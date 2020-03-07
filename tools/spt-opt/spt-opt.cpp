@@ -5,6 +5,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "spt/Dialect/FIRRTL/IR/Ops.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Pass/PassRegistry.h"
@@ -16,6 +17,7 @@
 
 using namespace llvm;
 using namespace mlir;
+using namespace spt;
 
 static cl::opt<std::string>
     inputFilename(cl::Positional, cl::desc("<input file>"), cl::init("-"));
@@ -50,6 +52,7 @@ int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
 
   registerDialect<StandardOpsDialect>();
+  registerDialect<firrtl::FIRRTLDialect>();
 
   // Register any pass manager command line options.
   registerPassManagerCLOptions();

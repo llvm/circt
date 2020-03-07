@@ -9,10 +9,12 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 
 
 ## Should get this from MLIR build files somehow?
-set(MLIR_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../llvm-project/mlir/include )
+set(MLIR_TABLEGEN_EXE mlir-tblgen)
+set(MLIR_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../llvm-project/mlir)
+set(MLIR_MAIN_SRC_DIR ${MLIR_SOURCE_DIR})
+set(MLIR_INCLUDE_DIR ${MLIR_SOURCE_DIR}/include )
 set(MLIR_BINARY_INCLUDE_DIR ${LLVM_TOOLS_BINARY_DIR}/../tools/mlir/include )
 
-include(AddSPT)
 
 # Installing the headers and docs needs to depend on generating any public
 # tablegen'd targets.
@@ -23,9 +25,10 @@ add_custom_target(spt-doc)
 include_directories( ${MLIR_INCLUDE_DIR})
 include_directories( ${MLIR_BINARY_INCLUDE_DIR})
 include_directories( ${SPT_INCLUDE_DIR})
+include_directories( ${SPT_MAIN_SRC_DIR})
 
-#add_subdirectory(include/spt)
-#add_subdirectory(lib)
+add_subdirectory(include/spt)
+add_subdirectory(lib)
 add_subdirectory(tools)
 #add_subdirectory(unittests)
 add_subdirectory(test)
