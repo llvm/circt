@@ -21,7 +21,7 @@ $ git clone git@github.com:llvm/llvm-project.git
 $ git clone git@github.com:sifive/clattner-experimental.git spt
 ```
 
-3) HACK: Add symlink because I can't figure out how to get LLVM_EXTERNAL_SPT_SOURCE_DIR to work with cmake:
+3) HACK: Add symlink because I can't figure out how to get `LLVM_EXTERNAL_SPT_SOURCE_DIR` to work with cmake:
 
 ```
 $ cd ~/Projects/llvm-project

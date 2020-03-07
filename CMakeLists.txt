@@ -7,6 +7,11 @@ set(SPT_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 
+
+## Should get this from MLIR build files somehow?
+set(MLIR_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../llvm-project/mlir/include )
+set(MLIR_BINARY_INCLUDE_DIR ${LLVM_TOOLS_BINARY_DIR}/../tools/mlir/include )
+
 include(AddSPT)
 
 # Installing the headers and docs needs to depend on generating any public
@@ -15,7 +20,8 @@ add_custom_target(spt-headers)
 set_target_properties(spt-headers PROPERTIES FOLDER "Misc")
 add_custom_target(spt-doc)
 
-include_directories( "include")
+include_directories( ${MLIR_INCLUDE_DIR})
+include_directories( ${MLIR_BINARY_INCLUDE_DIR})
 include_directories( ${SPT_INCLUDE_DIR})
 
 #add_subdirectory(include/spt)
