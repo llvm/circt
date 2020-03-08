@@ -1,35 +1,30 @@
 // RUN: spt-opt %s -split-input-file -verify-diagnostics
 
-"firrtl.module"() ( {
+firrtl.module @X() {
   // expected-error @+1 {{unknown firrtl type}}
-  %0 = "firrtl.input"() {name = "in"} : () -> !firrtl.unknowntype
-  "firrtl.done"() : () -> ()
-}) {name = "MyModule"} : () -> ()
+  %0 = firrtl.invalid : !firrtl.unknowntype
+}
 
 // -----
 
-"firrtl.module"() ( {
-  %0 = "firrtl.output"() {name = "out"} : () -> !firrtl.uint
-  %1 = "firrtl.input"() {name = "b"} : () -> ui32
-  %2 = "firrtl.input"() {name = "d"} : () -> ui16
+firrtl.module @X(%b : ui32, %d : ui16, %out : !firrtl.uint { firrtl.output }) {
   // expected-error @+1 {{'firrtl.add' op expected 2 operands, but found 3}}
-  %3 = "firrtl.add"(%1, %2, %3) : (ui32, ui16, ui32) -> ui32
-  "firrtl.done"() : () -> ()
-}) {name = "Top"} : () -> ()
+  %3 = "firrtl.add"(%b, %d, %out) : (ui32, ui16, !firrtl.uint) -> ui32
+}
 
 // -----
 
 // expected-error @+2 {{'firrtl.module' op expects regions to end with 'firrtl.done'}}
 // expected-note @+1 {{implies 'firrtl.done'}}
 "firrtl.module"() ( {
-  %0 = "firrtl.output"() {name = "out"} : () -> !firrtl.uint
+  %0 = firrtl.invalid : i32
 
-}) {name = "MyModule"} : () -> ()
+}) {sym_name = "MyModule", type = () -> ()} : () -> ()
 
 // -----
 
 
-// expected-error @+1 {{'firrtl.module' op requires attribute 'name'}}
+// expected-error @+1 {{'firrtl.module' op requires string attribute 'sym_name'}}
 "firrtl.module"() ( {
   "firrtl.done"() : () -> ()
-}) {no_name = "MyModule"} : () -> ()
+}) { type = () -> ()} : () -> ()

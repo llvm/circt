@@ -39,7 +39,7 @@ class FIRRTLOp<string mnemonic, list<OpTrait> traits = []> :
     Op<FIRRTLDialect, mnemonic, traits>;
 
 def CircuitOp : FIRRTLOp<"circuit",
-      [SingleBlockImplicitTerminator<"DoneOp">]> {
+      [IsolatedFromAbove, SingleBlockImplicitTerminator<"DoneOp">]> {
   let summary = "FIRRTL Circuit";
   let description = [{
     The "firrtl.circuit" operation represents an overall Verilog circuit,
@@ -62,14 +62,15 @@ def CircuitOp : FIRRTLOp<"circuit",
 }
 
 def FModuleOp : FIRRTLOp<"module",
-      [SingleBlockImplicitTerminator<"DoneOp">]> {
+      [IsolatedFromAbove, FunctionLike, Symbol,
+       SingleBlockImplicitTerminator<"DoneOp">]> {
   let summary = "FIRRTL Module";
   let description = [{
     The "firrtl.module" operation represents a Verilog module, including a given
     name, a list of ports, and a body that represents the connections within
     the module.
   }];
-  let arguments = (ins StrAttr:$name);
+  let arguments = (ins);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
@@ -79,6 +80,26 @@ def FModuleOp : FIRRTLOp<"module",
       Block &bodyBlock = body().front();
       return OpBuilder(&bodyBlock, std::prev(bodyBlock.end()));
     }
+  private:
+    // This trait needs access to the hooks defined below.
+    friend class OpTrait::FunctionLike<FModuleOp>;
+
+    /// Returns the number of arguments, implementing OpTrait::FunctionLike.
+    unsigned getNumFuncArguments() { return getType().getInputs().size(); }
+    /// Returns the number of results, implementing OpTrait::FunctionLike.
+    unsigned getNumFuncResults() { return getType().getResults().size(); }
+
+    /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
+    /// attribute is present and checks if it holds a function type.  Ensures
+    /// getType, getNumFuncArguments, and getNumFuncResults can be called safely.
+    LogicalResult verifyType() {
+      auto type = getTypeAttr().getValue();
+      if (!type.isa<FunctionType>())
+        return emitOpError("requires '" + getTypeAttrName() +
+                           "' attribute of function type");
+      return success();
+    }
+  public:
   }];
 
   let printer = [{ return ::print(p, *this); }];
