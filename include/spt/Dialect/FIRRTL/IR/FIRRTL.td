@@ -116,6 +116,28 @@ def FIRRTLInvalid : FIRRTLOp<"invalid", [NoSideEffect]> {
 }
 
 //===----------------------------------------------------------------------===//
+// Statements
+//===----------------------------------------------------------------------===//
+
+def FIRRTLConnectOp : FIRRTLOp<"connect", []> {
+  let summary = "Connect two signals";
+  let description = [{
+    Connect Operation:
+    ```
+       firrt.connect %lhs, %rhs "name" : t1, t2
+    ```
+    }];
+
+  let arguments = (ins AnyType:$lhs, AnyType:$rhs, OptionalAttr<StrAttr>:$name);
+  let results = (outs);
+  
+  // TODO: Print '$name' more nicely.  This breaks the asmparser tho.
+  let assemblyFormat = [{
+    $lhs `,` $rhs  attr-dict `:` type($lhs) `,` type($rhs)
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // Primitive Operations
 //===----------------------------------------------------------------------===//
 
