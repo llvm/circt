@@ -56,6 +56,9 @@ def CircuitOp : FIRRTLOp<"circuit",
       return OpBuilder(&bodyBlock, std::prev(bodyBlock.end()));
     }
   }];
+  
+  let printer = [{ return ::print(p, *this); }];
+  let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
 def FModuleOp : FIRRTLOp<"module",
@@ -77,6 +80,9 @@ def FModuleOp : FIRRTLOp<"module",
       return OpBuilder(&bodyBlock, std::prev(bodyBlock.end()));
     }
   }];
+
+  let printer = [{ return ::print(p, *this); }];
+  let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
 def DoneOp : FIRRTLOp<"done", [Terminator]> {

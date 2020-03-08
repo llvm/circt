@@ -9,6 +9,10 @@
 using namespace spt;
 using namespace firrtl;
 
+//===----------------------------------------------------------------------===//
+// Dialect specification.
+//===----------------------------------------------------------------------===//
+
 FIRRTLDialect::FIRRTLDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context) {
   addTypes<UIntType>();
@@ -24,6 +28,10 @@ FIRRTLDialect::FIRRTLDialect(MLIRContext *context)
 
 FIRRTLDialect::~FIRRTLDialect() {
 }
+
+//===----------------------------------------------------------------------===//
+// Type specifications.
+//===----------------------------------------------------------------------===//
 
 /// Parse a type registered to this dialect.
 Type FIRRTLDialect::parseType(DialectAsmParser &parser) const {
@@ -42,6 +50,70 @@ void FIRRTLDialect::printType(Type type, DialectAsmPrinter &os) const {
   os.getStream() << "uint";
 }
 
+//===----------------------------------------------------------------------===//
+// Module and Circuit Ops.
+//===----------------------------------------------------------------------===//
 
+static void print(OpAsmPrinter &p, CircuitOp op) {
+  p << op.getOperationName() << " ";
+  p.printAttribute(op.nameAttr());
+
+  p.printOptionalAttrDictWithKeyword(op.getAttrs(), {"name"});
+
+  p.printRegion(op.body(),
+                /*printEntryBlockArgs=*/false,
+                /*printBlockTerminators=*/false);
+}
+
+static ParseResult parseCircuitOp(OpAsmParser &parser, OperationState &result) {
+  // Parse the module name.
+  StringAttr nameAttr;
+  if (parser.parseAttribute(nameAttr, "name", result.attributes))
+    return failure();
+
+  // Parse the optional attribute list.
+  if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
+    return failure();
+
+  // Parse the body region.
+  Region *body = result.addRegion();
+  if (parser.parseRegion(*body, /*regionArgs*/{}, /*argTypes*/{}))
+    return failure();
+
+  CircuitOp::ensureTerminator(*body, parser.getBuilder(), result.location);
+
+  return success();
+}
+
+static void print(OpAsmPrinter &p, FModuleOp op) {
+  p << op.getOperationName() << " ";
+  p.printAttribute(op.nameAttr());
+
+  p.printOptionalAttrDictWithKeyword(op.getAttrs(), {"name"});
+
+  p.printRegion(op.body(),
+                /*printEntryBlockArgs=*/false,
+                /*printBlockTerminators=*/false);
+}
+
+static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result) {
+  // Parse the module name.
+  StringAttr nameAttr;
+  if (parser.parseAttribute(nameAttr, "name", result.attributes))
+    return failure();
+
+  // Parse the optional attribute list.
+  if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
+    return failure();
+
+  // Parse the body region.
+  Region *body = result.addRegion();
+  if (parser.parseRegion(*body, /*regionArgs*/{}, /*argTypes*/{}))
+    return failure();
+
+  FModuleOp::ensureTerminator(*body, parser.getBuilder(), result.location);
+
+  return success();
+}
 #define GET_OP_CLASSES
 #include "spt/Dialect/FIRRTL/IR/FIRRTL.cpp.inc"
