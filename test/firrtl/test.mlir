@@ -30,8 +30,12 @@ firrtl.circuit "Top" {
     %0 = "firrtl.output"() {name = "out"} : () -> !firrtl.uint
     %1 = "firrtl.input"() {name = "b"} : () -> ui32
     %2 = "firrtl.input"() {name = "d"} : () -> ui16
-    %3 = "firrtl.add"(%1, %2) : (ui32, ui16) -> ui32
-    "firrtl.connect"(%0, %3) : (!firrtl.uint, ui32) -> ()
+    %3 = firrtl.add %1, %2 : (ui32, ui16) -> ui32
+    
+    %4 = firrtl.invalid {name = "Name"} : ui16
+    %5 = firrtl.add %3, %4 : (ui32, ui16) -> ui32
+    
+    "firrtl.connect"(%0, %5) : (!firrtl.uint, ui32) -> ()
   }
 }
 
@@ -40,8 +44,10 @@ firrtl.circuit "Top" {
 // CHECK-NEXT:      %0 = "firrtl.output"() {name = "out"} : () -> !firrtl.uint
 // CHECK-NEXT:      %1 = "firrtl.input"() {name = "b"} : () -> ui32
 // CHECK-NEXT:      %2 = "firrtl.input"() {name = "d"} : () -> ui16
-// CHECK-NEXT:      %3 = "firrtl.add"(%1, %2) : (ui32, ui16) -> ui32
-// CHECK-NEXT:      "firrtl.connect"(%0, %3) : (!firrtl.uint, ui32) -> ()
+// CHECK-NEXT:      %3 = firrtl.add %1, %2 : (ui32, ui16) -> ui32
+// CHECK-NEXT:      %4 = firrtl.invalid {name = "Name"} : ui16
+// CHECK-NEXT:      %5 = firrtl.add %3, %4 : (ui32, ui16) -> ui32
+// CHECK-NEXT:      "firrtl.connect"(%0, %5) : (!firrtl.uint, ui32) -> ()
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 

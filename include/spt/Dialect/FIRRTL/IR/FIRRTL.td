@@ -94,15 +94,39 @@ def DoneOp : FIRRTLOp<"done", [Terminator]> {
   let arguments = (ins);
 }
 
+def FIRRTLInvalid : FIRRTLOp<"invalid", [NoSideEffect]> {
+  let summary = "Invalid operation";
+  let description = [{
+    Invalidate Operation:
+    ```
+       %result = firrt.invalid : i8
+    ```
+
+    The invalid operation produces a value of unspecified value.  Drivers may
+    be attached to it with `firrtl.connect`.
+  }];
+
+  let arguments = (ins OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  // TODO: Print '$name' more nicely.  This breaks the asmparser tho.
+  let assemblyFormat = [{
+    attr-dict `:` type($result)
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Primitive Operations
 //===----------------------------------------------------------------------===//
 
 // TODO: Should this be split out to addu/adds?
-def FIRRTLAddOp : FIRRTLOp<"add", [Commutative]> {
+def FIRRTLAddOp : FIRRTLOp<"add", [Commutative, NoSideEffect]> {
   let summary = "Add operations";
   let description = [{
-    Add Operation: x = add (y, z)
+    Add Operation:
+    ```
+       %result = firrt.add %lhs, %rhs "name" : (t1, t2) -> t3
+    ```
 
     The two options are:
     * add(UInt, UInt) -> UInt
@@ -112,8 +136,14 @@ def FIRRTLAddOp : FIRRTLOp<"add", [Commutative]> {
     The add operation result is the sum of e1 and e2 without loss of precision.
   }];
 
-  let arguments = (ins AnyType:$lhs, AnyType:$rhs);
+  let arguments = (ins AnyType:$lhs, AnyType:$rhs, OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
+  
+  // TODO: Print '$name' more nicely.  This breaks the asmparser tho.
+  let assemblyFormat = [{
+    $lhs `,` $rhs  attr-dict `:`
+       `(` type($lhs) `,` type($rhs) `)` `->` type($result)
+  }];
 }
 
 #endif // FIRRTL_OPS
