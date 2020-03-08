@@ -38,6 +38,59 @@ def FIRRTL_UIntType : DialectType<FIRRTLDialect,
 class FIRRTLOp<string mnemonic, list<OpTrait> traits = []> :
     Op<FIRRTLDialect, mnemonic, traits>;
 
+def CircuitOp : FIRRTLOp<"circuit",
+      [SingleBlockImplicitTerminator<"DoneOp">]> {
+  let summary = "FIRRTL Circuit";
+  let description = [{
+    The "firrtl.circuit" operation represents an overall Verilog circuit,
+    containing a list of modules.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let results = (outs);
+  let regions = (region SizedRegion<1>:$body);
+
+  let extraClassDeclaration = [{
+    OpBuilder getBodyBuilder() {
+      assert(!body().empty() && "Unexpected empty 'body' region.");
+      Block &bodyBlock = body().front();
+      return OpBuilder(&bodyBlock, std::prev(bodyBlock.end()));
+    }
+  }];
+}
+
+def FModuleOp : FIRRTLOp<"module",
+      [SingleBlockImplicitTerminator<"DoneOp">]> {
+  let summary = "FIRRTL Module";
+  let description = [{
+    The "firrtl.module" operation represents a Verilog module, including a given
+    name, a list of ports, and a body that represents the connections within
+    the module.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let results = (outs);
+  let regions = (region SizedRegion<1>:$body);
+
+  let extraClassDeclaration = [{
+    OpBuilder getBodyBuilder() {
+      assert(!body().empty() && "Unexpected empty 'body' region.");
+      Block &bodyBlock = body().front();
+      return OpBuilder(&bodyBlock, std::prev(bodyBlock.end()));
+    }
+  }];
+}
+
+def DoneOp : FIRRTLOp<"done", [Terminator]> {
+  let summary = "FIRRTL termination operation";
+  let description = [{
+    "firrtl.done" marks the end of a region in the FIRRTL dialect.
+  }];
+
+  let arguments = (ins);
+}
+
+//===----------------------------------------------------------------------===//
+// Primitive Operations
+//===----------------------------------------------------------------------===//
 
 // TODO: Should this be split out to addu/adds?
 def FIRRTLAddOp : FIRRTLOp<"add", [Commutative]> {
