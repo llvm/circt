@@ -14,6 +14,18 @@ using namespace firrtl;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
+// If the specified attribute set contains the firrtl.name attribute, return it.
+static StringAttr getFIRRTLNameAttr(ArrayRef<NamedAttribute> attrs) {
+  for (auto &argAttr : attrs) {
+    if (!argAttr.first.is("firrtl.name"))
+      continue;
+  
+    return argAttr.second.dyn_cast<StringAttr>();
+  }
+  
+  return StringAttr();
+}
+
 namespace {
 
 // We implement the OpAsmDialectInterface so that FIRRTL dialect operations
@@ -41,15 +53,8 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
     
     for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
       // Scan for a 'firrtl.name' attribute.
-      for (auto &argAttr : impl::getArgAttrs(parentOp, i)) {
-        if (!argAttr.first.is("firrtl.name"))
-          continue;
-      
-        auto str = argAttr.second.dyn_cast<StringAttr>();
-        if (str)
-          setNameFn(block->getArgument(i), str.getValue());
-        break;
-      }
+      if (auto str = getFIRRTLNameAttr(impl::getArgAttrs(parentOp, i)))
+        setNameFn(block->getArgument(i), str.getValue());
     }
   }
 };
@@ -125,6 +130,52 @@ static ParseResult parseCircuitOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
+
+// TODO: This ia a clone of mlir::impl::printFunctionSignature, refactor it to
+// allow this customization.
+static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
+                                    ArrayRef<Type> argTypes,
+                                    bool isVariadic,
+                                    ArrayRef<Type> resultTypes) {
+  Region &body = op->getRegion(0);
+  bool isExternal = body.empty();
+
+  p << '(';
+  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
+    if (i > 0)
+      p << ", ";
+
+    if (!isExternal) {
+      p.printOperand(body.front().getArgument(i));
+      p << ": ";
+    }
+
+    p.printType(argTypes[i]);
+    
+    auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
+    
+    // If the argument has the firrtl.name attribute, and if it was used by the
+    // printer exactly (not name mangled with a suffix etc) then we can omit
+    // the firrtl.name attribute from the argument attribute dictionary.
+    if (auto nameAttr = getFIRRTLNameAttr(argAttrs)) {
+      // FIXME: Need a way to verify that nameAttr is matched exactly.  We can't
+      // get the "used" name out of OpAsmPrinter.
+      p.printOptionalAttrDict(argAttrs, {"firrtl.name"});
+    } else {
+      p.printOptionalAttrDict(argAttrs);
+    }
+  }
+
+  if (isVariadic) {
+    if (!argTypes.empty())
+      p << ", ";
+    p << "...";
+  }
+
+  p << ')';
+}
+
+
 static void print(OpAsmPrinter &p, FModuleOp op) {
   using namespace mlir::impl;
 
@@ -142,7 +193,7 @@ static void print(OpAsmPrinter &p, FModuleOp op) {
   p << op.getOperationName() << ' ';
   p.printSymbolName(funcName);
 
-  printFunctionSignature(p, op, argTypes, /*isVariadic*/false, resultTypes);
+  printFunctionSignature2(p, op, argTypes, /*isVariadic*/false, resultTypes);
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size());
 
   // Print the body if this is not an external function.

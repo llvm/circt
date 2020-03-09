@@ -9,7 +9,7 @@ firrtl.module @MyModule(%in : ui8,
   firrtl.connect %out, %in : ui8, ui8
 }
 
-// CHECK-LABEL: firrtl.module @MyModule(%in: ui8 {firrtl.name = "in"}, %out: ui8 {firrtl.name = "out", firrtl.output}) {
+// CHECK-LABEL: firrtl.module @MyModule(%in: ui8, %out: ui8 {firrtl.output}) {
 // CHECK-NEXT:    firrtl.connect %out, %in : ui8, ui8
 // CHECK-NEXT:  }
 
@@ -35,7 +35,7 @@ firrtl.circuit "Top" {
 }
 
 // CHECK-LABEL: firrtl.circuit "Top" {
-// CHECK-NEXT:    firrtl.module @Top(%out: !firrtl.uint {firrtl.name = "out", firrtl.output}, %b: ui32 {firrtl.name = "b"}, %d: ui16 {firrtl.name = "d"}) {
+// CHECK-NEXT:    firrtl.module @Top(%out: !firrtl.uint {firrtl.output}, %b: ui32, %d: ui16) {
 // CHECK-NEXT:      %0 = firrtl.add %b, %d : (ui32, ui16) -> ui32
 // CHECK-NEXT:      %Name = firrtl.invalid {firrtl.name = "Name"} : ui16
 // CHECK-NEXT:      %1 = firrtl.add %0, %Name : (ui32, ui16) -> ui32
