@@ -14,6 +14,47 @@ using namespace firrtl;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
+namespace {
+
+// We implement the OpAsmDialectInterface so that FIRRTL dialect operations
+// automatically interpret the firrtl.name attribute on function arguments and
+// on operations as their SSA name.
+struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
+  using OpAsmDialectInterface::OpAsmDialectInterface;
+  
+  /// Get a special name to use when printing the given operation. See
+  /// OpAsmInterface.td#getAsmResultNames for usage details and documentation.
+  void getAsmResultNames(Operation *op,
+                         OpAsmSetValueNameFn setNameFn) const override {
+    if (op->getNumResults() > 0)
+      if (auto nameAttr = op->getAttrOfType<StringAttr>("firrtl.name"))
+        setNameFn(op->getResult(0), nameAttr.getValue());
+  }
+
+  /// Get a special name to use when printing the entry block arguments of the
+  /// region contained by an operation in this dialect.
+  void getAsmBlockArgumentNames(Block *block,
+                                OpAsmSetValueNameFn setNameFn) const override {
+    // Check to see if the operation containing the arguments has 'firrtl.name'
+    // attributes for them.  If so, use that as the name.
+    auto *parentOp = block->getParentOp();
+    
+    for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
+      // Scan for a 'firrtl.name' attribute.
+      for (auto &argAttr : impl::getArgAttrs(parentOp, i)) {
+        if (!argAttr.first.is("firrtl.name"))
+          continue;
+      
+        auto str = argAttr.second.dyn_cast<StringAttr>();
+        if (str)
+          setNameFn(block->getArgument(i), str.getValue());
+        break;
+      }
+    }
+  }
+};
+} // end anonymous namespace
+
 FIRRTLDialect::FIRRTLDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context) {
   addTypes<UIntType>();
@@ -21,13 +62,15 @@ FIRRTLDialect::FIRRTLDialect(MLIRContext *context)
 #define GET_OP_LIST
 #include "spt/Dialect/FIRRTL/IR/FIRRTL.cpp.inc"
       >();
+      
+  addInterfaces<FIRRTLOpAsmDialectInterface>();
 }
 
 FIRRTLDialect::~FIRRTLDialect() {
 }
 
 //===----------------------------------------------------------------------===//
-// Type specifications.
+// Type Implementations.
 //===----------------------------------------------------------------------===//
 
 /// Parse a type registered to this dialect.

@@ -9,8 +9,8 @@ firrtl.module @MyModule(%in : ui8,
   firrtl.connect %out, %in : ui8, ui8
 }
 
-// CHECK-LABEL: firrtl.module @MyModule(%arg0: ui8 {firrtl.name = "in"}, %arg1: ui8 {firrtl.name = "out", firrtl.output}) {
-// CHECK-NEXT:    firrtl.connect %arg1, %arg0 : ui8, ui8
+// CHECK-LABEL: firrtl.module @MyModule(%in: ui8 {firrtl.name = "in"}, %out: ui8 {firrtl.name = "out", firrtl.output}) {
+// CHECK-NEXT:    firrtl.connect %out, %in : ui8, ui8
 // CHECK-NEXT:  }
 
 
@@ -25,12 +25,9 @@ firrtl.circuit "Top" {
   firrtl.module @Top(%out : !firrtl.uint {firrtl.output},
                      %b : ui32,
                      %d : ui16) {
-    //%0 = "firrtl.output"() {name = "out"} : () -> !firrtl.uint
-    //%1 = "firrtl.input"() {name = "b"} : () -> ui32
-    //%2 = "firrtl.input"() {name = "d"} : () -> ui16
     %3 = firrtl.add %b, %d : (ui32, ui16) -> ui32
     
-    %4 = firrtl.invalid {name = "Name"} : ui16
+    %4 = firrtl.invalid {firrtl.name = "Name"} : ui16
     %5 = firrtl.add %3, %4 : (ui32, ui16) -> ui32
     
     firrtl.connect %out, %5 : !firrtl.uint, ui32
@@ -38,11 +35,11 @@ firrtl.circuit "Top" {
 }
 
 // CHECK-LABEL: firrtl.circuit "Top" {
-// CHECK-NEXT:    firrtl.module @Top(%arg0: !firrtl.uint {firrtl.name = "out", firrtl.output}, %arg1: ui32 {firrtl.name = "b"}, %arg2: ui16 {firrtl.name = "d"}) {
-// CHECK-NEXT:      %0 = firrtl.add %arg1, %arg2 : (ui32, ui16) -> ui32
-// CHECK-NEXT:      %1 = firrtl.invalid {name = "Name"} : ui16
-// CHECK-NEXT:      %2 = firrtl.add %0, %1 : (ui32, ui16) -> ui32
-// CHECK-NEXT:      firrtl.connect %arg0, %2 : !firrtl.uint, ui32
+// CHECK-NEXT:    firrtl.module @Top(%out: !firrtl.uint {firrtl.name = "out", firrtl.output}, %b: ui32 {firrtl.name = "b"}, %d: ui16 {firrtl.name = "d"}) {
+// CHECK-NEXT:      %0 = firrtl.add %b, %d : (ui32, ui16) -> ui32
+// CHECK-NEXT:      %Name = firrtl.invalid {firrtl.name = "Name"} : ui16
+// CHECK-NEXT:      %1 = firrtl.add %0, %Name : (ui32, ui16) -> ui32
+// CHECK-NEXT:      firrtl.connect %out, %1 : !firrtl.uint, ui32
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 
