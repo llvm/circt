@@ -8,6 +8,7 @@
 #define FIRRTL_OPS
 
 include "mlir/IR/OpBase.td"
+include "mlir/Interfaces/SideEffects.td"
 
 def FIRRTLDialect : Dialect {
   let name = "firrtl";

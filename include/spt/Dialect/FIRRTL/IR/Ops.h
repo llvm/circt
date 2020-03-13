@@ -12,6 +12,7 @@
 #include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/SymbolTable.h"
+#include "mlir/Interfaces/SideEffects.h"
 
 namespace spt {
 namespace firrtl {
