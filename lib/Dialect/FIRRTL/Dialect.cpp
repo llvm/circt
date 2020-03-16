@@ -142,8 +142,10 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
     if (i > 0)
       p << ", ";
 
+    Value argumentValue;
     if (!isExternal) {
-      p.printOperand(body.front().getArgument(i));
+      argumentValue = body.front().getArgument(i);
+      p.printOperand(argumentValue);
       p << ": ";
     }
 
@@ -154,13 +156,21 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
     // If the argument has the firrtl.name attribute, and if it was used by the
     // printer exactly (not name mangled with a suffix etc) then we can omit
     // the firrtl.name attribute from the argument attribute dictionary.
-    if (auto nameAttr = getFIRRTLNameAttr(argAttrs)) {
-      // FIXME: Need a way to verify that nameAttr is matched exactly.  We can't
-      // get the "used" name out of OpAsmPrinter.
-      p.printOptionalAttrDict(argAttrs, {"firrtl.name"});
-    } else {
-      p.printOptionalAttrDict(argAttrs);
+    ArrayRef<StringRef> elidedAttrs;
+    if (argumentValue) {
+      if (auto nameAttr = getFIRRTLNameAttr(argAttrs)) {
+
+        // Check to make sure the asmprinter is printing it correctly.
+        SmallString<32> resultNameStr;
+        llvm::raw_svector_ostream tmpStream(resultNameStr);
+        p.printOperand(argumentValue, tmpStream);
+
+        // If the name is the same as we would otherwise use, then we're good!
+        if (tmpStream.str().drop_front() == nameAttr.getValue())
+          elidedAttrs = {"firrtl.name"};
+      }
     }
+    p.printOptionalAttrDict(argAttrs, elidedAttrs);
   }
 
   if (isVariadic) {

@@ -43,3 +43,13 @@ firrtl.circuit "Top" {
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 
+
+// Test some hard cases of name handling.
+firrtl.module @Mod2(%in : ui8 { firrtl.name = "some name"},
+                    %out : ui8 { firrtl.output }) {
+  firrtl.connect %out, %in : ui8, ui8
+}
+
+// CHECK-LABEL: firrtl.module @Mod2(%some_name: ui8 {firrtl.name = "some name"}, %out: ui8 {firrtl.output}) {
+// CHECK-NEXT:    firrtl.connect %out, %some_name : ui8, ui8
+// CHECK-NEXT:  }
