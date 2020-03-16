@@ -5,12 +5,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "spt/Dialect/FIRRTL/IR/Ops.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Pass/PassRegistry.h"
-#include "mlir/Support/MlirOptMain.h"
 #include "mlir/Support/FileUtilities.h"
+#include "mlir/Support/MlirOptMain.h"
+#include "spt/Dialect/FIRRTL/IR/Ops.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/ToolOutputFile.h"
@@ -44,9 +44,9 @@ static cl::opt<bool>
                  cl::init(true));
 
 static cl::opt<bool>
-showDialects("show-dialects",
-             cl::desc("Print the list of registered dialects"),
-             cl::init(false));
+    showDialects("show-dialects",
+                 cl::desc("Print the list of registered dialects"),
+                 cl::init(false));
 
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
   MLIRContext context;
   if (showDialects) {
     llvm::outs() << "Registered Dialects:\n";
-    for(Dialect *dialect : context.getRegisteredDialects()) {
+    for (Dialect *dialect : context.getRegisteredDialects()) {
       llvm::outs() << dialect->getNamespace() << "\n";
     }
     return 0;

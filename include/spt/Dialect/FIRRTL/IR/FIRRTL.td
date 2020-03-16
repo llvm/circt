@@ -92,7 +92,8 @@ def FModuleOp : FIRRTLOp<"module",
 
     /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
     /// attribute is present and checks if it holds a function type.  Ensures
-    /// getType, getNumFuncArguments, and getNumFuncResults can be called safely.
+    /// getType, getNumFuncArguments, and getNumFuncResults can be called
+    ///  safely.
     LogicalResult verifyType() {
       auto type = getTypeAttr().getValue();
       if (!type.isa<FunctionType>())

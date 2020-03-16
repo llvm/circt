@@ -1,3 +1,3 @@
-add_mlir_dialect(FIRRTL FIRRTL)
+add_mlir_dialect(FIRRTL firrtl FIRRTL)
 
 

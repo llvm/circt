@@ -16,17 +16,17 @@
 
 namespace spt {
 namespace firrtl {
-  using namespace mlir;
+using namespace mlir;
 
 class FIRRTLDialect : public Dialect {
 public:
   /// Create the dialect in the given `context`.
   explicit FIRRTLDialect(MLIRContext *context);
   ~FIRRTLDialect();
-  
+
   Type parseType(DialectAsmParser &parser) const override;
   void printType(Type, DialectAsmPrinter &) const override;
-    
+
   static StringRef getDialectNamespace() { return "firrtl"; }
 };
 
@@ -46,9 +46,7 @@ public:
   }
 
   /// Support method to enable LLVM-style type casting.
-  static bool kindof(unsigned kind) {
-    return kind == FIRRTLTypes::Kind::UInt;
-  }
+  static bool kindof(unsigned kind) { return kind == FIRRTLTypes::Kind::UInt; }
 };
 
 #define GET_OP_CLASSES

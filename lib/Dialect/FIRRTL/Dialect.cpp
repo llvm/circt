@@ -2,10 +2,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "spt/Dialect/FIRRTL/IR/Ops.h"
-#include "mlir/IR/StandardTypes.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
+#include "mlir/IR/StandardTypes.h"
+#include "spt/Dialect/FIRRTL/IR/Ops.h"
 
 using namespace spt;
 using namespace firrtl;
@@ -19,10 +19,10 @@ static StringAttr getFIRRTLNameAttr(ArrayRef<NamedAttribute> attrs) {
   for (auto &argAttr : attrs) {
     if (!argAttr.first.is("firrtl.name"))
       continue;
-  
+
     return argAttr.second.dyn_cast<StringAttr>();
   }
-  
+
   return StringAttr();
 }
 
@@ -33,7 +33,7 @@ namespace {
 // on operations as their SSA name.
 struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
   using OpAsmDialectInterface::OpAsmDialectInterface;
-  
+
   /// Get a special name to use when printing the given operation. See
   /// OpAsmInterface.td#getAsmResultNames for usage details and documentation.
   void getAsmResultNames(Operation *op,
@@ -50,7 +50,7 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
     // Check to see if the operation containing the arguments has 'firrtl.name'
     // attributes for them.  If so, use that as the name.
     auto *parentOp = block->getParentOp();
-    
+
     for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
       // Scan for a 'firrtl.name' attribute.
       if (auto str = getFIRRTLNameAttr(impl::getArgAttrs(parentOp, i)))
@@ -67,12 +67,11 @@ FIRRTLDialect::FIRRTLDialect(MLIRContext *context)
 #define GET_OP_LIST
 #include "spt/Dialect/FIRRTL/IR/FIRRTL.cpp.inc"
       >();
-      
+
   addInterfaces<FIRRTLOpAsmDialectInterface>();
 }
 
-FIRRTLDialect::~FIRRTLDialect() {
-}
+FIRRTLDialect::~FIRRTLDialect() {}
 
 //===----------------------------------------------------------------------===//
 // Type Implementations.
@@ -81,10 +80,10 @@ FIRRTLDialect::~FIRRTLDialect() {
 /// Parse a type registered to this dialect.
 Type FIRRTLDialect::parseType(DialectAsmParser &parser) const {
   StringRef tyData = parser.getFullSymbolSpec();
-  
+
   if (tyData == "uint")
     return UIntType::get(getContext());
-  
+
   parser.emitError(parser.getNameLoc(), "unknown firrtl type");
   return Type();
 }
@@ -122,7 +121,7 @@ static ParseResult parseCircuitOp(OpAsmParser &parser, OperationState &result) {
 
   // Parse the body region.
   Region *body = result.addRegion();
-  if (parser.parseRegion(*body, /*regionArgs*/{}, /*argTypes*/{}))
+  if (parser.parseRegion(*body, /*regionArgs*/ {}, /*argTypes*/ {}))
     return failure();
 
   CircuitOp::ensureTerminator(*body, parser.getBuilder(), result.location);
@@ -130,12 +129,10 @@ static ParseResult parseCircuitOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-
 // TODO: This ia a clone of mlir::impl::printFunctionSignature, refactor it to
 // allow this customization.
 static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
-                                    ArrayRef<Type> argTypes,
-                                    bool isVariadic,
+                                    ArrayRef<Type> argTypes, bool isVariadic,
                                     ArrayRef<Type> resultTypes) {
   Region &body = op->getRegion(0);
   bool isExternal = body.empty();
@@ -151,9 +148,9 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
     }
 
     p.printType(argTypes[i]);
-    
+
     auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
-    
+
     // If the argument has the firrtl.name attribute, and if it was used by the
     // printer exactly (not name mangled with a suffix etc) then we can omit
     // the firrtl.name attribute from the argument attribute dictionary.
@@ -175,17 +172,16 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
   p << ')';
 }
 
-
 static void print(OpAsmPrinter &p, FModuleOp op) {
   using namespace mlir::impl;
 
   FunctionType fnType = op.getType();
   auto argTypes = fnType.getInputs();
   auto resultTypes = fnType.getResults();
-  
+
   // TODO: Should refactor mlir::impl::printFunctionLikeOp to allow these
   // customizations.  Need to not print the terminator.
-  
+
   // Print the operation and the function name.
   auto funcName =
       op.getAttrOfType<StringAttr>(::mlir::SymbolTable::getSymbolAttrName())
@@ -193,7 +189,7 @@ static void print(OpAsmPrinter &p, FModuleOp op) {
   p << op.getOperationName() << ' ';
   p.printSymbolName(funcName);
 
-  printFunctionSignature2(p, op, argTypes, /*isVariadic*/false, resultTypes);
+  printFunctionSignature2(p, op, argTypes, /*isVariadic*/ false, resultTypes);
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size());
 
   // Print the body if this is not an external function.
@@ -205,11 +201,11 @@ static void print(OpAsmPrinter &p, FModuleOp op) {
 
 static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result) {
   using namespace mlir::impl;
-  
+
   // TODO: Should refactor mlir::impl::parseFunctionLikeOp to allow these
   // customizations for implicit argument names.  Need to not print the
   // terminator.
-  
+
   SmallVector<OpAsmParser::OperandType, 4> entryArgs;
   SmallVector<SmallVector<NamedAttribute, 2>, 4> argAttrs;
   SmallVector<SmallVector<NamedAttribute, 2>, 4> resultAttrs;
@@ -225,10 +221,11 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result) {
 
   // Parse the function signature.
   bool isVariadic = false;
-  if (parseFunctionSignature(parser, /*allowVariadic*/false, entryArgs, argTypes,
-                             argAttrs, isVariadic, resultTypes, resultAttrs))
+  if (parseFunctionSignature(parser, /*allowVariadic*/ false, entryArgs,
+                             argTypes, argAttrs, isVariadic, resultTypes,
+                             resultAttrs))
     return failure();
-    
+
   // Record the argument and result types as an attribute.  This is necessary
   // for external modules.
   auto type = builder.getFunctionType(argTypes, resultTypes);
@@ -242,7 +239,7 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result) {
   assert(resultAttrs.size() == resultTypes.size());
 
   auto *context = result.getContext();
-  
+
   // Postprocess each of the arguments.  If there was no 'firrtl.name'
   // attribute, and if the argument name was non-numeric, then add the
   // firrtl.name attribute with the textual name from the IR.  The name in the
@@ -251,7 +248,7 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result) {
   for (size_t i = 0, e = argAttrs.size(); i != e; ++i) {
     auto &arg = entryArgs[i];
     auto &attrs = argAttrs[i];
-    
+
     // If an explicit name attribute was present, don't add the implicit one.
     bool hasNameAttr = false;
     for (auto &elt : attrs)
@@ -259,25 +256,24 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result) {
         hasNameAttr = true;
     if (hasNameAttr)
       continue;
-    
+
     // The name of an argument is of the form "%42" or "%id", and since parsing
     // succeeded, we know it always has one character.
-    assert(arg.name.size() > 1 && arg.name[0] == '%' &&
-           "Unknown MLIR name");
+    assert(arg.name.size() > 1 && arg.name[0] == '%' && "Unknown MLIR name");
     if (isdigit(arg.name[1]))
       continue;
-    
+
     auto nameAttr = StringAttr::get(arg.name.drop_front(), context);
-    attrs.push_back({ Identifier::get("firrtl.name", context), nameAttr });
+    attrs.push_back({Identifier::get("firrtl.name", context), nameAttr});
   }
-  
+
   // Add the attributes to the function arguments.
   addArgAndResultAttrs(builder, result, argAttrs, resultAttrs);
 
   // Parse the optional function body.
   auto *body = result.addRegion();
   if (parser.parseOptionalRegion(
-      *body, entryArgs, entryArgs.empty() ? ArrayRef<Type>() : argTypes))
+          *body, entryArgs, entryArgs.empty() ? ArrayRef<Type>() : argTypes))
     return failure();
 
   if (!body->empty())
