@@ -8,6 +8,7 @@ configure_lit_site_cfg(
 set(SPT_TEST_DEPENDS
   FileCheck count not
   spt-opt
+  spt-translate
   )
 
 add_lit_testsuite(check-spt "Running the SPT regression tests"

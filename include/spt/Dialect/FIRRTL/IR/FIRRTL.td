@@ -147,14 +147,13 @@ def FIRRTLConnectOp : FIRRTLOp<"connect", []> {
   let description = [{
     Connect Operation:
     ```
-       firrt.connect %lhs, %rhs "name" : t1, t2
+      firrt.connect %lhs, %rhs : t1, t2
     ```
     }];
 
   let arguments = (ins AnyType:$lhs, AnyType:$rhs, OptionalAttr<StrAttr>:$name);
   let results = (outs);
   
-  // TODO: Print '$name' more nicely.  This breaks the asmparser tho.
   let assemblyFormat = [{
     $lhs `,` $rhs  attr-dict `:` type($lhs) `,` type($rhs)
   }];
@@ -184,7 +183,6 @@ def FIRRTLAddOp : FIRRTLOp<"add", [Commutative, NoSideEffect]> {
   let arguments = (ins AnyType:$lhs, AnyType:$rhs, OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
   
-  // TODO: Print '$name' more nicely.  This breaks the asmparser tho.
   let assemblyFormat = [{
     $lhs `,` $rhs  attr-dict `:`
        `(` type($lhs) `,` type($rhs) `)` `->` type($result)

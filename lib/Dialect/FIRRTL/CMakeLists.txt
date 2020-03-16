@@ -1,3 +1,5 @@
+add_subdirectory(FIRToMLIR)
+
 file(GLOB globbed *.c *.cpp)
 add_mlir_dialect_library(MLIRFIRRTL
   ${globbed}

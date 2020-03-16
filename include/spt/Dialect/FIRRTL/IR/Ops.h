@@ -1,11 +1,11 @@
-//===- FIRRTL.h - FIRRTL dialect --------------------------------*- C++ -*-===//
+//===- FIRRTL/IR/Ops.h - FIRRTL dialect -------------------------*- C++ -*-===//
 //
 // This file defines an MLIR dialect for the FIRRTL IR.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef SPT_DIALECT_FIRRTL_FIRRTL_H
-#define SPT_DIALECT_FIRRTL_FIRRTL_H
+#ifndef SPT_DIALECT_FIRRTL_IR_OPS_H
+#define SPT_DIALECT_FIRRTL_IR_OPS_H
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Dialect.h"
@@ -55,4 +55,4 @@ public:
 } // namespace firrtl
 } // namespace spt
 
-#endif // SPT_DIALECT_FIRRTL_FIRRTL_H
+#endif // SPT_DIALECT_FIRRTL_IR_OPS_H
