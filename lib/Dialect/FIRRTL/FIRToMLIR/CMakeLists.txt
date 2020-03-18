@@ -1,5 +1,7 @@
+file(GLOB globbed *.cpp)
+
 add_mlir_library(SPTFIRToMLIR
-  FIRToMLIR.cpp
+  ${globbed}
   
   ADDITIONAL_HEADER_DIRS
   DEPENDS

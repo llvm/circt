@@ -1,0 +1,107 @@
+//===- FIRTokenKinds.def - .fir file Token Descriptions ---------*- C++ -*-===//
+//
+// This file is intended to be #include'd multiple times to extract information
+// about tokens for various clients in the lexer.
+//
+//===----------------------------------------------------------------------===//
+
+#if !defined(TOK_MARKER) && !defined(TOK_IDENTIFIER) &&                        \
+    !defined(TOK_LITERAL) && !defined(TOK_PUNCTUATION) &&                      \
+    !defined(TOK_KEYWORD)
+#error Must define one of the TOK_ macros.
+#endif
+
+#ifndef TOK_MARKER
+#define TOK_MARKER(X)
+#endif
+#ifndef TOK_IDENTIFIER
+#define TOK_IDENTIFIER(NAME)
+#endif
+#ifndef TOK_LITERAL
+#define TOK_LITERAL(NAME)
+#endif
+#ifndef TOK_PUNCTUATION
+#define TOK_PUNCTUATION(NAME, SPELLING)
+#endif
+#ifndef TOK_KEYWORD
+#define TOK_KEYWORD(SPELLING)
+#endif
+
+// Markers
+TOK_MARKER(eof)
+TOK_MARKER(error)
+
+// Identifiers.
+TOK_IDENTIFIER(identifier) // foo
+
+// Literals
+TOK_LITERAL(integer) // 42
+// TOK_LITERAL(string)                     // "foo"
+// TOK_LITERAL(raw_string)               // 'foo'
+
+// Punctuation.
+TOK_PUNCTUATION(colon, ":")
+TOK_PUNCTUATION(question, "?")
+TOK_PUNCTUATION(l_paren, "(")
+TOK_PUNCTUATION(r_paren, ")")
+TOK_PUNCTUATION(l_brace, "{")
+TOK_PUNCTUATION(r_brace, "}")
+TOK_PUNCTUATION(l_square, "[")
+TOK_PUNCTUATION(r_square, "]")
+TOK_PUNCTUATION(less, "<")
+TOK_PUNCTUATION(greater, ">")
+TOK_PUNCTUATION(equal, "=")
+
+// Keywords.  These turn "foo" into Token::kw_foo enums.
+
+// NOTE: Please key these alphabetized to make it easier to find something in
+// this list and to cater to OCD.
+TOK_KEYWORD(Analog)
+TOK_KEYWORD(Clock)
+TOK_KEYWORD(Fixed)
+TOK_KEYWORD(SInt)
+TOK_KEYWORD(UInt)
+TOK_KEYWORD(circuit)
+TOK_KEYWORD(cmem)
+TOK_KEYWORD(depth)
+TOK_KEYWORD(else)
+TOK_KEYWORD(extmodule)
+TOK_KEYWORD(flip)
+TOK_KEYWORD(infer)
+TOK_KEYWORD(input)
+TOK_KEYWORD(inst)
+TOK_KEYWORD(invalid)
+TOK_KEYWORD(is)
+TOK_KEYWORD(mem)
+TOK_KEYWORD(module)
+TOK_KEYWORD(mport)
+TOK_KEYWORD(mux)
+TOK_KEYWORD(new)
+TOK_KEYWORD(node)
+TOK_KEYWORD(of)
+TOK_KEYWORD(old)
+TOK_KEYWORD(output)
+TOK_KEYWORD(parameter)
+TOK_KEYWORD(printf)
+TOK_KEYWORD(rdwr)
+TOK_KEYWORD(read)
+TOK_KEYWORD(reader)
+TOK_KEYWORD(readwriter)
+TOK_KEYWORD(reg)
+TOK_KEYWORD(reset)
+TOK_KEYWORD(skip)
+TOK_KEYWORD(smem)
+TOK_KEYWORD(stop)
+TOK_KEYWORD(undefined)
+TOK_KEYWORD(validif)
+TOK_KEYWORD(when)
+TOK_KEYWORD(wire)
+TOK_KEYWORD(with)
+TOK_KEYWORD(write)
+TOK_KEYWORD(writer)
+
+#undef TOK_MARKER
+#undef TOK_IDENTIFIER
+#undef TOK_LITERAL
+#undef TOK_PUNCTUATION
+#undef TOK_KEYWORD
