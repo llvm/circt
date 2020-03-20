@@ -36,10 +36,14 @@ TOK_IDENTIFIER(identifier) // foo
 
 // Literals
 TOK_LITERAL(integer) // 42
-// TOK_LITERAL(string)                     // "foo"
+TOK_LITERAL(string)  // "foo"
 // TOK_LITERAL(raw_string)               // 'foo'
 
+TOK_LITERAL(fileinfo)
+
 // Punctuation.
+TOK_PUNCTUATION(period, ".")
+TOK_PUNCTUATION(comma, ",")
 TOK_PUNCTUATION(colon, ":")
 TOK_PUNCTUATION(question, "?")
 TOK_PUNCTUATION(l_paren, "(")
@@ -49,6 +53,7 @@ TOK_PUNCTUATION(r_brace, "}")
 TOK_PUNCTUATION(l_square, "[")
 TOK_PUNCTUATION(r_square, "]")
 TOK_PUNCTUATION(less, "<")
+TOK_PUNCTUATION(l_arrow, "<-")
 TOK_PUNCTUATION(greater, ">")
 TOK_PUNCTUATION(equal, "=")
 

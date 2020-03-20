@@ -92,9 +92,11 @@ private:
   FIRToken emitError(const char *loc, const Twine &message);
 
   // Lexer implementation methods.
+  FIRToken lexFileInfo(const char *tokStart);
   FIRToken lexIdentifierOrKeyword(const char *tokStart);
   FIRToken lexNumber(const char *tokStart);
   void skipComment();
+  FIRToken lexString(const char *tokStart);
 
   const llvm::SourceMgr &sourceMgr;
   mlir::MLIRContext *context;

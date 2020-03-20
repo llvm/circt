@@ -102,6 +102,10 @@ FIRToken FIRLexer::lexToken() {
       // Handle identifiers.
       return lexIdentifierOrKeyword(tokStart);
 
+    case '.':
+      return formToken(FIRToken::period, tokStart);
+    case ',':
+      return formToken(FIRToken::comma, tokStart);
     case ':':
       return formToken(FIRToken::colon, tokStart);
     case '(':
@@ -117,6 +121,10 @@ FIRToken FIRLexer::lexToken() {
     case ']':
       return formToken(FIRToken::r_square, tokStart);
     case '<':
+      if (*curPtr == '-') {
+        ++curPtr;
+        return formToken(FIRToken::l_arrow, tokStart);
+      }
       return formToken(FIRToken::less, tokStart);
     case '>':
       return formToken(FIRToken::greater, tokStart);
@@ -124,12 +132,18 @@ FIRToken FIRLexer::lexToken() {
       return formToken(FIRToken::equal, tokStart);
     case '?':
       return formToken(FIRToken::question, tokStart);
+    case '@':
+      if (*curPtr == '[')
+        return lexFileInfo(tokStart);
+      // Unknown character, emit an error.
+      return emitError(tokStart, "unexpected character");
+
     case ';':
       skipComment();
       continue;
 
-      //    case '"':
-      //      return lexString(tokStart);
+    case '"':
+      return lexString(tokStart);
 
     case '0':
     case '1':
@@ -142,6 +156,37 @@ FIRToken FIRLexer::lexToken() {
     case '8':
     case '9':
       return lexNumber(tokStart);
+    }
+  }
+}
+
+/// Lex a file info specifier.
+///
+///   FileInfo ::= '@[' ('\]'|.)* ']'
+///
+FIRToken FIRLexer::lexFileInfo(const char *tokStart) {
+  while (1) {
+    switch (*curPtr++) {
+    case ']': // This is the end of the fileinfo literal.
+      return formToken(FIRToken::fileinfo, tokStart);
+    case '\\':
+      // Ignore escaped ']'
+      if (*curPtr == ']')
+        ++curPtr;
+      break;
+    case 0:
+      // This could be the end of file in the middle of the fileinfo.  If so
+      // emit an error.
+      if (curPtr - 1 != curBuffer.end())
+        break;
+      LLVM_FALLTHROUGH;
+    case '\n': // Vertical whitespace isn't allowed in a fileinfo.
+    case '\v':
+    case '\f':
+      return emitError(tokStart, "unterminated file info specifier");
+    default:
+      // Skip over other characters.
+      break;
     }
   }
 }
@@ -170,20 +215,6 @@ FIRToken FIRLexer::lexIdentifierOrKeyword(const char *tokStart) {
   return FIRToken(kind, spelling);
 }
 
-/// Lex a number literal.
-///
-///   UnsignedInt ::= '0' | PosInt
-///   PosInt ::= [1-9] ([0-9])*
-///
-FIRToken FIRLexer::lexNumber(const char *tokStart) {
-  assert(isdigit(curPtr[-1]));
-
-  while (isdigit(*curPtr))
-    ++curPtr;
-
-  return formToken(FIRToken::integer, tokStart);
-}
-
 /// Skip a comment line, starting with a ';' and going to end of line.
 void FIRLexer::skipComment() {
   while (true) {
@@ -204,4 +235,48 @@ void FIRLexer::skipComment() {
       break;
     }
   }
+}
+
+/// StringLit      ::= '"' UnquotedString? '"'
+/// UnquotedString ::= ( '\\\'' | '\\"' | ~[\r\n] )+?
+///
+FIRToken FIRLexer::lexString(const char *tokStart) {
+  while (1) {
+    switch (*curPtr++) {
+    case '"': // This is the end of the string literal.
+      return formToken(FIRToken::string, tokStart);
+    case '\\':
+      // Ignore escaped '"'
+      if (*curPtr == '"')
+        ++curPtr;
+      break;
+    case 0:
+      // This could be the end of file in the middle of the string.  If so
+      // emit an error.
+      if (curPtr - 1 != curBuffer.end())
+        break;
+      LLVM_FALLTHROUGH;
+    case '\n': // Vertical whitespace isn't allowed in a string.
+    case '\v':
+    case '\f':
+      return emitError(tokStart, "unterminated string");
+    default:
+      // Skip over other characters.
+      break;
+    }
+  }
+}
+
+/// Lex a number literal.
+///
+///   UnsignedInt ::= '0' | PosInt
+///   PosInt ::= [1-9] ([0-9])*
+///
+FIRToken FIRLexer::lexNumber(const char *tokStart) {
+  assert(isdigit(curPtr[-1]));
+
+  while (isdigit(*curPtr))
+    ++curPtr;
+
+  return formToken(FIRToken::integer, tokStart);
 }
