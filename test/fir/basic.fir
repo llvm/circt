@@ -1,7 +1,7 @@
 ; RUN: spt-translate -import-firrtl -verify-diagnostics %s
 
 circuit basic :
-  module MyModule :
+  module MyModule :   @[FooBar.scala 369:27]
     input in: UInt<8>
     output out: UInt<8>
     out <= in

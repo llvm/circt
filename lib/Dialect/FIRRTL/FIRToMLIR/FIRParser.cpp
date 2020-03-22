@@ -128,6 +128,8 @@ struct FIRParser {
   // Common Parser Rules
   //===--------------------------------------------------------------------===//
 
+  ParseResult parseOptionalInfo();
+
   // Parse the 'id' grammar, which is an identifier or an allowed keyword.
   ParseResult parseId(const Twine &message);
   ParseResult parseType(const Twine &message);
@@ -174,6 +176,11 @@ ParseResult FIRParser::parseToken(FIRToken::Kind expectedToken,
 // Common Parser Rules.
 //===--------------------------------------------------------------------===//
 
+ParseResult FIRParser::parseOptionalInfo() {
+  consumeIf(FIRToken::fileinfo);
+  return success();
+}
+
 // Parse the 'id' grammar, which is an identifier or an allowed keyword.
 ParseResult FIRParser::parseId(const Twine &message) {
   switch (getToken().getKind()) {
@@ -204,19 +211,21 @@ ParseResult FIRParser::parseType(const Twine &message) {
 }
 
 //===----------------------------------------------------------------------===//
-// FIRFileParser
+// FIRCircuitParser
 //===----------------------------------------------------------------------===//
 
 namespace {
 /// This class implements the outer level of the parser, including things
 /// like circuit and module.
-struct FIRFileParser : public FIRParser {
-  FIRFileParser(GlobalFIRParserState &state, ModuleOp module)
+struct FIRCircuitParser : public FIRParser {
+  FIRCircuitParser(GlobalFIRParserState &state, ModuleOp module)
       : FIRParser(state), module(module) {}
 
-  ParseResult parseFile();
+  ParseResult parseCircuit();
 
 private:
+  ParseResult parsePortList(unsigned indent);
+  ParseResult parseExtModule(unsigned indent);
   ParseResult parseModule(unsigned indent);
 
   ModuleOp module;
@@ -227,15 +236,15 @@ private:
 /// file ::= circuit
 /// circuit ::= 'circuit' id ':' info? INDENT module* DEDENT EOF
 ///
-ParseResult FIRFileParser::parseFile() {
+ParseResult FIRCircuitParser::parseCircuit() {
   unsigned circuitIndent = getIndentation();
 
   // A file must contain a top level `circuit` definition.
   if (parseToken(FIRToken::kw_circuit,
                  "expected a top-level 'circuit' definition") ||
       parseId("expected circuit name") ||
-      parseToken(FIRToken::colon, "expected ':' in circuit definition"))
-    // FIXME: Parse an 'info' if present.
+      parseToken(FIRToken::colon, "expected ':' in circuit definition") ||
+      parseOptionalInfo())
     return failure();
 
   // Parse any contained modules.
@@ -254,37 +263,26 @@ ParseResult FIRFileParser::parseFile() {
       emitError("unexpected token in circuit");
       return failure();
 
-    case FIRToken::kw_module: {
+    case FIRToken::kw_module:
+    case FIRToken::kw_extmodule: {
       unsigned moduleIndent = getIndentation();
       if (moduleIndent <= circuitIndent)
         return emitError("module should be indented more"), failure();
 
-      if (parseModule(moduleIndent))
+      if (getToken().is(FIRToken::kw_module) ? parseModule(moduleIndent)
+                                             : parseExtModule(moduleIndent))
         return failure();
       break;
     }
-
-      // FIXME: Support extmodule.
-      // 'extmodule' id ':' info? INDENT port* defname? parameter* DEDENT
     }
   }
 }
 
-/// module ::= 'module' id ':' info? INDENT port* moduleBlock DEDENT
-/// moduleBlock ::= simple_stmt*
+/// portlist ::= port*
+/// port     ::= dir id ':' type info? NEWLINE
+/// dir      ::= 'input' | 'output'
 ///
-/// TODO: split port processing out to share with ext_module.
-/// port   ::= dir id ':' type info? NEWLINE
-/// dir    ::= 'input' | 'output'
-///
-ParseResult FIRFileParser::parseModule(unsigned indent) {
-  consumeToken(FIRToken::kw_module);
-
-  if (parseId("expected module name") ||
-      parseToken(FIRToken::colon, "expected ':' in module definition"))
-    // FIXME: Parse an 'info' if present.
-    return failure();
-
+ParseResult FIRCircuitParser::parsePortList(unsigned indent) {
   // Parse any ports.
   while (getToken().isAny(FIRToken::kw_input, FIRToken::kw_output) &&
          // Must be nested under the module.
@@ -293,13 +291,61 @@ ParseResult FIRFileParser::parseModule(unsigned indent) {
     consumeToken();
     if (parseId("expected port name") ||
         parseToken(FIRToken::colon, "expected ':' in port definition") ||
-        parseType("expected a type in port declaration"))
-      // FIXME: Parse an 'info' if present.
+        parseType("expected a type in port declaration") || parseOptionalInfo())
       return failure();
   }
 
-  // Parse the moduleBlock.
+  return success();
+}
 
+/// module    ::=
+///        'extmodule' id ':' info? INDENT portlist defname? parameter*  DEDENT
+/// defname   ::= 'defname' '=' id NEWLINE
+///
+/// parameter ::= 'parameter' id '=' intLit NEWLINE
+/// parameter ::= 'parameter' id '=' StringLit NEWLINE
+/// parameter ::= 'parameter' id '=' DoubleLit NEWLINE
+/// parameter ::= 'parameter' id '=' RawString NEWLINE
+ParseResult FIRCircuitParser::parseExtModule(unsigned indent) {
+  consumeToken(FIRToken::kw_extmodule);
+  if (parseId("expected module name") ||
+      parseToken(FIRToken::colon, "expected ':' in extmodule definition") ||
+      parseOptionalInfo() || parsePortList(indent))
+    return failure();
+
+  // Parse a defname if present.
+  if (consumeIf(FIRToken::kw_defname)) {
+    if (parseToken(FIRToken::equal, "expected '=' in defname") ||
+        parseId("expected defname name"))
+      return failure();
+  }
+
+  // Parse the parameter list.
+  while (consumeIf(FIRToken::kw_parameter)) {
+    if (parseId("expected parameter name") ||
+        parseToken(FIRToken::equal, "expected '=' in parameter"))
+      return failure();
+    if (getToken().isAny(FIRToken::integer, FIRToken::string))
+      consumeToken();
+    else
+      return emitError("expected parameter value"), failure();
+  }
+
+  return success();
+}
+
+/// module ::= 'module' id ':' info? INDENT portlist moduleBlock DEDENT
+/// moduleBlock ::= simple_stmt*
+///
+ParseResult FIRCircuitParser::parseModule(unsigned indent) {
+  consumeToken(FIRToken::kw_module);
+
+  if (parseId("expected module name") ||
+      parseToken(FIRToken::colon, "expected ':' in module definition") ||
+      parseOptionalInfo() || parsePortList(indent))
+    return failure();
+
+  // Parse the moduleBlock.
   while (true) {
     unsigned subIndent = getIndentation();
     if (subIndent <= indent)
@@ -345,7 +391,7 @@ static OwningModuleRef parseFIRFile(SourceMgr &sourceMgr,
   assert(dialect && "Could not find FIRRTL dialect?");
 
   GlobalFIRParserState state(sourceMgr, dialect);
-  if (FIRFileParser(state, *module).parseFile())
+  if (FIRCircuitParser(state, *module).parseCircuit())
     return nullptr;
 
   // Make sure the parse module has no other structural problems detected by

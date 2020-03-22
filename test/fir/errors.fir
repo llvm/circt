@@ -1,9 +1,9 @@
 ; RUN: spt-translate -import-firrtl -verify-diagnostics --split-input-file %s 
 
 circuit test :
-  extmodule MyModule :     ;  FIXME: expected-error {{unexpected token in circuit}}
+  extmodule MyModule :
 
-    ; xpected-error @+1 {{unterminated string}}
+    ; expected-error @+1 {{unterminated string}}
     parameter FORMAT = "tilelink_timeou
 
 ;// -----
