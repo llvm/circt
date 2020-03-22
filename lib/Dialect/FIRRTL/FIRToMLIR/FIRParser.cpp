@@ -131,7 +131,7 @@ struct FIRParser {
   ParseResult parseOptionalInfo();
 
   // Parse the 'id' grammar, which is an identifier or an allowed keyword.
-  ParseResult parseId(const Twine &message);
+  ParseResult parseId(StringAttr &result, const Twine &message);
   ParseResult parseType(const Twine &message);
 
 private:
@@ -181,8 +181,9 @@ ParseResult FIRParser::parseOptionalInfo() {
   return success();
 }
 
-// Parse the 'id' grammar, which is an identifier or an allowed keyword.
-ParseResult FIRParser::parseId(const Twine &message) {
+/// Parse the 'id' grammar, which is an identifier or an allowed keyword.  On
+/// success, this returns the identifier in the result attribute.
+ParseResult FIRParser::parseId(StringAttr &result, const Twine &message) {
   switch (getToken().getKind()) {
   // The most common case is an identifier.
   case FIRToken::identifier:
@@ -190,7 +191,8 @@ ParseResult FIRParser::parseId(const Twine &message) {
 #define TOK_KEYWORD(spelling) case FIRToken::kw_##spelling:
 #include "FIRTokenKinds.def"
 
-    // Yep, this is a valid 'id'.
+    // Yep, this is a valid 'id'.  Turn it into an attribute.
+    result = StringAttr::get(getToken().getSpelling(), getContext());
     consumeToken();
     return success();
 
@@ -217,7 +219,8 @@ ParseResult FIRParser::parseType(const Twine &message) {
 namespace {
 /// This class implements logic and state for parsing module bodies.
 struct FIRModuleParser : public FIRParser {
-  explicit FIRModuleParser(GlobalFIRParserState &state) : FIRParser(state) {}
+  explicit FIRModuleParser(GlobalFIRParserState &state, CircuitOp circuit)
+      : FIRParser(state), circuit(circuit) {}
 
   // TODO: This should take the CircuitOp to parse into.
   ParseResult parseExtModule(unsigned indent);
@@ -225,6 +228,8 @@ struct FIRModuleParser : public FIRParser {
 
 private:
   ParseResult parsePortList(unsigned indent);
+
+  CircuitOp circuit;
 };
 
 } // end anonymous namespace
@@ -240,7 +245,8 @@ ParseResult FIRModuleParser::parsePortList(unsigned indent) {
          getIndentation() > indent) {
 
     consumeToken();
-    if (parseId("expected port name") ||
+    StringAttr name;
+    if (parseId(name, "expected port name") ||
         parseToken(FIRToken::colon, "expected ':' in port definition") ||
         parseType("expected a type in port declaration") || parseOptionalInfo())
       return failure();
@@ -259,21 +265,24 @@ ParseResult FIRModuleParser::parsePortList(unsigned indent) {
 /// parameter ::= 'parameter' id '=' RawString NEWLINE
 ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   consumeToken(FIRToken::kw_extmodule);
-  if (parseId("expected module name") ||
+  StringAttr name;
+  if (parseId(name, "expected module name") ||
       parseToken(FIRToken::colon, "expected ':' in extmodule definition") ||
       parseOptionalInfo() || parsePortList(indent))
     return failure();
 
   // Parse a defname if present.
   if (consumeIf(FIRToken::kw_defname)) {
+    StringAttr defName;
     if (parseToken(FIRToken::equal, "expected '=' in defname") ||
-        parseId("expected defname name"))
+        parseId(defName, "expected defname name"))
       return failure();
   }
 
   // Parse the parameter list.
   while (consumeIf(FIRToken::kw_parameter)) {
-    if (parseId("expected parameter name") ||
+    StringAttr paramName;
+    if (parseId(paramName, "expected parameter name") ||
         parseToken(FIRToken::equal, "expected '=' in parameter"))
       return failure();
     if (getToken().isAny(FIRToken::integer, FIRToken::string))
@@ -289,12 +298,22 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
 /// moduleBlock ::= simple_stmt*
 ///
 ParseResult FIRModuleParser::parseModule(unsigned indent) {
-  consumeToken(FIRToken::kw_module);
+  // FIXME: This should be the .firtl loc, and get overriden by the fileinfo.
+  auto loc = UnknownLoc::get(getContext());
+  StringAttr name;
 
-  if (parseId("expected module name") ||
+  consumeToken(FIRToken::kw_module);
+  if (parseId(name, "expected module name") ||
       parseToken(FIRToken::colon, "expected ':' in module definition") ||
       parseOptionalInfo() || parsePortList(indent))
     return failure();
+
+  // TODO: handle port list.
+  auto builder = circuit.getBodyBuilder();
+  auto fmodule = builder.create<FModuleOp>(loc, name);
+
+  // TODO: populate this.
+  (void)fmodule;
 
   // Parse the moduleBlock.
   while (true) {
@@ -332,13 +351,13 @@ namespace {
 /// This class implements the outer level of the parser, including things
 /// like circuit and module.
 struct FIRCircuitParser : public FIRParser {
-  FIRCircuitParser(GlobalFIRParserState &state, ModuleOp module)
-      : FIRParser(state), module(module) {}
+  explicit FIRCircuitParser(GlobalFIRParserState &state, ModuleOp mlirModule)
+      : FIRParser(state), mlirModule(mlirModule) {}
 
   ParseResult parseCircuit();
 
 private:
-  ModuleOp module;
+  ModuleOp mlirModule;
 };
 
 } // end anonymous namespace
@@ -349,13 +368,21 @@ private:
 ParseResult FIRCircuitParser::parseCircuit() {
   unsigned circuitIndent = getIndentation();
 
+  // FIXME: This should be the .firtl loc, and get overriden by the fileinfo.
+  auto loc = UnknownLoc::get(getContext());
+  StringAttr name;
+
   // A file must contain a top level `circuit` definition.
   if (parseToken(FIRToken::kw_circuit,
                  "expected a top-level 'circuit' definition") ||
-      parseId("expected circuit name") ||
+      parseId(name, "expected circuit name") ||
       parseToken(FIRToken::colon, "expected ':' in circuit definition") ||
       parseOptionalInfo())
     return failure();
+
+  // Create the top-level circuit op in the MLIR module.
+  OpBuilder b(mlirModule.getBodyRegion());
+  auto circuit = b.create<CircuitOp>(loc, name);
 
   // Parse any contained modules.
   while (true) {
@@ -379,7 +406,7 @@ ParseResult FIRCircuitParser::parseCircuit() {
       if (moduleIndent <= circuitIndent)
         return emitError("module should be indented more"), failure();
 
-      FIRModuleParser mp(getState());
+      FIRModuleParser mp(getState(), circuit);
       if (getToken().is(FIRToken::kw_module) ? mp.parseModule(moduleIndent)
                                              : mp.parseExtModule(moduleIndent))
         return failure();
@@ -415,7 +442,7 @@ static OwningModuleRef parseFIRFile(SourceMgr &sourceMgr,
   if (failed(verify(*module)))
     return {};
 
-  return {};
+  return module;
 }
 
 void spt::firrtl::registerFIRRTLToMLIRTranslation() {

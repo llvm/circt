@@ -50,6 +50,11 @@ def CircuitOp : FIRRTLOp<"circuit",
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<"Builder *builder, OperationState &result, StringAttr name">
+  ];
+
   let extraClassDeclaration = [{
     OpBuilder getBodyBuilder() {
       assert(!body().empty() && "Unexpected empty 'body' region.");
@@ -74,6 +79,11 @@ def FModuleOp : FIRRTLOp<"module",
   let arguments = (ins);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<"Builder *builder, OperationState &result, StringAttr name">
+  ];
 
   let extraClassDeclaration = [{
     OpBuilder getBodyBuilder() {

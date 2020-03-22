@@ -95,8 +95,21 @@ void FIRRTLDialect::printType(Type type, DialectAsmPrinter &os) const {
 }
 
 //===----------------------------------------------------------------------===//
-// Module and Circuit Ops.
+// CircuitOp
 //===----------------------------------------------------------------------===//
+
+void CircuitOp::build(Builder *builder, OperationState &result,
+                      StringAttr name) {
+  // Add an attribute for the name.
+  result.addAttribute(builder->getIdentifier("name"), name);
+
+  // Create a region and a block for the body.  The argument of the region is
+  // the loop induction variable.
+  Region *bodyRegion = result.addRegion();
+  Block *body = new Block();
+  bodyRegion->push_back(body);
+  CircuitOp::ensureTerminator(*bodyRegion, *builder, result.location);
+}
 
 static void print(OpAsmPrinter &p, CircuitOp op) {
   p << op.getOperationName() << " ";
@@ -125,8 +138,28 @@ static ParseResult parseCircuitOp(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   CircuitOp::ensureTerminator(*body, parser.getBuilder(), result.location);
-
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// FModuleOp
+//===----------------------------------------------------------------------===//
+
+void FModuleOp::build(Builder *builder, OperationState &result,
+                      StringAttr name) {
+  // Add an attribute for the name.
+  result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
+
+  // Record the argument and result types as an attribute.
+  auto type = builder->getFunctionType({}, {});
+  result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
+
+  // Create a region and a block for the body.  The argument of the region is
+  // the loop induction variable.
+  Region *bodyRegion = result.addRegion();
+  Block *body = new Block();
+  bodyRegion->push_back(body);
+  FModuleOp::ensureTerminator(*bodyRegion, *builder, result.location);
 }
 
 // TODO: This ia a clone of mlir::impl::printFunctionSignature, refactor it to
@@ -153,9 +186,9 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
 
     auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
 
-    // If the argument has the firrtl.name attribute, and if it was used by the
-    // printer exactly (not name mangled with a suffix etc) then we can omit
-    // the firrtl.name attribute from the argument attribute dictionary.
+    // If the argument has the firrtl.name attribute, and if it was used by
+    // the printer exactly (not name mangled with a suffix etc) then we can
+    // omit the firrtl.name attribute from the argument attribute dictionary.
     ArrayRef<StringRef> elidedAttrs;
     if (argumentValue) {
       if (auto nameAttr = getFIRRTLNameAttr(argAttrs)) {
@@ -253,8 +286,9 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result) {
   // Postprocess each of the arguments.  If there was no 'firrtl.name'
   // attribute, and if the argument name was non-numeric, then add the
   // firrtl.name attribute with the textual name from the IR.  The name in the
-  // text file is a load-bearing part of the IR, but we don't want the verbosity
-  // in dumps of including it explicitly in the attribute dictionary.
+  // text file is a load-bearing part of the IR, but we don't want the
+  // verbosity in dumps of including it explicitly in the attribute
+  // dictionary.
   for (size_t i = 0, e = argAttrs.size(); i != e; ++i) {
     auto &arg = entryArgs[i];
     auto &attrs = argAttrs[i];
@@ -267,8 +301,8 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result) {
     if (hasNameAttr)
       continue;
 
-    // The name of an argument is of the form "%42" or "%id", and since parsing
-    // succeeded, we know it always has one character.
+    // The name of an argument is of the form "%42" or "%id", and since
+    // parsing succeeded, we know it always has one character.
     assert(arg.name.size() > 1 && arg.name[0] == '%' && "Unknown MLIR name");
     if (isdigit(arg.name[1]))
       continue;
