@@ -35,7 +35,7 @@ reasonably fast and is good to provide a sanity check that things are working):
 $ cd ~/Projects/llvm-project
 $ mkdir build
 $ cd build
-$ cmake -G Ninja ../llvm  -DLLVM_EXTERNAL_PROJECTS="spt" -DLLVM_EXTERNAL_SPT_SOURCE_DIR=/Users/chrisl/Projects/spt   -DLLVM_ENABLE_PROJECTS="mlir;spt" -DLLVM_TARGETS_TO_BUILD="X86" -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=DEBUG
+$ cmake -G Ninja ../llvm  -DLLVM_EXTERNAL_PROJECTS="spt" -DLLVM_EXTERNAL_SPT_SOURCE_DIR=/Users/chrisl/Projects/spt   -DLLVM_ENABLE_PROJECTS="mlir;spt" -DLLVM_TARGETS_TO_BUILD="X86;RISCV" -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=DEBUG
 ```
 
 The "-DCMAKE_BUILD_TYPE=DEBUG" flag enables debug information, which makes the

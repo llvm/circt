@@ -79,9 +79,14 @@ class FIRLexer {
 public:
   FIRLexer(const llvm::SourceMgr &sourceMgr, mlir::MLIRContext *context);
 
+  const llvm::SourceMgr &getSourceMgr() const { return sourceMgr; }
+
   FIRToken lexToken();
 
   mlir::Location getEncodedSourceLocation(llvm::SMLoc loc);
+
+  /// Return the indentation level of the specified token.
+  unsigned getIndentation(const FIRToken &tok) const;
 
 private:
   // Helpers.

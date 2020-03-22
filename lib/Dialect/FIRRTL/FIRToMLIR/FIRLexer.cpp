@@ -71,6 +71,28 @@ FIRToken FIRLexer::emitError(const char *loc, const Twine &message) {
   return formToken(FIRToken::error, loc);
 }
 
+/// Return the indentation level of the specified token.
+unsigned FIRLexer::getIndentation(const FIRToken &tok) const {
+  // Count the number of horizontal whitespace characters before the token.
+  auto *bufStart = curBuffer.begin();
+
+  auto isHorizontalWS = [](char c) -> bool { return c == ' ' || c == '\t'; };
+  auto isVerticalWS = [](char c) -> bool {
+    return c == '\n' || c == '\r' || c == '\f' || c == '\v';
+  };
+
+  unsigned indent = 0;
+  const auto *ptr = (const char *)tok.getSpelling().data();
+  while (ptr != bufStart && !isVerticalWS(ptr[-1]) && isHorizontalWS(ptr[-1]))
+    --ptr, ++indent;
+
+  return indent;
+}
+
+//===----------------------------------------------------------------------===//
+// Lexer Implementation Methods
+//===----------------------------------------------------------------------===//
+
 FIRToken FIRLexer::lexToken() {
   while (true) {
     const char *tokStart = curPtr;
@@ -123,7 +145,11 @@ FIRToken FIRLexer::lexToken() {
     case '<':
       if (*curPtr == '-') {
         ++curPtr;
-        return formToken(FIRToken::l_arrow, tokStart);
+        return formToken(FIRToken::less_minus, tokStart);
+      }
+      if (*curPtr == '=') {
+        ++curPtr;
+        return formToken(FIRToken::less_equal, tokStart);
       }
       return formToken(FIRToken::less, tokStart);
     case '>':
