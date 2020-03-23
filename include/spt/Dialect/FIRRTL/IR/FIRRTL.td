@@ -82,10 +82,12 @@ def FModuleOp : FIRRTLOp<"module",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"Builder *builder, OperationState &result, StringAttr name">
+    OpBuilder<"Builder *builder, OperationState &result, StringAttr name, "
+              "ArrayRef<std::pair<StringAttr, Type>> ports">
   ];
 
   let extraClassDeclaration = [{
+    typedef std::pair<StringAttr, Type> PortInfo;
     OpBuilder getBodyBuilder() {
       assert(!body().empty() && "Unexpected empty 'body' region.");
       Block &bodyBlock = body().front();

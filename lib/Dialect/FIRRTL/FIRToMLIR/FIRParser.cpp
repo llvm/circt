@@ -8,6 +8,7 @@
 #include "mlir/Analysis/Verifier.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Module.h"
+#include "mlir/IR/StandardTypes.h"
 #include "mlir/Translation.h"
 #include "spt/Dialect/FIRRTL/FIRToMLIR.h"
 #include "spt/Dialect/FIRRTL/IR/Ops.h"
@@ -132,7 +133,7 @@ struct FIRParser {
 
   // Parse the 'id' grammar, which is an identifier or an allowed keyword.
   ParseResult parseId(StringAttr &result, const Twine &message);
-  ParseResult parseType(const Twine &message);
+  ParseResult parseType(Type &result, const Twine &message);
 
 private:
   FIRParser(const FIRParser &) = delete;
@@ -202,13 +203,15 @@ ParseResult FIRParser::parseId(StringAttr &result, const Twine &message) {
   }
 }
 
-ParseResult FIRParser::parseType(const Twine &message) {
+ParseResult FIRParser::parseType(Type &result, const Twine &message) {
   // FIXME: This is not the correct type grammar :-)
   if (parseToken(FIRToken::kw_UInt, "expected type") ||
       parseToken(FIRToken::less, "expected <") ||
       parseToken(FIRToken::integer, "expected width") ||
       parseToken(FIRToken::greater, "expected >"))
     return failure();
+
+  result = IntegerType::get(8, IntegerType::Unsigned, getContext());
   return success();
 }
 
@@ -222,12 +225,12 @@ struct FIRModuleParser : public FIRParser {
   explicit FIRModuleParser(GlobalFIRParserState &state, CircuitOp circuit)
       : FIRParser(state), circuit(circuit) {}
 
-  // TODO: This should take the CircuitOp to parse into.
   ParseResult parseExtModule(unsigned indent);
   ParseResult parseModule(unsigned indent);
 
 private:
-  ParseResult parsePortList(unsigned indent);
+  ParseResult parsePortList(SmallVectorImpl<FModuleOp::PortInfo> &result,
+                            unsigned indent);
 
   CircuitOp circuit;
 };
@@ -238,18 +241,28 @@ private:
 /// port     ::= dir id ':' type info? NEWLINE
 /// dir      ::= 'input' | 'output'
 ///
-ParseResult FIRModuleParser::parsePortList(unsigned indent) {
+ParseResult
+FIRModuleParser::parsePortList(SmallVectorImpl<FModuleOp::PortInfo> &result,
+                               unsigned indent) {
   // Parse any ports.
   while (getToken().isAny(FIRToken::kw_input, FIRToken::kw_output) &&
          // Must be nested under the module.
          getIndentation() > indent) {
+    bool isOutput = getToken().is(FIRToken::kw_output);
 
     consumeToken();
     StringAttr name;
+    Type type;
     if (parseId(name, "expected port name") ||
         parseToken(FIRToken::colon, "expected ':' in port definition") ||
-        parseType("expected a type in port declaration") || parseOptionalInfo())
+        parseType(type, "expected a type in port declaration") ||
+        parseOptionalInfo())
       return failure();
+
+    // TODO: If isOutput, flip the type.
+    (void)isOutput;
+
+    result.push_back({name, type});
   }
 
   return success();
@@ -266,9 +279,11 @@ ParseResult FIRModuleParser::parsePortList(unsigned indent) {
 ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   consumeToken(FIRToken::kw_extmodule);
   StringAttr name;
+  SmallVector<FModuleOp::PortInfo, 4> portList;
+
   if (parseId(name, "expected module name") ||
       parseToken(FIRToken::colon, "expected ':' in extmodule definition") ||
-      parseOptionalInfo() || parsePortList(indent))
+      parseOptionalInfo() || parsePortList(portList, indent))
     return failure();
 
   // Parse a defname if present.
@@ -301,16 +316,17 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
   // FIXME: This should be the .firtl loc, and get overriden by the fileinfo.
   auto loc = UnknownLoc::get(getContext());
   StringAttr name;
+  SmallVector<FModuleOp::PortInfo, 4> portList;
 
   consumeToken(FIRToken::kw_module);
   if (parseId(name, "expected module name") ||
       parseToken(FIRToken::colon, "expected ':' in module definition") ||
-      parseOptionalInfo() || parsePortList(indent))
+      parseOptionalInfo() || parsePortList(portList, indent))
     return failure();
 
   // TODO: handle port list.
   auto builder = circuit.getBodyBuilder();
-  auto fmodule = builder.create<FModuleOp>(loc, name);
+  auto fmodule = builder.create<FModuleOp>(loc, name, portList);
 
   // TODO: populate this.
   (void)fmodule;

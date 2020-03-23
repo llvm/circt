@@ -145,20 +145,42 @@ static ParseResult parseCircuitOp(OpAsmParser &parser, OperationState &result) {
 // FModuleOp
 //===----------------------------------------------------------------------===//
 
-void FModuleOp::build(Builder *builder, OperationState &result,
-                      StringAttr name) {
+void FModuleOp::build(Builder *builder, OperationState &result, StringAttr name,
+                      ArrayRef<std::pair<StringAttr, Type>> ports) {
   // Add an attribute for the name.
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
 
+  SmallVector<Type, 4> argTypes;
+  for (auto elt : ports)
+    argTypes.push_back(elt.second);
+
   // Record the argument and result types as an attribute.
-  auto type = builder->getFunctionType({}, {});
+  auto type = builder->getFunctionType(argTypes, /*resultTypes*/ {});
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
+
+  // Record the names of the arguments if present.
+  SmallString<8> attrNameBuf;
+  for (size_t i = 0, e = ports.size(); i != e; ++i) {
+    if (ports[i].first.getValue().empty())
+      continue;
+
+    auto argAttr =
+        NamedAttribute(builder->getIdentifier("firrtl.name"), ports[i].first);
+
+    result.addAttribute(getArgAttrName(i, attrNameBuf),
+                        builder->getDictionaryAttr(argAttr));
+  }
 
   // Create a region and a block for the body.  The argument of the region is
   // the loop induction variable.
   Region *bodyRegion = result.addRegion();
   Block *body = new Block();
   bodyRegion->push_back(body);
+
+  // Add arguments to the body block.
+  for (auto elt : ports)
+    body->addArgument(elt.second);
+
   FModuleOp::ensureTerminator(*bodyRegion, *builder, result.location);
 }
 
