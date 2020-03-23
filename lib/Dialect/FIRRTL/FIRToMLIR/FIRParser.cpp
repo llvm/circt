@@ -12,6 +12,7 @@
 #include "mlir/Translation.h"
 #include "spt/Dialect/FIRRTL/FIRToMLIR.h"
 #include "spt/Dialect/FIRRTL/IR/Ops.h"
+#include "spt/Dialect/FIRRTL/IR/Types.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -203,16 +204,58 @@ ParseResult FIRParser::parseId(StringAttr &result, const Twine &message) {
   }
 }
 
+/// type ::= 'Clock'
+///      ::= 'Reset'
+///      ::= 'UInt' ('<' intLit '>')?
+///      ::= 'SInt' ('<' intLit '>')?
+///      ::= 'Analog' ('<' intLit '>')?
+///      FIXME: more
+///
+// FIXME: 'AsyncReset' is also handled by the parser but is not in the spec.
 ParseResult FIRParser::parseType(Type &result, const Twine &message) {
-  // FIXME: This is not the correct type grammar :-)
-  if (parseToken(FIRToken::kw_UInt, "expected type") ||
-      parseToken(FIRToken::less, "expected <") ||
-      parseToken(FIRToken::integer, "expected width") ||
-      parseToken(FIRToken::greater, "expected >"))
-    return failure();
+  switch (getToken().getKind()) {
+  default:
+    return emitError(message), failure();
 
-  result = IntegerType::get(8, IntegerType::Unsigned, getContext());
-  return success();
+  case FIRToken::kw_Clock:
+    consumeToken(FIRToken::kw_Clock);
+    return result = ClockType::get(getContext()), success();
+
+  case FIRToken::kw_Reset:
+    consumeToken(FIRToken::kw_Reset);
+    return result = ResetType::get(getContext()), success();
+
+  case FIRToken::kw_UInt:
+  case FIRToken::kw_SInt:
+  case FIRToken::kw_Analog: {
+    auto kind = getToken().getKind();
+    consumeToken();
+
+    if (!consumeIf(FIRToken::less)) {
+      if (kind == FIRToken::kw_SInt)
+        result = SIntType::get(getContext());
+      else if (kind == FIRToken::kw_UInt)
+        result = UIntType::get(getContext());
+      else {
+        assert(kind == FIRToken::kw_Analog);
+        result = AnalogType::get(getContext());
+      }
+      return success();
+    }
+
+    if (parseToken(FIRToken::integer, "expected width") ||
+        parseToken(FIRToken::greater, "expected >"))
+      return failure();
+
+    if (kind == FIRToken::kw_Analog)
+      llvm_unreachable("analog width not supported yet");
+
+    auto signedness =
+        kind == FIRToken::kw_SInt ? IntegerType::Signed : IntegerType::Unsigned;
+    result = IntegerType::get(8, signedness, getContext());
+    return success();
+  }
+  }
 }
 
 //===----------------------------------------------------------------------===//

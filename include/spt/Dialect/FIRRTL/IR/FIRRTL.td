@@ -23,13 +23,33 @@ def FIRRTLDialect : Dialect {
   let cppNamespace = "firrtl";
 }
 
-def FIRRTL_UIntType : DialectType<FIRRTLDialect,
-    CPred<"$_self.isa<UIntType>()">, "UInt type"> {
-  let typeDescription = [{
-    `firrtl.UInt` is an unsigned integer of unknown width.
-  }];
+class FIRGroundType<string name, string desc> 
+  : DialectType<FIRRTLDialect,
+           CPred<!strconcat("$_self.isa<", name, "Type>()")>,
+           !strconcat(name, " type")> {
+  let typeDescription = desc;
 }
 
+def FIRRTL_SIntType : FIRGroundType<"SInt", [{
+    `firrtl.SInt` is a signed integer of unknown width.
+  }]>;
+
+def FIRRTL_UIntType : FIRGroundType<"UInt", [{
+    `firrtl.UInt` is an unsigned integer of unknown width.
+  }]>;
+
+def FIRRTL_ClockType : FIRGroundType<"Clock", [{
+    `firrtl.Clock` describe wires and ports meant for carrying clock signals.
+  }]>;
+
+def FIRRTL_ResetType : FIRGroundType<"Reset", [{
+    `firrtl.Reset` does something.
+     FIXME: Reset type is not described in the FIRRTL spec, nor is AsyncReset.
+  }]>;
+
+def FIRRTL_AnalogType : FIRGroundType<"Analog", [{
+    `firrtl.Analog` can be attached to multiple drivers.
+  }]>;
 
 //===----------------------------------------------------------------------===//
 // FIRRTL op definitions

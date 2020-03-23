@@ -30,25 +30,6 @@ public:
   static StringRef getDialectNamespace() { return "firrtl"; }
 };
 
-namespace FIRRTLTypes {
-enum Kind {
-  UInt = Type::FIRST_PRIVATE_EXPERIMENTAL_0_TYPE,
-};
-} // namespace FIRRTLTypes
-
-// A unsigned integer type with unknown width.
-class UIntType : public Type::TypeBase<UIntType, Type> {
-public:
-  using Base::Base;
-
-  static UIntType get(MLIRContext *context) {
-    return Base::get(context, FIRRTLTypes::Kind::UInt);
-  }
-
-  /// Support method to enable LLVM-style type casting.
-  static bool kindof(unsigned kind) { return kind == FIRRTLTypes::Kind::UInt; }
-};
-
 #define GET_OP_CLASSES
 #include "spt/Dialect/FIRRTL/IR/FIRRTL.h.inc"
 

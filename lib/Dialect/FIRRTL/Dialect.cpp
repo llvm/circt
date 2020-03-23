@@ -6,6 +6,7 @@
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/StandardTypes.h"
 #include "spt/Dialect/FIRRTL/IR/Ops.h"
+#include "spt/Dialect/FIRRTL/IR/Types.h"
 
 using namespace spt;
 using namespace firrtl;
@@ -62,7 +63,8 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
 
 FIRRTLDialect::FIRRTLDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context) {
-  addTypes<UIntType>();
+  addTypes<SIntType, UIntType, ClockType, ResetType, AnalogType>();
+
   addOperations<
 #define GET_OP_LIST
 #include "spt/Dialect/FIRRTL/IR/FIRRTL.cpp.inc"
@@ -72,27 +74,6 @@ FIRRTLDialect::FIRRTLDialect(MLIRContext *context)
 }
 
 FIRRTLDialect::~FIRRTLDialect() {}
-
-//===----------------------------------------------------------------------===//
-// Type Implementations.
-//===----------------------------------------------------------------------===//
-
-/// Parse a type registered to this dialect.
-Type FIRRTLDialect::parseType(DialectAsmParser &parser) const {
-  StringRef tyData = parser.getFullSymbolSpec();
-
-  if (tyData == "uint")
-    return UIntType::get(getContext());
-
-  parser.emitError(parser.getNameLoc(), "unknown firrtl type");
-  return Type();
-}
-
-void FIRRTLDialect::printType(Type type, DialectAsmPrinter &os) const {
-  auto uintType = type.dyn_cast<UIntType>();
-  assert(uintType && "printing wrong type");
-  os.getStream() << "uint";
-}
 
 //===----------------------------------------------------------------------===//
 // CircuitOp

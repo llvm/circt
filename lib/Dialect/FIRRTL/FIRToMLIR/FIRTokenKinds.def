@@ -58,13 +58,15 @@ TOK_PUNCTUATION(less_minus, "<-")
 TOK_PUNCTUATION(greater, ">")
 TOK_PUNCTUATION(equal, "=")
 
-// Keywords.  These turn "foo" into Token::kw_foo enums.
+// Keywords.  These turn "foo" into FIRToken::kw_foo enums.
 
 // NOTE: Please key these alphabetized to make it easier to find something in
 // this list and to cater to OCD.
 TOK_KEYWORD(Analog)
+TOK_KEYWORD(AsyncReset)
 TOK_KEYWORD(Clock)
 TOK_KEYWORD(Fixed)
+TOK_KEYWORD(Reset)
 TOK_KEYWORD(SInt)
 TOK_KEYWORD(UInt)
 TOK_KEYWORD(circuit)
