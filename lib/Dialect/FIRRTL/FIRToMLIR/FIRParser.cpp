@@ -243,19 +243,24 @@ ParseResult FIRParser::parseType(Type &result, const Twine &message) {
       return success();
     }
 
+    auto widthSpelling = getTokenSpelling();
+    auto widthLoc = getToken().getLoc();
     if (parseToken(FIRToken::integer, "expected width") ||
         parseToken(FIRToken::greater, "expected >"))
       return failure();
 
-    // FIXME: Stop hardcoding 8 as the width!
+    int32_t width;
+    if (widthSpelling.getAsInteger(10, width) || width < 0)
+      return emitError(widthLoc, "invalid width specifier"), failure();
+
     if (kind == FIRToken::kw_Analog) {
-      result = AnalogType::get(8, getContext());
+      result = AnalogType::get(width, getContext());
       return success();
     }
 
     auto signedness =
         kind == FIRToken::kw_SInt ? IntegerType::Signed : IntegerType::Unsigned;
-    result = IntegerType::get(8, signedness, getContext());
+    result = IntegerType::get(width, signedness, getContext());
     return success();
   }
   }

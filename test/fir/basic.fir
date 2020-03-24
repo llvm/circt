@@ -11,9 +11,9 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
   ; CHECK: }
 
 
-  ; CHECK-LABEL: firrtl.module @circuit(%in: ui8) {
+  ; CHECK-LABEL: firrtl.module @circuit(%in: ui80) {
   module circuit :    ; Module with a keyword id.
-    input in: UInt<8>
+    input in: UInt<80>
 
   ; CHECK: }
 
@@ -27,6 +27,6 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     input a: Analog        ; CHECK: %a: !firrtl.analog,
     input a8: Analog<8>    ; CHECK: %a8: !firrtl.analog<8>,
     input s: SInt          ; CHECK: %s: !firrtl.sint,
-    input s8: SInt<8>      ; CHECK: %s8: si8,
+    input s4: SInt<4>      ; CHECK: %s4: si4,
     input u: UInt          ; CHECK: %u: !firrtl.uint) {
 
