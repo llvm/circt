@@ -1,4 +1,4 @@
-; RUN: spt-translate -import-firrtl -verify-diagnostics %s | FileCheck %s
+; RUN: spt-translate -import-firrtl -verify-diagnostics %s | spt-opt | FileCheck %s
 
 circuit basic :     ; CHECK: firrtl.circuit "basic" {
 
@@ -22,10 +22,11 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
 
   ; CHECK-LABEL: firrtl.module @types(
   module types :
-    input c: Clock     ; CHECK: %c: !firrtl.clock,
-    input r: Reset     ; CHECK: %r: !firrtl.reset,
-    input a: Analog    ; CHECK: %a: !firrtl.analog,
-    input s: SInt      ; CHECK: %s: !firrtl.sint,
-    input s8: SInt<8>  ; CHECK: %s8: si8,
-    input u: UInt      ; CHECK: %u: !firrtl.uint) {
+    input c: Clock         ; CHECK: %c: !firrtl.clock,
+    input r: Reset         ; CHECK: %r: !firrtl.reset,
+    input a: Analog        ; CHECK: %a: !firrtl.analog,
+    input a8: Analog<8>    ; CHECK: %a8: !firrtl.analog<8>,
+    input s: SInt          ; CHECK: %s: !firrtl.sint,
+    input s8: SInt<8>      ; CHECK: %s8: si8,
+    input u: UInt          ; CHECK: %u: !firrtl.uint) {
 

@@ -29,10 +29,11 @@ enum Kind {
 // Ground Types
 //===----------------------------------------------------------------------===//
 
-/// A signed integer type with unknown width.
+/// A signed integer type, whose width may not be known.
 class SIntType : public Type::TypeBase<SIntType, Type> {
 public:
   using Base::Base;
+
   static SIntType get(MLIRContext *context) {
     return Base::get(context, FIRRTLTypes::SInt);
   }
@@ -74,17 +75,27 @@ public:
 // Derived Types
 //===----------------------------------------------------------------------===//
 
+namespace detail {
+struct AnalogTypeStorage;
+} // namespace detail.
+
 // `firrtl.Analog` can be attached to multiple drivers.
-class AnalogType : public Type::TypeBase<AnalogType, Type> {
+class AnalogType
+    : public Type::TypeBase<AnalogType, Type, detail::AnalogTypeStorage> {
 public:
   using Base::Base;
 
-  static AnalogType get(MLIRContext *context) {
-    return Base::get(context, FIRRTLTypes::Analog);
-  }
+  /// Get an AnalogType with a known width, or -1 for unknown.
+  static AnalogType get(int32_t width, MLIRContext *context);
+
+  /// Get an AnalogType with unknown width.
+  static AnalogType get(MLIRContext *context) { return get(-1, context); }
 
   /// Support method to enable LLVM-style type casting.
   static bool kindof(unsigned kind) { return kind == FIRRTLTypes::Analog; }
+
+  /// Return the bitwidth of this Analog type or None if unknown.
+  Optional<int32_t> getWidth() const;
 };
 
 } // namespace firrtl

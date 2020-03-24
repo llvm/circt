@@ -247,8 +247,11 @@ ParseResult FIRParser::parseType(Type &result, const Twine &message) {
         parseToken(FIRToken::greater, "expected >"))
       return failure();
 
-    if (kind == FIRToken::kw_Analog)
-      llvm_unreachable("analog width not supported yet");
+    // FIXME: Stop hardcoding 8 as the width!
+    if (kind == FIRToken::kw_Analog) {
+      result = AnalogType::get(8, getContext());
+      return success();
+    }
 
     auto signedness =
         kind == FIRToken::kw_SInt ? IntegerType::Signed : IntegerType::Unsigned;
