@@ -26,29 +26,8 @@ enum Kind {
 } // namespace FIRRTLTypes
 
 //===----------------------------------------------------------------------===//
-// Ground Types
+// Ground Types Without Parameters
 //===----------------------------------------------------------------------===//
-
-/// A signed integer type, whose width may not be known.
-class SIntType : public Type::TypeBase<SIntType, Type> {
-public:
-  using Base::Base;
-
-  static SIntType get(MLIRContext *context) {
-    return Base::get(context, FIRRTLTypes::SInt);
-  }
-  static bool kindof(unsigned kind) { return kind == FIRRTLTypes::SInt; }
-};
-
-/// A unsigned integer type with unknown width.
-class UIntType : public Type::TypeBase<UIntType, Type> {
-public:
-  using Base::Base;
-  static UIntType get(MLIRContext *context) {
-    return Base::get(context, FIRRTLTypes::UInt);
-  }
-  static bool kindof(unsigned kind) { return kind == FIRRTLTypes::UInt; }
-};
 
 /// `firrtl.Clock` describe wires and ports meant for carrying clock signals.
 class ClockType : public Type::TypeBase<ClockType, Type> {
@@ -72,30 +51,54 @@ public:
 };
 
 //===----------------------------------------------------------------------===//
-// Derived Types
+// Width Qualified Types
 //===----------------------------------------------------------------------===//
 
 namespace detail {
-struct AnalogTypeStorage;
+struct WidthTypeStorage;
+Optional<int32_t> getWidthQualifiedTypeWidth(WidthTypeStorage *impl);
 } // namespace detail.
 
-// `firrtl.Analog` can be attached to multiple drivers.
-class AnalogType
-    : public Type::TypeBase<AnalogType, Type, detail::AnalogTypeStorage> {
+template <typename ConcreteType, FIRRTLTypes::Kind typeKind>
+class WidthQualifiedType
+    : public Type::TypeBase<ConcreteType, Type, detail::WidthTypeStorage> {
 public:
-  using Base::Base;
+  using Type::TypeBase<ConcreteType, Type,
+                       detail::WidthTypeStorage>::Base::Base;
 
-  /// Get an AnalogType with a known width, or -1 for unknown.
-  static AnalogType get(int32_t width, MLIRContext *context);
+  static bool kindof(unsigned kind) { return kind == typeKind; }
 
-  /// Get an AnalogType with unknown width.
-  static AnalogType get(MLIRContext *context) { return get(-1, context); }
+  /// Return the bitwidth of this type or None if unknown.
+  Optional<int32_t> getWidth() const {
+    return getWidthQualifiedTypeWidth(this->getImpl());
+  }
+};
 
-  /// Support method to enable LLVM-style type casting.
-  static bool kindof(unsigned kind) { return kind == FIRRTLTypes::Analog; }
+/// A signed integer type, whose width may not be known.
+class SIntType : public WidthQualifiedType<SIntType, FIRRTLTypes::SInt> {
+public:
+  using WidthQualifiedType::WidthQualifiedType;
 
-  /// Return the bitwidth of this Analog type or None if unknown.
-  Optional<int32_t> getWidth() const;
+  /// Get an with a known width, or -1 for unknown.
+  static SIntType get(MLIRContext *context, int32_t width = -1);
+};
+
+/// An unsigned integer type, whose width may not be known.
+class UIntType : public WidthQualifiedType<UIntType, FIRRTLTypes::UInt> {
+public:
+  using WidthQualifiedType::WidthQualifiedType;
+
+  /// Get an with a known width, or -1 for unknown.
+  static UIntType get(MLIRContext *context, int32_t width = -1);
+};
+
+// `firrtl.Analog` can be attached to multiple drivers.
+class AnalogType : public WidthQualifiedType<AnalogType, FIRRTLTypes::Analog> {
+public:
+  using WidthQualifiedType::WidthQualifiedType;
+
+  /// Get an with a known width, or -1 for unknown.
+  static AnalogType get(MLIRContext *context, int32_t width = -1);
 };
 
 } // namespace firrtl

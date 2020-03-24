@@ -231,36 +231,27 @@ ParseResult FIRParser::parseType(Type &result, const Twine &message) {
     auto kind = getToken().getKind();
     consumeToken();
 
-    if (!consumeIf(FIRToken::less)) {
-      if (kind == FIRToken::kw_SInt)
-        result = SIntType::get(getContext());
-      else if (kind == FIRToken::kw_UInt)
-        result = UIntType::get(getContext());
-      else {
-        assert(kind == FIRToken::kw_Analog);
-        result = AnalogType::get(getContext());
-      }
-      return success();
+    // Parse a width specifier if present.
+    int32_t width = -1;
+    if (consumeIf(FIRToken::less)) {
+      auto widthSpelling = getTokenSpelling();
+      auto widthLoc = getToken().getLoc();
+      if (parseToken(FIRToken::integer, "expected width") ||
+          parseToken(FIRToken::greater, "expected >"))
+        return failure();
+
+      if (widthSpelling.getAsInteger(10, width) || width < 0)
+        return emitError(widthLoc, "invalid width specifier"), failure();
     }
 
-    auto widthSpelling = getTokenSpelling();
-    auto widthLoc = getToken().getLoc();
-    if (parseToken(FIRToken::integer, "expected width") ||
-        parseToken(FIRToken::greater, "expected >"))
-      return failure();
-
-    int32_t width;
-    if (widthSpelling.getAsInteger(10, width) || width < 0)
-      return emitError(widthLoc, "invalid width specifier"), failure();
-
-    if (kind == FIRToken::kw_Analog) {
-      result = AnalogType::get(width, getContext());
-      return success();
+    if (kind == FIRToken::kw_SInt)
+      result = SIntType::get(getContext(), width);
+    else if (kind == FIRToken::kw_UInt)
+      result = UIntType::get(getContext(), width);
+    else {
+      assert(kind == FIRToken::kw_Analog);
+      result = AnalogType::get(getContext(), width);
     }
-
-    auto signedness =
-        kind == FIRToken::kw_SInt ? IntegerType::Signed : IntegerType::Unsigned;
-    result = IntegerType::get(width, signedness, getContext());
     return success();
   }
   }
