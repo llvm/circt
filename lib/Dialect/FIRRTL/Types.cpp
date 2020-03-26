@@ -9,6 +9,46 @@
 using namespace spt;
 using namespace firrtl;
 
+//===----------------------------------------------------------------------===//
+// Type Printing
+//===----------------------------------------------------------------------===//
+
+void FIRRTLType::print(raw_ostream &os) const {
+  auto printWidthQualifier = [&](Optional<int32_t> width) {
+    if (width)
+      os << '<' << width.getValue() << '>';
+  };
+
+  switch (getKind()) {
+  default:
+    assert(0 && "unknown dialect type to print");
+  case FIRRTLType::Clock:
+    os << "clock";
+    break;
+  case FIRRTLType::Reset:
+    os << "reset";
+    break;
+
+  // Width Qualified Types.
+  case FIRRTLType::SInt:
+    os << "sint";
+    printWidthQualifier(cast<SIntType>().getWidth());
+    break;
+  case FIRRTLType::UInt:
+    os << "uint";
+    printWidthQualifier(cast<UIntType>().getWidth());
+    break;
+  case FIRRTLType::Analog:
+    os << "analog";
+    printWidthQualifier(cast<AnalogType>().getWidth());
+    break;
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// Type Parsing
+//===----------------------------------------------------------------------===//
+
 /// Parse a type registered to this dialect.
 Type FIRRTLDialect::parseType(DialectAsmParser &parser) const {
   StringRef typeStr = parser.getFullSymbolSpec();
@@ -56,38 +96,6 @@ Type FIRRTLDialect::parseType(DialectAsmParser &parser) const {
   return Type();
 }
 
-void FIRRTLDialect::printType(Type type, DialectAsmPrinter &os) const {
-  auto printWidthQualifier = [&](Optional<int32_t> width) {
-    if (width)
-      os.getStream() << '<' << width.getValue() << '>';
-  };
-
-  switch (type.getKind()) {
-  default:
-    assert(0 && "unknown dialect type to print");
-  case FIRRTLTypes::Clock:
-    os.getStream() << "clock";
-    break;
-  case FIRRTLTypes::Reset:
-    os.getStream() << "reset";
-    break;
-
-  // Width Qualified Types.
-  case FIRRTLTypes::SInt:
-    os.getStream() << "sint";
-    printWidthQualifier(type.cast<SIntType>().getWidth());
-    break;
-  case FIRRTLTypes::UInt:
-    os.getStream() << "uint";
-    printWidthQualifier(type.cast<UIntType>().getWidth());
-    break;
-  case FIRRTLTypes::Analog:
-    os.getStream() << "analog";
-    printWidthQualifier(type.cast<AnalogType>().getWidth());
-    break;
-  }
-}
-
 //===----------------------------------------------------------------------===//
 // WidthTypeStorage
 //===----------------------------------------------------------------------===//
@@ -123,16 +131,16 @@ Optional<int32_t> getWidthQualifiedTypeWidth(WidthTypeStorage *impl) {
 /// Get an with a known width, or -1 for unknown.
 SIntType SIntType::get(MLIRContext *context, int32_t width) {
   assert(width >= -1 && "unknown width");
-  return Base::get(context, FIRRTLTypes::SInt, width);
+  return Base::get(context, FIRRTLType::SInt, width);
 }
 
 UIntType UIntType::get(MLIRContext *context, int32_t width) {
   assert(width >= -1 && "unknown width");
-  return Base::get(context, FIRRTLTypes::UInt, width);
+  return Base::get(context, FIRRTLType::UInt, width);
 }
 
 /// Get an with a known width, or -1 for unknown.
 AnalogType AnalogType::get(MLIRContext *context, int32_t width) {
   assert(width >= -1 && "unknown width");
-  return Base::get(context, FIRRTLTypes::Analog, width);
+  return Base::get(context, FIRRTLType::Analog, width);
 }

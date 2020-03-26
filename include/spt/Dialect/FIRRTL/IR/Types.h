@@ -13,45 +13,60 @@ namespace spt {
 namespace firrtl {
 using namespace mlir;
 
-namespace FIRRTLTypes {
-enum Kind {
-  // Ground types.
-  SInt = Type::FIRST_PRIVATE_EXPERIMENTAL_0_TYPE,
-  UInt,
-  Clock,
-  Reset,
-  // Derived types.
-  Analog,
+// This is a common base class for all FIRRTL types.
+class FIRRTLType : public Type {
+public:
+  enum Kind {
+    FIRST_KIND = Type::FIRST_PRIVATE_EXPERIMENTAL_0_TYPE,
+
+    // Ground Types Without Parameters.
+    Clock = FIRST_KIND,
+    Reset,
+
+    // Width Qualified Ground Types.
+    SInt,
+    UInt,
+    Analog,
+    LAST_KIND
+  };
+
+  using Type::Type;
+
+
+  void print(raw_ostream &os) const;
+
+  static bool kindof(unsigned kind) {
+    return kind >= FIRST_KIND && kind < LAST_KIND;
+  }
 };
-} // namespace FIRRTLTypes
 
 //===----------------------------------------------------------------------===//
 // Ground Types Without Parameters
 //===----------------------------------------------------------------------===//
 
 /// `firrtl.Clock` describe wires and ports meant for carrying clock signals.
-class ClockType : public Type::TypeBase<ClockType, Type> {
+class ClockType : public FIRRTLType::TypeBase<ClockType, FIRRTLType> {
 public:
   using Base::Base;
   static ClockType get(MLIRContext *context) {
-    return Base::get(context, FIRRTLTypes::Clock);
+    return Base::get(context, FIRRTLType::Clock);
   }
-  static bool kindof(unsigned kind) { return kind == FIRRTLTypes::Clock; }
+  static bool kindof(unsigned kind) { return kind == Clock; }
 };
 
 /// `firrtl.Reset`.  FIXME: This is not described in the FIRRTL spec, nor is
 /// AsyncReset.
-class ResetType : public Type::TypeBase<ResetType, Type> {
+class ResetType : public FIRRTLType::TypeBase<ResetType, FIRRTLType> {
 public:
   using Base::Base;
   static ResetType get(MLIRContext *context) {
-    return Base::get(context, FIRRTLTypes::Reset);
+    return Base::get(context, FIRRTLType::Reset);
   }
-  static bool kindof(unsigned kind) { return kind == FIRRTLTypes::Reset; }
+  static bool kindof(unsigned kind) { return kind == Reset; }
 };
 
 //===----------------------------------------------------------------------===//
-// Width Qualified Types
+// Width Qualified Ground Types
 //===----------------------------------------------------------------------===//
 
 namespace detail {
@@ -59,12 +74,13 @@ struct WidthTypeStorage;
 Optional<int32_t> getWidthQualifiedTypeWidth(WidthTypeStorage *impl);
 } // namespace detail.
 
-template <typename ConcreteType, FIRRTLTypes::Kind typeKind>
+template <typename ConcreteType, FIRRTLType::Kind typeKind>
 class WidthQualifiedType
-    : public Type::TypeBase<ConcreteType, Type, detail::WidthTypeStorage> {
+    : public FIRRTLType::TypeBase<ConcreteType, FIRRTLType,
+                                  detail::WidthTypeStorage> {
 public:
-  using Type::TypeBase<ConcreteType, Type,
-                       detail::WidthTypeStorage>::Base::Base;
+  using FIRRTLType::TypeBase<ConcreteType, FIRRTLType,
+                             detail::WidthTypeStorage>::Base::Base;
 
   static bool kindof(unsigned kind) { return kind == typeKind; }
 
@@ -75,7 +91,7 @@ public:
 };
 
 /// A signed integer type, whose width may not be known.
-class SIntType : public WidthQualifiedType<SIntType, FIRRTLTypes::SInt> {
+class SIntType : public WidthQualifiedType<SIntType, FIRRTLType::SInt> {
 public:
   using WidthQualifiedType::WidthQualifiedType;
 
@@ -84,7 +100,7 @@ public:
 };
 
 /// An unsigned integer type, whose width may not be known.
-class UIntType : public WidthQualifiedType<UIntType, FIRRTLTypes::UInt> {
+class UIntType : public WidthQualifiedType<UIntType, FIRRTLType::UInt> {
 public:
   using WidthQualifiedType::WidthQualifiedType;
 
@@ -93,7 +109,7 @@ public:
 };
 
 // `firrtl.Analog` can be attached to multiple drivers.
-class AnalogType : public WidthQualifiedType<AnalogType, FIRRTLTypes::Analog> {
+class AnalogType : public WidthQualifiedType<AnalogType, FIRRTLType::Analog> {
 public:
   using WidthQualifiedType::WidthQualifiedType;
 

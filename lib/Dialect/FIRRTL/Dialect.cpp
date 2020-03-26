@@ -75,6 +75,10 @@ FIRRTLDialect::FIRRTLDialect(MLIRContext *context)
 
 FIRRTLDialect::~FIRRTLDialect() {}
 
+void FIRRTLDialect::printType(Type type, DialectAsmPrinter &os) const {
+  type.cast<FIRRTLType>().print(os.getStream());
+}
+
 //===----------------------------------------------------------------------===//
 // CircuitOp
 //===----------------------------------------------------------------------===//
