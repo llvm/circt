@@ -63,7 +63,9 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
 
 FIRRTLDialect::FIRRTLDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context) {
-  addTypes<SIntType, UIntType, ClockType, ResetType, AnalogType>();
+  addTypes<SIntType, UIntType, ClockType, ResetType, AnalogType,
+           // Derived Types
+           FlipType>();
 
   addOperations<
 #define GET_OP_LIST
@@ -131,7 +133,7 @@ static ParseResult parseCircuitOp(OpAsmParser &parser, OperationState &result) {
 //===----------------------------------------------------------------------===//
 
 void FModuleOp::build(Builder *builder, OperationState &result, StringAttr name,
-                      ArrayRef<std::pair<StringAttr, Type>> ports) {
+                      ArrayRef<std::pair<StringAttr, FIRRTLType>> ports) {
   // Add an attribute for the name.
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
 

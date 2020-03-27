@@ -2,7 +2,7 @@
 
 circuit basic :     ; CHECK: firrtl.circuit "basic" {
 
-  ; CHECK-LABEL: firrtl.module @MyModule(%in: !firrtl.uint, %out: !firrtl.uint<8>) {
+  ; CHECK-LABEL: firrtl.module @MyModule(%in: !firrtl.uint, %out: !firrtl.flip<uint<8>>) {
   module MyModule :   @[FooBar.scala 369:27]
     input in: UInt
     output out: UInt<8>

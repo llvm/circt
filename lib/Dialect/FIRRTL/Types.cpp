@@ -5,6 +5,7 @@
 #include "spt/Dialect/FIRRTL/IR/Types.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "spt/Dialect/FIRRTL/IR/Ops.h"
+#include "llvm/ADT/StringSwitch.h"
 
 using namespace spt;
 using namespace firrtl;
@@ -22,6 +23,7 @@ void FIRRTLType::print(raw_ostream &os) const {
   switch (getKind()) {
   default:
     assert(0 && "unknown dialect type to print");
+    // Ground Types Without Parameters
   case FIRRTLType::Clock:
     os << "clock";
     break;
@@ -29,7 +31,7 @@ void FIRRTLType::print(raw_ostream &os) const {
     os << "reset";
     break;
 
-  // Width Qualified Types.
+  // Width Qualified Types
   case FIRRTLType::SInt:
     os << "sint";
     printWidthQualifier(cast<SIntType>().getWidth());
@@ -42,6 +44,13 @@ void FIRRTLType::print(raw_ostream &os) const {
     os << "analog";
     printWidthQualifier(cast<AnalogType>().getWidth());
     break;
+
+    // Derived Types
+  case FIRRTLType::Flip:
+    os << "flip<";
+    cast<FlipType>().getElementType().print(os);
+    os << '>';
+    break;
   }
 }
 
@@ -49,55 +58,87 @@ void FIRRTLType::print(raw_ostream &os) const {
 // Type Parsing
 //===----------------------------------------------------------------------===//
 
+/// type
+///   ::= clock
+///   ::= reset
+///   ::= sint ('<' int '>')?
+///   ::= uint ('<' int '>')?
+///   ::= analog ('<' int '>')?
+///   ::= flip '<' type '>'
+///
+static ParseResult parseType(FIRRTLType &result, DialectAsmParser &parser) {
+  StringRef name;
+  if (parser.parseKeyword(&name))
+    return failure();
+
+  auto kind = llvm::StringSwitch<FIRRTLType::Kind>(name)
+                  .Case("clock", FIRRTLType::Clock)
+                  .Case("reset", FIRRTLType::Reset)
+                  .Case("sint", FIRRTLType::SInt)
+                  .Case("uint", FIRRTLType::UInt)
+                  .Case("analog", FIRRTLType::Analog)
+                  .Case("flip", FIRRTLType::Flip)
+                  .Case("bundle", FIRRTLType::Bundle)
+                  .Case("vector", FIRRTLType::Vector)
+                  .Default(FIRRTLType::LAST_KIND);
+  auto *context = parser.getBuilder().getContext();
+
+  switch (kind) {
+  case FIRRTLType::Clock:
+    return result = ClockType::get(context), success();
+  case FIRRTLType::Reset:
+    return result = ResetType::get(context), success();
+
+  case FIRRTLType::SInt:
+  case FIRRTLType::UInt:
+  case FIRRTLType::Analog: {
+    // Parse the width specifier if it exists.
+    int32_t width = -1;
+    if (!parser.parseOptionalLess()) {
+      if (parser.parseInteger(width) || parser.parseGreater())
+        return failure();
+
+      if (width < 0)
+        return parser.emitError(parser.getNameLoc(), "unknown width"),
+               failure();
+    }
+
+    if (kind == FIRRTLType::SInt)
+      result = SIntType::get(context, width);
+    else if (kind == FIRRTLType::UInt)
+      result = UIntType::get(context, width);
+    else {
+      assert(kind == FIRRTLType::Analog);
+      result = AnalogType::get(context, width);
+    }
+    return success();
+  }
+
+  case FIRRTLType::Flip: {
+    FIRRTLType element;
+    if (parser.parseLess() || parseType(element, parser) ||
+        parser.parseGreater())
+      return failure();
+    return result = FlipType::get(element), success();
+  }
+  case FIRRTLType::Bundle:
+  case FIRRTLType::Vector:
+  default:
+    return parser.emitError(parser.getNameLoc(), "unknown firrtl type"),
+           failure();
+  }
+}
+
 /// Parse a type registered to this dialect.
 Type FIRRTLDialect::parseType(DialectAsmParser &parser) const {
-  StringRef typeStr = parser.getFullSymbolSpec();
-
-  if (typeStr == "clock")
-    return ClockType::get(getContext());
-  if (typeStr == "reset")
-    return ResetType::get(getContext());
-
-  // Parse the current typeStr as an optional width specifier like "<8>".  If
-  // the string is empty, this returns -1.  If it is an integer it returns
-  // the value.  If it is invalid, it emits an error and returns -2.
-  auto parseWidth = [&]() -> int32_t {
-    if (typeStr.empty())
-      return -1;
-
-    if (typeStr.front() != '<' || typeStr.back() != '>')
-      return parser.emitError(parser.getNameLoc(), "unknown firrtl type"), -2;
-    typeStr = typeStr.drop_front().drop_back();
-    int32_t width;
-    if (typeStr.getAsInteger(10, width) || width < 0)
-      return parser.emitError(parser.getNameLoc(), "unknown width"), -2;
-    return width;
-  };
-
-  if (typeStr.startswith("sint")) {
-    typeStr = typeStr.drop_front(strlen("sint"));
-    auto width = parseWidth();
-    return SIntType::get(getContext(), width);
-  }
-
-  if (typeStr.startswith("uint")) {
-    typeStr = typeStr.drop_front(strlen("uint"));
-    auto width = parseWidth();
-    return UIntType::get(getContext(), width);
-  }
-
-  if (typeStr.startswith("analog")) {
-    typeStr = typeStr.drop_front(strlen("analog"));
-    auto width = parseWidth();
-    return width == -2 ? Type() : AnalogType::get(getContext(), width);
-  }
-
-  parser.emitError(parser.getNameLoc(), "unknown firrtl type");
-  return Type();
+  FIRRTLType result;
+  if (::parseType(result, parser))
+    return Type();
+  return result;
 }
 
 //===----------------------------------------------------------------------===//
-// WidthTypeStorage
+// Width Qualified Ground Types
 //===----------------------------------------------------------------------===//
 
 namespace spt {
@@ -131,16 +172,56 @@ Optional<int32_t> getWidthQualifiedTypeWidth(WidthTypeStorage *impl) {
 /// Get an with a known width, or -1 for unknown.
 SIntType SIntType::get(MLIRContext *context, int32_t width) {
   assert(width >= -1 && "unknown width");
-  return Base::get(context, FIRRTLType::SInt, width);
+  return Base::get(context, SInt, width);
 }
 
 UIntType UIntType::get(MLIRContext *context, int32_t width) {
   assert(width >= -1 && "unknown width");
-  return Base::get(context, FIRRTLType::UInt, width);
+  return Base::get(context, UInt, width);
 }
 
 /// Get an with a known width, or -1 for unknown.
 AnalogType AnalogType::get(MLIRContext *context, int32_t width) {
   assert(width >= -1 && "unknown width");
-  return Base::get(context, FIRRTLType::Analog, width);
+  return Base::get(context, Analog, width);
 }
+
+//===----------------------------------------------------------------------===//
+// Flip Type
+//===----------------------------------------------------------------------===//
+
+namespace spt {
+namespace firrtl {
+namespace detail {
+struct FlipTypeStorage : mlir::TypeStorage {
+  FlipTypeStorage(FIRRTLType element) : element(element) {}
+  using KeyTy = FIRRTLType;
+
+  bool operator==(const KeyTy &key) const { return key == element; }
+
+  static FlipTypeStorage *construct(TypeStorageAllocator &allocator,
+                                    const KeyTy &key) {
+    return new (allocator.allocate<FlipTypeStorage>()) FlipTypeStorage(key);
+  }
+
+  FIRRTLType element;
+};
+
+} // namespace detail
+} // namespace firrtl
+} // namespace spt
+
+FlipType FlipType::get(FIRRTLType element) {
+  auto *context = element.getContext();
+  return Base::get(context, Flip, element);
+}
+
+FIRRTLType FlipType::getElementType() const { return getImpl()->element; }
+
+//===----------------------------------------------------------------------===//
+// Bundle Type
+//===----------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
+// Vector Type
+//===----------------------------------------------------------------------===//

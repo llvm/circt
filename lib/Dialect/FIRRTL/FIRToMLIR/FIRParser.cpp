@@ -134,7 +134,7 @@ struct FIRParser {
 
   // Parse the 'id' grammar, which is an identifier or an allowed keyword.
   ParseResult parseId(StringAttr &result, const Twine &message);
-  ParseResult parseType(Type &result, const Twine &message);
+  ParseResult parseType(FIRRTLType &result, const Twine &message);
 
 private:
   FIRParser(const FIRParser &) = delete;
@@ -212,7 +212,7 @@ ParseResult FIRParser::parseId(StringAttr &result, const Twine &message) {
 ///      FIXME: more
 ///
 // FIXME: 'AsyncReset' is also handled by the parser but is not in the spec.
-ParseResult FIRParser::parseType(Type &result, const Twine &message) {
+ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
   switch (getToken().getKind()) {
   default:
     return emitError(message), failure();
@@ -294,15 +294,16 @@ FIRModuleParser::parsePortList(SmallVectorImpl<FModuleOp::PortInfo> &result,
 
     consumeToken();
     StringAttr name;
-    Type type;
+    FIRRTLType type;
     if (parseId(name, "expected port name") ||
         parseToken(FIRToken::colon, "expected ':' in port definition") ||
         parseType(type, "expected a type in port declaration") ||
         parseOptionalInfo())
       return failure();
 
-    // TODO: If isOutput, flip the type.
-    (void)isOutput;
+    // If this is an output port, flip the type.
+    if (isOutput)
+      type = FlipType::get(type);
 
     result.push_back({name, type});
   }

@@ -11,6 +11,13 @@
 
 namespace spt {
 namespace firrtl {
+namespace detail {
+struct WidthTypeStorage;
+struct FlipTypeStorage;
+struct BundleTypeStorage;
+struct VectorTypeStorage;
+} // namespace detail.
+
 using namespace mlir;
 
 // This is a common base class for all FIRRTL types.
@@ -27,17 +34,22 @@ public:
     SInt,
     UInt,
     Analog,
+
+    // Derived Types
+    Flip,
+    Bundle,
+    Vector,
     LAST_KIND
   };
-
-  using Type::Type;
-
 
   void print(raw_ostream &os) const;
 
   static bool kindof(unsigned kind) {
     return kind >= FIRST_KIND && kind < LAST_KIND;
   }
+
+protected:
+  using Type::Type;
 };
 
 //===----------------------------------------------------------------------===//
@@ -70,7 +82,6 @@ public:
 //===----------------------------------------------------------------------===//
 
 namespace detail {
-struct WidthTypeStorage;
 Optional<int32_t> getWidthQualifiedTypeWidth(WidthTypeStorage *impl);
 } // namespace detail.
 
@@ -117,7 +128,73 @@ public:
   static AnalogType get(MLIRContext *context, int32_t width = -1);
 };
 
+//===----------------------------------------------------------------------===//
+// Flip Type
+//===----------------------------------------------------------------------===//
+
+class FlipType : public FIRRTLType::TypeBase<FlipType, FIRRTLType,
+                                             detail::FlipTypeStorage> {
+public:
+  using Base::Base;
+
+  FIRRTLType getElementType() const;
+
+  static FlipType get(FIRRTLType element);
+
+  static bool kindof(unsigned kind) { return kind == Flip; }
+};
+
+//===----------------------------------------------------------------------===//
+// Bundle Type
+//===----------------------------------------------------------------------===//
+
+class BundleType : public FIRRTLType::TypeBase<BundleType, FIRRTLType,
+                                               detail::BundleTypeStorage> {
+public:
+  using Base::Base;
+
+  //  using FIRRTLType::TypeBase<FlipType, FIRRTLType,
+  //                             detail::FlipTypeStorage>::Base::Base;
+
+  static bool kindof(unsigned kind) { return kind == Bundle; }
+};
+
+//===----------------------------------------------------------------------===//
+// Vector Type
+//===----------------------------------------------------------------------===//
+
+class VectorType : public FIRRTLType::TypeBase<VectorType, FIRRTLType,
+                                               detail::VectorTypeStorage> {
+public:
+  using Base::Base;
+
+  //  using FIRRTLType::TypeBase<FlipType, FIRRTLType,
+  //                             detail::FlipTypeStorage>::Base::Base;
+
+  static bool kindof(unsigned kind) { return kind == Vector; }
+};
+
 } // namespace firrtl
 } // namespace spt
+
+namespace llvm {
+
+// Type hash just like pointers.
+template <>
+struct DenseMapInfo<spt::firrtl::FIRRTLType> {
+  using FIRRTLType = spt::firrtl::FIRRTLType;
+  static FIRRTLType getEmptyKey() {
+    auto pointer = llvm::DenseMapInfo<void *>::getEmptyKey();
+    return FIRRTLType(static_cast<mlir::Type::ImplType *>(pointer));
+  }
+  static FIRRTLType getTombstoneKey() {
+    auto pointer = llvm::DenseMapInfo<void *>::getTombstoneKey();
+    return FIRRTLType(static_cast<mlir::Type::ImplType *>(pointer));
+  }
+  static unsigned getHashValue(FIRRTLType val) { return mlir::hash_value(val); }
+  static bool isEqual(FIRRTLType LHS, FIRRTLType RHS) { return LHS == RHS; }
+};
+
+} // namespace llvm
 
 #endif // SPT_DIALECT_FIRRTL_IR_TYPES_H
