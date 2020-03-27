@@ -65,7 +65,7 @@ FIRRTLDialect::FIRRTLDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context) {
   addTypes<SIntType, UIntType, ClockType, ResetType, AnalogType,
            // Derived Types
-           FlipType>();
+           FlipType, BundleType, VectorType>();
 
   addOperations<
 #define GET_OP_LIST

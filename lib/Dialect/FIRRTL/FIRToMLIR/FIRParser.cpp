@@ -134,6 +134,7 @@ struct FIRParser {
 
   // Parse the 'id' grammar, which is an identifier or an allowed keyword.
   ParseResult parseId(StringAttr &result, const Twine &message);
+  ParseResult parseFieldId(StringRef &result, const Twine &message);
   ParseResult parseType(FIRRTLType &result, const Twine &message);
 
 private:
@@ -204,12 +205,31 @@ ParseResult FIRParser::parseId(StringAttr &result, const Twine &message) {
   }
 }
 
+/// fieldId ::= Id
+///         ::= RelaxedId
+///         ::= UnsignedInt
+///         ::= keywordAsId
+///
+ParseResult FIRParser::parseFieldId(StringRef &result, const Twine &message) {
+  StringAttr name;
+  if (parseId(name, message))
+    return failure();
+
+  // FIXME: Handle RelaxedId/UnsignedInt/keywordAsId
+
+  result = name.getValue();
+  return success();
+}
+
 /// type ::= 'Clock'
 ///      ::= 'Reset'
 ///      ::= 'UInt' ('<' intLit '>')?
 ///      ::= 'SInt' ('<' intLit '>')?
 ///      ::= 'Analog' ('<' intLit '>')?
+///      ::= '{' '}' | '{' field (',' field)* '}'
 ///      FIXME: more
+///
+/// field: 'flip'? fieldId ':' type
 ///
 // FIXME: 'AsyncReset' is also handled by the parser but is not in the spec.
 ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
@@ -252,6 +272,38 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
       assert(kind == FIRToken::kw_Analog);
       result = AnalogType::get(getContext(), width);
     }
+    return success();
+  }
+
+  case FIRToken::l_brace: {
+    consumeToken(FIRToken::l_brace);
+
+    SmallVector<BundleType::BundleElement, 4> elements;
+
+    // Handle {}.
+    if (!consumeIf(FIRToken::r_brace)) {
+      do {
+        bool isFlipped = consumeIf(FIRToken::kw_flip);
+
+        StringRef fieldName;
+        FIRRTLType type;
+        if (parseFieldId(fieldName, "expected bundle field name") ||
+            parseToken(FIRToken::colon, "expected ':' in bundle") ||
+            parseType(type, "expected bundle field type"))
+          return failure();
+
+        if (isFlipped)
+          type = FlipType::get(type);
+
+        elements.push_back({Identifier::get(fieldName, getContext()), type});
+      } while (consumeIf(FIRToken::comma));
+
+      // If we didn't have a comma, then we must have an '}' at the end of the
+      // bundle.
+      if (parseToken(FIRToken::r_brace, "expected '}' at end of bundle"))
+        return failure();
+    }
+    result = BundleType::get(elements, getContext());
     return success();
   }
   }
@@ -312,7 +364,7 @@ FIRModuleParser::parsePortList(SmallVectorImpl<FModuleOp::PortInfo> &result,
 }
 
 /// module    ::=
-///        'extmodule' id ':' info? INDENT portlist defname? parameter*  DEDENT
+///        'extmodule' id ':' info? INDENT portlist defname? parameter* DEDENT
 /// defname   ::= 'defname' '=' id NEWLINE
 ///
 /// parameter ::= 'parameter' id '=' intLit NEWLINE

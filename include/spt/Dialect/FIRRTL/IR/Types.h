@@ -148,13 +148,19 @@ public:
 // Bundle Type
 //===----------------------------------------------------------------------===//
 
+/// BundleType is an aggregate of named elements.  This is effectively a struct
+/// for FIRRTL.
 class BundleType : public FIRRTLType::TypeBase<BundleType, FIRRTLType,
                                                detail::BundleTypeStorage> {
 public:
   using Base::Base;
 
-  //  using FIRRTLType::TypeBase<FlipType, FIRRTLType,
-  //                             detail::FlipTypeStorage>::Base::Base;
+  // Each element of a bundle
+  using BundleElement = std::pair<Identifier, FIRRTLType>;
+
+  ArrayRef<BundleElement> getElements() const;
+
+  static BundleType get(ArrayRef<BundleElement> elements, MLIRContext *context);
 
   static bool kindof(unsigned kind) { return kind == Bundle; }
 };
@@ -167,9 +173,6 @@ class VectorType : public FIRRTLType::TypeBase<VectorType, FIRRTLType,
                                                detail::VectorTypeStorage> {
 public:
   using Base::Base;
-
-  //  using FIRRTLType::TypeBase<FlipType, FIRRTLType,
-  //                             detail::FlipTypeStorage>::Base::Base;
 
   static bool kindof(unsigned kind) { return kind == Vector; }
 };

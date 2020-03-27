@@ -28,5 +28,7 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     input a8: Analog<8>    ; CHECK: %a8: !firrtl.analog<8>,
     input s: SInt          ; CHECK: %s: !firrtl.sint,
     input s4: SInt<4>      ; CHECK: %s4: !firrtl.sint<4>,
-    input u: UInt          ; CHECK: %u: !firrtl.uint) {
-
+    input u: UInt          ; CHECK: %u: !firrtl.uint,
+    input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
+    ; CHECK: %bf: !firrtl.bundle<int_1: flip<uint<1>>, int_out: uint<2>>) {
+    

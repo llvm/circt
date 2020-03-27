@@ -51,6 +51,17 @@ void FIRRTLType::print(raw_ostream &os) const {
     cast<FlipType>().getElementType().print(os);
     os << '>';
     break;
+
+  case FIRRTLType::Bundle: {
+    os << "bundle<";
+    mlir::interleaveComma(cast<BundleType>().getElements(), os,
+                          [&](BundleType::BundleElement element) {
+                            os << element.first << ": ";
+                            element.second.print(os);
+                          });
+    os << ">";
+    break;
+  }
   }
 }
 
@@ -65,6 +76,9 @@ void FIRRTLType::print(raw_ostream &os) const {
 ///   ::= uint ('<' int '>')?
 ///   ::= analog ('<' int '>')?
 ///   ::= flip '<' type '>'
+///   ::= bundle '<' (bundle-elt (',' bundle-elt)*)? '>'
+///
+/// bundle-elt ::= identifier ':' type
 ///
 static ParseResult parseType(FIRRTLType &result, DialectAsmParser &parser) {
   StringRef name;
@@ -121,7 +135,29 @@ static ParseResult parseType(FIRRTLType &result, DialectAsmParser &parser) {
       return failure();
     return result = FlipType::get(element), success();
   }
-  case FIRRTLType::Bundle:
+  case FIRRTLType::Bundle: {
+    if (parser.parseLess())
+      return failure();
+
+    SmallVector<BundleType::BundleElement, 4> elements;
+    if (parser.parseOptionalGreater()) {
+      // Parse all of the bundle-elt's.
+      do {
+        StringRef name;
+        FIRRTLType type;
+        if (parser.parseKeyword(&name) || parser.parseColon() ||
+            parseType(type, parser))
+          return failure();
+
+        elements.push_back({Identifier::get(name, context), type});
+      } while (!parser.parseOptionalComma());
+
+      if (parser.parseGreater())
+        return failure();
+    }
+
+    return result = BundleType::get(elements, context), success();
+  }
   case FIRRTLType::Vector:
   default:
     return parser.emitError(parser.getNameLoc(), "unknown firrtl type"),
@@ -222,6 +258,40 @@ FIRRTLType FlipType::getElementType() const { return getImpl()->element; }
 // Bundle Type
 //===----------------------------------------------------------------------===//
 
+namespace spt {
+namespace firrtl {
+namespace detail {
+struct BundleTypeStorage : mlir::TypeStorage {
+  using KeyTy = ArrayRef<BundleType::BundleElement>;
+
+  BundleTypeStorage(KeyTy elements)
+      : elements(elements.begin(), elements.end()) {}
+
+  bool operator==(const KeyTy &key) const { return key == KeyTy(elements); }
+
+  static BundleTypeStorage *construct(TypeStorageAllocator &allocator,
+                                      KeyTy key) {
+    return new (allocator.allocate<BundleTypeStorage>()) BundleTypeStorage(key);
+  }
+
+  SmallVector<BundleType::BundleElement, 4> elements;
+};
+
+} // namespace detail
+} // namespace firrtl
+} // namespace spt
+
+BundleType BundleType::get(ArrayRef<BundleElement> elements,
+                           MLIRContext *context) {
+  return Base::get(context, Bundle, elements);
+}
+
+auto BundleType::getElements() const -> ArrayRef<BundleElement> {
+  return getImpl()->elements;
+}
+
 //===----------------------------------------------------------------------===//
 // Vector Type
 //===----------------------------------------------------------------------===//
+
+// FIXME: TODO
