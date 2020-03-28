@@ -52,14 +52,20 @@ void FIRRTLType::print(raw_ostream &os) const {
     os << '>';
     break;
 
-  case FIRRTLType::Bundle: {
+  case FIRRTLType::Bundle:
     os << "bundle<";
     mlir::interleaveComma(cast<BundleType>().getElements(), os,
                           [&](BundleType::BundleElement element) {
                             os << element.first << ": ";
                             element.second.print(os);
                           });
-    os << ">";
+    os << '>';
+    break;
+  case FIRRTLType::Vector: {
+    auto vec = cast<FVectorType>();
+    os << "vector<";
+    vec.getElementType().print(os);
+    os << ", " << vec.getNumElements() << '>';
     break;
   }
   }
@@ -77,6 +83,7 @@ void FIRRTLType::print(raw_ostream &os) const {
 ///   ::= analog ('<' int '>')?
 ///   ::= flip '<' type '>'
 ///   ::= bundle '<' (bundle-elt (',' bundle-elt)*)? '>'
+///   ::= vector '<' type ',' int '>'
 ///
 /// bundle-elt ::= identifier ':' type
 ///
@@ -158,7 +165,18 @@ static ParseResult parseType(FIRRTLType &result, DialectAsmParser &parser) {
 
     return result = BundleType::get(elements, context), success();
   }
-  case FIRRTLType::Vector:
+  case FIRRTLType::Vector: {
+    FIRRTLType elementType;
+    unsigned width = 0;
+
+    if (parser.parseLess() || parseType(elementType, parser) ||
+        parser.parseComma() || parser.parseInteger(width) ||
+        parser.parseGreater())
+      return failure();
+
+    return result = FVectorType::get(elementType, width), success();
+  }
+
   default:
     return parser.emitError(parser.getNameLoc(), "unknown firrtl type"),
            failure();
@@ -294,4 +312,35 @@ auto BundleType::getElements() const -> ArrayRef<BundleElement> {
 // Vector Type
 //===----------------------------------------------------------------------===//
 
-// FIXME: TODO
+namespace spt {
+namespace firrtl {
+namespace detail {
+struct VectorTypeStorage : mlir::TypeStorage {
+  using KeyTy = std::pair<FIRRTLType, unsigned>;
+
+  VectorTypeStorage(KeyTy value) : value(value) {}
+
+  bool operator==(const KeyTy &key) const { return key == value; }
+
+  static VectorTypeStorage *construct(TypeStorageAllocator &allocator,
+                                      KeyTy key) {
+    return new (allocator.allocate<VectorTypeStorage>()) VectorTypeStorage(key);
+  }
+
+  KeyTy value;
+};
+
+} // namespace detail
+} // namespace firrtl
+} // namespace spt
+
+FVectorType FVectorType::get(FIRRTLType elementType, unsigned numElements) {
+  return Base::get(elementType.getContext(), Vector,
+                   std::make_pair(elementType, numElements));
+}
+
+FIRRTLType FVectorType::getElementType() const {
+  return getImpl()->value.first;
+}
+
+unsigned FVectorType::getNumElements() const { return getImpl()->value.second; }

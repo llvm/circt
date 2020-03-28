@@ -155,12 +155,12 @@ class BundleType : public FIRRTLType::TypeBase<BundleType, FIRRTLType,
 public:
   using Base::Base;
 
-  // Each element of a bundle
+  // Each element of a bundle, which is a name and type.
   using BundleElement = std::pair<Identifier, FIRRTLType>;
 
-  ArrayRef<BundleElement> getElements() const;
-
   static BundleType get(ArrayRef<BundleElement> elements, MLIRContext *context);
+
+  ArrayRef<BundleElement> getElements() const;
 
   static bool kindof(unsigned kind) { return kind == Bundle; }
 };
@@ -169,10 +169,16 @@ public:
 // Vector Type
 //===----------------------------------------------------------------------===//
 
-class VectorType : public FIRRTLType::TypeBase<VectorType, FIRRTLType,
+/// VectorType is a fixed size collection of elements, like an array.
+class FVectorType : public FIRRTLType::TypeBase<FVectorType, FIRRTLType,
                                                detail::VectorTypeStorage> {
 public:
   using Base::Base;
+
+  static FVectorType get(FIRRTLType elementType, unsigned numElements);
+
+  FIRRTLType getElementType() const;
+  unsigned getNumElements() const;
 
   static bool kindof(unsigned kind) { return kind == Vector; }
 };

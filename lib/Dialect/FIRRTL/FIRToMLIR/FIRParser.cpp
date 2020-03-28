@@ -227,7 +227,7 @@ ParseResult FIRParser::parseFieldId(StringRef &result, const Twine &message) {
 ///      ::= 'SInt' ('<' intLit '>')?
 ///      ::= 'Analog' ('<' intLit '>')?
 ///      ::= '{' '}' | '{' field (',' field)* '}'
-///      FIXME: more
+///      ::= type '[' intLit ']'
 ///
 /// field: 'flip'? fieldId ':' type
 ///
@@ -239,11 +239,13 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
 
   case FIRToken::kw_Clock:
     consumeToken(FIRToken::kw_Clock);
-    return result = ClockType::get(getContext()), success();
+    result = ClockType::get(getContext());
+    break;
 
   case FIRToken::kw_Reset:
     consumeToken(FIRToken::kw_Reset);
-    return result = ResetType::get(getContext()), success();
+    result = ResetType::get(getContext());
+    break;
 
   case FIRToken::kw_UInt:
   case FIRToken::kw_SInt:
@@ -272,7 +274,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
       assert(kind == FIRToken::kw_Analog);
       result = AnalogType::get(getContext(), width);
     }
-    return success();
+    break;
   }
 
   case FIRToken::l_brace: {
@@ -304,9 +306,26 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
         return failure();
     }
     result = BundleType::get(elements, getContext());
-    return success();
+    break;
   }
   }
+
+  // Handle postfix vector sizes.
+  while (consumeIf(FIRToken::l_square)) {
+    auto sizeSpelling = getTokenSpelling();
+    auto sizeLoc = getToken().getLoc();
+    if (parseToken(FIRToken::integer, "expected width") ||
+        parseToken(FIRToken::r_square, "expected ]"))
+      return failure();
+
+    unsigned size;
+    if (sizeSpelling.getAsInteger(10, size))
+      return emitError(sizeLoc, "invalid size specifier"), failure();
+
+    result = FVectorType::get(result, size);
+  }
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

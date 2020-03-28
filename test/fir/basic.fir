@@ -30,5 +30,7 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     input s4: SInt<4>      ; CHECK: %s4: !firrtl.sint<4>,
     input u: UInt          ; CHECK: %u: !firrtl.uint,
     input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
-    ; CHECK: %bf: !firrtl.bundle<int_1: flip<uint<1>>, int_out: uint<2>>) {
+    ; CHECK: %bf: !firrtl.bundle<int_1: flip<uint<1>>, int_out: uint<2>>
+    
+    input vec: UInt<1>[4] ; CHECK: %vec: !firrtl.vector<uint<1>, 4>) {
     
