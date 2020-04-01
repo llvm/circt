@@ -89,11 +89,19 @@ struct FIRParser {
   }
   InFlightDiagnostic emitError(SMLoc loc, const Twine &message = {});
 
+  //===--------------------------------------------------------------------===//
+  // Location Handling
+  //===--------------------------------------------------------------------===//
+
+  class LocWithInfo;
+
   /// Encode the specified source location information into an attribute for
   /// attachment to the IR.
   Location translateLocation(llvm::SMLoc loc) {
     return state.lex.translateLocation(loc);
   }
+
+  ParseResult parseOptionalInfo(LocWithInfo &result);
 
   //===--------------------------------------------------------------------===//
   // Token Parsing
@@ -142,8 +150,6 @@ struct FIRParser {
   //===--------------------------------------------------------------------===//
   // Common Parser Rules
   //===--------------------------------------------------------------------===//
-
-  ParseResult parseOptionalInfo();
 
   // Parse the 'id' grammar, which is an identifier or an allowed keyword.
   ParseResult parseId(StringAttr &result, const Twine &message);
@@ -201,13 +207,90 @@ ParseResult FIRParser::parseToken(FIRToken::Kind expectedToken,
 }
 
 //===--------------------------------------------------------------------===//
-// Common Parser Rules.
+// Location Processing
 //===--------------------------------------------------------------------===//
 
-ParseResult FIRParser::parseOptionalInfo() {
-  consumeIf(FIRToken::fileinfo);
+/// This helper class is used to handle Info records, which specify higher level
+/// symbolic source location, that may be missing from the file.  If the higher
+/// level source information is missing, we fall back to the location in the
+/// .fir file.
+class FIRParser::LocWithInfo {
+public:
+  explicit LocWithInfo(SMLoc firLoc) : firLoc(firLoc) {}
+
+  SMLoc getFIRLoc() const { return firLoc; }
+
+  Location getLocation(FIRParser *P) const {
+    if (infoLoc.hasValue())
+      return infoLoc.getValue();
+    return P->translateLocation(firLoc);
+  }
+
+  void setInfoLocation(Location loc) { infoLoc = loc; }
+
+private:
+  /// This is the designated location in the .fir file for use when there is no
+  /// @ info marker.
+  SMLoc firLoc;
+
+  /// This is the location specified by the @ marker if present.
+  Optional<Location> infoLoc;
+};
+
+/// info ::= FileInfo
+ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result) {
+  if (getToken().isNot(FIRToken::fileinfo))
+    return success();
+
+  auto loc = getToken().getLoc();
+
+  // See if we can parse this token into a File/Line/Column record.  If not,
+  // just ignore it with a warning.
+  auto unknownFormat = [&]() -> ParseResult {
+    mlir::emitWarning(translateLocation(loc),
+                      "ignoring unknown @ info record format");
+    return success();
+  };
+
+  auto spelling = getTokenSpelling();
+  consumeToken(FIRToken::fileinfo);
+
+  // The spelling of the token looks something like "@[Decoupled.scala 221:8]".
+  if (!spelling.startswith("@[") || !spelling.endswith("]"))
+    return unknownFormat();
+
+  spelling = spelling.drop_front(2).drop_back(1);
+
+  // Split at the last space.
+  auto spaceLoc = spelling.find_last_of(' ');
+  if (spaceLoc == StringRef::npos)
+    return unknownFormat();
+
+  auto filename = spelling.take_front(spaceLoc);
+  auto lineAndColumn = spelling.drop_front(spaceLoc + 1);
+
+  // Decode the line/column.  If the colon is missing, then it will be empty
+  // here.
+  StringRef lineStr, colStr;
+  std::tie(lineStr, colStr) = lineAndColumn.split(':');
+
+  // Zero represents an unknown line/column number.
+  unsigned lineNo = 0, columnNo = 0;
+
+  // Decode the line number and the column number if present.
+  if (lineStr.getAsInteger(10, lineNo))
+    return unknownFormat();
+  if (!colStr.empty() && colStr.getAsInteger(10, columnNo))
+    return unknownFormat();
+
+  result.setInfoLocation(
+      FileLineColLoc::get(filename, lineNo, columnNo, getContext()));
   return success();
 }
+
+//===--------------------------------------------------------------------===//
+// Common Parser Rules
+//===--------------------------------------------------------------------===//
 
 /// id  ::= Id | keywordAsId
 ///
@@ -485,19 +568,18 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
 
 /// wire ::= 'wire' id ':' type info?
 ParseResult FIRStmtParser::parseWire() {
-  SMLoc loc = getToken().getLoc();
+  LocWithInfo info(getToken().getLoc());
   consumeToken(FIRToken::kw_wire);
 
   StringAttr id;
   FIRRTLType type;
   if (parseId(id, "expected wire name") ||
       parseToken(FIRToken::colon, "expected ':' in wire") ||
-      parseType(type, "expected wire type") || parseOptionalInfo())
+      parseType(type, "expected wire type") || parseOptionalInfo(info))
     return failure();
 
-  auto resultLoc = translateLocation(loc);
-  auto result = builder.create<FIRRTLWireOp>(resultLoc, type, id);
-  if (addSymbolEntry(id.getValue(), result, loc))
+  auto result = builder.create<FIRRTLWireOp>(info.getLocation(this), type, id);
+  if (addSymbolEntry(id.getValue(), result, info.getFIRLoc()))
     return failure();
 
   return success();
@@ -545,18 +627,20 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
     consumeToken();
     StringAttr name;
     FIRRTLType type;
-    auto loc = getToken().getLoc();
+    LocWithInfo info(getToken().getLoc());
     if (parseId(name, "expected port name") ||
         parseToken(FIRToken::colon, "expected ':' in port definition") ||
         parseType(type, "expected a type in port declaration") ||
-        parseOptionalInfo())
+        parseOptionalInfo(info))
       return failure();
 
     // If this is an output port, flip the type.
     if (isOutput)
       type = FlipType::get(type);
 
-    result.push_back({{name, type}, loc});
+    // FIXME: We should persist the info loc into the IR, not just the name and
+    // type.
+    result.push_back({{name, type}, info.getFIRLoc()});
   }
 
   return success();
@@ -575,9 +659,10 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   StringAttr name;
   SmallVector<PortInfoAndLoc, 4> portListAndLoc;
 
+  LocWithInfo info(getToken().getLoc());
   if (parseId(name, "expected module name") ||
       parseToken(FIRToken::colon, "expected ':' in extmodule definition") ||
-      parseOptionalInfo() || parsePortList(portListAndLoc, indent))
+      parseOptionalInfo(info) || parsePortList(portListAndLoc, indent))
     return failure();
 
   // Add all the ports to the symbol table even though there are no SSA values
@@ -596,6 +681,8 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
       return failure();
   }
 
+  // TODO: Build a representation of this defname.
+
   // Parse the parameter list.
   while (consumeIf(FIRToken::kw_parameter)) {
     StringAttr paramName;
@@ -608,6 +695,8 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
       return emitError("expected parameter value"), failure();
   }
 
+  // TODO: Build a record of this parameter.
+
   return success();
 }
 
@@ -615,15 +704,14 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
 /// moduleBlock ::= simple_stmt*
 ///
 ParseResult FIRModuleParser::parseModule(unsigned indent) {
-  // FIXME: This should be the .firtl loc, and get overriden by the fileinfo.
-  auto loc = UnknownLoc::get(getContext());
+  LocWithInfo info(getToken().getLoc());
   StringAttr name;
   SmallVector<PortInfoAndLoc, 4> portListAndLoc;
 
   consumeToken(FIRToken::kw_module);
   if (parseId(name, "expected module name") ||
       parseToken(FIRToken::colon, "expected ':' in module definition") ||
-      parseOptionalInfo() || parsePortList(portListAndLoc, indent))
+      parseOptionalInfo(info) || parsePortList(portListAndLoc, indent))
     return failure();
 
   auto builder = circuit.getBodyBuilder();
@@ -633,7 +721,8 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
   portList.reserve(portListAndLoc.size());
   for (auto &elt : portListAndLoc)
     portList.push_back(elt.first);
-  auto fmodule = builder.create<FModuleOp>(loc, name, portList);
+  auto fmodule =
+      builder.create<FModuleOp>(info.getLocation(this), name, portList);
 
   // Install all of the ports into the symbol table, associated with their
   // block arguments.
@@ -687,7 +776,7 @@ private:
 ParseResult FIRCircuitParser::parseCircuit() {
   unsigned circuitIndent = getIndentation();
 
-  SMLoc loc = getToken().getLoc();
+  LocWithInfo info(getToken().getLoc());
   StringAttr name;
 
   // A file must contain a top level `circuit` definition.
@@ -695,12 +784,12 @@ ParseResult FIRCircuitParser::parseCircuit() {
                  "expected a top-level 'circuit' definition") ||
       parseId(name, "expected circuit name") ||
       parseToken(FIRToken::colon, "expected ':' in circuit definition") ||
-      parseOptionalInfo())
+      parseOptionalInfo(info))
     return failure();
 
   // Create the top-level circuit op in the MLIR module.
   OpBuilder b(mlirModule.getBodyRegion());
-  auto circuit = b.create<CircuitOp>(translateLocation(loc), name);
+  auto circuit = b.create<CircuitOp>(info.getLocation(this), name);
 
   // Parse any contained modules.
   while (true) {
