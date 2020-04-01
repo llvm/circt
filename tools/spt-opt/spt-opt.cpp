@@ -48,6 +48,10 @@ static cl::opt<bool>
                  cl::desc("Print the list of registered dialects"),
                  cl::init(false));
 
+static cl::opt<bool> allowUnregisteredDialects(
+    "allow-unregistered-dialect",
+    cl::desc("Allow operation with no registered dialects"), cl::init(false));
+
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
 
@@ -85,5 +89,6 @@ int main(int argc, char **argv) {
   }
 
   return failed(MlirOptMain(output->os(), std::move(file), passPipeline,
-                            splitInputFile, verifyDiagnostics, verifyPasses));
+                            splitInputFile, verifyDiagnostics, verifyPasses,
+                            allowUnregisteredDialects));
 }

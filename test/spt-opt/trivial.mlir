@@ -1,4 +1,4 @@
-// RUN: spt-opt %s | FileCheck %s
+// RUN: spt-opt %s -allow-unregistered-dialect | FileCheck %s
 
 // CHECK-LABEL: func @simpleCFG(%{{.*}}: i32, %{{.*}}: f32) -> i1 {
 func @simpleCFG(%arg0: i32, %f: f32) -> i1 {

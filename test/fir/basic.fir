@@ -50,7 +50,7 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: %2 = firrtl.wire {name = "out_0"} : !firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>
     wire out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
 
-    ; CHECK: firrtl.connect %0, %1 
+    ; CHECK: firrtl.connect %0, %1
     _T <= _T_2
 
     ;; TODO.
