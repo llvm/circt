@@ -155,7 +155,7 @@ def FIRRTLConnectOp : FIRRTLOp<"connect", []> {
     ```
     }];
 
-  let arguments = (ins AnyType:$lhs, AnyType:$rhs, OptionalAttr<StrAttr>:$name);
+  let arguments = (ins AnyType:$lhs, AnyType:$rhs);
   let results = (outs);
   
   let assemblyFormat = [{

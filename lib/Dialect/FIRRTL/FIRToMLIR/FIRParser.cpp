@@ -460,10 +460,9 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
       lookupSymbolEntry(src, name2, loc2))
     return failure();
 
-  // FIXME: Connect shouldn't have a name.  This should have a @ location.
+  // FIXME: Connect should have a @ location.
   auto resultLoc = getEncodedSourceLocation(arrowLoc);
-  builder.create<FIRRTLConnectOp>(resultLoc, dest, src,
-                                  /*name*/ StringAttr());
+  builder.create<FIRRTLConnectOp>(resultLoc, dest, src);
   return success();
 }
 
