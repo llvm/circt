@@ -1,8 +1,7 @@
 // RUN: spt-opt %s -split-input-file -verify-diagnostics
 
-firrtl.module @X() {
-  // expected-error @+1 {{unknown firrtl type}}
-  %0 = firrtl.invalid : !firrtl.unknowntype
+firrtl.module @X(%b : !firrtl.unknowntype) {
+  // expected-error @-1 {{unknown firrtl type}}
 }
 
 // -----
@@ -17,9 +16,10 @@ firrtl.module @X(%b : !firrtl.uint<32>, %d : !firrtl.uint<16>, %out : !firrtl.ui
 // expected-error @+2 {{'firrtl.module' op expects regions to end with 'firrtl.done'}}
 // expected-note @+1 {{implies 'firrtl.done'}}
 "firrtl.module"() ( {
-  %0 = firrtl.invalid : !firrtl.sint<32>
+^bb0(%a: !firrtl.uint<32>):
+  firrtl.invalid %a : !firrtl.uint<32>
 
-}) {sym_name = "MyModule", type = () -> ()} : () -> ()
+}) {sym_name = "MyModule", type = (!firrtl.uint<32>) -> ()} : () -> ()
 
 // -----
 

@@ -7,8 +7,8 @@ circuit basic :  @[CIRCUIT.scala 127]
     input in: UInt
     output out: UInt<8>
 
-    ; CHECK: firrtl.connect {{.*}}loc{{.*}}test/fir/locations.fir"
-    out <= in
+    ; CHECK: firrtl.connect {{.*}}loc("Somewhere.galaxy":42:1)
+    out <= in   @[Somewhere.galaxy 42:1]
 
   ; MODULE: CHECK: } loc("FooBar.scala":369:27)
 

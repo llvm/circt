@@ -163,7 +163,24 @@ def FIRRTLConnectOp : FIRRTLOp<"connect", []> {
   }];
 }
 
-def FIRRTLInvalid : FIRRTLOp<"invalid", [NoSideEffect]> {
+def FIRRTLPartialConnectOp : FIRRTLOp<"partialconnect", []> {
+  let summary = "Connect two signals";
+  let description = [{
+    Connect two values with fewer constraints:
+    ```
+      firrt.partialconnect %lhs, %rhs : t1, t2
+    ```
+    }];
+
+  let arguments = (ins AnyType:$lhs, AnyType:$rhs);
+  let results = (outs);
+  
+  let assemblyFormat = [{
+    $lhs `,` $rhs  attr-dict `:` type($lhs) `,` type($rhs)
+  }];
+}
+
+def FIRRTLInvalid : FIRRTLOp<"invalid", []> {
   let summary = "Invalid operation";
   let description = [{
     Invalidate Operation:
@@ -175,12 +192,11 @@ def FIRRTLInvalid : FIRRTLOp<"invalid", [NoSideEffect]> {
     be attached to it with `firrtl.connect`.
   }];
 
-  let arguments = (ins OptionalAttr<StrAttr>:$name);
-  let results = (outs AnyType:$result);
+  let arguments = (ins AnyType:$operand);
+  let results = (outs);
   
-  // TODO: Print '$name' more nicely.  This breaks the asmparser tho.
   let assemblyFormat = [{
-    attr-dict `:` type($result)
+    $operand attr-dict `:` type($operand)
   }];
 }
 

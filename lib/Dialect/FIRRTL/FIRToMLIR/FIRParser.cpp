@@ -525,48 +525,94 @@ struct FIRStmtParser : public FIRScopedParser {
   ParseResult parseSimpleStmt(unsigned stmtIndent);
 
 private:
+  ParseResult parseExp(Value &result, const Twine &message);
+
   ParseResult parseWire();
   OpBuilder builder;
 };
 
 } // end anonymous namespace
 
+/// XX   ::=  : 'UInt' ('<' intLit '>')? '(' intLit ')'
+/// XX   ::=  | 'SInt' ('<' intLit '>')? '(' intLit ')'
+///  exp ::=  | id    // Ref
+/// XX   ::=  | exp '.' fieldId
+/// XX   ::=  | exp '.' DoubleLit // TODO Workaround for #470
+/// XX   ::=  | exp '[' intLit ']'
+/// XX   ::=  | exp '[' exp ']'
+/// XX   ::=  | 'mux(' exp exp exp ')'
+/// XX   ::=  | 'validif(' exp exp ')'
+/// XX   ::=  | primop exp* intLit*  ')'
+ParseResult FIRStmtParser::parseExp(Value &result, const Twine &message) {
+  switch (getToken().getKind()) {
+  case FIRToken::identifier:
+    // exp ::= id
+    if (lookupSymbolEntry(result, getTokenSpelling(), getToken().getLoc()))
+      return failure();
+    consumeToken(FIRToken::identifier);
+    break;
+
+  default:
+    // FIXME: Handle the other 'id' keyword things.
+    emitError("unexpected token in module");
+    return failure();
+  }
+
+  // TODO: Handle postfix expressions.
+  return success();
+}
+
 /// simple_stmt ::= stmt
+///
 /// stmt ::= wire
+///      ::= exp '<=' exp info?
+///      ::= exp '<-' exp info?
+///      ::= exp 'is' 'invalid' info?
 ///
 ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
   switch (getToken().getKind()) {
   case FIRToken::kw_wire:
     return parseWire();
-  case FIRToken::identifier:
-    // FIXME: This is a temporary hack.
-    break;
 
-  default:
-    emitError("unexpected token in module");
-    return failure();
+  default: {
+    // Otherwise, this must be one of the productions that starts with an
+    // expression.
+    Value lhs;
+    if (parseExp(lhs, "unexpected token in module"))
+      return failure();
+
+    // Figure out which kind of statement it is.
+    LocWithInfo info(getToken().getLoc(), this);
+
+    // If 'is' grammar is special.
+    if (consumeIf(FIRToken::kw_is)) {
+      if (parseToken(FIRToken::kw_invalid, "expected 'invalid'") ||
+          parseOptionalInfo(info))
+        return failure();
+
+      builder.create<FIRRTLInvalid>(info.getLoc(), lhs);
+      return success();
+    }
+
+    auto kind = getToken().getKind();
+    if (getToken().isNot(FIRToken::less_equal, FIRToken::less_minus))
+      return emitError("expected '<=', '<-', or 'is' in statement"), failure();
+    consumeToken();
+
+    Value rhs;
+    if (parseExp(rhs, "unexpected token in statement") ||
+        parseOptionalInfo(info))
+      return failure();
+
+    if (kind == FIRToken::less_equal)
+      builder.create<FIRRTLConnectOp>(info.getLoc(), lhs, rhs);
+    else {
+      assert(kind == FIRToken::less_minus && "unexpected kind");
+      builder.create<FIRRTLPartialConnectOp>(info.getLoc(), lhs, rhs);
+    }
+    return success();
   }
-
-  // Hard coding identifier <= identifier
-  // FIXME: This is wrong.
-
-  StringRef name1 = getTokenSpelling(), name2;
-  SMLoc loc1 = getToken().getLoc(), arrowLoc, loc2;
-  consumeToken(FIRToken::identifier);
-  if (parseGetLocation(arrowLoc) ||
-      parseToken(FIRToken::less_equal, "expected <=") ||
-      parseGetSpelling(name2) || parseGetLocation(loc2) ||
-      parseToken(FIRToken::identifier, "expected identifier"))
-    return failure();
-
-  Value dest, src;
-  if (lookupSymbolEntry(dest, name1, loc1) ||
-      lookupSymbolEntry(src, name2, loc2))
-    return failure();
-
-  // FIXME: Connect should have a @ location.
-  builder.create<FIRRTLConnectOp>(translateLocation(arrowLoc), dest, src);
-  return success();
+  }
 }
 
 /// wire ::= 'wire' id ':' type info?
