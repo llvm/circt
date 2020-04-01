@@ -181,7 +181,7 @@ def FIRRTLPartialConnectOp : FIRRTLOp<"partialconnect", []> {
 }
 
 def FIRRTLInvalid : FIRRTLOp<"invalid", []> {
-  let summary = "Invalid operation";
+  let summary = "Invalid statement";
   let description = [{
     Invalidate Operation:
     ```
@@ -197,6 +197,25 @@ def FIRRTLInvalid : FIRRTLOp<"invalid", []> {
   
   let assemblyFormat = [{
     $operand attr-dict `:` type($operand)
+  }];
+}
+
+def FIRRTLSkip : FIRRTLOp<"skip", [NoSideEffect]> {
+  let summary = "Skip statement";
+  let description = [{
+    Skip Statement:
+    ```
+       %firrt.skip
+    ```
+
+    This is a no-op statement.
+  }];
+
+  let arguments = (ins);
+  let results = (outs);
+  
+  let assemblyFormat = [{
+    attr-dict
   }];
 }
 

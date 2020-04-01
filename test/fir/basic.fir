@@ -59,6 +59,9 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.invalid %auto : !firrtl.flip<uint<1>>
     auto is invalid
 
+    ; CHECK: firrtl.skip
+    skip  @[SKipLoc.scala 42:24]
+
     ;_T_2[0] <= _T[0] @[Xbar.scala 21:44]
     ;auto.out_0 <- out_0.member.0.reset @[LazyModule.scala 173:49]
     ;node _T_23 = or(_T_2[0], _T_2[1]) @[Parameters.scala 337:46]

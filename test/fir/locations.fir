@@ -10,6 +10,9 @@ circuit basic :  @[CIRCUIT.scala 127]
     ; CHECK: firrtl.connect {{.*}}loc("Somewhere.galaxy":42:1)
     out <= in   @[Somewhere.galaxy 42:1]
 
+    ; CHECK: firrtl.skip loc("SKipLoc.scala":42:24)
+    skip  @[SKipLoc.scala 42:24]
+
   ; MODULE: CHECK: } loc("FooBar.scala":369:27)
 
 

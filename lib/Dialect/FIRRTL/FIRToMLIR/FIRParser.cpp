@@ -527,7 +527,9 @@ struct FIRStmtParser : public FIRScopedParser {
 private:
   ParseResult parseExp(Value &result, const Twine &message);
 
+  ParseResult parseSkip();
   ParseResult parseWire();
+  ParseResult parseLeadingExpStmt();
   OpBuilder builder;
 };
 
@@ -565,54 +567,32 @@ ParseResult FIRStmtParser::parseExp(Value &result, const Twine &message) {
 /// simple_stmt ::= stmt
 ///
 /// stmt ::= wire
-///      ::= exp '<=' exp info?
-///      ::= exp '<-' exp info?
-///      ::= exp 'is' 'invalid' info?
+///      ::= skip
+///      ::= leading-exp-stmt
 ///
 ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
   switch (getToken().getKind()) {
+  case FIRToken::kw_skip:
+    return parseSkip();
   case FIRToken::kw_wire:
     return parseWire();
 
-  default: {
+  default:
     // Otherwise, this must be one of the productions that starts with an
     // expression.
-    Value lhs;
-    if (parseExp(lhs, "unexpected token in module"))
-      return failure();
-
-    // Figure out which kind of statement it is.
-    LocWithInfo info(getToken().getLoc(), this);
-
-    // If 'is' grammar is special.
-    if (consumeIf(FIRToken::kw_is)) {
-      if (parseToken(FIRToken::kw_invalid, "expected 'invalid'") ||
-          parseOptionalInfo(info))
-        return failure();
-
-      builder.create<FIRRTLInvalid>(info.getLoc(), lhs);
-      return success();
-    }
-
-    auto kind = getToken().getKind();
-    if (getToken().isNot(FIRToken::less_equal, FIRToken::less_minus))
-      return emitError("expected '<=', '<-', or 'is' in statement"), failure();
-    consumeToken();
-
-    Value rhs;
-    if (parseExp(rhs, "unexpected token in statement") ||
-        parseOptionalInfo(info))
-      return failure();
-
-    if (kind == FIRToken::less_equal)
-      builder.create<FIRRTLConnectOp>(info.getLoc(), lhs, rhs);
-    else {
-      assert(kind == FIRToken::less_minus && "unexpected kind");
-      builder.create<FIRRTLPartialConnectOp>(info.getLoc(), lhs, rhs);
-    }
-    return success();
+    return parseLeadingExpStmt();
   }
-  }
+}
+
+/// skip ::= 'skip' info?
+ParseResult FIRStmtParser::parseSkip() {
+  LocWithInfo info(getToken().getLoc(), this);
+  consumeToken(FIRToken::kw_skip);
+  if (parseOptionalInfo(info))
+    return failure();
+
+  builder.create<FIRRTLSkip>(info.getLoc());
+  return success();
 }
 
 /// wire ::= 'wire' id ':' type info?
@@ -631,6 +611,45 @@ ParseResult FIRStmtParser::parseWire() {
   if (addSymbolEntry(id.getValue(), result, info.getFIRLoc()))
     return failure();
 
+  return success();
+}
+
+/// leading-exp-stmt ::= exp '<=' exp info?
+///                  ::= exp '<-' exp info?
+///                  ::= exp 'is' 'invalid' info?
+ParseResult FIRStmtParser::parseLeadingExpStmt() {
+  Value lhs;
+  if (parseExp(lhs, "unexpected token in module"))
+    return failure();
+
+  // Figure out which kind of statement it is.
+  LocWithInfo info(getToken().getLoc(), this);
+
+  // If 'is' grammar is special.
+  if (consumeIf(FIRToken::kw_is)) {
+    if (parseToken(FIRToken::kw_invalid, "expected 'invalid'") ||
+        parseOptionalInfo(info))
+      return failure();
+
+    builder.create<FIRRTLInvalid>(info.getLoc(), lhs);
+    return success();
+  }
+
+  auto kind = getToken().getKind();
+  if (getToken().isNot(FIRToken::less_equal, FIRToken::less_minus))
+    return emitError("expected '<=', '<-', or 'is' in statement"), failure();
+  consumeToken();
+
+  Value rhs;
+  if (parseExp(rhs, "unexpected token in statement") || parseOptionalInfo(info))
+    return failure();
+
+  if (kind == FIRToken::less_equal)
+    builder.create<FIRRTLConnectOp>(info.getLoc(), lhs, rhs);
+  else {
+    assert(kind == FIRToken::less_minus && "unexpected kind");
+    builder.create<FIRRTLPartialConnectOp>(info.getLoc(), lhs, rhs);
+  }
   return success();
 }
 
