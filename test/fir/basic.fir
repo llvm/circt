@@ -6,6 +6,8 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
   module MyModule :   @[FooBar.scala 369:27]
     input in: UInt
     output out: UInt<8>
+
+    ; CHECK: firrtl.connect %out, %in : !firrtl.flip<uint<8>>, !firrtl.uint
     out <= in
 
   ; CHECK: }

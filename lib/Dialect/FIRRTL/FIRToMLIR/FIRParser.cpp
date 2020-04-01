@@ -101,31 +101,39 @@ struct FIRParser {
 
   /// If the current token has the specified kind, consume it and return true.
   /// If not, return false.
-  bool consumeIf(FIRToken::Kind kind) {
+  bool consumeIf(FIRToken::Kind kind, StringRef *spelling = nullptr,
+                 SMLoc *loc = nullptr) {
     if (state.curToken.isNot(kind))
       return false;
-    consumeToken(kind);
+    consumeToken(kind, spelling, loc);
     return true;
   }
 
   /// Advance the current lexer onto the next token.
-  void consumeToken() {
+  void consumeToken(StringRef *spelling = nullptr, SMLoc *loc = nullptr) {
     assert(state.curToken.isNot(FIRToken::eof, FIRToken::error) &&
            "shouldn't advance past EOF or errors");
+    if (spelling)
+      *spelling = getTokenSpelling();
+    if (loc)
+      *loc = getToken().getLoc();
+
     state.curToken = state.lex.lexToken();
   }
 
   /// Advance the current lexer onto the next token, asserting what the expected
   /// current token is.  This is preferred to the above method because it leads
   /// to more self-documenting code with better checking.
-  void consumeToken(FIRToken::Kind kind) {
+  void consumeToken(FIRToken::Kind kind, StringRef *spelling = nullptr,
+                    SMLoc *loc = nullptr) {
     assert(state.curToken.is(kind) && "consumed an unexpected token");
-    consumeToken();
+    consumeToken(spelling, loc);
   }
 
   /// Consume the specified token if present and return success.  On failure,
   /// output a diagnostic and return failure.
-  ParseResult parseToken(FIRToken::Kind expectedToken, const Twine &message);
+  ParseResult parseToken(FIRToken::Kind expectedToken, const Twine &message,
+                         StringRef *spelling = nullptr, SMLoc *loc = nullptr);
 
   //===--------------------------------------------------------------------===//
   // Common Parser Rules
@@ -170,8 +178,9 @@ InFlightDiagnostic FIRParser::emitError(SMLoc loc, const Twine &message) {
 /// Consume the specified token if present and return success.  On failure,
 /// output a diagnostic and return failure.
 ParseResult FIRParser::parseToken(FIRToken::Kind expectedToken,
-                                  const Twine &message) {
-  if (consumeIf(expectedToken))
+                                  const Twine &message, StringRef *spelling,
+                                  SMLoc *loc) {
+  if (consumeIf(expectedToken, spelling, loc))
     return success();
   return emitError(message);
 }
@@ -196,7 +205,7 @@ ParseResult FIRParser::parseId(StringAttr &result, const Twine &message) {
 #include "FIRTokenKinds.def"
 
     // Yep, this is a valid 'id'.  Turn it into an attribute.
-    result = StringAttr::get(getToken().getSpelling(), getContext());
+    result = StringAttr::get(getTokenSpelling(), getContext());
     consumeToken();
     return success();
 
@@ -343,7 +352,13 @@ public:
   FIRScopedParser(GlobalFIRParserState &state, SymbolTable &symbolTable)
       : FIRParser(state), symbolTable(symbolTable) {}
 
+  /// Add a symbol entry with the specified name, returning failure if the name
+  /// is already defined.
   ParseResult addSymbolEntry(StringRef name, Value value, SMLoc loc);
+
+  /// Look up the specified name, emitting an error and returning failure if the
+  /// name is unknown.
+  ParseResult lookupSymbolEntry(Value &result, StringRef name, SMLoc loc);
 
 protected:
   // This symbol table holds the names of ports, wires, and other local decls.
@@ -352,6 +367,8 @@ protected:
 };
 } // end anonymous namespace
 
+/// Add a symbol entry with the specified name, returning failure if the name
+/// is already defined.
 ParseResult FIRScopedParser::addSymbolEntry(StringRef name, Value value,
                                             SMLoc loc) {
   // TODO: Should we support name shadowing?  This will reject cases where
@@ -367,6 +384,20 @@ ParseResult FIRScopedParser::addSymbolEntry(StringRef name, Value value,
   }
 
   symbolTable.insert(nameId, {loc, value});
+  return success();
+}
+
+/// Look up the specified name, emitting an error and returning null if the
+/// name is unknown.
+ParseResult FIRScopedParser::lookupSymbolEntry(Value &result, StringRef name,
+                                               SMLoc loc) {
+  auto prev = symbolTable.lookup(Identifier::get(name, getContext()));
+  if (!prev.first.isValid())
+    return emitError(loc, "use of invalid name '" + name.str() + "'"),
+           failure();
+
+  assert(prev.second && "name in symbol table without definition");
+  result = prev.second;
   return success();
 }
 
@@ -395,14 +426,21 @@ private:
 ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
   // Hard coding identifier <= identifier
   // FIXME: This is wrong.
-  consumeToken(FIRToken::identifier);
-  if (parseToken(FIRToken::less_equal, "expected <=") ||
-      parseToken(FIRToken::identifier, "expected identifier"))
+
+  StringRef name1, name2;
+  SMLoc loc1, arrowLoc, loc2;
+  consumeToken(FIRToken::identifier, &name1, &loc1);
+  if (parseToken(FIRToken::less_equal, "expected <=", nullptr, &arrowLoc) ||
+      parseToken(FIRToken::identifier, "expected identifier", &name2, &loc2))
     return failure();
 
-  // builder.create<FIRRTLConnectOp>(loc, x, y);
-  // firrtl.connect %out, %5 : !firrtl.flip<uint>, !firrtl.uint<32>
+  Value dest, src;
+  if (lookupSymbolEntry(dest, name1, loc1) ||
+      lookupSymbolEntry(src, name2, loc2))
+    return failure();
 
+  builder.create<FIRRTLConnectOp>(getEncodedSourceLocation(arrowLoc), dest, src,
+                                  /*name*/ StringAttr());
   return success();
 }
 
