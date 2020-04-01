@@ -55,7 +55,7 @@ FIRLexer::FIRLexer(const llvm::SourceMgr &sourceMgr, MLIRContext *context)
 
 /// Encode the specified source location information into a Location object
 /// for attachment to the IR or error reporting.
-Location FIRLexer::getEncodedSourceLocation(llvm::SMLoc loc) {
+Location FIRLexer::translateLocation(llvm::SMLoc loc) {
   unsigned mainFileID = sourceMgr.getMainFileID();
   auto lineAndColumn = sourceMgr.getLineAndColumn(loc, mainFileID);
   auto *buffer = sourceMgr.getMemoryBuffer(mainFileID);
@@ -66,8 +66,7 @@ Location FIRLexer::getEncodedSourceLocation(llvm::SMLoc loc) {
 
 /// Emit an error message and return a FIRToken::error token.
 FIRToken FIRLexer::emitError(const char *loc, const Twine &message) {
-  mlir::emitError(getEncodedSourceLocation(SMLoc::getFromPointer(loc)),
-                  message);
+  mlir::emitError(translateLocation(SMLoc::getFromPointer(loc)), message);
   return formToken(FIRToken::error, loc);
 }
 

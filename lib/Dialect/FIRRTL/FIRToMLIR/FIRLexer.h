@@ -83,7 +83,7 @@ public:
 
   FIRToken lexToken();
 
-  mlir::Location getEncodedSourceLocation(llvm::SMLoc loc);
+  mlir::Location translateLocation(llvm::SMLoc loc);
 
   /// Return the indentation level of the specified token.
   unsigned getIndentation(const FIRToken &tok) const;

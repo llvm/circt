@@ -75,6 +75,10 @@ struct FIRParser {
     return state.lex.getIndentation(state.curToken);
   }
 
+  /// Return the current token the parser is inspecting.
+  const FIRToken &getToken() const { return state.curToken; }
+  StringRef getTokenSpelling() const { return state.curToken.getSpelling(); }
+
   //===--------------------------------------------------------------------===//
   // Error Handling
   //===--------------------------------------------------------------------===//
@@ -87,53 +91,53 @@ struct FIRParser {
 
   /// Encode the specified source location information into an attribute for
   /// attachment to the IR.
-  Location getEncodedSourceLocation(llvm::SMLoc loc) {
-    return state.lex.getEncodedSourceLocation(loc);
+  Location translateLocation(llvm::SMLoc loc) {
+    return state.lex.translateLocation(loc);
   }
 
   //===--------------------------------------------------------------------===//
   // Token Parsing
   //===--------------------------------------------------------------------===//
 
-  /// Return the current token the parser is inspecting.
-  const FIRToken &getToken() const { return state.curToken; }
-  StringRef getTokenSpelling() const { return state.curToken.getSpelling(); }
-
   /// If the current token has the specified kind, consume it and return true.
   /// If not, return false.
-  bool consumeIf(FIRToken::Kind kind, StringRef *spelling = nullptr,
-                 SMLoc *loc = nullptr) {
+  bool consumeIf(FIRToken::Kind kind) {
     if (state.curToken.isNot(kind))
       return false;
-    consumeToken(kind, spelling, loc);
+    consumeToken(kind);
     return true;
   }
 
   /// Advance the current lexer onto the next token.
-  void consumeToken(StringRef *spelling = nullptr, SMLoc *loc = nullptr) {
+  void consumeToken() {
     assert(state.curToken.isNot(FIRToken::eof, FIRToken::error) &&
            "shouldn't advance past EOF or errors");
-    if (spelling)
-      *spelling = getTokenSpelling();
-    if (loc)
-      *loc = getToken().getLoc();
-
     state.curToken = state.lex.lexToken();
   }
 
   /// Advance the current lexer onto the next token, asserting what the expected
   /// current token is.  This is preferred to the above method because it leads
   /// to more self-documenting code with better checking.
-  void consumeToken(FIRToken::Kind kind, StringRef *spelling = nullptr,
-                    SMLoc *loc = nullptr) {
+  void consumeToken(FIRToken::Kind kind) {
     assert(state.curToken.is(kind) && "consumed an unexpected token");
-    consumeToken(spelling, loc);
+    consumeToken();
+  }
+
+  /// Capture the current token's location into the specified value.  This
+  /// always succeeds.
+  ParseResult parseGetLocation(SMLoc &loc);
+  ParseResult parseGetLocation(Location &loc);
+
+  /// Capture the current token's spelling into the specified value.  This
+  /// always succeeds.
+  ParseResult parseGetSpelling(StringRef &spelling) {
+    spelling = getTokenSpelling();
+    return success();
   }
 
   /// Consume the specified token if present and return success.  On failure,
   /// output a diagnostic and return failure.
-  ParseResult parseToken(FIRToken::Kind expectedToken, const Twine &message,
-                         StringRef *spelling = nullptr, SMLoc *loc = nullptr);
+  ParseResult parseToken(FIRToken::Kind expectedToken, const Twine &message);
 
   //===--------------------------------------------------------------------===//
   // Common Parser Rules
@@ -162,7 +166,7 @@ private:
 //===----------------------------------------------------------------------===//
 
 InFlightDiagnostic FIRParser::emitError(SMLoc loc, const Twine &message) {
-  auto diag = mlir::emitError(getEncodedSourceLocation(loc), message);
+  auto diag = mlir::emitError(translateLocation(loc), message);
 
   // If we hit a parse error in response to a lexer error, then the lexer
   // already reported the error.
@@ -175,12 +179,23 @@ InFlightDiagnostic FIRParser::emitError(SMLoc loc, const Twine &message) {
 // Token Parsing
 //===----------------------------------------------------------------------===//
 
+/// Capture the current token's location into the specified value.  This
+/// always succeeds.
+ParseResult FIRParser::parseGetLocation(SMLoc &loc) {
+  loc = getToken().getLoc();
+  return success();
+}
+
+ParseResult FIRParser::parseGetLocation(Location &loc) {
+  loc = translateLocation(getToken().getLoc());
+  return success();
+}
+
 /// Consume the specified token if present and return success.  On failure,
 /// output a diagnostic and return failure.
 ParseResult FIRParser::parseToken(FIRToken::Kind expectedToken,
-                                  const Twine &message, StringRef *spelling,
-                                  SMLoc *loc) {
-  if (consumeIf(expectedToken, spelling, loc))
+                                  const Twine &message) {
+  if (consumeIf(expectedToken))
     return success();
   return emitError(message);
 }
@@ -224,7 +239,8 @@ ParseResult FIRParser::parseId(StringAttr &result, const Twine &message) {
 ///
 ParseResult FIRParser::parseFieldId(StringRef &result, const Twine &message) {
   // Handle the UnsignedInt case.
-  if (consumeIf(FIRToken::integer, &result))
+  result = getTokenSpelling();
+  if (consumeIf(FIRToken::integer))
     return success();
 
   // Otherwise, it must be Id or keywordAsId.
@@ -385,7 +401,7 @@ ParseResult FIRScopedParser::addSymbolEntry(StringRef name, Value value,
   auto prev = symbolTable.lookup(nameId);
   if (prev.first.isValid()) {
     emitError(loc, "redefinition of name '" + name.str() + "'")
-            .attachNote(getEncodedSourceLocation(prev.first))
+            .attachNote(translateLocation(prev.first))
         << "previous definition here";
     return failure();
   }
@@ -448,11 +464,13 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
   // Hard coding identifier <= identifier
   // FIXME: This is wrong.
 
-  StringRef name1, name2;
-  SMLoc loc1, arrowLoc, loc2;
-  consumeToken(FIRToken::identifier, &name1, &loc1);
-  if (parseToken(FIRToken::less_equal, "expected <=", nullptr, &arrowLoc) ||
-      parseToken(FIRToken::identifier, "expected identifier", &name2, &loc2))
+  StringRef name1 = getTokenSpelling(), name2;
+  SMLoc loc1 = getToken().getLoc(), arrowLoc, loc2;
+  consumeToken(FIRToken::identifier);
+  if (parseGetLocation(arrowLoc) ||
+      parseToken(FIRToken::less_equal, "expected <=") ||
+      parseGetSpelling(name2) || parseGetLocation(loc2) ||
+      parseToken(FIRToken::identifier, "expected identifier"))
     return failure();
 
   Value dest, src;
@@ -461,15 +479,14 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
     return failure();
 
   // FIXME: Connect should have a @ location.
-  auto resultLoc = getEncodedSourceLocation(arrowLoc);
-  builder.create<FIRRTLConnectOp>(resultLoc, dest, src);
+  builder.create<FIRRTLConnectOp>(translateLocation(arrowLoc), dest, src);
   return success();
 }
 
 /// wire ::= 'wire' id ':' type info?
 ParseResult FIRStmtParser::parseWire() {
-  SMLoc loc;
-  consumeToken(FIRToken::kw_wire, nullptr, &loc);
+  SMLoc loc = getToken().getLoc();
+  consumeToken(FIRToken::kw_wire);
 
   StringAttr id;
   FIRRTLType type;
@@ -478,7 +495,7 @@ ParseResult FIRStmtParser::parseWire() {
       parseType(type, "expected wire type") || parseOptionalInfo())
     return failure();
 
-  auto resultLoc = getEncodedSourceLocation(loc);
+  auto resultLoc = translateLocation(loc);
   auto result = builder.create<FIRRTLWireOp>(resultLoc, type, id);
   if (addSymbolEntry(id.getValue(), result, loc))
     return failure();
@@ -670,8 +687,7 @@ private:
 ParseResult FIRCircuitParser::parseCircuit() {
   unsigned circuitIndent = getIndentation();
 
-  // FIXME: This should be the .firtl loc, and get overriden by the fileinfo.
-  auto loc = UnknownLoc::get(getContext());
+  SMLoc loc = getToken().getLoc();
   StringAttr name;
 
   // A file must contain a top level `circuit` definition.
@@ -684,7 +700,7 @@ ParseResult FIRCircuitParser::parseCircuit() {
 
   // Create the top-level circuit op in the MLIR module.
   OpBuilder b(mlirModule.getBodyRegion());
-  auto circuit = b.create<CircuitOp>(loc, name);
+  auto circuit = b.create<CircuitOp>(translateLocation(loc), name);
 
   // Parse any contained modules.
   while (true) {
