@@ -3,7 +3,9 @@
 This is a test repository, experimenting with an approach of building a modular set of tools
 for verilog and other SiFive related projects.
 
-SPT is just a placeholder, "SiFive Platform Tools", better suggestion welcome :-)
+SPT is just a placeholder, "SiFive Platform Tools".  It has been pointed out
+that this is far too close to the existing "SBT" tool and it also only
+has three letters.  A better 4-letter suggestion is very welcome :-)
 
 
 ## Setting this up
