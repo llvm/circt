@@ -216,19 +216,22 @@ ParseResult FIRParser::parseToken(FIRToken::Kind expectedToken,
 /// .fir file.
 class FIRParser::LocWithInfo {
 public:
-  explicit LocWithInfo(SMLoc firLoc) : firLoc(firLoc) {}
+  explicit LocWithInfo(SMLoc firLoc, FIRParser *parser)
+      : parser(parser), firLoc(firLoc) {}
 
   SMLoc getFIRLoc() const { return firLoc; }
 
-  Location getLocation(FIRParser *P) const {
+  Location getLoc() const {
     if (infoLoc.hasValue())
       return infoLoc.getValue();
-    return P->translateLocation(firLoc);
+    return parser->translateLocation(firLoc);
   }
 
   void setInfoLocation(Location loc) { infoLoc = loc; }
 
 private:
+  FIRParser *const parser;
+
   /// This is the designated location in the .fir file for use when there is no
   /// @ info marker.
   SMLoc firLoc;
@@ -568,7 +571,7 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
 
 /// wire ::= 'wire' id ':' type info?
 ParseResult FIRStmtParser::parseWire() {
-  LocWithInfo info(getToken().getLoc());
+  LocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_wire);
 
   StringAttr id;
@@ -578,7 +581,7 @@ ParseResult FIRStmtParser::parseWire() {
       parseType(type, "expected wire type") || parseOptionalInfo(info))
     return failure();
 
-  auto result = builder.create<FIRRTLWireOp>(info.getLocation(this), type, id);
+  auto result = builder.create<FIRRTLWireOp>(info.getLoc(), type, id);
   if (addSymbolEntry(id.getValue(), result, info.getFIRLoc()))
     return failure();
 
@@ -627,7 +630,7 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
     consumeToken();
     StringAttr name;
     FIRRTLType type;
-    LocWithInfo info(getToken().getLoc());
+    LocWithInfo info(getToken().getLoc(), this);
     if (parseId(name, "expected port name") ||
         parseToken(FIRToken::colon, "expected ':' in port definition") ||
         parseType(type, "expected a type in port declaration") ||
@@ -659,7 +662,7 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   StringAttr name;
   SmallVector<PortInfoAndLoc, 4> portListAndLoc;
 
-  LocWithInfo info(getToken().getLoc());
+  LocWithInfo info(getToken().getLoc(), this);
   if (parseId(name, "expected module name") ||
       parseToken(FIRToken::colon, "expected ':' in extmodule definition") ||
       parseOptionalInfo(info) || parsePortList(portListAndLoc, indent))
@@ -704,7 +707,7 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
 /// moduleBlock ::= simple_stmt*
 ///
 ParseResult FIRModuleParser::parseModule(unsigned indent) {
-  LocWithInfo info(getToken().getLoc());
+  LocWithInfo info(getToken().getLoc(), this);
   StringAttr name;
   SmallVector<PortInfoAndLoc, 4> portListAndLoc;
 
@@ -721,8 +724,7 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
   portList.reserve(portListAndLoc.size());
   for (auto &elt : portListAndLoc)
     portList.push_back(elt.first);
-  auto fmodule =
-      builder.create<FModuleOp>(info.getLocation(this), name, portList);
+  auto fmodule = builder.create<FModuleOp>(info.getLoc(), name, portList);
 
   // Install all of the ports into the symbol table, associated with their
   // block arguments.
@@ -776,7 +778,7 @@ private:
 ParseResult FIRCircuitParser::parseCircuit() {
   unsigned circuitIndent = getIndentation();
 
-  LocWithInfo info(getToken().getLoc());
+  LocWithInfo info(getToken().getLoc(), this);
   StringAttr name;
 
   // A file must contain a top level `circuit` definition.
@@ -789,7 +791,7 @@ ParseResult FIRCircuitParser::parseCircuit() {
 
   // Create the top-level circuit op in the MLIR module.
   OpBuilder b(mlirModule.getBodyRegion());
-  auto circuit = b.create<CircuitOp>(info.getLocation(this), name);
+  auto circuit = b.create<CircuitOp>(info.getLoc(), name);
 
   // Parse any contained modules.
   while (true) {
