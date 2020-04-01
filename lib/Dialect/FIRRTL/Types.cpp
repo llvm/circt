@@ -5,6 +5,7 @@
 #include "spt/Dialect/FIRRTL/IR/Types.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "spt/Dialect/FIRRTL/IR/Ops.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
 
 using namespace spt;
@@ -150,9 +151,26 @@ static ParseResult parseType(FIRRTLType &result, DialectAsmParser &parser) {
     if (parser.parseOptionalGreater()) {
       // Parse all of the bundle-elt's.
       do {
+        std::string nameStr;
         StringRef name;
         FIRRTLType type;
-        if (parser.parseKeyword(&name) || parser.parseColon() ||
+
+        // The 'name' can be an identifier or an integer.
+        auto parseIntOrStringName = [&]() -> ParseResult {
+          uint32_t fieldIntName;
+          auto intName = parser.parseOptionalInteger(fieldIntName);
+          if (intName.hasValue()) {
+            nameStr = llvm::utostr(fieldIntName);
+            name = nameStr;
+            return intName.getValue();
+          }
+
+          // Otherwise must be an identifier.
+          return parser.parseKeyword(&name);
+          return success();
+        };
+
+        if (parseIntOrStringName() || parser.parseColon() ||
             parseType(type, parser))
           return failure();
 

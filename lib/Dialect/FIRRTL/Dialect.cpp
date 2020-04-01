@@ -63,15 +63,19 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
 
 FIRRTLDialect::FIRRTLDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context) {
+
+  // Register types.
   addTypes<SIntType, UIntType, ClockType, ResetType, AnalogType,
            // Derived Types
            FlipType, BundleType, FVectorType>();
 
+  // Register operations.
   addOperations<
 #define GET_OP_LIST
 #include "spt/Dialect/FIRRTL/IR/FIRRTL.cpp.inc"
       >();
 
+  // Register interface implementations.
   addInterfaces<FIRRTLOpAsmDialectInterface>();
 }
 

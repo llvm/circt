@@ -75,11 +75,11 @@ def FModuleOp : FIRRTLOp<"module",
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<"Builder *builder, OperationState &result, StringAttr name, "
-              "ArrayRef<std::pair<StringAttr, Type>> ports">
+              "ArrayRef<std::pair<StringAttr, FIRRTLType>> ports">
   ];
 
   let extraClassDeclaration = [{
-    typedef std::pair<StringAttr, Type> PortInfo;
+    typedef std::pair<StringAttr, FIRRTLType> PortInfo;
     OpBuilder getBodyBuilder() {
       assert(!body().empty() && "Unexpected empty 'body' region.");
       Block &bodyBlock = body().front();
@@ -121,24 +121,24 @@ def DoneOp : FIRRTLOp<"done", [Terminator]> {
   let arguments = (ins);
 }
 
-def FIRRTLInvalid : FIRRTLOp<"invalid", [NoSideEffect]> {
-  let summary = "Invalid operation";
-  let description = [{
-    Invalidate Operation:
-    ```
-       %result = firrt.invalid : i8
-    ```
+//===----------------------------------------------------------------------===//
+// Declarations
+//===----------------------------------------------------------------------===//
 
-    The invalid operation produces a value of unspecified value.  Drivers may
-    be attached to it with `firrtl.connect`.
-  }];
+def FIRRTLWireOp : FIRRTLOp<"wire", [NoSideEffect]> {
+  let summary = "Define a new wire";
+  let description = [{
+    Declare a new wire:
+    ```
+      %name = firrt.wire : t1
+    ```
+    }];
 
   let arguments = (ins OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
   
-  // TODO: Print '$name' more nicely.  This breaks the asmparser tho.
   let assemblyFormat = [{
-    attr-dict `:` type($result)
+     attr-dict `:` type($result)
   }];
 }
 
@@ -160,6 +160,27 @@ def FIRRTLConnectOp : FIRRTLOp<"connect", []> {
   
   let assemblyFormat = [{
     $lhs `,` $rhs  attr-dict `:` type($lhs) `,` type($rhs)
+  }];
+}
+
+def FIRRTLInvalid : FIRRTLOp<"invalid", [NoSideEffect]> {
+  let summary = "Invalid operation";
+  let description = [{
+    Invalidate Operation:
+    ```
+       %result = firrt.invalid : i8
+    ```
+
+    The invalid operation produces a value of unspecified value.  Drivers may
+    be attached to it with `firrtl.connect`.
+  }];
+
+  let arguments = (ins OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  // TODO: Print '$name' more nicely.  This breaks the asmparser tho.
+  let assemblyFormat = [{
+    attr-dict `:` type($result)
   }];
 }
 

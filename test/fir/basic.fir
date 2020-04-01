@@ -36,3 +36,26 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     
     input vec: UInt<1>[4] ; CHECK: %vec: !firrtl.vector<uint<1>, 4>) {
     
+
+  ; CHECK-LABEL: firrtl.module @stmts(
+  module stmts :
+    output auto : UInt<1>    ; CHECK: %auto: !firrtl.flip<uint<1>>)
+
+    ; CHECK: %0 = firrtl.wire {name = "_T"} : !firrtl.vector<uint<1>, 12>
+    wire _T : UInt<1>[12] @[Nodes.scala 370:76]
+
+    ; CHECK: %1 = firrtl.wire {name = "_T_2"} : !firrtl.vector<uint<1>, 13>
+    wire _T_2 : UInt<1>[13]
+
+    ; CHECK: %2 = firrtl.wire {name = "out_0"} : !firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>
+    wire out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
+
+    ; CHECK: firrtl.connect %0, %1 
+    _T <= _T_2
+
+    ;; TODO.
+    ;auto is invalid
+    ;_T_2[0] <= _T[0] @[Xbar.scala 21:44]
+    ;auto.out_0 <- out_0.member.0.reset @[LazyModule.scala 173:49]
+    ;node _T_23 = or(_T_2[0], _T_2[1]) @[Parameters.scala 337:46]
+

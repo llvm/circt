@@ -17,6 +17,7 @@
 namespace spt {
 namespace firrtl {
 using namespace mlir;
+class FIRRTLType;
 
 class FIRRTLDialect : public Dialect {
 public:

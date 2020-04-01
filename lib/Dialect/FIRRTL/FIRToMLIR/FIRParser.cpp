@@ -194,6 +194,8 @@ ParseResult FIRParser::parseOptionalInfo() {
   return success();
 }
 
+/// id  ::= Id | keywordAsId
+///
 /// Parse the 'id' grammar, which is an identifier or an allowed keyword.  On
 /// success, this returns the identifier in the result attribute.
 ParseResult FIRParser::parseId(StringAttr &result, const Twine &message) {
@@ -221,11 +223,16 @@ ParseResult FIRParser::parseId(StringAttr &result, const Twine &message) {
 ///         ::= keywordAsId
 ///
 ParseResult FIRParser::parseFieldId(StringRef &result, const Twine &message) {
+  // Handle the UnsignedInt case.
+  if (consumeIf(FIRToken::integer, &result))
+    return success();
+
+  // Otherwise, it must be Id or keywordAsId.
   StringAttr name;
   if (parseId(name, message))
     return failure();
 
-  // FIXME: Handle RelaxedId/UnsignedInt/keywordAsId
+  // FIXME: Handle RelaxedId
 
   result = name.getValue();
   return success();
@@ -416,14 +423,28 @@ struct FIRStmtParser : public FIRScopedParser {
   ParseResult parseSimpleStmt(unsigned stmtIndent);
 
 private:
+  ParseResult parseWire();
   OpBuilder builder;
 };
 
 } // end anonymous namespace
 
 /// simple_stmt ::= stmt
+/// stmt ::= wire
 ///
 ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
+  switch (getToken().getKind()) {
+  case FIRToken::kw_wire:
+    return parseWire();
+  case FIRToken::identifier:
+    // FIXME: This is a temporary hack.
+    break;
+
+  default:
+    emitError("unexpected token in module");
+    return failure();
+  }
+
   // Hard coding identifier <= identifier
   // FIXME: This is wrong.
 
@@ -439,8 +460,30 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
       lookupSymbolEntry(src, name2, loc2))
     return failure();
 
-  builder.create<FIRRTLConnectOp>(getEncodedSourceLocation(arrowLoc), dest, src,
+  // FIXME: Connect shouldn't have a name.  This should have a @ location.
+  auto resultLoc = getEncodedSourceLocation(arrowLoc);
+  builder.create<FIRRTLConnectOp>(resultLoc, dest, src,
                                   /*name*/ StringAttr());
+  return success();
+}
+
+/// wire ::= 'wire' id ':' type info?
+ParseResult FIRStmtParser::parseWire() {
+  SMLoc loc;
+  consumeToken(FIRToken::kw_wire, nullptr, &loc);
+
+  StringAttr id;
+  FIRRTLType type;
+  if (parseId(id, "expected wire name") ||
+      parseToken(FIRToken::colon, "expected ':' in wire") ||
+      parseType(type, "expected wire type") || parseOptionalInfo())
+    return failure();
+
+  auto resultLoc = getEncodedSourceLocation(loc);
+  auto result = builder.create<FIRRTLWireOp>(resultLoc, type, id);
+  if (addSymbolEntry(id.getValue(), result, loc))
+    return failure();
+
   return success();
 }
 
@@ -593,22 +636,13 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
     if (subIndent <= indent)
       return success();
 
-    switch (getToken().getKind()) {
     // The outer level parser can handle these tokens.
-    case FIRToken::eof:
-    case FIRToken::error:
+    if (getToken().isAny(FIRToken::eof, FIRToken::error))
       return success();
 
-    case FIRToken::identifier: {
-      if (stmtParser.parseSimpleStmt(subIndent))
-        return failure();
-      break;
-    }
-
-    default:
-      emitError("unexpected token in module");
+    // Let the statement parser handle this.
+    if (stmtParser.parseSimpleStmt(subIndent))
       return failure();
-    }
   }
 }
 
