@@ -13,6 +13,7 @@
 #include "spt/Dialect/FIRRTL/FIRToMLIR.h"
 #include "spt/Dialect/FIRRTL/IR/Ops.h"
 #include "spt/Dialect/FIRRTL/IR/Types.h"
+#include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -329,23 +330,104 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
 }
 
 //===----------------------------------------------------------------------===//
+// FIRScopedParser
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// This class is a common base class for stuff that needs local scope
+/// manipulation helpers.
+class FIRScopedParser : public FIRParser {
+public:
+  using SymbolTable =
+      llvm::ScopedHashTable<Identifier, std::pair<SMLoc, Value>>;
+  FIRScopedParser(GlobalFIRParserState &state, SymbolTable &symbolTable)
+      : FIRParser(state), symbolTable(symbolTable) {}
+
+  ParseResult addSymbolEntry(StringRef name, Value value, SMLoc loc);
+
+protected:
+  // This symbol table holds the names of ports, wires, and other local decls.
+  // This is scoped because conditional statements introduce subscopes.
+  SymbolTable &symbolTable;
+};
+} // end anonymous namespace
+
+ParseResult FIRScopedParser::addSymbolEntry(StringRef name, Value value,
+                                            SMLoc loc) {
+  // TODO: Should we support name shadowing?  This will reject cases where
+  // we try to define a new wire in a conditional where an outer name defined
+  // the same name.
+  auto nameId = Identifier::get(name, getContext());
+  auto prev = symbolTable.lookup(nameId);
+  if (prev.first.isValid()) {
+    emitError(loc, "redefinition of name '" + name.str() + "'")
+            .attachNote(getEncodedSourceLocation(prev.first))
+        << "previous definition here";
+    return failure();
+  }
+
+  symbolTable.insert(nameId, {loc, value});
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// FIRStmtParser
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// This class implements logic and state for parsing statements, suites, and
+/// similar module body constructs.
+struct FIRStmtParser : public FIRScopedParser {
+  explicit FIRStmtParser(GlobalFIRParserState &state, SymbolTable &symbolTable,
+                         OpBuilder builder)
+      : FIRScopedParser(state, symbolTable), builder(builder) {}
+
+  ParseResult parseSimpleStmt(unsigned stmtIndent);
+
+private:
+  OpBuilder builder;
+};
+
+} // end anonymous namespace
+
+/// simple_stmt ::= stmt
+///
+ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
+  // Hard coding identifier <= identifier
+  // FIXME: This is wrong.
+  consumeToken(FIRToken::identifier);
+  if (parseToken(FIRToken::less_equal, "expected <=") ||
+      parseToken(FIRToken::identifier, "expected identifier"))
+    return failure();
+
+  // builder.create<FIRRTLConnectOp>(loc, x, y);
+  // firrtl.connect %out, %5 : !firrtl.flip<uint>, !firrtl.uint<32>
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // FIRModuleParser
 //===----------------------------------------------------------------------===//
 
 namespace {
 /// This class implements logic and state for parsing module bodies.
-struct FIRModuleParser : public FIRParser {
+struct FIRModuleParser : public FIRScopedParser {
   explicit FIRModuleParser(GlobalFIRParserState &state, CircuitOp circuit)
-      : FIRParser(state), circuit(circuit) {}
+      : FIRScopedParser(state, symbolTable), circuit(circuit),
+        firstScope(symbolTable) {}
 
   ParseResult parseExtModule(unsigned indent);
   ParseResult parseModule(unsigned indent);
 
 private:
-  ParseResult parsePortList(SmallVectorImpl<FModuleOp::PortInfo> &result,
+  using PortInfoAndLoc = std::pair<FModuleOp::PortInfo, SMLoc>;
+  ParseResult parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
                             unsigned indent);
 
   CircuitOp circuit;
+  SymbolTable symbolTable;
+  SymbolTable::ScopeTy firstScope;
 };
 
 } // end anonymous namespace
@@ -355,7 +437,7 @@ private:
 /// dir      ::= 'input' | 'output'
 ///
 ParseResult
-FIRModuleParser::parsePortList(SmallVectorImpl<FModuleOp::PortInfo> &result,
+FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
                                unsigned indent) {
   // Parse any ports.
   while (getToken().isAny(FIRToken::kw_input, FIRToken::kw_output) &&
@@ -366,6 +448,7 @@ FIRModuleParser::parsePortList(SmallVectorImpl<FModuleOp::PortInfo> &result,
     consumeToken();
     StringAttr name;
     FIRRTLType type;
+    auto loc = getToken().getLoc();
     if (parseId(name, "expected port name") ||
         parseToken(FIRToken::colon, "expected ':' in port definition") ||
         parseType(type, "expected a type in port declaration") ||
@@ -376,7 +459,7 @@ FIRModuleParser::parsePortList(SmallVectorImpl<FModuleOp::PortInfo> &result,
     if (isOutput)
       type = FlipType::get(type);
 
-    result.push_back({name, type});
+    result.push_back({{name, type}, loc});
   }
 
   return success();
@@ -393,12 +476,20 @@ FIRModuleParser::parsePortList(SmallVectorImpl<FModuleOp::PortInfo> &result,
 ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   consumeToken(FIRToken::kw_extmodule);
   StringAttr name;
-  SmallVector<FModuleOp::PortInfo, 4> portList;
+  SmallVector<PortInfoAndLoc, 4> portListAndLoc;
 
   if (parseId(name, "expected module name") ||
       parseToken(FIRToken::colon, "expected ':' in extmodule definition") ||
-      parseOptionalInfo() || parsePortList(portList, indent))
+      parseOptionalInfo() || parsePortList(portListAndLoc, indent))
     return failure();
+
+  // Add all the ports to the symbol table even though there are no SSA values
+  // for arguments in an external module.  This detects multiple definitions
+  // of the same name.
+  for (auto &entry : portListAndLoc) {
+    if (addSymbolEntry(entry.first.first.getValue(), Value(), entry.second))
+      return failure();
+  }
 
   // Parse a defname if present.
   if (consumeIf(FIRToken::kw_defname)) {
@@ -430,20 +521,33 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
   // FIXME: This should be the .firtl loc, and get overriden by the fileinfo.
   auto loc = UnknownLoc::get(getContext());
   StringAttr name;
-  SmallVector<FModuleOp::PortInfo, 4> portList;
+  SmallVector<PortInfoAndLoc, 4> portListAndLoc;
 
   consumeToken(FIRToken::kw_module);
   if (parseId(name, "expected module name") ||
       parseToken(FIRToken::colon, "expected ':' in module definition") ||
-      parseOptionalInfo() || parsePortList(portList, indent))
+      parseOptionalInfo() || parsePortList(portListAndLoc, indent))
     return failure();
 
-  // TODO: handle port list.
   auto builder = circuit.getBodyBuilder();
+
+  // Create the module.
+  SmallVector<FModuleOp::PortInfo, 4> portList;
+  portList.reserve(portListAndLoc.size());
+  for (auto &elt : portListAndLoc)
+    portList.push_back(elt.first);
   auto fmodule = builder.create<FModuleOp>(loc, name, portList);
 
-  // TODO: populate this.
-  (void)fmodule;
+  // Install all of the ports into the symbol table, associated with their
+  // block arguments.
+  auto argIt = fmodule.args_begin();
+  for (auto &entry : portListAndLoc) {
+    if (addSymbolEntry(entry.first.first.getValue(), *argIt, entry.second))
+      return failure();
+    ++argIt;
+  }
+
+  FIRStmtParser stmtParser(getState(), symbolTable, fmodule.getBodyBuilder());
 
   // Parse the moduleBlock.
   while (true) {
@@ -457,14 +561,11 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
     case FIRToken::error:
       return success();
 
-    case FIRToken::identifier:
-      // Hard coding identifier <= identifier
-      // FIXME: This is wrong.
-      consumeToken(FIRToken::identifier);
-      if (parseToken(FIRToken::less_equal, "expected <=") ||
-          parseToken(FIRToken::identifier, "expected identifier"))
+    case FIRToken::identifier: {
+      if (stmtParser.parseSimpleStmt(subIndent))
         return failure();
       break;
+    }
 
     default:
       emitError("unexpected token in module");

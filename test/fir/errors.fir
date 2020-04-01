@@ -15,3 +15,20 @@ circuit test test : ; expected-error {{expected ':' in circuit definition}}
 ; expected-error @+1 {{unexpected character}}
 @
 
+;// -----
+
+circuit test :
+  module nameConflict :
+    input c: Clock   ; expected-note {{previous definition here}}
+    input r: Reset 
+    input c: Analog  ; expected-error {{redefinition of name 'c'}}
+  
+
+;// -----
+
+circuit test :
+  extmodule nameConflict :
+    input c: Clock   ; expected-note {{previous definition here}}
+    input r: Reset 
+    input c: Analog  ; expected-error {{redefinition of name 'c'}}
+  
