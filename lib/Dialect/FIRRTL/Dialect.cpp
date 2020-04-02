@@ -337,5 +337,40 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result) {
     FModuleOp::ensureTerminator(*body, parser.getBuilder(), result.location);
   return success();
 }
+
+//===----------------------------------------------------------------------===//
+// Expressions
+//===----------------------------------------------------------------------===//
+
+// Return the result of a subfield operation.
+FIRRTLType FIRRTLSubfieldOp::getResultType(FIRRTLType inType,
+                                           StringRef fieldName) {
+  if (auto bundleType = inType.dyn_cast<BundleType>()) {
+    for (auto &elt : bundleType.getElements()) {
+      if (elt.first.strref() == fieldName)
+        return elt.second;
+    }
+  }
+
+  if (auto flipType = inType.dyn_cast<FlipType>())
+    if (auto subType = getResultType(flipType.getElementType(), fieldName))
+      return FlipType::get(subType);
+
+  return {};
+}
+
+FIRRTLType FIRRTLSubindexOp::getResultType(FIRRTLType inType,
+                                           unsigned fieldIdx) {
+  if (auto vectorType = inType.dyn_cast<FVectorType>())
+    if (fieldIdx < vectorType.getNumElements())
+      return vectorType.getElementType();
+
+  if (auto flipType = inType.dyn_cast<FlipType>())
+    if (auto subType = getResultType(flipType.getElementType(), fieldIdx))
+      return FlipType::get(subType);
+
+  return {};
+}
+
 #define GET_OP_CLASSES
 #include "spt/Dialect/FIRRTL/IR/FIRRTL.cpp.inc"

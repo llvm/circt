@@ -600,9 +600,21 @@ ParseResult FIRStmtParser::parseExp(Value &result,
       if (parseFieldId(fieldName, "expected field name"))
         return failure();
 
-      // FIXME: The result type is set wrong here.
+      // Make sure the field name matches up with the input value's type and
+      // compute the result type for the expression.
+      auto resultType = result.getType().cast<FIRRTLType>();
+      resultType = FIRRTLSubfieldOp::getResultType(resultType, fieldName);
+      if (!resultType) {
+        // TODO: This error would be way nicer with a .fir pretty print of the
+        // type.
+        emitError(loc, "invalid subfield '" + fieldName + "' for type ")
+            << result.getType();
+        return failure();
+      }
+
+      // Create the result operation.
       auto op = builder.create<FIRRTLSubfieldOp>(
-          translateLocation(loc), result.getType(), result,
+          translateLocation(loc), resultType, result,
           builder.getStringAttr(fieldName),
           /*optionalName*/ StringAttr());
       subOps.push_back(op);
@@ -622,9 +634,21 @@ ParseResult FIRStmtParser::parseExp(Value &result,
       if (indexSpelling.getAsInteger(10, indexNo))
         return emitError(indexLoc, "invalid index specifier"), failure();
 
-      // FIXME: The result type is set wrong here.
+      // Make sure the field name matches up with the input value's type and
+      // compute the result type for the expression.
+      auto resultType = result.getType().cast<FIRRTLType>();
+      resultType = FIRRTLSubindexOp::getResultType(resultType, indexNo);
+      if (!resultType) {
+        // TODO: This error would be way nicer with a .fir pretty print of the
+        // type.
+        emitError(loc, "invalid subindex '" + Twine(indexNo))
+            << "' for type " << result.getType();
+        return failure();
+      }
+
+      // Create the result operation.
       auto op = builder.create<FIRRTLSubindexOp>(
-          translateLocation(loc), result.getType(), result,
+          translateLocation(loc), resultType, result,
           builder.getI32IntegerAttr(indexNo),
           /*optionalName*/ StringAttr());
       subOps.push_back(op);
@@ -632,10 +656,8 @@ ParseResult FIRStmtParser::parseExp(Value &result,
       continue;
     }
 
-    break;
+    return success();
   }
-
-  return success();
 }
 
 /// simple_stmt ::= stmt

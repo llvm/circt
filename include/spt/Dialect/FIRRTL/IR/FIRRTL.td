@@ -164,6 +164,13 @@ def FIRRTLSubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
   let assemblyFormat = [{
      $input `(` $fieldname `)` attr-dict `:` functional-type($input, $result)
   }];
+
+  let extraClassDeclaration = [{
+    /// Compute the result of a Subfield operation on a value of the specified
+    /// type and extracting the specified field name.  If the request is
+    /// invalid, then a null type is returned.
+    static FIRRTLType getResultType(FIRRTLType inType, StringRef fieldName);
+  }];
 }
 
 def FIRRTLSubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
@@ -185,6 +192,12 @@ def FIRRTLSubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat = [{
      $input `[` $index `]` attr-dict `:` functional-type($input, $result)
+  }];
+
+  let extraClassDeclaration = [{
+    /// Compute the result of a Subindex operation on a value of the specified
+    /// type.  If the request is invalid, then a null type is returned.
+    static FIRRTLType getResultType(FIRRTLType inType, unsigned fieldIdx);
   }];
 }
 

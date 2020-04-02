@@ -66,17 +66,16 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.invalid %reset : !firrtl.uint<1>
     reset is invalid
 
-    ; CHECK: %3 = firrtl.subfield %auto("out_0") 
-    ; CHECK: %4 = firrtl.subfield %2("member")
-    ; CHECK: %5 = firrtl.subfield %4("0") 
-    ; CHECK: %6 = firrtl.subfield %5("reset")
-    ; CHECK: firrtl.partialconnect %3, %6
-    auto.out_0 <- out_0.member.0.reset @[Field 173:49]
+    ; CHECK: %3 = firrtl.subfield %2("member") : (!firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>) -> !firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>
+    ; CHECK: %4 = firrtl.subfield %3("0") : (!firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>) -> !firrtl.bundle<clock: clock, reset: uint<1>>
+    ; CHECK: %5 = firrtl.subfield %4("reset") : (!firrtl.bundle<clock: clock, reset: uint<1>>) -> !firrtl.uint<1>
+    ; CHECK: firrtl.partialconnect %auto, %5 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    auto <- out_0.member.0.reset @[Field 173:49]
 
-    ; CHECK: %7 = firrtl.subindex %1[0] 
-    ; CHECK: %8 = firrtl.subindex %0[0] 
-    ; CHECK: firrtl.connect %7, %8
-
+    ; CHECK: %6 = firrtl.subindex %1[0] : (!firrtl.vector<uint<1>, 13>) -> !firrtl.uint<1>
+    ; CHECK: %7 = firrtl.subindex %0[0] : (!firrtl.vector<uint<1>, 12>) -> !firrtl.uint<1>
+    ; CHECK: firrtl.connect %6, %7
     _T_2[0] <= _T[0] @[Xbar.scala 21:44]
+
     ;node _T_23 = or(_T_2[0], _T_2[1]) @[Parameters.scala 337:46]
 
