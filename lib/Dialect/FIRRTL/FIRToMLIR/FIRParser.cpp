@@ -152,6 +152,7 @@ struct FIRParser {
   //===--------------------------------------------------------------------===//
 
   // Parse the 'id' grammar, which is an identifier or an allowed keyword.
+  ParseResult parseId(StringRef &result, const Twine &message);
   ParseResult parseId(StringAttr &result, const Twine &message);
   ParseResult parseFieldId(StringRef &result, const Twine &message);
   ParseResult parseType(FIRRTLType &result, const Twine &message);
@@ -299,7 +300,7 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result) {
 ///
 /// Parse the 'id' grammar, which is an identifier or an allowed keyword.  On
 /// success, this returns the identifier in the result attribute.
-ParseResult FIRParser::parseId(StringAttr &result, const Twine &message) {
+ParseResult FIRParser::parseId(StringRef &result, const Twine &message) {
   switch (getToken().getKind()) {
   // The most common case is an identifier.
   case FIRToken::identifier:
@@ -308,7 +309,7 @@ ParseResult FIRParser::parseId(StringAttr &result, const Twine &message) {
 #include "FIRTokenKinds.def"
 
     // Yep, this is a valid 'id'.  Turn it into an attribute.
-    result = StringAttr::get(getTokenSpelling(), getContext());
+    result = getTokenSpelling();
     consumeToken();
     return success();
 
@@ -316,6 +317,15 @@ ParseResult FIRParser::parseId(StringAttr &result, const Twine &message) {
     emitError(message);
     return failure();
   }
+}
+
+ParseResult FIRParser::parseId(StringAttr &result, const Twine &message) {
+  StringRef name;
+  if (parseId(name, message))
+    return failure();
+
+  result = StringAttr::get(name, getContext());
+  return success();
 }
 
 /// fieldId ::= Id
@@ -329,14 +339,12 @@ ParseResult FIRParser::parseFieldId(StringRef &result, const Twine &message) {
   if (consumeIf(FIRToken::integer))
     return success();
 
-  // Otherwise, it must be Id or keywordAsId.
-  StringAttr name;
-  if (parseId(name, message))
-    return failure();
-
   // FIXME: Handle RelaxedId
 
-  result = name.getValue();
+  // Otherwise, it must be Id or keywordAsId.
+  if (parseId(result, message))
+    return failure();
+
   return success();
 }
 
@@ -547,17 +555,18 @@ private:
 /// XX   ::=  | primop exp* intLit*  ')'
 ParseResult FIRStmtParser::parseExp(Value &result, const Twine &message) {
   switch (getToken().getKind()) {
-  case FIRToken::identifier:
-    // exp ::= id
-    if (lookupSymbolEntry(result, getTokenSpelling(), getToken().getLoc()))
-      return failure();
-    consumeToken(FIRToken::identifier);
-    break;
 
-  default:
-    // FIXME: Handle the other 'id' keyword things.
-    emitError("unexpected token in module");
-    return failure();
+  // Otherwise there are a bunch of keywords that are treated as identifiers
+  // try them.
+  case FIRToken::identifier: // exp ::= id
+  default: {
+    StringRef name;
+    auto loc = getToken().getLoc();
+    if (parseId(name, "unexpected token in module") ||
+        lookupSymbolEntry(result, name, loc))
+      return failure();
+    break;
+  }
   }
 
   // TODO: Handle postfix expressions.
@@ -724,7 +733,7 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
 /// parameter ::= 'parameter' id '=' RawString NEWLINE
 ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   consumeToken(FIRToken::kw_extmodule);
-  StringAttr name;
+  StringRef name;
   SmallVector<PortInfoAndLoc, 4> portListAndLoc;
 
   LocWithInfo info(getToken().getLoc(), this);
@@ -743,7 +752,7 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
 
   // Parse a defname if present.
   if (consumeIf(FIRToken::kw_defname)) {
-    StringAttr defName;
+    StringRef defName;
     if (parseToken(FIRToken::equal, "expected '=' in defname") ||
         parseId(defName, "expected defname name"))
       return failure();
@@ -753,7 +762,7 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
 
   // Parse the parameter list.
   while (consumeIf(FIRToken::kw_parameter)) {
-    StringAttr paramName;
+    StringRef paramName;
     if (parseId(paramName, "expected parameter name") ||
         parseToken(FIRToken::equal, "expected '=' in parameter"))
       return failure();
