@@ -28,3 +28,4 @@ firrtl.module @X(%b : !firrtl.uint<32>, %d : !firrtl.uint<16>, %out : !firrtl.ui
 "firrtl.module"() ( {
   "firrtl.done"() : () -> ()
 }) { type = () -> ()} : () -> ()
+

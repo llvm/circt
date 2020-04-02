@@ -26,4 +26,20 @@ circuit basic :  @[CIRCUIT.scala 127]
     input in: UInt
   ; CHECK: } loc({{.*}}test/fir/locations.fir"
 
+
+  ; CHECK-LABEL: firrtl.module @Subexpressions
+  module Subexpressions :
+    input in: UInt
+    output auto : { out_0 : UInt<1> }
+
+    ; CHECK: %0 = firrtl.wire {name = "out_0"}
+    wire out_0 : { member : { 0 : { reset : UInt<1>}}}
+
+    ; %1 = firrtl.subfield %auto "out_0" : {{.*}} loc("Field":173:49)
+    ; %2 = firrtl.subfield %0 "member" : {{.*}} loc("Field":173:49)
+    ; %3 = firrtl.subfield %2 "0" : {{.*}} loc("Field":173:49)
+    ; %4 = firrtl.subfield %3 "reset" : {{.*}} loc("Field":173:49)
+    ; firrtl.partialconnect %1, %4 : {{.*}} loc("Field":173:49)
+    auto.out_0 <- out_0.member.0.reset @[Field 173:49]
+
 ; CIRCUIT: CHECK: } loc("CIRCUIT.scala":127:0)

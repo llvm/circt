@@ -229,6 +229,7 @@ public:
   }
 
   void setInfoLocation(Location loc) { infoLoc = loc; }
+  void applyInfoToSubexpressions(ArrayRef<Operation *> ops);
 
 private:
   FIRParser *const parser;
@@ -240,6 +241,19 @@ private:
   /// This is the location specified by the @ marker if present.
   Optional<Location> infoLoc;
 };
+
+void FIRParser::LocWithInfo::applyInfoToSubexpressions(
+    ArrayRef<Operation *> ops) {
+
+  // If we had no info loc, then we're done.
+  if (!infoLoc.hasValue())
+    return;
+
+  // Otherwise, set it as the location for all of the subexpressions.
+  auto loc = infoLoc.getValue();
+  for (auto *op : ops)
+    op->setLoc(loc);
+}
 
 /// info ::= FileInfo
 ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result) {
@@ -533,7 +547,8 @@ struct FIRStmtParser : public FIRScopedParser {
   ParseResult parseSimpleStmt(unsigned stmtIndent);
 
 private:
-  ParseResult parseExp(Value &result, const Twine &message);
+  ParseResult parseExp(Value &result, SmallVectorImpl<Operation *> &subOps,
+                       const Twine &message);
 
   ParseResult parseSkip();
   ParseResult parseWire();
@@ -543,17 +558,23 @@ private:
 
 } // end anonymous namespace
 
+/// Parse the 'exp' grammar, returning all of the suboperations in the
+/// specified vector, and the ultimate SSA value in value.
+///
 /// XX   ::=  : 'UInt' ('<' intLit '>')? '(' intLit ')'
 /// XX   ::=  | 'SInt' ('<' intLit '>')? '(' intLit ')'
 ///  exp ::=  | id    // Ref
-/// XX   ::=  | exp '.' fieldId
+///      ::=  | exp '.' fieldId
 /// XX   ::=  | exp '.' DoubleLit // TODO Workaround for #470
-/// XX   ::=  | exp '[' intLit ']'
+///      ::=  | exp '[' intLit ']'
 /// XX   ::=  | exp '[' exp ']'
 /// XX   ::=  | 'mux(' exp exp exp ')'
 /// XX   ::=  | 'validif(' exp exp ')'
 /// XX   ::=  | primop exp* intLit*  ')'
-ParseResult FIRStmtParser::parseExp(Value &result, const Twine &message) {
+///
+ParseResult FIRStmtParser::parseExp(Value &result,
+                                    SmallVectorImpl<Operation *> &subOps,
+                                    const Twine &message) {
   switch (getToken().getKind()) {
 
   // Otherwise there are a bunch of keywords that are treated as identifiers
@@ -569,7 +590,51 @@ ParseResult FIRStmtParser::parseExp(Value &result, const Twine &message) {
   }
   }
 
-  // TODO: Handle postfix expressions.
+  // Handle postfix expressions.
+  while (1) {
+    auto loc = getToken().getLoc();
+
+    // Subfield: exp ::= exp '.' fieldId
+    if (consumeIf(FIRToken::period)) {
+      StringRef fieldName;
+      if (parseFieldId(fieldName, "expected field name"))
+        return failure();
+
+      // FIXME: The result type is set wrong here.
+      auto op = builder.create<FIRRTLSubfieldOp>(
+          translateLocation(loc), result.getType(), result,
+          builder.getStringAttr(fieldName),
+          /*optionalName*/ StringAttr());
+      subOps.push_back(op);
+      result = op.getResult();
+      continue;
+    }
+
+    // Subindex: exp ::= exp '[' intLit ']'
+    if (consumeIf(FIRToken::l_square)) {
+      auto indexSpelling = getTokenSpelling();
+      auto indexLoc = getToken().getLoc();
+      if (parseToken(FIRToken::integer, "expected width") ||
+          parseToken(FIRToken::r_square, "expected ']'"))
+        return failure();
+
+      unsigned indexNo;
+      if (indexSpelling.getAsInteger(10, indexNo))
+        return emitError(indexLoc, "invalid index specifier"), failure();
+
+      // FIXME: The result type is set wrong here.
+      auto op = builder.create<FIRRTLSubindexOp>(
+          translateLocation(loc), result.getType(), result,
+          builder.getI32IntegerAttr(indexNo),
+          /*optionalName*/ StringAttr());
+      subOps.push_back(op);
+      result = op.getResult();
+      continue;
+    }
+
+    break;
+  }
+
   return success();
 }
 
@@ -628,7 +693,8 @@ ParseResult FIRStmtParser::parseWire() {
 ///                  ::= exp 'is' 'invalid' info?
 ParseResult FIRStmtParser::parseLeadingExpStmt() {
   Value lhs;
-  if (parseExp(lhs, "unexpected token in module"))
+  SmallVector<Operation *, 8> subOps;
+  if (parseExp(lhs, subOps, "unexpected token in module"))
     return failure();
 
   // Figure out which kind of statement it is.
@@ -640,6 +706,9 @@ ParseResult FIRStmtParser::parseLeadingExpStmt() {
         parseOptionalInfo(info))
       return failure();
 
+    // If we had an info location, make sure all subexpression nodes get it.
+    info.applyInfoToSubexpressions(subOps);
+
     builder.create<FIRRTLInvalid>(info.getLoc(), lhs);
     return success();
   }
@@ -650,8 +719,12 @@ ParseResult FIRStmtParser::parseLeadingExpStmt() {
   consumeToken();
 
   Value rhs;
-  if (parseExp(rhs, "unexpected token in statement") || parseOptionalInfo(info))
+  if (parseExp(rhs, subOps, "unexpected token in statement") ||
+      parseOptionalInfo(info))
     return failure();
+
+  // If we had an info location, make sure all subexpression nodes get it.
+  info.applyInfoToSubexpressions(subOps);
 
   if (kind == FIRToken::less_equal)
     builder.create<FIRRTLConnectOp>(info.getLoc(), lhs, rhs);

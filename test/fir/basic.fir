@@ -66,7 +66,17 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.invalid %reset : !firrtl.uint<1>
     reset is invalid
 
-    ;_T_2[0] <= _T[0] @[Xbar.scala 21:44]
-    ;auto.out_0 <- out_0.member.0.reset @[LazyModule.scala 173:49]
+    ; CHECK: %3 = firrtl.subfield %auto("out_0") 
+    ; CHECK: %4 = firrtl.subfield %2("member")
+    ; CHECK: %5 = firrtl.subfield %4("0") 
+    ; CHECK: %6 = firrtl.subfield %5("reset")
+    ; CHECK: firrtl.partialconnect %3, %6
+    auto.out_0 <- out_0.member.0.reset @[Field 173:49]
+
+    ; CHECK: %7 = firrtl.subindex %1[0] 
+    ; CHECK: %8 = firrtl.subindex %0[0] 
+    ; CHECK: firrtl.connect %7, %8
+
+    _T_2[0] <= _T[0] @[Xbar.scala 21:44]
     ;node _T_23 = or(_T_2[0], _T_2[1]) @[Parameters.scala 337:46]
 

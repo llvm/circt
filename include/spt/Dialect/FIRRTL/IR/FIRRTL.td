@@ -143,6 +143,52 @@ def FIRRTLWireOp : FIRRTLOp<"wire", [NoSideEffect]> {
 }
 
 //===----------------------------------------------------------------------===//
+// Expressions
+//===----------------------------------------------------------------------===//
+
+def FIRRTLSubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
+  let summary = "Extract a subfield of another value";
+  let description = [{
+    The subfield expression refers to a subelement of an expression with a
+    bundle type.
+    ```
+      %result = firrt.subfield %input "fieldname" : t1, t2
+    ```
+    }];
+
+  let arguments = (ins AnyType:$input, StrAttr:$fieldname,
+                       OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  // TODO: Could drop the result type, inferring it from the source.
+  let assemblyFormat = [{
+     $input `(` $fieldname `)` attr-dict `:` functional-type($input, $result)
+  }];
+}
+
+def FIRRTLSubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
+  let summary = "Extract an element of another vector value";
+  let description = [{
+    The subindex expression statically refers, by index, to a subelement
+    of an expression with a vector type. The index must be a non-negative
+    integer and cannot be equal to or exceed the length of the vector it 
+    indexes.
+    ```
+      %result = firrt.subindex %input[index] : t1, t2
+    ```
+    }];
+
+  let arguments = (ins AnyType:$input, I32Attr:$index,
+                       OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  // TODO: Could drop the result type, inferring it from the source.
+  let assemblyFormat = [{
+     $input `[` $index `]` attr-dict `:` functional-type($input, $result)
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // Statements
 //===----------------------------------------------------------------------===//
 
