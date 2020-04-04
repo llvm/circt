@@ -591,6 +591,7 @@ struct FIRStmtParser : public FIRScopedParser {
 private:
   ParseResult parseExp(Value &result, SmallVectorImpl<Operation *> &subOps,
                        const Twine &message);
+  ParseResult parsePrimExp(Value &result, SmallVectorImpl<Operation *> &subOps);
 
   ParseResult parseSkip();
   ParseResult parseNode();
@@ -613,7 +614,7 @@ private:
 /// XX   ::=  | exp '[' exp ']'
 /// XX   ::=  | 'mux(' exp exp exp ')'
 /// XX   ::=  | 'validif(' exp exp ')'
-///      ::=  | primop exp* intLit*  ')'
+///      ::=  | prim
 ///
 ParseResult FIRStmtParser::parseExp(Value &result,
                                     SmallVectorImpl<Operation *> &subOps,
@@ -624,43 +625,11 @@ ParseResult FIRStmtParser::parseExp(Value &result,
   switch (kind) {
 
     // Handle all the primitive ops: primop exp* intLit*  ')'
-#define TOK_LPKEYWORD(SPELLING) case FIRToken::lp_##SPELLING:
+#define TOK_LPKEYWORD(SPELLING, NUMEXP, NUMCST) case FIRToken::lp_##SPELLING:
 #include "FIRTokenKinds.def"
-    {
-      consumeToken();
-
-      SmallVector<Value, 4> operands;
-      if (parseCommaSeparatedListUntil(FIRToken::r_paren, [&]() -> ParseResult {
-            // FIXME: This isn't handling the intLit case.
-            Value operand;
-            if (parseExp(operand, subOps,
-                         "expected expression in primitive operand"))
-              return failure();
-
-            operands.push_back(operand);
-            return success();
-          }))
-        return failure();
-
-      switch (kind) {
-      default:
-        emitError(loc, "primitive not supported yet");
-        return failure();
-      case FIRToken::lp_add:
-        if (operands.size() != 2)
-          return emitError(loc, "add must have two operands"), failure();
-        auto resultTy = FIRRTLAddOp::getResultType(
-            operands[0].getType().cast<FIRRTLType>(),
-            operands[1].getType().cast<FIRRTLType>());
-        if (!resultTy)
-          return emitError(loc, "invalid input types for add"), failure();
-        result = builder.create<FIRRTLAddOp>(
-            translateLocation(loc), resultTy, operands[0], operands[1],
-            /*name=*/builder.getStringAttr(""));
-        break;
-      }
-      break;
-    }
+    if (parsePrimExp(result, subOps))
+      return failure();
+    break;
 
     // Otherwise there are a bunch of keywords that are treated as identifiers
     // try them.
@@ -740,6 +709,67 @@ ParseResult FIRStmtParser::parseExp(Value &result,
       continue;
     }
 
+    return success();
+  }
+}
+
+/// prim ::= primop exp* intLit*  ')'
+ParseResult FIRStmtParser::parsePrimExp(Value &result,
+                                        SmallVectorImpl<Operation *> &subOps) {
+  auto kind = getToken().getKind();
+  auto loc = getToken().getLoc();
+  auto spelling = getTokenSpelling();
+  consumeToken();
+
+  // Parse the operands and constant integer arguments.
+  SmallVector<Value, 4> operands;
+  if (parseCommaSeparatedListUntil(FIRToken::r_paren, [&]() -> ParseResult {
+        // FIXME: This isn't handling the intLit case.
+        Value operand;
+        if (parseExp(operand, subOps,
+                     "expected expression in primitive operand"))
+          return failure();
+
+        operands.push_back(operand);
+        return success();
+      }))
+    return failure();
+
+  // After we parse the operands in integer arguments, validate that there is
+  // the right number of them.
+  static const int tokenID[] = {
+#define TOK_LPKEYWORD(SPELLING, NUMEXP, NUMCST) FIRToken::lp_##SPELLING,
+#include "FIRTokenKinds.def"
+  };
+
+  static const std::pair<unsigned char, unsigned char> numExpCst[] = {
+#define TOK_LPKEYWORD(SPELLING, NUMEXP, NUMCST) {NUMEXP, NUMCST},
+#include "FIRTokenKinds.def"
+  };
+
+  // Check that the right number of operands are present.
+  auto entry = numExpCst[kind - tokenID[0]];
+  if (entry.first != operands.size())
+    return emitError(loc, spelling.drop_back() + " must have " +
+                              Twine(entry.first) + " operands"),
+           failure();
+
+  // FIXME: Check the right number of constants are present.
+  SmallVector<FIRRTLType, 4> opTypes;
+  for (auto v : operands)
+    opTypes.push_back(v.getType().cast<FIRRTLType>());
+
+  switch (kind) {
+  default:
+    emitError(loc, "primitive not supported yet");
+    return failure();
+  case FIRToken::lp_add:
+    auto resultTy = FIRRTLAddOp::getResultType(opTypes[0], opTypes[1]);
+    if (!resultTy)
+      return emitError(loc, "invalid input types for add"), failure();
+    result = builder.create<FIRRTLAddOp>(translateLocation(loc), resultTy,
+                                         operands[0], operands[1],
+                                         /*name=*/builder.getStringAttr(""));
     return success();
   }
 }
