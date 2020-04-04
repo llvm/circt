@@ -372,5 +372,35 @@ FIRRTLType FIRRTLSubindexOp::getResultType(FIRRTLType inType,
   return {};
 }
 
+//===----------------------------------------------------------------------===//
+// Primitives
+//===----------------------------------------------------------------------===//
+
+FIRRTLType FIRRTLAddOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
+  if (auto lu = lhs.dyn_cast<UIntType>())
+    if (auto ru = rhs.dyn_cast<UIntType>()) {
+      if (!lu.getWidth().hasValue())
+        return lu;
+      if (!ru.getWidth().hasValue())
+        return ru;
+      auto width =
+          std::max(lu.getWidth().getValue(), ru.getWidth().getValue()) + 1;
+      return UIntType::get(lhs.getContext(), width);
+    }
+
+  if (auto ls = lhs.dyn_cast<SIntType>())
+    if (auto rs = rhs.dyn_cast<SIntType>()) {
+      if (!ls.getWidth().hasValue())
+        return ls;
+      if (!rs.getWidth().hasValue())
+        return rs;
+      auto width =
+          std::max(ls.getWidth().getValue(), rs.getWidth().getValue()) + 1;
+      return SIntType::get(lhs.getContext(), width);
+    }
+
+  return {};
+}
+
 #define GET_OP_CLASSES
 #include "spt/Dialect/FIRRTL/IR/FIRRTL.cpp.inc"

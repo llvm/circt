@@ -147,6 +147,18 @@ struct FIRParser {
   /// output a diagnostic and return failure.
   ParseResult parseToken(FIRToken::Kind expectedToken, const Twine &message);
 
+  /// Parse a comma separated list of elements that must have at least one entry
+  /// in it.
+  ParseResult
+  parseCommaSeparatedList(const std::function<ParseResult()> &parseElement);
+
+  /// Parse a comma-separated list of elements, terminated with an arbitrary
+  /// token.  This allows empty lists if allowEmptyList is true.
+  ParseResult
+  parseCommaSeparatedListUntil(FIRToken::Kind rightToken,
+                               const std::function<ParseResult()> &parseElement,
+                               bool allowEmptyList = true);
+
   //===--------------------------------------------------------------------===//
   // Common Parser Rules
   //===--------------------------------------------------------------------===//
@@ -205,6 +217,43 @@ ParseResult FIRParser::parseToken(FIRToken::Kind expectedToken,
   if (consumeIf(expectedToken))
     return success();
   return emitError(message);
+}
+
+/// Parse a comma separated list of elements that must have at least one entry
+/// in it.
+ParseResult FIRParser::parseCommaSeparatedList(
+    const std::function<ParseResult()> &parseElement) {
+  // Non-empty case starts with an element.
+  if (parseElement())
+    return failure();
+
+  // Otherwise we have a list of comma separated elements.
+  while (consumeIf(FIRToken::comma)) {
+    if (parseElement())
+      return failure();
+  }
+  return success();
+}
+
+/// Parse a comma-separated list of elements, terminated with an arbitrary
+/// token.  This allows empty lists if allowEmptyList is true.
+ParseResult FIRParser::parseCommaSeparatedListUntil(
+    FIRToken::Kind rightToken, const std::function<ParseResult()> &parseElement,
+    bool allowEmptyList) {
+
+  // Handle the empty case.
+  if (getToken().is(rightToken)) {
+    if (!allowEmptyList)
+      return emitError("expected list element");
+    consumeToken(rightToken);
+    return success();
+  }
+
+  if (parseCommaSeparatedList(parseElement) ||
+      parseToken(rightToken, "expected ',' or end of list"))
+    return failure();
+
+  return success();
 }
 
 //===--------------------------------------------------------------------===//
@@ -422,30 +471,23 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     consumeToken(FIRToken::l_brace);
 
     SmallVector<BundleType::BundleElement, 4> elements;
+    if (parseCommaSeparatedListUntil(FIRToken::r_brace, [&]() -> ParseResult {
+          bool isFlipped = consumeIf(FIRToken::kw_flip);
 
-    // Handle {}.
-    if (!consumeIf(FIRToken::r_brace)) {
-      do {
-        bool isFlipped = consumeIf(FIRToken::kw_flip);
+          StringRef fieldName;
+          FIRRTLType type;
+          if (parseFieldId(fieldName, "expected bundle field name") ||
+              parseToken(FIRToken::colon, "expected ':' in bundle") ||
+              parseType(type, "expected bundle field type"))
+            return failure();
 
-        StringRef fieldName;
-        FIRRTLType type;
-        if (parseFieldId(fieldName, "expected bundle field name") ||
-            parseToken(FIRToken::colon, "expected ':' in bundle") ||
-            parseType(type, "expected bundle field type"))
-          return failure();
+          if (isFlipped)
+            type = FlipType::get(type);
 
-        if (isFlipped)
-          type = FlipType::get(type);
-
-        elements.push_back({Identifier::get(fieldName, getContext()), type});
-      } while (consumeIf(FIRToken::comma));
-
-      // If we didn't have a comma, then we must have an '}' at the end of the
-      // bundle.
-      if (parseToken(FIRToken::r_brace, "expected '}' at end of bundle"))
-        return failure();
-    }
+          elements.push_back({Identifier::get(fieldName, getContext()), type});
+          return success();
+        }))
+      return failure();
     result = BundleType::get(elements, getContext());
     break;
   }
@@ -551,6 +593,7 @@ private:
                        const Twine &message);
 
   ParseResult parseSkip();
+  ParseResult parseNode();
   ParseResult parseWire();
   ParseResult parseLeadingExpStmt();
   OpBuilder builder;
@@ -570,21 +613,62 @@ private:
 /// XX   ::=  | exp '[' exp ']'
 /// XX   ::=  | 'mux(' exp exp exp ')'
 /// XX   ::=  | 'validif(' exp exp ')'
-/// XX   ::=  | primop exp* intLit*  ')'
+///      ::=  | primop exp* intLit*  ')'
 ///
 ParseResult FIRStmtParser::parseExp(Value &result,
                                     SmallVectorImpl<Operation *> &subOps,
                                     const Twine &message) {
-  switch (getToken().getKind()) {
+  auto kind = getToken().getKind();
+  auto loc = getToken().getLoc();
 
-  // Otherwise there are a bunch of keywords that are treated as identifiers
-  // try them.
+  switch (kind) {
+
+    // Handle all the primitive ops: primop exp* intLit*  ')'
+#define TOK_LPKEYWORD(SPELLING) case FIRToken::lp_##SPELLING:
+#include "FIRTokenKinds.def"
+    {
+      consumeToken();
+
+      SmallVector<Value, 4> operands;
+      if (parseCommaSeparatedListUntil(FIRToken::r_paren, [&]() -> ParseResult {
+            // FIXME: This isn't handling the intLit case.
+            Value operand;
+            if (parseExp(operand, subOps,
+                         "expected expression in primitive operand"))
+              return failure();
+
+            operands.push_back(operand);
+            return success();
+          }))
+        return failure();
+
+      switch (kind) {
+      default:
+        emitError(loc, "primitive not supported yet");
+        return failure();
+      case FIRToken::lp_add:
+        if (operands.size() != 2)
+          return emitError(loc, "add must have two operands"), failure();
+        auto resultTy = FIRRTLAddOp::getResultType(
+            operands[0].getType().cast<FIRRTLType>(),
+            operands[1].getType().cast<FIRRTLType>());
+        if (!resultTy)
+          return emitError(loc, "invalid input types for add"), failure();
+        result = builder.create<FIRRTLAddOp>(
+            translateLocation(loc), resultTy, operands[0], operands[1],
+            /*name=*/builder.getStringAttr(""));
+        break;
+      }
+      break;
+    }
+
+    // Otherwise there are a bunch of keywords that are treated as identifiers
+    // try them.
   case FIRToken::identifier: // exp ::= id
   default: {
     StringRef name;
     auto loc = getToken().getLoc();
-    if (parseId(name, "unexpected token in module") ||
-        lookupSymbolEntry(result, name, loc))
+    if (parseId(name, message) || lookupSymbolEntry(result, name, loc))
       return failure();
     break;
   }
@@ -663,6 +747,7 @@ ParseResult FIRStmtParser::parseExp(Value &result,
 /// simple_stmt ::= stmt
 ///
 /// stmt ::= wire
+///      ::= node
 ///      ::= skip
 ///      ::= leading-exp-stmt
 ///
@@ -670,6 +755,8 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
   switch (getToken().getKind()) {
   case FIRToken::kw_skip:
     return parseSkip();
+  case FIRToken::kw_node:
+    return parseNode();
   case FIRToken::kw_wire:
     return parseWire();
 
@@ -688,6 +775,30 @@ ParseResult FIRStmtParser::parseSkip() {
     return failure();
 
   builder.create<FIRRTLSkip>(info.getLoc());
+  return success();
+}
+
+/// node ::= 'node' id '=' exp info?
+ParseResult FIRStmtParser::parseNode() {
+  LocWithInfo info(getToken().getLoc(), this);
+  consumeToken(FIRToken::kw_node);
+
+  StringAttr id;
+  Value initializer;
+  SmallVector<Operation *, 8> subOps;
+  if (parseId(id, "expected node name") ||
+      parseToken(FIRToken::equal, "expected '=' in node") ||
+      parseExp(initializer, subOps, "unexpected expression for node") ||
+      parseOptionalInfo(info))
+    return failure();
+
+  // If we had an info location, make sure all subexpression nodes get it.
+  info.applyInfoToSubexpressions(subOps);
+
+  auto result = builder.create<FIRRTLNodeOp>(info.getLoc(), initializer, id);
+  if (addSymbolEntry(id.getValue(), result, info.getFIRLoc()))
+    return failure();
+
   return success();
 }
 

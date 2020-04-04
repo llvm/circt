@@ -81,10 +81,6 @@ public:
 // Width Qualified Ground Types
 //===----------------------------------------------------------------------===//
 
-namespace detail {
-Optional<int32_t> getWidthQualifiedTypeWidth(WidthTypeStorage *impl);
-} // namespace detail.
-
 template <typename ConcreteType, FIRRTLType::Kind typeKind>
 class WidthQualifiedType
     : public FIRRTLType::TypeBase<ConcreteType, FIRRTLType,
@@ -94,11 +90,6 @@ public:
                              detail::WidthTypeStorage>::Base::Base;
 
   static bool kindof(unsigned kind) { return kind == typeKind; }
-
-  /// Return the bitwidth of this type or None if unknown.
-  Optional<int32_t> getWidth() const {
-    return getWidthQualifiedTypeWidth(this->getImpl());
-  }
 };
 
 /// A signed integer type, whose width may not be known.
@@ -108,6 +99,9 @@ public:
 
   /// Get an with a known width, or -1 for unknown.
   static SIntType get(MLIRContext *context, int32_t width = -1);
+
+  /// Return the bitwidth of this type or None if unknown.
+  Optional<int32_t> getWidth() const;
 };
 
 /// An unsigned integer type, whose width may not be known.
@@ -117,6 +111,9 @@ public:
 
   /// Get an with a known width, or -1 for unknown.
   static UIntType get(MLIRContext *context, int32_t width = -1);
+
+  /// Return the bitwidth of this type or None if unknown.
+  Optional<int32_t> getWidth() const;
 };
 
 // `firrtl.Analog` can be attached to multiple drivers.
@@ -126,6 +123,9 @@ public:
 
   /// Get an with a known width, or -1 for unknown.
   static AnalogType get(MLIRContext *context, int32_t width = -1);
+
+  /// Return the bitwidth of this type or None if unknown.
+  Optional<int32_t> getWidth() const;
 };
 
 //===----------------------------------------------------------------------===//
@@ -171,7 +171,7 @@ public:
 
 /// VectorType is a fixed size collection of elements, like an array.
 class FVectorType : public FIRRTLType::TypeBase<FVectorType, FIRRTLType,
-                                               detail::VectorTypeStorage> {
+                                                detail::VectorTypeStorage> {
 public:
   using Base::Base;
 

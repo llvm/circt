@@ -7,7 +7,7 @@
 
 #if !defined(TOK_MARKER) && !defined(TOK_IDENTIFIER) &&                        \
     !defined(TOK_LITERAL) && !defined(TOK_PUNCTUATION) &&                      \
-    !defined(TOK_KEYWORD)
+    !defined(TOK_KEYWORD) && !defined(TOK_LPKEYWORD)
 #error Must define one of the TOK_ macros.
 #endif
 
@@ -25,6 +25,9 @@
 #endif
 #ifndef TOK_KEYWORD
 #define TOK_KEYWORD(SPELLING)
+#endif
+#ifndef TOK_LPKEYWORD
+#define TOK_LPKEYWORD(SPELLING)
 #endif
 
 // Markers
@@ -109,8 +112,53 @@ TOK_KEYWORD(with)
 TOK_KEYWORD(write)
 TOK_KEYWORD(writer)
 
+// Keywords when followed by an '('.  These turn "foo" into
+// FIRToken::lp_foo enums.
+TOK_LPKEYWORD(add)
+TOK_LPKEYWORD(and)
+TOK_LPKEYWORD(andr)
+TOK_LPKEYWORD(asAsyncReset)
+TOK_LPKEYWORD(asClock)
+TOK_LPKEYWORD(asFixedPoint)
+TOK_LPKEYWORD(asInterval)
+TOK_LPKEYWORD(asSInt)
+TOK_LPKEYWORD(asUInt)
+TOK_LPKEYWORD(bits)
+TOK_LPKEYWORD(cat)
+TOK_LPKEYWORD(clip)
+TOK_LPKEYWORD(cvt)
+TOK_LPKEYWORD(decp)
+TOK_LPKEYWORD(div)
+TOK_LPKEYWORD(dshl)
+TOK_LPKEYWORD(dshr)
+TOK_LPKEYWORD(eq)
+TOK_LPKEYWORD(geq)
+TOK_LPKEYWORD(gt)
+TOK_LPKEYWORD(head)
+TOK_LPKEYWORD(incp)
+TOK_LPKEYWORD(leq)
+TOK_LPKEYWORD(lt)
+TOK_LPKEYWORD(mul)
+TOK_LPKEYWORD(neg)
+TOK_LPKEYWORD(neq)
+TOK_LPKEYWORD(not)
+TOK_LPKEYWORD(or)
+TOK_LPKEYWORD(orr)
+TOK_LPKEYWORD(pad)
+TOK_LPKEYWORD(rem)
+TOK_LPKEYWORD(setp)
+TOK_LPKEYWORD(shl)
+TOK_LPKEYWORD(shr)
+TOK_LPKEYWORD(squz)
+TOK_LPKEYWORD(sub)
+TOK_LPKEYWORD(tail)
+TOK_LPKEYWORD(wrap)
+TOK_LPKEYWORD(xor)
+TOK_LPKEYWORD(xorr)
+
 #undef TOK_MARKER
 #undef TOK_IDENTIFIER
 #undef TOK_LITERAL
 #undef TOK_PUNCTUATION
 #undef TOK_KEYWORD
+#undef TOK_LPKEYWORD

@@ -229,17 +229,17 @@ struct WidthTypeStorage : mlir::TypeStorage {
 
   int32_t width;
 };
+} // namespace detail
+} // namespace firrtl
+} // namespace spt
 
-Optional<int32_t> getWidthQualifiedTypeWidth(WidthTypeStorage *impl) {
+static Optional<int32_t>
+getWidthQualifiedTypeWidth(firrtl::detail::WidthTypeStorage *impl) {
   int width = impl->width;
   if (width < 0)
     return None;
   return width;
 }
-
-} // namespace detail
-} // namespace firrtl
-} // namespace spt
 
 /// Get an with a known width, or -1 for unknown.
 SIntType SIntType::get(MLIRContext *context, int32_t width) {
@@ -247,15 +247,27 @@ SIntType SIntType::get(MLIRContext *context, int32_t width) {
   return Base::get(context, SInt, width);
 }
 
+Optional<int32_t> SIntType::getWidth() const {
+  return getWidthQualifiedTypeWidth(this->getImpl());
+}
+
 UIntType UIntType::get(MLIRContext *context, int32_t width) {
   assert(width >= -1 && "unknown width");
   return Base::get(context, UInt, width);
+}
+
+Optional<int32_t> UIntType::getWidth() const {
+  return getWidthQualifiedTypeWidth(this->getImpl());
 }
 
 /// Get an with a known width, or -1 for unknown.
 AnalogType AnalogType::get(MLIRContext *context, int32_t width) {
   assert(width >= -1 && "unknown width");
   return Base::get(context, Analog, width);
+}
+
+Optional<int32_t> AnalogType::getWidth() const {
+  return getWidthQualifiedTypeWidth(this->getImpl());
 }
 
 //===----------------------------------------------------------------------===//

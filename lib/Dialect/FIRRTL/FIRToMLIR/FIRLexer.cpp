@@ -229,9 +229,22 @@ FIRToken FIRLexer::lexIdentifierOrKeyword(const char *tokStart) {
          *curPtr == '$')
     ++curPtr;
 
-  // Check to see if this identifier is a keyword.
   StringRef spelling(tokStart, curPtr - tokStart);
 
+  // Check to see if this is a 'primop', which is an identifier juxtaposed with
+  // a '(' character.
+  if (*curPtr == '(') {
+    FIRToken::Kind kind = llvm::StringSwitch<FIRToken::Kind>(spelling)
+#define TOK_LPKEYWORD(SPELLING) .Case(#SPELLING, FIRToken::lp_##SPELLING)
+#include "FIRTokenKinds.def"
+                              .Default(FIRToken::identifier);
+    if (kind != FIRToken::identifier) {
+      ++curPtr;
+      return FIRToken(kind, tokStart);
+    }
+  }
+
+  // Check to see if this identifier is a keyword.
   FIRToken::Kind kind = llvm::StringSwitch<FIRToken::Kind>(spelling)
 #define TOK_KEYWORD(SPELLING) .Case(#SPELLING, FIRToken::kw_##SPELLING)
 #include "FIRTokenKinds.def"

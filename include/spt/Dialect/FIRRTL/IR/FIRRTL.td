@@ -125,6 +125,27 @@ def DoneOp : FIRRTLOp<"done", [Terminator]> {
 // Declarations
 //===----------------------------------------------------------------------===//
 
+def FIRRTLNodeOp : FIRRTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
+  let summary = "No-op to name a value";
+  let description = [{
+    A node is simply a named intermediate value in a circuit. The node must
+    be initialized to a value with a passive type and cannot be connected to.
+    Nodes are often used to split a complicated compound expression into named
+    subexpressions.
+
+    ```
+      %result = firrt.node %input : t1
+    ```
+    }];
+
+  let arguments = (ins AnyType:$input, OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  let assemblyFormat = [{
+     $input attr-dict `:` type($input)
+  }];
+}
+
 def FIRRTLWireOp : FIRRTLOp<"wire", [NoSideEffect]> {
   let summary = "Define a new wire";
   let description = [{
@@ -282,7 +303,6 @@ def FIRRTLSkip : FIRRTLOp<"skip", [NoSideEffect]> {
 // Primitive Operations
 //===----------------------------------------------------------------------===//
 
-// TODO: Should this be split out to addu/adds?
 def FIRRTLAddOp : FIRRTLOp<"add", [Commutative, NoSideEffect]> {
   let summary = "Add operations";
   let description = [{
@@ -305,6 +325,12 @@ def FIRRTLAddOp : FIRRTLOp<"add", [Commutative, NoSideEffect]> {
   let assemblyFormat = [{
     $lhs `,` $rhs  attr-dict `:`
        `(` type($lhs) `,` type($rhs) `)` `->` type($result)
+  }];
+
+  let extraClassDeclaration = [{
+    /// Compute the result type for an add with the specified type.  If the
+    /// request is invalid, then a null type is returned.
+    static FIRRTLType getResultType(FIRRTLType lhs, FIRRTLType rhs);
   }];
 }
 

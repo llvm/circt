@@ -77,5 +77,15 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.connect %6, %7
     _T_2[0] <= _T[0] @[Xbar.scala 21:44]
 
+    ; CHECK: %8 = firrtl.node %auto {name = "n1"} : !firrtl.flip<uint<1>>
+    node n1 = auto
+
+    ; CHECK: %9 = firrtl.add %reset, %reset {name = ""} : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+    node n2 = add(reset, reset)
+
+    ;node n2 = asClock(reset)
+
+    ;_auto <= UInt<1>("h0") 
+
     ;node _T_23 = or(_T_2[0], _T_2[1]) @[Parameters.scala 337:46]
 

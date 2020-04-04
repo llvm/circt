@@ -59,3 +59,18 @@ circuit test :
    input out_0 : SInt<8>[5]
    out_0[4] <- out_0[5]  ; expected-error {{invalid subindex '5' for type '!firrtl.vector<sint<8>, 5>'}}
 
+;// -----
+
+circuit test :
+  module invalid_add :
+   input in : SInt<8>
+   input c : Clock
+   node n = add(in, c)  ; expected-error {{invalid input types for add}}
+
+;// -----
+
+circuit test :
+  module invalid_add :
+   input in : SInt<8>
+   input c : Clock
+   node n = add(in, in, in)  ; expected-error {{add must have two operands}}
