@@ -859,7 +859,9 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result,
       kind != FIRToken::lp_leq && kind != FIRToken::lp_gt &&
       kind != FIRToken::lp_geq && kind != FIRToken::lp_eq &&
       kind != FIRToken::lp_neq && kind != FIRToken::lp_asClock &&
-      kind != FIRToken::lp_asSInt && kind != FIRToken::lp_asUInt)
+      kind != FIRToken::lp_asSInt && kind != FIRToken::lp_asUInt &&
+      kind != FIRToken::lp_or && kind != FIRToken::lp_xor &&
+      kind != FIRToken::lp_and)
     return emitError(loc, "unsupported primitive"), failure();
 
   auto typeError = [&](StringRef opName) -> ParseResult {
@@ -914,11 +916,7 @@ FIRStmtParser::parseIntegerLiteralExp(Value &result,
       parseToken(FIRToken::r_paren, "expected ')' in integer expression"))
     return failure();
 
-  FIRRTLType resultType;
-  if (isSigned)
-    resultType = SIntType::get(builder.getContext(), width);
-  else
-    resultType = UIntType::get(builder.getContext(), width);
+  FIRRTLType resultType = getIntegerType(builder.getContext(), isSigned, width);
   result = builder.create<ConstantOp>(translateLocation(loc), resultType,
                                       builder.getI32IntegerAttr(value),
                                       /*optionalName*/ StringAttr());

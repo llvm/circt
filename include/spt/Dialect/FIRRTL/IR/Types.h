@@ -100,6 +100,10 @@ public:
   static bool kindof(unsigned kind) { return kind == typeKind; }
 };
 
+/// Return a SIntType or UInt type with the specified signedness and width.
+FIRRTLType getIntegerType(MLIRContext *context, bool isSigned,
+                          int32_t width = -1);
+
 /// A signed integer type, whose width may not be known.
 class SIntType : public WidthQualifiedType<SIntType, FIRRTLType::SInt> {
 public:

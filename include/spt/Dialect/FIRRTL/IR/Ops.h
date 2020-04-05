@@ -32,8 +32,12 @@ public:
   static StringRef getDialectNamespace() { return "firrtl"; }
 };
 
+// Binary primitives.
 FIRRTLType getAddResult(FIRRTLType lhs, FIRRTLType rhs);
 FIRRTLType getCompareResult(FIRRTLType lhs, FIRRTLType rhs);
+FIRRTLType getBitwiseBinaryResult(FIRRTLType lhs, FIRRTLType rhs);
+
+// Unary primitives.
 FIRRTLType getAsClockResult(FIRRTLType input);
 FIRRTLType getAsSIntResult(FIRRTLType input);
 FIRRTLType getAsUIntResult(FIRRTLType input);

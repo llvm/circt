@@ -412,110 +412,22 @@ class BinaryPrimOp<string mnemonic, string resultTypeFunction,
   }])));
 }
 
-def AddOp : BinaryPrimOp<"add", "getAddResult", [Commutative]> {
-  let summary = "Addition operation";
-  let description = [{
-    Add Operation:
-    ```
-       %result = firrt.add %lhs, %rhs : (t1, t2) -> t3
-    ```
+def AddOp : BinaryPrimOp<"add", "getAddResult", [Commutative]>;
 
-    The two options are:
-    * add(UInt, UInt) -> UInt
-    * add(SInt, SInt) -> SInt
-    
-    The result width is max(we1, we2)+1
-    The add operation result is the sum of e1 and e2 without loss of precision.
-  }];
-}
+def AndOp : BinaryPrimOp<"and", "getBitwiseBinaryResult", [Commutative]>;
+def OrOp  : BinaryPrimOp<"or",  "getBitwiseBinaryResult", [Commutative]>;
+def XorOp : BinaryPrimOp<"xor", "getBitwiseBinaryResult", [Commutative]>;
 
 //===----------------------------------------------------------------------===//
 // Comparison Operations
 //===----------------------------------------------------------------------===//
 
-def LEQOp : BinaryPrimOp<"leq", "getCompareResult", []> {
-  let summary = "Less Than Or Equal operation";
-  let description = [{
-    Less Than Or Equal operation:
-    ```
-       %result = firrt.leq %lhs, %rhs : (t1, t2) -> t3
-    ```
-
-    The two options are:
-    * add(UInt, UInt) -> UInt<1>
-    * add(SInt, SInt) -> UInt<1>
-  }];
-}
-
-def LTOp : BinaryPrimOp<"lt", "getCompareResult", []> {
-  let summary = "Less Than operation";
-  let description = [{
-    Less Than operation:
-    ```
-       %result = firrt.lt %lhs, %rhs : (t1, t2) -> t3
-    ```
-
-    The two options are:
-    * add(UInt, UInt) -> UInt<1>
-    * add(SInt, SInt) -> UInt<1>
-  }];
-}
-
-def GEQOp : BinaryPrimOp<"geq", "getCompareResult", []> {
-  let summary = "Greater Than Or Equal operation";
-  let description = [{
-    Greater Than Or Equal operation:
-    ```
-       %result = firrt.geq %lhs, %rhs : (t1, t2) -> t3
-    ```
-
-    The two options are:
-    * add(UInt, UInt) -> UInt<1>
-    * add(SInt, SInt) -> UInt<1>
-  }];
-}
-
-def GTOp : BinaryPrimOp<"gt", "getCompareResult", []> {
-  let summary = "Greater Than operation";
-  let description = [{
-    Greater Than operation:
-    ```
-       %result = firrt.gt %lhs, %rhs : (t1, t2) -> t3
-    ```
-
-    The two options are:
-    * add(UInt, UInt) -> UInt<1>
-    * add(SInt, SInt) -> UInt<1>
-  }];
-}
-
-def EQOp : BinaryPrimOp<"eq", "getCompareResult", [Commutative]> {
-  let summary = "Equal To operation";
-  let description = [{
-    Equal To operation:
-    ```
-       %result = firrt.eq %lhs, %rhs : (t1, t2) -> t3
-    ```
-
-    The two options are:
-    * add(UInt, UInt) -> UInt<1>
-    * add(SInt, SInt) -> UInt<1>
-  }];
-}
-
-def NEQOp : BinaryPrimOp<"neq", "getCompareResult", [Commutative]> {
-  let summary = "Not Equal To operation";
-  let description = [{
-    Not Equal To operation:
-    ```
-       %result = firrt.neq %lhs, %rhs : (t1, t2) -> t3
-    ```
-
-    The two options are:
-    * add(UInt, UInt) -> UInt<1>
-    * add(SInt, SInt) -> UInt<1>
-  }];
-}
+def LEQOp : BinaryPrimOp<"leq", "getCompareResult", []>;
+def LTOp  : BinaryPrimOp<"lt",  "getCompareResult", []>;
+def GEQOp : BinaryPrimOp<"geq", "getCompareResult", []>;
+def GTOp  : BinaryPrimOp<"gt",  "getCompareResult", []>;
+def EQOp  : BinaryPrimOp<"eq",  "getCompareResult", [Commutative]>;
+def NEQOp : BinaryPrimOp<"neq", "getCompareResult", [Commutative]>;
 
 //===----------------------------------------------------------------------===//
 // Unary Operations
@@ -546,46 +458,8 @@ class UnaryPrimOp<string mnemonic, string resultTypeFunction,
   }])));
 }
 
-def AsSIntOp : UnaryPrimOp<"asSInt", "getAsSIntResult", []> {
-  let summary = " Interpret as SInt operation";
-  let description = [{
-     Interpret as SInt:
-    ```
-       %result = firrt.asSInt %lhs : (input) -> result
-    ```
-
-    The result of the interpret as SInt operation is the SInt typed signal,
-    which is 1-bit in the case of a Clock input, or the matching width of an
-    SInt or UInt input.
-  }];
-}
-
-def AsUIntOp : UnaryPrimOp<"asUInt", "getAsUIntResult", []> {
-  let summary = " Interpret as UInt operation";
-  let description = [{
-     Interpret as UInt:
-    ```
-       %result = firrt.asUInt %lhs : (input) -> result
-    ```
-
-    The result of the interpret as UInt operation is the UInt typed signal,
-    which is 1-bit in the case of a Clock input, or the matching width of an
-    SInt or UInt input.
-  }];
-}
-
-def AsClockOp : UnaryPrimOp<"asClock", "getAsClockResult", []> {
-  let summary = " Interpret as Clock operation";
-  let description = [{
-     Interpret as Clock:
-    ```
-       %result = firrt.asClock %lhs : (input) -> result
-    ```
-
-    The result of the interpret as clock operation is the Clock typed signal
-    obtained from interpreting a single bit integer as a clock signal.
-  }];
-}
-
+def AsSIntOp : UnaryPrimOp<"asSInt", "getAsSIntResult", []>;
+def AsUIntOp : UnaryPrimOp<"asUInt", "getAsUIntResult", []>;
+def AsClockOp : UnaryPrimOp<"asClock", "getAsClockResult", []>;
 
 #endif // FIRRTL_OPS

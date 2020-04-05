@@ -450,40 +450,58 @@ FIRRTLType SubindexOp::getResultType(FIRRTLType inType, unsigned fieldIdx) {
 // Binary Primitives
 //===----------------------------------------------------------------------===//
 
-FIRRTLType firrtl::getAddResult(FIRRTLType lhs, FIRRTLType rhs) {
+/// If LHS and RHS are both UInt or SInt types, the return true and compute the
+/// max width of them if known.  If unknown, return -1 in maxWidth.
+static bool isSameIntegerType(FIRRTLType lhs, FIRRTLType rhs,
+                              int32_t &maxWidth) {
   if (auto lu = lhs.dyn_cast<UIntType>())
     if (auto ru = rhs.dyn_cast<UIntType>()) {
       if (!lu.getWidth().hasValue())
-        return lu;
-      if (!ru.getWidth().hasValue())
-        return ru;
-      auto width =
-          std::max(lu.getWidth().getValue(), ru.getWidth().getValue()) + 1;
-      return UIntType::get(lhs.getContext(), width);
+        maxWidth = -1;
+      else if (!ru.getWidth().hasValue())
+        maxWidth = -1;
+      else
+        maxWidth = std::max(lu.getWidth().getValue(), ru.getWidth().getValue());
+      return true;
     }
 
   if (auto ls = lhs.dyn_cast<SIntType>())
     if (auto rs = rhs.dyn_cast<SIntType>()) {
       if (!ls.getWidth().hasValue())
-        return ls;
-      if (!rs.getWidth().hasValue())
-        return rs;
-      auto width =
-          std::max(ls.getWidth().getValue(), rs.getWidth().getValue()) + 1;
-      return SIntType::get(lhs.getContext(), width);
+        maxWidth = -1;
+      else if (!rs.getWidth().hasValue())
+        maxWidth = -1;
+      else
+        maxWidth = std::max(ls.getWidth().getValue(), rs.getWidth().getValue());
+      return true;
     }
+
+  return false;
+}
+
+FIRRTLType firrtl::getAddResult(FIRRTLType lhs, FIRRTLType rhs) {
+  int32_t width;
+  if (isSameIntegerType(lhs, rhs, width)) {
+    if (width != -1)
+      ++width;
+    return getIntegerType(lhs.getContext(), lhs.isa<SIntType>(), width);
+  }
 
   return {};
 }
-
-//===----------------------------------------------------------------------===//
-// Comparison Primitives
-//===----------------------------------------------------------------------===//
 
 FIRRTLType firrtl::getCompareResult(FIRRTLType lhs, FIRRTLType rhs) {
   if ((lhs.isa<UIntType>() && rhs.isa<UIntType>()) ||
       (lhs.isa<SIntType>() && rhs.isa<SIntType>()))
     return UIntType::get(lhs.getContext(), 1);
+  return {};
+}
+
+FIRRTLType firrtl::getBitwiseBinaryResult(FIRRTLType lhs, FIRRTLType rhs) {
+  int32_t width;
+  if (isSameIntegerType(lhs, rhs, width))
+    return UIntType::get(lhs.getContext(), width);
+
   return {};
 }
 

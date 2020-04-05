@@ -270,6 +270,14 @@ Optional<int32_t> AnalogType::getWidth() const {
   return getWidthQualifiedTypeWidth(this->getImpl());
 }
 
+/// Return a SIntType or UInt type with the specified signedness and width.
+FIRRTLType firrtl::getIntegerType(MLIRContext *context, bool isSigned,
+                                  int32_t width) {
+  if (isSigned)
+    return SIntType::get(context, width);
+  return UIntType::get(context, width);
+}
+
 //===----------------------------------------------------------------------===//
 // Flip Type
 //===----------------------------------------------------------------------===//
