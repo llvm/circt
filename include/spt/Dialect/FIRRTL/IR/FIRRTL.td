@@ -341,6 +341,17 @@ def SkipOp : FIRRTLOp<"skip", [NoSideEffect]> {
   }];
 }
 
+def StopOp : FIRRTLOp<"stop", []> {
+  let summary = "Stop Statement";
+
+  let arguments = (ins ClockType:$clock, UInt1Type:$cond, I32Attr:$exitCode);
+  let results = (outs);
+  
+  let assemblyFormat = [{
+    $clock `,` $cond `,` $exitCode attr-dict
+  }];
+}
+
 def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">]> {
   let summary = "When Statement";
   let description = [{

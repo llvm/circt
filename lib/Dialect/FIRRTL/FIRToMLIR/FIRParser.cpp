@@ -101,7 +101,10 @@ struct FIRParser {
     return state.lex.translateLocation(loc);
   }
 
-  ParseResult parseOptionalInfo(LocWithInfo &result);
+  /// Parse an @info marker if present.  If so, apply the symbolic location
+  /// specified it to all of the operations listed in subOps.
+  ParseResult parseOptionalInfo(LocWithInfo &result,
+                                ArrayRef<Operation *> subOps = {});
 
   //===--------------------------------------------------------------------===//
   // Token Parsing
@@ -284,7 +287,6 @@ public:
   }
 
   void setInfoLocation(Location loc) { infoLoc = loc; }
-  void applyInfoToSubexpressions(ArrayRef<Operation *> ops);
 
 private:
   FIRParser *const parser;
@@ -297,21 +299,13 @@ private:
   Optional<Location> infoLoc;
 };
 
-void FIRParser::LocWithInfo::applyInfoToSubexpressions(
-    ArrayRef<Operation *> ops) {
-
-  // If we had no info loc, then we're done.
-  if (!infoLoc.hasValue())
-    return;
-
-  // Otherwise, set it as the location for all of the subexpressions.
-  auto loc = infoLoc.getValue();
-  for (auto *op : ops)
-    op->setLoc(loc);
-}
-
+/// Parse an @info marker if present.  If so, apply the symbolic location
+/// specified it to all of the operations listed in subOps.
+///
 /// info ::= FileInfo
-ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result) {
+///
+ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
+                                         ArrayRef<Operation *> subOps) {
   if (getToken().isNot(FIRToken::fileinfo))
     return success();
 
@@ -356,8 +350,15 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result) {
   if (!colStr.empty() && colStr.getAsInteger(10, columnNo))
     return unknownFormat();
 
-  result.setInfoLocation(
-      FileLineColLoc::get(filename, lineNo, columnNo, getContext()));
+  auto resultLoc =
+      FileLineColLoc::get(filename, lineNo, columnNo, getContext());
+  result.setInfoLocation(resultLoc);
+
+  // Now that we have a symbolic location, apply it to any subOps specified.
+  for (auto *op : subOps) {
+    op->setLoc(resultLoc);
+  }
+
   return success();
 }
 
@@ -683,6 +684,7 @@ private:
   // Stmt Parsing
   ParseResult parsePrintf();
   ParseResult parseSkip();
+  ParseResult parseStop();
   ParseResult parseNode();
   ParseResult parseWire();
   ParseResult parseWhen(unsigned whenIndent);
@@ -893,15 +895,15 @@ FIRStmtParser::parseIntegerLiteralExp(Value &result,
 /// simple_stmt_block ::= simple_stmt*
 ParseResult FIRStmtParser::parseSimpleStmtBlock(unsigned indent) {
   while (true) {
+    // The outer level parser can handle these tokens.
+    if (getToken().isAny(FIRToken::eof, FIRToken::error))
+      return success();
+
     auto subIndent = getIndentation();
     if (!subIndent.hasValue())
       return emitError("expected statement to be on its own line"), failure();
 
     if (subIndent.getValue() <= indent)
-      return success();
-
-    // The outer level parser can handle these tokens.
-    if (getToken().isAny(FIRToken::eof, FIRToken::error))
       return success();
 
     // Let the statement parser handle this.
@@ -914,6 +916,7 @@ ParseResult FIRStmtParser::parseSimpleStmtBlock(unsigned indent) {
 ///
 /// stmt ::= printf
 ///      ::= skip
+///      ::= stop
 ///      ::= node
 ///      ::= wire
 ///      ::= when
@@ -925,6 +928,8 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
     return parsePrintf();
   case FIRToken::kw_skip:
     return parseSkip();
+  case FIRToken::lp_stop:
+    return parseStop();
   case FIRToken::kw_node:
     return parseNode();
   case FIRToken::kw_wire:
@@ -964,11 +969,8 @@ ParseResult FIRStmtParser::parsePrintf() {
       return failure();
   }
 
-  if (parseOptionalInfo(info))
+  if (parseOptionalInfo(info, subOps))
     return failure();
-
-  // If we had an info location, make sure all subexpression nodes get it.
-  info.applyInfoToSubexpressions(subOps);
 
   builder.create<PrintFOp>(info.getLoc(), clock, condition,
                            builder.getStringAttr(formatString), operands);
@@ -986,6 +988,29 @@ ParseResult FIRStmtParser::parseSkip() {
   return success();
 }
 
+/// stop ::= 'stop(' exp exp intLit ')' info?
+ParseResult FIRStmtParser::parseStop() {
+  LocWithInfo info(getToken().getLoc(), this);
+  consumeToken(FIRToken::lp_stop);
+
+  SmallVector<Operation *, 8> subOps;
+
+  Value clock, condition;
+  int32_t exitCode;
+  if (parseExp(clock, subOps, "expected clock expression in 'stop'") ||
+      parseToken(FIRToken::comma, "expected ',' in 'stop'") ||
+      parseExp(condition, subOps, "expected condition in 'stop'") ||
+      parseToken(FIRToken::comma, "expected ',' in 'stop'") ||
+      parseIntLit(exitCode, "expected exit code in 'stop'") ||
+      parseToken(FIRToken::r_paren, "expected ')' in 'stop'") ||
+      parseOptionalInfo(info, subOps))
+    return failure();
+
+  builder.create<StopOp>(info.getLoc(), clock, condition,
+                         builder.getI32IntegerAttr(exitCode));
+  return success();
+}
+
 /// node ::= 'node' id '=' exp info?
 ParseResult FIRStmtParser::parseNode() {
   LocWithInfo info(getToken().getLoc(), this);
@@ -997,11 +1022,8 @@ ParseResult FIRStmtParser::parseNode() {
   if (parseId(id, "expected node name") ||
       parseToken(FIRToken::equal, "expected '=' in node") ||
       parseExp(initializer, subOps, "unexpected expression for node") ||
-      parseOptionalInfo(info))
+      parseOptionalInfo(info, subOps))
     return failure();
-
-  // If we had an info location, make sure all subexpression nodes get it.
-  info.applyInfoToSubexpressions(subOps);
 
   auto result = builder.create<NodeOp>(info.getLoc(), initializer, id);
   if (addSymbolEntry(id.getValue(), result, info.getFIRLoc()))
@@ -1039,11 +1061,8 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   SmallVector<Operation *, 8> subOps;
   if (parseExp(condition, subOps, "unexpected expression in when") ||
       parseToken(FIRToken::colon, "expected ':' in when") ||
-      parseOptionalInfo(info))
+      parseOptionalInfo(info, subOps))
     return failure();
-
-  // If we had an info location, make sure all subexpression nodes get it.
-  info.applyInfoToSubexpressions(subOps);
 
   // Create the IR representation for the when.
   auto whenStmt = builder.create<WhenOp>(info.getLoc(), condition,
@@ -1116,11 +1135,8 @@ ParseResult FIRStmtParser::parseLeadingExpStmt() {
   // If 'is' grammar is special.
   if (consumeIf(FIRToken::kw_is)) {
     if (parseToken(FIRToken::kw_invalid, "expected 'invalid'") ||
-        parseOptionalInfo(info))
+        parseOptionalInfo(info, subOps))
       return failure();
-
-    // If we had an info location, make sure all subexpression nodes get it.
-    info.applyInfoToSubexpressions(subOps);
 
     builder.create<InvalidOp>(info.getLoc(), lhs);
     return success();
@@ -1133,11 +1149,8 @@ ParseResult FIRStmtParser::parseLeadingExpStmt() {
 
   Value rhs;
   if (parseExp(rhs, subOps, "unexpected token in statement") ||
-      parseOptionalInfo(info))
+      parseOptionalInfo(info, subOps))
     return failure();
-
-  // If we had an info location, make sure all subexpression nodes get it.
-  info.applyInfoToSubexpressions(subOps);
 
   if (kind == FIRToken::less_equal)
     builder.create<ConnectOp>(info.getLoc(), lhs, rhs);

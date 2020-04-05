@@ -125,3 +125,8 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
 
     ; CHECK: firrtl.printf %clock, %reset, "\22Something interesting! %x %x\22" %0, %1 : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 13>
     printf(clock, reset, "Something interesting! %x %x", _T, _T_2)
+
+    ; CHECK: firrtl.stop %clock, %reset, 42
+    stop(clock, reset, 42)
+
+    
