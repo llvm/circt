@@ -115,12 +115,11 @@ TOK_KEYWORD(write)
 TOK_KEYWORD(writer)
 
 // Keywords when followed by an '('.  These turn "foo" into
-// FIRToken::lp_foo enums.  The first integer is the number of expression
-// arguments, the second is the number of constant arguments.
-
+// FIRToken::lp_foo enums.
 TOK_LPKEYWORD(printf)
 TOK_LPKEYWORD(stop)
 
+// These are for LPKEYWORD cases that correspond to a primitive operation.
 TOK_LPKEYWORD_PRIM(add, AddOp)
 TOK_LPKEYWORD_PRIM(and, AndOp)
 // TOK_LPKEYWORD_PRIM(andr, XXX)

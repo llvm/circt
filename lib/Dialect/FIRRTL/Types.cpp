@@ -308,6 +308,9 @@ FIRRTLType FlipType::get(FIRRTLType element) {
   if (auto subFlip = element.dyn_cast<FlipType>())
     return subFlip.getElementType();
 
+  // TODO: This should maintain a canonical form, digging any flips out of
+  // sub-types.
+
   auto *context = element.getContext();
   return Base::get(context, Flip, element);
 }

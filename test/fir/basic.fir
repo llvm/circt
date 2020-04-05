@@ -40,6 +40,7 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
   ; CHECK-LABEL: firrtl.module @stmts(
   module stmts :
     input reset : UInt<1>    ; CHECK: %reset: !firrtl.uint<1>,
+    input clock : Clock      ; CHECK: %clock: !firrtl.clock,
     output auto : UInt<1>    ; CHECK: %auto: !firrtl.flip<uint<1>>)
 
     ; CHECK: %0 = firrtl.wire {name = "_T"} : !firrtl.vector<uint<1>, 12>
@@ -122,4 +123,5 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     when lt(reset, UInt(4)) :   ;; When with no else.
       _T <= _T_2
 
-  
+    ; CHECK: firrtl.printf %clock, %reset, "\22Something interesting! %x %x\22" %0, %1 : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 13>
+    printf(clock, reset, "Something interesting! %x %x", _T, _T_2)

@@ -30,6 +30,11 @@ def FIRRTLDialect : Dialect {
 def ClockType : Type<CPred<"$_self.isa<ClockType>()">, "clock">,
                 BuildableType<"ClockType::get($_builder.getContext())">;
 
+def UInt1Type : Type<CPred<"$_self.isa<UIntType>() && "
+                           "$_self.cast<UIntType>().getWidth() == 1">,
+                           "UInt<1>">,
+                BuildableType<"UIntType::get($_builder.getContext(), 1)">;
+
 //===----------------------------------------------------------------------===//
 // FIRRTL op definitions
 //===----------------------------------------------------------------------===//
@@ -302,6 +307,18 @@ def InvalidOp : FIRRTLOp<"invalid", []> {
   
   let assemblyFormat = [{
     $operand attr-dict `:` type($operand)
+  }];
+}
+
+def PrintFOp : FIRRTLOp<"printf", []> {
+  let summary = "Formatted Print Statement";
+
+  let arguments = (ins ClockType:$clock, UInt1Type:$cond, StrAttr:$formatString, 
+                       Variadic<AnyType>:$operands);
+  let results = (outs);
+  
+  let assemblyFormat = [{
+    $clock `,` $cond `,` $formatString attr-dict ($operands^ `:` type($operands))?
   }];
 }
 

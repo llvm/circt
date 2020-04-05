@@ -939,10 +939,40 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
   }
 }
 
-/// printf ::= 'printf(' exp exp StringLit ( exp)* ')' info?
+/// printf ::= 'printf(' exp ',' exp ',' StringLit (',' exp)* ')' info?
 ParseResult FIRStmtParser::parsePrintf() {
-  emitError("printf unimp");
-  return failure();
+  LocWithInfo info(getToken().getLoc(), this);
+  consumeToken(FIRToken::lp_printf);
+
+  SmallVector<Operation *, 8> subOps;
+
+  Value clock, condition;
+  StringRef formatString;
+  if (parseExp(clock, subOps, "expected clock expression in printf") ||
+      parseToken(FIRToken::comma, "expected ',' in printf") ||
+      parseExp(condition, subOps, "expected condition in printf") ||
+      parseToken(FIRToken::comma, "expected ',' in printf") ||
+      parseGetSpelling(formatString) ||
+      parseToken(FIRToken::string, "expected format string in printf"))
+    return failure();
+
+  SmallVector<Value, 4> operands;
+  while (!consumeIf(FIRToken::r_paren)) {
+    operands.push_back({});
+    if (parseToken(FIRToken::comma, "expected ',' in printf") ||
+        parseExp(operands.back(), subOps, "expected operand in printf"))
+      return failure();
+  }
+
+  if (parseOptionalInfo(info))
+    return failure();
+
+  // If we had an info location, make sure all subexpression nodes get it.
+  info.applyInfoToSubexpressions(subOps);
+
+  builder.create<PrintFOp>(info.getLoc(), clock, condition,
+                           builder.getStringAttr(formatString), operands);
+  return success();
 }
 
 /// skip ::= 'skip' info?
