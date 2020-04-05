@@ -163,6 +163,12 @@ struct FIRParser {
   // Common Parser Rules
   //===--------------------------------------------------------------------===//
 
+  /// Parse 'intLit' into the specified value.
+  ParseResult parseIntLit(int32_t &result, const Twine &message);
+
+  // Parse ('<' intLit '>')? setting result to -1 if not present.
+  ParseResult parseOptionalWidth(int32_t &result);
+
   // Parse the 'id' grammar, which is an identifier or an allowed keyword.
   ParseResult parseId(StringRef &result, const Twine &message);
   ParseResult parseId(StringAttr &result, const Twine &message);
@@ -359,6 +365,40 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result) {
 // Common Parser Rules
 //===--------------------------------------------------------------------===//
 
+/// Parse 'intLit' into the specified value.
+ParseResult FIRParser::parseIntLit(int32_t &result, const Twine &message) {
+  auto spelling = getTokenSpelling();
+  switch (getToken().getKind()) {
+  case FIRToken::integer:
+    if (spelling.getAsInteger(10, result))
+      return emitError(message), failure();
+    consumeToken(FIRToken::integer);
+    return success();
+
+  default:
+    return emitError("expected integer literal"), failure();
+  }
+}
+
+// optional-width ::= ('<' intLit '>')?
+//
+// This returns with result equal to -1 if not present.
+ParseResult FIRParser::parseOptionalWidth(int32_t &result) {
+  if (!consumeIf(FIRToken::less))
+    return result = -1, success();
+
+  // Parse a width specifier if present.
+  auto widthLoc = getToken().getLoc();
+  if (parseIntLit(result, "expected width") ||
+      parseToken(FIRToken::greater, "expected >"))
+    return failure();
+
+  if (result < 0)
+    return emitError(widthLoc, "invalid width specifier"), failure();
+
+  return success();
+}
+
 /// id  ::= Id | keywordAsId
 ///
 /// Parse the 'id' grammar, which is an identifier or an allowed keyword.  On
@@ -413,9 +453,9 @@ ParseResult FIRParser::parseFieldId(StringRef &result, const Twine &message) {
 
 /// type ::= 'Clock'
 ///      ::= 'Reset'
-///      ::= 'UInt' ('<' intLit '>')?
-///      ::= 'SInt' ('<' intLit '>')?
-///      ::= 'Analog' ('<' intLit '>')?
+///      ::= 'UInt' optional-width
+///      ::= 'SInt' optional-width
+///      ::= 'Analog' optional-width
 ///      ::= '{' '}' | '{' field (',' field)* '}'
 ///      ::= type '[' intLit ']'
 ///
@@ -444,17 +484,9 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     consumeToken();
 
     // Parse a width specifier if present.
-    int32_t width = -1;
-    if (consumeIf(FIRToken::less)) {
-      auto widthSpelling = getTokenSpelling();
-      auto widthLoc = getToken().getLoc();
-      if (parseToken(FIRToken::integer, "expected width") ||
-          parseToken(FIRToken::greater, "expected >"))
-        return failure();
-
-      if (widthSpelling.getAsInteger(10, width) || width < 0)
-        return emitError(widthLoc, "invalid width specifier"), failure();
-    }
+    int32_t width;
+    if (parseOptionalWidth(width))
+      return failure();
 
     if (kind == FIRToken::kw_SInt)
       result = SIntType::get(getContext(), width);
@@ -495,14 +527,13 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
 
   // Handle postfix vector sizes.
   while (consumeIf(FIRToken::l_square)) {
-    auto sizeSpelling = getTokenSpelling();
     auto sizeLoc = getToken().getLoc();
-    if (parseToken(FIRToken::integer, "expected width") ||
+    int32_t size;
+    if (parseIntLit(size, "expected width") ||
         parseToken(FIRToken::r_square, "expected ]"))
       return failure();
 
-    unsigned size;
-    if (sizeSpelling.getAsInteger(10, size))
+    if (size < 0)
       return emitError(sizeLoc, "invalid size specifier"), failure();
 
     result = FVectorType::get(result, size);
@@ -592,6 +623,8 @@ private:
   ParseResult parseExp(Value &result, SmallVectorImpl<Operation *> &subOps,
                        const Twine &message);
   ParseResult parsePrimExp(Value &result, SmallVectorImpl<Operation *> &subOps);
+  ParseResult parseIntegerLiteralExp(Value &result,
+                                     SmallVectorImpl<Operation *> &subOps);
 
   ParseResult parseSkip();
   ParseResult parseNode();
@@ -605,16 +638,15 @@ private:
 /// Parse the 'exp' grammar, returning all of the suboperations in the
 /// specified vector, and the ultimate SSA value in value.
 ///
-/// XX   ::=  : 'UInt' ('<' intLit '>')? '(' intLit ')'
-/// XX   ::=  | 'SInt' ('<' intLit '>')? '(' intLit ')'
-///  exp ::=  | id    // Ref
-///      ::=  | exp '.' fieldId
-/// XX   ::=  | exp '.' DoubleLit // TODO Workaround for #470
-///      ::=  | exp '[' intLit ']'
-/// XX   ::=  | exp '[' exp ']'
-/// XX   ::=  | 'mux(' exp exp exp ')'
-/// XX   ::=  | 'validif(' exp exp ')'
-///      ::=  | prim
+///  exp ::= id    // Ref
+///      ::= prim
+///      ::= integer-literal-exp
+///      ::= exp '.' fieldId
+///      ::= exp '[' intLit ']'
+/// XX   ::= exp '.' DoubleLit // TODO Workaround for #470
+/// XX   ::= exp '[' exp ']'
+/// XX   ::= 'mux(' exp exp exp ')'
+/// XX   ::= 'validif(' exp exp ')'
 ///
 ParseResult FIRStmtParser::parseExp(Value &result,
                                     SmallVectorImpl<Operation *> &subOps,
@@ -626,6 +658,12 @@ ParseResult FIRStmtParser::parseExp(Value &result,
   case FIRToken::lp_##SPELLING:
 #include "FIRTokenKinds.def"
     if (parsePrimExp(result, subOps))
+      return failure();
+    break;
+
+  case FIRToken::kw_UInt:
+  case FIRToken::kw_SInt:
+    if (parseIntegerLiteralExp(result, subOps))
       return failure();
     break;
 
@@ -675,14 +713,13 @@ ParseResult FIRStmtParser::parseExp(Value &result,
 
     // Subindex: exp ::= exp '[' intLit ']'
     if (consumeIf(FIRToken::l_square)) {
-      auto indexSpelling = getTokenSpelling();
       auto indexLoc = getToken().getLoc();
-      if (parseToken(FIRToken::integer, "expected width") ||
+      int32_t indexNo;
+      if (parseIntLit(indexNo, "expected index") ||
           parseToken(FIRToken::r_square, "expected ']'"))
         return failure();
 
-      unsigned indexNo;
-      if (indexSpelling.getAsInteger(10, indexNo))
+      if (indexNo < 0)
         return emitError(indexLoc, "invalid index specifier"), failure();
 
       // Make sure the field name matches up with the input value's type and
@@ -776,10 +813,41 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result,
       return emitError(loc, "invalid input types for " #SPELLING), failure();  \
     result = builder.create<CLASS>(translateLocation(loc), resultTy,           \
                                    ValueRange(operands), attrs);               \
-    return success();                                                          \
+    break;                                                                     \
   }
 #include "FIRTokenKinds.def"
   }
+
+  subOps.push_back(result.getDefiningOp());
+  return success();
+}
+
+/// integer-literal-exp ::= 'UInt' optional-width '(' intLit ')'
+///                     ::= 'SInt' optional-width '(' intLit ')'
+ParseResult
+FIRStmtParser::parseIntegerLiteralExp(Value &result,
+                                      SmallVectorImpl<Operation *> &subOps) {
+  bool isSigned = getToken().is(FIRToken::kw_SInt);
+  auto loc = getToken().getLoc();
+  consumeToken();
+
+  // Parse a width specifier if present.
+  int32_t width, value;
+  if (parseOptionalWidth(width) ||
+      parseToken(FIRToken::l_paren, "expected '(' in integer expression") ||
+      parseIntLit(value, "expected integer value") ||
+      parseToken(FIRToken::r_paren, "expected ')' in integer expression"))
+    return failure();
+
+  FIRRTLType resultType;
+  if (isSigned)
+    resultType = SIntType::get(builder.getContext(), width);
+  else
+    resultType = UIntType::get(builder.getContext(), width);
+  result = builder.create<FIRRTLConstantOp>(translateLocation(loc), resultType,
+                                            builder.getI32IntegerAttr(value),
+                                            /*optionalName*/ StringAttr());
+  return success();
 }
 
 /// simple_stmt ::= stmt
@@ -1010,6 +1078,8 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
     if (parseId(paramName, "expected parameter name") ||
         parseToken(FIRToken::equal, "expected '=' in parameter"))
       return failure();
+
+    // FIXME: This isn't right.
     if (getToken().isAny(FIRToken::integer, FIRToken::string))
       consumeToken();
     else

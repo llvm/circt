@@ -174,6 +174,24 @@ def FIRRTLWireOp : FIRRTLOp<"wire", [NoSideEffect]> {
 // Expressions
 //===----------------------------------------------------------------------===//
 
+def FIRRTLConstantOp : FIRRTLOp<"constant", [NoSideEffect]> {
+  let summary = "Produce a constant value";
+  let description = [{
+    The constant operation produces a constant value of SInt or UInt type.
+    ```
+      %result = firrt.constant 42 : t1
+    ```
+    }];
+
+  let arguments = (ins I32Attr:$value, OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  // TODO: Could drop the result type, inferring it from the source.
+  let assemblyFormat = [{
+     $value attr-dict `:` type($result)
+  }];
+}
+
 def FIRRTLSubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
   let summary = "Extract a subfield of another value";
   let description = [{

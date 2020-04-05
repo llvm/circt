@@ -80,13 +80,14 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: %8 = firrtl.node %auto {name = "n1"} : !firrtl.flip<uint<1>>
     node n1 = auto
 
-    ; CHECK: %9 = firrtl.add %reset, %reset : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+    ; CHECK: firrtl.add %reset, %reset : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
     node n2 = add(reset, reset)
 
     ; CHECK: firrtl.asClock %reset : !firrtl.uint<1>
     node n3 = asClock(reset)
 
-    ;_auto <= UInt<1>("h0") 
+    ; CHECK: firrtl.constant 42 : !firrtl.uint<10>
+    auto <= add(reset, UInt<10>(42))
 
     ;node _T_23 = or(_T_2[0], _T_2[1]) @[Parameters.scala 337:46]
 
