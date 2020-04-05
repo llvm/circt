@@ -239,8 +239,7 @@ FIRToken FIRLexer::lexIdentifierOrKeyword(const char *tokStart) {
   // a '(' character.
   if (*curPtr == '(') {
     FIRToken::Kind kind = llvm::StringSwitch<FIRToken::Kind>(spelling)
-#define TOK_LPKEYWORD(SPELLING, CLASS, NUMEXP, NUMCST)                         \
-  .Case(#SPELLING, FIRToken::lp_##SPELLING)
+#define TOK_LPKEYWORD(SPELLING) .Case(#SPELLING, FIRToken::lp_##SPELLING)
 #include "FIRTokenKinds.def"
                               .Default(FIRToken::identifier);
     if (kind != FIRToken::identifier) {

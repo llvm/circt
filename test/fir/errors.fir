@@ -65,7 +65,7 @@ circuit test :
   module invalid_add :
    input in : SInt<8>
    input c : Clock
-   node n = add(in, c)  ; expected-error {{invalid input types for add}}
+   node n = add(in, c)  ; expected-error {{invalid input types for 'add'}}
 
 ;// -----
 
@@ -73,7 +73,7 @@ circuit test :
   module invalid_add :
    input in : SInt<8>
    input c : Clock
-   node n = add(in, in, in)  ; expected-error {{add must have two operands}}
+   node n = add(in, in, in)  ; expected-error {{invalid input types for 'add': '!firrtl.sint<8>', '!firrtl.sint<8>', '!firrtl.sint<8>'}}
 
 ;// -----
 

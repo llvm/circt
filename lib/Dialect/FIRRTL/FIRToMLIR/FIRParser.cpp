@@ -681,6 +681,7 @@ private:
                                      SmallVectorImpl<Operation *> &subOps);
 
   // Stmt Parsing
+  ParseResult parsePrintf();
   ParseResult parseSkip();
   ParseResult parseNode();
   ParseResult parseWire();
@@ -712,8 +713,7 @@ ParseResult FIRStmtParser::parseExp(Value &result,
   switch (getToken().getKind()) {
 
     // Handle all the primitive ops: primop exp* intLit*  ')'
-#define TOK_LPKEYWORD(SPELLING, CLASS, NUMEXP, NUMCST)                         \
-  case FIRToken::lp_##SPELLING:
+#define TOK_LPKEYWORD(SPELLING) case FIRToken::lp_##SPELLING:
 #include "FIRTokenKinds.def"
     if (parsePrimExp(result, subOps))
       return failure();
@@ -811,7 +811,6 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result,
                                         SmallVectorImpl<Operation *> &subOps) {
   auto kind = getToken().getKind();
   auto loc = getToken().getLoc();
-  auto spelling = getTokenSpelling();
   consumeToken();
 
   // Parse the operands and constant integer arguments.
@@ -828,33 +827,13 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result,
       }))
     return failure();
 
-  // After we parse the operands in integer arguments, validate that there is
-  // the right number of them.
-  static const int tokenID[] = {
-#define TOK_LPKEYWORD(SPELLING, CLASS, NUMEXP, NUMCST) FIRToken::lp_##SPELLING,
-#include "FIRTokenKinds.def"
-  };
-
-  static const std::pair<unsigned char, unsigned char> numExpCst[] = {
-#define TOK_LPKEYWORD(SPELLING, CLASS, NUMEXP, NUMCST) {NUMEXP, NUMCST},
-#include "FIRTokenKinds.def"
-  };
-
-  // Check that the right number of operands are present.
-  auto entry = numExpCst[kind - tokenID[0]];
-  if (entry.first != operands.size())
-    return emitError(loc, spelling.drop_back() + " must have " +
-                              Twine(entry.first) + " operands"),
-           failure();
-
-  // FIXME: Check the right number of constants are present.
   SmallVector<FIRRTLType, 4> opTypes;
   for (auto v : operands)
     opTypes.push_back(v.getType().cast<FIRRTLType>());
 
   auto typeError = [&](StringRef opName) -> ParseResult {
-    auto diag = emitError(loc, "invalid input types for ") << opName;
-    bool isFirst = false;
+    auto diag = emitError(loc, "invalid input types for '") << opName << "': ";
+    bool isFirst = true;
     for (auto t : opTypes) {
       if (!isFirst)
         diag << ", ";
@@ -871,7 +850,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result,
     emitError(loc, "primitive not supported yet");
     return failure();
 
-#define TOK_LPKEYWORD(SPELLING, CLASS, NUMEXP, NUMCST)                         \
+#define TOK_LPKEYWORD_PRIM(SPELLING, CLASS)                                    \
   case FIRToken::lp_##SPELLING: {                                              \
     auto resultTy = CLASS::getResultType(opTypes);                             \
     if (!resultTy)                                                             \
@@ -933,14 +912,17 @@ ParseResult FIRStmtParser::parseSimpleStmtBlock(unsigned indent) {
 
 /// simple_stmt ::= stmt
 ///
-/// stmt ::= wire
-///      ::= node
+/// stmt ::= printf
 ///      ::= skip
+///      ::= node
+///      ::= wire
 ///      ::= when
 ///      ::= leading-exp-stmt
 ///
 ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
   switch (getToken().getKind()) {
+  case FIRToken::lp_printf:
+    return parsePrintf();
   case FIRToken::kw_skip:
     return parseSkip();
   case FIRToken::kw_node:
@@ -955,6 +937,12 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
     // expression.
     return parseLeadingExpStmt();
   }
+}
+
+/// printf ::= 'printf(' exp exp StringLit ( exp)* ')' info?
+ParseResult FIRStmtParser::parsePrintf() {
+  emitError("printf unimp");
+  return failure();
 }
 
 /// skip ::= 'skip' info?

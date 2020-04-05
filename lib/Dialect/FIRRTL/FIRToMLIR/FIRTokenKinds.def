@@ -7,7 +7,8 @@
 
 #if !defined(TOK_MARKER) && !defined(TOK_IDENTIFIER) &&                        \
     !defined(TOK_LITERAL) && !defined(TOK_PUNCTUATION) &&                      \
-    !defined(TOK_KEYWORD) && !defined(TOK_LPKEYWORD)
+    !defined(TOK_KEYWORD) && !defined(TOK_LPKEYWORD) &&                        \
+    !defined(TOK_LPKEYWORD_PRIM)
 #error Must define one of the TOK_ macros.
 #endif
 
@@ -27,7 +28,10 @@
 #define TOK_KEYWORD(SPELLING)
 #endif
 #ifndef TOK_LPKEYWORD
-#define TOK_LPKEYWORD(SPELLING, CLASS, NUMEXP, NUMCST)
+#define TOK_LPKEYWORD(SPELLING)
+#endif
+#ifndef TOK_LPKEYWORD_PRIM
+#define TOK_LPKEYWORD_PRIM(SPELLING, CLASS) TOK_LPKEYWORD(SPELLING)
 #endif
 
 // Markers
@@ -94,7 +98,6 @@ TOK_KEYWORD(of)
 TOK_KEYWORD(old)
 TOK_KEYWORD(output)
 TOK_KEYWORD(parameter)
-TOK_KEYWORD(printf)
 TOK_KEYWORD(rdwr)
 TOK_KEYWORD(read)
 TOK_KEYWORD(reader)
@@ -103,7 +106,6 @@ TOK_KEYWORD(reg)
 TOK_KEYWORD(reset)
 TOK_KEYWORD(skip)
 TOK_KEYWORD(smem)
-TOK_KEYWORD(stop)
 TOK_KEYWORD(undefined)
 TOK_KEYWORD(validif)
 TOK_KEYWORD(when)
@@ -115,38 +117,42 @@ TOK_KEYWORD(writer)
 // Keywords when followed by an '('.  These turn "foo" into
 // FIRToken::lp_foo enums.  The first integer is the number of expression
 // arguments, the second is the number of constant arguments.
-TOK_LPKEYWORD(add, AddOp, 2, 0)
-TOK_LPKEYWORD(and, AndOp, 2, 0)
-// TOK_LPKEYWORD(andr, XXX, 1, 0)
-TOK_LPKEYWORD(asClock, AsClockOp, 1, 0)
-TOK_LPKEYWORD(asSInt, AsSIntOp, 1, 0)
-TOK_LPKEYWORD(asUInt, AsUIntOp, 1, 0)
-// TOK_LPKEYWORD(bits, XXX, 1, 2)
-// TOK_LPKEYWORD(cat, XXX, 2, 0)
-// TOK_LPKEYWORD(cvt, XXX, 1, 0)
-// TOK_LPKEYWORD(div, XXX, 2, 0)
-// TOK_LPKEYWORD(dshl, XXX, 2, 0)
-// TOK_LPKEYWORD(dshr, XXX, 2, 0)
-TOK_LPKEYWORD(eq, LEQOp, 2, 0)
-TOK_LPKEYWORD(geq, GEQOp, 2, 0)
-TOK_LPKEYWORD(gt, GTOp, 2, 0)
-// TOK_LPKEYWORD(head, XXX, 1, 1)
-TOK_LPKEYWORD(leq, LEQOp, 2, 0)
-TOK_LPKEYWORD(lt, LTOp, 2, 0)
-// TOK_LPKEYWORD(mul, XXX, 2, 0)
-// TOK_LPKEYWORD(neg, XXX, 1, 0)
-TOK_LPKEYWORD(neq, NEQOp, 2, 0)
-// TOK_LPKEYWORD(not, XXX, 1, 0)
-TOK_LPKEYWORD(or, OrOp, 2, 0)
-// TOK_LPKEYWORD(orr, XXX, 1, 0)
-// TOK_LPKEYWORD(pad, XXX, 1, 1)
-// TOK_LPKEYWORD(rem, XXX, 2, 0)
-// TOK_LPKEYWORD(shl, XXX, 1, 1)
-// TOK_LPKEYWORD(shr, XXX, 1, 1)
-// TOK_LPKEYWORD(sub, XXX, 2, 0)
-// TOK_LPKEYWORD(tail, XXX, 1, 1)
-TOK_LPKEYWORD(xor, XorOp, 2, 0)
-// TOK_LPKEYWORD(xorr, XXX, 1, 0)
+
+TOK_LPKEYWORD(printf)
+TOK_LPKEYWORD(stop)
+
+TOK_LPKEYWORD_PRIM(add, AddOp)
+TOK_LPKEYWORD_PRIM(and, AndOp)
+// TOK_LPKEYWORD_PRIM(andr, XXX)
+TOK_LPKEYWORD_PRIM(asClock, AsClockOp)
+TOK_LPKEYWORD_PRIM(asSInt, AsSIntOp)
+TOK_LPKEYWORD_PRIM(asUInt, AsUIntOp)
+// TOK_LPKEYWORD_PRIM(bits, XXX)
+// TOK_LPKEYWORD_PRIM(cat, XXX)
+// TOK_LPKEYWORD_PRIM(cvt, XXX)
+// TOK_LPKEYWORD_PRIM(div, XXX)
+// TOK_LPKEYWORD_PRIM(dshl, XXX)
+// TOK_LPKEYWORD_PRIM(dshr, XXX)
+TOK_LPKEYWORD_PRIM(eq, LEQOp)
+TOK_LPKEYWORD_PRIM(geq, GEQOp)
+TOK_LPKEYWORD_PRIM(gt, GTOp)
+// TOK_LPKEYWORD_PRIM(head, XXX)
+TOK_LPKEYWORD_PRIM(leq, LEQOp)
+TOK_LPKEYWORD_PRIM(lt, LTOp)
+// TOK_LPKEYWORD_PRIM(mul, XXX)
+// TOK_LPKEYWORD_PRIM(neg, XXX)
+TOK_LPKEYWORD_PRIM(neq, NEQOp)
+// TOK_LPKEYWORD_PRIM(not, XXX)
+TOK_LPKEYWORD_PRIM(or, OrOp)
+// TOK_LPKEYWORD_PRIM(orr, XXX)
+// TOK_LPKEYWORD_PRIM(pad, XXX)
+// TOK_LPKEYWORD_PRIM(rem, XXX)
+// TOK_LPKEYWORD_PRIM(shl, XXX)
+// TOK_LPKEYWORD_PRIM(shr, XXX)
+// TOK_LPKEYWORD_PRIM(sub, XXX)
+// TOK_LPKEYWORD_PRIM(tail, XXX)
+TOK_LPKEYWORD_PRIM(xor, XorOp)
+// TOK_LPKEYWORD_PRIM(xorr, XXX)
 
 #undef TOK_MARKER
 #undef TOK_IDENTIFIER
@@ -154,3 +160,4 @@ TOK_LPKEYWORD(xor, XorOp, 2, 0)
 #undef TOK_PUNCTUATION
 #undef TOK_KEYWORD
 #undef TOK_LPKEYWORD
+#undef TOK_LPKEYWORD_PRIM
