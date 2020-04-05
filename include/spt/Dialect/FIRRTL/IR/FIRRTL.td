@@ -132,7 +132,7 @@ def DoneOp : FIRRTLOp<"done", [Terminator]> {
 // Declarations
 //===----------------------------------------------------------------------===//
 
-def FIRRTLNodeOp : FIRRTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
+def NodeOp : FIRRTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
   let summary = "No-op to name a value";
   let description = [{
     A node is simply a named intermediate value in a circuit. The node must
@@ -153,7 +153,7 @@ def FIRRTLNodeOp : FIRRTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
   }];
 }
 
-def FIRRTLWireOp : FIRRTLOp<"wire", [NoSideEffect]> {
+def WireOp : FIRRTLOp<"wire", [NoSideEffect]> {
   let summary = "Define a new wire";
   let description = [{
     Declare a new wire:
@@ -174,7 +174,7 @@ def FIRRTLWireOp : FIRRTLOp<"wire", [NoSideEffect]> {
 // Expressions
 //===----------------------------------------------------------------------===//
 
-def FIRRTLConstantOp : FIRRTLOp<"constant", [NoSideEffect]> {
+def ConstantOp : FIRRTLOp<"constant", [NoSideEffect]> {
   let summary = "Produce a constant value";
   let description = [{
     The constant operation produces a constant value of SInt or UInt type.
@@ -192,7 +192,7 @@ def FIRRTLConstantOp : FIRRTLOp<"constant", [NoSideEffect]> {
   }];
 }
 
-def FIRRTLSubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
+def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
   let summary = "Extract a subfield of another value";
   let description = [{
     The subfield expression refers to a subelement of an expression with a
@@ -219,7 +219,7 @@ def FIRRTLSubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
   }];
 }
 
-def FIRRTLSubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
+def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
   let summary = "Extract an element of another vector value";
   let description = [{
     The subindex expression statically refers, by index, to a subelement
@@ -251,7 +251,7 @@ def FIRRTLSubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
 // Statements
 //===----------------------------------------------------------------------===//
 
-def FIRRTLConnectOp : FIRRTLOp<"connect", []> {
+def ConnectOp : FIRRTLOp<"connect", []> {
   let summary = "Connect two signals";
   let description = [{
     Connect Operation:
@@ -268,7 +268,7 @@ def FIRRTLConnectOp : FIRRTLOp<"connect", []> {
   }];
 }
 
-def FIRRTLPartialConnectOp : FIRRTLOp<"partialconnect", []> {
+def PartialConnectOp : FIRRTLOp<"partialconnect", []> {
   let summary = "Connect two signals";
   let description = [{
     Connect two values with fewer constraints:
@@ -285,7 +285,7 @@ def FIRRTLPartialConnectOp : FIRRTLOp<"partialconnect", []> {
   }];
 }
 
-def FIRRTLInvalid : FIRRTLOp<"invalid", []> {
+def InvalidOp : FIRRTLOp<"invalid", []> {
   let summary = "Invalid statement";
   let description = [{
     Invalidate Operation:
@@ -305,7 +305,7 @@ def FIRRTLInvalid : FIRRTLOp<"invalid", []> {
   }];
 }
 
-def FIRRTLSkip : FIRRTLOp<"skip", [NoSideEffect]> {
+def SkipOp : FIRRTLOp<"skip", [NoSideEffect]> {
   let summary = "Skip statement";
   let description = [{
     Skip Statement:
@@ -328,7 +328,7 @@ def FIRRTLSkip : FIRRTLOp<"skip", [NoSideEffect]> {
 // Primitive Operations
 //===----------------------------------------------------------------------===//
 
-def FIRRTLAddOp : FIRRTLOp<"add", [Commutative, NoSideEffect]> {
+def AddOp : FIRRTLOp<"add", [Commutative, NoSideEffect]> {
   let summary = "Add operation";
   let description = [{
     Add Operation:
@@ -360,7 +360,7 @@ def FIRRTLAddOp : FIRRTLOp<"add", [Commutative, NoSideEffect]> {
   }];
 }
 
-def FIRRTLAsClockOp : FIRRTLOp<"asClock", [Commutative, NoSideEffect]> {
+def AsClockOp : FIRRTLOp<"asClock", [Commutative, NoSideEffect]> {
   let summary = " Interpret as Clock operation";
   let description = [{
      Interpret as Clock:

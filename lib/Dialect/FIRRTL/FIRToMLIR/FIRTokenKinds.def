@@ -115,11 +115,11 @@ TOK_KEYWORD(writer)
 // Keywords when followed by an '('.  These turn "foo" into
 // FIRToken::lp_foo enums.  The first integer is the number of expression
 // arguments, the second is the number of constant arguments.
-TOK_LPKEYWORD(add, FIRRTLAddOp, 2, 0)
+TOK_LPKEYWORD(add, AddOp, 2, 0)
 TOK_LPKEYWORD(and, XXX, 2, 0)
 TOK_LPKEYWORD(andr, XXX, 1, 0)
 // TOK_LPKEYWORD(asAsyncReset) -> undocumented
-TOK_LPKEYWORD(asClock, FIRRTLAsClockOp, 1, 0)
+TOK_LPKEYWORD(asClock, AsClockOp, 1, 0)
 // TOK_LPKEYWORD(asFixedPoint) -> undocumented
 // TOK_LPKEYWORD(asInterval) -> undocumented
 TOK_LPKEYWORD(asSInt, XXX, 1, 0)

@@ -750,7 +750,7 @@ ParseResult FIRStmtParser::parseExp(Value &result,
       // Make sure the field name matches up with the input value's type and
       // compute the result type for the expression.
       auto resultType = result.getType().cast<FIRRTLType>();
-      resultType = FIRRTLSubfieldOp::getResultType(resultType, fieldName);
+      resultType = SubfieldOp::getResultType(resultType, fieldName);
       if (!resultType) {
         // TODO: This error would be way nicer with a .fir pretty print of the
         // type.
@@ -760,10 +760,10 @@ ParseResult FIRStmtParser::parseExp(Value &result,
       }
 
       // Create the result operation.
-      auto op = builder.create<FIRRTLSubfieldOp>(
-          translateLocation(loc), resultType, result,
-          builder.getStringAttr(fieldName),
-          /*optionalName*/ StringAttr());
+      auto op =
+          builder.create<SubfieldOp>(translateLocation(loc), resultType, result,
+                                     builder.getStringAttr(fieldName),
+                                     /*optionalName*/ StringAttr());
       subOps.push_back(op);
       result = op.getResult();
       continue;
@@ -783,7 +783,7 @@ ParseResult FIRStmtParser::parseExp(Value &result,
       // Make sure the field name matches up with the input value's type and
       // compute the result type for the expression.
       auto resultType = result.getType().cast<FIRRTLType>();
-      resultType = FIRRTLSubindexOp::getResultType(resultType, indexNo);
+      resultType = SubindexOp::getResultType(resultType, indexNo);
       if (!resultType) {
         // TODO: This error would be way nicer with a .fir pretty print of the
         // type.
@@ -793,10 +793,10 @@ ParseResult FIRStmtParser::parseExp(Value &result,
       }
 
       // Create the result operation.
-      auto op = builder.create<FIRRTLSubindexOp>(
-          translateLocation(loc), resultType, result,
-          builder.getI32IntegerAttr(indexNo),
-          /*optionalName*/ StringAttr());
+      auto op =
+          builder.create<SubindexOp>(translateLocation(loc), resultType, result,
+                                     builder.getI32IntegerAttr(indexNo),
+                                     /*optionalName*/ StringAttr());
       subOps.push_back(op);
       result = op.getResult();
       continue;
@@ -854,7 +854,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result,
 
   // FIXME: This is temporary until we finish implementing all of the
   // primitives.
-  using XXX = FIRRTLAddOp;
+  using XXX = AddOp;
   if (kind != FIRToken::lp_add && kind != FIRToken::lp_asClock)
     return emitError(loc, "unsupported primitive"), failure();
 
@@ -902,9 +902,9 @@ FIRStmtParser::parseIntegerLiteralExp(Value &result,
     resultType = SIntType::get(builder.getContext(), width);
   else
     resultType = UIntType::get(builder.getContext(), width);
-  result = builder.create<FIRRTLConstantOp>(translateLocation(loc), resultType,
-                                            builder.getI32IntegerAttr(value),
-                                            /*optionalName*/ StringAttr());
+  result = builder.create<ConstantOp>(translateLocation(loc), resultType,
+                                      builder.getI32IntegerAttr(value),
+                                      /*optionalName*/ StringAttr());
   return success();
 }
 
@@ -961,7 +961,7 @@ ParseResult FIRStmtParser::parseSkip() {
   if (parseOptionalInfo(info))
     return failure();
 
-  builder.create<FIRRTLSkip>(info.getLoc());
+  builder.create<SkipOp>(info.getLoc());
   return success();
 }
 
@@ -982,7 +982,7 @@ ParseResult FIRStmtParser::parseNode() {
   // If we had an info location, make sure all subexpression nodes get it.
   info.applyInfoToSubexpressions(subOps);
 
-  auto result = builder.create<FIRRTLNodeOp>(info.getLoc(), initializer, id);
+  auto result = builder.create<NodeOp>(info.getLoc(), initializer, id);
   if (addSymbolEntry(id.getValue(), result, info.getFIRLoc()))
     return failure();
 
@@ -1001,7 +1001,7 @@ ParseResult FIRStmtParser::parseWire() {
       parseType(type, "expected wire type") || parseOptionalInfo(info))
     return failure();
 
-  auto result = builder.create<FIRRTLWireOp>(info.getLoc(), type, id);
+  auto result = builder.create<WireOp>(info.getLoc(), type, id);
   if (addSymbolEntry(id.getValue(), result, info.getFIRLoc()))
     return failure();
 
@@ -1094,7 +1094,7 @@ ParseResult FIRStmtParser::parseLeadingExpStmt() {
     // If we had an info location, make sure all subexpression nodes get it.
     info.applyInfoToSubexpressions(subOps);
 
-    builder.create<FIRRTLInvalid>(info.getLoc(), lhs);
+    builder.create<InvalidOp>(info.getLoc(), lhs);
     return success();
   }
 
@@ -1112,10 +1112,10 @@ ParseResult FIRStmtParser::parseLeadingExpStmt() {
   info.applyInfoToSubexpressions(subOps);
 
   if (kind == FIRToken::less_equal)
-    builder.create<FIRRTLConnectOp>(info.getLoc(), lhs, rhs);
+    builder.create<ConnectOp>(info.getLoc(), lhs, rhs);
   else {
     assert(kind == FIRToken::less_minus && "unexpected kind");
-    builder.create<FIRRTLPartialConnectOp>(info.getLoc(), lhs, rhs);
+    builder.create<PartialConnectOp>(info.getLoc(), lhs, rhs);
   }
   return success();
 }

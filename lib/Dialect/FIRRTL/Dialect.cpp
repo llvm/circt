@@ -343,8 +343,7 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result) {
 //===----------------------------------------------------------------------===//
 
 // Return the result of a subfield operation.
-FIRRTLType FIRRTLSubfieldOp::getResultType(FIRRTLType inType,
-                                           StringRef fieldName) {
+FIRRTLType SubfieldOp::getResultType(FIRRTLType inType, StringRef fieldName) {
   if (auto bundleType = inType.dyn_cast<BundleType>()) {
     for (auto &elt : bundleType.getElements()) {
       if (elt.first.strref() == fieldName)
@@ -359,8 +358,7 @@ FIRRTLType FIRRTLSubfieldOp::getResultType(FIRRTLType inType,
   return {};
 }
 
-FIRRTLType FIRRTLSubindexOp::getResultType(FIRRTLType inType,
-                                           unsigned fieldIdx) {
+FIRRTLType SubindexOp::getResultType(FIRRTLType inType, unsigned fieldIdx) {
   if (auto vectorType = inType.dyn_cast<FVectorType>())
     if (fieldIdx < vectorType.getNumElements())
       return vectorType.getElementType();
@@ -376,7 +374,7 @@ FIRRTLType FIRRTLSubindexOp::getResultType(FIRRTLType inType,
 // Primitives
 //===----------------------------------------------------------------------===//
 
-FIRRTLType FIRRTLAddOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
+FIRRTLType AddOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
   if (auto lu = lhs.dyn_cast<UIntType>())
     if (auto ru = rhs.dyn_cast<UIntType>()) {
       if (!lu.getWidth().hasValue())
@@ -402,19 +400,19 @@ FIRRTLType FIRRTLAddOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
   return {};
 }
 
-FIRRTLType FIRRTLAddOp::getResultType(ArrayRef<FIRRTLType> inputs) {
+FIRRTLType AddOp::getResultType(ArrayRef<FIRRTLType> inputs) {
   if (inputs.size() != 2)
     return {};
   return getResultType(inputs[0], inputs[1]);
 }
 
-FIRRTLType FIRRTLAsClockOp::getResultType(FIRRTLType input) {
+FIRRTLType AsClockOp::getResultType(FIRRTLType input) {
   if (input.isa<UIntType>() || input.isa<SIntType>() || input.isa<ClockType>())
     return ClockType::get(input.getContext());
   return {};
 }
 
-FIRRTLType FIRRTLAsClockOp::getResultType(ArrayRef<FIRRTLType> inputs) {
+FIRRTLType AsClockOp::getResultType(ArrayRef<FIRRTLType> inputs) {
   if (inputs.size() != 1)
     return {};
   return getResultType(inputs[0]);
