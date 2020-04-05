@@ -324,6 +324,48 @@ def SkipOp : FIRRTLOp<"skip", [NoSideEffect]> {
   }];
 }
 
+def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">]> {
+  let summary = "When Statement";
+  let description = [{
+    The "firrtl.when" operation represents a conditional.  Connections within
+    a conditional statement that connect to previously declared components hold
+    only when the given condition is high. The condition must have a 1-bit
+    unsigned integer type.
+  }];
+  let arguments = (ins AnyType:$condition);
+  let results = (outs);
+  let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<"Builder *builder, OperationState &result, "
+              "Value condition, bool withElseRegion">
+  ];
+
+  let extraClassDeclaration = [{
+    OpBuilder getThenBodyBuilder() {
+      assert(!thenRegion().empty() && "Unexpected empty 'then' region.");
+      Block &body = thenRegion().front();
+      return OpBuilder(&body, std::prev(body.end()));
+    }
+
+    bool hasElseRegion() {
+      return !elseRegion().empty();
+    }
+
+    void createElseRegion();
+
+    OpBuilder getElseBodyBuilder() {
+      assert(hasElseRegion() && "Unexpected empty 'else' region.");
+      Block &body = elseRegion().front();
+      return OpBuilder(&body, std::prev(body.end()));
+    }
+  }];
+  
+  let printer = [{ return ::print(p, *this); }];
+  let parser = [{ return ::parse$cppClass(parser, result); }];
+}
+
 //===----------------------------------------------------------------------===//
 // Primitive Operations
 //===----------------------------------------------------------------------===//

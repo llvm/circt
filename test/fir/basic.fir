@@ -92,18 +92,32 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.connect %auto
     auto <= add(UInt<10>(42), UInt<8>("hAB"))
 
-    ; CHECK: firrtl.connect %0, %1
-    ; CHECK: firrtl.partialconnect %0
+    ; CHECK: firrtl.when %reset {
+    ; CHECK:   firrtl.connect %0, %1
+    ; CHECK: } else {
+    ; CHECK:   firrtl.partialconnect %0
+    ; CHECK: }
     when reset : _T <= _T_2 else : _T <- _T_2
 
-    ; CHECK: [[N4A:%.+]] = firrtl.node %1
-    ; CHECK: firrtl.connect %0, [[N4A]]
-    ; CHECK: [[N4B:%.+]] = firrtl.node %1
-    ; CHECK: firrtl.partialconnect %0, [[N4B]]
+    ; CHECK: firrtl.when %reset {
+    ; CHECK:   [[N4A:%.+]] = firrtl.node %1
+    ; CHECK:   firrtl.connect %0, [[N4A]]
+    ; CHECK: } else {
+    ; CHECK:   [[N4B:%.+]] = firrtl.node %1
+    ; CHECK:   firrtl.partialconnect %0, [[N4B]]
+    ; CHECK: }
     when reset :
       node n4 = _T_2
       _T <= n4
     else :
       node n4 = _T_2   ; 'n4' name is in unique scopes.
       _T <- n4
-    
+
+    ; CHECK: firrtl.when %reset {
+    ; CHECK:   firrtl.connect %0, %1
+    ; CHECK: }
+    ; CHECK-NOT: else
+    when reset :   ;; When with no else.
+      _T <= _T_2
+
+  

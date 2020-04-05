@@ -627,9 +627,9 @@ protected:
 /// is already defined.
 ParseResult FIRScopedParser::addSymbolEntry(StringRef name, Value value,
                                             SMLoc loc) {
-  // TODO: Should we support name shadowing?  This will reject cases where
-  // we try to define a new wire in a conditional where an outer name defined
-  // the same name.
+  // TODO(firrtl spec): Should we support name shadowing?  This will reject
+  // cases where we try to define a new wire in a conditional where an outer
+  // name defined the same name.
   auto nameId = Identifier::get(name, getContext());
   auto prev = symbolTable.lookup(nameId);
   if (prev.first.isValid()) {
@@ -752,7 +752,7 @@ ParseResult FIRStmtParser::parseExp(Value &result,
       auto resultType = result.getType().cast<FIRRTLType>();
       resultType = SubfieldOp::getResultType(resultType, fieldName);
       if (!resultType) {
-        // TODO: This error would be way nicer with a .fir pretty print of the
+        // TODO(QoI): This error would be nicer with a .fir pretty print of the
         // type.
         emitError(loc, "invalid subfield '" + fieldName + "' for type ")
             << result.getType();
@@ -785,7 +785,7 @@ ParseResult FIRStmtParser::parseExp(Value &result,
       auto resultType = result.getType().cast<FIRRTLType>();
       resultType = SubindexOp::getResultType(resultType, indexNo);
       if (!resultType) {
-        // TODO: This error would be way nicer with a .fir pretty print of the
+        // TODO(QoI): This error would be nicer with a .fir pretty print of the
         // type.
         emitError(loc, "invalid subindex '" + Twine(indexNo))
             << "' for type " << result.getType();
@@ -1024,6 +1024,10 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   // If we had an info location, make sure all subexpression nodes get it.
   info.applyInfoToSubexpressions(subOps);
 
+  // Create the IR representation for the when.
+  auto whenStmt = builder.create<WhenOp>(info.getLoc(), condition,
+                                         /*createElse*/ false);
+
   // This is a function to parse a suite body.
   auto parseSuite = [&](OpBuilder builder) -> ParseResult {
     // Declarations within the suite are scoped to within the suite.
@@ -1047,9 +1051,8 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
     return subParser.parseSimpleStmtBlock(whenIndent);
   };
 
-  // FIXME: Create the IR representation for the when.
-  // FIXME: This should be using the right builder.
-  if (parseSuite(builder))
+  // Parse the 'then' body into the 'then' region.
+  if (parseSuite(whenStmt.getThenBodyBuilder()))
     return failure();
 
   // If the else is present, handle it otherwise we're done.
@@ -1057,19 +1060,22 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   if (!consumeIf(FIRToken::kw_else))
     return success();
 
+  // Create an else block to parse into.
+  whenStmt.createElseRegion();
+
   // If we have the ':' form, then handle it.
   if (getToken().is(FIRToken::kw_when)) {
-    // TODO: Handle the 'else when' syntactic sugar when we care.
+    // TODO(completeness): Handle the 'else when' syntactic sugar when we care.
     return emitError("'else when' syntax not supported yet"), failure();
   }
 
-  // FIXME: This should be passing in the right builder!
+  // Parse the 'else' body into the 'else' region.
   if (parseToken(FIRToken::colon, "expected ':' after 'else'") ||
-      parseOptionalInfo(elseInfo) || parseSuite(builder))
+      parseOptionalInfo(elseInfo) || parseSuite(whenStmt.getElseBodyBuilder()))
     return failure();
 
-  // TODO: There is no reason for the 'else :' grammar to take an info.  It
-  //  doesn't appear to be generated either.
+  // TODO(firtl spec): There is no reason for the 'else :' grammar to take an
+  // info.  It doesn't appear to be generated either.
   return success();
 }
 
@@ -1216,7 +1222,7 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
       return failure();
   }
 
-  // TODO: Build a representation of this defname.
+  // FIXME: Build a representation of this defname.
 
   // Parse the parameter list.
   while (consumeIf(FIRToken::kw_parameter)) {
@@ -1232,7 +1238,7 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
       return emitError("expected parameter value"), failure();
   }
 
-  // TODO: Build a record of this parameter.
+  // FIXME: Build a record of this parameter.
 
   return success();
 }
