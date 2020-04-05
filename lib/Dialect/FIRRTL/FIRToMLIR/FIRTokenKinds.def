@@ -27,7 +27,7 @@
 #define TOK_KEYWORD(SPELLING)
 #endif
 #ifndef TOK_LPKEYWORD
-#define TOK_LPKEYWORD(SPELLING, NUMEXP, NUMCST)
+#define TOK_LPKEYWORD(SPELLING, CLASS, NUMEXP, NUMCST)
 #endif
 
 // Markers
@@ -115,47 +115,47 @@ TOK_KEYWORD(writer)
 // Keywords when followed by an '('.  These turn "foo" into
 // FIRToken::lp_foo enums.  The first integer is the number of expression
 // arguments, the second is the number of constant arguments.
-TOK_LPKEYWORD(add, 2, 0)
-TOK_LPKEYWORD(and, 2, 0)
-TOK_LPKEYWORD(andr, 1, 0)
+TOK_LPKEYWORD(add, FIRRTLAddOp, 2, 0)
+TOK_LPKEYWORD(and, XXX, 2, 0)
+TOK_LPKEYWORD(andr, XXX, 1, 0)
 // TOK_LPKEYWORD(asAsyncReset) -> undocumented
-TOK_LPKEYWORD(asClock, 1, 0)
+TOK_LPKEYWORD(asClock, FIRRTLAsClockOp, 1, 0)
 // TOK_LPKEYWORD(asFixedPoint) -> undocumented
 // TOK_LPKEYWORD(asInterval) -> undocumented
-TOK_LPKEYWORD(asSInt, 1, 0)
-TOK_LPKEYWORD(asUInt, 1, 0)
-TOK_LPKEYWORD(bits, 1, 2)
-TOK_LPKEYWORD(cat, 2, 0)
+TOK_LPKEYWORD(asSInt, XXX, 1, 0)
+TOK_LPKEYWORD(asUInt, XXX, 1, 0)
+TOK_LPKEYWORD(bits, XXX, 1, 2)
+TOK_LPKEYWORD(cat, XXX, 2, 0)
 // TOK_LPKEYWORD(clip) -> undocumented.
-TOK_LPKEYWORD(cvt, 1, 0)
+TOK_LPKEYWORD(cvt, XXX, 1, 0)
 // TOK_LPKEYWORD(decp) -> undocumented.
-TOK_LPKEYWORD(div, 2, 0)
-TOK_LPKEYWORD(dshl, 2, 0)
-TOK_LPKEYWORD(dshr, 2, 0)
-TOK_LPKEYWORD(eq, 2, 0)
-TOK_LPKEYWORD(geq, 2, 0)
-TOK_LPKEYWORD(gt, 2, 0)
-TOK_LPKEYWORD(head, 1, 1)
+TOK_LPKEYWORD(div, XXX, 2, 0)
+TOK_LPKEYWORD(dshl, XXX, 2, 0)
+TOK_LPKEYWORD(dshr, XXX, 2, 0)
+TOK_LPKEYWORD(eq, XXX, 2, 0)
+TOK_LPKEYWORD(geq, XXX, 2, 0)
+TOK_LPKEYWORD(gt, XXX, 2, 0)
+TOK_LPKEYWORD(head, XXX, 1, 1)
 // TOK_LPKEYWORD(incp)  -> undocumented.
-TOK_LPKEYWORD(leq, 2, 0)
-TOK_LPKEYWORD(lt, 2, 0)
-TOK_LPKEYWORD(mul, 2, 0)
-TOK_LPKEYWORD(neg, 1, 0)
-TOK_LPKEYWORD(neq, 2, 0)
-TOK_LPKEYWORD(not, 1, 0)
-TOK_LPKEYWORD(or, 2, 0)
-TOK_LPKEYWORD(orr, 1, 0)
-TOK_LPKEYWORD(pad, 1, 1)
-TOK_LPKEYWORD(rem, 2, 0)
+TOK_LPKEYWORD(leq, XXX, 2, 0)
+TOK_LPKEYWORD(lt, XXX, 2, 0)
+TOK_LPKEYWORD(mul, XXX, 2, 0)
+TOK_LPKEYWORD(neg, XXX, 1, 0)
+TOK_LPKEYWORD(neq, XXX, 2, 0)
+TOK_LPKEYWORD(not, XXX, 1, 0)
+TOK_LPKEYWORD(or, XXX, 2, 0)
+TOK_LPKEYWORD(orr, XXX, 1, 0)
+TOK_LPKEYWORD(pad, XXX, 1, 1)
+TOK_LPKEYWORD(rem, XXX, 2, 0)
 // TOK_LPKEYWORD(setp) -> undocumented.
-TOK_LPKEYWORD(shl, 1, 1)
-TOK_LPKEYWORD(shr, 1, 1)
+TOK_LPKEYWORD(shl, XXX, 1, 1)
+TOK_LPKEYWORD(shr, XXX, 1, 1)
 // TOK_LPKEYWORD(squz) -> undocumented.
-TOK_LPKEYWORD(sub, 2, 0)
-TOK_LPKEYWORD(tail, 1, 1)
+TOK_LPKEYWORD(sub, XXX, 2, 0)
+TOK_LPKEYWORD(tail, XXX, 1, 1)
 // TOK_LPKEYWORD(wrap) -> undocumented.
-TOK_LPKEYWORD(xor, 2, 0)
-TOK_LPKEYWORD(xorr, 1, 0)
+TOK_LPKEYWORD(xor, XXX, 2, 0)
+TOK_LPKEYWORD(xorr, XXX, 1, 0)
 
 #undef TOK_MARKER
 #undef TOK_IDENTIFIER

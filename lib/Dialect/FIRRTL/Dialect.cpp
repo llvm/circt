@@ -402,5 +402,23 @@ FIRRTLType FIRRTLAddOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
   return {};
 }
 
+FIRRTLType FIRRTLAddOp::getResultType(ArrayRef<FIRRTLType> inputs) {
+  if (inputs.size() != 2)
+    return {};
+  return getResultType(inputs[0], inputs[1]);
+}
+
+FIRRTLType FIRRTLAsClockOp::getResultType(FIRRTLType input) {
+  if (input.isa<UIntType>() || input.isa<SIntType>() || input.isa<ClockType>())
+    return ClockType::get(input.getContext());
+  return {};
+}
+
+FIRRTLType FIRRTLAsClockOp::getResultType(ArrayRef<FIRRTLType> inputs) {
+  if (inputs.size() != 1)
+    return {};
+  return getResultType(inputs[0]);
+}
+
 #define GET_OP_CLASSES
 #include "spt/Dialect/FIRRTL/IR/FIRRTL.cpp.inc"

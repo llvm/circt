@@ -80,10 +80,11 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: %8 = firrtl.node %auto {name = "n1"} : !firrtl.flip<uint<1>>
     node n1 = auto
 
-    ; CHECK: %9 = firrtl.add %reset, %reset {name = ""} : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+    ; CHECK: %9 = firrtl.add %reset, %reset : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
     node n2 = add(reset, reset)
 
-    ;node n2 = asClock(reset)
+    ; CHECK: firrtl.asClock %reset : !firrtl.uint<1>
+    node n3 = asClock(reset)
 
     ;_auto <= UInt<1>("h0") 
 

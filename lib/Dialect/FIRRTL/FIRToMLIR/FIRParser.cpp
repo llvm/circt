@@ -619,13 +619,11 @@ private:
 ParseResult FIRStmtParser::parseExp(Value &result,
                                     SmallVectorImpl<Operation *> &subOps,
                                     const Twine &message) {
-  auto kind = getToken().getKind();
-  auto loc = getToken().getLoc();
-
-  switch (kind) {
+  switch (getToken().getKind()) {
 
     // Handle all the primitive ops: primop exp* intLit*  ')'
-#define TOK_LPKEYWORD(SPELLING, NUMEXP, NUMCST) case FIRToken::lp_##SPELLING:
+#define TOK_LPKEYWORD(SPELLING, CLASS, NUMEXP, NUMCST)                         \
+  case FIRToken::lp_##SPELLING:
 #include "FIRTokenKinds.def"
     if (parsePrimExp(result, subOps))
       return failure();
@@ -738,12 +736,12 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result,
   // After we parse the operands in integer arguments, validate that there is
   // the right number of them.
   static const int tokenID[] = {
-#define TOK_LPKEYWORD(SPELLING, NUMEXP, NUMCST) FIRToken::lp_##SPELLING,
+#define TOK_LPKEYWORD(SPELLING, CLASS, NUMEXP, NUMCST) FIRToken::lp_##SPELLING,
 #include "FIRTokenKinds.def"
   };
 
   static const std::pair<unsigned char, unsigned char> numExpCst[] = {
-#define TOK_LPKEYWORD(SPELLING, NUMEXP, NUMCST) {NUMEXP, NUMCST},
+#define TOK_LPKEYWORD(SPELLING, CLASS, NUMEXP, NUMCST) {NUMEXP, NUMCST},
 #include "FIRTokenKinds.def"
   };
 
@@ -759,18 +757,28 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result,
   for (auto v : operands)
     opTypes.push_back(v.getType().cast<FIRRTLType>());
 
+  // FIXME: This is temporary until we finish implementing all of the
+  // primitives.
+  using XXX = FIRRTLAddOp;
+  if (kind != FIRToken::lp_add && kind != FIRToken::lp_asClock)
+    return emitError(loc, "unsupported primitive"), failure();
+
+  ArrayRef<NamedAttribute> attrs;
   switch (kind) {
   default:
     emitError(loc, "primitive not supported yet");
     return failure();
-  case FIRToken::lp_add:
-    auto resultTy = FIRRTLAddOp::getResultType(opTypes[0], opTypes[1]);
-    if (!resultTy)
-      return emitError(loc, "invalid input types for add"), failure();
-    result = builder.create<FIRRTLAddOp>(translateLocation(loc), resultTy,
-                                         operands[0], operands[1],
-                                         /*name=*/builder.getStringAttr(""));
-    return success();
+
+#define TOK_LPKEYWORD(SPELLING, CLASS, NUMEXP, NUMCST)                         \
+  case FIRToken::lp_##SPELLING: {                                              \
+    auto resultTy = CLASS::getResultType(opTypes);                             \
+    if (!resultTy)                                                             \
+      return emitError(loc, "invalid input types for " #SPELLING), failure();  \
+    result = builder.create<CLASS>(translateLocation(loc), resultTy,           \
+                                   ValueRange(operands), attrs);               \
+    return success();                                                          \
+  }
+#include "FIRTokenKinds.def"
   }
 }
 

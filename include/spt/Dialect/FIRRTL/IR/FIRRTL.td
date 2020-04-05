@@ -24,6 +24,13 @@ def FIRRTLDialect : Dialect {
 }
 
 //===----------------------------------------------------------------------===//
+// FIRRTL Types Definitions
+//===----------------------------------------------------------------------===//
+
+def ClockType : Type<CPred<"$_self.isa<ClockType>()">, "clock">,
+                BuildableType<"ClockType::get($_builder.getContext())">;
+
+//===----------------------------------------------------------------------===//
 // FIRRTL op definitions
 //===----------------------------------------------------------------------===//
 
@@ -304,11 +311,11 @@ def FIRRTLSkip : FIRRTLOp<"skip", [NoSideEffect]> {
 //===----------------------------------------------------------------------===//
 
 def FIRRTLAddOp : FIRRTLOp<"add", [Commutative, NoSideEffect]> {
-  let summary = "Add operations";
+  let summary = "Add operation";
   let description = [{
     Add Operation:
     ```
-       %result = firrt.add %lhs, %rhs "name" : (t1, t2) -> t3
+       %result = firrt.add %lhs, %rhs : (t1, t2) -> t3
     ```
 
     The two options are:
@@ -328,10 +335,39 @@ def FIRRTLAddOp : FIRRTLOp<"add", [Commutative, NoSideEffect]> {
   }];
 
   let extraClassDeclaration = [{
-    /// Compute the result type for an add with the specified type.  If the
-    /// request is invalid, then a null type is returned.
+    /// Return the result for inputs with the specified type, returning a null
+    /// type if the input types are invalid.
     static FIRRTLType getResultType(FIRRTLType lhs, FIRRTLType rhs);
+    static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs);
   }];
 }
+
+def FIRRTLAsClockOp : FIRRTLOp<"asClock", [Commutative, NoSideEffect]> {
+  let summary = " Interpret as Clock operation";
+  let description = [{
+     Interpret as Clock:
+    ```
+       %result = firrt.asClock %lhs : t1
+    ```
+
+    The result of the interpret as clock operation is the Clock typed signal
+    obtained from interpreting a single bit integer as a clock signal.
+  }];
+
+  let arguments = (ins AnyType:$input, OptionalAttr<StrAttr>:$name);
+  let results = (outs ClockType:$result);
+  
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) 
+  }];
+
+  let extraClassDeclaration = [{
+    /// Return the result for inputs with the specified type, returning a null
+    /// type if the input types are invalid.
+    static FIRRTLType getResultType(FIRRTLType input);
+    static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs);
+  }];
+}
+
 
 #endif // FIRRTL_OPS
