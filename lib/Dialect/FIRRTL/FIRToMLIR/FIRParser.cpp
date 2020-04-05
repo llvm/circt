@@ -365,7 +365,15 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result) {
 // Common Parser Rules
 //===--------------------------------------------------------------------===//
 
-/// Parse 'intLit' into the specified value.
+/// intLit    ::= UnsignedInt
+///           ::= SignedInt
+///           ::= HexLit
+///           ::= OctalLit
+///           ::= BinaryLit
+/// HexLit    ::= '"' 'h' ( '+' | '-' )? ( HexDigit )+ '"'
+/// OctalLit  ::= '"' 'o' ( '+' | '-' )? ( OctalDigit )+ '"'
+/// BinaryLit ::= '"' 'b' ( '+' | '-' )? ( BinaryDigit )+ '"'
+///
 ParseResult FIRParser::parseIntLit(int32_t &result, const Twine &message) {
   auto spelling = getTokenSpelling();
   switch (getToken().getKind()) {
@@ -374,6 +382,50 @@ ParseResult FIRParser::parseIntLit(int32_t &result, const Twine &message) {
       return emitError(message), failure();
     consumeToken(FIRToken::integer);
     return success();
+
+  case FIRToken::string: {
+    // Drop the quotes.
+    assert(spelling.front() == '"' && spelling.back() == '"');
+    spelling = spelling.drop_back().drop_front();
+
+    // Decode the base.
+    unsigned base;
+    switch (spelling.empty() ? ' ' : spelling.front()) {
+    case 'h':
+      base = 16;
+      break;
+    case 'o':
+      base = 8;
+      break;
+    case 'b':
+      base = 2;
+      break;
+    default:
+      return emitError("expected base specifier (h/o/b) in integer literal"),
+             failure();
+    }
+    spelling = spelling.drop_front();
+
+    // Handle the optional sign.
+    bool isNegative = false;
+    if (!spelling.empty() && spelling.front() == '+')
+      spelling = spelling.drop_front();
+    else if (!spelling.empty() && spelling.front() == '-') {
+      isNegative = true;
+      spelling = spelling.drop_front();
+    }
+
+    // Parse the digits.
+    if (spelling.empty())
+      return emitError("expected digits in integer literal"), failure();
+
+    if (spelling.getAsInteger(base, result))
+      return emitError("invalid character in integer literal"), failure();
+    if (isNegative)
+      result = -result;
+    consumeToken(FIRToken::string);
+    return success();
+  }
 
   default:
     return emitError("expected integer literal"), failure();

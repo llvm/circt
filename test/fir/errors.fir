@@ -74,3 +74,9 @@ circuit test :
    input in : SInt<8>
    input c : Clock
    node n = add(in, in, in)  ; expected-error {{add must have two operands}}
+
+;// -----
+
+circuit test :
+  module invalid_add :
+   node n = add(UInt<8>("hAX"), UInt<10>(42))  ; expected-error {{invalid character in integer literal}}

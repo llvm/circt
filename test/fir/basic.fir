@@ -87,7 +87,8 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     node n3 = asClock(reset)
 
     ; CHECK: firrtl.constant 42 : !firrtl.uint<10>
-    auto <= add(reset, UInt<10>(42))
+    ; CHECK: firrtl.constant 171 : !firrtl.uint<8>
+    auto <= add(UInt<10>(42), UInt<8>("hAB"))
 
     ;node _T_23 = or(_T_2[0], _T_2[1]) @[Parameters.scala 337:46]
 
