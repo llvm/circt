@@ -113,11 +113,13 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
       node n4 = _T_2   ; 'n4' name is in unique scopes.
       _T <- n4
 
-    ; CHECK: firrtl.when %reset {
+    ; CHECK: [[TMP:%.+]] = firrtl.constant 4
+    ; CHECK: [[COND:%.+]] = firrtl.lt %reset, [[TMP]]
+    ; CHECK: firrtl.when [[COND]] {
     ; CHECK:   firrtl.connect %0, %1
     ; CHECK: }
     ; CHECK-NOT: else
-    when reset :   ;; When with no else.
+    when lt(reset, UInt(4)) :   ;; When with no else.
       _T <= _T_2
 
   

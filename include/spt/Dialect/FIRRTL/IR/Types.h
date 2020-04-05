@@ -139,7 +139,7 @@ public:
 
   FIRRTLType getElementType() const;
 
-  static FlipType get(FIRRTLType element);
+  static FIRRTLType get(FIRRTLType element);
 
   static bool kindof(unsigned kind) { return kind == Flip; }
 };

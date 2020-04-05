@@ -447,10 +447,10 @@ FIRRTLType SubindexOp::getResultType(FIRRTLType inType, unsigned fieldIdx) {
 }
 
 //===----------------------------------------------------------------------===//
-// Primitives
+// Binary Primitives
 //===----------------------------------------------------------------------===//
 
-FIRRTLType AddOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
+FIRRTLType firrtl::getAddResult(FIRRTLType lhs, FIRRTLType rhs) {
   if (auto lu = lhs.dyn_cast<UIntType>())
     if (auto ru = rhs.dyn_cast<UIntType>()) {
       if (!lu.getWidth().hasValue())
@@ -476,11 +476,20 @@ FIRRTLType AddOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
   return {};
 }
 
-FIRRTLType AddOp::getResultType(ArrayRef<FIRRTLType> inputs) {
-  if (inputs.size() != 2)
-    return {};
-  return getResultType(inputs[0], inputs[1]);
+//===----------------------------------------------------------------------===//
+// Comparison Primitives
+//===----------------------------------------------------------------------===//
+
+FIRRTLType firrtl::getCompareResult(FIRRTLType lhs, FIRRTLType rhs) {
+  if ((lhs.isa<UIntType>() && rhs.isa<UIntType>()) ||
+      (lhs.isa<SIntType>() && rhs.isa<SIntType>()))
+    return UIntType::get(lhs.getContext(), 1);
+  return {};
 }
+
+//===----------------------------------------------------------------------===//
+// Unary Primitives
+//===----------------------------------------------------------------------===//
 
 FIRRTLType AsClockOp::getResultType(FIRRTLType input) {
   if (input.isa<UIntType>() || input.isa<SIntType>() || input.isa<ClockType>())

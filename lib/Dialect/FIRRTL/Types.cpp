@@ -295,7 +295,11 @@ struct FlipTypeStorage : mlir::TypeStorage {
 } // namespace firrtl
 } // namespace spt
 
-FlipType FlipType::get(FIRRTLType element) {
+FIRRTLType FlipType::get(FIRRTLType element) {
+  // flip(flip(x)) -> x
+  if (auto subFlip = element.dyn_cast<FlipType>())
+    return subFlip.getElementType();
+
   auto *context = element.getContext();
   return Base::get(context, Flip, element);
 }

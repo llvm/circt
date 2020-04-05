@@ -13,6 +13,7 @@
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/SideEffects.h"
+#include "spt/Dialect/FIRRTL/IR/Types.h"
 
 namespace spt {
 namespace firrtl {
@@ -30,6 +31,9 @@ public:
 
   static StringRef getDialectNamespace() { return "firrtl"; }
 };
+
+FIRRTLType getAddResult(FIRRTLType lhs, FIRRTLType rhs);
+FIRRTLType getCompareResult(FIRRTLType lhs, FIRRTLType rhs);
 
 #define GET_OP_CLASSES
 #include "spt/Dialect/FIRRTL/IR/FIRRTL.h.inc"

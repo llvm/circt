@@ -855,8 +855,24 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result,
   // FIXME: This is temporary until we finish implementing all of the
   // primitives.
   using XXX = AddOp;
-  if (kind != FIRToken::lp_add && kind != FIRToken::lp_asClock)
+  if (kind != FIRToken::lp_add && kind != FIRToken::lp_asClock &&
+      kind != FIRToken::lp_lt && kind != FIRToken::lp_leq &&
+      kind != FIRToken::lp_gt && kind != FIRToken::lp_geq &&
+      kind != FIRToken::lp_eq && kind != FIRToken::lp_neq)
     return emitError(loc, "unsupported primitive"), failure();
+
+  auto typeError = [&](StringRef opName) -> ParseResult {
+    auto diag = emitError(loc, "invalid input types for ") << opName;
+    bool isFirst = false;
+    for (auto t : opTypes) {
+      if (!isFirst)
+        diag << ", ";
+      else
+        isFirst = false;
+      diag << t;
+    }
+    return failure();
+  };
 
   ArrayRef<NamedAttribute> attrs;
   switch (kind) {
@@ -868,7 +884,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result,
   case FIRToken::lp_##SPELLING: {                                              \
     auto resultTy = CLASS::getResultType(opTypes);                             \
     if (!resultTy)                                                             \
-      return emitError(loc, "invalid input types for " #SPELLING), failure();  \
+      return typeError(#SPELLING);                                             \
     result = builder.create<CLASS>(translateLocation(loc), resultTy,           \
                                    ValueRange(operands), attrs);               \
     break;                                                                     \
@@ -1008,8 +1024,8 @@ ParseResult FIRStmtParser::parseWire() {
   return success();
 }
 
-/// when  ::= 'when' exp ':' info? suite? ('else' ( when | ':' info? suite?) )?
-/// suite ::= simple_stmt | INDENT simple_stmt+ DEDENT
+/// when  ::= 'when' exp ':' info? suite? ('else' ( when | ':' info? suite?)
+/// )? suite ::= simple_stmt | INDENT simple_stmt+ DEDENT
 ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   LocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_when);
@@ -1065,7 +1081,8 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
 
   // If we have the ':' form, then handle it.
   if (getToken().is(FIRToken::kw_when)) {
-    // TODO(completeness): Handle the 'else when' syntactic sugar when we care.
+    // TODO(completeness): Handle the 'else when' syntactic sugar when we
+    // care.
     return emitError("'else when' syntax not supported yet"), failure();
   }
 
@@ -1179,8 +1196,8 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
     if (isOutput)
       type = FlipType::get(type);
 
-    // FIXME: We should persist the info loc into the IR, not just the name and
-    // type.
+    // FIXME: We should persist the info loc into the IR, not just the name
+    // and type.
     result.push_back({{name, type}, info.getFIRLoc()});
   }
 

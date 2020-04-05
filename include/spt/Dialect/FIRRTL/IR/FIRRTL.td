@@ -370,8 +370,50 @@ def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">]> {
 // Primitive Operations
 //===----------------------------------------------------------------------===//
 
-def AddOp : FIRRTLOp<"add", [Commutative, NoSideEffect]> {
-  let summary = "Add operation";
+class PrimOp<string mnemonic, list<OpTrait> traits = []> :
+    FIRRTLOp<mnemonic, !listconcat(traits, [NoSideEffect])> {
+  let arguments = (ins AnyType:$lhs, AnyType:$rhs, OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  let assemblyFormat = [{
+    $lhs `,` $rhs  attr-dict `:`
+       `(` type($lhs) `,` type($rhs) `)` `->` type($result)
+  }];
+}
+
+
+//===----------------------------------------------------------------------===//
+// Binary Operations
+//===----------------------------------------------------------------------===//
+
+// Base class for binary primitive operators.
+class BinPrimOp<string mnemonic, string resultTypeFunction, 
+                list<OpTrait> traits = []> :
+    FIRRTLOp<mnemonic, traits> {
+  let arguments = (ins AnyType:$lhs, AnyType:$rhs, OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  let assemblyFormat = [{
+    $lhs `,` $rhs  attr-dict `:`
+       `(` type($lhs) `,` type($rhs) `)` `->` type($result)
+  }];
+
+  let extraClassDeclaration = !cast<code>(!strconcat(!cast<string>([{
+    /// Return the result for inputs with the specified type, returning a null
+    /// type if the input types are invalid.
+    static FIRRTLType getResultType(FIRRTLType lhs, FIRRTLType rhs) {
+      return }]), resultTypeFunction, !cast<string>([{(lhs, rhs);
+    }
+    static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs) {
+      if (inputs.size() != 2)
+        return {};
+      return getResultType(inputs[0], inputs[1]);
+    }
+  }])));
+}
+
+def AddOp : BinPrimOp<"add", "getAddResult", [Commutative]> {
+  let summary = "Addition operation";
   let description = [{
     Add Operation:
     ```
@@ -385,24 +427,101 @@ def AddOp : FIRRTLOp<"add", [Commutative, NoSideEffect]> {
     The result width is max(we1, we2)+1
     The add operation result is the sum of e1 and e2 without loss of precision.
   }];
+}
 
-  let arguments = (ins AnyType:$lhs, AnyType:$rhs, OptionalAttr<StrAttr>:$name);
-  let results = (outs AnyType:$result);
-  
-  let assemblyFormat = [{
-    $lhs `,` $rhs  attr-dict `:`
-       `(` type($lhs) `,` type($rhs) `)` `->` type($result)
-  }];
+//===----------------------------------------------------------------------===//
+// Comparison Operations
+//===----------------------------------------------------------------------===//
 
-  let extraClassDeclaration = [{
-    /// Return the result for inputs with the specified type, returning a null
-    /// type if the input types are invalid.
-    static FIRRTLType getResultType(FIRRTLType lhs, FIRRTLType rhs);
-    static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs);
+def LEQOp : BinPrimOp<"leq", "getCompareResult", []> {
+  let summary = "Less Than Or Equal operation";
+  let description = [{
+    Less Than Or Equal operation:
+    ```
+       %result = firrt.leq %lhs, %rhs : (t1, t2) -> t3
+    ```
+
+    The two options are:
+    * add(UInt, UInt) -> UInt<1>
+    * add(SInt, SInt) -> UInt<1>
   }];
 }
 
-def AsClockOp : FIRRTLOp<"asClock", [Commutative, NoSideEffect]> {
+def LTOp : BinPrimOp<"lt", "getCompareResult", []> {
+  let summary = "Less Than operation";
+  let description = [{
+    Less Than operation:
+    ```
+       %result = firrt.lt %lhs, %rhs : (t1, t2) -> t3
+    ```
+
+    The two options are:
+    * add(UInt, UInt) -> UInt<1>
+    * add(SInt, SInt) -> UInt<1>
+  }];
+}
+
+def GEQOp : BinPrimOp<"geq", "getCompareResult", []> {
+  let summary = "Greater Than Or Equal operation";
+  let description = [{
+    Greater Than Or Equal operation:
+    ```
+       %result = firrt.geq %lhs, %rhs : (t1, t2) -> t3
+    ```
+
+    The two options are:
+    * add(UInt, UInt) -> UInt<1>
+    * add(SInt, SInt) -> UInt<1>
+  }];
+}
+
+def GTOp : BinPrimOp<"gt", "getCompareResult", []> {
+  let summary = "Greater Than operation";
+  let description = [{
+    Greater Than operation:
+    ```
+       %result = firrt.gt %lhs, %rhs : (t1, t2) -> t3
+    ```
+
+    The two options are:
+    * add(UInt, UInt) -> UInt<1>
+    * add(SInt, SInt) -> UInt<1>
+  }];
+}
+
+def EQOp : BinPrimOp<"eq", "getCompareResult", [Commutative]> {
+  let summary = "Equal To operation";
+  let description = [{
+    Equal To operation:
+    ```
+       %result = firrt.eq %lhs, %rhs : (t1, t2) -> t3
+    ```
+
+    The two options are:
+    * add(UInt, UInt) -> UInt<1>
+    * add(SInt, SInt) -> UInt<1>
+  }];
+}
+
+def NEQOp : BinPrimOp<"neq", "getCompareResult", [Commutative]> {
+  let summary = "Not Equal To operation";
+  let description = [{
+    Not Equal To operation:
+    ```
+       %result = firrt.neq %lhs, %rhs : (t1, t2) -> t3
+    ```
+
+    The two options are:
+    * add(UInt, UInt) -> UInt<1>
+    * add(SInt, SInt) -> UInt<1>
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Unary Operations
+//===----------------------------------------------------------------------===//
+
+def AsClockOp : PrimOp<"asClock", []> {
   let summary = " Interpret as Clock operation";
   let description = [{
      Interpret as Clock:
