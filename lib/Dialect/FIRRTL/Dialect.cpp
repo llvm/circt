@@ -491,16 +491,30 @@ FIRRTLType firrtl::getCompareResult(FIRRTLType lhs, FIRRTLType rhs) {
 // Unary Primitives
 //===----------------------------------------------------------------------===//
 
-FIRRTLType AsClockOp::getResultType(FIRRTLType input) {
+FIRRTLType firrtl::getAsClockResult(FIRRTLType input) {
   if (input.isa<UIntType>() || input.isa<SIntType>() || input.isa<ClockType>())
     return ClockType::get(input.getContext());
   return {};
 }
 
-FIRRTLType AsClockOp::getResultType(ArrayRef<FIRRTLType> inputs) {
-  if (inputs.size() != 1)
-    return {};
-  return getResultType(inputs[0]);
+FIRRTLType firrtl::getAsSIntResult(FIRRTLType input) {
+  if (input.isa<ClockType>() || input.isa<ResetType>())
+    return SIntType::get(input.getContext(), 1);
+  if (input.isa<SIntType>())
+    return input;
+  if (auto ui = input.dyn_cast<UIntType>())
+    return SIntType::get(input.getContext(), ui.getWidthOrSentinel());
+  return {};
+}
+
+FIRRTLType firrtl::getAsUIntResult(FIRRTLType input) {
+  if (input.isa<ClockType>() || input.isa<ResetType>())
+    return UIntType::get(input.getContext(), 1);
+  if (input.isa<UIntType>())
+    return input;
+  if (auto si = input.dyn_cast<SIntType>())
+    return UIntType::get(input.getContext(), si.getWidthOrSentinel());
+  return {};
 }
 
 #define GET_OP_CLASSES

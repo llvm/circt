@@ -34,6 +34,9 @@ public:
 
 FIRRTLType getAddResult(FIRRTLType lhs, FIRRTLType rhs);
 FIRRTLType getCompareResult(FIRRTLType lhs, FIRRTLType rhs);
+FIRRTLType getAsClockResult(FIRRTLType input);
+FIRRTLType getAsSIntResult(FIRRTLType input);
+FIRRTLType getAsUIntResult(FIRRTLType input);
 
 #define GET_OP_CLASSES
 #include "spt/Dialect/FIRRTL/IR/FIRRTL.h.inc"

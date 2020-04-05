@@ -855,10 +855,11 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result,
   // FIXME: This is temporary until we finish implementing all of the
   // primitives.
   using XXX = AddOp;
-  if (kind != FIRToken::lp_add && kind != FIRToken::lp_asClock &&
-      kind != FIRToken::lp_lt && kind != FIRToken::lp_leq &&
-      kind != FIRToken::lp_gt && kind != FIRToken::lp_geq &&
-      kind != FIRToken::lp_eq && kind != FIRToken::lp_neq)
+  if (kind != FIRToken::lp_add && kind != FIRToken::lp_lt &&
+      kind != FIRToken::lp_leq && kind != FIRToken::lp_gt &&
+      kind != FIRToken::lp_geq && kind != FIRToken::lp_eq &&
+      kind != FIRToken::lp_neq && kind != FIRToken::lp_asClock &&
+      kind != FIRToken::lp_asSInt && kind != FIRToken::lp_asUInt)
     return emitError(loc, "unsupported primitive"), failure();
 
   auto typeError = [&](StringRef opName) -> ParseResult {

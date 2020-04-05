@@ -387,9 +387,9 @@ class PrimOp<string mnemonic, list<OpTrait> traits = []> :
 //===----------------------------------------------------------------------===//
 
 // Base class for binary primitive operators.
-class BinPrimOp<string mnemonic, string resultTypeFunction, 
-                list<OpTrait> traits = []> :
-    FIRRTLOp<mnemonic, traits> {
+class BinaryPrimOp<string mnemonic, string resultTypeFunction, 
+                   list<OpTrait> traits = []> :
+    PrimOp<mnemonic, traits> {
   let arguments = (ins AnyType:$lhs, AnyType:$rhs, OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
   
@@ -412,7 +412,7 @@ class BinPrimOp<string mnemonic, string resultTypeFunction,
   }])));
 }
 
-def AddOp : BinPrimOp<"add", "getAddResult", [Commutative]> {
+def AddOp : BinaryPrimOp<"add", "getAddResult", [Commutative]> {
   let summary = "Addition operation";
   let description = [{
     Add Operation:
@@ -433,7 +433,7 @@ def AddOp : BinPrimOp<"add", "getAddResult", [Commutative]> {
 // Comparison Operations
 //===----------------------------------------------------------------------===//
 
-def LEQOp : BinPrimOp<"leq", "getCompareResult", []> {
+def LEQOp : BinaryPrimOp<"leq", "getCompareResult", []> {
   let summary = "Less Than Or Equal operation";
   let description = [{
     Less Than Or Equal operation:
@@ -447,7 +447,7 @@ def LEQOp : BinPrimOp<"leq", "getCompareResult", []> {
   }];
 }
 
-def LTOp : BinPrimOp<"lt", "getCompareResult", []> {
+def LTOp : BinaryPrimOp<"lt", "getCompareResult", []> {
   let summary = "Less Than operation";
   let description = [{
     Less Than operation:
@@ -461,7 +461,7 @@ def LTOp : BinPrimOp<"lt", "getCompareResult", []> {
   }];
 }
 
-def GEQOp : BinPrimOp<"geq", "getCompareResult", []> {
+def GEQOp : BinaryPrimOp<"geq", "getCompareResult", []> {
   let summary = "Greater Than Or Equal operation";
   let description = [{
     Greater Than Or Equal operation:
@@ -475,7 +475,7 @@ def GEQOp : BinPrimOp<"geq", "getCompareResult", []> {
   }];
 }
 
-def GTOp : BinPrimOp<"gt", "getCompareResult", []> {
+def GTOp : BinaryPrimOp<"gt", "getCompareResult", []> {
   let summary = "Greater Than operation";
   let description = [{
     Greater Than operation:
@@ -489,7 +489,7 @@ def GTOp : BinPrimOp<"gt", "getCompareResult", []> {
   }];
 }
 
-def EQOp : BinPrimOp<"eq", "getCompareResult", [Commutative]> {
+def EQOp : BinaryPrimOp<"eq", "getCompareResult", [Commutative]> {
   let summary = "Equal To operation";
   let description = [{
     Equal To operation:
@@ -503,7 +503,7 @@ def EQOp : BinPrimOp<"eq", "getCompareResult", [Commutative]> {
   }];
 }
 
-def NEQOp : BinPrimOp<"neq", "getCompareResult", [Commutative]> {
+def NEQOp : BinaryPrimOp<"neq", "getCompareResult", [Commutative]> {
   let summary = "Not Equal To operation";
   let description = [{
     Not Equal To operation:
@@ -521,30 +521,69 @@ def NEQOp : BinPrimOp<"neq", "getCompareResult", [Commutative]> {
 // Unary Operations
 //===----------------------------------------------------------------------===//
 
-def AsClockOp : PrimOp<"asClock", []> {
+// Base class for binary primitive operators.
+class UnaryPrimOp<string mnemonic, string resultTypeFunction, 
+                  list<OpTrait> traits = []> :
+    PrimOp<mnemonic, traits> {
+  let arguments = (ins AnyType:$input, OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  let assemblyFormat = [{
+    $input attr-dict `:` functional-type($input, $result)
+  }];
+
+  let extraClassDeclaration = !cast<code>(!strconcat(!cast<string>([{
+    /// Return the result for inputs with the specified type, returning a null
+    /// type if the input types are invalid.
+    static FIRRTLType getResultType(FIRRTLType input) {
+      return }]), resultTypeFunction, !cast<string>([{(input);
+    }
+    static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs) {
+      if (inputs.size() != 1)
+        return {};
+      return getResultType(inputs[0]);
+    }
+  }])));
+}
+
+def AsSIntOp : UnaryPrimOp<"asSInt", "getAsSIntResult", []> {
+  let summary = " Interpret as SInt operation";
+  let description = [{
+     Interpret as SInt:
+    ```
+       %result = firrt.asSInt %lhs : (input) -> result
+    ```
+
+    The result of the interpret as SInt operation is the SInt typed signal,
+    which is 1-bit in the case of a Clock input, or the matching width of an
+    SInt or UInt input.
+  }];
+}
+
+def AsUIntOp : UnaryPrimOp<"asUInt", "getAsUIntResult", []> {
+  let summary = " Interpret as UInt operation";
+  let description = [{
+     Interpret as UInt:
+    ```
+       %result = firrt.asUInt %lhs : (input) -> result
+    ```
+
+    The result of the interpret as UInt operation is the UInt typed signal,
+    which is 1-bit in the case of a Clock input, or the matching width of an
+    SInt or UInt input.
+  }];
+}
+
+def AsClockOp : UnaryPrimOp<"asClock", "getAsClockResult", []> {
   let summary = " Interpret as Clock operation";
   let description = [{
      Interpret as Clock:
     ```
-       %result = firrt.asClock %lhs : t1
+       %result = firrt.asClock %lhs : (input) -> result
     ```
 
     The result of the interpret as clock operation is the Clock typed signal
     obtained from interpreting a single bit integer as a clock signal.
-  }];
-
-  let arguments = (ins AnyType:$input, OptionalAttr<StrAttr>:$name);
-  let results = (outs ClockType:$result);
-  
-  let assemblyFormat = [{
-    $input attr-dict `:` type($input) 
-  }];
-
-  let extraClassDeclaration = [{
-    /// Return the result for inputs with the specified type, returning a null
-    /// type if the input types are invalid.
-    static FIRRTLType getResultType(FIRRTLType input);
-    static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs);
   }];
 }
 

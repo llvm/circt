@@ -122,8 +122,8 @@ TOK_LPKEYWORD(andr, XXX, 1, 0)
 TOK_LPKEYWORD(asClock, AsClockOp, 1, 0)
 // TOK_LPKEYWORD(asFixedPoint) -> undocumented
 // TOK_LPKEYWORD(asInterval) -> undocumented
-TOK_LPKEYWORD(asSInt, XXX, 1, 0)
-TOK_LPKEYWORD(asUInt, XXX, 1, 0)
+TOK_LPKEYWORD(asSInt, AsSIntOp, 1, 0)
+TOK_LPKEYWORD(asUInt, AsUIntOp, 1, 0)
 TOK_LPKEYWORD(bits, XXX, 1, 2)
 TOK_LPKEYWORD(cat, XXX, 2, 0)
 // TOK_LPKEYWORD(clip) -> undocumented.

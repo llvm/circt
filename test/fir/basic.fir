@@ -83,7 +83,7 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.add %reset, %reset : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
     node n2 = add(reset, reset)
 
-    ; CHECK: firrtl.asClock %reset : !firrtl.uint<1>
+    ; CHECK: firrtl.asClock %reset : (!firrtl.uint<1>) -> !firrtl.clock
     node n3 = asClock(reset)
 
     ; CHECK: firrtl.constant 42 : !firrtl.uint<10>

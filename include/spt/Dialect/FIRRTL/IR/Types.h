@@ -89,6 +89,14 @@ public:
   using FIRRTLType::TypeBase<ConcreteType, FIRRTLType,
                              detail::WidthTypeStorage>::Base::Base;
 
+  /// Return the width of this type, or -1 if it has none specified.
+  int32_t getWidthOrSentinel() {
+    auto width = static_cast<ConcreteType *>(this)->getWidth();
+    if (width.hasValue())
+      return width.getValue();
+    return -1;
+  }
+
   static bool kindof(unsigned kind) { return kind == typeKind; }
 };
 
