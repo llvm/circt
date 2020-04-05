@@ -852,18 +852,6 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result,
   for (auto v : operands)
     opTypes.push_back(v.getType().cast<FIRRTLType>());
 
-  // FIXME: This is temporary until we finish implementing all of the
-  // primitives.
-  using XXX = AddOp;
-  if (kind != FIRToken::lp_add && kind != FIRToken::lp_lt &&
-      kind != FIRToken::lp_leq && kind != FIRToken::lp_gt &&
-      kind != FIRToken::lp_geq && kind != FIRToken::lp_eq &&
-      kind != FIRToken::lp_neq && kind != FIRToken::lp_asClock &&
-      kind != FIRToken::lp_asSInt && kind != FIRToken::lp_asUInt &&
-      kind != FIRToken::lp_or && kind != FIRToken::lp_xor &&
-      kind != FIRToken::lp_and)
-    return emitError(loc, "unsupported primitive"), failure();
-
   auto typeError = [&](StringRef opName) -> ParseResult {
     auto diag = emitError(loc, "invalid input types for ") << opName;
     bool isFirst = false;
