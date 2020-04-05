@@ -71,7 +71,7 @@ struct FIRParser {
   const llvm::SourceMgr &getSourceMgr() { return state.lex.getSourceMgr(); }
 
   /// Return the indentation level of the specified token.
-  unsigned getIndentation() const {
+  Optional<unsigned> getIndentation() const {
     return state.lex.getIndentation(state.curToken);
   }
 
@@ -670,18 +670,24 @@ struct FIRStmtParser : public FIRScopedParser {
       : FIRScopedParser(state, symbolTable), builder(builder) {}
 
   ParseResult parseSimpleStmt(unsigned stmtIndent);
+  ParseResult parseSimpleStmtBlock(unsigned indent);
 
 private:
+  // Exp Parsing
   ParseResult parseExp(Value &result, SmallVectorImpl<Operation *> &subOps,
                        const Twine &message);
   ParseResult parsePrimExp(Value &result, SmallVectorImpl<Operation *> &subOps);
   ParseResult parseIntegerLiteralExp(Value &result,
                                      SmallVectorImpl<Operation *> &subOps);
 
+  // Stmt Parsing
   ParseResult parseSkip();
   ParseResult parseNode();
   ParseResult parseWire();
+  ParseResult parseWhen(unsigned whenIndent);
   ParseResult parseLeadingExpStmt();
+
+  // The builder to build into.
   OpBuilder builder;
 };
 
@@ -902,11 +908,32 @@ FIRStmtParser::parseIntegerLiteralExp(Value &result,
   return success();
 }
 
+/// simple_stmt_block ::= simple_stmt*
+ParseResult FIRStmtParser::parseSimpleStmtBlock(unsigned indent) {
+  while (true) {
+    auto subIndent = getIndentation();
+    if (!subIndent.hasValue())
+      return emitError("expected statement to be on its own line"), failure();
+
+    if (subIndent.getValue() <= indent)
+      return success();
+
+    // The outer level parser can handle these tokens.
+    if (getToken().isAny(FIRToken::eof, FIRToken::error))
+      return success();
+
+    // Let the statement parser handle this.
+    if (parseSimpleStmt(subIndent.getValue()))
+      return failure();
+  }
+}
+
 /// simple_stmt ::= stmt
 ///
 /// stmt ::= wire
 ///      ::= node
 ///      ::= skip
+///      ::= when
 ///      ::= leading-exp-stmt
 ///
 ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
@@ -917,6 +944,8 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
     return parseNode();
   case FIRToken::kw_wire:
     return parseWire();
+  case FIRToken::kw_when:
+    return parseWhen(stmtIndent);
 
   default:
     // Otherwise, this must be one of the productions that starts with an
@@ -976,6 +1005,71 @@ ParseResult FIRStmtParser::parseWire() {
   if (addSymbolEntry(id.getValue(), result, info.getFIRLoc()))
     return failure();
 
+  return success();
+}
+
+/// when  ::= 'when' exp ':' info? suite? ('else' ( when | ':' info? suite?) )?
+/// suite ::= simple_stmt | INDENT simple_stmt+ DEDENT
+ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
+  LocWithInfo info(getToken().getLoc(), this);
+  consumeToken(FIRToken::kw_when);
+
+  Value condition;
+  SmallVector<Operation *, 8> subOps;
+  if (parseExp(condition, subOps, "unexpected expression in when") ||
+      parseToken(FIRToken::colon, "expected ':' in when") ||
+      parseOptionalInfo(info))
+    return failure();
+
+  // If we had an info location, make sure all subexpression nodes get it.
+  info.applyInfoToSubexpressions(subOps);
+
+  // This is a function to parse a suite body.
+  auto parseSuite = [&](OpBuilder builder) -> ParseResult {
+    // Declarations within the suite are scoped to within the suite.
+    SymbolTable::ScopeTy suiteScope(symbolTable);
+
+    // We parse the substatements into their own parser, so they get insert
+    // into the specified 'when' region.
+    FIRStmtParser subParser(getState(), symbolTable, builder);
+
+    // Figure out whether the body is a single statement or a nested one.
+    auto stmtIndent = getIndentation();
+
+    // Parsing a single statment is straightforward.
+    if (!stmtIndent.hasValue())
+      return subParser.parseSimpleStmt(whenIndent);
+
+    if (stmtIndent <= whenIndent)
+      return emitError("when body must be indented more than when"), failure();
+
+    // Parse a block of statements that are indented more than the when.
+    return subParser.parseSimpleStmtBlock(whenIndent);
+  };
+
+  // FIXME: Create the IR representation for the when.
+  // FIXME: This should be using the right builder.
+  if (parseSuite(builder))
+    return failure();
+
+  // If the else is present, handle it otherwise we're done.
+  LocWithInfo elseInfo(getToken().getLoc(), this);
+  if (!consumeIf(FIRToken::kw_else))
+    return success();
+
+  // If we have the ':' form, then handle it.
+  if (getToken().is(FIRToken::kw_when)) {
+    // TODO: Handle the 'else when' syntactic sugar when we care.
+    return emitError("'else when' syntax not supported yet"), failure();
+  }
+
+  // FIXME: This should be passing in the right builder!
+  if (parseToken(FIRToken::colon, "expected ':' after 'else'") ||
+      parseOptionalInfo(elseInfo) || parseSuite(builder))
+    return failure();
+
+  // TODO: There is no reason for the 'else :' grammar to take an info.  It
+  //  doesn't appear to be generated either.
   return success();
 }
 
@@ -1143,8 +1237,7 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   return success();
 }
 
-/// module ::= 'module' id ':' info? INDENT portlist moduleBlock DEDENT
-/// moduleBlock ::= simple_stmt*
+/// module ::= 'module' id ':' info? INDENT portlist simple_stmt_block DEDENT
 ///
 ParseResult FIRModuleParser::parseModule(unsigned indent) {
   LocWithInfo info(getToken().getLoc(), this);
@@ -1178,19 +1271,7 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
   FIRStmtParser stmtParser(getState(), symbolTable, fmodule.getBodyBuilder());
 
   // Parse the moduleBlock.
-  while (true) {
-    unsigned subIndent = getIndentation();
-    if (subIndent <= indent)
-      return success();
-
-    // The outer level parser can handle these tokens.
-    if (getToken().isAny(FIRToken::eof, FIRToken::error))
-      return success();
-
-    // Let the statement parser handle this.
-    if (stmtParser.parseSimpleStmt(subIndent))
-      return failure();
-  }
+  return stmtParser.parseSimpleStmtBlock(indent);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1216,7 +1297,10 @@ private:
 /// circuit ::= 'circuit' id ':' info? INDENT module* DEDENT EOF
 ///
 ParseResult FIRCircuitParser::parseCircuit() {
-  unsigned circuitIndent = getIndentation();
+  auto indent = getIndentation();
+  if (!indent.hasValue())
+    return emitError("'circuit' must be first token on its line"), failure();
+  unsigned circuitIndent = indent.getValue();
 
   LocWithInfo info(getToken().getLoc(), this);
   StringAttr name;
@@ -1251,7 +1335,11 @@ ParseResult FIRCircuitParser::parseCircuit() {
 
     case FIRToken::kw_module:
     case FIRToken::kw_extmodule: {
-      unsigned moduleIndent = getIndentation();
+      auto indent = getIndentation();
+      if (!indent.hasValue())
+        return emitError("'module' must be first token on its line"), failure();
+      unsigned moduleIndent = indent.getValue();
+
       if (moduleIndent <= circuitIndent)
         return emitError("module should be indented more"), failure();
 

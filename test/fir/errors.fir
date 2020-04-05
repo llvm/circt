@@ -78,5 +78,16 @@ circuit test :
 ;// -----
 
 circuit test :
-  module invalid_add :
+  module invalid_int_literal :
    node n = add(UInt<8>("hAX"), UInt<10>(42))  ; expected-error {{invalid character in integer literal}}
+
+;// -----
+; When scopes are local to the body
+circuit test :
+  module invalid_name :
+    input reset : UInt<1>
+    output out : UInt<1>
+    when reset :
+      node n4 = reset
+    out <- n4   ; expected-error {{use of invalid name 'n4'}}
+

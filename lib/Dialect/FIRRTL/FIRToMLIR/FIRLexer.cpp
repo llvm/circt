@@ -71,7 +71,7 @@ FIRToken FIRLexer::emitError(const char *loc, const Twine &message) {
 }
 
 /// Return the indentation level of the specified token.
-unsigned FIRLexer::getIndentation(const FIRToken &tok) const {
+Optional<unsigned> FIRLexer::getIndentation(const FIRToken &tok) const {
   // Count the number of horizontal whitespace characters before the token.
   auto *bufStart = curBuffer.begin();
 
@@ -82,8 +82,12 @@ unsigned FIRLexer::getIndentation(const FIRToken &tok) const {
 
   unsigned indent = 0;
   const auto *ptr = (const char *)tok.getSpelling().data();
-  while (ptr != bufStart && !isVerticalWS(ptr[-1]) && isHorizontalWS(ptr[-1]))
+  while (ptr != bufStart && isHorizontalWS(ptr[-1]))
     --ptr, ++indent;
+
+  // If the character we stopped at isn't the start of line, then return none.
+  if (ptr != bufStart && !isVerticalWS(ptr[-1]))
+    return None;
 
   return indent;
 }

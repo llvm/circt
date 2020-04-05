@@ -86,8 +86,9 @@ public:
 
   mlir::Location translateLocation(llvm::SMLoc loc);
 
-  /// Return the indentation level of the specified token.
-  unsigned getIndentation(const FIRToken &tok) const;
+  /// Return the indentation level of the specified token or None if this token
+  /// is preceded by another token on the same line.
+  Optional<unsigned> getIndentation(const FIRToken &tok) const;
 
 private:
   // Helpers.

@@ -88,7 +88,22 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
 
     ; CHECK: firrtl.constant 42 : !firrtl.uint<10>
     ; CHECK: firrtl.constant 171 : !firrtl.uint<8>
+    ; CHECK: firrtl.add
+    ; CHECK: firrtl.connect %auto
     auto <= add(UInt<10>(42), UInt<8>("hAB"))
 
-    ;node _T_23 = or(_T_2[0], _T_2[1]) @[Parameters.scala 337:46]
+    ; CHECK: firrtl.connect %0, %1
+    ; CHECK: firrtl.partialconnect %0
+    when reset : _T <= _T_2 else : _T <- _T_2
 
+    ; CHECK: [[N4A:%.+]] = firrtl.node %1
+    ; CHECK: firrtl.connect %0, [[N4A]]
+    ; CHECK: [[N4B:%.+]] = firrtl.node %1
+    ; CHECK: firrtl.partialconnect %0, [[N4B]]
+    when reset :
+      node n4 = _T_2
+      _T <= n4
+    else :
+      node n4 = _T_2   ; 'n4' name is in unique scopes.
+      _T <- n4
+    
