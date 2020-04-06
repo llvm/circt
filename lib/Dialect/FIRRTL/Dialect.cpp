@@ -505,6 +505,27 @@ FIRRTLType firrtl::getBitwiseBinaryResult(FIRRTLType lhs, FIRRTLType rhs) {
   return {};
 }
 
+FIRRTLType firrtl::getDShlResult(FIRRTLType lhs, FIRRTLType rhs) {
+  int32_t width;
+  auto rhsui = rhs.dyn_cast<UIntType>();
+  if (!rhsui || !isSameIntegerType(lhs, lhs, width))
+    return {};
+
+  // If the left or right has unknown result type, then the operation does too.
+  if (width == -1 || !rhsui.getWidth().hasValue())
+    width = -1;
+  else
+    width = width + (1 << rhsui.getWidth().getValue()) - 1;
+  return getIntegerType(lhs.getContext(), lhs.isa<SIntType>(), width);
+}
+
+FIRRTLType firrtl::getDShrResult(FIRRTLType lhs, FIRRTLType rhs) {
+  int32_t width;
+  if (!rhs.isa<UIntType>() || !isSameIntegerType(lhs, lhs, width))
+    return {};
+  return lhs;
+}
+
 //===----------------------------------------------------------------------===//
 // Unary Primitives
 //===----------------------------------------------------------------------===//

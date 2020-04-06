@@ -446,16 +446,16 @@ def AndPrimOp : BinaryPrimOp<"and", "getBitwiseBinaryResult", [Commutative]>;
 def OrPrimOp  : BinaryPrimOp<"or",  "getBitwiseBinaryResult", [Commutative]>;
 def XorPrimOp : BinaryPrimOp<"xor", "getBitwiseBinaryResult", [Commutative]>;
 
-//===----------------------------------------------------------------------===//
 // Comparison Operations
-//===----------------------------------------------------------------------===//
-
 def LEQPrimOp : BinaryPrimOp<"leq", "getCompareResult", []>;
 def LTPrimOp  : BinaryPrimOp<"lt",  "getCompareResult", []>;
 def GEQPrimOp : BinaryPrimOp<"geq", "getCompareResult", []>;
 def GTPrimOp  : BinaryPrimOp<"gt",  "getCompareResult", []>;
 def EQPrimOp  : BinaryPrimOp<"eq",  "getCompareResult", [Commutative]>;
 def NEQPrimOp : BinaryPrimOp<"neq", "getCompareResult", [Commutative]>;
+
+def DShlPrimOp : BinaryPrimOp<"dshl", "getDShlResult", []>;
+def DShrPrimOp : BinaryPrimOp<"dshr", "getDShrResult", []>;
 
 //===----------------------------------------------------------------------===//
 // Unary Operations

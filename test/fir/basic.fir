@@ -136,3 +136,7 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.shl %i8, 4 : (!firrtl.uint<8>) -> !firrtl.uint<12>
     ; CHECK: firrtl.shr %i8, 8 : (!firrtl.uint<8>) -> !firrtl.uint<1>
     node n5 = or(shl(i8, 4), shr(i8, 8))
+  
+    ; CHECK: firrtl.dshl %i8, %24 : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<23>
+    node n6 = dshl(i8, UInt<4>(7))
+
