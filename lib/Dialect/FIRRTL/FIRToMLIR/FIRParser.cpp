@@ -167,6 +167,7 @@ struct FIRParser {
   //===--------------------------------------------------------------------===//
 
   /// Parse 'intLit' into the specified value.
+  ParseResult parseIntLit(int64_t &result, const Twine &message);
   ParseResult parseIntLit(int32_t &result, const Twine &message);
 
   // Parse ('<' intLit '>')? setting result to -1 if not present.
@@ -375,7 +376,7 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
 /// OctalLit  ::= '"' 'o' ( '+' | '-' )? ( OctalDigit )+ '"'
 /// BinaryLit ::= '"' 'b' ( '+' | '-' )? ( BinaryDigit )+ '"'
 ///
-ParseResult FIRParser::parseIntLit(int32_t &result, const Twine &message) {
+ParseResult FIRParser::parseIntLit(int64_t &result, const Twine &message) {
   auto spelling = getTokenSpelling();
   switch (getToken().getKind()) {
   case FIRToken::integer:
@@ -431,6 +432,18 @@ ParseResult FIRParser::parseIntLit(int32_t &result, const Twine &message) {
   default:
     return emitError("expected integer literal"), failure();
   }
+}
+
+ParseResult FIRParser::parseIntLit(int32_t &result, const Twine &message) {
+  int64_t value;
+  auto loc = getToken().getLoc();
+  if (parseIntLit(value, message))
+    return failure();
+
+  result = (int32_t)value;
+  if (result != value)
+    return emitError(loc, "value is too big to handle"), failure();
+  return success();
 }
 
 // optional-width ::= ('<' intLit '>')?
@@ -913,7 +926,8 @@ FIRStmtParser::parseIntegerLiteralExp(Value &result,
   consumeToken();
 
   // Parse a width specifier if present.
-  int32_t width, value;
+  int32_t width;
+  int64_t value;
   if (parseOptionalWidth(width) ||
       parseToken(FIRToken::l_paren, "expected '(' in integer expression") ||
       parseIntLit(value, "expected integer value") ||
@@ -922,7 +936,7 @@ FIRStmtParser::parseIntegerLiteralExp(Value &result,
 
   FIRRTLType resultType = getIntegerType(builder.getContext(), isSigned, width);
   result = builder.create<ConstantOp>(translateLocation(loc), resultType,
-                                      builder.getI32IntegerAttr(value),
+                                      builder.getI64IntegerAttr(value),
                                       /*optionalName*/ StringAttr());
   return success();
 }

@@ -188,7 +188,7 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect]> {
     ```
     }];
 
-  let arguments = (ins I32Attr:$value, OptionalAttr<StrAttr>:$name);
+  let arguments = (ins I64Attr:$value, OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
   
   // TODO: Could drop the result type, inferring it from the source.
