@@ -43,6 +43,8 @@ FIRRTLType getDShrResult(FIRRTLType lhs, FIRRTLType rhs);
 FIRRTLType getAsClockResult(FIRRTLType input);
 FIRRTLType getAsSIntResult(FIRRTLType input);
 FIRRTLType getAsUIntResult(FIRRTLType input);
+FIRRTLType getNotResult(FIRRTLType input);
+FIRRTLType getNegResult(FIRRTLType input);
 
 #define GET_OP_CLASSES
 #include "spt/Dialect/FIRRTL/IR/FIRRTL.h.inc"

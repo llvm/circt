@@ -487,9 +487,11 @@ class UnaryPrimOp<string mnemonic, string resultTypeFunction,
   }])));
 }
 
-def AsSIntPrimOp : UnaryPrimOp<"asSInt", "getAsSIntResult", []>;
-def AsUIntPrimOp : UnaryPrimOp<"asUInt", "getAsUIntResult", []>;
+def AsSIntPrimOp  : UnaryPrimOp<"asSInt", "getAsSIntResult", []>;
+def AsUIntPrimOp  : UnaryPrimOp<"asUInt", "getAsUIntResult", []>;
 def AsClockPrimOp : UnaryPrimOp<"asClock", "getAsClockResult", []>;
+def NegPrimOp     : UnaryPrimOp<"neg", "getNegResult", []>;
+def NotPrimOp     : UnaryPrimOp<"not", "getNotResult", []>;
 
 //===----------------------------------------------------------------------===//
 // Other Operations
