@@ -522,6 +522,29 @@ def BitsPrimOp : PrimOp<"bits", []> {
   }];
 }
 
+def MuxPrimOp : PrimOp<"mux", []> {
+  let arguments = (ins AnyType:$sel, AnyType:$high, AnyType:$low,
+                       OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  let assemblyFormat = [{
+    `(` operands `)` attr-dict `:` functional-type(operands, $result)
+  }];
+
+  let extraClassDeclaration = [{
+    /// Return the result for inputs with the specified type, returning a null
+    /// type if the input types are invalid.
+    static FIRRTLType getResultType(FIRRTLType sel, FIRRTLType high,
+                                    FIRRTLType low);
+    static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
+                                    ArrayRef<int32_t> integers) {
+      if (inputs.size() != 3 || integers.size() != 0)
+        return {};
+      return getResultType(inputs[0], inputs[1], inputs[2]);
+    }
+  }];
+}
+
 class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic, []> {
   let arguments = (ins AnyType:$input, I32Attr:$amount,
                        OptionalAttr<StrAttr>:$name);

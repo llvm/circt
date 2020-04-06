@@ -627,6 +627,53 @@ FIRRTLType BitsPrimOp::getResultType(FIRRTLType input, int32_t high,
   return {};
 }
 
+FIRRTLType MuxPrimOp::getResultType(FIRRTLType sel, FIRRTLType high,
+                                    FIRRTLType low) {
+  // Sel needs to be a one bit uint or an unknown width uint.
+  auto selui = sel.dyn_cast<UIntType>();
+  if (!selui || selui.getWidthOrSentinel() > 1)
+    return {};
+
+  // FIXME: This should be defined in terms of a more general type equivalence
+  // operator.  We actually need a 'meet' operator of some sort.
+  if (high == low)
+    return low;
+
+  // The base types need to be equivalent.
+  if (high.getKind() != low.getKind())
+    return {};
+  if (low.isa<ClockType>() || low.isa<ResetType>())
+    return low;
+
+  // Two different UInt types can be compatible.  If either has unknown width,
+  // then return it.  If both are known but different width, then return the
+  // larger one.
+  if (auto lowui = low.dyn_cast<UIntType>()) {
+    if (!lowui.getWidth().hasValue())
+      return lowui;
+    auto highui = high.cast<UIntType>();
+    if (!highui.getWidth().hasValue())
+      return highui;
+    if (lowui.getWidth().getValue() > highui.getWidth().getValue())
+      return low;
+    return high;
+  }
+
+  if (auto lowsi = low.dyn_cast<SIntType>()) {
+    if (!lowsi.getWidth().hasValue())
+      return lowsi;
+    auto highsi = high.cast<SIntType>();
+    if (!highsi.getWidth().hasValue())
+      return highsi;
+    if (lowsi.getWidth().getValue() > highsi.getWidth().getValue())
+      return low;
+    return high;
+  }
+
+  // FIXME: Should handle bundles and other things.
+  return {};
+}
+
 FIRRTLType ShlPrimOp::getResultType(FIRRTLType input, int32_t amount) {
   int32_t width;
   if (amount < 0 || !isSameIntegerType(input, input, width))

@@ -719,7 +719,6 @@ private:
 ///      ::= exp '[' intLit ']'
 /// XX   ::= exp '.' DoubleLit // TODO Workaround for #470
 /// XX   ::= exp '[' exp ']'
-/// XX   ::= 'mux(' exp exp exp ')'
 /// XX   ::= 'validif(' exp exp ')'
 ///
 ParseResult FIRStmtParser::parseExp(Value &result,
