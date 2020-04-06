@@ -36,6 +36,7 @@ public:
 FIRRTLType getAddResult(FIRRTLType lhs, FIRRTLType rhs);
 FIRRTLType getCompareResult(FIRRTLType lhs, FIRRTLType rhs);
 FIRRTLType getBitwiseBinaryResult(FIRRTLType lhs, FIRRTLType rhs);
+FIRRTLType getCatResult(FIRRTLType lhs, FIRRTLType rhs);
 FIRRTLType getDShlResult(FIRRTLType lhs, FIRRTLType rhs);
 FIRRTLType getDShrResult(FIRRTLType lhs, FIRRTLType rhs);
 
@@ -43,6 +44,7 @@ FIRRTLType getDShrResult(FIRRTLType lhs, FIRRTLType rhs);
 FIRRTLType getAsClockResult(FIRRTLType input);
 FIRRTLType getAsSIntResult(FIRRTLType input);
 FIRRTLType getAsUIntResult(FIRRTLType input);
+FIRRTLType getCvtResult(FIRRTLType input);
 FIRRTLType getNotResult(FIRRTLType input);
 FIRRTLType getNegResult(FIRRTLType input);
 

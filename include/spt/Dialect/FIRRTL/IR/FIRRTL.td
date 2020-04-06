@@ -454,6 +454,7 @@ def GTPrimOp  : BinaryPrimOp<"gt",  "getCompareResult", []>;
 def EQPrimOp  : BinaryPrimOp<"eq",  "getCompareResult", [Commutative]>;
 def NEQPrimOp : BinaryPrimOp<"neq", "getCompareResult", [Commutative]>;
 
+def CatPrimOp  : BinaryPrimOp<"cat", "getCatResult", []>;
 def DShlPrimOp : BinaryPrimOp<"dshl", "getDShlResult", []>;
 def DShrPrimOp : BinaryPrimOp<"dshr", "getDShrResult", []>;
 
@@ -490,6 +491,7 @@ class UnaryPrimOp<string mnemonic, string resultTypeFunction,
 def AsSIntPrimOp  : UnaryPrimOp<"asSInt", "getAsSIntResult", []>;
 def AsUIntPrimOp  : UnaryPrimOp<"asUInt", "getAsUIntResult", []>;
 def AsClockPrimOp : UnaryPrimOp<"asClock", "getAsClockResult", []>;
+def CvtPrimOp     : UnaryPrimOp<"cvt", "getCvtResult", []>;
 def NegPrimOp     : UnaryPrimOp<"neg", "getNegResult", []>;
 def NotPrimOp     : UnaryPrimOp<"not", "getNotResult", []>;
 

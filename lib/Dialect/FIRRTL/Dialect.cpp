@@ -501,7 +501,25 @@ FIRRTLType firrtl::getBitwiseBinaryResult(FIRRTLType lhs, FIRRTLType rhs) {
   int32_t width;
   if (isSameIntegerType(lhs, rhs, width))
     return UIntType::get(lhs.getContext(), width);
+  return {};
+}
 
+FIRRTLType firrtl::getCatResult(FIRRTLType lhs, FIRRTLType rhs) {
+
+  if (auto lu = lhs.dyn_cast<UIntType>())
+    if (auto ru = rhs.dyn_cast<UIntType>()) {
+      int32_t width = -1;
+      if (lu.getWidth().hasValue() && ru.getWidth().hasValue())
+        width = lu.getWidthOrSentinel() + ru.getWidthOrSentinel();
+      return UIntType::get(lhs.getContext(), width);
+    }
+  if (auto ls = lhs.dyn_cast<SIntType>())
+    if (auto rs = rhs.dyn_cast<SIntType>()) {
+      int32_t width = -1;
+      if (ls.getWidth().hasValue() && rs.getWidth().hasValue())
+        width = ls.getWidthOrSentinel() + rs.getWidthOrSentinel();
+      return UIntType::get(lhs.getContext(), width);
+    }
   return {};
 }
 
@@ -553,6 +571,20 @@ FIRRTLType firrtl::getAsUIntResult(FIRRTLType input) {
     return input;
   if (auto si = input.dyn_cast<SIntType>())
     return UIntType::get(input.getContext(), si.getWidthOrSentinel());
+  return {};
+}
+
+FIRRTLType firrtl::getCvtResult(FIRRTLType input) {
+  if (auto uiType = input.dyn_cast<UIntType>()) {
+    auto width = uiType.getWidthOrSentinel();
+    if (width != -1)
+      ++width;
+    return SIntType::get(input.getContext(), width);
+  }
+
+  if (input.isa<SIntType>())
+    return input;
+
   return {};
 }
 
