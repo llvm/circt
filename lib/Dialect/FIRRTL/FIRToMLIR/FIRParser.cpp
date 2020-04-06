@@ -857,14 +857,30 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result,
     return failure();
   };
 
-  SmallVector<NamedAttribute, 2> attrs;
-
-  if (kind == FIRToken::lp_bits && integers.size() == 2) {
-    attrs.push_back(
-        builder.getNamedAttr("hi", builder.getI32IntegerAttr(integers[0])));
-    attrs.push_back(
-        builder.getNamedAttr("lo", builder.getI32IntegerAttr(integers[1])));
+  SmallVector<StringRef, 2> attrNames;
+  switch (kind) {
+  default:
+    break;
+  case FIRToken::lp_bits:
+    attrNames.push_back("hi");
+    attrNames.push_back("lo");
+    break;
+  case FIRToken::lp_shl:
+  case FIRToken::lp_shr:
+    attrNames.push_back("amount");
+    break;
   }
+
+  if (integers.size() != attrNames.size()) {
+    emitError(loc,
+              "expected " + Twine(attrNames.size()) + " constant arguments");
+    return failure();
+  }
+
+  SmallVector<NamedAttribute, 2> attrs;
+  for (size_t i = 0, e = attrNames.size(); i != e; ++i)
+    attrs.push_back(builder.getNamedAttr(
+        attrNames[i], builder.getI32IntegerAttr(integers[i])));
 
   switch (kind) {
   default:

@@ -496,7 +496,8 @@ def AsClockPrimOp : UnaryPrimOp<"asClock", "getAsClockResult", []>;
 //===----------------------------------------------------------------------===//
 
 def BitsPrimOp : PrimOp<"bits", []> {
- let arguments = (ins AnyType:$input, I32Attr:$hi, I32Attr:$lo, OptionalAttr<StrAttr>:$name);
+  let arguments = (ins AnyType:$input, I32Attr:$hi, I32Attr:$lo,
+                       OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
   
   let assemblyFormat = [{
@@ -517,6 +518,29 @@ def BitsPrimOp : PrimOp<"bits", []> {
   }];
 }
 
+class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic, []> {
+  let arguments = (ins AnyType:$input, I32Attr:$amount,
+                       OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  let assemblyFormat = [{
+    $input `,` $amount attr-dict `:` functional-type($input, $result)
+  }];
 
+  let extraClassDeclaration = [{
+    /// Return the result for inputs with the specified type, returning a null
+    /// type if the input types are invalid.
+    static FIRRTLType getResultType(FIRRTLType input, int32_t amount);
+    static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
+                                    ArrayRef<int32_t> integers) {
+      if (inputs.size() != 1 || integers.size() != 1)
+        return {};
+      return getResultType(inputs[0], integers[0]);
+    }
+  }];
+}
+
+def ShlPrimOp : ShiftPrimOp<"shl">;
+def ShrPrimOp : ShiftPrimOp<"shr">;
 
 #endif // FIRRTL_OPS

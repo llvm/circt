@@ -558,5 +558,30 @@ FIRRTLType BitsPrimOp::getResultType(FIRRTLType input, int32_t high,
   return {};
 }
 
+FIRRTLType ShlPrimOp::getResultType(FIRRTLType input, int32_t amount) {
+  int32_t width;
+  if (amount < 0 || !isSameIntegerType(input, input, width))
+    return {};
+
+  if (width != -1)
+    width += amount;
+
+  return getIntegerType(input.getContext(), input.isa<SIntType>(), width);
+}
+
+FIRRTLType ShrPrimOp::getResultType(FIRRTLType input, int32_t amount) {
+  int32_t width;
+  if (amount < 0 || !isSameIntegerType(input, input, width))
+    return {};
+
+  if (width != -1) {
+    if (amount > width)
+      return {};
+    width = std::max(1, width - amount);
+  }
+
+  return getIntegerType(input.getContext(), input.isa<SIntType>(), width);
+}
+
 #define GET_OP_CLASSES
 #include "spt/Dialect/FIRRTL/IR/FIRRTL.cpp.inc"
