@@ -41,7 +41,8 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
   module stmts :
     input reset : UInt<1>    ; CHECK: %reset: !firrtl.uint<1>,
     input clock : Clock      ; CHECK: %clock: !firrtl.clock,
-    output auto : UInt<1>    ; CHECK: %auto: !firrtl.flip<uint<1>>)
+    output auto : UInt<1>    ; CHECK: %auto: !firrtl.flip<uint<1>>,
+    input i8 : UInt<8>       ; CHECK: %i8: !firrtl.uint<8>)
 
     ; CHECK: %0 = firrtl.wire {name = "_T"} : !firrtl.vector<uint<1>, 12>
     wire _T : UInt<1>[12] @[Nodes.scala 370:76]
@@ -128,5 +129,8 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
 
     ; CHECK: firrtl.stop %clock, %reset, 42
     stop(clock, reset, 42)
+
+    ; CHECK: firrtl.bits %i8 4 to 2 : (!firrtl.uint<8>) -> !firrtl.uint<3>
+    node n4 = bits(i8, 4, 2)
 
     

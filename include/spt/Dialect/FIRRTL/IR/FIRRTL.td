@@ -409,7 +409,6 @@ class PrimOp<string mnemonic, list<OpTrait> traits = []> :
   }];
 }
 
-
 //===----------------------------------------------------------------------===//
 // Binary Operations
 //===----------------------------------------------------------------------===//
@@ -432,30 +431,31 @@ class BinaryPrimOp<string mnemonic, string resultTypeFunction,
     static FIRRTLType getResultType(FIRRTLType lhs, FIRRTLType rhs) {
       return }]), resultTypeFunction, !cast<string>([{(lhs, rhs);
     }
-    static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs) {
-      if (inputs.size() != 2)
+    static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
+                                    ArrayRef<int32_t> integers) {
+      if (inputs.size() != 2 || !integers.empty())
         return {};
       return getResultType(inputs[0], inputs[1]);
     }
   }])));
 }
 
-def AddOp : BinaryPrimOp<"add", "getAddResult", [Commutative]>;
+def AddPrimOp : BinaryPrimOp<"add", "getAddResult", [Commutative]>;
 
-def AndOp : BinaryPrimOp<"and", "getBitwiseBinaryResult", [Commutative]>;
-def OrOp  : BinaryPrimOp<"or",  "getBitwiseBinaryResult", [Commutative]>;
-def XorOp : BinaryPrimOp<"xor", "getBitwiseBinaryResult", [Commutative]>;
+def AndPrimOp : BinaryPrimOp<"and", "getBitwiseBinaryResult", [Commutative]>;
+def OrPrimOp  : BinaryPrimOp<"or",  "getBitwiseBinaryResult", [Commutative]>;
+def XorPrimOp : BinaryPrimOp<"xor", "getBitwiseBinaryResult", [Commutative]>;
 
 //===----------------------------------------------------------------------===//
 // Comparison Operations
 //===----------------------------------------------------------------------===//
 
-def LEQOp : BinaryPrimOp<"leq", "getCompareResult", []>;
-def LTOp  : BinaryPrimOp<"lt",  "getCompareResult", []>;
-def GEQOp : BinaryPrimOp<"geq", "getCompareResult", []>;
-def GTOp  : BinaryPrimOp<"gt",  "getCompareResult", []>;
-def EQOp  : BinaryPrimOp<"eq",  "getCompareResult", [Commutative]>;
-def NEQOp : BinaryPrimOp<"neq", "getCompareResult", [Commutative]>;
+def LEQPrimOp : BinaryPrimOp<"leq", "getCompareResult", []>;
+def LTPrimOp  : BinaryPrimOp<"lt",  "getCompareResult", []>;
+def GEQPrimOp : BinaryPrimOp<"geq", "getCompareResult", []>;
+def GTPrimOp  : BinaryPrimOp<"gt",  "getCompareResult", []>;
+def EQPrimOp  : BinaryPrimOp<"eq",  "getCompareResult", [Commutative]>;
+def NEQPrimOp : BinaryPrimOp<"neq", "getCompareResult", [Commutative]>;
 
 //===----------------------------------------------------------------------===//
 // Unary Operations
@@ -478,16 +478,45 @@ class UnaryPrimOp<string mnemonic, string resultTypeFunction,
     static FIRRTLType getResultType(FIRRTLType input) {
       return }]), resultTypeFunction, !cast<string>([{(input);
     }
-    static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs) {
-      if (inputs.size() != 1)
+    static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
+                                    ArrayRef<int32_t> integers) {
+      if (inputs.size() != 1 || !integers.empty())
         return {};
       return getResultType(inputs[0]);
     }
   }])));
 }
 
-def AsSIntOp : UnaryPrimOp<"asSInt", "getAsSIntResult", []>;
-def AsUIntOp : UnaryPrimOp<"asUInt", "getAsUIntResult", []>;
-def AsClockOp : UnaryPrimOp<"asClock", "getAsClockResult", []>;
+def AsSIntPrimOp : UnaryPrimOp<"asSInt", "getAsSIntResult", []>;
+def AsUIntPrimOp : UnaryPrimOp<"asUInt", "getAsUIntResult", []>;
+def AsClockPrimOp : UnaryPrimOp<"asClock", "getAsClockResult", []>;
+
+//===----------------------------------------------------------------------===//
+// Other Operations
+//===----------------------------------------------------------------------===//
+
+def BitsPrimOp : PrimOp<"bits", []> {
+ let arguments = (ins AnyType:$input, I32Attr:$hi, I32Attr:$lo, OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  let assemblyFormat = [{
+    $input $hi `to` $lo attr-dict `:` functional-type($input, $result)
+  }];
+
+  let extraClassDeclaration = [{
+    /// Return the result for inputs with the specified type, returning a null
+    /// type if the input types are invalid.
+    static FIRRTLType getResultType(FIRRTLType input, int32_t high,
+                                    int32_t low);
+    static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
+                                    ArrayRef<int32_t> integers) {
+      if (inputs.size() != 1 || integers.size() != 2)
+        return {};
+      return getResultType(inputs[0], integers[0], integers[1]);
+    }
+  }];
+}
+
+
 
 #endif // FIRRTL_OPS

@@ -817,8 +817,19 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result,
 
   // Parse the operands and constant integer arguments.
   SmallVector<Value, 4> operands;
+  SmallVector<int32_t, 4> integers;
   if (parseCommaSeparatedListUntil(FIRToken::r_paren, [&]() -> ParseResult {
-        // FIXME: This isn't handling the intLit case.
+        // Handle the integer constant case if present.
+        if (getToken().isAny(FIRToken::integer, FIRToken::string)) {
+          integers.push_back(0);
+          return parseIntLit(integers.back(), "expected integer");
+        }
+
+        // Otherwise it must be a value operand.  These must all come before the
+        // integers.
+        if (!integers.empty())
+          return emitError("expected more integer constants"), failure();
+
         Value operand;
         if (parseExp(operand, subOps,
                      "expected expression in primitive operand"))
@@ -846,7 +857,15 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result,
     return failure();
   };
 
-  ArrayRef<NamedAttribute> attrs;
+  SmallVector<NamedAttribute, 2> attrs;
+
+  if (kind == FIRToken::lp_bits && integers.size() == 2) {
+    attrs.push_back(
+        builder.getNamedAttr("hi", builder.getI32IntegerAttr(integers[0])));
+    attrs.push_back(
+        builder.getNamedAttr("lo", builder.getI32IntegerAttr(integers[1])));
+  }
+
   switch (kind) {
   default:
     emitError(loc, "primitive not supported yet");
@@ -854,7 +873,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result,
 
 #define TOK_LPKEYWORD_PRIM(SPELLING, CLASS)                                    \
   case FIRToken::lp_##SPELLING: {                                              \
-    auto resultTy = CLASS::getResultType(opTypes);                             \
+    auto resultTy = CLASS::getResultType(opTypes, integers);                   \
     if (!resultTy)                                                             \
       return typeError(#SPELLING);                                             \
     result = builder.create<CLASS>(translateLocation(loc), resultTy,           \

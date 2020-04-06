@@ -535,5 +535,28 @@ FIRRTLType firrtl::getAsUIntResult(FIRRTLType input) {
   return {};
 }
 
+//===----------------------------------------------------------------------===//
+// Other Operations
+//===----------------------------------------------------------------------===//
+
+FIRRTLType BitsPrimOp::getResultType(FIRRTLType input, int32_t high,
+                                     int32_t low) {
+  // High must be >= low and both most be non-negative.
+  if (high < low || low < 0)
+    return {};
+
+  int32_t width;
+  if (isSameIntegerType(input, input, width)) {
+    // If the input has staticly known width, check it.  Both and low must be
+    // strictly less than width.
+    if (width != -1 && high >= width)
+      return {};
+
+    return UIntType::get(input.getContext(), high - low + 1);
+  }
+
+  return {};
+}
+
 #define GET_OP_CLASSES
 #include "spt/Dialect/FIRRTL/IR/FIRRTL.cpp.inc"
