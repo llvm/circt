@@ -236,6 +236,7 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
     // the printer exactly (not name mangled with a suffix etc) then we can
     // omit the firrtl.name attribute from the argument attribute dictionary.
     ArrayRef<StringRef> elidedAttrs;
+    StringRef tmp;
     if (argumentValue) {
       if (auto nameAttr = getFIRRTLNameAttr(argAttrs)) {
 
@@ -245,8 +246,10 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
         p.printOperand(argumentValue, tmpStream);
 
         // If the name is the same as we would otherwise use, then we're good!
-        if (tmpStream.str().drop_front() == nameAttr.getValue())
-          elidedAttrs = {"firrtl.name"};
+        if (tmpStream.str().drop_front() == nameAttr.getValue()) {
+          tmp = "firrtl.name";
+          elidedAttrs = tmp;
+        }
       }
     }
     p.printOptionalAttrDict(argAttrs, elidedAttrs);
