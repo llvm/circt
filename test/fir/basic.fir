@@ -150,3 +150,6 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     reg _T_2621 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0")) @[Edges.scala 230:27]
 
+    ; CHECK: firrtl.div %i8, %34 : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<8>
+    node n9 = div(i8, UInt<4>(4))
+

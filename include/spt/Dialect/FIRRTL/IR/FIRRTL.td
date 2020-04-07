@@ -475,7 +475,11 @@ class BinaryPrimOp<string mnemonic, string resultTypeFunction,
   }])));
 }
 
-def AddPrimOp : BinaryPrimOp<"add", "getAddResult", [Commutative]>;
+def AddPrimOp : BinaryPrimOp<"add", "getAddSubResult", [Commutative]>;
+def SubPrimOp : BinaryPrimOp<"sub", "getAddSubResult", []>;
+def MulPrimOp : BinaryPrimOp<"mul", "getMulResult", [Commutative]>;
+def DivPrimOp : BinaryPrimOp<"div", "getDivResult", []>;
+def RemPrimOp : BinaryPrimOp<"rem", "getRemResult", []>;
 
 def AndPrimOp : BinaryPrimOp<"and", "getBitwiseBinaryResult", [Commutative]>;
 def OrPrimOp  : BinaryPrimOp<"or",  "getBitwiseBinaryResult", [Commutative]>;

@@ -479,7 +479,7 @@ static bool isSameIntegerType(FIRRTLType lhs, FIRRTLType rhs,
   return false;
 }
 
-FIRRTLType firrtl::getAddResult(FIRRTLType lhs, FIRRTLType rhs) {
+FIRRTLType firrtl::getAddSubResult(FIRRTLType lhs, FIRRTLType rhs) {
   int32_t width;
   if (isSameIntegerType(lhs, rhs, width)) {
     if (width != -1)
@@ -488,6 +488,69 @@ FIRRTLType firrtl::getAddResult(FIRRTLType lhs, FIRRTLType rhs) {
   }
 
   return {};
+}
+
+FIRRTLType firrtl::getMulResult(FIRRTLType lhs, FIRRTLType rhs) {
+  if (lhs.getKind() != rhs.getKind())
+    return {};
+
+  int32_t width = -1;
+  if (auto lu = lhs.dyn_cast<UIntType>()) {
+    auto widthV = lu.getWidth();
+    auto ru = rhs.cast<UIntType>();
+    if (widthV.hasValue() && ru.getWidth().getValue())
+      width = widthV.getValue() + ru.getWidth().getValue();
+    return UIntType::get(lhs.getContext(), width);
+  }
+
+  if (auto ls = lhs.dyn_cast<SIntType>()) {
+    auto widthV = ls.getWidth();
+    auto rs = rhs.cast<SIntType>();
+    if (widthV.hasValue() && rs.getWidth().hasValue())
+      width = ls.getWidthOrSentinel() + rs.getWidthOrSentinel();
+    return SIntType::get(lhs.getContext(), width);
+  }
+  return {};
+}
+
+FIRRTLType firrtl::getDivResult(FIRRTLType lhs, FIRRTLType rhs) {
+  if (lhs.getKind() != rhs.getKind())
+    return {};
+
+  int32_t width = -1;
+  if (auto lu = lhs.dyn_cast<UIntType>()) {
+    if (lu.getWidth().hasValue())
+      width = lu.getWidth().getValue();
+    return UIntType::get(lhs.getContext(), width);
+  }
+  if (auto ls = lhs.dyn_cast<SIntType>()) {
+    if (ls.getWidth().hasValue())
+      width = ls.getWidth().getValue() + 1;
+    return SIntType::get(lhs.getContext(), width);
+  }
+  return {};
+}
+
+FIRRTLType firrtl::getRemResult(FIRRTLType lhs, FIRRTLType rhs) {
+  if (lhs.getKind() != rhs.getKind())
+    return {};
+
+  int32_t width = -1;
+  if (auto lu = lhs.dyn_cast<UIntType>()) {
+    auto widthV = lu.getWidth();
+    auto ru = rhs.cast<UIntType>();
+    if (widthV.hasValue() && ru.getWidth().getValue())
+      width = std::min(widthV.getValue(), ru.getWidth().getValue());
+    return UIntType::get(lhs.getContext(), width);
+  }
+
+  if (auto ls = lhs.dyn_cast<SIntType>()) {
+    auto widthV = ls.getWidth();
+    auto rs = rhs.cast<SIntType>();
+    if (widthV.hasValue() && rs.getWidth().hasValue())
+      width = std::min(ls.getWidthOrSentinel(), rs.getWidthOrSentinel());
+    return SIntType::get(lhs.getContext(), width);
+  }
 }
 
 FIRRTLType firrtl::getCompareResult(FIRRTLType lhs, FIRRTLType rhs) {
@@ -505,7 +568,6 @@ FIRRTLType firrtl::getBitwiseBinaryResult(FIRRTLType lhs, FIRRTLType rhs) {
 }
 
 FIRRTLType firrtl::getCatResult(FIRRTLType lhs, FIRRTLType rhs) {
-
   if (auto lu = lhs.dyn_cast<UIntType>())
     if (auto ru = rhs.dyn_cast<UIntType>()) {
       int32_t width = -1;

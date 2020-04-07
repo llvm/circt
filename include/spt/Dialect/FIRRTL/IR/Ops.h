@@ -33,7 +33,10 @@ public:
 };
 
 // Binary primitives.
-FIRRTLType getAddResult(FIRRTLType lhs, FIRRTLType rhs);
+FIRRTLType getAddSubResult(FIRRTLType lhs, FIRRTLType rhs);
+FIRRTLType getMulResult(FIRRTLType lhs, FIRRTLType rhs);
+FIRRTLType getDivResult(FIRRTLType lhs, FIRRTLType rhs);
+FIRRTLType getRemResult(FIRRTLType lhs, FIRRTLType rhs);
 FIRRTLType getCompareResult(FIRRTLType lhs, FIRRTLType rhs);
 FIRRTLType getBitwiseBinaryResult(FIRRTLType lhs, FIRRTLType rhs);
 FIRRTLType getCatResult(FIRRTLType lhs, FIRRTLType rhs);
