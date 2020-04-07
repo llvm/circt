@@ -156,3 +156,8 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.tail %i8 7 : (!firrtl.uint<8>) -> !firrtl.uint<1>
     ; CHECK: firrtl.tail %i8 0 : (!firrtl.uint<8>) -> !firrtl.uint<8>
     node n10 = add(tail(i8, 7), tail(i8, 0))
+
+   ; CHECK: firrtl.reg %clock {name = "_T_2622"} : (!firrtl.clock) -> !firrtl.uint<4>
+   ; expected-warning @+1 {{self referential reg not supported yet}}
+   reg _T_2622 : UInt<4>, clock with :
+      reset => (reset, _T_2622)

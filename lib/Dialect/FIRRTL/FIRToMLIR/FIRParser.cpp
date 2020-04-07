@@ -1154,11 +1154,26 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
         parseToken(FIRToken::equal_greater, "expected => in reset specifier") ||
         parseToken(FIRToken::l_paren, "expected '(' in reset specifier") ||
         parseExp(resetSignal, subOps, "expected expression for reset signal") ||
-        parseToken(FIRToken::comma, "expected ',' in reset specifier") ||
-        parseExp(resetValue, subOps, "expected expression for reset value") ||
-        parseToken(FIRToken::r_paren, "expected ')' in reset specifier") ||
-        parseOptionalInfo(info, subOps))
+        parseToken(FIRToken::comma, "expected ',' in reset specifier"))
       return failure();
+
+    // This is a horrible hack for self referential registers.  It isn't clear
+    // what this means, but lets accept it for now so we can keep working on the
+    // parser.
+    if (getTokenSpelling() == id.getValue()) {
+      emitWarning(info.getLoc(), "self referential reg not supported yet");
+      consumeToken();
+      if (parseToken(FIRToken::r_paren, "expected ')' in reset specifier") ||
+          parseOptionalInfo(info, subOps))
+        return failure();
+      resetSignal = Value();
+
+    } else {
+      if (parseExp(resetValue, subOps, "expected expression for reset value") ||
+          parseToken(FIRToken::r_paren, "expected ')' in reset specifier") ||
+          parseOptionalInfo(info, subOps))
+        return failure();
+    }
   }
 
   // Finally, handle the last info if present, providing location info for the
