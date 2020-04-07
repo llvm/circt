@@ -158,6 +158,41 @@ def NodeOp : FIRRTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
   }];
 }
 
+def RegOp : FIRRTLOp<"reg", []> {
+  let summary = "Define a new register";
+  let description = [{
+    Declare a new register:
+    ```
+      %name = firrt.reg %clockVal : t1
+    ```
+    }];
+
+  let arguments = (ins AnyType:$clockVal, OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  let assemblyFormat = [{
+     operands attr-dict `:` functional-type(operands, $result)
+  }];
+}
+
+def RegInitOp : FIRRTLOp<"reginit", []> {
+  let summary = "Define a new register with an initializer";
+  let description = [{
+    Declare a new register:
+    ```
+      %name = firrt.reg %clockVal, %resetSignal, %resetValue : t1
+    ```
+    }];
+
+  let arguments = (ins AnyType:$clockVal, AnyType:$resetSignal, 
+                       AnyType:$resetValue, OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  let assemblyFormat = [{
+     operands attr-dict `:` functional-type(operands, $result)
+  }];
+}
+
 def WireOp : FIRRTLOp<"wire", [NoSideEffect]> {
   let summary = "Define a new wire";
   let description = [{

@@ -700,6 +700,7 @@ private:
   ParseResult parseStop();
   ParseResult parseNode();
   ParseResult parseWire();
+  ParseResult parseRegister(unsigned regIndent);
   ParseResult parseWhen(unsigned whenIndent);
   ParseResult parseLeadingExpStmt();
 
@@ -968,6 +969,7 @@ ParseResult FIRStmtParser::parseSimpleStmtBlock(unsigned indent) {
 ///      ::= node
 ///      ::= wire
 ///      ::= when
+///      ::= register
 ///      ::= leading-exp-stmt
 ///
 ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
@@ -982,6 +984,8 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
     return parseNode();
   case FIRToken::kw_wire:
     return parseWire();
+  case FIRToken::kw_reg:
+    return parseRegister(stmtIndent);
   case FIRToken::kw_when:
     return parseWhen(stmtIndent);
 
@@ -1069,7 +1073,7 @@ ParseResult FIRStmtParser::parseNode() {
   SmallVector<Operation *, 8> subOps;
   if (parseId(id, "expected node name") ||
       parseToken(FIRToken::equal, "expected '=' in node") ||
-      parseExp(initializer, subOps, "unexpected expression for node") ||
+      parseExp(initializer, subOps, "expected expression for node") ||
       parseOptionalInfo(info, subOps))
     return failure();
 
@@ -1099,8 +1103,83 @@ ParseResult FIRStmtParser::parseWire() {
   return success();
 }
 
-/// when  ::= 'when' exp ':' info? suite? ('else' ( when | ':' info? suite?)
-/// )? suite ::= simple_stmt | INDENT simple_stmt+ DEDENT
+/// register    ::= 'reg' id ':' type exp ('with' ':' reset_block)? info?
+///
+/// reset_block ::= INDENT simple_reset info? NEWLINE DEDENT
+///             ::= '(' simple_reset ')'
+///
+/// simple_reset ::= simple_reset0
+///              ::= '(' simple_reset0 ')'
+///
+/// simple_reset0:  'reset' '=>' '(' exp exp ')'
+///
+ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
+  LocWithInfo info(getToken().getLoc(), this);
+  consumeToken(FIRToken::kw_reg);
+
+  StringAttr id;
+  FIRRTLType type;
+  Value clock;
+  SmallVector<Operation *, 8> subOps;
+
+  // TODO(firrtl spec): info? should come after the clock expression before the
+  // 'with'.
+  if (parseId(id, "expected reg name") ||
+      parseToken(FIRToken::colon, "expected ':' in reg") ||
+      parseType(type, "expected reg type") ||
+      parseToken(FIRToken::comma, "expected ',' in reg") ||
+      parseExp(clock, subOps, "expected expression for register clock"))
+    return failure();
+
+  // Parse the 'with' specifier if present.
+  Value resetSignal, resetValue;
+  if (consumeIf(FIRToken::kw_with)) {
+    if (parseToken(FIRToken::colon, "expected ':' in reg"))
+      return failure();
+
+    // TODO(firrtl spec): The grammar for the reset logic is wonky.  Why allow
+    // multiple ambiguous parentheses?  Why rely on indentation at all?
+
+    // This implements what the examples have in practice.
+    if (getToken().is(FIRToken::l_paren))
+      return emitError("this register form not handled yet"), failure();
+
+    auto indent = getIndentation();
+    if (!indent.hasValue() || indent.getValue() <= regIndent)
+      return emitError("expected indented reset specifier in reg"), failure();
+
+    SmallVector<Operation *, 8> subOps;
+    if (parseToken(FIRToken::kw_reset, "expected 'reset' in reg") ||
+        parseToken(FIRToken::equal_greater, "expected => in reset specifier") ||
+        parseToken(FIRToken::l_paren, "expected '(' in reset specifier") ||
+        parseExp(resetSignal, subOps, "expected expression for reset signal") ||
+        parseToken(FIRToken::comma, "expected ',' in reset specifier") ||
+        parseExp(resetValue, subOps, "expected expression for reset value") ||
+        parseToken(FIRToken::r_paren, "expected ')' in reset specifier") ||
+        parseOptionalInfo(info, subOps))
+      return failure();
+  }
+
+  // Finally, handle the last info if present, providing location info for the
+  // clock expression.
+  if (parseOptionalInfo(info, subOps))
+    return failure();
+
+  Value result;
+  if (resetSignal)
+    result = builder.create<RegInitOp>(info.getLoc(), type, clock, resetSignal,
+                                       resetValue, id);
+  else
+    result = builder.create<RegOp>(info.getLoc(), type, clock, id);
+
+  if (addSymbolEntry(id.getValue(), result, info.getFIRLoc()))
+    return failure();
+
+  return success();
+}
+
+/// when  ::= 'when' exp ':' info? suite? ('else' ( when | ':' info? suite?) )?
+/// suite ::= simple_stmt | INDENT simple_stmt+ DEDENT
 ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   LocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_when);

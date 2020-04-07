@@ -143,4 +143,10 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.cat %23, %26 : (!firrtl.uint<12>, !firrtl.uint<23>) -> !firrtl.uint<35>
     node n7 = cat(n5, n6)
 
+    ; CHECK: firrtl.mux(%reset, %i8, %29) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint) -> !firrtl.uint
+    node n8 = mux(reset, i8, UInt(4))
+
+    ; CHECK: firrtl.reginit %clock, %reset, %32 {name = "_T_2621"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>) -> !firrtl.uint<4>
+    reg _T_2621 : UInt<4>, clock with :
+      reset => (reset, UInt<4>("h0")) @[Edges.scala 230:27]
 

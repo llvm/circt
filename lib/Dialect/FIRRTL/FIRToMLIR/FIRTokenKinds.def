@@ -64,6 +64,7 @@ TOK_PUNCTUATION(less_equal, "<=")
 TOK_PUNCTUATION(less_minus, "<-")
 TOK_PUNCTUATION(greater, ">")
 TOK_PUNCTUATION(equal, "=")
+TOK_PUNCTUATION(equal_greater, "=>")
 
 // Keywords.  These turn "foo" into FIRToken::kw_foo enums.
 
