@@ -133,22 +133,32 @@ static ParseResult parseCircuitOp(OpAsmParser &parser, OperationState &result) {
 }
 
 //===----------------------------------------------------------------------===//
-// FModuleOp
+// FExtModuleOp and FModuleOp
 //===----------------------------------------------------------------------===//
 
-// Decode information about the input and output ports on this module.
-void FModuleOp::getPortInfo(SmallVectorImpl<PortInfo> &results) {
-  auto argTypes = getType().getInputs();
+FunctionType firrtl::getModuleType(Operation *op) {
+  auto typeAttr = op->getAttrOfType<TypeAttr>(FModuleOp::getTypeAttrName());
+  return typeAttr.getValue().cast<FunctionType>();
+}
+
+/// This function can extract information about ports from a module and an
+/// extmodule.
+void firrtl::getModulePortInfo(Operation *op,
+                               SmallVectorImpl<ModulePortInfo> &results) {
+  auto argTypes = getModuleType(op).getInputs();
 
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-    auto argAttrs = ::mlir::impl::getArgAttrs(*this, i);
+    auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
     results.push_back(
         {getFIRRTLNameAttr(argAttrs), argTypes[i].cast<FIRRTLType>()});
   }
 }
 
-void FModuleOp::build(Builder *builder, OperationState &result, StringAttr name,
-                      ArrayRef<std::pair<StringAttr, FIRRTLType>> ports) {
+static void buildModule(Builder *builder, OperationState &result,
+                        StringAttr name,
+                        ArrayRef<std::pair<StringAttr, FIRRTLType>> ports) {
+  using namespace mlir::impl;
+
   // Add an attribute for the name.
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
 
@@ -173,9 +183,15 @@ void FModuleOp::build(Builder *builder, OperationState &result, StringAttr name,
                         builder->getDictionaryAttr(argAttr));
   }
 
-  // Create a region and a block for the body.  The argument of the region is
-  // the loop induction variable.
-  Region *bodyRegion = result.addRegion();
+  result.addRegion();
+}
+
+void FModuleOp::build(Builder *builder, OperationState &result, StringAttr name,
+                      ArrayRef<std::pair<StringAttr, FIRRTLType>> ports) {
+  buildModule(builder, result, name, ports);
+
+  // Create a region and a block for the body.
+  auto *bodyRegion = result.regions[0].get();
   Block *body = new Block();
   bodyRegion->push_back(body);
 
@@ -184,6 +200,12 @@ void FModuleOp::build(Builder *builder, OperationState &result, StringAttr name,
     body->addArgument(elt.second);
 
   FModuleOp::ensureTerminator(*bodyRegion, *builder, result.location);
+}
+
+void FExtModuleOp::build(Builder *builder, OperationState &result,
+                         StringAttr name,
+                         ArrayRef<std::pair<StringAttr, FIRRTLType>> ports) {
+  buildModule(builder, result, name, ports);
 }
 
 // TODO: This ia a clone of mlir::impl::printFunctionSignature, refactor it to
@@ -239,10 +261,10 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
   p << ')';
 }
 
-static void print(OpAsmPrinter &p, FModuleOp op) {
+static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
   using namespace mlir::impl;
 
-  FunctionType fnType = op.getType();
+  FunctionType fnType = getModuleType(op);
   auto argTypes = fnType.getInputs();
   auto resultTypes = fnType.getResults();
 
@@ -251,13 +273,21 @@ static void print(OpAsmPrinter &p, FModuleOp op) {
 
   // Print the operation and the function name.
   auto funcName =
-      op.getAttrOfType<StringAttr>(::mlir::SymbolTable::getSymbolAttrName())
+      op->getAttrOfType<StringAttr>(::mlir::SymbolTable::getSymbolAttrName())
           .getValue();
-  p << op.getOperationName() << ' ';
+  p << op->getName() << ' ';
   p.printSymbolName(funcName);
 
   printFunctionSignature2(p, op, argTypes, /*isVariadic*/ false, resultTypes);
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size());
+}
+
+static void print(OpAsmPrinter &p, FExtModuleOp op) {
+  printModuleLikeOp(p, op);
+}
+
+static void print(OpAsmPrinter &p, FModuleOp op) {
+  printModuleLikeOp(p, op);
 
   // Print the body if this is not an external function.
   Region &body = op.getBody();
@@ -314,7 +344,6 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result) {
   // verbosity in dumps of including it explicitly in the attribute
   // dictionary.
   for (size_t i = 0, e = argAttrs.size(); i != e; ++i) {
-    auto &arg = entryArgs[i];
     auto &attrs = argAttrs[i];
 
     // If an explicit name attribute was present, don't add the implicit one.
@@ -322,8 +351,10 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result) {
     for (auto &elt : attrs)
       if (elt.first.str() == "firrtl.name")
         hasNameAttr = true;
-    if (hasNameAttr)
+    if (hasNameAttr || entryArgs.empty())
       continue;
+
+    auto &arg = entryArgs[i];
 
     // The name of an argument is of the form "%42" or "%id", and since
     // parsing succeeded, we know it always has one character.
@@ -349,6 +380,10 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
+static ParseResult parseFExtModuleOp(OpAsmParser &parser,
+                                     OperationState &result) {
+  return parseFModuleOp(parser, result);
+}
 //===----------------------------------------------------------------------===//
 // Statements
 //===----------------------------------------------------------------------===//

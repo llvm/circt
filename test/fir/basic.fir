@@ -19,7 +19,8 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
 
   ; CHECK: }
 
-  ; FIXME: HECK-LABEL: firrtl.module @MyExtModule(%in: !firrtl.uint, %out: !firrtl.flip<uint<8>>) {
+  ; CHECK-LABEL: firrtl.extmodule @MyExtModule(!firrtl.uint {firrtl.name = "in"}, !firrtl.flip<uint<8>> {firrtl.name = "out"})
+  ; CHECK-NOT: {
   extmodule MyExtModule : 
     input in: UInt
     output out: UInt<8>
@@ -172,3 +173,7 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.connect [[xyz_in]], %i8 : !firrtl.flip<uint<80>>, !firrtl.uint<8>
     xyz.in <= i8
 
+    ; CHECK: [[myext:%.+]] = firrtl.instance @MyExtModule {name = "myext"} : !firrtl.bundle<in: flip<uint>, out: uint<8>>
+    inst myext of MyExtModule
+    myext.in <= i8
+    printf(clock, reset, "Something interesting! %x", myext.out)

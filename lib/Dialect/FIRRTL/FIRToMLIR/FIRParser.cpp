@@ -1083,15 +1083,15 @@ ParseResult FIRStmtParser::parseInstance() {
   // Look up the module that is being referenced.
   auto moduleIR =
       builder.getBlock()->getParentOp()->getParentOfType<CircuitOp>();
-  auto referencedModule = moduleIR.lookupSymbol<FModuleOp>(moduleName);
+  auto referencedModule = moduleIR.lookupSymbol(moduleName);
   if (!referencedModule) {
     emitError(info.getFIRLoc(),
               "use of undefined module name '" + moduleName + "' in instance");
     return failure();
   }
 
-  SmallVector<FModuleOp::PortInfo, 4> modulePorts;
-  referencedModule.getPortInfo(modulePorts);
+  SmallVector<ModulePortInfo, 4> modulePorts;
+  getModulePortInfo(referencedModule, modulePorts);
 
   // Make a bundle of the inputs and outputs of the specified module.
   SmallVector<BundleType::BundleElement, 4> results;
@@ -1354,7 +1354,7 @@ struct FIRModuleParser : public FIRScopedParser {
   ParseResult parseModule(unsigned indent);
 
 private:
-  using PortInfoAndLoc = std::pair<FModuleOp::PortInfo, SMLoc>;
+  using PortInfoAndLoc = std::pair<ModulePortInfo, SMLoc>;
   ParseResult parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
                             unsigned indent);
 
@@ -1410,7 +1410,7 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
 /// parameter ::= 'parameter' id '=' RawString NEWLINE
 ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   consumeToken(FIRToken::kw_extmodule);
-  StringRef name;
+  StringAttr name;
   SmallVector<PortInfoAndLoc, 4> portListAndLoc;
 
   LocWithInfo info(getToken().getLoc(), this);
@@ -1418,6 +1418,15 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
       parseToken(FIRToken::colon, "expected ':' in extmodule definition") ||
       parseOptionalInfo(info) || parsePortList(portListAndLoc, indent))
     return failure();
+
+  auto builder = circuit.getBodyBuilder();
+
+  // Create the module.
+  SmallVector<ModulePortInfo, 4> portList;
+  portList.reserve(portListAndLoc.size());
+  for (auto &elt : portListAndLoc)
+    portList.push_back(elt.first);
+  auto fmodule = builder.create<FExtModuleOp>(info.getLoc(), name, portList);
 
   // Add all the ports to the symbol table even though there are no SSA values
   // for arguments in an external module.  This detects multiple definitions
@@ -1428,6 +1437,7 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   }
 
   // Parse a defname if present.
+  // TODO(firrtl spec): defname isn't documented at all, what is it?
   if (consumeIf(FIRToken::kw_defname)) {
     StringRef defName;
     if (parseToken(FIRToken::equal, "expected '=' in defname") ||
@@ -1436,6 +1446,7 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   }
 
   // FIXME: Build a representation of this defname.
+  (void)fmodule;
 
   // Parse the parameter list.
   while (consumeIf(FIRToken::kw_parameter)) {
@@ -1472,7 +1483,7 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
   auto builder = circuit.getBodyBuilder();
 
   // Create the module.
-  SmallVector<FModuleOp::PortInfo, 4> portList;
+  SmallVector<ModulePortInfo, 4> portList;
   portList.reserve(portListAndLoc.size());
   for (auto &elt : portListAndLoc)
     portList.push_back(elt.first);

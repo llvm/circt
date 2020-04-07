@@ -51,6 +51,15 @@ FIRRTLType getCvtResult(FIRRTLType input);
 FIRRTLType getNotResult(FIRRTLType input);
 FIRRTLType getNegResult(FIRRTLType input);
 
+typedef std::pair<StringAttr, FIRRTLType> ModulePortInfo;
+
+/// Return the function type that corresponds to a module.
+FunctionType getModuleType(Operation *op);
+
+/// This function can extract information about ports from a module and an
+/// extmodule.
+void getModulePortInfo(Operation *op, SmallVectorImpl<ModulePortInfo> &results);
+
 #define GET_OP_CLASSES
 #include "spt/Dialect/FIRRTL/IR/FIRRTL.h.inc"
 

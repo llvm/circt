@@ -92,10 +92,10 @@ def FModuleOp : FIRRTLOp<"module",
   ];
 
   let extraClassDeclaration = [{
-    typedef std::pair<StringAttr, FIRRTLType> PortInfo;
-
     // Decode information about the input and output ports on this module.
-    void getPortInfo(SmallVectorImpl<PortInfo> &results);
+    void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
+      getModulePortInfo(*this, results);
+    }
 
     OpBuilder getBodyBuilder() {
       assert(!body().empty() && "Unexpected empty 'body' region.");
@@ -105,6 +105,57 @@ def FModuleOp : FIRRTLOp<"module",
   private:
     // This trait needs access to the hooks defined below.
     friend class OpTrait::FunctionLike<FModuleOp>;
+
+    /// Returns the number of arguments, implementing OpTrait::FunctionLike.
+    unsigned getNumFuncArguments() { return getType().getInputs().size(); }
+    /// Returns the number of results, implementing OpTrait::FunctionLike.
+    unsigned getNumFuncResults() { return getType().getResults().size(); }
+
+    /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
+    /// attribute is present and checks if it holds a function type.  Ensures
+    /// getType, getNumFuncArguments, and getNumFuncResults can be called
+    ///  safely.
+    LogicalResult verifyType() {
+      auto type = getTypeAttr().getValue();
+      if (!type.isa<FunctionType>())
+        return emitOpError("requires '" + getTypeAttrName() +
+                           "' attribute of function type");
+      return success();
+    }
+  public:
+  }];
+
+  let printer = [{ return ::print(p, *this); }];
+  let parser = [{ return ::parse$cppClass(parser, result); }];
+}
+
+def FExtModuleOp : FIRRTLOp<"extmodule",
+      [IsolatedFromAbove, FunctionLike, Symbol]> {
+  let summary = "FIRRTL extmodule";
+  let description = [{
+    The "firrtl.extmodule" operation represents an external reference to a
+    Verilog module, including a given name, a list of ports, and a body that
+    represents the connections within the module.
+  }];
+  let arguments = (ins);
+  let results = (outs);
+  let regions = (region AnyRegion:$body);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<"Builder *builder, OperationState &result, StringAttr name, "
+              "ArrayRef<std::pair<StringAttr, FIRRTLType>> ports">
+  ];
+
+  let extraClassDeclaration = [{
+     // Decode information about the input and output ports on this module.
+     void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
+       getModulePortInfo(*this, results);
+     }
+
+  private:
+    // This trait needs access to the hooks defined below.
+    friend class OpTrait::FunctionLike<FExtModuleOp>;
 
     /// Returns the number of arguments, implementing OpTrait::FunctionLike.
     unsigned getNumFuncArguments() { return getType().getInputs().size(); }
