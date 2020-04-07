@@ -136,6 +136,17 @@ static ParseResult parseCircuitOp(OpAsmParser &parser, OperationState &result) {
 // FModuleOp
 //===----------------------------------------------------------------------===//
 
+// Decode information about the input and output ports on this module.
+void FModuleOp::getPortInfo(SmallVectorImpl<PortInfo> &results) {
+  auto argTypes = getType().getInputs();
+
+  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
+    auto argAttrs = ::mlir::impl::getArgAttrs(*this, i);
+    results.push_back(
+        {getFIRRTLNameAttr(argAttrs), argTypes[i].cast<FIRRTLType>()});
+  }
+}
+
 void FModuleOp::build(Builder *builder, OperationState &result, StringAttr name,
                       ArrayRef<std::pair<StringAttr, FIRRTLType>> ports) {
   // Add an attribute for the name.

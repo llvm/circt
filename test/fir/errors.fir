@@ -91,3 +91,11 @@ circuit test :
       node n4 = reset
     out <- n4   ; expected-error {{use of invalid name 'n4'}}
 
+;// -----
+
+circuit test :
+  module invalid_inst :
+
+    ; expected-error @+1 {{use of undefined module name 'some_module' in instance}}
+    inst xyz of some_module
+ 

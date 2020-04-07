@@ -19,6 +19,10 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
 
   ; CHECK: }
 
+  ; FIXME: HECK-LABEL: firrtl.module @MyExtModule(%in: !firrtl.uint, %out: !firrtl.flip<uint<8>>) {
+  extmodule MyExtModule : 
+    input in: UInt
+    output out: UInt<8>
 
   ; Module to test type parsing.
 
@@ -157,7 +161,14 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.tail %i8 0 : (!firrtl.uint<8>) -> !firrtl.uint<8>
     node n10 = add(tail(i8, 7), tail(i8, 0))
 
-   ; CHECK: firrtl.reg %clock {name = "_T_2622"} : (!firrtl.clock) -> !firrtl.uint<4>
-   ; expected-warning @+1 {{self referential reg not supported yet}}
-   reg _T_2622 : UInt<4>, clock with :
+    ; CHECK: firrtl.reg %clock {name = "_T_2622"} : (!firrtl.clock) -> !firrtl.uint<4>
+    ; expected-warning @+1 {{self referential reg not supported yet}}
+    reg _T_2622 : UInt<4>, clock with :
       reset => (reset, _T_2622)
+
+    ; CHECK: [[xyz:%.+]] = firrtl.instance @circuit {name = "xyz"} : !firrtl.bundle<in: flip<uint<80>>>
+    inst xyz of circuit
+    ; CHECK: [[xyz_in:%.+]] = firrtl.subfield [[xyz]]("in") : (!firrtl.bundle<in: flip<uint<80>>>) -> !firrtl.flip<uint<80>>
+    ; CHECK: firrtl.connect [[xyz_in]], %i8 : !firrtl.flip<uint<80>>, !firrtl.uint<8>
+    xyz.in <= i8
+

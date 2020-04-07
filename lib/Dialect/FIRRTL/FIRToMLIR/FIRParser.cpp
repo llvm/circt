@@ -698,6 +698,7 @@ private:
   ParseResult parsePrintf();
   ParseResult parseSkip();
   ParseResult parseStop();
+  ParseResult parseInstance();
   ParseResult parseNode();
   ParseResult parseWire();
   ParseResult parseRegister(unsigned regIndent);
@@ -967,6 +968,7 @@ ParseResult FIRStmtParser::parseSimpleStmtBlock(unsigned indent) {
 /// stmt ::= printf
 ///      ::= skip
 ///      ::= stop
+///      ::= instance
 ///      ::= node
 ///      ::= wire
 ///      ::= when
@@ -981,6 +983,8 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
     return parseSkip();
   case FIRToken::lp_stop:
     return parseStop();
+  case FIRToken::kw_inst:
+    return parseInstance();
   case FIRToken::kw_node:
     return parseNode();
   case FIRToken::kw_wire:
@@ -1064,6 +1068,46 @@ ParseResult FIRStmtParser::parseStop() {
   return success();
 }
 
+/// instance ::= 'inst' id 'of' id info?
+ParseResult FIRStmtParser::parseInstance() {
+  LocWithInfo info(getToken().getLoc(), this);
+  consumeToken(FIRToken::kw_inst);
+
+  StringAttr id;
+  StringRef moduleName;
+  if (parseId(id, "expected instance name") ||
+      parseToken(FIRToken::kw_of, "expected 'of' in instance") ||
+      parseId(moduleName, "expected module name") || parseOptionalInfo(info))
+    return failure();
+
+  // Look up the module that is being referenced.
+  auto moduleIR =
+      builder.getBlock()->getParentOp()->getParentOfType<CircuitOp>();
+  auto referencedModule = moduleIR.lookupSymbol<FModuleOp>(moduleName);
+  if (!referencedModule) {
+    emitError(info.getFIRLoc(),
+              "use of undefined module name '" + moduleName + "' in instance");
+    return failure();
+  }
+
+  SmallVector<FModuleOp::PortInfo, 4> modulePorts;
+  referencedModule.getPortInfo(modulePorts);
+
+  // Make a bundle of the inputs and outputs of the specified module.
+  SmallVector<BundleType::BundleElement, 4> results;
+  results.reserve(modulePorts.size());
+
+  for (auto port : modulePorts) {
+    results.push_back({builder.getIdentifier(port.first.getValue()),
+                       FlipType::get(port.second)});
+  }
+  auto resultType = BundleType::get(results, getContext());
+  auto result = builder.create<InstanceOp>(
+      info.getLoc(), resultType, builder.getSymbolRefAttr(moduleName), id);
+
+  return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
+}
+
 /// node ::= 'node' id '=' exp info?
 ParseResult FIRStmtParser::parseNode() {
   LocWithInfo info(getToken().getLoc(), this);
@@ -1079,10 +1123,7 @@ ParseResult FIRStmtParser::parseNode() {
     return failure();
 
   auto result = builder.create<NodeOp>(info.getLoc(), initializer, id);
-  if (addSymbolEntry(id.getValue(), result, info.getFIRLoc()))
-    return failure();
-
-  return success();
+  return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
 }
 
 /// wire ::= 'wire' id ':' type info?
@@ -1098,10 +1139,7 @@ ParseResult FIRStmtParser::parseWire() {
     return failure();
 
   auto result = builder.create<WireOp>(info.getLoc(), type, id);
-  if (addSymbolEntry(id.getValue(), result, info.getFIRLoc()))
-    return failure();
-
-  return success();
+  return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
 }
 
 /// register    ::= 'reg' id ':' type exp ('with' ':' reset_block)? info?
@@ -1188,10 +1226,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   else
     result = builder.create<RegOp>(info.getLoc(), type, clock, id);
 
-  if (addSymbolEntry(id.getValue(), result, info.getFIRLoc()))
-    return failure();
-
-  return success();
+  return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
 }
 
 /// when  ::= 'when' exp ':' info? suite? ('else' ( when | ':' info? suite?) )?

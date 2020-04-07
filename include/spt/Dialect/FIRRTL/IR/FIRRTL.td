@@ -44,7 +44,8 @@ class FIRRTLOp<string mnemonic, list<OpTrait> traits = []> :
     Op<FIRRTLDialect, mnemonic, traits>;
 
 def CircuitOp : FIRRTLOp<"circuit",
-      [IsolatedFromAbove, SingleBlockImplicitTerminator<"DoneOp">]> {
+      [IsolatedFromAbove, SymbolTable, 
+       SingleBlockImplicitTerminator<"DoneOp">]> {
   let summary = "FIRRTL Circuit";
   let description = [{
     The "firrtl.circuit" operation represents an overall Verilog circuit,
@@ -92,6 +93,10 @@ def FModuleOp : FIRRTLOp<"module",
 
   let extraClassDeclaration = [{
     typedef std::pair<StringAttr, FIRRTLType> PortInfo;
+
+    // Decode information about the input and output ports on this module.
+    void getPortInfo(SmallVectorImpl<PortInfo> &results);
+
     OpBuilder getBodyBuilder() {
       assert(!body().empty() && "Unexpected empty 'body' region.");
       Block &bodyBlock = body().front();
@@ -136,6 +141,22 @@ def DoneOp : FIRRTLOp<"done", [Terminator]> {
 //===----------------------------------------------------------------------===//
 // Declarations
 //===----------------------------------------------------------------------===//
+
+def InstanceOp : FIRRTLOp<"instance", []> {
+  let summary = "Instantiate an instance of a module";
+  let description = [{
+    This represents an instance of a module.  The result is always a bundle
+    that is a flattened form of the referenced modules inputs and outputs.
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$moduleName,
+                       OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  let assemblyFormat = [{
+     $moduleName attr-dict `:` type($result)
+  }];
+}
 
 def NodeOp : FIRRTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
   let summary = "No-op to name a value";
