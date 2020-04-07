@@ -551,6 +551,8 @@ FIRRTLType firrtl::getRemResult(FIRRTLType lhs, FIRRTLType rhs) {
       width = std::min(ls.getWidthOrSentinel(), rs.getWidthOrSentinel());
     return SIntType::get(lhs.getContext(), width);
   }
+
+  return {};
 }
 
 FIRRTLType firrtl::getCompareResult(FIRRTLType lhs, FIRRTLType rhs) {
@@ -756,6 +758,20 @@ FIRRTLType ShrPrimOp::getResultType(FIRRTLType input, int32_t amount) {
     if (amount > width)
       return {};
     width = std::max(1, width - amount);
+  }
+
+  return getIntegerType(input.getContext(), input.isa<SIntType>(), width);
+}
+
+FIRRTLType TailPrimOp::getResultType(FIRRTLType input, int32_t amount) {
+  int32_t width;
+  if (amount < 0 || !isSameIntegerType(input, input, width))
+    return {};
+
+  if (width != -1) {
+    if (width < amount)
+      return {};
+    width -= amount;
   }
 
   return getIntegerType(input.getContext(), input.isa<SIntType>(), width);

@@ -153,3 +153,6 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.div %i8, %34 : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<8>
     node n9 = div(i8, UInt<4>(4))
 
+    ; CHECK: firrtl.tail %i8 7 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+    ; CHECK: firrtl.tail %i8 0 : (!firrtl.uint<8>) -> !firrtl.uint<8>
+    node n10 = add(tail(i8, 7), tail(i8, 0))

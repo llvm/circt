@@ -880,6 +880,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result,
     break;
   case FIRToken::lp_shl:
   case FIRToken::lp_shr:
+  case FIRToken::lp_tail:
     attrNames.push_back("amount");
     break;
   }
