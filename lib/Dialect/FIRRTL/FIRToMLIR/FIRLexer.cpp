@@ -246,7 +246,7 @@ FIRToken FIRLexer::lexIdentifierOrKeyword(const char *tokStart) {
                               .Default(FIRToken::identifier);
     if (kind != FIRToken::identifier) {
       ++curPtr;
-      return FIRToken(kind, tokStart);
+      return formToken(kind, tokStart);
     }
   }
 
