@@ -500,7 +500,7 @@ FIRRTLType SubindexOp::getResultType(FIRRTLType inType, unsigned fieldIdx) {
 
 FIRRTLType SubaccessOp::getResultType(FIRRTLType inType, FIRRTLType indexType) {
   if (auto vectorType = inType.dyn_cast<FVectorType>())
-    if (indexType.isa<UIntType>())
+    if (indexType.getPassiveType().isa<UIntType>())
       return vectorType.getElementType();
 
   if (auto flipType = inType.dyn_cast<FlipType>())

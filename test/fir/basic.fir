@@ -183,6 +183,9 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.subaccess %_T[%i8] : (!firrtl.vector<uint<1>, 12>, !firrtl.uint<8>) -> !firrtl.uint<1>
     auto <= _T[i8]
 
+    ; CHECK: firrtl.subaccess %_T[%auto] : (!firrtl.vector<uint<1>, 12>, !firrtl.flip<uint<1>>) -> !firrtl.uint<1>
+    auto <= _T[auto]
+
   ; CHECK-LABEL: firrtl.module @type_handling(
   module type_handling :
     wire _T_6 : { flip b : { bits : { source : UInt<7> } } }
