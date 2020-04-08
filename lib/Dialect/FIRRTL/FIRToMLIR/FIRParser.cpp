@@ -702,6 +702,8 @@ private:
   ParseResult parsePrintf();
   ParseResult parseSkip();
   ParseResult parseStop();
+  ParseResult parseWhen(unsigned whenIndent);
+  ParseResult parseLeadingExpStmt();
 
   // Declarations
   ParseResult parseInstance();
@@ -709,14 +711,15 @@ private:
   ParseResult parseNode();
   ParseResult parseWire();
   ParseResult parseRegister(unsigned regIndent);
-  ParseResult parseWhen(unsigned whenIndent);
-  ParseResult parseLeadingExpStmt();
 
   // The builder to build into.
   OpBuilder builder;
 };
 
 } // end anonymous namespace
+
+//===-------------------------------
+// FIRStmtParser Expression Parsing.
 
 /// Parse the 'exp' grammar, returning all of the suboperations in the
 /// specified vector, and the ultimate SSA value in value.
@@ -1010,6 +1013,9 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result,
   return success();
 }
 
+//===-----------------------------
+// FIRStmtParser Statement Parsing
+
 /// simple_stmt_block ::= simple_stmt*
 ParseResult FIRStmtParser::parseSimpleStmtBlock(unsigned indent) {
   while (true) {
@@ -1035,22 +1041,31 @@ ParseResult FIRStmtParser::parseSimpleStmtBlock(unsigned indent) {
 /// stmt ::= printf
 ///      ::= skip
 ///      ::= stop
-///      ::= instance
+///      ::= when
+///      ::= leading-exp-stmt
+///
+/// stmt ::= instance
 ///      ::= cmem
 ///      ::= node
 ///      ::= wire
-///      ::= when
 ///      ::= register
-///      ::= leading-exp-stmt
 ///
 ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
   switch (getToken().getKind()) {
+    // Statements.
   case FIRToken::lp_printf:
     return parsePrintf();
   case FIRToken::kw_skip:
     return parseSkip();
   case FIRToken::lp_stop:
     return parseStop();
+  case FIRToken::kw_when:
+    return parseWhen(stmtIndent);
+  default:
+    // Statement productions that start with an expression.
+    return parseLeadingExpStmt();
+
+    // Declarations
   case FIRToken::kw_inst:
     return parseInstance();
   case FIRToken::kw_cmem:
@@ -1061,13 +1076,6 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
     return parseWire();
   case FIRToken::kw_reg:
     return parseRegister(stmtIndent);
-  case FIRToken::kw_when:
-    return parseWhen(stmtIndent);
-
-  default:
-    // Otherwise, this must be one of the productions that starts with an
-    // expression.
-    return parseLeadingExpStmt();
   }
 }
 
@@ -1137,6 +1145,119 @@ ParseResult FIRStmtParser::parseStop() {
                          builder.getI32IntegerAttr(exitCode));
   return success();
 }
+
+/// when  ::= 'when' exp ':' info? suite? ('else' ( when | ':' info? suite?) )?
+/// suite ::= simple_stmt | INDENT simple_stmt+ DEDENT
+ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
+  LocWithInfo info(getToken().getLoc(), this);
+  consumeToken(FIRToken::kw_when);
+
+  Value condition;
+  SmallVector<Operation *, 8> subOps;
+  if (parseExp(condition, subOps, "unexpected expression in when") ||
+      parseToken(FIRToken::colon, "expected ':' in when") ||
+      parseOptionalInfo(info, subOps))
+    return failure();
+
+  // Create the IR representation for the when.
+  auto whenStmt = builder.create<WhenOp>(info.getLoc(), condition,
+                                         /*createElse*/ false);
+
+  // This is a function to parse a suite body.
+  auto parseSuite = [&](OpBuilder builder) -> ParseResult {
+    // Declarations within the suite are scoped to within the suite.
+    SymbolTable::ScopeTy suiteScope(symbolTable);
+
+    // We parse the substatements into their own parser, so they get insert
+    // into the specified 'when' region.
+    FIRStmtParser subParser(getState(), symbolTable, builder);
+
+    // Figure out whether the body is a single statement or a nested one.
+    auto stmtIndent = getIndentation();
+
+    // Parsing a single statment is straightforward.
+    if (!stmtIndent.hasValue())
+      return subParser.parseSimpleStmt(whenIndent);
+
+    if (stmtIndent <= whenIndent)
+      return emitError("when body must be indented more than when"), failure();
+
+    // Parse a block of statements that are indented more than the when.
+    return subParser.parseSimpleStmtBlock(whenIndent);
+  };
+
+  // Parse the 'then' body into the 'then' region.
+  if (parseSuite(whenStmt.getThenBodyBuilder()))
+    return failure();
+
+  // If the else is present, handle it otherwise we're done.
+  LocWithInfo elseInfo(getToken().getLoc(), this);
+  if (!consumeIf(FIRToken::kw_else))
+    return success();
+
+  // Create an else block to parse into.
+  whenStmt.createElseRegion();
+
+  // If we have the ':' form, then handle it.
+  if (getToken().is(FIRToken::kw_when)) {
+    // TODO(completeness): Handle the 'else when' syntactic sugar when we
+    // care.
+    return emitError("'else when' syntax not supported yet"), failure();
+  }
+
+  // Parse the 'else' body into the 'else' region.
+  if (parseToken(FIRToken::colon, "expected ':' after 'else'") ||
+      parseOptionalInfo(elseInfo) || parseSuite(whenStmt.getElseBodyBuilder()))
+    return failure();
+
+  // TODO(firtl spec): There is no reason for the 'else :' grammar to take an
+  // info.  It doesn't appear to be generated either.
+  return success();
+}
+
+/// leading-exp-stmt ::= exp '<=' exp info?
+///                  ::= exp '<-' exp info?
+///                  ::= exp 'is' 'invalid' info?
+ParseResult FIRStmtParser::parseLeadingExpStmt() {
+  Value lhs;
+  SmallVector<Operation *, 8> subOps;
+  if (parseExp(lhs, subOps, "unexpected token in module"))
+    return failure();
+
+  // Figure out which kind of statement it is.
+  LocWithInfo info(getToken().getLoc(), this);
+
+  // If 'is' grammar is special.
+  if (consumeIf(FIRToken::kw_is)) {
+    if (parseToken(FIRToken::kw_invalid, "expected 'invalid'") ||
+        parseOptionalInfo(info, subOps))
+      return failure();
+
+    builder.create<InvalidOp>(info.getLoc(), lhs);
+    return success();
+  }
+
+  auto kind = getToken().getKind();
+  if (getToken().isNot(FIRToken::less_equal, FIRToken::less_minus))
+    return emitError("expected '<=', '<-', or 'is' in statement"), failure();
+  consumeToken();
+
+  Value rhs;
+  if (parseExp(rhs, subOps, "unexpected token in statement") ||
+      parseOptionalInfo(info, subOps))
+    return failure();
+
+  if (kind == FIRToken::less_equal)
+    builder.create<ConnectOp>(info.getLoc(), lhs, rhs);
+  else {
+    assert(kind == FIRToken::less_minus && "unexpected kind");
+    builder.create<PartialConnectOp>(info.getLoc(), lhs, rhs);
+  }
+  return success();
+}
+
+//===-------------------------------
+// FIRStmtParser Declaration Parsing
 
 /// instance ::= 'inst' id 'of' id info?
 ParseResult FIRStmtParser::parseInstance() {
@@ -1315,116 +1436,6 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
     result = builder.create<RegOp>(info.getLoc(), type, clock, id);
 
   return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
-}
-
-/// when  ::= 'when' exp ':' info? suite? ('else' ( when | ':' info? suite?) )?
-/// suite ::= simple_stmt | INDENT simple_stmt+ DEDENT
-ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
-  LocWithInfo info(getToken().getLoc(), this);
-  consumeToken(FIRToken::kw_when);
-
-  Value condition;
-  SmallVector<Operation *, 8> subOps;
-  if (parseExp(condition, subOps, "unexpected expression in when") ||
-      parseToken(FIRToken::colon, "expected ':' in when") ||
-      parseOptionalInfo(info, subOps))
-    return failure();
-
-  // Create the IR representation for the when.
-  auto whenStmt = builder.create<WhenOp>(info.getLoc(), condition,
-                                         /*createElse*/ false);
-
-  // This is a function to parse a suite body.
-  auto parseSuite = [&](OpBuilder builder) -> ParseResult {
-    // Declarations within the suite are scoped to within the suite.
-    SymbolTable::ScopeTy suiteScope(symbolTable);
-
-    // We parse the substatements into their own parser, so they get insert
-    // into the specified 'when' region.
-    FIRStmtParser subParser(getState(), symbolTable, builder);
-
-    // Figure out whether the body is a single statement or a nested one.
-    auto stmtIndent = getIndentation();
-
-    // Parsing a single statment is straightforward.
-    if (!stmtIndent.hasValue())
-      return subParser.parseSimpleStmt(whenIndent);
-
-    if (stmtIndent <= whenIndent)
-      return emitError("when body must be indented more than when"), failure();
-
-    // Parse a block of statements that are indented more than the when.
-    return subParser.parseSimpleStmtBlock(whenIndent);
-  };
-
-  // Parse the 'then' body into the 'then' region.
-  if (parseSuite(whenStmt.getThenBodyBuilder()))
-    return failure();
-
-  // If the else is present, handle it otherwise we're done.
-  LocWithInfo elseInfo(getToken().getLoc(), this);
-  if (!consumeIf(FIRToken::kw_else))
-    return success();
-
-  // Create an else block to parse into.
-  whenStmt.createElseRegion();
-
-  // If we have the ':' form, then handle it.
-  if (getToken().is(FIRToken::kw_when)) {
-    // TODO(completeness): Handle the 'else when' syntactic sugar when we
-    // care.
-    return emitError("'else when' syntax not supported yet"), failure();
-  }
-
-  // Parse the 'else' body into the 'else' region.
-  if (parseToken(FIRToken::colon, "expected ':' after 'else'") ||
-      parseOptionalInfo(elseInfo) || parseSuite(whenStmt.getElseBodyBuilder()))
-    return failure();
-
-  // TODO(firtl spec): There is no reason for the 'else :' grammar to take an
-  // info.  It doesn't appear to be generated either.
-  return success();
-}
-
-/// leading-exp-stmt ::= exp '<=' exp info?
-///                  ::= exp '<-' exp info?
-///                  ::= exp 'is' 'invalid' info?
-ParseResult FIRStmtParser::parseLeadingExpStmt() {
-  Value lhs;
-  SmallVector<Operation *, 8> subOps;
-  if (parseExp(lhs, subOps, "unexpected token in module"))
-    return failure();
-
-  // Figure out which kind of statement it is.
-  LocWithInfo info(getToken().getLoc(), this);
-
-  // If 'is' grammar is special.
-  if (consumeIf(FIRToken::kw_is)) {
-    if (parseToken(FIRToken::kw_invalid, "expected 'invalid'") ||
-        parseOptionalInfo(info, subOps))
-      return failure();
-
-    builder.create<InvalidOp>(info.getLoc(), lhs);
-    return success();
-  }
-
-  auto kind = getToken().getKind();
-  if (getToken().isNot(FIRToken::less_equal, FIRToken::less_minus))
-    return emitError("expected '<=', '<-', or 'is' in statement"), failure();
-  consumeToken();
-
-  Value rhs;
-  if (parseExp(rhs, subOps, "unexpected token in statement") ||
-      parseOptionalInfo(info, subOps))
-    return failure();
-
-  if (kind == FIRToken::less_equal)
-    builder.create<ConnectOp>(info.getLoc(), lhs, rhs);
-  else {
-    assert(kind == FIRToken::less_minus && "unexpected kind");
-    builder.create<PartialConnectOp>(info.getLoc(), lhs, rhs);
-  }
-  return success();
 }
 
 //===----------------------------------------------------------------------===//
