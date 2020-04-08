@@ -6,6 +6,7 @@
 
 #include "FIRLexer.h"
 #include "mlir/IR/Diagnostics.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/SourceMgr.h"
 
@@ -15,6 +16,9 @@ using namespace mlir;
 using llvm::SMLoc;
 using llvm::SMRange;
 using llvm::SourceMgr;
+
+#define isdigit(x) DO_NOT_USE_SLOW_CTYPE_FUNCTIONS
+#define isalpha(x) DO_NOT_USE_SLOW_CTYPE_FUNCTIONS
 
 //===----------------------------------------------------------------------===//
 // FIRToken
@@ -102,7 +106,7 @@ FIRToken FIRLexer::lexToken() {
     switch (*curPtr++) {
     default:
       // Handle identifiers.
-      if (isalpha(curPtr[-1]))
+      if (llvm::isAlpha(curPtr[-1]))
         return lexIdentifierOrKeyword(tokStart);
 
       // Unknown character, emit an error.
@@ -227,7 +231,7 @@ FIRToken FIRLexer::lexFileInfo(const char *tokStart) {
 ///
 FIRToken FIRLexer::lexIdentifierOrKeyword(const char *tokStart) {
   // Match the rest of the identifier regex: [0-9a-zA-Z_$]*
-  while (isalpha(*curPtr) || isdigit(*curPtr) || *curPtr == '_' ||
+  while (llvm::isAlpha(*curPtr) || llvm::isDigit(*curPtr) || *curPtr == '_' ||
          *curPtr == '$')
     ++curPtr;
 
@@ -313,9 +317,9 @@ FIRToken FIRLexer::lexString(const char *tokStart) {
 ///   PosInt ::= [1-9] ([0-9])*
 ///
 FIRToken FIRLexer::lexNumber(const char *tokStart) {
-  assert(isdigit(curPtr[-1]));
+  assert(llvm::isDigit(curPtr[-1]));
 
-  while (isdigit(*curPtr))
+  while (llvm::isDigit(*curPtr))
     ++curPtr;
 
   return formToken(FIRToken::integer, tokStart);
