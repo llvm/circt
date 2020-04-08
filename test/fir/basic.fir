@@ -186,6 +186,9 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.subaccess %_T[%auto] : (!firrtl.vector<uint<1>, 12>, !firrtl.flip<uint<1>>) -> !firrtl.uint<1>
     auto <= _T[auto]
 
+    ; CHECK: %myMem = firrtl.cmem {name = "myMem"} : !firrtl.vector<bundle<id: uint<4>, resp: uint<2>>, 8>
+    cmem myMem : { id : UInt<4>, resp : UInt<2>} [8] @[Decoupled.scala 209:24]
+ 
   ; CHECK-LABEL: firrtl.module @type_handling(
   module type_handling :
     wire _T_6 : { flip b : { bits : { source : UInt<7> } } }

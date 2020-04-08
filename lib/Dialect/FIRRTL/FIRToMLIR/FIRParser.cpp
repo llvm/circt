@@ -702,7 +702,10 @@ private:
   ParseResult parsePrintf();
   ParseResult parseSkip();
   ParseResult parseStop();
+
+  // Declarations
   ParseResult parseInstance();
+  ParseResult parseCMem();
   ParseResult parseNode();
   ParseResult parseWire();
   ParseResult parseRegister(unsigned regIndent);
@@ -1033,6 +1036,7 @@ ParseResult FIRStmtParser::parseSimpleStmtBlock(unsigned indent) {
 ///      ::= skip
 ///      ::= stop
 ///      ::= instance
+///      ::= cmem
 ///      ::= node
 ///      ::= wire
 ///      ::= when
@@ -1049,6 +1053,8 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
     return parseStop();
   case FIRToken::kw_inst:
     return parseInstance();
+  case FIRToken::kw_cmem:
+    return parseCMem();
   case FIRToken::kw_node:
     return parseNode();
   case FIRToken::kw_wire:
@@ -1169,6 +1175,23 @@ ParseResult FIRStmtParser::parseInstance() {
   auto result = builder.create<InstanceOp>(
       info.getLoc(), resultType, builder.getSymbolRefAttr(moduleName), id);
 
+  return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
+}
+
+/// cmem ::= 'cmem' id ':' type info?
+ParseResult FIRStmtParser::parseCMem() {
+  // TODO(firrtl spec) cmem is completely undocumented.
+  LocWithInfo info(getToken().getLoc(), this);
+  consumeToken(FIRToken::kw_cmem);
+
+  StringAttr id;
+  FIRRTLType type;
+  if (parseId(id, "expected cmem name") ||
+      parseToken(FIRToken::colon, "expected ':' in cmem") ||
+      parseType(type, "expected cmem type") || parseOptionalInfo(info))
+    return failure();
+
+  auto result = builder.create<CMemOp>(info.getLoc(), type, id);
   return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
 }
 
