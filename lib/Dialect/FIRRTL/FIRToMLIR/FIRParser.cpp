@@ -1176,8 +1176,9 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
     if (parseToken(FIRToken::colon, "expected ':' in reg"))
       return failure();
 
-    // TODO(firrtl spec): The grammar for the reset logic is wonky.  Why allow
-    // multiple ambiguous parentheses?  Why rely on indentation at all?
+    // TODO(firrtl spec): Simplify the grammar for register reset logic.
+    // Why allow multiple ambiguous parentheses?  Why rely on indentation at
+    // all?
 
     // This implements what the examples have in practice.
     if (getToken().is(FIRToken::l_paren))
@@ -1195,17 +1196,17 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
         parseToken(FIRToken::comma, "expected ',' in reset specifier"))
       return failure();
 
-    // This is a horrible hack for self referential registers.  It isn't clear
-    // what this means, but lets accept it for now so we can keep working on the
-    // parser.
+    // The Scala implementation of FIRRTL represents registers without resets
+    // as a self referential register... and the pretty printer doesn't print
+    // the right form. Recognize that this is happening and treat it as a
+    // register without a reset for compatibility.
+    // TODO(firrtl scala impl): pretty print registers without resets right.
     if (getTokenSpelling() == id.getValue()) {
-      emitWarning(info.getLoc(), "self referential reg not supported yet");
       consumeToken();
       if (parseToken(FIRToken::r_paren, "expected ')' in reset specifier") ||
           parseOptionalInfo(info, subOps))
         return failure();
       resetSignal = Value();
-
     } else {
       if (parseExp(resetValue, subOps, "expected expression for reset value") ||
           parseToken(FIRToken::r_paren, "expected ')' in reset specifier") ||
