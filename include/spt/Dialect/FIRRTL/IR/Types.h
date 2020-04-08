@@ -39,13 +39,20 @@ public:
     Flip,
     Bundle,
     Vector,
-    LAST_KIND
+    LAST_KIND = Vector
   };
 
   void print(raw_ostream &os) const;
 
+  /// Return true if this is a "passive" type - one that contains no "flip"
+  /// types recursively within itself.
+  bool isPassiveType();
+
+  /// Return this type with any flip types recursively removed from itself.
+  FIRRTLType getPassiveType();
+
   static bool kindof(unsigned kind) {
-    return kind >= FIRST_KIND && kind < LAST_KIND;
+    return kind >= FIRST_KIND && kind <= LAST_KIND;
   }
 
 protected:
@@ -113,7 +120,7 @@ public:
   static SIntType get(MLIRContext *context, int32_t width = -1);
 
   /// Return the bitwidth of this type or None if unknown.
-  Optional<int32_t> getWidth() const;
+  Optional<int32_t> getWidth();
 };
 
 /// An unsigned integer type, whose width may not be known.
@@ -125,7 +132,7 @@ public:
   static UIntType get(MLIRContext *context, int32_t width = -1);
 
   /// Return the bitwidth of this type or None if unknown.
-  Optional<int32_t> getWidth() const;
+  Optional<int32_t> getWidth();
 };
 
 // `firrtl.Analog` can be attached to multiple drivers.
@@ -137,7 +144,7 @@ public:
   static AnalogType get(MLIRContext *context, int32_t width = -1);
 
   /// Return the bitwidth of this type or None if unknown.
-  Optional<int32_t> getWidth() const;
+  Optional<int32_t> getWidth();
 };
 
 //===----------------------------------------------------------------------===//
@@ -149,7 +156,7 @@ class FlipType : public FIRRTLType::TypeBase<FlipType, FIRRTLType,
 public:
   using Base::Base;
 
-  FIRRTLType getElementType() const;
+  FIRRTLType getElementType();
 
   static FIRRTLType get(FIRRTLType element);
 
@@ -172,13 +179,20 @@ public:
 
   static BundleType get(ArrayRef<BundleElement> elements, MLIRContext *context);
 
-  ArrayRef<BundleElement> getElements() const;
+  ArrayRef<BundleElement> getElements();
+
+  /// Return true if this is a "passive" type - one that contains no "flip"
+  /// types recursively within itself.
+  bool isPassiveType();
+
+  /// Return this type with any flip types recursively removed from itself.
+  FIRRTLType getPassiveType();
 
   static bool kindof(unsigned kind) { return kind == Bundle; }
 };
 
 //===----------------------------------------------------------------------===//
-// Vector Type
+// FVector Type
 //===----------------------------------------------------------------------===//
 
 /// VectorType is a fixed size collection of elements, like an array.
@@ -189,8 +203,15 @@ public:
 
   static FVectorType get(FIRRTLType elementType, unsigned numElements);
 
-  FIRRTLType getElementType() const;
-  unsigned getNumElements() const;
+  FIRRTLType getElementType();
+  unsigned getNumElements();
+
+  /// Return true if this is a "passive" type - one that contains no "flip"
+  /// types recursively within itself.
+  bool isPassiveType();
+
+  /// Return this type with any flip types recursively removed from itself.
+  FIRRTLType getPassiveType();
 
   static bool kindof(unsigned kind) { return kind == Vector; }
 };

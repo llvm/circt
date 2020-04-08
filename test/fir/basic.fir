@@ -179,3 +179,8 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     inst myext of MyExtModule
     myext.in <= i8
     printf(clock, reset, "Something interesting! %x", myext.out)
+
+  ; CHECK-LABEL: firrtl.module @type_handling(
+  module type_handling :
+    wire _T_6 : { flip b : { bits : { source : UInt<7> } } }
+    node _T_8 = bits(_T_6.b.bits.source, 5, 0)

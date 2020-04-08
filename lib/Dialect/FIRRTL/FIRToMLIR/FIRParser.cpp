@@ -856,7 +856,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result,
 
   SmallVector<FIRRTLType, 4> opTypes;
   for (auto v : operands)
-    opTypes.push_back(v.getType().cast<FIRRTLType>());
+    opTypes.push_back(v.getType().cast<FIRRTLType>().getPassiveType());
 
   auto typeError = [&](StringRef opName) -> ParseResult {
     auto diag = emitError(loc, "invalid input types for '") << opName << "': ";
