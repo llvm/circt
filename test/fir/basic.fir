@@ -49,19 +49,19 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     output auto : UInt<1>    ; CHECK: %auto: !firrtl.flip<uint<1>>,
     input i8 : UInt<8>       ; CHECK: %i8: !firrtl.uint<8>)
 
-    ; CHECK: %0 = firrtl.wire {name = "_T"} : !firrtl.vector<uint<1>, 12>
+    ; CHECK: %_T = firrtl.wire {name = "_T"} : !firrtl.vector<uint<1>, 12>
     wire _T : UInt<1>[12] @[Nodes.scala 370:76]
 
-    ; CHECK: %1 = firrtl.wire {name = "_T_2"} : !firrtl.vector<uint<1>, 13>
+    ; CHECK: %_T_2 = firrtl.wire {name = "_T_2"} : !firrtl.vector<uint<1>, 13>
     wire _T_2 : UInt<1>[13]
 
-    ; CHECK: %2 = firrtl.wire {name = "out_0"} : !firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>
+    ; CHECK: %out_0 = firrtl.wire {name = "out_0"} : !firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>
     wire out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
 
-    ; CHECK: firrtl.connect %0, %1 : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 13>
+    ; CHECK: firrtl.connect %_T, %_T_2 : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 13>
     _T <= _T_2
 
-    ; CHECK: firrtl.partialconnect %0, %1
+    ; CHECK: firrtl.partialconnect %_T, %_T_2
     _T <- _T_2
 
     ; CHECK: firrtl.invalid %auto : !firrtl.flip<uint<1>>
@@ -73,18 +73,18 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.invalid %reset : !firrtl.uint<1>
     reset is invalid
 
-    ; CHECK: %3 = firrtl.subfield %2("member") : (!firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>) -> !firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>
-    ; CHECK: %4 = firrtl.subfield %3("0") : (!firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>) -> !firrtl.bundle<clock: clock, reset: uint<1>>
-    ; CHECK: %5 = firrtl.subfield %4("reset") : (!firrtl.bundle<clock: clock, reset: uint<1>>) -> !firrtl.uint<1>
-    ; CHECK: firrtl.partialconnect %auto, %5 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    ; CHECK: %0 = firrtl.subfield %out_0("member") : (!firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>) -> !firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>
+    ; CHECK: %1 = firrtl.subfield %0("0") : (!firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>) -> !firrtl.bundle<clock: clock, reset: uint<1>>
+    ; CHECK: %2 = firrtl.subfield %1("reset") : (!firrtl.bundle<clock: clock, reset: uint<1>>) -> !firrtl.uint<1>
+    ; CHECK: firrtl.partialconnect %auto, %2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     auto <- out_0.member.0.reset @[Field 173:49]
 
-    ; CHECK: %6 = firrtl.subindex %1[0] : (!firrtl.vector<uint<1>, 13>) -> !firrtl.uint<1>
-    ; CHECK: %7 = firrtl.subindex %0[0] : (!firrtl.vector<uint<1>, 12>) -> !firrtl.uint<1>
-    ; CHECK: firrtl.connect %6, %7
+    ; CHECK: %3 = firrtl.subindex %_T_2[0] : (!firrtl.vector<uint<1>, 13>) -> !firrtl.uint<1>
+    ; CHECK: %4 = firrtl.subindex %_T[0] : (!firrtl.vector<uint<1>, 12>) -> !firrtl.uint<1>
+    ; CHECK: firrtl.connect %3, %4
     _T_2[0] <= _T[0] @[Xbar.scala 21:44]
 
-    ; CHECK: %8 = firrtl.node %auto {name = "n1"} : !firrtl.flip<uint<1>>
+    ; CHECK: %n1 = firrtl.node %auto {name = "n1"} : !firrtl.flip<uint<1>>
     node n1 = auto
 
     ; CHECK: firrtl.add %reset, %reset : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
@@ -100,18 +100,18 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     auto <= add(UInt<10>(42), UInt<8>("hAB"))
 
     ; CHECK: firrtl.when %reset {
-    ; CHECK:   firrtl.connect %0, %1
+    ; CHECK:   firrtl.connect %_T, %_T_2
     ; CHECK: } else {
-    ; CHECK:   firrtl.partialconnect %0
+    ; CHECK:   firrtl.partialconnect %_T, %_T_2
     ; CHECK: }
     when reset : _T <= _T_2 else : _T <- _T_2
 
     ; CHECK: firrtl.when %reset {
-    ; CHECK:   [[N4A:%.+]] = firrtl.node %1
-    ; CHECK:   firrtl.connect %0, [[N4A]]
+    ; CHECK:   [[N4A:%.+]] = firrtl.node %_T_2
+    ; CHECK:   firrtl.connect %_T, [[N4A]]
     ; CHECK: } else {
-    ; CHECK:   [[N4B:%.+]] = firrtl.node %1
-    ; CHECK:   firrtl.partialconnect %0, [[N4B]]
+    ; CHECK:   [[N4B:%.+]] = firrtl.node %_T_2
+    ; CHECK:   firrtl.partialconnect %_T, [[N4B]]
     ; CHECK: }
     when reset :
       node n4 = _T_2
@@ -123,13 +123,13 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: [[TMP:%.+]] = firrtl.constant 4
     ; CHECK: [[COND:%.+]] = firrtl.lt %reset, [[TMP]]
     ; CHECK: firrtl.when [[COND]] {
-    ; CHECK:   firrtl.connect %0, %1
+    ; CHECK:   firrtl.connect %_T, %_T_2
     ; CHECK: }
     ; CHECK-NOT: else
     when lt(reset, UInt(4)) :   ;; When with no else.
       _T <= _T_2
 
-    ; CHECK: firrtl.printf %clock, %reset, "\22Something interesting! %x %x\22" %0, %1 : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 13>
+    ; CHECK: firrtl.printf %clock, %reset, "\22Something interesting! %x %x\22" %_T, %_T_2 : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 13>
     printf(clock, reset, "Something interesting! %x %x", _T, _T_2)
 
     ; CHECK: firrtl.stop %clock, %reset, 42
@@ -142,20 +142,20 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.shr %i8, 8 : (!firrtl.uint<8>) -> !firrtl.uint<1>
     node n5 = or(shl(i8, 4), shr(i8, 8))
   
-    ; CHECK: firrtl.dshl %i8, %24 : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<23>
+    ; CHECK: firrtl.dshl %i8, %{{.*}} : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<23>
     node n6 = dshl(i8, UInt<4>(7))
 
-    ; CHECK: firrtl.cat %23, %26 : (!firrtl.uint<12>, !firrtl.uint<23>) -> !firrtl.uint<35>
+    ; CHECK: firrtl.cat %{{.*}}, %{{.*}} : (!firrtl.uint<12>, !firrtl.uint<23>) -> !firrtl.uint<35>
     node n7 = cat(n5, n6)
 
-    ; CHECK: firrtl.mux(%reset, %i8, %29) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint) -> !firrtl.uint
+    ; CHECK: firrtl.mux(%reset, %i8, %{{.*}}) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint) -> !firrtl.uint
     node n8 = mux(reset, i8, UInt(4))
 
-    ; CHECK: firrtl.reginit %clock, %reset, %32 {name = "_T_2621"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>) -> !firrtl.uint<4>
+    ; CHECK: firrtl.reginit %clock, %reset, %{{.*}} {name = "_T_2621"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>) -> !firrtl.uint<4>
     reg _T_2621 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0")) @[Edges.scala 230:27]
 
-    ; CHECK: firrtl.div %i8, %34 : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<8>
+    ; CHECK: firrtl.div %i8, %{{.*}} : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<8>
     node n9 = div(i8, UInt<4>(4))
 
     ; CHECK: firrtl.tail %i8 7 : (!firrtl.uint<8>) -> !firrtl.uint<1>

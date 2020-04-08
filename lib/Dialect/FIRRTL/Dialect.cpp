@@ -16,8 +16,11 @@ using namespace firrtl;
 //===----------------------------------------------------------------------===//
 
 // If the specified attribute set contains the firrtl.name attribute, return it.
-static StringAttr getFIRRTLNameAttr(ArrayRef<NamedAttribute> attrs) {
+static StringAttr getModuleFIRRTLNameAttr(ArrayRef<NamedAttribute> attrs) {
   for (auto &argAttr : attrs) {
+    // FIXME: We currently use firrtl.name instead of name because this makes
+    // the FunctionLike handling in MLIR core happier.  It otherwise doesn't
+    // allow attributes on module parameters.
     if (!argAttr.first.is("firrtl.name"))
       continue;
 
@@ -30,7 +33,7 @@ static StringAttr getFIRRTLNameAttr(ArrayRef<NamedAttribute> attrs) {
 namespace {
 
 // We implement the OpAsmDialectInterface so that FIRRTL dialect operations
-// automatically interpret the firrtl.name attribute on function arguments and
+// automatically interpret the name attribute on function arguments and
 // on operations as their SSA name.
 struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
   using OpAsmDialectInterface::OpAsmDialectInterface;
@@ -40,7 +43,7 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
   void getAsmResultNames(Operation *op,
                          OpAsmSetValueNameFn setNameFn) const override {
     if (op->getNumResults() > 0)
-      if (auto nameAttr = op->getAttrOfType<StringAttr>("firrtl.name"))
+      if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
         setNameFn(op->getResult(0), nameAttr.getValue());
   }
 
@@ -54,7 +57,7 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
 
     for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
       // Scan for a 'firrtl.name' attribute.
-      if (auto str = getFIRRTLNameAttr(impl::getArgAttrs(parentOp, i)))
+      if (auto str = getModuleFIRRTLNameAttr(impl::getArgAttrs(parentOp, i)))
         setNameFn(block->getArgument(i), str.getValue());
     }
   }
@@ -150,7 +153,7 @@ void firrtl::getModulePortInfo(Operation *op,
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
     results.push_back(
-        {getFIRRTLNameAttr(argAttrs), argTypes[i].cast<FIRRTLType>()});
+        {getModuleFIRRTLNameAttr(argAttrs), argTypes[i].cast<FIRRTLType>()});
   }
 }
 
@@ -238,7 +241,7 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
     ArrayRef<StringRef> elidedAttrs;
     StringRef tmp;
     if (argumentValue) {
-      if (auto nameAttr = getFIRRTLNameAttr(argAttrs)) {
+      if (auto nameAttr = getModuleFIRRTLNameAttr(argAttrs)) {
 
         // Check to make sure the asmprinter is printing it correctly.
         SmallString<32> resultNameStr;
