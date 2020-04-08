@@ -332,7 +332,7 @@ def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
 }
 
 def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
-  let summary = "Extract an element of another vector value";
+  let summary = "Extract an element of a vector value";
   let description = [{
     The subindex expression statically refers, by index, to a subelement
     of an expression with a vector type. The index must be a non-negative
@@ -358,6 +358,34 @@ def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
     static FIRRTLType getResultType(FIRRTLType inType, unsigned fieldIdx);
   }];
 }
+
+def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect]> {
+  let summary = "Extract a dynamic element of a vector value";
+  let description = [{
+    The subaccess expression dynamically refers to a subelement of a 
+    vector-typed expression using a calculated index. The index must be an
+    expression with an unsigned integer type.
+    ```
+      %result = firrt.subaccess %input[%idx] : t1, t2
+    ```
+    }];
+
+  let arguments = (ins AnyType:$input, AnyType:$index,
+                       OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  // TODO: Could drop the result type, inferring it from the source.
+  let assemblyFormat = [{
+     $input `[` $index `]` attr-dict `:` functional-type(operands, $result)
+  }];
+
+  let extraClassDeclaration = [{
+    /// Compute the result of a Subaccess operation on a value of the specified
+    /// type.  If the request is invalid, then a null type is returned.
+    static FIRRTLType getResultType(FIRRTLType baseType, FIRRTLType indexType);
+  }];
+}
+
 
 //===----------------------------------------------------------------------===//
 // Statements

@@ -687,12 +687,16 @@ struct FIRStmtParser : public FIRScopedParser {
   ParseResult parseSimpleStmtBlock(unsigned indent);
 
 private:
+  using SubOpVector = SmallVectorImpl<Operation *>;
+
   // Exp Parsing
-  ParseResult parseExp(Value &result, SmallVectorImpl<Operation *> &subOps,
+  ParseResult parseExp(Value &result, SubOpVector &subOps,
                        const Twine &message);
-  ParseResult parsePrimExp(Value &result, SmallVectorImpl<Operation *> &subOps);
-  ParseResult parseIntegerLiteralExp(Value &result,
-                                     SmallVectorImpl<Operation *> &subOps);
+  ParseResult parsePostFixFieldId(Value &result, SubOpVector &subOps);
+  ParseResult parsePostFixIntSubscript(Value &result, SubOpVector &subOps);
+  ParseResult parsePostFixDynamicSubscript(Value &result, SubOpVector &subOps);
+  ParseResult parsePrimExp(Value &result, SubOpVector &subOps);
+  ParseResult parseIntegerLiteralExp(Value &result, SubOpVector &subOps);
 
   // Stmt Parsing
   ParseResult parsePrintf();
@@ -720,11 +724,10 @@ private:
 ///      ::= exp '.' fieldId
 ///      ::= exp '[' intLit ']'
 /// XX   ::= exp '.' DoubleLit // TODO Workaround for #470
-/// XX   ::= exp '[' exp ']'
+///      ::= exp '[' exp ']'
 /// XX   ::= 'validif(' exp exp ')'
 ///
-ParseResult FIRStmtParser::parseExp(Value &result,
-                                    SmallVectorImpl<Operation *> &subOps,
+ParseResult FIRStmtParser::parseExp(Value &result, SubOpVector &subOps,
                                     const Twine &message) {
   switch (getToken().getKind()) {
 
@@ -755,66 +758,24 @@ ParseResult FIRStmtParser::parseExp(Value &result,
 
   // Handle postfix expressions.
   while (1) {
-    auto loc = getToken().getLoc();
-
     // Subfield: exp ::= exp '.' fieldId
     if (consumeIf(FIRToken::period)) {
-      StringRef fieldName;
-      if (parseFieldId(fieldName, "expected field name"))
+      if (parsePostFixFieldId(result, subOps))
         return failure();
 
-      // Make sure the field name matches up with the input value's type and
-      // compute the result type for the expression.
-      auto resultType = result.getType().cast<FIRRTLType>();
-      resultType = SubfieldOp::getResultType(resultType, fieldName);
-      if (!resultType) {
-        // TODO(QoI): This error would be nicer with a .fir pretty print of the
-        // type.
-        emitError(loc, "invalid subfield '" + fieldName + "' for type ")
-            << result.getType();
-        return failure();
-      }
-
-      // Create the result operation.
-      auto op =
-          builder.create<SubfieldOp>(translateLocation(loc), resultType, result,
-                                     builder.getStringAttr(fieldName),
-                                     /*optionalName*/ StringAttr());
-      subOps.push_back(op);
-      result = op.getResult();
       continue;
     }
 
-    // Subindex: exp ::= exp '[' intLit ']'
+    // Subindex: exp ::= exp '[' intLit ']' | exp '[' exp ']'
     if (consumeIf(FIRToken::l_square)) {
-      auto indexLoc = getToken().getLoc();
-      int32_t indexNo;
-      if (parseIntLit(indexNo, "expected index") ||
-          parseToken(FIRToken::r_square, "expected ']'"))
-        return failure();
-
-      if (indexNo < 0)
-        return emitError(indexLoc, "invalid index specifier"), failure();
-
-      // Make sure the field name matches up with the input value's type and
-      // compute the result type for the expression.
-      auto resultType = result.getType().cast<FIRRTLType>();
-      resultType = SubindexOp::getResultType(resultType, indexNo);
-      if (!resultType) {
-        // TODO(QoI): This error would be nicer with a .fir pretty print of the
-        // type.
-        emitError(loc, "invalid subindex '" + Twine(indexNo))
-            << "' for type " << result.getType();
-        return failure();
+      if (getToken().isAny(FIRToken::integer, FIRToken::string)) {
+        if (parsePostFixIntSubscript(result, subOps))
+          return failure();
+        continue;
       }
+      if (parsePostFixDynamicSubscript(result, subOps))
+        return failure();
 
-      // Create the result operation.
-      auto op =
-          builder.create<SubindexOp>(translateLocation(loc), resultType, result,
-                                     builder.getI32IntegerAttr(indexNo),
-                                     /*optionalName*/ StringAttr());
-      subOps.push_back(op);
-      result = op.getResult();
       continue;
     }
 
@@ -822,9 +783,111 @@ ParseResult FIRStmtParser::parseExp(Value &result,
   }
 }
 
+/// exp ::= exp '.' fieldId
+///
+/// The "exp '.'" part of the production has already been parsed.
+///
+ParseResult FIRStmtParser::parsePostFixFieldId(Value &result,
+                                               SubOpVector &subOps) {
+  auto loc = getToken().getLoc();
+  StringRef fieldName;
+  if (parseFieldId(fieldName, "expected field name"))
+    return failure();
+
+  // Make sure the field name matches up with the input value's type and
+  // compute the result type for the expression.
+  auto resultType = result.getType().cast<FIRRTLType>();
+  resultType = SubfieldOp::getResultType(resultType, fieldName);
+  if (!resultType) {
+    // TODO(QoI): This error would be nicer with a .fir pretty print of the
+    // type.
+    emitError(loc, "invalid subfield '" + fieldName + "' for type ")
+        << result.getType();
+    return failure();
+  }
+
+  // Create the result operation.
+  auto op = builder.create<SubfieldOp>(translateLocation(loc), resultType,
+                                       result, builder.getStringAttr(fieldName),
+                                       /*optionalName*/ StringAttr());
+  subOps.push_back(op);
+  result = op.getResult();
+  return success();
+}
+
+/// exp ::= exp '[' intLit ']'
+///
+/// The "exp '['" part of the production has already been parsed.
+///
+ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result,
+                                                    SubOpVector &subOps) {
+  auto indexLoc = getToken().getLoc();
+  int32_t indexNo;
+  if (parseIntLit(indexNo, "expected index") ||
+      parseToken(FIRToken::r_square, "expected ']'"))
+    return failure();
+
+  if (indexNo < 0)
+    return emitError(indexLoc, "invalid index specifier"), failure();
+
+  // Make sure the index expression is valid and compute the result type for the
+  // expression.
+  auto resultType = result.getType().cast<FIRRTLType>();
+  resultType = SubindexOp::getResultType(resultType, indexNo);
+  if (!resultType) {
+    // TODO(QoI): This error would be nicer with a .fir pretty print of the
+    // type.
+    emitError(indexLoc, "invalid subindex '" + Twine(indexNo))
+        << "' for type " << result.getType();
+    return failure();
+  }
+
+  // Create the result operation.
+  auto op =
+      builder.create<SubindexOp>(translateLocation(indexLoc), resultType,
+                                 result, builder.getI32IntegerAttr(indexNo),
+                                 /*optionalName*/ StringAttr());
+  subOps.push_back(op);
+  result = op.getResult();
+  return success();
+}
+
+/// exp ::= exp '[' exp ']'
+///
+/// The "exp '['" part of the production has already been parsed.
+///
+ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result,
+                                                        SubOpVector &subOps) {
+  auto indexLoc = getToken().getLoc();
+  Value index;
+  if (parseExp(index, subOps, "expected subscript index expression") ||
+      parseToken(FIRToken::r_square, "expected ']' in subscript"))
+    return failure();
+
+  // Make sure the index expression is valid and compute the result type for the
+  // expression.
+  auto resultType = result.getType().cast<FIRRTLType>();
+  resultType = SubaccessOp::getResultType(resultType,
+                                          index.getType().cast<FIRRTLType>());
+  if (!resultType) {
+    // TODO(QoI): This error would be nicer with a .fir pretty print of the
+    // type.
+    emitError(indexLoc, "invalid dynamic subaccess into ")
+        << result.getType() << " with index of type " << index.getType();
+    return failure();
+  }
+
+  // Create the result operation.
+  auto op = builder.create<SubaccessOp>(translateLocation(indexLoc), resultType,
+                                        result, index,
+                                        /*optionalName*/ StringAttr());
+  subOps.push_back(op);
+  result = op.getResult();
+  return success();
+}
+
 /// prim ::= primop exp* intLit*  ')'
-ParseResult FIRStmtParser::parsePrimExp(Value &result,
-                                        SmallVectorImpl<Operation *> &subOps) {
+ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
   auto kind = getToken().getKind();
   auto loc = getToken().getLoc();
   consumeToken();
@@ -920,9 +983,8 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result,
 
 /// integer-literal-exp ::= 'UInt' optional-width '(' intLit ')'
 ///                     ::= 'SInt' optional-width '(' intLit ')'
-ParseResult
-FIRStmtParser::parseIntegerLiteralExp(Value &result,
-                                      SmallVectorImpl<Operation *> &subOps) {
+ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result,
+                                                  SubOpVector &subOps) {
   bool isSigned = getToken().is(FIRToken::kw_SInt);
   auto loc = getToken().getLoc();
   consumeToken();
@@ -937,9 +999,11 @@ FIRStmtParser::parseIntegerLiteralExp(Value &result,
     return failure();
 
   FIRRTLType resultType = getIntegerType(builder.getContext(), isSigned, width);
-  result = builder.create<ConstantOp>(translateLocation(loc), resultType,
-                                      builder.getI64IntegerAttr(value),
-                                      /*optionalName*/ StringAttr());
+  auto op = builder.create<ConstantOp>(translateLocation(loc), resultType,
+                                       builder.getI64IntegerAttr(value),
+                                       /*optionalName*/ StringAttr());
+  subOps.push_back(op);
+  result = op;
   return success();
 }
 

@@ -498,6 +498,18 @@ FIRRTLType SubindexOp::getResultType(FIRRTLType inType, unsigned fieldIdx) {
   return {};
 }
 
+FIRRTLType SubaccessOp::getResultType(FIRRTLType inType, FIRRTLType indexType) {
+  if (auto vectorType = inType.dyn_cast<FVectorType>())
+    if (indexType.isa<UIntType>())
+      return vectorType.getElementType();
+
+  if (auto flipType = inType.dyn_cast<FlipType>())
+    if (auto subType = getResultType(flipType.getElementType(), indexType))
+      return FlipType::get(subType);
+
+  return {};
+}
+
 //===----------------------------------------------------------------------===//
 // Binary Primitives
 //===----------------------------------------------------------------------===//
