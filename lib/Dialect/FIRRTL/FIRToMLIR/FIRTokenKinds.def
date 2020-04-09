@@ -50,7 +50,6 @@ TOK_LITERAL(fileinfo)
 
 // Punctuation.
 TOK_PUNCTUATION(period, ".")
-TOK_PUNCTUATION(comma, ",")
 TOK_PUNCTUATION(colon, ":")
 TOK_PUNCTUATION(question, "?")
 TOK_PUNCTUATION(l_paren, "(")

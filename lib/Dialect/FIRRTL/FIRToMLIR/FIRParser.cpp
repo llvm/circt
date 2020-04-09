@@ -150,17 +150,9 @@ struct FIRParser {
   /// output a diagnostic and return failure.
   ParseResult parseToken(FIRToken::Kind expectedToken, const Twine &message);
 
-  /// Parse a comma separated list of elements that must have at least one entry
-  /// in it.
-  ParseResult
-  parseCommaSeparatedList(const std::function<ParseResult()> &parseElement);
-
-  /// Parse a comma-separated list of elements, terminated with an arbitrary
-  /// token.  This allows empty lists if allowEmptyList is true.
-  ParseResult
-  parseCommaSeparatedListUntil(FIRToken::Kind rightToken,
-                               const std::function<ParseResult()> &parseElement,
-                               bool allowEmptyList = true);
+  /// Parse a list of elements, terminated with an arbitrary token.
+  ParseResult parseListUntil(FIRToken::Kind rightToken,
+                             const std::function<ParseResult()> &parseElement);
 
   //===--------------------------------------------------------------------===//
   // Common Parser Rules
@@ -229,40 +221,15 @@ ParseResult FIRParser::parseToken(FIRToken::Kind expectedToken,
   return emitError(message);
 }
 
-/// Parse a comma separated list of elements that must have at least one entry
-/// in it.
-ParseResult FIRParser::parseCommaSeparatedList(
-    const std::function<ParseResult()> &parseElement) {
-  // Non-empty case starts with an element.
-  if (parseElement())
-    return failure();
+/// Parse a list of elements, terminated with an arbitrary token.
+ParseResult
+FIRParser::parseListUntil(FIRToken::Kind rightToken,
+                          const std::function<ParseResult()> &parseElement) {
 
-  // Otherwise we have a list of comma separated elements.
-  while (consumeIf(FIRToken::comma)) {
+  while (!consumeIf(rightToken)) {
     if (parseElement())
       return failure();
   }
-  return success();
-}
-
-/// Parse a comma-separated list of elements, terminated with an arbitrary
-/// token.  This allows empty lists if allowEmptyList is true.
-ParseResult FIRParser::parseCommaSeparatedListUntil(
-    FIRToken::Kind rightToken, const std::function<ParseResult()> &parseElement,
-    bool allowEmptyList) {
-
-  // Handle the empty case.
-  if (getToken().is(rightToken)) {
-    if (!allowEmptyList)
-      return emitError("expected list element");
-    consumeToken(rightToken);
-    return success();
-  }
-
-  if (parseCommaSeparatedList(parseElement) ||
-      parseToken(rightToken, "expected ',' or end of list"))
-    return failure();
-
   return success();
 }
 
@@ -522,7 +489,7 @@ ParseResult FIRParser::parseFieldId(StringRef &result, const Twine &message) {
 ///      ::= 'UInt' optional-width
 ///      ::= 'SInt' optional-width
 ///      ::= 'Analog' optional-width
-///      ::= '{' '}' | '{' field (',' field)* '}'
+///      ::= {' field* '}'
 ///      ::= type '[' intLit ']'
 ///
 /// field: 'flip'? fieldId ':' type
@@ -569,7 +536,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     consumeToken(FIRToken::l_brace);
 
     SmallVector<BundleType::BundleElement, 4> elements;
-    if (parseCommaSeparatedListUntil(FIRToken::r_brace, [&]() -> ParseResult {
+    if (parseListUntil(FIRToken::r_brace, [&]() -> ParseResult {
           bool isFlipped = consumeIf(FIRToken::kw_flip);
 
           StringRef fieldName;
@@ -902,7 +869,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
   // Parse the operands and constant integer arguments.
   SmallVector<Value, 4> operands;
   SmallVector<int32_t, 4> integers;
-  if (parseCommaSeparatedListUntil(FIRToken::r_paren, [&]() -> ParseResult {
+  if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
         // Handle the integer constant case if present.
         if (getToken().isAny(FIRToken::integer, FIRToken::string)) {
           integers.push_back(0);
@@ -1108,7 +1075,6 @@ ParseResult FIRStmtParser::parseMemPort() {
       parseToken(FIRToken::l_square, "expected '[' in memory port") ||
       parseExp(indexExp, subOps, "expected index expression") ||
       parseToken(FIRToken::r_square, "expected ']' in memory port") ||
-      parseToken(FIRToken::comma, "expected ',' before clock expression") ||
       parseExp(clock, subOps, "expected clock expression") ||
       parseOptionalInfo(info, subOps))
     return failure();
@@ -1124,7 +1090,7 @@ ParseResult FIRStmtParser::parseMemPort() {
   return addSymbolEntry(resultValue.getValue(), result, info.getFIRLoc());
 }
 
-/// printf ::= 'printf(' exp ',' exp ',' StringLit (',' exp)* ')' info?
+/// printf ::= 'printf(' exp exp StringLit exp* ')' info?
 ParseResult FIRStmtParser::parsePrintf() {
   LocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::lp_printf);
@@ -1134,9 +1100,7 @@ ParseResult FIRStmtParser::parsePrintf() {
   Value clock, condition;
   StringRef formatString;
   if (parseExp(clock, subOps, "expected clock expression in printf") ||
-      parseToken(FIRToken::comma, "expected ',' in printf") ||
       parseExp(condition, subOps, "expected condition in printf") ||
-      parseToken(FIRToken::comma, "expected ',' in printf") ||
       parseGetSpelling(formatString) ||
       parseToken(FIRToken::string, "expected format string in printf"))
     return failure();
@@ -1144,8 +1108,7 @@ ParseResult FIRStmtParser::parsePrintf() {
   SmallVector<Value, 4> operands;
   while (!consumeIf(FIRToken::r_paren)) {
     operands.push_back({});
-    if (parseToken(FIRToken::comma, "expected ',' in printf") ||
-        parseExp(operands.back(), subOps, "expected operand in printf"))
+    if (parseExp(operands.back(), subOps, "expected operand in printf"))
       return failure();
   }
 
@@ -1178,9 +1141,7 @@ ParseResult FIRStmtParser::parseStop() {
   Value clock, condition;
   int32_t exitCode;
   if (parseExp(clock, subOps, "expected clock expression in 'stop'") ||
-      parseToken(FIRToken::comma, "expected ',' in 'stop'") ||
       parseExp(condition, subOps, "expected condition in 'stop'") ||
-      parseToken(FIRToken::comma, "expected ',' in 'stop'") ||
       parseIntLit(exitCode, "expected exit code in 'stop'") ||
       parseToken(FIRToken::r_paren, "expected ')' in 'stop'") ||
       parseOptionalInfo(info, subOps))
@@ -1419,7 +1380,6 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   if (parseId(id, "expected reg name") ||
       parseToken(FIRToken::colon, "expected ':' in reg") ||
       parseType(type, "expected reg type") ||
-      parseToken(FIRToken::comma, "expected ',' in reg") ||
       parseExp(clock, subOps, "expected expression for register clock"))
     return failure();
 
@@ -1445,8 +1405,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
     if (parseToken(FIRToken::kw_reset, "expected 'reset' in reg") ||
         parseToken(FIRToken::equal_greater, "expected => in reset specifier") ||
         parseToken(FIRToken::l_paren, "expected '(' in reset specifier") ||
-        parseExp(resetSignal, subOps, "expected expression for reset signal") ||
-        parseToken(FIRToken::comma, "expected ',' in reset specifier"))
+        parseExp(resetSignal, subOps, "expected expression for reset signal"))
       return failure();
 
     // The Scala implementation of FIRRTL represents registers without resets

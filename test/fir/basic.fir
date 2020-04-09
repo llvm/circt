@@ -23,7 +23,7 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
   ; CHECK-NOT: {
   extmodule MyExtModule : 
     input in: UInt
-    output out: UInt<8>
+    output ,,, out ,,: ,, UInt,<,8,>  ; Commas are whitespace
 
   ; Module to test type parsing.
 

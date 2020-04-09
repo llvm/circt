@@ -79,7 +79,9 @@ Optional<unsigned> FIRLexer::getIndentation(const FIRToken &tok) const {
   // Count the number of horizontal whitespace characters before the token.
   auto *bufStart = curBuffer.begin();
 
-  auto isHorizontalWS = [](char c) -> bool { return c == ' ' || c == '\t'; };
+  auto isHorizontalWS = [](char c) -> bool {
+    return c == ' ' || c == '\t' || c == ',';
+  };
   auto isVerticalWS = [](char c) -> bool {
     return c == '\n' || c == '\r' || c == '\f' || c == '\v';
   };
@@ -124,6 +126,7 @@ FIRToken FIRLexer::lexToken() {
     case '\t':
     case '\n':
     case '\r':
+    case ',':
       // Handle whitespace.
       continue;
 
@@ -133,8 +136,6 @@ FIRToken FIRLexer::lexToken() {
 
     case '.':
       return formToken(FIRToken::period, tokStart);
-    case ',':
-      return formToken(FIRToken::comma, tokStart);
     case ':':
       return formToken(FIRToken::colon, tokStart);
     case '(':
