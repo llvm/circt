@@ -196,6 +196,11 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     infer mport memValue = myMem[i8], clock
     auto <= memValue.id
 
+    ; CHECK: %base_table_0 = firrtl.smem "Undefined" {name = "base_table_0"} : !firrtl.vector<vector<uint<1>, 9>, 256>
+    smem base_table_0 : UInt<1>[9] [256]
+    ; CHECK: %base_table_1 = firrtl.smem "Old" {name = "base_table_1"} : !firrtl.vector<vector<uint<1>, 9>, 256>
+    smem base_table_1 : UInt<1>[9] [256] old
+
   ; CHECK-LABEL: firrtl.module @type_handling(
   module type_handling :
     wire _T_6 : { flip b : { bits : { source : UInt<7> } } }

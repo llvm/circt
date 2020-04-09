@@ -171,6 +171,8 @@ struct FIRParser {
   ParseResult parseFieldId(StringRef &result, const Twine &message);
   ParseResult parseType(FIRRTLType &result, const Twine &message);
 
+  ParseResult parseOptionalRUW(RUWAttr &result);
+
 private:
   FIRParser(const FIRParser &) = delete;
   void operator=(const FIRParser &) = delete;
@@ -575,6 +577,29 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
   return success();
 }
 
+/// ruw ::= 'old' | 'new' | 'undefined'
+ParseResult FIRParser::parseOptionalRUW(RUWAttr &result) {
+  switch (getToken().getKind()) {
+  default:
+    break;
+
+  case FIRToken::kw_old:
+    result = RUWAttr::Old;
+    consumeToken(FIRToken::kw_old);
+    break;
+  case FIRToken::kw_new:
+    result = RUWAttr::New;
+    consumeToken(FIRToken::kw_new);
+    break;
+  case FIRToken::kw_undefined:
+    result = RUWAttr::Undefined;
+    consumeToken(FIRToken::kw_undefined);
+    break;
+  }
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // FIRScopedParser
 //===----------------------------------------------------------------------===//
@@ -681,6 +706,7 @@ private:
   // Declarations
   ParseResult parseInstance();
   ParseResult parseCMem();
+  ParseResult parseSMem();
   ParseResult parseNode();
   ParseResult parseWire();
   ParseResult parseRegister(unsigned regIndent);
@@ -1074,6 +1100,7 @@ ParseResult FIRStmtParser::parseSimpleStmtBlock(unsigned indent) {
 ///
 /// stmt ::= instance
 ///      ::= cmem
+///      ::= smem
 ///      ::= node
 ///      ::= wire
 ///      ::= register
@@ -1111,6 +1138,8 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
     return parseInstance();
   case FIRToken::kw_cmem:
     return parseCMem();
+  case FIRToken::kw_smem:
+    return parseSMem();
   case FIRToken::kw_node:
     return parseNode();
   case FIRToken::kw_wire:
@@ -1387,6 +1416,26 @@ ParseResult FIRStmtParser::parseCMem() {
     return failure();
 
   auto result = builder.create<CMemOp>(info.getLoc(), type, id);
+  return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
+}
+
+/// smem ::= 'smem' id ':' type ruw? info?
+ParseResult FIRStmtParser::parseSMem() {
+  // TODO(firrtl spec) smem is completely undocumented.
+  LocWithInfo info(getToken().getLoc(), this);
+  consumeToken(FIRToken::kw_smem);
+
+  StringAttr id;
+  FIRRTLType type;
+  RUWAttr ruw = RUWAttr::Undefined;
+
+  if (parseId(id, "expected cmem name") ||
+      parseToken(FIRToken::colon, "expected ':' in cmem") ||
+      parseType(type, "expected cmem type") || parseOptionalRUW(ruw) ||
+      parseOptionalInfo(info))
+    return failure();
+
+  auto result = builder.create<SMemOp>(info.getLoc(), type, ruw, id);
   return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
 }
 

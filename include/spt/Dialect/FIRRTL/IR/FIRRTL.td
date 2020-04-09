@@ -36,6 +36,21 @@ def UInt1Type : Type<CPred<"$_self.isa<UIntType>() && "
                 BuildableType<"UIntType::get($_builder.getContext(), 1)">;
 
 //===----------------------------------------------------------------------===//
+// FIRRTL Enum Definitions
+//===----------------------------------------------------------------------===//
+
+def RUW_Undefined: I32EnumAttrCase<"Undefined", 0>;
+def RUW_Old: I32EnumAttrCase<"Old", 1>;
+def RUW_New: I32EnumAttrCase<"New", 2>;
+
+def RUWAttr: I32EnumAttr<"RUWAttr", "Read Under Write Enum",
+                         [RUW_Undefined, RUW_Old, RUW_New]> {
+  let cppNamespace = "spt::firrtl";
+  let stringToSymbolFnName = "ConvertToRUWEnum";
+  let symbolToStringFnName = "ConvertRUWToString";
+}
+
+//===----------------------------------------------------------------------===//
 // FIRRTL op definitions
 //===----------------------------------------------------------------------===//
 
@@ -216,6 +231,16 @@ def CMemOp : FIRRTLOp<"cmem", [NoSideEffect]> {
   
   let assemblyFormat = [{
      attr-dict `:` type($result)
+  }];
+}
+
+def SMemOp : FIRRTLOp<"smem", [NoSideEffect]> {
+  let summary = "Define a new smem";
+  let arguments = (ins RUWAttr:$ruw, OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    $ruw attr-dict `:` type($result)
   }];
 }
 

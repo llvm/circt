@@ -61,6 +61,15 @@ FunctionType getModuleType(Operation *op);
 /// extmodule.
 void getModulePortInfo(Operation *op, SmallVectorImpl<ModulePortInfo> &results);
 
+} // namespace firrtl
+} // namespace spt
+
+// Pull in all enum type definitions and utility function declarations.
+#include "spt/Dialect/FIRRTL/IR/FIRRTLEnums.h.inc"
+
+namespace spt {
+namespace firrtl {
+
 #define GET_OP_CLASSES
 #include "spt/Dialect/FIRRTL/IR/FIRRTL.h.inc"
 

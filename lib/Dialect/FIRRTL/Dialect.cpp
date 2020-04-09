@@ -7,6 +7,7 @@
 #include "mlir/IR/StandardTypes.h"
 #include "spt/Dialect/FIRRTL/IR/Ops.h"
 #include "spt/Dialect/FIRRTL/IR/Types.h"
+#include "llvm/ADT/StringSwitch.h"
 
 using namespace spt;
 using namespace firrtl;
@@ -880,6 +881,8 @@ FIRRTLType TailPrimOp::getResultType(FIRRTLType input, int32_t amount) {
 
   return getIntegerType(input.getContext(), input.isa<SIntType>(), width);
 }
+
+#include "spt/Dialect/FIRRTL/IR/FIRRTLEnums.cpp.inc"
 
 #define GET_OP_CLASSES
 #include "spt/Dialect/FIRRTL/IR/FIRRTL.cpp.inc"
