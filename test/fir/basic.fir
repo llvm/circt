@@ -207,3 +207,10 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     wire reg : UInt
     ; CHECK: firrtl.connect %reg,
     reg <= UInt(42)
+
+ ; CHECK-LABEL: firrtl.module @oversize_shift(
+  module oversize_shift :
+    wire value : UInt<2>
+    ; CHECK: firrtl.shr %value, 5 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+    node n = shr(value, 5)
+

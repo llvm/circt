@@ -861,11 +861,8 @@ FIRRTLType ShrPrimOp::getResultType(FIRRTLType input, int32_t amount) {
   if (amount < 0 || !isSameIntegerType(input, input, width))
     return {};
 
-  if (width != -1) {
-    if (amount > width)
-      return {};
+  if (width != -1)
     width = std::max(1, width - amount);
-  }
 
   return getIntegerType(input.getContext(), input.isa<SIntType>(), width);
 }
