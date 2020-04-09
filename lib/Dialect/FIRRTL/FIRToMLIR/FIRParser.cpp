@@ -699,6 +699,7 @@ private:
   ParseResult parseIntegerLiteralExp(Value &result, SubOpVector &subOps);
 
   // Stmt Parsing
+  ParseResult parseMemPort();
   ParseResult parsePrintf();
   ParseResult parseSkip();
   ParseResult parseStop();
@@ -1038,7 +1039,8 @@ ParseResult FIRStmtParser::parseSimpleStmtBlock(unsigned indent) {
 
 /// simple_stmt ::= stmt
 ///
-/// stmt ::= printf
+/// stmt ::= memport
+///      ::= printf
 ///      ::= skip
 ///      ::= stop
 ///      ::= when
@@ -1052,7 +1054,15 @@ ParseResult FIRStmtParser::parseSimpleStmtBlock(unsigned indent) {
 ///
 ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
   switch (getToken().getKind()) {
-    // Statements.
+  // Statements.
+  case FIRToken::kw_infer:
+    // TODO(clattner): mport is undocumented, so I'm not sure what its semantics
+    // are.  I will enable these when I see examples to make sure I understand
+    // what is going on here.
+    // case FIRToken::kw_read:
+    // case FIRToken::kw_write:
+    // case FIRToken::kw_rdwr:
+    return parseMemPort();
   case FIRToken::lp_printf:
     return parsePrintf();
   case FIRToken::kw_skip:
@@ -1077,6 +1087,41 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
   case FIRToken::kw_reg:
     return parseRegister(stmtIndent);
   }
+}
+
+/// stmt ::= mdir 'mport' id '=' id '[' exp ']' exp info?
+/// mdir ::= 'infer' | 'read' | 'write' | 'rdwr'
+///
+ParseResult FIRStmtParser::parseMemPort() {
+  LocWithInfo info(getToken().getLoc(), this);
+  consumeToken();
+
+  StringAttr resultValue;
+  StringRef memName;
+  Value memory, indexExp, clock;
+  SmallVector<Operation *, 8> subOps;
+  if (parseToken(FIRToken::kw_mport, "expected 'mport' in memory port") ||
+      parseId(resultValue, "expected result name") ||
+      parseToken(FIRToken::equal, "expected '=' in memory port") ||
+      parseId(memName, "expected memory name") ||
+      lookupSymbolEntry(memory, memName, info.getFIRLoc()) ||
+      parseToken(FIRToken::l_square, "expected '[' in memory port") ||
+      parseExp(indexExp, subOps, "expected index expression") ||
+      parseToken(FIRToken::r_square, "expected ']' in memory port") ||
+      parseToken(FIRToken::comma, "expected ',' before clock expression") ||
+      parseExp(clock, subOps, "expected clock expression") ||
+      parseOptionalInfo(info, subOps))
+    return failure();
+
+  auto memVType = memory.getType().dyn_cast<FVectorType>();
+  if (!memVType)
+    return emitError(info.getFIRLoc(), "memory should have vector type");
+  auto resultType = memVType.getElementType();
+
+  auto result = builder.create<MemoryPortOp>(info.getLoc(), resultType, memory,
+                                             indexExp, clock,
+                                             /*optionalName*/ resultValue);
+  return addSymbolEntry(resultValue.getValue(), result, info.getFIRLoc());
 }
 
 /// printf ::= 'printf(' exp ',' exp ',' StringLit (',' exp)* ')' info?

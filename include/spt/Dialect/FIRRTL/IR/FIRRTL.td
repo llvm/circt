@@ -401,6 +401,20 @@ def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect]> {
 // Statements
 //===----------------------------------------------------------------------===//
 
+def MemoryPortOp : FIRRTLOp<"memoryport", []> {
+  let summary = "Access a memory";
+
+  let arguments = (ins AnyType:$memory, AnyType:$index, AnyType:$clock,
+                       OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    `infer` $memory `,` $index `,` $clock attr-dict `:`
+       functional-type(operands, $result)
+  }];
+}
+
+
 def ConnectOp : FIRRTLOp<"connect", []> {
   let summary = "Connect two signals";
   let description = [{
