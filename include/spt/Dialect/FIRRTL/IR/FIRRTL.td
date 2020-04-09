@@ -655,12 +655,13 @@ class UnaryPrimOp<string mnemonic, string resultTypeFunction,
   }])));
 }
 
-def AsSIntPrimOp  : UnaryPrimOp<"asSInt", "getAsSIntResult", []>;
-def AsUIntPrimOp  : UnaryPrimOp<"asUInt", "getAsUIntResult", []>;
-def AsClockPrimOp : UnaryPrimOp<"asClock", "getAsClockResult", []>;
-def CvtPrimOp     : UnaryPrimOp<"cvt", "getCvtResult", []>;
-def NegPrimOp     : UnaryPrimOp<"neg", "getNegResult", []>;
-def NotPrimOp     : UnaryPrimOp<"not", "getNotResult", []>;
+def AsSIntPrimOp       : UnaryPrimOp<"asSInt", "getAsSIntResult">;
+def AsUIntPrimOp       : UnaryPrimOp<"asUInt", "getAsUIntResult">;
+def AsAsyncResetPrimOp : UnaryPrimOp<"asAsyncReset", "getAsAsyncResetResult">;
+def AsClockPrimOp      : UnaryPrimOp<"asClock", "getAsClockResult">;
+def CvtPrimOp          : UnaryPrimOp<"cvt", "getCvtResult">;
+def NegPrimOp          : UnaryPrimOp<"neg", "getNegResult">;
+def NotPrimOp          : UnaryPrimOp<"not", "getNotResult">;
 
 //===----------------------------------------------------------------------===//
 // Other Operations

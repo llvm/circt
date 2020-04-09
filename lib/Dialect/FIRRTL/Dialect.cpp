@@ -68,7 +68,7 @@ FIRRTLDialect::FIRRTLDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context) {
 
   // Register types.
-  addTypes<SIntType, UIntType, ClockType, ResetType, AnalogType,
+  addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
            // Derived Types
            FlipType, BundleType, FVectorType>();
 
@@ -711,6 +711,12 @@ FIRRTLType firrtl::getDShrResult(FIRRTLType lhs, FIRRTLType rhs) {
 // Unary Primitives
 //===----------------------------------------------------------------------===//
 
+FIRRTLType firrtl::getAsAsyncResetResult(FIRRTLType input) {
+  if (input.isa<UIntType>() || input.isa<SIntType>() || input.isa<ClockType>())
+    return AsyncResetType::get(input.getContext());
+  return {};
+}
+
 FIRRTLType firrtl::getAsClockResult(FIRRTLType input) {
   if (input.isa<UIntType>() || input.isa<SIntType>() || input.isa<ClockType>())
     return ClockType::get(input.getContext());
@@ -718,7 +724,8 @@ FIRRTLType firrtl::getAsClockResult(FIRRTLType input) {
 }
 
 FIRRTLType firrtl::getAsSIntResult(FIRRTLType input) {
-  if (input.isa<ClockType>() || input.isa<ResetType>())
+  if (input.isa<ClockType>() || input.isa<ResetType>() ||
+      input.isa<AsyncResetType>())
     return SIntType::get(input.getContext(), 1);
   if (input.isa<SIntType>())
     return input;
@@ -728,7 +735,8 @@ FIRRTLType firrtl::getAsSIntResult(FIRRTLType input) {
 }
 
 FIRRTLType firrtl::getAsUIntResult(FIRRTLType input) {
-  if (input.isa<ClockType>() || input.isa<ResetType>())
+  if (input.isa<ClockType>() || input.isa<ResetType>() ||
+      input.isa<AsyncResetType>())
     return UIntType::get(input.getContext(), 1);
   if (input.isa<UIntType>())
     return input;
@@ -805,7 +813,7 @@ FIRRTLType MuxPrimOp::getResultType(FIRRTLType sel, FIRRTLType high,
   // The base types need to be equivalent.
   if (high.getKind() != low.getKind())
     return {};
-  if (low.isa<ClockType>() || low.isa<ResetType>())
+  if (low.isa<ClockType>() || low.isa<ResetType>() || low.isa<AsyncResetType>())
     return low;
 
   // Two different UInt types can be compatible.  If either has unknown width,

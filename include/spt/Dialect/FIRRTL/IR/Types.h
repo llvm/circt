@@ -29,6 +29,7 @@ public:
     // Ground Types Without Parameters.
     Clock = FIRST_KIND,
     Reset,
+    AsyncReset,
 
     // Width Qualified Ground Types.
     SInt,
@@ -73,8 +74,8 @@ public:
   static bool kindof(unsigned kind) { return kind == Clock; }
 };
 
-/// `firrtl.Reset`.  FIXME: This is not described in the FIRRTL spec, nor is
-/// AsyncReset.
+/// `firrtl.Reset`.
+/// TODO(firrtl spec): This is not described in the FIRRTL spec.
 class ResetType : public FIRRTLType::TypeBase<ResetType, FIRRTLType> {
 public:
   using Base::Base;
@@ -82,6 +83,17 @@ public:
     return Base::get(context, FIRRTLType::Reset);
   }
   static bool kindof(unsigned kind) { return kind == Reset; }
+};
+
+/// `firrtl.AsyncReset`.
+/// TODO(firrtl spec): This is not described in the FIRRTL spec.
+class AsyncResetType : public FIRRTLType::TypeBase<AsyncResetType, FIRRTLType> {
+public:
+  using Base::Base;
+  static AsyncResetType get(MLIRContext *context) {
+    return Base::get(context, FIRRTLType::AsyncReset);
+  }
+  static bool kindof(unsigned kind) { return kind == AsyncReset; }
 };
 
 //===----------------------------------------------------------------------===//

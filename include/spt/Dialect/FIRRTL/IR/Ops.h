@@ -44,6 +44,7 @@ FIRRTLType getDShlResult(FIRRTLType lhs, FIRRTLType rhs);
 FIRRTLType getDShrResult(FIRRTLType lhs, FIRRTLType rhs);
 
 // Unary primitives.
+FIRRTLType getAsAsyncResetResult(FIRRTLType input);
 FIRRTLType getAsClockResult(FIRRTLType input);
 FIRRTLType getAsSIntResult(FIRRTLType input);
 FIRRTLType getAsUIntResult(FIRRTLType input);

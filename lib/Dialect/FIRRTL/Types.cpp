@@ -31,6 +31,9 @@ void FIRRTLType::print(raw_ostream &os) const {
   case FIRRTLType::Reset:
     os << "reset";
     break;
+  case FIRRTLType::AsyncReset:
+    os << "asyncreset";
+    break;
 
   // Width Qualified Types
   case FIRRTLType::SInt:
@@ -79,6 +82,7 @@ void FIRRTLType::print(raw_ostream &os) const {
 /// type
 ///   ::= clock
 ///   ::= reset
+///   ::= asyncreset
 ///   ::= sint ('<' int '>')?
 ///   ::= uint ('<' int '>')?
 ///   ::= analog ('<' int '>')?
@@ -96,6 +100,7 @@ static ParseResult parseType(FIRRTLType &result, DialectAsmParser &parser) {
   auto kind = llvm::StringSwitch<FIRRTLType::Kind>(name)
                   .Case("clock", FIRRTLType::Clock)
                   .Case("reset", FIRRTLType::Reset)
+                  .Case("asyncreset", FIRRTLType::AsyncReset)
                   .Case("sint", FIRRTLType::SInt)
                   .Case("uint", FIRRTLType::UInt)
                   .Case("analog", FIRRTLType::Analog)
@@ -110,6 +115,8 @@ static ParseResult parseType(FIRRTLType &result, DialectAsmParser &parser) {
     return result = ClockType::get(context), success();
   case FIRRTLType::Reset:
     return result = ResetType::get(context), success();
+  case FIRRTLType::AsyncReset:
+    return result = AsyncResetType::get(context), success();
 
   case FIRRTLType::SInt:
   case FIRRTLType::UInt:
@@ -218,6 +225,7 @@ bool FIRRTLType::isPassiveType() {
   switch (getKind()) {
   case FIRRTLType::Clock:
   case FIRRTLType::Reset:
+  case FIRRTLType::AsyncReset:
   case FIRRTLType::SInt:
   case FIRRTLType::UInt:
   case FIRRTLType::Analog:
@@ -239,6 +247,7 @@ FIRRTLType FIRRTLType::getPassiveType() {
   switch (getKind()) {
   case FIRRTLType::Clock:
   case FIRRTLType::Reset:
+  case FIRRTLType::AsyncReset:
   case FIRRTLType::SInt:
   case FIRRTLType::UInt:
   case FIRRTLType::Analog:
