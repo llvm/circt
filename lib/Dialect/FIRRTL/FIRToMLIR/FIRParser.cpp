@@ -655,7 +655,7 @@ ParseResult FIRScopedParser::lookupSymbolEntry(Value &result, StringRef name,
                                                SMLoc loc) {
   auto prev = symbolTable.lookup(Identifier::get(name, getContext()));
   if (!prev.first.isValid())
-    return emitError(loc, "use of invalid name '" + name.str() + "'"),
+    return emitError(loc, "use of unknown declaration '" + name.str() + "'"),
            failure();
 
   assert(prev.second && "name in symbol table without definition");
@@ -696,7 +696,7 @@ private:
                                                    const LocWithInfo &info);
 
   // Stmt Parsing
-  ParseResult parseMemPort();
+  ParseResult parseMemPort(MemDirAttr direction);
   ParseResult parsePrintf();
   ParseResult parseSkip();
   ParseResult parseStop();
@@ -1109,13 +1109,13 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
   switch (getToken().getKind()) {
   // Statements.
   case FIRToken::kw_infer:
-    // TODO(clattner): mport is undocumented, so I'm not sure what its semantics
-    // are.  I will enable these when I see examples to make sure I understand
-    // what is going on here.
-    // case FIRToken::kw_read:
-    // case FIRToken::kw_write:
-    // case FIRToken::kw_rdwr:
-    return parseMemPort();
+    return parseMemPort(MemDirAttr::Infer);
+  case FIRToken::kw_read:
+    return parseMemPort(MemDirAttr::Read);
+  case FIRToken::kw_write:
+    return parseMemPort(MemDirAttr::Write);
+  case FIRToken::kw_rdwr:
+    return parseMemPort(MemDirAttr::ReadWrite);
   case FIRToken::lp_printf:
     return parsePrintf();
   case FIRToken::kw_skip:
@@ -1152,7 +1152,7 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
 /// stmt ::= mdir 'mport' id '=' id '[' exp ']' exp info?
 /// mdir ::= 'infer' | 'read' | 'write' | 'rdwr'
 ///
-ParseResult FIRStmtParser::parseMemPort() {
+ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   LocWithInfo info(getToken().getLoc(), this);
   consumeToken();
 
@@ -1178,7 +1178,7 @@ ParseResult FIRStmtParser::parseMemPort() {
   auto resultType = memVType.getElementType();
 
   auto result = builder.create<MemoryPortOp>(info.getLoc(), resultType, memory,
-                                             indexExp, clock,
+                                             indexExp, clock, direction,
                                              /*optionalName*/ resultValue);
   return addSymbolEntry(resultValue.getValue(), result, info.getFIRLoc());
 }

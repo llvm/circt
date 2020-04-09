@@ -192,7 +192,7 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: %myMem = firrtl.cmem {name = "myMem"} : !firrtl.vector<bundle<id: uint<4>, resp: uint<2>>, 8>
     cmem myMem : { id : UInt<4>, resp : UInt<2>} [8] @[Decoupled.scala 209:24]
 
-    ; CHECK: %memValue = firrtl.memoryport infer %myMem, %i8, %clock {name = "memValue"} : (!firrtl.vector<bundle<id: uint<4>, resp: uint<2>>, 8>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.bundle<id: uint<4>, resp: uint<2>>
+    ; CHECK: %memValue = firrtl.memoryport "Infer" %myMem, %i8, %clock {name = "memValue"} : (!firrtl.vector<bundle<id: uint<4>, resp: uint<2>>, 8>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.bundle<id: uint<4>, resp: uint<2>>
     infer mport memValue = myMem[i8], clock
     auto <= memValue.id
 
@@ -200,6 +200,10 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     smem base_table_0 : UInt<1>[9] [256]
     ; CHECK: %base_table_1 = firrtl.smem "Old" {name = "base_table_1"} : !firrtl.vector<vector<uint<1>, 9>, 256>
     smem base_table_1 : UInt<1>[9] [256] old
+
+    ; CHECK: %tableValue = firrtl.memoryport "Read" %base_table_0, %i8, %clock {name = "tableValue"} : (!firrtl.vector<vector<uint<1>, 9>, 256>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.vector<uint<1>, 9>
+    read mport tableValue = base_table_0[i8], clock
+ 
 
   ; CHECK-LABEL: firrtl.module @type_handling(
   module type_handling :

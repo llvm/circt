@@ -39,16 +39,22 @@ def UInt1Type : Type<CPred<"$_self.isa<UIntType>() && "
 // FIRRTL Enum Definitions
 //===----------------------------------------------------------------------===//
 
+/// RUWAttr: Undefined/Old/New.
 def RUW_Undefined: I32EnumAttrCase<"Undefined", 0>;
 def RUW_Old: I32EnumAttrCase<"Old", 1>;
 def RUW_New: I32EnumAttrCase<"New", 2>;
 
 def RUWAttr: I32EnumAttr<"RUWAttr", "Read Under Write Enum",
-                         [RUW_Undefined, RUW_Old, RUW_New]> {
-  let cppNamespace = "spt::firrtl";
-  let stringToSymbolFnName = "ConvertToRUWEnum";
-  let symbolToStringFnName = "ConvertRUWToString";
-}
+                         [RUW_Undefined, RUW_Old, RUW_New]>;
+
+def MemDir_Infer    : I32EnumAttrCase<"Infer", 0>;
+def MemDir_Read     : I32EnumAttrCase<"Read", 1>;
+def MemDir_Write    : I32EnumAttrCase<"Write", 2>;
+def MemDir_ReadWrite: I32EnumAttrCase<"ReadWrite", 3>;
+
+def MemDirAttr: I32EnumAttr<"MemDirAttr", "Memory Direction Enum",
+                            [MemDir_Infer, MemDir_Read, MemDir_Write,
+                              MemDir_ReadWrite]>;
 
 //===----------------------------------------------------------------------===//
 // FIRRTL op definitions
@@ -426,7 +432,6 @@ def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect]> {
   }];
 }
 
-
 //===----------------------------------------------------------------------===//
 // Statements
 //===----------------------------------------------------------------------===//
@@ -435,11 +440,11 @@ def MemoryPortOp : FIRRTLOp<"memoryport", []> {
   let summary = "Access a memory";
 
   let arguments = (ins AnyType:$memory, AnyType:$index, AnyType:$clock,
-                       OptionalAttr<StrAttr>:$name);
+                       MemDirAttr:$direction, OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
 
   let assemblyFormat = [{
-    `infer` $memory `,` $index `,` $clock attr-dict `:`
+    $direction $memory `,` $index `,` $clock attr-dict `:`
        functional-type(operands, $result)
   }];
 }

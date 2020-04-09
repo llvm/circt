@@ -36,14 +36,14 @@ circuit test :
 circuit test :
   module invalid_name :
     input c: UInt
-    out <= c         ; expected-error {{use of invalid name 'out'}}
+    out <= c         ; expected-error {{use of unknown declaration 'out'}}
 
 ;// -----
 
 circuit test :
   module invalid_name :
     output out: UInt
-    out <= c         ; expected-error {{use of invalid name 'c'}}
+    out <= c         ; expected-error {{use of unknown declaration 'c'}}
 
 ;// -----
 
@@ -89,7 +89,7 @@ circuit test :
     output out : UInt<1>
     when reset :
       node n4 = reset
-    out <- n4   ; expected-error {{use of invalid name 'n4'}}
+    out <- n4   ; expected-error {{use of unknown declaration 'n4'}}
 
 ;// -----
 
