@@ -132,7 +132,7 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     when lt(reset, UInt(4)) :   ;; When with no else.
       _T <= _T_2
 
-    ; CHECK: firrtl.printf %clock, %reset, "\22Something interesting! %x %x\22" %_T, %_T_2 : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 13>
+      ; CHECK: firrtl.printf %clock, %reset, "\22Something interesting! %x %x\22" %_T, %_T_2 : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 13>
     printf(clock, reset, "Something interesting! %x %x", _T, _T_2)
 
     ; CHECK: firrtl.stop %clock, %reset, 42
@@ -208,9 +208,28 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.connect %reg,
     reg <= UInt(42)
 
- ; CHECK-LABEL: firrtl.module @oversize_shift(
+  ; CHECK-LABEL: firrtl.module @oversize_shift(
   module oversize_shift :
     wire value : UInt<2>
     ; CHECK: firrtl.shr %value, 5 : (!firrtl.uint<2>) -> !firrtl.uint<1>
     node n = shr(value, 5)
 
+  ; CHECK-LABEL: firrtl.module @when_else_ambiguity(
+  module when_else_ambiguity :
+    output out : UInt
+    input in : UInt
+    wire reset : UInt<1>
+
+  ; CHECK: firrtl.when {{.*}} {
+    when reset : @[Debug.scala 1176:37]
+    ; CHECK: firrtl.when {{.*}} {
+      when reset :
+        out <= in
+    ; CHECK: }
+    ; CHECK: } else {
+    else :
+        ; CHECK: firrtl.when {{.*}} {
+      when reset : @[Debug.scala 1180:39]
+        out <= in
+    ; CHECK: }
+    ; CHECK: }

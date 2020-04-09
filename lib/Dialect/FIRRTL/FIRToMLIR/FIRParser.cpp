@@ -1249,8 +1249,9 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
     if (!stmtIndent.hasValue())
       return subParser.parseSimpleStmt(whenIndent);
 
-    if (stmtIndent <= whenIndent)
-      return emitError("when body must be indented more than when"), failure();
+    if (stmtIndent.getValue() <= whenIndent)
+      return emitError("statement must be indented more than 'when'"),
+             failure();
 
     // Parse a block of statements that are indented more than the when.
     return subParser.parseSimpleStmtBlock(whenIndent);
@@ -1261,9 +1262,17 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
     return failure();
 
   // If the else is present, handle it otherwise we're done.
-  LocWithInfo elseInfo(getToken().getLoc(), this);
-  if (!consumeIf(FIRToken::kw_else))
+  if (getToken().isNot(FIRToken::kw_else))
     return success();
+
+  // If the 'else' is less indented than the when, then it must belong to some
+  // containing 'when'.
+  auto elseIndent = getIndentation();
+  if (elseIndent.hasValue() && elseIndent.getValue() < whenIndent)
+    return success();
+
+  LocWithInfo elseInfo(getToken().getLoc(), this);
+  consumeToken(FIRToken::kw_else);
 
   // Create an else block to parse into.
   whenStmt.createElseRegion();
