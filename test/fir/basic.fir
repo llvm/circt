@@ -200,3 +200,10 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
   module type_handling :
     wire _T_6 : { flip b : { bits : { source : UInt<7> } } }
     node _T_8 = bits(_T_6.b.bits.source, 5, 0)
+
+  ; CHECK-LABEL: firrtl.module @expr_stmt_ambiguity(
+  module expr_stmt_ambiguity :
+    ; CHECK: %reg = firrtl.wire {name = "reg"} : !firrtl.uint
+    wire reg : UInt
+    ; CHECK: firrtl.connect %reg,
+    reg <= UInt(42)

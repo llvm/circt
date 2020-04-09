@@ -659,11 +659,16 @@ private:
   // Exp Parsing
   ParseResult parseExp(Value &result, SubOpVector &subOps,
                        const Twine &message);
+
+  ParseResult parseOptionalExpPostscript(Value &result, SubOpVector &subOps);
   ParseResult parsePostFixFieldId(Value &result, SubOpVector &subOps);
   ParseResult parsePostFixIntSubscript(Value &result, SubOpVector &subOps);
   ParseResult parsePostFixDynamicSubscript(Value &result, SubOpVector &subOps);
   ParseResult parsePrimExp(Value &result, SubOpVector &subOps);
   ParseResult parseIntegerLiteralExp(Value &result, SubOpVector &subOps);
+
+  Optional<ParseResult> parseExpWithLeadingKeyword(const char *keyword,
+                                                   const LocWithInfo &info);
 
   // Stmt Parsing
   ParseResult parseMemPort();
@@ -671,7 +676,7 @@ private:
   ParseResult parseSkip();
   ParseResult parseStop();
   ParseResult parseWhen(unsigned whenIndent);
-  ParseResult parseLeadingExpStmt();
+  ParseResult parseLeadingExpStmt(Value lhs, SubOpVector &subOps);
 
   // Declarations
   ParseResult parseInstance();
@@ -729,6 +734,19 @@ ParseResult FIRStmtParser::parseExp(Value &result, SubOpVector &subOps,
     break;
   }
   }
+
+  return parseOptionalExpPostscript(result, subOps);
+}
+
+/// Parse the postfix productions of expression after the leading expression
+/// has been parsed.
+///
+///  exp ::= exp '.' fieldId
+///      ::= exp '[' intLit ']'
+/// XX   ::= exp '.' DoubleLit // TODO Workaround for #470
+///      ::= exp '[' exp ']'
+ParseResult FIRStmtParser::parseOptionalExpPostscript(Value &result,
+                                                      SubOpVector &subOps) {
 
   // Handle postfix expressions.
   while (1) {
@@ -980,6 +998,48 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result,
   return success();
 }
 
+/// The .fir grammar has the annoying property where:
+/// 1) some statements start with keywords
+/// 2) some start with an expression
+/// 3) it allows the 'reference' expression to either be an identifier or a
+///    keyword.
+///
+/// One example of this is something like, where this is not a register decl:
+///   reg <- thing
+///
+/// Solving this requires lookahead to the second token.  We handle it by
+///  factoring the lookahead inline into the code to keep the parser fast.
+///
+/// As such, statements that start with a leading keyword call this method to
+/// check to see if the keyword they consumed was actually the start of an
+/// expression.  If so, they parse the expression-based statement and return the
+/// parser result.  If not, they return None and the statement is parsed like
+/// normal.
+Optional<ParseResult>
+FIRStmtParser::parseExpWithLeadingKeyword(const char *keyword,
+                                          const LocWithInfo &info) {
+
+  switch (getToken().getKind()) {
+  default:
+    // This isn't part of an expression, and isn't part of a statement.
+    return None;
+
+  case FIRToken::period:     // exp `.` identifier
+  case FIRToken::l_square:   // exp `[` index `]`
+  case FIRToken::kw_is:      // exp is invalid
+  case FIRToken::less_equal: // exp <= thing
+  case FIRToken::less_minus: // exp <- thing
+    break;
+  }
+
+  Value lhs;
+  SmallVector<Operation *, 8> subOps;
+  if (lookupSymbolEntry(lhs, keyword, info.getFIRLoc()) ||
+      parseOptionalExpPostscript(lhs, subOps))
+    return ParseResult(failure());
+
+  return parseLeadingExpStmt(lhs, subOps);
+}
 //===-----------------------------
 // FIRStmtParser Statement Parsing
 
@@ -1037,9 +1097,14 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
     return parseStop();
   case FIRToken::kw_when:
     return parseWhen(stmtIndent);
-  default:
+  default: {
     // Statement productions that start with an expression.
-    return parseLeadingExpStmt();
+    Value lhs;
+    SmallVector<Operation *, 8> subOps;
+    if (parseExp(lhs, subOps, "unexpected token in module"))
+      return failure();
+    return parseLeadingExpStmt(lhs, subOps);
+  }
 
     // Declarations
   case FIRToken::kw_inst:
@@ -1223,12 +1288,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
 /// leading-exp-stmt ::= exp '<=' exp info?
 ///                  ::= exp '<-' exp info?
 ///                  ::= exp 'is' 'invalid' info?
-ParseResult FIRStmtParser::parseLeadingExpStmt() {
-  Value lhs;
-  SmallVector<Operation *, 8> subOps;
-  if (parseExp(lhs, subOps, "unexpected token in module"))
-    return failure();
-
+ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs, SubOpVector &subOps) {
   // Figure out which kind of statement it is.
   LocWithInfo info(getToken().getLoc(), this);
 
@@ -1368,6 +1428,10 @@ ParseResult FIRStmtParser::parseWire() {
 ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   LocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_reg);
+
+  // If this was actually the start of a connect or something else handle that.
+  if (auto isExpr = parseExpWithLeadingKeyword("reg", info))
+    return isExpr.getValue();
 
   StringAttr id;
   FIRRTLType type;
