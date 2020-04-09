@@ -159,7 +159,7 @@ struct FIRParser {
   //===--------------------------------------------------------------------===//
 
   /// Parse 'intLit' into the specified value.
-  ParseResult parseIntLit(int64_t &result, const Twine &message);
+  ParseResult parseIntLit(APInt &result, const Twine &message);
   ParseResult parseIntLit(int32_t &result, const Twine &message);
 
   // Parse ('<' intLit '>')? setting result to -1 if not present.
@@ -343,7 +343,7 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
 /// OctalLit  ::= '"' 'o' ( '+' | '-' )? ( OctalDigit )+ '"'
 /// BinaryLit ::= '"' 'b' ( '+' | '-' )? ( BinaryDigit )+ '"'
 ///
-ParseResult FIRParser::parseIntLit(int64_t &result, const Twine &message) {
+ParseResult FIRParser::parseIntLit(APInt &result, const Twine &message) {
   auto spelling = getTokenSpelling();
   switch (getToken().getKind()) {
   case FIRToken::integer:
@@ -402,12 +402,12 @@ ParseResult FIRParser::parseIntLit(int64_t &result, const Twine &message) {
 }
 
 ParseResult FIRParser::parseIntLit(int32_t &result, const Twine &message) {
-  int64_t value;
+  APInt value;
   auto loc = getToken().getLoc();
   if (parseIntLit(value, message))
     return failure();
 
-  result = (int32_t)value;
+  result = (int32_t)value.getLimitedValue();
   if (result != value)
     return emitError(loc, "value is too big to handle"), failure();
   return success();
@@ -965,7 +965,7 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result,
 
   // Parse a width specifier if present.
   int32_t width;
-  int64_t value;
+  APInt value;
   if (parseOptionalWidth(width) ||
       parseToken(FIRToken::l_paren, "expected '(' in integer expression") ||
       parseIntLit(value, "expected integer value") ||
@@ -973,9 +973,8 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result,
     return failure();
 
   FIRRTLType resultType = getIntegerType(builder.getContext(), isSigned, width);
-  auto op = builder.create<ConstantOp>(translateLocation(loc), resultType,
-                                       builder.getI64IntegerAttr(value),
-                                       /*optionalName*/ StringAttr());
+  auto op =
+      builder.create<ConstantOp>(translateLocation(loc), resultType, value);
   subOps.push_back(op);
   result = op;
   return success();

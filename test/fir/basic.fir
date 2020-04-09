@@ -93,8 +93,8 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.asClock %reset : (!firrtl.uint<1>) -> !firrtl.clock
     node n3 = asClock(reset)
 
-    ; CHECK: firrtl.constant 42 : !firrtl.uint<10>
-    ; CHECK: firrtl.constant 171 : !firrtl.uint<8>
+    ; CHECK: firrtl.constant(42 : ui10) : !firrtl.uint<10>
+    ; CHECK: firrtl.constant(171 : ui8) : !firrtl.uint<8>
     ; CHECK: firrtl.add
     ; CHECK: firrtl.connect %auto
     auto <= add(UInt<10>(42), UInt<8>("hAB"))
@@ -120,7 +120,7 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
       node n4 = _T_2   ; 'n4' name is in unique scopes.
       _T <- n4
 
-    ; CHECK: [[TMP:%.+]] = firrtl.constant 4
+    ; CHECK: [[TMP:%.+]] = firrtl.constant(4 : ui1024)
     ; CHECK: [[COND:%.+]] = firrtl.lt %reset, [[TMP]]
     ; CHECK: firrtl.when [[COND]] {
     ; CHECK:   firrtl.connect %_T, %_T_2

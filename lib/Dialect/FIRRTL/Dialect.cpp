@@ -470,6 +470,41 @@ static ParseResult parseWhenOp(OpAsmParser &parser, OperationState &result) {
 // Expressions
 //===----------------------------------------------------------------------===//
 
+/// Build a ConstantOp from an APInt and a FIRRTL type, handling the attribute
+/// formation for the 'value' attribute.
+void ConstantOp::build(Builder *builder, OperationState &result,
+                       FIRRTLType type, const APInt &value,
+                       Optional<StringAttr> name) {
+  int32_t width = -1;
+  IntegerType::SignednessSemantics signedness;
+
+  APInt valueToUse = value;
+  if (auto sint = type.dyn_cast<SIntType>()) {
+    signedness = IntegerType::Signed;
+    width = sint.getWidthOrSentinel();
+
+    // TODO: 1024 bits should be enough for anyone??  The issue here is that
+    // the constant type uniquer does not like constants with multiple bitwidth
+    // but the same MLIR type.  We can't just use unit type or index type or
+    // something like that to represent the unwidth'd case.
+    valueToUse = valueToUse.sextOrTrunc(width != -1 ? width : 1024);
+  } else {
+    assert(type.isa<UIntType>());
+    signedness = IntegerType::Unsigned;
+    width = type.cast<UIntType>().getWidthOrSentinel();
+
+    // TODO: 1024 bits should be enough for anyone??
+    valueToUse = valueToUse.zextOrTrunc(width != -1 ? width : 1024);
+  }
+
+  Type attrType =
+      IntegerType::get(valueToUse.getBitWidth(), signedness, type.getContext());
+  auto attr = builder->getIntegerAttr(attrType, valueToUse);
+
+  auto nameAttr = name.hasValue() ? name.getValue() : StringAttr();
+  return build(builder, result, type, attr, nameAttr);
+}
+
 // Return the result of a subfield operation.
 FIRRTLType SubfieldOp::getResultType(FIRRTLType inType, StringRef fieldName) {
   if (auto bundleType = inType.dyn_cast<BundleType>()) {

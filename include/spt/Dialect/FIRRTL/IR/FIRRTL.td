@@ -305,13 +305,18 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect]> {
     ```
     }];
 
-  let arguments = (ins I64Attr:$value, OptionalAttr<StrAttr>:$name);
+  let arguments = (ins APIntAttr:$value, OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
   
-  // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat = [{
-     $value attr-dict `:` type($result)
+     `(` $value `)` attr-dict `:` type($result)
   }];
+
+  let builders = [
+    OpBuilder<"Builder *builder, OperationState &result, "
+              "FIRRTLType type, const APInt &value, "
+              "Optional<StringAttr> name = None">
+  ];
 }
 
 def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
@@ -413,7 +418,6 @@ def MemoryPortOp : FIRRTLOp<"memoryport", []> {
        functional-type(operands, $result)
   }];
 }
-
 
 def ConnectOp : FIRRTLOp<"connect", []> {
   let summary = "Connect two signals";
