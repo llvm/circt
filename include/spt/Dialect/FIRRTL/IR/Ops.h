@@ -49,8 +49,9 @@ FIRRTLType getAsClockResult(FIRRTLType input);
 FIRRTLType getAsSIntResult(FIRRTLType input);
 FIRRTLType getAsUIntResult(FIRRTLType input);
 FIRRTLType getCvtResult(FIRRTLType input);
-FIRRTLType getNotResult(FIRRTLType input);
 FIRRTLType getNegResult(FIRRTLType input);
+FIRRTLType getNotResult(FIRRTLType input);
+FIRRTLType getReductionResult(FIRRTLType input);
 
 typedef std::pair<StringAttr, FIRRTLType> ModulePortInfo;
 

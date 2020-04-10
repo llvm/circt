@@ -693,6 +693,10 @@ def CvtPrimOp          : UnaryPrimOp<"cvt", "getCvtResult">;
 def NegPrimOp          : UnaryPrimOp<"neg", "getNegResult">;
 def NotPrimOp          : UnaryPrimOp<"not", "getNotResult">;
 
+def AndRPrimOp         : UnaryPrimOp<"andr", "getReductionResult">;
+def OrRPrimOp          : UnaryPrimOp<"orr", "getReductionResult">;
+def XorRPrimOp         : UnaryPrimOp<"xorr", "getReductionResult">;
+
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//

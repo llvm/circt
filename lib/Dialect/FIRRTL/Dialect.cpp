@@ -760,13 +760,6 @@ FIRRTLType firrtl::getCvtResult(FIRRTLType input) {
   return {};
 }
 
-FIRRTLType firrtl::getNotResult(FIRRTLType input) {
-  int32_t width;
-  if (!isSameIntegerType(input, input, width))
-    return {};
-  return UIntType::get(input.getContext(), width);
-}
-
 FIRRTLType firrtl::getNegResult(FIRRTLType input) {
   int32_t width;
   if (!isSameIntegerType(input, input, width))
@@ -774,6 +767,20 @@ FIRRTLType firrtl::getNegResult(FIRRTLType input) {
   if (width != -1)
     ++width;
   return SIntType::get(input.getContext(), width);
+}
+
+FIRRTLType firrtl::getNotResult(FIRRTLType input) {
+  int32_t width;
+  if (!isSameIntegerType(input, input, width))
+    return {};
+  return UIntType::get(input.getContext(), width);
+}
+
+FIRRTLType firrtl::getReductionResult(FIRRTLType input) {
+  int32_t width;
+  if (!isSameIntegerType(input, input, width))
+    return {};
+  return UIntType::get(input.getContext(), 1);
 }
 
 //===----------------------------------------------------------------------===//

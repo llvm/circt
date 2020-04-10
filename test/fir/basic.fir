@@ -207,6 +207,8 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.pad %i8, 10 : (!firrtl.uint<8>) -> !firrtl.uint<10>
     node n11 = pad(i8, 10)
 
+    ; CHECK: firrtl.andr %n11 : (!firrtl.uint<10>) -> !firrtl.uint<1>
+    node n12 = andr(n11)
 
 
   ; CHECK-LABEL: firrtl.module @type_handling(
