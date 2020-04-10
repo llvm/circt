@@ -42,8 +42,9 @@ TOK_MARKER(error)
 TOK_IDENTIFIER(identifier) // foo
 
 // Literals
-TOK_LITERAL(integer) // 42
-TOK_LITERAL(string)  // "foo"
+TOK_LITERAL(integer)       // 42
+TOK_LITERAL(floatingpoint) // 42.0
+TOK_LITERAL(string)        // "foo"
 // TOK_LITERAL(raw_string)               // 'foo'
 
 TOK_LITERAL(fileinfo)

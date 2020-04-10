@@ -177,6 +177,13 @@ FIRToken FIRLexer::lexToken() {
     case '"':
       return lexString(tokStart);
 
+    case '+':
+    case '-':
+      if (!llvm::isDigit(*curPtr))
+        return emitError(tokStart, "unexpected character");
+      ++curPtr;
+      return lexFloatingPoint(tokStart);
+
     case '0':
     case '1':
     case '2':
@@ -323,5 +330,39 @@ FIRToken FIRLexer::lexNumber(const char *tokStart) {
   while (llvm::isDigit(*curPtr))
     ++curPtr;
 
+  // If we encounter a '.', then this is a floating point literal.
+  if (*curPtr == '.' && llvm::isDigit(curPtr[1]))
+    return lexFloatingPoint(tokStart);
+
   return formToken(FIRToken::integer, tokStart);
+}
+
+/// Lex a floating point literal.  This is called after lexing the optional
+/// sign, as well as at least one digit.
+///
+/// DoubleLit ::=
+///       ( '+' | '-' )? Digit+ '.' Digit+ ( 'E' ( '+' | '-' )? Digit+ )?
+FIRToken FIRLexer::lexFloatingPoint(const char *tokStart) {
+  assert(llvm::isDigit(curPtr[-1]));
+
+  // Consume any more digits we may encounter.
+  while (llvm::isDigit(*curPtr))
+    ++curPtr;
+
+  if (*curPtr != '.')
+    return emitError(tokStart, "expected '.' in floating point literal");
+  if (!llvm::isDigit(curPtr[1]))
+    return emitError(tokStart, "expected digit in floating point literal");
+  curPtr += 2;
+  while (llvm::isDigit(*curPtr))
+    ++curPtr;
+
+  if (*curPtr == 'E') {
+    ++curPtr;
+    if (*curPtr == '+' || *curPtr == '-')
+      ++curPtr;
+    while (llvm::isDigit(*curPtr))
+      ++curPtr;
+  }
+  return formToken(FIRToken::floatingpoint, tokStart);
 }

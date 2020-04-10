@@ -1749,7 +1749,7 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
 ///
 /// parameter ::= 'parameter' id '=' intLit NEWLINE
 /// parameter ::= 'parameter' id '=' StringLit NEWLINE
-/// parameter ::= 'parameter' id '=' DoubleLit NEWLINE
+/// parameter ::= 'parameter' id '=' floatingpoint NEWLINE
 /// parameter ::= 'parameter' id '=' RawString NEWLINE
 ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   consumeToken(FIRToken::kw_extmodule);
@@ -1799,7 +1799,8 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
       return failure();
 
     // FIXME: This isn't right.
-    if (getToken().isAny(FIRToken::integer, FIRToken::string))
+    if (getToken().isAny(FIRToken::integer, FIRToken::string,
+                         FIRToken::floatingpoint))
       consumeToken();
     else
       return emitError("expected parameter value"), failure();

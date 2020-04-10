@@ -25,6 +25,18 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     input in: UInt
     output ,,, out ,,: ,, UInt,<,8,>  ; Commas are whitespace
 
+
+; CHECK-LABEL: firrtl.extmodule @MyParameterizedExtModule(!firrtl.uint {firrtl.name = "in"}, !firrtl.flip<uint<8>> {firrtl.name = "out"})
+  ; CHECK-NOT: {
+  extmodule MyParameterizedExtModule : 
+    input in: UInt
+    output out: UInt<8>
+    defname = name_thing
+    parameter FORMAT = "tilelink_timeout=%d"
+    parameter DEFAULT = 0
+    parameter WIDTH = 32
+    parameter DEPTH = 32.42
+
   ; Module to test type parsing.
 
   ; CHECK-LABEL: firrtl.module @types(
