@@ -224,6 +224,12 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.connect %reg,
     reg <= UInt(42)
 
+    ; CHECK: %write = firrtl.wire
+    wire write : { id : UInt<4>, resp : UInt<2>}
+
+    ; CHECK: firrtl.subfield %write("id")
+    write.id <= UInt(1)
+
   ; CHECK-LABEL: firrtl.module @oversize_shift(
   module oversize_shift :
     wire value : UInt<2>

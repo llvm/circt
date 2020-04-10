@@ -703,7 +703,7 @@ private:
   ParseResult parsePrimExp(Value &result, SubOpVector &subOps);
   ParseResult parseIntegerLiteralExp(Value &result, SubOpVector &subOps);
 
-  Optional<ParseResult> parseExpWithLeadingKeyword(const char *keyword,
+  Optional<ParseResult> parseExpWithLeadingKeyword(StringRef keyword,
                                                    const LocWithInfo &info);
 
   // Stmt Parsing
@@ -1055,7 +1055,7 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result,
 /// parser result.  If not, they return None and the statement is parsed like
 /// normal.
 Optional<ParseResult>
-FIRStmtParser::parseExpWithLeadingKeyword(const char *keyword,
+FIRStmtParser::parseExpWithLeadingKeyword(StringRef keyword,
                                           const LocWithInfo &info) {
 
   switch (getToken().getKind()) {
@@ -1166,9 +1166,15 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
 /// mdir ::= 'infer' | 'read' | 'write' | 'rdwr'
 ///
 ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
+  auto spelling = getTokenSpelling();
   auto mdirIndent = getIndentation();
   LocWithInfo info(getToken().getLoc(), this);
   consumeToken();
+
+  // If this was actually the start of a connect or something else handle
+  // that.
+  if (auto isExpr = parseExpWithLeadingKeyword(spelling, info))
+    return isExpr.getValue();
 
   StringAttr resultValue;
   StringRef memName;
@@ -1277,6 +1283,12 @@ ParseResult FIRStmtParser::parsePrintf() {
 ParseResult FIRStmtParser::parseSkip() {
   LocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_skip);
+
+  // If this was actually the start of a connect or something else handle
+  // that.
+  if (auto isExpr = parseExpWithLeadingKeyword("skip", info))
+    return isExpr.getValue();
+
   if (parseOptionalInfo(info))
     return failure();
 
@@ -1310,6 +1322,11 @@ ParseResult FIRStmtParser::parseStop() {
 ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   LocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_when);
+
+  // If this was actually the start of a connect or something else handle
+  // that.
+  if (auto isExpr = parseExpWithLeadingKeyword("when", info))
+    return isExpr.getValue();
 
   Value condition;
   SmallVector<Operation *, 8> subOps;
@@ -1428,6 +1445,11 @@ ParseResult FIRStmtParser::parseInstance() {
   LocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_inst);
 
+  // If this was actually the start of a connect or something else handle
+  // that.
+  if (auto isExpr = parseExpWithLeadingKeyword("inst", info))
+    return isExpr.getValue();
+
   StringAttr id;
   StringRef moduleName;
   if (parseId(id, "expected instance name") ||
@@ -1469,6 +1491,11 @@ ParseResult FIRStmtParser::parseCMem() {
   LocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_cmem);
 
+  // If this was actually the start of a connect or something else handle
+  // that.
+  if (auto isExpr = parseExpWithLeadingKeyword("cmem", info))
+    return isExpr.getValue();
+
   StringAttr id;
   FIRRTLType type;
   if (parseId(id, "expected cmem name") ||
@@ -1491,6 +1518,11 @@ ParseResult FIRStmtParser::parseSMem() {
   // TODO(firrtl spec) smem is completely undocumented.
   LocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_smem);
+
+  // If this was actually the start of a connect or something else handle
+  // that.
+  if (auto isExpr = parseExpWithLeadingKeyword("smem", info))
+    return isExpr.getValue();
 
   StringAttr id;
   FIRRTLType type;
@@ -1517,6 +1549,11 @@ ParseResult FIRStmtParser::parseNode() {
   LocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_node);
 
+  // If this was actually the start of a connect or something else handle
+  // that.
+  if (auto isExpr = parseExpWithLeadingKeyword("node", info))
+    return isExpr.getValue();
+
   StringAttr id;
   Value initializer;
   SmallVector<Operation *, 8> subOps;
@@ -1534,6 +1571,11 @@ ParseResult FIRStmtParser::parseNode() {
 ParseResult FIRStmtParser::parseWire() {
   LocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_wire);
+
+  // If this was actually the start of a connect or something else handle
+  // that.
+  if (auto isExpr = parseExpWithLeadingKeyword("wire", info))
+    return isExpr.getValue();
 
   StringAttr id;
   FIRRTLType type;
