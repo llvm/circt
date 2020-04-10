@@ -611,8 +611,14 @@ class FIRScopedParser : public FIRParser {
 public:
   using SymbolTable =
       llvm::ScopedHashTable<Identifier, std::pair<SMLoc, Value>>;
-  FIRScopedParser(GlobalFIRParserState &state, SymbolTable &symbolTable)
-      : FIRParser(state), symbolTable(symbolTable) {}
+  using MemoryScopeTable =
+      llvm::ScopedHashTable<Identifier,
+                            std::pair<SymbolTable::ScopeTy *, Operation *>>;
+
+  FIRScopedParser(GlobalFIRParserState &state, SymbolTable &symbolTable,
+                  MemoryScopeTable &memoryScopeTable)
+      : FIRParser(state), symbolTable(symbolTable),
+        memoryScopeTable(memoryScopeTable) {}
 
   /// Add a symbol entry with the specified name, returning failure if the name
   /// is already defined.
@@ -622,10 +628,14 @@ public:
   /// name is unknown.
   ParseResult lookupSymbolEntry(Value &result, StringRef name, SMLoc loc);
 
-protected:
-  // This symbol table holds the names of ports, wires, and other local decls.
-  // This is scoped because conditional statements introduce subscopes.
+  /// This symbol table holds the names of ports, wires, and other local decls.
+  /// This is scoped because conditional statements introduce subscopes.
   SymbolTable &symbolTable;
+
+  /// Chisel is producing mports with invalid scopes.  To work around the bug,
+  /// we need to keep track of the scope (in the `symbolTable`) of each memory.
+  /// This keeps track of this.
+  MemoryScopeTable &memoryScopeTable;
 };
 } // end anonymous namespace
 
@@ -671,9 +681,10 @@ namespace {
 /// This class implements logic and state for parsing statements, suites, and
 /// similar module body constructs.
 struct FIRStmtParser : public FIRScopedParser {
-  explicit FIRStmtParser(GlobalFIRParserState &state, SymbolTable &symbolTable,
-                         OpBuilder builder)
-      : FIRScopedParser(state, symbolTable), builder(builder) {}
+  explicit FIRStmtParser(FIRScopedParser &parentParser, OpBuilder builder)
+      : FIRScopedParser(parentParser.getState(), parentParser.symbolTable,
+                        parentParser.memoryScopeTable),
+        builder(builder) {}
 
   ParseResult parseSimpleStmt(unsigned stmtIndent);
   ParseResult parseSimpleStmtBlock(unsigned indent);
@@ -1153,6 +1164,7 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
 /// mdir ::= 'infer' | 'read' | 'write' | 'rdwr'
 ///
 ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
+  auto mdirIndent = getIndentation();
   LocWithInfo info(getToken().getLoc(), this);
   consumeToken();
 
@@ -1180,6 +1192,52 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   auto result = builder.create<MemoryPortOp>(info.getLoc(), resultType, memory,
                                              indexExp, clock, direction,
                                              /*optionalName*/ resultValue);
+
+  // TODO(firrtl scala bug): Chisel is creating invalid IR where the mports
+  // are logically defining their name at the scope of the memory itself.  This
+  // is a problem for us, because the index expression and clock may be defined
+  // in a nested expression.  We can't really tell when this is happening
+  //  without unbounded lookahead either.
+  //
+  // Fortunately, this seems to happen in very idiomatic cases, where the
+  // mport happens at the end of a when block.  We detect this situation by
+  // seeing if the next statement is indented less than our memport - if so,
+  // this is the last statement at the end of the 'when' block.   Trigger a
+  // hacky workaround just in this case.
+  auto nextIndent = getIndentation();
+  if (mdirIndent.hasValue() && nextIndent.hasValue() &&
+      mdirIndent.getValue() > nextIndent.getValue()) {
+    auto memNameId = Identifier::get(memName, getContext());
+
+    // To make this even more gross, we have no efficient way to figure out
+    // what scope a value lives in our scoped hash table.  We keep a shadow
+    // table to track this.
+    auto scopeAndOperation = memoryScopeTable.lookup(memNameId);
+    if (!scopeAndOperation.first) {
+      emitError(info.getFIRLoc(), "unknown memory '") << memNameId << "'";
+      return failure();
+    }
+
+    // If we need to inject this name into a parent scope, then we have to do
+    // some IR hackery.  Create a wire for the resultValue name right before
+    // the mem in question, inject its name into that scope, then connect
+    // the output of the mport to it.
+    if (scopeAndOperation.first != symbolTable.getCurScope()) {
+      OpBuilder memOpBuilder(scopeAndOperation.second);
+
+      auto wireHack = memOpBuilder.create<WireOp>(
+          info.getLoc(), result.getType(), StringAttr());
+      builder.create<ConnectOp>(info.getLoc(), wireHack, result);
+
+      // Inject this the wire's name into the same scope as the memory.
+      symbolTable.insertIntoScope(
+          scopeAndOperation.first,
+          Identifier::get(resultValue.getValue(), getContext()),
+          {info.getFIRLoc(), wireHack});
+      return success();
+    }
+  }
+
   return addSymbolEntry(resultValue.getValue(), result, info.getFIRLoc());
 }
 
@@ -1245,8 +1303,8 @@ ParseResult FIRStmtParser::parseStop() {
   return success();
 }
 
-/// when  ::= 'when' exp ':' info? suite? ('else' ( when | ':' info? suite?) )?
-/// suite ::= simple_stmt | INDENT simple_stmt+ DEDENT
+/// when  ::= 'when' exp ':' info? suite? ('else' ( when | ':' info? suite?)
+/// )? suite ::= simple_stmt | INDENT simple_stmt+ DEDENT
 ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   LocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_when);
@@ -1266,10 +1324,11 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   auto parseSuite = [&](OpBuilder builder) -> ParseResult {
     // Declarations within the suite are scoped to within the suite.
     SymbolTable::ScopeTy suiteScope(symbolTable);
+    MemoryScopeTable::ScopeTy suiteMemoryScope(memoryScopeTable);
 
     // We parse the substatements into their own parser, so they get insert
     // into the specified 'when' region.
-    FIRStmtParser subParser(getState(), symbolTable, builder);
+    FIRStmtParser subParser(*this, builder);
 
     // Figure out whether the body is a single statement or a nested one.
     auto stmtIndent = getIndentation();
@@ -1416,6 +1475,12 @@ ParseResult FIRStmtParser::parseCMem() {
     return failure();
 
   auto result = builder.create<CMemOp>(info.getLoc(), type, id);
+
+  // Remember that this memory is in this symbol table scope.
+  // TODO(chisel bug): This should be removed along with memoryScopeTable.
+  memoryScopeTable.insert(Identifier::get(id.getValue(), getContext()),
+                          {symbolTable.getCurScope(), result.getOperation()});
+
   return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
 }
 
@@ -1436,6 +1501,12 @@ ParseResult FIRStmtParser::parseSMem() {
     return failure();
 
   auto result = builder.create<SMemOp>(info.getLoc(), type, ruw, id);
+
+  // Remember that this memory is in this symbol table scope.
+  // TODO(chisel bug): This should be removed along with memoryScopeTable.
+  memoryScopeTable.insert(Identifier::get(id.getValue(), getContext()),
+                          {symbolTable.getCurScope(), result.getOperation()});
+
   return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
 }
 
@@ -1487,7 +1558,8 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   LocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_reg);
 
-  // If this was actually the start of a connect or something else handle that.
+  // If this was actually the start of a connect or something else handle
+  // that.
   if (auto isExpr = parseExpWithLeadingKeyword("reg", info))
     return isExpr.getValue();
 
@@ -1496,8 +1568,8 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   Value clock;
   SmallVector<Operation *, 8> subOps;
 
-  // TODO(firrtl spec): info? should come after the clock expression before the
-  // 'with'.
+  // TODO(firrtl spec): info? should come after the clock expression before
+  // the 'with'.
   if (parseId(id, "expected reg name") ||
       parseToken(FIRToken::colon, "expected ':' in reg") ||
       parseType(type, "expected reg type") ||
@@ -1571,8 +1643,8 @@ namespace {
 /// This class implements logic and state for parsing module bodies.
 struct FIRModuleParser : public FIRScopedParser {
   explicit FIRModuleParser(GlobalFIRParserState &state, CircuitOp circuit)
-      : FIRScopedParser(state, symbolTable), circuit(circuit),
-        firstScope(symbolTable) {}
+      : FIRScopedParser(state, symbolTable, memoryScopeTable), circuit(circuit),
+        firstScope(symbolTable), firstMemoryScope(memoryScopeTable) {}
 
   ParseResult parseExtModule(unsigned indent);
   ParseResult parseModule(unsigned indent);
@@ -1585,6 +1657,9 @@ private:
   CircuitOp circuit;
   SymbolTable symbolTable;
   SymbolTable::ScopeTy firstScope;
+
+  MemoryScopeTable memoryScopeTable;
+  MemoryScopeTable::ScopeTy firstMemoryScope;
 };
 
 } // end anonymous namespace
@@ -1722,7 +1797,7 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
     ++argIt;
   }
 
-  FIRStmtParser stmtParser(getState(), symbolTable, fmodule.getBodyBuilder());
+  FIRStmtParser stmtParser(*this, fmodule.getBodyBuilder());
 
   // Parse the moduleBlock.
   return stmtParser.parseSimpleStmtBlock(indent);

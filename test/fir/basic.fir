@@ -203,7 +203,11 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
 
     ; CHECK: %tableValue = firrtl.memoryport "Read" %base_table_0, %i8, %clock {name = "tableValue"} : (!firrtl.vector<vector<uint<1>, 9>, 256>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.vector<uint<1>, 9>
     read mport tableValue = base_table_0[i8], clock
- 
+
+    ;; Something to end the region.
+    _T <= _T
+
+
 
   ; CHECK-LABEL: firrtl.module @type_handling(
   module type_handling :
@@ -242,3 +246,28 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
         out <= in
     ; CHECK: }
     ; CHECK: }
+
+
+  ; CHECK-LABEL: firrtl.module @chisel_when_mport_bug(
+  module chisel_when_mport_bug :
+    input cond : UInt<1>
+    input foo : UInt
+    input clock : Clock
+
+    ; CHECK: [[HACKWIRE:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
+    ; CHECK: %memory = firrtl.smem "Undefined" {name = "memory"} : !firrtl.vector<vector<uint<1>, 9>, 256>
+    smem memory : UInt<1>[9] [256]
+
+    ; CHECK: firrtl.when %cond {
+    when cond :
+      node idx = foo
+      ; CHECK: %xyz = firrtl.memoryport "Read" %memory, %idx
+      ; CHECK: firrtl.connect [[HACKWIRE]], %xyz
+      read mport xyz = memory[idx], clock
+    ; CHECK: }
+    node sometest = eq(foo, UInt(42))
+    ; CHECK: firrtl.when %sometest {
+    when sometest :
+      ; CHECK:  %awesome = firrtl.node [[HACKWIRE]]
+      node awesome = xyz
+
