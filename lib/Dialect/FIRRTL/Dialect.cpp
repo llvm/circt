@@ -846,6 +846,18 @@ FIRRTLType MuxPrimOp::getResultType(FIRRTLType sel, FIRRTLType high,
   return {};
 }
 
+FIRRTLType PadPrimOp::getResultType(FIRRTLType input, int32_t amount) {
+  int32_t width;
+  if (amount < 0 || !isSameIntegerType(input, input, width))
+    return {};
+
+  if (width == -1)
+    return input;
+
+  width = std::max(width, amount);
+  return getIntegerType(input.getContext(), input.isa<SIntType>(), width);
+}
+
 FIRRTLType ShlPrimOp::getResultType(FIRRTLType input, int32_t amount) {
   int32_t width;
   if (amount < 0 || !isSameIntegerType(input, input, width))

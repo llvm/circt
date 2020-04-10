@@ -204,8 +204,8 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: %tableValue = firrtl.memoryport "Read" %base_table_0, %i8, %clock {name = "tableValue"} : (!firrtl.vector<vector<uint<1>, 9>, 256>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.vector<uint<1>, 9>
     read mport tableValue = base_table_0[i8], clock
 
-    ;; Something to end the region.
-    _T <= _T
+    ; CHECK: firrtl.pad %i8, 10 : (!firrtl.uint<8>) -> !firrtl.uint<10>
+    node n11 = pad(i8, 10)
 
 
 
