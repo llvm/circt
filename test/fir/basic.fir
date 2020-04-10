@@ -161,9 +161,10 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.div %i8, %{{.*}} : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<8>
     node n9 = div(i8, UInt<4>(4))
 
-    ; CHECK: firrtl.tail %i8 7 : (!firrtl.uint<8>) -> !firrtl.uint<1>
-    ; CHECK: firrtl.tail %i8 0 : (!firrtl.uint<8>) -> !firrtl.uint<8>
-    node n10 = add(tail(i8, 7), tail(i8, 0))
+    ; CHECK: firrtl.tail %i8, 7 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+    ; CHECK: firrtl.tail %i8, 0 : (!firrtl.uint<8>) -> !firrtl.uint<8>
+    ; CHECK: firrtl.head %i8, 4 : (!firrtl.uint<8>) -> !firrtl.uint<4>
+    node n10 = add(add(tail(i8, 7), tail(i8, 0)), head(i8, 4))
 
     ; The Scala implementation of FIRRTL prints registers without a reset value
     ; using the register name as the reset.  Make sure we handle this for

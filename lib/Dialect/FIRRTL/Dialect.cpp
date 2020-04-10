@@ -806,6 +806,18 @@ FIRRTLType BitsPrimOp::getResultType(FIRRTLType input, int32_t high,
   return {};
 }
 
+FIRRTLType HeadPrimOp::getResultType(FIRRTLType input, int32_t amount) {
+  int32_t width;
+  if (amount < 0 || !isSameIntegerType(input, input, width))
+    return {};
+
+  if (width != -1 && amount > width)
+    return {};
+
+  width = std::max(width, amount);
+  return UIntType::get(input.getContext(), amount);
+}
+
 FIRRTLType MuxPrimOp::getResultType(FIRRTLType sel, FIRRTLType high,
                                     FIRRTLType low) {
   // Sel needs to be a one bit uint or an unknown width uint.

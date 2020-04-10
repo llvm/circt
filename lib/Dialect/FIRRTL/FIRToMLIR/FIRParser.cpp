@@ -971,6 +971,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
     attrNames.push_back("hi");
     attrNames.push_back("lo");
     break;
+  case FIRToken::lp_head:
   case FIRToken::lp_pad:
   case FIRToken::lp_shl:
   case FIRToken::lp_shr:

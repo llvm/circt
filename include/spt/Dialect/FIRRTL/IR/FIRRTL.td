@@ -701,7 +701,7 @@ def XorRPrimOp         : UnaryPrimOp<"xorr", "getReductionResult">;
 // Other Operations
 //===----------------------------------------------------------------------===//
 
-def BitsPrimOp : PrimOp<"bits", []> {
+def BitsPrimOp : PrimOp<"bits"> {
   let arguments = (ins AnyType:$input, I32Attr:$hi, I32Attr:$lo,
                        OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
@@ -724,7 +724,29 @@ def BitsPrimOp : PrimOp<"bits", []> {
   }];
 }
 
-def MuxPrimOp : PrimOp<"mux", []> {
+def HeadPrimOp : PrimOp<"head"> {
+  let arguments = (ins AnyType:$input, I32Attr:$amount,
+                       OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    $input `,` $amount attr-dict `:` functional-type($input, $result)
+  }];
+
+  let extraClassDeclaration = [{
+    /// Return the result for inputs with the specified type, returning a null
+    /// type if the input types are invalid.
+    static FIRRTLType getResultType(FIRRTLType input, int32_t amount);
+    static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
+                                    ArrayRef<int32_t> integers) {
+      if (inputs.size() != 1 || integers.size() != 1)
+        return {};
+      return getResultType(inputs[0], integers[0]);
+    }
+  }];
+}
+
+def MuxPrimOp : PrimOp<"mux"> {
   let arguments = (ins AnyType:$sel, AnyType:$high, AnyType:$low,
                        OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
@@ -800,7 +822,7 @@ def TailPrimOp : PrimOp<"tail", []> {
   let results = (outs AnyType:$result);
   
   let assemblyFormat = [{
-    $input $amount attr-dict `:` functional-type($input, $result)
+    $input `,` $amount attr-dict `:` functional-type($input, $result)
   }];
 
   let extraClassDeclaration = [{
