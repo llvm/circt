@@ -208,7 +208,7 @@ public:
   // Each element of a bundle, which is a name and type.
   using BundleElement = std::pair<Identifier, FIRRTLType>;
 
-  static BundleType get(ArrayRef<BundleElement> elements, MLIRContext *context);
+  static FIRRTLType get(ArrayRef<BundleElement> elements, MLIRContext *context);
 
   ArrayRef<BundleElement> getElements();
 
@@ -232,7 +232,7 @@ class FVectorType : public FIRRTLType::TypeBase<FVectorType, FIRRTLType,
 public:
   using Base::Base;
 
-  static FVectorType get(FIRRTLType elementType, unsigned numElements);
+  static FIRRTLType get(FIRRTLType elementType, unsigned numElements);
 
   FIRRTLType getElementType();
   unsigned getNumElements();

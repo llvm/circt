@@ -367,10 +367,56 @@ struct FlipTypeStorage : mlir::TypeStorage {
 } // namespace firrtl
 } // namespace spt
 
+/// Return a bundle type with the specified elements all flipped.  This assumes
+/// the elements list is non-empty.
+static FIRRTLType
+getFlippedBundleType(ArrayRef<BundleType::BundleElement> elements) {
+  assert(!elements.empty());
+  SmallVector<BundleType::BundleElement, 16> flippedelements;
+  flippedelements.reserve(elements.size());
+  for (auto &elt : elements)
+    flippedelements.push_back({elt.first, FlipType::get(elt.second)});
+  return BundleType::get(flippedelements, elements[0].second.getContext());
+}
+
 FIRRTLType FlipType::get(FIRRTLType element) {
-  // flip(flip(x)) -> x
-  if (auto subFlip = element.dyn_cast<FlipType>())
-    return subFlip.getElementType();
+  // We maintain a canonical form for flip types, where we prefer to have the
+  // flip as far outward from an otherwise passive type as possible.  If a flip
+  // is being used with an aggregate type that contains non-passive elements,
+  // then it is forced into the elements to get the canonical form.
+  switch (element.getKind()) {
+  case FIRRTLType::Clock:
+  case FIRRTLType::Reset:
+  case FIRRTLType::AsyncReset:
+  case FIRRTLType::SInt:
+  case FIRRTLType::UInt:
+  case FIRRTLType::Analog:
+    break;
+
+    // Derived Types
+  case FIRRTLType::Flip:
+    // flip(flip(x)) -> x
+    return element.cast<FlipType>().getElementType();
+
+  case FIRRTLType::Bundle: {
+    // If the bundle is passive, then we're done because the flip will be at the
+    // outer level. Otherwise, it contains flip types recursively within itself
+    // that we should canonicalize.
+    auto bundle = element.cast<BundleType>();
+    if (bundle.isPassiveType())
+      break;
+    return getFlippedBundleType(bundle.getElements());
+  }
+  case FIRRTLType::Vector: {
+    // If the bundle is passive, then we're done because the flip will be at the
+    // outer level. Otherwise, it contains flip types recursively within itself
+    // that we should canonicalize.
+    auto vec = element.cast<FVectorType>();
+    if (vec.isPassiveType())
+      break;
+    return FVectorType::get(get(vec.getElementType()), vec.getNumElements());
+  }
+  }
 
   // TODO: This should maintain a canonical form, digging any flips out of
   // sub-types.
@@ -420,8 +466,17 @@ struct BundleTypeStorage : mlir::TypeStorage {
 } // namespace firrtl
 } // namespace spt
 
-BundleType BundleType::get(ArrayRef<BundleElement> elements,
+FIRRTLType BundleType::get(ArrayRef<BundleElement> elements,
                            MLIRContext *context) {
+  // If all of the elements are flip types, then we canonicalize the flips to
+  // the outer level.
+  if (!elements.empty() &&
+      llvm::all_of(elements, [&](const BundleElement &elt) -> bool {
+        return elt.second.isa<FlipType>();
+      })) {
+    return FlipType::get(getFlippedBundleType(elements));
+  }
+
   return Base::get(context, Bundle, elements);
 }
 
@@ -486,7 +541,11 @@ struct VectorTypeStorage : mlir::TypeStorage {
 } // namespace firrtl
 } // namespace spt
 
-FVectorType FVectorType::get(FIRRTLType elementType, unsigned numElements) {
+FIRRTLType FVectorType::get(FIRRTLType elementType, unsigned numElements) {
+  // If elementType is a flip, then we canonicalize it outwards.
+  if (auto flip = elementType.dyn_cast<FlipType>())
+    return FlipType::get(FVectorType::get(flip.getElementType(), numElements));
+
   return Base::get(elementType.getContext(), Vector,
                    std::make_pair(elementType, numElements));
 }

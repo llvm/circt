@@ -185,9 +185,9 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     reg _T_2622 : UInt<4>, clock with :
       reset => (UInt<1>("h0"), _T_2622)
 
-    ; CHECK: [[xyz:%.+]] = firrtl.instance @circuit {name = "xyz"} : !firrtl.bundle<in: flip<uint<80>>>
+    ; CHECK: [[xyz:%.+]] = firrtl.instance @circuit {name = "xyz"} : !firrtl.flip<bundle<in: uint<80>>>
     inst xyz of circuit
-    ; CHECK: [[xyz_in:%.+]] = firrtl.subfield [[xyz]]("in") : (!firrtl.bundle<in: flip<uint<80>>>) -> !firrtl.flip<uint<80>>
+    ; CHECK: [[xyz_in:%.+]] = firrtl.subfield [[xyz]]("in") : (!firrtl.flip<bundle<in: uint<80>>>) -> !firrtl.flip<uint<80>>
     ; CHECK: firrtl.connect [[xyz_in]], %i8 : !firrtl.flip<uint<80>>, !firrtl.uint<8>
     xyz.in <= i8
 
@@ -228,6 +228,16 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
   module type_handling :
     wire _T_6 : { flip b : { bits : { source : UInt<7> } } }
     node _T_8 = bits(_T_6.b.bits.source, 5, 0)
+
+    ; CHECK: %flip1 = firrtl.wire {{.*}} !firrtl.bundle<x: bundle<a: uint>>
+    wire flip1 : { flip x : { flip a : UInt } }
+    ; CHECK: %flip2 = firrtl.wire {{.*}} !firrtl.bundle<x: bundle<a: uint, b: flip<analog>>>
+    wire flip2 : { flip x : { flip a : UInt, b: Analog } }
+    ; CHECK: %flip3 = firrtl.wire {{.*}} !firrtl.bundle<x: bundle<a: uint, b: analog>>
+    wire flip3 : { flip x : { flip a : UInt, flip b: Analog } }
+    ; CHECK: %flip4 = firrtl.wire {{.*}} !firrtl.bundle<x: vector<bundle<a: uint>, 4>>
+    wire flip4 : { flip x : { flip a : UInt }[4] }
+
 
   ; CHECK-LABEL: firrtl.module @expr_stmt_ambiguity(
   module expr_stmt_ambiguity :
