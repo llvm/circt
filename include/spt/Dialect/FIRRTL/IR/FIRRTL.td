@@ -250,6 +250,17 @@ def SMemOp : FIRRTLOp<"smem", [NoSideEffect]> {
   }];
 }
 
+def MemOp : FIRRTLOp<"mem", [NoSideEffect]> {
+  let summary = "Define a new smem";
+  let arguments = (ins I32Attr:$readLatency, I32Attr:$writeLatency,
+                       RUWAttr:$ruw, OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    $ruw attr-dict `:` type($result)
+  }];
+}
+
 def NodeOp : FIRRTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
   let summary = "No-op to name a value";
   let description = [{

@@ -52,6 +52,10 @@ public:
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLType getPassiveType();
 
+  /// Return this type with all ground types replaced with UInt<1>.  This is
+  /// used for `mem` operations.
+  FIRRTLType getMaskType();
+
   static bool kindof(unsigned kind) {
     return kind >= FIRST_KIND && kind <= LAST_KIND;
   }

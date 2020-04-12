@@ -255,11 +255,43 @@ FIRRTLType FIRRTLType::getPassiveType() {
 
     // Derived Types
   case FIRRTLType::Flip:
-    return this->cast<FlipType>().getElementType().getPassiveType();
+    return cast<FlipType>().getElementType().getPassiveType();
   case FIRRTLType::Bundle:
-    return this->cast<BundleType>().getPassiveType();
+    return cast<BundleType>().getPassiveType();
   case FIRRTLType::Vector:
-    return this->cast<FVectorType>().getPassiveType();
+    return cast<FVectorType>().getPassiveType();
+  }
+  llvm_unreachable("unknown FIRRTL type");
+}
+
+/// Return this type with all ground types replaced with UInt<1>.  This is
+/// used for `mem` operations.
+FIRRTLType FIRRTLType::getMaskType() {
+  switch (getKind()) {
+  case FIRRTLType::Clock:
+  case FIRRTLType::Reset:
+  case FIRRTLType::AsyncReset:
+  case FIRRTLType::SInt:
+  case FIRRTLType::UInt:
+  case FIRRTLType::Analog:
+    return UIntType::get(getContext(), 1);
+
+    // Derived Types
+  case FIRRTLType::Flip:
+    return FlipType::get(cast<FlipType>().getElementType().getMaskType());
+  case FIRRTLType::Bundle: {
+    auto bundle = cast<BundleType>();
+    SmallVector<BundleType::BundleElement, 4> newElements;
+    newElements.reserve(bundle.getElements().size());
+    for (auto elt : bundle.getElements())
+      newElements.push_back({elt.first, elt.second.getMaskType()});
+    return BundleType::get(newElements, getContext());
+  }
+  case FIRRTLType::Vector: {
+    auto vector = cast<FVectorType>();
+    return FVectorType::get(vector.getElementType().getMaskType(),
+                            vector.getNumElements());
+  }
   }
   llvm_unreachable("unknown FIRRTL type");
 }

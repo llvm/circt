@@ -223,6 +223,28 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.andr %n11 : (!firrtl.uint<10>) -> !firrtl.uint<1>
     node n12 = andr(n11)
 
+    ; CHECK: %_M = firrtl.mem "Undefined" {name = "_M",
+    ; CHECK:   readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<
+    ; CHECK:       _T_10: bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: analog<4>>, mask: bundle<id: uint<1>>>,
+    ; CHECK:       _T_11: bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: analog<4>>, mask: bundle<id: uint<1>>>,
+    ; CHECK:       _T_18: bundle<addr: uint<3>, en: uint<1>, clk: clock, data: flip<bundle<id: analog<4>>>>>
+    mem _M : @[Decoupled.scala 209:24]
+        data-type => { id : Analog<4> }
+        depth => 8
+        read-latency => 0
+        write-latency => 1
+        reader => _T_18
+        writer => _T_10 _T_11
+        read-under-write => undefined
+    _M._T_18.addr is invalid @[Decoupled.scala 209:24]
+    _M._T_18.clk is invalid @[Decoupled.scala 209:24]
+    _M._T_18.en <= UInt<1>("h0") @[Decoupled.scala 209:24]
+    _M._T_10.addr is invalid @[Decoupled.scala 209:24]
+    _M._T_10.clk is invalid @[Decoupled.scala 209:24]
+    _M._T_10.en <= UInt<1>("h0") @[Decoupled.scala 209:24]
+    _M._T_10.data is invalid @[Decoupled.scala 209:24]
+    _M._T_10.mask is invalid @[Decoupled.scala 209:24]
+
 
   ; CHECK-LABEL: firrtl.module @type_handling(
   module type_handling :
