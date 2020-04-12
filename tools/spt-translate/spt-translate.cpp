@@ -6,6 +6,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/AsmState.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/MLIRContext.h"
@@ -43,6 +44,7 @@ static llvm::cl::opt<bool> verifyDiagnostics(
 int main(int argc, char **argv) {
   registerDialect<StandardOpsDialect>();
   registerDialect<firrtl::FIRRTLDialect>();
+  registerAsmPrinterCLOptions();
 
   firrtl::registerFIRRTLToMLIRTranslation();
 
