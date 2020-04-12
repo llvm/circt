@@ -510,7 +510,7 @@ void ConstantOp::build(Builder *builder, OperationState &result,
 FIRRTLType SubfieldOp::getResultType(FIRRTLType inType, StringRef fieldName) {
   if (auto bundleType = inType.dyn_cast<BundleType>()) {
     for (auto &elt : bundleType.getElements()) {
-      if (elt.first.strref() == fieldName)
+      if (elt.first.is(fieldName))
         return elt.second;
     }
   }

@@ -610,10 +610,12 @@ namespace {
 class FIRScopedParser : public FIRParser {
 public:
   using SymbolTable =
-      llvm::ScopedHashTable<Identifier, std::pair<SMLoc, Value>>;
+      llvm::ScopedHashTable<Identifier, std::pair<SMLoc, Value>,
+                            DenseMapInfo<Identifier>, llvm::BumpPtrAllocator>;
   using MemoryScopeTable =
       llvm::ScopedHashTable<Identifier,
-                            std::pair<SymbolTable::ScopeTy *, Operation *>>;
+                            std::pair<SymbolTable::ScopeTy *, Operation *>,
+                            DenseMapInfo<Identifier>, llvm::BumpPtrAllocator>;
 
   FIRScopedParser(GlobalFIRParserState &state, SymbolTable &symbolTable,
                   MemoryScopeTable &memoryScopeTable)

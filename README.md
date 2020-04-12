@@ -44,8 +44,10 @@ The `-DCMAKE_BUILD_TYPE=DEBUG` flag enables debug information, which makes the
 whole tree compile slower, but allows you to step through code into the LLVM
 and MLIR frameworks.
 
-To get something that runs fast, use `-DCMAKE_BUILD_TYPE=Release`.  This can
-make a very large difference in performance.
+To get something that runs fast, use `-DCMAKE_BUILD_TYPE=Release` or
+`-DCMAKE_BUILD_TYPE=RelWithDebInfo` if you want to go fast and optionally if
+you want debug info to go with it.  `RELEASE` mode makes a very large difference
+in performance.
 
 5) Build MLIR and run MLIR tests as a smoketest:
 
