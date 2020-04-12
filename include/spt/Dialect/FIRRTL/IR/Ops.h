@@ -42,6 +42,7 @@ FIRRTLType getBitwiseBinaryResult(FIRRTLType lhs, FIRRTLType rhs);
 FIRRTLType getCatResult(FIRRTLType lhs, FIRRTLType rhs);
 FIRRTLType getDShlResult(FIRRTLType lhs, FIRRTLType rhs);
 FIRRTLType getDShrResult(FIRRTLType lhs, FIRRTLType rhs);
+FIRRTLType getValidIfResult(FIRRTLType lhs, FIRRTLType rhs);
 
 // Unary primitives.
 FIRRTLType getAsAsyncResetResult(FIRRTLType input);

@@ -645,26 +645,28 @@ class BinaryPrimOp<string mnemonic, string resultTypeFunction,
 }
 
 def AddPrimOp : BinaryPrimOp<"add", "getAddSubResult", [Commutative]>;
-def SubPrimOp : BinaryPrimOp<"sub", "getAddSubResult", []>;
+def SubPrimOp : BinaryPrimOp<"sub", "getAddSubResult">;
 def MulPrimOp : BinaryPrimOp<"mul", "getMulResult", [Commutative]>;
-def DivPrimOp : BinaryPrimOp<"div", "getDivResult", []>;
-def RemPrimOp : BinaryPrimOp<"rem", "getRemResult", []>;
+def DivPrimOp : BinaryPrimOp<"div", "getDivResult">;
+def RemPrimOp : BinaryPrimOp<"rem", "getRemResult">;
 
 def AndPrimOp : BinaryPrimOp<"and", "getBitwiseBinaryResult", [Commutative]>;
 def OrPrimOp  : BinaryPrimOp<"or",  "getBitwiseBinaryResult", [Commutative]>;
 def XorPrimOp : BinaryPrimOp<"xor", "getBitwiseBinaryResult", [Commutative]>;
 
 // Comparison Operations
-def LEQPrimOp : BinaryPrimOp<"leq", "getCompareResult", []>;
-def LTPrimOp  : BinaryPrimOp<"lt",  "getCompareResult", []>;
-def GEQPrimOp : BinaryPrimOp<"geq", "getCompareResult", []>;
-def GTPrimOp  : BinaryPrimOp<"gt",  "getCompareResult", []>;
+def LEQPrimOp : BinaryPrimOp<"leq", "getCompareResult">;
+def LTPrimOp  : BinaryPrimOp<"lt",  "getCompareResult">;
+def GEQPrimOp : BinaryPrimOp<"geq", "getCompareResult">;
+def GTPrimOp  : BinaryPrimOp<"gt",  "getCompareResult">;
 def EQPrimOp  : BinaryPrimOp<"eq",  "getCompareResult", [Commutative]>;
 def NEQPrimOp : BinaryPrimOp<"neq", "getCompareResult", [Commutative]>;
 
-def CatPrimOp  : BinaryPrimOp<"cat", "getCatResult", []>;
-def DShlPrimOp : BinaryPrimOp<"dshl", "getDShlResult", []>;
-def DShrPrimOp : BinaryPrimOp<"dshr", "getDShrResult", []>;
+def CatPrimOp  : BinaryPrimOp<"cat", "getCatResult">;
+def DShlPrimOp : BinaryPrimOp<"dshl", "getDShlResult">;
+def DShrPrimOp : BinaryPrimOp<"dshr", "getDShrResult">;
+
+def ValidIfPrimOp : BinaryPrimOp<"validif", "getValidIfResult">;
 
 //===----------------------------------------------------------------------===//
 // Unary Operations

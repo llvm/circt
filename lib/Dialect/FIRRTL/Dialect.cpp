@@ -697,6 +697,15 @@ FIRRTLType firrtl::getDShrResult(FIRRTLType lhs, FIRRTLType rhs) {
   return lhs;
 }
 
+FIRRTLType firrtl::getValidIfResult(FIRRTLType lhs, FIRRTLType rhs) {
+  if (!lhs.isa<UIntType>())
+    return {};
+  auto lhsWidth = lhs.cast<UIntType>().getWidthOrSentinel();
+  if (lhsWidth != -1 && lhsWidth != 1)
+    return {};
+  return rhs;
+}
+
 //===----------------------------------------------------------------------===//
 // Unary Primitives
 //===----------------------------------------------------------------------===//
