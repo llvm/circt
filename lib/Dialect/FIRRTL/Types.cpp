@@ -265,6 +265,23 @@ FIRRTLType FIRRTLType::getPassiveType() {
 }
 
 //===----------------------------------------------------------------------===//
+// IntType
+//===----------------------------------------------------------------------===//
+
+/// Return the bitwidth of this type or None if unknown.
+Optional<int32_t> IntType::getWidth() {
+  return isSigned() ? this->cast<SIntType>().getWidth()
+                    : this->cast<UIntType>().getWidth();
+}
+
+/// Return a SIntType or UInt type with the specified signedness and width.
+IntType IntType::get(MLIRContext *context, bool isSigned, int32_t width) {
+  if (isSigned)
+    return SIntType::get(context, width);
+  return UIntType::get(context, width);
+}
+
+//===----------------------------------------------------------------------===//
 // Width Qualified Ground Types
 //===----------------------------------------------------------------------===//
 
@@ -323,14 +340,6 @@ AnalogType AnalogType::get(MLIRContext *context, int32_t width) {
 
 Optional<int32_t> AnalogType::getWidth() {
   return getWidthQualifiedTypeWidth(this->getImpl());
-}
-
-/// Return a SIntType or UInt type with the specified signedness and width.
-FIRRTLType firrtl::getIntegerType(MLIRContext *context, bool isSigned,
-                                  int32_t width) {
-  if (isSigned)
-    return SIntType::get(context, width);
-  return UIntType::get(context, width);
 }
 
 //===----------------------------------------------------------------------===//

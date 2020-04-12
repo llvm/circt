@@ -1031,7 +1031,7 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result,
       parseToken(FIRToken::r_paren, "expected ')' in integer expression"))
     return failure();
 
-  FIRRTLType resultType = getIntegerType(builder.getContext(), isSigned, width);
+  auto resultType = IntType::get(builder.getContext(), isSigned, width);
   auto op =
       builder.create<ConstantOp>(translateLocation(loc), resultType, value);
   subOps.push_back(op);

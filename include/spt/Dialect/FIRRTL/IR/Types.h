@@ -100,31 +100,48 @@ public:
 // Width Qualified Ground Types
 //===----------------------------------------------------------------------===//
 
-template <typename ConcreteType, FIRRTLType::Kind typeKind>
+template <typename ConcreteType, FIRRTLType::Kind typeKind, typename ParentType>
 class WidthQualifiedType
-    : public FIRRTLType::TypeBase<ConcreteType, FIRRTLType,
+    : public FIRRTLType::TypeBase<ConcreteType, ParentType,
                                   detail::WidthTypeStorage> {
 public:
-  using FIRRTLType::TypeBase<ConcreteType, FIRRTLType,
+  using FIRRTLType::TypeBase<ConcreteType, ParentType,
                              detail::WidthTypeStorage>::Base::Base;
 
   /// Return the width of this type, or -1 if it has none specified.
   int32_t getWidthOrSentinel() {
     auto width = static_cast<ConcreteType *>(this)->getWidth();
-    if (width.hasValue())
-      return width.getValue();
-    return -1;
+    return width.hasValue() ? width.getValue() : -1;
   }
 
   static bool kindof(unsigned kind) { return kind == typeKind; }
 };
 
-/// Return a SIntType or UInt type with the specified signedness and width.
-FIRRTLType getIntegerType(MLIRContext *context, bool isSigned,
-                          int32_t width = -1);
+/// This is the common base class between SIntType and UIntType.
+class IntType : public FIRRTLType {
+public:
+  using FIRRTLType::FIRRTLType;
+
+  /// Return a SIntType or UInt type with the specified signedness and width.
+  static IntType get(MLIRContext *context, bool isSigned, int32_t width = -1);
+
+  bool isSigned() { return getKind() == SInt; }
+
+  /// Return the bitwidth of this type or None if unknown.
+  Optional<int32_t> getWidth();
+
+  /// Return the width of this type, or -1 if it has none specified.
+  int32_t getWidthOrSentinel() {
+    auto width = getWidth();
+    return width.hasValue() ? width.getValue() : -1;
+  }
+
+  static bool kindof(unsigned kind) { return kind == SInt || kind == UInt; }
+};
 
 /// A signed integer type, whose width may not be known.
-class SIntType : public WidthQualifiedType<SIntType, FIRRTLType::SInt> {
+class SIntType
+    : public WidthQualifiedType<SIntType, FIRRTLType::SInt, IntType> {
 public:
   using WidthQualifiedType::WidthQualifiedType;
 
@@ -136,7 +153,8 @@ public:
 };
 
 /// An unsigned integer type, whose width may not be known.
-class UIntType : public WidthQualifiedType<UIntType, FIRRTLType::UInt> {
+class UIntType
+    : public WidthQualifiedType<UIntType, FIRRTLType::UInt, IntType> {
 public:
   using WidthQualifiedType::WidthQualifiedType;
 
@@ -148,7 +166,8 @@ public:
 };
 
 // `firrtl.Analog` can be attached to multiple drivers.
-class AnalogType : public WidthQualifiedType<AnalogType, FIRRTLType::Analog> {
+class AnalogType
+    : public WidthQualifiedType<AnalogType, FIRRTLType::Analog, FIRRTLType> {
 public:
   using WidthQualifiedType::WidthQualifiedType;
 
