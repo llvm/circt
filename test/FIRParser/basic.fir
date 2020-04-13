@@ -144,7 +144,7 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     when lt(reset, UInt(4)) :   ;; When with no else.
       _T <= _T_2
 
-      ; CHECK: firrtl.printf %clock, %reset, "\22Something interesting! %x %x\22" %_T, %_T_2 : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 13>
+      ; CHECK: firrtl.printf %clock, %reset, "\22Something interesting! %x %x\22"(%_T, %_T_2) : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 13>
     printf(clock, reset, "Something interesting! %x %x", _T, _T_2)
 
     ; CHECK: firrtl.stop %clock, %reset, 42

@@ -6,6 +6,7 @@ set(LIBS
   MLIRIR
   MLIROptLib
   MLIRStandardOps
+  MLIRTransforms
   LLVMSupport
 )
 

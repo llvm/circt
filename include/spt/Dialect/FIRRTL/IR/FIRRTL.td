@@ -522,7 +522,7 @@ def PrintFOp : FIRRTLOp<"printf", []> {
   let results = (outs);
   
   let assemblyFormat = [{
-    $clock `,` $cond `,` $formatString attr-dict ($operands^ `:` type($operands))?
+    $clock `,` $cond `,` $formatString attr-dict (`(` $operands^ `)` `:` type($operands))?
   }];
 }
 

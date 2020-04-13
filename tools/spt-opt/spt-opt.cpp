@@ -6,10 +6,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Pass/PassRegistry.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Support/MlirOptMain.h"
+#include "mlir/Transforms/Passes.h"
 #include "spt/Dialect/FIRRTL/IR/Ops.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
@@ -57,6 +59,10 @@ int main(int argc, char **argv) {
 
   registerDialect<StandardOpsDialect>();
   registerDialect<firrtl::FIRRTLDialect>();
+
+// Register the standard passes we want.
+#define GEN_PASS_REGISTRATION_Canonicalizer
+#include "mlir/Transforms/Passes.h.inc"
 
   // Register any pass manager command line options.
   registerPassManagerCLOptions();
