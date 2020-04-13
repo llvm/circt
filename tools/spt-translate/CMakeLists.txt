@@ -2,7 +2,7 @@ set(LIBS
   MLIRTranslation
   MLIRSupport
 
-  SPTFIRToMLIR
+  SPTFIRParser
 )
 add_llvm_tool(spt-translate
   spt-translate.cpp
