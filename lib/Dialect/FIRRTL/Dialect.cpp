@@ -22,7 +22,7 @@ static StringAttr getModuleFIRRTLNameAttr(ArrayRef<NamedAttribute> attrs) {
     // FIXME: We currently use firrtl.name instead of name because this makes
     // the FunctionLike handling in MLIR core happier.  It otherwise doesn't
     // allow attributes on module parameters.
-    if (!argAttr.first.is("firrtl.name"))
+    if (argAttr.first != "firrtl.name")
       continue;
 
     return argAttr.second.dyn_cast<StringAttr>();
@@ -510,7 +510,7 @@ void ConstantOp::build(Builder *builder, OperationState &result,
 FIRRTLType SubfieldOp::getResultType(FIRRTLType inType, StringRef fieldName) {
   if (auto bundleType = inType.dyn_cast<BundleType>()) {
     for (auto &elt : bundleType.getElements()) {
-      if (elt.first.is(fieldName))
+      if (elt.first == fieldName)
         return elt.second;
     }
   }
