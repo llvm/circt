@@ -24,7 +24,7 @@ circuit basic :  @[CIRCUIT.scala 127]
   ; CHECK-LABEL: firrtl.module @M3
   module M3 :   @[NoSpaceInLocator]   ; expected-warning {{ignoring unknown @ info record format}}
     input in: UInt
-  ; CHECK: } loc({{.*}}test/fir/locations.fir"
+  ; CHECK: } loc({{.*}}test/FIRParser/locations.fir"
 
 
   ; CHECK-LABEL: firrtl.module @Subexpressions
