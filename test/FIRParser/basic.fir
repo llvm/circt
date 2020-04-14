@@ -59,7 +59,8 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     input reset : UInt<1>    ; CHECK: %reset: !firrtl.uint<1>,
     input clock : Clock      ; CHECK: %clock: !firrtl.clock,
     output auto : UInt<1>    ; CHECK: %auto: !firrtl.flip<uint<1>>,
-    input i8 : UInt<8>       ; CHECK: %i8: !firrtl.uint<8>)
+    input i8 : UInt<8>       ; CHECK: %i8: !firrtl.uint<8>,
+    input s8 : SInt<8>       ; CHECK: %s8: !firrtl.sint<8>)
 
     ; CHECK: %_T = firrtl.wire {name = "_T"} : !firrtl.vector<uint<1>, 12>
     wire _T : UInt<1>[12] @[Nodes.scala 370:76]
@@ -108,11 +109,14 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.asAsyncReset %reset : (!firrtl.uint<1>) -> !firrtl.asyncreset
     node ar = asAsyncReset(reset)
 
-    ; CHECK: firrtl.constant(42 : ui10) : !firrtl.uint<10>
-    ; CHECK: firrtl.constant(171 : ui8) : !firrtl.uint<8>
-    ; CHECK: firrtl.add
+    ; CHECK: %c42_ui10 = firrtl.constant(42 : ui10) : !firrtl.uint<10>
+    ; CHECK: %c171_ui8 = firrtl.constant(171 : ui8) : !firrtl.uint<8>
+    ; CHECK: firrtl.add %c42_ui10, %c171_ui8
     ; CHECK: firrtl.connect %auto
     auto <= add(UInt<10>(42), UInt<8>("hAB"))
+
+    ; CHECK: %cm85_si8 = firrtl.constant(-85 : si8) : !firrtl.sint<8>
+    auto <= add(s8, SInt<8>("hAB"))
 
     ; CHECK: firrtl.when %reset {
     ; CHECK:   firrtl.connect %_T, %_T_2
