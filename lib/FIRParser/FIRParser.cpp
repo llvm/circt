@@ -23,6 +23,20 @@ using namespace mlir;
 using llvm::SMLoc;
 using llvm::SourceMgr;
 
+/// Return true if this is a useless temporary name produced by FIRRTL.  We
+/// drop these as they don't convey semantic meaning.
+static bool isUselessName(StringRef name) {
+  if (!name.startswith("_T"))
+    return false;
+  return name.size() == 2 || name[2] == '_';
+}
+
+/// If the specified name is a useless temporary name produced by FIRRTL, return
+/// an empty attribute to ignore it.  Otherwise, return the argument unmodified.
+static StringAttr filterUselessName(StringAttr name) {
+  return isUselessName(name.getValue()) ? StringAttr() : name;
+}
+
 //===----------------------------------------------------------------------===//
 // GlobalFIRParserState
 //===----------------------------------------------------------------------===//
@@ -744,7 +758,6 @@ private:
 ///      ::= exp '[' intLit ']'
 /// XX   ::= exp '.' DoubleLit // TODO Workaround for #470
 ///      ::= exp '[' exp ']'
-/// XX   ::= 'validif(' exp exp ')'
 ///
 ParseResult FIRStmtParser::parseExp(Value &result, SubOpVector &subOps,
                                     const Twine &message) {
@@ -1202,7 +1215,7 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
 
   auto result = builder.create<MemoryPortOp>(info.getLoc(), resultType, memory,
                                              indexExp, clock, direction,
-                                             /*optionalName*/ resultValue);
+                                             filterUselessName(resultValue));
 
   // TODO(firrtl scala bug): Chisel is creating invalid IR where the mports
   // are logically defining their name at the scope of the memory itself.  This
@@ -1482,8 +1495,9 @@ ParseResult FIRStmtParser::parseInstance() {
                        FlipType::get(port.second)});
   }
   auto resultType = BundleType::get(results, getContext());
-  auto result = builder.create<InstanceOp>(
-      info.getLoc(), resultType, builder.getSymbolRefAttr(moduleName), id);
+  auto result = builder.create<InstanceOp>(info.getLoc(), resultType,
+                                           builder.getSymbolRefAttr(moduleName),
+                                           filterUselessName(id));
 
   return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
 }
@@ -1506,7 +1520,8 @@ ParseResult FIRStmtParser::parseCMem() {
       parseType(type, "expected cmem type") || parseOptionalInfo(info))
     return failure();
 
-  auto result = builder.create<CMemOp>(info.getLoc(), type, id);
+  auto result =
+      builder.create<CMemOp>(info.getLoc(), type, filterUselessName(id));
 
   // Remember that this memory is in this symbol table scope.
   // TODO(chisel bug): This should be removed along with memoryScopeTable.
@@ -1537,7 +1552,8 @@ ParseResult FIRStmtParser::parseSMem() {
       parseOptionalInfo(info))
     return failure();
 
-  auto result = builder.create<SMemOp>(info.getLoc(), type, ruw, id);
+  auto result =
+      builder.create<SMemOp>(info.getLoc(), type, ruw, filterUselessName(id));
 
   // Remember that this memory is in this symbol table scope.
   // TODO(chisel bug): This should be removed along with memoryScopeTable.
@@ -1713,9 +1729,9 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
   }
 
   auto memType = BundleType::get(memFields, getContext());
-  auto result = builder.create<MemOp>(info.getLoc(), memType,
-                                      llvm::APInt(32, readLatency),
-                                      llvm::APInt(32, writeLatency), ruw, id);
+  auto result = builder.create<MemOp>(
+      info.getLoc(), memType, llvm::APInt(32, readLatency),
+      llvm::APInt(32, writeLatency), ruw, filterUselessName(id));
 
   // Remember that this memory is in this symbol table scope.
   // TODO(chisel bug): This should be removed along with memoryScopeTable.
@@ -1744,7 +1760,8 @@ ParseResult FIRStmtParser::parseNode() {
       parseOptionalInfo(info, subOps))
     return failure();
 
-  auto result = builder.create<NodeOp>(info.getLoc(), initializer, id);
+  auto result =
+      builder.create<NodeOp>(info.getLoc(), initializer, filterUselessName(id));
   return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
 }
 
@@ -1765,7 +1782,8 @@ ParseResult FIRStmtParser::parseWire() {
       parseType(type, "expected wire type") || parseOptionalInfo(info))
     return failure();
 
-  auto result = builder.create<WireOp>(info.getLoc(), type, id);
+  auto result =
+      builder.create<WireOp>(info.getLoc(), type, filterUselessName(id));
   return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
 }
 
@@ -1853,9 +1871,10 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   Value result;
   if (resetSignal)
     result = builder.create<RegInitOp>(info.getLoc(), type, clock, resetSignal,
-                                       resetValue, id);
+                                       resetValue, filterUselessName(id));
   else
-    result = builder.create<RegOp>(info.getLoc(), type, clock, id);
+    result = builder.create<RegOp>(info.getLoc(), type, clock,
+                                   filterUselessName(id));
 
   return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
 }
