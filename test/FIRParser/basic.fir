@@ -332,3 +332,32 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
       ; CHECK:  %awesome = firrtl.node [[HACKWIRE]]
       node awesome = xyz
 
+
+   ; CHECK-LABEL: firrtl.module @constant_implicit_cse(
+  module constant_implicit_cse :
+    input cond : UInt<1>
+
+    ; CHECK: [[CST15:%.+]] = firrtl.constant(15 : ui4) : !firrtl.uint<4>
+    ; CHECK: %a = firrtl.node [[CST15]]
+    node a = UInt<4>(15)
+    ; CHECK: %b = firrtl.node [[CST15]]
+    node b = UInt<4>(15)
+
+    ;; Constants always get emitted to the top level.
+    ; CHECK: [[CST7:%.+]] = firrtl.constant(7 : ui4) : !firrtl.uint<4>
+    ; CHECK: firrtl.when %cond {
+    when cond :
+      ; CHECK: %c = firrtl.node [[CST15]]
+      node c = UInt<4>(15)
+      ; CHECK: %d = firrtl.node [[CST7]]
+      node d = UInt<4>(7)
+      ; CHECK: firrtl.when %cond {
+      when cond :
+        ; CHECK:  %e = firrtl.node [[CST7]]
+        node e = UInt<4>(7)
+    ; CHECK: }
+    ; CHECK: }
+
+    ; CHECK:  %f = firrtl.node [[CST15]]
+    node f = UInt<4>(15)
+    node g = UInt<4>(7)

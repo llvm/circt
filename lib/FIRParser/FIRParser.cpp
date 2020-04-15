@@ -685,6 +685,23 @@ ParseResult FIRScopedParser::lookupSymbolEntry(Value &result, StringRef name,
 }
 
 //===----------------------------------------------------------------------===//
+// FIRModuleContext
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// This struct provides context information that is global to the module we're
+/// currently parsing into.
+struct FIRModuleContext {
+  // The expression-oriented nature of firrtl syntax produces tons of constant
+  // nodes which are obviously redundant.  Instead of literally producing them
+  // in the parser, do an implicit CSE to reduce parse time and silliness in the
+  // resulting IR.
+  llvm::DenseMap<std::pair<Attribute, Type>, Value> constantCache;
+};
+
+} // end anonymous namespace
+
+//===----------------------------------------------------------------------===//
 // FIRStmtParser
 //===----------------------------------------------------------------------===//
 
@@ -692,10 +709,11 @@ namespace {
 /// This class implements logic and state for parsing statements, suites, and
 /// similar module body constructs.
 struct FIRStmtParser : public FIRScopedParser {
-  explicit FIRStmtParser(FIRScopedParser &parentParser, OpBuilder builder)
+  explicit FIRStmtParser(OpBuilder builder, FIRScopedParser &parentParser,
+                         FIRModuleContext &moduleContext)
       : FIRScopedParser(parentParser.getState(), parentParser.symbolTable,
                         parentParser.memoryScopeTable),
-        builder(builder) {}
+        builder(builder), moduleContext(moduleContext) {}
 
   ParseResult parseSimpleStmt(unsigned stmtIndent);
   ParseResult parseSimpleStmtBlock(unsigned indent);
@@ -736,6 +754,9 @@ private:
 
   // The builder to build into.
   OpBuilder builder;
+
+  // Extra information maintained across a module.
+  FIRModuleContext &moduleContext;
 };
 
 } // end anonymous namespace
@@ -1040,11 +1061,54 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result,
       parseToken(FIRToken::r_paren, "expected ')' in integer expression"))
     return failure();
 
-  auto resultType = IntType::get(builder.getContext(), isSigned, width);
-  auto op =
-      builder.create<ConstantOp>(translateLocation(loc), resultType, value);
+  // Construct an integer attribute of the right width.
+  auto type = IntType::get(builder.getContext(), isSigned, width);
+
+  // TODO: check to see if this extension stuff is necessary.  We should at
+  // least warn for things like UInt<4>(255).
+  IntegerType::SignednessSemantics signedness;
+  if (type.isSigned()) {
+    signedness = IntegerType::Signed;
+    if (width != -1)
+      value = value.sextOrTrunc(width);
+  } else {
+    signedness = IntegerType::Unsigned;
+    if (width != -1)
+      value = value.zextOrTrunc(width);
+  }
+
+  Type attrType =
+      IntegerType::get(value.getBitWidth(), signedness, type.getContext());
+  auto attr = builder.getIntegerAttr(attrType, value);
+
+  // Check to see if we've already created this constant.  If so, reuse it.
+  auto &entry = moduleContext.constantCache[{attr, type}];
+  if (entry) {
+    // If we already had an entry, reuse it.
+    result = entry;
+    return success();
+  }
+
+  // Make sure to insert constants at the top level of the module to maintain
+  // dominance.
+  OpBuilder::InsertPoint savedIP;
+
+  auto parentOp = builder.getInsertionBlock()->getParentOp();
+  if (!isa<FModuleOp>(parentOp)) {
+    savedIP = builder.saveInsertionPoint();
+    while (!isa<FModuleOp>(parentOp)) {
+      builder.setInsertionPoint(parentOp);
+      parentOp = builder.getInsertionBlock()->getParentOp();
+    }
+  }
+
+  auto op = builder.create<ConstantOp>(translateLocation(loc), type, value);
+  entry = op;
   subOps.push_back(op);
   result = op;
+
+  if (savedIP.isSet())
+    builder.setInsertionPoint(savedIP.getBlock(), savedIP.getPoint());
   return success();
 }
 
@@ -1358,7 +1422,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
 
     // We parse the substatements into their own parser, so they get insert
     // into the specified 'when' region.
-    FIRStmtParser subParser(*this, builder);
+    FIRStmtParser subParser(builder, *this, moduleContext);
 
     // Figure out whether the body is a single statement or a nested one.
     auto stmtIndent = getIndentation();
@@ -2037,7 +2101,8 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
     ++argIt;
   }
 
-  FIRStmtParser stmtParser(*this, fmodule.getBodyBuilder());
+  FIRModuleContext moduleContext;
+  FIRStmtParser stmtParser(fmodule.getBodyBuilder(), *this, moduleContext);
 
   // Parse the moduleBlock.
   return stmtParser.parseSimpleStmtBlock(indent);

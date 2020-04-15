@@ -507,8 +507,6 @@ static LogicalResult verify(ConstantOp constant) {
   // If the result type has a bitwidth, then the attribute must match its width.
   auto intType = constant.getType().cast<IntType>();
   auto width = intType.getWidthOrSentinel();
-  llvm::errs() << "X: " << width << " " << constant.value()
-               << " wid= " << constant.value().getBitWidth() << "\n";
   if (width != -1 && (int)constant.value().getBitWidth() != width) {
     constant.emitError(
         "firrtl.constant attribute bitwidth doesn't match return type");
@@ -527,23 +525,16 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
 /// formation for the 'value' attribute.
 void ConstantOp::build(Builder *builder, OperationState &result, IntType type,
                        const APInt &value, Optional<StringAttr> name) {
-  IntegerType::SignednessSemantics signedness;
 
-  APInt valueToUse = value;
   int32_t width = type.getWidthOrSentinel();
-  if (type.isSigned()) {
-    signedness = IntegerType::Signed;
-    if (width != -1)
-      valueToUse = valueToUse.sextOrTrunc(width);
-  } else {
-    signedness = IntegerType::Unsigned;
-    if (width != -1)
-      valueToUse = valueToUse.zextOrTrunc(width);
-  }
+  assert((width == -1 || (int32_t)value.getBitWidth() == width) &&
+         "incorrect attribute bitwidth for firrtl.constant");
 
+  auto signedness =
+      type.isSigned() ? IntegerType::Signed : IntegerType::Unsigned;
   Type attrType =
-      IntegerType::get(valueToUse.getBitWidth(), signedness, type.getContext());
-  auto attr = builder->getIntegerAttr(attrType, valueToUse);
+      IntegerType::get(value.getBitWidth(), signedness, type.getContext());
+  auto attr = builder->getIntegerAttr(attrType, value);
 
   auto nameAttr = name.hasValue() ? name.getValue() : StringAttr();
   return build(builder, result, type, attr, nameAttr);
