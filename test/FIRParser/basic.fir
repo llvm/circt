@@ -228,8 +228,16 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     node n12 = andr(n11)
 
     ;  Test that _T names are ignored by the parser.
-    ; CHECK: %{{[0-9]+}} = firrtl.node %n12 : !firrtl.uint<1>
-    node _T_42 = n12
+    ; CHECK: %{{[0-9]+}} = firrtl.wire
+    wire _T_42 : UInt<1>
+
+    ; Test that _T nodes are completely ignored.
+    ; CHECK-NOT: firrtl.node
+    node _T_43 = n12
+
+    ; CHECK: firrtl.andr %n12
+    node value = andr(_T_43)    ;; Uses n12 directly.
+
 
     ; CHECK: %_M = firrtl.mem "Undefined" {name = "_M",
     ; CHECK:   readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<

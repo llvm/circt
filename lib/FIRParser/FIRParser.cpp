@@ -1819,8 +1819,16 @@ ParseResult FIRStmtParser::parseNode() {
       parseOptionalInfo(info, subOps))
     return failure();
 
-  auto result =
-      builder.create<NodeOp>(info.getLoc(), initializer, filterUselessName(id));
+  // Ignore useless names like _T.
+  auto actualName = filterUselessName(id);
+
+  // The entire point of a node declaration is to carry a name.  If it got
+  // dropped, then we don't even need to create a result.
+  Value result;
+  if (actualName)
+    result = builder.create<NodeOp>(info.getLoc(), initializer, actualName);
+  else
+    result = initializer;
   return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
 }
 
