@@ -30,6 +30,8 @@ def FIRRTLDialect : Dialect {
 def ClockType : Type<CPred<"$_self.isa<ClockType>()">, "clock">,
                 BuildableType<"ClockType::get($_builder.getContext())">;
 
+def IntType : Type<CPred<"$_self.isa<IntType>()">, "sint or uint type">;
+
 def UInt1Type : Type<CPred<"$_self.isa<UIntType>() && "
                            "$_self.cast<UIntType>().getWidth() == 1">,
                            "UInt<1>">,
@@ -353,7 +355,7 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike]> {
     }];
 
   let arguments = (ins APIntAttr:$value, OptionalAttr<StrAttr>:$name);
-  let results = (outs AnyType:$result);
+  let results = (outs IntType:$result);
   
   let assemblyFormat = [{
      `(` $value `)` attr-dict `:` type($result)
@@ -361,10 +363,11 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike]> {
 
   let builders = [
     OpBuilder<"Builder *builder, OperationState &result, "
-              "FIRRTLType type, const APInt &value, "
+              "IntType type, const APInt &value, "
               "Optional<StringAttr> name = None">
   ];
   let hasFolder = 1;
+  let verifier = [{ return ::verify(*this); }];
 }
 
 def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {

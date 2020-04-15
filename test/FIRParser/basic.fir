@@ -139,7 +139,7 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
       node n4 = _t_2   ; 'n4' name is in unique scopes.
       _t <- n4
 
-    ; CHECK: [[TMP:%.+]] = firrtl.constant(4 : ui1024)
+    ; CHECK: [[TMP:%.+]] = firrtl.constant(4 : ui4)
     ; CHECK: [[COND:%.+]] = firrtl.lt %reset, [[TMP]]
     ; CHECK: firrtl.when [[COND]] {
     ; CHECK:   firrtl.connect %_t, %_t_2

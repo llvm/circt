@@ -503,6 +503,21 @@ static ParseResult parseWhenOp(OpAsmParser &parser, OperationState &result) {
 // Expressions
 //===----------------------------------------------------------------------===//
 
+static LogicalResult verify(ConstantOp constant) {
+  // If the result type has a bitwidth, then the attribute must match its width.
+  auto intType = constant.getType().cast<IntType>();
+  auto width = intType.getWidthOrSentinel();
+  llvm::errs() << "X: " << width << " " << constant.value()
+               << " wid= " << constant.value().getBitWidth() << "\n";
+  if (width != -1 && (int)constant.value().getBitWidth() != width) {
+    constant.emitError(
+        "firrtl.constant attribute bitwidth doesn't match return type");
+    return failure();
+  }
+
+  return success();
+}
+
 OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
   assert(operands.empty() && "constant has no operands");
   return valueAttr();
@@ -510,29 +525,20 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
 
 /// Build a ConstantOp from an APInt and a FIRRTL type, handling the attribute
 /// formation for the 'value' attribute.
-void ConstantOp::build(Builder *builder, OperationState &result,
-                       FIRRTLType type, const APInt &value,
-                       Optional<StringAttr> name) {
-  int32_t width = -1;
+void ConstantOp::build(Builder *builder, OperationState &result, IntType type,
+                       const APInt &value, Optional<StringAttr> name) {
   IntegerType::SignednessSemantics signedness;
 
   APInt valueToUse = value;
-  if (auto sint = type.dyn_cast<SIntType>()) {
+  int32_t width = type.getWidthOrSentinel();
+  if (type.isSigned()) {
     signedness = IntegerType::Signed;
-    width = sint.getWidthOrSentinel();
-
-    // TODO: 1024 bits should be enough for anyone??  The issue here is that
-    // the constant type uniquer does not like constants with multiple bitwidth
-    // but the same MLIR type.  We can't just use unit type or index type or
-    // something like that to represent the unwidth'd case.
-    valueToUse = valueToUse.sextOrTrunc(width != -1 ? width : 1024);
+    if (width != -1)
+      valueToUse = valueToUse.sextOrTrunc(width);
   } else {
-    assert(type.isa<UIntType>());
     signedness = IntegerType::Unsigned;
-    width = type.cast<UIntType>().getWidthOrSentinel();
-
-    // TODO: 1024 bits should be enough for anyone??
-    valueToUse = valueToUse.zextOrTrunc(width != -1 ? width : 1024);
+    if (width != -1)
+      valueToUse = valueToUse.zextOrTrunc(width);
   }
 
   Type attrType =
