@@ -1,4 +1,4 @@
-; RUN: spt-translate -import-firrtl --mlir-print-debuginfo -verify-diagnostics %s | FileCheck %s
+; RUN: spt-translate -parse-fir --mlir-print-debuginfo -verify-diagnostics %s | FileCheck %s
 
 circuit basic :  @[CIRCUIT.scala 127]
 

@@ -2157,8 +2157,8 @@ static OwningModuleRef parseFIRFile(SourceMgr &sourceMgr,
 }
 
 void spt::firrtl::registerFIRRTLToMLIRTranslation() {
-  static TranslateToMLIRRegistration fromLLVM(
-      "import-firrtl", [](llvm::SourceMgr &sourceMgr, MLIRContext *context) {
+  static TranslateToMLIRRegistration fromFIR(
+      "parse-fir", [](llvm::SourceMgr &sourceMgr, MLIRContext *context) {
         return parseFIRFile(sourceMgr, context);
       });
 }
