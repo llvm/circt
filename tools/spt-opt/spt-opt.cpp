@@ -62,6 +62,7 @@ int main(int argc, char **argv) {
 
 // Register the standard passes we want.
 #define GEN_PASS_REGISTRATION_Canonicalizer
+#define GEN_PASS_REGISTRATION_CSE
 #include "mlir/Transforms/Passes.h.inc"
 
   // Register any pass manager command line options.

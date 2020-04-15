@@ -343,7 +343,7 @@ def WireOp : FIRRTLOp<"wire", [NoSideEffect]> {
 // Expressions
 //===----------------------------------------------------------------------===//
 
-def ConstantOp : FIRRTLOp<"constant", [NoSideEffect]> {
+def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike]> {
   let summary = "Produce a constant value";
   let description = [{
     The constant operation produces a constant value of SInt or UInt type.
@@ -364,6 +364,7 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect]> {
               "FIRRTLType type, const APInt &value, "
               "Optional<StringAttr> name = None">
   ];
+  let hasFolder = 1;
 }
 
 def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {

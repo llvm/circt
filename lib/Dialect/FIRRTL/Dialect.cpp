@@ -503,6 +503,11 @@ static ParseResult parseWhenOp(OpAsmParser &parser, OperationState &result) {
 // Expressions
 //===----------------------------------------------------------------------===//
 
+OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
+  assert(operands.empty() && "constant has no operands");
+  return valueAttr();
+}
+
 /// Build a ConstantOp from an APInt and a FIRRTL type, handling the attribute
 /// formation for the 'value' attribute.
 void ConstantOp::build(Builder *builder, OperationState &result,
