@@ -2,6 +2,7 @@ set(LIBS
   MLIRTranslation
   MLIRSupport
 
+  SPTEmitVerilog
   SPTFIRParser
 )
 add_llvm_tool(spt-translate

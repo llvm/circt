@@ -15,6 +15,7 @@
 #include "mlir/Translation.h"
 #include "spt/Dialect/FIRRTL/FIRToMLIR.h"
 #include "spt/Dialect/FIRRTL/IR/Ops.h"
+#include "spt/EmitVerilog.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/ToolOutputFile.h"
 
@@ -47,6 +48,7 @@ int main(int argc, char **argv) {
   registerAsmPrinterCLOptions();
 
   firrtl::registerFIRRTLToMLIRTranslation();
+  registerVerilogEmitterTranslation();
 
   llvm::InitLLVM y(argc, argv);
 

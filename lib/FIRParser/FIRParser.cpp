@@ -12,7 +12,6 @@
 #include "mlir/Translation.h"
 #include "spt/Dialect/FIRRTL/FIRToMLIR.h"
 #include "spt/Dialect/FIRRTL/IR/Ops.h"
-#include "spt/Dialect/FIRRTL/IR/Types.h"
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
