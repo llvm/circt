@@ -57,15 +57,20 @@ static cl::opt<bool> allowUnregisteredDialects(
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
 
+  // Register MLIR stuff
   registerDialect<StandardOpsDialect>();
-  registerDialect<firrtl::FIRRTLDialect>();
 
 // Register the standard passes we want.
 #define GEN_PASS_REGISTRATION_Canonicalizer
 #include "mlir/Transforms/Passes.h.inc"
 
   // Register any pass manager command line options.
+  registerMLIRContextCLOptions();
   registerPassManagerCLOptions();
+
+  // Register FIRRTL stuff.
+  registerDialect<firrtl::FIRRTLDialect>();
+
   PassPipelineCLParser passPipeline("", "Compiler passes to run");
 
   // Parse pass names in main to ensure static initialization completed.

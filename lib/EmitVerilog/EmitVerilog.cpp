@@ -21,30 +21,60 @@ using namespace mlir;
 
 namespace {
 
-struct VerilogEmitter {
+class VerilogEmitter {
+public:
   VerilogEmitter(raw_ostream &os) : os(os) {}
 
+  LogicalResult emitMLIRModule(ModuleOp module);
+
+  void emitError(Operation *op, const Twine &message) {
+    op->emitError(message);
+    encounteredError = true;
+  }
+
+  /// The stream to emit to.
   raw_ostream &os;
 
-  LogicalResult emitModule(ModuleOp module);
-
 private:
+  void emitCircuit(CircuitOp circuit);
+  void emitFModule(FModuleOp module);
+
+  bool encounteredError = false;
+
   VerilogEmitter(const VerilogEmitter &) = delete;
   void operator=(const VerilogEmitter &) = delete;
 };
 
 } // end anonymous namespace
 
-LogicalResult VerilogEmitter::emitModule(ModuleOp module) {
-  os << "Not implemented yet.\n";
+void VerilogEmitter::emitFModule(FModuleOp module) {
+  os << "Not implemented yet\n";
+}
 
-  return success();
+void VerilogEmitter::emitCircuit(CircuitOp circuit) {
+  for (auto &op : *circuit.getBody()) {
+    if (auto module = dyn_cast<FModuleOp>(op))
+      emitFModule(module);
+    else if (!isa<DoneOp>(op))
+      op.emitError("unknown operation");
+  }
+}
+
+LogicalResult VerilogEmitter::emitMLIRModule(ModuleOp module) {
+  for (auto &op : *module.getBody()) {
+    if (auto circuit = dyn_cast<CircuitOp>(op))
+      emitCircuit(circuit);
+    else if (!isa<ModuleTerminatorOp>(op))
+      op.emitError("unknown operation");
+  }
+
+  return encounteredError ? failure() : success();
 }
 
 void spt::registerVerilogEmitterTranslation() {
   static TranslateFromMLIRRegistration toVerilog(
       "emit-verilog",
       [](ModuleOp module, llvm::raw_ostream &os) -> LogicalResult {
-        return VerilogEmitter(os).emitModule(module);
+        return VerilogEmitter(os).emitMLIRModule(module);
       });
 }

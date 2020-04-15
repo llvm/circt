@@ -165,6 +165,9 @@ static ParseResult parseCircuitOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
+Region &CircuitOp::getBodyRegion() { return getOperation()->getRegion(0); }
+Block *CircuitOp::getBody() { return &getBodyRegion().front(); }
+
 //===----------------------------------------------------------------------===//
 // FExtModuleOp and FModuleOp
 //===----------------------------------------------------------------------===//

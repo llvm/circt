@@ -6,7 +6,7 @@ circuit Xorr :
     output b: UInt<1>
     b <= xorr(a)
 
-; CHECK: Not implemented yet.
+; CHECK: Not implemented yet
 
 
 ; TODO: CECK: module Xorr(
@@ -14,4 +14,19 @@ circuit Xorr :
 ; TODO: CECK:   output  b
 ; TODO: CECK: );
 ; TODO: CECK:   assign b = ^a;
+; TODO: CECK: endmodule
+
+
+  module Andr :
+    input a: UInt<4>
+    output b: UInt<1>
+    b <= andr(a)
+
+; CHECK: Not implemented yet
+
+; TODO: CECK: module Andr(
+; TODO: CECK:   input  [3:0] a,
+; TODO: CECK:   output  b
+; TODO: CECK: );
+; TODO: CECK:   assign b = &a;
 ; TODO: CECK: endmodule

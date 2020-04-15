@@ -43,10 +43,13 @@ static llvm::cl::opt<bool> verifyDiagnostics(
     llvm::cl::init(false));
 
 int main(int argc, char **argv) {
-  registerDialect<StandardOpsDialect>();
-  registerDialect<firrtl::FIRRTLDialect>();
+  // Register MLIR stuff.
   registerAsmPrinterCLOptions();
+  registerMLIRContextCLOptions();
+  registerDialect<StandardOpsDialect>();
 
+  // Register FIRRTL stuff.
+  registerDialect<firrtl::FIRRTLDialect>();
   registerFIRParserTranslation();
   registerVerilogEmitterTranslation();
 

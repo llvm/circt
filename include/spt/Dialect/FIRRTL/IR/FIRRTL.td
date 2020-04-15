@@ -87,6 +87,10 @@ def CircuitOp : FIRRTLOp<"circuit",
       Block &bodyBlock = body().front();
       return OpBuilder(&bodyBlock, std::prev(bodyBlock.end()));
     }
+
+    /// Return body of this circuit.
+    Region &getBodyRegion();
+    Block *getBody();
   }];
   
   let printer = [{ return ::print(p, *this); }];
@@ -123,6 +127,7 @@ def FModuleOp : FIRRTLOp<"module",
       Block &bodyBlock = body().front();
       return OpBuilder(&bodyBlock, std::prev(bodyBlock.end()));
     }
+
   private:
     // This trait needs access to the hooks defined below.
     friend class OpTrait::FunctionLike<FModuleOp>;
