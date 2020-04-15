@@ -1,4 +1,4 @@
-; RUN: spt-translate -parse-fir --mlir-print-debuginfo %s | spt-translate -emit-verilog | FileCheck %s
+; RUN: spt-translate -parse-fir --mlir-print-debuginfo %s | spt-translate -emit-verilog | FileCheck %s --strict-whitespace
 
 circuit Xorr :
   module Xorr :
@@ -7,8 +7,8 @@ circuit Xorr :
     b <= xorr(a)
 
 ; CHECK: module Xorr(
-; TODO:    input  [3:0] a,
-; TODO:    output  b
+; CHECK:    input  [3:0] a,
+; CHECK:    output       b
 ; CHECK: );
 ; TODO:    assign b = ^a;
 ; CHECK: endmodule
@@ -20,8 +20,8 @@ circuit Xorr :
     b <= andr(a)
 
 ; CHECK: module Andr(
-; TODO:    input  [3:0] a,
-; TODO:    output  b
+; CHECK:   input  [3:0] a,
+; CHECK:   output       b
 ; CHECK: );
 ; TODO:    assign b = &a;
 ; CHECK: endmodule

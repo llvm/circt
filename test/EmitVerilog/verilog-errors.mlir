@@ -6,6 +6,7 @@ func @foo() { // expected-error {{unknown operation}}
 // -----
 
 firrtl.circuit "Top" {
+  // expected-error @+1 {{parameter 'out' has an unsupported verilog type '!firrtl.uint'}}
   firrtl.module @Top(%out: !firrtl.uint) {
   }
 }
