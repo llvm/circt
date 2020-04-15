@@ -1,16 +1,16 @@
-//===- FIRToMLIR.cpp - .fir to FIRRTL dialect parser ----------------------===//
+//===- FIRParser.cpp - .fir to FIRRTL dialect parser ----------------------===//
 //
 // This implements a .fir file parser.
 //
 //===----------------------------------------------------------------------===//
 
+#include "spt/FIRParser.h"
 #include "FIRLexer.h"
 #include "mlir/Analysis/Verifier.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Module.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Translation.h"
-#include "spt/Dialect/FIRRTL/FIRToMLIR.h"
 #include "spt/Dialect/FIRRTL/IR/Ops.h"
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/Support/SourceMgr.h"
@@ -45,15 +45,11 @@ namespace {
 /// such as the current lexer position.  This is separated out from the parser
 /// so that individual subparsers can refer to the same state.
 struct GlobalFIRParserState {
-  GlobalFIRParserState(const llvm::SourceMgr &sourceMgr, FIRRTLDialect *dialect)
-      : context(dialect->getContext()), dialect(dialect),
-        lex(sourceMgr, context), curToken(lex.lexToken()) {}
+  GlobalFIRParserState(const llvm::SourceMgr &sourceMgr, MLIRContext *context)
+      : context(context), lex(sourceMgr, context), curToken(lex.lexToken()) {}
 
   /// The context we're parsing into.
   MLIRContext *const context;
-
-  /// The FIRRTL dialect.
-  FIRRTLDialect *const dialect;
 
   /// The lexer for the source file we're parsing.
   FIRLexer lex;
@@ -2140,10 +2136,7 @@ static OwningModuleRef parseFIRFile(SourceMgr &sourceMgr,
       FileLineColLoc::get(sourceBuf->getBufferIdentifier(), /*line=*/0,
                           /*column=*/0, context)));
 
-  auto *dialect = context->getRegisteredDialect<FIRRTLDialect>();
-  assert(dialect && "Could not find FIRRTL dialect?");
-
-  GlobalFIRParserState state(sourceMgr, dialect);
+  GlobalFIRParserState state(sourceMgr, context);
   if (FIRCircuitParser(state, *module).parseCircuit())
     return nullptr;
 
@@ -2155,7 +2148,7 @@ static OwningModuleRef parseFIRFile(SourceMgr &sourceMgr,
   return module;
 }
 
-void spt::firrtl::registerFIRRTLToMLIRTranslation() {
+void spt::registerFIRParserTranslation() {
   static TranslateToMLIRRegistration fromFIR(
       "parse-fir", [](llvm::SourceMgr &sourceMgr, MLIRContext *context) {
         return parseFIRFile(sourceMgr, context);
