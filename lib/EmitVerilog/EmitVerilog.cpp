@@ -48,7 +48,15 @@ private:
 } // end anonymous namespace
 
 void VerilogEmitter::emitFModule(FModuleOp module) {
-  os << "Not implemented yet\n";
+  os << "module " << module.getName() << "(\n";
+
+  // Emit the arguments.
+
+  os << ");\n";
+
+  // emit the body.
+
+  os << "endmodule\n";
 }
 
 void VerilogEmitter::emitCircuit(CircuitOp circuit) {
