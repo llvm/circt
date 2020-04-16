@@ -58,7 +58,7 @@ void FIRRTLType::print(raw_ostream &os) const {
 
   case FIRRTLType::Bundle:
     os << "bundle<";
-    mlir::interleaveComma(cast<BundleType>().getElements(), os,
+    llvm::interleaveComma(cast<BundleType>().getElements(), os,
                           [&](BundleType::BundleElement element) {
                             os << element.first << ": ";
                             element.second.print(os);

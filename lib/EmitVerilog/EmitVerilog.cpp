@@ -5,11 +5,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "spt/EmitVerilog.h"
-#include "mlir/ADT/TypeSwitch.h"
 #include "mlir/IR/Module.h"
 #include "mlir/Translation.h"
 #include "spt/Dialect/FIRRTL/IR/Ops.h"
 #include "spt/Support/LLVM.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace spt;
@@ -19,6 +19,8 @@ using namespace mlir;
 //===----------------------------------------------------------------------===//
 // Helper routines
 //===----------------------------------------------------------------------===//
+
+/// TODO: move this out to the dialect directory.
 
 /// ExprVisitor is a visitor for FIRRTL expression nodes.
 template <typename ConcreteType, typename ResultType = void>
@@ -199,6 +201,12 @@ private:
 };
 
 } // end anonymous namespace
+
+//===----------------------------------------------------------------------===//
+// Expression Emission
+//===----------------------------------------------------------------------===//
+
+/// ExprVisitor
 
 //===----------------------------------------------------------------------===//
 // Statements
