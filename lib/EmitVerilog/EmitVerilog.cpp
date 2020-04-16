@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "spt/EmitVerilog.h"
+#include "mlir/ADT/TypeSwitch.h"
 #include "mlir/IR/Module.h"
 #include "mlir/Translation.h"
 #include "spt/Dialect/FIRRTL/IR/Ops.h"
@@ -16,36 +17,99 @@ using namespace firrtl;
 using namespace mlir;
 
 //===----------------------------------------------------------------------===//
-// VerilogEmitter
+// Helper routines
 //===----------------------------------------------------------------------===//
 
-namespace {
-
-class VerilogEmitter {
+/// ExprVisitor is a visitor for FIRRTL expression nodes.
+template <typename ConcreteType, typename ResultType = void>
+class ExprVisitor {
 public:
-  VerilogEmitter(raw_ostream &os) : os(os) {}
-
-  LogicalResult emitMLIRModule(ModuleOp module);
-
-  void emitError(Operation *op, const Twine &message) {
-    op->emitError(message);
-    encounteredError = true;
+  ResultType visitExpr(Operation *op) {
+    return TypeSwitch<Operation *, ResultType>(op)
+        .template Case<AndRPrimOp, XorRPrimOp>([&](auto expr) -> ResultType {
+          return static_cast<ConcreteType *>(this)->visitExpr(expr);
+        })
+        .Default([&](auto expr) -> ResultType {
+          return static_cast<ConcreteType *>(this)->visitInvalidExpr(op);
+        });
   }
 
-  /// The stream to emit to.
-  raw_ostream &os;
+  /// This callback is invoked on any non-expression operations.
+  ResultType visitInvalidExpr(Operation *op) {
+    op->emitOpError("unknown firrtl expression");
+    abort();
+  }
 
-private:
-  void emitCircuit(CircuitOp circuit);
-  void emitFModule(FModuleOp module);
+  /// This callback is invoked on any expression operations that are not handled
+  /// by the concrete visitor.
+  ResultType visitUnhandledExpr(Operation *op) { return ResultType(); }
 
-  bool encounteredError = false;
+#define HANDLE(OPTYPE)                                                         \
+  ResultType visitExpr(OPTYPE op) {                                            \
+    return static_cast<ConcreteType *>(this)->visitUnhandledExpr(op);          \
+  }
 
-  VerilogEmitter(const VerilogEmitter &) = delete;
-  void operator=(const VerilogEmitter &) = delete;
+  // Basic expressions.
+  HANDLE(ConstantOp)
+  HANDLE(SubfieldOp);
+  HANDLE(SubindexOp);
+  HANDLE(SubaccessOp);
+
+  // Arithmetic and Logical Binary Primitives.
+  HANDLE(AddPrimOp);
+  HANDLE(SubPrimOp);
+  HANDLE(MulPrimOp);
+  HANDLE(DivPrimOp);
+  HANDLE(RemPrimOp);
+  HANDLE(AndPrimOp);
+  HANDLE(OrPrimOp);
+  HANDLE(XorPrimOp);
+
+  // Comparisons.
+  HANDLE(LEQPrimOp);
+  HANDLE(LTPrimOp);
+  HANDLE(GEQPrimOp);
+  HANDLE(GTPrimOp);
+  HANDLE(EQPrimOp);
+  HANDLE(NEQPrimOp);
+
+  // Misc Binary Primitives.
+  HANDLE(CatPrimOp);
+  HANDLE(DShlPrimOp);
+  HANDLE(DShrPrimOp);
+  HANDLE(ValidIfPrimOp);
+
+  // Unary operators.
+  HANDLE(AsSIntPrimOp);
+  HANDLE(AsUIntPrimOp);
+  HANDLE(AsAsyncResetPrimOp);
+  HANDLE(AsClockPrimOp);
+  HANDLE(CvtPrimOp);
+  HANDLE(NegPrimOp);
+  HANDLE(NotPrimOp);
+  HANDLE(AndRPrimOp);
+  HANDLE(OrRPrimOp);
+  HANDLE(XorRPrimOp);
+
+  // Miscellaneous.
+  HANDLE(BitsPrimOp);
+  HANDLE(HeadPrimOp);
+  HANDLE(MuxPrimOp);
+  HANDLE(PadPrimOp);
+  HANDLE(ShlPrimOp);
+  HANDLE(ShrPrimOp);
+  HANDLE(TailPrimOp);
 };
 
-} // end anonymous namespace
+/// Return true if the specified operation is a firrtl expression.
+static bool isExpression(Operation *op) {
+  struct IsExprClassifier : public ExprVisitor<IsExprClassifier, bool> {
+    bool visitInvalidExpr(Operation *op) { return false; }
+    bool visitUnhandledExpr(Operation *op) { return true; }
+  };
+
+  return IsExprClassifier().visitExpr(op);
+}
 
 /// Return the width of the specified FIRRTL type in bits or -1 if it isn't
 /// supported.
@@ -84,13 +148,114 @@ static unsigned getPrintedIntWidth(unsigned value) {
   return stream.str().size();
 }
 
+/// Return true if this expression should be emitted inline into any statement
+/// that uses it.
+static bool isExpressionEmittedInline(Operation *op) {
+  // ConstantOp is always emitted inline.
+  if (isa<ConstantOp>(op))
+    return true;
+
+  // Otherwise, if it has multiple uses, emit it out of line.
+  return op->getResult(0).hasOneUse();
+}
+
+//===----------------------------------------------------------------------===//
+// VerilogEmitter
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+class VerilogEmitter {
+public:
+  VerilogEmitter(raw_ostream &os) : os(os) {}
+
+  LogicalResult emitMLIRModule(ModuleOp module);
+
+  InFlightDiagnostic emitError(Operation *op, const Twine &message) {
+    encounteredError = true;
+    return op->emitError(message);
+  }
+
+  raw_ostream &indent() { return os.indent(currentIndent); }
+
+  void addIndent() { currentIndent += 2; }
+  void reduceIndent() { currentIndent -= 2; }
+
+  /// The stream to emit to.
+  raw_ostream &os;
+
+private:
+  void emitStatementExpression(Operation *op);
+  void emitStatement(ConnectOp op);
+  void emitOperation(Operation *op);
+  void emitFModule(FModuleOp module);
+  void emitCircuit(CircuitOp circuit);
+
+  bool encounteredError = false;
+  unsigned currentIndent = 0;
+
+  VerilogEmitter(const VerilogEmitter &) = delete;
+  void operator=(const VerilogEmitter &) = delete;
+};
+
+} // end anonymous namespace
+
+//===----------------------------------------------------------------------===//
+// Statements
+//===----------------------------------------------------------------------===//
+
+void VerilogEmitter::emitStatementExpression(Operation *op) {
+  // Need to emit a wire ahead of time,
+  //    then connect to that wire.
+  // Need a naming pass of some sort.
+  indent() << "assign WIRENAME = expr";
+}
+
+void VerilogEmitter::emitStatement(ConnectOp op) {
+  indent() << "assign x = y;\n";
+  // TODO: location information too.
+}
+
+//===----------------------------------------------------------------------===//
+// Module and Circuit
+//===----------------------------------------------------------------------===//
+
+void VerilogEmitter::emitOperation(Operation *op) {
+  // Handle expression statements.
+  if (isExpression(op)) {
+    if (!isExpressionEmittedInline(op))
+      emitStatementExpression(op);
+    return;
+  }
+
+  // Handle statements first.
+  // TODO: Refactor out to visitors.
+  bool isStatement = false;
+  TypeSwitch<Operation *>(op).Case<ConnectOp>([&](auto stmt) {
+    isStatement = true;
+    this->emitStatement(stmt);
+  });
+  if (isStatement)
+    return;
+
+  // Ignore the region terminator.
+  if (isa<DoneOp>(op))
+    return;
+
+  op->emitOpError("cannot emit this operation to Verilog");
+  encounteredError = true;
+}
+
 void VerilogEmitter::emitFModule(FModuleOp module) {
-  os << "module " << module.getName() << "(\n";
+  os << "module " << module.getName() << '(';
 
   // Determine the width of the widest type we have to print so everything
   // lines up nicely.
   SmallVector<ModulePortInfo, 8> portInfo;
   module.getPortInfo(portInfo);
+
+  if (!portInfo.empty())
+    os << '\n';
 
   unsigned maxTypeWidth = 0;
   for (auto &port : portInfo) {
@@ -103,48 +268,57 @@ void VerilogEmitter::emitFModule(FModuleOp module) {
     maxTypeWidth = std::max(thisWidth, maxTypeWidth);
   }
 
+  addIndent();
+
   // TODO(QoI): Should emit more than one port on a line.
   //  e.g. output [2:0] auto_out_c_bits_opcode, auto_out_c_bits_param,
   //
   for (auto &port : portInfo) {
-    os.indent(2);
+    indent();
     // Emit the arguments.
     auto portType = port.second;
     if (auto flip = portType.dyn_cast<FlipType>()) {
       portType = flip.getElementType();
-      os << "output ";
+      os << "output";
     } else {
-      os << "input  ";
+      os << "input ";
     }
 
     unsigned emittedWidth = 0;
 
     int bitWidth = getBitWidthOrSentinel(portType);
     if (bitWidth == -1) {
-      module.emitError("parameter '" + port.first.getValue() +
-                       "' has an unsupported verilog type ")
+      emitError(module, "parameter '" + port.first.getValue() +
+                            "' has an unsupported verilog type ")
           << portType;
     } else if (bitWidth != 1) {
       // Width 1 is implicit.
-      os << '[' << (bitWidth - 1) << ":0] ";
+      os << " [" << (bitWidth - 1) << ":0]";
       emittedWidth = getPrintedIntWidth(bitWidth - 1) + 5;
     }
 
     if (maxTypeWidth - emittedWidth)
       os.indent(maxTypeWidth - emittedWidth);
 
-    os << port.first.getValue();
+    os << ' ' << port.first.getValue();
     if (&port != &portInfo.back())
       os << ',';
+    else
+      os << ");";
     os << "\n";
   }
 
-  // TODO(QoI): Don't print this on its own line.
-  os << ");\n";
+  if (portInfo.empty())
+    os << ");\n";
 
-  // emit the body.
+  // Emit the body.
+  for (auto &op : *module.getBodyBlock()) {
+    emitOperation(&op);
+  }
 
-  os << "endmodule\n";
+  reduceIndent();
+
+  os << "endmodule\n\n";
 }
 
 void VerilogEmitter::emitCircuit(CircuitOp circuit) {

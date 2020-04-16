@@ -124,6 +124,10 @@ def FModuleOp : FIRRTLOp<"module",
       getModulePortInfo(*this, results);
     }
 
+    // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
+    // squatting on the name.
+    Block *getBodyBlock() { return &body().front(); }
+
     OpBuilder getBodyBuilder() {
       assert(!body().empty() && "Unexpected empty 'body' region.");
       Block &bodyBlock = body().front();
