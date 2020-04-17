@@ -72,38 +72,72 @@ static bool isExpressionEmittedInline(Operation *op) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-
-class VerilogEmitter {
+/// This class maintains the mutable state that cross-cuts and is shared by the
+/// various emitters.
+class VerilogEmitterState {
 public:
-  VerilogEmitter(raw_ostream &os) : os(os) {}
+  explicit VerilogEmitterState(raw_ostream &os) : os(os) {}
 
-  LogicalResult emitMLIRModule(ModuleOp module);
+  /// The stream to emit to.
+  raw_ostream &os;
+
+  bool encounteredError = false;
+  unsigned currentIndent = 0;
+
+private:
+  VerilogEmitterState(const VerilogEmitterState &) = delete;
+  void operator=(const VerilogEmitterState &) = delete;
+};
+} // namespace
+
+namespace {
+
+/// This is the base class for all of the Verilog Emitter components.
+class VerilogEmitterBase {
+public:
+  explicit VerilogEmitterBase(VerilogEmitterState &state)
+      : state(state), os(state.os) {}
 
   InFlightDiagnostic emitError(Operation *op, const Twine &message) {
-    encounteredError = true;
+    state.encounteredError = true;
     return op->emitError(message);
   }
 
-  raw_ostream &indent() { return os.indent(currentIndent); }
+  raw_ostream &indent() { return os.indent(state.currentIndent); }
 
-  void addIndent() { currentIndent += 2; }
-  void reduceIndent() { currentIndent -= 2; }
+  void addIndent() { state.currentIndent += 2; }
+  void reduceIndent() { state.currentIndent -= 2; }
+
+  // All of the mutable state we are maintaining.
+  VerilogEmitterState &state;
 
   /// The stream to emit to.
   raw_ostream &os;
 
 private:
+  VerilogEmitterBase(const VerilogEmitterBase &) = delete;
+  void operator=(const VerilogEmitterBase &) = delete;
+};
+
+} // end anonymous namespace
+
+//===----------------------------------------------------------------------===//
+// ModuleEmitter
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+class ModuleEmitter : public VerilogEmitterBase {
+public:
+  explicit ModuleEmitter(VerilogEmitterState &state)
+      : VerilogEmitterBase(state) {}
+
+  void emitFModule(FModuleOp module);
+
+private:
   void emitStatementExpression(Operation *op);
   void emitStatement(ConnectOp op);
   void emitOperation(Operation *op);
-  void emitFModule(FModuleOp module);
-  void emitCircuit(CircuitOp circuit);
-
-  bool encounteredError = false;
-  unsigned currentIndent = 0;
-
-  VerilogEmitter(const VerilogEmitter &) = delete;
-  void operator=(const VerilogEmitter &) = delete;
 };
 
 } // end anonymous namespace
@@ -118,14 +152,14 @@ private:
 // Statements
 //===----------------------------------------------------------------------===//
 
-void VerilogEmitter::emitStatementExpression(Operation *op) {
+void ModuleEmitter::emitStatementExpression(Operation *op) {
   // Need to emit a wire ahead of time,
   //    then connect to that wire.
   // Need a naming pass of some sort.
   indent() << "assign WIRENAME = expr";
 }
 
-void VerilogEmitter::emitStatement(ConnectOp op) {
+void ModuleEmitter::emitStatement(ConnectOp op) {
   indent() << "assign x = y;\n";
   // TODO: location information too.
 }
@@ -134,7 +168,7 @@ void VerilogEmitter::emitStatement(ConnectOp op) {
 // Module and Circuit
 //===----------------------------------------------------------------------===//
 
-void VerilogEmitter::emitOperation(Operation *op) {
+void ModuleEmitter::emitOperation(Operation *op) {
   // Handle expression statements.
   if (isExpression(op)) {
     if (!isExpressionEmittedInline(op))
@@ -157,10 +191,10 @@ void VerilogEmitter::emitOperation(Operation *op) {
     return;
 
   op->emitOpError("cannot emit this operation to Verilog");
-  encounteredError = true;
+  state.encounteredError = true;
 }
 
-void VerilogEmitter::emitFModule(FModuleOp module) {
+void ModuleEmitter::emitFModule(FModuleOp module) {
   os << "module " << module.getName() << '(';
 
   // Determine the width of the widest type we have to print so everything
@@ -235,30 +269,49 @@ void VerilogEmitter::emitFModule(FModuleOp module) {
   os << "endmodule\n\n";
 }
 
-void VerilogEmitter::emitCircuit(CircuitOp circuit) {
+//===----------------------------------------------------------------------===//
+// CircuitEmitter
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+class CircuitEmitter : public VerilogEmitterBase {
+public:
+  explicit CircuitEmitter(VerilogEmitterState &state)
+      : VerilogEmitterBase(state) {}
+
+  void emitMLIRModule(ModuleOp module);
+
+private:
+  void emitCircuit(CircuitOp circuit);
+};
+
+} // end anonymous namespace
+
+void CircuitEmitter::emitCircuit(CircuitOp circuit) {
   for (auto &op : *circuit.getBody()) {
-    if (auto module = dyn_cast<FModuleOp>(op))
-      emitFModule(module);
-    else if (!isa<DoneOp>(op))
+    if (auto module = dyn_cast<FModuleOp>(op)) {
+      ModuleEmitter(state).emitFModule(module);
+    } else if (!isa<DoneOp>(op))
       op.emitError("unknown operation");
   }
 }
 
-LogicalResult VerilogEmitter::emitMLIRModule(ModuleOp module) {
+void CircuitEmitter::emitMLIRModule(ModuleOp module) {
   for (auto &op : *module.getBody()) {
     if (auto circuit = dyn_cast<CircuitOp>(op))
       emitCircuit(circuit);
     else if (!isa<ModuleTerminatorOp>(op))
       op.emitError("unknown operation");
   }
+}
 
-  return encounteredError ? failure() : success();
+static LogicalResult emitVerilog(ModuleOp module, llvm::raw_ostream &os) {
+  VerilogEmitterState state(os);
+  CircuitEmitter(state).emitMLIRModule(module);
+  return failure(state.encounteredError);
 }
 
 void spt::registerVerilogEmitterTranslation() {
-  static TranslateFromMLIRRegistration toVerilog(
-      "emit-verilog",
-      [](ModuleOp module, llvm::raw_ostream &os) -> LogicalResult {
-        return VerilogEmitter(os).emitMLIRModule(module);
-      });
+  static TranslateFromMLIRRegistration toVerilog("emit-verilog", emitVerilog);
 }
