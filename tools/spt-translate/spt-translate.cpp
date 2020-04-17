@@ -13,7 +13,7 @@
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Support/ToolUtilities.h"
 #include "mlir/Translation.h"
-#include "spt/Dialect/FIRRTL/IR/Ops.h"
+#include "spt/Dialect/FIRRTL/Dialect.h"
 #include "spt/EmitVerilog.h"
 #include "spt/FIRParser.h"
 #include "llvm/Support/InitLLVM.h"

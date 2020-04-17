@@ -12,7 +12,7 @@
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Support/MlirOptMain.h"
 #include "mlir/Transforms/Passes.h"
-#include "spt/Dialect/FIRRTL/IR/Ops.h"
+#include "spt/Dialect/FIRRTL/Dialect.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/ToolOutputFile.h"

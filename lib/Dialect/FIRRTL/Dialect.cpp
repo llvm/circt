@@ -2,9 +2,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "spt/Dialect/FIRRTL/IR/Dialect.h"
+#include "spt/Dialect/FIRRTL/Dialect.h"
 #include "mlir/IR/DialectImplementation.h"
-#include "spt/Dialect/FIRRTL/IR/Ops.h"
+#include "spt/Dialect/FIRRTL/Ops.h"
 
 using namespace spt;
 using namespace firrtl;

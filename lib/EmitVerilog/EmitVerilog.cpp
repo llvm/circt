@@ -7,8 +7,7 @@
 #include "spt/EmitVerilog.h"
 #include "mlir/IR/Module.h"
 #include "mlir/Translation.h"
-#include "spt/Dialect/FIRRTL/IR/Ops.h"
-#include "spt/Dialect/FIRRTL/IR/Visitors.h"
+#include "spt/Dialect/FIRRTL/Visitors.h"
 #include "spt/Support/LLVM.h"
 #include "llvm/Support/raw_ostream.h"
 

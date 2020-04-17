@@ -7,7 +7,7 @@
 #ifndef SPT_DIALECT_FIRRTL_IR_VISITORS_H
 #define SPT_DIALECT_FIRRTL_IR_VISITORS_H
 
-#include "spt/Dialect/FIRRTL/IR/Ops.h"
+#include "spt/Dialect/FIRRTL/Ops.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace spt {

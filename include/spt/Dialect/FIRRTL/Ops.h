@@ -11,8 +11,8 @@
 #include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/SideEffects.h"
-#include "spt/Dialect/FIRRTL/IR/Dialect.h"
-#include "spt/Dialect/FIRRTL/IR/Types.h"
+#include "spt/Dialect/FIRRTL/Dialect.h"
+#include "spt/Dialect/FIRRTL/Types.h"
 
 namespace spt {
 namespace firrtl {

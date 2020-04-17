@@ -2,11 +2,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "spt/Dialect/FIRRTL/IR/Ops.h"
+#include "spt/Dialect/FIRRTL/Ops.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/StandardTypes.h"
-#include "spt/Dialect/FIRRTL/IR/Visitors.h"
+#include "spt/Dialect/FIRRTL/Visitors.h"
 
 using namespace spt;
 using namespace firrtl;

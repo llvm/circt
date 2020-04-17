@@ -2,9 +2,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "spt/Dialect/FIRRTL/IR/Types.h"
+#include "spt/Dialect/FIRRTL/Types.h"
 #include "mlir/IR/DialectImplementation.h"
-#include "spt/Dialect/FIRRTL/IR/Ops.h"
+#include "spt/Dialect/FIRRTL/Ops.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
 
