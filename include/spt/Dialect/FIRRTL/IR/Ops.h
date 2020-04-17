@@ -1,6 +1,6 @@
-//===- FIRRTL/IR/Ops.h - FIRRTL dialect -------------------------*- C++ -*-===//
+//===- FIRRTL/IR/Ops.h - Declare FIRRTL dialect operations ------*- C++ -*-===//
 //
-// This file defines an MLIR dialect for the FIRRTL IR.
+// This file declares the operation class for the FIRRTL IR.
 //
 //===----------------------------------------------------------------------===//
 
@@ -8,29 +8,17 @@
 #define SPT_DIALECT_FIRRTL_IR_OPS_H
 
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/Dialect.h"
 #include "mlir/IR/FunctionSupport.h"
-#include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/SideEffects.h"
+#include "spt/Dialect/FIRRTL/IR/Dialect.h"
 #include "spt/Dialect/FIRRTL/IR/Types.h"
 
 namespace spt {
 namespace firrtl {
-using namespace mlir;
-class FIRRTLType;
 
-class FIRRTLDialect : public Dialect {
-public:
-  /// Create the dialect in the given `context`.
-  explicit FIRRTLDialect(MLIRContext *context);
-  ~FIRRTLDialect();
-
-  Type parseType(DialectAsmParser &parser) const override;
-  void printType(Type, DialectAsmPrinter &) const override;
-
-  static StringRef getDialectNamespace() { return "firrtl"; }
-};
+/// Return true if the specified operation is a firrtl expression.
+bool isExpression(Operation *op);
 
 // Binary primitives.
 FIRRTLType getAddSubResult(FIRRTLType lhs, FIRRTLType rhs);
@@ -65,9 +53,6 @@ void getModulePortInfo(Operation *op, SmallVectorImpl<ModulePortInfo> &results);
 
 } // namespace firrtl
 } // namespace spt
-
-// Pull in all enum type definitions and utility function declarations.
-#include "spt/Dialect/FIRRTL/IR/FIRRTLEnums.h.inc"
 
 namespace spt {
 namespace firrtl {
