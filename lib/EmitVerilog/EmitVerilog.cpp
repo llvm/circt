@@ -9,6 +9,7 @@
 #include "mlir/Translation.h"
 #include "spt/Dialect/FIRRTL/Visitors.h"
 #include "spt/Support/LLVM.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace spt;
@@ -45,9 +46,9 @@ static int getBitWidthOrSentinel(FIRRTLType type) {
 static unsigned getPrintedIntWidth(unsigned value) {
   if (value < 10)
     return 1;
-  if (value <= 100)
+  if (value < 100)
     return 2;
-  if (value <= 1000)
+  if (value < 1000)
     return 3;
 
   SmallVector<char, 8> spelling;
@@ -138,9 +139,93 @@ private:
   void emitStatementExpression(Operation *op);
   void emitStatement(ConnectOp op);
   void emitOperation(Operation *op);
+
+  void collectNames(FModuleOp module);
+  void collectOpNames(Operation *op);
+  void addName(Value value, StringRef name);
+  void addName(Value value, StringAttr nameAttr) {
+    addName(value, nameAttr ? nameAttr.getValue() : "");
+  }
+
+  StringRef getName(Value value) {
+    auto *entry = nameTable[value];
+    assert(entry && "value expected a name but doesn't have one");
+    return entry->getKey();
+  }
+
+  llvm::StringSet<> usedNames;
+  llvm::DenseMap<Value, llvm::StringMapEntry<llvm::NoneType> *> nameTable;
+  size_t nextGeneratedNameID = 0;
 };
 
 } // end anonymous namespace
+
+/// Add the specified name to the name table, auto-uniquing the name if
+/// required.  If the name is empty, then this creates a unique temp name.
+void ModuleEmitter::addName(Value value, StringRef name) {
+  if (name.empty())
+    name = "_T";
+
+  // Check to see if this name is valid.  The first character cannot be a
+  // number of other weird thing.  If it is, start with an underscore.
+  if (!isalpha(name.front()) && name.front() != '_') {
+    SmallString<16> tmpName("_");
+    tmpName += name;
+    return addName(value, tmpName);
+  }
+
+  auto isValidVerilogCharacter = [](char ch) -> bool {
+    return isalpha(ch) || isdigit(ch) || ch == '_';
+  };
+
+  // Check to see if the name consists of all-valid identifiers.  If not, we
+  // need to escape them.
+  for (char ch : name) {
+    if (isValidVerilogCharacter(ch))
+      continue;
+
+    // Otherwise, we need to escape it.
+    SmallString<16> tmpName;
+    for (char ch : name) {
+      if (isValidVerilogCharacter(ch))
+        tmpName += ch;
+      else if (ch == ' ')
+        tmpName += '_';
+      else {
+        tmpName += llvm::utohexstr((unsigned char)ch);
+      }
+    }
+    return addName(value, tmpName);
+  }
+
+  // Check to see if this name is available - if so, use it.
+  auto insertResult = usedNames.insert(name);
+  if (insertResult.second) {
+    nameTable[value] = &*insertResult.first;
+    return;
+  }
+
+  // If not, we need to auto-unique it.
+  SmallVector<char, 16> nameBuffer(name.begin(), name.end());
+  nameBuffer.push_back('_');
+  auto baseSize = nameBuffer.size();
+
+  // Try until we find something that works.
+  while (1) {
+    auto suffix = llvm::utostr(nextGeneratedNameID++);
+    nameBuffer.append(suffix.begin(), suffix.end());
+
+    insertResult =
+        usedNames.insert(StringRef(nameBuffer.data(), nameBuffer.size()));
+    if (insertResult.second) {
+      nameTable[value] = &*insertResult.first;
+      return;
+    }
+
+    // Chop off the suffix and try again.
+    nameBuffer.resize(baseSize);
+  }
+}
 
 //===----------------------------------------------------------------------===//
 // Expression Emission
@@ -165,8 +250,46 @@ void ModuleEmitter::emitStatement(ConnectOp op) {
 }
 
 //===----------------------------------------------------------------------===//
-// Module and Circuit
+// Module Driver
 //===----------------------------------------------------------------------===//
+
+/// Build up the symbol table for all of the values that need names in the
+/// module.
+void ModuleEmitter::collectNames(FModuleOp module) {
+  SmallVector<ModulePortInfo, 8> portInfo;
+  module.getPortInfo(portInfo);
+
+  size_t nextPort = 0;
+  for (auto &port : portInfo)
+    addName(module.getArgument(nextPort++), port.first);
+
+  for (auto &op : *module.getBodyBlock())
+    collectOpNames(&op);
+}
+
+void ModuleEmitter::collectOpNames(Operation *op) {
+  // If the op has no results, then it doesn't produce a name.
+  if (op->getNumResults() == 0) {
+    // When has no results, but it does have a body!
+    if (auto when = dyn_cast<WhenOp>(op)) {
+      for (auto &op : when.thenRegion().front())
+        collectOpNames(&op);
+      if (when.hasElseRegion())
+        for (auto &op : when.elseRegion().front())
+          collectOpNames(&op);
+    }
+    return;
+  }
+
+  assert(op->getNumResults() == 1 && "firrtl only has single-op results");
+
+  // If the expression is inline, it doesn't need a name.
+  if (isExpression(op) && isExpressionEmittedInline(op))
+    return;
+
+  // Otherwise, it must be an expression or a declaration like a wire.
+  addName(op->getResult(0), op->getAttrOfType<StringAttr>("name"));
+}
 
 void ModuleEmitter::emitOperation(Operation *op) {
   // Handle expression statements.
@@ -176,7 +299,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
     return;
   }
 
-  // Handle statements first.
+  // Handle statements.
   // TODO: Refactor out to visitors.
   bool isStatement = false;
   TypeSwitch<Operation *>(op).Case<ConnectOp>([&](auto stmt) {
@@ -195,6 +318,9 @@ void ModuleEmitter::emitOperation(Operation *op) {
 }
 
 void ModuleEmitter::emitFModule(FModuleOp module) {
+  // Build our name table.
+  collectNames(module);
+
   os << "module " << module.getName() << '(';
 
   // Determine the width of the widest type we have to print so everything
@@ -221,6 +347,7 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
   // TODO(QoI): Should emit more than one port on a line.
   //  e.g. output [2:0] auto_out_c_bits_opcode, auto_out_c_bits_param,
   //
+  size_t portNumber = 0;
   for (auto &port : portInfo) {
     indent();
     // Emit the arguments.
@@ -248,7 +375,8 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
     if (maxTypeWidth - emittedWidth)
       os.indent(maxTypeWidth - emittedWidth);
 
-    os << ' ' << port.first.getValue();
+    // Emit the name.
+    os << ' ' << getName(module.getArgument(portNumber++));
     if (&port != &portInfo.back())
       os << ',';
     else
