@@ -10,6 +10,7 @@ circuit Xorr :
 ; CHECK-NEXT:    input  b);
 ; CHECK-NEXT:  endmodule
 
+
   module no_ports :
     skip   ; expected-error {{cannot emit this operation}}
    ; expected-note @-1 {{}}
@@ -17,16 +18,17 @@ circuit Xorr :
 ; CHECK-LABEL: module no_ports();
 ; CHECK-NEXT:  endmodule
 
+
   module Xorr :
     input a: UInt<4>
     output b: UInt<1>
     b <= xorr(a)
 
-; CHECK-LABEL:module Xorr(
-; CHECK-NEXT:    input  [3:0] a,
-; CHECK-NEXT:    output       b);
-; CHECK-NEXT:    assign b = ^a;
-; CHECK-NEXT: endmodule
+; CHECK-LABEL: module Xorr(
+; CHECK-NEXT:     input  [3:0] a,
+; CHECK-NEXT:     output       b);
+; CHECK-NEXT:     assign b = ^a;
+; CHECK-NEXT:  endmodule
 
 
   module Andr :
@@ -34,8 +36,26 @@ circuit Xorr :
     output b: UInt<1>
     b <= andr(a)
 
-; CHECK-LABEL:module Andr(
-; CHECK-NEXT:   input  [3:0] a,
-; CHECK-NEXT:   output       b);
-; CHECK-NEXT:   assign b = &a;
-; CHECK-NEXT: endmodule
+; CHECK-LABEL: module Andr(
+; CHECK-NEXT:    input  [3:0] a,
+; CHECK-NEXT:    output       b);
+; CHECK-NEXT:    assign b = &a;
+; CHECK-NEXT:  endmodule
+
+
+  module MultiUseExpr :
+    input a: UInt<4>
+    output b: UInt<1>
+    ;; This disappears in MLIR because of the _T name.  The verilog emitter
+    ;; needs to reintroduce it as an 'assign' to a local.
+    node _T_42 = andr(xorr(a))
+    b <= andr(_T_42)
+    b <= xorr(_T_42)
+
+; CHECK-LABEL: module MultiUseExpr(
+; CHECK-NEXT:    input  [3:0] a,
+; CHECK-NEXT:    output       b);
+; CHECK-NEXT:    assign _T = &^a;
+; CHECK-NEXT:    assign b = &_T;
+; CHECK-NEXT:    assign b = ^_T;
+; CHECK-NEXT:  endmodule
