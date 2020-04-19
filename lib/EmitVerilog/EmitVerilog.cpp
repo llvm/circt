@@ -61,6 +61,7 @@ static unsigned getPrintedIntWidth(unsigned value) {
 /// that uses it.
 static bool isExpressionEmittedInline(Operation *op) {
   // ConstantOp is always emitted inline.
+  // TODO: same for subobjects and other things like that.
   if (isa<ConstantOp>(op))
     return true;
 
@@ -104,6 +105,11 @@ public:
     return op->emitError(message);
   }
 
+  InFlightDiagnostic emitOpError(Operation *op, const Twine &message) {
+    state.encounteredError = true;
+    return op->emitOpError(message);
+  }
+
   raw_ostream &indent() { return os.indent(state.currentIndent); }
 
   void addIndent() { state.currentIndent += 2; }
@@ -128,14 +134,21 @@ private:
 
 namespace {
 
-class ModuleEmitter : public VerilogEmitterBase {
+class ModuleEmitter : public VerilogEmitterBase,
+                      public ExprVisitor<ModuleEmitter> {
 public:
   explicit ModuleEmitter(VerilogEmitterState &state)
       : VerilogEmitterBase(state) {}
 
   void emitFModule(FModuleOp module);
 
-private:
+  // Expressions
+  void emitExpression(Value exp, bool forceRootExpr = false);
+  void visitExpr(AndRPrimOp op);
+  void visitExpr(XorRPrimOp op);
+  void visitUnhandledExpr(Operation *op);
+
+  // Statements.
   void emitStatementExpression(Operation *op);
   void emitStatement(ConnectOp op);
   void emitOperation(Operation *op);
@@ -231,21 +244,60 @@ void ModuleEmitter::addName(Value value, StringRef name) {
 // Expression Emission
 //===----------------------------------------------------------------------===//
 
-/// ExprVisitor
+/// Emit the specified value as an expression.  If this is an inline-emitted
+/// expression, we emit that expression, otherwise we emit a reference to the
+/// already computed name.  If 'forceRootExpr' is true, then this emits an
+/// expression even if we typically don't do it inline.
+///
+// TODO: Return precedence and signedness information.
+void ModuleEmitter::emitExpression(Value exp, bool forceRootExpr) {
+  auto *op = exp.getDefiningOp();
+  bool shouldEmitInlineExpr = op && isExpression(op) &&
+                              (forceRootExpr || isExpressionEmittedInline(op));
+
+  // If this is a non-expr or shouldn't be done inline, just refer to its name.
+  if (!shouldEmitInlineExpr) {
+    os << getName(exp);
+    return;
+  }
+
+  // Okay, this is an expression we should emit inline.  Do this through our
+  // visitor.
+  dispatchExprVisitor(op);
+}
+
+void ModuleEmitter::visitExpr(AndRPrimOp op) {
+  os << "&";
+  emitExpression(op.input());
+}
+
+void ModuleEmitter::visitExpr(XorRPrimOp op) {
+  os << "^";
+  emitExpression(op.input());
+}
+
+void ModuleEmitter::visitUnhandledExpr(Operation *op) {
+  emitOpError(op, "cannot emit this expression to Verilog");
+  os << "<<unsupported expr: " << op->getName().getStringRef() << ">>";
+}
 
 //===----------------------------------------------------------------------===//
 // Statements
 //===----------------------------------------------------------------------===//
 
 void ModuleEmitter::emitStatementExpression(Operation *op) {
-  // Need to emit a wire ahead of time,
-  //    then connect to that wire.
-  // Need a naming pass of some sort.
-  indent() << "assign WIRENAME = expr";
+  indent() << "assign " << getName(op->getResult(0)) << " = ";
+  emitExpression(op->getResult(0), /*forceRootExpr=*/true);
+  os << ";\n";
+  // TODO: location information too.
 }
 
 void ModuleEmitter::emitStatement(ConnectOp op) {
-  indent() << "assign x = y;\n";
+  indent() << "assign ";
+  emitExpression(op.lhs());
+  os << " = ";
+  emitExpression(op.rhs());
+  os << ";\n";
   // TODO: location information too.
 }
 
@@ -313,8 +365,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
   if (isa<DoneOp>(op))
     return;
 
-  op->emitOpError("cannot emit this operation to Verilog");
-  state.encounteredError = true;
+  emitOpError(op, "cannot emit this operation to Verilog");
 }
 
 void ModuleEmitter::emitFModule(FModuleOp module) {

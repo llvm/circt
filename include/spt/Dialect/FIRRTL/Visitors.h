@@ -17,7 +17,7 @@ namespace firrtl {
 template <typename ConcreteType, typename ResultType = void>
 class ExprVisitor {
 public:
-  ResultType visitExpr(Operation *op) {
+  ResultType dispatchExprVisitor(Operation *op) {
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<AndRPrimOp, XorRPrimOp>([&](auto expr) -> ResultType {
           return static_cast<ConcreteType *>(this)->visitExpr(expr);

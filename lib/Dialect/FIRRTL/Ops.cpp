@@ -403,7 +403,7 @@ bool firrtl::isExpression(Operation *op) {
     bool visitUnhandledExpr(Operation *op) { return true; }
   };
 
-  return IsExprClassifier().visitExpr(op);
+  return IsExprClassifier().dispatchExprVisitor(op);
 }
 
 static LogicalResult verify(ConstantOp constant) {

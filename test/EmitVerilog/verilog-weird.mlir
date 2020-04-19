@@ -8,7 +8,7 @@ firrtl.circuit "Circuit" {
   // CHECK: module M1(
   // CHECK:   input  [7:0] y,
   // CHECK:   output [7:0] y_0);
-  // CHECK:   assign x = y;
+  // CHECK:   assign y_0 = y;
   // CHECK: endmodule
 
   firrtl.module @M2(%in : !firrtl.uint<8> { firrtl.name = "some name"},

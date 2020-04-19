@@ -5,28 +5,27 @@ circuit Xorr :
     input a: UInt<1>
     input b: UInt<1>
 
-; CHECK:      module inputs_only(
-; CHECK-NEXT:   input  a,
-; CHECK-NEXT:  input  b);
-; CHECK-NEXT: endmodule
+; CHECK-LABEL: module inputs_only(
+; CHECK-NEXT:    input  a,
+; CHECK-NEXT:    input  b);
+; CHECK-NEXT:  endmodule
 
   module no_ports :
     skip   ; expected-error {{cannot emit this operation}}
    ; expected-note @-1 {{}}
 
-; CHECK:      module no_ports();
-; CHECK-NEXT: endmodule
+; CHECK-LABEL: module no_ports();
+; CHECK-NEXT:  endmodule
 
   module Xorr :
     input a: UInt<4>
     output b: UInt<1>
     b <= xorr(a)
 
-; CHECK:       module Xorr(
+; CHECK-LABEL:module Xorr(
 ; CHECK-NEXT:    input  [3:0] a,
 ; CHECK-NEXT:    output       b);
-; TODO:          assign b = ^a;
-; CHECK-NEXT:    assign x = y;
+; CHECK-NEXT:    assign b = ^a;
 ; CHECK-NEXT: endmodule
 
 
@@ -35,11 +34,8 @@ circuit Xorr :
     output b: UInt<1>
     b <= andr(a)
 
-; CHECK:      module Andr(
+; CHECK-LABEL:module Andr(
 ; CHECK-NEXT:   input  [3:0] a,
 ; CHECK-NEXT:   output       b);
-
-
-; TODO:         assign b = &a;
-; CHECK-NEXT:   assign x = y;
+; CHECK-NEXT:   assign b = &a;
 ; CHECK-NEXT: endmodule
