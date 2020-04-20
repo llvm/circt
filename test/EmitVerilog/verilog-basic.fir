@@ -12,34 +12,27 @@ circuit Xorr :
 
 
   module no_ports :
-    skip   ; expected-error {{cannot emit this operation}}
-   ; expected-note @-1 {{}}
+    skip
 
 ; CHECK-LABEL: module no_ports();
 ; CHECK-NEXT:  endmodule
 
 
-  module Xorr :
+  module Expressions :
     input a: UInt<4>
     output b: UInt<1>
     b <= xorr(a)
+    b <= andr(a)
+    b <= orr(a)
+    b <= not(a)
 
-; CHECK-LABEL: module Xorr(
+; CHECK-LABEL: module Expressions(
 ; CHECK-NEXT:     input  [3:0] a,
 ; CHECK-NEXT:     output       b);
 ; CHECK-NEXT:     assign b = ^a;
-; CHECK-NEXT:  endmodule
-
-
-  module Andr :
-    input a: UInt<4>
-    output b: UInt<1>
-    b <= andr(a)
-
-; CHECK-LABEL: module Andr(
-; CHECK-NEXT:    input  [3:0] a,
-; CHECK-NEXT:    output       b);
-; CHECK-NEXT:    assign b = &a;
+; CHECK-NEXT:     assign b = &a;
+; CHECK-NEXT:     assign b = |a;
+; CHECK-NEXT:     assign b = ~a;
 ; CHECK-NEXT:  endmodule
 
 

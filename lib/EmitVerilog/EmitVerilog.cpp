@@ -144,13 +144,20 @@ public:
 
   // Expressions
   void emitExpression(Value exp, bool forceRootExpr = false);
-  void visitExpr(AndRPrimOp op);
-  void visitExpr(XorRPrimOp op);
+
+  void emitUnaryPrefixExpr(StringRef opSymbol, Value operand);
+
+  using ExprVisitor::visitExpr;
+  void visitExpr(AndRPrimOp op) { emitUnaryPrefixExpr("&", op.input()); }
+  void visitExpr(XorRPrimOp op) { emitUnaryPrefixExpr("^", op.input()); }
+  void visitExpr(OrRPrimOp op) { emitUnaryPrefixExpr("|", op.input()); }
+  void visitExpr(NotPrimOp op) { emitUnaryPrefixExpr("~", op.input()); }
   void visitUnhandledExpr(Operation *op);
 
   // Statements.
   void emitStatementExpression(Operation *op);
   void emitStatement(ConnectOp op);
+  void emitStatement(SkipOp op) {}
   void emitOperation(Operation *op);
 
   void collectNames(FModuleOp module);
@@ -266,14 +273,9 @@ void ModuleEmitter::emitExpression(Value exp, bool forceRootExpr) {
   dispatchExprVisitor(op);
 }
 
-void ModuleEmitter::visitExpr(AndRPrimOp op) {
-  os << "&";
-  emitExpression(op.input());
-}
-
-void ModuleEmitter::visitExpr(XorRPrimOp op) {
-  os << "^";
-  emitExpression(op.input());
+void ModuleEmitter::emitUnaryPrefixExpr(StringRef opSymbol, Value operand) {
+  os << opSymbol;
+  emitExpression(operand);
 }
 
 void ModuleEmitter::visitUnhandledExpr(Operation *op) {
@@ -354,7 +356,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
   // Handle statements.
   // TODO: Refactor out to visitors.
   bool isStatement = false;
-  TypeSwitch<Operation *>(op).Case<ConnectOp>([&](auto stmt) {
+  TypeSwitch<Operation *>(op).Case<ConnectOp, SkipOp>([&](auto stmt) {
     isStatement = true;
     this->emitStatement(stmt);
   });

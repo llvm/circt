@@ -19,7 +19,22 @@ class ExprVisitor {
 public:
   ResultType dispatchExprVisitor(Operation *op) {
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<AndRPrimOp, XorRPrimOp>([&](auto expr) -> ResultType {
+        // Basic Expressions
+        .template Case<
+            ConstantOp, SubfieldOp, SubindexOp, SubaccessOp,
+            // Arithmetic and Logical Binary Primitives.
+            AddPrimOp, SubPrimOp, MulPrimOp, DivPrimOp, RemPrimOp, AndPrimOp,
+            OrPrimOp, XorPrimOp,
+            // Comparisons.
+            LEQPrimOp, LTPrimOp, GEQPrimOp, GTPrimOp, EQPrimOp, NEQPrimOp,
+            // Misc Binary Primitives.
+            CatPrimOp, DShlPrimOp, DShrPrimOp, ValidIfPrimOp,
+            // Unary operators.
+            AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsClockPrimOp,
+            CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
+            // Miscellaneous.
+            BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
+            TailPrimOp>([&](auto expr) -> ResultType {
           return static_cast<ConcreteType *>(this)->visitExpr(expr);
         })
         .Default([&](auto expr) -> ResultType {
