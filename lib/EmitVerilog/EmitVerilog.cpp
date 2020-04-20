@@ -242,43 +242,43 @@ void ModuleEmitter::addName(Value value, StringRef name) {
 // Expression Emission
 //===----------------------------------------------------------------------===//
 
-class ExprEmitter : public ExprVisitor<ExprEmitter> {
+namespace {
+/// This enum keeps track of the precedence level of various binary operators,
+/// where a lower number binds tighter.
+enum VerilogPrecedence {
+  NonExpression, // Not an inline expression.
+  Unary,         // Symbols and all the unary operators.
+  Multiply,      // * , / , %
+  Addition,      // + , -
+  Shift,         // << , >>
+  Comparison,    // > , >= , < , <=
+  Equality,      // == , !=
+  And,           // &
+  Xor,           // ^ , ^~
+  Or,            // |
+};
+
+/// This is information precomputed about each subexpression in the tree we
+/// are emitting as a unit.
+struct SubExprInfo {
+  /// The precedence of this expression.
+  VerilogPrecedence precedence;
+};
+} // namespace
+
+namespace {
+class ExprEmitter : public ExprVisitor<ExprEmitter, void, SubExprInfo> {
 public:
   ExprEmitter(raw_ostream &os, ModuleEmitter &emitter)
       : os(os), emitter(emitter) {}
 
   void emitExpression(Value exp, bool forceRootExpr);
-  friend class ExprVisitor<ExprEmitter>;
+  friend class ExprVisitor;
 
 private:
   /// Compute the precedence levels and other information we need for the
   ///  subexpressions in this tree, filling in subExprInfos.
   void computeSubExprInfos(Value exp, bool forceRootExpr = false);
-
-  /// This enum keeps track of the precedence level of various binary operators,
-  /// where a lower number binds tighter.
-  enum VerilogPrecedence {
-    Unary,      // Symbols and all the unary operators.
-    Multiply,   // * , / , %
-    Addition,   // + , -
-    Shift,      // << , >>
-    Comparison, // > , >= , < , <=
-    Equality,   // == , !=
-    And,        // &
-    Xor,        // ^ , ^~
-    Or,         // |
-  };
-
-  /// This is information precomputed about each subexpression in the tree we
-  /// are emitting as a unit.
-  struct SubExprInfo {
-    /// True if this is an inline expanded subexpression.  False if it is a
-    /// reference to a shared expression, or is a non-expression value.
-    bool isInlineExpr = false;
-
-    /// The precedence of this expression.
-    VerilogPrecedence precedence;
-  };
 
   SubExprInfo getInfo(Value exp) const;
 
@@ -286,44 +286,81 @@ private:
   void emitSubExpr(Value exp, SubExprInfo exprInfo);
 
   void emitUnaryPrefixExpr(Operation *op, StringRef opSymbol);
-  void emitBinaryExpr(Operation *op, StringRef opSymbol);
-  void visitUnhandledExpr(Operation *op);
+  void emitBinaryExpr(Operation *op, StringRef opSymbol, SubExprInfo opInfo);
+  void visitUnhandledExpr(Operation *op, SubExprInfo exprInfo);
 
   using ExprVisitor::visitExpr;
-  void visitExpr(ConstantOp op);
-  void visitExpr(AddPrimOp op) { emitBinaryExpr(op, "+"); }
-  void visitExpr(SubPrimOp op) { emitBinaryExpr(op, "-"); }
-  void visitExpr(MulPrimOp op) { emitBinaryExpr(op, "*"); }
-  void visitExpr(DivPrimOp op) { emitBinaryExpr(op, "/"); }
-  void visitExpr(RemPrimOp op) { emitBinaryExpr(op, "%"); }
+  void visitExpr(ConstantOp op, SubExprInfo info);
+  void visitExpr(AddPrimOp op, SubExprInfo info) {
+    emitBinaryExpr(op, "+", info);
+  }
+  void visitExpr(SubPrimOp op, SubExprInfo info) {
+    emitBinaryExpr(op, "-", info);
+  }
+  void visitExpr(MulPrimOp op, SubExprInfo info) {
+    emitBinaryExpr(op, "*", info);
+  }
+  void visitExpr(DivPrimOp op, SubExprInfo info) {
+    emitBinaryExpr(op, "/", info);
+  }
+  void visitExpr(RemPrimOp op, SubExprInfo info) {
+    emitBinaryExpr(op, "%", info);
+  }
 
-  void visitExpr(AndPrimOp op) { emitBinaryExpr(op, "&"); }
-  void visitExpr(OrPrimOp op) { emitBinaryExpr(op, "|"); }
-  void visitExpr(XorPrimOp op) { emitBinaryExpr(op, "^"); }
+  void visitExpr(AndPrimOp op, SubExprInfo info) {
+    emitBinaryExpr(op, "&", info);
+  }
+  void visitExpr(OrPrimOp op, SubExprInfo info) {
+    emitBinaryExpr(op, "|", info);
+  }
+  void visitExpr(XorPrimOp op, SubExprInfo info) {
+    emitBinaryExpr(op, "^", info);
+  }
 
   // Comparison Operations
-  void visitExpr(LEQPrimOp op) { emitBinaryExpr(op, "<="); }
-  void visitExpr(LTPrimOp op) { emitBinaryExpr(op, "<"); }
-  void visitExpr(GEQPrimOp op) { emitBinaryExpr(op, ">="); }
-  void visitExpr(GTPrimOp op) { emitBinaryExpr(op, ">"); }
-  void visitExpr(EQPrimOp op) { emitBinaryExpr(op, "=="); }
-  void visitExpr(NEQPrimOp op) { emitBinaryExpr(op, "!="); }
+  void visitExpr(LEQPrimOp op, SubExprInfo info) {
+    emitBinaryExpr(op, "<=", info);
+  }
+  void visitExpr(LTPrimOp op, SubExprInfo info) {
+    emitBinaryExpr(op, "<", info);
+  }
+  void visitExpr(GEQPrimOp op, SubExprInfo info) {
+    emitBinaryExpr(op, ">=", info);
+  }
+  void visitExpr(GTPrimOp op, SubExprInfo info) {
+    emitBinaryExpr(op, ">", info);
+  }
+  void visitExpr(EQPrimOp op, SubExprInfo info) {
+    emitBinaryExpr(op, "==", info);
+  }
+  void visitExpr(NEQPrimOp op, SubExprInfo info) {
+    emitBinaryExpr(op, "!=", info);
+  }
 
   // Cat, DShl, DShr, ValidIf
 
   // Unary Prefix operators.
-  void visitExpr(AndRPrimOp op) { emitUnaryPrefixExpr(op, "&"); }
-  void visitExpr(XorRPrimOp op) { emitUnaryPrefixExpr(op, "^"); }
-  void visitExpr(OrRPrimOp op) { emitUnaryPrefixExpr(op, "|"); }
-  void visitExpr(NotPrimOp op) { emitUnaryPrefixExpr(op, "~"); }
+  void visitExpr(AndRPrimOp op, SubExprInfo info) {
+    emitUnaryPrefixExpr(op, "&");
+  }
+  void visitExpr(XorRPrimOp op, SubExprInfo info) {
+    emitUnaryPrefixExpr(op, "^");
+  }
+  void visitExpr(OrRPrimOp op, SubExprInfo info) {
+    emitUnaryPrefixExpr(op, "|");
+  }
+  void visitExpr(NotPrimOp op, SubExprInfo info) {
+    emitUnaryPrefixExpr(op, "~");
+  }
 
 private:
   llvm::SmallDenseMap<Value, SubExprInfo, 8> subExprInfos;
   raw_ostream &os;
   ModuleEmitter &emitter;
 };
+} // end anonymous namespace
 
-auto ExprEmitter::getInfo(Value exp) const -> SubExprInfo {
+SubExprInfo ExprEmitter::getInfo(Value exp) const {
   auto it = subExprInfos.find(exp);
   assert(it != subExprInfos.end() && "No info computed for this expr");
   return it->second;
@@ -360,7 +397,7 @@ void ExprEmitter::computeSubExprInfos(Value exp, bool forceRootExpr) {
     // If this is is an reference to an out-of-line expression or declaration,
     // just use it.
     if (!shouldEmitInlineExpr) {
-      subExprInfos[exp] = {false, Unary};
+      subExprInfos[exp] = {NonExpression};
       continue;
     }
 
@@ -390,7 +427,7 @@ void ExprEmitter::computeSubExprInfos(Value exp, bool forceRootExpr) {
     };
 
     auto precedence = ExprPropertyComputer().dispatchExprVisitor(op);
-    subExprInfos[exp] = {true, precedence};
+    subExprInfos[exp] = {precedence};
 
     // Visit all subexpressions.
     worklist.append(op->operand_begin(), op->operand_end());
@@ -401,14 +438,14 @@ void ExprEmitter::computeSubExprInfos(Value exp, bool forceRootExpr) {
 void ExprEmitter::emitSubExpr(Value exp, SubExprInfo exprInfo) {
   // If this is a non-expr or shouldn't be done inline, just refer to its
   // name.
-  if (!exprInfo.isInlineExpr) {
+  if (exprInfo.precedence == NonExpression) {
     os << emitter.getName(exp);
     return;
   }
 
   // Okay, this is an expression we should emit inline.  Do this through our
   // visitor.
-  dispatchExprVisitor(exp.getDefiningOp());
+  dispatchExprVisitor(exp.getDefiningOp(), exprInfo);
 }
 
 void ExprEmitter::emitUnaryPrefixExpr(Operation *op, StringRef opSymbol) {
@@ -422,10 +459,8 @@ void ExprEmitter::emitUnaryPrefixExpr(Operation *op, StringRef opSymbol) {
     os << ')';
 }
 
-void ExprEmitter::emitBinaryExpr(Operation *op, StringRef opSymbol) {
-  // FIXME: Don't recompute this.
-  auto opInfo = getInfo(op->getResult(0));
-
+void ExprEmitter::emitBinaryExpr(Operation *op, StringRef opSymbol,
+                                 SubExprInfo opInfo) {
   auto lhsInfo = getInfo(op->getOperand(0));
   auto rhsInfo = getInfo(op->getOperand(1));
 
@@ -443,10 +478,10 @@ void ExprEmitter::emitBinaryExpr(Operation *op, StringRef opSymbol) {
     os << ')';
 }
 
-void ExprEmitter::visitExpr(ConstantOp op) {
+void ExprEmitter::visitExpr(ConstantOp op, SubExprInfo exprInfo) {
   auto resType = op.getType().cast<IntType>();
   if (resType.getWidthOrSentinel() == -1)
-    return visitUnhandledExpr(op);
+    return visitUnhandledExpr(op, exprInfo);
 
   os << resType.getWidth() << "'";
   if (resType.isSigned())
@@ -458,7 +493,7 @@ void ExprEmitter::visitExpr(ConstantOp op) {
   os << valueStr;
 }
 
-void ExprEmitter::visitUnhandledExpr(Operation *op) {
+void ExprEmitter::visitUnhandledExpr(Operation *op, SubExprInfo exprInfo) {
   emitter.emitOpError(op, "cannot emit this expression to Verilog");
   os << "<<unsupported expr: " << op->getName().getStringRef() << ">>";
 }

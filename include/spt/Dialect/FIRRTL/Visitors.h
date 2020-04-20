@@ -14,10 +14,12 @@ namespace spt {
 namespace firrtl {
 
 /// ExprVisitor is a visitor for FIRRTL expression nodes.
-template <typename ConcreteType, typename ResultType = void>
+template <typename ConcreteType, typename ResultType = void,
+          typename... ExtraArgs>
 class ExprVisitor {
 public:
-  ResultType dispatchExprVisitor(Operation *op) {
+  ResultType dispatchExprVisitor(Operation *op, ExtraArgs... args) {
+    auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         // Basic Expressions
         .template Case<
@@ -35,26 +37,28 @@ public:
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp>([&](auto expr) -> ResultType {
-          return static_cast<ConcreteType *>(this)->visitExpr(expr);
+          return thisCast->visitExpr(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
-          return static_cast<ConcreteType *>(this)->visitInvalidExpr(op);
+          return thisCast->visitInvalidExpr(op, args...);
         });
   }
 
   /// This callback is invoked on any non-expression operations.
-  ResultType visitInvalidExpr(Operation *op) {
+  ResultType visitInvalidExpr(Operation *op, ExtraArgs... args) {
     op->emitOpError("unknown firrtl expression");
     abort();
   }
 
   /// This callback is invoked on any expression operations that are not handled
   /// by the concrete visitor.
-  ResultType visitUnhandledExpr(Operation *op) { return ResultType(); }
+  ResultType visitUnhandledExpr(Operation *op, ExtraArgs... args) {
+    return ResultType();
+  }
 
 #define HANDLE(OPTYPE)                                                         \
-  ResultType visitExpr(OPTYPE op) {                                            \
-    return static_cast<ConcreteType *>(this)->visitUnhandledExpr(op);          \
+  ResultType visitExpr(OPTYPE op, ExtraArgs... args) {                         \
+    return static_cast<ConcreteType *>(this)->visitUnhandledExpr(op, args...); \
   }
 
   // Basic expressions.
