@@ -144,15 +144,17 @@ public:
 
   // Expressions
   void emitExpression(Value exp, bool forceRootExpr = false);
-
   void emitUnaryPrefixExpr(StringRef opSymbol, Value operand);
+  void emitBinaryExpr(StringRef opSymbol, Value lhs, Value rhs);
+  void visitUnhandledExpr(Operation *op);
 
   using ExprVisitor::visitExpr;
+  void visitExpr(ConstantOp op);
+  void visitExpr(RemPrimOp op) { emitBinaryExpr("%", op.lhs(), op.rhs()); }
   void visitExpr(AndRPrimOp op) { emitUnaryPrefixExpr("&", op.input()); }
   void visitExpr(XorRPrimOp op) { emitUnaryPrefixExpr("^", op.input()); }
   void visitExpr(OrRPrimOp op) { emitUnaryPrefixExpr("|", op.input()); }
   void visitExpr(NotPrimOp op) { emitUnaryPrefixExpr("~", op.input()); }
-  void visitUnhandledExpr(Operation *op);
 
   // Statements.
   void emitStatementExpression(Operation *op);
@@ -276,6 +278,28 @@ void ModuleEmitter::emitExpression(Value exp, bool forceRootExpr) {
 void ModuleEmitter::emitUnaryPrefixExpr(StringRef opSymbol, Value operand) {
   os << opSymbol;
   emitExpression(operand);
+}
+
+void ModuleEmitter::emitBinaryExpr(StringRef opSymbol, Value lhs, Value rhs) {
+  // FIXME: Handle precedence issues.
+  emitExpression(lhs);
+  os << ' ' << opSymbol << ' ';
+  emitExpression(rhs);
+}
+
+void ModuleEmitter::visitExpr(ConstantOp op) {
+  auto resType = op.getType().cast<IntType>();
+  if (resType.getWidthOrSentinel() == -1)
+    return visitUnhandledExpr(op);
+
+  os << resType.getWidth() << "'";
+  if (resType.isSigned())
+    os << 's';
+  os << 'h';
+
+  SmallString<32> valueStr;
+  op.value().toStringUnsigned(valueStr, 16);
+  os << valueStr;
 }
 
 void ModuleEmitter::visitUnhandledExpr(Operation *op) {
