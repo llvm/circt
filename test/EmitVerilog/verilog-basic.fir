@@ -44,25 +44,32 @@ circuit Xorr :
     input a: UInt<4>
     input b: UInt<4>
     input c: UInt<4>
+    output out1: UInt<1>
     output out: UInt<4>
     out <= add(a, mul(b, c))
     out <= add(mul(a, b), c)
     out <= mul(add(a, b), c)
     out <= mul(a, add(b, c))
     out <= mul(add(a, b), add(b, c))
+    out1 <= xorr(add(b, c))
+    out1 <= or(lt(b, c), gt(b, c))
+    out1 <= and(xor(b, c), or(out1, out1))
 
 ; CHECK-LABEL: module Precedence(
 ; CHECK-NEXT:     input  [3:0] a,
 ; CHECK-NEXT:     input  [3:0] b,
 ; CHECK-NEXT:     input  [3:0] c,
+; CHECK-NEXT:     output       out1,
 ; CHECK-NEXT:     output [3:0] out);
 
-; FIXME: These are wrong.
 ; CHECK-NEXT:     assign out = a + b * c;
 ; CHECK-NEXT:     assign out = a * b + c;
-; CHECK-NEXT:     assign out = a + b * c;
-; CHECK-NEXT:     assign out = a * b + c;
-; CHECK-NEXT:     assign out = a + b * b + c;
+; CHECK-NEXT:     assign out = (a + b) * c;
+; CHECK-NEXT:     assign out = a * (b + c);
+; CHECK-NEXT:     assign out = (a + b) * (b + c);
+; CHECK-NEXT:     assign out1 = ^(b + c);
+; CHECK-NEXT:     assign out1 = b < c | b > c;
+; CHECK-NEXT:     assign out1 = (b ^ c) & (out1 | out1);
 ; CHECK-NEXT:  endmodule
 
 
