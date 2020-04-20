@@ -56,61 +56,74 @@ public:
     return ResultType();
   }
 
-#define HANDLE(OPTYPE)                                                         \
+  /// This fallback is invoked on any unary expr that isn't explicitly handled.
+  /// The default implementation delegates to the unhandled expression fallback.
+  ResultType visitUnaryExpr(Operation *op, ExtraArgs... args) {
+    return static_cast<ConcreteType *>(this)->visitUnhandledExpr(op, args...);
+  }
+
+  /// This fallback is invoked on any binary expr that isn't explicitly handled.
+  /// The default implementation delegates to the unhandled expression fallback.
+  ResultType visitBinaryExpr(Operation *op, ExtraArgs... args) {
+    return static_cast<ConcreteType *>(this)->visitUnhandledExpr(op, args...);
+  }
+
+#define HANDLE(OPTYPE, OPKIND)                                                 \
   ResultType visitExpr(OPTYPE op, ExtraArgs... args) {                         \
-    return static_cast<ConcreteType *>(this)->visitUnhandledExpr(op, args...); \
+    return static_cast<ConcreteType *>(this)->visit##OPKIND##Expr(op,          \
+                                                                  args...);    \
   }
 
   // Basic expressions.
-  HANDLE(ConstantOp)
-  HANDLE(SubfieldOp);
-  HANDLE(SubindexOp);
-  HANDLE(SubaccessOp);
+  HANDLE(ConstantOp, Unhandled)
+  HANDLE(SubfieldOp, Unhandled);
+  HANDLE(SubindexOp, Unhandled);
+  HANDLE(SubaccessOp, Unhandled);
 
   // Arithmetic and Logical Binary Primitives.
-  HANDLE(AddPrimOp);
-  HANDLE(SubPrimOp);
-  HANDLE(MulPrimOp);
-  HANDLE(DivPrimOp);
-  HANDLE(RemPrimOp);
-  HANDLE(AndPrimOp);
-  HANDLE(OrPrimOp);
-  HANDLE(XorPrimOp);
+  HANDLE(AddPrimOp, Binary);
+  HANDLE(SubPrimOp, Binary);
+  HANDLE(MulPrimOp, Binary);
+  HANDLE(DivPrimOp, Binary);
+  HANDLE(RemPrimOp, Binary);
+  HANDLE(AndPrimOp, Binary);
+  HANDLE(OrPrimOp, Binary);
+  HANDLE(XorPrimOp, Binary);
 
   // Comparisons.
-  HANDLE(LEQPrimOp);
-  HANDLE(LTPrimOp);
-  HANDLE(GEQPrimOp);
-  HANDLE(GTPrimOp);
-  HANDLE(EQPrimOp);
-  HANDLE(NEQPrimOp);
+  HANDLE(LEQPrimOp, Binary);
+  HANDLE(LTPrimOp, Binary);
+  HANDLE(GEQPrimOp, Binary);
+  HANDLE(GTPrimOp, Binary);
+  HANDLE(EQPrimOp, Binary);
+  HANDLE(NEQPrimOp, Binary);
 
   // Misc Binary Primitives.
-  HANDLE(CatPrimOp);
-  HANDLE(DShlPrimOp);
-  HANDLE(DShrPrimOp);
-  HANDLE(ValidIfPrimOp);
+  HANDLE(CatPrimOp, Binary);
+  HANDLE(DShlPrimOp, Binary);
+  HANDLE(DShrPrimOp, Binary);
+  HANDLE(ValidIfPrimOp, Binary);
 
   // Unary operators.
-  HANDLE(AsSIntPrimOp);
-  HANDLE(AsUIntPrimOp);
-  HANDLE(AsAsyncResetPrimOp);
-  HANDLE(AsClockPrimOp);
-  HANDLE(CvtPrimOp);
-  HANDLE(NegPrimOp);
-  HANDLE(NotPrimOp);
-  HANDLE(AndRPrimOp);
-  HANDLE(OrRPrimOp);
-  HANDLE(XorRPrimOp);
+  HANDLE(AsSIntPrimOp, Unary);
+  HANDLE(AsUIntPrimOp, Unary);
+  HANDLE(AsAsyncResetPrimOp, Unary);
+  HANDLE(AsClockPrimOp, Unary);
+  HANDLE(CvtPrimOp, Unary);
+  HANDLE(NegPrimOp, Unary);
+  HANDLE(NotPrimOp, Unary);
+  HANDLE(AndRPrimOp, Unary);
+  HANDLE(OrRPrimOp, Unary);
+  HANDLE(XorRPrimOp, Unary);
 
   // Miscellaneous.
-  HANDLE(BitsPrimOp);
-  HANDLE(HeadPrimOp);
-  HANDLE(MuxPrimOp);
-  HANDLE(PadPrimOp);
-  HANDLE(ShlPrimOp);
-  HANDLE(ShrPrimOp);
-  HANDLE(TailPrimOp);
+  HANDLE(BitsPrimOp, Unhandled);
+  HANDLE(HeadPrimOp, Unhandled);
+  HANDLE(MuxPrimOp, Unhandled);
+  HANDLE(PadPrimOp, Unhandled);
+  HANDLE(ShlPrimOp, Unhandled);
+  HANDLE(ShrPrimOp, Unhandled);
+  HANDLE(TailPrimOp, Unhandled);
 };
 
 } // namespace firrtl

@@ -288,45 +288,12 @@ private:
   /// Emit the specified value as a subexpression to the stream.
   void emitSubExpr(Value exp, SubExprInfo exprInfo);
 
-  void emitUnaryPrefixExpr(Operation *op, SubExprInfo opInfo);
-  void emitBinaryExpr(Operation *op, SubExprInfo opInfo);
   void visitUnhandledExpr(Operation *op, SubExprInfo exprInfo);
 
   using ExprVisitor::visitExpr;
   void visitExpr(ConstantOp op, SubExprInfo info);
-  void visitExpr(AddPrimOp op, SubExprInfo info) { emitBinaryExpr(op, info); }
-  void visitExpr(SubPrimOp op, SubExprInfo info) { emitBinaryExpr(op, info); }
-  void visitExpr(MulPrimOp op, SubExprInfo info) { emitBinaryExpr(op, info); }
-  void visitExpr(DivPrimOp op, SubExprInfo info) { emitBinaryExpr(op, info); }
-  void visitExpr(RemPrimOp op, SubExprInfo info) { emitBinaryExpr(op, info); }
-
-  void visitExpr(AndPrimOp op, SubExprInfo info) { emitBinaryExpr(op, info); }
-  void visitExpr(OrPrimOp op, SubExprInfo info) { emitBinaryExpr(op, info); }
-  void visitExpr(XorPrimOp op, SubExprInfo info) { emitBinaryExpr(op, info); }
-
-  // Comparison Operations
-  void visitExpr(LEQPrimOp op, SubExprInfo info) { emitBinaryExpr(op, info); }
-  void visitExpr(LTPrimOp op, SubExprInfo info) { emitBinaryExpr(op, info); }
-  void visitExpr(GEQPrimOp op, SubExprInfo info) { emitBinaryExpr(op, info); }
-  void visitExpr(GTPrimOp op, SubExprInfo info) { emitBinaryExpr(op, info); }
-  void visitExpr(EQPrimOp op, SubExprInfo info) { emitBinaryExpr(op, info); }
-  void visitExpr(NEQPrimOp op, SubExprInfo info) { emitBinaryExpr(op, info); }
-
-  // Cat, DShl, DShr, ValidIf
-
-  // Unary Prefix operators.
-  void visitExpr(AndRPrimOp op, SubExprInfo info) {
-    emitUnaryPrefixExpr(op, info);
-  }
-  void visitExpr(XorRPrimOp op, SubExprInfo info) {
-    emitUnaryPrefixExpr(op, info);
-  }
-  void visitExpr(OrRPrimOp op, SubExprInfo info) {
-    emitUnaryPrefixExpr(op, info);
-  }
-  void visitExpr(NotPrimOp op, SubExprInfo info) {
-    emitUnaryPrefixExpr(op, info);
-  }
+  void visitBinaryExpr(Operation *op, SubExprInfo info);
+  void visitUnaryExpr(Operation *op, SubExprInfo info);
 
 private:
   llvm::SmallDenseMap<Value, SubExprInfo, 8> subExprInfos;
@@ -431,7 +398,10 @@ void ExprEmitter::emitSubExpr(Value exp, SubExprInfo exprInfo) {
   dispatchExprVisitor(exp.getDefiningOp(), exprInfo);
 }
 
-void ExprEmitter::emitUnaryPrefixExpr(Operation *op, SubExprInfo opInfo) {
+void ExprEmitter::visitUnaryExpr(Operation *op, SubExprInfo opInfo) {
+  if (!opInfo.syntax)
+    return visitUnhandledExpr(op, opInfo);
+
   auto inputInfo = getInfo(op->getOperand(0));
 
   os << opInfo.syntax;
@@ -442,7 +412,10 @@ void ExprEmitter::emitUnaryPrefixExpr(Operation *op, SubExprInfo opInfo) {
     os << ')';
 }
 
-void ExprEmitter::emitBinaryExpr(Operation *op, SubExprInfo opInfo) {
+void ExprEmitter::visitBinaryExpr(Operation *op, SubExprInfo opInfo) {
+  if (!opInfo.syntax)
+    return visitUnhandledExpr(op, opInfo);
+
   auto lhsInfo = getInfo(op->getOperand(0));
   auto rhsInfo = getInfo(op->getOperand(1));
 
