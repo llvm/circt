@@ -40,6 +40,53 @@ circuit Xorr :
 ; CHECK-NEXT:  endmodule
 
 
+  module Precedence :
+    input a: UInt<4>
+    input b: UInt<4>
+    input c: UInt<4>
+    output out: UInt<4>
+    out <= add(a, mul(b, c))
+    out <= add(mul(a, b), c)
+    out <= mul(add(a, b), c)
+    out <= mul(a, add(b, c))
+    out <= mul(add(a, b), add(b, c))
+
+; CHECK-LABEL: module Precedence(
+; CHECK-NEXT:     input  [3:0] a,
+; CHECK-NEXT:     input  [3:0] b,
+; CHECK-NEXT:     input  [3:0] c,
+; CHECK-NEXT:     output [3:0] out);
+
+; FIXME: These are wrong.
+; CHECK-NEXT:     assign out = a + b * c;
+; CHECK-NEXT:     assign out = a * b + c;
+; CHECK-NEXT:     assign out = a + b * c;
+; CHECK-NEXT:     assign out = a * b + c;
+; CHECK-NEXT:     assign out = a + b * b + c;
+; CHECK-NEXT:  endmodule
+
+
+  module Sign :
+    input a: UInt<4>
+    input b: UInt<4>
+    input c: SInt<4>
+    input d: SInt<4>
+    output out: UInt<1>
+    out <= lt(a, b)
+    out <= lt(c, d)
+
+; CHECK-LABEL: module Sign(
+; CHECK-NEXT:     input  [3:0] a,
+; CHECK-NEXT:     input  [3:0] b,
+; CHECK-NEXT:     input  [3:0] c,
+; CHECK-NEXT:     input  [3:0] d,
+; CHECK-NEXT:     output       out);
+
+; FIXME: One of the two of these is wrong.
+; CHECK-NEXT:     assign out = a < b;
+; CHECK-NEXT:     assign out = c < d;
+; CHECK-NEXT:  endmodule
+
   module MultiUseExpr :
     input a: UInt<4>
     output b: UInt<1>

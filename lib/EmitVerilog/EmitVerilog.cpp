@@ -144,17 +144,37 @@ public:
 
   // Expressions
   void emitExpression(Value exp, bool forceRootExpr = false);
-  void emitUnaryPrefixExpr(StringRef opSymbol, Value operand);
-  void emitBinaryExpr(StringRef opSymbol, Value lhs, Value rhs);
+  void emitUnaryPrefixExpr(Operation *op, StringRef opSymbol);
+  void emitBinaryExpr(Operation *op, StringRef opSymbol);
   void visitUnhandledExpr(Operation *op);
 
   using ExprVisitor::visitExpr;
   void visitExpr(ConstantOp op);
-  void visitExpr(RemPrimOp op) { emitBinaryExpr("%", op.lhs(), op.rhs()); }
-  void visitExpr(AndRPrimOp op) { emitUnaryPrefixExpr("&", op.input()); }
-  void visitExpr(XorRPrimOp op) { emitUnaryPrefixExpr("^", op.input()); }
-  void visitExpr(OrRPrimOp op) { emitUnaryPrefixExpr("|", op.input()); }
-  void visitExpr(NotPrimOp op) { emitUnaryPrefixExpr("~", op.input()); }
+  void visitExpr(AddPrimOp op) { emitBinaryExpr(op, "+"); }
+  void visitExpr(SubPrimOp op) { emitBinaryExpr(op, "-"); }
+  void visitExpr(MulPrimOp op) { emitBinaryExpr(op, "*"); }
+  void visitExpr(DivPrimOp op) { emitBinaryExpr(op, "/"); }
+  void visitExpr(RemPrimOp op) { emitBinaryExpr(op, "%"); }
+
+  void visitExpr(AndPrimOp op) { emitBinaryExpr(op, "&"); }
+  void visitExpr(OrPrimOp op) { emitBinaryExpr(op, "|"); }
+  void visitExpr(XorPrimOp op) { emitBinaryExpr(op, "^"); }
+
+  // Comparison Operations
+  void visitExpr(LEQPrimOp op) { emitBinaryExpr(op, "<="); }
+  void visitExpr(LTPrimOp op) { emitBinaryExpr(op, "<"); }
+  void visitExpr(GEQPrimOp op) { emitBinaryExpr(op, ">="); }
+  void visitExpr(GTPrimOp op) { emitBinaryExpr(op, ">"); }
+  void visitExpr(EQPrimOp op) { emitBinaryExpr(op, "=="); }
+  void visitExpr(NEQPrimOp op) { emitBinaryExpr(op, "!="); }
+
+  // Cat, DShl, DShr, ValidIf
+
+  // Unary Prefix operators.
+  void visitExpr(AndRPrimOp op) { emitUnaryPrefixExpr(op, "&"); }
+  void visitExpr(XorRPrimOp op) { emitUnaryPrefixExpr(op, "^"); }
+  void visitExpr(OrRPrimOp op) { emitUnaryPrefixExpr(op, "|"); }
+  void visitExpr(NotPrimOp op) { emitUnaryPrefixExpr(op, "~"); }
 
   // Statements.
   void emitStatementExpression(Operation *op);
@@ -275,16 +295,16 @@ void ModuleEmitter::emitExpression(Value exp, bool forceRootExpr) {
   dispatchExprVisitor(op);
 }
 
-void ModuleEmitter::emitUnaryPrefixExpr(StringRef opSymbol, Value operand) {
+void ModuleEmitter::emitUnaryPrefixExpr(Operation *op, StringRef opSymbol) {
   os << opSymbol;
-  emitExpression(operand);
+  emitExpression(op->getOperand(0));
 }
 
-void ModuleEmitter::emitBinaryExpr(StringRef opSymbol, Value lhs, Value rhs) {
+void ModuleEmitter::emitBinaryExpr(Operation *op, StringRef opSymbol) {
   // FIXME: Handle precedence issues.
-  emitExpression(lhs);
+  emitExpression(op->getOperand(0));
   os << ' ' << opSymbol << ' ';
-  emitExpression(rhs);
+  emitExpression(op->getOperand(1));
 }
 
 void ModuleEmitter::visitExpr(ConstantOp op) {
