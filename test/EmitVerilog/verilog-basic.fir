@@ -20,6 +20,7 @@ circuit Xorr :
 
   module Expressions :
     input in4: UInt<4>
+    input clock: Clock
     output out1: UInt<1>
     output out4: UInt<4>
     out1 <= xorr(in4)
@@ -27,9 +28,12 @@ circuit Xorr :
     out1 <= orr(in4)
     out1 <= not(in4)
     out4 <= rem(in4, UInt<4>("h1"))
+    out1 <= asUInt(clock)
+    out1 <= asUInt(asClock(UInt<1>("h1")))
 
 ; CHECK-LABEL: module Expressions(
 ; CHECK-NEXT:     input  [3:0] in4,
+; CHECK-NEXT:     input        clock,
 ; CHECK-NEXT:     output       out1,
 ; CHECK-NEXT:     output [3:0] out4);
 ; CHECK-NEXT:     assign out1 = ^in4;
@@ -37,6 +41,8 @@ circuit Xorr :
 ; CHECK-NEXT:     assign out1 = |in4;
 ; CHECK-NEXT:     assign out1 = ~in4;
 ; CHECK-NEXT:     assign out4 = in4 % 4'h1;
+; CHECK-NEXT:     assign out1 = clock;
+; CHECK-NEXT:     assign out1 = 1'h1;
 ; CHECK-NEXT:  endmodule
 
 

@@ -247,15 +247,18 @@ namespace {
 /// where a lower number binds tighter.
 enum VerilogPrecedence {
   NonExpression, // Not an inline expression.
-  Unary,         // Symbols and all the unary operators.
-  Multiply,      // * , / , %
-  Addition,      // + , -
-  Shift,         // << , >>
-  Comparison,    // > , >= , < , <=
-  Equality,      // == , !=
-  And,           // &
-  Xor,           // ^ , ^~
-  Or,            // |
+  NoopCast,      // Inherits precedence of its operand.
+
+  // Normal precedence levels.
+  Unary,      // Symbols and all the unary operators.
+  Multiply,   // * , / , %
+  Addition,   // + , -
+  Shift,      // << , >>
+  Comparison, // > , >= , < , <=
+  Equality,   // == , !=
+  And,        // &
+  Xor,        // ^ , ^~
+  Or,         // |
 };
 
 /// This is information precomputed about each subexpression in the tree we
@@ -325,63 +328,95 @@ void ExprEmitter::emitExpression(Value exp, bool forceRootExpr) {
 /// Compute the precedence levels and other information we need for the
 ///  subexpressions in this tree, filling in subExprInfos.
 void ExprEmitter::computeSubExprInfos(Value exp, bool forceRootExpr) {
-  // This is all of the things we want to look at.
-  SmallVector<Value, 8> worklist;
-  worklist.push_back(exp);
+  auto *op = exp.getDefiningOp();
+  bool shouldEmitInlineExpr = op && isExpression(op) &&
+                              (forceRootExpr || isExpressionEmittedInline(op));
 
-  while (!worklist.empty()) {
-    auto exp = worklist.pop_back_val();
-    auto *op = exp.getDefiningOp();
-    bool shouldEmitInlineExpr =
-        op && isExpression(op) &&
-        (forceRootExpr || isExpressionEmittedInline(op));
+  // If this is is an reference to an out-of-line expression or declaration,
+  // just use it.
+  if (!shouldEmitInlineExpr) {
+    subExprInfos[exp] = {NonExpression, nullptr};
+    return;
+  }
 
-    // If this is is an reference to an out-of-line expression or declaration,
-    // just use it.
-    if (!shouldEmitInlineExpr) {
-      subExprInfos[exp] = {NonExpression, nullptr};
-      continue;
+  // Before we calculate information about this operator, calculate info about
+  // each subexpression.
+  for (auto operand : op->getOperands())
+    computeSubExprInfos(operand);
+
+  // Otherwise, we have an expression.  Compute the properties we care about.
+  struct ExprPropertyComputer
+      : public ExprVisitor<ExprPropertyComputer, SubExprInfo> {
+
+    using ExprVisitor::visitExpr;
+    SubExprInfo visitUnhandledExpr(Operation *op) { return {Unary, nullptr}; }
+
+    SubExprInfo visitExpr(AddPrimOp op) { return {Addition, "+"}; }
+    SubExprInfo visitExpr(SubPrimOp op) { return {Addition, "-"}; }
+    SubExprInfo visitExpr(MulPrimOp op) { return {Multiply, "*"}; }
+    SubExprInfo visitExpr(DivPrimOp op) { return {Multiply, "/"}; }
+    SubExprInfo visitExpr(RemPrimOp op) { return {Multiply, "%"}; }
+
+    SubExprInfo visitExpr(AndPrimOp op) { return {And, "&"}; }
+    SubExprInfo visitExpr(OrPrimOp op) { return {Or, "|"}; }
+    SubExprInfo visitExpr(XorPrimOp op) { return {Xor, "^"}; }
+
+    // Comparison Operations
+    SubExprInfo visitExpr(LEQPrimOp op) { return {Comparison, "<="}; }
+    SubExprInfo visitExpr(LTPrimOp op) { return {Comparison, "<"}; }
+    SubExprInfo visitExpr(GEQPrimOp op) { return {Comparison, ">="}; }
+    SubExprInfo visitExpr(GTPrimOp op) { return {Comparison, ">"}; }
+    SubExprInfo visitExpr(EQPrimOp op) { return {Equality, "=="}; }
+    SubExprInfo visitExpr(NEQPrimOp op) { return {Equality, "!="}; }
+
+    // Cat, DShl, DShr, ValidIf
+
+    // Unary Prefix operators.
+    SubExprInfo visitExpr(AndRPrimOp op) { return {Unary, "&"}; }
+    SubExprInfo visitExpr(XorRPrimOp op) { return {Unary, "^"}; }
+    SubExprInfo visitExpr(OrRPrimOp op) { return {Unary, "|"}; }
+    SubExprInfo visitExpr(NotPrimOp op) { return {Unary, "~"}; }
+
+    // Noop cast operators.
+    SubExprInfo visitExpr(AsAsyncResetPrimOp op) { return {NoopCast, ""}; }
+    SubExprInfo visitExpr(AsClockPrimOp op) { return {NoopCast, ""}; }
+
+    SubExprInfo visitExpr(AsUIntPrimOp op) {
+      auto input = op.input().getType();
+      // These casts don't print, because they are already single bit or
+      // unsigned values.
+      if (input.isa<ClockType>() || input.isa<ResetType>() ||
+          input.isa<AsyncResetType>() || input.isa<UIntType>())
+        return {NoopCast, ""};
+
+      // TODO: implement SInt -> UInt.
+      return {Unary, nullptr};
     }
 
-    // Otherwise, we have an expression.  Compute the properties we care about.
-    struct ExprPropertyComputer
-        : public ExprVisitor<ExprPropertyComputer, SubExprInfo> {
+    SubExprInfo visitExpr(AsSIntPrimOp op) {
+      auto input = op.input().getType();
+      // These casts don't print, because they are already single bit or
+      // unsigned values.
+      if (input.isa<ClockType>() || input.isa<ResetType>() ||
+          input.isa<AsyncResetType>() || input.isa<SIntType>())
+        return {NoopCast, ""};
 
-      using ExprVisitor::visitExpr;
-      SubExprInfo visitUnhandledExpr(Operation *op) { return {Unary, ""}; }
+      // TODO: implement UInt -> SInt.
+      return {Unary, nullptr};
+    }
+  };
 
-      SubExprInfo visitExpr(AddPrimOp op) { return {Addition, "+"}; }
-      SubExprInfo visitExpr(SubPrimOp op) { return {Addition, "-"}; }
-      SubExprInfo visitExpr(MulPrimOp op) { return {Multiply, "*"}; }
-      SubExprInfo visitExpr(DivPrimOp op) { return {Multiply, "/"}; }
-      SubExprInfo visitExpr(RemPrimOp op) { return {Multiply, "%"}; }
+  auto result = ExprPropertyComputer().dispatchExprVisitor(op);
 
-      SubExprInfo visitExpr(AndPrimOp op) { return {And, "&"}; }
-      SubExprInfo visitExpr(OrPrimOp op) { return {Or, "|"}; }
-      SubExprInfo visitExpr(XorPrimOp op) { return {Xor, "^"}; }
-
-      // Comparison Operations
-      SubExprInfo visitExpr(LEQPrimOp op) { return {Comparison, "<="}; }
-      SubExprInfo visitExpr(LTPrimOp op) { return {Comparison, "<"}; }
-      SubExprInfo visitExpr(GEQPrimOp op) { return {Comparison, ">="}; }
-      SubExprInfo visitExpr(GTPrimOp op) { return {Comparison, ">"}; }
-      SubExprInfo visitExpr(EQPrimOp op) { return {Equality, "=="}; }
-      SubExprInfo visitExpr(NEQPrimOp op) { return {Equality, "!="}; }
-
-      // Cat, DShl, DShr, ValidIf
-
-      // Unary Prefix operators.
-      SubExprInfo visitExpr(AndRPrimOp op) { return {Unary, "&"}; }
-      SubExprInfo visitExpr(XorRPrimOp op) { return {Unary, "^"}; }
-      SubExprInfo visitExpr(OrRPrimOp op) { return {Unary, "|"}; }
-      SubExprInfo visitExpr(NotPrimOp op) { return {Unary, "~"}; }
-    };
-
-    subExprInfos[exp] = ExprPropertyComputer().dispatchExprVisitor(op);
-
-    // Visit all subexpressions.
-    worklist.append(op->operand_begin(), op->operand_end());
+  // If this is a noop cast, then it doesn't exist in the output, so use the
+  // precedence of its operand instead.
+  if (result.precedence == NoopCast) {
+    result.precedence = getInfo(op->getOperand(0)).precedence;
+    if (result.precedence == NonExpression)
+      result.precedence = Unary;
   }
+
+  subExprInfos[exp] = result;
 }
 
 /// Emit the specified value as a subexpression to the stream.
@@ -404,7 +439,15 @@ void ExprEmitter::visitUnaryExpr(Operation *op, SubExprInfo opInfo) {
 
   auto inputInfo = getInfo(op->getOperand(0));
 
+  // If this is a noop cast, just emit the subexpression.
+  if (opInfo.syntax[0] == '\0')
+    return emitSubExpr(op->getOperand(0), inputInfo);
+
+  // Otherwise emit the prefix operators.
   os << opInfo.syntax;
+
+  // We emit parentheses if the subexpression binds looser than a unary
+  // expression, e.g. all binary expressions.
   if (inputInfo.precedence > Unary)
     os << '(';
   emitSubExpr(op->getOperand(0), inputInfo);
@@ -419,6 +462,8 @@ void ExprEmitter::visitBinaryExpr(Operation *op, SubExprInfo opInfo) {
   auto lhsInfo = getInfo(op->getOperand(0));
   auto rhsInfo = getInfo(op->getOperand(1));
 
+  // We emit parentheses for either operand if they bind looser than the current
+  // operator, e.g. if this is a multiply and the operand is an plus.
   if (opInfo.precedence < lhsInfo.precedence)
     os << '(';
   emitSubExpr(op->getOperand(0), lhsInfo);
@@ -438,7 +483,7 @@ void ExprEmitter::visitExpr(ConstantOp op, SubExprInfo exprInfo) {
   if (resType.getWidthOrSentinel() == -1)
     return visitUnhandledExpr(op, exprInfo);
 
-  os << resType.getWidth() << "'";
+  os << resType.getWidth() << '\'';
   if (resType.isSigned())
     os << 's';
   os << 'h';
