@@ -7,8 +7,19 @@
 #ifndef SPT_DIALECT_FIRPARSER_H
 #define SPT_DIALECT_FIRPARSER_H
 
+namespace llvm {
+class SourceMgr;
+}
+
+namespace mlir {
+class MLIRContext;
+class OwningModuleRef;
+} // namespace mlir
+
 namespace spt {
 
+mlir::OwningModuleRef parseFIRFile(llvm::SourceMgr &sourceMgr,
+                                   mlir::MLIRContext *context);
 void registerFIRParserTranslation();
 
 } // namespace spt

@@ -2217,8 +2217,7 @@ ParseResult FIRCircuitParser::parseCircuit() {
 //===----------------------------------------------------------------------===//
 
 // Parse the specified .fir file into the specified MLIR context.
-static OwningModuleRef parseFIRFile(SourceMgr &sourceMgr,
-                                    MLIRContext *context) {
+OwningModuleRef spt::parseFIRFile(SourceMgr &sourceMgr, MLIRContext *context) {
   auto sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
 
   // This is the result module we are parsing into.

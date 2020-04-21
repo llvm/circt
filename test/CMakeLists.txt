@@ -9,6 +9,7 @@ set(SPT_TEST_DEPENDS
   FileCheck count not
   spt-opt
   spt-translate
+  firtool
   )
 
 add_lit_testsuite(check-spt "Running the SPT regression tests"

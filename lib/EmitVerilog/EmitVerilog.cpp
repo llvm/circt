@@ -320,8 +320,7 @@ void ExprEmitter::emitExpression(Value exp, bool forceRootExpr) {
   // Compute information about subexpressions.
   computeSubExprInfos(exp, forceRootExpr);
 
-  // Okay, this is an expression we should emit inline.  Do this through our
-  // visitor.
+  // Emit the expression.
   emitSubExpr(exp, getInfo(exp));
 }
 
@@ -711,7 +710,7 @@ void CircuitEmitter::emitMLIRModule(ModuleOp module) {
   }
 }
 
-static LogicalResult emitVerilog(ModuleOp module, llvm::raw_ostream &os) {
+LogicalResult spt::emitVerilog(ModuleOp module, llvm::raw_ostream &os) {
   VerilogEmitterState state(os);
   CircuitEmitter(state).emitMLIRModule(module);
   return failure(state.encounteredError);
