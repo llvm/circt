@@ -724,6 +724,10 @@ def AndRPrimOp         : UnaryPrimOp<"andr", "getReductionResult">;
 def OrRPrimOp          : UnaryPrimOp<"orr", "getReductionResult">;
 def XorRPrimOp         : UnaryPrimOp<"xorr", "getReductionResult">;
 
+// This is an MLIR specific pseudo op.
+def AsPassivePrimOp    : UnaryPrimOp<"asPassive", "getAsPassiveResult">;
+
+
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//

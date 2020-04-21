@@ -102,7 +102,7 @@ FIRRTLDialect::FIRRTLDialect(MLIRContext *context)
   // Register operations.
   addOperations<
 #define GET_OP_LIST
-#include "spt/Dialect/FIRRTL/IR/FIRRTL.cpp.inc"
+#include "spt/Dialect/FIRRTL/FIRRTL.cpp.inc"
       >();
 
   // Register interface implementations.
@@ -116,4 +116,4 @@ void FIRRTLDialect::printType(Type type, DialectAsmPrinter &os) const {
 }
 
 // Provide implementations for the enums we use.
-#include "spt/Dialect/FIRRTL/IR/FIRRTLEnums.cpp.inc"
+#include "spt/Dialect/FIRRTL/FIRRTLEnums.cpp.inc"

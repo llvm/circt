@@ -34,6 +34,6 @@ StringAttr getFIRRTLNameAttr(ArrayRef<NamedAttribute> attrs);
 } // namespace spt
 
 // Pull in all enum type definitions and utility function declarations.
-#include "spt/Dialect/FIRRTL/IR/FIRRTLEnums.h.inc"
+#include "spt/Dialect/FIRRTL/FIRRTLEnums.h.inc"
 
 #endif // SPT_DIALECT_FIRRTL_IR_DIALECT_H

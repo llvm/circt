@@ -41,6 +41,7 @@ FIRRTLType getCvtResult(FIRRTLType input);
 FIRRTLType getNegResult(FIRRTLType input);
 FIRRTLType getNotResult(FIRRTLType input);
 FIRRTLType getReductionResult(FIRRTLType input);
+FIRRTLType getAsPassiveResult(FIRRTLType input);
 
 typedef std::pair<StringAttr, FIRRTLType> ModulePortInfo;
 
@@ -58,7 +59,7 @@ namespace spt {
 namespace firrtl {
 
 #define GET_OP_CLASSES
-#include "spt/Dialect/FIRRTL/IR/FIRRTL.h.inc"
+#include "spt/Dialect/FIRRTL/FIRRTL.h.inc"
 
 } // namespace firrtl
 } // namespace spt

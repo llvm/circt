@@ -721,6 +721,10 @@ struct FIRStmtParser : public FIRScopedParser {
 private:
   using SubOpVector = SmallVectorImpl<Operation *>;
 
+  /// Return the input operand if it has passive type, otherwise convert to
+  /// a passive-typed value and return that.
+  Value convertToPassive(Value input, Location loc);
+
   // Exp Parsing
   ParseResult parseExp(Value &result, SubOpVector &subOps,
                        const Twine &message);
@@ -760,6 +764,17 @@ private:
 };
 
 } // end anonymous namespace
+
+/// Return the input operand if it has passive type, otherwise convert to
+/// a passive-typed value and return that.
+Value FIRStmtParser::convertToPassive(Value input, Location loc) {
+  auto inType = input.getType().cast<FIRRTLType>();
+  if (inType.isPassiveType())
+    return input;
+
+  return builder.create<AsPassivePrimOp>(loc, inType.getPassiveType(), input,
+                                         /*optionalName*/ StringAttr());
+}
 
 //===-------------------------------
 // FIRStmtParser Expression Parsing.
@@ -1409,6 +1424,8 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
       parseToken(FIRToken::colon, "expected ':' in when") ||
       parseOptionalInfo(info, subOps))
     return failure();
+
+  condition = convertToPassive(condition, info.getLoc());
 
   // Create the IR representation for the when.
   auto whenStmt = builder.create<WhenOp>(info.getLoc(), condition,

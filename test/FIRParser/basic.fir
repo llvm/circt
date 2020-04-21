@@ -369,3 +369,14 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK:  %f = firrtl.node [[CST15]]
     node f = UInt<4>(15)
     node g = UInt<4>(7)
+
+  ; CHECK-LABEL: firrtl.module @flip_one
+  module flip_one :
+    input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
+    ; CHECK: %0 = firrtl.subfield %bf("int_1")
+    node _T = bf.int_1
+    ; CHECK: %1 = firrtl.asPassive %0 : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
+    when _T :  ; CHECK: firrtl.when %1 {
+      skip
+  
+ 
