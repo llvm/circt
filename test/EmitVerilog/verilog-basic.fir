@@ -137,12 +137,22 @@ circuit Xorr :
     output out: UInt<1>
     defname = FooExtModule
 
+  extmodule MyParameterizedExtModule : 
+    input in: UInt<8>
+    output out: UInt<1>
+    parameter FORMAT = "xyz_timeout=%d"
+    parameter DEFAULT = 0
+    parameter WIDTH = 32
+    parameter DEPTH = 3.5
+
   ; CHECK-LABEL: module UseInstances(
   ; CHECK-NEXT:    input  [7:0] a_in,
   ; CHECK-NEXT:    output       a_out);
   ; CHECK-EMPTY:
   ; CHECK-NEXT:     wire [7:0] xyz_in;
   ; CHECK-NEXT:     wire       xyz_out;
+  ; CHECK-NEXT:     wire [7:0] xyz2_in;
+  ; CHECK-NEXT:     wire       xyz2_out;
   ; CHECK-EMPTY:
   ; CHECK-NEXT:     FooExtModule xyz (
   ; CHECK-NEXT:       .in(xyz_in),
@@ -150,6 +160,13 @@ circuit Xorr :
   ; CHECK-NEXT:     );
   ; CHECK-NEXT:     assign xyz_in = a_in;
   ; CHECK-NEXT:     assign a_out = xyz_out;
+  ; CHECK-NEXT:     MyParameterizedExtModule #(.DEFAULT(0), .DEPTH(3.5{{.*}}), .FORMAT("xyz_timeout=%d"), .WIDTH(32)) xyz2 (
+  ; CHECK-NEXT:       .in(xyz2_in),
+  ; CHECK-NEXT:       .out(xyz2_out)
+  ; CHECK-NEXT:     );
+  ; CHECK-NEXT:     assign xyz2_in = a_in;
+  ; CHECK-NEXT:     assign a_out = xyz2_out;
+
   module UseInstances :
     input a_in: UInt<8>
     output a_out: UInt<1>
@@ -157,4 +174,8 @@ circuit Xorr :
     inst xyz of MyExtModule
     xyz.in <= a_in
     a_out <= xyz.out
+
+    inst xyz2 of MyParameterizedExtModule
+    xyz2.in <= a_in
+    a_out <= xyz2.out
 

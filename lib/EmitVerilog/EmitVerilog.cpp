@@ -597,13 +597,48 @@ void ModuleEmitter::emitStatement(InstanceOp op) {
   // redundant extmodule instances to encode different parameter configurations.
   auto moduleIR = op.getParentOfType<CircuitOp>();
   auto referencedModule = moduleIR.lookupSymbol(defName);
+  FExtModuleOp referencedExtModule;
+
   if (!referencedModule)
     emitOpError(op, "could not find mlir node named @" + defName);
-  else if (auto extModule = dyn_cast<FExtModuleOp>(referencedModule))
-    if (auto defNameAttr = extModule.defname())
+  else if ((referencedExtModule = dyn_cast<FExtModuleOp>(referencedModule)))
+    if (auto defNameAttr = referencedExtModule.defname())
       defName = defNameAttr.getValue();
+  indent() << defName;
 
-  indent() << defName << ' ' << instanceName << " (\n";
+  // Print a parameter constant value in a Verilog compatible way.
+  auto printParmValue = [&](Attribute value) {
+    if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
+      os << intAttr.getValue();
+    } else if (auto strAttr = value.dyn_cast<StringAttr>()) {
+      os << '"';
+      llvm::printEscapedString(strAttr.getValue(), os);
+      os << '"';
+    } else if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
+      // TODO: relying on float printing to be precise is not a good idea.
+      os << fpAttr.getValueAsDouble();
+    } else {
+      os << "<<UNKNOWN MLIRATTR: " << value << ">>";
+      emitOpError(op, "unknown extmodule parameter value");
+    }
+  };
+
+  // If this is a parameterized module, then emit the parameters.
+  if (referencedExtModule)
+    if (auto paramDictOpt = referencedExtModule.parameters()) {
+      DictionaryAttr paramDict = paramDictOpt.getValue();
+      if (!paramDict.empty()) {
+        os << " #(";
+        llvm::interleaveComma(paramDict, os, [&](NamedAttribute elt) {
+          os << '.' << elt.first << '(';
+          printParmValue(elt.second);
+          os << ')';
+        });
+        os << ')';
+      }
+    }
+
+  os << ' ' << instanceName << " (\n";
   // TODO: location information.
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
