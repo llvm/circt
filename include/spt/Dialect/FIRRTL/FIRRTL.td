@@ -800,7 +800,7 @@ def MuxPrimOp : PrimOp<"mux"> {
   }];
 }
 
-def PadPrimOp : PrimOp<"pad", []> {
+def PadPrimOp : PrimOp<"pad"> {
   let arguments = (ins AnyType:$input, I32Attr:$amount,
                        OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
@@ -822,7 +822,7 @@ def PadPrimOp : PrimOp<"pad", []> {
   }];
 }
 
-class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic, []> {
+class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic> {
   let arguments = (ins AnyType:$input, I32Attr:$amount,
                        OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
@@ -847,7 +847,7 @@ class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic, []> {
 def ShlPrimOp : ShiftPrimOp<"shl">;
 def ShrPrimOp : ShiftPrimOp<"shr">;
 
-def TailPrimOp : PrimOp<"tail", []> {
+def TailPrimOp : PrimOp<"tail"> {
   let arguments = (ins AnyType:$input, I32Attr:$amount,
                        OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
