@@ -1560,9 +1560,9 @@ ParseResult FIRStmtParser::parseInstance() {
     return failure();
 
   // Look up the module that is being referenced.
-  auto moduleIR =
+  auto circuit =
       builder.getBlock()->getParentOp()->getParentOfType<CircuitOp>();
-  auto referencedModule = moduleIR.lookupSymbol(moduleName);
+  auto referencedModule = circuit.lookupSymbol(moduleName);
   if (!referencedModule) {
     emitError(info.getFIRLoc(),
               "use of undefined module name '" + moduleName + "' in instance");

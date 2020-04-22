@@ -133,9 +133,28 @@ circuit Xorr :
 
   ; extmodules do not get emitted as anything, but are referenced from instances.
   extmodule MyExtModule :
-    input in: UInt<4>
-    output out: UInt<8>
+    input in: UInt<8>
+    output out: UInt<1>
+    defname = FooExtModule
 
+  ; CHECK-LABEL: module UseInstances(
+  ; CHECK-NEXT:    input  [7:0] a_in,
+  ; CHECK-NEXT:    output       a_out);
+  ; CHECK-EMPTY:
+  ; CHECK-NEXT:     wire [7:0] xyz_in;
+  ; CHECK-NEXT:     wire       xyz_out;
+  ; CHECK-EMPTY:
+  ; CHECK-NEXT:     FooExtModule xyz (
+  ; CHECK-NEXT:       .in(xyz_in),
+  ; CHECK-NEXT:       .out(xyz_out)
+  ; CHECK-NEXT:     );
+  ; CHECK-NEXT:     assign xyz_in = a_in;
+  ; CHECK-NEXT:     assign a_out = xyz_out;
+  module UseInstances :
+    input a_in: UInt<8>
+    output a_out: UInt<1>
 
-
+    inst xyz of MyExtModule
+    xyz.in <= a_in
+    a_out <= xyz.out
 

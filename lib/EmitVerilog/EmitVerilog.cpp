@@ -61,12 +61,50 @@ static unsigned getPrintedIntWidth(unsigned value) {
 /// that uses it.
 static bool isExpressionEmittedInline(Operation *op) {
   // ConstantOp is always emitted inline.
-  // TODO: same for subobjects and other things like that.
-  if (isa<ConstantOp>(op))
+  if (isa<ConstantOp>(op) || isa<SubfieldOp>(op))
     return true;
 
   // Otherwise, if it has multiple uses, emit it out of line.
   return op->getResult(0).hasOneUse();
+}
+
+/// This represents a flattened bundle field element.
+struct FlatBundleFieldEntry {
+  /// This is the underlying ground type of the field.
+  FIRRTLType type;
+  /// This is a suffix to add to the field name to make it unique.
+  std::string suffix;
+  /// This indicates whether the field was flipped to be an output.
+  bool isOutput;
+};
+
+/// Convert a nested bundle of fields into a flat list of fields.  This is used
+/// when working with instances and mems to flatten them.
+static void flattenBundleTypes(FIRRTLType type, StringRef suffixSoFar,
+                               bool isFlipped,
+                               SmallVectorImpl<FlatBundleFieldEntry> &results) {
+  if (auto flip = type.dyn_cast<FlipType>())
+    return flattenBundleTypes(flip.getElementType(), suffixSoFar, !isFlipped,
+                              results);
+
+  // In the base case we record this field.
+  auto bundle = type.dyn_cast<BundleType>();
+  if (!bundle) {
+    results.push_back({type, suffixSoFar.str(), isFlipped});
+    return;
+  }
+
+  SmallString<16> tmpSuffix(suffixSoFar);
+
+  // Otherwise, we have a bundle type.  Break it down.
+  for (auto &elt : bundle.getElements()) {
+    // Construct the suffix to pass down.
+    tmpSuffix.resize(suffixSoFar.size());
+    tmpSuffix.push_back('_');
+    tmpSuffix.append(elt.first.strref());
+    // Recursively process subelements.
+    flattenBundleTypes(elt.second, tmpSuffix, isFlipped, results);
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -149,6 +187,7 @@ public:
   void emitStatementExpression(Operation *op);
   void emitStatement(ConnectOp op);
   void emitStatement(NodeOp op);
+  void emitStatement(InstanceOp op);
   void emitStatement(SkipOp op) {}
   void emitOperation(Operation *op);
 
@@ -297,6 +336,7 @@ private:
   void visitExpr(ConstantOp op, SubExprInfo info);
   void visitBinaryExpr(Operation *op, SubExprInfo info);
   void visitUnaryExpr(Operation *op, SubExprInfo info);
+  void visitExpr(SubfieldOp op, SubExprInfo info);
 
 private:
   llvm::SmallDenseMap<Value, SubExprInfo, 8> subExprInfos;
@@ -379,6 +419,10 @@ void ExprEmitter::computeSubExprInfos(Value exp, bool forceRootExpr) {
     // Noop cast operators.
     SubExprInfo visitExpr(AsAsyncResetPrimOp op) { return {NoopCast, ""}; }
     SubExprInfo visitExpr(AsClockPrimOp op) { return {NoopCast, ""}; }
+
+    // Magic.
+    // TODO(verilog-dialect): eliminate SubfieldOp.
+    SubExprInfo visitExpr(SubfieldOp op) { return {Unary, "."}; }
 
     SubExprInfo visitExpr(AsUIntPrimOp op) {
       auto input = op.input().getType();
@@ -492,6 +536,15 @@ void ExprEmitter::visitExpr(ConstantOp op, SubExprInfo exprInfo) {
   os << valueStr;
 }
 
+void ExprEmitter::visitExpr(SubfieldOp op, SubExprInfo exprInfo) {
+  auto opInfo = getInfo(op.getOperand());
+  // We only handle subfield references derived from instances/mems/etc.
+  if (opInfo.precedence > Unary)
+    return visitUnhandledExpr(op, exprInfo);
+  emitSubExpr(op.getOperand(), opInfo);
+  os << '_' << op.fieldname();
+}
+
 void ExprEmitter::visitUnhandledExpr(Operation *op, SubExprInfo exprInfo) {
   emitter.emitOpError(op, "cannot emit this expression to Verilog");
   os << "<<unsupported expr: " << op->getName().getStringRef() << ">>";
@@ -534,6 +587,37 @@ void ModuleEmitter::emitStatement(NodeOp op) {
   // TODO: location information too.
 }
 
+void ModuleEmitter::emitStatement(InstanceOp op) {
+  auto instanceName = getName(op.getResult());
+  StringRef defName = op.moduleName();
+
+  // If this is referencing an extmodule with a specified defname, then use
+  // the defName from it as the actual module name we reference.  This exists
+  // because FIRRTL is not parameterized like verilog is - it introduces
+  // redundant extmodule instances to encode different parameter configurations.
+  auto moduleIR = op.getParentOfType<CircuitOp>();
+  auto referencedModule = moduleIR.lookupSymbol(defName);
+  if (!referencedModule)
+    emitOpError(op, "could not find mlir node named @" + defName);
+  else if (auto extModule = dyn_cast<FExtModuleOp>(referencedModule))
+    if (auto defNameAttr = extModule.defname())
+      defName = defNameAttr.getValue();
+
+  indent() << defName << ' ' << instanceName << " (\n";
+  // TODO: location information.
+
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+  flattenBundleTypes(op.getResult().getType().cast<FIRRTLType>(), "", false,
+                     fieldTypes);
+  for (auto &elt : fieldTypes) {
+    assert(!elt.suffix.empty() && "instance should always return a BundleType");
+    bool isLast = &elt == &fieldTypes.back();
+    indent() << "  ." << StringRef(elt.suffix).drop_front() << '('
+             << instanceName << elt.suffix << (isLast ? ")\n" : "),\n");
+  }
+  indent() << ");\n";
+}
+
 //===----------------------------------------------------------------------===//
 // Module Driver
 //===----------------------------------------------------------------------===//
@@ -553,6 +637,8 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       return "wire";
   };
 
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+
   for (auto &op : block) {
     // If the op has no results, then it doesn't produce a name.
     if (op.getNumResults() == 0)
@@ -564,57 +650,76 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     if (isExpression(&op) && isExpressionEmittedInline(&op))
       continue;
 
-    auto result = op.getResult(0);
+    Value result = op.getResult(0);
 
     // Otherwise, it must be an expression or a declaration like a wire.
     addName(result, op.getAttrOfType<StringAttr>("name"));
 
-    // Determine what kind of thing this is, and emit a declaration.
+    // FIXME(verilog dialect): This can cause name collisions, because the base
+    // name may be unique but the suffixed names may not be.  The right way to
+    // solve this is to change the instances and mems in a new Verilog dialect
+    // to use multiple return values, exposing the independent Value's.
+
+    // Determine what kind of thing this is, and how much space it needs.
     maxDeclNameWidth =
         std::max(getVerilogDeclWord(result).size(), maxDeclNameWidth);
 
+    // Flatten the type for processing of each individual element.
     auto type = result.getType().cast<FIRRTLType>();
-    int bitWidth = getBitWidthOrSentinel(type);
-    if (bitWidth == -1) {
-      emitError(&op, getName(result) + " has an unsupported verilog type ")
-          << type;
-      continue;
-    }
+    fieldTypes.clear();
+    flattenBundleTypes(type, "", false, fieldTypes);
 
-    if (bitWidth != 1) { // Width 1 is implicit.
-      // Add 5 to count the width of the "[:0] ".
-      size_t thisWidth = getPrintedIntWidth(bitWidth - 1) + 5;
-      maxTypeWidth = std::max(thisWidth, maxTypeWidth);
+    for (const auto &elt : fieldTypes) {
+      int bitWidth = getBitWidthOrSentinel(elt.type);
+      if (bitWidth == -1) {
+        emitError(&op, getName(result))
+            << elt.suffix << " has an unsupported verilog type " << type;
+        result = Value();
+        break;
+      }
+
+      if (bitWidth != 1) { // Width 1 is implicit.
+        // Add 5 to count the width of the "[:0] ".
+        size_t thisWidth = getPrintedIntWidth(bitWidth - 1) + 5;
+        maxTypeWidth = std::max(thisWidth, maxTypeWidth);
+      }
     }
 
     // Emit this declaration.
-    declsToEmit.push_back(result);
+    if (result)
+      declsToEmit.push_back(result);
   }
 
   // Okay, now that we have measured the things to emit, emit the things.
   for (auto result : declsToEmit) {
     auto word = getVerilogDeclWord(result);
 
-    indent() << word;
-    os.indent(maxDeclNameWidth - word.size() + 1);
+    // Flatten the type for processing of each individual element.
+    auto type = result.getType().cast<FIRRTLType>();
+    fieldTypes.clear();
+    flattenBundleTypes(type, "", false, fieldTypes);
 
-    // If there are any widths, emit this one.
-    if (maxTypeWidth) {
-      auto type = result.getType().cast<FIRRTLType>();
-      int bitWidth = getBitWidthOrSentinel(type);
-      assert(bitWidth != -1 && "sentinel handled above");
+    for (const auto &elt : fieldTypes) {
+      indent() << word;
+      os.indent(maxDeclNameWidth - word.size() + 1);
 
-      unsigned emittedWidth = 0;
-      if (bitWidth != 1) {
-        os << '[' << (bitWidth - 1) << ":0]";
-        emittedWidth = getPrintedIntWidth(bitWidth - 1) + 4;
+      // If there are any widths, emit this one.
+      if (maxTypeWidth) {
+        int bitWidth = getBitWidthOrSentinel(elt.type);
+        assert(bitWidth != -1 && "sentinel handled above");
+
+        unsigned emittedWidth = 0;
+        if (bitWidth != 1) {
+          os << '[' << (bitWidth - 1) << ":0]";
+          emittedWidth = getPrintedIntWidth(bitWidth - 1) + 4;
+        }
+
+        os.indent(maxTypeWidth - emittedWidth);
       }
 
-      os.indent(maxTypeWidth - emittedWidth);
+      os << getName(result) << elt.suffix << ";\n";
+      // TODO: Emit locator info.
     }
-
-    os << getName(result) << ";\n";
-    // TODO: Emit locator info.
   }
 
   if (!declsToEmit.empty())
@@ -632,10 +737,11 @@ void ModuleEmitter::emitOperation(Operation *op) {
   // Handle statements.
   // TODO: Refactor out to visitors.
   bool isStatement = false;
-  TypeSwitch<Operation *>(op).Case<ConnectOp, NodeOp, SkipOp>([&](auto stmt) {
-    isStatement = true;
-    this->emitStatement(stmt);
-  });
+  TypeSwitch<Operation *>(op).Case<ConnectOp, NodeOp, InstanceOp, SkipOp>(
+      [&](auto stmt) {
+        isStatement = true;
+        this->emitStatement(stmt);
+      });
   if (isStatement)
     return;
 
