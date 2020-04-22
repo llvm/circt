@@ -333,7 +333,11 @@ private:
   void visitExpr(ConstantOp op, SubExprInfo info);
   void visitBinaryExpr(Operation *op, SubExprInfo info);
   void visitUnaryExpr(Operation *op, SubExprInfo info);
+
   void visitExpr(SubfieldOp op, SubExprInfo info);
+  void visitExpr(BitsPrimOp op, SubExprInfo info);
+  void visitExpr(ShlPrimOp op, SubExprInfo info);
+  void visitExpr(ShrPrimOp op, SubExprInfo info);
 
 private:
   llvm::SmallDenseMap<Value, SubExprInfo, 8> subExprInfos;
@@ -416,6 +420,11 @@ void ExprEmitter::computeSubExprInfos(Value exp, bool forceRootExpr) {
     // Noop cast operators.
     SubExprInfo visitExpr(AsAsyncResetPrimOp op) { return {NoopCast, ""}; }
     SubExprInfo visitExpr(AsClockPrimOp op) { return {NoopCast, ""}; }
+
+    // Other
+    SubExprInfo visitExpr(BitsPrimOp op) { return {Unary, ""}; }
+    SubExprInfo visitExpr(ShlPrimOp op) { return {Unary, ""}; }
+    SubExprInfo visitExpr(ShrPrimOp op) { return {Unary, ""}; }
 
     // Magic.
     // TODO(verilog-dialect): eliminate SubfieldOp.
@@ -540,6 +549,52 @@ void ExprEmitter::visitExpr(SubfieldOp op, SubExprInfo exprInfo) {
     return visitUnhandledExpr(op, exprInfo);
   emitSubExpr(op.getOperand(), opInfo);
   os << '_' << op.fieldname();
+}
+
+void ExprEmitter::visitExpr(BitsPrimOp op, SubExprInfo info) {
+  auto opInfo = getInfo(op.getOperand());
+  // Parenthesize the base if necessary.
+  if (opInfo.precedence > Unary)
+    os << '(';
+  emitSubExpr(op.getOperand(), opInfo);
+  if (opInfo.precedence > Unary)
+    os << ')';
+
+  os << '[' << op.hi();
+  if (op.hi() != op.lo())
+    os << ':' << op.lo();
+  os << ']';
+}
+
+// TODO(verilog dialect): There is no need to persist shifts. They are
+// apparently only needed for width inference.
+void ExprEmitter::visitExpr(ShlPrimOp op, SubExprInfo info) {
+  // shl(x, 4) ==> {x, 4'h0}
+  os << '{';
+  emitSubExpr(op.getOperand(), getInfo(op.getOperand()));
+  os << ", " << op.amount() << "'h0}";
+}
+
+// TODO(verilog dialect): There is no need to persist shifts. They are
+// apparently only needed for width inference.
+void ExprEmitter::visitExpr(ShrPrimOp op, SubExprInfo info) {
+  auto inWidth = op.getOperand().getType().cast<IntType>().getWidthOrSentinel();
+  unsigned shiftAmount = op.amount().getLimitedValue();
+  if (inWidth == -1 || shiftAmount >= unsigned(inWidth))
+    return visitUnhandledExpr(op, info);
+
+  auto opInfo = getInfo(op.getOperand());
+  // Parenthesize the base if necessary.
+  if (opInfo.precedence > Unary)
+    os << '(';
+  emitSubExpr(op.getOperand(), opInfo);
+  if (opInfo.precedence > Unary)
+    os << ')';
+
+  os << '[' << (inWidth - 1);
+  if (shiftAmount != unsigned(inWidth - 1)) // Emit x[4] instead of x[4:4].
+    os << ':' << shiftAmount;
+  os << ']';
 }
 
 void ExprEmitter::visitUnhandledExpr(Operation *op, SubExprInfo exprInfo) {

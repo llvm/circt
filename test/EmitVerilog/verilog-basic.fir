@@ -30,12 +30,17 @@ circuit Xorr :
     out4 <= rem(in4, UInt<4>("h1"))
     out1 <= asUInt(clock)
     out1 <= asUInt(asClock(UInt<1>("h1")))
+    node x1 = bits(in4, 1, 0)
+    node x2 = or(shr(in4, 2), shl(bits(in4, 2, 2), 1))
 
 ; CHECK-LABEL: module Expressions(
 ; CHECK-NEXT:     input  [3:0] in4,
 ; CHECK-NEXT:     input        clock,
 ; CHECK-NEXT:     output       out1,
 ; CHECK-NEXT:     output [3:0] out4);
+; CHECK-EMPTY:
+; CHECK-NEXT:     wire [1:0] x1;
+; CHECK-NEXT:     wire [1:0] x2;
 ; CHECK-EMPTY:
 ; CHECK-NEXT:     assign out1 = ^in4;
 ; CHECK-NEXT:     assign out1 = &in4;
@@ -44,6 +49,8 @@ circuit Xorr :
 ; CHECK-NEXT:     assign out4 = in4 % 4'h1;
 ; CHECK-NEXT:     assign out1 = clock;
 ; CHECK-NEXT:     assign out1 = 1'h1;
+; CHECK-NEXT:     assign x1 = in4[1:0];
+; CHECK-NEXT:     assign x2 = in4[3:2] | {in4[2], 1'h0};
 ; CHECK-NEXT:  endmodule
 
 
