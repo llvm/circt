@@ -8,6 +8,7 @@ circuit Xorr :
 ; CHECK-LABEL: module inputs_only(
 ; CHECK-NEXT:    input  a,
 ; CHECK-NEXT:    input  b);
+; CHECK-EMPTY:
 ; CHECK-NEXT:  endmodule
 
 
@@ -36,6 +37,7 @@ circuit Xorr :
 ; CHECK-NEXT:     input        clock,
 ; CHECK-NEXT:     output       out1,
 ; CHECK-NEXT:     output [3:0] out4);
+; CHECK-EMPTY:
 ; CHECK-NEXT:     assign out1 = ^in4;
 ; CHECK-NEXT:     assign out1 = &in4;
 ; CHECK-NEXT:     assign out1 = |in4;
@@ -67,6 +69,7 @@ circuit Xorr :
 ; CHECK-NEXT:     input  [3:0] c,
 ; CHECK-NEXT:     output       out1,
 ; CHECK-NEXT:     output [3:0] out);
+; CHECK-EMPTY:
 
 ; CHECK-NEXT:     assign out = a + b * c;
 ; CHECK-NEXT:     assign out = a * b + c;
@@ -94,6 +97,7 @@ circuit Xorr :
 ; CHECK-NEXT:     input  [3:0] c,
 ; CHECK-NEXT:     input  [3:0] d,
 ; CHECK-NEXT:     output       out);
+; CHECK-EMPTY:
 
 ; FIXME: One of the two of these is wrong.
 ; CHECK-NEXT:     assign out = a < b;
@@ -106,13 +110,23 @@ circuit Xorr :
     ;; This disappears in MLIR because of the _T name.  The verilog emitter
     ;; needs to reintroduce it as an 'assign' to a local.
     node _T_42 = andr(xorr(a))
+    node _T_99 = add(a, a)
     b <= andr(_T_42)
     b <= xorr(_T_42)
+    b <= andr(_T_99)
+    b <= xorr(_T_99)
 
 ; CHECK-LABEL: module MultiUseExpr(
 ; CHECK-NEXT:    input  [3:0] a,
 ; CHECK-NEXT:    output       b);
+; CHECK-EMPTY:
+; CHECK-NEXT:    wire       _T;
+; CHECK-NEXT:    wire [4:0] _T_0;
+; CHECK-EMPTY:
 ; CHECK-NEXT:    assign _T = &^a;
+; CHECK-NEXT:    assign _T_0 = a + a;
 ; CHECK-NEXT:    assign b = &_T;
 ; CHECK-NEXT:    assign b = ^_T;
+; CHECK-NEXT:    assign b = &_T_0;
+; CHECK-NEXT:    assign b = ^_T_0;
 ; CHECK-NEXT:  endmodule

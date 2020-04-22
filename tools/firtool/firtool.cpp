@@ -6,13 +6,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
-//#include "mlir/Pass/Pass.h"
-#include "mlir/Pass/PassManager.h"
-//#include "mlir/Pass/PassRegistry.h"
 #include "mlir/IR/Module.h"
 #include "mlir/Parser.h"
+#include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
-//#include "mlir/Transforms/Passes.h"
 #include "spt/Dialect/FIRRTL/Dialect.h"
 #include "spt/EmitVerilog.h"
 #include "spt/FIRParser.h"
@@ -86,11 +83,6 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
-
-  // Register the standard passes we want.
-  //#define GEN_PASS_REGISTRATION_Canonicalizer
-  //#define GEN_PASS_REGISTRATION_CSE
-  //#include "mlir/Transforms/Passes.h.inc"
 
   // Register any pass manager command line options.
   registerMLIRContextCLOptions();

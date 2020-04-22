@@ -148,11 +148,11 @@ public:
   // Statements.
   void emitStatementExpression(Operation *op);
   void emitStatement(ConnectOp op);
+  void emitStatement(NodeOp op);
   void emitStatement(SkipOp op) {}
   void emitOperation(Operation *op);
 
-  void collectNames(FModuleOp module);
-  void collectOpNames(Operation *op);
+  void collectNamesEmitDecls(Block &block);
   void addName(Value value, StringRef name);
   void addName(Value value, StringAttr nameAttr) {
     addName(value, nameAttr ? nameAttr.getValue() : "");
@@ -526,46 +526,99 @@ void ModuleEmitter::emitStatement(ConnectOp op) {
   // TODO: location information too.
 }
 
+void ModuleEmitter::emitStatement(NodeOp op) {
+  indent() << "assign " << getName(op.getResult());
+  os << " = ";
+  emitExpression(op.input());
+  os << ";\n";
+  // TODO: location information too.
+}
+
 //===----------------------------------------------------------------------===//
 // Module Driver
 //===----------------------------------------------------------------------===//
 
-/// Build up the symbol table for all of the values that need names in the
-/// module.
-void ModuleEmitter::collectNames(FModuleOp module) {
-  SmallVector<ModulePortInfo, 8> portInfo;
-  module.getPortInfo(portInfo);
+void ModuleEmitter::collectNamesEmitDecls(Block &block) {
+  // In the first pass, we fill in the symbol table, calculate the max width of
+  // the declaration words and the max type width.
+  size_t maxDeclNameWidth = 0, maxTypeWidth = 0;
+  SmallVector<Value, 16> declsToEmit;
 
-  size_t nextPort = 0;
-  for (auto &port : portInfo)
-    addName(module.getArgument(nextPort++), port.first);
+  // Return the word (e.g. "wire") in Verilog to declare the specified thing.
+  auto getVerilogDeclWord = [](Value result) -> StringRef {
+    // FIXME: what about mems?
+    if (isa<RegOp>(result.getDefiningOp()))
+      return "reg";
+    else
+      return "wire";
+  };
 
-  for (auto &op : *module.getBodyBlock())
-    collectOpNames(&op);
-}
+  for (auto &op : block) {
+    // If the op has no results, then it doesn't produce a name.
+    if (op.getNumResults() == 0)
+      continue;
 
-void ModuleEmitter::collectOpNames(Operation *op) {
-  // If the op has no results, then it doesn't produce a name.
-  if (op->getNumResults() == 0) {
-    // When has no results, but it does have a body!
-    if (auto when = dyn_cast<WhenOp>(op)) {
-      for (auto &op : when.thenRegion().front())
-        collectOpNames(&op);
-      if (when.hasElseRegion())
-        for (auto &op : when.elseRegion().front())
-          collectOpNames(&op);
+    assert(op.getNumResults() == 1 && "firrtl only has single-op results");
+
+    // If the expression is inline, it doesn't need a name.
+    if (isExpression(&op) && isExpressionEmittedInline(&op))
+      continue;
+
+    auto result = op.getResult(0);
+
+    // Otherwise, it must be an expression or a declaration like a wire.
+    addName(result, op.getAttrOfType<StringAttr>("name"));
+
+    // Determine what kind of thing this is, and emit a declaration.
+    maxDeclNameWidth =
+        std::max(getVerilogDeclWord(result).size(), maxDeclNameWidth);
+
+    auto type = result.getType().cast<FIRRTLType>();
+    int bitWidth = getBitWidthOrSentinel(type);
+    if (bitWidth == -1) {
+      emitError(&op, getName(result) + " has an unsupported verilog type ")
+          << type;
+      continue;
     }
-    return;
+
+    if (bitWidth != 1) { // Width 1 is implicit.
+      // Add 5 to count the width of the "[:0] ".
+      size_t thisWidth = getPrintedIntWidth(bitWidth - 1) + 5;
+      maxTypeWidth = std::max(thisWidth, maxTypeWidth);
+    }
+
+    // Emit this declaration.
+    declsToEmit.push_back(result);
   }
 
-  assert(op->getNumResults() == 1 && "firrtl only has single-op results");
+  // Okay, now that we have measured the things to emit, emit the things.
+  for (auto result : declsToEmit) {
+    auto word = getVerilogDeclWord(result);
 
-  // If the expression is inline, it doesn't need a name.
-  if (isExpression(op) && isExpressionEmittedInline(op))
-    return;
+    indent() << word;
+    os.indent(maxDeclNameWidth - word.size() + 1);
 
-  // Otherwise, it must be an expression or a declaration like a wire.
-  addName(op->getResult(0), op->getAttrOfType<StringAttr>("name"));
+    // If there are any widths, emit this one.
+    if (maxTypeWidth) {
+      auto type = result.getType().cast<FIRRTLType>();
+      int bitWidth = getBitWidthOrSentinel(type);
+      assert(bitWidth != -1 && "sentinel handled above");
+
+      unsigned emittedWidth = 0;
+      if (bitWidth != 1) {
+        os << '[' << (bitWidth - 1) << ":0]";
+        emittedWidth = getPrintedIntWidth(bitWidth - 1) + 4;
+      }
+
+      os.indent(maxTypeWidth - emittedWidth);
+    }
+
+    os << getName(result) << ";\n";
+    // TODO: Emit locator info.
+  }
+
+  if (!declsToEmit.empty())
+    os << '\n';
 }
 
 void ModuleEmitter::emitOperation(Operation *op) {
@@ -579,7 +632,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
   // Handle statements.
   // TODO: Refactor out to visitors.
   bool isStatement = false;
-  TypeSwitch<Operation *>(op).Case<ConnectOp, SkipOp>([&](auto stmt) {
+  TypeSwitch<Operation *>(op).Case<ConnectOp, NodeOp, SkipOp>([&](auto stmt) {
     isStatement = true;
     this->emitStatement(stmt);
   });
@@ -594,19 +647,20 @@ void ModuleEmitter::emitOperation(Operation *op) {
 }
 
 void ModuleEmitter::emitFModule(FModuleOp module) {
-  // Build our name table.
-  collectNames(module);
-
-  os << "module " << module.getName() << '(';
-
-  // Determine the width of the widest type we have to print so everything
-  // lines up nicely.
+  // Add all the ports to the name table.
   SmallVector<ModulePortInfo, 8> portInfo;
   module.getPortInfo(portInfo);
 
+  size_t nextPort = 0;
+  for (auto &port : portInfo)
+    addName(module.getArgument(nextPort++), port.first);
+
+  os << "module " << module.getName() << '(';
   if (!portInfo.empty())
     os << '\n';
 
+  // Determine the width of the widest type we have to print so everything
+  // lines up nicely.
   unsigned maxTypeWidth = 0;
   for (auto &port : portInfo) {
     int bitWidth = getBitWidthOrSentinel(port.second);
@@ -656,12 +710,16 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
     if (&port != &portInfo.back())
       os << ',';
     else
-      os << ");";
-    os << "\n";
+      os << ");\n";
+    os << '\n';
   }
 
   if (portInfo.empty())
     os << ");\n";
+
+  // Build up the symbol table for all of the values that need names in the
+  // module.
+  collectNamesEmitDecls(*module.getBodyBlock());
 
   // Emit the body.
   for (auto &op : *module.getBodyBlock()) {
