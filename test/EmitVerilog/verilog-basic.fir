@@ -18,7 +18,6 @@ circuit Xorr :
 ; CHECK-LABEL: module no_ports();
 ; CHECK-NEXT:  endmodule
 
-
   module Expressions :
     input in4: UInt<4>
     input clock: Clock
@@ -130,3 +129,13 @@ circuit Xorr :
 ; CHECK-NEXT:    assign b = &_T_0;
 ; CHECK-NEXT:    assign b = ^_T_0;
 ; CHECK-NEXT:  endmodule
+
+
+  ; extmodules do not get emitted as anything, but are referenced from instances.
+  extmodule MyExtModule :
+    input in: UInt<4>
+    output out: UInt<8>
+
+
+
+

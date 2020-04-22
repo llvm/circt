@@ -754,8 +754,15 @@ void CircuitEmitter::emitCircuit(CircuitOp circuit) {
   for (auto &op : *circuit.getBody()) {
     if (auto module = dyn_cast<FModuleOp>(op)) {
       ModuleEmitter(state).emitFModule(module);
-    } else if (!isa<DoneOp>(op))
-      op.emitError("unknown operation");
+      continue;
+    }
+
+    // Ignore the done terminator at the end of the circuit.
+    // Ignore 'ext modules'.
+    if (isa<DoneOp>(op) || isa<FExtModuleOp>(op))
+      continue;
+
+    op.emitError("unknown operation");
   }
 }
 
