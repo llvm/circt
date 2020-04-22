@@ -295,6 +295,8 @@ enum VerilogPrecedence {
   And,        // &
   Xor,        // ^ , ^~
   Or,         // |
+
+  LowestPrecedence // Sentinel which is always the lowest precedence.
 };
 
 /// This is information precomputed about each subexpression in the tree we
@@ -325,19 +327,19 @@ private:
   SubExprInfo getInfo(Value exp) const;
 
   /// Emit the specified value as a subexpression to the stream.
-  void emitSubExpr(Value exp, SubExprInfo exprInfo);
+  void emitSubExpr(Value exp, VerilogPrecedence parenthesizeIfLooserThan);
 
   void visitUnhandledExpr(Operation *op, SubExprInfo exprInfo);
 
   using ExprVisitor::visitExpr;
-  void visitExpr(ConstantOp op, SubExprInfo info);
-  void visitBinaryExpr(Operation *op, SubExprInfo info);
-  void visitUnaryExpr(Operation *op, SubExprInfo info);
+  void visitExpr(ConstantOp op, SubExprInfo opInfo);
+  void visitBinaryExpr(Operation *op, SubExprInfo opInfo);
+  void visitUnaryExpr(Operation *op, SubExprInfo opInfo);
 
-  void visitExpr(SubfieldOp op, SubExprInfo info);
-  void visitExpr(BitsPrimOp op, SubExprInfo info);
-  void visitExpr(ShlPrimOp op, SubExprInfo info);
-  void visitExpr(ShrPrimOp op, SubExprInfo info);
+  void visitExpr(SubfieldOp op, SubExprInfo opInfo);
+  void visitExpr(BitsPrimOp op, SubExprInfo opInfo);
+  void visitExpr(ShlPrimOp op, SubExprInfo opInfo);
+  void visitExpr(ShrPrimOp op, SubExprInfo opInfo);
 
 private:
   llvm::SmallDenseMap<Value, SubExprInfo, 8> subExprInfos;
@@ -362,7 +364,7 @@ void ExprEmitter::emitExpression(Value exp, bool forceRootExpr) {
   computeSubExprInfos(exp, forceRootExpr);
 
   // Emit the expression.
-  emitSubExpr(exp, getInfo(exp));
+  emitSubExpr(exp, LowestPrecedence);
 }
 
 /// Compute the precedence levels and other information we need for the
@@ -469,62 +471,50 @@ void ExprEmitter::computeSubExprInfos(Value exp, bool forceRootExpr) {
 }
 
 /// Emit the specified value as a subexpression to the stream.
-void ExprEmitter::emitSubExpr(Value exp, SubExprInfo exprInfo) {
+void ExprEmitter::emitSubExpr(Value exp,
+                              VerilogPrecedence parenthesizeIfLooserThan) {
   // If this is a non-expr or shouldn't be done inline, just refer to its
   // name.
+  auto exprInfo = getInfo(exp);
   if (exprInfo.precedence == NonExpression) {
     os << emitter.getName(exp);
     return;
   }
 
+  // If this subexpression would bind looser than the expression it is bound
+  // into, then we need to parenthesize it.
+  if (exprInfo.precedence > parenthesizeIfLooserThan)
+    os << '(';
+
   // Okay, this is an expression we should emit inline.  Do this through our
   // visitor.
   dispatchExprVisitor(exp.getDefiningOp(), exprInfo);
+
+  if (exprInfo.precedence > parenthesizeIfLooserThan)
+    os << ')';
 }
 
 void ExprEmitter::visitUnaryExpr(Operation *op, SubExprInfo opInfo) {
   if (!opInfo.syntax)
     return visitUnhandledExpr(op, opInfo);
 
-  auto inputInfo = getInfo(op->getOperand(0));
-
   // If this is a noop cast, just emit the subexpression.
   if (opInfo.syntax[0] == '\0')
-    return emitSubExpr(op->getOperand(0), inputInfo);
+    return emitSubExpr(op->getOperand(0),
+                       getInfo(op->getOperand(0)).precedence);
 
   // Otherwise emit the prefix operators.
   os << opInfo.syntax;
-
-  // We emit parentheses if the subexpression binds looser than a unary
-  // expression, e.g. all binary expressions.
-  if (inputInfo.precedence > Unary)
-    os << '(';
-  emitSubExpr(op->getOperand(0), inputInfo);
-  if (inputInfo.precedence > Unary)
-    os << ')';
+  emitSubExpr(op->getOperand(0), opInfo.precedence);
 }
 
 void ExprEmitter::visitBinaryExpr(Operation *op, SubExprInfo opInfo) {
   if (!opInfo.syntax)
     return visitUnhandledExpr(op, opInfo);
 
-  auto lhsInfo = getInfo(op->getOperand(0));
-  auto rhsInfo = getInfo(op->getOperand(1));
-
-  // We emit parentheses for either operand if they bind looser than the current
-  // operator, e.g. if this is a multiply and the operand is an plus.
-  if (opInfo.precedence < lhsInfo.precedence)
-    os << '(';
-  emitSubExpr(op->getOperand(0), lhsInfo);
-  if (opInfo.precedence < lhsInfo.precedence)
-    os << ')';
+  emitSubExpr(op->getOperand(0), opInfo.precedence);
   os << ' ' << opInfo.syntax << ' ';
-
-  if (opInfo.precedence < rhsInfo.precedence)
-    os << '(';
-  emitSubExpr(op->getOperand(1), rhsInfo);
-  if (opInfo.precedence < rhsInfo.precedence)
-    os << ')';
+  emitSubExpr(op->getOperand(1), opInfo.precedence);
 }
 
 void ExprEmitter::visitExpr(ConstantOp op, SubExprInfo exprInfo) {
@@ -542,24 +532,13 @@ void ExprEmitter::visitExpr(ConstantOp op, SubExprInfo exprInfo) {
   os << valueStr;
 }
 
-void ExprEmitter::visitExpr(SubfieldOp op, SubExprInfo exprInfo) {
-  auto opInfo = getInfo(op.getOperand());
-  // We only handle subfield references derived from instances/mems/etc.
-  if (opInfo.precedence > Unary)
-    return visitUnhandledExpr(op, exprInfo);
-  emitSubExpr(op.getOperand(), opInfo);
+void ExprEmitter::visitExpr(SubfieldOp op, SubExprInfo opInfo) {
+  emitSubExpr(op.getOperand(), opInfo.precedence);
   os << '_' << op.fieldname();
 }
 
-void ExprEmitter::visitExpr(BitsPrimOp op, SubExprInfo info) {
-  auto opInfo = getInfo(op.getOperand());
-  // Parenthesize the base if necessary.
-  if (opInfo.precedence > Unary)
-    os << '(';
-  emitSubExpr(op.getOperand(), opInfo);
-  if (opInfo.precedence > Unary)
-    os << ')';
-
+void ExprEmitter::visitExpr(BitsPrimOp op, SubExprInfo opInfo) {
+  emitSubExpr(op.getOperand(), opInfo.precedence);
   os << '[' << op.hi();
   if (op.hi() != op.lo())
     os << ':' << op.lo();
@@ -568,28 +547,22 @@ void ExprEmitter::visitExpr(BitsPrimOp op, SubExprInfo info) {
 
 // TODO(verilog dialect): There is no need to persist shifts. They are
 // apparently only needed for width inference.
-void ExprEmitter::visitExpr(ShlPrimOp op, SubExprInfo info) {
+void ExprEmitter::visitExpr(ShlPrimOp op, SubExprInfo opInfo) {
   // shl(x, 4) ==> {x, 4'h0}
   os << '{';
-  emitSubExpr(op.getOperand(), getInfo(op.getOperand()));
+  emitSubExpr(op.getOperand(), LowestPrecedence);
   os << ", " << op.amount() << "'h0}";
 }
 
 // TODO(verilog dialect): There is no need to persist shifts. They are
 // apparently only needed for width inference.
-void ExprEmitter::visitExpr(ShrPrimOp op, SubExprInfo info) {
+void ExprEmitter::visitExpr(ShrPrimOp op, SubExprInfo opInfo) {
   auto inWidth = op.getOperand().getType().cast<IntType>().getWidthOrSentinel();
   unsigned shiftAmount = op.amount().getLimitedValue();
   if (inWidth == -1 || shiftAmount >= unsigned(inWidth))
-    return visitUnhandledExpr(op, info);
+    return visitUnhandledExpr(op, opInfo);
 
-  auto opInfo = getInfo(op.getOperand());
-  // Parenthesize the base if necessary.
-  if (opInfo.precedence > Unary)
-    os << '(';
-  emitSubExpr(op.getOperand(), opInfo);
-  if (opInfo.precedence > Unary)
-    os << ')';
+  emitSubExpr(op.getOperand(), opInfo.precedence);
 
   os << '[' << (inWidth - 1);
   if (shiftAmount != unsigned(inWidth - 1)) // Emit x[4] instead of x[4:4].
@@ -597,7 +570,7 @@ void ExprEmitter::visitExpr(ShrPrimOp op, SubExprInfo info) {
   os << ']';
 }
 
-void ExprEmitter::visitUnhandledExpr(Operation *op, SubExprInfo exprInfo) {
+void ExprEmitter::visitUnhandledExpr(Operation *op, SubExprInfo opInfo) {
   emitter.emitOpError(op, "cannot emit this expression to Verilog");
   os << "<<unsupported expr: " << op->getName().getStringRef() << ">>";
 }
