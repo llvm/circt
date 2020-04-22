@@ -15,7 +15,7 @@ firrtl.circuit "Circuit" {
                     %out : !firrtl.uint<8> { firrtl.name = "88^42"}) {
   }
   // CHECK: module M2(
-  // CHECK:   input  [7:0] some_name,
-  // CHECK:   input  [7:0] _885E42);
+  // CHECK:   input [7:0] some_name,
+  // CHECK:   input [7:0] _885E42);
   // CHECK: endmodule
 }

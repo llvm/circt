@@ -33,9 +33,6 @@ static int getBitWidthOrSentinel(FIRRTLType type) {
   case FIRRTLType::UInt:
     return type.cast<IntType>().getWidthOrSentinel();
 
-  case FIRRTLType::Flip:
-    return getBitWidthOrSentinel(type.cast<FlipType>().getElementType());
-
   default:
     return -1;
   };
@@ -802,9 +799,15 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
 
   // Determine the width of the widest type we have to print so everything
   // lines up nicely.
+  bool hasOutputs = false;
   unsigned maxTypeWidth = 0;
   for (auto &port : portInfo) {
-    int bitWidth = getBitWidthOrSentinel(port.second);
+    auto portType = port.second;
+    if (auto flip = portType.dyn_cast<FlipType>()) {
+      portType = flip.getElementType();
+      hasOutputs = true;
+    }
+    int bitWidth = getBitWidthOrSentinel(portType);
     if (bitWidth == -1 || bitWidth == 1)
       continue; // The error case is handled below.
 
@@ -827,7 +830,7 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
       portType = flip.getElementType();
       os << "output";
     } else {
-      os << "input ";
+      os << (hasOutputs ? "input " : "input");
     }
 
     unsigned emittedWidth = 0;

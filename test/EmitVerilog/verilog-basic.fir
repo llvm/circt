@@ -6,8 +6,8 @@ circuit Xorr :
     input b: UInt<1>
 
 ; CHECK-LABEL: module inputs_only(
-; CHECK-NEXT:    input  a,
-; CHECK-NEXT:    input  b);
+; CHECK-NEXT:    input a,
+; CHECK-NEXT:    input b);
 ; CHECK-EMPTY:
 ; CHECK-NEXT:  endmodule
 
