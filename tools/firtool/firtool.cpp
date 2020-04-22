@@ -41,6 +41,11 @@ static cl::opt<std::string> outputFilename("o", cl::desc("Output filename"),
                                            cl::value_desc("filename"),
                                            cl::init("-"));
 
+static cl::opt<bool>
+    ignoreFIRLocations("ignore-fir-locators",
+                       cl::desc("ignore the @info locations in the .fir file"),
+                       cl::init(true));
+
 enum OutputFormatKind { OutputMLIR, OutputVerilog, OutputDisabled };
 
 static cl::opt<OutputFormatKind> outputFormat(
@@ -61,9 +66,11 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
 
   OwningModuleRef module;
-  if (inputFormat == InputFIRFile)
-    module = parseFIRFile(sourceMgr, &context);
-  else {
+  if (inputFormat == InputFIRFile) {
+    FIRParserOptions options;
+    options.ignoreInfoLocators = ignoreFIRLocations;
+    module = parseFIRFile(sourceMgr, &context, options);
+  } else {
     assert(inputFormat == InputMLIRFile);
     module = parseSourceFile(sourceMgr, &context);
   }

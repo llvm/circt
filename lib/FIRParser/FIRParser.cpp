@@ -45,11 +45,16 @@ namespace {
 /// such as the current lexer position.  This is separated out from the parser
 /// so that individual subparsers can refer to the same state.
 struct GlobalFIRParserState {
-  GlobalFIRParserState(const llvm::SourceMgr &sourceMgr, MLIRContext *context)
-      : context(context), lex(sourceMgr, context), curToken(lex.lexToken()) {}
+  GlobalFIRParserState(const llvm::SourceMgr &sourceMgr, MLIRContext *context,
+                       FIRParserOptions options)
+      : context(context), options(options), lex(sourceMgr, context),
+        curToken(lex.lexToken()) {}
 
   /// The context we're parsing into.
   MLIRContext *const context;
+
+  // Options that control the behavior of the parser.
+  const FIRParserOptions options;
 
   /// The lexer for the source file we're parsing.
   FIRLexer lex;
@@ -328,6 +333,11 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
     return unknownFormat();
   if (!colStr.empty() && colStr.getAsInteger(10, columnNo))
     return unknownFormat();
+
+  // If info locators are ignored, don't actually apply them.  We still do all
+  // the verification above though.
+  if (state.options.ignoreInfoLocators)
+    return success();
 
   auto resultLoc =
       FileLineColLoc::get(filename, lineNo, columnNo, getContext());
@@ -2217,7 +2227,8 @@ ParseResult FIRCircuitParser::parseCircuit() {
 //===----------------------------------------------------------------------===//
 
 // Parse the specified .fir file into the specified MLIR context.
-OwningModuleRef spt::parseFIRFile(SourceMgr &sourceMgr, MLIRContext *context) {
+OwningModuleRef spt::parseFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
+                                  FIRParserOptions options) {
   auto sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
 
   // This is the result module we are parsing into.
@@ -2225,7 +2236,7 @@ OwningModuleRef spt::parseFIRFile(SourceMgr &sourceMgr, MLIRContext *context) {
       FileLineColLoc::get(sourceBuf->getBufferIdentifier(), /*line=*/0,
                           /*column=*/0, context)));
 
-  GlobalFIRParserState state(sourceMgr, context);
+  GlobalFIRParserState state(sourceMgr, context, options);
   if (FIRCircuitParser(state, *module).parseCircuit())
     return nullptr;
 
