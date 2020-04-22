@@ -2063,7 +2063,6 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   portList.reserve(portListAndLoc.size());
   for (auto &elt : portListAndLoc)
     portList.push_back(elt.first);
-  auto fmodule = builder.create<FExtModuleOp>(info.getLoc(), name, portList);
 
   // Add all the ports to the symbol table even though there are no SSA values
   // for arguments in an external module.  This detects multiple definitions
@@ -2075,37 +2074,77 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
 
   // Parse a defname if present.
   // TODO(firrtl spec): defname isn't documented at all, what is it?
+  StringRef defName;
   if (consumeIf(FIRToken::kw_defname)) {
-    StringRef defName;
     if (parseToken(FIRToken::equal, "expected '=' in defname") ||
         parseId(defName, "expected defname name"))
       return failure();
   }
 
-  // FIXME: Build a representation of this defname.
-  (void)fmodule;
+  SmallVector<NamedAttribute, 4> parameters;
+  SmallPtrSet<Identifier, 8> seenNames;
 
   // Parse the parameter list.
   while (consumeIf(FIRToken::kw_parameter)) {
+    auto loc = getToken().getLoc();
     StringRef paramName;
     if (parseId(paramName, "expected parameter name") ||
         parseToken(FIRToken::equal, "expected '=' in parameter"))
       return failure();
 
-    // FIXME: This isn't right.
-    if (getToken().isAny(FIRToken::integer, FIRToken::string,
-                         FIRToken::floatingpoint))
-      consumeToken();
-    else
+    Attribute value;
+    switch (getToken().getKind()) {
+    default:
       return emitError("expected parameter value"), failure();
+
+    case FIRToken::integer: {
+      APInt result;
+      if (getTokenSpelling().getAsInteger(10, result))
+        return emitError("invalid integer parameter"), failure();
+      value = builder.getIntegerAttr(
+          builder.getIntegerType(result.getBitWidth()), result);
+      consumeToken(FIRToken::integer);
+      break;
+    }
+    case FIRToken::string: {
+      // Drop the quotes.
+      auto spelling = getTokenSpelling();
+      assert(spelling.front() == '"' && spelling.back() == '"');
+      spelling = spelling.drop_back().drop_front();
+      // TODO(string extmodule parameters): Should unescape the string?
+      value = builder.getStringAttr(spelling);
+      consumeToken(FIRToken::string);
+      break;
+    }
+
+    case FIRToken::floatingpoint:
+      double v;
+      if (!llvm::to_float(getTokenSpelling(), v))
+        return emitError("invalid float parameter syntax"), failure();
+
+      value = builder.getF64FloatAttr(v);
+      consumeToken(FIRToken::floatingpoint);
+      break;
+    }
+
+    auto nameId = builder.getIdentifier(paramName);
+    if (!seenNames.insert(nameId).second)
+      return emitError(loc, "redefinition of parameter '" + paramName + "'");
+    parameters.push_back({nameId, value});
   }
 
-  // FIXME: Build a record of this parameter.
+  auto fmodule =
+      builder.create<FExtModuleOp>(info.getLoc(), name, portList, defName);
+
+  if (!parameters.empty())
+    fmodule.setAttr("parameters",
+                    DictionaryAttr::get(parameters, getContext()));
 
   return success();
 }
 
-/// module ::= 'module' id ':' info? INDENT portlist simple_stmt_block DEDENT
+/// module ::= 'module' id ':' info? INDENT portlist simple_stmt_block
+/// DEDENT
 ///
 ParseResult FIRModuleParser::parseModule(unsigned indent) {
   LocWithInfo info(getToken().getLoc(), this);
@@ -2193,8 +2232,9 @@ ParseResult FIRCircuitParser::parseCircuit() {
     case FIRToken::eof:
       return success();
 
-    // If we got an error token, then the lexer already emitted an error, just
-    // stop.  We could introduce error recovery if there was demand for it.
+    // If we got an error token, then the lexer already emitted an error,
+    // just stop.  We could introduce error recovery if there was demand for
+    // it.
     case FIRToken::error:
       return failure();
 

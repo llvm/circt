@@ -99,3 +99,9 @@ circuit test :
     ; expected-error @+1 {{use of undefined module name 'some_module' in instance}}
     inst xyz of some_module
  
+;// -----
+
+circuit test :
+  extmodule MyParameterizedExtModule :
+    parameter DEFAULT = 0
+    parameter DEFAULT = 32 ; expected-error {{redefinition of parameter 'DEFAULT'}}

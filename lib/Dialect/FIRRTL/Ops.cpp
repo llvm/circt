@@ -133,8 +133,11 @@ void FModuleOp::build(Builder *builder, OperationState &result, StringAttr name,
 
 void FExtModuleOp::build(Builder *builder, OperationState &result,
                          StringAttr name,
-                         ArrayRef<std::pair<StringAttr, FIRRTLType>> ports) {
+                         ArrayRef<std::pair<StringAttr, FIRRTLType>> ports,
+                         StringRef defnameAttr) {
   buildModule(builder, result, name, ports);
+  if (!defnameAttr.empty())
+    result.addAttribute("defname", builder->getStringAttr(defnameAttr));
 }
 
 // TODO: This ia a clone of mlir::impl::printFunctionSignature, refactor it to

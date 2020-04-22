@@ -169,14 +169,16 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
     Verilog module, including a given name, a list of ports, and a body that
     represents the connections within the module.
   }];
-  let arguments = (ins);
+  let arguments = (ins OptionalAttr<StrAttr>:$defname,
+                       OptionalAttr<DictionaryAttr>:$parameters);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<"Builder *builder, OperationState &result, StringAttr name, "
-              "ArrayRef<std::pair<StringAttr, FIRRTLType>> ports">
+              "ArrayRef<std::pair<StringAttr, FIRRTLType>> ports, "
+              "StringRef defnameAttr = StringRef()">
   ];
 
   let extraClassDeclaration = [{

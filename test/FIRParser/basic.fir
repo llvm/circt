@@ -19,20 +19,27 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
 
   ; CHECK: }
 
-  ; CHECK-LABEL: firrtl.extmodule @MyExtModule(!firrtl.uint {firrtl.name = "in"}, !firrtl.flip<uint<8>> {firrtl.name = "out"})
+  ; CHECK-LABEL: firrtl.extmodule @MyExtModule(!firrtl.uint {firrtl.name = "in"},
+  ; CHECK: !firrtl.flip<uint<8>> {firrtl.name = "out"})
+  ; CHECK: attributes {defname = "myextmodule"}
   ; CHECK-NOT: {
   extmodule MyExtModule : 
     input in: UInt
     output ,,, out ,,: ,, UInt,<,8,>  ; Commas are whitespace
+    defname = myextmodule
 
-
-; CHECK-LABEL: firrtl.extmodule @MyParameterizedExtModule(!firrtl.uint {firrtl.name = "in"}, !firrtl.flip<uint<8>> {firrtl.name = "out"})
+  ; CHECK-LABEL: firrtl.extmodule @MyParameterizedExtModule(!firrtl.uint {firrtl.name = "in"}, !firrtl.flip<uint<8>> {firrtl.name = "out"})
+  ; CHECK: attributes {defname = "name_thing",
+  ; CHECK: parameters = {DEFAULT = 0 : i64,
+  ; CHECK:               DEPTH = 3.242000e+01 : f64,
+  ; CHECK:               FORMAT = "xyz_timeout=%d",
+  ; CHECK:               WIDTH = 32 : i8}}
   ; CHECK-NOT: {
   extmodule MyParameterizedExtModule : 
     input in: UInt
     output out: UInt<8>
     defname = name_thing
-    parameter FORMAT = "tilelink_timeout=%d"
+    parameter FORMAT = "xyz_timeout=%d"
     parameter DEFAULT = 0
     parameter WIDTH = 32
     parameter DEPTH = 32.42
