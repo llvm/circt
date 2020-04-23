@@ -96,6 +96,7 @@ circuit Xorr :
     output out: UInt<1>
     out <= lt(a, b)
     out <= lt(c, d)
+    ;out <= lt(asSInt(a), asSInt(b))
 
 ; CHECK-LABEL: module Sign(
 ; CHECK-NEXT:     input  [3:0] a,
