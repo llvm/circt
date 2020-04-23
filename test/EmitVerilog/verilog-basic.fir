@@ -60,6 +60,8 @@ circuit Xorr :
     input c: UInt<4>
     output out1: UInt<1>
     output out: UInt<4>
+    out <= add(a, add(b, c))
+    out <= sub(add(a, b), c)
     out <= add(a, mul(b, c))
     out <= add(mul(a, b), c)
     out <= mul(add(a, b), c)
@@ -77,6 +79,8 @@ circuit Xorr :
 ; CHECK-NEXT:     output [3:0] out);
 ; CHECK-EMPTY:
 
+; CHECK-NEXT:     assign out = a + b + c;
+; CHECK-NEXT:     assign out = a + b - c;
 ; CHECK-NEXT:     assign out = a + b * c;
 ; CHECK-NEXT:     assign out = a * b + c;
 ; CHECK-NEXT:     assign out = (a + b) * c;
@@ -96,7 +100,8 @@ circuit Xorr :
     output out: UInt<1>
     out <= lt(a, b)
     out <= lt(c, d)
-    ;out <= lt(asSInt(a), asSInt(b))
+    out <= lt(asSInt(a), asSInt(b))
+    out <= eq(asSInt(a), asSInt(b))
 
 ; CHECK-LABEL: module Sign(
 ; CHECK-NEXT:     input  [3:0] a,
@@ -105,10 +110,10 @@ circuit Xorr :
 ; CHECK-NEXT:     input  [3:0] d,
 ; CHECK-NEXT:     output       out);
 ; CHECK-EMPTY:
-
-; FIXME: One of the two of these is wrong.
 ; CHECK-NEXT:     assign out = a < b;
-; CHECK-NEXT:     assign out = c < d;
+; CHECK-NEXT:     assign out = $signed(c) < $signed(d);
+; CHECK-NEXT:     assign out = $signed(a) < $signed(b);
+; CHECK-NEXT:     assign out = a == b;
 ; CHECK-NEXT:  endmodule
 
   module MultiUseExpr :

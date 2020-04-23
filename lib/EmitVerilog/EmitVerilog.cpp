@@ -297,13 +297,38 @@ enum VerilogPrecedence {
   ForceEmitMultiUse, // Sentinel saying to recursively emit a multi-used expr.
 };
 
+/// This enum keeps track of whether the emitted subexpression is signed or
+/// unsigned as seen from the Verilog language perspective.
+enum SubExprSignedness { IsSigned, IsUnsigned };
+
 /// This is information precomputed about each subexpression in the tree we
 /// are emitting as a unit.
 struct SubExprInfo {
   /// The precedence of this expression.
   VerilogPrecedence precedence;
+
+  /// The signedness of the expression.
+  SubExprSignedness signedness;
+
+  SubExprInfo(VerilogPrecedence precedence, SubExprSignedness signedness)
+      : precedence(precedence), signedness(signedness) {}
 };
 } // namespace
+
+/// Return the signedness of the specified type.
+static SubExprSignedness getSignednessOfValue(Value v) {
+  switch (v.getType().getKind()) {
+  default:
+    assert(0 && "unsupported type");
+  case FIRRTLType::Clock:
+  case FIRRTLType::Reset:
+  case FIRRTLType::AsyncReset:
+    return IsUnsigned;
+  case FIRRTLType::SInt:
+  case FIRRTLType::UInt:
+    return v.getType().cast<IntType>().isSigned() ? IsSigned : IsUnsigned;
+  }
+}
 
 namespace {
 /// This builds a recursively nested expression from an SSA use-def graph.  This
@@ -321,8 +346,8 @@ public:
 
 private:
   /// Emit the specified value as a subexpression to the stream.
-  SubExprInfo emitSubExpr(Value exp,
-                          VerilogPrecedence parenthesizeIfLooserThan);
+  SubExprInfo emitSubExpr(Value exp, VerilogPrecedence parenthesizeIfLooserThan,
+                          bool forceExpectedSign = false);
 
   SubExprInfo visitUnhandledExpr(Operation *op);
 
@@ -330,15 +355,34 @@ private:
   SubExprInfo visitExpr(ConstantOp op);
   SubExprInfo emitBinary(Operation *op, VerilogPrecedence prec,
                          const char *syntax) {
-    emitSubExpr(op->getOperand(0), prec);
+    auto lhsInfo = emitSubExpr(op->getOperand(0), prec);
     os << ' ' << syntax << ' ';
-    emitSubExpr(op->getOperand(1), prec);
-    return {prec};
+    auto rhsInfo = emitSubExpr(op->getOperand(1), prec);
+
+    // The result is signed if both operands are signed.
+    SubExprSignedness signedness;
+    if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
+      signedness = IsSigned;
+    else
+      signedness = IsUnsigned;
+
+    return {prec, signedness};
   }
-  SubExprInfo emitUnary(Operation *op, const char *syntax) {
+
+  /// Emit the specified subexpression in a context where the sign matters,
+  /// e.g. for a less than comparison or divide.
+  SubExprInfo emitSignedBinary(Operation *op, VerilogPrecedence prec,
+                               const char *syntax) {
+
+    emitSubExpr(op->getOperand(0), prec, /*forceExpectedSign:*/ true);
+    os << ' ' << syntax << ' ';
+    emitSubExpr(op->getOperand(1), prec, /*forceExpectedSign:*/ true);
+    return {prec, getSignednessOfValue(op->getResult(0))};
+  }
+  SubExprInfo emitUnary(Operation *op, const char *syntax, bool forceUnsigned) {
     os << syntax;
-    emitSubExpr(op->getOperand(0), Unary);
-    return {Unary};
+    auto signedness = emitSubExpr(op->getOperand(0), Unary).signedness;
+    return {Unary, forceUnsigned ? IsUnsigned : signedness};
   }
   SubExprInfo emitNoopCast(Operation *op) {
     return emitSubExpr(op->getOperand(0), LowestPrecedence);
@@ -347,8 +391,12 @@ private:
   SubExprInfo visitExpr(AddPrimOp op) { return emitBinary(op, Addition, "+"); }
   SubExprInfo visitExpr(SubPrimOp op) { return emitBinary(op, Addition, "-"); }
   SubExprInfo visitExpr(MulPrimOp op) { return emitBinary(op, Multiply, "*"); }
-  SubExprInfo visitExpr(DivPrimOp op) { return emitBinary(op, Multiply, "/"); }
-  SubExprInfo visitExpr(RemPrimOp op) { return emitBinary(op, Multiply, "%"); }
+  SubExprInfo visitExpr(DivPrimOp op) {
+    return emitSignedBinary(op, Multiply, "/");
+  }
+  SubExprInfo visitExpr(RemPrimOp op) {
+    return emitSignedBinary(op, Multiply, "%");
+  }
 
   SubExprInfo visitExpr(AndPrimOp op) { return emitBinary(op, And, "&"); }
   SubExprInfo visitExpr(OrPrimOp op) { return emitBinary(op, Or, "|"); }
@@ -356,51 +404,37 @@ private:
 
   // Comparison Operations
   SubExprInfo visitExpr(LEQPrimOp op) {
-    return emitBinary(op, Comparison, "<=");
+    return emitSignedBinary(op, Comparison, "<=");
   }
-  SubExprInfo visitExpr(LTPrimOp op) { return emitBinary(op, Comparison, "<"); }
+  SubExprInfo visitExpr(LTPrimOp op) {
+    return emitSignedBinary(op, Comparison, "<");
+  }
   SubExprInfo visitExpr(GEQPrimOp op) {
-    return emitBinary(op, Comparison, ">=");
+    return emitSignedBinary(op, Comparison, ">=");
   }
-  SubExprInfo visitExpr(GTPrimOp op) { return emitBinary(op, Comparison, ">"); }
+  SubExprInfo visitExpr(GTPrimOp op) {
+    return emitSignedBinary(op, Comparison, ">");
+  }
   SubExprInfo visitExpr(EQPrimOp op) { return emitBinary(op, Equality, "=="); }
   SubExprInfo visitExpr(NEQPrimOp op) { return emitBinary(op, Equality, "!="); }
 
   // Cat, DShl, DShr, ValidIf
 
   // Unary Prefix operators.
-  SubExprInfo visitExpr(AndRPrimOp op) { return emitUnary(op, "&"); }
-  SubExprInfo visitExpr(XorRPrimOp op) { return emitUnary(op, "^"); }
-  SubExprInfo visitExpr(OrRPrimOp op) { return emitUnary(op, "|"); }
-  SubExprInfo visitExpr(NotPrimOp op) { return emitUnary(op, "~"); }
+  SubExprInfo visitExpr(AndRPrimOp op) { return emitUnary(op, "&", true); }
+  SubExprInfo visitExpr(XorRPrimOp op) { return emitUnary(op, "^", true); }
+  SubExprInfo visitExpr(OrRPrimOp op) { return emitUnary(op, "|", true); }
+  SubExprInfo visitExpr(NotPrimOp op) { return emitUnary(op, "~", false); }
 
   // Noop cast operators.
   SubExprInfo visitExpr(AsAsyncResetPrimOp op) { return emitNoopCast(op); }
   SubExprInfo visitExpr(AsClockPrimOp op) { return emitNoopCast(op); }
 
-  SubExprInfo visitExpr(AsUIntPrimOp op) {
-    auto input = op.input().getType();
-    // These casts don't print, because they are already single bit or
-    // unsigned values.
-    if (input.isa<ClockType>() || input.isa<ResetType>() ||
-        input.isa<AsyncResetType>() || input.isa<UIntType>())
-      return emitNoopCast(op);
-
-    // TODO: implement SInt -> UInt.
-    return visitUnhandledExpr(op);
-  }
-
-  SubExprInfo visitExpr(AsSIntPrimOp op) {
-    auto input = op.input().getType();
-    // These casts don't print, because they are already single bit or
-    // unsigned values.
-    if (input.isa<ClockType>() || input.isa<ResetType>() ||
-        input.isa<AsyncResetType>() || input.isa<SIntType>())
-      return emitNoopCast(op);
-
-    // TODO: implement UInt -> SInt.
-    return visitUnhandledExpr(op);
-  }
+  // Signedness tracks the verilog sign, not the FIRRTL sign, so we don't need
+  // to emit anything for AsSInt/AsUInt.  Their results will get casted by the
+  // client as necessary.
+  SubExprInfo visitExpr(AsUIntPrimOp op) { return emitNoopCast(op); }
+  SubExprInfo visitExpr(AsSIntPrimOp op) { return emitNoopCast(op); }
 
   // Other
   SubExprInfo visitExpr(SubfieldOp op);
@@ -430,9 +464,9 @@ void ExprEmitter::emitExpression(Value exp, bool forceRootExpr,
 }
 
 /// Emit the specified value as a subexpression to the stream.
-SubExprInfo
-ExprEmitter::emitSubExpr(Value exp,
-                         VerilogPrecedence parenthesizeIfLooserThan) {
+SubExprInfo ExprEmitter::emitSubExpr(Value exp,
+                                     VerilogPrecedence parenthesizeIfLooserThan,
+                                     bool forceExpectedSign) {
   auto *op = exp.getDefiningOp();
   bool shouldEmitInlineExpr = op && isExpression(op);
 
@@ -444,8 +478,12 @@ ExprEmitter::emitSubExpr(Value exp,
   // If this is a non-expr or shouldn't be done inline, just refer to its
   // name.
   if (!shouldEmitInlineExpr) {
+    if (forceExpectedSign && getSignednessOfValue(exp) != IsUnsigned) {
+      os << "$signed(" << emitter.getName(exp) << ')';
+      return {Unary, IsSigned};
+    }
     os << emitter.getName(exp);
-    return {Unary};
+    return {Unary, IsUnsigned};
   }
 
   unsigned subExprStartIndex = resultBuffer.size();
@@ -454,14 +492,23 @@ ExprEmitter::emitSubExpr(Value exp,
   // visitor.
   auto expInfo = dispatchExprVisitor(exp.getDefiningOp());
 
-  // If this subexpression would bind looser than the expression it is bound
-  // into, then we need to parenthesize it.  Insert the parentheses
-  // retroactively.
-  if (expInfo.precedence > parenthesizeIfLooserThan)
-    resultBuffer.insert(resultBuffer.begin() + subExprStartIndex, '(');
-
-  if (expInfo.precedence > parenthesizeIfLooserThan)
+  // Check cases where we have to insert things before the expression now that
+  // we know things about it.
+  if (forceExpectedSign && getSignednessOfValue(exp) != expInfo.signedness) {
+    // If the sign of the result matters and we emitted something with the
+    // wrong sign, correct it.
+    StringRef cast = expInfo.signedness == IsSigned ? "$unsigned(" : "$signed(";
+    resultBuffer.insert(resultBuffer.begin() + subExprStartIndex, cast.begin(),
+                        cast.end());
     os << ')';
+
+  } else if (expInfo.precedence > parenthesizeIfLooserThan) {
+    // If this subexpression would bind looser than the expression it is bound
+    // into, then we need to parenthesize it.  Insert the parentheses
+    // retroactively.
+    resultBuffer.insert(resultBuffer.begin() + subExprStartIndex, '(');
+    os << ')';
+  }
 
   return expInfo;
 }
@@ -479,14 +526,14 @@ SubExprInfo ExprEmitter::visitExpr(ConstantOp op) {
   SmallString<32> valueStr;
   op.value().toStringUnsigned(valueStr, 16);
   os << valueStr;
-  return {Unary};
+  return {Unary, resType.isSigned() ? IsSigned : IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitExpr(SubfieldOp op) {
   auto prec = emitSubExpr(op.getOperand(), Unary);
   assert(prec.precedence == Unary);
   os << '_' << op.fieldname();
-  return {Unary};
+  return {Unary, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitExpr(BitsPrimOp op) {
@@ -495,7 +542,7 @@ SubExprInfo ExprEmitter::visitExpr(BitsPrimOp op) {
   if (op.hi() != op.lo())
     os << ':' << op.lo();
   os << ']';
-  return {Unary};
+  return {Unary, IsUnsigned};
 }
 
 // TODO(verilog dialect): There is no need to persist shifts. They are
@@ -505,7 +552,7 @@ SubExprInfo ExprEmitter::visitExpr(ShlPrimOp op) {
   os << '{';
   emitSubExpr(op.getOperand(), LowestPrecedence);
   os << ", " << op.amount() << "'h0}";
-  return {Unary};
+  return {Unary, IsUnsigned};
 }
 
 // TODO(verilog dialect): There is no need to persist shifts. They are
@@ -522,13 +569,13 @@ SubExprInfo ExprEmitter::visitExpr(ShrPrimOp op) {
   if (shiftAmount != unsigned(inWidth - 1)) // Emit x[4] instead of x[4:4].
     os << ':' << shiftAmount;
   os << ']';
-  return {Unary};
+  return {Unary, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
   emitter.emitOpError(op, "cannot emit this expression to Verilog");
   os << "<<unsupported expr: " << op->getName().getStringRef() << ">>";
-  return {Unary};
+  return {Unary, IsUnsigned};
 }
 
 //===----------------------------------------------------------------------===//
