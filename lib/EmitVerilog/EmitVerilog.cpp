@@ -54,10 +54,25 @@ static unsigned getPrintedIntWidth(unsigned value) {
   return stream.str().size();
 }
 
+/// Return true if this is a noop cast that will emit with no syntax.
+static bool isNoopCast(Operation *op) {
+  // These are always noop casts.
+  if (isa<AsAsyncResetPrimOp>(op) || isa<AsClockPrimOp>(op) ||
+      isa<AsUIntPrimOp>(op) || isa<AsSIntPrimOp>(op))
+    return true;
+
+  // cvt from signed is noop.
+  if (isa<CvtPrimOp>(op) &&
+      op->getOperand(0).getType().cast<IntType>().isSigned())
+    return true;
+
+  return false;
+}
+
 /// Return true if this expression should be emitted inline into any statement
 /// that uses it.
 static bool isExpressionEmittedInline(Operation *op) {
-  // ConstantOp is always emitted inline.
+  // These are always emitted inline even if multiply referenced.
   if (isa<ConstantOp>(op) || isa<SubfieldOp>(op))
     return true;
 
@@ -102,6 +117,14 @@ static void flattenBundleTypes(FIRRTLType type, StringRef suffixSoFar,
     // Recursively process subelements.
     flattenBundleTypes(elt.second, tmpSuffix, isFlipped, results);
   }
+}
+
+/// Do a best-effort job of looking through noop cast operations.
+static Value lookThroughNoopCasts(Value value) {
+  if (auto *op = value.getDefiningOp())
+    if (isNoopCast(op) && isExpressionEmittedInline(op))
+      return lookThroughNoopCasts(op->getOperand(0));
+  return value;
 }
 
 //===----------------------------------------------------------------------===//
@@ -353,6 +376,13 @@ private:
 
   using ExprVisitor::visitExpr;
   SubExprInfo visitExpr(ConstantOp op);
+
+  /// Emit a verilog concatenation of the specified values.  If the before or
+  /// after strings are specified, they are included as prefix/postfix elements
+  /// of the concatenation, respectively.
+  SubExprInfo emitCat(ArrayRef<Value> values, StringRef before = StringRef(),
+                      StringRef after = StringRef());
+
   SubExprInfo emitBinary(Operation *op, VerilogPrecedence prec,
                          const char *syntax, bool hasStrictSign = false) {
     auto lhsInfo = emitSubExpr(op->getOperand(0), prec, hasStrictSign);
@@ -363,9 +393,8 @@ private:
     // This isn't needed on the LHS, because the relevant Verilog operators are
     // left-associative.
     //
-    // Note: this check is a bit conservative, because it isn't ignoring noop
-    // casts so they could lead to unnecessary parens.
-    auto *rhsOperandOp = op->getOperand(1).getDefiningOp();
+    auto *rhsOperandOp =
+        lookThroughNoopCasts(op->getOperand(1)).getDefiningOp();
     auto rhsPrec = VerilogPrecedence(prec - 1);
     if (rhsOperandOp && op->getName() == rhsOperandOp->getName())
       rhsPrec = prec;
@@ -452,7 +481,8 @@ private:
 
   // Other
   SubExprInfo visitExpr(SubfieldOp op);
-  SubExprInfo visitExpr(CatPrimOp op);
+  SubExprInfo visitExpr(CatPrimOp op) { return emitCat({op.lhs(), op.rhs()}); }
+  SubExprInfo visitExpr(CvtPrimOp op);
   SubExprInfo visitExpr(BitsPrimOp op);
   SubExprInfo visitExpr(ShlPrimOp op);
   SubExprInfo visitExpr(ShrPrimOp op);
@@ -554,6 +584,8 @@ SubExprInfo ExprEmitter::visitExpr(SubfieldOp op) {
 }
 
 static void collectCatValues(Value operand, SmallVectorImpl<Value> &catValues) {
+  operand = lookThroughNoopCasts(operand);
+
   // If the operand is a single-use cat, flatten it into the vector we're
   // building.
   if (auto *op = operand.getDefiningOp())
@@ -566,17 +598,40 @@ static void collectCatValues(Value operand, SmallVectorImpl<Value> &catValues) {
   catValues.push_back(operand);
 }
 
-SubExprInfo ExprEmitter::visitExpr(CatPrimOp op) {
-  // We flatten recursive cat's into a single list.
+/// Emit a verilog concatenation of the specified values.  If the before or
+/// after strings are specified, they are included as prefix/postfix elements
+/// of the concatenation, respectively.
+SubExprInfo ExprEmitter::emitCat(ArrayRef<Value> values, StringRef before,
+                                 StringRef after) {
   os << '{';
-  SmallVector<Value, 8> catValues;
-  collectCatValues(op.lhs(), catValues);
-  collectCatValues(op.rhs(), catValues);
+  if (!before.empty()) {
+    os << before;
+    if (!values.empty() || !after.empty())
+      os << ", ";
+  }
 
-  llvm::interleaveComma(catValues, os,
+  // Recursively flatten any nested cat-like expressions.
+  SmallVector<Value, 8> elements;
+  for (auto v : values)
+    collectCatValues(v, elements);
+
+  llvm::interleaveComma(elements, os,
                         [&](Value v) { emitSubExpr(v, LowestPrecedence); });
+
+  if (!after.empty()) {
+    if (!values.empty())
+      os << ", ";
+    os << after;
+  }
   os << '}';
   return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitExpr(CvtPrimOp op) {
+  if (op.getOperand().getType().cast<IntType>().isSigned())
+    return emitNoopCast(op);
+
+  return emitCat(op.getOperand(), "1'b0");
 }
 
 SubExprInfo ExprEmitter::visitExpr(BitsPrimOp op) {
@@ -592,10 +647,8 @@ SubExprInfo ExprEmitter::visitExpr(BitsPrimOp op) {
 // apparently only needed for width inference.
 SubExprInfo ExprEmitter::visitExpr(ShlPrimOp op) {
   // shl(x, 4) ==> {x, 4'h0}
-  os << '{';
-  emitSubExpr(op.getOperand(), LowestPrecedence);
-  os << ", " << op.amount() << "'h0}";
-  return {Unary, IsUnsigned};
+  auto shAmt = op.amount().getLimitedValue();
+  return emitCat(op.getOperand(), "", llvm::utostr(shAmt) + "'h0");
 }
 
 // TODO(verilog dialect): There is no need to persist shifts. They are
