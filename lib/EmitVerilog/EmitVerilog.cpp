@@ -429,8 +429,10 @@ private:
   }
   SubExprInfo visitExpr(EQPrimOp op) { return emitBinary(op, Equality, "=="); }
   SubExprInfo visitExpr(NEQPrimOp op) { return emitBinary(op, Equality, "!="); }
-
-  // Cat, DShl, DShr, ValidIf
+  SubExprInfo visitExpr(DShlPrimOp op) { return emitBinary(op, Shift, "<<"); }
+  SubExprInfo visitExpr(DShrPrimOp op) {
+    return emitSignedBinary(op, Shift, ">>>");
+  }
 
   // Unary Prefix operators.
   SubExprInfo visitExpr(AndRPrimOp op) { return emitUnary(op, "&", true); }
@@ -450,6 +452,7 @@ private:
 
   // Other
   SubExprInfo visitExpr(SubfieldOp op);
+  SubExprInfo visitExpr(CatPrimOp op);
   SubExprInfo visitExpr(BitsPrimOp op);
   SubExprInfo visitExpr(ShlPrimOp op);
   SubExprInfo visitExpr(ShrPrimOp op);
@@ -543,8 +546,36 @@ SubExprInfo ExprEmitter::visitExpr(ConstantOp op) {
 
 SubExprInfo ExprEmitter::visitExpr(SubfieldOp op) {
   auto prec = emitSubExpr(op.getOperand(), Unary);
+  // TODO(verilog dialect): This is a hack, relying on the fact that only
+  // textual expressions that produce a name can appear here.
   assert(prec.precedence == Unary);
   os << '_' << op.fieldname();
+  return {Unary, IsUnsigned};
+}
+
+static void collectCatValues(Value operand, SmallVectorImpl<Value> &catValues) {
+  // If the operand is a single-use cat, flatten it into the vector we're
+  // building.
+  if (auto *op = operand.getDefiningOp())
+    if (auto cat = dyn_cast<CatPrimOp>(op))
+      if (isExpressionEmittedInline(cat)) {
+        collectCatValues(cat.lhs(), catValues);
+        collectCatValues(cat.rhs(), catValues);
+        return;
+      }
+  catValues.push_back(operand);
+}
+
+SubExprInfo ExprEmitter::visitExpr(CatPrimOp op) {
+  // We flatten recursive cat's into a single list.
+  os << '{';
+  SmallVector<Value, 8> catValues;
+  collectCatValues(op.lhs(), catValues);
+  collectCatValues(op.rhs(), catValues);
+
+  llvm::interleaveComma(catValues, os,
+                        [&](Value v) { emitSubExpr(v, LowestPrecedence); });
+  os << '}';
   return {Unary, IsUnsigned};
 }
 
