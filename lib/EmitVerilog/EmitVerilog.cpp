@@ -354,14 +354,30 @@ private:
   using ExprVisitor::visitExpr;
   SubExprInfo visitExpr(ConstantOp op);
   SubExprInfo emitBinary(Operation *op, VerilogPrecedence prec,
-                         const char *syntax) {
-    auto lhsInfo = emitSubExpr(op->getOperand(0), prec);
+                         const char *syntax, bool hasStrictSign = false) {
+    auto lhsInfo = emitSubExpr(op->getOperand(0), prec, hasStrictSign);
     os << ' ' << syntax << ' ';
-    auto rhsInfo = emitSubExpr(op->getOperand(1), prec);
 
-    // The result is signed if both operands are signed.
+    // The precedence of the RHS operand must be tighter than this operator if
+    // they have a different opcode in order to handle things like "x-(a+b)".
+    // This isn't needed on the LHS, because the relevant Verilog operators are
+    // left-associative.
+    //
+    // Note: this check is a bit conservative, because it isn't ignoring noop
+    // casts so they could lead to unnecessary parens.
+    auto *rhsOperandOp = op->getOperand(1).getDefiningOp();
+    auto rhsPrec = VerilogPrecedence(prec - 1);
+    if (rhsOperandOp && op->getName() == rhsOperandOp->getName())
+      rhsPrec = prec;
+
+    auto rhsInfo = emitSubExpr(op->getOperand(1), rhsPrec, hasStrictSign);
+
+    // If we have a strict sign, then match the firrtl operation sign.
+    // Otherwise, the result is signed if both operands are signed.
     SubExprSignedness signedness;
-    if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
+    if (hasStrictSign)
+      signedness = getSignednessOfValue(op->getResult(0));
+    else if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
       signedness = IsSigned;
     else
       signedness = IsUnsigned;
@@ -373,11 +389,7 @@ private:
   /// e.g. for a less than comparison or divide.
   SubExprInfo emitSignedBinary(Operation *op, VerilogPrecedence prec,
                                const char *syntax) {
-
-    emitSubExpr(op->getOperand(0), prec, /*forceExpectedSign:*/ true);
-    os << ' ' << syntax << ' ';
-    emitSubExpr(op->getOperand(1), prec, /*forceExpectedSign:*/ true);
-    return {prec, getSignednessOfValue(op->getResult(0))};
+    return emitBinary(op, prec, syntax, /*hasStrictSign:*/ true);
   }
   SubExprInfo emitUnary(Operation *op, const char *syntax, bool forceUnsigned) {
     os << syntax;

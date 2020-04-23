@@ -1,6 +1,6 @@
 ; RUN: spt-translate -parse-fir --mlir-print-debuginfo %s | spt-translate -emit-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
-
 circuit Xorr :
+
   module inputs_only :
     input a: UInt<1>
     input b: UInt<1>
@@ -62,6 +62,7 @@ circuit Xorr :
     output out: UInt<4>
     out <= add(a, add(b, c))
     out <= sub(add(a, b), c)
+    out <= sub(a, add(b, c))
     out <= add(a, mul(b, c))
     out <= add(mul(a, b), c)
     out <= mul(add(a, b), c)
@@ -81,6 +82,7 @@ circuit Xorr :
 
 ; CHECK-NEXT:     assign out = a + b + c;
 ; CHECK-NEXT:     assign out = a + b - c;
+; CHECK-NEXT:     assign out = a - (b + c);
 ; CHECK-NEXT:     assign out = a + b * c;
 ; CHECK-NEXT:     assign out = a * b + c;
 ; CHECK-NEXT:     assign out = (a + b) * c;
