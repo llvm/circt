@@ -36,6 +36,12 @@ circuit Xorr :
     node x4 = dshr(asSInt(in4), in4)
     node x5 = cat(cat(in4, asUInt(clock)), cat(asUInt(clock), in4))
     node x6 = cvt(asUInt(cat(in4, in4)))
+    node x7 = mux(asUInt(clock),
+                  mux(asUInt(clock), UInt<4>("h1"), UInt<4>("h2")),
+                  UInt<4>("h3"))
+    node x8 = mux(asUInt(clock),
+                  UInt<4>("h1"),
+                  mux(asUInt(clock), UInt<4>("h2"), UInt<4>("h3")))
 
 ; CHECK-LABEL: module Expressions(
 ; CHECK-NEXT:     input  [3:0] in4,
@@ -49,6 +55,8 @@ circuit Xorr :
 ; CHECK-NEXT:     wire [3:0] x4;
 ; CHECK-NEXT:     wire [9:0] x5;
 ; CHECK-NEXT:     wire [8:0] x6;
+; CHECK-NEXT:     wire [3:0] x7;
+; CHECK-NEXT:     wire [3:0] x8;
 ; CHECK-EMPTY:
 ; CHECK-NEXT:     assign out1 = ^in4;
 ; CHECK-NEXT:     assign out1 = &in4;
@@ -63,6 +71,8 @@ circuit Xorr :
 ; CHECK-NEXT:     assign x4 = $signed(in4) >>> in4;
 ; CHECK-NEXT:     assign x5 = {in4, clock, clock, in4};
 ; CHECK-NEXT:     assign x6 = {1'b0, in4, in4};
+; CHECK-NEXT:     assign x7 = clock ? (clock ? 4'h1 : 4'h2) : 4'h3;
+; CHECK-NEXT:     assign x8 = clock ? 4'h1 : clock ? 4'h2 : 4'h3;
 ; CHECK-NEXT:  endmodule
 
 

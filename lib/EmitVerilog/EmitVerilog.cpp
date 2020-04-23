@@ -306,15 +306,16 @@ namespace {
 /// where a lower number binds tighter.
 enum VerilogPrecedence {
   // Normal precedence levels.
-  Unary,      // Symbols and all the unary operators.
-  Multiply,   // * , / , %
-  Addition,   // + , -
-  Shift,      // << , >>
-  Comparison, // > , >= , < , <=
-  Equality,   // == , !=
-  And,        // &
-  Xor,        // ^ , ^~
-  Or,         // |
+  Unary,       // Symbols and all the unary operators.
+  Multiply,    // * , / , %
+  Addition,    // + , -
+  Shift,       // << , >>
+  Comparison,  // > , >= , < , <=
+  Equality,    // == , !=
+  And,         // &
+  Xor,         // ^ , ^~
+  Or,          // |
+  Conditional, // ? :
 
   LowestPrecedence,  // Sentinel which is always the lowest precedence.
   ForceEmitMultiUse, // Sentinel saying to recursively emit a multi-used expr.
@@ -481,6 +482,7 @@ private:
 
   // Other
   SubExprInfo visitExpr(SubfieldOp op);
+  SubExprInfo visitExpr(MuxPrimOp op);
   SubExprInfo visitExpr(CatPrimOp op) { return emitCat({op.lhs(), op.rhs()}); }
   SubExprInfo visitExpr(CvtPrimOp op);
   SubExprInfo visitExpr(BitsPrimOp op);
@@ -581,6 +583,21 @@ SubExprInfo ExprEmitter::visitExpr(SubfieldOp op) {
   assert(prec.precedence == Unary);
   os << '_' << op.fieldname();
   return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitExpr(MuxPrimOp op) {
+  // The ?: operator is right associative.
+  emitSubExpr(op.sel(), VerilogPrecedence(Conditional - 1));
+  os << " ? ";
+  auto lhsInfo = emitSubExpr(op.high(), VerilogPrecedence(Conditional - 1));
+  os << " : ";
+  auto rhsInfo = emitSubExpr(op.low(), Conditional);
+
+  SubExprSignedness signedness = IsUnsigned;
+  if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
+    signedness = IsSigned;
+
+  return {Conditional, signedness};
 }
 
 static void collectCatValues(Value operand, SmallVectorImpl<Value> &catValues) {
