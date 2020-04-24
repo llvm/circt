@@ -850,7 +850,9 @@ FIRRTLType TailPrimOp::getResultType(FIRRTLType input, int32_t amount) {
 
   int32_t width = inputi.getWidthOrSentinel();
   if (width != -1) {
-    if (width < amount)
+    // TODO(firrtl-spec): zero bit integers are not allowed, so the amount
+    // cannot equal the width.
+    if (width <= amount)
       return {};
     width -= amount;
   }

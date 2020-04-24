@@ -42,6 +42,7 @@ circuit Xorr :
     node x8 = mux(asUInt(clock),
                   UInt<4>("h1"),
                   mux(asUInt(clock), UInt<4>("h2"), UInt<4>("h3")))
+    node x9 = or(head(in4, 2), tail(in4, 2))
 
 ; CHECK-LABEL: module Expressions(
 ; CHECK-NEXT:     input  [3:0] in4,
@@ -57,6 +58,7 @@ circuit Xorr :
 ; CHECK-NEXT:     wire [8:0] x6;
 ; CHECK-NEXT:     wire [3:0] x7;
 ; CHECK-NEXT:     wire [3:0] x8;
+; CHECK-NEXT:     wire [1:0] x9;
 ; CHECK-EMPTY:
 ; CHECK-NEXT:     assign out1 = ^in4;
 ; CHECK-NEXT:     assign out1 = &in4;
@@ -73,6 +75,7 @@ circuit Xorr :
 ; CHECK-NEXT:     assign x6 = {1'b0, in4, in4};
 ; CHECK-NEXT:     assign x7 = clock ? (clock ? 4'h1 : 4'h2) : 4'h3;
 ; CHECK-NEXT:     assign x8 = clock ? 4'h1 : clock ? 4'h2 : 4'h3;
+; CHECK-NEXT:     assign x9 = in4[3:2] | in4[1:0];
 ; CHECK-NEXT:  endmodule
 
 

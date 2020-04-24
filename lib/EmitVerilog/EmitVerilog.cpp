@@ -384,6 +384,10 @@ private:
   SubExprInfo emitCat(ArrayRef<Value> values, StringRef before = StringRef(),
                       StringRef after = StringRef());
 
+  /// Emit a verilog bit selection operation like x[4:0], the bit numbers are
+  /// inclusive like verilog.
+  SubExprInfo emitBitSelect(Value operand, unsigned hiBit, unsigned loBit);
+
   SubExprInfo emitBinary(Operation *op, VerilogPrecedence prec,
                          const char *syntax, bool hasStrictSign = false) {
     auto lhsInfo = emitSubExpr(op->getOperand(0), prec, hasStrictSign);
@@ -485,8 +489,16 @@ private:
   SubExprInfo visitExpr(MuxPrimOp op);
   SubExprInfo visitExpr(CatPrimOp op) { return emitCat({op.lhs(), op.rhs()}); }
   SubExprInfo visitExpr(CvtPrimOp op);
-  SubExprInfo visitExpr(BitsPrimOp op);
-  SubExprInfo visitExpr(ShlPrimOp op);
+  SubExprInfo visitExpr(BitsPrimOp op) {
+    return emitBitSelect(op.getOperand(), op.hi().getLimitedValue(),
+                         op.lo().getLimitedValue());
+  }
+  SubExprInfo visitExpr(HeadPrimOp op);
+  SubExprInfo visitExpr(TailPrimOp op);
+  SubExprInfo visitExpr(ShlPrimOp op) { // shl(x, 4) ==> {x, 4'h0}
+    auto shAmt = op.amount().getLimitedValue();
+    return emitCat(op.getOperand(), "", llvm::utostr(shAmt) + "'h0");
+  }
   SubExprInfo visitExpr(ShrPrimOp op);
 
 private:
@@ -560,46 +572,6 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
   return expInfo;
 }
 
-SubExprInfo ExprEmitter::visitExpr(ConstantOp op) {
-  auto resType = op.getType().cast<IntType>();
-  if (resType.getWidthOrSentinel() == -1)
-    return visitUnhandledExpr(op);
-
-  os << resType.getWidth() << '\'';
-  if (resType.isSigned())
-    os << 's';
-  os << 'h';
-
-  SmallString<32> valueStr;
-  op.value().toStringUnsigned(valueStr, 16);
-  os << valueStr;
-  return {Unary, resType.isSigned() ? IsSigned : IsUnsigned};
-}
-
-SubExprInfo ExprEmitter::visitExpr(SubfieldOp op) {
-  auto prec = emitSubExpr(op.getOperand(), Unary);
-  // TODO(verilog dialect): This is a hack, relying on the fact that only
-  // textual expressions that produce a name can appear here.
-  assert(prec.precedence == Unary);
-  os << '_' << op.fieldname();
-  return {Unary, IsUnsigned};
-}
-
-SubExprInfo ExprEmitter::visitExpr(MuxPrimOp op) {
-  // The ?: operator is right associative.
-  emitSubExpr(op.sel(), VerilogPrecedence(Conditional - 1));
-  os << " ? ";
-  auto lhsInfo = emitSubExpr(op.high(), VerilogPrecedence(Conditional - 1));
-  os << " : ";
-  auto rhsInfo = emitSubExpr(op.low(), Conditional);
-
-  SubExprSignedness signedness = IsUnsigned;
-  if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
-    signedness = IsSigned;
-
-  return {Conditional, signedness};
-}
-
 static void collectCatValues(Value operand, SmallVectorImpl<Value> &catValues) {
   operand = lookThroughNoopCasts(operand);
 
@@ -644,6 +616,59 @@ SubExprInfo ExprEmitter::emitCat(ArrayRef<Value> values, StringRef before,
   return {Unary, IsUnsigned};
 }
 
+/// Emit a verilog bit selection operation like x[4:0], the bit numbers are
+/// inclusive like verilog.
+SubExprInfo ExprEmitter::emitBitSelect(Value operand, unsigned hiBit,
+                                       unsigned loBit) {
+  emitSubExpr(operand, Unary);
+
+  os << '[' << hiBit;
+  if (hiBit != loBit) // Emit x[4] instead of x[4:4].
+    os << ':' << loBit;
+  os << ']';
+  return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitExpr(ConstantOp op) {
+  auto resType = op.getType().cast<IntType>();
+  if (resType.getWidthOrSentinel() == -1)
+    return visitUnhandledExpr(op);
+
+  os << resType.getWidth() << '\'';
+  if (resType.isSigned())
+    os << 's';
+  os << 'h';
+
+  SmallString<32> valueStr;
+  op.value().toStringUnsigned(valueStr, 16);
+  os << valueStr;
+  return {Unary, resType.isSigned() ? IsSigned : IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitExpr(SubfieldOp op) {
+  auto prec = emitSubExpr(op.getOperand(), Unary);
+  // TODO(verilog dialect): This is a hack, relying on the fact that only
+  // textual expressions that produce a name can appear here.
+  assert(prec.precedence == Unary);
+  os << '_' << op.fieldname();
+  return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitExpr(MuxPrimOp op) {
+  // The ?: operator is right associative.
+  emitSubExpr(op.sel(), VerilogPrecedence(Conditional - 1));
+  os << " ? ";
+  auto lhsInfo = emitSubExpr(op.high(), VerilogPrecedence(Conditional - 1));
+  os << " : ";
+  auto rhsInfo = emitSubExpr(op.low(), Conditional);
+
+  SubExprSignedness signedness = IsUnsigned;
+  if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
+    signedness = IsSigned;
+
+  return {Conditional, signedness};
+}
+
 SubExprInfo ExprEmitter::visitExpr(CvtPrimOp op) {
   if (op.getOperand().getType().cast<IntType>().isSigned())
     return emitNoopCast(op);
@@ -651,21 +676,20 @@ SubExprInfo ExprEmitter::visitExpr(CvtPrimOp op) {
   return emitCat(op.getOperand(), "1'b0");
 }
 
-SubExprInfo ExprEmitter::visitExpr(BitsPrimOp op) {
-  emitSubExpr(op.getOperand(), Unary);
-  os << '[' << op.hi();
-  if (op.hi() != op.lo())
-    os << ':' << op.lo();
-  os << ']';
-  return {Unary, IsUnsigned};
+SubExprInfo ExprEmitter::visitExpr(HeadPrimOp op) {
+  auto width = op.getOperand().getType().cast<IntType>().getWidthOrSentinel();
+  if (width == -1)
+    return visitUnhandledExpr(op);
+  auto numBits = op.amount().getLimitedValue();
+  return emitBitSelect(op.getOperand(), width - 1, width - numBits);
 }
 
-// TODO(verilog dialect): There is no need to persist shifts. They are
-// apparently only needed for width inference.
-SubExprInfo ExprEmitter::visitExpr(ShlPrimOp op) {
-  // shl(x, 4) ==> {x, 4'h0}
-  auto shAmt = op.amount().getLimitedValue();
-  return emitCat(op.getOperand(), "", llvm::utostr(shAmt) + "'h0");
+SubExprInfo ExprEmitter::visitExpr(TailPrimOp op) {
+  auto width = op.getOperand().getType().cast<IntType>().getWidthOrSentinel();
+  if (width == -1)
+    return visitUnhandledExpr(op);
+  auto numBits = op.amount().getLimitedValue();
+  return emitBitSelect(op.getOperand(), width - 1 - numBits, 0);
 }
 
 // TODO(verilog dialect): There is no need to persist shifts. They are
@@ -676,13 +700,7 @@ SubExprInfo ExprEmitter::visitExpr(ShrPrimOp op) {
   if (inWidth == -1 || shiftAmount >= unsigned(inWidth))
     return visitUnhandledExpr(op);
 
-  emitSubExpr(op.getOperand(), Unary);
-
-  os << '[' << (inWidth - 1);
-  if (shiftAmount != unsigned(inWidth - 1)) // Emit x[4] instead of x[4:4].
-    os << ':' << shiftAmount;
-  os << ']';
-  return {Unary, IsUnsigned};
+  return emitBitSelect(op.getOperand(), inWidth - 1, shiftAmount);
 }
 
 SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
