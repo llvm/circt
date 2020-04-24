@@ -38,6 +38,13 @@ static int getBitWidthOrSentinel(FIRRTLType type) {
   };
 }
 
+/// Return the type of the specified value, converted to a passive type.  If "T"
+/// Is specified, this force casts to that subtype.
+template <typename T = FIRRTLType>
+static T getPassiveTypeOf(Value v) {
+  return v.getType().cast<FIRRTLType>().getPassiveType().cast<T>();
+}
+
 /// Given an integer value, return the number of characters it will take to
 /// print its base-10 value.
 static unsigned getPrintedIntWidth(unsigned value) {
@@ -679,14 +686,14 @@ SubExprInfo ExprEmitter::visitExpr(MuxPrimOp op) {
 }
 
 SubExprInfo ExprEmitter::visitExpr(CvtPrimOp op) {
-  if (op.getOperand().getType().cast<IntType>().isSigned())
+  if (getPassiveTypeOf<IntType>(op.getOperand()).isSigned())
     return emitNoopCast(op);
 
   return emitCat(op.getOperand(), "1'b0");
 }
 
 SubExprInfo ExprEmitter::visitExpr(HeadPrimOp op) {
-  auto width = op.getOperand().getType().cast<IntType>().getWidthOrSentinel();
+  auto width = getPassiveTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
   if (width == -1)
     return visitUnhandledExpr(op);
   auto numBits = op.amount().getLimitedValue();
@@ -694,7 +701,7 @@ SubExprInfo ExprEmitter::visitExpr(HeadPrimOp op) {
 }
 
 SubExprInfo ExprEmitter::visitExpr(TailPrimOp op) {
-  auto width = op.getOperand().getType().cast<IntType>().getWidthOrSentinel();
+  auto width = getPassiveTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
   if (width == -1)
     return visitUnhandledExpr(op);
   auto numBits = op.amount().getLimitedValue();
@@ -702,17 +709,17 @@ SubExprInfo ExprEmitter::visitExpr(TailPrimOp op) {
 }
 
 SubExprInfo ExprEmitter::visitExpr(PadPrimOp op) {
-  auto inType = op.getOperand().getType().cast<IntType>();
-  if (inType.getWidthOrSentinel() == -1)
+  auto inType = getPassiveTypeOf<IntType>(op.getOperand());
+  auto inWidth = inType.getWidthOrSentinel();
+  if (inWidth == -1)
     return visitUnhandledExpr(op);
-  auto inWidth = unsigned(inType.getWidth().getValue());
   auto destWidth = op.amount().getLimitedValue();
 
   // If the destination width is smaller than the input width, then this is a
   // truncation.
-  if (destWidth == inWidth)
+  if (destWidth == unsigned(inWidth))
     return emitNoopCast(op);
-  if (destWidth < inWidth)
+  if (destWidth < unsigned(inWidth))
     return emitBitSelect(op.getOperand(), destWidth - 1, 0);
 
   // If this is unsigned, it is a zero extension.
@@ -745,12 +752,12 @@ SubExprInfo ExprEmitter::visitExpr(PadPrimOp op) {
 // TODO(verilog dialect): There is no need to persist shifts. They are
 // apparently only needed for width inference.
 SubExprInfo ExprEmitter::visitExpr(ShrPrimOp op) {
-  auto inWidth = op.getOperand().getType().cast<IntType>().getWidthOrSentinel();
+  auto width = getPassiveTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
   unsigned shiftAmount = op.amount().getLimitedValue();
-  if (inWidth == -1 || shiftAmount >= unsigned(inWidth))
+  if (width == -1 || shiftAmount >= unsigned(width))
     return visitUnhandledExpr(op);
 
-  return emitBitSelect(op.getOperand(), inWidth - 1, shiftAmount);
+  return emitBitSelect(op.getOperand(), width - 1, shiftAmount);
 }
 
 SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
@@ -1031,6 +1038,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
     return;
 
   emitOpError(op, "cannot emit this operation to Verilog");
+  indent() << "unknown MLIR operation " << *op << "\n";
 }
 
 void ModuleEmitter::emitFModule(FModuleOp module) {

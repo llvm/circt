@@ -103,6 +103,7 @@ circuit Xorr :
     out1 <= xorr(add(b, c))
     out1 <= or(lt(b, c), gt(b, c))
     out1 <= and(xor(b, c), or(out1, out1))
+    out1 <= shr(out, 2)
 
 ; CHECK-LABEL: module Precedence(
 ; CHECK-NEXT:     input  [3:0] a,
@@ -123,6 +124,7 @@ circuit Xorr :
 ; CHECK-NEXT:     assign out1 = ^(b + c);
 ; CHECK-NEXT:     assign out1 = b < c | b > c;
 ; CHECK-NEXT:     assign out1 = (b ^ c) & (out1 | out1);
+; CHECK-NEXT:     assign out1 = out[3:2];
 ; CHECK-NEXT:  endmodule
 
 
