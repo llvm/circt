@@ -206,6 +206,8 @@ public:
   // Statements.
   void emitStatementExpression(Operation *op);
   void emitStatement(ConnectOp op);
+  void emitStatement(PrintFOp op);
+  void emitStatement(StopOp op);
   void emitDecl(NodeOp op);
   void emitDecl(InstanceOp op);
   void emitOperation(Operation *op);
@@ -737,6 +739,16 @@ void ModuleEmitter::emitStatement(ConnectOp op) {
   // TODO: location information too.
 }
 
+void ModuleEmitter::emitStatement(PrintFOp op) {
+  indent() << "$fwrite(FIXME: NOT CORRECT)\n";
+  // TODO: location information too.
+}
+
+void ModuleEmitter::emitStatement(StopOp op) {
+  indent() << "FIXME NOT CORRECT: $fatal;\n";
+  // TODO: location information too.
+}
+
 void ModuleEmitter::emitDecl(NodeOp op) {
   indent() << "assign " << getName(op.getResult());
   os << " = ";
@@ -934,8 +946,13 @@ void ModuleEmitter::emitOperation(Operation *op) {
   public:
     StmtDeclEmitter(ModuleEmitter &emitter) : emitter(emitter) {}
 
+    using DeclVisitor::visitDecl;
+    using StmtVisitor::visitStmt;
     bool visitStmt(ConnectOp op) { return emitter.emitStatement(op), true; }
+    bool visitStmt(DoneOp op) { return true; }
+    bool visitStmt(PrintFOp op) { return emitter.emitStatement(op), true; }
     bool visitStmt(SkipOp op) { return true; }
+    bool visitStmt(StopOp op) { return emitter.emitStatement(op), true; }
     bool visitUnhandledStmt(Operation *op) { return false; }
     bool visitInvalidStmt(Operation *op) { return dispatchDeclVisitor(op); }
 
@@ -948,10 +965,6 @@ void ModuleEmitter::emitOperation(Operation *op) {
   private:
     ModuleEmitter &emitter;
   };
-
-  // Ignore the region terminator.
-  if (isa<DoneOp>(op))
-    return;
 
   if (StmtDeclEmitter(*this).dispatchStmtVisitor(op))
     return;

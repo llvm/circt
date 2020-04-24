@@ -136,9 +136,11 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<ConnectOp, SkipOp>([&](auto opNode) -> ResultType {
-          return thisCast->visitStmt(opNode, args...);
-        })
+        .template Case<ConnectOp, DoneOp, InvalidOp, MemoryPortOp,
+                       PartialConnectOp, PrintFOp, SkipOp, StopOp, WhenOp>(
+            [&](auto opNode) -> ResultType {
+              return thisCast->visitStmt(opNode, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidStmt(op, args...);
         });
@@ -162,7 +164,14 @@ public:
   }
 
   HANDLE(ConnectOp);
+  HANDLE(DoneOp);
+  HANDLE(InvalidOp);
+  HANDLE(MemoryPortOp);
+  HANDLE(PartialConnectOp);
+  HANDLE(PrintFOp);
   HANDLE(SkipOp);
+  HANDLE(StopOp);
+  HANDLE(WhenOp);
 #undef HANDLE
 };
 
@@ -174,7 +183,8 @@ public:
   ResultType dispatchDeclVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<NodeOp, InstanceOp>([&](auto opNode) -> ResultType {
+        .template Case<CMemOp, InstanceOp, MemOp, NodeOp, RegOp, SMemOp,
+                       RegInitOp, WireOp>([&](auto opNode) -> ResultType {
           return thisCast->visitDecl(opNode, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -199,8 +209,14 @@ public:
     return static_cast<ConcreteType *>(this)->visitUnhandledDecl(op, args...); \
   }
 
-  HANDLE(NodeOp);
+  HANDLE(CMemOp);
   HANDLE(InstanceOp);
+  HANDLE(MemOp);
+  HANDLE(NodeOp);
+  HANDLE(RegOp);
+  HANDLE(RegInitOp);
+  HANDLE(SMemOp);
+  HANDLE(WireOp);
 #undef HANDLE
 };
 
