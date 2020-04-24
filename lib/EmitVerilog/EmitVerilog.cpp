@@ -1074,7 +1074,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
     return;
 
   // emitOpError(op, "cannot emit this operation to Verilog");
-  indent() << "unknown MLIR operation " << *op << "\n";
+  indent() << "unknown MLIR operation " << op->getName().getStringRef() << "\n";
 }
 
 void ModuleEmitter::emitFModule(FModuleOp module) {

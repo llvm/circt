@@ -8,8 +8,10 @@
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Module.h"
 #include "mlir/Parser.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
+#include "mlir/Transforms/Passes.h"
 #include "spt/Dialect/FIRRTL/Dialect.h"
 #include "spt/EmitVerilog.h"
 #include "spt/FIRParser.h"
@@ -40,6 +42,9 @@ static cl::opt<std::string>
 static cl::opt<std::string> outputFilename("o", cl::desc("Output filename"),
                                            cl::value_desc("filename"),
                                            cl::init("-"));
+
+static cl::opt<bool> disableOptimization("disable-opt",
+                                         cl::desc("disable optimizations"));
 
 static cl::opt<bool>
     ignoreFIRLocations("ignore-fir-locators",
@@ -77,6 +82,20 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   if (!module)
     return failure();
 
+  // If enabled, run the optimizer.
+  if (!disableOptimization) {
+    // Apply any pass manager command line options.
+    PassManager pm(&context, /*verifyPasses:*/ true);
+    applyPassManagerCLOptions(pm);
+
+    pm.addPass(createCSEPass());
+    pm.addPass(createCanonicalizerPass());
+
+    if (failed(pm.run(module.get())))
+      return failure();
+  }
+
+  // Finally, emit the output.
   switch (outputFormat) {
   case OutputMLIR:
     module->print(os);
