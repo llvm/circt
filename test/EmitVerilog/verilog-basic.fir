@@ -170,11 +170,8 @@ circuit Xorr :
 ; CHECK-NEXT:    input  [3:0] a,
 ; CHECK-NEXT:    output       b);
 ; CHECK-EMPTY:
-; CHECK-NEXT:    wire       _T;
-; CHECK-NEXT:    wire [4:0] _T_0;
-; CHECK-EMPTY:
-; CHECK-NEXT:    assign _T = &^a;
-; CHECK-NEXT:    assign _T_0 = a + a;
+; CHECK-NEXT:    wire _T = &^a;
+; CHECK-NEXT:    wire [4:0] _T_0 = a + a;
 ; CHECK-NEXT:    assign b = &_T;
 ; CHECK-NEXT:    assign b = ^_T;
 ; CHECK-NEXT:    assign b = &_T_0;

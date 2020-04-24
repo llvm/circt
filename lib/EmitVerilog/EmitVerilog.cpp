@@ -16,6 +16,9 @@ using namespace spt;
 using namespace firrtl;
 using namespace mlir;
 
+/// Should we emit wire decls in a block at the top of a module, or inline?
+static bool emitInlineWireDecls = true;
+
 //===----------------------------------------------------------------------===//
 // Helper routines
 //===----------------------------------------------------------------------===//
@@ -180,6 +183,10 @@ public:
   void addIndent() { state.currentIndent += 2; }
   void reduceIndent() { state.currentIndent -= 2; }
 
+  /// Emit the verilog type for the specified ground type, padding the text to
+  /// the specified number of characters.
+  void emitTypePaddedToWidth(FIRRTLType type, size_t padToWidth, Operation *op);
+
   // All of the mutable state we are maintaining.
   VerilogEmitterState &state;
 
@@ -193,6 +200,26 @@ private:
 
 } // end anonymous namespace
 
+void VerilogEmitterBase::emitTypePaddedToWidth(FIRRTLType type,
+                                               size_t padToWidth,
+                                               Operation *op) {
+  int bitWidth = getBitWidthOrSentinel(type);
+  if (bitWidth == -1) {
+    emitError(op, "value has an unsupported verilog type ") << type;
+    os << "<<invalid type>>";
+    return;
+  }
+
+  size_t emittedWidth = 0;
+  if (bitWidth != 1) {
+    os << '[' << (bitWidth - 1) << ":0]";
+    emittedWidth = getPrintedIntWidth(bitWidth - 1) + 4;
+  }
+
+  if (emittedWidth < padToWidth)
+    os.indent(padToWidth - emittedWidth);
+}
+
 //===----------------------------------------------------------------------===//
 // ModuleEmitter
 //===----------------------------------------------------------------------===//
@@ -205,9 +232,6 @@ public:
       : VerilogEmitterBase(state) {}
 
   void emitFModule(FModuleOp module);
-
-  // Expressions
-
   void emitExpression(Value exp, bool forceRootExpr = false);
 
   // Statements.
@@ -784,7 +808,22 @@ void ModuleEmitter::emitExpression(Value exp, bool forceRootExpr) {
 }
 
 void ModuleEmitter::emitStatementExpression(Operation *op) {
-  indent() << "assign " << getName(op->getResult(0)) << " = ";
+  // This is invoked for expressions that have a non-single use.  This could
+  // either be because they are dead or because they have multiple uses.
+  if (op->getResult(0).use_empty()) {
+    indent() << "// Unused: ";
+  } else if (emitInlineWireDecls) {
+    auto type = op->getResult(0).getType().cast<FIRRTLType>();
+    indent() << "wire ";
+
+    if (getBitWidthOrSentinel(type) != 1) {
+      emitTypePaddedToWidth(type, 0, op);
+      os << ' ';
+    }
+    os << getName(op->getResult(0)) << " = ";
+  } else {
+    indent() << "assign " << getName(op->getResult(0)) << " = ";
+  }
   emitExpression(op->getResult(0), /*forceRootExpr=*/true);
   os << ";\n";
   // TODO: location information too.
@@ -922,15 +961,22 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       continue;
 
     assert(op.getNumResults() == 1 && "firrtl only has single-op results");
-
-    // If the expression is inline, it doesn't need a name.
-    if (isExpression(&op) && isExpressionEmittedInline(&op))
-      continue;
-
     Value result = op.getResult(0);
+
+    // If this is an expression emitted inline or unused, it doesn't need a
+    // name.
+    bool isExpr = isExpression(&op);
+    if (isExpr) {
+      if (isExpressionEmittedInline(&op) || result.use_empty())
+        continue;
+    }
 
     // Otherwise, it must be an expression or a declaration like a wire.
     addName(result, op.getAttrOfType<StringAttr>("name"));
+
+    // If we are emitting inline wire decls, don't measure or emit this wire.
+    if (isExpr && emitInlineWireDecls)
+      continue;
 
     // FIXME(verilog dialect): This can cause name collisions, because the base
     // name may be unique but the suffixed names may not be.  The right way to
@@ -979,21 +1025,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     for (const auto &elt : fieldTypes) {
       indent() << word;
       os.indent(maxDeclNameWidth - word.size() + 1);
-
-      // If there are any widths, emit this one.
-      if (maxTypeWidth) {
-        int bitWidth = getBitWidthOrSentinel(elt.type);
-        assert(bitWidth != -1 && "sentinel handled above");
-
-        unsigned emittedWidth = 0;
-        if (bitWidth != 1) {
-          os << '[' << (bitWidth - 1) << ":0]";
-          emittedWidth = getPrintedIntWidth(bitWidth - 1) + 4;
-        }
-
-        os.indent(maxTypeWidth - emittedWidth);
-      }
-
+      emitTypePaddedToWidth(elt.type, maxTypeWidth, result.getDefiningOp());
       os << getName(result) << elt.suffix << ";\n";
       // TODO: Emit locator info.
     }
@@ -1041,7 +1073,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
   if (StmtDeclEmitter(*this).dispatchStmtVisitor(op))
     return;
 
-  emitOpError(op, "cannot emit this operation to Verilog");
+  // emitOpError(op, "cannot emit this operation to Verilog");
   indent() << "unknown MLIR operation " << *op << "\n";
 }
 
@@ -1089,29 +1121,15 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
     auto portType = port.second;
     if (auto flip = portType.dyn_cast<FlipType>()) {
       portType = flip.getElementType();
-      os << "output";
+      os << "output ";
     } else {
-      os << (hasOutputs ? "input " : "input");
+      os << (hasOutputs ? "input  " : "input ");
     }
 
-    unsigned emittedWidth = 0;
-
-    int bitWidth = getBitWidthOrSentinel(portType);
-    if (bitWidth == -1) {
-      emitError(module, "parameter '" + port.first.getValue() +
-                            "' has an unsupported verilog type ")
-          << portType;
-    } else if (bitWidth != 1) {
-      // Width 1 is implicit.
-      os << " [" << (bitWidth - 1) << ":0]";
-      emittedWidth = getPrintedIntWidth(bitWidth - 1) + 5;
-    }
-
-    if (maxTypeWidth - emittedWidth)
-      os.indent(maxTypeWidth - emittedWidth);
+    emitTypePaddedToWidth(portType, maxTypeWidth, module);
 
     // Emit the name.
-    os << ' ' << getName(module.getArgument(portNumber++));
+    os << getName(module.getArgument(portNumber++));
     if (&port != &portInfo.back())
       os << ',';
     else
