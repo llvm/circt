@@ -124,6 +124,84 @@ public:
   HANDLE(ShlPrimOp, Unhandled);
   HANDLE(ShrPrimOp, Unhandled);
   HANDLE(TailPrimOp, Unhandled);
+
+#undef HANDLE
+};
+
+/// ExprVisitor is a visitor for FIRRTL statement nodes.
+template <typename ConcreteType, typename ResultType = void,
+          typename... ExtraArgs>
+class StmtVisitor {
+public:
+  ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
+    auto *thisCast = static_cast<ConcreteType *>(this);
+    return TypeSwitch<Operation *, ResultType>(op)
+        .template Case<ConnectOp, SkipOp>([&](auto opNode) -> ResultType {
+          return thisCast->visitStmt(opNode, args...);
+        })
+        .Default([&](auto expr) -> ResultType {
+          return thisCast->visitInvalidStmt(op, args...);
+        });
+  }
+
+  /// This callback is invoked on any non-Stmt operations.
+  ResultType visitInvalidStmt(Operation *op, ExtraArgs... args) {
+    op->emitOpError("unknown firrtl stmt");
+    abort();
+  }
+
+  /// This callback is invoked on any Stmt operations that are not handled
+  /// by the concrete visitor.
+  ResultType visitUnhandledStmt(Operation *op, ExtraArgs... args) {
+    return ResultType();
+  }
+
+#define HANDLE(OPTYPE)                                                         \
+  ResultType visitStmt(OPTYPE op, ExtraArgs... args) {                         \
+    return static_cast<ConcreteType *>(this)->visitUnhandledStmt(op, args...); \
+  }
+
+  HANDLE(ConnectOp);
+  HANDLE(SkipOp);
+#undef HANDLE
+};
+
+/// ExprVisitor is a visitor for FIRRTL declaration nodes.
+template <typename ConcreteType, typename ResultType = void,
+          typename... ExtraArgs>
+class DeclVisitor {
+public:
+  ResultType dispatchDeclVisitor(Operation *op, ExtraArgs... args) {
+    auto *thisCast = static_cast<ConcreteType *>(this);
+    return TypeSwitch<Operation *, ResultType>(op)
+        .template Case<NodeOp, InstanceOp>([&](auto opNode) -> ResultType {
+          return thisCast->visitDecl(opNode, args...);
+        })
+        .Default([&](auto expr) -> ResultType {
+          return thisCast->visitInvalidDecl(op, args...);
+        });
+  }
+
+  /// This callback is invoked on any non-Decl operations.
+  ResultType visitInvalidDecl(Operation *op, ExtraArgs... args) {
+    op->emitOpError("unknown firrtl decl");
+    abort();
+  }
+
+  /// This callback is invoked on any Decl operations that are not handled
+  /// by the concrete visitor.
+  ResultType visitUnhandledDecl(Operation *op, ExtraArgs... args) {
+    return ResultType();
+  }
+
+#define HANDLE(OPTYPE)                                                         \
+  ResultType visitDecl(OPTYPE op, ExtraArgs... args) {                         \
+    return static_cast<ConcreteType *>(this)->visitUnhandledDecl(op, args...); \
+  }
+
+  HANDLE(NodeOp);
+  HANDLE(InstanceOp);
+#undef HANDLE
 };
 
 } // namespace firrtl

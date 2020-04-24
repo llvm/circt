@@ -206,9 +206,8 @@ public:
   // Statements.
   void emitStatementExpression(Operation *op);
   void emitStatement(ConnectOp op);
-  void emitStatement(NodeOp op);
-  void emitStatement(InstanceOp op);
-  void emitStatement(SkipOp op) {}
+  void emitDecl(NodeOp op);
+  void emitDecl(InstanceOp op);
   void emitOperation(Operation *op);
 
   void collectNamesEmitDecls(Block &block);
@@ -738,7 +737,7 @@ void ModuleEmitter::emitStatement(ConnectOp op) {
   // TODO: location information too.
 }
 
-void ModuleEmitter::emitStatement(NodeOp op) {
+void ModuleEmitter::emitDecl(NodeOp op) {
   indent() << "assign " << getName(op.getResult());
   os << " = ";
   emitExpression(op.input());
@@ -746,7 +745,7 @@ void ModuleEmitter::emitStatement(NodeOp op) {
   // TODO: location information too.
 }
 
-void ModuleEmitter::emitStatement(InstanceOp op) {
+void ModuleEmitter::emitDecl(InstanceOp op) {
   auto instanceName = getName(op.getResult());
   StringRef defName = op.moduleName();
 
@@ -928,19 +927,33 @@ void ModuleEmitter::emitOperation(Operation *op) {
     return;
   }
 
-  // Handle statements.
-  // TODO: Refactor out to visitors.
-  bool isStatement = false;
-  TypeSwitch<Operation *>(op).Case<ConnectOp, NodeOp, InstanceOp, SkipOp>(
-      [&](auto stmt) {
-        isStatement = true;
-        this->emitStatement(stmt);
-      });
-  if (isStatement)
-    return;
+  // This visitor dispatches based on the operation kind and returns true if
+  // successfully handled.
+  class StmtDeclEmitter : public StmtVisitor<StmtDeclEmitter, bool>,
+                          public DeclVisitor<StmtDeclEmitter, bool> {
+  public:
+    StmtDeclEmitter(ModuleEmitter &emitter) : emitter(emitter) {}
+
+    bool visitStmt(ConnectOp op) { return emitter.emitStatement(op), true; }
+    bool visitStmt(SkipOp op) { return true; }
+    bool visitUnhandledStmt(Operation *op) { return false; }
+    bool visitInvalidStmt(Operation *op) { return dispatchDeclVisitor(op); }
+
+    bool visitDecl(NodeOp op) { return emitter.emitDecl(op), true; }
+    bool visitDecl(InstanceOp op) { return emitter.emitDecl(op), true; }
+
+    bool visitUnhandledDecl(Operation *op) { return false; }
+    bool visitInvalidDecl(Operation *op) { return false; }
+
+  private:
+    ModuleEmitter &emitter;
+  };
 
   // Ignore the region terminator.
   if (isa<DoneOp>(op))
+    return;
+
+  if (StmtDeclEmitter(*this).dispatchStmtVisitor(op))
     return;
 
   emitOpError(op, "cannot emit this operation to Verilog");
