@@ -347,18 +347,21 @@ struct SubExprInfo {
 };
 } // namespace
 
-/// Return the signedness of the specified type.
-static SubExprSignedness getSignednessOfValue(Value v) {
-  switch (v.getType().getKind()) {
+/// Return the verilog signedness of the specified type.
+static SubExprSignedness getSignednessOf(Type type) {
+  switch (type.getKind()) {
   default:
     assert(0 && "unsupported type");
+  case FIRRTLType::Flip:
+    return getSignednessOf(type.cast<FlipType>().getElementType());
   case FIRRTLType::Clock:
   case FIRRTLType::Reset:
   case FIRRTLType::AsyncReset:
     return IsUnsigned;
   case FIRRTLType::SInt:
+    return IsSigned;
   case FIRRTLType::UInt:
-    return v.getType().cast<IntType>().isSigned() ? IsSigned : IsUnsigned;
+    return IsUnsigned;
   }
 }
 
@@ -418,7 +421,7 @@ private:
     // Otherwise, the result is signed if both operands are signed.
     SubExprSignedness signedness;
     if (hasStrictSign)
-      signedness = getSignednessOfValue(op->getResult(0));
+      signedness = getSignednessOf(op->getResult(0).getType());
     else if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
       signedness = IsSigned;
     else
@@ -547,7 +550,7 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
   // If this is a non-expr or shouldn't be done inline, just refer to its
   // name.
   if (!shouldEmitInlineExpr) {
-    if (forceExpectedSign && getSignednessOfValue(exp) != IsUnsigned) {
+    if (forceExpectedSign && getSignednessOf(exp.getType()) != IsUnsigned) {
       os << "$signed(" << emitter.getName(exp) << ')';
       return {Unary, IsSigned};
     }
@@ -563,7 +566,8 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
 
   // Check cases where we have to insert things before the expression now that
   // we know things about it.
-  if (forceExpectedSign && getSignednessOfValue(exp) != expInfo.signedness) {
+  if (forceExpectedSign &&
+      getSignednessOf(exp.getType()) != expInfo.signedness) {
     // If the sign of the result matters and we emitted something with the
     // wrong sign, correct it.
     StringRef cast = expInfo.signedness == IsSigned ? "$unsigned(" : "$signed(";
