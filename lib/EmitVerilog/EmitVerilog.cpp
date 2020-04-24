@@ -487,6 +487,7 @@ private:
 
   // Other
   SubExprInfo visitExpr(SubfieldOp op);
+  SubExprInfo visitExpr(ValidIfPrimOp op);
   SubExprInfo visitExpr(MuxPrimOp op);
   SubExprInfo visitExpr(CatPrimOp op) { return emitCat({op.lhs(), op.rhs()}); }
   SubExprInfo visitExpr(CvtPrimOp op);
@@ -496,6 +497,7 @@ private:
   }
   SubExprInfo visitExpr(HeadPrimOp op);
   SubExprInfo visitExpr(TailPrimOp op);
+  SubExprInfo visitExpr(PadPrimOp op);
   SubExprInfo visitExpr(ShlPrimOp op) { // shl(x, 4) ==> {x, 4'h0}
     auto shAmt = op.amount().getLimitedValue();
     return emitCat(op.getOperand(), "", llvm::utostr(shAmt) + "'h0");
@@ -655,6 +657,12 @@ SubExprInfo ExprEmitter::visitExpr(SubfieldOp op) {
   return {Unary, IsUnsigned};
 }
 
+SubExprInfo ExprEmitter::visitExpr(ValidIfPrimOp op) {
+  // It isn't clear to me why it it is ok to ignore the binding condition,
+  // but this is what the existing FIRRTL verilog emitter does.
+  return emitSubExpr(op.rhs(), LowestPrecedence);
+}
+
 SubExprInfo ExprEmitter::visitExpr(MuxPrimOp op) {
   // The ?: operator is right associative.
   emitSubExpr(op.sel(), VerilogPrecedence(Conditional - 1));
@@ -691,6 +699,47 @@ SubExprInfo ExprEmitter::visitExpr(TailPrimOp op) {
     return visitUnhandledExpr(op);
   auto numBits = op.amount().getLimitedValue();
   return emitBitSelect(op.getOperand(), width - 1 - numBits, 0);
+}
+
+SubExprInfo ExprEmitter::visitExpr(PadPrimOp op) {
+  auto inType = op.getOperand().getType().cast<IntType>();
+  if (inType.getWidthOrSentinel() == -1)
+    return visitUnhandledExpr(op);
+  auto inWidth = unsigned(inType.getWidth().getValue());
+  auto destWidth = op.amount().getLimitedValue();
+
+  // If the destination width is smaller than the input width, then this is a
+  // truncation.
+  if (destWidth == inWidth)
+    return emitNoopCast(op);
+  if (destWidth < inWidth)
+    return emitBitSelect(op.getOperand(), destWidth - 1, 0);
+
+  // If this is unsigned, it is a zero extension.
+  if (!inType.isSigned()) {
+    os << "{{" << (destWidth - inWidth) << "'d0}, ";
+    emitSubExpr(op.getOperand(), LowestPrecedence);
+    os << "}";
+    return {Unary, IsUnsigned};
+  }
+
+  // Handle sign extend from a single bit in a pretty way.
+  if (inWidth == 1) {
+    os << '{' << destWidth << '{';
+    emitSubExpr(op.getOperand(), LowestPrecedence);
+    os << "}}";
+    return {Unary, IsUnsigned};
+  }
+
+  // Otherwise, this is a sign extension of a general expression.
+  // TODO(QoI): Instead of emitting the expression multiple times, we should
+  // emit it to a known name.
+  os << "{{" << (destWidth - inWidth) << '{';
+  emitSubExpr(op.getOperand(), Unary);
+  os << '[' << (inWidth - 1) << "]}}, ";
+  emitSubExpr(op.getOperand(), LowestPrecedence);
+  os << "}";
+  return {Unary, IsUnsigned};
 }
 
 // TODO(verilog dialect): There is no need to persist shifts. They are
@@ -740,12 +789,24 @@ void ModuleEmitter::emitStatement(ConnectOp op) {
 }
 
 void ModuleEmitter::emitStatement(PrintFOp op) {
+  // TODO(verilog dialect): this is a simulation only construct, we should have
+  // synthesis specific nodes, e.g. an 'if' statement, always @(posedge) blocks,
+  // etc.
   indent() << "$fwrite(FIXME: NOT CORRECT)\n";
   // TODO: location information too.
 }
 
 void ModuleEmitter::emitStatement(StopOp op) {
-  indent() << "FIXME NOT CORRECT: $fatal;\n";
+  // TODO(verilog dialect): this is a simulation only construct, we should have
+  // synthesis specific nodes, e.g. an 'if' statement, always @(posedge) blocks,
+  // etc.
+  indent() << "FIXME NOT CORRECT:";
+
+  if (op.exitCode().getLimitedValue())
+    os << "$fatal;\n";
+  else
+    os << "$finish;\n";
+
   // TODO: location information too.
 }
 

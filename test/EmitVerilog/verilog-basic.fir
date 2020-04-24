@@ -43,6 +43,9 @@ circuit Xorr :
                   UInt<4>("h1"),
                   mux(asUInt(clock), UInt<4>("h2"), UInt<4>("h3")))
     node x9 = or(head(in4, 2), tail(in4, 2))
+    node x10 = validif(asUInt(clock), in4)
+    node x11 = xor(xor(pad(in4, 6), asUInt(pad(asSInt(in4), 6))),
+                   asUInt(pad(asSInt(clock), 6)))
 
 ; CHECK-LABEL: module Expressions(
 ; CHECK-NEXT:     input  [3:0] in4,
@@ -59,6 +62,8 @@ circuit Xorr :
 ; CHECK-NEXT:     wire [3:0] x7;
 ; CHECK-NEXT:     wire [3:0] x8;
 ; CHECK-NEXT:     wire [1:0] x9;
+; CHECK-NEXT:     wire [3:0] x10;
+; CHECK-NEXT:     wire [5:0] x11;
 ; CHECK-EMPTY:
 ; CHECK-NEXT:     assign out1 = ^in4;
 ; CHECK-NEXT:     assign out1 = &in4;
@@ -76,6 +81,8 @@ circuit Xorr :
 ; CHECK-NEXT:     assign x7 = clock ? (clock ? 4'h1 : 4'h2) : 4'h3;
 ; CHECK-NEXT:     assign x8 = clock ? 4'h1 : clock ? 4'h2 : 4'h3;
 ; CHECK-NEXT:     assign x9 = in4[3:2] | in4[1:0];
+; CHECK-NEXT:     assign x10 = in4;
+; CHECK-NEXT:     assign x11 = {{\{\{}}2'd0}, in4} ^ {{\{\{}}2{in4[3]}}, in4} ^ {6{clock}};
 ; CHECK-NEXT:  endmodule
 
 
