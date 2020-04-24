@@ -79,11 +79,25 @@ static bool isNoopCast(Operation *op) {
   return false;
 }
 
+/// Return true for operations that are always inlined.
+static bool isExpressionAlwaysInline(Operation *op) {
+  if (isa<ConstantOp>(op) || isa<SubfieldOp>(op))
+    return true;
+
+  // If this is a noop cast and the operand is always inlined, then the noop
+  // cast is always inlined.
+  if (isNoopCast(op))
+    if (auto *operandOp = op->getOperand(0).getDefiningOp())
+      return isExpressionAlwaysInline(operandOp);
+
+  return false;
+}
+
 /// Return true if this expression should be emitted inline into any statement
 /// that uses it.
 static bool isExpressionEmittedInline(Operation *op) {
   // These are always emitted inline even if multiply referenced.
-  if (isa<ConstantOp>(op) || isa<SubfieldOp>(op))
+  if (isExpressionAlwaysInline(op))
     return true;
 
   // Otherwise, if it has multiple uses, emit it out of line.
