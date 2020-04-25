@@ -184,7 +184,8 @@ circuit Xorr :
 ; CHECK-NEXT:  endmodule
 
 
-  ; extmodules do not get emitted as anything, but are referenced from instances.
+  ; extmodules do not get emitted as anything, but are referenced from
+  ; instances.
   extmodule MyExtModule :
     input in: UInt<8>
     output out: UInt<1>

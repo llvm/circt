@@ -25,9 +25,14 @@ using llvm::SourceMgr;
 /// Return true if this is a useless temporary name produced by FIRRTL.  We
 /// drop these as they don't convey semantic meaning.
 static bool isUselessName(StringRef name) {
-  if (!name.startswith("_T"))
-    return false;
-  return name.size() == 2 || name[2] == '_';
+  // Ignore _T and _T_123
+  if (name.startswith("_T"))
+    return name.size() == 2 || name[2] == '_';
+
+  // Ignore _GEN and _GEN_123, these are produced by Namespace.scala.
+  if (name.startswith("_GEN"))
+    return name.size() == 4 || name[4] == '_';
+  return false;
 }
 
 /// If the specified name is a useless temporary name produced by FIRRTL, return
