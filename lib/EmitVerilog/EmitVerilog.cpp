@@ -1087,7 +1087,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
   if (StmtDeclEmitter(*this).dispatchStmtVisitor(op))
     return;
 
-  // emitOpError(op, "cannot emit this operation to Verilog");
+  emitOpError(op, "cannot emit this operation to Verilog");
   indent() << "unknown MLIR operation " << op->getName().getStringRef() << "\n";
 }
 
