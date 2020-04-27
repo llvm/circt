@@ -17,7 +17,10 @@ using namespace firrtl;
 using namespace mlir;
 
 /// Should we emit wire decls in a block at the top of a module, or inline?
-static bool emitInlineWireDecls = true;
+static constexpr bool emitInlineWireDecls = true;
+
+/// This is the preferred source width for the generated Verilog.
+static constexpr size_t preferredSourceWidth = 120;
 
 //===----------------------------------------------------------------------===//
 // Helper routines
@@ -35,6 +38,9 @@ static int getBitWidthOrSentinel(FIRRTLType type) {
   case FIRRTLType::SInt:
   case FIRRTLType::UInt:
     return type.cast<IntType>().getWidthOrSentinel();
+
+  case FIRRTLType::Flip:
+    return getBitWidthOrSentinel(type.cast<FlipType>().getElementType());
 
   default:
     return -1;
@@ -1189,7 +1195,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
   if (StmtDeclEmitter(*this).dispatchStmtVisitor(op))
     return;
 
-  emitOpError(op, "cannot emit this operation to Verilog");
+  // emitOpError(op, "cannot emit this operation to Verilog");
   indent() << "unknown MLIR operation " << op->getName().getStringRef() << "\n";
 }
 
@@ -1341,16 +1347,16 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
   if (!portInfo.empty())
     os << '\n';
 
+  auto isOutput = [](FIRRTLType type) -> bool { return type.isa<FlipType>(); };
+
   // Determine the width of the widest type we have to print so everything
   // lines up nicely.
   bool hasOutputs = false;
   unsigned maxTypeWidth = 0;
   for (auto &port : portInfo) {
     auto portType = port.second;
-    if (auto flip = portType.dyn_cast<FlipType>()) {
-      portType = flip.getElementType();
-      hasOutputs = true;
-    }
+    hasOutputs |= isOutput(portType);
+
     int bitWidth = getBitWidthOrSentinel(portType);
     if (bitWidth == -1 || bitWidth == 1)
       continue; // The error case is handled below.
@@ -1362,26 +1368,44 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
 
   addIndent();
 
-  // TODO(QoI): Should emit more than one port on a line.
-  //  e.g. output [2:0] auto_out_c_bits_opcode, auto_out_c_bits_param,
-  //
-  size_t portNumber = 0;
-  for (auto &port : portInfo) {
+  for (size_t portIdx = 0, e = portInfo.size(); portIdx != e;) {
+    size_t startOfLinePos = os.tell();
+
     indent();
     // Emit the arguments.
-    auto portType = port.second;
-    if (auto flip = portType.dyn_cast<FlipType>()) {
-      portType = flip.getElementType();
+    auto portType = portInfo[portIdx].second;
+    bool isThisPortOutput = isOutput(portType);
+    if (isThisPortOutput)
       os << "output ";
-    } else {
+    else
       os << (hasOutputs ? "input  " : "input ");
-    }
 
+    int bitWidth = getBitWidthOrSentinel(portType);
     emitTypePaddedToWidth(portType, maxTypeWidth, module);
 
     // Emit the name.
-    os << getName(module.getArgument(portNumber++));
-    if (&port != &portInfo.back())
+    os << getName(module.getArgument(portIdx));
+    ++portIdx;
+
+    // If we have any more ports with the same types and the same direction,
+    // emit them in a list on the same line.
+    while (portIdx != e &&
+           isOutput(portInfo[portIdx].second) == isThisPortOutput &&
+           bitWidth == getBitWidthOrSentinel(portInfo[portIdx].second)) {
+      // Don't exceed our preferred line length.
+      StringRef name = getName(module.getArgument(portIdx));
+      if (os.tell() + 2 + name.size() - startOfLinePos >
+          // We use "-2" here because we need a trailing comma or ); for the
+          // decl.
+          preferredSourceWidth - 2)
+        break;
+
+      // Append this to the running port decl.
+      os << ", " << name;
+      ++portIdx;
+    }
+
+    if (portIdx != e)
       os << ',';
     else
       os << ");\n";

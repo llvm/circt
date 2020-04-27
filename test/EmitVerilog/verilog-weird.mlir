@@ -12,10 +12,10 @@ firrtl.circuit "Circuit" {
   // CHECK: endmodule
 
   firrtl.module @M2(%in : !firrtl.uint<8> { firrtl.name = "some name"},
-                    %out : !firrtl.uint<8> { firrtl.name = "88^42"}) {
+                    %out : !firrtl.uint<7> { firrtl.name = "88^42"}) {
   }
   // CHECK: module M2(
   // CHECK:   input [7:0] some_name,
-  // CHECK:   input [7:0] _885E42);
+  // CHECK:   input [6:0] _885E42);
   // CHECK: endmodule
 }

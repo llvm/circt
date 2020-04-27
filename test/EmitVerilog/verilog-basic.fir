@@ -6,8 +6,7 @@ circuit Xorr :
     input b: UInt<1>
 
 ; CHECK-LABEL: module inputs_only(
-; CHECK-NEXT:    input a,
-; CHECK-NEXT:    input b);
+; CHECK-NEXT:    input a, b);
 ; CHECK-EMPTY:
 ; CHECK-NEXT:  endmodule
 
@@ -107,9 +106,7 @@ circuit Xorr :
     out1 <= lt(out, a)
 
 ; CHECK-LABEL: module Precedence(
-; CHECK-NEXT:     input  [3:0] a,
-; CHECK-NEXT:     input  [3:0] b,
-; CHECK-NEXT:     input  [3:0] c,
+; CHECK-NEXT:     input  [3:0] a, b, c,
 ; CHECK-NEXT:     output       out1,
 ; CHECK-NEXT:     output [3:0] out);
 ; CHECK-EMPTY:
@@ -142,10 +139,7 @@ circuit Xorr :
     out <= eq(asSInt(a), asSInt(b))
 
 ; CHECK-LABEL: module Sign(
-; CHECK-NEXT:     input  [3:0] a,
-; CHECK-NEXT:     input  [3:0] b,
-; CHECK-NEXT:     input  [3:0] c,
-; CHECK-NEXT:     input  [3:0] d,
+; CHECK-NEXT:     input  [3:0] a, b, c, d,
 ; CHECK-NEXT:     output       out);
 ; CHECK-EMPTY:
 ; CHECK-NEXT:     assign out = a < b;
@@ -234,8 +228,7 @@ circuit Xorr :
     a_out <= xyz2.out
 
   ; CHECK-LABEL: module Stop(
-  ; CHECK-NEXT:    input clock,
-  ; CHECK-NEXT:    input reset);
+  ; CHECK-NEXT:    input clock, reset);
   ; CHECK-EMPTY:
   ; CHECK-NEXT:    always @(posedge clock) begin
   ; CHECK-NEXT:      `ifndef SYNTHESIS
@@ -249,8 +242,7 @@ circuit Xorr :
     stop(clock, reset, 42)
 
   ; CHECK-LABEL: module Stop2(
-  ; CHECK-NEXT:    input clock,
-  ; CHECK-NEXT:    input reset);
+  ; CHECK-NEXT:    input clock, reset);
   ; CHECK-EMPTY:
   ; CHECK-NEXT:    always @(posedge clock) begin
   ; CHECK-NEXT:      `ifndef SYNTHESIS
@@ -268,9 +260,7 @@ circuit Xorr :
     stop(clock, reset, 0)
 
   ; CHECK-LABEL: module Stop3(
-  ; CHECK-NEXT:    input clock1,
-  ; CHECK-NEXT:    input clock2,
-  ; CHECK-NEXT:    input reset);
+  ; CHECK-NEXT:    input clock1, clock2, reset);
   ; CHECK-EMPTY:
   ; CHECK-NEXT:    always @(posedge clock1) begin
   ; CHECK-NEXT:      `ifndef SYNTHESIS
@@ -291,10 +281,8 @@ circuit Xorr :
     stop(clock2, reset, 0)
 
   ; CHECK-LABEL: module Print(
-  ; CHECK-NEXT:    input       clock,
-  ; CHECK-NEXT:    input       reset,
-  ; CHECK-NEXT:    input [3:0] a,
-  ; CHECK-NEXT:    input [3:0] b);
+  ; CHECK-NEXT:    input       clock, reset,
+  ; CHECK-NEXT:    input [3:0] a, b);
   ; CHECK-EMPTY:
   ; CHECK-NEXT:    always @(posedge clock) begin
   ; CHECK-NEXT:      `ifndef SYNTHESIS
