@@ -151,6 +151,28 @@ static Value lookThroughNoopCasts(Value value) {
   return value;
 }
 
+namespace {
+/// This enum keeps track of the precedence level of various binary operators,
+/// where a lower number binds tighter.
+enum VerilogPrecedence {
+  // Normal precedence levels.
+  Unary,           // Symbols and all the unary operators.
+  Multiply,        // * , / , %
+  Addition,        // + , -
+  Shift,           // << , >>
+  Comparison,      // > , >= , < , <=
+  Equality,        // == , !=
+  And,             // &
+  Xor,             // ^ , ^~
+  Or,              // |
+  AndShortCircuit, // &&
+  Conditional,     // ? :
+
+  LowestPrecedence,  // Sentinel which is always the lowest precedence.
+  ForceEmitMultiUse, // Sentinel saying to recursively emit a multi-used expr.
+};
+} // end anonymous namespace
+
 //===----------------------------------------------------------------------===//
 // VerilogEmitter
 //===----------------------------------------------------------------------===//
@@ -248,6 +270,11 @@ public:
   void emitFModule(FModuleOp module);
   void emitExpression(Value exp, bool forceRootExpr = false);
 
+  /// Emit the specified expression and return it as a string.
+  std::string
+  emitExpressionToString(Value exp,
+                         VerilogPrecedence precedence = LowestPrecedence);
+
   // Statements.
   void emitStatementExpression(Operation *op);
   void emitStatement(ConnectOp op);
@@ -269,7 +296,69 @@ public:
     return entry->getKey();
   }
 
+  // Conditional statement handling.
+
+  enum class ConditionalStmtKind {
+    /// Stuff that goes at the top of the conditional statement block.
+    Declaration,
+    /// Stuff that goes in an 'initial' block for simulation.
+    Initial,
+    /// Stuff that is gated by the positive edge of a clock.
+    AlwaysAtPosEdge,
+  };
+
+  enum class Mode { All, SimulationOnly };
+
+  void addDeclaration(std::string action, Mode mode) {
+    conditionalStmts.push_back(
+        {ConditionalStmtKind::Declaration, "", mode, "", std::move(action)});
+  }
+
+  void addInitial(std::string action, Mode mode) {
+    conditionalStmts.push_back(
+        {ConditionalStmtKind::Initial, "", mode, "", std::move(action)});
+  }
+
+  void addAtPosEdge(std::string action, Mode mode, std::string clock,
+                    std::string condition) {
+    conditionalStmts.push_back({ConditionalStmtKind::AlwaysAtPosEdge,
+                                std::move(clock), mode, std::move(condition),
+                                std::move(action)});
+  }
+
+  /// ConditionalStatement are emitted lexically at the end of the module
+  /// into blocks.
+  struct ConditionalStatement {
+    /// This specifies the kind of the statement, e.g. whether it goes into an
+    /// initial block of something else.
+    ConditionalStmtKind kind;
+
+    /// For "always @" blocks, this is the clock expression they are gated on.
+    /// This is empty for 'initial' blocks.
+    std::string clock;
+
+    /// This is the verilog mode the statement is gated by.
+    Mode mode;
+
+    /// If non-empty, this is an 'if' condition that gates the statement.  If
+    /// empty, the statement is unconditional.
+    std::string condition;
+
+    /// This is the statement to emit.  If there is a condition, this should
+    /// always be a single verilog statement that can be emitted without a
+    /// begin/end clause.
+    std::string action;
+
+    bool operator<(const ConditionalStatement &rhs) const {
+      return std::make_tuple(kind, clock, mode, condition, action) <
+             std::make_tuple(rhs.kind, rhs.clock, rhs.mode, rhs.condition,
+                             rhs.action);
+    }
+  };
+
+  // Per module states.
   llvm::StringSet<> usedNames;
+  std::vector<ConditionalStatement> conditionalStmts;
   llvm::DenseMap<Value, llvm::StringMapEntry<llvm::NoneType> *> nameTable;
   size_t nextGeneratedNameID = 0;
 };
@@ -348,24 +437,6 @@ void ModuleEmitter::addName(Value value, StringRef name) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// This enum keeps track of the precedence level of various binary operators,
-/// where a lower number binds tighter.
-enum VerilogPrecedence {
-  // Normal precedence levels.
-  Unary,       // Symbols and all the unary operators.
-  Multiply,    // * , / , %
-  Addition,    // + , -
-  Shift,       // << , >>
-  Comparison,  // > , >= , < , <=
-  Equality,    // == , !=
-  And,         // &
-  Xor,         // ^ , ^~
-  Or,          // |
-  Conditional, // ? :
-
-  LowestPrecedence,  // Sentinel which is always the lowest precedence.
-  ForceEmitMultiUse, // Sentinel saying to recursively emit a multi-used expr.
-};
 
 /// This enum keeps track of whether the emitted subexpression is signed or
 /// unsigned as seen from the Verilog language perspective.
@@ -415,6 +486,9 @@ public:
   ExprEmitter(ModuleEmitter &emitter) : emitter(emitter), os(resultBuffer) {}
 
   void emitExpression(Value exp, bool forceRootExpr, raw_ostream &os);
+
+  /// Emit the specified expression and return it as a string.
+  std::string emitExpressionToString(Value exp, VerilogPrecedence precedence);
   friend class ExprVisitor;
 
 private:
@@ -571,6 +645,13 @@ void ExprEmitter::emitExpression(Value exp, bool forceRootExpr,
 
   // Once the expression is done, we can emit the result to the stream.
   os << resultBuffer;
+}
+
+/// Emit the specified expression and return it as a string.
+std::string ExprEmitter::emitExpressionToString(Value exp,
+                                                VerilogPrecedence precedence) {
+  emitSubExpr(exp, precedence);
+  return std::string(resultBuffer.begin(), resultBuffer.end());
 }
 
 /// Emit the specified value as a subexpression to the stream.
@@ -821,6 +902,12 @@ void ModuleEmitter::emitExpression(Value exp, bool forceRootExpr) {
   ExprEmitter(*this).emitExpression(exp, forceRootExpr, os);
 }
 
+/// Emit the specified expression and return it as a string.
+std::string
+ModuleEmitter::emitExpressionToString(Value exp, VerilogPrecedence precedence) {
+  return ExprEmitter(*this).emitExpressionToString(exp, precedence);
+}
+
 void ModuleEmitter::emitStatementExpression(Operation *op) {
   // This is invoked for expressions that have a non-single use.  This could
   // either be because they are dead or because they have multiple uses.
@@ -864,14 +951,13 @@ void ModuleEmitter::emitStatement(StopOp op) {
   // TODO(verilog dialect): this is a simulation only construct, we should have
   // synthesis specific nodes, e.g. an 'if' statement, always @(posedge) blocks,
   // etc.
-  indent() << "FIXME NOT CORRECT:";
-
-  if (op.exitCode().getLimitedValue())
-    os << "$fatal;\n";
-  else
-    os << "$finish;\n";
+  auto clockExpr = emitExpressionToString(op.clock());
+  auto condExpr =
+      "`STOP_COND_ && " + emitExpressionToString(op.cond(), AndShortCircuit);
 
   // TODO: location information too.
+  const char *action = op.exitCode().getLimitedValue() ? "$fatal;" : "$finish;";
+  addAtPosEdge(action, Mode::SimulationOnly, clockExpr, condExpr);
 }
 
 void ModuleEmitter::emitDecl(NodeOp op) {
@@ -889,7 +975,8 @@ void ModuleEmitter::emitDecl(InstanceOp op) {
   // If this is referencing an extmodule with a specified defname, then use
   // the defName from it as the actual module name we reference.  This exists
   // because FIRRTL is not parameterized like verilog is - it introduces
-  // redundant extmodule instances to encode different parameter configurations.
+  // redundant extmodule instances to encode different parameter
+  // configurations.
   auto moduleIR = op.getParentOfType<CircuitOp>();
   auto referencedModule = moduleIR.lookupSymbol(defName);
   FExtModuleOp referencedExtModule;
@@ -953,8 +1040,8 @@ void ModuleEmitter::emitDecl(InstanceOp op) {
 //===----------------------------------------------------------------------===//
 
 void ModuleEmitter::collectNamesEmitDecls(Block &block) {
-  // In the first pass, we fill in the symbol table, calculate the max width of
-  // the declaration words and the max type width.
+  // In the first pass, we fill in the symbol table, calculate the max width
+  // of the declaration words and the max type width.
   size_t maxDeclNameWidth = 0, maxTypeWidth = 0;
   SmallVector<Value, 16> declsToEmit;
 
@@ -992,10 +1079,11 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     if (isExpr && emitInlineWireDecls)
       continue;
 
-    // FIXME(verilog dialect): This can cause name collisions, because the base
-    // name may be unique but the suffixed names may not be.  The right way to
-    // solve this is to change the instances and mems in a new Verilog dialect
-    // to use multiple return values, exposing the independent Value's.
+    // FIXME(verilog dialect): This can cause name collisions, because the
+    // base name may be unique but the suffixed names may not be.  The right
+    // way to solve this is to change the instances and mems in a new Verilog
+    // dialect to use multiple return values, exposing the independent
+    // Value's.
 
     // Determine what kind of thing this is, and how much space it needs.
     maxDeclNameWidth =
@@ -1091,6 +1179,141 @@ void ModuleEmitter::emitOperation(Operation *op) {
   indent() << "unknown MLIR operation " << op->getName().getStringRef() << "\n";
 }
 
+/// Split the ArrayRef (which is known to be sorted) into chunks where the
+/// specified elementFn matches.  The visitFn is invoked for every element.
+template <typename Compare>
+static void splitByPredicate(
+    ModuleEmitter &emitter,
+    ArrayRef<ModuleEmitter::ConditionalStatement> fullList,
+    std::function<void(ArrayRef<ModuleEmitter::ConditionalStatement> elements,
+                       ModuleEmitter &emitter)>
+        visitFn,
+    const Compare &elementFn) {
+  while (!fullList.empty()) {
+    auto eltValue = elementFn(fullList[0]);
+
+    // Scan all of the elements that match this one.
+    size_t endElement = 1;
+    while (endElement < fullList.size() &&
+           eltValue == elementFn(fullList[endElement])) {
+      ++endElement;
+    }
+
+    // Visit this slice and then drop it.
+    visitFn(fullList.take_front(endElement), emitter);
+    fullList = fullList.drop_front(endElement);
+  };
+}
+
+/// Emit a group of actions, with a fixed condition.
+static void
+emitActionByCond(ArrayRef<ModuleEmitter::ConditionalStatement> elements,
+                 ModuleEmitter &emitter) {
+  bool indentChildren = true;
+  if (!elements[0].condition.empty()) {
+    emitter.indent() << "if (" << elements[0].condition << ") ";
+    if (elements.size() != 1) {
+      emitter.os << "begin\n";
+      emitter.addIndent();
+    } else {
+      indentChildren = false;
+    }
+  }
+
+  // Emit all the actions.
+  for (auto &elt : elements) {
+    if (indentChildren)
+      emitter.indent();
+    emitter.os << elt.action << '\n';
+  }
+
+  if (!elements[0].condition.empty() && elements.size() != 1) {
+    emitter.reduceIndent();
+    emitter.indent() << "end\n";
+  }
+}
+
+/// Emit a group of actions, guarded by conditions, with a fixed mode.
+static void
+emitCondActionByMode(ArrayRef<ModuleEmitter::ConditionalStatement> elements,
+                     ModuleEmitter &emitter) {
+  switch (elements[0].mode) {
+  case ModuleEmitter::Mode::All:
+    break;
+  case ModuleEmitter::Mode::SimulationOnly:
+    emitter.indent() << "`ifndef SYNTHESIS\n";
+    emitter.addIndent();
+    break;
+  }
+
+  splitByPredicate(
+      emitter, elements, emitActionByCond,
+      [](const ModuleEmitter::ConditionalStatement &condStmt) -> StringRef {
+        return condStmt.condition;
+      });
+
+  switch (elements[0].mode) {
+  case ModuleEmitter::Mode::All:
+    break;
+  case ModuleEmitter::Mode::SimulationOnly:
+    emitter.reduceIndent();
+    emitter.indent() << "`endif // SYNTHESIS\n";
+    break;
+  }
+}
+
+/// Emit a group of "always @(posedge)" conditional statements with a matching
+/// clock declaration.
+static void
+emitPosEdgeByClock(ArrayRef<ModuleEmitter::ConditionalStatement> elements,
+                   ModuleEmitter &emitter) {
+  emitter.indent() << "always @(posedge " << elements[0].clock << ") begin\n";
+  emitter.addIndent();
+  splitByPredicate(emitter, elements, emitCondActionByMode,
+                   [](const ModuleEmitter::ConditionalStatement &condStmt) {
+                     return condStmt.mode;
+                   });
+  emitter.reduceIndent();
+  emitter.indent() << "end // always @(posedge)\n";
+}
+
+/// Emit a block of conditional statements that have the same ConditionStmtKind.
+static void
+emitConditionStmtKind(ArrayRef<ModuleEmitter::ConditionalStatement> elements,
+                      ModuleEmitter &emitter) {
+  switch (elements[0].kind) {
+  case ModuleEmitter::ConditionalStmtKind::Declaration:
+    splitByPredicate(emitter, elements, emitCondActionByMode,
+                     [](const ModuleEmitter::ConditionalStatement &condStmt) {
+                       return condStmt.mode;
+                     });
+
+    break;
+  case ModuleEmitter::ConditionalStmtKind::Initial:
+    emitter.indent() << "`ifndef SYNTHESIS\n";
+    emitter.indent() << "initial begin\n";
+    emitter.addIndent();
+    assert(elements[0].clock.empty() && "initial members can't have a clock");
+
+    splitByPredicate(emitter, elements, emitCondActionByMode,
+                     [](const ModuleEmitter::ConditionalStatement &condStmt) {
+                       return condStmt.mode;
+                     });
+
+    emitter.reduceIndent();
+    emitter.indent() << "end // initial\n";
+    emitter.indent() << "`endif // SYNTHESIS\n";
+    break;
+  case ModuleEmitter::ConditionalStmtKind::AlwaysAtPosEdge:
+    // Split by the clock condition.
+    splitByPredicate(emitter, elements, emitPosEdgeByClock,
+                     [](const ModuleEmitter::ConditionalStatement &condStmt) {
+                       return condStmt.clock;
+                     });
+    break;
+  }
+}
+
 void ModuleEmitter::emitFModule(FModuleOp module) {
   // Add all the ports to the name table.
   SmallVector<ModulePortInfo, 8> portInfo;
@@ -1163,6 +1386,15 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
     emitOperation(&op);
   }
 
+  // Emit the conditional statements at the bottom.  Start by sorting the list
+  // to group by kind.
+  std::sort(conditionalStmts.begin(), conditionalStmts.end());
+
+  // Emit conditional statements by groups.
+  splitByPredicate(
+      *this, conditionalStmts, emitConditionStmtKind,
+      [](const ModuleEmitter::ConditionalStatement &condStmt)
+          -> ModuleEmitter::ConditionalStmtKind { return condStmt.kind; });
   reduceIndent();
 
   os << "endmodule\n\n";
@@ -1173,7 +1405,6 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-
 class CircuitEmitter : public VerilogEmitterBase {
 public:
   explicit CircuitEmitter(VerilogEmitterState &state)
@@ -1188,6 +1419,40 @@ private:
 } // end anonymous namespace
 
 void CircuitEmitter::emitCircuit(CircuitOp circuit) {
+  // TODO(QoI): Emit file header, indicating the name of the circuit,
+  // location info and any other interesting metadata (e.g. comment
+  // block) attached to it.
+  os << R"XXX(
+// Standard header to adapt well known macros to our needs.\n";
+`ifdef RANDOMIZE_GARBAGE_ASSIGN
+`define RANDOMIZE
+`endif
+`ifdef RANDOMIZE_INVALID_ASSIGN
+`define RANDOMIZE
+`endif
+`ifdef RANDOMIZE_REG_INIT
+`define RANDOMIZE
+`endif
+`ifdef RANDOMIZE_MEM_INIT
+`define RANDOMIZE
+`endif
+`ifndef RANDOM
+`define RANDOM $random
+`endif
+// Users can define 'PRINTF_COND' to add an extra gate to prints.
+`ifdef PRINTF_COND
+`define PRINTF_COND_ (`PRINTF_COND)
+`else
+`define PRINTF_COND_ 1
+`endif
+// Users can define 'STOP_COND' to add an extra gate to stop conditions.
+`ifdef STOP_COND
+`define STOP_COND_ (`STOP_COND)
+`else
+`define STOP_COND_ 1
+`endif
+)XXX";
+
   for (auto &op : *circuit.getBody()) {
     if (auto module = dyn_cast<FModuleOp>(op)) {
       ModuleEmitter(state).emitFModule(module);

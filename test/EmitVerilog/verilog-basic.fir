@@ -233,3 +233,60 @@ circuit Xorr :
     xyz2.in <= a_in
     a_out <= xyz2.out
 
+  ; CHECK-LABEL: module Stop(
+  ; CHECK-NEXT:    input clock,
+  ; CHECK-NEXT:    input reset);
+  ; CHECK-EMPTY:
+  ; CHECK-NEXT:    always @(posedge clock) begin
+  ; CHECK-NEXT:      `ifndef SYNTHESIS
+  ; CHECK-NEXT:        if (`STOP_COND_ && reset) $fatal;
+  ; CHECK-NEXT:      `endif // SYNTHESIS
+  ; CHECK-NEXT:    end // always @(posedge)
+  ; CHECK-NEXT:  endmodule
+  module Stop :
+    input clock: Clock
+    input reset: UInt<1>
+    stop(clock, reset, 42)
+
+  ; CHECK-LABEL: module Stop2(
+  ; CHECK-NEXT:    input clock,
+  ; CHECK-NEXT:    input reset);
+  ; CHECK-EMPTY:
+  ; CHECK-NEXT:    always @(posedge clock) begin
+  ; CHECK-NEXT:      `ifndef SYNTHESIS
+  ; CHECK-NEXT:        if (`STOP_COND_ && reset) begin
+  ; CHECK-NEXT:          $fatal;
+  ; CHECK-NEXT:          $finish;
+  ; CHECK-NEXT:        end
+  ; CHECK-NEXT:      `endif // SYNTHESIS
+  ; CHECK-NEXT:    end // always @(posedge)
+  ; CHECK-NEXT:  endmodule
+  module Stop2 :
+    input clock: Clock
+    input reset: UInt<1>
+    stop(clock, reset, 42)
+    stop(clock, reset, 0)
+
+  ; CHECK-LABEL: module Stop3(
+  ; CHECK-NEXT:    input clock1,
+  ; CHECK-NEXT:    input clock2,
+  ; CHECK-NEXT:    input reset);
+  ; CHECK-EMPTY:
+  ; CHECK-NEXT:    always @(posedge clock1) begin
+  ; CHECK-NEXT:      `ifndef SYNTHESIS
+  ; CHECK-NEXT:        if (`STOP_COND_ && reset) $fatal;
+  ; CHECK-NEXT:      `endif // SYNTHESIS
+  ; CHECK-NEXT:    end // always @(posedge)
+  ; CHECK-NEXT:    always @(posedge clock2) begin
+  ; CHECK-NEXT:      `ifndef SYNTHESIS
+  ; CHECK-NEXT:        if (`STOP_COND_ && reset) $finish;
+  ; CHECK-NEXT:      `endif // SYNTHESIS
+  ; CHECK-NEXT:    end // always @(posedge)
+  ; CHECK-NEXT:  endmodule
+  module Stop3 :
+    input clock1: Clock
+    input clock2: Clock
+    input reset: UInt<1>
+    stop(clock1, reset, 42)
+    stop(clock2, reset, 0)
+
