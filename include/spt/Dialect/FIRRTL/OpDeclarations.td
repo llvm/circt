@@ -1,0 +1,126 @@
+//===- OpDeclarations.td - FIRRTL declaration ops ----------*- tablegen -*-===//
+//
+// This describes the MLIR ops for FIRRTL declarations.
+//
+//===----------------------------------------------------------------------===//
+
+def InstanceOp : FIRRTLOp<"instance"> {
+  let summary = "Instantiate an instance of a module";
+  let description = [{
+    This represents an instance of a module.  The result is always a bundle
+    that is a flattened form of the referenced modules inputs and outputs.
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$moduleName,
+                       OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  let assemblyFormat = [{
+     $moduleName attr-dict `:` type($result)
+  }];
+}
+
+def CMemOp : FIRRTLOp<"cmem", [NoSideEffect]> {
+  let summary = "Define a new cmem";
+  let arguments = (ins OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  let assemblyFormat = [{
+     attr-dict `:` type($result)
+  }];
+}
+
+def SMemOp : FIRRTLOp<"smem", [NoSideEffect]> {
+  let summary = "Define a new smem";
+  let arguments = (ins RUWAttr:$ruw, OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    $ruw attr-dict `:` type($result)
+  }];
+}
+
+def MemOp : FIRRTLOp<"mem", [NoSideEffect]> {
+  let summary = "Define a new smem";
+  let arguments = (ins I32Attr:$readLatency, I32Attr:$writeLatency,
+                       RUWAttr:$ruw, OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    $ruw attr-dict `:` type($result)
+  }];
+}
+
+def NodeOp : FIRRTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
+  let summary = "No-op to name a value";
+  let description = [{
+    A node is simply a named intermediate value in a circuit. The node must
+    be initialized to a value with a passive type and cannot be connected to.
+    Nodes are often used to split a complicated compound expression into named
+    subexpressions.
+
+    ```
+      %result = firrt.node %input : t1
+    ```
+    }];
+
+  let arguments = (ins AnyType:$input, OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  let assemblyFormat = [{
+     $input attr-dict `:` type($input)
+  }];
+}
+
+def RegOp : FIRRTLOp<"reg"> {
+  let summary = "Define a new register";
+  let description = [{
+    Declare a new register:
+    ```
+      %name = firrt.reg %clockVal : t1
+    ```
+    }];
+
+  let arguments = (ins AnyType:$clockVal, OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  let assemblyFormat = [{
+     operands attr-dict `:` functional-type(operands, $result)
+  }];
+}
+
+def RegInitOp : FIRRTLOp<"reginit"> {
+  let summary = "Define a new register with an initializer";
+  let description = [{
+    Declare a new register:
+    ```
+      %name = firrt.reg %clockVal, %resetSignal, %resetValue : t1
+    ```
+    }];
+
+  let arguments = (ins AnyType:$clockVal, AnyType:$resetSignal, 
+                       AnyType:$resetValue, OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  let assemblyFormat = [{
+     operands attr-dict `:` functional-type(operands, $result)
+  }];
+}
+
+def WireOp : FIRRTLOp<"wire", [NoSideEffect]> {
+  let summary = "Define a new wire";
+  let description = [{
+    Declare a new wire:
+    ```
+      %name = firrt.wire : t1
+    ```
+    }];
+
+  let arguments = (ins OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  let assemblyFormat = [{
+     attr-dict `:` type($result)
+  }];
+}
+
