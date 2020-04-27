@@ -943,7 +943,21 @@ void ModuleEmitter::emitStatement(PrintFOp op) {
   // TODO(verilog dialect): this is a simulation only construct, we should have
   // synthesis specific nodes, e.g. an 'if' statement, always @(posedge) blocks,
   // etc.
-  indent() << "$fwrite(FIXME: NOT CORRECT)\n";
+  auto clockExpr = emitExpressionToString(op.clock());
+  auto condExpr =
+      "`PRINTF_COND_ && " + emitExpressionToString(op.cond(), AndShortCircuit);
+
+  std::string actionStr;
+  llvm::raw_string_ostream action(actionStr);
+
+  action << "$fwrite(32'h80000002, \"";
+  action.write_escaped(op.formatString()) << '"';
+  for (auto operand : op.operands()) {
+    action << ", " << emitExpressionToString(operand);
+  }
+  action << ");";
+
+  addAtPosEdge(action.str(), Mode::SimulationOnly, clockExpr, condExpr);
   // TODO: location information too.
 }
 

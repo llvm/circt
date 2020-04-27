@@ -46,6 +46,55 @@ bool FIRToken::isKeyword() const {
   }
 }
 
+/// Given a token containing a string literal, return its value, including
+/// removing the quote characters and unescaping the contents of the string. The
+/// lexer has already verified that this token is valid.
+std::string FIRToken::getStringValue() const {
+  assert(getKind() == string);
+  return getStringValue(getSpelling());
+}
+
+std::string FIRToken::getStringValue(StringRef spelling) {
+  // Start by dropping the quotes.
+  StringRef bytes = spelling.drop_front().drop_back();
+
+  std::string result;
+  result.reserve(bytes.size());
+  for (unsigned i = 0, e = bytes.size(); i != e;) {
+    auto c = bytes[i++];
+    if (c != '\\') {
+      result.push_back(c);
+      continue;
+    }
+
+    assert(i + 1 <= e && "invalid string should be caught by lexer");
+    auto c1 = bytes[i++];
+    switch (c1) {
+    case '"':
+    case '\\':
+      result.push_back(c1);
+      continue;
+    case 'n':
+      result.push_back('\n');
+      continue;
+    case 't':
+      result.push_back('\t');
+      continue;
+      // TODO: Handle the rest of the escapes.
+    default:
+      break;
+    }
+
+    assert(i + 1 <= e && "invalid string should be caught by lexer");
+    auto c2 = bytes[i++];
+
+    assert(llvm::isHexDigit(c1) && llvm::isHexDigit(c2) && "invalid escape");
+    result.push_back((llvm::hexDigitValue(c1) << 4) | llvm::hexDigitValue(c2));
+  }
+
+  return result;
+}
+
 //===----------------------------------------------------------------------===//
 // FIRLexer
 //===----------------------------------------------------------------------===//

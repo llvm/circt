@@ -61,6 +61,12 @@ public:
   /// Return true if this is one of the keyword token kinds (e.g. kw_wire).
   bool isKeyword() const;
 
+  /// Given a token containing a string literal, return its value, including
+  /// removing the quote characters and unescaping the contents of the string.
+  /// The lexer has already verified that this token is valid.
+  std::string getStringValue() const;
+  static std::string getStringValue(StringRef spelling);
+
   // Location processing.
   llvm::SMLoc getLoc() const;
   llvm::SMLoc getEndLoc() const;

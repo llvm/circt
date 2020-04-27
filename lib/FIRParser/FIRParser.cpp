@@ -1379,8 +1379,9 @@ ParseResult FIRStmtParser::parsePrintf() {
   if (parseOptionalInfo(info, subOps))
     return failure();
 
+  auto formatStrUnescaped = FIRToken::getStringValue(formatString);
   builder.create<PrintFOp>(info.getLoc(), clock, condition,
-                           builder.getStringAttr(formatString), operands);
+                           builder.getStringAttr(formatStrUnescaped), operands);
   return success();
 }
 
@@ -2112,12 +2113,8 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
       break;
     }
     case FIRToken::string: {
-      // Drop the quotes.
-      auto spelling = getTokenSpelling();
-      assert(spelling.front() == '"' && spelling.back() == '"');
-      spelling = spelling.drop_back().drop_front();
-      // TODO(string extmodule parameters): Should unescape the string?
-      value = builder.getStringAttr(spelling);
+      // Drop the quotes and unescape.
+      value = builder.getStringAttr(getToken().getStringValue());
       consumeToken(FIRToken::string);
       break;
     }

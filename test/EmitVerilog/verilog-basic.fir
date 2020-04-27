@@ -290,3 +290,20 @@ circuit Xorr :
     stop(clock1, reset, 42)
     stop(clock2, reset, 0)
 
+  ; CHECK-LABEL: module Print(
+  ; CHECK-NEXT:    input       clock,
+  ; CHECK-NEXT:    input       reset,
+  ; CHECK-NEXT:    input [3:0] a,
+  ; CHECK-NEXT:    input [3:0] b);
+  ; CHECK-EMPTY:
+  ; CHECK-NEXT:    always @(posedge clock) begin
+  ; CHECK-NEXT:      `ifndef SYNTHESIS
+  ; CHECK-NEXT:        if (`PRINTF_COND_ && reset) $fwrite(32'h80000002, "Hi %x %x\n", a + a, b);
+  ; CHECK-NEXT:      `endif // SYNTHESIS
+  ; CHECK-NEXT:    end // always @(posedge)
+  module Print :
+    input clock: Clock
+    input reset: UInt<1>
+    input a: UInt<4>
+    input b: UInt<4>
+    printf(clock, reset, "Hi %x %x\n", add(a, a), b)

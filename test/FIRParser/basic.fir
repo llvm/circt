@@ -32,14 +32,14 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
   ; CHECK: attributes {defname = "name_thing",
   ; CHECK: parameters = {DEFAULT = 0 : i64,
   ; CHECK:               DEPTH = 3.242000e+01 : f64,
-  ; CHECK:               FORMAT = "xyz_timeout=%d",
+  ; CHECK:               FORMAT = "xyz_timeout=%d\0A",
   ; CHECK:               WIDTH = 32 : i8}}
   ; CHECK-NOT: {
   extmodule MyParameterizedExtModule : 
     input in: UInt
     output out: UInt<8>
     defname = name_thing
-    parameter FORMAT = "xyz_timeout=%d"
+    parameter FORMAT = "xyz_timeout=%d\n"
     parameter DEFAULT = 0
     parameter WIDTH = 32
     parameter DEPTH = 32.42
@@ -155,8 +155,8 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     when lt(reset, UInt(4)) :   ;; When with no else.
       _t <= _t_2
 
-      ; CHECK: firrtl.printf %clock, %reset, "\22Something interesting! %x %x\22"(%_t, %_t_2) : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 13>
-    printf(clock, reset, "Something interesting! %x %x", _t, _t_2)
+    ; CHECK: firrtl.printf %clock, %reset, "Something interesting!\0A %x %x"(%_t, %_t_2) : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 13>
+    printf(clock, reset, "Something interesting!\n %x %x", _t, _t_2)
 
     ; CHECK: firrtl.stop %clock, %reset, 42
     stop(clock, reset, 42)
