@@ -1008,7 +1008,7 @@ void ModuleEmitter::emitDecl(InstanceOp op) {
       os << intAttr.getValue();
     } else if (auto strAttr = value.dyn_cast<StringAttr>()) {
       os << '"';
-      llvm::printEscapedString(strAttr.getValue(), os);
+      os.write_escaped(strAttr.getValue());
       os << '"';
     } else if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
       // TODO: relying on float printing to be precise is not a good idea.

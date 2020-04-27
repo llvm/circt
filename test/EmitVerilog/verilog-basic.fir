@@ -194,7 +194,7 @@ circuit Xorr :
   extmodule MyParameterizedExtModule : 
     input in: UInt<8>
     output out: UInt<1>
-    parameter FORMAT = "xyz_timeout=%d"
+    parameter FORMAT = "xyz_timeout=%d\n"
     parameter DEFAULT = 0
     parameter WIDTH = 32
     parameter DEPTH = 3.5
@@ -214,7 +214,7 @@ circuit Xorr :
   ; CHECK-NEXT:     );
   ; CHECK-NEXT:     assign xyz_in = a_in;
   ; CHECK-NEXT:     assign a_out = xyz_out;
-  ; CHECK-NEXT:     MyParameterizedExtModule #(.DEFAULT(0), .DEPTH(3.5{{.*}}), .FORMAT("xyz_timeout=%d"), .WIDTH(32)) xyz2 (
+  ; CHECK-NEXT:     MyParameterizedExtModule #(.DEFAULT(0), .DEPTH(3.5{{.*}}), .FORMAT("xyz_timeout=%d\n"), .WIDTH(32)) xyz2 (
   ; CHECK-NEXT:       .in(xyz2_in),
   ; CHECK-NEXT:       .out(xyz2_out)
   ; CHECK-NEXT:     );
