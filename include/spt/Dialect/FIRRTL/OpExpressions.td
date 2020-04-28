@@ -158,6 +158,7 @@ def MulPrimOp : BinaryPrimOp<"mul", "getMulResult", [Commutative]>;
 def DivPrimOp : BinaryPrimOp<"div", "getDivResult">;
 def RemPrimOp : BinaryPrimOp<"rem", "getRemResult">;
 
+let hasFolder = 1 in
 def AndPrimOp : BinaryPrimOp<"and", "getBitwiseBinaryResult", [Commutative]>;
 def OrPrimOp  : BinaryPrimOp<"or",  "getBitwiseBinaryResult", [Commutative]>;
 def XorPrimOp : BinaryPrimOp<"xor", "getBitwiseBinaryResult", [Commutative]>;

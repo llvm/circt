@@ -3,8 +3,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "spt/Dialect/FIRRTL/Ops.h"
+#include "mlir/Dialect/CommonFolders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/StandardTypes.h"
 #include "spt/Dialect/FIRRTL/Visitors.h"
 
@@ -642,6 +644,46 @@ FIRRTLType firrtl::getValidIfResult(FIRRTLType lhs, FIRRTLType rhs) {
   if (lhsWidth != -1 && lhsWidth != 1)
     return {};
   return rhs;
+}
+
+//===----------------------------------------------------------------------===//
+// Binary Primitive Fold Hooks
+//===----------------------------------------------------------------------===//
+
+struct ConstantIntMatcher {
+  APInt &value;
+  ConstantIntMatcher(APInt &value) : value(value) {}
+  bool match(Operation *op) {
+    if (auto cst = dyn_cast<ConstantOp>(op)) {
+      value = cst.value();
+      return true;
+    }
+    return false;
+  }
+};
+
+static inline ConstantIntMatcher m_FConstant(APInt &value) {
+  return ConstantIntMatcher(value);
+}
+
+// TODO: Move to DRR.
+OpFoldResult AndPrimOp::fold(ArrayRef<Attribute> operands) {
+  APInt value;
+
+  /// and(x, 0) -> 0
+  if (matchPattern(rhs(), m_FConstant(value)) && value.isNullValue())
+    return rhs();
+
+  /// and(x, -1) -> x
+  if (matchPattern(rhs(), m_FConstant(value)) && value.isAllOnesValue())
+    return lhs();
+
+  /// and(x, x) -> x
+  if (lhs() == rhs())
+    return rhs();
+
+  return constFoldBinaryOp<IntegerAttr>(operands,
+                                        [](APInt a, APInt b) { return a & b; });
 }
 
 //===----------------------------------------------------------------------===//
