@@ -13,7 +13,7 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike]> {
     ```
     }];
 
-  let arguments = (ins APIntAttr:$value, OptionalAttr<StrAttr>:$name);
+  let arguments = (ins APIntAttr:$value);
   let results = (outs IntType:$result);
   
   let assemblyFormat = [{
@@ -22,8 +22,7 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike]> {
 
   let builders = [
     OpBuilder<"Builder *builder, OperationState &result, "
-              "IntType type, const APInt &value, "
-              "Optional<StringAttr> name = None">
+              "IntType type, const APInt &value">
   ];
   let hasFolder = 1;
   let verifier = [{ return ::verify(*this); }];
@@ -39,8 +38,7 @@ def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
     ```
     }];
 
-  let arguments = (ins AnyType:$input, StrAttr:$fieldname,
-                       OptionalAttr<StrAttr>:$name);
+  let arguments = (ins AnyType:$input, StrAttr:$fieldname);
   let results = (outs AnyType:$result);
   
   // TODO: Could drop the result type, inferring it from the source.
@@ -68,8 +66,7 @@ def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
     ```
     }];
 
-  let arguments = (ins AnyType:$input, I32Attr:$index,
-                       OptionalAttr<StrAttr>:$name);
+  let arguments = (ins AnyType:$input, I32Attr:$index);
   let results = (outs AnyType:$result);
   
   // TODO: Could drop the result type, inferring it from the source.
@@ -95,8 +92,7 @@ def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect]> {
     ```
     }];
 
-  let arguments = (ins AnyType:$input, AnyType:$index,
-                       OptionalAttr<StrAttr>:$name);
+  let arguments = (ins AnyType:$input, AnyType:$index);
   let results = (outs AnyType:$result);
   
   // TODO: Could drop the result type, inferring it from the source.
@@ -116,7 +112,7 @@ def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect]> {
 
 class PrimOp<string mnemonic, list<OpTrait> traits = []> :
     FIRRTLOp<mnemonic, !listconcat(traits, [NoSideEffect])> {
-  let arguments = (ins AnyType:$lhs, AnyType:$rhs, OptionalAttr<StrAttr>:$name);
+  let arguments = (ins AnyType:$lhs, AnyType:$rhs);
   let results = (outs AnyType:$result);
   
   let assemblyFormat = [{
@@ -133,7 +129,7 @@ class PrimOp<string mnemonic, list<OpTrait> traits = []> :
 class BinaryPrimOp<string mnemonic, string resultTypeFunction, 
                    list<OpTrait> traits = []> :
     PrimOp<mnemonic, traits> {
-  let arguments = (ins AnyType:$lhs, AnyType:$rhs, OptionalAttr<StrAttr>:$name);
+  let arguments = (ins AnyType:$lhs, AnyType:$rhs);
   let results = (outs AnyType:$result);
   
   let assemblyFormat = [{
@@ -188,7 +184,7 @@ def ValidIfPrimOp : BinaryPrimOp<"validif", "getValidIfResult">;
 class UnaryPrimOp<string mnemonic, string resultTypeFunction, 
                   list<OpTrait> traits = []> :
     PrimOp<mnemonic, traits> {
-  let arguments = (ins AnyType:$input, OptionalAttr<StrAttr>:$name);
+  let arguments = (ins AnyType:$input);
   let results = (outs AnyType:$result);
   
   let assemblyFormat = [{
@@ -231,8 +227,7 @@ def AsPassivePrimOp    : UnaryPrimOp<"asPassive", "getAsPassiveResult">;
 //===----------------------------------------------------------------------===//
 
 def BitsPrimOp : PrimOp<"bits"> {
-  let arguments = (ins AnyType:$input, I32Attr:$hi, I32Attr:$lo,
-                       OptionalAttr<StrAttr>:$name);
+  let arguments = (ins AnyType:$input, I32Attr:$hi, I32Attr:$lo);
   let results = (outs AnyType:$result);
   
   let assemblyFormat = [{
@@ -254,8 +249,7 @@ def BitsPrimOp : PrimOp<"bits"> {
 }
 
 def HeadPrimOp : PrimOp<"head"> {
-  let arguments = (ins AnyType:$input, I32Attr:$amount,
-                       OptionalAttr<StrAttr>:$name);
+  let arguments = (ins AnyType:$input, I32Attr:$amount);
   let results = (outs AnyType:$result);
 
   let assemblyFormat = [{
@@ -276,8 +270,7 @@ def HeadPrimOp : PrimOp<"head"> {
 }
 
 def MuxPrimOp : PrimOp<"mux"> {
-  let arguments = (ins AnyType:$sel, AnyType:$high, AnyType:$low,
-                       OptionalAttr<StrAttr>:$name);
+  let arguments = (ins AnyType:$sel, AnyType:$high, AnyType:$low);
   let results = (outs AnyType:$result);
   
   let assemblyFormat = [{
@@ -299,8 +292,7 @@ def MuxPrimOp : PrimOp<"mux"> {
 }
 
 def PadPrimOp : PrimOp<"pad"> {
-  let arguments = (ins AnyType:$input, I32Attr:$amount,
-                       OptionalAttr<StrAttr>:$name);
+  let arguments = (ins AnyType:$input, I32Attr:$amount);
   let results = (outs AnyType:$result);
 
   let assemblyFormat = [{
@@ -321,8 +313,7 @@ def PadPrimOp : PrimOp<"pad"> {
 }
 
 class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic> {
-  let arguments = (ins AnyType:$input, I32Attr:$amount,
-                       OptionalAttr<StrAttr>:$name);
+  let arguments = (ins AnyType:$input, I32Attr:$amount);
   let results = (outs AnyType:$result);
   
   let assemblyFormat = [{
@@ -346,8 +337,7 @@ def ShlPrimOp : ShiftPrimOp<"shl">;
 def ShrPrimOp : ShiftPrimOp<"shr">;
 
 def TailPrimOp : PrimOp<"tail"> {
-  let arguments = (ins AnyType:$input, I32Attr:$amount,
-                       OptionalAttr<StrAttr>:$name);
+  let arguments = (ins AnyType:$input, I32Attr:$amount);
   let results = (outs AnyType:$result);
   
   let assemblyFormat = [{

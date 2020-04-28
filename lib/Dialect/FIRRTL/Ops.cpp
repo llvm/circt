@@ -430,7 +430,7 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
 /// Build a ConstantOp from an APInt and a FIRRTL type, handling the attribute
 /// formation for the 'value' attribute.
 void ConstantOp::build(Builder *builder, OperationState &result, IntType type,
-                       const APInt &value, Optional<StringAttr> name) {
+                       const APInt &value) {
 
   int32_t width = type.getWidthOrSentinel();
   assert((width == -1 || (int32_t)value.getBitWidth() == width) &&
@@ -441,9 +441,7 @@ void ConstantOp::build(Builder *builder, OperationState &result, IntType type,
   Type attrType =
       IntegerType::get(value.getBitWidth(), signedness, type.getContext());
   auto attr = builder->getIntegerAttr(attrType, value);
-
-  auto nameAttr = name.hasValue() ? name.getValue() : StringAttr();
-  return build(builder, result, type, attr, nameAttr);
+  return build(builder, result, type, attr);
 }
 
 // Return the result of a subfield operation.

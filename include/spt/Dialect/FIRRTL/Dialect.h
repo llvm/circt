@@ -23,6 +23,9 @@ public:
   Type parseType(DialectAsmParser &parser) const override;
   void printType(Type, DialectAsmPrinter &) const override;
 
+  Operation *materializeConstant(OpBuilder &builder, Attribute value, Type type,
+                                 Location loc) override;
+
   static StringRef getDialectNamespace() { return "firrtl"; }
 };
 

@@ -787,8 +787,7 @@ Value FIRStmtParser::convertToPassive(Value input, Location loc) {
   if (inType.isPassiveType())
     return input;
 
-  return builder.create<AsPassivePrimOp>(loc, inType.getPassiveType(), input,
-                                         /*optionalName*/ StringAttr());
+  return builder.create<AsPassivePrimOp>(loc, inType.getPassiveType(), input);
 }
 
 //===-------------------------------
@@ -898,9 +897,9 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result,
   }
 
   // Create the result operation.
-  auto op = builder.create<SubfieldOp>(translateLocation(loc), resultType,
-                                       result, builder.getStringAttr(fieldName),
-                                       /*optionalName*/ StringAttr());
+  auto op =
+      builder.create<SubfieldOp>(translateLocation(loc), resultType, result,
+                                 builder.getStringAttr(fieldName));
   subOps.push_back(op);
   result = op.getResult();
   return success();
@@ -936,8 +935,7 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result,
   // Create the result operation.
   auto op =
       builder.create<SubindexOp>(translateLocation(indexLoc), resultType,
-                                 result, builder.getI32IntegerAttr(indexNo),
-                                 /*optionalName*/ StringAttr());
+                                 result, builder.getI32IntegerAttr(indexNo));
   subOps.push_back(op);
   result = op.getResult();
   return success();
@@ -970,8 +968,7 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result,
 
   // Create the result operation.
   auto op = builder.create<SubaccessOp>(translateLocation(indexLoc), resultType,
-                                        result, index,
-                                        /*optionalName*/ StringAttr());
+                                        result, index);
   subOps.push_back(op);
   result = op.getResult();
   return success();
