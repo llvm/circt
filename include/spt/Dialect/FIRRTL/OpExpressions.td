@@ -160,7 +160,9 @@ def RemPrimOp : BinaryPrimOp<"rem", "getRemResult">;
 
 let hasFolder = 1 in
 def AndPrimOp : BinaryPrimOp<"and", "getBitwiseBinaryResult", [Commutative]>;
+let hasFolder = 1 in
 def OrPrimOp  : BinaryPrimOp<"or",  "getBitwiseBinaryResult", [Commutative]>;
+let hasFolder = 1 in
 def XorPrimOp : BinaryPrimOp<"xor", "getBitwiseBinaryResult", [Commutative]>;
 
 // Comparison Operations

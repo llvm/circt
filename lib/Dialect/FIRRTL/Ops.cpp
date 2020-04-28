@@ -671,19 +671,63 @@ OpFoldResult AndPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
 
   /// and(x, 0) -> 0
-  if (matchPattern(rhs(), m_FConstant(value)) && value.isNullValue())
+  if (matchPattern(rhs(), m_FConstant(value)) && value.isNullValue() &&
+      rhs().getType() == getType())
     return rhs();
 
   /// and(x, -1) -> x
-  if (matchPattern(rhs(), m_FConstant(value)) && value.isAllOnesValue())
+  if (matchPattern(rhs(), m_FConstant(value)) && value.isAllOnesValue() &&
+      lhs().getType() == getType())
     return lhs();
 
   /// and(x, x) -> x
-  if (lhs() == rhs())
+  if (lhs() == rhs() && rhs().getType() == getType())
     return rhs();
 
   return constFoldBinaryOp<IntegerAttr>(operands,
                                         [](APInt a, APInt b) { return a & b; });
+}
+
+OpFoldResult OrPrimOp::fold(ArrayRef<Attribute> operands) {
+  APInt value;
+
+  /// or(x, 0) -> x
+  if (matchPattern(rhs(), m_FConstant(value)) && value.isNullValue() &&
+      lhs().getType() == getType())
+    return lhs();
+
+  /// or(x, -1) -> -1
+  if (matchPattern(rhs(), m_FConstant(value)) && value.isAllOnesValue() &&
+      rhs().getType() == getType())
+    return rhs();
+
+  /// or(x, x) -> x
+  if (lhs() == rhs())
+    return rhs();
+
+  return constFoldBinaryOp<IntegerAttr>(operands,
+                                        [](APInt a, APInt b) { return a | b; });
+}
+
+OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
+  APInt value;
+
+  /// xor(x, 0) -> x
+  if (matchPattern(rhs(), m_FConstant(value)) && value.isNullValue() &&
+      lhs().getType() == getType())
+    return lhs();
+
+  /// xor(x, x) -> 0
+  if (lhs() == rhs()) {
+    auto width = getType().cast<IntType>().getWidthOrSentinel();
+    if (width == -1)
+      width = 1;
+    auto type = IntegerType::get(width, getContext());
+    return Builder(getContext()).getZeroAttr(type);
+  }
+
+  return constFoldBinaryOp<IntegerAttr>(operands,
+                                        [](APInt a, APInt b) { return a ^ b; });
 }
 
 //===----------------------------------------------------------------------===//
