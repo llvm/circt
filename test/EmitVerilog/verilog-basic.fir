@@ -230,10 +230,11 @@ circuit Xorr :
   ; CHECK-LABEL: module Stop(
   ; CHECK-NEXT:    input clock, reset);
   ; CHECK-EMPTY:
+  ; CHECK-EMPTY:
   ; CHECK-NEXT:    always @(posedge clock) begin
   ; CHECK-NEXT:      `ifndef SYNTHESIS
   ; CHECK-NEXT:        if (`STOP_COND_ && reset) $fatal;
-  ; CHECK-NEXT:      `endif // !SYNTHESIS
+  ; CHECK-NEXT:      `endif
   ; CHECK-NEXT:    end // always @(posedge)
   ; CHECK-NEXT:  endmodule
   module Stop :
@@ -243,6 +244,7 @@ circuit Xorr :
 
   ; CHECK-LABEL: module Stop2(
   ; CHECK-NEXT:    input clock, reset);
+  ; CHECK-EMPTY:
   ; CHECK-EMPTY:
   ; CHECK-NEXT:    always @(posedge clock) begin
   ; CHECK-NEXT:      `ifndef SYNTHESIS
@@ -262,15 +264,16 @@ circuit Xorr :
   ; CHECK-LABEL: module Stop3(
   ; CHECK-NEXT:    input clock1, clock2, reset);
   ; CHECK-EMPTY:
+  ; CHECK-EMPTY:
   ; CHECK-NEXT:    always @(posedge clock1) begin
   ; CHECK-NEXT:      `ifndef SYNTHESIS
   ; CHECK-NEXT:        if (`STOP_COND_ && reset) $fatal;
-  ; CHECK-NEXT:      `endif // !SYNTHESIS
+  ; CHECK-NEXT:      `endif
   ; CHECK-NEXT:    end // always @(posedge)
   ; CHECK-NEXT:    always @(posedge clock2) begin
   ; CHECK-NEXT:      `ifndef SYNTHESIS
   ; CHECK-NEXT:        if (`STOP_COND_ && reset) $finish;
-  ; CHECK-NEXT:      `endif // !SYNTHESIS
+  ; CHECK-NEXT:      `endif
   ; CHECK-NEXT:    end // always @(posedge)
   ; CHECK-NEXT:  endmodule
   module Stop3 :
@@ -284,10 +287,11 @@ circuit Xorr :
   ; CHECK-NEXT:    input       clock, reset,
   ; CHECK-NEXT:    input [3:0] a, b);
   ; CHECK-EMPTY:
+  ; CHECK-EMPTY:
   ; CHECK-NEXT:    always @(posedge clock) begin
   ; CHECK-NEXT:      `ifndef SYNTHESIS
   ; CHECK-NEXT:        if (`PRINTF_COND_ && reset) $fwrite(32'h80000002, "Hi %x %x\n", a + a, b);
-  ; CHECK-NEXT:      `endif // !SYNTHESIS
+  ; CHECK-NEXT:      `endif
   ; CHECK-NEXT:    end // always @(posedge)
   module Print :
     input clock: Clock
@@ -295,3 +299,73 @@ circuit Xorr :
     input a: UInt<4>
     input b: UInt<4>
     printf(clock, reset, "Hi %x %x\n", add(a, a), b)
+
+  ; CHECK-LABEL: module UninitReg1(
+  ; CHECK-NEXT:    input clock);
+  ; CHECK-EMPTY:
+  ; CHECK-NEXT:    reg  [1:0] count;
+  ; CHECK-NEXT:    wire [1:0] x;
+  ; CHECK-EMPTY:
+  ; CHECK-NEXT:    assign x = count;
+  ; CHECK-EMPTY:
+  ; CHECK-NEXT:    `ifndef SYNTHESIS
+  ; CHECK-NEXT:    initial begin
+  ; CHECK-NEXT:      `INIT_RANDOM_PROLOG_
+  ; CHECK-NEXT:      `ifdef RANDOMIZE_REG_INIT
+  ; CHECK-NEXT:        count = `RANDOM; 
+  ; CHECK-NEXT:      `endif
+  ; CHECK-NEXT:    end // initial
+  ; CHECK-NEXT:    `endif // SYNTHESIS
+  ; CHECK-NEXT: endmodule
+  module UninitReg1 :
+    input clock: Clock
+    reg count : UInt<2>, clock with :
+      reset => (UInt<1>("h0"), count) @[RationalCrossing.scala 119:22]
+    node x = count
+
+
+
+; CHECK-LABEL: module InitReg1(
+; CHECK-NEXT:   input         clock, reset,
+; CHECK-NEXT:   input  [31:0] io_d,
+; CHECK-NEXT:   output [31:0] io_q,
+; CHECK-NEXT:   input         io_en);
+; CHECK-EMPTY:
+; CHECK-NEXT:   reg [31:0] reg;
+; CHECK-EMPTY:
+; CHECK-NEXT:   assign io_q = reg;
+; CHECK-NEXT:   assign reg = io_en ? io_d : reg;
+; CHECK-EMPTY:
+; CHECK-NEXT:   `ifndef SYNTHESIS
+; CHECK-NEXT:   initial begin
+; CHECK-NEXT:     `INIT_RANDOM_PROLOG_
+; CHECK-NEXT:     if (reset) reg = 32'h0;
+; CHECK-NEXT:     `ifdef RANDOMIZE_REG_INIT
+; CHECK-NEXT:       if (~reset) reg = `RANDOM;
+; CHECK-NEXT:     `endif
+; CHECK-NEXT:   end // initial
+; CHECK-NEXT:   `endif // SYNTHESIS
+; CHECK-NEXT: endmodule
+
+
+;  always @(posedge clock or posedge _T) begin
+;    if (_T) begin
+;      reg_ <= 32'h0;
+;    end else begin
+;      reg_ <= io_d;
+;    end
+;  end
+
+  module InitReg1 :
+    input clock : Clock
+    input reset : UInt<1>
+    input io_d : UInt<32>
+    output io_q : UInt<32>
+    input io_en : UInt<1>
+
+    node _T = asAsyncReset(reset)
+    reg reg : UInt<32>, clock with :
+      reset => (_T, UInt<32>("h0"))
+    io_q <= reg
+    reg <= mux(io_en, io_d, reg)
+

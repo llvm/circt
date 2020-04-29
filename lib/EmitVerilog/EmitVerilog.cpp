@@ -288,6 +288,8 @@ public:
   void emitStatement(StopOp op);
   void emitDecl(NodeOp op);
   void emitDecl(InstanceOp op);
+  void emitDecl(RegOp op);
+  void emitDecl(RegInitOp op);
   void emitOperation(Operation *op);
 
   void collectNamesEmitDecls(Block &block);
@@ -321,9 +323,11 @@ public:
                                 std::move(ppCond), "", std::move(action)});
   }
 
-  void addInitial(std::string action, std::string ppCond) {
+  void addInitial(std::string action, std::string ppCond = {},
+                  std::string condition = {}) {
     conditionalStmts.push_back({ConditionalStmtKind::Initial, "",
-                                std::move(ppCond), "", std::move(action)});
+                                std::move(ppCond), std::move(condition),
+                                std::move(action)});
   }
 
   void addAtPosEdge(std::string action, std::string ppCond, std::string clock,
@@ -331,6 +335,15 @@ public:
     conditionalStmts.push_back({ConditionalStmtKind::AlwaysAtPosEdge,
                                 std::move(clock), std::move(ppCond),
                                 std::move(condition), std::move(action)});
+  }
+
+  // Set up the per-module state for random seeding of registers/memory.
+  void emitRandomizeProlog() {
+    // Only emit this prolog once.
+    if (emittedRandomProlog)
+      return;
+    emittedRandomProlog = true;
+    addInitial("`INIT_RANDOM_PROLOG_");
   }
 
   /// ConditionalStatement are emitted lexically at the end of the module
@@ -370,6 +383,10 @@ public:
   std::vector<ConditionalStatement> conditionalStmts;
   llvm::DenseMap<Value, llvm::StringMapEntry<llvm::NoneType> *> nameTable;
   size_t nextGeneratedNameID = 0;
+
+  // This is set to true after the first RANDOMIZE prolog has been emitted in
+  // this module to the initial block.
+  bool emittedRandomProlog = false;
 };
 
 } // end anonymous namespace
@@ -1058,6 +1075,34 @@ void ModuleEmitter::emitDecl(InstanceOp op) {
   indent() << ");\n";
 }
 
+void ModuleEmitter::emitDecl(RegOp op) {
+  // There is nothing to do for the register decl itself: the prepass at the
+  // module level will already handle emission of the corresponding reg
+  // declaration, and any assign to it will be handled at that time.  Here we
+  // are concerned with the emission of the initializer expression for
+  // simulation.
+  emitRandomizeProlog();
+
+  // At simulator load time, the register is set to random nothing.
+  std::string action = getName(op.getResult()).str() + " = `RANDOM;";
+  addInitial(action, /*ppCond*/ "RANDOMIZE_REG_INIT");
+}
+
+void ModuleEmitter::emitDecl(RegInitOp op) {
+  // Registers with an init expression get a random init for the case where they
+  // are not initialized.
+  auto resetSignal = emitExpressionToString(op.resetSignal());
+  auto resetValue = emitExpressionToString(op.resetValue());
+
+  emitRandomizeProlog();
+  std::string action = getName(op.getResult()).str() + " = `RANDOM;";
+  addInitial(action, /*ppCond*/ "RANDOMIZE_REG_INIT",
+             /*cond*/ "~" + resetSignal);
+
+  action = getName(op.getResult()).str() + " = " + resetValue + ";";
+  addInitial(action, /*ppCond*/ "", /*cond*/ resetSignal);
+}
+
 //===----------------------------------------------------------------------===//
 // Module Driver
 //===----------------------------------------------------------------------===//
@@ -1187,6 +1232,8 @@ void ModuleEmitter::emitOperation(Operation *op) {
 
     bool visitDecl(InstanceOp op) { return emitter.emitDecl(op), true; }
     bool visitDecl(NodeOp op) { return emitter.emitDecl(op), true; }
+    bool visitDecl(RegOp op) { return emitter.emitDecl(op), true; }
+    bool visitDecl(RegInitOp op) { return emitter.emitDecl(op), true; }
 
     bool visitUnhandledDecl(Operation *op) { return false; }
     bool visitInvalidDecl(Operation *op) { return false; }
@@ -1277,7 +1324,12 @@ emitCondActionByPPCond(ArrayRef<ModuleEmitter::ConditionalStatement> elements,
 
   if (!elements[0].ppCond.empty()) {
     emitter.reduceIndent();
-    emitter.indent() << "`endif // " << elements[0].ppCond << '\n';
+    // Only print the macro again if there was a reasonable amount of stuff
+    // being guarded.
+    if (elements.size() > 1)
+      emitter.indent() << "`endif // " << elements[0].ppCond << '\n';
+    else
+      emitter.indent() << "`endif\n";
   }
 }
 
@@ -1300,6 +1352,9 @@ emitPosEdgeByClock(ArrayRef<ModuleEmitter::ConditionalStatement> elements,
 static void
 emitConditionStmtKind(ArrayRef<ModuleEmitter::ConditionalStatement> elements,
                       ModuleEmitter &emitter) {
+  // Separate the top level blocks with a newline.
+  emitter.os << '\n';
+
   switch (elements[0].kind) {
   case ModuleEmitter::ConditionalStmtKind::Declaration:
     splitByPredicate(emitter, elements, emitCondActionByPPCond,
@@ -1425,7 +1480,7 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
 
   // Emit the conditional statements at the bottom.  Start by sorting the list
   // to group by kind.
-  std::sort(conditionalStmts.begin(), conditionalStmts.end());
+  std::stable_sort(conditionalStmts.begin(), conditionalStmts.end());
 
   // Emit conditional statements by groups.
   splitByPredicate(
@@ -1487,6 +1542,29 @@ void CircuitEmitter::emitCircuit(CircuitOp circuit) {
 `define STOP_COND_ (`STOP_COND)
 `else
 `define STOP_COND_ 1
+`endif
+
+// Users can define INIT_RANDOM as general code that gets injected into the
+// initializer block for modules with registers.
+`ifndef INIT_RANDOM
+`define `INIT_RANDOM
+`endif
+
+// If using random initialization, you can also define RANDOMIZE_DELAY to
+// customize the delay used, otherwise 0.002 is used.
+`ifndef RANDOMIZE_DELAY
+`define RANDOMIZE_DELAY 0.002
+`endif
+
+// Define INIT_RANDOM_PROLOG_ for use in our modules below.
+`ifdef RANDOMIZE
+  `ifndef VERILATOR
+    `define `INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end
+  `else
+    `define `INIT_RANDOM_PROLOG_ `INIT_RANDOM
+  `endif
+`else
+  `define `INIT_RANDOM_PROLOG_
 `endif
 )XXX";
 
