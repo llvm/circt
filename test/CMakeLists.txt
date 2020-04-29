@@ -12,12 +12,12 @@ set(CIRT_TEST_DEPENDS
   firtool
   )
 
-add_lit_testsuite(check-spt "Running the SPT regression tests"
+add_lit_testsuite(check-cirt "Running the CIRT regression tests"
   ${CMAKE_CURRENT_BINARY_DIR}
   DEPENDS ${CIRT_TEST_DEPENDS}
   )
-set_target_properties(check-spt PROPERTIES FOLDER "Tests")
+set_target_properties(check-cirt PROPERTIES FOLDER "Tests")
 
-add_lit_testsuites(SPT ${CMAKE_CURRENT_SOURCE_DIR}
+add_lit_testsuites(CIRT ${CMAKE_CURRENT_SOURCE_DIR}
   DEPENDS ${CIRT_TEST_DEPS}
 )

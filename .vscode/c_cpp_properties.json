@@ -8,7 +8,7 @@
                 "${workspaceFolder}/../llvm-project/llvm/include",
                 "${workspaceFolder}/../llvm-project/build/include",
                 "${workspaceFolder}/../llvm-project/build/tools/mlir/include",
-                "${workspaceFolder}/../llvm-project/build/tools/spt/include"
+                "${workspaceFolder}/../llvm-project/build/tools/cirt/include"
             ],
             "defines": [],
             "macFrameworkPath": [

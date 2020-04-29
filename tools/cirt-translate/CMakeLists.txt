@@ -3,8 +3,8 @@ set(LIBS
   MLIRIR
   MLIRSupport
 
-  SPTEmitVerilog
-  SPTFIRParser
+  CIRTEmitVerilog
+  CIRTFIRParser
 )
 add_llvm_tool(cirt-translate
   cirt-translate.cpp

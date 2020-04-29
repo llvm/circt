@@ -118,7 +118,7 @@ int main(int argc, char **argv) {
   registerDialect<firrtl::FIRRTLDialect>();
 
   // Parse pass names in main to ensure static initialization completed.
-  cl::ParseCommandLineOptions(argc, argv, "spt modular optimizer driver\n");
+  cl::ParseCommandLineOptions(argc, argv, "cirt modular optimizer driver\n");
 
   // Figure out the input format if unspecified.
   if (inputFormat == InputUnspecified) {

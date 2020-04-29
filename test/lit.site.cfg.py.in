@@ -31,9 +31,9 @@ config.host_arch = "@HOST_ARCH@"
 config.mlir_src_root = "@MLIR_SOURCE_DIR@"
 config.mlir_obj_root = "@MLIR_BINARY_DIR@"
 config.mlir_tools_dir = "@MLIR_TOOLS_DIR@"
-config.spt_src_root = "@CIRT_SOURCE_DIR@"
-config.spt_obj_root = "@CIRT_BINARY_DIR@"
-config.spt_tools_dir = "@CIRT_TOOLS_DIR@"
+config.cirt_src_root = "@CIRT_SOURCE_DIR@"
+config.cirt_obj_root = "@CIRT_BINARY_DIR@"
+config.cirt_tools_dir = "@CIRT_TOOLS_DIR@"
 
 # Support substitution of the tools_dir with user parameters. This is
 # used when we can't determine the tool dir at configuration time.

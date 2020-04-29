@@ -1,7 +1,7 @@
 set(LIBS
   MLIRFIRRTL
-  SPTEmitVerilog
-  SPTFIRParser
+  CIRTEmitVerilog
+  CIRTFIRParser
 
   MLIRParser
   MLIRSupport

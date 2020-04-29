@@ -1,6 +1,6 @@
 //===- cirt-opt.cpp - The cirt-opt driver ---------------------------------===//
 //
-// This file implements the 'cirt-opt' tool, which is the spt analog of
+// This file implements the 'cirt-opt' tool, which is the cirt analog of
 // mlir-opt, used to drive compiler passes, e.g. for testing.
 //
 //===----------------------------------------------------------------------===//
@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
   PassPipelineCLParser passPipeline("", "Compiler passes to run");
 
   // Parse pass names in main to ensure static initialization completed.
-  cl::ParseCommandLineOptions(argc, argv, "spt modular optimizer driver\n");
+  cl::ParseCommandLineOptions(argc, argv, "cirt modular optimizer driver\n");
 
   MLIRContext context;
   if (showDialects) {

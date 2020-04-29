@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
       translationRequested("", llvm::cl::desc("Translation to perform"),
                            llvm::cl::Required);
 
-  llvm::cl::ParseCommandLineOptions(argc, argv, "SPT translation driver\n");
+  llvm::cl::ParseCommandLineOptions(argc, argv, "CIRT translation driver\n");
 
   std::string errorMessage;
   auto input = openInputFile(inputFilename, &errorMessage);

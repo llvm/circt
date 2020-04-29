@@ -1,10 +1,10 @@
 file(GLOB globbed *.cpp)
 
-add_mlir_library(SPTEmitVerilog
+add_mlir_library(CIRTEmitVerilog
   ${globbed}
   
   ADDITIONAL_HEADER_DIRS
   )
 
-add_dependencies(SPTEmitVerilog MLIRFIRRTL)
-target_link_libraries(SPTEmitVerilog MLIRFIRRTL)
+add_dependencies(CIRTEmitVerilog MLIRFIRRTL)
+target_link_libraries(CIRTEmitVerilog MLIRFIRRTL)

@@ -1,10 +1,10 @@
 file(GLOB globbed *.cpp)
 
-add_mlir_library(SPTFIRParser
+add_mlir_library(CIRTFIRParser
   ${globbed}
   
   ADDITIONAL_HEADER_DIRS
   )
 
-add_dependencies(SPTFIRParser MLIRFIRRTL)
-target_link_libraries(SPTFIRParser MLIRFIRRTL)
+add_dependencies(CIRTFIRParser MLIRFIRRTL)
+target_link_libraries(CIRTFIRParser MLIRFIRRTL)
