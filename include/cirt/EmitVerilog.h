@@ -4,8 +4,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef SPT_EMIT_VERILOG_H
-#define SPT_EMIT_VERILOG_H
+#ifndef CIRT_EMIT_VERILOG_H
+#define CIRT_EMIT_VERILOG_H
 
 #include "cirt/Support/LLVM.h"
 
@@ -22,4 +22,4 @@ void registerVerilogEmitterTranslation();
 
 } // namespace cirt
 
-#endif // SPT_EMIT_VERILOG_H
+#endif // CIRT_EMIT_VERILOG_H

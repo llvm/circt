@@ -1,9 +1,9 @@
 # SPT project.
-set(SPT_MAIN_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include ) # --src-root
-set(SPT_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/include ) # --includedir
+set(CIRT_MAIN_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include ) # --src-root
+set(CIRT_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/include ) # --includedir
 
-set(SPT_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-set(SPT_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
+set(CIRT_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+set(CIRT_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 
@@ -24,8 +24,8 @@ add_custom_target(spt-doc)
 
 include_directories( ${MLIR_INCLUDE_DIR})
 include_directories( ${MLIR_BINARY_INCLUDE_DIR})
-include_directories( ${SPT_INCLUDE_DIR})
-include_directories( ${SPT_MAIN_SRC_DIR})
+include_directories( ${CIRT_INCLUDE_DIR})
+include_directories( ${CIRT_MAIN_SRC_DIR})
 
 add_subdirectory(include/cirt)
 add_subdirectory(lib)
@@ -33,9 +33,9 @@ add_subdirectory(tools)
 #add_subdirectory(unittests)
 add_subdirectory(test)
 
-#option(SPT_INCLUDE_DOCS "Generate build targets for the SPT docs."
+#option(CIRT_INCLUDE_DOCS "Generate build targets for the SPT docs."
 #  ${LLVM_INCLUDE_DOCS} ${MLIR_INCLUDE_DOCS})
-#if (SPT_INCLUDE_DOCS)
+#if (CIRT_INCLUDE_DOCS)
 #  add_subdirectory(docs)
 #endif()
 
@@ -50,7 +50,7 @@ install(DIRECTORY include/spt
   PATTERN "LICENSE.TXT"
   )
 
-install(DIRECTORY ${SPT_INCLUDE_DIR}/spt
+install(DIRECTORY ${CIRT_INCLUDE_DIR}/spt
   DESTINATION include
   COMPONENT spt-headers
   FILES_MATCHING

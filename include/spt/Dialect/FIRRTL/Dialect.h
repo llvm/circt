@@ -4,8 +4,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef SPT_DIALECT_FIRRTL_IR_DIALECT_H
-#define SPT_DIALECT_FIRRTL_IR_DIALECT_H
+#ifndef CIRT_DIALECT_FIRRTL_IR_DIALECT_H
+#define CIRT_DIALECT_FIRRTL_IR_DIALECT_H
 
 #include "mlir/IR/Dialect.h"
 
@@ -39,4 +39,4 @@ StringAttr getFIRRTLNameAttr(ArrayRef<NamedAttribute> attrs);
 // Pull in all enum type definitions and utility function declarations.
 #include "cirt/Dialect/FIRRTL/FIRRTLEnums.h.inc"
 
-#endif // SPT_DIALECT_FIRRTL_IR_DIALECT_H
+#endif // CIRT_DIALECT_FIRRTL_IR_DIALECT_H

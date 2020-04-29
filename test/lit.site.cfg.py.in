@@ -31,9 +31,9 @@ config.host_arch = "@HOST_ARCH@"
 config.mlir_src_root = "@MLIR_SOURCE_DIR@"
 config.mlir_obj_root = "@MLIR_BINARY_DIR@"
 config.mlir_tools_dir = "@MLIR_TOOLS_DIR@"
-config.spt_src_root = "@SPT_SOURCE_DIR@"
-config.spt_obj_root = "@SPT_BINARY_DIR@"
-config.spt_tools_dir = "@SPT_TOOLS_DIR@"
+config.spt_src_root = "@CIRT_SOURCE_DIR@"
+config.spt_obj_root = "@CIRT_BINARY_DIR@"
+config.spt_tools_dir = "@CIRT_TOOLS_DIR@"
 
 # Support substitution of the tools_dir with user parameters. This is
 # used when we can't determine the tool dir at configuration time.
@@ -49,4 +49,4 @@ import lit.llvm
 lit.llvm.initialize(lit_config, config)
 
 # Let the main config do the real work.
-lit_config.load_config(config, "@SPT_SOURCE_DIR@/test/lit.cfg.py")
+lit_config.load_config(config, "@CIRT_SOURCE_DIR@/test/lit.cfg.py")

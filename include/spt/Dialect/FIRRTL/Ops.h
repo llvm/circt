@@ -4,15 +4,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef SPT_DIALECT_FIRRTL_IR_OPS_H
-#define SPT_DIALECT_FIRRTL_IR_OPS_H
+#ifndef CIRT_DIALECT_FIRRTL_IR_OPS_H
+#define CIRT_DIALECT_FIRRTL_IR_OPS_H
 
+#include "cirt/Dialect/FIRRTL/Dialect.h"
+#include "cirt/Dialect/FIRRTL/Types.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/SideEffects.h"
-#include "cirt/Dialect/FIRRTL/Dialect.h"
-#include "cirt/Dialect/FIRRTL/Types.h"
 
 namespace cirt {
 namespace firrtl {
@@ -64,4 +64,4 @@ namespace firrtl {
 } // namespace firrtl
 } // namespace cirt
 
-#endif // SPT_DIALECT_FIRRTL_IR_OPS_H
+#endif // CIRT_DIALECT_FIRRTL_IR_OPS_H

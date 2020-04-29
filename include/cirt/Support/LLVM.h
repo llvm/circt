@@ -3,14 +3,14 @@
 // This file forward declares and imports various common LLVM and MLIR datatypes
 // that we want to use unqualified.
 //
-// Note that most of these are forward declared and then imported into the SPT
+// Note that most of these are forward declared and then imported into the cirt
 // namespace with using decls, rather than being #included.  This is because we
 // want clients to explicitly #include the files they need.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef SPT_SUPPORT_LLVM_H
-#define SPT_SUPPORT_LLVM_H
+#ifndef CIRT_SUPPORT_LLVM_H
+#define CIRT_SUPPORT_LLVM_H
 
 // MLIR includes a lot of forward declarations of LLVM types, use them.
 #include "mlir/Support/LLVM.h"
@@ -57,4 +57,4 @@ using llvm::APInt;
 using llvm::raw_ostream;
 } // namespace cirt
 
-#endif // SPT_SUPPORT_LLVM_H
+#endif // CIRT_SUPPORT_LLVM_H

@@ -5,7 +5,7 @@ configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.cfg.py
   )
 
-set(SPT_TEST_DEPENDS
+set(CIRT_TEST_DEPENDS
   FileCheck count not
   spt-opt
   spt-translate
@@ -14,10 +14,10 @@ set(SPT_TEST_DEPENDS
 
 add_lit_testsuite(check-spt "Running the SPT regression tests"
   ${CMAKE_CURRENT_BINARY_DIR}
-  DEPENDS ${SPT_TEST_DEPENDS}
+  DEPENDS ${CIRT_TEST_DEPENDS}
   )
 set_target_properties(check-spt PROPERTIES FOLDER "Tests")
 
 add_lit_testsuites(SPT ${CMAKE_CURRENT_SOURCE_DIR}
-  DEPENDS ${SPT_TEST_DEPS}
+  DEPENDS ${CIRT_TEST_DEPS}
 )

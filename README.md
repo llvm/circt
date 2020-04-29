@@ -4,8 +4,11 @@ This is a test repository, experimenting with an approach of building a modular
 set of tools for verilog and other SiFive related projects.
 
 "CIRT" stands for "Circuit IR and Tools" or perhaps "CIRCuiT + 
-IntermediateRepresenTation + Toolbox" (hat tip to Aliaksei Chapyzhenka).  This
-name can still be changed if a better one is suggested.  :-)
+IntermediateRepresenTation + Toolbox" (hat tip to Aliaksei Chapyzhenka).  The
+T can be further expanded as Tool, Translator, Team, Tech, Target, Tree, Type,
+...
+
+This name can still be changed if a better one is suggested.  :-)
 
 ## Setting this up
 

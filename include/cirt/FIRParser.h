@@ -4,8 +4,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef SPT_DIALECT_FIRPARSER_H
-#define SPT_DIALECT_FIRPARSER_H
+#ifndef CIRT_DIALECT_FIRPARSER_H
+#define CIRT_DIALECT_FIRPARSER_H
 
 namespace llvm {
 class SourceMgr;
@@ -31,4 +31,4 @@ void registerFIRParserTranslation();
 
 } // namespace cirt
 
-#endif // SPT_DIALECT_FIRPARSER_H
+#endif // CIRT_DIALECT_FIRPARSER_H
