@@ -301,7 +301,8 @@ circuit Xorr :
     printf(clock, reset, "Hi %x %x\n", add(a, a), b)
 
   ; CHECK-LABEL: module UninitReg1(
-  ; CHECK-NEXT:    input clock);
+  ; CHECK-NEXT:    input       clock, reset, cond,
+  ; CHECK-NEXT:    input [1:0] value);
   ; CHECK-EMPTY:
   ; CHECK-NEXT:    reg  [1:0] count;
   ; CHECK-NEXT:    wire [1:0] x;
@@ -316,14 +317,22 @@ circuit Xorr :
   ; CHECK-NEXT:      `endif
   ; CHECK-NEXT:    end // initial
   ; CHECK-NEXT:    `endif // SYNTHESIS
+  ; CHECK-EMPTY:
+  ; CHECK-NEXT:   always @(posedge clock) begin
+  ; CHECK-NEXT:     count <= reset ? 2'h0 : cond ? value : count;
+  ; CHECK-NEXT:   end
   ; CHECK-NEXT: endmodule
   module UninitReg1 :
     input clock: Clock
+    input reset : UInt<1>
+    input cond: UInt<1>
+    input value: UInt<2>
     reg count : UInt<2>, clock with :
       reset => (UInt<1>("h0"), count) @[RationalCrossing.scala 119:22]
     node x = count
 
-
+   node _GEN_0 = mux(cond, value, count)
+   count <= mux(reset, UInt<2>("h0"), _GEN_0)
 
 ; CHECK-LABEL: module InitReg1(
 ; CHECK-NEXT:   input         clock, reset,
@@ -334,7 +343,6 @@ circuit Xorr :
 ; CHECK-NEXT:   reg [31:0] reg;
 ; CHECK-EMPTY:
 ; CHECK-NEXT:   assign io_q = reg;
-; CHECK-NEXT:   assign reg = io_en ? io_d : reg;
 ; CHECK-EMPTY:
 ; CHECK-NEXT:   `ifndef SYNTHESIS
 ; CHECK-NEXT:   initial begin
@@ -345,16 +353,11 @@ circuit Xorr :
 ; CHECK-NEXT:     `endif
 ; CHECK-NEXT:   end // initial
 ; CHECK-NEXT:   `endif // SYNTHESIS
+; CHECK-EMPTY:
+; CHECK-NEXT:   always @(posedge clock or posedge reset) begin
+; CHECK-NEXT:     reg <= io_en ? io_d : reg;
+; CHECK-NEXT:   end
 ; CHECK-NEXT: endmodule
-
-
-;  always @(posedge clock or posedge _T) begin
-;    if (_T) begin
-;      reg_ <= 32'h0;
-;    end else begin
-;      reg_ <= io_d;
-;    end
-;  end
 
   module InitReg1 :
     input clock : Clock

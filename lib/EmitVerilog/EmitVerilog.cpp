@@ -957,8 +957,33 @@ void ModuleEmitter::emitStatementExpression(Operation *op) {
 }
 
 void ModuleEmitter::emitStatement(ConnectOp op) {
+  // Connect to a register has "special" behavior.
+  auto lhs = op.lhs();
+  if (auto *lhsOp = lhs.getDefiningOp()) {
+    if (auto regOp = dyn_cast<RegOp>(lhsOp)) {
+      auto clockExpr = emitExpressionToString(regOp.clockVal());
+      std::string action =
+          getName(lhs).str() + " <= " + emitExpressionToString(op.rhs()) + ";";
+
+      addAtPosEdge(action, /*ppCond*/ "", clockExpr, /*condition*/ "");
+      return;
+    }
+
+    if (auto regInitOp = dyn_cast<RegInitOp>(lhsOp)) {
+      auto clockExpr = emitExpressionToString(regInitOp.clockVal());
+      clockExpr +=
+          " or posedge " + emitExpressionToString(regInitOp.resetSignal());
+
+      std::string action =
+          getName(lhs).str() + " <= " + emitExpressionToString(op.rhs()) + ";";
+
+      addAtPosEdge(action, /*ppCond*/ "", clockExpr, /*condition*/ "");
+      return;
+    }
+  }
+
   indent() << "assign ";
-  emitExpression(op.lhs());
+  emitExpression(lhs);
   os << " = ";
   emitExpression(op.rhs());
   os << ";\n";
