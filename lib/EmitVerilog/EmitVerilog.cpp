@@ -4,11 +4,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "spt/EmitVerilog.h"
+#include "cirt/EmitVerilog.h"
+#include "cirt/Dialect/FIRRTL/Visitors.h"
+#include "cirt/Support/LLVM.h"
 #include "mlir/IR/Module.h"
 #include "mlir/Translation.h"
-#include "spt/Dialect/FIRRTL/Visitors.h"
-#include "spt/Support/LLVM.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/Support/raw_ostream.h"
 

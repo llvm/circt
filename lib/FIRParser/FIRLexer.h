@@ -7,7 +7,7 @@
 #ifndef FIRTOMLIR_FIRLEXER_H
 #define FIRTOMLIR_FIRLEXER_H
 
-#include "spt/Support/LLVM.h"
+#include "cirt/Support/LLVM.h"
 #include "llvm/Support/SourceMgr.h"
 
 namespace mlir {

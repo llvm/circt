@@ -7,7 +7,7 @@
 #ifndef SPT_EMIT_VERILOG_H
 #define SPT_EMIT_VERILOG_H
 
-#include "spt/Support/LLVM.h"
+#include "cirt/Support/LLVM.h"
 
 namespace mlir {
 struct LogicalResult;

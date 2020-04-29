@@ -5,6 +5,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "cirt/Dialect/FIRRTL/Dialect.h"
+#include "cirt/EmitVerilog.h"
+#include "cirt/FIRParser.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Module.h"
 #include "mlir/Parser.h"
@@ -12,9 +15,6 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Transforms/Passes.h"
-#include "spt/Dialect/FIRRTL/Dialect.h"
-#include "spt/EmitVerilog.h"
-#include "spt/FIRParser.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/ToolOutputFile.h"

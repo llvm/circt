@@ -7,12 +7,12 @@
 #ifndef SPT_DIALECT_FIRRTL_IR_OPS_H
 #define SPT_DIALECT_FIRRTL_IR_OPS_H
 
+#include "cirt/Dialect/FIRRTL/Dialect.h"
+#include "cirt/Dialect/FIRRTL/Types.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/SideEffects.h"
-#include "cirt/Dialect/FIRRTL/Dialect.h"
-#include "cirt/Dialect/FIRRTL/Types.h"
 
 namespace cirt {
 namespace firrtl {

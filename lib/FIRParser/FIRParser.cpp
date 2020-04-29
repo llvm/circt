@@ -4,14 +4,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "spt/FIRParser.h"
+#include "cirt/FIRParser.h"
 #include "FIRLexer.h"
+#include "cirt/Dialect/FIRRTL/Ops.h"
 #include "mlir/Analysis/Verifier.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Module.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Translation.h"
-#include "spt/Dialect/FIRRTL/Ops.h"
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"

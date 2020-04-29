@@ -27,7 +27,7 @@ include_directories( ${MLIR_BINARY_INCLUDE_DIR})
 include_directories( ${SPT_INCLUDE_DIR})
 include_directories( ${SPT_MAIN_SRC_DIR})
 
-add_subdirectory(include/spt)
+add_subdirectory(include/cirt)
 add_subdirectory(lib)
 add_subdirectory(tools)
 #add_subdirectory(unittests)
