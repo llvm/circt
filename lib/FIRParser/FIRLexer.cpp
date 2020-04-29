@@ -10,7 +10,7 @@
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/SourceMgr.h"
 
-using namespace spt;
+using namespace cirt;
 using namespace firrtl;
 using namespace mlir;
 using llvm::SMLoc;

@@ -9,7 +9,7 @@
 
 #include "mlir/IR/Dialect.h"
 
-namespace spt {
+namespace cirt {
 namespace firrtl {
 using namespace mlir;
 class FIRRTLType;
@@ -34,7 +34,7 @@ public:
 StringAttr getFIRRTLNameAttr(ArrayRef<NamedAttribute> attrs);
 
 } // namespace firrtl
-} // namespace spt
+} // namespace cirt
 
 // Pull in all enum type definitions and utility function declarations.
 #include "spt/Dialect/FIRRTL/FIRRTLEnums.h.inc"

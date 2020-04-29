@@ -16,7 +16,7 @@
 #include "mlir/Support/LLVM.h"
 
 // Import things we want into our namespace.
-namespace spt {
+namespace cirt {
 // Casting operators.
 using llvm::cast;
 using llvm::cast_or_null;
@@ -55,6 +55,6 @@ using llvm::Twine;
 using llvm::APFloat;
 using llvm::APInt;
 using llvm::raw_ostream;
-} // namespace spt
+} // namespace cirt
 
 #endif // SPT_SUPPORT_LLVM_H

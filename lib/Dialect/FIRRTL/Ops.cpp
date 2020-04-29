@@ -10,7 +10,7 @@
 #include "mlir/IR/StandardTypes.h"
 #include "spt/Dialect/FIRRTL/Visitors.h"
 
-using namespace spt;
+using namespace cirt;
 using namespace firrtl;
 
 //===----------------------------------------------------------------------===//

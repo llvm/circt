@@ -15,7 +15,7 @@ class MLIRContext;
 class Location;
 } // namespace mlir
 
-namespace spt {
+namespace cirt {
 namespace firrtl {
 
 /// This represents a specific token for .fir files.
@@ -123,6 +123,6 @@ private:
 };
 
 } // namespace firrtl
-} // namespace spt
+} // namespace cirt
 
 #endif // FIRTOMLIR_FIRLEXER_H

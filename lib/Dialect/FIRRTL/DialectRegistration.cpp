@@ -3,7 +3,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "spt/Dialect/FIRRTL/Dialect.h"
-using namespace spt;
+using namespace cirt;
 using namespace firrtl;
 
 // Static initialization for FIRRTL dialect registration.

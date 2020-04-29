@@ -16,7 +16,7 @@ class MLIRContext;
 class OwningModuleRef;
 } // namespace mlir
 
-namespace spt {
+namespace cirt {
 
 struct FIRParserOptions {
   /// If this is set to true, the @info locators are ignored, and the locations
@@ -29,6 +29,6 @@ mlir::OwningModuleRef parseFIRFile(llvm::SourceMgr &sourceMgr,
                                    FIRParserOptions options = {});
 void registerFIRParserTranslation();
 
-} // namespace spt
+} // namespace cirt
 
 #endif // SPT_DIALECT_FIRPARSER_H

@@ -20,7 +20,7 @@
 #include "llvm/Support/ToolOutputFile.h"
 
 using namespace mlir;
-using namespace spt;
+using namespace cirt;
 
 static llvm::cl::opt<std::string> inputFilename(llvm::cl::Positional,
                                                 llvm::cl::desc("<input file>"),

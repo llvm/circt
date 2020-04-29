@@ -14,12 +14,12 @@ struct LogicalResult;
 class ModuleOp;
 } // namespace mlir
 
-namespace spt {
+namespace cirt {
 
 mlir::LogicalResult emitVerilog(mlir::ModuleOp module, llvm::raw_ostream &os);
 
 void registerVerilogEmitterTranslation();
 
-} // namespace spt
+} // namespace cirt
 
 #endif // SPT_EMIT_VERILOG_H

@@ -12,7 +12,7 @@
 #include "llvm/ADT/StringSet.h"
 #include "llvm/Support/raw_ostream.h"
 
-using namespace spt;
+using namespace cirt;
 using namespace firrtl;
 using namespace mlir;
 
@@ -1617,12 +1617,12 @@ void CircuitEmitter::emitMLIRModule(ModuleOp module) {
   }
 }
 
-LogicalResult spt::emitVerilog(ModuleOp module, llvm::raw_ostream &os) {
+LogicalResult cirt::emitVerilog(ModuleOp module, llvm::raw_ostream &os) {
   VerilogEmitterState state(os);
   CircuitEmitter(state).emitMLIRModule(module);
   return failure(state.encounteredError);
 }
 
-void spt::registerVerilogEmitterTranslation() {
+void cirt::registerVerilogEmitterTranslation() {
   static TranslateFromMLIRRegistration toVerilog("emit-verilog", emitVerilog);
 }

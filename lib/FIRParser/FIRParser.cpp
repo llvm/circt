@@ -16,7 +16,7 @@
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 
-using namespace spt;
+using namespace cirt;
 using namespace firrtl;
 using namespace mlir;
 using llvm::SMLoc;
@@ -2266,8 +2266,8 @@ ParseResult FIRCircuitParser::parseCircuit() {
 //===----------------------------------------------------------------------===//
 
 // Parse the specified .fir file into the specified MLIR context.
-OwningModuleRef spt::parseFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
-                                  FIRParserOptions options) {
+OwningModuleRef cirt::parseFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
+                                   FIRParserOptions options) {
   auto sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
 
   // This is the result module we are parsing into.
@@ -2287,7 +2287,7 @@ OwningModuleRef spt::parseFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
   return module;
 }
 
-void spt::registerFIRParserTranslation() {
+void cirt::registerFIRParserTranslation() {
   static TranslateToMLIRRegistration fromFIR(
       "parse-fir", [](llvm::SourceMgr &sourceMgr, MLIRContext *context) {
         return parseFIRFile(sourceMgr, context);

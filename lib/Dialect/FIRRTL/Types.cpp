@@ -8,7 +8,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
 
-using namespace spt;
+using namespace cirt;
 using namespace firrtl;
 
 //===----------------------------------------------------------------------===//
@@ -317,7 +317,7 @@ IntType IntType::get(MLIRContext *context, bool isSigned, int32_t width) {
 // Width Qualified Ground Types
 //===----------------------------------------------------------------------===//
 
-namespace spt {
+namespace cirt {
 namespace firrtl {
 namespace detail {
 struct WidthTypeStorage : mlir::TypeStorage {
@@ -335,7 +335,7 @@ struct WidthTypeStorage : mlir::TypeStorage {
 };
 } // namespace detail
 } // namespace firrtl
-} // namespace spt
+} // namespace cirt
 
 static Optional<int32_t>
 getWidthQualifiedTypeWidth(firrtl::detail::WidthTypeStorage *impl) {
@@ -378,7 +378,7 @@ Optional<int32_t> AnalogType::getWidth() {
 // Flip Type
 //===----------------------------------------------------------------------===//
 
-namespace spt {
+namespace cirt {
 namespace firrtl {
 namespace detail {
 struct FlipTypeStorage : mlir::TypeStorage {
@@ -397,7 +397,7 @@ struct FlipTypeStorage : mlir::TypeStorage {
 
 } // namespace detail
 } // namespace firrtl
-} // namespace spt
+} // namespace cirt
 
 /// Return a bundle type with the specified elements all flipped.  This assumes
 /// the elements list is non-empty.
@@ -463,7 +463,7 @@ FIRRTLType FlipType::getElementType() { return getImpl()->element; }
 // Bundle Type
 //===----------------------------------------------------------------------===//
 
-namespace spt {
+namespace cirt {
 namespace firrtl {
 namespace detail {
 struct BundleTypeStorage : mlir::TypeStorage {
@@ -496,7 +496,7 @@ struct BundleTypeStorage : mlir::TypeStorage {
 
 } // namespace detail
 } // namespace firrtl
-} // namespace spt
+} // namespace cirt
 
 FIRRTLType BundleType::get(ArrayRef<BundleElement> elements,
                            MLIRContext *context) {
@@ -545,7 +545,7 @@ FIRRTLType BundleType::getPassiveType() {
 // Vector Type
 //===----------------------------------------------------------------------===//
 
-namespace spt {
+namespace cirt {
 namespace firrtl {
 namespace detail {
 struct VectorTypeStorage : mlir::TypeStorage {
@@ -571,7 +571,7 @@ struct VectorTypeStorage : mlir::TypeStorage {
 
 } // namespace detail
 } // namespace firrtl
-} // namespace spt
+} // namespace cirt
 
 FIRRTLType FVectorType::get(FIRRTLType elementType, unsigned numElements) {
   // If elementType is a flip, then we canonicalize it outwards.

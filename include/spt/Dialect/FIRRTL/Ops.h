@@ -14,7 +14,7 @@
 #include "spt/Dialect/FIRRTL/Dialect.h"
 #include "spt/Dialect/FIRRTL/Types.h"
 
-namespace spt {
+namespace cirt {
 namespace firrtl {
 
 /// Return true if the specified operation is a firrtl expression.
@@ -53,15 +53,15 @@ FunctionType getModuleType(Operation *op);
 void getModulePortInfo(Operation *op, SmallVectorImpl<ModulePortInfo> &results);
 
 } // namespace firrtl
-} // namespace spt
+} // namespace cirt
 
-namespace spt {
+namespace cirt {
 namespace firrtl {
 
 #define GET_OP_CLASSES
 #include "spt/Dialect/FIRRTL/FIRRTL.h.inc"
 
 } // namespace firrtl
-} // namespace spt
+} // namespace cirt
 
 #endif // SPT_DIALECT_FIRRTL_IR_OPS_H

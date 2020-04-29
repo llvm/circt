@@ -21,7 +21,7 @@
 
 using namespace llvm;
 using namespace mlir;
-using namespace spt;
+using namespace cirt;
 
 /// Allow the user to specify the input file format.  This can be used to
 /// override the input, and can be used to specify ambiguous cases like standard

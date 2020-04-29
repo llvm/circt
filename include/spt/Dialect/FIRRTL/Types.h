@@ -9,7 +9,7 @@
 
 #include "mlir/IR/Types.h"
 
-namespace spt {
+namespace cirt {
 namespace firrtl {
 namespace detail {
 struct WidthTypeStorage;
@@ -252,14 +252,14 @@ public:
 };
 
 } // namespace firrtl
-} // namespace spt
+} // namespace cirt
 
 namespace llvm {
 
 // Type hash just like pointers.
 template <>
-struct DenseMapInfo<spt::firrtl::FIRRTLType> {
-  using FIRRTLType = spt::firrtl::FIRRTLType;
+struct DenseMapInfo<cirt::firrtl::FIRRTLType> {
+  using FIRRTLType = cirt::firrtl::FIRRTLType;
   static FIRRTLType getEmptyKey() {
     auto pointer = llvm::DenseMapInfo<void *>::getEmptyKey();
     return FIRRTLType(static_cast<mlir::Type::ImplType *>(pointer));

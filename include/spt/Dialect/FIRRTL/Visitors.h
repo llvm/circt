@@ -10,7 +10,7 @@
 #include "spt/Dialect/FIRRTL/Ops.h"
 #include "llvm/ADT/TypeSwitch.h"
 
-namespace spt {
+namespace cirt {
 namespace firrtl {
 
 /// ExprVisitor is a visitor for FIRRTL expression nodes.
@@ -221,6 +221,6 @@ public:
 };
 
 } // namespace firrtl
-} // namespace spt
+} // namespace cirt
 
 #endif // SPT_DIALECT_FIRRTL_IR_VISITORS_H

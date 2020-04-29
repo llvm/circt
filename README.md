@@ -1,12 +1,11 @@
-# clattner-test / spt
+# clattner-test / CIRT / Circuit IR and Tools
 
-This is a test repository, experimenting with an approach of building a modular set of tools
-for verilog and other SiFive related projects.
+This is a test repository, experimenting with an approach of building a modular
+set of tools for verilog and other SiFive related projects.
 
-SPT is just a placeholder, "SiFive Platform Tools".  It has been pointed out
-that this is far too close to the existing "SBT" tool and it also only
-has three letters.  A better 4-letter suggestion is very welcome :-)
-
+"CIRT" stands for "Circuit IR and Tools" or perhaps "CIRCuiT + 
+IntermediateRepresenTation + Toolbox" (hat tip to Aliaksei Chapyzhenka).  This
+name can still be changed if a better one is suggested.  :-)
 
 ## Setting this up
 
@@ -15,29 +14,29 @@ These are the commands Chris used to set this up on a Mac:
 1) Install Dependences of LLVM/MLIR according to [the
   instructions](https://mlir.llvm.org/getting_started/), including cmake and ninja. 
 
-2) Check out LLVM and SPT repo's:
+2) Check out LLVM and CIRT repo's:
 
 ```
 $ cd ~/Projects
 $ git clone git@github.com:llvm/llvm-project.git
-$ git clone git@github.com:sifive/clattner-experimental.git spt
+$ git clone git@github.com:sifive/clattner-experimental.git cirt
 ```
 
-3) HACK: Add symlink because I can't figure out how to get `LLVM_EXTERNAL_SPT_SOURCE_DIR` to work with cmake:
+3) HACK: Add symlink because I can't figure out how to get `LLVM_EXTERNAL_CIRT_SOURCE_DIR` to work with cmake:
 
 ```
 $ cd ~/Projects/llvm-project
-$ ln -s ../spt spt
+$ ln -s ../cirt cirt
 ```
 
-4) Configure the build to build MLIR and SPT (MLIR is probably not necessary, but it builds 
+4) Configure the build to build MLIR and CIRT (MLIR is probably not necessary, but it builds 
 reasonably fast and is good to provide a sanity check that things are working): 
 
 ```
 $ cd ~/Projects/llvm-project
 $ mkdir build
 $ cd build
-$ cmake -G Ninja ../llvm  -DLLVM_EXTERNAL_PROJECTS="spt" -DLLVM_EXTERNAL_SPT_SOURCE_DIR=/Users/chrisl/Projects/spt   -DLLVM_ENABLE_PROJECTS="mlir;spt" -DLLVM_TARGETS_TO_BUILD="X86;RISCV"  -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=DEBUG
+$ cmake -G Ninja ../llvm  -DLLVM_EXTERNAL_PROJECTS="cirt" -DLLVM_EXTERNAL_CIRT_SOURCE_DIR=/Users/chrisl/Projects/cirt   -DLLVM_ENABLE_PROJECTS="mlir;cirt" -DLLVM_TARGETS_TO_BUILD="X86;RISCV"  -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=DEBUG
 ```
 
 The `-DCMAKE_BUILD_TYPE=DEBUG` flag enables debug information, which makes the
@@ -55,15 +54,15 @@ in performance.
 $ ninja check-mlir
 ```
 
-6) Build SPT and run SPT tests:
+6) Build CIRT and run CIRT tests:
 
 ```
-$ ninja check-spt
+$ ninja check-cirt
 ```
 
-## Submitting changes to SPT
+## Submitting changes to CIRT
 
-
+Talk to Chris.
 
 ## Submitting changes to LLVM / MLIR
 

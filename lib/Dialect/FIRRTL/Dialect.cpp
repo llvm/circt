@@ -6,7 +6,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "spt/Dialect/FIRRTL/Ops.h"
 
-using namespace spt;
+using namespace cirt;
 using namespace firrtl;
 
 //===----------------------------------------------------------------------===//
