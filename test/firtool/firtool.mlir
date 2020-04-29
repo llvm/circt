@@ -1,4 +1,4 @@
-// RUN: firtool %s --format=mlir -mlir    | spt-opt | FileCheck %s --check-prefix=MLIR
+// RUN: firtool %s --format=mlir -mlir    | cirt-opt | FileCheck %s --check-prefix=MLIR
 // RUN: firtool %s --format=mlir -verilog |           FileCheck %s --check-prefix=VERILOG
 
 firrtl.circuit "Top" {

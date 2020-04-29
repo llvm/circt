@@ -1,4 +1,4 @@
-; RUN: firtool %s --format=fir -mlir    | spt-opt | FileCheck %s --check-prefix=MLIR
+; RUN: firtool %s --format=fir -mlir    | cirt-opt | FileCheck %s --check-prefix=MLIR
 ; RUN: firtool %s --format=fir -verilog |           FileCheck %s --check-prefix=VERILOG
 
 circuit fir_test :

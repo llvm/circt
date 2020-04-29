@@ -1,4 +1,4 @@
-; RUN: spt-translate -parse-fir -verify-diagnostics %s | spt-opt | FileCheck %s
+; RUN: cirt-translate -parse-fir -verify-diagnostics %s | cirt-opt | FileCheck %s
 
 circuit basic :     ; CHECK: firrtl.circuit "basic" {
 

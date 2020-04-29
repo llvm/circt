@@ -1,7 +1,7 @@
-//===- cirt-opt.cpp - The cirt-opt driver -----------------------------------===//
+//===- cirt-opt.cpp - The cirt-opt driver ---------------------------------===//
 //
-// This file implements the 'cirt-opt' tool, which is the spt analog of mlir-opt,
-// used to drive compiler passes, e.g. for testing.
+// This file implements the 'cirt-opt' tool, which is the spt analog of
+// mlir-opt, used to drive compiler passes, e.g. for testing.
 //
 //===----------------------------------------------------------------------===//
 

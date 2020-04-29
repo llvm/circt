@@ -7,8 +7,8 @@ configure_lit_site_cfg(
 
 set(CIRT_TEST_DEPENDS
   FileCheck count not
-  spt-opt
-  spt-translate
+  cirt-opt
+  cirt-translate
   firtool
   )
 

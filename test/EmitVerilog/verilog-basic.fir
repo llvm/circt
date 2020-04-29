@@ -1,4 +1,4 @@
-; RUN: spt-translate -parse-fir --mlir-print-debuginfo %s | spt-translate -emit-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
+; RUN: cirt-translate -parse-fir --mlir-print-debuginfo %s | cirt-translate -emit-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 circuit Xorr :
 
   module inputs_only :

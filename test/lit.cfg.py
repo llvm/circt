@@ -53,8 +53,8 @@ llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 
 tool_dirs = [config.spt_tools_dir, config.mlir_tools_dir, config.llvm_tools_dir]
 tools = [
-    'spt-opt',
-    'spt-translate',
+    'cirt-opt',
+    'cirt-translate',
 ]
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)

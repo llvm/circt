@@ -1,4 +1,4 @@
-//===- cirt-translate.cpp - SPT Translate Driver ---------------------------===//
+//===- cirt-translate.cpp - CIRT Translation Driver -----------------------===//
 //
 // This is a command line utility that translates a file from/to MLIR using one
 // of the registered translations.

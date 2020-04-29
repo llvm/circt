@@ -1,4 +1,4 @@
-; RUN: spt-translate -parse-fir -verify-diagnostics --split-input-file %s 
+; RUN: cirt-translate -parse-fir -verify-diagnostics --split-input-file %s 
 
 circuit test :
   extmodule MyModule :

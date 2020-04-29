@@ -1,4 +1,4 @@
-// RUN: spt-opt -canonicalize %s | FileCheck %s
+// RUN: cirt-opt -canonicalize %s | FileCheck %s
 
 
 // CHECK-LABEL: firrtl.module @And
