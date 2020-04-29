@@ -8,6 +8,7 @@
 #define FIRRTL_TD
 
 include "mlir/IR/OpBase.td"
+include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/SideEffects.td"
 
 def FIRRTLDialect : Dialect {

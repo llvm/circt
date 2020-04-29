@@ -18,7 +18,7 @@ def CircuitOp : FIRRTLOp<"circuit",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"Builder *builder, OperationState &result, StringAttr name">
+    OpBuilder<"OpBuilder &builder, OperationState &result, StringAttr name">
   ];
 
   let extraClassDeclaration = [{
@@ -52,11 +52,13 @@ def FModuleOp : FIRRTLOp<"module",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"Builder *builder, OperationState &result, StringAttr name, "
+    OpBuilder<"OpBuilder &builder, OperationState &result, StringAttr name, "
               "ArrayRef<std::pair<StringAttr, FIRRTLType>> ports">
   ];
 
   let extraClassDeclaration = [{
+    using FunctionLike::getBody;
+
     // Decode information about the input and output ports on this module.
     void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
       getModulePortInfo(*this, results);
@@ -114,7 +116,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"Builder *builder, OperationState &result, StringAttr name, "
+    OpBuilder<"OpBuilder &builder, OperationState &result, StringAttr name, "
               "ArrayRef<std::pair<StringAttr, FIRRTLType>> ports, "
               "StringRef defnameAttr = StringRef()">
   ];

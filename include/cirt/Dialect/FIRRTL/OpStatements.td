@@ -128,7 +128,7 @@ def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">]> {
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"Builder *builder, OperationState &result, "
+    OpBuilder<"OpBuilder &builder, OperationState &result, "
               "Value condition, bool withElseRegion">
   ];
 

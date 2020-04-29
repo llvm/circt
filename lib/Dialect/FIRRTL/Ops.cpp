@@ -17,17 +17,17 @@ using namespace firrtl;
 // CircuitOp
 //===----------------------------------------------------------------------===//
 
-void CircuitOp::build(Builder *builder, OperationState &result,
+void CircuitOp::build(OpBuilder &builder, OperationState &result,
                       StringAttr name) {
   // Add an attribute for the name.
-  result.addAttribute(builder->getIdentifier("name"), name);
+  result.addAttribute(builder.getIdentifier("name"), name);
 
   // Create a region and a block for the body.  The argument of the region is
   // the loop induction variable.
   Region *bodyRegion = result.addRegion();
   Block *body = new Block();
   bodyRegion->push_back(body);
-  CircuitOp::ensureTerminator(*bodyRegion, *builder, result.location);
+  CircuitOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
 
 static void print(OpAsmPrinter &p, CircuitOp op) {
@@ -85,7 +85,7 @@ void firrtl::getModulePortInfo(Operation *op,
   }
 }
 
-static void buildModule(Builder *builder, OperationState &result,
+static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name,
                         ArrayRef<std::pair<StringAttr, FIRRTLType>> ports) {
   using namespace mlir::impl;
@@ -98,7 +98,7 @@ static void buildModule(Builder *builder, OperationState &result,
     argTypes.push_back(elt.second);
 
   // Record the argument and result types as an attribute.
-  auto type = builder->getFunctionType(argTypes, /*resultTypes*/ {});
+  auto type = builder.getFunctionType(argTypes, /*resultTypes*/ {});
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
 
   // Record the names of the arguments if present.
@@ -108,16 +108,17 @@ static void buildModule(Builder *builder, OperationState &result,
       continue;
 
     auto argAttr =
-        NamedAttribute(builder->getIdentifier("firrtl.name"), ports[i].first);
+        NamedAttribute(builder.getIdentifier("firrtl.name"), ports[i].first);
 
     result.addAttribute(getArgAttrName(i, attrNameBuf),
-                        builder->getDictionaryAttr(argAttr));
+                        builder.getDictionaryAttr(argAttr));
   }
 
   result.addRegion();
 }
 
-void FModuleOp::build(Builder *builder, OperationState &result, StringAttr name,
+void FModuleOp::build(OpBuilder &builder, OperationState &result,
+                      StringAttr name,
                       ArrayRef<std::pair<StringAttr, FIRRTLType>> ports) {
   buildModule(builder, result, name, ports);
 
@@ -130,16 +131,16 @@ void FModuleOp::build(Builder *builder, OperationState &result, StringAttr name,
   for (auto elt : ports)
     body->addArgument(elt.second);
 
-  FModuleOp::ensureTerminator(*bodyRegion, *builder, result.location);
+  FModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
 
-void FExtModuleOp::build(Builder *builder, OperationState &result,
+void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name,
                          ArrayRef<std::pair<StringAttr, FIRRTLType>> ports,
                          StringRef defnameAttr) {
   buildModule(builder, result, name, ports);
   if (!defnameAttr.empty())
-    result.addAttribute("defname", builder->getStringAttr(defnameAttr));
+    result.addAttribute("defname", builder.getStringAttr(defnameAttr));
 }
 
 // TODO: This ia a clone of mlir::impl::printFunctionSignature, refactor it to
@@ -331,15 +332,15 @@ void WhenOp::createElseRegion() {
   WhenOp::ensureTerminator(elseRegion(), builder, getLoc());
 }
 
-void WhenOp::build(Builder *builder, OperationState &result, Value condition,
+void WhenOp::build(OpBuilder &builder, OperationState &result, Value condition,
                    bool withElseRegion) {
   result.addOperands(condition);
 
   Region *thenRegion = result.addRegion();
   Region *elseRegion = result.addRegion();
-  WhenOp::ensureTerminator(*thenRegion, *builder, result.location);
+  WhenOp::ensureTerminator(*thenRegion, builder, result.location);
   if (withElseRegion)
-    WhenOp::ensureTerminator(*elseRegion, *builder, result.location);
+    WhenOp::ensureTerminator(*elseRegion, builder, result.location);
 }
 
 static void print(OpAsmPrinter &p, WhenOp op) {
@@ -431,7 +432,7 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
 
 /// Build a ConstantOp from an APInt and a FIRRTL type, handling the attribute
 /// formation for the 'value' attribute.
-void ConstantOp::build(Builder *builder, OperationState &result, IntType type,
+void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
                        const APInt &value) {
 
   int32_t width = type.getWidthOrSentinel();
@@ -442,7 +443,7 @@ void ConstantOp::build(Builder *builder, OperationState &result, IntType type,
       type.isSigned() ? IntegerType::Signed : IntegerType::Unsigned;
   Type attrType =
       IntegerType::get(value.getBitWidth(), signedness, type.getContext());
-  auto attr = builder->getIntegerAttr(attrType, value);
+  auto attr = builder.getIntegerAttr(attrType, value);
   return build(builder, result, type, attr);
 }
 

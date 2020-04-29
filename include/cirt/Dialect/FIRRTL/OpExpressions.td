@@ -21,7 +21,7 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike]> {
   }];
 
   let builders = [
-    OpBuilder<"Builder *builder, OperationState &result, "
+    OpBuilder<"OpBuilder &builder, OperationState &result, "
               "IntType type, const APInt &value">
   ];
   let hasFolder = 1;
