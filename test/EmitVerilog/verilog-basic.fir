@@ -233,7 +233,7 @@ circuit Xorr :
   ; CHECK-NEXT:    always @(posedge clock) begin
   ; CHECK-NEXT:      `ifndef SYNTHESIS
   ; CHECK-NEXT:        if (`STOP_COND_ && reset) $fatal;
-  ; CHECK-NEXT:      `endif // SYNTHESIS
+  ; CHECK-NEXT:      `endif // !SYNTHESIS
   ; CHECK-NEXT:    end // always @(posedge)
   ; CHECK-NEXT:  endmodule
   module Stop :
@@ -250,7 +250,7 @@ circuit Xorr :
   ; CHECK-NEXT:          $fatal;
   ; CHECK-NEXT:          $finish;
   ; CHECK-NEXT:        end
-  ; CHECK-NEXT:      `endif // SYNTHESIS
+  ; CHECK-NEXT:      `endif // !SYNTHESIS
   ; CHECK-NEXT:    end // always @(posedge)
   ; CHECK-NEXT:  endmodule
   module Stop2 :
@@ -265,12 +265,12 @@ circuit Xorr :
   ; CHECK-NEXT:    always @(posedge clock1) begin
   ; CHECK-NEXT:      `ifndef SYNTHESIS
   ; CHECK-NEXT:        if (`STOP_COND_ && reset) $fatal;
-  ; CHECK-NEXT:      `endif // SYNTHESIS
+  ; CHECK-NEXT:      `endif // !SYNTHESIS
   ; CHECK-NEXT:    end // always @(posedge)
   ; CHECK-NEXT:    always @(posedge clock2) begin
   ; CHECK-NEXT:      `ifndef SYNTHESIS
   ; CHECK-NEXT:        if (`STOP_COND_ && reset) $finish;
-  ; CHECK-NEXT:      `endif // SYNTHESIS
+  ; CHECK-NEXT:      `endif // !SYNTHESIS
   ; CHECK-NEXT:    end // always @(posedge)
   ; CHECK-NEXT:  endmodule
   module Stop3 :
@@ -287,7 +287,7 @@ circuit Xorr :
   ; CHECK-NEXT:    always @(posedge clock) begin
   ; CHECK-NEXT:      `ifndef SYNTHESIS
   ; CHECK-NEXT:        if (`PRINTF_COND_ && reset) $fwrite(32'h80000002, "Hi %x %x\n", a + a, b);
-  ; CHECK-NEXT:      `endif // SYNTHESIS
+  ; CHECK-NEXT:      `endif // !SYNTHESIS
   ; CHECK-NEXT:    end // always @(posedge)
   module Print :
     input clock: Clock

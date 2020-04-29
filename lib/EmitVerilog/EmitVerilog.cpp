@@ -313,23 +313,24 @@ public:
     AlwaysAtPosEdge,
   };
 
-  enum class Mode { All, SimulationOnly };
+  // Note: Preprocessor conditions are defined in the ConditionalStatement
+  // struct below.
 
-  void addDeclaration(std::string action, Mode mode) {
-    conditionalStmts.push_back(
-        {ConditionalStmtKind::Declaration, "", mode, "", std::move(action)});
+  void addDeclaration(std::string action, std::string ppCond) {
+    conditionalStmts.push_back({ConditionalStmtKind::Declaration, "",
+                                std::move(ppCond), "", std::move(action)});
   }
 
-  void addInitial(std::string action, Mode mode) {
-    conditionalStmts.push_back(
-        {ConditionalStmtKind::Initial, "", mode, "", std::move(action)});
+  void addInitial(std::string action, std::string ppCond) {
+    conditionalStmts.push_back({ConditionalStmtKind::Initial, "",
+                                std::move(ppCond), "", std::move(action)});
   }
 
-  void addAtPosEdge(std::string action, Mode mode, std::string clock,
+  void addAtPosEdge(std::string action, std::string ppCond, std::string clock,
                     std::string condition) {
     conditionalStmts.push_back({ConditionalStmtKind::AlwaysAtPosEdge,
-                                std::move(clock), mode, std::move(condition),
-                                std::move(action)});
+                                std::move(clock), std::move(ppCond),
+                                std::move(condition), std::move(action)});
   }
 
   /// ConditionalStatement are emitted lexically at the end of the module
@@ -343,8 +344,10 @@ public:
     /// This is empty for 'initial' blocks.
     std::string clock;
 
-    /// This is the verilog mode the statement is gated by.
-    Mode mode;
+    /// If non-empty, this is a preprocessor condition that gates the statement.
+    /// If the string starts with a ! character, then this is an `ifndef
+    /// condition, otherwise it is an `ifdef condition.
+    std::string ppCond;
 
     /// If non-empty, this is an 'if' condition that gates the statement.  If
     /// empty, the statement is unconditional.
@@ -356,8 +359,8 @@ public:
     std::string action;
 
     bool operator<(const ConditionalStatement &rhs) const {
-      return std::make_tuple(kind, clock, mode, condition, action) <
-             std::make_tuple(rhs.kind, rhs.clock, rhs.mode, rhs.condition,
+      return std::make_tuple(kind, clock, ppCond, condition, action) <
+             std::make_tuple(rhs.kind, rhs.clock, rhs.ppCond, rhs.condition,
                              rhs.action);
     }
   };
@@ -963,7 +966,7 @@ void ModuleEmitter::emitStatement(PrintFOp op) {
   }
   action << ");";
 
-  addAtPosEdge(action.str(), Mode::SimulationOnly, clockExpr, condExpr);
+  addAtPosEdge(action.str(), "!SYNTHESIS", clockExpr, condExpr);
   // TODO: location information too.
 }
 
@@ -977,7 +980,7 @@ void ModuleEmitter::emitStatement(StopOp op) {
 
   // TODO: location information too.
   const char *action = op.exitCode().getLimitedValue() ? "$fatal;" : "$finish;";
-  addAtPosEdge(action, Mode::SimulationOnly, clockExpr, condExpr);
+  addAtPosEdge(action, "!SYNTHESIS", clockExpr, condExpr);
 }
 
 void ModuleEmitter::emitDecl(NodeOp op) {
@@ -1063,18 +1066,18 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
   // In the first pass, we fill in the symbol table, calculate the max width
   // of the declaration words and the max type width.
   size_t maxDeclNameWidth = 0, maxTypeWidth = 0;
-  SmallVector<Value, 16> declsToEmit;
 
   // Return the word (e.g. "wire") in Verilog to declare the specified thing.
-  auto getVerilogDeclWord = [](Value result) -> StringRef {
+  auto getVerilogDeclWord = [](Operation *op) -> StringRef {
     // FIXME: what about mems?
-    if (isa<RegOp>(result.getDefiningOp()))
+    if (isa<RegOp>(op) || isa<RegInitOp>(op))
       return "reg";
     else
       return "wire";
   };
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+  SmallVector<Operation *, 16> declsToEmit;
 
   for (auto &op : block) {
     // If the op has no results, then it doesn't produce a name.
@@ -1107,7 +1110,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
     // Determine what kind of thing this is, and how much space it needs.
     maxDeclNameWidth =
-        std::max(getVerilogDeclWord(result).size(), maxDeclNameWidth);
+        std::max(getVerilogDeclWord(&op).size(), maxDeclNameWidth);
 
     // Flatten the type for processing of each individual element.
     auto type = result.getType().cast<FIRRTLType>();
@@ -1132,23 +1135,23 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
     // Emit this declaration.
     if (result)
-      declsToEmit.push_back(result);
+      declsToEmit.push_back(&op);
   }
 
   // Okay, now that we have measured the things to emit, emit the things.
-  for (auto result : declsToEmit) {
-    auto word = getVerilogDeclWord(result);
+  for (auto *decl : declsToEmit) {
+    auto word = getVerilogDeclWord(decl);
 
     // Flatten the type for processing of each individual element.
-    auto type = result.getType().cast<FIRRTLType>();
+    auto type = decl->getResult(0).getType().cast<FIRRTLType>();
     fieldTypes.clear();
     flattenBundleTypes(type, "", false, fieldTypes);
 
     for (const auto &elt : fieldTypes) {
       indent() << word;
       os.indent(maxDeclNameWidth - word.size() + 1);
-      emitTypePaddedToWidth(elt.type, maxTypeWidth, result.getDefiningOp());
-      os << getName(result) << elt.suffix << ";\n";
+      emitTypePaddedToWidth(elt.type, maxTypeWidth, decl);
+      os << getName(decl->getResult(0)) << elt.suffix << ";\n";
       // TODO: Emit locator info.
     }
   }
@@ -1182,8 +1185,8 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitUnhandledStmt(Operation *op) { return false; }
     bool visitInvalidStmt(Operation *op) { return dispatchDeclVisitor(op); }
 
-    bool visitDecl(NodeOp op) { return emitter.emitDecl(op), true; }
     bool visitDecl(InstanceOp op) { return emitter.emitDecl(op), true; }
+    bool visitDecl(NodeOp op) { return emitter.emitDecl(op), true; }
 
     bool visitUnhandledDecl(Operation *op) { return false; }
     bool visitInvalidDecl(Operation *op) { return false; }
@@ -1255,15 +1258,15 @@ emitActionByCond(ArrayRef<ModuleEmitter::ConditionalStatement> elements,
 
 /// Emit a group of actions, guarded by conditions, with a fixed mode.
 static void
-emitCondActionByMode(ArrayRef<ModuleEmitter::ConditionalStatement> elements,
-                     ModuleEmitter &emitter) {
-  switch (elements[0].mode) {
-  case ModuleEmitter::Mode::All:
-    break;
-  case ModuleEmitter::Mode::SimulationOnly:
-    emitter.indent() << "`ifndef SYNTHESIS\n";
+emitCondActionByPPCond(ArrayRef<ModuleEmitter::ConditionalStatement> elements,
+                       ModuleEmitter &emitter) {
+  if (!elements[0].ppCond.empty()) {
+    if (elements[0].ppCond.front() == '!')
+      emitter.indent() << "`ifndef "
+                       << StringRef(elements[0].ppCond).drop_front() << '\n';
+    else
+      emitter.indent() << "`ifdef " << elements[0].ppCond << '\n';
     emitter.addIndent();
-    break;
   }
 
   splitByPredicate(
@@ -1272,13 +1275,9 @@ emitCondActionByMode(ArrayRef<ModuleEmitter::ConditionalStatement> elements,
         return condStmt.condition;
       });
 
-  switch (elements[0].mode) {
-  case ModuleEmitter::Mode::All:
-    break;
-  case ModuleEmitter::Mode::SimulationOnly:
+  if (!elements[0].ppCond.empty()) {
     emitter.reduceIndent();
-    emitter.indent() << "`endif // SYNTHESIS\n";
-    break;
+    emitter.indent() << "`endif // " << elements[0].ppCond << '\n';
   }
 }
 
@@ -1289,9 +1288,9 @@ emitPosEdgeByClock(ArrayRef<ModuleEmitter::ConditionalStatement> elements,
                    ModuleEmitter &emitter) {
   emitter.indent() << "always @(posedge " << elements[0].clock << ") begin\n";
   emitter.addIndent();
-  splitByPredicate(emitter, elements, emitCondActionByMode,
+  splitByPredicate(emitter, elements, emitCondActionByPPCond,
                    [](const ModuleEmitter::ConditionalStatement &condStmt) {
-                     return condStmt.mode;
+                     return condStmt.ppCond;
                    });
   emitter.reduceIndent();
   emitter.indent() << "end // always @(posedge)\n";
@@ -1303,9 +1302,9 @@ emitConditionStmtKind(ArrayRef<ModuleEmitter::ConditionalStatement> elements,
                       ModuleEmitter &emitter) {
   switch (elements[0].kind) {
   case ModuleEmitter::ConditionalStmtKind::Declaration:
-    splitByPredicate(emitter, elements, emitCondActionByMode,
+    splitByPredicate(emitter, elements, emitCondActionByPPCond,
                      [](const ModuleEmitter::ConditionalStatement &condStmt) {
-                       return condStmt.mode;
+                       return condStmt.ppCond;
                      });
 
     break;
@@ -1315,9 +1314,9 @@ emitConditionStmtKind(ArrayRef<ModuleEmitter::ConditionalStatement> elements,
     emitter.addIndent();
     assert(elements[0].clock.empty() && "initial members can't have a clock");
 
-    splitByPredicate(emitter, elements, emitCondActionByMode,
+    splitByPredicate(emitter, elements, emitCondActionByPPCond,
                      [](const ModuleEmitter::ConditionalStatement &condStmt) {
-                       return condStmt.mode;
+                       return condStmt.ppCond;
                      });
 
     emitter.reduceIndent();
