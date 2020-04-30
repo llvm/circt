@@ -1927,12 +1927,12 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
     // all?
 
     // This implements what the examples have in practice.
-    if (getToken().is(FIRToken::l_paren))
-      return emitError("this register form not handled yet"), failure();
+    bool hasExtraLParen = consumeIf(FIRToken::l_paren);
 
     auto indent = getIndentation();
     if (!indent.hasValue() || indent.getValue() <= regIndent)
-      return emitError("expected indented reset specifier in reg"), failure();
+      if (!hasExtraLParen)
+        return emitError("expected indented reset specifier in reg"), failure();
 
     SmallVector<Operation *, 8> subOps;
     if (parseToken(FIRToken::kw_reset, "expected 'reset' in reg") ||
@@ -1958,6 +1958,10 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
           parseOptionalInfo(info, subOps))
         return failure();
     }
+
+    if (hasExtraLParen &&
+        parseToken(FIRToken::r_paren, "expected ')' in reset specifier"))
+      return failure();
   }
 
   // Finally, handle the last info if present, providing location info for the
