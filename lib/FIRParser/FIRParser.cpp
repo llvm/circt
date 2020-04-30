@@ -1303,6 +1303,18 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
                                              indexExp, clock, direction,
                                              filterUselessName(resultValue));
 
+  // TODO(firrtl scala bug): If the next operation is a skip, just eat it if it
+  // is at the same indent level as us.  This is a horrible hack on top of the
+  // following hack to work around a Scala bug.
+  auto nextIndent = getIndentation();
+  if (getToken().is(FIRToken::kw_skip) && mdirIndent.hasValue() &&
+      nextIndent.hasValue() && mdirIndent.getValue() == nextIndent.getValue()) {
+    if (parseSkip())
+      return failure();
+
+    nextIndent = getIndentation();
+  }
+
   // TODO(firrtl scala bug): Chisel is creating invalid IR where the mports
   // are logically defining their name at the scope of the memory itself.  This
   // is a problem for us, because the index expression and clock may be defined
@@ -1314,7 +1326,6 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   // seeing if the next statement is indented less than our memport - if so,
   // this is the last statement at the end of the 'when' block.   Trigger a
   // hacky workaround just in this case.
-  auto nextIndent = getIndentation();
   if (mdirIndent.hasValue() && nextIndent.hasValue() &&
       mdirIndent.getValue() > nextIndent.getValue()) {
     auto memNameId = Identifier::get(memName, getContext());

@@ -335,6 +335,7 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     input clock : Clock
 
     ; CHECK: [[HACKWIRE:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
+    ; CHECK: [[HACKWIRE2:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
     ; CHECK: %memory = firrtl.smem "Undefined" {name = "memory"} : !firrtl.vector<vector<uint<1>, 9>, 256>
     smem memory : UInt<1>[9] [256]
 
@@ -346,10 +347,24 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
       read mport xyz = memory[idx], clock
     ; CHECK: }
     node sometest = eq(foo, UInt(42))
+
+    ; CHECK: firrtl.when %cond {
+    when cond :
+      node idx = foo
+      ; CHECK: %xyz2 = firrtl.memoryport "Read" %memory, %idx
+      ; CHECK: firrtl.skip
+      ; CHECK: firrtl.connect [[HACKWIRE2]], %xyz2
+      read mport xyz2 = memory[idx], clock
+      skip @[Debug.scala 1176:37]
+    ; CHECK: }
+    node sometest2 = eq(foo, UInt(42))
+
     ; CHECK: firrtl.when %sometest {
     when sometest :
-      ; CHECK:  %awesome = firrtl.node [[HACKWIRE]]
+      ; CHECK: %awesome = firrtl.node [[HACKWIRE]]
+      ; CHECK: %awesome2 = firrtl.node [[HACKWIRE2]]
       node awesome = xyz
+      node awesome2 = xyz2
 
 
    ; CHECK-LABEL: firrtl.module @constant_implicit_cse(
