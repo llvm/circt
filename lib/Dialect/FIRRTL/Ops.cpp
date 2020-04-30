@@ -997,6 +997,17 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
+OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
+  APInt value;
+
+  // If we are extracting the entire input, then return it.
+  if (input().getType() == getType() &&
+      getType().cast<IntType>().getWidthOrSentinel() != -1)
+    return input();
+
+  return {};
+}
+
 OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
 

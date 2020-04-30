@@ -86,6 +86,20 @@ firrtl.module @NEQ(%in: !firrtl.uint<1>,
   firrtl.connect %out, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 }
 
+// CHECK-LABEL: firrtl.module @Bits
+firrtl.module @Bits(%in1: !firrtl.uint<1>,
+                    %in4: !firrtl.uint<4>,
+                    %out1: !firrtl.flip<uint<1>>,
+                    %out4: !firrtl.flip<uint<4>>) {
+  // CHECK: firrtl.connect %out1, %in1
+  %0 = firrtl.bits %in1 0 to 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %out1, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+
+  // CHECK: firrtl.connect %out4, %in4
+  %1 = firrtl.bits %in4 3 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.connect %out4, %1 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+}
+
 // CHECK-LABEL: firrtl.module @Mux
 firrtl.module @Mux(%in: !firrtl.uint<4>,
                    %cond: !firrtl.uint<1>,
