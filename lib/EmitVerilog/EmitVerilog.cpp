@@ -277,11 +277,12 @@ public:
       : VerilogEmitterBase(state) {}
 
   void emitFModule(FModuleOp module);
-  void emitExpression(Value exp, bool forceRootExpr = false);
+  void emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
+                      bool forceRootExpr = false);
 
   /// Emit the specified expression and return it as a string.
   std::string
-  emitExpressionToString(Value exp,
+  emitExpressionToString(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
                          VerilogPrecedence precedence = LowestPrecedence);
 
   // Statements.
@@ -307,6 +308,14 @@ public:
     return entry->getKey();
   }
 
+  /// Return the location information as a (potentially empty) string.
+  std::string getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops);
+
+  /// If we have location information for any of the specified operations,
+  /// aggregate it together and print a pretty comment specifying where the
+  /// operations came from.  In any case, print a newline.
+  void emitLocationInfoAndNewLine(const SmallPtrSet<Operation *, 8> &ops);
+
   // Conditional statement handling.
 
   enum class ConditionalStmtKind {
@@ -321,23 +330,26 @@ public:
   // Note: Preprocessor conditions are defined in the ConditionalStatement
   // struct below.
 
-  void addDeclaration(std::string action, std::string ppCond) {
+  void addDeclaration(std::string action, std::string locInfo,
+                      std::string ppCond) {
     conditionalStmts.push_back({ConditionalStmtKind::Declaration, "",
-                                std::move(ppCond), "", std::move(action)});
+                                std::move(ppCond), "", std::move(action),
+                                std::move(locInfo)});
   }
 
-  void addInitial(std::string action, std::string ppCond = {},
-                  std::string condition = {}) {
+  void addInitial(std::string action, std::string locInfo,
+                  std::string ppCond = {}, std::string condition = {}) {
     conditionalStmts.push_back({ConditionalStmtKind::Initial, "",
                                 std::move(ppCond), std::move(condition),
-                                std::move(action)});
+                                std::move(action), std::move(locInfo)});
   }
 
-  void addAtPosEdge(std::string action, std::string ppCond, std::string clock,
-                    std::string condition) {
+  void addAtPosEdge(std::string action, std::string locInfo, std::string ppCond,
+                    std::string clock, std::string condition) {
     conditionalStmts.push_back({ConditionalStmtKind::AlwaysAtPosEdge,
                                 std::move(clock), std::move(ppCond),
-                                std::move(condition), std::move(action)});
+                                std::move(condition), std::move(action),
+                                std::move(locInfo)});
   }
 
   // Set up the per-module state for random seeding of registers/memory.
@@ -346,7 +358,7 @@ public:
     if (emittedRandomProlog)
       return;
     emittedRandomProlog = true;
-    addInitial("`INIT_RANDOM_PROLOG_");
+    addInitial("`INIT_RANDOM_PROLOG_", /*locInfo=*/"");
   }
 
   /// ConditionalStatement are emitted lexically at the end of the module
@@ -374,10 +386,13 @@ public:
     /// begin/end clause.
     std::string action;
 
+    /// This is location information (if any) to print.
+    std::string locInfo;
+
     bool operator<(const ConditionalStatement &rhs) const {
-      return std::make_tuple(kind, clock, ppCond, condition, action) <
+      return std::make_tuple(kind, clock, ppCond, condition, action, locInfo) <
              std::make_tuple(rhs.kind, rhs.clock, rhs.ppCond, rhs.condition,
-                             rhs.action);
+                             rhs.action, locInfo);
     }
   };
 
@@ -461,6 +476,70 @@ void ModuleEmitter::addName(Value value, StringRef name) {
   }
 }
 
+/// Return the location information as a (potentially empty) string.
+std::string
+ModuleEmitter::getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
+  std::string resultStr;
+  llvm::raw_string_ostream sstr(resultStr);
+
+  // Multiple operations may come from the same location or may not have useful
+  // location info.  Unique it now.
+  SmallPtrSet<Attribute, 8> locations;
+  for (auto *op : ops) {
+    if (auto loc = op->getLoc().dyn_cast<FileLineColLoc>())
+      locations.insert(loc);
+  }
+
+  auto printLoc = [&](FileLineColLoc loc) {
+    sstr << loc.getFilename();
+    if (auto line = loc.getLine()) {
+      sstr << ':' << line;
+      if (auto col = loc.getColumn())
+        sstr << ':' << col;
+    }
+  };
+
+  switch (locations.size()) {
+  case 1:
+    printLoc((*locations.begin()).cast<FileLineColLoc>());
+    LLVM_FALLTHROUGH;
+  case 0:
+    return sstr.str();
+  default:
+    break;
+  }
+
+  // Sort the entries.
+  SmallVector<FileLineColLoc, 8> locVector;
+  locVector.reserve(locations.size());
+  for (auto loc : locations)
+    locVector.push_back(loc.cast<FileLineColLoc>());
+
+  llvm::array_pod_sort(
+      locVector.begin(), locVector.end(),
+      [](const FileLineColLoc *lhs, const FileLineColLoc *rhs) -> int {
+        if (auto fn = lhs->getFilename().compare(rhs->getFilename()))
+          return fn;
+        if (lhs->getLine() != rhs->getLine())
+          return lhs->getLine() < rhs->getLine() ? -1 : 1;
+        return lhs->getColumn() < rhs->getColumn() ? -1 : 1;
+      });
+
+  llvm::interleaveComma(locVector, sstr, printLoc);
+  return sstr.str();
+}
+
+/// If we have location information for any of the specified operations,
+/// aggregate it together and print a pretty comment specifying where the
+/// operations came from.  In any case, print a newline.
+void ModuleEmitter::emitLocationInfoAndNewLine(
+    const SmallPtrSet<Operation *, 8> &ops) {
+  auto locInfo = getLocationInfoAsString(ops);
+  if (!locInfo.empty())
+    os << "\t// " << locInfo;
+  os << '\n';
+}
+
 //===----------------------------------------------------------------------===//
 // Expression Emission
 //===----------------------------------------------------------------------===//
@@ -512,7 +591,10 @@ namespace {
 /// was needed later.
 class ExprEmitter : public ExprVisitor<ExprEmitter, SubExprInfo> {
 public:
-  ExprEmitter(ModuleEmitter &emitter) : emitter(emitter), os(resultBuffer) {}
+  /// Create an ExprEmitter for the specified module emitter, and keeping track
+  /// of any emitted expressions in the specified set.
+  ExprEmitter(ModuleEmitter &emitter, SmallPtrSet<Operation *, 8> &emittedExprs)
+      : emitter(emitter), emittedExprs(emittedExprs), os(resultBuffer) {}
 
   void emitExpression(Value exp, bool forceRootExpr, raw_ostream &os);
 
@@ -657,6 +739,7 @@ private:
 
 private:
   ModuleEmitter &emitter;
+  SmallPtrSet<Operation *, 8> &emittedExprs;
   SmallString<128> resultBuffer;
   llvm::raw_svector_ostream os;
 };
@@ -731,6 +814,8 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     os << ')';
   }
 
+  // Remember that we emitted this.
+  emittedExprs.insert(exp.getDefiningOp());
   return expInfo;
 }
 
@@ -927,14 +1012,19 @@ SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
 /// already computed name.  If 'forceRootExpr' is true, then this emits an
 /// expression even if we typically don't do it inline.
 ///
-void ModuleEmitter::emitExpression(Value exp, bool forceRootExpr) {
-  ExprEmitter(*this).emitExpression(exp, forceRootExpr, os);
+void ModuleEmitter::emitExpression(Value exp,
+                                   SmallPtrSet<Operation *, 8> &emittedExprs,
+                                   bool forceRootExpr) {
+  ExprEmitter(*this, emittedExprs).emitExpression(exp, forceRootExpr, os);
 }
 
 /// Emit the specified expression and return it as a string.
 std::string
-ModuleEmitter::emitExpressionToString(Value exp, VerilogPrecedence precedence) {
-  return ExprEmitter(*this).emitExpressionToString(exp, precedence);
+ModuleEmitter::emitExpressionToString(Value exp,
+                                      SmallPtrSet<Operation *, 8> &emittedExprs,
+                                      VerilogPrecedence precedence) {
+  return ExprEmitter(*this, emittedExprs)
+      .emitExpressionToString(exp, precedence);
 }
 
 void ModuleEmitter::emitStatementExpression(Operation *op) {
@@ -954,52 +1044,61 @@ void ModuleEmitter::emitStatementExpression(Operation *op) {
   } else {
     indent() << "assign " << getName(op->getResult(0)) << " = ";
   }
-  emitExpression(op->getResult(0), /*forceRootExpr=*/true);
-  os << ";\n";
-  // TODO: location information too.
+  SmallPtrSet<Operation *, 8> emittedExprs;
+  emitExpression(op->getResult(0), emittedExprs, /*forceRootExpr=*/true);
+  os << ';';
+  emitLocationInfoAndNewLine(emittedExprs);
 }
 
 void ModuleEmitter::emitStatement(ConnectOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
   // Connect to a register has "special" behavior.
   auto lhs = op.lhs();
   if (auto *lhsOp = lhs.getDefiningOp()) {
-    if (auto regOp = dyn_cast<RegOp>(lhsOp)) {
-      auto clockExpr = emitExpressionToString(regOp.clockVal());
-      std::string action =
-          getName(lhs).str() + " <= " + emitExpressionToString(op.rhs()) + ";";
+    auto addRegAssign = [&](const std::string &clockExpr, Value value) {
+      std::string action = getName(lhs).str() +
+                           " <= " + emitExpressionToString(value, ops) + ";";
+      auto locStr = getLocationInfoAsString(ops);
+      addAtPosEdge(action, locStr, /*ppCond*/ "", clockExpr, /*condition*/ "");
+      return;
+    };
 
-      addAtPosEdge(action, /*ppCond*/ "", clockExpr, /*condition*/ "");
+    if (auto regOp = dyn_cast<RegOp>(lhsOp)) {
+      auto clockExpr = emitExpressionToString(regOp.clockVal(), ops);
+      addRegAssign(clockExpr, op.rhs());
       return;
     }
 
     if (auto regInitOp = dyn_cast<RegInitOp>(lhsOp)) {
-      auto clockExpr = emitExpressionToString(regInitOp.clockVal());
+      auto clockExpr = emitExpressionToString(regInitOp.clockVal(), ops);
       clockExpr +=
-          " or posedge " + emitExpressionToString(regInitOp.resetSignal());
+          " or posedge " + emitExpressionToString(regInitOp.resetSignal(), ops);
 
-      std::string action =
-          getName(lhs).str() + " <= " + emitExpressionToString(op.rhs()) + ";";
-
-      addAtPosEdge(action, /*ppCond*/ "", clockExpr, /*condition*/ "");
+      addRegAssign(clockExpr, op.rhs());
       return;
     }
   }
 
   indent() << "assign ";
-  emitExpression(lhs);
+  emitExpression(lhs, ops);
   os << " = ";
-  emitExpression(op.rhs());
-  os << ";\n";
-  // TODO: location information too.
+  emitExpression(op.rhs(), ops);
+  os << ';';
+  emitLocationInfoAndNewLine(ops);
 }
 
 void ModuleEmitter::emitStatement(PrintFOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
   // TODO(verilog dialect): this is a simulation only construct, we should have
   // synthesis specific nodes, e.g. an 'if' statement, always @(posedge) blocks,
   // etc.
-  auto clockExpr = emitExpressionToString(op.clock());
-  auto condExpr =
-      "`PRINTF_COND_ && " + emitExpressionToString(op.cond(), AndShortCircuit);
+  auto clockExpr = emitExpressionToString(op.clock(), ops);
+  auto condExpr = "`PRINTF_COND_ && " +
+                  emitExpressionToString(op.cond(), ops, AndShortCircuit);
 
   std::string actionStr;
   llvm::raw_string_ostream action(actionStr);
@@ -1007,33 +1106,41 @@ void ModuleEmitter::emitStatement(PrintFOp op) {
   action << "$fwrite(32'h80000002, \"";
   action.write_escaped(op.formatString()) << '"';
   for (auto operand : op.operands()) {
-    action << ", " << emitExpressionToString(operand);
+    action << ", " << emitExpressionToString(operand, ops);
   }
   action << ");";
 
-  addAtPosEdge(action.str(), "!SYNTHESIS", clockExpr, condExpr);
-  // TODO: location information too.
+  auto locInfo = getLocationInfoAsString(ops);
+  addAtPosEdge(action.str(), locInfo, "!SYNTHESIS", clockExpr, condExpr);
 }
 
 void ModuleEmitter::emitStatement(StopOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
   // TODO(verilog dialect): this is a simulation only construct, we should have
   // synthesis specific nodes, e.g. an 'if' statement, always @(posedge) blocks,
   // etc.
-  auto clockExpr = emitExpressionToString(op.clock());
-  auto condExpr =
-      "`STOP_COND_ && " + emitExpressionToString(op.cond(), AndShortCircuit);
+  auto clockExpr = emitExpressionToString(op.clock(), ops);
+  auto condExpr = "`STOP_COND_ && " +
+                  emitExpressionToString(op.cond(), ops, AndShortCircuit);
 
   // TODO: location information too.
   const char *action = op.exitCode().getLimitedValue() ? "$fatal;" : "$finish;";
-  addAtPosEdge(action, "!SYNTHESIS", clockExpr, condExpr);
+  auto locInfo = getLocationInfoAsString(ops);
+
+  addAtPosEdge(action, locInfo, "!SYNTHESIS", clockExpr, condExpr);
 }
 
 void ModuleEmitter::emitDecl(NodeOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
   indent() << "assign " << getName(op.getResult());
   os << " = ";
-  emitExpression(op.input());
-  os << ";\n";
-  // TODO: location information too.
+  emitExpression(op.input(), ops);
+  os << ';';
+  emitLocationInfoAndNewLine(ops);
 }
 
 void ModuleEmitter::emitDecl(InstanceOp op) {
@@ -1104,6 +1211,9 @@ void ModuleEmitter::emitDecl(InstanceOp op) {
 }
 
 void ModuleEmitter::emitDecl(RegOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
   // There is nothing to do for the register decl itself: the prepass at the
   // module level will already handle emission of the corresponding reg
   // declaration, and any assign to it will be handled at that time.  Here we
@@ -1113,22 +1223,27 @@ void ModuleEmitter::emitDecl(RegOp op) {
 
   // At simulator load time, the register is set to random nothing.
   std::string action = getName(op.getResult()).str() + " = `RANDOM;";
-  addInitial(action, /*ppCond*/ "RANDOMIZE_REG_INIT");
+  auto locInfo = getLocationInfoAsString(ops);
+  addInitial(action, locInfo, /*ppCond*/ "RANDOMIZE_REG_INIT");
 }
 
 void ModuleEmitter::emitDecl(RegInitOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
   // Registers with an init expression get a random init for the case where they
   // are not initialized.
-  auto resetSignal = emitExpressionToString(op.resetSignal());
-  auto resetValue = emitExpressionToString(op.resetValue());
+  auto resetSignal = emitExpressionToString(op.resetSignal(), ops);
+  auto resetValue = emitExpressionToString(op.resetValue(), ops);
+  auto locInfo = getLocationInfoAsString(ops);
 
   emitRandomizeProlog();
   std::string action = getName(op.getResult()).str() + " = `RANDOM;";
-  addInitial(action, /*ppCond*/ "RANDOMIZE_REG_INIT",
+  addInitial(action, locInfo, /*ppCond*/ "RANDOMIZE_REG_INIT",
              /*cond*/ "~" + resetSignal);
 
   action = getName(op.getResult()).str() + " = " + resetValue + ";";
-  addInitial(action, /*ppCond*/ "", /*cond*/ resetSignal);
+  addInitial(action, locInfo, /*ppCond*/ "", /*cond*/ resetSignal);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1211,21 +1326,32 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       declsToEmit.push_back(&op);
   }
 
+  SmallPtrSet<Operation *, 8> ops;
+
   // Okay, now that we have measured the things to emit, emit the things.
   for (auto *decl : declsToEmit) {
+    ops.clear();
+    ops.insert(decl);
+
     auto word = getVerilogDeclWord(decl);
 
     // Flatten the type for processing of each individual element.
     auto type = decl->getResult(0).getType().cast<FIRRTLType>();
     fieldTypes.clear();
     flattenBundleTypes(type, "", false, fieldTypes);
+    ops.insert(decl);
 
+    bool isFirst = true;
     for (const auto &elt : fieldTypes) {
       indent() << word;
       os.indent(maxDeclNameWidth - word.size() + 1);
       emitTypePaddedToWidth(elt.type, maxTypeWidth, decl);
-      os << getName(decl->getResult(0)) << elt.suffix << ";\n";
-      // TODO: Emit locator info.
+      os << getName(decl->getResult(0)) << elt.suffix << ';';
+
+      if (isFirst)
+        emitLocationInfoAndNewLine(ops);
+      else
+        os << '\n';
     }
   }
 
@@ -1322,7 +1448,10 @@ emitActionByCond(ArrayRef<ModuleEmitter::ConditionalStatement> elements,
   for (auto &elt : elements) {
     if (indentChildren)
       emitter.indent();
-    emitter.os << elt.action << '\n';
+    emitter.os << elt.action;
+    if (!elt.locInfo.empty())
+      emitter.os << "\t// " << elt.locInfo;
+    emitter.os << '\n';
   }
 
   if (!elements[0].condition.empty() && elements.size() != 1) {

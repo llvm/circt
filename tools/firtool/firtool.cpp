@@ -49,7 +49,7 @@ static cl::opt<bool> disableOptimization("disable-opt",
 static cl::opt<bool>
     ignoreFIRLocations("ignore-fir-locators",
                        cl::desc("ignore the @info locations in the .fir file"),
-                       cl::init(true));
+                       cl::init(false));
 
 enum OutputFormatKind { OutputMLIR, OutputVerilog, OutputDisabled };
 

@@ -206,7 +206,7 @@ circuit Xorr :
   ; CHECK-NEXT:       .in(xyz_in),
   ; CHECK-NEXT:       .out(xyz_out)
   ; CHECK-NEXT:     );
-  ; CHECK-NEXT:     assign xyz_in = a_in;
+  ; CHECK-NEXT:     assign xyz_in = a_in;{{.*}}// Here.scala:119
   ; CHECK-NEXT:     assign a_out = xyz_out;
   ; CHECK-NEXT:     MyParameterizedExtModule #(.DEFAULT(0), .DEPTH(3.5{{.*}}), .FORMAT("xyz_timeout=%d\n"), .WIDTH(32)) xyz2 (
   ; CHECK-NEXT:       .in(xyz2_in),
@@ -220,7 +220,7 @@ circuit Xorr :
     output a_out: UInt<1>
 
     inst xyz of MyExtModule
-    xyz.in <= a_in
+    xyz.in <= a_in @[Here.scala 119]
     a_out <= xyz.out
 
     inst xyz2 of MyParameterizedExtModule
@@ -304,7 +304,7 @@ circuit Xorr :
   ; CHECK-NEXT:    input       clock, reset, cond,
   ; CHECK-NEXT:    input [1:0] value);
   ; CHECK-EMPTY:
-  ; CHECK-NEXT:    reg  [1:0] count;
+  ; CHECK-NEXT:    reg  [1:0] count;{{.*}}// RationalCrossing.scala:119:22
   ; CHECK-NEXT:    wire [1:0] x;
   ; CHECK-EMPTY:
   ; CHECK-NEXT:    assign x = count;
@@ -313,7 +313,7 @@ circuit Xorr :
   ; CHECK-NEXT:    initial begin
   ; CHECK-NEXT:      `INIT_RANDOM_PROLOG_
   ; CHECK-NEXT:      `ifdef RANDOMIZE_REG_INIT
-  ; CHECK-NEXT:        count = `RANDOM; 
+  ; CHECK-NEXT:        count = `RANDOM;{{.*}}// RationalCrossing.scala:119:22
   ; CHECK-NEXT:      `endif
   ; CHECK-NEXT:    end // initial
   ; CHECK-NEXT:    `endif // SYNTHESIS
