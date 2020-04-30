@@ -25,15 +25,17 @@ $ git clone git@github.com:llvm/llvm-project.git
 $ git clone git@github.com:sifive/clattner-experimental.git cirt
 ```
 
-3) HACK: Add symlink because I can't figure out how to get `LLVM_EXTERNAL_CIRT_SOURCE_DIR` to work with cmake:
+3) HACK: Add symlink because I can't figure out how to get
+   `LLVM_EXTERNAL_CIRT_SOURCE_DIR` to work with cmake (I'd love help with
+   this!):
 
 ```
 $ cd ~/Projects/llvm-project
 $ ln -s ../cirt cirt
 ```
 
-4) Configure the build to build MLIR and CIRT (MLIR is probably not necessary, but it builds 
-reasonably fast and is good to provide a sanity check that things are working): 
+4) Configure the build to build MLIR and CIRT using a command like this
+   (replace `/Users/chrisl` with the paths you want to use):
 
 ```
 $ cd ~/Projects/llvm-project
@@ -51,7 +53,8 @@ To get something that runs fast, use `-DCMAKE_BUILD_TYPE=Release` or
 you want debug info to go with it.  `RELEASE` mode makes a very large difference
 in performance.
 
-5) Build MLIR and run MLIR tests as a smoketest:
+5) Build MLIR and run MLIR tests as a smoketest - this isn't needed, but is
+reasonably fast and a good sanity check:
 
 ```
 $ ninja check-mlir
