@@ -120,3 +120,23 @@ firrtl.module @Mux(%in: !firrtl.uint<4>,
   %3 = firrtl.mux (%cond, %c1_ui1, %c1_ui0) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %out1, %3 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 }
+
+// CHECK-LABEL: firrtl.module @Pad
+firrtl.module @Pad(%in1u: !firrtl.uint<1>,
+                   %out1u: !firrtl.flip<uint<1>>,
+                   %outu: !firrtl.flip<uint<4>>,
+                   %outs: !firrtl.flip<sint<4>>) {
+  // CHECK: firrtl.connect %out1u, %in1u
+  %0 = firrtl.pad %in1u, 1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %out1u, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+
+  // CHECK: firrtl.connect %outu, %c1_ui4
+  %c1_ui0 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
+  %1 = firrtl.pad %c1_ui0, 4 : (!firrtl.uint<1>) -> !firrtl.uint<4>
+  firrtl.connect %outu, %1 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+
+  // CHECK: firrtl.connect %outs, %cm1_si4
+  %c1_si1 = firrtl.constant(-1 : si1) : !firrtl.sint<1>
+  %2 = firrtl.pad %c1_si1, 4 : (!firrtl.sint<1>) -> !firrtl.sint<4>
+  firrtl.connect %outs, %2 : !firrtl.flip<sint<4>>, !firrtl.sint<4>
+}

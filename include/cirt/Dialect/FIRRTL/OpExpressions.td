@@ -308,6 +308,8 @@ def PadPrimOp : PrimOp<"pad"> {
     $input `,` $amount attr-dict `:` functional-type($input, $result)
   }];
 
+  let hasFolder = 1;
+
   let extraClassDeclaration = [{
     /// Return the result for inputs with the specified type, returning a null
     /// type if the input types are invalid.
