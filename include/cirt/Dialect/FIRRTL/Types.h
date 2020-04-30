@@ -56,6 +56,12 @@ public:
   /// used for `mem` operations.
   FIRRTLType getMaskType();
 
+  /// Support method to enable LLVM-style type casting.
+  static bool classof(Type type) {
+    return type.getKind() >= Type::FIRST_PRIVATE_EXPERIMENTAL_0_TYPE &&
+           type.getKind() <= FIRRTLType::LAST_KIND;
+  }
+
   static bool kindof(unsigned kind) {
     return kind >= FIRST_KIND && kind <= LAST_KIND;
   }
@@ -141,6 +147,7 @@ public:
   }
 
   static bool kindof(unsigned kind) { return kind == SInt || kind == UInt; }
+  static bool classof(Type type) { return kindof(type.getKind()); }
 };
 
 /// A signed integer type, whose width may not be known.

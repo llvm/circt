@@ -105,3 +105,10 @@ circuit test :
   extmodule MyParameterizedExtModule :
     parameter DEFAULT = 0
     parameter DEFAULT = 32 ; expected-error {{redefinition of parameter 'DEFAULT'}}
+
+;// -----
+
+circuit test :
+  module invalid_name :
+    input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
+    node n4 = add(bf, bf)  ; expected-error {{invalid input types for 'add'}}

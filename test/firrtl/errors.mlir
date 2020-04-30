@@ -6,7 +6,7 @@ firrtl.module @X(%b : !firrtl.unknowntype) {
 
 // -----
 
-firrtl.module @X(%b : !firrtl.uint<32>, %d : !firrtl.uint<16>, %out : !firrtl.uint { firrtl.output }) {
+firrtl.module @X(%b : !firrtl.uint<32>, %d : !firrtl.uint<16>, %out : !firrtl.uint) {
   // expected-error @+1 {{'firrtl.add' op expected 2 operands, but found 3}}
   %3 = "firrtl.add"(%b, %d, %out) : (!firrtl.uint<32>, !firrtl.uint<16>, !firrtl.uint) -> !firrtl.uint<32>
 }
@@ -23,9 +23,7 @@ firrtl.module @X(%b : !firrtl.uint<32>, %d : !firrtl.uint<16>, %out : !firrtl.ui
 
 // -----
 
-
 // expected-error @+1 {{'firrtl.module' op requires string attribute 'sym_name'}}
 "firrtl.module"() ( {
   "firrtl.done"() : () -> ()
 }) { type = () -> ()} : () -> ()
-
