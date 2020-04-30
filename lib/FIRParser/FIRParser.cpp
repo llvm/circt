@@ -755,6 +755,7 @@ private:
                                                    const LocWithInfo &info);
 
   // Stmt Parsing
+  ParseResult parseAttach();
   ParseResult parseMemPort(MemDirAttr direction);
   ParseResult parsePrintf();
   ParseResult parseSkip();
@@ -1206,7 +1207,8 @@ ParseResult FIRStmtParser::parseSimpleStmtBlock(unsigned indent) {
 
 /// simple_stmt ::= stmt
 ///
-/// stmt ::= memport
+/// stmt ::= attach
+///      ::= memport
 ///      ::= printf
 ///      ::= skip
 ///      ::= stop
@@ -1221,6 +1223,8 @@ ParseResult FIRStmtParser::parseSimpleStmtBlock(unsigned indent) {
 ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
   switch (getToken().getKind()) {
   // Statements.
+  case FIRToken::kw_attach:
+    return parseAttach();
   case FIRToken::kw_infer:
     return parseMemPort(MemDirAttr::Infer);
   case FIRToken::kw_read:
@@ -1262,6 +1266,35 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
   case FIRToken::kw_reg:
     return parseRegister(stmtIndent);
   }
+}
+
+/// attach ::= 'attach' '(' exp+ ')' info?
+ParseResult FIRStmtParser::parseAttach() {
+  auto spelling = getTokenSpelling();
+  LocWithInfo info(getToken().getLoc(), this);
+  consumeToken(FIRToken::kw_attach);
+
+  // If this was actually the start of a connect or something else handle
+  // that.
+  if (auto isExpr = parseExpWithLeadingKeyword(spelling, info))
+    return isExpr.getValue();
+
+  if (parseToken(FIRToken::l_paren, "expected '(' after attach"))
+    return failure();
+
+  SmallVector<Operation *, 8> subOps;
+  SmallVector<Value, 4> operands;
+  do {
+    operands.push_back({});
+    if (parseExp(operands.back(), subOps, "expected operand in attach"))
+      return failure();
+  } while (!consumeIf(FIRToken::r_paren));
+
+  if (parseOptionalInfo(info, subOps))
+    return failure();
+
+  builder.create<AttachOp>(info.getLoc(), operands);
+  return success();
 }
 
 /// stmt ::= mdir 'mport' id '=' id '[' exp ']' exp info?

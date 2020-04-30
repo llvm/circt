@@ -17,6 +17,18 @@ def MemoryPortOp : FIRRTLOp<"memoryport", []> {
   }];
 }
 
+def AttachOp : FIRRTLOp<"attach"> {
+  let summary = "Analog Attach Statement";
+
+  let arguments = (ins Variadic<AnyType>:$operands);
+  let results = (outs);
+
+  let assemblyFormat = [{
+    `(` $operands `)` attr-dict `:` type($operands)
+  }];
+  // TODO: add verifier that the operands are all Analog
+}
+
 def ConnectOp : FIRRTLOp<"connect", []> {
   let summary = "Connect two signals";
   let description = [{

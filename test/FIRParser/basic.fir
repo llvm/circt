@@ -67,7 +67,8 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     input clock : Clock      ; CHECK: %clock: !firrtl.clock,
     output auto : UInt<1>    ; CHECK: %auto: !firrtl.flip<uint<1>>,
     input i8 : UInt<8>       ; CHECK: %i8: !firrtl.uint<8>,
-    input s8 : SInt<8>       ; CHECK: %s8: !firrtl.sint<8>)
+    input s8 : SInt<8>       ; CHECK: %s8: !firrtl.sint<8>,
+    input a8 : Analog<8>     ; CHECK: %a8: !firrtl.analog<8>)
 
     ; CHECK: %_t = firrtl.wire {name = "_t"} : !firrtl.vector<uint<1>, 12>
     wire _t : UInt<1>[12] @[Nodes.scala 370:76]
@@ -272,6 +273,8 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     _M._T_10.data is invalid @[Decoupled.scala 209:24]
     _M._T_10.mask is invalid @[Decoupled.scala 209:24]
 
+    ; CHECK: firrtl.attach(%a8, %a8, %a8) :
+    attach (a8, a8, a8)
 
   ; CHECK-LABEL: firrtl.module @type_handling(
   module type_handling :
