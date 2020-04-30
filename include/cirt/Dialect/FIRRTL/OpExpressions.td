@@ -170,7 +170,9 @@ def LEQPrimOp : BinaryPrimOp<"leq", "getCompareResult">;
 def LTPrimOp  : BinaryPrimOp<"lt",  "getCompareResult">;
 def GEQPrimOp : BinaryPrimOp<"geq", "getCompareResult">;
 def GTPrimOp  : BinaryPrimOp<"gt",  "getCompareResult">;
+let hasFolder = 1 in
 def EQPrimOp  : BinaryPrimOp<"eq",  "getCompareResult", [Commutative]>;
+let hasFolder = 1 in
 def NEQPrimOp : BinaryPrimOp<"neq", "getCompareResult", [Commutative]>;
 
 def CatPrimOp  : BinaryPrimOp<"cat", "getCatResult">;

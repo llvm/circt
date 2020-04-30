@@ -945,7 +945,58 @@ OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
                                         [](APInt a, APInt b) { return a ^ b; });
 }
 
-// TODO: Move to DRR.
+OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
+  APInt value;
+
+  if (matchPattern(rhs(), m_FConstant(value))) {
+    APInt lhsCst;
+    // Constant fold.
+    if (matchPattern(lhs(), m_FConstant(lhsCst)) &&
+        value.getBitWidth() == lhsCst.getBitWidth()) {
+      auto result = value == lhsCst;
+      return IntegerAttr::get(IntegerType::get(1, getContext()),
+                              APInt(1, result));
+    }
+
+    /// eq(x, 1) -> x when x is 1 bit.
+    /// TODO: Support SInt<1> on the LHS etc.
+    if (value.isAllOnesValue() && lhs().getType() == getType())
+      return lhs();
+
+    /// TODO: eq(x, 0) -> not(x) when x is 1 bit.
+    /// TODO: eq(x, 0) -> not(orr(x)) when x is >1 bit
+    /// TODO: eq(x, ~0) -> andr(x)) when x is >1 bit
+  }
+
+  return {};
+}
+
+OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
+  APInt value;
+
+  if (matchPattern(rhs(), m_FConstant(value))) {
+    APInt lhsCst;
+    // Constant fold.
+    if (matchPattern(lhs(), m_FConstant(lhsCst)) &&
+        value.getBitWidth() == lhsCst.getBitWidth()) {
+      auto result = value != lhsCst;
+      return IntegerAttr::get(IntegerType::get(1, getContext()),
+                              APInt(1, result));
+    }
+
+    /// neq(x, 0) -> x when x is 1 bit.
+    /// TODO: Support SInt<1> on the LHS etc.
+    if (value.isNullValue() && lhs().getType() == getType())
+      return lhs();
+
+    /// TODO: neq(x, 0) -> not(orr(x)) when x is >1 bit
+    /// TODO: neq(x, 1) -> not(x) when x is 1 bit.
+    /// TODO: neq(x, ~0) -> andr(x)) when x is >1 bit
+  }
+
+  return {};
+}
+
 OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
 

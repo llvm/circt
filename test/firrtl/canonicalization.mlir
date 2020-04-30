@@ -68,6 +68,24 @@ firrtl.module @Xor(%in: !firrtl.uint<4>,
   firrtl.connect %out, %3 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 }
 
+// CHECK-LABEL: firrtl.module @EQ
+firrtl.module @EQ(%in: !firrtl.uint<1>,
+                   %out: !firrtl.flip<uint<1>>) {
+  // CHECK: firrtl.connect %out, %in
+  %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
+  %0 = firrtl.eq %in, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %out, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+}
+
+// CHECK-LABEL: firrtl.module @NEQ
+firrtl.module @NEQ(%in: !firrtl.uint<1>,
+                   %out: !firrtl.flip<uint<1>>) {
+  // CHECK: firrtl.connect %out, %in
+  %c1_ui0 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+  %0 = firrtl.neq %in, %c1_ui0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %out, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+}
+
 // CHECK-LABEL: firrtl.module @Mux
 firrtl.module @Mux(%in: !firrtl.uint<4>,
                    %cond: !firrtl.uint<1>,
@@ -83,7 +101,7 @@ firrtl.module @Mux(%in: !firrtl.uint<4>,
   %2 = firrtl.mux (%c1_ui0, %in, %c7_ui4) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %2 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
- // CHECK: firrtl.connect %out1, %cond
+  // CHECK: firrtl.connect %out1, %cond
   %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
   %3 = firrtl.mux (%cond, %c1_ui1, %c1_ui0) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %out1, %3 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
