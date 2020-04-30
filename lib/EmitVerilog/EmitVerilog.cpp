@@ -39,6 +39,9 @@ static int getBitWidthOrSentinel(FIRRTLType type) {
   case FIRRTLType::UInt:
     return type.cast<IntType>().getWidthOrSentinel();
 
+  case FIRRTLType::Analog:
+    return type.cast<AnalogType>().getWidthOrSentinel();
+
   case FIRRTLType::Flip:
     return getBitWidthOrSentinel(type.cast<FlipType>().getElementType());
 

@@ -372,3 +372,8 @@ circuit Xorr :
     io_q <= reg
     reg <= mux(io_en, io_d, reg)
 
+  ; CHECK-LABEL: module Analog(
+  ; CHECK-NEXT:   output [4:0] io_pins_asrcn3v3);
+  module Analog :
+    output io_pins_asrcn3v3 : Analog<5>
+
