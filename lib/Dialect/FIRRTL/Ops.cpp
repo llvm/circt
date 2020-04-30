@@ -648,90 +648,6 @@ FIRRTLType firrtl::getValidIfResult(FIRRTLType lhs, FIRRTLType rhs) {
 }
 
 //===----------------------------------------------------------------------===//
-// Binary Primitive Fold Hooks
-//===----------------------------------------------------------------------===//
-
-struct ConstantIntMatcher {
-  APInt &value;
-  ConstantIntMatcher(APInt &value) : value(value) {}
-  bool match(Operation *op) {
-    if (auto cst = dyn_cast<ConstantOp>(op)) {
-      value = cst.value();
-      return true;
-    }
-    return false;
-  }
-};
-
-static inline ConstantIntMatcher m_FConstant(APInt &value) {
-  return ConstantIntMatcher(value);
-}
-
-// TODO: Move to DRR.
-OpFoldResult AndPrimOp::fold(ArrayRef<Attribute> operands) {
-  APInt value;
-
-  /// and(x, 0) -> 0
-  if (matchPattern(rhs(), m_FConstant(value)) && value.isNullValue() &&
-      rhs().getType() == getType())
-    return rhs();
-
-  /// and(x, -1) -> x
-  if (matchPattern(rhs(), m_FConstant(value)) && value.isAllOnesValue() &&
-      lhs().getType() == getType())
-    return lhs();
-
-  /// and(x, x) -> x
-  if (lhs() == rhs() && rhs().getType() == getType())
-    return rhs();
-
-  return constFoldBinaryOp<IntegerAttr>(operands,
-                                        [](APInt a, APInt b) { return a & b; });
-}
-
-OpFoldResult OrPrimOp::fold(ArrayRef<Attribute> operands) {
-  APInt value;
-
-  /// or(x, 0) -> x
-  if (matchPattern(rhs(), m_FConstant(value)) && value.isNullValue() &&
-      lhs().getType() == getType())
-    return lhs();
-
-  /// or(x, -1) -> -1
-  if (matchPattern(rhs(), m_FConstant(value)) && value.isAllOnesValue() &&
-      rhs().getType() == getType())
-    return rhs();
-
-  /// or(x, x) -> x
-  if (lhs() == rhs())
-    return rhs();
-
-  return constFoldBinaryOp<IntegerAttr>(operands,
-                                        [](APInt a, APInt b) { return a | b; });
-}
-
-OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
-  APInt value;
-
-  /// xor(x, 0) -> x
-  if (matchPattern(rhs(), m_FConstant(value)) && value.isNullValue() &&
-      lhs().getType() == getType())
-    return lhs();
-
-  /// xor(x, x) -> 0
-  if (lhs() == rhs()) {
-    auto width = getType().cast<IntType>().getWidthOrSentinel();
-    if (width == -1)
-      width = 1;
-    auto type = IntegerType::get(width, getContext());
-    return Builder(getContext()).getZeroAttr(type);
-  }
-
-  return constFoldBinaryOp<IntegerAttr>(operands,
-                                        [](APInt a, APInt b) { return a ^ b; });
-}
-
-//===----------------------------------------------------------------------===//
 // Unary Primitives
 //===----------------------------------------------------------------------===//
 
@@ -943,6 +859,127 @@ FIRRTLType TailPrimOp::getResultType(FIRRTLType input, int32_t amount) {
   }
 
   return IntType::get(input.getContext(), inputi.isSigned(), width);
+}
+
+//===----------------------------------------------------------------------===//
+// Fold Hooks
+//===----------------------------------------------------------------------===//
+
+struct ConstantIntMatcher {
+  APInt &value;
+  ConstantIntMatcher(APInt &value) : value(value) {}
+  bool match(Operation *op) {
+    if (auto cst = dyn_cast<ConstantOp>(op)) {
+      value = cst.value();
+      return true;
+    }
+    return false;
+  }
+};
+
+static inline ConstantIntMatcher m_FConstant(APInt &value) {
+  return ConstantIntMatcher(value);
+}
+
+// TODO: Move to DRR.
+OpFoldResult AndPrimOp::fold(ArrayRef<Attribute> operands) {
+  APInt value;
+
+  /// and(x, 0) -> 0
+  if (matchPattern(rhs(), m_FConstant(value)) && value.isNullValue() &&
+      rhs().getType() == getType())
+    return rhs();
+
+  /// and(x, -1) -> x
+  if (matchPattern(rhs(), m_FConstant(value)) && value.isAllOnesValue() &&
+      lhs().getType() == getType())
+    return lhs();
+
+  /// and(x, x) -> x
+  if (lhs() == rhs() && rhs().getType() == getType())
+    return rhs();
+
+  return constFoldBinaryOp<IntegerAttr>(operands,
+                                        [](APInt a, APInt b) { return a & b; });
+}
+
+OpFoldResult OrPrimOp::fold(ArrayRef<Attribute> operands) {
+  APInt value;
+
+  /// or(x, 0) -> x
+  if (matchPattern(rhs(), m_FConstant(value)) && value.isNullValue() &&
+      lhs().getType() == getType())
+    return lhs();
+
+  /// or(x, -1) -> -1
+  if (matchPattern(rhs(), m_FConstant(value)) && value.isAllOnesValue() &&
+      rhs().getType() == getType())
+    return rhs();
+
+  /// or(x, x) -> x
+  if (lhs() == rhs())
+    return rhs();
+
+  return constFoldBinaryOp<IntegerAttr>(operands,
+                                        [](APInt a, APInt b) { return a | b; });
+}
+
+OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
+  APInt value;
+
+  /// xor(x, 0) -> x
+  if (matchPattern(rhs(), m_FConstant(value)) && value.isNullValue() &&
+      lhs().getType() == getType())
+    return lhs();
+
+  /// xor(x, x) -> 0
+  if (lhs() == rhs()) {
+    auto width = getType().cast<IntType>().getWidthOrSentinel();
+    if (width == -1)
+      width = 1;
+    auto type = IntegerType::get(width, getContext());
+    return Builder(getContext()).getZeroAttr(type);
+  }
+
+  return constFoldBinaryOp<IntegerAttr>(operands,
+                                        [](APInt a, APInt b) { return a ^ b; });
+}
+
+// TODO: Move to DRR.
+OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
+  APInt value;
+
+  /// mux(0/1, x, y) -> x or y
+  if (matchPattern(sel(), m_FConstant(value))) {
+    if (value.isNullValue() && low().getType() == getType())
+      return low();
+    if (!value.isNullValue() && high().getType() == getType())
+      return high();
+  }
+
+  // mux(cond, x, x) -> x
+  if (high() == low())
+    return high();
+
+  // mux(cond, x, cst)
+  if (matchPattern(low(), m_FConstant(value))) {
+    APInt c1;
+    // mux(cond, c1, c2)
+    if (matchPattern(high(), m_FConstant(c1))) {
+      // mux(cond, 1, 0) -> cond
+      if (c1.isOneValue() && value.isNullValue() &&
+          getType() == sel().getType())
+        return sel();
+
+      // TODO: x ? ~0 : 0 -> sext(x)
+      // TODO: "x ? c1 : c2" -> many tricks
+    }
+    // TODO: "x ? a : 0" -> sext(x) & a
+  }
+
+  // TODO: "x ? c1 : y" -> "~x ? y : c1"
+
+  return {};
 }
 
 // Provide the autogenerated implementation guts for the Op classes.

@@ -1501,7 +1501,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
       parseOptionalInfo(elseInfo) || parseSuite(whenStmt.getElseBodyBuilder()))
     return failure();
 
-  // TODO(firtl spec): There is no reason for the 'else :' grammar to take an
+  // TODO(firrtl spec): There is no reason for the 'else :' grammar to take an
   // info.  It doesn't appear to be generated either.
   return success();
 }
