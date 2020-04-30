@@ -5,6 +5,7 @@
 #include "cirt/Dialect/FIRRTL/Ops.h"
 #include "mlir/Dialect/CommonFolders.h"
 #include "mlir/IR/Matchers.h"
+#include "mlir/IR/PatternMatch.h"
 
 using namespace cirt;
 using namespace firrtl;
@@ -143,6 +144,35 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
   }
 
   return {};
+}
+
+namespace {
+struct CatFolder final : public OpRewritePattern<CatPrimOp> {
+  CatFolder(MLIRContext *context) : OpRewritePattern(context) {}
+
+  LogicalResult matchAndRewrite(CatPrimOp op,
+                                PatternRewriter &rewriter) const override {
+    // cat(bits(x, ...), bits(x, ...)) -> bits(x ...) when the two ...'s are
+    // consequtive in the input.
+    if (auto lhsBits = dyn_cast_or_null<BitsPrimOp>(op.lhs().getDefiningOp())) {
+      if (auto rhsBits =
+              dyn_cast_or_null<BitsPrimOp>(op.rhs().getDefiningOp())) {
+        if (lhsBits.input() == rhsBits.input() &&
+            lhsBits.lo() - 1 == rhsBits.hi()) {
+          rewriter.replaceOpWithNewOp<BitsPrimOp>(
+              op, op.getType(), lhsBits.input(), lhsBits.hi(), rhsBits.lo());
+          return success();
+        }
+      }
+    }
+    return failure();
+  }
+};
+} // end anonymous namespace
+
+void CatPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                            MLIRContext *context) {
+  results.insert<CatFolder>(context);
 }
 
 OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {

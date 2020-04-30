@@ -175,6 +175,7 @@ def EQPrimOp  : BinaryPrimOp<"eq",  "getCompareResult", [Commutative]>;
 let hasFolder = 1 in
 def NEQPrimOp : BinaryPrimOp<"neq", "getCompareResult", [Commutative]>;
 
+let hasCanonicalizer = 1 in
 def CatPrimOp  : BinaryPrimOp<"cat", "getCatResult">;
 def DShlPrimOp : BinaryPrimOp<"dshl", "getDShlResult">;
 def DShrPrimOp : BinaryPrimOp<"dshr", "getDShrResult">;
