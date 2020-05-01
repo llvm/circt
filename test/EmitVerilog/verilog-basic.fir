@@ -214,6 +214,7 @@ circuit Xorr :
   ; CHECK-NEXT:     );
   ; CHECK-NEXT:     assign xyz2_in = a_in;
   ; CHECK-NEXT:     assign a_out = xyz2_out;
+  ; CHECK-NEXT:  endmodule
 
   module UseInstances :
     input a_in: UInt<8>
@@ -293,6 +294,8 @@ circuit Xorr :
   ; CHECK-NEXT:        if (`PRINTF_COND_ && reset) $fwrite(32'h80000002, "Hi %x %x\n", a + a, b);
   ; CHECK-NEXT:      `endif
   ; CHECK-NEXT:    end // always @(posedge)
+  ; CHECK-NEXT:  endmodule
+
   module Print :
     input clock: Clock
     input reset: UInt<1>
