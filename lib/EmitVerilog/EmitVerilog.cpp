@@ -99,31 +99,6 @@ static bool isNoopCast(Operation *op) {
   return false;
 }
 
-/// Return true for operations that are always inlined.
-static bool isExpressionAlwaysInline(Operation *op) {
-  if (isa<ConstantOp>(op) || isa<SubfieldOp>(op))
-    return true;
-
-  // If this is a noop cast and the operand is always inlined, then the noop
-  // cast is always inlined.
-  if (isNoopCast(op))
-    if (auto *operandOp = op->getOperand(0).getDefiningOp())
-      return isExpressionAlwaysInline(operandOp);
-
-  return false;
-}
-
-/// Return true if this expression should be emitted inline into any statement
-/// that uses it.
-static bool isExpressionEmittedInline(Operation *op) {
-  // These are always emitted inline even if multiply referenced.
-  if (isExpressionAlwaysInline(op))
-    return true;
-
-  // Otherwise, if it has multiple uses, emit it out of line.
-  return op->getResult(0).hasOneUse();
-}
-
 /// This represents a flattened bundle field element.
 struct FlatBundleFieldEntry {
   /// This is the underlying ground type of the field.
@@ -161,14 +136,6 @@ static void flattenBundleTypes(FIRRTLType type, StringRef suffixSoFar,
     // Recursively process subelements.
     flattenBundleTypes(elt.second, tmpSuffix, isFlipped, results);
   }
-}
-
-/// Do a best-effort job of looking through noop cast operations.
-static Value lookThroughNoopCasts(Value value) {
-  if (auto *op = value.getDefiningOp())
-    if (isNoopCast(op) && isExpressionEmittedInline(op))
-      return lookThroughNoopCasts(op->getOperand(0));
-  return value;
 }
 
 namespace {
@@ -425,10 +392,16 @@ public:
   };
 
   // Per module states.
-  llvm::StringSet<> usedNames;
   std::vector<ConditionalStatement> conditionalStmts;
+
+  llvm::StringSet<> usedNames;
   llvm::DenseMap<Value, llvm::StringMapEntry<llvm::NoneType> *> nameTable;
   size_t nextGeneratedNameID = 0;
+
+  /// This set keeps track of all of the expression nodes that need to be
+  /// emitted as standalone wire declarations.  This can happen because they are
+  /// multiply-used or because the user requires a name to reference.
+  SmallPtrSet<Operation *, 16> outOfLineExpressions;
 
   // This is set to true after the first RANDOMIZE prolog has been emitted in
   // this module to the initial block.
@@ -639,6 +612,16 @@ public:
   std::string emitExpressionToString(Value exp, VerilogPrecedence precedence);
   friend class ExprVisitor;
 
+  /// Do a best-effort job of looking through noop cast operations.
+  Value lookThroughNoopCasts(Value value) {
+    if (auto *op = value.getDefiningOp())
+      if (isNoopCast(op) && !emitter.outOfLineExpressions.count(op))
+        return lookThroughNoopCasts(op->getOperand(0));
+    return value;
+  }
+
+  ModuleEmitter &emitter;
+
 private:
   /// Emit the specified value as a subexpression to the stream.
   SubExprInfo emitSubExpr(Value exp, VerilogPrecedence parenthesizeIfLooserThan,
@@ -775,7 +758,6 @@ private:
   SubExprInfo visitExpr(ShrPrimOp op);
 
 private:
-  ModuleEmitter &emitter;
   SmallPtrSet<Operation *, 8> &emittedExprs;
   SmallString<128> resultBuffer;
   llvm::raw_svector_ostream os;
@@ -812,7 +794,7 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
 
   // Don't emit this expression inline if it has multiple uses.
   if (shouldEmitInlineExpr && parenthesizeIfLooserThan != ForceEmitMultiUse &&
-      !isExpressionEmittedInline(op))
+      emitter.outOfLineExpressions.count(op))
     shouldEmitInlineExpr = false;
 
   // If this is a non-expr or shouldn't be done inline, just refer to its
@@ -856,16 +838,17 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
   return expInfo;
 }
 
-static void collectCatValues(Value operand, SmallVectorImpl<Value> &catValues) {
-  operand = lookThroughNoopCasts(operand);
+static void collectCatValues(Value operand, SmallVectorImpl<Value> &catValues,
+                             ExprEmitter &emitter) {
+  operand = emitter.lookThroughNoopCasts(operand);
 
   // If the operand is a single-use cat, flatten it into the vector we're
   // building.
   if (auto *op = operand.getDefiningOp())
     if (auto cat = dyn_cast<CatPrimOp>(op))
-      if (isExpressionEmittedInline(cat)) {
-        collectCatValues(cat.lhs(), catValues);
-        collectCatValues(cat.rhs(), catValues);
+      if (!emitter.emitter.outOfLineExpressions.count(cat)) {
+        collectCatValues(cat.lhs(), catValues, emitter);
+        collectCatValues(cat.rhs(), catValues, emitter);
         return;
       }
   catValues.push_back(operand);
@@ -886,7 +869,7 @@ SubExprInfo ExprEmitter::emitCat(ArrayRef<Value> values, StringRef before,
   // Recursively flatten any nested cat-like expressions.
   SmallVector<Value, 8> elements;
   for (auto v : values)
-    collectCatValues(v, elements);
+    collectCatValues(v, elements, *this);
 
   llvm::interleaveComma(elements, os,
                         [&](Value v) { emitSubExpr(v, LowestPrecedence); });
@@ -1295,6 +1278,31 @@ void ModuleEmitter::emitDecl(MemOp op) {
 // Module Driver
 //===----------------------------------------------------------------------===//
 
+/// Return true for operations that are always inlined.
+static bool isExpressionAlwaysInline(Operation *op) {
+  if (isa<ConstantOp>(op) || isa<SubfieldOp>(op))
+    return true;
+
+  // If this is a noop cast and the operand is always inlined, then the noop
+  // cast is always inlined.
+  if (isNoopCast(op))
+    if (auto *operandOp = op->getOperand(0).getDefiningOp())
+      return isExpressionAlwaysInline(operandOp);
+
+  return false;
+}
+
+/// Return true if this expression should be emitted inline into any statement
+/// that uses it.
+static bool isExpressionEmittedInline(Operation *op) {
+  // These are always emitted inline even if multiply referenced.
+  if (isExpressionAlwaysInline(op))
+    return true;
+
+  // Otherwise, if it has multiple uses, emit it out of line.
+  return op->getResult(0).hasOneUse();
+}
+
 void ModuleEmitter::collectNamesEmitDecls(Block &block) {
   // In the first pass, we fill in the symbol table, calculate the max width
   // of the declaration words and the max type width.
@@ -1327,6 +1335,9 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     if (isExpr) {
       if (isExpressionEmittedInline(&op) || result.use_empty())
         continue;
+
+      // Remember that this expression should be emitted out of line.
+      outOfLineExpressions.insert(&op);
     }
 
     // Otherwise, it must be an expression or a declaration like a wire.
@@ -1425,9 +1436,9 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 }
 
 void ModuleEmitter::emitOperation(Operation *op) {
-  // Handle expression statements.
+  // Expressions may either be ignored or emitted as an expression statements.
   if (isExpression(op)) {
-    if (!isExpressionEmittedInline(op))
+    if (outOfLineExpressions.count(op))
       emitStatementExpression(op);
     return;
   }
@@ -1465,7 +1476,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
   if (StmtDeclEmitter(*this).dispatchStmtVisitor(op))
     return;
 
-  // emitOpError(op, "cannot emit this operation to Verilog");
+  emitOpError(op, "cannot emit this operation to Verilog");
   indent() << "unknown MLIR operation " << op->getName().getStringRef() << "\n";
 }
 
