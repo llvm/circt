@@ -96,6 +96,11 @@ static bool isNoopCast(Operation *op) {
       op->getOperand(0).getType().cast<IntType>().isSigned())
     return true;
 
+  // Shift left by zero is a noop.
+  if (auto shl = dyn_cast<ShlPrimOp>(op))
+    if (shl.amount() == 0)
+      return true;
+
   return false;
 }
 
@@ -754,7 +759,9 @@ private:
   SubExprInfo visitExpr(PadPrimOp op);
   SubExprInfo visitExpr(ShlPrimOp op) { // shl(x, 4) ==> {x, 4'h0}
     auto shAmt = op.amount().getLimitedValue();
-    return emitCat(op.getOperand(), "", llvm::utostr(shAmt) + "'h0");
+    if (shAmt)
+      return emitCat(op.getOperand(), "", llvm::utostr(shAmt) + "'h0");
+    return emitNoopCast(op);
   }
   SubExprInfo visitExpr(ShrPrimOp op);
 
