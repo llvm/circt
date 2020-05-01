@@ -148,34 +148,37 @@ circuit Xorr :
 ; CHECK-NEXT:     assign out = a == b;
 ; CHECK-NEXT:  endmodule
 
-  module MultiUseExpr :
-    input a: UInt<4>
-    output b: UInt<1>
-    ;; This disappears in MLIR because of the _T name.  The verilog emitter
-    ;; needs to reintroduce it as an 'assign' to a local.
-    node _T_42 = andr(xorr(a))
-    node _T_99 = add(a, a)
-    b <= andr(_T_42)
-    b <= xorr(_T_42)
-    b <= andr(_T_99)
-    b <= xorr(_T_99)
-
-    ; This expression is multiply used but should still be emitted inline.
-    node _T_100 = asUInt(SInt<4>("h3"))
-    b <= xorr(or(_T_100, _T_100))
 
 ; CHECK-LABEL: module MultiUseExpr(
 ; CHECK-NEXT:    input  [3:0] a,
 ; CHECK-NEXT:    output       b);
 ; CHECK-EMPTY:
-; CHECK-NEXT:    wire _T = &^a;
-; CHECK-NEXT:    wire [4:0] _T_0 = a + a;
-; CHECK-NEXT:    assign b = &_T;
-; CHECK-NEXT:    assign b = ^_T;
-; CHECK-NEXT:    assign b = &_T_0;
-; CHECK-NEXT:    assign b = ^_T_0;
-; CHECK-NEXT:    assign b = ^(4'sh3 | 4'sh3);
-; CHECK-NEXT:  endmodule
+  module MultiUseExpr :
+    input a: UInt<4>
+    output b: UInt<1>
+    ;; These node decls disappear in MLIR because of the _T name.  The verilog
+    ;; emitter needs to reintroduce it as an 'assign' to a local.
+
+    node _T_42 = andr(xorr(a)) ; CHECK-NEXT:    wire _T = &^a;
+    node _T_99 = add(a, a)     ; CHECK-NEXT:    wire [4:0] _T_0 = a + a;
+
+    b <= andr(_T_42)           ; CHECK-NEXT:    assign b = &_T;
+    b <= xorr(_T_42)           ; CHECK-NEXT:    assign b = ^_T;
+    b <= andr(_T_99)           ; CHECK-NEXT:    assign b = &_T_0;
+    b <= xorr(_T_99)           ; CHECK-NEXT:    assign b = ^_T_0;
+
+    ; This expression is multiply used but should still be emitted inline.
+    ; CHECK-NEXT: assign b = ^(4'sh3 | 4'sh3);
+    node _T_100 = asUInt(SInt<4>("h3"))
+    b <= xorr(or(_T_100, _T_100))
+
+    ; This expression isn't multiply used but needs to be emitted separately
+    ; because Verilog bit select expressions don't compose generally.
+    ; CHECK-NEXT: wire [3:0] _T_1 = ~a;
+    ; CHECK-NEXT: assign b = _T_1[3:2];
+    b <= shr(not(a), 2)
+
+    ; CHECK-NEXT:  endmodule
 
 
   ; extmodules do not get emitted as anything, but are referenced from

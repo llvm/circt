@@ -143,7 +143,8 @@ namespace {
 /// where a lower number binds tighter.
 enum VerilogPrecedence {
   // Normal precedence levels.
-  Unary,           // Symbols and all the unary operators.
+  Symbol,          // Atomic symbol like "foo"
+  Unary,           // Unary operators like ~foo
   Multiply,        // * , / , %
   Addition,        // + , -
   Shift,           // << , >>
@@ -805,7 +806,7 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
       return {Unary, IsSigned};
     }
     os << emitter.getName(exp);
-    return {Unary, IsUnsigned};
+    return {Symbol, IsUnsigned};
   }
 
   unsigned subExprStartIndex = resultBuffer.size();
@@ -885,9 +886,14 @@ SubExprInfo ExprEmitter::emitCat(ArrayRef<Value> values, StringRef before,
 
 /// Emit a verilog bit selection operation like x[4:0], the bit numbers are
 /// inclusive like verilog.
+///
+/// Note that anything that emits a BitSelect must be handled in the
+/// isExpressionUnableToInline.
 SubExprInfo ExprEmitter::emitBitSelect(Value operand, unsigned hiBit,
                                        unsigned loBit) {
-  emitSubExpr(operand, Unary);
+  auto x = emitSubExpr(operand, LowestPrecedence);
+  assert(x.precedence == Symbol &&
+         "should be handled by isExpressionUnableToInline");
 
   os << '[' << hiBit;
   if (hiBit != loBit) // Emit x[4] instead of x[4:4].
@@ -916,9 +922,9 @@ SubExprInfo ExprEmitter::visitExpr(SubfieldOp op) {
   auto prec = emitSubExpr(op.getOperand(), Unary);
   // TODO(verilog dialect): This is a hack, relying on the fact that only
   // textual expressions that produce a name can appear here.
-  assert(prec.precedence == Unary);
+  assert(prec.precedence == Symbol);
   os << '_' << op.fieldname();
-  return {Unary, IsUnsigned};
+  return {Symbol, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitExpr(ValidIfPrimOp op) {
@@ -1020,7 +1026,7 @@ SubExprInfo ExprEmitter::visitExpr(ShrPrimOp op) {
 SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
   emitter.emitOpError(op, "cannot emit this expression to Verilog");
   os << "<<unsupported expr: " << op->getName().getStringRef() << ">>";
-  return {Unary, IsUnsigned};
+  return {Symbol, IsUnsigned};
 }
 
 //===----------------------------------------------------------------------===//
@@ -1278,6 +1284,42 @@ void ModuleEmitter::emitDecl(MemOp op) {
 // Module Driver
 //===----------------------------------------------------------------------===//
 
+/// Most expressions are invalid to bit-select from in Verilog, but some things
+/// are ok.  Return true if it is ok to inline bitselect from the result of this
+/// expression.  It is conservatively correct to return false.
+static bool isOkToBitSelectFrom(Operation *op) {
+  if (isa<SubfieldOp>(op))
+    return true;
+
+  // TODO: We could handle concat and other operators here.
+  return false;
+}
+
+/// Return true if we are unable to ever inline the specified operation.  This
+/// happens because not all Verilog expressions are composable.
+static bool isExpressionUnableToInline(Operation *op) {
+  // Can the users of the operation to see if any of them need this to be
+  // emitted out-of-line.
+  for (auto user : op->getUsers()) {
+    // Verilog bit selection is required by the standard to be:
+    // "a vector, packed array, packed structure, parameter or concatenation".
+    // It cannot be an arbitrary expression.
+    if (isa<HeadPrimOp>(user) || isa<TailPrimOp>(user) ||
+        isa<ShrPrimOp>(user) || isa<BitsPrimOp>(user))
+      if (!isOkToBitSelectFrom(op))
+        return true;
+
+    if (auto pad = dyn_cast<PadPrimOp>(user)) {
+      auto inType = getPassiveTypeOf<IntType>(pad.getOperand());
+      auto inWidth = inType.getWidthOrSentinel();
+      if (unsigned(inWidth) > pad.amount().getLimitedValue() &&
+          !isOkToBitSelectFrom(op))
+        return true;
+    }
+  }
+  return false;
+}
+
 /// Return true for operations that are always inlined.
 static bool isExpressionAlwaysInline(Operation *op) {
   if (isa<ConstantOp>(op) || isa<SubfieldOp>(op))
@@ -1295,6 +1337,11 @@ static bool isExpressionAlwaysInline(Operation *op) {
 /// Return true if this expression should be emitted inline into any statement
 /// that uses it.
 static bool isExpressionEmittedInline(Operation *op) {
+  // If it isn't structurally possible to inline this expression, emit it out of
+  // line.
+  if (isExpressionUnableToInline(op))
+    return false;
+
   // These are always emitted inline even if multiply referenced.
   if (isExpressionAlwaysInline(op))
     return true;
@@ -1333,7 +1380,8 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     // name.
     bool isExpr = isExpression(&op);
     if (isExpr) {
-      if (isExpressionEmittedInline(&op) || result.use_empty())
+      // If this expression is dead, or can be emitted inline, ignore it.
+      if (result.use_empty() || isExpressionEmittedInline(&op))
         continue;
 
       // Remember that this expression should be emitted out of line.
@@ -1476,7 +1524,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
   if (StmtDeclEmitter(*this).dispatchStmtVisitor(op))
     return;
 
-  emitOpError(op, "cannot emit this operation to Verilog");
+  // emitOpError(op, "cannot emit this operation to Verilog");
   indent() << "unknown MLIR operation " << op->getName().getStringRef() << "\n";
 }
 
