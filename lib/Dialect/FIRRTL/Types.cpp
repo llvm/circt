@@ -541,6 +541,20 @@ FIRRTLType BundleType::getPassiveType() {
   return passiveType;
 }
 
+/// Look up an element by name.  This returns a BundleElement with.
+auto BundleType::getElement(StringRef name) -> Optional<BundleElement> {
+  for (const auto &element : getElements()) {
+    if (element.first == name)
+      return element;
+  }
+  return None;
+}
+
+FIRRTLType BundleType::getElementType(StringRef name) {
+  auto element = getElement(name);
+  return element.hasValue() ? element.getValue().second : FIRRTLType();
+}
+
 //===----------------------------------------------------------------------===//
 // Vector Type
 //===----------------------------------------------------------------------===//

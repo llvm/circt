@@ -320,6 +320,23 @@ static ParseResult parseFExtModuleOp(OpAsmParser &parser,
                                      OperationState &result) {
   return parseFModuleOp(parser, result);
 }
+
+//===----------------------------------------------------------------------===//
+// Declarations
+//===----------------------------------------------------------------------===//
+
+/// Return the data-type field of the memory, the type of each element.
+FIRRTLType MemOp::getDataType() {
+  // The outer level of a mem is a bundle, containing the input and output
+  // ports.
+  auto bundle = getType().cast<BundleType>();
+  assert(!bundle.getElements().empty() &&
+         "must have at least one input or output port");
+  auto firstPort = bundle.getElements()[0];
+  auto firstPortType = firstPort.second.getPassiveType().cast<BundleType>();
+  return firstPortType.getElementType("data");
+}
+
 //===----------------------------------------------------------------------===//
 // Statements
 //===----------------------------------------------------------------------===//

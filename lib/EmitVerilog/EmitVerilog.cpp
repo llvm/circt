@@ -36,11 +36,17 @@ static int getBitWidthOrSentinel(FIRRTLType type) {
     return 1;
 
   case FIRRTLType::SInt:
-  case FIRRTLType::UInt:
-    return type.cast<IntType>().getWidthOrSentinel();
+  case FIRRTLType::UInt: {
+    // Turn zero-bit values into single bit ones for simplicity.  This occurs
+    // in the addr lines of mems with depth=1.
+    auto result = type.cast<IntType>().getWidthOrSentinel();
+    return result ? result : 1;
+  }
 
-  case FIRRTLType::Analog:
-    return type.cast<AnalogType>().getWidthOrSentinel();
+  case FIRRTLType::Analog: {
+    auto result = type.cast<AnalogType>().getWidthOrSentinel();
+    return result ? result : 1;
+  }
 
   case FIRRTLType::Flip:
     return getBitWidthOrSentinel(type.cast<FlipType>().getElementType());
@@ -249,6 +255,8 @@ void VerilogEmitterBase::emitTypePaddedToWidth(FIRRTLType type,
                                                size_t padToWidth,
                                                Operation *op) {
   int bitWidth = getBitWidthOrSentinel(type);
+  assert(bitWidth != 0 && "Shouldn't emit zero bit declarations");
+
   if (bitWidth == -1) {
     emitError(op, "value has an unsupported verilog type ") << type;
     os << "<<invalid type>>";
@@ -293,6 +301,7 @@ public:
   void emitDecl(NodeOp op);
   void emitDecl(InstanceOp op);
   void emitDecl(RegOp op);
+  void emitDecl(MemOp op);
   void emitDecl(RegInitOp op);
   void emitOperation(Operation *op);
 
@@ -1246,6 +1255,14 @@ void ModuleEmitter::emitDecl(RegInitOp op) {
   addInitial(action, locInfo, /*ppCond*/ "", /*cond*/ resetSignal);
 }
 
+void ModuleEmitter::emitDecl(MemOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  auto locInfo = getLocationInfoAsString(ops);
+  indent() << "FIXME: Emit Mem " << locInfo << '\n';
+}
+
 //===----------------------------------------------------------------------===//
 // Module Driver
 //===----------------------------------------------------------------------===//
@@ -1257,7 +1274,8 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
   // Return the word (e.g. "wire") in Verilog to declare the specified thing.
   auto getVerilogDeclWord = [](Operation *op) -> StringRef {
-    // FIXME: what about mems?
+    // Note: MemOp is handled as "wire" here because each of its subcomponents
+    // are wires.  The corresponding 'reg' decl is handled specially below.
     if (isa<RegOp>(op) || isa<RegInitOp>(op))
       return "reg";
     else
@@ -1305,11 +1323,15 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     fieldTypes.clear();
     flattenBundleTypes(type, "", false, fieldTypes);
 
+    // Handle the reg declaration for a memory specially.
+    if (auto memOp = dyn_cast<MemOp>(&op))
+      flattenBundleTypes(memOp.getDataType(), "", false, fieldTypes);
+
     for (const auto &elt : fieldTypes) {
       int bitWidth = getBitWidthOrSentinel(elt.type);
       if (bitWidth == -1) {
         emitError(&op, getName(result))
-            << elt.suffix << " has an unsupported verilog type " << type;
+            << elt.suffix << " has an unsupported verilog type " << elt.type;
         result = Value();
         break;
       }
@@ -1339,7 +1361,6 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     auto type = decl->getResult(0).getType().cast<FIRRTLType>();
     fieldTypes.clear();
     flattenBundleTypes(type, "", false, fieldTypes);
-    ops.insert(decl);
 
     bool isFirst = true;
     for (const auto &elt : fieldTypes) {
@@ -1352,6 +1373,22 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
         emitLocationInfoAndNewLine(ops);
       else
         os << '\n';
+    }
+
+    // Handle the reg declaration for a memory specially.
+    if (auto memOp = dyn_cast<MemOp>(decl)) {
+      fieldTypes.clear();
+      flattenBundleTypes(memOp.getDataType(), "", false, fieldTypes);
+
+      auto depth = memOp.depth();
+
+      for (const auto &elt : fieldTypes) {
+        indent() << "reg";
+        os.indent(maxDeclNameWidth - 3 + 1);
+        emitTypePaddedToWidth(elt.type, maxTypeWidth, decl);
+        os << getName(decl->getResult(0)) << elt.suffix;
+        os << '[' << (depth - 1) << ":0];\n";
+      }
     }
   }
 
@@ -1388,6 +1425,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitDecl(NodeOp op) { return emitter.emitDecl(op), true; }
     bool visitDecl(RegOp op) { return emitter.emitDecl(op), true; }
     bool visitDecl(RegInitOp op) { return emitter.emitDecl(op), true; }
+    bool visitDecl(MemOp op) { return emitter.emitDecl(op), true; }
 
     bool visitUnhandledDecl(Operation *op) { return false; }
     bool visitInvalidDecl(Operation *op) { return false; }

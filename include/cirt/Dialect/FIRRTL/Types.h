@@ -223,6 +223,10 @@ public:
 
   ArrayRef<BundleElement> getElements();
 
+  /// Look up an element by name.  This returns None on failure.
+  llvm::Optional<BundleElement> getElement(StringRef name);
+  FIRRTLType getElementType(StringRef name);
+
   /// Return true if this is a "passive" type - one that contains no "flip"
   /// types recursively within itself.
   bool isPassiveType();

@@ -377,3 +377,28 @@ circuit Xorr :
   module Analog :
     output io_pins_asrcn3v3 : Analog<5>
 
+  ; CHECK-LABEL: module Mem(
+  ; CHECK-NEXT:   input clock1, clock2);
+
+  ; CHECK:        reg  [3:0] _M_id[7:0];
+  ; CHECK-NEXT:   reg  [7:0] _M_other[7:0];
+  module Mem :
+    input clock1 : Clock
+    input clock2 : Clock
+    mem _M : @[Decoupled.scala 209:24]
+          data-type => { id : Analog<4>, other: SInt<8> }
+          depth => 8
+          read-latency => 0
+          write-latency => 1
+          reader => read
+          writer => write
+          read-under-write => undefined
+    ;_M.read.addr is invalid @[Decoupled.scala 209:24]
+    ;_M.read.clk <= clock1
+    ;_M.read.en <= UInt<1>("h0") @[Decoupled.scala 209:24]
+
+    ;_M.write.addr
+    ;_M.write.clk <= clock2
+    ;_M.write.en <=
+    ;_M.write.data
+    ;_M.write.mask

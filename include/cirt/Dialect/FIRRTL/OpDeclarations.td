@@ -43,11 +43,18 @@ def SMemOp : FIRRTLOp<"smem", [NoSideEffect]> {
 def MemOp : FIRRTLOp<"mem", [NoSideEffect]> {
   let summary = "Define a new smem";
   let arguments = (ins I32Attr:$readLatency, I32Attr:$writeLatency,
-                       RUWAttr:$ruw, OptionalAttr<StrAttr>:$name);
+                       I32Attr:$depth, RUWAttr:$ruw,
+                       OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
 
   let assemblyFormat = [{
     $ruw attr-dict `:` type($result)
+  }];
+
+
+  let extraClassDeclaration = [{
+    /// Return the data-type field of the memory, the type of each element.
+    FIRRTLType getDataType();
   }];
 }
 

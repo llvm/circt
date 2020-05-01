@@ -1864,7 +1864,8 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
   auto memType = BundleType::get(memFields, getContext());
   auto result = builder.create<MemOp>(
       info.getLoc(), memType, llvm::APInt(32, readLatency),
-      llvm::APInt(32, writeLatency), ruw, filterUselessName(id));
+      llvm::APInt(32, writeLatency), llvm::APInt(32, depth), ruw,
+      filterUselessName(id));
 
   // Remember that this memory is in this symbol table scope.
   // TODO(chisel bug): This should be removed along with memoryScopeTable.
