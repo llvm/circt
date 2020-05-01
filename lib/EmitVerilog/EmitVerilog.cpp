@@ -1742,7 +1742,7 @@ void CircuitEmitter::emitCircuit(CircuitOp circuit) {
 // Users can define INIT_RANDOM as general code that gets injected into the
 // initializer block for modules with registers.
 `ifndef INIT_RANDOM
-`define `INIT_RANDOM
+`define INIT_RANDOM
 `endif
 
 // If using random initialization, you can also define RANDOMIZE_DELAY to
@@ -1754,12 +1754,12 @@ void CircuitEmitter::emitCircuit(CircuitOp circuit) {
 // Define INIT_RANDOM_PROLOG_ for use in our modules below.
 `ifdef RANDOMIZE
   `ifndef VERILATOR
-    `define `INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end
+    `define INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end
   `else
-    `define `INIT_RANDOM_PROLOG_ `INIT_RANDOM
+    `define INIT_RANDOM_PROLOG_ `INIT_RANDOM
   `endif
 `else
-  `define `INIT_RANDOM_PROLOG_
+  `define INIT_RANDOM_PROLOG_
 `endif
 )XXX";
 
