@@ -101,6 +101,7 @@ firrtl.module @Cat(%in4: !firrtl.uint<4>,
 firrtl.module @Bits(%in1: !firrtl.uint<1>,
                     %in4: !firrtl.uint<4>,
                     %out1: !firrtl.flip<uint<1>>,
+                    %out2: !firrtl.flip<uint<2>>,
                     %out4: !firrtl.flip<uint<4>>) {
   // CHECK: firrtl.connect %out1, %in1
   %0 = firrtl.bits %in1 0 to 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -109,6 +110,11 @@ firrtl.module @Bits(%in1: !firrtl.uint<1>,
   // CHECK: firrtl.connect %out4, %in4
   %1 = firrtl.bits %in4 3 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out4, %1 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+
+  // CHECK: firrtl.connect %out2, %c1_ui2
+  %c7_ui4 = firrtl.constant(10 : ui4) : !firrtl.uint<4>
+  %2 = firrtl.bits %c7_ui4 2 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+  firrtl.connect %out2, %2 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
 }
 
 // CHECK-LABEL: firrtl.module @Mux
@@ -150,4 +156,38 @@ firrtl.module @Pad(%in1u: !firrtl.uint<1>,
   %c1_si1 = firrtl.constant(-1 : si1) : !firrtl.sint<1>
   %2 = firrtl.pad %c1_si1, 4 : (!firrtl.sint<1>) -> !firrtl.sint<4>
   firrtl.connect %outs, %2 : !firrtl.flip<sint<4>>, !firrtl.sint<4>
+}
+
+// CHECK-LABEL: firrtl.module @Shl
+firrtl.module @Shl(%in1u: !firrtl.uint<1>,
+                   %out1u: !firrtl.flip<uint<1>>,
+                   %outu: !firrtl.flip<uint<4>>) {
+  // CHECK: firrtl.connect %out1u, %in1u
+  %0 = firrtl.shl %in1u, 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %out1u, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+
+  // CHECK: firrtl.connect %outu, %c8_ui4
+  %c1_ui0 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
+  %1 = firrtl.shl %c1_ui0, 3 : (!firrtl.uint<1>) -> !firrtl.uint<4>
+  firrtl.connect %outu, %1 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+}
+
+// CHECK-LABEL: firrtl.module @Shr
+firrtl.module @Shr(%in1u: !firrtl.uint<1>,
+                   %in4u: !firrtl.uint<4>,
+                   %out1u: !firrtl.flip<uint<1>>,
+                   %outu: !firrtl.flip<uint<4>>) {
+  // CHECK: firrtl.connect %out1u, %in1u
+  %0 = firrtl.shr %in1u, 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %out1u, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+
+ // CHECK: firrtl.connect %out1u, %c0_ui1
+  %1 = firrtl.shr %in4u, 4 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+  firrtl.connect %out1u, %1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+
+
+  // CHECK: firrtl.connect %out1u, %c1_ui1
+  %c12_ui4 = firrtl.constant(12 : ui4) : !firrtl.uint<4>
+  %2 = firrtl.shr %c12_ui4, 3 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+  firrtl.connect %out1u, %2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 }

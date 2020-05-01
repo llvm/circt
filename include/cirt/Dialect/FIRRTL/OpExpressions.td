@@ -243,6 +243,12 @@ def BitsPrimOp : PrimOp<"bits"> {
   let hasFolder = 1;
 
   let extraClassDeclaration = [{
+    /// Return the highest bit included in the result.
+    unsigned getHi() { return hi().getLimitedValue(); }
+
+    /// Return the lowest bit included in the result.
+    unsigned getLo() { return lo().getLimitedValue(); }
+
     /// Return the result for inputs with the specified type, returning a null
     /// type if the input types are invalid.
     static FIRRTLType getResultType(FIRRTLType input, int32_t high,
@@ -333,6 +339,9 @@ class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic> {
   }];
 
   let extraClassDeclaration = [{
+    /// Return the shift amount.
+    unsigned getAmount() { return amount().getLimitedValue(); }
+
     /// Return the result for inputs with the specified type, returning a null
     /// type if the input types are invalid.
     static FIRRTLType getResultType(FIRRTLType input, int32_t amount);
@@ -345,7 +354,9 @@ class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic> {
   }];
 }
 
+let hasFolder = 1 in
 def ShlPrimOp : ShiftPrimOp<"shl">;
+let hasFolder = 1 in
 def ShrPrimOp : ShiftPrimOp<"shr">;
 
 def TailPrimOp : PrimOp<"tail"> {

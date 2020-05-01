@@ -137,6 +137,9 @@ public:
 
   bool isSigned() { return getKind() == SInt; }
 
+  /// Return true if this integer type has a known width.
+  bool hasWidth() { return getWidth().hasValue(); }
+
   /// Return the bitwidth of this type or None if unknown.
   Optional<int32_t> getWidth();
 

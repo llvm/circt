@@ -14,6 +14,11 @@ using namespace firrtl;
 // Fold Hooks
 //===----------------------------------------------------------------------===//
 
+static Attribute getIntAttr(const APInt &value, MLIRContext *context) {
+  return IntegerAttr::get(IntegerType::get(value.getBitWidth(), context),
+                          value);
+}
+
 struct ConstantIntMatcher {
   APInt &value;
   ConstantIntMatcher(APInt &value) : value(value) {}
@@ -102,9 +107,7 @@ OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
     // Constant fold.
     if (matchPattern(lhs(), m_FConstant(lhsCst)) &&
         value.getBitWidth() == lhsCst.getBitWidth()) {
-      auto result = value == lhsCst;
-      return IntegerAttr::get(IntegerType::get(1, getContext()),
-                              APInt(1, result));
+      return getIntAttr(APInt(1, value == lhsCst), getContext());
     }
 
     /// eq(x, 1) -> x when x is 1 bit.
@@ -128,9 +131,7 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
     // Constant fold.
     if (matchPattern(lhs(), m_FConstant(lhsCst)) &&
         value.getBitWidth() == lhsCst.getBitWidth()) {
-      auto result = value != lhsCst;
-      return IntegerAttr::get(IntegerType::get(1, getContext()),
-                              APInt(1, result));
+      return getIntAttr(APInt(1, value != lhsCst), getContext());
     }
 
     /// neq(x, 0) -> x when x is 1 bit.
@@ -158,7 +159,7 @@ struct CatFolder final : public OpRewritePattern<CatPrimOp> {
       if (auto rhsBits =
               dyn_cast_or_null<BitsPrimOp>(op.rhs().getDefiningOp())) {
         if (lhsBits.input() == rhsBits.input() &&
-            lhsBits.lo() - 1 == rhsBits.hi()) {
+            lhsBits.getLo() - 1 == rhsBits.getHi()) {
           rewriter.replaceOpWithNewOp<BitsPrimOp>(
               op, op.getType(), lhsBits.input(), lhsBits.hi(), rhsBits.lo());
           return success();
@@ -176,12 +177,18 @@ void CatPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 }
 
 OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
-  APInt value;
-
+  auto inputType = input().getType().cast<FIRRTLType>().getPassiveType();
   // If we are extracting the entire input, then return it.
-  if (input().getType() == getType() &&
-      getType().cast<IntType>().getWidthOrSentinel() != -1)
+  if (inputType == getType() &&
+      inputType.cast<IntType>().getWidthOrSentinel() != -1)
     return input();
+
+  // Constant fold.
+  APInt value;
+  if (inputType.cast<IntType>().hasWidth() &&
+      matchPattern(input(), m_FConstant(value)))
+    return getIntAttr(value.lshr(getLo()).trunc(getHi() - getLo() + 1),
+                      getContext());
 
   return {};
 }
@@ -224,29 +231,83 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
 
 OpFoldResult PadPrimOp::fold(ArrayRef<Attribute> operands) {
   auto input = this->input();
-  auto inputType = input.getType().cast<IntType>();
 
   // pad(x) -> x  if the width doesn't change.
   if (input.getType() == getType())
     return input;
 
   // Need to know the input width.
+  auto inputType =
+      input.getType().cast<FIRRTLType>().getPassiveType().cast<IntType>();
   int32_t width = inputType.getWidthOrSentinel();
   if (width == -1)
     return {};
 
+  // Constant fold.
   APInt value;
-
-  /// pad(cst1) -> cst2
   if (matchPattern(input, m_FConstant(value))) {
     auto destWidth = getType().cast<IntType>().getWidthOrSentinel();
-    if (inputType.isSigned())
-      value = value.sext(destWidth);
-    else
-      value = value.zext(destWidth);
+    if (destWidth == -1)
+      return {};
 
-    return IntegerAttr::get(IntegerType::get(destWidth, getContext()), value);
+    if (inputType.isSigned())
+      return getIntAttr(value.sext(destWidth), getContext());
+    return getIntAttr(value.zext(destWidth), getContext());
   }
 
+  return {};
+}
+
+OpFoldResult ShlPrimOp::fold(ArrayRef<Attribute> operands) {
+  auto input = this->input();
+  auto inputType =
+      input.getType().cast<FIRRTLType>().getPassiveType().cast<IntType>();
+  int shiftAmount = getAmount();
+
+  // shl(x, 0) -> x
+  if (shiftAmount == 0)
+    return input;
+
+  // Constant fold.
+  APInt value;
+  if (matchPattern(input, m_FConstant(value))) {
+    auto inputWidth = inputType.getWidthOrSentinel();
+    if (inputWidth != -1) {
+      auto resultWidth = inputWidth + shiftAmount;
+      return getIntAttr(value.zext(resultWidth).shl(shiftAmount), getContext());
+    }
+  }
+  return {};
+}
+
+OpFoldResult ShrPrimOp::fold(ArrayRef<Attribute> operands) {
+  auto input = this->input();
+  auto inputType =
+      input.getType().cast<FIRRTLType>().getPassiveType().cast<IntType>();
+  int shiftAmount = getAmount();
+
+  // shl(x, 0) -> x
+  if (shiftAmount == 0)
+    return input;
+
+  auto inputWidth = inputType.getWidthOrSentinel();
+  if (inputWidth == -1)
+    return {};
+
+  // shr(x, cst) where cst is all of x's bits and x is unsigned is 0.
+  // If it is signed, it is a sign bit.
+  if (shiftAmount == inputWidth && !inputType.isSigned())
+    return getIntAttr(APInt(1, 0), getContext());
+
+  // Constant fold.
+  APInt value;
+  if (matchPattern(input, m_FConstant(value))) {
+    auto resultWidth = std::max(inputWidth - shiftAmount, 1);
+    if (!inputType.isSigned())
+      value = value.lshr(shiftAmount);
+    else
+      value = value.ashr(shiftAmount);
+    return getIntAttr(value.trunc(resultWidth), getContext());
+  }
   return {};
 }
