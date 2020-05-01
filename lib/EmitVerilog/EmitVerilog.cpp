@@ -22,6 +22,11 @@ static constexpr bool emitInlineWireDecls = true;
 /// This is the preferred source width for the generated Verilog.
 static constexpr size_t preferredSourceWidth = 120;
 
+/// This is a set accessed through getReservedWords() that contains all of the
+/// Verilog names and other identifiers we need to avoid because of name
+/// conflicts.
+static llvm::ManagedStatic<StringSet<>> reservedWordCache;
+
 //===----------------------------------------------------------------------===//
 // Helper routines
 //===----------------------------------------------------------------------===//
@@ -187,6 +192,20 @@ enum VerilogPrecedence {
   ForceEmitMultiUse, // Sentinel saying to recursively emit a multi-used expr.
 };
 } // end anonymous namespace
+
+/// Return a StringSet that contains all of the reserved names (e.g. Verilog
+/// keywords) that we need to avoid for fear of name conflicts.
+static const StringSet<> &getReservedWords() {
+  auto &set = *reservedWordCache;
+  if (set.empty()) {
+    static const char *const reservedWords[] = {
+#include "ReservedWords.def"
+    };
+    for (auto *word : reservedWords)
+      set.insert(word);
+  }
+  return set;
+}
 
 //===----------------------------------------------------------------------===//
 // VerilogEmitter
@@ -456,11 +475,18 @@ void ModuleEmitter::addName(Value value, StringRef name) {
     return addName(value, tmpName);
   }
 
+  // Get the list of reserved words we need to avoid.  We could prepopulate this
+  // into the used words cache, but it is large and immutable, so we just query
+  // it when needed.
+  auto &reservedWords = getReservedWords();
+
   // Check to see if this name is available - if so, use it.
-  auto insertResult = usedNames.insert(name);
-  if (insertResult.second) {
-    nameTable[value] = &*insertResult.first;
-    return;
+  if (!reservedWords.count(name)) {
+    auto insertResult = usedNames.insert(name);
+    if (insertResult.second) {
+      nameTable[value] = &*insertResult.first;
+      return;
+    }
   }
 
   // If not, we need to auto-unique it.
@@ -472,12 +498,14 @@ void ModuleEmitter::addName(Value value, StringRef name) {
   while (1) {
     auto suffix = llvm::utostr(nextGeneratedNameID++);
     nameBuffer.append(suffix.begin(), suffix.end());
+    name = StringRef(nameBuffer.data(), nameBuffer.size());
 
-    insertResult =
-        usedNames.insert(StringRef(nameBuffer.data(), nameBuffer.size()));
-    if (insertResult.second) {
-      nameTable[value] = &*insertResult.first;
-      return;
+    if (!reservedWords.count(name)) {
+      auto insertResult = usedNames.insert(name);
+      if (insertResult.second) {
+        nameTable[value] = &*insertResult.first;
+        return;
+      }
     }
 
     // Chop off the suffix and try again.

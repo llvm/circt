@@ -340,22 +340,22 @@ circuit Xorr :
 ; CHECK-NEXT:   output [31:0] io_q,
 ; CHECK-NEXT:   input         io_en);
 ; CHECK-EMPTY:
-; CHECK-NEXT:   reg [31:0] reg;
+; CHECK-NEXT:   reg [31:0] reg_0;
 ; CHECK-EMPTY:
-; CHECK-NEXT:   assign io_q = reg;
+; CHECK-NEXT:   assign io_q = reg_0;
 ; CHECK-EMPTY:
 ; CHECK-NEXT:   `ifndef SYNTHESIS
 ; CHECK-NEXT:   initial begin
 ; CHECK-NEXT:     `INIT_RANDOM_PROLOG_
-; CHECK-NEXT:     if (reset) reg = 32'h0;
+; CHECK-NEXT:     if (reset) reg_0 = 32'h0;
 ; CHECK-NEXT:     `ifdef RANDOMIZE_REG_INIT
-; CHECK-NEXT:       if (~reset) reg = `RANDOM;
+; CHECK-NEXT:       if (~reset) reg_0 = `RANDOM;
 ; CHECK-NEXT:     `endif
 ; CHECK-NEXT:   end // initial
 ; CHECK-NEXT:   `endif // SYNTHESIS
 ; CHECK-EMPTY:
 ; CHECK-NEXT:   always @(posedge clock or posedge reset) begin
-; CHECK-NEXT:     reg <= io_en ? io_d : reg;
+; CHECK-NEXT:     reg_0 <= io_en ? io_d : reg_0;
 ; CHECK-NEXT:   end
 ; CHECK-NEXT: endmodule
 
