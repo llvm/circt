@@ -7,7 +7,7 @@
 #include "cirt/FIRParser.h"
 #include "FIRLexer.h"
 #include "cirt/Dialect/FIRRTL/Ops.h"
-#include "mlir/Analysis/Verifier.h"
+#include "mlir/IR/Verifier.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Module.h"
 #include "mlir/IR/StandardTypes.h"

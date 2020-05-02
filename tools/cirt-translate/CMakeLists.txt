@@ -1,8 +1,9 @@
 set(LIBS
   MLIRTranslation
   MLIRIR
+  MLIRStandardOps
   MLIRSupport
-
+ 
   CIRTEmitVerilog
   CIRTFIRParser
 )
