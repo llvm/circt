@@ -332,25 +332,28 @@ public:
   // struct below.
 
   void addDeclaration(std::string action, std::string locInfo,
-                      std::string ppCond) {
+                      std::string ppCond, unsigned partialOrder = 0) {
     conditionalStmts.push_back({ConditionalStmtKind::Declaration, "",
-                                std::move(ppCond), "", std::move(action),
-                                std::move(locInfo)});
-  }
-
-  void addInitial(std::string action, std::string locInfo,
-                  std::string ppCond = {}, std::string condition = {}) {
-    conditionalStmts.push_back({ConditionalStmtKind::Initial, "",
-                                std::move(ppCond), std::move(condition),
+                                std::move(ppCond), "", partialOrder,
                                 std::move(action), std::move(locInfo)});
   }
 
-  void addAtPosEdge(std::string action, std::string locInfo, std::string ppCond,
-                    std::string clock, std::string condition) {
+  void addInitial(std::string action, std::string locInfo,
+                  std::string ppCond = {}, std::string condition = {},
+                  unsigned partialOrder = 0) {
+    conditionalStmts.push_back({ConditionalStmtKind::Initial, "",
+                                std::move(ppCond), std::move(condition),
+                                partialOrder, std::move(action),
+                                std::move(locInfo)});
+  }
+
+  void addAtPosEdge(std::string action, std::string locInfo, std::string clock,
+                    std::string ppCond = {}, std::string condition = {},
+                    unsigned partialOrder = 0) {
     conditionalStmts.push_back({ConditionalStmtKind::AlwaysAtPosEdge,
                                 std::move(clock), std::move(ppCond),
-                                std::move(condition), std::move(action),
-                                std::move(locInfo)});
+                                std::move(condition), partialOrder,
+                                std::move(action), std::move(locInfo)});
   }
 
   // Set up the per-module state for random seeding of registers/memory.
@@ -382,6 +385,11 @@ public:
     /// empty, the statement is unconditional.
     std::string condition;
 
+    /// This is used to sort entries that have some partial ordering w.r.t. each
+    /// other.  This can only be used to order actions conditionalized by the
+    /// same ppCond and condition.
+    unsigned partialOrder;
+
     /// This is the statement to emit.  If there is a condition, this should
     /// always be a single verilog statement that can be emitted without a
     /// begin/end clause.
@@ -391,9 +399,10 @@ public:
     std::string locInfo;
 
     bool operator<(const ConditionalStatement &rhs) const {
-      return std::make_tuple(kind, clock, ppCond, condition, action, locInfo) <
+      return std::make_tuple(kind, clock, ppCond, condition, partialOrder,
+                             action, locInfo) <
              std::make_tuple(rhs.kind, rhs.clock, rhs.ppCond, rhs.condition,
-                             rhs.action, locInfo);
+                             rhs.partialOrder, rhs.action, locInfo);
     }
   };
 
@@ -412,6 +421,7 @@ public:
   // This is set to true after the first RANDOMIZE prolog has been emitted in
   // this module to the initial block.
   bool emittedRandomProlog = false;
+  bool emittedInitVar = false;
 };
 
 } // end anonymous namespace
@@ -1094,7 +1104,7 @@ void ModuleEmitter::emitStatement(ConnectOp op) {
       std::string action = getName(lhs).str() +
                            " <= " + emitExpressionToString(value, ops) + ";";
       auto locStr = getLocationInfoAsString(ops);
-      addAtPosEdge(action, locStr, /*ppCond*/ "", clockExpr, /*condition*/ "");
+      addAtPosEdge(action, locStr, clockExpr);
       return;
     };
 
@@ -1144,7 +1154,7 @@ void ModuleEmitter::emitStatement(PrintFOp op) {
   action << ");";
 
   auto locInfo = getLocationInfoAsString(ops);
-  addAtPosEdge(action.str(), locInfo, "!SYNTHESIS", clockExpr, condExpr);
+  addAtPosEdge(action.str(), locInfo, clockExpr, "!SYNTHESIS", condExpr);
 }
 
 void ModuleEmitter::emitStatement(StopOp op) {
@@ -1162,7 +1172,7 @@ void ModuleEmitter::emitStatement(StopOp op) {
   const char *action = op.exitCode().getLimitedValue() ? "$fatal;" : "$finish;";
   auto locInfo = getLocationInfoAsString(ops);
 
-  addAtPosEdge(action, locInfo, "!SYNTHESIS", clockExpr, condExpr);
+  addAtPosEdge(action, locInfo, clockExpr, "!SYNTHESIS", condExpr);
 }
 
 void ModuleEmitter::emitDecl(NodeOp op) {
@@ -1283,8 +1293,41 @@ void ModuleEmitter::emitDecl(MemOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
+  auto memName = getName(op.getResult());
+  auto depth = op.getDepth();
   auto locInfo = getLocationInfoAsString(ops);
-  indent() << "FIXME: Emit Mem " << locInfo << '\n';
+
+  // If we haven't already emitted a declaration of initvar, do so.
+  if (!emittedInitVar) {
+    addInitial("integer initvar;", "", /*ppCond*/ "RANDOMIZE_MEM_INIT",
+               /*cond*/ "", /*partialOrder: initVar decl*/ 10);
+    emittedInitVar = true;
+  }
+
+  // Aggregate mems may declare multiple reg's.  We need to random initialize
+  // them all.
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+  flattenBundleTypes(op.getDataType(), "", false, fieldTypes);
+  if (!fieldTypes.empty()) {
+    std::string action = "for (initvar = 0; initvar < " + llvm::utostr(depth) +
+                         "; initvar = initvar+1)";
+
+    if (fieldTypes.size() > 1)
+      action += " begin";
+
+    for (const auto &elt : fieldTypes)
+      action += "\n  " + memName.str() + elt.suffix + "[initvar] = `RANDOM;";
+
+    if (fieldTypes.size() > 1)
+      action += "\nend";
+
+    // On initialization, fill the mem with random bits if RANDOMIZE_MEM_INIT
+    // is set.
+    addInitial(action, locInfo, /*ppCond*/ "RANDOMIZE_MEM_INIT",
+               /*cond*/ "", /*partialOrder: After initVar decl*/ 11);
+  }
+
+  indent() << "// FIXME: Emit Mem " << locInfo << '\n';
 }
 
 //===----------------------------------------------------------------------===//
@@ -1469,12 +1512,13 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
         os << '\n';
     }
 
-    // Handle the reg declaration for a memory specially.
+    // Handle the reg declaration for a memory specially because we need to
+    // handle aggregate types and depths.
     if (auto memOp = dyn_cast<MemOp>(decl)) {
       fieldTypes.clear();
       flattenBundleTypes(memOp.getDataType(), "", false, fieldTypes);
 
-      auto depth = memOp.depth();
+      auto depth = memOp.getDepth();
 
       for (const auto &elt : fieldTypes) {
         indent() << "reg";
@@ -1580,7 +1624,23 @@ emitActionByCond(ArrayRef<ModuleEmitter::ConditionalStatement> elements,
   for (auto &elt : elements) {
     if (indentChildren)
       emitter.indent();
-    emitter.os << elt.action;
+
+    // Emit the action one line at a time, indenting after any embedded \n's.
+    StringRef actionToEmit = elt.action;
+    do {
+      auto lineEnd = std::min(actionToEmit.find('\n'), actionToEmit.size());
+      emitter.os << actionToEmit.take_front(lineEnd);
+      actionToEmit = actionToEmit.drop_front(lineEnd);
+
+      // If we found a \n, then emit it and indent right afterward.
+      if (!actionToEmit.empty()) {
+        assert(actionToEmit.front() == '\n');
+        emitter.os << '\n';
+        emitter.indent();
+        actionToEmit = actionToEmit.drop_front();
+      }
+    } while (!actionToEmit.empty());
+
     if (!elt.locInfo.empty())
       emitter.os << "\t// " << elt.locInfo;
     emitter.os << '\n';

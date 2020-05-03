@@ -53,6 +53,10 @@ def MemOp : FIRRTLOp<"mem", [NoSideEffect]> {
 
 
   let extraClassDeclaration = [{
+    unsigned getDepth() { return depth().getLimitedValue(); }
+    unsigned getReadLatency() { return readLatency().getLimitedValue(); }
+    unsigned getWriteLatency() { return writeLatency().getLimitedValue(); }
+
     /// Return the data-type field of the memory, the type of each element.
     FIRRTLType getDataType();
   }];

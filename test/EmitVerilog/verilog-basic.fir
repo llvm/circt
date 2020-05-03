@@ -386,17 +386,45 @@ circuit Xorr :
   module Analog :
     output io_pins_asrcn3v3 : Analog<5>
 
-  ; CHECK-LABEL: module Mem(
+  ; CHECK-LABEL: module MemSimple(
   ; CHECK-NEXT:   input clock1, clock2);
-
-  ; CHECK:        reg  [3:0] _M_id[7:0];
-  ; CHECK-NEXT:   reg  [7:0] _M_other[7:0];
-  module Mem :
+  module MemSimple :
     input clock1 : Clock
     input clock2 : Clock
+
+    ; CHECK:        reg  [41:0] _M[7:0];
+    mem _M : @[Decoupled.scala 209:24]
+          data-type => SInt<42>
+          depth => 8
+          read-latency => 0
+          write-latency => 1
+          reader => read
+          writer => write
+          read-under-write => undefined
+
+; CHECK:       `ifndef SYNTHESIS
+; CHECK-NEXT:  initial begin
+; CHECK-NEXT:    `ifdef RANDOMIZE_MEM_INIT
+; CHECK-NEXT:      integer initvar;
+; CHECK-NEXT:      for (initvar = 0; initvar < 8; initvar = initvar+1)
+; CHECK-NEXT:        _M[initvar] = `RANDOM;	// Decoupled.scala:209:24
+; CHECK-NEXT:    `endif // RANDOMIZE_MEM_INIT
+; CHECK-NEXT:  end // initial
+; CHECK-NEXT:  `endif // SYNTHESIS
+
+
+
+  ; CHECK-LABEL: module MemAggregate(
+  ; CHECK-NEXT:   input clock1, clock2);
+  module MemAggregate :
+    input clock1 : Clock
+    input clock2 : Clock
+
+    ; CHECK:        reg  [3:0] _M_id[19:0];
+    ; CHECK-NEXT:   reg  [7:0] _M_other[19:0];
     mem _M : @[Decoupled.scala 209:24]
           data-type => { id : Analog<4>, other: SInt<8> }
-          depth => 8
+          depth => 20
           read-latency => 0
           write-latency => 1
           reader => read
@@ -411,3 +439,15 @@ circuit Xorr :
     ;_M.write.en <=
     ;_M.write.data
     ;_M.write.mask
+
+; CHECK:        `ifndef SYNTHESIS
+; CHECK-NEXT:    initial begin
+; CHECK-NEXT:      `ifdef RANDOMIZE_MEM_INIT
+; CHECK-NEXT:        integer initvar;
+; CHECK-NEXT:        for (initvar = 0; initvar < 20; initvar = initvar+1) begin
+; CHECK-NEXT:          _M_id[initvar] = `RANDOM;
+; CHECK-NEXT:          _M_other[initvar] = `RANDOM;
+; CHECK-NEXT:        end	// Decoupled.scala:209:24
+; CHECK-NEXT:      `endif // RANDOMIZE_MEM_INIT
+; CHECK-NEXT:    end // initial
+; CHECK-NEXT:    `endif // SYNTHESIS
