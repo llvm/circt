@@ -1294,13 +1294,13 @@ void ModuleEmitter::emitDecl(MemOp op) {
   ops.insert(op);
 
   auto memName = getName(op.getResult());
-  auto depth = op.getDepth();
+  uint64_t depth = op.getDepth();
   auto locInfo = getLocationInfoAsString(ops);
 
   // If we haven't already emitted a declaration of initvar, do so.
   if (!emittedInitVar) {
-    // FIXME: This doesn't support mems greater than 2^32.
-    // FIXME: expand depth to 64-bits.
+    assert(depth < (1ULL << 31) &&
+           "FIXME: This doesn't support mems greater than 2^32");
     addInitial("integer initvar;", "", /*ppCond*/ "RANDOMIZE_MEM_INIT",
                /*cond*/ "", /*partialOrder: initVar decl*/ 10);
     emittedInitVar = true;
@@ -1520,8 +1520,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       fieldTypes.clear();
       flattenBundleTypes(memOp.getDataType(), "", false, fieldTypes);
 
-      auto depth = memOp.getDepth();
-
+      uint64_t depth = memOp.getDepth();
       for (const auto &elt : fieldTypes) {
         indent() << "reg";
         os.indent(maxDeclNameWidth - 3 + 1);

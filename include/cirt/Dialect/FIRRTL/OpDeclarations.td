@@ -41,9 +41,9 @@ def SMemOp : FIRRTLOp<"smem", [NoSideEffect]> {
 }
 
 def MemOp : FIRRTLOp<"mem", [NoSideEffect]> {
-  let summary = "Define a new smem";
+  let summary = "Define a new mem";
   let arguments = (ins I32Attr:$readLatency, I32Attr:$writeLatency,
-                       I32Attr:$depth, RUWAttr:$ruw,
+                       I64Attr:$depth, RUWAttr:$ruw,
                        OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
 
@@ -51,9 +51,15 @@ def MemOp : FIRRTLOp<"mem", [NoSideEffect]> {
     $ruw attr-dict `:` type($result)
   }];
 
+  let builders = [
+    OpBuilder<"OpBuilder &builder, OperationState &result, "
+              "FIRRTLType resultType, unsigned readLatency, "
+              "unsigned writeLatency, uint64_t depth, RUWAttr ruw, "
+              "StringAttr name = {}">
+  ];
 
   let extraClassDeclaration = [{
-    unsigned getDepth() { return depth().getLimitedValue(); }
+    uint64_t getDepth() { return depth().getLimitedValue(); }
     unsigned getReadLatency() { return readLatency().getLimitedValue(); }
     unsigned getWriteLatency() { return writeLatency().getLimitedValue(); }
 

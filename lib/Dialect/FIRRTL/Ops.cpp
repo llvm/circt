@@ -325,6 +325,14 @@ static ParseResult parseFExtModuleOp(OpAsmParser &parser,
 // Declarations
 //===----------------------------------------------------------------------===//
 
+void MemOp::build(OpBuilder &builder, OperationState &result,
+                  FIRRTLType resultType, unsigned readLatency,
+                  unsigned writeLatency, uint64_t depth, RUWAttr ruw,
+                  StringAttr name) {
+  build(builder, result, resultType, llvm::APInt(32, readLatency),
+        llvm::APInt(32, writeLatency), llvm::APInt(64, depth), ruw, name);
+}
+
 /// Return the data-type field of the memory, the type of each element.
 FIRRTLType MemOp::getDataType() {
   // The outer level of a mem is a bundle, containing the input and output

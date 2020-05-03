@@ -251,7 +251,7 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     node value = andr(_GEN_43)    ;; Uses n12 directly.
 
 
-    ; CHECK: %_M = firrtl.mem "Undefined" {depth = 8 : i32, name = "_M",
+    ; CHECK: %_M = firrtl.mem "Undefined" {depth = 8 : i64, name = "_M",
     ; CHECK:   readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<
     ; CHECK:       _T_10: bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: analog<4>>, mask: bundle<id: uint<1>>>,
     ; CHECK:       _T_11: bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: analog<4>>, mask: bundle<id: uint<1>>>,
