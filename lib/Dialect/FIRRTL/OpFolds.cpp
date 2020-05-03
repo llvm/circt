@@ -216,6 +216,20 @@ void BitsPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
   results.insert<Folder>(context);
 }
 
+/// Replace the specified operation with a 'bits' op from the specified hi/lo
+/// bits.  Insert a cast to handle the case where the original operation
+/// returned a signed integer.
+static void replaceWithBits(Operation *op, Value input, unsigned hiBit,
+                            unsigned loBit, PatternRewriter &rewriter) {
+  auto resultType = op->getResult(0).getType();
+  if (bool isUnsigned = resultType.cast<IntType>().isUnsigned()) {
+    rewriter.replaceOpWithNewOp<BitsPrimOp>(op, input, hiBit, loBit);
+  } else {
+    auto bits = rewriter.create<BitsPrimOp>(op->getLoc(), input, hiBit, loBit);
+    rewriter.replaceOpWithNewOp<AsSIntPrimOp>(op, resultType, bits);
+  }
+}
+
 void HeadPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                              MLIRContext *context) {
   struct Folder final : public OpRewritePattern<HeadPrimOp> {
@@ -234,8 +248,8 @@ void HeadPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
       // If we know the input width, we can canonicalize this into a BitsPrimOp.
       unsigned keepAmount = op.getAmount();
-      rewriter.replaceOpWithNewOp<BitsPrimOp>(op, op.input(), inputWidth - 1,
-                                              inputWidth - keepAmount);
+      replaceWithBits(op, op.input(), inputWidth - 1, inputWidth - keepAmount,
+                      rewriter);
       return success();
     }
   };
@@ -380,9 +394,17 @@ void ShrPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
       // If we know the input width, we can canonicalize this into a BitsPrimOp.
       unsigned shiftAmount = op.getAmount();
+      if (int(shiftAmount) == inputWidth) {
+        // shift(x, 32) => 0 when x has 32 bits.  This is handled by fold().
+        if (op.getType().cast<IntType>().isUnsigned())
+          return failure();
 
-      rewriter.replaceOpWithNewOp<BitsPrimOp>(op, op.input(), inputWidth - 1,
-                                              shiftAmount);
+        // Shifting a signed value by the full width is actually taking the sign
+        // bit.
+        --shiftAmount;
+      }
+
+      replaceWithBits(op, op.input(), inputWidth - 1, shiftAmount, rewriter);
       return success();
     }
   };
@@ -406,10 +428,10 @@ void TailPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       if (inputWidth == -1)
         return failure();
 
-      // If we know the input width, we can canonicalize this into a BitsPrimOp.
+      // If we know the input width, we can canonicalize this into a
+      // BitsPrimOp.
       unsigned dropAmount = op.getAmount();
-      rewriter.replaceOpWithNewOp<BitsPrimOp>(op, op.input(),
-                                              inputWidth - dropAmount - 1, 0);
+      replaceWithBits(op, op.input(), inputWidth - dropAmount - 1, 0, rewriter);
       return success();
     }
   };

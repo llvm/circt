@@ -197,15 +197,23 @@ firrtl.module @Shl(%in1u: !firrtl.uint<1>,
 // CHECK-LABEL: firrtl.module @Shr
 firrtl.module @Shr(%in1u: !firrtl.uint<1>,
                    %in4u: !firrtl.uint<4>,
+                   %in4s: !firrtl.sint<4>,
+                   %out1s: !firrtl.flip<sint<1>>,
                    %out1u: !firrtl.flip<uint<1>>,
                    %outu: !firrtl.flip<uint<4>>) {
   // CHECK: firrtl.connect %out1u, %in1u
   %0 = firrtl.shr %in1u, 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %out1u, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 
- // CHECK: firrtl.connect %out1u, %c0_ui1
+  // CHECK: firrtl.connect %out1u, %c0_ui1
   %1 = firrtl.shr %in4u, 4 : (!firrtl.uint<4>) -> !firrtl.uint<1>
   firrtl.connect %out1u, %1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+
+  // CHECK: [[BITS:%.+]] = firrtl.bits %in4s 3 to 3
+  // CHECK-NEXT: [[CAST:%.+]] = firrtl.asSInt [[BITS]]
+  // CHECK-NEXT: firrtl.connect %out1s, [[CAST]]
+  %4 = firrtl.shr %in4s, 4 : (!firrtl.sint<4>) -> !firrtl.sint<1>
+  firrtl.connect %out1s, %4 : !firrtl.flip<sint<1>>, !firrtl.sint<1>
 
   // CHECK: firrtl.connect %out1u, %c1_ui1
   %c12_ui4 = firrtl.constant(12 : ui4) : !firrtl.uint<4>

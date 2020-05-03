@@ -136,6 +136,7 @@ public:
   static IntType get(MLIRContext *context, bool isSigned, int32_t width = -1);
 
   bool isSigned() { return getKind() == SInt; }
+  bool isUnsigned() { return getKind() == UInt; }
 
   /// Return true if this integer type has a known width.
   bool hasWidth() { return getWidth().hasValue(); }
