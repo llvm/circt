@@ -115,6 +115,13 @@ firrtl.module @Bits(%in1: !firrtl.uint<1>,
   %c7_ui4 = firrtl.constant(10 : ui4) : !firrtl.uint<4>
   %2 = firrtl.bits %c7_ui4 2 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<2>
   firrtl.connect %out2, %2 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
+
+
+  // CHECK: firrtl.bits %in4 2 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+  // CHECK-NEXT: firrtl.connect %out1, %
+  %3 = firrtl.bits %in4 3 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<3>
+  %4 = firrtl.bits %3 1 to 1 : (!firrtl.uint<3>) -> !firrtl.uint<1>
+  firrtl.connect %out1, %4 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 }
 
 // CHECK-LABEL: firrtl.module @Mux

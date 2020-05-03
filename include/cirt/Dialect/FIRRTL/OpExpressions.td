@@ -240,7 +240,13 @@ def BitsPrimOp : PrimOp<"bits"> {
     $input $hi `to` $lo attr-dict `:` functional-type($input, $result)
   }];
 
+  let hasCanonicalizer = 1;
   let hasFolder = 1;
+
+  let builders = [
+    OpBuilder<"OpBuilder &builder, OperationState &result, Value input, "
+              "unsigned high, unsigned low">
+  ];
 
   let extraClassDeclaration = [{
     /// Return the highest bit included in the result.

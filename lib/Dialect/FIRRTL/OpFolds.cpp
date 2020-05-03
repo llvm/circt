@@ -193,6 +193,31 @@ OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
+namespace {
+struct BitsFolder final : public OpRewritePattern<BitsPrimOp> {
+  BitsFolder(MLIRContext *context) : OpRewritePattern(context) {}
+
+  LogicalResult matchAndRewrite(BitsPrimOp op,
+                                PatternRewriter &rewriter) const override {
+    auto inputOp = op.input().getDefiningOp();
+    // bits(bits(x, ...), ...) -> bits(x, ...).
+    if (auto innerBits = dyn_cast_or_null<BitsPrimOp>(inputOp)) {
+      auto newLo = op.getLo() + innerBits.getLo();
+      auto newHi = newLo + op.getHi() - op.getLo();
+      rewriter.replaceOpWithNewOp<BitsPrimOp>(op, innerBits.input(), newHi,
+                                              newLo);
+      return success();
+    }
+    return failure();
+  }
+};
+} // end anonymous namespace
+
+void BitsPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                             MLIRContext *context) {
+  results.insert<BitsFolder>(context);
+}
+
 OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
 

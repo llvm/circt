@@ -762,6 +762,13 @@ FIRRTLType BitsPrimOp::getResultType(FIRRTLType input, int32_t high,
   return UIntType::get(input.getContext(), high - low + 1);
 }
 
+void BitsPrimOp::build(OpBuilder &builder, OperationState &result, Value input,
+                       unsigned high, unsigned low) {
+  auto type = getResultType(input.getType().cast<FIRRTLType>(), high, low);
+  assert(type && "invalid inputs building BitsPrimOp!");
+  build(builder, result, type, input, APInt(32, high), APInt(32, low));
+}
+
 FIRRTLType HeadPrimOp::getResultType(FIRRTLType input, int32_t amount) {
   auto inputi = input.dyn_cast<IntType>();
   if (amount < 0 || !inputi)
