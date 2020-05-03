@@ -70,6 +70,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   sourceMgr.AddNewSourceBuffer(std::move(ownedBuffer), llvm::SMLoc());
   SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
 
+  // Nothing in the parser is threaded.  Disable synchronization overhead.
+  context.disableMultithreading();
+
   OwningModuleRef module;
   if (inputFormat == InputFIRFile) {
     FIRParserOptions options;
@@ -81,6 +84,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   }
   if (!module)
     return failure();
+
+  // Allow optimizations to run multithreaded.
+  context.disableMultithreading(false);
 
   // If enabled, run the optimizer.
   if (!disableOptimization) {

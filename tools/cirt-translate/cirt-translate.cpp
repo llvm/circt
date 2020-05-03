@@ -79,6 +79,10 @@ int main(int argc, char **argv) {
   auto processBuffer = [&](std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
                            raw_ostream &os) {
     MLIRContext context;
+
+    // Nothing here is threaded.  Disable synchronization overhead.
+    context.disableMultithreading();
+
     llvm::SourceMgr sourceMgr;
     sourceMgr.AddNewSourceBuffer(std::move(ownedBuffer), llvm::SMLoc());
 
