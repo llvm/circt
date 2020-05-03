@@ -124,6 +124,21 @@ firrtl.module @Bits(%in1: !firrtl.uint<1>,
   firrtl.connect %out1, %4 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 }
 
+// CHECK-LABEL: firrtl.module @Head
+firrtl.module @Head(%in4u: !firrtl.uint<4>,
+                   %out1u: !firrtl.flip<uint<1>>,
+                   %out3u: !firrtl.flip<uint<3>>) {
+  // CHECK: [[BITS:%.+]] = firrtl.bits %in4u 3 to 3
+  // CHECK-NEXT: firrtl.connect %out1u, [[BITS]]
+  %0 = firrtl.head %in4u, 1 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+  firrtl.connect %out1u, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+
+  // CHECK: [[BITS:%.+]] = firrtl.bits %in4u 3 to 1
+  // CHECK-NEXT: firrtl.connect %out3u, [[BITS]]
+  %1 = firrtl.head %in4u, 3 : (!firrtl.uint<4>) -> !firrtl.uint<3>
+  firrtl.connect %out3u, %1 : !firrtl.flip<uint<3>>, !firrtl.uint<3>
+}
+
 // CHECK-LABEL: firrtl.module @Mux
 firrtl.module @Mux(%in: !firrtl.uint<4>,
                    %cond: !firrtl.uint<1>,
@@ -192,9 +207,28 @@ firrtl.module @Shr(%in1u: !firrtl.uint<1>,
   %1 = firrtl.shr %in4u, 4 : (!firrtl.uint<4>) -> !firrtl.uint<1>
   firrtl.connect %out1u, %1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 
-
   // CHECK: firrtl.connect %out1u, %c1_ui1
   %c12_ui4 = firrtl.constant(12 : ui4) : !firrtl.uint<4>
   %2 = firrtl.shr %c12_ui4, 3 : (!firrtl.uint<4>) -> !firrtl.uint<1>
   firrtl.connect %out1u, %2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+
+  // CHECK: [[BITS:%.+]] = firrtl.bits %in4u 3 to 3
+  // CHECK-NEXT: firrtl.connect %out1u, [[BITS]]
+  %3 = firrtl.shr %in4u, 3 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+  firrtl.connect %out1u, %3 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+}
+
+// CHECK-LABEL: firrtl.module @Tail
+firrtl.module @Tail(%in4u: !firrtl.uint<4>,
+                   %out1u: !firrtl.flip<uint<1>>,
+                   %out3u: !firrtl.flip<uint<3>>) {
+  // CHECK: [[BITS:%.+]] = firrtl.bits %in4u 0 to 0
+  // CHECK-NEXT: firrtl.connect %out1u, [[BITS]]
+  %0 = firrtl.tail %in4u, 3 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+  firrtl.connect %out1u, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+
+  // CHECK: [[BITS:%.+]] = firrtl.bits %in4u 2 to 0
+  // CHECK-NEXT: firrtl.connect %out3u, [[BITS]]
+  %1 = firrtl.tail %in4u, 1 : (!firrtl.uint<4>) -> !firrtl.uint<3>
+  firrtl.connect %out3u, %1 : !firrtl.flip<uint<3>>, !firrtl.uint<3>
 }

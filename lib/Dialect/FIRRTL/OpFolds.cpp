@@ -147,33 +147,32 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
-namespace {
-struct CatFolder final : public OpRewritePattern<CatPrimOp> {
-  CatFolder(MLIRContext *context) : OpRewritePattern(context) {}
-
-  LogicalResult matchAndRewrite(CatPrimOp op,
-                                PatternRewriter &rewriter) const override {
-    // cat(bits(x, ...), bits(x, ...)) -> bits(x ...) when the two ...'s are
-    // consequtive in the input.
-    if (auto lhsBits = dyn_cast_or_null<BitsPrimOp>(op.lhs().getDefiningOp())) {
-      if (auto rhsBits =
-              dyn_cast_or_null<BitsPrimOp>(op.rhs().getDefiningOp())) {
-        if (lhsBits.input() == rhsBits.input() &&
-            lhsBits.getLo() - 1 == rhsBits.getHi()) {
-          rewriter.replaceOpWithNewOp<BitsPrimOp>(
-              op, op.getType(), lhsBits.input(), lhsBits.hi(), rhsBits.lo());
-          return success();
-        }
-      }
-    }
-    return failure();
-  }
-};
-} // end anonymous namespace
-
 void CatPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                             MLIRContext *context) {
-  results.insert<CatFolder>(context);
+  struct Folder final : public OpRewritePattern<CatPrimOp> {
+    using OpRewritePattern::OpRewritePattern;
+
+    LogicalResult matchAndRewrite(CatPrimOp op,
+                                  PatternRewriter &rewriter) const override {
+      // cat(bits(x, ...), bits(x, ...)) -> bits(x ...) when the two ...'s are
+      // consequtive in the input.
+      if (auto lhsBits =
+              dyn_cast_or_null<BitsPrimOp>(op.lhs().getDefiningOp())) {
+        if (auto rhsBits =
+                dyn_cast_or_null<BitsPrimOp>(op.rhs().getDefiningOp())) {
+          if (lhsBits.input() == rhsBits.input() &&
+              lhsBits.getLo() - 1 == rhsBits.getHi()) {
+            rewriter.replaceOpWithNewOp<BitsPrimOp>(
+                op, op.getType(), lhsBits.input(), lhsBits.hi(), rhsBits.lo());
+            return success();
+          }
+        }
+      }
+      return failure();
+    }
+  };
+
+  results.insert<Folder>(context);
 }
 
 OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -193,29 +192,55 @@ OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
-namespace {
-struct BitsFolder final : public OpRewritePattern<BitsPrimOp> {
-  BitsFolder(MLIRContext *context) : OpRewritePattern(context) {}
-
-  LogicalResult matchAndRewrite(BitsPrimOp op,
-                                PatternRewriter &rewriter) const override {
-    auto inputOp = op.input().getDefiningOp();
-    // bits(bits(x, ...), ...) -> bits(x, ...).
-    if (auto innerBits = dyn_cast_or_null<BitsPrimOp>(inputOp)) {
-      auto newLo = op.getLo() + innerBits.getLo();
-      auto newHi = newLo + op.getHi() - op.getLo();
-      rewriter.replaceOpWithNewOp<BitsPrimOp>(op, innerBits.input(), newHi,
-                                              newLo);
-      return success();
-    }
-    return failure();
-  }
-};
-} // end anonymous namespace
-
 void BitsPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                              MLIRContext *context) {
-  results.insert<BitsFolder>(context);
+  struct Folder final : public OpRewritePattern<BitsPrimOp> {
+    using OpRewritePattern::OpRewritePattern;
+
+    LogicalResult matchAndRewrite(BitsPrimOp op,
+                                  PatternRewriter &rewriter) const override {
+
+      auto inputOp = op.input().getDefiningOp();
+      // bits(bits(x, ...), ...) -> bits(x, ...).
+      if (auto innerBits = dyn_cast_or_null<BitsPrimOp>(inputOp)) {
+        auto newLo = op.getLo() + innerBits.getLo();
+        auto newHi = newLo + op.getHi() - op.getLo();
+        rewriter.replaceOpWithNewOp<BitsPrimOp>(op, innerBits.input(), newHi,
+                                                newLo);
+        return success();
+      }
+      return failure();
+    }
+  };
+
+  results.insert<Folder>(context);
+}
+
+void HeadPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                             MLIRContext *context) {
+  struct Folder final : public OpRewritePattern<HeadPrimOp> {
+    using OpRewritePattern::OpRewritePattern;
+
+    LogicalResult matchAndRewrite(HeadPrimOp op,
+                                  PatternRewriter &rewriter) const override {
+      auto inputWidth = op.input()
+                            .getType()
+                            .cast<FIRRTLType>()
+                            .getPassiveType()
+                            .cast<IntType>()
+                            .getWidthOrSentinel();
+      if (inputWidth == -1)
+        return failure();
+
+      // If we know the input width, we can canonicalize this into a BitsPrimOp.
+      unsigned keepAmount = op.getAmount();
+      rewriter.replaceOpWithNewOp<BitsPrimOp>(op, op.input(), inputWidth - 1,
+                                              inputWidth - keepAmount);
+      return success();
+    }
+  };
+
+  results.insert<Folder>(context);
 }
 
 OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -335,4 +360,59 @@ OpFoldResult ShrPrimOp::fold(ArrayRef<Attribute> operands) {
     return getIntAttr(value.trunc(resultWidth), getContext());
   }
   return {};
+}
+
+void ShrPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                            MLIRContext *context) {
+  struct Folder final : public OpRewritePattern<ShrPrimOp> {
+    using OpRewritePattern::OpRewritePattern;
+
+    LogicalResult matchAndRewrite(ShrPrimOp op,
+                                  PatternRewriter &rewriter) const override {
+      auto inputWidth = op.input()
+                            .getType()
+                            .cast<FIRRTLType>()
+                            .getPassiveType()
+                            .cast<IntType>()
+                            .getWidthOrSentinel();
+      if (inputWidth == -1)
+        return failure();
+
+      // If we know the input width, we can canonicalize this into a BitsPrimOp.
+      unsigned shiftAmount = op.getAmount();
+
+      rewriter.replaceOpWithNewOp<BitsPrimOp>(op, op.input(), inputWidth - 1,
+                                              shiftAmount);
+      return success();
+    }
+  };
+
+  results.insert<Folder>(context);
+}
+
+void TailPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                             MLIRContext *context) {
+  struct Folder final : public OpRewritePattern<TailPrimOp> {
+    using OpRewritePattern::OpRewritePattern;
+
+    LogicalResult matchAndRewrite(TailPrimOp op,
+                                  PatternRewriter &rewriter) const override {
+      auto inputWidth = op.input()
+                            .getType()
+                            .cast<FIRRTLType>()
+                            .getPassiveType()
+                            .cast<IntType>()
+                            .getWidthOrSentinel();
+      if (inputWidth == -1)
+        return failure();
+
+      // If we know the input width, we can canonicalize this into a BitsPrimOp.
+      unsigned dropAmount = op.getAmount();
+      rewriter.replaceOpWithNewOp<BitsPrimOp>(op, op.input(),
+                                              inputWidth - dropAmount - 1, 0);
+      return success();
+    }
+  };
+
+  results.insert<Folder>(context);
 }

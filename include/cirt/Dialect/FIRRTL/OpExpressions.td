@@ -276,7 +276,11 @@ def HeadPrimOp : PrimOp<"head"> {
     $input `,` $amount attr-dict `:` functional-type($input, $result)
   }];
 
+  let hasCanonicalizer = 1;
+
   let extraClassDeclaration = [{
+    unsigned getAmount() { return amount().getLimitedValue(); }
+
     /// Return the result for inputs with the specified type, returning a null
     /// type if the input types are invalid.
     static FIRRTLType getResultType(FIRRTLType input, int32_t amount);
@@ -362,7 +366,7 @@ class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic> {
 
 let hasFolder = 1 in
 def ShlPrimOp : ShiftPrimOp<"shl">;
-let hasFolder = 1 in
+let hasFolder = 1, hasCanonicalizer = 1 in
 def ShrPrimOp : ShiftPrimOp<"shr">;
 
 def TailPrimOp : PrimOp<"tail"> {
@@ -373,7 +377,11 @@ def TailPrimOp : PrimOp<"tail"> {
     $input `,` $amount attr-dict `:` functional-type($input, $result)
   }];
 
+  let hasCanonicalizer = 1;
+
   let extraClassDeclaration = [{
+    unsigned getAmount() { return amount().getLimitedValue(); }
+
     /// Return the result for inputs with the specified type, returning a null
     /// type if the input types are invalid.
     static FIRRTLType getResultType(FIRRTLType input, int32_t amount);

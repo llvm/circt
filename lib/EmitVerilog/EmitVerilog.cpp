@@ -1299,6 +1299,8 @@ void ModuleEmitter::emitDecl(MemOp op) {
 
   // If we haven't already emitted a declaration of initvar, do so.
   if (!emittedInitVar) {
+    // FIXME: This doesn't support mems greater than 2^32.
+    // FIXME: expand depth to 64-bits.
     addInitial("integer initvar;", "", /*ppCond*/ "RANDOMIZE_MEM_INIT",
                /*cond*/ "", /*partialOrder: initVar decl*/ 10);
     emittedInitVar = true;
