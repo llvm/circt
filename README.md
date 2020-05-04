@@ -6,9 +6,11 @@ set of tools for verilog and other SiFive related projects.
 "CIRT" stands for "Circuit IR and Tools" or perhaps "CIRCuiT + 
 IntermediateRepresenTation + Toolbox" (hat tip to Aliaksei Chapyzhenka).  The
 T can be further expanded as Tool, Translator, Team, Tech, Target, Tree, Type,
-...
+...  This name can still be changed if a better one is suggested.  :-)
 
-This name can still be changed if a better one is suggested.  :-)
+To follow along, please join the [cirt-dev](https://groups.google.com/a/sifive.com/forum/#!forum/cirt-dev)
+ mailing list.  It is self-add, and anyone at SiFive is welcome.
+
 
 ## Setting this up
 
