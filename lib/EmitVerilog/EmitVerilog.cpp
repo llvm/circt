@@ -1336,6 +1336,20 @@ void ModuleEmitter::emitDecl(MemOp op) {
                /*cond*/ "", /*partialOrder: After initVar decl*/ 11);
   }
 
+  // Walk the use-def chains to find accesses to the ports.
+  // NOTE: This is all kinds of gross, but is an artifact of how FIRRTL decides
+  // to model memories at this level of the IR.
+  SmallVector<std::pair<Identifier, MemOp::PortKind>, 2> ports;
+  op.getPorts(ports);
+
+  for (auto &port : ports) {
+    if (port.second == MemOp::PortKind::ReadWrite) {
+      op.emitOpError("readwrite ports should be lowered into separate read and "
+                     "write ports by previous passes");
+      continue;
+    }
+  }
+
   indent() << "// FIXME: Emit Mem " << locInfo << '\n';
 }
 

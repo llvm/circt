@@ -70,6 +70,12 @@ def MemOp : FIRRTLOp<"mem", [NoSideEffect]> {
     unsigned getReadLatency() { return readLatency().getLimitedValue(); }
     unsigned getWriteLatency() { return writeLatency().getLimitedValue(); }
 
+    /// Return the name and kind of ports supported by this memory.
+    void getPorts(SmallVectorImpl<std::pair<Identifier, PortKind>> &result);
+
+    /// Return the kind of the specified port or None if the name is invalid.
+    Optional<PortKind> getPortKind(Identifier portName);
+
     /// Return the data-type field of the memory, the type of each element.
     FIRRTLType getDataType();
   }];

@@ -227,6 +227,8 @@ public:
 
   ArrayRef<BundleElement> getElements();
 
+  size_t getNumElements() { return getElements().size(); }
+
   /// Look up an element by name.  This returns None on failure.
   llvm::Optional<BundleElement> getElement(StringRef name);
   FIRRTLType getElementType(StringRef name);

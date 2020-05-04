@@ -401,6 +401,48 @@ MemOp::getTypeForPortList(uint64_t depth, FIRRTLType dataType,
   return BundleType::get(memFields, context);
 }
 
+/// Return the kind of port this is given the port type from a 'mem' decl.
+static Optional<MemOp::PortKind> getMemPortKindFromType(FIRRTLType type) {
+  auto portType = type.dyn_cast<BundleType>();
+  if (!portType)
+    return None;
+
+  switch (portType.getNumElements()) {
+  default:
+    return None;
+  case 4:
+    return MemOp::PortKind::Read;
+  case 5:
+    return MemOp::PortKind::Write;
+  case 7:
+    return MemOp::PortKind::ReadWrite;
+  }
+}
+
+/// Return the name and kind of ports supported by this memory.
+void MemOp::getPorts(
+    SmallVectorImpl<std::pair<Identifier, MemOp::PortKind>> &result) {
+  // The type of a mem must be a bundle.
+  auto bundle = getType().cast<BundleType>();
+
+  // Each entry in the bundle is a port.
+  for (auto elt : bundle.getElements()) {
+    // Each port is a bundle.
+    auto kind = getMemPortKindFromType(elt.second);
+    assert(kind.hasValue() && "unknown port type!");
+    result.push_back({elt.first, kind.getValue()});
+  }
+}
+
+/// Return the kind of the specified port or None if the name is invalid.
+Optional<MemOp::PortKind> MemOp::getPortKind(Identifier portName) {
+  // The type of a mem must be a bundle.
+  auto eltType = getType().cast<BundleType>().getElementType(portName.str());
+  if (!eltType)
+    return None;
+  return getMemPortKindFromType(eltType);
+}
+
 /// Return the data-type field of the memory, the type of each element.
 FIRRTLType MemOp::getDataType() {
   // The outer level of a mem is a bundle, containing the input and output
