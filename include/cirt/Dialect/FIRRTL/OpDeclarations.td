@@ -20,7 +20,7 @@ def InstanceOp : FIRRTLOp<"instance"> {
   }];
 }
 
-def CMemOp : FIRRTLOp<"cmem", [NoSideEffect]> {
+def CMemOp : FIRRTLOp<"cmem", [/*MemAlloc*/]> {
   let summary = "Define a new cmem";
   let arguments = (ins OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
@@ -30,7 +30,7 @@ def CMemOp : FIRRTLOp<"cmem", [NoSideEffect]> {
   }];
 }
 
-def SMemOp : FIRRTLOp<"smem", [NoSideEffect]> {
+def SMemOp : FIRRTLOp<"smem", [/*MemAlloc*/]> {
   let summary = "Define a new smem";
   let arguments = (ins RUWAttr:$ruw, OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
@@ -40,7 +40,7 @@ def SMemOp : FIRRTLOp<"smem", [NoSideEffect]> {
   }];
 }
 
-def MemOp : FIRRTLOp<"mem", [NoSideEffect]> {
+def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
   let summary = "Define a new mem";
   let arguments = (ins I32Attr:$readLatency, I32Attr:$writeLatency,
                        I64Attr:$depth, RUWAttr:$ruw,
@@ -74,7 +74,7 @@ def MemOp : FIRRTLOp<"mem", [NoSideEffect]> {
     void getPorts(SmallVectorImpl<std::pair<Identifier, PortKind>> &result);
 
     /// Return the kind of the specified port or None if the name is invalid.
-    Optional<PortKind> getPortKind(Identifier portName);
+    Optional<PortKind> getPortKind(StringRef portName);
 
     /// Return the data-type field of the memory, the type of each element.
     FIRRTLType getDataType();
@@ -102,7 +102,7 @@ def NodeOp : FIRRTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
   }];
 }
 
-def RegOp : FIRRTLOp<"reg"> {
+def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
   let summary = "Define a new register";
   let description = [{
     Declare a new register:
@@ -119,7 +119,7 @@ def RegOp : FIRRTLOp<"reg"> {
   }];
 }
 
-def RegInitOp : FIRRTLOp<"reginit"> {
+def RegInitOp : FIRRTLOp<"reginit", [/*MemAlloc*/]> {
   let summary = "Define a new register with an initializer";
   let description = [{
     Declare a new register:
@@ -137,7 +137,7 @@ def RegInitOp : FIRRTLOp<"reginit"> {
   }];
 }
 
-def WireOp : FIRRTLOp<"wire", [NoSideEffect]> {
+def WireOp : FIRRTLOp<"wire", []> {
   let summary = "Define a new wire";
   let description = [{
     Declare a new wire:
