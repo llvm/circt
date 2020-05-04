@@ -208,7 +208,7 @@ circuit Xorr :
   ; CHECK-NEXT:     wire [7:0] xyz2_in;
   ; CHECK-NEXT:     wire       xyz2_out;
   ; CHECK-EMPTY:
-  ; CHECK-NEXT:     FooExtModule xyz (
+  ; CHECK-NEXT:     FooExtModule xyz ({{.*}}// There.scala:11711
   ; CHECK-NEXT:       .in(xyz_in),
   ; CHECK-NEXT:       .out(xyz_out)
   ; CHECK-NEXT:     );
@@ -226,7 +226,7 @@ circuit Xorr :
     input a_in: UInt<8>
     output a_out: UInt<1>
 
-    inst xyz of MyExtModule
+    inst xyz of MyExtModule  @[There.scala 11711]
     xyz.in <= a_in @[Here.scala 119]
     a_out <= xyz.out
 

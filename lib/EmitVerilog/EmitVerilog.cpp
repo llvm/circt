@@ -1168,7 +1168,6 @@ void ModuleEmitter::emitStatement(StopOp op) {
   auto condExpr = "`STOP_COND_ && " +
                   emitExpressionToString(op.cond(), ops, AndShortCircuit);
 
-  // TODO: location information too.
   const char *action = op.exitCode().getLimitedValue() ? "$fatal;" : "$finish;";
   auto locInfo = getLocationInfoAsString(ops);
 
@@ -1187,6 +1186,9 @@ void ModuleEmitter::emitDecl(NodeOp op) {
 }
 
 void ModuleEmitter::emitDecl(InstanceOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
   auto instanceName = getName(op.getResult());
   StringRef defName = op.moduleName();
 
@@ -1238,8 +1240,8 @@ void ModuleEmitter::emitDecl(InstanceOp op) {
       }
     }
 
-  os << ' ' << instanceName << " (\n";
-  // TODO: location information.
+  os << ' ' << instanceName << " (";
+  emitLocationInfoAndNewLine(ops);
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
   flattenBundleTypes(op.getResult().getType().cast<FIRRTLType>(), "", false,
@@ -1290,6 +1292,11 @@ void ModuleEmitter::emitDecl(RegInitOp op) {
 }
 
 void ModuleEmitter::emitDecl(MemOp op) {
+  // Check that the MemOp has been properly lowered before this.
+  if (op.getReadLatency() != 0 || op.getWriteLatency() != 1)
+    op.emitOpError("all memories should be transformed into blackboxes or "
+                   "combinational by previous passses");
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
