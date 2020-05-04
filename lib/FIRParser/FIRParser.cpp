@@ -1724,8 +1724,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
   int32_t depth = -1, readLatency = -1, writeLatency = -1;
   RUWAttr ruw = RUWAttr::Undefined;
 
-  enum PortKind { Read, Write, ReadWrite };
-  SmallVector<std::pair<StringRef, PortKind>, 4> ports;
+  SmallVector<std::pair<Identifier, MemOp::PortKind>, 4> ports;
 
   // Parse all the memfield records, which are indented more than the mem.
   while (1) {
@@ -1771,42 +1770,27 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
       continue;
     }
 
-    PortKind portKind;
+    MemOp::PortKind portKind;
     if (spelling == "reader")
-      portKind = Read;
+      portKind = MemOp::PortKind::Read;
     else if (spelling == "writer")
-      portKind = Write;
+      portKind = MemOp::PortKind::Write;
     else if (spelling == "readwriter")
-      portKind = ReadWrite;
+      portKind = MemOp::PortKind::ReadWrite;
     else
       return emitError("unexpected field in 'mem' declaration"), failure();
 
     StringRef portName;
     if (parseId(portName, "expected port name"))
       return failure();
-    ports.push_back({portName, portKind});
+    ports.push_back({builder.getIdentifier(portName), portKind});
 
     while (!getIndentation().hasValue()) {
       if (parseId(portName, "expected port name"))
         return failure();
-      ports.push_back({portName, portKind});
+      ports.push_back({builder.getIdentifier(portName), portKind});
     }
   }
-
-  // Okay, now that we parsed all the things, do some validation to make sure
-  // that things are more or less sensible.
-  llvm::array_pod_sort(ports.begin(), ports.end(),
-                       [](const std::pair<StringRef, PortKind> *lhs,
-                          const std::pair<StringRef, PortKind> *rhs) -> int {
-                         return lhs->first.compare(rhs->first);
-                       });
-
-  // Reject duplicate ports.
-  for (size_t i = 1, e = ports.size(); i < e; ++i)
-    if (ports[i - 1].first == ports[i].first) {
-      emitError(info.getFIRLoc(), "duplicate port name ") << ports[i].first;
-      return failure();
-    }
 
   if (!type.isPassiveType()) {
     emitError(info.getFIRLoc(), "'mem' data-type must be a passive type");
@@ -1819,49 +1803,12 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
   if (readLatency < 0 || writeLatency < 0)
     return emitError(info.getFIRLoc(), "invalid latency");
 
-  // Figure out the number of bits needed for the address, and thus the address
-  // type to use.
-  auto addressType = UIntType::get(getContext(), llvm::Log2_32_Ceil(depth));
-
-  // Okay, we've validated the data, construct the result type.
-  SmallVector<BundleType::BundleElement, 4> memFields;
-  SmallVector<BundleType::BundleElement, 5> portFields;
-  // Common fields for all port types.
-  portFields.push_back({builder.getIdentifier("addr"), addressType});
-  portFields.push_back(
-      {builder.getIdentifier("en"), UIntType::get(getContext(), 1)});
-  portFields.push_back(
-      {builder.getIdentifier("clk"), ClockType::get(getContext())});
-
-  for (auto port : ports) {
-    // Reuse the first three fields, but drop the rest.
-    portFields.erase(portFields.begin() + 3, portFields.end());
-    switch (port.second) {
-    case Read:
-      portFields.push_back(
-          {builder.getIdentifier("data"), FlipType::get(type)});
-      break;
-
-    case Write:
-      portFields.push_back({builder.getIdentifier("data"), type});
-      portFields.push_back({builder.getIdentifier("mask"), type.getMaskType()});
-      break;
-    case ReadWrite:
-      portFields.push_back(
-          {builder.getIdentifier("wmode"), UIntType::get(getContext(), 1)});
-      portFields.push_back(
-          {builder.getIdentifier("rdata"), FlipType::get(type)});
-      portFields.push_back({builder.getIdentifier("wdata"), type});
-      portFields.push_back(
-          {builder.getIdentifier("wmask"), type.getMaskType()});
-      break;
-    }
-
-    memFields.push_back({builder.getIdentifier(port.first),
-                         BundleType::get(portFields, getContext())});
+  auto memType = MemOp::getTypeForPortList(depth, type, ports);
+  if (!memType) {
+    emitError(info.getFIRLoc(), "duplicate port name in mem");
+    return failure();
   }
 
-  auto memType = BundleType::get(memFields, getContext());
   auto result =
       builder.create<MemOp>(info.getLoc(), memType, readLatency, writeLatency,
                             depth, ruw, filterUselessName(id));

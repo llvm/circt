@@ -333,6 +333,74 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
         llvm::APInt(32, writeLatency), llvm::APInt(64, depth), ruw, name);
 }
 
+/// Return the type of a mem given a list of named ports and their kind.
+/// This returns a null type if there are duplicate port names.
+FIRRTLType
+MemOp::getTypeForPortList(uint64_t depth, FIRRTLType dataType,
+                          ArrayRef<std::pair<Identifier, PortKind>> portList) {
+  assert(dataType.isPassiveType() && "mem can only have passive datatype");
+
+  auto *context = dataType.getContext();
+
+  SmallVector<std::pair<Identifier, PortKind>, 4> ports(portList.begin(),
+                                                        portList.end());
+
+  // Canonicalize the port names into alphabetic order and check for duplicates.
+  llvm::array_pod_sort(
+      ports.begin(), ports.end(),
+      [](const std::pair<Identifier, MemOp::PortKind> *lhs,
+         const std::pair<Identifier, MemOp::PortKind> *rhs) -> int {
+        return lhs->first.strref().compare(rhs->first.strref());
+      });
+
+  // Reject duplicate ports.
+  for (size_t i = 1, e = ports.size(); i < e; ++i)
+    if (ports[i - 1].first == ports[i].first)
+      return {};
+
+  // Figure out the number of bits needed for the address, and thus the address
+  // type to use.
+  auto addressType = UIntType::get(context, llvm::Log2_64_Ceil(depth));
+
+  auto getId = [&](StringRef name) -> Identifier {
+    return Identifier::get(name, context);
+  };
+
+  // Okay, we've validated the data, construct the result type.
+  SmallVector<BundleType::BundleElement, 4> memFields;
+  SmallVector<BundleType::BundleElement, 5> portFields;
+  // Common fields for all port types.
+  portFields.push_back({getId("addr"), addressType});
+  portFields.push_back({getId("en"), UIntType::get(context, 1)});
+  portFields.push_back({getId("clk"), ClockType::get(context)});
+
+  for (auto port : ports) {
+    // Reuse the first three fields, but drop the rest.
+    portFields.erase(portFields.begin() + 3, portFields.end());
+    switch (port.second) {
+    case PortKind::Read:
+      portFields.push_back({getId("data"), FlipType::get(dataType)});
+      break;
+
+    case PortKind::Write:
+      portFields.push_back({getId("data"), dataType});
+      portFields.push_back({getId("mask"), dataType.getMaskType()});
+      break;
+
+    case PortKind::ReadWrite:
+      portFields.push_back({getId("wmode"), UIntType::get(context, 1)});
+      portFields.push_back({getId("rdata"), FlipType::get(dataType)});
+      portFields.push_back({getId("wdata"), dataType});
+      portFields.push_back({getId("wmask"), dataType.getMaskType()});
+      break;
+    }
+
+    memFields.push_back({port.first, BundleType::get(portFields, context)});
+  }
+
+  return BundleType::get(memFields, context);
+}
+
 /// Return the data-type field of the memory, the type of each element.
 FIRRTLType MemOp::getDataType() {
   // The outer level of a mem is a bundle, containing the input and output

@@ -59,6 +59,13 @@ def MemOp : FIRRTLOp<"mem", [NoSideEffect]> {
   ];
 
   let extraClassDeclaration = [{
+    enum class PortKind { Read, Write, ReadWrite };
+
+    /// Return the type of a mem given a list of named ports and their kind.
+    /// This returns a null type if there are duplicate port names.
+    static FIRRTLType getTypeForPortList(uint64_t depth, FIRRTLType dataType,
+                              ArrayRef<std::pair<Identifier, PortKind>> ports);
+
     uint64_t getDepth() { return depth().getLimitedValue(); }
     unsigned getReadLatency() { return readLatency().getLimitedValue(); }
     unsigned getWriteLatency() { return writeLatency().getLimitedValue(); }
