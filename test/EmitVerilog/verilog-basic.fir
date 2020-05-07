@@ -490,3 +490,13 @@ circuit Xorr :
 ; CHECK-NEXT:      _M_other[_M_write_addr] <= _M_write_data_other;	// Decoupled.scala:209:24
 ; CHECK-NEXT:    end
 ; CHECK-NEXT:  end // always @(posedge)
+
+  ; CHECK-LABEL: module MemEmpty();
+  module MemEmpty :
+    mem Empty :
+      data-type => UInt<32>
+      depth => 16
+      read-latency => 0
+      write-latency => 1
+      read-under-write => undefined
+

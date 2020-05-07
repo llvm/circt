@@ -444,12 +444,15 @@ Optional<MemOp::PortKind> MemOp::getPortKind(StringRef portName) {
 }
 
 /// Return the data-type field of the memory, the type of each element.
-FIRRTLType MemOp::getDataType() {
+FIRRTLType MemOp::getDataTypeOrNull() {
   // The outer level of a mem is a bundle, containing the input and output
   // ports.
   auto bundle = getType().cast<BundleType>();
-  assert(!bundle.getElements().empty() &&
-         "must have at least one input or output port");
+
+  // Mems with no read/write ports are legal.
+  if (bundle.getElements().empty())
+    return {};
+
   auto firstPort = bundle.getElements()[0];
   auto firstPortType = firstPort.second.getPassiveType().cast<BundleType>();
   return firstPortType.getElementType("data");

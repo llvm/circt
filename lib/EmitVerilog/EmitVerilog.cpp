@@ -1291,10 +1291,10 @@ void ModuleEmitter::emitDecl(RegInitOp op) {
 
 void ModuleEmitter::emitDecl(MemOp op) {
   // Check that the MemOp has been properly lowered before this.
-  /*  if (op.getReadLatency() != 0 || op.getWriteLatency() != 1)
-      op.emitOpError("all memories should be transformed into blackboxes or "
-                     "combinational by previous passses");
-  */
+  if (op.getReadLatency() != 0 || op.getWriteLatency() != 1)
+    op.emitOpError("all memories should be transformed into blackboxes or "
+                   "combinational by previous passses");
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1314,7 +1314,8 @@ void ModuleEmitter::emitDecl(MemOp op) {
   // Aggregate mems may declare multiple reg's.  We need to random initialize
   // them all.
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenBundleTypes(op.getDataType(), "", false, fieldTypes);
+  if (auto dataType = op.getDataTypeOrNull())
+    flattenBundleTypes(dataType, "", false, fieldTypes);
 
   if (!fieldTypes.empty()) {
     std::string action = "for (initvar = 0; initvar < " + llvm::utostr(depth) +
@@ -1528,7 +1529,8 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
     // Handle the reg declaration for a memory specially.
     if (auto memOp = dyn_cast<MemOp>(&op))
-      flattenBundleTypes(memOp.getDataType(), "", false, fieldTypes);
+      if (auto dataType = memOp.getDataTypeOrNull())
+        flattenBundleTypes(dataType, "", false, fieldTypes);
 
     for (const auto &elt : fieldTypes) {
       int bitWidth = getBitWidthOrSentinel(elt.type);
@@ -1582,7 +1584,8 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     // handle aggregate types and depths.
     if (auto memOp = dyn_cast<MemOp>(decl)) {
       fieldTypes.clear();
-      flattenBundleTypes(memOp.getDataType(), "", false, fieldTypes);
+      if (auto dataType = memOp.getDataTypeOrNull())
+        flattenBundleTypes(dataType, "", false, fieldTypes);
 
       uint64_t depth = memOp.getDepth();
       for (const auto &elt : fieldTypes) {
@@ -1640,7 +1643,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
   if (StmtDeclEmitter(*this).dispatchStmtVisitor(op))
     return;
 
-  // emitOpError(op, "cannot emit this operation to Verilog");
+  emitOpError(op, "cannot emit this operation to Verilog");
   indent() << "unknown MLIR operation " << op->getName().getStringRef() << "\n";
 }
 
