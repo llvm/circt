@@ -519,3 +519,7 @@ circuit Xorr :
 ; CHECK-NEXT:    assign c = a;{{.*}}// Place.scala:101
 ; CHECK-NEXT:    assign c = b;{{.*}}// Place.scala:101
 ; CHECK-NEXT:  `endif // SYNTHESIS
+
+  module IsInvalid :
+    output a: Analog<1>
+    a is invalid  @[Place.scala 101]

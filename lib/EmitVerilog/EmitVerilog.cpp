@@ -1652,6 +1652,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitStmt(AttachOp op) { return emitter.emitStatement(op), true; }
     bool visitStmt(ConnectOp op) { return emitter.emitStatement(op), true; }
     bool visitStmt(DoneOp op) { return true; }
+    bool visitStmt(InvalidOp op) { return true; }
     bool visitStmt(PrintFOp op) { return emitter.emitStatement(op), true; }
     bool visitStmt(SkipOp op) { return true; }
     bool visitStmt(StopOp op) { return emitter.emitStatement(op), true; }
