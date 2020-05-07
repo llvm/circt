@@ -387,13 +387,27 @@ circuit Xorr :
     output io_pins_asrcn3v3 : Analog<5>
 
   ; CHECK-LABEL: module MemSimple(
-  ; CHECK-NEXT:   input clock1, clock2);
+  ; CHECK-NEXT:   input         clock1, clock2, inpred,
+  ; CHECK-NEXT:   input  [41:0] indata,
+  ; CHECK-NEXT:   output [41:0] result);
   module MemSimple :
-    input clock1 : Clock
-    input clock2 : Clock
+    input clock1  : Clock
+    input clock2  : Clock
+    input inpred  : UInt<1>
+    input indata  : SInt<42>
+    output result : SInt<42>
 
-    ; CHECK:        reg  [41:0] _M[7:0];
-    mem _M : @[Decoupled.scala 209:24]
+    ; CHECK:  wire [2:0]  _M_read_addr;
+    ; CHECK:  wire        _M_read_en;
+    ; CHECK:  wire        _M_read_clk;
+    ; CHECK:  wire [41:0] _M_read_data;
+    ; CHECK:  wire [2:0]  _M_write_addr;
+    ; CHECK:  wire        _M_write_en;
+    ; CHECK:  wire        _M_write_clk;
+    ; CHECK:  wire [41:0] _M_write_data;
+    ; CHECK:  wire        _M_write_mask;
+    ; CHECK:  reg  [41:0] _M[7:0];
+    mem _M : @[Decoupled.scala 209:27]
           data-type => SInt<42>
           depth => 8
           read-latency => 0
@@ -402,16 +416,40 @@ circuit Xorr :
           writer => write
           read-under-write => undefined
 
+    ; CHECK: assign _M_read_data = _M[_M_read_addr];	// Decoupled.scala:209:27
+    ; CHECK-NEXT: assign result = _M_read_data;
+    result <= _M.read.data
+
+    ; CHECK: assign _M_read_addr = 1'h0;
+    _M.read.addr <= UInt<1>("h0")
+    ; CHECK: assign _M_read_en = 1'h1;
+    _M.read.en <= UInt<1>("h1")
+    ; CHECK: assign _M_read_clk = clock1;
+    _M.read.clk <= clock1
+    ; CHECK: assign _M_write_addr = 3'h0;
+    _M.write.addr <= validif(inpred, UInt<3>("h0"))
+    ; CHECK: assign _M_write_en = inpred ? 1'h1 : 1'h0;
+    _M.write.en <= mux(inpred, UInt<1>("h1"), UInt<1>("h0"))
+    ; CHECK: assign _M_write_clk = clock2;
+    _M.write.clk <= validif(inpred, clock2)
+    ; CHECK: assign _M_write_data = indata;
+    _M.write.data <= validif(inpred, indata)
+    ; CHECK: assign _M_write_mask = 1'h1;
+    _M.write.mask <= validif(inpred, UInt<1>("h1"))
+
 ; CHECK:       `ifndef SYNTHESIS
 ; CHECK-NEXT:  initial begin
 ; CHECK-NEXT:    `ifdef RANDOMIZE_MEM_INIT
 ; CHECK-NEXT:      integer initvar;
 ; CHECK-NEXT:      for (initvar = 0; initvar < 8; initvar = initvar+1)
-; CHECK-NEXT:        _M[initvar] = `RANDOM;	// Decoupled.scala:209:24
+; CHECK-NEXT:        _M[initvar] = `RANDOM;{{.*}}// Decoupled.scala:209:27
 ; CHECK-NEXT:    `endif // RANDOMIZE_MEM_INIT
 ; CHECK-NEXT:  end // initial
 ; CHECK-NEXT:  `endif // SYNTHESIS
 
+; CHECK:       always @(posedge _M_write_clk) begin
+; CHECK-NEXT:    if (_M_write_en & _M_write_mask) _M[_M_write_addr] <= _M_write_data;	// Decoupled.scala:209:27
+; CHECK-NEXT:  end // always @(posedge)
 
 
   ; CHECK-LABEL: module MemAggregate(
@@ -430,15 +468,9 @@ circuit Xorr :
           reader => read
           writer => write
           read-under-write => undefined
-    ;_M.read.addr is invalid @[Decoupled.scala 209:24]
-    ;_M.read.clk <= clock1
-    ;_M.read.en <= UInt<1>("h0") @[Decoupled.scala 209:24]
 
-    ;_M.write.addr
-    ;_M.write.clk <= clock2
-    ;_M.write.en <=
-    ;_M.write.data
-    ;_M.write.mask
+    ; CHECK: assign _M_read_data_id = _M_id[_M_read_addr];	// Decoupled.scala:209:24
+    ; CHECK: assign _M_read_data_other = _M_other[_M_read_addr];	// Decoupled.scala:209:24
 
 ; CHECK:        `ifndef SYNTHESIS
 ; CHECK-NEXT:    initial begin
@@ -451,3 +483,10 @@ circuit Xorr :
 ; CHECK-NEXT:      `endif // RANDOMIZE_MEM_INIT
 ; CHECK-NEXT:    end // initial
 ; CHECK-NEXT:    `endif // SYNTHESIS
+
+; CHECK:  always @(posedge _M_write_clk) begin
+; CHECK-NEXT:    if (_M_write_en & _M_write_mask) begin
+; CHECK-NEXT:      _M_id[_M_write_addr] <= _M_write_data_id;	// Decoupled.scala:209:24
+; CHECK-NEXT:      _M_other[_M_write_addr] <= _M_write_data_other;	// Decoupled.scala:209:24
+; CHECK-NEXT:    end
+; CHECK-NEXT:  end // always @(posedge)

@@ -435,9 +435,9 @@ void MemOp::getPorts(
 }
 
 /// Return the kind of the specified port or None if the name is invalid.
-Optional<MemOp::PortKind> MemOp::getPortKind(Identifier portName) {
+Optional<MemOp::PortKind> MemOp::getPortKind(StringRef portName) {
   // The type of a mem must be a bundle.
-  auto eltType = getType().cast<BundleType>().getElementType(portName.str());
+  auto eltType = getType().cast<BundleType>().getElementType(portName);
   if (!eltType)
     return None;
   return getMemPortKindFromType(eltType);

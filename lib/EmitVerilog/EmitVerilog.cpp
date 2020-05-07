@@ -1099,29 +1099,27 @@ void ModuleEmitter::emitStatement(ConnectOp op) {
 
   // Connect to a register has "special" behavior.
   auto lhs = op.lhs();
-  if (auto *lhsOp = lhs.getDefiningOp()) {
-    auto addRegAssign = [&](const std::string &clockExpr, Value value) {
-      std::string action = getName(lhs).str() +
-                           " <= " + emitExpressionToString(value, ops) + ";";
-      auto locStr = getLocationInfoAsString(ops);
-      addAtPosEdge(action, locStr, clockExpr);
-      return;
-    };
+  auto addRegAssign = [&](const std::string &clockExpr, Value value) {
+    std::string action =
+        getName(lhs).str() + " <= " + emitExpressionToString(value, ops) + ";";
+    auto locStr = getLocationInfoAsString(ops);
+    addAtPosEdge(action, locStr, clockExpr);
+    return;
+  };
 
-    if (auto regOp = dyn_cast<RegOp>(lhsOp)) {
-      auto clockExpr = emitExpressionToString(regOp.clockVal(), ops);
-      addRegAssign(clockExpr, op.rhs());
-      return;
-    }
+  if (auto regOp = dyn_cast_or_null<RegOp>(lhs.getDefiningOp())) {
+    auto clockExpr = emitExpressionToString(regOp.clockVal(), ops);
+    addRegAssign(clockExpr, op.rhs());
+    return;
+  }
 
-    if (auto regInitOp = dyn_cast<RegInitOp>(lhsOp)) {
-      auto clockExpr = emitExpressionToString(regInitOp.clockVal(), ops);
-      clockExpr +=
-          " or posedge " + emitExpressionToString(regInitOp.resetSignal(), ops);
+  if (auto regInitOp = dyn_cast_or_null<RegInitOp>(lhs.getDefiningOp())) {
+    auto clockExpr = emitExpressionToString(regInitOp.clockVal(), ops);
+    clockExpr +=
+        " or posedge " + emitExpressionToString(regInitOp.resetSignal(), ops);
 
-      addRegAssign(clockExpr, op.rhs());
-      return;
-    }
+    addRegAssign(clockExpr, op.rhs());
+    return;
   }
 
   indent() << "assign ";
@@ -1293,10 +1291,10 @@ void ModuleEmitter::emitDecl(RegInitOp op) {
 
 void ModuleEmitter::emitDecl(MemOp op) {
   // Check that the MemOp has been properly lowered before this.
-  if (op.getReadLatency() != 0 || op.getWriteLatency() != 1)
-    op.emitOpError("all memories should be transformed into blackboxes or "
-                   "combinational by previous passses");
-
+  /*  if (op.getReadLatency() != 0 || op.getWriteLatency() != 1)
+      op.emitOpError("all memories should be transformed into blackboxes or "
+                     "combinational by previous passses");
+  */
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1317,6 +1315,7 @@ void ModuleEmitter::emitDecl(MemOp op) {
   // them all.
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
   flattenBundleTypes(op.getDataType(), "", false, fieldTypes);
+
   if (!fieldTypes.empty()) {
     std::string action = "for (initvar = 0; initvar < " + llvm::utostr(depth) +
                          "; initvar = initvar+1)";
@@ -1336,21 +1335,65 @@ void ModuleEmitter::emitDecl(MemOp op) {
                /*cond*/ "", /*partialOrder: After initVar decl*/ 11);
   }
 
-  // Walk the use-def chains to find accesses to the ports.
-  // NOTE: This is all kinds of gross, but is an artifact of how FIRRTL decides
-  // to model memories at this level of the IR.
+  // Iterate over all of the read/write ports, emitting logic necessary to use
+  // them.
   SmallVector<std::pair<Identifier, MemOp::PortKind>, 2> ports;
   op.getPorts(ports);
 
   for (auto &port : ports) {
-    if (port.second == MemOp::PortKind::ReadWrite) {
+    auto portName = port.first;
+
+    // Return the identifier emitted to Verilog that refers to the specified
+    // field of the specified read/write port.  This corresponds to the naming
+    // of subfield's.
+    // TODO(verilog dialect): eliminate subfields.
+    auto getPortName = [&](StringRef fieldName) -> std::string {
+      return getName(op).str() + "_" + portName.str() + "_" + fieldName.str();
+    };
+
+    switch (port.second) {
+    case MemOp::PortKind::ReadWrite:
       op.emitOpError("readwrite ports should be lowered into separate read and "
                      "write ports by previous passes");
       continue;
+
+    case MemOp::PortKind::Read:
+      // Emit an assign to the read port, using the address.
+      // TODO(firrtl-spec): It appears that the clock signal on the read port is
+      // ignored, why does it exist?
+
+      // TODO(completeness): Check out Assign vs Garbage Assign for when the
+      // depth of the mem is not a power of two.
+      // This handles the RANDOMIZE_GARBAGE_ASSIGN macro.
+      for (const auto &elt : fieldTypes) {
+        indent() << "assign " << getPortName("data") << elt.suffix << " = "
+                 << getName(op) << elt.suffix << '[' << getPortName("addr")
+                 << "];";
+        emitLocationInfoAndNewLine(ops);
+      }
+      break;
+
+    case MemOp::PortKind::Write:
+      auto clockExpr = getPortName("clk");
+      auto locStr = getLocationInfoAsString(ops);
+
+      // Compute the condition, which is an 'and' of the enable signal and
+      // the mask predicate.
+      // TODO(QoI, verilog dialect): The mask is frequently (always?) one --
+      // we don't need to print it if so.
+      auto condition = getPortName("en") + " & " + getPortName("mask");
+
+      for (const auto &elt : fieldTypes) {
+        std::string action = getName(op).str() + elt.suffix + '[' +
+                             getPortName("addr") +
+                             "] <= " + getPortName("data") + elt.suffix + ";";
+
+        addAtPosEdge(action, locStr, clockExpr,
+                     /*ppCond:*/ {}, /*condition*/ condition);
+      }
+      break;
     }
   }
-
-  indent() << "// FIXME: Emit Mem " << locInfo << '\n';
 }
 
 //===----------------------------------------------------------------------===//
