@@ -552,7 +552,48 @@ ModuleEmitter::getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
         return lhs->getColumn() < rhs->getColumn() ? -1 : 1;
       });
 
-  llvm::interleaveComma(locVector, sstr, printLoc);
+  // The entries are sorted by filename, line, col.  Try to merge together
+  // entries to reduce verbosity on the column info.
+  StringRef lastFileName;
+  for (size_t i = 0, e = locVector.size(); i != e;) {
+    if (i != 0)
+      sstr << ", ";
+
+    // Print the filename if it changed.
+    auto first = locVector[i];
+    if (first.getFilename() != lastFileName) {
+      lastFileName = first.getFilename();
+      sstr << lastFileName;
+    }
+
+    // Scan for entires with the same file/line.
+    size_t end = i + 1;
+    while (end != e && first.getFilename() == locVector[end].getFilename() &&
+           first.getLine() == locVector[end].getLine())
+      ++end;
+
+    // If we have one entry, print it normally.
+    if (end == i + 1) {
+      if (auto line = first.getLine()) {
+        sstr << ':' << line;
+        if (auto col = first.getColumn())
+          sstr << ':' << col;
+      }
+      ++i;
+      continue;
+    }
+
+    // Otherwise print a brace enclosed list.
+    sstr << ':' << first.getLine() << ":{";
+    while (i != end) {
+      sstr << locVector[i++].getColumn();
+
+      if (i != end)
+        sstr << ',';
+    }
+    sstr << '}';
+  }
+
   return sstr.str();
 }
 
@@ -1321,10 +1362,10 @@ void ModuleEmitter::emitDecl(RegInitOp op) {
 
 void ModuleEmitter::emitDecl(MemOp op) {
   // Check that the MemOp has been properly lowered before this.
-  if (op.getReadLatency() != 0 || op.getWriteLatency() != 1)
+  /*if (op.getReadLatency() != 0 || op.getWriteLatency() != 1)
     op.emitOpError("all memories should be transformed into blackboxes or "
                    "combinational by previous passses");
-
+*/
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
