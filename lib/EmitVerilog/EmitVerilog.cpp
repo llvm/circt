@@ -753,6 +753,9 @@ private:
     return emitSignedBinary(op, Multiply, "/");
   }
   SubExprInfo visitExpr(RemPrimOp op) {
+    // FIXME(rtl dialect): Verilog has the width of (a % b) = Max(W(a), W(b))
+    // FIRRTL has the width of (a % b) = Min(W(a), W(b)), which makes more
+    // sense, but nevertheless is a problem when emitting verilog.
     return emitSignedBinary(op, Multiply, "%");
   }
 
@@ -1362,10 +1365,10 @@ void ModuleEmitter::emitDecl(RegInitOp op) {
 
 void ModuleEmitter::emitDecl(MemOp op) {
   // Check that the MemOp has been properly lowered before this.
-  /*if (op.getReadLatency() != 0 || op.getWriteLatency() != 1)
-    op.emitOpError("all memories should be transformed into blackboxes or "
-                   "combinational by previous passses");
-*/
+  if (op.getReadLatency() != 0 || op.getWriteLatency() != 1) {
+    // FIXME: This should be an error.
+    op.emitWarning("FIXME: need to support mem read/write latency correctly");
+  }
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
