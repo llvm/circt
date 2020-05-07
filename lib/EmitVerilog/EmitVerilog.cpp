@@ -287,6 +287,7 @@ public:
 
   // Statements.
   void emitStatementExpression(Operation *op);
+  void emitStatement(AttachOp op);
   void emitStatement(ConnectOp op);
   void emitStatement(PrintFOp op);
   void emitStatement(StopOp op);
@@ -1093,6 +1094,35 @@ void ModuleEmitter::emitStatementExpression(Operation *op) {
   emitLocationInfoAndNewLine(emittedExprs);
 }
 
+void ModuleEmitter::emitStatement(AttachOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  // Don't emit anything for a zero or one operand attach.
+  if (op.operands().size() < 2)
+    return;
+
+  auto locStr = getLocationInfoAsString(ops);
+
+  // If we are simulating, use an 'alias':
+  std::string action = "alias ";
+  llvm::interleave(
+      op.operands(),
+      [&](Value operand) { action += emitExpressionToString(operand, ops); },
+      [&] { action += " = "; });
+  addDeclaration(action + ";", locStr, "!SYNTHESIS");
+
+  // Otherwise, emit an N^2 number of attaches both directions.
+  for (auto v1 : op.operands()) {
+    for (auto v2 : op.operands())
+      if (v1 != v2) {
+        action = "assign " + emitExpressionToString(v1, ops) + " = " +
+                 emitExpressionToString(v2, ops) + ";";
+        addDeclaration(action, locStr, "SYNTHESIS");
+      }
+  }
+}
+
 void ModuleEmitter::emitStatement(ConnectOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -1619,6 +1649,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
 
     using DeclVisitor::visitDecl;
     using StmtVisitor::visitStmt;
+    bool visitStmt(AttachOp op) { return emitter.emitStatement(op), true; }
     bool visitStmt(ConnectOp op) { return emitter.emitStatement(op), true; }
     bool visitStmt(DoneOp op) { return true; }
     bool visitStmt(PrintFOp op) { return emitter.emitStatement(op), true; }

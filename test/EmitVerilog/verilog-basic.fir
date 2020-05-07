@@ -500,3 +500,22 @@ circuit Xorr :
       write-latency => 1
       read-under-write => undefined
 
+  ; CHECK-LABEL: module Attach(
+  ; CHECK-NEXT:    input a, b, c);
+  module Attach :
+    input a: Analog<1>
+    input b: Analog<1>
+    input c: Analog<1>
+    attach(a, b, c)  @[Place.scala 101]
+
+; CHECK:       `ifndef SYNTHESIS
+; CHECK-NEXT:    alias a = b = c;{{.*}}// Place.scala:101
+; CHECK-NEXT:  `endif
+; CHECK-NEXT:  `ifdef SYNTHESIS
+; CHECK-NEXT:    assign a = b;{{.*}}// Place.scala:101
+; CHECK-NEXT:    assign a = c;{{.*}}// Place.scala:101
+; CHECK-NEXT:    assign b = a;{{.*}}// Place.scala:101
+; CHECK-NEXT:    assign b = c;{{.*}}// Place.scala:101
+; CHECK-NEXT:    assign c = a;{{.*}}// Place.scala:101
+; CHECK-NEXT:    assign c = b;{{.*}}// Place.scala:101
+; CHECK-NEXT:  `endif // SYNTHESIS

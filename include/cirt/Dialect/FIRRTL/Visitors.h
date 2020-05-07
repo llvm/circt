@@ -136,7 +136,7 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<ConnectOp, DoneOp, InvalidOp, MemoryPortOp,
+        .template Case<AttachOp, ConnectOp, DoneOp, InvalidOp, MemoryPortOp,
                        PartialConnectOp, PrintFOp, SkipOp, StopOp, WhenOp>(
             [&](auto opNode) -> ResultType {
               return thisCast->visitStmt(opNode, args...);
@@ -163,6 +163,7 @@ public:
     return static_cast<ConcreteType *>(this)->visitUnhandledStmt(op, args...); \
   }
 
+  HANDLE(AttachOp);
   HANDLE(ConnectOp);
   HANDLE(DoneOp);
   HANDLE(InvalidOp);
