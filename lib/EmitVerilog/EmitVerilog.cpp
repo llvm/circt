@@ -1347,10 +1347,11 @@ void ModuleEmitter::emitDecl(MemOp op) {
   if (auto dataType = op.getDataTypeOrNull())
     flattenBundleTypes(dataType, "", false, fieldTypes);
 
+  emitRandomizeProlog();
+
   // On initialization, fill the mem with random bits if RANDOMIZE_MEM_INIT
   // is set.
-  if (depth == 1) {
-    // Don't emit a for loop for one element.
+  if (depth == 1) { // Don't emit a for loop for one element.
     for (const auto &elt : fieldTypes) {
       std::string action = memName.str() + elt.suffix + "[0] = `RANDOM;";
       addInitial(action, locInfo, /*ppCond*/ "RANDOMIZE_MEM_INIT",
@@ -1372,6 +1373,9 @@ void ModuleEmitter::emitDecl(MemOp op) {
     addInitial(action, locInfo, /*ppCond*/ "RANDOMIZE_MEM_INIT",
                /*cond*/ "", /*partialOrder: After initVar decl*/ 11);
   }
+
+  // Keep track of whether this mem is an even power of two or not.
+  bool isPowerOfTwo = llvm::isPowerOf2_64(depth);
 
   // Iterate over all of the read/write ports, emitting logic necessary to use
   // them.
@@ -1399,16 +1403,35 @@ void ModuleEmitter::emitDecl(MemOp op) {
       // Emit an assign to the read port, using the address.
       // TODO(firrtl-spec): It appears that the clock signal on the read port is
       // ignored, why does it exist?
+      if (!isPowerOfTwo) {
+        indent() << "`ifndef RANDOMIZE_GARBAGE_ASSIGN\n";
+        addIndent();
+      }
 
-      // TODO(completeness): Check out Assign vs Garbage Assign for when the
-      // depth of the mem is not a power of two.
-      // This handles the RANDOMIZE_GARBAGE_ASSIGN macro.
       for (const auto &elt : fieldTypes) {
         indent() << "assign " << getPortName("data") << elt.suffix << " = "
                  << getName(op) << elt.suffix << '[' << getPortName("addr")
                  << "];";
         emitLocationInfoAndNewLine(ops);
       }
+
+      if (!isPowerOfTwo) {
+        reduceIndent();
+        indent() << "`else\n";
+        addIndent();
+
+        for (const auto &elt : fieldTypes) {
+          indent() << "assign " << getPortName("data") << elt.suffix << " = ";
+          os << getPortName("addr") << " < " << depth << " ? ";
+          os << getName(op) << elt.suffix << '[' << getPortName("addr") << "]";
+          os << " : `RANDOM;";
+          emitLocationInfoAndNewLine(ops);
+        }
+
+        reduceIndent();
+        indent() << "`endif // RANDOMIZE_GARBAGE_ASSIGN\n";
+      }
+
       break;
 
     case MemOp::PortKind::Write:

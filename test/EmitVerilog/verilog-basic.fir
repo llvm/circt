@@ -439,6 +439,7 @@ circuit Xorr :
 
 ; CHECK:       `ifndef SYNTHESIS
 ; CHECK-NEXT:  initial begin
+; CHECK-NEXT:    `INIT_RANDOM_PROLOG_
 ; CHECK-NEXT:    `ifdef RANDOMIZE_MEM_INIT
 ; CHECK-NEXT:      integer initvar;
 ; CHECK-NEXT:      for (initvar = 0; initvar < 8; initvar = initvar+1)
@@ -469,11 +470,17 @@ circuit Xorr :
           writer => write
           read-under-write => undefined
 
-    ; CHECK: assign _M_read_data_id = _M_id[_M_read_addr];	// Decoupled.scala:209:24
-    ; CHECK: assign _M_read_data_other = _M_other[_M_read_addr];	// Decoupled.scala:209:24
+    ; CHECK: `ifndef RANDOMIZE_GARBAGE_ASSIGN
+    ; CHECK-NEXT: assign _M_read_data_id = _M_id[_M_read_addr];	// Decoupled.scala:209:24
+    ; CHECK-NEXT: assign _M_read_data_other = _M_other[_M_read_addr];	// Decoupled.scala:209:24
+    ; CHECK-NEXT: `else
+    ; CHECK-NEXT: assign _M_read_data_id = _M_read_addr < 20 ? _M_id[_M_read_addr] : `RANDOM;
+    ; CHECK-NEXT: assign _M_read_data_other = _M_read_addr < 20 ? _M_other[_M_read_addr] : `RANDOM;
+    ; CHECK-NEXT: `endif // RANDOMIZE_GARBAGE_ASSIGN
 
 ; CHECK:        `ifndef SYNTHESIS
 ; CHECK-NEXT:    initial begin
+; CHECK-NEXT:      `INIT_RANDOM_PROLOG_
 ; CHECK-NEXT:      `ifdef RANDOMIZE_MEM_INIT
 ; CHECK-NEXT:        integer initvar;
 ; CHECK-NEXT:        for (initvar = 0; initvar < 20; initvar = initvar+1) begin
@@ -512,6 +519,7 @@ circuit Xorr :
           read-under-write => undefined
 ; CHECK:        `ifndef SYNTHESIS
 ; CHECK-NEXT:    initial begin
+; CHECK-NEXT:      `INIT_RANDOM_PROLOG_
 ; CHECK-NEXT:      `ifdef RANDOMIZE_MEM_INIT
 ; CHECK-NEXT:        _M_id[0] = `RANDOM;
 ; CHECK-NEXT:        _M_other[0] = `RANDOM;
