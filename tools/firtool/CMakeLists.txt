@@ -1,5 +1,4 @@
 set(LIBS
-  MLIRFIRRTL
   CIRTEmitVerilog
   CIRTFIRParser
 

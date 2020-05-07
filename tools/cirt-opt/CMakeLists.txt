@@ -1,5 +1,6 @@
 set(LIBS
   MLIRFIRRTL
+  MLIRRTL
 
   MLIRParser
   MLIRSupport

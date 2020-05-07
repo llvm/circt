@@ -24,7 +24,7 @@ def FIRRTLDialect : Dialect {
   let cppNamespace = "firrtl";
 }
 
-// Base class for the operation in this dialect
+// Base class for the operation in this dialect.
 class FIRRTLOp<string mnemonic, list<OpTrait> traits = []> :
     Op<FIRRTLDialect, mnemonic, traits>;
 

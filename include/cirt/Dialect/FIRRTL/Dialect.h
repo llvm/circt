@@ -4,8 +4,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRT_DIALECT_FIRRTL_IR_DIALECT_H
-#define CIRT_DIALECT_FIRRTL_IR_DIALECT_H
+#ifndef CIRT_DIALECT_FIRRTL_DIALECT_H
+#define CIRT_DIALECT_FIRRTL_DIALECT_H
 
 #include "mlir/IR/Dialect.h"
 
