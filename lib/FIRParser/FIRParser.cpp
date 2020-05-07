@@ -26,12 +26,18 @@ using llvm::SourceMgr;
 /// drop these as they don't convey semantic meaning.
 static bool isUselessName(StringRef name) {
   // Ignore _T and _T_123
-  if (name.startswith("_T"))
-    return name.size() == 2 || name[2] == '_';
+  if (name.startswith("_T")) {
+    if (name.size() == 2)
+      return true;
+    return name.size() > 3 && name[2] == '_' && llvm::isDigit(name[3]);
+  }
 
   // Ignore _GEN and _GEN_123, these are produced by Namespace.scala.
-  if (name.startswith("_GEN"))
-    return name.size() == 4 || name[4] == '_';
+  if (name.startswith("_GEN")) {
+    if (name.size() == 4)
+      return true;
+    return name.size() > 5 && name[4] == '_' && llvm::isDigit(name[5]);
+  }
   return false;
 }
 
