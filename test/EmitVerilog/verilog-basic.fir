@@ -500,6 +500,25 @@ circuit Xorr :
       write-latency => 1
       read-under-write => undefined
 
+ ; CHECK-LABEL: module MemOne();
+  module MemOne :
+    mem _M : @[Decoupled.scala 209:24]
+          data-type => { id : Analog<4>, other: SInt<8> }
+          depth => 1
+          read-latency => 0
+          write-latency => 1
+          reader => read
+          writer => write
+          read-under-write => undefined
+; CHECK:        `ifndef SYNTHESIS
+; CHECK-NEXT:    initial begin
+; CHECK-NEXT:      `ifdef RANDOMIZE_MEM_INIT
+; CHECK-NEXT:        _M_id[0] = `RANDOM;
+; CHECK-NEXT:        _M_other[0] = `RANDOM;
+; CHECK-NEXT:      `endif // RANDOMIZE_MEM_INIT
+; CHECK-NEXT:    end // initial
+; CHECK-NEXT:    `endif // SYNTHESIS
+
   ; CHECK-LABEL: module Attach(
   ; CHECK-NEXT:    input a, b, c);
   module Attach :

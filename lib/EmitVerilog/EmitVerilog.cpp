@@ -1333,7 +1333,7 @@ void ModuleEmitter::emitDecl(MemOp op) {
   auto locInfo = getLocationInfoAsString(ops);
 
   // If we haven't already emitted a declaration of initvar, do so.
-  if (!emittedInitVar) {
+  if (!emittedInitVar && depth > 1) {
     assert(depth < (1ULL << 31) &&
            "FIXME: This doesn't support mems greater than 2^32");
     addInitial("integer initvar;", "", /*ppCond*/ "RANDOMIZE_MEM_INIT",
@@ -1347,7 +1347,17 @@ void ModuleEmitter::emitDecl(MemOp op) {
   if (auto dataType = op.getDataTypeOrNull())
     flattenBundleTypes(dataType, "", false, fieldTypes);
 
-  if (!fieldTypes.empty()) {
+  // On initialization, fill the mem with random bits if RANDOMIZE_MEM_INIT
+  // is set.
+  if (depth == 1) {
+    // Don't emit a for loop for one element.
+    for (const auto &elt : fieldTypes) {
+      std::string action = memName.str() + elt.suffix + "[0] = `RANDOM;";
+      addInitial(action, locInfo, /*ppCond*/ "RANDOMIZE_MEM_INIT",
+                 /*cond*/ "", /*partialOrder: After initVar decl*/ 11);
+    }
+
+  } else if (!fieldTypes.empty()) {
     std::string action = "for (initvar = 0; initvar < " + llvm::utostr(depth) +
                          "; initvar = initvar+1)";
 
@@ -1359,9 +1369,6 @@ void ModuleEmitter::emitDecl(MemOp op) {
 
     if (fieldTypes.size() > 1)
       action += "\nend";
-
-    // On initialization, fill the mem with random bits if RANDOMIZE_MEM_INIT
-    // is set.
     addInitial(action, locInfo, /*ppCond*/ "RANDOMIZE_MEM_INIT",
                /*cond*/ "", /*partialOrder: After initVar decl*/ 11);
   }
