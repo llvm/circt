@@ -6,6 +6,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "cirt/Dialect/FIRRTL/Dialect.h"
+#include "cirt/Dialect/RTL/Dialect.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
@@ -69,8 +70,9 @@ int main(int argc, char **argv) {
   registerMLIRContextCLOptions();
   registerPassManagerCLOptions();
 
-  // Register FIRRTL stuff.
+  // Register our dialects.
   registerDialect<firrtl::FIRRTLDialect>();
+  registerDialect<rtl::RTLDialect>();
 
   PassPipelineCLParser passPipeline("", "Compiler passes to run");
 

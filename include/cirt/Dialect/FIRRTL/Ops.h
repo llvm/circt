@@ -1,11 +1,11 @@
-//===- FIRRTL/IR/Ops.h - Declare FIRRTL dialect operations ------*- C++ -*-===//
+//===- FIRRTL/Ops.h - Declare FIRRTL dialect operations ---------*- C++ -*-===//
 //
 // This file declares the operation class for the FIRRTL IR.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRT_DIALECT_FIRRTL_IR_OPS_H
-#define CIRT_DIALECT_FIRRTL_IR_OPS_H
+#ifndef CIRT_DIALECT_FIRRTL_OPS_H
+#define CIRT_DIALECT_FIRRTL_OPS_H
 
 #include "cirt/Dialect/FIRRTL/Dialect.h"
 #include "cirt/Dialect/FIRRTL/Types.h"
@@ -64,4 +64,4 @@ namespace firrtl {
 } // namespace firrtl
 } // namespace cirt
 
-#endif // CIRT_DIALECT_FIRRTL_IR_OPS_H
+#endif // CIRT_DIALECT_FIRRTL_OPS_H

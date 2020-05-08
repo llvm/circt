@@ -4,7 +4,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike]> {
+def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
+                                       FirstAttrDerivedResultType]> {
   let summary = "Produce a constant value";
   let description = [{
     The constant operation produces a constant value of SInt or UInt type.

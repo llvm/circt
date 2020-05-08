@@ -8,6 +8,7 @@
 #define RTL_TD
 
 include "mlir/IR/OpBase.td"
+include "mlir/Interfaces/SideEffects.td"
 
 def RTLDialect : Dialect {
   let name = "rtl";
@@ -25,6 +26,6 @@ def RTLDialect : Dialect {
 class RTLOp<string mnemonic, list<OpTrait> traits = []> :
     Op<RTLDialect, mnemonic, traits>;
 
-// TODO: Lots.
+include "RTLExpressions.td"
 
 #endif // RTL_TD
