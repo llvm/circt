@@ -240,8 +240,8 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result) {
   // terminator.
 
   SmallVector<OpAsmParser::OperandType, 4> entryArgs;
-  SmallVector<SmallVector<NamedAttribute, 2>, 4> argAttrs;
-  SmallVector<SmallVector<NamedAttribute, 2>, 4> resultAttrs;
+  SmallVector<NamedAttrList, 4> argAttrs;
+  SmallVector<NamedAttrList, 4> resultAttrs;
   SmallVector<Type, 4> argTypes;
   SmallVector<Type, 4> resultTypes;
   auto &builder = parser.getBuilder();
