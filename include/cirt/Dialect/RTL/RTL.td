@@ -8,7 +8,7 @@
 #define RTL_TD
 
 include "mlir/IR/OpBase.td"
-include "mlir/Interfaces/SideEffects.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def RTLDialect : Dialect {
   let name = "rtl";
