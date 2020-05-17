@@ -28,3 +28,24 @@ def ConstantOp : RTLOp<"constant", [NoSideEffect, ConstantLike,
   let hasFolder = 1;
   let verifier = [{ return ::verify(*this); }];
 }
+
+//===----------------------------------------------------------------------===//
+// Binary Operations
+//===----------------------------------------------------------------------===//
+
+// Base class for binary operators.
+class BinOp<string mnemonic, list<OpTrait> traits = []> :
+    RTLOp<mnemonic,
+          !listconcat(traits, [SameTypeOperands, SameOperandsAndResultType])> {
+  let arguments = (ins AnySignlessInteger:$lhs, AnySignlessInteger:$rhs);
+  let results = (outs AnySignlessInteger:$result);
+
+  let assemblyFormat = [{
+    $lhs `,` $rhs  attr-dict `:` type($result)
+  }];
+}
+
+def AddOp : BinOp<"add", [Commutative]>;
+def SubOp : BinOp<"sub", []>;
+def MulOp : BinOp<"mul", [Commutative]>;
+def DivOp : BinOp<"div", []>;

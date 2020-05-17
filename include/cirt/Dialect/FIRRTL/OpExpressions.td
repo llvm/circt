@@ -111,16 +111,9 @@ def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect]> {
 // Primitive Operations
 //===----------------------------------------------------------------------===//
 
+/// PrimOp is a FIRRTLOp without side effects.
 class PrimOp<string mnemonic, list<OpTrait> traits = []> :
-    FIRRTLOp<mnemonic, !listconcat(traits, [NoSideEffect])> {
-  let arguments = (ins AnyType:$lhs, AnyType:$rhs);
-  let results = (outs AnyType:$result);
-  
-  let assemblyFormat = [{
-    $lhs `,` $rhs  attr-dict `:`
-       `(` type($lhs) `,` type($rhs) `)` `->` type($result)
-  }];
-}
+    FIRRTLOp<mnemonic, !listconcat(traits, [NoSideEffect])>;
 
 //===----------------------------------------------------------------------===//
 // Binary Operations
