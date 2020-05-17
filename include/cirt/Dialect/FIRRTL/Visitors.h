@@ -36,7 +36,10 @@ public:
             CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
-            TailPrimOp>([&](auto expr) -> ResultType {
+            TailPrimOp,
+
+            // Standard Dialect integer conversion.
+            StdIntCast>([&](auto expr) -> ResultType {
           return thisCast->visitExpr(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -46,7 +49,7 @@ public:
 
   /// This callback is invoked on any non-expression operations.
   ResultType visitInvalidExpr(Operation *op, ExtraArgs... args) {
-    op->emitOpError("unknown firrtl expression");
+    op->emitOpError("unknown FIRRTL expression");
     abort();
   }
 
@@ -125,6 +128,8 @@ public:
   HANDLE(ShrPrimOp, Unhandled);
   HANDLE(TailPrimOp, Unhandled);
 
+  // Standard Dialect integer conversion.
+  HANDLE(StdIntCast, Unhandled);
 #undef HANDLE
 };
 

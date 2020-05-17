@@ -7,6 +7,7 @@
 #include "cirt/EmitVerilog.h"
 #include "cirt/Dialect/FIRRTL/Visitors.h"
 #include "cirt/Support/LLVM.h"
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Module.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Translation.h"
@@ -31,6 +32,14 @@ static llvm::ManagedStatic<StringSet<>> reservedWordCache;
 //===----------------------------------------------------------------------===//
 // Helper routines
 //===----------------------------------------------------------------------===//
+
+static bool isVerilogExpression(Operation *op) {
+  // All FIRRTL expressions are also Verilog expressions.
+  if (isExpression(op))
+    return true;
+  // The standard ConstantIntOp is an expression as well.
+  return isa<mlir::ConstantIntOp>(op);
+}
 
 /// Return the width of the specified FIRRTL type in bits or -1 if it isn't
 /// supported.
@@ -693,9 +702,11 @@ private:
                           bool forceExpectedSign = false);
 
   SubExprInfo visitUnhandledExpr(Operation *op);
+  SubExprInfo visitInvalidExpr(Operation *op);
 
   using ExprVisitor::visitExpr;
-  SubExprInfo visitExpr(ConstantOp op);
+  SubExprInfo visitExpr(firrtl::ConstantOp op);
+  SubExprInfo visitExpr(mlir::ConstantIntOp op);
 
   /// Emit a verilog concatenation of the specified values.  If the before or
   /// after strings are specified, they are included as prefix/postfix elements
@@ -827,6 +838,9 @@ private:
   }
   SubExprInfo visitExpr(ShrPrimOp op);
 
+  // Conversion to/from standard integer types is a noop.
+  SubExprInfo visitExpr(StdIntCast op) { return emitNoopCast(op); }
+
 private:
   SmallPtrSet<Operation *, 8> &emittedExprs;
   SmallString<128> resultBuffer;
@@ -860,7 +874,7 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
                                      VerilogPrecedence parenthesizeIfLooserThan,
                                      bool forceExpectedSign) {
   auto *op = exp.getDefiningOp();
-  bool shouldEmitInlineExpr = op && isExpression(op);
+  bool shouldEmitInlineExpr = op && isVerilogExpression(op);
 
   // Don't emit this expression inline if it has multiple uses.
   if (shouldEmitInlineExpr && parenthesizeIfLooserThan != ForceEmitMultiUse &&
@@ -971,7 +985,7 @@ SubExprInfo ExprEmitter::emitBitSelect(Value operand, unsigned hiBit,
   return {Unary, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitExpr(ConstantOp op) {
+SubExprInfo ExprEmitter::visitExpr(firrtl::ConstantOp op) {
   auto resType = op.getType().cast<IntType>();
   if (resType.getWidthOrSentinel() == -1)
     return visitUnhandledExpr(op);
@@ -983,6 +997,20 @@ SubExprInfo ExprEmitter::visitExpr(ConstantOp op) {
 
   SmallString<32> valueStr;
   op.value().toStringUnsigned(valueStr, 16);
+  os << valueStr;
+  return {Unary, resType.isSigned() ? IsSigned : IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitExpr(mlir::ConstantIntOp op) {
+  auto resType = op.getType().cast<IntegerType>();
+  os << resType.getWidth() << '\'';
+  if (resType.isSigned())
+    os << 's';
+  os << 'h';
+
+  auto valueAttr = op.getAttrOfType<IntegerAttr>("value");
+  SmallString<32> valueStr;
+  valueAttr.getValue().toStringUnsigned(valueStr, 16);
   os << valueStr;
   return {Unary, resType.isSigned() ? IsSigned : IsUnsigned};
 }
@@ -1096,6 +1124,14 @@ SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
   emitter.emitOpError(op, "cannot emit this expression to Verilog");
   os << "<<unsupported expr: " << op->getName().getStringRef() << ">>";
   return {Symbol, IsUnsigned};
+}
+
+// This handles dispatching to non-FIRRTL operations.
+SubExprInfo ExprEmitter::visitInvalidExpr(Operation *op) {
+  if (auto cst = dyn_cast<mlir::ConstantIntOp>(op))
+    return visitExpr(cst);
+
+  return visitUnhandledExpr(op);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1550,7 +1586,8 @@ static bool isExpressionUnableToInline(Operation *op) {
 
 /// Return true for operations that are always inlined.
 static bool isExpressionAlwaysInline(Operation *op) {
-  if (isa<ConstantOp>(op) || isa<SubfieldOp>(op))
+  if (isa<firrtl::ConstantOp>(op) || isa<mlir::ConstantIntOp>(op) ||
+      isa<SubfieldOp>(op))
     return true;
 
   // If this is a noop cast and the operand is always inlined, then the noop
@@ -1606,7 +1643,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
     // If this is an expression emitted inline or unused, it doesn't need a
     // name.
-    bool isExpr = isExpression(&op);
+    bool isExpr = isVerilogExpression(&op);
     if (isExpr) {
       // If this expression is dead, or can be emitted inline, ignore it.
       if (result.use_empty() || isExpressionEmittedInline(&op))
@@ -1713,7 +1750,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
 void ModuleEmitter::emitOperation(Operation *op) {
   // Expressions may either be ignored or emitted as an expression statements.
-  if (isExpression(op)) {
+  if (isVerilogExpression(op)) {
     if (outOfLineExpressions.count(op))
       emitStatementExpression(op);
     return;
