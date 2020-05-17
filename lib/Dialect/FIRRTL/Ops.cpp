@@ -78,8 +78,16 @@ void firrtl::getModulePortInfo(Operation *op,
 
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
-    results.push_back(
-        {getFIRRTLNameAttr(argAttrs), argTypes[i].cast<FIRRTLType>()});
+    auto type = argTypes[i].dyn_cast<FIRRTLType>();
+
+    // Convert IntegerType ports to IntType ports transparently.
+    if (!type) {
+      auto intType = argTypes[i].cast<IntegerType>();
+      type = IntType::get(op->getContext(), intType.isSigned(),
+                          intType.getWidth());
+    }
+
+    results.push_back({getFIRRTLNameAttr(argAttrs), type});
   }
 }
 

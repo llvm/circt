@@ -21,9 +21,9 @@ firrtl.circuit "Circuit" {
   // CHECK-EMPTY:
   // CHECK-NEXT:  endmodule
 
-
   firrtl.module @M3(%x : !firrtl.uint<8>,
-                    %y : !firrtl.flip<uint<8>>) {
+                    %y : !firrtl.flip<uint<8>>,
+                    %z : i8) {
     firrtl.connect %y, %x : !firrtl.flip<uint<8>>, !firrtl.uint<8>
 
     %c42_ui8 = firrtl.constant(42 : ui8) : !firrtl.uint<8>
@@ -36,15 +36,20 @@ firrtl.circuit "Circuit" {
     %b = firrtl.stdIntCast %x : (!firrtl.uint<8>) -> i8
     %c = firrtl.stdIntCast %b : (i8) -> !firrtl.uint<8>
     firrtl.connect %y, %c : !firrtl.flip<uint<8>>, !firrtl.uint<8>
+
+    %d = firrtl.stdIntCast %z : (i8) -> !firrtl.uint<8>
+    firrtl.connect %y, %d : !firrtl.flip<uint<8>>, !firrtl.uint<8>
   }
 
   // CHECK-LABEL: module M3(
   // CHECK-NEXT:    input  [7:0] x,
-  // CHECK-NEXT:    output [7:0] y);
+  // CHECK-NEXT:    output [7:0] y,
+  // CHECK-NEXT:    input  [7:0] z);
   // CHECK-EMPTY:
   // CHECK-NEXT:    assign y = x;
   // CHECK-NEXT:    assign y = 8'h2A;
   // CHECK-NEXT:    assign y = 8'h2A;
   // CHECK-NEXT:    assign y = x;
+  // CHECK-NEXT:    assign y = z;
   // CHECK-NEXT:  endmodule
 }
