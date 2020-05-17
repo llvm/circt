@@ -16,6 +16,9 @@ namespace rtl {
 #define GET_OP_CLASSES
 #include "cirt/Dialect/RTL/RTL.h.inc"
 
+/// Return true if the specified operation is a combinatorial logic op.
+bool isCombinatorial(Operation *op);
+
 } // namespace rtl
 } // namespace cirt
 

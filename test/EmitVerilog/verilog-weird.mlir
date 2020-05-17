@@ -29,7 +29,7 @@ firrtl.circuit "Circuit" {
     %c42_ui8 = firrtl.constant(42 : ui8) : !firrtl.uint<8>
     firrtl.connect %y, %c42_ui8 : !firrtl.flip<uint<8>>, !firrtl.uint<8>
 
-    %c42 = constant 42 : i8
+    %c42 = rtl.constant (42: i8) : i8
     %a = firrtl.stdIntCast %c42 : (i8) -> !firrtl.uint<8>
     firrtl.connect %y, %a : !firrtl.flip<uint<8>>, !firrtl.uint<8>
 

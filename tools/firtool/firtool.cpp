@@ -6,6 +6,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "cirt/Dialect/FIRRTL/Dialect.h"
+#include "cirt/Dialect/RTL/Dialect.h"
 #include "cirt/EmitVerilog.h"
 #include "cirt/FIRParser.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
@@ -120,8 +121,9 @@ int main(int argc, char **argv) {
   registerMLIRContextCLOptions();
   registerPassManagerCLOptions();
 
-  // Register FIRRTL stuff.
+  // Register our dialects.
   registerDialect<firrtl::FIRRTLDialect>();
+  registerDialect<rtl::RTLDialect>();
 
   // Parse pass names in main to ensure static initialization completed.
   cl::ParseCommandLineOptions(argc, argv, "cirt modular optimizer driver\n");

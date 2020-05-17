@@ -1,0 +1,29 @@
+// RUN: cirt-translate %s -emit-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
+
+firrtl.circuit "Circuit" {
+  firrtl.module @M1(%x : !firrtl.uint<8>,
+                    %y : !firrtl.flip<uint<8>>,
+                    %z : i8) {
+    %c42 = rtl.constant (42 : i8) : i8
+    %c5 = rtl.constant (5 : i8) : i8
+    %a = rtl.add %z, %c42 : i8
+    %b = rtl.mul %a, %c5 : i8
+    %c = firrtl.stdIntCast %b : (i8) -> !firrtl.uint<8>
+    firrtl.connect %y, %c : !firrtl.flip<uint<8>>, !firrtl.uint<8>
+
+    %d = rtl.mul %z, %z : i8
+    %e = rtl.concat %d, %z, %d : (i8, i8, i8) -> i8
+    %f = firrtl.stdIntCast %e : (i8) -> !firrtl.uint<8>
+    firrtl.connect %y, %f : !firrtl.flip<uint<8>>, !firrtl.uint<8>
+  }
+
+  // CHECK-LABEL: module M1(
+  // CHECK-NEXT:    input  [7:0] x,
+  // CHECK-NEXT:    output [7:0] y,
+  // CHECK-NEXT:    input  [7:0] z);
+  // CHECK-EMPTY:
+  // CHECK-NEXT:    assign y = (z + 8'h2A) * 8'h5;
+  // CHECK-NEXT:    wire [7:0] _T = z * z;
+  // CHECK-NEXT:    assign y = {_T, z, _T};
+  // CHECK-NEXT:  endmodule
+}

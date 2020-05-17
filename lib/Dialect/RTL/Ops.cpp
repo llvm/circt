@@ -3,12 +3,28 @@
 //===----------------------------------------------------------------------===//
 
 #include "cirt/Dialect/RTL/Ops.h"
+#include "cirt/Dialect/RTL/Visitors.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/StandardTypes.h"
 
 using namespace cirt;
 using namespace rtl;
+
+/// Return true if the specified operation is a combinatorial logic op.
+bool rtl::isCombinatorial(Operation *op) {
+  struct IsCombClassifier
+      : public CombinatorialVisitor<IsCombClassifier, bool> {
+    bool visitInvalidComb(Operation *op) { return false; }
+    bool visitUnhandledComb(Operation *op) { return true; }
+  };
+
+  return IsCombClassifier().dispatchCombinatorialVisitor(op);
+}
+
+//===----------------------------------------------------------------------===//
+// ConstantOp
+//===----------------------------------------------------------------------===//
 
 static LogicalResult verify(ConstantOp constant) {
   // If the result type has a bitwidth, then the attribute must match its width.

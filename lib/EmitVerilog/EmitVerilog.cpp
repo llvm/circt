@@ -6,8 +6,9 @@
 
 #include "cirt/EmitVerilog.h"
 #include "cirt/Dialect/FIRRTL/Visitors.h"
+#include "cirt/Dialect/RTL/Ops.h"
+#include "cirt/Dialect/RTL/Visitors.h"
 #include "cirt/Support/LLVM.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Module.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Translation.h"
@@ -34,11 +35,9 @@ static llvm::ManagedStatic<StringSet<>> reservedWordCache;
 //===----------------------------------------------------------------------===//
 
 static bool isVerilogExpression(Operation *op) {
-  // All FIRRTL expressions are also Verilog expressions.
-  if (isExpression(op))
-    return true;
-  // The standard ConstantIntOp is an expression as well.
-  return isa<mlir::ConstantIntOp>(op);
+  // All FIRRTL expressions and RTL combinatorial logic ops are Verilog
+  // expressions.
+  return isExpression(op) || rtl::isCombinatorial(op);
 }
 
 /// Return the width of the specified FIRRTL type in bits or -1 if it isn't
@@ -673,7 +672,8 @@ namespace {
 /// we emit the characters to a SmallVector which allows us to emit a bunch of
 /// stuff, then pre-insert parentheses and other things if we find out that it
 /// was needed later.
-class ExprEmitter : public ExprVisitor<ExprEmitter, SubExprInfo> {
+class ExprEmitter : public ExprVisitor<ExprEmitter, SubExprInfo>,
+                    public rtl::CombinatorialVisitor<ExprEmitter, SubExprInfo> {
 public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
   /// of any emitted expressions in the specified set.
@@ -685,6 +685,7 @@ public:
   /// Emit the specified expression and return it as a string.
   std::string emitExpressionToString(Value exp, VerilogPrecedence precedence);
   friend class ExprVisitor;
+  friend class CombinatorialVisitor;
 
   /// Do a best-effort job of looking through noop cast operations.
   Value lookThroughNoopCasts(Value value) {
@@ -702,11 +703,16 @@ private:
                           bool forceExpectedSign = false);
 
   SubExprInfo visitUnhandledExpr(Operation *op);
-  SubExprInfo visitInvalidExpr(Operation *op);
+  SubExprInfo visitInvalidExpr(Operation *op) {
+    return dispatchCombinatorialVisitor(op);
+  }
+  SubExprInfo visitInvalidComb(Operation *op) { return visitUnhandledExpr(op); }
+  SubExprInfo visitUnhandledComb(Operation *op) {
+    return visitUnhandledExpr(op);
+  }
 
   using ExprVisitor::visitExpr;
   SubExprInfo visitExpr(firrtl::ConstantOp op);
-  SubExprInfo visitExpr(mlir::ConstantIntOp op);
 
   /// Emit a verilog concatenation of the specified values.  If the before or
   /// after strings are specified, they are included as prefix/postfix elements
@@ -719,35 +725,7 @@ private:
   SubExprInfo emitBitSelect(Value operand, unsigned hiBit, unsigned loBit);
 
   SubExprInfo emitBinary(Operation *op, VerilogPrecedence prec,
-                         const char *syntax, bool hasStrictSign = false) {
-    auto lhsInfo = emitSubExpr(op->getOperand(0), prec, hasStrictSign);
-    os << ' ' << syntax << ' ';
-
-    // The precedence of the RHS operand must be tighter than this operator if
-    // they have a different opcode in order to handle things like "x-(a+b)".
-    // This isn't needed on the LHS, because the relevant Verilog operators are
-    // left-associative.
-    //
-    auto *rhsOperandOp =
-        lookThroughNoopCasts(op->getOperand(1)).getDefiningOp();
-    auto rhsPrec = VerilogPrecedence(prec - 1);
-    if (rhsOperandOp && op->getName() == rhsOperandOp->getName())
-      rhsPrec = prec;
-
-    auto rhsInfo = emitSubExpr(op->getOperand(1), rhsPrec, hasStrictSign);
-
-    // If we have a strict sign, then match the firrtl operation sign.
-    // Otherwise, the result is signed if both operands are signed.
-    SubExprSignedness signedness;
-    if (hasStrictSign)
-      signedness = getSignednessOf(op->getResult(0).getType());
-    else if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
-      signedness = IsSigned;
-    else
-      signedness = IsUnsigned;
-
-    return {prec, signedness};
-  }
+                         const char *syntax, bool hasStrictSign = false);
 
   /// Emit the specified subexpression in a context where the sign matters,
   /// e.g. for a less than comparison or divide.
@@ -841,6 +819,20 @@ private:
   // Conversion to/from standard integer types is a noop.
   SubExprInfo visitExpr(StdIntCast op) { return emitNoopCast(op); }
 
+  // RTL Dialect Operations
+  using CombinatorialVisitor::visitComb;
+  SubExprInfo visitComb(rtl::ConstantOp op);
+  SubExprInfo visitComb(rtl::AddOp op) { return emitBinary(op, Addition, "+"); }
+  SubExprInfo visitComb(rtl::SubOp op) { return emitBinary(op, Addition, "-"); }
+  SubExprInfo visitComb(rtl::MulOp op) { return emitBinary(op, Multiply, "*"); }
+  SubExprInfo visitComb(rtl::DivOp op) {
+    return emitSignedBinary(op, Multiply, "/");
+  }
+  SubExprInfo visitComb(rtl::AndOp op) { return emitBinary(op, And, "&"); }
+  SubExprInfo visitComb(rtl::OrOp op) { return emitBinary(op, Or, "|"); }
+  SubExprInfo visitComb(rtl::XorOp op) { return emitBinary(op, Xor, "^"); }
+  SubExprInfo visitComb(rtl::ConcatOp op);
+
 private:
   SmallPtrSet<Operation *, 8> &emittedExprs;
   SmallString<128> resultBuffer;
@@ -867,6 +859,36 @@ std::string ExprEmitter::emitExpressionToString(Value exp,
                                                 VerilogPrecedence precedence) {
   emitSubExpr(exp, precedence);
   return std::string(resultBuffer.begin(), resultBuffer.end());
+}
+
+SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
+                                    const char *syntax, bool hasStrictSign) {
+  auto lhsInfo = emitSubExpr(op->getOperand(0), prec, hasStrictSign);
+  os << ' ' << syntax << ' ';
+
+  // The precedence of the RHS operand must be tighter than this operator if
+  // they have a different opcode in order to handle things like "x-(a+b)".
+  // This isn't needed on the LHS, because the relevant Verilog operators are
+  // left-associative.
+  //
+  auto *rhsOperandOp = lookThroughNoopCasts(op->getOperand(1)).getDefiningOp();
+  auto rhsPrec = VerilogPrecedence(prec - 1);
+  if (rhsOperandOp && op->getName() == rhsOperandOp->getName())
+    rhsPrec = prec;
+
+  auto rhsInfo = emitSubExpr(op->getOperand(1), rhsPrec, hasStrictSign);
+
+  // If we have a strict sign, then match the firrtl operation sign.
+  // Otherwise, the result is signed if both operands are signed.
+  SubExprSignedness signedness;
+  if (hasStrictSign)
+    signedness = getSignednessOf(op->getResult(0).getType());
+  else if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
+    signedness = IsSigned;
+  else
+    signedness = IsUnsigned;
+
+  return {prec, signedness};
 }
 
 /// Emit the specified value as a subexpression to the stream.
@@ -967,6 +989,15 @@ SubExprInfo ExprEmitter::emitCat(ArrayRef<Value> values, StringRef before,
   return {Unary, IsUnsigned};
 }
 
+SubExprInfo ExprEmitter::visitComb(rtl::ConcatOp op) {
+  os << '{';
+  llvm::interleaveComma(op.getOperands(), os,
+                        [&](Value v) { emitSubExpr(v, LowestPrecedence); });
+
+  os << '}';
+  return {Unary, IsUnsigned};
+}
+
 /// Emit a verilog bit selection operation like x[4:0], the bit numbers are
 /// inclusive like verilog.
 ///
@@ -1001,7 +1032,7 @@ SubExprInfo ExprEmitter::visitExpr(firrtl::ConstantOp op) {
   return {Unary, resType.isSigned() ? IsSigned : IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitExpr(mlir::ConstantIntOp op) {
+SubExprInfo ExprEmitter::visitComb(rtl::ConstantOp op) {
   auto resType = op.getType().cast<IntegerType>();
   os << resType.getWidth() << '\'';
   if (resType.isSigned())
@@ -1126,14 +1157,6 @@ SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
   return {Symbol, IsUnsigned};
 }
 
-// This handles dispatching to non-FIRRTL operations.
-SubExprInfo ExprEmitter::visitInvalidExpr(Operation *op) {
-  if (auto cst = dyn_cast<mlir::ConstantIntOp>(op))
-    return visitExpr(cst);
-
-  return visitUnhandledExpr(op);
-}
-
 //===----------------------------------------------------------------------===//
 // Statements
 //===----------------------------------------------------------------------===//
@@ -1164,7 +1187,7 @@ void ModuleEmitter::emitStatementExpression(Operation *op) {
   if (op->getResult(0).use_empty()) {
     indent() << "// Unused: ";
   } else if (emitInlineWireDecls) {
-    auto type = op->getResult(0).getType().cast<FIRRTLType>();
+    auto type = op->getResult(0).getType();
     indent() << "wire ";
 
     if (getBitWidthOrSentinel(type) != 1) {
@@ -1586,7 +1609,7 @@ static bool isExpressionUnableToInline(Operation *op) {
 
 /// Return true for operations that are always inlined.
 static bool isExpressionAlwaysInline(Operation *op) {
-  if (isa<firrtl::ConstantOp>(op) || isa<mlir::ConstantIntOp>(op) ||
+  if (isa<firrtl::ConstantOp>(op) || isa<rtl::ConstantOp>(op) ||
       isa<SubfieldOp>(op))
     return true;
 

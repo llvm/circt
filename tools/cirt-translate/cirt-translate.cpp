@@ -6,6 +6,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "cirt/Dialect/FIRRTL/Dialect.h"
+#include "cirt/Dialect/RTL/Dialect.h"
 #include "cirt/EmitVerilog.h"
 #include "cirt/FIRParser.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
@@ -47,6 +48,9 @@ int main(int argc, char **argv) {
   registerAsmPrinterCLOptions();
   registerMLIRContextCLOptions();
   registerDialect<StandardOpsDialect>();
+
+  // RTL.
+  registerDialect<rtl::RTLDialect>();
 
   // Register FIRRTL stuff.
   registerDialect<firrtl::FIRRTLDialect>();

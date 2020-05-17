@@ -18,6 +18,10 @@ def ConstantOp : RTLOp<"constant", [NoSideEffect, ConstantLike,
   let arguments = (ins APIntAttr:$value);
   let results = (outs AnySignlessInteger:$result);
   
+  // FIXME(QoI): Instead of requiring "rtl.constant (42: i8) : i8", we should
+  // just use "rtl.constant 42: i8".  This can be done with a custom printer and
+  // parser, but would be better to be autoderived from the
+  // FirstAttrDerivedResultType trait.
   let assemblyFormat = [{
      `(` $value `)` attr-dict `:` type($result)
   }];
@@ -54,10 +58,15 @@ class UTBinRTLOp<string mnemonic, list<OpTrait> traits = []> :
   }];
 }
 
+// Arithmetic and Logical Binary Operations.
 def AddOp : UTBinRTLOp<"add", [Commutative]>;
 def SubOp : UTBinRTLOp<"sub">;
 def MulOp : UTBinRTLOp<"mul", [Commutative]>;
 def DivOp : UTBinRTLOp<"div">;
+def RemOp : UTBinRTLOp<"rem">;
+def AndOp : UTBinRTLOp<"and", [Commutative]>;
+def OrOp  : UTBinRTLOp<"or",  [Commutative]>;
+def XorOp : UTBinRTLOp<"xor", [Commutative]>;
 
 //===----------------------------------------------------------------------===//
 // Other Operations
