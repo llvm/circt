@@ -12,6 +12,8 @@ def ClockType : Type<CPred<"$_self.isa<ClockType>()">, "clock">,
                 BuildableType<"ClockType::get($_builder.getContext())">;
 
 def IntType : Type<CPred<"$_self.isa<IntType>()">, "sint or uint type">;
+def SIntType : Type<CPred<"$_self.isa<SIntType>()">, "sint type">;
+def UIntType : Type<CPred<"$_self.isa<UIntType>()">, "uint type">;
 
 def UInt1Type : Type<CPred<"$_self.isa<UIntType>() && "
                            "$_self.cast<UIntType>().getWidth() == 1">,

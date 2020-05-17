@@ -5,17 +5,20 @@ firrtl.circuit "Circuit" {
                     %y : !firrtl.flip<uint<8>>) {
     firrtl.connect %y, %x : !firrtl.flip<uint<8>>, !firrtl.uint<8>
   }
-  // CHECK: module M1(
-  // CHECK:   input  [7:0] y,
-  // CHECK:   output [7:0] y_0);
-  // CHECK:   assign y_0 = y;
-  // CHECK: endmodule
+  // CHECK-LABEL: module M1(
+  // CHECK-NEXT:    input  [7:0] y,
+  // CHECK-NEXT:    output [7:0] y_0);
+  // CHECK-EMPTY:
+  // CHECK-NEXT:    assign y_0 = y;
+  // CHECK-NEXT:  endmodule
 
   firrtl.module @M2(%in : !firrtl.uint<8> { firrtl.name = "some name"},
                     %out : !firrtl.uint<7> { firrtl.name = "88^42"}) {
   }
-  // CHECK: module M2(
-  // CHECK:   input [7:0] some_name,
-  // CHECK:   input [6:0] _885E42);
-  // CHECK: endmodule
+  // CHECK-LABEL: module M2(
+  // CHECK-NEXT:    input [7:0] some_name,
+  // CHECK-NEXT:    input [6:0] _885E42);
+  // CHECK-EMPTY:
+  // CHECK-NEXT:  endmodule
+
 }

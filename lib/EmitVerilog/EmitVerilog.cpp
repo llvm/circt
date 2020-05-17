@@ -8,6 +8,7 @@
 #include "cirt/Dialect/FIRRTL/Visitors.h"
 #include "cirt/Support/LLVM.h"
 #include "mlir/IR/Module.h"
+#include "mlir/IR/StandardTypes.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/Support/raw_ostream.h"
@@ -33,8 +34,16 @@ static llvm::ManagedStatic<StringSet<>> reservedWordCache;
 
 /// Return the width of the specified FIRRTL type in bits or -1 if it isn't
 /// supported.
-static int getBitWidthOrSentinel(FIRRTLType type) {
-  switch (type.getKind()) {
+static int getBitWidthOrSentinel(Type type) {
+  // This handles integer type and FIRRTL types.
+  if (auto intType = type.dyn_cast<IntegerType>())
+    return intType.getWidth();
+
+  auto ftype = type.dyn_cast<FIRRTLType>();
+  if (!ftype)
+    return -1;
+
+  switch (ftype.getKind()) {
   case FIRRTLType::Clock:
   case FIRRTLType::Reset:
   case FIRRTLType::AsyncReset:
@@ -107,7 +116,7 @@ static bool isNoopCast(Operation *op) {
 /// This represents a flattened bundle field element.
 struct FlatBundleFieldEntry {
   /// This is the underlying ground type of the field.
-  FIRRTLType type;
+  Type type;
   /// This is a suffix to add to the field name to make it unique.
   std::string suffix;
   /// This indicates whether the field was flipped to be an output.
@@ -116,8 +125,7 @@ struct FlatBundleFieldEntry {
 
 /// Convert a nested bundle of fields into a flat list of fields.  This is used
 /// when working with instances and mems to flatten them.
-static void flattenBundleTypes(FIRRTLType type, StringRef suffixSoFar,
-                               bool isFlipped,
+static void flattenBundleTypes(Type type, StringRef suffixSoFar, bool isFlipped,
                                SmallVectorImpl<FlatBundleFieldEntry> &results) {
   if (auto flip = type.dyn_cast<FlipType>())
     return flattenBundleTypes(flip.getElementType(), suffixSoFar, !isFlipped,
@@ -228,7 +236,7 @@ public:
 
   /// Emit the verilog type for the specified ground type, padding the text to
   /// the specified number of characters.
-  void emitTypePaddedToWidth(FIRRTLType type, size_t padToWidth, Operation *op);
+  void emitTypePaddedToWidth(Type type, size_t padToWidth, Operation *op);
 
   // All of the mutable state we are maintaining.
   VerilogEmitterState &state;
@@ -243,8 +251,7 @@ private:
 
 } // end anonymous namespace
 
-void VerilogEmitterBase::emitTypePaddedToWidth(FIRRTLType type,
-                                               size_t padToWidth,
+void VerilogEmitterBase::emitTypePaddedToWidth(Type type, size_t padToWidth,
                                                Operation *op) {
   int bitWidth = getBitWidthOrSentinel(type);
   assert(bitWidth != 0 && "Shouldn't emit zero bit declarations");
@@ -1627,9 +1634,8 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
         std::max(getVerilogDeclWord(&op).size(), maxDeclNameWidth);
 
     // Flatten the type for processing of each individual element.
-    auto type = result.getType().cast<FIRRTLType>();
     fieldTypes.clear();
-    flattenBundleTypes(type, "", false, fieldTypes);
+    flattenBundleTypes(result.getType(), "", false, fieldTypes);
 
     // Handle the reg declaration for a memory specially.
     if (auto memOp = dyn_cast<MemOp>(&op))
@@ -1667,9 +1673,8 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     auto word = getVerilogDeclWord(decl);
 
     // Flatten the type for processing of each individual element.
-    auto type = decl->getResult(0).getType().cast<FIRRTLType>();
     fieldTypes.clear();
-    flattenBundleTypes(type, "", false, fieldTypes);
+    flattenBundleTypes(decl->getResult(0).getType(), "", false, fieldTypes);
 
     bool isFirst = true;
     for (const auto &elt : fieldTypes) {

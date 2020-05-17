@@ -26,7 +26,7 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
               "IntType type, const APInt &value">
   ];
   let hasFolder = 1;
-  let verifier = [{ return ::verify(*this); }];
+  let verifier = [{ return ::verifyConstantOp(*this); }];
 }
 
 def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
@@ -221,7 +221,6 @@ def XorRPrimOp         : UnaryPrimOp<"xorr", "getReductionResult">;
 // This is an MLIR specific pseudo op.
 def AsPassivePrimOp    : UnaryPrimOp<"asPassive", "getAsPassiveResult">;
 
-
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
@@ -386,4 +385,21 @@ def TailPrimOp : PrimOp<"tail"> {
       return getResultType(inputs[0], integers[0]);
     }
   }];
+}
+
+//===----------------------------------------------------------------------===//
+// Conversions to/from fixed-width signless integer types in standard dialect.
+//===----------------------------------------------------------------------===//
+
+// This operation converts from an SInt/UInt to a signless integer type, or
+// visa-versa.
+def StdIntCast : FIRRTLOp<"stdIntCast", [NoSideEffect]> {
+  let arguments = (ins AnyType:$input);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    $input attr-dict `:` functional-type($input, $result)
+  }];
+
+  let verifier = [{ return ::verifyStdIntCast(*this); }];
 }
