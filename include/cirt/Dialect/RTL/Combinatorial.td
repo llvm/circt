@@ -1,6 +1,6 @@
-//===- OpExpressions.td - RTL expression ops ---------------*- tablegen -*-===//
+//===- Combinatorial.td - RTL combinatorial logic ops ------*- tablegen -*-===//
 //
-// This describes the MLIR ops for RTL expressions.
+// This describes the MLIR ops for combinatorial logic.
 //
 //===----------------------------------------------------------------------===//
 

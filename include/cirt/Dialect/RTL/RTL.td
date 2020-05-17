@@ -26,6 +26,6 @@ def RTLDialect : Dialect {
 class RTLOp<string mnemonic, list<OpTrait> traits = []> :
     Op<RTLDialect, mnemonic, traits>;
 
-include "RTLExpressions.td"
+include "Combinatorial.td"
 
 #endif // RTL_TD
