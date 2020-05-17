@@ -34,18 +34,42 @@ def ConstantOp : RTLOp<"constant", [NoSideEffect, ConstantLike,
 //===----------------------------------------------------------------------===//
 
 // Base class for binary operators.
-class BinOp<string mnemonic, list<OpTrait> traits = []> :
-    RTLOp<mnemonic,
-          !listconcat(traits, [SameTypeOperands, SameOperandsAndResultType])> {
+class BinRTLOp<string mnemonic, list<OpTrait> traits = []> :
+      RTLOp<mnemonic, !listconcat(traits, [NoSideEffect])> {
   let arguments = (ins AnySignlessInteger:$lhs, AnySignlessInteger:$rhs);
   let results = (outs AnySignlessInteger:$result);
 
   let assemblyFormat = [{
+    $lhs `,` $rhs  attr-dict `:` functional-type($args, results)
+  }];
+}
+
+// Binary operator with uniform input/result types.
+class UTBinRTLOp<string mnemonic, list<OpTrait> traits = []> :
+      BinRTLOp<mnemonic,
+               !listconcat(traits,
+                           [SameTypeOperands, SameOperandsAndResultType])> {
+   let assemblyFormat = [{
     $lhs `,` $rhs  attr-dict `:` type($result)
   }];
 }
 
-def AddOp : BinOp<"add", [Commutative]>;
-def SubOp : BinOp<"sub", []>;
-def MulOp : BinOp<"mul", [Commutative]>;
-def DivOp : BinOp<"div", []>;
+def AddOp : UTBinRTLOp<"add", [Commutative]>;
+def SubOp : UTBinRTLOp<"sub">;
+def MulOp : UTBinRTLOp<"mul", [Commutative]>;
+def DivOp : UTBinRTLOp<"div">;
+
+//===----------------------------------------------------------------------===//
+// Other Operations
+//===----------------------------------------------------------------------===//
+
+def ConcatOp : RTLOp<"concat", [NoSideEffect]> {
+  let summary = "Concatenate a variadic list of operands together.";
+
+  let arguments = (ins Variadic<AnySignlessInteger>:$inputs);
+  let results = (outs AnySignlessInteger:$result);
+
+  let assemblyFormat = [{
+    $inputs attr-dict `:` functional-type($inputs, results)
+  }];
+}
