@@ -1,11 +1,11 @@
-//===- FIRRTL/IR/Visitors.h - FIRRTL Dialect Visitors -----------*- C++ -*-===//
+//===- FIRRTL/Visitors.h - FIRRTL Dialect Visitors --------------*- C++ -*-===//
 //
 // This file defines visitors that make it easier to work with FIRRTL IR.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRT_DIALECT_FIRRTL_IR_VISITORS_H
-#define CIRT_DIALECT_FIRRTL_IR_VISITORS_H
+#ifndef CIRT_DIALECT_FIRRTL_VISITORS_H
+#define CIRT_DIALECT_FIRRTL_VISITORS_H
 
 #include "cirt/Dialect/FIRRTL/Ops.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -229,4 +229,4 @@ public:
 } // namespace firrtl
 } // namespace cirt
 
-#endif // CIRT_DIALECT_FIRRTL_IR_VISITORS_H
+#endif // CIRT_DIALECT_FIRRTL_VISITORS_H
