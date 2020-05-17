@@ -43,15 +43,10 @@ static bool isVerilogExpression(Operation *op) {
 /// Return the width of the specified FIRRTL type in bits or -1 if it isn't
 /// supported.
 static int getBitWidthOrSentinel(Type type) {
-  // This handles integer type and FIRRTL types.
-  if (auto intType = type.dyn_cast<IntegerType>())
-    return intType.getWidth();
+  switch (type.getKind()) {
+  case StandardTypes::Integer:
+    return type.cast<IntegerType>().getWidth();
 
-  auto ftype = type.dyn_cast<FIRRTLType>();
-  if (!ftype)
-    return -1;
-
-  switch (ftype.getKind()) {
   case FIRRTLType::Clock:
   case FIRRTLType::Reset:
   case FIRRTLType::AsyncReset:
@@ -652,6 +647,8 @@ static SubExprSignedness getSignednessOf(Type type) {
   switch (type.getKind()) {
   default:
     assert(0 && "unsupported type");
+  case StandardTypes::Integer:
+    return type.cast<IntegerType>().isSigned() ? IsSigned : IsUnsigned;
   case FIRRTLType::Flip:
     return getSignednessOf(type.cast<FlipType>().getElementType());
   case FIRRTLType::Clock:
@@ -827,6 +824,9 @@ private:
   SubExprInfo visitComb(rtl::MulOp op) { return emitBinary(op, Multiply, "*"); }
   SubExprInfo visitComb(rtl::DivOp op) {
     return emitSignedBinary(op, Multiply, "/");
+  }
+  SubExprInfo visitComb(rtl::ModOp op) {
+    return emitSignedBinary(op, Multiply, "%");
   }
   SubExprInfo visitComb(rtl::AndOp op) { return emitBinary(op, And, "&"); }
   SubExprInfo visitComb(rtl::OrOp op) { return emitBinary(op, Or, "|"); }

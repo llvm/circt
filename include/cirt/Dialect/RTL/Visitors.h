@@ -23,7 +23,7 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<ConstantOp,
                        // Arithmetic and Logical Binary Operations.
-                       AddOp, SubOp, MulOp, DivOp, RemOp, AndOp, OrOp, XorOp,
+                       AddOp, SubOp, MulOp, DivOp, ModOp, AndOp, OrOp, XorOp,
                        // Other operations.
                        ConcatOp>([&](auto expr) -> ResultType {
           return thisCast->visitComb(expr, args...);
@@ -65,7 +65,7 @@ public:
   HANDLE(SubOp, Binary);
   HANDLE(MulOp, Binary);
   HANDLE(DivOp, Binary);
-  HANDLE(RemOp, Binary);
+  HANDLE(ModOp, Binary);
   HANDLE(AndOp, Binary);
   HANDLE(OrOp, Binary);
   HANDLE(XorOp, Binary);

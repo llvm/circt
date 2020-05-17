@@ -12,9 +12,10 @@ firrtl.circuit "Circuit" {
     firrtl.connect %y, %c : !firrtl.flip<uint<8>>, !firrtl.uint<8>
 
     %d = rtl.mul %z, %z : i8
-    %e = rtl.concat %d, %z, %d : (i8, i8, i8) -> i8
-    %f = firrtl.stdIntCast %e : (i8) -> !firrtl.uint<8>
-    firrtl.connect %y, %f : !firrtl.flip<uint<8>>, !firrtl.uint<8>
+    %e = rtl.mod %d, %c5 : i8
+    %f = rtl.concat %e, %z, %d : (i8, i8, i8) -> i8
+    %g = firrtl.stdIntCast %f : (i8) -> !firrtl.uint<8>
+    firrtl.connect %y, %g : !firrtl.flip<uint<8>>, !firrtl.uint<8>
   }
 
   // CHECK-LABEL: module M1(
@@ -24,6 +25,6 @@ firrtl.circuit "Circuit" {
   // CHECK-EMPTY:
   // CHECK-NEXT:    assign y = (z + 8'h2A) * 8'h5;
   // CHECK-NEXT:    wire [7:0] _T = z * z;
-  // CHECK-NEXT:    assign y = {_T, z, _T};
+  // CHECK-NEXT:    assign y = {_T % 8'h5, z, _T};
   // CHECK-NEXT:  endmodule
 }

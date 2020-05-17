@@ -63,7 +63,7 @@ def AddOp : UTBinRTLOp<"add", [Commutative]>;
 def SubOp : UTBinRTLOp<"sub">;
 def MulOp : UTBinRTLOp<"mul", [Commutative]>;
 def DivOp : UTBinRTLOp<"div">;
-def RemOp : UTBinRTLOp<"rem">;
+def ModOp : UTBinRTLOp<"mod">;
 def AndOp : UTBinRTLOp<"and", [Commutative]>;
 def OrOp  : UTBinRTLOp<"or",  [Commutative]>;
 def XorOp : UTBinRTLOp<"xor", [Commutative]>;
