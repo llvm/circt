@@ -8,6 +8,7 @@
 #define CIRT_DIALECT_RTL_OPS_H
 
 #include "cirt/Dialect/RTL/Dialect.h"
+#include "mlir/IR/OpImplementation.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 namespace cirt {

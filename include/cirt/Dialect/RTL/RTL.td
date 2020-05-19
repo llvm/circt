@@ -9,6 +9,7 @@
 
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/IR/OpAsmInterface.td"
 
 def RTLDialect : Dialect {
   let name = "rtl";

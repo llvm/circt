@@ -9,9 +9,9 @@ func @test1() -> i36 {
 }
 
 // CHECK-LABEL: func @test1() -> i36 {
-// CHECK-NEXT:    %0 = rtl.constant(42 : i12) : i12
-// CHECK-NEXT:    %1 = rtl.add %0, %0 : i12
-// CHECK-NEXT:    %2 = rtl.mul %0, %1 : i12
-// CHECK-NEXT:    %3 = rtl.concat %0, %1, %2 : (i12, i12, i12) -> i36
-// CHECK-NEXT:    return %3 : i36
+// CHECK-NEXT:    %c42_i12 = rtl.constant(42 : i12) : i12
+// CHECK-NEXT:    %0 = rtl.add %c42_i12, %c42_i12 : i12
+// CHECK-NEXT:    %1 = rtl.mul %c42_i12, %0 : i12
+// CHECK-NEXT:    %2 = rtl.concat %c42_i12, %0, %1 : (i12, i12, i12) -> i36
+// CHECK-NEXT:    return %2 : i36
 // CHECK-NEXT:  }

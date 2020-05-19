@@ -4,8 +4,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-def ConstantOp : RTLOp<"constant", [NoSideEffect, ConstantLike,
-                                    FirstAttrDerivedResultType]> {
+def ConstantOp
+ : RTLOp<"constant",
+          [NoSideEffect, ConstantLike, FirstAttrDerivedResultType,
+           DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let summary = "Produce a constant value";
   let description = [{
     The constant operation produces a constant value of standard integer type
@@ -29,8 +31,11 @@ def ConstantOp : RTLOp<"constant", [NoSideEffect, ConstantLike,
   let builders = [
     OpBuilder<"OpBuilder &builder, OperationState &result, const APInt &value">
   ];
+  let extraClassDeclaration = [{
+    APInt getValue() { return getAttrOfType<IntegerAttr>("value").getValue(); }
+  }];
   let hasFolder = 1;
-  let verifier = [{ return ::verify(*this); }];
+  let verifier = [{ return ::verifyConstantOp(*this); }];
 }
 
 //===----------------------------------------------------------------------===//

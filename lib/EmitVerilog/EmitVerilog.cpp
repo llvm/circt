@@ -1039,9 +1039,8 @@ SubExprInfo ExprEmitter::visitComb(rtl::ConstantOp op) {
     os << 's';
   os << 'h';
 
-  auto valueAttr = op.getAttrOfType<IntegerAttr>("value");
   SmallString<32> valueStr;
-  valueAttr.getValue().toStringUnsigned(valueStr, 16);
+  op.getValue().toStringUnsigned(valueStr, 16);
   os << valueStr;
   return {Unary, resType.isSigned() ? IsSigned : IsUnsigned};
 }
