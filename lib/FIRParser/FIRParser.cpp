@@ -1052,10 +1052,9 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
     return failure();
   }
 
-  SmallVector<NamedAttribute, 2> attrs;
+  NamedAttrList attrs;
   for (size_t i = 0, e = attrNames.size(); i != e; ++i)
-    attrs.push_back(builder.getNamedAttr(
-        attrNames[i], builder.getI32IntegerAttr(integers[i])));
+    attrs.append(attrNames[i], builder.getI32IntegerAttr(integers[i]));
 
   switch (kind) {
   default:
@@ -2085,7 +2084,7 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
       return failure();
   }
 
-  SmallVector<NamedAttribute, 4> parameters;
+  NamedAttrList parameters;
   SmallPtrSet<Identifier, 8> seenNames;
 
   // Parse the parameter list.
@@ -2130,7 +2129,7 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
     auto nameId = builder.getIdentifier(paramName);
     if (!seenNames.insert(nameId).second)
       return emitError(loc, "redefinition of parameter '" + paramName + "'");
-    parameters.push_back({nameId, value});
+    parameters.append(nameId, value);
   }
 
   auto fmodule =
