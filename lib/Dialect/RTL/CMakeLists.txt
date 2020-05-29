@@ -8,8 +8,10 @@ add_mlir_dialect_library(MLIRRTL
   DEPENDS
   MLIRRTLIncGen
 
+  LINK_COMPONENTS
+  Support
+
   LINK_LIBS PUBLIC
-  LLVMSupport
    )
 
 add_dependencies(mlir-headers MLIRRTLIncGen)

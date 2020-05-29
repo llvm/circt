@@ -68,9 +68,26 @@ $ ninja check-mlir
 $ ninja check-cirt
 ```
 
+7) Optionally configure your environment:
+
+It is useful to add the .../llvm-project/build/bin directory to the end
+of your PATH, allowing you to use the tools like cirt-opt in a natural way on
+the command line.  Similarly, you need to be in the build directory to invoke
+ninja, which is super annoying.  You might find a bash/zsh alias like this to
+be useful:
+
+```bash
+build() {
+  (cd $HOME/Projects/llvm-project/build/; ninja $1 $2 $3)
+}
+```
+
+This allows you to invoke `build check-cirt` from any directory and have it do
+the right thing.
+
 ## Submitting changes to CIRT
 
-Talk to Chris.
+The project is small so there is no formal process yet. just talk to Chris :-) PR's should also work.
 
 ## Submitting changes to LLVM / MLIR
 
@@ -79,7 +96,7 @@ To get set up for this:
 
 1) Follow the "[How to Contribute](https://mlir.llvm.org/getting_started/Contributing/)" instructions, and install the right tools, e.g. 'arcanist' and `clang-format`.
  2) Get an LLVM Phabricator account
- 3)  [ask for LLVM commit access](https://llvm.org/docs/DeveloperPolicy.html#obtaining-commit-access).
+ 3) [Ask for LLVM commit access](https://llvm.org/docs/DeveloperPolicy.html#obtaining-commit-access), the barrier is low.
 
 ### Submitting a patch
 

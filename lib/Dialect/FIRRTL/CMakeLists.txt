@@ -9,8 +9,10 @@ add_mlir_dialect_library(MLIRFIRRTL
   MLIRFIRRTLIncGen
   MLIRFIRRTLEnumsIncGen
 
+  LINK_COMPONENTS
+  Support
+
   LINK_LIBS PUBLIC
-  LLVMSupport
    )
 
 add_dependencies(mlir-headers MLIRFIRRTLIncGen MLIRFIRRTLEnumsIncGen)
