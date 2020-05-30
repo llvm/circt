@@ -1,4 +1,4 @@
-// RUN: cirt-opt -lower-firrt-to-rtl %s | FileCheck %s
+// RUN: cirt-opt -lower-firrtl-to-rtl %s | FileCheck %s
 
 // CHECK-LABEL: firrtl.module @Constant
 firrtl.module @Constant() {

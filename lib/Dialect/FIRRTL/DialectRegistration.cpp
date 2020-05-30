@@ -14,8 +14,6 @@ static mlir::DialectRegistration<FIRRTLDialect> FIRRTLOps;
 
 /// Register all of the FIRRTL transformation passes with the PassManager.
 void cirt::firrtl::registerFIRRTLPasses() {
-  using namespace mlir;
-  registerPass(
-      "lower-firrt-to-rtl", "Lower FIRRTL to RTL",
-      []() -> std::unique_ptr<Pass> { return createLowerFIRRTLToRTLPass(); });
+#define GEN_PASS_REGISTRATION
+#include "cirt/Dialect/FIRRTL/FIRRTLPasses.h.inc"
 }

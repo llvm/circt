@@ -43,9 +43,11 @@ public:
 };
 } // end anonymous namespace
 
+#define GEN_PASS_CLASSES
+#include "cirt/Dialect/FIRRTL/FIRRTLPasses.h.inc"
+
 namespace {
-struct FIRRTLLowering
-    : public PassWrapper<FIRRTLLowering, OperationPass<FModuleOp>> {
+struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering> {
   /// Run the dialect converter on the FModule.
   void runOnOperation() override {
     OwningRewritePatternList patterns;
