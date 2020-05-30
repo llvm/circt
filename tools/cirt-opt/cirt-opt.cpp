@@ -72,6 +72,8 @@ int main(int argc, char **argv) {
 
   // Register our dialects.
   registerDialect<firrtl::FIRRTLDialect>();
+  firrtl::registerFIRRTLPasses();
+
   registerDialect<rtl::RTLDialect>();
 
   PassPipelineCLParser passPipeline("", "Compiler passes to run");

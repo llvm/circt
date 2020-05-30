@@ -4,8 +4,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRT_DIALECT_FIRRTL_IR_TYPES_H
-#define CIRT_DIALECT_FIRRTL_IR_TYPES_H
+#ifndef CIRT_DIALECT_FIRRTL_TYPES_H
+#define CIRT_DIALECT_FIRRTL_TYPES_H
 
 #include "mlir/IR/Types.h"
 
@@ -291,4 +291,4 @@ struct DenseMapInfo<cirt::firrtl::FIRRTLType> {
 
 } // namespace llvm
 
-#endif // CIRT_DIALECT_FIRRTL_IR_TYPES_H
+#endif // CIRT_DIALECT_FIRRTL_TYPES_H
