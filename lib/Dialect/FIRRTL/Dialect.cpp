@@ -56,12 +56,7 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
       llvm::raw_svector_ostream specialName(specialNameBuffer);
       specialName << 'c';
       if (intTy) {
-        if (!intTy.isSigned() || !constant.value().isNegative())
-          constant.value().print(specialName, /*isSigned:*/ false);
-        else {
-          specialName << 'm';
-          (-constant.value()).print(specialName, /*isSigned:*/ false);
-        }
+        constant.value().print(specialName, /*isSigned:*/ intTy.isSigned());
 
         specialName << (intTy.isSigned() ? "_si" : "_ui");
         auto width = intTy.getWidthOrSentinel();

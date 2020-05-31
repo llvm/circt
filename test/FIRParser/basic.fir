@@ -123,7 +123,7 @@ circuit basic :     ; CHECK: firrtl.circuit "basic" {
     ; CHECK: firrtl.connect %auto
     auto <= add(UInt<10>(42), UInt<8>("hAB"))
 
-    ; CHECK: %cm85_si8 = firrtl.constant(-85 : si8) : !firrtl.sint<8>
+    ; CHECK: %c-85_si8 = firrtl.constant(-85 : si8) : !firrtl.sint<8>
     auto <= add(s8, SInt<8>("hAB"))
 
     ; CHECK: firrtl.when %reset {

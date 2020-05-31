@@ -174,7 +174,7 @@ firrtl.module @Pad(%in1u: !firrtl.uint<1>,
   %1 = firrtl.pad %c1_ui0, 4 : (!firrtl.uint<1>) -> !firrtl.uint<4>
   firrtl.connect %outu, %1 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
-  // CHECK: firrtl.connect %outs, %cm1_si4
+  // CHECK: firrtl.connect %outs, %c-1_si4
   %c1_si1 = firrtl.constant(-1 : si1) : !firrtl.sint<1>
   %2 = firrtl.pad %c1_si1, 4 : (!firrtl.sint<1>) -> !firrtl.sint<4>
   firrtl.connect %outs, %2 : !firrtl.flip<sint<4>>, !firrtl.sint<4>
