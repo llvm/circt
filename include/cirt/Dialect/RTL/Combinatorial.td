@@ -90,6 +90,7 @@ def SExtOp : RTLOp<"sext", [NoSideEffect]> {
   let verifier = [{ return ::verifyExtOp(*this); }];
 }
 
+// TODO: Should zext just be a concat with zeros?
 def ZExtOp : RTLOp<"zext", [NoSideEffect]> {
   let summary = "Zero extend an integer to a larger integer";
 
@@ -103,18 +104,7 @@ def ZExtOp : RTLOp<"zext", [NoSideEffect]> {
   let verifier = [{ return ::verifyExtOp(*this); }];
 }
 
-def TruncOp : RTLOp<"trunc", [NoSideEffect]> {
-  let summary = "Truncate an integer to a smaller integer";
-
-  let arguments = (ins AnySignlessInteger:$input);
-  let results = (outs AnySignlessInteger:$result);
-
-  let assemblyFormat = [{
-    $input attr-dict `:` type($input) `,` type($result)
-  }];
-
-  let verifier = [{ return ::verifyTruncOp(*this); }];
-}
+// TODO: Bit extract range, use it for trunc.
 
 def ConcatOp : RTLOp<"concat", [NoSideEffect]> {
   let summary = "Concatenate a variadic list of operands together.";

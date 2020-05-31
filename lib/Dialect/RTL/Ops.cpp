@@ -87,19 +87,6 @@ static LogicalResult verifyExtOp(Operation *op) {
   return success();
 }
 
-static LogicalResult verifyTruncOp(Operation *op) {
-  // The source must be bigger than the dest type. Both are already known to
-  // be signless integers.
-  auto srcType = op->getOperand(0).getType().cast<IntegerType>();
-  auto dstType = op->getResult(0).getType().cast<IntegerType>();
-  if (srcType.getWidth() <= dstType.getWidth()) {
-    op->emitError("rtl.trunc must reduce bitwidth of operand");
-    return failure();
-  }
-
-  return success();
-}
-
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
