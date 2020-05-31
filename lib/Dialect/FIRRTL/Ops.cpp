@@ -240,7 +240,8 @@ static void print(OpAsmPrinter &p, FModuleOp op) {
                   /*printBlockTerminators=*/false);
 }
 
-static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result) {
+static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
+                                  bool isExtModule = false) {
   using namespace mlir::impl;
 
   // TODO: Should refactor mlir::impl::parseFunctionLikeOp to allow these
@@ -319,14 +320,14 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result) {
           *body, entryArgs, entryArgs.empty() ? ArrayRef<Type>() : argTypes))
     return failure();
 
-  if (!body->empty())
+  if (!isExtModule)
     FModuleOp::ensureTerminator(*body, parser.getBuilder(), result.location);
   return success();
 }
 
 static ParseResult parseFExtModuleOp(OpAsmParser &parser,
                                      OperationState &result) {
-  return parseFModuleOp(parser, result);
+  return parseFModuleOp(parser, result, /*isExtModule:*/ true);
 }
 
 //===----------------------------------------------------------------------===//

@@ -57,3 +57,10 @@ firrtl.module @Mod2(%in : !firrtl.uint<8> { firrtl.name = "some name"},
 // CHECK:                           %out: !firrtl.flip<uint<8>>) {
 // CHECK-NEXT:    firrtl.connect %out, %some_name : !firrtl.flip<uint<8>>, !firrtl.uint<8>
 // CHECK-NEXT:  }
+
+
+// Modules may be completely empty.
+// CHECK-LABEL: firrtl.module @no_ports() {
+firrtl.module @no_ports() {
+}
+ 

@@ -6,10 +6,9 @@ func @test1(%arg0: i3) -> i50 {
   %c = rtl.mul %a, %b : i12
 
   %d = rtl.sext %arg0 : i3, i7
-  %e = rtl.zext %arg0 : i3, i15
-  %f = rtl.trunc %e : i15, i7
+  %e = rtl.zext %arg0 : i3, i7
 
-  %result = rtl.concat %a, %b, %c, %d, %f : (i12, i12, i12, i7, i7) -> i50
+  %result = rtl.concat %a, %b, %c, %d, %e : (i12, i12, i12, i7, i7) -> i50
   return %result : i50
 }
 
@@ -18,8 +17,7 @@ func @test1(%arg0: i3) -> i50 {
 // CHECK-NEXT:    %0 = rtl.add %c42_i12, %c42_i12 : i12
 // CHECK-NEXT:    %1 = rtl.mul %c42_i12, %0 : i12
 // CHECK-NEXT:    %2 = rtl.sext %arg0 : i3, i7
-// CHECK-NEXT:    %3 = rtl.zext %arg0 : i3, i15
-// CHECK-NEXT:    %4 = rtl.trunc %3 : i15, i7
-// CHECK-NEXT:    %5 = rtl.concat %c42_i12, %0, %1, %2, %4 : (i12, i12, i12, i7, i7) -> i50
-// CHECK-NEXT:    return %5 : i50
+// CHECK-NEXT:    %3 = rtl.zext %arg0 : i3, i7
+// CHECK-NEXT:    %4 = rtl.concat %c42_i12, %0, %1, %2, %3 : (i12, i12, i12, i7, i7) -> i50
+// CHECK-NEXT:    return %4 : i50
 // CHECK-NEXT:  }
