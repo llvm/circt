@@ -12,41 +12,6 @@ using namespace cirt;
 using namespace firrtl;
 using namespace rtl;
 
-static void lower(firrtl::ConstantOp op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) {
-  rewriter.replaceOpWithNewOp<rtl::ConstantOp>(op, op.value());
-}
-
-static void lower(firrtl::AddPrimOp op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) {
-  // FIXME: Not handling extensions correctly.
-  rewriter.replaceOpWithNewOp<rtl::AddOp>(op, operands[0], operands[1]);
-};
-
-static void lower(firrtl::SubPrimOp op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) {
-  // FIXME: Not handling extensions correctly.
-  rewriter.replaceOpWithNewOp<rtl::SubOp>(op, operands[0], operands[1]);
-}
-
-namespace {
-/// Utility class for operation conversions targeting that
-/// match exactly one source operation.
-template <typename OpTy>
-class RTLRewriter : public ConversionPattern {
-public:
-  RTLRewriter(MLIRContext *ctx)
-      : ConversionPattern(OpTy::getOperationName(), /*benefit*/ 1, ctx) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    lower(OpTy(op), operands, rewriter);
-    return success();
-  }
-};
-} // end anonymous namespace
-
 //===----------------------------------------------------------------------===//
 // RTLTypeConverter
 //===----------------------------------------------------------------------===//
@@ -60,7 +25,6 @@ public:
                                    ArrayRef<Value> inputs,
                                    Location loc) override;
 
-private:
   static Optional<Type> convertIntType(IntType type);
 };
 } // end anonymous namespace
@@ -84,6 +48,92 @@ Operation *RTLTypeConverter::materializeConversion(PatternRewriter &rewriter,
 }
 
 //===----------------------------------------------------------------------===//
+// Helpers
+//===----------------------------------------------------------------------===//
+
+static Value mapOperand(Value operand, Operation *op,
+                        ConversionPatternRewriter &rewriter) {
+  auto opType = operand.getType();
+  if (auto intType = opType.dyn_cast<IntType>()) {
+    auto destType = RTLTypeConverter::convertIntType(intType);
+    if (!destType.hasValue())
+      return operand;
+
+    // Cast firrtl -> standard type.
+    return rewriter.create<firrtl::StdIntCast>(op->getLoc(),
+                                               destType.getValue(), operand);
+  }
+
+  return operand;
+}
+
+static LogicalResult lower(firrtl::ConstantOp op, ArrayRef<Value> operands,
+                           ConversionPatternRewriter &rewriter) {
+  rewriter.replaceOpWithNewOp<rtl::ConstantOp>(op, op.value());
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Unary Operations
+//===----------------------------------------------------------------------===//
+
+static LogicalResult lower(firrtl::AsUIntPrimOp op, ArrayRef<Value> operands,
+                           ConversionPatternRewriter &rewriter) {
+  auto operand = mapOperand(operands[0], op, rewriter);
+
+  auto resultType = op.getType().cast<UIntType>();
+  auto srcWidth = operand.getType().getIntOrFloatBitWidth();
+  auto destWidth = resultType.getWidthOrSentinel();
+  if (destWidth == -1)
+    return failure();
+
+  // Noop cast.
+  if (srcWidth == unsigned(destWidth))
+    return rewriter.replaceOp(op, operand), success();
+
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// Binary Operations
+//===----------------------------------------------------------------------===//
+
+static LogicalResult lower(firrtl::AddPrimOp op, ArrayRef<Value> operands,
+                           ConversionPatternRewriter &rewriter) {
+  // FIXME: Not handling extensions correctly.
+  rewriter.replaceOpWithNewOp<rtl::AddOp>(
+      op, mapOperand(operands[0], op, rewriter),
+      mapOperand(operands[1], op, rewriter));
+  return success();
+}
+
+static LogicalResult lower(firrtl::SubPrimOp op, ArrayRef<Value> operands,
+                           ConversionPatternRewriter &rewriter) {
+  // FIXME: Not handling extensions correctly.
+  rewriter.replaceOpWithNewOp<rtl::SubOp>(
+      op, mapOperand(operands[0], op, rewriter),
+      mapOperand(operands[1], op, rewriter));
+  return success();
+}
+
+namespace {
+/// Utility class for operation conversions targeting that
+/// match exactly one source operation.
+template <typename OpTy>
+class RTLRewriter : public ConversionPattern {
+public:
+  RTLRewriter(MLIRContext *ctx)
+      : ConversionPattern(OpTy::getOperationName(), /*benefit*/ 1, ctx) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    return lower(OpTy(op), operands, rewriter);
+  }
+};
+} // end anonymous namespace
+
+//===----------------------------------------------------------------------===//
 // RTLConversionTarget
 //===----------------------------------------------------------------------===//
 
@@ -92,11 +142,7 @@ class RTLConversionTarget : public ConversionTarget {
 public:
   explicit RTLConversionTarget(MLIRContext &ctx) : ConversionTarget(ctx) {
     addLegalDialect<RTLDialect>();
-
-    // TODO: Replace this with an operations.def file at some point.
-    this->addIllegalOp<firrtl::ConstantOp>();
-    this->addIllegalOp<firrtl::AddPrimOp>();
-    this->addIllegalOp<firrtl::SubPrimOp>();
+    addLegalOp<firrtl::StdIntCast>();
   }
 };
 } // end anonymous namespace
@@ -111,7 +157,10 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering> {
     OwningRewritePatternList patterns;
     patterns
         .insert<RTLRewriter<firrtl::ConstantOp>, RTLRewriter<firrtl::AddPrimOp>,
-                RTLRewriter<firrtl::SubPrimOp>>(&getContext());
+                RTLRewriter<firrtl::SubPrimOp>,
+
+                // Unary Operations
+                RTLRewriter<firrtl::AsUIntPrimOp>>(&getContext());
 
     RTLConversionTarget target(getContext());
     RTLTypeConverter typeConverter;
