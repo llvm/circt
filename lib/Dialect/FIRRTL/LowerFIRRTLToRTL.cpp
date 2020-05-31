@@ -12,36 +12,41 @@ using namespace cirt;
 using namespace firrtl;
 using namespace rtl;
 
+namespace {
 /// Utility class for operation conversions targeting that
 /// match exactly one source operation.
-template <typename OpTy>
-class ConvertOpToRTLPattern : public ConversionPattern {
+template <typename CRTPClass, typename OpTy>
+class RTLRewriter : public ConversionPattern {
 public:
-  ConvertOpToRTLPattern(MLIRContext *ctx)
+  RTLRewriter(MLIRContext *ctx)
       : ConversionPattern(OpTy::getOperationName(), /*benefit*/ 1, ctx) {}
-};
-
-struct LowerConstantOp : public ConvertOpToRTLPattern<firrtl::ConstantOp> {
-  using ConvertOpToRTLPattern::ConvertOpToRTLPattern;
 
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
-    auto cstOp = cast<firrtl::ConstantOp>(op);
-    rewriter.replaceOpWithNewOp<rtl::ConstantOp>(op, cstOp.value());
+    static_cast<const CRTPClass *>(this)->doIt(OpTy(op), operands, rewriter);
     return success();
   }
 };
+} // end anonymous namespace
 
-struct LowerAddOp : public ConvertOpToRTLPattern<firrtl::AddPrimOp> {
-  using ConvertOpToRTLPattern::ConvertOpToRTLPattern;
+struct LowerConstantOp
+    : public RTLRewriter<LowerConstantOp, firrtl::ConstantOp> {
+  using RTLRewriter::RTLRewriter;
 
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
+  void doIt(firrtl::ConstantOp op, ArrayRef<Value> operands,
+            ConversionPatternRewriter &rewriter) const {
+    rewriter.replaceOpWithNewOp<rtl::ConstantOp>(op, op.value());
+  }
+};
+
+struct LowerAddOp : public RTLRewriter<LowerAddOp, firrtl::AddPrimOp> {
+  using RTLRewriter::RTLRewriter;
+
+  void doIt(firrtl::AddPrimOp op, ArrayRef<Value> operands,
+            ConversionPatternRewriter &rewriter) const {
     // FIXME: Not handling extensions correctly.
     rewriter.replaceOpWithNewOp<rtl::AddOp>(op, operands[0], operands[1]);
-    return success();
   }
 };
 
