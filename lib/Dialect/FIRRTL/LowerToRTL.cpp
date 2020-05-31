@@ -1,4 +1,4 @@
-//===- LowerFIRRTLToRTL.cpp - Lower FIRRTL -> RTL dialect -----------------===//
+//===- LowerToRTL.cpp - Lower FIRRTL -> RTL dialect -----------------------===//
 //
 //===----------------------------------------------------------------------===//
 
