@@ -1,17 +1,25 @@
 // RUN: cirt-opt %s | FileCheck %s
 
-func @test1() -> i36 {
+func @test1(%arg0: i3) -> i50 {
   %a = rtl.constant(42 : i12) : i12
   %b = rtl.add %a, %a : i12
   %c = rtl.mul %a, %b : i12
-  %d = rtl.concat %a, %b, %c : (i12, i12, i12) -> i36
-  return %d : i36
+
+  %d = rtl.sext %arg0 : i3, i7
+  %e = rtl.zext %arg0 : i3, i15
+  %f = rtl.trunc %e : i15, i7
+
+  %result = rtl.concat %a, %b, %c, %d, %f : (i12, i12, i12, i7, i7) -> i50
+  return %result : i50
 }
 
-// CHECK-LABEL: func @test1() -> i36 {
+// CHECK-LABEL: func @test1(%arg0: i3) -> i50 {
 // CHECK-NEXT:    %c42_i12 = rtl.constant(42 : i12) : i12
 // CHECK-NEXT:    %0 = rtl.add %c42_i12, %c42_i12 : i12
 // CHECK-NEXT:    %1 = rtl.mul %c42_i12, %0 : i12
-// CHECK-NEXT:    %2 = rtl.concat %c42_i12, %0, %1 : (i12, i12, i12) -> i36
-// CHECK-NEXT:    return %2 : i36
+// CHECK-NEXT:    %2 = rtl.sext %arg0 : i3, i7
+// CHECK-NEXT:    %3 = rtl.zext %arg0 : i3, i15
+// CHECK-NEXT:    %4 = rtl.trunc %3 : i15, i7
+// CHECK-NEXT:    %5 = rtl.concat %c42_i12, %0, %1, %2, %4 : (i12, i12, i12, i7, i7) -> i50
+// CHECK-NEXT:    return %5 : i50
 // CHECK-NEXT:  }

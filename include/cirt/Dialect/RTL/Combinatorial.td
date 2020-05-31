@@ -77,6 +77,45 @@ def XorOp : UTBinRTLOp<"xor", [Commutative]>;
 // Other Operations
 //===----------------------------------------------------------------------===//
 
+def SExtOp : RTLOp<"sext", [NoSideEffect]> {
+  let summary = "Sign extend an integer to a larger integer";
+
+  let arguments = (ins AnySignlessInteger:$input);
+  let results = (outs AnySignlessInteger:$result);
+
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `,` type($result)
+  }];
+
+  let verifier = [{ return ::verifyExtOp(*this); }];
+}
+
+def ZExtOp : RTLOp<"zext", [NoSideEffect]> {
+  let summary = "Zero extend an integer to a larger integer";
+
+  let arguments = (ins AnySignlessInteger:$input);
+  let results = (outs AnySignlessInteger:$result);
+
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `,` type($result)
+  }];
+
+  let verifier = [{ return ::verifyExtOp(*this); }];
+}
+
+def TruncOp : RTLOp<"trunc", [NoSideEffect]> {
+  let summary = "Truncate an integer to a smaller integer";
+
+  let arguments = (ins AnySignlessInteger:$input);
+  let results = (outs AnySignlessInteger:$result);
+
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `,` type($result)
+  }];
+
+  let verifier = [{ return ::verifyTruncOp(*this); }];
+}
+
 def ConcatOp : RTLOp<"concat", [NoSideEffect]> {
   let summary = "Concatenate a variadic list of operands together.";
 
