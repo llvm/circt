@@ -5,6 +5,7 @@
 #include "cirt/Dialect/FIRRTL/Ops.h"
 #include "cirt/Dialect/FIRRTL/Passes.h"
 #include "cirt/Dialect/RTL/Ops.h"
+#include "mlir/IR/StandardTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 using namespace cirt;
@@ -20,7 +21,6 @@ public:
       : ConversionPattern(OpTy::getOperationName(), /*benefit*/ 1, ctx) {}
 };
 
-// Lower ConstantOp to ConstantOp.
 struct LowerConstantOp : public ConvertOpToRTLPattern<firrtl::ConstantOp> {
   using ConvertOpToRTLPattern::ConvertOpToRTLPattern;
 
@@ -33,12 +33,65 @@ struct LowerConstantOp : public ConvertOpToRTLPattern<firrtl::ConstantOp> {
   }
 };
 
+struct LowerAddOp : public ConvertOpToRTLPattern<firrtl::AddPrimOp> {
+  using ConvertOpToRTLPattern::ConvertOpToRTLPattern;
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    // FIXME: Not handling extensions correctly.
+    rewriter.replaceOpWithNewOp<rtl::AddOp>(op, operands[0], operands[1]);
+    return success();
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// RTLTypeConverter
+//===----------------------------------------------------------------------===//
+
+namespace {
+class RTLTypeConverter : public TypeConverter {
+public:
+  RTLTypeConverter();
+
+  Operation *materializeConversion(PatternRewriter &rewriter, Type resultType,
+                                   ArrayRef<Value> inputs,
+                                   Location loc) override;
+
+private:
+  static Optional<Type> convertIntType(IntType type);
+};
+} // end anonymous namespace
+
+RTLTypeConverter::RTLTypeConverter() { addConversion(convertIntType); }
+
+// Lower SInt/UInt to builtin integer type.
+Optional<Type> RTLTypeConverter::convertIntType(IntType type) {
+  auto width = type.getWidthOrSentinel();
+  if (width == -1)
+    return None;
+  return IntegerType::get(width, type.getContext());
+}
+
+Operation *RTLTypeConverter::materializeConversion(PatternRewriter &rewriter,
+                                                   Type resultType,
+                                                   ArrayRef<Value> inputs,
+                                                   Location loc) {
+
+  assert(0 && "xx");
+}
+
+//===----------------------------------------------------------------------===//
+// RTLConversionTarget
+//===----------------------------------------------------------------------===//
+
 namespace {
 class RTLConversionTarget : public ConversionTarget {
 public:
   explicit RTLConversionTarget(MLIRContext &ctx) : ConversionTarget(ctx) {
     addLegalDialect<RTLDialect>();
     this->addIllegalOp<firrtl::ConstantOp>();
+    this->addIllegalOp<firrtl::AddPrimOp>();
   }
 };
 } // end anonymous namespace
@@ -51,10 +104,12 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering> {
   /// Run the dialect converter on the FModule.
   void runOnOperation() override {
     OwningRewritePatternList patterns;
-    patterns.insert<LowerConstantOp>(&getContext());
+    patterns.insert<LowerConstantOp, LowerAddOp>(&getContext());
 
     RTLConversionTarget target(getContext());
-    if (failed(applyPartialConversion(getOperation(), target, patterns)))
+    RTLTypeConverter typeConverter;
+    if (failed(applyPartialConversion(getOperation(), target, patterns,
+                                      &typeConverter)))
       signalPassFailure();
   }
 };
