@@ -12,10 +12,27 @@ using namespace cirt;
 using namespace firrtl;
 using namespace rtl;
 
+static void lower(firrtl::ConstantOp op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) {
+  rewriter.replaceOpWithNewOp<rtl::ConstantOp>(op, op.value());
+}
+
+static void lower(firrtl::AddPrimOp op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) {
+  // FIXME: Not handling extensions correctly.
+  rewriter.replaceOpWithNewOp<rtl::AddOp>(op, operands[0], operands[1]);
+};
+
+static void lower(firrtl::SubPrimOp op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) {
+  // FIXME: Not handling extensions correctly.
+  rewriter.replaceOpWithNewOp<rtl::SubOp>(op, operands[0], operands[1]);
+}
+
 namespace {
 /// Utility class for operation conversions targeting that
 /// match exactly one source operation.
-template <typename CRTPClass, typename OpTy>
+template <typename OpTy>
 class RTLRewriter : public ConversionPattern {
 public:
   RTLRewriter(MLIRContext *ctx)
@@ -24,31 +41,11 @@ public:
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
-    static_cast<const CRTPClass *>(this)->doIt(OpTy(op), operands, rewriter);
+    lower(OpTy(op), operands, rewriter);
     return success();
   }
 };
 } // end anonymous namespace
-
-struct LowerConstantOp
-    : public RTLRewriter<LowerConstantOp, firrtl::ConstantOp> {
-  using RTLRewriter::RTLRewriter;
-
-  void doIt(firrtl::ConstantOp op, ArrayRef<Value> operands,
-            ConversionPatternRewriter &rewriter) const {
-    rewriter.replaceOpWithNewOp<rtl::ConstantOp>(op, op.value());
-  }
-};
-
-struct LowerAddOp : public RTLRewriter<LowerAddOp, firrtl::AddPrimOp> {
-  using RTLRewriter::RTLRewriter;
-
-  void doIt(firrtl::AddPrimOp op, ArrayRef<Value> operands,
-            ConversionPatternRewriter &rewriter) const {
-    // FIXME: Not handling extensions correctly.
-    rewriter.replaceOpWithNewOp<rtl::AddOp>(op, operands[0], operands[1]);
-  }
-};
 
 //===----------------------------------------------------------------------===//
 // RTLTypeConverter
@@ -95,8 +92,11 @@ class RTLConversionTarget : public ConversionTarget {
 public:
   explicit RTLConversionTarget(MLIRContext &ctx) : ConversionTarget(ctx) {
     addLegalDialect<RTLDialect>();
+
+    // TODO: Replace this with an operations.def file at some point.
     this->addIllegalOp<firrtl::ConstantOp>();
     this->addIllegalOp<firrtl::AddPrimOp>();
+    this->addIllegalOp<firrtl::SubPrimOp>();
   }
 };
 } // end anonymous namespace
@@ -109,7 +109,9 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering> {
   /// Run the dialect converter on the FModule.
   void runOnOperation() override {
     OwningRewritePatternList patterns;
-    patterns.insert<LowerConstantOp, LowerAddOp>(&getContext());
+    patterns
+        .insert<RTLRewriter<firrtl::ConstantOp>, RTLRewriter<firrtl::AddPrimOp>,
+                RTLRewriter<firrtl::SubPrimOp>>(&getContext());
 
     RTLConversionTarget target(getContext());
     RTLTypeConverter typeConverter;
