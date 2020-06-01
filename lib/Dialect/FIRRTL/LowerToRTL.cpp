@@ -69,6 +69,36 @@ static Value mapOperand(Value operand, Operation *op,
   return operand;
 }
 
+/// Map the specified operation and then extend it to destType width if needed.
+/// The sign of the extension follows the sign of destType.
+static Value mapAndExtendInt(Value operand, Type destType, Operation *op,
+                             ConversionPatternRewriter &rewriter) {
+  operand = mapOperand(operand, op, rewriter);
+  if (!operand)
+    return {};
+
+  auto destIntType = destType.cast<IntType>();
+  auto destWidth = destIntType.getWidthOrSentinel();
+  if (destWidth == -1)
+    return {};
+
+  auto srcWidth = operand.getType().cast<IntegerType>().getWidth();
+  if (srcWidth == unsigned(destWidth))
+    return operand;
+
+  assert(srcWidth < unsigned(destWidth) && "Only extensions");
+  auto resultType = rewriter.getIntegerType(destWidth);
+
+  if (destIntType.isSigned())
+    return rewriter.create<rtl::SExtOp>(op->getLoc(), resultType, operand);
+
+  return rewriter.create<rtl::ZExtOp>(op->getLoc(), resultType, operand);
+}
+
+//===----------------------------------------------------------------------===//
+// Special Operations
+//===----------------------------------------------------------------------===//
+
 static LogicalResult lower(firrtl::ConstantOp op, ArrayRef<Value> operands,
                            ConversionPatternRewriter &rewriter) {
   rewriter.replaceOpWithNewOp<rtl::ConstantOp>(op, op.value());
@@ -104,23 +134,10 @@ static LogicalResult lower(firrtl::AsUIntPrimOp op, ArrayRef<Value> operands,
 // Pad is a noop or extension operation.
 static LogicalResult lower(firrtl::PadPrimOp op, ArrayRef<Value> operands,
                            ConversionPatternRewriter &rewriter) {
-  auto operand = mapOperand(operands[0], op, rewriter);
+  auto operand = mapAndExtendInt(operands[0], op.getType(), op, rewriter);
   if (!operand)
     return failure();
-
-  auto srcWidth = operand.getType().cast<IntegerType>().getWidth();
-  auto destType = op.getType().cast<IntType>();
-  auto destWidth = destType.getWidthOrSentinel();
-  if (destWidth == -1)
-    return failure();
-
-  auto resultType = rewriter.getIntegerType(destWidth);
-  if (srcWidth == unsigned(destWidth)) // Noop cast.
-    rewriter.replaceOp(op, operand);
-  else if (destType.isSigned())
-    rewriter.replaceOpWithNewOp<rtl::SExtOp>(op, resultType, operand);
-  else
-    rewriter.replaceOpWithNewOp<rtl::ZExtOp>(op, resultType, operand);
+  rewriter.replaceOp(op, operand);
   return success();
 }
 
@@ -128,40 +145,33 @@ static LogicalResult lower(firrtl::PadPrimOp op, ArrayRef<Value> operands,
 // Binary Operations
 //===----------------------------------------------------------------------===//
 
-static LogicalResult lower(firrtl::AddPrimOp op, ArrayRef<Value> operands,
-                           ConversionPatternRewriter &rewriter) {
-  auto lhs = mapOperand(operands[0], op, rewriter);
-  auto rhs = mapOperand(operands[1], op, rewriter);
+template <typename OpType, typename ResultOpType>
+static LogicalResult lowerBinOp(OpType op, ArrayRef<Value> operands,
+                                ConversionPatternRewriter &rewriter) {
+  // Extend the two operands to match the destination type.
+  auto lhs = mapAndExtendInt(operands[0], op.getType(), op, rewriter);
+  auto rhs = mapAndExtendInt(operands[1], op.getType(), op, rewriter);
   if (!lhs || !rhs)
     return failure();
 
-  // FIXME: Not handling extensions correctly.
-  rewriter.replaceOpWithNewOp<rtl::AddOp>(op, lhs, rhs);
+  // Emit the result operation.
+  rewriter.replaceOpWithNewOp<ResultOpType>(op, lhs, rhs);
   return success();
+}
+
+static LogicalResult lower(firrtl::AddPrimOp op, ArrayRef<Value> operands,
+                           ConversionPatternRewriter &rewriter) {
+  return lowerBinOp<firrtl::AddPrimOp, rtl::AddOp>(op, operands, rewriter);
 }
 
 static LogicalResult lower(firrtl::SubPrimOp op, ArrayRef<Value> operands,
                            ConversionPatternRewriter &rewriter) {
-  auto lhs = mapOperand(operands[0], op, rewriter);
-  auto rhs = mapOperand(operands[1], op, rewriter);
-  if (!lhs || !rhs)
-    return failure();
-
-  // FIXME: Not handling extensions correctly.
-  rewriter.replaceOpWithNewOp<rtl::SubOp>(op, lhs, rhs);
-  return success();
+  return lowerBinOp<firrtl::SubPrimOp, rtl::SubOp>(op, operands, rewriter);
 }
 
 static LogicalResult lower(firrtl::XorPrimOp op, ArrayRef<Value> operands,
                            ConversionPatternRewriter &rewriter) {
-  auto lhs = mapOperand(operands[0], op, rewriter);
-  auto rhs = mapOperand(operands[1], op, rewriter);
-  if (!lhs || !rhs)
-    return failure();
-
-  // FIXME: Not handling extensions correctly.
-  rewriter.replaceOpWithNewOp<rtl::XorOp>(op, lhs, rhs);
-  return success();
+  return lowerBinOp<firrtl::XorPrimOp, rtl::XorOp>(op, operands, rewriter);
 }
 
 namespace {

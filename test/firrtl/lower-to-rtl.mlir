@@ -27,9 +27,11 @@ firrtl.module @Constant(%in1: !firrtl.uint<4>,
   // CHECK: %5 = rtl.zext %4 : i3, i4
   %4 = firrtl.pad %3, 4 : (!firrtl.sint<3>) -> !firrtl.uint<4>
 
-  // CHECK: %6 = rtl.xor %2, %5 : i4
-  %5 = firrtl.xor %2, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK: %6 = firrtl.stdIntCast %in2 : (!firrtl.uint<2>) -> i2
+  // CHECK: %7 = rtl.zext %6 : i2, i4
+  // CHECK: %8 = rtl.xor %7, %5 : i4
+  %5 = firrtl.xor %in2, %4 : (!firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
-  // CHECK-NEXT: firrtl.connect %out1, %6 : !firrtl.flip<uint<4>>, i4
+  // CHECK-NEXT: firrtl.connect %out1, %8 : !firrtl.flip<uint<4>>, i4
   firrtl.connect %out1, %5 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 }
