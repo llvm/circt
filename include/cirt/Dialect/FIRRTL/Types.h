@@ -56,6 +56,12 @@ public:
   /// used for `mem` operations.
   FIRRTLType getMaskType();
 
+  /// If this is an IntType, AnalogType, or sugar type for a single bit (Clock,
+  /// Reset, etc) then return the bitwidth.  Return -1 if the is one of these
+  /// types but without a specified bitwidth.  Return -2 if this isn't a simple
+  /// type.
+  int32_t getBitWidthOrSentinel();
+
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
     return type.getKind() >= Type::FIRST_PRIVATE_EXPERIMENTAL_0_TYPE &&

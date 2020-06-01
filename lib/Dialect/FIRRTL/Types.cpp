@@ -296,6 +296,30 @@ FIRRTLType FIRRTLType::getMaskType() {
   llvm_unreachable("unknown FIRRTL type");
 }
 
+/// If this is an IntType, AnalogType, or sugar type for a single bit (Clock,
+/// Reset, etc) then return the bitwidth.  Return -1 if the is one of these
+/// types but without a specified bitwidth.  Return -2 if this isn't a simple
+/// type.
+int32_t FIRRTLType::getBitWidthOrSentinel() {
+  switch (getKind()) {
+  default:
+    assert(0 && "unknown FIRRTL type");
+  case FIRRTLType::Clock:
+  case FIRRTLType::Reset:
+  case FIRRTLType::AsyncReset:
+    return 1;
+  case FIRRTLType::SInt:
+  case FIRRTLType::UInt:
+    return cast<IntType>().getWidthOrSentinel();
+  case FIRRTLType::Analog:
+    return cast<AnalogType>().getWidthOrSentinel();
+  case FIRRTLType::Flip:
+  case FIRRTLType::Bundle:
+  case FIRRTLType::Vector:
+    return -2;
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // IntType
 //===----------------------------------------------------------------------===//

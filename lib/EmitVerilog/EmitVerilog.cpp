@@ -831,6 +831,9 @@ private:
   SubExprInfo visitComb(rtl::AndOp op) { return emitBinary(op, And, "&"); }
   SubExprInfo visitComb(rtl::OrOp op) { return emitBinary(op, Or, "|"); }
   SubExprInfo visitComb(rtl::XorOp op) { return emitBinary(op, Xor, "^"); }
+
+  SubExprInfo visitComb(rtl::SExtOp op);
+  SubExprInfo visitComb(rtl::ZExtOp op);
   SubExprInfo visitComb(rtl::ConcatOp op);
 
 private:
@@ -986,6 +989,42 @@ SubExprInfo ExprEmitter::emitCat(ArrayRef<Value> values, StringRef before,
     os << after;
   }
   os << '}';
+  return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitComb(rtl::SExtOp op) {
+  auto inType = op.getOperand().getType().cast<IntegerType>();
+  auto inWidth = inType.getWidth();
+  auto destWidth = op.getType().cast<IntegerType>().getWidth();
+
+ // Handle sign extend from a single bit in a pretty way.
+  if (inWidth == 1) {
+    os << '{' << destWidth << '{';
+    emitSubExpr(op.getOperand(), LowestPrecedence);
+    os << "}}";
+    return {Unary, IsUnsigned};
+  }
+
+  // Otherwise, this is a sign extension of a general expression.
+  // TODO(QoI): Instead of emitting the expression multiple times, we should
+  // emit it to a known name.
+  os << "{{" << (destWidth - inWidth) << '{';
+  emitSubExpr(op.getOperand(), Unary);
+  os << '[' << (inWidth - 1) << "]}}, ";
+  emitSubExpr(op.getOperand(), LowestPrecedence);
+  os << "}";
+  return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitComb(rtl::ZExtOp op) {
+  auto inType = op.getOperand().getType().cast<IntegerType>();
+  auto inWidth = inType.getWidth();
+  auto destWidth = op.getType().cast<IntegerType>().getWidth();
+
+  // A zero extension just fills the top with numbers.
+  os << "{{" << (destWidth - inWidth) << "'d0}, ";
+  emitSubExpr(op.getOperand(), LowestPrecedence);
+  os << "}";
   return {Unary, IsUnsigned};
 }
 

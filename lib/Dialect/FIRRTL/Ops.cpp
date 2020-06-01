@@ -1019,28 +1019,31 @@ FIRRTLType TailPrimOp::getResultType(FIRRTLType input, int32_t amount) {
 //===----------------------------------------------------------------------===//
 
 static LogicalResult verifyStdIntCast(StdIntCast cast) {
-  // Either the input or result must have be IntType with a width, the other
-  // must be a signless standard integer type, and the widths must match.
-  IntType intType;
+  // Either the input or result must have signless standard integer type, the
+  // other must be a FIRRTL type that lowers to one, and their widths must
+  // match.
+  FIRRTLType firType;
   IntegerType integerType;
-  if ((intType = cast.getOperand().getType().dyn_cast<IntType>())) {
+  if ((firType = cast.getOperand().getType().dyn_cast<FIRRTLType>())) {
     integerType = cast.getType().dyn_cast<IntegerType>();
     if (!integerType) {
       cast.emitError("result type must be a signless integer");
       return failure();
     }
-  } else if ((intType = cast.getType().dyn_cast<IntType>())) {
+  } else if ((firType = cast.getType().dyn_cast<FIRRTLType>())) {
     integerType = cast.getOperand().getType().dyn_cast<IntegerType>();
     if (!integerType) {
       cast.emitError("operand type must be a signless integer");
       return failure();
     }
   } else {
-    cast.emitError("either source or result type must be SInt/UInt type");
+    cast.emitError("either source or result type must be integer type");
     return failure();
   }
 
-  auto intWidth = intType.getWidthOrSentinel();
+  int32_t intWidth = firType.getBitWidthOrSentinel();
+  if (intWidth == -2)
+    return cast.emitError("firrtl type isn't simple bit type");
   if (intWidth == -1)
     return cast.emitError("SInt/UInt type must have a width"), failure();
   if (!integerType.isSignless())

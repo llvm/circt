@@ -63,4 +63,13 @@ firrtl.module @Mod2(%in : !firrtl.uint<8> { firrtl.name = "some name"},
 // CHECK-LABEL: firrtl.module @no_ports() {
 firrtl.module @no_ports() {
 }
- 
+
+// stdIntCast can work with clock inputs/outputs too.
+// CHECK-LABEL: @ClockCast
+firrtl.module @ClockCast(%clock: !firrtl.clock, %in1 : i1) {
+  // CHECK: %0 = firrtl.stdIntCast %clock : (!firrtl.clock) -> i1
+  %0 = firrtl.stdIntCast %clock : (!firrtl.clock) -> i1
+
+  // CHECK: %1 = firrtl.stdIntCast %in1 : (i1) -> !firrtl.clock
+  %1 = firrtl.stdIntCast %in1 : (i1) -> !firrtl.clock
+}

@@ -25,7 +25,7 @@ public:
                        // Arithmetic and Logical Binary Operations.
                        AddOp, SubOp, MulOp, DivOp, ModOp, AndOp, OrOp, XorOp,
                        // Other operations.
-                       ConcatOp>([&](auto expr) -> ResultType {
+                       SExtOp, ZExtOp, ConcatOp>([&](auto expr) -> ResultType {
           return thisCast->visitComb(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -71,6 +71,8 @@ public:
   HANDLE(XorOp, Binary);
 
   // Other operations.
+  HANDLE(SExtOp, Unhandled);
+  HANDLE(ZExtOp, Unhandled);
   HANDLE(ConcatOp, Unhandled);
 #undef HANDLE
 };

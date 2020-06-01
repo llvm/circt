@@ -25,18 +25,20 @@ public:
                                    ArrayRef<Value> inputs,
                                    Location loc) override;
 
-  static Optional<Type> convertIntType(IntType type);
+  static Optional<Type> convertType(FIRRTLType type);
 };
 } // end anonymous namespace
 
-RTLTypeConverter::RTLTypeConverter() { addConversion(convertIntType); }
+RTLTypeConverter::RTLTypeConverter() { addConversion(convertType); }
 
-// Lower SInt/UInt to builtin integer type.
-Optional<Type> RTLTypeConverter::convertIntType(IntType type) {
-  auto width = type.getWidthOrSentinel();
+Optional<Type> RTLTypeConverter::convertType(FIRRTLType type) {
+  auto width = type.getBitWidthOrSentinel();
+  if (width >= 0)
+    return IntegerType::get(width, type.getContext());
   if (width == -1)
-    return None;
-  return IntegerType::get(width, type.getContext());
+    return None; // IntType with unknown width.
+
+  return type;
 }
 
 Operation *RTLTypeConverter::materializeConversion(PatternRewriter &rewriter,
@@ -56,14 +58,16 @@ Operation *RTLTypeConverter::materializeConversion(PatternRewriter &rewriter,
 static Value mapOperand(Value operand, Operation *op,
                         ConversionPatternRewriter &rewriter) {
   auto opType = operand.getType();
-  if (auto intType = opType.dyn_cast<IntType>()) {
-    auto destType = RTLTypeConverter::convertIntType(intType);
-    if (!destType.hasValue())
+  if (auto firType = opType.dyn_cast<FIRRTLType>()) {
+    auto resultType = RTLTypeConverter::convertType(firType);
+    if (!resultType.hasValue())
       return {};
 
-    // Cast firrtl -> standard type.
-    return rewriter.create<firrtl::StdIntCast>(op->getLoc(),
-                                               destType.getValue(), operand);
+    if (auto intType = resultType.getValue().dyn_cast<IntegerType>()) {
+      // Cast firrtl -> standard type.
+      return rewriter.create<firrtl::StdIntCast>(op->getLoc(), intType,
+                                                 operand);
+    }
   }
 
   return operand;
