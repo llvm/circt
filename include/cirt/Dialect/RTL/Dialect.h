@@ -19,6 +19,9 @@ public:
   ~RTLDialect();
 
   static StringRef getDialectNamespace() { return "rtl"; }
+
+  Operation *materializeConstant(OpBuilder &builder, Attribute value, Type type,
+                                 Location loc) override;
 };
 
 } // namespace rtl
