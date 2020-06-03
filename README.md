@@ -1,15 +1,18 @@
-# clattner-test / CIRT / Circuit IR and Tools
+# "CIRT" / Circuit IR and Tools
 
-This is a test repository, experimenting with an approach of building a modular
-set of tools for verilog and other SiFive related projects.
+This is an experimental repository, applying the MLIR/LLVM approach to building
+modular tools for Verilog, focusing on FIRRTL.
 
 "CIRT" stands for "Circuit IR and Tools" or perhaps "CIRCuiT + 
 IntermediateRepresenTation + Toolbox" (hat tip to Aliaksei Chapyzhenka).  The
 T can be further expanded as Tool, Translator, Team, Tech, Target, Tree, Type,
 ...  This name can still be changed if a better one is suggested.  :-)
 
-To follow along, please join the [cirt-dev](https://groups.google.com/a/sifive.com/forum/#!forum/cirt-dev)
- mailing list.  It is self-add, and anyone at SiFive is welcome.
+While the code for this repository is may eventually be public, this is not an
+open community project.  SiFive employees who would like to follow along, can
+join the
+[cirt-dev](https://groups.google.com/a/sifive.com/forum/#!forum/cirt-dev)
+mailing list.  It is self-add, and anyone at SiFive is welcome.
 
 
 ## Setting this up
@@ -24,7 +27,7 @@ These are the commands Chris used to set this up on a Mac:
 ```
 $ cd ~/Projects
 $ git clone git@github.com:llvm/llvm-project.git
-$ git clone git@github.com:sifive/clattner-experimental.git cirt
+$ git clone git@github.com:sifive/cirt.git cirt
 ```
 
 3) HACK: Add symlink because I can't figure out how to get
@@ -87,7 +90,8 @@ the right thing.
 
 ## Submitting changes to CIRT
 
-The project is small so there is no formal process yet. just talk to Chris :-) PR's should also work.
+The project is small so there is no formal process yet. Just talk to Chris, or
+create a PR.
 
 ## Submitting changes to LLVM / MLIR
 
