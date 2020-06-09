@@ -21,10 +21,6 @@ class RTLTypeConverter : public TypeConverter {
 public:
   RTLTypeConverter();
 
-  Operation *materializeConversion(PatternRewriter &rewriter, Type resultType,
-                                   ArrayRef<Value> inputs,
-                                   Location loc) override;
-
   static Optional<Type> convertType(FIRRTLType type);
 };
 } // end anonymous namespace
@@ -39,14 +35,6 @@ Optional<Type> RTLTypeConverter::convertType(FIRRTLType type) {
     return None; // IntType with unknown width.
 
   return type;
-}
-
-Operation *RTLTypeConverter::materializeConversion(PatternRewriter &rewriter,
-                                                   Type resultType,
-                                                   ArrayRef<Value> inputs,
-                                                   Location loc) {
-
-  assert(0 && "xx");
 }
 
 //===----------------------------------------------------------------------===//
