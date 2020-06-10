@@ -8,13 +8,6 @@ IntermediateRepresenTation + Toolbox" (hat tip to Aliaksei Chapyzhenka).  The
 T can be further expanded as Tool, Translator, Team, Tech, Target, Tree, Type,
 ...  This name can still be changed if a better one is suggested.  :-)
 
-While the code for this repository is may eventually be public, this is not an
-open community project.  SiFive employees who would like to follow along, can
-join the
-[cirt-dev](https://groups.google.com/a/sifive.com/forum/#!forum/cirt-dev)
-mailing list.  It is self-add, and anyone at SiFive is welcome.
-
-
 ## Setting this up
 
 These are the commands Chris used to set this up on a Mac:
