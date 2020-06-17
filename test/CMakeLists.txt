@@ -9,6 +9,7 @@ set(CIRCT_TEST_DEPENDS
   FileCheck count not
   circt-opt
   circt-translate
+  handshake-runner
   firtool
   )
 

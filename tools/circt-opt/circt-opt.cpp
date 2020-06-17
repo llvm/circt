@@ -1,5 +1,4 @@
-//===- circt-opt.cpp - The circt-opt driver
-//---------------------------------===//
+//===- circt-opt.cpp - The circt-opt driver -------------------------------===//
 //
 // This file implements the 'circt-opt' tool, which is the circt analog of
 // mlir-opt, used to drive compiler passes, e.g. for testing.
@@ -8,6 +7,8 @@
 
 #include "circt/Dialect/FIRRTL/Dialect.h"
 #include "circt/Dialect/RTL/Dialect.h"
+#include "circt/Dialect/Handshake/HandshakeOps.h"
+#include "circt/Conversion/StandardToHandshake/StandardToHandshake.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
@@ -74,6 +75,9 @@ int main(int argc, char **argv) {
   // Register our dialects.
   registerDialect<firrtl::FIRRTLDialect>();
   firrtl::registerFIRRTLPasses();
+
+  registerDialect<handshake::HandshakeOpsDialect>();
+  handshake::registerStandardToHandshakePasses();
 
   registerDialect<rtl::RTLDialect>();
 
