@@ -6,17 +6,17 @@ tradeoff between performance, power usage, design cost and manufacturing
 cost. Accelerators typically implement compute structures, interconnect,
 and memory hierarchies optimized for particular workloads. Optimizing
 memory and communication is often more important for overall design
-goals than optimizing the computing structures[@dallymemorywall].
+goals than optimizing the computing structures.
 Accelerators are almost always programmable to some extent, in order to
 allow them to operate on a set of similar workloads, although they are
 typically much less programmable than general purpose architectures.
 
 Accelerators are often so valuable because of their specialization that
 they may be included in devices even when they are not constantly
-used[@hadi11darksilicon].
+used.
 
 The need for specialization has led to a wide variety of accelerators in
-some areas, such as machine learning[@hotchips2019]. Programming a wide
+some areas, such as machine learning. Programming a wide
 variety of accelerators from a wide scope of design languages is a
 significant challenge. MLIR addresses this by using many abstractions
 called *dialects*. Individual design languages are typically associated
@@ -26,10 +26,10 @@ allows the effort of developing and maintaining optimizations to be
 shared between design languages and target architectures. Eventually,
 dialects are lowered (perhaps in a target-specific fashion) to low-level
 dialects and eventually to target-specific dialects, facilitating code
-generation for particular accelerator targets[@bondhugula2020high].
+generation for particular accelerator targets.
 
 At the same time, developing accelerators themselves is becoming more
-challenging[@berkeley06dwarfs]. Accelerators are often complex and may
+challenging. Accelerators are often complex and may
 have multiple design constraints which are difficult to meet. Even
 building one accelerator can have a significant cost. At the same time,
 accelerators are also numerous, implying that there is less design
@@ -65,7 +65,7 @@ to a difference in component granularity. For instance early in the
 design process an abstraction may be used with large, coarse-grained
 components. After lowering, perhaps through other abstractions, the same
 abstraction may again appear with smaller, find-grained
-components.[@ptolemy14SystemDesign]
+components.
 
 Below, we summarize the most important abstractions used in existing
 processes. This list is unlikely to be comprehensive and it is likely
@@ -82,9 +82,9 @@ Netlists are a longstanding abstraction used for circuit design,
 expressing the instantiation and interconnection of primitive
 components. Components are typically fine-grained, representing logic
 gates in a standard-cell integrated circuit, or architectural primitives
-in programmable logic. The EDIF[@EDIF] format has been almost ubiquitous
+in programmable logic. The EDIF format has been almost ubiquitous
 since the early days of Electronic Design Automation, although the
-Verilog[@verilog] language is also commonly used to store netlists in
+Verilog language is also commonly used to store netlists in
 modern tools.
 
 Netlist descriptions often blur the distinctions between the inputs and
@@ -100,7 +100,7 @@ Register-transfer level (RTL) {#sec:rtl}
 The Register-transfer level is has been commonly used to describe logic
 circuits. The process of logic synthesis is commonly used to lower RTL
 designs into structural netlists. Verilog, SystemVerilog, and VHDL are
-commonly used in the industry. The LLHD framework[@schuiki2020llhd]
+commonly used in the industry. The LLHD framework
 explicitly takes a multi-level approach to capturing RTL designs and
 lowering them into more fundamental constructs which can be efficiently
 simulated or synthesized. A key aspect of this systems is the
@@ -108,8 +108,8 @@ observation that useful input languages (such as SystemVerilog) provide
 a much wider set of constructs than can be easily synthesized, and
 managing this complexity in a structured way is key to building real
 systems. Another recent system focused on improving RTL-level design is
-Chisel[@bachrach12chisel], along with associated
-FIRRTL[@berkeley17firrtl][@berkeley16firrtl] intermediate
+Chisel, along with associated
+FIRRTL intermediate
 representation.
 
 At the register-transfer level, the distinction between components which
@@ -124,10 +124,10 @@ Finite-State Machine + Datapath (FSMD) {#sec:fsmd}
 --------------------------------------
 
 High-Level synthesis(HLS) of RTL designs from C code has become a common
-paradigm for accelerator design[@cong11HLS][@kastner2018parallel].
+paradigm for accelerator design.
 Typically generating a high-performance implementation requires analysis
 and scheduling of the FSMD model in order to understand the performance
-implications of particular choices[@zhang13sdc].
+implications of particular choices.
 
 A common intermediate abstraction in HLS is a combination of
 finite-state machines and datapath abstractions. Conceptually, in each
@@ -144,13 +144,13 @@ in other ways (for instance, using microcode) rather than being lowered
 through logic synthesis into fixed logic.
 
 Several projects have described the internal representation of HLS
-compilers. LegUp[@canis13legup] leverages the Clang/LLVM framework for
-representing designs, while Bambu[@pilato13bambu] builds an independent
-internal representation. A recent effort in this area is Futil[@futil],
+compilers. LegUp leverages the Clang/LLVM framework for
+representing designs, while Bambu builds an independent
+internal representation. A recent effort in this area is Futil,
 which implements an intermediate representation leveraged by the Dahlia
-system[@nigam20dahlia].
+system.
 
-Dataflow/handshake {#sec:handshake}
+[Dataflow/handshake](Dialects/Handshake.md) {#sec:handshake}
 ------------------
 
 Dataflow models have long been used to represent parallel computation.
@@ -163,7 +163,7 @@ latency to communicate data from one process to another is guaranteed to
 not change the streams of data being computed.
 
 It is possible to extract dataflow models from fine-grained CDFG
-representations of sequential code[@josipovic18hls] and the resulting
+representations of sequential code and the resulting
 dataflow models can be implemented directly in a circuit, although the
 circuits used to implement fine-grained handshake logic are often more
 complex than an equivalent FSMD model (for designs which can be
@@ -191,13 +191,13 @@ also enable the impact of late-stage changes, called Engineering Change
 Orders (ECOs), to be encapsulated, avoiding unnecessary redundant
 verification. IP composition also enables portable operating system
 software and runtimes based on declarative descriptions of device
-architectures, for instance using Device Trees[@deviceTrees].
+architectures, for instance using Device Trees.
 
-IPXact[@IPXact] is an industry standard file format, although a lack of
+IPXact is an industry standard file format, although a lack of
 industry-standard IP definitions and heavy reliance in practice on
 vendor extensions has meant that tools using IPXact are largely not
 inter-operable. In addition, being based on XML, IPXact is somewhat
-verbose and difficult for humans to interact with. DUH[@DUH] is a recent
+verbose and difficult for humans to interact with. DUH is a recent
 open-source effort based on JSON formats also focusing on IP
 composition.
 
@@ -273,7 +273,7 @@ in a program.
 Many optimizations are possible on dataflow models. Most critically,
 *fusion optimizations manipulate the dataflow graph to generate toplevel
 dataflow components where each component represents execution on a
-single processor.[@gordon02streamit] In order to generate a balanced
+single processor. In order to generate a balanced
 system, this is typically done with several goals. Primarily, this needs
 to be done considering locality of access, often merging dataflow
 components which share inputs or process data in a pipeline.
@@ -286,7 +286,7 @@ transformations may also be important, where large granularity
 components exist in a dataflow program. Obviously data-parallel
 computations can be partitioned using Split/Join pairs, while more
 complex components consisting of nested loops with recurrences require
-more complex analysis.[@rijpkema00compaan]**
+more complex analysis.**
 
 Stream computation can be implemented using different mechanisms
 depending on the architecture. Some architectures provide stream
