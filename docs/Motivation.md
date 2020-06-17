@@ -174,6 +174,14 @@ is often appropriate for large accelerator designs where clock
 distribution and global timing closure can be challenging when
 implementing large componentized RTL designs.
 
+Another common use of dataflow models is as a simulation tool, as in
+FireSim.  FireSim starts with a cycle-accurate RTL model, and extracts
+a dataflow model where time is represented explicitly in the model.
+This allows distributed simulation or for models of parts of a
+hardware design to be inserted where RTL does not yet exist.  By
+mapping the dataflow model back to hardware in a non-cycle accurate
+way, very fast emulation can be built quickly.
+
 IP composition {#sec:ipi}
 --------------
 
