@@ -4,13 +4,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRT_DIALECT_FIRRTL_VISITORS_H
-#define CIRT_DIALECT_FIRRTL_VISITORS_H
+#ifndef CIRCT_DIALECT_FIRRTL_VISITORS_H
+#define CIRCT_DIALECT_FIRRTL_VISITORS_H
 
-#include "cirt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/Ops.h"
 #include "llvm/ADT/TypeSwitch.h"
 
-namespace cirt {
+namespace circt {
 namespace firrtl {
 
 /// ExprVisitor is a visitor for FIRRTL expression nodes.
@@ -227,6 +227,6 @@ public:
 };
 
 } // namespace firrtl
-} // namespace cirt
+} // namespace circt
 
-#endif // CIRT_DIALECT_FIRRTL_VISITORS_H
+#endif // CIRCT_DIALECT_FIRRTL_VISITORS_H

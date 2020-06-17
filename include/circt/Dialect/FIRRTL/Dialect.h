@@ -4,12 +4,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRT_DIALECT_FIRRTL_DIALECT_H
-#define CIRT_DIALECT_FIRRTL_DIALECT_H
+#ifndef CIRCT_DIALECT_FIRRTL_DIALECT_H
+#define CIRCT_DIALECT_FIRRTL_DIALECT_H
 
 #include "mlir/IR/Dialect.h"
 
-namespace cirt {
+namespace circt {
 namespace firrtl {
 using namespace mlir;
 class FIRRTLType;
@@ -37,9 +37,9 @@ StringAttr getFIRRTLNameAttr(ArrayRef<NamedAttribute> attrs);
 void registerFIRRTLPasses();
 
 } // namespace firrtl
-} // namespace cirt
+} // namespace circt
 
 // Pull in all enum type definitions and utility function declarations.
-#include "cirt/Dialect/FIRRTL/FIRRTLEnums.h.inc"
+#include "circt/Dialect/FIRRTL/FIRRTLEnums.h.inc"
 
-#endif // CIRT_DIALECT_FIRRTL_IR_DIALECT_H
+#endif // CIRCT_DIALECT_FIRRTL_IR_DIALECT_H

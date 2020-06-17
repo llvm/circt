@@ -4,14 +4,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRT_DIALECT_FIRRTL_PASSES_TD
-#define CIRT_DIALECT_FIRRTL_PASSES_TD
+#ifndef CIRCT_DIALECT_FIRRTL_PASSES_TD
+#define CIRCT_DIALECT_FIRRTL_PASSES_TD
 
 include "mlir/Pass/PassBase.td"
 
 def LowerFIRRTLToRTL : Pass<"lower-firrtl-to-rtl", "firrtl::FModuleOp"> {
   let summary = "Lower FIRRTL to RTL";
-  let constructor = "cirt::firrtl::createLowerFIRRTLToRTLPass()";
+  let constructor = "circt::firrtl::createLowerFIRRTLToRTLPass()";
 }
 
-#endif // CIRT_DIALECT_FIRRTL_PASSES_TD
+#endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

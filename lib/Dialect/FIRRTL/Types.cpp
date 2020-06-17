@@ -2,13 +2,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "cirt/Dialect/FIRRTL/Types.h"
-#include "cirt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/Types.h"
+#include "circt/Dialect/FIRRTL/Ops.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
 
-using namespace cirt;
+using namespace circt;
 using namespace firrtl;
 
 //===----------------------------------------------------------------------===//
@@ -341,7 +341,7 @@ IntType IntType::get(MLIRContext *context, bool isSigned, int32_t width) {
 // Width Qualified Ground Types
 //===----------------------------------------------------------------------===//
 
-namespace cirt {
+namespace circt {
 namespace firrtl {
 namespace detail {
 struct WidthTypeStorage : mlir::TypeStorage {
@@ -359,7 +359,7 @@ struct WidthTypeStorage : mlir::TypeStorage {
 };
 } // namespace detail
 } // namespace firrtl
-} // namespace cirt
+} // namespace circt
 
 static Optional<int32_t>
 getWidthQualifiedTypeWidth(firrtl::detail::WidthTypeStorage *impl) {
@@ -402,7 +402,7 @@ Optional<int32_t> AnalogType::getWidth() {
 // Flip Type
 //===----------------------------------------------------------------------===//
 
-namespace cirt {
+namespace circt {
 namespace firrtl {
 namespace detail {
 struct FlipTypeStorage : mlir::TypeStorage {
@@ -421,7 +421,7 @@ struct FlipTypeStorage : mlir::TypeStorage {
 
 } // namespace detail
 } // namespace firrtl
-} // namespace cirt
+} // namespace circt
 
 /// Return a bundle type with the specified elements all flipped.  This assumes
 /// the elements list is non-empty.
@@ -487,7 +487,7 @@ FIRRTLType FlipType::getElementType() { return getImpl()->element; }
 // Bundle Type
 //===----------------------------------------------------------------------===//
 
-namespace cirt {
+namespace circt {
 namespace firrtl {
 namespace detail {
 struct BundleTypeStorage : mlir::TypeStorage {
@@ -520,7 +520,7 @@ struct BundleTypeStorage : mlir::TypeStorage {
 
 } // namespace detail
 } // namespace firrtl
-} // namespace cirt
+} // namespace circt
 
 FIRRTLType BundleType::get(ArrayRef<BundleElement> elements,
                            MLIRContext *context) {
@@ -583,7 +583,7 @@ FIRRTLType BundleType::getElementType(StringRef name) {
 // Vector Type
 //===----------------------------------------------------------------------===//
 
-namespace cirt {
+namespace circt {
 namespace firrtl {
 namespace detail {
 struct VectorTypeStorage : mlir::TypeStorage {
@@ -609,7 +609,7 @@ struct VectorTypeStorage : mlir::TypeStorage {
 
 } // namespace detail
 } // namespace firrtl
-} // namespace cirt
+} // namespace circt
 
 FIRRTLType FVectorType::get(FIRRTLType elementType, unsigned numElements) {
   // If elementType is a flip, then we canonicalize it outwards.

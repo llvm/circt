@@ -1,4 +1,4 @@
-// RUN: cirt-opt %s -split-input-file -verify-diagnostics
+// RUN: circt-opt %s -split-input-file -verify-diagnostics
 
 func @test_constant() -> i32 {
   // expected-error @+1 {{firrtl.constant attribute bitwidth doesn't match return type}}

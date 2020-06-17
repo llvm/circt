@@ -5,10 +5,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "cirt/Dialect/FIRRTL/Dialect.h"
-#include "cirt/Dialect/RTL/Dialect.h"
-#include "cirt/EmitVerilog.h"
-#include "cirt/FIRParser.h"
+#include "circt/Dialect/FIRRTL/Dialect.h"
+#include "circt/Dialect/RTL/Dialect.h"
+#include "circt/EmitVerilog.h"
+#include "circt/FIRParser.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Module.h"
 #include "mlir/Parser.h"
@@ -22,7 +22,7 @@
 
 using namespace llvm;
 using namespace mlir;
-using namespace cirt;
+using namespace circt;
 
 /// Allow the user to specify the input file format.  This can be used to
 /// override the input, and can be used to specify ambiguous cases like standard
@@ -126,7 +126,7 @@ int main(int argc, char **argv) {
   registerDialect<rtl::RTLDialect>();
 
   // Parse pass names in main to ensure static initialization completed.
-  cl::ParseCommandLineOptions(argc, argv, "cirt modular optimizer driver\n");
+  cl::ParseCommandLineOptions(argc, argv, "circt modular optimizer driver\n");
 
   // Figure out the input format if unspecified.
   if (inputFormat == InputUnspecified) {

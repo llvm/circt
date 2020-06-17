@@ -4,8 +4,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRT_DIALECT_FIRPARSER_H
-#define CIRT_DIALECT_FIRPARSER_H
+#ifndef CIRCT_DIALECT_FIRPARSER_H
+#define CIRCT_DIALECT_FIRPARSER_H
 
 namespace llvm {
 class SourceMgr;
@@ -16,7 +16,7 @@ class MLIRContext;
 class OwningModuleRef;
 } // namespace mlir
 
-namespace cirt {
+namespace circt {
 
 struct FIRParserOptions {
   /// If this is set to true, the @info locators are ignored, and the locations
@@ -29,6 +29,6 @@ mlir::OwningModuleRef parseFIRFile(llvm::SourceMgr &sourceMgr,
                                    FIRParserOptions options = {});
 void registerFIRParserTranslation();
 
-} // namespace cirt
+} // namespace circt
 
-#endif // CIRT_DIALECT_FIRPARSER_H
+#endif // CIRCT_DIALECT_FIRPARSER_H

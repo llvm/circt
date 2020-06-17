@@ -1,5 +1,5 @@
-; RUN: firtool %s --format=fir              | cirt-opt | FileCheck %s --check-prefix=OPT
-; RUN: firtool %s --format=fir -disable-opt | cirt-opt | FileCheck %s --check-prefix=NOOPT
+; RUN: firtool %s --format=fir              | circt-opt | FileCheck %s --check-prefix=OPT
+; RUN: firtool %s --format=fir -disable-opt | circt-opt | FileCheck %s --check-prefix=NOOPT
 
 circuit optimizations :
   module test_cse :

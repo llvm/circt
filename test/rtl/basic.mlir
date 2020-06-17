@@ -1,4 +1,4 @@
-// RUN: cirt-opt %s | FileCheck %s
+// RUN: circt-opt %s | FileCheck %s
 
 func @test1(%arg0: i3) -> i50 {
   %a = rtl.constant(42 : i12) : i12

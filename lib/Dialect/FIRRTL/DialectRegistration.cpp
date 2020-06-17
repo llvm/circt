@@ -2,18 +2,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "cirt/Dialect/FIRRTL/Dialect.h"
-#include "cirt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/FIRRTL/Dialect.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
-using namespace cirt;
+using namespace circt;
 using namespace firrtl;
 
 // Static initialization for FIRRTL dialect registration.
 static mlir::DialectRegistration<FIRRTLDialect> FIRRTLOps;
 
 /// Register all of the FIRRTL transformation passes with the PassManager.
-void cirt::firrtl::registerFIRRTLPasses() {
+void circt::firrtl::registerFIRRTLPasses() {
 #define GEN_PASS_REGISTRATION
-#include "cirt/Dialect/FIRRTL/FIRRTLPasses.h.inc"
+#include "circt/Dialect/FIRRTL/FIRRTLPasses.h.inc"
 }

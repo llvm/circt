@@ -1,14 +1,15 @@
-//===- cirt-translate.cpp - CIRT Translation Driver -----------------------===//
+//===- circt-translate.cpp - CIRCT Translation Driver
+//-----------------------===//
 //
 // This is a command line utility that translates a file from/to MLIR using one
 // of the registered translations.
 //
 //===----------------------------------------------------------------------===//
 
-#include "cirt/Dialect/FIRRTL/Dialect.h"
-#include "cirt/Dialect/RTL/Dialect.h"
-#include "cirt/EmitVerilog.h"
-#include "cirt/FIRParser.h"
+#include "circt/Dialect/FIRRTL/Dialect.h"
+#include "circt/Dialect/RTL/Dialect.h"
+#include "circt/EmitVerilog.h"
+#include "circt/FIRParser.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/Diagnostics.h"
@@ -21,7 +22,7 @@
 #include "llvm/Support/ToolOutputFile.h"
 
 using namespace mlir;
-using namespace cirt;
+using namespace circt;
 
 static llvm::cl::opt<std::string> inputFilename(llvm::cl::Positional,
                                                 llvm::cl::desc("<input file>"),
@@ -64,7 +65,7 @@ int main(int argc, char **argv) {
       translationRequested("", llvm::cl::desc("Translation to perform"),
                            llvm::cl::Required);
 
-  llvm::cl::ParseCommandLineOptions(argc, argv, "CIRT translation driver\n");
+  llvm::cl::ParseCommandLineOptions(argc, argv, "CIRCT translation driver\n");
 
   std::string errorMessage;
   auto input = openInputFile(inputFilename, &errorMessage);

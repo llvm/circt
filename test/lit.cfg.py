@@ -16,7 +16,7 @@ from lit.llvm.subst import FindTool
 # Configuration file for the 'lit' test runner.
 
 # name: The name of this test suite.
-config.name = 'CIRT'
+config.name = 'CIRCT'
 
 config.test_format = lit.formats.ShTest(not llvm_config.use_lit_shell)
 
@@ -27,7 +27,7 @@ config.suffixes = ['.td', '.mlir', '.ll', '.fir']
 config.test_source_root = os.path.dirname(__file__)
 
 # test_exec_root: The root path where tests should be run.
-config.test_exec_root = os.path.join(config.cirt_obj_root, 'test')
+config.test_exec_root = os.path.join(config.circt_obj_root, 'test')
 
 config.substitutions.append(('%PATH%', config.environment['PATH']))
 config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
@@ -46,15 +46,15 @@ config.excludes = ['Inputs', 'CMakeLists.txt', 'README.txt', 'LICENSE.txt']
 config.test_source_root = os.path.dirname(__file__)
 
 # test_exec_root: The root path where tests should be run.
-config.test_exec_root = os.path.join(config.cirt_obj_root, 'test')
+config.test_exec_root = os.path.join(config.circt_obj_root, 'test')
 
 # Tweak the PATH to include the tools dir.
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 
-tool_dirs = [config.cirt_tools_dir, config.mlir_tools_dir, config.llvm_tools_dir]
+tool_dirs = [config.circt_tools_dir, config.mlir_tools_dir, config.llvm_tools_dir]
 tools = [
-    'cirt-opt',
-    'cirt-translate',
+    'circt-opt',
+    'circt-translate',
 ]
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)

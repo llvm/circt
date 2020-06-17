@@ -1,4 +1,4 @@
-// RUN: cirt-opt %s | FileCheck %s
+// RUN: circt-opt %s | FileCheck %s
 
 //module MyModule :
 //  input in: UInt<8>

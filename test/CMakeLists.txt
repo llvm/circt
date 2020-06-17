@@ -5,19 +5,19 @@ configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.cfg.py
   )
 
-set(CIRT_TEST_DEPENDS
+set(CIRCT_TEST_DEPENDS
   FileCheck count not
-  cirt-opt
-  cirt-translate
+  circt-opt
+  circt-translate
   firtool
   )
 
-add_lit_testsuite(check-cirt "Running the CIRT regression tests"
+add_lit_testsuite(check-circt "Running the CIRCT regression tests"
   ${CMAKE_CURRENT_BINARY_DIR}
-  DEPENDS ${CIRT_TEST_DEPENDS}
+  DEPENDS ${CIRCT_TEST_DEPENDS}
   )
-set_target_properties(check-cirt PROPERTIES FOLDER "Tests")
+set_target_properties(check-circt PROPERTIES FOLDER "Tests")
 
-add_lit_testsuites(CIRT ${CMAKE_CURRENT_SOURCE_DIR}
-  DEPENDS ${CIRT_TEST_DEPS}
+add_lit_testsuites(CIRCT ${CMAKE_CURRENT_SOURCE_DIR}
+  DEPENDS ${CIRCT_TEST_DEPS}
 )

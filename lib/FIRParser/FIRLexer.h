@@ -7,7 +7,7 @@
 #ifndef FIRTOMLIR_FIRLEXER_H
 #define FIRTOMLIR_FIRLEXER_H
 
-#include "cirt/Support/LLVM.h"
+#include "circt/Support/LLVM.h"
 #include "llvm/Support/SourceMgr.h"
 
 namespace mlir {
@@ -15,7 +15,7 @@ class MLIRContext;
 class Location;
 } // namespace mlir
 
-namespace cirt {
+namespace circt {
 namespace firrtl {
 
 /// This represents a specific token for .fir files.
@@ -123,6 +123,6 @@ private:
 };
 
 } // namespace firrtl
-} // namespace cirt
+} // namespace circt
 
 #endif // FIRTOMLIR_FIRLEXER_H

@@ -4,18 +4,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "cirt/EmitVerilog.h"
-#include "cirt/Dialect/FIRRTL/Visitors.h"
-#include "cirt/Dialect/RTL/Ops.h"
-#include "cirt/Dialect/RTL/Visitors.h"
-#include "cirt/Support/LLVM.h"
+#include "circt/EmitVerilog.h"
+#include "circt/Dialect/FIRRTL/Visitors.h"
+#include "circt/Dialect/RTL/Ops.h"
+#include "circt/Dialect/RTL/Visitors.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Module.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/Support/raw_ostream.h"
 
-using namespace cirt;
+using namespace circt;
 using namespace firrtl;
 using namespace mlir;
 
@@ -997,7 +997,7 @@ SubExprInfo ExprEmitter::visitComb(rtl::SExtOp op) {
   auto inWidth = inType.getWidth();
   auto destWidth = op.getType().cast<IntegerType>().getWidth();
 
- // Handle sign extend from a single bit in a pretty way.
+  // Handle sign extend from a single bit in a pretty way.
   if (inWidth == 1) {
     os << '{' << destWidth << '{';
     emitSubExpr(op.getOperand(), LowestPrecedence);
@@ -2218,12 +2218,12 @@ void CircuitEmitter::emitMLIRModule(ModuleOp module) {
   }
 }
 
-LogicalResult cirt::emitVerilog(ModuleOp module, llvm::raw_ostream &os) {
+LogicalResult circt::emitVerilog(ModuleOp module, llvm::raw_ostream &os) {
   VerilogEmitterState state(os);
   CircuitEmitter(state).emitMLIRModule(module);
   return failure(state.encounteredError);
 }
 
-void cirt::registerVerilogEmitterTranslation() {
+void circt::registerVerilogEmitterTranslation() {
   static TranslateFromMLIRRegistration toVerilog("emit-verilog", emitVerilog);
 }

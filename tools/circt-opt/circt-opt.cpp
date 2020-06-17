@@ -1,12 +1,13 @@
-//===- cirt-opt.cpp - The cirt-opt driver ---------------------------------===//
+//===- circt-opt.cpp - The circt-opt driver
+//---------------------------------===//
 //
-// This file implements the 'cirt-opt' tool, which is the cirt analog of
+// This file implements the 'circt-opt' tool, which is the circt analog of
 // mlir-opt, used to drive compiler passes, e.g. for testing.
 //
 //===----------------------------------------------------------------------===//
 
-#include "cirt/Dialect/FIRRTL/Dialect.h"
-#include "cirt/Dialect/RTL/Dialect.h"
+#include "circt/Dialect/FIRRTL/Dialect.h"
+#include "circt/Dialect/RTL/Dialect.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
@@ -20,7 +21,7 @@
 
 using namespace llvm;
 using namespace mlir;
-using namespace cirt;
+using namespace circt;
 
 static cl::opt<std::string>
     inputFilename(cl::Positional, cl::desc("<input file>"), cl::init("-"));
@@ -79,7 +80,7 @@ int main(int argc, char **argv) {
   PassPipelineCLParser passPipeline("", "Compiler passes to run");
 
   // Parse pass names in main to ensure static initialization completed.
-  cl::ParseCommandLineOptions(argc, argv, "cirt modular optimizer driver\n");
+  cl::ParseCommandLineOptions(argc, argv, "circt modular optimizer driver\n");
 
   MLIRContext context;
   if (showDialects) {

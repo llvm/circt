@@ -4,17 +4,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRT_DIALECT_FIRRTL_OPS_H
-#define CIRT_DIALECT_FIRRTL_OPS_H
+#ifndef CIRCT_DIALECT_FIRRTL_OPS_H
+#define CIRCT_DIALECT_FIRRTL_OPS_H
 
-#include "cirt/Dialect/FIRRTL/Dialect.h"
-#include "cirt/Dialect/FIRRTL/Types.h"
+#include "circt/Dialect/FIRRTL/Dialect.h"
+#include "circt/Dialect/FIRRTL/Types.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
-namespace cirt {
+namespace circt {
 namespace firrtl {
 
 /// Return true if the specified operation is a firrtl expression.
@@ -53,15 +53,15 @@ FunctionType getModuleType(Operation *op);
 void getModulePortInfo(Operation *op, SmallVectorImpl<ModulePortInfo> &results);
 
 } // namespace firrtl
-} // namespace cirt
+} // namespace circt
 
-namespace cirt {
+namespace circt {
 namespace firrtl {
 
 #define GET_OP_CLASSES
-#include "cirt/Dialect/FIRRTL/FIRRTL.h.inc"
+#include "circt/Dialect/FIRRTL/FIRRTL.h.inc"
 
 } // namespace firrtl
-} // namespace cirt
+} // namespace circt
 
-#endif // CIRT_DIALECT_FIRRTL_OPS_H
+#endif // CIRCT_DIALECT_FIRRTL_OPS_H

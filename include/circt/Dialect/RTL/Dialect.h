@@ -4,12 +4,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRT_DIALECT_RTL_DIALECT_H
-#define CIRT_DIALECT_RTL_DIALECT_H
+#ifndef CIRCT_DIALECT_RTL_DIALECT_H
+#define CIRCT_DIALECT_RTL_DIALECT_H
 
 #include "mlir/IR/Dialect.h"
 
-namespace cirt {
+namespace circt {
 namespace rtl {
 using namespace mlir;
 
@@ -25,6 +25,6 @@ public:
 };
 
 } // namespace rtl
-} // namespace cirt
+} // namespace circt
 
-#endif // CIRT_DIALECT_RTL_DIALECT_H
+#endif // CIRCT_DIALECT_RTL_DIALECT_H

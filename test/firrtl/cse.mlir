@@ -1,4 +1,4 @@
-// RUN: cirt-opt -cse %s | FileCheck %s
+// RUN: circt-opt -cse %s | FileCheck %s
 
 // CHECK-LABEL: firrtl.module @And
 firrtl.module @And(%in1: !firrtl.uint<4>, %in2: !firrtl.uint<4>,

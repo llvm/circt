@@ -2,11 +2,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "cirt/Dialect/FIRRTL/Dialect.h"
-#include "cirt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/Dialect.h"
+#include "circt/Dialect/FIRRTL/Ops.h"
 #include "mlir/IR/DialectImplementation.h"
 
-using namespace cirt;
+using namespace circt;
 using namespace firrtl;
 
 //===----------------------------------------------------------------------===//
@@ -97,7 +97,7 @@ FIRRTLDialect::FIRRTLDialect(MLIRContext *context)
   // Register operations.
   addOperations<
 #define GET_OP_LIST
-#include "cirt/Dialect/FIRRTL/FIRRTL.cpp.inc"
+#include "circt/Dialect/FIRRTL/FIRRTL.cpp.inc"
       >();
 
   // Register interface implementations.
@@ -129,4 +129,4 @@ Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
 }
 
 // Provide implementations for the enums we use.
-#include "cirt/Dialect/FIRRTL/FIRRTLEnums.cpp.inc"
+#include "circt/Dialect/FIRRTL/FIRRTLEnums.cpp.inc"

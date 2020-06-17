@@ -4,23 +4,23 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRT_DIALECT_RTL_OPS_H
-#define CIRT_DIALECT_RTL_OPS_H
+#ifndef CIRCT_DIALECT_RTL_OPS_H
+#define CIRCT_DIALECT_RTL_OPS_H
 
-#include "cirt/Dialect/RTL/Dialect.h"
+#include "circt/Dialect/RTL/Dialect.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
-namespace cirt {
+namespace circt {
 namespace rtl {
 
 #define GET_OP_CLASSES
-#include "cirt/Dialect/RTL/RTL.h.inc"
+#include "circt/Dialect/RTL/RTL.h.inc"
 
 /// Return true if the specified operation is a combinatorial logic op.
 bool isCombinatorial(Operation *op);
 
 } // namespace rtl
-} // namespace cirt
+} // namespace circt
 
-#endif // CIRT_DIALECT_RTL_OPS_H
+#endif // CIRCT_DIALECT_RTL_OPS_H

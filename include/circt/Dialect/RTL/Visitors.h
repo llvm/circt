@@ -4,13 +4,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRT_DIALECT_RTL_VISITORS_H
-#define CIRT_DIALECT_RTL_VISITORS_H
+#ifndef CIRCT_DIALECT_RTL_VISITORS_H
+#define CIRCT_DIALECT_RTL_VISITORS_H
 
-#include "cirt/Dialect/RTL/Ops.h"
+#include "circt/Dialect/RTL/Ops.h"
 #include "llvm/ADT/TypeSwitch.h"
 
-namespace cirt {
+namespace circt {
 namespace rtl {
 
 /// This helps visit Combinatorial nodes.
@@ -78,6 +78,6 @@ public:
 };
 
 } // namespace rtl
-} // namespace cirt
+} // namespace circt
 
-#endif // CIRT_DIALECT_RTL_VISITORS_H
+#endif // CIRCT_DIALECT_RTL_VISITORS_H

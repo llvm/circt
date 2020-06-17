@@ -4,22 +4,22 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRT_EMIT_VERILOG_H
-#define CIRT_EMIT_VERILOG_H
+#ifndef CIRCT_EMIT_VERILOG_H
+#define CIRCT_EMIT_VERILOG_H
 
-#include "cirt/Support/LLVM.h"
+#include "circt/Support/LLVM.h"
 
 namespace mlir {
 struct LogicalResult;
 class ModuleOp;
 } // namespace mlir
 
-namespace cirt {
+namespace circt {
 
 mlir::LogicalResult emitVerilog(mlir::ModuleOp module, llvm::raw_ostream &os);
 
 void registerVerilogEmitterTranslation();
 
-} // namespace cirt
+} // namespace circt
 
-#endif // CIRT_EMIT_VERILOG_H
+#endif // CIRCT_EMIT_VERILOG_H

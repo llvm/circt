@@ -1,6 +1,6 @@
 set(LIBS
-  CIRTEmitVerilog
-  CIRTFIRParser
+  CIRCTEmitVerilog
+  CIRCTFIRParser
 
   MLIRParser
   MLIRSupport

@@ -1,4 +1,4 @@
-// RUN: cirt-opt -pass-pipeline='firrtl.circuit(lower-firrtl-to-rtl)' %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='firrtl.circuit(lower-firrtl-to-rtl)' %s | FileCheck %s
 
  firrtl.circuit "Circuit" {
 

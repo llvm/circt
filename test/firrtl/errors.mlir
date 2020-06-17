@@ -1,4 +1,4 @@
-// RUN: cirt-opt %s -split-input-file -verify-diagnostics
+// RUN: circt-opt %s -split-input-file -verify-diagnostics
 
 firrtl.module @X(%b : !firrtl.unknowntype) {
   // expected-error @-1 {{unknown firrtl type}}

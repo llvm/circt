@@ -2,13 +2,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "cirt/Dialect/FIRRTL/Ops.h"
-#include "cirt/Dialect/FIRRTL/Passes.h"
-#include "cirt/Dialect/RTL/Ops.h"
+#include "circt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/RTL/Ops.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
-using namespace cirt;
+using namespace circt;
 using namespace firrtl;
 using namespace rtl;
 
@@ -198,7 +198,7 @@ public:
 } // end anonymous namespace
 
 #define GEN_PASS_CLASSES
-#include "cirt/Dialect/FIRRTL/FIRRTLPasses.h.inc"
+#include "circt/Dialect/FIRRTL/FIRRTLPasses.h.inc"
 
 namespace {
 struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering> {
@@ -224,6 +224,6 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering> {
 };
 } // end anonymous namespace
 
-std::unique_ptr<mlir::Pass> cirt::firrtl::createLowerFIRRTLToRTLPass() {
+std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLToRTLPass() {
   return std::make_unique<FIRRTLLowering>();
 }

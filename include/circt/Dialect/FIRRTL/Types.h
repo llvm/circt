@@ -4,12 +4,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRT_DIALECT_FIRRTL_TYPES_H
-#define CIRT_DIALECT_FIRRTL_TYPES_H
+#ifndef CIRCT_DIALECT_FIRRTL_TYPES_H
+#define CIRCT_DIALECT_FIRRTL_TYPES_H
 
 #include "mlir/IR/Types.h"
 
-namespace cirt {
+namespace circt {
 namespace firrtl {
 namespace detail {
 struct WidthTypeStorage;
@@ -275,14 +275,14 @@ public:
 };
 
 } // namespace firrtl
-} // namespace cirt
+} // namespace circt
 
 namespace llvm {
 
 // Type hash just like pointers.
 template <>
-struct DenseMapInfo<cirt::firrtl::FIRRTLType> {
-  using FIRRTLType = cirt::firrtl::FIRRTLType;
+struct DenseMapInfo<circt::firrtl::FIRRTLType> {
+  using FIRRTLType = circt::firrtl::FIRRTLType;
   static FIRRTLType getEmptyKey() {
     auto pointer = llvm::DenseMapInfo<void *>::getEmptyKey();
     return FIRRTLType(static_cast<mlir::Type::ImplType *>(pointer));
@@ -297,4 +297,4 @@ struct DenseMapInfo<cirt::firrtl::FIRRTLType> {
 
 } // namespace llvm
 
-#endif // CIRT_DIALECT_FIRRTL_TYPES_H
+#endif // CIRCT_DIALECT_FIRRTL_TYPES_H

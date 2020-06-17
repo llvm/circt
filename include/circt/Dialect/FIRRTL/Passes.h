@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRT_DIALECT_FIRRTL_PASSES_H
-#define CIRT_DIALECT_FIRRTL_PASSES_H
+#ifndef CIRCT_DIALECT_FIRRTL_PASSES_H
+#define CIRCT_DIALECT_FIRRTL_PASSES_H
 
 #include <memory>
 
@@ -19,12 +19,12 @@ namespace mlir {
 class Pass;
 } // namespace mlir
 
-namespace cirt {
+namespace circt {
 namespace firrtl {
 
 std::unique_ptr<mlir::Pass> createLowerFIRRTLToRTLPass();
 
 } // namespace firrtl
-} // namespace cirt
+} // namespace circt
 
-#endif // CIRT_DIALECT_FIRRTL_PASSES_H
+#endif // CIRCT_DIALECT_FIRRTL_PASSES_H

@@ -2,13 +2,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "cirt/Dialect/RTL/Dialect.h"
-#include "cirt/Dialect/RTL/Ops.h"
+#include "circt/Dialect/RTL/Dialect.h"
+#include "circt/Dialect/RTL/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/StandardTypes.h"
 
-using namespace cirt;
+using namespace circt;
 using namespace rtl;
 
 //===----------------------------------------------------------------------===//
@@ -21,7 +21,7 @@ RTLDialect::RTLDialect(MLIRContext *context)
   // Register operations.
   addOperations<
 #define GET_OP_LIST
-#include "cirt/Dialect/RTL/RTL.cpp.inc"
+#include "circt/Dialect/RTL/RTL.cpp.inc"
       >();
 }
 
