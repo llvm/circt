@@ -1,7 +1,7 @@
 # "CIRCT" / Circuit IR Compilers and Tools
 
 This is an experimental repository, applying the MLIR/LLVM approach to building
-modular tools for Verilog, focusing on FIRRTL.
+modular tools for hardware design.
 
 "CIRCT" stands for "Circuit IR Compilers and Tools" or perhaps "CIRCuiT + 
 IntermediateRepresenTation + Toolbox" (hat tip to Aliaksei Chapyzhenka).  The
@@ -15,31 +15,40 @@ These are the commands Chris used to set this up on a Mac:
 1) Install Dependences of LLVM/MLIR according to [the
   instructions](https://mlir.llvm.org/getting_started/), including cmake and ninja. 
 
-2) Check out LLVM and CIRCT repo's:
+2) Check out LLVM and CIRCT repos.  CIRCT contains LLVM as a git
+submodule.  The LLVM repo here includes staged changes to MLIR which
+may be necessary to support CIRCT.  It also represents the version of
+LLVM that has been tested.  MLIR is still changing relatively rapidly,
+so feel free to use the current version of LLVM, but APIs may have
+changed.
 
 ```
 $ cd ~/Projects
-$ git clone git@github.com:llvm/llvm-project.git
-$ git clone git@github.com:sifive/circt.git circt
+$ git clone git@github.com:circt/circt.git
+$ git submodule init
+$ git submodule update
 ```
 
-3) HACK: Add symlink because I can't figure out how to get
-   `LLVM_EXTERNAL_CIRCT_SOURCE_DIR` to work with cmake (I'd love help with
-   this!):
+3) Build and test LLVM/MLIR
 
 ```
-$ cd ~/Projects/llvm-project
-$ ln -s ../circt circt
+$ cd circt
+$ mkdir llvm/build
+$ cd llvm/build
+$ cmake -G Ninja ../llvm -DLLVM_ENABLE_PROJECTS="mlir" -DLLVM_TARGETS_TO_BUILD="X86;RISCV"  -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=DEBUG
+$ ninja
+$ ninja check-mlir
 ```
 
-4) Configure the build to build MLIR and CIRCT using a command like this
-   (replace `/Users/chrisl` with the paths you want to use):
+4) Build and test CIRCT
 
 ```
-$ cd ~/Projects/llvm-project
-$ mkdir build
-$ cd build
-$ cmake -G Ninja ../llvm  -DLLVM_EXTERNAL_PROJECTS="circt" -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=/Users/chrisl/Projects/circt   -DLLVM_ENABLE_PROJECTS="mlir;circt" -DLLVM_TARGETS_TO_BUILD="X86;RISCV"  -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=DEBUG
+$ cd ~/Projects
+$ mkdir circt/build
+$ cd circt/build
+$ cmake -G Ninja .. -DMLIR_DIR=~/Projects/circt/llvm/build/lib/cmake/mlir -DLLVM_DIR=~/Projects/circt/llvm/build/lib/cmake/llvm -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=DEBUG
+$ ninja
+$ ninja check-circt
 ```
 
 The `-DCMAKE_BUILD_TYPE=DEBUG` flag enables debug information, which makes the
@@ -48,25 +57,13 @@ and MLIR frameworks.
 
 To get something that runs fast, use `-DCMAKE_BUILD_TYPE=Release` or
 `-DCMAKE_BUILD_TYPE=RelWithDebInfo` if you want to go fast and optionally if
-you want debug info to go with it.  `RELEASE` mode makes a very large difference
+you want debug info to go with it.  `Release` mode makes a very large difference
 in performance.
 
-5) Build MLIR and run MLIR tests as a smoketest - this isn't needed, but is
-reasonably fast and a good sanity check:
 
-```
-$ ninja check-mlir
-```
+5) Optionally configure your environment:
 
-6) Build CIRCT and run CIRCT tests:
-
-```
-$ ninja check-circt
-```
-
-7) Optionally configure your environment:
-
-It is useful to add the .../llvm-project/build/bin directory to the end
+It is useful to add the .../circt/build/bin directory to the end
 of your PATH, allowing you to use the tools like circt-opt in a natural way on
 the command line.  Similarly, you need to be in the build directory to invoke
 ninja, which is super annoying.  You might find a bash/zsh alias like this to
@@ -74,7 +71,7 @@ be useful:
 
 ```bash
 build() {
-  (cd $HOME/Projects/llvm-project/build/; ninja $1 $2 $3)
+  (cd $HOME/Projects/circt/build/; ninja $1 $2 $3)
 }
 ```
 
@@ -83,8 +80,7 @@ the right thing.
 
 ## Submitting changes to CIRCT
 
-The project is small so there is no formal process yet. Just talk to Chris, or
-create a PR.
+The project is small so there is no formal process yet. Feel free to create a PR.
 
 ## Submitting changes to LLVM / MLIR
 
