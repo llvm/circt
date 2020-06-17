@@ -4,10 +4,6 @@
 set(CIRCT_INSTALL_PACKAGE_DIR lib${LLVM_LIBDIR_SUFFIX}/cmake/llvm)
 set(circt_cmake_builddir "${CMAKE_BINARY_DIR}/${CIRCT_INSTALL_PACKAGE_DIR}")
 
-# Keep this in sync with llvm/cmake/CMakeLists.txt!
-set(LLVM_INSTALL_PACKAGE_DIR lib${LLVM_LIBDIR_SUFFIX}/cmake/llvm)
-set(llvm_cmake_builddir "${LLVM_BINARY_DIR}/${LLVM_INSTALL_PACKAGE_DIR}")
-
 get_property(CIRCT_EXPORTS GLOBAL PROPERTY CIRCT_EXPORTS)
 export(TARGETS ${CIRCT_EXPORTS} FILE ${circt_cmake_builddir}/CIRCTTargets.cmake)
 
@@ -53,10 +49,12 @@ if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
             COMPONENT circt-cmake-exports)
   endif()
 
-  install(FILES #${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/CIRCTConfig.cmake
-    ${CMAKE_CURRENT_SOURCE_DIR}/AddCIRCT.cmake
-    DESTINATION ${CIRCT_INSTALL_PACKAGE_DIR}
-    COMPONENT circt-cmake-exports)
+  # FIXME: Figure out what from this directory actually needs be
+  # installed to allow out of tree users.  
+  # install(FILES #${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/CIRCTConfig.cmake
+  #   ${CMAKE_CURRENT_SOURCE_DIR}/AddCIRCT.cmake
+  #   DESTINATION ${CIRCT_INSTALL_PACKAGE_DIR}
+  #   COMPONENT circt-cmake-exports)
 
   if(NOT LLVM_ENABLE_IDE)
     # Add a dummy target so this can be used with LLVM_DISTRIBUTION_COMPONENTS
