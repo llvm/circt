@@ -1,8 +1,9 @@
 {
-        "files.associations": {
-            "*.inc": "cpp"
-        },
-        "cmake.configureOnOpen": false,
-        "C_Cpp.errorSquiggles": "Enabled",
-        "C_Cpp.dimInactiveRegions": false
-    }
+    "files.associations": {
+        "*.inc": "cpp"
+    },
+    "cmake.configureOnOpen": false,
+    "C_Cpp.errorSquiggles": "Enabled",
+    "C_Cpp.dimInactiveRegions": false,
+    "editor.rulers": [80]
+}

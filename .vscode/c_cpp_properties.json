@@ -3,8 +3,8 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/include/circt",
-                "${workspaceFolder}/build/include/circt",
+                "${workspaceFolder}/include",
+                "${workspaceFolder}/build/include",
                 "${workspaceFolder}/llvm/mlir/include",
                 "${workspaceFolder}/llvm/llvm/include",
                 "${workspaceFolder}/llvm/build/include",

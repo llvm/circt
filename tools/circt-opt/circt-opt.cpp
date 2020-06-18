@@ -9,6 +9,7 @@
 #include "circt/Dialect/RTL/Dialect.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Conversion/StandardToHandshake/StandardToHandshake.h"
+#include "circt/Conversion/HandshakeToFIRRTL/HandshakeToFIRRTL.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
@@ -78,6 +79,7 @@ int main(int argc, char **argv) {
 
   registerDialect<handshake::HandshakeOpsDialect>();
   handshake::registerStandardToHandshakePasses();
+  handshake::registerHandshakeToFIRRTLPasses();
 
   registerDialect<rtl::RTLDialect>();
 
