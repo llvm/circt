@@ -1854,6 +1854,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitDecl(RegOp op) { return emitter.emitDecl(op), true; }
     bool visitDecl(RegInitOp op) { return emitter.emitDecl(op), true; }
     bool visitDecl(MemOp op) { return emitter.emitDecl(op), true; }
+    bool visitDecl(WireOp op) { return true; }
 
     bool visitUnhandledDecl(Operation *op) { return false; }
     bool visitInvalidDecl(Operation *op) { return false; }
@@ -1877,8 +1878,8 @@ void ModuleEmitter::emitOperation(Operation *op) {
     }
     bool visitStmt(rtl::WireOp op) { return true; }
 
-    bool visitUnhandledDecl(Operation *op) { return false; }
-    bool visitInvalidDecl(Operation *op) { return false; }
+    bool visitUnhandledStmt(Operation *op) { return false; }
+    bool visitInvalidStmt(Operation *op) { return false; }
 
   private:
     ModuleEmitter &emitter;

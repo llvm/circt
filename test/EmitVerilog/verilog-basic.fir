@@ -16,9 +16,12 @@ circuit Xorr :
 
 
   module no_ports :
+    wire x : UInt<4>
     skip
 
 ; CHECK-LABEL: module no_ports();
+; CHECK-NEXT:    wire [3:0] x;
+; CHECK-EMPTY:
 ; CHECK-NEXT:  endmodule
 
   module Expressions :
