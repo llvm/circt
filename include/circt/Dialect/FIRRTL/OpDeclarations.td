@@ -91,7 +91,7 @@ def NodeOp : FIRRTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
     subexpressions.
 
     ```
-      %result = firrt.node %input : t1
+      %result = firrtl.node %input : t1
     ```
     }];
 
@@ -108,7 +108,7 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
   let description = [{
     Declare a new register:
     ```
-      %name = firrt.reg %clockVal : t1
+      %name = firrtl.reg %clockVal : t1
     ```
     }];
 
@@ -125,7 +125,7 @@ def RegInitOp : FIRRTLOp<"reginit", [/*MemAlloc*/]> {
   let description = [{
     Declare a new register:
     ```
-      %name = firrt.reg %clockVal, %resetSignal, %resetValue : t1
+      %name = firrtl.reg %clockVal, %resetSignal, %resetValue : t1
     ```
     }];
 
@@ -143,7 +143,7 @@ def WireOp : FIRRTLOp<"wire", []> {
   let description = [{
     Declare a new wire:
     ```
-      %name = firrt.wire : t1
+      %name = firrtl.wire : t1
     ```
     }];
 
