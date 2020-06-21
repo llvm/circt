@@ -27,4 +27,26 @@ firrtl.circuit "Circuit" {
   // CHECK-NEXT:    wire [7:0] _T = z * z;
   // CHECK-NEXT:    assign y = {_T % 8'h5, z, _T};
   // CHECK-NEXT:  endmodule
+
+
+   firrtl.module @M2(%x : i8,
+                     %y : i8,
+                     %z : i8) {
+    %c42 = rtl.constant (42 : i8) : i8
+    rtl.connect %x, %c42 : i8
+
+    %w1 = rtl.wire { name = "foo" } : i8
+    rtl.connect %w1, %y : i8
+    rtl.connect %z, %w1 : i8
+  }
+
+  // CHECK-LABEL: module M2(
+  // CHECK-NEXT:    input [7:0] x, y, z);
+  // CHECK-EMPTY:
+  // CHECK-NEXT:    wire [7:0] foo;
+  // CHECK-EMPTY:
+  // CHECK-NEXT:    assign x = 8'h2A;
+  // CHECK-NEXT:    assign foo = y;
+  // CHECK-NEXT:    assign z = foo;
+  // CHECK-NEXT:  endmodule
 }

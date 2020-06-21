@@ -299,6 +299,7 @@ public:
   void emitStatementExpression(Operation *op);
   void emitStatement(AttachOp op);
   void emitStatement(ConnectOp op);
+  void emitStatement(rtl::ConnectOp op);
   void emitStatement(PrintFOp op);
   void emitStatement(StopOp op);
   void emitDecl(NodeOp op);
@@ -1308,6 +1309,18 @@ void ModuleEmitter::emitStatement(ConnectOp op) {
   emitLocationInfoAndNewLine(ops);
 }
 
+void ModuleEmitter::emitStatement(rtl::ConnectOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent() << "assign ";
+  emitExpression(op.dest(), ops);
+  os << " = ";
+  emitExpression(op.src(), ops);
+  os << ';';
+  emitLocationInfoAndNewLine(ops);
+}
+
 void ModuleEmitter::emitStatement(PrintFOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -1850,6 +1863,28 @@ void ModuleEmitter::emitOperation(Operation *op) {
   };
 
   if (StmtDeclEmitter(*this).dispatchStmtVisitor(op))
+    return;
+
+  // This visitor dispatches based on the operation kind and returns true if
+  // successfully handled.
+  class RTLStmtEmitter : public rtl::StmtVisitor<RTLStmtEmitter, bool> {
+  public:
+    RTLStmtEmitter(ModuleEmitter &emitter) : emitter(emitter) {}
+
+    using StmtVisitor::visitStmt;
+    bool visitStmt(rtl::ConnectOp op) {
+      return emitter.emitStatement(op), true;
+    }
+    bool visitStmt(rtl::WireOp op) { return true; }
+
+    bool visitUnhandledDecl(Operation *op) { return false; }
+    bool visitInvalidDecl(Operation *op) { return false; }
+
+  private:
+    ModuleEmitter &emitter;
+  };
+
+  if (RTLStmtEmitter(*this).dispatchStmtVisitor(op))
     return;
 
   emitOpError(op, "cannot emit this operation to Verilog");
