@@ -39,17 +39,10 @@ using namespace circt::firrtl;
 
 // Only support integer type
 FIRRTLType getBundleType(mlir::Type type, bool isOutput) {
-  auto dataId = Identifier::get("data", type.getContext());
-  auto validId = Identifier::get("valid", type.getContext());
-  auto readyId = Identifier::get("ready", type.getContext());
-
-  auto validType = UIntType::get(type.getContext(), 1);
-  auto readyType = UIntType::get(type.getContext(), 1);
-  auto flipValidType = FlipType::get(validType);
-  auto flipReadyType = FlipType::get(readyType);
-
   using BundleElement = std::pair<Identifier, FIRRTLType>;
   llvm::SmallVector<BundleElement, 3> elements;
+
+  auto dataId = Identifier::get("data", type.getContext());
 
   if (type.isSignedInteger() || type.isUnsignedInteger()) {
 
@@ -81,6 +74,14 @@ FIRRTLType getBundleType(mlir::Type type, bool isOutput) {
     }
   }
 
+  auto validId = Identifier::get("valid", type.getContext());
+  auto validType = UIntType::get(type.getContext(), 1);
+  auto flipValidType = FlipType::get(validType);
+
+  auto readyId = Identifier::get("ready", type.getContext());
+  auto readyType = UIntType::get(type.getContext(), 1);
+  auto flipReadyType = FlipType::get(readyType);
+
   // Construct the valid/ready field of the FIRRTL bundle
   if (isOutput) {
     BundleElement validElement = std::make_pair(validId, flipValidType);
@@ -98,20 +99,53 @@ FIRRTLType getBundleType(mlir::Type type, bool isOutput) {
   return BundleType::get(BundleElements, type.getContext());
 }
 
+//// Only support one input merge (merge -> connect)
+//// Not support branch
+//void convertMergeOp(firrtl::FModuleOp moduleOp,
+//                    ConversionPatternRewriter &rewriter) {
+//  for (Block &block : moduleOp) {
+//    for (Operation &op : block) {
+//      if (auto mergeOp = dyn_cast<handshake::MergeOp>(op)) {
+//        rewriter.setInsertionPointAfter(&op);
+//
+//        // Create wire for the results of merge operation
+//        auto results = mergeOp->getResults();
+//
+//        // Create connection between operands and result
+//        if (mergeOp->getNumOperands() == 1) {
+//          auto 
+//        }
+//      }
+//    }
+//  }
+//}
+
+//void convertReturnOp(firrtl::FModuleOp moduleOp,
+//                     ConversionPatternRewriter &rewriter) {
+//  for (Block &block : moduleOp) {
+//    for (Operation &op : block) {
+//      if (auto returnOp = dyn_cast<handshake::ReturnOp>(op)) {
+//        rewriter.setInsertionPointAfter(&op);
+//        for () {
+//          rewriter.create<firrtl::ConnectOp>();
+//        }
+//      }
+//    }
+//  }
+//}
+
 namespace {
 class FIRRTLTypeConverter : public TypeConverter {
 public:
-  FIRRTLTypeConverter();
+  FIRRTLTypeConverter() {
+    addConversion(convertType);
+  };
 
-  static Optional<Type> convertType(Type type);
+  static Optional<Type> convertType(Type type) {
+    return getBundleType(type, false);
+  };
 };
 } // End anonymous namespace
-
-FIRRTLTypeConverter::FIRRTLTypeConverter() { addConversion(convertType); }
-
-Optional<Type> FIRRTLTypeConverter::convertType(Type type) {
-  return type;
-}
 
 struct FuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
   using OpConversionPattern<handshake::FuncOp>::OpConversionPattern;
@@ -125,17 +159,24 @@ struct FuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     using ModulePort = std::pair<StringAttr, FIRRTLType>;
     llvm::SmallVector<ModulePort, 8> modulePorts;
 
+    // Signature conversion (converts function arguments)
+    int arg_count = funcOp.getNumArguments() + funcOp.getNumResults();
+    TypeConverter::SignatureConversion newSignature(arg_count);
+
     // Add all the input ports
     int ins_idx = 0;
     for (auto &arg : funcOp.getArguments()) {
       mlir::Type portType = arg.getType();
       StringAttr portName = 
-          rewriter.getStringAttr("in" + std::to_string(ins_idx));
+          rewriter.getStringAttr("arg" + std::to_string(ins_idx));
 
       // Convert normal type to FIRRTL bundle type
       FIRRTLType bundlePortType = getBundleType(portType, false);
       ModulePort modulePort = std::make_pair(portName, bundlePortType);
       modulePorts.push_back(modulePort);
+
+      // Remap inputs of the old signature
+      newSignature.addInputs(ins_idx, bundlePortType);
       ins_idx += 1;
     }
 
@@ -143,21 +184,28 @@ struct FuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     int outs_idx = 0;
     for (auto portType : funcOp.getType().getResults()) {
       StringAttr portName = 
-          rewriter.getStringAttr("out" + std::to_string(outs_idx));
+          rewriter.getStringAttr("result" + std::to_string(outs_idx));
 
       // Convert normal type to FIRRTL bundle type
       FIRRTLType bundlePortType = getBundleType(portType, true);
       ModulePort modulePort = std::make_pair(portName, bundlePortType);
       modulePorts.push_back(modulePort);
+
+      // Add outputs to the new signature
+      newSignature.addInputs(bundlePortType);
       outs_idx += 1;
     }
 
-    auto newFuncOp = rewriter.create<firrtl::FModuleOp>(
+    auto moduleOp = rewriter.create<firrtl::FModuleOp>(
         funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()), 
         ArrayRef<ModulePort>(modulePorts));
-    rewriter.inlineRegionBefore(funcOp.getBody(), newFuncOp.getBody(),
-                                newFuncOp.end());
+    rewriter.inlineRegionBefore(funcOp.getBody(), moduleOp.getBody(),
+                                moduleOp.end());
 
+    //convertMergeOp(moduleOp, rewriter);
+    //convertReturnOp(moduleOp, rewriter);
+
+    rewriter.applySignatureConversion(&moduleOp.getBody(), newSignature);
     rewriter.eraseOp(funcOp);
   }
 };
