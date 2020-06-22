@@ -1,13 +1,13 @@
 ////Simple Control Path: standard
-//func @foo(%arg0: i32) -> (i32) {
-//  return %arg0 : i32
+//func @foo(%arg0: si32) -> (si32) {
+//  return %arg0 : si32
 //}
 
 //Simple Control Path: handshake
 module {
-  handshake.func @foo(%arg0: i32, %arg1: none, ...) -> (i32, none) {
-    %0 = "handshake.merge"(%arg0) : (i32) -> i32
-    handshake.return %0, %arg1 : i32, none
+  handshake.func @foo(%arg0: si32, %arg1: none, ...) -> (si32, none) {
+    %0 = "handshake.merge"(%arg0) : (si32) -> si32
+    handshake.return %0, %arg1 : si32, none
   }
 }
 
@@ -36,9 +36,9 @@ module {
 //}
 
 //Complex Control Path : standard
-//func @foo(%in0: i32, %in1: i32) -> (i32) {
-//  %c42 = constant 42 : i32
-//  %0 = addi %in0, %in1 : i32
-//  %1 = addi %0, %c42 : i32
-//  return %1 : i32
+//func @foo(%in0: si32, %in1: si32) -> (si32) {
+//  %c42 = constant 42 : si32
+//  %0 = addi %in0, %in1 : si32
+//  %1 = addi %0, %c42 : si32
+//  return %1 : si32
 //}

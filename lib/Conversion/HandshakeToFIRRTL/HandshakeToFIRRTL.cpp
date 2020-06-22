@@ -112,21 +112,20 @@ void convertMergeOp(firrtl::FModuleOp moduleOp,
         auto resultType = result.getType();
         auto resultBundleType = getBundleType(resultType, false);
 
-        OperationState state(op.getLoc(), firrtl::WireOp::getOperationName());
-        firrtl::WireOp::build(rewriter, state, resultBundleType,
-                              rewriter.getStringAttr(""));
-        auto *wireOp = rewriter.createOperation(state);
-        //result.setType(resultBundleType);
-        rewriter.replaceOp(wireOp, result);
-        rewriter.eraseOp(&op);
+        auto wireOp = rewriter.create<firrtl::WireOp>(op.getLoc(),
+                                      resultBundleType,
+                                      rewriter.getStringAttr(""));
+        auto newResult = wireOp.getResult();
+        result.replaceAllUsesWith(newResult);
 
         // Create connection between operands and result
         rewriter.setInsertionPointAfter(wireOp);
         if (op.getNumOperands() == 1) {
           auto operand = op.getOperand(0);
-          rewriter.create<firrtl::ConnectOp>(wireOp->getLoc(),
-                                             result, operand);
+          rewriter.create<firrtl::ConnectOp>(wireOp.getLoc(),
+                                             newResult, operand);
         }
+        rewriter.eraseOp(&op);
       }
     }
   }
@@ -142,7 +141,7 @@ void convertReturnOp(firrtl::FModuleOp moduleOp,
 
         for (int i = 0, e = op.getNumOperands(); i < e; i ++) {
           auto operand = op.getOperand(i);
-          auto result = block.getArgument(numInput + i);
+          auto result = moduleOp.getArgument(numInput + i);
           rewriter.create<firrtl::ConnectOp>(op.getLoc(),
                                              result, operand);
         }
@@ -165,7 +164,7 @@ public:
 };
 } // End anonymous namespace
 
-struct FuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
+struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
   using OpConversionPattern<handshake::FuncOp>::OpConversionPattern;
 
   LogicalResult match(Operation *op) const override {
@@ -219,11 +218,11 @@ struct FuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
         ArrayRef<ModulePort>(modulePorts));
     rewriter.inlineRegionBefore(funcOp.getBody(), moduleOp.getBody(),
                                 moduleOp.end());
-    rewriter.applySignatureConversion(&moduleOp.getBody(), newSignature);
-
+    
     convertMergeOp(moduleOp, rewriter);
     convertReturnOp(moduleOp, rewriter, ins_idx);
 
+    rewriter.applySignatureConversion(&moduleOp.getBody(), newSignature);
     rewriter.eraseOp(funcOp);
   }
 };
@@ -238,12 +237,15 @@ public:
 
     ConversionTarget target(getContext());
     target.addLegalDialect<FIRRTLDialect>();
-    target.addIllegalDialect<handshake::HandshakeOpsDialect>();
+    //target.addIllegalDialect<handshake::HandshakeOpsDialect>();
 
     OwningRewritePatternList patterns;
-    patterns.insert<FuncOpLowering>(op.getContext());
+    patterns.insert<HandshakeFuncOpLowering>(op.getContext());
 
     FIRRTLTypeConverter typeConverter;
+
+    //if (failed(applyPartialConversion(op, target, patterns)))
+    //  signalPassFailure();
 
     if (failed(applyPartialConversion(op, target, patterns, &typeConverter)))
       signalPassFailure();

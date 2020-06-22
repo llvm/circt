@@ -1,6 +1,8 @@
 {
     "files.associations": {
-        "*.inc": "cpp"
+        "*.inc": "cpp",
+        "__locale": "cpp",
+        "functional": "cpp"
     },
     "files.watcherExclude": {
         "**/.git/objects/**": true,
