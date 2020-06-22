@@ -10,7 +10,7 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
   let description = [{
     The constant operation produces a constant value of SInt or UInt type.
     ```
-      %result = firrt.constant 42 : t1
+      %result = firrtl.constant 42 : t1
     ```
     }];
 
@@ -35,7 +35,7 @@ def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
     The subfield expression refers to a subelement of an expression with a
     bundle type.
     ```
-      %result = firrt.subfield %input "fieldname" : t1, t2
+      %result = firrtl.subfield %input "fieldname" : t1, t2
     ```
     }];
 
@@ -63,7 +63,7 @@ def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
     integer and cannot be equal to or exceed the length of the vector it 
     indexes.
     ```
-      %result = firrt.subindex %input[index] : t1, t2
+      %result = firrtl.subindex %input[index] : t1, t2
     ```
     }];
 
@@ -89,7 +89,7 @@ def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect]> {
     vector-typed expression using a calculated index. The index must be an
     expression with an unsigned integer type.
     ```
-      %result = firrt.subaccess %input[%idx] : t1, t2
+      %result = firrtl.subaccess %input[%idx] : t1, t2
     ```
     }];
 

@@ -1,4 +1,8 @@
 ; RUN: circt-translate -parse-fir --mlir-print-debuginfo %s | circt-translate -emit-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
+
+; Some day this should pass:
+; XUN: circt-translate -parse-fir --mlir-print-debuginfo %s | circt-opt -pass-pipeline='firrtl.circuit(lower-firrtl-to-rtl)' | circt-translate -emit-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
+
 circuit Xorr :
 
   module inputs_only :
@@ -12,9 +16,12 @@ circuit Xorr :
 
 
   module no_ports :
+    wire x : UInt<4>
     skip
 
 ; CHECK-LABEL: module no_ports();
+; CHECK-NEXT:    wire [3:0] x;
+; CHECK-EMPTY:
 ; CHECK-NEXT:  endmodule
 
   module Expressions :

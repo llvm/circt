@@ -23,7 +23,7 @@ def ConstantOp
   // FIXME(QoI): Instead of requiring "rtl.constant (42: i8) : i8", we should
   // just use "rtl.constant 42: i8".  This can be done with a custom printer and
   // parser, but would be better to be autoderived from the
-  // FirstAttrDerivedResultType trait.
+  // FirstAttrDerivedResultType trait.  This should be an MLIR core improvement.
   let assemblyFormat = [{
      `(` $value `)` attr-dict `:` type($result)
   }];

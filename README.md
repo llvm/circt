@@ -3,19 +3,19 @@
 This is an experimental repository, applying the MLIR/LLVM approach to building
 modular tools for hardware design.
 
-"CIRCT" stands for "Circuit IR Compilers and Tools" or perhaps "CIRCuiT + 
-IntermediateRepresenTation + Toolbox" (hat tip to Aliaksei Chapyzhenka).  The
-T can be further expanded as Tool, Translator, Team, Tech, Target, Tree, Type,
+"CIRCT" stands for "Circuit IR Compilers and Tools".  One might also interpret
+it as the recursively as "CIRCT IR Compiler and Tools".  The T can be further
+expanded as Tool, Translator, Team, Tech, Target, Tree, Type,
 ...  This name can still be changed if a better one is suggested.  :-)
 
 ## Setting this up
 
-These are the commands Chris used to set this up on a Mac:
+These commands can be used to set this up on a Mac:
 
-1) Install Dependences of LLVM/MLIR according to [the
+1) **Install Dependencies** of LLVM/MLIR according to [the
   instructions](https://mlir.llvm.org/getting_started/), including cmake and ninja. 
 
-2) Check out LLVM and CIRCT repos.  CIRCT contains LLVM as a git
+2) **Check out LLVM and CIRCT repos.**  CIRCT contains LLVM as a git
 submodule.  The LLVM repo here includes staged changes to MLIR which
 may be necessary to support CIRCT.  It also represents the version of
 LLVM that has been tested.  MLIR is still changing relatively rapidly,
@@ -29,7 +29,7 @@ $ git submodule init
 $ git submodule update
 ```
 
-3) Build and test LLVM/MLIR
+3) **Build and test LLVM/MLIR:**
 
 ```
 $ cd circt
@@ -40,7 +40,7 @@ $ ninja
 $ ninja check-mlir
 ```
 
-4) Build and test CIRCT
+4) **Build and test CIRCT:**
 
 ```
 $ cd ~/Projects
@@ -61,10 +61,10 @@ you want debug info to go with it.  `Release` mode makes a very large difference
 in performance.
 
 
-5) Optionally configure your environment:
+5) **Optionally configure your environment**:
 
-It is useful to add the .../circt/build/bin directory to the end
-of your PATH, allowing you to use the tools like circt-opt in a natural way on
+It is useful to add the `.../circt/build/bin` and `.../circt/llvm/build/bin` directories to the end
+of your PATH, allowing you to use the tools like `circt-opt` in a natural way on
 the command line.  Similarly, you need to be in the build directory to invoke
 ninja, which is super annoying.  You might find a bash/zsh alias like this to
 be useful:

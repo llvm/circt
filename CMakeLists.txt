@@ -15,6 +15,8 @@ endif()
 
 project(circt LANGUAGES CXX C)
 
+set(CMAKE_CXX_STANDARD 14)
+
 find_package(MLIR REQUIRED CONFIG)
 
 message(STATUS "Using MLIRConfig.cmake in: ${MLIR_DIR}")

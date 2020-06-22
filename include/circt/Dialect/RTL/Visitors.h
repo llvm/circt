@@ -77,6 +77,52 @@ public:
 #undef HANDLE
 };
 
+/// This helps visit Combinatorial nodes.
+template <typename ConcreteType, typename ResultType = void,
+          typename... ExtraArgs>
+class StmtVisitor {
+public:
+  ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
+    auto *thisCast = static_cast<ConcreteType *>(this);
+    return TypeSwitch<Operation *, ResultType>(op)
+        .template Case<ConnectOp, WireOp>([&](auto expr) -> ResultType {
+          return thisCast->visitStmt(expr, args...);
+        })
+        .Default([&](auto expr) -> ResultType {
+          return thisCast->visitInvalidStmt(op, args...);
+        });
+  }
+
+  /// This callback is invoked on any non-expression operations.
+  ResultType visitInvalidStmt(Operation *op, ExtraArgs... args) {
+    op->emitOpError("unknown RTL combinatorial node");
+    abort();
+  }
+
+  /// This callback is invoked on any combinatorial operations that are not
+  /// handled by the concrete visitor.
+  ResultType visitUnhandledComb(Operation *op, ExtraArgs... args) {
+    return ResultType();
+  }
+
+  /// This fallback is invoked on any binary node that isn't explicitly handled.
+  /// The default implementation delegates to the 'unhandled' fallback.
+  ResultType visitBinaryComb(Operation *op, ExtraArgs... args) {
+    return static_cast<ConcreteType *>(this)->visitUnhandledComb(op, args...);
+  }
+
+#define HANDLE(OPTYPE, OPKIND)                                                 \
+  ResultType visitStmt(OPTYPE op, ExtraArgs... args) {                         \
+    return static_cast<ConcreteType *>(this)->visit##OPKIND##Stmt(op,          \
+                                                                  args...);    \
+  }
+
+  // Basic nodes.
+  HANDLE(ConnectOp, Unhandled)
+  HANDLE(WireOp, Unhandled);
+#undef HANDLE
+};
+
 } // namespace rtl
 } // namespace circt
 
