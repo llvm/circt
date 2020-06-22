@@ -147,13 +147,9 @@ static LogicalResult lower(firrtl::CatPrimOp op, ArrayRef<Value> operands,
   Value args[2] = {operands[0], operands[1]};
 
   auto resultLoc = op.getLoc();
-  Type resultTypes[1] = {rewriter.getIntegerType(lhsWidth + rhsWidth)};
-  NamedAttrList attrs;
+  Type resultType = rewriter.getIntegerType(lhsWidth + rhsWidth);
 
-  Value inserted = rewriter.create<rtl::ConcatOp>(
-      resultLoc, ArrayRef<Type>(resultTypes), ArrayRef<Value>(args), attrs);
-
-  rewriter.replaceOp(op, inserted);
+  rewriter.replaceOpWithNewOp<rtl::ConcatOp>(op, resultType, ArrayRef<Value>(args));
   return success();
 }
 
