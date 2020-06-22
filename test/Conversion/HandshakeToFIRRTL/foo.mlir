@@ -11,7 +11,7 @@ module {
   }
 }
 
-////Simple Control Path: firrtl
+//Simple Control Path: firrtl
 //firrtl.circuit "Circuit" {
 //  firrtl.module @foo(
 //      %in0: !firrtl.bundle<data: sint<32>, valid: uint<1>, ready: flip<uint<1>>>,

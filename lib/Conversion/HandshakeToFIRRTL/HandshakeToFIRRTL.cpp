@@ -50,8 +50,8 @@ FIRRTLType getBundleType(mlir::Type type, bool isOutput) {
     auto width = type.dyn_cast<IntegerType>().getWidth();
 
     if (type.isSignedInteger()) {
-      auto dataType = SIntType::get(type.getContext(), width);
-      auto flipDataType = FlipType::get(dataType);
+      auto dataType = firrtl::SIntType::get(type.getContext(), width);
+      auto flipDataType = firrtl::FlipType::get(dataType);
 
       if (isOutput) {
         BundleElement dataElement = std::make_pair(dataId, flipDataType);
@@ -61,8 +61,8 @@ FIRRTLType getBundleType(mlir::Type type, bool isOutput) {
         elements.push_back(dataElement);
       }
     } else {
-      auto dataType = UIntType::get(type.getContext(), width);
-      auto flipDataType = FlipType::get(dataType);
+      auto dataType = firrtl::UIntType::get(type.getContext(), width);
+      auto flipDataType = firrtl::FlipType::get(dataType);
 
       if (isOutput) {
         BundleElement dataElement = std::make_pair(dataId, flipDataType);
@@ -75,12 +75,12 @@ FIRRTLType getBundleType(mlir::Type type, bool isOutput) {
   }
 
   auto validId = Identifier::get("valid", type.getContext());
-  auto validType = UIntType::get(type.getContext(), 1);
-  auto flipValidType = FlipType::get(validType);
+  auto validType = firrtl::UIntType::get(type.getContext(), 1);
+  auto flipValidType = firrtl::FlipType::get(validType);
 
   auto readyId = Identifier::get("ready", type.getContext());
-  auto readyType = UIntType::get(type.getContext(), 1);
-  auto flipReadyType = FlipType::get(readyType);
+  auto readyType = firrtl::UIntType::get(type.getContext(), 1);
+  auto flipReadyType = firrtl::FlipType::get(readyType);
 
   // Construct the valid/ready field of the FIRRTL bundle
   if (isOutput) {
@@ -96,43 +96,61 @@ FIRRTLType getBundleType(mlir::Type type, bool isOutput) {
   }
 
   ArrayRef<BundleElement> BundleElements = ArrayRef<BundleElement>(elements);
-  return BundleType::get(BundleElements, type.getContext());
+  return firrtl::BundleType::get(BundleElements, type.getContext());
 }
 
-//// Only support one input merge (merge -> connect)
-//// Not support branch
-//void convertMergeOp(firrtl::FModuleOp moduleOp,
-//                    ConversionPatternRewriter &rewriter) {
-//  for (Block &block : moduleOp) {
-//    for (Operation &op : block) {
-//      if (auto mergeOp = dyn_cast<handshake::MergeOp>(op)) {
-//        rewriter.setInsertionPointAfter(&op);
-//
-//        // Create wire for the results of merge operation
-//        auto results = mergeOp->getResults();
-//
-//        // Create connection between operands and result
-//        if (mergeOp->getNumOperands() == 1) {
-//          auto 
-//        }
-//      }
-//    }
-//  }
-//}
+// Only support one input merge (merge -> connect)
+void convertMergeOp(firrtl::FModuleOp moduleOp,
+                    ConversionPatternRewriter &rewriter) {
+  for (Block &block : moduleOp) {
+    for (Operation &op : block) {
+      if (auto mergeOp = dyn_cast<handshake::MergeOp>(op)) {
+        rewriter.setInsertionPointAfter(&op);
 
-//void convertReturnOp(firrtl::FModuleOp moduleOp,
-//                     ConversionPatternRewriter &rewriter) {
-//  for (Block &block : moduleOp) {
-//    for (Operation &op : block) {
-//      if (auto returnOp = dyn_cast<handshake::ReturnOp>(op)) {
-//        rewriter.setInsertionPointAfter(&op);
-//        for () {
-//          rewriter.create<firrtl::ConnectOp>();
-//        }
-//      }
-//    }
-//  }
-//}
+        // Create wire for the results of merge operation
+        auto result = op.getResult(0);
+        auto resultType = result.getType();
+        auto resultBundleType = getBundleType(resultType, false);
+
+        OperationState state(op.getLoc(), firrtl::WireOp::getOperationName());
+        firrtl::WireOp::build(rewriter, state, resultBundleType,
+                              rewriter.getStringAttr(""));
+        auto *wireOp = rewriter.createOperation(state);
+        //result.setType(resultBundleType);
+        rewriter.replaceOp(wireOp, result);
+        rewriter.eraseOp(&op);
+
+        // Create connection between operands and result
+        rewriter.setInsertionPointAfter(wireOp);
+        if (op.getNumOperands() == 1) {
+          auto operand = op.getOperand(0);
+          rewriter.create<firrtl::ConnectOp>(wireOp->getLoc(),
+                                             result, operand);
+        }
+      }
+    }
+  }
+}
+
+// Only support single block function op
+void convertReturnOp(firrtl::FModuleOp moduleOp,
+                     ConversionPatternRewriter &rewriter, uint numInput) {
+  for (Block &block : moduleOp) {
+    for (Operation &op : block) {
+      if (auto returnOp = dyn_cast<handshake::ReturnOp>(op)) {
+        rewriter.setInsertionPointAfter(&op);
+
+        for (int i = 0, e = op.getNumOperands(); i < e; i ++) {
+          auto operand = op.getOperand(i);
+          auto result = block.getArgument(numInput + i);
+          rewriter.create<firrtl::ConnectOp>(op.getLoc(),
+                                             result, operand);
+        }
+        rewriter.eraseOp(&op);
+      }
+    }
+  }
+}
 
 namespace {
 class FIRRTLTypeConverter : public TypeConverter {
@@ -201,11 +219,11 @@ struct FuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
         ArrayRef<ModulePort>(modulePorts));
     rewriter.inlineRegionBefore(funcOp.getBody(), moduleOp.getBody(),
                                 moduleOp.end());
-
-    //convertMergeOp(moduleOp, rewriter);
-    //convertReturnOp(moduleOp, rewriter);
-
     rewriter.applySignatureConversion(&moduleOp.getBody(), newSignature);
+
+    convertMergeOp(moduleOp, rewriter);
+    convertReturnOp(moduleOp, rewriter, ins_idx);
+
     rewriter.eraseOp(funcOp);
   }
 };
@@ -213,7 +231,7 @@ struct FuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
 namespace {
 class HandshakeToFIRRTLPass 
     : public mlir::PassWrapper<HandshakeToFIRRTLPass, 
-                               OperationPass<ModuleOp>> {
+                               OperationPass<handshake::FuncOp>> {
 public:
   void runOnOperation() override {
     auto op = getOperation();
