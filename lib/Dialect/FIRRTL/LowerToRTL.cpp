@@ -143,7 +143,6 @@ static LogicalResult lower(firrtl::CatPrimOp op, ArrayRef<Value> operands,
   auto lhsWidth = lhs.getType().cast<IntegerType>().getWidth();
   auto rhsWidth = rhs.getType().cast<IntegerType>().getWidth();
 
-  // TODO full argument type conversion
   Value args[2] = {operands[0], operands[1]};
 
   auto resultLoc = op.getLoc();
