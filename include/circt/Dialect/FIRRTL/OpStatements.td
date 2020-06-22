@@ -34,7 +34,7 @@ def ConnectOp : FIRRTLOp<"connect", []> {
   let description = [{
     Connect Operation:
     ```
-      firrt.connect %lhs, %rhs : t1, t2
+      firrtl.connect %lhs, %rhs : t1, t2
     ```
     }];
 
@@ -51,7 +51,7 @@ def PartialConnectOp : FIRRTLOp<"partialconnect", []> {
   let description = [{
     Connect two values with fewer constraints:
     ```
-      firrt.partialconnect %lhs, %rhs : t1, t2
+      firrtl.partialconnect %lhs, %rhs : t1, t2
     ```
     }];
 
@@ -68,7 +68,7 @@ def InvalidOp : FIRRTLOp<"invalid", []> {
   let description = [{
     Invalidate Operation:
     ```
-       %result = firrt.invalid : i8
+       %result = firrtl.invalid : i8
     ```
 
     The invalid operation produces a value of unspecified value.  Drivers may
@@ -101,7 +101,7 @@ def SkipOp : FIRRTLOp<"skip", [NoSideEffect]> {
   let description = [{
     Skip Statement:
     ```
-       %firrt.skip
+       %firrtl.skip
     ```
 
     This is a no-op statement.
