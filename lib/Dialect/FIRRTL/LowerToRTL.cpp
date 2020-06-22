@@ -144,18 +144,14 @@ static LogicalResult lower(firrtl::CatPrimOp op, ArrayRef<Value> operands,
   auto rhsWidth = rhs.getType().cast<IntegerType>().getWidth();
 
   // TODO full argument type conversion
-  Value args [2] = {operands[0], operands[1]};
+  Value args[2] = {operands[0], operands[1]};
 
   auto resultLoc = op.getLoc();
-  Type resultTypes [1] = {rewriter.getIntegerType(lhsWidth + rhsWidth)};
+  Type resultTypes[1] = {rewriter.getIntegerType(lhsWidth + rhsWidth)};
   NamedAttrList attrs;
 
   Value inserted = rewriter.create<rtl::ConcatOp>(
-    resultLoc,
-    ArrayRef<Type>(resultTypes),
-    ArrayRef<Value>(args),
-    attrs
-  );
+      resultLoc, ArrayRef<Type>(resultTypes), ArrayRef<Value>(args), attrs);
 
   rewriter.replaceOp(op, inserted);
   return success();
@@ -237,8 +233,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering> {
         RTLRewriter<firrtl::ConstantOp>,
         // Binary Operations
         RTLRewriter<firrtl::AddPrimOp>, RTLRewriter<firrtl::SubPrimOp>,
-        RTLRewriter<firrtl::XorPrimOp>,
-        RTLRewriter<firrtl::CatPrimOp>,
+        RTLRewriter<firrtl::XorPrimOp>, RTLRewriter<firrtl::CatPrimOp>,
 
         // Unary Operations
         RTLRewriter<firrtl::PadPrimOp>, RTLRewriter<firrtl::AsSIntPrimOp>,
