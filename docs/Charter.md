@@ -294,7 +294,7 @@ state, dataflow-based programming describes memory locality explicitly
 in a program.
 
 Many optimizations are possible on dataflow models. Most critically,
-*fusion optimizations manipulate the dataflow graph to generate toplevel
+fusion optimizations manipulate the dataflow graph to generate toplevel
 dataflow components where each component represents execution on a
 single processor. In order to generate a balanced
 system, this is typically done with several goals. Primarily, this needs
@@ -309,7 +309,7 @@ transformations may also be important, where large granularity
 components exist in a dataflow program. Obviously data-parallel
 computations can be partitioned using Split/Join pairs, while more
 complex components consisting of nested loops with recurrences require
-more complex analysis.**
+more complex analysis.
 
 Stream computation can be implemented using different mechanisms
 depending on the architecture. Some architectures provide stream
