@@ -99,6 +99,32 @@ FIRRTLType getBundleType(mlir::Type type, bool isOutput) {
   return firrtl::BundleType::get(BundleElements, type.getContext());
 }
 
+void mergeToEntryBlock(firrtl::FModuleOp moduleOp,
+                       ConversionPatternRewriter &rewriter) {
+  
+  // Get pointers of the first two blocks
+  auto iterator = moduleOp.getBody().begin();
+  Block *dstBlock = &*iterator;
+  Block *srcBlock = &*(++ iterator);
+  auto *termOp = dstBlock->getTerminator();
+
+  // Connect all uses of each argument of the second block to the corresponding
+  // argument of the first block
+  for (int i = 0, e = srcBlock->getNumArguments(); i < e; i ++) {
+    auto srcArgument = srcBlock->getArgument(i);
+    auto dstArgument = dstBlock->getArgument(i);
+    srcArgument.replaceAllUsesWith(dstArgument);
+  }
+
+  // Move all operations of the second block to the first block
+  while(!srcBlock->empty()){
+    Operation *op = &srcBlock->front();
+    op->moveBefore(termOp);
+  }
+  rewriter.eraseBlock(srcBlock);
+  rewriter.eraseOp(termOp);
+}
+
 // Only support one input merge (merge -> connect)
 void convertMergeOp(firrtl::FModuleOp moduleOp,
                     ConversionPatternRewriter &rewriter) {
@@ -141,7 +167,7 @@ void convertReturnOp(firrtl::FModuleOp moduleOp,
 
         for (int i = 0, e = op.getNumOperands(); i < e; i ++) {
           auto operand = op.getOperand(i);
-          auto result = moduleOp.getArgument(numInput + i);
+          auto result = block.getArgument(numInput + i);
           rewriter.create<firrtl::ConnectOp>(op.getLoc(),
                                              result, operand);
         }
@@ -219,6 +245,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     rewriter.inlineRegionBefore(funcOp.getBody(), moduleOp.getBody(),
                                 moduleOp.end());
     
+    mergeToEntryBlock(moduleOp, rewriter);
     convertMergeOp(moduleOp, rewriter);
     convertReturnOp(moduleOp, rewriter, ins_idx);
 
@@ -242,13 +269,13 @@ public:
     OwningRewritePatternList patterns;
     patterns.insert<HandshakeFuncOpLowering>(op.getContext());
 
-    FIRRTLTypeConverter typeConverter;
+    //FIRRTLTypeConverter typeConverter;
 
-    //if (failed(applyPartialConversion(op, target, patterns)))
-    //  signalPassFailure();
-
-    if (failed(applyPartialConversion(op, target, patterns, &typeConverter)))
+    if (failed(applyPartialConversion(op, target, patterns)))
       signalPassFailure();
+
+    //if (failed(applyPartialConversion(op, target, patterns, &typeConverter)))
+    //  signalPassFailure();
   }
 };
 } // end anonymous namespace
