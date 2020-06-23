@@ -1,7 +1,7 @@
 # "CIRCT" / Circuit IR Compilers and Tools
 
 This is an experimental repository, applying the MLIR/LLVM approach to building
-modular tools for hardware design.
+modular tools for hardware design.  A longer [charter document is here](docs/Charter.md).
 
 "CIRCT" stands for "Circuit IR Compilers and Tools".  One might also interpret
 it as the recursively as "CIRCT IR Compiler and Tools".  The T can be further
@@ -80,7 +80,27 @@ the right thing.
 
 ## Submitting changes to CIRCT
 
-The project is small so there is no formal process yet. Feel free to create a PR.
+The project is small so there are few formal process yet.  We generally follow
+the LLVM and MLIR community practices, but we currently use pull requests and
+GitHub issues.  Here are some high-level guidelines:
+
+ * Please use clang-format in the LLVM style.  There are good plugins
+   for common editors like VSCode, Atom, etc, or you can run it
+   manually.  This makes code easier to read and understand.
+ 
+ * Beyond mechanical formatting issues, please follow the [LLVM Coding 
+   Standards](https://llvm.org/docs/CodingStandards.html).
+
+ * Please practice "[incremental development](https://llvm.org/docs/DeveloperPolicy.html#incremental-development)", preferring to send a small
+   series of incremental patches rather than large patches.  There are other
+   policies in the LLVM Developer Policy document that are worth skimming.
+
+ * Please use "Squash and Merge" in PRs when they are approved - we don't
+   need the intra-change history in the repository history.
+
+ * Please create a PRs to get a code review.  For reviewers, it is good to look
+   at the primary author of the code you are touching to make sure they are at
+   least CC'd on the PR.
 
 ## Submitting changes to LLVM / MLIR
 

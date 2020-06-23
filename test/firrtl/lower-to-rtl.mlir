@@ -34,6 +34,9 @@
     // CHECK: %8 = rtl.xor %7, %5 : i4
     %5 = firrtl.xor %in2, %4 : (!firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
+    // CHECK: %9 = rtl.concat %5, %8 : (i4, i4) -> i8
+    %6 = firrtl.cat %4, %5 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<8>
+
     // CHECK-NEXT: firrtl.connect %out1, %8 : !firrtl.flip<uint<4>>, i4
     firrtl.connect %out1, %5 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
   }
