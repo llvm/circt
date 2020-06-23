@@ -122,7 +122,7 @@ void mergeToEntryBlock(firrtl::FModuleOp moduleOp,
     op->moveBefore(termOp);
   }
   rewriter.eraseBlock(srcBlock);
-  rewriter.eraseOp(termOp);
+  //rewriter.eraseOp(termOp);
 }
 
 // Only support one input merge (merge -> connect)
@@ -185,7 +185,11 @@ public:
   };
 
   static Optional<Type> convertType(Type type) {
-    return getBundleType(type, false);
+    if (type.isa<firrtl::FIRRTLType>()) {
+      return type;
+    } else {
+      return getBundleType(type, false);
+    }
   };
 };
 } // End anonymous namespace
@@ -249,7 +253,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     convertMergeOp(moduleOp, rewriter);
     convertReturnOp(moduleOp, rewriter, ins_idx);
 
-    rewriter.applySignatureConversion(&moduleOp.getBody(), newSignature);
+    //rewriter.applySignatureConversion(&moduleOp.getBody(), newSignature);
     rewriter.eraseOp(funcOp);
   }
 };
@@ -264,18 +268,18 @@ public:
 
     ConversionTarget target(getContext());
     target.addLegalDialect<FIRRTLDialect>();
-    //target.addIllegalDialect<handshake::HandshakeOpsDialect>();
+    target.addIllegalDialect<handshake::HandshakeOpsDialect>();
 
     OwningRewritePatternList patterns;
     patterns.insert<HandshakeFuncOpLowering>(op.getContext());
 
-    //FIRRTLTypeConverter typeConverter;
+    FIRRTLTypeConverter typeConverter;
 
-    if (failed(applyPartialConversion(op, target, patterns)))
-      signalPassFailure();
-
-    //if (failed(applyPartialConversion(op, target, patterns, &typeConverter)))
+    //if (failed(applyPartialConversion(op, target, patterns)))
     //  signalPassFailure();
+
+    if (failed(applyPartialConversion(op, target, patterns, &typeConverter)))
+      signalPassFailure();
   }
 };
 } // end anonymous namespace
