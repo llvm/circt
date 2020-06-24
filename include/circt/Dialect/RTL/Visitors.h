@@ -24,6 +24,8 @@ public:
         .template Case<ConstantOp,
                        // Arithmetic and Logical Binary Operations.
                        AddOp, SubOp, MulOp, DivOp, ModOp, AndOp, OrOp, XorOp,
+                       // Reduction Operators
+                       AndROp, OrROp, XorROp,
                        // Other operations.
                        SExtOp, ZExtOp, ConcatOp>([&](auto expr) -> ResultType {
           return thisCast->visitComb(expr, args...);
@@ -51,6 +53,10 @@ public:
     return static_cast<ConcreteType *>(this)->visitUnhandledComb(op, args...);
   }
 
+  ResultType visitUnaryComb(Operation *op, ExtraArgs... args) {
+    return static_cast<ConcreteType *>(this)->visitUnhandledComb(op, args...);
+  }
+
 #define HANDLE(OPTYPE, OPKIND)                                                 \
   ResultType visitComb(OPTYPE op, ExtraArgs... args) {                         \
     return static_cast<ConcreteType *>(this)->visit##OPKIND##Comb(op,          \
@@ -69,6 +75,10 @@ public:
   HANDLE(AndOp, Binary);
   HANDLE(OrOp, Binary);
   HANDLE(XorOp, Binary);
+
+  HANDLE(AndROp, Unary);
+  HANDLE(OrROp, Unary);
+  HANDLE(XorROp, Unary);
 
   // Other operations.
   HANDLE(SExtOp, Unhandled);
@@ -108,6 +118,10 @@ public:
   /// This fallback is invoked on any binary node that isn't explicitly handled.
   /// The default implementation delegates to the 'unhandled' fallback.
   ResultType visitBinaryComb(Operation *op, ExtraArgs... args) {
+    return static_cast<ConcreteType *>(this)->visitUnhandledComb(op, args...);
+  }
+
+  ResultType visitUnaryComb(Operation *op, ExtraArgs... args) {
     return static_cast<ConcreteType *>(this)->visitUnhandledComb(op, args...);
   }
 
