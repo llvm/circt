@@ -1,12 +1,34 @@
-# "CIRCT" / Circuit IR Compilers and Tools
-
-This is an experimental repository, applying the MLIR/LLVM approach to building
-modular tools for hardware design.  A longer [charter document is here](docs/Charter.md).
+# ⚡️ "CIRCT" / Circuit IR Compilers and Tools
 
 "CIRCT" stands for "Circuit IR Compilers and Tools".  One might also interpret
-it as the recursively as "CIRCT IR Compiler and Tools".  The T can be further
-expanded as Tool, Translator, Team, Tech, Target, Tree, Type,
-...  This name can still be changed if a better one is suggested.  :-)
+it as the recursively as "CIRCT IR Compiler and Tools".  The T can be 
+selectively expanded as Tool, Translator, Team, Technology, Target, Tree, Type,
+... we're ok with the ambiguity.
+
+## Motivation
+
+The EDA industry has well-known and widely used proprietary and open source
+tools.  However, these tools are inconsistent, have usability concerns, and were
+not designed together into a common platform.  Furthermore
+these tools are generally built with 
+[Verilog](https://en.wikipedia.org/wiki/Verilog) (also 
+[VHDL](https://en.wikipedia.org/wiki/VHDL)) as the IRs that they
+interchange.  Verilog has well known design issues, and limitations, e.g.
+suffering from poor location tracking support.
+
+The CIRCT project is an (experimental!) effort looking to apply MLIR and
+the LLVM development methodology to the domain of hardware design tools.  Many
+of us dream of having reusable infrastructure that is modular, uses 
+library-based design techniques, is more consistent, and builds on the best
+practices in compiler infrastructure and compiler design techniques.
+
+By working together, we hope that we can build a new center of gravity to draw
+contributions from the small (but enthusiastic!) community of people who work
+on open hardware tooling.  In turn we hope this will propel open tools forward,
+enables new higher-level abstractions for hardware design, and
+perhaps some pieces may even be adopted by proprietary tools in time.
+
+For more information, please see our longer [charter document](docs/Charter.md).
 
 ## Setting this up
 
