@@ -19,7 +19,7 @@ def ConstantOp
 
   let arguments = (ins APIntAttr:$value);
   let results = (outs AnySignlessInteger:$result);
-  
+
   // FIXME(QoI): Instead of requiring "rtl.constant (42: i8) : i8", we should
   // just use "rtl.constant 42: i8".  This can be done with a custom printer and
   // parser, but would be better to be autoderived from the
@@ -63,6 +63,27 @@ class UTBinRTLOp<string mnemonic, list<OpTrait> traits = []> :
   }];
 }
 
+// Base class for variadic operators.
+class VariRTLOp<string mnemonic, list<OpTrait> traits = []> :
+RTLOp<mnemonic, !listconcat(traits, [NoSideEffect])> {
+  let arguments = (ins Variadic<AnySignlessInteger>:$inputs);
+  let results = (outs AnySignlessInteger:$result);
+
+  let assemblyFormat = [{
+    $inputs  attr-dict `:` functional-type($inputs, results)
+    }];
+  }
+
+// Variadic operator with uniform input/result types.
+class UTVariRTLOp<string mnemonic, list<OpTrait> traits = []> :
+VariRTLOp<mnemonic,
+!listconcat(traits,
+  [SameTypeOperands, SameOperandsAndResultType])> {
+    let assemblyFormat = [{
+      $inputs  attr-dict `:` type($result)
+      }];
+    }
+
 // Arithmetic and Logical Binary Operations.
 def AddOp : UTBinRTLOp<"add", [Commutative]>;
 def SubOp : UTBinRTLOp<"sub">;
@@ -72,6 +93,9 @@ def ModOp : UTBinRTLOp<"mod">;
 def AndOp : UTBinRTLOp<"and", [Commutative]>;
 def OrOp  : UTBinRTLOp<"or",  [Commutative]>;
 def XorOp : UTBinRTLOp<"xor", [Commutative]>;
+
+// Concatenate a variadic list of operands together.
+def ConcatOp : VariRTLOp<"concat">;
 
 //===----------------------------------------------------------------------===//
 // Other Operations
@@ -105,14 +129,3 @@ def ZExtOp : RTLOp<"zext", [NoSideEffect]> {
 }
 
 // TODO: Bit extract range, use it for trunc.
-
-def ConcatOp : RTLOp<"concat", [NoSideEffect]> {
-  let summary = "Concatenate a variadic list of operands together.";
-
-  let arguments = (ins Variadic<AnySignlessInteger>:$inputs);
-  let results = (outs AnySignlessInteger:$result);
-
-  let assemblyFormat = [{
-    $inputs attr-dict `:` functional-type($inputs, results)
-  }];
-}
