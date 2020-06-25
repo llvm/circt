@@ -84,7 +84,7 @@ class UnaryRTLOp<string mnemonic, list<OpTrait> traits = []> :
   let results = (outs AnySignlessInteger:$result);
 
   let assemblyFormat = [{
-    $input attr-dict `:` type($input) `,` type($result)
+    $input attr-dict `:` functional-type($input, $result)
   }];
 }
 
