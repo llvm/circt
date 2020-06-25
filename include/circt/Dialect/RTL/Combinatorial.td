@@ -19,7 +19,7 @@ def ConstantOp
 
   let arguments = (ins APIntAttr:$value);
   let results = (outs AnySignlessInteger:$result);
-  
+
   // FIXME(QoI): Instead of requiring "rtl.constant (42: i8) : i8", we should
   // just use "rtl.constant 42: i8".  This can be done with a custom printer and
   // parser, but would be better to be autoderived from the
@@ -72,6 +72,25 @@ def ModOp : UTBinRTLOp<"mod">;
 def AndOp : UTBinRTLOp<"and", [Commutative]>;
 def OrOp  : UTBinRTLOp<"or",  [Commutative]>;
 def XorOp : UTBinRTLOp<"xor", [Commutative]>;
+
+//===----------------------------------------------------------------------===//
+// Unary Operations
+//===----------------------------------------------------------------------===//
+
+// Base class for unary primitive operators.
+class UnaryRTLOp<string mnemonic, list<OpTrait> traits = []> :
+      RTLOp<mnemonic, !listconcat(traits, [NoSideEffect])> {
+  let arguments = (ins AnySignlessInteger:$input);
+  let results = (outs AnySignlessInteger:$result);
+
+  let assemblyFormat = [{
+    $input attr-dict `:` functional-type($input, $result)
+  }];
+}
+
+def AndROp : UnaryRTLOp<"andr">;
+def OrROp  : UnaryRTLOp<"orr">;
+def XorROp : UnaryRTLOp<"xorr">;
 
 //===----------------------------------------------------------------------===//
 // Other Operations
