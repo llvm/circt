@@ -57,6 +57,7 @@ tools = [
     'handshake-runner',
     'circt-opt',
     'circt-translate',
+    'llhd-sim'
 ]
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)
