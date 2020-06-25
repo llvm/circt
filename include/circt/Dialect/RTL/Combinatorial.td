@@ -98,6 +98,25 @@ def XorOp : UTBinRTLOp<"xor", [Commutative]>;
 def ConcatOp : VariRTLOp<"concat">;
 
 //===----------------------------------------------------------------------===//
+// Unary Operations
+//===----------------------------------------------------------------------===//
+
+// Base class for unary primitive operators.
+class UnaryRTLOp<string mnemonic, list<OpTrait> traits = []> :
+      RTLOp<mnemonic, !listconcat(traits, [NoSideEffect])> {
+  let arguments = (ins AnySignlessInteger:$input);
+  let results = (outs AnySignlessInteger:$result);
+
+  let assemblyFormat = [{
+    $input attr-dict `:` functional-type($input, $result)
+  }];
+}
+
+def AndROp : UnaryRTLOp<"andr">;
+def OrROp  : UnaryRTLOp<"orr">;
+def XorROp : UnaryRTLOp<"xorr">;
+
+//===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
 

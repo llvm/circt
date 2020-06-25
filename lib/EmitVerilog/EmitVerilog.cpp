@@ -833,6 +833,10 @@ private:
   SubExprInfo visitComb(rtl::OrOp op) { return emitBinary(op, Or, "|"); }
   SubExprInfo visitComb(rtl::XorOp op) { return emitBinary(op, Xor, "^"); }
 
+  SubExprInfo visitComb(rtl::AndROp op) { return emitUnary(op, "&", true); }
+  SubExprInfo visitComb(rtl::OrROp op) { return emitUnary(op, "|", true); }
+  SubExprInfo visitComb(rtl::XorROp op) { return emitUnary(op, "^", true); }
+
   SubExprInfo visitComb(rtl::SExtOp op);
   SubExprInfo visitComb(rtl::ZExtOp op);
   SubExprInfo visitComb(rtl::ConcatOp op);
