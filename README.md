@@ -1,3 +1,5 @@
+![](https://github.com/circt/circt/workflows/Build%20and%20Test/badge.svg?event=push)
+
 # ⚡️ "CIRCT" / Circuit IR Compilers and Tools
 
 "CIRCT" stands for "Circuit IR Compilers and Tools".  One might also interpret
