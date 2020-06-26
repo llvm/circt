@@ -158,9 +158,8 @@ void convertMergeOp(FModuleOp &moduleOp,
   }
 }
 
-template <typename OpType>
 ArrayRef<std::pair<StringAttr, FIRRTLType>> getFModulePorts(
-    OpType &op, ConversionPatternRewriter &rewriter) {
+    Operation &op, ConversionPatternRewriter &rewriter) {
   using ModulePort = std::pair<StringAttr, FIRRTLType>;
   llvm::SmallVector<ModulePort, 4> modulePorts;
 
@@ -218,55 +217,94 @@ std::map<StringRef, SubfieldOp> createSubfieldOps(BlockArgument port,
   return subfieldOpMap;
 }
 
-template <typename OpType>
-void createBinaryOpModule(FModuleOp moduleOp, OpType binaryOp, 
+std::map<StringRef, firrtl::ConstantOp> createLowHighConstantOps(
+    BlockArgument port, Location termOpLoc, 
+    ConversionPatternRewriter &rewriter){
+  std::map<StringRef, firrtl::ConstantOp> LowHighConstantOpMap;
+  auto portType = port.getType().dyn_cast<BundleType>();
+  auto dataType = portType.getElementType(StringRef("data"));
+  auto validType = portType.getElementType(StringRef("valid"));
+
+  // Create constant ops
+  auto zeroDataAttr = rewriter.getIntegerAttr(IntegerType::get(
+      dataType.getBitWidthOrSentinel(), IntegerType::Signed, 
+      rewriter.getContext()), 0);
+  auto zeroDataOp = rewriter.create<firrtl::ConstantOp>(
+      termOpLoc, dataType, zeroDataAttr);
+  LowHighConstantOpMap.insert(std::pair<StringRef, firrtl::ConstantOp>(
+      StringRef("zero"), zeroDataOp));
+
+  auto lowSignalAttr = rewriter.getIntegerAttr(
+      IntegerType::get(1, IntegerType::Unsigned, rewriter.getContext()), 0);
+  auto lowSignalOp = rewriter.create<firrtl::ConstantOp>(
+      termOpLoc, validType, lowSignalAttr);
+  LowHighConstantOpMap.insert(std::pair<StringRef, firrtl::ConstantOp>(
+      StringRef("low"), lowSignalOp));
+  
+  auto highSignalAttr = rewriter.getIntegerAttr(
+      IntegerType::get(1, IntegerType::Unsigned, rewriter.getContext()), 1);
+  auto highSignalOp = rewriter.create<firrtl::ConstantOp>(
+      termOpLoc, validType, highSignalAttr);
+  LowHighConstantOpMap.insert(std::pair<StringRef, firrtl::ConstantOp>(
+      StringRef("high"), highSignalOp));
+  
+  return LowHighConstantOpMap;
+}
+
+template <typename FIRRTLOpType>
+void createBinaryOpModule(FModuleOp moduleOp, Operation &binaryOp, 
                           ConversionPatternRewriter &rewriter) {
   // Create new FIRRTL module for binary operation
   auto binaryOpModule = rewriter.create<FModuleOp>(
       moduleOp.getLoc(), 
       rewriter.getStringAttr(binaryOp.getName().getStringRef()), 
-      getFModulePorts<OpType>(binaryOp, rewriter));
+      getFModulePorts(binaryOp, rewriter));
   auto &entryBlock = binaryOpModule.getBody().front();
+  auto arg0Port = entryBlock.getArgument(0);
+  auto arg1Port = entryBlock.getArgument(1);
+  auto resultPort = entryBlock.getArgument(2);
   auto *termOp = entryBlock.getTerminator();
 
-  // Construct arg0, arg1, result signals
-  auto arg0Map = createSubfieldOps(entryBlock.getArgument(0), 
-                                   termOp->getLoc(), rewriter);
-  auto arg1Map = createSubfieldOps(entryBlock.getArgument(1), 
-                                   termOp->getLoc(), rewriter);
-  auto resultMap = createSubfieldOps(entryBlock.getArgument(2), 
-                                     termOp->getLoc(), rewriter);
+  // Get all useful types
+  StringRef dataString = StringRef("data");
+  StringRef validString = StringRef("valid");
+  StringRef readyString = StringRef("ready");
 
-//  // Construct combinational logics
-//  auto arg0Valid = arg0ValidOp.getResult();
-//  auto arg1Valid = arg1ValidOp.getResult();
-//  auto argsValid = rewriter.create<AndPrimOp>(
-//      termOp->getLoc(), arg0ValidType, arg0Valid, arg1Valid);
-//
-//  auto resultReady = resultReadyOp.getResult();
-//  auto condition = rewriter.create<AndPrimOp>(
-//      termOp->getLoc(), arg0ValidType, argsValid, resultReady);
-//    
-//  auto arg0Data = arg0DataOp.getResult();
-//  auto arg1Data = arg1DataOp.getResult();
-//  auto result = rewriter.create<AddPrimOp>(
-//      termOp->getLoc(), arg0DataType, arg0Data, arg1Data);
-//  
-//  auto zeroSignal = rewriter.create<ConstantOp>(
-//      termOp->getLoc(), arg0DataType, rewriter.getIntegerAttr(
-//      IntegerType::get(32, IntegerType::Signed, 
-//      rewriter.getContext()), 0));
-//  auto lowSignal = rewriter.create<ConstantOp>(
-//      termOp->getLoc(), arg0ValidType, rewriter.getIntegerAttr(
-//      IntegerType::get(1, IntegerType::Unsigned, 
-//      rewriter.getContext()), 0));
-//  auto highSignal = rewriter.create<ConstantOp>(
-//      termOp->getLoc(), arg0ValidType, rewriter.getIntegerAttr(
-//      IntegerType::get(1, IntegerType::Unsigned, 
-//      rewriter.getContext()), 0));
-//
-//  auto whenOp = rewriter.create<WhenOp>(
-//      termOp->getLoc(), condition, true);
+  auto argsType = arg0Port.getType().dyn_cast<BundleType>();
+  auto dataType = argsType.getElementType(dataString);
+  auto validType = argsType.getElementType(validString);
+  auto flipReadyType = argsType.getElementType(readyString);
+
+  auto resultType = resultPort.getType().dyn_cast<BundleType>();
+  auto flipDataType = resultType.getElementType(dataString);
+  auto flipValidType = resultType.getElementType(validString);
+  auto readyType = resultType.getElementType(readyString);
+
+  // Construct arg0, arg1, result, constant signals
+  auto arg0Map = createSubfieldOps(arg0Port, termOp->getLoc(), rewriter);
+  auto arg1Map = createSubfieldOps(arg1Port, termOp->getLoc(), rewriter);
+  auto resultMap = createSubfieldOps(resultPort, termOp->getLoc(), rewriter);
+  auto constantMap = createLowHighConstantOps(
+      arg0Port, termOp->getLoc(), rewriter);
+
+  // Construct combinational logics
+  auto arg0Valid = arg0Map[validString].getResult();
+  auto arg1Valid = arg1Map[validString].getResult();
+  auto argsValid = rewriter.create<AndPrimOp>(
+      termOp->getLoc(), validType, arg0Valid, arg1Valid);
+
+  auto resultReady = resultMap[readyString].getResult();
+  auto condition = rewriter.create<AndPrimOp>(
+      termOp->getLoc(), validType, argsValid, resultReady);
+    
+  auto arg0Data = arg0Map[dataString].getResult();
+  auto arg1Data = arg1Map[dataString].getResult();
+  auto result = rewriter.create<FIRRTLOpType>(
+      termOp->getLoc(), dataType, arg0Data, arg1Data);
+  
+  //TODO
+  auto whenOp = rewriter.create<WhenOp>(
+      termOp->getLoc(), condition, true);
 }
 
 void convertStandardOp(FModuleOp moduleOp,
@@ -274,7 +312,8 @@ void convertStandardOp(FModuleOp moduleOp,
   for (Block &block : moduleOp) {
     for (Operation &op : block) {
       if (auto addiOp = dyn_cast<AddIOp>(op)) {
-        continue;
+        createBinaryOpModule<firrtl::AddPrimOp>(moduleOp, op, rewriter);
+        
       }
     }
   }
@@ -291,8 +330,7 @@ void convertReturnOp(FModuleOp &moduleOp,
         for (int i = 0, e = op.getNumOperands(); i < e; i ++) {
           auto operand = op.getOperand(i);
           auto result = block.getArgument(numInput + i);
-          rewriter.create<ConnectOp>(op.getLoc(),
-                                             result, operand);
+          rewriter.create<ConnectOp>(op.getLoc(), result, operand);
         }
         rewriter.eraseOp(&op);
       }
