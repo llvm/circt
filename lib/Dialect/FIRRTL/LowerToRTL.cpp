@@ -105,9 +105,9 @@ static LogicalResult lower(firrtl::WireOp op, ArrayRef<Value> operands,
 
     if (auto intType = resultType.getValue().dyn_cast<IntegerType>()) {
       rewriter.replaceOpWithNewOp<rtl::WireOp>(op, intType, op.nameAttr());
-    }
     // TODO: Add support for vectors in RTL. The below code to handle FIRRTL
     // vectors is not a solution.
+    }
     else if (auto fvType = resFirType.dyn_cast<FVectorType>()) {
       unsigned numElems = fvType.getNumElements();
       auto elemType = RTLTypeConverter::convertType(fvType.getElementType());
