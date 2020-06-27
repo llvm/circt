@@ -11,8 +11,8 @@ firrtl.module @And(%in: !firrtl.uint<4>,
   firrtl.connect %out, %0 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
   // CHECK: firrtl.connect %out, %in
-  %c1_ui15 = firrtl.constant(15 : ui4) : !firrtl.uint<4>
-  %1 = firrtl.and %in, %c1_ui15 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  %c15_ui4 = firrtl.constant(15 : ui4) : !firrtl.uint<4>
+  %1 = firrtl.and %in, %c15_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %1 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
   // CHECK: firrtl.connect %out, %c0_ui4
@@ -23,6 +23,15 @@ firrtl.module @And(%in: !firrtl.uint<4>,
   // CHECK: firrtl.connect %out, %in
   %3 = firrtl.and %in, %in : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %3 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+
+  // Mixed type inputs - the constant is zero extended, not sign extended, so it
+  // cannot be folded!
+
+  // CHECK: firrtl.and %in, %c3_ui2
+  // CHECK-NEXT: firrtl.connect %out,
+  %c3_ui2 = firrtl.constant(3 : ui2) : !firrtl.uint<2>
+  %4 = firrtl.and %in, %c3_ui2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<4>
+  firrtl.connect %out, %4 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @Or
