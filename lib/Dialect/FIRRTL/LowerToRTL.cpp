@@ -100,18 +100,12 @@ static LogicalResult lower(firrtl::ConstantOp op, ArrayRef<Value> operands,
 static LogicalResult lower(firrtl::WireOp op, ArrayRef<Value> operands,
                            ConversionPatternRewriter &rewriter) {
   auto resType = op.result().getType().cast<FIRRTLType>();
-  if (auto resultType = RTLTypeConverter::convertType(resType)) {
-
-    if (auto intType = resultType.getValue().dyn_cast<IntegerType>()) {
-      rewriter.replaceOpWithNewOp<rtl::WireOp>(op, intType, op.nameAttr());
-      return success();
-    } else {
-      op.emitError("Unsupported type of FIRRTL wire.");
-      return failure();
-    }
-  }
-
-  return failure();
+  auto resultType = RTLTypeConverter::convertType(resType);
+  if (!resultType)
+    return failure();
+  rewriter.replaceOpWithNewOp<rtl::WireOp>(op, resultType.getValue(),
+                                           op.nameAttr());
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

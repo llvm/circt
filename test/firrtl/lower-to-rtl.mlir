@@ -46,10 +46,10 @@
     // CHECK-NEXT: %11 = rtl.wire : i2
     firrtl.wire : !firrtl.uint<2>
 
-    // CHECK-NEXT: %12 = firrtl.wire : !firrtl.vector<uint<1>, 13>
+    // CHECK-NEXT: %12 = rtl.wire : !firrtl.vector<uint<1>, 13>
     %_t_2 = firrtl.wire : !firrtl.vector<uint<1>, 13>
 
-    // CHECK-NEXT: %13 = firrtl.wire : !firrtl.vector<uint<2>, 13>
+    // CHECK-NEXT: %13 = rtl.wire : !firrtl.vector<uint<2>, 13>
     %_t_3 = firrtl.wire : !firrtl.vector<uint<2>, 13>
   }
 }
