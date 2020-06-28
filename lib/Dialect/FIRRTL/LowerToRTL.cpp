@@ -99,25 +99,19 @@ static LogicalResult lower(firrtl::ConstantOp op, ArrayRef<Value> operands,
 
 static LogicalResult lower(firrtl::WireOp op, ArrayRef<Value> operands,
                            ConversionPatternRewriter &rewriter) {
-  auto resType = op.result().getType();
-  if (auto resFirType = resType.dyn_cast<FIRRTLType>()) {
-    auto resultType = RTLTypeConverter::convertType(resFirType);
+  auto resType = op.result().getType().cast<FIRRTLType>();
+  if (auto resultType = RTLTypeConverter::convertType(resType)) {
 
     if (auto intType = resultType.getValue().dyn_cast<IntegerType>()) {
       rewriter.replaceOpWithNewOp<rtl::WireOp>(op, intType, op.nameAttr());
-    // TODO: Add support for vectors in RTL. The below code to handle FIRRTL
-    // vectors is not a solution.
-    }
-    else if (auto fvType = resFirType.dyn_cast<FVectorType>()) {
-      unsigned numElems = fvType.getNumElements();
-      auto elemType = RTLTypeConverter::convertType(fvType.getElementType());
-      unsigned width = elemType.getValue().dyn_cast<IntegerType>().getWidth();
-      rewriter.replaceOpWithNewOp<rtl::WireOp>(
-          op, rewriter.getIntegerType(numElems * width), op.nameAttr());
+      return success();
+    } else {
+      op.emitError("Unsupported type of FIRRTL wire.");
+      return failure();
     }
   }
 
-  return success();
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
