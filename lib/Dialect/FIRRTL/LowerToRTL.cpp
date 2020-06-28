@@ -97,6 +97,17 @@ static LogicalResult lower(firrtl::ConstantOp op, ArrayRef<Value> operands,
   return success();
 }
 
+static LogicalResult lower(firrtl::WireOp op, ArrayRef<Value> operands,
+                           ConversionPatternRewriter &rewriter) {
+  auto resType = op.result().getType().cast<FIRRTLType>();
+  auto resultType = RTLTypeConverter::convertType(resType);
+  if (!resultType)
+    return failure();
+  rewriter.replaceOpWithNewOp<rtl::WireOp>(op, resultType.getValue(),
+                                           op.nameAttr());
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Unary Operations
 //===----------------------------------------------------------------------===//
@@ -225,7 +236,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering> {
   void runOnOperation() override {
     OwningRewritePatternList patterns;
     patterns.insert<
-        RTLRewriter<firrtl::ConstantOp>,
+        RTLRewriter<firrtl::ConstantOp>, RTLRewriter<firrtl::WireOp>,
         // Binary Operations
         RTLRewriter<firrtl::AddPrimOp>, RTLRewriter<firrtl::SubPrimOp>,
         RTLRewriter<firrtl::XorPrimOp>, RTLRewriter<firrtl::CatPrimOp>,

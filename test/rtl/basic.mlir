@@ -26,6 +26,10 @@ func @test1(%arg0: i3) -> i50 {
 
   // CHECK-NEXT:    %8 = rtl.concat %4, %0, %1, %2, %3 : (i12, i12, i12, i7, i7) -> i50
   %result = rtl.concat %conc1, %b, %c, %d, %e : (i12, i12, i12, i7, i7) -> i50
+
+  // CHECK-NEXT: %9 = rtl.wire : i4
+  %w = rtl.wire : i4
+
   // CHECK-NEXT:    return %8 : i50
   return %result : i50
 }
