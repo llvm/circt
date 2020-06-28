@@ -77,20 +77,20 @@ def XorOp : UTBinRTLOp<"xor", [Commutative]>;
 // Unary Operations
 //===----------------------------------------------------------------------===//
 
-// Base class for unary primitive operators.
-class UnaryRTLOp<string mnemonic, list<OpTrait> traits = []> :
+// Base class for unary reduction operations that produce an i1.
+class UnaryI1ReductionRTLOp<string mnemonic, list<OpTrait> traits = []> :
       RTLOp<mnemonic, !listconcat(traits, [NoSideEffect])> {
   let arguments = (ins AnySignlessInteger:$input);
-  let results = (outs AnySignlessInteger:$result);
+  let results = (outs I1:$result);
 
   let assemblyFormat = [{
-    $input attr-dict `:` functional-type($input, $result)
+    $input attr-dict `:` type($input)
   }];
 }
 
-def AndROp : UnaryRTLOp<"andr">;
-def OrROp  : UnaryRTLOp<"orr">;
-def XorROp : UnaryRTLOp<"xorr">;
+def AndROp : UnaryI1ReductionRTLOp<"andr">;
+def OrROp  : UnaryI1ReductionRTLOp<"orr">;
+def XorROp : UnaryI1ReductionRTLOp<"xorr">;
 
 //===----------------------------------------------------------------------===//
 // Other Operations
