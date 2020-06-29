@@ -108,6 +108,18 @@ static LogicalResult lower(firrtl::WireOp op, ArrayRef<Value> operands,
   return success();
 }
 
+static LogicalResult lower(firrtl::ConnectOp op, ArrayRef<Value> operands,
+                           ConversionPatternRewriter &rewriter) {
+
+  auto lhs = mapOperand(operands[0], op, rewriter);
+  auto rhs = mapOperand(operands[1], op, rewriter);
+  if (!lhs || !rhs)
+    return failure();
+
+  rewriter.replaceOpWithNewOp<rtl::ConnectOp>(op, lhs, rhs);
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Unary Operations
 //===----------------------------------------------------------------------===//
@@ -237,6 +249,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering> {
     OwningRewritePatternList patterns;
     patterns.insert<
         RTLRewriter<firrtl::ConstantOp>, RTLRewriter<firrtl::WireOp>,
+        RTLRewriter<firrtl::ConnectOp>,
         // Binary Operations
         RTLRewriter<firrtl::AddPrimOp>, RTLRewriter<firrtl::SubPrimOp>,
         RTLRewriter<firrtl::XorPrimOp>, RTLRewriter<firrtl::CatPrimOp>,
