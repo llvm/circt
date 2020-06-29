@@ -156,23 +156,35 @@ static LogicalResult lower(firrtl::CatPrimOp op, ArrayRef<Value> operands,
 // Variadic Bitwise Operations
 //===----------------------------------------------------------------------===//
 
+#include <iostream> 
 template <typename OpType, typename ResultOpType>
 static LogicalResult lowerVariadicOp(OpType op, ArrayRef<Value> operands,
                                      ConversionPatternRewriter &rewriter) {
-  auto lhs = mapOperand(operands[0], op, rewriter);
-  auto rhs = mapOperand(operands[1], op, rewriter);
-  if (!lhs || !rhs)
-    return failure();
+  
+  
+  // auto lhs = mapOperand(operands[0], op, rewriter);
+  // auto rhs = mapOperand(operands[1], op, rewriter);
 
-  auto lhsWidth = lhs.getType().cast<IntegerType>().getWidth();
-  auto rhsWidth = rhs.getType().cast<IntegerType>().getWidth();
+  // std::cout << "test " << std::endl;
+  // lhs.getType().dump();
+  // std::cout << "test2 " << std::endl;
 
-  Value args[2] = {operands[0], operands[1]};
+  // if (!lhs || !rhs)
+  //   return failure();
 
-  Type resultType = rewriter.getIntegerType(lhsWidth);
+  // std::cout << "test " << std::endl;
+  // lhs.dump();
+  // std::cout << "test2 " << std::endl;
+
+  // auto lhsWidth = lhs.getResult().getType().cast<IntegerType>().getWidth();
+  // auto rhsWidth = rhs.getType().cast<IntegerType>().getWidth();
+
+  // Value args[2] = {operands[0], operands[1]};
+
+  Type resultType = rewriter.getIntegerType(4);
 
   rewriter.replaceOpWithNewOp<ResultOpType>(op, resultType,
-                                            ArrayRef<Value>(args));
+                                            operands);
   return success();
 }
 
@@ -262,7 +274,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering> {
         RTLRewriter<firrtl::ConstantOp>,
         // Binary Operations
         RTLRewriter<firrtl::AddPrimOp>, RTLRewriter<firrtl::SubPrimOp>,
-        // RTLRewriter<firrtl::XorPrimOp>,
+        RTLRewriter<firrtl::XorPrimOp>,
         RTLRewriter<firrtl::CatPrimOp>,
 
         // Unary Operations
