@@ -108,12 +108,12 @@ static void printSigType(SigType sig, DialectAsmPrinter &printer) {
 void LLHDDialect::printType(Type type, DialectAsmPrinter &printer) const {
   switch (type.getKind()) {
   case LLHDTypes::Sig: {
-    SigType sig = type.dyn_cast<SigType>();
+    SigType sig = type.cast<SigType>();
     printSigType(sig, printer);
     break;
   }
   case LLHDTypes::Time: {
-    TimeType time = type.dyn_cast<TimeType>();
+    TimeType time = type.cast<TimeType>();
     printer << time.getKeyword();
     break;
   }
@@ -190,7 +190,7 @@ void LLHDDialect::printAttribute(Attribute attr,
                                  DialectAsmPrinter &printer) const {
   switch (attr.getKind()) {
   case LLHDAttrs::Time: {
-    TimeAttr time = attr.dyn_cast<TimeAttr>();
+    TimeAttr time = attr.cast<TimeAttr>();
     printTimeAttribute(time, printer);
     break;
   }

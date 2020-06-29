@@ -15,8 +15,8 @@ void FunctionEliminationPass::runOnOperation() {
   ModuleOp module = getOperation();
 
   module.walk([this](CallOp op) {
-    if (dyn_cast<llhd::ProcOp>(op.getParentOp()) ||
-        dyn_cast<llhd::EntityOp>(op.getParentOp())) {
+    if (isa<llhd::ProcOp>(op.getParentOp()) ||
+        isa<llhd::EntityOp>(op.getParentOp())) {
       emitError(op.getLoc(),
                 "Not all functions are inlined, there is at least "
                 "one function call left within a llhd.proc or llhd.entity.");

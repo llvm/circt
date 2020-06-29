@@ -18,7 +18,7 @@ void ProcessLoweringPass::runOnOperation() {
     // Check invariants
     size_t numBlocks = op.body().getBlocks().size();
     if (numBlocks == 1) {
-      if (!dyn_cast<llhd::HaltOp>(op.body().back().getTerminator())) {
+      if (!isa<llhd::HaltOp>(op.body().back().getTerminator())) {
         op.emitOpError("Process-lowering: Entry block is required to be "
                        "terminated by a HaltOp from the LLHD dialect.");
         signalPassFailure();
@@ -31,7 +31,7 @@ void ProcessLoweringPass::runOnOperation() {
                        "llhd.wait) is not allowed to have arguments.");
         signalPassFailure();
       }
-      if (!dyn_cast<BranchOp>(first.getTerminator())) {
+      if (!isa<BranchOp>(first.getTerminator())) {
         op.emitOpError("Process-lowering: The first block has to be terminated "
                        "by a BranchOp from the standard dialect.");
         signalPassFailure();
