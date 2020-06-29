@@ -321,8 +321,8 @@ FModuleOp createBinaryOpModule(FModuleOp moduleOp, Operation &binaryOp,
       dataType, validType, flipReadyType, rewriter);
   auto resultMap = createSubfieldOps(resultPort, termOp->getLoc(), 
       flipDataType, flipValidType, readyType, rewriter);
-  auto constantMap = createLowHighConstantOps(arg0Port, termOp->getLoc(), 
-                                              dataType, rewriter);
+  auto constantMap = createLowHighConstantOps(arg0Port, 
+      termOp->getLoc(), dataType, rewriter);
 
   // Construct combinational logics
   auto arg0Valid = arg0Map[validString].getResult();
@@ -336,12 +336,35 @@ FModuleOp createBinaryOpModule(FModuleOp moduleOp, Operation &binaryOp,
     
   auto arg0Data = arg0Map[dataString].getResult();
   auto arg1Data = arg1Map[dataString].getResult();
-  auto result = rewriter.create<FIRRTLOpType>(
+  auto exprFIRRTLOp = rewriter.create<FIRRTLOpType>(
       termOp->getLoc(), dataType, arg0Data, arg1Data);
-  
-  //TODO
+
   auto whenOp = rewriter.create<WhenOp>(
       termOp->getLoc(), condition, true);
+  auto resultData = resultMap[dataString].getResult();
+  auto resultValid = resultMap[validString].getResult();
+  auto arg0Ready = arg0Map[readyString].getResult();
+  auto arg1Ready = arg1Map[readyString].getResult();
+
+  // Connect then block of the whenOp
+  rewriter.setInsertionPoint(whenOp.thenRegion().front().getTerminator());
+  
+  auto exprResult = exprFIRRTLOp.getResult();
+  rewriter.create<ConnectOp>(termOp->getLoc(), resultData, exprResult);
+  auto highSignal = constantMap[StringRef("high")].getResult();
+  rewriter.create<ConnectOp>(termOp->getLoc(), resultValid, highSignal);
+  rewriter.create<ConnectOp>(termOp->getLoc(), arg0Ready, highSignal);
+  rewriter.create<ConnectOp>(termOp->getLoc(), arg1Ready, highSignal);
+
+  // Connect else block of the whenOp
+  rewriter.setInsertionPoint(whenOp.elseRegion().front().getTerminator());
+
+  auto zeroValue = constantMap[StringRef("zero")].getResult();
+  rewriter.create<ConnectOp>(termOp->getLoc(), resultData, zeroValue);
+  auto lowSignal = constantMap[StringRef("low")].getResult();
+  rewriter.create<ConnectOp>(termOp->getLoc(), resultValid, lowSignal);
+  rewriter.create<ConnectOp>(termOp->getLoc(), arg0Ready, lowSignal);
+  rewriter.create<ConnectOp>(termOp->getLoc(), arg1Ready, lowSignal);
 
   return binaryOpModule;
 }
@@ -394,8 +417,8 @@ void createInstOp(FModuleOp &exprModuleOp, Operation &binaryOp, int inst_idx,
     // Connect output ports
     else {
       auto result = binaryOp.getResult(0);
-      auto wireOp = rewriter.create<WireOp>(binaryOp.getLoc(), elementType,
-                                            rewriter.getStringAttr(""));
+      auto wireOp = rewriter.create<WireOp>(binaryOp.getLoc(), 
+          elementType, rewriter.getStringAttr(""));
       auto newResult = wireOp.getResult();
       result.replaceAllUsesWith(newResult);
 
