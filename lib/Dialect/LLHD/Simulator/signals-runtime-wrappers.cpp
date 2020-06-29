@@ -1,5 +1,5 @@
-#include "circt/Simulator/signals-runtime-wrappers.h"
-#include "circt/Simulator/State.h"
+#include "circt/Dialect/LLHD/Simulator/signals-runtime-wrappers.h"
+#include "circt/Dialect/LLHD/Simulator/State.h"
 
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"

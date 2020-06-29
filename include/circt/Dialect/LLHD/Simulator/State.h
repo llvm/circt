@@ -1,5 +1,5 @@
-#ifndef CIRCT_SIMULATOR_STATE_H
-#define CIRCT_SIMULATOR_STATE_H
+#ifndef CIRCT_DIALECT_LLHD_SIMULATOR_STATE_H
+#define CIRCT_DIALECT_LLHD_SIMULATOR_STATE_H
 
 #include <map>
 #include <queue>
@@ -209,4 +209,4 @@ struct State {
 } // namespace llhd
 } // namespace mlir
 
-#endif // CIRCT_SIMULATOR_STATE_H
+#endif // CIRCT_DIALECT_LLHD_SIMULATOR_STATE_H

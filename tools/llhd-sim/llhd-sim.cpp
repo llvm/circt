@@ -1,6 +1,6 @@
 #include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
-#include "circt/Simulator/Engine.h"
+#include "circt/Dialect/LLHD/Simulator/Engine.h"
 
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"

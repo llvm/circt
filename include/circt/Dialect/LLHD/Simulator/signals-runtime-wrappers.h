@@ -1,7 +1,7 @@
-#ifndef CIRCT_SIMULATOR_SIGNALS_RUNTIME_WRAPPERS_H
-#define CIRCT_SIMULATOR_SIGNALS_RUNTIME_WRAPPERS_H
+#ifndef CIRCT_DIALECT_LLHD_SIMULATOR_SIGNALS_RUNTIME_WRAPPERS_H
+#define CIRCT_DIALECT_LLHD_SIMULATOR_SIGNALS_RUNTIME_WRAPPERS_H
 
-#include "circt/Simulator/State.h"
+#include "circt/Dialect/LLHD/Simulator/State.h"
 
 extern "C" {
 
@@ -36,4 +36,4 @@ void llhd_suspend(mlir::llhd::sim::State *state,
                   int eps);
 }
 
-#endif // CIRCT_SIMULATOR_SIGNALS_RUNTIME_WRAPPERS_H
+#endif // CIRCT_DIALECT_LLHD_SIMULATOR_SIGNALS_RUNTIME_WRAPPERS_H

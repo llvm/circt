@@ -1,8 +1,8 @@
-#ifndef CIRCT_SIMULATOR_ENGINE_H
-#define CIRCT_SIMULATOR_ENGINE_H
+#ifndef CIRCT_DIALECT_LLHD_SIMULATOR_ENGINE_H
+#define CIRCT_DIALECT_LLHD_SIMULATOR_ENGINE_H
 
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "circt/Simulator/State.h"
+#include "circt/Dialect/LLHD/Simulator/State.h"
 
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/IR/Module.h"
@@ -44,4 +44,4 @@ private:
 } // namespace llhd
 } // namespace mlir
 
-#endif // CIRCT_SIMULATOR_ENGINE_H
+#endif // CIRCT_DIALECT_LLHD_SIMULATOR_ENGINE_H
