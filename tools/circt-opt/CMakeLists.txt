@@ -23,6 +23,5 @@ target_link_libraries(circt-opt
   MLIRStandardOps
   MLIRTransforms
   MLIRLLVMIR
-  MLIRStandardToLLVM
   )
 

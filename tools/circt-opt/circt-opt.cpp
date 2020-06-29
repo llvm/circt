@@ -12,7 +12,6 @@
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "circt/Dialect/RTL/Dialect.h"
-#include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AsmState.h"
@@ -76,9 +75,6 @@ int main(int argc, char **argv) {
 #define GEN_PASS_REGISTRATION_CSE
 #define GEN_PASS_REGISTRATION_Inliner
 #include "mlir/Transforms/Passes.h.inc"
-
-#define GEN_PASS_REGISTRATION_ConvertStandardToLLVM
-#include "mlir/Conversion/Passes.h.inc"
 
   // Register any pass manager command line options.
   registerMLIRContextCLOptions();
