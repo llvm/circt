@@ -1,4 +1,4 @@
-![](https://github.com/circt/circt/workflows/Build%20and%20Test/badge.svg?event=push)
+[![](https://github.com/circt/circt/workflows/Build%20and%20Test/badge.svg?event=push)](https://github.com/circt/circt/actions)
 
 # ⚡️ "CIRCT" / Circuit IR Compilers and Tools
 
