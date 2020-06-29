@@ -346,14 +346,14 @@ FModuleOp createBinaryOpModule(FModuleOp moduleOp, Operation &binaryOp,
   return binaryOpModule;
 }
 
-Type getInstBundleType(FModuleOp &opModule) {
+Type getInstBundleType(FModuleOp &exprModuleOp) {
   using BundleElement = std::pair<Identifier, FIRRTLType>;
   llvm::SmallVector<BundleElement, 3> elements;
 
   int arg_idx = 0;
-  for (auto &arg : opModule.getArguments()) {
+  for (auto &arg : exprModuleOp.getArguments()) {
     std::string argName = "arg" + std::to_string(arg_idx);
-    auto argId = Identifier::get(argName, opModule.getContext());
+    auto argId = Identifier::get(argName, exprModuleOp.getContext());
     auto argType = FlipType::get(arg.getType().dyn_cast<BundleType>());
     BundleElement argElement = std::make_pair(argId, argType);
     elements.push_back(argElement);
@@ -361,16 +361,16 @@ Type getInstBundleType(FModuleOp &opModule) {
   }
 
   ArrayRef<BundleElement> BundleElements = ArrayRef<BundleElement>(elements);
-  return BundleType::get(BundleElements, opModule.getContext());
+  return BundleType::get(BundleElements, exprModuleOp.getContext());
 }
 
-void createInstOp(FModuleOp &opModule, Operation &op, int inst_idx, 
+void createInstOp(FModuleOp &exprModuleOp, Operation &binaryOp, int inst_idx, 
                   ConversionPatternRewriter &rewriter) {
-  auto instType = getInstBundleType(opModule);
-  auto moduleName = opModule.getOperationName();
+  auto instType = getInstBundleType(exprModuleOp);
+  auto moduleName = exprModuleOp.getOperationName();
   auto instName = moduleName + std::to_string(inst_idx);
   auto instNameAttr = rewriter.getStringAttr(instName.getSingleStringRef());
-  rewriter.create<firrtl::InstanceOp>(op.getLoc(), instType, 
+  rewriter.create<firrtl::InstanceOp>(binaryOp.getLoc(), instType, 
                                       moduleName, instNameAttr);
   
   //TODO
