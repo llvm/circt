@@ -17,6 +17,107 @@
 
 using namespace mlir;
 
+namespace {
+
+template <class AttrElementT,
+          class ElementValueT = typename AttrElementT::ValueType,
+          class CalculationT = function_ref<ElementValueT(ElementValueT)>>
+Attribute constFoldUnaryOp(ArrayRef<Attribute> operands,
+                           const CalculationT &calculate) {
+  assert(operands.size() == 1 && "unary op takes one operand");
+  if (!operands[0])
+    return {};
+
+  if (auto val = operands[0].dyn_cast<AttrElementT>()) {
+    return AttrElementT::get(val.getType(), calculate(val.getValue()));
+  } else if (auto val = operands[0].dyn_cast<SplatElementsAttr>()) {
+    // Operand is a splat so we can avoid expanding the value out and
+    // just fold based on the splat value.
+    auto elementResult = calculate(val.getSplatValue<ElementValueT>());
+    return DenseElementsAttr::get(val.getType(), elementResult);
+  }
+  if (auto val = operands[0].dyn_cast<ElementsAttr>()) {
+    // Operand is ElementsAttr-derived; perform an element-wise fold by
+    // expanding the values.
+    auto valIt = val.getValues<ElementValueT>().begin();
+    SmallVector<ElementValueT, 4> elementResults;
+    elementResults.reserve(val.getNumElements());
+    for (size_t i = 0, e = val.getNumElements(); i < e; ++i, ++valIt)
+      elementResults.push_back(calculate(*valIt));
+    return DenseElementsAttr::get(val.getType(), elementResults);
+  }
+  return {};
+}
+
+template <class AttrElementT,
+          class ElementValueT = typename AttrElementT::ValueType,
+          class CalculationT = function_ref<
+              ElementValueT(ElementValueT, ElementValueT, ElementValueT)>>
+Attribute constFoldTernaryOp(ArrayRef<Attribute> operands,
+                             const CalculationT &calculate) {
+  assert(operands.size() == 3 && "ternary op takes three operands");
+  if (!operands[0] || !operands[1] || !operands[2])
+    return {};
+  if (operands[0].getType() != operands[1].getType())
+    return {};
+  if (operands[0].getType() != operands[2].getType())
+    return {};
+
+  if (operands[0].isa<AttrElementT>() && operands[1].isa<AttrElementT>() &&
+      operands[2].isa<AttrElementT>()) {
+    auto fst = operands[0].cast<AttrElementT>();
+    auto snd = operands[1].cast<AttrElementT>();
+    auto trd = operands[2].cast<AttrElementT>();
+
+    return AttrElementT::get(
+        fst.getType(),
+        calculate(fst.getValue(), snd.getValue(), trd.getValue()));
+  }
+  if (operands[0].isa<SplatElementsAttr>() &&
+      operands[1].isa<SplatElementsAttr>() &&
+      operands[2].isa<SplatElementsAttr>()) {
+    // Operands are splats so we can avoid expanding the values out and
+    // just fold based on the splat value.
+    auto fst = operands[0].cast<SplatElementsAttr>();
+    auto snd = operands[1].cast<SplatElementsAttr>();
+    auto trd = operands[2].cast<SplatElementsAttr>();
+
+    auto elementResult = calculate(fst.getSplatValue<ElementValueT>(),
+                                   snd.getSplatValue<ElementValueT>(),
+                                   trd.getSplatValue<ElementValueT>());
+    return DenseElementsAttr::get(fst.getType(), elementResult);
+  }
+  if (operands[0].isa<ElementsAttr>() && operands[1].isa<ElementsAttr>() &&
+      operands[2].isa<ElementsAttr>()) {
+    // Operands are ElementsAttr-derived; perform an element-wise fold by
+    // expanding the values.
+    auto fst = operands[0].cast<ElementsAttr>();
+    auto snd = operands[1].cast<ElementsAttr>();
+    auto trd = operands[2].cast<ElementsAttr>();
+
+    auto fstIt = fst.getValues<ElementValueT>().begin();
+    auto sndIt = snd.getValues<ElementValueT>().begin();
+    auto trdIt = trd.getValues<ElementValueT>().begin();
+    SmallVector<ElementValueT, 4> elementResults;
+    elementResults.reserve(fst.getNumElements());
+    for (size_t i = 0, e = fst.getNumElements(); i < e;
+         ++i, ++fstIt, ++sndIt, ++trdIt)
+      elementResults.push_back(calculate(*fstIt, *sndIt, *trdIt));
+    return DenseElementsAttr::get(fst.getType(), elementResults);
+  }
+  return {};
+}
+
+struct constant_int_all_ones_matcher {
+  bool match(Operation *op) {
+    APInt value;
+    return mlir::detail::constant_int_op_binder(&value).match(op) &&
+           value.isAllOnesValue();
+  }
+};
+
+} // anonymous namespace
+
 //===---------------------------------------------------------------------===//
 // LLHD Trait Helper Functions
 //===---------------------------------------------------------------------===//
