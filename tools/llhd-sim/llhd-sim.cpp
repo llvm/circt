@@ -53,15 +53,15 @@ int parseMLIR(MLIRContext &context, OwningModuleRef &module) {
   return 0;
 }
 
-int dumpLLVM(ModuleOp *module, MLIRContext &context) {
+int dumpLLVM(ModuleOp module, MLIRContext &context) {
   if (dumpLLVMDialect) {
-    module->dump();
+    module.dump();
     llvm::errs() << "\n";
     return 0;
   }
 
   // Translate the module, that contains the LLVM dialect, to LLVM IR.
-  auto llvmModule = mlir::translateModuleToLLVMIR(*module);
+  auto llvmModule = mlir::translateModuleToLLVMIR(module);
   if (!llvmModule) {
     llvm::errs() << "Failed to emit LLVM IR\n";
     return -1;

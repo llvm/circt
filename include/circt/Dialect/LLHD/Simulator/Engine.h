@@ -30,10 +30,10 @@ public:
   void buildLayout(ModuleOp module);
 
   /// Get a reference to the module
-  ModuleOp *getModuleRef() { return &module; }
+  const ModuleOp getModuleRef() const { return module; }
 
   /// Get the simulation state.
-  State *getState() { return state.get(); }
+  const State *getState() const { return state.get(); }
 
   /// Dump the instance layout stored in the State.
   void dumpStateLayout();
