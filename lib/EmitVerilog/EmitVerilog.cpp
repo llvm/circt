@@ -725,7 +725,7 @@ private:
   SubExprInfo emitBinary(Operation *op, VerilogPrecedence prec,
                          const char *syntax, bool hasStrictSign = false);
 
-  SubExprInfo emitVary(Operation *op, VerilogPrecedence prec,
+  SubExprInfo emitVariadic(Operation *op, VerilogPrecedence prec,
                         const char *syntax, bool hasStrictSign = false);
 
   /// Emit the specified subexpression in a context where the sign matters,
@@ -832,9 +832,9 @@ private:
   SubExprInfo visitComb(rtl::ModOp op) {
     return emitSignedBinary(op, Multiply, "%");
   }
-  SubExprInfo visitComb(rtl::AndOp op) { return emitVary(op, And, "&"); }
-  SubExprInfo visitComb(rtl::OrOp op) { return emitVary(op, Or, "|"); }
-  SubExprInfo visitComb(rtl::XorOp op) { return emitVary(op, Xor, "^"); }
+  SubExprInfo visitComb(rtl::AndOp op) { return emitVariadic(op, And, "&"); }
+  SubExprInfo visitComb(rtl::OrOp op) { return emitVariadic(op, Or, "|"); }
+  SubExprInfo visitComb(rtl::XorOp op) { return emitVariadic(op, Xor, "^"); }
 
   SubExprInfo visitComb(rtl::AndROp op) { return emitUnary(op, "&", true); }
   SubExprInfo visitComb(rtl::OrROp op) { return emitUnary(op, "|", true); }
@@ -916,7 +916,7 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
 
 
 
-SubExprInfo ExprEmitter::emitVary(Operation *op, VerilogPrecedence prec,
+SubExprInfo ExprEmitter::emitVariadic(Operation *op, VerilogPrecedence prec,
                                     const char *syntax, bool hasStrictSign) {
 
   os << '(';
