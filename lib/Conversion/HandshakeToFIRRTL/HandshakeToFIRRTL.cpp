@@ -366,14 +366,45 @@ Type getInstBundleType(FModuleOp &exprModuleOp) {
 
 void createInstOp(FModuleOp &exprModuleOp, Operation &binaryOp, int inst_idx, 
                   ConversionPatternRewriter &rewriter) {
+  rewriter.setInsertionPoint(&binaryOp);
   auto instType = getInstBundleType(exprModuleOp);
-  auto moduleName = exprModuleOp.getOperationName();
-  auto instName = moduleName + std::to_string(inst_idx);
-  auto instNameAttr = rewriter.getStringAttr(instName.getSingleStringRef());
-  rewriter.create<firrtl::InstanceOp>(binaryOp.getLoc(), instType, 
-                                      moduleName, instNameAttr);
+  auto exprModuleName = exprModuleOp.getName();
+  auto instNameAttr = rewriter.getStringAttr("");
+  auto instOp = rewriter.create<firrtl::InstanceOp>(binaryOp.getLoc(), 
+      instType, exprModuleName, instNameAttr);
   
-  //TODO
+  auto instResult = instOp.getResult();
+  auto numInputs = binaryOp.getNumOperands();
+
+  int port_idx = 0;
+  for (auto &element : instType.dyn_cast<BundleType>().getElements()) {
+    auto elementName = element.first;
+    auto elementType = element.second;
+    auto subfieldOp = rewriter.create<SubfieldOp>(
+        binaryOp.getLoc(), elementType, instResult, 
+        rewriter.getStringAttr(elementName.strref()));
+    
+    // Connect input ports
+    if (port_idx < numInputs) {
+      auto operand = binaryOp.getOperand(port_idx);
+      auto result = subfieldOp.getResult();
+      rewriter.create<ConnectOp>(binaryOp.getLoc(), result, operand);
+    }
+    
+    // Connect output ports
+    else {
+      auto result = binaryOp.getResult(0);
+      auto wireOp = rewriter.create<WireOp>(binaryOp.getLoc(), elementType,
+                                            rewriter.getStringAttr(""));
+      auto newResult = wireOp.getResult();
+      result.replaceAllUsesWith(newResult);
+
+      auto operand = subfieldOp.getResult();
+      rewriter.create<ConnectOp>(binaryOp.getLoc(), newResult, operand);
+    }
+    port_idx += 1;
+  }
+  rewriter.eraseOp(&binaryOp);
 }
 
 void convertStandardOp(FModuleOp moduleOp,
