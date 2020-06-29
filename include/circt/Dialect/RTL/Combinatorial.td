@@ -76,15 +76,15 @@ RTLOp<mnemonic, !listconcat(traits, [NoSideEffect])> {
 
 // Variadic operator with uniform input types.
 // TODO uniform input/outut types
-class UTVariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
-      VariadicRTLOp<mnemonic,
-            !listconcat(traits,
-                        [SameTypeOperands, SameOperandsAndResultType])> {
+// class UTVariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
+//       VariadicRTLOp<mnemonic,
+//             !listconcat(traits,
+//                         [SameTypeOperands, SameOperandsAndResultType])> {
 
-  let assemblyFormat = [{
-    $inputs attr-dict `:` type($result)
-    }];
-  }
+//   let assemblyFormat = [{
+//     $inputs attr-dict `:` type($result)
+//     }];
+//   }
 
 // Arithmetic and Logical Binary Operations.
 def AddOp : UTBinRTLOp<"add", [Commutative]>;
@@ -93,9 +93,9 @@ def MulOp : UTBinRTLOp<"mul", [Commutative]>;
 def DivOp : UTBinRTLOp<"div">;
 def ModOp : UTBinRTLOp<"mod">;
 
-def AndOp : UTVariadicRTLOp<"and">;
-def OrOp  : UTVariadicRTLOp<"or">;
-def XorOp : UTVariadicRTLOp<"xor">;
+def AndOp : VariadicRTLOp<"and">;
+def OrOp  : VariadicRTLOp<"or">;
+def XorOp : VariadicRTLOp<"xor">;
 
 // Concatenate a variadic list of operands together.
 def ConcatOp : VariadicRTLOp<"concat">;
