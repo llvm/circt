@@ -21,7 +21,6 @@ namespace llhd {
 using namespace mlir;
 using namespace mlir::llhd;
 
-namespace {
 // keep a counter to infer a signal's index in his entity's signal table
 static int signalCounter = 0;
 // keep a counter to infer the resume index after a wait instruction in a
@@ -32,8 +31,9 @@ static int resumeCounter = 0;
 //===----------------------------------------------------------------------===//
 
 /// Get an existing global string
-Value getGlobalString(Location loc, OpBuilder &builder,
-                      LLVMTypeConverter &typeConverter, LLVM::GlobalOp &str) {
+static Value getGlobalString(Location loc, OpBuilder &builder,
+                             LLVMTypeConverter &typeConverter,
+                             LLVM::GlobalOp &str) {
   auto i8PtrTy = LLVM::LLVMType::getInt8PtrTy(typeConverter.getDialect());
   auto i32Ty = LLVM::LLVMType::getInt32Ty(typeConverter.getDialect());
 
@@ -50,10 +50,10 @@ Value getGlobalString(Location loc, OpBuilder &builder,
 /// module's region in case the function does not exists. If
 /// insertBodyAndTerminator is set, also adds the entry block and return
 /// terminator
-LLVM::LLVMFuncOp getOrInsertFunction(ModuleOp &module,
-                                     ConversionPatternRewriter &rewriter,
-                                     std::string name, LLVM::LLVMType signature,
-                                     bool insertBodyAndTerminator = false) {
+static LLVM::LLVMFuncOp
+getOrInsertFunction(ModuleOp &module, ConversionPatternRewriter &rewriter,
+                    std::string name, LLVM::LLVMType signature,
+                    bool insertBodyAndTerminator = false) {
   auto func = module.lookupSymbol<LLVM::LLVMFuncOp>(name);
   if (!func) {
     OpBuilder moduleBuilder(module.getBodyRegion());
@@ -70,11 +70,10 @@ LLVM::LLVMFuncOp getOrInsertFunction(ModuleOp &module,
 
 /// Insert probe runtime call and extraction of details from the struct. The
 /// mlir::Values of the details are returned, in struct-order.
-std::pair<Value, Value> insertProbeSignal(ModuleOp &module,
-                                          ConversionPatternRewriter &rewriter,
-                                          LLVM::LLVMDialect *dialect,
-                                          Operation *op, Value statePtr,
-                                          Value signal) {
+static std::pair<Value, Value>
+insertProbeSignal(ModuleOp &module, ConversionPatternRewriter &rewriter,
+                  LLVM::LLVMDialect *dialect, Operation *op, Value statePtr,
+                  Value signal) {
   auto i8PtrTy = LLVM::LLVMType::getInt8PtrTy(dialect);
   auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect);
   auto i64Ty = LLVM::LLVMType::getInt64Ty(dialect);
@@ -111,9 +110,9 @@ std::pair<Value, Value> insertProbeSignal(ModuleOp &module,
 /// Gather the types of values that are used outside of the block they're
 /// defined in. An LLVMType structure containing those types, in order of
 /// appearance, is returned.
-LLVM::LLVMType getProcPersistenceTy(LLVM::LLVMDialect *dialect,
-                                    LLVMTypeConverter &converter,
-                                    ProcOp &proc) {
+static LLVM::LLVMType getProcPersistenceTy(LLVM::LLVMDialect *dialect,
+                                           LLVMTypeConverter &converter,
+                                           ProcOp &proc) {
   SmallVector<LLVM::LLVMType, 3> types = SmallVector<LLVM::LLVMType, 3>();
 
   auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect);
@@ -134,10 +133,10 @@ LLVM::LLVMType getProcPersistenceTy(LLVM::LLVMDialect *dialect,
 /// Insert a comparison block that either jumps to the trueDest block, if the
 /// resume index mathces the current index, or to falseDest otherwise. If no
 /// falseDest is provided, the next block is taken insead.
-void insertComparisonBlock(ConversionPatternRewriter &rewriter,
-                           LLVM::LLVMDialect *dialect, Location loc,
-                           Region *body, Value resumeIdx, int currIdx,
-                           Block *trueDest, Block *falseDest = nullptr) {
+static void insertComparisonBlock(ConversionPatternRewriter &rewriter,
+                                  LLVM::LLVMDialect *dialect, Location loc,
+                                  Region *body, Value resumeIdx, int currIdx,
+                                  Block *trueDest, Block *falseDest = nullptr) {
   auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect);
   // redirect entry block to a first comparison block. If it is a fresh start,
   // start from where original entry would have jumped, else the process is in
@@ -162,10 +161,11 @@ void insertComparisonBlock(ConversionPatternRewriter &rewriter,
 
 /// Insert the blocks and operations needed to persist values across suspension,
 /// as well as ones needed to resume execution at the right spot.
-void insertPersistence(LLVMTypeConverter &converter,
-                       ConversionPatternRewriter &rewriter,
-                       LLVM::LLVMDialect *dialect, Location loc, ProcOp &proc,
-                       LLVM::LLVMType &stateTy, LLVM::LLVMFuncOp &converted) {
+static void insertPersistence(LLVMTypeConverter &converter,
+                              ConversionPatternRewriter &rewriter,
+                              LLVM::LLVMDialect *dialect, Location loc,
+                              ProcOp &proc, LLVM::LLVMType &stateTy,
+                              LLVM::LLVMFuncOp &converted) {
   auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect);
   DominanceInfo dom(converted);
 
@@ -258,6 +258,7 @@ void insertPersistence(LLVMTypeConverter &converter,
 // Unit conversions
 //===----------------------------------------------------------------------===//
 
+namespace {
 /// Convert an `llhd.entity` unit to LLVM. The result is an `llvm.func` which
 /// takes a pointer to the state as arguments.
 struct EntityOpConversion : public ConvertToLLVMPattern {
@@ -333,7 +334,9 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
     return success();
   }
 };
+} // namespace
 
+namespace {
 /// Convert an `"llhd.terminator" operation to `llvm.return`.
 struct TerminatorOpConversion : public ConvertToLLVMPattern {
   explicit TerminatorOpConversion(MLIRContext *ctx,
@@ -350,7 +353,9 @@ struct TerminatorOpConversion : public ConvertToLLVMPattern {
     return success();
   }
 };
+} // namespace
 
+namespace {
 /// Convert an `llhd.proc` operation to llvm dialect. This inserts the required
 /// logic to resume execution after an `llhd.wait` operation, as well as state
 /// keeping for values that need to persist across suspension.
@@ -436,7 +441,9 @@ struct ProcOpConversion : public ConvertToLLVMPattern {
     return success();
   }
 };
+} // namespace
 
+namespace {
 /// Convert an `llhd.halt` operation to llvm dialect. This zeroes out all the
 /// senses and returns, effectively making the process unable to be invoked
 /// again.
@@ -485,7 +492,9 @@ struct HaltOpConversion : public ConvertToLLVMPattern {
     return success();
   }
 };
+} // namespace
 
+namespace {
 /// Covnert an `llhd.wait` operation to llvm dialect. This sets the current
 /// resume point, sets the observed senses (if present) and schedules the timed
 /// wake up (if present).
@@ -588,7 +597,9 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
     return success();
   }
 };
+} // namespace
 
+namespace {
 /// Lower an llhd.inst operation to llvm. This generates malloc calls and
 /// alloc_signal calls (to store the pointer into the state) for each signal in
 /// the instantiated entity.
@@ -822,11 +833,13 @@ private:
   const std::string allocCall = "alloc_signal";
   const std::string initCall = "llhd_init";
 };
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Signal conversions
 //===----------------------------------------------------------------------===//
 
+namespace {
 /// Convert an `llhd.sig` operation to LLVM. The i-th signal of an entity get's
 /// lowered to a load of the i-th element of the signal table, passed as an
 /// argument.
@@ -862,7 +875,9 @@ struct SigOpConversion : public ConvertToLLVMPattern {
     return success();
   }
 };
+} // namespace
 
+namespace {
 /// Convert an `llhd.prb` operation to LLVM. The result is a library call to the
 /// `@probe_signal` function. The signal details are then extracted and used to
 /// load the final probe value.
@@ -921,7 +936,9 @@ struct PrbOpConversion : public ConvertToLLVMPattern {
     return success();
   }
 };
+} // namespace
 
+namespace {
 /// Convert an `llhd.drv` operation to LLVM. The result is a library call to the
 /// `@drive_signal` function, which declaration is inserted at the beginning of
 /// the module if missing. The required arguments are either generated or
@@ -1020,11 +1037,13 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
 private:
   const std::string libCall = "drive_signal";
 };
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Bitwise conversions
 //===----------------------------------------------------------------------===//
 
+namespace {
 /// Convert an `llhd.not` operation. The result is an `llvm.xor` operation,
 /// xor-ing the operand with all ones.
 struct NotOpConversion : public ConvertToLLVMPattern {
@@ -1058,7 +1077,9 @@ struct NotOpConversion : public ConvertToLLVMPattern {
     return success();
   }
 };
+} // namespace
 
+namespace {
 /// Convert an `llhd.shr` operation to llvm. All the operands are extended to
 /// the width obtained by combining the hidden and base values. This combined
 /// value is then shifted (exposing the hidden value) and truncated to the base
@@ -1173,7 +1194,9 @@ struct ShrOpConversion : public ConvertToLLVMPattern {
     return failure();
   }
 };
+} // namespace
 
+namespace {
 /// Convert an `llhd.shr` operation to llvm. All the operands are extended to
 /// the width obtained by combining the hidden and base values. This combined
 /// value is then shifted right by `hidden_width - amount` (exposing the hidden
@@ -1234,6 +1257,7 @@ struct ShlOpConversion : public ConvertToLLVMPattern {
     return success();
   }
 };
+} // namespace
 
 using AndOpConversion = OneToOneConvertToLLVMPattern<llhd::AndOp, LLVM::AndOp>;
 using OrOpConversion = OneToOneConvertToLLVMPattern<llhd::OrOp, LLVM::OrOp>;
@@ -1243,6 +1267,7 @@ using XorOpConversion = OneToOneConvertToLLVMPattern<llhd::XorOp, LLVM::XOrOp>;
 // Value manipulation conversions
 //===----------------------------------------------------------------------===//
 
+namespace {
 /// Lower an LLHD constant operation to LLVM. Time constant are treated as a
 /// special case, by just erasing them. Operations that use time constants
 /// are assumed to extract and convert the elements they require. Remaining
@@ -1273,7 +1298,9 @@ struct ConstOpConversion : public ConvertToLLVMPattern {
     return success();
   }
 };
+} // namespace
 
+namespace {
 /// Convert an llhd.exts operation. For integers, the value is shifted to the
 /// start index and then truncated to the final length. Other types are not yet
 /// supported and fail the conversion.
@@ -1369,7 +1396,9 @@ struct ExtsOpConversion : public ConvertToLLVMPattern {
     return failure();
   }
 };
+} // namespace
 
+namespace {
 struct LLHDToLLVMLoweringPass
     : public ConvertLLHDToLLVMBase<LLHDToLLVMLoweringPass> {
   void runOnOperation() override;
