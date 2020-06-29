@@ -254,6 +254,7 @@ std::map<StringRef, firrtl::ConstantOp> createLowHighConstantOps(
   return LowHighConstantOpMap;
 }
 
+// TODO: modify to support all binary and unary operations
 template <typename FIRRTLOpType>
 FModuleOp createBinaryOpModule(FModuleOp moduleOp, Operation &binaryOp, 
                                ConversionPatternRewriter &rewriter) {
@@ -313,7 +314,7 @@ FModuleOp createBinaryOpModule(FModuleOp moduleOp, Operation &binaryOp,
   auto flipValidType = resultType.getElementType(validString);
   auto readyType = resultType.getElementType(readyString);
 
-  // Construct arg0, arg1, result, constant signals
+  // Construct arg0, arg1, result, constant signal maps
   rewriter.setInsertionPoint(termOp);
   auto arg0Map = createSubfieldOps(arg0Port, termOp->getLoc(), 
       dataType, validType, flipReadyType, rewriter);
@@ -440,13 +441,13 @@ void convertStandardOp(FModuleOp moduleOp,
             createBinaryOpModule<firrtl::AddPrimOp>(moduleOp, op, rewriter);
         createInstOp(binaryOpModule, op, inst_idx, rewriter);
 
-        // For debug
-        Region *currentRegion = moduleOp.getParentRegion();
-        for (auto &block : *currentRegion) {
-          for (auto &op : block) {
-            llvm::outs() << op << "\n";
-          }
-        }
+        //// For debug
+        //Region *currentRegion = moduleOp.getParentRegion();
+        //for (auto &block : *currentRegion) {
+        //  for (auto &op : block) {
+        //    llvm::outs() << op << "\n";
+        //  }
+        //}
       }
       inst_idx += 1;
     }
