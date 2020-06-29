@@ -4,7 +4,9 @@
 
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/IR/Module.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
+#include "mlir/Transforms/DialectConversion.h"
 
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"

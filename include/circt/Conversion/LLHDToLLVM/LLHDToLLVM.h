@@ -1,13 +1,13 @@
 #ifndef CIRCT_CONVERSION_LLHDTOLLVM_LLHDTOLLVM_H
 #define CIRCT_CONVERSION_LLHDTOLLVM_LLHDTOLLVM_H
 
-#include "mlir/Pass/Pass.h"
-#include "mlir/Transforms/DialectConversion.h"
+#include <memory>
 
 namespace mlir {
 
 class ModuleOp;
 class LLVMTypeConverter;
+class OwningRewritePatternList;
 template <typename T>
 class OperationPass;
 
@@ -20,11 +20,7 @@ void populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
 /// Create an LLHD to LLVM conversion pass.
 std::unique_ptr<OperationPass<ModuleOp>> createConvertLLHDToLLVMPass();
 
-/// Register the LLHD to LLVM convesion pass.
-inline void initLLHDToLLVMPass() {
-#define GEN_PASS_REGISTRATION
-#include "circt/Conversion/LLHDToLLVM/Passes.h.inc"
-}
+void initLLHDToLLVMPass();
 } // namespace llhd
 } // namespace mlir
 

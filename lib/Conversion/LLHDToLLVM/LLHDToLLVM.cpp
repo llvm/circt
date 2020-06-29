@@ -8,6 +8,7 @@
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Dominance.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 namespace mlir {
@@ -1424,4 +1425,10 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
 std::unique_ptr<OperationPass<ModuleOp>>
 mlir::llhd::createConvertLLHDToLLVMPass() {
   return std::make_unique<LLHDToLLVMLoweringPass>();
+}
+
+/// Register the LLHD to LLVM convesion pass.
+void llhd::initLLHDToLLVMPass() {
+#define GEN_PASS_REGISTRATION
+#include "circt/Conversion/LLHDToLLVM/Passes.h.inc"
 }
