@@ -133,7 +133,9 @@ static bool sameKindArbitraryWidth(Type lhsType, Type rhsType) {
 // LLHD Operations
 //===---------------------------------------------------------------------===//
 
-// Const Op
+//===----------------------------------------------------------------------===//
+// ConstOp
+//===----------------------------------------------------------------------===//
 
 static ParseResult parseConstOp(OpAsmParser &parser, OperationState &result) {
   Attribute val;
@@ -311,6 +313,19 @@ OpFoldResult llhd::ShlOp::fold(ArrayRef<Attribute> operands) {
       });
 }
 
+static LogicalResult verify(llhd::ShlOp op) {
+  if (op.base().getType() != op.result().getType()) {
+    op.emitError("The output of the Shl operation is required to have the "
+                 "same type as the base value (first operand), (")
+        << op.base().getType() << " vs. " << op.result().getType() << ")";
+    return failure();
+  }
+
+  // TODO: verify that T and Th only differ in the number of bits or elements
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // ShrOp
 //===----------------------------------------------------------------------===//
@@ -329,7 +344,22 @@ OpFoldResult llhd::ShrOp::fold(ArrayRef<Attribute> operands) {
       });
 }
 
-// Wait Terminator
+static LogicalResult verify(llhd::ShrOp op) {
+  if (op.base().getType() != op.result().getType()) {
+    op.emitError("The output of the Shr operation is required to have the "
+                 "same type as the base value (first operand), (")
+        << op.base().getType() << " vs. " << op.result().getType() << ")";
+    return failure();
+  }
+
+  // TODO: verify that T and Th only differ in the number of bits or elements
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// WaitOp
+//===----------------------------------------------------------------------===//
 
 // Implement this operation for the BranchOpInterface
 Optional<MutableOperandRange>
@@ -338,7 +368,9 @@ llhd::WaitOp::getMutableSuccessorOperands(unsigned index) {
   return destOpsMutable();
 }
 
-// Entity Op
+//===----------------------------------------------------------------------===//
+// EntityOp
+//===----------------------------------------------------------------------===//
 
 /// Parse an argument list of an entity operation.
 /// The argument list and argument types are returned in args and argTypes
@@ -349,6 +381,7 @@ parseArgumentList(OpAsmParser &parser,
                   SmallVectorImpl<Type> &argTypes) {
   if (parser.parseLParen())
     return failure();
+
   do {
     OpAsmParser::OperandType argument;
     Type argType;
@@ -359,6 +392,7 @@ parseArgumentList(OpAsmParser &parser,
       }
     }
   } while (succeeded(parser.parseOptionalComma()));
+
   if (parser.parseRParen())
     return failure();
 
@@ -514,7 +548,10 @@ ArrayRef<Type> llhd::EntityOp::getCallableResults() {
   return getType().getResults();
 }
 
-// Proc Operation
+//===----------------------------------------------------------------------===//
+// ProcOp
+//===----------------------------------------------------------------------===//
+
 LogicalResult mlir::llhd::ProcOp::verifyType() {
   // Fail if function returns more than zero values. This is because the
   // outputs of a process are specially marked arguments.
@@ -685,32 +722,9 @@ ArrayRef<Type> llhd::ProcOp::getCallableResults() {
   return getType().getResults();
 }
 
-// Shift Operations
-static LogicalResult verify(llhd::ShlOp op) {
-  if (op.base().getType() != op.result().getType()) {
-    op.emitError("The output of the Shl operation is required to have the "
-                 "same type as the base value (first operand), (")
-        << op.base().getType() << " vs. " << op.result().getType() << ")";
-    return failure();
-  }
-
-  // TODO: verify that T and Th only differ in the number of bits or elements
-
-  return success();
-}
-
-static LogicalResult verify(llhd::ShrOp op) {
-  if (op.base().getType() != op.result().getType()) {
-    op.emitError("The output of the Shr operation is required to have the "
-                 "same type as the base value (first operand), (")
-        << op.base().getType() << " vs. " << op.result().getType() << ")";
-    return failure();
-  }
-
-  // TODO: verify that T and Th only differ in the number of bits or elements
-
-  return success();
-}
+//===----------------------------------------------------------------------===//
+// InstOp
+//===----------------------------------------------------------------------===//
 
 static LogicalResult verify(llhd::InstOp op) {
   // Check that the callee attribute was specified.
@@ -765,6 +779,10 @@ FunctionType llhd::InstOp::getCalleeType() {
   SmallVector<Type, 8> argTypes(getOperandTypes());
   return FunctionType::get(argTypes, ArrayRef<Type>(), getContext());
 }
+
+//===----------------------------------------------------------------------===//
+// RegOp
+//===----------------------------------------------------------------------===//
 
 static ParseResult parseRegOp(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::OperandType signal;
