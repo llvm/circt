@@ -1,21 +1,15 @@
 add_mlir_conversion_library(MLIRLLHDToLLVM 
-    LLHDToLLVM.cpp
+  LLHDToLLVM.cpp
 
-    DEPENDS
-    MLIRLLHDIncGen
-    MLIRLLHDConversionPassIncGen
-)
+  DEPENDS
+  MLIRLLHDIncGen
+  MLIRLLHDConversionPassIncGen
 
-set(LIBS
+  LINK_LIBS PUBLIC
   MLIRLLVMIR
   MLIRStandardToLLVM
   MLIRVector
   MLIRTransforms
   LLVMCore
   LLVMSupport
-  )
-
-add_dependencies(MLIRLLHDToLLVM ${LIBS})
-target_link_libraries(MLIRLLHDToLLVM
-  PUBLIC
-  ${LIBS})
+)
