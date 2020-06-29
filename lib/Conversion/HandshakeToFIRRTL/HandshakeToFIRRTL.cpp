@@ -165,7 +165,7 @@ void convertMergeOp(FModuleOp &moduleOp,
 
 // Create a new FModuleOp operation as submodule of the top module
 FModuleOp createFModuleOp(FModuleOp moduleOp, Operation &originalOp,
-                           ConversionPatternRewriter &rewriter) {
+                          ConversionPatternRewriter &rewriter) {
   // Create new FIRRTL module for binary operation
   rewriter.setInsertionPoint(moduleOp);
   using ModulePort = std::pair<StringAttr, FIRRTLType>;
@@ -206,9 +206,8 @@ FModuleOp createFModuleOp(FModuleOp moduleOp, Operation &originalOp,
 // Create a series of subfieldOps for extract elements of the bundle type ports
 // of the new created FModuleOp
 std::map<StringRef, SubfieldOp> createPortSubfieldOps(BlockArgument port, 
-    Location termOpLoc, FIRRTLType dataType, 
-    FIRRTLType validType, FIRRTLType readyType, 
-    ConversionPatternRewriter &rewriter) {
+    Location termOpLoc, FIRRTLType dataType, FIRRTLType validType, 
+    FIRRTLType readyType, ConversionPatternRewriter &rewriter) {
   std::map<StringRef, SubfieldOp> subfieldOpMap;
 
   auto dataOp = rewriter.create<SubfieldOp>(
@@ -266,10 +265,34 @@ std::map<StringRef, firrtl::ConstantOp> createLowHighConstantOps(
   return LowHighConstantOpMap;
 }
 
+// Check whether the same submodule has been created
+FModuleOp checkExistingFModules(FModuleOp moduleOp, Operation &originalOp) {
+  Region *currentRegion = moduleOp.getParentRegion();
+  for (auto &block : *currentRegion) {
+    for (auto &op : block) {
+      auto originalOpName = originalOp.getName().getStringRef();
+      if (auto moduleOp = dyn_cast<FModuleOp>(op)) {
+        
+        // Check whether the name of the current operation is as same as the 
+        // targeted operation, if so, directly return the current operation 
+        // rather than create a new FModule operation
+        auto currentOpName = moduleOp.getName();
+        if (originalOpName == currentOpName) {
+          return moduleOp;
+        }
+      }
+    }
+  }
+  return FModuleOp(nullptr);
+}
+
 // Support all unary operations
 template <typename FIRRTLOpType>
 FModuleOp createUnaryOpFModule(FModuleOp moduleOp, Operation &unaryOp, 
                                ConversionPatternRewriter &rewriter) {
+  if (auto existingModule = checkExistingFModules(moduleOp, unaryOp)) {
+    return existingModule;
+  }
   auto unaryOpModule = createFModuleOp(moduleOp, unaryOp, rewriter);
   
   auto &entryBlock = unaryOpModule.getBody().front();
@@ -342,6 +365,9 @@ FModuleOp createUnaryOpFModule(FModuleOp moduleOp, Operation &unaryOp,
 template <typename FIRRTLOpType>
 FModuleOp createBinaryOpFModule(FModuleOp moduleOp, Operation &binaryOp, 
                                ConversionPatternRewriter &rewriter) {
+  if (auto existingModule = checkExistingFModules(moduleOp, binaryOp)) {
+    return existingModule;
+  }
   auto binaryOpModule = createFModuleOp(moduleOp, binaryOp, rewriter);
   
   auto &entryBlock = binaryOpModule.getBody().front();
@@ -500,14 +526,14 @@ void convertStandardOp(FModuleOp moduleOp,
                          moduleOp, op, rewriter);
         createInstOp(subModule, op, rewriter);
       }
-      //// For debug
+      // For debug
       //Region *currentRegion = moduleOp.getParentRegion();
       //for (auto &block : *currentRegion) {
       //  for (auto &op : block) {
       //    llvm::outs() << op << "\n";
       //  }
       //}
-      inst_idx += 1;
+      //inst_idx += 1;
     }
   }
 }
