@@ -289,7 +289,7 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
     // add state, signal table and arguments table arguments
     intermediate.addInputs(
         ArrayRef<Type>({i8PtrTy, i32Ty.getPointerTo(), i32Ty.getPointerTo()}));
-    for (unsigned i = 0; i < entityOp.getNumArguments(); i++)
+    for (size_t i = 0, e = entityOp.getNumArguments(); i < e; ++i)
       intermediate.addInputs(i, voidTy);
     rewriter.applySignatureConversion(&entityOp.getBody(), intermediate);
 
@@ -301,7 +301,7 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
     final.addInputs(1, i32Ty.getPointerTo());
     final.addInputs(2, i32Ty.getPointerTo());
 
-    for (unsigned i = 0; i < entityOp.getNumArguments(); i++) {
+    for (size_t i = 0, e = entityOp.getNumArguments(); i < e; ++i) {
       // create gep and load operations from arguments table for each original
       // argument
       auto index = bodyBuilder.create<LLVM::ConstantOp>(
@@ -395,7 +395,7 @@ struct ProcOpConversion : public ConvertToLLVMPattern {
     ArrayRef<Type> procSigTys(
         {i8PtrTy, stateTy.getPointerTo(), i32Ty.getPointerTo()});
     intermediate.addInputs(procSigTys);
-    for (unsigned int i = 0; i < procOp.getNumArguments(); i++)
+    for (size_t i = 0, e = procOp.getNumArguments(); i < e; ++i)
       intermediate.addInputs(i, voidTy);
     rewriter.applySignatureConversion(&procOp.getBody(), intermediate);
     OpBuilder bodyBuilder =
@@ -406,7 +406,7 @@ struct ProcOpConversion : public ConvertToLLVMPattern {
     final.addInputs(1, stateTy.getPointerTo());
     final.addInputs(2, i32Ty.getPointerTo());
 
-    for (unsigned int i = 0; i < procOp.getNumArguments(); i++) {
+    for (size_t i = 0, e = procOp.getNumArguments(); i < e; ++i) {
       // create gep and load operations from arguments table for each original
       // argument
       auto index = bodyBuilder.create<LLVM::ConstantOp>(
@@ -477,7 +477,7 @@ struct HaltOpConversion : public ConvertToLLVMPattern {
         op->getLoc(), senseTableTy.getPointerTo(), sensePtrGep);
 
     // zero out all the senses flags
-    for (unsigned int i = 0; i < senseTableTy.getArrayNumElements(); i++) {
+    for (size_t i = 0, e = senseTableTy.getArrayNumElements(); i < e; ++i) {
       auto indC = rewriter.create<LLVM::ConstantOp>(
           op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(i));
       auto zeroB = rewriter.create<LLVM::ConstantOp>(
@@ -543,7 +543,7 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
 
     // set senses flags
     // TODO: actually handle observed signals
-    for (unsigned int i = 0; i < senseTableTy.getArrayNumElements(); i++) {
+    for (size_t i = 0, e = senseTableTy.getArrayNumElements(); i < e; ++i) {
       auto indC = rewriter.create<LLVM::ConstantOp>(
           op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(i));
       auto zeroB = rewriter.create<LLVM::ConstantOp>(
@@ -800,8 +800,9 @@ struct InstOpConversion : public ConvertToLLVMPattern {
           op->getLoc(), sensesPtrTy, sensesMall);
 
       // set initial senses to 1
-      for (unsigned i = 0;
-           i < sensesPtrTy.getPointerElementTy().getArrayNumElements(); i++) {
+      for (size_t i = 0,
+                  e = sensesPtrTy.getPointerElementTy().getArrayNumElements();
+           i < e; ++i) {
         auto oneB = initBuilder.create<LLVM::ConstantOp>(
             op->getLoc(), i1Ty, rewriter.getBoolAttr(true));
         auto gepInd = initBuilder.create<LLVM::ConstantOp>(

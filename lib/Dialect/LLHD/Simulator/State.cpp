@@ -58,7 +58,7 @@ Signal::Signal(int origin, uint8_t *value, uint64_t size, uint64_t offset)
 bool Signal::operator==(const Signal &rhs) const {
   if (owner != rhs.owner || name != rhs.name || size != rhs.size)
     return false;
-  for (uint64_t i = 0; i < size; i++) {
+  for (uint64_t i = 0; i < size; ++i) {
     if (detail.value[i] != rhs.detail.value[i])
       return false;
   }
@@ -76,7 +76,7 @@ bool Signal::operator<(const Signal &rhs) const {
 std::string Signal::dump() {
   std::stringstream ss;
   ss << "0x";
-  for (int i = size - 1; i >= 0; i--) {
+  for (int i = size - 1; i >= 0; --i) {
     ss << std::setw(2) << std::setfill('0') << std::hex
        << static_cast<int>(detail.value[i]);
   }
@@ -102,7 +102,7 @@ void Slot::insertChange(std::string inst) { scheduled.push_back(inst); }
 //===----------------------------------------------------------------------===//
 void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
                                  APInt &bytes) {
-  for (unsigned long i = 0; i < c.size(); i++) {
+  for (size_t i = 0, e = c.size(); i < e; ++i) {
     if (time == c[i].time) {
       c[i].insertChange(index, bitOffset, bytes);
       return;
@@ -114,7 +114,7 @@ void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
 }
 
 void UpdateQueue::insertOrUpdate(Time time, std::string inst) {
-  for (unsigned long i = 0; i < c.size(); i++) {
+  for (size_t i = 0, e = c.size(); i < e; ++i) {
     if (time == c[i].time) {
       c[i].insertChange(inst);
       return;
@@ -130,7 +130,7 @@ void UpdateQueue::insertOrUpdate(Time time, std::string inst) {
 //===----------------------------------------------------------------------===//
 
 State::~State() {
-  for (int i = 0; i < nSigs; i++)
+  for (int i = 0; i < nSigs; ++i)
     if (signals[i].detail.value)
       std::free(signals[i].detail.value);
 
@@ -236,7 +236,7 @@ void State::dumpLayout() {
 
 void State::dumpSignalTriggers() {
   llvm::errs() << "::------------- Signal information -------------::\n";
-  for (unsigned long i = 0; i < signals.size(); i++) {
+  for (size_t i = 0, e = signals.size(); i < e; ++i) {
     llvm::errs() << signals[i].owner << "/" << signals[i].name
                  << " triggers: " << signals[i].owner << " ";
     for (auto trig : signals[i].triggers) {

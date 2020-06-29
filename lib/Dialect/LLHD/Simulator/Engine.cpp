@@ -72,7 +72,7 @@ int Engine::simulate(int n) {
   }
 
   // dump signals initial values
-  for (int i = 0; i < state->nSigs; i++) {
+  for (int i = 0; i < state->nSigs; ++i) {
     state->dumpSignal(out, i);
   }
 

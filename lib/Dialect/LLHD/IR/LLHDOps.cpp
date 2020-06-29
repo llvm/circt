@@ -443,7 +443,7 @@ static ParseResult parseEntityOp(OpAsmParser &parser, OperationState &result) {
 static void printArgumentList(OpAsmPrinter &printer,
                               std::vector<BlockArgument> args) {
   printer << "(";
-  for (size_t i = 0; i < args.size(); i++) {
+  for (size_t i = 0, e = args.size(); i < e; ++i) {
     printer << args[i] << " : ";
     printer.printType(args[i].getType());
     if (i < args.size() - 1)
@@ -499,7 +499,7 @@ LogicalResult mlir::llhd::EntityOp::verifyType() {
     return failure();
   }
   // Check that all operands are of signal type
-  for (int i = 0, n = this->getNumFuncArguments(); i < n; i++) {
+  for (int i = 0, e = this->getNumFuncArguments(); i < e; ++i) {
     if (!llhd::SigType::kindof(this->getArgument(i).getType().getKind())) {
       this->emitOpError("usage of invalid argument type. Got ")
           << this->getArgument(i).getType() << ", expected LLHD signal type";
@@ -561,7 +561,7 @@ LogicalResult mlir::llhd::ProcOp::verifyType() {
     return failure();
   }
   // Check that all operands are of signal type
-  for (int i = 0, n = this->getNumFuncArguments(); i < n; i++) {
+  for (int i = 0, e = this->getNumFuncArguments(); i < e; ++i) {
     if (!llhd::SigType::kindof(this->getArgument(i).getType().getKind())) {
       this->emitOpError("usage of invalid argument type, was ")
           << this->getArgument(i).getType() << ", expected LLHD signal type";
@@ -748,7 +748,7 @@ static LogicalResult verify(llhd::InstOp op) {
       return op.emitOpError(
           "incorrect number of outputs for proc instantiation");
 
-    for (unsigned i = 0, e = type.getNumInputs(); i != e; ++i)
+    for (size_t i = 0, e = type.getNumInputs(); i != e; ++i)
       if (op.getOperand(i).getType() != type.getInput(i))
         return op.emitOpError("operand type mismatch");
 
@@ -764,7 +764,7 @@ static LogicalResult verify(llhd::InstOp op) {
       return op.emitOpError(
           "incorrect number of outputs for entity instantiation");
 
-    for (unsigned i = 0, e = type.getNumInputs(); i != e; ++i)
+    for (size_t i = 0, e = type.getNumInputs(); i != e; ++i)
       if (op.getOperand(i).getType() != type.getInput(i))
         return op.emitOpError("operand type mismatch");
 
@@ -877,7 +877,7 @@ static ParseResult parseRegOp(OpAsmParser &parser, OperationState &result) {
 
 static void print(OpAsmPrinter &printer, llhd::RegOp op) {
   printer << op.getOperationName() << " " << op.signal();
-  for (unsigned i = 0; i < op.values().size(); ++i) {
+  for (size_t i = 0, e = op.values().size(); i < e; ++i) {
     Optional<llhd::RegMode> mode = llhd::symbolizeRegMode(
         op.modes().getValue()[i].cast<IntegerAttr>().getInt());
     if (!mode)
