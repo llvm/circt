@@ -39,6 +39,10 @@ using namespace circt::firrtl;
 
 // Only support integer type
 FIRRTLType getBundleType(mlir::Type type, bool isOutput) {
+  if (type.isa<BundleType>()) {
+    return type.dyn_cast<BundleType>();
+  }
+
   using BundleElement = std::pair<Identifier, FIRRTLType>;
   llvm::SmallVector<BundleElement, 3> elements;
 
@@ -139,8 +143,7 @@ void convertMergeOp(FModuleOp &moduleOp,
         auto resultType = result.getType();
         auto resultBundleType = getBundleType(resultType, false);
 
-        auto wireOp = rewriter.create<WireOp>(op.getLoc(),
-                                      resultBundleType,
+        auto wireOp = rewriter.create<WireOp>(op.getLoc(), resultBundleType,
                                       rewriter.getStringAttr(""));
         auto newResult = wireOp.getResult();
         result.replaceAllUsesWith(newResult);
@@ -149,8 +152,7 @@ void convertMergeOp(FModuleOp &moduleOp,
         rewriter.setInsertionPointAfter(wireOp);
         if (op.getNumOperands() == 1) {
           auto operand = op.getOperand(0);
-          rewriter.create<ConnectOp>(wireOp.getLoc(),
-                                             newResult, operand);
+          rewriter.create<ConnectOp>(wireOp.getLoc(), newResult, operand);
         }
         rewriter.eraseOp(&op);
       }
@@ -158,59 +160,58 @@ void convertMergeOp(FModuleOp &moduleOp,
   }
 }
 
-ArrayRef<std::pair<StringAttr, FIRRTLType>> getFModulePorts(
-    Operation &op, ConversionPatternRewriter &rewriter) {
-  using ModulePort = std::pair<StringAttr, FIRRTLType>;
-  llvm::SmallVector<ModulePort, 4> modulePorts;
-
-  // Add all the input ports
-  int ins_idx = 0;
-  for (auto arg : op.getOperands()) {
-    mlir::Type portType = arg.getType();
-    StringAttr portName = 
-        rewriter.getStringAttr("arg" + std::to_string(ins_idx));
-
-    // Convert normal type to FIRRTL bundle type
-    FIRRTLType bundlePortType = getBundleType(portType, false);
-    ModulePort modulePort = std::make_pair(portName, bundlePortType);
-    modulePorts.push_back(modulePort);
-  }
-
-  // Add all the output ports
-  int outs_idx = 0;
-  for (auto arg : op.getResults()) {
-    mlir::Type portType = arg.getType();
-    StringAttr portName = 
-        rewriter.getStringAttr("result" + std::to_string(outs_idx));
-
-    // Convert normal type to FIRRTL bundle type
-    FIRRTLType bundlePortType = getBundleType(portType, true);
-    ModulePort modulePort = std::make_pair(portName, bundlePortType);
-    modulePorts.push_back(modulePort);
-  }
-  return ArrayRef<ModulePort>(modulePorts);
-}
+//ArrayRef<std::pair<StringAttr, FIRRTLType>> getFModulePorts(
+//    Operation &op, ConversionPatternRewriter &rewriter) {
+//  using ModulePort = std::pair<StringAttr, FIRRTLType>;
+//  llvm::SmallVector<ModulePort, 4> modulePorts;
+//
+//  // Add all the input ports
+//  int ins_idx = 0;
+//  for (auto portType : op.getOperands().getTypes()) {
+//    StringAttr portName = 
+//        rewriter.getStringAttr("arg" + std::to_string(ins_idx));
+//
+//    // Convert normal type to FIRRTL bundle type
+//    FIRRTLType bundlePortType = getBundleType(portType, false);
+//    ModulePort modulePort = std::make_pair(portName, bundlePortType);
+//    modulePorts.push_back(modulePort);
+//    ins_idx += 1;
+//  }
+//
+//  // Add all the output ports
+//  int outs_idx = ins_idx;
+//  for (auto portType : op.getResults().getTypes()) {
+//    StringAttr portName = 
+//        rewriter.getStringAttr("arg" + std::to_string(outs_idx));
+//
+//    // Convert normal type to FIRRTL bundle type
+//    FIRRTLType bundlePortType = getBundleType(portType, true);
+//    ModulePort modulePort = std::make_pair(portName, bundlePortType);
+//    modulePorts.push_back(modulePort);
+//    outs_idx += 1;
+//  }
+//
+//  return ArrayRef<ModulePort>(modulePorts);
+//}
 
 std::map<StringRef, SubfieldOp> createSubfieldOps(BlockArgument port, 
-    Location termOpLoc, ConversionPatternRewriter &rewriter) {
+    Location termOpLoc, FIRRTLType dataType, 
+    FIRRTLType validType, FIRRTLType readyType, 
+    ConversionPatternRewriter &rewriter) {
   std::map<StringRef, SubfieldOp> subfieldOpMap;
-  auto portType = port.getType().dyn_cast<BundleType>();
 
   auto dataOp = rewriter.create<SubfieldOp>(
-      termOpLoc, portType.getElementType(StringRef("data")), port,
-      rewriter.getStringAttr("data"));
+      termOpLoc, dataType, port, rewriter.getStringAttr("data"));
   subfieldOpMap.insert(std::pair<StringRef, SubfieldOp>(
       StringRef("data"), dataOp));
 
   auto validOp = rewriter.create<SubfieldOp>(
-      termOpLoc, portType.getElementType(StringRef("valid")), port,
-      rewriter.getStringAttr("valid"));
+      termOpLoc, validType, port, rewriter.getStringAttr("valid"));
   subfieldOpMap.insert(std::pair<StringRef, SubfieldOp>(
       StringRef("valid"), validOp));
 
   auto readyOp = rewriter.create<SubfieldOp>(
-      termOpLoc, portType.getElementType(StringRef("ready")), port,
-      rewriter.getStringAttr("ready"));
+      termOpLoc, readyType, port, rewriter.getStringAttr("ready"));
   subfieldOpMap.insert(std::pair<StringRef, SubfieldOp>(
       StringRef("ready"), readyOp));
   
@@ -218,33 +219,35 @@ std::map<StringRef, SubfieldOp> createSubfieldOps(BlockArgument port,
 }
 
 std::map<StringRef, firrtl::ConstantOp> createLowHighConstantOps(
-    BlockArgument port, Location termOpLoc, 
+    BlockArgument port, Location termOpLoc, FIRRTLType dataType, 
     ConversionPatternRewriter &rewriter){
   std::map<StringRef, firrtl::ConstantOp> LowHighConstantOpMap;
-  auto portType = port.getType().dyn_cast<BundleType>();
-  auto dataType = portType.getElementType(StringRef("data"));
-  auto validType = portType.getElementType(StringRef("valid"));
 
-  // Create constant ops
-  auto zeroDataAttr = rewriter.getIntegerAttr(IntegerType::get(
-      dataType.getBitWidthOrSentinel(), IntegerType::Signed, 
-      rewriter.getContext()), 0);
+  auto signalType = UIntType::get(rewriter.getContext(), 1);
+  auto signalStdType = IntegerType::get(1, IntegerType::Unsigned, 
+                                        rewriter.getContext());
+
+  // Create zero data constant op
+  auto dataStdType = IntegerType::get(dataType.getBitWidthOrSentinel(), 
+      IntegerType::Signed, rewriter.getContext());
+  auto zeroDataAttr = rewriter.getIntegerAttr(dataStdType, 0);
+
   auto zeroDataOp = rewriter.create<firrtl::ConstantOp>(
       termOpLoc, dataType, zeroDataAttr);
   LowHighConstantOpMap.insert(std::pair<StringRef, firrtl::ConstantOp>(
       StringRef("zero"), zeroDataOp));
 
-  auto lowSignalAttr = rewriter.getIntegerAttr(
-      IntegerType::get(1, IntegerType::Unsigned, rewriter.getContext()), 0);
+  // Create low signal constant op
+  auto lowSignalAttr = rewriter.getIntegerAttr(signalStdType, 0);
   auto lowSignalOp = rewriter.create<firrtl::ConstantOp>(
-      termOpLoc, validType, lowSignalAttr);
+      termOpLoc, signalType, lowSignalAttr);
   LowHighConstantOpMap.insert(std::pair<StringRef, firrtl::ConstantOp>(
       StringRef("low"), lowSignalOp));
-  
-  auto highSignalAttr = rewriter.getIntegerAttr(
-      IntegerType::get(1, IntegerType::Unsigned, rewriter.getContext()), 1);
+
+  // Create low signal constant op
+  auto highSignalAttr = rewriter.getIntegerAttr(signalStdType, 1);
   auto highSignalOp = rewriter.create<firrtl::ConstantOp>(
-      termOpLoc, validType, highSignalAttr);
+      termOpLoc, signalType, highSignalAttr);
   LowHighConstantOpMap.insert(std::pair<StringRef, firrtl::ConstantOp>(
       StringRef("high"), highSignalOp));
   
@@ -252,13 +255,43 @@ std::map<StringRef, firrtl::ConstantOp> createLowHighConstantOps(
 }
 
 template <typename FIRRTLOpType>
-void createBinaryOpModule(FModuleOp moduleOp, Operation &binaryOp, 
-                          ConversionPatternRewriter &rewriter) {
+FModuleOp createBinaryOpModule(FModuleOp moduleOp, Operation &binaryOp, 
+                               ConversionPatternRewriter &rewriter) {
   // Create new FIRRTL module for binary operation
-  auto binaryOpModule = rewriter.create<FModuleOp>(
-      moduleOp.getLoc(), 
+  rewriter.setInsertionPoint(moduleOp);
+  using ModulePort = std::pair<StringAttr, FIRRTLType>;
+  llvm::SmallVector<ModulePort, 4> modulePorts;
+
+  // Add all the input ports
+  int ins_idx = 0;
+  for (auto portType : binaryOp.getOperands().getTypes()) {
+    StringAttr portName = 
+        rewriter.getStringAttr("arg" + std::to_string(ins_idx));
+
+    // Convert normal type to FIRRTL bundle type
+    FIRRTLType bundlePortType = getBundleType(portType, false);
+    ModulePort modulePort = std::make_pair(portName, bundlePortType);
+    modulePorts.push_back(modulePort);
+    ins_idx += 1;
+  }
+
+  // Add all the output ports
+  int outs_idx = ins_idx;
+  for (auto portType : binaryOp.getResults().getTypes()) {
+    StringAttr portName = 
+        rewriter.getStringAttr("arg" + std::to_string(outs_idx));
+
+    // Convert normal type to FIRRTL bundle type
+    FIRRTLType bundlePortType = getBundleType(portType, true);
+    ModulePort modulePort = std::make_pair(portName, bundlePortType);
+    modulePorts.push_back(modulePort);
+    outs_idx += 1;
+  }
+
+  auto binaryOpModule = rewriter.create<FModuleOp>(moduleOp.getLoc(), 
       rewriter.getStringAttr(binaryOp.getName().getStringRef()), 
-      getFModulePorts(binaryOp, rewriter));
+      ArrayRef<ModulePort>(modulePorts));
+  
   auto &entryBlock = binaryOpModule.getBody().front();
   auto arg0Port = entryBlock.getArgument(0);
   auto arg1Port = entryBlock.getArgument(1);
@@ -281,11 +314,15 @@ void createBinaryOpModule(FModuleOp moduleOp, Operation &binaryOp,
   auto readyType = resultType.getElementType(readyString);
 
   // Construct arg0, arg1, result, constant signals
-  auto arg0Map = createSubfieldOps(arg0Port, termOp->getLoc(), rewriter);
-  auto arg1Map = createSubfieldOps(arg1Port, termOp->getLoc(), rewriter);
-  auto resultMap = createSubfieldOps(resultPort, termOp->getLoc(), rewriter);
-  auto constantMap = createLowHighConstantOps(
-      arg0Port, termOp->getLoc(), rewriter);
+  rewriter.setInsertionPoint(termOp);
+  auto arg0Map = createSubfieldOps(arg0Port, termOp->getLoc(), 
+      dataType, validType, flipReadyType, rewriter);
+  auto arg1Map = createSubfieldOps(arg1Port, termOp->getLoc(), 
+      dataType, validType, flipReadyType, rewriter);
+  auto resultMap = createSubfieldOps(resultPort, termOp->getLoc(), 
+      flipDataType, flipValidType, readyType, rewriter);
+  auto constantMap = createLowHighConstantOps(arg0Port, termOp->getLoc(), 
+                                              dataType, rewriter);
 
   // Construct combinational logics
   auto arg0Valid = arg0Map[validString].getResult();
@@ -305,16 +342,59 @@ void createBinaryOpModule(FModuleOp moduleOp, Operation &binaryOp,
   //TODO
   auto whenOp = rewriter.create<WhenOp>(
       termOp->getLoc(), condition, true);
+
+  return binaryOpModule;
+}
+
+Type getInstBundleType(FModuleOp &opModule) {
+  using BundleElement = std::pair<Identifier, FIRRTLType>;
+  llvm::SmallVector<BundleElement, 3> elements;
+
+  int arg_idx = 0;
+  for (auto &arg : opModule.getArguments()) {
+    std::string argName = "arg" + std::to_string(arg_idx);
+    auto argId = Identifier::get(argName, opModule.getContext());
+    auto argType = FlipType::get(arg.getType().dyn_cast<BundleType>());
+    BundleElement argElement = std::make_pair(argId, argType);
+    elements.push_back(argElement);
+    arg_idx += 1;
+  }
+
+  ArrayRef<BundleElement> BundleElements = ArrayRef<BundleElement>(elements);
+  return BundleType::get(BundleElements, opModule.getContext());
+}
+
+void createInstOp(FModuleOp &opModule, Operation &op, int inst_idx, 
+                  ConversionPatternRewriter &rewriter) {
+  auto instType = getInstBundleType(opModule);
+  auto moduleName = opModule.getOperationName();
+  auto instName = moduleName + std::to_string(inst_idx);
+  auto instNameAttr = rewriter.getStringAttr(instName.getSingleStringRef());
+  rewriter.create<firrtl::InstanceOp>(op.getLoc(), instType, 
+                                      moduleName, instNameAttr);
+  
+  //TODO
 }
 
 void convertStandardOp(FModuleOp moduleOp,
                        ConversionPatternRewriter &rewriter) {
   for (Block &block : moduleOp) {
+    int inst_idx = 0;
     for (Operation &op : block) {
-      if (auto addiOp = dyn_cast<AddIOp>(op)) {
-        createBinaryOpModule<firrtl::AddPrimOp>(moduleOp, op, rewriter);
-        
+      if (dyn_cast<AddIOp>(op)) {
+        FModuleOp binaryOpModule = 
+            createBinaryOpModule<firrtl::AddPrimOp>(moduleOp, op, rewriter);
+        createInstOp(binaryOpModule, op, inst_idx, rewriter);
+
+        // For debug
+        Region *currentRegion = moduleOp.getParentRegion();
+        for (auto &block : *currentRegion) {
+          for (auto &op : block) {
+            llvm::outs() << op << "\n";
+          }
+        }
       }
+      inst_idx += 1;
     }
   }
 }
@@ -389,10 +469,10 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     }
 
     // Add all the output ports
-    int outs_idx = 0;
+    int outs_idx = ins_idx;
     for (auto portType : funcOp.getType().getResults()) {
       StringAttr portName = 
-          rewriter.getStringAttr("result" + std::to_string(outs_idx));
+          rewriter.getStringAttr("arg" + std::to_string(outs_idx));
 
       // Convert normal type to FIRRTL bundle type
       FIRRTLType bundlePortType = getBundleType(portType, true);
@@ -412,7 +492,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     
     mergeToEntryBlock(moduleOp, rewriter);
     convertMergeOp(moduleOp, rewriter);
-    //convertExpressions(moduleOp, rewriter);
+    convertStandardOp(moduleOp, rewriter);
     convertReturnOp(moduleOp, rewriter, ins_idx);
 
     //rewriter.applySignatureConversion(&moduleOp.getBody(), newSignature);
