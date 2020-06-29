@@ -1,6 +1,7 @@
-#include "circt/Dialect/LLHD/Simulator/Engine.h"
+#include "State.h"
+
 #include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
-#include "circt/Dialect/LLHD/Simulator/State.h"
+#include "circt/Dialect/LLHD/Simulator/Engine.h"
 
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/IR/Module.h"
@@ -51,6 +52,12 @@ Engine::Engine(llvm::raw_ostream &out, OwningModuleRef &module,
   assert(maybeEngine && "failed to create JIT");
   engine = std::move(*maybeEngine);
 }
+
+Engine::~Engine() = default;
+
+void Engine::dumpStateLayout() { state->dumpLayout(); }
+
+void Engine::dumpStateSignalTriggers() { state->dumpSignalTriggers(); }
 
 int Engine::simulate(int n) {
   assert(engine && "engine not found");

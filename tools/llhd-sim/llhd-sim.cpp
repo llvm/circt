@@ -117,8 +117,8 @@ int main(int argc, char **argv) {
   }
 
   if (dumpLayout) {
-    engine.getState()->dumpLayout();
-    engine.getState()->dumpSignalTriggers();
+    engine.dumpStateLayout();
+    engine.dumpStateSignalTriggers();
     return 0;
   }
 

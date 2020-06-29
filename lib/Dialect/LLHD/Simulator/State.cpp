@@ -1,4 +1,4 @@
-#include "circt/Dialect/LLHD/Simulator/State.h"
+#include "State.h"
 
 #include "llvm/Support/raw_ostream.h"
 
