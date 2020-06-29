@@ -44,14 +44,14 @@ static cl::opt<std::string> root(
     cl::value_desc("root_name"), cl::init("root"));
 static cl::alias rootA("r", cl::desc("Alias for -root"), cl::aliasopt(root));
 
-int parseMLIR(MLIRContext &context, OwningModuleRef &module) {
+static int parseMLIR(MLIRContext &context, OwningModuleRef &module) {
   module = parseSourceFile(inputFilename, &context);
   if (!module)
     return 1;
   return 0;
 }
 
-int dumpLLVM(ModuleOp module, MLIRContext &context) {
+static int dumpLLVM(ModuleOp module, MLIRContext &context) {
   if (dumpLLVMDialect) {
     module.dump();
     llvm::errs() << "\n";
