@@ -1,9 +1,53 @@
-#include "circt/Target/Verilog/VerilogPrinter.h"
+#include "circt/Target/Verilog/TranslateToVerilog.h"
+#include "circt/Dialect/LLHD/IR/LLHDOps.h"
+
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/Module.h"
 #include "mlir/Support/LogicalResult.h"
+#include "mlir/Translation.h"
+#include "llvm/ADT/Twine.h"
+#include "llvm/Support/FormattedStream.h"
 
 using namespace mlir;
 
-LogicalResult mlir::llhd::VerilogPrinter::printModule(ModuleOp module) {
+namespace {
+
+class VerilogPrinter {
+public:
+  VerilogPrinter(llvm::formatted_raw_ostream &output) : out(output) {}
+
+  LogicalResult printModule(ModuleOp op);
+  LogicalResult printOperation(Operation *op, unsigned indentAmount = 0);
+
+private:
+  LogicalResult printType(Type type);
+  LogicalResult printUnaryOp(Operation *op, StringRef opSymbol,
+                             unsigned indentAmount = 0);
+  LogicalResult printBinaryOp(Operation *op, StringRef opSymbol,
+                              unsigned indentAmount = 0);
+  LogicalResult printSignedBinaryOp(Operation *op, StringRef opSymbol,
+                                    unsigned indentAmount = 0);
+
+  /// Prints a SSA value. In case no mapping to a name exists yet, a new one is
+  /// added.
+  Twine getVariableName(Value value);
+
+  Twine getNewInstantiationName() {
+    return Twine("inst_") + Twine(instCount++);
+  }
+
+  /// Adds an alias for an existing SSA value. In case doesn't exist, it just
+  /// adds the alias as a new value.
+  void addAliasVariable(Value alias, Value existing);
+
+  unsigned instCount = 0;
+  llvm::formatted_raw_ostream &out;
+  unsigned nextValueNum = 0;
+  DenseMap<Value, unsigned> mapValueToName;
+  DenseMap<Value, unsigned> timeValueMap;
+};
+
+LogicalResult VerilogPrinter::printModule(ModuleOp module) {
   bool didFail = false;
   module.walk([&didFail, this](llhd::EntityOp entity) {
     // An EntityOp always has a single block
@@ -46,9 +90,8 @@ LogicalResult mlir::llhd::VerilogPrinter::printModule(ModuleOp module) {
   return success();
 }
 
-LogicalResult mlir::llhd::VerilogPrinter::printBinaryOp(Operation *inst,
-                                                        StringRef opSymbol,
-                                                        unsigned indentAmount) {
+LogicalResult VerilogPrinter::printBinaryOp(Operation *inst, StringRef opSymbol,
+                                            unsigned indentAmount) {
   // Check that the operation is indeed a binary operation
   if (inst->getNumOperands() != 2) {
     emitError(inst->getLoc(), "This operation does not have two operands!");
@@ -70,8 +113,9 @@ LogicalResult mlir::llhd::VerilogPrinter::printBinaryOp(Operation *inst,
   return success();
 }
 
-LogicalResult mlir::llhd::VerilogPrinter::printSignedBinaryOp(
-    Operation *inst, StringRef opSymbol, unsigned indentAmount) {
+LogicalResult VerilogPrinter::printSignedBinaryOp(Operation *inst,
+                                                  StringRef opSymbol,
+                                                  unsigned indentAmount) {
   // Note: the wire is not declared as signed, because if you have the result
   // of two signed operation as an input to an unsigned operation, it would
   // perform the signed version (sometimes this is not a problem because it's
@@ -103,9 +147,8 @@ LogicalResult mlir::llhd::VerilogPrinter::printSignedBinaryOp(
   return success();
 }
 
-LogicalResult mlir::llhd::VerilogPrinter::printUnaryOp(Operation *inst,
-                                                       StringRef opSymbol,
-                                                       unsigned indentAmount) {
+LogicalResult VerilogPrinter::printUnaryOp(Operation *inst, StringRef opSymbol,
+                                           unsigned indentAmount) {
   // Check that the operation is indeed a unary operation
   if (inst->getNumOperands() != 1) {
     emitError(inst->getLoc(),
@@ -127,9 +170,8 @@ LogicalResult mlir::llhd::VerilogPrinter::printUnaryOp(Operation *inst,
   return success();
 }
 
-LogicalResult
-mlir::llhd::VerilogPrinter::printOperation(Operation *inst,
-                                           unsigned indentAmount) {
+LogicalResult VerilogPrinter::printOperation(Operation *inst,
+                                             unsigned indentAmount) {
   if (auto op = dyn_cast<llhd::ConstOp>(inst)) {
     if (op.value().getKind() == StandardAttributes::Integer) {
       // Integer constant
@@ -143,7 +185,7 @@ mlir::llhd::VerilogPrinter::printOperation(Operation *inst,
       return success();
     } else if (llhd::TimeAttr::kindof(op.value().getKind())) {
       // Time Constant
-      auto timeAttr = op.value().cast<TimeAttr>();
+      auto timeAttr = op.value().cast<llhd::TimeAttr>();
       if (timeAttr.getTime() == 0 && timeAttr.getDelta() != 1) {
         emitError(op.getLoc(),
                   "Not possible to translate a time attribute with 0 real "
@@ -333,7 +375,7 @@ mlir::llhd::VerilogPrinter::printOperation(Operation *inst,
   return failure();
 }
 
-LogicalResult mlir::llhd::VerilogPrinter::printType(Type type) {
+LogicalResult VerilogPrinter::printType(Type type) {
   if (type.isIntOrFloat()) {
     unsigned int width = type.getIntOrFloatBitWidth();
     if (width != 1)
@@ -346,7 +388,7 @@ LogicalResult mlir::llhd::VerilogPrinter::printType(Type type) {
   return failure();
 }
 
-Twine mlir::llhd::VerilogPrinter::getVariableName(Value value) {
+Twine VerilogPrinter::getVariableName(Value value) {
   if (!mapValueToName.count(value)) {
     mapValueToName.insert(std::make_pair(value, nextValueNum));
     nextValueNum++;
@@ -354,7 +396,7 @@ Twine mlir::llhd::VerilogPrinter::getVariableName(Value value) {
   return Twine("_") + Twine(mapValueToName.lookup(value));
 }
 
-void mlir::llhd::VerilogPrinter::addAliasVariable(Value alias, Value existing) {
+void VerilogPrinter::addAliasVariable(Value alias, Value existing) {
   if (!mapValueToName.count(existing)) {
     mapValueToName.insert(std::make_pair(alias, nextValueNum));
     nextValueNum++;
@@ -362,4 +404,19 @@ void mlir::llhd::VerilogPrinter::addAliasVariable(Value alias, Value existing) {
     mapValueToName.insert(
         std::make_pair(alias, mapValueToName.lookup(existing)));
   }
+}
+
+} // anonymous namespace
+
+LogicalResult mlir::llhd::printVerilog(ModuleOp module, raw_ostream &os) {
+  llvm::formatted_raw_ostream out(os);
+  VerilogPrinter printer(out);
+  return printer.printModule(module);
+}
+
+void mlir::llhd::registerToVerilogTranslation() {
+  TranslateFromMLIRRegistration registration(
+      "llhd-to-verilog", [](ModuleOp module, raw_ostream &output) {
+        return printVerilog(module, output);
+      });
 }

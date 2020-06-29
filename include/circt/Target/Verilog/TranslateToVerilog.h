@@ -1,23 +1,20 @@
 #ifndef CIRCT_TARGET_VERILOG_TRANSLATETOVERILOG_H
 #define CIRCT_TARGET_VERILOG_TRANSLATETOVERILOG_H
 
-#include "circt/Target/Verilog/VerilogPrinter.h"
-#include "mlir/Translation.h"
-
-using namespace mlir;
+namespace llvm {
+class raw_ostream;
+} // namespace llvm
 
 namespace mlir {
+
+struct LogicalResult;
+class ModuleOp;
+
 namespace llhd {
 
-void registerToVerilogTranslation() {
-  TranslateFromMLIRRegistration registration(
-      "llhd-to-verilog", [](ModuleOp module, raw_ostream &output) {
-        formatted_raw_ostream out(output);
-        llhd::VerilogPrinter printer(out);
-        printer.printModule(module);
-        return success();
-      });
-}
+mlir::LogicalResult printVerilog(mlir::ModuleOp module, llvm::raw_ostream &os);
+
+void registerToVerilogTranslation();
 
 } // namespace llhd
 } // namespace mlir
