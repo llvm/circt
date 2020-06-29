@@ -110,7 +110,7 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  llhd::sim::Engine engine(output->os(), module, context, root);
+  llhd::sim::Engine engine(output->os(), *module, context, root);
 
   if (dumpLLVMDialect || dumpLLVMIR) {
     return dumpLLVM(engine.getModuleRef(), context);

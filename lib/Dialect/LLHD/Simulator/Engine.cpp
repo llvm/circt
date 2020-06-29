@@ -17,14 +17,14 @@
 using namespace mlir;
 using namespace llhd::sim;
 
-Engine::Engine(llvm::raw_ostream &out, OwningModuleRef &module,
-               MLIRContext &context, std::string root)
+Engine::Engine(llvm::raw_ostream &out, ModuleOp module, MLIRContext &context,
+               std::string root)
     : out(out), root(root) {
   state = std::make_unique<State>();
 
-  buildLayout(*module);
+  buildLayout(module);
 
-  auto rootEntity = module->lookupSymbol<EntityOp>(root);
+  auto rootEntity = module.lookupSymbol<EntityOp>(root);
 
   // insert explicit instantiation of root
   OpBuilder insertInst =
@@ -38,12 +38,12 @@ Engine::Engine(llvm::raw_ostream &out, OwningModuleRef &module,
 
   mlir::PassManager pm(&context);
   pm.addPass(llhd::createConvertLLHDToLLVMPass());
-  if (failed(pm.run(*module))) {
+  if (failed(pm.run(module))) {
     llvm::errs() << "failed to convert module to LLVM";
     exit(EXIT_FAILURE);
   }
 
-  this->module = *module;
+  this->module = module;
 
   // init jit
   llvm::InitializeNativeTarget();

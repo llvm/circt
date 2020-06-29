@@ -17,7 +17,7 @@ class Engine {
 public:
   /// Initialize an LLHD simulation engine. This initializes the state, as well
   /// as the mlir::ExecutionEngine with the given module.
-  Engine(llvm::raw_ostream &out, OwningModuleRef &module, MLIRContext &context,
+  Engine(llvm::raw_ostream &out, ModuleOp module, MLIRContext &context,
          std::string root);
 
   /// Default destructor
