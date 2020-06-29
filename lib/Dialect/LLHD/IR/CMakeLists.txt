@@ -7,7 +7,7 @@ add_mlir_dialect_library(MLIRLLHD
 
   DEPENDS
   MLIRLLHDEnumsIncGen
-  MLIRLLHDOpsIncGen
+  MLIRLLHDIncGen
 
   LINK_LIBS PUBLIC
   MLIREDSC

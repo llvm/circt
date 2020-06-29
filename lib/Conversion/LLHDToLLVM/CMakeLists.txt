@@ -2,7 +2,7 @@ add_mlir_conversion_library(MLIRLLHDToLLVM
     LLHDToLLVM.cpp
 
     DEPENDS
-    MLIRLLHDOpsIncGen
+    MLIRLLHDIncGen
     MLIRLLHDConversionPassIncGen
 )
 

@@ -1,7 +1,17 @@
-#ifndef CIRCT_DIALECT_LLHD_IR_LLHDBASE
-#define CIRCT_DIALECT_LLHD_IR_LLHDBASE
+//===- LLHD.td - LLHD dialect definition -------------------*- tablegen -*-===//
+//
+// This is the top level file for the LLHD dialect.
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef CIRCT_DIALECT_LLHD_IR_LLHD
+#define CIRCT_DIALECT_LLHD_IR_LLHD
 
 include "mlir/IR/OpBase.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "mlir/Interfaces/CallInterfaces.td"
+include "mlir/IR/SymbolInterfaces.td"
 
 //===----------------------------------------------------------------------===//
 // LLHD dialect definition
@@ -89,6 +99,12 @@ class SameTypeArbitraryWidth<string desc, string lhs, string rhs> : PredOpTrait<
         ".getType(); return (lhsType.getKind() == rhsType.getKind()) &&" #
         "(!lhsType.isa<ShapedType>() || (lhsType.cast<ShapedType>().getElementType() == rhsType.cast<ShapedType>().getElementType()));}()">>;
 
+include "ValueOps.td"
+include "ArithmeticOps.td"
+include "BitwiseOps.td"
+include "SignalOps.td"
+include "ExtractOps.td"
+include "InsertOps.td"
+include "StructureOps.td"
 
-
-#endif // CIRCT_DIALECT_LLHD_IR_LLHDBASE
+#endif // CIRCT_DIALECT_LLHD_IR_LLHD

@@ -835,10 +835,10 @@ static LogicalResult verify(llhd::RegOp op) {
   return success();
 }
 
-#include "circt/Dialect/LLHD/IR/LLHDOpsEnums.cpp.inc"
+#include "circt/Dialect/LLHD/IR/LLHDEnums.cpp.inc"
 namespace mlir {
 namespace llhd {
 #define GET_OP_CLASSES
-#include "circt/Dialect/LLHD/IR/LLHDOps.cpp.inc"
+#include "circt/Dialect/LLHD/IR/LLHD.cpp.inc"
 } // namespace llhd
 } // namespace mlir

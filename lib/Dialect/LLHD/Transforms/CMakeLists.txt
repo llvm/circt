@@ -12,7 +12,7 @@ add_llvm_library(MLIRLLHDTransforms
   FunctionEliminationPass.cpp
 
   DEPENDS
-  MLIRLLHDOpsIncGen
+  MLIRLLHDIncGen
   MLIRLLHDTransformsIncGen
 )
 target_link_libraries(MLIRLLHDTransforms ${LIBS})
