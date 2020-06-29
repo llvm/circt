@@ -18,6 +18,17 @@
 using namespace mlir;
 
 //===---------------------------------------------------------------------===//
+// LLHD Trait Helper Functions
+//===---------------------------------------------------------------------===//
+
+static bool sameKindArbitraryWidth(Type lhsType, Type rhsType) {
+  return (lhsType.getKind() == rhsType.getKind()) &&
+         (!lhsType.isa<ShapedType>() ||
+          (lhsType.cast<ShapedType>().getElementType() ==
+           rhsType.cast<ShapedType>().getElementType()));
+}
+
+//===---------------------------------------------------------------------===//
 // LLHD Operations
 //===---------------------------------------------------------------------===//
 
