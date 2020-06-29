@@ -1,3 +1,10 @@
+//===- ProcessLoweringPass.cpp - Implement Process Lowering Pass ----------===//
+//
+// Implement Pass to transform combinatorial processes to entities.
+//
+//===----------------------------------------------------------------------===//
+
+#include "PassDetails.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"

@@ -1,3 +1,7 @@
+//===- LLHDOps.cpp - Implement the LLHD operations ------------------------===//
+//
+//===----------------------------------------------------------------------===//
+
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "mlir/Dialect/CommonFolders.h"

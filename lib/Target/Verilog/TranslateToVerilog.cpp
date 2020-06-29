@@ -1,3 +1,9 @@
+//===- TranslateToVerilog.cpp - Verilog Printer ---------------------------===//
+//
+// This is the main LLHD to Verilog Printer implementation.
+//
+//===----------------------------------------------------------------------===//
+
 #include "circt/Target/Verilog/TranslateToVerilog.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 

@@ -1,3 +1,9 @@
+//===-- Passes.td - LLHD pass definition file --------------*- tablegen -*-===//
+//
+// This file contains definitions for passes that work on the LLHD dialect.
+//
+//===----------------------------------------------------------------------===//
+
 #ifndef CIRCT_DIALECT_LLHD_TRANSFORMS_PASSES
 #define CIRCT_DIALECT_LLHD_TRANSFORMS_PASSES
 

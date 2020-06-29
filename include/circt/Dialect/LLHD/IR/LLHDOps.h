@@ -1,3 +1,9 @@
+//===- LLHDOps.h - Declare LLHD dialect operations --------------*- C++ -*-===//
+//
+// This file declares the operation class for the LLHD IR.
+//
+//===----------------------------------------------------------------------===//
+
 #ifndef CIRCT_DIALECT_LLHD_IR_LLHDOPS_H
 #define CIRCT_DIALECT_LLHD_IR_LLHDOPS_H
 

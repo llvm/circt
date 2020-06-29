@@ -1,3 +1,9 @@
+//===- LLHDToLLVM.cpp - LLHD to LLVM Conversion Pass ----------------------===//
+//
+// This is the main LLHD to LLVM Conversion Pass Implementation.
+//
+//===----------------------------------------------------------------------===//
+
 #include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"

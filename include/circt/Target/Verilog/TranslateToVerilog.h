@@ -1,3 +1,9 @@
+//===- TranslateToVerilog.h - Verilog Printer -------------------*- C++ -*-===//
+//
+// Defines the interface to the LLHD to Verilog Printer.
+//
+//===----------------------------------------------------------------------===//
+
 #ifndef CIRCT_TARGET_VERILOG_TRANSLATETOVERILOG_H
 #define CIRCT_TARGET_VERILOG_TRANSLATETOVERILOG_H
 

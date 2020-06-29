@@ -1,3 +1,9 @@
+//===- LLHDDialect.h - Declare LLHD dialect operations ----------*- C++ -*-===//
+//
+// This file declares an MLIR dialect for the LLHD IR.
+//
+//===----------------------------------------------------------------------===//
+
 #ifndef CIRCT_DIALECT_LLHD_IR_LLHDDIALECT_H
 #define CIRCT_DIALECT_LLHD_IR_LLHDDIALECT_H
 

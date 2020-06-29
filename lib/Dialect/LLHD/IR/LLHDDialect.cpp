@@ -1,3 +1,7 @@
+//===- LLHDDialect.cpp - Implement the LLHD dialect -----------------------===//
+//
+//===----------------------------------------------------------------------===//
+
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "mlir/IR/Builders.h"

@@ -1,3 +1,10 @@
+//===- FunctionEliminationPass.cpp - Implement Function Elimination Pass --===//
+//
+// Implement pass to check that all functions got inlined and delete them.
+//
+//===----------------------------------------------------------------------===//
+
+#include "PassDetails.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
