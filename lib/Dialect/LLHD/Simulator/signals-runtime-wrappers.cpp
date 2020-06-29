@@ -59,7 +59,7 @@ void drive_signal(State *state, int index, uint8_t *value, uint64_t width,
 
 int add_subsignal(mlir::llhd::sim::State *state, int origin, uint8_t *ptr,
                   uint64_t len, uint64_t offset) {
-  int size = std::ceil((len + offset) / 8.0);
+  int size = llvm::divideCeil(len + offset, 8);
   state->signals.push_back(Signal(origin, ptr, size, offset));
   return (state->signals.size() - 1);
 }

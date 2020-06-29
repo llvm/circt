@@ -691,8 +691,8 @@ struct InstOpConversion : public ConvertToLLVMPattern {
               initBuilder.insert(sigOp.init().getDefiningOp()->clone())
                   ->getResult(0);
           // malloc required space
-          int size =
-              std::ceil(sigOp.init().getType().getIntOrFloatBitWidth() / 8.0);
+          int size = llvm::divideCeil(
+              sigOp.init().getType().getIntOrFloatBitWidth(), 8);
           auto sizeConst = initBuilder.create<LLVM::ConstantOp>(
               rewriter.getUnknownLoc(), i64Ty,
               rewriter.getI64IntegerAttr(size));
@@ -904,7 +904,7 @@ struct PrbOpConversion : public ConvertToLLVMPattern {
     // get amount of bytes to load. An extra byte is always loaded to cover the
     // case where a subsignal spans halfway in the last byte.
     int resWidth = prbOp.getType().getIntOrFloatBitWidth();
-    int loadWidth = (std::ceil(resWidth / 8.0) + 1) * 8;
+    int loadWidth = (llvm::divideCeil(resWidth, 8) + 1) * 8;
     auto loadTy = LLVM::LLVMType::getIntNTy(&getDialect(), loadWidth);
 
     // get pointer to state from function arguments
