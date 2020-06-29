@@ -1,10 +1,6 @@
 #include "signals-runtime-wrappers.h"
 
-#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/Support/raw_ostream.h"
-
-#include <cassert>
 
 using namespace llvm;
 using namespace mlir::llhd::sim;

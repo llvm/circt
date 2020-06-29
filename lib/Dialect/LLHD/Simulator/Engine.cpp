@@ -4,15 +4,11 @@
 #include "circt/Dialect/LLHD/Simulator/Engine.h"
 
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
-#include "mlir/IR/Module.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 #include "llvm/Support/TargetSelect.h"
-#include "llvm/Support/raw_ostream.h"
-
-#include <algorithm>
 
 using namespace mlir;
 using namespace llhd::sim;

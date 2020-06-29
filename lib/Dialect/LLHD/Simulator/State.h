@@ -1,15 +1,11 @@
 #ifndef CIRCT_DIALECT_LLHD_SIMULATOR_STATE_H
 #define CIRCT_DIALECT_LLHD_SIMULATOR_STATE_H
 
+#include "llvm/ADT/APInt.h"
+#include "llvm/ADT/StringMap.h"
+
 #include <map>
 #include <queue>
-#include <string>
-#include <vector>
-
-#include "llvm/ADT/APInt.h"
-#include "llvm/ADT/PriorityQueue.h"
-#include "llvm/ADT/StringMap.h"
-#include "llvm/Support/raw_ostream.h"
 
 namespace mlir {
 namespace llhd {

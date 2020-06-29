@@ -3,8 +3,11 @@
 
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 
-#include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/IR/Module.h"
+
+namespace mlir {
+class ExecutionEngine;
+} // namespace mlir
 
 namespace mlir {
 namespace llhd {
