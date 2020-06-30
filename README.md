@@ -7,6 +7,10 @@ it as the recursively as "CIRCT IR Compiler and Tools".  The T can be
 selectively expanded as Tool, Translator, Team, Technology, Target, Tree, Type,
 ... we're ok with the ambiguity.
 
+The CIRCT community has a weekly meeting with open attendance.  Please see the
+[meeting notes document](https://docs.google.com/document/d/1fOSRdyZR2w75D87yU2Ma9h2-_lEPL4NxvhJGJd-s5pk/edit#)
+for more information.
+
 ## Motivation
 
 The EDA industry has well-known and widely used proprietary and open source
