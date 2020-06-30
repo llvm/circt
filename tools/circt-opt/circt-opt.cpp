@@ -25,46 +25,45 @@
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/ToolOutputFile.h"
 
+using namespace llvm;
 using namespace mlir;
 using namespace circt;
 
-static llvm::cl::opt<std::string> inputFilename(llvm::cl::Positional,
-                                                llvm::cl::desc("<input file>"),
-                                                llvm::cl::init("-"));
+static cl::opt<std::string>
+    inputFilename(cl::Positional, cl::desc("<input file>"), cl::init("-"));
 
-static llvm::cl::opt<std::string>
-    outputFilename("o", llvm::cl::desc("Output filename"),
-                   llvm::cl::value_desc("filename"), llvm::cl::init("-"));
+static cl::opt<std::string> outputFilename("o", cl::desc("Output filename"),
+                                           cl::value_desc("filename"),
+                                           cl::init("-"));
 
-static llvm::cl::opt<bool> splitInputFile(
-    "split-input-file",
-    llvm::cl::desc("Split the input file into pieces and process each "
-                   "chunk independently"),
-    llvm::cl::init(false));
+static cl::opt<bool>
+    splitInputFile("split-input-file",
+                   cl::desc("Split the input file into pieces and process each "
+                            "chunk independently"),
+                   cl::init(false));
 
-static llvm::cl::opt<bool> verifyDiagnostics(
-    "verify-diagnostics",
-    llvm::cl::desc("Check that emitted diagnostics match "
-                   "expected-* lines on the corresponding line"),
-    llvm::cl::init(false));
+static cl::opt<bool>
+    verifyDiagnostics("verify-diagnostics",
+                      cl::desc("Check that emitted diagnostics match "
+                               "expected-* lines on the corresponding line"),
+                      cl::init(false));
 
-static llvm::cl::opt<bool> verifyPasses(
-    "verify-each",
-    llvm::cl::desc("Run the verifier after each transformation pass"),
-    llvm::cl::init(true));
+static cl::opt<bool>
+    verifyPasses("verify-each",
+                 cl::desc("Run the verifier after each transformation pass"),
+                 cl::init(true));
 
-static llvm::cl::opt<bool>
+static cl::opt<bool>
     showDialects("show-dialects",
-                 llvm::cl::desc("Print the list of registered dialects"),
-                 llvm::cl::init(false));
+                 cl::desc("Print the list of registered dialects"),
+                 cl::init(false));
 
-static llvm::cl::opt<bool> allowUnregisteredDialects(
+static cl::opt<bool> allowUnregisteredDialects(
     "allow-unregistered-dialect",
-    llvm::cl::desc("Allow operation with no registered dialects"),
-    llvm::cl::init(false));
+    cl::desc("Allow operation with no registered dialects"), cl::init(false));
 
 int main(int argc, char **argv) {
-  llvm::InitLLVM y(argc, argv);
+  InitLLVM y(argc, argv);
 
   // Register MLIR stuff
   registerDialect<StandardOpsDialect>();
@@ -100,8 +99,7 @@ int main(int argc, char **argv) {
   PassPipelineCLParser passPipeline("", "Compiler passes to run");
 
   // Parse pass names in main to ensure static initialization completed.
-  llvm::cl::ParseCommandLineOptions(argc, argv,
-                                    "circt modular optimizer driver\n");
+  cl::ParseCommandLineOptions(argc, argv, "circt modular optimizer driver\n");
 
   MLIRContext context;
   if (showDialects) {
