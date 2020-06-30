@@ -247,8 +247,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering> {
 
     RTLConversionTarget target(getContext());
     RTLTypeConverter typeConverter;
-    if (failed(applyPartialConversion(getOperation(), target, patterns,
-                                      &typeConverter)))
+    if (failed(applyPartialConversion(getOperation(), target, patterns)))
       signalPassFailure();
   }
 };
