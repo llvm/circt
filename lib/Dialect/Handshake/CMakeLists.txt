@@ -14,8 +14,8 @@ add_mlir_dialect_library(MLIRHandshakeOps
   LINK_LIBS
   MLIRStandardOps
   MLIRIR
-  )
-add_dependencies(MLIRHandshakeOps
+
+  DEPENDS
   MLIRHandshakeOpsIncGen
   MLIRHandshakeInterfacesIncGen
   MLIRHandshakeRewritersIncGen

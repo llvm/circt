@@ -19,7 +19,7 @@ def ConstantOp
 
   let arguments = (ins APIntAttr:$value);
   let results = (outs AnySignlessInteger:$result);
-  
+
   // FIXME(QoI): Instead of requiring "rtl.constant (42: i8) : i8", we should
   // just use "rtl.constant 42: i8".  This can be done with a custom printer and
   // parser, but would be better to be autoderived from the
@@ -72,6 +72,25 @@ def ModOp : UTBinRTLOp<"mod">;
 def AndOp : UTBinRTLOp<"and", [Commutative]>;
 def OrOp  : UTBinRTLOp<"or",  [Commutative]>;
 def XorOp : UTBinRTLOp<"xor", [Commutative]>;
+
+//===----------------------------------------------------------------------===//
+// Unary Operations
+//===----------------------------------------------------------------------===//
+
+// Base class for unary reduction operations that produce an i1.
+class UnaryI1ReductionRTLOp<string mnemonic, list<OpTrait> traits = []> :
+      RTLOp<mnemonic, !listconcat(traits, [NoSideEffect])> {
+  let arguments = (ins AnySignlessInteger:$input);
+  let results = (outs I1:$result);
+
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input)
+  }];
+}
+
+def AndROp : UnaryI1ReductionRTLOp<"andr">;
+def OrROp  : UnaryI1ReductionRTLOp<"orr">;
+def XorROp : UnaryI1ReductionRTLOp<"xorr">;
 
 //===----------------------------------------------------------------------===//
 // Other Operations

@@ -46,7 +46,7 @@ OpFoldResult AndPrimOp::fold(ArrayRef<Attribute> operands) {
 
   /// and(x, -1) -> x
   if (matchPattern(rhs(), m_FConstant(value)) && value.isAllOnesValue() &&
-      lhs().getType() == getType())
+      lhs().getType() == getType() && rhs().getType() == getType())
     return lhs();
 
   /// and(x, x) -> x
@@ -67,7 +67,7 @@ OpFoldResult OrPrimOp::fold(ArrayRef<Attribute> operands) {
 
   /// or(x, -1) -> -1
   if (matchPattern(rhs(), m_FConstant(value)) && value.isAllOnesValue() &&
-      rhs().getType() == getType())
+      rhs().getType() == getType() && lhs().getType() == getType())
     return rhs();
 
   /// or(x, x) -> x
