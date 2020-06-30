@@ -104,26 +104,14 @@ Type LLHDDialect::parseType(DialectAsmParser &parser) const {
 /// Print a signal type with custom syntax:
 /// type ::= !sig.type<underlying-type>
 static void printSigType(SigType sig, DialectAsmPrinter &printer) {
-  printer << sig.getKeyword() << "<";
-  printer.printType(sig.getUnderlyingType());
-  printer << ">";
+  printer << sig.getKeyword() << "<" << sig.getUnderlyingType() << ">";
 }
 
 void LLHDDialect::printType(Type type, DialectAsmPrinter &printer) const {
-  switch (type.getKind()) {
-  case LLHDTypes::Sig: {
-    SigType sig = type.cast<SigType>();
+  if (SigType sig = type.dyn_cast<SigType>()) {
     printSigType(sig, printer);
-    break;
-  }
-  case LLHDTypes::Time: {
-    TimeType time = type.cast<TimeType>();
+  } else if (TimeType time = type.dyn_cast<TimeType>()) {
     printer << time.getKeyword();
-    break;
-  }
-
-  default:
-    break;
   }
 }
 
@@ -192,14 +180,8 @@ static void printTimeAttribute(TimeAttr attr, DialectAsmPrinter &printer) {
 
 void LLHDDialect::printAttribute(Attribute attr,
                                  DialectAsmPrinter &printer) const {
-  switch (attr.getKind()) {
-  case LLHDAttrs::Time: {
-    TimeAttr time = attr.cast<TimeAttr>();
+  if (TimeAttr time = attr.dyn_cast<TimeAttr>()) {
     printTimeAttribute(time, printer);
-    break;
-  }
-  default:
-    break;
   }
 }
 

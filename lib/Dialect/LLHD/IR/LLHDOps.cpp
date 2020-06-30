@@ -161,8 +161,7 @@ static void print(OpAsmPrinter &printer, llhd::ConstOp op) {
   // followed by the operation type
   printer.printAttributeWithoutType(op.valueAttr());
   printer.printOptionalAttrDict(op.getAttrs(), {"value"});
-  printer << " : ";
-  printer.printType(op.getType());
+  printer << " : " << op.getType();
 }
 
 OpFoldResult llhd::ConstOp::fold(ArrayRef<Attribute> operands) {
@@ -319,10 +318,10 @@ OpFoldResult llhd::ShlOp::fold(ArrayRef<Attribute> operands) {
 
 static LogicalResult verify(llhd::ShlOp op) {
   if (op.base().getType() != op.result().getType()) {
-    op.emitError("The output of the Shl operation is required to have the "
-                 "same type as the base value (first operand), (")
-        << op.base().getType() << " vs. " << op.result().getType() << ")";
-    return failure();
+    return op.emitError(
+               "The output of the Shl operation is required to have the "
+               "same type as the base value (first operand), (")
+           << op.base().getType() << " vs. " << op.result().getType() << ")";
   }
 
   // TODO: verify that T and Th only differ in the number of bits or elements
@@ -350,10 +349,10 @@ OpFoldResult llhd::ShrOp::fold(ArrayRef<Attribute> operands) {
 
 static LogicalResult verify(llhd::ShrOp op) {
   if (op.base().getType() != op.result().getType()) {
-    op.emitError("The output of the Shr operation is required to have the "
-                 "same type as the base value (first operand), (")
-        << op.base().getType() << " vs. " << op.result().getType() << ")";
-    return failure();
+    return op.emitError(
+               "The output of the Shr operation is required to have the "
+               "same type as the base value (first operand), (")
+           << op.base().getType() << " vs. " << op.result().getType() << ")";
   }
 
   // TODO: verify that T and Th only differ in the number of bits or elements
@@ -447,12 +446,9 @@ static ParseResult parseEntityOp(OpAsmParser &parser, OperationState &result) {
 static void printArgumentList(OpAsmPrinter &printer,
                               std::vector<BlockArgument> args) {
   printer << "(";
-  for (size_t i = 0, e = args.size(); i < e; ++i) {
-    printer << args[i] << " : ";
-    printer.printType(args[i].getType());
-    if (i < args.size() - 1)
-      printer << ", ";
-  }
+  llvm::interleaveComma(args, printer, [&](BlockArgument arg) {
+    printer << arg << " : " << arg.getType();
+  });
   printer << ")";
 }
 
@@ -488,9 +484,9 @@ static LogicalResult verify(llhd::EntityOp op) {
   uint64_t nIns = op.insAttr().getInt();
   // check that there is at most one flag for each argument
   if (numArgs < nIns) {
-    op.emitError("Cannot have more inputs than arguments, expected at most ")
-        << numArgs << " but got: " << nIns;
-    return failure();
+    return op.emitError(
+               "Cannot have more inputs than arguments, expected at most ")
+           << numArgs << " but got: " << nIns;
   }
   return success();
 }
@@ -498,16 +494,14 @@ static LogicalResult verify(llhd::EntityOp op) {
 LogicalResult mlir::llhd::EntityOp::verifyType() {
   // Fail if function returns any values. An entity's outputs are specially
   // marked arguments.
-  if (this->getNumResults() > 0) {
-    this->emitOpError("an entity cannot have return types.");
-    return failure();
-  }
+  if (getNumResults() > 0)
+    return emitOpError("an entity cannot have return types.");
+
   // Check that all operands are of signal type
-  for (int i = 0, e = this->getNumFuncArguments(); i < e; ++i) {
-    if (!llhd::SigType::kindof(this->getArgument(i).getType().getKind())) {
-      this->emitOpError("usage of invalid argument type. Got ")
-          << this->getArgument(i).getType() << ", expected LLHD signal type";
-      return failure();
+  for (int i = 0, e = getNumFuncArguments(); i < e; ++i) {
+    if (!getArgument(i).getType().isa<llhd::SigType>()) {
+      return emitOpError("usage of invalid argument type. Got ")
+             << getArgument(i).getType() << ", expected LLHD signal type";
     }
   }
   return success();
@@ -515,11 +509,9 @@ LogicalResult mlir::llhd::EntityOp::verifyType() {
 
 LogicalResult mlir::llhd::EntityOp::verifyBody() {
   // Body must not be empty.
-  if (this->isExternal()) {
-    this->emitOpError("defining external entity with the entity instruction "
-                      "is not allowed, use the intended instruction instead.");
-    return failure();
-  }
+  if (isExternal())
+    return emitOpError("defining external entity with the entity instruction "
+                       "is not allowed, use the intended instruction instead.");
 
   // check signal names are unique
   llvm::StringMap<bool> sigMap;
@@ -559,17 +551,16 @@ ArrayRef<Type> llhd::EntityOp::getCallableResults() {
 LogicalResult mlir::llhd::ProcOp::verifyType() {
   // Fail if function returns more than zero values. This is because the
   // outputs of a process are specially marked arguments.
-  if (this->getNumResults() > 0) {
-    this->emitOpError(
+  if (getNumResults() > 0) {
+    return emitOpError(
         "process has more than zero return types, this is not allowed");
-    return failure();
   }
+
   // Check that all operands are of signal type
-  for (int i = 0, e = this->getNumFuncArguments(); i < e; ++i) {
-    if (!llhd::SigType::kindof(this->getArgument(i).getType().getKind())) {
-      this->emitOpError("usage of invalid argument type, was ")
-          << this->getArgument(i).getType() << ", expected LLHD signal type";
-      return failure();
+  for (int i = 0, e = getNumFuncArguments(); i < e; ++i) {
+    if (!getArgument(i).getType().isa<llhd::SigType>()) {
+      return emitOpError("usage of invalid argument type, was ")
+             << getArgument(i).getType() << ", expected LLHD signal type";
     }
   }
   return success();
@@ -578,10 +569,9 @@ LogicalResult mlir::llhd::ProcOp::verifyType() {
 LogicalResult mlir::llhd::ProcOp::verifyBody() {
   // Body must not be empty, this indicates an external process. We use
   // another instruction to reference external processes.
-  if (this->isExternal()) {
-    this->emitOpError("defining external processes with the proc instruction "
-                      "is not allowed, use the intended instruction instead.");
-    return failure();
+  if (isExternal()) {
+    return emitOpError("defining external processes with the proc instruction "
+                       "is not allowed, use the intended instruction instead.");
   }
   return success();
 }
@@ -592,9 +582,9 @@ static LogicalResult verify(llhd::ProcOp op) {
   uint64_t numArgs = op.getNumArguments();
   uint64_t numIns = op.insAttr().getInt();
   if (numArgs < numIns) {
-    op.emitOpError("Cannot have more inputs than arguments, expected at most ")
-        << numArgs << ", got " << numIns;
-    return failure();
+    return op.emitOpError(
+               "Cannot have more inputs than arguments, expected at most ")
+           << numArgs << ", got " << numIns;
   }
   return success();
 }
@@ -668,7 +658,8 @@ static ParseResult parseProcOp(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   result.addAttribute("ins", builder.getI64IntegerAttr(argTypes.size()));
-  parser.parseArrow();
+  if (parser.parseArrow())
+    return failure();
 
   if (parseProcArgumentList(parser, argTypes, argNames))
     return failure();
@@ -691,10 +682,7 @@ static void printProcArguments(OpAsmPrinter &p, Operation *op,
   Region &body = op->getRegion(0);
   auto printList = [&](unsigned i, unsigned max) -> void {
     for (; i < max; ++i) {
-      p.printOperand(body.front().getArgument(i));
-      p << " : ";
-
-      p.printType(types[i]);
+      p << body.front().getArgument(i) << " : " << types[i];
       p.printOptionalAttrDict(::mlir::impl::getArgAttrs(op, i));
 
       if (i < max - 1)
@@ -735,6 +723,7 @@ static LogicalResult verify(llhd::InstOp op) {
   auto calleeAttr = op.getAttrOfType<FlatSymbolRefAttr>("callee");
   if (!calleeAttr)
     return op.emitOpError("requires a 'callee' symbol reference attribute");
+
   auto proc = op.getParentOfType<ModuleOp>().lookupSymbol<llhd::ProcOp>(
       calleeAttr.getValue());
   auto entity = op.getParentOfType<ModuleOp>().lookupSymbol<llhd::EntityOp>(
@@ -757,7 +746,8 @@ static LogicalResult verify(llhd::InstOp op) {
         return op.emitOpError("operand type mismatch");
 
     return success();
-  } else if (entity) {
+  }
+  if (entity) {
     auto type = entity.getType();
 
     if (entity.ins() != op.inputs().size())
@@ -773,10 +763,9 @@ static LogicalResult verify(llhd::InstOp op) {
         return op.emitOpError("operand type mismatch");
 
     return success();
-  } else {
-    return op.emitOpError() << "'" << calleeAttr.getValue()
-                            << "' does not reference a valid proc or entity";
   }
+  return op.emitOpError() << "'" << calleeAttr.getValue()
+                          << "' does not reference a valid proc or entity";
 }
 
 FunctionType llhd::InstOp::getCalleeType() {
@@ -884,8 +873,10 @@ static void print(OpAsmPrinter &printer, llhd::RegOp op) {
   for (size_t i = 0, e = op.values().size(); i < e; ++i) {
     Optional<llhd::RegMode> mode = llhd::symbolizeRegMode(
         op.modes().getValue()[i].cast<IntegerAttr>().getInt());
-    if (!mode)
+    if (!mode) {
       op.emitError("invalid RegMode");
+      return;
+    }
     printer << ", (" << op.values()[i] << ", \""
             << llhd::stringifyRegMode(mode.getValue()) << "\" "
             << op.triggers()[i] << " after " << op.delays()[i];
@@ -961,9 +952,9 @@ static LogicalResult verify(llhd::RegOp op) {
     if (val.getType() != op.signal().getType() &&
         val.getType() !=
             op.signal().getType().cast<llhd::SigType>().getUnderlyingType()) {
-      op.emitOpError("type of each 'value' has to be either the same as the "
-                     "type of 'signal' or the underlying type of 'signal'");
-      return failure();
+      return op.emitOpError(
+          "type of each 'value' has to be either the same as the "
+          "type of 'signal' or the underlying type of 'signal'");
     }
   }
   return success();

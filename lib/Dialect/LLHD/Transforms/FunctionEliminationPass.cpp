@@ -8,6 +8,7 @@
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/Visitors.h"
 
 using namespace mlir;
 
@@ -21,15 +22,21 @@ struct FunctionEliminationPass
 void FunctionEliminationPass::runOnOperation() {
   ModuleOp module = getOperation();
 
-  module.walk([this](CallOp op) {
+  WalkResult result = module.walk([](CallOp op) -> WalkResult {
     if (isa<llhd::ProcOp>(op.getParentOp()) ||
         isa<llhd::EntityOp>(op.getParentOp())) {
-      emitError(op.getLoc(),
-                "Not all functions are inlined, there is at least "
-                "one function call left within a llhd.proc or llhd.entity.");
-      signalPassFailure();
+      return emitError(
+          op.getLoc(),
+          "Not all functions are inlined, there is at least "
+          "one function call left within a llhd.proc or llhd.entity.");
     }
+    WalkResult::advance();
   });
+
+  if (result.wasInterrupted()) {
+    signalPassFailure();
+    return;
+  }
 
   module.walk([](FuncOp op) { op.erase(); });
 }

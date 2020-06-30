@@ -9,6 +9,7 @@
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Module.h"
+#include "mlir/IR/Visitors.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/Twine.h"
@@ -54,8 +55,7 @@ private:
 };
 
 LogicalResult VerilogPrinter::printModule(ModuleOp module) {
-  bool didFail = false;
-  module.walk([&didFail, this](llhd::EntityOp entity) {
+  WalkResult result = module.walk([this](llhd::EntityOp entity) -> WalkResult {
     // An EntityOp always has a single block
     Block &entryBlock = entity.body().front();
 
@@ -78,9 +78,7 @@ LogicalResult VerilogPrinter::printModule(ModuleOp module) {
          iter != entryBlock.end() && !dyn_cast<llhd::TerminatorOp>(iter);
          iter++) {
       if (failed(printOperation(&(*iter), 4))) {
-        emitError(iter->getLoc(), "Operation not supported!");
-        didFail = true;
-        return;
+        return emitError(iter->getLoc(), "Operation not supported!");
       }
     }
 
@@ -88,24 +86,22 @@ LogicalResult VerilogPrinter::printModule(ModuleOp module) {
     // Reset variable name counter as variables only have to be unique within a
     // module
     nextValueNum = 0;
+    return WalkResult::advance();
   });
   // if printing of a single operation failed, fail the whole translation
-  if (didFail)
-    return failure();
-
-  return success();
+  return failure(result.wasInterrupted());
 }
 
 LogicalResult VerilogPrinter::printBinaryOp(Operation *inst, StringRef opSymbol,
                                             unsigned indentAmount) {
   // Check that the operation is indeed a binary operation
   if (inst->getNumOperands() != 2) {
-    emitError(inst->getLoc(), "This operation does not have two operands!");
-    return failure();
+    return emitError(inst->getLoc(),
+                     "This operation does not have two operands!");
   }
   if (inst->getNumResults() != 1) {
-    emitError(inst->getLoc(), "This operation does not have one result!");
-    return failure();
+    return emitError(inst->getLoc(),
+                     "This operation does not have one result!");
   }
 
   // Print the operation
@@ -134,12 +130,12 @@ LogicalResult VerilogPrinter::printSignedBinaryOp(Operation *inst,
   //
   // Check that the operation is indeed a binary operation
   if (inst->getNumOperands() != 2) {
-    emitError(inst->getLoc(), "This operation does not have two operands!");
-    return failure();
+    return emitError(inst->getLoc(),
+                     "This operation does not have two operands!");
   }
   if (inst->getNumResults() != 1) {
-    emitError(inst->getLoc(), "This operation does not have one result!");
-    return failure();
+    return emitError(inst->getLoc(),
+                     "This operation does not have one result!");
   }
 
   // Print the operation
@@ -157,13 +153,12 @@ LogicalResult VerilogPrinter::printUnaryOp(Operation *inst, StringRef opSymbol,
                                            unsigned indentAmount) {
   // Check that the operation is indeed a unary operation
   if (inst->getNumOperands() != 1) {
-    emitError(inst->getLoc(),
-              "This operation does not have exactly one operand!");
-    return failure();
+    return emitError(inst->getLoc(),
+                     "This operation does not have exactly one operand!");
   }
   if (inst->getNumResults() != 1) {
-    emitError(inst->getLoc(), "This operation does not have one result!");
-    return failure();
+    return emitError(inst->getLoc(),
+                     "This operation does not have one result!");
   }
 
   // Print the operation
@@ -179,7 +174,7 @@ LogicalResult VerilogPrinter::printUnaryOp(Operation *inst, StringRef opSymbol,
 LogicalResult VerilogPrinter::printOperation(Operation *inst,
                                              unsigned indentAmount) {
   if (auto op = dyn_cast<llhd::ConstOp>(inst)) {
-    if (op.value().getKind() == StandardAttributes::Integer) {
+    if (IntegerAttr intAttr = op.value().dyn_cast<IntegerAttr>()) {
       // Integer constant
       out.PadToColumn(indentAmount);
       out << "wire ";
@@ -187,22 +182,21 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
         return failure();
       out << " " << getVariableName(inst->getResult(0)) << " = "
           << op.getResult().getType().getIntOrFloatBitWidth() << "'d"
-          << op.value().cast<IntegerAttr>().getValue().getZExtValue() << ";\n";
+          << intAttr.getValue().getZExtValue() << ";\n";
       return success();
-    } else if (llhd::TimeAttr::kindof(op.value().getKind())) {
+    }
+    if (llhd::TimeAttr timeAttr = op.value().dyn_cast<llhd::TimeAttr>()) {
       // Time Constant
-      auto timeAttr = op.value().cast<llhd::TimeAttr>();
       if (timeAttr.getTime() == 0 && timeAttr.getDelta() != 1) {
-        emitError(op.getLoc(),
-                  "Not possible to translate a time attribute with 0 real "
-                  "time and non-1 delta.");
-        return failure();
-      } else {
-        // Track time value for future use
-        timeValueMap.insert(
-            std::make_pair(inst->getResult(0), timeAttr.getTime()));
-        return success();
+        return emitError(
+            op.getLoc(),
+            "Not possible to translate a time attribute with 0 real "
+            "time and non-1 delta.");
       }
+      // Track time value for future use
+      timeValueMap.insert(
+          std::make_pair(inst->getResult(0), timeAttr.getTime()));
+      return success();
     }
     return failure();
   }
@@ -328,8 +322,8 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
     return printSignedBinaryOp(inst, "%", indentAmount);
   }
   if (auto op = dyn_cast<llhd::SModOp>(inst)) {
-    emitError(op.getLoc(), "Signed modulo operation is not yet supported!");
-    return failure();
+    return emitError(op.getLoc(),
+                     "Signed modulo operation is not yet supported!");
   }
   if (auto op = dyn_cast<CmpIOp>(inst)) {
     switch (op.getPredicate()) {
@@ -387,8 +381,8 @@ LogicalResult VerilogPrinter::printType(Type type) {
     if (width != 1)
       out << '[' << (width - 1) << ":0]";
     return success();
-  } else if (llhd::SigType::kindof(type.getKind())) {
-    llhd::SigType sig = type.cast<llhd::SigType>();
+  }
+  if (llhd::SigType sig = type.dyn_cast<llhd::SigType>()) {
     return printType(sig.getUnderlyingType());
   }
   return failure();
