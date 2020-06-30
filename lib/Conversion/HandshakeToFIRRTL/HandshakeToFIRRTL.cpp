@@ -285,81 +285,6 @@ FModuleOp checkExistingFModules(FModuleOp moduleOp, Operation &originalOp) {
   return FModuleOp(nullptr);
 }
 
-// Support all unary operations
-template <typename FIRRTLOpType>
-FModuleOp createUnaryOpFModule(FModuleOp moduleOp, Operation &unaryOp, 
-                               ConversionPatternRewriter &rewriter) {
-  if (auto existingModule = checkExistingFModules(moduleOp, unaryOp)) {
-    return existingModule;
-  }
-  auto unaryOpModule = createFModuleOp(moduleOp, unaryOp, rewriter);
-  
-  auto &entryBlock = unaryOpModule.getBody().front();
-  auto argPort = entryBlock.getArgument(0);
-  auto resultPort = entryBlock.getArgument(1);
-  auto *termOp = entryBlock.getTerminator();
-
-  // Get all useful types
-  StringRef dataString = StringRef("data");
-  StringRef validString = StringRef("valid");
-  StringRef readyString = StringRef("ready");
-
-  auto argType = argPort.getType().dyn_cast<BundleType>();
-  auto dataType = argType.getElementType(dataString);
-  auto validType = argType.getElementType(validString);
-  auto flipReadyType = argType.getElementType(readyString);
-
-  auto resultType = resultPort.getType().dyn_cast<BundleType>();
-  auto flipDataType = resultType.getElementType(dataString);
-  auto flipValidType = resultType.getElementType(validString);
-  auto readyType = resultType.getElementType(readyString);
-
-  // Construct arg0, arg1, result, constant signal maps
-  rewriter.setInsertionPoint(termOp);
-  auto argMap = createPortSubfieldOps(argPort, termOp->getLoc(), 
-      dataType, validType, flipReadyType, rewriter);
-  auto resultMap = createPortSubfieldOps(resultPort, termOp->getLoc(), 
-      flipDataType, flipValidType, readyType, rewriter);
-  auto constantMap = createLowHighConstantOps(termOp->getLoc(), 
-                                              dataType, rewriter);
-
-  // Construct combinational logics
-  auto argValid = argMap[validString].getResult();
-  auto resultReady = resultMap[readyString].getResult();
-  auto condition = rewriter.create<AndPrimOp>(
-      termOp->getLoc(), validType, argValid, resultReady);
-    
-  auto argData = argMap[dataString].getResult();
-  auto unaryFIRRTLOp = rewriter.create<FIRRTLOpType>(
-      termOp->getLoc(), dataType, argData);
-
-  auto whenOp = rewriter.create<WhenOp>(
-      termOp->getLoc(), condition, true);
-  auto resultData = resultMap[dataString].getResult();
-  auto resultValid = resultMap[validString].getResult();
-  auto argReady = argMap[readyString].getResult();
-
-  // Connect then block of the whenOp
-  rewriter.setInsertionPoint(whenOp.thenRegion().front().getTerminator());
-  
-  auto unaryResult = unaryFIRRTLOp.getResult();
-  rewriter.create<ConnectOp>(termOp->getLoc(), resultData, unaryResult);
-  auto highSignal = constantMap[StringRef("high")].getResult();
-  rewriter.create<ConnectOp>(termOp->getLoc(), resultValid, highSignal);
-  rewriter.create<ConnectOp>(termOp->getLoc(), argReady, highSignal);
-
-  // Connect else block of the whenOp
-  rewriter.setInsertionPoint(whenOp.elseRegion().front().getTerminator());
-
-  auto zeroValue = constantMap[StringRef("zero")].getResult();
-  rewriter.create<ConnectOp>(termOp->getLoc(), resultData, zeroValue);
-  auto lowSignal = constantMap[StringRef("low")].getResult();
-  rewriter.create<ConnectOp>(termOp->getLoc(), resultValid, lowSignal);
-  rewriter.create<ConnectOp>(termOp->getLoc(), argReady, lowSignal);
-
-  return unaryOpModule;
-}
-
 // Support all binary operations
 template <typename FIRRTLOpType>
 FModuleOp createBinaryOpFModule(FModuleOp moduleOp, Operation &binaryOp, 
@@ -390,7 +315,7 @@ FModuleOp createBinaryOpFModule(FModuleOp moduleOp, Operation &binaryOp,
   auto flipValidType = resultType.getElementType(validString);
   auto readyType = resultType.getElementType(readyString);
 
-  // Construct arg0, arg1, result, constant signal maps
+  // Construct arg0, arg1, result signal maps
   rewriter.setInsertionPoint(termOp);
   auto arg0Map = createPortSubfieldOps(arg0Port, termOp->getLoc(), 
       dataType, validType, flipReadyType, rewriter);
@@ -398,50 +323,37 @@ FModuleOp createBinaryOpFModule(FModuleOp moduleOp, Operation &binaryOp,
       dataType, validType, flipReadyType, rewriter);
   auto resultMap = createPortSubfieldOps(resultPort, termOp->getLoc(), 
       flipDataType, flipValidType, readyType, rewriter);
-  auto constantMap = createLowHighConstantOps(termOp->getLoc(), 
-                                              dataType, rewriter);
 
-  // Construct combinational logics
-  auto arg0Valid = arg0Map[validString].getResult();
-  auto arg1Valid = arg1Map[validString].getResult();
-  auto argsValid = rewriter.create<AndPrimOp>(
-      termOp->getLoc(), validType, arg0Valid, arg1Valid);
-
-  auto resultReady = resultMap[readyString].getResult();
-  auto condition = rewriter.create<AndPrimOp>(
-      termOp->getLoc(), validType, argsValid, resultReady);
-    
+  // Connect data signals
   auto arg0Data = arg0Map[dataString].getResult();
   auto arg1Data = arg1Map[dataString].getResult();
-  auto binaryFIRRTLOp = rewriter.create<FIRRTLOpType>(
-      termOp->getLoc(), dataType, arg0Data, arg1Data);
-
-  auto whenOp = rewriter.create<WhenOp>(
-      termOp->getLoc(), condition, true);
   auto resultData = resultMap[dataString].getResult();
+
+  auto CombDataOp = rewriter.create<FIRRTLOpType>(
+      termOp->getLoc(), dataType, arg0Data, arg1Data);
+  auto combData = CombDataOp.getResult();
+  rewriter.create<ConnectOp>(termOp->getLoc(), resultData, combData);
+
+  // Connect valid signals
+  auto arg0Valid = arg0Map[validString].getResult();
+  auto arg1Valid = arg1Map[validString].getResult();
   auto resultValid = resultMap[validString].getResult();
+
+  auto combValidOp = rewriter.create<AndPrimOp>(
+      termOp->getLoc(), validType, arg0Valid, arg1Valid);
+  auto combValid = combValidOp.getResult();
+  rewriter.create<ConnectOp>(termOp->getLoc(), resultValid, combValid);
+
+  // Connect ready signals
+  auto resultReady = resultMap[readyString].getResult();
   auto arg0Ready = arg0Map[readyString].getResult();
   auto arg1Ready = arg1Map[readyString].getResult();
 
-  // Connect then block of the whenOp
-  rewriter.setInsertionPoint(whenOp.thenRegion().front().getTerminator());
-  
-  auto binaryResult = binaryFIRRTLOp.getResult();
-  rewriter.create<ConnectOp>(termOp->getLoc(), resultData, binaryResult);
-  auto highSignal = constantMap[StringRef("high")].getResult();
-  rewriter.create<ConnectOp>(termOp->getLoc(), resultValid, highSignal);
-  rewriter.create<ConnectOp>(termOp->getLoc(), arg0Ready, highSignal);
-  rewriter.create<ConnectOp>(termOp->getLoc(), arg1Ready, highSignal);
-
-  // Connect else block of the whenOp
-  rewriter.setInsertionPoint(whenOp.elseRegion().front().getTerminator());
-
-  auto zeroValue = constantMap[StringRef("zero")].getResult();
-  rewriter.create<ConnectOp>(termOp->getLoc(), resultData, zeroValue);
-  auto lowSignal = constantMap[StringRef("low")].getResult();
-  rewriter.create<ConnectOp>(termOp->getLoc(), resultValid, lowSignal);
-  rewriter.create<ConnectOp>(termOp->getLoc(), arg0Ready, lowSignal);
-  rewriter.create<ConnectOp>(termOp->getLoc(), arg1Ready, lowSignal);
+  auto combReadyOp = rewriter.create<AndPrimOp>(
+      termOp->getLoc(), validType, combValid, resultReady);
+  auto combReady = combReadyOp.getResult();
+  rewriter.create<ConnectOp>(termOp->getLoc(), arg0Ready, combReady);
+  rewriter.create<ConnectOp>(termOp->getLoc(), arg1Ready, combReady);
 
   return binaryOpModule;
 }
