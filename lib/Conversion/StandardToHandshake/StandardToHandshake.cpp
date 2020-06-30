@@ -1341,6 +1341,38 @@ struct FuncOpLowering : public OpConversionPattern<mlir::FuncOp> {
 };
 
 namespace {
+struct DFRemoveBlockPass : 
+public PassWrapper<DFRemoveBlockPass, OperationPass<handshake::FuncOp>> {
+  void runOnOperation() override {
+    auto funcOp = getOperation();
+    auto *termOp = funcOp.getBody().front().getTerminator();
+
+    // Move all operations to the first block except terminator operations 
+    // which can be safely dropped
+    for (auto &block : funcOp) {
+      if (block.isEntryBlock()) continue;
+      while(!block.empty()){
+        Operation *currentOp = &block.front();
+        if (dyn_cast<handshake::TerminatorOp>(*currentOp)) {
+          currentOp->erase();
+        } else {
+          currentOp->moveBefore(termOp);
+        }
+      }
+    }
+    termOp->erase();
+
+    // Remove all empty blocks, generating a single block function
+    while (true) {
+      Block *currentBlock = &funcOp.getBody().back();
+      if (currentBlock->isEntryBlock()) break;
+      currentBlock -> erase();
+    }
+  }
+};
+} //namespace
+
+namespace {
 
 struct DFPass : public PassWrapper<DFPass, OperationPass<ModuleOp>> {
   void runOnOperation() override {
@@ -1444,4 +1476,7 @@ void handshake::registerStandardToHandshakePasses() {
     PassRegistration<DFCanonicalizePass>(
       "canonicalize-dataflow",
       "Canonicalize handshake IR");
+    PassRegistration<DFRemoveBlockPass>(
+      "remove-block-structure",
+      "Remove block structure in handshake IR");
 }

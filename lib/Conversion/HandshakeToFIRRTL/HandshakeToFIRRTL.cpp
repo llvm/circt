@@ -130,7 +130,6 @@ void mergeToEntryBlock(FModuleOp &moduleOp,
     op->moveBefore(termOp);
   }
   rewriter.eraseBlock(srcBlock);
-  //rewriter.eraseOp(termOp);
 }
 
 // Only support single input merge (merge -> connect)
