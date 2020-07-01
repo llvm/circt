@@ -1,3 +1,9 @@
+//===- Engine.h - LLHD simulaton engine -------------------------*- C++ -*-===//
+//
+// This file defines the main Engine class of the LLHD simulator.
+//
+//===----------------------------------------------------------------------===//
+
 #ifndef CIRCT_DIALECT_LLHD_SIMULATOR_ENGINE_H
 #define CIRCT_DIALECT_LLHD_SIMULATOR_ENGINE_H
 
@@ -32,8 +38,8 @@ public:
   /// Build the instance layout of the design.
   void buildLayout(ModuleOp module);
 
-  /// Get a reference to the module
-  const ModuleOp getModuleRef() const { return module; }
+  /// Get the MLIR module.
+  const ModuleOp getModule() const { return module; }
 
   /// Get the simulation state.
   const State *getState() const { return state.get(); }

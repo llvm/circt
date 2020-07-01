@@ -1,3 +1,9 @@
+//===- signals-runtime-wrappers.cpp - Runtime library implementation ------===//
+//
+// This file implements the runtime library used in LLHD simulation.
+//
+//===----------------------------------------------------------------------===//
+
 #include "signals-runtime-wrappers.h"
 
 #include "llvm/ADT/ArrayRef.h"
@@ -38,7 +44,7 @@ void drive_signal(State *state, int index, uint8_t *value, uint64_t width,
 
   Time sTime(time, delta, eps);
 
-  // track back origin signal
+  // Track back origin signal.
   int originIdx = index;
   while (state->signals[originIdx].origin >= 0) {
     originIdx = state->signals[originIdx].origin;
@@ -49,7 +55,7 @@ void drive_signal(State *state, int index, uint8_t *value, uint64_t width,
                       8 +
                   state->signals[index].detail.offset;
 
-  // spawn new event
+  // Spawn a new event.
   state->pushQueue(sTime, originIdx, bitOffset, drive);
 }
 
@@ -63,7 +69,7 @@ int add_subsignal(mlir::llhd::sim::State *state, int origin, uint8_t *ptr,
 void llhd_suspend(State *state, ProcState *procState, int time, int delta,
                   int eps) {
   std::string instS(procState->inst);
-  // add new scheduled wake up if a time is specified
+  // Add a new scheduled wake up if a time is specified.
   if (time || delta || eps) {
     Time sTime(time, delta, eps);
     state->pushQueue(sTime, instS);

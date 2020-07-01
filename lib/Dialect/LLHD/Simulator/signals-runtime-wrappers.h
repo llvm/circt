@@ -1,3 +1,9 @@
+//===- signals-runtime-wrappers.h - Simulation runtime library --*- C++ -*-===//
+//
+// Defines the runtime library used in LLHD simulation.
+//
+//===----------------------------------------------------------------------===//
+
 #ifndef CIRCT_DIALECT_LLHD_SIMULATOR_SIGNALS_RUNTIME_WRAPPERS_H
 #define CIRCT_DIALECT_LLHD_SIMULATOR_SIGNALS_RUNTIME_WRAPPERS_H
 
@@ -26,11 +32,11 @@ mlir::llhd::sim::SignalDetail *probe_signal(mlir::llhd::sim::State *state,
 void drive_signal(mlir::llhd::sim::State *state, int index, uint8_t *value,
                   uint64_t width, int time, int delta, int eps);
 
-/// Add a temporary subsignal to the global signal table
+/// Add a temporary subsignal to the global signal table.
 int add_subsignal(mlir::llhd::sim::State *state, int origin, uint8_t *ptr,
                   uint64_t len, uint64_t offset);
 
-/// Suspend a process
+/// Suspend a process.
 void llhd_suspend(mlir::llhd::sim::State *state,
                   mlir::llhd::sim::ProcState *procState, int time, int delta,
                   int eps);

@@ -1,3 +1,9 @@
+//===- Engine.cpp - Simulator Engine class implementation -------*- C++ -*-===//
+//
+// This file implements the Engine class.
+//
+//===----------------------------------------------------------------------===//
+
 #include "State.h"
 
 #include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
@@ -22,14 +28,14 @@ Engine::Engine(llvm::raw_ostream &out, ModuleOp module, MLIRContext &context,
 
   auto rootEntity = module.lookupSymbol<EntityOp>(root);
 
-  // insert explicit instantiation of root
+  // Insert explicit instantiation of the design root.
   OpBuilder insertInst =
       OpBuilder::atBlockTerminator(&rootEntity.getBody().getBlocks().front());
   insertInst.create<InstOp>(rootEntity.getBlocks().front().back().getLoc(),
                             llvm::None, root, root, ArrayRef<Value>(),
                             ArrayRef<Value>());
 
-  // add 0-time event
+  // Add the 0-time event.
   state->queue.push(Slot(Time()));
 
   mlir::PassManager pm(&context);
@@ -41,7 +47,6 @@ Engine::Engine(llvm::raw_ostream &out, ModuleOp module, MLIRContext &context,
 
   this->module = module;
 
-  // init jit
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
   auto maybeEngine = mlir::ExecutionEngine::create(this->module);
@@ -60,23 +65,23 @@ int Engine::simulate(int n) {
   assert(state && "state not found");
 
   SmallVector<void *, 1> arg({&state});
-  // initialize simulation state
+  // Initialize tbe simulation state.
   auto invocationResult = engine->invoke("llhd_init", arg);
   if (invocationResult) {
     llvm::errs() << "Failed invocation of llhd_init: " << invocationResult;
     return -1;
   }
 
-  // dump signals initial values
+  // Dump the signals' initial values.
   for (int i = 0; i < state->nSigs; ++i) {
     state->dumpSignal(out, i);
   }
 
   int i = 0;
 
-  // keep track of instances that need to wakeup
+  // Keep track of the instances that need to wakeup.
   std::vector<std::string> wakeupQueue;
-  // start with all entities in queue
+  // All instances are run in the first cycle.
   for (auto k : state->instances.keys())
     wakeupQueue.push_back(k.str());
 
@@ -84,23 +89,23 @@ int Engine::simulate(int n) {
     if (n > 0 && i >= n) {
       break;
     }
-    // pop queue
     auto pop = state->popQueue();
 
-    // update time
+    // Update the simulation time.
     assert(state->time < pop.time || pop.time.time == 0);
     state->time = pop.time;
 
-    // dump changes, only if actually changed
+    // Apply the signal changes and dump the signals that actually changed
+    // value.
     for (auto change : pop.changes) {
-      // get update buffer
+      // Get a buffer to apply the changes on.
       Signal *curr = &(state->signals[change.first]);
       APInt buff(
           curr->size * 8,
           ArrayRef<uint64_t>(reinterpret_cast<uint64_t *>(curr->detail.value),
                              curr->size));
 
-      // apply changes to buffer
+      // Apply all the changes to the buffer, in order of execution.
       for (auto drive : change.second) {
         if (drive.second.getBitWidth() < buff.getBitWidth())
           buff.insertBits(drive.second, drive.first);
@@ -108,24 +113,23 @@ int Engine::simulate(int n) {
           buff = drive.second;
       }
 
-      // continue if updated signal is equal to the initial
+      // Skip if the updated signal value is equal to the initial value.
       if (std::memcmp(curr->detail.value, buff.getRawData(), curr->size) == 0)
         continue;
 
-      // update signal value
+      // Apply the signal update.
       std::memcpy(curr->detail.value, buff.getRawData(),
                   state->signals[change.first].size);
 
-      // trigger sensitive instances
-      // owner is always triggered
+      // Trigger all sensitive instances.
+      // The owner is always triggered.
       wakeupQueue.push_back(state->signals[change.first].owner);
-      // add sensitive instances
+      // Add sensitive instances.
       for (auto inst : state->signals[change.first].triggers) {
+        // Skip if the process is not currently sensible to the signal.
         if (!state->instances[inst].isEntity) {
-          // find the index of the signal in the sensitivity list
           auto &sensList = state->instances[inst].sensitivityList;
           auto it = std::find(sensList.begin(), sensList.end(), change.first);
-          // skip if sense disabled
           if (sensList.end() != it &&
               state->instances[inst].procState->senses[it - sensList.begin()] ==
                   0)
@@ -134,39 +138,40 @@ int Engine::simulate(int n) {
         wakeupQueue.push_back(inst);
       }
 
-      // dump the updated signal
+      // Dump the updated signal.
       state->dumpSignal(out, change.first);
     }
 
-    // wakeup scheduled
-    // TODO: don't wakeup if already woken up by observed signal
+    // TODO: don't wakeup a process instances if already woken up by an observed
+    // signal.
+    // Add scheduled process resumes to the wakeup queue.
     for (auto inst : pop.scheduled) {
       wakeupQueue.push_back(inst);
     }
 
-    // clear temporary subsignals
+    // Clear temporary subsignals.
     state->signals.erase(state->signals.begin() + state->nSigs,
                          state->signals.end());
 
-    // run entities in wakeupqueue
+    // Run the instances present in the wakeup queue.
     for (auto inst : wakeupQueue) {
       auto name = state->instances[inst].unit;
       auto sigTable = state->instances[inst].signalTable.data();
       auto sensitivityList = state->instances[inst].sensitivityList;
       auto outputList = state->instances[inst].outputs;
-      // combine inputs and outputs in one argument table
+      // Combine inputs and outputs in one argument table.
       sensitivityList.insert(sensitivityList.end(), outputList.begin(),
                              outputList.end());
       auto argTable = sensitivityList.data();
 
-      // gather instance arguments for unit invocation
+      // Gather the instance arguments for unit invocation.
       SmallVector<void *, 3> args;
       if (state->instances[inst].isEntity)
         args.assign({&state, &sigTable, &argTable});
       else {
         args.assign({&state, &state->instances[inst].procState, &argTable});
       }
-      // run the unit
+      // Run the unit.
       auto invocationResult = engine->invoke(name, args);
       if (invocationResult) {
         llvm::errs() << "Failed invocation of " << root << ": "
@@ -175,7 +180,7 @@ int Engine::simulate(int n) {
       }
     }
 
-    // clear wakeup queue
+    // Clear wakeup queue.
     wakeupQueue.clear();
     i++;
   }
@@ -184,22 +189,24 @@ int Engine::simulate(int n) {
 }
 
 void Engine::buildLayout(ModuleOp module) {
-  // start from root
+  // Start from the root entity.
   auto rootEntity = module.lookupSymbol<EntityOp>(root);
   assert(rootEntity && "root entity not found!");
 
-  // build root instance, parent and name are the same for the root.
+  // Build root instance, the parent and instance names are the same for the
+  // root.
   Instance rootInst(root, root);
   rootInst.unit = root;
 
-  // recursively walk entities starting at root.
+  // Recursively walk the units starting at root.
   walkEntity(rootEntity, rootInst);
 
+  // The root is always an instance.
   rootInst.isEntity = true;
-  // store root instance
+  // Store the root instance.
   state->instances[rootInst.name] = rootInst;
 
-  // add triggers and outputs to signals
+  // Add triggers and outputs to all signals.
   for (auto &inst : state->instances) {
     for (auto trigger : inst.getValue().sensitivityList) {
       state->signals[trigger].triggers.push_back(inst.getKey().str());
@@ -215,15 +222,15 @@ void Engine::walkEntity(EntityOp entity, Instance &child) {
   entity.walk([&](Operation *op) -> WalkResult {
     assert(op);
 
-    //! add signal to signal table
+    // Add a signal to the signal table.
     if (auto sig = dyn_cast<SigOp>(op)) {
       int index = state->addSignal(sig.name().str(), child.name);
       child.signalTable.push_back(index);
     }
 
-    //! build (recursive) instance layout
+    // Build (recursive) instance layout.
     if (auto inst = dyn_cast<InstOp>(op)) {
-      // skip self-recursion
+      // Skip self-recursion.
       if (inst.callee() == child.name)
         return WalkResult::advance();
       if (auto e =
@@ -231,25 +238,24 @@ void Engine::walkEntity(EntityOp entity, Instance &child) {
         Instance newChild(inst.name().str(), child.name);
         newChild.unit = inst.callee().str();
 
-        // gather sensitivity list
+        // Gather sensitivity list.
         for (auto arg : inst.inputs()) {
-          // check if the argument comes from a parent's argument
+          // Check if the argument comes from a parent's argument.
           if (auto a = arg.dyn_cast<BlockArgument>()) {
             unsigned int argInd = a.getArgNumber();
-            // the argument comes either from one of the inputs or one of the
-            // outputs
+            // The argument comes either from one of the parent's inputs, or one
+            // of the parent's outputs.
             if (argInd < newChild.sensitivityList.size())
               newChild.sensitivityList.push_back(child.sensitivityList[argInd]);
             else
               newChild.sensitivityList.push_back(
                   child.outputs[argInd - newChild.sensitivityList.size()]);
           } else if (auto sig = dyn_cast<SigOp>(arg.getDefiningOp())) {
-            // otherwise has to come from a sigop,
-            // search through the intantce's signal table
+            // Otherwise has to come from a sigop, search through the intantce's
+            // signal table.
             for (auto s : child.signalTable) {
               if (state->signals[s].name == sig.name() &&
                   state->signals[s].owner == child.name) {
-                // found, exit loop
                 newChild.sensitivityList.push_back(s);
                 break;
               }
@@ -257,24 +263,23 @@ void Engine::walkEntity(EntityOp entity, Instance &child) {
           }
         }
 
-        // gather outputs list
+        // Gather outputs list.
         for (auto out : inst.outputs()) {
-          // check if comes from arg
+          // Check if it comes from an argument.
           if (auto a = out.dyn_cast<BlockArgument>()) {
             unsigned int argInd = a.getArgNumber();
-            // the argument comes either from one of the inputs or one of the
-            // outputs
+            // The argument comes either from one of the parent's inputs or one
+            // of the parent's outputs.
             if (argInd < newChild.sensitivityList.size())
               newChild.outputs.push_back(child.sensitivityList[argInd]);
             else
               newChild.outputs.push_back(
                   child.outputs[argInd - newChild.sensitivityList.size()]);
           } else if (auto sig = dyn_cast<SigOp>(out.getDefiningOp())) {
-            // search through the signal table
+            // Search through the signal table.
             for (auto s : child.signalTable) {
               if (state->signals[s].name == sig.name() &&
                   state->signals[s].owner == child.name) {
-                // found, exit loop
                 newChild.outputs.push_back(s);
                 break;
               }
@@ -282,8 +287,8 @@ void Engine::walkEntity(EntityOp entity, Instance &child) {
           }
         }
 
-        // recursively walk new entity, otherwise it is a process and cannot
-        // define new signals
+        // Recursively walk a new entity, otherwise it is a process and cannot
+        // define new signals or instances.
         if (auto ent = dyn_cast<EntityOp>(e)) {
           newChild.isEntity = true;
           walkEntity(ent, newChild);
@@ -291,7 +296,7 @@ void Engine::walkEntity(EntityOp entity, Instance &child) {
           newChild.isEntity = false;
         }
 
-        // store the created instance
+        // Store the created instance.
         state->instances[newChild.name] = newChild;
       }
     }

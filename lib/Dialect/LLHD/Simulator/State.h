@@ -1,3 +1,10 @@
+//===- State.h - Simulation state definition --------------------*- C++ -*-===//
+//
+// Defines structures used to keep track of the simulation state in the LLHD
+// simulator.
+//
+//===----------------------------------------------------------------------===//
+
 #ifndef CIRCT_DIALECT_LLHD_SIMULATOR_STATE_H
 #define CIRCT_DIALECT_LLHD_SIMULATOR_STATE_H
 
@@ -42,7 +49,7 @@ struct Time {
 private:
 };
 
-/// Detail structure that can be easily accessed by the lowered code
+/// Detail structure that can be easily accessed by the lowered code.
 struct SignalDetail {
   uint8_t *value;
   uint64_t offset;
@@ -56,27 +63,28 @@ struct Signal {
   /// Construct a signal with the given name, owner and initial value.
   Signal(std::string name, std::string owner, uint8_t *value, uint64_t size);
 
-  /// Construct a subsignal of the signal at origin un the global signal table
+  /// Construct a subsignal of the signal at origin un the global signal table.
   Signal(int origin, uint8_t *value, uint64_t size, uint64_t offset);
 
-  /// Default signal destructor
+  /// Default signal destructor.
   ~Signal() = default;
 
-  /// Returns true if the signals match in name, owner, size and value
+  /// Returns true if the signals match in name, owner, size and value.
   bool operator==(const Signal &rhs) const;
 
-  /// Returns true if the owner is lexically smaller than rhs, or the
-  /// name is lexically smaller than rhs, in case they share the same owner
+  /// Returns true if the owner name is lexically smaller than rhs's owner, or
+  /// the name is lexically smaller than rhs's name, in case they share the same
+  /// owner.
   bool operator<(const Signal &rhs) const;
 
-  /// Return the signal value in dumpable format: "0x<value>"
+  /// Return the signal value in dumpable format: "0x<value>".
   std::string dump();
 
   std::string name;
   std::string owner;
-  // the list of instances this signal triggers
+  // The list of instances this signal triggers.
   std::vector<std::string> triggers;
-  // the list of instances this signal is an output of
+  // The list of instances this signal is an output of.
   std::vector<std::string> outOf;
   int origin = -1;
   uint64_t size;
@@ -97,12 +105,12 @@ struct Slot {
   /// Insert a change.
   void insertChange(int index, int bitOffset, llvm::APInt &bytes);
 
-  /// Insert a scheduled process wakeup
+  /// Insert a scheduled process wakeup.
   void insertChange(std::string inst);
 
-  // <signal-index, vec<(offset, new-value)>>
+  // Map structure: <signal-index, vec<(offset, new-value)>>.
   std::map<int, std::vector<std::pair<int, llvm::APInt>>> changes;
-  // processes with scheduled wakeup
+  // Processes with scheduled wakeup.
   std::vector<std::string> scheduled;
   Time time;
 };
@@ -122,7 +130,7 @@ public:
   void insertOrUpdate(Time time, std::string inst);
 };
 
-/// State structure for process persistence across suspension
+/// State structure for process persistence across suspension.
 struct ProcState {
   char *inst;
   int resume;
@@ -130,25 +138,25 @@ struct ProcState {
   uint8_t *resumeState;
 };
 
-/// The simulator internal representation of an instance
+/// The simulator internal representation of an instance.
 struct Instance {
   Instance() = default;
 
   Instance(std::string name, std::string parent)
       : name(name), parent(parent), procState(nullptr) {}
 
-  // the instance name
+  // The instance name.
   std::string name;
-  // the instance parent's name
+  // The instance parent's name.
   std::string parent;
-  // the instance's base unit
+  // The instance's base unit.
   std::string unit;
   bool isEntity;
-  // the signals the unit defines
+  // The signals the unit defines.
   std::vector<int> signalTable;
-  // the input list
+  // The input list.
   std::vector<int> sensitivityList;
-  // the output list
+  // The output list.
   std::vector<int> outputs;
   ProcState *procState;
 };
@@ -159,7 +167,8 @@ struct State {
   /// Construct a new empty (at 0 time) state.
   State() = default;
 
-  /// State destructor, ensures all malloc'd signal regions are correctly free'd
+  /// State destructor, ensures all malloc'd regions stored in the state are
+  /// correctly free'd.
   ~State();
 
   /// Pop the head of the queue and update the simulation time.
@@ -180,7 +189,7 @@ struct State {
   int addSignalData(int index, std::string owner, uint8_t *value,
                     uint64_t size);
 
-  /// Add a pointer to the process persistence state to a process instance
+  /// Add a pointer to the process persistence state to a process instance.
   void addProcPtr(std::string name, ProcState *procStatePtr);
 
   /// Dump a signal to the out stream. One entry is added for every instance

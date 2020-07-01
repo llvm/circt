@@ -1,3 +1,10 @@
+//===- LLHDToLLVM.h - LLHD to LLVM pass entry point -------------*- C++ -*-===//
+//
+// This header file defines prototypes that expose the LLHDToLLVM pass
+// constructors.
+//
+//===----------------------------------------------------------------------===//
+
 #ifndef CIRCT_CONVERSION_LLHDTOLLVM_LLHDTOLLVM_H
 #define CIRCT_CONVERSION_LLHDTOLLVM_LLHDTOLLVM_H
 

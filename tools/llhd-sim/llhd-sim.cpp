@@ -1,3 +1,9 @@
+//===- llhd-sim.cpp - LLHD simulator tool -----------------------*- C++ -*-===//
+//
+// This file implements a command line tool to run LLHD simulation.
+//
+//===----------------------------------------------------------------------===//
+
 #include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/Simulator/Engine.h"
@@ -76,12 +82,11 @@ int main(int argc, char **argv) {
 
   llhd::initLLHDToLLVMPass();
 
-  // Initialize LLVM
   InitLLVM y(argc, argv);
 
   cl::ParseCommandLineOptions(argc, argv, "LLHD simulator\n");
 
-  // Set up the input file.
+  // Set up the input and output files.
   std::string errorMessage;
   auto file = openInputFile(inputFilename, &errorMessage);
   if (!file) {
@@ -95,7 +100,7 @@ int main(int argc, char **argv) {
     exit(1);
   }
 
-  // parse input file
+  // Parse the input file.
   MLIRContext context;
   OwningModuleRef module;
 
@@ -111,7 +116,7 @@ int main(int argc, char **argv) {
   llhd::sim::Engine engine(output->os(), *module, context, root);
 
   if (dumpLLVMDialect || dumpLLVMIR) {
-    return dumpLLVM(engine.getModuleRef(), context);
+    return dumpLLVM(engine.getModule(), context);
   }
 
   if (dumpLayout) {

@@ -1,3 +1,10 @@
+//===- State.cpp - LLHD simulator state -------------------------*- C++ -*-===//
+//
+// This file implements the constructs used to keep track of the simulation
+// state in the LLHD simulator.
+//
+//===----------------------------------------------------------------------===//
+
 #include "State.h"
 
 #include "llvm/Support/raw_ostream.h"
@@ -150,8 +157,6 @@ Slot State::popQueue() {
   return pop;
 }
 
-/// Push a new event in the event queue and return the index of the new event
-/// in the queue.
 void State::pushQueue(Time t, int index, int bitOffset, APInt &bytes) {
   Time newTime = time + t;
   queue.insertOrUpdate(newTime, index, bitOffset, bytes);
@@ -161,7 +166,6 @@ void State::pushQueue(Time t, std::string inst) {
   queue.insertOrUpdate(newTime, inst);
 }
 
-/// Add a new signal to the state. Returns the index of the new signal.
 int State::addSignal(std::string name, std::string owner) {
   signals.push_back(Signal(name, owner));
   return signals.size() - 1;
@@ -169,9 +173,9 @@ int State::addSignal(std::string name, std::string owner) {
 
 void State::addProcPtr(std::string name, ProcState *procStatePtr) {
   instances[name].procState = procStatePtr;
-  // copy string to owner name ptr
+  // Copy string to owner name ptr.
   name.copy(instances[name].procState->inst, name.size());
-  // ensure string is null-terminated
+  // Ensure the string is null-terminated.
   instances[name].procState->inst[name.size()] = '\0';
 }
 
