@@ -403,3 +403,16 @@ def StdIntCast : FIRRTLOp<"stdIntCast", [NoSideEffect]> {
 
   let verifier = [{ return ::verifyStdIntCast(*this); }];
 }
+
+// This operation converts from an flipped SInt/UInt to a signless integer type, or
+// visa-versa.
+def StdFlippedIntCast : FIRRTLOp<"stdFlippedIntCast", [NoSideEffect]> {
+  let arguments = (ins AnyType:$input);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    $input attr-dict `:` functional-type($input, $result)
+  }];
+
+  let verifier = [{ return ::verifyStdFlippedIntCast(*this); }];
+}

@@ -51,6 +51,15 @@ static Value mapOperand(Value operand, Operation *op,
     if (!resultType.hasValue())
       return {};
 
+    if (auto flippedType = firType.dyn_cast<FlipType>()) {
+      auto passiveResultType = RTLTypeConverter::convertType(flippedType.getPassiveType());
+      if (auto intType = passiveResultType.getValue().dyn_cast<IntegerType>()) {
+        // Cast flipped firrtl -> standard type.
+        return rewriter.create<firrtl::StdFlippedIntCast>(op->getLoc(), intType,
+                                                          operand);
+      }
+    }
+
     if (auto intType = resultType.getValue().dyn_cast<IntegerType>()) {
       // Cast firrtl -> standard type.
       return rewriter.create<firrtl::StdIntCast>(op->getLoc(), intType,
@@ -235,6 +244,7 @@ public:
   explicit RTLConversionTarget(MLIRContext &ctx) : ConversionTarget(ctx) {
     addLegalDialect<RTLDialect>();
     addLegalOp<firrtl::StdIntCast>();
+    addLegalOp<firrtl::StdFlippedIntCast>();
   }
 };
 } // end anonymous namespace

@@ -40,19 +40,20 @@
     // CHECK-NEXT: rtl.connect %2, %5 : i4
     firrtl.connect %2, %4 : !firrtl.uint<4>, !firrtl.uint<4>
 
-    // CHECK-NEXT: rtl.connect %out1, %8 : !firrtl.flip<uint<4>>, i4
+    // CHECK-NEXT: %10 = firrtl.stdFlippedIntCast %out1 : (!firrtl.flip<uint<4>>) -> i4
+    // CHECK-NEXT: rtl.connect %10, %8 : i4
     firrtl.connect %out1, %5 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
-    // CHECK-NEXT: %10 = rtl.wire {name = "test-name"} : i4
+    // CHECK-NEXT: %11 = rtl.wire {name = "test-name"} : i4
     firrtl.wire {name = "test-name"} : !firrtl.uint<4>
 
-    // CHECK-NEXT: %11 = rtl.wire : i2
+    // CHECK-NEXT: %12 = rtl.wire : i2
     firrtl.wire : !firrtl.uint<2>
 
-    // CHECK-NEXT: %12 = rtl.wire : !firrtl.vector<uint<1>, 13>
+    // CHECK-NEXT: %13 = rtl.wire : !firrtl.vector<uint<1>, 13>
     %_t_2 = firrtl.wire : !firrtl.vector<uint<1>, 13>
 
-    // CHECK-NEXT: %13 = rtl.wire : !firrtl.vector<uint<2>, 13>
+    // CHECK-NEXT: %14 = rtl.wire : !firrtl.vector<uint<2>, 13>
     %_t_3 = firrtl.wire : !firrtl.vector<uint<2>, 13>
   }
 }
