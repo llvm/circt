@@ -1,9 +1,15 @@
+[![](https://github.com/circt/circt/workflows/Build%20and%20Test/badge.svg?event=push)](https://github.com/circt/circt/actions)
+
 # ⚡️ "CIRCT" / Circuit IR Compilers and Tools
 
 "CIRCT" stands for "Circuit IR Compilers and Tools".  One might also interpret
 it as the recursively as "CIRCT IR Compiler and Tools".  The T can be 
 selectively expanded as Tool, Translator, Team, Technology, Target, Tree, Type,
 ... we're ok with the ambiguity.
+
+The CIRCT community has a weekly meeting with open attendance.  Please see the
+[meeting notes document](https://docs.google.com/document/d/1fOSRdyZR2w75D87yU2Ma9h2-_lEPL4NxvhJGJd-s5pk/edit#)
+for more information.
 
 ## Motivation
 
