@@ -4,14 +4,12 @@ add_mlir_dialect_library(MLIRLLHDTransforms
   FunctionEliminationPass.cpp
 
   DEPENDS
-  MLIRLLHDIncGen
   MLIRLLHDTransformsIncGen
 
-  LINK_LIBS
+  LINK_LIBS PUBLIC
   MLIREDSC
   MLIRIR
   MLIRStandardOps
   MLIRLLHD
   MLIRTransformUtils
-  LLVMSupport
 )

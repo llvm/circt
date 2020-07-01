@@ -6,10 +6,7 @@ set(LLVM_OPTIONAL_SOURCES
 
 add_mlir_library(CIRCTLLHDSimState
     State.cpp
-
-    LINK_LIBS PUBLIC
-    LLVMSupport
-    )
+)
 
 add_mlir_library(circt-llhd-signals-runtime-wrappers SHARED
     signals-runtime-wrappers.cpp
