@@ -47,9 +47,8 @@ static Value getGlobalString(Location loc, OpBuilder &builder,
       loc, str.getType().getPointerTo(), str.getName());
   auto idx = builder.create<LLVM::ConstantOp>(loc, i32Ty,
                                               builder.getI32IntegerAttr(0));
-  llvm::SmallVector<Value, 2> idxs({idx, idx});
-  auto gep = builder.create<LLVM::GEPOp>(loc, i8PtrTy, addr, idxs);
-  return gep;
+  std::array<Value, 2> idxs({idx, idx});
+  return builder.create<LLVM::GEPOp>(loc, i8PtrTy, addr, idxs);
 }
 
 /// Looks up a symbol and inserts a new functino at the beginning of the
@@ -89,7 +88,7 @@ insertProbeSignal(ModuleOp &module, ConversionPatternRewriter &rewriter,
       sigTy.getPointerTo(), {i8PtrTy, i32Ty}, /*isVarArg=*/false);
   auto prbFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
                                      "probe_signal", prbSignature);
-  SmallVector<Value, 2> prbArgs({statePtr, signal});
+  std::array<Value, 2> prbArgs({statePtr, signal});
   auto prbCall =
       rewriter
           .create<LLVM::CallOp>(op->getLoc(), sigTy.getPointerTo(),
@@ -123,7 +122,7 @@ static LLVM::LLVMType getProcPersistenceTy(LLVM::LLVMDialect *dialect,
 
   auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect);
 
-  proc.walk([&](Operation *op) -> WalkResult {
+  proc.walk([&](Operation *op) -> void {
     if (op->isUsedOutsideOfBlock(op->getBlock())) {
       if (op->getResult(0).getType().isa<IntegerType>())
         types.push_back(converter.convertType(op->getResult(0).getType())
@@ -131,7 +130,6 @@ static LLVM::LLVMType getProcPersistenceTy(LLVM::LLVMDialect *dialect,
       else if (op->getResult(0).getType().isa<SigType>())
         types.push_back(i32Ty);
     }
-    return WalkResult::advance();
   });
   return LLVM::LLVMType::getStructTy(dialect, types);
 }
@@ -191,15 +189,14 @@ static void insertPersistence(LLVMTypeConverter &converter,
   rewriter.create<LLVM::ReturnOp>(loc, ValueRange());
 
   auto body = &converted.getBody();
-  assert(body->front().getTerminator()->getNumSuccessors() > 0 &&
+  assert(body->front().getNumSuccessors() > 0 &&
          "the process entry block is expected to branch to another block");
 
   // Redirect the entry block to a first comparison block. If on a fresh start,
   // start from where original entry would have jumped, else the process is in
   // an illegal state and jump to the abort block.
   insertComparisonBlock(rewriter, dialect, loc, body, larg, 0,
-                        body->front().getTerminator()->getSuccessor(0),
-                        abortBlock);
+                        body->front().getSuccessor(0), abortBlock);
 
   // Keep track of the index in the presistence table of the operation we
   // are currently processing.
@@ -208,7 +205,7 @@ static void insertPersistence(LLVMTypeConverter &converter,
   int waitInd = 0;
 
   // Insert operations required to persist values across process suspension.
-  converted.walk([&](Operation *op) -> WalkResult {
+  converted.walk([&](Operation *op) -> void {
     if (op->isUsedOutsideOfBlock(op->getBlock()) &&
         op->getResult(0) != larg.getResult() &&
         !(op->getResult(0).getType().isa<TimeType>())) {
@@ -255,7 +252,6 @@ static void insertPersistence(LLVMTypeConverter &converter,
       insertComparisonBlock(rewriter, dialect, loc, body, larg, ++waitInd,
                             wait.dest());
     }
-    return WalkResult::advance();
   });
 }
 
@@ -292,8 +288,8 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
     LLVMTypeConverter::SignatureConversion intermediate(
         entityOp.getNumArguments());
     // Add state, signal table and arguments table arguments.
-    intermediate.addInputs(
-        ArrayRef<Type>({i8PtrTy, i32Ty.getPointerTo(), i32Ty.getPointerTo()}));
+    intermediate.addInputs(std::array<Type, 3>(
+        {i8PtrTy, i32Ty.getPointerTo(), i32Ty.getPointerTo()}));
     for (size_t i = 0, e = entityOp.getNumArguments(); i < e; ++i)
       intermediate.addInputs(i, voidTy);
     rewriter.applySignatureConversion(&entityOp.getBody(), intermediate);
@@ -398,7 +394,7 @@ struct ProcOpConversion : public ConvertToLLVMPattern {
     LLVMTypeConverter::SignatureConversion intermediate(
         procOp.getNumArguments());
     // Add state, process state table and arguments table arguments.
-    ArrayRef<Type> procSigTys(
+    std::array<Type, 3> procSigTys(
         {i8PtrTy, stateTy.getPointerTo(), i32Ty.getPointerTo()});
     intermediate.addInputs(procSigTys);
     for (size_t i = 0, e = procOp.getNumArguments(); i < e; ++i)
@@ -598,7 +594,7 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
                                      procState, ArrayRef<Value>({zeroC, oneC}));
     rewriter.create<LLVM::StoreOp>(op->getLoc(), resumeIdxC, resumeIdxPtr);
 
-    SmallVector<Value, 5> args(
+    std::array<Value, 5> args(
         {statePtr, procStateBC, realTimeConst, deltaConst, epsConst});
     rewriter.create<LLVM::CallOp>(
         op->getLoc(), voidTy, rewriter.getSymbolRefAttr(llhdSuspendFunc), args);
@@ -635,7 +631,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
     auto initFuncTy =
         LLVM::LLVMType::getFunctionTy(voidTy, {i8PtrTy}, /*isVarArg=*/false);
     auto initFunc =
-        getOrInsertFunction(module, rewriter, op->getLoc(), initCall,
+        getOrInsertFunction(module, rewriter, op->getLoc(), "llhd_init",
                             initFuncTy, /*insertBodyAndTerminator=*/true);
 
     // Get or insert the malloc function definition.
@@ -651,7 +647,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
     auto allocSigFuncTy = LLVM::LLVMType::getFunctionTy(
         i32Ty, {i8PtrTy, i32Ty, i8PtrTy, i8PtrTy, i64Ty}, /*isVarArg=*/false);
     auto sigFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
-                                       allocCall, allocSigFuncTy);
+                                       "alloc_signal", allocSigFuncTy);
 
     // Get or insert Alloc_proc library call definition.
     auto allocProcFuncTy = LLVM::LLVMType::getFunctionTy(
@@ -688,7 +684,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
       // Index of the signal in the unit's signal table.
       int initCounter = 0;
       // Walk over the entity and generate mallocs for each one of its signals.
-      child.walk([&](Operation *op) -> WalkResult {
+      child.walk([&](Operation *op) -> void {
         if (auto sigOp = dyn_cast<SigOp>(op)) {
           // Get index constant of the signal in the unit's signal table.
           auto indexConst = initBuilder.create<LLVM::ConstantOp>(
@@ -709,7 +705,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
           // segfault.
           auto mallocSize = initBuilder.create<LLVM::ConstantOp>(
               op->getLoc(), i64Ty, rewriter.getI64IntegerAttr(size * 2));
-          llvm::SmallVector<Value, 1> margs({mallocSize});
+          std::array<Value, 1> margs({mallocSize});
           auto mall = initBuilder
                           .create<LLVM::CallOp>(
                               op->getLoc(), i8PtrTy,
@@ -724,12 +720,11 @@ struct InstOpConversion : public ConvertToLLVMPattern {
               mall);
           initBuilder.create<LLVM::StoreOp>(op->getLoc(), initDef, bitcast);
 
-          llvm::SmallVector<Value, 5> args(
+          std::array<Value, 5> args(
               {initStatePtr, indexConst, owner, mall, sizeConst});
           initBuilder.create<LLVM::CallOp>(
               op->getLoc(), i32Ty, rewriter.getSymbolRefAttr(sigFunc), args);
         }
-        return WalkResult::advance();
       });
     } else if (auto proc = module.lookupSymbol<ProcOp>(instOp.callee())) {
       // Handle process instantiation.
@@ -757,7 +752,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
           ArrayRef<Value>({oneC}));
       auto procStateSize = initBuilder.create<LLVM::PtrToIntOp>(
           op->getLoc(), i64Ty, procStateGep);
-      llvm::SmallVector<Value, 1> procStateMArgs({procStateSize});
+      std::array<Value, 1> procStateMArgs({procStateSize});
       auto procStateMall =
           initBuilder
               .create<LLVM::CallOp>(op->getLoc(), i8PtrTy,
@@ -772,7 +767,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
       auto strSizeC = initBuilder.create<LLVM::ConstantOp>(
           op->getLoc(), i64Ty, rewriter.getI64IntegerAttr(ownerName.size()));
 
-      llvm::SmallVector<Value, 1> strMallArgs({strSizeC});
+      std::array<Value, 1> strMallArgs({strSizeC});
       auto strMall = initBuilder
                          .create<LLVM::CallOp>(
                              op->getLoc(), i8PtrTy,
@@ -797,7 +792,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
           op->getLoc(), sensesPtrTy, sensesNullPtr, ArrayRef<Value>({oneC}));
       auto sensesSize =
           initBuilder.create<LLVM::PtrToIntOp>(op->getLoc(), i64Ty, sensesGep);
-      SmallVector<Value, 1> senseMArgs({sensesSize});
+      std::array<Value, 1> senseMArgs({sensesSize});
       auto sensesMall = initBuilder
                             .create<LLVM::CallOp>(
                                 op->getLoc(), i8PtrTy,
@@ -828,7 +823,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
       initBuilder.create<LLVM::StoreOp>(op->getLoc(), sensesBC,
                                         procStateSensesPtr);
 
-      SmallVector<Value, 4> allocProcArgs({initStatePtr, owner, procStateMall});
+      std::array<Value, 3> allocProcArgs({initStatePtr, owner, procStateMall});
       initBuilder.create<LLVM::CallOp>(op->getLoc(), voidTy,
                                        rewriter.getSymbolRefAttr(allocProcFunc),
                                        allocProcArgs);
@@ -837,10 +832,6 @@ struct InstOpConversion : public ConvertToLLVMPattern {
     rewriter.eraseOp(op);
     return success();
   }
-
-private:
-  const std::string allocCall = "alloc_signal";
-  const std::string initCall = "llhd_init";
 };
 } // namespace
 
@@ -970,8 +961,8 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
     auto drvFuncTy = LLVM::LLVMType::getFunctionTy(
         voidTy, {i8PtrTy, i32Ty, i8PtrTy, i64Ty, i32Ty, i32Ty, i32Ty},
         /*isVarArg=*/false);
-    auto drvFunc =
-        getOrInsertFunction(module, rewriter, op->getLoc(), libCall, drvFuncTy);
+    auto drvFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
+                                       "drive_signal", drvFuncTy);
 
     // Get the state pointer from the function arguments.
     Value statePtr = op->getParentOfType<LLVM::LLVMFuncOp>().getArgument(0);
@@ -1018,9 +1009,8 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
         epsAttr);
 
     // Define the drive_signal library call arguments.
-    llvm::SmallVector<Value, 7> args({statePtr, transformed.signal(), bc,
-                                      widthConst, realTimeConst, deltaConst,
-                                      epsConst});
+    std::array<Value, 7> args({statePtr, transformed.signal(), bc, widthConst,
+                               realTimeConst, deltaConst, epsConst});
     // Create the library call.
     rewriter.create<LLVM::CallOp>(op->getLoc(), voidTy,
                                   rewriter.getSymbolRefAttr(drvFunc), args);
@@ -1028,9 +1018,6 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
     rewriter.eraseOp(op);
     return success();
   }
-
-private:
-  const std::string libCall = "drive_signal";
 };
 } // namespace
 
@@ -1178,7 +1165,7 @@ struct ShrOpConversion : public ConvertToLLVMPattern {
               resTy.getUnderlyingType().getIntOrFloatBitWidth()));
 
       // Add the subsignal to the state.
-      SmallVector<Value, 5> addSubArgs(
+      std::array<Value, 5> addSubArgs(
           {statePtr, transformed.base(), newPtr, lenConst, bitOffset});
       rewriter.replaceOpWithNewOp<LLVM::CallOp>(
           op, i32Ty, rewriter.getSymbolRefAttr(addSubFunc), addSubArgs);
@@ -1381,7 +1368,7 @@ struct ExtsOpConversion : public ConvertToLLVMPattern {
           rewriter.create<LLVM::URemOp>(op->getLoc(), adjustedStart, const8);
 
       // Add the new subsignal to the state.
-      SmallVector<Value, 5> addSubArgs(
+      std::array<Value, 5> addSubArgs(
           {statePtr, transformed.target(), newPtr, lenConst, bitOffset});
       rewriter.replaceOpWithNewOp<LLVM::CallOp>(
           op, i32Ty, rewriter.getSymbolRefAttr(addSubFunc), addSubArgs);
