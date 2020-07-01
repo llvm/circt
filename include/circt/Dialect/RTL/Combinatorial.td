@@ -90,9 +90,9 @@ def MulOp : UTBinRTLOp<"mul", [Commutative]>;
 def DivOp : UTBinRTLOp<"div">;
 def ModOp : UTBinRTLOp<"mod">;
 
-def AndOp : UTVariadicRTLOp<"and">;
-def OrOp  : UTVariadicRTLOp<"or">;
-def XorOp : UTVariadicRTLOp<"xor">;
+def AndOp : UTVariadicRTLOp<"and", [Commutative]>;
+def OrOp  : UTVariadicRTLOp<"or", [Commutative]>;
+def XorOp : UTVariadicRTLOp<"xor", [Commutative]>;
 
 // Concatenate a variadic list of operands together.
 def ConcatOp : VariadicRTLOp<"concat">;
