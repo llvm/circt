@@ -167,7 +167,6 @@ static LogicalResult lower(firrtl::CatPrimOp op, ArrayRef<Value> operands,
 // Variadic Bitwise Operations
 //===----------------------------------------------------------------------===//
 
-#include <iostream> 
 template <typename OpType, typename ResultOpType>
 static LogicalResult lowerVariadicOp(OpType op, ArrayRef<Value> operands,
                                      ConversionPatternRewriter &rewriter) {
@@ -176,16 +175,12 @@ static LogicalResult lowerVariadicOp(OpType op, ArrayRef<Value> operands,
   // auto lhs = mapOperand(operands[0], op, rewriter);
   // auto rhs = mapOperand(operands[1], op, rewriter);
 
-  // std::cout << "test " << std::endl;
   // lhs.getType().dump();
-  // std::cout << "test2 " << std::endl;
 
   // if (!lhs || !rhs)
   //   return failure();
 
-  // std::cout << "test " << std::endl;
   // lhs.dump();
-  // std::cout << "test2 " << std::endl;
 
   // auto lhsWidth = lhs.getResult().getType().cast<IntegerType>().getWidth();
   // auto rhsWidth = rhs.getType().cast<IntegerType>().getWidth();
