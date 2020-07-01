@@ -140,7 +140,7 @@ FIRRTLType getBundleType(mlir::Type type, bool isOutput) {
 }
 
 // Check whether the same submodule has been created
-FModuleOp checkSubModuleOp(FModuleOp topModuleOp, Operation &oldOp) {
+FModuleOp checkSubModuleOp(FModuleOp topModuleOp, Operation oldOp) {
   Region *currentRegion = topModuleOp.getParentRegion();
   for (auto &block : *currentRegion) {
     for (auto &op : block) {
@@ -161,8 +161,8 @@ FModuleOp checkSubModuleOp(FModuleOp topModuleOp, Operation &oldOp) {
 }
 
 // Create a new FModuleOp operation as submodule of the top module
-FModuleOp insertSubModuleOp(FModuleOp topModuleOp, Operation &oldOp,
-                                 ConversionPatternRewriter &rewriter) {
+FModuleOp insertSubModuleOp(FModuleOp topModuleOp, Operation oldOp,
+                            ConversionPatternRewriter &rewriter) {
   // Create new FIRRTL module for binary operation
   rewriter.setInsertionPoint(topModuleOp);
   using ModulePort = std::pair<StringAttr, FIRRTLType>;
@@ -202,7 +202,7 @@ FModuleOp insertSubModuleOp(FModuleOp topModuleOp, Operation &oldOp,
 
 // Convert orignal multiple bundle type port to a flattend bundle type 
 // containing all the origianl bundle ports
-Type getInstOpType(FModuleOp &subModuleOp) {
+Type getInstOpType(FModuleOp subModuleOp) {
   using BundleElement = std::pair<Identifier, FIRRTLType>;
   llvm::SmallVector<BundleElement, 4> elements;
 
@@ -221,7 +221,7 @@ Type getInstOpType(FModuleOp &subModuleOp) {
 }
 
 // Create instanceOp in the top FModuleOp region
-void insertInstOp(mlir::Type instType, Operation &oldOp, 
+void insertInstOp(mlir::Type instType, Operation oldOp, 
                   ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPoint(&oldOp);
   auto exprModuleName = subModuleOp.getName();
@@ -264,7 +264,7 @@ void insertInstOp(mlir::Type instType, Operation &oldOp,
 }
 
 // Extract values of all subfields of all ports of the submodule
-ValueMapArray extractSubfields(FModuleOp &subModuleOp, 
+ValueMapArray extractSubfields(FModuleOp subModuleOp, 
                                ConversionPatternRewriter &rewriter) {
   llvm::SmallVector<ValueMap, 4> ports;
   auto &entryBlock = subModuleOp.getBody().front();
@@ -289,8 +289,7 @@ ValueMapArray extractSubfields(FModuleOp &subModuleOp,
 }
 
 // Create a low voltage constant operation and return its result value
-Value insertLowConstantOp(Location insertLoc, 
-                          ConversionPatternRewriter &rewriter) {
+Value insertNegOp(Location insertLoc, ConversionPatternRewriter &rewriter) {
   auto signalType = UIntType::get(rewriter.getContext(), 1);
   auto StandardUIntType = IntegerType::get(1, IntegerType::Unsigned, 
                                            rewriter.getContext());
@@ -303,8 +302,7 @@ Value insertLowConstantOp(Location insertLoc,
 }
 
 // Create a high voltage constant operation and return its result value
-Value insertHighConstantOp(Location insertLoc, 
-                           ConversionPatternRewriter &rewriter) {
+Value insertPosOp(Location insertLoc, ConversionPatternRewriter &rewriter) {
   auto signalType = UIntType::get(rewriter.getContext(), 1);
   auto StandardUIntType = IntegerType::get(1, IntegerType::Unsigned, 
                                            rewriter.getContext());
@@ -317,39 +315,58 @@ Value insertHighConstantOp(Location insertLoc,
 }
 
 // TODO
-void buildStandardOp(FModuleOp &subModuleOp, Operation &oldOp, 
-                     ConversionPatternRewriter &rewriter) {
+void buildMergeOp(FModuleOp subModuleOp, ValueMapArray subfieldArray, 
+                  ConversionPatternRewriter &rewriter) {
+  auto &entryBlock = subModuleOp.getBody().front();
+  auto *termOp = entryBlock.getTerminator();
+  rewriter.setInsertionPoint(termOp);
+
+
+}
+
+// Build binary operations for the new sub-module
+template <typename OpType>
+void buildBinaryOp(FModuleOp subModuleOp, ValueMapArray subfieldArray, 
+                   ConversionPatternRewriter &rewriter) {
+  auto &entryBlock = subModuleOp.getBody().front();
+  auto *termOp = entryBlock.getTerminator();
+  rewriter.setInsertionPoint(termOp);
+
+  auto arg0Map = subfieldArray[0];
+  auto arg1Map = subfieldArray[1];
+  auto resultMap = subfieldArray[2];
+
   StringRef dataString = StringRef("data");
   StringRef validString = StringRef("valid");
   StringRef readyString = StringRef("ready");
 
   // Connect data signals
-  auto arg0Data = arg0Map[dataString].getResult();
-  auto arg1Data = arg1Map[dataString].getResult();
-  auto resultData = resultMap[dataString].getResult();
+  auto arg0Data = arg0Map[dataString];
+  auto arg1Data = arg1Map[dataString];
+  auto resultData = resultMap[dataString];
 
-  auto CombDataOp = rewriter.create<FIRRTLOpType>(
-      termOp->getLoc(), dataType, arg0Data, arg1Data);
+  auto CombDataOp = rewriter.create<OpType>(termOp->getLoc(), 
+      arg0Data.getType(), arg0Data, arg1Data);
   auto combData = CombDataOp.getResult();
   rewriter.create<ConnectOp>(termOp->getLoc(), resultData, combData);
 
   // Connect valid signals
-  auto arg0Valid = arg0Map[validString].getResult();
-  auto arg1Valid = arg1Map[validString].getResult();
-  auto resultValid = resultMap[validString].getResult();
+  auto arg0Valid = arg0Map[validString];
+  auto arg1Valid = arg1Map[validString];
+  auto resultValid = resultMap[validString];
 
-  auto combValidOp = rewriter.create<AndPrimOp>(
-      termOp->getLoc(), validType, arg0Valid, arg1Valid);
+  auto combValidOp = rewriter.create<AndPrimOp>(termOp->getLoc(), 
+      arg0Valid.getType(), arg0Valid, arg1Valid);
   auto combValid = combValidOp.getResult();
   rewriter.create<ConnectOp>(termOp->getLoc(), resultValid, combValid);
 
   // Connect ready signals
-  auto resultReady = resultMap[readyString].getResult();
-  auto arg0Ready = arg0Map[readyString].getResult();
-  auto arg1Ready = arg1Map[readyString].getResult();
+  auto resultReady = resultMap[readyString];
+  auto arg0Ready = arg0Map[readyString];
+  auto arg1Ready = arg1Map[readyString];
 
-  auto combReadyOp = rewriter.create<AndPrimOp>(
-      termOp->getLoc(), validType, combValid, resultReady);
+  auto combReadyOp = rewriter.create<AndPrimOp>(termOp->getLoc(), 
+      combValid.getType(), combValid, resultReady);
   auto combReady = combReadyOp.getResult();
   rewriter.create<ConnectOp>(termOp->getLoc(), arg0Ready, combReady);
   rewriter.create<ConnectOp>(termOp->getLoc(), arg1Ready, combReady);
@@ -375,8 +392,9 @@ void convertSubModuleOp(FModuleOp topModuleOp,
       insertInstOp(instOpType, op, rewriter);
 
       // Build the combinational logic in the new created submodule
-      auto in = extractSubfields(subModuleOp, rewriter);
-      buildSubModuleOp(subModuleOp, op, rewriter);
+      auto subfieldArray = extractSubfields(subModuleOp, rewriter);
+      buildMergeOp(subModuleOp, op, rewriter);
+      buildBinaryOp<OpType>(subModuleOp, op, rewriter);
 
       // For debug
       //Region *currentRegion = topModuleOp.getParentRegion();
