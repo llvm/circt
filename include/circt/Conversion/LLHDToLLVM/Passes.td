@@ -1,3 +1,9 @@
+//===-- Passes.td - LLHD to LLVM pass definition file ------*- tablegen -*-===//
+//
+// This file contains definitions for the LLHD to LLVM conversion pass.
+//
+//===----------------------------------------------------------------------===//
+
 #ifndef CIRCT_CONVERSION_LLHDTOLLVM_PASSES
 #define CIRCT_CONVERSION_LLHDTOLLVM_PASSES
 
