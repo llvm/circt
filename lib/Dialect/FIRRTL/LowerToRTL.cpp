@@ -52,7 +52,8 @@ static Value mapOperand(Value operand, Operation *op,
       return {};
 
     if (auto flippedType = firType.dyn_cast<FlipType>()) {
-      auto passiveResultType = RTLTypeConverter::convertType(flippedType.getPassiveType());
+      auto passiveResultType =
+          RTLTypeConverter::convertType(flippedType.getPassiveType());
       if (auto intType = passiveResultType.getValue().dyn_cast<IntegerType>()) {
         // Cast flipped firrtl -> standard type.
         return rewriter.create<firrtl::StdFlippedIntCast>(op->getLoc(), intType,

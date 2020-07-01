@@ -1076,7 +1076,8 @@ static LogicalResult verifyStdFlippedIntCast(StdFlippedIntCast cast) {
   if (intWidth == -2)
     return cast.emitError("flipped firrtl type isn't simple bit type");
   if (intWidth == -1)
-    return cast.emitError("flipped SInt/UInt type must have a width"), failure();
+    return cast.emitError("flipped SInt/UInt type must have a width"),
+           failure();
 
   return success();
 }
