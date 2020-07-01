@@ -21,13 +21,11 @@
 
 using namespace mlir;
 
-namespace {
-
 template <class AttrElementT,
           class ElementValueT = typename AttrElementT::ValueType,
           class CalculationT = function_ref<ElementValueT(ElementValueT)>>
-Attribute constFoldUnaryOp(ArrayRef<Attribute> operands,
-                           const CalculationT &calculate) {
+static Attribute constFoldUnaryOp(ArrayRef<Attribute> operands,
+                                  const CalculationT &calculate) {
   assert(operands.size() == 1 && "unary op takes one operand");
   if (!operands[0])
     return {};
@@ -57,8 +55,8 @@ template <class AttrElementT,
           class ElementValueT = typename AttrElementT::ValueType,
           class CalculationT = function_ref<
               ElementValueT(ElementValueT, ElementValueT, ElementValueT)>>
-Attribute constFoldTernaryOp(ArrayRef<Attribute> operands,
-                             const CalculationT &calculate) {
+static Attribute constFoldTernaryOp(ArrayRef<Attribute> operands,
+                                    const CalculationT &calculate) {
   assert(operands.size() == 3 && "ternary op takes three operands");
   if (!operands[0] || !operands[1] || !operands[2])
     return {};
@@ -111,6 +109,8 @@ Attribute constFoldTernaryOp(ArrayRef<Attribute> operands,
   }
   return {};
 }
+
+namespace {
 
 struct constant_int_all_ones_matcher {
   bool match(Operation *op) {
