@@ -1055,7 +1055,7 @@ static LogicalResult verifyStdIntCast(StdIntCast cast) {
 }
 
 //===----------------------------------------------------------------------------===//
-// Conversions to/from flipped fixed-width signless integer types in standard
+// Conversions from flipped fixed-width signless integer types in standard
 // dialect.
 //===----------------------------------------------------------------------------===//
 
