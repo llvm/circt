@@ -63,7 +63,7 @@ LogicalResult VerilogPrinter::printModule(ModuleOp module) {
     out << "module _" << entity.getName();
     if (!entryBlock.args_empty()) {
       out << "(";
-      for (unsigned int i = 0; i < entryBlock.getNumArguments(); i++) {
+      for (unsigned int i = 0, e = entryBlock.getNumArguments(); i < e; ++i) {
         out << (i > 0 ? ", " : "")
             << (i < entity.ins().getZExtValue() ? "input " : "output ");
         printType(entryBlock.getArgument(i).getType());
@@ -76,7 +76,7 @@ LogicalResult VerilogPrinter::printModule(ModuleOp module) {
     // Print the operations within the entity
     for (auto iter = entryBlock.begin();
          iter != entryBlock.end() && !dyn_cast<llhd::TerminatorOp>(iter);
-         iter++) {
+         ++iter) {
       if (failed(printOperation(&(*iter), 4))) {
         return emitError(iter->getLoc(), "Operation not supported!");
       }
