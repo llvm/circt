@@ -37,72 +37,73 @@ using namespace mlir::handshake;
 using namespace circt;
 using namespace circt::firrtl;
 
-// Convert standard type to FIRRTL bundle type
-// Only support integer type
-FIRRTLType getBundleType(mlir::Type type, bool isOutput) {
-  if (type.isa<BundleType>()) {
-    return type.dyn_cast<BundleType>();
-  }
-
+template <typename OpType>
+FIRRTLType getBundleTypeImpl(OpType dataType, bool isOutput, 
+                             MLIRContext *context) {
   using BundleElement = std::pair<Identifier, FIRRTLType>;
   llvm::SmallVector<BundleElement, 3> elements;
 
-  auto dataId = Identifier::get("data", type.getContext());
+  // Construct the data field of the FIRRTL bundle if not a NoneType
+  if (dataType) {
+    auto dataId = Identifier::get("data", context);
 
-  if (type.isSignedInteger() || type.isUnsignedInteger() || 
-      type.isSignlessInteger()) {
-
-    // Construct the data field of the FIRRTL bundle
-    auto width = type.dyn_cast<IntegerType>().getWidth();
-
-    if (type.isSignedInteger() || type.isSignlessInteger()) {
-      auto dataType = SIntType::get(type.getContext(), width);
-      auto flipDataType = FlipType::get(dataType);
-
-      if (isOutput) {
-        BundleElement dataElement = std::make_pair(dataId, flipDataType);
-        elements.push_back(dataElement);
-      } else {
-        BundleElement dataElement = std::make_pair(dataId, dataType);
-        elements.push_back(dataElement);
-      }
+    if (isOutput) {
+      elements.push_back(std::make_pair(dataId, FlipType::get(dataType)));
     } else {
-      auto dataType = UIntType::get(type.getContext(), width);
-      auto flipDataType = FlipType::get(dataType);
-
-      if (isOutput) {
-        BundleElement dataElement = std::make_pair(dataId, flipDataType);
-        elements.push_back(dataElement);
-      } else {
-        BundleElement dataElement = std::make_pair(dataId, dataType);
-        elements.push_back(dataElement);
-      }
+      elements.push_back(std::make_pair(dataId, dataType));
     }
   }
 
-  auto validId = Identifier::get("valid", type.getContext());
-  auto validType = UIntType::get(type.getContext(), 1);
-  auto flipValidType = FlipType::get(validType);
-
-  auto readyId = Identifier::get("ready", type.getContext());
-  auto readyType = UIntType::get(type.getContext(), 1);
-  auto flipReadyType = FlipType::get(readyType);
-
   // Construct the valid/ready field of the FIRRTL bundle
+  auto validId = Identifier::get("valid", context);
+  auto readyId = Identifier::get("ready", context);
+  auto signalType = UIntType::get(context, 1);
+
   if (isOutput) {
-    BundleElement validElement = std::make_pair(validId, flipValidType);
-    elements.push_back(validElement);
-    BundleElement readyElement = std::make_pair(readyId, readyType);
-    elements.push_back(readyElement);
+    elements.push_back(std::make_pair(validId, FlipType::get(signalType)));
+    elements.push_back(std::make_pair(readyId, signalType));
   } else {
-    BundleElement validElement = std::make_pair(validId, validType);
-    elements.push_back(validElement);
-    BundleElement readyElement = std::make_pair(readyId, flipReadyType);
-    elements.push_back(readyElement);
+    elements.push_back(std::make_pair(validId, signalType));
+    elements.push_back(std::make_pair(readyId, FlipType::get(signalType)));
   }
 
-  ArrayRef<BundleElement> BundleElements = ArrayRef<BundleElement>(elements);
-  return BundleType::get(BundleElements, type.getContext());
+  return BundleType::get(ArrayRef<BundleElement>(elements), context);
+}
+
+FIRRTLType getBundleType(mlir::Type type, bool isOutput) {
+  // If the targeted type is already converted to a bundle type elsewhere, 
+  // itself will be returned after cast.
+  if (type.isa<BundleType>()) {
+    return type.cast<BundleType>();
+  }
+
+  if (type.isSignedInteger()) {
+    unsigned width = type.cast<IntegerType>().getWidth();
+    SIntType dataType = SIntType::get(type.getContext(), width);
+    return getBundleTypeImpl<SIntType>(dataType, isOutput, type.getContext());
+  }
+  else if (type.isUnsignedInteger()) {
+    unsigned width = type.cast<IntegerType>().getWidth();
+    UIntType dataType = UIntType::get(type.getContext(), width);
+    return getBundleTypeImpl<UIntType>(dataType, isOutput, type.getContext());
+  }
+  // ISSUE: How to handle signless integers? Should we use the AsSIntPrimOp or 
+  // AsUIntPrimOp to convert? Now we simply consider them as signed integers.
+  else if (type.isSignlessInteger()) {
+    unsigned width = type.cast<IntegerType>().getWidth();
+    SIntType dataType = SIntType::get(type.getContext(), width);
+    return getBundleTypeImpl<SIntType>(dataType, isOutput, type.getContext());
+  }
+  // Now we convert index type as signed integers.
+  else if (type.isIndex()) {
+    unsigned width = type.cast<IndexType>().kInternalStorageBitWidth;
+    SIntType dataType = SIntType::get(type.getContext(), width);
+    return getBundleTypeImpl<SIntType>(dataType, isOutput, type.getContext());
+  }
+  else {
+    SIntType dataType = nullptr;
+    return getBundleTypeImpl<SIntType>(dataType, isOutput, type.getContext());
+  }
 }
 
 // Merge the second block (inlined block from original funcOp) to the first 
@@ -426,13 +427,12 @@ void createInstOp(FModuleOp &subModuleOp, Operation &originalOp,
 void convertStandardOp(FModuleOp moduleOp,
                        ConversionPatternRewriter &rewriter) {
   for (Block &block : moduleOp) {
-    int inst_idx = 0;
     for (Operation &op : block) {
-      if (dyn_cast<AddIOp>(op)) {
+      if (dyn_cast<mlir::AddIOp>(op)) {
         auto subModule = createBinaryOpFModule<firrtl::AddPrimOp>(
                          moduleOp, op, rewriter);
         createInstOp(subModule, op, rewriter);
-      } else if (dyn_cast<SubIOp>(op)) {
+      } else if (dyn_cast<mlir::SubIOp>(op)) {
         auto subModule = createBinaryOpFModule<firrtl::SubPrimOp>(
                          moduleOp, op, rewriter);
         createInstOp(subModule, op, rewriter);
@@ -444,10 +444,21 @@ void convertStandardOp(FModuleOp moduleOp,
       //    llvm::outs() << op << "\n";
       //  }
       //}
-      //inst_idx += 1;
     }
   }
 }
+
+// Convert SinkOps to FIRRTL representation
+//void convertElasticOp(FModuleOp moduleOp, ConversionPatternRewriter &rewriter) {
+//  for (Block &block : moduleOp) {
+//    for (Operation &op : block) {
+//      if (dyn_cast<handshake::SinkOp) {
+//        auto subModule = 
+//        auto createInstOp(subModule, op, rewriter);
+//      }
+//    }
+//  }
+//}
 
 // Only support single block function op
 void convertReturnOp(FModuleOp &moduleOp,
