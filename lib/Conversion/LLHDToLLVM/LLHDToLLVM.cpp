@@ -58,17 +58,16 @@ static Value getGlobalString(Location loc, OpBuilder &builder,
 /// terminator
 static LLVM::LLVMFuncOp
 getOrInsertFunction(ModuleOp &module, ConversionPatternRewriter &rewriter,
-                    std::string name, LLVM::LLVMType signature,
+                    Location loc, std::string name, LLVM::LLVMType signature,
                     bool insertBodyAndTerminator = false) {
   auto func = module.lookupSymbol<LLVM::LLVMFuncOp>(name);
   if (!func) {
     OpBuilder moduleBuilder(module.getBodyRegion());
-    func = moduleBuilder.create<LLVM::LLVMFuncOp>(rewriter.getUnknownLoc(),
-                                                  name, signature);
+    func = moduleBuilder.create<LLVM::LLVMFuncOp>(loc, name, signature);
     if (insertBodyAndTerminator) {
       func.addEntryBlock();
       OpBuilder b(func.getBody());
-      b.create<LLVM::ReturnOp>(rewriter.getUnknownLoc(), ValueRange());
+      b.create<LLVM::ReturnOp>(loc, ValueRange());
     }
   }
   return func;
@@ -87,8 +86,8 @@ insertProbeSignal(ModuleOp &module, ConversionPatternRewriter &rewriter,
 
   auto prbSignature = LLVM::LLVMType::getFunctionTy(sigTy.getPointerTo(),
                                                     {i8PtrTy, i32Ty}, false);
-  auto prbFunc =
-      getOrInsertFunction(module, rewriter, "probe_signal", prbSignature);
+  auto prbFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
+                                     "probe_signal", prbSignature);
   SmallVector<Value, 2> prbArgs({statePtr, signal});
   auto prbCall =
       rewriter
@@ -311,12 +310,11 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
       // create gep and load operations from arguments table for each original
       // argument
       auto index = bodyBuilder.create<LLVM::ConstantOp>(
-          rewriter.getUnknownLoc(), i32Ty, rewriter.getI32IntegerAttr(i));
+          op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(i));
       auto bitcast = bodyBuilder.create<LLVM::GEPOp>(
-          rewriter.getUnknownLoc(), i32Ty.getPointerTo(),
-          entityOp.getArgument(2), ArrayRef<Value>(index));
-      auto load =
-          bodyBuilder.create<LLVM::LoadOp>(rewriter.getUnknownLoc(), bitcast);
+          op->getLoc(), i32Ty.getPointerTo(), entityOp.getArgument(2),
+          ArrayRef<Value>(index));
+      auto load = bodyBuilder.create<LLVM::LoadOp>(op->getLoc(), bitcast);
       // remap i-th original argument to the loaded value
       final.remapInput(i + 3, load.getResult());
     }
@@ -524,8 +522,8 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
     auto llhdSuspendTy = LLVM::LLVMType::getFunctionTy(
         voidTy, {i8PtrTy, i8PtrTy, i32Ty, i32Ty, i32Ty}, false);
     auto module = op->getParentOfType<ModuleOp>();
-    auto llhdSuspendFunc =
-        getOrInsertFunction(module, rewriter, "llhd_suspend", llhdSuspendTy);
+    auto llhdSuspendFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
+                                               "llhd_suspend", llhdSuspendTy);
 
     auto statePtr = llvmFunc.getArgument(0);
     auto procState = llvmFunc.getArgument(1);
@@ -629,29 +627,29 @@ struct InstOpConversion : public ConvertToLLVMPattern {
 
     // init function signature: (i8* %state) -> void
     auto initFuncTy = LLVM::LLVMType::getFunctionTy(voidTy, {i8PtrTy}, false);
-    auto initFunc =
-        getOrInsertFunction(module, rewriter, initCall, initFuncTy, true);
+    auto initFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
+                                        initCall, initFuncTy, true);
 
     //! get or insert malloc function definition
     // malloc function signature: (i64 %size) -> i8* %pointer
     auto mallocSigFuncTy =
         LLVM::LLVMType::getFunctionTy(i8PtrTy, {i64Ty}, false);
-    auto mallFunc =
-        getOrInsertFunction(module, rewriter, "malloc", mallocSigFuncTy);
+    auto mallFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
+                                        "malloc", mallocSigFuncTy);
 
     //! get or insert library call definition
     // alloc_signal function signature: (i8* %state, i8* %sig_name, i8*
     // %sig_owner, i32 %value) -> i32 %sig_index
     auto allocSigFuncTy = LLVM::LLVMType::getFunctionTy(
         i32Ty, {i8PtrTy, i32Ty, i8PtrTy, i8PtrTy, i64Ty}, false);
-    auto sigFunc =
-        getOrInsertFunction(module, rewriter, allocCall, allocSigFuncTy);
+    auto sigFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
+                                       allocCall, allocSigFuncTy);
 
     // get or insert alloc_proc library call definition
     auto allocProcFuncTy = LLVM::LLVMType::getFunctionTy(
         voidTy, {i8PtrTy, i8PtrTy, i8PtrTy}, false);
-    auto allocProcFunc =
-        getOrInsertFunction(module, rewriter, "alloc_proc", allocProcFuncTy);
+    auto allocProcFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
+                                             "alloc_proc", allocProcFuncTy);
 
     Value initStatePtr = initFunc.getArgument(0);
 
@@ -668,14 +666,14 @@ struct InstOpConversion : public ConvertToLLVMPattern {
         module.lookupSymbol<LLVM::GlobalOp>("instance." + ownerName.str());
     if (!parentSym) {
       owner = LLVM::createGlobalString(
-          rewriter.getUnknownLoc(), initBuilder, "instance." + ownerName.str(),
+          op->getLoc(), initBuilder, "instance." + ownerName.str(),
           ownerName.str() + '\0', LLVM::Linkage::Internal,
           typeConverter.getDialect());
       parentSym =
           module.lookupSymbol<LLVM::GlobalOp>("instance." + ownerName.str());
     } else {
-      owner = getGlobalString(rewriter.getUnknownLoc(), initBuilder,
-                              typeConverter, parentSym);
+      owner =
+          getGlobalString(op->getLoc(), initBuilder, typeConverter, parentSym);
     }
 
     if (auto child = module.lookupSymbol<EntityOp>(instOp.callee())) {
@@ -686,8 +684,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
         if (auto sigOp = dyn_cast<SigOp>(op)) {
           // get index constant of the signal in the unit's signal table
           auto indexConst = initBuilder.create<LLVM::ConstantOp>(
-              rewriter.getUnknownLoc(), i32Ty,
-              rewriter.getI32IntegerAttr(initCounter));
+              op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(initCounter));
           initCounter++;
 
           //! add signal allocation to the init function
@@ -700,33 +697,29 @@ struct InstOpConversion : public ConvertToLLVMPattern {
           int size = llvm::divideCeil(
               sigOp.init().getType().getIntOrFloatBitWidth(), 8);
           auto sizeConst = initBuilder.create<LLVM::ConstantOp>(
-              rewriter.getUnknownLoc(), i64Ty,
-              rewriter.getI64IntegerAttr(size));
+              op->getLoc(), i64Ty, rewriter.getI64IntegerAttr(size));
           // malloc an extra byte to avoid segfaulting when loading an offset
           // signal
           auto mallocSize = initBuilder.create<LLVM::ConstantOp>(
-              rewriter.getUnknownLoc(), i64Ty,
-              rewriter.getI64IntegerAttr(size * 2));
+              op->getLoc(), i64Ty, rewriter.getI64IntegerAttr(size * 2));
           llvm::SmallVector<Value, 1> margs({mallocSize});
           auto mall = initBuilder
                           .create<LLVM::CallOp>(
-                              rewriter.getUnknownLoc(), i8PtrTy,
+                              op->getLoc(), i8PtrTy,
                               rewriter.getSymbolRefAttr(mallFunc), margs)
                           .getResult(0);
           auto bitcast = initBuilder.create<LLVM::BitcastOp>(
-              rewriter.getUnknownLoc(),
+              op->getLoc(),
               typeConverter.convertType(sigOp.init().getType())
                   .cast<LLVM::LLVMType>()
                   .getPointerTo(),
               mall);
-          initBuilder.create<LLVM::StoreOp>(rewriter.getUnknownLoc(), initDef,
-                                            bitcast);
+          initBuilder.create<LLVM::StoreOp>(op->getLoc(), initDef, bitcast);
 
           llvm::SmallVector<Value, 5> args(
               {initStatePtr, indexConst, owner, mall, sizeConst});
-          initBuilder.create<LLVM::CallOp>(rewriter.getUnknownLoc(), i32Ty,
-                                           rewriter.getSymbolRefAttr(sigFunc),
-                                           args);
+          initBuilder.create<LLVM::CallOp>(
+              op->getLoc(), i32Ty, rewriter.getSymbolRefAttr(sigFunc), args);
         }
         return WalkResult::advance();
       });
@@ -972,17 +965,11 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
     auto i64Ty = LLVM::LLVMType::getInt64Ty(typeConverter.getDialect());
 
     // get or insert drive library call
-    auto drvFunc = module.lookupSymbol<LLVM::LLVMFuncOp>(libCall);
-    if (!drvFunc) {
-      OpBuilder moduleBuilder(module.getBodyRegion());
-      // drv function signature: (i8* %state, i32 %sig_index, i8* %new_value,
-      // i64 width i32 %time, i32 %delta, i32 %eps) -> ()
-      auto drvFuncTy = LLVM::LLVMType::getFunctionTy(
-          voidTy, {i8PtrTy, i32Ty, i8PtrTy, i64Ty, i32Ty, i32Ty, i32Ty},
-          /*isVarArg=*/false);
-      drvFunc = moduleBuilder.create<LLVM::LLVMFuncOp>(rewriter.getUnknownLoc(),
-                                                       libCall, drvFuncTy);
-    }
+    auto drvFuncTy = LLVM::LLVMType::getFunctionTy(
+        voidTy, {i8PtrTy, i32Ty, i8PtrTy, i64Ty, i32Ty, i32Ty, i32Ty},
+        /*isVarArg=*/false);
+    auto drvFunc =
+        getOrInsertFunction(module, rewriter, op->getLoc(), libCall, drvFuncTy);
 
     // get state pointer from function arguments
     Value statePtr = op->getParentOfType<LLVM::LLVMFuncOp>().getArgument(0);
@@ -1149,8 +1136,8 @@ struct ShrOpConversion : public ConvertToLLVMPattern {
       // get add_subsignal runtime call
       auto addSubSignature = LLVM::LLVMType::getFunctionTy(
           i32Ty, {i8PtrTy, i32Ty, i8PtrTy, i64Ty, i64Ty}, false);
-      auto addSubFunc = getOrInsertFunction(module, rewriter, "add_subsignal",
-                                            addSubSignature);
+      auto addSubFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
+                                            "add_subsignal", addSubSignature);
 
       // get state pointer from arguments
       auto statePtr = op->getParentOfType<LLVM::LLVMFuncOp>().getArgument(0);
@@ -1360,8 +1347,8 @@ struct ExtsOpConversion : public ConvertToLLVMPattern {
       // get add_subsignal runtime call
       auto addSubSignature = LLVM::LLVMType::getFunctionTy(
           i32Ty, {i8PtrTy, i32Ty, i8PtrTy, i64Ty, i64Ty}, false);
-      auto addSubFunc = getOrInsertFunction(module, rewriter, "add_subsignal",
-                                            addSubSignature);
+      auto addSubFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
+                                            "add_subsignal", addSubSignature);
 
       // get state pointer from arguments
       auto statePtr = op->getParentOfType<LLVM::LLVMFuncOp>().getArgument(0);
