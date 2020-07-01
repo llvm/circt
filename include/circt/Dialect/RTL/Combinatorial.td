@@ -65,26 +65,23 @@ class UTBinRTLOp<string mnemonic, list<OpTrait> traits = []> :
 
 // Base class for variadic operators.
 class VariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
-RTLOp<mnemonic, !listconcat(traits, [NoSideEffect])> {
-  let arguments = (ins Variadic<AnySignlessInteger>:$inputs);
+      RTLOp<mnemonic, !listconcat(traits, [NoSideEffect])> {
+  let arguments = (ins Variadic<AnySignlessInteger>:$operands);
   let results = (outs AnySignlessInteger:$result);
 
   let assemblyFormat = [{
-    $inputs  attr-dict `:` functional-type($inputs, results)
-    }];
-  }
+    $operands  attr-dict `:` functional-type($operands, results)
+  }];
+}
 
-// Variadic operator with uniform input types.
-// TODO uniform input/outut types
-// class UTVariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
-//       VariadicRTLOp<mnemonic,
-//             !listconcat(traits,
-//                         [SameTypeOperands, SameOperandsAndResultType])> {
-
-//   let assemblyFormat = [{
-//     $inputs attr-dict `:` type($result)
-//     }];
-//   }
+class UTVariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
+      VariadicRTLOp<mnemonic,
+               !listconcat(traits,
+                           [SameTypeOperands, SameOperandsAndResultType])> {
+   let assemblyFormat = [{
+    $operands  attr-dict `:` type($result)
+  }];
+}
 
 // Arithmetic and Logical Binary Operations.
 def AddOp : UTBinRTLOp<"add", [Commutative]>;
@@ -93,9 +90,9 @@ def MulOp : UTBinRTLOp<"mul", [Commutative]>;
 def DivOp : UTBinRTLOp<"div">;
 def ModOp : UTBinRTLOp<"mod">;
 
-def AndOp : VariadicRTLOp<"and">;
-def OrOp  : VariadicRTLOp<"or">;
-def XorOp : VariadicRTLOp<"xor">;
+def AndOp : UTVariadicRTLOp<"and">;
+def OrOp  : UTVariadicRTLOp<"or">;
+def XorOp : UTVariadicRTLOp<"xor">;
 
 // Concatenate a variadic list of operands together.
 def ConcatOp : VariadicRTLOp<"concat">;
