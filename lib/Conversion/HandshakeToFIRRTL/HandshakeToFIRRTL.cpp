@@ -111,7 +111,7 @@ FIRRTLType getBundleType(Type type, bool isFlip) {
   // Convert old type to a bundle type, currently only support integer or index
   // or none type.
   MLIRContext *context = type.getContext();
-  
+
   switch (type.getKind()) {
   case StandardTypes::Integer: {
     IntegerType integerType = type.cast<IntegerType>();
@@ -142,19 +142,14 @@ FIRRTLType getBundleType(Type type, bool isFlip) {
 
 // Check whether the same submodule has been created
 FModuleOp checkSubModuleOp(FModuleOp topModuleOp, Operation &oldOp) {
-  Region *currentRegion = topModuleOp.getParentRegion();
-  for (auto &block : *currentRegion) {
-    for (auto &op : block) {
-      auto oldOpName = oldOp.getName().getStringRef();
-      if (auto topModuleOp = dyn_cast<FModuleOp>(op)) {
-        
-        // Check whether the name of the current operation is as same as the 
-        // targeted operation, if so, directly return the current operation 
-        // rather than create a new FModule operation
-        auto currentOpName = topModuleOp.getName();
-        if (oldOpName == currentOpName) {
-          return topModuleOp;
-        }
+  for (auto &op : topModuleOp.getParentRegion()->front()) {
+    if (auto subModuleOp = dyn_cast<FModuleOp>(op)) {
+      
+      // Check whether the name of the current operation is as same as the 
+      // targeted operation, if so, return the current operation rather than
+      // create a new FModule operation
+      if (oldOp.getName().getStringRef() == subModuleOp.getName()) {
+        return subModuleOp;
       }
     }
   }
@@ -164,7 +159,7 @@ FModuleOp checkSubModuleOp(FModuleOp topModuleOp, Operation &oldOp) {
 // Create a new FModuleOp operation as submodule of the top module
 FModuleOp insertSubModuleOp(FModuleOp topModuleOp, Operation &oldOp,
                             ConversionPatternRewriter &rewriter) {
-  // Create new FIRRTL module for binary operation
+  // Create new FIRRTL module
   rewriter.setInsertionPoint(topModuleOp);
   using ModulePort = std::pair<StringAttr, FIRRTLType>;
   llvm::SmallVector<ModulePort, 4> modulePorts;
@@ -175,10 +170,8 @@ FModuleOp insertSubModuleOp(FModuleOp topModuleOp, Operation &oldOp,
     StringAttr portName = 
         rewriter.getStringAttr("arg" + std::to_string(ins_idx));
 
-    // Convert normal type to FIRRTL bundle type
     FIRRTLType bundlePortType = getBundleType(portType, false);
-    ModulePort modulePort = std::make_pair(portName, bundlePortType);
-    modulePorts.push_back(modulePort);
+    modulePorts.push_back(std::make_pair(portName, bundlePortType));
     ins_idx += 1;
   }
 
@@ -188,10 +181,8 @@ FModuleOp insertSubModuleOp(FModuleOp topModuleOp, Operation &oldOp,
     StringAttr portName = 
         rewriter.getStringAttr("arg" + std::to_string(outs_idx));
 
-    // Convert normal type to FIRRTL bundle type
     FIRRTLType bundlePortType = getBundleType(portType, true);
-    ModulePort modulePort = std::make_pair(portName, bundlePortType);
-    modulePorts.push_back(modulePort);
+    modulePorts.push_back(std::make_pair(portName, bundlePortType));
     outs_idx += 1;
   }
 
@@ -201,48 +192,43 @@ FModuleOp insertSubModuleOp(FModuleOp topModuleOp, Operation &oldOp,
   return subModule;
 }
 
-// Convert orignal multiple bundle type port to a flattend bundle type 
-// containing all the origianl bundle ports
-Type getInstOpType(FModuleOp subModuleOp) {
+// Create instanceOp in the top FModuleOp region
+void createInstOp(FModuleOp subModuleOp, Operation &oldOp, 
+                  ConversionPatternRewriter &rewriter) {
+  // Convert orignal multiple bundle type port to a flattend bundle type 
+  // containing all the origianl bundle ports
   using BundleElement = std::pair<Identifier, FIRRTLType>;
   llvm::SmallVector<BundleElement, 4> elements;
+  MLIRContext *context = subModuleOp.getContext();
 
   int arg_idx = 0;
   for (auto &arg : subModuleOp.getArguments()) {
     std::string argName = "arg" + std::to_string(arg_idx);
-    auto argId = Identifier::get(argName, subModuleOp.getContext());
+    auto argId = Identifier::get(argName, context);
+
+    // All ports of the instance operation are flipped
     auto argType = FlipType::get(arg.getType().dyn_cast<BundleType>());
-    BundleElement argElement = std::make_pair(argId, argType);
-    elements.push_back(argElement);
+    elements.push_back(std::make_pair(argId, argType));
     arg_idx += 1;
   }
+  auto instType = BundleType::get(ArrayRef<BundleElement>(elements), context);
 
-  ArrayRef<BundleElement> BundleElements = ArrayRef<BundleElement>(elements);
-  return BundleType::get(BundleElements, subModuleOp.getContext());
-}
-
-// Create instanceOp in the top FModuleOp region
-void insertInstOp(mlir::Type instType, Operation &oldOp, 
-                  ConversionPatternRewriter &rewriter) {
+  // Insert instanceOp
   rewriter.setInsertionPoint(&oldOp);
-  auto subModuleName = oldOp.getName().getStringRef();
-  auto instNameAttr = rewriter.getStringAttr("");
   auto instOp = rewriter.create<firrtl::InstanceOp>(oldOp.getLoc(), 
-      instType, subModuleName, instNameAttr);
-  
-  auto instResult = instOp.getResult();
-  auto numInputs = oldOp.getNumOperands();
+      instType, oldOp.getName().getStringRef(), rewriter.getStringAttr(""));
 
+  // Connect instanceOp with other operations in the top module
   int port_idx = 0;
-  for (auto &element : instType.dyn_cast<BundleType>().getElements()) {
+  for (auto &element : instType.cast<BundleType>().getElements()) {
     auto elementName = element.first;
     auto elementType = element.second;
     auto subfieldOp = rewriter.create<SubfieldOp>(
-        oldOp.getLoc(), elementType, instResult, 
+        oldOp.getLoc(), elementType, instOp.getResult(), 
         rewriter.getStringAttr(elementName.strref()));
     
     // Connect input ports
-    if (port_idx < numInputs) {
+    if (port_idx < oldOp.getNumOperands()) {
       auto operand = oldOp.getOperand(port_idx);
       auto result = subfieldOp.getResult();
       rewriter.create<ConnectOp>(oldOp.getLoc(), result, operand);
@@ -416,8 +402,7 @@ void convertSubModuleOp(FModuleOp topModuleOp,
 
         // Create and insert instance operation into top-module, and connect with
         // other operations
-        auto instOpType = getInstOpType(subModuleOp);
-        insertInstOp(instOpType, op, rewriter);
+        createInstOp(subModuleOp, op, rewriter);
       }
       
       // For debug
