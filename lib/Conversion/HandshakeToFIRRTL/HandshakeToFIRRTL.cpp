@@ -67,9 +67,7 @@ void mergeToEntryBlock(FModuleOp &topModuleOp,
   rewriter.eraseBlock(secondBlock);
 }
 
-// TODO: update code structure
-template <typename OpType>
-FIRRTLType buildBundleType(OpType dataType, bool isOutput, 
+FIRRTLType buildBundleType(FIRRTLType dataType, bool isFlip, 
                            MLIRContext *context) {
   using BundleElement = std::pair<Identifier, FIRRTLType>;
   llvm::SmallVector<BundleElement, 3> elements;
@@ -78,7 +76,7 @@ FIRRTLType buildBundleType(OpType dataType, bool isOutput,
   if (dataType) {
     Identifier dataId = Identifier::get("data", context);
 
-    if (isOutput) {
+    if (isFlip) {
       elements.push_back(std::make_pair(dataId, FlipType::get(dataType)));
     } else {
       elements.push_back(std::make_pair(dataId, dataType));
@@ -90,7 +88,7 @@ FIRRTLType buildBundleType(OpType dataType, bool isOutput,
   Identifier readyId = Identifier::get("ready", context);
   UIntType signalType = UIntType::get(context, 1);
 
-  if (isOutput) {
+  if (isFlip) {
     elements.push_back(std::make_pair(validId, FlipType::get(signalType)));
     elements.push_back(std::make_pair(readyId, signalType));
   } else {
@@ -102,40 +100,43 @@ FIRRTLType buildBundleType(OpType dataType, bool isOutput,
 }
 
 // Convert a standard type to corresponding FIRRTL bundle type
-FIRRTLType getBundleType(mlir::Type type, bool isOutput) {
-  
+FIRRTLType getBundleType(Type type, bool isFlip) {
+
   // If the targeted type is already converted to a bundle type elsewhere, 
   // itself will be returned after cast.
   if (type.isa<BundleType>()) {
     return type.cast<BundleType>();
   }
 
-  if (type.isSignedInteger()) {
-    unsigned width = type.cast<IntegerType>().getWidth();
-    SIntType dataType = SIntType::get(type.getContext(), width);
-    return buildBundleType<SIntType>(dataType, isOutput, type.getContext());
+  // Convert old type to a bundle type, currently only support integer or index
+  // or none type.
+  MLIRContext *context = type.getContext();
+  
+  switch (type.getKind()) {
+  case StandardTypes::Integer: {
+    IntegerType integerType = type.cast<IntegerType>();
+    unsigned width = integerType.getWidth();
+    
+    switch (integerType.getSignedness()) {
+      case IntegerType::Signed:
+        return buildBundleType(SIntType::get(context, width), isFlip, context);
+      case IntegerType::Unsigned:
+        return buildBundleType(UIntType::get(context, width), isFlip, context);
+      // ISSUE: How to handle signless integers? Should we use the AsSIntPrimOp
+      // or AsUIntPrimOp to convert?
+      case IntegerType::Signless:
+        return buildBundleType(SIntType::get(context, width), isFlip, context);
+    }
   }
-  else if (type.isUnsignedInteger()) {
-    unsigned width = type.cast<IntegerType>().getWidth();
-    UIntType dataType = UIntType::get(type.getContext(), width);
-    return buildBundleType<UIntType>(dataType, isOutput, type.getContext());
-  }
-  // ISSUE: How to handle signless integers? Should we use the AsSIntPrimOp or 
-  // AsUIntPrimOp to convert? Now we simply consider them as signed integers.
-  else if (type.isSignlessInteger()) {
-    unsigned width = type.cast<IntegerType>().getWidth();
-    SIntType dataType = SIntType::get(type.getContext(), width);
-    return buildBundleType<SIntType>(dataType, isOutput, type.getContext());
-  }
-  // Now we convert index type as signed integers.
-  else if (type.isIndex()) {
+  // ISSUE: How to handle index integers?
+  case StandardTypes::Index: {
     unsigned width = type.cast<IndexType>().kInternalStorageBitWidth;
-    SIntType dataType = SIntType::get(type.getContext(), width);
-    return buildBundleType<SIntType>(dataType, isOutput, type.getContext());
+    return buildBundleType(SIntType::get(context, width), isFlip, context);
   }
-  else {
-    SIntType dataType = nullptr;
-    return buildBundleType<SIntType>(dataType, isOutput, type.getContext());
+  case StandardTypes::None:
+    return buildBundleType(nullptr, isFlip, context);
+  default:
+    return FIRRTLType(nullptr);
   }
 }
 
@@ -478,10 +479,6 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     using ModulePort = std::pair<StringAttr, FIRRTLType>;
     llvm::SmallVector<ModulePort, 8> modulePorts;
 
-    // Signature conversion (converts function arguments)
-    int arg_count = funcOp.getNumArguments() + funcOp.getNumResults();
-    TypeConverter::SignatureConversion newSignature(arg_count);
-
     // Add all the input ports
     int ins_idx = 0;
     for (auto &arg : funcOp.getArguments()) {
@@ -489,13 +486,9 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       StringAttr portName = 
           rewriter.getStringAttr("arg" + std::to_string(ins_idx));
 
-      // Convert normal type to FIRRTL bundle type
       FIRRTLType bundlePortType = getBundleType(portType, false);
       ModulePort modulePort = std::make_pair(portName, bundlePortType);
       modulePorts.push_back(modulePort);
-
-      // Remap inputs of the old signature
-      newSignature.addInputs(ins_idx, bundlePortType);
       ins_idx += 1;
     }
 
@@ -505,13 +498,9 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       StringAttr portName = 
           rewriter.getStringAttr("arg" + std::to_string(outs_idx));
 
-      // Convert normal type to FIRRTL bundle type
       FIRRTLType bundlePortType = getBundleType(portType, true);
       ModulePort modulePort = std::make_pair(portName, bundlePortType);
       modulePorts.push_back(modulePort);
-
-      // Add outputs to the new signature
-      newSignature.addInputs(bundlePortType);
       outs_idx += 1;
     }
 
@@ -526,7 +515,6 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     convertSubModuleOp(topModuleOp, rewriter);
     convertReturnOp(topModuleOp, ins_idx, rewriter);
 
-    //rewriter.applySignatureConversion(&topModuleOp.getBody(), newSignature);
     rewriter.eraseOp(funcOp);
   }
 };
