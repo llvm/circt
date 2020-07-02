@@ -7,10 +7,9 @@
 
 #include "State.h"
 
+#include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include <iomanip>
-#include <sstream>
 #include <string>
 
 using namespace llvm;
@@ -42,9 +41,10 @@ Time Time::operator+(const Time &rhs) const {
 bool Time::isZero() { return (time == 0 && delta == 0 && eps == 0); }
 
 std::string Time::dump() {
-  std::stringstream dumpStr;
-  dumpStr << time << "ns " << delta << "d " << eps << "e";
-  return dumpStr.str();
+  std::string ret;
+  raw_string_ostream ss(ret);
+  ss << time << "ns " << delta << "d " << eps << "e";
+  return ss.str();
 }
 
 //===----------------------------------------------------------------------===//
@@ -80,11 +80,11 @@ bool Signal::operator<(const Signal &rhs) const {
 }
 
 std::string Signal::dump() {
-  std::stringstream ss;
+  std::string ret;
+  raw_string_ostream ss(ret);
   ss << "0x";
   for (int i = size - 1; i >= 0; --i) {
-    ss << std::setw(2) << std::setfill('0') << std::hex
-       << static_cast<int>(detail.value[i]);
+    ss << format_hex_no_prefix(static_cast<int>(detail.value[i]), 2);
   }
   return ss.str();
 }
