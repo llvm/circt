@@ -37,8 +37,8 @@ using namespace mlir::handshake;
 using namespace circt;
 using namespace circt::firrtl;
 
-using ValueMap = std::map<StringRef, Value>;
-using ValueMapArray = ArrayRef<ValueMap>;
+using ValueVector = std::vector<Value>;
+using ValueVectorList = std::vector<ValueVector>;
 
 // Merge the second block (the block inlined from original funcOp) to the first 
 // block (the new created empty block of the top module)
@@ -140,7 +140,7 @@ FIRRTLType getBundleType(mlir::Type type, bool isOutput) {
 }
 
 // Check whether the same submodule has been created
-FModuleOp checkSubModuleOp(FModuleOp topModuleOp, Operation oldOp) {
+FModuleOp checkSubModuleOp(FModuleOp topModuleOp, Operation &oldOp) {
   Region *currentRegion = topModuleOp.getParentRegion();
   for (auto &block : *currentRegion) {
     for (auto &op : block) {
@@ -161,7 +161,7 @@ FModuleOp checkSubModuleOp(FModuleOp topModuleOp, Operation oldOp) {
 }
 
 // Create a new FModuleOp operation as submodule of the top module
-FModuleOp insertSubModuleOp(FModuleOp topModuleOp, Operation oldOp,
+FModuleOp insertSubModuleOp(FModuleOp topModuleOp, Operation &oldOp,
                             ConversionPatternRewriter &rewriter) {
   // Create new FIRRTL module for binary operation
   rewriter.setInsertionPoint(topModuleOp);
@@ -221,13 +221,13 @@ Type getInstOpType(FModuleOp subModuleOp) {
 }
 
 // Create instanceOp in the top FModuleOp region
-void insertInstOp(mlir::Type instType, Operation oldOp, 
+void insertInstOp(mlir::Type instType, Operation &oldOp, 
                   ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPoint(&oldOp);
-  auto exprModuleName = subModuleOp.getName();
+  auto subModuleName = oldOp.getName().getStringRef();
   auto instNameAttr = rewriter.getStringAttr("");
   auto instOp = rewriter.create<firrtl::InstanceOp>(oldOp.getLoc(), 
-      instType, exprModuleName, instNameAttr);
+      instType, subModuleName, instNameAttr);
   
   auto instResult = instOp.getResult();
   auto numInputs = oldOp.getNumOperands();
@@ -264,28 +264,28 @@ void insertInstOp(mlir::Type instType, Operation oldOp,
 }
 
 // Extract values of all subfields of all ports of the submodule
-ValueMapArray extractSubfields(FModuleOp subModuleOp, 
-                               ConversionPatternRewriter &rewriter) {
-  llvm::SmallVector<ValueMap, 4> ports;
+ValueVectorList extractSubfields(FModuleOp subModuleOp, 
+                                 ConversionPatternRewriter &rewriter) {
+  ValueVectorList valueVectorList;
   auto &entryBlock = subModuleOp.getBody().front();
   auto *termOp = entryBlock.getTerminator();
   rewriter.setInsertionPoint(termOp);
 
   for (auto &arg : entryBlock.getArguments()) {
-    ValueMap currentMap;
+    ValueVector valueVector;
     auto argType = arg.getType().cast<BundleType>();
     for (auto &element : argType.getElements()) {
       auto elementName = element.first.strref();
       auto elementType = element.second;
       auto subfieldOp = rewriter.create<SubfieldOp>(termOp->getLoc(), 
           elementType, arg, rewriter.getStringAttr(elementName));
-      auto subfieldValue = subfieldOp.getResult();
-      currentMap.insert(std::pair<StringRef, Value>(
-          elementName, subfieldValue));
+      auto value = subfieldOp.getResult();
+      valueVector.push_back(value);
     }
-    ports.push_back(currentMap);
+    valueVectorList.push_back(valueVector);
   }
-  return ValueMapArray(ports);
+
+  return valueVectorList;
 }
 
 // Create a low voltage constant operation and return its result value
@@ -315,15 +315,45 @@ Value insertPosOp(Location insertLoc, ConversionPatternRewriter &rewriter) {
 }
 
 // TODO
-void buildMergeOp(FModuleOp subModuleOp, ValueMapArray subfieldArray, 
-                  ConversionPatternRewriter &rewriter) {
-  auto &entryBlock = subModuleOp.getBody().front();
-  auto *termOp = entryBlock.getTerminator();
-  rewriter.setInsertionPoint(termOp);
+//void buildMergeOp(FModuleOp subModuleOp, ValueMapArray subfieldArray, 
+//                  ConversionPatternRewriter &rewriter) {
+//  auto &entryBlock = subModuleOp.getBody().front();
+//  auto *termOp = entryBlock.getTerminator();
+//  rewriter.setInsertionPoint(termOp);
+//
+//
+//}
 
+void convertMergeOp(FModuleOp &moduleOp,
+                    ConversionPatternRewriter &rewriter) {
+  for (Block &block : moduleOp) {
+    for (Operation &op : block) {
+      if (auto mergeOp = dyn_cast<handshake::MergeOp>(op)) {
+        rewriter.setInsertionPointAfter(&op);
 
+        // Create wire for the results of merge operation
+        auto result = op.getResult(0);
+        auto resultType = result.getType();
+        auto resultBundleType = getBundleType(resultType, false);
+
+        auto wireOp = rewriter.create<WireOp>(op.getLoc(), resultBundleType,
+                                      rewriter.getStringAttr(""));
+        auto newResult = wireOp.getResult();
+        result.replaceAllUsesWith(newResult);
+
+        // Create connection between operands and result
+        rewriter.setInsertionPointAfter(wireOp);
+        if (op.getNumOperands() == 1) {
+          auto operand = op.getOperand(0);
+          rewriter.create<ConnectOp>(wireOp.getLoc(), newResult, operand);
+        }
+        rewriter.eraseOp(&op);
+      }
+    }
+  }
 }
 
+// TODO: Update logic
 // Build binary operations for the new sub-module
 template <typename OpType>
 void buildBinaryOp(FModuleOp subModuleOp, ValueMapArray subfieldArray, 
@@ -379,23 +409,24 @@ void convertSubModuleOp(FModuleOp topModuleOp,
   for (Block &block : topModuleOp) {
     for (Operation &op : block) {
 
+      if (isa<AddIOp>(op)) {
       // Check whether Sub-module already exists, if not, we will create and 
       // insert a new empty sub-module
-      auto subModuleOp = checkSubModuleOp(topModuleOp, op));
+      auto subModuleOp = checkSubModuleOp(topModuleOp, op);
       if (!subModuleOp) {
         subModuleOp = insertSubModuleOp(topModuleOp, op, rewriter);
+
+        // Build the combinational logic in the new created submodule
+        auto subfieldList = extractSubfields(subModuleOp, rewriter);
+        buildBinaryOp<firrtl::AddPrimOp>(subModuleOp, subfieldList, rewriter);
       }
 
       // Create and insert instance operation into top-module, and connect with
       // other operations
       auto instOpType = getInstOpType(subModuleOp);
       insertInstOp(instOpType, op, rewriter);
-
-      // Build the combinational logic in the new created submodule
-      auto subfieldArray = extractSubfields(subModuleOp, rewriter);
-      buildMergeOp(subModuleOp, op, rewriter);
-      buildBinaryOp<OpType>(subModuleOp, op, rewriter);
-
+      }
+      
       // For debug
       //Region *currentRegion = topModuleOp.getParentRegion();
       //for (auto &block : *currentRegion) {
@@ -499,6 +530,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
                                 topModuleOp.end());
     
     mergeToEntryBlock(topModuleOp, rewriter);
+    convertMergeOp(topModuleOp, rewriter);
     convertSubModuleOp(topModuleOp, rewriter);
     convertReturnOp(topModuleOp, ins_idx, rewriter);
 

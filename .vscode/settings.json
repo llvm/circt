@@ -109,7 +109,8 @@
         "typeindex": "cpp",
         "valarray": "cpp",
         "*.ipp": "cpp",
-        "cstdatomic": "cpp"
+        "cstdatomic": "cpp",
+        "__memory": "cpp"
     },
     "files.watcherExclude": {
         "**/.git/objects/**": true,
