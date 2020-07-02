@@ -31,9 +31,8 @@
 
     // CHECK: %6 = firrtl.stdIntCast %in2 : (!firrtl.uint<2>) -> i2
     // CHECK: %7 = rtl.zext %6 : i2, i4
-
-    // CHECK: %8 = rtl.xor %5, %5 : i4
-    %5 = firrtl.xor %0, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+    // CHECK: %8 = rtl.xor %7, %5 : i4
+    %5 = firrtl.xor %in2, %4 : (!firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
     // CHECK: %9 = rtl.concat %5, %8 : (i4, i4) -> i8
     %6 = firrtl.cat %4, %5 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<8>

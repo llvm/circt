@@ -170,27 +170,13 @@ static LogicalResult lower(firrtl::CatPrimOp op, ArrayRef<Value> operands,
 template <typename OpType, typename ResultOpType>
 static LogicalResult lowerVariadicOp(OpType op, ArrayRef<Value> operands,
                                      ConversionPatternRewriter &rewriter) {
-  
-  
-  // auto lhs = mapOperand(operands[0], op, rewriter);
-  // auto rhs = mapOperand(operands[1], op, rewriter);
+  auto lhs = mapAndExtendInt(operands[0], op.getType(), op, rewriter);
+  auto rhs = mapAndExtendInt(operands[1], op.getType(), op, rewriter);
 
-  // lhs.getType().dump();
+  if (!lhs || !rhs)
+    return failure();
 
-  // if (!lhs || !rhs)
-  //   return failure();
-
-  // lhs.dump();
-
-  // auto lhsWidth = lhs.getResult().getType().cast<IntegerType>().getWidth();
-  // auto rhsWidth = rhs.getType().cast<IntegerType>().getWidth();
-
-  // Value args[2] = {operands[0], operands[1]};
-
-  Type resultType = rewriter.getIntegerType(4);
-
-  rewriter.replaceOpWithNewOp<ResultOpType>(op, resultType,
-                                            operands);
+  rewriter.replaceOpWithNewOp<ResultOpType>(op, ValueRange({lhs, rhs}));
   return success();
 }
 
