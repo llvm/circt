@@ -69,7 +69,7 @@ public:
   static llvm::StringRef getKeyword() { return "sig"; }
 };
 
-class TimeType : public Type::TypeBase<TimeType, Type> {
+class TimeType : public Type::TypeBase<TimeType, Type, DefaultTypeStorage> {
 public:
   using Base::Base;
 
