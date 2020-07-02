@@ -24,7 +24,8 @@ def LLHD_EntityOp : LLHD_Op<"entity", [
     Syntax:
 
     ```
-    entity-op ::= `llhd.entity` entity-symbol `(` arg-list `)` `->` `(` out-list `)` attr-dict entity-region
+    entity-op ::= `llhd.entity` entity-symbol `(` arg-list `)` `->`
+      `(` out-list `)` attr-dict entity-region
     ```
 
     Example:
@@ -92,13 +93,15 @@ def LLHD_ProcOp : LLHD_Op<"proc", [
     Syntax:
 
     ```
-    proc-op ::= `llhd.proc` proc-symbol `(` ssa-input-list `)` `->` `(` ssa-output-list `)` attr-dict `{` proc-region `}`
+    proc-op ::= `llhd.proc` proc-symbol `(` ssa-input-list `)` `->`
+      `(` ssa-output-list `)` attr-dict `{` proc-region `}`
     ```
 
     Examples:
 
     ```mlir
-    llhd.proc @example(%in0 : !llhd.sig<i64>, %in1 : !llhd.sig<i1>) -> (%out2 : !llhd.sig<i1>) {
+    llhd.proc @example(%in0 : !llhd.sig<i64>, %in1 : !llhd.sig<i1>) ->
+        (%out2 : !llhd.sig<i1>) {
       br ^bb1
     ^bb1:
       llhd.halt
@@ -144,7 +147,9 @@ def LLHD_InstOp : LLHD_Op<"inst", [
     Syntax:
 
     ```
-    inst-op ::= `llhd.inst` inst-name symbol-name `(` ssa-input-list `)` `->` `(` ssa-output-list `)` attr-dict `:` functional-type(ssa-input-list, ssa-output-list)
+    inst-op ::= `llhd.inst` inst-name symbol-name `(` ssa-input-list `)` `->`
+      `(` ssa-output-list `)` attr-dict `:`
+      functional-type(ssa-input-list, ssa-output-list)
     ```
 
     Example:
@@ -152,7 +157,8 @@ def LLHD_InstOp : LLHD_Op<"inst", [
     ```mlir
     llhd.inst "foo" @empty() -> () : () -> ()
     llhd.inst "bar" @proc_symbol() -> (%out0) : () -> !llhd.sig<i32>
-    llhd.inst "baz" @entity_symbol(%in0, %in1) -> (%out0, %out1) : (!llhd.sig<i32>, !llhd.sig<i16>) -> (!llhd.sig<i8>, !llhd.sig<i4>)
+    llhd.inst "baz" @entity_symbol(%in0, %in1) -> (%out0, %out1) :
+      (!llhd.sig<i32>, !llhd.sig<i16>) -> (!llhd.sig<i8>, !llhd.sig<i4>)
     ```
   }];
 
@@ -227,7 +233,8 @@ def LLHD_WaitOp : LLHD_Op<"wait", [
     llhd.wait ^bb1
     llhd.wait for %time, ^bb1(%time : !llhd.time)
     llhd.wait (%0, %1 : !llhd.sig<i64>, !llhd.sig<i1>), ^bb1(%1 : !llhd.sig<i1>)
-    llhd.wait for %time, (%0, %1 : !llhd.sig<i64>, !llhd.sig<i1>), ^bb1(%1, %0 : !llhd.sig<i1>, !llhd.sig<i64>)
+    llhd.wait for %time, (%0, %1 : !llhd.sig<i64>, !llhd.sig<i1>),
+      ^bb1(%1, %0 : !llhd.sig<i1>, !llhd.sig<i64>)
     ```
   }];
 

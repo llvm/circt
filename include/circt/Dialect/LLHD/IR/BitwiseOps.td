@@ -202,7 +202,9 @@ def LLHD_ShlOp : LLHD_Op<"shl", [NoSideEffect]> {
     Syntax:
 
     ```
-    shl-op ::= ssa-id `=` `llhd.shl` ssa-base `,` ssa-hidden `,` ssa-amount attr-dict `:` `(` base-type `,` hidden-type `,` amount-type `)` `->` result-type
+    shl-op ::= ssa-id `=`
+      `llhd.shl` ssa-base `,` ssa-hidden `,` ssa-amount attr-dict `:`
+      `(` base-type `,` hidden-type `,` amount-type `)` `->` result-type
     ```
 
     Examples:
@@ -246,7 +248,9 @@ def LLHD_ShrOp : LLHD_Op<"shr", [NoSideEffect]> {
     Syntax:
 
     ```
-    shr-op ::= ssa-id `=` `llhd.shr` ssa-base `,` ssa-hidden `,` ssa-amount attr-dict `:` `(` base-type `,` hidden-type `,` amount-type `)` `->` result-type
+    shr-op ::= ssa-id `=`
+      `llhd.shr` ssa-base `,` ssa-hidden `,` ssa-amount attr-dict `:`
+      `(` base-type `,` hidden-type `,` amount-type `)` `->` result-type
     ```
 
     Examples:

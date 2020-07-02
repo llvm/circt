@@ -95,7 +95,8 @@ def LLHD_DrvOp : LLHD_Op<"drv", [
     Syntax:
 
     ```
-    drv-op ::= `llhd.drv` ssa-signal `,` ssa-const `after` ssa-time (`if` ssa-enable)? `:` !llhd.sig<const-type>
+    drv-op ::= `llhd.drv` ssa-signal `,` ssa-const `after` ssa-time
+      (`if` ssa-enable)? `:` !llhd.sig<const-type>
     ```
 
     Example:
@@ -168,7 +169,10 @@ def LLHD_RegOp : LLHD_Op<"reg", [
     Syntax:
 
     ```
-    reg-op ::= `llhd.reg` signal-ssa-value ( `,` `(` value-ssa-value `,` mode-string trigger-ssa-value `after` delay-ssa-value ( `if` gate-ssa-value )? `:` value-type )+ attr-dict `:` signal-type
+    reg-op ::= `llhd.reg` signal-ssa-value
+      ( `,` `(` value-ssa-value `,` mode-string trigger-ssa-value `after`
+      delay-ssa-value ( `if` gate-ssa-value )? `:` value-type )+
+      attr-dict `:` signal-type
     ```
 
     Examples:
@@ -184,13 +188,15 @@ def LLHD_RegOp : LLHD_Op<"reg", [
     A rising-edge triggered flip-flop with active-low reset:
 
     ```mlir
-    llhd.reg %Q, (%init, "low" %RSTB after %T : !llhd.sig<i8>), (%D, "rise" %CLK after %T : !llhd.sig<i8>) : !llhd.sig<i8>
+    llhd.reg %Q, (%init, "low" %RSTB after %T : !llhd.sig<i8>),
+      (%D, "rise" %CLK after %T : !llhd.sig<i8>) : !llhd.sig<i8>
     ```
 
     A rising-edge triggered enable flip-flop with active-low reset:
 
     ```mlir
-    llhd.reg %Q, (%init, "low" %RSTB after %T : !llhd.sig<i8>), (%D, "rise" %CLK after %T if %EN : !llhd.sig<i8>) : !llhd.sig<i8>
+    llhd.reg %Q, (%init, "low" %RSTB after %T : !llhd.sig<i8>),
+      (%D, "rise" %CLK after %T if %EN : !llhd.sig<i8>) : !llhd.sig<i8>
     ```
 
     A transparent-low and transparent-high latch:
@@ -205,7 +211,8 @@ def LLHD_RegOp : LLHD_Op<"reg", [
     ```mlir
     %0 = llhd.const 0 : i1
     %1 = llhd.const 1 : i1
-    llhd.reg %Q, (%0, "high" %R after %T : !llhd.sig<i1>), (%1, "high" %S after %T : !llhd.sig<i1>) : !llhd.sig<i1>
+    llhd.reg %Q, (%0, "high" %R after %T : !llhd.sig<i1>),
+      (%1, "high" %S after %T : !llhd.sig<i1>) : !llhd.sig<i1>
     ```
   }];
 

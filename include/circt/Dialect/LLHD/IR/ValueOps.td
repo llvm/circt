@@ -16,7 +16,8 @@ def LLHD_ConstOp : LLHD_Op<"const", [ConstantLike, NoSideEffect]> {
     Syntax:
 
     ```
-    const-op ::= ssa-id `=` `llhd.const` attribute-value attr-dict `:` result-type
+    const-op ::= ssa-id `=`
+      `llhd.const` attribute-value attr-dict `:` result-type
     ```
 
     Example:
@@ -84,7 +85,8 @@ def LLHD_TupleOp : LLHD_Op<"tuple", [
     %c2 = llhd.const 2 : i2
     %sig = llhd.sig "sig_name" %c1 : i32
     %vec = constant dense<[1, 2]> : vector<2xi32>
-    %tuple = llhd.tuple %c1, %c2, %vec, %sig : tuple<i32, i2, vector<2xi32>, !llhd.sig<i32>>
+    %tuple = llhd.tuple %c1, %c2, %vec, %sig :
+      tuple<i32, i2, vector<2xi32>, !llhd.sig<i32>>
     ```
   }];
 

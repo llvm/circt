@@ -112,14 +112,14 @@ def LLHD_InsfOp : LLHD_Op<"insf", [
       Type targetType = target().getType();
       if (auto vec = targetType.dyn_cast<VectorType>())
         return vec.getNumElements();
-      return targetType.dyn_cast<TupleType>().size();
+      return targetType.cast<TupleType>().size();
     }
 
     Type getElementTypeAtIndex(int64_t index) {
       Type targetType = target().getType();
       if (auto vec = targetType.dyn_cast<VectorType>())
         return vec.getElementType();
-      return targetType.dyn_cast<TupleType>().getTypes()[index];
+      return targetType.cast<TupleType>().getTypes()[index];
     }
   }];
 }
