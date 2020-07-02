@@ -293,8 +293,6 @@ Value insertNegOp(Location insertLoc, ConversionPatternRewriter &rewriter) {
   auto signalType = UIntType::get(rewriter.getContext(), 1);
   auto StandardUIntType = IntegerType::get(1, IntegerType::Unsigned, 
                                            rewriter.getContext());
-  
-  // Create low signal constant op
   auto lowSignalAttr = rewriter.getIntegerAttr(StandardUIntType, 0);
   auto lowSignalOp = rewriter.create<firrtl::ConstantOp>(
       insertLoc, signalType, lowSignalAttr);
@@ -306,8 +304,6 @@ Value insertPosOp(Location insertLoc, ConversionPatternRewriter &rewriter) {
   auto signalType = UIntType::get(rewriter.getContext(), 1);
   auto StandardUIntType = IntegerType::get(1, IntegerType::Unsigned, 
                                            rewriter.getContext());
-  
-  // Create low signal constant op
   auto highSignalAttr = rewriter.getIntegerAttr(StandardUIntType, 1);
   auto highSignalOp = rewriter.create<firrtl::ConstantOp>(
       insertLoc, signalType, highSignalAttr);
@@ -353,48 +349,44 @@ void convertMergeOp(FModuleOp &moduleOp,
   }
 }
 
-// TODO: Update logic
 // Build binary operations for the new sub-module
 template <typename OpType>
-void buildBinaryOp(FModuleOp subModuleOp, ValueMapArray subfieldArray, 
+void buildBinaryOp(FModuleOp subModuleOp, ValueVectorList subfieldList, 
                    ConversionPatternRewriter &rewriter) {
   auto &entryBlock = subModuleOp.getBody().front();
   auto *termOp = entryBlock.getTerminator();
   rewriter.setInsertionPoint(termOp);
 
-  auto arg0Map = subfieldArray[0];
-  auto arg1Map = subfieldArray[1];
-  auto resultMap = subfieldArray[2];
+  // Get subfields values
+  auto arg0Subfield = subfieldList[0];
+  auto arg1Subfiled = subfieldList[1];
+  auto resultSubfiled = subfieldList[2];
 
-  StringRef dataString = StringRef("data");
-  StringRef validString = StringRef("valid");
-  StringRef readyString = StringRef("ready");
+  auto arg0Data = arg0Subfield[0];
+  auto arg0Valid = arg0Subfield[1];
+  auto arg0Ready = arg0Subfield[2];
+
+  auto arg1Data = arg1Subfiled[0];
+  auto arg1Valid = arg1Subfiled[1];
+  auto arg1Ready = arg1Subfiled[2];
+
+  auto resultData = resultSubfiled[0];
+  auto resultValid = resultSubfiled[1];
+  auto resultReady = resultSubfiled[2];
 
   // Connect data signals
-  auto arg0Data = arg0Map[dataString];
-  auto arg1Data = arg1Map[dataString];
-  auto resultData = resultMap[dataString];
-
   auto CombDataOp = rewriter.create<OpType>(termOp->getLoc(), 
       arg0Data.getType(), arg0Data, arg1Data);
   auto combData = CombDataOp.getResult();
   rewriter.create<ConnectOp>(termOp->getLoc(), resultData, combData);
 
   // Connect valid signals
-  auto arg0Valid = arg0Map[validString];
-  auto arg1Valid = arg1Map[validString];
-  auto resultValid = resultMap[validString];
-
   auto combValidOp = rewriter.create<AndPrimOp>(termOp->getLoc(), 
       arg0Valid.getType(), arg0Valid, arg1Valid);
   auto combValid = combValidOp.getResult();
   rewriter.create<ConnectOp>(termOp->getLoc(), resultValid, combValid);
 
   // Connect ready signals
-  auto resultReady = resultMap[readyString];
-  auto arg0Ready = arg0Map[readyString];
-  auto arg1Ready = arg1Map[readyString];
-
   auto combReadyOp = rewriter.create<AndPrimOp>(termOp->getLoc(), 
       combValid.getType(), combValid, resultReady);
   auto combReady = combReadyOp.getResult();
@@ -410,21 +402,21 @@ void convertSubModuleOp(FModuleOp topModuleOp,
     for (Operation &op : block) {
 
       if (isa<AddIOp>(op)) {
-      // Check whether Sub-module already exists, if not, we will create and 
-      // insert a new empty sub-module
-      auto subModuleOp = checkSubModuleOp(topModuleOp, op);
-      if (!subModuleOp) {
-        subModuleOp = insertSubModuleOp(topModuleOp, op, rewriter);
+        // Check whether Sub-module already exists, if not, we will create and 
+        // insert a new empty sub-module
+        auto subModuleOp = checkSubModuleOp(topModuleOp, op);
+        if (!subModuleOp) {
+          subModuleOp = insertSubModuleOp(topModuleOp, op, rewriter);
 
-        // Build the combinational logic in the new created submodule
-        auto subfieldList = extractSubfields(subModuleOp, rewriter);
-        buildBinaryOp<firrtl::AddPrimOp>(subModuleOp, subfieldList, rewriter);
-      }
+          // Build the combinational logic in the new created submodule
+          auto subfieldList = extractSubfields(subModuleOp, rewriter);
+          buildBinaryOp<firrtl::AddPrimOp>(subModuleOp, subfieldList, rewriter);
+        }
 
-      // Create and insert instance operation into top-module, and connect with
-      // other operations
-      auto instOpType = getInstOpType(subModuleOp);
-      insertInstOp(instOpType, op, rewriter);
+        // Create and insert instance operation into top-module, and connect with
+        // other operations
+        auto instOpType = getInstOpType(subModuleOp);
+        insertInstOp(instOpType, op, rewriter);
       }
       
       // For debug
