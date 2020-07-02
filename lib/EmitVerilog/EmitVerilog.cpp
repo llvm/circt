@@ -726,7 +726,7 @@ private:
                          const char *syntax, bool hasStrictSign = false);
 
   SubExprInfo emitVariadic(Operation *op, VerilogPrecedence prec,
-                        const char *syntax, bool hasStrictSign = false);
+                           const char *syntax, bool hasStrictSign = false);
 
   /// Emit the specified subexpression in a context where the sign matters,
   /// e.g. for a less than comparison or divide.
@@ -902,22 +902,8 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   return {prec, signedness};
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 SubExprInfo ExprEmitter::emitVariadic(Operation *op, VerilogPrecedence prec,
-                                    const char *syntax, bool hasStrictSign) {
+                                      const char *syntax, bool hasStrictSign) {
 
   os << '(';
 
@@ -925,10 +911,6 @@ SubExprInfo ExprEmitter::emitVariadic(Operation *op, VerilogPrecedence prec,
   os << ')';
   return {prec, IsUnsigned};
 }
-
-
-
-
 
 /// Emit the specified value as a subexpression to the stream.
 SubExprInfo ExprEmitter::emitSubExpr(Value exp,

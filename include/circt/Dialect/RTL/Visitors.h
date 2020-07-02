@@ -24,7 +24,7 @@ public:
         .template Case<ConstantOp,
                        // Arithmetic and Logical Binary Operations.
                        AddOp, SubOp, MulOp, DivOp, ModOp,
-                       // bitwise operations
+                       // Bitwise operations
                        AndOp, OrOp, XorOp,
                        // Reduction Operators
                        AndROp, OrROp, XorROp,
