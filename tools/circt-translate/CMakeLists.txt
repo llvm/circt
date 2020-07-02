@@ -15,4 +15,6 @@ target_link_libraries(circt-translate
  
   CIRCTEmitVerilog
   CIRCTFIRParser
+  MLIRLLHD
+  MLIRLLHDTargetVerilog
   )
