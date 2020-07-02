@@ -81,7 +81,7 @@ protected:
 //===----------------------------------------------------------------------===//
 
 /// `firrtl.Clock` describe wires and ports meant for carrying clock signals.
-class ClockType : public FIRRTLType::TypeBase<ClockType, FIRRTLType> {
+class ClockType : public FIRRTLType::TypeBase<ClockType, FIRRTLType, DefaultTypeStorage> {
 public:
   using Base::Base;
   static ClockType get(MLIRContext *context) {
@@ -92,7 +92,7 @@ public:
 
 /// `firrtl.Reset`.
 /// TODO(firrtl spec): This is not described in the FIRRTL spec.
-class ResetType : public FIRRTLType::TypeBase<ResetType, FIRRTLType> {
+class ResetType : public FIRRTLType::TypeBase<ResetType, FIRRTLType, DefaultTypeStorage> {
 public:
   using Base::Base;
   static ResetType get(MLIRContext *context) {
@@ -100,10 +100,9 @@ public:
   }
   static bool kindof(unsigned kind) { return kind == Reset; }
 };
-
 /// `firrtl.AsyncReset`.
 /// TODO(firrtl spec): This is not described in the FIRRTL spec.
-class AsyncResetType : public FIRRTLType::TypeBase<AsyncResetType, FIRRTLType> {
+class AsyncResetType : public FIRRTLType::TypeBase<AsyncResetType, FIRRTLType, DefaultTypeStorage> {
 public:
   using Base::Base;
   static AsyncResetType get(MLIRContext *context) {

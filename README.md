@@ -1,9 +1,15 @@
+[![](https://github.com/circt/circt/workflows/Build%20and%20Test/badge.svg?event=push)](https://github.com/circt/circt/actions)
+
 # ⚡️ "CIRCT" / Circuit IR Compilers and Tools
 
 "CIRCT" stands for "Circuit IR Compilers and Tools".  One might also interpret
 it as the recursively as "CIRCT IR Compiler and Tools".  The T can be 
 selectively expanded as Tool, Translator, Team, Technology, Target, Tree, Type,
 ... we're ok with the ambiguity.
+
+The CIRCT community has a weekly meeting with open attendance.  Please see the
+[meeting notes document](https://docs.google.com/document/d/1fOSRdyZR2w75D87yU2Ma9h2-_lEPL4NxvhJGJd-s5pk/edit#)
+for more information.
 
 ## Motivation
 
@@ -151,3 +157,39 @@ When your review converges and your patch is approved, do the following:
 3) retest your patch with `ninja check-mlir`  (or whatever other target makes sense)
 4) push your changes with `git push`
 
+### Updating the staging version of LLVM / MLIR
+
+The 'staging' tree at git@github.com:circt/llvm.git is only intended to be a temporary location for patches which have not yet been accepted upstream.  The patches here should not be long lived and the branches in that tree may be rebased without warning.  The 'correct' version of LLVM is referenced by its git hash as a submodule of the main circt repository.  It may be necessary to pull changes from LLVM, in which case it is appropriate to rebase this tree.
+
+```
+$ cd llvm
+$ git remote add git@github.com:llvm/llvm.git
+$ git pull --rebase llvm master
+$ cd build
+$ ninja
+$ ninja check-mlir
+```
+
+At this point we have built and tested our changes with any upstream changes and resolved any conflicts.  Note that we rebase instead of merging in order to ensure that our patches remain current, since they should get pushed to LLVM at some point.  Now we can update `circt/llvm` and push a new reference to LLVM for everyone else to use.
+
+```
+$ git push -f origin HEAD:staging
+```
+
+However, we're still not done at this point.  `circt/circt` still points at the old git hash for the llvm submodule.
+
+```
+$ cd circt/build
+$ ninja
+$ ninja check-circt
+```
+
+Now we have fixed any changes to circuit, so those changes can be committed and pushed.
+
+```
+$ cd ..
+$ git commit .
+$ git push origin HEAD:master
+```
+
+You should see that the changes include an update to the submodule hash.

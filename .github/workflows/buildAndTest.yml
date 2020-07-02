@@ -1,0 +1,45 @@
+name: Build and Test
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Configure Environment
+      run: echo "::add-path::$GITHUB_WORKSPACE/llvm/install/bin"
+    - name: Get CIRCT
+      uses: actions/checkout@v2
+      with:
+        submodules: 'true'
+    - name: Get LLVM Hash
+      id: get-llvm-hash
+      run: echo "::set-output name=hash::$(git submodule status)"
+      shell: bash
+    - name: Cache LLVM
+      id: cache-llvm
+      uses: actions/cache@v1
+      with:
+        path: llvm
+        key: ${{ runner.os }}-llvm-install-${{ steps.get-llvm-hash.outputs.hash }}
+    - name: Install LLVM
+      if: steps.cache-llvm.outputs.cache-hit != 'true'
+      run: |
+        mkdir llvm/build
+        mkdir llvm/install
+        cd llvm/build
+        cmake ../llvm -DLLVM_BUILD_EXAMPLES=OFF -DLLVM_TARGETS_TO_BUILD="host" -DCMAKE_INSTALL_PREFIX=../install -DLLVM_ENABLE_PROJECTS='mlir' -DLLVM_OPTIMIZED_TABLEGEN=ON -DLLVM_ENABLE_OCAMLDOC=OFF -DLLVM_ENABLE_BINDINGS=OFF -DLLVM_INSTALL_UTILS=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DLLVM_ENABLE_LLD=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=ON
+        cmake --build . --target install -- -j$(nproc)
+    - name: Build and Test CIRCT (Assert)
+      run: |
+        mkdir build_assert
+        cd build_assert
+        cmake .. -DCMAKE_BUILD_TYPE=Debug -DLLVM_ENABLE_ASSERTIONS=ON -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ -DCMAKE_LINKER=lld -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit
+        make check-circt -j$(nproc)
+    - name: Build and Test CIRCT (Release)
+      run: |
+        mkdir build_release
+        cd build_release
+        cmake .. -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=OFF -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ -DCMAKE_LINKER=lld -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit
+        make check-circt -j$(nproc)

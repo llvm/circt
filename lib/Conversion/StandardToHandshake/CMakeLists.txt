@@ -4,7 +4,7 @@ add_mlir_library(MLIRStandardToHandshake
   ADDITIONAL_HEADER_DIRS
   ${MLIR_MAIN_INCLUDE_DIR}/mlir/Conversion/StandardToHandshake
 
-  LINK_LIBS
+  LINK_LIBS PUBLIC
   MLIRIR
   MLIRPass
   MLIRStandardOps
