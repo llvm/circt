@@ -40,33 +40,6 @@ using namespace circt::firrtl;
 using ValueVector = std::vector<Value>;
 using ValueVectorList = std::vector<ValueVector>;
 
-// Merge the second block (the block inlined from original funcOp) to the first 
-// block (the new created empty block of the top module)
-void mergeToEntryBlock(FModuleOp &topModuleOp,
-                       ConversionPatternRewriter &rewriter) {
-  
-  // Get pointers of the first two blocks
-  auto blockIterator = topModuleOp.getBody().begin();
-  Block *entryBlock = &*blockIterator;
-  Block *secondBlock = &*(++ blockIterator);
-  Operation *termOp = entryBlock->getTerminator();
-
-  // Connect all uses of each argument of the second block to the corresponding
-  // argument of the first block
-  for (int i = 0, e = secondBlock->getNumArguments(); i < e; i ++) {
-    BlockArgument oldArgument = secondBlock->getArgument(i);
-    BlockArgument newArgument = entryBlock->getArgument(i);
-    oldArgument.replaceAllUsesWith(newArgument);
-  }
-
-  // Move all operations of the second block to the first block
-  while(!secondBlock->empty()){
-    Operation *op = &secondBlock->front();
-    op->moveBefore(termOp);
-  }
-  rewriter.eraseBlock(secondBlock);
-}
-
 FIRRTLType buildBundleType(FIRRTLType dataType, bool isFlip, 
                            MLIRContext *context) {
   using BundleElement = std::pair<Identifier, FIRRTLType>;
@@ -140,6 +113,70 @@ FIRRTLType getBundleType(Type type, bool isFlip) {
   }
 }
 
+FModuleOp createTopModuleOp(handshake::FuncOp funcOp, 
+                            ConversionPatternRewriter &rewriter) {
+  using ModulePort = std::pair<StringAttr, FIRRTLType>;
+  llvm::SmallVector<ModulePort, 8> modulePorts;
+
+  // Add all the input ports
+  unsigned args_idx = 0;
+  for (auto &arg : funcOp.getArguments()) {
+    mlir::Type portType = arg.getType();
+    StringAttr portName = 
+        rewriter.getStringAttr("arg" + std::to_string(args_idx));
+
+    FIRRTLType bundlePortType = getBundleType(portType, false);
+    modulePorts.push_back(std::make_pair(portName, bundlePortType));
+    args_idx += 1;
+  }
+
+  // Add all the output ports
+  for (auto portType : funcOp.getType().getResults()) {
+    StringAttr portName = 
+        rewriter.getStringAttr("arg" + std::to_string(args_idx));
+
+    FIRRTLType bundlePortType = getBundleType(portType, true);
+    modulePorts.push_back(std::make_pair(portName, bundlePortType));
+    args_idx += 1;
+  }
+
+  // Create top FIRRTL module for subtituting the funcOp
+  auto topModuleOp = rewriter.create<FModuleOp>(
+      funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()), 
+      ArrayRef<ModulePort>(modulePorts));
+  rewriter.inlineRegionBefore(funcOp.getBody(), topModuleOp.getBody(),
+                              topModuleOp.end());
+
+  return topModuleOp;
+}
+
+// Merge the second block (the block inlined from original funcOp) to the first 
+// block (the new created empty block of the top module)
+void mergeToEntryBlock(FModuleOp &topModuleOp,
+                       ConversionPatternRewriter &rewriter) {
+  
+  // Get pointers of the first two blocks
+  auto blockIterator = topModuleOp.getBody().begin();
+  Block *entryBlock = &*blockIterator;
+  Block *secondBlock = &*(++ blockIterator);
+  Operation *termOp = entryBlock->getTerminator();
+
+  // Connect all uses of each argument of the second block to the corresponding
+  // argument of the first block
+  for (int i = 0, e = secondBlock->getNumArguments(); i < e; i ++) {
+    BlockArgument oldArgument = secondBlock->getArgument(i);
+    BlockArgument newArgument = entryBlock->getArgument(i);
+    oldArgument.replaceAllUsesWith(newArgument);
+  }
+
+  // Move all operations of the second block to the first block
+  while(!secondBlock->empty()){
+    Operation *op = &secondBlock->front();
+    op->moveBefore(termOp);
+  }
+  rewriter.eraseBlock(secondBlock);
+}
+
 // Check whether the same submodule has been created
 FModuleOp checkSubModuleOp(FModuleOp topModuleOp, Operation &oldOp) {
   for (auto &op : topModuleOp.getParentRegion()->front()) {
@@ -190,6 +227,106 @@ FModuleOp insertSubModuleOp(FModuleOp topModuleOp, Operation &oldOp,
       rewriter.getStringAttr(oldOp.getName().getStringRef()), 
       ArrayRef<ModulePort>(modulePorts));
   return subModule;
+}
+
+// Extract values of all subfields of all ports of the submodule
+ValueVectorList extractSubfields(FModuleOp subModuleOp, 
+                                 ConversionPatternRewriter &rewriter) {
+  ValueVectorList valueVectorList;
+  auto &entryBlock = subModuleOp.getBody().front();
+  auto *termOp = entryBlock.getTerminator();
+  rewriter.setInsertionPoint(termOp);
+
+  for (auto &arg : entryBlock.getArguments()) {
+    ValueVector valueVector;
+    auto argType = arg.getType().cast<BundleType>();
+    for (auto &element : argType.getElements()) {
+      auto elementName = element.first.strref();
+      auto elementType = element.second;
+      auto subfieldOp = rewriter.create<SubfieldOp>(termOp->getLoc(), 
+          elementType, arg, rewriter.getStringAttr(elementName));
+      auto value = subfieldOp.getResult();
+      valueVector.push_back(value);
+    }
+    valueVectorList.push_back(valueVector);
+  }
+
+  return valueVectorList;
+}
+
+// Create a low voltage constant operation and return its result value
+Value insertNegOp(Location insertLoc, ConversionPatternRewriter &rewriter) {
+  auto signalType = UIntType::get(rewriter.getContext(), 1);
+  auto StandardUIntType = IntegerType::get(1, IntegerType::Unsigned, 
+                                           rewriter.getContext());
+  auto lowSignalAttr = rewriter.getIntegerAttr(StandardUIntType, 0);
+  auto lowSignalOp = rewriter.create<firrtl::ConstantOp>(
+      insertLoc, signalType, lowSignalAttr);
+  return lowSignalOp.getResult();
+}
+
+// Create a high voltage constant operation and return its result value
+Value insertPosOp(Location insertLoc, ConversionPatternRewriter &rewriter) {
+  auto signalType = UIntType::get(rewriter.getContext(), 1);
+  auto StandardUIntType = IntegerType::get(1, IntegerType::Unsigned, 
+                                           rewriter.getContext());
+  auto highSignalAttr = rewriter.getIntegerAttr(StandardUIntType, 1);
+  auto highSignalOp = rewriter.create<firrtl::ConstantOp>(
+      insertLoc, signalType, highSignalAttr);
+  return highSignalOp.getResult();
+}
+
+// TODO
+void buildMergeOp(FModuleOp subModuleOp, ValueVectorList subfieldList, 
+                  ConversionPatternRewriter &rewriter) {
+  auto &entryBlock = subModuleOp.getBody().front();
+  auto *termOp = entryBlock.getTerminator();
+  rewriter.setInsertionPoint(termOp);
+}
+
+// Build binary operations for the new sub-module
+template <typename OpType>
+void buildBinaryOp(FModuleOp subModuleOp, ValueVectorList subfieldList, 
+                   ConversionPatternRewriter &rewriter) {
+  auto &entryBlock = subModuleOp.getBody().front();
+  auto *termOp = entryBlock.getTerminator();
+  rewriter.setInsertionPoint(termOp);
+
+  // Get subfields values
+  auto arg0Subfield = subfieldList[0];
+  auto arg1Subfiled = subfieldList[1];
+  auto resultSubfiled = subfieldList[2];
+
+  auto arg0Data = arg0Subfield[0];
+  auto arg0Valid = arg0Subfield[1];
+  auto arg0Ready = arg0Subfield[2];
+
+  auto arg1Data = arg1Subfiled[0];
+  auto arg1Valid = arg1Subfiled[1];
+  auto arg1Ready = arg1Subfiled[2];
+
+  auto resultData = resultSubfiled[0];
+  auto resultValid = resultSubfiled[1];
+  auto resultReady = resultSubfiled[2];
+
+  // Connect data signals
+  auto CombDataOp = rewriter.create<OpType>(termOp->getLoc(), 
+      arg0Data.getType(), arg0Data, arg1Data);
+  auto combData = CombDataOp.getResult();
+  rewriter.create<ConnectOp>(termOp->getLoc(), resultData, combData);
+
+  // Connect valid signals
+  auto combValidOp = rewriter.create<AndPrimOp>(termOp->getLoc(), 
+      arg0Valid.getType(), arg0Valid, arg1Valid);
+  auto combValid = combValidOp.getResult();
+  rewriter.create<ConnectOp>(termOp->getLoc(), resultValid, combValid);
+
+  // Connect ready signals
+  auto combReadyOp = rewriter.create<AndPrimOp>(termOp->getLoc(), 
+      combValid.getType(), combValid, resultReady);
+  auto combReady = combReadyOp.getResult();
+  rewriter.create<ConnectOp>(termOp->getLoc(), arg0Ready, combReady);
+  rewriter.create<ConnectOp>(termOp->getLoc(), arg1Ready, combReady);
 }
 
 // Create instanceOp in the top FModuleOp region
@@ -250,189 +387,35 @@ void createInstOp(FModuleOp subModuleOp, Operation &oldOp,
   rewriter.eraseOp(&oldOp);
 }
 
-// Extract values of all subfields of all ports of the submodule
-ValueVectorList extractSubfields(FModuleOp subModuleOp, 
-                                 ConversionPatternRewriter &rewriter) {
-  ValueVectorList valueVectorList;
-  auto &entryBlock = subModuleOp.getBody().front();
-  auto *termOp = entryBlock.getTerminator();
-  rewriter.setInsertionPoint(termOp);
+void convertMergeOp(Operation &oldOp, ConversionPatternRewriter &rewriter) {
+  rewriter.setInsertionPointAfter(&oldOp);
 
-  for (auto &arg : entryBlock.getArguments()) {
-    ValueVector valueVector;
-    auto argType = arg.getType().cast<BundleType>();
-    for (auto &element : argType.getElements()) {
-      auto elementName = element.first.strref();
-      auto elementType = element.second;
-      auto subfieldOp = rewriter.create<SubfieldOp>(termOp->getLoc(), 
-          elementType, arg, rewriter.getStringAttr(elementName));
-      auto value = subfieldOp.getResult();
-      valueVector.push_back(value);
-    }
-    valueVectorList.push_back(valueVector);
+  // Create wire for the results of merge operation
+  auto result = oldOp.getResult(0);
+  auto resultBundleType = getBundleType(result.getType(), false);
+
+  auto wireOp = rewriter.create<WireOp>(oldOp.getLoc(), resultBundleType,
+                                rewriter.getStringAttr(""));
+  auto newResult = wireOp.getResult();
+  result.replaceAllUsesWith(newResult);
+
+  // Create connection between operands and result
+  rewriter.setInsertionPointAfter(wireOp);
+  if (oldOp.getNumOperands() == 1) {
+    rewriter.create<ConnectOp>(wireOp.getLoc(), newResult, oldOp.getOperand(0));
   }
-
-  return valueVectorList;
-}
-
-// Create a low voltage constant operation and return its result value
-Value insertNegOp(Location insertLoc, ConversionPatternRewriter &rewriter) {
-  auto signalType = UIntType::get(rewriter.getContext(), 1);
-  auto StandardUIntType = IntegerType::get(1, IntegerType::Unsigned, 
-                                           rewriter.getContext());
-  auto lowSignalAttr = rewriter.getIntegerAttr(StandardUIntType, 0);
-  auto lowSignalOp = rewriter.create<firrtl::ConstantOp>(
-      insertLoc, signalType, lowSignalAttr);
-  return lowSignalOp.getResult();
-}
-
-// Create a high voltage constant operation and return its result value
-Value insertPosOp(Location insertLoc, ConversionPatternRewriter &rewriter) {
-  auto signalType = UIntType::get(rewriter.getContext(), 1);
-  auto StandardUIntType = IntegerType::get(1, IntegerType::Unsigned, 
-                                           rewriter.getContext());
-  auto highSignalAttr = rewriter.getIntegerAttr(StandardUIntType, 1);
-  auto highSignalOp = rewriter.create<firrtl::ConstantOp>(
-      insertLoc, signalType, highSignalAttr);
-  return highSignalOp.getResult();
-}
-
-// TODO
-//void buildMergeOp(FModuleOp subModuleOp, ValueMapArray subfieldArray, 
-//                  ConversionPatternRewriter &rewriter) {
-//  auto &entryBlock = subModuleOp.getBody().front();
-//  auto *termOp = entryBlock.getTerminator();
-//  rewriter.setInsertionPoint(termOp);
-//
-//
-//}
-
-void convertMergeOp(FModuleOp &moduleOp,
-                    ConversionPatternRewriter &rewriter) {
-  for (Block &block : moduleOp) {
-    for (Operation &op : block) {
-      if (auto mergeOp = dyn_cast<handshake::MergeOp>(op)) {
-        rewriter.setInsertionPointAfter(&op);
-
-        // Create wire for the results of merge operation
-        auto result = op.getResult(0);
-        auto resultType = result.getType();
-        auto resultBundleType = getBundleType(resultType, false);
-
-        auto wireOp = rewriter.create<WireOp>(op.getLoc(), resultBundleType,
-                                      rewriter.getStringAttr(""));
-        auto newResult = wireOp.getResult();
-        result.replaceAllUsesWith(newResult);
-
-        // Create connection between operands and result
-        rewriter.setInsertionPointAfter(wireOp);
-        if (op.getNumOperands() == 1) {
-          auto operand = op.getOperand(0);
-          rewriter.create<ConnectOp>(wireOp.getLoc(), newResult, operand);
-        }
-        rewriter.eraseOp(&op);
-      }
-    }
-  }
-}
-
-// Build binary operations for the new sub-module
-template <typename OpType>
-void buildBinaryOp(FModuleOp subModuleOp, ValueVectorList subfieldList, 
-                   ConversionPatternRewriter &rewriter) {
-  auto &entryBlock = subModuleOp.getBody().front();
-  auto *termOp = entryBlock.getTerminator();
-  rewriter.setInsertionPoint(termOp);
-
-  // Get subfields values
-  auto arg0Subfield = subfieldList[0];
-  auto arg1Subfiled = subfieldList[1];
-  auto resultSubfiled = subfieldList[2];
-
-  auto arg0Data = arg0Subfield[0];
-  auto arg0Valid = arg0Subfield[1];
-  auto arg0Ready = arg0Subfield[2];
-
-  auto arg1Data = arg1Subfiled[0];
-  auto arg1Valid = arg1Subfiled[1];
-  auto arg1Ready = arg1Subfiled[2];
-
-  auto resultData = resultSubfiled[0];
-  auto resultValid = resultSubfiled[1];
-  auto resultReady = resultSubfiled[2];
-
-  // Connect data signals
-  auto CombDataOp = rewriter.create<OpType>(termOp->getLoc(), 
-      arg0Data.getType(), arg0Data, arg1Data);
-  auto combData = CombDataOp.getResult();
-  rewriter.create<ConnectOp>(termOp->getLoc(), resultData, combData);
-
-  // Connect valid signals
-  auto combValidOp = rewriter.create<AndPrimOp>(termOp->getLoc(), 
-      arg0Valid.getType(), arg0Valid, arg1Valid);
-  auto combValid = combValidOp.getResult();
-  rewriter.create<ConnectOp>(termOp->getLoc(), resultValid, combValid);
-
-  // Connect ready signals
-  auto combReadyOp = rewriter.create<AndPrimOp>(termOp->getLoc(), 
-      combValid.getType(), combValid, resultReady);
-  auto combReady = combReadyOp.getResult();
-  rewriter.create<ConnectOp>(termOp->getLoc(), arg0Ready, combReady);
-  rewriter.create<ConnectOp>(termOp->getLoc(), arg1Ready, combReady);
-}
-
-// Convert operations which require to create new sub-module to FIRRTL 
-// representation. (Create sub-module => instantiate => connect)
-void convertSubModuleOp(FModuleOp topModuleOp,
-                        ConversionPatternRewriter &rewriter) {
-  for (Block &block : topModuleOp) {
-    for (Operation &op : block) {
-
-      if (isa<AddIOp>(op)) {
-        // Check whether Sub-module already exists, if not, we will create and 
-        // insert a new empty sub-module
-        auto subModuleOp = checkSubModuleOp(topModuleOp, op);
-        if (!subModuleOp) {
-          subModuleOp = insertSubModuleOp(topModuleOp, op, rewriter);
-
-          // Build the combinational logic in the new created submodule
-          auto subfieldList = extractSubfields(subModuleOp, rewriter);
-          buildBinaryOp<firrtl::AddPrimOp>(subModuleOp, subfieldList, rewriter);
-        }
-
-        // Create and insert instance operation into top-module, and connect with
-        // other operations
-        createInstOp(subModuleOp, op, rewriter);
-      }
-      
-      // For debug
-      //Region *currentRegion = topModuleOp.getParentRegion();
-      //for (auto &block : *currentRegion) {
-      //  for (auto &op : block) {
-      //    llvm::outs() << op << "\n";
-      //  }
-      //}
-    }
-  }
+  rewriter.eraseOp(&oldOp);
 }
 
 // Only support single block function op
-void convertReturnOp(FModuleOp &topModuleOp, unsigned numInput,
+void convertReturnOp(Operation &oldOp, Block &block, unsigned numInput,
                      ConversionPatternRewriter &rewriter) {
-  for (Block &block : topModuleOp) {
-    for (Operation &op : block) {
-      if (auto returnOp = dyn_cast<handshake::ReturnOp>(op)) {
-        rewriter.setInsertionPointAfter(&op);
-
-        for (int i = 0, e = op.getNumOperands(); i < e; i ++) {
-          auto operand = op.getOperand(i);
-          auto result = block.getArgument(numInput + i);
-          rewriter.create<ConnectOp>(op.getLoc(), result, operand);
-        }
-        rewriter.eraseOp(&op);
-      }
-    }
+  rewriter.setInsertionPointAfter(&oldOp);
+  for (int i = 0, e = oldOp.getNumOperands(); i < e; i ++) {
+    rewriter.create<ConnectOp>(oldOp.getLoc(), block.getArgument(numInput + i), 
+                               oldOp.getOperand(i));
   }
+  rewriter.eraseOp(&oldOp);
 }
 
 namespace {
@@ -461,45 +444,29 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
 
   void rewrite(handshake::FuncOp funcOp, ArrayRef<Value> operands,
                ConversionPatternRewriter &rewriter) const override {
-    using ModulePort = std::pair<StringAttr, FIRRTLType>;
-    llvm::SmallVector<ModulePort, 8> modulePorts;
-
-    // Add all the input ports
-    int ins_idx = 0;
-    for (auto &arg : funcOp.getArguments()) {
-      mlir::Type portType = arg.getType();
-      StringAttr portName = 
-          rewriter.getStringAttr("arg" + std::to_string(ins_idx));
-
-      FIRRTLType bundlePortType = getBundleType(portType, false);
-      ModulePort modulePort = std::make_pair(portName, bundlePortType);
-      modulePorts.push_back(modulePort);
-      ins_idx += 1;
-    }
-
-    // Add all the output ports
-    int outs_idx = ins_idx;
-    for (auto portType : funcOp.getType().getResults()) {
-      StringAttr portName = 
-          rewriter.getStringAttr("arg" + std::to_string(outs_idx));
-
-      FIRRTLType bundlePortType = getBundleType(portType, true);
-      ModulePort modulePort = std::make_pair(portName, bundlePortType);
-      modulePorts.push_back(modulePort);
-      outs_idx += 1;
-    }
-
-    auto topModuleOp = rewriter.create<FModuleOp>(
-        funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()), 
-        ArrayRef<ModulePort>(modulePorts));
-    rewriter.inlineRegionBefore(funcOp.getBody(), topModuleOp.getBody(),
-                                topModuleOp.end());
-    
+    auto topModuleOp = createTopModuleOp(funcOp, rewriter);
     mergeToEntryBlock(topModuleOp, rewriter);
-    convertMergeOp(topModuleOp, rewriter);
-    convertSubModuleOp(topModuleOp, rewriter);
-    convertReturnOp(topModuleOp, ins_idx, rewriter);
 
+    // Traverse and convert all operations in funcOp.
+    for (Block &block : topModuleOp) {
+      for (Operation &op : block) {
+        if (isa<handshake::ReturnOp>(op)) {
+          convertReturnOp(op, block, funcOp.getNumArguments(), rewriter);
+        } else if(isa<handshake::MergeOp>(op)) {
+          convertMergeOp(op, rewriter);
+        } else if (isa<AddIOp>(op)) {
+          // Check whether Sub-module already exists, if not, we will create 
+          // and insert a new empty sub-module
+          auto subModuleOp = checkSubModuleOp(topModuleOp, op);
+          if (!subModuleOp) {
+            subModuleOp = insertSubModuleOp(topModuleOp, op, rewriter);
+            auto subfieldList = extractSubfields(subModuleOp, rewriter);
+            buildBinaryOp<firrtl::AddPrimOp>(subModuleOp, subfieldList, rewriter);
+          }
+          createInstOp(subModuleOp, op, rewriter);
+        }
+      }
+    }
     rewriter.eraseOp(funcOp);
   }
 };
