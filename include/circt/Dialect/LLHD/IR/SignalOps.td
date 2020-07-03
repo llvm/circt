@@ -39,7 +39,7 @@ def LLHD_SigOp : LLHD_Op<"sig", [
     signal named "bar", carrying an `i1` type with initial value of 1.
   }];
 
-  let arguments = (ins StrAttr: $name, AnySignlessInteger: $init);
+  let arguments = (ins StrAttr: $name, LLHD_AnySigUnderlyingType: $init);
   let results = (outs LLHD_AnySigType: $result);
 
   let assemblyFormat = "$name $init attr-dict `:` type($init)";
@@ -73,7 +73,7 @@ def LLHD_PrbOp : LLHD_Op<"prb", [
   }];
 
   let arguments = (ins LLHD_AnySigType: $signal);
-  let results = (outs AnySignlessInteger: $result);
+  let results = (outs LLHD_AnySigUnderlyingType: $result);
 
   let assemblyFormat = "$signal attr-dict `:` type($signal)";
 }
@@ -114,7 +114,7 @@ def LLHD_DrvOp : LLHD_Op<"drv", [
   }];
 
   let arguments = (ins LLHD_AnySigType: $signal,
-                       AnySignlessInteger: $value,
+                       LLHD_AnySigUnderlyingType: $value,
                        LLHD_TimeType: $time,
                        Optional<I1>: $enable);
 

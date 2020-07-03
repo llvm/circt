@@ -122,6 +122,16 @@ struct constant_int_all_ones_matcher {
 
 } // anonymous namespace
 
+unsigned mlir::llhd::getLLHDTypeWidth(Type type) {
+  if (auto sig = type.dyn_cast<llhd::SigType>())
+    type = sig.getUnderlyingType();
+  if (auto vec = type.dyn_cast<VectorType>())
+    return vec.getNumElements();
+  if (auto tup = type.dyn_cast<TupleType>())
+    return tup.size();
+  return type.getIntOrFloatBitWidth();
+}
+
 //===---------------------------------------------------------------------===//
 // LLHD Trait Helper Functions
 //===---------------------------------------------------------------------===//
@@ -167,34 +177,6 @@ static void print(OpAsmPrinter &printer, llhd::ConstOp op) {
 OpFoldResult llhd::ConstOp::fold(ArrayRef<Attribute> operands) {
   assert(operands.empty() && "const has no operands");
   return value();
-}
-
-//===----------------------------------------------------------------------===//
-// DextsOp
-//===----------------------------------------------------------------------===//
-
-unsigned llhd::DextsOp::getSliceWidth() {
-  auto resultTy = result().getType();
-  if (resultTy.isSignlessInteger()) {
-    return resultTy.getIntOrFloatBitWidth();
-  } else if (auto sigRes = resultTy.dyn_cast<llhd::SigType>()) {
-    return sigRes.getUnderlyingType().getIntOrFloatBitWidth();
-  } else if (auto vecRes = resultTy.dyn_cast<VectorType>()) {
-    return vecRes.getNumElements();
-  }
-  return 0;
-}
-
-unsigned llhd::DextsOp::getTargetWidth() {
-  auto targetTy = target().getType();
-  if (targetTy.isSignlessInteger()) {
-    return targetTy.getIntOrFloatBitWidth();
-  } else if (auto sigRes = targetTy.dyn_cast<llhd::SigType>()) {
-    return sigRes.getUnderlyingType().getIntOrFloatBitWidth();
-  } else if (auto vecRes = targetTy.dyn_cast<VectorType>()) {
-    return vecRes.getNumElements();
-  }
-  return 0;
 }
 
 //===----------------------------------------------------------------------===//

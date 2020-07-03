@@ -50,19 +50,8 @@ def LLHD_InssOp : LLHD_Op<"inss", [
   }];
 
   let extraClassDeclaration = [{
-    unsigned getSliceSize() {
-      Type sliceType = slice().getType();
-      if (auto vec = sliceType.dyn_cast<VectorType>())
-        return vec.getNumElements();
-      return sliceType.getIntOrFloatBitWidth();
-    }
-
-    unsigned getTargetSize() {
-      Type targetType = target().getType();
-      if (auto vec = targetType.dyn_cast<VectorType>())
-        return vec.getNumElements();
-      return targetType.getIntOrFloatBitWidth();
-    }
+    unsigned getSliceSize() { return getLLHDTypeWidth(slice().getType()); }
+    unsigned getTargetSize() { return getLLHDTypeWidth(target().getType()); }
   }];
 }
 
@@ -108,12 +97,7 @@ def LLHD_InsfOp : LLHD_Op<"insf", [
   }];
 
   let extraClassDeclaration = [{
-    int64_t getTargetSize() {
-      Type targetType = target().getType();
-      if (auto vec = targetType.dyn_cast<VectorType>())
-        return vec.getNumElements();
-      return targetType.cast<TupleType>().size();
-    }
+    unsigned getTargetSize() { return getLLHDTypeWidth(target().getType()); }
 
     Type getElementTypeAtIndex(int64_t index) {
       Type targetType = target().getType();

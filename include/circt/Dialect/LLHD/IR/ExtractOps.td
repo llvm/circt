@@ -37,46 +37,21 @@ def LLHD_ExtsOp : LLHD_Op<"exts", [
   }];
 
   let arguments = (ins
-    AnyTypeOf<[AnySignlessInteger, LLHD_AnySigType, AnyVector]>: $target,
+    AnyTypeOf<[AnySignlessInteger, AnyVector,
+               LLHD_SigType<[AnySignlessInteger, AnyVector]>]>: $target,
     IndexAttr: $start);
 
   let results = (outs
-    AnyTypeOf<[AnySignlessInteger, LLHD_AnySigType, AnyVector]>: $result);
+    AnyTypeOf<[AnySignlessInteger, AnyVector,
+               LLHD_SigType<[AnySignlessInteger, AnyVector]>]>: $result);
 
   let assemblyFormat = [{
     $target `,` $start attr-dict `:` type($target) `->` type($result)
   }];
 
   let extraClassDeclaration = [{
-    unsigned getSliceSize() {
-      Type sliceType = result().getType();
-      if (auto vec = sliceType.dyn_cast<VectorType>())
-        return vec.getNumElements();
-      if (auto sig = sliceType.dyn_cast<llhd::SigType>()) {
-        Type ty = sig.getUnderlyingType();
-        if (auto vec = ty.dyn_cast<VectorType>())
-          return vec.getNumElements();
-        if (auto tup = ty.dyn_cast<TupleType>())
-          return tup.size();
-        return ty.getIntOrFloatBitWidth();
-      }
-      return sliceType.getIntOrFloatBitWidth();
-    }
-
-    unsigned getTargetSize() {
-      Type targetType = target().getType();
-      if (auto vec = targetType.dyn_cast<VectorType>())
-        return vec.getNumElements();
-      if (auto sig = targetType.dyn_cast<llhd::SigType>()) {
-        Type ty = sig.getUnderlyingType();
-        if (auto vec = ty.dyn_cast<VectorType>())
-          return vec.getNumElements();
-        if (auto tup = ty.dyn_cast<TupleType>())
-          return tup.size();
-        return ty.getIntOrFloatBitWidth();
-      }
-      return targetType.getIntOrFloatBitWidth();
-    }
+    unsigned getSliceSize()  { return getLLHDTypeWidth(result().getType()); }
+    unsigned getTargetSize() { return getLLHDTypeWidth(target().getType()); }
   }];
 }
 
@@ -109,18 +84,20 @@ def LLHD_DextsOp : LLHD_Op<"dexts", [
   }];
 
   let arguments = (ins
-    AnyTypeOf<[AnySignlessInteger, AnyVector, LLHD_AnySigType]>: $target,
+    AnyTypeOf<[AnySignlessInteger, AnyVector,
+               LLHD_SigType<[AnySignlessInteger, AnyVector]>]>: $target,
     AnySignlessInteger: $start);
 
   let results = (outs
-    AnyTypeOf<[AnySignlessInteger, AnyVector, LLHD_AnySigType]>: $result);
+    AnyTypeOf<[AnySignlessInteger, AnyVector,
+               LLHD_SigType<[AnySignlessInteger, AnyVector]>]>: $result);
 
   let assemblyFormat = [{
     operands attr-dict `:` functional-type(operands, results)
   }];
 
   let extraClassDeclaration = [{
-    unsigned getSliceWidth();
-    unsigned getTargetWidth();
+    unsigned getSliceWidth()  { return getLLHDTypeWidth(result().getType()); }
+    unsigned getTargetWidth() { return getLLHDTypeWidth(target().getType()); }
   }];
 }
