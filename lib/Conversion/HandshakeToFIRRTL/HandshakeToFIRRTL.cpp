@@ -292,10 +292,30 @@ ValueVectorList extractSubfields(Block &entryBlock, Location insertLoc,
 // Build merge logic
 void buildMergeLogic(ValueVectorList subfieldList, Location insertLoc, 
                      ConversionPatternRewriter &rewriter) {
-  auto arg0Subfield = subfieldList[0];
+  // Get subfields values
+  auto arg0Subfield = subfieldList.front();
+  auto resultSubfiled = subfieldList.back();
 
-  for (int i = 0, e = subfieldList.size() - 1; i < e; i ++) {
+  auto arg0Data = arg0Subfield[0];
+  auto arg0Valid = arg0Subfield[1];
+  auto arg0Ready = arg0Subfield[2];
 
+  auto resultData = resultSubfiled[0];
+  auto resultValid = resultSubfiled[1];
+  auto resultReady = resultSubfiled[2];
+
+  // Single input merge operation
+  if (subfieldList.size() == 2) {
+    rewriter.create<ConnectOp>(insertLoc, resultData, arg0Data);
+    rewriter.create<ConnectOp>(insertLoc, resultValid, arg0Valid);
+    rewriter.create<ConnectOp>(insertLoc, arg0Ready, resultReady);
+  }
+
+  // Multiple input merge operation
+  else {
+    for (int i = 0, e = subfieldList.size() - 1; i < e; i ++) {
+
+    }
   }
 }
 
@@ -386,35 +406,10 @@ void createInstOp(Operation &oldOp, FModuleOp subModuleOp,
     // Connect output ports
     else {
       auto result = oldOp.getResult(0);
-      auto wireOp = rewriter.create<WireOp>(oldOp.getLoc(), 
-          elementType, rewriter.getStringAttr(""));
-      auto newResult = wireOp.getResult();
+      auto newResult = subfieldOp.getResult();
       result.replaceAllUsesWith(newResult);
-
-      auto operand = subfieldOp.getResult();
-      rewriter.create<ConnectOp>(oldOp.getLoc(), newResult, operand);
     }
     port_idx += 1;
-  }
-  rewriter.eraseOp(&oldOp);
-}
-
-void convertMergeOp(Operation &oldOp, ConversionPatternRewriter &rewriter) {
-  rewriter.setInsertionPointAfter(&oldOp);
-
-  // Create wire for the results of merge operation
-  auto result = oldOp.getResult(0);
-  auto resultBundleType = getBundleType(result.getType(), false);
-
-  auto wireOp = rewriter.create<WireOp>(oldOp.getLoc(), resultBundleType,
-                                rewriter.getStringAttr(""));
-  auto newResult = wireOp.getResult();
-  result.replaceAllUsesWith(newResult);
-
-  // Create connection between operands and result
-  rewriter.setInsertionPointAfter(wireOp);
-  if (oldOp.getNumOperands() == 1) {
-    rewriter.create<ConnectOp>(wireOp.getLoc(), newResult, oldOp.getOperand(0));
   }
   rewriter.eraseOp(&oldOp);
 }
@@ -434,23 +429,6 @@ void convertReturnOp(Operation &oldOp, Block &entryBlock, unsigned numInput,
 // MLIR Pass Entry
 //===----------------------------------------------------------------------===//
 
-namespace {
-class FIRRTLTypeConverter : public TypeConverter {
-public:
-  FIRRTLTypeConverter() {
-    addConversion(convertType);
-  };
-
-  static Optional<Type> convertType(Type type) {
-    if (type.isa<FIRRTLType>()) {
-      return type;
-    } else {
-      return getBundleType(type, false);
-    }
-  };
-};
-} // End anonymous namespace
-
 struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
   using OpConversionPattern<handshake::FuncOp>::OpConversionPattern;
 
@@ -469,13 +447,9 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       if (isa<handshake::ReturnOp>(op)) {
         convertReturnOp(op, entryBlock, funcOp.getNumArguments(), rewriter);
       } 
-      else if(isa<handshake::MergeOp>(op)) {
-        convertMergeOp(op, rewriter);
-      } 
-
       // This branch take cares of all operations that require to create new 
       // submodules, and instantiation.
-      else if (isa<AddIOp>(op)) {
+      else if (op.getDialect()->getNamespace() != StringRef("firrtl")) {
         // Check whether Sub-module already exists, if not, we will create 
         // and insert a new empty sub-module
         auto subModuleOp = checkSubModuleOp(topModuleOp, op);
@@ -488,9 +462,14 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
           rewriter.setInsertionPoint(termOp);
 
           auto subfieldList = extractSubfields(entryBlock, insertLoc, rewriter);
-          buildBinaryLogic<firrtl::AddPrimOp>(subfieldList, insertLoc, rewriter);
+          if (isa<AddIOp>(op)) {
+            buildBinaryLogic<firrtl::AddPrimOp>(subfieldList, 
+                                                insertLoc, rewriter);
+          } else if (isa<handshake::MergeOp>(op)) {
+            buildMergeLogic(subfieldList, insertLoc, rewriter);
+          }
         }
-        createInstOp(subModuleOp, op, rewriter);
+        createInstOp(op, subModuleOp, rewriter);
       }
     }
     rewriter.eraseOp(funcOp);
@@ -512,9 +491,7 @@ public:
     OwningRewritePatternList patterns;
     patterns.insert<HandshakeFuncOpLowering>(op.getContext());
 
-    FIRRTLTypeConverter typeConverter;
-
-    if (failed(applyPartialConversion(op, target, patterns, &typeConverter)))
+    if (failed(applyPartialConversion(op, target, patterns)))
       signalPassFailure();
   }
 };
