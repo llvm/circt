@@ -5,11 +5,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/FIRRTL/Dialect.h"
-#include "circt/Dialect/RTL/Dialect.h"
-#include "circt/Dialect/Handshake/HandshakeOps.h"
+#include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
 #include "circt/Conversion/StandardToHandshake/StandardToHandshake.h"
+#include "circt/Dialect/FIRRTL/Dialect.h"
+#include "circt/Dialect/Handshake/HandshakeOps.h"
+#include "circt/Dialect/LLHD/IR/LLHDDialect.h"
+#include "circt/Dialect/LLHD/Transforms/Passes.h"
+#include "circt/Dialect/RTL/Dialect.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/AsmState.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Pass/PassRegistry.h"
@@ -62,15 +67,20 @@ int main(int argc, char **argv) {
 
   // Register MLIR stuff
   registerDialect<StandardOpsDialect>();
+  registerDialect<LLVM::LLVMDialect>();
 
 // Register the standard passes we want.
 #define GEN_PASS_REGISTRATION_Canonicalizer
 #define GEN_PASS_REGISTRATION_CSE
+#define GEN_PASS_REGISTRATION_Inliner
 #include "mlir/Transforms/Passes.h.inc"
 
   // Register any pass manager command line options.
   registerMLIRContextCLOptions();
   registerPassManagerCLOptions();
+
+  // Register printer command line options.
+  registerAsmPrinterCLOptions();
 
   // Register our dialects.
   registerDialect<firrtl::FIRRTLDialect>();
@@ -80,6 +90,11 @@ int main(int argc, char **argv) {
   handshake::registerStandardToHandshakePasses();
 
   registerDialect<rtl::RTLDialect>();
+
+  registerDialect<llhd::LLHDDialect>();
+
+  llhd::initLLHDTransformationPasses();
+  llhd::initLLHDToLLVMPass();
 
   PassPipelineCLParser passPipeline("", "Compiler passes to run");
 
