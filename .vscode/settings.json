@@ -1,22 +1,3 @@
 {
-    "files.associations": {
-        "*.inc": "cpp",
-    },
-    "files.watcherExclude": {
-        "**/.git/objects/**": true,
-        "**/.git/subtree-cache/**": true,
-        "**/node_modules/*/**": true,
-        "**/llvm/**": true,
-        "**/build/**": true,
-        "**/include/**": false,
-        "**/build/include/**": false,
-        "**/llvm/mlir/include/**": false,
-        "**/llvm/llvm/include/**": false,
-        "**/llvm/build/include/**": false,
-        "**/llvm/build/tools/mlir/include/**": false
-    },
-    "cmake.configureOnOpen": false,
-    "C_Cpp.errorSquiggles": "Enabled",
-    "C_Cpp.dimInactiveRegions": false,
-    "editor.rulers": [80]
+    "cmake.configureOnOpen": false
 }
