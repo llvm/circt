@@ -11,6 +11,7 @@ set(CIRCT_TEST_DEPENDS
   circt-translate
   handshake-runner
   firtool
+  llhd-sim
   )
 
 add_lit_testsuite(check-circt "Running the CIRCT regression tests"

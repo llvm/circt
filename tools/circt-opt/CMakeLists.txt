@@ -13,6 +13,9 @@ target_link_libraries(circt-opt
   MLIRRTL
   MLIRStandardToHandshake
   MLIRHandshakeToFIRRTL
+  MLIRLLHD
+  MLIRLLHDTransforms
+  MLIRLLHDToLLVM
 
   MLIRParser
   MLIRSupport
@@ -20,5 +23,6 @@ target_link_libraries(circt-opt
   MLIROptLib
   MLIRStandardOps
   MLIRTransforms
+  MLIRLLVMIR
   )
 
