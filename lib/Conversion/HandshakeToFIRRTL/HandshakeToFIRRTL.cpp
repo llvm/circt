@@ -289,7 +289,7 @@ ValueVectorList extractSubfields(Block &entryBlock, Location insertLoc,
   return valueVectorList;
 }
 
-// TODO
+// Build merge logic
 void buildMergeLogic(ValueVectorList subfieldList, Location insertLoc, 
                      ConversionPatternRewriter &rewriter) {
   auto arg0Subfield = subfieldList[0];
@@ -299,7 +299,7 @@ void buildMergeLogic(ValueVectorList subfieldList, Location insertLoc,
   }
 }
 
-// Build binary operations for the new sub-module
+// Build binary logic for the new sub-module
 template <typename OpType>
 void buildBinaryLogic(ValueVectorList subfieldList, Location insertLoc, 
                       ConversionPatternRewriter &rewriter) {
@@ -342,7 +342,7 @@ void buildBinaryLogic(ValueVectorList subfieldList, Location insertLoc,
 //===----------------------------------------------------------------------===//
 
 // Create instanceOp in the top FModuleOp region
-void createInstOp(FModuleOp subModuleOp, Operation &oldOp, 
+void createInstOp(Operation &oldOp, FModuleOp subModuleOp, 
                   ConversionPatternRewriter &rewriter) {
   // Convert orignal multiple bundle type port to a flattend bundle type 
   // containing all the origianl bundle ports
@@ -420,18 +420,18 @@ void convertMergeOp(Operation &oldOp, ConversionPatternRewriter &rewriter) {
 }
 
 // Only support single block function op
-void convertReturnOp(Operation &oldOp, Block &block, unsigned numInput,
+void convertReturnOp(Operation &oldOp, Block &entryBlock, unsigned numInput,
                      ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPointAfter(&oldOp);
   for (int i = 0, e = oldOp.getNumOperands(); i < e; i ++) {
-    rewriter.create<ConnectOp>(oldOp.getLoc(), block.getArgument(numInput + i), 
-                               oldOp.getOperand(i));
+    rewriter.create<ConnectOp>(oldOp.getLoc(), 
+        entryBlock.getArgument(numInput + i), oldOp.getOperand(i));
   }
   rewriter.eraseOp(&oldOp);
 }
 
 //===----------------------------------------------------------------------===//
-// Main
+// MLIR Pass Entry
 //===----------------------------------------------------------------------===//
 
 namespace {
