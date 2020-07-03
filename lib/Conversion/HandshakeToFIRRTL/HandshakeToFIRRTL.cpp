@@ -151,7 +151,7 @@ FModuleOp createTopModuleOp(handshake::FuncOp funcOp,
   // Add all the input ports
   unsigned args_idx = 0;
   for (auto &arg : funcOp.getArguments()) {
-    mlir::Type portType = arg.getType();
+    Type portType = arg.getType();
     StringAttr portName = 
         rewriter.getStringAttr("arg" + std::to_string(args_idx));
 
@@ -289,32 +289,39 @@ ValueVectorList extractSubfields(Block &entryBlock, Location insertLoc,
   return valueVectorList;
 }
 
-// Build merge logic
+// Multiple input merge operation. Now we presume only one input is active, an
+// simple arbitration algorithm is used here: the 1th input always has the
+// highest priority.
 void buildMergeLogic(ValueVectorList subfieldList, Location insertLoc, 
                      ConversionPatternRewriter &rewriter) {
-  // Get subfields values
-  auto arg0Subfield = subfieldList.front();
+
   auto resultSubfiled = subfieldList.back();
-
-  auto arg0Data = arg0Subfield[0];
-  auto arg0Valid = arg0Subfield[1];
-  auto arg0Ready = arg0Subfield[2];
-
   auto resultData = resultSubfiled[0];
   auto resultValid = resultSubfiled[1];
   auto resultReady = resultSubfiled[2];
 
-  // Single input merge operation
-  if (subfieldList.size() == 2) {
-    rewriter.create<ConnectOp>(insertLoc, resultData, arg0Data);
-    rewriter.create<ConnectOp>(insertLoc, resultValid, arg0Valid);
-    rewriter.create<ConnectOp>(insertLoc, arg0Ready, resultReady);
-  }
+  // Walk through all inputs
+  for (int i = 0, e = subfieldList.size() - 1; i < e; i ++) {
 
-  // Multiple input merge operation
-  else {
-    for (int i = 0, e = subfieldList.size() - 1; i < e; i ++) {
+    // Get subfields values
+    auto argSubfield = subfieldList[i];
+    auto argData = argSubfield[0];
+    auto argValid = argSubfield[1];
+    auto argReady = argSubfield[2];
 
+    // Create new when operation
+    auto whenOp = rewriter.create<WhenOp>(insertLoc, argValid, true);
+    rewriter.setInsertionPointToStart(&whenOp.thenRegion().front());
+    rewriter.create<ConnectOp>(insertLoc, resultData, argData);
+    rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
+    rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
+    rewriter.setInsertionPointToStart(&whenOp.elseRegion().front());
+
+    // Else branch (no input is active)
+    if (i == e - 1) {
+      rewriter.create<ConnectOp>(insertLoc, resultData, argData);
+      rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
+      rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
     }
   }
 }
@@ -463,7 +470,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
 
           auto subfieldList = extractSubfields(entryBlock, insertLoc, rewriter);
           if (isa<AddIOp>(op)) {
-            buildBinaryLogic<firrtl::AddPrimOp>(subfieldList, 
+            buildBinaryLogic<AddPrimOp>(subfieldList, 
                                                 insertLoc, rewriter);
           } else if (isa<handshake::MergeOp>(op)) {
             buildMergeLogic(subfieldList, insertLoc, rewriter);
