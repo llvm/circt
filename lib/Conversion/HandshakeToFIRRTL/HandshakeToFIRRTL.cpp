@@ -118,25 +118,13 @@ FIRRTLType getBundleType(Type type, bool isFlip) {
 }
 
 // Create a low voltage constant operation and return its result value
-Value createNegOp(Location insertLoc, ConversionPatternRewriter &rewriter) {
-  auto signalType = UIntType::get(rewriter.getContext(), 1);
-  auto StandardUIntType = IntegerType::get(1, IntegerType::Unsigned, 
-                                           rewriter.getContext());
-  auto lowSignalAttr = rewriter.getIntegerAttr(StandardUIntType, 0);
-  auto lowSignalOp = rewriter.create<firrtl::ConstantOp>(
-      insertLoc, signalType, lowSignalAttr);
-  return lowSignalOp.getResult();
-}
-
-// Create a high voltage constant operation and return its result value
-Value createPosOp(Location insertLoc, ConversionPatternRewriter &rewriter) {
-  auto signalType = UIntType::get(rewriter.getContext(), 1);
-  auto StandardUIntType = IntegerType::get(1, IntegerType::Unsigned, 
-                                           rewriter.getContext());
-  auto highSignalAttr = rewriter.getIntegerAttr(StandardUIntType, 1);
-  auto highSignalOp = rewriter.create<firrtl::ConstantOp>(
-      insertLoc, signalType, highSignalAttr);
-  return highSignalOp.getResult();
+Value createConstantOp(Location insertLoc, FIRRTLType opType, int value, 
+                       ConversionPatternRewriter &rewriter) {
+  auto constantOpAttr = rewriter.getIntegerAttr(
+      IntegerType::get(32, rewriter.getContext()), value);
+  auto constantOp = rewriter.create<firrtl::ConstantOp>(
+      insertLoc, opType, constantOpAttr);
+  return constantOp.getResult();
 }
 
 //===----------------------------------------------------------------------===//
@@ -367,8 +355,6 @@ void buildControlMergeLogic(ValueVectorList subfieldList, Location insertLoc,
     auto argValid = argSubfield[0];
 
     auto controlType = FlipType::get(controlData.getType().cast<FIRRTLType>());
-    auto controlAttr = rewriter.getIntegerAttr(
-        IntegerType::get(32, rewriter.getContext()), i);
 
     // If current input is not the last input, a new when operation will be
     // created, and connections will be created in the thenRegion of the new
@@ -377,17 +363,15 @@ void buildControlMergeLogic(ValueVectorList subfieldList, Location insertLoc,
       auto whenOp = rewriter.create<WhenOp>(insertLoc, argValid, true);
       
       rewriter.setInsertionPointToStart(&whenOp.thenRegion().front());
-      auto controlOp = rewriter.create<firrtl::ConstantOp>(
-          insertLoc, controlType, controlAttr);
-      rewriter.create<ConnectOp>(insertLoc, controlData, controlOp.getResult());
+      auto controlValue = createConstantOp(insertLoc, controlType, i, rewriter);
+      rewriter.create<ConnectOp>(insertLoc, controlData, controlValue);
       rewriter.create<ConnectOp>(insertLoc, controlValid, argValid); // Mark
       rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
 
       rewriter.setInsertionPointToStart(&whenOp.elseRegion().front());
     } else {
-      auto controlOp = rewriter.create<firrtl::ConstantOp>(
-          insertLoc, controlType, controlAttr);
-      rewriter.create<ConnectOp>(insertLoc, controlData, controlOp.getResult());
+      auto controlValue = createConstantOp(insertLoc, controlType, i, rewriter);
+      rewriter.create<ConnectOp>(insertLoc, controlData, controlValue);
       rewriter.create<ConnectOp>(insertLoc, controlValid, argValid); // Mark
       rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
     }
@@ -446,7 +430,7 @@ void buildConditionalBranchLogic(Operation oldOp, ValueVectorList subfieldList,
   rewriter.create<ConnectOp>(insertLoc, result0Valid, argValid);
   rewriter.create<ConnectOp>(insertLoc, argReady, result0Ready);
 
-  if (!cast<handshake::BranchOp>(oldOp).isControl()) {
+  if (!cast<handshake::ConditionalBranchOp>(oldOp).isControl()) {
     auto argData = argSubfield[2];
     auto result0Data = result0Subfield[2];
     rewriter.create<ConnectOp>(insertLoc, result0Data, argData);
@@ -462,7 +446,7 @@ void buildConditionalBranchLogic(Operation oldOp, ValueVectorList subfieldList,
   rewriter.create<ConnectOp>(insertLoc, result1Valid, argValid);
   rewriter.create<ConnectOp>(insertLoc, argReady, result1Ready);
 
-  if (!cast<handshake::BranchOp>(oldOp).isControl()) {
+  if (!cast<handshake::ConditionalBranchOp>(oldOp).isControl()) {
     auto argData = argSubfield[2];
     auto result1Data = result1Subfield[2];
     rewriter.create<ConnectOp>(insertLoc, result1Data, argData);
@@ -476,17 +460,116 @@ void buildConditionalBranchLogic(Operation oldOp, ValueVectorList subfieldList,
 
 void buildMuxLogic(ValueVectorList subfieldList, Location insertLoc, 
                    ConversionPatternRewriter &rewriter) {
+  // Get select subfield values
+  auto selectSubfield = subfieldList.front();
+  auto selectValid = selectSubfield[0];
+  auto selectReady = selectSubfield[1];
+  auto selectData = selectSubfield[2];
+  auto selectType = selectData.getType().cast<FIRRTLType>();
 
+  // Get result subfield values
+  auto resultSubfield = subfieldList.back();
+  auto resultValid = resultSubfield[0];
+  auto resultReady = resultSubfield[1];
+  auto resultData = resultSubfield[2];
+
+  auto validWhenOp = rewriter.create<WhenOp>(insertLoc, selectValid, true);
+  rewriter.setInsertionPointToStart(&validWhenOp.thenRegion().front());
+
+  for (int i = 1, e = subfieldList.size() - 1; i < e; i ++) {
+    auto argSubfield = subfieldList[i];
+    auto argValid = argSubfield[0];
+    auto argReady = argSubfield[1];
+    auto argData = argSubfield[2];
+
+    if (i != e - 1) {
+      auto constantValue = createConstantOp(insertLoc, selectType, i, rewriter);
+      auto conditionOp = rewriter.create<EQPrimOp>(insertLoc, 
+          UIntType::get(rewriter.getContext(), 1), selectData, constantValue);
+      auto branchWhenOp = rewriter.create<WhenOp>(
+          insertLoc, conditionOp.getResult(), true);
+
+      rewriter.setInsertionPointToStart(&branchWhenOp.thenRegion().front());
+      rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
+      rewriter.create<ConnectOp>(insertLoc, resultData, argData);
+      rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
+      auto selectReadyOp = rewriter.create<AndPrimOp>(
+          insertLoc, argValid.getType(), argValid, resultReady);
+      rewriter.create<ConnectOp>(insertLoc, 
+          selectReady, selectReadyOp.getResult());
+
+      rewriter.setInsertionPointToStart(&branchWhenOp.elseRegion().front());
+    } else {
+      rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
+      rewriter.create<ConnectOp>(insertLoc, resultData, argData);
+      rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
+      auto selectReadyOp = rewriter.create<AndPrimOp>(
+          insertLoc, argValid.getType(), argValid, resultReady);
+      rewriter.create<ConnectOp>(insertLoc, 
+          selectReady, selectReadyOp.getResult());
+    }
+  }
 }
 
 void buildForkLogic(Operation oldOp, ValueVectorList subfieldList, 
                     Location insertLoc, ConversionPatternRewriter &rewriter) {
+  auto argSubfield = subfieldList.front();
+  auto argValid = argSubfield[0];
+  auto argReady = argSubfield[1];
 
+  Value *tmpReady = nullptr;
+  for (int i = 1, e = subfieldList.size(); i < e; i ++) {
+    auto resultfield = subfieldList[i];
+    auto resultValid = resultfield[0];
+    auto resultReady = resultfield[1];
+
+    rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
+
+    if (!cast<handshake::ForkOp>(oldOp).isControl()){
+      auto argData = argSubfield[2];
+      auto resultData = resultfield[2];
+      rewriter.create<ConnectOp>(insertLoc, resultData, argData);
+    }
+
+    if (i == 1) {
+      *tmpReady = resultReady;
+    } else {
+      *tmpReady = rewriter.create<OrPrimOp>(insertLoc, 
+          resultReady.getType(), resultReady, *tmpReady);
+    }
+  }
+  rewriter.create<ConnectOp>(insertLoc, argReady, *tmpReady);
 }
 
 void buildLazyForkLogic(Operation oldOp, ValueVectorList subfieldList, 
     Location insertLoc, ConversionPatternRewriter &rewriter) {
+  auto argSubfield = subfieldList.front();
+  auto argValid = argSubfield[0];
+  auto argReady = argSubfield[1];
 
+  Value *tmpReady = &subfieldList[1][1];
+  for (int i = 2, e = subfieldList.size(); i < e; i ++) {
+    auto resultReady = subfieldList[i][1];
+    *tmpReady = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(), 
+                                           resultReady, *tmpReady);
+  }
+  rewriter.create<ConnectOp>(insertLoc, argReady, *tmpReady);
+  
+  auto resultValidOp = rewriter.create<AndPrimOp>(insertLoc, 
+      argValid.getType(), argValid, *tmpReady);
+  for (int i = 1, e = subfieldList.size(); i < e; i ++) {
+    auto resultfield = subfieldList[i];
+    auto resultValid = resultfield[0];
+
+    rewriter.create<ConnectOp>(insertLoc, resultValid, 
+                               resultValidOp.getResult());
+
+    if (!cast<handshake::ForkOp>(oldOp).isControl()){
+      auto argData = argSubfield[2];
+      auto resultData = resultfield[2];
+      rewriter.create<ConnectOp>(insertLoc, resultData, argData);
+    }
+  }
 }
 
 void buildSinkLogic(ValueVectorList subfieldList, Location insertLoc, 

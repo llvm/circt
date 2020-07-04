@@ -1,6 +1,8 @@
 {
     "files.associations": {
         "*.inc": "cpp",
+        "__config": "cpp",
+        "__nullptr": "cpp"
     },
     "files.watcherExclude": {
         "**/.git/objects/**": true,
