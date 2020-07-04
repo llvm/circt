@@ -127,6 +127,24 @@ Value createConstantOp(Location insertLoc, FIRRTLType opType, int value,
   return constantOp.getResult();
 }
 
+std::string getSubModuleName(Operation &oldOp) {
+  auto subModuleName = oldOp.getName().getStringRef().str() + "_" + 
+                       std::to_string(oldOp.getNumOperands()) + "ins_" + 
+                       std::to_string(oldOp.getNumResults()) + "outs";
+
+  // Add compare operation information
+  if (auto comOp = dyn_cast<mlir::CmpIOp>(oldOp)) {
+    subModuleName += "_" + stringifyEnum(comOp.getPredicate()).str();
+  } 
+  
+  // Add elastic component control information
+  else if (oldOp.getAttrs().size() != 0) {
+    if (oldOp.getAttrOfType<BoolAttr>("control").getValue())
+      subModuleName += "_ctrl";
+  }
+  return subModuleName;
+}
+
 //===----------------------------------------------------------------------===//
 // Create Top FIRRTL Module Functions
 //===----------------------------------------------------------------------===//
@@ -207,7 +225,7 @@ FModuleOp checkSubModuleOp(FModuleOp topModuleOp, Operation &oldOp) {
       // Check whether the name of the current operation is as same as the 
       // targeted operation, if so, return the current operation rather than
       // create a new FModule operation
-      if (oldOp.getName().getStringRef() == subModuleOp.getName()) {
+      if (StringRef(getSubModuleName(oldOp)) == subModuleOp.getName()) {
         return subModuleOp;
       }
     }
@@ -246,7 +264,7 @@ FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation &oldOp,
   }
 
   auto subModule = rewriter.create<FModuleOp>(topModuleOp.getLoc(), 
-      rewriter.getStringAttr(oldOp.getName().getStringRef()), 
+      rewriter.getStringAttr(StringRef(getSubModuleName(oldOp))), 
       ArrayRef<ModulePort>(modulePorts));
   return subModule;
 }
@@ -679,7 +697,7 @@ void createInstOp(Operation &oldOp, FModuleOp subModuleOp,
   // Insert instanceOp
   rewriter.setInsertionPointAfter(&oldOp);
   auto instOp = rewriter.create<firrtl::InstanceOp>(oldOp.getLoc(), 
-      instType, oldOp.getName().getStringRef(), rewriter.getStringAttr(""));
+      instType, subModuleOp.getName(), rewriter.getStringAttr(""));
 
   // Connect instanceOp with other operations in the top module
   int port_idx = 0;
@@ -738,6 +756,10 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     auto &entryBlock = topModuleOp.getBody().front();
 
     // Traverse and convert all operations in funcOp.
+    // If you want to extend a non-submodule operation, please follow the 
+    // pattern of convertReturnOp.
+    // Else if you want to extend a submodule operation, please follow the 
+    // pattern of buildBinaryLogic, and buildMergeLogic.
     for (Operation &op : entryBlock) {
       if (isa<handshake::ReturnOp>(op)) {
         convertReturnOp(op, entryBlock, rewriter);
@@ -773,8 +795,8 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
           else if (isa<mlir::XOrOp>(op))
             buildBinaryLogic<XorPrimOp>(subfieldList, insertLoc, rewriter);
           
-          else if (isa<mlir::CmpIOp>(op)) {
-            auto cmpOpAttr = cast<mlir::CmpIOp>(op).getPredicate();
+          else if (auto cmpOp = dyn_cast<mlir::CmpIOp>(op)) {
+            auto cmpOpAttr = cmpOp.getPredicate();
             switch(cmpOpAttr) {
               case CmpIPredicate::eq:
                 buildBinaryLogic<EQPrimOp>(subfieldList, insertLoc, rewriter);
