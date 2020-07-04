@@ -164,6 +164,38 @@ static LogicalResult lower(firrtl::CatPrimOp op, ArrayRef<Value> operands,
 }
 
 //===----------------------------------------------------------------------===//
+// Variadic Bitwise Operations
+//===----------------------------------------------------------------------===//
+
+template <typename OpType, typename ResultOpType>
+static LogicalResult lowerVariadicOp(OpType op, ArrayRef<Value> operands,
+                                     ConversionPatternRewriter &rewriter) {
+  auto lhs = mapAndExtendInt(operands[0], op.getType(), op, rewriter);
+  auto rhs = mapAndExtendInt(operands[1], op.getType(), op, rewriter);
+
+  if (!lhs || !rhs)
+    return failure();
+
+  rewriter.replaceOpWithNewOp<ResultOpType>(op, ValueRange({lhs, rhs}));
+  return success();
+}
+
+static LogicalResult lower(firrtl::AndPrimOp op, ArrayRef<Value> operands,
+                           ConversionPatternRewriter &rewriter) {
+  return lowerVariadicOp<firrtl::AndPrimOp, rtl::AndOp>(op, operands, rewriter);
+}
+
+static LogicalResult lower(firrtl::OrPrimOp op, ArrayRef<Value> operands,
+                           ConversionPatternRewriter &rewriter) {
+  return lowerVariadicOp<firrtl::OrPrimOp, rtl::OrOp>(op, operands, rewriter);
+}
+
+static LogicalResult lower(firrtl::XorPrimOp op, ArrayRef<Value> operands,
+                           ConversionPatternRewriter &rewriter) {
+  return lowerVariadicOp<firrtl::XorPrimOp, rtl::XorOp>(op, operands, rewriter);
+}
+
+//===----------------------------------------------------------------------===//
 // Binary Operations
 //===----------------------------------------------------------------------===//
 
@@ -189,11 +221,6 @@ static LogicalResult lower(firrtl::AddPrimOp op, ArrayRef<Value> operands,
 static LogicalResult lower(firrtl::SubPrimOp op, ArrayRef<Value> operands,
                            ConversionPatternRewriter &rewriter) {
   return lowerBinOp<firrtl::SubPrimOp, rtl::SubOp>(op, operands, rewriter);
-}
-
-static LogicalResult lower(firrtl::XorPrimOp op, ArrayRef<Value> operands,
-                           ConversionPatternRewriter &rewriter) {
-  return lowerBinOp<firrtl::XorPrimOp, rtl::XorOp>(op, operands, rewriter);
 }
 
 namespace {
