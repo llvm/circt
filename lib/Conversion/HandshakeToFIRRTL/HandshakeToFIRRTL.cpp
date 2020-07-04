@@ -289,39 +289,103 @@ ValueVectorList extractSubfields(Block &entryBlock, Location insertLoc,
   return valueVectorList;
 }
 
+void buildControlMergeLogic(ValueVectorList subfieldList, Location insertLoc, 
+                            ConversionPatternRewriter &rewriter) {
+
+  // Get result subfield values
+  auto numPort = subfieldList.size();
+  auto resultSubfield = subfieldList[numPort - 2];
+  auto resultValid = resultSubfield[0];
+  auto resultReady = resultSubfield[1];
+
+  // The last result of control_merge indicates which input is active.
+  auto controlSubfield = subfieldList[numPort - 1];
+  auto controlData = controlSubfield[0];
+  auto controlValid = controlSubfield[1];
+  auto controlReady = controlSubfield[2];
+
+  // Connect ready signal for all inputs
+  auto argReadyOp = rewriter.create<AndPrimOp>(
+      insertLoc, resultReady.getType(), resultReady, controlReady);
+  for (int i = 0, e = numPort - 2; i < e; i ++) {
+    auto argReady = subfieldList[i][1];
+    rewriter.create<ConnectOp>(insertLoc, argReady, argReadyOp.getResult());
+  }
+
+  // Walk through all inputs to create a chain of when operation
+  for (int i = 0, e = numPort - 2; i < e; i ++) {
+
+    // Get current input subfield values
+    auto argSubfield = subfieldList[i];
+    auto argValid = argSubfield[0];
+
+    auto controlType = FlipType::get(controlData.getType().cast<FIRRTLType>());
+    auto controlAttr = rewriter.getIntegerAttr(
+        IntegerType::get(32, rewriter.getContext()), i);
+
+    // If current input is not the last input, a new when operation will be
+    // created, and connections will be created in the thenRegion of the new
+    // when operation.
+    if (i != e - 1) {
+      auto whenOp = rewriter.create<WhenOp>(insertLoc, argValid, true);
+      rewriter.setInsertionPointToStart(&whenOp.thenRegion().front());
+
+      auto controlOp = rewriter.create<firrtl::ConstantOp>(
+          insertLoc, controlType, controlAttr);
+      rewriter.create<ConnectOp>(insertLoc, controlData, controlOp.getResult());
+      rewriter.create<ConnectOp>(insertLoc, controlValid, argValid); // Mark
+      rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
+
+      rewriter.setInsertionPointToStart(&whenOp.elseRegion().front());
+    } else {
+      auto controlOp = rewriter.create<firrtl::ConstantOp>(
+          insertLoc, controlType, controlAttr);
+      rewriter.create<ConnectOp>(insertLoc, controlData, controlOp.getResult());
+      rewriter.create<ConnectOp>(insertLoc, controlValid, argValid); // Mark
+      rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
+    }
+  }
+}
+
 // Multiple input merge operation. Now we presume only one input is active, an
 // simple arbitration algorithm is used here: the 1th input always has the
 // highest priority.
 void buildMergeLogic(ValueVectorList subfieldList, Location insertLoc, 
                      ConversionPatternRewriter &rewriter) {
 
-  auto resultSubfiled = subfieldList.back();
-  auto resultData = resultSubfiled[0];
-  auto resultValid = resultSubfiled[1];
-  auto resultReady = resultSubfiled[2];
+  // Get result subfield values
+  auto resultSubfield = subfieldList.back();
+  auto resultData = resultSubfield[0];
+  auto resultValid = resultSubfield[1];
+  auto resultReady = resultSubfield[2];
 
-  // Walk through all inputs
+  // Connect ready signal for all inputs
   for (int i = 0, e = subfieldList.size() - 1; i < e; i ++) {
+    auto argReady = subfieldList[i][2];
+    rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
+  }
 
-    // Get subfields values
+  // Walk through all inputs to create a chain of when operation
+  for (int i = 0, e = subfieldList.size() - 1; i < e; i ++) {
+    
+    // Get current input subfield values
     auto argSubfield = subfieldList[i];
     auto argData = argSubfield[0];
     auto argValid = argSubfield[1];
-    auto argReady = argSubfield[2];
 
-    // Create new when operation
-    auto whenOp = rewriter.create<WhenOp>(insertLoc, argValid, true);
-    rewriter.setInsertionPointToStart(&whenOp.thenRegion().front());
-    rewriter.create<ConnectOp>(insertLoc, resultData, argData);
-    rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
-    rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
-    rewriter.setInsertionPointToStart(&whenOp.elseRegion().front());
+    // If current input is not the last input, a new when operation will be
+    // created, and connections will be created in the thenRegion of the new
+    // when operation.
+    if (i != e - 1) {
+      auto whenOp = rewriter.create<WhenOp>(insertLoc, argValid, true);
+      rewriter.setInsertionPointToStart(&whenOp.thenRegion().front());
 
-    // Else branch (no input is active)
-    if (i == e - 1) {
       rewriter.create<ConnectOp>(insertLoc, resultData, argData);
       rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
-      rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
+      rewriter.setInsertionPointToStart(&whenOp.elseRegion().front());
+    } else {
+      rewriter.create<ConnectOp>(insertLoc, resultData, argData);
+      rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
     }
   }
 }
@@ -333,7 +397,7 @@ void buildBinaryLogic(ValueVectorList subfieldList, Location insertLoc,
   // Get subfields values
   auto arg0Subfield = subfieldList[0];
   auto arg1Subfiled = subfieldList[1];
-  auto resultSubfiled = subfieldList[2];
+  auto resultSubfield = subfieldList[2];
 
   auto arg0Data = arg0Subfield[0];
   auto arg0Valid = arg0Subfield[1];
@@ -343,9 +407,9 @@ void buildBinaryLogic(ValueVectorList subfieldList, Location insertLoc,
   auto arg1Valid = arg1Subfiled[1];
   auto arg1Ready = arg1Subfiled[2];
 
-  auto resultData = resultSubfiled[0];
-  auto resultValid = resultSubfiled[1];
-  auto resultReady = resultSubfiled[2];
+  auto resultData = resultSubfield[0];
+  auto resultValid = resultSubfield[1];
+  auto resultReady = resultSubfield[2];
 
   // Connect data signals
   auto CombDataOp = rewriter.create<OpType>(
@@ -470,8 +534,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
 
           auto subfieldList = extractSubfields(entryBlock, insertLoc, rewriter);
           if (isa<AddIOp>(op)) {
-            buildBinaryLogic<AddPrimOp>(subfieldList, 
-                                                insertLoc, rewriter);
+            buildBinaryLogic<AddPrimOp>(subfieldList, insertLoc, rewriter);
           } else if (isa<handshake::MergeOp>(op)) {
             buildMergeLogic(subfieldList, insertLoc, rewriter);
           }
