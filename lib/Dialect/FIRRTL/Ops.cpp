@@ -1024,7 +1024,21 @@ static LogicalResult verifyStdIntCast(StdIntCast cast) {
   // match.
   FIRRTLType firType;
   IntegerType integerType;
-  if ((firType = cast.getOperand().getType().dyn_cast<FIRRTLType>())) {
+  if (auto flippedType = cast.getOperand().getType().dyn_cast<FlipType>()) {
+    firType = flippedType.getPassiveType();
+    integerType = cast.getType().dyn_cast<IntegerType>();
+    if (!integerType) {
+      cast.emitError("flipped result type must be a signless integer");
+      return failure();
+    }
+  } else if (auto flippedType = cast.getType().dyn_cast<FlipType>()) {
+    firType = flippedType.getPassiveType();
+    integerType = cast.getOperand().getType().dyn_cast<IntegerType>();
+    if (!integerType) {
+      cast.emitError("flipped operand type must be a signless integer");
+      return failure();
+    }
+  } else if ((firType = cast.getOperand().getType().dyn_cast<FIRRTLType>())) {
     integerType = cast.getType().dyn_cast<IntegerType>();
     if (!integerType) {
       cast.emitError("result type must be a signless integer");
@@ -1050,34 +1064,6 @@ static LogicalResult verifyStdIntCast(StdIntCast cast) {
     return cast.emitError("standard integer type must be signless"), failure();
   if (unsigned(intWidth) != integerType.getWidth())
     return cast.emitError("source and result width must match"), failure();
-
-  return success();
-}
-
-//===----------------------------------------------------------------------------===//
-// Conversions from flipped fixed-width signless integer types in standard
-// dialect.
-//===----------------------------------------------------------------------------===//
-
-static LogicalResult verifyStdFlippedIntCast(StdFlippedIntCast cast) {
-  // Either the input or result must have signless standard integer type, the
-  // other must be a FIRRTL type that lowers to one, and their widths must
-  // match.
-  FIRRTLType firType;
-  FIRRTLType passiveType;
-  if (firType = cast.getOperand().getType().dyn_cast<FlipType>()) {
-    passiveType = firType.getPassiveType();
-  } else {
-    cast.emitError("firrtl type is not flipped");
-    return failure();
-  }
-
-  int32_t intWidth = passiveType.getBitWidthOrSentinel();
-  if (intWidth == -2)
-    return cast.emitError("flipped firrtl type isn't simple bit type");
-  if (intWidth == -1)
-    return cast.emitError("flipped SInt/UInt type must have a width"),
-           failure();
 
   return success();
 }

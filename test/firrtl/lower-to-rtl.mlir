@@ -40,7 +40,7 @@
     // CHECK-NEXT: rtl.connect %2, %5 : i4
     firrtl.connect %2, %4 : !firrtl.uint<4>, !firrtl.uint<4>
 
-    // CHECK-NEXT: %10 = firrtl.stdFlippedIntCast %out1 : (!firrtl.flip<uint<4>>) -> i4
+    // CHECK-NEXT: %10 = firrtl.stdIntCast %out1 : (!firrtl.flip<uint<4>>) -> i4
     // CHECK-NEXT: rtl.connect %10, %8 : i4
     firrtl.connect %out1, %5 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 

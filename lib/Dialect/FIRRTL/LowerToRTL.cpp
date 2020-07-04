@@ -11,7 +11,7 @@
 using namespace circt;
 using namespace firrtl;
 using namespace rtl;
-
+#include <iostream>
 //===----------------------------------------------------------------------===//
 // RTLTypeConverter
 //===----------------------------------------------------------------------===//
@@ -51,20 +51,18 @@ static Value mapOperand(Value operand, Operation *op,
     if (!resultType.hasValue())
       return {};
 
-    if (auto flippedType = firType.dyn_cast<FlipType>()) {
-      auto passiveResultType =
-          RTLTypeConverter::convertType(flippedType.getPassiveType());
-      if (auto intType = passiveResultType.getValue().dyn_cast<IntegerType>()) {
-        // Cast flipped firrtl -> standard type.
-        return rewriter.create<firrtl::StdFlippedIntCast>(op->getLoc(), intType,
-                                                          operand);
-      }
-    }
-
     if (auto intType = resultType.getValue().dyn_cast<IntegerType>()) {
       // Cast firrtl -> standard type.
       return rewriter.create<firrtl::StdIntCast>(op->getLoc(), intType,
                                                  operand);
+    } else if (auto flippedType = resultType.getValue().dyn_cast<FlipType>()) {
+      auto flippedResultType =
+          RTLTypeConverter::convertType(flippedType.getPassiveType());
+      if (auto intType = flippedResultType.getValue().dyn_cast<IntegerType>()) {
+        // Cast flipped firrtl -> standard type.
+        return rewriter.create<firrtl::StdIntCast>(op->getLoc(), intType,
+                                                   operand);
+      }
     }
   }
 
@@ -245,7 +243,6 @@ public:
   explicit RTLConversionTarget(MLIRContext &ctx) : ConversionTarget(ctx) {
     addLegalDialect<RTLDialect>();
     addLegalOp<firrtl::StdIntCast>();
-    addLegalOp<firrtl::StdFlippedIntCast>();
   }
 };
 } // end anonymous namespace
