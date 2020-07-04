@@ -11,7 +11,7 @@
 using namespace circt;
 using namespace firrtl;
 using namespace rtl;
-#include <iostream>
+
 //===----------------------------------------------------------------------===//
 // RTLTypeConverter
 //===----------------------------------------------------------------------===//
