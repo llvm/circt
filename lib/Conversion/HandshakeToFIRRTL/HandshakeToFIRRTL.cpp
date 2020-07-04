@@ -289,6 +289,49 @@ ValueVectorList extractSubfields(Block &entryBlock, Location insertLoc,
   return valueVectorList;
 }
 
+// Multiple input merge operation. Now we presume only one input is active, an
+// simple arbitration algorithm is used here: the 1th input always has the
+// highest priority.
+void buildMergeLogic(ValueVectorList subfieldList, Location insertLoc, 
+                     ConversionPatternRewriter &rewriter) {
+
+  // Get result subfield values
+  auto resultSubfield = subfieldList.back();
+  auto resultData = resultSubfield[0];
+  auto resultValid = resultSubfield[1];
+  auto resultReady = resultSubfield[2];
+
+  // Connect ready signal for all inputs
+  for (int i = 0, e = subfieldList.size() - 1; i < e; i ++) {
+    auto argReady = subfieldList[i][2];
+    rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
+  }
+
+  // Walk through all inputs to create a chain of when operation
+  for (int i = 0, e = subfieldList.size() - 1; i < e; i ++) {
+    
+    // Get current input subfield values
+    auto argSubfield = subfieldList[i];
+    auto argData = argSubfield[0];
+    auto argValid = argSubfield[1];
+
+    // If current input is not the last input, a new when operation will be
+    // created, and connections will be created in the thenRegion of the new
+    // when operation.
+    if (i != e - 1) {
+      auto whenOp = rewriter.create<WhenOp>(insertLoc, argValid, true);
+      rewriter.setInsertionPointToStart(&whenOp.thenRegion().front());
+
+      rewriter.create<ConnectOp>(insertLoc, resultData, argData);
+      rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
+      rewriter.setInsertionPointToStart(&whenOp.elseRegion().front());
+    } else {
+      rewriter.create<ConnectOp>(insertLoc, resultData, argData);
+      rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
+    }
+  }
+}
+
 void buildControlMergeLogic(ValueVectorList subfieldList, Location insertLoc, 
                             ConversionPatternRewriter &rewriter) {
 
@@ -347,47 +390,65 @@ void buildControlMergeLogic(ValueVectorList subfieldList, Location insertLoc,
   }
 }
 
-// Multiple input merge operation. Now we presume only one input is active, an
-// simple arbitration algorithm is used here: the 1th input always has the
-// highest priority.
-void buildMergeLogic(ValueVectorList subfieldList, Location insertLoc, 
-                     ConversionPatternRewriter &rewriter) {
+void buildBranchLogic(ValueVectorList subfieldList, Location insertLoc, 
+                      ConversionPatternRewriter &rewriter) {
+  auto argSubfield = subfieldList[0];
+  auto resultSubfield = subfieldList[1];
 
-  // Get result subfield values
-  auto resultSubfield = subfieldList.back();
-  auto resultData = resultSubfield[0];
-  auto resultValid = resultSubfield[1];
-  auto resultReady = resultSubfield[2];
+  bool isControl = (argSubfield.size() == 2 && resultSubfield.size() == 2);
+  if (isControl) {
+    auto argValid = argSubfield[0];
+    auto argReady = argSubfield[1];
 
-  // Connect ready signal for all inputs
-  for (int i = 0, e = subfieldList.size() - 1; i < e; i ++) {
-    auto argReady = subfieldList[i][2];
+    auto resultValid = resultSubfield[0];
+    auto resultReady = resultSubfield[1];
+
+    rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
     rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
-  }
-
-  // Walk through all inputs to create a chain of when operation
-  for (int i = 0, e = subfieldList.size() - 1; i < e; i ++) {
-    
-    // Get current input subfield values
-    auto argSubfield = subfieldList[i];
+  } else {
     auto argData = argSubfield[0];
     auto argValid = argSubfield[1];
+    auto argReady = argSubfield[2];
 
-    // If current input is not the last input, a new when operation will be
-    // created, and connections will be created in the thenRegion of the new
-    // when operation.
-    if (i != e - 1) {
-      auto whenOp = rewriter.create<WhenOp>(insertLoc, argValid, true);
-      rewriter.setInsertionPointToStart(&whenOp.thenRegion().front());
+    auto resultData = resultSubfield[0];
+    auto resultValid = resultSubfield[1];
+    auto resultReady = resultSubfield[2];
 
-      rewriter.create<ConnectOp>(insertLoc, resultData, argData);
-      rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
-      rewriter.setInsertionPointToStart(&whenOp.elseRegion().front());
-    } else {
-      rewriter.create<ConnectOp>(insertLoc, resultData, argData);
-      rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
-    }
+    rewriter.create<ConnectOp>(insertLoc, resultData, argData);
+    rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
+    rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
   }
+}
+
+void buildConditionalBranchLogic(
+    ValueVectorList subfieldList, Location insertLoc, 
+    ConversionPatternRewriter &rewriter) {
+
+}
+
+void buildMuxLogic(ValueVectorList subfieldList, Location insertLoc, 
+                   ConversionPatternRewriter &rewriter) {
+
+}
+
+void buildForkLogic(ValueVectorList subfieldList, Location insertLoc, 
+                    ConversionPatternRewriter &rewriter) {
+
+}
+
+void buildSinkLogic(ValueVectorList subfieldList, Location insertLoc, 
+                    ConversionPatternRewriter &rewriter) {
+
+}
+
+void buildConstantLogic(ValueVectorList subfieldList, Location insertLoc, 
+                        ConversionPatternRewriter &rewriter) {
+
+}
+
+void buildJoinLogic(ValueVectorList subfieldList, Location insertLoc, 
+                    ConversionPatternRewriter &rewriter) {
+
 }
 
 // Build binary logic for the new sub-module
@@ -396,16 +457,16 @@ void buildBinaryLogic(ValueVectorList subfieldList, Location insertLoc,
                       ConversionPatternRewriter &rewriter) {
   // Get subfields values
   auto arg0Subfield = subfieldList[0];
-  auto arg1Subfiled = subfieldList[1];
+  auto arg1Subfield = subfieldList[1];
   auto resultSubfield = subfieldList[2];
 
   auto arg0Data = arg0Subfield[0];
   auto arg0Valid = arg0Subfield[1];
   auto arg0Ready = arg0Subfield[2];
 
-  auto arg1Data = arg1Subfiled[0];
-  auto arg1Valid = arg1Subfiled[1];
-  auto arg1Ready = arg1Subfiled[2];
+  auto arg1Data = arg1Subfield[0];
+  auto arg1Valid = arg1Subfield[1];
+  auto arg1Ready = arg1Subfield[2];
 
   auto resultData = resultSubfield[0];
   auto resultValid = resultSubfield[1];

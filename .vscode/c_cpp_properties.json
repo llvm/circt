@@ -1,20 +1,17 @@
 {
     "configurations": [
         {
-            "name": "Mac",
+            "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/include",
-                "${workspaceFolder}/../llvm-project/mlir/include",
-                "${workspaceFolder}/../llvm-project/llvm/include",
-                "${workspaceFolder}/../llvm-project/build/include",
-                "${workspaceFolder}/../llvm-project/build/tools/mlir/include",
-                "${workspaceFolder}/../llvm-project/build/tools/circt/include"
+                "${workspaceFolder}/build/include",
+                "${workspaceFolder}/llvm/mlir/include",
+                "${workspaceFolder}/llvm/llvm/include",
+                "${workspaceFolder}/llvm/build/include",
+                "${workspaceFolder}/llvm/build/tools/mlir/include"
             ],
             "defines": [],
-            "macFrameworkPath": [
-                "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks"
-            ],
-            "compilerPath": "/usr/bin/clang",
+            "compilerPath": "/tools/batonroot/rodin/devkits/lnx64/gcc-7.1.0/bin/g++",
             "cStandard": "c11",
             "cppStandard": "c++17",
             "intelliSenseMode": "clang-x64"
