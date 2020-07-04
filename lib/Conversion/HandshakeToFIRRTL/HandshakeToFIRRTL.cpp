@@ -108,7 +108,7 @@ FIRRTLType getBundleType(Type type, bool isFlip) {
   // ISSUE: How to handle index integers?
   case StandardTypes::Index: {
     unsigned width = type.cast<IndexType>().kInternalStorageBitWidth;
-    return buildBundleType(UIntType::get(context, width), isFlip, context);
+    return buildBundleType(SIntType::get(context, width), isFlip, context);
   }
   case StandardTypes::None:
     return buildBundleType(nullptr, isFlip, context);
@@ -511,34 +511,36 @@ void buildMuxLogic(ValueVectorList subfieldList, Location insertLoc,
   }
 }
 
+// ISSUE: Currently fork is as same as lazy fork
 void buildForkLogic(Operation oldOp, ValueVectorList subfieldList, 
                     Location insertLoc, ConversionPatternRewriter &rewriter) {
   auto argSubfield = subfieldList.front();
   auto argValid = argSubfield[0];
   auto argReady = argSubfield[1];
 
-  Value *tmpReady = nullptr;
+  Value *tmpReady = &subfieldList[1][1];
+  for (int i = 2, e = subfieldList.size(); i < e; i ++) {
+    auto resultReady = subfieldList[i][1];
+    *tmpReady = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(), 
+                                           resultReady, *tmpReady);
+  }
+  rewriter.create<ConnectOp>(insertLoc, argReady, *tmpReady);
+  
+  auto resultValidOp = rewriter.create<AndPrimOp>(insertLoc, 
+      argValid.getType(), argValid, *tmpReady);
   for (int i = 1, e = subfieldList.size(); i < e; i ++) {
     auto resultfield = subfieldList[i];
     auto resultValid = resultfield[0];
-    auto resultReady = resultfield[1];
 
-    rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
+    rewriter.create<ConnectOp>(insertLoc, resultValid, 
+                               resultValidOp.getResult());
 
     if (!cast<handshake::ForkOp>(oldOp).isControl()){
       auto argData = argSubfield[2];
       auto resultData = resultfield[2];
       rewriter.create<ConnectOp>(insertLoc, resultData, argData);
     }
-
-    if (i == 1) {
-      *tmpReady = resultReady;
-    } else {
-      *tmpReady = rewriter.create<OrPrimOp>(insertLoc, 
-          resultReady.getType(), resultReady, *tmpReady);
-    }
   }
-  rewriter.create<ConnectOp>(insertLoc, argReady, *tmpReady);
 }
 
 void buildLazyForkLogic(Operation oldOp, ValueVectorList subfieldList, 
@@ -574,17 +576,40 @@ void buildLazyForkLogic(Operation oldOp, ValueVectorList subfieldList,
 
 void buildSinkLogic(ValueVectorList subfieldList, Location insertLoc, 
                     ConversionPatternRewriter &rewriter) {
+  auto argSubfield = subfieldList.front();
+  auto argValid = argSubfield[0];
+  auto argReady = argSubfield[1];
 
+  auto signalType = argValid.getType().cast<FIRRTLType>();
+  auto highSignal = createConstantOp(insertLoc, signalType, 1, rewriter);
+  rewriter.create<ConnectOp>(insertLoc, argReady, highSignal);
 }
 
-void buildConstantLogic(ValueVectorList subfieldList, Location insertLoc, 
-                        ConversionPatternRewriter &rewriter) {
+void buildConstantLogic(Operation oldOp, ValueVectorList subfieldList, 
+    Location insertLoc, ConversionPatternRewriter &rewriter) {
 
+  auto controlSubfield = subfieldList.front();
+  auto controlValid = controlSubfield[0];
+  auto controlReady = controlSubfield[1];
+
+  auto resultSubfield = subfieldList.back();
+  auto resultValid = resultSubfield[0];
+  auto resultReady = resultSubfield[1];
+  auto resultData = resultSubfield[2];
+
+  auto constantType = FlipType::get(resultData.getType().cast<FIRRTLType>());
+  auto constantAttrValue = oldOp.getAttrOfType<IntegerAttr>("value").getSInt();
+
+  rewriter.create<ConnectOp>(insertLoc, resultValid, controlValid);
+  rewriter.create<ConnectOp>(insertLoc, controlReady, resultReady);
+  auto constantValue = createConstantOp(insertLoc, constantType, 
+                                        constantAttrValue, rewriter);
+  rewriter.create<ConnectOp>(insertLoc, resultData, constantValue);
 }
 
-void buildJoinLogic(Operation oldOp, ValueVectorList subfieldList, 
-                    Location insertLoc, ConversionPatternRewriter &rewriter) {
-
+void buildJoinLogic(ValueVectorList subfieldList, Location insertLoc, 
+                    ConversionPatternRewriter &rewriter) {
+  
 }
 
 // Build binary logic for the new sub-module
