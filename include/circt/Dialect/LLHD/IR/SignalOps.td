@@ -39,7 +39,7 @@ def LLHD_SigOp : LLHD_Op<"sig", [
     signal named "bar", carrying an `i1` type with initial value of 1.
   }];
 
-  let arguments = (ins StrAttr: $name, LLHD_AnySigUnderlyingType: $init);
+  let arguments = (ins StrAttr: $name, LLHD_AnyUnderlyingType: $init);
   let results = (outs LLHD_AnySigType: $result);
 
   let assemblyFormat = "$name $init attr-dict `:` type($init)";
@@ -73,7 +73,7 @@ def LLHD_PrbOp : LLHD_Op<"prb", [
   }];
 
   let arguments = (ins LLHD_AnySigType: $signal);
-  let results = (outs LLHD_AnySigUnderlyingType: $result);
+  let results = (outs LLHD_AnyUnderlyingType: $result);
 
   let assemblyFormat = "$signal attr-dict `:` type($signal)";
 }
@@ -114,7 +114,7 @@ def LLHD_DrvOp : LLHD_Op<"drv", [
   }];
 
   let arguments = (ins LLHD_AnySigType: $signal,
-                       LLHD_AnySigUnderlyingType: $value,
+                       LLHD_AnyUnderlyingType: $value,
                        LLHD_TimeType: $time,
                        Optional<I1>: $enable);
 
@@ -219,7 +219,7 @@ def LLHD_RegOp : LLHD_Op<"reg", [
   let arguments = (ins
     LLHD_AnySigType: $signal,
     LLHD_RegModeArrayAttr: $modes,
-    Variadic<AnyTypeOf<[LLHD_AnySigUnderlyingType, LLHD_AnySigType]>>: $values,
+    Variadic<AnyTypeOf<[LLHD_AnyUnderlyingType, LLHD_AnySigType]>>: $values,
     Variadic<I1>: $triggers,
     Variadic<LLHD_TimeType>: $delays,
     Variadic<I1>: $gates,
