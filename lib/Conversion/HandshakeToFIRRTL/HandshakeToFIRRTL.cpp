@@ -49,17 +49,6 @@ FIRRTLType buildBundleType(FIRRTLType dataType, bool isFlip,
   using BundleElement = std::pair<Identifier, FIRRTLType>;
   llvm::SmallVector<BundleElement, 3> elements;
 
-  // Construct the data field of the FIRRTL bundle if not a NoneType
-  if (dataType) {
-    Identifier dataId = Identifier::get("data", context);
-
-    if (isFlip) {
-      elements.push_back(std::make_pair(dataId, FlipType::get(dataType)));
-    } else {
-      elements.push_back(std::make_pair(dataId, dataType));
-    }
-  }
-
   // Construct the valid/ready field of the FIRRTL bundle
   Identifier validId = Identifier::get("valid", context);
   Identifier readyId = Identifier::get("ready", context);
@@ -71,6 +60,17 @@ FIRRTLType buildBundleType(FIRRTLType dataType, bool isFlip,
   } else {
     elements.push_back(std::make_pair(validId, signalType));
     elements.push_back(std::make_pair(readyId, FlipType::get(signalType)));
+  }
+
+  // Construct the data field of the FIRRTL bundle if not a NoneType
+  if (dataType) {
+    Identifier dataId = Identifier::get("data", context);
+
+    if (isFlip) {
+      elements.push_back(std::make_pair(dataId, FlipType::get(dataType)));
+    } else {
+      elements.push_back(std::make_pair(dataId, dataType));
+    }
   }
 
   return BundleType::get(ArrayRef<BundleElement>(elements), context);
@@ -102,13 +102,13 @@ FIRRTLType getBundleType(Type type, bool isFlip) {
       // ISSUE: How to handle signless integers? Should we use the AsSIntPrimOp
       // or AsUIntPrimOp to convert?
       case IntegerType::Signless:
-        return buildBundleType(SIntType::get(context, width), isFlip, context);
+        return buildBundleType(UIntType::get(context, width), isFlip, context);
     }
   }
   // ISSUE: How to handle index integers?
   case StandardTypes::Index: {
     unsigned width = type.cast<IndexType>().kInternalStorageBitWidth;
-    return buildBundleType(SIntType::get(context, width), isFlip, context);
+    return buildBundleType(UIntType::get(context, width), isFlip, context);
   }
   case StandardTypes::None:
     return buildBundleType(nullptr, isFlip, context);
@@ -290,20 +290,21 @@ ValueVectorList extractSubfields(Block &entryBlock, Location insertLoc,
 }
 
 // Multiple input merge operation. Now we presume only one input is active, an
-// simple arbitration algorithm is used here: the 1th input always has the
-// highest priority.
+// simple arbitration algorithm is used here: the former input always has the
+// higher priority.
+// We also presume merge is a non-block element.
 void buildMergeLogic(ValueVectorList subfieldList, Location insertLoc, 
                      ConversionPatternRewriter &rewriter) {
 
   // Get result subfield values
   auto resultSubfield = subfieldList.back();
-  auto resultData = resultSubfield[0];
-  auto resultValid = resultSubfield[1];
-  auto resultReady = resultSubfield[2];
+  auto resultValid = resultSubfield[0];
+  auto resultReady = resultSubfield[1];
+  auto resultData = resultSubfield[2];
 
   // Connect ready signal for all inputs
   for (int i = 0, e = subfieldList.size() - 1; i < e; i ++) {
-    auto argReady = subfieldList[i][2];
+    auto argReady = subfieldList[i][1];
     rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
   }
 
@@ -312,18 +313,19 @@ void buildMergeLogic(ValueVectorList subfieldList, Location insertLoc,
     
     // Get current input subfield values
     auto argSubfield = subfieldList[i];
-    auto argData = argSubfield[0];
-    auto argValid = argSubfield[1];
+    auto argValid = argSubfield[0];
+    auto argData = argSubfield[2];
 
     // If current input is not the last input, a new when operation will be
     // created, and connections will be created in the thenRegion of the new
     // when operation.
     if (i != e - 1) {
       auto whenOp = rewriter.create<WhenOp>(insertLoc, argValid, true);
+      
       rewriter.setInsertionPointToStart(&whenOp.thenRegion().front());
-
       rewriter.create<ConnectOp>(insertLoc, resultData, argData);
       rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
+      
       rewriter.setInsertionPointToStart(&whenOp.elseRegion().front());
     } else {
       rewriter.create<ConnectOp>(insertLoc, resultData, argData);
@@ -332,6 +334,8 @@ void buildMergeLogic(ValueVectorList subfieldList, Location insertLoc,
   }
 }
 
+// Same as buildMergeLogic, except that a control output port is included for 
+// indicating the current active input port.
 void buildControlMergeLogic(ValueVectorList subfieldList, Location insertLoc, 
                             ConversionPatternRewriter &rewriter) {
 
@@ -343,9 +347,9 @@ void buildControlMergeLogic(ValueVectorList subfieldList, Location insertLoc,
 
   // The last result of control_merge indicates which input is active.
   auto controlSubfield = subfieldList[numPort - 1];
-  auto controlData = controlSubfield[0];
-  auto controlValid = controlSubfield[1];
-  auto controlReady = controlSubfield[2];
+  auto controlValid = controlSubfield[0];
+  auto controlReady = controlSubfield[1];
+  auto controlData = controlSubfield[2];
 
   // Connect ready signal for all inputs
   auto argReadyOp = rewriter.create<AndPrimOp>(
@@ -371,8 +375,8 @@ void buildControlMergeLogic(ValueVectorList subfieldList, Location insertLoc,
     // when operation.
     if (i != e - 1) {
       auto whenOp = rewriter.create<WhenOp>(insertLoc, argValid, true);
+      
       rewriter.setInsertionPointToStart(&whenOp.thenRegion().front());
-
       auto controlOp = rewriter.create<firrtl::ConstantOp>(
           insertLoc, controlType, controlAttr);
       rewriter.create<ConnectOp>(insertLoc, controlData, controlOp.getResult());
@@ -390,40 +394,84 @@ void buildControlMergeLogic(ValueVectorList subfieldList, Location insertLoc,
   }
 }
 
-void buildBranchLogic(ValueVectorList subfieldList, Location insertLoc, 
-                      ConversionPatternRewriter &rewriter) {
+// Single input and single output branch operation
+void buildBranchLogic(Operation oldOp, ValueVectorList subfieldList, 
+                      Location insertLoc, ConversionPatternRewriter &rewriter) {
   auto argSubfield = subfieldList[0];
   auto resultSubfield = subfieldList[1];
 
-  bool isControl = (argSubfield.size() == 2 && resultSubfield.size() == 2);
-  if (isControl) {
-    auto argValid = argSubfield[0];
-    auto argReady = argSubfield[1];
+  auto argValid = argSubfield[0];
+  auto argReady = argSubfield[1];
+  auto resultValid = resultSubfield[0];
+  auto resultReady = resultSubfield[1];
 
-    auto resultValid = resultSubfield[0];
-    auto resultReady = resultSubfield[1];
+  rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
+  rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
 
-    rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
-    rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
-  } else {
-    auto argData = argSubfield[0];
-    auto argValid = argSubfield[1];
-    auto argReady = argSubfield[2];
-
-    auto resultData = resultSubfield[0];
-    auto resultValid = resultSubfield[1];
-    auto resultReady = resultSubfield[2];
+  if (!cast<handshake::BranchOp>(oldOp).isControl()) {
+    auto argData = argSubfield[2];
+    auto resultData = resultSubfield[2];
 
     rewriter.create<ConnectOp>(insertLoc, resultData, argData);
-    rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
-    rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
   }
 }
 
-void buildConditionalBranchLogic(
-    ValueVectorList subfieldList, Location insertLoc, 
-    ConversionPatternRewriter &rewriter) {
+// Conditional branch operation with two output
+void buildConditionalBranchLogic(Operation oldOp, ValueVectorList subfieldList, 
+    Location insertLoc, ConversionPatternRewriter &rewriter) {
 
+  auto argSubfield = subfieldList[0];
+  auto controlSubfield = subfieldList[1];
+  auto result0Subfield = subfieldList[2];
+  auto result1Subfield = subfieldList[3];
+
+  auto controlValid = controlSubfield[0];
+  auto controlReady = controlSubfield[1];
+  auto controlData = controlSubfield[2];
+
+  auto argValid = argSubfield[0];
+  auto argReady = argSubfield[1];
+  auto result0Valid = result0Subfield[0];
+  auto result0Ready = result0Subfield[1];
+  auto result1Valid = result1Subfield[0];
+  auto result1Ready = result1Subfield[1];
+
+  auto validWhenOp = rewriter.create<WhenOp>(insertLoc, controlValid, true);
+  
+  rewriter.setInsertionPointToStart(&validWhenOp.thenRegion().front());
+  auto branchWhenOp = rewriter.create<WhenOp>(insertLoc, controlData, true);
+
+  // When control signal is true
+  rewriter.setInsertionPointToStart(&branchWhenOp.thenRegion().front());
+  rewriter.create<ConnectOp>(insertLoc, result0Valid, argValid);
+  rewriter.create<ConnectOp>(insertLoc, argReady, result0Ready);
+
+  if (!cast<handshake::BranchOp>(oldOp).isControl()) {
+    auto argData = argSubfield[2];
+    auto result0Data = result0Subfield[2];
+    rewriter.create<ConnectOp>(insertLoc, result0Data, argData);
+  }
+
+  auto controlReadyOp0 = rewriter.create<AndPrimOp>(
+      insertLoc, argValid.getType(), argValid, result0Ready);
+  rewriter.create<ConnectOp>(insertLoc, controlReady, 
+                             controlReadyOp0.getResult());
+  
+  // When control signal is false
+  rewriter.setInsertionPointToStart(&branchWhenOp.elseRegion().front());
+  rewriter.create<ConnectOp>(insertLoc, result1Valid, argValid);
+  rewriter.create<ConnectOp>(insertLoc, argReady, result1Ready);
+
+  if (!cast<handshake::BranchOp>(oldOp).isControl()) {
+    auto argData = argSubfield[2];
+    auto result1Data = result1Subfield[2];
+    rewriter.create<ConnectOp>(insertLoc, result1Data, argData);
+  }
+
+  auto controlReadyOp1 = rewriter.create<AndPrimOp>(
+      insertLoc, argValid.getType(), argValid, result1Ready);
+  rewriter.create<ConnectOp>(insertLoc, controlReady, 
+                             controlReadyOp1.getResult());
 }
 
 void buildMuxLogic(ValueVectorList subfieldList, Location insertLoc, 
@@ -431,8 +479,13 @@ void buildMuxLogic(ValueVectorList subfieldList, Location insertLoc,
 
 }
 
-void buildForkLogic(ValueVectorList subfieldList, Location insertLoc, 
-                    ConversionPatternRewriter &rewriter) {
+void buildForkLogic(Operation oldOp, ValueVectorList subfieldList, 
+                    Location insertLoc, ConversionPatternRewriter &rewriter) {
+
+}
+
+void buildLazyForkLogic(Operation oldOp, ValueVectorList subfieldList, 
+    Location insertLoc, ConversionPatternRewriter &rewriter) {
 
 }
 
@@ -446,8 +499,8 @@ void buildConstantLogic(ValueVectorList subfieldList, Location insertLoc,
 
 }
 
-void buildJoinLogic(ValueVectorList subfieldList, Location insertLoc, 
-                    ConversionPatternRewriter &rewriter) {
+void buildJoinLogic(Operation oldOp, ValueVectorList subfieldList, 
+                    Location insertLoc, ConversionPatternRewriter &rewriter) {
 
 }
 
@@ -460,17 +513,17 @@ void buildBinaryLogic(ValueVectorList subfieldList, Location insertLoc,
   auto arg1Subfield = subfieldList[1];
   auto resultSubfield = subfieldList[2];
 
-  auto arg0Data = arg0Subfield[0];
-  auto arg0Valid = arg0Subfield[1];
-  auto arg0Ready = arg0Subfield[2];
+  auto arg0Valid = arg0Subfield[0];
+  auto arg0Ready = arg0Subfield[1];
+  auto arg0Data = arg0Subfield[2];
 
-  auto arg1Data = arg1Subfield[0];
-  auto arg1Valid = arg1Subfield[1];
-  auto arg1Ready = arg1Subfield[2];
+  auto arg1Valid = arg1Subfield[0];
+  auto arg1Ready = arg1Subfield[1];
+  auto arg1Data = arg1Subfield[2];
 
-  auto resultData = resultSubfield[0];
-  auto resultValid = resultSubfield[1];
-  auto resultReady = resultSubfield[2];
+  auto resultValid = resultSubfield[0];
+  auto resultReady = resultSubfield[1];
+  auto resultData = resultSubfield[2];
 
   // Connect data signals
   auto CombDataOp = rewriter.create<OpType>(
@@ -598,7 +651,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
             buildBinaryLogic<AddPrimOp>(subfieldList, insertLoc, rewriter);
           } else if (isa<handshake::MergeOp>(op)) {
             buildMergeLogic(subfieldList, insertLoc, rewriter);
-          }
+          } 
         }
         createInstOp(op, subModuleOp, rewriter);
       }
