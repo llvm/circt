@@ -1345,7 +1345,9 @@ struct DFRemoveBlockPass :
 public PassWrapper<DFRemoveBlockPass, OperationPass<handshake::FuncOp>> {
   void runOnOperation() override {
     auto funcOp = getOperation();
-    auto *termOp = funcOp.getBody().front().getTerminator();
+    auto &entryBlock = funcOp.getBody().front();
+    auto *termOp = entryBlock.getTerminator();
+    auto builder = OpBuilder(funcOp.getContext());
 
     // Move all operations to the first block except terminator operations 
     // which can be safely dropped
@@ -1353,14 +1355,20 @@ public PassWrapper<DFRemoveBlockPass, OperationPass<handshake::FuncOp>> {
       if (block.isEntryBlock()) continue;
       while(!block.empty()){
         Operation *currentOp = &block.front();
-        if (dyn_cast<handshake::TerminatorOp>(*currentOp)) {
+        if (isa<handshake::TerminatorOp>(*currentOp)) {
+          currentOp->erase();
+        } else if (isa<handshake::ReturnOp>(*currentOp)) {
+          builder.setInsertionPointToEnd(&entryBlock);
+          builder.clone(*currentOp);
           currentOp->erase();
         } else {
           currentOp->moveBefore(termOp);
         }
       }
     }
-    termOp->erase();
+
+    if (isa<handshake::TerminatorOp>(*termOp))
+      termOp->erase();
 
     // Remove all empty blocks, generating a single block function
     while (true) {

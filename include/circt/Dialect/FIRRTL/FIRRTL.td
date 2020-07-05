@@ -10,6 +10,7 @@
 include "mlir/IR/OpBase.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/IR/RegionKindInterface.td"
 
 def FIRRTLDialect : Dialect {
   let name = "firrtl";

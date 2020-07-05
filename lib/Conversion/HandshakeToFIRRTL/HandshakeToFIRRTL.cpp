@@ -102,7 +102,7 @@ FIRRTLType getBundleType(Type type, bool isFlip) {
       // ISSUE: How to handle signless integers? Should we use the AsSIntPrimOp
       // or AsUIntPrimOp to convert?
       case IntegerType::Signless:
-        return buildBundleType(UIntType::get(context, width), isFlip, context);
+        return buildBundleType(SIntType::get(context, width), isFlip, context);
     }
   }
   // ISSUE: How to handle index integers?
@@ -120,8 +120,8 @@ FIRRTLType getBundleType(Type type, bool isFlip) {
 // Create a low voltage constant operation and return its result value
 Value createConstantOp(Location insertLoc, FIRRTLType opType, int value, 
                        ConversionPatternRewriter &rewriter) {
-  auto constantOpAttr = rewriter.getIntegerAttr(
-      IntegerType::get(32, rewriter.getContext()), value);
+  auto constantOpAttr = rewriter.getIntegerAttr(IntegerType::get(
+      opType.getBitWidthOrSentinel(), rewriter.getContext()), value);
   auto constantOp = rewriter.create<firrtl::ConstantOp>(
       insertLoc, opType, constantOpAttr);
   return constantOp.getResult();
@@ -133,13 +133,12 @@ std::string getSubModuleName(Operation &oldOp) {
                        std::to_string(oldOp.getNumResults()) + "outs";
 
   // Add compare operation information
-  if (auto comOp = dyn_cast<mlir::CmpIOp>(oldOp)) {
+  if (auto comOp = dyn_cast<mlir::CmpIOp>(oldOp))
     subModuleName += "_" + stringifyEnum(comOp.getPredicate()).str();
-  } 
-  
+
   // Add elastic component control information
-  else if (oldOp.getAttrs().size() != 0) {
-    if (oldOp.getAttrOfType<BoolAttr>("control").getValue())
+  else if (auto ctrlAttr = oldOp.getAttr("control")) {
+    if (ctrlAttr.cast<BoolAttr>().getValue())
       subModuleName += "_ctrl";
   }
   return subModuleName;
@@ -411,7 +410,7 @@ void buildMuxLogic(ValueVectorList subfieldList, Location insertLoc,
   auto resultReady = resultSubfield[1];
   auto resultData = resultSubfield[2];
 
-  auto validWhenOp = rewriter.create<WhenOp>(insertLoc, selectValid, true);
+  auto validWhenOp = rewriter.create<WhenOp>(insertLoc, selectValid, false);
   rewriter.setInsertionPointToStart(&validWhenOp.thenRegion().front());
 
   for (int i = 1, e = subfieldList.size() - 1; i < e; i ++) {
@@ -475,8 +474,8 @@ void buildBranchLogic(Operation &oldOp, ValueVectorList subfieldList,
 void buildConditionalBranchLogic(Operation &oldOp, ValueVectorList subfieldList, 
     Location insertLoc, ConversionPatternRewriter &rewriter) {
 
-  auto argSubfield = subfieldList[0];
-  auto controlSubfield = subfieldList[1];
+  auto controlSubfield = subfieldList[0];
+  auto argSubfield = subfieldList[1];
   auto result0Subfield = subfieldList[2];
   auto result1Subfield = subfieldList[3];
 
@@ -496,7 +495,7 @@ void buildConditionalBranchLogic(Operation &oldOp, ValueVectorList subfieldList,
   rewriter.setInsertionPointToStart(&validWhenOp.thenRegion().front());
   auto branchWhenOp = rewriter.create<WhenOp>(insertLoc, controlData, true);
 
-  // When control signal is true
+  // When control signal is true, the first branch is selected
   rewriter.setInsertionPointToStart(&branchWhenOp.thenRegion().front());
   rewriter.create<ConnectOp>(insertLoc, result0Valid, argValid);
   rewriter.create<ConnectOp>(insertLoc, argReady, result0Ready);
@@ -512,7 +511,7 @@ void buildConditionalBranchLogic(Operation &oldOp, ValueVectorList subfieldList,
   rewriter.create<ConnectOp>(insertLoc, controlReady, 
                              controlReadyOp0.getResult());
   
-  // When control signal is false
+  // When control signal is false, the second branch is selected
   rewriter.setInsertionPointToStart(&branchWhenOp.elseRegion().front());
   rewriter.create<ConnectOp>(insertLoc, result1Valid, argValid);
   rewriter.create<ConnectOp>(insertLoc, argReady, result1Ready);
@@ -605,7 +604,7 @@ void buildConstantLogic(Operation &oldOp, ValueVectorList subfieldList,
   auto resultData = resultSubfield[2];
 
   auto constantType = FlipType::get(resultData.getType().cast<FIRRTLType>());
-  auto constantAttrValue = oldOp.getAttrOfType<IntegerAttr>("value").getSInt();
+  auto constantAttrValue = oldOp.getAttrOfType<IntegerAttr>("value").getInt();
 
   rewriter.create<ConnectOp>(insertLoc, resultValid, controlValid);
   rewriter.create<ConnectOp>(insertLoc, controlReady, resultReady);
@@ -619,10 +618,14 @@ void buildSinkLogic(ValueVectorList subfieldList, Location insertLoc,
   auto argSubfield = subfieldList.front();
   auto argValid = argSubfield[0];
   auto argReady = argSubfield[1];
+  auto argData = argSubfield[2];
 
   auto signalType = argValid.getType().cast<FIRRTLType>();
   auto highSignal = createConstantOp(insertLoc, signalType, 1, rewriter);
   rewriter.create<ConnectOp>(insertLoc, argReady, highSignal);
+
+  rewriter.eraseOp(argValid.getDefiningOp());
+  rewriter.eraseOp(argData.getDefiningOp());
 }
 
 // TODO
@@ -800,16 +803,22 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
             switch(cmpOpAttr) {
               case CmpIPredicate::eq:
                 buildBinaryLogic<EQPrimOp>(subfieldList, insertLoc, rewriter);
+                break;
               case CmpIPredicate::ne:
                 buildBinaryLogic<NEQPrimOp>(subfieldList, insertLoc, rewriter);
+                break;
               case CmpIPredicate::slt:
                 buildBinaryLogic<LTPrimOp>(subfieldList, insertLoc, rewriter);
+                break;
               case CmpIPredicate::sle:
                 buildBinaryLogic<LEQPrimOp>(subfieldList, insertLoc, rewriter);
+                break;
               case CmpIPredicate::sgt:
                 buildBinaryLogic<GTPrimOp>(subfieldList, insertLoc, rewriter);
+                break;
               case CmpIPredicate::sge:
                 buildBinaryLogic<GEQPrimOp>(subfieldList, insertLoc, rewriter);
+                break;
             }
           }
           else if (isa<mlir::ShiftLeftOp>(op))
@@ -848,6 +857,12 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       }
     }
     rewriter.eraseOp(funcOp);
+    
+    for (auto &block : *topModuleOp.getParentRegion()) {
+      for (auto &op : block) {
+        llvm::outs() << op << "\n";
+      }
+    }
   }
 };
 

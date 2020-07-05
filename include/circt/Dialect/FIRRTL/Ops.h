@@ -13,6 +13,7 @@
 #include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
+#include "mlir/IR/RegionKindInterface.h"
 
 namespace circt {
 namespace firrtl {
