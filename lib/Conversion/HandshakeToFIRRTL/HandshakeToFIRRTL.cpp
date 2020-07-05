@@ -490,7 +490,7 @@ void buildConditionalBranchLogic(Operation &oldOp, ValueVectorList subfieldList,
   auto result1Valid = result1Subfield[0];
   auto result1Ready = result1Subfield[1];
 
-  auto validWhenOp = rewriter.create<WhenOp>(insertLoc, controlValid, true);
+  auto validWhenOp = rewriter.create<WhenOp>(insertLoc, controlValid, false);
   
   rewriter.setInsertionPointToStart(&validWhenOp.thenRegion().front());
   auto branchWhenOp = rewriter.create<WhenOp>(insertLoc, controlData, true);
@@ -538,8 +538,9 @@ void buildForkLogic(Operation &oldOp, ValueVectorList subfieldList,
   Value *tmpReady = &subfieldList[1][1];
   for (int i = 2, e = subfieldList.size(); i < e; i ++) {
     auto resultReady = subfieldList[i][1];
-    *tmpReady = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(), 
-                                           resultReady, *tmpReady);
+    auto tmpReadyOp = rewriter.create<AndPrimOp>(insertLoc, 
+        resultReady.getType(), resultReady, *tmpReady);
+    *tmpReady = tmpReadyOp.getResult();
   }
   rewriter.create<ConnectOp>(insertLoc, argReady, *tmpReady);
   
@@ -569,8 +570,9 @@ void buildLazyForkLogic(Operation &oldOp, ValueVectorList subfieldList,
   Value *tmpReady = &subfieldList[1][1];
   for (int i = 2, e = subfieldList.size(); i < e; i ++) {
     auto resultReady = subfieldList[i][1];
-    *tmpReady = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(), 
-                                           resultReady, *tmpReady);
+    auto tmpReadyOp = rewriter.create<AndPrimOp>(insertLoc, 
+        resultReady.getType(), resultReady, *tmpReady);
+    *tmpReady = tmpReadyOp.getResult();
   }
   rewriter.create<ConnectOp>(insertLoc, argReady, *tmpReady);
   
@@ -628,10 +630,28 @@ void buildSinkLogic(ValueVectorList subfieldList, Location insertLoc,
   rewriter.eraseOp(argData.getDefiningOp());
 }
 
-// TODO
 void buildJoinLogic(ValueVectorList subfieldList, Location insertLoc, 
                     ConversionPatternRewriter &rewriter) {
+  auto resultSubfield = subfieldList.back();
+  auto resultValid = resultSubfield[0];
+  auto resultReady = resultSubfield[1];
+
+  Value *tmpValid = &subfieldList[0][0];
+  for (int i = 1, e = subfieldList.size() - 1; i < e; i ++) {
+    auto argValid = subfieldList[i][0];
+    auto tmpValidOp = rewriter.create<AndPrimOp>(insertLoc, 
+        argValid.getType(), argValid, *tmpValid);
+    *tmpValid = tmpValidOp.getResult();
+  }
+
+  rewriter.create<ConnectOp>(insertLoc, resultValid, *tmpValid);
+  auto argReadyOp = rewriter.create<AndPrimOp>(insertLoc,
+      resultReady.getType(), resultReady, *tmpValid);
   
+  for (int i = 0, e = subfieldList.size() - 1; i < e; i ++) {
+    auto argReady = subfieldList[i][1];
+    rewriter.create<ConnectOp>(insertLoc, argReady, argReadyOp);
+  }
 }
 
 // Build binary logic for the new sub-module
