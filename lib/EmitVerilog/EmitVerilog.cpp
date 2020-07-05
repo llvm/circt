@@ -725,6 +725,9 @@ private:
   SubExprInfo emitBinary(Operation *op, VerilogPrecedence prec,
                          const char *syntax, bool hasStrictSign = false);
 
+  SubExprInfo emitVariadic(Operation *op, VerilogPrecedence prec,
+                           const char *syntax, bool hasStrictSign = false);
+
   /// Emit the specified subexpression in a context where the sign matters,
   /// e.g. for a less than comparison or divide.
   SubExprInfo emitSignedBinary(Operation *op, VerilogPrecedence prec,
@@ -829,9 +832,9 @@ private:
   SubExprInfo visitComb(rtl::ModOp op) {
     return emitSignedBinary(op, Multiply, "%");
   }
-  SubExprInfo visitComb(rtl::AndOp op) { return emitBinary(op, And, "&"); }
-  SubExprInfo visitComb(rtl::OrOp op) { return emitBinary(op, Or, "|"); }
-  SubExprInfo visitComb(rtl::XorOp op) { return emitBinary(op, Xor, "^"); }
+  SubExprInfo visitComb(rtl::AndOp op) { return emitVariadic(op, And, "&"); }
+  SubExprInfo visitComb(rtl::OrOp op) { return emitVariadic(op, Or, "|"); }
+  SubExprInfo visitComb(rtl::XorOp op) { return emitVariadic(op, Xor, "^"); }
 
   SubExprInfo visitComb(rtl::AndROp op) { return emitUnary(op, "&", true); }
   SubExprInfo visitComb(rtl::OrROp op) { return emitUnary(op, "|", true); }
@@ -897,6 +900,16 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
     signedness = IsUnsigned;
 
   return {prec, signedness};
+}
+
+SubExprInfo ExprEmitter::emitVariadic(Operation *op, VerilogPrecedence prec,
+                                      const char *syntax, bool hasStrictSign) {
+  interleave(
+      op->getOperands().begin(), op->getOperands().end(),
+      [&](Value v1) { os << "( "; emitSubExpr(v1, prec, hasStrictSign); os << " )"; },
+      [&] { os << ' ' << syntax << ' '; });
+
+  return {prec, IsUnsigned};
 }
 
 /// Emit the specified value as a subexpression to the stream.
