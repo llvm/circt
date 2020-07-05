@@ -1024,27 +1024,15 @@ static LogicalResult verifyStdIntCast(StdIntCast cast) {
   // match.
   FIRRTLType firType;
   IntegerType integerType;
-  if (auto flippedType = cast.getOperand().getType().dyn_cast<FlipType>()) {
-    firType = flippedType.getPassiveType();
-    integerType = cast.getType().dyn_cast<IntegerType>();
-    if (!integerType) {
-      cast.emitError("flipped result type must be a signless integer");
-      return failure();
-    }
-  } else if (auto flippedType = cast.getType().dyn_cast<FlipType>()) {
-    firType = flippedType.getPassiveType();
-    integerType = cast.getOperand().getType().dyn_cast<IntegerType>();
-    if (!integerType) {
-      cast.emitError("flipped operand type must be a signless integer");
-      return failure();
-    }
-  } else if ((firType = cast.getOperand().getType().dyn_cast<FIRRTLType>())) {
+  if ((firType = cast.getOperand().getType().dyn_cast<FIRRTLType>())) {
+    firType = firType.getPassiveType();
     integerType = cast.getType().dyn_cast<IntegerType>();
     if (!integerType) {
       cast.emitError("result type must be a signless integer");
       return failure();
     }
   } else if ((firType = cast.getType().dyn_cast<FIRRTLType>())) {
+    firType = firType.getPassiveType();
     integerType = cast.getOperand().getType().dyn_cast<IntegerType>();
     if (!integerType) {
       cast.emitError("operand type must be a signless integer");

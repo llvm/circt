@@ -47,7 +47,7 @@ static Value mapOperand(Value operand, Operation *op,
                         ConversionPatternRewriter &rewriter) {
   auto opType = operand.getType();
   if (auto firType = opType.dyn_cast<FIRRTLType>()) {
-    auto resultType = RTLTypeConverter::convertType(firType);
+    auto resultType = RTLTypeConverter::convertType(firType.getPassiveType());
     if (!resultType.hasValue())
       return {};
 
@@ -55,14 +55,6 @@ static Value mapOperand(Value operand, Operation *op,
       // Cast firrtl -> standard type.
       return rewriter.create<firrtl::StdIntCast>(op->getLoc(), intType,
                                                  operand);
-    } else if (auto flippedType = resultType.getValue().dyn_cast<FlipType>()) {
-      auto flippedResultType =
-          RTLTypeConverter::convertType(flippedType.getPassiveType());
-      if (auto intType = flippedResultType.getValue().dyn_cast<IntegerType>()) {
-        // Cast flipped firrtl -> standard type.
-        return rewriter.create<firrtl::StdIntCast>(op->getLoc(), intType,
-                                                   operand);
-      }
     }
   }
 
