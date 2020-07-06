@@ -236,6 +236,11 @@ def LLHD_ShlOp : LLHD_Op<"shl", [
     operands attr-dict `:` functional-type(operands, results)
   }];
 
+  let extraClassDeclaration = [{
+    unsigned getBaseWidth()  { return getLLHDTypeWidth(base().getType()); }
+    unsigned getHiddenWidth() { return getLLHDTypeWidth(hidden().getType()); }
+  }];
+
   let hasFolder = 1;
 }
 
@@ -290,6 +295,11 @@ def LLHD_ShrOp : LLHD_Op<"shr", [
 
   let assemblyFormat = [{
     operands attr-dict `:` functional-type(operands, results)
+  }];
+
+  let extraClassDeclaration = [{
+    unsigned getBaseWidth()  { return getLLHDTypeWidth(base().getType()); }
+    unsigned getHiddenWidth() { return getLLHDTypeWidth(hidden().getType()); }
   }];
 
   let hasFolder = 1;
