@@ -278,8 +278,7 @@ ValueVectorList extractSubfields(FModuleOp subModuleOp, Location insertLoc,
 }
 
 /// Assume only one input is active. When multiple inputs are active, inputs in
-/// the front have higher priority, and tokens from unselected inputs will be
-/// dropped.
+/// the front have higher priority.
 void buildMergeLogic(ValueVectorList portList, Location insertLoc,
                      ConversionPatternRewriter &rewriter) {
   ValueVector resultSubfields = portList.back();
@@ -287,33 +286,24 @@ void buildMergeLogic(ValueVectorList portList, Location insertLoc,
   Value resultReady = resultSubfields[1];
   Value resultData = resultSubfields[2];
 
-  // All inputs will be ready to accept new tokens when the output is ready.
-  for (int i = 0, e = portList.size() - 1; i < e; ++i) {
-    Value argReady = portList[i][1];
-    rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
-  }
-
   // Walk through all inputs to create a chain of when operation.
   for (int i = 0, e = portList.size() - 1; i < e; ++i) {
     ValueVector argSubfields = portList[i];
     Value argValid = argSubfields[0];
+    Value argReady = argSubfields[1];
     Value argData = argSubfields[2];
 
-    // If the current input is not the last one, a new when operation will be
-    // created.
-    if (i != e - 1) {
-      WhenOp whenOp =
-          rewriter.create<WhenOp>(insertLoc, argValid, /*withElseRegion=*/true);
+    // If the current input is not the last one, the new created when operation
+    // will have an else region.
+    WhenOp whenOp = rewriter.create<WhenOp>(insertLoc, argValid,
+                                            /*withElseRegion=*/(i != e - 1));
+    rewriter.setInsertionPointToStart(&whenOp.thenRegion().front());
+    rewriter.create<ConnectOp>(insertLoc, resultData, argData);
+    rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
+    rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
 
-      rewriter.setInsertionPointToStart(&whenOp.thenRegion().front());
-      rewriter.create<ConnectOp>(insertLoc, resultData, argData);
-      rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
-
+    if (i != e - 1)
       rewriter.setInsertionPointToStart(&whenOp.elseRegion().front());
-    } else {
-      rewriter.create<ConnectOp>(insertLoc, resultData, argData);
-      rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
-    }
   }
 }
 
@@ -322,6 +312,7 @@ void buildControlMergeLogic(Operation &oldOp, ValueVectorList portList,
                             Location insertLoc,
                             ConversionPatternRewriter &rewriter) {
   int numPort = portList.size();
+
   ValueVector resultSubfields = portList[numPort - 2];
   Value resultValid = resultSubfields[0];
   Value resultReady = resultSubfields[1];
@@ -331,59 +322,40 @@ void buildControlMergeLogic(Operation &oldOp, ValueVectorList portList,
   Value controlValid = controlSubfields[0];
   Value controlReady = controlSubfields[1];
   Value controlData = controlSubfields[2];
+  FIRRTLType controlType =
+      FlipType::get(controlData.getType().cast<FIRRTLType>());
 
-  // All inputs will be ready to accept new tokens when both outputs are ready.
   AndPrimOp argReadyOp = rewriter.create<AndPrimOp>(
       insertLoc, resultReady.getType(), resultReady, controlReady);
-  for (int i = 0, e = numPort - 2; i < e; ++i) {
-    Value argReady = portList[i][1];
-    rewriter.create<ConnectOp>(insertLoc, argReady, argReadyOp.getResult());
-  }
 
   // Walk through all inputs to create a chain of when operation.
   for (int i = 0, e = numPort - 2; i < e; ++i) {
     ValueVector argSubfields = portList[i];
     Value argValid = argSubfields[0];
-    FIRRTLType controlType =
-        FlipType::get(controlData.getType().cast<FIRRTLType>());
+    Value argReady = argSubfields[1];
 
-    // If the current input is not the last one, a new when operation will be
-    // created.
-    if (i != e - 1) {
-      WhenOp whenOp =
-          rewriter.create<WhenOp>(insertLoc, argValid, /*withElseRegion=*/true);
+    // If the current input is not the last one, the new created when operation
+    // will have an else region.
+    WhenOp whenOp = rewriter.create<WhenOp>(insertLoc, argValid,
+                                            /*withElseRegion=*/(i != e - 1));
+    rewriter.setInsertionPointToStart(&whenOp.thenRegion().front());
+    rewriter.create<ConnectOp>(
+        insertLoc, controlData,
+        createConstantOp(insertLoc, controlType, i, rewriter));
+    rewriter.create<ConnectOp>(insertLoc, controlValid, argValid);
+    rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
+    rewriter.create<ConnectOp>(insertLoc, argReady, argReadyOp.getResult());
 
-      rewriter.setInsertionPointToStart(&whenOp.thenRegion().front());
-      rewriter.create<ConnectOp>(
-          insertLoc, controlData,
-          createConstantOp(insertLoc, controlType, i, rewriter));
-      rewriter.create<ConnectOp>(insertLoc, controlValid, argValid);
-      rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
-
-      if (!cast<handshake::ControlMergeOp>(oldOp)
-               .getAttrOfType<BoolAttr>("control")
-               .getValue()) {
-        Value argData = argSubfields[2];
-        Value resultData = resultSubfields[2];
-        rewriter.create<ConnectOp>(insertLoc, resultData, argData);
-      }
-
-      rewriter.setInsertionPointToStart(&whenOp.elseRegion().front());
-    } else {
-      rewriter.create<ConnectOp>(
-          insertLoc, controlData,
-          createConstantOp(insertLoc, controlType, i, rewriter));
-      rewriter.create<ConnectOp>(insertLoc, controlValid, argValid);
-      rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
-
-      if (!cast<handshake::ControlMergeOp>(oldOp)
-               .getAttrOfType<BoolAttr>("control")
-               .getValue()) {
-        Value argData = argSubfields[2];
-        Value resultData = resultSubfields[2];
-        rewriter.create<ConnectOp>(insertLoc, resultData, argData);
-      }
+    if (!cast<handshake::ControlMergeOp>(oldOp)
+             .getAttrOfType<BoolAttr>("control")
+             .getValue()) {
+      Value argData = argSubfields[2];
+      Value resultData = resultSubfields[2];
+      rewriter.create<ConnectOp>(insertLoc, resultData, argData);
     }
+
+    if (i != e - 1)
+      rewriter.setInsertionPointToStart(&whenOp.elseRegion().front());
   }
 }
 
@@ -401,8 +373,8 @@ void buildMuxLogic(ValueVectorList portList, Location insertLoc,
   Value resultData = resultSubfields[2];
 
   // Mux will work only when the select input is active.
-  WhenOp validWhenOp =
-      rewriter.create<WhenOp>(insertLoc, selectValid, /*withElseRegion=*/false);
+  WhenOp validWhenOp = rewriter.create<WhenOp>(insertLoc, selectValid,
+                                               /*withElseRegion=*/false);
   rewriter.setInsertionPointToStart(&validWhenOp.thenRegion().front());
 
   // Walk through all inputs to create a chain of when operation.
@@ -416,8 +388,8 @@ void buildMuxLogic(ValueVectorList portList, Location insertLoc,
         insertLoc, UIntType::get(rewriter.getContext(), 1), selectData,
         createConstantOp(insertLoc, selectType, i, rewriter));
 
-    // If the current input is not the last one, the new created when operation
-    // will have an else region.
+    // If the current input is not the last one, the new created when
+    // operation will have an else region.
     WhenOp branchWhenOp = rewriter.create<WhenOp>(
         insertLoc, conditionOp.getResult(), /*withElseRegion=*/(i != e - 1));
 
@@ -549,8 +521,8 @@ void buildLazyForkLogic(Operation &oldOp, ValueVectorList portList,
   }
 }
 
-/// Currently Fork is implement as a LazyFork. An eager Fork is supposed to be a
-/// timing component (?), which will be supported in the next patch.
+/// Currently Fork is implement as a LazyFork. An eager Fork is supposed to be
+/// a timing component, which will be supported in the next patch.
 void buildForkLogic(Operation &oldOp, ValueVectorList portList,
                     Location insertLoc, ConversionPatternRewriter &rewriter) {
   buildLazyForkLogic(oldOp, portList, insertLoc, rewriter);
@@ -559,8 +531,8 @@ void buildForkLogic(Operation &oldOp, ValueVectorList portList,
 void buildConstantLogic(Operation &oldOp, ValueVectorList portList,
                         Location insertLoc,
                         ConversionPatternRewriter &rewriter) {
-  // The first input is control signal which will trigger the Constant operation
-  // to emit tokens.
+  // The first input is control signal which will trigger the Constant
+  // operation to emit tokens.
   ValueVector controlSubfields = portList.front();
   Value controlValid = controlSubfields[0];
   Value controlReady = controlSubfields[1];
