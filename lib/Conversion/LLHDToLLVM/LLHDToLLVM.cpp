@@ -1510,6 +1510,64 @@ struct ExtractSliceOpConversion : public ConvertToLLVMPattern {
 };
 } // namespace
 
+namespace {
+/// Lower an `llhd.inss` operation to the LLVM dialect.
+struct InsertSliceOpConversion : public ConvertToLLVMPattern {
+  explicit InsertSliceOpConversion(MLIRContext *ctx,
+                                   LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(llhd::InsertSliceOp ::getOperationName(), ctx,
+                             typeConverter) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto inssOp = cast<InsertSliceOp>(op);
+
+    InsertSliceOpAdaptor transformed(operands);
+
+    auto indexTy = typeConverter.convertType(inssOp.startAttr().getType());
+
+    if (inssOp.result().getType().isa<IntegerType>()) {
+      auto startConst = rewriter.create<LLVM::ConstantOp>(op->getLoc(), indexTy,
+                                                          inssOp.startAttr());
+      Value adjusted;
+      if (inssOp.result().getType().getIntOrFloatBitWidth() < 64) {
+        adjusted = rewriter.create<LLVM::TruncOp>(
+            op->getLoc(), transformed.target().getType(), startConst);
+      } else {
+        adjusted = rewriter.create<LLVM::ZExtOp>(
+            op->getLoc(), transformed.target().getType(), startConst);
+      }
+      // Generate a mask to set the affected bits.
+      APInt mask = APInt(inssOp.slice().getType().getIntOrFloatBitWidth(), 0);
+      mask.setAllBits();
+      auto maskConst = rewriter.create<LLVM::ConstantOp>(
+          op->getLoc(), transformed.slice().getType(),
+          rewriter.getIntegerAttr(inssOp.slice().getType(), mask));
+      auto maskZext = rewriter.create<LLVM::ZExtOp>(
+          op->getLoc(), transformed.target().getType(), maskConst);
+      auto maskShift = rewriter.create<LLVM::ShlOp>(
+          op->getLoc(), transformed.target().getType(), maskZext, adjusted);
+
+      // Adjust the slice start index.
+      auto sliceZext = rewriter.create<LLVM::ZExtOp>(
+          op->getLoc(), transformed.target().getType(), transformed.slice());
+      auto sliceShift = rewriter.create<LLVM::ShlOp>(
+          op->getLoc(), transformed.target().getType(), sliceZext, adjusted);
+
+      // Insert the slice.
+      auto applyMask = rewriter.create<LLVM::OrOp>(
+          op->getLoc(), transformed.target(), maskShift);
+      rewriter.replaceOpWithNewOp<LLVM::AndOp>(op, applyMask, sliceShift);
+
+      return success();
+    }
+
+    return failure();
+  }
+};
+} // namespace
+
 //===----------------------------------------------------------------------===//
 // Memory operations
 //===----------------------------------------------------------------------===//
@@ -1581,7 +1639,8 @@ void llhd::populateLLHDToLLVMConversionPatterns(
   MLIRContext *ctx = converter.getDialect()->getContext();
 
   // Value manipulation conversion patterns.
-  patterns.insert<ConstOpConversion, ExtractSliceOpConversion>(ctx, converter);
+  patterns.insert<ConstOpConversion, ExtractSliceOpConversion,
+                  InsertSliceOpConversion>(ctx, converter);
 
   // Bitwise conversion patterns.
   patterns.insert<NotOpConversion, ShrOpConversion, ShlOpConversion>(ctx,
