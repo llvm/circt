@@ -137,8 +137,15 @@ unsigned mlir::llhd::getLLHDTypeWidth(Type type) {
 //===---------------------------------------------------------------------===//
 
 static bool sameKindArbitraryWidth(Type lhsType, Type rhsType) {
-  return (lhsType.getKind() == rhsType.getKind()) &&
-         (!lhsType.isa<ShapedType>() ||
+  if (lhsType.getKind() != rhsType.getKind())
+    return false;
+
+  if (auto sig = lhsType.dyn_cast<llhd::SigType>())
+    return sameKindArbitraryWidth(
+        sig.getUnderlyingType(),
+        rhsType.cast<llhd::SigType>().getUnderlyingType());
+
+  return (!lhsType.isa<ShapedType>() ||
           (lhsType.cast<ShapedType>().getElementType() ==
            rhsType.cast<ShapedType>().getElementType()));
 }
