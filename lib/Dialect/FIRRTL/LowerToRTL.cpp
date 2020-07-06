@@ -47,7 +47,7 @@ static Value mapOperand(Value operand, Operation *op,
                         ConversionPatternRewriter &rewriter) {
   auto opType = operand.getType();
   if (auto firType = opType.dyn_cast<FIRRTLType>()) {
-    auto resultType = RTLTypeConverter::convertType(firType);
+    auto resultType = RTLTypeConverter::convertType(firType.getPassiveType());
     if (!resultType.hasValue())
       return {};
 
@@ -108,6 +108,18 @@ static LogicalResult lower(firrtl::WireOp op, ArrayRef<Value> operands,
   return success();
 }
 
+static LogicalResult lower(firrtl::ConnectOp op, ArrayRef<Value> operands,
+                           ConversionPatternRewriter &rewriter) {
+
+  auto lhs = mapOperand(operands[0], op, rewriter);
+  auto rhs = mapOperand(operands[1], op, rewriter);
+  if (!lhs || !rhs)
+    return failure();
+
+  rewriter.replaceOpWithNewOp<rtl::ConnectOp>(op, lhs, rhs);
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Unary Operations
 //===----------------------------------------------------------------------===//
@@ -164,6 +176,38 @@ static LogicalResult lower(firrtl::CatPrimOp op, ArrayRef<Value> operands,
 }
 
 //===----------------------------------------------------------------------===//
+// Variadic Bitwise Operations
+//===----------------------------------------------------------------------===//
+
+template <typename OpType, typename ResultOpType>
+static LogicalResult lowerVariadicOp(OpType op, ArrayRef<Value> operands,
+                                     ConversionPatternRewriter &rewriter) {
+  auto lhs = mapAndExtendInt(operands[0], op.getType(), op, rewriter);
+  auto rhs = mapAndExtendInt(operands[1], op.getType(), op, rewriter);
+
+  if (!lhs || !rhs)
+    return failure();
+
+  rewriter.replaceOpWithNewOp<ResultOpType>(op, ValueRange({lhs, rhs}));
+  return success();
+}
+
+static LogicalResult lower(firrtl::AndPrimOp op, ArrayRef<Value> operands,
+                           ConversionPatternRewriter &rewriter) {
+  return lowerVariadicOp<firrtl::AndPrimOp, rtl::AndOp>(op, operands, rewriter);
+}
+
+static LogicalResult lower(firrtl::OrPrimOp op, ArrayRef<Value> operands,
+                           ConversionPatternRewriter &rewriter) {
+  return lowerVariadicOp<firrtl::OrPrimOp, rtl::OrOp>(op, operands, rewriter);
+}
+
+static LogicalResult lower(firrtl::XorPrimOp op, ArrayRef<Value> operands,
+                           ConversionPatternRewriter &rewriter) {
+  return lowerVariadicOp<firrtl::XorPrimOp, rtl::XorOp>(op, operands, rewriter);
+}
+
+//===----------------------------------------------------------------------===//
 // Binary Operations
 //===----------------------------------------------------------------------===//
 
@@ -189,11 +233,6 @@ static LogicalResult lower(firrtl::AddPrimOp op, ArrayRef<Value> operands,
 static LogicalResult lower(firrtl::SubPrimOp op, ArrayRef<Value> operands,
                            ConversionPatternRewriter &rewriter) {
   return lowerBinOp<firrtl::SubPrimOp, rtl::SubOp>(op, operands, rewriter);
-}
-
-static LogicalResult lower(firrtl::XorPrimOp op, ArrayRef<Value> operands,
-                           ConversionPatternRewriter &rewriter) {
-  return lowerBinOp<firrtl::XorPrimOp, rtl::XorOp>(op, operands, rewriter);
 }
 
 namespace {
@@ -237,6 +276,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering> {
     OwningRewritePatternList patterns;
     patterns.insert<
         RTLRewriter<firrtl::ConstantOp>, RTLRewriter<firrtl::WireOp>,
+        RTLRewriter<firrtl::ConnectOp>,
         // Binary Operations
         RTLRewriter<firrtl::AddPrimOp>, RTLRewriter<firrtl::SubPrimOp>,
         RTLRewriter<firrtl::XorPrimOp>, RTLRewriter<firrtl::CatPrimOp>,

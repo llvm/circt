@@ -23,7 +23,9 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<ConstantOp,
                        // Arithmetic and Logical Binary Operations.
-                       AddOp, SubOp, MulOp, DivOp, ModOp, AndOp, OrOp, XorOp,
+                       AddOp, SubOp, MulOp, DivOp, ModOp,
+                       // Bitwise operations
+                       AndOp, OrOp, XorOp,
                        // Reduction Operators
                        AndROp, OrROp, XorROp,
                        // Other operations.
@@ -57,6 +59,10 @@ public:
     return static_cast<ConcreteType *>(this)->visitUnhandledComb(op, args...);
   }
 
+  ResultType visitVariadicComb(Operation *op, ExtraArgs... args) {
+    return static_cast<ConcreteType *>(this)->visitUnhandledComb(op, args...);
+  }
+
 #define HANDLE(OPTYPE, OPKIND)                                                 \
   ResultType visitComb(OPTYPE op, ExtraArgs... args) {                         \
     return static_cast<ConcreteType *>(this)->visit##OPKIND##Comb(op,          \
@@ -72,9 +78,10 @@ public:
   HANDLE(MulOp, Binary);
   HANDLE(DivOp, Binary);
   HANDLE(ModOp, Binary);
-  HANDLE(AndOp, Binary);
-  HANDLE(OrOp, Binary);
-  HANDLE(XorOp, Binary);
+
+  HANDLE(AndOp, Variadic);
+  HANDLE(OrOp, Variadic);
+  HANDLE(XorOp, Variadic);
 
   HANDLE(AndROp, Unary);
   HANDLE(OrROp, Unary);
