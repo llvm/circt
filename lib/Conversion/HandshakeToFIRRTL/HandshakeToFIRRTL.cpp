@@ -180,8 +180,7 @@ FModuleOp createTopModuleOp(handshake::FuncOp funcOp,
                               topModuleOp.end());
 
   // Merge the second block (inlined from funcOp) of the top-module into the
-  // entry block. This will be called in createTopModuleOp() immediately after
-  // the funcOp is inlined into the top-module.
+  // entry block.
   auto blockIterator = topModuleOp.getBody().begin();
   Block *entryBlock = &*blockIterator;
   Block *secondBlock = &*(++blockIterator);

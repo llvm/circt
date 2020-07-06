@@ -1345,36 +1345,36 @@ struct DFRemoveBlockPass :
 public PassWrapper<DFRemoveBlockPass, OperationPass<handshake::FuncOp>> {
   void runOnOperation() override {
     auto funcOp = getOperation();
-    auto &entryBlock = funcOp.getBody().front();
-    auto *termOp = entryBlock.getTerminator();
     auto builder = OpBuilder(funcOp.getContext());
+    auto *termOp = funcOp.getBody().front().getTerminator();
 
-    // Move all operations to the first block except terminator operations 
-    // which can be safely dropped
     for (auto &block : funcOp) {
       if (block.isEntryBlock()) continue;
+
+      // Move all operations to the first block except for terminator operations 
+      // which can be safely dropped.
       while(!block.empty()){
-        Operation *currentOp = &block.front();
-        if (isa<handshake::TerminatorOp>(*currentOp)) {
-          currentOp->erase();
-        } else if (isa<handshake::ReturnOp>(*currentOp)) {
-          builder.setInsertionPointToEnd(&entryBlock);
-          builder.clone(*currentOp);
-          currentOp->erase();
+        Operation &op = block.front();
+        if (isa<handshake::TerminatorOp>(op)) {
+          op.erase();
+        } else if (isa<handshake::ReturnOp>(op)) {
+          builder.setInsertionPointAfter(termOp);
+          builder.clone(op);
+          builder.clearInsertionPoint();
+          op.erase();
         } else {
-          currentOp->moveBefore(termOp);
+          op.moveBefore(termOp);
         }
       }
     }
-
     if (isa<handshake::TerminatorOp>(*termOp))
       termOp->erase();
 
-    // Remove all empty blocks, generating a single block function
+    // Remove all empty blocks.
     while (true) {
-      Block *currentBlock = &funcOp.getBody().back();
-      if (currentBlock->isEntryBlock()) break;
-      currentBlock -> erase();
+      Block &block = funcOp.getBody().back();
+      if (block.isEntryBlock()) break;
+      block.erase();
     }
   }
 };
