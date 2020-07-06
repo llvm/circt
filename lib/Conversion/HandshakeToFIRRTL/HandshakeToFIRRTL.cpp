@@ -529,6 +529,7 @@ void buildConditionalBranchLogic(Operation &oldOp, ValueVectorList subfieldList,
 }
 
 // ISSUE: Currently fork is as same as lazy fork
+// This should be a timing components?
 void buildForkLogic(Operation &oldOp, ValueVectorList subfieldList, 
                     Location insertLoc, ConversionPatternRewriter &rewriter) {
   auto argSubfield = subfieldList.front();
@@ -624,10 +625,12 @@ void buildSinkLogic(ValueVectorList subfieldList, Location insertLoc,
 
   auto signalType = argValid.getType().cast<FIRRTLType>();
   auto highSignal = createConstantOp(insertLoc, signalType, 1, rewriter);
-  rewriter.create<ConnectOp>(insertLoc, argReady, highSignal);
-
-  rewriter.eraseOp(argValid.getDefiningOp());
-  rewriter.eraseOp(argData.getDefiningOp());
+  
+  auto tmpReadyOp = rewriter.create<OrPrimOp>(insertLoc, 
+      argValid.getType(), argValid, argData);
+  auto argReadyOp = rewriter.create<OrPrimOp>(insertLoc,
+      highSignal.getType(), highSignal, tmpReadyOp.getResult());
+  rewriter.create<ConnectOp>(insertLoc, argReady, argReadyOp.getResult());
 }
 
 void buildJoinLogic(ValueVectorList subfieldList, Location insertLoc, 
@@ -740,7 +743,7 @@ void createInstOp(Operation &oldOp, FModuleOp subModuleOp,
     
     // Connect output ports
     else {
-      auto result = oldOp.getResult(0);
+      auto result = oldOp.getResult(port_idx - oldOp.getNumOperands());
       auto newResult = subfieldOp.getResult();
       result.replaceAllUsesWith(newResult);
     }
@@ -761,6 +764,11 @@ void convertReturnOp(Operation &oldOp, Block &entryBlock,
   rewriter.eraseOp(&oldOp);
 }
 
+// TODO
+void insertBuffers() {
+
+}
+
 //===----------------------------------------------------------------------===//
 // MLIR Pass Entry
 //===----------------------------------------------------------------------===//
@@ -774,6 +782,10 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
 
   void rewrite(handshake::FuncOp funcOp, ArrayRef<Value> operands,
                ConversionPatternRewriter &rewriter) const override {
+    auto circuitOp = rewriter.create<CircuitOp>(funcOp.getLoc(), 
+        rewriter.getStringAttr(funcOp.getName()));
+    rewriter.setInsertionPointToStart(circuitOp.getBody());
+
     auto topModuleOp = createTopModuleOp(funcOp, rewriter);
     mergeToEntryBlock(topModuleOp, rewriter);
     auto &entryBlock = topModuleOp.getBody().front();
@@ -787,8 +799,8 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       if (isa<handshake::ReturnOp>(op)) {
         convertReturnOp(op, entryBlock, rewriter);
       } 
-      // This branch take cares of all operations that require to create new 
-      // submodules, and instantiation.
+      // This branch take cares of all non-timing operations that require to 
+      // create new submodules, and instantiation.
       else if (op.getDialect()->getNamespace() != StringRef("firrtl")) {
         // Check whether Sub-module already exists, if not, we will create 
         // and insert a new empty sub-module
@@ -878,6 +890,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     }
     rewriter.eraseOp(funcOp);
     
+    // Code for debug
     for (auto &block : *topModuleOp.getParentRegion()) {
       for (auto &op : block) {
         llvm::outs() << op << "\n";
