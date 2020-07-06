@@ -305,19 +305,6 @@ OpFoldResult llhd::ShlOp::fold(ArrayRef<Attribute> operands) {
       });
 }
 
-static LogicalResult verify(llhd::ShlOp op) {
-  if (op.base().getType() != op.result().getType()) {
-    return op.emitError(
-               "The output of the Shl operation is required to have the "
-               "same type as the base value (first operand), (")
-           << op.base().getType() << " vs. " << op.result().getType() << ")";
-  }
-
-  // TODO: verify that T and Th only differ in the number of bits or elements
-
-  return success();
-}
-
 //===----------------------------------------------------------------------===//
 // ShrOp
 //===----------------------------------------------------------------------===//
@@ -334,19 +321,6 @@ OpFoldResult llhd::ShrOp::fold(ArrayRef<Attribute> operands) {
         hidden <<= base.getBitWidth() - amt.getZExtValue();
         return base + hidden;
       });
-}
-
-static LogicalResult verify(llhd::ShrOp op) {
-  if (op.base().getType() != op.result().getType()) {
-    return op.emitError(
-               "The output of the Shr operation is required to have the "
-               "same type as the base value (first operand), (")
-           << op.base().getType() << " vs. " << op.result().getType() << ")";
-  }
-
-  // TODO: verify that T and Th only differ in the number of bits or elements
-
-  return success();
 }
 
 //===----------------------------------------------------------------------===//
