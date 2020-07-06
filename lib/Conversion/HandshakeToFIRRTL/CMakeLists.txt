@@ -4,7 +4,11 @@ add_mlir_library(MLIRHandshakeToFIRRTL
   ADDITIONAL_HEADER_DIRS
   ${MLIR_MAIN_INCLUDE_DIR}/mlir/Conversion/HandshakeToFIRRTL
 
-  LINK_LIBS
+  DEPENDS
+  MLIRHandshakeRewritersIncGen
+  MLIRHandshakeInterfacesIncGen
+
+  LINK_LIBS PUBLIC
   MLIRIR
   MLIRPass
   MLIRStandardOps
