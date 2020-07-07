@@ -513,7 +513,7 @@ void buildLazyForkLogic(Operation &oldOp, ValueVectorList portList,
     rewriter.create<ConnectOp>(insertLoc, resultValid,
                                resultValidOp.getResult());
 
-    if (!cast<handshake::ForkOp>(oldOp).isControl()) {
+    if (!cast<handshake::LazyForkOp>(oldOp).isControl()) {
       Value argData = argSubfields[2];
       Value resultData = resultfield[2];
       rewriter.create<ConnectOp>(insertLoc, resultData, argData);
@@ -525,7 +525,35 @@ void buildLazyForkLogic(Operation &oldOp, ValueVectorList portList,
 /// a timing component, which will be supported in the next patch.
 void buildForkLogic(Operation &oldOp, ValueVectorList portList,
                     Location insertLoc, ConversionPatternRewriter &rewriter) {
-  buildLazyForkLogic(oldOp, portList, insertLoc, rewriter);
+  ValueVector argSubfields = portList.front();
+  Value argValid = argSubfields[0];
+  Value argReady = argSubfields[1];
+
+  // The input will be ready to accept new token when all outputs are ready.
+  Value *tmpReady = &portList[1][1];
+  for (int i = 2, e = portList.size(); i < e; ++i) {
+    Value resultReady = portList[i][1];
+    AndPrimOp tmpReadyOp = rewriter.create<AndPrimOp>(
+        insertLoc, resultReady.getType(), resultReady, *tmpReady);
+    *tmpReady = tmpReadyOp.getResult();
+  }
+  rewriter.create<ConnectOp>(insertLoc, argReady, *tmpReady);
+
+  // All outputs must be ready for the LazyFork to send the token.
+  AndPrimOp resultValidOp = rewriter.create<AndPrimOp>(
+      insertLoc, argValid.getType(), argValid, *tmpReady);
+  for (int i = 1, e = portList.size(); i < e; ++i) {
+    ValueVector resultfield = portList[i];
+    Value resultValid = resultfield[0];
+    rewriter.create<ConnectOp>(insertLoc, resultValid,
+                               resultValidOp.getResult());
+
+    if (!cast<handshake::ForkOp>(oldOp).isControl()) {
+      Value argData = argSubfields[2];
+      Value resultData = resultfield[2];
+      rewriter.create<ConnectOp>(insertLoc, resultData, argData);
+    }
+  }
 }
 
 void buildConstantLogic(Operation &oldOp, ValueVectorList portList,
@@ -569,6 +597,7 @@ void buildSinkLogic(ValueVectorList portList, Location insertLoc,
   rewriter.eraseOp(argData.getDefiningOp());
 }
 
+/// Currently only support {control = true}.
 void buildJoinLogic(ValueVectorList portList, Location insertLoc,
                     ConversionPatternRewriter &rewriter) {
   ValueVector resultSubfields = portList.back();
@@ -800,6 +829,9 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
             buildConstantLogic(op, portList, insertLoc, rewriter);
           else if (isa<handshake::SinkOp>(op))
             buildSinkLogic(portList, insertLoc, rewriter);
+
+          else if (isa<handshake::JoinOp>(op))
+            buildJoinLogic(portList, insertLoc, rewriter);
           else
             assert(false && "Usupported operation type.");
         }
