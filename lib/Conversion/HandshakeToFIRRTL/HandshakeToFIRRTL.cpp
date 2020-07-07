@@ -121,10 +121,11 @@ Value createConstantOp(Location insertLoc, FIRRTLType opType, int value,
       .getResult();
 }
 
-/// Construct a name for creating FIRRTL sub-module. The returned name contains
-/// the following information: 1. operation name; 2. inputs number; 3. outputs
-/// number; 4. (if applied) comparison operation type; 5. (if applied) whether
-/// the elastic component is for the control path.
+/// Construct a name for creating FIRRTL sub-module. The returned string
+/// contains the following information: 1) standard or handshake operation
+/// name; 2) number of inputs; 3) number of outputs; 4) comparison operation
+/// type (if applied); 5) whether the elastic component is for the control path
+/// (if applied).
 std::string getSubModuleName(Operation &oldOp) {
   std::string subModuleName = oldOp.getName().getStringRef().str() + "_" +
                               std::to_string(oldOp.getNumOperands()) + "ins_" +
@@ -145,9 +146,10 @@ std::string getSubModuleName(Operation &oldOp) {
 // FIRRTL Top-module Related Functions
 //===----------------------------------------------------------------------===//
 
-/// Currently we are not considering clock and reset, thus the generated circuit
-/// is pure combinational logic. If graph cycle exists, at least one buffer is
-/// required to be inserted, which will be supported in the next patch.
+/// Currently we are not considering clock and registers, thus the generated
+/// circuit is pure combinational logic. If graph cycle exists, at least one
+/// buffer is required to be inserted for breaking the cycle, which will be
+/// supported in the next patch.
 FModuleOp createTopModuleOp(handshake::FuncOp funcOp,
                             ConversionPatternRewriter &rewriter) {
   using ModulePort = std::pair<StringAttr, FIRRTLType>;
@@ -279,6 +281,7 @@ ValueVectorList extractSubfields(FModuleOp subModuleOp, Location insertLoc,
 
 /// Assume only one input is active. When multiple inputs are active, inputs in
 /// the front have higher priority.
+/// Please refer to test_merge.mlir test case.
 void buildMergeLogic(ValueVectorList portList, Location insertLoc,
                      ConversionPatternRewriter &rewriter) {
   ValueVector resultSubfields = portList.back();
@@ -286,7 +289,7 @@ void buildMergeLogic(ValueVectorList portList, Location insertLoc,
   Value resultReady = resultSubfields[1];
   Value resultData = resultSubfields[2];
 
-  // Walk through all inputs to create a chain of when operation.
+  // Walk through each input to create a chain of when operation.
   for (int i = 0, e = portList.size() - 1; i < e; ++i) {
     ValueVector argSubfields = portList[i];
     Value argValid = argSubfields[0];
@@ -308,6 +311,7 @@ void buildMergeLogic(ValueVectorList portList, Location insertLoc,
 }
 
 /// Assume only one input is active.
+/// Please refer to test_cmerge.mlir test case.
 void buildControlMergeLogic(Operation &oldOp, ValueVectorList portList,
                             Location insertLoc,
                             ConversionPatternRewriter &rewriter) {
@@ -328,7 +332,7 @@ void buildControlMergeLogic(Operation &oldOp, ValueVectorList portList,
   AndPrimOp argReadyOp = rewriter.create<AndPrimOp>(
       insertLoc, resultReady.getType(), resultReady, controlReady);
 
-  // Walk through all inputs to create a chain of when operation.
+  // Walk through each input to create a chain of when operation.
   for (int i = 0, e = numPort - 2; i < e; ++i) {
     ValueVector argSubfields = portList[i];
     Value argValid = argSubfields[0];
@@ -359,6 +363,7 @@ void buildControlMergeLogic(Operation &oldOp, ValueVectorList portList,
   }
 }
 
+/// Please refer to test_mux.mlir test case.
 void buildMuxLogic(ValueVectorList portList, Location insertLoc,
                    ConversionPatternRewriter &rewriter) {
   ValueVector selectSubfields = portList.front();
@@ -377,7 +382,7 @@ void buildMuxLogic(ValueVectorList portList, Location insertLoc,
                                                /*withElseRegion=*/false);
   rewriter.setInsertionPointToStart(&validWhenOp.thenRegion().front());
 
-  // Walk through all inputs to create a chain of when operation.
+  // Walk through each input to create a chain of when operation.
   for (int i = 1, e = portList.size() - 1; i < e; ++i) {
     ValueVector argSubfields = portList[i];
     Value argValid = argSubfields[0];
@@ -409,6 +414,7 @@ void buildMuxLogic(ValueVectorList portList, Location insertLoc,
   }
 }
 
+/// Please refer to test_branch.mlir test case.
 void buildBranchLogic(Operation &oldOp, ValueVectorList portList,
                       Location insertLoc, ConversionPatternRewriter &rewriter) {
   ValueVector argSubfields = portList[0];
@@ -429,6 +435,7 @@ void buildBranchLogic(Operation &oldOp, ValueVectorList portList,
 }
 
 /// Two outputs conditional branch operation.
+/// Please refer to test_conditional_branch.mlir test case.
 void buildConditionalBranchLogic(Operation &oldOp, ValueVectorList portList,
                                  Location insertLoc,
                                  ConversionPatternRewriter &rewriter) {
@@ -487,6 +494,7 @@ void buildConditionalBranchLogic(Operation &oldOp, ValueVectorList portList,
                              control1ReadyOp.getResult());
 }
 
+/// Please refer to test_lazy_fork.mlir test case.
 void buildLazyForkLogic(Operation &oldOp, ValueVectorList portList,
                         Location insertLoc,
                         ConversionPatternRewriter &rewriter) {
@@ -522,7 +530,9 @@ void buildLazyForkLogic(Operation &oldOp, ValueVectorList portList,
 }
 
 /// Currently Fork is implement as a LazyFork. An eager Fork is supposed to be
-/// a timing component, which will be supported in the next patch.
+/// a timing component, and contains a register for recording which outputs
+/// have accepted the token. Eager Fork will be supported in the next patch.
+/// Please refer to test_lazy_fork.mlir test case.
 void buildForkLogic(Operation &oldOp, ValueVectorList portList,
                     Location insertLoc, ConversionPatternRewriter &rewriter) {
   ValueVector argSubfields = portList.front();
@@ -556,6 +566,7 @@ void buildForkLogic(Operation &oldOp, ValueVectorList portList,
   }
 }
 
+/// Please refer to test_constant.mlir test case.
 void buildConstantLogic(Operation &oldOp, ValueVectorList portList,
                         Location insertLoc,
                         ConversionPatternRewriter &rewriter) {
@@ -581,6 +592,7 @@ void buildConstantLogic(Operation &oldOp, ValueVectorList portList,
       createConstantOp(insertLoc, constantType, constantAttrValue, rewriter));
 }
 
+/// Please refer to test_sink.mlir test case.
 void buildSinkLogic(ValueVectorList portList, Location insertLoc,
                     ConversionPatternRewriter &rewriter) {
   ValueVector argSubfields = portList.front();
@@ -598,6 +610,7 @@ void buildSinkLogic(ValueVectorList portList, Location insertLoc,
 }
 
 /// Currently only support {control = true}.
+/// Please refer to test_join.mlir test case.
 void buildJoinLogic(ValueVectorList portList, Location insertLoc,
                     ConversionPatternRewriter &rewriter) {
   ValueVector resultSubfields = portList.back();
@@ -623,6 +636,7 @@ void buildJoinLogic(ValueVectorList portList, Location insertLoc,
   }
 }
 
+/// Please refer to simple_addi.mlir test case.
 template <typename OpType>
 void buildBinaryLogic(ValueVectorList portList, Location insertLoc,
                       ConversionPatternRewriter &rewriter) {
@@ -731,6 +745,30 @@ void convertReturnOp(Operation &oldOp, FModuleOp topModuleOp,
 // HandshakeToFIRRTL lowering Pass
 //===----------------------------------------------------------------------===//
 
+/// Process of lowering:
+///
+/// 0)  Create and go into a new FIRRTL circuit;
+/// 1)  Create and go into a new FIRRTL top-module;
+/// 2)  Inline Handshake FuncOp region into the FIRRTL top-module;
+/// 3)  Traverse and convert each Standard or Handshake operation:
+///   i)    Check if an identical sub-module exists. If so, skip to vi);
+///   ii)   Create and go into a new FIRRTL sub-module;
+///   iii)  Extract data (if applied), valid, and ready subfield from each port
+///         of the sub-module;
+///   iv)   Build combinational logic;
+///   v)    Exit the sub-module and go back to the top-module;
+///   vi)   Create an new instance for the sub-module;
+///   vii)  Connect the instance with its predecessors and successors;
+/// 4)  Erase the Handshake FuncOp.
+///
+/// createTopModuleOp():  1) and 2)
+/// checkSubModuleOp():   3.i)
+/// createSubModuleOp():  3.ii)
+/// extractSubfields():   3.iii)
+/// build*Logic():        3.iv)
+/// createInstOp():       3.v), 3.vi), and 3.vii)
+///
+/// Please refer to test_addi.mlir test case.
 struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
   using OpConversionPattern<handshake::FuncOp>::OpConversionPattern;
 
@@ -744,7 +782,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     rewriter.setInsertionPointToStart(circuitOp.getBody());
     FModuleOp topModuleOp = createTopModuleOp(funcOp, rewriter);
 
-    // Traverse and convert all operations in funcOp.
+    // Traverse and convert each operation in funcOp.
     for (Operation &op : topModuleOp.getBody().front()) {
       if (isa<handshake::ReturnOp>(op))
         convertReturnOp(op, topModuleOp, rewriter);
