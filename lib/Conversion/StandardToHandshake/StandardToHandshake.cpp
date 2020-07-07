@@ -1342,6 +1342,44 @@ struct FuncOpLowering : public OpConversionPattern<mlir::FuncOp> {
 
 namespace {
 
+struct DFRemoveBlockPass : 
+public PassWrapper<DFRemoveBlockPass, OperationPass<handshake::FuncOp>> {
+  void runOnOperation() override {
+    auto funcOp = getOperation();
+    auto builder = OpBuilder(funcOp.getContext());
+    auto *termOp = funcOp.getBody().front().getTerminator();
+
+    for (auto &block : funcOp) {
+      if (block.isEntryBlock()) continue;
+
+      // Move all operations to the first block except for terminator operations 
+      // which can be safely dropped.
+      while(!block.empty()){
+        Operation &op = block.front();
+        if (isa<handshake::TerminatorOp>(op)) {
+          op.erase();
+        } else if (isa<handshake::ReturnOp>(op)) {
+          builder.setInsertionPointAfter(termOp);
+          builder.clone(op);
+          builder.clearInsertionPoint();
+          op.erase();
+        } else {
+          op.moveBefore(termOp);
+        }
+      }
+    }
+    if (isa<handshake::TerminatorOp>(*termOp))
+      termOp->erase();
+
+    // Remove all empty blocks.
+    while (true) {
+      Block &block = funcOp.getBody().back();
+      if (block.isEntryBlock()) break;
+      block.erase();
+    }
+  }
+};
+
 struct DFPass : public PassWrapper<DFPass, OperationPass<ModuleOp>> {
   void runOnOperation() override {
     ModuleOp m = getOperation();
@@ -1444,4 +1482,7 @@ void handshake::registerStandardToHandshakePasses() {
     PassRegistration<DFCanonicalizePass>(
       "canonicalize-dataflow",
       "Canonicalize handshake IR");
+    PassRegistration<DFRemoveBlockPass>(
+      "remove-block-structure",
+      "Remove block structure in handshake IR");
 }
