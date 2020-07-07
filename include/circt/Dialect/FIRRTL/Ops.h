@@ -11,9 +11,9 @@
 #include "circt/Dialect/FIRRTL/Types.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionSupport.h"
+#include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
-#include "mlir/IR/RegionKindInterface.h"
 
 namespace circt {
 namespace firrtl {

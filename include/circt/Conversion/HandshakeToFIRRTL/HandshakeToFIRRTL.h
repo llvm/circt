@@ -13,21 +13,20 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-// =============================================================================
+//===----------------------------------------------------------------------===//
 
 #ifndef MLIR_CONVERSION_HANDSHAKETOFIRRTL_H_
 #define MLIR_CONVERSION_HANDSHAKETOFIRRTL_H_
 
-#include <memory>
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
-#include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/Handshake/HandshakeOps.h"
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include <memory>
 
 namespace mlir {
-  namespace handshake {
-    class FuncOp;
-    void registerHandshakeToFIRRTLPasses();
-  }
+namespace handshake {
+void registerHandshakeToFIRRTLPasses();
+} // namespace handshake
 } // namespace mlir
 
 #endif // MLIR_CONVERSION_HANDSHAKETOFIRRTL_H_
