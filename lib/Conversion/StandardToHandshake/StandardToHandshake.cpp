@@ -1474,16 +1474,16 @@ struct DFAnalysisPass : public PassWrapper<DFAnalysisPass,
 } // namespace
 
 void handshake::registerStandardToHandshakePasses() {
-    PassRegistration<DFAnalysisPass>(
+  PassRegistration<DFAnalysisPass>(
       "analyze-dataflow",
       "Print resource (operation) statistics");
-    PassRegistration<DFPass>(
+  PassRegistration<DFPass>(
       "create-dataflow",
       "Convert standard MLIR into dataflow IR");
-    PassRegistration<DFCanonicalizePass>(
+  PassRegistration<DFCanonicalizePass>(
       "canonicalize-dataflow",
       "Canonicalize handshake IR");
-    PassRegistration<DFRemoveBlockPass>(
+  PassRegistration<DFRemoveBlockPass>(
       "remove-block-structure",
       "Remove block structure in handshake IR");
 }
