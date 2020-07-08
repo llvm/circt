@@ -1341,20 +1341,20 @@ struct FuncOpLowering : public OpConversionPattern<mlir::FuncOp> {
 };
 
 namespace {
-
-struct DFRemoveBlockPass : 
-public PassWrapper<DFRemoveBlockPass, OperationPass<handshake::FuncOp>> {
+struct DFRemoveBlockPass
+    : public PassWrapper<DFRemoveBlockPass, OperationPass<handshake::FuncOp>> {
   void runOnOperation() override {
     auto funcOp = getOperation();
     auto builder = OpBuilder(funcOp.getContext());
     auto *termOp = funcOp.getBody().front().getTerminator();
 
     for (auto &block : funcOp) {
-      if (block.isEntryBlock()) continue;
+      if (block.isEntryBlock())
+        continue;
 
-      // Move all operations to the first block except for terminator operations 
+      // Move all operations to the first block except for terminator operations
       // which can be safely dropped.
-      while(!block.empty()){
+      while (!block.empty()) {
         Operation &op = block.front();
         if (isa<handshake::TerminatorOp>(op)) {
           op.erase();
@@ -1374,7 +1374,8 @@ public PassWrapper<DFRemoveBlockPass, OperationPass<handshake::FuncOp>> {
     // Remove all empty blocks.
     while (true) {
       Block &block = funcOp.getBody().back();
-      if (block.isEntryBlock()) break;
+      if (block.isEntryBlock())
+        break;
       block.erase();
     }
   }
