@@ -59,7 +59,7 @@ def FModuleOp : FIRRTLOp<"module",
   let extraClassDeclaration = [{
     using FunctionLike::getBody;
 
-    /// Implement RegionKindInterface.
+    // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
 
     // Decode information about the input and output ports on this module.

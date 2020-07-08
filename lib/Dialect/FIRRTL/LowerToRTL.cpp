@@ -227,7 +227,7 @@ static LogicalResult lowerBinOp(OpType op, ArrayRef<Value> operands,
 
 static LogicalResult lower(firrtl::AddPrimOp op, ArrayRef<Value> operands,
                            ConversionPatternRewriter &rewriter) {
-  return lowerBinOp<firrtl::AddPrimOp, rtl::AddOp>(op, operands, rewriter);
+  return lowerVariadicOp<firrtl::AddPrimOp, rtl::AddOp>(op, operands, rewriter);
 }
 
 static LogicalResult lower(firrtl::SubPrimOp op, ArrayRef<Value> operands,
