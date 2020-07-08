@@ -11,7 +11,7 @@ firrtl.circuit "Circuit" {
     %c = firrtl.stdIntCast %b : (i8) -> !firrtl.uint<8>
     firrtl.connect %y, %c : !firrtl.flip<uint<8>>, !firrtl.uint<8>
 
-    %d = rtl.mul %z, %z : i8
+    %d = rtl.mul %z, %z, %z : i8
     %e = rtl.mod %d, %c5 : i8
     %f = rtl.concat %e, %z, %d : (i8, i8, i8) -> i8
     %g = firrtl.stdIntCast %f : (i8) -> !firrtl.uint<8>
@@ -24,7 +24,7 @@ firrtl.circuit "Circuit" {
   // CHECK-NEXT:    input  [7:0] z);
   // CHECK-EMPTY:
   // CHECK-NEXT:    assign y = (z + 8'h2A) * 8'h5;
-  // CHECK-NEXT:    wire [7:0] _T = z * z;
+  // CHECK-NEXT:    wire [7:0] _T = z * z * z;
   // CHECK-NEXT:    assign y = {_T % 8'h5, z, _T};
   // CHECK-NEXT:  endmodule
 
@@ -57,9 +57,8 @@ firrtl.circuit "Circuit" {
     %c5 = rtl.constant (5 : i8) : i8
     %a = rtl.add %z, %c42 : i8
     %v1 = rtl.and %a, %c42, %c5 : i8
-    %v2 = rtl.xor %a, %v1, %c42 : i8
-    %v3 = rtl.or %a, %v1, %v2 : i8
-
+    %v2 = rtl.or %a, %v1 : i8
+    %v3 = rtl.xor %v1, %v2, %c42 : i8
     %c = firrtl.stdIntCast %v3 : (i8) -> !firrtl.uint<8>
     firrtl.connect %y, %c : !firrtl.flip<uint<8>>, !firrtl.uint<8>
   }
@@ -70,8 +69,8 @@ firrtl.circuit "Circuit" {
   // CHECK-NEXT:  input  [7:0] z);
   // CHECK-EMPTY:
   // CHECK-NEXT:  wire [7:0] _T = z + 8'h2A;
-  // CHECK-NEXT:  wire [7:0] _T_0 = ( _T ) & ( 8'h2A ) & ( 8'h5 );
-  // CHECK-NEXT:  assign y = ( _T ) | ( _T_0 ) | ( ( _T ) ^ ( _T_0 ) ^ ( 8'h2A ) );
+  // CHECK-NEXT:  wire [7:0] _T_0 = _T & 8'h2A & 8'h5;
+  // CHECK-NEXT:  assign y = _T_0 ^ (_T | _T_0) ^ 8'h2A;
   // CHECK-NEXT:endmodule
 
 }

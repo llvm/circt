@@ -743,9 +743,9 @@ private:
     return emitSubExpr(op->getOperand(0), LowestPrecedence);
   }
 
-  SubExprInfo visitExpr(AddPrimOp op) { return emitBinary(op, Addition, "+"); }
+  SubExprInfo visitExpr(AddPrimOp op) { return emitVariadic(op, Addition, "+"); }
   SubExprInfo visitExpr(SubPrimOp op) { return emitBinary(op, Addition, "-"); }
-  SubExprInfo visitExpr(MulPrimOp op) { return emitBinary(op, Multiply, "*"); }
+  SubExprInfo visitExpr(MulPrimOp op) { return emitVariadic(op, Multiply, "*"); }
   SubExprInfo visitExpr(DivPrimOp op) {
     return emitSignedBinary(op, Multiply, "/");
   }
@@ -756,9 +756,9 @@ private:
     return emitSignedBinary(op, Multiply, "%");
   }
 
-  SubExprInfo visitExpr(AndPrimOp op) { return emitBinary(op, And, "&"); }
-  SubExprInfo visitExpr(OrPrimOp op) { return emitBinary(op, Or, "|"); }
-  SubExprInfo visitExpr(XorPrimOp op) { return emitBinary(op, Xor, "^"); }
+  SubExprInfo visitExpr(AndPrimOp op) { return emitVariadic(op, And, "&"); }
+  SubExprInfo visitExpr(OrPrimOp op) { return emitVariadic(op, Or, "|"); }
+  SubExprInfo visitExpr(XorPrimOp op) { return emitVariadic(op, Xor, "^"); }
 
   // Comparison Operations
   SubExprInfo visitExpr(LEQPrimOp op) {
@@ -823,9 +823,9 @@ private:
   // RTL Dialect Operations
   using CombinatorialVisitor::visitComb;
   SubExprInfo visitComb(rtl::ConstantOp op);
-  SubExprInfo visitComb(rtl::AddOp op) { return emitBinary(op, Addition, "+"); }
+  SubExprInfo visitComb(rtl::AddOp op) { return emitVariadic(op, Addition, "+"); }
   SubExprInfo visitComb(rtl::SubOp op) { return emitBinary(op, Addition, "-"); }
-  SubExprInfo visitComb(rtl::MulOp op) { return emitBinary(op, Multiply, "*"); }
+  SubExprInfo visitComb(rtl::MulOp op) { return emitVariadic(op, Multiply, "*"); }
   SubExprInfo visitComb(rtl::DivOp op) {
     return emitSignedBinary(op, Multiply, "/");
   }
@@ -906,7 +906,7 @@ SubExprInfo ExprEmitter::emitVariadic(Operation *op, VerilogPrecedence prec,
                                       const char *syntax, bool hasStrictSign) {
   interleave(
       op->getOperands().begin(), op->getOperands().end(),
-      [&](Value v1) { os << "( "; emitSubExpr(v1, prec, hasStrictSign); os << " )"; },
+      [&](Value v1) { emitSubExpr(v1, prec, hasStrictSign); },
       [&] { os << ' ' << syntax << ' '; });
 
   return {prec, IsUnsigned};
