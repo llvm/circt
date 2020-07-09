@@ -1345,37 +1345,21 @@ struct DFRemoveBlockPass
     : public PassWrapper<DFRemoveBlockPass, OperationPass<handshake::FuncOp>> {
   void runOnOperation() override {
     auto funcOp = getOperation();
-    auto builder = OpBuilder(funcOp.getContext());
-    auto *termOp = funcOp.getBody().front().getTerminator();
+    auto &entryBlock = funcOp.getBody().front().getOperations();
 
+    // Erase all TerminatorOp, and move ReturnOp to the end of entry block.
     for (auto &block : funcOp) {
-      if (block.isEntryBlock())
-        continue;
-
-      // Move all operations to the first block except for terminator operations
-      // which can be safely dropped.
-      while (!block.empty()) {
-        Operation &op = block.front();
-        if (isa<handshake::TerminatorOp>(op)) {
-          op.erase();
-        } else if (isa<handshake::ReturnOp>(op)) {
-          builder.setInsertionPointAfter(termOp);
-          builder.clone(op);
-          builder.clearInsertionPoint();
-          op.erase();
-        } else {
-          op.moveBefore(termOp);
-        }
-      }
+      Operation &termOp = block.back();
+      if (isa<handshake::TerminatorOp>(termOp))
+        termOp.erase();
+      else if (isa<handshake::ReturnOp>(termOp))
+        entryBlock.splice(entryBlock.end(), block.getOperations(), termOp);
     }
-    if (isa<handshake::TerminatorOp>(*termOp))
-      termOp->erase();
 
-    // Remove all empty blocks.
-    while (true) {
-      Block &block = funcOp.getBody().back();
-      if (block.isEntryBlock())
-        break;
+    // Move all operations to entry block and erase other blocks.
+    for (auto &block :
+         llvm::make_early_inc_range(llvm::drop_begin(funcOp, 1))) {
+      entryBlock.splice(--entryBlock.end(), block.getOperations());
       block.erase();
     }
   }
