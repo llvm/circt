@@ -1,6 +1,7 @@
 // RUN: circt-opt -lower-handshake-to-firrtl %s | FileCheck %s
 
-// CHECK: firrtl.module @handshake.lazy_fork_1ins_2outs(%arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>, %arg1: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<sint<64>>>, %arg2: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<sint<64>>>) {
+// CHECK-LABEL: firrtl.module @handshake.lazy_fork_1ins_2outs(
+// CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>, %arg1: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<sint<64>>>, %arg2: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<sint<64>>>) {
 // CHECK:   %0 = firrtl.subfield %arg0("valid") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>) -> !firrtl.uint<1>
 // CHECK:   %1 = firrtl.subfield %arg0("ready") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>) -> !firrtl.flip<uint<1>>
 // CHECK:   %2 = firrtl.subfield %arg0("data") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>) -> !firrtl.sint<64>
@@ -19,7 +20,8 @@
 // CHECK:   firrtl.connect %8, %2 : !firrtl.flip<sint<64>>, !firrtl.sint<64>
 // CHECK: }
 
-// CHECK: firrtl.module @test_lazy_fork(%arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg2: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<sint<64>>>, %arg3: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<sint<64>>>, %arg4: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>) {
+// CHECK-LABEL: firrtl.module @test_lazy_fork(
+// CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg2: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<sint<64>>>, %arg3: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<sint<64>>>, %arg4: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>) {
 handshake.func @test_lazy_fork(%arg0: index, %arg1: none, ...) -> (index, index, none) {
 
   // CHECK: %0 = firrtl.instance @handshake.lazy_fork_1ins_2outs {name = ""} : !firrtl.bundle<arg0: bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<sint<64>>>, arg1: bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>, arg2: bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>>

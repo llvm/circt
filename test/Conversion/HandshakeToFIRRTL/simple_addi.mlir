@@ -1,6 +1,7 @@
 // RUN: circt-opt -lower-handshake-to-firrtl %s | FileCheck %s
 
-// CHECK: firrtl.module @handshake.merge_1ins_1outs(%arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>, %arg1: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<sint<64>>>) {
+// CHECK-LABEL: firrtl.module @handshake.merge_1ins_1outs(
+// CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>, %arg1: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<sint<64>>>) {
 // CHECK:   %0 = firrtl.subfield %arg0("valid") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>) -> !firrtl.uint<1>
 // CHECK:   %1 = firrtl.subfield %arg0("ready") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>) -> !firrtl.flip<uint<1>>
 // CHECK:   %2 = firrtl.subfield %arg0("data") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>) -> !firrtl.sint<64>
@@ -14,7 +15,8 @@
 // CHECK:   }
 // CHECK: }
 
-// CHECK: firrtl.module @std.addi_2ins_1outs(%arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>, %arg2: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<sint<64>>>) {
+// CHECK-LABEL: firrtl.module @std.addi_2ins_1outs(
+// CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>, %arg2: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<sint<64>>>) {
 // CHECK:   %0 = firrtl.subfield %arg0("valid") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>) -> !firrtl.uint<1>
 // CHECK:   %1 = firrtl.subfield %arg0("ready") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>) -> !firrtl.flip<uint<1>>
 // CHECK:   %2 = firrtl.subfield %arg0("data") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>) -> !firrtl.sint<64>
@@ -33,7 +35,8 @@
 // CHECK:   firrtl.connect %4, %11 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 // CHECK: }
 
-// CHECK: firrtl.module @simple_addi(%arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>, %arg2: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg3: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<sint<64>>>, %arg4: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>) {
+// CHECK-LABEL: firrtl.module @simple_addi(
+// CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>, %arg2: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg3: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<sint<64>>>, %arg4: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>) {
 handshake.func @simple_addi(%arg0: index, %arg1: index, %arg2: none, ...) -> (index, none) {
 
   // CHECK: %0 = firrtl.instance @handshake.merge_1ins_1outs {name = ""} : !firrtl.bundle<arg0: bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<sint<64>>>, arg1: bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>>

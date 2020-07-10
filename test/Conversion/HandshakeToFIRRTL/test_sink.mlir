@@ -1,12 +1,14 @@
 // RUN: circt-opt -lower-handshake-to-firrtl %s | FileCheck %s
 
-// CHECK: firrtl.module @handshake.sink_1ins_0outs(%arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>) {
+// CHECK-LABEL: firrtl.module @handshake.sink_1ins_0outs(
+// CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>) {
 // CHECK:   %0 = firrtl.subfield %arg0("ready") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>) -> !firrtl.flip<uint<1>>
 // CHECK:   %c1_ui1 = firrtl.constant(true) : !firrtl.uint<1>
 // CHECK:   firrtl.connect %0, %c1_ui1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 // CHECK: }
 
-// CHECK: firrtl.module @test_sink(%arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg2: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>) {
+// CHECK-LABEL: firrtl.module @test_sink(
+// CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<64>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg2: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>) {
 handshake.func @test_sink(%arg0: index, %arg2: none, ...) -> (none) {
 
   // CHECK: %0 = firrtl.instance @handshake.sink_1ins_0outs {name = ""} : !firrtl.bundle<arg0: bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<sint<64>>>>

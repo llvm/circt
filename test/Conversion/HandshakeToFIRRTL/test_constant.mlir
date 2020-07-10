@@ -1,6 +1,7 @@
 // RUN: circt-opt -lower-handshake-to-firrtl %s | FileCheck %s
 
-// CHECK: firrtl.module @handshake.lazy_fork_1ins_2outs_ctrl(%arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg1: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, %arg2: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>) {
+// CHECK-LABEL: firrtl.module @handshake.lazy_fork_1ins_2outs_ctrl(
+// CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg1: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, %arg2: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>) {
 // CHECK:   %0 = firrtl.subfield %arg0("valid") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>) -> !firrtl.uint<1>
 // CHECK:   %1 = firrtl.subfield %arg0("ready") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>) -> !firrtl.flip<uint<1>>
 // CHECK:   %2 = firrtl.subfield %arg1("valid") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>) -> !firrtl.flip<uint<1>>
@@ -26,7 +27,8 @@
 // CHECK:   firrtl.connect %4, %c42_si64 : !firrtl.flip<sint<64>>, !firrtl.sint<64>
 // CHECK: }
 
-// CHECK: firrtl.module @test_constant(%arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg1: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<sint<64>>>, %arg2: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>) {
+// CHECK-LABEL: firrtl.module @test_constant(
+// CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg1: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<sint<64>>>, %arg2: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>) {
 handshake.func @test_constant(%arg0: none, ...) -> (index, none) {
 
   // CHECK: %0 = firrtl.instance @handshake.lazy_fork_1ins_2outs_ctrl {name = ""} : !firrtl.bundle<arg0: bundle<valid: flip<uint<1>>, ready: uint<1>>, arg1: bundle<valid: uint<1>, ready: flip<uint<1>>>, arg2: bundle<valid: uint<1>, ready: flip<uint<1>>>>
