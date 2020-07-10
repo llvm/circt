@@ -183,7 +183,13 @@ def LLHD_XorOp : LLHD_ArithmeticOrBitwiseOp<"xor", [Commutative]> {
   let hasFolder = 1;
 }
 
-def LLHD_ShlOp : LLHD_Op<"shl", [NoSideEffect]> {
+def LLHD_ShlOp : LLHD_Op<"shl", [
+    NoSideEffect,
+    AllTypesMatch<["base", "result"]>,
+    SameTypeArbitraryWidth<
+      "'hidden' and 'base' need to have the same type apart from the width",
+      "$hidden", "$base">
+  ]> {
   let summary = "Shifts a value to the left by a given amount.";
   let description = [{
     The type of the base value and the hidden value must be the same, but
@@ -214,22 +220,37 @@ def LLHD_ShlOp : LLHD_Op<"shl", [NoSideEffect]> {
     ```
   }];
 
-  // TODO: adjust type T and Th to include arrays and pointers
-  let arguments = (ins AnyTypeOf<[AnySignlessInteger, LLHD_AnySigType]>:$base,
-                       AnyTypeOf<[AnySignlessInteger, LLHD_AnySigType]>:$hidden,
-                       AnySignlessInteger:$amount);
+  // TODO: adjust type T and Th to include pointers
+  let arguments = (ins
+    AnyTypeOf<[AnySignlessInteger, AnyVector,
+               LLHD_SigType<[AnySignlessInteger, AnyVector]>]>:$base,
+    AnyTypeOf<[AnySignlessInteger, AnyVector,
+               LLHD_SigType<[AnySignlessInteger, AnyVector]>]>:$hidden,
+    AnySignlessInteger:$amount);
 
-  let results = (outs AnyTypeOf<[AnySignlessInteger, LLHD_AnySigType]>:$result);
+  let results = (outs
+    AnyTypeOf<[AnySignlessInteger, AnyVector,
+               LLHD_SigType<[AnySignlessInteger, AnyVector]>]>:$result);
 
   let assemblyFormat = [{
     operands attr-dict `:` functional-type(operands, results)
   }];
 
-  let verifier = [{ return ::verify(*this); }];
+  let extraClassDeclaration = [{
+    unsigned getBaseWidth()  { return getLLHDTypeWidth(base().getType()); }
+    unsigned getHiddenWidth() { return getLLHDTypeWidth(hidden().getType()); }
+  }];
+
   let hasFolder = 1;
 }
 
-def LLHD_ShrOp : LLHD_Op<"shr", [NoSideEffect]> {
+def LLHD_ShrOp : LLHD_Op<"shr", [
+    NoSideEffect,
+    AllTypesMatch<["base", "result"]>,
+    SameTypeArbitraryWidth<
+      "'hidden' and 'base' need to have the same type apart from the width",
+      "$hidden", "$base">
+  ]> {
   let summary = "Shifts a value to the right by a given amount.";
   let description = [{
     The type of the base value and the hidden value must be the same, but
@@ -260,17 +281,26 @@ def LLHD_ShrOp : LLHD_Op<"shr", [NoSideEffect]> {
     ```
   }];
 
-  // TODO: adjust type T and Th to include arrays and pointers
-  let arguments = (ins AnyTypeOf<[AnySignlessInteger, LLHD_AnySigType]>:$base,
-                       AnyTypeOf<[AnySignlessInteger, LLHD_AnySigType]>:$hidden,
-                       AnySignlessInteger:$amount);
+  // TODO: adjust type T and Th to include pointers
+  let arguments = (ins
+    AnyTypeOf<[AnySignlessInteger, AnyVector,
+               LLHD_SigType<[AnySignlessInteger, AnyVector]>]>:$base,
+    AnyTypeOf<[AnySignlessInteger, AnyVector,
+               LLHD_SigType<[AnySignlessInteger, AnyVector]>]>:$hidden,
+    AnySignlessInteger:$amount);
 
-  let results = (outs AnyTypeOf<[AnySignlessInteger, LLHD_AnySigType]>:$result);
+  let results = (outs
+    AnyTypeOf<[AnySignlessInteger, AnyVector,
+               LLHD_SigType<[AnySignlessInteger, AnyVector]>]>:$result);
 
   let assemblyFormat = [{
     operands attr-dict `:` functional-type(operands, results)
   }];
 
-  let verifier = [{ return ::verify(*this); }];
+  let extraClassDeclaration = [{
+    unsigned getBaseWidth()  { return getLLHDTypeWidth(base().getType()); }
+    unsigned getHiddenWidth() { return getLLHDTypeWidth(hidden().getType()); }
+  }];
+
   let hasFolder = 1;
 }

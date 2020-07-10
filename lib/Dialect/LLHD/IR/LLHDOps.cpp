@@ -122,13 +122,30 @@ struct constant_int_all_ones_matcher {
 
 } // anonymous namespace
 
+unsigned mlir::llhd::getLLHDTypeWidth(Type type) {
+  if (auto sig = type.dyn_cast<llhd::SigType>())
+    type = sig.getUnderlyingType();
+  if (auto vec = type.dyn_cast<VectorType>())
+    return vec.getNumElements();
+  if (auto tup = type.dyn_cast<TupleType>())
+    return tup.size();
+  return type.getIntOrFloatBitWidth();
+}
+
 //===---------------------------------------------------------------------===//
 // LLHD Trait Helper Functions
 //===---------------------------------------------------------------------===//
 
 static bool sameKindArbitraryWidth(Type lhsType, Type rhsType) {
-  return (lhsType.getKind() == rhsType.getKind()) &&
-         (!lhsType.isa<ShapedType>() ||
+  if (lhsType.getKind() != rhsType.getKind())
+    return false;
+
+  if (auto sig = lhsType.dyn_cast<llhd::SigType>())
+    return sameKindArbitraryWidth(
+        sig.getUnderlyingType(),
+        rhsType.cast<llhd::SigType>().getUnderlyingType());
+
+  return (!lhsType.isa<ShapedType>() ||
           (lhsType.cast<ShapedType>().getElementType() ==
            rhsType.cast<ShapedType>().getElementType()));
 }
@@ -167,34 +184,6 @@ static void print(OpAsmPrinter &printer, llhd::ConstOp op) {
 OpFoldResult llhd::ConstOp::fold(ArrayRef<Attribute> operands) {
   assert(operands.empty() && "const has no operands");
   return value();
-}
-
-//===----------------------------------------------------------------------===//
-// DextsOp
-//===----------------------------------------------------------------------===//
-
-unsigned llhd::DextsOp::getSliceWidth() {
-  auto resultTy = result().getType();
-  if (resultTy.isSignlessInteger()) {
-    return resultTy.getIntOrFloatBitWidth();
-  } else if (auto sigRes = resultTy.dyn_cast<llhd::SigType>()) {
-    return sigRes.getUnderlyingType().getIntOrFloatBitWidth();
-  } else if (auto vecRes = resultTy.dyn_cast<VectorType>()) {
-    return vecRes.getNumElements();
-  }
-  return 0;
-}
-
-unsigned llhd::DextsOp::getTargetWidth() {
-  auto targetTy = target().getType();
-  if (targetTy.isSignlessInteger()) {
-    return targetTy.getIntOrFloatBitWidth();
-  } else if (auto sigRes = targetTy.dyn_cast<llhd::SigType>()) {
-    return sigRes.getUnderlyingType().getIntOrFloatBitWidth();
-  } else if (auto vecRes = targetTy.dyn_cast<VectorType>()) {
-    return vecRes.getNumElements();
-  }
-  return 0;
 }
 
 //===----------------------------------------------------------------------===//
@@ -316,19 +305,6 @@ OpFoldResult llhd::ShlOp::fold(ArrayRef<Attribute> operands) {
       });
 }
 
-static LogicalResult verify(llhd::ShlOp op) {
-  if (op.base().getType() != op.result().getType()) {
-    return op.emitError(
-               "The output of the Shl operation is required to have the "
-               "same type as the base value (first operand), (")
-           << op.base().getType() << " vs. " << op.result().getType() << ")";
-  }
-
-  // TODO: verify that T and Th only differ in the number of bits or elements
-
-  return success();
-}
-
 //===----------------------------------------------------------------------===//
 // ShrOp
 //===----------------------------------------------------------------------===//
@@ -345,19 +321,6 @@ OpFoldResult llhd::ShrOp::fold(ArrayRef<Attribute> operands) {
         hidden <<= base.getBitWidth() - amt.getZExtValue();
         return base + hidden;
       });
-}
-
-static LogicalResult verify(llhd::ShrOp op) {
-  if (op.base().getType() != op.result().getType()) {
-    return op.emitError(
-               "The output of the Shr operation is required to have the "
-               "same type as the base value (first operand), (")
-           << op.base().getType() << " vs. " << op.result().getType() << ")";
-  }
-
-  // TODO: verify that T and Th only differ in the number of bits or elements
-
-  return success();
 }
 
 //===----------------------------------------------------------------------===//
