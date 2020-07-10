@@ -98,8 +98,6 @@ static FIRRTLType getBundleType(Type type, bool isFlip) {
   case StandardTypes::None:
     return buildBundleType(/*dataType=*/nullptr, isFlip, context);
   default:
-    assert(false && "Unsupported data type. Supported data types: integer "
-                    "(signed, unsigned, signless), index, none");
     return FIRRTLType(nullptr);
   }
 }
@@ -112,9 +110,8 @@ static Value createConstantOp(FIRRTLType opType, APInt value,
                                         intOpType.isSigned());
     return rewriter.create<firrtl::ConstantOp>(
         insertLoc, opType, rewriter.getIntegerAttr(type, value));
-  } else {
+  } else
     return Value(nullptr);
-  }
 }
 
 /// Construct a name for creating FIRRTL sub-module. The returned string
@@ -156,6 +153,11 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp,
   for (auto &arg : funcOp.getArguments()) {
     auto portName = rewriter.getStringAttr("arg" + std::to_string(args_idx));
     auto bundlePortType = getBundleType(arg.getType(), /*isFlip=*/false);
+
+    if (!bundlePortType)
+      funcOp.emitError("Unsupported data type. Supported data types: integer "
+                       "(signed, unsigned, signless), index, none.");
+
     ports.push_back(ModulePort(portName, bundlePortType));
     args_idx += 1;
   }
@@ -164,6 +166,11 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp,
   for (auto portType : funcOp.getType().getResults()) {
     auto portName = rewriter.getStringAttr("arg" + std::to_string(args_idx));
     auto bundlePortType = getBundleType(portType, /*isFlip=*/true);
+
+    if (!bundlePortType)
+      funcOp.emitError("Unsupported data type. Supported data types: integer "
+                       "(signed, unsigned, signless), index, none.");
+
     ports.push_back(ModulePort(portName, bundlePortType));
     args_idx += 1;
   }
@@ -228,6 +235,11 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
   for (auto portType : oldOp->getOperands().getTypes()) {
     auto portName = rewriter.getStringAttr("arg" + std::to_string(args_idx));
     auto bundlePortType = getBundleType(portType, /*isFlip=*/false);
+
+    if (!bundlePortType)
+      oldOp->emitError("Unsupported data type. Supported data types: integer "
+                       "(signed, unsigned, signless), index, none.");
+
     ports.push_back(ModulePort(portName, bundlePortType));
     args_idx += 1;
   }
@@ -236,6 +248,11 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
   for (auto portType : oldOp->getResults().getTypes()) {
     auto portName = rewriter.getStringAttr("arg" + std::to_string(args_idx));
     auto bundlePortType = getBundleType(portType, /*isFlip=*/true);
+
+    if (!bundlePortType)
+      oldOp->emitError("Unsupported data type. Supported data types: integer "
+                       "(signed, unsigned, signless), index, none.");
+
     ports.push_back(ModulePort(portName, bundlePortType));
     args_idx += 1;
   }
@@ -866,7 +883,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
             buildConstantLogic(&oldOp, portList, insertLoc, rewriter);
 
           else
-            assert(false && "Usupported operation type.");
+            oldOp.emitError("Usupported operation type.");
         }
 
         // Instantiate the new created sub-module.
