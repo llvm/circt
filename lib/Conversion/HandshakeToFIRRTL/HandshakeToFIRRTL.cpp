@@ -18,10 +18,7 @@
 #include "circt/Conversion/HandshakeToFIRRTL/HandshakeToFIRRTL.h"
 #include "circt/Dialect/FIRRTL/Ops.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
-#include "mlir/IR/PatternMatch.h"
-#include "mlir/IR/Value.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "mlir/Transforms/Passes.h"
 #include "mlir/Transforms/Utils.h"
 
 using namespace mlir;
@@ -44,9 +41,9 @@ static FIRRTLType buildBundleType(FIRRTLType dataType, bool isFlip,
   llvm::SmallVector<BundleElement, 3> elements;
 
   // Add valid and ready subfield to the bundle.
-  Identifier validId = Identifier::get("valid", context);
-  Identifier readyId = Identifier::get("ready", context);
-  UIntType signalType = UIntType::get(context, 1);
+  auto validId = Identifier::get("valid", context);
+  auto readyId = Identifier::get("ready", context);
+  auto signalType = UIntType::get(context, 1);
   if (isFlip) {
     elements.push_back(BundleElement(validId, FlipType::get(signalType)));
     elements.push_back(BundleElement(readyId, signalType));
@@ -57,14 +54,14 @@ static FIRRTLType buildBundleType(FIRRTLType dataType, bool isFlip,
 
   // Add data subfield to the bundle if dataType is not a null.
   if (dataType) {
-    Identifier dataId = Identifier::get("data", context);
+    auto dataId = Identifier::get("data", context);
     if (isFlip)
       elements.push_back(BundleElement(dataId, FlipType::get(dataType)));
     else
       elements.push_back(BundleElement(dataId, dataType));
   }
 
-  return BundleType::get(ArrayRef<BundleElement>(elements), context);
+  return BundleType::get(elements, context);
 }
 
 /// Return a FIRRTL bundle type (with data, valid, and ready subfields) given a
@@ -79,8 +76,8 @@ static FIRRTLType getBundleType(Type type, bool isFlip) {
   MLIRContext *context = type.getContext();
   switch (type.getKind()) {
   case StandardTypes::Integer: {
-    IntegerType integerType = type.cast<IntegerType>();
-    int width = integerType.getWidth();
+    auto integerType = type.cast<IntegerType>();
+    unsigned width = integerType.getWidth();
 
     switch (integerType.getSignedness()) {
     case IntegerType::Signed:
@@ -90,13 +87,13 @@ static FIRRTLType getBundleType(Type type, bool isFlip) {
     // ISSUE: How to handle signless integers? Should we use the AsSIntPrimOp
     // or AsUIntPrimOp to convert?
     case IntegerType::Signless:
-      return buildBundleType(SIntType::get(context, width), isFlip, context);
+      return buildBundleType(UIntType::get(context, width), isFlip, context);
     }
   }
-  // Currently we consider index type as 64-bits signed integer.
+  // Currently we consider index type as 64-bits unsigned integer.
   case StandardTypes::Index: {
-    int width = type.cast<IndexType>().kInternalStorageBitWidth;
-    return buildBundleType(SIntType::get(context, width), isFlip, context);
+    unsigned width = type.cast<IndexType>().kInternalStorageBitWidth;
+    return buildBundleType(UIntType::get(context, width), isFlip, context);
   }
   case StandardTypes::None:
     return buildBundleType(/*dataType=*/nullptr, isFlip, context);
@@ -107,11 +104,17 @@ static FIRRTLType getBundleType(Type type, bool isFlip) {
   }
 }
 
-static Value createConstantOp(Location insertLoc, FIRRTLType opType, int value,
+static Value createConstantOp(FIRRTLType opType, APInt value,
+                              Location insertLoc,
                               ConversionPatternRewriter &rewriter) {
-  IntegerAttr constantOpAttr = rewriter.getIntegerAttr(
-      rewriter.getIntegerType(opType.getBitWidthOrSentinel()), value);
-  return rewriter.create<firrtl::ConstantOp>(insertLoc, opType, constantOpAttr);
+  if (auto intOpType = opType.dyn_cast<firrtl::IntType>()) {
+    auto type = rewriter.getIntegerType(intOpType.getWidthOrSentinel(),
+                                        intOpType.isSigned());
+    return rewriter.create<firrtl::ConstantOp>(
+        insertLoc, opType, rewriter.getIntegerAttr(type, value));
+  } else {
+    return Value(nullptr);
+  }
 }
 
 /// Construct a name for creating FIRRTL sub-module. The returned string
@@ -119,15 +122,15 @@ static Value createConstantOp(Location insertLoc, FIRRTLType opType, int value,
 /// name; 2) number of inputs; 3) number of outputs; 4) comparison operation
 /// type (if applied); 5) whether the elastic component is for the control path
 /// (if applied).
-static std::string getSubModuleName(Operation &oldOp) {
-  std::string subModuleName = oldOp.getName().getStringRef().str() + "_" +
-                              std::to_string(oldOp.getNumOperands()) + "ins_" +
-                              std::to_string(oldOp.getNumResults()) + "outs";
+static std::string getSubModuleName(Operation *oldOp) {
+  std::string subModuleName = oldOp->getName().getStringRef().str() + "_" +
+                              std::to_string(oldOp->getNumOperands()) + "ins_" +
+                              std::to_string(oldOp->getNumResults()) + "outs";
 
   if (auto comOp = dyn_cast<mlir::CmpIOp>(oldOp))
     subModuleName += "_" + stringifyEnum(comOp.getPredicate()).str();
 
-  if (auto ctrlAttr = oldOp.getAttr("control")) {
+  if (auto ctrlAttr = oldOp->getAttr("control")) {
     if (ctrlAttr.cast<BoolAttr>().getValue())
       subModuleName += "_ctrl";
   }
@@ -143,34 +146,31 @@ static std::string getSubModuleName(Operation &oldOp) {
 /// circuit is pure combinational logic. If graph cycle exists, at least one
 /// buffer is required to be inserted for breaking the cycle, which will be
 /// supported in the next patch.
-FModuleOp createTopModuleOp(handshake::FuncOp funcOp,
-                            ConversionPatternRewriter &rewriter) {
+static FModuleOp createTopModuleOp(handshake::FuncOp funcOp,
+                                   ConversionPatternRewriter &rewriter) {
   using ModulePort = std::pair<StringAttr, FIRRTLType>;
   llvm::SmallVector<ModulePort, 8> ports;
 
   // Add all inputs of funcOp.
-  int args_idx = 0;
+  unsigned args_idx = 0;
   for (auto &arg : funcOp.getArguments()) {
-    StringAttr portName =
-        rewriter.getStringAttr("arg" + std::to_string(args_idx));
-    FIRRTLType bundlePortType = getBundleType(arg.getType(), /*isFlip=*/false);
+    auto portName = rewriter.getStringAttr("arg" + std::to_string(args_idx));
+    auto bundlePortType = getBundleType(arg.getType(), /*isFlip=*/false);
     ports.push_back(ModulePort(portName, bundlePortType));
     args_idx += 1;
   }
 
   // Add all outputs of funcOp.
   for (auto portType : funcOp.getType().getResults()) {
-    StringAttr portName =
-        rewriter.getStringAttr("arg" + std::to_string(args_idx));
-    FIRRTLType bundlePortType = getBundleType(portType, /*isFlip=*/true);
+    auto portName = rewriter.getStringAttr("arg" + std::to_string(args_idx));
+    auto bundlePortType = getBundleType(portType, /*isFlip=*/true);
     ports.push_back(ModulePort(portName, bundlePortType));
     args_idx += 1;
   }
 
   // Create a FIRRTL module, and inline the funcOp into it.
-  FModuleOp topModuleOp = rewriter.create<FModuleOp>(
-      funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()),
-      ArrayRef<ModulePort>(ports));
+  auto topModuleOp = rewriter.create<FModuleOp>(
+      funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()), ports);
   rewriter.inlineRegionBefore(funcOp.getBody(), topModuleOp.getBody(),
                               topModuleOp.end());
 
@@ -182,10 +182,10 @@ FModuleOp createTopModuleOp(handshake::FuncOp funcOp,
 
   // Replace uses of each argument of the second block with the corresponding
   // argument of the entry block.
-  for (int i = 0, e = secondBlock->getNumArguments(); i < e; ++i) {
-    BlockArgument oldArgument = secondBlock->getArgument(i);
-    BlockArgument newArgument = entryBlock->getArgument(i);
-    oldArgument.replaceAllUsesWith(newArgument);
+  args_idx = 0;
+  for (auto &oldArg : secondBlock->getArguments()) {
+    oldArg.replaceAllUsesWith(entryBlock->getArgument(args_idx));
+    args_idx += 1;
   }
 
   // Move all operations of the second block to the entry block.
@@ -204,10 +204,10 @@ FModuleOp createTopModuleOp(handshake::FuncOp funcOp,
 
 /// Check whether a submodule with the same name has been created elsewhere.
 /// Return the matched submodule if true, otherwise return nullptr.
-FModuleOp checkSubModuleOp(FModuleOp topModuleOp, Operation &oldOp) {
+static FModuleOp checkSubModuleOp(FModuleOp topModuleOp, Operation *oldOp) {
   for (auto &op : topModuleOp.getParentRegion()->front()) {
     if (auto subModuleOp = dyn_cast<FModuleOp>(op)) {
-      if (StringRef(getSubModuleName(oldOp)) == subModuleOp.getName()) {
+      if (getSubModuleName(oldOp) == subModuleOp.getName()) {
         return subModuleOp;
       }
     }
@@ -217,35 +217,32 @@ FModuleOp checkSubModuleOp(FModuleOp topModuleOp, Operation &oldOp) {
 
 /// All standard expressions and handshake elastic components will be converted
 /// to a FIRRTL sub-module and be instantiated in the top-module.
-FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation &oldOp,
-                            ConversionPatternRewriter &rewriter) {
+static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
+                                   ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPoint(topModuleOp);
   using ModulePort = std::pair<StringAttr, FIRRTLType>;
-  llvm::SmallVector<ModulePort, 4> ports;
+  llvm::SmallVector<ModulePort, 8> ports;
 
   // Add all inputs of oldOp.
-  int args_idx = 0;
-  for (auto portType : oldOp.getOperands().getTypes()) {
-    StringAttr portName =
-        rewriter.getStringAttr("arg" + std::to_string(args_idx));
-    FIRRTLType bundlePortType = getBundleType(portType, /*isFlip=*/false);
+  unsigned args_idx = 0;
+  for (auto portType : oldOp->getOperands().getTypes()) {
+    auto portName = rewriter.getStringAttr("arg" + std::to_string(args_idx));
+    auto bundlePortType = getBundleType(portType, /*isFlip=*/false);
     ports.push_back(ModulePort(portName, bundlePortType));
     args_idx += 1;
   }
 
   // Add all outputs of oldOp.
-  for (auto portType : oldOp.getResults().getTypes()) {
-    StringAttr portName =
-        rewriter.getStringAttr("arg" + std::to_string(args_idx));
-    FIRRTLType bundlePortType = getBundleType(portType, /*isFlip=*/true);
+  for (auto portType : oldOp->getResults().getTypes()) {
+    auto portName = rewriter.getStringAttr("arg" + std::to_string(args_idx));
+    auto bundlePortType = getBundleType(portType, /*isFlip=*/true);
     ports.push_back(ModulePort(portName, bundlePortType));
     args_idx += 1;
   }
 
   return rewriter.create<FModuleOp>(
-      topModuleOp.getLoc(),
-      rewriter.getStringAttr(StringRef(getSubModuleName(oldOp))),
-      ArrayRef<ModulePort>(ports));
+      topModuleOp.getLoc(), rewriter.getStringAttr(getSubModuleName(oldOp)),
+      ports);
 }
 
 //===----------------------------------------------------------------------===//
@@ -253,12 +250,13 @@ FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation &oldOp,
 //===----------------------------------------------------------------------===//
 
 /// Extract all subfields of all ports of the sub-module.
-ValueVectorList extractSubfields(FModuleOp subModuleOp, Location insertLoc,
-                                 ConversionPatternRewriter &rewriter) {
+static ValueVectorList extractSubfields(FModuleOp subModuleOp,
+                                        Location insertLoc,
+                                        ConversionPatternRewriter &rewriter) {
   ValueVectorList portList;
   for (auto &arg : subModuleOp.getArguments()) {
     ValueVector subfields;
-    BundleType argType = arg.getType().cast<BundleType>();
+    auto argType = arg.getType().cast<BundleType>();
     for (auto &element : argType.getElements()) {
       StringRef elementName = element.first.strref();
       FIRRTLType elementType = element.second;
@@ -271,18 +269,147 @@ ValueVectorList extractSubfields(FModuleOp subModuleOp, Location insertLoc,
   return portList;
 }
 
+/// Please refer to simple_addi.mlir test case.
+template <typename OpType>
+static void buildBinaryLogic(ValueVectorList portList, Location insertLoc,
+                             ConversionPatternRewriter &rewriter) {
+  ValueVector arg0Subfield = portList[0];
+  ValueVector arg1Subfield = portList[1];
+  ValueVector resultSubfields = portList[2];
+
+  Value arg0Valid = arg0Subfield[0];
+  Value arg0Ready = arg0Subfield[1];
+  Value arg0Data = arg0Subfield[2];
+  Value arg1Valid = arg1Subfield[0];
+  Value arg1Ready = arg1Subfield[1];
+  Value arg1Data = arg1Subfield[2];
+  Value resultValid = resultSubfields[0];
+  Value resultReady = resultSubfields[1];
+  Value resultData = resultSubfields[2];
+
+  // Carry out the binary operation.
+  auto resultDataOp = rewriter.create<OpType>(insertLoc, arg0Data.getType(),
+                                              arg0Data, arg1Data);
+  rewriter.create<ConnectOp>(insertLoc, resultData, resultDataOp);
+
+  // Generate valid signal.
+  auto resultValidOp = rewriter.create<AndPrimOp>(
+      insertLoc, arg0Valid.getType(), arg0Valid, arg1Valid);
+  rewriter.create<ConnectOp>(insertLoc, resultValid, resultValidOp);
+
+  // Generate ready signals.
+  auto argReadyOp = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
+                                               resultReady, resultValidOp);
+  rewriter.create<ConnectOp>(insertLoc, arg0Ready, argReadyOp);
+  rewriter.create<ConnectOp>(insertLoc, arg1Ready, argReadyOp);
+}
+
+/// Please refer to test_sink.mlir test case.
+static void buildSinkLogic(ValueVectorList portList, Location insertLoc,
+                           ConversionPatternRewriter &rewriter) {
+  ValueVector argSubfields = portList.front();
+  Value argValid = argSubfields[0];
+  Value argReady = argSubfields[1];
+  Value argData = argSubfields[2];
+
+  // A Sink operation is always ready to accept tokens.
+  auto signalType = argValid.getType().cast<FIRRTLType>();
+  Value highSignal =
+      createConstantOp(signalType, APInt(1, 1), insertLoc, rewriter);
+  rewriter.create<ConnectOp>(insertLoc, argReady, highSignal);
+
+  rewriter.eraseOp(argValid.getDefiningOp());
+  rewriter.eraseOp(argData.getDefiningOp());
+}
+
+/// Currently only support {control = true}.
+/// Please refer to test_join.mlir test case.
+static void buildJoinLogic(ValueVectorList portList, Location insertLoc,
+                           ConversionPatternRewriter &rewriter) {
+  ValueVector resultSubfields = portList.back();
+  Value resultValid = resultSubfields[0];
+  Value resultReady = resultSubfields[1];
+
+  // The output is triggered only after all inputs are valid.
+  Value *tmpValid = &portList[0][0];
+  for (unsigned i = 1, e = portList.size() - 1; i < e; ++i) {
+    Value argValid = portList[i][0];
+    *tmpValid = rewriter.create<AndPrimOp>(insertLoc, argValid.getType(),
+                                           argValid, *tmpValid);
+  }
+  rewriter.create<ConnectOp>(insertLoc, resultValid, *tmpValid);
+
+  // The input will be ready to accept new token when old token is sent out.
+  auto argReadyOp = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
+                                               resultReady, *tmpValid);
+  for (unsigned i = 0, e = portList.size() - 1; i < e; ++i) {
+    Value argReady = portList[i][1];
+    rewriter.create<ConnectOp>(insertLoc, argReady, argReadyOp);
+  }
+}
+
+/// Please refer to test_mux.mlir test case.
+static void buildMuxLogic(ValueVectorList portList, Location insertLoc,
+                          ConversionPatternRewriter &rewriter) {
+  ValueVector selectSubfields = portList.front();
+  Value selectValid = selectSubfields[0];
+  Value selectReady = selectSubfields[1];
+  Value selectData = selectSubfields[2];
+  auto selectType = selectData.getType().cast<FIRRTLType>();
+
+  ValueVector resultSubfields = portList.back();
+  Value resultValid = resultSubfields[0];
+  Value resultReady = resultSubfields[1];
+  Value resultData = resultSubfields[2];
+
+  // Mux will work only when the select input is active.
+  auto validWhenOp = rewriter.create<WhenOp>(insertLoc, selectValid,
+                                             /*withElseRegion=*/false);
+  rewriter.setInsertionPointToStart(&validWhenOp.thenRegion().front());
+
+  // Walk through each input to create a chain of when operation.
+  for (unsigned i = 1, e = portList.size() - 1; i < e; ++i) {
+    ValueVector argSubfields = portList[i];
+    Value argValid = argSubfields[0];
+    Value argReady = argSubfields[1];
+    Value argData = argSubfields[2];
+
+    auto conditionOp = rewriter.create<EQPrimOp>(
+        insertLoc, UIntType::get(rewriter.getContext(), 1), selectData,
+        createConstantOp(selectType, APInt(64, i), insertLoc, rewriter));
+
+    // If the current input is not the last one, the new created when
+    // operation will have an else region.
+    auto branchWhenOp = rewriter.create<WhenOp>(
+        insertLoc, conditionOp, /*withElseRegion=*/(i != e - 1));
+
+    rewriter.setInsertionPointToStart(&branchWhenOp.thenRegion().front());
+    rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
+    rewriter.create<ConnectOp>(insertLoc, resultData, argData);
+    rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
+
+    // Select will be ready to accept new token when data has been passed from
+    // input to output.
+    auto selectReadyOp = rewriter.create<AndPrimOp>(
+        insertLoc, argValid.getType(), argValid, resultReady);
+    rewriter.create<ConnectOp>(insertLoc, selectReady, selectReadyOp);
+    if (i != e - 1)
+      rewriter.setInsertionPointToStart(&branchWhenOp.elseRegion().front());
+  }
+}
+
 /// Assume only one input is active. When multiple inputs are active, inputs in
 /// the front have higher priority.
 /// Please refer to test_merge.mlir test case.
-void buildMergeLogic(ValueVectorList portList, Location insertLoc,
-                     ConversionPatternRewriter &rewriter) {
+static void buildMergeLogic(ValueVectorList portList, Location insertLoc,
+                            ConversionPatternRewriter &rewriter) {
   ValueVector resultSubfields = portList.back();
   Value resultValid = resultSubfields[0];
   Value resultReady = resultSubfields[1];
   Value resultData = resultSubfields[2];
 
   // Walk through each input to create a chain of when operation.
-  for (int i = 0, e = portList.size() - 1; i < e; ++i) {
+  for (unsigned i = 0, e = portList.size() - 1; i < e; ++i) {
     ValueVector argSubfields = portList[i];
     Value argValid = argSubfields[0];
     Value argReady = argSubfields[1];
@@ -290,8 +417,8 @@ void buildMergeLogic(ValueVectorList portList, Location insertLoc,
 
     // If the current input is not the last one, the new created when operation
     // will have an else region.
-    WhenOp whenOp = rewriter.create<WhenOp>(insertLoc, argValid,
-                                            /*withElseRegion=*/(i != e - 1));
+    auto whenOp = rewriter.create<WhenOp>(insertLoc, argValid,
+                                          /*withElseRegion=*/(i != e - 1));
     rewriter.setInsertionPointToStart(&whenOp.thenRegion().front());
     rewriter.create<ConnectOp>(insertLoc, resultData, argData);
     rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
@@ -304,47 +431,44 @@ void buildMergeLogic(ValueVectorList portList, Location insertLoc,
 
 /// Assume only one input is active.
 /// Please refer to test_cmerge.mlir test case.
-void buildControlMergeLogic(Operation &oldOp, ValueVectorList portList,
-                            Location insertLoc,
-                            ConversionPatternRewriter &rewriter) {
-  int numPort = portList.size();
+static void buildControlMergeLogic(handshake::ControlMergeOp *oldOp,
+                                   ValueVectorList portList, Location insertLoc,
+                                   ConversionPatternRewriter &rewriter) {
+  unsigned numPorts = portList.size();
 
-  ValueVector resultSubfields = portList[numPort - 2];
+  ValueVector resultSubfields = portList[numPorts - 2];
   Value resultValid = resultSubfields[0];
   Value resultReady = resultSubfields[1];
 
   // The last output indicates which input is active now.
-  ValueVector controlSubfields = portList[numPort - 1];
+  ValueVector controlSubfields = portList[numPorts - 1];
   Value controlValid = controlSubfields[0];
   Value controlReady = controlSubfields[1];
   Value controlData = controlSubfields[2];
-  FIRRTLType controlType =
-      FlipType::get(controlData.getType().cast<FIRRTLType>());
+  auto controlType = FlipType::get(controlData.getType().cast<FIRRTLType>());
 
-  AndPrimOp argReadyOp = rewriter.create<AndPrimOp>(
-      insertLoc, resultReady.getType(), resultReady, controlReady);
+  auto argReadyOp = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
+                                               resultReady, controlReady);
 
   // Walk through each input to create a chain of when operation.
-  for (int i = 0, e = numPort - 2; i < e; ++i) {
+  for (unsigned i = 0, e = numPorts - 2; i < e; ++i) {
     ValueVector argSubfields = portList[i];
     Value argValid = argSubfields[0];
     Value argReady = argSubfields[1];
 
     // If the current input is not the last one, the new created when operation
     // will have an else region.
-    WhenOp whenOp = rewriter.create<WhenOp>(insertLoc, argValid,
-                                            /*withElseRegion=*/(i != e - 1));
+    auto whenOp = rewriter.create<WhenOp>(insertLoc, argValid,
+                                          /*withElseRegion=*/(i != e - 1));
     rewriter.setInsertionPointToStart(&whenOp.thenRegion().front());
     rewriter.create<ConnectOp>(
         insertLoc, controlData,
-        createConstantOp(insertLoc, controlType, i, rewriter));
+        createConstantOp(controlType, APInt(64, i), insertLoc, rewriter));
     rewriter.create<ConnectOp>(insertLoc, controlValid, argValid);
     rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
     rewriter.create<ConnectOp>(insertLoc, argReady, argReadyOp);
 
-    if (!cast<handshake::ControlMergeOp>(oldOp)
-             .getAttrOfType<BoolAttr>("control")
-             .getValue()) {
+    if (!oldOp->getAttrOfType<BoolAttr>("control").getValue()) {
       Value argData = argSubfields[2];
       Value resultData = resultSubfields[2];
       rewriter.create<ConnectOp>(insertLoc, resultData, argData);
@@ -355,59 +479,10 @@ void buildControlMergeLogic(Operation &oldOp, ValueVectorList portList,
   }
 }
 
-/// Please refer to test_mux.mlir test case.
-void buildMuxLogic(ValueVectorList portList, Location insertLoc,
-                   ConversionPatternRewriter &rewriter) {
-  ValueVector selectSubfields = portList.front();
-  Value selectValid = selectSubfields[0];
-  Value selectReady = selectSubfields[1];
-  Value selectData = selectSubfields[2];
-  FIRRTLType selectType = selectData.getType().cast<FIRRTLType>();
-
-  ValueVector resultSubfields = portList.back();
-  Value resultValid = resultSubfields[0];
-  Value resultReady = resultSubfields[1];
-  Value resultData = resultSubfields[2];
-
-  // Mux will work only when the select input is active.
-  WhenOp validWhenOp = rewriter.create<WhenOp>(insertLoc, selectValid,
-                                               /*withElseRegion=*/false);
-  rewriter.setInsertionPointToStart(&validWhenOp.thenRegion().front());
-
-  // Walk through each input to create a chain of when operation.
-  for (int i = 1, e = portList.size() - 1; i < e; ++i) {
-    ValueVector argSubfields = portList[i];
-    Value argValid = argSubfields[0];
-    Value argReady = argSubfields[1];
-    Value argData = argSubfields[2];
-
-    EQPrimOp conditionOp = rewriter.create<EQPrimOp>(
-        insertLoc, UIntType::get(rewriter.getContext(), 1), selectData,
-        createConstantOp(insertLoc, selectType, i, rewriter));
-
-    // If the current input is not the last one, the new created when
-    // operation will have an else region.
-    WhenOp branchWhenOp = rewriter.create<WhenOp>(
-        insertLoc, conditionOp, /*withElseRegion=*/(i != e - 1));
-
-    rewriter.setInsertionPointToStart(&branchWhenOp.thenRegion().front());
-    rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
-    rewriter.create<ConnectOp>(insertLoc, resultData, argData);
-    rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
-
-    // Select will be ready to accept new token when data has been passed from
-    // input to output.
-    AndPrimOp selectReadyOp = rewriter.create<AndPrimOp>(
-        insertLoc, argValid.getType(), argValid, resultReady);
-    rewriter.create<ConnectOp>(insertLoc, selectReady, selectReadyOp);
-    if (i != e - 1)
-      rewriter.setInsertionPointToStart(&branchWhenOp.elseRegion().front());
-  }
-}
-
 /// Please refer to test_branch.mlir test case.
-void buildBranchLogic(Operation &oldOp, ValueVectorList portList,
-                      Location insertLoc, ConversionPatternRewriter &rewriter) {
+static void buildBranchLogic(handshake::BranchOp *oldOp,
+                             ValueVectorList portList, Location insertLoc,
+                             ConversionPatternRewriter &rewriter) {
   ValueVector argSubfields = portList[0];
   ValueVector resultSubfields = portList[1];
   Value argValid = argSubfields[0];
@@ -418,7 +493,7 @@ void buildBranchLogic(Operation &oldOp, ValueVectorList portList,
   rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
   rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
 
-  if (!cast<handshake::BranchOp>(oldOp).isControl()) {
+  if (!oldOp->isControl()) {
     Value argData = argSubfields[2];
     Value resultData = resultSubfields[2];
     rewriter.create<ConnectOp>(insertLoc, resultData, argData);
@@ -427,9 +502,10 @@ void buildBranchLogic(Operation &oldOp, ValueVectorList portList,
 
 /// Two outputs conditional branch operation.
 /// Please refer to test_conditional_branch.mlir test case.
-void buildConditionalBranchLogic(Operation &oldOp, ValueVectorList portList,
-                                 Location insertLoc,
-                                 ConversionPatternRewriter &rewriter) {
+static void buildConditionalBranchLogic(handshake::ConditionalBranchOp *oldOp,
+                                        ValueVectorList portList,
+                                        Location insertLoc,
+                                        ConversionPatternRewriter &rewriter) {
   ValueVector controlSubfields = portList[0];
   ValueVector argSubfields = portList[1];
   ValueVector result0Subfields = portList[2];
@@ -446,24 +522,24 @@ void buildConditionalBranchLogic(Operation &oldOp, ValueVectorList portList,
   Value result1Ready = result1Subfields[1];
 
   // ConditionalBranch will work only when the control input is active.
-  WhenOp validWhenOp = rewriter.create<WhenOp>(insertLoc, controlValid,
-                                               /*withElseRegion=*/false);
+  auto validWhenOp = rewriter.create<WhenOp>(insertLoc, controlValid,
+                                             /*withElseRegion=*/false);
   rewriter.setInsertionPointToStart(&validWhenOp.thenRegion().front());
-  WhenOp branchWhenOp = rewriter.create<WhenOp>(insertLoc, controlData,
-                                                /*withElseRegion=*/true);
+  auto branchWhenOp = rewriter.create<WhenOp>(insertLoc, controlData,
+                                              /*withElseRegion=*/true);
 
   // When control signal is true, the first branch is selected
   rewriter.setInsertionPointToStart(&branchWhenOp.thenRegion().front());
   rewriter.create<ConnectOp>(insertLoc, result0Valid, argValid);
   rewriter.create<ConnectOp>(insertLoc, argReady, result0Ready);
 
-  if (!cast<handshake::ConditionalBranchOp>(oldOp).isControl()) {
+  if (!oldOp->isControl()) {
     Value argData = argSubfields[2];
     Value result0Data = result0Subfields[2];
     rewriter.create<ConnectOp>(insertLoc, result0Data, argData);
   }
 
-  AndPrimOp control0ReadyOp = rewriter.create<AndPrimOp>(
+  auto control0ReadyOp = rewriter.create<AndPrimOp>(
       insertLoc, argValid.getType(), argValid, result0Ready);
   rewriter.create<ConnectOp>(insertLoc, controlReady, control0ReadyOp);
 
@@ -472,28 +548,28 @@ void buildConditionalBranchLogic(Operation &oldOp, ValueVectorList portList,
   rewriter.create<ConnectOp>(insertLoc, result1Valid, argValid);
   rewriter.create<ConnectOp>(insertLoc, argReady, result1Ready);
 
-  if (!cast<handshake::ConditionalBranchOp>(oldOp).isControl()) {
+  if (!oldOp->isControl()) {
     Value argData = argSubfields[2];
     Value result1Data = result1Subfields[2];
     rewriter.create<ConnectOp>(insertLoc, result1Data, argData);
   }
 
-  AndPrimOp control1ReadyOp = rewriter.create<AndPrimOp>(
+  auto control1ReadyOp = rewriter.create<AndPrimOp>(
       insertLoc, argValid.getType(), argValid, result1Ready);
   rewriter.create<ConnectOp>(insertLoc, controlReady, control1ReadyOp);
 }
 
 /// Please refer to test_lazy_fork.mlir test case.
-void buildLazyForkLogic(Operation &oldOp, ValueVectorList portList,
-                        Location insertLoc,
-                        ConversionPatternRewriter &rewriter) {
+static void buildLazyForkLogic(handshake::LazyForkOp *oldOp,
+                               ValueVectorList portList, Location insertLoc,
+                               ConversionPatternRewriter &rewriter) {
   ValueVector argSubfields = portList.front();
   Value argValid = argSubfields[0];
   Value argReady = argSubfields[1];
 
   // The input will be ready to accept new token when all outputs are ready.
   Value *tmpReady = &portList[1][1];
-  for (int i = 2, e = portList.size(); i < e; ++i) {
+  for (unsigned i = 2, e = portList.size(); i < e; ++i) {
     Value resultReady = portList[i][1];
     *tmpReady = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
                                            resultReady, *tmpReady);
@@ -501,14 +577,14 @@ void buildLazyForkLogic(Operation &oldOp, ValueVectorList portList,
   rewriter.create<ConnectOp>(insertLoc, argReady, *tmpReady);
 
   // All outputs must be ready for the LazyFork to send the token.
-  AndPrimOp resultValidOp = rewriter.create<AndPrimOp>(
-      insertLoc, argValid.getType(), argValid, *tmpReady);
-  for (int i = 1, e = portList.size(); i < e; ++i) {
+  auto resultValidOp = rewriter.create<AndPrimOp>(insertLoc, argValid.getType(),
+                                                  argValid, *tmpReady);
+  for (unsigned i = 1, e = portList.size(); i < e; ++i) {
     ValueVector resultfield = portList[i];
     Value resultValid = resultfield[0];
     rewriter.create<ConnectOp>(insertLoc, resultValid, resultValidOp);
 
-    if (!cast<handshake::LazyForkOp>(oldOp).isControl()) {
+    if (!oldOp->isControl()) {
       Value argData = argSubfields[2];
       Value resultData = resultfield[2];
       rewriter.create<ConnectOp>(insertLoc, resultData, argData);
@@ -520,15 +596,16 @@ void buildLazyForkLogic(Operation &oldOp, ValueVectorList portList,
 /// a timing component, and contains a register for recording which outputs
 /// have accepted the token. Eager Fork will be supported in the next patch.
 /// Please refer to test_lazy_fork.mlir test case.
-void buildForkLogic(Operation &oldOp, ValueVectorList portList,
-                    Location insertLoc, ConversionPatternRewriter &rewriter) {
+static void buildForkLogic(handshake::ForkOp *oldOp, ValueVectorList portList,
+                           Location insertLoc,
+                           ConversionPatternRewriter &rewriter) {
   ValueVector argSubfields = portList.front();
   Value argValid = argSubfields[0];
   Value argReady = argSubfields[1];
 
   // The input will be ready to accept new token when all outputs are ready.
   Value *tmpReady = &portList[1][1];
-  for (int i = 2, e = portList.size(); i < e; ++i) {
+  for (unsigned i = 2, e = portList.size(); i < e; ++i) {
     Value resultReady = portList[i][1];
     *tmpReady = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
                                            resultReady, *tmpReady);
@@ -536,14 +613,14 @@ void buildForkLogic(Operation &oldOp, ValueVectorList portList,
   rewriter.create<ConnectOp>(insertLoc, argReady, *tmpReady);
 
   // All outputs must be ready for the LazyFork to send the token.
-  AndPrimOp resultValidOp = rewriter.create<AndPrimOp>(
-      insertLoc, argValid.getType(), argValid, *tmpReady);
-  for (int i = 1, e = portList.size(); i < e; ++i) {
+  auto resultValidOp = rewriter.create<AndPrimOp>(insertLoc, argValid.getType(),
+                                                  argValid, *tmpReady);
+  for (unsigned i = 1, e = portList.size(); i < e; ++i) {
     ValueVector resultfield = portList[i];
     Value resultValid = resultfield[0];
     rewriter.create<ConnectOp>(insertLoc, resultValid, resultValidOp);
 
-    if (!cast<handshake::ForkOp>(oldOp).isControl()) {
+    if (!oldOp->isControl()) {
       Value argData = argSubfields[2];
       Value resultData = resultfield[2];
       rewriter.create<ConnectOp>(insertLoc, resultData, argData);
@@ -552,9 +629,9 @@ void buildForkLogic(Operation &oldOp, ValueVectorList portList,
 }
 
 /// Please refer to test_constant.mlir test case.
-void buildConstantLogic(Operation &oldOp, ValueVectorList portList,
-                        Location insertLoc,
-                        ConversionPatternRewriter &rewriter) {
+static void buildConstantLogic(handshake::ConstantOp *oldOp,
+                               ValueVectorList portList, Location insertLoc,
+                               ConversionPatternRewriter &rewriter) {
   // The first input is control signal which will trigger the Constant
   // operation to emit tokens.
   ValueVector controlSubfields = portList.front();
@@ -566,93 +643,14 @@ void buildConstantLogic(Operation &oldOp, ValueVectorList portList,
   Value resultReady = resultSubfields[1];
   Value resultData = resultSubfields[2];
 
-  FIRRTLType constantType =
-      FlipType::get(resultData.getType().cast<FIRRTLType>());
-  int constantAttrValue = oldOp.getAttrOfType<IntegerAttr>("value").getInt();
+  auto constantType = FlipType::get(resultData.getType().cast<FIRRTLType>());
+  auto constantValue = oldOp->getAttrOfType<IntegerAttr>("value").getValue();
 
   rewriter.create<ConnectOp>(insertLoc, resultValid, controlValid);
   rewriter.create<ConnectOp>(insertLoc, controlReady, resultReady);
   rewriter.create<ConnectOp>(
       insertLoc, resultData,
-      createConstantOp(insertLoc, constantType, constantAttrValue, rewriter));
-}
-
-/// Please refer to test_sink.mlir test case.
-void buildSinkLogic(ValueVectorList portList, Location insertLoc,
-                    ConversionPatternRewriter &rewriter) {
-  ValueVector argSubfields = portList.front();
-  Value argValid = argSubfields[0];
-  Value argReady = argSubfields[1];
-  Value argData = argSubfields[2];
-
-  // A Sink operation is always ready to accept tokens.
-  FIRRTLType signalType = argValid.getType().cast<FIRRTLType>();
-  Value highSignal = createConstantOp(insertLoc, signalType, 1, rewriter);
-  rewriter.create<ConnectOp>(insertLoc, argReady, highSignal);
-
-  rewriter.eraseOp(argValid.getDefiningOp());
-  rewriter.eraseOp(argData.getDefiningOp());
-}
-
-/// Currently only support {control = true}.
-/// Please refer to test_join.mlir test case.
-void buildJoinLogic(ValueVectorList portList, Location insertLoc,
-                    ConversionPatternRewriter &rewriter) {
-  ValueVector resultSubfields = portList.back();
-  Value resultValid = resultSubfields[0];
-  Value resultReady = resultSubfields[1];
-
-  // The output is triggered only after all inputs are valid.
-  Value *tmpValid = &portList[0][0];
-  for (int i = 1, e = portList.size() - 1; i < e; ++i) {
-    Value argValid = portList[i][0];
-    *tmpValid = rewriter.create<AndPrimOp>(insertLoc, argValid.getType(),
-                                           argValid, *tmpValid);
-  }
-  rewriter.create<ConnectOp>(insertLoc, resultValid, *tmpValid);
-
-  // The input will be ready to accept new token when old token is sent out.
-  AndPrimOp argReadyOp = rewriter.create<AndPrimOp>(
-      insertLoc, resultReady.getType(), resultReady, *tmpValid);
-  for (int i = 0, e = portList.size() - 1; i < e; ++i) {
-    Value argReady = portList[i][1];
-    rewriter.create<ConnectOp>(insertLoc, argReady, argReadyOp);
-  }
-}
-
-/// Please refer to simple_addi.mlir test case.
-template <typename OpType>
-void buildBinaryLogic(ValueVectorList portList, Location insertLoc,
-                      ConversionPatternRewriter &rewriter) {
-  ValueVector arg0Subfield = portList[0];
-  ValueVector arg1Subfield = portList[1];
-  ValueVector resultSubfields = portList[2];
-
-  Value arg0Valid = arg0Subfield[0];
-  Value arg0Ready = arg0Subfield[1];
-  Value arg0Data = arg0Subfield[2];
-  Value arg1Valid = arg1Subfield[0];
-  Value arg1Ready = arg1Subfield[1];
-  Value arg1Data = arg1Subfield[2];
-  Value resultValid = resultSubfields[0];
-  Value resultReady = resultSubfields[1];
-  Value resultData = resultSubfields[2];
-
-  // Carry out the binary operation.
-  OpType resultDataOp = rewriter.create<OpType>(insertLoc, arg0Data.getType(),
-                                                arg0Data, arg1Data);
-  rewriter.create<ConnectOp>(insertLoc, resultData, resultDataOp);
-
-  // Generate valid signal.
-  AndPrimOp resultValidOp = rewriter.create<AndPrimOp>(
-      insertLoc, arg0Valid.getType(), arg0Valid, arg1Valid);
-  rewriter.create<ConnectOp>(insertLoc, resultValid, resultValidOp);
-
-  // Generate ready signals.
-  AndPrimOp argReadyOp = rewriter.create<AndPrimOp>(
-      insertLoc, resultReady.getType(), resultReady, resultValidOp);
-  rewriter.create<ConnectOp>(insertLoc, arg0Ready, argReadyOp);
-  rewriter.create<ConnectOp>(insertLoc, arg1Ready, argReadyOp);
+      createConstantOp(constantType, constantValue, insertLoc, rewriter));
 }
 
 //===----------------------------------------------------------------------===//
@@ -661,68 +659,71 @@ void buildBinaryLogic(ValueVectorList portList, Location insertLoc,
 
 /// Create InstanceOp in the top-module. This will be called after the
 /// corresponding sub-module and combinational logic are created.
-void createInstOp(Operation &oldOp, FModuleOp subModuleOp,
-                  ConversionPatternRewriter &rewriter) {
-  rewriter.setInsertionPointAfter(&oldOp);
+static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
+                         ConversionPatternRewriter &rewriter) {
+  rewriter.setInsertionPointAfter(oldOp);
   using BundleElement = std::pair<Identifier, FIRRTLType>;
   llvm::SmallVector<BundleElement, 4> elements;
   MLIRContext *context = subModuleOp.getContext();
 
   // Bundle all ports of the instance into a new flattened bundle type.
-  int args_idx = 0;
+  unsigned args_idx = 0;
   for (auto &arg : subModuleOp.getArguments()) {
     std::string argName = "arg" + std::to_string(args_idx);
-    Identifier argId = rewriter.getIdentifier(argName);
+    auto argId = rewriter.getIdentifier(argName);
 
     // All ports of the instance operation are flipped.
-    FIRRTLType argType = FlipType::get(arg.getType().cast<BundleType>());
+    auto argType = FlipType::get(arg.getType().cast<BundleType>());
     elements.push_back(BundleElement(argId, argType));
     args_idx += 1;
   }
 
   // Create a instance operation.
-  FIRRTLType instType =
-      BundleType::get(ArrayRef<BundleElement>(elements), context);
-  firrtl::InstanceOp instOp = rewriter.create<firrtl::InstanceOp>(
-      oldOp.getLoc(), instType, subModuleOp.getName(),
+  auto instType = BundleType::get(elements, context);
+  auto instanceOp = rewriter.create<firrtl::InstanceOp>(
+      oldOp->getLoc(), instType, subModuleOp.getName(),
       rewriter.getStringAttr(""));
 
   // Connect the new created instance with its predecessors and successors in
   // the top-module.
-  int ports_idx = 0;
+  unsigned ports_idx = 0;
   for (auto &element : instType.cast<BundleType>().getElements()) {
     Identifier elementName = element.first;
     FIRRTLType elementType = element.second;
-    SubfieldOp subfieldOp = rewriter.create<SubfieldOp>(
-        oldOp.getLoc(), elementType, instOp,
+    auto subfieldOp = rewriter.create<SubfieldOp>(
+        oldOp->getLoc(), elementType, instanceOp,
         rewriter.getStringAttr(elementName.strref()));
 
-    // Connect input ports.
-    if (ports_idx < oldOp.getNumOperands())
-      rewriter.create<ConnectOp>(oldOp.getLoc(), subfieldOp,
-                                 oldOp.getOperand(ports_idx));
-    // Connect output ports.
+    unsigned numIns = oldOp->getNumOperands();
+    if (ports_idx < numIns)
+      // Connect input ports.
+      rewriter.create<ConnectOp>(oldOp->getLoc(), subfieldOp,
+                                 oldOp->getOperand(ports_idx));
     else {
-      Value result = oldOp.getResult(ports_idx - oldOp.getNumOperands());
+      // Connect output ports.
+      Value result = oldOp->getResult(ports_idx - numIns);
       result.replaceAllUsesWith(subfieldOp);
     }
     ports_idx += 1;
   }
-  rewriter.eraseOp(&oldOp);
+  rewriter.eraseOp(oldOp);
 }
 
-void convertReturnOp(Operation &oldOp, FModuleOp topModuleOp,
-                     ConversionPatternRewriter &rewriter) {
-  rewriter.setInsertionPointAfter(&oldOp);
-  int numArg = topModuleOp.getNumArguments();
+static void convertReturnOp(Operation *oldOp, FModuleOp topModuleOp,
+                            ConversionPatternRewriter &rewriter) {
+  rewriter.setInsertionPointAfter(oldOp);
+  unsigned numIns = topModuleOp.getNumArguments() - oldOp->getNumOperands();
 
   // Connect each operand of the old return operation with the corresponding
   // output ports.
-  for (int i = 0, e = oldOp.getNumOperands(); i < e; ++i)
-    rewriter.create<ConnectOp>(oldOp.getLoc(),
-                               topModuleOp.getArgument(numArg - e + i),
-                               oldOp.getOperand(i));
-  rewriter.eraseOp(&oldOp);
+  unsigned args_idx = 0;
+  for (auto result : oldOp->getOperands()) {
+    rewriter.create<ConnectOp>(
+        oldOp->getLoc(), topModuleOp.getArgument(numIns + args_idx), result);
+    args_idx += 1;
+  }
+
+  rewriter.eraseOp(oldOp);
 }
 
 //===----------------------------------------------------------------------===//
@@ -761,24 +762,24 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
   void rewrite(handshake::FuncOp funcOp, ArrayRef<Value> operands,
                ConversionPatternRewriter &rewriter) const override {
     // Create FIRRTL circuit and top-module operation.
-    CircuitOp circuitOp = rewriter.create<CircuitOp>(
+    auto circuitOp = rewriter.create<CircuitOp>(
         funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()));
     rewriter.setInsertionPointToStart(circuitOp.getBody());
-    FModuleOp topModuleOp = createTopModuleOp(funcOp, rewriter);
+    auto topModuleOp = createTopModuleOp(funcOp, rewriter);
 
     // Traverse and convert each operation in funcOp.
     for (Operation &op : topModuleOp.getBody().front()) {
       if (isa<handshake::ReturnOp>(op))
-        convertReturnOp(op, topModuleOp, rewriter);
+        convertReturnOp(&op, topModuleOp, rewriter);
 
       // This branch takes care of all non-timing operations that require to
       // be instantiated in the top-module.
-      else if (op.getDialect()->getNamespace() != StringRef("firrtl")) {
-        FModuleOp subModuleOp = checkSubModuleOp(topModuleOp, op);
+      else if (op.getDialect()->getNamespace() != "firrtl") {
+        FModuleOp subModuleOp = checkSubModuleOp(topModuleOp, &op);
 
         // Check if the sub-module already exists.
         if (!subModuleOp) {
-          subModuleOp = createSubModuleOp(topModuleOp, op, rewriter);
+          subModuleOp = createSubModuleOp(topModuleOp, &op, rewriter);
 
           Operation *termOp = subModuleOp.getBody().front().getTerminator();
           Location insertLoc = termOp->getLoc();
@@ -789,15 +790,19 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
 
           if (isa<mlir::AddIOp>(op))
             buildBinaryLogic<AddPrimOp>(portList, insertLoc, rewriter);
+
           else if (isa<mlir::SubIOp>(op))
             buildBinaryLogic<SubPrimOp>(portList, insertLoc, rewriter);
+
           else if (isa<mlir::MulIOp>(op))
             buildBinaryLogic<MulPrimOp>(portList, insertLoc, rewriter);
 
           else if (isa<mlir::AndOp>(op))
             buildBinaryLogic<AndPrimOp>(portList, insertLoc, rewriter);
+
           else if (isa<mlir::OrOp>(op))
             buildBinaryLogic<OrPrimOp>(portList, insertLoc, rewriter);
+
           else if (isa<mlir::XOrOp>(op))
             buildBinaryLogic<XorPrimOp>(portList, insertLoc, rewriter);
 
@@ -825,41 +830,47 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
             }
           } else if (isa<mlir::ShiftLeftOp>(op))
             buildBinaryLogic<DShlPrimOp>(portList, insertLoc, rewriter);
+
           else if (isa<mlir::SignedShiftRightOp>(op))
             buildBinaryLogic<DShrPrimOp>(portList, insertLoc, rewriter);
 
           // Build elastic components logic
-          else if (isa<handshake::MergeOp>(op))
-            buildMergeLogic(portList, insertLoc, rewriter);
-          else if (isa<handshake::ControlMergeOp>(op))
-            buildControlMergeLogic(op, portList, insertLoc, rewriter);
-
-          else if (isa<handshake::MuxOp>(op))
-            buildMuxLogic(portList, insertLoc, rewriter);
-
-          else if (isa<handshake::BranchOp>(op))
-            buildBranchLogic(op, portList, insertLoc, rewriter);
-          else if (isa<handshake::ConditionalBranchOp>(op))
-            buildConditionalBranchLogic(op, portList, insertLoc, rewriter);
-
-          else if (isa<handshake::ForkOp>(op))
-            buildForkLogic(op, portList, insertLoc, rewriter);
-          else if (isa<handshake::LazyForkOp>(op))
-            buildLazyForkLogic(op, portList, insertLoc, rewriter);
-
-          else if (isa<handshake::ConstantOp>(op))
-            buildConstantLogic(op, portList, insertLoc, rewriter);
           else if (isa<handshake::SinkOp>(op))
             buildSinkLogic(portList, insertLoc, rewriter);
 
           else if (isa<handshake::JoinOp>(op))
             buildJoinLogic(portList, insertLoc, rewriter);
+
+          else if (isa<handshake::MuxOp>(op))
+            buildMuxLogic(portList, insertLoc, rewriter);
+
+          else if (isa<handshake::MergeOp>(op))
+            buildMergeLogic(portList, insertLoc, rewriter);
+
+          else if (auto oldOp = dyn_cast<handshake::ControlMergeOp>(op))
+            buildControlMergeLogic(&oldOp, portList, insertLoc, rewriter);
+
+          else if (auto oldOp = dyn_cast<handshake::BranchOp>(op))
+            buildBranchLogic(&oldOp, portList, insertLoc, rewriter);
+
+          else if (auto oldOp = dyn_cast<handshake::ConditionalBranchOp>(op))
+            buildConditionalBranchLogic(&oldOp, portList, insertLoc, rewriter);
+
+          else if (auto oldOp = dyn_cast<handshake::ForkOp>(op))
+            buildForkLogic(&oldOp, portList, insertLoc, rewriter);
+
+          else if (auto oldOp = dyn_cast<handshake::LazyForkOp>(op))
+            buildLazyForkLogic(&oldOp, portList, insertLoc, rewriter);
+
+          else if (auto oldOp = dyn_cast<handshake::ConstantOp>(op))
+            buildConstantLogic(&oldOp, portList, insertLoc, rewriter);
+
           else
             assert(false && "Usupported operation type.");
         }
 
         // Instantiate the new created sub-module.
-        createInstOp(op, subModuleOp, rewriter);
+        createInstOp(&op, subModuleOp, rewriter);
       }
     }
     rewriter.eraseOp(funcOp);
