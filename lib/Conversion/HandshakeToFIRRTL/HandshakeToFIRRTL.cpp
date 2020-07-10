@@ -111,8 +111,7 @@ static Value createConstantOp(Location insertLoc, FIRRTLType opType, int value,
                               ConversionPatternRewriter &rewriter) {
   IntegerAttr constantOpAttr = rewriter.getIntegerAttr(
       rewriter.getIntegerType(opType.getBitWidthOrSentinel()), value);
-  return rewriter.create<firrtl::ConstantOp>(insertLoc, opType, constantOpAttr)
-      .getResult();
+  return rewriter.create<firrtl::ConstantOp>(insertLoc, opType, constantOpAttr);
 }
 
 /// Construct a name for creating FIRRTL sub-module. The returned string
@@ -263,9 +262,8 @@ ValueVectorList extractSubfields(FModuleOp subModuleOp, Location insertLoc,
     for (auto &element : argType.getElements()) {
       StringRef elementName = element.first.strref();
       FIRRTLType elementType = element.second;
-      SubfieldOp subfieldOp = rewriter.create<SubfieldOp>(
-          insertLoc, elementType, arg, rewriter.getStringAttr(elementName));
-      subfields.push_back(subfieldOp.getResult());
+      subfields.push_back(rewriter.create<SubfieldOp>(
+          insertLoc, elementType, arg, rewriter.getStringAttr(elementName)));
     }
     portList.push_back(subfields);
   }
@@ -342,7 +340,7 @@ void buildControlMergeLogic(Operation &oldOp, ValueVectorList portList,
         createConstantOp(insertLoc, controlType, i, rewriter));
     rewriter.create<ConnectOp>(insertLoc, controlValid, argValid);
     rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
-    rewriter.create<ConnectOp>(insertLoc, argReady, argReadyOp.getResult());
+    rewriter.create<ConnectOp>(insertLoc, argReady, argReadyOp);
 
     if (!cast<handshake::ControlMergeOp>(oldOp)
              .getAttrOfType<BoolAttr>("control")
@@ -390,7 +388,7 @@ void buildMuxLogic(ValueVectorList portList, Location insertLoc,
     // If the current input is not the last one, the new created when
     // operation will have an else region.
     WhenOp branchWhenOp = rewriter.create<WhenOp>(
-        insertLoc, conditionOp.getResult(), /*withElseRegion=*/(i != e - 1));
+        insertLoc, conditionOp, /*withElseRegion=*/(i != e - 1));
 
     rewriter.setInsertionPointToStart(&branchWhenOp.thenRegion().front());
     rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
@@ -401,8 +399,7 @@ void buildMuxLogic(ValueVectorList portList, Location insertLoc,
     // input to output.
     AndPrimOp selectReadyOp = rewriter.create<AndPrimOp>(
         insertLoc, argValid.getType(), argValid, resultReady);
-    rewriter.create<ConnectOp>(insertLoc, selectReady,
-                               selectReadyOp.getResult());
+    rewriter.create<ConnectOp>(insertLoc, selectReady, selectReadyOp);
     if (i != e - 1)
       rewriter.setInsertionPointToStart(&branchWhenOp.elseRegion().front());
   }
@@ -468,8 +465,7 @@ void buildConditionalBranchLogic(Operation &oldOp, ValueVectorList portList,
 
   AndPrimOp control0ReadyOp = rewriter.create<AndPrimOp>(
       insertLoc, argValid.getType(), argValid, result0Ready);
-  rewriter.create<ConnectOp>(insertLoc, controlReady,
-                             control0ReadyOp.getResult());
+  rewriter.create<ConnectOp>(insertLoc, controlReady, control0ReadyOp);
 
   // When control signal is false, the second branch is selected
   rewriter.setInsertionPointToStart(&branchWhenOp.elseRegion().front());
@@ -484,8 +480,7 @@ void buildConditionalBranchLogic(Operation &oldOp, ValueVectorList portList,
 
   AndPrimOp control1ReadyOp = rewriter.create<AndPrimOp>(
       insertLoc, argValid.getType(), argValid, result1Ready);
-  rewriter.create<ConnectOp>(insertLoc, controlReady,
-                             control1ReadyOp.getResult());
+  rewriter.create<ConnectOp>(insertLoc, controlReady, control1ReadyOp);
 }
 
 /// Please refer to test_lazy_fork.mlir test case.
@@ -500,9 +495,8 @@ void buildLazyForkLogic(Operation &oldOp, ValueVectorList portList,
   Value *tmpReady = &portList[1][1];
   for (int i = 2, e = portList.size(); i < e; ++i) {
     Value resultReady = portList[i][1];
-    AndPrimOp tmpReadyOp = rewriter.create<AndPrimOp>(
-        insertLoc, resultReady.getType(), resultReady, *tmpReady);
-    *tmpReady = tmpReadyOp.getResult();
+    *tmpReady = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
+                                           resultReady, *tmpReady);
   }
   rewriter.create<ConnectOp>(insertLoc, argReady, *tmpReady);
 
@@ -512,8 +506,7 @@ void buildLazyForkLogic(Operation &oldOp, ValueVectorList portList,
   for (int i = 1, e = portList.size(); i < e; ++i) {
     ValueVector resultfield = portList[i];
     Value resultValid = resultfield[0];
-    rewriter.create<ConnectOp>(insertLoc, resultValid,
-                               resultValidOp.getResult());
+    rewriter.create<ConnectOp>(insertLoc, resultValid, resultValidOp);
 
     if (!cast<handshake::LazyForkOp>(oldOp).isControl()) {
       Value argData = argSubfields[2];
@@ -537,9 +530,8 @@ void buildForkLogic(Operation &oldOp, ValueVectorList portList,
   Value *tmpReady = &portList[1][1];
   for (int i = 2, e = portList.size(); i < e; ++i) {
     Value resultReady = portList[i][1];
-    AndPrimOp tmpReadyOp = rewriter.create<AndPrimOp>(
-        insertLoc, resultReady.getType(), resultReady, *tmpReady);
-    *tmpReady = tmpReadyOp.getResult();
+    *tmpReady = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
+                                           resultReady, *tmpReady);
   }
   rewriter.create<ConnectOp>(insertLoc, argReady, *tmpReady);
 
@@ -549,8 +541,7 @@ void buildForkLogic(Operation &oldOp, ValueVectorList portList,
   for (int i = 1, e = portList.size(); i < e; ++i) {
     ValueVector resultfield = portList[i];
     Value resultValid = resultfield[0];
-    rewriter.create<ConnectOp>(insertLoc, resultValid,
-                               resultValidOp.getResult());
+    rewriter.create<ConnectOp>(insertLoc, resultValid, resultValidOp);
 
     if (!cast<handshake::ForkOp>(oldOp).isControl()) {
       Value argData = argSubfields[2];
@@ -615,9 +606,8 @@ void buildJoinLogic(ValueVectorList portList, Location insertLoc,
   Value *tmpValid = &portList[0][0];
   for (int i = 1, e = portList.size() - 1; i < e; ++i) {
     Value argValid = portList[i][0];
-    AndPrimOp tmpValidOp = rewriter.create<AndPrimOp>(
-        insertLoc, argValid.getType(), argValid, *tmpValid);
-    *tmpValid = tmpValidOp.getResult();
+    *tmpValid = rewriter.create<AndPrimOp>(insertLoc, argValid.getType(),
+                                           argValid, *tmpValid);
   }
   rewriter.create<ConnectOp>(insertLoc, resultValid, *tmpValid);
 
@@ -626,7 +616,7 @@ void buildJoinLogic(ValueVectorList portList, Location insertLoc,
       insertLoc, resultReady.getType(), resultReady, *tmpValid);
   for (int i = 0, e = portList.size() - 1; i < e; ++i) {
     Value argReady = portList[i][1];
-    rewriter.create<ConnectOp>(insertLoc, argReady, argReadyOp.getResult());
+    rewriter.create<ConnectOp>(insertLoc, argReady, argReadyOp);
   }
 }
 
@@ -651,18 +641,18 @@ void buildBinaryLogic(ValueVectorList portList, Location insertLoc,
   // Carry out the binary operation.
   OpType resultDataOp = rewriter.create<OpType>(insertLoc, arg0Data.getType(),
                                                 arg0Data, arg1Data);
-  rewriter.create<ConnectOp>(insertLoc, resultData, resultDataOp.getResult());
+  rewriter.create<ConnectOp>(insertLoc, resultData, resultDataOp);
 
   // Generate valid signal.
   AndPrimOp resultValidOp = rewriter.create<AndPrimOp>(
       insertLoc, arg0Valid.getType(), arg0Valid, arg1Valid);
-  rewriter.create<ConnectOp>(insertLoc, resultValid, resultValidOp.getResult());
+  rewriter.create<ConnectOp>(insertLoc, resultValid, resultValidOp);
 
   // Generate ready signals.
   AndPrimOp argReadyOp = rewriter.create<AndPrimOp>(
-      insertLoc, resultReady.getType(), resultReady, resultValidOp.getResult());
-  rewriter.create<ConnectOp>(insertLoc, arg0Ready, argReadyOp.getResult());
-  rewriter.create<ConnectOp>(insertLoc, arg1Ready, argReadyOp.getResult());
+      insertLoc, resultReady.getType(), resultReady, resultValidOp);
+  rewriter.create<ConnectOp>(insertLoc, arg0Ready, argReadyOp);
+  rewriter.create<ConnectOp>(insertLoc, arg1Ready, argReadyOp);
 }
 
 //===----------------------------------------------------------------------===//
@@ -704,17 +694,17 @@ void createInstOp(Operation &oldOp, FModuleOp subModuleOp,
     Identifier elementName = element.first;
     FIRRTLType elementType = element.second;
     SubfieldOp subfieldOp = rewriter.create<SubfieldOp>(
-        oldOp.getLoc(), elementType, instOp.getResult(),
+        oldOp.getLoc(), elementType, instOp,
         rewriter.getStringAttr(elementName.strref()));
 
     // Connect input ports.
     if (ports_idx < oldOp.getNumOperands())
-      rewriter.create<ConnectOp>(oldOp.getLoc(), subfieldOp.getResult(),
+      rewriter.create<ConnectOp>(oldOp.getLoc(), subfieldOp,
                                  oldOp.getOperand(ports_idx));
     // Connect output ports.
     else {
       Value result = oldOp.getResult(ports_idx - oldOp.getNumOperands());
-      result.replaceAllUsesWith(subfieldOp.getResult());
+      result.replaceAllUsesWith(subfieldOp);
     }
     ports_idx += 1;
   }
