@@ -18,13 +18,8 @@
 #include "circt/Conversion/HandshakeToFIRRTL/HandshakeToFIRRTL.h"
 #include "circt/Dialect/FIRRTL/Ops.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
-#include "mlir/IR/Builders.h"
-#include "mlir/IR/Function.h"
-#include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
-#include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
-#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
 #include "mlir/Transforms/Utils.h"
@@ -34,7 +29,7 @@ using namespace mlir::handshake;
 using namespace circt;
 using namespace circt::firrtl;
 
-using ValueVector = std::vector<Value>;
+using ValueVector = llvm::SmallVector<Value, 3>;
 using ValueVectorList = std::vector<ValueVector>;
 
 //===----------------------------------------------------------------------===//
@@ -43,8 +38,8 @@ using ValueVectorList = std::vector<ValueVector>;
 
 /// Build a FIRRTL bundle type (with data, valid, and ready subfields) given the
 /// type of the data subfield.
-FIRRTLType buildBundleType(FIRRTLType dataType, bool isFlip,
-                           MLIRContext *context) {
+static FIRRTLType buildBundleType(FIRRTLType dataType, bool isFlip,
+                                  MLIRContext *context) {
   using BundleElement = std::pair<Identifier, FIRRTLType>;
   llvm::SmallVector<BundleElement, 3> elements;
 
@@ -75,11 +70,11 @@ FIRRTLType buildBundleType(FIRRTLType dataType, bool isFlip,
 /// Return a FIRRTL bundle type (with data, valid, and ready subfields) given a
 /// standard data type. Current supported data types are integer (signed,
 /// unsigned, and signless), index, and none.
-FIRRTLType getBundleType(Type type, bool isFlip) {
+static FIRRTLType getBundleType(Type type, bool isFlip) {
   // If the input is already converted to a bundle type elsewhere, itself will
   // be returned after cast.
-  if (type.isa<BundleType>())
-    return type.cast<BundleType>();
+  if (auto bundleType = type.dyn_cast<BundleType>())
+    return bundleType;
 
   MLIRContext *context = type.getContext();
   switch (type.getKind()) {
@@ -112,11 +107,10 @@ FIRRTLType getBundleType(Type type, bool isFlip) {
   }
 }
 
-Value createConstantOp(Location insertLoc, FIRRTLType opType, int value,
-                       ConversionPatternRewriter &rewriter) {
+static Value createConstantOp(Location insertLoc, FIRRTLType opType, int value,
+                              ConversionPatternRewriter &rewriter) {
   IntegerAttr constantOpAttr = rewriter.getIntegerAttr(
-      IntegerType::get(opType.getBitWidthOrSentinel(), rewriter.getContext()),
-      value);
+      rewriter.getIntegerType(opType.getBitWidthOrSentinel()), value);
   return rewriter.create<firrtl::ConstantOp>(insertLoc, opType, constantOpAttr)
       .getResult();
 }
@@ -126,7 +120,7 @@ Value createConstantOp(Location insertLoc, FIRRTLType opType, int value,
 /// name; 2) number of inputs; 3) number of outputs; 4) comparison operation
 /// type (if applied); 5) whether the elastic component is for the control path
 /// (if applied).
-std::string getSubModuleName(Operation &oldOp) {
+static std::string getSubModuleName(Operation &oldOp) {
   std::string subModuleName = oldOp.getName().getStringRef().str() + "_" +
                               std::to_string(oldOp.getNumOperands()) + "ins_" +
                               std::to_string(oldOp.getNumResults()) + "outs";
@@ -688,7 +682,7 @@ void createInstOp(Operation &oldOp, FModuleOp subModuleOp,
   int args_idx = 0;
   for (auto &arg : subModuleOp.getArguments()) {
     std::string argName = "arg" + std::to_string(args_idx);
-    Identifier argId = Identifier::get(argName, context);
+    Identifier argId = rewriter.getIdentifier(argName);
 
     // All ports of the instance operation are flipped.
     FIRRTLType argType = FlipType::get(arg.getType().cast<BundleType>());

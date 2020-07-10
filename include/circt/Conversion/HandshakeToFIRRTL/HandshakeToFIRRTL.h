@@ -15,13 +15,8 @@
 // limitations under the License.
 //===----------------------------------------------------------------------===//
 
-#ifndef MLIR_CONVERSION_HANDSHAKETOFIRRTL_H_
-#define MLIR_CONVERSION_HANDSHAKETOFIRRTL_H_
-
-#include "circt/Dialect/FIRRTL/Ops.h"
-#include "circt/Dialect/Handshake/HandshakeOps.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
-#include <memory>
+#ifndef CIRCT_CONVERSION_HANDSHAKETOFIRRTL_H_
+#define CIRCT_CONVERSION_HANDSHAKETOFIRRTL_H_
 
 namespace mlir {
 namespace handshake {
