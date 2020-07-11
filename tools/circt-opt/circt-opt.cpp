@@ -5,6 +5,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Conversion/HandshakeToFIRRTL/HandshakeToFIRRTL.h"
 #include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
 #include "circt/Conversion/StandardToHandshake/StandardToHandshake.h"
 #include "circt/Dialect/FIRRTL/Dialect.h"
@@ -88,6 +89,7 @@ int main(int argc, char **argv) {
 
   registerDialect<handshake::HandshakeOpsDialect>();
   handshake::registerStandardToHandshakePasses();
+  handshake::registerHandshakeToFIRRTLPasses();
 
   registerDialect<rtl::RTLDialect>();
 
