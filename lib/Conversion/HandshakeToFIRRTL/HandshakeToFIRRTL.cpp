@@ -22,8 +22,8 @@
 #include "mlir/Transforms/Utils.h"
 
 using namespace mlir;
-using namespace mlir::handshake;
 using namespace circt;
+using namespace circt::handshake;
 using namespace circt::firrtl;
 
 using ValueVector = llvm::SmallVector<Value, 3>;

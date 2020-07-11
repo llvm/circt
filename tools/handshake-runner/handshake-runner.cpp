@@ -52,6 +52,8 @@
 #define INDEX_WIDTH 32
 
 using namespace llvm;
+using namespace mlir;
+using namespace circt;
 using cl::opt;
 
 static cl::OptionCategory mainCategory("Application options");
@@ -209,28 +211,28 @@ void executeOp(mlir::StoreOp op, std::vector<Any> &in, std::vector<Any> &out,
   ref[address] = in[0];
 }
 
-void executeOp(mlir::handshake::ForkOp op, std::vector<Any> &in,
+void executeOp(circt::handshake::ForkOp op, std::vector<Any> &in,
                std::vector<Any> &out) {
   for (unsigned i = 0; i < out.size(); i++) {
     out[i] = in[0];
   }
 }
-void executeOp(mlir::handshake::JoinOp op, std::vector<Any> &in,
+void executeOp(circt::handshake::JoinOp op, std::vector<Any> &in,
                std::vector<Any> &out) {
   out[0] = in[0];
 }
-void executeOp(mlir::handshake::ConstantOp op, std::vector<Any> &in,
+void executeOp(circt::handshake::ConstantOp op, std::vector<Any> &in,
                std::vector<Any> &out) {
   auto attr = op.getAttrOfType<mlir::IntegerAttr>("value");
   out[0] = attr.getValue();
 }
-void executeOp(mlir::handshake::StoreOp op, std::vector<Any> &in,
+void executeOp(circt::handshake::StoreOp op, std::vector<Any> &in,
                std::vector<Any> &out, std::vector<std::vector<Any>> &store) {
   // Forward the address and data to the memory op.
   out[0] = in[0];
   out[1] = in[1];
 }
-void executeOp(mlir::handshake::BranchOp op, std::vector<Any> &in,
+void executeOp(circt::handshake::BranchOp op, std::vector<Any> &in,
                std::vector<Any> &out) {
   out[0] = in[0];
 }
@@ -314,14 +316,14 @@ std::string printAnyValueWithType(mlir::Type type, Any &value) {
 }
 
 void scheduleIfNeeded(std::list<mlir::Operation *> &readyList,
-                      DenseMap<mlir::Value , Any> &valueMap,
+                      llvm::DenseMap<mlir::Value , Any> &valueMap,
                       mlir::Operation *op) {
   if (std::find(readyList.begin(), readyList.end(), op) == readyList.end()) {
     readyList.push_back(op);
   }
 }
 void scheduleUses(std::list<mlir::Operation *> &readyList,
-                  DenseMap<mlir::Value , Any> &valueMap, mlir::Value value) {
+                  llvm::DenseMap<mlir::Value , Any> &valueMap, mlir::Value value) {
   for (auto &use : value.getUses()) {
     scheduleIfNeeded(readyList, valueMap, use.getOwner());
   }
@@ -367,8 +369,8 @@ bool executeStdOp(mlir::Operation &op, std::vector<Any> &inValues,
 }
 
 void executeFunction(mlir::FuncOp &toplevel,
-                     DenseMap<mlir::Value , Any> &valueMap,
-                     DenseMap<mlir::Value , double> &timeMap,
+                     llvm::DenseMap<mlir::Value , Any> &valueMap,
+                     llvm::DenseMap<mlir::Value , double> &timeMap,
                      std::vector<Any> &results,
                      std::vector<double> &resultTimes,
                      std::vector<std::vector<Any>> &store,
@@ -478,8 +480,8 @@ void executeFunction(mlir::FuncOp &toplevel,
         mlir::FunctionType ftype = funcOp.getType();
         unsigned inputs = ftype.getNumInputs();
         unsigned outputs = ftype.getNumResults();
-        DenseMap<mlir::Value , Any> newValueMap;
-        DenseMap<mlir::Value , double> newTimeMap;
+        llvm::DenseMap<mlir::Value , Any> newValueMap;
+        llvm::DenseMap<mlir::Value , double> newTimeMap;
         std::vector<Any> results(outputs);
         std::vector<double> resultTimes(outputs);
         std::vector<std::vector<Any>> store;
@@ -520,9 +522,9 @@ void executeFunction(mlir::FuncOp &toplevel,
   }
 }
 
-void executeHandshakeFunction(mlir::handshake::FuncOp &toplevel,
-                              DenseMap<mlir::Value , Any> &valueMap,
-                              DenseMap<mlir::Value , double> &timeMap,
+void executeHandshakeFunction(circt::handshake::FuncOp &toplevel,
+                              llvm::DenseMap<mlir::Value , Any> &valueMap,
+                              llvm::DenseMap<mlir::Value , double> &timeMap,
                               std::vector<Any> &results,
                               std::vector<double> &resultTimes,
                               std::vector<std::vector<Any>> &store,
@@ -565,7 +567,7 @@ void executeHandshakeFunction(mlir::handshake::FuncOp &toplevel,
       }*/
 
     // Special handling for non-total functions.
-    if (auto Op = dyn_cast<mlir::handshake::ControlMergeOp>(op)) {
+    if (auto Op = dyn_cast<circt::handshake::ControlMergeOp>(op)) {
       bool found = false;
       int i = 0;
       LLVM_DEBUG(dbgs() << "OP:  " << op << "\n");
@@ -593,7 +595,7 @@ void executeHandshakeFunction(mlir::handshake::FuncOp &toplevel,
       continue;
     }
 
-    if (auto Op = dyn_cast<mlir::handshake::MergeOp>(op)) {
+    if (auto Op = dyn_cast<circt::handshake::MergeOp>(op)) {
       // Almost the same as CMerge above.
       bool found = false;
       int i = 0;
@@ -619,7 +621,7 @@ void executeHandshakeFunction(mlir::handshake::FuncOp &toplevel,
     }
 
     // Special handling for non-total functions.
-    if (auto Op = dyn_cast<mlir::handshake::MuxOp>(op)) {
+    if (auto Op = dyn_cast<circt::handshake::MuxOp>(op)) {
       mlir::Value control = op.getOperand(0);
       if (valueMap.count(control) == 0) {
         // it's not ready.  Reschedule it.
@@ -660,7 +662,7 @@ void executeHandshakeFunction(mlir::handshake::FuncOp &toplevel,
     }
 
     // Special handling for non-total functions.
-    if (auto Op = dyn_cast<mlir::handshake::LoadOp>(op)) {
+    if (auto Op = dyn_cast<circt::handshake::LoadOp>(op)) {
       mlir::Value address = op.getOperand(0);
       mlir::Value data = op.getOperand(1);
       mlir::Value nonce = op.getOperand(2);
@@ -709,8 +711,8 @@ void executeHandshakeFunction(mlir::handshake::FuncOp &toplevel,
       continue;
     }
     // Special handling for non-total functions.
-    if (auto Op = dyn_cast<mlir::handshake::MemoryOp>(op)) {
-      static DenseMap<unsigned, unsigned> idToBuffer;
+    if (auto Op = dyn_cast<circt::handshake::MemoryOp>(op)) {
+      static llvm::DenseMap<unsigned, unsigned> idToBuffer;
       int opIndex = 0;
       bool notReady = false;
       LLVM_DEBUG(dbgs() << "OP:  " << op << "\n");
@@ -803,7 +805,7 @@ void executeHandshakeFunction(mlir::handshake::FuncOp &toplevel,
       continue;
     }
 
-    if (auto Op = dyn_cast<mlir::handshake::ConditionalBranchOp>(op)) {
+    if (auto Op = dyn_cast<circt::handshake::ConditionalBranchOp>(op)) {
       mlir::Value control = op.getOperand(0);
       if (valueMap.count(control) == 0) {
         // it's not ready.  Reschedule it.
@@ -882,20 +884,20 @@ void executeHandshakeFunction(mlir::handshake::FuncOp &toplevel,
     //     outValues[i] = outInts[i];
     //   if (!isa<mlir::hpx::SliceOp>(op) && !isa<mlir::hpx::UnsliceOp>(op))
     //     time += 1;
-    } else if (auto Op = dyn_cast<mlir::handshake::StartOp>(op)) {
-    } else if (auto Op = dyn_cast<mlir::handshake::EndOp>(op)) {
-    } else if (auto Op = dyn_cast<mlir::handshake::SinkOp>(op)) {
-    } else if (auto Op = dyn_cast<mlir::handshake::ForkOp>(op))
+    } else if (auto Op = dyn_cast<circt::handshake::StartOp>(op)) {
+    } else if (auto Op = dyn_cast<circt::handshake::EndOp>(op)) {
+    } else if (auto Op = dyn_cast<circt::handshake::SinkOp>(op)) {
+    } else if (auto Op = dyn_cast<circt::handshake::ForkOp>(op))
       executeOp(Op, inValues, outValues);
-    else if (auto Op = dyn_cast<mlir::handshake::JoinOp>(op))
+    else if (auto Op = dyn_cast<circt::handshake::JoinOp>(op))
       executeOp(Op, inValues, outValues);
-    else if (auto Op = dyn_cast<mlir::handshake::ConstantOp>(op))
+    else if (auto Op = dyn_cast<circt::handshake::ConstantOp>(op))
       executeOp(Op, inValues, outValues);
-    else if (auto Op = dyn_cast<mlir::handshake::StoreOp>(op))
+    else if (auto Op = dyn_cast<circt::handshake::StoreOp>(op))
       executeOp(Op, inValues, outValues, store);
-    else if (auto Op = dyn_cast<mlir::handshake::BranchOp>(op))
+    else if (auto Op = dyn_cast<circt::handshake::BranchOp>(op))
       executeOp(Op, inValues, outValues);
-    else if (auto Op = dyn_cast<mlir::handshake::ReturnOp>(op)) {
+    else if (auto Op = dyn_cast<circt::handshake::ReturnOp>(op)) {
       for (unsigned i = 0; i < results.size(); i++) {
         results[i] = inValues[i];
         resultTimes[i] = timeMap[Op.getOperand(i)];
@@ -922,7 +924,7 @@ void executeHandshakeFunction(mlir::handshake::FuncOp &toplevel,
 
 int main(int argc, char **argv) {
   mlir::registerAllDialects();
-  mlir::registerDialect<mlir::handshake::HandshakeOpsDialect>();
+  mlir::registerDialect<circt::handshake::HandshakeOpsDialect>();
   InitLLVM y(argc, argv);
   cl::ParseCommandLineOptions(
       argc, argv,
@@ -964,10 +966,10 @@ int main(int argc, char **argv) {
   // The valueMap associates each SSA statement in the program
   // (represented by a Value*) with it's corresponding value.
   // Currently the value is assumed to be an integer.
-  DenseMap<mlir::Value , Any> valueMap;
+  llvm::DenseMap<mlir::Value , Any> valueMap;
 
   // The timeMap associates each value with the time it was created.
-  DenseMap<mlir::Value , double> timeMap;
+  llvm::DenseMap<mlir::Value , double> timeMap;
 
   // We need three things in a function-type independent way.
   // The type signature of the function.
@@ -995,8 +997,8 @@ int main(int argc, char **argv) {
     realInputs = inputs;
     outputs = ftype.getNumResults();
     realOutputs = outputs;
-  } else if (mlir::handshake::FuncOp toplevel =
-                 module->lookupSymbol<mlir::handshake::FuncOp>(
+  } else if (circt::handshake::FuncOp toplevel =
+                 module->lookupSymbol<circt::handshake::FuncOp>(
                      toplevelFunction)) {
     ftype = toplevel.getType();
     mlir::Block &entryBlock = toplevel.getBody().front();
@@ -1060,8 +1062,8 @@ int main(int argc, char **argv) {
           module->lookupSymbol<mlir::FuncOp>(toplevelFunction)) {
     executeFunction(toplevel, valueMap, timeMap, results, resultTimes, store,
                     storeTimes);
-  } else if (mlir::handshake::FuncOp toplevel =
-                 module->lookupSymbol<mlir::handshake::FuncOp>(
+  } else if (circt::handshake::FuncOp toplevel =
+                 module->lookupSymbol<circt::handshake::FuncOp>(
                      toplevelFunction)) {
     executeHandshakeFunction(toplevel, valueMap, timeMap, results, resultTimes,
                              store, storeTimes);

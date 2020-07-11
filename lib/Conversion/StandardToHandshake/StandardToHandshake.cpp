@@ -34,7 +34,8 @@
 #include <map>
 
 using namespace mlir;
-using namespace mlir::handshake;
+using namespace circt;
+using namespace circt::handshake;
 using namespace std;
 
 typedef DenseMap<Block *, vector<Value>> BlockValues;
