@@ -211,28 +211,28 @@ void executeOp(mlir::StoreOp op, std::vector<Any> &in, std::vector<Any> &out,
   ref[address] = in[0];
 }
 
-void executeOp(circt::handshake::ForkOp op, std::vector<Any> &in,
+void executeOp(handshake::ForkOp op, std::vector<Any> &in,
                std::vector<Any> &out) {
   for (unsigned i = 0; i < out.size(); i++) {
     out[i] = in[0];
   }
 }
-void executeOp(circt::handshake::JoinOp op, std::vector<Any> &in,
+void executeOp(handshake::JoinOp op, std::vector<Any> &in,
                std::vector<Any> &out) {
   out[0] = in[0];
 }
-void executeOp(circt::handshake::ConstantOp op, std::vector<Any> &in,
+void executeOp(handshake::ConstantOp op, std::vector<Any> &in,
                std::vector<Any> &out) {
   auto attr = op.getAttrOfType<mlir::IntegerAttr>("value");
   out[0] = attr.getValue();
 }
-void executeOp(circt::handshake::StoreOp op, std::vector<Any> &in,
+void executeOp(handshake::StoreOp op, std::vector<Any> &in,
                std::vector<Any> &out, std::vector<std::vector<Any>> &store) {
   // Forward the address and data to the memory op.
   out[0] = in[0];
   out[1] = in[1];
 }
-void executeOp(circt::handshake::BranchOp op, std::vector<Any> &in,
+void executeOp(handshake::BranchOp op, std::vector<Any> &in,
                std::vector<Any> &out) {
   out[0] = in[0];
 }
@@ -522,7 +522,7 @@ void executeFunction(mlir::FuncOp &toplevel,
   }
 }
 
-void executeHandshakeFunction(circt::handshake::FuncOp &toplevel,
+void executeHandshakeFunction(handshake::FuncOp &toplevel,
                               llvm::DenseMap<mlir::Value , Any> &valueMap,
                               llvm::DenseMap<mlir::Value , double> &timeMap,
                               std::vector<Any> &results,
@@ -567,7 +567,7 @@ void executeHandshakeFunction(circt::handshake::FuncOp &toplevel,
       }*/
 
     // Special handling for non-total functions.
-    if (auto Op = dyn_cast<circt::handshake::ControlMergeOp>(op)) {
+    if (auto Op = dyn_cast<handshake::ControlMergeOp>(op)) {
       bool found = false;
       int i = 0;
       LLVM_DEBUG(dbgs() << "OP:  " << op << "\n");
@@ -595,7 +595,7 @@ void executeHandshakeFunction(circt::handshake::FuncOp &toplevel,
       continue;
     }
 
-    if (auto Op = dyn_cast<circt::handshake::MergeOp>(op)) {
+    if (auto Op = dyn_cast<handshake::MergeOp>(op)) {
       // Almost the same as CMerge above.
       bool found = false;
       int i = 0;
@@ -621,7 +621,7 @@ void executeHandshakeFunction(circt::handshake::FuncOp &toplevel,
     }
 
     // Special handling for non-total functions.
-    if (auto Op = dyn_cast<circt::handshake::MuxOp>(op)) {
+    if (auto Op = dyn_cast<handshake::MuxOp>(op)) {
       mlir::Value control = op.getOperand(0);
       if (valueMap.count(control) == 0) {
         // it's not ready.  Reschedule it.
@@ -662,7 +662,7 @@ void executeHandshakeFunction(circt::handshake::FuncOp &toplevel,
     }
 
     // Special handling for non-total functions.
-    if (auto Op = dyn_cast<circt::handshake::LoadOp>(op)) {
+    if (auto Op = dyn_cast<handshake::LoadOp>(op)) {
       mlir::Value address = op.getOperand(0);
       mlir::Value data = op.getOperand(1);
       mlir::Value nonce = op.getOperand(2);
@@ -711,7 +711,7 @@ void executeHandshakeFunction(circt::handshake::FuncOp &toplevel,
       continue;
     }
     // Special handling for non-total functions.
-    if (auto Op = dyn_cast<circt::handshake::MemoryOp>(op)) {
+    if (auto Op = dyn_cast<handshake::MemoryOp>(op)) {
       static llvm::DenseMap<unsigned, unsigned> idToBuffer;
       int opIndex = 0;
       bool notReady = false;
@@ -805,7 +805,7 @@ void executeHandshakeFunction(circt::handshake::FuncOp &toplevel,
       continue;
     }
 
-    if (auto Op = dyn_cast<circt::handshake::ConditionalBranchOp>(op)) {
+    if (auto Op = dyn_cast<handshake::ConditionalBranchOp>(op)) {
       mlir::Value control = op.getOperand(0);
       if (valueMap.count(control) == 0) {
         // it's not ready.  Reschedule it.
@@ -884,20 +884,20 @@ void executeHandshakeFunction(circt::handshake::FuncOp &toplevel,
     //     outValues[i] = outInts[i];
     //   if (!isa<mlir::hpx::SliceOp>(op) && !isa<mlir::hpx::UnsliceOp>(op))
     //     time += 1;
-    } else if (auto Op = dyn_cast<circt::handshake::StartOp>(op)) {
-    } else if (auto Op = dyn_cast<circt::handshake::EndOp>(op)) {
-    } else if (auto Op = dyn_cast<circt::handshake::SinkOp>(op)) {
-    } else if (auto Op = dyn_cast<circt::handshake::ForkOp>(op))
+    } else if (auto Op = dyn_cast<handshake::StartOp>(op)) {
+    } else if (auto Op = dyn_cast<handshake::EndOp>(op)) {
+    } else if (auto Op = dyn_cast<handshake::SinkOp>(op)) {
+    } else if (auto Op = dyn_cast<handshake::ForkOp>(op))
       executeOp(Op, inValues, outValues);
-    else if (auto Op = dyn_cast<circt::handshake::JoinOp>(op))
+    else if (auto Op = dyn_cast<handshake::JoinOp>(op))
       executeOp(Op, inValues, outValues);
-    else if (auto Op = dyn_cast<circt::handshake::ConstantOp>(op))
+    else if (auto Op = dyn_cast<handshake::ConstantOp>(op))
       executeOp(Op, inValues, outValues);
-    else if (auto Op = dyn_cast<circt::handshake::StoreOp>(op))
+    else if (auto Op = dyn_cast<handshake::StoreOp>(op))
       executeOp(Op, inValues, outValues, store);
-    else if (auto Op = dyn_cast<circt::handshake::BranchOp>(op))
+    else if (auto Op = dyn_cast<handshake::BranchOp>(op))
       executeOp(Op, inValues, outValues);
-    else if (auto Op = dyn_cast<circt::handshake::ReturnOp>(op)) {
+    else if (auto Op = dyn_cast<handshake::ReturnOp>(op)) {
       for (unsigned i = 0; i < results.size(); i++) {
         results[i] = inValues[i];
         resultTimes[i] = timeMap[Op.getOperand(i)];
@@ -924,7 +924,7 @@ void executeHandshakeFunction(circt::handshake::FuncOp &toplevel,
 
 int main(int argc, char **argv) {
   mlir::registerAllDialects();
-  mlir::registerDialect<circt::handshake::HandshakeOpsDialect>();
+  mlir::registerDialect<handshake::HandshakeOpsDialect>();
   InitLLVM y(argc, argv);
   cl::ParseCommandLineOptions(
       argc, argv,
@@ -997,8 +997,8 @@ int main(int argc, char **argv) {
     realInputs = inputs;
     outputs = ftype.getNumResults();
     realOutputs = outputs;
-  } else if (circt::handshake::FuncOp toplevel =
-                 module->lookupSymbol<circt::handshake::FuncOp>(
+  } else if (handshake::FuncOp toplevel =
+                 module->lookupSymbol<handshake::FuncOp>(
                      toplevelFunction)) {
     ftype = toplevel.getType();
     mlir::Block &entryBlock = toplevel.getBody().front();
@@ -1062,8 +1062,8 @@ int main(int argc, char **argv) {
           module->lookupSymbol<mlir::FuncOp>(toplevelFunction)) {
     executeFunction(toplevel, valueMap, timeMap, results, resultTimes, store,
                     storeTimes);
-  } else if (circt::handshake::FuncOp toplevel =
-                 module->lookupSymbol<circt::handshake::FuncOp>(
+  } else if (handshake::FuncOp toplevel =
+                 module->lookupSymbol<handshake::FuncOp>(
                      toplevelFunction)) {
     executeHandshakeFunction(toplevel, valueMap, timeMap, results, resultTimes,
                              store, storeTimes);

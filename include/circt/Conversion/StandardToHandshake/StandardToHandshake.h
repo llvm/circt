@@ -19,9 +19,9 @@
 #define CIRCT_CONVERSION_STANDARDTOHANDSHAKE_H_
 
 namespace circt {
-  namespace handshake {
-    void registerStandardToHandshakePasses();
-  }
+namespace handshake {
+void registerStandardToHandshakePasses();
+}
 } // namespace circt
 
 #endif // MLIR_CONVERSION_STANDARDTOHANDSHAKE_H_
