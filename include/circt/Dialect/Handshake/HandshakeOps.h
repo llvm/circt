@@ -20,16 +20,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef MLIR_HANDSHAKEOPS_OPS_H_
-#define MLIR_HANDSHAKEOPS_OPS_H_
+#ifndef CIRCT_HANDSHAKEOPS_OPS_H_
+#define CIRCT_HANDSHAKEOPS_OPS_H_
 
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/Function.h"
-#include "mlir/IR/Operation.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/Operation.h"
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/IR/TypeSupport.h"
@@ -37,9 +37,10 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Pass/Pass.h"
 
-namespace mlir {
+namespace circt {
 namespace handshake {
 
+using namespace mlir;
 class TerminatorOp;
 
 class HandshakeOpsDialect : public Dialect {
@@ -68,5 +69,5 @@ public:
 // };
 
 } // end namespace handshake
-} // end namespace mlir
+} // end namespace circt
 #endif // MLIR_HANDSHAKEOPS_OPS_H_

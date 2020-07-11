@@ -1,6 +1,6 @@
 //===- StandardToHandshake.h ------------------------------------*- C++ -*-===//
 //
-// Copyright 2019 The CIRCT Authors.
+// Copyright 2020 The CIRCT Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,18 +15,13 @@
 // limitations under the License.
 // =============================================================================
 
-#ifndef MLIR_CONVERSION_STANDARDTOHANDSHAKE_H_
-#define MLIR_CONVERSION_STANDARDTOHANDSHAKE_H_
+#ifndef CIRCT_CONVERSION_STANDARDTOHANDSHAKE_H_
+#define CIRCT_CONVERSION_STANDARDTOHANDSHAKE_H_
 
-#include <memory>
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
-#include "circt/Dialect/Handshake/HandshakeOps.h"
-
-namespace mlir {
-  namespace handshake {
-    class FuncOp;
-    void registerStandardToHandshakePasses();
-  }
-} // namespace mlir
+namespace circt {
+namespace handshake {
+void registerStandardToHandshakePasses();
+}
+} // namespace circt
 
 #endif // MLIR_CONVERSION_STANDARDTOHANDSHAKE_H_

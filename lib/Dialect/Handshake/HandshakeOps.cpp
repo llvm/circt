@@ -29,7 +29,8 @@
 #include "mlir/IR/Value.h"
 
 using namespace mlir;
-using namespace mlir::handshake;
+using namespace circt;
+using namespace circt::handshake;
 
 #include "mlir/IR/IntegerSet.h"
 #include "mlir/IR/PatternMatch.h"
@@ -38,11 +39,11 @@ using namespace mlir::handshake;
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/Support/Debug.h"
 
-namespace mlir {
+namespace circt {
 namespace handshake {
 #include "circt/Dialect/Handshake/HandshakeOps.inc"
 }
-} // namespace mlir
+} // namespace circt
 
 //===----------------------------------------------------------------------===//
 // HandshakeOpsDialect
@@ -78,7 +79,7 @@ void ForkOp::build(Builder builder, OperationState &result, Value operand,
 }
 void handshake::ForkOp::getCanonicalizationPatterns(
     OwningRewritePatternList &results, MLIRContext *context) {
-  results.insert<mlir::handshake::EliminateSimpleForksPattern>(context);
+  results.insert<circt::handshake::EliminateSimpleForksPattern>(context);
 }
 
 void LazyForkOp::build(Builder builder, OperationState &result, Value operand,
@@ -119,7 +120,7 @@ void MergeOp::build(Builder builder, OperationState &result, Value operand,
 
 void MergeOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                           MLIRContext *context) {
-  results.insert<mlir::handshake::EliminateSimpleMergesPattern>(context);
+  results.insert<circt::handshake::EliminateSimpleMergesPattern>(context);
 }
 
 void MuxOp::build(Builder builder, OperationState &result, Value operand,
@@ -158,7 +159,7 @@ void ControlMergeOp::build(Builder builder, OperationState &result,
 // void ControlMergeOp::getCanonicalizationPatterns(OwningRewritePatternList
 // &results,
 //                                           MLIRContext *context) {
-//   results.insert<mlir::handshake::EliminateSimpleControlMergesPattern>(context);
+//   results.insert<circt::handshake::EliminateSimpleControlMergesPattern>(context);
 // }
 
 void handshake::BranchOp::build(Builder builder, OperationState &result,
@@ -179,7 +180,7 @@ void handshake::BranchOp::build(Builder builder, OperationState &result,
 }
 void handshake::BranchOp::getCanonicalizationPatterns(
     OwningRewritePatternList &results, MLIRContext *context) {
-  results.insert<mlir::handshake::EliminateSimpleBranchesPattern>(context);
+  results.insert<circt::handshake::EliminateSimpleBranchesPattern>(context);
 }
 
 void handshake::ConditionalBranchOp::build(Builder builder,
@@ -271,8 +272,8 @@ void MemoryOp::build(Builder builder, OperationState &result,
   if (!lsq) {
 
     result.addAttribute("ld_count", builder.getIntegerAttr(i32Type, outputs));
-    result.addAttribute("st_count", builder.getIntegerAttr(
-                                        i32Type, control_outputs - outputs));
+    result.addAttribute(
+        "st_count", builder.getIntegerAttr(i32Type, control_outputs - outputs));
   }
 }
 
@@ -380,7 +381,7 @@ static LogicalResult verify(handshake::ReturnOp op) {
   return success();
 }
 
-namespace mlir {
+namespace circt {
 namespace handshake {
 
 #include "circt/Dialect/Handshake/HandshakeInterfaces.cpp.inc"
@@ -388,6 +389,5 @@ namespace handshake {
 #define GET_OP_CLASSES
 #include "circt/Dialect/Handshake/HandshakeOps.cpp.inc"
 
-
 } // namespace handshake
-} // namespace mlir
+} // namespace circt

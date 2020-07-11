@@ -18,10 +18,10 @@
 #ifndef CIRCT_CONVERSION_HANDSHAKETOFIRRTL_H_
 #define CIRCT_CONVERSION_HANDSHAKETOFIRRTL_H_
 
-namespace mlir {
+namespace circt {
 namespace handshake {
 void registerHandshakeToFIRRTLPasses();
 } // namespace handshake
-} // namespace mlir
+} // namespace circt
 
 #endif // MLIR_CONVERSION_HANDSHAKETOFIRRTL_H_

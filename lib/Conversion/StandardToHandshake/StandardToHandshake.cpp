@@ -34,7 +34,8 @@
 #include <map>
 
 using namespace mlir;
-using namespace mlir::handshake;
+using namespace circt;
+using namespace circt::handshake;
 using namespace std;
 
 typedef DenseMap<Block *, vector<Value>> BlockValues;
@@ -542,9 +543,7 @@ void addBranchOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
 
         if (auto condBranchOp = dyn_cast<mlir::CondBranchOp>(termOp))
           newOp = rewriter.create<handshake::ConditionalBranchOp>(
-              termOp->getLoc(),
-              condBranchOp.getCondition(),
-              val);
+              termOp->getLoc(), condBranchOp.getCondition(), val);
         else if (isa<mlir::BranchOp>(termOp))
           newOp = rewriter.create<handshake::BranchOp>(termOp->getLoc(), val);
 
@@ -570,8 +569,7 @@ void addBranchOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
   // in Verifier.cpp)
   for (Block &block : f) {
     Operation *termOp = block.getTerminator();
-    if (isa<mlir::CondBranchOp>(termOp) ||
-        isa<mlir::BranchOp>(termOp)) {
+    if (isa<mlir::CondBranchOp>(termOp) || isa<mlir::BranchOp>(termOp)) {
       SmallVector<mlir::Block *, 8> results(block.getSuccessors());
       rewriter.setInsertionPointToEnd(&block);
       rewriter.create<handshake::TerminatorOp>(termOp->getLoc(), results);
@@ -594,8 +592,7 @@ void addSinkOps(handshake::FuncOp f, OpBuilder &rewriter) {
       // Do not add sinks for unused MLIR operations which the rewriter will
       // later remove We have already replaced these ops with their handshake
       // equivalents
-      if (!isa<mlir::CondBranchOp>(op) &&
-          !isa<mlir::BranchOp>(op) &&
+      if (!isa<mlir::CondBranchOp>(op) && !isa<mlir::BranchOp>(op) &&
           !isa<mlir::LoadOp>(op)) {
 
         if (op.getNumResults() > 0) {
@@ -624,9 +621,7 @@ void connectConstantsToControl(handshake::FuncOp f,
       if (auto constantOp = dyn_cast<mlir::ConstantOp>(op)) {
         rewriter.setInsertionPointAfter(&op);
         Operation *newOp = rewriter.create<handshake::ConstantOp>(
-            op.getLoc(),
-            constantOp.getValue(),
-            cntrlMg->getResult(0));
+            op.getLoc(), constantOp.getValue(), cntrlMg->getResult(0));
 
         op.getResult(0).replaceAllUsesWith(newOp->getResult(0));
         cstOps.push_back(&op);
@@ -653,8 +648,7 @@ void replaceFirstUse(Operation *op, Value oldVal, Value newVal) {
   return;
 }
 
-void insertFork(Operation *op, Value result, bool isLazy,
-                OpBuilder &rewriter) {
+void insertFork(Operation *op, Value result, bool isLazy, OpBuilder &rewriter) {
   // Get successor operations
   vector<Operation *> opsToProcess;
   for (auto &u : result.getUses())
@@ -681,8 +675,7 @@ void addForkOps(handshake::FuncOp f, OpBuilder &rewriter) {
   for (Block &block : f) {
     for (Operation &op : block) {
       // Ignore terminators, and don't add Forks to Forks.
-      if (op.getNumSuccessors() == 0 &&
-          !isa<ForkOp>(op)) {
+      if (op.getNumSuccessors() == 0 && !isa<ForkOp>(op)) {
         for (auto result : op.getResults()) {
           // If there is a result and it is used more than once
           if (!result.use_empty() && !result.hasOneUse())
@@ -741,20 +734,20 @@ void checkMergePredecessors(Operation *op) {
   // Merges in entry block have single predecessor (argument)
   if (block->isEntryBlock()) {
     if (operand_count != 1)
-      op->emitError("merge operations in entry block must have a ") <<
-        "single predecessor";
+      op->emitError("merge operations in entry block must have a ")
+          << "single predecessor";
   } else {
     int data_inputs = mergeOp.dataOperands().size();
     if (operand_count > getBlockPredecessorCount(block))
-      op->emitError("merge operation has ") <<
-        operand_count << " data inputs, but only " <<
-        getBlockPredecessorCount(block) << " predecessor blocks";
+      op->emitError("merge operation has ")
+          << operand_count << " data inputs, but only "
+          << getBlockPredecessorCount(block) << " predecessor blocks";
   }
 
   // There must be a predecessor from each predecessor block
   for (auto *predBlock : block->getPredecessors()) {
     bool found = false;
-    for(auto operand : mergeOp.dataOperands()) {
+    for (auto operand : mergeOp.dataOperands()) {
       auto *operandOp = operand.getDefiningOp();
       if (operandOp->getBlock() == predBlock) {
         found = true;
@@ -777,10 +770,8 @@ void checkMergePredecessors(Operation *op) {
 void checkDataflowConversion(handshake::FuncOp f) {
   for (Block &block : f) {
     for (Operation &op : block) {
-      if (!dyn_cast<mlir::CondBranchOp>(op) &&
-          !dyn_cast<mlir::BranchOp>(op) &&
-          !dyn_cast<mlir::LoadOp>(op) &&
-          !dyn_cast<mlir::ConstantOp>(op)) {
+      if (!dyn_cast<mlir::CondBranchOp>(op) && !dyn_cast<mlir::BranchOp>(op) &&
+          !dyn_cast<mlir::LoadOp>(op) && !dyn_cast<mlir::ConstantOp>(op)) {
         if (op.getNumResults() > 0) {
           for (auto result : op.getResults()) {
             checkUseCount(&op, result);
@@ -828,7 +819,7 @@ typedef llvm::MapVector<Value, vector<Operation *>> MemRefToMemoryAccessOp;
 // list of new ops corresponding to each memref. Later, we instantiate
 // a memory node for each memref and connect it to its load/store ops
 MemRefToMemoryAccessOp replaceMemoryOps(handshake::FuncOp f,
-                          ConversionPatternRewriter &rewriter) {
+                                        ConversionPatternRewriter &rewriter) {
   // Map from original memref to new load/store operations.
   MemRefToMemoryAccessOp MemRefOps;
 
@@ -931,8 +922,7 @@ void addMemOpForks(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
 
   for (Block &block : f) {
     for (Operation &op : block) {
-      if (dyn_cast<MemoryOp>(op) ||
-          dyn_cast<StartOp>(op) ||
+      if (dyn_cast<MemoryOp>(op) || dyn_cast<StartOp>(op) ||
           dyn_cast<ControlMergeOp>(op)) {
         for (auto result : op.getResults()) {
           // If there is a result and it is used more than once
@@ -1054,7 +1044,7 @@ void setJoinControlInputs(vector<Operation *> memOps, Operation *memOp,
     auto *op = memOps[i];
     Value val = getBlockControlValue(op->getBlock());
     auto srcOp = val.getDefiningOp();
-    if( !dyn_cast<JoinOp>(srcOp)) {
+    if (!dyn_cast<JoinOp>(srcOp)) {
       srcOp->emitError("Op expected to be a JoinOp or StartOp");
     }
     addValueToOperands(srcOp, memOp->getResult(offset + cntrlInd[i]));
@@ -1101,8 +1091,7 @@ void setMemOpControlInputs(ConversionPatternRewriter &rewriter,
 }
 
 void connectToMemory(handshake::FuncOp f, MemRefToMemoryAccessOp MemRefOps,
-                     bool lsq,
-                     ConversionPatternRewriter &rewriter) {
+                     bool lsq, ConversionPatternRewriter &rewriter) {
   // Add MemoryOps which represent the memory interface
   // Connect memory operations and control appropriately
   int mem_count = 0;
@@ -1216,8 +1205,8 @@ void replaceCallOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
       if (auto callOp = dyn_cast<CallOp>(op)) {
         rewriter.setInsertionPointAfter(&op);
         rewriter.replaceOpWithNewOp<handshake::InstanceOp>(
-          callOp, callOp.getCallee(), callOp.getResultTypes(),
-          callOp.getOperands());
+            callOp, callOp.getCallee(), callOp.getResultTypes(),
+            callOp.getOperands());
       }
     }
   }
@@ -1229,8 +1218,7 @@ struct DFCanonicalizePattern : public ConversionPattern {
     // Ignore forks, ops without results, and branches (ops with succ blocks)
     op->emitWarning("checking...");
     return success();
-    if (op->getNumSuccessors() == 0 &&
-        op->getNumResults() > 0 &&
+    if (op->getNumSuccessors() == 0 && op->getNumResults() > 0 &&
         !isa<ForkOp>(op))
       return success();
     else
@@ -1240,8 +1228,7 @@ struct DFCanonicalizePattern : public ConversionPattern {
   void rewrite(Operation *op, ArrayRef<Value> operands,
                ConversionPatternRewriter &rewriter) const override {
     op->emitWarning("skipping...");
-    if (op->getNumSuccessors() == 0 &&
-        op->getNumResults() > 0 &&
+    if (op->getNumSuccessors() == 0 && op->getNumResults() > 0 &&
         !isa<ForkOp>(op)) {
       op->emitWarning("skipping...");
     }
@@ -1255,9 +1242,7 @@ struct DFCanonicalizePattern : public ConversionPattern {
 
 struct FuncOpLowering : public OpConversionPattern<mlir::FuncOp> {
   using OpConversionPattern<mlir::FuncOp>::OpConversionPattern;
-  LogicalResult match(Operation *op) const override {
-    return success();
-  }
+  LogicalResult match(Operation *op) const override { return success(); }
 
   void rewrite(mlir::FuncOp funcOp, ArrayRef<Value> operands,
                ConversionPatternRewriter &rewriter) const override {
@@ -1380,24 +1365,25 @@ struct DFPass : public PassWrapper<DFPass, OperationPass<ModuleOp>> {
   }
 };
 
-struct DFCanonicalizePass : public PassWrapper<DFCanonicalizePass,
-                                               OperationPass<handshake::FuncOp>> {
+struct DFCanonicalizePass
+    : public PassWrapper<DFCanonicalizePass, OperationPass<handshake::FuncOp>> {
   void runOnOperation() override {
     auto Op = getOperation();
     OpBuilder builder(Op);
     addForkOps(Op, builder);
     addSinkOps(Op, builder);
 
-      for (auto &block : Op)
-        for (auto &nestedOp : block)
-          for (mlir::Value out : nestedOp.getResults())
-            if (!out.hasOneUse()) {
-              nestedOp.emitError("does not have exactly one use");
-              signalPassFailure();
-            }
+    for (auto &block : Op)
+      for (auto &nestedOp : block)
+        for (mlir::Value out : nestedOp.getResults())
+          if (!out.hasOneUse()) {
+            nestedOp.emitError("does not have exactly one use");
+            signalPassFailure();
+          }
     // ConversionTarget target(getContext());
     // // "Legal" function ops should have no interface variable ABI attributes.
-    // target.addDynamicallyLegalDialect<HandshakeOpsDialect, StandardOpsDialect>(
+    // target.addDynamicallyLegalDialect<HandshakeOpsDialect,
+    // StandardOpsDialect>(
     //         Optional<ConversionTarget::DynamicLegalityCallbackFn>(
     //            [](Operation *op) { return op->hasOneUse(); }));
 
@@ -1411,12 +1397,11 @@ struct DFCanonicalizePass : public PassWrapper<DFCanonicalizePass,
 };
 } // namespace
 
-
 // Temporary: print resources (operation counts)
 namespace {
 
-struct DFAnalysisPass : public PassWrapper<DFAnalysisPass,
-                                           OperationPass<ModuleOp>> {
+struct DFAnalysisPass
+    : public PassWrapper<DFAnalysisPass, OperationPass<ModuleOp>> {
   void runOnOperation() override {
     ModuleOp m = getOperation();
 
@@ -1440,8 +1425,8 @@ struct DFAnalysisPass : public PassWrapper<DFAnalysisPass,
             branch_count++;
           else if (isa<JoinOp>(op))
             join_count++;
-          else if (!isa<handshake::BranchOp>(op) &&
-                   !isa<SinkOp>(op) && !isa<TerminatorOp>(op))
+          else if (!isa<handshake::BranchOp>(op) && !isa<SinkOp>(op) &&
+                   !isa<TerminatorOp>(op))
             count++;
         }
 
@@ -1458,16 +1443,12 @@ struct DFAnalysisPass : public PassWrapper<DFAnalysisPass,
 } // namespace
 
 void handshake::registerStandardToHandshakePasses() {
-  PassRegistration<DFAnalysisPass>(
-      "analyze-dataflow",
-      "Print resource (operation) statistics");
-  PassRegistration<DFPass>(
-      "create-dataflow",
-      "Convert standard MLIR into dataflow IR");
-  PassRegistration<DFCanonicalizePass>(
-      "canonicalize-dataflow",
-      "Canonicalize handshake IR");
-  PassRegistration<DFRemoveBlockPass>(
-      "remove-block-structure",
-      "Remove block structure in handshake IR");
+  PassRegistration<DFAnalysisPass>("analyze-dataflow",
+                                   "Print resource (operation) statistics");
+  PassRegistration<DFPass>("create-dataflow",
+                           "Convert standard MLIR into dataflow IR");
+  PassRegistration<DFCanonicalizePass>("canonicalize-dataflow",
+                                       "Canonicalize handshake IR");
+  PassRegistration<DFRemoveBlockPass>("remove-block-structure",
+                                      "Remove block structure in handshake IR");
 }
