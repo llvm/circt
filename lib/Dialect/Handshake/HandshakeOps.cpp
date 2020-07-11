@@ -272,8 +272,8 @@ void MemoryOp::build(Builder builder, OperationState &result,
   if (!lsq) {
 
     result.addAttribute("ld_count", builder.getIntegerAttr(i32Type, outputs));
-    result.addAttribute("st_count", builder.getIntegerAttr(
-                                        i32Type, control_outputs - outputs));
+    result.addAttribute(
+        "st_count", builder.getIntegerAttr(i32Type, control_outputs - outputs));
   }
 }
 
@@ -388,7 +388,6 @@ namespace handshake {
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Handshake/HandshakeOps.cpp.inc"
-
 
 } // namespace handshake
 } // namespace circt

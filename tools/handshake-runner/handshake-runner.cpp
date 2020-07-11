@@ -29,10 +29,10 @@
 #include <vector>
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
-#include "mlir/InitAllDialects.h"
 #include "mlir/IR/Function.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Module.h"
+#include "mlir/InitAllDialects.h"
 #include "mlir/Parser.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
@@ -116,11 +116,13 @@ void executeOp(mlir::MulIOp op, std::vector<Any> &in, std::vector<Any> &out) {
 void executeOp(mlir::MulFOp op, std::vector<Any> &in, std::vector<Any> &out) {
   out[0] = any_cast<APFloat>(in[0]) * any_cast<APFloat>(in[1]);
 }
-void executeOp(mlir::SignedDivIOp op, std::vector<Any> &in, std::vector<Any> &out) {
+void executeOp(mlir::SignedDivIOp op, std::vector<Any> &in,
+               std::vector<Any> &out) {
   assert(any_cast<APInt>(in[1]).getZExtValue() && "Division By Zero!");
   out[0] = any_cast<APInt>(in[0]).sdiv(any_cast<APInt>(in[1]));
 }
-void executeOp(mlir::UnsignedDivIOp op, std::vector<Any> &in, std::vector<Any> &out) {
+void executeOp(mlir::UnsignedDivIOp op, std::vector<Any> &in,
+               std::vector<Any> &out) {
   assert(any_cast<APInt>(in[1]).getZExtValue() && "Division By Zero!");
   out[0] = any_cast<APInt>(in[0]).udiv(any_cast<APInt>(in[1]));
 }
@@ -316,14 +318,15 @@ std::string printAnyValueWithType(mlir::Type type, Any &value) {
 }
 
 void scheduleIfNeeded(std::list<mlir::Operation *> &readyList,
-                      llvm::DenseMap<mlir::Value , Any> &valueMap,
+                      llvm::DenseMap<mlir::Value, Any> &valueMap,
                       mlir::Operation *op) {
   if (std::find(readyList.begin(), readyList.end(), op) == readyList.end()) {
     readyList.push_back(op);
   }
 }
 void scheduleUses(std::list<mlir::Operation *> &readyList,
-                  llvm::DenseMap<mlir::Value , Any> &valueMap, mlir::Value value) {
+                  llvm::DenseMap<mlir::Value, Any> &valueMap,
+                  mlir::Value value) {
   for (auto &use : value.getUses()) {
     scheduleIfNeeded(readyList, valueMap, use.getOwner());
   }
@@ -369,8 +372,8 @@ bool executeStdOp(mlir::Operation &op, std::vector<Any> &inValues,
 }
 
 void executeFunction(mlir::FuncOp &toplevel,
-                     llvm::DenseMap<mlir::Value , Any> &valueMap,
-                     llvm::DenseMap<mlir::Value , double> &timeMap,
+                     llvm::DenseMap<mlir::Value, Any> &valueMap,
+                     llvm::DenseMap<mlir::Value, double> &timeMap,
                      std::vector<Any> &results,
                      std::vector<double> &resultTimes,
                      std::vector<std::vector<Any>> &store,
@@ -413,16 +416,16 @@ void executeFunction(mlir::FuncOp &toplevel,
       LLVM_DEBUG(dbgs() << "STORE: " << storeTime << "\n");
       time = std::max(time, storeTime);
       storeTimes[ptr] = time;
-    // } else if (auto Op = dyn_cast<mlir::hpx::ExecutableOpInterface>(op)) {
-    //   std::vector<APInt> inInts(op.getNumOperands());
-    //   std::vector<APInt> outInts(op.getNumResults());
-    //   for (unsigned i = 0; i < op.getNumOperands(); i++)
-    //     inInts[i] = any_cast<APInt>(inValues[i]);
-    //   Op.execute(inInts, outInts);
-    //   for (unsigned i = 0; i < op.getNumResults(); i++)
-    //     outValues[i] = outInts[i];
-    //   if (!isa<mlir::hpx::SliceOp>(op) && !isa<mlir::hpx::UnsliceOp>(op))
-    //     time += 1;
+      // } else if (auto Op = dyn_cast<mlir::hpx::ExecutableOpInterface>(op)) {
+      //   std::vector<APInt> inInts(op.getNumOperands());
+      //   std::vector<APInt> outInts(op.getNumResults());
+      //   for (unsigned i = 0; i < op.getNumOperands(); i++)
+      //     inInts[i] = any_cast<APInt>(inValues[i]);
+      //   Op.execute(inInts, outInts);
+      //   for (unsigned i = 0; i < op.getNumResults(); i++)
+      //     outValues[i] = outInts[i];
+      //   if (!isa<mlir::hpx::SliceOp>(op) && !isa<mlir::hpx::UnsliceOp>(op))
+      //     time += 1;
     } else if (auto Op = dyn_cast<mlir::BranchOp>(op)) {
       mlir::Block *dest = Op.getDest();
       unsigned arg = 0;
@@ -480,8 +483,8 @@ void executeFunction(mlir::FuncOp &toplevel,
         mlir::FunctionType ftype = funcOp.getType();
         unsigned inputs = ftype.getNumInputs();
         unsigned outputs = ftype.getNumResults();
-        llvm::DenseMap<mlir::Value , Any> newValueMap;
-        llvm::DenseMap<mlir::Value , double> newTimeMap;
+        llvm::DenseMap<mlir::Value, Any> newValueMap;
+        llvm::DenseMap<mlir::Value, double> newTimeMap;
         std::vector<Any> results(outputs);
         std::vector<double> resultTimes(outputs);
         std::vector<std::vector<Any>> store;
@@ -493,8 +496,7 @@ void executeFunction(mlir::FuncOp &toplevel,
           newValueMap[blockArgs[i]] = inValues[i];
           newTimeMap[blockArgs[i]] = timeMap[op.getOperand(i)];
         }
-        executeFunction(funcOp, newValueMap, newTimeMap,
-                        results, resultTimes,
+        executeFunction(funcOp, newValueMap, newTimeMap, results, resultTimes,
                         store, storeTimes);
         i = 0;
         for (mlir::Value out : op.getResults()) {
@@ -523,8 +525,8 @@ void executeFunction(mlir::FuncOp &toplevel,
 }
 
 void executeHandshakeFunction(handshake::FuncOp &toplevel,
-                              llvm::DenseMap<mlir::Value , Any> &valueMap,
-                              llvm::DenseMap<mlir::Value , double> &timeMap,
+                              llvm::DenseMap<mlir::Value, Any> &valueMap,
+                              llvm::DenseMap<mlir::Value, double> &timeMap,
                               std::vector<Any> &results,
                               std::vector<double> &resultTimes,
                               std::vector<std::vector<Any>> &store,
@@ -635,7 +637,7 @@ void executeHandshakeFunction(handshake::FuncOp &toplevel,
       auto controlValue = valueMap[control];
       auto controlTime = timeMap[control];
       mlir::Value in = any_cast<APInt>(controlValue) == 0 ? op.getOperand(1)
-                                                           : op.getOperand(2);
+                                                          : op.getOperand(2);
       if (valueMap.count(in) == 0) {
         // it's not ready.  Reschedule it.
 #ifdef EXTRA_DEBUG
@@ -730,8 +732,7 @@ void executeHandshakeFunction(handshake::FuncOp &toplevel,
       for (unsigned i = 0; i < Op.getStCount().getZExtValue(); i++) {
         mlir::Value data = op.getOperand(opIndex++);
         mlir::Value address = op.getOperand(opIndex++);
-        mlir::Value nonceOut =
-            op.getResult(Op.getLdCount().getZExtValue() + i);
+        mlir::Value nonceOut = op.getResult(Op.getLdCount().getZExtValue() + i);
         if ((!valueMap.count(data) || !valueMap.count(address))) {
           notReady = true;
           continue;
@@ -765,9 +766,8 @@ void executeHandshakeFunction(handshake::FuncOp &toplevel,
       for (unsigned i = 0; i < Op.getLdCount().getZExtValue(); i++) {
         mlir::Value address = op.getOperand(opIndex++);
         mlir::Value dataOut = op.getResult(i);
-        mlir::Value nonceOut =
-            op.getResult(Op.getLdCount().getZExtValue() +
-                         Op.getStCount().getZExtValue() + i);
+        mlir::Value nonceOut = op.getResult(Op.getLdCount().getZExtValue() +
+                                            Op.getStCount().getZExtValue() + i);
         if (!valueMap.count(address)) {
           notReady = true;
           continue;
@@ -832,7 +832,7 @@ void executeHandshakeFunction(handshake::FuncOp &toplevel,
       LLVM_DEBUG(debugArg("IN", control, controlValue, controlTime));
       LLVM_DEBUG(debugArg("IN", in, inValue, inTime));
       mlir::Value out = any_cast<APInt>(controlValue) != 0 ? op.getResult(0)
-                                                            : op.getResult(1);
+                                                           : op.getResult(1);
       double time = std::max(controlTime, inTime);
       valueMap[out] = inValue;
       timeMap[out] = time;
@@ -872,18 +872,18 @@ void executeHandshakeFunction(handshake::FuncOp &toplevel,
       valueMap.erase(in);
     }
     if (executeStdOp(op, inValues, outValues)) {
-    // } else if (auto Op = dyn_cast<mlir::hpx::ExecutableOpInterface>(op)) {
-    //   std::vector<APInt> inInts(op.getNumOperands());
-    //   std::vector<APInt> outInts(op.getNumResults());
-    //   for (unsigned i = 0; i < op.getNumOperands(); i++) {
-    //     assert(inValues[i].hasValue());
-    //     inInts[i] = any_cast<APInt>(inValues[i]);
-    //   }
-    //   Op.execute(inInts, outInts);
-    //   for (unsigned i = 0; i < op.getNumResults(); i++)
-    //     outValues[i] = outInts[i];
-    //   if (!isa<mlir::hpx::SliceOp>(op) && !isa<mlir::hpx::UnsliceOp>(op))
-    //     time += 1;
+      // } else if (auto Op = dyn_cast<mlir::hpx::ExecutableOpInterface>(op)) {
+      //   std::vector<APInt> inInts(op.getNumOperands());
+      //   std::vector<APInt> outInts(op.getNumResults());
+      //   for (unsigned i = 0; i < op.getNumOperands(); i++) {
+      //     assert(inValues[i].hasValue());
+      //     inInts[i] = any_cast<APInt>(inValues[i]);
+      //   }
+      //   Op.execute(inInts, outInts);
+      //   for (unsigned i = 0; i < op.getNumResults(); i++)
+      //     outValues[i] = outInts[i];
+      //   if (!isa<mlir::hpx::SliceOp>(op) && !isa<mlir::hpx::UnsliceOp>(op))
+      //     time += 1;
     } else if (auto Op = dyn_cast<handshake::StartOp>(op)) {
     } else if (auto Op = dyn_cast<handshake::EndOp>(op)) {
     } else if (auto Op = dyn_cast<handshake::SinkOp>(op)) {
@@ -966,10 +966,10 @@ int main(int argc, char **argv) {
   // The valueMap associates each SSA statement in the program
   // (represented by a Value*) with it's corresponding value.
   // Currently the value is assumed to be an integer.
-  llvm::DenseMap<mlir::Value , Any> valueMap;
+  llvm::DenseMap<mlir::Value, Any> valueMap;
 
   // The timeMap associates each value with the time it was created.
-  llvm::DenseMap<mlir::Value , double> timeMap;
+  llvm::DenseMap<mlir::Value, double> timeMap;
 
   // We need three things in a function-type independent way.
   // The type signature of the function.
@@ -998,8 +998,7 @@ int main(int argc, char **argv) {
     outputs = ftype.getNumResults();
     realOutputs = outputs;
   } else if (handshake::FuncOp toplevel =
-                 module->lookupSymbol<handshake::FuncOp>(
-                     toplevelFunction)) {
+                 module->lookupSymbol<handshake::FuncOp>(toplevelFunction)) {
     ftype = toplevel.getType();
     mlir::Block &entryBlock = toplevel.getBody().front();
     blockArgs = entryBlock.getArguments();
@@ -1063,8 +1062,7 @@ int main(int argc, char **argv) {
     executeFunction(toplevel, valueMap, timeMap, results, resultTimes, store,
                     storeTimes);
   } else if (handshake::FuncOp toplevel =
-                 module->lookupSymbol<handshake::FuncOp>(
-                     toplevelFunction)) {
+                 module->lookupSymbol<handshake::FuncOp>(toplevelFunction)) {
     executeHandshakeFunction(toplevel, valueMap, timeMap, results, resultTimes,
                              store, storeTimes);
   }
