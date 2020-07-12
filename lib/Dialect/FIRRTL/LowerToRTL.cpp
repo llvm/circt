@@ -276,6 +276,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering> {
         RTLRewriter<firrtl::ConnectOp>,
         // Binary Operations
         RTLRewriter<firrtl::AddPrimOp>, RTLRewriter<firrtl::SubPrimOp>,
+        RTLRewriter<firrtl::AndPrimOp>, RTLRewriter<firrtl::OrPrimOp>,
         RTLRewriter<firrtl::XorPrimOp>, RTLRewriter<firrtl::CatPrimOp>,
 
         // Unary Operations

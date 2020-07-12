@@ -34,7 +34,10 @@
     // CHECK: [[XOR:%.+]] = rtl.xor %7, %5 : i4
     %5 = firrtl.xor %in2, %4 : (!firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
-    // CHECK: %9 = rtl.concat %5, [[XOR]] : (i4, i4) -> i8
+    // CHECK: rtl.and [[XOR]]
+    %and = firrtl.and %5, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+
+    // CHECK: = rtl.concat %5, [[XOR]] : (i4, i4) -> i8
     %6 = firrtl.cat %4, %5 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<8>
 
     // CHECK:  [[CAST1:%.+]] = firrtl.stdIntCast %in1
