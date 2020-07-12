@@ -165,13 +165,10 @@ static LogicalResult lower(firrtl::CatPrimOp op, ArrayRef<Value> operands,
 
   auto lhsWidth = lhs.getType().cast<IntegerType>().getWidth();
   auto rhsWidth = rhs.getType().cast<IntegerType>().getWidth();
-
-  Value args[2] = {operands[0], operands[1]};
-
   Type resultType = rewriter.getIntegerType(lhsWidth + rhsWidth);
 
   rewriter.replaceOpWithNewOp<rtl::ConcatOp>(op, resultType,
-                                             ArrayRef<Value>(args));
+                                             ValueRange({lhs, rhs}));
   return success();
 }
 
