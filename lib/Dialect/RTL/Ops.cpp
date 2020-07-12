@@ -116,6 +116,11 @@ static LogicalResult verifyExtOp(Operation *op) {
 // Other Operations
 //===----------------------------------------------------------------------===//
 
+void ExtractOp::build(OpBuilder &builder, OperationState &result,
+                      Type resultType, Value input, unsigned lowBit) {
+  build(builder, result, resultType, input, llvm::APInt(32, lowBit));
+}
+
 static LogicalResult verifyExtractOp(ExtractOp op) {
   unsigned srcWidth = op.input().getType().cast<IntegerType>().getWidth();
   unsigned dstWidth = op.getType().cast<IntegerType>().getWidth();

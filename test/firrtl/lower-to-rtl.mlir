@@ -2,10 +2,10 @@
 
  firrtl.circuit "Circuit" {
 
-  // CHECK-LABEL: firrtl.module @Constant
-  firrtl.module @Constant(%in1: !firrtl.uint<4>,
-                          %in2: !firrtl.uint<2>,
-                          %out1: !firrtl.flip<uint<4>>) {
+  // CHECK-LABEL: firrtl.module @Simple
+  firrtl.module @Simple(%in1: !firrtl.uint<4>,
+                        %in2: !firrtl.uint<2>,
+                        %out1: !firrtl.flip<uint<4>>) {
 
     // CHECK: rtl.constant(-4 : i4) : i4
     %c12_ui4 = firrtl.constant(12 : ui4) : !firrtl.uint<4>
@@ -37,7 +37,7 @@
     // CHECK: rtl.and [[XOR]]
     %and = firrtl.and %5, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
-    // CHECK: = rtl.concat %5, [[XOR]] : (i4, i4) -> i8
+    // CHECK: [[CONCAT1:%.+]] = rtl.concat %5, [[XOR]] : (i4, i4) -> i8
     %6 = firrtl.cat %4, %5 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<8>
 
     // CHECK:  [[CAST1:%.+]] = firrtl.stdIntCast %in1
@@ -63,5 +63,14 @@
 
     // CHECK-NEXT: = rtl.wire : !firrtl.vector<uint<2>, 13>
     %_t_3 = firrtl.wire : !firrtl.vector<uint<2>, 13>
+
+    // CHECK-NEXT: = rtl.extract [[CONCAT1]] from 3 : (i8) -> i5
+    %8 = firrtl.bits %6 7 to 3 : (!firrtl.uint<8>) -> !firrtl.uint<5>
+
+    // CHECK-NEXT: = rtl.extract [[CONCAT1]] from 5 : (i8) -> i3
+    %9 = firrtl.head %6, 3 : (!firrtl.uint<8>) -> !firrtl.uint<3>
+
+    // CHECK-NEXT: = rtl.extract [[CONCAT1]] from 0 : (i8) -> i5
+    %10 = firrtl.tail %6, 3 : (!firrtl.uint<8>) -> !firrtl.uint<5>
   }
 }

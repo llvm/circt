@@ -232,6 +232,47 @@ static LogicalResult lower(firrtl::SubPrimOp op, ArrayRef<Value> operands,
   return lowerBinOp<firrtl::SubPrimOp, rtl::SubOp>(op, operands, rewriter);
 }
 
+//===----------------------------------------------------------------------===//
+// Other Operations
+//===----------------------------------------------------------------------===//
+
+static LogicalResult lower(firrtl::BitsPrimOp op, ArrayRef<Value> operands,
+                           ConversionPatternRewriter &rewriter) {
+  auto input = mapOperand(operands[0], op, rewriter);
+  if (!input)
+    return failure();
+
+  Type resultType = rewriter.getIntegerType(op.getHi() - op.getLo() + 1);
+  rewriter.replaceOpWithNewOp<rtl::ExtractOp>(op, resultType, input,
+                                              op.getLo());
+  return success();
+}
+
+static LogicalResult lower(firrtl::HeadPrimOp op, ArrayRef<Value> operands,
+                           ConversionPatternRewriter &rewriter) {
+  auto input = mapOperand(operands[0], op, rewriter);
+  if (!input)
+    return failure();
+
+  auto inWidth = input.getType().cast<IntegerType>().getWidth();
+  Type resultType = rewriter.getIntegerType(op.getAmount());
+  rewriter.replaceOpWithNewOp<rtl::ExtractOp>(op, resultType, input,
+                                              inWidth - op.getAmount());
+  return success();
+}
+
+static LogicalResult lower(firrtl::TailPrimOp op, ArrayRef<Value> operands,
+                           ConversionPatternRewriter &rewriter) {
+  auto input = mapOperand(operands[0], op, rewriter);
+  if (!input)
+    return failure();
+
+  auto inWidth = input.getType().cast<IntegerType>().getWidth();
+  Type resultType = rewriter.getIntegerType(inWidth - op.getAmount());
+  rewriter.replaceOpWithNewOp<rtl::ExtractOp>(op, resultType, input, 0);
+  return success();
+}
+
 namespace {
 /// Utility class for operation conversions targeting that
 /// match exactly one source operation.
@@ -281,7 +322,11 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering> {
 
         // Unary Operations
         RTLRewriter<firrtl::PadPrimOp>, RTLRewriter<firrtl::AsSIntPrimOp>,
-        RTLRewriter<firrtl::AsUIntPrimOp>>(&getContext());
+        RTLRewriter<firrtl::AsUIntPrimOp>,
+
+        // Other Operations
+        RTLRewriter<firrtl::BitsPrimOp>, RTLRewriter<firrtl::HeadPrimOp>,
+        RTLRewriter<firrtl::TailPrimOp>>(&getContext());
 
     RTLConversionTarget target(getContext());
     RTLTypeConverter typeConverter;
