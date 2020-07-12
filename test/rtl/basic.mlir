@@ -9,10 +9,10 @@ func @test1(%arg0: i3) -> i50 {
   %b = rtl.add %a, %a : i12
   %c = rtl.mul %a, %b : i12
 
-  // CHECK-NEXT:    %2 = rtl.sext %arg0 : i3, i7
-  // CHECK-NEXT:    %3 = rtl.zext %arg0 : i3, i7
-  %d = rtl.sext %arg0 : i3, i7
-  %e = rtl.zext %arg0 : i3, i7
+  // CHECK-NEXT:    %2 = rtl.sext %arg0 : (i3) -> i7
+  // CHECK-NEXT:    %3 = rtl.zext %arg0 : (i3) -> i7
+  %d = rtl.sext %arg0 : (i3) -> i7
+  %e = rtl.zext %arg0 : (i3) -> i7
 
   // CHECK-NEXT:    %4 = rtl.concat %c42_i12 : (i12) -> i12
   %conc1 = rtl.concat %a : (i12) -> i12
@@ -27,7 +27,16 @@ func @test1(%arg0: i3) -> i50 {
   // CHECK-NEXT:    %8 = rtl.concat %4, %0, %1, %2, %3 : (i12, i12, i12, i7, i7) -> i50
   %result = rtl.concat %conc1, %b, %c, %d, %e : (i12, i12, i12, i7, i7) -> i50
 
-  // CHECK-NEXT: %9 = rtl.wire : i4
+  // CHECK-NEXT: rtl.extract %8 from 4 : (i50) -> i19
+  %small1 = rtl.extract %result from 4 : (i50) -> i19
+
+  // CHECK-NEXT: rtl.extract %8 from 31 : (i50) -> i19
+  %small2 = rtl.extract %result from 31 : (i50) -> i19
+
+  // CHECK-NEXT: rtl.add
+  %add = rtl.add %small1, %small2 : i19
+
+  // CHECK-NEXT:  = rtl.wire : i4
   %w = rtl.wire : i4
 
   // CHECK-NEXT:    return %8 : i50

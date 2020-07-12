@@ -19,6 +19,7 @@ static Attribute getIntAttr(const APInt &value, MLIRContext *context) {
                           value);
 }
 
+namespace {
 struct ConstantIntMatcher {
   APInt &value;
   ConstantIntMatcher(APInt &value) : value(value) {}
@@ -30,6 +31,7 @@ struct ConstantIntMatcher {
     return false;
   }
 };
+} // end anonymous namespace
 
 static inline ConstantIntMatcher m_FConstant(APInt &value) {
   return ConstantIntMatcher(value);

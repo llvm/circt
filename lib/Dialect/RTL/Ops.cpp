@@ -6,6 +6,7 @@
 #include "circt/Dialect/RTL/Visitors.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/StandardTypes.h"
 
 using namespace circt;
@@ -20,6 +21,29 @@ bool rtl::isCombinatorial(Operation *op) {
   };
 
   return IsCombClassifier().dispatchCombinatorialVisitor(op);
+}
+
+static Attribute getIntAttr(const APInt &value, MLIRContext *context) {
+  return IntegerAttr::get(IntegerType::get(value.getBitWidth(), context),
+                          value);
+}
+
+namespace {
+struct ConstantIntMatcher {
+  APInt &value;
+  ConstantIntMatcher(APInt &value) : value(value) {}
+  bool match(Operation *op) {
+    if (auto cst = dyn_cast<ConstantOp>(op)) {
+      value = cst.value();
+      return true;
+    }
+    return false;
+  }
+};
+} // end anonymous namespace
+
+static inline ConstantIntMatcher m_RConstant(APInt &value) {
+  return ConstantIntMatcher(value);
 }
 
 //===----------------------------------------------------------------------===//
@@ -74,17 +98,45 @@ void ConstantOp::getAsmResultNames(
 // Unary Operations
 //===----------------------------------------------------------------------===//
 
+// Verify SExtOp and ZExtOp.
 static LogicalResult verifyExtOp(Operation *op) {
   // The source must be smaller than the dest type.  Both are already known to
   // be signless integers.
   auto srcType = op->getOperand(0).getType().cast<IntegerType>();
   auto dstType = op->getResult(0).getType().cast<IntegerType>();
   if (srcType.getWidth() >= dstType.getWidth()) {
-    op->emitError("extension must increase bitwidth of operand");
+    op->emitOpError("extension must increase bitwidth of operand");
     return failure();
   }
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Other Operations
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verifyExtractOp(ExtractOp op) {
+  unsigned srcWidth = op.input().getType().cast<IntegerType>().getWidth();
+  unsigned dstWidth = op.getType().cast<IntegerType>().getWidth();
+  if (op.getLowBit() >= srcWidth || srcWidth - op.getLowBit() < dstWidth)
+    return op.emitOpError("from bit too large for input"), failure();
+
+  return success();
+}
+
+OpFoldResult ExtractOp::fold(ArrayRef<Attribute> operands) {
+  // If we are extracting the entire input, then return it.
+  if (input().getType() == getType())
+    return input();
+
+  // Constant fold.
+  APInt value;
+  if (mlir::matchPattern(input(), m_RConstant(value))) {
+    unsigned dstWidth = getType().cast<IntegerType>().getWidth();
+    return getIntAttr(value.lshr(getLowBit()).trunc(dstWidth), getContext());
+  }
+  return {};
 }
 
 //===----------------------------------------------------------------------===//

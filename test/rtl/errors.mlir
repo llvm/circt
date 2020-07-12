@@ -10,6 +10,20 @@ func @test_constant() -> i32 {
 
 func @test_extend(%arg0: i4) -> i4 {
   // expected-error @+1 {{extension must increase bitwidth of operand}}
-  %a = rtl.sext %arg0 : i4, i4
+  %a = rtl.sext %arg0 : (i4) -> i4
   return %a : i4
+}
+
+// -----
+
+func @test_extract(%arg0: i4) {
+  // expected-error @+1 {{'rtl.extract' op from bit too large for input}}
+  %a = rtl.extract %arg0 from 6 : (i4) -> i3
+}
+
+// -----
+
+func @test_extract(%arg0: i4) {
+   // expected-error @+1 {{'rtl.extract' op from bit too large for input}}
+  %b = rtl.extract %arg0 from 2 : (i4) -> i3
 }

@@ -23,14 +23,14 @@
     %2 = firrtl.sub %0, %1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
     // CHECK: %3 = firrtl.stdIntCast %in2 : (!firrtl.uint<2>) -> i2
-    // CHECK: %4 = rtl.sext %3 : i2, i3
+    // CHECK: %4 = rtl.sext %3 : (i2) -> i3
     %3 = firrtl.pad %in2, 3 : (!firrtl.uint<2>) -> !firrtl.sint<3>
 
-    // CHECK: %5 = rtl.zext %4 : i3, i4
+    // CHECK: %5 = rtl.zext %4 : (i3) -> i4
     %4 = firrtl.pad %3, 4 : (!firrtl.sint<3>) -> !firrtl.uint<4>
 
     // CHECK: %6 = firrtl.stdIntCast %in2 : (!firrtl.uint<2>) -> i2
-    // CHECK: %7 = rtl.zext %6 : i2, i4
+    // CHECK: %7 = rtl.zext %6 : (i2) -> i4
     // CHECK: [[XOR:%.+]] = rtl.xor %7, %5 : i4
     %5 = firrtl.xor %in2, %4 : (!firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
 

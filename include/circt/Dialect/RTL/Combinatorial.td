@@ -39,7 +39,7 @@ def ConstantOp
 }
 
 //===----------------------------------------------------------------------===//
-// Binary Operations
+// Arithmetic and Logical Operations
 //===----------------------------------------------------------------------===//
 
 // Base class for binary operators.
@@ -79,7 +79,7 @@ class UTVariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
                !listconcat(traits,
                            [SameTypeOperands, SameOperandsAndResultType])> {
    let assemblyFormat = [{
-    $operands  attr-dict `:` type($result)
+    $operands attr-dict `:` type($result)
   }];
 }
 
@@ -93,9 +93,6 @@ def ModOp : UTBinRTLOp<"mod">;
 def AndOp : UTVariadicRTLOp<"and", [Commutative]>;
 def OrOp  : UTVariadicRTLOp<"or", [Commutative]>;
 def XorOp : UTVariadicRTLOp<"xor", [Commutative]>;
-
-// Concatenate a variadic list of operands together.
-def ConcatOp : VariadicRTLOp<"concat">;
 
 //===----------------------------------------------------------------------===//
 // Unary Operations
@@ -120,6 +117,30 @@ def XorROp : UnaryI1ReductionRTLOp<"xorr">;
 // Other Operations
 //===----------------------------------------------------------------------===//
 
+// Concatenate a variadic list of operands together.
+def ConcatOp : VariadicRTLOp<"concat">;
+
+// Extract a range of bits from the specified input.
+def ExtractOp : RTLOp<"extract", [NoSideEffect]> {
+  let summary = "Extract a range of bits into a smaller value, lowBit "
+                "specifies the lowest bit included.";
+
+  let arguments = (ins AnySignlessInteger:$input,
+                   I32Attr:$lowBit);
+  let results = (outs AnySignlessInteger:$result);
+
+  let assemblyFormat = [{
+    $input `from` $lowBit attr-dict `:` functional-type($input, $result)
+  }];
+
+  let extraClassDeclaration = [{
+    unsigned getLowBit() { return lowBit().getZExtValue(); }
+  }];
+
+  let hasFolder = 1;
+  let verifier = [{ return ::verifyExtractOp(*this); }];
+}
+
 def SExtOp : RTLOp<"sext", [NoSideEffect]> {
   let summary = "Sign extend an integer to a larger integer";
 
@@ -127,13 +148,12 @@ def SExtOp : RTLOp<"sext", [NoSideEffect]> {
   let results = (outs AnySignlessInteger:$result);
 
   let assemblyFormat = [{
-    $input attr-dict `:` type($input) `,` type($result)
+    $input attr-dict `:` functional-type($input, $result)
   }];
 
   let verifier = [{ return ::verifyExtOp(*this); }];
 }
 
-// TODO: Should zext just be a concat with zeros?
 def ZExtOp : RTLOp<"zext", [NoSideEffect]> {
   let summary = "Zero extend an integer to a larger integer";
 
@@ -141,7 +161,7 @@ def ZExtOp : RTLOp<"zext", [NoSideEffect]> {
   let results = (outs AnySignlessInteger:$result);
 
   let assemblyFormat = [{
-    $input attr-dict `:` type($input) `,` type($result)
+    $input attr-dict `:` functional-type($input, $result)
   }];
 
   let verifier = [{ return ::verifyExtOp(*this); }];
