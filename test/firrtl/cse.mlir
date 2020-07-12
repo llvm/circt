@@ -1,5 +1,7 @@
 // RUN: circt-opt -cse %s | FileCheck %s
 
+firrtl.circuit "Circuit" {
+
 // CHECK-LABEL: firrtl.module @And
 firrtl.module @And(%in1: !firrtl.uint<4>, %in2: !firrtl.uint<4>,
                    %out1: !firrtl.flip<uint<4>>,
@@ -26,4 +28,6 @@ firrtl.module @Wire() {
 
   // CHECK-NEXT: firrtl.connect %_t, %_t_0
   firrtl.connect %w1, %w2 : !firrtl.uint<1>, !firrtl.uint<1>
+}
+
 }
