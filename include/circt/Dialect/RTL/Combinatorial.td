@@ -118,7 +118,11 @@ def XorROp : UnaryI1ReductionRTLOp<"xorr">;
 //===----------------------------------------------------------------------===//
 
 // Concatenate a variadic list of operands together.
-def ConcatOp : VariadicRTLOp<"concat">;
+def ConcatOp : VariadicRTLOp<"concat"> {
+  let builders = [
+    OpBuilder<"OpBuilder &builder, OperationState &result, ValueRange inputs">
+  ];
+}
 
 // Extract a range of bits from the specified input.
 def ExtractOp : RTLOp<"extract", [NoSideEffect]> {

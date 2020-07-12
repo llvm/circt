@@ -5,6 +5,7 @@
   // CHECK-LABEL: firrtl.module @Simple
   firrtl.module @Simple(%in1: !firrtl.uint<4>,
                         %in2: !firrtl.uint<2>,
+                        %in3: !firrtl.sint<8>,
                         %out1: !firrtl.flip<uint<4>>) {
 
     // CHECK: rtl.constant(-4 : i4) : i4
@@ -72,5 +73,19 @@
 
     // CHECK-NEXT: = rtl.extract [[CONCAT1]] from 0 : (i8) -> i5
     %10 = firrtl.tail %6, 3 : (!firrtl.uint<8>) -> !firrtl.uint<5>
+
+    // CHECK-NEXT: = rtl.extract [[CONCAT1]] from 3 : (i8) -> i5
+    %11 = firrtl.shr %6, 3 : (!firrtl.uint<8>) -> !firrtl.uint<5>
+
+    // CHECK-NEXT: = rtl.constant(false) : i1
+    %12 = firrtl.shr %6, 8 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+
+    // CHECK-NEXT: [[CAST:%.+]] = firrtl.stdIntCast %in3
+    // CHECK-NEXT: = rtl.extract [[CAST]] from 7 : (i8) -> i1
+    %13 = firrtl.shr %in3, 8 : (!firrtl.sint<8>) -> !firrtl.sint<1>
+
+    // CHECK-NEXT: [[ZERO:%.+]] = rtl.constant(0 : i3) : i3
+    // CHECK-NEXT: = rtl.concat [[CONCAT1]], [[ZERO]] : (i8, i3) -> i11
+    %14 = firrtl.shl %6, 3 : (!firrtl.uint<8>) -> !firrtl.uint<11>
   }
 }

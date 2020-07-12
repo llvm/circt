@@ -116,6 +116,15 @@ static LogicalResult verifyExtOp(Operation *op) {
 // Other Operations
 //===----------------------------------------------------------------------===//
 
+void ConcatOp::build(OpBuilder &builder, OperationState &result,
+                     ValueRange inputs) {
+  unsigned resultWidth = 0;
+  for (auto input : inputs) {
+    resultWidth += input.getType().cast<IntegerType>().getWidth();
+  }
+  build(builder, result, builder.getIntegerType(resultWidth), inputs);
+}
+
 void ExtractOp::build(OpBuilder &builder, OperationState &result,
                       Type resultType, Value input, unsigned lowBit) {
   build(builder, result, resultType, input, llvm::APInt(32, lowBit));
