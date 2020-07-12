@@ -52,25 +52,27 @@ firrtl.circuit "Circuit" {
 
   firrtl.module @M3(%x : !firrtl.uint<8>,
                     %y : !firrtl.flip<uint<8>>,
-                    %z : i8) {
+                    %z : i8, %q : i16) {
     %c42 = rtl.constant (42 : i8) : i8
     %c5 = rtl.constant (5 : i8) : i8
+    %ext_z = rtl.extract %q from 8 : (i16) -> i8
     %a = rtl.add %z, %c42 : i8
     %v1 = rtl.and %a, %c42, %c5 : i8
     %v2 = rtl.or %a, %v1 : i8
-    %v3 = rtl.xor %v1, %v2, %c42 : i8
+    %v3 = rtl.xor %v1, %v2, %c42, %ext_z : i8
     %c = firrtl.stdIntCast %v3 : (i8) -> !firrtl.uint<8>
     firrtl.connect %y, %c : !firrtl.flip<uint<8>>, !firrtl.uint<8>
   }
 
   // CHECK-LABEL: module M3(
-  // CHECK-NEXT:  input  [7:0] x,
-  // CHECK-NEXT:  output [7:0] y,
-  // CHECK-NEXT:  input  [7:0] z);
+  // CHECK-NEXT:  input  [7:0]  x,
+  // CHECK-NEXT:  output [7:0]  y,
+  // CHECK-NEXT:  input  [7:0]  z,
+  // CHECK-NEXT:  input  [15:0] q);
   // CHECK-EMPTY:
   // CHECK-NEXT:  wire [7:0] _T = z + 8'h2A;
   // CHECK-NEXT:  wire [7:0] _T_0 = _T & 8'h2A & 8'h5;
-  // CHECK-NEXT:  assign y = _T_0 ^ (_T | _T_0) ^ 8'h2A;
+  // CHECK-NEXT:  assign y = _T_0 ^ (_T | _T_0) ^ 8'h2A ^ q[15:8];
   // CHECK-NEXT:endmodule
 
 }
