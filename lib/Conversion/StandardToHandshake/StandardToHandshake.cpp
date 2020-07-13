@@ -41,6 +41,8 @@ using namespace std;
 typedef DenseMap<Block *, vector<Value>> BlockValues;
 typedef DenseMap<Block *, vector<Operation *>> BlockOps;
 
+typedef DenseMap<Block *, vector<Block *>> BlockDoms;
+
 template <typename FuncOp>
 
 void dotPrint(FuncOp f, string name) {
@@ -1212,6 +1214,24 @@ void replaceCallOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
   }
 }
 
+void insertBufferOpsNaive(handshake::FuncOp f,
+                          ConversionPatternRewriter &rewriter) {
+  vector<Block *> allBlocks;
+  for (auto &block : f)
+    allBlocks.push_back(&block);
+
+  // Initialize dominators of each block.
+  BlockDoms doms;
+  for (auto &block : f) {
+    if (block.isEntryBlock())
+      doms[&block].push_back(&block);
+    else
+      doms[&block] = allBlocks;
+  }
+
+  // Iterate to find dominators of each block.
+}
+
 struct DFCanonicalizePattern : public ConversionPattern {
   using ConversionPattern::ConversionPattern;
   LogicalResult match(Operation *op) const override {
@@ -1308,6 +1328,8 @@ struct FuncOpLowering : public OpConversionPattern<mlir::FuncOp> {
 
     bool lsq = false;
     connectToMemory(newFuncOp, MemOps, lsq, rewriter);
+
+    insertBufferOpsNaive(newFuncOp, rewriter);
 
     // Apply signature conversion to set function arguments
     rewriter.applySignatureConversion(&newFuncOp.getBody(), result);
