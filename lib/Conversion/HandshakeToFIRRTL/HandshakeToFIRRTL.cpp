@@ -143,7 +143,7 @@ static std::string getSubModuleName(Operation *oldOp) {
 /// circuit is pure combinational logic. If graph cycle exists, at least one
 /// buffer is required to be inserted for breaking the cycle, which will be
 /// supported in the next patch.
-static FModuleOp createTopModuleOp(handshake::FuncOp funcOp,
+static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, bool hasClockReset,
                                    ConversionPatternRewriter &rewriter) {
   using ModulePort = std::pair<StringAttr, FIRRTLType>;
   llvm::SmallVector<ModulePort, 8> ports;
@@ -173,6 +173,14 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp,
 
     ports.push_back(ModulePort(portName, bundlePortType));
     args_idx += 1;
+  }
+
+  // Add clock and reset signals.
+  if (hasClockReset) {
+    ports.push_back(ModulePort(rewriter.getStringAttr("clock"),
+                               rewriter.getType<ClockType>()));
+    ports.push_back(ModulePort(rewriter.getStringAttr("reset"),
+                               rewriter.getType<UIntType>(1)));
   }
 
   // Create a FIRRTL module, and inline the funcOp into it.
@@ -225,6 +233,7 @@ static FModuleOp checkSubModuleOp(FModuleOp topModuleOp, Operation *oldOp) {
 /// All standard expressions and handshake elastic components will be converted
 /// to a FIRRTL sub-module and be instantiated in the top-module.
 static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
+                                   bool hasClockReset,
                                    ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPoint(topModuleOp);
   using ModulePort = std::pair<StringAttr, FIRRTLType>;
@@ -255,6 +264,14 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
 
     ports.push_back(ModulePort(portName, bundlePortType));
     args_idx += 1;
+  }
+
+  // Add clock and reset signals.
+  if (hasClockReset) {
+    ports.push_back(ModulePort(rewriter.getStringAttr("clock"),
+                               rewriter.getType<ClockType>()));
+    ports.push_back(ModulePort(rewriter.getStringAttr("reset"),
+                               rewriter.getType<UIntType>(1)));
   }
 
   return rewriter.create<FModuleOp>(
