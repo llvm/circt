@@ -42,10 +42,13 @@ func @or_annulment(%arg0: i11) -> i11 {
   return %0 : i11
 }
 
-// CHECK-LABEL: func @mul_annulment(%arg0: i11, %arg1: i11) -> i11 {
-func @mul_annulment(%arg0: i11, %arg1: i11) -> i11 {
+// CHECK-LABEL: func @mul_annulment(%arg0: i11, %arg1: i11, %arg2: i11) -> i11 {
+func @mul_annulment(%arg0: i11, %arg1: i11, %arg2: i11) -> i11 {
+  // CHECK-NEXT: %c0_i11 = rtl.constant(0 : i11) : i11
   %c0_i11 = rtl.constant(0 : i11) : i11
   %0 = rtl.mul %arg0, %arg1, %c0_i11 : i11
-  // CHECK-NEXT: rtl.constant(0 : i11)
-  return %0 : i11
+  // CHECK-NEXT: %0 = rtl.or %arg2, %c0_i11
+  %1 = rtl.or %c0_i11, %arg2: i11
+  // CHECK-NEXT: return %0
+  return %1 : i11
 }

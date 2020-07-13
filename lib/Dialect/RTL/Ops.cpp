@@ -234,10 +234,10 @@ OpFoldResult MulOp::fold(ArrayRef<Attribute> operands) {
 
   APInt value;
 
-  // // mul(..., 0) -> 0 -- annulment
-  // if (matchPattern(inputs()[size-1], m_RConstant(value)) &&
-  // value.isNullValue())
-  //   return inputs()[size-1];
+  // mul(..., 0) -> 0 -- annulment
+  if (matchPattern(inputs()[size-1], m_RConstant(value)) &&
+  value.isNullValue())
+    return inputs()[size-1];
 
   /// TODO: mul(..., 1) -> mul(...) -- identity
   /// TODO: mul(..., c1, c2) -> mul(..., c3) where c3 = c1 * c2 -- constant
