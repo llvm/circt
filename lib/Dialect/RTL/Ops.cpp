@@ -145,6 +145,50 @@ OpFoldResult ExtractOp::fold(ArrayRef<Attribute> operands) {
 }
 
 //===----------------------------------------------------------------------===//
+// Variadic operations
+//===----------------------------------------------------------------------===//
+
+OpFoldResult AndOp::fold(ArrayRef<Attribute> operands) {
+  // If we are extracting the entire input, then return it.
+  if (inputs().size() == 1u)
+    return inputs()[0];
+
+  return {};
+}
+
+OpFoldResult OrOp::fold(ArrayRef<Attribute> operands) {
+  // If we are extracting the entire input, then return it.
+  if (inputs().size() == 1u)
+    return inputs()[0];
+
+  return {};
+}
+
+OpFoldResult XorOp::fold(ArrayRef<Attribute> operands) {
+  // If we are extracting the entire input, then return it.
+  if (inputs().size() == 1u)
+    return inputs()[0];
+
+  return {};
+}
+
+OpFoldResult AddOp::fold(ArrayRef<Attribute> operands) {
+  // If we are extracting the entire input, then return it.
+  if (inputs().size() == 1u)
+    return inputs()[0];
+
+  return {};
+}
+
+OpFoldResult MulOp::fold(ArrayRef<Attribute> operands) {
+  // If we are extracting the entire input, then return it.
+  if (inputs().size() == 1u)
+    return inputs()[0];
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
