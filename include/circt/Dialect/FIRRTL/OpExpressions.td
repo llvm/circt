@@ -318,6 +318,12 @@ def PadPrimOp : PrimOp<"pad"> {
     $input `,` $amount attr-dict `:` functional-type($input, $result)
   }];
 
+  let description = [{
+    The result of the `head` operation are the `amount` most significant bits
+    of `input`. `amount` must be non-negative and less than or equal to the bit
+    width of `input`.  The result width is equal to `amount`.
+  }];
+
   let hasFolder = 1;
 
   let extraClassDeclaration = [{
@@ -368,6 +374,12 @@ def TailPrimOp : PrimOp<"tail"> {
   
   let assemblyFormat = [{
     $input `,` $amount attr-dict `:` functional-type($input, $result)
+  }];
+
+  let description = [{
+    The `tail` operation truncates the `amount` most significant bits from
+    `input`.  `amount` must be non-negative and less than or equal to the bit
+    width of e. The result is `width(input)-amount` bits wide.
   }];
 
   let hasCanonicalizer = 1;

@@ -1,5 +1,6 @@
 // RUN: circt-opt -canonicalize %s | FileCheck %s
 
+firrtl.circuit "Circuit" {
 
 // CHECK-LABEL: firrtl.module @And
 firrtl.module @And(%in: !firrtl.uint<4>,
@@ -248,4 +249,6 @@ firrtl.module @Tail(%in4u: !firrtl.uint<4>,
   // CHECK-NEXT: firrtl.connect %out3u, [[BITS]]
   %1 = firrtl.tail %in4u, 1 : (!firrtl.uint<4>) -> !firrtl.uint<3>
   firrtl.connect %out3u, %1 : !firrtl.flip<uint<3>>, !firrtl.uint<3>
+}
+
 }

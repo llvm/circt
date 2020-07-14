@@ -743,9 +743,13 @@ private:
     return emitSubExpr(op->getOperand(0), LowestPrecedence);
   }
 
-  SubExprInfo visitExpr(AddPrimOp op) { return emitVariadic(op, Addition, "+"); }
+  SubExprInfo visitExpr(AddPrimOp op) {
+    return emitVariadic(op, Addition, "+");
+  }
   SubExprInfo visitExpr(SubPrimOp op) { return emitBinary(op, Addition, "-"); }
-  SubExprInfo visitExpr(MulPrimOp op) { return emitVariadic(op, Multiply, "*"); }
+  SubExprInfo visitExpr(MulPrimOp op) {
+    return emitVariadic(op, Multiply, "*");
+  }
   SubExprInfo visitExpr(DivPrimOp op) {
     return emitSignedBinary(op, Multiply, "/");
   }
@@ -823,9 +827,13 @@ private:
   // RTL Dialect Operations
   using CombinatorialVisitor::visitComb;
   SubExprInfo visitComb(rtl::ConstantOp op);
-  SubExprInfo visitComb(rtl::AddOp op) { return emitVariadic(op, Addition, "+"); }
+  SubExprInfo visitComb(rtl::AddOp op) {
+    return emitVariadic(op, Addition, "+");
+  }
   SubExprInfo visitComb(rtl::SubOp op) { return emitBinary(op, Addition, "-"); }
-  SubExprInfo visitComb(rtl::MulOp op) { return emitVariadic(op, Multiply, "*"); }
+  SubExprInfo visitComb(rtl::MulOp op) {
+    return emitVariadic(op, Multiply, "*");
+  }
   SubExprInfo visitComb(rtl::DivOp op) {
     return emitSignedBinary(op, Multiply, "/");
   }
@@ -843,6 +851,7 @@ private:
   SubExprInfo visitComb(rtl::SExtOp op);
   SubExprInfo visitComb(rtl::ZExtOp op);
   SubExprInfo visitComb(rtl::ConcatOp op);
+  SubExprInfo visitComb(rtl::ExtractOp op);
 
 private:
   SmallPtrSet<Operation *, 8> &emittedExprs;
@@ -1053,6 +1062,12 @@ SubExprInfo ExprEmitter::visitComb(rtl::ConcatOp op) {
 
   os << '}';
   return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitComb(rtl::ExtractOp op) {
+  unsigned dstWidth = op.getType().cast<IntegerType>().getWidth();
+  return emitBitSelect(op.input(), op.getLowBit() + dstWidth - 1,
+                       op.getLowBit());
 }
 
 /// Emit a verilog bit selection operation like x[4:0], the bit numbers are

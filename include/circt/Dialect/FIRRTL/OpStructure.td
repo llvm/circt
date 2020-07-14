@@ -102,6 +102,7 @@ def FModuleOp : FIRRTLOp<"module",
 
   let printer = [{ return ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
+  let verifier = [{ return ::verifyFModuleOp(*this); }];
 }
 
 def FExtModuleOp : FIRRTLOp<"extmodule",

@@ -1,5 +1,7 @@
 // RUN: circt-opt %s | FileCheck %s
 
+firrtl.circuit "Circuit" {
+
 //module MyModule :
 //  input in: UInt<8>
 //  output out: UInt<8>
@@ -72,4 +74,6 @@ firrtl.module @ClockCast(%clock: !firrtl.clock, %in1 : i1) {
 
   // CHECK: %1 = firrtl.stdIntCast %in1 : (i1) -> !firrtl.clock
   %1 = firrtl.stdIntCast %in1 : (i1) -> !firrtl.clock
+}
+
 }

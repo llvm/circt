@@ -163,15 +163,7 @@ static LogicalResult lower(firrtl::CatPrimOp op, ArrayRef<Value> operands,
   if (!lhs || !rhs)
     return failure();
 
-  auto lhsWidth = lhs.getType().cast<IntegerType>().getWidth();
-  auto rhsWidth = rhs.getType().cast<IntegerType>().getWidth();
-
-  Value args[2] = {operands[0], operands[1]};
-
-  Type resultType = rewriter.getIntegerType(lhsWidth + rhsWidth);
-
-  rewriter.replaceOpWithNewOp<rtl::ConcatOp>(op, resultType,
-                                             ArrayRef<Value>(args));
+  rewriter.replaceOpWithNewOp<rtl::ConcatOp>(op, ValueRange({lhs, rhs}));
   return success();
 }
 
@@ -235,6 +227,91 @@ static LogicalResult lower(firrtl::SubPrimOp op, ArrayRef<Value> operands,
   return lowerBinOp<firrtl::SubPrimOp, rtl::SubOp>(op, operands, rewriter);
 }
 
+//===----------------------------------------------------------------------===//
+// Other Operations
+//===----------------------------------------------------------------------===//
+
+static LogicalResult lower(firrtl::BitsPrimOp op, ArrayRef<Value> operands,
+                           ConversionPatternRewriter &rewriter) {
+  auto input = mapOperand(operands[0], op, rewriter);
+  if (!input)
+    return failure();
+
+  Type resultType = rewriter.getIntegerType(op.getHi() - op.getLo() + 1);
+  rewriter.replaceOpWithNewOp<rtl::ExtractOp>(op, resultType, input,
+                                              op.getLo());
+  return success();
+}
+
+static LogicalResult lower(firrtl::HeadPrimOp op, ArrayRef<Value> operands,
+                           ConversionPatternRewriter &rewriter) {
+  auto input = mapOperand(operands[0], op, rewriter);
+  if (!input)
+    return failure();
+
+  auto inWidth = input.getType().cast<IntegerType>().getWidth();
+  Type resultType = rewriter.getIntegerType(op.getAmount());
+  rewriter.replaceOpWithNewOp<rtl::ExtractOp>(op, resultType, input,
+                                              inWidth - op.getAmount());
+  return success();
+}
+
+static LogicalResult lower(firrtl::ShlPrimOp op, ArrayRef<Value> operands,
+                           ConversionPatternRewriter &rewriter) {
+  auto input = mapOperand(operands[0], op, rewriter);
+  if (!input)
+    return failure();
+
+  // Handle the degenerate case.
+  if (op.getAmount() == 0) {
+    rewriter.replaceOp(op, input);
+    return success();
+  }
+
+  auto zero =
+      rewriter.create<rtl::ConstantOp>(op.getLoc(), APInt(op.getAmount(), 0));
+  rewriter.replaceOpWithNewOp<rtl::ConcatOp>(op, ValueRange({input, zero}));
+  return success();
+}
+
+static LogicalResult lower(firrtl::ShrPrimOp op, ArrayRef<Value> operands,
+                           ConversionPatternRewriter &rewriter) {
+  auto input = mapOperand(operands[0], op, rewriter);
+  if (!input)
+    return failure();
+
+  // Handle the special degenerate cases.
+  auto inWidth = input.getType().cast<IntegerType>().getWidth();
+  auto shiftAmount = op.getAmount();
+  if (shiftAmount == inWidth) {
+    // Unsigned shift by full width returns zero.
+    if (op.input().getType().cast<IntType>().isUnsigned()) {
+      rewriter.replaceOpWithNewOp<rtl::ConstantOp>(op, APInt(1, 0));
+      return success();
+    }
+
+    // Signed shift by full width is equivalent to extracting the sign bit.
+    --shiftAmount;
+  }
+
+  Type resultType = rewriter.getIntegerType(inWidth - shiftAmount);
+  rewriter.replaceOpWithNewOp<rtl::ExtractOp>(op, resultType, input,
+                                              shiftAmount);
+  return success();
+}
+
+static LogicalResult lower(firrtl::TailPrimOp op, ArrayRef<Value> operands,
+                           ConversionPatternRewriter &rewriter) {
+  auto input = mapOperand(operands[0], op, rewriter);
+  if (!input)
+    return failure();
+
+  auto inWidth = input.getType().cast<IntegerType>().getWidth();
+  Type resultType = rewriter.getIntegerType(inWidth - op.getAmount());
+  rewriter.replaceOpWithNewOp<rtl::ExtractOp>(op, resultType, input, 0);
+  return success();
+}
+
 namespace {
 /// Utility class for operation conversions targeting that
 /// match exactly one source operation.
@@ -279,11 +356,17 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering> {
         RTLRewriter<firrtl::ConnectOp>,
         // Binary Operations
         RTLRewriter<firrtl::AddPrimOp>, RTLRewriter<firrtl::SubPrimOp>,
+        RTLRewriter<firrtl::AndPrimOp>, RTLRewriter<firrtl::OrPrimOp>,
         RTLRewriter<firrtl::XorPrimOp>, RTLRewriter<firrtl::CatPrimOp>,
 
         // Unary Operations
         RTLRewriter<firrtl::PadPrimOp>, RTLRewriter<firrtl::AsSIntPrimOp>,
-        RTLRewriter<firrtl::AsUIntPrimOp>>(&getContext());
+        RTLRewriter<firrtl::AsUIntPrimOp>,
+
+        // Other Operations
+        RTLRewriter<firrtl::BitsPrimOp>, RTLRewriter<firrtl::HeadPrimOp>,
+        RTLRewriter<firrtl::ShlPrimOp>, RTLRewriter<firrtl::ShrPrimOp>,
+        RTLRewriter<firrtl::TailPrimOp>>(&getContext());
 
     RTLConversionTarget target(getContext());
     RTLTypeConverter typeConverter;
