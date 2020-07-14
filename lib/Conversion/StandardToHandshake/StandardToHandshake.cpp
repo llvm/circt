@@ -1331,25 +1331,19 @@ struct DFInsertBufferPass
 
   DenseMap<Operation *, bool> opVisited;
   DenseMap<Operation *, bool> opOnStack;
-  std::stack<Operation *> opStack;
-
-  static bool notBufferOp(OpOperand &operand) {
-    return !isa<handshake::BufferOp>(operand.getOwner());
-  }
 
   /// DFS-based graph cycle detection and naive buffer insertion. Exactly one
   /// 1-slot non-transparent buffer will be inserted into each graph cycle.
   void insertBufferOp(Operation *op, OpBuilder &builder) {
     // Mark operation as visited and push into the stack.
     opVisited[op] = true;
-    opStack.push(op);
     opOnStack[op] = true;
 
     // Traverse all uses of the current operation.
     for (auto &operand : op->getUses()) {
       auto user = operand.getOwner();
 
-      // If graph cycle detected, directly insert a BufferOp to the back edge.
+      // If graph cycle detected, insert a BufferOp into the edge.
       if (opOnStack[user] && !isa<handshake::BufferOp>(op) &&
           !isa<handshake::BufferOp>(user)) {
         auto value = operand.get();
@@ -1358,17 +1352,17 @@ struct DFInsertBufferPass
         auto bufferOp = builder.create<handshake::BufferOp>(
             op->getLoc(), value.getType(), value, /*sequential=*/true,
             /*slots=*/APInt(32, 1));
-        value.replaceUsesWithIf(bufferOp,
-                                function_ref<bool(OpOperand &)>(notBufferOp));
+        value.replaceUsesWithIf(
+            bufferOp,
+            function_ref<bool(OpOperand &)>([](OpOperand &operand) -> bool {
+              return !isa<handshake::BufferOp>(operand.getOwner());
+            }));
       }
-
-      // For unvisited operation, recursively call this method.
+      // For unvisited operations, recursively call insertBufferOp() method.
       else if (!opVisited[user])
         insertBufferOp(user, builder);
     }
-
     // Pop operation out of the stack.
-    opStack.pop();
     opOnStack[op] = false;
   }
 
@@ -1384,9 +1378,8 @@ struct DFInsertBufferPass
     auto builder = OpBuilder(f.getContext());
     for (auto &arg : f.getBody().front().getArguments()) {
       for (auto &operand : arg.getUses()) {
-        auto op = operand.getOwner();
-        if (!opVisited[op])
-          insertBufferOp(op, builder);
+        if (!opVisited[operand.getOwner()])
+          insertBufferOp(operand.getOwner(), builder);
       }
     }
   }
