@@ -20,17 +20,17 @@ module {
     %9:2 = "handshake.fork"(%8) {control = false} : (index) -> (index, index)
 
     // CHECK:       %10:2 = "handshake.control_merge"(%28, %5) {control = true} : (none, none) -> (none, index)
-    // CHECK-NEXT:  %11 = "handshake.buffer"(%10#0) {sequential = true, slots = 1 : i32} : (none) -> none
+    // CHECK-NEXT:  %11 = "handshake.buffer"(%10#0) {control = true, sequential = true, slots = 1 : i32} : (none) -> none
     %10:2 = "handshake.control_merge"(%23, %5) {control = true} : (none, none) -> (none, index)
 
     // CHECK:       %12:2 = "handshake.fork"(%10#1) {control = false} : (index) -> (index, index)
-    // CHECK-NEXT:  %13 = "handshake.buffer"(%12#1) {sequential = true, slots = 1 : i32} : (index) -> index
+    // CHECK-NEXT:  %13 = "handshake.buffer"(%12#1) {control = false, sequential = true, slots = 1 : i32} : (index) -> index
     %11:2 = "handshake.fork"(%10#1) {control = false} : (index) -> (index, index)
     %12 = "handshake.mux"(%11#0, %24, %6) : (index, index, index) -> index
 
     // CHECK:       %15:2 = "handshake.fork"(%14) {control = false} : (index) -> (index, index)
-    // CHECK-NEXT:  %16 = "handshake.buffer"(%15#1) {sequential = true, slots = 1 : i32} : (index) -> index
-    // CHECK-NEXT:  %17 = "handshake.buffer"(%15#0) {sequential = true, slots = 1 : i32} : (index) -> index
+    // CHECK-NEXT:  %16 = "handshake.buffer"(%15#1) {control = false, sequential = true, slots = 1 : i32} : (index) -> index
+    // CHECK-NEXT:  %17 = "handshake.buffer"(%15#0) {control = false, sequential = true, slots = 1 : i32} : (index) -> index
     %13:2 = "handshake.fork"(%12) {control = false} : (index) -> (index, index)
     %14 = cmpi "slt", %13#1, %9#1 : index
     %15:3 = "handshake.fork"(%14) {control = false} : (i1) -> (i1, i1, i1)
@@ -50,7 +50,7 @@ module {
     %21 = addi %16, %20 : index
 
     // CHECK:       %26 = "handshake.branch"(%21) {control = false} : (index) -> index
-    // CHECK-NEXT:  %27 = "handshake.buffer"(%26) {sequential = true, slots = 1 : i32} : (index) -> index
+    // CHECK-NEXT:  %27 = "handshake.buffer"(%26) {control = false, sequential = true, slots = 1 : i32} : (index) -> index
     %22 = "handshake.branch"(%17) {control = false} : (index) -> index
     %23 = "handshake.branch"(%19#1) {control = true} : (none) -> none
     %24 = "handshake.branch"(%21) {control = false} : (index) -> index

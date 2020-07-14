@@ -1351,6 +1351,7 @@ struct DFInsertBufferPass
         builder.setInsertionPointAfter(op);
         auto bufferOp = builder.create<handshake::BufferOp>(
             op->getLoc(), value.getType(), value, /*sequential=*/true,
+            /*control=*/value.getType().isa<NoneType>(),
             /*slots=*/APInt(32, 1));
         value.replaceUsesWithIf(
             bufferOp,

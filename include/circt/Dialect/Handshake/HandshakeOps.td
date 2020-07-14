@@ -287,12 +287,20 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect]> {
     buffer.
   }];
 
-  let arguments = (ins AnyType, BoolAttr:$sequential, I32Attr:$slots);
+  let arguments = (ins AnyType, BoolAttr:$sequential, BoolAttr:$control, 
+                   I32Attr:$slots);
   let results = (outs AnyType);
 
   let extraClassDeclaration = [{
-    bool isSequential() { return getAttrOfType<BoolAttr>("sequential").getValue(); }
-    APInt getNumSlots() { return getAttrOfType<IntegerAttr>("slots").getValue(); }
+    bool isSequential() {
+      return getAttrOfType<BoolAttr>("sequential").getValue();
+    }
+    bool isControl() {
+      return getAttrOfType<BoolAttr>("control").getValue();
+    }
+    APInt getNumSlots() {
+      return getAttrOfType<IntegerAttr>("slots").getValue();
+    }
   }];
 }
 
