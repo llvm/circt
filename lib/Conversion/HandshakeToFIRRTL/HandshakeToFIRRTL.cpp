@@ -693,6 +693,21 @@ static void buildConstantLogic(handshake::ConstantOp *oldOp,
       createConstantOp(constantType, constantValue, insertLoc, rewriter));
 }
 
+static void buildBufferLogic(Operation *oldOp, ValueVectorList portList,
+                             Location insertLoc,
+                             ConversionPatternRewriter &rewriter) {
+  ValueVector inputSubfields = portList[0];
+  Value inputValid = inputSubfields[0];
+  Value inputReady = inputSubfields[1];
+
+  ValueVector outputSubfields = portList[1];
+  Value outputValid = outputSubfields[0];
+  Value outputReady = outputSubfields[1];
+
+  Value clock = portList[2][0];
+  Value reset = portList[3][0];
+}
+
 //===----------------------------------------------------------------------===//
 // Old Operation Conversion Functions
 //===----------------------------------------------------------------------===//
