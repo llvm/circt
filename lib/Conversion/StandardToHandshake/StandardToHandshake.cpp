@@ -41,8 +41,6 @@ using namespace std;
 typedef DenseMap<Block *, vector<Value>> BlockValues;
 typedef DenseMap<Block *, vector<Operation *>> BlockOps;
 
-typedef DenseMap<Block *, vector<Block *>> BlockDoms;
-
 template <typename FuncOp>
 
 void dotPrint(FuncOp f, string name) {
@@ -1214,24 +1212,6 @@ void replaceCallOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
   }
 }
 
-void insertBufferOpsNaive(handshake::FuncOp f,
-                          ConversionPatternRewriter &rewriter) {
-  vector<Block *> allBlocks;
-  for (auto &block : f)
-    allBlocks.push_back(&block);
-
-  // Initialize dominators of each block.
-  BlockDoms doms;
-  for (auto &block : f) {
-    if (block.isEntryBlock())
-      doms[&block].push_back(&block);
-    else
-      doms[&block] = allBlocks;
-  }
-
-  // Iterate to find dominators of each block.
-}
-
 struct DFCanonicalizePattern : public ConversionPattern {
   using ConversionPattern::ConversionPattern;
   LogicalResult match(Operation *op) const override {
@@ -1329,8 +1309,6 @@ struct FuncOpLowering : public OpConversionPattern<mlir::FuncOp> {
     bool lsq = false;
     connectToMemory(newFuncOp, MemOps, lsq, rewriter);
 
-    insertBufferOpsNaive(newFuncOp, rewriter);
-
     // Apply signature conversion to set function arguments
     rewriter.applySignatureConversion(&newFuncOp.getBody(), result);
 
@@ -1348,6 +1326,68 @@ struct FuncOpLowering : public OpConversionPattern<mlir::FuncOp> {
 };
 
 namespace {
+struct DFInsertBufferPass
+    : public PassWrapper<DFInsertBufferPass, OperationPass<handshake::FuncOp>> {
+
+  DenseMap<Operation *, bool> opVisited;
+  DenseMap<Operation *, bool> opOnStack;
+  std::stack<Operation *> opStack;
+
+  static bool isBufferOp(OpOperand &use) {
+    return !isa<handshake::BufferOp>(use.getOwner());
+  }
+
+  void insertBufferOp(Operation *op, OpBuilder &builder) {
+    // Mark operation as visited and push onto the stack.
+    opVisited[op] = true;
+    opStack.push(op);
+    opOnStack[op] = true;
+
+    // Traverse all uses of the current operation.
+    for (auto &use : op->getUses()) {
+      auto child = use.getOwner();
+
+      // If graph cycle detected, insert a BufferOp to the back edge.
+      // Sequential operations (BufferOp and ForkOp) will be ignored.
+      if (!isa<handshake::ForkOp>(op) && !isa<handshake::BufferOp>(op) &&
+          !isa<handshake::ForkOp>(child) && !isa<handshake::BufferOp>(child) &&
+          opOnStack[child]) {
+        auto value = use.get();
+
+        builder.setInsertionPointAfter(op);
+        auto bufferOp = builder.create<handshake::BufferOp>(
+            op->getLoc(), value.getType(), value, /*sequential=*/true,
+            /*slots=*/APInt(32, 1));
+        value.replaceUsesWithIf(bufferOp,
+                                function_ref<bool(OpOperand &)>(isBufferOp));
+      }
+
+      // For unvisited operation, recursively call this method.
+      else if (!opVisited[child])
+        insertBufferOp(child, builder);
+    }
+
+    // Pop operation from the stack.
+    opStack.pop();
+    opOnStack[op] = false;
+  }
+
+  void runOnOperation() override {
+    auto f = getOperation();
+    for (auto &block : f) {
+      for (auto &op : block) {
+        opVisited[&op] = false;
+        opOnStack[&op] = false;
+      }
+    }
+
+    auto builder = OpBuilder(f.getContext());
+    for (auto &arg : f.getBody().front().getArguments())
+      for (auto &use : arg.getUses())
+        insertBufferOp(use.getOwner(), builder);
+  }
+};
+
 struct DFRemoveBlockPass
     : public PassWrapper<DFRemoveBlockPass, OperationPass<handshake::FuncOp>> {
   void runOnOperation() override {
@@ -1473,4 +1513,6 @@ void handshake::registerStandardToHandshakePasses() {
                                        "Canonicalize handshake IR");
   PassRegistration<DFRemoveBlockPass>("remove-block-structure",
                                       "Remove block structure in handshake IR");
+  PassRegistration<DFInsertBufferPass>("insert-buffer",
+                                       "Insert buffers to break graph cycles.");
 }

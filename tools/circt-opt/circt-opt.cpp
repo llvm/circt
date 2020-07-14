@@ -22,6 +22,7 @@
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Support/MlirOptMain.h"
 #include "mlir/Transforms/Passes.h"
+#include "mlir/Transforms/ViewOpGraph.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/ToolOutputFile.h"
@@ -90,6 +91,10 @@ int main(int argc, char **argv) {
   registerDialect<handshake::HandshakeOpsDialect>();
   handshake::registerStandardToHandshakePasses();
   handshake::registerHandshakeToFIRRTLPasses();
+  mlir::registerPass("print-op-graph", "Print op graph per-Region",
+                     []() -> std::unique_ptr<::mlir::Pass> {
+                       return mlir::createPrintOpGraphPass();
+                     });
 
   registerDialect<rtl::RTLDialect>();
 
