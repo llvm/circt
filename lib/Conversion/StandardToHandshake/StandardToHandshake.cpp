@@ -1333,41 +1333,41 @@ struct DFInsertBufferPass
   DenseMap<Operation *, bool> opOnStack;
   std::stack<Operation *> opStack;
 
-  static bool isBufferOp(OpOperand &use) {
-    return !isa<handshake::BufferOp>(use.getOwner());
+  static bool notBufferOp(OpOperand &operand) {
+    return !isa<handshake::BufferOp>(operand.getOwner());
   }
 
+  /// DFS-based graph cycle detection and naive buffer insertion. Exactly one
+  /// 1-slot non-transparent buffer will be inserted into each graph cycle.
   void insertBufferOp(Operation *op, OpBuilder &builder) {
-    // Mark operation as visited and push onto the stack.
+    // Mark operation as visited and push into the stack.
     opVisited[op] = true;
     opStack.push(op);
     opOnStack[op] = true;
 
     // Traverse all uses of the current operation.
-    for (auto &use : op->getUses()) {
-      auto child = use.getOwner();
+    for (auto &operand : op->getUses()) {
+      auto user = operand.getOwner();
 
-      // If graph cycle detected, insert a BufferOp to the back edge.
-      // Sequential operations (BufferOp and ForkOp) will be ignored.
-      if (!isa<handshake::ForkOp>(op) && !isa<handshake::BufferOp>(op) &&
-          !isa<handshake::ForkOp>(child) && !isa<handshake::BufferOp>(child) &&
-          opOnStack[child]) {
-        auto value = use.get();
+      // If graph cycle detected, directly insert a BufferOp to the back edge.
+      if (opOnStack[user] && !isa<handshake::BufferOp>(op) &&
+          !isa<handshake::BufferOp>(user)) {
+        auto value = operand.get();
 
         builder.setInsertionPointAfter(op);
         auto bufferOp = builder.create<handshake::BufferOp>(
             op->getLoc(), value.getType(), value, /*sequential=*/true,
             /*slots=*/APInt(32, 1));
         value.replaceUsesWithIf(bufferOp,
-                                function_ref<bool(OpOperand &)>(isBufferOp));
+                                function_ref<bool(OpOperand &)>(notBufferOp));
       }
 
       // For unvisited operation, recursively call this method.
-      else if (!opVisited[child])
-        insertBufferOp(child, builder);
+      else if (!opVisited[user])
+        insertBufferOp(user, builder);
     }
 
-    // Pop operation from the stack.
+    // Pop operation out of the stack.
     opStack.pop();
     opOnStack[op] = false;
   }
@@ -1380,11 +1380,15 @@ struct DFInsertBufferPass
         opOnStack[&op] = false;
       }
     }
-
+    // Traverse each use of each argument of the entry block.
     auto builder = OpBuilder(f.getContext());
-    for (auto &arg : f.getBody().front().getArguments())
-      for (auto &use : arg.getUses())
-        insertBufferOp(use.getOwner(), builder);
+    for (auto &arg : f.getBody().front().getArguments()) {
+      for (auto &operand : arg.getUses()) {
+        auto op = operand.getOwner();
+        if (!opVisited[op])
+          insertBufferOp(op, builder);
+      }
+    }
   }
 };
 
