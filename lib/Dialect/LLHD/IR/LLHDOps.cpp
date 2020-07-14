@@ -237,13 +237,7 @@ OpFoldResult llhd::EqOp::fold(ArrayRef<Attribute> operands) {
   if (!operands[0] || !operands[1])
     return {};
 
-  if (auto lhs = operands[0].dyn_cast<IntegerAttr>()) {
-    if (auto rhs = operands[1].dyn_cast<IntegerAttr>()) {
-      return BoolAttr::get(lhs.getValue() == rhs.getValue(), getContext());
-    }
-  }
-
-  return {};
+  return BoolAttr::get(operands[0] == operands[1], getContext());
 }
 
 //===----------------------------------------------------------------------===//
@@ -262,13 +256,7 @@ OpFoldResult llhd::NeqOp::fold(ArrayRef<Attribute> operands) {
   if (!operands[0] || !operands[1])
     return {};
 
-  if (auto lhs = operands[0].dyn_cast<IntegerAttr>()) {
-    if (auto rhs = operands[1].dyn_cast<IntegerAttr>()) {
-      return BoolAttr::get(lhs.getValue() != rhs.getValue(), getContext());
-    }
-  }
-
-  return {};
+  return BoolAttr::get(operands[0] != operands[1], getContext());
 }
 
 //===----------------------------------------------------------------------===//
