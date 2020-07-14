@@ -92,74 +92,74 @@ func @dexts_vec(%v1 : vector<1xi1>, %v10 : vector<10xi1>, %i0 : i5, %i1 : i10) {
     return
 }
 
-// CHECK-LABEL: @extf_vectors
+// CHECK-LABEL: @extract_element_vectors
 // CHECK-SAME: %[[VEC1:.*]]: vector<1xi1>
 // CHECK-SAME: %[[VEC5:.*]]: vector<5xi32>
-func @extf_vectors(%vec1 : vector<1xi1>, %vec5 : vector<5xi32>) {
-    // CHECK-NEXT: %{{.*}} = llhd.extf %[[VEC1]], 0 : vector<1xi1> -> i1
-    %0 = llhd.extf %vec1, 0 : vector<1xi1> -> i1
-    // CHECK-NEXT: %{{.*}} = llhd.extf %[[VEC5]], 4 : vector<5xi32> -> i32
-    %1 = llhd.extf %vec5, 4 : vector<5xi32> -> i32
+func @extract_element_vectors(%vec1 : vector<1xi1>, %vec5 : vector<5xi32>) {
+    // CHECK-NEXT: %{{.*}} = llhd.extract_element %[[VEC1]], 0 : vector<1xi1> -> i1
+    %0 = llhd.extract_element %vec1, 0 : vector<1xi1> -> i1
+    // CHECK-NEXT: %{{.*}} = llhd.extract_element %[[VEC5]], 4 : vector<5xi32> -> i32
+    %1 = llhd.extract_element %vec5, 4 : vector<5xi32> -> i32
 
     return
 }
 
-// CHECK-LABEL: @extf_tuples
+// CHECK-LABEL: @extract_element_tuples
 // CHECK-SAME: %[[TUP:.*]]: tuple<i1, i2, i3>
-func @extf_tuples(%tup : tuple<i1, i2, i3>) {
-    // CHECK-NEXT: %{{.*}} = llhd.extf %[[TUP]], 0 : tuple<i1, i2, i3> -> i1
-    %0 = llhd.extf %tup, 0 : tuple<i1, i2, i3> -> i1
-    // CHECK-NEXT: %{{.*}} = llhd.extf %[[TUP]], 2 : tuple<i1, i2, i3> -> i3
-    %1 = llhd.extf %tup, 2 : tuple<i1, i2, i3> -> i3
+func @extract_element_tuples(%tup : tuple<i1, i2, i3>) {
+    // CHECK-NEXT: %{{.*}} = llhd.extract_element %[[TUP]], 0 : tuple<i1, i2, i3> -> i1
+    %0 = llhd.extract_element %tup, 0 : tuple<i1, i2, i3> -> i1
+    // CHECK-NEXT: %{{.*}} = llhd.extract_element %[[TUP]], 2 : tuple<i1, i2, i3> -> i3
+    %1 = llhd.extract_element %tup, 2 : tuple<i1, i2, i3> -> i3
 
     return
 }
 
-// CHECK-LABEL: @extf_signals_of_vectors
+// CHECK-LABEL: @extract_element_signals_of_vectors
 // CHECK-SAME: %[[VEC1:.*]]: !llhd.sig<vector<1xi1>>
 // CHECK-SAME: %[[VEC5:.*]]: !llhd.sig<vector<5xi32>>
-func @extf_signals_of_vectors(%vec1 : !llhd.sig<vector<1xi1>>, %vec5 : !llhd.sig<vector<5xi32>>) {
-    // CHECK-NEXT: %{{.*}} = llhd.extf %[[VEC1]], 0 : !llhd.sig<vector<1xi1>> -> !llhd.sig<i1>
-    %0 = llhd.extf %vec1, 0 : !llhd.sig<vector<1xi1>> -> !llhd.sig<i1>
-    // CHECK-NEXT: %{{.*}} = llhd.extf %[[VEC5]], 4 : !llhd.sig<vector<5xi32>> -> !llhd.sig<i32>
-    %1 = llhd.extf %vec5, 4 : !llhd.sig<vector<5xi32>> -> !llhd.sig<i32>
+func @extract_element_signals_of_vectors(%vec1 : !llhd.sig<vector<1xi1>>, %vec5 : !llhd.sig<vector<5xi32>>) {
+    // CHECK-NEXT: %{{.*}} = llhd.extract_element %[[VEC1]], 0 : !llhd.sig<vector<1xi1>> -> !llhd.sig<i1>
+    %0 = llhd.extract_element %vec1, 0 : !llhd.sig<vector<1xi1>> -> !llhd.sig<i1>
+    // CHECK-NEXT: %{{.*}} = llhd.extract_element %[[VEC5]], 4 : !llhd.sig<vector<5xi32>> -> !llhd.sig<i32>
+    %1 = llhd.extract_element %vec5, 4 : !llhd.sig<vector<5xi32>> -> !llhd.sig<i32>
 
     return
 }
 
-// CHECK-LABEL: @extf_signals_of_tuples
+// CHECK-LABEL: @extract_element_signals_of_tuples
 // CHECK-SAME: %[[TUP:.*]]: !llhd.sig<tuple<i1, i2, i3>>
-func @extf_signals_of_tuples(%tup : !llhd.sig<tuple<i1, i2, i3>>) {
-    // CHECK-NEXT: %{{.*}} = llhd.extf %[[TUP]], 0 : !llhd.sig<tuple<i1, i2, i3>> -> !llhd.sig<i1>
-    %0 = llhd.extf %tup, 0 : !llhd.sig<tuple<i1, i2, i3>> -> !llhd.sig<i1>
-    // CHECK-NEXT: %{{.*}} = llhd.extf %[[TUP]], 2 : !llhd.sig<tuple<i1, i2, i3>> -> !llhd.sig<i3>
-    %1 = llhd.extf %tup, 2 : !llhd.sig<tuple<i1, i2, i3>> -> !llhd.sig<i3>
+func @extract_element_signals_of_tuples(%tup : !llhd.sig<tuple<i1, i2, i3>>) {
+    // CHECK-NEXT: %{{.*}} = llhd.extract_element %[[TUP]], 0 : !llhd.sig<tuple<i1, i2, i3>> -> !llhd.sig<i1>
+    %0 = llhd.extract_element %tup, 0 : !llhd.sig<tuple<i1, i2, i3>> -> !llhd.sig<i1>
+    // CHECK-NEXT: %{{.*}} = llhd.extract_element %[[TUP]], 2 : !llhd.sig<tuple<i1, i2, i3>> -> !llhd.sig<i3>
+    %1 = llhd.extract_element %tup, 2 : !llhd.sig<tuple<i1, i2, i3>> -> !llhd.sig<i3>
 
     return
 }
 
-// CHECK-LABEL: @dextf_vectors
+// CHECK-LABEL: @dyn_extract_element_vectors
 // CHECK-SAME: %[[INDEX:.*]]: i32
 // CHECK-SAME: %[[VEC1:.*]]: vector<1xi1>
 // CHECK-SAME: %[[VEC5:.*]]: vector<5xi32>
-func @dextf_vectors(%index : i32, %vec1 : vector<1xi1>, %vec5 : vector<5xi32>) {
-    // CHECK-NEXT: %{{.*}} = llhd.dextf %[[VEC1]], %[[INDEX]] : (vector<1xi1>, i32) -> i1
-    %0 = llhd.dextf %vec1, %index : (vector<1xi1>, i32) -> i1
-    // CHECK-NEXT: %{{.*}} = llhd.dextf %[[VEC5]], %[[INDEX]] : (vector<5xi32>, i32) -> i32
-    %1 = llhd.dextf %vec5, %index : (vector<5xi32>, i32) -> i32
+func @dyn_extract_element_vectors(%index : i32, %vec1 : vector<1xi1>, %vec5 : vector<5xi32>) {
+    // CHECK-NEXT: %{{.*}} = llhd.dyn_extract_element %[[VEC1]], %[[INDEX]] : (vector<1xi1>, i32) -> i1
+    %0 = llhd.dyn_extract_element %vec1, %index : (vector<1xi1>, i32) -> i1
+    // CHECK-NEXT: %{{.*}} = llhd.dyn_extract_element %[[VEC5]], %[[INDEX]] : (vector<5xi32>, i32) -> i32
+    %1 = llhd.dyn_extract_element %vec5, %index : (vector<5xi32>, i32) -> i32
 
     return
 }
 
-// CHECK-LABEL: @dextf_signals_of_vectors
+// CHECK-LABEL: @dyn_extract_element_signals_of_vectors
 // CHECK-SAME: %[[INDEX:.*]]: i32
 // CHECK-SAME: %[[VEC1:.*]]: !llhd.sig<vector<1xi1>>
 // CHECK-SAME: %[[VEC5:.*]]: !llhd.sig<vector<5xi32>>
-func @dextf_signals_of_vectors(%index : i32, %vec1 : !llhd.sig<vector<1xi1>>, %vec5 : !llhd.sig<vector<5xi32>>) {
-    // CHECK-NEXT: %{{.*}} = llhd.dextf %[[VEC1]], %[[INDEX]] : (!llhd.sig<vector<1xi1>>, i32) -> !llhd.sig<i1>
-    %0 = llhd.dextf %vec1, %index : (!llhd.sig<vector<1xi1>>, i32) -> !llhd.sig<i1>
-    // CHECK-NEXT: %{{.*}} = llhd.dextf %[[VEC5]], %[[INDEX]] : (!llhd.sig<vector<5xi32>>, i32) -> !llhd.sig<i32>
-    %1 = llhd.dextf %vec5, %index : (!llhd.sig<vector<5xi32>>, i32) -> !llhd.sig<i32>
+func @dyn_extract_element_signals_of_vectors(%index : i32, %vec1 : !llhd.sig<vector<1xi1>>, %vec5 : !llhd.sig<vector<5xi32>>) {
+    // CHECK-NEXT: %{{.*}} = llhd.dyn_extract_element %[[VEC1]], %[[INDEX]] : (!llhd.sig<vector<1xi1>>, i32) -> !llhd.sig<i1>
+    %0 = llhd.dyn_extract_element %vec1, %index : (!llhd.sig<vector<1xi1>>, i32) -> !llhd.sig<i1>
+    // CHECK-NEXT: %{{.*}} = llhd.dyn_extract_element %[[VEC5]], %[[INDEX]] : (!llhd.sig<vector<5xi32>>, i32) -> !llhd.sig<i32>
+    %1 = llhd.dyn_extract_element %vec5, %index : (!llhd.sig<vector<5xi32>>, i32) -> !llhd.sig<i32>
 
     return
 }
@@ -292,81 +292,81 @@ func @dexts_illegal_vec_element_conversion(%c : vector<1xi1>, %i : i1) {
 
 // -----
 
-func @extf_vector_index_out_of_bounds(%vec : vector<3xi1>) {
-    // expected-error @+1 {{'index' has to be smaller than the 'target' size}}
-    %0 = llhd.extf %vec, 3 : vector<3xi1> -> i1
+func @extract_element_vector_index_out_of_bounds(%vec : vector<3xi1>) {
+    // expected-error @+1 {{'index' has to be smaller than the width of the 'target' type}}
+    %0 = llhd.extract_element %vec, 3 : vector<3xi1> -> i1
 
     return
 }
 
 // -----
 
-func @extf_tuple_index_out_of_bounds(%tup : tuple<i1, i2, i3>) {
-    // expected-error @+1 {{'index' has to be smaller than the 'target' size}}
-    %0 = llhd.extf %tup, 3 : tuple<i1, i2, i3> -> i3
+func @extract_element_tuple_index_out_of_bounds(%tup : tuple<i1, i2, i3>) {
+    // expected-error @+1 {{'index' has to be smaller than the width of the 'target' type}}
+    %0 = llhd.extract_element %tup, 3 : tuple<i1, i2, i3> -> i3
 
     return
 }
 
 // -----
 
-func @extf_vector_type_mismatch(%vec : vector<3xi1>) {
-    // expected-error @+1 {{'result' type has to match type at 'index' of 'target', in case 'target' is a singal, consider the underlying types of the 'target' and 'result' signals}}
-    %0 = llhd.extf %vec, 0 : vector<3xi1> -> i2
+func @extract_element_vector_type_mismatch(%vec : vector<3xi1>) {
+    // expected-error @+1 {{'result' type must match the type of 'target' at position 'index', or in case 'target' is a signal, it must be a signal of the underlying type of 'target' at position 'index'}}
+    %0 = llhd.extract_element %vec, 0 : vector<3xi1> -> i2
 
     return
 }
 
 // -----
 
-func @extf_tuple_type_mismatch(%tup : tuple<i1, i2, i3>) {
-    // expected-error @+1 {{'result' type has to match type at 'index' of 'target', in case 'target' is a singal, consider the underlying types of the 'target' and 'result' signals}}
-    %0 = llhd.extf %tup, 0 : tuple<i1, i2, i3> -> i2
+func @extract_element_tuple_type_mismatch(%tup : tuple<i1, i2, i3>) {
+    // expected-error @+1 {{'result' type must match the type of 'target' at position 'index', or in case 'target' is a signal, it must be a signal of the underlying type of 'target' at position 'index'}}
+    %0 = llhd.extract_element %tup, 0 : tuple<i1, i2, i3> -> i2
 
     return
 }
 
 // -----
 
-func @extf_signal_type_mismatch(%sig : !llhd.sig<tuple<i1, i2, i3>>) {
-    // expected-error @+1 {{'result' type has to match type at 'index' of 'target', in case 'target' is a singal, consider the underlying types of the 'target' and 'result' signals}}
-    %0 = llhd.extf %sig, 0 : !llhd.sig<tuple<i1, i2, i3>> -> !llhd.sig<i2>
+func @extract_element_signal_type_mismatch(%sig : !llhd.sig<tuple<i1, i2, i3>>) {
+    // expected-error @+1 {{'result' type must match the type of 'target' at position 'index', or in case 'target' is a signal, it must be a signal of the underlying type of 'target' at position 'index'}}
+    %0 = llhd.extract_element %sig, 0 : !llhd.sig<tuple<i1, i2, i3>> -> !llhd.sig<i2>
 
     return
 }
 
 // -----
 
-func @extf_illegal_signal_alias(%sig : !llhd.sig<tuple<i1, i2, i3>>) {
-    // expected-error @+1 {{'result' type has to match type at 'index' of 'target', in case 'target' is a singal, consider the underlying types of the 'target' and 'result' signals}}
-    %0 = llhd.extf %sig, 0 : !llhd.sig<tuple<i1, i2, i3>> -> i1
+func @extract_element_illegal_signal_alias(%sig : !llhd.sig<tuple<i1, i2, i3>>) {
+    // expected-error @+1 {{'result' type must match the type of 'target' at position 'index', or in case 'target' is a signal, it must be a signal of the underlying type of 'target' at position 'index'}}
+    %0 = llhd.extract_element %sig, 0 : !llhd.sig<tuple<i1, i2, i3>> -> i1
 
     return
 }
 
 // -----
 
-func @dextf_vector_type_mismatch(%index : i2, %vec : vector<3xi1>) {
+func @dyn_extract_element_vector_type_mismatch(%index : i2, %vec : vector<3xi1>) {
     // expected-error @+1 {{'result' must be the element type of the 'target' vector, in case 'target' is a signal of a vector, 'result' also is a signal of the vector element type}}
-    %0 = llhd.dextf %vec, %index : (vector<3xi1>, i2) -> i2
+    %0 = llhd.dyn_extract_element %vec, %index : (vector<3xi1>, i2) -> i2
 
     return
 }
 
 // -----
 
-func @dextf_signal_type_mismatch(%index : i2, %sig : !llhd.sig<vector<3xi1>>) {
+func @dyn_extract_element_signal_type_mismatch(%index : i2, %sig : !llhd.sig<vector<3xi1>>) {
     // expected-error @+1 {{'result' must be the element type of the 'target' vector, in case 'target' is a signal of a vector, 'result' also is a signal of the vector element type}}
-    %0 = llhd.dextf %sig, %index : (!llhd.sig<vector<3xi1>>, i2) -> !llhd.sig<i2>
+    %0 = llhd.dyn_extract_element %sig, %index : (!llhd.sig<vector<3xi1>>, i2) -> !llhd.sig<i2>
 
     return
 }
 
 // -----
 
-func @dextf_illegal_signal_alias(%index : i2, %sig : !llhd.sig<vector<3xi1>>) {
+func @dyn_extract_element_illegal_signal_alias(%index : i2, %sig : !llhd.sig<vector<3xi1>>) {
     // expected-error @+1 {{'result' must be the element type of the 'target' vector, in case 'target' is a signal of a vector, 'result' also is a signal of the vector element type}}
-    %0 = llhd.dextf %sig, %index : (!llhd.sig<vector<3xi1>>, i2) -> i1
+    %0 = llhd.dyn_extract_element %sig, %index : (!llhd.sig<vector<3xi1>>, i2) -> i1
 
     return
 }
