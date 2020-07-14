@@ -154,6 +154,109 @@ OpFoldResult ExtractOp::fold(ArrayRef<Attribute> operands) {
 }
 
 //===----------------------------------------------------------------------===//
+// Variadic operations
+//===----------------------------------------------------------------------===//
+
+OpFoldResult AndOp::fold(ArrayRef<Attribute> operands) {
+  auto size = inputs().size();
+  // and(x) -> x -- noop
+  if (size == 1u)
+    return inputs()[0];
+
+  APInt value;
+
+  // and(..., 0) -> 0 -- annulment
+  if (matchPattern(inputs()[size - 1], m_RConstant(value)) &&
+      value.isNullValue())
+    return inputs()[size - 1];
+
+  /// TODO: and(..., '1) -> and(...) -- identity
+  /// TODO: and(..., x, x) -> and(..., x) -- idempotent
+  /// TODO: and(..., c1, c2) -> and(..., c3) where c3 = c1 & c2 -- constant
+  /// folding
+  /// TODO: and(x, and(...)) -> and(x, ...) -- flatten
+  /// TODO: and(..., x, not(x)) -> and(..., 0) -- complement
+
+  return {};
+}
+
+OpFoldResult OrOp::fold(ArrayRef<Attribute> operands) {
+  auto size = inputs().size();
+  // or(x) -> x -- noop
+  if (size == 1u)
+    return inputs()[0];
+
+  APInt value;
+
+  // or(..., '1) -> '1 -- annulment
+  if (matchPattern(inputs()[size - 1], m_RConstant(value)) &&
+      value.isAllOnesValue())
+    return inputs()[size - 1];
+
+  /// TODO: or(..., 0) -> or(...) -- identity
+  /// TODO: or(..., x, x) -> or(..., x) -- idempotent
+  /// TODO: or(..., c1, c2) -> or(..., c3) where c3 = c1 | c2 -- constant
+  /// folding
+  /// TODO: or(x, or(...)) -> or(x, ...) -- flatten
+  /// TODO: or(..., x, not(x)) -> or(..., '1) -- complement
+
+  return {};
+}
+
+OpFoldResult XorOp::fold(ArrayRef<Attribute> operands) {
+  auto size = inputs().size();
+  // xor(x) -> x -- noop
+  if (size == 1u)
+    return inputs()[0];
+
+  /// TODO: xor(..., 0) -> xor(...) -- identity
+  /// TODO: xor(..., '1) -> not(xor(...))
+  /// TODO: xor(..., x, x) -> xor(..., 0) -- idempotent?
+  /// TODO: xor(..., c1, c2) -> xor(..., c3) where c3 = c1 ^ c2 -- constant
+  /// folding
+  /// TODO: xor(x, xor(...)) -> xor(x, ...) -- flatten
+  /// TODO: xor(..., x, not(x)) -> xor(..., '1)
+
+  return {};
+}
+
+OpFoldResult AddOp::fold(ArrayRef<Attribute> operands) {
+  auto size = inputs().size();
+  // add(x) -> x -- noop
+  if (size == 1u)
+    return inputs()[0];
+
+  /// TODO: add(..., 0) -> add(...) -- identity
+  /// TODO: add(..., x, x) -> add(..., shl(x, 1))
+  /// TODO: add(..., c1, c2) -> add(..., c3) where c3 = c1 + c2 -- constant
+  /// folding
+  /// TODO: add(x, add(...)) -> add(x, ...) -- flatten
+
+  return {};
+}
+
+OpFoldResult MulOp::fold(ArrayRef<Attribute> operands) {
+  auto size = inputs().size();
+  // mul(x) -> x -- noop
+  if (size == 1u)
+    return inputs()[0];
+
+  APInt value;
+
+  // mul(..., 0) -> 0 -- annulment
+  if (matchPattern(inputs()[size-1], m_RConstant(value)) &&
+  value.isNullValue())
+    return inputs()[size-1];
+
+  /// TODO: mul(..., 1) -> mul(...) -- identity
+  /// TODO: mul(..., c1, c2) -> mul(..., c3) where c3 = c1 * c2 -- constant
+  /// folding
+  /// TODO: mul(a, mul(...)) -> mul(a, ...) -- flatten
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

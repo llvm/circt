@@ -66,11 +66,11 @@ class UTBinRTLOp<string mnemonic, list<OpTrait> traits = []> :
 // Base class for variadic operators.
 class VariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
       RTLOp<mnemonic, !listconcat(traits, [NoSideEffect])> {
-  let arguments = (ins Variadic<AnySignlessInteger>:$operands);
+  let arguments = (ins Variadic<AnySignlessInteger>:$inputs);
   let results = (outs AnySignlessInteger:$result);
 
   let assemblyFormat = [{
-    $operands  attr-dict `:` functional-type($operands, results)
+    $inputs  attr-dict `:` functional-type($inputs, results)
   }];
 }
 
@@ -78,8 +78,10 @@ class UTVariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
       VariadicRTLOp<mnemonic,
                !listconcat(traits,
                            [SameTypeOperands, SameOperandsAndResultType])> {
-   let assemblyFormat = [{
-    $operands attr-dict `:` type($result)
+
+  let hasFolder = 1;
+  let assemblyFormat = [{
+    $inputs attr-dict `:` type($result)
   }];
 }
 
