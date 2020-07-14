@@ -288,7 +288,7 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect]> {
   }];
 
   let arguments = (ins AnyType, BoolAttr:$sequential, BoolAttr:$control, 
-                   I32Attr:$slots);
+                   Confined<I32Attr, [IntMinValue<0>]>:$slots);
   let results = (outs AnyType);
 
   let extraClassDeclaration = [{
