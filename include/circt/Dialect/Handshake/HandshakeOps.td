@@ -277,6 +277,33 @@ def ReturnOp : Handshake_Op<"return", [Terminator]> {
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
+def BufferOp : Handshake_Op<"buffer", [NoSideEffect]> {
+  let summary = "buffer operation";
+
+  let description = [{
+    The "handshake.buffer" operation represents a buffer operation. $slots
+    must be an unsigned integer larger than 0. $sequantial=True indicates a 
+    nontransparent buffer, while $sequantial=False indicates a transparent 
+    buffer.
+  }];
+
+  let arguments = (ins AnyType, BoolAttr:$sequential, BoolAttr:$control, 
+                   Confined<I32Attr, [IntMinValue<0>]>:$slots);
+  let results = (outs AnyType);
+
+  let extraClassDeclaration = [{
+    bool isSequential() {
+      return getAttrOfType<BoolAttr>("sequential").getValue();
+    }
+    bool isControl() {
+      return getAttrOfType<BoolAttr>("control").getValue();
+    }
+    APInt getNumSlots() {
+      return getAttrOfType<IntegerAttr>("slots").getValue();
+    }
+  }];
+}
+
 def ForkOp : Handshake_Op<"fork", [NoSideEffect]> {
   let summary = "fork operation";
 

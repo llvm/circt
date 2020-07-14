@@ -1212,7 +1212,7 @@ void replaceCallOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
   }
 }
 
-struct DFCanonicalizePattern : public ConversionPattern {
+struct HandshakeCanonicalizePattern : public ConversionPattern {
   using ConversionPattern::ConversionPattern;
   LogicalResult match(Operation *op) const override {
     // Ignore forks, ops without results, and branches (ops with succ blocks)
@@ -1326,8 +1326,70 @@ struct FuncOpLowering : public OpConversionPattern<mlir::FuncOp> {
 };
 
 namespace {
-struct DFRemoveBlockPass
-    : public PassWrapper<DFRemoveBlockPass, OperationPass<handshake::FuncOp>> {
+struct HandshakeInsertBufferPass
+    : public PassWrapper<HandshakeInsertBufferPass,
+                         OperationPass<handshake::FuncOp>> {
+
+  DenseMap<Operation *, bool> opVisited;
+  DenseMap<Operation *, bool> opOnStack;
+
+  /// DFS-based graph cycle detection and naive buffer insertion. Exactly one
+  /// 2-slot non-transparent buffer will be inserted into each graph cycle.
+  void insertBufferOp(Operation *op, OpBuilder &builder) {
+    // Mark operation as visited and push into the stack.
+    opVisited[op] = true;
+    opOnStack[op] = true;
+
+    // Traverse all uses of the current operation.
+    for (auto &operand : op->getUses()) {
+      auto user = operand.getOwner();
+
+      // If graph cycle detected, insert a BufferOp into the edge.
+      if (opOnStack[user] && !isa<handshake::BufferOp>(op) &&
+          !isa<handshake::BufferOp>(user)) {
+        auto value = operand.get();
+
+        builder.setInsertionPointAfter(op);
+        auto bufferOp = builder.create<handshake::BufferOp>(
+            op->getLoc(), value.getType(), value, /*sequential=*/true,
+            /*control=*/value.getType().isa<NoneType>(),
+            /*slots=*/APInt(32, 2));
+        value.replaceUsesWithIf(
+            bufferOp,
+            function_ref<bool(OpOperand &)>([](OpOperand &operand) -> bool {
+              return !isa<handshake::BufferOp>(operand.getOwner());
+            }));
+      }
+      // For unvisited operations, recursively call insertBufferOp() method.
+      else if (!opVisited[user])
+        insertBufferOp(user, builder);
+    }
+    // Pop operation out of the stack.
+    opOnStack[op] = false;
+  }
+
+  void runOnOperation() override {
+    auto f = getOperation();
+    for (auto &block : f) {
+      for (auto &op : block) {
+        opVisited[&op] = false;
+        opOnStack[&op] = false;
+      }
+    }
+    // Traverse each use of each argument of the entry block.
+    auto builder = OpBuilder(f.getContext());
+    for (auto &arg : f.getBody().front().getArguments()) {
+      for (auto &operand : arg.getUses()) {
+        if (!opVisited[operand.getOwner()])
+          insertBufferOp(operand.getOwner(), builder);
+      }
+    }
+  }
+};
+
+struct HandshakeRemoveBlockPass
+    : public PassWrapper<HandshakeRemoveBlockPass,
+                         OperationPass<handshake::FuncOp>> {
   void runOnOperation() override {
     auto funcOp = getOperation();
     auto &entryBlock = funcOp.getBody().front().getOperations();
@@ -1350,7 +1412,8 @@ struct DFRemoveBlockPass
   }
 };
 
-struct DFPass : public PassWrapper<DFPass, OperationPass<ModuleOp>> {
+struct HandshakePass
+    : public PassWrapper<HandshakePass, OperationPass<ModuleOp>> {
   void runOnOperation() override {
     ModuleOp m = getOperation();
 
@@ -1365,8 +1428,9 @@ struct DFPass : public PassWrapper<DFPass, OperationPass<ModuleOp>> {
   }
 };
 
-struct DFCanonicalizePass
-    : public PassWrapper<DFCanonicalizePass, OperationPass<handshake::FuncOp>> {
+struct HandshakeCanonicalizePass
+    : public PassWrapper<HandshakeCanonicalizePass,
+                         OperationPass<handshake::FuncOp>> {
   void runOnOperation() override {
     auto Op = getOperation();
     OpBuilder builder(Op);
@@ -1388,8 +1452,8 @@ struct DFCanonicalizePass
     //            [](Operation *op) { return op->hasOneUse(); }));
 
     // OwningRewritePatternList patterns;
-    // patterns.insert<DFCanonicalizePattern>("std.muli", 1, m.getContext());
-    // applyPatternsAndFoldGreedily(
+    // patterns.insert<HandshakeCanonicalizePattern>("std.muli", 1,
+    // m.getContext()); applyPatternsAndFoldGreedily(
 
     // if (failed(applyPartialConversion(m, target, patterns)))
     //   signalPassFailure();
@@ -1400,8 +1464,8 @@ struct DFCanonicalizePass
 // Temporary: print resources (operation counts)
 namespace {
 
-struct DFAnalysisPass
-    : public PassWrapper<DFAnalysisPass, OperationPass<ModuleOp>> {
+struct HandshakeAnalysisPass
+    : public PassWrapper<HandshakeAnalysisPass, OperationPass<ModuleOp>> {
   void runOnOperation() override {
     ModuleOp m = getOperation();
 
@@ -1443,12 +1507,14 @@ struct DFAnalysisPass
 } // namespace
 
 void handshake::registerStandardToHandshakePasses() {
-  PassRegistration<DFAnalysisPass>("analyze-dataflow",
-                                   "Print resource (operation) statistics");
-  PassRegistration<DFPass>("create-dataflow",
-                           "Convert standard MLIR into dataflow IR");
-  PassRegistration<DFCanonicalizePass>("canonicalize-dataflow",
-                                       "Canonicalize handshake IR");
-  PassRegistration<DFRemoveBlockPass>("remove-block-structure",
-                                      "Remove block structure in handshake IR");
+  PassRegistration<HandshakeAnalysisPass>(
+      "analyze-dataflow", "Print resource (operation) statistics");
+  PassRegistration<HandshakePass>("create-dataflow",
+                                  "Convert standard MLIR into dataflow IR");
+  PassRegistration<HandshakeCanonicalizePass>("canonicalize-dataflow",
+                                              "Canonicalize handshake IR");
+  PassRegistration<HandshakeRemoveBlockPass>(
+      "remove-block-structure", "Remove block structure in handshake IR");
+  PassRegistration<HandshakeInsertBufferPass>(
+      "handshake-insert-buffer", "Insert buffers to break graph cycles.");
 }
