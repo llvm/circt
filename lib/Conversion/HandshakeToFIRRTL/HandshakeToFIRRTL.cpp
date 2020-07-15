@@ -149,10 +149,10 @@ static std::string getSubModuleName(Operation *oldOp) {
 /// circuit is pure combinational logic. If graph cycle exists, at least one
 /// buffer is required to be inserted for breaking the cycle, which will be
 /// supported in the next patch.
-static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, bool hasClock,
+static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
                                    ConversionPatternRewriter &rewriter) {
   using ModulePort = std::pair<StringAttr, FIRRTLType>;
-  std::vector<ModulePort> ports;
+  llvm::SmallVector<ModulePort, 8> ports;
 
   // Add all inputs of funcOp.
   unsigned args_idx = 0;
@@ -182,11 +182,20 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, bool hasClock,
   }
 
   // Add clock and reset signals.
-  if (hasClock) {
+  if (numClocks == 1) {
     ports.push_back(ModulePort(rewriter.getStringAttr("clock"),
                                rewriter.getType<ClockType>()));
     ports.push_back(ModulePort(rewriter.getStringAttr("reset"),
                                rewriter.getType<UIntType>(1)));
+  } else if (numClocks > 1) {
+    for (unsigned i = 0; i < numClocks; ++i) {
+      auto clockName = "clock" + std::to_string(i);
+      auto resetName = "reset" + std::to_string(i);
+      ports.push_back(ModulePort(rewriter.getStringAttr(clockName),
+                                 rewriter.getType<ClockType>()));
+      ports.push_back(ModulePort(rewriter.getStringAttr(resetName),
+                                 rewriter.getType<UIntType>(1)));
+    }
   }
 
   // Create a FIRRTL module, and inline the funcOp into it.
@@ -243,7 +252,7 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
                                    ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPoint(topModuleOp);
   using ModulePort = std::pair<StringAttr, FIRRTLType>;
-  std::vector<ModulePort> ports;
+  llvm::SmallVector<ModulePort, 8> ports;
 
   // Add all inputs of oldOp.
   unsigned args_idx = 0;
@@ -721,11 +730,11 @@ static void buildBufferLogic(handshake::BufferOp *oldOp,
 /// Create InstanceOp in the top-module. This will be called after the
 /// corresponding sub-module and combinational logic are created.
 static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
-                         FModuleOp topModuleOp,
+                         FModuleOp topModuleOp, unsigned clockDomain,
                          ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPointAfter(oldOp);
   using BundleElement = std::pair<Identifier, FIRRTLType>;
-  std::vector<BundleElement> elements;
+  llvm::SmallVector<BundleElement, 8> elements;
   MLIRContext *context = subModuleOp.getContext();
 
   // Bundle all ports of the instance into a new flattened bundle type.
@@ -758,6 +767,12 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
 
     unsigned numIns = oldOp->getNumOperands();
     unsigned numArgs = numIns + oldOp->getNumResults();
+
+    auto topArgs = topModuleOp.getBody().front().getArguments();
+    auto firstClock = std::find_if(topArgs.begin(), topArgs.end(),
+                                   [](BlockArgument &arg) -> bool {
+                                     return arg.getType().isa<ClockType>();
+                                   });
     if (ports_idx < numIns) {
       // Connect input ports.
       rewriter.create<ConnectOp>(oldOp->getLoc(), subfieldOp,
@@ -768,8 +783,7 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
       result.replaceAllUsesWith(subfieldOp);
     } else {
       // Connect clock or reset signal.
-      auto signal = *(topModuleOp.getBody().front().getArguments().end() +
-                      ports_idx - numArgs - 2);
+      auto signal = *(firstClock + 2 * clockDomain + ports_idx - numArgs);
       rewriter.create<ConnectOp>(oldOp->getLoc(), subfieldOp, signal);
     }
     ports_idx += 1;
@@ -834,7 +848,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     auto circuitOp = rewriter.create<CircuitOp>(
         funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()));
     rewriter.setInsertionPointToStart(circuitOp.getBody());
-    auto topModuleOp = createTopModuleOp(funcOp, /*hasClock=*/true, rewriter);
+    auto topModuleOp = createTopModuleOp(funcOp, /*numClocks=*/1, rewriter);
 
     // Traverse and convert each operation in funcOp.
     for (Operation &op : topModuleOp.getBody().front()) {
@@ -943,7 +957,8 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
         }
 
         // Instantiate the new created sub-module.
-        createInstOp(&op, subModuleOp, topModuleOp, rewriter);
+        createInstOp(&op, subModuleOp, topModuleOp, /*clockDomain=*/0,
+                     rewriter);
       }
     }
     rewriter.eraseOp(funcOp);
