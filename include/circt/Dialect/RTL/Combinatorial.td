@@ -79,6 +79,7 @@ class UTVariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
                !listconcat(traits,
                            [SameTypeOperands, SameOperandsAndResultType])> {
 
+  let hasCanonicalizer = 1;
   let hasFolder = 1;
   let assemblyFormat = [{
     $inputs attr-dict `:` type($result)
