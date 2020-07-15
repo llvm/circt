@@ -14,6 +14,21 @@ func @check_not_folding(%a : i64) -> (i64, i64) {
   return %0, %1 : i64, i64
 }
 
+// CHECK-LABEL: @check_not_of_equality_patterns
+// CHECK-SAME: %[[A:.*]]: i64,
+// CHECK-SAME: %[[B:.*]]: i64
+func @check_not_of_equality_patterns(%a : i64, %b : i64) -> (i1, i1) {
+  %eq = llhd.eq %a, %b : i64
+  %neq = llhd.neq %a, %b : i64
+  // CHECK-NEXT: %[[NEQ:.*]] = llhd.neq %[[A]], %[[B]] : i64
+  %0 = llhd.not %eq : i1
+  // CHECK-NEXT: %[[EQ:.*]] = llhd.eq %[[A]], %[[B]] : i64
+  %1 = llhd.not %neq : i1
+
+  // CHECK-NEXT: return %[[NEQ]], %[[EQ]] : i1, i1
+  return %0, %1 : i1, i1
+}
+
 // CHECK-LABEL: @check_and_folding
 // CHECK-SAME: %[[A:.*]]: i64,
 // CHECK-SAME: %[[B:.*]]: i64
@@ -86,4 +101,34 @@ func @check_xor_folding(%a : i64, %b : i64) -> (i64, i64, i64, i64, i64, i64, i6
 
   // CHECK-NEXT: return %[[C0]], %[[A]], %[[NA]], %[[CN1]], %[[CN1]], %[[XOR1]], %[[XOR2]] : i64, i64, i64, i64, i64, i64, i64
   return %0, %1, %2, %3, %4, %5, %6 : i64, i64, i64, i64, i64, i64, i64
+}
+
+// CHECK-LABEL: @check_shl_folding
+// CHECK-SAME: %[[BASE:.*]]: i4
+// CHECK-SAME: %[[HIDDEN:.*]]: i8
+func @check_shl_folding(%base : i4, %hidden : i8) -> (i4, i4) {
+  // CHECK-NEXT: %[[NEGSEVEN:.*]] = llhd.const -7 : i4
+  %0 = llhd.const 2 : i4
+  %1 = llhd.const 4 : i4
+  %2 = llhd.const 0 : i4
+  %3 = llhd.shl %0, %1, %0 : (i4, i4, i4) -> i4
+  // check correct pattern replacement if amount is constant zero
+  %4 = llhd.shl %base, %hidden, %2 : (i4, i8, i4) -> i4
+  // CHECK-NEXT: return %[[NEGSEVEN]], %[[BASE]] : i4, i4
+  return %3, %4 : i4, i4
+}
+
+// CHECK-LABEL: @check_shr_folding
+// CHECK-SAME: %[[BASE:.*]]: i4
+// CHECK-SAME: %[[HIDDEN:.*]]: i8
+func @check_shr_folding(%base : i4, %hidden : i8) -> (i4, i4) {
+  // CHECK-NEXT: %[[NEGSEVEN:.*]] = llhd.const -7 : i4
+  %0 = llhd.const 2 : i4
+  %1 = llhd.const 4 : i4
+  %2 = llhd.const 0 : i4
+  %3 = llhd.shr %1, %0, %0 : (i4, i4, i4) -> i4
+  // check correct pattern replacement if amount is constant zero
+  %4 = llhd.shr %base, %hidden, %2 : (i4, i8, i4) -> i4
+  // CHECK-NEXT: return %[[NEGSEVEN]], %[[BASE]] : i4, i4
+  return %3, %4 : i4, i4
 }

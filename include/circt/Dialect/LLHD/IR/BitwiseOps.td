@@ -40,6 +40,7 @@ def LLHD_NotOp : LLHD_ArithmeticOrBitwiseOp<"not", []> {
   let arguments = (ins AnySignlessInteger:$value);
 
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 def LLHD_AndOp : LLHD_ArithmeticOrBitwiseOp<"and", [Commutative]> {

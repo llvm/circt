@@ -91,6 +91,7 @@ def LLHD_EqOp : LLHD_Op<"eq", [
   let assemblyFormat = "operands attr-dict `:` type($lhs)";
 
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 def LLHD_NeqOp : LLHD_Op<"neq", [
@@ -124,4 +125,5 @@ def LLHD_NeqOp : LLHD_Op<"neq", [
   let assemblyFormat = "operands attr-dict `:` type($lhs)";
 
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
