@@ -222,6 +222,44 @@ OpFoldResult llhd::SModOp::fold(ArrayRef<Attribute> operands) {
 }
 
 //===----------------------------------------------------------------------===//
+// EqOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult llhd::EqOp::fold(ArrayRef<Attribute> operands) {
+  /// llhd.eq(x, 1) -> x
+  if (matchPattern(rhs(), m_One()) && lhs().getType().isSignlessInteger(1))
+    return lhs();
+
+  /// llhs.eq(x,x) -> 1
+  if (lhs() == rhs())
+    return BoolAttr::get(true, getContext());
+
+  if (!operands[0] || !operands[1])
+    return {};
+
+  return BoolAttr::get(operands[0] == operands[1], getContext());
+}
+
+//===----------------------------------------------------------------------===//
+// NeqOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult llhd::NeqOp::fold(ArrayRef<Attribute> operands) {
+  /// llhd.neq(x, 0) -> x
+  if (matchPattern(rhs(), m_Zero()) && lhs().getType().isSignlessInteger(1))
+    return lhs();
+
+  /// llhs.neq(x,x) -> 0
+  if (lhs() == rhs())
+    return BoolAttr::get(false, getContext());
+
+  if (!operands[0] || !operands[1])
+    return {};
+
+  return BoolAttr::get(operands[0] != operands[1], getContext());
+}
+
+//===----------------------------------------------------------------------===//
 // NotOp
 //===----------------------------------------------------------------------===//
 
