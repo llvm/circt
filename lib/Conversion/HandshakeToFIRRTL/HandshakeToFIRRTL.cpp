@@ -127,6 +127,12 @@ static std::string getSubModuleName(Operation *oldOp) {
   if (auto comOp = dyn_cast<mlir::CmpIOp>(oldOp))
     subModuleName += "_" + stringifyEnum(comOp.getPredicate()).str();
 
+  if (auto bufferOp = dyn_cast<handshake::BufferOp>(oldOp)) {
+    subModuleName += "_" + bufferOp.getNumSlots().toString(10, false) + "slots";
+    if (bufferOp.isSequential())
+      subModuleName += "_seq";
+  }
+
   if (auto ctrlAttr = oldOp->getAttr("control")) {
     if (ctrlAttr.cast<BoolAttr>().getValue())
       subModuleName += "_ctrl";
@@ -146,7 +152,7 @@ static std::string getSubModuleName(Operation *oldOp) {
 static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, bool hasClock,
                                    ConversionPatternRewriter &rewriter) {
   using ModulePort = std::pair<StringAttr, FIRRTLType>;
-  llvm::SmallVector<ModulePort, 8> ports;
+  std::vector<ModulePort> ports;
 
   // Add all inputs of funcOp.
   unsigned args_idx = 0;
@@ -237,7 +243,7 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
                                    ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPoint(topModuleOp);
   using ModulePort = std::pair<StringAttr, FIRRTLType>;
-  llvm::SmallVector<ModulePort, 8> ports;
+  std::vector<ModulePort> ports;
 
   // Add all inputs of oldOp.
   unsigned args_idx = 0;
@@ -693,8 +699,8 @@ static void buildConstantLogic(handshake::ConstantOp *oldOp,
       createConstantOp(constantType, constantValue, insertLoc, rewriter));
 }
 
-static void buildBufferLogic(Operation *oldOp, ValueVectorList portList,
-                             Location insertLoc,
+static void buildBufferLogic(handshake::BufferOp *oldOp,
+                             ValueVectorList portList, Location insertLoc,
                              ConversionPatternRewriter &rewriter) {
   ValueVector inputSubfields = portList[0];
   Value inputValid = inputSubfields[0];
@@ -715,10 +721,11 @@ static void buildBufferLogic(Operation *oldOp, ValueVectorList portList,
 /// Create InstanceOp in the top-module. This will be called after the
 /// corresponding sub-module and combinational logic are created.
 static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
+                         FModuleOp topModuleOp,
                          ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPointAfter(oldOp);
   using BundleElement = std::pair<Identifier, FIRRTLType>;
-  llvm::SmallVector<BundleElement, 4> elements;
+  std::vector<BundleElement> elements;
   MLIRContext *context = subModuleOp.getContext();
 
   // Bundle all ports of the instance into a new flattened bundle type.
@@ -728,7 +735,7 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
     auto argId = rewriter.getIdentifier(argName);
 
     // All ports of the instance operation are flipped.
-    auto argType = FlipType::get(arg.getType().cast<BundleType>());
+    auto argType = FlipType::get(arg.getType().cast<FIRRTLType>());
     elements.push_back(BundleElement(argId, argType));
     args_idx += 1;
   }
@@ -750,14 +757,20 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
         rewriter.getStringAttr(elementName.strref()));
 
     unsigned numIns = oldOp->getNumOperands();
-    if (ports_idx < numIns)
+    unsigned numArgs = numIns + oldOp->getNumResults();
+    if (ports_idx < numIns) {
       // Connect input ports.
       rewriter.create<ConnectOp>(oldOp->getLoc(), subfieldOp,
                                  oldOp->getOperand(ports_idx));
-    else {
+    } else if (ports_idx < numArgs) {
       // Connect output ports.
       Value result = oldOp->getResult(ports_idx - numIns);
       result.replaceAllUsesWith(subfieldOp);
+    } else {
+      // Connect clock or reset signal.
+      auto signal = *(topModuleOp.getBody().front().getArguments().end() +
+                      ports_idx - numArgs - 2);
+      rewriter.create<ConnectOp>(oldOp->getLoc(), subfieldOp, signal);
     }
     ports_idx += 1;
   }
@@ -821,7 +834,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     auto circuitOp = rewriter.create<CircuitOp>(
         funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()));
     rewriter.setInsertionPointToStart(circuitOp.getBody());
-    auto topModuleOp = createTopModuleOp(funcOp, /*hasClock=*/false, rewriter);
+    auto topModuleOp = createTopModuleOp(funcOp, /*hasClock=*/true, rewriter);
 
     // Traverse and convert each operation in funcOp.
     for (Operation &op : topModuleOp.getBody().front()) {
@@ -832,7 +845,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       // be instantiated in the top-module.
       else if (op.getDialect()->getNamespace() != "firrtl") {
         FModuleOp subModuleOp = checkSubModuleOp(topModuleOp, &op);
-        bool hasClock = isa<handshake::ForkOp>(op);
+        bool hasClock = isa<handshake::BufferOp>(op);
 
         // Check if the sub-module already exists.
         if (!subModuleOp) {
@@ -922,12 +935,15 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
           else if (auto oldOp = dyn_cast<handshake::ConstantOp>(op))
             buildConstantLogic(&oldOp, portList, insertLoc, rewriter);
 
+          else if (auto oldOp = dyn_cast<handshake::BufferOp>(op))
+            buildBufferLogic(&oldOp, portList, insertLoc, rewriter);
+
           else
             oldOp.emitError("Usupported operation type.");
         }
 
         // Instantiate the new created sub-module.
-        createInstOp(&op, subModuleOp, rewriter);
+        createInstOp(&op, subModuleOp, topModuleOp, rewriter);
       }
     }
     rewriter.eraseOp(funcOp);
