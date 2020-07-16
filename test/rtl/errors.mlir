@@ -27,3 +27,10 @@ func @test_extract(%arg0: i4) {
    // expected-error @+1 {{'rtl.extract' op from bit too large for input}}
   %b = rtl.extract %arg0 from 2 : (i4) -> i3
 }
+
+// -----
+
+func @test_and() {
+   // expected-error @+1 {{'rtl.and' op expected 1 or more operands}}
+  %b = rtl.and : i111
+}
