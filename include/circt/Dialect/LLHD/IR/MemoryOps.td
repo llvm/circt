@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 def LLHD_VarOp : LLHD_Op<"var", [
-    NoSideEffect,
     TypesMatchWith<
       "type of 'init' and underlying type of 'result' have to match.",
       "init", "result", "PtrType::get($_self)">
@@ -34,7 +33,6 @@ def LLHD_VarOp : LLHD_Op<"var", [
 }
 
 def LLHD_LoadOp : LLHD_Op<"load", [
-    NoSideEffect,
     TypesMatchWith<
       "type of 'result' and underlying type of 'pointer' have to match.",
       "pointer", "result", "$_self.cast<PtrType>().getUnderlyingType()">
