@@ -101,3 +101,122 @@ def LLHD_DextsOp : LLHD_Op<"dexts", [
     unsigned getTargetWidth() { return getLLHDTypeWidth(target().getType()); }
   }];
 }
+
+def LLHD_ExtractElementOp : LLHD_Op<"extract_element", [
+    NoSideEffect,
+    PredOpTrait<"'index' has to be smaller than the width of the 'target' type",
+      CPred<"$index.cast<IntegerAttr>().getInt() < getTargetWidth()">>,
+    TypesMatchWith<
+      "'result' type must match the type of 'target' at position 'index', or "
+      "in case 'target' is a signal, it must be a signal of the underlying type"
+      " of 'target' at position 'index'",
+      "target", "result",
+      "($_self.isa<llhd::SigType>() "
+        "? llhd::SigType::get("
+          "getElementTypeAtIndex($index.cast<IntegerAttr>().getInt())) "
+        ": getElementTypeAtIndex($index.cast<IntegerAttr>().getInt()))">
+  ]> {
+  let summary = [{
+    Extract an element from a vector, tuple, or signal of a vector or tuple.
+  }];
+  let description = [{
+    The `llhd.extract_element` operation allows access to an element of the
+    `$target` operand. The `$index` attribute defines the index of the element
+    to extract. If `%target` is a signal, a new subsignal aliasing the element
+    will be returned.
+
+    Example:
+
+    ```mlir
+    %0 = constant dense<[1,2,3]> : vector<3xi8>
+    %1 = llhd.extract_element %0, 0 : vector<3xi8> -> i8
+
+    %2 = llhd.sig %0 : vector<3xi8>
+    %3 = llhd.extract_element %2, 0 : !llhd.sig<vector<3xi8>> -> !llhd.sig<i8>
+
+    %4 = llhd.const 8 : i16
+    %5 = llhd.tuple %0, %4 : tuple<vector<3xi8>, i16>
+    %6 = llhd.extract_element %5, 1 : tuple<vector<3xi8>, i16> -> i16
+    ```
+  }];
+
+  let arguments = (ins AnyTypeOf<[
+      AnyVector,
+      AnyTuple,
+      LLHD_SigType<[AnyVector, AnyTuple]>
+    ]>: $target,
+    IndexAttr: $index);
+
+  let results = (outs AnyType: $result);
+
+  let assemblyFormat = [{
+    $target `,` $index attr-dict `:` type($target) `->` type($result)
+  }];
+
+  let extraClassDeclaration = [{
+    unsigned getTargetWidth() { return getLLHDTypeWidth(target().getType()); };
+
+    Type getElementTypeAtIndex(unsigned index) {
+      Type targetType = target().getType();
+      if (auto sig = targetType.dyn_cast<llhd::SigType>())
+        targetType = sig.getUnderlyingType();
+      if (auto vec = targetType.dyn_cast<VectorType>())
+        return vec.getElementType();
+      return targetType.dyn_cast<TupleType>().getTypes()[index];
+    }
+  }];
+}
+
+def LLHD_DynamicExtractElementOp : LLHD_Op<"dyn_extract_element", [
+  NoSideEffect,
+  TypesMatchWith<"'result' must be the element type of the 'target' vector, in "
+    "case 'target' is a signal of a vector, 'result' also is a signal of the "
+    "vector element type",
+    "target", "result",
+    "($_self.isa<llhd::SigType>() ? llhd::SigType::get(getElementType()) "
+                                 ": getElementType())">
+  ]> {
+  let summary = [{
+    Dynamically extract an element from a vector or signal of vector.
+  }];
+  let description = [{
+    The `llhd.dyn_extract_element` operation allows to dynamically access an
+    element of the `$target` operand. The `$index` operand defines the index of
+    the element to extract. If `%target` is a signal, a new subsignal aliasing
+    the element will be returned.
+
+    Example:
+
+    ```mlir
+    %index = llhd.const 1 : i2
+
+    %0 = constant dense<[1,2,3]> : vector<3xi8>
+    %1 = llhd.dyn_extract_element %0, %index : (vector<3xi8>, i2) -> i8
+
+    %2 = llhd.sig %0 : vector<3xi8>
+    %3 = llhd.dyn_extract_element %2, %index
+      : (!llhd.sig<vector<3xi8>>, i2) -> !llhd.sig<i8>
+    ```
+  }];
+
+  let arguments = (ins
+    AnyTypeOf<[AnyVector, LLHD_SigType<[AnyVector]>]>: $target,
+    AnySignlessInteger: $index);
+
+  let results = (outs AnyType: $result);
+
+  let assemblyFormat = [{
+    $target `,` $index attr-dict `:` functional-type(operands, results)
+  }];
+
+  let extraClassDeclaration = [{
+    unsigned getTargetWidth() { return getLLHDTypeWidth(target().getType()); }
+
+    Type getElementType() {
+      Type targetType = target().getType();
+      if (auto sig = targetType.dyn_cast<llhd::SigType>())
+        targetType = sig.getUnderlyingType();
+      return targetType.dyn_cast<VectorType>().getElementType();
+    }
+  }];
+}
