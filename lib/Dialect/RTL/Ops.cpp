@@ -168,9 +168,9 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
 
   // and(..., 0) -> 0 -- annulment
-  if (matchPattern(inputs()[size - 1], m_RConstant(value)) &&
+  if (matchPattern(inputs().back(), m_RConstant(value)) &&
       value.isNullValue())
-    return inputs()[size - 1];
+    return inputs().back();
 
   return {};
 }
@@ -187,7 +187,7 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       APInt value, value1;
 
       // and(..., '1) -> and(...) -- identity
-      if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
+      if (matchPattern(inputs.back(), m_RConstant(value)) &&
           value.isAllOnesValue()) {
 
         rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(),
@@ -215,9 +215,9 @@ OpFoldResult OrOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
 
   // or(..., '1) -> '1 -- annulment
-  if (matchPattern(inputs()[size - 1], m_RConstant(value)) &&
+  if (matchPattern(inputs().back(), m_RConstant(value)) &&
       value.isAllOnesValue())
-    return inputs()[size - 1];
+    return inputs().back();
   return {};
 }
 
@@ -233,7 +233,7 @@ void OrOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
       if (size > 1) {
         // or(..., 0) -> or(...) -- identity
-        if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
+        if (matchPattern(inputs.back(), m_RConstant(value)) &&
             value.isNullValue()) {
 
           rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(),
@@ -274,7 +274,7 @@ void XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
       if (size > 1) {
         // xor(..., 0) -> xor(...) -- identity
-        if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
+        if (matchPattern(inputs.back(), m_RConstant(value)) &&
             value.isNullValue()) {
 
           rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(),
@@ -317,7 +317,7 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
       if (size > 1) {
         // add(..., 0) -> add(...) -- identity
-        if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
+        if (matchPattern(inputs.back(), m_RConstant(value)) &&
             value.isNullValue()) {
 
           rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(),
@@ -346,9 +346,9 @@ OpFoldResult MulOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
 
   // mul(..., 0) -> 0 -- annulment
-  if (matchPattern(inputs()[size - 1], m_RConstant(value)) &&
+  if (matchPattern(inputs().back(), m_RConstant(value)) &&
       value.isNullValue())
-    return inputs()[size - 1];
+    return inputs().back();
 
   return {};
 }
@@ -365,7 +365,7 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
       if (size > 1) {
         // mul(..., 1) -> mul(...) -- identity
-        if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
+        if (matchPattern(inputs.back(), m_RConstant(value)) &&
             (value == 1u)) {
 
           rewriter.replaceOpWithNewOp<MulOp>(op, op.getType(),
