@@ -160,7 +160,7 @@ OpFoldResult ExtractOp::fold(ArrayRef<Attribute> operands) {
 
 OpFoldResult AndOp::fold(ArrayRef<Attribute> operands) {
   auto size = inputs().size();
-  assert(size > 0 && "rtl.and should take 1 or more operands");
+
   // and(x) -> x -- noop
   if (size == 1u)
     return inputs()[0];
@@ -182,8 +182,9 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
     LogicalResult matchAndRewrite(AndOp op,
                                   PatternRewriter &rewriter) const override {
       auto inputs = op.inputs();
-      auto size = op.inputs().size();
-      APInt value;
+      auto size = inputs.size();
+
+      APInt value, value1;
 
       // and(..., '1) -> and(...) -- identity
       if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
@@ -206,7 +207,6 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
 OpFoldResult OrOp::fold(ArrayRef<Attribute> operands) {
   auto size = inputs().size();
-  assert(size > 0 && "rtl.or should take 1 or more operands");
 
   // or(x) -> x -- noop
   if (size == 1u)
@@ -254,7 +254,7 @@ void OrOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
 OpFoldResult XorOp::fold(ArrayRef<Attribute> operands) {
   auto size = inputs().size();
-  assert(size > 0 && "rtl.xor should take 1 or more operands");
+
   // xor(x) -> x -- noop
   if (size == 1u)
     return inputs()[0];
@@ -297,7 +297,7 @@ void XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
 OpFoldResult AddOp::fold(ArrayRef<Attribute> operands) {
   auto size = inputs().size();
-  assert(size > 0 && "rtl.add should take 1 or more operands");
+
   // add(x) -> x -- noop
   if (size == 1u)
     return inputs()[0];
@@ -338,7 +338,7 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
 OpFoldResult MulOp::fold(ArrayRef<Attribute> operands) {
   auto size = inputs().size();
-  assert(size > 0 && "rtl.mul should take 1 or more operands");
+
   // mul(x) -> x -- noop
   if (size == 1u)
     return inputs()[0];
