@@ -23,7 +23,7 @@ void llhd::NotOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 }
 
 void llhd::EqOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
-                                              MLIRContext *context) {
+                                             MLIRContext *context) {
   results.insert<BooleanEqToXor>(context);
 }
 
