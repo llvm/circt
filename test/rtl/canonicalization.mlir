@@ -83,12 +83,12 @@ func @or_identity(%arg0: i11, %arg1: i11) -> i11 {
 }
 
 // CHECK-LABEL: func @xor_identity(%arg0: i11, %arg1: i11) -> i11 {
-// CHECK-NEXT:    %0 = rtl.xor %arg0, %arg1
+// CHECK-NEXT:    %0 = rtl.xor %arg1, %arg0
 // CHECK-NEXT:    return %0
 
 func @xor_identity(%arg0: i11, %arg1: i11) -> i11 {
   %c0_i11 = rtl.constant(0 : i11) : i11
-  %0 = rtl.xor %arg0, %c0_i11, %arg1 : i11
+  %0 = rtl.xor %c0_i11, %arg1, %arg0 : i11
   return %0 : i11
 }
 
