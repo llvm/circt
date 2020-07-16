@@ -18,6 +18,7 @@ func @affine_apply_mod(%arg0: index) -> index {
 // CHECK:           handshake.return %[[VAL_11]], %[[VAL_3]]#2 : index, none
 // CHECK:         }
 // CHECK:       }
+
     %c42 = constant 42 : index
     %0 = remi_signed %arg0, %c42 : index
     %c0 = constant 0 : index

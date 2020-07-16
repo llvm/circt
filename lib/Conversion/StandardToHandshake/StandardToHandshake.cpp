@@ -41,8 +41,39 @@ using namespace std;
 typedef DenseMap<Block *, vector<Value>> BlockValues;
 typedef DenseMap<Block *, vector<Operation *>> BlockOps;
 
-template <typename FuncOp>
 
+/// Remove basic blocks inside the given FuncOp. This allows the result to be
+/// a valid graph region, since multi-basic block regions are not allowed to
+/// be graph regions currently.
+void removeBasicBlocks(handshake::FuncOp funcOp) {
+  auto &entryBlock = funcOp.getBody().front().getOperations();
+
+  // Erase all TerminatorOp, and move ReturnOp to the end of entry block.
+  for (auto &block : funcOp) {
+    Operation &termOp = block.back();
+    if (isa<handshake::TerminatorOp>(termOp))
+      termOp.erase();
+    else if (isa<handshake::ReturnOp>(termOp))
+      entryBlock.splice(entryBlock.end(), block.getOperations(), termOp);
+  }
+
+  // Move all operations to entry block and erase other blocks.
+  for (auto &block :
+         llvm::make_early_inc_range(llvm::drop_begin(funcOp, 1))) {
+    entryBlock.splice(--entryBlock.end(), block.getOperations());
+  }
+  for (auto &block :
+         llvm::make_early_inc_range(llvm::drop_begin(funcOp, 1))) {
+    block.clear();
+    block.dropAllDefinedValueUses();
+    for (int i = 0; i < block.getNumArguments(); i++) {
+      block.eraseArgument(i);
+    }
+    block.erase();
+  }
+}
+
+template <typename FuncOp>
 void dotPrint(FuncOp f, string name) {
   // Prints DOT representation of the dataflow graph, used for debugging
   DenseMap<Block *, unsigned> blockIDs;
@@ -1391,24 +1422,7 @@ struct HandshakeRemoveBlockPass
     : public PassWrapper<HandshakeRemoveBlockPass,
                          OperationPass<handshake::FuncOp>> {
   void runOnOperation() override {
-    auto funcOp = getOperation();
-    auto &entryBlock = funcOp.getBody().front().getOperations();
-
-    // Erase all TerminatorOp, and move ReturnOp to the end of entry block.
-    for (auto &block : funcOp) {
-      Operation &termOp = block.back();
-      if (isa<handshake::TerminatorOp>(termOp))
-        termOp.erase();
-      else if (isa<handshake::ReturnOp>(termOp))
-        entryBlock.splice(entryBlock.end(), block.getOperations(), termOp);
-    }
-
-    // Move all operations to entry block and erase other blocks.
-    for (auto &block :
-         llvm::make_early_inc_range(llvm::drop_begin(funcOp, 1))) {
-      entryBlock.splice(--entryBlock.end(), block.getOperations());
-      block.erase();
-    }
+    removeBasicBlocks(getOperation());
   }
 };
 
@@ -1425,6 +1439,10 @@ struct HandshakePass
 
     if (failed(applyPartialConversion(m, target, patterns)))
       signalPassFailure();
+
+    // Legalize the resulting regions, which can have no basic blocks.
+    for (auto func : m.getOps<handshake::FuncOp>())
+      removeBasicBlocks(func);
   }
 };
 

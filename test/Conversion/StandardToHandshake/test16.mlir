@@ -26,6 +26,7 @@ func @affine_apply_ceildiv(%arg0: index) -> index {
 // CHECK:           handshake.return %[[VAL_19]], %[[VAL_4]]#3 : index, none
 // CHECK:         }
 // CHECK:       }
+
     %c42 = constant 42 : index
     %c0 = constant 0 : index
     %c1 = constant 1 : index

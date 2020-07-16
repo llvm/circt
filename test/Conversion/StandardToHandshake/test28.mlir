@@ -18,8 +18,6 @@
 // CHECK:           %[[VAL_15:.*]] = "handshake.branch"(%[[VAL_10]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_16:.*]] = "handshake.branch"(%[[VAL_11]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_17:.*]] = "handshake.branch"(%[[VAL_12]]) {control = false} : (index) -> index
-// CHECK:           "handshake.terminator"()[^bb1] : () -> ()
-// CHECK:         ^bb1:
 // CHECK:           %[[VAL_18:.*]] = "handshake.mux"(%[[VAL_19:.*]]#3, %[[VAL_20:.*]], %[[VAL_16]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_21:.*]]:2 = "handshake.fork"(%[[VAL_18]]) {control = false} : (index) -> (index, index)
 // CHECK:           %[[VAL_22:.*]] = "handshake.mux"(%[[VAL_19]]#2, %[[VAL_23:.*]], %[[VAL_13]]) : (index, index, index) -> index
@@ -39,8 +37,6 @@
 // CHECK:           %[[VAL_39:.*]], %[[VAL_40:.*]] = "handshake.conditional_branch"(%[[VAL_32]]#1, %[[VAL_26]]#0) {control = true} : (i1, none) -> (none, none)
 // CHECK:           %[[VAL_41:.*]], %[[VAL_42:.*]] = "handshake.conditional_branch"(%[[VAL_32]]#0, %[[VAL_30]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_42]]) : (index) -> ()
-// CHECK:           "handshake.terminator"()[^bb2, ^bb3] : () -> ()
-// CHECK:         ^bb2:
 // CHECK:           %[[VAL_43:.*]] = "handshake.merge"(%[[VAL_41]]) : (index) -> index
 // CHECK:           %[[VAL_44:.*]]:2 = "handshake.fork"(%[[VAL_43]]) {control = false} : (index) -> (index, index)
 // CHECK:           %[[VAL_45:.*]] = "handshake.merge"(%[[VAL_35]]) : (index) -> index
@@ -68,13 +64,13 @@
 // CHECK:           %[[VAL_20]] = "handshake.branch"(%[[VAL_49]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_27]] = "handshake.branch"(%[[VAL_53]]) {control = true} : (none) -> none
 // CHECK:           %[[VAL_29]] = "handshake.branch"(%[[VAL_59]]) {control = false} : (index) -> index
-// CHECK:           "handshake.terminator"()[^bb1] : () -> ()
-// CHECK:         ^bb3:
 // CHECK:           %[[VAL_63:.*]]:2 = "handshake.control_merge"(%[[VAL_40]]) {control = true} : (none) -> (none, index)
 // CHECK:           "handshake.sink"(%[[VAL_63]]#1) : (index) -> ()
 // CHECK:           handshake.return %[[VAL_63]]#0 : none
 // CHECK:         }
 // CHECK:       }
+
+
     %0 = alloc() : memref<10xf32>
     %10 = alloc() : memref<10xf32>
     %c0 = constant 0 : index

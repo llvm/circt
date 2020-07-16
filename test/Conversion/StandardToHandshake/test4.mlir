@@ -38,6 +38,7 @@ func @ops(f32, f32, i32, i32) -> (f32, i32) {
 // CHECK:           handshake.return %[[VAL_13]], %[[VAL_16]], %[[VAL_4]] : f32, i32, none
 // CHECK:         }
 // CHECK:       }
+
 ^bb0(%arg0: f32, %arg1: f32, %arg2: i32, %arg3: i32):
   %0 = subf %arg0, %arg1: f32
   %1 = subi %arg2, %arg3: i32
