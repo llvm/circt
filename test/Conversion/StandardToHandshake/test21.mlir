@@ -15,8 +15,6 @@ func @loop_min_max(%arg0: index) {
 // CHECK:           %[[VAL_9:.*]] = "handshake.branch"(%[[VAL_4]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_10:.*]] = "handshake.branch"(%[[VAL_5]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_11:.*]] = "handshake.branch"(%[[VAL_6]]) {control = false} : (index) -> index
-// CHECK:           "handshake.terminator"()[^bb1] : () -> ()
-// CHECK:         ^bb1:
 // CHECK:           %[[VAL_12:.*]] = "handshake.mux"(%[[VAL_13:.*]]#3, %[[VAL_14:.*]], %[[VAL_10]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_15:.*]]:2 = "handshake.fork"(%[[VAL_12]]) {control = false} : (index) -> (index, index)
 // CHECK:           %[[VAL_16:.*]] = "handshake.mux"(%[[VAL_13]]#2, %[[VAL_17:.*]], %[[VAL_7]]) : (index, index, index) -> index
@@ -36,8 +34,6 @@ func @loop_min_max(%arg0: index) {
 // CHECK:           %[[VAL_33:.*]], %[[VAL_34:.*]] = "handshake.conditional_branch"(%[[VAL_26]]#1, %[[VAL_20]]#0) {control = true} : (i1, none) -> (none, none)
 // CHECK:           %[[VAL_35:.*]], %[[VAL_36:.*]] = "handshake.conditional_branch"(%[[VAL_26]]#0, %[[VAL_24]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_36]]) : (index) -> ()
-// CHECK:           "handshake.terminator"()[^bb2, ^bb6] : () -> ()
-// CHECK:         ^bb2:
 // CHECK:           %[[VAL_37:.*]] = "handshake.merge"(%[[VAL_35]]) : (index) -> index
 // CHECK:           %[[VAL_38:.*]]:5 = "handshake.fork"(%[[VAL_37]]) {control = false} : (index) -> (index, index, index, index, index)
 // CHECK:           %[[VAL_39:.*]] = "handshake.merge"(%[[VAL_29]]) : (index) -> index
@@ -67,8 +63,6 @@ func @loop_min_max(%arg0: index) {
 // CHECK:           %[[VAL_62:.*]] = "handshake.branch"(%[[VAL_50]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_63:.*]] = "handshake.branch"(%[[VAL_55]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_64:.*]] = "handshake.branch"(%[[VAL_56]]) {control = false} : (index) -> index
-// CHECK:           "handshake.terminator"()[^bb3] : () -> ()
-// CHECK:         ^bb3:
 // CHECK:           %[[VAL_65:.*]] = "handshake.mux"(%[[VAL_66:.*]]#6, %[[VAL_67:.*]], %[[VAL_63]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_68:.*]]:2 = "handshake.fork"(%[[VAL_65]]) {control = false} : (index) -> (index, index)
 // CHECK:           %[[VAL_69:.*]] = "handshake.mux"(%[[VAL_66]]#5, %[[VAL_70:.*]], %[[VAL_64]]) : (index, index, index) -> index
@@ -93,8 +87,6 @@ func @loop_min_max(%arg0: index) {
 // CHECK:           %[[VAL_98:.*]], %[[VAL_99:.*]] = "handshake.conditional_branch"(%[[VAL_85]]#1, %[[VAL_79]]#0) {control = true} : (i1, none) -> (none, none)
 // CHECK:           %[[VAL_100:.*]], %[[VAL_101:.*]] = "handshake.conditional_branch"(%[[VAL_85]]#0, %[[VAL_83]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_101]]) : (index) -> ()
-// CHECK:           "handshake.terminator"()[^bb4, ^bb5] : () -> ()
-// CHECK:         ^bb4:
 // CHECK:           %[[VAL_102:.*]] = "handshake.merge"(%[[VAL_100]]) : (index) -> index
 // CHECK:           %[[VAL_103:.*]] = "handshake.merge"(%[[VAL_88]]) : (index) -> index
 // CHECK:           %[[VAL_104:.*]]:2 = "handshake.fork"(%[[VAL_103]]) {control = false} : (index) -> (index, index)
@@ -114,8 +106,6 @@ func @loop_min_max(%arg0: index) {
 // CHECK:           %[[VAL_78]] = "handshake.branch"(%[[VAL_109]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_80]] = "handshake.branch"(%[[VAL_110]]#0) {control = true} : (none) -> none
 // CHECK:           %[[VAL_82]] = "handshake.branch"(%[[VAL_111]]) {control = false} : (index) -> index
-// CHECK:           "handshake.terminator"()[^bb3] : () -> ()
-// CHECK:         ^bb5:
 // CHECK:           %[[VAL_112:.*]] = "handshake.merge"(%[[VAL_91]]) : (index) -> index
 // CHECK:           %[[VAL_113:.*]] = "handshake.merge"(%[[VAL_93]]) : (index) -> index
 // CHECK:           %[[VAL_114:.*]]:2 = "handshake.fork"(%[[VAL_113]]) {control = false} : (index) -> (index, index)
@@ -129,13 +119,12 @@ func @loop_min_max(%arg0: index) {
 // CHECK:           %[[VAL_17]] = "handshake.branch"(%[[VAL_116]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_21]] = "handshake.branch"(%[[VAL_117]]#0) {control = true} : (none) -> none
 // CHECK:           %[[VAL_23]] = "handshake.branch"(%[[VAL_118]]) {control = false} : (index) -> index
-// CHECK:           "handshake.terminator"()[^bb1] : () -> ()
-// CHECK:         ^bb6:
 // CHECK:           %[[VAL_119:.*]]:2 = "handshake.control_merge"(%[[VAL_34]]) {control = true} : (none) -> (none, index)
 // CHECK:           "handshake.sink"(%[[VAL_119]]#1) : (index) -> ()
 // CHECK:           handshake.return %[[VAL_119]]#0 : none
 // CHECK:         }
 // CHECK:       }
+
     %c0 = constant 0 : index
     %c42 = constant 42 : index
     %c1 = constant 1 : index

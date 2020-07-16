@@ -45,6 +45,7 @@ func @affine_applies() {
 // CHECK:           handshake.return %[[VAL_1]]#17 : none
 // CHECK:         }
 // CHECK:       }
+
     %c0 = constant 0 : index
     %c101 = constant 101 : index
     %c102 = constant 102 : index

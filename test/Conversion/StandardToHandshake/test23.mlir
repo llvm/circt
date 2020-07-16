@@ -36,23 +36,18 @@ func @multi_cond(%arg0: index, %arg1: index, %arg2: index, %arg3: index) {
 // CHECK:           %[[VAL_33:.*]] = cmpi "eq", %[[VAL_32]], %[[VAL_12]]#5 : index
 // CHECK:           %[[VAL_34:.*]] = and %[[VAL_30]], %[[VAL_33]] : i1
 // CHECK:           %[[VAL_35:.*]], %[[VAL_36:.*]] = "handshake.conditional_branch"(%[[VAL_34]], %[[VAL_10]]#7) {control = true} : (i1, none) -> (none, none)
-// CHECK:           "handshake.terminator"()[^bb1, ^bb2] : () -> ()
-// CHECK:         ^bb1:
 // CHECK:           %[[VAL_37:.*]]:2 = "handshake.control_merge"(%[[VAL_35]]) {control = true} : (none) -> (none, index)
 // CHECK:           "handshake.sink"(%[[VAL_37]]#1) : (index) -> ()
 // CHECK:           %[[VAL_38:.*]] = "handshake.branch"(%[[VAL_37]]#0) {control = true} : (none) -> none
-// CHECK:           "handshake.terminator"()[^bb3] : () -> ()
-// CHECK:         ^bb2:
 // CHECK:           %[[VAL_39:.*]]:2 = "handshake.control_merge"(%[[VAL_36]]) {control = true} : (none) -> (none, index)
 // CHECK:           "handshake.sink"(%[[VAL_39]]#1) : (index) -> ()
 // CHECK:           %[[VAL_40:.*]] = "handshake.branch"(%[[VAL_39]]#0) {control = true} : (none) -> none
-// CHECK:           "handshake.terminator"()[^bb3] : () -> ()
-// CHECK:         ^bb3:
 // CHECK:           %[[VAL_41:.*]]:2 = "handshake.control_merge"(%[[VAL_40]], %[[VAL_38]]) {control = true} : (none, none) -> (none, index)
 // CHECK:           "handshake.sink"(%[[VAL_41]]#1) : (index) -> ()
 // CHECK:           handshake.return %[[VAL_41]]#0 : none
 // CHECK:         }
 // CHECK:       }
+
     %c0 = constant 0 : index
     %c-1 = constant -1 : index
     %1 = muli %c0, %c-1 : index

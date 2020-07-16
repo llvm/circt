@@ -6,8 +6,6 @@ func @more_imperfectly_nested_loops() {
 // CHECK-LABEL:   handshake.func @more_imperfectly_nested_loops(
 // CHECK-SAME:                                                  %[[VAL_0:.*]]: none, ...) -> none {
 // CHECK:           %[[VAL_1:.*]] = "handshake.branch"(%[[VAL_0]]) {control = true} : (none) -> none
-// CHECK:           "handshake.terminator"()[^bb1] : () -> ()
-// CHECK:         ^bb1:
 // CHECK:           %[[VAL_2:.*]]:2 = "handshake.control_merge"(%[[VAL_1]]) {control = true} : (none) -> (none, index)
 // CHECK:           %[[VAL_3:.*]]:3 = "handshake.fork"(%[[VAL_2]]#0) {control = true} : (none) -> (none, none, none)
 // CHECK:           "handshake.sink"(%[[VAL_2]]#1) : (index) -> ()
@@ -16,8 +14,6 @@ func @more_imperfectly_nested_loops() {
 // CHECK:           %[[VAL_6:.*]] = "handshake.branch"(%[[VAL_3]]#2) {control = true} : (none) -> none
 // CHECK:           %[[VAL_7:.*]] = "handshake.branch"(%[[VAL_4]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_8:.*]] = "handshake.branch"(%[[VAL_5]]) {control = false} : (index) -> index
-// CHECK:           "handshake.terminator"()[^bb2] : () -> ()
-// CHECK:         ^bb2:
 // CHECK:           %[[VAL_9:.*]] = "handshake.mux"(%[[VAL_10:.*]]#1, %[[VAL_11:.*]], %[[VAL_8]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_12:.*]]:2 = "handshake.fork"(%[[VAL_9]]) {control = false} : (index) -> (index, index)
 // CHECK:           %[[VAL_13:.*]]:2 = "handshake.control_merge"(%[[VAL_14:.*]], %[[VAL_6]]) {control = true} : (none, none) -> (none, index)
@@ -31,8 +27,6 @@ func @more_imperfectly_nested_loops() {
 // CHECK:           %[[VAL_22:.*]], %[[VAL_23:.*]] = "handshake.conditional_branch"(%[[VAL_19]]#1, %[[VAL_13]]#0) {control = true} : (i1, none) -> (none, none)
 // CHECK:           %[[VAL_24:.*]], %[[VAL_25:.*]] = "handshake.conditional_branch"(%[[VAL_19]]#0, %[[VAL_17]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_25]]) : (index) -> ()
-// CHECK:           "handshake.terminator"()[^bb3, ^bb12] : () -> ()
-// CHECK:         ^bb3:
 // CHECK:           %[[VAL_26:.*]] = "handshake.merge"(%[[VAL_24]]) : (index) -> index
 // CHECK:           %[[VAL_27:.*]] = "handshake.merge"(%[[VAL_20]]) : (index) -> index
 // CHECK:           %[[VAL_28:.*]]:2 = "handshake.control_merge"(%[[VAL_22]]) {control = true} : (none) -> (none, index)
@@ -40,8 +34,6 @@ func @more_imperfectly_nested_loops() {
 // CHECK:           %[[VAL_29:.*]] = "handshake.branch"(%[[VAL_26]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_30:.*]] = "handshake.branch"(%[[VAL_27]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_31:.*]] = "handshake.branch"(%[[VAL_28]]#0) {control = true} : (none) -> none
-// CHECK:           "handshake.terminator"()[^bb4] : () -> ()
-// CHECK:         ^bb4:
 // CHECK:           %[[VAL_32:.*]] = "handshake.merge"(%[[VAL_29]]) : (index) -> index
 // CHECK:           %[[VAL_33:.*]] = "handshake.merge"(%[[VAL_30]]) : (index) -> index
 // CHECK:           %[[VAL_34:.*]]:2 = "handshake.control_merge"(%[[VAL_31]]) {control = true} : (none) -> (none, index)
@@ -54,8 +46,6 @@ func @more_imperfectly_nested_loops() {
 // CHECK:           %[[VAL_40:.*]] = "handshake.branch"(%[[VAL_35]]#2) {control = true} : (none) -> none
 // CHECK:           %[[VAL_41:.*]] = "handshake.branch"(%[[VAL_36]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_42:.*]] = "handshake.branch"(%[[VAL_37]]) {control = false} : (index) -> index
-// CHECK:           "handshake.terminator"()[^bb5] : () -> ()
-// CHECK:         ^bb5:
 // CHECK:           %[[VAL_43:.*]] = "handshake.mux"(%[[VAL_44:.*]]#3, %[[VAL_45:.*]], %[[VAL_42]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_46:.*]]:2 = "handshake.fork"(%[[VAL_43]]) {control = false} : (index) -> (index, index)
 // CHECK:           %[[VAL_47:.*]] = "handshake.mux"(%[[VAL_44]]#2, %[[VAL_48:.*]], %[[VAL_38]]) : (index, index, index) -> index
@@ -73,8 +63,6 @@ func @more_imperfectly_nested_loops() {
 // CHECK:           %[[VAL_64:.*]], %[[VAL_65:.*]] = "handshake.conditional_branch"(%[[VAL_57]]#1, %[[VAL_51]]#0) {control = true} : (i1, none) -> (none, none)
 // CHECK:           %[[VAL_66:.*]], %[[VAL_67:.*]] = "handshake.conditional_branch"(%[[VAL_57]]#0, %[[VAL_55]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_67]]) : (index) -> ()
-// CHECK:           "handshake.terminator"()[^bb6, ^bb7] : () -> ()
-// CHECK:         ^bb6:
 // CHECK:           %[[VAL_68:.*]] = "handshake.merge"(%[[VAL_66]]) : (index) -> index
 // CHECK:           %[[VAL_69:.*]] = "handshake.merge"(%[[VAL_58]]) : (index) -> index
 // CHECK:           %[[VAL_70:.*]] = "handshake.merge"(%[[VAL_60]]) : (index) -> index
@@ -89,8 +77,6 @@ func @more_imperfectly_nested_loops() {
 // CHECK:           %[[VAL_50]] = "handshake.branch"(%[[VAL_71]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_52]] = "handshake.branch"(%[[VAL_73]]#1) {control = true} : (none) -> none
 // CHECK:           %[[VAL_54]] = "handshake.branch"(%[[VAL_75]]) {control = false} : (index) -> index
-// CHECK:           "handshake.terminator"()[^bb5] : () -> ()
-// CHECK:         ^bb7:
 // CHECK:           %[[VAL_76:.*]] = "handshake.merge"(%[[VAL_61]]) : (index) -> index
 // CHECK:           %[[VAL_77:.*]] = "handshake.merge"(%[[VAL_63]]) : (index) -> index
 // CHECK:           %[[VAL_78:.*]]:2 = "handshake.control_merge"(%[[VAL_65]]) {control = true} : (none) -> (none, index)
@@ -98,8 +84,6 @@ func @more_imperfectly_nested_loops() {
 // CHECK:           %[[VAL_79:.*]] = "handshake.branch"(%[[VAL_76]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_80:.*]] = "handshake.branch"(%[[VAL_77]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_81:.*]] = "handshake.branch"(%[[VAL_78]]#0) {control = true} : (none) -> none
-// CHECK:           "handshake.terminator"()[^bb8] : () -> ()
-// CHECK:         ^bb8:
 // CHECK:           %[[VAL_82:.*]] = "handshake.merge"(%[[VAL_79]]) : (index) -> index
 // CHECK:           %[[VAL_83:.*]] = "handshake.merge"(%[[VAL_80]]) : (index) -> index
 // CHECK:           %[[VAL_84:.*]]:2 = "handshake.control_merge"(%[[VAL_81]]) {control = true} : (none) -> (none, index)
@@ -112,8 +96,6 @@ func @more_imperfectly_nested_loops() {
 // CHECK:           %[[VAL_90:.*]] = "handshake.branch"(%[[VAL_85]]#2) {control = true} : (none) -> none
 // CHECK:           %[[VAL_91:.*]] = "handshake.branch"(%[[VAL_86]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_92:.*]] = "handshake.branch"(%[[VAL_87]]) {control = false} : (index) -> index
-// CHECK:           "handshake.terminator"()[^bb9] : () -> ()
-// CHECK:         ^bb9:
 // CHECK:           %[[VAL_93:.*]] = "handshake.mux"(%[[VAL_94:.*]]#3, %[[VAL_95:.*]], %[[VAL_92]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_96:.*]]:2 = "handshake.fork"(%[[VAL_93]]) {control = false} : (index) -> (index, index)
 // CHECK:           %[[VAL_97:.*]] = "handshake.mux"(%[[VAL_94]]#2, %[[VAL_98:.*]], %[[VAL_88]]) : (index, index, index) -> index
@@ -131,8 +113,6 @@ func @more_imperfectly_nested_loops() {
 // CHECK:           %[[VAL_114:.*]], %[[VAL_115:.*]] = "handshake.conditional_branch"(%[[VAL_107]]#1, %[[VAL_101]]#0) {control = true} : (i1, none) -> (none, none)
 // CHECK:           %[[VAL_116:.*]], %[[VAL_117:.*]] = "handshake.conditional_branch"(%[[VAL_107]]#0, %[[VAL_105]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_117]]) : (index) -> ()
-// CHECK:           "handshake.terminator"()[^bb10, ^bb11] : () -> ()
-// CHECK:         ^bb10:
 // CHECK:           %[[VAL_118:.*]] = "handshake.merge"(%[[VAL_116]]) : (index) -> index
 // CHECK:           %[[VAL_119:.*]] = "handshake.merge"(%[[VAL_108]]) : (index) -> index
 // CHECK:           %[[VAL_120:.*]] = "handshake.merge"(%[[VAL_110]]) : (index) -> index
@@ -147,8 +127,6 @@ func @more_imperfectly_nested_loops() {
 // CHECK:           %[[VAL_100]] = "handshake.branch"(%[[VAL_121]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_102]] = "handshake.branch"(%[[VAL_123]]#1) {control = true} : (none) -> none
 // CHECK:           %[[VAL_104]] = "handshake.branch"(%[[VAL_125]]) {control = false} : (index) -> index
-// CHECK:           "handshake.terminator"()[^bb9] : () -> ()
-// CHECK:         ^bb11:
 // CHECK:           %[[VAL_126:.*]] = "handshake.merge"(%[[VAL_111]]) : (index) -> index
 // CHECK:           %[[VAL_127:.*]] = "handshake.merge"(%[[VAL_113]]) : (index) -> index
 // CHECK:           %[[VAL_128:.*]]:2 = "handshake.control_merge"(%[[VAL_115]]) {control = true} : (none) -> (none, index)
@@ -159,13 +137,12 @@ func @more_imperfectly_nested_loops() {
 // CHECK:           %[[VAL_11]] = "handshake.branch"(%[[VAL_127]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_14]] = "handshake.branch"(%[[VAL_129]]#1) {control = true} : (none) -> none
 // CHECK:           %[[VAL_16]] = "handshake.branch"(%[[VAL_131]]) {control = false} : (index) -> index
-// CHECK:           "handshake.terminator"()[^bb2] : () -> ()
-// CHECK:         ^bb12:
 // CHECK:           %[[VAL_132:.*]]:2 = "handshake.control_merge"(%[[VAL_23]]) {control = true} : (none) -> (none, index)
 // CHECK:           "handshake.sink"(%[[VAL_132]]#1) : (index) -> ()
 // CHECK:           handshake.return %[[VAL_132]]#0 : none
 // CHECK:         }
 // CHECK:       }
+
 ^bb0:
   br ^bb1
 ^bb1:	// pred: ^bb0

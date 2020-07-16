@@ -19,6 +19,7 @@ func @load_store(memref<4x4xi32>, index) {
 // CHECK:           handshake.return %[[VAL_10]] : none
 // CHECK:         }
 // CHECK:       }
+
 ^bb0(%0: memref<4x4xi32>, %1: index):
   %2 = "std.load"(%0, %1, %1) : (memref<4x4xi32>, index, index)->i32
   %3 = load %0[%1, %1] : memref<4x4xi32>
