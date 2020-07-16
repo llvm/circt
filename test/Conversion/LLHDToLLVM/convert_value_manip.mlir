@@ -17,31 +17,31 @@ llvm.func @convert_const() {
     llvm.return
 }
 
-// CHECK-LABEL: @convert_exts_int
+// CHECK-LABEL: @convert_extract_slice_int
 // CHECK-SAME: %[[CI32:.*]]: !llvm.i32
 // CHECK-SAME: %[[CI100:.*]]: !llvm.i100
-func @convert_exts_int(%cI32 : i32, %cI100 : i100) {
+func @convert_extract_slice_int(%cI32 : i32, %cI100 : i100) {
     // CHECK-NEXT: %[[CIND0:.*]] = llvm.mlir.constant(0 : index) : !llvm.i64
     // CHECK-NEXT: %[[CIND1:.*]] = llvm.mlir.constant(10 : index) : !llvm.i64
     // CHECK-NEXT: %[[ADJUST0:.*]] = llvm.trunc %[[CIND0]] : !llvm.i64 to !llvm.i32
     // CHECK-NEXT: %[[SHR0:.*]] = llvm.lshr %[[CI32]], %[[ADJUST0]] : !llvm.i32
     // CHECK-NEXT: %{{.*}} = llvm.trunc %[[SHR0]] : !llvm.i32 to !llvm.i10
-    %0 = llhd.exts %cI32, 0 : i32 -> i10
+    %0 = llhd.extract_slice %cI32, 0 : i32 -> i10
     // CHECK-NEXT: %[[CIND2:.*]] = llvm.mlir.constant(0 : index) : !llvm.i64
     // CHECK-NEXT: %[[CIND3:.*]] = llvm.mlir.constant(10 : index) : !llvm.i64
     // CHECK-NEXT: %[[ADJUST1:.*]] = llvm.zext %[[CIND2]] : !llvm.i64 to !llvm.i100
     // CHECK-NEXT: %[[SHR1:.*]] = llvm.lshr %[[CI100]], %[[ADJUST1]] : !llvm.i100
     // CHECK-NEXT: %{{.*}} = llvm.trunc %[[SHR1]] : !llvm.i100 to !llvm.i10
-    %2 = llhd.exts %cI100, 0 : i100 -> i10
+    %2 = llhd.extract_slice %cI100, 0 : i100 -> i10
 
     return
 }
 
-// CHECK-LABEL: @convert_exts_sig
+// CHECK-LABEL: @convert_extract_slice_sig
 // CHECK-SAME: %[[STATE:.*]]: !llvm<"i8*">,
 // CHECK-SAME: %[[SIGTAB:.*]]: !llvm<"i32*">,
 // CHECK-SAME: %[[ARGTAB:.*]]: !llvm<"i32*">
-llhd.entity @convert_exts_sig (%sI32 : !llhd.sig<i32>) -> () {
+llhd.entity @convert_extract_slice_sig (%sI32 : !llhd.sig<i32>) -> () {
     // CHECK-NEXT: %[[IDX0:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
     // CHECK-NEXT: %[[GEP0:.*]] = llvm.getelementptr %[[ARGTAB]][%[[IDX0]]] : (!llvm<"i32*">, !llvm.i32) -> !llvm<"i32*">
     // CHECK-NEXT: %[[L0:.*]] = llvm.load %[[GEP0]] : !llvm<"i32*">
@@ -62,5 +62,5 @@ llhd.entity @convert_exts_sig (%sI32 : !llhd.sig<i32>) -> () {
     // CHECK-NEXT: %[[INTTTOPTR0:.*]] = llvm.inttoptr %[[ADD0]] : !llvm.i64 to !llvm<"i8*">
     // CHECK-NEXT: %[[BYTEOFFSET0:.*]] = llvm.urem %[[IDX2]], %[[C2]] : !llvm.i64
     // CHECK-NEXT: %{{.*}} = llvm.call @add_subsignal(%[[STATE]], %[[L0]], %[[INTTTOPTR0]], %[[LEN0]], %[[BYTEOFFSET0]]) : (!llvm<"i8*">, !llvm.i32, !llvm<"i8*">, !llvm.i64, !llvm.i64) -> !llvm.i32
-    %0 = llhd.exts %sI32, 0 : !llhd.sig<i32> -> !llhd.sig<i10>
+    %0 = llhd.extract_slice %sI32, 0 : !llhd.sig<i32> -> !llhd.sig<i10>
 }

@@ -1286,17 +1286,18 @@ namespace {
 /// Convert an llhd.exts operation. For integers, the value is shifted to the
 /// start index and then truncated to the final length. For signals, a new
 /// subsignal is created, pointing to the defined slice.
-struct ExtsOpConversion : public ConvertToLLVMPattern {
-  explicit ExtsOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(llhd::ExtsOp::getOperationName(), ctx,
+struct ExtractSliceOpConversion : public ConvertToLLVMPattern {
+  explicit ExtractSliceOpConversion(MLIRContext *ctx,
+                                    LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(llhd::ExtractSliceOp::getOperationName(), ctx,
                              typeConverter) {}
 
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
-    auto extsOp = cast<ExtsOp>(op);
+    auto extsOp = cast<ExtractSliceOp>(op);
 
-    ExtsOpAdaptor transformed(operands);
+    ExtractSliceOpAdaptor transformed(operands);
 
     auto indexTy = typeConverter.convertType(extsOp.startAttr().getType());
     auto i8PtrTy = getVoidPtrType();
@@ -1392,7 +1393,7 @@ void llhd::populateLLHDToLLVMConversionPatterns(
   MLIRContext *ctx = converter.getDialect()->getContext();
 
   // Value manipulation conversion patterns.
-  patterns.insert<ConstOpConversion, ExtsOpConversion>(ctx, converter);
+  patterns.insert<ConstOpConversion, ExtractSliceOpConversion>(ctx, converter);
 
   // Bitwise conversion patterns.
   patterns.insert<NotOpConversion, ShrOpConversion, ShlOpConversion>(ctx,
