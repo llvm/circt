@@ -192,7 +192,7 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       auto size = inputs.size();
       assert(size > 1 && "expected 2 or more operands");
 
-      APInt value, value1;
+      APInt value;
 
       // and(..., '1) -> and(...) -- identity
       if (matchPattern(inputs.back(), m_RConstant(value)) &&
