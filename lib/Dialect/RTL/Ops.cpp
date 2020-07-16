@@ -161,7 +161,7 @@ OpFoldResult ExtractOp::fold(ArrayRef<Attribute> operands) {
 static LogicalResult verifyUTVariadicRTLOp(Operation *op) {
   auto size = op->getOperands().size();
   if (size < 1)
-    return op->emitOpError("requres 1 or more args");
+    return op->emitOpError("requires 1 or more args");
 
   return success();
 }
