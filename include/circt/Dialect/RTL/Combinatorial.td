@@ -81,12 +81,7 @@ class UTVariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
 
   let hasCanonicalizer = 1;
   let hasFolder = 1;
-  let verifier = [{
-    auto size = inputs().size();
-    if (size < 1)
-      return emitOpError("requres 1 or more args");
-    return success();
-  }];
+  let verifier =  [{ return ::verifyUTVariadicRTLOp(*this); }];
 
   let assemblyFormat = [{
     $inputs attr-dict `:` type($result)

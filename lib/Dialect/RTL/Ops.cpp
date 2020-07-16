@@ -158,6 +158,14 @@ OpFoldResult ExtractOp::fold(ArrayRef<Attribute> operands) {
 // Variadic operations
 //===----------------------------------------------------------------------===//
 
+static LogicalResult verifyUTVariadicRTLOp(Operation *op) {
+  auto size = op->getOperands().size();
+  if (size < 1)
+    return op->emitOpError("requres 1 or more args");
+
+  return success();
+}
+
 OpFoldResult AndOp::fold(ArrayRef<Attribute> operands) {
   auto size = inputs().size();
 
@@ -168,8 +176,7 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
 
   // and(..., 0) -> 0 -- annulment
-  if (matchPattern(inputs().back(), m_RConstant(value)) &&
-      value.isNullValue())
+  if (matchPattern(inputs().back(), m_RConstant(value)) && value.isNullValue())
     return inputs().back();
 
   return {};
@@ -183,6 +190,7 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                   PatternRewriter &rewriter) const override {
       auto inputs = op.inputs();
       auto size = inputs.size();
+      assert(size > 1 && "expected 2 or more operands");
 
       APInt value, value1;
 
@@ -229,23 +237,22 @@ void OrOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                   PatternRewriter &rewriter) const override {
       auto inputs = op.inputs();
       auto size = inputs.size();
+      assert(size > 1 && "expected 2 or more operands");
+
       APInt value;
 
-      if (size > 1) {
-        // or(..., 0) -> or(...) -- identity
-        if (matchPattern(inputs.back(), m_RConstant(value)) &&
-            value.isNullValue()) {
+      // or(..., 0) -> or(...) -- identity
+      if (matchPattern(inputs.back(), m_RConstant(value)) &&
+          value.isNullValue()) {
 
-          rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(),
-                                            inputs.drop_back());
-          return success();
-        }
-        /// TODO: or(..., x, x) -> or(..., x) -- idempotent
-        /// TODO: or(..., c1, c2) -> or(..., c3) where c3 = c1 | c2 -- constant
-        /// folding
-        /// TODO: or(x, or(...)) -> or(x, ...) -- flatten
-        /// TODO: or(..., x, not(x)) -> or(..., '1) -- complement
+        rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), inputs.drop_back());
+        return success();
       }
+      /// TODO: or(..., x, x) -> or(..., x) -- idempotent
+      /// TODO: or(..., c1, c2) -> or(..., c3) where c3 = c1 | c2 -- constant
+      /// folding
+      /// TODO: or(x, or(...)) -> or(x, ...) -- flatten
+      /// TODO: or(..., x, not(x)) -> or(..., '1) -- complement
       return failure();
     }
   };
@@ -270,25 +277,25 @@ void XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                   PatternRewriter &rewriter) const override {
       auto inputs = op.inputs();
       auto size = inputs.size();
+      assert(size > 1 && "expected 2 or more operands");
+
       APInt value;
 
-      if (size > 1) {
-        // xor(..., 0) -> xor(...) -- identity
-        if (matchPattern(inputs.back(), m_RConstant(value)) &&
-            value.isNullValue()) {
+      // xor(..., 0) -> xor(...) -- identity
+      if (matchPattern(inputs.back(), m_RConstant(value)) &&
+          value.isNullValue()) {
 
-          rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(),
-                                             inputs.drop_back());
-          return success();
-        }
-
-        /// TODO: xor(..., '1) -> not(xor(...))
-        /// TODO: xor(..., x, x) -> xor(..., 0) -- idempotent?
-        /// TODO: xor(..., c1, c2) -> xor(..., c3) where c3 = c1 ^ c2 --
-        /// constant folding
-        /// TODO: xor(x, xor(...)) -> xor(x, ...) -- flatten
-        /// TODO: xor(..., x, not(x)) -> xor(..., '1)
+        rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(),
+                                           inputs.drop_back());
+        return success();
       }
+
+      /// TODO: xor(..., '1) -> not(xor(...))
+      /// TODO: xor(..., x, x) -> xor(..., 0) -- idempotent?
+      /// TODO: xor(..., c1, c2) -> xor(..., c3) where c3 = c1 ^ c2 --
+      /// constant folding
+      /// TODO: xor(x, xor(...)) -> xor(x, ...) -- flatten
+      /// TODO: xor(..., x, not(x)) -> xor(..., '1)
       return failure();
     }
   };
@@ -313,23 +320,22 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                   PatternRewriter &rewriter) const override {
       auto inputs = op.inputs();
       auto size = inputs.size();
+      assert(size > 1 && "expected 2 or more operands");
+
       APInt value;
 
-      if (size > 1) {
-        // add(..., 0) -> add(...) -- identity
-        if (matchPattern(inputs.back(), m_RConstant(value)) &&
-            value.isNullValue()) {
-
-          rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(),
-                                             inputs.drop_back());
-          return success();
-        }
-
-        /// TODO: add(..., x, x) -> add(..., shl(x, 1))
-        /// TODO: add(..., c1, c2) -> add(..., c3) where c3 = c1 + c2 --
-        /// constant folding
-        /// TODO: add(x, add(...)) -> add(x, ...) -- flatten
+      // add(..., 0) -> add(...) -- identity
+      if (matchPattern(inputs.back(), m_RConstant(value)) &&
+          value.isNullValue()) {
+        rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(),
+                                           inputs.drop_back());
+        return success();
       }
+
+      /// TODO: add(..., x, x) -> add(..., shl(x, 1))
+      /// TODO: add(..., c1, c2) -> add(..., c3) where c3 = c1 + c2 --
+      /// constant folding
+      /// TODO: add(x, add(...)) -> add(x, ...) -- flatten
       return failure();
     }
   };
@@ -346,8 +352,7 @@ OpFoldResult MulOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
 
   // mul(..., 0) -> 0 -- annulment
-  if (matchPattern(inputs().back(), m_RConstant(value)) &&
-      value.isNullValue())
+  if (matchPattern(inputs().back(), m_RConstant(value)) && value.isNullValue())
     return inputs().back();
 
   return {};
@@ -361,22 +366,20 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                   PatternRewriter &rewriter) const override {
       auto inputs = op.inputs();
       auto size = inputs.size();
+      assert(size > 1 && "expected 2 or more operands");
+
       APInt value;
 
-      if (size > 1) {
-        // mul(..., 1) -> mul(...) -- identity
-        if (matchPattern(inputs.back(), m_RConstant(value)) &&
-            (value == 1u)) {
-
-          rewriter.replaceOpWithNewOp<MulOp>(op, op.getType(),
-                                             inputs.drop_back());
-          return success();
-        }
-
-        /// TODO: mul(..., c1, c2) -> mul(..., c3) where c3 = c1 * c2 --
-        /// constant folding
-        /// TODO: mul(a, mul(...)) -> mul(a, ...) -- flatten
+      // mul(..., 1) -> mul(...) -- identity
+      if (matchPattern(inputs.back(), m_RConstant(value)) && (value == 1u)) {
+        rewriter.replaceOpWithNewOp<MulOp>(op, op.getType(),
+                                           inputs.drop_back());
+        return success();
       }
+
+      /// TODO: mul(..., c1, c2) -> mul(..., c3) where c3 = c1 * c2 --
+      /// constant folding
+      /// TODO: mul(a, mul(...)) -> mul(a, ...) -- flatten
 
       return failure();
     }
