@@ -12,4 +12,19 @@ func @check_vec(%c1 : i1, %c2 : i1, %c3 : i1, %c4 : i32, %c5 : i32, %c6 : i32) {
   return
 }
 
+// CHECK-LABEL: @check_array_uniform
+// CHECK-SAME: %[[C1:.*]]: i1
+// CHECK-SAME: %[[C32:.*]]: i32
+// CHECK-SAME: %[[TUP:.*]]: tuple<i1, i2, i3>
+func @check_array_uniform(%c1 : i1, %c32 : i32, %tup : tuple<i1, i2, i3>) {
+  // CHECK-NEXT: %{{.*}} = llhd.array_uniform %[[C1]] : !llhd.array<50xi1>
+  %0 = llhd.array_uniform %c1 : !llhd.array<50xi1>
+  // CHECK-NEXT: %{{.*}} = llhd.array_uniform %[[C32]] : !llhd.array<1xi32>
+  %1 = llhd.array_uniform %c32 : !llhd.array<1xi32>
+  // CHECK-NEXT: %{{.*}} = llhd.array_uniform %[[TUP]] : !llhd.array<5xtuple<i1, i2, i3>>
+  %3 = llhd.array_uniform %tup : !llhd.array<5xtuple<i1, i2, i3>>
+
+  return
+}
+
 // TODO: add more tests

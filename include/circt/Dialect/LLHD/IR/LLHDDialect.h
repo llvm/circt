@@ -15,6 +15,7 @@ namespace llhd {
 namespace detail {
 struct SigTypeStorage;
 struct TimeAttrStorage;
+struct ArrayTypeStorage;
 } // namespace detail
 
 class LLHDDialect : public Dialect {
@@ -48,8 +49,13 @@ namespace LLHDTypes {
 enum Kinds {
   Sig = mlir::Type::FIRST_PRIVATE_EXPERIMENTAL_0_TYPE,
   Time,
+  Array,
 };
 } // namespace LLHDTypes
+
+//===----------------------------------------------------------------------===//
+// SigType
+//===----------------------------------------------------------------------===//
 
 class SigType
     : public mlir::Type::TypeBase<SigType, mlir::Type, detail::SigTypeStorage> {
@@ -69,6 +75,10 @@ public:
   static llvm::StringRef getKeyword() { return "sig"; }
 };
 
+//===----------------------------------------------------------------------===//
+// TimeType
+//===----------------------------------------------------------------------===//
+
 class TimeType : public Type::TypeBase<TimeType, Type, DefaultTypeStorage> {
 public:
   using Base::Base;
@@ -81,6 +91,40 @@ public:
 
   /// Get the keyword for the time type
   static llvm::StringRef getKeyword() { return "time"; }
+};
+
+//===----------------------------------------------------------------------===//
+// ArrayType
+//===----------------------------------------------------------------------===//
+
+class ArrayType
+    : public Type::TypeBase<ArrayType, Type, detail::ArrayTypeStorage> {
+public:
+  using Base::Base;
+
+  /// Get or create a new ArrayType of the provided length and element type.
+  /// Assumes the arguments define a well-formed ArrayType.
+  static ArrayType get(unsigned length, Type elementType);
+
+  /// Get or create a new ArrayType of the provided length and element type
+  /// declared at the given, potentially unknown, location. If the ArrayType
+  /// defined by the arguments would be ill-formed, emit errors and return
+  /// nullptr-wrapping type.
+  static ArrayType getChecked(unsigned length, Type elementType,
+                              Location location);
+
+  /// Verify the construction of an array type.
+  static LogicalResult
+  verifyConstructionInvariants(Location loc, unsigned length, Type elementType);
+
+  unsigned getLength() const;
+  Type getElementType() const;
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast.
+  static bool kindof(unsigned kind) { return kind == LLHDTypes::Array; }
+
+  /// Get the keyword for the array type
+  static llvm::StringRef getKeyword() { return "array"; }
 };
 
 //===----------------------------------------------------------------------===//

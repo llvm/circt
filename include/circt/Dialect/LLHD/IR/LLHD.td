@@ -47,6 +47,9 @@ def LLHD_AnySigUnderlyingType :
 
 def LLHD_AnySigType : LLHD_SigType<[LLHD_AnySigUnderlyingType]>;
 
+// LLHD Array Type
+def LLHD_ArrayType : Type<CPred<"$_self.isa<ArrayType>()">, "LLHD array type">;
+
 //===----------------------------------------------------------------------===//
 // LLDH attribute definitions
 //===----------------------------------------------------------------------===//
