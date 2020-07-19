@@ -101,11 +101,6 @@ static Type parseArrayType(DialectAsmParser &parser) {
                      "Array must have exactly one dimension");
     return nullptr;
   }
-  if (length[0] < 0) {
-    parser.emitError(parser.getCurrentLocation(),
-                     "Array length must be non-negative");
-    return nullptr;
-  }
   return ArrayType::get(length[0], elementType);
 }
 
