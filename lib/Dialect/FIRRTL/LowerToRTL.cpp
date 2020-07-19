@@ -111,12 +111,25 @@ static LogicalResult lower(firrtl::WireOp op, ArrayRef<Value> operands,
 static LogicalResult lower(firrtl::ConnectOp op, ArrayRef<Value> operands,
                            ConversionPatternRewriter &rewriter) {
 
-  auto lhs = mapOperand(operands[0], op, rewriter);
-  auto rhs = mapOperand(operands[1], op, rewriter);
-  if (!lhs || !rhs)
+  auto dest = mapOperand(operands[0], op, rewriter);
+
+  // The source can be a smaller integer, extend it as appropriate if so.
+  auto destType = operands[0].getType().dyn_cast<FIRRTLType>();
+
+  // FIXME: Defs are generally lowered before the users, so we lose the original
+  // FIRRTL type.  We cannot use the standard MLIR lowering framework for this
+  // lowering pass. :-(
+
+  Value src;
+  if (destType && destType.getPassiveType().isa<IntType>())
+    src = mapAndExtendInt(operands[1], destType.getPassiveType(), op, rewriter);
+  else
+    src = mapOperand(operands[1], op, rewriter);
+
+  if (!dest || !src)
     return failure();
 
-  rewriter.replaceOpWithNewOp<rtl::ConnectOp>(op, lhs, rhs);
+  rewriter.replaceOpWithNewOp<rtl::ConnectOp>(op, dest, src);
   return success();
 }
 

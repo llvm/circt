@@ -53,6 +53,12 @@
     // CHECK-NEXT: rtl.connect [[CAST]], [[XOR]] : i4
     firrtl.connect %out1, %5 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
+    // CHECK-NEXT: [[CAST1:%.+]] = firrtl.stdIntCast %out1 : (!firrtl.flip<uint<4>>) -> i4
+    // CHECK-NEXT: [[CAST2:%.+]] = firrtl.stdIntCast %in2 : (!firrtl.uint<2>) -> i2
+    // CHECK-NEXT: [[ZEXT:%.+]] = rtl.zext [[CAST2]] : (i2) -> i4
+    // CHECK-NEXT: rtl.connect [[CAST1]], [[ZEXT]] : i4
+    firrtl.connect %out1, %in2 : !firrtl.flip<uint<4>>, !firrtl.uint<2>
+
     // CHECK-NEXT: = rtl.wire {name = "test-name"} : i4
     firrtl.wire {name = "test-name"} : !firrtl.uint<4>
 
