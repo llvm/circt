@@ -52,7 +52,7 @@ def LLHD_AnySigType : LLHD_SigType<[LLHD_AnyUnderlyingType]>;
 class LLHD_PtrType<list<Type> allowedTypes>
     : ContainerType<AnyTypeOf<allowedTypes>, CPred<"$_self.isa<PtrType>()">,
                     "$_self.cast<PtrType>().getUnderlyingType()",
-                    "LLHD ptr type">;
+                    "LLHD pointer type">;
 
 def LLHD_AnyPtrType : LLHD_PtrType<[LLHD_AnyUnderlyingType]>;
 
