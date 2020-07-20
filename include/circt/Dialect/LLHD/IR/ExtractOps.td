@@ -55,7 +55,7 @@ def LLHD_ExtractSliceOp : LLHD_Op<"extract_slice", [
   }];
 }
 
-def LLHD_DynamicExtractSliceOp : LLHD_Op<"dyn_extract_slice", [
+def LLHD_DynExtractSliceOp : LLHD_Op<"dyn_extract_slice", [
     NoSideEffect,
     SameTypeArbitraryWidth<
       "'target' and 'result' types have to match apart from their width",
@@ -167,7 +167,7 @@ def LLHD_ExtractElementOp : LLHD_Op<"extract_element", [
   }];
 }
 
-def LLHD_DynamicExtractElementOp : LLHD_Op<"dyn_extract_element", [
+def LLHD_DynExtractElementOp : LLHD_Op<"dyn_extract_element", [
   NoSideEffect,
   TypesMatchWith<"'result' must be the element type of the 'target' vector, in "
     "case 'target' is a signal of a vector, 'result' also is a signal of the "
