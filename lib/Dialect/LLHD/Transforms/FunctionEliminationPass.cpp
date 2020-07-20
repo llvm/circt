@@ -30,7 +30,7 @@ void FunctionEliminationPass::runOnOperation() {
           "Not all functions are inlined, there is at least "
           "one function call left within a llhd.proc or llhd.entity.");
     }
-    WalkResult::advance();
+    return WalkResult::advance();
   });
 
   if (result.wasInterrupted()) {
