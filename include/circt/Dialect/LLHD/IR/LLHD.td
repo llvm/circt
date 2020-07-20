@@ -37,15 +37,24 @@ def LLHD_Dialect : Dialect {
 def LLHD_TimeType : Type<CPred<"$_self.isa<TimeType>()">, "LLHD time type">,
                     BuildableType<"TimeType::get($_builder.getContext())">;
 
+// Legal underlying types for signals and pointers.
+def LLHD_AnyUnderlyingType :
+  AnyTypeOf<[AnySignlessInteger, AnyVector, AnyTuple]>;
+
 // LLHD sig type
 class LLHD_SigType<list<Type> allowedTypes>
   : ContainerType<AnyTypeOf<allowedTypes>, CPred<"$_self.isa<SigType>()">,
     "$_self.cast<SigType>().getUnderlyingType()", "LLHD sig type">;
 
-def LLHD_AnySigUnderlyingType :
-  AnyTypeOf<[AnySignlessInteger, AnyVector, AnyTuple]>;
+def LLHD_AnySigType : LLHD_SigType<[LLHD_AnyUnderlyingType]>;
 
-def LLHD_AnySigType : LLHD_SigType<[LLHD_AnySigUnderlyingType]>;
+// LLHD ptr type
+class LLHD_PtrType<list<Type> allowedTypes>
+    : ContainerType<AnyTypeOf<allowedTypes>, CPred<"$_self.isa<PtrType>()">,
+                    "$_self.cast<PtrType>().getUnderlyingType()",
+                    "LLHD pointer type">;
+
+def LLHD_AnyPtrType : LLHD_PtrType<[LLHD_AnyUnderlyingType]>;
 
 // LLHD Array Type
 def LLHD_ArrayType : Type<CPred<"$_self.isa<ArrayType>()">, "LLHD array type">;
@@ -114,5 +123,6 @@ include "SignalOps.td"
 include "ExtractOps.td"
 include "InsertOps.td"
 include "StructureOps.td"
+include "MemoryOps.td"
 
 #endif // CIRCT_DIALECT_LLHD_IR_LLHD

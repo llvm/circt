@@ -47,7 +47,7 @@ struct LLHDInlinerInterface : public DialectInlinerInterface {
 
 LLHDDialect::LLHDDialect(mlir::MLIRContext *context)
     : Dialect(getDialectNamespace(), context) {
-  addTypes<SigType, TimeType, ArrayType>();
+  addTypes<SigType, TimeType, ArrayType, PtrType>();
   addAttributes<TimeAttr>();
   addOperations<
 #define GET_OP_LIST
@@ -65,9 +65,8 @@ Operation *LLHDDialect::materializeConstant(OpBuilder &builder, Attribute value,
 // Type parsing
 //===----------------------------------------------------------------------===//
 
-/// Parse a signal type.
-/// Syntax: sig ::= !llhd.sig<type>
-static Type parseSigType(DialectAsmParser &parser) {
+/// Parse a nested type, enclosed in angle brackts (`<...>`).
+static Type parseNestedType(DialectAsmParser &parser) {
   Type underlyingType;
   if (parser.parseLess())
     return Type();
@@ -81,7 +80,20 @@ static Type parseSigType(DialectAsmParser &parser) {
 
   if (parser.parseGreater())
     return Type();
-  return SigType::get(underlyingType);
+
+  return underlyingType;
+}
+
+/// Parse a signal type.
+/// Syntax: sig ::= !llhd.sig<type>
+static Type parseSigType(DialectAsmParser &parser) {
+  return SigType::get(parseNestedType(parser));
+}
+
+/// Parse a pointer type.
+/// Syntax: ptr ::= !llhd.ptr<type
+static Type parsePtrType(DialectAsmParser &parser) {
+  return PtrType::get(parseNestedType(parser));
 }
 
 /// Parse an array type.
@@ -116,6 +128,9 @@ Type LLHDDialect::parseType(DialectAsmParser &parser) const {
     return TimeType::get(getContext());
   if (typeKeyword == ArrayType::getKeyword())
     return parseArrayType(parser);
+  if (typeKeyword == PtrType::getKeyword())
+    return parsePtrType(parser);
+
   return Type();
 }
 
@@ -137,6 +152,8 @@ void LLHDDialect::printType(Type type, DialectAsmPrinter &printer) const {
   } else if (ArrayType array = type.dyn_cast<ArrayType>()) {
     printer << array.getKeyword() << "<" << array.getLength() << "x"
             << array.getElementType() << ">";
+  } else if (PtrType ptr = type.dyn_cast<PtrType>()) {
+    printer << ptr.getKeyword() << "<" << ptr.getUnderlyingType() << ">";
   }
 }
 
@@ -275,6 +292,28 @@ private:
   Type elementType;
 };
 
+struct PtrTypeStorage : public mlir::TypeStorage {
+  using KeyTy = Type;
+
+  PtrTypeStorage(Type underlyingType) : underlyingType(underlyingType) {}
+
+  bool operator==(const KeyTy &key) const { return key == getUnderlyingType(); }
+
+  static KeyTy getKey(mlir::Type underlyingType) {
+    return KeyTy(underlyingType);
+  }
+
+  static PtrTypeStorage *construct(TypeStorageAllocator &allocator,
+                                   const KeyTy &key) {
+    return new (allocator.allocate<PtrTypeStorage>()) PtrTypeStorage(key);
+  }
+
+  Type getUnderlyingType() const { return underlyingType; }
+
+private:
+  Type underlyingType;
+};
+
 //===----------------------------------------------------------------------===//
 // Attribute storage
 //===----------------------------------------------------------------------===//
@@ -378,6 +417,15 @@ LogicalResult ArrayType::verifyConstructionInvariants(Location loc,
 unsigned ArrayType::getLength() const { return getImpl()->getLength(); }
 Type ArrayType::getElementType() const { return getImpl()->getElementType(); }
 
+// Ptr Type
+
+PtrType PtrType::get(mlir::Type underlyingType) {
+  return Base::get(underlyingType.getContext(), LLHDTypes::Ptr, underlyingType);
+};
+
+mlir::Type PtrType::getUnderlyingType() {
+  return getImpl()->getUnderlyingType();
+}
 //===----------------------------------------------------------------------===//
 // LLHD Attribtues
 //===----------------------------------------------------------------------===//

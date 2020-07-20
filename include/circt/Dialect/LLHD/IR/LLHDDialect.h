@@ -16,6 +16,7 @@ namespace detail {
 struct SigTypeStorage;
 struct TimeAttrStorage;
 struct ArrayTypeStorage;
+struct PtrTypeStorage;
 } // namespace detail
 
 class LLHDDialect : public Dialect {
@@ -50,6 +51,7 @@ enum Kinds {
   Sig = mlir::Type::FIRST_PRIVATE_EXPERIMENTAL_0_TYPE,
   Time,
   Array,
+  Ptr,
 };
 } // namespace LLHDTypes
 
@@ -91,6 +93,24 @@ public:
 
   /// Get the keyword for the time type
   static llvm::StringRef getKeyword() { return "time"; }
+};
+
+class PtrType
+    : public mlir::Type::TypeBase<PtrType, Type, detail::PtrTypeStorage> {
+public:
+  using Base::Base;
+
+  /// Return whether the given kind is Ptr.
+  static bool kindof(unsigned kind) { return kind == LLHDTypes::Ptr; }
+
+  /// Get a new instance of llhd Ptr type.
+  static PtrType get(Type underlyingType);
+
+  /// The underlying type of the Ptr type.
+  Type getUnderlyingType();
+
+  /// Get the keyword for the Ptr type.
+  static llvm::StringRef getKeyword() { return "ptr"; }
 };
 
 //===----------------------------------------------------------------------===//
