@@ -4,7 +4,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-def LLHD_ExtsOp : LLHD_Op<"exts", [
+def LLHD_ExtractSliceOp : LLHD_Op<"extract_slice", [
     NoSideEffect,
     PredOpTrait<
       "'start' + size of the slice have to be smaller or equal to the 'target' "
@@ -18,7 +18,7 @@ def LLHD_ExtsOp : LLHD_Op<"exts", [
   ]> {
   let summary = "Extract a slice of consecutive elements.";
   let description = [{
-    The `llhd.exts` operation allows access to a slice of the `$target`
+    The `llhd.extract_slice` operation allows access to a slice of the `$target`
     operand. The `$start` attribute defines the index of the first element.
     The return type is the same as `$target` but with the width of the
     specified result type.
@@ -29,10 +29,10 @@ def LLHD_ExtsOp : LLHD_Op<"exts", [
 
     ```mlir
     %0 = llhd.const 123 : i32
-    %1 = llhd.exts %0, 0 : i32 -> i2
+    %1 = llhd.extract_slice %0, 0 : i32 -> i2
 
     %2 = llhd.sig %0 : i32
-    %3 = llhd.exts %2, 0 : !llhd.sig<i32> -> !llhd.sig<i5>
+    %3 = llhd.extract_slice %2, 0 : !llhd.sig<i32> -> !llhd.sig<i5>
     ```
   }];
 
@@ -55,7 +55,7 @@ def LLHD_ExtsOp : LLHD_Op<"exts", [
   }];
 }
 
-def LLHD_DextsOp : LLHD_Op<"dexts", [
+def LLHD_DynExtractSliceOp : LLHD_Op<"dyn_extract_slice", [
     NoSideEffect,
     SameTypeArbitraryWidth<
       "'target' and 'result' types have to match apart from their width",
@@ -66,9 +66,9 @@ def LLHD_DextsOp : LLHD_Op<"dexts", [
   ]> {
   let summary = "Dynamically extract a slice of consecutive elements";
   let description = [{
-    The `llhd.dexts` operation allows to dynamically access a slice of the
-    `$target` operand, starting at the index given by the `$start` operand.
-    The resulting slice length is defined by the result type.
+    The `llhd.dyn_extract_slice` operation allows to dynamically access a slice
+    of the `$target` operand, starting at the index given by the `$start`
+    operand. The resulting slice length is defined by the result type.
     The `$target` operand kind has to match the result kind.
     If `$target` is a vector, only the number of elements can change, while
     the element type has to remain the same.
@@ -79,7 +79,7 @@ def LLHD_DextsOp : LLHD_Op<"dexts", [
     %0 = llhd.const 0x0f0 : i12
     %1 = llhd.const 4 : i3
 
-    %3 = llhd.dexts %0, %1 : (i12, i3) -> i4    // %3: 0xf
+    %3 = llhd.dyn_extract_slice %0, %1 : (i12, i3) -> i4    // %3: 0xf
     ```
   }];
 
@@ -167,7 +167,7 @@ def LLHD_ExtractElementOp : LLHD_Op<"extract_element", [
   }];
 }
 
-def LLHD_DynamicExtractElementOp : LLHD_Op<"dyn_extract_element", [
+def LLHD_DynExtractElementOp : LLHD_Op<"dyn_extract_element", [
   NoSideEffect,
   TypesMatchWith<"'result' must be the element type of the 'target' vector, in "
     "case 'target' is a signal of a vector, 'result' also is a signal of the "

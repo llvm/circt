@@ -4,7 +4,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-def LLHD_InssOp : LLHD_Op<"inss", [
+def LLHD_InsertSliceOp : LLHD_Op<"insert_slice", [
     NoSideEffect,
     AllTypesMatch<["target", "result"]>,
     SameTypeArbitraryWidth<
@@ -20,8 +20,8 @@ def LLHD_InssOp : LLHD_Op<"inss", [
   ]> {
   let summary = "Insert a slice of consecutive elements.";
   let description = [{
-    The `llhd.inss` operation allows insertion of a slice represented by the
-    `$slice` operand into the `$target` operand. The `$start` attribute
+    The `llhd.insert_slice` operation allows insertion of a slice represented by
+    the `$slice` operand into the `$target` operand. The `$start` attribute
     defines the index of the first element. The return type is the same as
     `$target`. Note that the `$target` is not changed, but a new value with
     the slice inserted is returned.
@@ -31,11 +31,11 @@ def LLHD_InssOp : LLHD_Op<"inss", [
     ```mlir
     %itarget = llhd.const 123 : i32
     %islice = llhd.const 2 : i2
-    %0 = llhd.inss %itarget, %islice, 0 : i32, i2
+    %0 = llhd.insert_slice %itarget, %islice, 0 : i32, i2
 
     %vtarget = constant dense<[1,2,3]> : vector<3xi32>
     %vslice = constant dense<[4,5]> : vector<2xi32>
-    %1 = llhd.inss %vtarget, %vslice, 0 : vector<3xi32>, vector<2xi32>
+    %1 = llhd.insert_slice %vtarget, %vslice, 0 : vector<3xi32>, vector<2xi32>
     ```
   }];
 
@@ -55,7 +55,7 @@ def LLHD_InssOp : LLHD_Op<"inss", [
   }];
 }
 
-def LLHD_InsfOp : LLHD_Op<"insf", [
+def LLHD_InsertElementOp : LLHD_Op<"insert_element", [
     NoSideEffect,
     AllTypesMatch<["target", "result"]>,
     PredOpTrait<"'index' has to be smaller than the 'target' size",
@@ -66,10 +66,10 @@ def LLHD_InsfOp : LLHD_Op<"insf", [
   ]> {
   let summary = "Insert an element into a vector or tuple.";
   let description = [{
-    The `llhd.insf` operation allows insertion of an element represented by
-    the `$element` operand into the `$target` operand. The `$index`
-    attribute defines the index where to insert the element. The return type
-    is the same as `$target`. Note that the `$target` is not changed, but a
+    The `llhd.insert_element` operation allows insertion of an element
+    represented by the `$element` operand into the `$target` operand. The
+    `$index` attribute defines the index where to insert the element. The return
+    type is the same as `$target`. Note that the `$target` is not changed, but a
     new value with the element inserted is returned.
 
     Example:
@@ -77,11 +77,12 @@ def LLHD_InsfOp : LLHD_Op<"insf", [
     ```mlir
     %target = constant dense<[1,2,3]> : vector<3xi8>
     %element = llhd.const 2 : i8
-    %0 = llhd.insf %target, %element, 0 : vector<3xi8>, i8
+    %0 = llhd.insert_element %target, %element, 0 : vector<3xi8>, i8
 
     %tuptarget = llhd.tuple %element, %target : tuple<i8, vector<3xi8>
     %newelement = llhd.const 4 : i8
-    %1 = llhd.insf %tuptarget, %newelement, 0 : tuple<i8, vector<3xi8>>, i8
+    %1 = llhd.insert_element %tuptarget, %newelement, 0
+      : tuple<i8, vector<3xi8>>, i8
     ```
   }];
 
