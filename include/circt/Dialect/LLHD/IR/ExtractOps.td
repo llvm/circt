@@ -13,7 +13,7 @@ def LLHD_ExtractSliceOp : LLHD_Op<"extract_slice", [
             "this->getTargetSize()">>,
     SameTypeArbitraryWidth<
       "'target' and 'result' have to be both either signless integers, signals "
-      "or vectors with the same element type",
+      "or arrays with the same element type",
       "$target", "$result">
   ]> {
   let summary = "Extract a slice of consecutive elements.";
@@ -37,13 +37,13 @@ def LLHD_ExtractSliceOp : LLHD_Op<"extract_slice", [
   }];
 
   let arguments = (ins
-    AnyTypeOf<[AnySignlessInteger, AnyVector,
-               LLHD_SigType<[AnySignlessInteger, AnyVector]>]>: $target,
+    AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType,
+               LLHD_SigType<[AnySignlessInteger, LLHD_ArrayType]>]>: $target,
     IndexAttr: $start);
 
   let results = (outs
-    AnyTypeOf<[AnySignlessInteger, AnyVector,
-               LLHD_SigType<[AnySignlessInteger, AnyVector]>]>: $result);
+    AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType,
+               LLHD_SigType<[AnySignlessInteger, LLHD_ArrayType]>]>: $result);
 
   let assemblyFormat = [{
     $target `,` $start attr-dict `:` type($target) `->` type($result)
@@ -70,7 +70,7 @@ def LLHD_DynExtractSliceOp : LLHD_Op<"dyn_extract_slice", [
     of the `$target` operand, starting at the index given by the `$start`
     operand. The resulting slice length is defined by the result type.
     The `$target` operand kind has to match the result kind.
-    If `$target` is a vector, only the number of elements can change, while
+    If `$target` is an array, only the number of elements can change, while
     the element type has to remain the same.
 
     Example:
@@ -84,13 +84,13 @@ def LLHD_DynExtractSliceOp : LLHD_Op<"dyn_extract_slice", [
   }];
 
   let arguments = (ins
-    AnyTypeOf<[AnySignlessInteger, AnyVector,
-               LLHD_SigType<[AnySignlessInteger, AnyVector]>]>: $target,
+    AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType,
+               LLHD_SigType<[AnySignlessInteger, LLHD_ArrayType]>]>: $target,
     AnySignlessInteger: $start);
 
   let results = (outs
-    AnyTypeOf<[AnySignlessInteger, AnyVector,
-               LLHD_SigType<[AnySignlessInteger, AnyVector]>]>: $result);
+    AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType,
+               LLHD_SigType<[AnySignlessInteger, LLHD_ArrayType]>]>: $result);
 
   let assemblyFormat = [{
     operands attr-dict `:` functional-type(operands, results)
@@ -117,7 +117,7 @@ def LLHD_ExtractElementOp : LLHD_Op<"extract_element", [
         ": getElementTypeAtIndex($index.cast<IntegerAttr>().getInt()))">
   ]> {
   let summary = [{
-    Extract an element from a vector, tuple, or signal of a vector or tuple.
+    Extract an element from an array, tuple, or signal of an array or tuple.
   }];
   let description = [{
     The `llhd.extract_element` operation allows access to an element of the
@@ -128,22 +128,24 @@ def LLHD_ExtractElementOp : LLHD_Op<"extract_element", [
     Example:
 
     ```mlir
-    %0 = constant dense<[1,2,3]> : vector<3xi8>
-    %1 = llhd.extract_element %0, 0 : vector<3xi8> -> i8
+    %init = llhd.const 3 : i8
+    %0 = llhd.array_uniform %init : !llhd.array<3xi8>
+    %1 = llhd.extract_element %0, 0 : !llhd.array<3xi8> -> i8
 
-    %2 = llhd.sig %0 : vector<3xi8>
-    %3 = llhd.extract_element %2, 0 : !llhd.sig<vector<3xi8>> -> !llhd.sig<i8>
+    %2 = llhd.sig %0 : !llhd.array<3xi8>
+    %3 = llhd.extract_element %2, 0
+      : !llhd.sig<!llhd.array<3xi8>> -> !llhd.sig<i8>
 
     %4 = llhd.const 8 : i16
-    %5 = llhd.tuple %0, %4 : tuple<vector<3xi8>, i16>
-    %6 = llhd.extract_element %5, 1 : tuple<vector<3xi8>, i16> -> i16
+    %5 = llhd.tuple %0, %4 : tuple<!llhd.array<3xi8>, i16>
+    %6 = llhd.extract_element %5, 1 : tuple<!llhd.array<3xi8>, i16> -> i16
     ```
   }];
 
   let arguments = (ins AnyTypeOf<[
-      AnyVector,
+      LLHD_ArrayType,
       AnyTuple,
-      LLHD_SigType<[AnyVector, AnyTuple]>
+      LLHD_SigType<[LLHD_ArrayType, AnyTuple]>
     ]>: $target,
     IndexAttr: $index);
 
@@ -160,24 +162,24 @@ def LLHD_ExtractElementOp : LLHD_Op<"extract_element", [
       Type targetType = target().getType();
       if (auto sig = targetType.dyn_cast<llhd::SigType>())
         targetType = sig.getUnderlyingType();
-      if (auto vec = targetType.dyn_cast<VectorType>())
-        return vec.getElementType();
-      return targetType.dyn_cast<TupleType>().getTypes()[index];
+      if (auto array = targetType.dyn_cast<llhd::ArrayType>())
+        return array.getElementType();
+      return targetType.cast<TupleType>().getTypes()[index];
     }
   }];
 }
 
 def LLHD_DynExtractElementOp : LLHD_Op<"dyn_extract_element", [
   NoSideEffect,
-  TypesMatchWith<"'result' must be the element type of the 'target' vector, in "
-    "case 'target' is a signal of a vector, 'result' also is a signal of the "
-    "vector element type",
+  TypesMatchWith<"'result' must be the element type of the 'target' array, in "
+    "case 'target' is a signal of an array, 'result' also is a signal of the "
+    "array element type",
     "target", "result",
     "($_self.isa<llhd::SigType>() ? llhd::SigType::get(getElementType()) "
                                  ": getElementType())">
   ]> {
   let summary = [{
-    Dynamically extract an element from a vector or signal of vector.
+    Dynamically extract an element from an array or signal of array.
   }];
   let description = [{
     The `llhd.dyn_extract_element` operation allows to dynamically access an
@@ -190,17 +192,18 @@ def LLHD_DynExtractElementOp : LLHD_Op<"dyn_extract_element", [
     ```mlir
     %index = llhd.const 1 : i2
 
-    %0 = constant dense<[1,2,3]> : vector<3xi8>
-    %1 = llhd.dyn_extract_element %0, %index : (vector<3xi8>, i2) -> i8
+    %init = llhd.const 3 : i8
+    %0 = llhd.array_uniform %init : !llhd.array<3xi8>
+    %1 = llhd.dyn_extract_element %0, %index : (!llhd.array<3xi8>, i2) -> i8
 
-    %2 = llhd.sig %0 : vector<3xi8>
+    %2 = llhd.sig %0 : !llhd.array<3xi8>
     %3 = llhd.dyn_extract_element %2, %index
-      : (!llhd.sig<vector<3xi8>>, i2) -> !llhd.sig<i8>
+      : (!llhd.sig<!llhd.array<3xi8>>, i2) -> !llhd.sig<i8>
     ```
   }];
 
   let arguments = (ins
-    AnyTypeOf<[AnyVector, LLHD_SigType<[AnyVector]>]>: $target,
+    AnyTypeOf<[LLHD_ArrayType, LLHD_SigType<[LLHD_ArrayType]>]>: $target,
     AnySignlessInteger: $index);
 
   let results = (outs AnyType: $result);
@@ -216,7 +219,7 @@ def LLHD_DynExtractElementOp : LLHD_Op<"dyn_extract_element", [
       Type targetType = target().getType();
       if (auto sig = targetType.dyn_cast<llhd::SigType>())
         targetType = sig.getUnderlyingType();
-      return targetType.dyn_cast<VectorType>().getElementType();
+      return targetType.cast<llhd::ArrayType>().getElementType();
     }
   }];
 }

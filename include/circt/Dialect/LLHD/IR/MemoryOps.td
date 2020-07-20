@@ -19,15 +19,16 @@ def LLHD_VarOp : LLHD_Op<"var", [
 
     ```
     %int = llhd.const 0 : i32
-    %arr = constant dense<[1,2,3]> : vector<3xi32>
+    %arr = llhd.array_uniform %int : !llhd.array<3xi32>
 
     %iPtr = llhd.var %int : i32
-    %arrPtr = llhd.var %arr : vector<3xi32>
+    %arrPtr = llhd.var %arr : !llhd.array<3xi32>
     ```
   }];
 
   let arguments = (ins LLHD_AnyUnderlyingType: $init);
-  let results = (outs Res<LLHD_AnyPtrType, "the newly allocated reference", [MemAlloc]>: $result);
+  let results = (outs Res<LLHD_AnyPtrType, "the newly allocated reference",
+                          [MemAlloc]>: $result);
 
   let assemblyFormat = "$init attr-dict `:` type($init)";
 }
@@ -46,16 +47,17 @@ def LLHD_LoadOp : LLHD_Op<"load", [
 
     ```
     %int = llhd.const 0 : i32
-    %arr = constant dense<[1,2,3]> : vector<3xi32>
+    %arr = llhd.array_uniform %int : !llhd.array<3xi32>
     %iPtr = llhd.var %int : i32
-    %arrPtr = llhd.var %arr : vector<3xi32>
+    %arrPtr = llhd.var %arr : !llhd.array<3xi32>
 
     %iLd = llhd.load %iPtr : !llhd.ptr<i32>
-    %arrLd = llhd.load %arrPtr : !llhd.ptr<vector<3xi32>>
+    %arrLd = llhd.load %arrPtr : !llhd.ptr<!llhd.array<3xi32>>
     ```
   }];
 
-  let arguments = (ins Arg<LLHD_AnyPtrType, "the reference to load from", [MemRead]>: $pointer);
+  let arguments = (ins Arg<LLHD_AnyPtrType, "the reference to load from",
+                           [MemRead]>: $pointer);
   let results = (outs LLHD_AnyUnderlyingType: $result);
 
   let assemblyFormat = "$pointer attr-dict `:` type($pointer)";
@@ -75,16 +77,17 @@ def LLHD_StoreOp : LLHD_Op<"store", [
 
     ```
     %int = llhd.const 0 : i32
-    %arr = constant dense<[1,2,3]> : vector<3xi32>
+    %arr = llhd.array_uniform %int : !llhd.array<3xi32>
     %iPtr = llhd.var %int : i32
-    %arrPtr = llhd.var %arr : vector<3xi32>
+    %arrPtr = llhd.var %arr : !llhd.array<3xi32>
 
     llhd.store %iPtr, %int : !llhd.ptr<i32>
-    llhd.store %arrPtr, %arr : !llhd.ptr<vector<3xi32>>
+    llhd.store %arrPtr, %arr : !llhd.ptr<!llhd.array<3xi32>>
     ```
   }];
 
-  let arguments = (ins Arg<LLHD_AnyPtrType, "the reference to store to", [MemWrite]>: $pointer,
+  let arguments = (ins Arg<LLHD_AnyPtrType, "the reference to store to",
+                           [MemWrite]>: $pointer,
                        LLHD_AnyUnderlyingType: $value);
 
   let assemblyFormat = "$pointer `,` $value attr-dict `:` type($pointer)";

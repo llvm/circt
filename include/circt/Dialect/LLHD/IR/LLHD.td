@@ -37,9 +37,12 @@ def LLHD_Dialect : Dialect {
 def LLHD_TimeType : Type<CPred<"$_self.isa<TimeType>()">, "LLHD time type">,
                     BuildableType<"TimeType::get($_builder.getContext())">;
 
+// LLHD Array Type
+def LLHD_ArrayType : Type<CPred<"$_self.isa<ArrayType>()">, "LLHD array type">;
+
 // Legal underlying types for signals and pointers.
 def LLHD_AnyUnderlyingType :
-  AnyTypeOf<[AnySignlessInteger, AnyVector, AnyTuple]>;
+  AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType, AnyTuple]>;
 
 // LLHD sig type
 class LLHD_SigType<list<Type> allowedTypes>
@@ -55,9 +58,6 @@ class LLHD_PtrType<list<Type> allowedTypes>
                     "LLHD pointer type">;
 
 def LLHD_AnyPtrType : LLHD_PtrType<[LLHD_AnyUnderlyingType]>;
-
-// LLHD Array Type
-def LLHD_ArrayType : Type<CPred<"$_self.isa<ArrayType>()">, "LLHD array type">;
 
 //===----------------------------------------------------------------------===//
 // LLDH attribute definitions

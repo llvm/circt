@@ -8,7 +8,7 @@ def LLHD_InsertSliceOp : LLHD_Op<"insert_slice", [
     NoSideEffect,
     AllTypesMatch<["target", "result"]>,
     SameTypeArbitraryWidth<
-      "'target' and 'slice' have to be both either signless integers or vectors"
+      "'target' and 'slice' have to be both either signless integers or arrays"
       " with the same element type",
       "$target", "$slice">,
     PredOpTrait<
@@ -33,17 +33,20 @@ def LLHD_InsertSliceOp : LLHD_Op<"insert_slice", [
     %islice = llhd.const 2 : i2
     %0 = llhd.insert_slice %itarget, %islice, 0 : i32, i2
 
-    %vtarget = constant dense<[1,2,3]> : vector<3xi32>
-    %vslice = constant dense<[4,5]> : vector<2xi32>
-    %1 = llhd.insert_slice %vtarget, %vslice, 0 : vector<3xi32>, vector<2xi32>
+    %init1 = llhd.const 2 : i32
+    %init2 = llhd.const 3 : i32
+    %vtarget = llhd.array_uniform %init1 : !llhd.array<3xi32>
+    %vslice = llhd.array_uniform %init2 : !llhd.array<2xi32>
+    %1 = llhd.insert_slice %vtarget, %vslice, 0
+      : !llhd.array<3xi32>, !llhd.array<2xi32>
     ```
   }];
 
-  let arguments = (ins AnyTypeOf<[AnySignlessInteger, AnyVector]>: $target,
-                       AnyTypeOf<[AnySignlessInteger, AnyVector]>: $slice,
+  let arguments = (ins AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType]>: $target,
+                       AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType]>: $slice,
                        IndexAttr: $start);
 
-  let results = (outs AnyTypeOf<[AnySignlessInteger, AnyVector]>: $result);
+  let results = (outs AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType]>: $result);
 
   let assemblyFormat = [{
     $target `,` $slice `,` $start attr-dict `:` type($target) `,` type($slice)
@@ -64,7 +67,7 @@ def LLHD_InsertElementOp : LLHD_Op<"insert_element", [
       "target", "element",
       "this->getElementTypeAtIndex($index.cast<IntegerAttr>().getInt())">
   ]> {
-  let summary = "Insert an element into a vector or tuple.";
+  let summary = "Insert an element into an array or tuple.";
   let description = [{
     The `llhd.insert_element` operation allows insertion of an element
     represented by the `$element` operand into the `$target` operand. The
@@ -75,22 +78,23 @@ def LLHD_InsertElementOp : LLHD_Op<"insert_element", [
     Example:
 
     ```mlir
-    %target = constant dense<[1,2,3]> : vector<3xi8>
+    %init = llhd.const 1 : i8
+    %target = llhd.array_uniform : !llhd.array<3xi8>
     %element = llhd.const 2 : i8
-    %0 = llhd.insert_element %target, %element, 0 : vector<3xi8>, i8
+    %0 = llhd.insert_element %target, %element, 0 : !llhd.array<3xi8>, i8
 
-    %tuptarget = llhd.tuple %element, %target : tuple<i8, vector<3xi8>
+    %tuptarget = llhd.tuple %element, %target : tuple<i8, !llhd.array<3xi8>
     %newelement = llhd.const 4 : i8
     %1 = llhd.insert_element %tuptarget, %newelement, 0
-      : tuple<i8, vector<3xi8>>, i8
+      : tuple<i8, !llhd.array<3xi8>>, i8
     ```
   }];
 
-  let arguments = (ins AnyTypeOf<[AnyVector, AnyTuple]>: $target,
+  let arguments = (ins AnyTypeOf<[LLHD_ArrayType, AnyTuple]>: $target,
                        AnyType: $element,
                        IndexAttr: $index);
 
-  let results = (outs AnyTypeOf<[AnyVector, AnyTuple]>: $result);
+  let results = (outs AnyTypeOf<[LLHD_ArrayType, AnyTuple]>: $result);
 
   let assemblyFormat = [{
     $target `,` $element `,` $index attr-dict `:`
@@ -102,8 +106,8 @@ def LLHD_InsertElementOp : LLHD_Op<"insert_element", [
 
     Type getElementTypeAtIndex(int64_t index) {
       Type targetType = target().getType();
-      if (auto vec = targetType.dyn_cast<VectorType>())
-        return vec.getElementType();
+      if (auto array = targetType.dyn_cast<llhd::ArrayType>())
+        return array.getElementType();
       return targetType.cast<TupleType>().getTypes()[index];
     }
   }];

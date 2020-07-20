@@ -125,8 +125,8 @@ struct constant_int_all_ones_matcher {
 unsigned mlir::llhd::getLLHDTypeWidth(Type type) {
   if (auto sig = type.dyn_cast<llhd::SigType>())
     type = sig.getUnderlyingType();
-  if (auto vec = type.dyn_cast<VectorType>())
-    return vec.getNumElements();
+  if (auto array = type.dyn_cast<llhd::ArrayType>())
+    return array.getLength();
   if (auto tup = type.dyn_cast<TupleType>())
     return tup.size();
   return type.getIntOrFloatBitWidth();
@@ -144,6 +144,10 @@ static bool sameKindArbitraryWidth(Type lhsType, Type rhsType) {
     return sameKindArbitraryWidth(
         sig.getUnderlyingType(),
         rhsType.cast<llhd::SigType>().getUnderlyingType());
+
+  if (auto array = lhsType.dyn_cast<llhd::ArrayType>())
+    return array.getElementType() ==
+           rhsType.cast<llhd::ArrayType>().getElementType();
 
   return (!lhsType.isa<ShapedType>() ||
           (lhsType.cast<ShapedType>().getElementType() ==
