@@ -27,7 +27,7 @@ def LLHD_VarOp : LLHD_Op<"var", [
   }];
 
   let arguments = (ins LLHD_AnyUnderlyingType: $init);
-  let results = (outs Res<LLHD_AnyPtrType, "The allocated reference.", [MemAlloc]>: $result);
+  let results = (outs Res<LLHD_AnyPtrType, "the newly allocated reference", [MemAlloc]>: $result);
 
   let assemblyFormat = "$init attr-dict `:` type($init)";
 }
@@ -55,7 +55,7 @@ def LLHD_LoadOp : LLHD_Op<"load", [
     ```
   }];
 
-  let arguments = (ins Arg<LLHD_AnyPtrType, "The reference to load from.", [MemRead]>: $pointer);
+  let arguments = (ins Arg<LLHD_AnyPtrType, "the reference to load from", [MemRead]>: $pointer);
   let results = (outs LLHD_AnyUnderlyingType: $result);
 
   let assemblyFormat = "$pointer attr-dict `:` type($pointer)";
@@ -84,7 +84,7 @@ def LLHD_StoreOp : LLHD_Op<"store", [
     ```
   }];
 
-  let arguments = (ins Arg<LLHD_AnyPtrType, "The reference to store to.", [MemWrite]>: $pointer,
+  let arguments = (ins Arg<LLHD_AnyPtrType, "the reference to store to", [MemWrite]>: $pointer,
                        LLHD_AnyUnderlyingType: $value);
 
   let assemblyFormat = "$pointer `,` $value attr-dict `:` type($pointer)";
