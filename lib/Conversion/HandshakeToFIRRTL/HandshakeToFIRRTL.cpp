@@ -127,6 +127,12 @@ static std::string getSubModuleName(Operation *oldOp) {
   if (auto comOp = dyn_cast<mlir::CmpIOp>(oldOp))
     subModuleName += "_" + stringifyEnum(comOp.getPredicate()).str();
 
+  if (auto bufferOp = dyn_cast<handshake::BufferOp>(oldOp)) {
+    subModuleName += "_" + bufferOp.getNumSlots().toString(10, false) + "slots";
+    if (bufferOp.isSequential())
+      subModuleName += "_seq";
+  }
+
   if (auto ctrlAttr = oldOp->getAttr("control")) {
     if (ctrlAttr.cast<BoolAttr>().getValue())
       subModuleName += "_ctrl";
@@ -143,7 +149,7 @@ static std::string getSubModuleName(Operation *oldOp) {
 /// circuit is pure combinational logic. If graph cycle exists, at least one
 /// buffer is required to be inserted for breaking the cycle, which will be
 /// supported in the next patch.
-static FModuleOp createTopModuleOp(handshake::FuncOp funcOp,
+static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
                                    ConversionPatternRewriter &rewriter) {
   using ModulePort = std::pair<StringAttr, FIRRTLType>;
   llvm::SmallVector<ModulePort, 8> ports;
@@ -173,6 +179,23 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp,
 
     ports.push_back(ModulePort(portName, bundlePortType));
     args_idx += 1;
+  }
+
+  // Add clock and reset signals.
+  if (numClocks == 1) {
+    ports.push_back(ModulePort(rewriter.getStringAttr("clock"),
+                               rewriter.getType<ClockType>()));
+    ports.push_back(ModulePort(rewriter.getStringAttr("reset"),
+                               rewriter.getType<UIntType>(1)));
+  } else if (numClocks > 1) {
+    for (unsigned i = 0; i < numClocks; ++i) {
+      auto clockName = "clock" + std::to_string(i);
+      auto resetName = "reset" + std::to_string(i);
+      ports.push_back(ModulePort(rewriter.getStringAttr(clockName),
+                                 rewriter.getType<ClockType>()));
+      ports.push_back(ModulePort(rewriter.getStringAttr(resetName),
+                                 rewriter.getType<UIntType>(1)));
+    }
   }
 
   // Create a FIRRTL module, and inline the funcOp into it.
@@ -225,6 +248,7 @@ static FModuleOp checkSubModuleOp(FModuleOp topModuleOp, Operation *oldOp) {
 /// All standard expressions and handshake elastic components will be converted
 /// to a FIRRTL sub-module and be instantiated in the top-module.
 static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
+                                   bool hasClock,
                                    ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPoint(topModuleOp);
   using ModulePort = std::pair<StringAttr, FIRRTLType>;
@@ -257,6 +281,14 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
     args_idx += 1;
   }
 
+  // Add clock and reset signals.
+  if (hasClock) {
+    ports.push_back(ModulePort(rewriter.getStringAttr("clock"),
+                               rewriter.getType<ClockType>()));
+    ports.push_back(ModulePort(rewriter.getStringAttr("reset"),
+                               rewriter.getType<UIntType>(1)));
+  }
+
   return rewriter.create<FModuleOp>(
       topModuleOp.getLoc(), rewriter.getStringAttr(getSubModuleName(oldOp)),
       ports);
@@ -273,12 +305,18 @@ static ValueVectorList extractSubfields(FModuleOp subModuleOp,
   ValueVectorList portList;
   for (auto &arg : subModuleOp.getArguments()) {
     ValueVector subfields;
-    auto argType = arg.getType().cast<BundleType>();
-    for (auto &element : argType.getElements()) {
-      StringRef elementName = element.first.strref();
-      FIRRTLType elementType = element.second;
-      subfields.push_back(rewriter.create<SubfieldOp>(
-          insertLoc, elementType, arg, rewriter.getStringAttr(elementName)));
+    if (auto argType = arg.getType().dyn_cast<BundleType>()) {
+      // Extract all subfields of all bundle ports.
+      for (auto &element : argType.getElements()) {
+        StringRef elementName = element.first.strref();
+        FIRRTLType elementType = element.second;
+        subfields.push_back(rewriter.create<SubfieldOp>(
+            insertLoc, elementType, arg, rewriter.getStringAttr(elementName)));
+      }
+    } else if (arg.getType().isa<ClockType>() ||
+               arg.getType().dyn_cast<UIntType>().getWidthOrSentinel() == 1) {
+      // Extract clock and reset signals.
+      subfields.push_back(arg);
     }
     portList.push_back(subfields);
   }
@@ -670,6 +708,21 @@ static void buildConstantLogic(handshake::ConstantOp *oldOp,
       createConstantOp(constantType, constantValue, insertLoc, rewriter));
 }
 
+static void buildBufferLogic(handshake::BufferOp *oldOp,
+                             ValueVectorList portList, Location insertLoc,
+                             ConversionPatternRewriter &rewriter) {
+  ValueVector inputSubfields = portList[0];
+  Value inputValid = inputSubfields[0];
+  Value inputReady = inputSubfields[1];
+
+  ValueVector outputSubfields = portList[1];
+  Value outputValid = outputSubfields[0];
+  Value outputReady = outputSubfields[1];
+
+  Value clock = portList[2][0];
+  Value reset = portList[3][0];
+}
+
 //===----------------------------------------------------------------------===//
 // Old Operation Conversion Functions
 //===----------------------------------------------------------------------===//
@@ -677,10 +730,11 @@ static void buildConstantLogic(handshake::ConstantOp *oldOp,
 /// Create InstanceOp in the top-module. This will be called after the
 /// corresponding sub-module and combinational logic are created.
 static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
+                         FModuleOp topModuleOp, unsigned clockDomain,
                          ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPointAfter(oldOp);
   using BundleElement = std::pair<Identifier, FIRRTLType>;
-  llvm::SmallVector<BundleElement, 4> elements;
+  llvm::SmallVector<BundleElement, 8> elements;
   MLIRContext *context = subModuleOp.getContext();
 
   // Bundle all ports of the instance into a new flattened bundle type.
@@ -690,7 +744,7 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
     auto argId = rewriter.getIdentifier(argName);
 
     // All ports of the instance operation are flipped.
-    auto argType = FlipType::get(arg.getType().cast<BundleType>());
+    auto argType = FlipType::get(arg.getType().cast<FIRRTLType>());
     elements.push_back(BundleElement(argId, argType));
     args_idx += 1;
   }
@@ -712,14 +766,25 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
         rewriter.getStringAttr(elementName.strref()));
 
     unsigned numIns = oldOp->getNumOperands();
-    if (ports_idx < numIns)
+    unsigned numArgs = numIns + oldOp->getNumResults();
+
+    auto topArgs = topModuleOp.getBody().front().getArguments();
+    auto firstClock = std::find_if(topArgs.begin(), topArgs.end(),
+                                   [](BlockArgument &arg) -> bool {
+                                     return arg.getType().isa<ClockType>();
+                                   });
+    if (ports_idx < numIns) {
       // Connect input ports.
       rewriter.create<ConnectOp>(oldOp->getLoc(), subfieldOp,
                                  oldOp->getOperand(ports_idx));
-    else {
+    } else if (ports_idx < numArgs) {
       // Connect output ports.
       Value result = oldOp->getResult(ports_idx - numIns);
       result.replaceAllUsesWith(subfieldOp);
+    } else {
+      // Connect clock or reset signal.
+      auto signal = *(firstClock + 2 * clockDomain + ports_idx - numArgs);
+      rewriter.create<ConnectOp>(oldOp->getLoc(), subfieldOp, signal);
     }
     ports_idx += 1;
   }
@@ -727,9 +792,10 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
 }
 
 static void convertReturnOp(Operation *oldOp, FModuleOp topModuleOp,
+                            handshake::FuncOp funcOp,
                             ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPointAfter(oldOp);
-  unsigned numIns = topModuleOp.getNumArguments() - oldOp->getNumOperands();
+  unsigned numIns = funcOp.getNumArguments();
 
   // Connect each operand of the old return operation with the corresponding
   // output ports.
@@ -782,21 +848,22 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     auto circuitOp = rewriter.create<CircuitOp>(
         funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()));
     rewriter.setInsertionPointToStart(circuitOp.getBody());
-    auto topModuleOp = createTopModuleOp(funcOp, rewriter);
+    auto topModuleOp = createTopModuleOp(funcOp, /*numClocks=*/1, rewriter);
 
     // Traverse and convert each operation in funcOp.
     for (Operation &op : topModuleOp.getBody().front()) {
       if (isa<handshake::ReturnOp>(op))
-        convertReturnOp(&op, topModuleOp, rewriter);
+        convertReturnOp(&op, topModuleOp, funcOp, rewriter);
 
       // This branch takes care of all non-timing operations that require to
       // be instantiated in the top-module.
       else if (op.getDialect()->getNamespace() != "firrtl") {
         FModuleOp subModuleOp = checkSubModuleOp(topModuleOp, &op);
+        bool hasClock = isa<handshake::BufferOp>(op);
 
         // Check if the sub-module already exists.
         if (!subModuleOp) {
-          subModuleOp = createSubModuleOp(topModuleOp, &op, rewriter);
+          subModuleOp = createSubModuleOp(topModuleOp, &op, hasClock, rewriter);
 
           Operation *termOp = subModuleOp.getBody().front().getTerminator();
           Location insertLoc = termOp->getLoc();
@@ -882,12 +949,16 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
           else if (auto oldOp = dyn_cast<handshake::ConstantOp>(op))
             buildConstantLogic(&oldOp, portList, insertLoc, rewriter);
 
+          else if (auto oldOp = dyn_cast<handshake::BufferOp>(op))
+            buildBufferLogic(&oldOp, portList, insertLoc, rewriter);
+
           else
             oldOp.emitError("Usupported operation type.");
         }
 
         // Instantiate the new created sub-module.
-        createInstOp(&op, subModuleOp, rewriter);
+        createInstOp(&op, subModuleOp, topModuleOp, /*clockDomain=*/0,
+                     rewriter);
       }
     }
     rewriter.eraseOp(funcOp);
