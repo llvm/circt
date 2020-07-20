@@ -226,6 +226,56 @@ public:
 #undef HANDLE
 };
 
+/// FIRRTLVisitor allows you to visit all of the expr/stmt/decls with one class
+/// declaration.
+///
+/// Clients call dispatchVisitor to invoke the dispatch, and may implement
+/// visitInvalidOp() to get notified about non-FIRRTL dialect nodes and
+/// visitUnhandledOp() to get notified about FIRRTL dialect ops that are not
+/// handled specifically.
+template <typename ConcreteType, typename ResultType = void,
+          typename... ExtraArgs>
+class FIRRTLVisitor
+    : public ExprVisitor<ConcreteType, ResultType, ExtraArgs...>,
+      public StmtVisitor<ConcreteType, ResultType, ExtraArgs...>,
+      public DeclVisitor<ConcreteType, ResultType, ExtraArgs...> {
+public:
+  /// This is the main entrypoint for the FIRRTLVisitor.
+  ResultType dispatchVisitor(Operation *op, ExtraArgs... args) {
+    return this->dispatchExprVisitor(op, args...);
+  }
+
+  // Chain from each visitor onto the next one.
+  ResultType visitInvalidExpr(Operation *op, ExtraArgs... args) {
+    return this->dispatchStmtVisitor(op, args...);
+  }
+  ResultType visitInvalidStmt(Operation *op, ExtraArgs... args) {
+    return this->dispatchDeclVisitor(op, args...);
+  }
+  ResultType visitInvalidDecl(Operation *op, ExtraArgs... args) {
+    return static_cast<ConcreteType *>(this)->visitInvalidOp(op, args...);
+  }
+
+  // Default to chaining visitUnhandledXXX to visitUnhandledOp.
+  ResultType visitUnhandledExpr(Operation *op, ExtraArgs... args) {
+    return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);
+  }
+  ResultType visitUnhandledStmt(Operation *op, ExtraArgs... args) {
+    return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);
+  }
+  ResultType visitUnhandledDecl(Operation *op, ExtraArgs... args) {
+    return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);
+  }
+
+  /// visitInvalidOp is an override point for non-FIRRTL dialect operations.
+  ResultType visitInvalidOp(Operation *op, ExtraArgs... args) {
+    return ResultType();
+  }
+
+  /// visitUnhandledOp is an override point for FIRRTL dialect ops that the
+  /// concrete visitor didn't bother to implement.
+  ResultType visitUnhandledOp(Operation *op) { return ResultType(); }
+};
 } // namespace firrtl
 } // namespace circt
 
