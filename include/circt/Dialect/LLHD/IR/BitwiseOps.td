@@ -40,6 +40,7 @@ def LLHD_NotOp : LLHD_ArithmeticOrBitwiseOp<"not", []> {
   let arguments = (ins AnySignlessInteger:$value);
 
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 def LLHD_AndOp : LLHD_ArithmeticOrBitwiseOp<"and", [Commutative]> {
@@ -181,6 +182,7 @@ def LLHD_XorOp : LLHD_ArithmeticOrBitwiseOp<"xor", [Commutative]> {
   let arguments = (ins AnySignlessInteger:$lhs, AnySignlessInteger:$rhs);
 
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 def LLHD_ShlOp : LLHD_Op<"shl", [

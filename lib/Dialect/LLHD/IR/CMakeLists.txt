@@ -1,6 +1,7 @@
 add_mlir_dialect_library(MLIRLLHD
   LLHDDialect.cpp
   LLHDOps.cpp
+  LLHDCanonicalization.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/include/Dialect/LLHD
@@ -8,6 +9,7 @@ add_mlir_dialect_library(MLIRLLHD
   DEPENDS
   MLIRLLHDEnumsIncGen
   MLIRLLHDIncGen
+  MLIRLLHDCanonicalizationIncGen
 
   LINK_LIBS PUBLIC
   MLIREDSC

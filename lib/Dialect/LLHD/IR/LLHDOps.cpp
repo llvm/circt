@@ -264,6 +264,10 @@ OpFoldResult llhd::NeqOp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult llhd::NotOp::fold(ArrayRef<Attribute> operands) {
+  // llhd.not(llhd.not(x)) -> x
+  if (auto op = value().getDefiningOp<llhd::NotOp>())
+    return op.value();
+
   return constFoldUnaryOp<IntegerAttr>(operands, [](APInt a) { return ~a; });
 }
 
@@ -283,6 +287,12 @@ OpFoldResult llhd::AndOp::fold(ArrayRef<Attribute> operands) {
   // llhd.and(x, x) -> x
   if (rhs() == lhs())
     return rhs();
+
+  // llhd.and(x, llhd.not(x)) -> 0
+  // llhd.and(llhd.not(x), x) -> 0
+  if (matchPattern(rhs(), m_Op<llhd::NotOp>(matchers::m_Val(lhs()))) ||
+      matchPattern(lhs(), m_Op<llhd::NotOp>(matchers::m_Val(rhs()))))
+    return IntegerAttr::get(lhs().getType(), 0);
 
   return constFoldBinaryOp<IntegerAttr>(operands,
                                         [](APInt a, APInt b) { return a & b; });
@@ -305,6 +315,12 @@ OpFoldResult llhd::OrOp::fold(ArrayRef<Attribute> operands) {
   if (rhs() == lhs())
     return rhs();
 
+  // llhd.or(x, llhd.not(x)) -> all_bits_set
+  // llhd.or(llhd.not(x), x) -> all_bits_set
+  if (matchPattern(rhs(), m_Op<llhd::NotOp>(matchers::m_Val(lhs()))) ||
+      matchPattern(lhs(), m_Op<llhd::NotOp>(matchers::m_Val(rhs()))))
+    return IntegerAttr::get(lhs().getType(), -1);
+
   return constFoldBinaryOp<IntegerAttr>(operands,
                                         [](APInt a, APInt b) { return a | b; });
 }
@@ -321,6 +337,12 @@ OpFoldResult llhd::XorOp::fold(ArrayRef<Attribute> operands) {
   /// llhs.xor(x,x) -> 0
   if (lhs() == rhs())
     return Builder(getContext()).getZeroAttr(getType());
+
+  // llhd.xor(x, llhd.not(x)) -> all_bits_set
+  // llhd.xor(llhd.not(x), x) -> all_bits_set
+  if (matchPattern(rhs(), m_Op<llhd::NotOp>(matchers::m_Val(lhs()))) ||
+      matchPattern(lhs(), m_Op<llhd::NotOp>(matchers::m_Val(rhs()))))
+    return IntegerAttr::get(lhs().getType(), -1);
 
   return constFoldBinaryOp<IntegerAttr>(operands,
                                         [](APInt a, APInt b) { return a ^ b; });
