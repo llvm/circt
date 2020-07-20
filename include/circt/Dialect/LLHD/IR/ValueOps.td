@@ -66,6 +66,32 @@ def LLHD_VecOp : LLHD_Op<"vec", [
   let assemblyFormat = "$values attr-dict `:` type($result)";
 }
 
+def LLHD_ArrayUniformOp : LLHD_Op<"array_uniform", [
+    NoSideEffect,
+    TypesMatchWith<
+      "type of 'init' has to match the element type of the 'result' array",
+      "result", "init",
+      "$_self.cast<llhd::ArrayType>().getElementType()">
+  ]> {
+  let summary = "Create a uniform array from an initialization value.";
+  let description = [{
+    The `llhd.array_uniform` operation allows to create an LLHD array from a
+    single SSA-value used as initialization for all elements.
+
+    Example:
+
+    ```mlir
+    %init = llhd.const 1 : i32
+    %array = llhd.array_uniform %init : !llhd.array<3xi32>
+    ```
+  }];
+
+  let arguments = (ins AnyType: $init);
+  let results = (outs LLHD_ArrayType: $result);
+
+  let assemblyFormat = "$init attr-dict `:` type($result)";
+}
+
 def LLHD_TupleOp : LLHD_Op<"tuple", [
     NoSideEffect,
     TypesMatchWith<

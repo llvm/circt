@@ -47,7 +47,7 @@ struct LLHDInlinerInterface : public DialectInlinerInterface {
 
 LLHDDialect::LLHDDialect(mlir::MLIRContext *context)
     : Dialect(getDialectNamespace(), context) {
-  addTypes<SigType, TimeType>();
+  addTypes<SigType, TimeType, ArrayType>();
   addAttributes<TimeAttr>();
   addOperations<
 #define GET_OP_LIST
@@ -84,6 +84,26 @@ static Type parseSigType(DialectAsmParser &parser) {
   return SigType::get(underlyingType);
 }
 
+/// Parse an array type.
+/// Syntax: array ::= !llhd.array<{length}x{elementType}>
+static Type parseArrayType(DialectAsmParser &parser) {
+  Type elementType;
+  SmallVector<int64_t, 1> length;
+  if (parser.parseLess() || parser.parseDimensionList(length, false) ||
+      parser.parseType(elementType) || parser.parseGreater()) {
+    parser.emitError(parser.getCurrentLocation(),
+                     "No array type found. Array needs a length and an element "
+                     "type.");
+    return nullptr;
+  }
+  if (length.size() != 1) {
+    parser.emitError(parser.getCurrentLocation(),
+                     "Array must have exactly one dimension");
+    return nullptr;
+  }
+  return ArrayType::get(length[0], elementType);
+}
+
 Type LLHDDialect::parseType(DialectAsmParser &parser) const {
   llvm::StringRef typeKeyword;
   // parse the type keyword first
@@ -94,6 +114,8 @@ Type LLHDDialect::parseType(DialectAsmParser &parser) const {
   }
   if (typeKeyword == TimeType::getKeyword())
     return TimeType::get(getContext());
+  if (typeKeyword == ArrayType::getKeyword())
+    return parseArrayType(parser);
   return Type();
 }
 
@@ -112,6 +134,9 @@ void LLHDDialect::printType(Type type, DialectAsmPrinter &printer) const {
     printSigType(sig, printer);
   } else if (TimeType time = type.dyn_cast<TimeType>()) {
     printer << time.getKeyword();
+  } else if (ArrayType array = type.dyn_cast<ArrayType>()) {
+    printer << array.getKeyword() << "<" << array.getLength() << "x"
+            << array.getElementType() << ">";
   }
 }
 
@@ -225,6 +250,31 @@ private:
   mlir::Type underlyingType;
 };
 
+/// Array Type Storage and Uniquing.
+struct ArrayTypeStorage : public TypeStorage {
+  /// The hash key used for uniquing.
+  using KeyTy = std::pair<unsigned, Type>;
+  ArrayTypeStorage(unsigned length, Type elementTy)
+      : length(length), elementType(elementTy) {}
+
+  bool operator==(const KeyTy &key) const {
+    return key == KeyTy(length, elementType);
+  }
+
+  static ArrayTypeStorage *construct(TypeStorageAllocator &allocator,
+                                     const KeyTy &key) {
+    return new (allocator.allocate<ArrayTypeStorage>())
+        ArrayTypeStorage(key.first, key.second);
+  }
+
+  unsigned getLength() const { return length; }
+  Type getElementType() const { return elementType; }
+
+private:
+  unsigned length;
+  Type elementType;
+};
+
 //===----------------------------------------------------------------------===//
 // Attribute storage
 //===----------------------------------------------------------------------===//
@@ -303,6 +353,30 @@ mlir::Type SigType::getUnderlyingType() {
 TimeType TimeType::get(MLIRContext *context) {
   return Base::get(context, LLHDTypes::Time);
 }
+
+// ArrayType
+
+ArrayType ArrayType::get(unsigned length, Type elementType) {
+  return Base::get(elementType.getContext(), LLHDTypes::Array, length,
+                   elementType);
+}
+
+ArrayType ArrayType::getChecked(unsigned length, Type elementType,
+                                Location location) {
+  return Base::getChecked(location, LLHDTypes::Array, length, elementType);
+}
+
+LogicalResult ArrayType::verifyConstructionInvariants(Location loc,
+                                                      unsigned length,
+                                                      Type elementType) {
+  if (length == 0)
+    return emitError(loc, "array types must have at least one element");
+
+  return success();
+}
+
+unsigned ArrayType::getLength() const { return getImpl()->getLength(); }
+Type ArrayType::getElementType() const { return getImpl()->getElementType(); }
 
 //===----------------------------------------------------------------------===//
 // LLHD Attribtues
