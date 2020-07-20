@@ -65,10 +65,10 @@
     // CHECK-NEXT: = rtl.wire : i2
     firrtl.wire : !firrtl.uint<2>
 
-    // CHECK-NEXT: = rtl.wire : !firrtl.vector<uint<1>, 13>
+    // CHECK-NEXT: = firrtl.wire : !firrtl.vector<uint<1>, 13>
     %_t_2 = firrtl.wire : !firrtl.vector<uint<1>, 13>
 
-    // CHECK-NEXT: = rtl.wire : !firrtl.vector<uint<2>, 13>
+    // CHECK-NEXT: = firrtl.wire : !firrtl.vector<uint<2>, 13>
     %_t_3 = firrtl.wire : !firrtl.vector<uint<2>, 13>
 
     // CHECK-NEXT: = rtl.extract [[CONCAT1]] from 3 : (i8) -> i5

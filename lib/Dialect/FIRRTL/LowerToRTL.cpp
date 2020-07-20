@@ -4,133 +4,275 @@
 
 #include "circt/Dialect/FIRRTL/Ops.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/FIRRTL/Visitors.h"
 #include "circt/Dialect/RTL/Ops.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Pass/Pass.h"
-#include "mlir/Transforms/DialectConversion.h"
 using namespace circt;
 using namespace firrtl;
-using namespace rtl;
 
 //===----------------------------------------------------------------------===//
-// RTLTypeConverter
+// Pass Infrastructure
 //===----------------------------------------------------------------------===//
+
+#define GEN_PASS_CLASSES
+#include "circt/Dialect/FIRRTL/FIRRTLPasses.h.inc"
 
 namespace {
-class RTLTypeConverter : public TypeConverter {
-public:
-  RTLTypeConverter();
+struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
+                        public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
-  static Optional<Type> convertType(FIRRTLType type);
+  void runOnOperation() override;
+
+  // Helpers.
+  Type lowerType(Type firrtlType);
+  Value getLoweredValue(Value operand);
+  Value getLoweredAndExtendedValue(Value operand, Type destType);
+  LogicalResult setLowering(Value orig, Value result);
+  template <typename ResultOpType, typename... CtorArgTypes>
+  LogicalResult setLoweringTo(Operation *orig, CtorArgTypes... args);
+
+  using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitExpr;
+  using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitDecl;
+  using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitStmt;
+
+  // Lowering hooks.
+  LogicalResult visitExpr(ConstantOp op);
+  LogicalResult visitDecl(WireOp op);
+  LogicalResult visitStmt(ConnectOp op);
+  LogicalResult visitUnhandledOp(Operation *op);
+  LogicalResult visitInvalidOp(Operation *op) { return visitUnhandledOp(op); }
+
+  // Unary Ops.
+  LogicalResult lowerNoopCast(Operation *op);
+  LogicalResult visitExpr(AsSIntPrimOp op) { return lowerNoopCast(op); }
+  LogicalResult visitExpr(AsUIntPrimOp op) { return lowerNoopCast(op); }
+  LogicalResult visitExpr(CatPrimOp op);
+  LogicalResult visitExpr(PadPrimOp op);
+
+  // Binary Ops.
+  template <typename ResultOpType>
+  LogicalResult lowerBinOp(Operation *op);
+  template <typename ResultOpType>
+  LogicalResult lowerBinOpToVariadic(Operation *op);
+
+  LogicalResult visitExpr(AndPrimOp op) {
+    return lowerBinOpToVariadic<rtl::AndOp>(op);
+  }
+  LogicalResult visitExpr(OrPrimOp op) {
+    return lowerBinOpToVariadic<rtl::OrOp>(op);
+  }
+  LogicalResult visitExpr(XorPrimOp op) {
+    return lowerBinOpToVariadic<rtl::XorOp>(op);
+  }
+  LogicalResult visitExpr(AddPrimOp op) {
+    return lowerBinOpToVariadic<rtl::AddOp>(op);
+  }
+  LogicalResult visitExpr(SubPrimOp op) { return lowerBinOp<rtl::SubOp>(op); }
+
+  // Other Operations
+  LogicalResult visitExpr(BitsPrimOp op);
+  LogicalResult visitExpr(HeadPrimOp op);
+  LogicalResult visitExpr(ShlPrimOp op);
+  LogicalResult visitExpr(ShrPrimOp op);
+  LogicalResult visitExpr(TailPrimOp op);
+
+private:
+  /// This builder is set to the right location for each visit call.
+  OpBuilder *builder = nullptr;
+
+  /// Each value lowered (e.g. operation result) is kept track in this map.  The
+  /// key should have a FIRRTL type, the result will have an RTL dialect type.
+  DenseMap<Value, Value> valueMapping;
 };
 } // end anonymous namespace
 
-RTLTypeConverter::RTLTypeConverter() { addConversion(convertType); }
+/// This is the pass constructor.
+std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLToRTLPass() {
+  return std::make_unique<FIRRTLLowering>();
+}
 
-Optional<Type> RTLTypeConverter::convertType(FIRRTLType type) {
-  auto width = type.getBitWidthOrSentinel();
-  if (width >= 0)
-    return IntegerType::get(width, type.getContext());
-  if (width == -1)
-    return None; // IntType with unknown width.
+// This is the main entrypoint for the lowering pass.
+void FIRRTLLowering::runOnOperation() {
+  // FIRRTL FModule is a single block because FIRRTL ops are a DAG.  Walk
+  // through each operation lowering each in turn if we can, introducing casts
+  // if we cannot.
+  auto *body = getOperation().getBodyBlock();
 
-  return type;
+  SmallVector<Operation *, 16> opsToRemove;
+
+  // Iterate through each operation in the module body, attempting to lower
+  // each of them.  We maintain 'builder' for each invocation.
+  OpBuilder theBuilder(&getContext());
+  builder = &theBuilder;
+  for (auto &op : body->getOperations()) {
+    builder->setInsertionPoint(&op);
+    if (succeeded(dispatchVisitor(&op)))
+      opsToRemove.push_back(&op);
+  }
+  builder = nullptr;
+
+  // Now that all of the operations that can be lowered are, remove the original
+  // values.  We know that any lowered operations will be dead (if removed in
+  // reverse order) at this point - any users of them from unremapped operations
+  // will be changed to use the newly lowered ops.
+  while (!opsToRemove.empty())
+    opsToRemove.pop_back_val()->erase();
 }
 
 //===----------------------------------------------------------------------===//
 // Helpers
 //===----------------------------------------------------------------------===//
 
-/// Map in the input value into an expected type, using the type converter to
-/// do this.  This would ideally be handled by the conversion framework.
-static Value mapOperand(Value operand, Operation *op,
-                        ConversionPatternRewriter &rewriter) {
-  auto opType = operand.getType();
-  if (auto firType = opType.dyn_cast<FIRRTLType>()) {
-    auto resultType = RTLTypeConverter::convertType(firType.getPassiveType());
-    if (!resultType.hasValue())
-      return {};
+/// Given a FIRRTL type, return the corresponding type for the RTL dialect.
+/// This returns a null type if it cannot be lowered.
+Type FIRRTLLowering::lowerType(Type type) {
+  auto firType = type.dyn_cast<FIRRTLType>();
+  if (!firType)
+    return {};
 
-    if (auto intType = resultType.getValue().dyn_cast<IntegerType>()) {
-      // Cast firrtl -> standard type.
-      return rewriter.create<firrtl::StdIntCast>(op->getLoc(), intType,
-                                                 operand);
-    }
-  }
+  // Ignore flip types.
+  firType = firType.getPassiveType();
 
-  return operand;
+  auto width = firType.getBitWidthOrSentinel();
+  if (width >= 0) // IntType, analog with known width, clock, etc.
+    return IntegerType::get(width, type.getContext());
+
+  return {};
 }
 
-/// Map the specified operation and then extend it to destType width if needed.
-/// The sign of the extension follows the sign of destType.
-static Value mapAndExtendInt(Value operand, Type destType, Operation *op,
-                             ConversionPatternRewriter &rewriter) {
-  operand = mapOperand(operand, op, rewriter);
-  if (!operand)
+/// Return the lowered value corresponding to the specified original value.
+/// This returns a null value for FIRRTL values that cannot be lowered, e.g.
+/// unknown width integers.
+Value FIRRTLLowering::getLoweredValue(Value value) {
+  // All FIRRTL dialect values have FIRRTL types, so if we see something else
+  // mixed in, it must be something we can't lower.  Just return it directly.
+  auto firType = value.getType().dyn_cast<FIRRTLType>();
+  if (!firType)
+    return value;
+
+  // If we lowered this value, then return the lowered value.
+  auto it = valueMapping.find(value);
+  if (it != valueMapping.end())
+    return it->second;
+
+  // Otherwise, we need to introduce a cast to the right FIRRTL type.
+  auto resultType = lowerType(firType);
+  if (!resultType)
+    return value;
+
+  if (!resultType.isa<IntegerType>())
     return {};
 
-  auto destIntType = destType.cast<IntType>();
-  auto destWidth = destIntType.getWidthOrSentinel();
-  if (destWidth == -1)
+  // Cast FIRRTL -> standard type.
+  auto loc = builder->getInsertionPoint()->getLoc();
+  return builder->create<StdIntCast>(loc, resultType, value);
+}
+
+/// Return the lowered value corresponding to the specified original value and
+/// then extend it to match the width of destType if needed.
+///
+/// This returns a null value for FIRRTL values that cannot be lowered, e.g.
+/// unknown width integers.
+Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
+  assert(value.getType().isa<FIRRTLType>() && destType.isa<FIRRTLType>() &&
+         "input/output value should be FIRRTL");
+
+  auto result = getLoweredValue(value);
+  if (!result)
     return {};
 
-  auto srcWidth = operand.getType().cast<IntegerType>().getWidth();
-  if (srcWidth == unsigned(destWidth))
-    return operand;
+  auto destFIRType = destType.cast<FIRRTLType>().getPassiveType();
+  if (value.getType().cast<FIRRTLType>().getPassiveType() == destFIRType)
+    return result;
 
-  assert(srcWidth < unsigned(destWidth) && "Only extensions");
-  auto resultType = rewriter.getIntegerType(destWidth);
+  // We only know how to extend integer types with known width.
+  auto destIntType = destFIRType.dyn_cast<IntType>();
+  if (!destIntType || !destIntType.hasWidth())
+    return {};
 
+  auto destWidth = unsigned(destIntType.getWidthOrSentinel());
+  auto srcWidth = result.getType().cast<IntegerType>().getWidth();
+  if (srcWidth == destWidth)
+    return result;
+
+  assert(srcWidth < destWidth && "Only extensions");
+  auto resultType = builder->getIntegerType(destWidth);
+
+  auto loc = builder->getInsertionPoint()->getLoc();
   if (destIntType.isSigned())
-    return rewriter.create<rtl::SExtOp>(op->getLoc(), resultType, operand);
+    return builder->create<rtl::SExtOp>(loc, resultType, result);
 
-  return rewriter.create<rtl::ZExtOp>(op->getLoc(), resultType, operand);
+  return builder->create<rtl::ZExtOp>(loc, resultType, result);
+}
+
+/// Set the lowered value of 'orig' to 'result', remembering this in a map.
+/// This always returns success() to make it more convenient in lowering code.
+LogicalResult FIRRTLLowering::setLowering(Value orig, Value result) {
+  assert(orig.getType().isa<FIRRTLType>() &&
+         !result.getType().isa<FIRRTLType>() &&
+         "Lowering didn't turn a FIRRTL value into a non-FIRRTL value");
+
+  assert(!valueMapping.count(orig) && "value lowered multiple times");
+  valueMapping[orig] = result;
+  return success();
+}
+
+/// Create a new operation with type ResultOpType and arguments CtorArgTypes,
+/// then call setLowering with its result.
+template <typename ResultOpType, typename... CtorArgTypes>
+LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
+                                            CtorArgTypes... args) {
+  auto result = builder->create<ResultOpType>(orig->getLoc(), args...);
+  return setLowering(orig->getResult(0), result);
 }
 
 //===----------------------------------------------------------------------===//
 // Special Operations
 //===----------------------------------------------------------------------===//
 
-static LogicalResult lower(firrtl::ConstantOp op, ArrayRef<Value> operands,
-                           ConversionPatternRewriter &rewriter) {
-  rewriter.replaceOpWithNewOp<rtl::ConstantOp>(op, op.value());
-  return success();
-}
-
-static LogicalResult lower(firrtl::WireOp op, ArrayRef<Value> operands,
-                           ConversionPatternRewriter &rewriter) {
+LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   auto resType = op.result().getType().cast<FIRRTLType>();
-  auto resultType = RTLTypeConverter::convertType(resType);
+  auto resultType = lowerType(resType);
   if (!resultType)
     return failure();
-  rewriter.replaceOpWithNewOp<rtl::WireOp>(op, resultType.getValue(),
-                                           op.nameAttr());
-  return success();
+  return setLoweringTo<rtl::WireOp>(op, resultType, op.nameAttr());
 }
 
-static LogicalResult lower(firrtl::ConnectOp op, ArrayRef<Value> operands,
-                           ConversionPatternRewriter &rewriter) {
-
-  auto dest = mapOperand(operands[0], op, rewriter);
+LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
+  auto dest = getLoweredValue(op.lhs());
 
   // The source can be a smaller integer, extend it as appropriate if so.
-  auto destType = operands[0].getType().dyn_cast<FIRRTLType>();
-
-  // FIXME: Defs are generally lowered before the users, so we lose the original
-  // FIRRTL type.  We cannot use the standard MLIR lowering framework for this
-  // lowering pass. :-(
-
-  Value src;
-  if (destType && destType.getPassiveType().isa<IntType>())
-    src = mapAndExtendInt(operands[1], destType.getPassiveType(), op, rewriter);
-  else
-    src = mapOperand(operands[1], op, rewriter);
+  Value src = getLoweredAndExtendedValue(op.rhs(), op.lhs().getType());
 
   if (!dest || !src)
     return failure();
 
-  rewriter.replaceOpWithNewOp<rtl::ConnectOp>(op, dest, src);
+  builder->create<rtl::ConnectOp>(op.getLoc(), dest, src);
   return success();
+}
+
+/// Handle the unhandled case - in this case, the operands may be a mix of
+/// lowered and unlowered values.  If the operand was not lowered then leave it
+/// alone, otherwise insert a cast from the lowered value.
+LogicalResult FIRRTLLowering::visitUnhandledOp(Operation *op) {
+  for (auto &operand : op->getOpOperands()) {
+    Value origValue = operand.get();
+    auto it = valueMapping.find(origValue);
+    // If the operand wasn't lowered, then leave it alone.
+    if (it == valueMapping.end())
+      continue;
+
+    // Otherwise, insert a cast from the lowered value.
+    Value mapped = builder->create<StdIntCast>(op->getLoc(),
+                                               origValue.getType(), it->second);
+    operand.set(mapped);
+  }
+  return failure();
+}
+
+LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
+  return setLoweringTo<rtl::ConstantOp>(op, op.value());
 }
 
 //===----------------------------------------------------------------------===//
@@ -138,158 +280,100 @@ static LogicalResult lower(firrtl::ConnectOp op, ArrayRef<Value> operands,
 //===----------------------------------------------------------------------===//
 
 // Lower a cast that is a noop at the RTL level.
-static LogicalResult lowerNoopCast(Operation *op, ArrayRef<Value> operands,
-                                   ConversionPatternRewriter &rewriter) {
-  auto operand = mapOperand(operands[0], op, rewriter);
+LogicalResult FIRRTLLowering::lowerNoopCast(Operation *op) {
+  auto operand = getLoweredValue(op->getOperand(0));
   if (!operand)
     return failure();
 
   // Noop cast.
-  rewriter.replaceOp(op, operand);
-  return success();
-}
-
-static LogicalResult lower(firrtl::AsSIntPrimOp op, ArrayRef<Value> operands,
-                           ConversionPatternRewriter &rewriter) {
-  return lowerNoopCast(op, operands, rewriter);
-}
-
-static LogicalResult lower(firrtl::AsUIntPrimOp op, ArrayRef<Value> operands,
-                           ConversionPatternRewriter &rewriter) {
-  return lowerNoopCast(op, operands, rewriter);
+  return setLowering(op->getResult(0), operand);
 }
 
 // Pad is a noop or extension operation.
-static LogicalResult lower(firrtl::PadPrimOp op, ArrayRef<Value> operands,
-                           ConversionPatternRewriter &rewriter) {
-  auto operand = mapAndExtendInt(operands[0], op.getType(), op, rewriter);
+LogicalResult FIRRTLLowering::visitExpr(PadPrimOp op) {
+  auto operand = getLoweredAndExtendedValue(op.input(), op.getType());
   if (!operand)
     return failure();
-  rewriter.replaceOp(op, operand);
-  return success();
-}
-
-static LogicalResult lower(firrtl::CatPrimOp op, ArrayRef<Value> operands,
-                           ConversionPatternRewriter &rewriter) {
-  auto lhs = mapOperand(operands[0], op, rewriter);
-  auto rhs = mapOperand(operands[1], op, rewriter);
-  if (!lhs || !rhs)
-    return failure();
-
-  rewriter.replaceOpWithNewOp<rtl::ConcatOp>(op, ValueRange({lhs, rhs}));
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
-// Variadic Bitwise Operations
-//===----------------------------------------------------------------------===//
-
-template <typename OpType, typename ResultOpType>
-static LogicalResult lowerVariadicOp(OpType op, ArrayRef<Value> operands,
-                                     ConversionPatternRewriter &rewriter) {
-  auto lhs = mapAndExtendInt(operands[0], op.getType(), op, rewriter);
-  auto rhs = mapAndExtendInt(operands[1], op.getType(), op, rewriter);
-
-  if (!lhs || !rhs)
-    return failure();
-
-  rewriter.replaceOpWithNewOp<ResultOpType>(op, ValueRange({lhs, rhs}));
-  return success();
-}
-
-static LogicalResult lower(firrtl::AndPrimOp op, ArrayRef<Value> operands,
-                           ConversionPatternRewriter &rewriter) {
-  return lowerVariadicOp<firrtl::AndPrimOp, rtl::AndOp>(op, operands, rewriter);
-}
-
-static LogicalResult lower(firrtl::OrPrimOp op, ArrayRef<Value> operands,
-                           ConversionPatternRewriter &rewriter) {
-  return lowerVariadicOp<firrtl::OrPrimOp, rtl::OrOp>(op, operands, rewriter);
-}
-
-static LogicalResult lower(firrtl::XorPrimOp op, ArrayRef<Value> operands,
-                           ConversionPatternRewriter &rewriter) {
-  return lowerVariadicOp<firrtl::XorPrimOp, rtl::XorOp>(op, operands, rewriter);
+  return setLowering(op, operand);
 }
 
 //===----------------------------------------------------------------------===//
 // Binary Operations
 //===----------------------------------------------------------------------===//
 
-template <typename OpType, typename ResultOpType>
-static LogicalResult lowerBinOp(OpType op, ArrayRef<Value> operands,
-                                ConversionPatternRewriter &rewriter) {
+template <typename ResultOpType>
+LogicalResult FIRRTLLowering::lowerBinOpToVariadic(Operation *op) {
+  auto resultType = op->getResult(0).getType();
+  auto lhs = getLoweredAndExtendedValue(op->getOperand(0), resultType);
+  auto rhs = getLoweredAndExtendedValue(op->getOperand(1), resultType);
+  if (!lhs || !rhs)
+    return failure();
+
+  return setLoweringTo<ResultOpType>(op, ValueRange({lhs, rhs}));
+}
+
+template <typename ResultOpType>
+LogicalResult FIRRTLLowering::lowerBinOp(Operation *op) {
   // Extend the two operands to match the destination type.
-  auto lhs = mapAndExtendInt(operands[0], op.getType(), op, rewriter);
-  auto rhs = mapAndExtendInt(operands[1], op.getType(), op, rewriter);
+  auto resultType = op->getResult(0).getType();
+  auto lhs = getLoweredAndExtendedValue(op->getOperand(0), resultType);
+  auto rhs = getLoweredAndExtendedValue(op->getOperand(1), resultType);
   if (!lhs || !rhs)
     return failure();
 
   // Emit the result operation.
-  rewriter.replaceOpWithNewOp<ResultOpType>(op, lhs, rhs);
-  return success();
+  return setLoweringTo<ResultOpType>(op, lhs, rhs);
 }
 
-static LogicalResult lower(firrtl::AddPrimOp op, ArrayRef<Value> operands,
-                           ConversionPatternRewriter &rewriter) {
-  return lowerVariadicOp<firrtl::AddPrimOp, rtl::AddOp>(op, operands, rewriter);
-}
+LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
+  auto lhs = getLoweredValue(op.lhs());
+  auto rhs = getLoweredValue(op.rhs());
+  if (!lhs || !rhs)
+    return failure();
 
-static LogicalResult lower(firrtl::SubPrimOp op, ArrayRef<Value> operands,
-                           ConversionPatternRewriter &rewriter) {
-  return lowerBinOp<firrtl::SubPrimOp, rtl::SubOp>(op, operands, rewriter);
+  return setLoweringTo<rtl::ConcatOp>(op, ValueRange({lhs, rhs}));
 }
-
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
 
-static LogicalResult lower(firrtl::BitsPrimOp op, ArrayRef<Value> operands,
-                           ConversionPatternRewriter &rewriter) {
-  auto input = mapOperand(operands[0], op, rewriter);
+LogicalResult FIRRTLLowering::visitExpr(BitsPrimOp op) {
+  auto input = getLoweredValue(op.input());
   if (!input)
     return failure();
 
-  Type resultType = rewriter.getIntegerType(op.getHi() - op.getLo() + 1);
-  rewriter.replaceOpWithNewOp<rtl::ExtractOp>(op, resultType, input,
-                                              op.getLo());
-  return success();
+  Type resultType = builder->getIntegerType(op.getHi() - op.getLo() + 1);
+  return setLoweringTo<rtl::ExtractOp>(op, resultType, input, op.getLo());
 }
 
-static LogicalResult lower(firrtl::HeadPrimOp op, ArrayRef<Value> operands,
-                           ConversionPatternRewriter &rewriter) {
-  auto input = mapOperand(operands[0], op, rewriter);
+LogicalResult FIRRTLLowering::visitExpr(HeadPrimOp op) {
+  auto input = getLoweredValue(op.input());
   if (!input)
     return failure();
 
   auto inWidth = input.getType().cast<IntegerType>().getWidth();
-  Type resultType = rewriter.getIntegerType(op.getAmount());
-  rewriter.replaceOpWithNewOp<rtl::ExtractOp>(op, resultType, input,
-                                              inWidth - op.getAmount());
-  return success();
+  Type resultType = builder->getIntegerType(op.getAmount());
+  return setLoweringTo<rtl::ExtractOp>(op, resultType, input,
+                                       inWidth - op.getAmount());
 }
 
-static LogicalResult lower(firrtl::ShlPrimOp op, ArrayRef<Value> operands,
-                           ConversionPatternRewriter &rewriter) {
-  auto input = mapOperand(operands[0], op, rewriter);
+LogicalResult FIRRTLLowering::visitExpr(ShlPrimOp op) {
+  auto input = getLoweredValue(op.input());
   if (!input)
     return failure();
 
   // Handle the degenerate case.
-  if (op.getAmount() == 0) {
-    rewriter.replaceOp(op, input);
-    return success();
-  }
+  if (op.getAmount() == 0)
+    return setLowering(op, input);
 
+  // TODO: We could keep track of zeros and implicitly CSE them.
   auto zero =
-      rewriter.create<rtl::ConstantOp>(op.getLoc(), APInt(op.getAmount(), 0));
-  rewriter.replaceOpWithNewOp<rtl::ConcatOp>(op, ValueRange({input, zero}));
-  return success();
+      builder->create<rtl::ConstantOp>(op.getLoc(), APInt(op.getAmount(), 0));
+  return setLoweringTo<rtl::ConcatOp>(op, ValueRange({input, zero}));
 }
 
-static LogicalResult lower(firrtl::ShrPrimOp op, ArrayRef<Value> operands,
-                           ConversionPatternRewriter &rewriter) {
-  auto input = mapOperand(operands[0], op, rewriter);
+LogicalResult FIRRTLLowering::visitExpr(ShrPrimOp op) {
+  auto input = getLoweredValue(op.input());
   if (!input)
     return failure();
 
@@ -297,98 +381,24 @@ static LogicalResult lower(firrtl::ShrPrimOp op, ArrayRef<Value> operands,
   auto inWidth = input.getType().cast<IntegerType>().getWidth();
   auto shiftAmount = op.getAmount();
   if (shiftAmount == inWidth) {
-    // Unsigned shift by full width returns zero.
-    if (op.input().getType().cast<IntType>().isUnsigned()) {
-      rewriter.replaceOpWithNewOp<rtl::ConstantOp>(op, APInt(1, 0));
-      return success();
-    }
+    // Unsigned shift by full width returns a single-bit zero.
+    if (op.input().getType().cast<IntType>().isUnsigned())
+      return setLoweringTo<rtl::ConstantOp>(op, APInt(1, 0));
 
     // Signed shift by full width is equivalent to extracting the sign bit.
     --shiftAmount;
   }
 
-  Type resultType = rewriter.getIntegerType(inWidth - shiftAmount);
-  rewriter.replaceOpWithNewOp<rtl::ExtractOp>(op, resultType, input,
-                                              shiftAmount);
-  return success();
+  Type resultType = builder->getIntegerType(inWidth - shiftAmount);
+  return setLoweringTo<rtl::ExtractOp>(op, resultType, input, shiftAmount);
 }
 
-static LogicalResult lower(firrtl::TailPrimOp op, ArrayRef<Value> operands,
-                           ConversionPatternRewriter &rewriter) {
-  auto input = mapOperand(operands[0], op, rewriter);
+LogicalResult FIRRTLLowering::visitExpr(TailPrimOp op) {
+  auto input = getLoweredValue(op.input());
   if (!input)
     return failure();
 
   auto inWidth = input.getType().cast<IntegerType>().getWidth();
-  Type resultType = rewriter.getIntegerType(inWidth - op.getAmount());
-  rewriter.replaceOpWithNewOp<rtl::ExtractOp>(op, resultType, input, 0);
-  return success();
-}
-
-namespace {
-/// Utility class for operation conversions targeting that
-/// match exactly one source operation.
-template <typename OpTy>
-class RTLRewriter : public ConversionPattern {
-public:
-  RTLRewriter(MLIRContext *ctx)
-      : ConversionPattern(OpTy::getOperationName(), /*benefit*/ 1, ctx) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    return lower(OpTy(op), operands, rewriter);
-  }
-};
-} // end anonymous namespace
-
-//===----------------------------------------------------------------------===//
-// RTLConversionTarget
-//===----------------------------------------------------------------------===//
-
-namespace {
-class RTLConversionTarget : public ConversionTarget {
-public:
-  explicit RTLConversionTarget(MLIRContext &ctx) : ConversionTarget(ctx) {
-    addLegalDialect<RTLDialect>();
-    addLegalOp<firrtl::StdIntCast>();
-  }
-};
-} // end anonymous namespace
-
-#define GEN_PASS_CLASSES
-#include "circt/Dialect/FIRRTL/FIRRTLPasses.h.inc"
-
-namespace {
-struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering> {
-  /// Run the dialect converter on the FModule.
-  void runOnOperation() override {
-    OwningRewritePatternList patterns;
-    patterns.insert<
-        RTLRewriter<firrtl::ConstantOp>, RTLRewriter<firrtl::WireOp>,
-        RTLRewriter<firrtl::ConnectOp>,
-        // Binary Operations
-        RTLRewriter<firrtl::AddPrimOp>, RTLRewriter<firrtl::SubPrimOp>,
-        RTLRewriter<firrtl::AndPrimOp>, RTLRewriter<firrtl::OrPrimOp>,
-        RTLRewriter<firrtl::XorPrimOp>, RTLRewriter<firrtl::CatPrimOp>,
-
-        // Unary Operations
-        RTLRewriter<firrtl::PadPrimOp>, RTLRewriter<firrtl::AsSIntPrimOp>,
-        RTLRewriter<firrtl::AsUIntPrimOp>,
-
-        // Other Operations
-        RTLRewriter<firrtl::BitsPrimOp>, RTLRewriter<firrtl::HeadPrimOp>,
-        RTLRewriter<firrtl::ShlPrimOp>, RTLRewriter<firrtl::ShrPrimOp>,
-        RTLRewriter<firrtl::TailPrimOp>>(&getContext());
-
-    RTLConversionTarget target(getContext());
-    RTLTypeConverter typeConverter;
-    if (failed(applyPartialConversion(getOperation(), target, patterns)))
-      signalPassFailure();
-  }
-};
-} // end anonymous namespace
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLToRTLPass() {
-  return std::make_unique<FIRRTLLowering>();
+  Type resultType = builder->getIntegerType(inWidth - op.getAmount());
+  return setLoweringTo<rtl::ExtractOp>(op, resultType, input, 0);
 }
