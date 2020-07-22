@@ -69,7 +69,7 @@ def LLHD_EqOp : LLHD_Op<"eq", [
   let description = [{
     This operation compares two values and returns 1 if they are the same and 0
     otherwise. It is capable of comparing all types in the LLHD dialect. It
-    performs element-wise equality for vectors and tuples.
+    performs element-wise equality for arrays and tuples.
 
     Examples:
 
@@ -103,7 +103,7 @@ def LLHD_NeqOp : LLHD_Op<"neq", [
   let description = [{
     This operation compares two values and returns 1 if they are not the same
     and 0 if they are the same. It is capable of comparing all types in the LLHD
-    dialect. It performs element-wise equality for vectors and tuples.
+    dialect. It performs element-wise equality for arrays and tuples.
 
     Examples:
 

@@ -34,20 +34,19 @@ def LLHD_ConstOp : LLHD_Op<"const", [ConstantLike, NoSideEffect]> {
   let hasFolder = 1;
 }
 
-def LLHD_VecOp : LLHD_Op<"vec", [
+def LLHD_ArrayOp : LLHD_Op<"array", [
     NoSideEffect,
     TypesMatchWith<
       "types and number of 'values' have to match the length and type of the "
-      "'result' vector",
+      "'result' array",
       "result", "values",
-      "std::vector<Type>($_self.cast<ShapedType>().getNumElements(), "
-      "$_self.cast<ShapedType>().getElementType())">
+      "std::vector<Type>($_self.cast<llhd::ArrayType>().getLength(), "
+      "$_self.cast<llhd::ArrayType>().getElementType())">
   ]> {
-  let summary = "Create a vector from a list of values.";
+  let summary = "Create an array from a list of values.";
   let description = [{
-    The `llhd.vec` operation allows to create a vector from a list of
-    SSA-values. This allows for more flexibility compared to only using
-    `std.constant` and the vector dialect operations.
+    The `llhd.array` operation allows to create an array from a list of
+    SSA-values.
 
     Example:
 
@@ -55,13 +54,13 @@ def LLHD_VecOp : LLHD_Op<"vec", [
     %c1 = llhd.const 1 : i32
     %c2 = llhd.const 2 : i32
     %c3 = llhd.const 3 : i32
-    %vec = llhd.vec %c1, %c2, %c3 : vector<3xi32>
-    %elem = vector.extractelement %vec[%c1 : i32] : vector<3xi32>
+    %array = llhd.array %c1, %c2, %c3 : !llhd.array<3xi32>
+    %elem = llhd.extract_element %array, 0 : !llhd.array<3xi32> -> i32
     ```
   }];
 
   let arguments = (ins Variadic<AnyType>: $values);
-  let results = (outs AnyVector: $result);
+  let results = (outs LLHD_ArrayType: $result);
 
   let assemblyFormat = "$values attr-dict `:` type($result)";
 }
@@ -110,9 +109,9 @@ def LLHD_TupleOp : LLHD_Op<"tuple", [
     %c1 = llhd.const 1 : i32
     %c2 = llhd.const 2 : i2
     %sig = llhd.sig "sig_name" %c1 : i32
-    %vec = constant dense<[1, 2]> : vector<2xi32>
-    %tuple = llhd.tuple %c1, %c2, %vec, %sig :
-      tuple<i32, i2, vector<2xi32>, !llhd.sig<i32>>
+    %array = llhd.array_uniform %c1 : !llhd.array<2xi32>
+    %tuple = llhd.tuple %c1, %c2, %array, %sig :
+      tuple<i32, i2, !llhd.array<2xi32>, !llhd.sig<i32>>
     ```
   }];
 

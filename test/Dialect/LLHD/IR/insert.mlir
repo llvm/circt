@@ -12,14 +12,14 @@ func @insert_slice_integers(%cI1 : i1, %cI32 : i32) {
   return
 }
 
-// CHECK-LABEL: @insert_slice_vectors
-// CHECK-SAME: %[[VEC2:.*]]: vector<2xi1>
-// CHECK-SAME: %[[VEC5:.*]]: vector<5xi1>
-func @insert_slice_vectors(%vec2 : vector<2xi1>, %vec5 : vector<5xi1>) -> () {
-  // CHECK-NEXT: %{{.*}} = llhd.insert_slice %[[VEC5]], %[[VEC2]], 3 : vector<5xi1>, vector<2xi1>
-  %0 = llhd.insert_slice %vec5, %vec2, 3 : vector<5xi1>, vector<2xi1>
-  // CHECK-NEXT: %{{.*}} = llhd.insert_slice %[[VEC2]], %[[VEC2]], 0 :  vector<2xi1>, vector<2xi1>
-  %1 = llhd.insert_slice %vec2, %vec2, 0 : vector<2xi1>, vector<2xi1>
+// CHECK-LABEL: @insert_slice_arrays
+// CHECK-SAME: %[[ARRAY2:.*]]: !llhd.array<2xi1>
+// CHECK-SAME: %[[ARRAY5:.*]]: !llhd.array<5xi1>
+func @insert_slice_arrays(%array2 : !llhd.array<2xi1>, %array5 : !llhd.array<5xi1>) -> () {
+  // CHECK-NEXT: %{{.*}} = llhd.insert_slice %[[ARRAY5]], %[[ARRAY2]], 3 : !llhd.array<5xi1>, !llhd.array<2xi1>
+  %0 = llhd.insert_slice %array5, %array2, 3 : !llhd.array<5xi1>, !llhd.array<2xi1>
+  // CHECK-NEXT: %{{.*}} = llhd.insert_slice %[[ARRAY2]], %[[ARRAY2]], 0 :  !llhd.array<2xi1>, !llhd.array<2xi1>
+  %1 = llhd.insert_slice %array2, %array2, 0 : !llhd.array<2xi1>, !llhd.array<2xi1>
 
   return
 }
@@ -37,34 +37,34 @@ func @insert_element_tuples(%tup : tuple<i1, i8>, %i1 : i1, %i8 : i8) {
   return
 }
 
-// CHECK-LABEL: @insert_element_vectors
-// CHECK-SAME: %[[V1:.*]]: vector<4xi1>,
-// CHECK-SAME: %[[V8:.*]]: vector<4xi8>,
+// CHECK-LABEL: @insert_element_arrays
+// CHECK-SAME: %[[V1:.*]]: !llhd.array<4xi1>,
+// CHECK-SAME: %[[V8:.*]]: !llhd.array<4xi8>,
 // CHECK-SAME: %[[I1:.*]]: i1,
 // CHECK-SAME: %[[I8:.*]]: i8
-func @insert_element_vectors(%v1 : vector<4xi1>, %v8 : vector<4xi8>, %i1 : i1, %i8 : i8) {
-  // CHECK-NEXT: %{{.*}} = llhd.insert_element %[[V1]], %[[I1]], 0 : vector<4xi1>, i1
-  %0 = llhd.insert_element %v1, %i1, 0 : vector<4xi1>, i1
-  // CHECK-NEXT: %{{.*}} = llhd.insert_element %[[V8]], %[[I8]], 2 : vector<4xi8>, i8
-  %1 = llhd.insert_element %v8, %i8, 2 : vector<4xi8>, i8
+func @insert_element_arrays(%v1 : !llhd.array<4xi1>, %v8 : !llhd.array<4xi8>, %i1 : i1, %i8 : i8) {
+  // CHECK-NEXT: %{{.*}} = llhd.insert_element %[[V1]], %[[I1]], 0 : !llhd.array<4xi1>, i1
+  %0 = llhd.insert_element %v1, %i1, 0 : !llhd.array<4xi1>, i1
+  // CHECK-NEXT: %{{.*}} = llhd.insert_element %[[V8]], %[[I8]], 2 : !llhd.array<4xi8>, i8
+  %1 = llhd.insert_element %v8, %i8, 2 : !llhd.array<4xi8>, i8
 
   return
 }
 
 // -----
 
-func @illegal_kind(%c : i32, %vec : vector<2xi32>) {
-  // expected-error @+1 {{failed to verify that 'target' and 'slice' have to be both either signless integers or vectors with the same element type}}
-  %0 = llhd.insert_slice %vec, %c, 0 : vector<2xi32>, i32
+func @illegal_kind(%c : i32, %array : !llhd.array<2xi32>) {
+  // expected-error @+1 {{failed to verify that 'target' and 'slice' have to be both either signless integers or arrays with the same element type}}
+  %0 = llhd.insert_slice %array, %c, 0 : !llhd.array<2xi32>, i32
 
   return
 }
 
 // -----
 
-func @illegal_elemental_type(%slice : vector<1xi1>, %vec : vector<2xi32>) {
-  // expected-error @+1 {{failed to verify that 'target' and 'slice' have to be both either signless integers or vectors with the same element type}}
-  %0 = llhd.insert_slice %vec, %slice, 0 : vector<2xi32>, vector<1xi1>
+func @illegal_elemental_type(%slice : !llhd.array<1xi1>, %array : !llhd.array<2xi32>) {
+  // expected-error @+1 {{failed to verify that 'target' and 'slice' have to be both either signless integers or arrays with the same element type}}
+  %0 = llhd.insert_slice %array, %slice, 0 : !llhd.array<2xi32>, !llhd.array<1xi1>
 
   return
 }
@@ -80,27 +80,27 @@ func @insert_slice_illegal_start_index_int(%slice : i16, %c : i32) {
 
 // -----
 
-func @insert_slice_illegal_start_index_vector(%slice : vector<2xi1>, %vec : vector<3xi1>) {
+func @insert_slice_illegal_start_index_array(%slice : !llhd.array<2xi1>, %array : !llhd.array<3xi1>) {
   // expected-error @+1 {{failed to verify that 'start' + size of the 'slice' have to be smaller or equal to the 'target' size}}
-  %0 = llhd.insert_slice %vec, %slice, 2 : vector<3xi1>, vector<2xi1>
+  %0 = llhd.insert_slice %array, %slice, 2 : !llhd.array<3xi1>, !llhd.array<2xi1>
 
   return
 }
 
 // -----
 
-func @insert_element_index_out_of_bounds(%e : i1, %vec : vector<3xi1>) {
+func @insert_element_index_out_of_bounds(%e : i1, %array : !llhd.array<3xi1>) {
   // expected-error @+1 {{failed to verify that 'index' has to be smaller than the 'target' size}}
-  %0 = llhd.insert_element %vec, %e, 3 : vector<3xi1>, i1
+  %0 = llhd.insert_element %array, %e, 3 : !llhd.array<3xi1>, i1
 
   return
 }
 
 // -----
 
-func @insert_element_type_mismatch_vector(%e : i2, %vec : vector<3xi1>) {
+func @insert_element_type_mismatch_array(%e : i2, %array : !llhd.array<3xi1>) {
   // expected-error @+1 {{failed to verify that 'element' type has to match type at 'index' of 'target'}}
-  %0 = llhd.insert_element %vec, %e, 0 : vector<3xi1>, i2
+  %0 = llhd.insert_element %array, %e, 0 : !llhd.array<3xi1>, i2
 
   return
 }
