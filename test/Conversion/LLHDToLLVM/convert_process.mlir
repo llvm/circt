@@ -13,13 +13,11 @@ func @dummy_i32 (%0 : i32)  {
 // CHECK-LABEL: @convert_persistent_value
 // CHECK-SAME: %[[STATE:.*]]: !llvm<"i8*">
 // CHECK-SAME: %[[PROCSTATE:.*]]: !llvm<"{ i8*, i32, [0 x i1]*, { i1, i32 } }*">
-// CHECK-SAME: %[[ARGTABLE:.*]]: !llvm<"i32*">
+// CHECK-SAME: %[[ARGTABLE:.*]]: !llvm<"{ i8*, i64, i64, i64 }*">
 // CHECK-NEXT: %[[GIND1:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
-// CHECK-NEXT: %[[GEP0:.*]] = llvm.getelementptr %[[ARGTABLE]][%[[GIND1]]] : (!llvm<"i32*">, !llvm.i32) -> !llvm<"i32*">
-// CHECK-NEXT: %[[L0:.*]] = llvm.load %[[GEP0]] : !llvm<"i32*">
+// CHECK-NEXT: %[[GEP0:.*]] = llvm.getelementptr %[[ARGTABLE]][%[[GIND1]]] : (!llvm<"{ i8*, i64, i64, i64 }*">, !llvm.i32) -> !llvm<"{ i8*, i64, i64, i64 }*">
 // CHECK-NEXT: %[[GIND2:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
-// CHECK-NEXT: %[[GEP1:.*]] = llvm.getelementptr %[[ARGTABLE]][%[[GIND2]]] : (!llvm<"i32*">, !llvm.i32) -> !llvm<"i32*">
-// CHECK-NEXT: %[[L1:.*]] = llvm.load %[[GEP1]] : !llvm<"i32*">
+// CHECK-NEXT: %[[GEP1:.*]] = llvm.getelementptr %[[ARGTABLE]][%[[GIND2]]] : (!llvm<"{ i8*, i64, i64, i64 }*">, !llvm.i32) -> !llvm<"{ i8*, i64, i64, i64 }*">
 // CHECK-NEXT: %[[GIND3:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
 // CHECK-NEXT: %[[GIND4:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
 // CHECK-NEXT: %[[GEP2:.*]] = llvm.getelementptr %[[PROCSTATE]][%[[GIND3]], %[[GIND4]]] : (!llvm<"{ i8*, i32, [0 x i1]*, { i1, i32 } }*">, !llvm.i32, !llvm.i32) -> !llvm<"i32*">
@@ -76,10 +74,9 @@ llhd.proc @convert_persistent_value () -> (%out0 : !llhd.sig<i1>, %out1 : !llhd.
 // CHECK-LABEL: @convert_resume
 // CHECK-SAME: %[[STATE:.*]]: !llvm<"i8*">
 // CHECK-SAME: %[[PROCSTATE:.*]]: !llvm<"{ i8*, i32, [1 x i1]*, {} }*">
-// CHECK-SAME: %[[ARGTABLE:.*]]:  !llvm<"i32*">
+// CHECK-SAME: %[[ARGTABLE:.*]]:  !llvm<"{ i8*, i64, i64, i64 }*">)
 // CHECK-NEXT: %[[GIND1:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
-// CHECK-NEXT: %[[GEP0:.*]] = llvm.getelementptr %[[ARGTABLE]][%[[GIND1]]] : (!llvm<"i32*">, !llvm.i32) -> !llvm<"i32*">
-// CHECK-NEXT: %[[L0:.*]] = llvm.load %[[GEP0]] : !llvm<"i32*">
+// CHECK-NEXT: %[[GEP0:.*]] = llvm.getelementptr %[[ARGTABLE]][%[[GIND1]]] : (!llvm<"{ i8*, i64, i64, i64 }*">, !llvm.i32) -> !llvm<"{ i8*, i64, i64, i64 }*">
 // CHECK-NEXT: %[[GIND2:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
 // CHECK-NEXT: %[[GIND3:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
 // CHECK-NEXT: %[[GEP1:.*]] = llvm.getelementptr %[[PROCSTATE]][%[[GIND2]], %[[GIND3]]] : (!llvm<"{ i8*, i32, [1 x i1]*, {} }*">, !llvm.i32, !llvm.i32) -> !llvm<"i32*">
