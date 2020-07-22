@@ -55,7 +55,7 @@ def LLHD_ArrayOp : LLHD_Op<"array", [
     %c2 = llhd.const 2 : i32
     %c3 = llhd.const 3 : i32
     %array = llhd.array %c1, %c2, %c3 : !llhd.array<3xi32>
-    %elem = llhd.extract_element %array, 0 : vector<3xi32> -> i32
+    %elem = llhd.extract_element %array, 0 : !llhd.array<3xi32> -> i32
     ```
   }];
 
