@@ -421,7 +421,7 @@ struct ProcOpConversion : public ConvertToLLVMPattern {
     auto i1Ty = LLVM::LLVMType::getInt1Ty(&getDialect());
     auto i32Ty = LLVM::LLVMType::getInt32Ty(&getDialect());
     auto senseTableTy =
-        LLVM::LLVMType::getArrayTy(i1Ty, procOp.insAttr().getInt())
+        LLVM::LLVMType::getArrayTy(i1Ty, procOp.getNumArguments())
             .getPointerTo();
     auto stateTy = LLVM::LLVMType::getStructTy(
         /* current instance  */ i8PtrTy, /* resume index */ i32Ty,
