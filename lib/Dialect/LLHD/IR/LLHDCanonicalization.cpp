@@ -3,6 +3,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/PatternMatch.h"
 
 using namespace mlir;
@@ -10,6 +11,55 @@ using namespace mlir;
 namespace {
 /// Include the patterns defined in the Declarative Rewrite framework.
 #include "circt/Dialect/LLHD/IR/LLHDCanonicalization.inc"
+
+struct DynExtractSliceWithConstantStart
+    : public mlir::OpRewritePattern<llhd::DynExtractSliceOp> {
+  DynExtractSliceWithConstantStart(mlir::MLIRContext *context)
+      : OpRewritePattern<llhd::DynExtractSliceOp>(context, /*benefit=*/1) {}
+
+  mlir::LogicalResult
+  matchAndRewrite(llhd::DynExtractSliceOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    APInt startValue;
+    if (auto constOp = op.start().getDefiningOp<ConstantOp>())
+      startValue = constOp.valueAttr().cast<IntegerAttr>().getValue();
+    else if (auto constOp = op.start().getDefiningOp<llhd::ConstOp>())
+      startValue = constOp.valueAttr().cast<IntegerAttr>().getValue();
+    else
+      return failure();
+
+    rewriter.replaceOpWithNewOp<llhd::ExtractSliceOp>(
+        op, op.result().getType(), op.target(),
+        rewriter.getIndexAttr(startValue.getZExtValue()));
+
+    return success();
+  }
+};
+
+struct DynExtractElementWithConstantIndex
+    : public mlir::OpRewritePattern<llhd::DynExtractElementOp> {
+  DynExtractElementWithConstantIndex(mlir::MLIRContext *context)
+      : OpRewritePattern<llhd::DynExtractElementOp>(context,
+                                                    /*benefit=*/1) {}
+
+  mlir::LogicalResult
+  matchAndRewrite(llhd::DynExtractElementOp op,
+                  mlir::PatternRewriter &rewriter) const override {
+    APInt startValue;
+    if (auto constOp = op.index().getDefiningOp<ConstantOp>())
+      startValue = constOp.valueAttr().cast<IntegerAttr>().getValue();
+    else if (auto constOp = op.index().getDefiningOp<llhd::ConstOp>())
+      startValue = constOp.valueAttr().cast<IntegerAttr>().getValue();
+    else
+      return failure();
+
+    rewriter.replaceOpWithNewOp<llhd::ExtractElementOp>(
+        op, op.result().getType(), op.target(),
+        rewriter.getIndexAttr(startValue.getZExtValue()));
+
+    return success();
+  }
+};
 } // anonymous namespace
 
 void llhd::XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
@@ -30,4 +80,14 @@ void llhd::EqOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 void llhd::NeqOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                               MLIRContext *context) {
   results.insert<BooleanNeqToXor>(context);
+}
+
+void llhd::DynExtractSliceOp::getCanonicalizationPatterns(
+    OwningRewritePatternList &results, MLIRContext *context) {
+  results.insert<DynExtractSliceWithConstantStart>(context);
+}
+
+void llhd::DynExtractElementOp::getCanonicalizationPatterns(
+    OwningRewritePatternList &results, MLIRContext *context) {
+  results.insert<DynExtractElementWithConstantIndex>(context);
 }

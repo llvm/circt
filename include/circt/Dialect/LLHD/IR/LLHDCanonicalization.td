@@ -48,12 +48,4 @@ def BooleanNeqToXor : Pat<
   (LLHD_NeqOp I1:$lhs, I1:$rhs),
   (LLHD_XorOp $lhs, $rhs)>;
 
-
-// TODO: dexts(target,constant c) -> exts(target, c)
-// TODO: dextf(target,constant c) -> extf(target, c)
-// TODO: exts(shr(hidden, base, constant amt), 0) -> exts(base, amt) (folder)
-//       (if amt + sliceWidth <= baseWidth, common pattern of moore to
-//        extract bits)
-// TODO: exts(exts(target, a), b) -> exts(target, a+b) (folder)
-
 #endif // CIRCT_DIALECT_LLHD_IR_CANONICALIZATION_TD
