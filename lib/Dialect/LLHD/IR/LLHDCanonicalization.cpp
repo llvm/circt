@@ -4,6 +4,7 @@
 
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 
 using namespace mlir;
@@ -20,19 +21,14 @@ struct DynExtractSliceWithConstantStart
   mlir::LogicalResult
   matchAndRewrite(llhd::DynExtractSliceOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    APInt startValue;
-    if (auto constOp = op.start().getDefiningOp<ConstantOp>())
-      startValue = constOp.valueAttr().cast<IntegerAttr>().getValue();
-    else if (auto constOp = op.start().getDefiningOp<llhd::ConstOp>())
-      startValue = constOp.valueAttr().cast<IntegerAttr>().getValue();
-    else
-      return failure();
-
-    rewriter.replaceOpWithNewOp<llhd::ExtractSliceOp>(
-        op, op.result().getType(), op.target(),
-        rewriter.getIndexAttr(startValue.getZExtValue()));
-
-    return success();
+    IntegerAttr intAttr;
+    if (mlir::matchPattern(op.start(), m_Constant<IntegerAttr>(&intAttr))) {
+      rewriter.replaceOpWithNewOp<llhd::ExtractSliceOp>(
+          op, op.result().getType(), op.target(),
+          rewriter.getIndexAttr(intAttr.getValue().getZExtValue()));
+      return success();
+    }
+    return failure();
   }
 };
 
@@ -45,19 +41,14 @@ struct DynExtractElementWithConstantIndex
   mlir::LogicalResult
   matchAndRewrite(llhd::DynExtractElementOp op,
                   mlir::PatternRewriter &rewriter) const override {
-    APInt startValue;
-    if (auto constOp = op.index().getDefiningOp<ConstantOp>())
-      startValue = constOp.valueAttr().cast<IntegerAttr>().getValue();
-    else if (auto constOp = op.index().getDefiningOp<llhd::ConstOp>())
-      startValue = constOp.valueAttr().cast<IntegerAttr>().getValue();
-    else
-      return failure();
-
-    rewriter.replaceOpWithNewOp<llhd::ExtractElementOp>(
-        op, op.result().getType(), op.target(),
-        rewriter.getIndexAttr(startValue.getZExtValue()));
-
-    return success();
+    IntegerAttr intAttr;
+    if (mlir::matchPattern(op.index(), m_Constant<IntegerAttr>(&intAttr))) {
+      rewriter.replaceOpWithNewOp<llhd::ExtractElementOp>(
+          op, op.result().getType(), op.target(),
+          rewriter.getIndexAttr(intAttr.getValue().getZExtValue()));
+      return success();
+    }
+    return failure();
   }
 };
 } // anonymous namespace

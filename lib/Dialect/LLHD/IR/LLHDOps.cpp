@@ -403,12 +403,9 @@ OpFoldResult llhd::ExtractSliceOp::fold(ArrayRef<Attribute> operands) {
   //   with amt + start + sliceWidth <= baseWidth
   //   => llhd.extract_slice(base, amt + start)
   if (auto shrOp = target().getDefiningOp<llhd::ShrOp>()) {
-    auto constOp = shrOp.amount().getDefiningOp<llhd::ConstOp>();
-    auto constantOp = shrOp.amount().getDefiningOp<ConstantOp>();
-
-    if (constOp || constantOp) {
-      Attribute valueAttr = constOp ? constOp.value() : constantOp.value();
-      uint64_t amt = valueAttr.cast<IntegerAttr>().getValue().getZExtValue();
+    IntegerAttr intAttr;
+    if (matchPattern(shrOp.amount(), m_Constant<IntegerAttr>(&intAttr))) {
+      uint64_t amt = intAttr.getValue().getZExtValue();
 
       if (amt + extractStart + getSliceSize() <= shrOp.getBaseWidth()) {
         targetMutable().assign(shrOp.base());
