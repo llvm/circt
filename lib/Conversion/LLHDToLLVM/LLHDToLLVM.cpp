@@ -174,6 +174,19 @@ static LLVM::LLVMType getProcPersistenceTy(LLVM::LLVMDialect *dialect,
       }
     }
   });
+
+  // Also persist block arguments escaping their defining block.
+  for (auto &block : proc.getBlocks()) {
+    if (block.isEntryBlock())
+      continue;
+    for (auto arg : block.getArguments()) {
+      if (arg.isUsedOutsideOfBlock(&block)) {
+        types.push_back(
+            converter.convertType(arg.getType()).cast<LLVM::LLVMType>());
+      }
+    }
+  }
+
   return LLVM::LLVMType::getStructTy(dialect->getContext(), types);
 }
 
@@ -202,6 +215,73 @@ static void insertComparisonBlock(ConversionPatternRewriter &rewriter,
   // Redirect the entry block terminator to the new comparison block.
   auto entryTer = body->front().getTerminator();
   entryTer->setSuccessor(newBlock, 0);
+}
+
+/// Insert a GEP operation to the pointer of the i-th value in the process
+/// persistence table.
+static Value gepPersistenceState(LLVM::LLVMDialect *dialect, Location loc,
+                                 ConversionPatternRewriter &rewriter,
+                                 LLVM::LLVMType elementTy, int index,
+                                 Value state) {
+  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect->getContext());
+  auto zeroC = rewriter.create<LLVM::ConstantOp>(loc, i32Ty,
+                                                 rewriter.getI32IntegerAttr(0));
+  auto threeC = rewriter.create<LLVM::ConstantOp>(
+      loc, i32Ty, rewriter.getI32IntegerAttr(3));
+  auto indC = rewriter.create<LLVM::ConstantOp>(
+      loc, i32Ty, rewriter.getI32IntegerAttr(index));
+  return rewriter.create<LLVM::GEPOp>(loc, elementTy.getPointerTo(), state,
+                                      ArrayRef<Value>({zeroC, threeC, indC}));
+}
+
+/// Persist a `Value` by storing it into the process persistence table, and
+/// substituting the uses that escape the block the operation is defined in with
+/// a load from the persistence table.
+static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
+                         LLVMTypeConverter &converter,
+                         ConversionPatternRewriter &rewriter,
+                         LLVM::LLVMType stateTy, int &i, Value state,
+                         Value persist) {
+  auto elemTy = stateTy.getStructElementType(3).getStructElementType(i);
+
+  // Store the value escaping it's definingn block in the persistence table.
+  if (auto arg = persist.dyn_cast<BlockArgument>()) {
+    rewriter.setInsertionPointToStart(arg.getParentBlock());
+  } else {
+    rewriter.setInsertionPointAfter(persist.getDefiningOp());
+  }
+  Value toStore;
+  if (auto ptr = persist.getType().dyn_cast<PtrType>()) {
+    // Unwrap the pointer and store it's value.
+    auto elemTy = converter.convertType(ptr.getUnderlyingType());
+    toStore = rewriter.create<LLVM::LoadOp>(loc, elemTy, persist);
+  } else {
+    // Store the value directly.
+    toStore = persist;
+  }
+
+  auto gep0 = gepPersistenceState(dialect, loc, rewriter, elemTy, i, state);
+  rewriter.create<LLVM::StoreOp>(loc, toStore, gep0);
+
+  // Load the value from the persistence table and substitute the original
+  // use with it, whenever it is in a different block.
+  for (auto &use : llvm::make_early_inc_range(persist.getUses())) {
+    if (persist.getParentBlock() != use.getOwner()->getBlock()) {
+      auto user = use.getOwner();
+      rewriter.setInsertionPointToStart(user->getBlock());
+
+      auto gep1 = gepPersistenceState(dialect, loc, rewriter, elemTy, i, state);
+      // Use the pointer in the state struct directly for pointer types.
+      if (persist.getType().isa<PtrType>()) {
+        use.set(gep1);
+      } else {
+        auto load1 = rewriter.create<LLVM::LoadOp>(loc, elemTy, gep1);
+        // Load the value otherwise.
+        use.set(load1);
+      }
+    }
+  }
+  i++;
 }
 
 /// Insert the blocks and operations needed to persist values across suspension,
@@ -249,58 +329,10 @@ static void insertPersistence(LLVMTypeConverter &converter,
   // Insert operations required to persist values across process suspension.
   converted.walk([&](Operation *op) -> void {
     if (op->isUsedOutsideOfBlock(op->getBlock()) &&
-        op->getResult(0) != larg.getResult()) {
-      auto elemTy = stateTy.getStructElementType(3).getStructElementType(i);
-
-      // Store the value escaping it's definingn block in the persistence table.
-      rewriter.setInsertionPointAfter(op);
-      Value toStore;
-      if (auto ptr = op->getResult(0).getType().dyn_cast<PtrType>()) {
-        // Unwrap the pointer and store it's value.
-        auto elemTy = converter.convertType(ptr.getUnderlyingType());
-        toStore = rewriter.create<LLVM::LoadOp>(loc, elemTy, op->getResult(0));
-      } else {
-        // Store the value directly.
-        toStore = op->getResult(0);
-      }
-
-      auto zeroC0 = rewriter.create<LLVM::ConstantOp>(
-          loc, i32Ty, rewriter.getI32IntegerAttr(0));
-      auto threeC0 = rewriter.create<LLVM::ConstantOp>(
-          loc, i32Ty, rewriter.getI32IntegerAttr(3));
-      auto indC0 = rewriter.create<LLVM::ConstantOp>(
-          loc, i32Ty, rewriter.getI32IntegerAttr(i));
-      auto gep0 = rewriter.create<LLVM::GEPOp>(
-          loc, elemTy.getPointerTo(), converted.getArgument(1),
-          ArrayRef<Value>({zeroC0, threeC0, indC0}));
-      rewriter.create<LLVM::StoreOp>(loc, toStore, gep0);
-
-      // Load the value from the persistence table and substitute the original
-      // use with it, whenever it is in a different block.
-      for (auto &use : llvm::make_early_inc_range(op->getUses())) {
-        if (op->getBlock() != use.getOwner()->getBlock()) {
-          auto user = use.getOwner();
-          rewriter.setInsertionPointToStart(user->getBlock());
-          auto zeroC1 = rewriter.create<LLVM::ConstantOp>(
-              loc, i32Ty, rewriter.getI32IntegerAttr(0));
-          auto threeC1 = rewriter.create<LLVM::ConstantOp>(
-              loc, i32Ty, rewriter.getI32IntegerAttr(3));
-          auto indC1 = rewriter.create<LLVM::ConstantOp>(
-              loc, i32Ty, rewriter.getI32IntegerAttr(i));
-          auto gep1 = rewriter.create<LLVM::GEPOp>(
-              loc, elemTy.getPointerTo(), converted.getArgument(1),
-              ArrayRef<Value>({zeroC1, threeC1, indC1}));
-          // Use the pointer in the state struct directly for pointer types.
-          if (op->getResult(0).getType().isa<PtrType>()) {
-            use.set(gep1);
-          } else {
-            // Load the value otherwise.
-            auto load1 = rewriter.create<LLVM::LoadOp>(loc, elemTy, gep1);
-            use.set(load1);
-          }
-        }
-      }
-      i++;
+        op->getResult(0) != larg.getResult() &&
+        !(op->getResult(0).getType().isa<TimeType>())) {
+      persistValue(dialect, loc, converter, rewriter, stateTy, i,
+                   converted.getArgument(1), op->getResult(0));
     }
 
     // Insert a comparison block for wait operations.
@@ -309,6 +341,18 @@ static void insertPersistence(LLVMTypeConverter &converter,
                             wait.dest());
     }
   });
+
+  // Also persist argument blocks escaping their defining block.
+  for (auto &block : converted.getBlocks()) {
+    if (block.isEntryBlock())
+      continue;
+    for (auto arg : block.getArguments()) {
+      if (arg.isUsedOutsideOfBlock(&block)) {
+        persistValue(dialect, loc, converter, rewriter, stateTy, i,
+                     converted.getArgument(1), arg);
+      }
+    }
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -503,8 +547,6 @@ struct ProcOpConversion : public ConvertToLLVMPattern {
       final.remapInput(i + 3, gep.getResult());
     }
 
-    rewriter.applySignatureConversion(&procOp.getBody(), final);
-
     // Get the converted process signature.
     auto funcTy = LLVM::LLVMType::getFunctionTy(
         voidTy, {i8PtrTy, stateTy.getPointerTo(), sigTy.getPointerTo()},
@@ -519,6 +561,13 @@ struct ProcOpConversion : public ConvertToLLVMPattern {
 
     insertPersistence(typeConverter, rewriter, &getDialect(), op->getLoc(),
                       procOp, stateTy, llvmFunc);
+
+    // Convert the block argument types after inserting the persistence, since
+    // this messes up the block argument uses.
+    if (failed(rewriter.convertRegionTypes(&llvmFunc.getBody(), typeConverter,
+                                           &final))) {
+      return failure();
+    }
 
     rewriter.eraseOp(op);
 
