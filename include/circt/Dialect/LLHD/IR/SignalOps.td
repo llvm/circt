@@ -46,7 +46,6 @@ def LLHD_SigOp : LLHD_Op<"sig", [
 }
 
 def LLHD_PrbOp : LLHD_Op<"prb", [
-    NoSideEffect,
     TypesMatchWith<
       "type of 'result' and underlying type of 'signal' have to match.",
       "signal", "result", "$_self.cast<SigType>().getUnderlyingType()">
@@ -72,7 +71,8 @@ def LLHD_PrbOp : LLHD_Op<"prb", [
     ```
   }];
 
-  let arguments = (ins LLHD_AnySigType: $signal);
+  let arguments = (ins Arg<LLHD_AnySigType, "the signal to probe from",
+                           [MemRead]>: $signal);
   let results = (outs LLHD_AnyUnderlyingType: $result);
 
   let assemblyFormat = "$signal attr-dict `:` type($signal)";
@@ -113,7 +113,8 @@ def LLHD_DrvOp : LLHD_Op<"drv", [
     ```
   }];
 
-  let arguments = (ins LLHD_AnySigType: $signal,
+  let arguments = (ins Arg<LLHD_AnySigType, "the signal to drive to",
+                           [MemWrite]>: $signal,
                        LLHD_AnyUnderlyingType: $value,
                        LLHD_TimeType: $time,
                        Optional<I1>: $enable);
