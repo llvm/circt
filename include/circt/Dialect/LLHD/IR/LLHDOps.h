@@ -17,6 +17,7 @@
 #include "circt/Dialect/LLHD/IR/LLHDEnums.h.inc"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
+#include "mlir/Interfaces/LoopLikeInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 namespace circt {
