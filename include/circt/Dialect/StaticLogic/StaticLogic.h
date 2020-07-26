@@ -50,5 +50,5 @@ public:
 #include "circt/Dialect/StaticLogic/StaticLogic.h.inc"
 
 } // namespace staticlogic
-} // end namespace circt
+} // namespace circt
 #endif // CIRCT_STATICLOGIC_OPS_H_

@@ -46,12 +46,22 @@ def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [
   let summary = "pipeline operation";
   let description = [{
     The "pipeline" operation represents a statically scheduled pipeline stucture
-    which contains multiple pipeline stages.
+    which can contain multiple pipeline stages.
   }];
 
   let arguments = (ins);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
+
+  let extraClassDeclaration = [{
+    /// Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+
+    /// Returns the number of arguments, implementing OpTrait::FunctionLike.
+    unsigned getNumFuncArguments() { return getType().getInputs().size(); }
+    /// Returns the number of results, implementing OpTrait::FunctionLike.
+    unsigned getNumFuncResults() { return getType().getResults().size(); }
+  }];
 }
 
 #endif // STATICLOGIC_OPS
