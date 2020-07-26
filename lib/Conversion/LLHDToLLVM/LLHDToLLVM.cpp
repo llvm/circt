@@ -34,6 +34,12 @@ static size_t signalCounter = 0;
 // Helpers
 //===----------------------------------------------------------------------===//
 
+static unsigned getStdOrLLVMIntegerWidth(Type type) {
+  if (auto llvmTy = type.dyn_cast<LLVM::LLVMType>())
+    return llvmTy.getIntegerBitWidth();
+  return type.getIntOrFloatBitWidth();
+}
+
 /// Get an existing global string.
 static Value getGlobalString(Location loc, OpBuilder &builder,
                              LLVMTypeConverter &typeConverter,
@@ -877,7 +883,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
                   ->getResult(0);
           // Get the required space, in bytes, to store the signal's value.
           int size = llvm::divideCeil(
-              sigOp.init().getType().getIntOrFloatBitWidth(), 8);
+              getStdOrLLVMIntegerWidth(sigOp.init().getType()), 8);
           auto sizeConst = initBuilder.create<LLVM::ConstantOp>(
               op->getLoc(), i64Ty, rewriter.getI64IntegerAttr(size));
           // Malloc double the required space to make sure signal shifts do not
@@ -1078,7 +1084,7 @@ struct PrbOpConversion : public ConvertToLLVMPattern {
 
     // Get the amount of bytes to load. An extra byte is always loaded to cover
     // the case where a subsignal spans halfway in the last byte.
-    int resWidth = prbOp.getType().getIntOrFloatBitWidth();
+    int resWidth = getStdOrLLVMIntegerWidth(prbOp.getType());
     int loadWidth = (llvm::divideCeil(resWidth, 8) + 1) * 8;
     auto loadTy =
         LLVM::LLVMType::getIntNTy(&typeConverter.getContext(), loadWidth);
@@ -1143,11 +1149,8 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
     // Get the state pointer from the function arguments.
     Value statePtr = op->getParentOfType<LLVM::LLVMFuncOp>().getArgument(0);
 
-    int sigWidth = drvOp.signal()
-                       .getType()
-                       .dyn_cast<SigType>()
-                       .getUnderlyingType()
-                       .getIntOrFloatBitWidth();
+    int sigWidth = getStdOrLLVMIntegerWidth(
+        drvOp.signal().getType().dyn_cast<SigType>().getUnderlyingType());
 
     auto widthConst = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), i64Ty, rewriter.getI64IntegerAttr(sigWidth));
@@ -1205,7 +1208,7 @@ struct NotOpConversion : public ConvertToLLVMPattern {
     // Get the `llhd.not` operation.
     auto notOp = cast<NotOp>(op);
     // Get integer width.
-    unsigned width = notOp.getType().getIntOrFloatBitWidth();
+    unsigned width = getStdOrLLVMIntegerWidth(notOp.getType());
     // Get the used llvm types.
     auto iTy = LLVM::LLVMType::getIntNTy(&typeConverter.getContext(), width);
 
@@ -1243,8 +1246,8 @@ struct ShrOpConversion : public ConvertToLLVMPattern {
 
     if (auto resTy = shrOp.result().getType().dyn_cast<IntegerType>()) {
       // Get width of the base and hidden values combined.
-      auto baseWidth = shrOp.getType().getIntOrFloatBitWidth();
-      auto hdnWidth = shrOp.hidden().getType().getIntOrFloatBitWidth();
+      auto baseWidth = getStdOrLLVMIntegerWidth(shrOp.getType());
+      auto hdnWidth = getStdOrLLVMIntegerWidth(shrOp.hidden().getType());
       auto full = baseWidth + hdnWidth;
 
       auto tmpTy = LLVM::LLVMType::getIntNTy(&typeConverter.getContext(), full);
@@ -1341,8 +1344,8 @@ struct ShlOpConversion : public ConvertToLLVMPattern {
     assert(!shlOp.getType().isa<llhd::SigType>() && "sig not yet supported");
 
     // Get the width of the base and hidden operands combined.
-    auto baseWidth = shlOp.getType().getIntOrFloatBitWidth();
-    auto hdnWidth = shlOp.hidden().getType().getIntOrFloatBitWidth();
+    auto baseWidth = getStdOrLLVMIntegerWidth(shlOp.getType());
+    auto hdnWidth = getStdOrLLVMIntegerWidth(shlOp.hidden().getType());
     auto full = baseWidth + hdnWidth;
 
     auto tmpTy = LLVM::LLVMType::getIntNTy(&typeConverter.getContext(), full);
@@ -1458,7 +1461,7 @@ struct ExtractSliceOpConversion : public ConvertToLLVMPattern {
       auto resTy = typeConverter.convertType(extsOp.result().getType());
       // Adjust the index const for shifting.
       Value adjusted;
-      if (extsOp.target().getType().getIntOrFloatBitWidth() < 64) {
+      if (getStdOrLLVMIntegerWidth(extsOp.target().getType()) < 64) {
         adjusted = rewriter.create<LLVM::TruncOp>(
             op->getLoc(), transformed.target().getType(), startConst);
       } else {
@@ -1531,7 +1534,7 @@ struct InsertSliceOpConversion : public ConvertToLLVMPattern {
       auto startConst = rewriter.create<LLVM::ConstantOp>(op->getLoc(), indexTy,
                                                           inssOp.startAttr());
       Value adjusted;
-      if (inssOp.result().getType().getIntOrFloatBitWidth() < 64) {
+      if (getStdOrLLVMIntegerWidth(inssOp.result().getType()) < 64) {
         adjusted = rewriter.create<LLVM::TruncOp>(
             op->getLoc(), transformed.target().getType(), startConst);
       } else {
@@ -1539,11 +1542,14 @@ struct InsertSliceOpConversion : public ConvertToLLVMPattern {
             op->getLoc(), transformed.target().getType(), startConst);
       }
       // Generate a mask to set the affected bits.
-      APInt mask = APInt(inssOp.slice().getType().getIntOrFloatBitWidth(), 0);
+
+      auto width = getStdOrLLVMIntegerWidth(inssOp.slice().getType());
+      APInt mask = APInt(width, 0);
       mask.setAllBits();
       auto maskConst = rewriter.create<LLVM::ConstantOp>(
           op->getLoc(), transformed.slice().getType(),
-          rewriter.getIntegerAttr(inssOp.slice().getType(), mask));
+          rewriter.getIntegerAttr(
+              IntegerType::get(width, rewriter.getContext()), mask));
       auto maskZext = rewriter.create<LLVM::ZExtOp>(
           op->getLoc(), transformed.target().getType(), maskConst);
       auto maskShift = rewriter.create<LLVM::ShlOp>(
