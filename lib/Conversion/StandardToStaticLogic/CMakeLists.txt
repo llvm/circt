@@ -11,5 +11,4 @@ add_mlir_library(MLIRStandardToStaticLogic
   MLIRSupport
   MLIRTransforms
   MLIRStaticLogicOps
-  MLIRStandardToHandshake
   )

@@ -40,44 +40,80 @@ def StaticLogic_Dialect : Dialect {
 def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [
   NativeOpTrait<"IsIsolatedFromAbove">,
   NativeOpTrait<"FunctionLike">,
+  SingleBlockImplicitTerminator<"DoneOp">,
   Symbol,
   RegionKindInterface
 ]> {
   let summary = "pipeline operation";
   let description = [{
-    The "pipeline" operation represents a statically scheduled pipeline stucture
-    which can contain multiple pipeline stages.
+    The "staticlogic.pipeline" operation represents a statically scheduled 
+    pipeline stucture which can contain multiple pipeline stages.
   }];
 
   let arguments = (ins);
   let results = (outs);
-  let regions = (region SizedRegion<1>:$body);
+  let regions = (region AnyRegion : $body);
+
+  let skipDefaultBuilders = 1;
+
+  let builders = [OpBuilder<"OpBuilder &builder, OperationState &odsState, "
+                            "StringRef name, FunctionType type, "
+                            "ValueRange operands, " 
+                            "ArrayRef<NamedAttribute> attributes", [{
+    odsState.addAttribute(SymbolTable::getSymbolAttrName(),
+                          builder.getStringAttr(name));
+    odsState.addAttribute(getTypeAttrName(), TypeAttr::get(type));
+    odsState.addOperands(operands);
+    odsState.addAttributes(attributes);
+    for (unsigned i = 0; i != 1; ++i)
+      (void)odsState.addRegion();
+    
+    auto *bodyRegion = odsState.regions[0].get();
+    PipelineOp::ensureTerminator(*bodyRegion, builder, odsState.location);
+  }]>];
 
   let extraClassDeclaration = [{
     /// Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
 
+    // This trait needs access to the hooks defined below.
+    friend class OpTrait::FunctionLike<PipelineOp>;
+
     /// Returns the number of arguments, implementing OpTrait::FunctionLike.
     unsigned getNumFuncArguments() { return getType().getInputs().size(); }
     /// Returns the number of results, implementing OpTrait::FunctionLike.
     unsigned getNumFuncResults() { return getType().getResults().size(); }
+
+    /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
+    /// attribute is present and checks if it holds a function type.  Ensures
+    /// getType, getNumFuncArguments, and getNumFuncResults can be called
+    ///  safely.
+    LogicalResult verifyType() {
+      auto type = getTypeAttr().getValue();
+      if (!type.isa<FunctionType>())
+        return emitOpError("requires '" + getTypeAttrName() +
+                           "' attribute of function type");
+      return success();
+    }
   }];
 
-  let parser = [{
-    auto buildFuncType =
-        [](Builder & builder, ArrayRef<Type> argTypes, ArrayRef<Type> results,
-           impl::VariadicFlag, std::string &) {
-      return builder.getFunctionType(argTypes, results);
-    };
-
-    return impl::parseFunctionLikeOp(parser, result, /*allowVariadic=*/true,
-                                     buildFuncType);
-  }];
+  let parser = [{ }];
   let printer = [{
-    impl::printFunctionLikeOp(p, *this, getType().getInputs(), 
-                              /*isVariadic=*/true, getType().getResults());
+    auto type = getAttrOfType<TypeAttr>(getTypeAttrName()).getValue()
+                .cast<FunctionType>();
+    impl::printFunctionLikeOp(p, *this, type.getInputs(), 
+                              /*isVariadic=*/true, type.getResults());
   }];
-  let verifier = [{ return success(); }];
+  let verifier = [{ }];
+}
+
+def DoneOp : Op<StaticLogic_Dialect, "done", [Terminator]> {
+  let summary = "StaticLogic termination operation";
+  let description = [{
+    "staticlogic.done" marks the end of a region in the StaticLogic dialect.
+  }];
+
+  let arguments = (ins);
 }
 
 #endif // STATICLOGIC_OPS
