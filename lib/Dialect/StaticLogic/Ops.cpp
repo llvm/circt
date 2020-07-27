@@ -19,10 +19,27 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/Function.h"
+#include "mlir/IR/FunctionImplementation.h"
+#include "mlir/IR/Matchers.h"
+#include "mlir/IR/Module.h"
+#include "mlir/IR/OpDefinition.h"
+#include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/StandardTypes.h"
+#include "mlir/IR/Value.h"
 
 using namespace mlir;
 using namespace circt;
 using namespace circt::staticlogic;
+
+namespace circt {
+namespace staticlogic {
+#define GET_OP_CLASSES
+#include "circt/Dialect/StaticLogic/StaticLogic.cpp.inc"
+} // namespace staticlogic
+} // namespace circt
 
 StaticLogicDialect::StaticLogicDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context) {

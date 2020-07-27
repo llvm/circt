@@ -36,5 +36,34 @@
 
 using namespace mlir;
 using namespace circt;
-using namespace circt::handshake;
 using namespace circt::staticlogic;
+
+struct CreatePipeline : public OpConversionPattern<mlir::FuncOp> {
+  using OpConversionPattern<mlir::FuncOp>::OpConversionPattern;
+  LogicalResult match(Operation *op) const override { return success(); }
+
+  void rewrite(mlir::FuncOp funcOp, ArrayRef<Value> operands,
+               ConversionPatternRewriter &rewriter) const override {
+  }
+};
+
+struct CreatePipelinePass
+    : public PassWrapper<CreatePipelinePass, OperationPass<ModuleOp>> {
+  void runOnOperation() override {
+    ModuleOp m = getOperation();
+
+    ConversionTarget target(getContext());
+    target.addLegalDialect<StaticLogicDialect, StandardOpsDialect>();
+
+    OwningRewritePatternList patterns;
+    patterns.insert<CreatePipeline>(m.getContext());
+
+    if (failed(applyPartialConversion(m, target, patterns)))
+      signalPassFailure();
+  }
+};
+
+void staticlogic::registerStandardToStaticLogicPasses() {
+  PassRegistration<CreatePipelinePass>(
+      "create-pipeline", "Create StaticLogic pipeline operations.");
+}

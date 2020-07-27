@@ -62,6 +62,22 @@ def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [
     /// Returns the number of results, implementing OpTrait::FunctionLike.
     unsigned getNumFuncResults() { return getType().getResults().size(); }
   }];
+
+  let parser = [{
+    auto buildFuncType =
+        [](Builder & builder, ArrayRef<Type> argTypes, ArrayRef<Type> results,
+           impl::VariadicFlag, std::string &) {
+      return builder.getFunctionType(argTypes, results);
+    };
+
+    return impl::parseFunctionLikeOp(parser, result, /*allowVariadic=*/true,
+                                     buildFuncType);
+  }];
+  let printer = [{
+    impl::printFunctionLikeOp(p, *this, getType().getInputs(), 
+                              /*isVariadic=*/true, getType().getResults());
+  }];
+  let verifier = [{ return success(); }];
 }
 
 #endif // STATICLOGIC_OPS
