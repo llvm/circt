@@ -40,7 +40,6 @@ def StaticLogic_Dialect : Dialect {
 def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [
   NativeOpTrait<"IsIsolatedFromAbove">,
   NativeOpTrait<"FunctionLike">,
-  SingleBlockImplicitTerminator<"DoneOp">,
   Symbol,
   RegionKindInterface
 ]> {
@@ -52,24 +51,20 @@ def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [
 
   let arguments = (ins);
   let results = (outs);
-  let regions = (region AnyRegion : $body);
+  let regions = (region AnyRegion: $body);
 
   let skipDefaultBuilders = 1;
 
   let builders = [OpBuilder<"OpBuilder &builder, OperationState &odsState, "
-                            "StringRef name, FunctionType type, "
-                            "ValueRange operands, " 
-                            "ArrayRef<NamedAttribute> attributes", [{
+      "StringRef name, FunctionType type, " 
+      "ArrayRef<NamedAttribute> attributes",
+  [{
     odsState.addAttribute(SymbolTable::getSymbolAttrName(),
                           builder.getStringAttr(name));
     odsState.addAttribute(getTypeAttrName(), TypeAttr::get(type));
-    odsState.addOperands(operands);
     odsState.addAttributes(attributes);
     for (unsigned i = 0; i != 1; ++i)
       (void)odsState.addRegion();
-    
-    auto *bodyRegion = odsState.regions[0].get();
-    PipelineOp::ensureTerminator(*bodyRegion, builder, odsState.location);
   }]>];
 
   let extraClassDeclaration = [{
@@ -107,13 +102,55 @@ def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [
   let verifier = [{ }];
 }
 
-def DoneOp : Op<StaticLogic_Dialect, "done", [Terminator]> {
-  let summary = "StaticLogic termination operation";
+def InstanceOp : Op<StaticLogic_Dialect, "instance", [CallOpInterface]> {
+  let summary = "module instantiate operation";
   let description = [{
-    "staticlogic.done" marks the end of a region in the StaticLogic dialect.
+    The `staticlogic.instance` operation represents the instantiation of a 
+	  StaticLogic module which is similar to a function call.
   }];
 
-  let arguments = (ins);
+  let arguments = (ins FlatSymbolRefAttr:$module, Variadic<AnyType>:$operands);
+  let results = (outs Variadic<AnyType>);
+
+  let builders = [OpBuilder<"OpBuilder &builder, OperationState &odsState, "
+    "SymbolRefAttr module, ArrayRef<Type> results, ValueRange operands = {}",
+  [{
+    odsState.addOperands(operands);
+    odsState.addAttribute("module", module);
+    odsState.addTypes(results);
+  }]>];
+
+  let extraClassDeclaration = [{
+    StringRef getModule() { return module(); }
+    FunctionType getModuleType();
+
+    /// Get the argument operands to the called function.
+    operand_range getArgOperands() {
+      return {arg_operand_begin(), arg_operand_end()};
+    }
+
+    operand_iterator arg_operand_begin() { return operand_begin(); }
+    operand_iterator arg_operand_end() { return operand_end(); }
+
+    /// Return the module of this operation.
+    CallInterfaceCallable getCallableForCallee() {
+      return getAttrOfType<SymbolRefAttr>("module");
+    }
+  }];
+
+  let assemblyFormat = [{
+    $module `(` $operands `)` attr-dict `:` functional-type($operands, results)
+  }];
+}
+
+def ReturnOp : Op<StaticLogic_Dialect, "return", [Terminator]> {
+  let summary = "StaticLogic dialect return.";
+  let description = [{
+    The "handshake.return" operation represents a terminator of a statically 
+    scheduled module.
+  }];
+
+  let arguments = (ins Variadic<AnyType> : $operands);
 }
 
 #endif // STATICLOGIC_OPS

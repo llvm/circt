@@ -167,78 +167,22 @@ static BlockValues getBlockLiveIns(mlir::FuncOp f) {
   return blockLiveIns;
 }
 
-static BlockValues getBlockLiveOuts(mlir::FuncOp f, BlockValues blockLiveIns) {
-  BlockValues blockLiveOuts;
-
+static void canonicalizeFuncOp(mlir::FuncOp f, OpBuilder &builder,
+                               BlockValues blockLiveIns) {
   for (Block &block : f) {
-    vector<Value> liveOuts;
-    for (int i = 0, e = block.getNumSuccessors(); i < e; ++i) {
-      Block *succ = block.getSuccessor(i);
-      liveOuts = vectorUnion(liveOuts, blockLiveIns[succ]);
-    }
-    blockLiveOuts[&block] = liveOuts;
-  }
-  return blockLiveOuts;
-}
-
-static BlockValues getPipelineIns(mlir::FuncOp f, BlockValues blockLiveIns) {
-  // Push back block arguments
-  for (Block &block : f) {
-    for (auto &val : block.getArguments()) {
-      blockLiveIns[&block].push_back(val);
-    }
-  }
-  return blockLiveIns;
-}
-
-static BlockValues getPipelineOuts(mlir::FuncOp f, BlockValues blockLiveOuts) {
-  for (Block &block : f) {
-    Operation *termOp = block.getTerminator();
-    if (auto condBranchOp = dyn_cast<mlir::CondBranchOp>(termOp)) {
-      for (auto val : condBranchOp.getTrueOperands())
-        blockLiveOuts[&block].push_back(val);
-      for (auto val : condBranchOp.getFalseOperands())
-        blockLiveOuts[&block].push_back(val);
-    } else {
-      for (auto val : termOp->getOperands())
-        blockLiveOuts[&block].push_back(val);
-    }
-  }
-  return blockLiveOuts;
-}
-
-static void createPipeline(mlir::FuncOp f, OpBuilder &builder) {
-  BlockValues blockLiveIns = getBlockLiveIns(f);
-  BlockValues blockLiveOuts = getBlockLiveOuts(f, blockLiveIns);
-
-  BlockValues pipelineIns = getPipelineIns(f, blockLiveIns);
-  BlockValues pipelineOuts = getPipelineOuts(f, blockLiveOuts);
-
-  unsigned opIdx = 0;
-  for (Block &block : f) {
-    // Add block arguments.
-    for (auto val : blockLiveIns[&block]) {
-      auto newArg = block.addArgument(val.getType());
-      val.replaceUsesWithIf(
-          newArg,
-          function_ref<bool(OpOperand &)>([&block](OpOperand &operand) -> bool {
-            return operand.getOwner()->getBlock() == block;
-          }));
-    }
-
     // Add terminator operands.
     auto *termOp = block.getTerminator();
     if (auto condBranchOp = dyn_cast<mlir::CondBranchOp>(termOp)) {
 
       // Add true destination operands.
-      SmallVector<Value, 8> trueOperands;
+      SmallVector<Value, 4> trueOperands;
       for (auto trueOperand : condBranchOp.getTrueOperands())
         trueOperands.push_back(trueOperand);
       for (auto trueLiveOut : blockLiveIns[condBranchOp.getTrueDest()])
         trueOperands.push_back(trueLiveOut);
 
       // Add false destination operands.
-      SmallVector<Value, 8> falseOperands;
+      SmallVector<Value, 4> falseOperands;
       for (auto falseOperand : condBranchOp.getFalseOperands())
         falseOperands.push_back(falseOperand);
       for (auto falseLiveOut : blockLiveIns[condBranchOp.getFalseDest()])
@@ -251,7 +195,7 @@ static void createPipeline(mlir::FuncOp f, OpBuilder &builder) {
       condBranchOp.erase();
 
     } else if (auto branchOp = dyn_cast<mlir::BranchOp>(termOp)) {
-      SmallVector<Value, 8> operands;
+      SmallVector<Value, 4> operands;
       for (auto operand : branchOp.getOperands())
         operands.push_back(operand);
       for (auto liveOut : blockLiveIns[branchOp.getDest()])
@@ -262,52 +206,68 @@ static void createPipeline(mlir::FuncOp f, OpBuilder &builder) {
       branchOp.erase();
     }
 
-    if (!block.front().isKnownTerminator()) {
+    // Add block arguments.
+    for (auto val : blockLiveIns[&block]) {
+      auto newArg = block.addArgument(val.getType());
+      val.replaceUsesWithIf(
+          newArg,
+          function_ref<bool(OpOperand &)>([&block](OpOperand &operand) -> bool {
+            return operand.getOwner()->getBlock() == &block;
+          }));
+    }
+  }
+}
 
-      // Traverse all inputs to get their types.
+static void createPipeline(mlir::FuncOp f, OpBuilder &builder) {
+  BlockValues blockLiveIns = getBlockLiveIns(f);
+  canonicalizeFuncOp(f, builder, blockLiveIns);
+
+  unsigned blockIdx = 0;
+  for (Block &block : f) {
+    if (block.front().isKnownNonTerminator() &&
+        block.back().isKnownTerminator()) {
+      // Traverse all inputs and outputs to get their types.
       SmallVector<mlir::Type, 8> argTypes;
-      for (auto &val : pipelineIns[&block]) {
+      for (auto &val : block.getArguments()) {
         argTypes.push_back(val.getType());
       }
-
-      // Traverse all outputs to get their types.
       SmallVector<mlir::Type, 8> resTypes;
-      for (auto &val : pipelineOuts[&block]) {
+      for (auto val : block.back().getOperands()) {
         resTypes.push_back(val.getType());
       }
-
       auto opType = builder.getFunctionType(argTypes, resTypes);
 
       // Get attributes of the pipeline.
       SmallVector<NamedAttribute, 4> attributes;
 
-      // Build pipeline operation.
-      builder.setInsertionPoint(block.getTerminator());
-      auto pipelineOp = builder.create<staticlogic::PipelineOp>(
-          f.getLoc(), "pipeline" + std::to_string(opIdx), opType,
-          ValueRange(pipelineIns[&block]), attributes);
+      // Create pipeline operation.
+      builder.setInsertionPoint(f);
+      auto pipeline = builder.create<staticlogic::PipelineOp>(
+          f.getLoc(), "pipeline" + std::to_string(blockIdx), opType,
+          attributes);
+      auto &pipelineOps = pipeline.addEntryBlock()->getOperations();
 
-      auto &pipelineOps = pipelineOp.getBlocks().front().getOperations();
-      pipelineOps.splice(--pipelineOps.end(), block.getOperations(),
-                         block.begin(), (--block.end()));
+      // Create return operation in the block and move all operations except the
+      // terminator operation into the pipeline.
+      builder.setInsertionPoint(&block.back());
+      builder.create<staticlogic::ReturnOp>(f.getLoc(),
+                                            block.back().getOperands());
+      pipelineOps.splice(pipelineOps.end(), block.getOperations(),
+                         block.begin(), --block.end());
 
-      // Create return operation and reconnect results of the pipeline.
-      builder.setInsertionPoint(&pipelineOps.back());
-      auto returnOp = builder.create<mlir::ReturnOp>(
-          f.getLoc(), ValueRange(pipelineOuts[&block]));
-      pipelineOps.back().erase();
-
-      // Reconnect arguments of the pipeline.
       unsigned argIdx = 0;
-      for (auto &arg : pipelineOp.getArguments()) {
-        Value value = pipelineIns[&block][argIdx];
-        value.replaceAllUsesWith(arg);
+      for (auto &arg : pipeline.getArguments()) {
+        block.getArgument(argIdx).replaceAllUsesWith(arg);
         argIdx += 1;
       }
 
-      llvm::outs() << "new block\n";
+      // Create call operation.
+      auto pipelineCallOp = builder.create<staticlogic::InstanceOp>(
+          f.getLoc(), builder.getSymbolRefAttr(pipeline.getName()),
+          pipeline.getType().getResults(), block.getArguments());
+      block.back().setOperands(pipelineCallOp.getResults());
 
-      opIdx += 1;
+      blockIdx += 1;
     }
   }
 }
