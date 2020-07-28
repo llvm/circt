@@ -3,7 +3,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "mlir/IR/Matchers.h"
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/PatternMatch.h"
 
 using namespace mlir;
@@ -11,46 +11,7 @@ using namespace mlir;
 namespace {
 /// Include the patterns defined in the Declarative Rewrite framework.
 #include "circt/Dialect/LLHD/IR/LLHDCanonicalization.inc"
-
-struct DynExtractSliceWithConstantStart
-    : public mlir::OpRewritePattern<llhd::DynExtractSliceOp> {
-  DynExtractSliceWithConstantStart(mlir::MLIRContext *context)
-      : OpRewritePattern<llhd::DynExtractSliceOp>(context, /*benefit=*/1) {}
-
-  mlir::LogicalResult
-  matchAndRewrite(llhd::DynExtractSliceOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    IntegerAttr intAttr;
-    if (mlir::matchPattern(op.start(), m_Constant<IntegerAttr>(&intAttr))) {
-      rewriter.replaceOpWithNewOp<llhd::ExtractSliceOp>(
-          op, op.result().getType(), op.target(),
-          rewriter.getIndexAttr(intAttr.getValue().getZExtValue()));
-      return success();
-    }
-    return failure();
-  }
-};
-
-struct DynExtractElementWithConstantIndex
-    : public mlir::OpRewritePattern<llhd::DynExtractElementOp> {
-  DynExtractElementWithConstantIndex(mlir::MLIRContext *context)
-      : OpRewritePattern<llhd::DynExtractElementOp>(context,
-                                                    /*benefit=*/1) {}
-
-  mlir::LogicalResult
-  matchAndRewrite(llhd::DynExtractElementOp op,
-                  mlir::PatternRewriter &rewriter) const override {
-    IntegerAttr intAttr;
-    if (mlir::matchPattern(op.index(), m_Constant<IntegerAttr>(&intAttr))) {
-      rewriter.replaceOpWithNewOp<llhd::ExtractElementOp>(
-          op, op.result().getType(), op.target(),
-          rewriter.getIndexAttr(intAttr.getValue().getZExtValue()));
-      return success();
-    }
-    return failure();
-  }
-};
-} // anonymous namespace
+} // namespace
 
 void llhd::XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                               MLIRContext *context) {
@@ -74,10 +35,12 @@ void llhd::NeqOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
 void llhd::DynExtractSliceOp::getCanonicalizationPatterns(
     OwningRewritePatternList &results, MLIRContext *context) {
-  results.insert<DynExtractSliceWithConstantStart>(context);
+  results.insert<DynExtractSliceWithConstantOpStart,
+                 DynExtractSliceWithLLHDConstOpStart>(context);
 }
 
 void llhd::DynExtractElementOp::getCanonicalizationPatterns(
     OwningRewritePatternList &results, MLIRContext *context) {
-  results.insert<DynExtractElementWithConstantIndex>(context);
+  results.insert<DynExtractElementWithConstantOpIndex,
+                 DynExtractElementWithLLHDConstOpIndex>(context);
 }
