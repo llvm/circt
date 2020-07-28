@@ -30,6 +30,8 @@ using namespace circt::llhd;
 // Keep a counter to infer a signal's index in his entity's signal table.
 static size_t signalCounter = 0;
 
+static size_t regCounter = 0;
+
 //===----------------------------------------------------------------------===//
 // Helpers
 //===----------------------------------------------------------------------===//
@@ -415,6 +417,27 @@ static void insertPersistence(LLVMTypeConverter &converter,
   }
 }
 
+/// Return a struct type of arrays containing one entry for each RegOp condition
+/// that needs more than one state of the trigger to infer it (i.e. `both`,
+/// `rise` and `fall`).
+static LLVM::LLVMType getRegStateTy(LLVM::LLVMDialect *dialect,
+                                    Operation *unit) {
+  SmallVector<LLVM::LLVMType, 4> types;
+  unit->walk([&](RegOp op) {
+    size_t count = 0;
+    for (size_t i = 0; i < op.modes().size(); ++i) {
+      auto mode = op.getRegModeAt(i);
+      if (mode == RegMode::fall || mode == RegMode::rise ||
+          mode == RegMode::both)
+        ++count;
+    }
+    if (count > 0)
+      types.push_back(LLVM::LLVMType::getArrayTy(
+          LLVM::LLVMType::getInt1Ty(dialect->getContext()), count));
+  });
+  return LLVM::LLVMType::getStructTy(dialect->getContext(), types);
+}
+
 //===----------------------------------------------------------------------===//
 // Type conversions
 //===----------------------------------------------------------------------===//
@@ -466,6 +489,9 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
     auto i8PtrTy = getVoidPtrType();
     auto i32Ty = LLVM::LLVMType::getInt32Ty(&typeConverter.getContext());
     auto sigTy = getSigType(&getDialect());
+    auto entityStatePtrTy = getRegStateTy(&getDialect(), op).getPointerTo();
+
+    regCounter = 0;
 
     // Use an intermediate signature conversion to add the arguments for the
     // state and signal table pointer arguments.
@@ -473,7 +499,7 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
         entityOp.getNumArguments());
     // Add state and signal table arguments.
     intermediate.addInputs(
-        std::array<Type, 2>({i8PtrTy, sigTy.getPointerTo()}));
+        std::array<Type, 3>({i8PtrTy, entityStatePtrTy, sigTy.getPointerTo()}));
     for (size_t i = 0, e = entityOp.getNumArguments(); i < e; ++i)
       intermediate.addInputs(i, voidTy);
     rewriter.applySignatureConversion(&entityOp.getBody(), intermediate);
@@ -483,7 +509,8 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
     LLVMTypeConverter::SignatureConversion final(
         intermediate.getConvertedTypes().size());
     final.addInputs(0, i8PtrTy);
-    final.addInputs(1, sigTy.getPointerTo());
+    final.addInputs(1, entityStatePtrTy);
+    final.addInputs(2, sigTy.getPointerTo());
 
     // The first n elements of the signal table represent the entity arguments,
     // while the remaining elements represent the entity's owned signals.
@@ -493,18 +520,18 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
       auto index = bodyBuilder.create<LLVM::ConstantOp>(
           op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(i));
       auto gep = bodyBuilder.create<LLVM::GEPOp>(
-          op->getLoc(), sigTy.getPointerTo(), entityOp.getArgument(1),
+          op->getLoc(), sigTy.getPointerTo(), entityOp.getArgument(2),
           ArrayRef<Value>(index));
       // Remap i-th original argument to the gep'd signal pointer.
-      final.remapInput(i + 2, gep.getResult());
+      final.remapInput(i + 3, gep.getResult());
     }
 
     rewriter.applySignatureConversion(&entityOp.getBody(), final);
 
     // Get the converted entity signature.
-    auto funcTy =
-        LLVM::LLVMType::getFunctionTy(voidTy, {i8PtrTy, sigTy.getPointerTo()},
-                                      /*isVarArg=*/false);
+    auto funcTy = LLVM::LLVMType::getFunctionTy(
+        voidTy, {i8PtrTy, entityStatePtrTy, sigTy.getPointerTo()},
+        /*isVarArg=*/false);
 
     // Create the a new llvm function to house the lowered entity.
     auto llvmFunc = rewriter.create<LLVM::LLVMFuncOp>(
@@ -841,6 +868,12 @@ struct InstOpConversion : public ConvertToLLVMPattern {
     auto allocProcFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
                                              "alloc_proc", allocProcFuncTy);
 
+    // Get or insert alloc_entity library call definition.
+    auto allocEntityFuncTy = LLVM::LLVMType::getFunctionTy(
+        voidTy, {i8PtrTy, i8PtrTy, i8PtrTy}, /*isVarArg=*/false);
+    auto allocEntityFunc = getOrInsertFunction(
+        module, rewriter, op->getLoc(), "alloc_entity", allocEntityFuncTy);
+
     Value initStatePtr = initFunc.getArgument(0);
 
     // Get a builder for the init function.
@@ -866,6 +899,42 @@ struct InstOpConversion : public ConvertToLLVMPattern {
 
     // Handle entity instantiation.
     if (auto child = module.lookupSymbol<EntityOp>(instOp.callee())) {
+      auto regStateTy = getRegStateTy(&getDialect(), child.getOperation());
+      auto regStatePtrTy = regStateTy.getPointerTo();
+      auto oneC = initBuilder.create<LLVM::ConstantOp>(
+          op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(1));
+      auto regNull =
+          initBuilder.create<LLVM::NullOp>(op->getLoc(), regStatePtrTy);
+      auto regGep = initBuilder.create<LLVM::GEPOp>(
+          op->getLoc(), regStatePtrTy, regNull, ArrayRef<Value>({oneC}));
+      auto regSize =
+          initBuilder.create<LLVM::PtrToIntOp>(op->getLoc(), i64Ty, regGep);
+      auto regMall =
+          initBuilder
+              .create<LLVM::CallOp>(op->getLoc(), i8PtrTy,
+                                    rewriter.getSymbolRefAttr(mallFunc),
+                                    ArrayRef<Value>({regSize}))
+              .getResult(0);
+      auto regMallBC = initBuilder.create<LLVM::BitcastOp>(
+          op->getLoc(), regStatePtrTy, regMall);
+      auto zeroB = initBuilder.create<LLVM::ConstantOp>(
+          op->getLoc(), i1Ty, rewriter.getBoolAttr(false));
+      for (size_t i = 0, e = regStateTy.getStructNumElements(); i < e; ++i) {
+        size_t f = regStateTy.getStructElementType(i).getArrayNumElements();
+        for (size_t j = 0; j < f; ++j) {
+          auto regIndexC = initBuilder.create<LLVM::ConstantOp>(
+              op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(i));
+          auto triggerIndexC = initBuilder.create<LLVM::ConstantOp>(
+              op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(j));
+          auto regGep = initBuilder.create<LLVM::GEPOp>(
+              op->getLoc(), i1Ty.getPointerTo(), regMallBC,
+              ArrayRef<Value>({zeroB, regIndexC, triggerIndexC}));
+          initBuilder.create<LLVM::StoreOp>(op->getLoc(), zeroB, regGep);
+        }
+      }
+      initBuilder.create<LLVM::CallOp>(
+          op->getLoc(), voidTy, rewriter.getSymbolRefAttr(allocEntityFunc),
+          ArrayRef<Value>({initStatePtr, owner, regMall}));
       // Index of the signal in the unit's signal table.
       int initCounter = 0;
       // Walk over the entity and generate mallocs for each one of its signals.
@@ -1044,7 +1113,7 @@ struct SigOpConversion : public ConvertToLLVMPattern {
     auto sigTy = getSigType(&getDialect());
 
     // Get the signal table pointer from the arguments.
-    Value sigTablePtr = op->getParentOfType<LLVM::LLVMFuncOp>().getArgument(1);
+    Value sigTablePtr = op->getParentOfType<LLVM::LLVMFuncOp>().getArgument(2);
 
     // Get the index in the signal table and increase counter.
     auto indexConst = rewriter.create<LLVM::ConstantOp>(
@@ -1206,6 +1275,139 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
     return success();
   }
 };
+} // namespace
+
+namespace {
+/// Convert an `llhd.reg` operation to LLVM dialect. This generates a series of
+/// comparisons (blocks) that end up driving the signal with apropriate
+/// arguments.
+struct RegOpConversion : public ConvertToLLVMPattern {
+  explicit RegOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(RegOp::getOperationName(), ctx, typeConverter) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto regOp = cast<RegOp>(op);
+    RegOpAdaptor transformed(operands, op->getAttrDictionary());
+
+    auto i1Ty = LLVM::LLVMType::getInt1Ty(&typeConverter.getContext());
+    auto i32Ty = LLVM::LLVMType::getInt32Ty(&typeConverter.getContext());
+
+    auto func = op->getParentOfType<LLVM::LLVMFuncOp>();
+
+    // Retrieve and update previous trigger values for rising/falling edge
+    // detection.
+    SmallVector<Value, 4> prevTriggers;
+    for (int i = 0, e = regOp.values().size(); i < e; ++i) {
+      auto mode = regOp.getRegModeAt(i);
+      if (mode == RegMode::both || mode == RegMode::fall ||
+          mode == RegMode::rise) {
+        auto zeroC = rewriter.create<LLVM::ConstantOp>(
+            op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(0));
+        auto regIndexC = rewriter.create<LLVM::ConstantOp>(
+            op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(regCounter));
+        auto triggerIndexC = rewriter.create<LLVM::ConstantOp>(
+            op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(i));
+        auto gep = rewriter.create<LLVM::GEPOp>(
+            op->getLoc(), i1Ty.getPointerTo(), func.getArgument(1),
+            ArrayRef<Value>({zeroC, regIndexC, triggerIndexC}));
+        prevTriggers.push_back(
+            rewriter.create<LLVM::LoadOp>(op->getLoc(), gep));
+        rewriter.create<LLVM::StoreOp>(op->getLoc(), transformed.triggers()[i],
+                                       gep);
+      }
+    }
+    // Create blocks for drive and continue
+    auto block = op->getBlock();
+    auto continueBlock = block->splitBlock(op);
+
+    auto drvBlock = rewriter.createBlock(continueBlock);
+    auto valArg = drvBlock->addArgument(transformed.values()[0].getType());
+    auto delayArg = drvBlock->addArgument(transformed.delays()[0].getType());
+    auto gateArg = drvBlock->addArgument(i1Ty);
+
+    // Create a drive with the block arguments.
+    rewriter.setInsertionPointToStart(drvBlock);
+    rewriter.create<DrvOp>(op->getLoc(), regOp.signal(), valArg, delayArg,
+                           gateArg);
+    rewriter.create<LLVM::BrOp>(op->getLoc(), ValueRange(), continueBlock);
+
+    int j = prevTriggers.size() - 1;
+    // Create a comparison block for each of the reg tuples.
+    for (int i = regOp.values().size() - 1, e = i; i >= 0; --i) {
+      auto cmpBlock = rewriter.createBlock(block->getNextNode());
+      rewriter.setInsertionPointToStart(cmpBlock);
+
+      Value gate;
+      if (regOp.hasGate(i)) {
+        gate = regOp.getGateAt(i);
+      } else {
+        gate = rewriter.create<LLVM::ConstantOp>(op->getLoc(), i1Ty,
+                                                 rewriter.getBoolAttr(true));
+      }
+
+      auto drvArgs = std::array<Value, 3>(
+          {transformed.values()[i], transformed.delays()[i], gate});
+
+      RegMode mode = regOp.getRegModeAt(i);
+
+      // Create comparison constants for all modes other than both.
+      Value rhs;
+      if (mode == RegMode::low || mode == RegMode::fall) {
+        rhs = rewriter.create<LLVM::ConstantOp>(op->getLoc(), i1Ty,
+                                                rewriter.getBoolAttr(false));
+      } else if (mode == RegMode::high || mode == RegMode::rise) {
+        rhs = rewriter.create<LLVM::ConstantOp>(op->getLoc(), i1Ty,
+                                                rewriter.getBoolAttr(true));
+      }
+
+      // Create comparison for non-both modes.
+      Value comp;
+      if (rhs)
+        comp =
+            rewriter.create<LLVM::ICmpOp>(op->getLoc(), LLVM::ICmpPredicate::eq,
+                                          transformed.triggers()[i], rhs);
+
+      // Create comparison for modes needing more than one state of the trigger.
+      Value brCond;
+      if (mode == RegMode::rise || mode == RegMode::fall ||
+          mode == RegMode::both) {
+
+        auto cmpPrev = rewriter.create<LLVM::ICmpOp>(
+            op->getLoc(), LLVM::ICmpPredicate::ne, transformed.triggers()[i],
+            prevTriggers[j--]);
+        if (mode == RegMode::both)
+          brCond = cmpPrev;
+        else
+          brCond =
+              rewriter.create<LLVM::AndOp>(op->getLoc(), i1Ty, comp, cmpPrev);
+      } else {
+        brCond = comp;
+      }
+
+      Block *nextBlock;
+      nextBlock = cmpBlock->getNextNode();
+      // Don't go to next block for last comparison's false branch (skip the
+      // drive block).
+      if (i == e)
+        nextBlock = continueBlock;
+
+      rewriter.create<LLVM::CondBrOp>(op->getLoc(), brCond, drvBlock, drvArgs,
+                                      nextBlock, ValueRange());
+    }
+
+    rewriter.setInsertionPointToEnd(block);
+    rewriter.create<LLVM::BrOp>(op->getLoc(), ArrayRef<Value>(),
+                                block->getNextNode());
+
+    rewriter.eraseOp(op);
+
+    ++regCounter;
+
+    return success();
+  }
+}; // namespace
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -1687,8 +1889,8 @@ void llhd::populateLLHDToLLVMConversionPatterns(
                   WaitOpConversion, HaltOpConversion>(ctx, converter);
 
   // Signal conversion patterns.
-  patterns.insert<SigOpConversion, PrbOpConversion, DrvOpConversion>(ctx,
-                                                                     converter);
+  patterns.insert<SigOpConversion, PrbOpConversion, DrvOpConversion,
+                  RegOpConversion>(ctx, converter);
 
   // Memory conversion patterns.
   patterns.insert<VarOpConversion, StoreOpConversion>(ctx, converter);

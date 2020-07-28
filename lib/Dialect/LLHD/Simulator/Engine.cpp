@@ -80,10 +80,10 @@ int Engine::simulate(int n) {
   int i = 0;
 
   // Keep track of the instances that need to wakeup.
-  std::vector<std::string> wakeupQueue;
+  std::set<std::string> wakeupQueue;
   // All instances are run in the first cycle.
   for (auto k : state->instances.keys())
-    wakeupQueue.push_back(k.str());
+    wakeupQueue.insert(k.str());
 
   while (!state->queue.empty()) {
     if (n > 0 && i >= n) {
@@ -122,7 +122,7 @@ int Engine::simulate(int n) {
 
       // Trigger all sensitive instances.
       // The owner is always triggered.
-      wakeupQueue.push_back(state->signals[change.first].owner);
+      wakeupQueue.insert(state->signals[change.first].owner);
       // Add sensitive instances.
       for (auto inst : state->signals[change.first].triggers) {
         // Skip if the process is not currently sensible to the signal.
@@ -140,7 +140,7 @@ int Engine::simulate(int n) {
           // Invalidate scheduled wakeup
           state->instances[inst].expectedWakeup = Time();
         }
-        wakeupQueue.push_back(inst);
+        wakeupQueue.insert(inst);
       }
 
       // Dump the updated signal.
@@ -150,7 +150,7 @@ int Engine::simulate(int n) {
     // Add scheduled process resumes to the wakeup queue.
     for (auto inst : pop.scheduled) {
       if (state->time == state->instances[inst].expectedWakeup)
-        wakeupQueue.push_back(inst);
+        wakeupQueue.insert(inst);
     }
 
     // Run the instances present in the wakeup queue.
@@ -161,7 +161,8 @@ int Engine::simulate(int n) {
       // Gather the instance arguments for unit invocation.
       SmallVector<void *, 3> args;
       if (state->instances[inst].isEntity)
-        args.assign({&state, &signalTable});
+        args.assign(
+            {&state, &state->instances[inst].entityState, &signalTable});
       else {
         args.assign({&state, &state->instances[inst].procState, &signalTable});
       }

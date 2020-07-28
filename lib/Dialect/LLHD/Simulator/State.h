@@ -154,6 +154,7 @@ struct Instance {
   std::vector<SignalDetail> sensitivityList;
   ProcState *procState;
   Time expectedWakeup;
+  uint8_t *entityState;
 };
 
 /// The simulator's state. It contains the current simulation time, signal

@@ -29,6 +29,12 @@ void alloc_proc(State *state, char *owner, ProcState *procState) {
   state->addProcPtr(sOwner, procState);
 }
 
+void alloc_entity(State *state, char *owner, uint8_t *entityState) {
+  assert(state && "alloc_entity: state not found");
+  std::string sOwner(owner);
+  state->instances[sOwner].entityState = entityState;
+}
+
 void drive_signal(State *state, SignalDetail *detail, uint8_t *value,
                   uint64_t width, int time, int delta, int eps) {
   assert(state && "drive_signal: state not found");

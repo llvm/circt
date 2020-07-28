@@ -138,6 +138,8 @@ State::~State() {
       std::free(inst.procState->inst);
       std::free(inst.procState->senses);
       std::free(inst.procState);
+    } else {
+      std::free(inst.entityState);
     }
   }
 }
