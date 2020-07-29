@@ -241,15 +241,12 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
-  // auto input = getLoweredValue(op.input());
+  Value node = getLoweredValue(op.input());
 
-  // The source can be a smaller integer, extend it as appropriate if so.
-  Value src = getLoweredValue(op.input());
+  if (!node)
+    return failure();
 
-  // if (!dest || !src)
-  //   return failure();
-
-  builder->create<rtl::NodeOp>(op.getLoc(),src, op.nameAttr());
+  builder->create<rtl::NodeOp>(op.getLoc(), node, op.nameAttr());
   return success();
 }
 
