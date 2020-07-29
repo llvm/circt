@@ -2,9 +2,9 @@
 
 // CHECK-LABEL: func @test1(%arg0: i3) -> i50 {
 func @test1(%arg0: i3) -> i50 {
-  // CHECK-NEXT:    %[[C42_i12:.*]] = rtl.constant(42 : i12) : i12
-  // CHECK-NEXT:    %[[RES0:.*]] = rtl.add %[[C42_i12:.*]], %[[C42_i12:.*]] : i12
-  // CHECK-NEXT:    %[[RES1:.*]] = rtl.mul %[[C42_i12:.*]], %[[RES0:.*]] : i12
+  // CHECK-NEXT:    %c42_i12 = rtl.constant(42 : i12) : i12
+  // CHECK-NEXT:    %[[RES0:.*]] = rtl.add %c42_i12, %c42_i12 : i12
+  // CHECK-NEXT:    %[[RES1:.*]] = rtl.mul %c42_i12, %[[RES0:.*]] : i12
   %a = rtl.constant(42 : i12) : i12
   %b = rtl.add %a, %a : i12
   %c = rtl.mul %a, %b : i12

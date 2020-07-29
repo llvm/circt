@@ -9,8 +9,8 @@ func @extract_noop(%arg0: i3) -> i3 {
 }
 
 // CHECK-LABEL: func @extract_cstfold() -> i3 {
-// CHECK-NEXT:    %[[C3_i3:.*]] = rtl.constant(-3 : i3)
-// CHECK-NEXT:    return  %[[C3_i3:.*]]
+// CHECK-NEXT:    %c-3_i3 = rtl.constant(-3 : i3)
+// CHECK-NEXT:    return  %c-3_i3
 
 func @extract_cstfold() -> i3 {
   %c42_i12 = rtl.constant(42 : i12) : i12
@@ -31,8 +31,8 @@ func @variadic_noop(%arg0: i11) -> i11 {
 }
 
 // CHECK-LABEL: func @and_annulment(%arg0: i11, %arg1: i11) -> i11 {
-// CHECK-NEXT:    %[[C0_i11:.*]] = rtl.constant(0 : i11)
-// CHECK-NEXT:    return %[[C0_i11:.*]]
+// CHECK-NEXT:    %c0_i11 = rtl.constant(0 : i11)
+// CHECK-NEXT:    return %c0_i11
 
 func @and_annulment(%arg0: i11, %arg1: i11) -> i11 {
   %c0_i11 = rtl.constant(0 : i11) : i11
@@ -41,8 +41,8 @@ func @and_annulment(%arg0: i11, %arg1: i11) -> i11 {
 }
 
 // CHECK-LABEL: func @or_annulment(%arg0: i11) -> i11 {
-// CHECK-NEXT:    %[[C1_i11:.*]] = rtl.constant(-1 : i11)
-// CHECK-NEXT:    return %[[C1_i11:.*]]
+// CHECK-NEXT:    %c-1_i11 = rtl.constant(-1 : i11)
+// CHECK-NEXT:    return %c-1_i11
 
 func @or_annulment(%arg0: i11) -> i11 {
   %c-1_i11 = rtl.constant(-1 : i11) : i11
@@ -51,8 +51,8 @@ func @or_annulment(%arg0: i11) -> i11 {
 }
 
 // CHECK-LABEL: func @mul_annulment(%arg0: i11, %arg1: i11, %arg2: i11) -> i11 {
-// CHECK-NEXT:    %[[C0_i11:.*]] = rtl.constant(0 : i11) : i11
-// CHECK-NEXT:    return %[[C0_i11:.*]]
+// CHECK-NEXT:    %c0_i11 = rtl.constant(0 : i11) : i11
+// CHECK-NEXT:    return %c0_i11
 
 func @mul_annulment(%arg0: i11, %arg1: i11, %arg2: i11) -> i11 {
   %c0_i11 = rtl.constant(0 : i11) : i11
