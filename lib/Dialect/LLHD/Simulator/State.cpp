@@ -199,13 +199,8 @@ int State::addSignalData(int index, std::string owner, uint8_t *value,
 void State::dumpSignal(llvm::raw_ostream &out, int index) {
   auto &sig = signals[index];
   for (auto inst : sig.triggers) {
-    std::string curr = inst, path = inst;
-    while (instances[curr].name != sig.owner) {
-      curr = instances[curr].parent;
-      path = curr + "/" + path;
-    }
-    out << time.dump() << "  " << path << "/" << sig.name << "  " << sig.dump()
-        << "\n";
+    out << time.dump() << "  " << instances[inst].path << "/" << sig.name
+        << "  " << sig.dump() << "\n";
   }
 }
 
@@ -214,6 +209,7 @@ void State::dumpLayout() {
   for (auto &inst : instances) {
     llvm::errs() << inst.getKey().str() << ":\n";
     llvm::errs() << "---parent: " << inst.getValue().parent << "\n";
+    llvm::errs() << "---path: " << inst.getValue().path << "\n";
     llvm::errs() << "---isEntity: " << inst.getValue().isEntity << "\n";
     llvm::errs() << "---sensitivity list: ";
     for (auto in : inst.getValue().sensitivityList) {

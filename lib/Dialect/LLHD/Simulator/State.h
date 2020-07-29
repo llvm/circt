@@ -146,6 +146,8 @@ struct Instance {
   std::string name;
   // The instance parent's name.
   std::string parent;
+  // The instance's hierarchical path.
+  std::string path;
   // The instance's base unit.
   std::string unit;
   bool isEntity;

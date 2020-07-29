@@ -421,9 +421,9 @@ static void insertPersistence(LLVMTypeConverter &converter,
 /// that needs more than one state of the trigger to infer it (i.e. `both`,
 /// `rise` and `fall`).
 static LLVM::LLVMType getRegStateTy(LLVM::LLVMDialect *dialect,
-                                    Operation *unit) {
+                                    Operation *entity) {
   SmallVector<LLVM::LLVMType, 4> types;
-  unit->walk([&](RegOp op) {
+  entity->walk([&](RegOp op) {
     size_t count = 0;
     for (size_t i = 0; i < op.modes().size(); ++i) {
       auto mode = op.getRegModeAt(i);
@@ -468,8 +468,8 @@ static LLVM::LLVMType convertPtrType(PtrType type,
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Convert an `llhd.entity` unit to LLVM dialect. The result is an `llvm.func`
-/// which takes a pointer to the state as arguments.
+/// Convert an `llhd.entity` entity to LLVM dialect. The result is an
+/// `llvm.func` which takes a pointer to the state as arguments.
 struct EntityOpConversion : public ConvertToLLVMPattern {
   explicit EntityOpConversion(MLIRContext *ctx,
                               LLVMTypeConverter &typeConverter)
@@ -833,6 +833,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
     auto instOp = cast<InstOp>(op);
     // Get the parent module.
     auto module = op->getParentOfType<ModuleOp>();
+    auto entity = op->getParentOfType<EntityOp>();
 
     auto voidTy = getVoidType();
     auto i8PtrTy = getVoidPtrType();
@@ -881,17 +882,17 @@ struct InstOpConversion : public ConvertToLLVMPattern {
         OpBuilder::atBlockTerminator(&initFunc.getBody().getBlocks().front());
 
     // Use the instance name to retrieve the instance from the state.
-    auto ownerName = instOp.name();
+    auto ownerName = entity.getName().str() + "." + instOp.name().str();
+
     // Get or create owner name string
     Value owner;
     auto parentSym =
-        module.lookupSymbol<LLVM::GlobalOp>("instance." + ownerName.str());
+        module.lookupSymbol<LLVM::GlobalOp>("instance." + ownerName);
     if (!parentSym) {
       owner = LLVM::createGlobalString(
-          op->getLoc(), initBuilder, "instance." + ownerName.str(),
-          ownerName.str() + '\0', LLVM::Linkage::Internal);
-      parentSym =
-          module.lookupSymbol<LLVM::GlobalOp>("instance." + ownerName.str());
+          op->getLoc(), initBuilder, "instance." + ownerName, ownerName + '\0',
+          LLVM::Linkage::Internal);
+      parentSym = module.lookupSymbol<LLVM::GlobalOp>("instance." + ownerName);
     } else {
       owner =
           getGlobalString(op->getLoc(), initBuilder, typeConverter, parentSym);
@@ -935,12 +936,12 @@ struct InstOpConversion : public ConvertToLLVMPattern {
       initBuilder.create<LLVM::CallOp>(
           op->getLoc(), voidTy, rewriter.getSymbolRefAttr(allocEntityFunc),
           ArrayRef<Value>({initStatePtr, owner, regMall}));
-      // Index of the signal in the unit's signal table.
+      // Index of the signal in the entity's signal table.
       int initCounter = 0;
       // Walk over the entity and generate mallocs for each one of its signals.
       child.walk([&](Operation *op) -> void {
         if (auto sigOp = dyn_cast<SigOp>(op)) {
-          // Get index constant of the signal in the unit's signal table.
+          // Get index constant of the signal in the entity's signal table.
           auto indexConst = initBuilder.create<LLVM::ConstantOp>(
               op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(initCounter));
           initCounter++;

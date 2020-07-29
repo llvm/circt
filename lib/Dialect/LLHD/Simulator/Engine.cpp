@@ -17,7 +17,6 @@
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/Support/TargetSelect.h"
 
-using namespace llvm;
 using namespace mlir;
 using namespace circt::llhd::sim;
 
@@ -82,7 +81,7 @@ int Engine::simulate(int n) {
   int i = 0;
 
   // Keep track of the instances that need to wakeup.
-  SmallSet<std::string, 8> wakeupQueue;
+  llvm::SmallSet<std::string, 8> wakeupQueue;
   // All instances are run in the first cycle.
   for (auto k : state->instances.keys())
     wakeupQueue.insert(k.str());
@@ -122,9 +121,6 @@ int Engine::simulate(int n) {
       std::memcpy(curr->value, buff.getRawData(),
                   state->signals[change.first].size);
 
-      // Trigger all sensitive instances.
-      // The owner is always triggered.
-      wakeupQueue.insert(state->signals[change.first].owner);
       // Add sensitive instances.
       for (auto inst : state->signals[change.first].triggers) {
         // Skip if the process is not currently sensible to the signal.
@@ -171,7 +167,7 @@ int Engine::simulate(int n) {
       // Run the unit.
       auto invocationResult = engine->invoke(name, args);
       if (invocationResult) {
-        llvm::errs() << "Failed invocation of " << root << ": "
+        llvm::errs() << "Failed invocation of " << name << ": "
                      << invocationResult;
         return -1;
       }
@@ -194,6 +190,7 @@ void Engine::buildLayout(ModuleOp module) {
   // root.
   Instance rootInst(root, root);
   rootInst.unit = root;
+  rootInst.path = root;
 
   // Recursively walk the units starting at root.
   walkEntity(rootEntity, rootInst);
@@ -201,7 +198,7 @@ void Engine::buildLayout(ModuleOp module) {
   // The root is always an instance.
   rootInst.isEntity = true;
   // Store the root instance.
-  state->instances[rootInst.name] = rootInst;
+  state->instances[rootInst.unit + "." + rootInst.name] = rootInst;
 
   // Add triggers to signals.
   for (auto &inst : state->instances) {
@@ -230,9 +227,10 @@ void Engine::walkEntity(EntityOp entity, Instance &child) {
         return;
       if (auto e =
               op->getParentOfType<ModuleOp>().lookupSymbol(inst.callee())) {
-        Instance newChild(inst.name().str(), child.name);
+        Instance newChild(child.unit + '.' + inst.name().str(), child.name);
         newChild.unit = inst.callee().str();
         newChild.nArgs = inst.getNumOperands();
+        newChild.path = child.path + "/" + inst.name().str();
 
         // Add instance arguments to sensitivity list. The first nArgs signals
         // in the sensitivity list represent the unit's arguments, while the
