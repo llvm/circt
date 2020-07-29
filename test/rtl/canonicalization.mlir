@@ -94,7 +94,7 @@ func @xor_identity(%arg0: i11, %arg1: i11) -> i11 {
 
 // CHECK-LABEL: func @add_identity(%arg0: i11, %arg1: i11) -> i11 {
 // CHECK-NEXT:   [[RES:%[0-9]+]] = rtl.add %arg0, %arg1
-// CHECK-NEXT:    return [[RES:]]
+// CHECK-NEXT:    return [[RES]]
 
 func @add_identity(%arg0: i11, %arg1: i11) -> i11 {
   %c0_i11 = rtl.constant(0 : i11) : i11
