@@ -27,7 +27,7 @@ def StaticLogic_Dialect : Dialect {
 }
 
 def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [FunctionLike, Symbol,
-  NativeOpTrait<"IsIsolatedFromAbove">, RegionKindInterface
+  NativeOpTrait<"IsIsolatedFromAbove">
 ]> {
   let summary = "pipeline operation";
   let description = [{
@@ -54,9 +54,6 @@ def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [FunctionLike, Symbol,
   }]>];
 
   let extraClassDeclaration = [{
-    /// Implement RegionKindInterface.
-    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
-
     // This trait needs access to the hooks defined below.
     friend class OpTrait::FunctionLike<PipelineOp>;
 

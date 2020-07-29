@@ -143,6 +143,10 @@ static BlockValues getBlockLiveIns(mlir::FuncOp f) {
   return blockLiveIns;
 }
 
+/// This function converts all live-ins of a block into its arguments, and
+/// converts all live-outs of a block into its return values. In this way, the
+/// sequencial code inside of each block can be isolated and converted to a
+/// function call.
 static void canonicalizeFuncOp(mlir::FuncOp f, OpBuilder &builder,
                                BlockValues blockLiveIns) {
   for (Block &block : f) {
