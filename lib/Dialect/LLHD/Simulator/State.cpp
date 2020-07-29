@@ -134,11 +134,11 @@ State::~State() {
 
   for (auto &entry : instances) {
     auto inst = entry.getValue();
-    if (!inst.isEntity && inst.procState) {
+    if (inst.procState) {
       std::free(inst.procState->inst);
       std::free(inst.procState->senses);
       std::free(inst.procState);
-    } else {
+    } else if (inst.entityState) {
       std::free(inst.entityState);
     }
   }

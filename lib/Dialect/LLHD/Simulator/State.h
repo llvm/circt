@@ -140,7 +140,7 @@ struct Instance {
   Instance() = default;
 
   Instance(std::string name, std::string parent)
-      : name(name), parent(parent), procState(nullptr) {}
+      : name(name), parent(parent), procState(nullptr), entityState(nullptr) {}
 
   // The instance name.
   std::string name;
