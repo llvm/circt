@@ -14,8 +14,10 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
 
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/Support/TargetSelect.h"
 
+using namespace llvm;
 using namespace mlir;
 using namespace circt::llhd::sim;
 
@@ -80,7 +82,7 @@ int Engine::simulate(int n) {
   int i = 0;
 
   // Keep track of the instances that need to wakeup.
-  std::set<std::string> wakeupQueue;
+  SmallSet<std::string, 8> wakeupQueue;
   // All instances are run in the first cycle.
   for (auto k : state->instances.keys())
     wakeupQueue.insert(k.str());
