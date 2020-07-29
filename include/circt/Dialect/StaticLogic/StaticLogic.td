@@ -1,21 +1,10 @@
-//===- StaticLogic.td - StaticLogic operation definitions --*- tablegen -*-===//
+//===- StaticLogic.td - StaticLogic Definitions ------------*- tablegen -*-===//
 //
 // Copyright 2020 The CIRCT Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-// =============================================================================
-//
-//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 
 #ifdef STATICLOGIC_OPS
@@ -37,11 +26,8 @@ def StaticLogic_Dialect : Dialect {
   let cppNamespace = "";
 }
 
-def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [
-  NativeOpTrait<"IsIsolatedFromAbove">,
-  NativeOpTrait<"FunctionLike">,
-  Symbol,
-  RegionKindInterface
+def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [FunctionLike, Symbol,
+  NativeOpTrait<"IsIsolatedFromAbove">, RegionKindInterface
 ]> {
   let summary = "pipeline operation";
   let description = [{
@@ -82,7 +68,7 @@ def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [
     /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
     /// attribute is present and checks if it holds a function type.  Ensures
     /// getType, getNumFuncArguments, and getNumFuncResults can be called
-    ///  safely.
+    /// safely.
     LogicalResult verifyType() {
       auto type = getTypeAttr().getValue();
       if (!type.isa<FunctionType>())
@@ -92,14 +78,12 @@ def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [
     }
   }];
 
-  let parser = [{ }];
   let printer = [{
     auto type = getAttrOfType<TypeAttr>(getTypeAttrName()).getValue()
                 .cast<FunctionType>();
     impl::printFunctionLikeOp(p, *this, type.getInputs(), 
                               /*isVariadic=*/true, type.getResults());
   }];
-  let verifier = [{ }];
 }
 
 def InstanceOp : Op<StaticLogic_Dialect, "instance", [CallOpInterface]> {
@@ -109,16 +93,9 @@ def InstanceOp : Op<StaticLogic_Dialect, "instance", [CallOpInterface]> {
 	  StaticLogic module which is similar to a function call.
   }];
 
-  let arguments = (ins FlatSymbolRefAttr:$module, Variadic<AnyType>:$operands);
+  let arguments = (ins FlatSymbolRefAttr: $module, 
+                       Variadic<AnyType>: $operands);
   let results = (outs Variadic<AnyType>);
-
-  let builders = [OpBuilder<"OpBuilder &builder, OperationState &odsState, "
-    "SymbolRefAttr module, ArrayRef<Type> results, ValueRange operands = {}",
-  [{
-    odsState.addOperands(operands);
-    odsState.addAttribute("module", module);
-    odsState.addTypes(results);
-  }]>];
 
   let extraClassDeclaration = [{
     StringRef getModule() { return module(); }
@@ -137,20 +114,16 @@ def InstanceOp : Op<StaticLogic_Dialect, "instance", [CallOpInterface]> {
       return getAttrOfType<SymbolRefAttr>("module");
     }
   }];
-
-  let assemblyFormat = [{
-    $module `(` $operands `)` attr-dict `:` functional-type($operands, results)
-  }];
 }
 
 def ReturnOp : Op<StaticLogic_Dialect, "return", [Terminator]> {
   let summary = "StaticLogic dialect return.";
   let description = [{
     The "handshake.return" operation represents a terminator of a statically 
-    scheduled module.
+    scheduled module, which is similar to a standard return operation.
   }];
 
-  let arguments = (ins Variadic<AnyType> : $operands);
+  let arguments = (ins Variadic<AnyType>: $operands);
 }
 
 #endif // STATICLOGIC_OPS
