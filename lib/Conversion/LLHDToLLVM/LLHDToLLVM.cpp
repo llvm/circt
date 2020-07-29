@@ -1020,7 +1020,8 @@ struct InstOpConversion : public ConvertToLLVMPattern {
 
       // Malloc space for owner name.
       auto strSizeC = initBuilder.create<LLVM::ConstantOp>(
-          op->getLoc(), i64Ty, rewriter.getI64IntegerAttr(ownerName.size()));
+          op->getLoc(), i64Ty,
+          rewriter.getI64IntegerAttr(ownerName.size() + 1));
 
       std::array<Value, 1> strMallArgs({strSizeC});
       auto strMall = initBuilder
