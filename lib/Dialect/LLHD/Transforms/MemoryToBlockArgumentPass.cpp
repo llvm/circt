@@ -28,9 +28,9 @@ static void getDominanceFrontier(Block *frontierOf, Operation *op,
   for (Block &block : op->getRegion(0).getBlocks()) {
     for (Block *pred : block.getPredecessors()) {
       if (dom.dominates(frontierOf, pred) &&
-          !dom.properlyDominates(frontierOf, &block)) {
-        if (block.getOps<llhd::VarOp>().empty())
-          df.insert(&block);
+          !dom.properlyDominates(frontierOf, &block) &&
+          block.getOps<llhd::VarOp>().empty()) {
+        df.insert(&block);
       }
     }
   }
@@ -38,7 +38,7 @@ static void getDominanceFrontier(Block *frontierOf, Operation *op,
 
 /// Add the blocks in the closure of the dominance fontier relation of all the
 /// block in 'initialSet' to 'closure'
-static void getDFClosure(std::vector<Block *> &initialSet, Operation *op,
+static void getDFClosure(SmallVectorImpl<Block *> &initialSet, Operation *op,
                          std::set<Block *> &closure) {
   unsigned numElements;
   for (Block *block : initialSet) {
@@ -54,7 +54,7 @@ static void getDFClosure(std::vector<Block *> &initialSet, Operation *op,
 
 /// Add a block argument to a given terminator. Only 'std.br', 'std.cond_br' and
 /// 'llhd.wait' are supported. The successor block has to be provided for the
-/// 'std.cond_br' terminator which has to possible successors.
+/// 'std.cond_br' terminator which has two possible successors.
 static void addBlockOperandToTerminator(Operation *terminator,
                                         Block *successsor, Value toAppend) {
   if (auto wait = dyn_cast<llhd::WaitOp>(terminator)) {
@@ -89,7 +89,7 @@ void MemoryToBlockArgumentPass::runOnOperation() {
   // Get all variables defined in the body of this operation
   // Note that variables that are passed as a function argument are not
   // considered.
-  std::vector<Value> vars;
+  SmallVector<Value, 16> vars;
   for (llhd::VarOp var : operation->getRegion(0).getOps<llhd::VarOp>()) {
     vars.push_back(var.result());
   }
@@ -107,7 +107,7 @@ void MemoryToBlockArgumentPass::runOnOperation() {
 
   // For each variable find the blocks where a value is stored to it
   for (Value var : vars) {
-    std::vector<Block *> defBlocks;
+    SmallVector<Block *, 16> defBlocks;
     defBlocks.push_back(
         var.getDefiningOp<llhd::VarOp>().getOperation()->getBlock());
     operation->walk([&](llhd::StoreOp op) {
@@ -115,6 +115,7 @@ void MemoryToBlockArgumentPass::runOnOperation() {
         defBlocks.push_back(op.getOperation()->getBlock());
     });
     // Remove duplicates from the list
+    std::sort(defBlocks.begin(), defBlocks.end());
     defBlocks.erase(std::unique(defBlocks.begin(), defBlocks.end()),
                     defBlocks.end());
 
@@ -147,15 +148,15 @@ void MemoryToBlockArgumentPass::runOnOperation() {
     // Basically reaching definitions analysis and replacing the loaded values
     // by the values stored
     DenseMap<Block *, Value> outputMap;
-    std::set<Block *> workQueue;
-    std::set<Block *> workDone;
+    SmallPtrSet<Block *, 32> workQueue;
+    SmallPtrSet<Block *, 32> workDone;
 
     workQueue.insert(&operation->getRegion(0).front());
 
     while (!workQueue.empty()) {
       // Pop block to process at the front
       Block *block = *workQueue.begin();
-      workQueue.erase(workQueue.begin());
+      workQueue.erase(block);
 
       // Remember the currently stored value
       Value currStoredValue;
@@ -214,7 +215,7 @@ void MemoryToBlockArgumentPass::runOnOperation() {
       // Add all successors of this block to the work queue if they are not
       // already processed
       for (Block *succ : block->getSuccessors()) {
-        if (std::find(workDone.begin(), workDone.end(), succ) == workDone.end())
+        if (!workDone.count(succ))
           workQueue.insert(succ);
       }
     }

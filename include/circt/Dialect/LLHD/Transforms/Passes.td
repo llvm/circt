@@ -24,7 +24,7 @@ def MemoryToBlockArgument : Pass<"llhd-memory-to-block-argument",
   let description = [{
     Promotes memory locations allocated with `llhd.var` to block arguments. This
     enables other optimizations and is required to be able to lower behavioral
-    LLHD to structural LLHD. This is because there is not memory model and
+    LLHD to structural LLHD. This is because there are no memory model and
     control flow in structural LLHD. After executing this pass, the
     "-llhd-block-argument-to-mux" pass can be used to convert the block
     arguments to multiplexers to enable more control-flow elimination.
