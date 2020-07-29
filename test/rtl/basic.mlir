@@ -39,6 +39,9 @@ func @test1(%arg0: i3) -> i50 {
   // CHECK-NEXT:  = rtl.wire : i4
   %w = rtl.wire : i4
 
+  // CHECK-NEXT:  = rtl.node %11 : i19
+  %n = rtl.node %add : i19
+
   // CHECK-NEXT:    return %8 : i50
   return %result : i50
 }

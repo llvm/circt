@@ -93,5 +93,7 @@
     // CHECK-NEXT: [[ZERO:%.+]] = rtl.constant(0 : i3) : i3
     // CHECK-NEXT: = rtl.concat [[CONCAT1]], [[ZERO]] : (i8, i3) -> i11
     %14 = firrtl.shl %6, 3 : (!firrtl.uint<8>) -> !firrtl.uint<11>
+
+    %15 = firrtl.node %14 : !firrtl.uint<11>
   }
 }

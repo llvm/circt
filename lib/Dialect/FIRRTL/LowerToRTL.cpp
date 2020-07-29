@@ -39,6 +39,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   // Lowering hooks.
   LogicalResult visitExpr(ConstantOp op);
   LogicalResult visitDecl(WireOp op);
+  LogicalResult visitDecl(NodeOp op);
   LogicalResult visitStmt(ConnectOp op);
   LogicalResult visitUnhandledOp(Operation *op);
   LogicalResult visitInvalidOp(Operation *op) { return visitUnhandledOp(op); }
@@ -237,6 +238,19 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   if (!resultType)
     return failure();
   return setLoweringTo<rtl::WireOp>(op, resultType, op.nameAttr());
+}
+
+LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
+  // auto input = getLoweredValue(op.input());
+
+  // The source can be a smaller integer, extend it as appropriate if so.
+  Value src = getLoweredValue(op.input());
+
+  // if (!dest || !src)
+  //   return failure();
+
+  builder->create<rtl::NodeOp>(op.getLoc(),src, op.nameAttr());
+  return success();
 }
 
 LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {

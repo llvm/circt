@@ -37,3 +37,24 @@ def WireOp : RTLOp<"wire"> {
      attr-dict `:` type($result)
   }];
 }
+
+def NodeOp : RTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
+  let summary = "No-op to name a value";
+  let description = [{
+    A node is simply a named intermediate value in a circuit. The node must
+    be initialized to a value with a passive type and cannot be connected to.
+    Nodes are often used to split a complicated compound expression into named
+    subexpressions.
+
+    ```
+      %result = rtl.node %input : t1
+    ```
+    }];
+
+  let arguments = (ins AnyType:$input, OptionalAttr<StrAttr>:$name);
+  let results = (outs AnyType:$result);
+  
+  let assemblyFormat = [{
+     $input attr-dict `:` type($input)
+  }];
+}
