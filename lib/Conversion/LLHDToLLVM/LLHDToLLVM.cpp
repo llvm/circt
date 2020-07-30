@@ -1397,8 +1397,7 @@ void llhd::populateLLHDToLLVMConversionPatterns(
   // Bitwise conversion patterns.
   patterns.insert<NotOpConversion, ShrOpConversion, ShlOpConversion>(ctx,
                                                                      converter);
-  patterns.insert<AndOpConversion, OrOpConversion, XorOpConversion>(
-      converter, LowerToLLVMOptions::getDefaultOptions());
+  patterns.insert<AndOpConversion, OrOpConversion, XorOpConversion>(converter);
 
   // Unit conversion patterns.
   patterns.insert<EntityOpConversion, TerminatorOpConversion, ProcOpConversion,

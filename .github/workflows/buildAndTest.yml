@@ -3,8 +3,8 @@ name: Build and Test
 on: [push, pull_request]
 
 jobs:
-  build:
-    name: Build and Test
+  build-llvm:
+    name: Build LLVM
     runs-on: ubuntu-latest
     steps:
     - name: Configure Environment
@@ -23,7 +23,36 @@ jobs:
       with:
         path: llvm
         key: ${{ runner.os }}-llvm-install-${{ steps.get-llvm-hash.outputs.hash }}
-    - name: Install LLVM
+    - name: Rebuild and Install LLVM
+      if: steps.cache-llvm.outputs.cache-hit != 'true'
+      run: |
+        mkdir llvm/build
+        mkdir llvm/install
+        cd llvm/build
+        cmake ../llvm -DLLVM_BUILD_EXAMPLES=OFF -DLLVM_TARGETS_TO_BUILD="host" -DCMAKE_INSTALL_PREFIX=../install -DLLVM_ENABLE_PROJECTS='mlir' -DLLVM_OPTIMIZED_TABLEGEN=ON -DLLVM_ENABLE_OCAMLDOC=OFF -DLLVM_ENABLE_BINDINGS=OFF -DLLVM_INSTALL_UTILS=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DLLVM_ENABLE_LLD=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=ON
+        cmake --build . --target install -- -j$(nproc)
+  build:
+    name: Build and Test
+    needs: build-llvm
+    runs-on: ubuntu-latest
+    steps:
+    - name: Configure Environment
+      run: echo "::add-path::$GITHUB_WORKSPACE/llvm/install/bin"
+    - name: Get CIRCT
+      uses: actions/checkout@v2
+      with:
+        submodules: 'true'
+    - name: Get LLVM Hash
+      id: get-llvm-hash
+      run: echo "::set-output name=hash::$(git submodule status)"
+      shell: bash
+    - name: Cache LLVM
+      id: cache-llvm
+      uses: actions/cache@v1
+      with:
+        path: llvm
+        key: ${{ runner.os }}-llvm-install-${{ steps.get-llvm-hash.outputs.hash }}
+    - name: Rebuild and Install LLVM
       if: steps.cache-llvm.outputs.cache-hit != 'true'
       run: |
         mkdir llvm/build

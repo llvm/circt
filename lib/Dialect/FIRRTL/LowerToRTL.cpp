@@ -309,7 +309,7 @@ LogicalResult FIRRTLLowering::lowerBinOpToVariadic(Operation *op) {
   if (!lhs || !rhs)
     return failure();
 
-  return setLoweringTo<ResultOpType>(op, ValueRange({lhs, rhs}));
+  return setLoweringTo<ResultOpType>(op, ValueRange({lhs, rhs}), std::vector<NamedAttribute>{});
 }
 
 template <typename ResultOpType>
