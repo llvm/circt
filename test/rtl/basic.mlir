@@ -14,7 +14,7 @@ func @test1(%arg0: i3) -> i50 {
   %d = rtl.sext %arg0 : (i3) -> i7
   %e = rtl.zext %arg0 : (i3) -> i7
 
-  // CHECK-NEXT:    [[RES4:%[0-9]+]] = rtl.concat %[[C42_i12:.*]] : (i12) -> i12
+  // CHECK-NEXT:    [[RES4:%[0-9]+]] = rtl.concat %c42_i12 : (i12) -> i12
   %conc1 = rtl.concat %a : (i12) -> i12
 
   // CHECK-NEXT:    [[RES5:%[0-9]+]] = rtl.andr [[RES4]] : i12
