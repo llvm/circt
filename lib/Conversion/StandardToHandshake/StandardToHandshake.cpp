@@ -33,23 +33,6 @@ using namespace std;
 typedef DenseMap<Block *, vector<Value>> BlockValues;
 typedef DenseMap<Block *, vector<Operation *>> BlockOps;
 
-void removeRedundantComponents(handshake::FuncOp funcOp) {
-  for (auto &block : funcOp) {
-    for (auto &op : llvm::make_early_inc_range(block.getOperations())) {
-      if (auto mergeOp = dyn_cast<handshake::MergeOp>(op)) {
-        if (mergeOp.getNumOperands() == 1) {
-          mergeOp.getResult().replaceAllUsesWith(mergeOp.getOperand(0));
-          mergeOp.erase();
-        }
-      }
-      if (auto branchOp = dyn_cast<handshake::BranchOp>(op)) {
-        branchOp.getResult().replaceAllUsesWith(branchOp.getOperand());
-        branchOp.erase();
-      }
-    }
-  }
-}
-
 /// Remove basic blocks inside the given FuncOp. This allows the result to be
 /// a valid graph region, since multi-basic block regions are not allowed to
 /// be graph regions currently.
@@ -1424,12 +1407,6 @@ struct HandshakeInsertBufferPass
   }
 };
 
-struct HandshakeRemoveRedundanciesPass
-    : public PassWrapper<HandshakeRemoveRedundanciesPass,
-                         OperationPass<handshake::FuncOp>> {
-  void runOnOperation() override { removeRedundantComponents(getOperation()); }
-};
-
 struct HandshakeRemoveBlockPass
     : public PassWrapper<HandshakeRemoveBlockPass,
                          OperationPass<handshake::FuncOp>> {
@@ -1541,10 +1518,6 @@ void handshake::registerStandardToHandshakePasses() {
                                   "Convert standard MLIR into dataflow IR");
   PassRegistration<HandshakeCanonicalizePass>("canonicalize-dataflow",
                                               "Canonicalize handshake IR");
-  PassRegistration<HandshakeRemoveRedundanciesPass>(
-      "handshake-remove-redundancies",
-      "Remove single-input merge operations and single-output branch "
-      "operations in handshake IR");
   PassRegistration<HandshakeRemoveBlockPass>(
       "remove-block-structure", "Remove block structure in handshake IR");
   PassRegistration<HandshakeInsertBufferPass>(
