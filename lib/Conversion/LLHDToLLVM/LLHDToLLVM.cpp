@@ -1542,29 +1542,38 @@ struct InsertSliceOpConversion : public ConvertToLLVMPattern {
             op->getLoc(), transformed.target().getType(), startConst);
       }
       // Generate a mask to set the affected bits.
-
-      auto width = getStdOrLLVMIntegerWidth(inssOp.slice().getType());
-      APInt mask = APInt(width, 0);
-      mask.setAllBits();
+      auto width = getStdOrLLVMIntegerWidth(inssOp.target().getType());
+      unsigned start = inssOp.startAttr().getInt();
+      unsigned end = start + width - 1;
+      APInt mask(width, 0);
+      // mask.setAllBits();
+      mask.setBits(start, end);
       auto maskConst = rewriter.create<LLVM::ConstantOp>(
-          op->getLoc(), transformed.slice().getType(),
+          op->getLoc(), transformed.target().getType(),
           rewriter.getIntegerAttr(
               IntegerType::get(width, rewriter.getContext()), mask));
-      auto maskZext = rewriter.create<LLVM::ZExtOp>(
-          op->getLoc(), transformed.target().getType(), maskConst);
-      auto maskShift = rewriter.create<LLVM::ShlOp>(
-          op->getLoc(), transformed.target().getType(), maskZext, adjusted);
 
-      // Adjust the slice start index.
+      // Generate a mask for the slice, to avoid resetting bits outside of the
+      // slice.
+      mask.flipAllBits();
+      auto sliceMaskConst = rewriter.create<LLVM::ConstantOp>(
+          op->getLoc(), transformed.target().getType(),
+          rewriter.getIntegerAttr(
+              IntegerType::get(width, rewriter.getContext()), mask));
+
+      // Adjust the slice to the start index.
       auto sliceZext = rewriter.create<LLVM::ZExtOp>(
           op->getLoc(), transformed.target().getType(), transformed.slice());
       auto sliceShift = rewriter.create<LLVM::ShlOp>(
           op->getLoc(), transformed.target().getType(), sliceZext, adjusted);
+      auto sliceMasked = rewriter.create<LLVM::OrOp>(
+          op->getLoc(), transformed.target().getType(), sliceShift,
+          sliceMaskConst);
 
       // Insert the slice.
       auto applyMask = rewriter.create<LLVM::OrOp>(
-          op->getLoc(), transformed.target(), maskShift);
-      rewriter.replaceOpWithNewOp<LLVM::AndOp>(op, applyMask, sliceShift);
+          op->getLoc(), transformed.target(), maskConst);
+      rewriter.replaceOpWithNewOp<LLVM::AndOp>(op, applyMask, sliceMasked);
 
       return success();
     }
