@@ -2,37 +2,37 @@
 
 // CHECK-LABEL: @convert_const
 llvm.func @convert_const() {
-    // CHECK-NEXT: %{{.*}} = llvm.mlir.constant(true) : !llvm.i1
-    %0 = llhd.const 1 : i1
+  // CHECK-NEXT: %{{.*}} = llvm.mlir.constant(true) : !llvm.i1
+  %0 = llhd.const 1 : i1
 
-    // CHECK-NEXT %{{.*}} = llvm.mlir.constant(0 : i32) : !llvm.i32
-    %1 = llhd.const 0 : i32
+  // CHECK-NEXT %{{.*}} = llvm.mlir.constant(0 : i32) : !llvm.i32
+  %1 = llhd.const 0 : i32
 
-    // this gets erased
-    %2 = llhd.const #llhd.time<0ns, 0d, 0e> : !llhd.time
+  // this gets erased
+  %2 = llhd.const #llhd.time<0ns, 0d, 0e> : !llhd.time
 
-    // CHECK-NEXT %{{.*}} = llvm.mlir.constant(123 : i64) : !llvm.i64
-    %3 = llhd.const 123 : i64
+  // CHECK-NEXT %{{.*}} = llvm.mlir.constant(123 : i64) : !llvm.i64
+  %3 = llhd.const 123 : i64
 
-    llvm.return
+  llvm.return
 }
 
 // CHECK-LABEL: @convert_extract_slice_int
 // CHECK-SAME: %[[CI32:.*]]: !llvm.i32
 // CHECK-SAME: %[[CI100:.*]]: !llvm.i100
 func @convert_extract_slice_int(%cI32 : i32, %cI100 : i100) {
-    // CHECK-NEXT: %[[CIND0:.*]] = llvm.mlir.constant(0 : index) : !llvm.i64
-    // CHECK-NEXT: %[[ADJUST0:.*]] = llvm.trunc %[[CIND0]] : !llvm.i64 to !llvm.i32
-    // CHECK-NEXT: %[[SHR0:.*]] = llvm.lshr %[[CI32]], %[[ADJUST0]] : !llvm.i32
-    // CHECK-NEXT: %{{.*}} = llvm.trunc %[[SHR0]] : !llvm.i32 to !llvm.i10
-    %0 = llhd.extract_slice %cI32, 0 : i32 -> i10
-    // CHECK-NEXT: %[[CIND2:.*]] = llvm.mlir.constant(0 : index) : !llvm.i64
-    // CHECK-NEXT: %[[ADJUST1:.*]] = llvm.zext %[[CIND2]] : !llvm.i64 to !llvm.i100
-    // CHECK-NEXT: %[[SHR1:.*]] = llvm.lshr %[[CI100]], %[[ADJUST1]] : !llvm.i100
-    // CHECK-NEXT: %{{.*}} = llvm.trunc %[[SHR1]] : !llvm.i100 to !llvm.i10
-    %2 = llhd.extract_slice %cI100, 0 : i100 -> i10
+  // CHECK-NEXT: %[[CIND0:.*]] = llvm.mlir.constant(0 : index) : !llvm.i64
+  // CHECK-NEXT: %[[ADJUST0:.*]] = llvm.trunc %[[CIND0]] : !llvm.i64 to !llvm.i32
+  // CHECK-NEXT: %[[SHR0:.*]] = llvm.lshr %[[CI32]], %[[ADJUST0]] : !llvm.i32
+  // CHECK-NEXT: %{{.*}} = llvm.trunc %[[SHR0]] : !llvm.i32 to !llvm.i10
+  %0 = llhd.extract_slice %cI32, 0 : i32 -> i10
+  // CHECK-NEXT: %[[CIND2:.*]] = llvm.mlir.constant(0 : index) : !llvm.i64
+  // CHECK-NEXT: %[[ADJUST1:.*]] = llvm.zext %[[CIND2]] : !llvm.i64 to !llvm.i100
+  // CHECK-NEXT: %[[SHR1:.*]] = llvm.lshr %[[CI100]], %[[ADJUST1]] : !llvm.i100
+  // CHECK-NEXT: %{{.*}} = llvm.trunc %[[SHR1]] : !llvm.i100 to !llvm.i10
+  %2 = llhd.extract_slice %cI100, 0 : i100 -> i10
 
-    return
+  return
 }
 
 // CHECK-LABEL:   llvm.func @convert_extract_slice_sig(
@@ -71,5 +71,5 @@ func @convert_extract_slice_int(%cI32 : i32, %cI100 : i100) {
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.entity @convert_extract_slice_sig (%sI32 : !llhd.sig<i32>) -> () {
-    %0 = llhd.extract_slice %sI32, 0 : !llhd.sig<i32> -> !llhd.sig<i10>
+  %0 = llhd.extract_slice %sI32, 0 : !llhd.sig<i32> -> !llhd.sig<i10>
 }

@@ -2,12 +2,12 @@
 
 // CHECK-LABEL: @dummy_i1
 func @dummy_i1 (%0 : i1) {
-    return
+  return
 }
 
 // CHECK-LABEL: @dummy_i32
 func @dummy_i32 (%0 : i32)  {
-    return
+  return
 }
 
 // CHECK-LABEL: @convert_persistent_value
@@ -59,16 +59,16 @@ func @dummy_i32 (%0 : i32)  {
 // CHECK-NEXT: llvm.return
 // CHECK-NEXT: }
 llhd.proc @convert_persistent_value () -> (%out0 : !llhd.sig<i1>, %out1 : !llhd.sig<i32>) {
-    br ^entry
+  br ^entry
 ^entry:
-    %0 = llhd.const 0 : i1
-    %1 = llhd.const 0 : i32
-    br ^resume
+  %0 = llhd.const 0 : i1
+  %1 = llhd.const 0 : i32
+  br ^resume
 ^resume:
-    %t = llhd.const #llhd.time<0ns, 0d, 1e> : !llhd.time
-    call @dummy_i1(%0) : (i1) -> ()
-    call @dummy_i32(%1) : (i32) -> ()
-    br ^resume
+  %t = llhd.const #llhd.time<0ns, 0d, 1e> : !llhd.time
+  call @dummy_i1(%0) : (i1) -> ()
+  call @dummy_i32(%1) : (i32) -> ()
+  br ^resume
 }
 
 // CHECK-LABEL: @convert_resume
@@ -123,10 +123,10 @@ llhd.proc @convert_persistent_value () -> (%out0 : !llhd.sig<i1>, %out1 : !llhd.
 // CHECK-NEXT: llvm.return
 // CHECK-NEXT: }
 llhd.proc @convert_resume (%in0 : !llhd.sig<i1>) -> () {
-    br ^entry
+  br ^entry
 ^entry:
-    %t = llhd.const #llhd.time<0ns, 0d, 1e> : !llhd.time
-    llhd.wait for %t, ^resume
+  %t = llhd.const #llhd.time<0ns, 0d, 1e> : !llhd.time
+  llhd.wait for %t, ^resume
 ^resume:
-    llhd.halt
+  llhd.halt
 }

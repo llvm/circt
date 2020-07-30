@@ -12,8 +12,8 @@
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.entity @convert_sig () -> () {
-    %init = llhd.const 0 : i1
-    %s0 = llhd.sig "sig0" %init : i1
+  %init = llhd.const 0 : i1
+  %s0 = llhd.sig "sig0" %init : i1
 }
 
 // CHECK-LABEL:   llvm.func @convert_prb(
@@ -35,7 +35,7 @@ llhd.entity @convert_sig () -> () {
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.entity @convert_prb (%sI1 : !llhd.sig<i1>) -> () {
-    %p0 = llhd.prb %sI1 : !llhd.sig<i1>
+  %p0 = llhd.prb %sI1 : !llhd.sig<i1>
 }
 
 // CHECK-LABEL:   llvm.func @convert_drv(
@@ -56,7 +56,7 @@ llhd.entity @convert_prb (%sI1 : !llhd.sig<i1>) -> () {
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.entity @convert_drv (%sI1 : !llhd.sig<i1>) -> () {
-    %cI1 = llhd.const 0 : i1
-    %t = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
-    llhd.drv %sI1, %cI1 after %t : !llhd.sig<i1>
+  %cI1 = llhd.const 0 : i1
+  %t = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
+  llhd.drv %sI1, %cI1 after %t : !llhd.sig<i1>
 }
