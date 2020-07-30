@@ -53,6 +53,8 @@ private:
 struct SignalDetail {
   uint8_t *value;
   uint64_t offset;
+  uint64_t instIndex;
+  uint64_t globalIndex;
 };
 
 /// The simulator's internal representation of a signal.
@@ -62,9 +64,6 @@ struct Signal {
 
   /// Construct a signal with the given name, owner and initial value.
   Signal(std::string name, std::string owner, uint8_t *value, uint64_t size);
-
-  /// Construct a subsignal of the signal at origin un the global signal table.
-  Signal(int origin, uint8_t *value, uint64_t size, uint64_t offset);
 
   /// Default signal destructor.
   ~Signal() = default;
@@ -84,11 +83,9 @@ struct Signal {
   std::string owner;
   // The list of instances this signal triggers.
   std::vector<std::string> triggers;
-  // The list of instances this signal is an output of.
-  std::vector<std::string> outOf;
   int origin = -1;
   uint64_t size;
-  SignalDetail detail;
+  uint8_t *value;
 };
 
 /// The simulator's internal representation of one queue slot.
@@ -109,7 +106,7 @@ struct Slot {
   void insertChange(std::string inst);
 
   // Map structure: <signal-index, vec<(offset, new-value)>>.
-  std::map<int, std::vector<std::pair<int, llvm::APInt>>> changes;
+  std::map<uint64_t, std::vector<std::pair<int, llvm::APInt>>> changes;
   // Processes with scheduled wakeup.
   std::vector<std::string> scheduled;
   Time time;
@@ -152,12 +149,9 @@ struct Instance {
   // The instance's base unit.
   std::string unit;
   bool isEntity;
-  // The signals the unit defines.
-  std::vector<int> signalTable;
-  // The input list.
-  std::vector<int> sensitivityList;
-  // The output list.
-  std::vector<int> outputs;
+  size_t nArgs = 0;
+  // The arguments and signals of this instance.
+  std::vector<SignalDetail> sensitivityList;
   ProcState *procState;
 };
 
@@ -204,7 +198,6 @@ struct State {
 
   Time time;
   std::string root;
-  int nSigs;
   llvm::StringMap<Instance> instances;
   std::vector<Signal> signals;
   UpdateQueue queue;

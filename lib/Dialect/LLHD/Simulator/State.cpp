@@ -52,23 +52,16 @@ std::string Time::dump() {
 //===----------------------------------------------------------------------===//
 
 Signal::Signal(std::string name, std::string owner)
-    : name(name), owner(owner), size(0), detail({nullptr, 0}) {}
+    : name(name), owner(owner), size(0), value(nullptr) {}
 
 Signal::Signal(std::string name, std::string owner, uint8_t *value,
                uint64_t size)
-    : name(name), owner(owner), size(size), detail({value, 0}) {}
-
-Signal::Signal(int origin, uint8_t *value, uint64_t size, uint64_t offset)
-    : origin(origin), size(size), detail({value, offset}) {}
+    : name(name), owner(owner), size(size), value(value) {}
 
 bool Signal::operator==(const Signal &rhs) const {
   if (owner != rhs.owner || name != rhs.name || size != rhs.size)
     return false;
-  for (uint64_t i = 0; i < size; ++i) {
-    if (detail.value[i] != rhs.detail.value[i])
-      return false;
-  }
-  return true;
+  return std::memcmp(value, rhs.value, size);
 }
 
 bool Signal::operator<(const Signal &rhs) const {
@@ -84,7 +77,7 @@ std::string Signal::dump() {
   raw_string_ostream ss(ret);
   ss << "0x";
   for (int i = size - 1; i >= 0; --i) {
-    ss << format_hex_no_prefix(static_cast<int>(detail.value[i]), 2);
+    ss << format_hex_no_prefix(static_cast<int>(value[i]), 2);
   }
   return ss.str();
 }
@@ -136,9 +129,9 @@ void UpdateQueue::insertOrUpdate(Time time, std::string inst) {
 //===----------------------------------------------------------------------===//
 
 State::~State() {
-  for (int i = 0; i < nSigs; ++i)
-    if (signals[i].detail.value)
-      std::free(signals[i].detail.value);
+  for (int i = 0, e = signals.size(); i < e; ++i)
+    if (signals[i].value)
+      std::free(signals[i].value);
 
   for (auto &entry : instances) {
     auto inst = entry.getValue();
@@ -181,32 +174,34 @@ void State::addProcPtr(std::string name, ProcState *procStatePtr) {
 
 int State::addSignalData(int index, std::string owner, uint8_t *value,
                          uint64_t size) {
-  int globalIdx = instances[owner].signalTable[index];
-  signals[globalIdx].detail.value = value;
+  auto inst = instances[owner];
+  uint64_t globalIdx = inst.sensitivityList[index + inst.nArgs].globalIndex;
+
+  // Add pointer and size to global signal table entry.
+  signals[globalIdx].value = value;
   signals[globalIdx].size = size;
+
+  // Add the value pointer to the signal detail struct for each instance this
+  // signal appears in.
+  for (auto inst : signals[globalIdx].triggers) {
+    for (auto &detail : instances[inst].sensitivityList) {
+      if (detail.globalIndex == globalIdx) {
+        detail.value = value;
+        break;
+      }
+    }
+  }
   return globalIdx;
 }
 
 void State::dumpSignal(llvm::raw_ostream &out, int index) {
   auto &sig = signals[index];
-  out << time.dump() << "  " << sig.owner << "/" << sig.name << "  "
-      << sig.dump() << "\n";
   for (auto inst : sig.triggers) {
     std::string curr = inst, path = inst;
-    do {
+    while (instances[curr].name != sig.owner) {
       curr = instances[curr].parent;
       path = curr + "/" + path;
-    } while (instances[curr].name != sig.owner);
-    out << time.dump() << "  " << path << "/" << sig.name << "  " << sig.dump()
-        << "\n";
-  }
-  for (auto inst : sig.outOf) {
-    std::string path = inst;
-    std::string curr = inst;
-    do {
-      curr = instances[curr].parent;
-      path = curr + "/" + path;
-    } while (instances[curr].name != sig.owner);
+    }
     out << time.dump() << "  " << path << "/" << sig.name << "  " << sig.dump()
         << "\n";
   }
@@ -218,19 +213,9 @@ void State::dumpLayout() {
     llvm::errs() << inst.getKey().str() << ":\n";
     llvm::errs() << "---parent: " << inst.getValue().parent << "\n";
     llvm::errs() << "---isEntity: " << inst.getValue().isEntity << "\n";
-    llvm::errs() << "---signal table: ";
-    for (auto sig : inst.getValue().signalTable) {
-      llvm::errs() << sig << " ";
-    }
-    llvm::errs() << "\n";
     llvm::errs() << "---sensitivity list: ";
     for (auto in : inst.getValue().sensitivityList) {
-      llvm::errs() << in << " ";
-    }
-    llvm::errs() << "\n";
-    llvm::errs() << "---output list: ";
-    for (auto out : inst.getValue().outputs) {
-      llvm::errs() << out << " ";
+      llvm::errs() << in.globalIndex << " ";
     }
     llvm::errs() << "\n";
   }
@@ -240,16 +225,9 @@ void State::dumpLayout() {
 void State::dumpSignalTriggers() {
   llvm::errs() << "::------------- Signal information -------------::\n";
   for (size_t i = 0, e = signals.size(); i < e; ++i) {
-    llvm::errs() << signals[i].owner << "/" << signals[i].name
-                 << " triggers: " << signals[i].owner << " ";
+    llvm::errs() << signals[i].owner << "/" << signals[i].name << " triggers: ";
     for (auto trig : signals[i].triggers) {
       llvm::errs() << trig << " ";
-    }
-    llvm::errs() << "\n";
-    llvm::errs() << signals[i].owner << "/" << signals[i].name
-                 << " is output of: " << signals[i].owner << " ";
-    for (auto out : signals[i].outOf) {
-      llvm::errs() << out << " ";
     }
     llvm::errs() << "\n";
   }
