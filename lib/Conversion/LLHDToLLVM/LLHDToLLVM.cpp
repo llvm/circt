@@ -1543,8 +1543,9 @@ struct InsertSliceOpConversion : public ConvertToLLVMPattern {
       }
       // Generate a mask to set the affected bits.
       auto width = getStdOrLLVMIntegerWidth(inssOp.target().getType());
+      auto sliceWidth = getStdOrLLVMIntegerWidth(inssOp.slice().getType());
       unsigned start = inssOp.startAttr().getInt();
-      unsigned end = start + width - 1;
+      unsigned end = start + sliceWidth;
       APInt mask(width, 0);
       mask.setBits(start, end);
       auto maskConst = rewriter.create<LLVM::ConstantOp>(
