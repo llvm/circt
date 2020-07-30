@@ -63,8 +63,8 @@ func @mul_annulment(%arg0: i11, %arg1: i11, %arg2: i11) -> i11 {
 // Identities
 
 // CHECK-LABEL: func @and_identity(%arg0: i11, %arg1: i11) -> i11 {
-// CHECK-NEXT:    %[[RES:.*]] = rtl.and %arg0, %arg1
-// CHECK-NEXT:    return %[[RES:.*]]
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.and %arg0, %arg1
+// CHECK-NEXT:    return [[RES]]
 
 func @and_identity(%arg0: i11, %arg1: i11) -> i11 {
   %c-1_i11 = rtl.constant(-1 : i11) : i11
@@ -73,8 +73,8 @@ func @and_identity(%arg0: i11, %arg1: i11) -> i11 {
 }
 
 // CHECK-LABEL: func @or_identity(%arg0: i11, %arg1: i11) -> i11 {
-// CHECK-NEXT:    %[[RES:.*]] = rtl.or %arg0, %arg1
-// CHECK-NEXT:    return %[[RES:.*]]
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.or %arg0, %arg1
+// CHECK-NEXT:    return [[RES]]
 
 func @or_identity(%arg0: i11, %arg1: i11) -> i11 {
   %c0_i11 = rtl.constant(0 : i11) : i11
@@ -83,8 +83,8 @@ func @or_identity(%arg0: i11, %arg1: i11) -> i11 {
 }
 
 // CHECK-LABEL: func @xor_identity(%arg0: i11, %arg1: i11) -> i11 {
-// CHECK-NEXT:    %[[RES:.*]] = rtl.xor %arg1, %arg0
-// CHECK-NEXT:    return %[[RES:.*]]
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.xor %arg1, %arg0
+// CHECK-NEXT:    return [[RES]]
 
 func @xor_identity(%arg0: i11, %arg1: i11) -> i11 {
   %c0_i11 = rtl.constant(0 : i11) : i11
@@ -93,8 +93,8 @@ func @xor_identity(%arg0: i11, %arg1: i11) -> i11 {
 }
 
 // CHECK-LABEL: func @add_identity(%arg0: i11, %arg1: i11) -> i11 {
-// CHECK-NEXT:    %[[RES:.*]] = rtl.add %arg0, %arg1
-// CHECK-NEXT:    return %[[RES:.*]]
+// CHECK-NEXT:   [[RES:%[0-9]+]] = rtl.add %arg0, %arg1
+// CHECK-NEXT:    return [[RES]]
 
 func @add_identity(%arg0: i11, %arg1: i11) -> i11 {
   %c0_i11 = rtl.constant(0 : i11) : i11
@@ -103,8 +103,8 @@ func @add_identity(%arg0: i11, %arg1: i11) -> i11 {
 }
 
 // CHECK-LABEL: func @mul_identity(%arg0: i11, %arg1: i11) -> i11 {
-// CHECK-NEXT:    %[[RES:.*]] = rtl.mul %arg0, %arg1
-// CHECK-NEXT:    return %[[RES:.*]]
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.mul %arg0, %arg1
+// CHECK-NEXT:    return [[RES]]
 
 func @mul_identity(%arg0: i11, %arg1: i11) -> i11 {
   %c1_i11 = rtl.constant(1 : i11) : i11
