@@ -162,16 +162,10 @@ static LLVM::LLVMType getProcPersistenceTy(LLVM::LLVMDialect *dialect,
                                            LLVMTypeConverter &converter,
                                            ProcOp &proc) {
   SmallVector<LLVM::LLVMType, 3> types = SmallVector<LLVM::LLVMType, 3>();
-
-  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect);
-
   proc.walk([&](Operation *op) -> void {
     if (op->isUsedOutsideOfBlock(op->getBlock())) {
-      if (op->getResult(0).getType().isa<IntegerType>())
-        types.push_back(converter.convertType(op->getResult(0).getType())
-                            .cast<LLVM::LLVMType>());
-      else if (op->getResult(0).getType().isa<SigType>())
-        types.push_back(i32Ty);
+      types.push_back(converter.convertType(op->getResult(0).getType())
+                          .cast<LLVM::LLVMType>());
     }
   });
   return LLVM::LLVMType::getStructTy(dialect, types);
@@ -250,8 +244,7 @@ static void insertPersistence(LLVMTypeConverter &converter,
   // Insert operations required to persist values across process suspension.
   converted.walk([&](Operation *op) -> void {
     if (op->isUsedOutsideOfBlock(op->getBlock()) &&
-        op->getResult(0) != larg.getResult() &&
-        !(op->getResult(0).getType().isa<TimeType>())) {
+        op->getResult(0) != larg.getResult()) {
       auto elemTy = stateTy.getStructElementType(3).getStructElementType(i);
 
       // Store the value escaping it's definingn block in the persistence table.
@@ -298,6 +291,23 @@ static void insertPersistence(LLVMTypeConverter &converter,
   });
 }
 
+//===----------------------------------------------------------------------===//
+// Type conversions
+//===----------------------------------------------------------------------===//
+
+static LLVM::LLVMType convertSigType(SigType type,
+                                     LLVMTypeConverter &converter) {
+  auto i64Ty = LLVM::LLVMType::getInt64Ty(converter.getDialect());
+  auto i8PtrTy = LLVM::LLVMType::getInt8PtrTy(converter.getDialect());
+  return LLVM::LLVMType::getStructTy(i8PtrTy, i64Ty, i64Ty, i64Ty)
+      .getPointerTo();
+}
+
+static LLVM::LLVMType convertTimeType(TimeType type,
+                                      LLVMTypeConverter &converter) {
+  auto i32Ty = LLVM::LLVMType::getInt32Ty(converter.getDialect());
+  return LLVM::LLVMType::getArrayTy(i32Ty, 3);
+}
 //===----------------------------------------------------------------------===//
 // Unit conversions
 //===----------------------------------------------------------------------===//
@@ -552,7 +562,7 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     auto waitOp = cast<WaitOp>(op);
-    WaitOpAdaptor transformed(operands, nullptr);
+    WaitOpAdaptor transformed(operands, op->getAttrDictionary());
     auto llvmFunc = op->getParentOfType<LLVM::LLVMFuncOp>();
 
     auto voidTy = getVoidType();
@@ -601,28 +611,19 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
     }
 
     // Get time constats, if present.
-    Value realTimeConst;
-    Value deltaConst;
-    Value epsConst;
+    Value realTime;
+    Value delta;
+    Value eps;
     if (waitOp.timeMutable().size() > 0) {
-      auto timeAttr = cast<llhd::ConstOp>(waitOp.time().getDefiningOp())
-                          .valueAttr()
-                          .dyn_cast<TimeAttr>();
-      // Get the real time as an attribute.
-      auto realTimeAttr = rewriter.getI32IntegerAttr(timeAttr.getTime());
-      // Create a new time const operation.
-      realTimeConst =
-          rewriter.create<LLVM::ConstantOp>(op->getLoc(), i32Ty, realTimeAttr);
-      // Get the delta step as an attribute.
-      auto deltaAttr = rewriter.getI32IntegerAttr(timeAttr.getDelta());
-      // Create a new delta const operation.
-      deltaConst =
-          rewriter.create<LLVM::ConstantOp>(op->getLoc(), i32Ty, deltaAttr);
-      // Get the epsilon step as an attribute.
-      auto epsAttr = rewriter.getI32IntegerAttr(timeAttr.getEps());
-      // Create a new eps const operation.
-      epsConst =
-          rewriter.create<LLVM::ConstantOp>(op->getLoc(), i32Ty, epsAttr);
+      realTime = rewriter.create<LLVM::ExtractValueOp>(
+          op->getLoc(), i32Ty, transformed.time(),
+          rewriter.getI32ArrayAttr(ArrayRef<int32_t>({0})));
+      delta = rewriter.create<LLVM::ExtractValueOp>(
+          op->getLoc(), i32Ty, transformed.time(),
+          rewriter.getI32ArrayAttr(ArrayRef<int32_t>({1})));
+      eps = rewriter.create<LLVM::ExtractValueOp>(
+          op->getLoc(), i32Ty, transformed.time(),
+          rewriter.getI32ArrayAttr(ArrayRef<int32_t>({2})));
     }
 
     // Update and store the new resume index in the process state.
@@ -635,8 +636,7 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
                                      procState, ArrayRef<Value>({zeroC, oneC}));
     rewriter.create<LLVM::StoreOp>(op->getLoc(), resumeIdxC, resumeIdxPtr);
 
-    std::array<Value, 5> args(
-        {statePtr, procStateBC, realTimeConst, deltaConst, epsConst});
+    std::array<Value, 5> args({statePtr, procStateBC, realTime, delta, eps});
     rewriter.create<LLVM::CallOp>(
         op->getLoc(), voidTy, rewriter.getSymbolRefAttr(llhdSuspendFunc), args);
 
@@ -1022,32 +1022,20 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
     rewriter.create<LLVM::StoreOp>(op->getLoc(), transformed.value(), alloca);
     auto bc = rewriter.create<LLVM::BitcastOp>(op->getLoc(), i8PtrTy, alloca);
 
-    // Get the constant time operation.
-    auto timeAttr = cast<llhd::ConstOp>(drvOp.time().getDefiningOp())
-                        .valueAttr()
-                        .dyn_cast<TimeAttr>();
-    // Get the real time as an attribute.
-    auto realTimeAttr = rewriter.getI32IntegerAttr(timeAttr.getTime());
-    // Create a new time const operation.
-    auto realTimeConst = rewriter.create<LLVM::ConstantOp>(
-        op->getLoc(), LLVM::LLVMType::getInt32Ty(typeConverter.getDialect()),
-        realTimeAttr);
-    // Get the delta step as an attribute.
-    auto deltaAttr = rewriter.getI32IntegerAttr(timeAttr.getDelta());
-    // Create a new delta const operation.
-    auto deltaConst = rewriter.create<LLVM::ConstantOp>(
-        op->getLoc(), LLVM::LLVMType::getInt32Ty(typeConverter.getDialect()),
-        deltaAttr);
-    // Get the epsilon step as an attribute.
-    auto epsAttr = rewriter.getI32IntegerAttr(timeAttr.getEps());
-    // Create a new eps const operation.
-    auto epsConst = rewriter.create<LLVM::ConstantOp>(
-        op->getLoc(), LLVM::LLVMType::getInt32Ty(typeConverter.getDialect()),
-        epsAttr);
+    // Get the time values.
+    auto realTime = rewriter.create<LLVM::ExtractValueOp>(
+        op->getLoc(), i32Ty, transformed.time(),
+        rewriter.getI32ArrayAttr(ArrayRef<int32_t>({0})));
+    auto delta = rewriter.create<LLVM::ExtractValueOp>(
+        op->getLoc(), i32Ty, transformed.time(),
+        rewriter.getI32ArrayAttr(ArrayRef<int32_t>({1})));
+    auto eps = rewriter.create<LLVM::ExtractValueOp>(
+        op->getLoc(), i32Ty, transformed.time(),
+        rewriter.getI32ArrayAttr(ArrayRef<int32_t>({2})));
 
     // Define the drive_signal library call arguments.
-    std::array<Value, 7> args({statePtr, transformed.signal(), bc, widthConst,
-                               realTimeConst, deltaConst, epsConst});
+    std::array<Value, 7> args(
+        {statePtr, transformed.signal(), bc, widthConst, realTime, delta, eps});
     // Create the library call.
     rewriter.create<LLVM::CallOp>(op->getLoc(), voidTy,
                                   rewriter.getSymbolRefAttr(drvFunc), args);
@@ -1267,10 +1255,9 @@ using XorOpConversion = OneToOneConvertToLLVMPattern<llhd::XorOp, LLVM::XOrOp>;
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Lower an LLHD constant operation to LLVM dialect. Time constant are treated
-/// as a special case, by just erasing them. Operations that use time constants
-/// are assumed to extract and convert the elements they require. The other
-/// const types are lowered to an equivalent `llvm.mlir.constant` operation.
+/// Lower an LLHD constant operation to LLVM dialect. Time constants are lowered
+/// to an array of 3 integers, containing the 3 time values. The other const
+/// types are lowered to an equivalent `llvm.mlir.constant` operation.
 struct ConstOpConversion : public ConvertToLLVMPattern {
   explicit ConstOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
       : ConvertToLLVMPattern(llhd::ConstOp::getOperationName(), ctx,
@@ -1283,9 +1270,14 @@ struct ConstOpConversion : public ConvertToLLVMPattern {
     auto constOp = cast<ConstOp>(op);
     // Get the constant's attribute.
     auto attr = constOp.value();
-    // Handle the time const special case.
-    if (!attr.getType().isa<IntegerType>()) {
-      rewriter.eraseOp(op);
+    // Handle the time const special case: create a new array containing the
+    // three time values.
+    if (auto timeAttr = attr.dyn_cast<TimeAttr>()) {
+      auto timeTy = typeConverter.convertType(constOp.getResult().getType());
+      auto denseAttr = DenseElementsAttr::get(
+          VectorType::get(3, rewriter.getI32Type()),
+          {timeAttr.getTime(), timeAttr.getDelta(), timeAttr.getEps()});
+      rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(op, timeTy, denseAttr);
       return success();
     }
     // Get the converted llvm type.
@@ -1397,8 +1389,7 @@ void llhd::populateLLHDToLLVMConversionPatterns(
   // Bitwise conversion patterns.
   patterns.insert<NotOpConversion, ShrOpConversion, ShlOpConversion>(ctx,
                                                                      converter);
-  patterns.insert<AndOpConversion, OrOpConversion, XorOpConversion>(
-      converter, LowerToLLVMOptions::getDefaultOptions());
+  patterns.insert<AndOpConversion, OrOpConversion, XorOpConversion>(converter);
 
   // Unit conversion patterns.
   patterns.insert<EntityOpConversion, TerminatorOpConversion, ProcOpConversion,
@@ -1412,6 +1403,10 @@ void llhd::populateLLHDToLLVMConversionPatterns(
 void LLHDToLLVMLoweringPass::runOnOperation() {
   OwningRewritePatternList patterns;
   auto converter = mlir::LLVMTypeConverter(&getContext());
+  converter.addConversion(
+      [&](SigType sig) { return convertSigType(sig, converter); });
+  converter.addConversion(
+      [&](TimeType time) { return convertTimeType(time, converter); });
 
   // Apply a partial conversion first, lowering only the instances, to generate
   // the init function.
@@ -1419,6 +1414,7 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
 
   LLVMConversionTarget target(getContext());
   target.addIllegalOp<InstOp>();
+  target.addLegalOp<LLVM::DialectCastOp>();
 
   // Apply the partial conversion.
   if (failed(applyPartialConversion(getOperation(), target, patterns)))
@@ -1430,6 +1426,7 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
 
   target.addLegalDialect<LLVM::LLVMDialect>();
   target.addLegalOp<ModuleOp, ModuleTerminatorOp>();
+  target.addIllegalOp<LLVM::DialectCastOp>();
 
   // Apply the full conversion.
   if (failed(applyFullConversion(getOperation(), target, patterns)))
