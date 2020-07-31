@@ -299,6 +299,18 @@ static void insertPersistence(LLVMTypeConverter &converter,
 }
 
 //===----------------------------------------------------------------------===//
+// Type conversions
+//===----------------------------------------------------------------------===//
+
+static LLVM::LLVMType convertSigType(SigType type,
+                                     LLVMTypeConverter &converter) {
+  auto i64Ty = LLVM::LLVMType::getInt64Ty(converter.getDialect());
+  auto i8PtrTy = LLVM::LLVMType::getInt8PtrTy(converter.getDialect());
+  return LLVM::LLVMType::getStructTy(i8PtrTy, i64Ty, i64Ty, i64Ty)
+      .getPointerTo();
+}
+
+//===----------------------------------------------------------------------===//
 // Unit conversions
 //===----------------------------------------------------------------------===//
 
@@ -1411,6 +1423,8 @@ void llhd::populateLLHDToLLVMConversionPatterns(
 void LLHDToLLVMLoweringPass::runOnOperation() {
   OwningRewritePatternList patterns;
   auto converter = mlir::LLVMTypeConverter(&getContext());
+  converter.addConversion(
+      [&](SigType sig) { return convertSigType(sig, converter); });
 
   // Apply a partial conversion first, lowering only the instances, to generate
   // the init function.
