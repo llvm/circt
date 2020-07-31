@@ -1414,6 +1414,7 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
 
   LLVMConversionTarget target(getContext());
   target.addIllegalOp<InstOp>();
+  target.addLegalOp<LLVM::DialectCastOp>();
 
   // Apply the partial conversion.
   if (failed(applyPartialConversion(getOperation(), target, patterns)))
@@ -1425,6 +1426,7 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
 
   target.addLegalDialect<LLVM::LLVMDialect>();
   target.addLegalOp<ModuleOp, ModuleTerminatorOp>();
+  target.addIllegalOp<LLVM::DialectCastOp>();
 
   // Apply the full conversion.
   if (failed(applyFullConversion(getOperation(), target, patterns)))
