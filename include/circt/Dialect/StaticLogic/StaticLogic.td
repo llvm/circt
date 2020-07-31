@@ -34,18 +34,28 @@ def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [NoSideEffect]> {
     corresponding to a pipeline stage.
   }];
 
-  let arguments = (ins);
+  let arguments = (ins Variadic<AnyType>);
   let results = (outs Variadic<AnyType>);
   let regions = (region AnyRegion: $body);
 
   let skipDefaultBuilders = 1;
 
   let builders = [OpBuilder<"OpBuilder &odsBuilder, OperationState &odsState, "
-                 "ArrayRef<Type> resultTypes", [{
+                 "ValueRange operands, ValueRange results", [{
+    SmallVector<Type, 4> argTypes;
+    for (auto value : operands)
+      argTypes.push_back(value.getType());
+
+    SmallVector<Type, 4> resultTypes;
+    for (auto value : results)
+      resultTypes.push_back(value.getType());
+
     Region *bodyRegion = odsState.addRegion();
     Block *body = new Block();
     bodyRegion->push_back(body);
+    body->addArguments(argTypes);
 
+    odsState.addOperands(operands);
     odsState.addTypes(resultTypes);
   }]>];
 }

@@ -11,17 +11,19 @@
 // CHECK:           }) : () -> (index, index)
 // CHECK:           br ^bb2(%[[VAL_0:.*]]#0 : index)
 // CHECK:         ^bb2(%[[VAL_1:.*]]: index):  // 2 preds: ^bb1, ^bb3
-// CHECK:           %[[VAL_2:.*]] = "staticlogic.pipeline"() ( {
-// CHECK:             %[[TMP_0:.*]] = cmpi "slt", %[[VAL_1:.*]], %[[VAL_0:.*]]#1 : index
+// CHECK:           %[[VAL_2:.*]] = "staticlogic.pipeline"(%[[VAL_1:.*]], %[[VAL_0:.*]]#1) ( {
+// CHECK:           ^bb0(%[[ARG_0:.*]]: index, %[[ARG_1:.*]]: index):  // no predecessors
+// CHECK:             %[[TMP_0:.*]] = cmpi "slt", %[[ARG_0:.*]], %[[ARG_1:.*]] : index
 // CHECK:             "staticlogic.return"(%[[TMP_0:.*]]) : (i1) -> ()
-// CHECK:           }) : () -> i1
+// CHECK:           }) : (index, index) -> i1
 // CHECK:           cond_br %[[VAL_2:.*]], ^bb3, ^bb4
 // CHECK:         ^bb3:  // pred: ^bb2
-// CHECK:           %[[VAL_3:.*]] = "staticlogic.pipeline"() ( {
+// CHECK:           %[[VAL_3:.*]] = "staticlogic.pipeline"(%[[VAL_1:.*]]) ( {
+// CHECK:           ^bb0(%[[ARG_0:.*]]: index):  // no predecessors
 // CHECK:             %c1 = constant 1 : index
-// CHECK:             %[[TMP_1:.*]] = addi %[[VAL_1:.*]], %c1 : index
+// CHECK:             %[[TMP_1:.*]] = addi %[[ARG_0:.*]], %c1 : index
 // CHECK:             "staticlogic.return"(%[[TMP_1:.*]]) : (index) -> ()
-// CHECK:           }) : () -> index
+// CHECK:           }) : (index) -> index
 // CHECK:           br ^bb2(%[[VAL_3:.*]] : index)
 // CHECK:         ^bb4:  // pred: ^bb2
 // CHECK:           return
