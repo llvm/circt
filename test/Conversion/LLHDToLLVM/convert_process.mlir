@@ -102,66 +102,195 @@ llhd.proc @convert_persistent_value () -> (%out0 : !llhd.sig<i1>, %out1 : !llhd.
   br ^resume
 }
 
+
 // CHECK-LABEL:   llvm.func @convert_resume(
-// CHECK-SAME:                              %[[VAL_0:.*]]: !llvm.ptr<i8>,
-// CHECK-SAME:                              %[[VAL_1:.*]]: !llvm.ptr<struct<(ptr<i8>, i32, ptr<array<1 x i1>>, struct<()>)>>,
-// CHECK-SAME:                              %[[VAL_2:.*]]: !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>) {
+// CHECK-SAME:                              %[[VAL_0:.*]]: !llvm<"i8*">,
+// CHECK-SAME:                              %[[VAL_1:.*]]: !llvm<"{ i8*, i32, [3 x i1]*, { [3 x i32] } }*">,
+// CHECK-SAME:                              %[[VAL_2:.*]]: !llvm<"{ i8*, i64, i64, i64 }*">) {
 // CHECK:           %[[VAL_3:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
-// CHECK:           %[[VAL_4:.*]] = llvm.getelementptr %[[VAL_2]]{{\[}}%[[VAL_3]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.i32) -> !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
-// CHECK:           %[[VAL_5:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
-// CHECK:           %[[VAL_6:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
-// CHECK:           %[[VAL_7:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_5]], %[[VAL_6]]] : (!llvm.ptr<struct<(ptr<i8>, i32, ptr<array<1 x i1>>, struct<()>)>>, !llvm.i32, !llvm.i32) -> !llvm.ptr<i32>
-// CHECK:           %[[VAL_8:.*]] = llvm.load %[[VAL_7]] : !llvm.ptr<i32>
+// CHECK:           %[[VAL_4:.*]] = llvm.getelementptr %[[VAL_2]]{{\[}}%[[VAL_3]]] : (!llvm<"{ i8*, i64, i64, i64 }*">, !llvm.i32) -> !llvm<"{ i8*, i64, i64, i64 }*">
+// CHECK:           %[[VAL_5:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
+// CHECK:           %[[VAL_6:.*]] = llvm.getelementptr %[[VAL_2]]{{\[}}%[[VAL_5]]] : (!llvm<"{ i8*, i64, i64, i64 }*">, !llvm.i32) -> !llvm<"{ i8*, i64, i64, i64 }*">
+// CHECK:           %[[VAL_7:.*]] = llvm.mlir.constant(2 : i32) : !llvm.i32
+// CHECK:           %[[VAL_8:.*]] = llvm.getelementptr %[[VAL_2]]{{\[}}%[[VAL_7]]] : (!llvm<"{ i8*, i64, i64, i64 }*">, !llvm.i32) -> !llvm<"{ i8*, i64, i64, i64 }*">
+// CHECK:           %[[VAL_9:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+// CHECK:           %[[VAL_10:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
+// CHECK:           %[[VAL_11:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_9]], %[[VAL_10]]] : (!llvm<"{ i8*, i32, [3 x i1]*, { [3 x i32] } }*">, !llvm.i32, !llvm.i32) -> !llvm<"i32*">
+// CHECK:           %[[VAL_12:.*]] = llvm.load %[[VAL_11]] : !llvm<"i32*">
 // CHECK:           llvm.br ^bb1
 // CHECK:         ^bb1:
-// CHECK:           %[[VAL_9:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
-// CHECK:           %[[VAL_10:.*]] = llvm.icmp "eq" %[[VAL_8]], %[[VAL_9]] : !llvm.i32
-// CHECK:           llvm.cond_br %[[VAL_10]], ^bb4, ^bb2
+// CHECK:           %[[VAL_13:.*]] = llvm.mlir.constant(4 : i32) : !llvm.i32
+// CHECK:           %[[VAL_14:.*]] = llvm.icmp "eq" %[[VAL_12]], %[[VAL_13]] : !llvm.i32
+// CHECK:           llvm.cond_br %[[VAL_14]], ^bb10, ^bb2
 // CHECK:         ^bb2:
-// CHECK:           %[[VAL_11:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
-// CHECK:           %[[VAL_12:.*]] = llvm.icmp "eq" %[[VAL_8]], %[[VAL_11]] : !llvm.i32
-// CHECK:           llvm.cond_br %[[VAL_12]], ^bb3, ^bb5
+// CHECK:           %[[VAL_15:.*]] = llvm.mlir.constant(3 : i32) : !llvm.i32
+// CHECK:           %[[VAL_16:.*]] = llvm.icmp "eq" %[[VAL_12]], %[[VAL_15]] : !llvm.i32
+// CHECK:           llvm.cond_br %[[VAL_16]], ^bb9, ^bb3
 // CHECK:         ^bb3:
-// CHECK:           %[[VAL_13:.*]] = llvm.mlir.constant(dense<[0, 0, 1]> : vector<3xi32>) : !llvm.array<3 x i32>
-// CHECK:           %[[VAL_14:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
-// CHECK:           %[[VAL_15:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
-// CHECK:           %[[VAL_16:.*]] = llvm.mlir.constant(2 : i32) : !llvm.i32
-// CHECK:           %[[VAL_17:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_14]], %[[VAL_16]]] : (!llvm.ptr<struct<(ptr<i8>, i32, ptr<array<1 x i1>>, struct<()>)>>, !llvm.i32, !llvm.i32) -> !llvm.ptr<ptr<array<1 x i1>>>
-// CHECK:           %[[VAL_18:.*]] = llvm.load %[[VAL_17]] : !llvm.ptr<ptr<array<1 x i1>>>
-// CHECK:           %[[VAL_19:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
-// CHECK:           %[[VAL_20:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i1
-// CHECK:           %[[VAL_21:.*]] = llvm.getelementptr %[[VAL_18]]{{\[}}%[[VAL_14]], %[[VAL_19]]] : (!llvm.ptr<array<1 x i1>>, !llvm.i32, !llvm.i32) -> !llvm.ptr<i1>
-// CHECK:           llvm.store %[[VAL_20]], %[[VAL_21]] : !llvm.ptr<i1>
-// CHECK:           %[[VAL_22:.*]] = llvm.extractvalue %[[VAL_13]][0 : i32] : !llvm.array<3 x i32>
-// CHECK:           %[[VAL_23:.*]] = llvm.extractvalue %[[VAL_13]][1 : i32] : !llvm.array<3 x i32>
-// CHECK:           %[[VAL_24:.*]] = llvm.extractvalue %[[VAL_13]][2 : i32] : !llvm.array<3 x i32>
-// CHECK:           %[[VAL_25:.*]] = llvm.bitcast %[[VAL_1]] : !llvm.ptr<struct<(ptr<i8>, i32, ptr<array<1 x i1>>, struct<()>)>> to !llvm.ptr<i8>
-// CHECK:           %[[VAL_26:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
-// CHECK:           %[[VAL_27:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_14]], %[[VAL_15]]] : (!llvm.ptr<struct<(ptr<i8>, i32, ptr<array<1 x i1>>, struct<()>)>>, !llvm.i32, !llvm.i32) -> !llvm.ptr<i32>
-// CHECK:           llvm.store %[[VAL_26]], %[[VAL_27]] : !llvm.ptr<i32>
-// CHECK:           %[[VAL_28:.*]] = llvm.call @llhd_suspend(%[[VAL_0]], %[[VAL_25]], %[[VAL_22]], %[[VAL_23]], %[[VAL_24]]) : (!llvm.ptr<i8>, !llvm.ptr<i8>, !llvm.i32, !llvm.i32, !llvm.i32) -> !llvm.void
-// CHECK:           llvm.return
+// CHECK:           %[[VAL_17:.*]] = llvm.mlir.constant(2 : i32) : !llvm.i32
+// CHECK:           %[[VAL_18:.*]] = llvm.icmp "eq" %[[VAL_12]], %[[VAL_17]] : !llvm.i32
+// CHECK:           llvm.cond_br %[[VAL_18]], ^bb8, ^bb4
 // CHECK:         ^bb4:
-// CHECK:           %[[VAL_29:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
-// CHECK:           %[[VAL_30:.*]] = llvm.mlir.constant(2 : i32) : !llvm.i32
-// CHECK:           %[[VAL_31:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_29]], %[[VAL_30]]] : (!llvm.ptr<struct<(ptr<i8>, i32, ptr<array<1 x i1>>, struct<()>)>>, !llvm.i32, !llvm.i32) -> !llvm.ptr<ptr<array<1 x i1>>>
-// CHECK:           %[[VAL_32:.*]] = llvm.load %[[VAL_31]] : !llvm.ptr<ptr<array<1 x i1>>>
-// CHECK:           %[[VAL_33:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
-// CHECK:           %[[VAL_34:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i1
-// CHECK:           %[[VAL_35:.*]] = llvm.getelementptr %[[VAL_32]]{{\[}}%[[VAL_29]], %[[VAL_33]]] : (!llvm.ptr<array<1 x i1>>, !llvm.i32, !llvm.i32) -> !llvm.ptr<i1>
-// CHECK:           llvm.store %[[VAL_34]], %[[VAL_35]] : !llvm.ptr<i1>
-// CHECK:           llvm.return
+// CHECK:           %[[VAL_19:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
+// CHECK:           %[[VAL_20:.*]] = llvm.icmp "eq" %[[VAL_12]], %[[VAL_19]] : !llvm.i32
+// CHECK:           llvm.cond_br %[[VAL_20]], ^bb7, ^bb5
 // CHECK:         ^bb5:
+// CHECK:           %[[VAL_21:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+// CHECK:           %[[VAL_22:.*]] = llvm.icmp "eq" %[[VAL_12]], %[[VAL_21]] : !llvm.i32
+// CHECK:           llvm.cond_br %[[VAL_22]], ^bb6, ^bb11
+// CHECK:         ^bb6:
+// CHECK:           %[[VAL_23:.*]] = llvm.mlir.constant(dense<[0, 0, 1]> : vector<3xi32>) : !llvm<"[3 x i32]">
+// CHECK:           %[[VAL_24:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+// CHECK:           %[[VAL_25:.*]] = llvm.mlir.constant(3 : i32) : !llvm.i32
+// CHECK:           %[[VAL_26:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+// CHECK:           %[[VAL_27:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_24]], %[[VAL_25]], %[[VAL_26]]] : (!llvm<"{ i8*, i32, [3 x i1]*, { [3 x i32] } }*">, !llvm.i32, !llvm.i32, !llvm.i32) -> !llvm<"[3 x i32]*">
+// CHECK:           llvm.store %[[VAL_23]], %[[VAL_27]] : !llvm<"[3 x i32]*">
+// CHECK:           %[[VAL_28:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
+// CHECK:           %[[VAL_29:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_9]], %[[VAL_10]]] : (!llvm<"{ i8*, i32, [3 x i1]*, { [3 x i32] } }*">, !llvm.i32, !llvm.i32) -> !llvm<"i32*">
+// CHECK:           llvm.store %[[VAL_28]], %[[VAL_29]] : !llvm<"i32*">
+// CHECK:           %[[VAL_30:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+// CHECK:           %[[VAL_31:.*]] = llvm.mlir.constant(2 : i32) : !llvm.i32
+// CHECK:           %[[VAL_32:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_30]], %[[VAL_31]]] : (!llvm<"{ i8*, i32, [3 x i1]*, { [3 x i32] } }*">, !llvm.i32, !llvm.i32) -> !llvm<"[3 x i1]**">
+// CHECK:           %[[VAL_33:.*]] = llvm.load %[[VAL_32]] : !llvm<"[3 x i1]**">
+// CHECK:           %[[VAL_34:.*]] = llvm.mlir.constant(false) : !llvm.i1
+// CHECK:           %[[VAL_35:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+// CHECK:           %[[VAL_36:.*]] = llvm.getelementptr %[[VAL_33]]{{\[}}%[[VAL_30]], %[[VAL_35]]] : (!llvm<"[3 x i1]*">, !llvm.i32, !llvm.i32) -> !llvm<"i1*">
+// CHECK:           llvm.store %[[VAL_34]], %[[VAL_36]] : !llvm<"i1*">
+// CHECK:           %[[VAL_37:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
+// CHECK:           %[[VAL_38:.*]] = llvm.getelementptr %[[VAL_33]]{{\[}}%[[VAL_30]], %[[VAL_37]]] : (!llvm<"[3 x i1]*">, !llvm.i32, !llvm.i32) -> !llvm<"i1*">
+// CHECK:           llvm.store %[[VAL_34]], %[[VAL_38]] : !llvm<"i1*">
+// CHECK:           %[[VAL_39:.*]] = llvm.mlir.constant(2 : i32) : !llvm.i32
+// CHECK:           %[[VAL_40:.*]] = llvm.getelementptr %[[VAL_33]]{{\[}}%[[VAL_30]], %[[VAL_39]]] : (!llvm<"[3 x i1]*">, !llvm.i32, !llvm.i32) -> !llvm<"i1*">
+// CHECK:           llvm.store %[[VAL_34]], %[[VAL_40]] : !llvm<"i1*">
+// CHECK:           %[[VAL_41:.*]] = llvm.bitcast %[[VAL_1]] : !llvm<"{ i8*, i32, [3 x i1]*, { [3 x i32] } }*"> to !llvm<"i8*">
+// CHECK:           %[[VAL_42:.*]] = llvm.extractvalue %[[VAL_23]][0 : i32] : !llvm<"[3 x i32]">
+// CHECK:           %[[VAL_43:.*]] = llvm.extractvalue %[[VAL_23]][1 : i32] : !llvm<"[3 x i32]">
+// CHECK:           %[[VAL_44:.*]] = llvm.extractvalue %[[VAL_23]][2 : i32] : !llvm<"[3 x i32]">
+// CHECK:           %[[VAL_45:.*]] = llvm.call @llhd_suspend(%[[VAL_0]], %[[VAL_41]], %[[VAL_42]], %[[VAL_43]], %[[VAL_44]]) : (!llvm<"i8*">, !llvm<"i8*">, !llvm.i32, !llvm.i32, !llvm.i32) -> !llvm.void
+// CHECK:           llvm.return
+// CHECK:         ^bb7:
+// CHECK:           %[[VAL_46:.*]] = llvm.mlir.constant(2 : i32) : !llvm.i32
+// CHECK:           %[[VAL_47:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_9]], %[[VAL_10]]] : (!llvm<"{ i8*, i32, [3 x i1]*, { [3 x i32] } }*">, !llvm.i32, !llvm.i32) -> !llvm<"i32*">
+// CHECK:           llvm.store %[[VAL_46]], %[[VAL_47]] : !llvm<"i32*">
+// CHECK:           %[[VAL_48:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+// CHECK:           %[[VAL_49:.*]] = llvm.mlir.constant(2 : i32) : !llvm.i32
+// CHECK:           %[[VAL_50:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_48]], %[[VAL_49]]] : (!llvm<"{ i8*, i32, [3 x i1]*, { [3 x i32] } }*">, !llvm.i32, !llvm.i32) -> !llvm<"[3 x i1]**">
+// CHECK:           %[[VAL_51:.*]] = llvm.load %[[VAL_50]] : !llvm<"[3 x i1]**">
+// CHECK:           %[[VAL_52:.*]] = llvm.mlir.constant(false) : !llvm.i1
+// CHECK:           %[[VAL_53:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+// CHECK:           %[[VAL_54:.*]] = llvm.getelementptr %[[VAL_51]]{{\[}}%[[VAL_48]], %[[VAL_53]]] : (!llvm<"[3 x i1]*">, !llvm.i32, !llvm.i32) -> !llvm<"i1*">
+// CHECK:           llvm.store %[[VAL_52]], %[[VAL_54]] : !llvm<"i1*">
+// CHECK:           %[[VAL_55:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
+// CHECK:           %[[VAL_56:.*]] = llvm.getelementptr %[[VAL_51]]{{\[}}%[[VAL_48]], %[[VAL_55]]] : (!llvm<"[3 x i1]*">, !llvm.i32, !llvm.i32) -> !llvm<"i1*">
+// CHECK:           llvm.store %[[VAL_52]], %[[VAL_56]] : !llvm<"i1*">
+// CHECK:           %[[VAL_57:.*]] = llvm.mlir.constant(2 : i32) : !llvm.i32
+// CHECK:           %[[VAL_58:.*]] = llvm.getelementptr %[[VAL_51]]{{\[}}%[[VAL_48]], %[[VAL_57]]] : (!llvm<"[3 x i1]*">, !llvm.i32, !llvm.i32) -> !llvm<"i1*">
+// CHECK:           llvm.store %[[VAL_52]], %[[VAL_58]] : !llvm<"i1*">
+// CHECK:           %[[VAL_59:.*]] = llvm.getelementptr %[[VAL_4]]{{\[}}%[[VAL_48]], %[[VAL_49]]] : (!llvm<"{ i8*, i64, i64, i64 }*">, !llvm.i32, !llvm.i32) -> !llvm<"i64*">
+// CHECK:           %[[VAL_60:.*]] = llvm.load %[[VAL_59]] : !llvm<"i64*">
+// CHECK:           %[[VAL_61:.*]] = llvm.mlir.constant(true) : !llvm.i1
+// CHECK:           %[[VAL_62:.*]] = llvm.getelementptr %[[VAL_51]]{{\[}}%[[VAL_48]], %[[VAL_60]]] : (!llvm<"[3 x i1]*">, !llvm.i32, !llvm.i64) -> !llvm<"i1*">
+// CHECK:           llvm.store %[[VAL_61]], %[[VAL_62]] : !llvm<"i1*">
+// CHECK:           %[[VAL_63:.*]] = llvm.getelementptr %[[VAL_8]]{{\[}}%[[VAL_48]], %[[VAL_49]]] : (!llvm<"{ i8*, i64, i64, i64 }*">, !llvm.i32, !llvm.i32) -> !llvm<"i64*">
+// CHECK:           %[[VAL_64:.*]] = llvm.load %[[VAL_63]] : !llvm<"i64*">
+// CHECK:           %[[VAL_65:.*]] = llvm.mlir.constant(true) : !llvm.i1
+// CHECK:           %[[VAL_66:.*]] = llvm.getelementptr %[[VAL_51]]{{\[}}%[[VAL_48]], %[[VAL_64]]] : (!llvm<"[3 x i1]*">, !llvm.i32, !llvm.i64) -> !llvm<"i1*">
+// CHECK:           llvm.store %[[VAL_65]], %[[VAL_66]] : !llvm<"i1*">
+// CHECK:           %[[VAL_67:.*]] = llvm.bitcast %[[VAL_1]] : !llvm<"{ i8*, i32, [3 x i1]*, { [3 x i32] } }*"> to !llvm<"i8*">
+// CHECK:           llvm.return
+// CHECK:         ^bb8:
+// CHECK:           %[[VAL_68:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+// CHECK:           %[[VAL_69:.*]] = llvm.mlir.constant(3 : i32) : !llvm.i32
+// CHECK:           %[[VAL_70:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+// CHECK:           %[[VAL_71:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_68]], %[[VAL_69]], %[[VAL_70]]] : (!llvm<"{ i8*, i32, [3 x i1]*, { [3 x i32] } }*">, !llvm.i32, !llvm.i32, !llvm.i32) -> !llvm<"[3 x i32]*">
+// CHECK:           %[[VAL_72:.*]] = llvm.load %[[VAL_71]] : !llvm<"[3 x i32]*">
+// CHECK:           %[[VAL_73:.*]] = llvm.mlir.constant(3 : i32) : !llvm.i32
+// CHECK:           %[[VAL_74:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_9]], %[[VAL_10]]] : (!llvm<"{ i8*, i32, [3 x i1]*, { [3 x i32] } }*">, !llvm.i32, !llvm.i32) -> !llvm<"i32*">
+// CHECK:           llvm.store %[[VAL_73]], %[[VAL_74]] : !llvm<"i32*">
+// CHECK:           %[[VAL_75:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+// CHECK:           %[[VAL_76:.*]] = llvm.mlir.constant(2 : i32) : !llvm.i32
+// CHECK:           %[[VAL_77:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_75]], %[[VAL_76]]] : (!llvm<"{ i8*, i32, [3 x i1]*, { [3 x i32] } }*">, !llvm.i32, !llvm.i32) -> !llvm<"[3 x i1]**">
+// CHECK:           %[[VAL_78:.*]] = llvm.load %[[VAL_77]] : !llvm<"[3 x i1]**">
+// CHECK:           %[[VAL_79:.*]] = llvm.mlir.constant(false) : !llvm.i1
+// CHECK:           %[[VAL_80:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+// CHECK:           %[[VAL_81:.*]] = llvm.getelementptr %[[VAL_78]]{{\[}}%[[VAL_75]], %[[VAL_80]]] : (!llvm<"[3 x i1]*">, !llvm.i32, !llvm.i32) -> !llvm<"i1*">
+// CHECK:           llvm.store %[[VAL_79]], %[[VAL_81]] : !llvm<"i1*">
+// CHECK:           %[[VAL_82:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
+// CHECK:           %[[VAL_83:.*]] = llvm.getelementptr %[[VAL_78]]{{\[}}%[[VAL_75]], %[[VAL_82]]] : (!llvm<"[3 x i1]*">, !llvm.i32, !llvm.i32) -> !llvm<"i1*">
+// CHECK:           llvm.store %[[VAL_79]], %[[VAL_83]] : !llvm<"i1*">
+// CHECK:           %[[VAL_84:.*]] = llvm.mlir.constant(2 : i32) : !llvm.i32
+// CHECK:           %[[VAL_85:.*]] = llvm.getelementptr %[[VAL_78]]{{\[}}%[[VAL_75]], %[[VAL_84]]] : (!llvm<"[3 x i1]*">, !llvm.i32, !llvm.i32) -> !llvm<"i1*">
+// CHECK:           llvm.store %[[VAL_79]], %[[VAL_85]] : !llvm<"i1*">
+// CHECK:           %[[VAL_86:.*]] = llvm.getelementptr %[[VAL_6]]{{\[}}%[[VAL_75]], %[[VAL_76]]] : (!llvm<"{ i8*, i64, i64, i64 }*">, !llvm.i32, !llvm.i32) -> !llvm<"i64*">
+// CHECK:           %[[VAL_87:.*]] = llvm.load %[[VAL_86]] : !llvm<"i64*">
+// CHECK:           %[[VAL_88:.*]] = llvm.mlir.constant(true) : !llvm.i1
+// CHECK:           %[[VAL_89:.*]] = llvm.getelementptr %[[VAL_78]]{{\[}}%[[VAL_75]], %[[VAL_87]]] : (!llvm<"[3 x i1]*">, !llvm.i32, !llvm.i64) -> !llvm<"i1*">
+// CHECK:           llvm.store %[[VAL_88]], %[[VAL_89]] : !llvm<"i1*">
+// CHECK:           %[[VAL_90:.*]] = llvm.bitcast %[[VAL_1]] : !llvm<"{ i8*, i32, [3 x i1]*, { [3 x i32] } }*"> to !llvm<"i8*">
+// CHECK:           %[[VAL_91:.*]] = llvm.extractvalue %[[VAL_72]][0 : i32] : !llvm<"[3 x i32]">
+// CHECK:           %[[VAL_92:.*]] = llvm.extractvalue %[[VAL_72]][1 : i32] : !llvm<"[3 x i32]">
+// CHECK:           %[[VAL_93:.*]] = llvm.extractvalue %[[VAL_72]][2 : i32] : !llvm<"[3 x i32]">
+// CHECK:           %[[VAL_94:.*]] = llvm.call @llhd_suspend(%[[VAL_0]], %[[VAL_90]], %[[VAL_91]], %[[VAL_92]], %[[VAL_93]]) : (!llvm<"i8*">, !llvm<"i8*">, !llvm.i32, !llvm.i32, !llvm.i32) -> !llvm.void
+// CHECK:           llvm.return
+// CHECK:         ^bb9:
+// CHECK:           %[[VAL_95:.*]] = llvm.mlir.constant(4 : i32) : !llvm.i32
+// CHECK:           %[[VAL_96:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_9]], %[[VAL_10]]] : (!llvm<"{ i8*, i32, [3 x i1]*, { [3 x i32] } }*">, !llvm.i32, !llvm.i32) -> !llvm<"i32*">
+// CHECK:           llvm.store %[[VAL_95]], %[[VAL_96]] : !llvm<"i32*">
+// CHECK:           %[[VAL_97:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+// CHECK:           %[[VAL_98:.*]] = llvm.mlir.constant(2 : i32) : !llvm.i32
+// CHECK:           %[[VAL_99:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_97]], %[[VAL_98]]] : (!llvm<"{ i8*, i32, [3 x i1]*, { [3 x i32] } }*">, !llvm.i32, !llvm.i32) -> !llvm<"[3 x i1]**">
+// CHECK:           %[[VAL_100:.*]] = llvm.load %[[VAL_99]] : !llvm<"[3 x i1]**">
+// CHECK:           %[[VAL_101:.*]] = llvm.getelementptr %[[VAL_4]]{{\[}}%[[VAL_97]], %[[VAL_98]]] : (!llvm<"{ i8*, i64, i64, i64 }*">, !llvm.i32, !llvm.i32) -> !llvm<"i64*">
+// CHECK:           %[[VAL_102:.*]] = llvm.load %[[VAL_101]] : !llvm<"i64*">
+// CHECK:           %[[VAL_103:.*]] = llvm.mlir.constant(true) : !llvm.i1
+// CHECK:           %[[VAL_104:.*]] = llvm.getelementptr %[[VAL_100]]{{\[}}%[[VAL_97]], %[[VAL_102]]] : (!llvm<"[3 x i1]*">, !llvm.i32, !llvm.i64) -> !llvm<"i1*">
+// CHECK:           llvm.store %[[VAL_103]], %[[VAL_104]] : !llvm<"i1*">
+// CHECK:           %[[VAL_105:.*]] = llvm.getelementptr %[[VAL_8]]{{\[}}%[[VAL_97]], %[[VAL_98]]] : (!llvm<"{ i8*, i64, i64, i64 }*">, !llvm.i32, !llvm.i32) -> !llvm<"i64*">
+// CHECK:           %[[VAL_106:.*]] = llvm.load %[[VAL_105]] : !llvm<"i64*">
+// CHECK:           %[[VAL_107:.*]] = llvm.mlir.constant(true) : !llvm.i1
+// CHECK:           %[[VAL_108:.*]] = llvm.getelementptr %[[VAL_100]]{{\[}}%[[VAL_97]], %[[VAL_106]]] : (!llvm<"[3 x i1]*">, !llvm.i32, !llvm.i64) -> !llvm<"i1*">
+// CHECK:           llvm.store %[[VAL_107]], %[[VAL_108]] : !llvm<"i1*">
+// CHECK:           %[[VAL_109:.*]] = llvm.getelementptr %[[VAL_6]]{{\[}}%[[VAL_97]], %[[VAL_98]]] : (!llvm<"{ i8*, i64, i64, i64 }*">, !llvm.i32, !llvm.i32) -> !llvm<"i64*">
+// CHECK:           %[[VAL_110:.*]] = llvm.load %[[VAL_109]] : !llvm<"i64*">
+// CHECK:           %[[VAL_111:.*]] = llvm.mlir.constant(true) : !llvm.i1
+// CHECK:           %[[VAL_112:.*]] = llvm.getelementptr %[[VAL_100]]{{\[}}%[[VAL_97]], %[[VAL_110]]] : (!llvm<"[3 x i1]*">, !llvm.i32, !llvm.i64) -> !llvm<"i1*">
+// CHECK:           llvm.store %[[VAL_111]], %[[VAL_112]] : !llvm<"i1*">
+// CHECK:           %[[VAL_113:.*]] = llvm.bitcast %[[VAL_1]] : !llvm<"{ i8*, i32, [3 x i1]*, { [3 x i32] } }*"> to !llvm<"i8*">
+// CHECK:           llvm.return
+// CHECK:         ^bb10:
+// CHECK:           %[[VAL_114:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+// CHECK:           %[[VAL_115:.*]] = llvm.mlir.constant(2 : i32) : !llvm.i32
+// CHECK:           %[[VAL_116:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_114]], %[[VAL_115]]] : (!llvm<"{ i8*, i32, [3 x i1]*, { [3 x i32] } }*">, !llvm.i32, !llvm.i32) -> !llvm<"[3 x i1]**">
+// CHECK:           %[[VAL_117:.*]] = llvm.load %[[VAL_116]] : !llvm<"[3 x i1]**">
+// CHECK:           %[[VAL_118:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+// CHECK:           %[[VAL_119:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i1
+// CHECK:           %[[VAL_120:.*]] = llvm.getelementptr %[[VAL_117]]{{\[}}%[[VAL_114]], %[[VAL_118]]] : (!llvm<"[3 x i1]*">, !llvm.i32, !llvm.i32) -> !llvm<"i1*">
+// CHECK:           llvm.store %[[VAL_119]], %[[VAL_120]] : !llvm<"i1*">
+// CHECK:           %[[VAL_121:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
+// CHECK:           %[[VAL_122:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i1
+// CHECK:           %[[VAL_123:.*]] = llvm.getelementptr %[[VAL_117]]{{\[}}%[[VAL_114]], %[[VAL_121]]] : (!llvm<"[3 x i1]*">, !llvm.i32, !llvm.i32) -> !llvm<"i1*">
+// CHECK:           llvm.store %[[VAL_122]], %[[VAL_123]] : !llvm<"i1*">
+// CHECK:           %[[VAL_124:.*]] = llvm.mlir.constant(2 : i32) : !llvm.i32
+// CHECK:           %[[VAL_125:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i1
+// CHECK:           %[[VAL_126:.*]] = llvm.getelementptr %[[VAL_117]]{{\[}}%[[VAL_114]], %[[VAL_124]]] : (!llvm<"[3 x i1]*">, !llvm.i32, !llvm.i32) -> !llvm<"i1*">
+// CHECK:           llvm.store %[[VAL_125]], %[[VAL_126]] : !llvm<"i1*">
+// CHECK:           llvm.return
+// CHECK:         ^bb11:
 // CHECK:           llvm.return
 // CHECK:         }
-
-llhd.proc @convert_resume (%in0 : !llhd.sig<i1>) -> () {
-  br ^entry
-^entry:
-  %t = llhd.const #llhd.time<0ns, 0d, 1e> : !llhd.time
-  llhd.wait for %t, ^resume
-^resume:
-  llhd.halt
+llhd.proc @convert_resume (%in0 : !llhd.sig<i1>, %in1 : !llhd.sig<i32>) -> (%out0 : !llhd.sig<i20>) {
+    br ^wait_timed
+^wait_timed:
+    %t = llhd.const #llhd.time<0ns, 0d, 1e> : !llhd.time
+    llhd.wait for %t, ^wait_observe
+^wait_observe:
+    llhd.wait (%in0, %out0 : !llhd.sig<i1>, !llhd.sig<i20>), ^wait_timed_observe
+^wait_timed_observe:
+    llhd.wait for %t, (%in1 : !llhd.sig<i32>), ^wait_observe_all
+^wait_observe_all:
+    llhd.wait (%in0, %out0, %in1 : !llhd.sig<i1>, !llhd.sig<i20>, !llhd.sig<i32>), ^end
+^end:
+    llhd.halt
 }
 
 

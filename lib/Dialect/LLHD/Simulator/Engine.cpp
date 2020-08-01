@@ -136,6 +136,9 @@ int Engine::simulate(int n) {
               state->instances[inst].procState->senses[it - sensList.begin()] ==
                   0)
             continue;
+
+          // Invalidate scheduled wakeup
+          state->instances[inst].expectedWakeup = Time();
         }
         wakeupQueue.push_back(inst);
       }
@@ -144,11 +147,10 @@ int Engine::simulate(int n) {
       state->dumpSignal(out, change.first);
     }
 
-    // TODO: don't wakeup a process instances if already woken up by an observed
-    // signal.
     // Add scheduled process resumes to the wakeup queue.
     for (auto inst : pop.scheduled) {
-      wakeupQueue.push_back(inst);
+      if (state->time == state->instances[inst].expectedWakeup)
+        wakeupQueue.push_back(inst);
     }
 
     // Run the instances present in the wakeup queue.

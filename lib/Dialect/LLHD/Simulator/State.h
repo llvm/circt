@@ -153,6 +153,7 @@ struct Instance {
   // The arguments and signals of this instance.
   std::vector<SignalDetail> sensitivityList;
   ProcState *procState;
+  Time expectedWakeup;
 };
 
 /// The simulator's state. It contains the current simulation time, signal

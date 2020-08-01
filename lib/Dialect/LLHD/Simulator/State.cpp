@@ -156,6 +156,7 @@ void State::pushQueue(Time t, int index, int bitOffset, APInt &bytes) {
 void State::pushQueue(Time t, std::string inst) {
   Time newTime = time + t;
   queue.insertOrUpdate(newTime, inst);
+  instances[inst].expectedWakeup = newTime;
 }
 
 int State::addSignal(std::string name, std::string owner) {

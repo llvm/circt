@@ -29,9 +29,7 @@ using namespace circt::llhd;
 
 // Keep a counter to infer a signal's index in his entity's signal table.
 static size_t signalCounter = 0;
-// Keep a counter to infer the resume index after a wait instruction in a
-// process.
-static int resumeCounter = 0;
+
 //===----------------------------------------------------------------------===//
 // Helpers
 //===----------------------------------------------------------------------===//
@@ -339,6 +337,15 @@ static void insertPersistence(LLVMTypeConverter &converter,
     if (auto wait = dyn_cast<WaitOp>(op)) {
       insertComparisonBlock(rewriter, dialect, loc, body, larg, ++waitInd,
                             wait.dest());
+
+      // Insert the resume index update at the wait operation location.
+      rewriter.setInsertionPoint(op);
+      auto procState = op->getParentOfType<LLVM::LLVMFuncOp>().getArgument(1);
+      auto resumeIdxC = rewriter.create<LLVM::ConstantOp>(
+          loc, i32Ty, rewriter.getI32IntegerAttr(waitInd));
+      auto resumeIdxPtr = rewriter.create<LLVM::GEPOp>(
+          loc, i32Ty.getPointerTo(), procState, ArrayRef<Value>({zeroC, oneC}));
+      rewriter.create<LLVM::StoreOp>(op->getLoc(), resumeIdxC, resumeIdxPtr);
     }
   });
 
@@ -511,9 +518,6 @@ struct ProcOpConversion : public ConvertToLLVMPattern {
         getProcPersistenceTy(&getDialect(), typeConverter, procOp));
     auto sigTy = getSigType(&getDialect());
 
-    // Reset the resume index counter.
-    resumeCounter = 0;
-
     // Have an intermediate signature conversion to add the arguments for the
     // state, process-specific state and signal table.
     LLVMTypeConverter::SignatureConversion intermediate(
@@ -644,8 +648,9 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
 
     auto voidTy = getVoidType();
     auto i8PtrTy = getVoidPtrType();
-    auto i1Ty = LLVM::LLVMType::getInt1Ty(&typeConverter.getContext());
-    auto i32Ty = LLVM::LLVMType::getInt32Ty(&typeConverter.getContext());
+    auto i1Ty = LLVM::LLVMType::getInt1Ty(&getDialect());
+    auto i32Ty = LLVM::LLVMType::getInt32Ty(&getDialect());
+    auto i64Ty = LLVM::LLVMType::getInt64Ty(&getDialect());
 
     // Get the llhd_suspend runtime function.
     auto llhdSuspendTy = LLVM::LLVMType::getFunctionTy(
@@ -664,8 +669,6 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
     // Get senses ptr.
     auto zeroC = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(0));
-    auto oneC = rewriter.create<LLVM::ConstantOp>(
-        op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(1));
     auto twoC = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(2));
     auto sensePtrGep = rewriter.create<LLVM::GEPOp>(
@@ -674,48 +677,56 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
     auto sensePtr = rewriter.create<LLVM::LoadOp>(
         op->getLoc(), senseTableTy.getPointerTo(), sensePtrGep);
 
-    // Set senses flags.
-    // TODO: actually handle observed signals
-    for (size_t i = 0, e = senseTableTy.getArrayNumElements(); i < e; ++i) {
-      auto indC = rewriter.create<LLVM::ConstantOp>(
-          op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(i));
+    // Reset sense table, if not all signals are observed.
+    if (waitOp.obs().size() < senseTableTy.getArrayNumElements()) {
       auto zeroB = rewriter.create<LLVM::ConstantOp>(
-          op->getLoc(), i1Ty, rewriter.getI32IntegerAttr(0));
-      auto senseElemPtr = rewriter.create<LLVM::GEPOp>(
-          op->getLoc(), i1Ty.getPointerTo(), sensePtr,
-          ArrayRef<Value>({zeroC, indC}));
-      rewriter.create<LLVM::StoreOp>(op->getLoc(), zeroB, senseElemPtr);
+          op->getLoc(), i1Ty, rewriter.getBoolAttr(false));
+      for (size_t i = 0, e = senseTableTy.getArrayNumElements(); i < e; ++i) {
+        auto indC = rewriter.create<LLVM::ConstantOp>(
+            op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(i));
+        auto senseElemPtr = rewriter.create<LLVM::GEPOp>(
+            op->getLoc(), i1Ty.getPointerTo(), sensePtr,
+            ArrayRef<Value>({zeroC, indC}));
+        rewriter.create<LLVM::StoreOp>(op->getLoc(), zeroB, senseElemPtr);
+      }
     }
 
-    // Get time constats, if present.
-    Value realTime;
-    Value delta;
-    Value eps;
-    if (waitOp.timeMutable().size() > 0) {
-      realTime = rewriter.create<LLVM::ExtractValueOp>(
-          op->getLoc(), i32Ty, transformed.time(),
-          rewriter.getI32ArrayAttr(ArrayRef<int32_t>({0})));
-      delta = rewriter.create<LLVM::ExtractValueOp>(
-          op->getLoc(), i32Ty, transformed.time(),
-          rewriter.getI32ArrayAttr(ArrayRef<int32_t>({1})));
-      eps = rewriter.create<LLVM::ExtractValueOp>(
-          op->getLoc(), i32Ty, transformed.time(),
-          rewriter.getI32ArrayAttr(ArrayRef<int32_t>({2})));
+    // Set sense flags for observed signals.
+    for (auto observation : transformed.obs()) {
+      auto instIndexPtr = rewriter.create<LLVM::GEPOp>(
+          op->getLoc(), i64Ty.getPointerTo(), observation,
+          ArrayRef<Value>({zeroC, twoC}));
+      auto instIndex =
+          rewriter.create<LLVM::LoadOp>(op->getLoc(), i64Ty, instIndexPtr);
+      auto oneB = rewriter.create<LLVM::ConstantOp>(op->getLoc(), i1Ty,
+                                                    rewriter.getBoolAttr(true));
+      auto senseElementPtr = rewriter.create<LLVM::GEPOp>(
+          op->getLoc(), i1Ty.getPointerTo(), sensePtr,
+          ArrayRef<Value>({zeroC, instIndex}));
+      rewriter.create<LLVM::StoreOp>(op->getLoc(), oneB, senseElementPtr);
     }
 
     // Update and store the new resume index in the process state.
     auto procStateBC =
         rewriter.create<LLVM::BitcastOp>(op->getLoc(), i8PtrTy, procState);
-    auto resumeIdxC = rewriter.create<LLVM::ConstantOp>(
-        op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(++resumeCounter));
-    auto resumeIdxPtr =
-        rewriter.create<LLVM::GEPOp>(op->getLoc(), i32Ty.getPointerTo(),
-                                     procState, ArrayRef<Value>({zeroC, oneC}));
-    rewriter.create<LLVM::StoreOp>(op->getLoc(), resumeIdxC, resumeIdxPtr);
 
-    std::array<Value, 5> args({statePtr, procStateBC, realTime, delta, eps});
-    rewriter.create<LLVM::CallOp>(
-        op->getLoc(), voidTy, rewriter.getSymbolRefAttr(llhdSuspendFunc), args);
+    // Spawn scheduled event, if present.
+    if (waitOp.time()) {
+      auto realTime = rewriter.create<LLVM::ExtractValueOp>(
+          op->getLoc(), i32Ty, transformed.time(),
+          rewriter.getI32ArrayAttr(ArrayRef<int32_t>({0})));
+      auto delta = rewriter.create<LLVM::ExtractValueOp>(
+          op->getLoc(), i32Ty, transformed.time(),
+          rewriter.getI32ArrayAttr(ArrayRef<int32_t>({1})));
+      auto eps = rewriter.create<LLVM::ExtractValueOp>(
+          op->getLoc(), i32Ty, transformed.time(),
+          rewriter.getI32ArrayAttr(ArrayRef<int32_t>({2})));
+
+      std::array<Value, 5> args({statePtr, procStateBC, realTime, delta, eps});
+      rewriter.create<LLVM::CallOp>(op->getLoc(), voidTy,
+                                    rewriter.getSymbolRefAttr(llhdSuspendFunc),
+                                    args);
+    }
 
     rewriter.replaceOpWithNewOp<LLVM::ReturnOp>(op, ValueRange());
     return success();
