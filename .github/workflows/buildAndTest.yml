@@ -19,7 +19,7 @@ jobs:
       shell: bash
     - name: Cache LLVM
       id: cache-llvm
-      uses: actions/cache@v1
+      uses: actions/cache@v2
       with:
         path: llvm
         key: ${{ runner.os }}-llvm-install-${{ steps.get-llvm-hash.outputs.hash }}
@@ -48,7 +48,7 @@ jobs:
       shell: bash
     - name: Cache LLVM
       id: cache-llvm
-      uses: actions/cache@v1
+      uses: actions/cache@v2
       with:
         path: llvm
         key: ${{ runner.os }}-llvm-install-${{ steps.get-llvm-hash.outputs.hash }}
