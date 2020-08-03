@@ -1,11 +1,11 @@
 // RUN: llhd-sim %s | FileCheck %s
 
-// CHECK: 0ns 0d 0e  root/twoBytes  0x12345678
-// CHECK-NEXT: 0ns 0d 0e  root/spanBytes  0xffffffff
-// CHECK-NEXT: 0ns 0d 0e  root/sameByte  0xffffffff
-// CHECK-NEXT: 1ns 0d 0e  root/twoBytes  0x1234ffff
-// CHECK-NEXT: 1ns 0d 0e  root/spanBytes  0xfffff00f
-// CHECK-NEXT: 1ns 0d 0e  root/sameByte  0xfffffffc
+// CHECK: 0ps 0d 0e  root/twoBytes  0x12345678
+// CHECK-NEXT: 0ps 0d 0e  root/spanBytes  0xffffffff
+// CHECK-NEXT: 0ps 0d 0e  root/sameByte  0xffffffff
+// CHECK-NEXT: 1000ps 0d 0e  root/twoBytes  0x1234ffff
+// CHECK-NEXT: 1000ps 0d 0e  root/spanBytes  0xfffff00f
+// CHECK-NEXT: 1000ps 0d 0e  root/sameByte  0xfffffffc
 llhd.entity @root () -> () {
   %0 = llhd.const 0x12345678 : i32
   %1 = llhd.const 0xffffffff : i32

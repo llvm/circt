@@ -1,14 +1,14 @@
 // RUN: llhd-sim %s | FileCheck %s
 
-// CHECK: 0ns 0d 0e  root/shr  0x08
-// CHECK-NEXT: 0ns 0d 0e  root/shl  0x01
-// CHECK-NEXT: 1ns 0d 0e  root/shr  0x0c
-// CHECK-NEXT: 1ns 0d 0e  root/shl  0x02
-// CHECK-NEXT: 2ns 0d 0e  root/shr  0x0e
-// CHECK-NEXT: 2ns 0d 0e  root/shl  0x04
-// CHECK-NEXT: 3ns 0d 0e  root/shr  0x0f
-// CHECK-NEXT: 3ns 0d 0e  root/shl  0x08
-// CHECK-NEXT: 4ns 0d 0e  root/shl  0x00
+// CHECK: 0ps 0d 0e  root/shr  0x08
+// CHECK-NEXT: 0ps 0d 0e  root/shl  0x01
+// CHECK-NEXT: 1000ps 0d 0e  root/shr  0x0c
+// CHECK-NEXT: 1000ps 0d 0e  root/shl  0x02
+// CHECK-NEXT: 2000ps 0d 0e  root/shr  0x0e
+// CHECK-NEXT: 2000ps 0d 0e  root/shl  0x04
+// CHECK-NEXT: 3000ps 0d 0e  root/shr  0x0f
+// CHECK-NEXT: 3000ps 0d 0e  root/shl  0x08
+// CHECK-NEXT: 4000ps 0d 0e  root/shl  0x00
 
 llhd.entity @root () -> () {
   %time = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time

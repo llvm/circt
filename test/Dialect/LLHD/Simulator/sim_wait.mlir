@@ -1,23 +1,23 @@
 // RUN: llhd-sim %s | FileCheck %s
 
-// CHECK: 0ns 0d 0e  root/proc/s1  0x00000000
-// CHECK-NEXT: 0ns 0d 0e  root/s1  0x00000000
-// CHECK-NEXT: 0ns 0d 0e  root/proc/s2  0x00000000
-// CHECK-NEXT: 0ns 0d 0e  root/s2  0x00000000
-// CHECK-NEXT: 0ns 0d 2e  root/proc/s1  0x00000001
-// CHECK-NEXT: 0ns 0d 2e  root/s1  0x00000001
-// CHECK-NEXT: 0ns 0d 3e  root/proc/s2  0x00000001
-// CHECK-NEXT: 0ns 0d 3e  root/s2  0x00000001
-// CHECK-NEXT: 0ns 0d 4e  root/proc/s2  0x00000002
-// CHECK-NEXT: 0ns 0d 4e  root/s2  0x00000002
-// CHECK-NEXT: 0ns 0d 5e  root/proc/s2  0x00000003
-// CHECK-NEXT: 0ns 0d 5e  root/s2  0x00000003
-// CHECK-NEXT: 0ns 0d 7e  root/proc/s2  0x00000004
-// CHECK-NEXT: 0ns 0d 7e  root/s2  0x00000004
-// CHECK-NEXT: 0ns 0d 8e  root/proc/s1  0x00000004
-// CHECK-NEXT: 0ns 0d 8e  root/s1  0x00000004
-// CHECK-NEXT: 0ns 0d 10e  root/proc/s2  0x00000005
-// CHECK-NEXT: 0ns 0d 10e  root/s2  0x00000005
+// CHECK: 0ps 0d 0e  root/proc/s1  0x00000000
+// CHECK-NEXT: 0ps 0d 0e  root/s1  0x00000000
+// CHECK-NEXT: 0ps 0d 0e  root/proc/s2  0x00000000
+// CHECK-NEXT: 0ps 0d 0e  root/s2  0x00000000
+// CHECK-NEXT: 0ps 0d 2e  root/proc/s1  0x00000001
+// CHECK-NEXT: 0ps 0d 2e  root/s1  0x00000001
+// CHECK-NEXT: 0ps 0d 3e  root/proc/s2  0x00000001
+// CHECK-NEXT: 0ps 0d 3e  root/s2  0x00000001
+// CHECK-NEXT: 0ps 0d 4e  root/proc/s2  0x00000002
+// CHECK-NEXT: 0ps 0d 4e  root/s2  0x00000002
+// CHECK-NEXT: 0ps 0d 5e  root/proc/s2  0x00000003
+// CHECK-NEXT: 0ps 0d 5e  root/s2  0x00000003
+// CHECK-NEXT: 0ps 0d 7e  root/proc/s2  0x00000004
+// CHECK-NEXT: 0ps 0d 7e  root/s2  0x00000004
+// CHECK-NEXT: 0ps 0d 8e  root/proc/s1  0x00000004
+// CHECK-NEXT: 0ps 0d 8e  root/s1  0x00000004
+// CHECK-NEXT: 0ps 0d 10e  root/proc/s2  0x00000005
+// CHECK-NEXT: 0ps 0d 10e  root/s2  0x00000005
 llhd.entity @root () -> () {
   %0 = llhd.const 0 : i32
   %1 = llhd.sig "s1" %0 : i32
