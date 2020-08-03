@@ -452,8 +452,8 @@ static LLVM::LLVMType convertSigType(SigType type,
 
 static LLVM::LLVMType convertTimeType(TimeType type,
                                       LLVMTypeConverter &converter) {
-  auto i32Ty = LLVM::LLVMType::getInt32Ty(&converter.getContext());
-  return LLVM::LLVMType::getArrayTy(i32Ty, 3);
+  auto i64Ty = LLVM::LLVMType::getInt64Ty(&converter.getContext());
+  return LLVM::LLVMType::getArrayTy(i64Ty, 3);
 }
 
 static LLVM::LLVMType convertPtrType(PtrType type,
@@ -738,7 +738,7 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
 
     // Get the llhd_suspend runtime function.
     auto llhdSuspendTy = LLVM::LLVMType::getFunctionTy(
-        voidTy, {i8PtrTy, i8PtrTy, i32Ty, i32Ty, i32Ty}, /*isVarArg=*/false);
+        voidTy, {i8PtrTy, i8PtrTy, i64Ty, i64Ty, i64Ty}, /*isVarArg=*/false);
     auto module = op->getParentOfType<ModuleOp>();
     auto llhdSuspendFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
                                                "llhd_suspend", llhdSuspendTy);
@@ -797,13 +797,13 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
     // Spawn scheduled event, if present.
     if (waitOp.time()) {
       auto realTime = rewriter.create<LLVM::ExtractValueOp>(
-          op->getLoc(), i32Ty, transformed.time(),
+          op->getLoc(), i64Ty, transformed.time(),
           rewriter.getI32ArrayAttr(ArrayRef<int32_t>({0})));
       auto delta = rewriter.create<LLVM::ExtractValueOp>(
-          op->getLoc(), i32Ty, transformed.time(),
+          op->getLoc(), i64Ty, transformed.time(),
           rewriter.getI32ArrayAttr(ArrayRef<int32_t>({1})));
       auto eps = rewriter.create<LLVM::ExtractValueOp>(
-          op->getLoc(), i32Ty, transformed.time(),
+          op->getLoc(), i64Ty, transformed.time(),
           rewriter.getI32ArrayAttr(ArrayRef<int32_t>({2})));
 
       std::array<Value, 5> args({statePtr, procStateBC, realTime, delta, eps});
@@ -1213,7 +1213,7 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
     // Get or insert the drive library call.
     auto drvFuncTy = LLVM::LLVMType::getFunctionTy(
         voidTy,
-        {i8PtrTy, sigTy.getPointerTo(), i8PtrTy, i64Ty, i32Ty, i32Ty, i32Ty},
+        {i8PtrTy, sigTy.getPointerTo(), i8PtrTy, i64Ty, i64Ty, i64Ty, i64Ty},
         /*isVarArg=*/false);
     auto drvFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
                                        "drive_signal", drvFuncTy);
@@ -1257,13 +1257,13 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
 
     // Get the time values.
     auto realTime = rewriter.create<LLVM::ExtractValueOp>(
-        op->getLoc(), i32Ty, transformed.time(),
+        op->getLoc(), i64Ty, transformed.time(),
         rewriter.getI32ArrayAttr(ArrayRef<int32_t>({0})));
     auto delta = rewriter.create<LLVM::ExtractValueOp>(
-        op->getLoc(), i32Ty, transformed.time(),
+        op->getLoc(), i64Ty, transformed.time(),
         rewriter.getI32ArrayAttr(ArrayRef<int32_t>({1})));
     auto eps = rewriter.create<LLVM::ExtractValueOp>(
-        op->getLoc(), i32Ty, transformed.time(),
+        op->getLoc(), i64Ty, transformed.time(),
         rewriter.getI32ArrayAttr(ArrayRef<int32_t>({2})));
 
     // Define the drive_signal library call arguments.
@@ -1645,10 +1645,10 @@ struct ConstOpConversion : public ConvertToLLVMPattern {
                                        {"us", 1000000},
                                        {"ns", 1000},
                                        {"ps", 1}};
-      unsigned adjusted = map[timeAttr.getTimeUnit()] * timeAttr.getTime();
+      uint64_t adjusted = map[timeAttr.getTimeUnit()] * timeAttr.getTime(),
+               delta = timeAttr.getDelta(), eps = timeAttr.getEps();
       auto denseAttr = DenseElementsAttr::get(
-          VectorType::get(3, rewriter.getI32Type()),
-          {adjusted, timeAttr.getDelta(), timeAttr.getEps()});
+          VectorType::get(3, rewriter.getI64Type()), {adjusted, delta, eps});
       rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(op, timeTy, denseAttr);
       return success();
     }
