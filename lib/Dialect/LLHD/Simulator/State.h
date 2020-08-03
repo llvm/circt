@@ -24,7 +24,7 @@ struct Time {
   Time() = default;
 
   /// Construct with given time values.
-  Time(unsigned time, unsigned delta, unsigned eps)
+  Time(uint64_t time, uint64_t delta, uint64_t eps)
       : time(time), delta(delta), eps(eps) {}
 
   /// Compare the time values in order of time, delta, eps.
@@ -42,9 +42,9 @@ struct Time {
   /// Get the stored time in a printable format.
   std::string dump();
 
-  unsigned time;
-  unsigned delta;
-  unsigned eps;
+  uint64_t time;
+  uint64_t delta;
+  uint64_t eps;
 
 private:
 };
