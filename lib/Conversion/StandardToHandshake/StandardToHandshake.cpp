@@ -33,7 +33,6 @@ using namespace std;
 typedef DenseMap<Block *, vector<Value>> BlockValues;
 typedef DenseMap<Block *, vector<Operation *>> BlockOps;
 
-
 /// Remove basic blocks inside the given FuncOp. This allows the result to be
 /// a valid graph region, since multi-basic block regions are not allowed to
 /// be graph regions currently.
@@ -50,12 +49,10 @@ void removeBasicBlocks(handshake::FuncOp funcOp) {
   }
 
   // Move all operations to entry block and erase other blocks.
-  for (auto &block :
-         llvm::make_early_inc_range(llvm::drop_begin(funcOp, 1))) {
+  for (auto &block : llvm::make_early_inc_range(llvm::drop_begin(funcOp, 1))) {
     entryBlock.splice(--entryBlock.end(), block.getOperations());
   }
-  for (auto &block :
-         llvm::make_early_inc_range(llvm::drop_begin(funcOp, 1))) {
+  for (auto &block : llvm::make_early_inc_range(llvm::drop_begin(funcOp, 1))) {
     block.clear();
     block.dropAllDefinedValueUses();
     for (int i = 0; i < block.getNumArguments(); i++) {
@@ -1413,9 +1410,7 @@ struct HandshakeInsertBufferPass
 struct HandshakeRemoveBlockPass
     : public PassWrapper<HandshakeRemoveBlockPass,
                          OperationPass<handshake::FuncOp>> {
-  void runOnOperation() override {
-    removeBasicBlocks(getOperation());
-  }
+  void runOnOperation() override { removeBasicBlocks(getOperation()); }
 };
 
 struct HandshakePass
