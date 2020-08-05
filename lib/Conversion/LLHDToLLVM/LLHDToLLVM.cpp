@@ -463,6 +463,13 @@ static LLVM::LLVMType convertPtrType(PtrType type,
       .getPointerTo();
 }
 
+static LLVM::LLVMType convertArrayType(ArrayType type,
+                                       LLVMTypeConverter &converter) {
+  auto elementTy =
+      converter.convertType(type.getElementType()).cast<LLVM::LLVMType>();
+  return LLVM::LLVMType::getArrayTy(elementTy, type.getLength());
+}
+
 //===----------------------------------------------------------------------===//
 // Unit conversions
 //===----------------------------------------------------------------------===//
@@ -1664,6 +1671,63 @@ struct ConstOpConversion : public ConvertToLLVMPattern {
 } // namespace
 
 namespace {
+/// Convert an ArrayOp operation to the LLVM dialect. An equivalent and
+/// initialized llvm array type is generated.
+struct ArrayOpConversion : public ConvertToLLVMPattern {
+  explicit ArrayOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(llhd::ArrayOp::getOperationName(), ctx,
+                             typeConverter) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    ArrayOpAdaptor transformed(operands);
+    auto arrayTy = typeConverter.convertType(op->getResult(0).getType());
+
+    Value arr = rewriter.create<LLVM::UndefOp>(op->getLoc(), arrayTy);
+    for (size_t i = 0, e = transformed.values().size(); i < e; ++i) {
+      arr = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), arrayTy, arr,
+                                                 transformed.values()[i],
+                                                 rewriter.getI32ArrayAttr(i));
+    }
+
+    rewriter.replaceOp(op, arr);
+    return success();
+  }
+};
+} // namespace
+
+namespace {
+/// Convert an ArrayUniformOp operation to the LLVM dialect. An equivalent llvm
+/// array type is generated, which values are all initialized to the `init`
+/// operand's value.
+struct ArrayUniformOpConversion : public ConvertToLLVMPattern {
+  explicit ArrayUniformOpConversion(MLIRContext *ctx,
+                                    LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(llhd::ArrayUniformOp::getOperationName(), ctx,
+                             typeConverter) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    ArrayUniformOpAdaptor transformed(operands);
+    auto arrayTy = typeConverter.convertType(op->getResult(0).getType())
+                       .cast<LLVM::LLVMType>();
+
+    Value arr = rewriter.create<LLVM::UndefOp>(op->getLoc(), arrayTy);
+    for (size_t i = 0, e = arrayTy.getArrayNumElements(); i < e; ++i) {
+      arr = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), arrayTy, arr,
+                                                 transformed.init(),
+                                                 rewriter.getI32ArrayAttr(i));
+    }
+
+    rewriter.replaceOp(op, arr);
+    return success();
+  }
+};
+} // namespace
+
+namespace {
 /// Convert an llhd.exts operation. For integers, the value is shifted to the
 /// start index and then truncated to the final length. For signals, a new
 /// subsignal is created, pointing to the defined slice.
@@ -1885,8 +1949,10 @@ void llhd::populateLLHDToLLVMConversionPatterns(
   MLIRContext *ctx = converter.getDialect()->getContext();
 
   // Value manipulation conversion patterns.
-  patterns.insert<ConstOpConversion, ExtractSliceOpConversion,
-                  InsertSliceOpConversion>(ctx, converter);
+  patterns
+      .insert<ConstOpConversion, ArrayOpConversion, ArrayUniformOpConversion,
+              ExtractSliceOpConversion, InsertSliceOpConversion>(ctx,
+                                                                 converter);
 
   // Bitwise conversion patterns.
   patterns.insert<NotOpConversion, ShrOpConversion, ShlOpConversion>(ctx,
@@ -1915,6 +1981,8 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
       [&](TimeType time) { return convertTimeType(time, converter); });
   converter.addConversion(
       [&](PtrType ptr) { return convertPtrType(ptr, converter); });
+  converter.addConversion(
+      [&](ArrayType arr) { return convertArrayType(arr, converter); });
 
   // Apply a partial conversion first, lowering only the instances, to generate
   // the init function.
