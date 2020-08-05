@@ -946,47 +946,73 @@ struct InstOpConversion : public ConvertToLLVMPattern {
       // Index of the signal in the entity's signal table.
       int initCounter = 0;
       // Walk over the entity and generate mallocs for each one of its signals.
-      child.walk([&](Operation *op) -> void {
-        if (auto sigOp = dyn_cast<SigOp>(op)) {
-          // Get index constant of the signal in the entity's signal table.
-          auto indexConst = initBuilder.create<LLVM::ConstantOp>(
-              op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(initCounter));
-          initCounter++;
+      child.walk([&](SigOp op) -> void {
+        // if (auto sigOp = dyn_cast<SigOp>(op)) {
+        auto underlyingTy = typeConverter.convertType(op.init().getType())
+                                .cast<LLVM::LLVMType>();
+        // Get index constant of the signal in the entity's signal table.
+        auto indexConst = initBuilder.create<LLVM::ConstantOp>(
+            op.getLoc(), i32Ty, rewriter.getI32IntegerAttr(initCounter));
+        initCounter++;
 
-          // Clone and insert the operation that defines the signal's init
-          // operand (assmued to be a constant op)
-          auto initDef =
-              initBuilder.insert(sigOp.init().getDefiningOp()->clone())
+        // Clone and insert the operation that defines the signal's init
+        // operand (assmued to be a constant/array op)
+        auto defOp = op.init().getDefiningOp();
+        Value initDef;
+        if (auto arrayUniformOp = dyn_cast<ArrayUniformOp>(defOp)) {
+          auto init =
+              initBuilder.insert(defOp->getOperand(0).getDefiningOp()->clone())
                   ->getResult(0);
-          // Get the required space, in bytes, to store the signal's value.
-          int size = llvm::divideCeil(
-              getStdOrLLVMIntegerWidth(sigOp.init().getType()), 8);
-          auto sizeConst = initBuilder.create<LLVM::ConstantOp>(
-              op->getLoc(), i64Ty, rewriter.getI64IntegerAttr(size));
-          // Malloc double the required space to make sure signal shifts do not
-          // segfault.
-          auto mallocSize = initBuilder.create<LLVM::ConstantOp>(
-              op->getLoc(), i64Ty, rewriter.getI64IntegerAttr(size * 2));
-          std::array<Value, 1> margs({mallocSize});
-          auto mall = initBuilder
-                          .create<LLVM::CallOp>(
-                              op->getLoc(), i8PtrTy,
-                              rewriter.getSymbolRefAttr(mallFunc), margs)
-                          .getResult(0);
-          // Store the initial value.
-          auto bitcast = initBuilder.create<LLVM::BitcastOp>(
-              op->getLoc(),
-              typeConverter.convertType(sigOp.init().getType())
-                  .cast<LLVM::LLVMType>()
-                  .getPointerTo(),
-              mall);
-          initBuilder.create<LLVM::StoreOp>(op->getLoc(), initDef, bitcast);
-
-          std::array<Value, 5> args(
-              {initStatePtr, indexConst, owner, mall, sizeConst});
-          initBuilder.create<LLVM::CallOp>(
-              op->getLoc(), i32Ty, rewriter.getSymbolRefAttr(sigFunc), args);
+          auto def = initBuilder.insert(arrayUniformOp.clone());
+          def->setOperand(0, init);
+          initDef = def->getResult(0);
+        } else if (auto arrayOp = dyn_cast<ArrayOp>(defOp)) {
+          auto def = cast<ArrayOp>(initBuilder.insert(arrayOp.clone()));
+          initBuilder.setInsertionPoint(def.getOperation());
+          for (size_t i = 0, e = def.values().size(); i < e; ++i) {
+            auto clone =
+                initBuilder.insert(def.values()[i].getDefiningOp()->clone())
+                    ->getResult(0);
+            def.setOperand(i, clone);
+          }
+          initBuilder.setInsertionPointAfter(def.getOperation());
+          initDef = def.result();
+        } else {
+          initDef = initBuilder.insert(defOp->clone())->getResult(0);
         }
+
+        // Compute the required space to malloc.
+        auto oneC = initBuilder.create<LLVM::ConstantOp>(
+            op.getLoc(), i32Ty, rewriter.getI32IntegerAttr(1));
+        auto twoC = initBuilder.create<LLVM::ConstantOp>(
+            op.getLoc(), i64Ty, rewriter.getI32IntegerAttr(2));
+        auto nullPtr = initBuilder.create<LLVM::NullOp>(
+            op.getLoc(), underlyingTy.getPointerTo());
+        auto sizeGep = initBuilder.create<LLVM::GEPOp>(
+            op.getLoc(), underlyingTy.getPointerTo(), nullPtr,
+            ArrayRef<Value>(oneC));
+        auto size =
+            initBuilder.create<LLVM::PtrToIntOp>(op.getLoc(), i64Ty, sizeGep);
+        // Malloc double the required space to make sure signal
+        // shifts do not segfault.
+        auto mallocSize =
+            initBuilder.create<LLVM::MulOp>(op.getLoc(), i64Ty, size, twoC);
+        std::array<Value, 1> margs({mallocSize});
+        auto mall = initBuilder
+                        .create<LLVM::CallOp>(
+                            op.getLoc(), i8PtrTy,
+                            rewriter.getSymbolRefAttr(mallFunc), margs)
+                        .getResult(0);
+        // Store the initial value.
+        auto bitcast = initBuilder.create<LLVM::BitcastOp>(
+            op.getLoc(), underlyingTy.getPointerTo(), mall);
+        initBuilder.create<LLVM::StoreOp>(op.getLoc(), initDef, bitcast);
+
+        std::array<Value, 5> args(
+            {initStatePtr, indexConst, owner, mall, size});
+        initBuilder.create<LLVM::CallOp>(
+            op.getLoc(), i32Ty, rewriter.getSymbolRefAttr(sigFunc), args);
+        // }
       });
     } else if (auto proc = module.lookupSymbol<ProcOp>(instOp.callee())) {
       // Handle process instantiation.
@@ -1157,33 +1183,44 @@ struct PrbOpConversion : public ConvertToLLVMPattern {
     auto prbOp = cast<PrbOp>(op);
 
     // Collect the used llvm types.
-    auto finalTy =
-        typeConverter.convertType(prbOp.getType()).cast<LLVM::LLVMType>();
-
-    // Get the amount of bytes to load. An extra byte is always loaded to cover
-    // the case where a subsignal spans halfway in the last byte.
-    int resWidth = getStdOrLLVMIntegerWidth(prbOp.getType());
-    int loadWidth = (llvm::divideCeil(resWidth, 8) + 1) * 8;
-    auto loadTy =
-        LLVM::LLVMType::getIntNTy(&typeConverter.getContext(), loadWidth);
+    auto resTy = prbOp.getType();
+    auto finalTy = typeConverter.convertType(resTy).cast<LLVM::LLVMType>();
 
     // Get the signal details from the signal struct.
     auto sigDetail = getSignalDetail(rewriter, &getDialect(), op->getLoc(),
                                      transformed.signal());
 
-    auto bitcast = rewriter.create<LLVM::BitcastOp>(
-        op->getLoc(), loadTy.getPointerTo(), sigDetail[0]);
-    auto loadSig = rewriter.create<LLVM::LoadOp>(op->getLoc(), loadTy, bitcast);
+    if (resTy.isa<IntegerType>()) {
+      // Get the amount of bytes to load. An extra byte is always loaded to
+      // cover the case where a subsignal spans halfway in the last byte.
+      int resWidth = getStdOrLLVMIntegerWidth(resTy);
+      int loadWidth = (llvm::divideCeil(resWidth, 8) + 1) * 8;
+      auto loadTy =
+          LLVM::LLVMType::getIntNTy(&typeConverter.getContext(), loadWidth);
 
-    // TODO: cover the case of loadTy being larger than 64 bits (zext)
-    // Shift the loaded value by the offset and truncate to the final width.
-    auto trOff =
-        rewriter.create<LLVM::TruncOp>(op->getLoc(), loadTy, sigDetail[1]);
-    auto shifted =
-        rewriter.create<LLVM::LShrOp>(op->getLoc(), loadTy, loadSig, trOff);
-    rewriter.replaceOpWithNewOp<LLVM::TruncOp>(op, finalTy, shifted);
+      auto bitcast = rewriter.create<LLVM::BitcastOp>(
+          op->getLoc(), loadTy.getPointerTo(), sigDetail[0]);
+      auto loadSig =
+          rewriter.create<LLVM::LoadOp>(op->getLoc(), loadTy, bitcast);
 
-    return success();
+      // TODO: cover the case of loadTy being larger than 64 bits (zext)
+      // Shift the loaded value by the offset and truncate to the final width.
+      auto trOff =
+          rewriter.create<LLVM::TruncOp>(op->getLoc(), loadTy, sigDetail[1]);
+      auto shifted =
+          rewriter.create<LLVM::LShrOp>(op->getLoc(), loadTy, loadSig, trOff);
+      rewriter.replaceOpWithNewOp<LLVM::TruncOp>(op, finalTy, shifted);
+
+      return success();
+    }
+    if (auto arrTy = resTy.dyn_cast<ArrayType>()) {
+      auto bitcast = rewriter.create<LLVM::BitcastOp>(
+          op->getLoc(), finalTy.getPointerTo(), sigDetail[0]);
+      rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, finalTy, bitcast);
+
+      return success();
+    }
+    return failure();
   }
 };
 } // namespace
@@ -1227,9 +1264,16 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
 
     // Get the state pointer from the function arguments.
     Value statePtr = op->getParentOfType<LLVM::LLVMFuncOp>().getArgument(0);
-
-    int sigWidth = getStdOrLLVMIntegerWidth(
-        drvOp.signal().getType().dyn_cast<SigType>().getUnderlyingType());
+    auto underlyingTy =
+        drvOp.signal().getType().dyn_cast<SigType>().getUnderlyingType();
+    int sigWidth;
+    if (auto arrTy = underlyingTy.dyn_cast<ArrayType>()) {
+      sigWidth = llvm::divideCeil(
+                     getStdOrLLVMIntegerWidth(arrTy.getElementType()), 8) *
+                 8 * arrTy.getLength();
+    } else {
+      sigWidth = getStdOrLLVMIntegerWidth(underlyingTy);
+    }
 
     // Insert enable comparison. Skip if the enable operand is 0.
     if (auto gate = drvOp.enable()) {
