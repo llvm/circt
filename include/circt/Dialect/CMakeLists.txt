@@ -12,6 +12,7 @@
 add_subdirectory(Calyx)
 add_subdirectory(Comb)
 add_subdirectory(ESI)
+add_subdirectory(HIR)
 add_subdirectory(FIRRTL)
 add_subdirectory(HW)
 add_subdirectory(Handshake)
