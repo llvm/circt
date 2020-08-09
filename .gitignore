@@ -9,3 +9,8 @@ lit.site.cfg.py
 
 # External software
 /ext
+
+#Misc
+.vscode
+compile_commands.json
+.clangd
