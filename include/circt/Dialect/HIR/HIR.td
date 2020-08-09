@@ -27,6 +27,23 @@ def HIR_TimeType : Type<CPred<"$_self.isa<TimeType>()">, "HIR time type">,
 class HIR_Op<string mnemonic, list<OpTrait> traits = []> :
         Op<HIRR_Dialect, mnemonic, traits>;
 
+def HIR_Def_Time_Var_Op : HIR_Op<"def_time_var", [NoSideEffect]> {
+    let summary = "Op defines a new time var.";
+    let description = [{
+        This op defines a new time variable. 
+        Example:
+
+        ```mlir
+        %t = hir.def_time_var: hir.time
+        ```
+    }];
+
+    let arguments = (ins );
+    let results = (outs HIR_TimeType:$res);
+
+    let assemblyFormat = [{attr-dict `:` type($res)}];
+}
+
 def HIR_Duplicate_Time_Var_Op : HIR_Op<"duplicate_time_var", [NoSideEffect]> {
     let summary = "Op duplicates a time var.";
     let description = [{
@@ -47,22 +64,24 @@ def HIR_Duplicate_Time_Var_Op : HIR_Op<"duplicate_time_var", [NoSideEffect]> {
     let assemblyFormat = [{$input attr-dict `:` type($input) `->` type($res)}];
 }
 
-
-def HIR_Def_Time_Var_Op : HIR_Op<"def_time_var", [NoSideEffect]> {
-    let summary = "Op defines a new time var.";
+def HIR_Sync_Time_Op : HIR_Op<"sync_time", [NoSideEffect]> {
+    let summary = "synchronize two time domains.";
     let description = [{
-        This op defines a new time variable. 
+        This op synchronizes two time domains. Until the specified instant
+        does not occur in both time zones, the time zones will wait.
+
         Example:
 
         ```mlir
-        %t = hir.def_time_var: hir.time
+        hir.sync_time(%t1,%t2): (hir.time,hir.time)
         ```
     }];
 
-    let arguments = (ins );
-    let results = (outs HIR_TimeType:$res);
+    let arguments = (ins HIR_TimeType:$inp1,HIR_TimeType:$inp2);
+    let results = (outs );
 
-    let assemblyFormat = [{attr-dict `:` type($res)}];
+    let assemblyFormat = [{`(`$inp1 `,` $inp2 `)` attr-dict `:` `(` type($inp1)
+    `,` type($inp2) `)`}];
 }
 
 #endif // HIR_OPS
