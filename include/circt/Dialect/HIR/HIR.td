@@ -59,7 +59,7 @@ def HIR_Duplicate_Time_Var_Op : HIR_Op<"duplicate_time_var", [NoSideEffect]> {
         ```
   }];
 
-  let arguments = (ins HIR_TimeType : $input, I32Attr : $dummy_attr);
+  let arguments = (ins HIR_TimeType : $input);
   let results = (outs HIR_TimeType : $res);
 
   let assemblyFormat = [{$input attr-dict `:` type($input) `->` type($res)}];
@@ -95,7 +95,8 @@ def HIR_Mem_Read_Op : HIR_Op<"mem_read", [NoSideEffect]> {
         ```
   }];
 
-  let arguments = (ins HIR_MemoryInterfaceType:$mem, I32:$addr, HIR_TimeType : $at);
+  let arguments = (ins HIR_MemoryInterfaceType:$mem, I32:$addr, HIR_TimeType :
+  $at, I32Attr:$num_input_operands);
   let results = (outs AnyType: $res);
   let parser = [{return hir::parseMem_Read_Op(parser,result);}];
   let printer = [{return hir::print(p,*this);}];

@@ -40,6 +40,9 @@ void HIRDialect::printType(Type type, DialectAsmPrinter &printer) const {
   if (TimeType time = type.dyn_cast<TimeType>()) {
     printer << time.getKeyword();
   }
+  if (MemoryInterfaceType mem_interface = type.dyn_cast<MemoryInterfaceType>()) {
+    printer << mem_interface.getKeyword();
+  }
 }
 
 

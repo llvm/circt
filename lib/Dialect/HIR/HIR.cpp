@@ -23,7 +23,7 @@ static void print(mlir::OpAsmPrinter &printer, Mem_Read_Op op) {
   printer << "hir.mem_read"
           << " " << op.mem() << "[" << op.addr() << "]"
           << " at " <<op.at()
-          << " : " << op.mem().getType() <<"->" <<op.res().getType();
+          << " : " << op.mem().getType() <<" -> " <<op.res().getType();
 }
 
 static mlir::ParseResult parseMem_Read_Op(mlir::OpAsmParser &parser,
@@ -51,6 +51,8 @@ static mlir::ParseResult parseMem_Read_Op(mlir::OpAsmParser &parser,
   if (parser.resolveOperand(atRawOperand, odsBuildableTimeType, result.operands))
     return mlir::failure();
 
+  auto num_input_operands_attr=parser.getBuilder().getIntegerAttr(odsBuildableI32Type,2);
+  result.attributes.set("num_input_operands",num_input_operands_attr);
   result.addTypes(resTypes);
 }
 
