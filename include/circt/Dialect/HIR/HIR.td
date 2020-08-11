@@ -35,7 +35,7 @@ def HIR_Def_Time_Var_Op : HIR_Op<"def_time_var", [NoSideEffect]> {
         Example:
 
         ```mlir
-        %t = hir.def_time_var: hir.time
+        %t = hir.def_time_var: !hir.time
         ```
     }];
 
@@ -54,15 +54,13 @@ def HIR_Duplicate_Time_Var_Op : HIR_Op<"duplicate_time_var", [NoSideEffect]> {
 
     Example:
 
-        ```mlir % t2 = hir.duplicate_time_var %
-    t1: hir.time->hir.time
-        ```
+        ```mlir % t2 = hir.duplicate_time_var %t1 : !hir.time```
   }];
 
   let arguments = (ins HIR_TimeType : $input);
   let results = (outs HIR_TimeType : $res);
 
-  let assemblyFormat = [{$input attr-dict `:` type($input) `->` type($res)}];
+  let assemblyFormat = [{$input attr-dict `:` type($res)}];
 }
 
 def HIR_Sync_Time_Op : HIR_Op<"sync_time", [NoSideEffect]> {
@@ -74,7 +72,7 @@ def HIR_Sync_Time_Op : HIR_Op<"sync_time", [NoSideEffect]> {
 
     Example:
 
-        ```mlir hir.sync_time(% t1, % t2): (hir.time, hir.time)
+        ```mlir hir.sync_time(% t1, % t2): (!hir.time, !hir.time)
         ```
   }];
 
@@ -85,20 +83,60 @@ def HIR_Sync_Time_Op : HIR_Op<"sync_time", [NoSideEffect]> {
     `,` type($inp2) `)`}];
 }
 
-def HIR_Mem_Read_Op : HIR_Op<"mem_read", [NoSideEffect]> {
+def HIR_MemReadOp : HIR_Op<"mem_read", [NoSideEffect]> {
   let summary = "read from a memory interface.";
   let description = [{
     This Op reads from a memory interface 
     Example:
 
-        ```mlir hir.mem_read %A[%x] at %t: (hir.mem_interface) -> hir.int
+        ```mlir hir.mem_read %A[%x] at %t: (hir.mem_interface) -> !hir.int
         ```
   }];
 
   let arguments = (ins HIR_MemoryInterfaceType:$mem, I32:$addr, HIR_TimeType :
   $at, I32Attr:$num_input_operands);
   let results = (outs AnyType: $res);
-  let parser = [{return hir::parseMem_Read_Op(parser,result);}];
-  let printer = [{return hir::print(p,*this);}];
+  let parser = [{return parseMemReadOp(parser,result);}];
+  let printer = [{return print(p,*this);}];
+}
+
+def HIR_For_Op : HIR_Op<"mem_read", 
+    [ImplicitHIRTerminator, RecursiveSideEffects]> {
+  let summary = "for operation";
+  let description = [{
+    This op implements a sequential for loop
+        ```mlir
+     hir.for %i = 0 to %N step 1 at iter_time(%ti=%t tstep 2) {
+        hir.for %j = %lb to %ub step %s at iter_time(%tj=%ti) 
+          iter_args(%xx=%x at %tj){   
+            %yy = hir.delay %xx by 1 at %tj
+            hir.yield %yy at %tj+1;
+        }
+      }
+    }
+    ```
+  }];
+
+  let arguments = (ins AnyType: $lb, AnyType: $ub, AnyType: $step, 
+    HIR_TimeType:$at, I32Attr: $tstep);
+  let regions = (region SizedRegion<1>:$region);
+
+  let extraClassDeclaration = [{
+    Value getInductionVar() { return getBody()->getArgument(0); }
+
+    unsigned int getTstep() {
+      return getAttr("tstep").cast<IntegerAttr>().getInt();
+    }
+
+    Block *getBody(unsigned idx = 0) {
+      Region &region = this->getOperation()->getRegion(idx);
+      assert(!region.empty() && "unexpected empty region");
+      return &region.front();
+    }
+
+    }];
+
+  let hasCanonicalizer = 1;
+  let hasFolder = 1;
 }
 #endif // HIR_OPS

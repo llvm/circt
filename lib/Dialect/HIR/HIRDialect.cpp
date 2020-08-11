@@ -9,9 +9,10 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
 
-namespace mlir {
-namespace hir {
-HIRDialect::HIRDialect(mlir::MLIRContext *context)
+using namespace mlir ;
+using namespace hir ;
+
+HIRDialect::HIRDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context) {
   addTypes<TimeType, MemoryInterfaceType>();
   addOperations<
@@ -22,30 +23,25 @@ HIRDialect::HIRDialect(mlir::MLIRContext *context)
 
 // Types
 Type HIRDialect::parseType(DialectAsmParser &parser) const {
-  llvm::StringRef typeKeyword;
-  if (parser.parseKeyword(&typeKeyword)) {
+  StringRef typeKeyword;
+  if (parser.parseKeyword(&typeKeyword))
     return parser.emitError(parser.getNameLoc(), "unknown hir type"), Type();
-  }
 
   if (typeKeyword == TimeType::getKeyword()) {
     return TimeType::get(getContext());
   }
-  if (typeKeyword == MemoryInterfaceType::getKeyword()) {
+  else if (typeKeyword == MemoryInterfaceType::getKeyword()) {
     return MemoryInterfaceType::get(getContext());
   }
+
   return parser.emitError(parser.getNameLoc(), "unknown hir type"), Type();
 }
 
 void HIRDialect::printType(Type type, DialectAsmPrinter &printer) const {
-  if (TimeType time = type.dyn_cast<TimeType>()) {
-    printer << time.getKeyword();
+  if (TimeType hirTime = type.dyn_cast<TimeType>()) {
+    printer << hirTime.getKeyword();
   }
-  if (MemoryInterfaceType mem_interface = type.dyn_cast<MemoryInterfaceType>()) {
+  else if (MemoryInterfaceType mem_interface = type.dyn_cast<MemoryInterfaceType>()) {
     printer << mem_interface.getKeyword();
   }
 }
-
-
-
-} // namespace hir
-} // namespace mlir
