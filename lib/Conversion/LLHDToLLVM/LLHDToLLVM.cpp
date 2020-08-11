@@ -2027,8 +2027,8 @@ struct DynExtractSliceOpConversion : public ConvertToLLVMPattern {
       // ExtractValueOp only takes attribute arguments for the indexes, so we
       // need to store the array into the stack and use gep+load to get the
       // elements dynamically.
-      auto targetPtr = rewriter.create<LLVM::AllocaOp>(op->getLoc(), targetTy,
-                                                       ArrayRef<Value>(oneC));
+      auto targetPtr = rewriter.create<LLVM::AllocaOp>(
+          op->getLoc(), targetTy.getPointerTo(), ArrayRef<Value>(oneC));
       rewriter.create<LLVM::StoreOp>(op->getLoc(), transformed.target(),
                                      targetPtr);
       Value slice = rewriter.create<LLVM::UndefOp>(op->getLoc(), llvmArrTy);
