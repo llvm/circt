@@ -96,12 +96,35 @@ def HIR_MemReadOp : HIR_Op<"mem_read", [NoSideEffect]> {
   let arguments = (ins HIR_MemoryInterfaceType:$mem, I32:$addr, HIR_TimeType :
   $at, I32Attr:$num_input_operands);
   let results = (outs AnyType: $res);
-  let parser = [{return parseMemReadOp(parser,result);}];
-  let printer = [{return print(p,*this);}];
+  let parser = [{return parse$cppClass(parser,result);}];
+  let printer = [{return print$cppClass(p,*this);}];
 }
 
-def HIR_For_Op : HIR_Op<"mem_read", 
-    [ImplicitHIRTerminator, RecursiveSideEffects]> {
+
+def ImplicitTerminator
+    : SingleBlockImplicitTerminator<"TerminatorOp">;
+ 
+def TerminatorOp :
+    HIR_Op<"terminator", [NoSideEffect, Terminator]> {
+  let summary = "HIR terminator operation";
+  let description = [{
+    Syntax:
+
+    ```
+    operation ::= `"hir.terminator"() : () -> ()`
+    ```
+     }];
+
+  // No custom parsing/printing form.
+  let parser = ?;
+  let printer = ?;
+
+  // Fully specified by traits.
+  let verifier = ?;
+}
+
+def HIR_ForOp : HIR_Op<"for", 
+    [ImplicitTerminator, RecursiveSideEffects]> {
   let summary = "for operation";
   let description = [{
     This op implements a sequential for loop
@@ -112,31 +135,19 @@ def HIR_For_Op : HIR_Op<"mem_read",
             %yy = hir.delay %xx by 1 at %tj
             hir.yield %yy at %tj+1;
         }
-      }
-    }
+     }
     ```
   }];
 
   let arguments = (ins AnyType: $lb, AnyType: $ub, AnyType: $step, 
-    HIR_TimeType:$at, I32Attr: $tstep);
+    HIR_TimeType:$at, Optional<AnyType>: $tstep, OptionalAttr<BoolAttr>:$hasTstep);
   let regions = (region SizedRegion<1>:$region);
 
   let extraClassDeclaration = [{
     Value getInductionVar() { return getBody()->getArgument(0); }
-
-    unsigned int getTstep() {
-      return getAttr("tstep").cast<IntegerAttr>().getInt();
-    }
-
-    Block *getBody(unsigned idx = 0) {
-      Region &region = this->getOperation()->getRegion(idx);
-      assert(!region.empty() && "unexpected empty region");
-      return &region.front();
-    }
-
-    }];
-
-  let hasCanonicalizer = 1;
-  let hasFolder = 1;
+    Value getIterTimeVar() { return getBody()->getArgument(1); }
+  }];
+  let parser = [{return parse$cppClass(parser,result);}];
+  let printer = [{return print$cppClass(p,*this);}];
 }
 #endif // HIR_OPS

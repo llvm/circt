@@ -1,5 +1,5 @@
-#include "circt/Dialect/HIR/HIR.h"
 #include "circt/Dialect/HIR/HIRDialect.h"
+#include "circt/Dialect/HIR/HIR.h"
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
@@ -9,8 +9,8 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
 
-using namespace mlir ;
-using namespace hir ;
+using namespace mlir;
+using namespace hir;
 
 HIRDialect::HIRDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context) {
@@ -29,8 +29,7 @@ Type HIRDialect::parseType(DialectAsmParser &parser) const {
 
   if (typeKeyword == TimeType::getKeyword()) {
     return TimeType::get(getContext());
-  }
-  else if (typeKeyword == MemoryInterfaceType::getKeyword()) {
+  } else if (typeKeyword == MemoryInterfaceType::getKeyword()) {
     return MemoryInterfaceType::get(getContext());
   }
 
@@ -40,8 +39,8 @@ Type HIRDialect::parseType(DialectAsmParser &parser) const {
 void HIRDialect::printType(Type type, DialectAsmPrinter &printer) const {
   if (TimeType hirTime = type.dyn_cast<TimeType>()) {
     printer << hirTime.getKeyword();
-  }
-  else if (MemoryInterfaceType mem_interface = type.dyn_cast<MemoryInterfaceType>()) {
+  } else if (MemoryInterfaceType mem_interface =
+                 type.dyn_cast<MemoryInterfaceType>()) {
     printer << mem_interface.getKeyword();
   }
 }
