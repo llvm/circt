@@ -449,6 +449,21 @@ static Value zextByOne(Location loc, ConversionPatternRewriter &rewriter,
   return rewriter.create<LLVM::ZExtOp>(loc, zextTy, value);
 }
 
+/// Adjust the bithwidth of value to be the same as targetTy's bitwidth.
+static Value adjustBitWidth(Location loc, ConversionPatternRewriter &rewriter,
+                            Type targetTy, Value value) {
+  auto valueWidth = getStdOrLLVMIntegerWidth(value.getType());
+  auto targetWidth = getStdOrLLVMIntegerWidth(targetTy);
+
+  if (valueWidth < targetWidth)
+    return rewriter.create<LLVM::ZExtOp>(loc, targetTy, value);
+
+  if (valueWidth > targetWidth)
+    return rewriter.create<LLVM::TruncOp>(loc, targetTy, value);
+
+  return value;
+}
+
 //===----------------------------------------------------------------------===//
 // Type conversions
 //===----------------------------------------------------------------------===//
@@ -1226,10 +1241,8 @@ struct PrbOpConversion : public ConvertToLLVMPattern {
       auto loadSig =
           rewriter.create<LLVM::LoadOp>(op->getLoc(), loadTy, bitcast);
 
-      // TODO: cover the case of loadTy being larger than 64 bits (zext)
       // Shift the loaded value by the offset and truncate to the final width.
-      auto trOff =
-          rewriter.create<LLVM::TruncOp>(op->getLoc(), loadTy, sigDetail[1]);
+      auto trOff = adjustBitWidth(op->getLoc(), rewriter, loadTy, sigDetail[1]);
       auto shifted =
           rewriter.create<LLVM::LShrOp>(op->getLoc(), loadTy, loadSig, trOff);
       rewriter.replaceOpWithNewOp<LLVM::TruncOp>(op, finalTy, shifted);
@@ -1559,12 +1572,12 @@ struct ShrOpConversion : public ConvertToLLVMPattern {
       auto tmpTy = LLVM::LLVMType::getIntNTy(&typeConverter.getContext(), full);
 
       // Extend all operands the combined width.
-      auto baseZext = rewriter.create<LLVM::ZExtOp>(op->getLoc(), tmpTy,
-                                                    transformed.base());
-      auto hdnZext = rewriter.create<LLVM::ZExtOp>(op->getLoc(), tmpTy,
-                                                   transformed.hidden());
-      auto amntZext = rewriter.create<LLVM::ZExtOp>(op->getLoc(), tmpTy,
-                                                    transformed.amount());
+      auto baseZext =
+          adjustBitWidth(op->getLoc(), rewriter, tmpTy, transformed.base());
+      auto hdnZext =
+          adjustBitWidth(op->getLoc(), rewriter, tmpTy, transformed.hidden());
+      auto amntZext =
+          adjustBitWidth(op->getLoc(), rewriter, tmpTy, transformed.amount());
 
       // Shift the hidden operand such that it can be prepended to the full
       // value.
@@ -1596,8 +1609,8 @@ struct ShrOpConversion : public ConvertToLLVMPattern {
           getSignalDetail(rewriter, &getDialect(), op->getLoc(),
                           transformed.base(), /*extractIndices=*/true);
 
-      auto zextAmnt = rewriter.create<LLVM::ZExtOp>(op->getLoc(), i64Ty,
-                                                    transformed.amount());
+      auto zextAmnt =
+          adjustBitWidth(op->getLoc(), rewriter, i64Ty, transformed.amount());
 
       // Adjust slice start point from signal's offset.
       auto adjustedAmnt =
@@ -1658,11 +1671,11 @@ struct ShlOpConversion : public ConvertToLLVMPattern {
 
     // Extend all operands to the combined width.
     auto baseZext =
-        rewriter.create<LLVM::ZExtOp>(op->getLoc(), tmpTy, transformed.base());
-    auto hdnZext = rewriter.create<LLVM::ZExtOp>(op->getLoc(), tmpTy,
-                                                 transformed.hidden());
-    auto amntZext = rewriter.create<LLVM::ZExtOp>(op->getLoc(), tmpTy,
-                                                  transformed.amount());
+        adjustBitWidth(op->getLoc(), rewriter, tmpTy, transformed.base());
+    auto hdnZext =
+        adjustBitWidth(op->getLoc(), rewriter, tmpTy, transformed.hidden());
+    auto amntZext =
+        adjustBitWidth(op->getLoc(), rewriter, tmpTy, transformed.amount());
 
     // Shift the base operand such that it can be prepended to the full value.
     auto hdnWidthConst = rewriter.create<LLVM::ConstantOp>(
@@ -1833,7 +1846,7 @@ static Value shiftArraySigPointer(Location loc,
   auto elemPtrTy = arrTy.getArrayElementType().getPointerTo();
   auto i8PtrTy = LLVM::LLVMType::getInt8PtrTy(dialect->getContext());
   auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect->getContext());
-  //
+
   auto zeroC = rewriter.create<LLVM::ConstantOp>(loc, i32Ty,
                                                  rewriter.getI32IntegerAttr(0));
   auto zextIndex = zextByOne(loc, rewriter, index);
@@ -1870,14 +1883,8 @@ struct ExtractSliceOpConversion : public ConvertToLLVMPattern {
     if (auto retTy = extsOp.result().getType().dyn_cast<IntegerType>()) {
       auto resTy = typeConverter.convertType(extsOp.result().getType());
       // Adjust the index const for shifting.
-      Value adjusted;
-      if (getStdOrLLVMIntegerWidth(extsOp.target().getType()) < 64) {
-        adjusted = rewriter.create<LLVM::TruncOp>(
-            op->getLoc(), transformed.target().getType(), startConst);
-      } else {
-        adjusted = rewriter.create<LLVM::ZExtOp>(
-            op->getLoc(), transformed.target().getType(), startConst);
-      }
+      Value adjusted = adjustBitWidth(
+          op->getLoc(), rewriter, transformed.target().getType(), startConst);
 
       // Shift right by the index.
       auto shr = rewriter.create<LLVM::LShrOp>(op->getLoc(),
@@ -1961,14 +1968,9 @@ struct DynExtractSliceOpConversion : public ConvertToLLVMPattern {
     if (auto retTy = extsOp.result().getType().dyn_cast<IntegerType>()) {
       auto resTy = typeConverter.convertType(extsOp.result().getType());
       // Adjust the index const for shifting.
-      Value adjusted;
-      if (getStdOrLLVMIntegerWidth(extsOp.target().getType()) < 64) {
-        adjusted = rewriter.create<LLVM::TruncOp>(
-            op->getLoc(), transformed.target().getType(), transformed.start());
-      } else {
-        adjusted = rewriter.create<LLVM::ZExtOp>(
-            op->getLoc(), transformed.target().getType(), transformed.start());
-      }
+      Value adjusted =
+          adjustBitWidth(op->getLoc(), rewriter, transformed.target().getType(),
+                         transformed.start());
 
       // Shift right by the index.
       auto shr = rewriter.create<LLVM::LShrOp>(op->getLoc(),
@@ -1986,8 +1988,8 @@ struct DynExtractSliceOpConversion : public ConvertToLLVMPattern {
 
       if (resTy.getUnderlyingType().isa<IntegerType>()) {
 
-        auto zextStart = rewriter.create<LLVM::ZExtOp>(op->getLoc(), i64Ty,
-                                                       transformed.start());
+        auto zextStart =
+            adjustBitWidth(op->getLoc(), rewriter, i64Ty, transformed.start());
         // Adjust the slice starting point by the signal's offset.
         auto adjustedStart =
             rewriter.create<LLVM::AddOp>(op->getLoc(), sigDetail[1], zextStart);
@@ -2189,14 +2191,9 @@ struct InsertSliceOpConversion : public ConvertToLLVMPattern {
     if (inssOp.result().getType().isa<IntegerType>()) {
       auto startConst = rewriter.create<LLVM::ConstantOp>(op->getLoc(), indexTy,
                                                           inssOp.startAttr());
-      Value adjusted;
-      if (getStdOrLLVMIntegerWidth(inssOp.result().getType()) < 64) {
-        adjusted = rewriter.create<LLVM::TruncOp>(
-            op->getLoc(), transformed.target().getType(), startConst);
-      } else {
-        adjusted = rewriter.create<LLVM::ZExtOp>(
-            op->getLoc(), transformed.target().getType(), startConst);
-      }
+      Value adjusted = adjustBitWidth(
+          op->getLoc(), rewriter, transformed.target().getType(), startConst);
+
       // Generate a mask to set the affected bits.
       auto width = getStdOrLLVMIntegerWidth(inssOp.target().getType());
       auto sliceWidth = getStdOrLLVMIntegerWidth(inssOp.slice().getType());
@@ -2218,8 +2215,9 @@ struct InsertSliceOpConversion : public ConvertToLLVMPattern {
               IntegerType::get(width, rewriter.getContext()), mask));
 
       // Adjust the slice to the start index.
-      auto sliceZext = rewriter.create<LLVM::ZExtOp>(
-          op->getLoc(), transformed.target().getType(), transformed.slice());
+      auto sliceZext =
+          adjustBitWidth(op->getLoc(), rewriter, transformed.target().getType(),
+                         transformed.slice());
       auto sliceShift = rewriter.create<LLVM::ShlOp>(
           op->getLoc(), transformed.target().getType(), sliceZext, adjusted);
       auto sliceMasked = rewriter.create<LLVM::OrOp>(
