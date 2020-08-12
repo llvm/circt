@@ -1818,6 +1818,14 @@ struct ArrayUniformOpConversion : public ConvertToLLVMPattern {
 // Extraction operations converison
 //===----------------------------------------------------------------------===//
 
+static Value extractInt(Location loc, ConversionPatternRewriter &rewriter,
+                        LLVM::LLVMType resultTy, Value value, Value start) {
+  auto adjustedStart = adjustBitWidth(loc, rewriter, value.getType(), start);
+  auto shiftValue =
+      rewriter.create<LLVM::LShrOp>(loc, value.getType(), value, adjustedStart);
+  return rewriter.create<LLVM::TruncOp>(loc, resultTy, shiftValue);
+}
+
 static std::pair<Value, Value>
 shiftIntegerSigPointer(Location loc, LLVM::LLVMDialect *dialect,
                        ConversionPatternRewriter &rewriter, Value pointer,
@@ -1881,17 +1889,10 @@ struct ExtractSliceOpConversion : public ConvertToLLVMPattern {
                                                         extsOp.startAttr());
 
     if (auto retTy = extsOp.result().getType().dyn_cast<IntegerType>()) {
-      auto resTy = typeConverter.convertType(extsOp.result().getType());
-      // Adjust the index const for shifting.
-      Value adjusted = adjustBitWidth(
-          op->getLoc(), rewriter, transformed.target().getType(), startConst);
-
-      // Shift right by the index.
-      auto shr = rewriter.create<LLVM::LShrOp>(op->getLoc(),
-                                               transformed.target().getType(),
-                                               transformed.target(), adjusted);
-      // Truncate to the slice length.
-      rewriter.replaceOpWithNewOp<LLVM::TruncOp>(op, resTy, shr);
+      auto resTy = typeConverter.convertType(extsOp.result().getType())
+                       .cast<LLVM::LLVMType>();
+      rewriter.replaceOp(op, extractInt(op->getLoc(), rewriter, resTy,
+                                        transformed.target(), startConst));
 
       return success();
     }
@@ -1966,18 +1967,11 @@ struct DynExtractSliceOpConversion : public ConvertToLLVMPattern {
     auto i64Ty = LLVM::LLVMType::getInt64Ty(&typeConverter.getContext());
 
     if (auto retTy = extsOp.result().getType().dyn_cast<IntegerType>()) {
-      auto resTy = typeConverter.convertType(extsOp.result().getType());
-      // Adjust the index const for shifting.
-      Value adjusted =
-          adjustBitWidth(op->getLoc(), rewriter, transformed.target().getType(),
-                         transformed.start());
-
-      // Shift right by the index.
-      auto shr = rewriter.create<LLVM::LShrOp>(op->getLoc(),
-                                               transformed.target().getType(),
-                                               transformed.target(), adjusted);
-      // Truncate to the slice length.
-      rewriter.replaceOpWithNewOp<LLVM::TruncOp>(op, resTy, shr);
+      auto resTy = typeConverter.convertType(extsOp.result().getType())
+                       .cast<LLVM::LLVMType>();
+      rewriter.replaceOp(op,
+                         extractInt(op->getLoc(), rewriter, resTy,
+                                    transformed.target(), transformed.start()));
 
       return success();
     }
