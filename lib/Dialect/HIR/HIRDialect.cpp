@@ -27,11 +27,11 @@ Type HIRDialect::parseType(DialectAsmParser &parser) const {
   if (parser.parseKeyword(&typeKeyword))
     return parser.emitError(parser.getNameLoc(), "unknown hir type"), Type();
 
-  if (typeKeyword == TimeType::getKeyword()) {
+  if (typeKeyword == TimeType::getKeyword()) 
     return TimeType::get(getContext());
-  } else if (typeKeyword == MemoryInterfaceType::getKeyword()) {
+
+  if (typeKeyword == MemoryInterfaceType::getKeyword()) 
     return MemoryInterfaceType::get(getContext());
-  }
 
   return parser.emitError(parser.getNameLoc(), "unknown hir type"), Type();
 }

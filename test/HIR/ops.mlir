@@ -8,7 +8,7 @@ func @foo() {
   %u = "dummy_op"() : () -> (i32)
   %s = "dummy_op"() : () -> (i32)
   %ts = "dummy_op"() : () -> (i32)
-  hir.for %i = %l to %u step %s iter_time(%ti = %t tstep %ts):i32{
+  hir.for %i = %l to %u step %s iter_time(%ti = %t tstep %ts) : i32{
     // CHECK: %[[ADDR:.*]] = "dummy_op"() 
     %x = "dummy_op"() : () -> (i32)
     // CHECK: %[[MEM:.*]] = "mem_def"() 

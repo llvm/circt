@@ -32,11 +32,10 @@ def HIR_Def_Time_Var_Op : HIR_Op<"def_time_var", [NoSideEffect]> {
   let summary = "Op defines a new time var.";
   let description = [{
         This op defines a new time variable. 
+
         Example:
 
-        ```mlir
-        %t = hir.def_time_var: !hir.time
-        ```
+        ```mlir %t = hir.def_time_var: !hir.time```
     }];
 
   let arguments = (ins);
@@ -48,9 +47,8 @@ def HIR_Def_Time_Var_Op : HIR_Op<"def_time_var", [NoSideEffect]> {
 def HIR_Duplicate_Time_Var_Op : HIR_Op<"duplicate_time_var", [NoSideEffect]> {
   let summary = "Op duplicates a time var.";
   let description = [{
-    This op duplicates a time
-        var.Semantics are same as using original time var but in the hardware a
-            separate path is used to propagate the new time var.
+    This op duplicates a time var. Semantics are same as using original time var
+    but in the hardware a separate path is used to propagate the new time var.
 
     Example:
 
@@ -66,14 +64,12 @@ def HIR_Duplicate_Time_Var_Op : HIR_Op<"duplicate_time_var", [NoSideEffect]> {
 def HIR_Sync_Time_Op : HIR_Op<"sync_time", [NoSideEffect]> {
   let summary = "synchronize two time domains.";
   let description = [{
-    This op synchronizes two time domains.Until the specified instant does not
-        occur in both time zones,
-    the time zones will wait.
+    This op synchronizes two time domains. Until the specified instant does not
+    occur in both time zones, the time zones will wait.
 
     Example:
 
-        ```mlir hir.sync_time(% t1, % t2): (!hir.time, !hir.time)
-        ```
+        ```mlir hir.sync_time(% t1, % t2): (!hir.time, !hir.time)```
   }];
 
   let arguments = (ins HIR_TimeType : $inp1, HIR_TimeType : $inp2);
@@ -86,11 +82,10 @@ def HIR_Sync_Time_Op : HIR_Op<"sync_time", [NoSideEffect]> {
 def HIR_MemReadOp : HIR_Op<"mem_read", [NoSideEffect]> {
   let summary = "read from a memory interface.";
   let description = [{
-    This Op reads from a memory interface 
+    This Op reads from a memory interface. 
     Example:
 
-        ```mlir hir.mem_read %A[%x] at %t: (hir.mem_interface) -> !hir.int
-        ```
+        ```mlir hir.mem_read %A[%x] at %t: (hir.mem_interface) -> !hir.int```
   }];
 
   let arguments = (ins HIR_MemoryInterfaceType:$mem, I32:$addr, HIR_TimeType :
@@ -108,11 +103,9 @@ def TerminatorOp :
     HIR_Op<"terminator", [NoSideEffect, Terminator]> {
   let summary = "HIR terminator operation";
   let description = [{
+    This is the terminator op for loop and if statement regions
     Syntax:
-
-    ```
-    operation ::= `"hir.terminator"() : () -> ()`
-    ```
+    ```operation ::= `"hir.terminator"() : () -> ()````
      }];
 
   // No custom parsing/printing form.
@@ -127,11 +120,11 @@ def HIR_ForOp : HIR_Op<"for",
     [ImplicitTerminator, RecursiveSideEffects]> {
   let summary = "for operation";
   let description = [{
-    This op implements a sequential for loop
+    This op implements a sequential for loop.
         ```mlir
-     hir.for %i = 0 to %N step 1 at iter_time(%ti=%t tstep 2) {
-        hir.for %j = %lb to %ub step %s at iter_time(%tj=%ti) 
-          iter_args(%xx=%x at %tj){   
+     hir.for %i = 0 to %N step 1 at iter_time(%ti = %t tstep 2) {
+        hir.for %j = %lb to %ub step %s at iter_time(%tj = %ti) 
+          iter_args(%xx = %x at %tj){   
             %yy = hir.delay %xx by 1 at %tj
             hir.yield %yy at %tj+1;
         }

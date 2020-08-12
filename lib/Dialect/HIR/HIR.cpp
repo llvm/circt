@@ -13,7 +13,9 @@
 using namespace mlir;
 using namespace hir;
 
-// Helper Methods
+// TODO: replace all integer type with hir.int type
+
+// Helper Methods.
 
 static Type getIntegerType(OpAsmParser &parser, int bitwidth) {
   return parser.getBuilder().getIntegerType(bitwidth);
@@ -22,7 +24,12 @@ static Type getIntegerType(OpAsmParser &parser, int bitwidth) {
 static Type getTimeType(OpAsmParser &parser) {
   return TimeType::get(parser.getBuilder().getContext());
 }
-// MemReadOp
+
+// MemReadOp.
+/*
+ * hir.mem_read %mem[%add] at %t : !hir.mem_interface -> i32
+ */
+
 static void printMemReadOp(OpAsmPrinter &printer, MemReadOp op) {
   printer << "hir.mem_read"
           << " " << op.mem() << "[" << op.addr() << "]"
@@ -54,20 +61,29 @@ static ParseResult parseMemReadOp(OpAsmParser &parser, OperationState &result) {
                             result.operands))
     return failure();
 
+  // Right now the mem interface takes only one address. Thus there are two
+  // parameters, the memory interface and the address.
+  // TODO: Add support for arbitrary number of address parameters.
   auto num_input_operands_attr =
       parser.getBuilder().getIntegerAttr(odsBuildableI32Type, 2);
   result.attributes.set("num_input_operands", num_input_operands_attr);
   result.addTypes(resRawType);
+  return success();
 }
 
-// ForOp
+// ForOp.
+/*
+ * hir.for %i = %l to %u step %s iter_time(%ti = %t){...}
+ * hir.for %i = %l to %u step %s iter_time(%ti = %t tstep %n){...}
+ */
+
 static void printForOp(OpAsmPrinter &printer, ForOp op) {
   printer << "hir.for"
           << " " << op.getInductionVar() << " = " << op.lb() << " to "
           << op.ub() << " step " << op.step() << " iter_time( "
           << op.getIterTimeVar() << " = " << op.at();
 
-  // print optional tstep
+  // print optional tstep.
   if (op.getAttrOfType<BoolAttr>("hasTstepAttr").getValue())
     printer << " tstep " << op.tstep();
   printer << " ) ";
@@ -109,11 +125,13 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
       parser.parseOperand(stepRawOperand))
     return failure();
 
+  // Parse iter time.
   if (parser.parseKeyword("iter_time") || parser.parseLParen() ||
       parser.parseRegionArgument(regionRawOperands[1]) || parser.parseEqual() ||
       parser.parseOperand(atRawOperand))
     return failure();
 
+  // Parse optional tstep.
   bool hasTstep = false;
   if (!parser.parseOptionalKeyword("tstep")) {
     if (parser.parseOperand(tstepRawOperand))
@@ -123,6 +141,7 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
   auto hasTstepAttr = parser.getBuilder().getBoolAttr(hasTstep);
   result.attributes.set("hasTstepAttr", hasTstepAttr);
 
+  // Parse the type of induction variable.
   if (parser.parseRParen() || parser.parseColon() ||
       parser.parseType(regionRawOperandTypes[0]))
     return failure();
