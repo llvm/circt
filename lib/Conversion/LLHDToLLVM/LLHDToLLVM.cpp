@@ -2112,9 +2112,6 @@ struct DynExtractElementOpConversion : public ConvertToLLVMPattern {
     auto extOp = cast<llhd::DynExtractElementOp>(op);
     DynExtractElementOpAdaptor transformed(operands);
 
-    auto oneC = rewriter.create<LLVM::ConstantOp>(
-        op->getLoc(), LLVM::LLVMType::getInt32Ty(&typeConverter.getContext()),
-        rewriter.getI32IntegerAttr(1));
     if (auto arrTy = extOp.target().getType().dyn_cast<ArrayType>()) {
       auto elemTy = typeConverter.convertType(arrTy.getElementType())
                         .cast<LLVM::LLVMType>();
@@ -2122,6 +2119,9 @@ struct DynExtractElementOpConversion : public ConvertToLLVMPattern {
       auto zeroC = rewriter.create<LLVM::ConstantOp>(
           op->getLoc(), LLVM::LLVMType::getInt32Ty(&typeConverter.getContext()),
           rewriter.getI32IntegerAttr(0));
+      auto oneC = rewriter.create<LLVM::ConstantOp>(
+          op->getLoc(), LLVM::LLVMType::getInt32Ty(&typeConverter.getContext()),
+          rewriter.getI32IntegerAttr(1));
       auto arrPtr = rewriter.create<LLVM::AllocaOp>(
           op->getLoc(),
           transformed.target().getType().cast<LLVM::LLVMType>().getPointerTo(),
