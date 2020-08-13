@@ -1264,15 +1264,22 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
 
     // Get the state pointer from the function arguments.
     Value statePtr = op->getParentOfType<LLVM::LLVMFuncOp>().getArgument(0);
-    auto underlyingTy =
-        drvOp.signal().getType().dyn_cast<SigType>().getUnderlyingType();
+    auto underlyingTy = drvOp.value().getType();
     int sigWidth;
     if (auto arrTy = underlyingTy.dyn_cast<ArrayType>()) {
       sigWidth = llvm::divideCeil(
                      getStdOrLLVMIntegerWidth(arrTy.getElementType()), 8) *
                  8 * arrTy.getLength();
+    } else if (auto llvmTy = underlyingTy.dyn_cast<LLVM::LLVMType>()) {
+      if (llvmTy.isArrayTy())
+        sigWidth =
+            llvm::divideCeil(
+                getStdOrLLVMIntegerWidth(llvmTy.getArrayElementType()), 8) *
+            8 * llvmTy.getArrayNumElements();
+      else
+        sigWidth = llvmTy.getIntegerBitWidth();
     } else {
-      sigWidth = getStdOrLLVMIntegerWidth(underlyingTy);
+      sigWidth = underlyingTy.getIntOrFloatBitWidth();
     }
 
     // Insert enable comparison. Skip if the enable operand is 0.
