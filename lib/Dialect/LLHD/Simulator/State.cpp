@@ -189,7 +189,6 @@ int State::addSignalData(int index, std::string owner, uint8_t *value,
     for (auto &detail : instances[inst].sensitivityList) {
       if (detail.globalIndex == globalIdx) {
         detail.value = value;
-        break;
       }
     }
   }
