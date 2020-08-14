@@ -1601,41 +1601,31 @@ struct ShrOpConversion : public ConvertToLLVMPattern {
 
       return success();
     } else if (auto resTy = shrOp.result().getType().dyn_cast<SigType>()) {
-      auto i8PtrTy = getVoidPtrType();
-      auto i64Ty = LLVM::LLVMType::getInt64Ty(&typeConverter.getContext());
 
-      // Get the signal pointer and offset.
-      auto sigDetail =
-          getSignalDetail(rewriter, &getDialect(), op->getLoc(),
-                          transformed.base(), /*extractIndices=*/true);
+      rewriter.replaceOpWithNewOp<DynExtractSliceOp>(
+          op, shrOp.result().getType(), transformed.base(),
+          transformed.amount());
 
-      auto zextAmnt =
-          adjustBitWidth(op->getLoc(), rewriter, i64Ty, transformed.amount());
+      return success();
+    }
+    if (auto arrTy = shrOp.result().getType().dyn_cast<ArrayType>()) {
+      auto baseTy = shrOp.base().getType().cast<ArrayType>();
+      auto hiddenTy = shrOp.hidden().getType().cast<ArrayType>();
+      auto combinedTy = ArrayType::get(
+          baseTy.getLength() + hiddenTy.getLength(), baseTy.getElementType());
 
-      // Adjust slice start point from signal's offset.
-      auto adjustedAmnt =
-          rewriter.create<LLVM::AddOp>(op->getLoc(), sigDetail[1], zextAmnt);
+      auto combinedArrayInit = rewriter.create<LLVM::UndefOp>(
+          op->getLoc(), typeConverter.convertType(combinedTy));
+      auto insertBase = rewriter.create<InsertSliceOp>(
+          op->getLoc(), combinedTy, combinedArrayInit, shrOp.base(),
+          rewriter.getIndexAttr(0));
+      auto insertHidden = rewriter.create<InsertSliceOp>(
+          op->getLoc(), combinedTy, insertBase, shrOp.hidden(),
+          rewriter.getIndexAttr(baseTy.getLength()));
+      auto extract = rewriter.create<DynExtractSliceOp>(
+          op->getLoc(), arrTy, insertHidden, transformed.amount());
 
-      // Shift pointer to the new start byte.
-      auto ptrToInt =
-          rewriter.create<LLVM::PtrToIntOp>(op->getLoc(), i64Ty, sigDetail[0]);
-      auto const8 = rewriter.create<LLVM::ConstantOp>(
-          op->getLoc(), i64Ty, rewriter.getI64IntegerAttr(8));
-      auto ptrOffset =
-          rewriter.create<LLVM::UDivOp>(op->getLoc(), adjustedAmnt, const8);
-      auto shiftedPtr =
-          rewriter.create<LLVM::AddOp>(op->getLoc(), ptrToInt, ptrOffset);
-      auto newPtr =
-          rewriter.create<LLVM::IntToPtrOp>(op->getLoc(), i8PtrTy, shiftedPtr);
-
-      // Compute the offset into the first byte.
-      auto bitOffset =
-          rewriter.create<LLVM::URemOp>(op->getLoc(), adjustedAmnt, const8);
-
-      // Create a subsignal with the new pointer and offset.
-      rewriter.replaceOp(op, createSubSig(&getDialect(), rewriter, op->getLoc(),
-                                          sigDetail, newPtr, bitOffset));
-
+      rewriter.replaceOp(op, extract.getResult());
       return success();
     }
 
