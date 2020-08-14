@@ -30,12 +30,15 @@ func @convert_insert_slice(%int : i32, %iSlice : i10, %arr : !llhd.array<4xi5>, 
 
 // CHECK-LABEL:   llvm.func @convert_insert_element(
 // CHECK-SAME:                                      %[[VAL_0:.*]]: !llvm.i5,
-// CHECK-SAME:                                      %[[VAL_1:.*]]: !llvm.array<4 x i5>) {
-// CHECK:           %[[VAL_2:.*]] = llvm.insertvalue %[[VAL_0]], %[[VAL_1]][0 : index] : !llvm.array<4 x i5>
+// CHECK-SAME:                                      %[[VAL_1:.*]]: !llvm.array<4 x i5>,
+// CHECK-SAME:                                      %[[VAL_2:.*]]: !llvm.struct<(i4, i5, i6)>) {
+// CHECK:           %[[VAL_3:.*]] = llvm.insertvalue %[[VAL_0]], %[[VAL_1]][0 : index] : !llvm.array<4 x i5>
+// CHECK:           %[[VAL_4:.*]] = llvm.insertvalue %[[VAL_0]], %[[VAL_2]][1 : index] : !llvm.struct<(i4, i5, i6)>
 // CHECK:           llvm.return
 // CHECK:         }
-func @convert_insert_element(%int : i5, %arr : !llhd.array<4xi5>) {
+func @convert_insert_element(%int : i5, %arr : !llhd.array<4xi5>, %tup : tuple<i4, i5, i6>) {
   %0 = llhd.insert_element %arr, %int, 0 : !llhd.array<4xi5>, i5
+  %1 = llhd.insert_element %tup, %int, 1 : tuple<i4, i5, i6>, i5
 
   return
 }

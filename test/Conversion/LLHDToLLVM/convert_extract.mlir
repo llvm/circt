@@ -197,48 +197,78 @@ func @convert_dyn_extract_slice_sig (%c : i32, %sI32 : !llhd.sig<i32>, %sArr : !
 }
 
 // CHECK-LABEL:   llvm.func @convert_extract_element(
-// CHECK-SAME:                                       %[[VAL_0:.*]]: !llvm.array<4 x i5>) {
-// CHECK:           %[[VAL_1:.*]] = llvm.extractvalue %[[VAL_0]][1 : index] : !llvm.array<4 x i5>
+// CHECK-SAME:                                       %[[VAL_0:.*]]: !llvm.array<4 x i5>,
+// CHECK-SAME:                                       %[[VAL_1:.*]]: !llvm.struct<(i1, i2, i3)>) {
+// CHECK:           %[[VAL_2:.*]] = llvm.extractvalue %[[VAL_0]][1 : index] : !llvm.array<4 x i5>
+// CHECK:           %[[VAL_3:.*]] = llvm.extractvalue %[[VAL_1]][2 : index] : !llvm.struct<(i1, i2, i3)>
 // CHECK:           llvm.return
 // CHECK:         }
-func @convert_extract_element(%arr : !llhd.array<4xi5>) {
-  %2 = llhd.extract_element %arr, 1 : !llhd.array<4xi5> -> i5
+func @convert_extract_element(%arr : !llhd.array<4xi5>, %tup : tuple<i1, i2, i3>) {
+  %0 = llhd.extract_element %arr, 1 : !llhd.array<4xi5> -> i5
+  %1 = llhd.extract_element %tup, 2 : tuple<i1, i2, i3> -> i3
 
   return
 }
 
 // CHECK-LABEL:   llvm.func @convert_extract_element_sig(
-// CHECK-SAME:                                           %[[VAL_0:.*]]: !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>) {
-// CHECK:           %[[VAL_1:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
-// CHECK:           %[[VAL_2:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
-// CHECK:           %[[VAL_3:.*]] = llvm.getelementptr %[[VAL_0]]{{\[}}%[[VAL_1]], %[[VAL_1]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.i32, !llvm.i32) -> !llvm.ptr<ptr<i8>>
-// CHECK:           %[[VAL_4:.*]] = llvm.load %[[VAL_3]] : !llvm.ptr<ptr<i8>>
-// CHECK:           %[[VAL_5:.*]] = llvm.getelementptr %[[VAL_0]]{{\[}}%[[VAL_1]], %[[VAL_2]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.i32, !llvm.i32) -> !llvm.ptr<i64>
-// CHECK:           %[[VAL_6:.*]] = llvm.load %[[VAL_5]] : !llvm.ptr<i64>
-// CHECK:           %[[VAL_7:.*]] = llvm.mlir.constant(2 : i32) : !llvm.i32
-// CHECK:           %[[VAL_8:.*]] = llvm.mlir.constant(3 : i32) : !llvm.i32
-// CHECK:           %[[VAL_9:.*]] = llvm.getelementptr %[[VAL_0]]{{\[}}%[[VAL_1]], %[[VAL_7]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.i32, !llvm.i32) -> !llvm.ptr<i64>
-// CHECK:           %[[VAL_10:.*]] = llvm.load %[[VAL_9]] : !llvm.ptr<i64>
-// CHECK:           %[[VAL_11:.*]] = llvm.getelementptr %[[VAL_0]]{{\[}}%[[VAL_1]], %[[VAL_8]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.i32, !llvm.i32) -> !llvm.ptr<i64>
-// CHECK:           %[[VAL_12:.*]] = llvm.load %[[VAL_11]] : !llvm.ptr<i64>
-// CHECK:           %[[VAL_13:.*]] = llvm.mlir.constant(0 : index) : !llvm.i32
-// CHECK:           %[[VAL_14:.*]] = llvm.zext %[[VAL_13]] : !llvm.i32 to !llvm.i33
-// CHECK:           %[[VAL_15:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
-// CHECK:           %[[VAL_16:.*]] = llvm.bitcast %[[VAL_4]] : !llvm.ptr<i8> to !llvm.ptr<array<4 x i4>>
-// CHECK:           %[[VAL_17:.*]] = llvm.getelementptr %[[VAL_16]]{{\[}}%[[VAL_15]], %[[VAL_14]]] : (!llvm.ptr<array<4 x i4>>, !llvm.i32, !llvm.i33) -> !llvm.ptr<i4>
-// CHECK:           %[[VAL_18:.*]] = llvm.bitcast %[[VAL_17]] : !llvm.ptr<i4> to !llvm.ptr<i8>
-// CHECK:           %[[VAL_19:.*]] = llvm.mlir.undef : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_20:.*]] = llvm.insertvalue %[[VAL_18]], %[[VAL_19]][0 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_21:.*]] = llvm.insertvalue %[[VAL_6]], %[[VAL_20]][1 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_22:.*]] = llvm.insertvalue %[[VAL_10]], %[[VAL_21]][2 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_23:.*]] = llvm.insertvalue %[[VAL_12]], %[[VAL_22]][3 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_24:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
-// CHECK:           %[[VAL_25:.*]] = llvm.alloca %[[VAL_24]] x !llvm.struct<(ptr<i8>, i64, i64, i64)> {alignment = 4 : i64} : (!llvm.i32) -> !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
-// CHECK:           llvm.store %[[VAL_23]], %[[VAL_25]] : !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
+// CHECK-SAME:                                           %[[VAL_0:.*]]: !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>,
+// CHECK-SAME:                                           %[[VAL_1:.*]]: !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>) {
+// CHECK:           %[[VAL_2:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+// CHECK:           %[[VAL_3:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
+// CHECK:           %[[VAL_4:.*]] = llvm.getelementptr %[[VAL_0]]{{\[}}%[[VAL_2]], %[[VAL_2]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.i32, !llvm.i32) -> !llvm.ptr<ptr<i8>>
+// CHECK:           %[[VAL_5:.*]] = llvm.load %[[VAL_4]] : !llvm.ptr<ptr<i8>>
+// CHECK:           %[[VAL_6:.*]] = llvm.getelementptr %[[VAL_0]]{{\[}}%[[VAL_2]], %[[VAL_3]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.i32, !llvm.i32) -> !llvm.ptr<i64>
+// CHECK:           %[[VAL_7:.*]] = llvm.load %[[VAL_6]] : !llvm.ptr<i64>
+// CHECK:           %[[VAL_8:.*]] = llvm.mlir.constant(2 : i32) : !llvm.i32
+// CHECK:           %[[VAL_9:.*]] = llvm.mlir.constant(3 : i32) : !llvm.i32
+// CHECK:           %[[VAL_10:.*]] = llvm.getelementptr %[[VAL_0]]{{\[}}%[[VAL_2]], %[[VAL_8]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.i32, !llvm.i32) -> !llvm.ptr<i64>
+// CHECK:           %[[VAL_11:.*]] = llvm.load %[[VAL_10]] : !llvm.ptr<i64>
+// CHECK:           %[[VAL_12:.*]] = llvm.getelementptr %[[VAL_0]]{{\[}}%[[VAL_2]], %[[VAL_9]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.i32, !llvm.i32) -> !llvm.ptr<i64>
+// CHECK:           %[[VAL_13:.*]] = llvm.load %[[VAL_12]] : !llvm.ptr<i64>
+// CHECK:           %[[VAL_14:.*]] = llvm.mlir.constant(0 : index) : !llvm.i32
+// CHECK:           %[[VAL_15:.*]] = llvm.zext %[[VAL_14]] : !llvm.i32 to !llvm.i33
+// CHECK:           %[[VAL_16:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+// CHECK:           %[[VAL_17:.*]] = llvm.bitcast %[[VAL_5]] : !llvm.ptr<i8> to !llvm.ptr<array<4 x i4>>
+// CHECK:           %[[VAL_18:.*]] = llvm.getelementptr %[[VAL_17]]{{\[}}%[[VAL_16]], %[[VAL_15]]] : (!llvm.ptr<array<4 x i4>>, !llvm.i32, !llvm.i33) -> !llvm.ptr<i4>
+// CHECK:           %[[VAL_19:.*]] = llvm.bitcast %[[VAL_18]] : !llvm.ptr<i4> to !llvm.ptr<i8>
+// CHECK:           %[[VAL_20:.*]] = llvm.mlir.undef : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_21:.*]] = llvm.insertvalue %[[VAL_19]], %[[VAL_20]][0 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_22:.*]] = llvm.insertvalue %[[VAL_7]], %[[VAL_21]][1 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_23:.*]] = llvm.insertvalue %[[VAL_11]], %[[VAL_22]][2 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_24:.*]] = llvm.insertvalue %[[VAL_13]], %[[VAL_23]][3 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_25:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
+// CHECK:           %[[VAL_26:.*]] = llvm.alloca %[[VAL_25]] x !llvm.struct<(ptr<i8>, i64, i64, i64)> {alignment = 4 : i64} : (!llvm.i32) -> !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
+// CHECK:           llvm.store %[[VAL_24]], %[[VAL_26]] : !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
+// CHECK:           %[[VAL_27:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+// CHECK:           %[[VAL_28:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
+// CHECK:           %[[VAL_29:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_27]], %[[VAL_27]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.i32, !llvm.i32) -> !llvm.ptr<ptr<i8>>
+// CHECK:           %[[VAL_30:.*]] = llvm.load %[[VAL_29]] : !llvm.ptr<ptr<i8>>
+// CHECK:           %[[VAL_31:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_27]], %[[VAL_28]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.i32, !llvm.i32) -> !llvm.ptr<i64>
+// CHECK:           %[[VAL_32:.*]] = llvm.load %[[VAL_31]] : !llvm.ptr<i64>
+// CHECK:           %[[VAL_33:.*]] = llvm.mlir.constant(2 : i32) : !llvm.i32
+// CHECK:           %[[VAL_34:.*]] = llvm.mlir.constant(3 : i32) : !llvm.i32
+// CHECK:           %[[VAL_35:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_27]], %[[VAL_33]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.i32, !llvm.i32) -> !llvm.ptr<i64>
+// CHECK:           %[[VAL_36:.*]] = llvm.load %[[VAL_35]] : !llvm.ptr<i64>
+// CHECK:           %[[VAL_37:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_27]], %[[VAL_34]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.i32, !llvm.i32) -> !llvm.ptr<i64>
+// CHECK:           %[[VAL_38:.*]] = llvm.load %[[VAL_37]] : !llvm.ptr<i64>
+// CHECK:           %[[VAL_39:.*]] = llvm.mlir.constant(1 : index) : !llvm.i32
+// CHECK:           %[[VAL_40:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+// CHECK:           %[[VAL_41:.*]] = llvm.bitcast %[[VAL_30]] : !llvm.ptr<i8> to !llvm.ptr<struct<(i1, i2, i3)>>
+// CHECK:           %[[VAL_42:.*]] = llvm.getelementptr %[[VAL_41]]{{\[}}%[[VAL_40]], %[[VAL_39]]] : (!llvm.ptr<struct<(i1, i2, i3)>>, !llvm.i32, !llvm.i32) -> !llvm.ptr<i2>
+// CHECK:           %[[VAL_43:.*]] = llvm.bitcast %[[VAL_42]] : !llvm.ptr<i2> to !llvm.ptr<i8>
+// CHECK:           %[[VAL_44:.*]] = llvm.mlir.undef : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_45:.*]] = llvm.insertvalue %[[VAL_43]], %[[VAL_44]][0 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_46:.*]] = llvm.insertvalue %[[VAL_32]], %[[VAL_45]][1 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_47:.*]] = llvm.insertvalue %[[VAL_36]], %[[VAL_46]][2 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_48:.*]] = llvm.insertvalue %[[VAL_38]], %[[VAL_47]][3 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
+// CHECK:           %[[VAL_49:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
+// CHECK:           %[[VAL_50:.*]] = llvm.alloca %[[VAL_49]] x !llvm.struct<(ptr<i8>, i64, i64, i64)> {alignment = 4 : i64} : (!llvm.i32) -> !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
+// CHECK:           llvm.store %[[VAL_48]], %[[VAL_50]] : !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
 // CHECK:           llvm.return
 // CHECK:         }
-func @convert_extract_element_sig (%sArr : !llhd.sig<!llhd.array<4xi4>>) {
-  %1 = llhd.extract_element %sArr, 0 : !llhd.sig<!llhd.array<4xi4>> -> !llhd.sig<i4>
+func @convert_extract_element_sig (%sArr : !llhd.sig<!llhd.array<4xi4>>, %sTup : !llhd.sig<tuple<i1, i2, i3>>) {
+  %0 = llhd.extract_element %sArr, 0 : !llhd.sig<!llhd.array<4xi4>> -> !llhd.sig<i4>
+  %1 = llhd.extract_element %sTup, 1 : !llhd.sig<tuple<i1, i2, i3>> -> !llhd.sig<i2>
 
   return
 }
