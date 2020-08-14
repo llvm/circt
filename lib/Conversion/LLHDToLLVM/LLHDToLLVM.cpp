@@ -1763,6 +1763,51 @@ struct NegOpConversion : public ConvertToLLVMPattern {
     return success();
   }
 };
+
+} // namespace
+namespace {
+struct EqOpConversion : public ConvertToLLVMPattern {
+  explicit EqOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(llhd::EqOp::getOperationName(), ctx,
+                             typeConverter) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    EqOpAdaptor transformed(operands);
+
+    if (transformed.rhs().getType().cast<LLVM::LLVMType>().isIntegerTy()) {
+      rewriter.replaceOpWithNewOp<LLVM::ICmpOp>(
+          op, LLVM::ICmpPredicate::eq, transformed.lhs(), transformed.rhs());
+
+      return success();
+    }
+    return failure();
+  }
+};
+} // namespace
+
+namespace {
+struct NeqOpConversion : public ConvertToLLVMPattern {
+  explicit NeqOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(llhd::NeqOp::getOperationName(), ctx,
+                             typeConverter) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    NeqOpAdaptor transformed(operands);
+
+    if (transformed.rhs().getType().cast<LLVM::LLVMType>().isIntegerTy()) {
+      rewriter.replaceOpWithNewOp<LLVM::ICmpOp>(
+          op, LLVM::ICmpPredicate::ne, transformed.lhs(), transformed.rhs());
+
+      return success();
+    }
+
+    return failure();
+  }
+};
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -2531,7 +2576,8 @@ void llhd::populateLLHDToLLVMConversionPatterns(
   patterns.insert<AndOpConversion, OrOpConversion, XorOpConversion>(converter);
 
   // Arithmetic conversion patterns.
-  patterns.insert<NegOpConversion>(ctx, converter);
+  patterns.insert<NegOpConversion, EqOpConversion, NeqOpConversion>(ctx,
+                                                                    converter);
 
   // Unit conversion patterns.
   patterns.insert<EntityOpConversion, TerminatorOpConversion, ProcOpConversion,
