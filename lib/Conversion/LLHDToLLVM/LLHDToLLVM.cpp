@@ -1740,6 +1740,32 @@ using OrOpConversion = OneToOneConvertToLLVMPattern<llhd::OrOp, LLVM::OrOp>;
 using XorOpConversion = OneToOneConvertToLLVMPattern<llhd::XorOp, LLVM::XOrOp>;
 
 //===----------------------------------------------------------------------===//
+// Arithmetic conversions
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct NegOpConversion : public ConvertToLLVMPattern {
+  explicit NegOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(llhd::NegOp::getOperationName(), ctx,
+                             typeConverter) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    NegOpAdaptor transformed(operands);
+
+    auto zeroC = rewriter.create<LLVM::ConstantOp>(
+        op->getLoc(), transformed.value().getType(),
+        rewriter.getI32IntegerAttr(0));
+    rewriter.replaceOpWithNewOp<LLVM::SubOp>(op, transformed.value().getType(),
+                                             zeroC, transformed.value());
+
+    return success();
+  }
+};
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // Value creation conversions
 //===----------------------------------------------------------------------===//
 
@@ -2503,6 +2529,9 @@ void llhd::populateLLHDToLLVMConversionPatterns(
   patterns.insert<NotOpConversion, ShrOpConversion, ShlOpConversion>(ctx,
                                                                      converter);
   patterns.insert<AndOpConversion, OrOpConversion, XorOpConversion>(converter);
+
+  // Arithmetic conversion patterns.
+  patterns.insert<NegOpConversion>(ctx, converter);
 
   // Unit conversion patterns.
   patterns.insert<EntityOpConversion, TerminatorOpConversion, ProcOpConversion,
