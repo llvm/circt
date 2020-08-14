@@ -1897,11 +1897,10 @@ static Value shiftStructuredSigPointer(Location loc,
 
   auto zeroC = rewriter.create<LLVM::ConstantOp>(loc, i32Ty,
                                                  rewriter.getI32IntegerAttr(0));
-  auto zextIndex = zextByOne(loc, rewriter, index);
   auto bitcastToArr =
       rewriter.create<LLVM::BitcastOp>(loc, structTy.getPointerTo(), pointer);
   auto gep = rewriter.create<LLVM::GEPOp>(loc, elemPtrTy, bitcastToArr,
-                                          ArrayRef<Value>({zeroC, zextIndex}));
+                                          ArrayRef<Value>({zeroC, index}));
   return rewriter.create<LLVM::BitcastOp>(loc, i8PtrTy, gep);
 }
 
@@ -1910,8 +1909,9 @@ static Value shiftArraySigPointer(Location loc,
                                   LLVM::LLVMType arrTy, Value pointer,
                                   Value index) {
   auto elemPtrTy = arrTy.getArrayElementType().getPointerTo();
+  auto zextIndex = zextByOne(loc, rewriter, index);
   return shiftStructuredSigPointer(loc, rewriter, arrTy, elemPtrTy, pointer,
-                                   index);
+                                   zextIndex);
 }
 
 namespace {
@@ -2121,13 +2121,13 @@ struct ExtractElementOpConversion : public ConvertToLLVMPattern {
     }
 
     if (auto sigTy = extOp.target().getType().dyn_cast<SigType>()) {
-      auto i64Ty = LLVM::LLVMType::getInt64Ty(&typeConverter.getContext());
+      auto i32Ty = LLVM::LLVMType::getInt32Ty(&typeConverter.getContext());
 
       auto sigDetail =
           getSignalDetail(rewriter, &getDialect(), op->getLoc(),
                           transformed.target(), /*extractIndices=*/true);
 
-      auto indexC = rewriter.create<LLVM::ConstantOp>(op->getLoc(), i64Ty,
+      auto indexC = rewriter.create<LLVM::ConstantOp>(op->getLoc(), i32Ty,
                                                       extOp.indexAttr());
 
       Value adjusted;
