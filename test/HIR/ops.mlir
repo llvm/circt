@@ -14,7 +14,7 @@ func @foo() {
     // CHECK: %[[MEM:.*]] = "mem_def"() 
     %A = "mem_def"() : ()->(!hir.mem_interface)
     // CHECK: {{%.*}} = hir.mem_read %[[MEM]]{{\[}}%[[ADDR]]{{\]}} at %{{.*}}
-    %v = hir.mem_read %A[%x] at  %ti : !hir.mem_interface -> i32
+    %v = hir.mem_read %A[%x] at  %ti delay 10: !hir.mem_interface -> i32
   }
   %y = "dummy_op"() : () -> (i32)
   hir.for %j = %l to %u step %s iter_time(%tj = %t):i32{
@@ -28,5 +28,8 @@ func @foo() {
   hir.for %i = %l to %u step %s iter_time(%ti = %t tstep %ts):i32{
     %x = "dummy_op"() : () -> (i32)
   }
+  %z1 = hir.call @foo (%l,%u) at %t:(i32,i32)->(i32)
+  %z2 = hir.call @bar (%l,%u) at %t delay 3:(i32,i32)->(i32)
+  
   return
 }

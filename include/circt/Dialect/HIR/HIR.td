@@ -2,6 +2,7 @@
 #define HIR_OPS
 
 include "mlir/IR/OpBase.td"
+include "mlir/Interfaces/LoopLikeInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 // Dialect
@@ -16,10 +17,10 @@ def HIRR_Dialect : Dialect {
 }
 
 // Types
-def HIR_TimeType : Type<CPred<"$_self.isa<TimeType>()">, "HIR time type">,
+def TimeType : Type<CPred<"$_self.isa<TimeType>()">, "HIR time type">,
                    BuildableType<"TimeType::get($_builder.getContext())">;
 
-def HIR_MemoryInterfaceType
+def MemoryInterfaceType
     : Type<CPred<"$_self.isa<MemoryInterfaceType>()">,
            "HIR memory interface type ">,
       BuildableType<"MemoryInterfaceType::get($_builder.getContext())">;
@@ -28,7 +29,7 @@ def HIR_MemoryInterfaceType
 class HIR_Op<string mnemonic, list<OpTrait> traits = []>
     : Op<HIRR_Dialect, mnemonic, traits>;
 
-def HIR_Def_Time_Var_Op : HIR_Op<"def_time_var", [NoSideEffect]> {
+def DefTimeVarOp : HIR_Op<"def_time_var", [NoSideEffect]> {
   let summary = "Op defines a new time var.";
   let description = [{
         This op defines a new time variable. 
@@ -39,12 +40,12 @@ def HIR_Def_Time_Var_Op : HIR_Op<"def_time_var", [NoSideEffect]> {
     }];
 
   let arguments = (ins);
-  let results = (outs HIR_TimeType : $res);
+  let results = (outs TimeType : $res);
 
   let assemblyFormat = [{attr-dict `:` type($res)}];
 }
 
-def HIR_Duplicate_Time_Var_Op : HIR_Op<"duplicate_time_var", [NoSideEffect]> {
+def DuplicateTimeVarOp : HIR_Op<"duplicate_time_var", [NoSideEffect]> {
   let summary = "Op duplicates a time var.";
   let description = [{
     This op duplicates a time var. Semantics are same as using original time var
@@ -55,13 +56,13 @@ def HIR_Duplicate_Time_Var_Op : HIR_Op<"duplicate_time_var", [NoSideEffect]> {
         ```mlir % t2 = hir.duplicate_time_var %t1 : !hir.time```
   }];
 
-  let arguments = (ins HIR_TimeType : $input);
-  let results = (outs HIR_TimeType : $res);
+  let arguments = (ins TimeType : $input);
+  let results = (outs TimeType : $res);
 
   let assemblyFormat = [{$input attr-dict `:` type($res)}];
 }
 
-def HIR_Sync_Time_Op : HIR_Op<"sync_time", [NoSideEffect]> {
+def SyncTimeOp : HIR_Op<"sync_time", [NoSideEffect]> {
   let summary = "synchronize two time domains.";
   let description = [{
     This op synchronizes two time domains. Until the specified instant does not
@@ -72,29 +73,46 @@ def HIR_Sync_Time_Op : HIR_Op<"sync_time", [NoSideEffect]> {
         ```mlir hir.sync_time(% t1, % t2): (!hir.time, !hir.time)```
   }];
 
-  let arguments = (ins HIR_TimeType : $inp1, HIR_TimeType : $inp2);
+  let arguments = (ins TimeType : $inp1, TimeType : $inp2);
   let results = (outs);
 
   let assemblyFormat = [{`(`$inp1 `,` $inp2 `)` attr-dict `:` `(` type($inp1)
     `,` type($inp2) `)`}];
 }
 
-def HIR_MemReadOp : HIR_Op<"mem_read", [NoSideEffect]> {
+def MemReadOp : HIR_Op<"mem_read", [NoSideEffect]> {
   let summary = "read from a memory interface.";
   let description = [{
     This Op reads from a memory interface. 
     Example:
 
-        ```mlir hir.mem_read %A[%x] at %t: (hir.mem_interface) -> !hir.int```
+        ```mlir hir.mem_read %A[%x] at %t 
+        : !hir.mem_interface -> !hir.int```
   }];
 
-  let arguments = (ins HIR_MemoryInterfaceType:$mem, I32:$addr, HIR_TimeType :
-  $at, I32Attr:$num_input_operands);
+  let arguments = (ins MemoryInterfaceType:$mem, I32:$addr, TimeType : $tstart,
+  OptionalAttr<I32Attr>: $delay);
   let results = (outs AnyType: $res);
-  let parser = [{return parse$cppClass(parser,result);}];
-  let printer = [{return print$cppClass(p,*this);}];
+  let assemblyFormat = [{$mem `[` $addr `]` `at` $tstart (`delay` $delay^)?
+    attr-dict `:` type($mem) `->` type($res)}];
 }
 
+def MemWriteOp : HIR_Op<"mem_write", []> {
+  let summary = "read from a memory interface.";
+  let description = [{
+    This Op reads from a memory interface. 
+    Example:
+
+        ```mlir hir.mem_write %v to %A[%x] at %t 
+        : (!hir.int, !hir.mem_interface)```
+  }];
+
+  let arguments = (ins AnyType:$value, MemoryInterfaceType:$mem, I32:$addr, 
+  TimeType :$tstart, OptionalAttr<I32Attr>:$delay);
+  let results = (outs );
+  let assemblyFormat = [{$value `to` $mem `[` $addr `]` `at` $tstart 
+  (`delay` $delay^)? attr-dict `:` `(`type($value) `,` type($mem)`)`}];
+}
 
 def ImplicitTerminator
     : SingleBlockImplicitTerminator<"TerminatorOp">;
@@ -116,8 +134,9 @@ def TerminatorOp :
   let verifier = ?;
 }
 
-def HIR_ForOp : HIR_Op<"for", 
-    [ImplicitTerminator, RecursiveSideEffects]> {
+def ForOp : HIR_Op<"for", 
+    [ImplicitTerminator, RecursiveSideEffects,
+    DeclareOpInterfaceMethods<LoopLikeOpInterface>]> {
   let summary = "for operation";
   let description = [{
     This op implements a sequential for loop.
@@ -133,13 +152,50 @@ def HIR_ForOp : HIR_Op<"for",
   }];
 
   let arguments = (ins AnyType: $lb, AnyType: $ub, AnyType: $step, 
-    HIR_TimeType:$at, Optional<AnyType>: $tstep, OptionalAttr<BoolAttr>:$hasTstep);
+    TimeType:$tstart, Optional<AnyType>: $tstep);
   let regions = (region SizedRegion<1>:$region);
 
   let extraClassDeclaration = [{
     Value getInductionVar() { return getBody()->getArgument(0); }
     Value getIterTimeVar() { return getBody()->getArgument(1); }
   }];
+  let parser = [{return parse$cppClass(parser,result);}];
+  let printer = [{return print$cppClass(p,*this);}];
+}
+
+def CallOp : HIR_Op<"call" > {
+  let summary = "Function call";
+  let description = [{
+    This Op calls a function/module. 
+    Example:
+
+        ```mlir %a,%b = hir.call @foo (%x,%A) at %ti
+        : (!hir.int,!hir.mem_interface) -> (!hir.int,!hir.int)```
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$callee, Variadic<AnyType>:$operands,
+    TimeType:$tstart, OptionalAttr<I32Attr>: $delay);
+  let results = (outs Variadic<AnyType> : $res);
+
+  let assemblyFormat = [{
+    $callee `(` $operands `)` `at` $tstart (`delay` $delay^)? attr-dict `:` functional-type($operands, $res)
+  }];
+
+}
+
+def DefOp : HIR_Op<"def", [ImplicitTerminator] > {
+  let summary = "Function definition";
+  let description = [{
+    This Op creates a new function 
+    Example:
+
+        ```mlir hir.func @foo (%x at %t, %A) at %t 
+        : (!hir.int,!hir.mem_interface) -> (!hir.int,!hir.int)```
+  }];
+
+  let arguments = (ins I32ArrayAttr : $time_domains, I32ArrayAttr: $time_offsets);
+  let regions = (region SizedRegion<1>:$region);
+  let results = (outs );
   let parser = [{return parse$cppClass(parser,result);}];
   let printer = [{return print$cppClass(p,*this);}];
 }
