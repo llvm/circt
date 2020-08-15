@@ -4,11 +4,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-class HasCustomParserPrinter {
-  code printer = [{ return ::print$cppClass(p, *this); }];
-  code parser = [{ return ::parse$cppClass(parser, result); }];
-}
-
 def HasRegionTerminator : SingleBlockImplicitTerminator<"YieldOp">;
 
 //===----------------------------------------------------------------------===//
