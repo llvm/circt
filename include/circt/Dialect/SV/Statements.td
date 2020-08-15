@@ -29,6 +29,10 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator]>, HasCustomParserPrinter {
   
   // TODO: ODS doesn't support parsing/printing regions yet :-(
   // let assemblyFormat = [{ $clock attr-dict $body }];*/
+
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &body().front(); }
+  }];
 }
 
 def IfOp : SVOp<"if", [HasRegionTerminator]>,
@@ -41,6 +45,10 @@ def IfOp : SVOp<"if", [HasRegionTerminator]>,
   
   // TODO: ODS doesn't support parsing/printing regions yet :-(
   //let assemblyFormat = [{ $cond attr-dict $body }];
+
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &body().front(); }
+  }];
 }
 
 // TODO: This should be generalized, e.g. with an enum to specify the edge
@@ -55,6 +63,10 @@ def AlwaysAtPosEdgeOp : SVOp<"alwaysat_posedge", [HasRegionTerminator]>,
   
   // TODO: ODS doesn't support parsing/printing regions yet :-(
   //let assemblyFormat = [{ $clock attr-dict $body }];
+
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &body().front(); }
+  }];
 }
 
 //===----------------------------------------------------------------------===//
