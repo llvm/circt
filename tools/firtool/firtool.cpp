@@ -7,6 +7,7 @@
 
 #include "circt/Dialect/FIRRTL/Dialect.h"
 #include "circt/Dialect/RTL/Dialect.h"
+#include "circt/Dialect/SV/Dialect.h"
 #include "circt/EmitVerilog.h"
 #include "circt/FIRParser.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
@@ -124,6 +125,7 @@ int main(int argc, char **argv) {
   // Register our dialects.
   registerDialect<firrtl::FIRRTLDialect>();
   registerDialect<rtl::RTLDialect>();
+  registerDialect<sv::SVDialect>();
 
   // Parse pass names in main to ensure static initialization completed.
   cl::ParseCommandLineOptions(argc, argv, "circt modular optimizer driver\n");
