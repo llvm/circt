@@ -87,7 +87,7 @@ def MemReadOp : HIR_Op<"mem_read", [NoSideEffect]> {
     Example:
 
         ```mlir hir.mem_read %A[%x] at %t 
-        : !hir.mem_interface -> !hir.int```
+        : !hir.wire -> !hir.int```
   }];
 
   let arguments = (ins MemoryInterfaceType:$mem, I32:$addr, TimeType : $tstart,
@@ -98,9 +98,9 @@ def MemReadOp : HIR_Op<"mem_read", [NoSideEffect]> {
 }
 
 def MemWriteOp : HIR_Op<"mem_write", []> {
-  let summary = "read from a memory interface.";
+  let summary = "Write to a memory interface.";
   let description = [{
-    This Op reads from a memory interface. 
+    This Op writes to memory. 
     Example:
 
         ```mlir hir.mem_write %v to %A[%x] at %t 
@@ -112,6 +112,40 @@ def MemWriteOp : HIR_Op<"mem_write", []> {
   let results = (outs );
   let assemblyFormat = [{$value `to` $mem `[` $addr `]` `at` $tstart 
   (`delay` $delay^)? attr-dict `:` `(`type($value) `,` type($mem)`)`}];
+}
+
+def WireReadOp : HIR_Op<"wire_read", [NoSideEffect]> {
+  let summary = "Read from a wire.";
+  let description = [{
+    This Op reads from wire. 
+    Example:
+
+        ```mlir hir.wire_read %A[%x] at %t 
+        : !hir.wire -> !hir.int```
+  }];
+
+  let arguments = (ins MemoryInterfaceType:$wire, TimeType : $tstart,
+  OptionalAttr<I32Attr>: $delay);
+  let results = (outs AnyType: $res);
+  let assemblyFormat = [{$wire `at` $tstart (`delay` $delay^)?
+    attr-dict `:` type($wire) `->` type($res)}];
+}
+
+def WireWriteOp : HIR_Op<"wire_write", []> {
+  let summary = "Write to a wire";
+  let description = [{
+    This Op writes to a wire. 
+    Example:
+
+        ```mlir hir.wire_write %v to %A at %t 
+        : (!hir.int, !hir.wire)```
+  }];
+
+  let arguments = (ins AnyType:$value, WireType:$wire, 
+  TimeType :$tstart, OptionalAttr<I32Attr>:$delay);
+  let results = (outs );
+  let assemblyFormat = [{$value `to` $wire `at` $tstart 
+  (`delay` $delay^)? attr-dict `:` `(`type($value) `,` type($wire)`)`}];
 }
 
 def ImplicitTerminator
