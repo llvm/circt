@@ -11,6 +11,7 @@ namespace mlir {
 namespace hir {
 enum Kinds {
   TimeKind = Type::FIRST_PRIVATE_EXPERIMENTAL_0_TYPE,
+  IntKind,
   MemoryInterfaceKind,
   WireKind
 };
@@ -26,6 +27,20 @@ public:
   static llvm::StringRef getKeyword() { return "time"; }
   static TimeType get(MLIRContext *context) {
     return Base::get(context, TimeKind);
+  }
+};
+
+class IntType : public Type::TypeBase<IntType, Type, DefaultTypeStorage> {
+  /**
+   * This class defines hir.int type in the dialect.
+   */
+public:
+  using Base::Base;
+
+  static bool kindof(unsigned kind) { return kind == IntKind; }
+  static llvm::StringRef getKeyword() { return "int"; }
+  static IntType get(MLIRContext *context) {
+    return Base::get(context, IntKind);
   }
 };
 

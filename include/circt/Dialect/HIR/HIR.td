@@ -20,6 +20,9 @@ def HIRR_Dialect : Dialect {
 def TimeType : Type<CPred<"$_self.isa<TimeType>()">, "HIR time type">,
                    BuildableType<"TimeType::get($_builder.getContext())">;
 
+def IntType : Type<CPred<"$_self.isa<IntType>()">, "HIR int type">,
+                   BuildableType<"IntType::get($_builder.getContext())">;
+
 def MemoryInterfaceType
     : Type<CPred<"$_self.isa<MemoryInterfaceType>()">,
            "HIR mem_interface type ">,
@@ -95,7 +98,7 @@ def MemReadOp : HIR_Op<"mem_read", [NoSideEffect]> {
         : !hir.wire -> !hir.int```
   }];
 
-  let arguments = (ins MemoryInterfaceType:$mem, I32:$addr, TimeType : $tstart,
+  let arguments = (ins MemoryInterfaceType:$mem, IntType:$addr, TimeType : $tstart,
   OptionalAttr<I32Attr>: $delay);
   let results = (outs AnyType: $res);
   let assemblyFormat = [{$mem `[` $addr `]` `at` $tstart (`delay` $delay^)?
@@ -112,7 +115,7 @@ def MemWriteOp : HIR_Op<"mem_write", []> {
         : (!hir.int, !hir.mem_interface)```
   }];
 
-  let arguments = (ins AnyType:$value, MemoryInterfaceType:$mem, I32:$addr, 
+  let arguments = (ins AnyType:$value, MemoryInterfaceType:$mem, IntType:$addr, 
   TimeType :$tstart, OptionalAttr<I32Attr>:$delay);
   let results = (outs );
   let assemblyFormat = [{$value `to` $mem `[` $addr `]` `at` $tstart 
@@ -190,8 +193,8 @@ def ForOp : HIR_Op<"for",
     ```
   }];
 
-  let arguments = (ins AnyType: $lb, AnyType: $ub, AnyType: $step, 
-    TimeType:$tstart, Optional<AnyType>: $tstep);
+  let arguments = (ins IntType: $lb, IntType: $ub, IntType: $step, 
+    TimeType:$tstart, Optional<IntType>: $tstep);
   let regions = (region SizedRegion<1>:$region);
 
   let extraClassDeclaration = [{

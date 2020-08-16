@@ -13,112 +13,13 @@
 using namespace mlir;
 using namespace hir;
 
-// TODO: replace all integer type with hir.int type
-
 // Helper Methods.
 
 static Type getIntegerType(OpAsmParser &parser, int bitwidth) {
-  return parser.getBuilder().getIntegerType(bitwidth);
+  return IntType::get(parser.getBuilder().getContext());
 }
-
 static Type getTimeType(OpAsmParser &parser) {
   return TimeType::get(parser.getBuilder().getContext());
-}
-
-/* MemReadOp.
- * Example:
- * hir.mem_read %mem[%add] at %t : !hir.mem_interface -> i32
- */
-
-/*
-static void printMemReadOp(OpAsmPrinter &printer, MemReadOp op) {
-  printer << "hir.mem_read"
-          << " " << op.mem() << "[" << op.addr() << "]"
-          << " at " << op.tstart() << " : " << op.mem().getType() << " -> "
-          << op.res().getType();
-  if (op.mem() == op.addr()) {
-  }
-}
-
-static ParseResult parseMemReadOp(OpAsmParser &parser, OperationState &result) {
-  Type memType;
-  Type resRawType;
-  OpAsmParser::OperandType memRawOperand;
-  OpAsmParser::OperandType addrRawOperand;
-  OpAsmParser::OperandType tstartRawOperand;
-  if (parser.parseOperand(memRawOperand) || parser.parseLSquare() ||
-      parser.parseOperand(addrRawOperand) || parser.parseRSquare() ||
-      parser.parseKeyword("at") || parser.parseOperand(tstartRawOperand) ||
-      parser.parseColon() || parser.parseType(memType) || parser.parseArrow() ||
-      parser.parseType(resRawType))
-    return failure();
-
-  if (parser.resolveOperand(memRawOperand, memType, result.operands))
-    return failure();
-  Type odsBuildableTimeType = getTimeType(parser);
-  Type intTypeVar = getIntegerType(parser, 32);
-  if (parser.resolveOperand(addrRawOperand, intTypeVar, result.operands))
-    return failure();
-  if (parser.resolveOperand(tstartRawOperand, odsBuildableTimeType,
-                            result.operands))
-    return failure();
-
-  // Right now the mem interface takes only one address.
-  // TODO: Add support for arbitrary number of address parameters.
-  auto numAddrOperandsAttr = parser.getBuilder().getIntegerAttr(intTypeVar, 1);
-  result.attributes.set("num_addr_operands", numAddrOperandsAttr);
-  result.addTypes(resRawType);
-  return success();
-}
-*/
-
-/* MemWriteOp
- * Example:
- * hir.mem_write %v to %mem[%add] at %t : (!hir.int, !hir.mem_interface)
- */
-
-static void printMemWriteOp(OpAsmPrinter &printer, MemWriteOp op) {
-  printer << "hir.mem_write"
-          << " " << op.value() << " to " << op.mem() << "[ " << op.addr()
-          << " ]"
-          << " at " << op.tstart() << " : "
-          << "( " << op.value().getType() << ", " << op.mem().getType() << " )";
-}
-
-static ParseResult parseMemWriteOp(OpAsmParser &parser,
-                                   OperationState &result) {
-  Type valueType;
-  Type memType;
-  OpAsmParser::OperandType valueRawOperand;
-  OpAsmParser::OperandType memRawOperand;
-  OpAsmParser::OperandType addrRawOperand;
-  OpAsmParser::OperandType tstartRawOperand;
-  if (parser.parseOperand(valueRawOperand) || parser.parseKeyword("to") ||
-      parser.parseOperand(memRawOperand) || parser.parseLSquare() ||
-      parser.parseOperand(addrRawOperand) || parser.parseRSquare() ||
-      parser.parseKeyword("at") || parser.parseOperand(tstartRawOperand) ||
-      parser.parseColon() || parser.parseLParen() ||
-      parser.parseType(valueType) || parser.parseType(memType) ||
-      parser.parseRParen())
-    return failure();
-
-  if (parser.resolveOperand(valueRawOperand, valueType, result.operands))
-    return failure();
-  if (parser.resolveOperand(memRawOperand, memType, result.operands))
-    return failure();
-  Type timeTypeVar = getTimeType(parser);
-  Type intTypeVar = getIntegerType(parser, 32);
-  if (parser.resolveOperand(addrRawOperand, intTypeVar, result.operands))
-    return failure();
-  if (parser.resolveOperand(tstartRawOperand, timeTypeVar, result.operands))
-    return failure();
-
-  // Right now the mem interface takes only one address. Thus there are two
-  // parameters, the memory interface and the address.
-  // TODO: Add support for arbitrary number of address parameters.
-  auto numAddrOperandsAttr = parser.getBuilder().getIntegerAttr(intTypeVar, 1);
-  result.attributes.set("num_addr_operands", numAddrOperandsAttr);
-  return success();
 }
 
 /* ForOp.
