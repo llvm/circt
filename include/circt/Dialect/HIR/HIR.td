@@ -22,8 +22,13 @@ def TimeType : Type<CPred<"$_self.isa<TimeType>()">, "HIR time type">,
 
 def MemoryInterfaceType
     : Type<CPred<"$_self.isa<MemoryInterfaceType>()">,
-           "HIR memory interface type ">,
+           "HIR mem_interface type ">,
       BuildableType<"MemoryInterfaceType::get($_builder.getContext())">;
+
+def WireType
+    : Type<CPred<"$_self.isa<WireType>()">,
+           "HIR wire type ">,
+      BuildableType<"WireType::get($_builder.getContext())">;
 
 // Ops
 class HIR_Op<string mnemonic, list<OpTrait> traits = []>
