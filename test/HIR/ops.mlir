@@ -1,4 +1,15 @@
 // RUN: circt-opt %s | FileCheck %s
+hir.def @mult(%x,%y) at %t {time_domains = [0:i32,0:i32,0:i32], 
+time_offsets = [0:i32,0:i32,4:i32], verilog_module= "iMult32"}:
+(!hir.int,!hir.int)->(!hir.int) 
+
+hir.def @add(%x,%y) at %t {time_domains = [0:i32,0:i32,0:i32], 
+time_offsets = [0:i32,0:i32,1:i32]}:
+(!hir.int,!hir.int)->(!hir.int){
+
+}
+
+
 func @foo() {
   %t = hir.def_time_var : !hir.time
   %t2 = hir.duplicate_time_var %t : !hir.time
@@ -28,8 +39,8 @@ func @foo() {
   hir.for %i = %l to %u step %s iter_time(%ti = %t tstep %ts):!hir.int{
     %x = "dummy_op"() : () -> (!hir.int)
   }
-  %z1 = hir.call @foo (%l,%u) at %t:(!hir.int,!hir.int)->(!hir.int)
-  %z2 = hir.call @bar (%l,%u) at %t delay 3:(!hir.int,!hir.int)->(!hir.int)
+  %m = hir.call @mult (%l,%u) at %t:(!hir.int,!hir.int)->(!hir.int)
+  %mac = hir.call @add (%m,%s) at %t delay 1:(!hir.int,!hir.int)->(!hir.int)
   
   return
 }
