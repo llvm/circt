@@ -153,6 +153,26 @@ static Value createSubSig(LLVM::LLVMDialect *dialect,
   return allocaSubSig;
 }
 
+/// Returns true if the given value is passed as an argument to the destination
+/// block of the given WaitOp.
+static bool isWaitDestArg(WaitOp op, Value val) {
+  for (auto arg : op.destOps()) {
+    if (arg == val)
+      return true;
+  }
+  return false;
+}
+
+// Returns true if the given operation is used as a destination argument in a
+// WaitOp.
+static bool isWaitDestArg(Operation *op) {
+  for (auto user : op->getUsers()) {
+    if (auto wait = dyn_cast<WaitOp>(user))
+      return isWaitDestArg(wait, op->getResult(0));
+  }
+  return false;
+}
+
 /// Gather the types of values that are used outside of the block they're
 /// defined in. An LLVMType structure containing those types, in order of
 /// appearance, is returned.
@@ -161,7 +181,7 @@ static LLVM::LLVMType getProcPersistenceTy(LLVM::LLVMDialect *dialect,
                                            ProcOp &proc) {
   SmallVector<LLVM::LLVMType, 3> types = SmallVector<LLVM::LLVMType, 3>();
   proc.walk([&](Operation *op) -> void {
-    if (op->isUsedOutsideOfBlock(op->getBlock())) {
+    if (op->isUsedOutsideOfBlock(op->getBlock()) || isWaitDestArg(op)) {
       if (auto ptr = op->getResult(0).getType().dyn_cast<PtrType>()) {
         // Persist the unwrapped value.
         auto converted = converter.convertType(ptr.getUnderlyingType());
@@ -196,8 +216,9 @@ static LLVM::LLVMType getProcPersistenceTy(LLVM::LLVMDialect *dialect,
 static void insertComparisonBlock(ConversionPatternRewriter &rewriter,
                                   LLVM::LLVMDialect *dialect, Location loc,
                                   Region *body, Value resumeIdx, int currIdx,
-                                  Block *trueDest, Block *falseDest = nullptr) {
-  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect->getContext());
+                                  Block *trueDest, ValueRange trueDestArgs,
+                                  Block *falseDest = nullptr) {
+  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect);
   auto secondBlock = ++body->begin();
   auto newBlock = rewriter.createBlock(body, secondBlock);
   auto cmpIdx = rewriter.create<LLVM::ConstantOp>(
@@ -210,7 +231,8 @@ static void insertComparisonBlock(ConversionPatternRewriter &rewriter,
   if (!falseDest)
     falseDest = &*secondBlock;
 
-  rewriter.create<LLVM::CondBrOp>(loc, cmpRes, trueDest, falseDest);
+  rewriter.create<LLVM::CondBrOp>(loc, cmpRes, trueDest, trueDestArgs,
+                                  falseDest, ValueRange());
 
   // Redirect the entry block terminator to the new comparison block.
   auto entryTer = body->front().getTerminator();
@@ -268,9 +290,14 @@ static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
   // Load the value from the persistence table and substitute the original
   // use with it, whenever it is in a different block.
   for (auto &use : llvm::make_early_inc_range(persist.getUses())) {
-    if (persist.getParentBlock() != use.getOwner()->getBlock()) {
-      auto user = use.getOwner();
-      rewriter.setInsertionPointToStart(user->getBlock());
+    auto user = use.getOwner();
+    if (persist.getParentBlock() != user->getBlock() ||
+        (isa<WaitOp>(user) && isWaitDestArg(cast<WaitOp>(user), persist))) {
+      if (isa<WaitOp>(user) && isWaitDestArg(cast<WaitOp>(user), persist))
+        rewriter.setInsertionPoint(
+            user->getParentRegion()->front().getTerminator());
+      else
+        rewriter.setInsertionPointToStart(user->getBlock());
 
       auto gep1 = gepPersistenceState(dialect, loc, rewriter, elemTy, i, state);
       // Use the pointer in the state struct directly for pointer and signal
@@ -293,8 +320,16 @@ static void insertPersistence(LLVMTypeConverter &converter,
                               ConversionPatternRewriter &rewriter,
                               LLVM::LLVMDialect *dialect, Location loc,
                               ProcOp &proc, LLVM::LLVMType &stateTy,
-                              LLVM::LLVMFuncOp &converted) {
-  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect->getContext());
+                              LLVM::LLVMFuncOp &converted,
+                              Operation *splitEntryBefore) {
+  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect);
+
+  auto &firstBB = converted.getBody().front();
+
+  auto splitFirst = firstBB.splitBlock(splitEntryBefore);
+
+  rewriter.setInsertionPointToEnd(&firstBB);
+  rewriter.create<LLVM::BrOp>(loc, ValueRange(), splitFirst);
 
   // Load the resume index from the process state argument.
   rewriter.setInsertionPoint(converted.getBody().front().getTerminator());
@@ -314,14 +349,13 @@ static void insertPersistence(LLVMTypeConverter &converter,
   rewriter.create<LLVM::ReturnOp>(loc, ValueRange());
 
   auto body = &converted.getBody();
-  assert(body->front().getNumSuccessors() > 0 &&
-         "the process entry block is expected to branch to another block");
 
   // Redirect the entry block to a first comparison block. If on a fresh start,
   // start from where original entry would have jumped, else the process is in
   // an illegal state and jump to the abort block.
   insertComparisonBlock(rewriter, dialect, loc, body, larg, 0,
-                        body->front().getSuccessor(0), abortBlock);
+                        body->front().getSuccessor(0), ValueRange(),
+                        abortBlock);
 
   // Keep track of the index in the presistence table of the operation we
   // are currently processing.
@@ -331,7 +365,7 @@ static void insertPersistence(LLVMTypeConverter &converter,
 
   // Insert operations required to persist values across process suspension.
   converted.walk([&](Operation *op) -> void {
-    if (op->isUsedOutsideOfBlock(op->getBlock()) &&
+    if ((op->isUsedOutsideOfBlock(op->getBlock()) || isWaitDestArg(op)) &&
         op->getResult(0) != larg.getResult()) {
       persistValue(dialect, loc, converter, rewriter, stateTy, i,
                    converted.getArgument(1), op->getResult(0));
@@ -340,7 +374,7 @@ static void insertPersistence(LLVMTypeConverter &converter,
     // Insert a comparison block for wait operations.
     if (auto wait = dyn_cast<WaitOp>(op)) {
       insertComparisonBlock(rewriter, dialect, loc, body, larg, ++waitInd,
-                            wait.dest());
+                            wait.dest(), wait.destOps());
 
       // Insert the resume index update at the wait operation location.
       rewriter.setInsertionPoint(op);
@@ -522,6 +556,10 @@ struct ProcOpConversion : public ConvertToLLVMPattern {
         getProcPersistenceTy(&getDialect(), typeConverter, procOp));
     auto sigTy = getSigType(&getDialect());
 
+    // Keep track of the original first operation of the process, to know where
+    // to split the first block to insert comparison blocks.
+    auto &firstOp = op->getRegion(0).front().front();
+
     // Have an intermediate signature conversion to add the arguments for the
     // state, process-specific state and signal table.
     LLVMTypeConverter::SignatureConversion intermediate(
@@ -568,7 +606,7 @@ struct ProcOpConversion : public ConvertToLLVMPattern {
                                 llvmFunc.end());
 
     insertPersistence(typeConverter, rewriter, &getDialect(), op->getLoc(),
-                      procOp, stateTy, llvmFunc);
+                      procOp, stateTy, llvmFunc, &firstOp);
 
     // Convert the block argument types after inserting the persistence, since
     // this messes up the block argument uses.
