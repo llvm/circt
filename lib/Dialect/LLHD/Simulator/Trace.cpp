@@ -54,7 +54,7 @@ void Trace::addChangeReduced(unsigned sigIndex) {
       // Add a change for the whole signal.
       auto valueDump = sig.dump();
       auto path = state->instances[root].path + '/' + sig.name;
-      changes.push_back(std::make_tuple(path, valueDump));
+      changes.push_back(std::make_pair(path, valueDump));
     }
   }
 }
