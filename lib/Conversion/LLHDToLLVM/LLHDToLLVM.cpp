@@ -1332,10 +1332,14 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
                            .getPointerTo();
       auto oneC = rewriter.create<LLVM::ConstantOp>(
           op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(1));
+      auto eightC = rewriter.create<LLVM::ConstantOp>(
+          op->getLoc(), i64Ty, rewriter.getI64IntegerAttr(8));
       auto nullPtr = rewriter.create<LLVM::NullOp>(op->getLoc(), llvmPtrTy);
       auto gepOne = rewriter.create<LLVM::GEPOp>(
           op->getLoc(), llvmPtrTy, nullPtr, ArrayRef<Value>(oneC));
-      sigWidth = rewriter.create<LLVM::PtrToIntOp>(op->getLoc(), i64Ty, gepOne);
+      auto toInt =
+          rewriter.create<LLVM::PtrToIntOp>(op->getLoc(), i64Ty, gepOne);
+      sigWidth = rewriter.create<LLVM::MulOp>(op->getLoc(), toInt, eightC);
     } else {
       sigWidth = rewriter.create<LLVM::ConstantOp>(
           op->getLoc(), i64Ty,

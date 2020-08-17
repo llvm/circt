@@ -85,17 +85,19 @@ llhd.entity @convert_prb (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!llhd.array<3x
 // CHECK:           %[[VAL_20:.*]] = llvm.extractvalue %[[VAL_13]][2 : i32] : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_21:.*]] = llvm.call @drive_signal(%[[VAL_0]], %[[VAL_4]], %[[VAL_17]], %[[VAL_14]], %[[VAL_18]], %[[VAL_19]], %[[VAL_20]]) : (!llvm.ptr<i8>, !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.ptr<i8>, !llvm.i64, !llvm.i64, !llvm.i64, !llvm.i64) -> !llvm.void
 // CHECK:           %[[VAL_22:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
-// CHECK:           %[[VAL_23:.*]] = llvm.mlir.null : !llvm.ptr<array<3 x i5>>
-// CHECK:           %[[VAL_24:.*]] = llvm.getelementptr %[[VAL_23]]{{\[}}%[[VAL_22]]] : (!llvm.ptr<array<3 x i5>>, !llvm.i32) -> !llvm.ptr<array<3 x i5>>
-// CHECK:           %[[VAL_25:.*]] = llvm.ptrtoint %[[VAL_24]] : !llvm.ptr<array<3 x i5>> to !llvm.i64
-// CHECK:           %[[VAL_26:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
-// CHECK:           %[[VAL_27:.*]] = llvm.alloca %[[VAL_26]] x !llvm.array<3 x i5> {alignment = 4 : i64} : (!llvm.i32) -> !llvm.ptr<array<3 x i5>>
-// CHECK:           llvm.store %[[VAL_12]], %[[VAL_27]] : !llvm.ptr<array<3 x i5>>
-// CHECK:           %[[VAL_28:.*]] = llvm.bitcast %[[VAL_27]] : !llvm.ptr<array<3 x i5>> to !llvm.ptr<i8>
-// CHECK:           %[[VAL_29:.*]] = llvm.extractvalue %[[VAL_13]][0 : i32] : !llvm.array<3 x i64>
-// CHECK:           %[[VAL_30:.*]] = llvm.extractvalue %[[VAL_13]][1 : i32] : !llvm.array<3 x i64>
-// CHECK:           %[[VAL_31:.*]] = llvm.extractvalue %[[VAL_13]][2 : i32] : !llvm.array<3 x i64>
-// CHECK:           %[[VAL_32:.*]] = llvm.call @drive_signal(%[[VAL_0]], %[[VAL_6]], %[[VAL_28]], %[[VAL_25]], %[[VAL_29]], %[[VAL_30]], %[[VAL_31]]) : (!llvm.ptr<i8>, !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.ptr<i8>, !llvm.i64, !llvm.i64, !llvm.i64, !llvm.i64) -> !llvm.void
+// CHECK:           %[[VAL_23:.*]] = llvm.mlir.constant(8 : i64) : !llvm.i64
+// CHECK:           %[[VAL_24:.*]] = llvm.mlir.null : !llvm.ptr<array<3 x i5>>
+// CHECK:           %[[VAL_25:.*]] = llvm.getelementptr %[[VAL_24]]{{\[}}%[[VAL_22]]] : (!llvm.ptr<array<3 x i5>>, !llvm.i32) -> !llvm.ptr<array<3 x i5>>
+// CHECK:           %[[VAL_26:.*]] = llvm.ptrtoint %[[VAL_25]] : !llvm.ptr<array<3 x i5>> to !llvm.i64
+// CHECK:           %[[VAL_27:.*]] = llvm.mul %[[VAL_26]], %[[VAL_23]] : !llvm.i64
+// CHECK:           %[[VAL_28:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
+// CHECK:           %[[VAL_29:.*]] = llvm.alloca %[[VAL_28]] x !llvm.array<3 x i5> {alignment = 4 : i64} : (!llvm.i32) -> !llvm.ptr<array<3 x i5>>
+// CHECK:           llvm.store %[[VAL_12]], %[[VAL_29]] : !llvm.ptr<array<3 x i5>>
+// CHECK:           %[[VAL_30:.*]] = llvm.bitcast %[[VAL_29]] : !llvm.ptr<array<3 x i5>> to !llvm.ptr<i8>
+// CHECK:           %[[VAL_31:.*]] = llvm.extractvalue %[[VAL_13]][0 : i32] : !llvm.array<3 x i64>
+// CHECK:           %[[VAL_32:.*]] = llvm.extractvalue %[[VAL_13]][1 : i32] : !llvm.array<3 x i64>
+// CHECK:           %[[VAL_33:.*]] = llvm.extractvalue %[[VAL_13]][2 : i32] : !llvm.array<3 x i64>
+// CHECK:           %[[VAL_34:.*]] = llvm.call @drive_signal(%[[VAL_0]], %[[VAL_6]], %[[VAL_30]], %[[VAL_27]], %[[VAL_31]], %[[VAL_32]], %[[VAL_33]]) : (!llvm.ptr<i8>, !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.ptr<i8>, !llvm.i64, !llvm.i64, !llvm.i64, !llvm.i64) -> !llvm.void
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.entity @convert_drv (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!llhd.array<3xi5>>) -> () {
