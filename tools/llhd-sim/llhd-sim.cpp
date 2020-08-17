@@ -51,6 +51,24 @@ static cl::opt<std::string> root(
     cl::value_desc("root_name"), cl::init("root"));
 static cl::alias rootA("r", cl::desc("Alias for -root"), cl::aliasopt(root));
 
+enum TraceFormat { full, reduced, merged, mergedReduce, noTrace = -1 };
+
+static cl::opt<TraceFormat> traceMode(
+    "trace-format", cl::desc("Choose the dump format:"), cl::init(full),
+    cl::values(
+        clEnumVal(full, "A human readable and diff-friendly dump of all the "
+                        "signal changes, default"),
+        clEnumVal(reduced,
+                  "A human readable dump of only the root-level signals"),
+        clEnumVal(merged, "A human readable dump of all signal changes, where "
+                          "all delta steps and epsilon steps are merged into "
+                          "their real-time steps"),
+        clEnumValN(mergedReduce, "merged-reduce",
+                   "A human readable dump of only the root level signals, "
+                   "where all delta steps and epsilon steps are merged into "
+                   "their real-time steps"),
+        clEnumValN(noTrace, "no-trace", "Don't dump the signal trace")));
+
 static int parseMLIR(MLIRContext &context, OwningModuleRef &module) {
   module = parseSourceFile(inputFilename, &context);
   if (!module)
@@ -115,7 +133,7 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  llhd::sim::Engine engine(output->os(), *module, context, root);
+  llhd::sim::Engine engine(output->os(), *module, context, root, traceMode);
 
   if (dumpLLVMDialect || dumpLLVMIR) {
     return dumpLLVM(engine.getModule(), context);

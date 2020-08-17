@@ -20,6 +20,16 @@ extern "C" {
 int allocSignal(circt::llhd::sim::State *state, int index, char *owner,
                 uint8_t *value, int64_t size);
 
+/// Add offset and size information for the elements of an array signal.
+void add_sig_array_elements(mlir::llhd::sim::State *state, unsigned index,
+                            unsigned size, unsigned numElements);
+
+/// Add offset and size information for one element of a struct signal. Elements
+/// are assumed to be added (by calling this function) in sequential order, from
+/// first to last.
+void add_sig_struct_element(mlir::llhd::sim::State *state, unsigned index,
+                            unsigned offset, unsigned size);
+
 /// Add allocated constructs to a process instance.
 void allocProc(circt::llhd::sim::State *state, char *owner,
                circt::llhd::sim::ProcState *procState);

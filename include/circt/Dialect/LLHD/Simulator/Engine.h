@@ -27,7 +27,7 @@ public:
   /// Initialize an LLHD simulation engine. This initializes the state, as well
   /// as the mlir::ExecutionEngine with the given module.
   Engine(llvm::raw_ostream &out, ModuleOp module, MLIRContext &context,
-         std::string root);
+         std::string root, int mode);
 
   /// Default destructor
   ~Engine();
@@ -58,6 +58,7 @@ private:
   std::unique_ptr<State> state;
   std::unique_ptr<ExecutionEngine> engine;
   ModuleOp module;
+  int traceMode;
 };
 
 } // namespace sim

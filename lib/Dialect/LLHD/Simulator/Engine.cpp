@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "State.h"
+#include "Trace.h"
 
 #include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
 #include "circt/Dialect/LLHD/Simulator/Engine.h"
@@ -21,9 +22,10 @@ using namespace mlir;
 using namespace circt::llhd::sim;
 
 Engine::Engine(llvm::raw_ostream &out, ModuleOp module, MLIRContext &context,
-               std::string root)
-    : out(out), root(root) {
+               std::string root, int mode)
+    : out(out), root(root), traceMode(mode) {
   state = std::make_unique<State>();
+  state->root = root + '.' + root;
 
   buildLayout(module);
 
@@ -65,6 +67,9 @@ int Engine::simulate(int n) {
   assert(engine && "engine not found");
   assert(state && "state not found");
 
+  auto tm = static_cast<TraceMode>(traceMode);
+  Trace trace(state, out, tm);
+
   SmallVector<void *, 1> arg({&state});
   // Initialize tbe simulation state.
   auto invocationResult = engine->invoke("llhd_init", arg);
@@ -73,9 +78,11 @@ int Engine::simulate(int n) {
     return -1;
   }
 
-  // Dump the signals' initial values.
-  for (size_t i = 0, e = state->signals.size(); i < e; ++i) {
-    state->dumpSignal(out, i);
+  if (traceMode >= 0) {
+    // Dump the signals' initial values.
+    for (size_t i = 0, e = state->signals.size(); i < e; ++i) {
+      trace.addChange(i);
+    }
   }
 
   int i = 0;
@@ -93,8 +100,10 @@ int Engine::simulate(int n) {
     auto pop = state->popQueue();
 
     // Update the simulation time.
-    assert(state->time < pop.time || pop.time.time == 0);
     state->time = pop.time;
+
+    if (traceMode >= 0)
+      trace.flush();
 
     // Apply the signal changes and dump the signals that actually changed
     // value.
@@ -143,7 +152,8 @@ int Engine::simulate(int n) {
       }
 
       // Dump the updated signal.
-      state->dumpSignal(out, change.first);
+      if (traceMode >= 0)
+        trace.addChange(change.first);
     }
 
     // Add scheduled process resumes to the wakeup queue.
@@ -178,6 +188,12 @@ int Engine::simulate(int n) {
     wakeupQueue.clear();
     i++;
   }
+
+  if (traceMode >= 0) {
+    // Flush any remainign changes
+    trace.flush(/*force=*/true);
+  }
+
   llvm::errs() << "Finished after " << i << " steps.\n";
   return 0;
 }
@@ -189,7 +205,7 @@ void Engine::buildLayout(ModuleOp module) {
 
   // Build root instance, the parent and instance names are the same for the
   // root.
-  Instance rootInst(root, root);
+  Instance rootInst(state->root, state->root);
   rootInst.unit = root;
   rootInst.path = root;
 
@@ -199,10 +215,10 @@ void Engine::buildLayout(ModuleOp module) {
   // The root is always an instance.
   rootInst.isEntity = true;
   // Store the root instance.
-  state->instances[rootInst.unit + "." + rootInst.name] = std::move(rootInst);
+  state->instances[rootInst.unit + "." + rootInst.name] = std::move(rootInst)
 
-  // Add triggers to signals.
-  for (auto &inst : state->instances) {
+      // Add triggers to signals.
+      for (auto &inst : state->instances) {
     for (auto trigger : inst.getValue().sensitivityList) {
       state->signals[trigger.globalIndex].triggers.push_back(
           inst.getKey().str());

@@ -23,7 +23,18 @@ int allocSignal(State *state, int index, char *owner, uint8_t *value,
   return state->addSignalData(index, sOwner, value, size);
 }
 
-void allocProc(State *state, char *owner, ProcState *procState) {
+void add_sig_array_elements(State *state, unsigned index, unsigned size,
+                            unsigned numElements) {
+  for (size_t i = 0; i < numElements; ++i)
+    state->addSignalElement(index, size * i, size);
+}
+
+void add_sig_struct_element(State *state, unsigned index, unsigned offset,
+                            unsigned size) {
+  state->addSignalElement(index, offset, size);
+}
+
+void alloc_proc(State *state, char *owner, ProcState *procState) {
   assert(state && "alloc_proc: state not found");
   std::string sOwner(owner);
   state->addProcPtr(sOwner, procState);

@@ -1,8 +1,8 @@
 // RUN: llhd-sim %s | FileCheck %s
 
 // CHECK: 0ps 0d 0e  root/proc/s1  0x00000000
-// CHECK-NEXT: 0ps 0d 0e  root/s1  0x00000000
 // CHECK-NEXT: 0ps 0d 0e  root/proc/s2  0x00000000
+// CHECK-NEXT: 0ps 0d 0e  root/s1  0x00000000
 // CHECK-NEXT: 0ps 0d 0e  root/s2  0x00000000
 // CHECK-NEXT: 0ps 0d 2e  root/proc/s1  0x00000001
 // CHECK-NEXT: 0ps 0d 2e  root/s1  0x00000001
