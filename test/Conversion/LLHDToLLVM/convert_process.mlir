@@ -66,10 +66,10 @@ func @dummy_subsig(%0 : !llhd.sig<i10>) {
 // CHECK:           %[[VAL_27:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_24]], %[[VAL_25]], %[[VAL_26]]] : (!llvm.ptr<struct<(ptr<i8>, i32, ptr<array<2 x i1>>, struct<(i1, i32, array<3 x i32>, i32, struct<(ptr<i8>, i64, i64, i64)>)>)>>, !llvm.i32, !llvm.i32, !llvm.i32) -> !llvm.ptr<array<3 x i32>>
 // CHECK:           llvm.store %[[VAL_23]], %[[VAL_27]] : !llvm.ptr<array<3 x i32>>
 // CHECK:           %[[VAL_28:.*]] = llvm.mlir.constant(1 : i32) : !llvm.i32
-// CHECK:           %[[VAL_29:.*]] = llvm.alloca %[[VAL_28]] x !llvm.i32 {alignment = 4 : i64} : (!llvm.i32) -> !llvm.ptr<i32>
-// CHECK:           llvm.store %[[VAL_18]], %[[VAL_29]] : !llvm.ptr<i32>
-// CHECK:           %[[VAL_30:.*]] = llvm.load %[[VAL_29]] : !llvm.ptr<i32>
-// CHECK:           %[[VAL_31:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+// CHECK:           %[[VAL_29:.*]] = llvm.alloca %[[VAL_28]] x !llvm.i32 {alignment = 4 : i64} : (!llvm.i32) -> !llvm<"i32*">
+// CHECK:           llvm.store %[[VAL_18]], %[[VAL_29]] : !llvm<"i32*">
+// CHECK:           %[[VAL_30:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
+// CHECK:           %[[VAL_31:.*]] = llvm.mlir.constant(3 : i32) : !llvm.i32
 // CHECK:           %[[VAL_32:.*]] = llvm.mlir.constant(3 : i32) : !llvm.i32
 // CHECK:           %[[VAL_33:.*]] = llvm.mlir.constant(3 : i32) : !llvm.i32
 // CHECK:           %[[VAL_34:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_31]], %[[VAL_32]], %[[VAL_33]]] : (!llvm.ptr<struct<(ptr<i8>, i32, ptr<array<2 x i1>>, struct<(i1, i32, array<3 x i32>, i32, struct<(ptr<i8>, i64, i64, i64)>)>)>>, !llvm.i32, !llvm.i32, !llvm.i32) -> !llvm.ptr<i32>

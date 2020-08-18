@@ -272,8 +272,18 @@ static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
   } else {
     rewriter.setInsertionPointAfter(persist.getDefiningOp());
   }
+
+  auto gep0 = gepPersistenceState(dialect, loc, rewriter, elemTy, i, state);
+
   Value toStore;
   if (auto ptr = persist.getType().dyn_cast<PtrType>()) {
+    // Redirect uses of the pointer in the same block to the pointer in the
+    // persistence state. This ensures that stores and loads all operate on the
+    // same value.
+    for (auto &use : llvm::make_early_inc_range(persist.getUses())) {
+      if (persist.getParentBlock() == use.getOwner()->getBlock())
+        use.set(gep0);
+    }
     // Unwrap the pointer and store it's value.
     auto elemTy = converter.convertType(ptr.getUnderlyingType());
     toStore = rewriter.create<LLVM::LoadOp>(loc, elemTy, persist);
@@ -284,7 +294,6 @@ static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
     toStore = persist;
   }
 
-  auto gep0 = gepPersistenceState(dialect, loc, rewriter, elemTy, i, state);
   rewriter.create<LLVM::StoreOp>(loc, toStore, gep0);
 
   // Load the value from the persistence table and substitute the original
