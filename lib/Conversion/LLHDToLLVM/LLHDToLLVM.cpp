@@ -1285,6 +1285,15 @@ struct PrbOpConversion : public ConvertToLLVMPattern {
 };
 } // namespace
 
+/// Check if the given type is either of LLHD's ArrayType, TupleType, or LLVM
+/// array or struct type.
+static bool isArrayOrTuple(Type type) {
+  if (auto llvmTy = type.dyn_cast<LLVM::LLVMType>()) {
+    return llvmTy.isArrayTy() || llvmTy.isStructTy();
+  }
+  return type.isa<ArrayType, TupleType>();
+}
+
 namespace {
 /// Convert an `llhd.drv` operation to LLVM dialect. The result is a library
 /// call to the
@@ -1326,7 +1335,7 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
     Value statePtr = op->getParentOfType<LLVM::LLVMFuncOp>().getArgument(0);
     auto underlyingTy = drvOp.value().getType();
     Value sigWidth;
-    if (underlyingTy.isa<ArrayType, TupleType>()) {
+    if (isArrayOrTuple(underlyingTy)) {
       auto llvmPtrTy = typeConverter.convertType(underlyingTy)
                            .cast<LLVM::LLVMType>()
                            .getPointerTo();
