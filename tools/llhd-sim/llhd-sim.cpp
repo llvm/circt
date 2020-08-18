@@ -69,13 +69,6 @@ static cl::opt<TraceFormat> traceMode(
                    "their real-time steps"),
         clEnumValN(noTrace, "no-trace", "Don't dump the signal trace")));
 
-static int parseMLIR(MLIRContext &context, OwningModuleRef &module) {
-  module = parseSourceFile(inputFilename, &context);
-  if (!module)
-    return 1;
-  return 0;
-}
-
 static int dumpLLVM(ModuleOp module, MLIRContext &context) {
   if (dumpLLVMDialect) {
     module.dump();
@@ -117,15 +110,15 @@ int main(int argc, char **argv) {
   }
 
   // Parse the input file.
-  MLIRContext context;
-  OwningModuleRef module;
+  SourceMgr mgr;
+  mgr.AddNewSourceBuffer(std::move(file), SMLoc());
 
+  MLIRContext context;
   // Load the dialects
   context
       .loadDialect<llhd::LLHDDialect, LLVM::LLVMDialect, StandardOpsDialect>();
 
-  if (parseMLIR(context, module))
-    return 1;
+  OwningModuleRef module(parseSourceFile(mgr, &context));
 
   if (dumpMLIR) {
     module->dump();
