@@ -15,7 +15,6 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
 
-#include "llvm/ADT/SmallSet.h"
 #include "llvm/Support/TargetSelect.h"
 
 using namespace mlir;
@@ -88,10 +87,10 @@ int Engine::simulate(int n, uint64_t maxTime) {
   int i = 0;
 
   // Keep track of the instances that need to wakeup.
-  llvm::SmallSet<std::string, 8> wakeupQueue;
+  llvm::SmallVector<std::string, 8> wakeupQueue;
   // All instances are run in the first cycle.
   for (auto k : state->instances.keys())
-    wakeupQueue.insert(k.str());
+    wakeupQueue.push_back(k.str());
 
   while (!state->queue.empty()) {
     auto pop = state->popQueue();
@@ -149,7 +148,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
           // Invalidate scheduled wakeup
           state->instances[inst].expectedWakeup = Time();
         }
-        wakeupQueue.insert(inst);
+        wakeupQueue.push_back(inst);
       }
 
       // Dump the updated signal.
@@ -160,8 +159,12 @@ int Engine::simulate(int n, uint64_t maxTime) {
     // Add scheduled process resumes to the wakeup queue.
     for (auto inst : pop.scheduled) {
       if (state->time == state->instances[inst].expectedWakeup)
-        wakeupQueue.insert(inst);
+        wakeupQueue.push_back(inst);
     }
+
+    std::sort(wakeupQueue.begin(), wakeupQueue.end());
+    wakeupQueue.erase(std::unique(wakeupQueue.begin(), wakeupQueue.end()),
+                      wakeupQueue.end());
 
     // Run the instances present in the wakeup queue.
     for (auto inst : wakeupQueue) {
