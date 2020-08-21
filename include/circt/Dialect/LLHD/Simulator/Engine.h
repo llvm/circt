@@ -33,7 +33,7 @@ public:
   ~Engine();
 
   /// Run simulation up to n steps. Pass n=0 to run indefinitely.
-  int simulate(int n);
+  int simulate(int n, uint64_t maxTime);
 
   /// Build the instance layout of the design.
   void buildLayout(ModuleOp module);

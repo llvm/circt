@@ -63,7 +63,7 @@ void Engine::dumpStateLayout() { state->dumpLayout(); }
 
 void Engine::dumpStateSignalTriggers() { state->dumpSignalTriggers(); }
 
-int Engine::simulate(int n) {
+int Engine::simulate(int n, uint64_t maxTime) {
   assert(engine && "engine not found");
   assert(state && "state not found");
 
@@ -94,10 +94,11 @@ int Engine::simulate(int n) {
     wakeupQueue.insert(k.str());
 
   while (!state->queue.empty()) {
-    if (n > 0 && i >= n) {
+    auto pop = state->popQueue();
+
+    if ((n > 0 && i >= n) || (maxTime > 0 && pop.time.time > maxTime)) {
       break;
     }
-    auto pop = state->popQueue();
 
     // Update the simulation time.
     state->time = pop.time;

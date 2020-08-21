@@ -32,6 +32,12 @@ static cl::opt<std::string> outputFilename("o", cl::desc("Output filename"),
 static cl::opt<int> nSteps("n", cl::desc("Set the maximum number of steps"),
                            cl::value_desc("max-steps"));
 
+static cl::opt<uint64_t> maxTime(
+    "T",
+    cl::desc("Stop the simulation after the given amount of picoseconds, "
+             "inclusive (including all sub-steps for that real-time step). "),
+    cl::value_desc("max-steps"));
+
 static cl::opt<bool>
     dumpLLVMDialect("dump-llvm-dialect",
                     cl::desc("Dump the LLVM IR dialect module"));
@@ -138,7 +144,7 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  engine.simulate(nSteps);
+  engine.simulate(nSteps, maxTime);
 
   output->keep();
   return 0;
