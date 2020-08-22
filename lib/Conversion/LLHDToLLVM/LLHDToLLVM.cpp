@@ -1003,16 +1003,28 @@ struct InstOpConversion : public ConvertToLLVMPattern {
                             op.getLoc(), i8PtrTy,
                             rewriter.getSymbolRefAttr(mallFunc), margs)
                         .getResult(0);
+
         // Store the initial value.
         auto bitcast = initBuilder.create<LLVM::BitcastOp>(
             op.getLoc(), underlyingTy.getPointerTo(), mall);
         initBuilder.create<LLVM::StoreOp>(op.getLoc(), initDef, bitcast);
 
+        // Get the amount of bytes required to represent an integer underlying
+        // type. Use the whole size of the type if not an integer.
+        Value passSize;
+        if (underlyingTy.isIntegerTy()) {
+          auto byteWidth =
+              llvm::divideCeil(underlyingTy.getIntegerBitWidth(), 8);
+          passSize = initBuilder.create<LLVM::ConstantOp>(
+              op.getLoc(), i64Ty, rewriter.getI64IntegerAttr(byteWidth));
+        } else {
+          passSize = size;
+        }
+
         std::array<Value, 5> args(
-            {initStatePtr, indexConst, owner, mall, size});
+            {initStatePtr, indexConst, owner, mall, passSize});
         initBuilder.create<LLVM::CallOp>(
             op.getLoc(), i32Ty, rewriter.getSymbolRefAttr(sigFunc), args);
-        // }
       });
     } else if (auto proc = module.lookupSymbol<ProcOp>(instOp.callee())) {
       // Handle process instantiation.
