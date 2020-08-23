@@ -57,7 +57,14 @@ static cl::opt<std::string> root(
     cl::value_desc("root_name"), cl::init("root"));
 static cl::alias rootA("r", cl::desc("Alias for -root"), cl::aliasopt(root));
 
-enum TraceFormat { full, reduced, merged, mergedReduce, noTrace = -1 };
+enum TraceFormat {
+  full,
+  reduced,
+  merged,
+  mergedReduce,
+  namedOnly,
+  noTrace = -1
+};
 
 static cl::opt<TraceFormat> traceMode(
     "trace-format", cl::desc("Choose the dump format:"), cl::init(full),
@@ -73,6 +80,11 @@ static cl::opt<TraceFormat> traceMode(
                    "A human readable dump of only the root level signals, "
                    "where all delta steps and epsilon steps are merged into "
                    "their real-time steps"),
+        clEnumValN(namedOnly, "named-only",
+                   "A human readable dump of only the root level signals, "
+                   "where all delta steps and epsilon steps are merged into "
+                   "their real-time steps, and default-named signals (i.e. "
+                   "with name 'sig[0-9]*') are filtered out."),
         clEnumValN(noTrace, "no-trace", "Don't dump the signal trace")));
 
 static int dumpLLVM(ModuleOp module, MLIRContext &context) {

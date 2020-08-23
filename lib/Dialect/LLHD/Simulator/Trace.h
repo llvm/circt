@@ -14,7 +14,7 @@ namespace mlir {
 namespace llhd {
 namespace sim {
 
-enum TraceMode { full, reduced, merged, mergedReduce };
+enum TraceMode { full, reduced, merged, mergedReduce, namedOnly };
 
 /// Class for generating a signal change trace.
 /// This offers various trace formats:
@@ -37,6 +37,7 @@ class Trace {
   std::vector<std::pair<std::string, std::string>> changes;
   std::map<std::pair<unsigned, unsigned>, std::pair<Time, std::string>>
       mergedChanges;
+  std::map<std::pair<unsigned, unsigned>, std::string> lastValue;
 
   void addChangeFull(unsigned);
   void addChangeReduced(unsigned);

@@ -2,6 +2,8 @@
 
 #include "llvm/Support/raw_ostream.h"
 
+#include <regex>
+
 using namespace mlir::llhd::sim;
 
 void Trace::addChange(unsigned sigIndex) {
@@ -10,7 +12,7 @@ void Trace::addChange(unsigned sigIndex) {
     addChangeFull(sigIndex);
   else if (mode == reduced)
     addChangeReduced(sigIndex);
-  else if (mode == merged || mode == mergedReduce)
+  else if (mode == merged || mode == mergedReduce || mode == namedOnly)
     addChangeMerged(sigIndex);
 }
 
@@ -79,9 +81,9 @@ void Trace::addChangeMerged(unsigned sigIndex) {
 
 void Trace::flush(bool force) {
   if (changes.size() > 0 || mergedChanges.size() > 0) {
-    if (mode == TraceMode::full || mode == TraceMode::reduced)
+    if (mode == full || mode == reduced)
       flushFull();
-    else if (mode == TraceMode::merged || mode == TraceMode::mergedReduce)
+    else if (mode == merged || mode == mergedReduce || mode == namedOnly)
       if (state->time.time > currentTime.time || force)
         flushMerged();
   }
@@ -106,37 +108,44 @@ void Trace::flushMerged() {
     auto sigIndex = elem.first.first;
     auto sig = state->signals[sigIndex];
     auto change = elem.second;
-    // Add the changes for all signals.
-    if (mode == merged) {
-      for (auto inst : sig.triggers) {
-        if (sig.elements.size() > 0) {
-          std::string path;
-          llvm::raw_string_ostream ss(path);
-          ss << state->instances[inst].path << '/' << sig.name << '['
-             << elem.first.second << ']';
-          changes.push_back(std::make_pair(path, change.second));
-        } else {
-          auto path = state->instances[inst].path + '/' + sig.name;
-          changes.push_back(std::make_pair(path, change.second));
+    // Filter out changes that do not actually introduce changes
+    if (lastValue[elem.first] != change.second) {
+      // Add the changes for all signals.
+      if (mode == merged) {
+        for (auto inst : sig.triggers) {
+          if (sig.elements.size() > 0) {
+            std::string path;
+            llvm::raw_string_ostream ss(path);
+            ss << state->instances[inst].path << '/' << sig.name << '['
+               << elem.first.second << ']';
+            changes.push_back(std::make_pair(path, change.second));
+          } else {
+            auto path = state->instances[inst].path + '/' + sig.name;
+            changes.push_back(std::make_pair(path, change.second));
+          }
+        }
+      } else if (mode == mergedReduce || mode == namedOnly) {
+        // Add the changes for the top-level signals only.
+        auto sigIndex = elem.first.first;
+        auto sig = state->signals[sigIndex];
+        auto root = state->root;
+        if (sig.owner == root &&
+            (mode == mergedReduce ||
+             (mode == namedOnly && sig.owner == root &&
+              !std::regex_match(sig.name, std::regex("sig[0-9]*"))))) {
+          if (sig.elements.size() > 0) {
+            std::string path;
+            llvm::raw_string_ostream ss(path);
+            ss << state->instances[root].path << '/' << sig.name << '['
+               << elem.first.second << ']';
+            changes.push_back(std::make_pair(path, change.second));
+          } else {
+            auto path = state->instances[root].path + '/' + sig.name;
+            changes.push_back(std::make_pair(path, change.second));
+          }
         }
       }
-    } else if (mode == mergedReduce) {
-      // Add the changes for the top-level signals only.
-      auto sigIndex = elem.first.first;
-      auto sig = state->signals[sigIndex];
-      auto root = state->root;
-      if (sig.owner == root) {
-        if (sig.elements.size() > 0) {
-          std::string path;
-          llvm::raw_string_ostream ss(path);
-          ss << state->instances[root].path << '/' << sig.name << '['
-             << elem.first.second << ']';
-          changes.push_back(std::make_pair(path, change.second));
-        } else {
-          auto path = state->instances[root].path + '/' + sig.name;
-          changes.push_back(std::make_pair(path, change.second));
-        }
-      }
+      lastValue[elem.first] = change.second;
     }
   }
 
