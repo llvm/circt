@@ -113,13 +113,41 @@ func @convert_extract_slice_sig (%sI32 : !llhd.sig<i32>, %sArr : !llhd.sig<!llhd
 // CHECK:           %[[VAL_13:.*]] = llvm.mlir.constant(0 : i64) : !llvm.i33
 // CHECK:           %[[VAL_14:.*]] = llvm.add %[[VAL_13]], %[[VAL_10]] : !llvm.i33
 // CHECK:           %[[VAL_15:.*]] = llvm.getelementptr %[[VAL_11]]{{\[}}%[[VAL_8]], %[[VAL_14]]] : (!llvm.ptr<array<4 x i5>>, !llvm.i64, !llvm.i33) -> !llvm.ptr<i5>
-// CHECK:           %[[VAL_16:.*]] = llvm.load %[[VAL_15]] : !llvm.ptr<i5>
-// CHECK:           %[[VAL_17:.*]] = llvm.insertvalue %[[VAL_16]], %[[VAL_12]][0 : i32] : !llvm.array<2 x i5>
-// CHECK:           %[[VAL_18:.*]] = llvm.mlir.constant(1 : i64) : !llvm.i33
-// CHECK:           %[[VAL_19:.*]] = llvm.add %[[VAL_18]], %[[VAL_10]] : !llvm.i33
-// CHECK:           %[[VAL_20:.*]] = llvm.getelementptr %[[VAL_11]]{{\[}}%[[VAL_8]], %[[VAL_19]]] : (!llvm.ptr<array<4 x i5>>, !llvm.i64, !llvm.i33) -> !llvm.ptr<i5>
-// CHECK:           %[[VAL_21:.*]] = llvm.load %[[VAL_20]] : !llvm.ptr<i5>
-// CHECK:           %[[VAL_22:.*]] = llvm.insertvalue %[[VAL_21]], %[[VAL_17]][1 : i32] : !llvm.array<2 x i5>
+// CHECK:           %[[VAL_16:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i5
+// CHECK:           %[[VAL_17:.*]] = llvm.ptrtoint %[[VAL_11]] : !llvm.ptr<array<4 x i5>> to !llvm.i64
+// CHECK:           %[[VAL_18:.*]] = llvm.ptrtoint %[[VAL_15]] : !llvm.ptr<i5> to !llvm.i64
+// CHECK:           %[[VAL_19:.*]] = llvm.icmp "ult" %[[VAL_18]], %[[VAL_17]] : !llvm.i64
+// CHECK:           llvm.cond_br %[[VAL_19]], ^bb3(%[[VAL_16]] : !llvm.i5), ^bb1
+// CHECK:         ^bb1:
+// CHECK:           %[[VAL_20:.*]] = llvm.mlir.constant(1 : i64) : !llvm.i64
+// CHECK:           %[[VAL_21:.*]] = llvm.getelementptr %[[VAL_11]]{{\[}}%[[VAL_20]]] : (!llvm.ptr<array<4 x i5>>, !llvm.i64) -> !llvm.ptr<i5>
+// CHECK:           %[[VAL_22:.*]] = llvm.ptrtoint %[[VAL_21]] : !llvm.ptr<i5> to !llvm.i64
+// CHECK:           %[[VAL_23:.*]] = llvm.icmp "ugt" %[[VAL_18]], %[[VAL_22]] : !llvm.i64
+// CHECK:           llvm.cond_br %[[VAL_23]], ^bb3(%[[VAL_16]] : !llvm.i5), ^bb2
+// CHECK:         ^bb2:
+// CHECK:           %[[VAL_24:.*]] = llvm.load %[[VAL_15]] : !llvm.ptr<i5>
+// CHECK:           llvm.br ^bb3(%[[VAL_24]] : !llvm.i5)
+// CHECK:         ^bb3(%[[VAL_25:.*]]: !llvm.i5):
+// CHECK:           %[[VAL_26:.*]] = llvm.insertvalue %[[VAL_25]], %[[VAL_12]][0 : i32] : !llvm.array<2 x i5>
+// CHECK:           %[[VAL_27:.*]] = llvm.mlir.constant(1 : i64) : !llvm.i33
+// CHECK:           %[[VAL_28:.*]] = llvm.add %[[VAL_27]], %[[VAL_10]] : !llvm.i33
+// CHECK:           %[[VAL_29:.*]] = llvm.getelementptr %[[VAL_11]]{{\[}}%[[VAL_8]], %[[VAL_28]]] : (!llvm.ptr<array<4 x i5>>, !llvm.i64, !llvm.i33) -> !llvm.ptr<i5>
+// CHECK:           %[[VAL_30:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i5
+// CHECK:           %[[VAL_31:.*]] = llvm.ptrtoint %[[VAL_11]] : !llvm.ptr<array<4 x i5>> to !llvm.i64
+// CHECK:           %[[VAL_32:.*]] = llvm.ptrtoint %[[VAL_29]] : !llvm.ptr<i5> to !llvm.i64
+// CHECK:           %[[VAL_33:.*]] = llvm.icmp "ult" %[[VAL_32]], %[[VAL_31]] : !llvm.i64
+// CHECK:           llvm.cond_br %[[VAL_33]], ^bb6(%[[VAL_30]] : !llvm.i5), ^bb4
+// CHECK:         ^bb4:
+// CHECK:           %[[VAL_34:.*]] = llvm.mlir.constant(1 : i64) : !llvm.i64
+// CHECK:           %[[VAL_35:.*]] = llvm.getelementptr %[[VAL_11]]{{\[}}%[[VAL_34]]] : (!llvm.ptr<array<4 x i5>>, !llvm.i64) -> !llvm.ptr<i5>
+// CHECK:           %[[VAL_36:.*]] = llvm.ptrtoint %[[VAL_35]] : !llvm.ptr<i5> to !llvm.i64
+// CHECK:           %[[VAL_37:.*]] = llvm.icmp "ugt" %[[VAL_32]], %[[VAL_36]] : !llvm.i64
+// CHECK:           llvm.cond_br %[[VAL_37]], ^bb6(%[[VAL_30]] : !llvm.i5), ^bb5
+// CHECK:         ^bb5:
+// CHECK:           %[[VAL_38:.*]] = llvm.load %[[VAL_29]] : !llvm.ptr<i5>
+// CHECK:           llvm.br ^bb6(%[[VAL_38]] : !llvm.i5)
+// CHECK:         ^bb6(%[[VAL_39:.*]]: !llvm.i5):
+// CHECK:           %[[VAL_40:.*]] = llvm.insertvalue %[[VAL_39]], %[[VAL_26]][1 : i32] : !llvm.array<2 x i5>
 // CHECK:           llvm.return
 // CHECK:         }
 func @convert_dyn_extract_slice(%cI32 : i32, %cI100 : i100, %arr : !llhd.array<4xi5>) {

@@ -343,7 +343,8 @@ static void insertPersistence(LLVMTypeConverter &converter,
 
   auto &firstBB = converted.getBody().front();
 
-  auto splitFirst = firstBB.splitBlock(splitEntryBefore);
+  auto splitFirst =
+      rewriter.splitBlock(&firstBB, splitEntryBefore->getIterator());
 
   rewriter.setInsertionPointToEnd(&firstBB);
   rewriter.create<LLVM::BrOp>(loc, ValueRange(), splitFirst);
@@ -1358,7 +1359,8 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
     // Insert enable comparison. Skip if the enable operand is 0.
     if (auto gate = drvOp.enable()) {
       auto block = op->getBlock();
-      auto continueBlock = block->splitBlock(op);
+      auto continueBlock =
+          rewriter.splitBlock(rewriter.getInsertionBlock(), op->getIterator());
       auto drvBlock = rewriter.createBlock(continueBlock);
       rewriter.setInsertionPointToEnd(drvBlock);
       rewriter.create<LLVM::BrOp>(op->getLoc(), ValueRange(), continueBlock);
@@ -2012,6 +2014,76 @@ struct ExtractSliceOpConversion : public ConvertToLLVMPattern {
 };
 } // namespace
 
+static Value getBaseValue(Location loc, ConversionPatternRewriter &rewriter,
+                          LLVM::LLVMType elemTy) {
+
+  if (elemTy.isStructTy()) {
+    Value struc = rewriter.create<LLVM::UndefOp>(loc, elemTy);
+    for (size_t i = 0, e = elemTy.getStructNumElements(); i < e; ++i) {
+      auto toInsert =
+          getBaseValue(loc, rewriter, elemTy.getStructElementType(i));
+      struc = rewriter.create<LLVM::InsertValueOp>(loc, elemTy, struc, toInsert,
+                                                   rewriter.getI32ArrayAttr(i));
+    }
+    return struc;
+  }
+  if (elemTy.isArrayTy()) {
+    Value arr = rewriter.create<LLVM::UndefOp>(loc, elemTy);
+    auto toInsert = getBaseValue(loc, rewriter, elemTy.getArrayElementType());
+    for (size_t i = 0, e = elemTy.getArrayNumElements(); i < e; ++i) {
+      arr = rewriter.create<LLVM::InsertValueOp>(loc, elemTy, arr, toInsert,
+                                                 rewriter.getI32ArrayAttr(i));
+    }
+  }
+  return rewriter.create<LLVM::ConstantOp>(loc, elemTy,
+                                           rewriter.getI32IntegerAttr(0));
+}
+
+static Value arrayBoundaryCheck(Location loc,
+                                ConversionPatternRewriter &rewriter,
+                                LLVM::LLVMType arrTy, Value ptr, Value gepd) {
+  auto i64Ty = LLVM::LLVMType::getInt64Ty(arrTy.getContext());
+  auto elemTy = arrTy.getArrayElementType();
+
+  auto block = rewriter.getInsertionBlock();
+  auto compBlock = rewriter.splitBlock(block, rewriter.getInsertionPoint());
+  auto loadBlock = rewriter.splitBlock(compBlock, compBlock->begin());
+  auto splitBlock = rewriter.splitBlock(loadBlock, loadBlock->begin());
+  auto arg = splitBlock->addArgument(elemTy);
+
+  rewriter.setInsertionPointToEnd(block);
+  auto base = getBaseValue(loc, rewriter, elemTy);
+
+  auto lower = rewriter.create<LLVM::PtrToIntOp>(loc, i64Ty, ptr);
+  auto gepInt = rewriter.create<LLVM::PtrToIntOp>(loc, i64Ty, gepd);
+  auto cmpLower = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::ult,
+                                                gepInt, lower);
+  rewriter.create<LLVM::CondBrOp>(loc, cmpLower, splitBlock, ValueRange({base}),
+                                  compBlock, ValueRange());
+
+  rewriter.setInsertionPointToEnd(compBlock);
+  auto last = rewriter.create<LLVM::ConstantOp>(
+      loc, i64Ty, rewriter.getI64IntegerAttr(arrTy.getArrayNumElements() - 1));
+  // auto upperOffset = rewriter.create<LLVM::MulOp>(loc, nElems, size);
+  // auto upper = rewriter.create<LLVM::AddOp>(loc, ptr, upperOffset);
+  auto gepLast = rewriter.create<LLVM::GEPOp>(
+      loc, arrTy.getArrayElementType().getPointerTo(), ptr,
+      ArrayRef<Value>(last));
+  auto upper = rewriter.create<LLVM::PtrToIntOp>(loc, i64Ty, gepLast);
+  auto cmpUpper = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::ugt,
+                                                gepInt, upper);
+  rewriter.create<LLVM::CondBrOp>(loc, cmpUpper, splitBlock, ValueRange({base}),
+                                  loadBlock, ValueRange());
+
+  rewriter.setInsertionPointToEnd(loadBlock);
+  auto load = rewriter.create<LLVM::LoadOp>(loc, elemTy, gepd);
+  rewriter.create<LLVM::BrOp>(loc, ValueRange({load}), splitBlock);
+
+  rewriter.setInsertionPointToStart(splitBlock);
+
+  return arg;
+}
+
 namespace {
 struct DynExtractSliceOpConversion : public ConvertToLLVMPattern {
   explicit DynExtractSliceOpConversion(MLIRContext *ctx,
@@ -2098,7 +2170,8 @@ struct DynExtractSliceOpConversion : public ConvertToLLVMPattern {
         auto gep = rewriter.create<LLVM::GEPOp>(
             op->getLoc(), elemTy.getPointerTo(), targetPtr,
             ArrayRef<Value>({zeroC, adjustedIndex}));
-        auto extract = rewriter.create<LLVM::LoadOp>(op->getLoc(), elemTy, gep);
+        auto extract = arrayBoundaryCheck(op->getLoc(), rewriter, llvmArrTy,
+                                          targetPtr, gep);
         slice = rewriter.create<LLVM::InsertValueOp>(
             op->getLoc(), llvmArrTy, slice, extract,
             rewriter.getI32ArrayAttr(i));
