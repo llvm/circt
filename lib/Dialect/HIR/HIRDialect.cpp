@@ -14,7 +14,7 @@ using namespace hir;
 
 HIRDialect::HIRDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context) {
-  addTypes<TimeType, IntType, MemoryInterfaceType, WireType>();
+  addTypes<TimeType, IntType,StaticIntType, MemoryInterfaceType, WireType>();
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/HIR/HIR.cpp.inc"
@@ -39,6 +39,10 @@ Type HIRDialect::parseType(DialectAsmParser &parser) const {
   if (typeKeyword == IntType::getKeyword())
     return IntType::get(getContext());
 
+  if (typeKeyword == StaticIntType::getKeyword())
+    return StaticIntType::get(getContext());
+
+
   return parser.emitError(parser.getNameLoc(), "unknown hir type"), Type();
 }
 
@@ -56,8 +60,13 @@ void HIRDialect::printType(Type type, DialectAsmPrinter &printer) const {
     printer << wire.getKeyword();
     return;
   }
-  if (IntType Int = type.dyn_cast<IntType>()) {
+  if (type.getKind()==IntKind){
+    IntType Int = type.cast<IntType>(); 
     printer << Int.getKeyword();
+    return;
+  }
+  if (StaticIntType StaticInt = type.dyn_cast<StaticIntType>()) {
+    printer << StaticInt.getKeyword();
     return;
   }
 }

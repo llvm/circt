@@ -2,6 +2,7 @@
 #define HIR_HIR_H
 
 #include "mlir/IR/Dialect.h"
+#include "mlir/IR/Function.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
@@ -12,6 +13,7 @@ namespace hir {
 enum Kinds {
   TimeKind = Type::FIRST_PRIVATE_EXPERIMENTAL_0_TYPE,
   IntKind,
+  StaticIntKind,
   MemoryInterfaceKind,
   WireKind
 };
@@ -30,19 +32,41 @@ public:
   }
 };
 
+//TODO: Remove this
+//class BaseIntType :public Type{
+//  static bool classof(Type type) {
+//    return type.getKind() == hir::IntKind ||
+//           type.getKind() == hir::StaticIntKind;
+//  }
+//};
+
 class IntType : public Type::TypeBase<IntType, Type, DefaultTypeStorage> {
   /**
    * This class defines hir.int type in the dialect.
    */
 public:
   using Base::Base;
-
   static bool kindof(unsigned kind) { return kind == IntKind; }
   static llvm::StringRef getKeyword() { return "int"; }
   static IntType get(MLIRContext *context) {
     return Base::get(context, IntKind);
   }
 };
+
+class StaticIntType : public Type::TypeBase<StaticIntType, Type, DefaultTypeStorage> {
+  /**
+   * This class defines hir.static_int type in the dialect.
+   */
+
+public:
+  using Base::Base;
+  static bool kindof(unsigned kind) { return kind == StaticIntKind; }
+  static llvm::StringRef getKeyword() { return "static_int"; }
+  static StaticIntType get(MLIRContext *context) {
+    return Base::get(context, StaticIntKind);
+  }
+};
+
 
 class MemoryInterfaceType
     : public Type::TypeBase<MemoryInterfaceType, Type, DefaultTypeStorage> {
