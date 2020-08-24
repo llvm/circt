@@ -9,9 +9,18 @@ it as the recursively as "CIRCT IR Compiler and Tools".  The T can be
 selectively expanded as Tool, Translator, Team, Technology, Target, Tree, Type,
 ... we're ok with the ambiguity.
 
-The CIRCT community has a weekly meeting with open attendance.  Please see the
+The CIRCT community is an open and welcoming community.  If you'd like to
+participate, you can do so in a number of different ways:
+
+1) Join our [Discourse Forum](https://llvm.discourse.group/c/Projects-that-want-to-become-official-LLVM-Projects/circt/) on the LLVM Discourse server.  
+
+2) Join our weekly video chat.  Please see the
 [meeting notes document](https://docs.google.com/document/d/1fOSRdyZR2w75D87yU2Ma9h2-_lEPL4NxvhJGJd-s5pk/edit#)
 for more information.
+
+3) Contribute code.  CIRCT follows all of the LLVM Policies: you can create pull
+   requests for the CIRCT repository, and gain commit access using the [standard
+   LLVM policies](https://llvm.discourse.group/c/Projects-that-want-to-become-official-LLVM-Projects/circt/).
 
 ## Motivation
 
