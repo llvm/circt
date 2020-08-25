@@ -908,7 +908,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
     } else if (auto proc = module.lookupSymbol<ProcOp>(instOp.callee())) {
       // Handle process instantiation.
       auto sensesPtrTy =
-          LLVM::LLVMType::getArrayTy(i1Ty, instOp.inputs().size())
+          LLVM::LLVMType::getArrayTy(i1Ty, proc.getNumArguments())
               .getPointerTo();
       auto procStatePtrTy =
           LLVM::LLVMType::getStructTy(
