@@ -91,7 +91,6 @@ struct Signal {
   std::string owner;
   // The list of instances this signal triggers.
   std::vector<std::string> triggers;
-  int origin = -1;
   uint64_t size;
   std::unique_ptr<uint8_t> value;
   std::vector<std::pair<unsigned, unsigned>> elements;
