@@ -478,12 +478,14 @@ void rewriteMemoryOps(handshake::FuncOp f, MemToAccess &memToAccess,
 
     // TODO: There might be other cases not handled belong to
     // AffineReadOpInterface or AffineWriteOpInterface.
-    if (isa<AffineLoadOp>(op))
+    if (isa<AffineLoadOp>(op)) {
       newOp = rewriter.create<handshake::LoadOp>(op->getLoc(), access.memref,
                                                  operands);
-    else if (isa<AffineStoreOp>(op))
+      op->getResult(0).replaceAllUsesWith(newOp->getResult(0));
+    } else if (isa<AffineStoreOp>(op)) {
       newOp = rewriter.create<handshake::StoreOp>(op->getLoc(),
                                                   op->getOperand(0), operands);
+    }
 
     // Update the memref to access mapping.
     memToAccess[access.memref].push_back(newOp);
@@ -497,9 +499,9 @@ void rewriteMemoryOps(handshake::FuncOp f, MemToAccess &memToAccess,
     for (unsigned j = 0; j < numOperands; ++j)
       op->eraseOperand(0);
     assert(op->getNumOperands() == 0);
-    // rewriter.eraseOp(op);
+    rewriter.eraseOp(op);
     // TODO: switch back to the rewriter based erase.
-    op->erase();
+    // op->erase();
   }
 }
 
@@ -606,10 +608,12 @@ void forkMemoryOpResults(handshake::FuncOp f,
                          ConversionPatternRewriter &rewriter) {
   for (Block &block : f) {
     for (Operation &op : block) {
-      if (isa<MemoryOp, StartOp, ControlMergeOp>(op)) {
+      if (isa<handshake::MemoryOp, handshake::StartOp,
+              handshake::ControlMergeOp>(op)) {
         for (auto result : op.getResults()) {
           // If there is a result and it is used more than once
           if (!result.use_empty() && !result.hasOneUse()) {
+            insertFork(&op, result, rewriter);
           }
         }
       }
@@ -666,6 +670,7 @@ void connectAccessToMemory(handshake::FuncOp f, MemToAccess &memToAccess,
                             memOpInfo, rewriter);
   }
 
+  // Add ForkOp to memory results that have been used more than once.
   forkMemoryOpResults(f, rewriter);
 
   removeAllocOps(f, rewriter);
@@ -794,7 +799,7 @@ public:
     // Changing their use to the block argument will avoid such problems.
     rewriteStartOp(newFuncOp, rewriter);
 
-    LLVM_DEBUG(newFuncOp.dump());
+    // LLVM_DEBUG(newFuncOp.dump());
 
     rewriter.eraseOp(funcOp);
 
