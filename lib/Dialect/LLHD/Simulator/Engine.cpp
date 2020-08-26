@@ -92,6 +92,8 @@ int Engine::simulate(int n, uint64_t maxTime) {
   for (auto k : state->instances.keys())
     wakeupQueue.push_back(k.str());
 
+  llvm::StringMap<void (*)(void **)> jitted;
+
   while (!state->queue.empty()) {
     auto pop = state->popQueue();
 
@@ -167,24 +169,30 @@ int Engine::simulate(int n, uint64_t maxTime) {
                       wakeupQueue.end());
 
     // Run the instances present in the wakeup queue.
-    for (auto inst : wakeupQueue) {
-      auto name = state->instances[inst].unit;
-      auto signalTable = state->instances[inst].sensitivityList.data();
+    for (auto instID : wakeupQueue) {
+      auto &inst = state->instances[instID];
+      auto name = inst.unit;
+      auto signalTable = inst.sensitivityList.data();
 
       // Gather the instance arguments for unit invocation.
       SmallVector<void *, 3> args;
-      if (state->instances[inst].isEntity)
-        args.assign(
-            {&state, &state->instances[inst].entityState, &signalTable});
+      if (inst.isEntity)
+        args.assign({&state, &inst.entityState, &signalTable});
       else {
-        args.assign({&state, &state->instances[inst].procState, &signalTable});
+        args.assign({&state, &inst.procState, &signalTable});
       }
       // Run the unit.
-      auto invocationResult = engine->invoke(name, args);
-      if (invocationResult) {
-        llvm::errs() << "Failed invocation of " << name << ": "
-                     << invocationResult;
-        return -1;
+      if (auto instPtr = jitted.lookup(name)) {
+        (*instPtr)(args.data());
+      } else {
+        auto expectedFPtr = engine->lookup(name);
+        if (!expectedFPtr) {
+          llvm::errs() << "Could not lookup " << name << "!\n";
+          return -1;
+        }
+        auto fptr = *expectedFPtr;
+        jitted.insert_or_assign(name, fptr);
+        (*fptr)(args.data());
       }
     }
 
