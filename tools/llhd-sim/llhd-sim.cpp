@@ -113,6 +113,14 @@ static int dumpLLVM(ModuleOp module, MLIRContext &context) {
     return -1;
   }
 
+  auto llvmTransformer =
+      makeOptimizingTransformer(optimizationLevel, 0, nullptr);
+
+  if (auto err = llvmTransformer(llvmModule.get())) {
+    llvm::errs() << "Failed to optimize LLVM IR " << err << "\n";
+    return -1;
+  }
+
   llvm::errs() << *llvmModule << "\n";
   return 0;
 }
