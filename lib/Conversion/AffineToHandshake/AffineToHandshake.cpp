@@ -482,8 +482,8 @@ void rewriteMemoryOps(handshake::FuncOp f, MemToAccess &memToAccess,
       newOp = rewriter.create<handshake::LoadOp>(op->getLoc(), access.memref,
                                                  operands);
     else if (isa<AffineStoreOp>(op))
-      newOp = rewriter.create<handshake::StoreOp>(op->getLoc(), access.memref,
-                                                  operands);
+      newOp = rewriter.create<handshake::StoreOp>(op->getLoc(),
+                                                  op->getOperand(0), operands);
 
     // Update the memref to access mapping.
     memToAccess[access.memref].push_back(newOp);
