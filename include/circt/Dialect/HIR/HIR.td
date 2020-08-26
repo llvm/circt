@@ -371,7 +371,7 @@ def CastOp : HIR_Op<"cast">{
 
 }
 
-def AddOp : HIR_Op<"add">{
+def AddOp : HIR_Op<"add",[NoSideEffect]>{
   let summary = "Add two hir.int values";
   let description = [{
       Example:
@@ -393,16 +393,26 @@ def ReturnOp : HIR_Op<"return", [HasParent<"DefOp">,NoSideEffect,
 
   let description = [{
     This instruction must be the last instruction in a block.
-
-    <!-- End of AutoGen section -->
-
-    ```
-    return-op ::= `spv.Return`
-    ```
+    ```mlir hir.return (%x, %y): (!hir.int, !hir.int)```
   }];
 
   let arguments = (ins Variadic<AnyType>:$operands);
 
   let assemblyFormat = "(`(`$operands^`)` `:` `(`type($operands)`)`)? attr-dict";
 }
+
+def NewWireOp :HIR_Op<"wire", [NoSideEffect]> {
+  let summary = "Create new wire";
+
+  let description = [{
+
+    ```mlir %w = hir.wire```
+  }];
+
+  let arguments = (ins);
+  let results = (outs WireType:$res);
+
+  let assemblyFormat = "attr-dict";
+}
+
 #endif // HIR_OPS

@@ -20,7 +20,7 @@ hir.def @MatmulKernel at %t (%A:!hir.mem_interface ,%B:!hir.mem_interface,%C:!hi
     hir.yield at %ti offset %s1
     hir.unroll_for %j = 0 to 128 step 1 iter_time(%tj = %ti){
       hir.yield at %tj offset %s1
-      %C_bus = "getNewWire"(){dims = "128xi32"}: () -> (!hir.wire)
+      %C_bus = hir.wire {type = "128xi32"}
       hir.wire_write %0 to %C_bus at %tj offset %s3 :
       (!hir.int,!hir.wire)
       %tk_end=hir.unroll_for %k = 0 to 128 step 1 iter_time(%tk = %tj tstep 1){
