@@ -2198,7 +2198,7 @@ struct ExtractElementOpConversion : public ConvertToLLVMPattern {
     auto extOp = cast<llhd::ExtractElementOp>(op);
     llhd::ExtractElementOpAdaptor transformed(operands);
 
-    if (extOp.target().getType().isa<ArrayType, TupleType>()) {
+    if (isArrayOrTuple(extOp.target().getType())) {
       rewriter.replaceOpWithNewOp<LLVM::ExtractValueOp>(
           op, typeConverter.convertType(extOp.result().getType()),
           transformed.target(), rewriter.getArrayAttr(extOp.indexAttr()));
