@@ -1609,10 +1609,13 @@ struct ShrOpConversion : public ConvertToLLVMPattern {
       return success();
     }
     if (auto arrTy = shrOp.result().getType().dyn_cast<ArrayType>()) {
-      auto baseTy = shrOp.base().getType().cast<ArrayType>();
-      auto hiddenTy = shrOp.hidden().getType().cast<ArrayType>();
-      auto combinedTy = ArrayType::get(
-          baseTy.getLength() + hiddenTy.getLength(), baseTy.getElementType());
+      auto baseTy = typeConverter.convertType(shrOp.base().getType())
+                        .cast<LLVM::LLVMType>();
+      auto hiddenTy = typeConverter.convertType(shrOp.hidden().getType())
+                          .cast<LLVM::LLVMType>();
+      auto combinedTy = llhd::ArrayType::get(baseTy.getArrayNumElements() +
+                                                 hiddenTy.getArrayNumElements(),
+                                             arrTy.getElementType());
 
       auto combinedArrayInit = rewriter.create<LLVM::UndefOp>(
           op->getLoc(), typeConverter.convertType(combinedTy));
@@ -1621,7 +1624,7 @@ struct ShrOpConversion : public ConvertToLLVMPattern {
           rewriter.getIndexAttr(0));
       auto insertHidden = rewriter.create<InsertSliceOp>(
           op->getLoc(), combinedTy, insertBase, shrOp.hidden(),
-          rewriter.getIndexAttr(baseTy.getLength()));
+          rewriter.getIndexAttr(baseTy.getArrayNumElements()));
       auto extract = rewriter.create<DynExtractSliceOp>(
           op->getLoc(), arrTy, insertHidden, transformed.amount());
 
@@ -2218,10 +2221,11 @@ struct InsertSliceOpConversion : public ConvertToLLVMPattern {
     if (auto arrTy = inssOp.result().getType().dyn_cast<ArrayType>()) {
       auto elemTy = typeConverter.convertType(arrTy.getElementType());
       auto llvmArrTy = typeConverter.convertType(arrTy);
+      auto llvmSliceTy = transformed.slice().getType().cast<LLVM::LLVMType>();
       size_t startIndex = inssOp.startAttr().getInt();
 
       Value insert = transformed.target();
-      for (size_t i = 0, e = inssOp.getSliceSize(); i < e; ++i) {
+      for (size_t i = 0, e = llvmSliceTy.getArrayNumElements(); i < e; ++i) {
         auto extract = rewriter.create<LLVM::ExtractValueOp>(
             op->getLoc(), elemTy, transformed.slice(),
             rewriter.getI32ArrayAttr(i));
