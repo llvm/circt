@@ -16,4 +16,4 @@ void registerAffineToHandshakePasses();
 }
 } // namespace circt
 
-#endif // MLIR_CONVERSION_AFFINETOHANDSHAKE_H_
+#endif // CIRCT_CONVERSION_AFFINETOHANDSHAKE_H_
