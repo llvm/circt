@@ -11,18 +11,25 @@
 #include "circt/Dialect/LLHD/Simulator/Engine.h"
 
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
+#include "mlir/IR/Module.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/Passes.h"
 
+#include "llvm/IR/Module.h"
 #include "llvm/Support/TargetSelect.h"
 
 using namespace mlir;
 using namespace circt::llhd::sim;
 
-Engine::Engine(llvm::raw_ostream &out, ModuleOp module, MLIRContext &context,
-               std::string root, int traceMode)
-    : out(out), root(root), traceMode(traceMode) {
+Engine::Engine(
+    llvm::raw_ostream &out, ModuleOp module,
+    llvm::function_ref<mlir::LogicalResult(mlir::ModuleOp)> mlirTransformer,
+    llvm::function_ref<llvm::Error(llvm::Module *)> llvmTransformer,
+    std::string root, int mode)
+    : out(out), root(root), traceMode(mode) {
+  startTimer(0);
   state = std::make_unique<State>();
   state->root = root + '.' + root;
 
@@ -40,10 +47,8 @@ Engine::Engine(llvm::raw_ostream &out, ModuleOp module, MLIRContext &context,
   // Add the 0-time event.
   state->queue.push(Slot(Time()));
 
-  mlir::PassManager pm(&context);
-  pm.addPass(llhd::createConvertLLHDToLLVMPass());
-  if (failed(pm.run(module))) {
-    llvm::errs() << "failed to convert module to LLVM";
+  if (failed(mlirTransformer(module))) {
+    llvm::errs() << "failed to apply the MLIR passes\n";
     exit(EXIT_FAILURE);
   }
 
@@ -51,7 +56,8 @@ Engine::Engine(llvm::raw_ostream &out, ModuleOp module, MLIRContext &context,
 
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
-  auto maybeEngine = mlir::ExecutionEngine::create(this->module);
+  auto maybeEngine =
+      mlir::ExecutionEngine::create(this->module, llvmTransformer);
   assert(maybeEngine && "failed to create JIT");
   engine = std::move(*maybeEngine);
 }
