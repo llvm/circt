@@ -10,6 +10,7 @@ add_mlir_library(MLIRAffineToHandshake
   MLIRStandardOps
   MLIRAffineOps
   MLIRAffineUtils
+  MLIRAnalysis
   MLIRSupport
   MLIRTransforms
   MLIRHandshakeOps

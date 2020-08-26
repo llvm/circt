@@ -8,8 +8,8 @@
 // =============================================================================
 
 #include "circt/Conversion/StandardToHandshake/StandardToHandshake.h"
-#include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
+#include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Function.h"
