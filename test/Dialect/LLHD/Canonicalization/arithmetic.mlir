@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -mlir-print-op-generic -canonicalize | circt-opt | circt-opt | FileCheck %s
+// RUN: circt-opt %s -canonicalize | FileCheck %s
 
 // CHECK-LABEL: @check_neg_folding
 func @check_neg_folding() -> (i16) {
