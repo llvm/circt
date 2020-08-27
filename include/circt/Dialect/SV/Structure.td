@@ -27,8 +27,8 @@ def InterfaceOp : SVOp<"interface",
 // For now, IntegerType is a placeholder for future SV dialect types
 def SignalTypeAttr : TypeAttrBase<"IntegerType", "Integer type attribute">;
 
-def InterfaceSignalOp : SVOp<"interface.signal", [Symbol, HasParent<"InterfaceOp">]>,
-    HasCustomParserPrinter {
+def InterfaceSignalOp : SVOp<"interface.signal",
+    [Symbol, HasParent<"InterfaceOp">]> {
   let summary = "Operation to define a SystemVerilog signal for interfaces";
 
   let description = [{
@@ -40,37 +40,41 @@ def InterfaceSignalOp : SVOp<"interface.signal", [Symbol, HasParent<"InterfaceOp
     StrAttr:$sym_name,
     SignalTypeAttr:$type
   );
+
+  let assemblyFormat = [{
+    attr-dict $sym_name `:` $type
+  }];
 }
 
-def ModPortDirectionInput : StrEnumAttrCase<"input">;
-def ModPortDirectionOutput : StrEnumAttrCase<"output">;
-def ModPortDirectionInout : StrEnumAttrCase<"inout">;
+def ModportDirectionInput : StrEnumAttrCase<"input">;
+def ModportDirectionOutput : StrEnumAttrCase<"output">;
+def ModportDirectionInOut : StrEnumAttrCase<"inout">;
 
-def ModPortDirectionAttr : StrEnumAttr<"ModPortDirectionAttr",
+def ModportDirectionAttr : StrEnumAttr<"ModportDirectionAttr",
   "Defines direction in a modport",
-  [ModPortDirectionInput, ModPortDirectionOutput, ModPortDirectionInout]>;
+  [ModportDirectionInput, ModportDirectionOutput, ModportDirectionInOut]>;
 
-def ModPortDirectionField : StructFieldAttr<"direction", ModPortDirectionAttr>;
+def ModportDirectionField : StructFieldAttr<"direction", ModportDirectionAttr>;
 
-def ModPortSignalField : StructFieldAttr<"signal", FlatSymbolRefAttr>;
+def ModportSignalField : StructFieldAttr<"signal", FlatSymbolRefAttr>;
 
-def ModPortStructAttr : StructAttr<"ModPortStructAttr", SVDialect,
-  [ModPortDirectionField, ModPortSignalField]>;
+def ModportStructAttr : StructAttr<"ModportStructAttr", SVDialect,
+  [ModportDirectionField, ModportSignalField]>;
 
-def ModPortStructArrayAttr : TypedArrayAttrBase<ModPortStructAttr,
+def ModportStructArrayAttr : TypedArrayAttrBase<ModportStructAttr,
   "array of modport structs">;
 
-def InterfaceModPortOp : SVOp<"interface.modport", [Symbol, HasParent<"InterfaceOp">]>,
-    HasCustomParserPrinter {
+def InterfaceModportOp : SVOp<"interface.modport",
+    [Symbol, HasParent<"InterfaceOp">]> {
   let summary = "Operation to define a SystemVerilog modport for interfaces";
 
   let arguments = (ins
     StrAttr:$sym_name,
-    ModPortStructArrayAttr:$ports
+    ModportStructArrayAttr:$ports
   );
 
-  let verifier = [{
-    return ::verify$cppClass(*this);
+  let assemblyFormat = [{
+    attr-dict $sym_name $ports
   }];
 }
 
