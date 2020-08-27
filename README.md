@@ -12,7 +12,7 @@ selectively expanded as Tool, Translator, Team, Technology, Target, Tree, Type,
 The CIRCT community is an open and welcoming community.  If you'd like to
 participate, you can do so in a number of different ways:
 
-1) Join our [Discourse Forum](https://llvm.discourse.group/c/Projects-that-want-to-become-official-LLVM-Projects/circt/) on the LLVM Discourse server.  
+1) Join our [Discourse Forum](https://llvm.discourse.group/c/Projects-that-want-to-become-official-LLVM-Projects/circt/) on the LLVM Discourse server.  To get a "mailing list" like experience click the bell icon in the upper right and switch to "Watching".  It is also helpful to go to your Discourse profile, then the "emails" tab, and check "Enable mailing list mode".
 
 2) Join our weekly video chat.  Please see the
 [meeting notes document](https://docs.google.com/document/d/1fOSRdyZR2w75D87yU2Ma9h2-_lEPL4NxvhJGJd-s5pk/edit#)
