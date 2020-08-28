@@ -1,30 +1,41 @@
+<p align="center"><img src="docs/circt-logo.svg"/></p>
+
 [![](https://github.com/circt/circt/workflows/Build%20and%20Test/badge.svg?event=push)](https://github.com/circt/circt/actions)
 
 # ⚡️ "CIRCT" / Circuit IR Compilers and Tools
 
 "CIRCT" stands for "Circuit IR Compilers and Tools".  One might also interpret
-it as the recursively as "CIRCT IR Compiler and Tools".  The T can be 
+it as the recursively as "CIRCT IR Compiler and Tools".  The T can be
 selectively expanded as Tool, Translator, Team, Technology, Target, Tree, Type,
 ... we're ok with the ambiguity.
 
-The CIRCT community has a weekly meeting with open attendance.  Please see the
+The CIRCT community is an open and welcoming community.  If you'd like to
+participate, you can do so in a number of different ways:
+
+1) Join our [Discourse Forum](https://llvm.discourse.group/c/Projects-that-want-to-become-official-LLVM-Projects/circt/) on the LLVM Discourse server.  To get a "mailing list" like experience click the bell icon in the upper right and switch to "Watching".  It is also helpful to go to your Discourse profile, then the "emails" tab, and check "Enable mailing list mode".
+
+2) Join our weekly video chat.  Please see the
 [meeting notes document](https://docs.google.com/document/d/1fOSRdyZR2w75D87yU2Ma9h2-_lEPL4NxvhJGJd-s5pk/edit#)
 for more information.
+
+3) Contribute code.  CIRCT follows all of the LLVM Policies: you can create pull
+   requests for the CIRCT repository, and gain commit access using the [standard
+   LLVM policies](https://llvm.discourse.group/c/Projects-that-want-to-become-official-LLVM-Projects/circt/).
 
 ## Motivation
 
 The EDA industry has well-known and widely used proprietary and open source
 tools.  However, these tools are inconsistent, have usability concerns, and were
 not designed together into a common platform.  Furthermore
-these tools are generally built with 
-[Verilog](https://en.wikipedia.org/wiki/Verilog) (also 
+these tools are generally built with
+[Verilog](https://en.wikipedia.org/wiki/Verilog) (also
 [VHDL](https://en.wikipedia.org/wiki/VHDL)) as the IRs that they
 interchange.  Verilog has well known design issues, and limitations, e.g.
 suffering from poor location tracking support.
 
 The CIRCT project is an (experimental!) effort looking to apply MLIR and
 the LLVM development methodology to the domain of hardware design tools.  Many
-of us dream of having reusable infrastructure that is modular, uses 
+of us dream of having reusable infrastructure that is modular, uses
 library-based design techniques, is more consistent, and builds on the best
 practices in compiler infrastructure and compiler design techniques.
 
@@ -41,7 +52,7 @@ For more information, please see our longer [charter document](docs/Charter.md).
 These commands can be used to set this up on a Mac:
 
 1) **Install Dependencies** of LLVM/MLIR according to [the
-  instructions](https://mlir.llvm.org/getting_started/), including cmake and ninja. 
+  instructions](https://mlir.llvm.org/getting_started/), including cmake and ninja.
 
 2) **Check out LLVM and CIRCT repos.**  CIRCT contains LLVM as a git
 submodule.  The LLVM repo here includes staged changes to MLIR which
@@ -115,8 +126,8 @@ GitHub issues.  Here are some high-level guidelines:
  * Please use clang-format in the LLVM style.  There are good plugins
    for common editors like VSCode, Atom, etc, or you can run it
    manually.  This makes code easier to read and understand.
- 
- * Beyond mechanical formatting issues, please follow the [LLVM Coding 
+
+ * Beyond mechanical formatting issues, please follow the [LLVM Coding
    Standards](https://llvm.org/docs/CodingStandards.html).
 
  * Please practice "[incremental development](https://llvm.org/docs/DeveloperPolicy.html#incremental-development)", preferring to send a small
@@ -146,7 +157,7 @@ The patch flow goes like this:
 1) Check out the LLVM mono repo (as described above).
 2) Make changes to your codebase.
 3) Stage your changes with `git add`.
-4) Run clang-format to tidy up the details of the patch with `git clang-format origin/master` 
+4) Run clang-format to tidy up the details of the patch with `git clang-format origin/master`
 5) Create a [patch in Phabricator](https://llvm.org/docs/Phabricator.html) with `arc diff`.
 6) Iterate on review, changing your code and sending another patch with `arc diff`.
 

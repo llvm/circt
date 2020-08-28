@@ -2,21 +2,13 @@
 //
 // Copyright 2019 The CIRCT Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 // =============================================================================
 
 #include "circt/Conversion/StandardToHandshake/StandardToHandshake.h"
-
+#include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
@@ -41,7 +33,6 @@ using namespace std;
 typedef DenseMap<Block *, vector<Value>> BlockValues;
 typedef DenseMap<Block *, vector<Operation *>> BlockOps;
 
-
 /// Remove basic blocks inside the given FuncOp. This allows the result to be
 /// a valid graph region, since multi-basic block regions are not allowed to
 /// be graph regions currently.
@@ -58,12 +49,10 @@ void removeBasicBlocks(handshake::FuncOp funcOp) {
   }
 
   // Move all operations to entry block and erase other blocks.
-  for (auto &block :
-         llvm::make_early_inc_range(llvm::drop_begin(funcOp, 1))) {
+  for (auto &block : llvm::make_early_inc_range(llvm::drop_begin(funcOp, 1))) {
     entryBlock.splice(--entryBlock.end(), block.getOperations());
   }
-  for (auto &block :
-         llvm::make_early_inc_range(llvm::drop_begin(funcOp, 1))) {
+  for (auto &block : llvm::make_early_inc_range(llvm::drop_begin(funcOp, 1))) {
     block.clear();
     block.dropAllDefinedValueUses();
     for (int i = 0; i < block.getNumArguments(); i++) {
@@ -1421,9 +1410,7 @@ struct HandshakeInsertBufferPass
 struct HandshakeRemoveBlockPass
     : public PassWrapper<HandshakeRemoveBlockPass,
                          OperationPass<handshake::FuncOp>> {
-  void runOnOperation() override {
-    removeBasicBlocks(getOperation());
-  }
+  void runOnOperation() override { removeBasicBlocks(getOperation()); }
 };
 
 struct HandshakePass

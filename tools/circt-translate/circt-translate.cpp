@@ -9,6 +9,7 @@
 #include "circt/Dialect/FIRRTL/Dialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/RTL/Dialect.h"
+#include "circt/Dialect/SV/Dialect.h"
 #include "circt/EmitVerilog.h"
 #include "circt/FIRParser.h"
 #include "circt/Target/Verilog/TranslateToVerilog.h"
@@ -52,8 +53,9 @@ int main(int argc, char **argv) {
   registerMLIRContextCLOptions();
   registerDialect<StandardOpsDialect>();
 
-  // RTL.
+  // RTL and SV.
   registerDialect<rtl::RTLDialect>();
+  registerDialect<sv::SVDialect>();
 
   // Register FIRRTL stuff.
   registerDialect<firrtl::FIRRTLDialect>();

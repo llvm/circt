@@ -73,7 +73,7 @@ int Engine::simulate(int n) {
   }
 
   // Dump the signals' initial values.
-  for (int i = 0; i < state->nSigs; ++i) {
+  for (size_t i = 0, e = state->signals.size(); i < e; ++i) {
     state->dumpSignal(out, i);
   }
 
@@ -100,10 +100,9 @@ int Engine::simulate(int n) {
     for (auto change : pop.changes) {
       // Get a buffer to apply the changes on.
       Signal *curr = &(state->signals[change.first]);
-      APInt buff(
-          curr->size * 8,
-          ArrayRef<uint64_t>(reinterpret_cast<uint64_t *>(curr->detail.value),
-                             curr->size));
+      APInt buff(curr->size * 8,
+                 ArrayRef<uint64_t>(reinterpret_cast<uint64_t *>(curr->value),
+                                    curr->size));
 
       // Apply all the changes to the buffer, in order of execution.
       for (auto drive : change.second) {
@@ -114,11 +113,11 @@ int Engine::simulate(int n) {
       }
 
       // Skip if the updated signal value is equal to the initial value.
-      if (std::memcmp(curr->detail.value, buff.getRawData(), curr->size) == 0)
+      if (std::memcmp(curr->value, buff.getRawData(), curr->size) == 0)
         continue;
 
       // Apply the signal update.
-      std::memcpy(curr->detail.value, buff.getRawData(),
+      std::memcpy(curr->value, buff.getRawData(),
                   state->signals[change.first].size);
 
       // Trigger all sensitive instances.
@@ -129,7 +128,10 @@ int Engine::simulate(int n) {
         // Skip if the process is not currently sensible to the signal.
         if (!state->instances[inst].isEntity) {
           auto &sensList = state->instances[inst].sensitivityList;
-          auto it = std::find(sensList.begin(), sensList.end(), change.first);
+          auto it = std::find_if(sensList.begin(), sensList.end(),
+                                 [&change](SignalDetail &s) {
+                                   return s.globalIndex == change.first;
+                                 });
           if (sensList.end() != it &&
               state->instances[inst].procState->senses[it - sensList.begin()] ==
                   0)
@@ -149,27 +151,17 @@ int Engine::simulate(int n) {
       wakeupQueue.push_back(inst);
     }
 
-    // Clear temporary subsignals.
-    state->signals.erase(state->signals.begin() + state->nSigs,
-                         state->signals.end());
-
     // Run the instances present in the wakeup queue.
     for (auto inst : wakeupQueue) {
       auto name = state->instances[inst].unit;
-      auto sigTable = state->instances[inst].signalTable.data();
-      auto sensitivityList = state->instances[inst].sensitivityList;
-      auto outputList = state->instances[inst].outputs;
-      // Combine inputs and outputs in one argument table.
-      sensitivityList.insert(sensitivityList.end(), outputList.begin(),
-                             outputList.end());
-      auto argTable = sensitivityList.data();
+      auto signalTable = state->instances[inst].sensitivityList.data();
 
       // Gather the instance arguments for unit invocation.
       SmallVector<void *, 3> args;
       if (state->instances[inst].isEntity)
-        args.assign({&state, &sigTable, &argTable});
+        args.assign({&state, &signalTable});
       else {
-        args.assign({&state, &state->instances[inst].procState, &argTable});
+        args.assign({&state, &state->instances[inst].procState, &signalTable});
       }
       // Run the unit.
       auto invocationResult = engine->invoke(name, args);
@@ -206,83 +198,63 @@ void Engine::buildLayout(ModuleOp module) {
   // Store the root instance.
   state->instances[rootInst.name] = rootInst;
 
-  // Add triggers and outputs to all signals.
+  // Add triggers to signals.
   for (auto &inst : state->instances) {
     for (auto trigger : inst.getValue().sensitivityList) {
-      state->signals[trigger].triggers.push_back(inst.getKey().str());
-    }
-    for (auto out : inst.getValue().outputs) {
-      state->signals[out].outOf.push_back(inst.getKey().str());
+      state->signals[trigger.globalIndex].triggers.push_back(
+          inst.getKey().str());
     }
   }
-  state->nSigs = state->signals.size();
 }
 
 void Engine::walkEntity(EntityOp entity, Instance &child) {
-  entity.walk([&](Operation *op) -> WalkResult {
+  entity.walk([&](Operation *op) {
     assert(op);
 
     // Add a signal to the signal table.
     if (auto sig = dyn_cast<SigOp>(op)) {
-      int index = state->addSignal(sig.name().str(), child.name);
-      child.signalTable.push_back(index);
+      uint64_t index = state->addSignal(sig.name().str(), child.name);
+      child.sensitivityList.push_back(
+          SignalDetail({nullptr, 0, child.sensitivityList.size(), index}));
     }
 
     // Build (recursive) instance layout.
     if (auto inst = dyn_cast<InstOp>(op)) {
       // Skip self-recursion.
       if (inst.callee() == child.name)
-        return WalkResult::advance();
+        return;
       if (auto e =
               op->getParentOfType<ModuleOp>().lookupSymbol(inst.callee())) {
         Instance newChild(inst.name().str(), child.name);
         newChild.unit = inst.callee().str();
+        newChild.nArgs = inst.getNumOperands();
 
-        // Gather sensitivity list.
-        for (auto arg : inst.inputs()) {
-          // Check if the argument comes from a parent's argument.
-          if (auto a = arg.dyn_cast<BlockArgument>()) {
-            unsigned int argInd = a.getArgNumber();
-            // The argument comes either from one of the parent's inputs, or one
-            // of the parent's outputs.
-            if (argInd < newChild.sensitivityList.size())
-              newChild.sensitivityList.push_back(child.sensitivityList[argInd]);
-            else
-              newChild.sensitivityList.push_back(
-                  child.outputs[argInd - newChild.sensitivityList.size()]);
-          } else if (auto sig = dyn_cast<SigOp>(arg.getDefiningOp())) {
-            // Otherwise has to come from a sigop, search through the intantce's
-            // signal table.
-            for (auto s : child.signalTable) {
-              if (state->signals[s].name == sig.name() &&
-                  state->signals[s].owner == child.name) {
-                newChild.sensitivityList.push_back(s);
-                break;
-              }
-            }
-          }
-        }
+        // Add instance arguments to sensitivity list. The first nArgs signals
+        // in the sensitivity list represent the unit's arguments, while the
+        // following ones represent the unit-defined signals.
+        llvm::SmallVector<Value, 8> args;
+        args.insert(args.end(), inst.inputs().begin(), inst.inputs().end());
+        args.insert(args.end(), inst.outputs().begin(), inst.outputs().end());
 
-        // Gather outputs list.
-        for (auto out : inst.outputs()) {
-          // Check if it comes from an argument.
-          if (auto a = out.dyn_cast<BlockArgument>()) {
-            unsigned int argInd = a.getArgNumber();
-            // The argument comes either from one of the parent's inputs or one
-            // of the parent's outputs.
-            if (argInd < newChild.sensitivityList.size())
-              newChild.outputs.push_back(child.sensitivityList[argInd]);
-            else
-              newChild.outputs.push_back(
-                  child.outputs[argInd - newChild.sensitivityList.size()]);
-          } else if (auto sig = dyn_cast<SigOp>(out.getDefiningOp())) {
-            // Search through the signal table.
-            for (auto s : child.signalTable) {
-              if (state->signals[s].name == sig.name() &&
-                  state->signals[s].owner == child.name) {
-                newChild.outputs.push_back(s);
-                break;
-              }
+        for (size_t i = 0, e = args.size(); i < e; ++i) {
+          // The signal comes from an instance's argument.
+          if (auto blockArg = args[i].dyn_cast<BlockArgument>()) {
+            auto detail = child.sensitivityList[blockArg.getArgNumber()];
+            detail.instIndex = i;
+            newChild.sensitivityList.push_back(detail);
+          } else if (auto sig = dyn_cast<SigOp>(args[i].getDefiningOp())) {
+            // The signal comes from one of the instance's owned signals.
+            auto it = std::find_if(
+                child.sensitivityList.begin(), child.sensitivityList.end(),
+                [&](SignalDetail &detail) {
+                  return state->signals[detail.globalIndex].name ==
+                             sig.name() &&
+                         state->signals[detail.globalIndex].owner == child.name;
+                });
+            if (it != child.sensitivityList.end()) {
+              auto detail = *it;
+              detail.instIndex = i;
+              newChild.sensitivityList.push_back(detail);
             }
           }
         }
@@ -300,6 +272,5 @@ void Engine::walkEntity(EntityOp entity, Instance &child) {
         state->instances[newChild.name] = newChild;
       }
     }
-    return WalkResult::advance();
   });
 }

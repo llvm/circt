@@ -8,6 +8,8 @@
 #include "circt/Dialect/FIRRTL/Visitors.h"
 #include "circt/Dialect/RTL/Ops.h"
 #include "circt/Dialect/RTL/Visitors.h"
+#include "circt/Dialect/SV/Ops.h"
+#include "circt/Dialect/SV/Visitors.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Module.h"
 #include "mlir/IR/StandardTypes.h"
@@ -37,7 +39,8 @@ static llvm::ManagedStatic<StringSet<>> reservedWordCache;
 static bool isVerilogExpression(Operation *op) {
   // All FIRRTL expressions and RTL combinatorial logic ops are Verilog
   // expressions.
-  return isExpression(op) || rtl::isCombinatorial(op);
+  return isExpression(op) || rtl::isCombinatorial(op) ||
+         isa<sv::TextualValueOp>(op);
 }
 
 /// Return the width of the specified FIRRTL type in bits or -1 if it isn't
@@ -302,6 +305,10 @@ public:
   void emitStatement(rtl::ConnectOp op);
   void emitStatement(PrintFOp op);
   void emitStatement(StopOp op);
+  void emitStatement(sv::IfDefOp op);
+  void emitStatement(sv::IfOp op);
+  void emitStatement(sv::AlwaysAtPosEdgeOp op);
+  void emitStatement(sv::FWriteOp op);
   void emitDecl(NodeOp op);
   void emitDecl(InstanceOp op);
   void emitDecl(RegOp op);
@@ -671,7 +678,8 @@ namespace {
 /// stuff, then pre-insert parentheses and other things if we find out that it
 /// was needed later.
 class ExprEmitter : public ExprVisitor<ExprEmitter, SubExprInfo>,
-                    public rtl::CombinatorialVisitor<ExprEmitter, SubExprInfo> {
+                    public rtl::CombinatorialVisitor<ExprEmitter, SubExprInfo>,
+                    public sv::Visitor<ExprEmitter, SubExprInfo> {
 public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
   /// of any emitted expressions in the specified set.
@@ -684,6 +692,7 @@ public:
   std::string emitExpressionToString(Value exp, VerilogPrecedence precedence);
   friend class ExprVisitor;
   friend class CombinatorialVisitor;
+  friend class Visitor;
 
   /// Do a best-effort job of looking through noop cast operations.
   Value lookThroughNoopCasts(Value value) {
@@ -704,12 +713,14 @@ private:
   SubExprInfo visitInvalidExpr(Operation *op) {
     return dispatchCombinatorialVisitor(op);
   }
-  SubExprInfo visitInvalidComb(Operation *op) { return visitUnhandledExpr(op); }
+  SubExprInfo visitInvalidComb(Operation *op) { return dispatchSVVisitor(op); }
   SubExprInfo visitUnhandledComb(Operation *op) {
     return visitUnhandledExpr(op);
   }
+  SubExprInfo visitUnhandledSV(Operation *op) { return visitUnhandledExpr(op); }
 
   using ExprVisitor::visitExpr;
+  using Visitor::visitSV;
   SubExprInfo visitExpr(firrtl::ConstantOp op);
 
   /// Emit a verilog concatenation of the specified values.  If the before or
@@ -742,6 +753,8 @@ private:
   SubExprInfo emitNoopCast(Operation *op) {
     return emitSubExpr(op->getOperand(0), LowestPrecedence);
   }
+
+  SubExprInfo visitSV(sv::TextualValueOp op);
 
   SubExprInfo visitExpr(AddPrimOp op) {
     return emitVariadic(op, Addition, "+");
@@ -1088,6 +1101,11 @@ SubExprInfo ExprEmitter::emitBitSelect(Value operand, unsigned hiBit,
   return {Unary, IsUnsigned};
 }
 
+SubExprInfo ExprEmitter::visitSV(sv::TextualValueOp op) {
+  os << op.string();
+  return {Unary, IsUnsigned};
+}
+
 SubExprInfo ExprEmitter::visitExpr(firrtl::ConstantOp op) {
   auto resType = op.getType().cast<IntType>();
   if (resType.getWidthOrSentinel() == -1)
@@ -1393,6 +1411,93 @@ void ModuleEmitter::emitStatement(StopOp op) {
   auto locInfo = getLocationInfoAsString(ops);
 
   addAtPosEdge(action, locInfo, clockExpr, "!SYNTHESIS", condExpr);
+}
+
+void ModuleEmitter::emitStatement(sv::FWriteOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent() << "$fwrite(32'h80000002, \"";
+  os.write_escaped(op.string());
+  os << "\");";
+  emitLocationInfoAndNewLine(ops);
+}
+
+void ModuleEmitter::emitStatement(sv::IfDefOp op) {
+  auto cond = op.cond();
+
+  if (cond.startswith("!"))
+    indent() << "#ifndef " << cond.drop_front(1);
+  else
+    indent() << "#ifdef " << cond;
+
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  emitLocationInfoAndNewLine(ops);
+
+  addIndent();
+  auto *block = op.getBodyBlock();
+  auto it = block->begin(), end = std::prev(block->end());
+  for (; it != end; ++it)
+    emitOperation(&*it);
+  reduceIndent();
+
+  indent() << "#endif\n";
+}
+
+/// Emit the body of a control flow statement that is surrounded by begin/end
+/// markers if non-singular.  If the control flow construct is multi-line and
+/// if multiLineComment is non-null, the string is included in a comment after
+/// the 'end' to make it easier to associate.
+static void emitBeginEndRegion(Block *block,
+                               SmallPtrSet<Operation *, 8> &locationOps,
+                               ModuleEmitter &emitter,
+                               const char *multiLineComment = nullptr) {
+  auto isSingleVerilogStatement = [&](Operation &op) {
+    // Not all expressions and statements are guaranteed to emit a single
+    // Verilog statement (for the purposes of if statements).  Just do a simple
+    // check here for now.  This can be improved over time.
+    return isa<sv::FWriteOp>(op);
+  };
+
+  // Get the range of statements we want to emit, ignoring the Yield terminator.
+  auto it = block->begin(), end = std::prev(block->end());
+
+  // Determine if we can omit the begin/end keywords.
+  bool hasOneStmt =
+      it != end && std::next(it) == end && isSingleVerilogStatement(*it);
+  if (!hasOneStmt)
+    emitter.os << " begin";
+  emitter.emitLocationInfoAndNewLine(locationOps);
+
+  emitter.addIndent();
+  for (; it != end; ++it)
+    emitter.emitOperation(&*it);
+  emitter.reduceIndent();
+
+  if (!hasOneStmt) {
+    emitter.indent() << "end";
+    if (multiLineComment)
+      emitter.os << " // " << multiLineComment;
+    emitter.os << '\n';
+  }
+}
+
+void ModuleEmitter::emitStatement(sv::IfOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent() << "if (" << emitExpressionToString(op.cond(), ops) << ')';
+  emitBeginEndRegion(op.getBodyBlock(), ops, *this);
+}
+
+void ModuleEmitter::emitStatement(sv::AlwaysAtPosEdgeOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent() << "always @(posedge " << emitExpressionToString(op.clock(), ops)
+           << ")";
+  emitBeginEndRegion(op.getBodyBlock(), ops, *this, "always @(posedge)");
 }
 
 void ModuleEmitter::emitDecl(NodeOp op) {
@@ -1918,6 +2023,28 @@ void ModuleEmitter::emitOperation(Operation *op) {
   };
 
   if (RTLStmtEmitter(*this).dispatchStmtVisitor(op))
+    return;
+
+  class SVEmitter : public sv::Visitor<SVEmitter, bool> {
+  public:
+    SVEmitter(ModuleEmitter &emitter) : emitter(emitter) {}
+
+    using Visitor::visitSV;
+    bool visitSV(sv::IfDefOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::IfOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::AlwaysAtPosEdgeOp op) {
+      return emitter.emitStatement(op), true;
+    }
+    bool visitSV(sv::FWriteOp op) { return emitter.emitStatement(op), true; }
+
+    bool visitUnhandledSV(Operation *op) { return false; }
+    bool visitInvalidSV(Operation *op) { return false; }
+
+  private:
+    ModuleEmitter &emitter;
+  };
+
+  if (SVEmitter(*this).dispatchSVVisitor(op))
     return;
 
   emitOpError(op, "cannot emit this operation to Verilog");

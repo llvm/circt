@@ -388,6 +388,76 @@ OpFoldResult llhd::ShrOp::fold(ArrayRef<Attribute> operands) {
 }
 
 //===----------------------------------------------------------------------===//
+// ExtractSliceOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult llhd::ExtractSliceOp::fold(ArrayRef<Attribute> operands) {
+  uint64_t extractStart = startAttr().getInt();
+
+  // llhd.extract_slice(target, 0) with sliceWidth==targetWidth => target
+  if (extractStart == 0 && getSliceSize() == getTargetSize())
+    return target();
+
+  // llhd.extract_slice(llhd.shr(hidden, base, constant amt), start)
+  //   with amt + start + sliceWidth <= baseWidth
+  //   => llhd.extract_slice(base, amt + start)
+  if (auto shrOp = target().getDefiningOp<llhd::ShrOp>()) {
+    IntegerAttr intAttr;
+    if (matchPattern(shrOp.amount(), m_Constant<IntegerAttr>(&intAttr))) {
+      uint64_t amt = intAttr.getValue().getZExtValue();
+
+      if (amt + extractStart + getSliceSize() <= shrOp.getBaseWidth()) {
+        targetMutable().assign(shrOp.base());
+        setAttr("start",
+                IntegerAttr::get(startAttr().getType(), amt + extractStart));
+        return result();
+      }
+    }
+  }
+
+  // llhd.extract_slice(llhd.extract_slice(target, a), b)
+  //   => llhd.extract_slice(target, a+b)
+  if (auto extOp = target().getDefiningOp<llhd::ExtractSliceOp>()) {
+    targetMutable().assign(extOp.target());
+    auto newStart = extractStart + extOp.startAttr().getInt();
+    setAttr("start", IntegerAttr::get(startAttr().getType(), newStart));
+    return result();
+  }
+
+  // llhd.extract_slice(llhd.insert_slice(target, slice, a), b)
+  if (auto insertOp = target().getDefiningOp<llhd::InsertSliceOp>()) {
+    uint64_t insertStart = insertOp.startAttr().getInt();
+    // with b >= a && b + resultWidth <= a + sliceWidth
+    //   => llhd.extract_slice(slice, b-a)
+    if (extractStart >= insertStart &&
+        extractStart + getSliceSize() <=
+            insertStart + insertOp.getSliceSize()) {
+      targetMutable().assign(insertOp.slice());
+      setAttr("start", IntegerAttr::get(startAttr().getType(),
+                                        extractStart - insertStart));
+      return result();
+    }
+    // with b + resultWidth <= a or b >= a + insertedSliceWidth
+    //   => llhd.extract_slice(target, b)
+    if (extractStart + getSliceSize() <= insertStart ||
+        extractStart >= insertStart + insertOp.getSliceSize()) {
+      targetMutable().assign(insertOp.target());
+      return result();
+    }
+  }
+
+  if (!operands[0])
+    return nullptr;
+
+  if (auto intAttr = operands[0].dyn_cast<IntegerAttr>())
+    return IntegerAttr::get(result().getType(),
+                            intAttr.getValue().extractBitsAsZExtValue(
+                                getSliceSize(), extractStart));
+
+  return nullptr;
+}
+
+//===----------------------------------------------------------------------===//
 // WaitOp
 //===----------------------------------------------------------------------===//
 

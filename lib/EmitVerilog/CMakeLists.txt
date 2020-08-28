@@ -8,4 +8,5 @@ add_mlir_library(CIRCTEmitVerilog
   LINK_LIBS PUBLIC
   MLIRFIRRTL
   MLIRRTL
+  MLIRSV
   )

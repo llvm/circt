@@ -76,3 +76,5 @@ firrtl.circuit "Circuit" {
   // CHECK-NEXT:endmodule
 
 }
+
+

@@ -8,11 +8,14 @@
 #include "circt/Conversion/HandshakeToFIRRTL/HandshakeToFIRRTL.h"
 #include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
 #include "circt/Conversion/StandardToHandshake/StandardToHandshake.h"
+#include "circt/Conversion/StandardToStaticLogic/StandardToStaticLogic.h"
 #include "circt/Dialect/FIRRTL/Dialect.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
+#include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "circt/Dialect/RTL/Dialect.h"
+#include "circt/Dialect/SV/Dialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AsmState.h"
@@ -88,12 +91,14 @@ int main(int argc, char **argv) {
   firrtl::registerFIRRTLPasses();
 
   registerDialect<handshake::HandshakeOpsDialect>();
+  registerDialect<staticlogic::StaticLogicDialect>();
+  staticlogic::registerStandardToStaticLogicPasses();
   handshake::registerStandardToHandshakePasses();
   handshake::registerHandshakeToFIRRTLPasses();
 
-  registerDialect<rtl::RTLDialect>();
-
   registerDialect<llhd::LLHDDialect>();
+  registerDialect<rtl::RTLDialect>();
+  registerDialect<sv::SVDialect>();
 
   llhd::initLLHDTransformationPasses();
   llhd::initLLHDToLLVMPass();
