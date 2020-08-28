@@ -9,6 +9,7 @@
 #define CIRCT_DIALECT_LLHD_SIMULATOR_STATE_H
 
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 
 #include <map>
@@ -113,16 +114,18 @@ struct Slot {
   void insertChange(std::string inst);
 
   // Map structure: <signal-index, vec<(offset, new-value)>>.
-  std::map<uint64_t, std::vector<std::pair<int, llvm::APInt>>> changes;
+  std::map<uint64_t, llvm::SmallVector<std::pair<int, llvm::APInt>, 16>>
+      changes;
   // Processes with scheduled wakeup.
-  std::vector<std::string> scheduled;
+  llvm::SmallVector<std::string, 4> scheduled;
   Time time;
 };
 
 /// This is equivalent to and std::priorityQueue<Slot> ordered using the greater
 /// operator, which adds an insertion method to add changes to a slot.
 class UpdateQueue
-    : public std::priority_queue<Slot, std::vector<Slot>, std::greater<Slot>> {
+    : public std::priority_queue<Slot, llvm::SmallVector<Slot, 16>,
+                                 std::greater<Slot>> {
 public:
   /// Check wheter a slot for the given time already exists. If that's the case,
   /// add the new change to it, else create a new slot and push it to the queue.
