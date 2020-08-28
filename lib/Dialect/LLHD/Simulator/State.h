@@ -167,6 +167,7 @@ struct Instance {
   std::unique_ptr<ProcState> procState;
   std::unique_ptr<uint8_t> entityState;
   Time expectedWakeup;
+  void (*unitFPtr)(void **);
 };
 
 /// The simulator's state. It contains the current simulation time, signal

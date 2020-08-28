@@ -95,10 +95,15 @@ int Engine::simulate(int n, uint64_t maxTime) {
   // Keep track of the instances that need to wakeup.
   llvm::SmallVector<std::string, 8> wakeupQueue;
   // All instances are run in the first cycle.
-  for (auto k : state->instances.keys())
-    wakeupQueue.push_back(k.str());
-
-  llvm::StringMap<void (*)(void **)> jitted;
+  for (auto &inst : state->instances) {
+    wakeupQueue.push_back(inst.first().str());
+    auto expectedFPtr = engine->lookup(inst.second.unit);
+    if (!expectedFPtr) {
+      llvm::errs() << "Could not lookup " << inst.second.unit << "!\n";
+      return -1;
+    }
+    inst.second.unitFPtr = *expectedFPtr;
+  }
 
   while (!state->queue.empty()) {
     auto &pop = state->queue.top();
@@ -190,18 +195,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
         args.assign({&state, &inst.procState, &signalTable});
       }
       // Run the unit.
-      if (auto instPtr = jitted.lookup(name)) {
-        (*instPtr)(args.data());
-      } else {
-        auto expectedFPtr = engine->lookup(name);
-        if (!expectedFPtr) {
-          llvm::errs() << "Could not lookup " << name << "!\n";
-          return -1;
-        }
-        auto fptr = *expectedFPtr;
-        jitted.insert_or_assign(name, fptr);
-        (*fptr)(args.data());
-      }
+      (*inst.unitFPtr)(args.data());
     }
 
     // Clear wakeup queue.
