@@ -101,7 +101,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
   llvm::StringMap<void (*)(void **)> jitted;
 
   while (!state->queue.empty()) {
-    auto pop = state->popQueue();
+    auto &pop = state->queue.top();
 
     if ((n > 0 && i >= n) || (maxTime > 0 && pop.time.time > maxTime)) {
       break;
@@ -169,6 +169,8 @@ int Engine::simulate(int n, uint64_t maxTime) {
       if (state->time == state->instances[inst].expectedWakeup)
         wakeupQueue.push_back(inst);
     }
+
+    state->queue.pop();
 
     std::sort(wakeupQueue.begin(), wakeupQueue.end());
     wakeupQueue.erase(std::unique(wakeupQueue.begin(), wakeupQueue.end()),
