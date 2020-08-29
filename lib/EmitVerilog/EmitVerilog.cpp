@@ -1436,10 +1436,8 @@ void ModuleEmitter::emitStatement(sv::IfDefOp op) {
   emitLocationInfoAndNewLine(ops);
 
   addIndent();
-  auto *block = op.getBodyBlock();
-  auto it = block->begin(), end = std::prev(block->end());
-  for (; it != end; ++it)
-    emitOperation(&*it);
+  for (auto &op : op.getBodyBlock()->without_terminator())
+    emitOperation(&op);
   reduceIndent();
 
   indent() << "#endif\n";
@@ -1460,19 +1458,16 @@ static void emitBeginEndRegion(Block *block,
     return isa<sv::FWriteOp>(op);
   };
 
-  // Get the range of statements we want to emit, ignoring the Yield terminator.
-  auto it = block->begin(), end = std::prev(block->end());
-
   // Determine if we can omit the begin/end keywords.
-  bool hasOneStmt =
-      it != end && std::next(it) == end && isSingleVerilogStatement(*it);
+  bool hasOneStmt = llvm::hasSingleElement(block->without_terminator()) &&
+                    isSingleVerilogStatement(block->front());
   if (!hasOneStmt)
     emitter.os << " begin";
   emitter.emitLocationInfoAndNewLine(locationOps);
 
   emitter.addIndent();
-  for (; it != end; ++it)
-    emitter.emitOperation(&*it);
+  for (auto &op : block->without_terminator())
+    emitter.emitOperation(&op);
   emitter.reduceIndent();
 
   if (!hasOneStmt) {
