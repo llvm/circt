@@ -100,6 +100,7 @@ struct Signal {
 struct Slot {
   /// Construct a new slot.
   Slot(Time time) : time(time) {}
+  Slot(Time time, int index, int bitOffset, llvm::APInt &bytes);
 
   /// Returns true if the slot's time is smaller than the compared slot's time.
   bool operator<(const Slot &rhs) const;

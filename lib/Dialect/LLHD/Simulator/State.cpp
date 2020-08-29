@@ -97,6 +97,10 @@ std::string Signal::dump(unsigned elemIndex) {
 // Slot
 //===----------------------------------------------------------------------===//
 
+Slot::Slot(Time time, int index, int bitOffset, APInt &bytes) : time(time) {
+  insertChange(index, bitOffset, bytes);
+}
+
 bool Slot::operator<(const Slot &rhs) const { return time < rhs.time; }
 
 bool Slot::operator>(const Slot &rhs) const { return rhs.time < time; }
@@ -118,9 +122,7 @@ void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
       return;
     }
   }
-  Slot newSlot(time);
-  newSlot.insertChange(index, bitOffset, bytes);
-  push(newSlot);
+  push(Slot(time, index, bitOffset, bytes));
 }
 
 void UpdateQueue::insertOrUpdate(Time time, std::string inst) {
