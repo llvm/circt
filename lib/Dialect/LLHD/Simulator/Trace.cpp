@@ -132,7 +132,7 @@ void Trace::flushMerged() {
         if (sig.owner == root &&
             (mode == mergedReduce ||
              (mode == namedOnly && sig.owner == root &&
-              !std::regex_match(sig.name, std::regex("sig[0-9]*"))))) {
+              !std::regex_match(sig.name, std::regex("(sig)?[0-9]*"))))) {
           if (sig.elements.size() > 0) {
             std::string path;
             llvm::raw_string_ostream ss(path);
