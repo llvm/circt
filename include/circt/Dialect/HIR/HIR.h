@@ -12,7 +12,6 @@ namespace mlir {
 namespace hir {
 enum Kinds {
   TimeKind = Type::FIRST_PRIVATE_EXPERIMENTAL_0_TYPE,
-  ValKind,
   ConstKind,
   MemrefKind,
   WireKind
@@ -29,27 +28,6 @@ public:
   static llvm::StringRef getKeyword() { return "time"; }
   static TimeType get(MLIRContext *context) {
     return Base::get(context, TimeKind);
-  }
-};
-
-//TODO: Remove this
-//class BaseValType :public Type{
-//  static bool classof(Type type) {
-//    return type.getKind() == hir::ValKind ||
-//           type.getKind() == hir::ConstKind;
-//  }
-//};
-
-class ValType : public Type::TypeBase<ValType, Type, DefaultTypeStorage> {
-  /**
-   * This class defines hir.val type in the dialect.
-   */
-public:
-  using Base::Base;
-  static bool kindof(unsigned kind) { return kind == ValKind; }
-  static llvm::StringRef getKeyword() { return "val"; }
-  static ValType get(MLIRContext *context) {
-    return Base::get(context, ValKind);
   }
 };
 

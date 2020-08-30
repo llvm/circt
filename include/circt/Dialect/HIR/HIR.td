@@ -27,10 +27,6 @@ def ConstType: Type<CPred<"$_self.isa<ConstType>()">
 , "HIR const type">,
   BuildableType<"ConstType::get($_builder.getContext())">;
 
-def ValType : Type<CPred<"$_self.isa<ValType>() || $_self.isa<ConstType>()">
-, "HIR int type">,
-  BuildableType<"ValType::get($_builder.getContext())">;
-
 def MemrefType
 : Type<CPred<"$_self.isa<MemrefType>()">,
   "HIR memref type ">,
@@ -195,11 +191,11 @@ def DelayOp: HIR_Op<"delay",[NoSideEffect]>{
   let summary = "Delay operation";
   let description = [{```mlir %yy = hir.delay %xx by %1 at %tj```}];
 
-  let arguments = (ins ValType:$input, ConstType:$delay, 
+  let arguments = (ins AnyType : $input, ConstType:$delay, 
       TimeType:$tstart, Optional<ConstType>: $offset);
-  let results = (outs ValType:$res);
+  let results = (outs AnyType : $res);
   let assemblyFormat = [{$input `by` $delay `at` $tstart (`offset` $offset^)? 
-    attr-dict `:` type($input)}];
+    attr-dict `:` type($input) `->` type($res)}];
 }
 
 def ForOp : HIR_Op<"for", 
@@ -219,8 +215,8 @@ def ForOp : HIR_Op<"for",
         ```
       }];
 
-      let arguments = (ins ValType: $lb, ValType: $ub, ValType: $step, 
-          TimeType:$tstart, Optional<ValType>: $tstep);
+      let arguments = (ins AnyType: $lb, AnyType: $ub, AnyType: $step, 
+          TimeType:$tstart, Optional<AnyType>: $tstep);
       let regions = (region SizedRegion<1>:$region);
       let results = (outs TimeType:$tlast);
 
@@ -381,11 +377,12 @@ def AddOp : HIR_Op<"add",[NoSideEffect]>{
       ```mlir %1 = hir.add (%x,1 : !hir.const -> !hir.val```
   }];
 
-  let arguments = (ins ValType: $left, ValType:$right, TimeType: $tstart,
+  let arguments = (ins AnyType: $left, AnyType:$right, TimeType: $tstart,
       Optional<ConstType>:$offset);
-  let results = (outs ValType : $res);
+  let results = (outs AnyType: $res);
 
-  let assemblyFormat = [{ `at` $tstart (`offset` $offset^)? `(` $left `,` $right`)` attr-dict}];
+  let assemblyFormat = [{ `at` $tstart (`offset` $offset^)? `(` $left `,`
+  $right`)` attr-dict `:` `(` type($left) `,` type($right) `)` `->` type($res)}];
 
 }
 

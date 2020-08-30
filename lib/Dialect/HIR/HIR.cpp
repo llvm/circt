@@ -28,9 +28,7 @@ static Type getIntegerType(OpAsmParser &parser, int bitwidth) {
 static ConstType getConstIntType(OpAsmParser &parser) {
   return ConstType::get(parser.getBuilder().getContext());
 }
-static ValType getValIntType(OpAsmParser &parser, int bitwidth) {
-  return ValType::get(parser.getBuilder().getContext());
-}
+
 static Type getTimeType(OpAsmParser &parser) {
   return TimeType::get(parser.getBuilder().getContext());
 }
@@ -160,14 +158,16 @@ static ParseResult parseFunctionType(OpAsmParser &parser, int num_operands,
 
 static void printForOp(OpAsmPrinter &printer, ForOp op) {
   printer << "hir.for"
-          << " " << op.getInductionVar() << " = " << op.lb() << " to "
-          << op.ub() << " step " << op.step() << " iter_time( "
+          << " " << op.getInductionVar() << " : " <<op.getInductionVar().getType() 
+          << " = " << op.lb() << " : " << op.lb().getType() << " to "
+          << op.ub() << " : " << op.ub().getType() << " step " << op.step() 
+          << " : " <<op.step().getType() << " iter_time( "
           << op.getIterTimeVar() << " = " << op.tstart();
 
   // print optional tstep.
 
   if (op.getNumOperands()==5)
-    printer << " tstep " << op.tstep();
+    printer << " tstep " << op.tstep() << " : " << op.tstep().getType();
   printer << " ) ";
 
   printer.printRegion(op.region(),
@@ -178,13 +178,12 @@ static void printForOp(OpAsmPrinter &printer, ForOp op) {
 static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
   auto &builder = parser.getBuilder();
 
-  Type intTy = getValIntType(parser, 32);
   Type timeTy = getTimeType(parser);
-  Type lbRawType = intTy;
-  Type ubRawType = intTy;
-  Type stepRawType = intTy;
+  Type lbRawType;
+  Type ubRawType;
+  Type stepRawType;
   Type tstartRawType = timeTy;
-  Type tstepRawType = intTy;
+  Type tstepRawType;
   Type regionRawOperandTypes[2];
   ArrayRef<Type> regionOperandTypes(regionRawOperandTypes);
   regionRawOperandTypes[1] = timeTy;
@@ -198,13 +197,13 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
 
   ArrayRef<OpAsmParser::OperandType> regionOperands(regionRawOperands);
   // Parse the induction variable followed by '='.
-  if (parser.parseRegionArgument(regionRawOperands[0]) || parser.parseEqual())
+  if (parser.parseRegionArgument(regionRawOperands[0]) || parser.parseColonType(regionRawOperandTypes[0])|| parser.parseEqual())
     return failure();
 
   // Parse loop bounds.
-  if (parser.parseOperand(lbRawOperand) || parser.parseKeyword("to") ||
-      parser.parseOperand(ubRawOperand) || parser.parseKeyword("step") ||
-      parser.parseOperand(stepRawOperand))
+  if (parser.parseOperand(lbRawOperand) ||parser.parseColonType(lbRawType)|| parser.parseKeyword("to") ||
+      parser.parseOperand(ubRawOperand) ||parser.parseColonType(ubRawType)|| parser.parseKeyword("step") ||
+      parser.parseOperand(stepRawOperand)||parser.parseColonType(stepRawType))
     return failure();
 
   // Parse iter time.
@@ -216,14 +215,11 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
   // Parse optional tstep.
   bool hasTstep = false;
   if (!parser.parseOptionalKeyword("tstep")) {
-    if (parser.parseOperand(tstepRawOperand))
+    if (parser.parseOperand(tstepRawOperand) || parser.parseColonType(tstepRawType))
       return failure();
     hasTstep = true;
   }
-
-  // Parse the type of induction variable.
-  if (parser.parseRParen() || parser.parseColon() ||
-      parser.parseType(regionRawOperandTypes[0]))
+  if(parser.parseRParen())
     return failure();
 
   if (parser.resolveOperand(lbRawOperand, lbRawType, result.operands) ||
@@ -286,7 +282,7 @@ static ParseResult parseUnrollForOp(OpAsmParser &parser,
   auto &builder = parser.getBuilder();
   Type timeTypeVar = getTimeType(parser);
   Type tstartRawType = timeTypeVar;
-  Type tstepRawType = getValIntType(parser, 32);
+  Type tstepRawType = getConstIntType(parser);
   Type regionRawOperandTypes[2];
   ArrayRef<Type> regionOperandTypes(regionRawOperandTypes);
   regionRawOperandTypes[0] = getConstIntType(parser);
