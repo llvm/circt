@@ -14,7 +14,7 @@ using namespace hir;
 
 HIRDialect::HIRDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context) {
-  addTypes<TimeType, IntType,StaticIntType, MemoryInterfaceType, WireType>();
+  addTypes<TimeType, ValType,ConstType, MemrefType, WireType>();
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/HIR/HIR.cpp.inc"
@@ -30,43 +30,43 @@ Type HIRDialect::parseType(DialectAsmParser &parser) const {
   if (typeKeyword == TimeType::getKeyword())
     return TimeType::get(getContext());
 
-  if (typeKeyword == MemoryInterfaceType::getKeyword())
-    return MemoryInterfaceType::get(getContext());
+  if (typeKeyword == MemrefType::getKeyword())
+    return MemrefType::get(getContext());
 
   if (typeKeyword == WireType::getKeyword())
     return WireType::get(getContext());
 
-  if (typeKeyword == IntType::getKeyword())
-    return IntType::get(getContext());
+  if (typeKeyword == ValType::getKeyword())
+    return ValType::get(getContext());
 
-  if (typeKeyword == StaticIntType::getKeyword())
-    return StaticIntType::get(getContext());
+  if (typeKeyword == ConstType::getKeyword())
+    return ConstType::get(getContext());
 
 
   return parser.emitError(parser.getNameLoc(), "unknown hir type"), Type();
 }
 
 void HIRDialect::printType(Type type, DialectAsmPrinter &printer) const {
-  if (TimeType hirTime = type.dyn_cast<TimeType>()) {
-    printer << hirTime.getKeyword();
+  if (TimeType timeTy = type.dyn_cast<TimeType>()) {
+    printer << timeTy.getKeyword();
     return;
   }
-  if (MemoryInterfaceType mem_interface =
-          type.dyn_cast<MemoryInterfaceType>()) {
-    printer << mem_interface.getKeyword();
+  if (MemrefType memrefTy =
+          type.dyn_cast<MemrefType>()) {
+    printer << memrefTy.getKeyword();
     return;
   }
-  if (WireType wire = type.dyn_cast<WireType>()) {
-    printer << wire.getKeyword();
+  if (WireType wireTy = type.dyn_cast<WireType>()) {
+    printer << wireTy.getKeyword();
     return;
   }
-  if (type.getKind()==IntKind){
-    IntType Int = type.cast<IntType>(); 
-    printer << Int.getKeyword();
+  if (type.getKind()==ValKind){
+    ValType valTy = type.cast<ValType>(); 
+    printer << valTy.getKeyword();
     return;
   }
-  if (StaticIntType StaticInt = type.dyn_cast<StaticIntType>()) {
-    printer << StaticInt.getKeyword();
+  if (ConstType constTy = type.dyn_cast<ConstType>()) {
+    printer << constTy.getKeyword();
     return;
   }
 }

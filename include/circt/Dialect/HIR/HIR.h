@@ -12,9 +12,9 @@ namespace mlir {
 namespace hir {
 enum Kinds {
   TimeKind = Type::FIRST_PRIVATE_EXPERIMENTAL_0_TYPE,
-  IntKind,
-  StaticIntKind,
-  MemoryInterfaceKind,
+  ValKind,
+  ConstKind,
+  MemrefKind,
   WireKind
 };
 
@@ -33,53 +33,53 @@ public:
 };
 
 //TODO: Remove this
-//class BaseIntType :public Type{
+//class BaseValType :public Type{
 //  static bool classof(Type type) {
-//    return type.getKind() == hir::IntKind ||
-//           type.getKind() == hir::StaticIntKind;
+//    return type.getKind() == hir::ValKind ||
+//           type.getKind() == hir::ConstKind;
 //  }
 //};
 
-class IntType : public Type::TypeBase<IntType, Type, DefaultTypeStorage> {
+class ValType : public Type::TypeBase<ValType, Type, DefaultTypeStorage> {
   /**
-   * This class defines hir.int type in the dialect.
+   * This class defines hir.val type in the dialect.
    */
 public:
   using Base::Base;
-  static bool kindof(unsigned kind) { return kind == IntKind; }
-  static llvm::StringRef getKeyword() { return "int"; }
-  static IntType get(MLIRContext *context) {
-    return Base::get(context, IntKind);
+  static bool kindof(unsigned kind) { return kind == ValKind; }
+  static llvm::StringRef getKeyword() { return "val"; }
+  static ValType get(MLIRContext *context) {
+    return Base::get(context, ValKind);
   }
 };
 
-class StaticIntType : public Type::TypeBase<StaticIntType, Type, DefaultTypeStorage> {
+class ConstType : public Type::TypeBase<ConstType, Type, DefaultTypeStorage> {
   /**
-   * This class defines hir.static_int type in the dialect.
+   * This class defines hir.const type in the dialect.
    */
 
 public:
   using Base::Base;
-  static bool kindof(unsigned kind) { return kind == StaticIntKind; }
-  static llvm::StringRef getKeyword() { return "static_int"; }
-  static StaticIntType get(MLIRContext *context) {
-    return Base::get(context, StaticIntKind);
+  static bool kindof(unsigned kind) { return kind == ConstKind; }
+  static llvm::StringRef getKeyword() { return "const"; }
+  static ConstType get(MLIRContext *context) {
+    return Base::get(context, ConstKind);
   }
 };
 
 
-class MemoryInterfaceType
-    : public Type::TypeBase<MemoryInterfaceType, Type, DefaultTypeStorage> {
+class MemrefType
+    : public Type::TypeBase<MemrefType, Type, DefaultTypeStorage> {
   /**
-   * This class defines hir.mem_interface type in the dialect.
+   * This class defines hir.memref type in the dialect.
    */
 public:
   using Base::Base;
 
-  static bool kindof(unsigned kind) { return kind == MemoryInterfaceKind; }
-  static llvm::StringRef getKeyword() { return "mem_interface"; }
-  static MemoryInterfaceType get(MLIRContext *context) {
-    return Base::get(context, MemoryInterfaceKind);
+  static bool kindof(unsigned kind) { return kind == MemrefKind; }
+  static llvm::StringRef getKeyword() { return "memref"; }
+  static MemrefType get(MLIRContext *context) {
+    return Base::get(context, MemrefKind);
   }
 };
 

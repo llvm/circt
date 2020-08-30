@@ -4,8 +4,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Target/HIRToVerilog/HIRToVerilog.h"
 #include "circt/Dialect/HIR/HIR.h"
+#include "circt/Target/HIRToVerilog/HIRToVerilog.h"
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Module.h"
@@ -17,9 +17,38 @@
 
 using namespace mlir;
 
+namespace {
+
+class VerilogPrinter {
+public:
+  VerilogPrinter(llvm::formatted_raw_ostream &output) : out(output) {}
+
+  LogicalResult printModule(ModuleOp op);
+  LogicalResult printOperation(Operation *op, unsigned indentAmount = 0);
+
+private:
+  llvm::formatted_raw_ostream &out;
+};
+
+LogicalResult VerilogPrinter::printModule(ModuleOp module) {
+  WalkResult result = module.walk([this](hir::DefOp defOp) -> WalkResult {
+    // An EntityOp always has a single block
+    Block &entryBlock = defOp.getBody().front();
+
+    // Print the module signature
+    out << "module " << defOp.getName();
+    out << ";\n";
+    out << "endmodule\n";
+    return WalkResult::advance();
+  });
+  // if printing of a single operation failed, fail the whole translation
+  return failure(result.wasInterrupted());
+}
+} // namespace
 LogicalResult mlir::hir::printVerilog(ModuleOp module, raw_ostream &os) {
   llvm::formatted_raw_ostream out(os);
-  os<<"//Generated verilog from HIR.\n";
+  VerilogPrinter printer(out);
+  return printer.printModule(module);
 }
 
 void mlir::hir::registerHIRToVerilogTranslation() {
