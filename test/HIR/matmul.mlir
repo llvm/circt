@@ -10,8 +10,9 @@
 // %C = alloc(): hir.memref<NxNxi8>{layout=[0][1],port=[rd,wr], 
 //                          storage_type=bram2P}
 
-hir.def @MatmulKernel at %t (%A:!hir.memref<128*128*i32,dist_dims=[1]>
-,%B:!hir.memref<128*128*i32,dist_dims=[0,1]>,%C:!hir.memref<128*128*i32,dist_dims=[1]>) ->
+hir.def @MatmulKernel at %t
+(%A:!hir.memref<128*128*i32,packing=[1],r>,%B:!hir.memref<128*128*i32,packing=[],r>,
+%C:!hir.memref<128*128*i32,packing=[1],w>) ->
 (i32) {
   %s1 = hir.constant 1 : !hir.const<i32>
   %s3 = hir.constant 3: !hir.const<i32>
@@ -31,10 +32,10 @@ hir.def @MatmulKernel at %t (%A:!hir.memref<128*128*i32,dist_dims=[1]>
       %tk_end=hir.unroll_for %k = 0 to 128 step 1 iter_time(%tk = %tj tstep 1){
         %i_delayed = hir.delay %i by %k at %ti: i32 -> i32 // hoist from j-loop
         %a = hir.mem_read %A[%i_delayed, %k] at %ti offset %k:
-        !hir.memref<128*128*i32>[i32,!hir.const<i32>] -> i32 // hoist from j-loop
+        !hir.memref<128*128*i32,packing=[1],r>[i32,!hir.const<i32>] -> i32 // hoist from j-loop
         %a_delayed = hir.delay %a by %j at %ti offset %k : i32 ->i32
         %b = hir.mem_read %B[%j,%k] at %tk :
-        !hir.memref<128*128*i32>[!hir.const<i32>,!hir.const<i32>] -> i32
+        !hir.memref<128*128*i32,packing=[],r>[!hir.const<i32>,!hir.const<i32>] -> i32
         %ab = hir.call @mult(%a_delayed,%b) at %tk
         :(i32,i32)->(i32)
         %c_prev = hir.wire_read %C_bus[%k] at %tk offset %s3 : !hir.wire ->
@@ -49,7 +50,7 @@ hir.def @MatmulKernel at %t (%A:!hir.memref<128*128*i32,dist_dims=[1]>
       %acc = hir.wire_read %C_bus[%s127] at %tk_end offset %s3: !hir.wire ->
       i32
       hir.mem_write %acc to %C[%i,%j] at %tk_end offset %s3 :
-      (i32,!hir.memref<128*128*i32>[i32,!hir.const<i32>])
+      (i32,!hir.memref<128*128*i32,packing=[1],w>[i32,!hir.const<i32>])
     }
   }
   hir.return
