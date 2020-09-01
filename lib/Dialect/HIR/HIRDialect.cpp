@@ -22,25 +22,15 @@ HIRDialect::HIRDialect(MLIRContext *context)
       >();
 }
 
-static Type parseConstType(DialectAsmParser &parser, MLIRContext *context) {
-  Type elementType;
-  if (parser.parseLess() || parser.parseType(elementType) ||
-      parser.parseGreater())
-    return Type();
-
-  // TODO:Construct the ConstType with type.
-  auto constTy = ConstType::get(context);
-  return constTy;
-}
-
-static ParseResult parseMemrefPortKind(DialectAsmParser &parser,
-                                       MemrefDetails::PortKind &port) {
+namespace Helpers {
+static ParseResult parsePortKind(DialectAsmParser &parser,
+                                 Details::PortKind &port) {
   if (!parser.parseOptionalKeyword("rw"))
-    port = MemrefDetails::rw;
+    port = Details::rw;
   else if (!parser.parseOptionalKeyword("r"))
-    port = MemrefDetails::r;
+    port = Details::r;
   else if (!parser.parseOptionalKeyword("w"))
-    port = MemrefDetails::w;
+    port = Details::w;
   else
     return failure();
   return success();
@@ -70,21 +60,18 @@ parseOptionalMemrefPacking(DialectAsmParser &parser,
   return success();
 }
 
-static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
-  llvm::SmallVector<unsigned, 4> shape;
-  Type elementType;
-  hir::MemrefDetails::PortKind default_port = hir::MemrefDetails::rw;
-  if (parser.parseLess())
-    return Type();
-
+static ParseResult parseShapedType(DialectAsmParser &parser,
+                                   SmallVectorImpl<unsigned> &shape,
+                                   Type &elementType) {
   unsigned dim;
+
   if (parser.parseInteger(dim))
-    return Type();
+    return failure();
   shape.push_back(dim);
   if (parser.parseOptionalStar())
     return parser.emitError(parser.getCurrentLocation(),
                             "expected '*' followed by type"),
-           Type();
+           failure();
   while (true) {
     auto optionalParseRes = parser.parseOptionalInteger(dim);
     if (!optionalParseRes.hasValue())
@@ -92,16 +79,31 @@ static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
     if (optionalParseRes.getValue())
       return parser.emitError(parser.getCurrentLocation(),
                               "expected integer literal or type"),
-             Type();
+             failure();
     shape.push_back(dim);
     if (parser.parseOptionalStar())
       return parser.emitError(parser.getCurrentLocation(),
                               "expected '*' followed by type"),
-             Type();
+             failure();
   }
   if (parser.parseType(elementType))
+    return failure();
+}
+}; // namespace Helpers
+
+// Types
+
+// Memref Type
+static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
+  llvm::SmallVector<unsigned, 4> shape;
+  Type elementType;
+  hir::Details::PortKind default_port = hir::Details::rw;
+  if (parser.parseLess())
     return Type();
-  
+
+  if(Helpers::parseShapedType(parser, shape, elementType))
+    return Type();
+
   llvm::SmallVector<unsigned, 4> default_packing;
   // default packing is [0,1,2,3] for shape = [d3,d2,d1,d0] i.e. d0 is fastest
   // changing dim in linear index and no distributed dimensions.
@@ -116,7 +118,8 @@ static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
     return Type();
 
   llvm::SmallVector<unsigned, 4> packing;
-  OptionalParseResult hasPacking = parseOptionalMemrefPacking(parser, packing);
+  OptionalParseResult hasPacking =
+      Helpers::parseOptionalMemrefPacking(parser, packing);
 
   if (hasPacking.hasValue()) {
     if (hasPacking.getValue())
@@ -128,14 +131,115 @@ static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
       return Type();
   }
 
-  hir::MemrefDetails::PortKind port;
-  if (parseMemrefPortKind(parser, port) || parser.parseGreater())
+  hir::Details::PortKind port;
+  if (Helpers::parsePortKind(parser, port) || parser.parseGreater())
     return Type();
 
   return MemrefType::get(context, shape, elementType, packing, port);
 }
 
-// Types
+static void printMemrefType(MemrefType memrefTy, DialectAsmPrinter &printer) {
+  printer << memrefTy.getKeyword();
+  printer << "<";
+  auto shape = memrefTy.getShape();
+  auto elementType = memrefTy.getElementType();
+  auto packing = memrefTy.getPacking();
+  auto port = memrefTy.getPort();
+  for (auto dim : shape)
+    printer << dim << "*";
+
+  printer << elementType << ", packing = [";
+
+  for (int i = 0; i < packing.size(); i++)
+    printer << packing[i] << ((i == (packing.size() - 1)) ? "" : ", ");
+  printer << "]";
+
+  if (port == Details::r) {
+    printer << ", r";
+  } else if (port == Details::w) {
+    printer << ", w";
+  } else if (port == Details::rw) {
+    printer << "";
+  } else {
+    printer << ", unknown";
+  }
+  printer << ">";
+}
+
+// WireType
+static Type parseWireType(DialectAsmParser &parser, MLIRContext *context) {
+  llvm::SmallVector<unsigned, 4> shape;
+  Type elementType;
+  hir::Details::PortKind default_port = hir::Details::rw;
+  if (parser.parseLess())
+    return Type();
+
+  if(Helpers::parseShapedType(parser, shape, elementType))
+    return Type();
+
+  llvm::SmallVector<unsigned, 4> default_packing;
+  // default packing is [0,1,2,3] for shape = [d3,d2,d1,d0] i.e. d0 is fastest
+  // changing dim in linear index and no distributed dimensions.
+  for (int i = 0; i < shape.size(); i++)
+    default_packing.push_back(i);
+
+  if (!parser.parseOptionalGreater())
+    return WireType::get(context, shape, elementType, default_port);
+
+  if (parser.parseComma())
+    return Type();
+
+  hir::Details::PortKind port;
+  if (Helpers::parsePortKind(parser, port) || parser.parseGreater())
+    return Type();
+
+  return WireType::get(context, shape, elementType, port);
+}
+
+static void printWireType(WireType wireTy, DialectAsmPrinter &printer) {
+  printer << wireTy.getKeyword();
+  printer << "<";
+  auto shape = wireTy.getShape();
+  auto elementType = wireTy.getElementType();
+  auto port = wireTy.getPort();
+  for (auto dim : shape)
+    printer << dim << "*";
+
+  printer << elementType ;
+
+  if (port == Details::r) {
+    printer << ", r";
+  } else if (port == Details::w) {
+    printer << ", w";
+  } else if (port == Details::rw) {
+    printer << "";
+  } else {
+    printer << ", unknown";
+  }
+  printer << ">";
+}
+//ConsType
+
+static Type parseConstType(DialectAsmParser &parser, MLIRContext *context) {
+  Type elementType;
+  if (parser.parseLess() || parser.parseType(elementType) ||
+      parser.parseGreater())
+    return Type();
+
+  // TODO:Construct the ConstType with type.
+  auto constTy = ConstType::get(context,elementType);
+  return constTy;
+}
+
+static void printConstType(ConstType constTy, DialectAsmPrinter &printer) {
+  printer << constTy.getKeyword();
+  printer << "<";
+  auto elementType = constTy.getElementType();
+  printer << elementType ;
+  printer << ">";
+}
+
+// parseType and printType
 Type HIRDialect::parseType(DialectAsmParser &parser) const {
   StringRef typeKeyword;
   if (parser.parseKeyword(&typeKeyword))
@@ -149,43 +253,13 @@ Type HIRDialect::parseType(DialectAsmParser &parser) const {
                            getContext()); // MemrefType::get(getContext());
 
   if (typeKeyword == WireType::getKeyword())
-    return WireType::get(getContext());
+    return parseWireType(parser,
+                         getContext()); // MemrefType::get(getContext());
 
   if (typeKeyword == ConstType::getKeyword())
     return parseConstType(parser, getContext());
 
   return parser.emitError(parser.getNameLoc(), "unknown hir type"), Type();
-}
-
-static void printMemrefType(MemrefType memrefTy, DialectAsmPrinter &printer){
-    printer << memrefTy.getKeyword();
-    printer << "<";
-    auto shape = memrefTy.getShape();
-    auto elementType = memrefTy.getElementType();
-    auto packing = memrefTy.getPacking();
-    auto port = memrefTy.getPort();
-    for (auto dim:shape)
-      printer << dim << "*";
-
-    printer << elementType << ", packing = [";
-
-    for (int i=0;i<packing.size();i++)
-      printer << packing[i] << ((i==(packing.size()-1))?"" : ", ");
-    printer << "], ";
-
-    if(port == MemrefDetails::r){
-      printer << "r";
-    }
-    else if (port == MemrefDetails::w){
-      printer << "w";
-    }
-    else if (port == MemrefDetails::rw){
-      printer << "rw";
-    }
-    else{
-      printer << "unknown";
-    }
-    printer << ">";
 }
 
 void HIRDialect::printType(Type type, DialectAsmPrinter &printer) const {
@@ -194,15 +268,15 @@ void HIRDialect::printType(Type type, DialectAsmPrinter &printer) const {
     return;
   }
   if (MemrefType memrefTy = type.dyn_cast<MemrefType>()) {
-    printMemrefType(memrefTy,printer);
+    printMemrefType(memrefTy, printer);
     return;
   }
   if (WireType wireTy = type.dyn_cast<WireType>()) {
-    printer << wireTy.getKeyword();
+    printWireType(wireTy,printer);
     return;
   }
   if (ConstType constTy = type.dyn_cast<ConstType>()) {
-    printer << constTy.getKeyword();
+    printConstType(constTy,printer);
     return;
   }
 }

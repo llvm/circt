@@ -106,7 +106,7 @@ def MemReadOp : HIR_Op<"mem_read", [NoSideEffect,AttrSizedOperandSegments]> {
   Variadic<AnyType>:$addr, TimeType : $tstart,
       Optional<ConstType>: $offset);
   let results = (outs AnyType: $res);
-  let assemblyFormat = [{$mem `[`  $addr `]` `at` $tstart (`offset` $offset^)?
+  let assemblyFormat = [{$mem `[`  $addr `]` `at` $tstart (`offset` $offset^ `:` type($offset))?
     attr-dict `:` type($mem) `[` type($addr) `]` `->` type($res)}];
 }
 
@@ -125,7 +125,7 @@ def MemWriteOp : HIR_Op<"mem_write", [AttrSizedOperandSegments]> {
       TimeType :$tstart, Optional<ConstType>:$offset);
   let results = (outs );
   let assemblyFormat = [{$value `to` $mem  `[` $addr `]` `at` $tstart 
-    (`offset` $offset^)? attr-dict `:` `(`type($value) `,` type($mem)`[`
+    (`offset` $offset^ `:` type($offset))? attr-dict `:` `(`type($value) `,` type($mem)`[`
     type($addr) `]` `)`}];
 }
 
@@ -144,8 +144,8 @@ def WireReadOp : HIR_Op<"wire_read", [NoSideEffect,AttrSizedOperandSegments]> {
 
   let results = (outs AnyType: $res);
 
-  let assemblyFormat = [{$wire ( `[`$addr^`]` )? `at` $tstart (`offset` $offset^)?
-    attr-dict `:` type($wire) `->` type($res)}];
+  let assemblyFormat = [{$wire  `[`$addr`]`  `at` $tstart (`offset` $offset^ `:` type($offset))?
+    attr-dict `:` type($wire) `[`type($addr)`]` `->` type($res)}];
 }
 
 def WireWriteOp : HIR_Op<"wire_write", [AttrSizedOperandSegments]> {
@@ -163,8 +163,9 @@ def WireWriteOp : HIR_Op<"wire_write", [AttrSizedOperandSegments]> {
 
   let results = (outs );
 
-  let assemblyFormat = [{$value `to` $wire ( `[`$addr^`]` )? `at` $tstart 
-    (`offset` $offset^)? attr-dict `:` `(`type($value) `,` type($wire)`)`}];
+  let assemblyFormat = [{$value `to` $wire  `[`$addr`]` `at` $tstart 
+    (`offset` $offset^ `:` type($offset))? attr-dict `:` `(`type($value) `,`
+    type($wire) `[`type($addr)`]` `)`}];
 }
 
 def ImplicitTerminator
@@ -194,7 +195,7 @@ def DelayOp: HIR_Op<"delay",[NoSideEffect]>{
   let arguments = (ins AnyType : $input, ConstType:$delay, 
       TimeType:$tstart, Optional<ConstType>: $offset);
   let results = (outs AnyType : $res);
-  let assemblyFormat = [{$input `by` $delay `at` $tstart (`offset` $offset^)? 
+  let assemblyFormat = [{$input `by` $delay `:` type($delay) `at` $tstart (`offset` $offset^ `:` type($offset))? 
     attr-dict `:` type($input) `->` type($res)}];
 }
 
@@ -269,7 +270,7 @@ def CallOp : HIR_Op<"call",[AttrSizedOperandSegments] > {
   let results = (outs Variadic<AnyType> : $res);
 
   let assemblyFormat = [{
-    $callee `(` $operands `)` `at` $tstart (`offset` $offset^)? attr-dict 
+    $callee `(` $operands `)` `at` $tstart (`offset` $offset^ `:` type($offset))? attr-dict 
       `:` functional-type($operands, $res)
   }];
 }
@@ -333,7 +334,7 @@ def YieldOp : HIR_Op<"yield", [AttrSizedOperandSegments] > {
   let results = (outs );
 
   let assemblyFormat = [{ attr-dict (`(` $operands^ `)` `:` type($operands))? 
-    `at` $tstart (`offset` $offset^)?}];
+    `at` $tstart (`offset` $offset^ `:` type($offset))?}];
 }
 
 def ConstantOp : HIR_Op<"constant" > {
@@ -364,7 +365,7 @@ def CastOp : HIR_Op<"cast">{
       Optional<ConstType>:$offset);
   let results = (outs AnyType : $res);
 
-  let assemblyFormat = [{ $input  `at` $tstart (`offset` $offset^)? attr-dict
+  let assemblyFormat = [{ $input  `at` $tstart (`offset` $offset^ `:` type($offset))? attr-dict
     `:` type($input) `->` type($res)}];
 
 }
@@ -381,7 +382,7 @@ def AddOp : HIR_Op<"add",[NoSideEffect]>{
       Optional<ConstType>:$offset);
   let results = (outs AnyType: $res);
 
-  let assemblyFormat = [{ `at` $tstart (`offset` $offset^)? `(` $left `,`
+  let assemblyFormat = [{ `at` $tstart (`offset` $offset^ `:` type($offset))? `(` $left `,`
   $right`)` attr-dict `:` `(` type($left) `,` type($right) `)` `->` type($res)}];
 
 }
@@ -397,8 +398,7 @@ def ConstAddOp : HIR_Op<"const_add",[NoSideEffect]>{
   let arguments = (ins ConstType: $left, ConstType:$right);
   let results = (outs ConstType : $res);
 
-  let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict}];
-
+  let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(` type($left) `,` type($right) `)` `->` type($res)}];
 }
 
 def ReturnOp : HIR_Op<"return", [HasParent<"DefOp">,NoSideEffect,
@@ -415,7 +415,7 @@ def ReturnOp : HIR_Op<"return", [HasParent<"DefOp">,NoSideEffect,
   let assemblyFormat = "(`(`$operands^`)` `:` `(`type($operands)`)`)? attr-dict";
 }
 
-def NewWireOp :HIR_Op<"wire", [NoSideEffect]> {
+def WireOp :HIR_Op<"wire", [NoSideEffect]> {
   let summary = "Create new wire";
 
   let description = [{
@@ -426,7 +426,7 @@ def NewWireOp :HIR_Op<"wire", [NoSideEffect]> {
   let arguments = (ins);
   let results = (outs WireType:$res);
 
-  let assemblyFormat = "attr-dict";
+  let assemblyFormat = "attr-dict `:` type($res)";
 }
 
 #endif // HIR_OPS

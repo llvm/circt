@@ -25,8 +25,8 @@ static IntegerAttr getIntegerAttr(OpAsmParser &parser, int width, int value) {
 static Type getIntegerType(OpAsmParser &parser, int bitwidth) {
   return IntegerType::get(bitwidth, parser.getBuilder().getContext());
 }
-static ConstType getConstIntType(OpAsmParser &parser) {
-  return ConstType::get(parser.getBuilder().getContext());
+static ConstType getConstIntType(OpAsmParser &parser,int bitwidth) {
+  return ConstType::get(parser.getBuilder().getContext(), getIntegerType(parser,bitwidth));
 }
 
 static Type getTimeType(OpAsmParser &parser) {
@@ -110,7 +110,7 @@ static ParseResult parseAndResolveTimeOperand(OpAsmParser &parser,
 
   auto offsetIsIdx = parser.parseOptionalOperand(offsetVar);
   if (offsetIsIdx.hasValue()) {
-    if (parser.resolveOperand(offsetVar, getConstIntType(parser),
+    if (parser.resolveOperand(offsetVar, getConstIntType(parser,32),
                               result.operands)) {
       return failure();
     } else
@@ -282,10 +282,10 @@ static ParseResult parseUnrollForOp(OpAsmParser &parser,
   auto &builder = parser.getBuilder();
   Type timeTypeVar = getTimeType(parser);
   Type tstartRawType = timeTypeVar;
-  Type tstepRawType = getConstIntType(parser);
+  Type tstepRawType = getConstIntType(parser,32);
   Type regionRawOperandTypes[2];
   ArrayRef<Type> regionOperandTypes(regionRawOperandTypes);
-  regionRawOperandTypes[0] = getConstIntType(parser);
+  regionRawOperandTypes[0] = getConstIntType(parser,32);
   regionRawOperandTypes[1] = timeTypeVar;
 
   IntegerAttr lbAttr;
