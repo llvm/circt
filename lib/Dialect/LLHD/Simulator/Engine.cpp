@@ -129,12 +129,11 @@ int Engine::simulate(int n, uint64_t maxTime) {
                              curr->size));
 
       // Apply all the changes to the buffer, in order of execution.
-      for (auto drive : change.second) {
-        if (drive.second.getBitWidth() < buff.getBitWidth())
-          buff.insertBits(drive.second, drive.first);
-        else
-          buff = drive.second;
-      }
+      auto drive = change.second;
+      if (drive.second.getBitWidth() < buff.getBitWidth())
+        buff.insertBits(drive.second, drive.first);
+      else
+        buff = drive.second;
 
       // Skip if the updated signal value is equal to the initial value.
       if (std::memcmp(curr->value.get(), buff.getRawData(), curr->size) == 0)

@@ -106,7 +106,7 @@ bool Slot::operator<(const Slot &rhs) const { return time < rhs.time; }
 bool Slot::operator>(const Slot &rhs) const { return rhs.time < time; }
 
 void Slot::insertChange(int index, int bitOffset, APInt &bytes) {
-  changes[index].push_back(std::make_pair(bitOffset, bytes));
+  changes.push_back(std::make_pair(index, std::make_pair(bitOffset, bytes)));
 }
 
 void Slot::insertChange(std::string inst) { scheduled.push_back(inst); }

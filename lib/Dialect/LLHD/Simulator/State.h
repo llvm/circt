@@ -115,7 +115,7 @@ struct Slot {
   void insertChange(std::string inst);
 
   // Map structure: <signal-index, vec<(offset, new-value)>>.
-  std::map<uint64_t, llvm::SmallVector<std::pair<int, llvm::APInt>, 16>>
+  llvm::SmallVector<std::pair<unsigned, std::pair<int, llvm::APInt>>, 32>
       changes;
   // Processes with scheduled wakeup.
   llvm::SmallVector<std::string, 4> scheduled;
