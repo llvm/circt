@@ -109,7 +109,7 @@ void Slot::insertChange(int index, int bitOffset, APInt &bytes) {
   changes.push_back(std::make_pair(index, std::make_pair(bitOffset, bytes)));
 }
 
-void Slot::insertChange(std::string inst) { scheduled.push_back(inst); }
+void Slot::insertChange(unsigned inst) { scheduled.push_back(inst); }
 
 //===----------------------------------------------------------------------===//
 // UpdateQueue
@@ -125,7 +125,7 @@ void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
   push(Slot(time, index, bitOffset, bytes));
 }
 
-void UpdateQueue::insertOrUpdate(Time time, std::string inst) {
+void UpdateQueue::insertOrUpdate(Time time, unsigned inst) {
   for (size_t i = 0, e = c.size(); i < e; ++i) {
     if (time == c[i].time) {
       c[i].insertChange(inst);
@@ -142,10 +142,12 @@ void UpdateQueue::insertOrUpdate(Time time, std::string inst) {
 //===----------------------------------------------------------------------===//
 
 State::~State() {
-  for (auto &entry : instances) {
-    auto &inst = entry.getValue();
+  for (int i = 0, e = signals.size(); i < e; ++i)
+    if (signals[i].value)
+      std::free(signals[i].value);
+
+  for (auto &inst : instances) {
     if (inst.procState) {
-      std::free(inst.procState->inst);
       std::free(inst.procState->senses);
     }
   }
@@ -162,7 +164,7 @@ void State::pushQueue(Time t, int index, int bitOffset, APInt &bytes) {
   Time newTime = time + t;
   queue.insertOrUpdate(newTime, index, bitOffset, bytes);
 }
-void State::pushQueue(Time t, std::string inst) {
+void State::pushQueue(Time t, unsigned inst) {
   Time newTime = time + t;
   queue.insertOrUpdate(newTime, inst);
   instances[inst].expectedWakeup = newTime;
@@ -174,16 +176,28 @@ int State::addSignal(std::string name, std::string owner) {
 }
 
 void State::addProcPtr(std::string name, ProcState *procStatePtr) {
-  instances[name].procState = std::unique_ptr<ProcState>(procStatePtr);
-  // Copy string to owner name ptr.
-  name.copy(instances[name].procState->inst, name.size());
-  // Ensure the string is null-terminated.
-  instances[name].procState->inst[name.size()] = '\0';
+
+  auto it = std::find_if(instances.begin(), instances.end(),
+                         [&](auto &inst) { return name == inst.name; });
+  if (it == instances.end()) {
+    llvm::errs() << "could not find an instance named " << name << "\n";
+    exit(EXIT_FAILURE);
+  }
+
+  // Store instance index in process state.
+  procStatePtr->inst = it - instances.begin();
+  (*it).procState = procStatePtr;
 }
 
 int State::addSignalData(int index, std::string owner, uint8_t *value,
                          uint64_t size) {
-  auto &inst = instances[owner];
+  auto it = std::find_if(instances.begin(), instances.end(),
+                         [&](auto &inst) { return owner == inst.name; });
+  if (it == instances.end()) {
+    llvm::errs() << "could not find an instance named " << owner << "\n";
+    exit(EXIT_FAILURE);
+  }
+  auto inst = (*it);
   uint64_t globalIdx = inst.sensitivityList[index + inst.nArgs].globalIndex;
   auto &sig = signals[globalIdx];
 
@@ -218,12 +232,11 @@ void State::dumpSignal(llvm::raw_ostream &out, int index) {
 void State::dumpLayout() {
   llvm::errs() << "::------------------- Layout -------------------::\n";
   for (auto &inst : instances) {
-    llvm::errs() << inst.getKey().str() << ":\n";
-    llvm::errs() << "---parent: " << inst.getValue().parent << "\n";
-    llvm::errs() << "---path: " << inst.getValue().path << "\n";
-    llvm::errs() << "---isEntity: " << inst.getValue().isEntity << "\n";
+    llvm::errs() << inst.name << ":\n";
+    llvm::errs() << "---path: " << inst.path << "\n";
+    llvm::errs() << "---isEntity: " << inst.isEntity << "\n";
     llvm::errs() << "---sensitivity list: ";
-    for (auto in : inst.getValue().sensitivityList) {
+    for (auto in : inst.sensitivityList) {
       llvm::errs() << in.globalIndex << " ";
     }
     llvm::errs() << "\n";

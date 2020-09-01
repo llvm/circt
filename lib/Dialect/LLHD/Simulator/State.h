@@ -90,7 +90,7 @@ struct Signal {
   std::string name;
   std::string owner;
   // The list of instances this signal triggers.
-  std::vector<std::string> triggers;
+  std::vector<unsigned> triggers;
   uint64_t size;
   std::unique_ptr<uint8_t> value;
   std::vector<std::pair<unsigned, unsigned>> elements;
@@ -112,13 +112,13 @@ struct Slot {
   void insertChange(int index, int bitOffset, llvm::APInt &bytes);
 
   /// Insert a scheduled process wakeup.
-  void insertChange(std::string inst);
+  void insertChange(unsigned inst);
 
   // Map structure: <signal-index, vec<(offset, new-value)>>.
   llvm::SmallVector<std::pair<unsigned, std::pair<int, llvm::APInt>>, 32>
       changes;
   // Processes with scheduled wakeup.
-  llvm::SmallVector<std::string, 4> scheduled;
+  llvm::SmallVector<unsigned, 4> scheduled;
   Time time;
 };
 
@@ -135,12 +135,12 @@ public:
   /// Check wheter a slot for the given time already exists. If that's the case,
   /// add the scheduled wakeup to it, else create a new slot and push it to the
   /// queue.
-  void insertOrUpdate(Time time, std::string inst);
+  void insertOrUpdate(Time time, unsigned inst);
 };
 
 /// State structure for process persistence across suspension.
 struct ProcState {
-  char *inst;
+  unsigned inst;
   int resume;
   bool *senses;
   uint8_t *resumeState;
@@ -150,13 +150,11 @@ struct ProcState {
 struct Instance {
   Instance() = default;
 
-  Instance(std::string name, std::string parent)
-      : name(name), parent(parent), procState(nullptr), entityState(nullptr) {}
+  Instance(std::string name)
+      : name(name), procState(nullptr), entityState(nullptr) {}
 
   // The instance name.
   std::string name;
-  // The instance parent's name.
-  std::string parent;
   // The instance's hierarchical path.
   std::string path;
   // The instance's base unit.
@@ -188,7 +186,7 @@ struct State {
   void pushQueue(Time time, int index, int bitOffset, llvm::APInt &bytes);
 
   /// Push a new scheduled wakeup event in the event queue.
-  void pushQueue(Time time, std::string inst);
+  void pushQueue(Time time, unsigned inst);
 
   /// Get the signal at position i in the signal list.
   Signal getSignal(int index);
@@ -216,7 +214,7 @@ struct State {
 
   Time time;
   std::string root;
-  llvm::StringMap<Instance> instances;
+  llvm::SmallVector<Instance, 8> instances;
   std::vector<Signal> signals;
   UpdateQueue queue;
 };

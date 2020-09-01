@@ -93,16 +93,17 @@ int Engine::simulate(int n, uint64_t maxTime) {
   int i = 0;
 
   // Keep track of the instances that need to wakeup.
-  llvm::SmallVector<std::string, 8> wakeupQueue;
+  llvm::SmallVector<unsigned, 8> wakeupQueue;
   // All instances are run in the first cycle.
-  for (auto &inst : state->instances) {
-    wakeupQueue.push_back(inst.first().str());
-    auto expectedFPtr = engine->lookup(inst.second.unit);
+  for (size_t i = 0, e = state->instances.size(); i < e; ++i) {
+    wakeupQueue.push_back(i);
+    auto &inst = state->instances[i];
+    auto expectedFPtr = engine->lookup(inst.unit);
     if (!expectedFPtr) {
-      llvm::errs() << "Could not lookup " << inst.second.unit << "!\n";
+      llvm::errs() << "Could not lookup " << inst.unit << "!\n";
       return -1;
     }
-    inst.second.unitFPtr = *expectedFPtr;
+    inst.unitFPtr = *expectedFPtr;
   }
 
   while (!state->queue.empty()) {
@@ -181,8 +182,8 @@ int Engine::simulate(int n, uint64_t maxTime) {
                       wakeupQueue.end());
 
     // Run the instances present in the wakeup queue.
-    for (auto instID : wakeupQueue) {
-      auto &inst = state->instances[instID];
+    for (auto i : wakeupQueue) {
+      auto &inst = state->instances[i];
       auto name = inst.unit;
       auto signalTable = inst.sensitivityList.data();
 
@@ -219,7 +220,7 @@ void Engine::buildLayout(ModuleOp module) {
 
   // Build root instance, the parent and instance names are the same for the
   // root.
-  Instance rootInst(state->root, state->root);
+  Instance rootInst(state->root);
   rootInst.unit = root;
   rootInst.path = root;
 
@@ -229,13 +230,13 @@ void Engine::buildLayout(ModuleOp module) {
   // The root is always an instance.
   rootInst.isEntity = true;
   // Store the root instance.
-  state->instances[rootInst.name] = std::move(rootInst);
+  state->instances.push_back(rootInst);
 
   // Add triggers to signals.
-  for (auto &inst : state->instances) {
-    for (auto trigger : inst.getValue().sensitivityList) {
-      state->signals[trigger.globalIndex].triggers.push_back(
-          inst.getKey().str());
+  for (size_t i = 0, e = state->instances.size(); i < e; ++i) {
+    auto &inst = state->instances[i];
+    for (auto trigger : inst.sensitivityList) {
+      state->signals[trigger.globalIndex].triggers.push_back(i);
     }
   }
 }
@@ -258,7 +259,7 @@ void Engine::walkEntity(EntityOp entity, Instance &child) {
         return;
       if (auto e =
               op->getParentOfType<ModuleOp>().lookupSymbol(inst.callee())) {
-        Instance newChild(child.unit + '.' + inst.name().str(), child.name);
+        Instance newChild(child.unit + '.' + inst.name().str());
         newChild.unit = inst.callee().str();
         newChild.nArgs = inst.getNumOperands();
         newChild.path = child.path + "/" + inst.name().str();
@@ -303,7 +304,7 @@ void Engine::walkEntity(EntityOp entity, Instance &child) {
         }
 
         // Store the created instance.
-        state->instances[newChild.name] = std::move(newChild);
+        state->instances.push_back(newChild);
       }
     }
   });

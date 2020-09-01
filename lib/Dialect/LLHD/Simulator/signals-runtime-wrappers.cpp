@@ -7,6 +7,7 @@
 #include "signals-runtime-wrappers.h"
 
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
 using namespace circt::llhd::sim;
@@ -43,7 +44,13 @@ void allocProc(State *state, char *owner, ProcState *procState) {
 void allocEntity(State *state, char *owner, uint8_t *entityState) {
   assert(state && "alloc_entity: state not found");
   std::string sOwner(owner);
-  state->instances[sOwner].entityState = std::unique_ptr<uint8_t>(entityState);
+  auto it = std::find_if(state->instances.begin(), state->instances.end(),
+                         [&](auto &inst) { return inst.name == owner; });
+  if (it == state->instances.end()) {
+    llvm::errs() << "could not find an instance named " << owner << "\n";
+    exit(EXIT_FAILURE);
+  }
+  (*it).entityState = entityState;
 }
 
 void driveSignal(State *state, SignalDetail *detail, uint8_t *value,
@@ -69,10 +76,9 @@ void driveSignal(State *state, SignalDetail *detail, uint8_t *value,
 
 void llhdSuspend(State *state, ProcState *procState, int time, int delta,
                  int eps) {
-  std::string instS(procState->inst);
   // Add a new scheduled wake up if a time is specified.
   if (time || delta || eps) {
     Time sTime(time, delta, eps);
-    state->pushQueue(sTime, instS);
+    state->pushQueue(sTime, procState->inst);
   }
 }
