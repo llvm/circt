@@ -101,7 +101,7 @@ static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
   if (parser.parseLess())
     return Type();
 
-  if(Helpers::parseShapedType(parser, shape, elementType))
+  if (Helpers::parseShapedType(parser, shape, elementType))
     return Type();
 
   llvm::SmallVector<unsigned, 4> default_packing;
@@ -135,7 +135,9 @@ static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
   if (Helpers::parsePortKind(parser, port) || parser.parseGreater())
     return Type();
 
-  return MemrefType::get(context, shape, elementType, packing, port);
+  return MemrefType::get(context, shape, elementType,
+                         hasPacking.hasValue() ? packing : default_packing,
+                         port);
 }
 
 static void printMemrefType(MemrefType memrefTy, DialectAsmPrinter &printer) {
@@ -174,7 +176,7 @@ static Type parseWireType(DialectAsmParser &parser, MLIRContext *context) {
   if (parser.parseLess())
     return Type();
 
-  if(Helpers::parseShapedType(parser, shape, elementType))
+  if (Helpers::parseShapedType(parser, shape, elementType))
     return Type();
 
   llvm::SmallVector<unsigned, 4> default_packing;
@@ -205,7 +207,7 @@ static void printWireType(WireType wireTy, DialectAsmPrinter &printer) {
   for (auto dim : shape)
     printer << dim << "*";
 
-  printer << elementType ;
+  printer << elementType;
 
   if (port == Details::r) {
     printer << ", r";
@@ -218,7 +220,7 @@ static void printWireType(WireType wireTy, DialectAsmPrinter &printer) {
   }
   printer << ">";
 }
-//ConsType
+// ConsType
 
 static Type parseConstType(DialectAsmParser &parser, MLIRContext *context) {
   Type elementType;
@@ -226,8 +228,7 @@ static Type parseConstType(DialectAsmParser &parser, MLIRContext *context) {
       parser.parseGreater())
     return Type();
 
-  // TODO:Construct the ConstType with type.
-  auto constTy = ConstType::get(context,elementType);
+  auto constTy = ConstType::get(context, elementType);
   return constTy;
 }
 
@@ -235,7 +236,7 @@ static void printConstType(ConstType constTy, DialectAsmPrinter &printer) {
   printer << constTy.getKeyword();
   printer << "<";
   auto elementType = constTy.getElementType();
-  printer << elementType ;
+  printer << elementType;
   printer << ">";
 }
 
@@ -272,11 +273,11 @@ void HIRDialect::printType(Type type, DialectAsmPrinter &printer) const {
     return;
   }
   if (WireType wireTy = type.dyn_cast<WireType>()) {
-    printWireType(wireTy,printer);
+    printWireType(wireTy, printer);
     return;
   }
   if (ConstType constTy = type.dyn_cast<ConstType>()) {
-    printConstType(constTy,printer);
+    printConstType(constTy, printer);
     return;
   }
 }
