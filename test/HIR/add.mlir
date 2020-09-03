@@ -6,7 +6,7 @@ hir.def @Add at %t (%A:!hir.memref<128*i32,r>,
   %1 = hir.constant 1 :i32
   %c1 = hir.constant 1 :!hir.const<i32>
   %128 = hir.constant 128 :i32
-  hir.for %i:i32 = %0:i32 to %128:i32 step %1:i32 iter_time(%ti = %t){
+  hir.for %i:i32 = %0:i32 to %128:i32 step %1:i32 iter_time(%ti = %t tstep %c1:!hir.const<i32>){
     %a = hir.mem_read %A[%i] at %ti : !hir.memref<128*i32,r>[i32] -> i32
     %b = hir.mem_read %B[%i] at %ti : !hir.memref<128*i32,r>[i32] -> i32
     %c = hir.add at %ti offset %c1:!hir.const<i32> (%a,%b) : (i32,i32) -> i32
