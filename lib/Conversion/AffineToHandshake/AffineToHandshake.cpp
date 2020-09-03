@@ -1,18 +1,17 @@
 //===- AffineToHandshake.cpp - Convert MLIR affine to handshake -*- C++ -*-===//
 //
-// Copyright 2019 The CIRCT Authors.
+// This file implements the affine-to-handshake conversion.
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-// =============================================================================
+//===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/AffineToHandshake/AffineToHandshake.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/Analysis/AffineAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/AffineExprVisitor.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Function.h"
 #include "mlir/IR/OpImplementation.h"
@@ -20,11 +19,13 @@
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
 #include "mlir/Transforms/Utils.h"
 
 using namespace mlir;
+using namespace std;
 using namespace circt;
 using namespace circt::handshake;
 
@@ -81,11 +82,805 @@ typedef llvm::DenseMap<mlir::Block *, std::vector<mlir::Value>> BlockValues;
 /// Maps from basic blocks to sets of operations.
 typedef llvm::DenseMap<mlir::Block *, std::vector<mlir::Operation *>> BlockOps;
 
-/// Perform liveness analysis on blocks in the given handshake::FuncOp. Results
-/// will be updated to the input map mapping from blocks to the sets of entry
-/// variables (mlir::Values) that are live. Liveness analysis in this conversion
-/// is mainly used to create merge operations.
-void livenessAnalysis(handshake::FuncOp f, BlockValues &blockLiveIns) {}
+/// Get the USE values for all basic blocks in the given handshake::FuncOp. For
+/// each block, this function iterates through each of its operations to find
+/// operands that are not owned by the current block.
+LogicalResult getBlockUses(handshake::FuncOp f, BlockValues &uses) {
+  for (Block &block : f) {
+    for (Operation &op : block) {
+      if (isa<AffineForOp, scf::ForOp, AffineYieldOp, scf::YieldOp>(op))
+        continue;
+
+      for (int i = 0, e = op.getNumOperands(); i < e; ++i) {
+        mlir::Value operand = op.getOperand(i);
+        Block *owner;
+
+        if (operand.getKind() == mlir::Value::Kind::BlockArgument) {
+          // Operand is block argument, get its owner block
+          owner = operand.cast<BlockArgument>().getOwner();
+        } else {
+          // Operand comes from operation, get the block of its defining op
+          Operation *defOp = operand.getDefiningOp();
+          // TODO: Needs better error handling with more verbose information.
+          assert(defOp != NULL);
+          owner = defOp->getBlock();
+        }
+
+        // If this operand is defined in some other block, and it has not yet
+        // been added, we add it to the USE set of the current block.
+        if (owner != &block &&
+            std::find(uses[&block].begin(), uses[&block].end(), operand) ==
+                uses[&block].end())
+          uses[&block].push_back(operand);
+      }
+    }
+  }
+
+  return success();
+}
+
+/// Get the DEF set of values for each basic block in the given
+/// handshake::FuncOp. A value is defined in a block if it is the result of an
+/// operation in that block, or it is the block arguments of that block.
+LogicalResult getBlockDefs(handshake::FuncOp f, BlockValues &defs) {
+  for (Block &block : f) {
+    // Add operation results to the DEF set.
+    for (Operation &op : block) {
+      if (isa<AffineForOp, scf::ForOp, AffineYieldOp, scf::YieldOp>(op))
+        continue;
+      if (op.getNumResults() > 0) {
+        for (auto result : op.getResults())
+          defs[&block].push_back(result);
+      }
+    }
+
+    // Add block arguments to the DEF set.
+    for (auto &arg : block.getArguments())
+      defs[&block].push_back(arg);
+  }
+
+  return success();
+}
+
+vector<Value> vectorUnion(vector<Value> v1, vector<Value> v2) {
+  // Returns v1 U v2
+  // Assumes unique values in v1
+
+  for (int i = 0, e = v2.size(); i < e; ++i) {
+    Value val = v2[i];
+    if (std::find(v1.begin(), v1.end(), val) == v1.end())
+      v1.push_back(val);
+  }
+  return v1;
+}
+
+vector<Value> vectorDiff(vector<Value> v1, vector<Value> v2) {
+  // Returns v1 - v2
+  vector<Value> d;
+
+  for (int i = 0, e = v1.size(); i < e; ++i) {
+    Value val = v1[i];
+    if (std::find(v2.begin(), v2.end(), val) == v2.end())
+      d.push_back(val);
+  }
+  return d;
+}
+
+/// Perform liveness analysis on all the basic blocks in the given
+/// handshake::FuncOp. The algorithm is adapted from:
+/// https://suif.stanford.edu/~courses/cs243/lectures/l2.pdf (slide 19)
+/// Results will be updated to the input map mapping from blocks to the sets of
+/// entry variables (mlir::Values) that are live. Liveness analysis in this
+/// conversion is mainly used to create merge operations.
+LogicalResult livenessAnalysis(handshake::FuncOp f, BlockValues &blockLiveIns) {
+  // blockUses: values used in block but not defined in block
+  // blockDefs: values defined in block
+  BlockValues blockUses, blockDefs;
+  if (failed(getBlockUses(f, blockUses)) || failed(getBlockDefs(f, blockDefs)))
+    return failure();
+
+  // Iterate while there are any changes to any of the livein sets
+  bool change = true;
+  while (change) {
+    change = false;
+    // liveOuts(b): all liveins of all successors of b
+    // liveOuts(b) = U (blockLiveIns(s)) forall successors s of b
+    for (Block &block : f) {
+      vector<Value> liveOuts;
+      for (int i = 0, e = block.getNumSuccessors(); i < e; ++i) {
+        Block *succ = block.getSuccessor(i);
+        liveOuts = vectorUnion(liveOuts, blockLiveIns[succ]);
+      }
+      // diff(b):  liveouts of b which are not defined in b
+      // diff(b) = liveOuts(b) - blockDefs(b)
+      vector<Value> diff = vectorDiff(liveOuts, blockDefs[&block]);
+      // liveIns(b) = blockUses(b) U diff(b)
+      vector<Value> tmpLiveIns = vectorUnion(blockUses[&block], diff);
+      // Update blockLiveIns if new liveins found
+      if (tmpLiveIns.size() > blockLiveIns[&block].size()) {
+        blockLiveIns[&block] = tmpLiveIns;
+        change = true;
+      }
+    }
+  }
+
+  return success();
+}
+
+unsigned getNumBlockPredecessors(Block *block) {
+  // Returns number of block predecessors
+  auto predecessors = block->getPredecessors();
+  return std::distance(predecessors.begin(), predecessors.end());
+}
+
+/// Insert merge operation for the given Value in the given basic block.
+/// Depending on the type of the Value and the number of predecessor blocks, we
+/// create different types of merge:
+/// - A ControlMergeOp (CMerge) is created for (non-BlockArgument) values on the
+/// control-only path, which is originated from the StartOp.
+/// - A MergeOp is created if the value is a BlockArgument and the block has
+/// less than one predecessor.
+/// - A MuxOp is created if the value is a BlockArgument and the block has
+/// multiple predecessors.
+Operation *insertMerge(Block *block, mlir::Value val,
+                       ConversionPatternRewriter &rewriter) {
+  unsigned numPredecessors = getNumBlockPredecessors(block);
+
+  // Control-only path originates from StartOp.
+  if (val.getKind() != mlir::Value::Kind::BlockArgument) {
+    Operation *defOp = val.getDefiningOp();
+    // A live-in value should have exactly a single def-op.
+    assert(defOp != nullptr);
+    if (isa<StartOp>(defOp))
+      return rewriter.create<handshake::ControlMergeOp>(block->front().getLoc(),
+                                                        val, numPredecessors);
+  }
+
+  // Now we handle Values that are either BlockArguments or values that are not
+  // originated from StartOp.
+  // If there are no block predecessors (i.e., entry block), function argument
+  // is set as its single operand.
+  if (numPredecessors <= 1)
+    return rewriter.create<handshake::MergeOp>(block->front().getLoc(), val, 1);
+
+  // Otherwise, we create a MuxOp that has an explicit selector to select one
+  // of its inputs as its output.
+  return rewriter.create<handshake::MuxOp>(block->front().getLoc(), val,
+                                           numPredecessors);
+}
+
+/// Insert merge operations after live-in values of each basic block in the
+/// given handshake::FuncOp. The newly inserted merge operations are stored into
+/// the blockMerges argument.
+LogicalResult insertMergeOps(handshake::FuncOp f, BlockValues blockLiveIns,
+                             BlockOps &blockMerges,
+                             ConversionPatternRewriter &rewriter) {
+  for (Block &block : f) {
+    rewriter.setInsertionPointToStart(&block);
+    // Insert merge operations for all live-in values.
+    for (auto &val : blockLiveIns[&block]) {
+      Operation *newOp = insertMerge(&block, val, rewriter);
+      if (newOp)
+        blockMerges[&block].push_back(newOp);
+    }
+
+    // Insert merge operations for all BlockArguments of this current block,
+    // which are not in the live-in set. We need to add merge operations for
+    // them as well, because, for example:
+    //
+    // ```mlir
+    // %1 = ...
+    // br bb1(%1)
+    // ^bb1(%arg1):
+    //   %2 = op(%arg1)
+    // ```
+    //
+    // In this case, `%arg1` is a BlockArgument of the block `^bb1`, and based
+    // on the control-flow, `%1` will be passed into `^bb1` as `%arg1`, and
+    // therefore, `%arg1` is pratically a live-in variable and we need to add a
+    // merge operation for it.
+    for (auto &arg : block.getArguments()) {
+      Operation *newOp = insertMerge(&block, arg, rewriter);
+      if (newOp)
+        blockMerges[&block].push_back(newOp);
+    }
+  }
+
+  return success();
+}
+
+/// Check if block contains operation which produces the given Value `val`.
+/// `val` cannot be BlockArgument in this case.
+bool blockHasSrcOp(mlir::Value val, Block *block) {
+  // Arguments do not have an operation producer
+  if (val.getKind() == Value::Kind::BlockArgument)
+    return false;
+  // The defining operation of `val` should exist.
+  Operation *op = val.getDefiningOp();
+  assert(op != nullptr);
+  // If the defining op is in the given block, we can say that `val` is defined
+  // in that block.
+  return (op->getBlock() == block);
+}
+
+/// The given MergeOp `op` has a list of operands, the first of which is the
+/// value being merged, and the rest are the values that are merged into the
+/// first value. However, when creating `op`, these other operands are not
+/// explicitly specified (they stay the same as the first operand), and this
+/// function aims to replace them with the correct values. Each function call
+/// will handle one predecessor block (`predBlock`), which corresponds to one
+/// merge operand.
+///
+/// Depending on the value being merged, there are two cases for replacement:
+///
+/// 1) If the value being merged is a BlockArgument of its owning block, then we
+/// know that the actual values to be merged into the first arguments are those
+/// passed into the block as that BlockArgument. We can simply search for them
+/// in the terminator of the given `predBlock`.
+/// 2) If not, given the pressumption that, besides BlockArguments, values
+/// beging merged can only be live-in values. Each live-in value has a single
+/// source of definition. If it is defined in the given `predBlock`, then we are
+/// merging the right thing; if not, it should come from another MergeOp in that
+/// `predBlock`. We should search for that MergeOp and return its result, which
+/// will further become the merge operand of `op`.
+mlir::Value getMergeOperand(Operation *op, Block *predBlock,
+                            BlockOps blockMerges) {
+  // The value that is merged by the given MergeOp `op`, which can be retrieved
+  // from the first operand of the MergeOp.
+  mlir::Value srcVal = op->getOperand(0);
+  // The parent block of the MergeOp.
+  Block *block = op->getBlock();
+
+  // If the value being merged is NOT a BlockArgument of the current block, then
+  // we return itself if it is defined in the given predecessor `predBlock`;
+  // otherwise, that value should be a merged result from the `predBlock`, and
+  // we should find the exact MergeOp that merges that value and return the
+  // merge result.
+  if (std::find(block->getArguments().begin(), block->getArguments().end(),
+                srcVal) == block->getArguments().end()) {
+    // Value is not defined by operation in predBlock
+    if (!blockHasSrcOp(srcVal, predBlock)) {
+      // Find the corresponding Merge
+      for (Operation *predOp : blockMerges[predBlock])
+        if (predOp->getOperand(0) == srcVal)
+          return predOp->getResult(0);
+    } else
+      return srcVal;
+  }
+  // If the Value being merged is a BlockArgument of this current block, then we
+  // should replace the merge operands by the actual values passed in as the
+  // BlockArgument, and these values should come from the predecessors of this
+  // current block. We do this by extracting the operands that passed into the
+  // terminator of the predecessor block, which should either be a CondBranchOp
+  // or a BranchOp. From these terminator operands we can get what the exact
+  // values that are passed into the current block and will be merged.
+  else {
+    unsigned index = srcVal.cast<BlockArgument>().getArgNumber();
+    Operation *termOp = predBlock->getTerminator();
+    if (auto br = dyn_cast<mlir::CondBranchOp>(termOp)) {
+      if (block == br.getTrueDest())
+        return br.getTrueOperand(index);
+      else {
+        assert(block == br.getFalseDest());
+        return br.getFalseOperand(index);
+      }
+    } else if (isa<mlir::BranchOp>(termOp)) {
+      return termOp->getOperand(index);
+    } else {
+      // TODO: what this case could be?
+      return nullptr;
+    }
+  }
+}
+
+/// Remove all block arguments, which should be guaranteed to have no usage.
+/// When removing BlockArguments, the branch operations that pass them in will
+/// be removed as well by `eraseArguments`.
+/// TODO: is it so?
+void removeBlockOperands(handshake::FuncOp f) {
+  for (Block &block : f) {
+    if (!block.isEntryBlock()) {
+      int x = block.getNumArguments() - 1;
+      for (int i = x; i >= 0; --i)
+        block.eraseArgument(i);
+    }
+  }
+}
+
+/// All merge operands are initially set to original (defining) value. This
+/// function iterates through every basic block in the given handshake::FuncOp,
+/// and for each block, it goes through every merge op recorded in the map
+/// `blockMerges`. For each operand starting from index 1, we relate them to the
+/// corresponding block predecessor (ordering determined by
+/// `getPredecessors()`). This relationship is built by `getMergeOperand`.
+/// Before calling `reconnectMergeOps`, those operations that use the
+/// value to be merged are still using the original value. We will use the 0-th
+/// operand of each merge, i.e., the value being merged, to identify operations
+/// that use it and replace such usage with the merge result.
+void reconnectMergeOps(handshake::FuncOp f, BlockOps &blockMerges) {
+  for (Block &block : f) {
+    for (Operation *op : blockMerges[&block]) {
+      unsigned count = 1;
+      // Set appropriate operand from predecessor block.
+      for (auto *predBlock : block.getPredecessors()) {
+        mlir::Value mgOperand = getMergeOperand(op, predBlock, blockMerges);
+        // TODO: is it possible that mgOperand can actually be NULL?
+        assert(mgOperand != nullptr);
+        op->setOperand(count, mgOperand);
+        count++;
+      }
+      // Let other operations to use the merge result instead of the original
+      // object representing the value to be merged (the first operand).
+      for (Operation &otherOp : block)
+        if (!isa<MergeLikeOpInterface>(otherOp))
+          otherOp.replaceUsesOfWith(op->getOperand(0), op->getResult(0));
+    }
+  }
+
+  // Disconnect original value (Operand(0), used as helper) from all merges. If
+  // the original value must be a merge operand, it is still set as some
+  // subsequent operand. If block has multiple predecessors, connect Muxes to
+  // ControlMerge
+  for (Block &block : f) {
+    unsigned numPredecessors = getNumBlockPredecessors(&block);
+
+    if (numPredecessors <= 1) {
+      for (Operation *op : blockMerges[&block])
+        op->eraseOperand(0);
+    } else {
+      Operation *cntrlMg = getControlMerge(&block);
+      assert(cntrlMg != nullptr);
+      cntrlMg->eraseOperand(0);
+
+      for (Operation *op : blockMerges[&block])
+        if (op != cntrlMg)
+          op->setOperand(0, cntrlMg->getResult(1));
+    }
+  }
+}
+
+/// For all blocks, we add MergeOp to their live-in values and their
+/// BlockArguments. A MergeOp is analogous to the Phi-functions in SSA, its
+/// behaviour is to dynamically select values that may come from any
+/// control-flow path. More details can be found in this paper:
+/// https://dl.acm.org/doi/abs/10.1145/3174243.3174264
+LogicalResult addMergeOps(handshake::FuncOp f,
+                          ConversionPatternRewriter &rewriter) {
+  // blockLiveIns: live in variables of block
+  BlockValues liveIns;
+  if (failed(livenessAnalysis(f, liveIns)))
+    return failure();
+  // Insert merge operations if necessary for all live-in values of all basic
+  // blocks. The mapping between the new merge ops and their owner blocks are
+  // created as well.
+  BlockOps mergeOps;
+  if (failed(insertMergeOps(f, liveIns, mergeOps, rewriter)))
+    return failure();
+
+  // Set merge operands and uses
+  reconnectMergeOps(f, mergeOps);
+
+  // After the previous steps, all BlockArguments should have no usage (replaced
+  // by MergeOp results) and can be safely removed.
+  removeBlockOperands(f);
+
+  return success();
+}
+} // namespace
+
+namespace {
+
+/// This function determines whether a value is a live-out value of a block by
+/// checking whether it is being used by any MergeOp. This works because
+/// live-out values are the union of all live-in values from all successors, and
+/// live-in values are always being merged. This function should only be called
+/// when all the necessary MergeOp operations are added.
+bool isLiveOut(Value val) {
+  for (auto &u : val.getUses())
+    if (isa<MergeLikeOpInterface>(u.getOwner()))
+      return true;
+  return false;
+}
+
+/// A value can have multiple branches in a single successor block (for
+/// instance, there can be an SSA phi and a merge that we insert). This function
+/// determines the number of branches to insert based on the value uses in
+/// successor blocks. For each successor of the given block, if its own number
+/// of uses of `val` is the largest among all successors, then we return this
+/// number.
+unsigned getBranchCount(mlir::Value val, Block *block) {
+  unsigned uses = 0;
+  for (unsigned i = 0, e = block->getNumSuccessors(); i < e; ++i) {
+    unsigned curr = 0;
+    Block *succ = block->getSuccessor(i);
+    for (auto &u : val.getUses()) {
+      if (u.getOwner()->getBlock() == succ)
+        curr++;
+    }
+    uses = (curr > uses) ? curr : uses;
+  }
+  return uses;
+}
+
+// Return the appropriate branch result based on successor block which uses it
+mlir::Value getSuccResult(Operation *termOp, Operation *newOp,
+                          Block *succBlock) {
+  // For conditional block, check if result goes to true or to false successor
+  if (auto condBranchOp = dyn_cast<mlir::CondBranchOp>(termOp)) {
+    if (condBranchOp.getTrueDest() == succBlock)
+      return dyn_cast<handshake::ConditionalBranchOp>(newOp).trueResult();
+    else {
+      assert(condBranchOp.getFalseDest() == succBlock);
+      return dyn_cast<handshake::ConditionalBranchOp>(newOp).falseResult();
+    }
+  }
+  // If the block is unconditional, newOp has only one result
+  return newOp->getResult(0);
+}
+
+/// Get the live-out set for each block in the given handshake::FuncOp. Whether
+/// a value is live-out is determined by the `isLiveOut` function.
+LogicalResult getBlockLiveOuts(handshake::FuncOp f, BlockValues &liveOuts) {
+  for (Block &block : f) {
+    for (Operation &op : block) {
+      for (auto result : op.getResults())
+        if (isLiveOut(result))
+          liveOuts[&block].push_back(result);
+    }
+  }
+  return success();
+}
+
+/// Insert a BranchOp for each live-out value of every block in the given
+/// handshake::FuncOp. The insertion point will immediately be after each
+/// block's terminator. And we create BranchOp from the original terminators,
+/// which should be either mlir::CondBranchOp or mlir::BranchOp.
+LogicalResult insertBranchOps(handshake::FuncOp f, BlockValues &liveOuts,
+                              ConversionPatternRewriter &rewriter) {
+  for (Block &block : f) {
+    Operation *termOp = block.getTerminator();
+    rewriter.setInsertionPoint(termOp);
+
+    for (Value val : liveOuts[&block]) {
+      // Count the number of branches which the liveout needs (being used).
+      unsigned numBranches = getBranchCount(val, &block);
+
+      // Instantiate branches and connect them to MergeOps.
+      for (unsigned i = 0, e = numBranches; i < e; ++i) {
+        Operation *newOp = nullptr;
+
+        if (auto condBranchOp = dyn_cast<mlir::CondBranchOp>(termOp))
+          newOp = rewriter.create<handshake::ConditionalBranchOp>(
+              termOp->getLoc(), condBranchOp.getCondition(), val);
+        else if (isa<mlir::BranchOp>(termOp))
+          newOp = rewriter.create<handshake::BranchOp>(termOp->getLoc(), val);
+
+        // When the BranchOp in the handshake realm is created, we replace the
+        // uses of the revious BranchOps' results to the current handshake
+        // branches.
+        if (newOp != nullptr) {
+          for (int i = 0, e = block.getNumSuccessors(); i < e; ++i) {
+            Block *succ = block.getSuccessor(i);
+            mlir::Value res = getSuccResult(termOp, newOp, succ);
+
+            for (auto &u : val.getUses()) {
+              if (u.getOwner()->getBlock() == succ) {
+                u.getOwner()->replaceUsesOfWith(val, res);
+                break;
+              }
+            }
+          }
+        }
+        // TODO: what if newOp is nullptr?
+      }
+    }
+  }
+  return success();
+}
+
+/// This function creates new handshake terminators after the original mlir
+/// branches that will be removed.
+LogicalResult rewriteBranchTerminators(handshake::FuncOp f,
+                                       ConversionPatternRewriter &rewriter) {
+  for (Block &block : f) {
+    Operation *termOp = block.getTerminator();
+    if (isa<mlir::CondBranchOp>(termOp) || isa<mlir::BranchOp>(termOp)) {
+      SmallVector<mlir::Block *, 8> results(block.getSuccessors());
+      // The new terminator will take all the original successors list as its
+      // arguments.
+      rewriter.setInsertionPointToEnd(&block);
+      rewriter.create<handshake::TerminatorOp>(termOp->getLoc(), results);
+
+      // Remove the Operands to keep the single-use rule.
+      for (int i = 0, e = termOp->getNumOperands(); i < e; ++i)
+        termOp->eraseOperand(0);
+      assert(termOp->getNumOperands() == 0);
+      rewriter.eraseOp(termOp);
+    }
+  }
+  return success();
+}
+
+LogicalResult addBranchOps(handshake::FuncOp f,
+                           ConversionPatternRewriter &rewriter) {
+  // Get the mapping between blocks and their live-out values.
+  BlockValues liveOuts;
+  if (failed(getBlockLiveOuts(f, liveOuts)))
+    return failure();
+
+  // Insert a BranchOp for every live-out value in every block.
+  if (failed(insertBranchOps(f, liveOuts, rewriter)))
+    return failure();
+
+  // Remove StandardOp branch terminators and place new terminator.
+  // TODO: should be removed in some subsequent pass (we only need it to pass
+  // checks in Verifier.cpp)
+  if (failed(rewriteBranchTerminators(f, rewriter)))
+    return failure();
+  return success();
+}
+
+} // namespace
+
+namespace {
+/// Functions related to rewriting AffineForOp.
+
+/// AffineMap related.
+class AffineApplyExpander
+    : public AffineExprVisitor<AffineApplyExpander, Value> {
+public:
+  AffineApplyExpander(OpBuilder &builder, ValueRange dimValues,
+                      ValueRange symbolValues, Location loc)
+      : builder(builder), dimValues(dimValues), symbolValues(symbolValues),
+        loc(loc) {}
+
+  template <typename OpTy>
+  Value buildBinaryExpr(AffineBinaryOpExpr expr) {
+    auto lhs = visit(expr.getLHS());
+    auto rhs = visit(expr.getRHS());
+    if (!lhs || !rhs)
+      return nullptr;
+    auto op = builder.create<OpTy>(loc, lhs, rhs);
+    return op.getResult();
+  }
+
+  Value visitAddExpr(AffineBinaryOpExpr expr) {
+    return buildBinaryExpr<AddIOp>(expr);
+  }
+
+  Value visitMulExpr(AffineBinaryOpExpr expr) { return nullptr; }
+  Value visitModExpr(AffineBinaryOpExpr expr) { return nullptr; }
+  Value visitCeilDivExpr(AffineBinaryOpExpr expr) { return nullptr; }
+  Value visitFloorDivExpr(AffineBinaryOpExpr expr) { return nullptr; }
+
+  Value visitConstantExpr(AffineConstantExpr expr) {
+    auto valueAttr =
+        builder.getIntegerAttr(builder.getIndexType(), expr.getValue());
+    auto op = builder.create<mlir::ConstantOp>(loc, builder.getIndexType(),
+                                               valueAttr);
+    return op.getResult();
+  }
+
+  Value visitDimExpr(AffineDimExpr expr) {
+    assert(expr.getPosition() < dimValues.size() &&
+           "affine dim position out of range");
+    return dimValues[expr.getPosition()];
+  }
+
+  Value visitSymbolExpr(AffineSymbolExpr expr) {
+    assert(expr.getPosition() < symbolValues.size() &&
+           "symbol dim position out of range");
+    return symbolValues[expr.getPosition()];
+  }
+
+private:
+  OpBuilder &builder;
+  ValueRange dimValues;
+  ValueRange symbolValues;
+
+  Location loc;
+};
+
+mlir::Value expandAffineExpr(OpBuilder &builder, Location loc, AffineExpr expr,
+                             ValueRange dimValues, ValueRange symbolValues) {
+  return AffineApplyExpander(builder, dimValues, symbolValues, loc).visit(expr);
+}
+
+/// Lower the results of an affine map into operations that do the actual
+/// computation.
+Optional<llvm::SmallVector<mlir::Value, 8>>
+expandAffineMap(OpBuilder &builder, Location loc, AffineMap affineMap,
+                ValueRange operands) {
+  auto numDims = affineMap.getNumDims();
+
+  // Expand each affine map result.
+  auto expanded = llvm::to_vector<8>(
+      llvm::map_range(affineMap.getResults(),
+                      [numDims, &builder, loc, operands](AffineExpr expr) {
+                        return expandAffineExpr(builder, loc, expr,
+                                                operands.take_front(numDims),
+                                                operands.drop_front(numDims));
+                      }));
+
+  // Return the expanded affine map results if all of them are not nullptr.
+  if (llvm::all_of(expanded, [](Value v) { return v; }))
+    return expanded;
+
+  return llvm::None;
+}
+
+/// Build a sequence of min/max operations to reduce the output from the values.
+/// We use this function to resolve the lower/upper bound of AffineForOp.
+mlir::Value buildMinMaxReductionSeq(Location loc, CmpIPredicate predicate,
+                                    ValueRange values, OpBuilder &builder) {
+  assert(!llvm::empty(values) && "empty min/max chain");
+
+  auto valueIt = values.begin();
+  Value value = *valueIt++;
+  for (; valueIt != values.end(); ++valueIt) {
+    auto cmpOp = builder.create<CmpIOp>(loc, predicate, value, *valueIt);
+    value = builder.create<SelectOp>(loc, cmpOp.getResult(), value, *valueIt);
+  }
+
+  return value;
+}
+
+/// Take the maximum of the results from the expanded affine map.
+mlir::Value lowerAffineMapMax(OpBuilder &builder, Location loc, AffineMap map,
+                              ValueRange operands) {
+  if (auto values = expandAffineMap(builder, loc, map, operands))
+    return buildMinMaxReductionSeq(loc, CmpIPredicate::sgt, *values, builder);
+  return nullptr;
+}
+
+/// Take the minimum of the results from the expanded affine map.
+mlir::Value lowerAffineMapMin(OpBuilder &builder, Location loc, AffineMap map,
+                              ValueRange operands) {
+  if (auto values = expandAffineMap(builder, loc, map, operands))
+    return buildMinMaxReductionSeq(loc, CmpIPredicate::slt, *values, builder);
+  return nullptr;
+}
+
+/// Extract the upper bound from the results of the upper-bound affine map in
+/// the AffineForOp. We take the min of them. Operands are dim and symbol
+/// values.
+mlir::Value lowerAffineUpperBound(AffineForOp op, OpBuilder &builder) {
+  return lowerAffineMapMin(builder, op.getLoc(), op.getUpperBoundMap(),
+                           op.getUpperBoundOperands());
+}
+
+/// Extract the lower bound from the results of the lower-bound affine map in
+/// the AffineForOp. We take the max of them. Operands are dim and symbol
+/// values.
+mlir::Value lowerAffineLowerBound(AffineForOp op, OpBuilder &builder) {
+  return lowerAffineMapMax(builder, op.getLoc(), op.getLowerBoundMap(),
+                           op.getLowerBoundOperands());
+}
+
+/// Rewrite the given AffineForOp instance to a scf::ForOp, which will be
+/// further lowered in later rewrite passes.
+LogicalResult rewriteAffineForOp(AffineForOp op,
+                                 ConversionPatternRewriter &rewriter) {
+  Location loc = op.getLoc();
+
+  mlir::Value lowerBound = lowerAffineLowerBound(op, rewriter);
+  mlir::Value upperBound = lowerAffineUpperBound(op, rewriter);
+  mlir::Value step = rewriter.create<mlir::ConstantIndexOp>(loc, op.getStep());
+
+  auto f = rewriter.create<scf::ForOp>(loc, lowerBound, upperBound, step);
+  rewriter.eraseBlock(f.getBody());
+  // Put the body region of the AffineForOp into the scf::ForOp.
+  rewriter.inlineRegionBefore(op.region(), f.region(), f.region().end());
+  rewriter.eraseOp(op);
+
+  SmallVector<Operation *, 4> yieldOpsToRemove;
+  for (Block &block : f.region()) {
+    for (Operation &op : block) {
+      if (auto yieldOp = dyn_cast<AffineYieldOp>(op)) {
+        rewriter.setInsertionPoint(&op);
+        rewriter.replaceOpWithNewOp<scf::YieldOp>(&op);
+      }
+    }
+  }
+
+  return success();
+}
+
+void rewriteAffineForOps(handshake::FuncOp f,
+                         ConversionPatternRewriter &rewriter) {
+  for (Block &block : f) {
+    for (Operation &op : block) {
+      if (auto forOp = dyn_cast<AffineForOp>(op)) {
+        rewriter.setInsertionPoint(&op);
+        rewriteAffineForOp(forOp, rewriter);
+      }
+    }
+  }
+}
+
+LogicalResult rewriteSCFForOp(scf::ForOp forOp,
+                              ConversionPatternRewriter &rewriter) {
+  Location loc = forOp.getLoc();
+
+  auto *initBlock = rewriter.getInsertionBlock();
+  auto initPosition = rewriter.getInsertionPoint();
+  auto *endBlock = rewriter.splitBlock(initBlock, initPosition);
+
+  auto *conditionBlock = &forOp.region().front();
+  auto *firstBodyBlock =
+      rewriter.splitBlock(conditionBlock, conditionBlock->begin());
+  auto *lastBodyBlock = &forOp.region().back();
+  rewriter.inlineRegionBefore(forOp.region(), endBlock);
+  auto iv = conditionBlock->getArgument(0);
+
+  // lastBodyBlock->print(llvm::outs());
+  // Operation *terminator = lastBodyBlock->getTerminator();
+  // HACK
+  Operation *terminator = nullptr;
+  for (Operation &op : *lastBodyBlock) {
+    if (auto yieldOp = dyn_cast<scf::YieldOp>(op)) {
+      terminator = &op;
+      break;
+    }
+  }
+
+  rewriter.setInsertionPointToEnd(lastBodyBlock);
+  auto step = forOp.step();
+  auto stepped = rewriter.create<AddIOp>(loc, iv, step).getResult();
+  if (!stepped)
+    return failure();
+
+  SmallVector<Value, 8> loopCarried;
+  loopCarried.push_back(stepped);
+  loopCarried.append(terminator->operand_begin(), terminator->operand_end());
+  rewriter.create<mlir::BranchOp>(loc, conditionBlock, loopCarried);
+  rewriter.eraseOp(terminator);
+
+  // Compute loop bounds before branching to the condition.
+  rewriter.setInsertionPointToEnd(initBlock);
+  Value lowerBound = forOp.lowerBound();
+  Value upperBound = forOp.upperBound();
+  if (!lowerBound || !upperBound)
+    return failure();
+
+  // The initial values of loop-carried values is obtained from the operands
+  // of the loop operation.
+  SmallVector<Value, 8> destOperands;
+  destOperands.push_back(lowerBound);
+  auto iterOperands = forOp.getIterOperands();
+  destOperands.append(iterOperands.begin(), iterOperands.end());
+  rewriter.create<mlir::BranchOp>(loc, conditionBlock, destOperands);
+
+  // With the body block done, we can fill in the condition block.
+  rewriter.setInsertionPointToEnd(conditionBlock);
+  auto comparison =
+      rewriter.create<CmpIOp>(loc, CmpIPredicate::slt, iv, upperBound);
+
+  rewriter.create<mlir::CondBranchOp>(loc, comparison, firstBodyBlock,
+                                      ArrayRef<Value>(), endBlock,
+                                      ArrayRef<Value>());
+
+  // The result of the loop operation is the values of the condition block
+  // arguments except the induction variable on the last iteration.
+  rewriter.replaceOp(forOp, conditionBlock->getArguments().drop_front());
+
+  return success();
+}
+
+void rewriteSCFForOps(handshake::FuncOp f,
+                      ConversionPatternRewriter &rewriter) {
+  SmallVector<Operation *, 4> forOps;
+  f.walk([&](Operation *op) {
+    if (auto forOp = dyn_cast<scf::ForOp>(op)) {
+      forOps.push_back(op);
+    }
+  });
+
+  for (Operation *op : forOps) {
+    rewriter.setInsertionPoint(op);
+    rewriteSCFForOp(dyn_cast<scf::ForOp>(op), rewriter);
+  }
+}
 
 } // namespace
 
@@ -167,9 +962,16 @@ void insertFork(Operation *op, mlir::Value result, OpBuilder &rewriter) {
   // Get list of operations that use the given result. There could be
   // duplication since result might be used for multiple times.
   SmallVector<Operation *, 8> opsToProcess;
-  for (auto &u : result.getUses())
-    opsToProcess.push_back(u.getOwner());
+  for (auto &u : result.getUses()) {
+    Operation *op = u.getOwner();
+    if (isa<AffineForOp, scf::ForOp>(op))
+      continue;
+    opsToProcess.push_back(op);
+  }
+
   unsigned numOpsToProcess = opsToProcess.size();
+  if (numOpsToProcess <= 1)
+    return;
 
   // Insert handshake::ForkOp directly after op.
   rewriter.setInsertionPointAfter(op);
@@ -187,6 +989,8 @@ void insertFork(Operation *op, mlir::Value result, OpBuilder &rewriter) {
 void addForkOps(handshake::FuncOp f, OpBuilder &rewriter) {
   for (Block &block : f) {
     for (Operation &op : block) {
+      if (isa<AffineForOp, scf::ForOp>(op))
+        continue;
       // Ignore terminators, and don't add Forks to Forks.
       if (op.getNumSuccessors() == 0 && !isa<handshake::ForkOp>(op)) {
         for (auto result : op.getResults()) {
@@ -200,12 +1004,6 @@ void addForkOps(handshake::FuncOp f, OpBuilder &rewriter) {
   }
 }
 
-/// Add merge operations to the handshake::FuncOp.
-void addMergeOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
-  BlockValues liveIns;
-  livenessAnalysis(f, liveIns);
-}
-
 /// Add a handshake::SinkOp to any result that has no use. A SinkOp is designed
 /// to discard any data that arrives at it.
 void addSinkOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
@@ -215,7 +1013,8 @@ void addSinkOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
       // TODO: is this list completed?
       if (!isa<mlir::CondBranchOp, mlir::BranchOp, mlir::LoadOp,
                mlir::ConstantOp, mlir::AffineReadOpInterface,
-               mlir::AffineWriteOpInterface>(op)) {
+               mlir::AffineWriteOpInterface, mlir::AffineForOp, scf::ForOp>(
+              op)) {
         // Create SinkOps to any operation that has positive number of results,
         // if such results are not being used.
         if (op.getNumResults() > 0) {
@@ -773,11 +1572,23 @@ public:
     rewriter.applySignatureConversion(&newFuncOp.getBody(), result);
 
     // Now we start to rewrite the body of this new handshake::FuncOp.
-    // First of all, we create a pair of handshake::StartOp and
-    // handshake::ReturnOp in the newFuncOp.
-    setControlOnlyPath(newFuncOp, rewriter);
+
     // Rewrite all the CallOp in the function body to handshake::InstanceOp.
     rewriteCallOps(newFuncOp, rewriter);
+
+    // Create a pair of handshake::StartOp andhandshake::ReturnOp in the
+    // newFuncOp.
+    setControlOnlyPath(newFuncOp, rewriter);
+
+    // Rewrite affine for ops
+    rewriteAffineForOps(newFuncOp, rewriter);
+    // Rewrite all the scf::ForOps created by rewriteAffineForOps.
+    rewriteSCFForOps(newFuncOp, rewriter);
+
+    addMergeOps(newFuncOp, rewriter);
+
+    addBranchOps(newFuncOp, rewriter);
+
     // Rewrite memory operations
     MemToAccess memToAccess;
     rewriteMemoryOps(newFuncOp, memToAccess, rewriter);
@@ -800,6 +1611,7 @@ public:
     rewriteStartOp(newFuncOp, rewriter);
 
     // LLVM_DEBUG(newFuncOp.dump());
+    // newFuncOp.dump();
 
     rewriter.eraseOp(funcOp);
 
@@ -814,7 +1626,7 @@ struct HandshakePass
 
     ConversionTarget target(getContext());
     target.addLegalDialect<HandshakeOpsDialect, StandardOpsDialect,
-                           AffineDialect>();
+                           scf::SCFDialect, AffineDialect>();
 
     OwningRewritePatternList patterns;
     patterns.insert<FuncOpLowering>(m.getContext());

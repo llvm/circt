@@ -7,6 +7,8 @@ func @empty_body () -> () {
   return
 }
 
-// CHECK:     handshake.func @empty_body(%[[VAL_0:.*]]: none, ...) -> none {
-// CHECK-NEXT:  handshake.return %[[VAL_0]] : none
+// CHECK:     handshake.func @empty_body(%[[ARG_0:.*]]: none, ...) -> none {
+// CHECK-NEXT:  %[[VAL_0:.*]] = "handshake.merge"(%[[ARG_0]]) : (none) -> none
+// CHECK-NEXT:  "handshake.sink"(%[[VAL_0]]) : (none) -> ()
+// CHECK-NEXT:  handshake.return %[[ARG_0]] : none
 // CHECK-NEXT:}

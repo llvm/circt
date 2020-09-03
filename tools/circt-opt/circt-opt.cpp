@@ -19,6 +19,7 @@
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/Pass/Pass.h"
@@ -74,6 +75,7 @@ int main(int argc, char **argv) {
   // Register MLIR stuff
   registerDialect<StandardOpsDialect>();
   registerDialect<AffineDialect>();
+  registerDialect<scf::SCFDialect>();
   registerDialect<LLVM::LLVMDialect>();
 
 // Register the standard passes we want.
