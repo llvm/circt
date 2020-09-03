@@ -244,6 +244,7 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
         addrWidth += ceil(log2(dim));
       }
       out << "output wire[" << addrWidth - 1 << ":0] v_addr" << valueNumber;
+      out << ",\noutput wire v_addr_valid" << valueNumber;
       if (port == hir::Details::r || port == hir::Details::rw) {
         bool bitwidth_valid = getBitWidth(argType, bitwidth);
         if (!bitwidth_valid)
@@ -267,8 +268,7 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
     if (i == args.size())
       out << "\n";
   }
-  out << ")";
-  out << ";\n";
+  out << ");\n\n";
 
   printBody(entryBlock);
   out << "endmodule\n";
