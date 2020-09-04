@@ -61,7 +61,7 @@ def DuplicateTimeVarOp : HIR_Op<"duplicate_time_var", [NoSideEffect]> {
   let summary = "Op duplicates a time var.";
   let description = [{
     This op duplicates a time var. Semantics are the same as using original time 
-    var but in the hardware a separate path is used to propagate the new var.
+      var but in the hardware a separate path is used to propagate the new var.
 
       Example:
 
@@ -116,8 +116,9 @@ def MemWriteOp : HIR_Op<"mem_write", [AttrSizedOperandSegments]> {
     This Op writes to memory. 
       Example:
 
-      ```mlir hir.mem_write %v to %A[%const][%x,%y] at %t 
-      : (!hir.val, !hir.memref)```
+      ```
+      mlir hir.mem_write %v to %A[%const][%x,%y] at %t : (!hir.val, !hir.memref)
+      ```
   }];
 
   let arguments = (ins AnyType:$value, MemrefType:$mem,
@@ -188,7 +189,10 @@ HIR_Op<"terminator", [NoSideEffect, Terminator]> {
 
 def DelayOp: HIR_Op<"delay",[NoSideEffect]>{
   let summary = "Delay operation";
-  let description = [{```mlir %yy = hir.delay %xx by %1 at %tj```}];
+  let description = [{
+Example:
+    ```mlir %yy = hir.delay %xx by %1 at %tj```
+  }];
 
   let arguments = (ins AnyType : $input, ConstType:$delay, 
       TimeType:$tstart, Optional<ConstType>: $offset);
@@ -233,8 +237,10 @@ def UnrollForOp : HIR_Op<"unroll_for",
       let summary = "for operation";
       let description = [{
         This op implements a sequential for loop.
-          ```mlir
-          %tdone=hir.for %i = 0 to %N step 1 at iter_time(%ti = %t tstep 2) {}
+          Example:
+          ```
+          mlir %tdone=hir.for %i = 0 to %N step 1 at iter_time(%ti = %t tstep 2)
+          {}
         ```
       }];
 
@@ -257,8 +263,9 @@ def CallOp : HIR_Op<"call",[AttrSizedOperandSegments] > {
     This Op calls a function/module. 
       Example:
 
-      ```mlir %a,%b = hir.call @foo (%x,%A) at %ti
-      : (!hir.val,!hir.memref) -> (!hir.val,!hir.val)```
+      ```mlir 
+      %a,%b = hir.call @foo (%x,%A) at %ti : (!hir.val,!hir.memref) -> (!hir.val,!hir.val)
+      ```
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$callee, Variadic<AnyType>:$operands,
@@ -278,8 +285,9 @@ def DefOp : HIR_Op<"def",
         This Op creates a new function 
           Example:
 
-          ```mlir hir.func @foo (%x, %A) at %t 
-          : (!hir.val,!hir.memref) -> (!hir.val,!hir.val)```
+          ```mlir 
+          hir.func @foo (%x, %A) at %t : (!hir.val,!hir.memref) -> (!hir.val,!hir.val)
+          ```
       }];
 
       let arguments = (ins
