@@ -116,25 +116,69 @@ void Slot::insertChange(unsigned inst) { scheduled.push_back(inst); }
 //===----------------------------------------------------------------------===//
 void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
                                  APInt &bytes) {
-  for (size_t i = 0, e = c.size(); i < e; ++i) {
-    if (time == c[i].time) {
-      c[i].insertChange(index, bitOffset, bytes);
+  int firstUnused = -1;
+  for (size_t i = 0, e = size(); i < e; ++i) {
+    if (time == begin()[i].time) {
+      begin()[i].insertChange(index, bitOffset, bytes);
       return;
+    } else if (begin()[i].unused) {
+      firstUnused = i;
     }
   }
-  push(Slot(time, index, bitOffset, bytes));
+
+  ++events;
+
+  if (firstUnused >= 0) {
+    auto &curr = begin()[firstUnused];
+    curr.insertChange(index, bitOffset, bytes);
+    curr.unused = false;
+    curr.time = time;
+  } else {
+    push_back(Slot(time, index, bitOffset, bytes));
+  }
 }
 
 void UpdateQueue::insertOrUpdate(Time time, unsigned inst) {
-  for (size_t i = 0, e = c.size(); i < e; ++i) {
-    if (time == c[i].time) {
-      c[i].insertChange(inst);
+  int firstUnused = -1;
+  for (size_t i = 0, e = size(); i < e; ++i) {
+    if (time == begin()[i].time) {
+      begin()[i].insertChange(inst);
       return;
+    } else if (begin()[i].unused) {
+      firstUnused = i;
     }
   }
-  Slot newSlot(time);
-  newSlot.insertChange(inst);
-  push(newSlot);
+
+  ++events;
+
+  size_t newSlot;
+  if (firstUnused >= 0) {
+    begin()[firstUnused].insertChange(inst);
+    begin()[firstUnused].unused = false;
+    begin()[firstUnused].time = time;
+    newSlot = firstUnused;
+  } else {
+    Slot slot(time);
+    slot.insertChange(inst);
+    push_back(slot);
+  }
+}
+
+Slot &UpdateQueue::top() {
+  auto it = std::min_element(begin(), end(), [](auto &a, auto &b) {
+    return !a.unused && (a < b || b.unused);
+  });
+  currentTop = it - begin();
+  return begin()[currentTop];
+}
+
+void UpdateQueue::pop() {
+  auto &curr = begin()[currentTop];
+  curr.unused = true;
+  curr.changes.clear();
+  curr.scheduled.clear();
+  curr.time = Time();
+  --events;
 }
 
 //===----------------------------------------------------------------------===//

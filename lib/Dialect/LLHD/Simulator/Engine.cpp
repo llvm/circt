@@ -45,7 +45,8 @@ Engine::Engine(
                             ArrayRef<Value>());
 
   // Add the 0-time event.
-  state->queue.push(Slot(Time()));
+  state->queue.push_back(Slot(Time()));
+  ++state->queue.events;
 
   if (failed(mlirTransformer(module))) {
     llvm::errs() << "failed to apply the MLIR passes\n";
@@ -106,7 +107,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
     inst.unitFPtr = *expectedFPtr;
   }
 
-  while (!state->queue.empty()) {
+  while (state->queue.events > 0) {
     auto &pop = state->queue.top();
 
     if ((n > 0 && i >= n) || (maxTime > 0 && pop.time.time > maxTime)) {

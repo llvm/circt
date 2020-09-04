@@ -120,13 +120,14 @@ struct Slot {
   // Processes with scheduled wakeup.
   llvm::SmallVector<unsigned, 4> scheduled;
   Time time;
+  bool unused = false;
 };
 
 /// This is equivalent to and std::priorityQueue<Slot> ordered using the greater
 /// operator, which adds an insertion method to add changes to a slot.
-class UpdateQueue
-    : public std::priority_queue<Slot, llvm::SmallVector<Slot, 16>,
-                                 std::greater<Slot>> {
+class UpdateQueue : public llvm::SmallVector<Slot, 8> {
+  size_t currentTop = 0;
+
 public:
   /// Check wheter a slot for the given time already exists. If that's the case,
   /// add the new change to it, else create a new slot and push it to the queue.
@@ -136,6 +137,12 @@ public:
   /// add the scheduled wakeup to it, else create a new slot and push it to the
   /// queue.
   void insertOrUpdate(Time time, unsigned inst);
+
+  Slot &top();
+
+  void pop();
+
+  unsigned events = 0;
 };
 
 /// State structure for process persistence across suspension.
