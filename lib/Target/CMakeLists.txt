@@ -1,2 +1,2 @@
-add_subdirectory(Verilog)
 add_subdirectory(HIRToVerilog)
+add_subdirectory(Verilog)

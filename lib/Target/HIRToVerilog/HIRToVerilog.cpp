@@ -23,6 +23,7 @@ using namespace hir;
 // TODO: Printer should never fail. All the checks we are doing here should
 // pass. We should implement these checks in op's verify function.
 // TODO: Replace recursive function calls.
+
 namespace {
 std::string loopCounterTemplate =
     "\nwire[$msb_lb:0] lb$n_loop = v$n_lb;"
@@ -52,13 +53,13 @@ std::string loopCounterTemplate =
 
 static void findAndReplaceAll(std::string &data, std::string toSearch,
                               std::string replaceStr) {
-  // Get the first occurrence
+  // Get the first occurrence.
   size_t pos = data.find(toSearch);
-  // Repeat till end is reached
+  // Repeat till end is reached.
   while (pos != std::string::npos) {
-    // Replace this occurrence of Sub String
+    // Replace this occurrence of Sub String.
     data.replace(pos, toSearch.size(), replaceStr);
-    // Get the next occurrence from the current position
+    // Get the next occurrence from the current position.
     pos = data.find(toSearch, pos + replaceStr.size());
   }
 }
@@ -75,6 +76,8 @@ static bool getBitWidth(Type ty, unsigned &bitwidth) {
   return false;
 }
 
+/// This class is the verilog output printer for the HIR dialect. It walks
+/// throught the module and prints the verilog in the 'out' variable.
 class VerilogPrinter {
 public:
   VerilogPrinter(llvm::formatted_raw_ostream &output) : out(output) {}
@@ -95,30 +98,65 @@ private:
   LogicalResult printBody(Block &block, unsigned indentAmount = 0);
   LogicalResult printType(Type type);
 
+  std::stringstream module_out;
   llvm::formatted_raw_ostream &out;
   unsigned nextValueNum = 0;
   DenseMap<Value, unsigned> mapValueToNum;
+  // selectors will select among many busses. The bus with high %t is selected.
+  // Its illegal to have multiple %t asserted high.
+  struct SelectorPair {
+    unsigned result;
+    SmallVector<std::pair<unsigned, unsigned>, 4> operandsWithTime;
+  };
+  SmallVector<SelectorPair, 4> pendingSelectors;
+  SmallVector<std::pair<unsigned, SmallVector<unsigned, 4>>, 4> pendingORs;
 };
+
+LogicalResult printMemReadOp(MemReadOp op, unsigned indentAmount) {
+  auto addr = op.addr();
+  auto result = op.res();
+  auto mem = op.mem();
+  auto tstart = op.tstart();
+  auto offset = op.offset();
+  // To solve:
+  // - How to get the tstart+offset right?
+  // -- Lets have a naming convention tMoC is tM offset by C.
+  // -- We need a map tM -> highest offset.
+  // -- We can have a rule that the timevar offsets are calculated next to the
+  //    source of the timevar. This ensures that all offsets visible always and
+  //    can be reused.
+  // -- UnrollFor op does not need special handling. Mostly the unrollFor body
+  //    will have its own time var. In case it uses an outer scope's timevar, we
+  //    anyway create the offset near the def location of the time var which is
+  //    in the outer scope. So it will be available to everyone outside the
+  //    unrollFor op.
+  // - How to get the selector right?
+  // -- What happens when we are at the end?
+}
 
 LogicalResult VerilogPrinter::printReturnOp(hir::ReturnOp op,
                                             unsigned indentAmount) {
-  out << "\n//hir.return => NOP\n";
+  module_out << "\n//hir.return => NOP\n";
 }
+
 LogicalResult VerilogPrinter::printConstantOp(hir::ConstantOp op,
                                               unsigned indentAmount) {
   auto result = op.res();
   if (auto intTy = result.getType().dyn_cast<IntegerType>()) {
     unsigned valueNumber = newValueNumber();
     mapValueToNum.insert(std::make_pair(result, valueNumber));
-    out << "wire [" << intTy.getWidth() - 1 << " : 0] v" << valueNumber;
-    out << "=" << intTy.getWidth() << "'d" << op.value() << ";\n";
+    module_out << "wire [" << intTy.getWidth() - 1 << " : 0] v" << valueNumber;
+    module_out << "=" << intTy.getWidth() << "'d"
+               << op.value().getLimitedValue() << ";\n";
     return success();
   } else if (auto constTy = result.getType().dyn_cast<ConstType>()) {
     if (auto intTy = constTy.getElementType().dyn_cast<IntegerType>()) {
       unsigned valueNumber = newValueNumber();
       mapValueToNum.insert(std::make_pair(result, valueNumber));
-      out << "wire [" << intTy.getWidth() - 1 << " : 0] v" << valueNumber;
-      out << "=" << intTy.getWidth() << "'d" << op.value() << ";\n";
+      module_out << "wire [" << intTy.getWidth() - 1 << " : 0] v"
+                 << valueNumber;
+      module_out << "=" << intTy.getWidth() << "'d"
+                 << op.value().getLimitedValue() << ";\n";
       return success();
     }
   }
@@ -157,7 +195,8 @@ LogicalResult VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
   mapValueToNum.insert(std::make_pair(idx, n_loop));
   mapValueToNum.insert(std::make_pair(tloop, n_loop));
   if (auto idx_intTy = idx.getType().dyn_cast<IntegerType>()) {
-    out << "reg[" << idx_intTy.getWidth() << "] counter" << n_loop << ";\n";
+    module_out << "reg[" << idx_intTy.getWidth() << "] counter" << n_loop
+               << ";\n";
   } else {
     return emitError(op.getLoc(), "for loop induction var must be an integer");
   }
@@ -184,11 +223,11 @@ LogicalResult VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
     findAndReplaceAll(loopCounterString, "$n_tstep", std::to_string(n_tstep));
   findAndReplaceAll(loopCounterString, "$width_tstep",
                     std::to_string(width_tstep));
-  out << "\n//Loop" << n_loop << " begin\n";
-  out << loopCounterString;
-  out << "\n//Loop" << n_loop << " body\n";
-  printBody(op.getLoopBody().front(),indentAmount);
-  out << "\n//Loop" << n_loop << " end\n";
+  module_out << "\n//Loop" << n_loop << " begin\n";
+  module_out << loopCounterString;
+  module_out << "\n//Loop" << n_loop << " body\n";
+  printBody(op.getLoopBody().front(), indentAmount);
+  module_out << "\n//Loop" << n_loop << " end\n";
   return success();
 }
 
@@ -206,12 +245,12 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
 }
 
 LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
-  // An EntityOp always has a single block
+  // An EntityOp always has a single block.
   Block &entryBlock = op.getBody().front();
   auto args = entryBlock.getArguments();
-  // Print the module signature
+  // Print the module signature.
   FunctionType funcType = op.getType();
-  out << "module " << op.getName() << "(";
+  module_out << "module " << op.getName().str() << "(";
   for (int i = 0; i < args.size(); i++) {
     unsigned bitwidth = 0;
     Value arg = args[i];
@@ -219,19 +258,19 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
     unsigned valueNumber = newValueNumber();
     mapValueToNum.insert(std::make_pair(arg, valueNumber));
 
-    // Print verilog
+    // Print verilog.
     if (i == 0)
-      out << "\n";
+      module_out << "\n";
 
     if (i > 0)
-      out << ",\n";
+      module_out << ",\n";
 
     if (argType.isa<hir::TimeType>()) {
-      out << "input wire t" << valueNumber;
+      module_out << "input wire t" << valueNumber;
     } else if (argType.isa<IntegerType>()) {
       getBitWidth(argType, bitwidth);
-      out << "input wire[" << bitwidth - 1 << ":0]  ";
-      out << "v" << valueNumber;
+      module_out << "input wire[" << bitwidth - 1 << ":0]  ";
+      module_out << "v" << valueNumber;
     } else if (argType.isa<MemrefType>()) {
       MemrefType memrefTy = argType.dyn_cast<MemrefType>();
       ArrayRef<unsigned> shape = memrefTy.getShape();
@@ -243,40 +282,41 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
       for (auto dim : shape) {
         addrWidth += ceil(log2(dim));
       }
-      out << "output wire[" << addrWidth - 1 << ":0] v_addr" << valueNumber;
-      out << ",\noutput wire v_addr_valid" << valueNumber;
+      module_out << "output wire[" << addrWidth - 1 << ":0] v_addr"
+                 << valueNumber;
+      module_out << ",\noutput wire v_addr_valid" << valueNumber;
       if (port == hir::Details::r || port == hir::Details::rw) {
         bool bitwidth_valid = getBitWidth(argType, bitwidth);
         if (!bitwidth_valid)
           return emitError(op.getLoc(), "Unsupported argument type!");
-        out << ",\n"
-            << "input wire[" << bitwidth - 1 << ":0]  ";
-        out << "v_data_rd" << valueNumber;
+        module_out << ",\n"
+                   << "input wire[" << bitwidth - 1 << ":0]  ";
+        module_out << "v_data_rd" << valueNumber;
       }
       if (port == hir::Details::w || port == hir::Details::rw) {
         bool bitwidth_valid = getBitWidth(argType, bitwidth);
         if (!bitwidth_valid)
           return emitError(op.getLoc(), "Unsupported argument type!");
-        out << ",\n"
-            << "output wire[" << bitwidth - 1 << ":0]  ";
-        out << "v_data_wr" << valueNumber;
+        module_out << ",\n"
+                   << "output wire[" << bitwidth - 1 << ":0]  ";
+        module_out << "v_data_wr" << valueNumber;
       }
     } else {
       return emitError(op.getLoc(), "Unsupported argument type!");
     }
 
     if (i == args.size())
-      out << "\n";
+      module_out << "\n";
   }
-  out << ");\n\n";
+  module_out << ");\n\n";
 
   printBody(entryBlock);
-  out << "endmodule\n";
+  module_out << "endmodule\n";
   return success();
 }
 
 LogicalResult VerilogPrinter::printBody(Block &block, unsigned indentAmount) {
-  // Print the operations within the entity
+  // Print the operations within the entity.
   for (auto iter = block.begin(); iter != block.end(); ++iter) {
     auto error = printOperation(&(*iter), 4);
     if (failed(error)) {
@@ -290,10 +330,10 @@ LogicalResult VerilogPrinter::printModule(ModuleOp module) {
       return WalkResult::interrupt();
     return WalkResult::advance();
   });
-  // if printing of a single operation failed, fail the whole translation
+  // if printing of a single operation failed, fail the whole translation.
   return failure(result.wasInterrupted());
 }
-} // namespace
+} // namespace.
 
 LogicalResult mlir::hir::printVerilog(ModuleOp module, raw_ostream &os) {
   llvm::formatted_raw_ostream out(os);

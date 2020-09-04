@@ -1,3 +1,10 @@
+//=========- HIR.cpp - Registration, Parser & Printer----------------------===//
+//
+// This file implements parsers and printers for Types and registers the types
+// and operations.
+//
+//===----------------------------------------------------------------------===//
+
 #include "circt/Dialect/HIR/HIR.h"
 #include "circt/Dialect/HIR/HIRDialect.h"
 
@@ -40,7 +47,7 @@ static OptionalParseResult
 parseOptionalMemrefPacking(DialectAsmParser &parser,
                            SmallVectorImpl<unsigned> &packing) {
   if (parser.parseOptionalKeyword("packing"))
-    return OptionalParseResult(llvm::None);
+    return OptionalParseResult(None);
   if (parser.parseEqual() || parser.parseLSquare())
     return failure();
   if (!parser.parseOptionalRSquare())
@@ -89,13 +96,13 @@ static ParseResult parseShapedType(DialectAsmParser &parser,
   if (parser.parseType(elementType))
     return failure();
 }
-}; // namespace Helpers
+}; // namespace Helpers.
 
-// Types
+// Types.
 
-// Memref Type
+// Memref Type.
 static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
-  llvm::SmallVector<unsigned, 4> shape;
+  SmallVector<unsigned, 4> shape;
   Type elementType;
   hir::Details::PortKind default_port = hir::Details::rw;
   if (parser.parseLess())
@@ -104,7 +111,7 @@ static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
   if (Helpers::parseShapedType(parser, shape, elementType))
     return Type();
 
-  llvm::SmallVector<unsigned, 4> default_packing;
+  SmallVector<unsigned, 4> default_packing;
   // default packing is [0,1,2,3] for shape = [d3,d2,d1,d0] i.e. d0 is fastest
   // changing dim in linear index and no distributed dimensions.
   for (int i = 0; i < shape.size(); i++)
@@ -117,7 +124,7 @@ static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
   if (parser.parseComma())
     return Type();
 
-  llvm::SmallVector<unsigned, 4> packing;
+  SmallVector<unsigned, 4> packing;
   OptionalParseResult hasPacking =
       Helpers::parseOptionalMemrefPacking(parser, packing);
 
@@ -168,9 +175,9 @@ static void printMemrefType(MemrefType memrefTy, DialectAsmPrinter &printer) {
   printer << ">";
 }
 
-// WireType
+// WireType.
 static Type parseWireType(DialectAsmParser &parser, MLIRContext *context) {
-  llvm::SmallVector<unsigned, 4> shape;
+  SmallVector<unsigned, 4> shape;
   Type elementType;
   hir::Details::PortKind default_port = hir::Details::rw;
   if (parser.parseLess())
@@ -179,7 +186,7 @@ static Type parseWireType(DialectAsmParser &parser, MLIRContext *context) {
   if (Helpers::parseShapedType(parser, shape, elementType))
     return Type();
 
-  llvm::SmallVector<unsigned, 4> default_packing;
+  SmallVector<unsigned, 4> default_packing;
   // default packing is [0,1,2,3] for shape = [d3,d2,d1,d0] i.e. d0 is fastest
   // changing dim in linear index and no distributed dimensions.
   for (int i = 0; i < shape.size(); i++)
@@ -220,7 +227,7 @@ static void printWireType(WireType wireTy, DialectAsmPrinter &printer) {
   }
   printer << ">";
 }
-// ConsType
+// ConsType.
 
 static Type parseConstType(DialectAsmParser &parser, MLIRContext *context) {
   Type elementType;
@@ -240,7 +247,7 @@ static void printConstType(ConstType constTy, DialectAsmPrinter &printer) {
   printer << ">";
 }
 
-// parseType and printType
+// parseType and printType.
 Type HIRDialect::parseType(DialectAsmParser &parser) const {
   StringRef typeKeyword;
   if (parser.parseKeyword(&typeKeyword))
@@ -250,12 +257,10 @@ Type HIRDialect::parseType(DialectAsmParser &parser) const {
     return TimeType::get(getContext());
 
   if (typeKeyword == MemrefType::getKeyword())
-    return parseMemrefType(parser,
-                           getContext()); // MemrefType::get(getContext());
+    return parseMemrefType(parser, getContext());
 
   if (typeKeyword == WireType::getKeyword())
-    return parseWireType(parser,
-                         getContext()); // MemrefType::get(getContext());
+    return parseWireType(parser, getContext());
 
   if (typeKeyword == ConstType::getKeyword())
     return parseConstType(parser, getContext());

@@ -60,8 +60,8 @@ def DefTimeVarOp : HIR_Op<"def_time_var", [NoSideEffect]> {
 def DuplicateTimeVarOp : HIR_Op<"duplicate_time_var", [NoSideEffect]> {
   let summary = "Op duplicates a time var.";
   let description = [{
-    This op duplicates a time var. Semantics are same as using original time var
-      but in the hardware a separate path is used to propagate the new time var.
+    This op duplicates a time var. Semantics are the same as using original time 
+    var but in the hardware a separate path is used to propagate the new var.
 
       Example:
 
@@ -98,16 +98,16 @@ def MemReadOp : HIR_Op<"mem_read", [NoSideEffect,AttrSizedOperandSegments]> {
     This Op reads from a memory interface. 
       Example:
 
-      ```mlir hir.mem_read %A[%const][%x,%y] at %t 
-      : !hir.wire -> !hir.val```
+      ```mlir hir.mem_read %A[%const][%x,%y] at %t : !hir.wire -> !hir.val```
   }];
 
   let arguments = (ins MemrefType:$mem, 
-  Variadic<AnyType>:$addr, TimeType : $tstart,
+      Variadic<AnyType>:$addr, TimeType : $tstart,
       Optional<ConstType>: $offset);
   let results = (outs AnyType: $res);
-  let assemblyFormat = [{$mem `[`  $addr `]` `at` $tstart (`offset` $offset^ `:` type($offset))?
-    attr-dict `:` type($mem) `[` type($addr) `]` `->` type($res)}];
+  let assemblyFormat = [{$mem `[`  $addr `]` `at` $tstart (`offset` $offset^ `:` 
+      type($offset))? attr-dict `:` type($mem) `[` type($addr) `]` `->` 
+    type($res)}];
 }
 
 def MemWriteOp : HIR_Op<"mem_write", [AttrSizedOperandSegments]> {
@@ -125,8 +125,8 @@ def MemWriteOp : HIR_Op<"mem_write", [AttrSizedOperandSegments]> {
       TimeType :$tstart, Optional<ConstType>:$offset);
   let results = (outs );
   let assemblyFormat = [{$value `to` $mem  `[` $addr `]` `at` $tstart 
-    (`offset` $offset^ `:` type($offset))? attr-dict `:` `(`type($value) `,` type($mem)`[`
-    type($addr) `]` `)`}];
+    (`offset` $offset^ `:` type($offset))? attr-dict 
+      `:` `(`type($value) `,` type($mem)`[`type($addr) `]` `)`}];
 }
 
 def WireReadOp : HIR_Op<"wire_read", [NoSideEffect,AttrSizedOperandSegments]> {
@@ -135,8 +135,7 @@ def WireReadOp : HIR_Op<"wire_read", [NoSideEffect,AttrSizedOperandSegments]> {
     This Op reads from wire. 
       Example:
 
-      ```mlir hir.wire_read %A[%x] at %t 
-      : !hir.wire -> !hir.val```
+      ```mlir hir.wire_read %A[%x] at %t : !hir.wire -> !hir.val```
   }];
 
   let arguments = (ins WireType:$wire, Variadic<ConstType>:$addr, 
@@ -154,8 +153,7 @@ def WireWriteOp : HIR_Op<"wire_write", [AttrSizedOperandSegments]> {
     This Op writes to a wire. 
       Example:
 
-      ```mlir hir.wire_write %v to %A at %t 
-      : (!hir.val, !hir.wire)```
+      ```mlir hir.wire_write %v to %A at %t : (!hir.val, !hir.wire)```
   }];
 
   let arguments = (ins AnyType:$value, WireType:$wire, Variadic<ConstType>:$addr,
@@ -165,7 +163,7 @@ def WireWriteOp : HIR_Op<"wire_write", [AttrSizedOperandSegments]> {
 
   let assemblyFormat = [{$value `to` $wire  `[`$addr`]` `at` $tstart 
     (`offset` $offset^ `:` type($offset))? attr-dict `:` `(`type($value) `,`
-    type($wire) `[`type($addr)`]` `)`}];
+        type($wire) `[`type($addr)`]` `)`}];
 }
 
 def ImplicitTerminator
@@ -236,24 +234,22 @@ def UnrollForOp : HIR_Op<"unroll_for",
       let description = [{
         This op implements a sequential for loop.
           ```mlir
-          %tdone=hir.for %i = 0 to %N step 1 at iter_time(%ti = %t tstep 2) {
-          }
-      }
-      ```
-    }];
+          %tdone=hir.for %i = 0 to %N step 1 at iter_time(%ti = %t tstep 2) {}
+        ```
+      }];
 
-let arguments = (ins I32Attr: $lb, I32Attr: $ub, I32Attr: $step, 
-    TimeType:$tstart, OptionalAttr<I32Attr>: $tstep);
-let regions = (region SizedRegion<1>:$region);
-let results = (outs TimeType:$tlast);
+      let arguments = (ins I32Attr: $lb, I32Attr: $ub, I32Attr: $step, 
+          TimeType:$tstart, OptionalAttr<I32Attr>: $tstep);
+      let regions = (region SizedRegion<1>:$region);
+      let results = (outs TimeType:$tlast);
 
-let extraClassDeclaration = [{
-  Value getInductionVar() { return getBody()->getArgument(0); }
-  Value getIterTimeVar() { return getBody()->getArgument(1); }
-}];
-let parser = [{return parse$cppClass(parser,result);}];
-let printer = [{return print$cppClass(p,*this);}];
-}
+      let extraClassDeclaration = [{
+        Value getInductionVar() { return getBody()->getArgument(0); }
+        Value getIterTimeVar() { return getBody()->getArgument(1); }
+      }];
+      let parser = [{return parse$cppClass(parser,result);}];
+      let printer = [{return print$cppClass(p,*this);}];
+    }
 
 def CallOp : HIR_Op<"call",[AttrSizedOperandSegments] > {
   let summary = "Function call";
@@ -276,48 +272,48 @@ def CallOp : HIR_Op<"call",[AttrSizedOperandSegments] > {
 }
 
 def DefOp : HIR_Op<"def",
-[DeclareOpInterfaceMethods<CallableOpInterface>, FunctionLike,IsolatedFromAbove,Symbol] > {
-  let summary = "Function definition";
-  let description = [{
-    This Op creates a new function 
-      Example:
+    [DeclareOpInterfaceMethods<CallableOpInterface>, FunctionLike,IsolatedFromAbove,Symbol] > {
+      let summary = "Function definition";
+      let description = [{
+        This Op creates a new function 
+          Example:
 
-      ```mlir hir.func @foo (%x, %A) at %t 
-      : (!hir.val,!hir.memref) -> (!hir.val,!hir.val)```
-  }];
+          ```mlir hir.func @foo (%x, %A) at %t 
+          : (!hir.val,!hir.memref) -> (!hir.val,!hir.val)```
+      }];
 
-  let arguments = (ins
-    TypeAttr:$type,
-    StrAttr:$sym_name,
-    OptionalAttr<I32ArrayAttr> : $time_domains, 
-    OptionalAttr<I32ArrayAttr>: $time_offsets);
+      let arguments = (ins
+          TypeAttr:$type,
+          StrAttr:$sym_name,
+          OptionalAttr<I32ArrayAttr> : $time_domains, 
+          OptionalAttr<I32ArrayAttr>: $time_offsets);
 
-  let regions = (region SizedRegion<1>:$region);
-  let results = (outs );
-  let parser = [{return parse$cppClass(parser,result);}];
-  let printer = [{return print$cppClass(p,*this);}];
-  let extraClassDeclaration = [{
-  private:
-    // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<DefOp>;
+      let regions = (region SizedRegion<1>:$region);
+      let results = (outs );
+      let parser = [{return parse$cppClass(parser,result);}];
+      let printer = [{return print$cppClass(p,*this);}];
+      let extraClassDeclaration = [{
+        private:
+          // This trait needs access to the hooks defined below.
+          friend class OpTrait::FunctionLike<DefOp>;
 
-    /// Returns the number of arguments. Hook for OpTrait::FunctionLike.
-    unsigned getNumFuncArguments() { return getType().getNumInputs(); }
+          /// Returns the number of arguments. Hook for OpTrait::FunctionLike.
+          unsigned getNumFuncArguments() { return getType().getNumInputs(); }
 
-    /// Returns the number of results. Hook for OpTrait::FunctionLike.
-    unsigned getNumFuncResults() { return getType().getNumResults(); }
+          /// Returns the number of results. Hook for OpTrait::FunctionLike.
+          unsigned getNumFuncResults() { return getType().getNumResults(); }
 
-    /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
-    /// attribute is present and checks if it holds a function type. Ensures
-    /// getType, getNumFuncArguments, and getNumFuncResults can be called safely
-    LogicalResult verifyType();
-    Region& body(){ return getOperation()->getRegion(0);}
+          /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
+          /// attribute is present and checks if it holds a function type. Ensures
+          /// getType, getNumFuncArguments, and getNumFuncResults can be called safely
+          LogicalResult verifyType();
+          Region& body(){ return getOperation()->getRegion(0);}
 
-    /// Hook for OpTrait::FunctionLike, called after verifying the function
-    /// type and the presence of the (potentially empty) function body.
-    LogicalResult verifyBody();
-  }];
-}
+          /// Hook for OpTrait::FunctionLike, called after verifying the function
+          /// type and the presence of the (potentially empty) function body.
+          LogicalResult verifyBody();
+      }];
+    }
 
 def YieldOp : HIR_Op<"yield", [AttrSizedOperandSegments] > {
   let summary = "Yield from loops";
@@ -325,8 +321,7 @@ def YieldOp : HIR_Op<"yield", [AttrSizedOperandSegments] > {
     This Op yields from a loop.
       Example:
 
-      ```mlir hir.yield (%x, %A) at %t offset %3
-      : (!hir.val,!hir.val)```
+      ```mlir hir.yield (%x, %A) at %t offset %3 : (!hir.val,!hir.val)```
   }];
 
   let arguments = (ins Variadic<AnyType> : $operands, TimeType: $tstart,
@@ -373,47 +368,47 @@ def CastOp : HIR_Op<"cast">{
 def AddOp : HIR_Op<"add",[NoSideEffect]>{
   let summary = "Add two hir.val values";
   let description = [{
-      Example:
+Example:
 
-      ```mlir %1 = hir.add (%x,1 : !hir.const -> !hir.val```
-  }];
+    ```mlir %1 = hir.add (%x,1 : !hir.const -> !hir.val```
+        }];
 
-  let arguments = (ins AnyType: $left, AnyType:$right, TimeType: $tstart,
-      Optional<ConstType>:$offset);
-  let results = (outs AnyType: $res);
+        let arguments = (ins AnyType: $left, AnyType:$right, TimeType: $tstart,
+          Optional<ConstType>:$offset);
+        let results = (outs AnyType: $res);
 
-  let assemblyFormat = [{ `at` $tstart (`offset` $offset^ `:` type($offset))? `(` $left `,`
-  $right`)` attr-dict `:` `(` type($left) `,` type($right) `)` `->` type($res)}];
+        let assemblyFormat = [{ `at` $tstart (`offset` $offset^ `:` type($offset))? `(` $left `,`
+            $right`)` attr-dict `:` `(` type($left) `,` type($right) `)` `->` type($res)}];
 
-}
+        }
 
-def ConstAddOp : HIR_Op<"const_add",[NoSideEffect]>{
-  let summary = "Add two hir.const values";
-  let description = [{
-      Example:
+        def ConstAddOp : HIR_Op<"const_add",[NoSideEffect]>{
+        let summary = "Add two hir.const values";
+        let description = [{
+Example:
 
-      ```mlir %1 = hir.add (%x,%y) : !hir.const -> !hir.val```
-  }];
+```mlir %1 = hir.add (%x,%y) : !hir.const -> !hir.val```
+}];
 
-  let arguments = (ins ConstType: $left, ConstType:$right);
-  let results = (outs ConstType : $res);
+let arguments = (ins ConstType: $left, ConstType:$right);
+    let results = (outs ConstType : $res);
 
-  let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(` type($left) `,` type($right) `)` `->` type($res)}];
-}
+    let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(` type($left) `,` type($right) `)` `->` type($res)}];
+    }
 
 def ReturnOp : HIR_Op<"return", [HasParent<"DefOp">,NoSideEffect,
-                                     Terminator]> {
-  let summary = "Return from function";
+    Terminator]> {
+      let summary = "Return from function";
 
-  let description = [{
-    This instruction must be the last instruction in a block.
-    ```mlir hir.return (%x, %y): (!hir.val, !hir.val)```
-  }];
+      let description = [{
+        This instruction must be the last instruction in a block.
+          ```mlir hir.return (%x, %y): (!hir.val, !hir.val)```
+      }];
 
-  let arguments = (ins Variadic<AnyType>:$operands);
+      let arguments = (ins Variadic<AnyType>:$operands);
 
-  let assemblyFormat = "(`(`$operands^`)` `:` `(`type($operands)`)`)? attr-dict";
-}
+      let assemblyFormat = "(`(`$operands^`)` `:` `(`type($operands)`)`)? attr-dict";
+    }
 
 def WireOp :HIR_Op<"wire", [NoSideEffect]> {
   let summary = "Create new wire";

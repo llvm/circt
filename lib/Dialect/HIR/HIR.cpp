@@ -1,14 +1,20 @@
+//=========- HIR.cpp - Parser & Printer for Ops ---------------------------===//
+//
+// This file implements parsers and printers for ops.
+//
+//===----------------------------------------------------------------------===//
+
 #include "circt/Dialect/HIR/HIR.h"
 #include "circt/Dialect/HIR/HIRDialect.h"
 #include "mlir/Dialect/CommonFolders.h"
+#include "mlir/IR/Function.h"
+#include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Region.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
-#include "mlir/IR/Function.h"
-#include "mlir/IR/FunctionImplementation.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/StringMap.h"
 
@@ -25,8 +31,9 @@ static IntegerAttr getIntegerAttr(OpAsmParser &parser, int width, int value) {
 static Type getIntegerType(OpAsmParser &parser, int bitwidth) {
   return IntegerType::get(bitwidth, parser.getBuilder().getContext());
 }
-static ConstType getConstIntType(OpAsmParser &parser,int bitwidth) {
-  return ConstType::get(parser.getBuilder().getContext(), getIntegerType(parser,bitwidth));
+static ConstType getConstIntType(OpAsmParser &parser, int bitwidth) {
+  return ConstType::get(parser.getBuilder().getContext(),
+                        getIntegerType(parser, bitwidth));
 }
 
 static Type getTimeType(OpAsmParser &parser) {
@@ -41,10 +48,11 @@ static ParseResult parseIntegerAttr(IntegerAttr &value, int bitwidth,
                                attrName, result.attributes);
 }
 
+/// parse a comma separated list of operands.
 static ParseResult
 parseOperands(OpAsmParser &parser,
               SmallVectorImpl<OpAsmParser::OperandType> &operands) {
-  /// operands-list ::= firstOperand (, nextOperand)*
+  // operands-list ::= firstOperand (, nextOperand)* .
   OpAsmParser::OperandType firstOperand;
   if (parser.parseOperand(firstOperand))
     return failure();
@@ -58,10 +66,11 @@ parseOperands(OpAsmParser &parser,
   return success();
 }
 
+/// parse an optional comma separated list of operands with paren as delimiter.
 static ParseResult
 parseOptionalOperands(OpAsmParser &parser,
                       SmallVectorImpl<OpAsmParser::OperandType> &operands) {
-  /// ::= `(` `)` or `(` operands-list `)`.
+  // ::= `(` `)` or `(` operands-list `)`.
   if (parser.parseLParen())
     return failure();
   if (parser.parseOptionalRParen())
@@ -87,7 +96,6 @@ static ParseResult parseTypes(OpAsmParser &parser,
 
 static ParseResult parseOptionalTypes(OpAsmParser &parser,
                                       SmallVectorImpl<Type> &types) {
-  /// ::= `(` `)` or `(` operands-list `)`.
   if (parser.parseLParen())
     return failure();
   if (parser.parseOptionalRParen())
@@ -110,7 +118,7 @@ static ParseResult parseAndResolveTimeOperand(OpAsmParser &parser,
 
   auto offsetIsIdx = parser.parseOptionalOperand(offsetVar);
   if (offsetIsIdx.hasValue()) {
-    if (parser.resolveOperand(offsetVar, getConstIntType(parser,32),
+    if (parser.resolveOperand(offsetVar, getConstIntType(parser, 32),
                               result.operands)) {
       return failure();
     } else
@@ -121,6 +129,7 @@ static ParseResult parseAndResolveTimeOperand(OpAsmParser &parser,
                             result.attributes))
     return failure();
 }
+
 static ParseResult parseTimeOperand(OpAsmParser &parser,
                                     OpAsmParser::OperandType &timeVar,
                                     StringRef attrName, NamedAttrList &attrs) {
@@ -150,23 +159,22 @@ static ParseResult parseFunctionType(OpAsmParser &parser, int num_operands,
   return success();
 }
 
-/* ForOp.
- * Example:
- * hir.for %i = %l to %u step %s iter_time(%ti = %t){...}
- * hir.for %i = %l to %u step %s iter_time(%ti = %t tstep %n){...}
- */
-
+/// ForOp.
+/// Example:
+/// hir.for %i = %l to %u step %s iter_time(%ti = %t){...}
+/// hir.for %i = %l to %u step %s iter_time(%ti = %t tstep %n){...}
 static void printForOp(OpAsmPrinter &printer, ForOp op) {
   printer << "hir.for"
-          << " " << op.getInductionVar() << " : " <<op.getInductionVar().getType() 
-          << " = " << op.lb() << " : " << op.lb().getType() << " to "
-          << op.ub() << " : " << op.ub().getType() << " step " << op.step() 
-          << " : " <<op.step().getType() << " iter_time( "
-          << op.getIterTimeVar() << " = " << op.tstart();
+          << " " << op.getInductionVar() << " : "
+          << op.getInductionVar().getType() << " = " << op.lb() << " : "
+          << op.lb().getType() << " to " << op.ub() << " : "
+          << op.ub().getType() << " step " << op.step() << " : "
+          << op.step().getType() << " iter_time( " << op.getIterTimeVar()
+          << " = " << op.tstart();
 
   // print optional tstep.
 
-  if (op.getNumOperands()==5)
+  if (op.getNumOperands() == 5)
     printer << " tstep " << op.tstep() << " : " << op.tstep().getType();
   printer << " ) ";
 
@@ -197,13 +205,15 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
 
   ArrayRef<OpAsmParser::OperandType> regionOperands(regionRawOperands);
   // Parse the induction variable followed by '='.
-  if (parser.parseRegionArgument(regionRawOperands[0]) || parser.parseColonType(regionRawOperandTypes[0])|| parser.parseEqual())
+  if (parser.parseRegionArgument(regionRawOperands[0]) ||
+      parser.parseColonType(regionRawOperandTypes[0]) || parser.parseEqual())
     return failure();
 
   // Parse loop bounds.
-  if (parser.parseOperand(lbRawOperand) ||parser.parseColonType(lbRawType)|| parser.parseKeyword("to") ||
-      parser.parseOperand(ubRawOperand) ||parser.parseColonType(ubRawType)|| parser.parseKeyword("step") ||
-      parser.parseOperand(stepRawOperand)||parser.parseColonType(stepRawType))
+  if (parser.parseOperand(lbRawOperand) || parser.parseColonType(lbRawType) ||
+      parser.parseKeyword("to") || parser.parseOperand(ubRawOperand) ||
+      parser.parseColonType(ubRawType) || parser.parseKeyword("step") ||
+      parser.parseOperand(stepRawOperand) || parser.parseColonType(stepRawType))
     return failure();
 
   // Parse iter time.
@@ -215,11 +225,12 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
   // Parse optional tstep.
   bool hasTstep = false;
   if (!parser.parseOptionalKeyword("tstep")) {
-    if (parser.parseOperand(tstepRawOperand) || parser.parseColonType(tstepRawType))
+    if (parser.parseOperand(tstepRawOperand) ||
+        parser.parseColonType(tstepRawType))
       return failure();
     hasTstep = true;
   }
-  if(parser.parseRParen())
+  if (parser.parseRParen())
     return failure();
 
   if (parser.resolveOperand(lbRawOperand, lbRawType, result.operands) ||
@@ -254,12 +265,11 @@ LogicalResult ForOp::moveOutOfLoop(ArrayRef<Operation *> ops) {
     op->moveBefore(*this);
   return success();
 }
-/* UnrollForOp.
- * Example:
- * hir.unroll_for %i = 0 to 100 step 3 iter_time(%ti = %t){...}
- * hir.unroll_for %i = %l to %u step %s iter_time(%ti = %t tstep 3){...}
- */
 
+/// UnrollForOp.
+/// Example:
+/// hir.unroll_for %i = 0 to 100 step 3 iter_time(%ti = %t){...}
+/// hir.unroll_for %i = %l to %u step %s iter_time(%ti = %t tstep 3){...}
 static void printUnrollForOp(OpAsmPrinter &printer, UnrollForOp op) {
   printer << "hir.unroll_for"
           << " " << op.getInductionVar() << " = " << op.lb() << " to "
@@ -267,8 +277,8 @@ static void printUnrollForOp(OpAsmPrinter &printer, UnrollForOp op) {
           << op.getIterTimeVar() << " = " << op.tstart();
 
   // print optional tstep.
-  
-  if(op.tstep().hasValue())
+
+  if (op.tstep().hasValue())
     printer << " tstep " << op.tstep().getValue();
   printer << " ) ";
 
@@ -282,10 +292,10 @@ static ParseResult parseUnrollForOp(OpAsmParser &parser,
   auto &builder = parser.getBuilder();
   Type timeTypeVar = getTimeType(parser);
   Type tstartRawType = timeTypeVar;
-  Type tstepRawType = getConstIntType(parser,32);
+  Type tstepRawType = getConstIntType(parser, 32);
   Type regionRawOperandTypes[2];
   ArrayRef<Type> regionOperandTypes(regionRawOperandTypes);
-  regionRawOperandTypes[0] = getConstIntType(parser,32);
+  regionRawOperandTypes[0] = getConstIntType(parser, 32);
   regionRawOperandTypes[1] = timeTypeVar;
 
   IntegerAttr lbAttr;
@@ -325,7 +335,7 @@ static ParseResult parseUnrollForOp(OpAsmParser &parser,
   if (parser.parseRParen())
     return failure();
 
-  // resolve operand
+  // resolve operand.
   if (parser.resolveOperand(tstartRawOperand, tstartRawType, result.operands))
     return failure();
 
@@ -351,22 +361,9 @@ LogicalResult UnrollForOp::moveOutOfLoop(ArrayRef<Operation *> ops) {
   return success();
 }
 
-/* DefOp
- * Example:
- * hir.def @foo at %t (%x :!hir.int, %y:!hir.int) ->(!hir.int){}
- */
-
-// CallableOpInterface
-Region *DefOp::getCallableRegion() {
-  return isExternal() ? nullptr : &body();
-}
-
-// CallableOpInterface
-ArrayRef<Type> DefOp::getCallableResults() {
-  return getType().getResults();
-}
-
-
+/// DefOp
+/// Example:
+/// hir.def @foo at %t (%x :!hir.int, %y:!hir.int) ->(!hir.int){}
 static ParseResult parseDefOp(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::OperandType, 4> entryArgs;
   OpAsmParser::OperandType tstart;
@@ -382,8 +379,8 @@ static ParseResult parseDefOp(OpAsmParser &parser, OperationState &result) {
                              result.attributes))
     return failure();
 
-  // Parse tstart
-  if(parser.parseKeyword("at") || parser.parseRegionArgument(tstart))
+  // Parse tstart.
+  if (parser.parseKeyword("at") || parser.parseRegionArgument(tstart))
     return failure();
 
   // Parse the function signature.
@@ -409,8 +406,7 @@ static ParseResult parseDefOp(OpAsmParser &parser, OperationState &result) {
   auto *body = result.addRegion();
   entryArgs.push_back(tstart);
   argTypes.push_back(getTimeType(parser));
-  return parser.parseOptionalRegion(
-      *body, entryArgs, argTypes);
+  return parser.parseOptionalRegion(*body, entryArgs, argTypes);
 }
 
 static void printDefOp(OpAsmPrinter &printer, DefOp op) {
@@ -418,13 +414,15 @@ static void printDefOp(OpAsmPrinter &printer, DefOp op) {
   printer << "hir.def ";
   printer.printSymbolName(op.sym_name());
   Region &body = op.getOperation()->getRegion(0);
-  printer << " at " << body.front().getArgument(body.front().getNumArguments()-1)<< " ";
+  printer << " at "
+          << body.front().getArgument(body.front().getNumArguments() - 1)
+          << " ";
 
   auto fnType = op.getType();
   impl::printFunctionSignature(printer, op, fnType.getInputs(),
                                /*isVariadic=*/false, fnType.getResults());
-  impl::printFunctionAttributes(
-      printer, op, fnType.getNumInputs(), fnType.getNumResults());
+  impl::printFunctionAttributes(printer, op, fnType.getNumInputs(),
+                                fnType.getNumResults());
 
   // Print the body if this is not an external function.
   if (!body.empty())
@@ -432,16 +430,17 @@ static void printDefOp(OpAsmPrinter &printer, DefOp op) {
                         /*printBlockTerminators=*/true);
 }
 
+// CallableOpInterface.
+Region *DefOp::getCallableRegion() { return isExternal() ? nullptr : &body(); }
+
+// CallableOpInterface.
+ArrayRef<Type> DefOp::getCallableResults() { return getType().getResults(); }
+
 LogicalResult DefOp::verifyType() {
   auto type = getTypeAttr().getValue();
   if (!type.isa<FunctionType>())
     return emitOpError("requires '" + getTypeAttrName() +
                        "' attribute of function type");
-  return success();
-}
-
-LogicalResult DefOp::verifyBody() {
-  //TODO
   return success();
 }
 #define GET_OP_CLASSES
