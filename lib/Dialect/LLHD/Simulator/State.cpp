@@ -106,8 +106,14 @@ bool Slot::operator<(const Slot &rhs) const { return time < rhs.time; }
 bool Slot::operator>(const Slot &rhs) const { return rhs.time < time; }
 
 void Slot::insertChange(int index, int bitOffset, APInt &bytes) {
-  changes.push_back(std::make_pair(index, bitOffset));
-  data.push_back(bytes);
+  if (changesSize >= changes.size()) {
+    changes.push_back(std::make_pair(index, bitOffset));
+    data.push_back(bytes);
+  } else {
+    changes[changesSize] = std::make_pair(index, bitOffset);
+    data[changesSize] = bytes;
+  }
+  ++changesSize;
 }
 
 void Slot::insertChange(unsigned inst) { scheduled.push_back(inst); }
@@ -176,8 +182,7 @@ Slot &UpdateQueue::top() {
 void UpdateQueue::pop() {
   auto &curr = begin()[currentTop];
   curr.unused = true;
-  curr.changes.clear();
-  curr.data.clear();
+  curr.changesSize = 0;
   curr.scheduled.clear();
   curr.time = Time();
   --events;

@@ -122,7 +122,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
 
     // Apply the signal changes and dump the signals that actually changed
     // value.
-    for (size_t i = 0, e = pop.changes.size(); i < e; ++i) {
+    for (size_t i = 0, e = pop.changesSize; i < e; ++i) {
       auto change = pop.changes[i];
       // Get a buffer to apply the changes on.
       Signal &curr = state->signals[change.first];
