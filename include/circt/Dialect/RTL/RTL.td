@@ -10,6 +10,8 @@
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/SymbolInterfaces.td"
+include "mlir/IR/RegionKindInterface.td"
 
 def RTLDialect : Dialect {
   let name = "rtl";
@@ -29,5 +31,6 @@ class RTLOp<string mnemonic, list<OpTrait> traits = []> :
 
 include "Combinatorial.td"
 include "Statements.td"
+include "Structure.td"
 
 #endif // RTL_TD
