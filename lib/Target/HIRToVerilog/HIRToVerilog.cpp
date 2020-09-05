@@ -15,6 +15,7 @@
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/FormattedStream.h"
 
+#include <functional>
 #include <string>
 
 using namespace mlir;
@@ -76,6 +77,24 @@ static bool getBitWidth(Type ty, unsigned &bitwidth) {
   return false;
 }
 
+static unsigned calcAddrWidth(hir::MemrefType memrefTy) {
+  // FIXME: Currently we assume that all dims are power of two.
+  auto shape = memrefTy.getShape();
+  auto elementType = memrefTy.getElementType();
+  auto packing = memrefTy.getPacking();
+  unsigned elementWidth;
+  getBitWidth(elementType, elementWidth);
+  int max_dim = shape.size() - 1;
+  unsigned addrWidth = 0;
+  for (auto dim : packing) {
+    // dim0 is last in shape.
+    int dim_size = shape[max_dim - dim];
+    float log_size = log2(dim_size);
+    addrWidth += ceil(log_size);
+  }
+  return addrWidth;
+}
+
 /// This class is the verilog output printer for the HIR dialect. It walks
 /// throught the module and prints the verilog in the 'out' variable.
 class VerilogPrinter {
@@ -96,31 +115,50 @@ private:
   LogicalResult printMemWriteOp(MemWriteOp op, unsigned indentAmount = 0);
   LogicalResult printReturnOp(hir::ReturnOp op, unsigned indentAmount = 0);
   LogicalResult printBody(Block &block, unsigned indentAmount = 0);
+  LogicalResult printMemrefAddrSelector(Value mem, unsigned indentAmount = 0);
   LogicalResult printType(Type type);
+  LogicalResult processReplacements(std::string &code);
 
   std::stringstream module_out;
   llvm::formatted_raw_ostream &out;
   unsigned nextValueNum = 0;
-  DenseMap<Value, unsigned> mapValueToNum;
-  // selectors will select among many busses. The bus with high %t is selected.
-  // Its illegal to have multiple %t asserted high.
-  struct SelectorPair {
-    unsigned result;
-    SmallVector<std::pair<unsigned, unsigned>, 4> operandsWithTime;
-  };
-  SmallVector<SelectorPair, 4> pendingSelectors;
-  SmallVector<std::pair<unsigned, SmallVector<unsigned, 4>>, 4> pendingORs;
+  llvm::DenseMap<Value, unsigned> mapValueToNum;
+  llvm::DenseMap<Value, int> mapConstToInt;
+  llvm::DenseMap<Value, unsigned> mapValueToSelWidth;
+  llvm::DenseMap<Value, unsigned> mapTimeToMaxOffset;
+
+  SmallVector<std::pair<unsigned, std::function<std::string()>>, 4> replaceLocs;
 };
 
-LogicalResult printMemReadOp(MemReadOp op, unsigned indentAmount) {
-  auto addr = op.addr();
+LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
+                                             unsigned indentAmount) {
+  OperandRange addr = op.addr();
   auto result = op.res();
   auto mem = op.mem();
+  unsigned n_mem = mapValueToNum[mem];
   auto tstart = op.tstart();
   auto offset = op.offset();
+  int offsetValue = 0;
+  if (offset) {
+    auto offsetType = offset.getType();
+    if (!offsetType.isa<hir::ConstType>())
+      return emitError(op.getLoc(), "offset must be a const<int>");
+    Type elementType = offsetType.dyn_cast<hir::ConstType>().getElementType();
+    if (!elementType.isa<IntegerType>())
+      return emitError(op.getLoc(), "offset must be a const<int>");
+    offsetValue = mapConstToInt[offset];
+  }
+  unsigned oldMaxOffset = mapTimeToMaxOffset[tstart];
+  mapTimeToMaxOffset[tstart] =
+      (offsetValue > oldMaxOffset) ? offsetValue : oldMaxOffset;
+  module_out << "assign v_addr" << n_mem << "_sel_valid["
+             << mapValueToSelWidth[mem] << "] = "
+             << "t" << mapValueToNum[tstart] << "offset" << offsetValue
+             << ";\n";
+  mapValueToSelWidth[mem] += 1;
   // To solve:
   // - How to get the tstart+offset right?
-  // -- Lets have a naming convention tMoC is tM offset by C.
+  // -- Lets have a naming convention tMoffset[C] is tM offset by C.
   // -- We need a map tM -> highest offset.
   // -- We can have a rule that the timevar offsets are calculated next to the
   //    source of the timevar. This ensures that all offsets visible always and
@@ -130,8 +168,19 @@ LogicalResult printMemReadOp(MemReadOp op, unsigned indentAmount) {
   //    anyway create the offset near the def location of the time var which is
   //    in the outer scope. So it will be available to everyone outside the
   //    unrollFor op.
+  //
   // - How to get the selector right?
-  // -- What happens when we are at the end?
+  // -- Register a new selector S. Init mapValueNumToSelectorWidth[S] = 0;
+  // -- print v_addrN = CODEGEN_SELECTOR(selectorS_inputs, selectorS_valids)
+  //    at the top of the enclosing scope.
+  // -- $const = mapValueNumToSelectorWidth[S]++;
+  //    print selectorS_inputs[$const] = vM;
+  //    print selectorS_valids[$const] = tX;
+  //    at the location of mem_read/mem_write
+  // -- Insert the definitions of selectorS_inputs and selectorS_valids based on
+  //    mapValueNumToSelectorWidth[S]
+  // -- This handles the unrollFor op as well!
+  return success();
 }
 
 LogicalResult VerilogPrinter::printReturnOp(hir::ReturnOp op,
@@ -142,12 +191,13 @@ LogicalResult VerilogPrinter::printReturnOp(hir::ReturnOp op,
 LogicalResult VerilogPrinter::printConstantOp(hir::ConstantOp op,
                                               unsigned indentAmount) {
   auto result = op.res();
+  int value = op.value().getLimitedValue();
+  mapConstToInt.insert(std::make_pair(result, value));
   if (auto intTy = result.getType().dyn_cast<IntegerType>()) {
     unsigned valueNumber = newValueNumber();
     mapValueToNum.insert(std::make_pair(result, valueNumber));
     module_out << "wire [" << intTy.getWidth() - 1 << " : 0] v" << valueNumber;
-    module_out << "=" << intTy.getWidth() << "'d"
-               << op.value().getLimitedValue() << ";\n";
+    module_out << "=" << intTy.getWidth() << "'d" << value << ";\n";
     return success();
   } else if (auto constTy = result.getType().dyn_cast<ConstType>()) {
     if (auto intTy = constTy.getElementType().dyn_cast<IntegerType>()) {
@@ -155,8 +205,7 @@ LogicalResult VerilogPrinter::printConstantOp(hir::ConstantOp op,
       mapValueToNum.insert(std::make_pair(result, valueNumber));
       module_out << "wire [" << intTy.getWidth() - 1 << " : 0] v"
                  << valueNumber;
-      module_out << "=" << intTy.getWidth() << "'d"
-                 << op.value().getLimitedValue() << ";\n";
+      module_out << "=" << intTy.getWidth() << "'d" << value << ";\n";
       return success();
     }
   }
@@ -239,6 +288,8 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
     return printForOp(op, indentAmount);
   } else if (auto op = dyn_cast<hir::ReturnOp>(inst)) {
     return printReturnOp(op, indentAmount);
+  } else if (auto op = dyn_cast<hir::MemReadOp>(inst)) {
+    return printMemReadOp(op, indentAmount);
   } else {
     return emitError(inst->getLoc(), "Unsupported Operation!");
   }
@@ -273,18 +324,11 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
       module_out << "v" << valueNumber;
     } else if (argType.isa<MemrefType>()) {
       MemrefType memrefTy = argType.dyn_cast<MemrefType>();
-      ArrayRef<unsigned> shape = memrefTy.getShape();
-      Type elementType = memrefTy.getElementType();
-      ArrayRef<unsigned> packing = memrefTy.getPacking();
       hir::Details::PortKind port = memrefTy.getPort();
-      unsigned addrWidth = 0;
-      // FIXME: Currently we assume that all dims are power of two.
-      for (auto dim : shape) {
-        addrWidth += ceil(log2(dim));
-      }
+      unsigned addrWidth = calcAddrWidth(memrefTy);
       module_out << "output wire[" << addrWidth - 1 << ":0] v_addr"
                  << valueNumber;
-      module_out << ",\noutput wire v_addr_valid" << valueNumber;
+      module_out << ",\noutput wire v_addr" << valueNumber << "_valid";
       if (port == hir::Details::r || port == hir::Details::rw) {
         bool bitwidth_valid = getBitWidth(argType, bitwidth);
         if (!bitwidth_valid)
@@ -310,8 +354,51 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
   }
   module_out << ");\n\n";
 
+  for (auto arg : args)
+    if (arg.getType().isa<hir::MemrefType>())
+      printMemrefAddrSelector(arg);
+
   printBody(entryBlock);
   module_out << "endmodule\n";
+
+  // Pass module's code to out.
+  std::string code = module_out.str();
+  processReplacements(code);
+  out << code;
+  return success();
+}
+
+LogicalResult VerilogPrinter::processReplacements(std::string &code) {
+  for (auto replacement : replaceLocs) {
+    unsigned loc = replacement.first;
+    std::function<std::string()> getReplacementString = replacement.second;
+    std::string replacementStr = getReplacementString();
+    std::stringstream locSStream;
+    locSStream << "$loc" << loc;
+    findAndReplaceAll(code, locSStream.str(), replacementStr);
+  }
+  return success();
+}
+
+LogicalResult VerilogPrinter::printMemrefAddrSelector(Value mem,
+                                                      unsigned indentAmount) {
+  unsigned n_mem = mapValueToNum[mem];
+  MemrefType memrefTy = mem.getType().dyn_cast<hir::MemrefType>();
+  hir::Details::PortKind port = memrefTy.getPort();
+  unsigned addrWidth = calcAddrWidth(memrefTy);
+  unsigned loc = replaceLocs.size();
+  replaceLocs.push_back(std::make_pair(loc, [=, this]() -> std::string {
+    unsigned selWidth = mapValueToSelWidth[mem];
+    if (selWidth == 0)
+      return "";
+    std::stringstream output;
+    output << "wire[" << selWidth - 1 << ":0] v_addr" << n_mem
+           << "_sel_valid;\n";
+    output << "assign v_addr" << n_mem << "_valid = |v_addr" << n_mem
+           << "_sel_valid;";
+    return output.str();
+  }));
+  module_out << "$loc" << loc << "\n";
   return success();
 }
 

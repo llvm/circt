@@ -443,5 +443,8 @@ LogicalResult DefOp::verifyType() {
                        "' attribute of function type");
   return success();
 }
+
+/// required for functionlike trait
+LogicalResult DefOp::verifyBody() { return success(); }
 #define GET_OP_CLASSES
 #include "circt/Dialect/HIR/HIR.cpp.inc"
