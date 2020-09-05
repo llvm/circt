@@ -1583,7 +1583,7 @@ void ModuleEmitter::emitDecl(InstanceOp op) {
   indent() << ");\n";
 }
 
-void ModuleEmitter::emitRTLInstance(rtl::RTLInstanceOp op) {
+void ModuleEmitter::emitStatement(rtl::RTLInstanceOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1607,7 +1607,7 @@ void ModuleEmitter::emitRTLInstance(rtl::RTLInstanceOp op) {
 
   for (int i = 0; i < portInfo.size(); ++i) {
     rtl::RTLModulePortInfo &elt = portInfo[i];
-    bool isLast = &elt == &portInfo.back();  
+    bool isLast = &elt == &portInfo.back();
     indent() << "  ." << StringRef(std::get<0>(elt).getValue()) << " ("
              << getName(opArgs[i]) << (isLast ? ")\n" : "),\n");
   }
