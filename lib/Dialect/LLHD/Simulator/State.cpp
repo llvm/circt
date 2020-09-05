@@ -172,7 +172,7 @@ void UpdateQueue::insertOrUpdate(Time time, unsigned inst) {
   }
 }
 
-Slot &UpdateQueue::top() {
+const Slot &UpdateQueue::top() {
   auto it = std::min_element(begin(), end(), [](auto &a, auto &b) {
     return !a.unused && (a < b || b.unused);
   });
@@ -230,7 +230,7 @@ int State::addSignal(std::string name, std::string owner) {
 void State::addProcPtr(std::string name, ProcState *procStatePtr) {
 
   auto it = std::find_if(instances.begin(), instances.end(),
-                         [&](auto &inst) { return name == inst.name; });
+                         [&](const auto &inst) { return name == inst.name; });
   if (it == instances.end()) {
     llvm::errs() << "could not find an instance named " << name << "\n";
     exit(EXIT_FAILURE);
@@ -244,7 +244,7 @@ void State::addProcPtr(std::string name, ProcState *procStatePtr) {
 int State::addSignalData(int index, std::string owner, uint8_t *value,
                          uint64_t size) {
   auto it = std::find_if(instances.begin(), instances.end(),
-                         [&](auto &inst) { return owner == inst.name; });
+                         [&](const auto &inst) { return owner == inst.name; });
   if (it == instances.end()) {
     llvm::errs() << "could not find an instance named " << owner << "\n";
     exit(EXIT_FAILURE);
@@ -283,7 +283,7 @@ void State::dumpSignal(llvm::raw_ostream &out, int index) {
 
 void State::dumpLayout() {
   llvm::errs() << "::------------------- Layout -------------------::\n";
-  for (auto &inst : instances) {
+  for (const auto &inst : instances) {
     llvm::errs() << inst.name << ":\n";
     llvm::errs() << "---path: " << inst.path << "\n";
     llvm::errs() << "---isEntity: " << inst.isEntity << "\n";

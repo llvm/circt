@@ -141,7 +141,7 @@ public:
   /// queue.
   void insertOrUpdate(Time time, unsigned inst);
 
-  Slot &top();
+  const Slot &top();
 
   void pop();
 

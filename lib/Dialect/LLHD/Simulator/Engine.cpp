@@ -125,13 +125,13 @@ int Engine::simulate(int n, uint64_t maxTime) {
     for (size_t i = 0, e = pop.changesSize; i < e; ++i) {
       auto change = pop.changes[i];
       // Get a buffer to apply the changes on.
-      Signal &curr = state->signals[change.first];
+      const auto &curr = state->signals[change.first];
       APInt buff(curr.size * 8,
                  ArrayRef<uint64_t>(reinterpret_cast<uint64_t *>(curr.value),
                                     curr.size));
 
       // Apply all the changes to the buffer, in order of execution.
-      auto &drive = pop.data[i];
+      const auto &drive = pop.data[i];
       if (drive.getBitWidth() < buff.getBitWidth())
         buff.insertBits(drive, change.second);
       else
@@ -148,9 +148,9 @@ int Engine::simulate(int n, uint64_t maxTime) {
       for (auto inst : state->signals[change.first].triggers) {
         // Skip if the process is not currently sensible to the signal.
         if (!state->instances[inst].isEntity) {
-          auto &sensList = state->instances[inst].sensitivityList;
+          const auto &sensList = state->instances[inst].sensitivityList;
           auto it = std::find_if(sensList.begin(), sensList.end(),
-                                 [&change](SignalDetail &s) {
+                                 [&change](const SignalDetail &s) {
                                    return s.globalIndex == change.first;
                                  });
           if (sensList.end() != it &&
