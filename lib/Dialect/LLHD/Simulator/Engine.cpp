@@ -122,28 +122,27 @@ int Engine::simulate(int n, uint64_t maxTime) {
 
     // Apply the signal changes and dump the signals that actually changed
     // value.
-    for (auto change : pop.changes) {
+    for (size_t i = 0, e = pop.changes.size(); i < e; ++i) {
+      auto change = pop.changes[i];
       // Get a buffer to apply the changes on.
-      Signal *curr = &(state->signals[change.first]);
-      APInt buff(
-          curr->size * 8,
-          ArrayRef<uint64_t>(reinterpret_cast<uint64_t *>(curr->value.get()),
-                             curr->size));
+      Signal &curr = state->signals[change.first];
+      APInt buff(curr.size * 8,
+                 ArrayRef<uint64_t>(reinterpret_cast<uint64_t *>(curr.value),
+                                    curr.size));
 
       // Apply all the changes to the buffer, in order of execution.
-      auto drive = change.second;
-      if (drive.second.getBitWidth() < buff.getBitWidth())
-        buff.insertBits(drive.second, drive.first);
+      auto &drive = pop.data[i];
+      if (drive.getBitWidth() < buff.getBitWidth())
+        buff.insertBits(drive, change.second);
       else
-        buff = drive.second;
+        buff = drive;
 
       // Skip if the updated signal value is equal to the initial value.
-      if (std::memcmp(curr->value.get(), buff.getRawData(), curr->size) == 0)
+      if (std::memcmp(curr.value, buff.getRawData(), curr.size) == 0)
         continue;
 
       // Apply the signal update.
-      std::memcpy(curr->value.get(), buff.getRawData(),
-                  state->signals[change.first].size);
+      std::memcpy(curr.value, buff.getRawData(), curr.size);
 
       // Add sensitive instances.
       for (auto inst : state->signals[change.first].triggers) {

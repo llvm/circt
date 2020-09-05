@@ -106,7 +106,8 @@ bool Slot::operator<(const Slot &rhs) const { return time < rhs.time; }
 bool Slot::operator>(const Slot &rhs) const { return rhs.time < time; }
 
 void Slot::insertChange(int index, int bitOffset, APInt &bytes) {
-  changes.push_back(std::make_pair(index, std::make_pair(bitOffset, bytes)));
+  changes.push_back(std::make_pair(index, bitOffset));
+  data.push_back(bytes);
 }
 
 void Slot::insertChange(unsigned inst) { scheduled.push_back(inst); }
@@ -176,6 +177,7 @@ void UpdateQueue::pop() {
   auto &curr = begin()[currentTop];
   curr.unused = true;
   curr.changes.clear();
+  curr.data.clear();
   curr.scheduled.clear();
   curr.time = Time();
   --events;
