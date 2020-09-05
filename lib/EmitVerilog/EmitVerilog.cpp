@@ -291,7 +291,6 @@ public:
 
   void emitFModule(FModuleOp module);
   void emitRTLModule(rtl::RTLModuleOp module);
-  void emitRTLInstance(rtl::RTLInstanceOp op);
   void emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
                       bool forceRootExpr = false);
 
@@ -305,6 +304,7 @@ public:
   void emitStatement(AttachOp op);
   void emitStatement(ConnectOp op);
   void emitStatement(rtl::ConnectOp op);
+  void emitStatement(rtl::RTLInstanceOp op);
   void emitStatement(PrintFOp op);
   void emitStatement(StopOp op);
   void emitStatement(sv::IfDefOp op);
@@ -2046,7 +2046,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
       return emitter.emitStatement(op), true;
     }
     bool visitStmt(rtl::RTLInstanceOp op) {
-      return emitter.emitRTLInstance(op), true;
+      return emitter.emitStatement(op), true;
     }
     bool visitStmt(rtl::WireOp op) { return true; }
 
