@@ -97,7 +97,8 @@ std::string Signal::dump(unsigned elemIndex) {
 // Slot
 //===----------------------------------------------------------------------===//
 
-Slot::Slot(Time time, int index, int bitOffset, APInt &bytes) : time(time) {
+Slot::Slot(Time time, int index, int bitOffset, const APInt &bytes)
+    : time(time) {
   insertChange(index, bitOffset, bytes);
 }
 
@@ -105,7 +106,7 @@ bool Slot::operator<(const Slot &rhs) const { return time < rhs.time; }
 
 bool Slot::operator>(const Slot &rhs) const { return rhs.time < time; }
 
-void Slot::insertChange(int index, int bitOffset, APInt &bytes) {
+void Slot::insertChange(int index, int bitOffset, const APInt &bytes) {
   if (changesSize >= changes.size()) {
     changes.push_back(std::make_pair(index, bitOffset));
     data.push_back(bytes);
@@ -122,7 +123,7 @@ void Slot::insertChange(unsigned inst) { scheduled.push_back(inst); }
 // UpdateQueue
 //===----------------------------------------------------------------------===//
 void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
-                                 APInt &bytes) {
+                                 const APInt &bytes) {
   int firstUnused = -1;
   for (size_t i = 0, e = size(); i < e; ++i) {
     if (time == begin()[i].time) {
@@ -211,7 +212,7 @@ Slot State::popQueue() {
   return pop;
 }
 
-void State::pushQueue(Time t, int index, int bitOffset, APInt &bytes) {
+void State::pushQueue(Time t, int index, int bitOffset, const APInt &bytes) {
   Time newTime = time + t;
   queue.insertOrUpdate(newTime, index, bitOffset, bytes);
 }

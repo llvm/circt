@@ -100,7 +100,7 @@ struct Signal {
 struct Slot {
   /// Construct a new slot.
   Slot(Time time) : time(time) {}
-  Slot(Time time, int index, int bitOffset, llvm::APInt &bytes);
+  Slot(Time time, int index, int bitOffset, const llvm::APInt &bytes);
 
   /// Returns true if the slot's time is smaller than the compared slot's time.
   bool operator<(const Slot &rhs) const;
@@ -109,7 +109,7 @@ struct Slot {
   bool operator>(const Slot &rhs) const;
 
   /// Insert a change.
-  void insertChange(int index, int bitOffset, llvm::APInt &bytes);
+  void insertChange(int index, int bitOffset, const llvm::APInt &bytes);
 
   /// Insert a scheduled process wakeup.
   void insertChange(unsigned inst);
@@ -133,7 +133,8 @@ class UpdateQueue : public llvm::SmallVector<Slot, 8> {
 public:
   /// Check wheter a slot for the given time already exists. If that's the case,
   /// add the new change to it, else create a new slot and push it to the queue.
-  void insertOrUpdate(Time time, int index, int bitOffset, llvm::APInt &bytes);
+  void insertOrUpdate(Time time, int index, int bitOffset,
+                      const llvm::APInt &bytes);
 
   /// Check wheter a slot for the given time already exists. If that's the case,
   /// add the scheduled wakeup to it, else create a new slot and push it to the
@@ -192,7 +193,7 @@ struct State {
   Slot popQueue();
 
   /// Push a new event in the event queue.
-  void pushQueue(Time time, int index, int bitOffset, llvm::APInt &bytes);
+  void pushQueue(Time time, int index, int bitOffset, const llvm::APInt &bytes);
 
   /// Push a new scheduled wakeup event in the event queue.
   void pushQueue(Time time, unsigned inst);
