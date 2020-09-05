@@ -97,22 +97,27 @@ std::string Signal::dump(unsigned elemIndex) {
 // Slot
 //===----------------------------------------------------------------------===//
 
-Slot::Slot(Time time, int index, int bitOffset, const APInt &bytes)
+Slot::Slot(Time time, int index, int bitOffset, uint8_t *bytes, unsigned width)
     : time(time) {
-  insertChange(index, bitOffset, bytes);
+  insertChange(index, bitOffset, bytes, width);
 }
 
 bool Slot::operator<(const Slot &rhs) const { return time < rhs.time; }
 
 bool Slot::operator>(const Slot &rhs) const { return rhs.time < time; }
 
-void Slot::insertChange(int index, int bitOffset, const APInt &bytes) {
+void Slot::insertChange(int index, int bitOffset, uint8_t *bytes,
+                        unsigned width) {
+  auto size = llvm::divideCeil(width, 8) + 1;
   if (changesSize >= changes.size()) {
     changes.push_back(std::make_pair(index, bitOffset));
-    data.push_back(bytes);
+    data.push_back(APInt(
+        width, ArrayRef<uint64_t>(reinterpret_cast<uint64_t *>(bytes), size)));
   } else {
     changes[changesSize] = std::make_pair(index, bitOffset);
-    data[changesSize] = bytes;
+    data[changesSize] = APInt(
+        width, ArrayRef<uint64_t>(reinterpret_cast<uint64_t *>(bytes), size));
+    ;
   }
   ++changesSize;
 }
@@ -123,11 +128,11 @@ void Slot::insertChange(unsigned inst) { scheduled.push_back(inst); }
 // UpdateQueue
 //===----------------------------------------------------------------------===//
 void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
-                                 const APInt &bytes) {
+                                 uint8_t *bytes, unsigned width) {
   int firstUnused = -1;
   for (size_t i = 0, e = size(); i < e; ++i) {
     if (time == begin()[i].time) {
-      begin()[i].insertChange(index, bitOffset, bytes);
+      begin()[i].insertChange(index, bitOffset, bytes, width);
       return;
     } else if (begin()[i].unused) {
       firstUnused = i;
@@ -138,11 +143,11 @@ void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
 
   if (firstUnused >= 0) {
     auto &curr = begin()[firstUnused];
-    curr.insertChange(index, bitOffset, bytes);
+    curr.insertChange(index, bitOffset, bytes, width);
     curr.unused = false;
     curr.time = time;
   } else {
-    push_back(Slot(time, index, bitOffset, bytes));
+    push_back(Slot(time, index, bitOffset, bytes, width));
   }
 }
 
@@ -212,9 +217,10 @@ Slot State::popQueue() {
   return pop;
 }
 
-void State::pushQueue(Time t, int index, int bitOffset, const APInt &bytes) {
-  Time newTime = time + t;
-  queue.insertOrUpdate(newTime, index, bitOffset, bytes);
+void State::pushQueue(Time t, int index, int bitOffset, uint8_t *bytes,
+                      unsigned width) {
+  // Time newTime = time + t;
+  queue.insertOrUpdate(time + t, index, bitOffset, bytes, width);
 }
 void State::pushQueue(Time t, unsigned inst) {
   Time newTime = time + t;

@@ -60,18 +60,19 @@ void driveSignal(State *state, SignalDetail *detail, uint8_t *value,
   auto globalIndex = detail->globalIndex;
   auto offset = detail->offset;
 
-  int size = llvm::divideCeil(width + offset, 8);
+  // int size = llvm::divideCeil(width + offset, 8);
 
-  APInt drive(width,
-              ArrayRef<uint64_t>(reinterpret_cast<uint64_t *>(value), size));
+  // APInt drive(width,
+  //             ArrayRef<uint64_t>(reinterpret_cast<uint64_t *>(value), size));
 
-  Time sTime(time, delta, eps);
+  // Time sTime(time, delta, eps);
 
   int bitOffset =
       (detail->value - state->signals[globalIndex].value.get()) * 8 + offset;
 
   // Spawn a new event.
-  state->pushQueue(sTime, globalIndex, bitOffset, drive);
+  state->pushQueue(Time(time, delta, eps), globalIndex, bitOffset, value,
+                   width);
 }
 
 void llhdSuspend(State *state, ProcState *procState, int time, int delta,
