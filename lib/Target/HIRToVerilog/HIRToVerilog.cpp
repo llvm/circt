@@ -106,6 +106,7 @@ private:
   unsigned newValueNumber() { return nextValueNum++; }
   LogicalResult printOperation(Operation *op, unsigned indentAmount = 0);
 
+  // Individual op printers.
   LogicalResult printDefOp(DefOp op, unsigned indentAmount = 0);
   LogicalResult printConstantOp(hir::ConstantOp op, unsigned indentAmount = 0);
   LogicalResult printForOp(ForOp op, unsigned indentAmount = 0);
@@ -113,6 +114,8 @@ private:
   LogicalResult printMemReadOp(MemReadOp op, unsigned indentAmount = 0);
   LogicalResult printMemWriteOp(MemWriteOp op, unsigned indentAmount = 0);
   LogicalResult printReturnOp(hir::ReturnOp op, unsigned indentAmount = 0);
+
+  // Helpers.
   LogicalResult printBody(Block &block, unsigned indentAmount = 0);
   LogicalResult printMemrefAddrSelector(Value mem, unsigned indentAmount = 0);
   LogicalResult printType(Type type);
@@ -156,31 +159,22 @@ LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
              << mapValueToSelWidth[mem] << "] = "
              << "t" << mapValueToNum[tstart] << "offset[" << offsetValue
              << "];\n";
+  module_out << "assign v_addr" << n_mem << "_sel_data["
+             << mapValueToSelWidth[mem] << "] = {";
+  int i = 0;
+  for (auto addrI : addr) {
+    if (i++ > 0)
+      module_out << ", ";
+    module_out << "v" << mapValueToNum[addrI];
+  }
+  module_out << "};\n";
+  unsigned n_result = newValueNumber();
+  mapValueToNum.insert(std::make_pair(result, n_result));
+  module_out << "assign v" << n_result << " = v_data_rd" << n_mem << "["
+             << mapValueToSelWidth[mem] << "];\n\n";
+
+  // We now have one more selector input so incr the width.
   mapValueToSelWidth[mem] += 1;
-  // To solve:
-  // - How to get the tstart+offset right?
-  // -- Lets have a naming convention tMoffset[C] is tM offset by C.
-  // -- We need a map tM -> highest offset.
-  // -- We can have a rule that the timevar offsets are calculated next to the
-  //    source of the timevar. This ensures that all offsets visible always and
-  //    can be reused.
-  // -- UnrollFor op does not need special handling. Mostly the unrollFor body
-  //    will have its own time var. In case it uses an outer scope's timevar, we
-  //    anyway create the offset near the def location of the time var which is
-  //    in the outer scope. So it will be available to everyone outside the
-  //    unrollFor op.
-  //
-  // - How to get the selector right?
-  // -- Register a new selector S. Init mapValueNumToSelectorWidth[S] = 0;
-  // -- print v_addrN = CODEGEN_SELECTOR(selectorS_inputs, selectorS_valids)
-  //    at the top of the enclosing scope.
-  // -- $const = mapValueNumToSelectorWidth[S]++;
-  //    print selectorS_inputs[$const] = vM;
-  //    print selectorS_valids[$const] = tX;
-  //    at the location of mem_read/mem_write
-  // -- Insert the definitions of selectorS_inputs and selectorS_valids based on
-  //    mapValueNumToSelectorWidth[S]
-  // -- This handles the unrollFor op as well!
   return success();
 }
 
@@ -378,17 +372,18 @@ LogicalResult VerilogPrinter::printTimeOffsets(Value timeVar) {
   module_out << "always@(*) "
              << "t" << n_timeVar << "offset[0] <= t" << n_timeVar << ";\n";
   unsigned n_i = newValueNumber();
-  module_out << "genvar i" << n_i<<";\n";
-  module_out << "\ngenerate for(i"<<n_i<<" = 1; i" <<n_i << "< $loc"<<loc <<"; i++) begin\n";
+  module_out << "genvar i" << n_i << ";\n";
+  module_out << "\ngenerate for(i" << n_i << " = 1; i" << n_i << "< $loc" << loc
+             << "; i++) begin\n";
   module_out << "always@(clk) begin\n";
-  module_out << "t" << n_timeVar << "offset[i" <<n_i << "] <= " 
-    << "t" << n_timeVar << "offset[i" << n_i-1<<"];\n";
+  module_out << "t" << n_timeVar << "offset[i" << n_i << "] <= "
+             << "t" << n_timeVar << "offset[i" << n_i - 1 << "];\n";
   module_out << "end\n";
   module_out << "end\n";
   module_out << "endgenerate\n\n";
 
   replaceLocs.push_back(std::make_pair(loc, [=]() -> std::string {
-    return std::to_string(mapTimeToMaxOffset[timeVar]+1);
+    return std::to_string(mapTimeToMaxOffset[timeVar] + 1);
   }));
 }
 
@@ -409,6 +404,10 @@ LogicalResult VerilogPrinter::printMemrefAddrSelector(Value mem,
   unsigned n_mem = mapValueToNum[mem];
   MemrefType memrefTy = mem.getType().dyn_cast<hir::MemrefType>();
   hir::Details::PortKind port = memrefTy.getPort();
+  Type elementType = memrefTy.getElementType();
+  unsigned elementWidth;
+  if (!getBitWidth(elementType, elementWidth))
+    return failure();
   unsigned addrWidth = calcAddrWidth(memrefTy);
   unsigned loc = replaceLocs.size();
   replaceLocs.push_back(std::make_pair(loc, [=]() -> std::string {
@@ -419,7 +418,22 @@ LogicalResult VerilogPrinter::printMemrefAddrSelector(Value mem,
     output << "wire[" << selWidth - 1 << ":0] v_addr" << n_mem
            << "_sel_valid;\n";
     output << "assign v_addr" << n_mem << "_valid = |v_addr" << n_mem
-           << "_sel_valid;";
+           << "_sel_valid;\n";
+    output << "wire[" << elementWidth - 1 << ":0] v_addr" << n_mem
+           << "_sel_data[" << selWidth - 1 << ":0];\n";
+    output << "always@(*) begin\n";
+    output << " if(v_addr" << n_mem << "_sel_valid[0] == 1'b1)\n";
+    output << "   v_addr" << n_mem << " <= v_addr" << n_mem
+           << "_sel_data[0];\n";
+    for (int i = 1; i < selWidth; i++) {
+      output << " else if(v_addr" << n_mem << "_sel_valid[" << i
+             << "] == 1'b1)\n";
+      output << "   v_addr" << n_mem << " <= v_addr" << n_mem << "_sel_data["
+             << i << "];\n";
+    }
+    output << "  else\n";
+    output << "   v_addr" << n_mem << " <= 0;\n";
+    output << "end\n";
     return output.str();
   }));
   module_out << "$loc" << loc << "\n";
@@ -435,6 +449,7 @@ LogicalResult VerilogPrinter::printBody(Block &block, unsigned indentAmount) {
     }
   }
 }
+
 LogicalResult VerilogPrinter::printModule(ModuleOp module) {
   WalkResult result = module.walk([this](DefOp defOp) -> WalkResult {
     if (!printDefOp(defOp).value)
