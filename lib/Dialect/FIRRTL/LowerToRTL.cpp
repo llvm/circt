@@ -6,8 +6,10 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/FIRRTL/Visitors.h"
 #include "circt/Dialect/RTL/Ops.h"
+#include "circt/Dialect/SV/Ops.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/Support/SaveAndRestore.h"
 using namespace circt;
 using namespace firrtl;
 
@@ -37,11 +39,11 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitStmt;
 
   // Lowering hooks.
+  void handleUnloweredOp(Operation *op);
   LogicalResult visitExpr(ConstantOp op);
   LogicalResult visitDecl(WireOp op);
-  LogicalResult visitStmt(ConnectOp op);
-  LogicalResult visitUnhandledOp(Operation *op);
-  LogicalResult visitInvalidOp(Operation *op) { return visitUnhandledOp(op); }
+  LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
+  LogicalResult visitInvalidOp(Operation *op) { return failure(); }
 
   // Unary Ops.
   LogicalResult lowerNoopCast(Operation *op);
@@ -77,6 +79,10 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(ShrPrimOp op);
   LogicalResult visitExpr(TailPrimOp op);
 
+  // Statements
+  LogicalResult visitStmt(ConnectOp op);
+  LogicalResult visitStmt(PrintFOp op);
+
 private:
   /// This builder is set to the right location for each visit call.
   OpBuilder *builder = nullptr;
@@ -107,8 +113,13 @@ void FIRRTLLowering::runOnOperation() {
   builder = &theBuilder;
   for (auto &op : body->getOperations()) {
     builder->setInsertionPoint(&op);
-    if (succeeded(dispatchVisitor(&op)))
+    if (succeeded(dispatchVisitor(&op))) {
       opsToRemove.push_back(&op);
+    } else {
+      // If lowering didn't succeed, then make sure to rewrite operands that
+      // refer to lowered values.
+      handleUnloweredOp(&op);
+    }
   }
   builder = nullptr;
 
@@ -239,23 +250,11 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   return setLoweringTo<rtl::WireOp>(op, resultType, op.nameAttr());
 }
 
-LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
-  auto dest = getLoweredValue(op.lhs());
-
-  // The source can be a smaller integer, extend it as appropriate if so.
-  Value src = getLoweredAndExtendedValue(op.rhs(), op.lhs().getType());
-
-  if (!dest || !src)
-    return failure();
-
-  builder->create<rtl::ConnectOp>(op.getLoc(), dest, src);
-  return success();
-}
-
-/// Handle the unhandled case - in this case, the operands may be a mix of
-/// lowered and unlowered values.  If the operand was not lowered then leave it
-/// alone, otherwise insert a cast from the lowered value.
-LogicalResult FIRRTLLowering::visitUnhandledOp(Operation *op) {
+/// Handle the case where an operation wasn't lowered.  When this happens, the
+/// operands may be a mix of lowered and unlowered values.  If the operand was
+/// not lowered then leave it alone, otherwise insert a cast from the lowered
+/// value.
+void FIRRTLLowering::handleUnloweredOp(Operation *op) {
   for (auto &operand : op->getOpOperands()) {
     Value origValue = operand.get();
     auto it = valueMapping.find(origValue);
@@ -268,7 +267,6 @@ LogicalResult FIRRTLLowering::visitUnhandledOp(Operation *op) {
                                                origValue.getType(), it->second);
     operand.set(mapped);
   }
-  return failure();
 }
 
 LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
@@ -309,7 +307,8 @@ LogicalResult FIRRTLLowering::lowerBinOpToVariadic(Operation *op) {
   if (!lhs || !rhs)
     return failure();
 
-  return setLoweringTo<ResultOpType>(op, ValueRange({lhs, rhs}), std::vector<NamedAttribute>{});
+  return setLoweringTo<ResultOpType>(op, ValueRange({lhs, rhs}),
+                                     ArrayRef<NamedAttribute>{});
 }
 
 template <typename ResultOpType>
@@ -333,6 +332,7 @@ LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
 
   return setLoweringTo<rtl::ConcatOp>(op, ValueRange({lhs, rhs}));
 }
+
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
@@ -401,4 +401,57 @@ LogicalResult FIRRTLLowering::visitExpr(TailPrimOp op) {
   auto inWidth = input.getType().cast<IntegerType>().getWidth();
   Type resultType = builder->getIntegerType(inWidth - op.getAmount());
   return setLoweringTo<rtl::ExtractOp>(op, resultType, input, 0);
+}
+
+//===----------------------------------------------------------------------===//
+// Statements
+//===----------------------------------------------------------------------===//
+
+LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
+  auto dest = getLoweredValue(op.lhs());
+
+  // The source can be a smaller integer, extend it as appropriate if so.
+  Value src = getLoweredAndExtendedValue(op.rhs(), op.lhs().getType());
+
+  if (!dest || !src)
+    return failure();
+
+  builder->create<rtl::ConnectOp>(op.getLoc(), dest, src);
+  return success();
+}
+
+// Printf is a macro op that lowers to an sv.ifdef, an sv.if, and an sv.fwrite
+// all nested together.
+LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
+  // We can only lower nullary printf's so far.
+  if (!op.operands().empty())
+    return failure();
+
+  // Emit this into an "sv.alwaysat_posedge" body.
+  auto clock = getLoweredValue(op.clock());
+  auto always = builder->create<sv::AlwaysAtPosEdgeOp>(op.getLoc(), clock);
+
+  // We're going to move insertion points.
+  auto oldIPBlock = builder->getInsertionBlock();
+  auto oldIP = builder->getInsertionPoint();
+
+  // Emit an "#ifndef SYNTHESIS" guard into the always block.
+  builder->setInsertionPointToStart(always.getBody());
+  auto ifndef = builder->create<sv::IfDefOp>(op.getLoc(), "!SYNTHESIS");
+
+  // Emit an "sv.if 'PRINTF_COND_ & cond' into the #ifndef.
+  builder->setInsertionPointToStart(ifndef.getBodyBlock());
+  auto cond = getLoweredValue(op.cond());
+  Value ifCond = builder->create<sv::TextualValueOp>(
+      op.getLoc(), cond.getType(), "PRINTF_COND_");
+  ifCond = builder->create<rtl::AndOp>(op.getLoc(), ValueRange{ifCond, cond},
+                                       ArrayRef<NamedAttribute>{});
+  auto svIf = builder->create<sv::IfOp>(op.getLoc(), ifCond);
+
+  // Emit the sv.fwrite.
+  builder->setInsertionPointToStart(svIf.getBodyBlock());
+  builder->create<sv::FWriteOp>(op.getLoc(), op.formatString());
+
+  builder->setInsertionPoint(oldIPBlock, oldIP);
+  return success();
 }

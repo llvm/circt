@@ -94,4 +94,37 @@
     // CHECK-NEXT: = rtl.concat [[CONCAT1]], [[ZERO]] : (i8, i3) -> i11
     %14 = firrtl.shl %6, 3 : (!firrtl.uint<8>) -> !firrtl.uint<11>
   }
+
+
+//   module Print :
+//    input clock: Clock
+//    input reset: UInt<1>
+//    input a: UInt<4>
+//    input b: UInt<4>
+//    printf(clock, reset, "No operands!\n")
+//    printf(clock, reset, "Hi %x %x\n", add(a, a), b)
+
+  // CHECK-LABEL: firrtl.module @Print
+  firrtl.module @Print(%clock: !firrtl.clock, %reset: !firrtl.uint<1>,
+                       %a: !firrtl.uint<4>, %b: !firrtl.uint<4>) {
+    firrtl.printf %clock, %reset, "No operands!\0A"
+
+    // CHECK-NEXT: [[CL:%.+]] = firrtl.stdIntCast %clock : (!firrtl.clock) -> i1
+    // CHECK-NEXT: sv.alwaysat_posedge [[CL]] {
+    // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
+    // CHECK-NEXT:     [[R:%.+]] = firrtl.stdIntCast %reset : (!firrtl.uint<1>) -> i1
+    // CHECK-NEXT:     [[TV:%.+]] = sv.textual_value "PRINTF_COND_" : i1
+    // CHECK-NEXT:     [[AND:%.+]] = rtl.and [[TV]], [[R]]
+    // CHECK-NEXT:     sv.if [[AND]] {
+    // CHECK-NEXT:       sv.fwrite "No operands!\0A"
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+
+    // CHECK: [[ADD:%.+]] = rtl.add
+    %0 = firrtl.add %a, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
+    firrtl.printf %clock, %reset, "Hi %x %x\0A"(%0, %b) : !firrtl.uint<5>, !firrtl.uint<4>
+    // CHECK: firrtl.printf
+  }
+
 }
