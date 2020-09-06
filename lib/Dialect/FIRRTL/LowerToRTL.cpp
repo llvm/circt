@@ -9,7 +9,6 @@
 #include "circt/Dialect/SV/Ops.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Pass/Pass.h"
-#include "llvm/Support/SaveAndRestore.h"
 using namespace circt;
 using namespace firrtl;
 

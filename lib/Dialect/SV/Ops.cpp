@@ -20,7 +20,7 @@ void IfDefOp::build(OpBuilder &odsBuilder, OperationState &result,
                     StringRef cond) {
   result.addAttribute("cond", odsBuilder.getStringAttr(cond));
   Region *body = result.addRegion();
-  IfOp::ensureTerminator(*body, odsBuilder, result.location);
+  IfDefOp::ensureTerminator(*body, odsBuilder, result.location);
 }
 
 static ParseResult parseIfDefOp(OpAsmParser &parser, OperationState &result) {
