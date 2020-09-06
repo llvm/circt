@@ -30,6 +30,14 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator]>, HasCustomParserPrinter {
   // TODO: ODS doesn't support parsing/printing regions yet :-(
   // let assemblyFormat = [{ $clock attr-dict $body }];*/
 
+  // TODO: ODS forces using a custom builder just to get the region terminator
+  // implicitly installed.
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<"OpBuilder &builder, OperationState &result, "
+              "StringRef cond">
+  ];
+
   let extraClassDeclaration = [{
     Block *getBodyBlock() { return &body().front(); }
   }];
@@ -45,6 +53,14 @@ def IfOp : SVOp<"if", [HasRegionTerminator]>,
   
   // TODO: ODS doesn't support parsing/printing regions yet :-(
   //let assemblyFormat = [{ $cond attr-dict $body }];
+
+  // TODO: ODS forces using a custom builder just to get the region terminator
+  // implicitly installed.
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<"OpBuilder &builder, OperationState &result, "
+              "Value cond">
+  ];
 
   let extraClassDeclaration = [{
     Block *getBodyBlock() { return &body().front(); }
@@ -63,6 +79,14 @@ def AlwaysAtPosEdgeOp : SVOp<"alwaysat_posedge", [HasRegionTerminator]>,
   
   // TODO: ODS doesn't support parsing/printing regions yet :-(
   //let assemblyFormat = [{ $clock attr-dict $body }];
+
+  // TODO: ODS forces using a custom builder just to get the region terminator
+  // implicitly installed.
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<"OpBuilder &builder, OperationState &result, "
+              "Value cond">
+  ];
 
   let extraClassDeclaration = [{
     Block *getBodyBlock() { return &body().front(); }

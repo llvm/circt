@@ -16,6 +16,13 @@ using namespace sv;
 //===----------------------------------------------------------------------===//
 // IfDefOp
 
+void IfDefOp::build(OpBuilder &odsBuilder, OperationState &result,
+                    StringRef cond) {
+  result.addAttribute("cond", odsBuilder.getStringAttr(cond));
+  Region *body = result.addRegion();
+  IfOp::ensureTerminator(*body, odsBuilder, result.location);
+}
+
 static ParseResult parseIfDefOp(OpAsmParser &parser, OperationState &result) {
   StringAttr cond;
   Region *body = result.addRegion();
@@ -39,6 +46,12 @@ static void printIfDefOp(OpAsmPrinter &p, IfDefOp op) {
 
 //===----------------------------------------------------------------------===//
 // IfOp
+
+void IfOp::build(OpBuilder &odsBuilder, OperationState &result, Value cond) {
+  result.addOperands(cond);
+  Region *body = result.addRegion();
+  IfOp::ensureTerminator(*body, odsBuilder, result.location);
+}
 
 static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::OperandType cond;
@@ -64,6 +77,13 @@ static void printIfOp(OpAsmPrinter &p, IfOp op) {
 
 //===----------------------------------------------------------------------===//
 // AlwaysAtPosEdgeOp
+
+void AlwaysAtPosEdgeOp::build(OpBuilder &odsBuilder, OperationState &result,
+                              Value clock) {
+  result.addOperands(clock);
+  Region *body = result.addRegion();
+  AlwaysAtPosEdgeOp::ensureTerminator(*body, odsBuilder, result.location);
+}
 
 static ParseResult parseAlwaysAtPosEdgeOp(OpAsmParser &parser,
                                           OperationState &result) {
