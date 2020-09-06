@@ -110,8 +110,8 @@ private:
   LogicalResult printDefOp(DefOp op, unsigned indentAmount = 0);
   LogicalResult printConstantOp(hir::ConstantOp op, unsigned indentAmount = 0);
   LogicalResult printForOp(ForOp op, unsigned indentAmount = 0);
-  LogicalResult printAddOp(AddOp op, unsigned indentAmount = 0);
   LogicalResult printMemReadOp(MemReadOp op, unsigned indentAmount = 0);
+  LogicalResult printAddOp(hir::AddOp op, unsigned indentAmount = 0);
   LogicalResult printMemWriteOp(MemWriteOp op, unsigned indentAmount = 0);
   LogicalResult printReturnOp(hir::ReturnOp op, unsigned indentAmount = 0);
 
@@ -176,6 +176,33 @@ LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
   // We now have one more selector input so incr the width.
   mapValueToSelWidth[mem] += 1;
   return success();
+}
+
+LogicalResult VerilogPrinter::printAddOp(hir::AddOp op, unsigned indentAmount) {
+  Value left = op.left();
+  Value right = op.right();
+  Value result = op.res();
+  Type resultType = result.getType();
+  unsigned n_result = newValueNumber();
+  mapValueToNum.insert(std::make_pair(result, n_result));
+  if (auto resultIntType = resultType.dyn_cast<IntegerType>()) {
+    unsigned resultWidth = resultIntType.getWidth();
+    module_out << "wire [" << resultWidth - 1 << " : 0] v" << n_result << " = "
+               << "v" << mapValueToNum[left] << " + "
+               << "v" << mapValueToNum[right] << ";\n";
+    return success();
+  } else if (auto resultConstType = resultType.dyn_cast<ConstType>()) {
+    if (auto elementIntType =
+            resultConstType.getElementType().dyn_cast<IntegerType>()) {
+      int leftValue = mapConstToInt[left];
+      int rightValue = mapConstToInt[right];
+      unsigned elementWidth = elementIntType.getWidth();
+      mapConstToInt.insert(std::make_pair(result, leftValue + rightValue));
+      module_out << "wire [" << elementWidth - 1 << " : 0] v" << n_result
+                 << " = " << leftValue + rightValue << ";\n";
+    }
+  }
+  return emitError(op.getLoc(), "result must be either int or const<int>!");
 }
 
 LogicalResult VerilogPrinter::printReturnOp(hir::ReturnOp op,
@@ -286,6 +313,8 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
     return printReturnOp(op, indentAmount);
   } else if (auto op = dyn_cast<hir::MemReadOp>(inst)) {
     return printMemReadOp(op, indentAmount);
+  } else if (auto op = dyn_cast<hir::AddOp>(inst)) {
+    return printAddOp(op, indentAmount);
   } else {
     return emitError(inst->getLoc(), "Unsupported Operation!");
   }

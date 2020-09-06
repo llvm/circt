@@ -37,7 +37,7 @@ hir.def @MatmulKernel at %t(
         %ab = hir.call @mult(%a_delayed, %b) at %tk : (i32, i32) -> (i32)
         %c_prev = hir.wire_read %C_bus[%k] at %tk offset %s3 : !hir.const<i32> : !hir.wire<128*i32>[!hir.const<i32>] -> i32
         %c = hir.call @add(%ab, %c_prev) at %tk offset %s3 : !hir.const<i32> : (i32, i32) -> (i32)
-        %kPlus1 = hir.const_add(%k, %s1) : (!hir.const<i32>, !hir.const<i32>) -> !hir.const<i32>
+        %kPlus1 = hir.add(%k, %s1) : (!hir.const<i32>, !hir.const<i32>) -> (!hir.const<i32>)
         hir.wire_write %c to %C_bus[%kPlus1] at %tk offset %s4 : !hir.const<i32> : (i32, !hir.wire<128*i32>[!hir.const<i32>])
       }
       %s127 = hir.constant 127 : !hir.const<i32>

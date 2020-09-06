@@ -376,33 +376,17 @@ def CastOp : HIR_Op<"cast">{
 def AddOp : HIR_Op<"add",[NoSideEffect]>{
   let summary = "Add two hir.val values";
   let description = [{
-Example:
+Examples:
+    ```mlir %1 = hir.add (%x, %y) : (i32, i32) -> (i32)```
+    ```mlir %1 = hir.add (%x, %y) : (!hir.const<i32>, !hir.conts<i32>) -> (!hir.const<i32>)```
+  }];
 
-    ```mlir %1 = hir.add (%x,1 : !hir.const -> !hir.val```
-        }];
+  let arguments = (ins AnyType: $left, AnyType:$right);
+  let results = (outs AnyType: $res);
 
-        let arguments = (ins AnyType: $left, AnyType:$right, TimeType: $tstart,
-          Optional<ConstType>:$offset);
-        let results = (outs AnyType: $res);
-
-        let assemblyFormat = [{ `at` $tstart (`offset` $offset^ `:` type($offset))? `(` $left `,`
-            $right`)` attr-dict `:` `(` type($left) `,` type($right) `)` `->` type($res)}];
-
-        }
-
-        def ConstAddOp : HIR_Op<"const_add",[NoSideEffect]>{
-        let summary = "Add two hir.const values";
-        let description = [{
-Example:
-
-```mlir %1 = hir.add (%x,%y) : !hir.const -> !hir.val```
-}];
-
-let arguments = (ins ConstType: $left, ConstType:$right);
-    let results = (outs ConstType : $res);
-
-    let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(` type($left) `,` type($right) `)` `->` type($res)}];
-    }
+  let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(`
+      type($left) `,` type($right) `)` `->` `(` type($res) `)`}];
+}
 
 def ReturnOp : HIR_Op<"return", [HasParent<"DefOp">,NoSideEffect,
     Terminator]> {
@@ -410,7 +394,7 @@ def ReturnOp : HIR_Op<"return", [HasParent<"DefOp">,NoSideEffect,
 
       let description = [{
         This instruction must be the last instruction in a block.
-          ```mlir hir.return (%x, %y): (!hir.val, !hir.val)```
+          ```mlir hir.return (%x, %y): (i32, !hir.const<i1>)```
       }];
 
       let arguments = (ins Variadic<AnyType>:$operands);
