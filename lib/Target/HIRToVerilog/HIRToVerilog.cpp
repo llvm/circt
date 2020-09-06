@@ -40,11 +40,10 @@ std::string loopCounterTemplate =
     "(prev_idx$n_loop+saved_step)"
     "\n: prev_idx$n_loop;"
     "\nwire tloop_out$n_loop = tstart$n_loop"
-    "\n|| (idx$n_loop < (tstart$n_loop?ub$n_loop"
-    "\n:saved_ub$n_loop)?tloop_in$n_loop"
+    "\n|| ((idx$n_loop < saved_ub$n_loop)?tloop_in$n_loop"
     "\n                          :1'b0);"
-    "\nalways@(posedge $clk) saved_idx$n_loop <= idx$n_loop;"
-    "\nalways@(posedge $clk) if (tstart$n_loop) begin"
+    "\nalways@(posedge clk) saved_idx$n_loop <= idx$n_loop;"
+    "\nalways@(posedge clk) if (tstart$n_loop) begin"
     "\n  saved_ub$n_loop   <= ub$n_loop;"
     "\n  saved_step <= step$n_loop;"
     "\nend"
@@ -118,6 +117,7 @@ private:
   LogicalResult printMemrefAddrSelector(Value mem, unsigned indentAmount = 0);
   LogicalResult printType(Type type);
   LogicalResult processReplacements(std::string &code);
+  LogicalResult printTimeOffsets(Value timeVar);
 
   std::stringstream module_out;
   llvm::formatted_raw_ostream &out;
@@ -133,11 +133,11 @@ private:
 LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
                                              unsigned indentAmount) {
   OperandRange addr = op.addr();
-  auto result = op.res();
-  auto mem = op.mem();
+  mlir::Value result = op.res();
+  mlir::Value mem = op.mem();
   unsigned n_mem = mapValueToNum[mem];
-  auto tstart = op.tstart();
-  auto offset = op.offset();
+  mlir::Value tstart = op.tstart();
+  mlir::Value offset = op.offset();
   int offsetValue = 0;
   if (offset) {
     auto offsetType = offset.getType();
@@ -148,13 +148,14 @@ LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
       return emitError(op.getLoc(), "offset must be a const<int>");
     offsetValue = mapConstToInt[offset];
   }
+
   unsigned oldMaxOffset = mapTimeToMaxOffset[tstart];
   mapTimeToMaxOffset[tstart] =
       (offsetValue > oldMaxOffset) ? offsetValue : oldMaxOffset;
   module_out << "assign v_addr" << n_mem << "_sel_valid["
              << mapValueToSelWidth[mem] << "] = "
-             << "t" << mapValueToNum[tstart] << "offset" << offsetValue
-             << ";\n";
+             << "t" << mapValueToNum[tstart] << "offset[" << offsetValue
+             << "];\n";
   mapValueToSelWidth[mem] += 1;
   // To solve:
   // - How to get the tstart+offset right?
@@ -254,7 +255,7 @@ LogicalResult VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
   if (n_tstep >= 0)
     loopCounterStream << "assign tloop_in$n_loop = "
                          "count_delay#(.WIDTH_input(1),.WIDTH_DELAY($width_"
-                         "tstep))($tloop_out$n_loop, v$n_tstep);\n";
+                         "tstep))(tloop_out$n_loop, v$n_tstep);\n";
 
   std::string loopCounterString = loopCounterStream.str();
   findAndReplaceAll(loopCounterString, "$n_loop", std::to_string(n_loop));
@@ -275,6 +276,7 @@ LogicalResult VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
   module_out << "\n//Loop" << n_loop << " begin\n";
   module_out << loopCounterString;
   module_out << "\n//Loop" << n_loop << " body\n";
+  printTimeOffsets(tloop);
   printBody(op.getLoopBody().front(), indentAmount);
   module_out << "\n//Loop" << n_loop << " end\n";
   return success();
@@ -357,7 +359,8 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
   for (auto arg : args)
     if (arg.getType().isa<hir::MemrefType>())
       printMemrefAddrSelector(arg);
-
+  Value tstart = args.back();
+  printTimeOffsets(tstart);
   printBody(entryBlock);
   module_out << "endmodule\n";
 
@@ -366,6 +369,27 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
   processReplacements(code);
   out << code;
   return success();
+}
+
+LogicalResult VerilogPrinter::printTimeOffsets(Value timeVar) {
+  unsigned loc = replaceLocs.size();
+  unsigned n_timeVar = mapValueToNum[timeVar];
+  module_out << "reg t" << n_timeVar << "offset[$loc" << loc << "];\n";
+  module_out << "always@(*) "
+             << "t" << n_timeVar << "offset[0] <= t" << n_timeVar << ";\n";
+  unsigned n_i = newValueNumber();
+  module_out << "genvar i" << n_i<<";\n";
+  module_out << "\ngenerate for(i"<<n_i<<" = 1; i" <<n_i << "< $loc"<<loc <<"; i++) begin\n";
+  module_out << "always@(clk) begin\n";
+  module_out << "t" << n_timeVar << "offset[i" <<n_i << "] <= " 
+    << "t" << n_timeVar << "offset[i" << n_i-1<<"];\n";
+  module_out << "end\n";
+  module_out << "end\n";
+  module_out << "endgenerate\n\n";
+
+  replaceLocs.push_back(std::make_pair(loc, [=]() -> std::string {
+    return std::to_string(mapTimeToMaxOffset[timeVar]+1);
+  }));
 }
 
 LogicalResult VerilogPrinter::processReplacements(std::string &code) {
@@ -387,7 +411,7 @@ LogicalResult VerilogPrinter::printMemrefAddrSelector(Value mem,
   hir::Details::PortKind port = memrefTy.getPort();
   unsigned addrWidth = calcAddrWidth(memrefTy);
   unsigned loc = replaceLocs.size();
-  replaceLocs.push_back(std::make_pair(loc, [=, this]() -> std::string {
+  replaceLocs.push_back(std::make_pair(loc, [=]() -> std::string {
     unsigned selWidth = mapValueToSelWidth[mem];
     if (selWidth == 0)
       return "";
