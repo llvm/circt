@@ -309,6 +309,8 @@ public:
   void emitStatement(sv::IfOp op);
   void emitStatement(sv::AlwaysAtPosEdgeOp op);
   void emitStatement(sv::FWriteOp op);
+  void emitStatement(sv::FatalOp op);
+  void emitStatement(sv::FinishOp op);
   void emitDecl(NodeOp op);
   void emitDecl(InstanceOp op);
   void emitDecl(RegOp op);
@@ -1428,6 +1430,20 @@ void ModuleEmitter::emitStatement(sv::FWriteOp op) {
   emitLocationInfoAndNewLine(ops);
 }
 
+void ModuleEmitter::emitStatement(sv::FatalOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  indent() << "$fatal;";
+  emitLocationInfoAndNewLine(ops);
+}
+
+void ModuleEmitter::emitStatement(sv::FinishOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  indent() << "$finish;";
+  emitLocationInfoAndNewLine(ops);
+}
+
 void ModuleEmitter::emitStatement(sv::IfDefOp op) {
   auto cond = op.cond();
 
@@ -1460,7 +1476,8 @@ static void emitBeginEndRegion(Block *block,
     // Not all expressions and statements are guaranteed to emit a single
     // Verilog statement (for the purposes of if statements).  Just do a simple
     // check here for now.  This can be improved over time.
-    return isa<sv::FWriteOp>(op);
+    return isa<sv::FWriteOp>(op) || isa<sv::FinishOp>(op) ||
+           isa<sv::FatalOp>(op);
   };
 
   // Determine if we can omit the begin/end keywords.
@@ -2036,6 +2053,8 @@ void ModuleEmitter::emitOperation(Operation *op) {
       return emitter.emitStatement(op), true;
     }
     bool visitSV(sv::FWriteOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::FatalOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::FinishOp op) { return emitter.emitStatement(op), true; }
 
     bool visitUnhandledSV(Operation *op) { return false; }
     bool visitInvalidSV(Operation *op) { return false; }

@@ -112,7 +112,7 @@
     // CHECK-NEXT: sv.alwaysat_posedge [[CL]] {
     // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
     // CHECK-NEXT:     [[R:%.+]] = firrtl.stdIntCast %reset : (!firrtl.uint<1>) -> i1
-    // CHECK-NEXT:     [[TV:%.+]] = sv.textual_value "PRINTF_COND_" : i1
+    // CHECK-NEXT:     [[TV:%.+]] = sv.textual_value "`PRINTF_COND_" : i1
     // CHECK-NEXT:     [[AND:%.+]] = rtl.and [[TV]], [[R]]
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       sv.fwrite "No operands!\0A"
@@ -126,5 +126,43 @@
 
     // CHECK: sv.fwrite "Hi %x %x\0A"({{.*}}) : i5, i4
     firrtl.printf %clock, %reset, "Hi %x %x\0A"(%0, %b) : !firrtl.uint<5>, !firrtl.uint<4>
+  }
+
+
+
+// module Stop3 :
+//    input clock1: Clock
+//    input clock2: Clock
+//    input reset: UInt<1>
+//    stop(clock1, reset, 42)
+//    stop(clock2, reset, 0)
+
+  // CHECK-LABEL: firrtl.module @Stop
+  firrtl.module @Stop(%clock1: !firrtl.clock, %clock2: !firrtl.clock, %reset: !firrtl.uint<1>) {
+    // CHECK-NEXT: %0 = firrtl.stdIntCast %clock1 : (!firrtl.clock) -> i1
+    // CHECK-NEXT: sv.alwaysat_posedge %0 {
+    // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
+    // CHECK-NEXT:     %2 = firrtl.stdIntCast %reset : (!firrtl.uint<1>) -> i1
+    // CHECK-NEXT:     %3 = sv.textual_value "`STOP_COND_" : i1
+    // CHECK-NEXT:     %4 = rtl.and %3, %2 : i1
+    // CHECK-NEXT:     sv.if %4 {
+    // CHECK-NEXT:       sv.fatal
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    firrtl.stop %clock1, %reset, 42
+
+    // CHECK-NEXT: %1 = firrtl.stdIntCast %clock2 : (!firrtl.clock) -> i1
+    // CHECK-NEXT: sv.alwaysat_posedge %1 {
+    // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
+    // CHECK-NEXT:     %2 = firrtl.stdIntCast %reset : (!firrtl.uint<1>) -> i1
+    // CHECK-NEXT:     %3 = sv.textual_value "`STOP_COND_" : i1
+    // CHECK-NEXT:     %4 = rtl.and %3, %2 : i1
+    // CHECK-NEXT:     sv.if %4 {
+    // CHECK-NEXT:       sv.finish
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    firrtl.stop %clock2, %reset, 0
   }
 }

@@ -4,6 +4,12 @@ firrtl.circuit "Circuit" {
   // CHECK-LABEL: module M1(
   firrtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
 
+    // CHECK:      always @(posedge clock) begin
+    // CHECK-NEXT:   #ifndef SYNTHESIS
+    // CHECK-NEXT:     if (PRINTF_COND_ & cond)
+    // CHECK-NEXT:       $fwrite(32'h80000002, "Hi\n");
+    // CHECK-NEXT:   #endif
+    // CHECK-NEXT: end // always @(posedge)
     sv.alwaysat_posedge %clock {
       sv.ifdef "!SYNTHESIS" {
         %tmp = sv.textual_value "PRINTF_COND_" : i1
@@ -14,23 +20,21 @@ firrtl.circuit "Circuit" {
       }
     }
 
-    // CHECK:      always @(posedge clock) begin
-    // CHECK-NEXT:   #ifndef SYNTHESIS
-    // CHECK-NEXT:     if (PRINTF_COND_ & cond)
-    // CHECK-NEXT:       $fwrite(32'h80000002, "Hi\n");
-    // CHECK-NEXT:   #endif
-    // CHECK-NEXT: end // always @(posedge)
+    // CHECK-NEXT:   if (cond) begin
     sv.if %cond {
+      // CHECK-NEXT:     $fwrite(32'h80000002, "Hi\n");
       sv.fwrite "Hi\n"
 
+      // CHECK-NEXT:     $fwrite(32'h80000002, "Bye %x\n", val + val);
       %tmp = rtl.add %val, %val : i8
       sv.fwrite "Bye %x\n"(%tmp) : i8 
-    }
 
-    // CHECK-NEXT:   if (cond) begin
-    // CHECK-NEXT:     $fwrite(32'h80000002, "Hi\n");
-    // CHECK-NEXT:     $fwrite(32'h80000002, "Bye %x\n", val + val);
-    // CHECK-NEXT:   end
+      // CHECK-NEXT:   $fatal
+      sv.fatal
+      // CHECK-NEXT:   $finish
+      sv.finish
+      // CHECK-NEXT:   end
+    }
   }
 }
 

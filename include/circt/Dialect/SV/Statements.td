@@ -108,7 +108,7 @@ def YieldOp
 
 // TODO: This needs to model the file descriptor to write on.  This is currently
 // hard coded to 32'h80000002.
-def FWriteOp : SVOp<"fwrite", []> {
+def FWriteOp : SVOp<"fwrite"> {
   let summary = "'$fwrite' statement";
    
   let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands);
@@ -117,4 +117,28 @@ def FWriteOp : SVOp<"fwrite", []> {
   let assemblyFormat = [{
     $string attr-dict (`(` $operands^ `)` `:` type($operands))?
   }];
+}
+
+def FinishOp : SVOp<"finish"> {
+  let summary = "'$finish' statement";
+  let description = [{
+    Finishes a simulation and exits the simulation process.
+  }];
+
+  let arguments = (ins);
+  let results = (outs);
+
+  let assemblyFormat = [{ attr-dict }];
+}
+
+def FatalOp : SVOp<"fatal"> {
+  let summary = "'$fatal' statement";
+  let description = [{
+    Run-time fatal assertion error.
+  }];
+
+  let arguments = (ins);
+  let results = (outs);
+
+  let assemblyFormat = [{ attr-dict }];
 }

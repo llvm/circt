@@ -24,9 +24,10 @@ public:
                        // Control flow.
                        IfDefOp, IfOp, AlwaysAtPosEdgeOp,
                        // Other Statements.
-                       YieldOp, FWriteOp>([&](auto expr) -> ResultType {
-          return thisCast->visitSV(expr, args...);
-        })
+                       YieldOp, FWriteOp, FatalOp, FinishOp>(
+            [&](auto expr) -> ResultType {
+              return thisCast->visitSV(expr, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidSV(op, args...);
         });
@@ -60,6 +61,8 @@ public:
   // Other Statements.
   HANDLE(YieldOp, Unhandled);
   HANDLE(FWriteOp, Unhandled);
+  HANDLE(FatalOp, Unhandled);
+  HANDLE(FinishOp, Unhandled);
 #undef HANDLE
 };
 

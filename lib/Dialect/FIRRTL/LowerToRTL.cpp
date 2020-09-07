@@ -81,6 +81,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   // Statements
   LogicalResult visitStmt(ConnectOp op);
   LogicalResult visitStmt(PrintFOp op);
+  LogicalResult visitStmt(StopOp op);
 
 private:
   /// This builder is set to the right location for each visit call.
@@ -427,18 +428,17 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   auto always = builder->create<sv::AlwaysAtPosEdgeOp>(op.getLoc(), clock);
 
   // We're going to move insertion points.
-  auto oldIPBlock = builder->getInsertionBlock();
-  auto oldIP = builder->getInsertionPoint();
+  auto oldIP = &*builder->getInsertionPoint();
 
   // Emit an "#ifndef SYNTHESIS" guard into the always block.
   builder->setInsertionPointToStart(always.getBody());
   auto ifndef = builder->create<sv::IfDefOp>(op.getLoc(), "!SYNTHESIS");
 
-  // Emit an "sv.if 'PRINTF_COND_ & cond' into the #ifndef.
+  // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
   builder->setInsertionPointToStart(ifndef.getBodyBlock());
   auto cond = getLoweredValue(op.cond());
   Value ifCond = builder->create<sv::TextualValueOp>(
-      op.getLoc(), cond.getType(), "PRINTF_COND_");
+      op.getLoc(), cond.getType(), "`PRINTF_COND_");
   ifCond = builder->create<rtl::AndOp>(op.getLoc(), ValueRange{ifCond, cond},
                                        ArrayRef<NamedAttribute>{});
   auto svIf = builder->create<sv::IfOp>(op.getLoc(), ifCond);
@@ -452,6 +452,41 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
 
   builder->create<sv::FWriteOp>(op.getLoc(), op.formatString(), operands);
 
-  builder->setInsertionPoint(oldIPBlock, oldIP);
+  builder->setInsertionPoint(oldIP);
+  return success();
+}
+
+// Stop lowers into a nested series of behavioral statements plus $fatal or
+// $finish.
+LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
+  // Emit this into an "sv.alwaysat_posedge" body.
+  auto clock = getLoweredValue(op.clock());
+  auto always = builder->create<sv::AlwaysAtPosEdgeOp>(op.getLoc(), clock);
+
+  // We're going to move insertion points.
+  auto oldIP = &*builder->getInsertionPoint();
+
+  // Emit an "#ifndef SYNTHESIS" guard into the always block.
+  builder->setInsertionPointToStart(always.getBody());
+  auto ifndef = builder->create<sv::IfDefOp>(op.getLoc(), "!SYNTHESIS");
+
+  // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
+  builder->setInsertionPointToStart(ifndef.getBodyBlock());
+  auto cond = getLoweredValue(op.cond());
+  Value ifCond = builder->create<sv::TextualValueOp>(
+      op.getLoc(), cond.getType(), "`STOP_COND_");
+  ifCond = builder->create<rtl::AndOp>(op.getLoc(), ValueRange{ifCond, cond},
+                                       ArrayRef<NamedAttribute>{});
+  auto svIf = builder->create<sv::IfOp>(op.getLoc(), ifCond);
+
+  // Emit the sv.fatal or sv.finish.
+  builder->setInsertionPointToStart(svIf.getBodyBlock());
+
+  if (op.exitCode().getLimitedValue())
+    builder->create<sv::FatalOp>(op.getLoc());
+  else
+    builder->create<sv::FinishOp>(op.getLoc());
+
+  builder->setInsertionPoint(oldIP);
   return success();
 }
