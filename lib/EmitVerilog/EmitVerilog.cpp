@@ -1797,7 +1797,8 @@ static bool isExpressionUnableToInline(Operation *op) {
     // "a vector, packed array, packed structure, parameter or concatenation".
     // It cannot be an arbitrary expression.
     if (isa<HeadPrimOp>(user) || isa<TailPrimOp>(user) ||
-        isa<ShrPrimOp>(user) || isa<BitsPrimOp>(user))
+        isa<ShrPrimOp>(user) || isa<BitsPrimOp>(user) ||
+        isa<rtl::ExtractOp>(user))
       if (!isOkToBitSelectFrom(op))
         return true;
 

@@ -75,6 +75,20 @@ firrtl.circuit "Circuit" {
   // CHECK-NEXT:  assign y = _T_0 ^ (_T | _T_0) ^ 8'h2A ^ q[15:8];
   // CHECK-NEXT:endmodule
 
+  // The "_T" value is singly used, but Verilog can't bit extract out of a not,
+  // so an explicit temporary is required.
+
+  // CHECK-LABEL: module ExtractCrash(
+  // CHECK: wire [3:0] _T = ~a;
+  // CHECK-NEXT: assign b = _T[3:2];
+  firrtl.module @ExtractCrash(%a: !firrtl.uint<4>, %b: !firrtl.flip<uint<1>>) {
+    %26 = firrtl.not %a : (!firrtl.uint<4>) -> !firrtl.uint<4>
+    %27 = firrtl.stdIntCast %26 : (!firrtl.uint<4>) -> i4
+    %28 = rtl.extract %27 from 2 : (i4) -> i2
+    %29 = firrtl.stdIntCast %b : (!firrtl.flip<uint<1>>) -> i1
+    %30 = firrtl.stdIntCast %28 : (i2) -> !firrtl.uint<2>
+    firrtl.connect %b, %30 : !firrtl.flip<uint<1>>, !firrtl.uint<2>
+  }
 }
 
 
