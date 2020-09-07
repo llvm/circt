@@ -107,8 +107,7 @@
   // CHECK-LABEL: firrtl.module @Print
   firrtl.module @Print(%clock: !firrtl.clock, %reset: !firrtl.uint<1>,
                        %a: !firrtl.uint<4>, %b: !firrtl.uint<4>) {
-    firrtl.printf %clock, %reset, "No operands!\0A"
-
+ 
     // CHECK-NEXT: [[CL:%.+]] = firrtl.stdIntCast %clock : (!firrtl.clock) -> i1
     // CHECK-NEXT: sv.alwaysat_posedge [[CL]] {
     // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
@@ -120,11 +119,12 @@
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
+   firrtl.printf %clock, %reset, "No operands!\0A"
 
     // CHECK: [[ADD:%.+]] = rtl.add
     %0 = firrtl.add %a, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
-    firrtl.printf %clock, %reset, "Hi %x %x\0A"(%0, %b) : !firrtl.uint<5>, !firrtl.uint<4>
-    // CHECK: firrtl.printf
-  }
 
+    // CHECK: sv.fwrite "Hi %x %x\0A"({{.*}}) : i5, i4
+    firrtl.printf %clock, %reset, "Hi %x %x\0A"(%0, %b) : !firrtl.uint<5>, !firrtl.uint<4>
+  }
 }

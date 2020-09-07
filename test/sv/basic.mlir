@@ -17,6 +17,9 @@ func @test1(%arg0: i1, %arg1: i1) {
       %tmp2 = rtl.and %tmp, %arg1 : i1
       sv.if %tmp2 {
         sv.fwrite "Hi\n" 
+
+        // Test fwrite with operands.
+        sv.fwrite "%x"(%tmp2) : i1
       }
     }
   }
@@ -27,10 +30,10 @@ func @test1(%arg0: i1, %arg1: i1) {
   // CHECK-NEXT:     %1 = rtl.and %0, %arg1 : i1
   // CHECK-NEXT:     sv.if %1 {
   // CHECK-NEXT:       sv.fwrite "Hi\0A" 
+  // CHECK-NEXT:       sv.fwrite "%x"(%1) : i1
   // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
-
 
 
 // Smoke test generic syntax.

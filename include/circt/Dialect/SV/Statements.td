@@ -106,15 +106,15 @@ def YieldOp
    let assemblyFormat = [{attr-dict}];
 }
 
-// TODO: This needs to model the file descriptor to write on as well as the
-// arguments.
+// TODO: This needs to model the file descriptor to write on.  This is currently
+// hard coded to 32'h80000002.
 def FWriteOp : SVOp<"fwrite", []> {
   let summary = "'$fwrite' statement";
    
-  let arguments = (ins StrAttr:$string);
+  let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands);
   let results = (outs);
 
   let assemblyFormat = [{
-    $string attr-dict
+    $string attr-dict (`(` $operands^ `)` `:` type($operands))?
   }];
 }

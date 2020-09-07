@@ -422,10 +422,6 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
 // Printf is a macro op that lowers to an sv.ifdef, an sv.if, and an sv.fwrite
 // all nested together.
 LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
-  // We can only lower nullary printf's so far.
-  if (!op.operands().empty())
-    return failure();
-
   // Emit this into an "sv.alwaysat_posedge" body.
   auto clock = getLoweredValue(op.clock());
   auto always = builder->create<sv::AlwaysAtPosEdgeOp>(op.getLoc(), clock);
@@ -449,7 +445,12 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
 
   // Emit the sv.fwrite.
   builder->setInsertionPointToStart(svIf.getBodyBlock());
-  builder->create<sv::FWriteOp>(op.getLoc(), op.formatString());
+  SmallVector<Value, 4> operands;
+  operands.reserve(op.operands().size());
+  for (auto operand : op.operands())
+    operands.push_back(getLoweredValue(operand));
+
+  builder->create<sv::FWriteOp>(op.getLoc(), op.formatString(), operands);
 
   builder->setInsertionPoint(oldIPBlock, oldIP);
   return success();

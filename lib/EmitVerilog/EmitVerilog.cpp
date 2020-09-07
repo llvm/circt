@@ -1419,7 +1419,12 @@ void ModuleEmitter::emitStatement(sv::FWriteOp op) {
 
   indent() << "$fwrite(32'h80000002, \"";
   os.write_escaped(op.string());
-  os << "\");";
+  os << '"';
+
+  for (auto operand : op.operands()) {
+    os << ", " << emitExpressionToString(operand, ops);
+  }
+  os << ");";
   emitLocationInfoAndNewLine(ops);
 }
 
