@@ -207,10 +207,14 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
   if (srcWidth == destWidth)
     return result;
 
-  assert(srcWidth < destWidth && "Only extensions");
+  auto loc = builder->getInsertionPoint()->getLoc();
+  if (srcWidth > destWidth) {
+    emitError(loc) << "operand should not be a truncation";
+    return {};
+  }
+
   auto resultType = builder->getIntegerType(destWidth);
 
-  auto loc = builder->getInsertionPoint()->getLoc();
   if (destIntType.isSigned())
     return builder->create<rtl::SExtOp>(loc, resultType, result);
 
@@ -425,6 +429,18 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
 LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   // Emit this into an "sv.alwaysat_posedge" body.
   auto clock = getLoweredValue(op.clock());
+  auto cond = getLoweredValue(op.cond());
+  if (!clock || !cond)
+    return failure();
+
+  SmallVector<Value, 4> operands;
+  operands.reserve(op.operands().size());
+  for (auto operand : op.operands()) {
+    operands.push_back(getLoweredValue(operand));
+    if (!operands.back())
+      return failure();
+  }
+
   auto always = builder->create<sv::AlwaysAtPosEdgeOp>(op.getLoc(), clock);
 
   // We're going to move insertion points.
@@ -436,7 +452,6 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
 
   // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
   builder->setInsertionPointToStart(ifndef.getBodyBlock());
-  auto cond = getLoweredValue(op.cond());
   Value ifCond = builder->create<sv::TextualValueOp>(
       op.getLoc(), cond.getType(), "`PRINTF_COND_");
   ifCond = builder->create<rtl::AndOp>(op.getLoc(), ValueRange{ifCond, cond},
@@ -445,11 +460,6 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
 
   // Emit the sv.fwrite.
   builder->setInsertionPointToStart(svIf.getBodyBlock());
-  SmallVector<Value, 4> operands;
-  operands.reserve(op.operands().size());
-  for (auto operand : op.operands())
-    operands.push_back(getLoweredValue(operand));
-
   builder->create<sv::FWriteOp>(op.getLoc(), op.formatString(), operands);
 
   builder->setInsertionPoint(oldIP);
@@ -461,6 +471,10 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
 LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
   // Emit this into an "sv.alwaysat_posedge" body.
   auto clock = getLoweredValue(op.clock());
+  auto cond = getLoweredValue(op.cond());
+  if (!clock || !cond)
+    return failure();
+
   auto always = builder->create<sv::AlwaysAtPosEdgeOp>(op.getLoc(), clock);
 
   // We're going to move insertion points.
@@ -472,7 +486,6 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
 
   // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
   builder->setInsertionPointToStart(ifndef.getBodyBlock());
-  auto cond = getLoweredValue(op.cond());
   Value ifCond = builder->create<sv::TextualValueOp>(
       op.getLoc(), cond.getType(), "`STOP_COND_");
   ifCond = builder->create<rtl::AndOp>(op.getLoc(), ValueRange{ifCond, cond},

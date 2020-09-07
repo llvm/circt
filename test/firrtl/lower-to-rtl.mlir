@@ -109,9 +109,9 @@
                        %a: !firrtl.uint<4>, %b: !firrtl.uint<4>) {
  
     // CHECK-NEXT: [[CL:%.+]] = firrtl.stdIntCast %clock : (!firrtl.clock) -> i1
+    // CHECK-NEXT: [[R:%.+]] = firrtl.stdIntCast %reset : (!firrtl.uint<1>) -> i1
     // CHECK-NEXT: sv.alwaysat_posedge [[CL]] {
     // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
-    // CHECK-NEXT:     [[R:%.+]] = firrtl.stdIntCast %reset : (!firrtl.uint<1>) -> i1
     // CHECK-NEXT:     [[TV:%.+]] = sv.textual_value "`PRINTF_COND_" : i1
     // CHECK-NEXT:     [[AND:%.+]] = rtl.and [[TV]], [[R]]
     // CHECK-NEXT:     sv.if [[AND]] {
@@ -140,25 +140,25 @@
   // CHECK-LABEL: firrtl.module @Stop
   firrtl.module @Stop(%clock1: !firrtl.clock, %clock2: !firrtl.clock, %reset: !firrtl.uint<1>) {
     // CHECK-NEXT: %0 = firrtl.stdIntCast %clock1 : (!firrtl.clock) -> i1
+    // CHECK-NEXT: %1 = firrtl.stdIntCast %reset : (!firrtl.uint<1>) -> i1
     // CHECK-NEXT: sv.alwaysat_posedge %0 {
     // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
-    // CHECK-NEXT:     %2 = firrtl.stdIntCast %reset : (!firrtl.uint<1>) -> i1
-    // CHECK-NEXT:     %3 = sv.textual_value "`STOP_COND_" : i1
-    // CHECK-NEXT:     %4 = rtl.and %3, %2 : i1
-    // CHECK-NEXT:     sv.if %4 {
+    // CHECK-NEXT:     %4 = sv.textual_value "`STOP_COND_" : i1
+    // CHECK-NEXT:     %5 = rtl.and %4, %1 : i1
+    // CHECK-NEXT:     sv.if %5 {
     // CHECK-NEXT:       sv.fatal
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     firrtl.stop %clock1, %reset, 42
 
-    // CHECK-NEXT: %1 = firrtl.stdIntCast %clock2 : (!firrtl.clock) -> i1
-    // CHECK-NEXT: sv.alwaysat_posedge %1 {
+    // CHECK-NEXT: %2 = firrtl.stdIntCast %clock2 : (!firrtl.clock) -> i1
+    // CHECK-NEXT: %3 = firrtl.stdIntCast %reset : (!firrtl.uint<1>) -> i1
+    // CHECK-NEXT: sv.alwaysat_posedge %2 {
     // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
-    // CHECK-NEXT:     %2 = firrtl.stdIntCast %reset : (!firrtl.uint<1>) -> i1
-    // CHECK-NEXT:     %3 = sv.textual_value "`STOP_COND_" : i1
-    // CHECK-NEXT:     %4 = rtl.and %3, %2 : i1
-    // CHECK-NEXT:     sv.if %4 {
+    // CHECK-NEXT:     %4 = sv.textual_value "`STOP_COND_" : i1
+    // CHECK-NEXT:     %5 = rtl.and %4, %3 : i1
+    // CHECK-NEXT:     sv.if %5 {
     // CHECK-NEXT:       sv.finish
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
