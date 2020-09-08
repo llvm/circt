@@ -51,6 +51,7 @@ std::string loopCounterTemplate =
     "\nwire t$n_loop = tloop_out$n_loop;"
     "\nwire[$msb_idx:0] v$n_loop = idx$n_loop;\n";
 
+static unsigned max(unsigned x, unsigned y) { return x > y ? x : y; }
 static void findAndReplaceAll(std::string &data, std::string toSearch,
                               std::string replaceStr) {
   // Get the first occurrence.
@@ -64,16 +65,16 @@ static void findAndReplaceAll(std::string &data, std::string toSearch,
   }
 }
 
-static bool getBitWidth(Type ty, unsigned &bitwidth) {
+static unsigned getBitWidth(Type ty) {
+  unsigned bitwidth = 0;
   if (auto intTy = ty.dyn_cast<IntegerType>()) {
     bitwidth = intTy.getWidth();
-    return true;
   } else if (auto memrefTy = ty.dyn_cast<MemrefType>()) {
-    return getBitWidth(memrefTy.getElementType(), bitwidth);
+    bitwidth = getBitWidth(memrefTy.getElementType());
   } else if (auto constTy = ty.dyn_cast<ConstType>()) {
-    return getBitWidth(constTy.getElementType(), bitwidth);
+    bitwidth = getBitWidth(constTy.getElementType());
   }
-  return false;
+  return bitwidth;
 }
 
 static unsigned calcAddrWidth(hir::MemrefType memrefTy) {
@@ -81,8 +82,7 @@ static unsigned calcAddrWidth(hir::MemrefType memrefTy) {
   auto shape = memrefTy.getShape();
   auto elementType = memrefTy.getElementType();
   auto packing = memrefTy.getPacking();
-  unsigned elementWidth;
-  getBitWidth(elementType, elementWidth);
+  unsigned elementWidth = getBitWidth(elementType);
   int max_dim = shape.size() - 1;
   unsigned addrWidth = 0;
   for (auto dim : packing) {
@@ -93,6 +93,12 @@ static unsigned calcAddrWidth(hir::MemrefType memrefTy) {
   }
   return addrWidth;
 }
+
+/// Keeps track of the number of mem_reads and mem_writes on a memref.
+struct MemrefParams {
+  unsigned numReads = 0;
+  unsigned numWrites = 0;
+};
 
 /// This class is the verilog output printer for the HIR dialect. It walks
 /// throught the module and prints the verilog in the 'out' variable.
@@ -127,9 +133,8 @@ private:
   unsigned nextValueNum = 0;
   llvm::DenseMap<Value, unsigned> mapValueToNum;
   llvm::DenseMap<Value, int> mapConstToInt;
-  llvm::DenseMap<Value, unsigned> mapValueToSelWidth;
+  llvm::DenseMap<Value, MemrefParams> mapValueToMemrefParams;
   llvm::DenseMap<Value, unsigned> mapTimeToMaxOffset;
-
   SmallVector<std::pair<unsigned, std::function<std::string()>>, 4> replaceLocs;
 };
 
@@ -138,29 +143,31 @@ LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
   OperandRange addr = op.addr();
   mlir::Value result = op.res();
   mlir::Value mem = op.mem();
-  unsigned n_mem = mapValueToNum[mem];
   mlir::Value tstart = op.tstart();
   mlir::Value offset = op.offset();
-  int offsetValue = 0;
-  if (offset) {
-    auto offsetType = offset.getType();
-    if (!offsetType.isa<hir::ConstType>())
-      return emitError(op.getLoc(), "offset must be a const<int>");
-    Type elementType = offsetType.dyn_cast<hir::ConstType>().getElementType();
-    if (!elementType.isa<IntegerType>())
-      return emitError(op.getLoc(), "offset must be a const<int>");
-    offsetValue = mapConstToInt[offset];
-  }
 
-  unsigned oldMaxOffset = mapTimeToMaxOffset[tstart];
-  mapTimeToMaxOffset[tstart] =
-      (offsetValue > oldMaxOffset) ? offsetValue : oldMaxOffset;
-  module_out << "assign v_addr" << n_mem << "_sel_valid["
-             << mapValueToSelWidth[mem] << "] = "
-             << "t" << mapValueToNum[tstart] << "offset[" << offsetValue
-             << "];\n";
-  module_out << "assign v_addr" << n_mem << "_sel_data["
-             << mapValueToSelWidth[mem] << "] = {";
+  unsigned id_mem = mapValueToNum[mem];
+  unsigned id_tstart = mapValueToNum[tstart];
+  unsigned id_result = newValueNumber();
+
+  mapValueToNum.insert(std::make_pair(result, id_result));
+  int offsetValue = offset ? mapConstToInt[offset] : 0;
+  unsigned width_result = getBitWidth(result.getType());
+
+  mapTimeToMaxOffset[tstart] = max(offsetValue, mapTimeToMaxOffset[tstart]);
+  MemrefParams memParams = mapValueToMemrefParams[mem];
+
+  std::string v_addr_valid =
+      "v_addr" + std::to_string(id_mem) + "_valid[" +
+      std::to_string(memParams.numReads + memParams.numWrites) + "]";
+  std::string v_addr_input =
+      "v_addr" + std::to_string(id_mem) + "_input[" +
+      std::to_string(memParams.numReads + memParams.numWrites) + "]";
+  std::string t_offset = "t" + std::to_string(id_tstart) + "offset[" +
+                         std::to_string(offsetValue) + "]";
+
+  module_out << "assign " << v_addr_valid << " = " << t_offset << ";\n";
+  module_out << "assign " << v_addr_input << " = {";
   int i = 0;
   for (auto addrI : addr) {
     if (i++ > 0)
@@ -168,13 +175,75 @@ LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
     module_out << "v" << mapValueToNum[addrI];
   }
   module_out << "};\n";
-  unsigned n_result = newValueNumber();
-  mapValueToNum.insert(std::make_pair(result, n_result));
-  module_out << "assign v" << n_result << " = v_data_rd" << n_mem << "["
-             << mapValueToSelWidth[mem] << "];\n\n";
 
-  // We now have one more selector input so incr the width.
-  mapValueToSelWidth[mem] += 1;
+  std::string v_result = "v" + std::to_string(id_result);
+  std::string v_rd_en_valid = "v_rd_en_valid" + std::to_string(id_mem) + "[" +
+                              std::to_string(memParams.numReads) + "]";
+  std::string v_rd_data = "v_rd_data" + std::to_string(id_mem);
+
+  module_out << "wire[" << (width_result - 1) << ":0]" + v_result << " = "
+             << v_rd_data << ";\n\n";
+  module_out << "assign " + v_rd_en_valid << " = " << t_offset << ";\n\n";
+
+  // Increment number of reads on the memref.
+  memParams.numReads++;
+  mapValueToMemrefParams[mem] = memParams;
+  return success();
+}
+
+LogicalResult VerilogPrinter::printMemWriteOp(MemWriteOp op,
+                                              unsigned indentAmount) {
+  OperandRange addr = op.addr();
+  mlir::Value mem = op.mem();
+  mlir::Value value = op.value();
+  mlir::Value tstart = op.tstart();
+  mlir::Value offset = op.offset();
+
+  unsigned id_mem = mapValueToNum[mem];
+  unsigned id_tstart = mapValueToNum[tstart];
+  unsigned id_value = mapValueToNum[value];
+
+  int offsetValue = offset ? mapConstToInt[offset] : 0;
+
+  mapTimeToMaxOffset[tstart] = max(offsetValue, mapTimeToMaxOffset[tstart]);
+  MemrefParams memParams = mapValueToMemrefParams[mem];
+
+  std::string v_addr_valid =
+      "v_addr" + std::to_string(id_mem) + "_valid[" +
+      std::to_string(memParams.numReads + memParams.numWrites) + "]";
+  std::string v_addr_input =
+      "v_addr" + std::to_string(id_mem) + "_input[" +
+      std::to_string(memParams.numReads + memParams.numWrites) + "]";
+  std::string t_offset = "t" + std::to_string(id_tstart) + "offset[" +
+                         std::to_string(offsetValue) + "]";
+
+  module_out << "assign " << v_addr_valid << " = " << t_offset << ";\n";
+  module_out << "assign " << v_addr_input << " = {";
+  int i = 0;
+  for (auto addrI : addr) {
+    if (i++ > 0)
+      module_out << ", ";
+    module_out << "v" << mapValueToNum[addrI];
+  }
+  module_out << "};\n";
+
+  std::string v_wr_en_valid = "v_wr_en_valid" + std::to_string(id_mem) + "[" +
+                              std::to_string(memParams.numWrites) + "]";
+  std::string v_wr_data_input = "v_wr_data" + std::to_string(id_mem) +
+                                "_input[" +
+                                std::to_string(memParams.numWrites) + "]";
+  std::string v_wr_data_valid = "v_wr_data" + std::to_string(id_mem) +
+                                "_valid[" +
+                                std::to_string(memParams.numWrites) + "]";
+  std::string v_value = "v" + id_value;
+
+  module_out << "assign " + v_wr_en_valid << " = " << t_offset << ";\n";
+  module_out << "assign " + v_wr_data_valid << " = " << t_offset << ";\n\n";
+  module_out << "assign " + v_wr_data_input << " = " << v_value << ";\n";
+
+  // Increment number of writes on the memref.
+  memParams.numWrites++;
+  mapValueToMemrefParams[mem] = memParams;
   return success();
 }
 
@@ -183,11 +252,11 @@ LogicalResult VerilogPrinter::printAddOp(hir::AddOp op, unsigned indentAmount) {
   Value right = op.right();
   Value result = op.res();
   Type resultType = result.getType();
-  unsigned n_result = newValueNumber();
-  mapValueToNum.insert(std::make_pair(result, n_result));
+  unsigned id_result = newValueNumber();
+  mapValueToNum.insert(std::make_pair(result, id_result));
   if (auto resultIntType = resultType.dyn_cast<IntegerType>()) {
     unsigned resultWidth = resultIntType.getWidth();
-    module_out << "wire [" << resultWidth - 1 << " : 0] v" << n_result << " = "
+    module_out << "wire [" << resultWidth - 1 << " : 0] v" << id_result << " = "
                << "v" << mapValueToNum[left] << " + "
                << "v" << mapValueToNum[right] << ";\n";
     return success();
@@ -198,7 +267,7 @@ LogicalResult VerilogPrinter::printAddOp(hir::AddOp op, unsigned indentAmount) {
       int rightValue = mapConstToInt[right];
       unsigned elementWidth = elementIntType.getWidth();
       mapConstToInt.insert(std::make_pair(result, leftValue + rightValue));
-      module_out << "wire [" << elementWidth - 1 << " : 0] v" << n_result
+      module_out << "wire [" << elementWidth - 1 << " : 0] v" << id_result
                  << " = " << leftValue + rightValue << ";\n";
     }
   }
@@ -235,71 +304,65 @@ LogicalResult VerilogPrinter::printConstantOp(hir::ConstantOp op,
 }
 
 LogicalResult VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
-  unsigned width_lb;
-  unsigned width_ub;
-  unsigned width_step;
-  unsigned width_tstep;
-  unsigned width_idx;
-  bool gotBitwidth = getBitWidth(op.lb().getType(), width_lb) &&
-                     getBitWidth(op.ub().getType(), width_ub) &&
-                     getBitWidth(op.step().getType(), width_step);
-  if (!gotBitwidth)
-    return emitError(
-        op.getLoc(),
-        "lb, ub and step must be either integer or const<integer>!");
-
-  if (op.tstep())
-    if (getBitWidth(op.tstep().getType(), width_tstep) == false)
-      return emitError(op.getLoc(),
-                       "tstep must be either integer or const<integer>!");
-
-  unsigned n_lb = mapValueToNum[op.lb()];
-  unsigned n_ub = mapValueToNum[op.ub()];
-  unsigned n_step = mapValueToNum[op.step()];
-  int n_tstep = op.tstep() ? mapValueToNum[op.tstep()] : -1;
-  unsigned n_tstart = mapValueToNum[op.tstart()];
+  Value lb = op.lb();
+  Value ub = op.ub();
+  Value step = op.step();
+  Value tstart = op.tstart();
+  Value tstep = op.tstep();
   Value idx = op.getInductionVar();
-  if (!getBitWidth(idx.getType(), width_idx))
-    return emitError(op.getLoc(), "loop induction var must be integer type");
   Value tloop = op.getIterTimeVar();
-  unsigned n_loop = newValueNumber();
-  mapValueToNum.insert(std::make_pair(idx, n_loop));
-  mapValueToNum.insert(std::make_pair(tloop, n_loop));
+
+  unsigned id_lb = mapValueToNum[op.lb()];
+  unsigned id_ub = mapValueToNum[op.ub()];
+  unsigned id_step = mapValueToNum[op.step()];
+  unsigned id_tstep = tstep ? mapValueToNum[op.tstep()] : -1;
+  unsigned id_tstart = mapValueToNum[op.tstart()];
+  unsigned id_loop = newValueNumber();
+
+  mapValueToNum.insert(std::make_pair(idx, id_loop));
+  mapValueToNum.insert(std::make_pair(tloop, id_loop));
+
+  unsigned width_lb = getBitWidth(op.lb().getType());
+  unsigned width_ub = getBitWidth(op.ub().getType());
+  unsigned width_step = getBitWidth(op.step().getType());
+  unsigned width_tstep = op.tstep() ? getBitWidth(op.tstep().getType()) : 0;
+  unsigned width_idx = getBitWidth(idx.getType());
+
   if (auto idx_intTy = idx.getType().dyn_cast<IntegerType>()) {
-    module_out << "reg[" << idx_intTy.getWidth() << "] counter" << n_loop
+    module_out << "reg[" << idx_intTy.getWidth() << "] counter" << id_loop
                << ";\n";
   } else {
     return emitError(op.getLoc(), "for loop induction var must be an integer");
   }
   std::stringstream loopCounterStream;
   loopCounterStream << loopCounterTemplate;
-  if (n_tstep >= 0)
+  if (id_tstep >= 0)
     loopCounterStream << "assign tloop_in$n_loop = "
                          "count_delay#(.WIDTH_input(1),.WIDTH_DELAY($width_"
-                         "tstep))(tloop_out$n_loop, v$n_tstep);\n";
+                         "tstep))(tloop_out$n_loop, v$id_tstep);\n";
 
   std::string loopCounterString = loopCounterStream.str();
-  findAndReplaceAll(loopCounterString, "$n_loop", std::to_string(n_loop));
+  findAndReplaceAll(loopCounterString, "$n_loop", std::to_string(id_loop));
   findAndReplaceAll(loopCounterString, "$msb_idx",
                     std::to_string(width_idx - 1));
-  findAndReplaceAll(loopCounterString, "$n_lb", std::to_string(n_lb));
+  findAndReplaceAll(loopCounterString, "$n_lb", std::to_string(id_lb));
   findAndReplaceAll(loopCounterString, "$msb_lb", std::to_string(width_lb - 1));
-  findAndReplaceAll(loopCounterString, "$n_ub", std::to_string(n_ub));
+  findAndReplaceAll(loopCounterString, "$n_ub", std::to_string(id_ub));
   findAndReplaceAll(loopCounterString, "$msb_ub", std::to_string(width_ub - 1));
-  findAndReplaceAll(loopCounterString, "$n_step", std::to_string(n_step));
+  findAndReplaceAll(loopCounterString, "$n_step", std::to_string(id_step));
   findAndReplaceAll(loopCounterString, "$msb_step",
                     std::to_string(width_step - 1));
-  findAndReplaceAll(loopCounterString, "$n_tstart", std::to_string(n_tstart));
-  if (n_tstep >= 0)
-    findAndReplaceAll(loopCounterString, "$n_tstep", std::to_string(n_tstep));
+  findAndReplaceAll(loopCounterString, "$n_tstart", std::to_string(id_tstart));
+  if (id_tstep >= 0)
+    findAndReplaceAll(loopCounterString, "$id_tstep", std::to_string(id_tstep));
   findAndReplaceAll(loopCounterString, "$width_tstep",
                     std::to_string(width_tstep));
-  module_out << "\n//Loop" << n_loop << " begin\n";
+  module_out << "\n//Loop" << id_loop << " begin\n";
   module_out << loopCounterString;
-  module_out << "\n//Loop" << n_loop << " body\n";
+  module_out << "\n//Loop" << id_loop << " body\n";
   printTimeOffsets(tloop);
   printBody(op.getLoopBody().front(), indentAmount);
-  module_out << "\n//Loop" << n_loop << " end\n";
+  module_out << "\n//Loop" << id_loop << " end\n";
   return success();
 }
 
@@ -355,20 +418,16 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
                  << valueNumber;
       module_out << ",\noutput wire v_addr" << valueNumber << "_valid";
       if (port == hir::Details::r || port == hir::Details::rw) {
-        bool bitwidth_valid = getBitWidth(argType, bitwidth);
-        if (!bitwidth_valid)
-          return emitError(op.getLoc(), "Unsupported argument type!");
+        getBitWidth(argType, bitwidth);
         module_out << ",\n"
                    << "input wire[" << bitwidth - 1 << ":0]  ";
-        module_out << "v_data_rd" << valueNumber;
+        module_out << "v_rd_data" << valueNumber;
       }
       if (port == hir::Details::w || port == hir::Details::rw) {
-        bool bitwidth_valid = getBitWidth(argType, bitwidth);
-        if (!bitwidth_valid)
-          return emitError(op.getLoc(), "Unsupported argument type!");
+        getBitWidth(argType, bitwidth);
         module_out << ",\n"
                    << "output wire[" << bitwidth - 1 << ":0]  ";
-        module_out << "v_data_wr" << valueNumber;
+        module_out << "v_wr_data" << valueNumber;
       }
     } else {
       return emitError(op.getLoc(), "Unsupported argument type!");
@@ -396,17 +455,17 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
 
 LogicalResult VerilogPrinter::printTimeOffsets(Value timeVar) {
   unsigned loc = replaceLocs.size();
-  unsigned n_timeVar = mapValueToNum[timeVar];
-  module_out << "reg t" << n_timeVar << "offset[$loc" << loc << "];\n";
+  unsigned id_timeVar = mapValueToNum[timeVar];
+  module_out << "reg t" << id_timeVar << "offset[$loc" << loc << "];\n";
   module_out << "always@(*) "
-             << "t" << n_timeVar << "offset[0] <= t" << n_timeVar << ";\n";
-  unsigned n_i = newValueNumber();
-  module_out << "genvar i" << n_i << ";\n";
-  module_out << "\ngenerate for(i" << n_i << " = 1; i" << n_i << "< $loc" << loc
-             << "; i++) begin\n";
+             << "t" << id_timeVar << "offset[0] <= t" << id_timeVar << ";\n";
+  unsigned id_i = newValueNumber();
+  module_out << "genvar i" << id_i << ";\n";
+  module_out << "\ngenerate for(i" << id_i << " = 1; i" << id_i << "< $loc"
+             << loc << "; i++) begin\n";
   module_out << "always@(clk) begin\n";
-  module_out << "t" << n_timeVar << "offset[i" << n_i << "] <= "
-             << "t" << n_timeVar << "offset[i" << n_i - 1 << "];\n";
+  module_out << "t" << id_timeVar << "offset[i" << id_i << "] <= "
+             << "t" << id_timeVar << "offset[i" << id_i - 1 << "];\n";
   module_out << "end\n";
   module_out << "end\n";
   module_out << "endgenerate\n\n";
@@ -430,38 +489,37 @@ LogicalResult VerilogPrinter::processReplacements(std::string &code) {
 
 LogicalResult VerilogPrinter::printMemrefAddrSelector(Value mem,
                                                       unsigned indentAmount) {
-  unsigned n_mem = mapValueToNum[mem];
+  unsigned id_mem = mapValueToNum[mem];
   MemrefType memrefTy = mem.getType().dyn_cast<hir::MemrefType>();
   hir::Details::PortKind port = memrefTy.getPort();
   Type elementType = memrefTy.getElementType();
   unsigned elementWidth;
-  if (!getBitWidth(elementType, elementWidth))
-    return failure();
-  unsigned addrWidth = calcAddrWidth(memrefTy);
+  getBitWidth(elementType, elementWidth) unsigned addrWidth =
+      calcAddrWidth(memrefTy);
   unsigned loc = replaceLocs.size();
   replaceLocs.push_back(std::make_pair(loc, [=]() -> std::string {
     unsigned selWidth = mapValueToSelWidth[mem];
     if (selWidth == 0)
       return "";
     std::stringstream output;
-    output << "wire[" << selWidth - 1 << ":0] v_addr" << n_mem
+    output << "wire[" << selWidth - 1 << ":0] v_addr" << id_mem
            << "_sel_valid;\n";
-    output << "assign v_addr" << n_mem << "_valid = |v_addr" << n_mem
+    output << "assign v_addr" << id_mem << "_valid = |v_addr" << id_mem
            << "_sel_valid;\n";
-    output << "wire[" << elementWidth - 1 << ":0] v_addr" << n_mem
+    output << "wire[" << elementWidth - 1 << ":0] v_addr" << id_mem
            << "_sel_data[" << selWidth - 1 << ":0];\n";
     output << "always@(*) begin\n";
-    output << " if(v_addr" << n_mem << "_sel_valid[0] == 1'b1)\n";
-    output << "   v_addr" << n_mem << " <= v_addr" << n_mem
+    output << " if(v_addr" << id_mem << "_sel_valid[0] == 1'b1)\n";
+    output << "   v_addr" << id_mem << " <= v_addr" << id_mem
            << "_sel_data[0];\n";
     for (int i = 1; i < selWidth; i++) {
-      output << " else if(v_addr" << n_mem << "_sel_valid[" << i
+      output << " else if(v_addr" << id_mem << "_sel_valid[" << i
              << "] == 1'b1)\n";
-      output << "   v_addr" << n_mem << " <= v_addr" << n_mem << "_sel_data["
+      output << "   v_addr" << id_mem << " <= v_addr" << id_mem << "_sel_data["
              << i << "];\n";
     }
     output << "  else\n";
-    output << "   v_addr" << n_mem << " <= 0;\n";
+    output << "   v_addr" << id_mem << " <= 0;\n";
     output << "end\n";
     return output.str();
   }));
