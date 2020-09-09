@@ -88,7 +88,8 @@ typedef llvm::DenseMap<mlir::Block *, std::vector<mlir::Operation *>> BlockOps;
 LogicalResult getBlockUses(handshake::FuncOp f, BlockValues &uses) {
   for (Block &block : f) {
     for (Operation &op : block) {
-      if (isa<AffineForOp, scf::ForOp, AffineYieldOp, scf::YieldOp>(op))
+      if (isa<AffineForOp, scf::ForOp, AffineYieldOp, scf::YieldOp,
+              mlir::AffineReadOpInterface, mlir::AffineWriteOpInterface>(op))
         continue;
 
       for (int i = 0, e = op.getNumOperands(); i < e; ++i) {
@@ -126,7 +127,9 @@ LogicalResult getBlockDefs(handshake::FuncOp f, BlockValues &defs) {
   for (Block &block : f) {
     // Add operation results to the DEF set.
     for (Operation &op : block) {
-      if (isa<AffineForOp, scf::ForOp, AffineYieldOp, scf::YieldOp>(op))
+      // HACK: operations of these types should have been removed.
+      if (isa<AffineForOp, scf::ForOp, AffineYieldOp, scf::YieldOp,
+              mlir::AffineReadOpInterface, mlir::AffineWriteOpInterface>(op))
         continue;
       if (op.getNumResults() > 0) {
         for (auto result : op.getResults())
@@ -231,7 +234,7 @@ Operation *insertMerge(Block *block, mlir::Value val,
     Operation *defOp = val.getDefiningOp();
     // A live-in value should have exactly a single def-op.
     assert(defOp != nullptr);
-    if (isa<StartOp>(defOp))
+    if (isa<handshake::StartOp>(defOp))
       return rewriter.create<handshake::ControlMergeOp>(block->front().getLoc(),
                                                         val, numPredecessors);
   }
@@ -958,7 +961,8 @@ void rewriteFirstUse(Operation *op, mlir::Value oldValue,
 }
 
 /// Fork the result of the Operation op and updates its future usage.
-void insertFork(Operation *op, mlir::Value result, OpBuilder &rewriter) {
+void insertFork(Operation *op, mlir::Value result, bool isLazy,
+                OpBuilder &rewriter) {
   // Get list of operations that use the given result. There could be
   // duplication since result might be used for multiple times.
   SmallVector<Operation *, 8> opsToProcess;
@@ -975,8 +979,13 @@ void insertFork(Operation *op, mlir::Value result, OpBuilder &rewriter) {
 
   // Insert handshake::ForkOp directly after op.
   rewriter.setInsertionPointAfter(op);
-  Operation *newOp =
-      rewriter.create<handshake::ForkOp>(op->getLoc(), result, numOpsToProcess);
+  Operation *newOp = nullptr;
+  if (isLazy)
+    newOp = rewriter.create<handshake::LazyForkOp>(op->getLoc(), result,
+                                                   numOpsToProcess);
+  else
+    newOp = rewriter.create<handshake::ForkOp>(op->getLoc(), result,
+                                               numOpsToProcess);
 
   // Then we modify the uses of result to change them to a specific output from
   // the new ForkOp. Same operation that has multiple uses of result will have
@@ -997,7 +1006,7 @@ void addForkOps(handshake::FuncOp f, OpBuilder &rewriter) {
           // If there is a result and it is used more than once, we insert a new
           // ForkOp.
           if (!result.use_empty() && !result.hasOneUse())
-            insertFork(&op, result, rewriter);
+            insertFork(&op, result, /*isLazy=*/false, rewriter);
         }
       }
     }
@@ -1076,11 +1085,12 @@ void removeAllocOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
   for (Block &block : f) {
     for (Operation &op : block) {
       if (isa<mlir::AllocOp>(op)) {
-        // The standard AllocOp should have exactly one use.
-        // assert(op.getResult(0).hasOneUse());
+        // The standard AllocOp should have exactly one use, and that use should
+        // have been sinked.
+        assert(op.getResult(0).hasOneUse());
         for (auto &u : op.getResult(0).getUses()) {
           Operation *useOp = u.getOwner();
-          if (auto mg = dyn_cast<SinkOp>(useOp))
+          if (auto mg = dyn_cast<handshake::SinkOp>(useOp))
             allocOps.push_back(&op);
         }
       }
@@ -1403,7 +1413,7 @@ void setMemoryControlNetwork(Operation *memOp, ArrayRef<Operation *> accessOps,
 }
 
 /// Forks the output from MemoryOp.
-void forkMemoryOpResults(handshake::FuncOp f,
+void forkMemoryOpResults(handshake::FuncOp f, bool isLazy,
                          ConversionPatternRewriter &rewriter) {
   for (Block &block : f) {
     for (Operation &op : block) {
@@ -1412,7 +1422,7 @@ void forkMemoryOpResults(handshake::FuncOp f,
         for (auto result : op.getResults()) {
           // If there is a result and it is used more than once
           if (!result.use_empty() && !result.hasOneUse()) {
-            insertFork(&op, result, rewriter);
+            insertFork(&op, result, isLazy, rewriter);
           }
         }
       }
@@ -1420,13 +1430,13 @@ void forkMemoryOpResults(handshake::FuncOp f,
   }
 }
 
-/// Connect handshake access operations to memref objects.
+/// Connect handshake access operations to memref objects. A new
+/// handshake::MemoryOp will be created for each of the original memrefs.
+/// `useLSQ` indicates whether we should create load-store queues for MemoryOps.
 void connectAccessToMemory(handshake::FuncOp f, MemToAccess &memToAccess,
-                           ConversionPatternRewriter &rewriter) {
+                           bool useLSQ, ConversionPatternRewriter &rewriter) {
   // Counter for the number of MemoryOp created.
   unsigned numMemoryOps = 0;
-  // A placeholder for the flag of load-store queue.
-  bool isLoadStoreQueue = false;
 
   // First we create new memory objects that are results of
   // handshake::MemoryOp.
@@ -1435,6 +1445,9 @@ void connectAccessToMemory(handshake::FuncOp f, MemToAccess &memToAccess,
     std::vector<Operation *> accessOps = mem.second;
 
     unsigned numAccessOps = accessOps.size();
+    // Number of control-only outputs for each access, which indicate access
+    // completion.
+    unsigned numControls = useLSQ ? 0 : numAccessOps;
 
     // The new MemoryOp will be placed at the front of the entry block.
     Block *entryBlock = &f.front();
@@ -1454,23 +1467,30 @@ void connectAccessToMemory(handshake::FuncOp f, MemToAccess &memToAccess,
     // Collect control values from the blocks of all memory access operations.
     getControlValues(accessOps, controlValues);
 
+    // In case of LSQ interface, set control values as inputs (used to trigger
+    // allocation to LSQ)
+    if (useLSQ)
+      operands.insert(operands.end(), controlValues.begin(),
+                      controlValues.end());
+
     // Create the MemoryOp object.
     // TODO: handle the case that memref is BlockArgument
-    Operation *memoryOp = rewriter.create<MemoryOp>(
+    Operation *memoryOp = rewriter.create<handshake::MemoryOp>(
         entryBlock->front().getLoc(), operands, memOpInfo.numLoadOps,
-        numAccessOps, isLoadStoreQueue, numMemoryOps, memref);
+        numControls, useLSQ, numMemoryOps, memref);
+    numMemoryOps++;
 
     // Connect the result of this newly created MemoryOp instance, which is a
     // memory in handshake, to the access operations.
     setMemoryForLoadOps(accessOps, memoryOp);
 
-    // TODO: enable the control network later.
-    setMemoryControlNetwork(memoryOp, accessOps, controlValues, indexMap,
-                            memOpInfo, rewriter);
+    if (!useLSQ)
+      setMemoryControlNetwork(memoryOp, accessOps, controlValues, indexMap,
+                              memOpInfo, rewriter);
   }
 
   // Add ForkOp to memory results that have been used more than once.
-  forkMemoryOpResults(f, rewriter);
+  forkMemoryOpResults(f, useLSQ, rewriter);
 
   removeAllocOps(f, rewriter);
   // This is called because some previously dangling results are now connected
@@ -1602,16 +1622,15 @@ public:
     addForkOps(newFuncOp, rewriter);
 
     // Connect memory access operations to newly created handshake::MemoryOp.
-    connectAccessToMemory(newFuncOp, memToAccess, rewriter);
+    // TODO: is there a way to trigger flag from CLI?
+    bool useLSQ = false;
+    connectAccessToMemory(newFuncOp, memToAccess, useLSQ, rewriter);
 
     // Rewrite the StartOp and remove its duplicantions. A bit more on why there
     // will be duplications: The single result of the StartOp will be used by
     // many operations, e.g., handshake::ConstantOp, handshake::ReturnOp, etc.
     // Changing their use to the block argument will avoid such problems.
     rewriteStartOp(newFuncOp, rewriter);
-
-    // LLVM_DEBUG(newFuncOp.dump());
-    // newFuncOp.dump();
 
     rewriter.eraseOp(funcOp);
 
@@ -1621,6 +1640,16 @@ public:
 
 struct HandshakePass
     : public mlir::PassWrapper<HandshakePass, OperationPass<mlir::ModuleOp>> {
+
+  HandshakePass() = default;
+  HandshakePass(const HandshakePass &pass) {}
+
+  // TODO: how to pass this to the ConversionPattern?
+  Option<bool> useLSQ{
+      *this, "use-lsq",
+      llvm::cl::desc("Whether to use load-store queue when building the "
+                     "memory interface.")};
+
   void runOnOperation() override {
     ModuleOp m = getOperation();
 
