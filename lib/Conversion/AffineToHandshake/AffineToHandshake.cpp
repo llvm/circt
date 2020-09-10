@@ -8,6 +8,7 @@
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/Analysis/AffineAnalysis.h"
+#include "mlir/Analysis/AffineStructures.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
@@ -1187,10 +1188,75 @@ struct MemoryOperandInfo {
   unsigned numLoadOps; // Number of load operations.
 };
 
-/// Get the operands of a MemoryOp from all the access operations that access
-/// it, which are ordered in a store-before-load sequence. The index mapping for
-/// ordering (old->new) will be stored in indexMap. Additional information will
-/// be stored in MemoryOperandInfo.
+/// Mapping from a pair of access ops to their dependence.
+/// TODO: find a more efficient data structure.
+typedef llvm::DenseMap<unsigned, std::vector<std::vector<bool>>> DependenceMap;
+
+/// Perform dependence analysis on all memory access operations. Results is a
+/// mapping between operation pairs and their dependence results. This function
+/// should be executed before AffineForOp being removed.
+void dependenceAnalysis(handshake::FuncOp f, DependenceMap &hasDeps) {
+  LLVM_DEBUG(llvm::dbgs() << "Begin dependence analysis\n";);
+  // Cache all the load and store operations.
+  SmallVector<Operation *, 8> loadAndStoreOps;
+  f.walk([&](Operation *op) {
+    if (isa<AffineReadOpInterface, AffineWriteOpInterface>(op)) {
+      loadAndStoreOps.push_back(op);
+    }
+  });
+
+  unsigned numOps = loadAndStoreOps.size();
+
+  // TODO: refactorize this mapping logic.
+  llvm::SmallVector<mlir::Value, 4> memrefs;
+  llvm::DenseMap<mlir::Value, unsigned> memIdMap;
+  llvm::DenseMap<mlir::Value, SmallVector<Operation *, 8>> memToOps;
+  for (unsigned i = 0; i < numOps; i++) {
+    Operation *op = loadAndStoreOps[i];
+    MemRefAccess access(op);
+    if (memIdMap.find(access.memref) == memIdMap.end()) {
+      memIdMap[access.memref] = memIdMap.size();
+      memrefs.push_back(access.memref);
+    }
+
+    memToOps[access.memref].push_back(op);
+  }
+
+  unsigned numMemrefs = memrefs.size();
+
+  FlatAffineConstraints depCsts;
+  for (unsigned t = 0; t < numMemrefs; t++) {
+    mlir::Value memref = memrefs[t];
+    unsigned numMemOps = memToOps[memref].size();
+
+    unsigned memId = memIdMap[memref];
+    hasDeps[memId].resize(numMemOps);
+
+    for (unsigned i = 0; i < numMemOps; i++) {
+      Operation *srcOp = memToOps[memref][i];
+      MemRefAccess srcAccess(srcOp);
+      hasDeps[memId][i].resize(numMemOps);
+
+      for (unsigned j = 0; j < numMemOps; j++) {
+        Operation *dstOp = memToOps[memref][j];
+        MemRefAccess dstAccess(dstOp);
+
+        unsigned loopDepth =
+            std::max(srcAccess.indices.size(), dstAccess.indices.size());
+
+        depCsts.reset();
+        hasDeps[memId][i][j] = hasDependence(checkMemrefAccessDependence(
+            srcAccess, dstAccess, loopDepth + 1, &depCsts, nullptr));
+      }
+    }
+  }
+  LLVM_DEBUG(llvm::dbgs() << "End dependence analysis\n";);
+}
+
+/// Get the operands of a MemoryOp from all the access operations that
+/// access it, which are ordered in a store-before-load sequence. The index
+/// mapping for ordering (old->new) will be stored in indexMap. Additional
+/// information will be stored in MemoryOperandInfo.
 void getMemoryOperandsFromAccessOps(ArrayRef<Operation *> accessOps,
                                     SmallVectorImpl<mlir::Value> &operands,
                                     SmallVectorImpl<unsigned> &indexMap,
@@ -1325,9 +1391,11 @@ void setMemoryForLoadOps(ArrayRef<Operation *> accessOps, Operation *memOp) {
 }
 
 /// Setup the control network for the MemoryOp.
-void setMemoryControlNetwork(Operation *memOp, ArrayRef<Operation *> accessOps,
+void setMemoryControlNetwork(Operation *memOp, unsigned memId,
+                             ArrayRef<Operation *> accessOps,
                              SmallVectorImpl<mlir::Value> &controlValues,
                              SmallVectorImpl<unsigned> &indexMap,
+                             DependenceMap &depMap,
                              MemoryOperandInfo &memOpInfo,
                              ConversionPatternRewriter &rewriter) {
   unsigned numAccessOps = accessOps.size();
@@ -1383,19 +1451,15 @@ void setMemoryControlNetwork(Operation *memOp, ArrayRef<Operation *> accessOps,
     Operation *controlOp = getControlOp(currBlock);
     controlOperands.push_back(controlOp->getResult(0));
 
-    // For any access op before the current one, within this block, we add their
-    // control values to the control operand list as well. This represents the
-    // dependences at some level.
+    // Use the dependence information from depMap to insert control operands
+    // here.
     for (unsigned j = 0; j < i; ++j) {
       Operation *predOp = accessOps[j];
       Block *predBlock = predOp->getBlock();
 
-      if (currBlock == predBlock) {
-        // Exclude RAR dependences. The control operand will be collected from
-        // the memory operation's output.
-        if (!(isa<handshake::LoadOp>(currOp) && isa<handshake::LoadOp>(predOp)))
-          controlOperands.push_back(
-              memOp->getResult(memOpInfo.numLoadOps + indexMap[j]));
+      if (currBlock == predBlock && depMap[memId][j][i]) {
+        controlOperands.push_back(
+            memOp->getResult(memOpInfo.numLoadOps + indexMap[j]));
       }
     }
 
@@ -1434,7 +1498,8 @@ void forkMemoryOpResults(handshake::FuncOp f, bool isLazy,
 /// handshake::MemoryOp will be created for each of the original memrefs.
 /// `useLSQ` indicates whether we should create load-store queues for MemoryOps.
 void connectAccessToMemory(handshake::FuncOp f, MemToAccess &memToAccess,
-                           bool useLSQ, ConversionPatternRewriter &rewriter) {
+                           bool useLSQ, DependenceMap &depMap,
+                           ConversionPatternRewriter &rewriter) {
   // Counter for the number of MemoryOp created.
   unsigned numMemoryOps = 0;
 
@@ -1478,15 +1543,16 @@ void connectAccessToMemory(handshake::FuncOp f, MemToAccess &memToAccess,
     Operation *memoryOp = rewriter.create<handshake::MemoryOp>(
         entryBlock->front().getLoc(), operands, memOpInfo.numLoadOps,
         numControls, useLSQ, numMemoryOps, memref);
-    numMemoryOps++;
 
     // Connect the result of this newly created MemoryOp instance, which is a
     // memory in handshake, to the access operations.
     setMemoryForLoadOps(accessOps, memoryOp);
 
     if (!useLSQ)
-      setMemoryControlNetwork(memoryOp, accessOps, controlValues, indexMap,
-                              memOpInfo, rewriter);
+      setMemoryControlNetwork(memoryOp, numMemoryOps, accessOps, controlValues,
+                              indexMap, depMap, memOpInfo, rewriter);
+
+    numMemoryOps++;
   }
 
   // Add ForkOp to memory results that have been used more than once.
@@ -1592,6 +1658,8 @@ public:
     rewriter.applySignatureConversion(&newFuncOp.getBody(), result);
 
     // Now we start to rewrite the body of this new handshake::FuncOp.
+    DependenceMap depMap;
+    dependenceAnalysis(newFuncOp, depMap);
 
     // Rewrite all the CallOp in the function body to handshake::InstanceOp.
     rewriteCallOps(newFuncOp, rewriter);
@@ -1624,7 +1692,7 @@ public:
     // Connect memory access operations to newly created handshake::MemoryOp.
     // TODO: is there a way to trigger flag from CLI?
     bool useLSQ = false;
-    connectAccessToMemory(newFuncOp, memToAccess, useLSQ, rewriter);
+    connectAccessToMemory(newFuncOp, memToAccess, useLSQ, depMap, rewriter);
 
     // Rewrite the StartOp and remove its duplicantions. A bit more on why there
     // will be duplications: The single result of the StartOp will be used by
