@@ -40,7 +40,7 @@ public:
 
   /// This callback is invoked on any invalid operations.
   ResultType visitInvalidOp(Operation *op, ExtraArgs... args) {
-    op->emitOpError("is unsupported operation.");
+    op->emitOpError("is unsupported operation");
     abort();
   }
 
@@ -108,7 +108,7 @@ public:
 
   /// This callback is invoked on any invalid operations.
   ResultType visitInvalidOp(Operation *op, ExtraArgs... args) {
-    op->emitOpError("is unsupported operation.");
+    op->emitOpError("is unsupported operation");
     abort();
   }
 
