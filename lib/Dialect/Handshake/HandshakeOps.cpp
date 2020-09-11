@@ -42,7 +42,7 @@ namespace handshake {
 //===----------------------------------------------------------------------===//
 
 HandshakeOpsDialect::HandshakeOpsDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context) {
+    : Dialect(getDialectNamespace(), context, getTypeID()) {
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/Handshake/HandshakeOps.cpp.inc"

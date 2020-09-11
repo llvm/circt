@@ -22,7 +22,7 @@ namespace staticlogic {
 } // namespace circt
 
 StaticLogicDialect::StaticLogicDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context) {
+    : Dialect(getDialectNamespace(), context, getTypeID()) {
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/StaticLogic/StaticLogic.cpp.inc"

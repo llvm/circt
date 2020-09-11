@@ -12,6 +12,7 @@
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Utils.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
 using namespace circt;
@@ -66,32 +67,33 @@ static FIRRTLType getBundleType(Type type, bool isFlip) {
     return bundleType;
 
   MLIRContext *context = type.getContext();
-  switch (type.getKind()) {
-  case StandardTypes::Integer: {
-    auto integerType = type.cast<IntegerType>();
-    unsigned width = integerType.getWidth();
+  return TypeSwitch<Type, FIRRTLType>(type)
+      .Case<IntegerType>([&](IntegerType integerType) {
+        unsigned width = integerType.getWidth();
 
-    switch (integerType.getSignedness()) {
-    case IntegerType::Signed:
-      return buildBundleType(SIntType::get(context, width), isFlip, context);
-    case IntegerType::Unsigned:
-      return buildBundleType(UIntType::get(context, width), isFlip, context);
-    // ISSUE: How to handle signless integers? Should we use the AsSIntPrimOp
-    // or AsUIntPrimOp to convert?
-    case IntegerType::Signless:
-      return buildBundleType(UIntType::get(context, width), isFlip, context);
-    }
-  }
-  // Currently we consider index type as 64-bits unsigned integer.
-  case StandardTypes::Index: {
-    unsigned width = type.cast<IndexType>().kInternalStorageBitWidth;
-    return buildBundleType(UIntType::get(context, width), isFlip, context);
-  }
-  case StandardTypes::None:
-    return buildBundleType(/*dataType=*/nullptr, isFlip, context);
-  default:
-    return FIRRTLType(nullptr);
-  }
+        switch (integerType.getSignedness()) {
+        case IntegerType::Signed:
+          return buildBundleType(SIntType::get(context, width), isFlip,
+                                 context);
+        case IntegerType::Unsigned:
+          return buildBundleType(UIntType::get(context, width), isFlip,
+                                 context);
+        // ISSUE: How to handle signless integers? Should we use the
+        // AsSIntPrimOp or AsUIntPrimOp to convert?
+        case IntegerType::Signless:
+          return buildBundleType(UIntType::get(context, width), isFlip,
+                                 context);
+        }
+      })
+      .Case<IndexType>([&](IndexType indexType) {
+        // Currently we consider index type as 64-bits unsigned integer.
+        unsigned width = indexType.kInternalStorageBitWidth;
+        return buildBundleType(UIntType::get(context, width), isFlip, context);
+      })
+      .Case<NoneType>([&](NoneType) {
+        return buildBundleType(/*dataType=*/nullptr, isFlip, context);
+      })
+      .Default([&](Type) { return FIRRTLType(nullptr); });
 }
 
 static Value createConstantOp(FIRRTLType opType, APInt value,
