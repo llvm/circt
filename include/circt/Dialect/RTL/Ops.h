@@ -18,7 +18,13 @@ namespace circt {
 namespace rtl {
 
 // This holds the name, type, direction of a module's ports
-typedef std::tuple<StringAttr, Type, StringAttr> RTLModulePortInfo;
+struct RTLModulePortInfo {
+  StringAttr name;
+  Type type;
+  StringAttr direction;
+};
+
+// typedef std::tuple<StringAttr, Type, StringAttr> RTLModulePortInfo;
 
 FunctionType getModuleType(Operation *op);
 

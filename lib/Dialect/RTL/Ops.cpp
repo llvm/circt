@@ -2,6 +2,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/FIRRTL/Ops.h"
 #include "circt/Dialect/RTL/Ops.h"
 #include "circt/Dialect/RTL/Visitors.h"
 #include "mlir/IR/Builders.h"
@@ -23,24 +24,24 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 
   SmallVector<Type, 4> argTypes;
   for (auto elt : ports)
-    argTypes.push_back(std::get<1>(elt));
+    argTypes.push_back(elt.type);
 
   // Record the argument and result types as an attribute.
-  auto type = builder.getFunctionType(argTypes, /*resultTypes*/ {});
+  auto type = builder.getFunctionType(argTypes, /*resultTypes=*/{});
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
 
   // Record the names of the arguments if present.
   SmallString<8> attrNameBuf;
   SmallString<8> attrDirBuf;
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
-    if (std::get<0>(ports[i]).getValue().empty())
+    if (ports[i].name.getValue().empty())
       continue;
 
-    auto argAttr = NamedAttribute(builder.getIdentifier("rtl.name"),
-                                  std::get<0>(ports[i]));
+    auto argAttr =
+        NamedAttribute(builder.getIdentifier("rtl.name"), ports[i].name);
 
     auto dirAttr = NamedAttribute(builder.getIdentifier("rtl.direction"),
-                                  std::get<2>(ports[i]));
+                                  ports[i].direction);
 
     result.addAttribute(getArgAttrName(i, attrNameBuf),
                         builder.getDictionaryAttr({argAttr, dirAttr}));
@@ -60,7 +61,7 @@ void rtl::RTLModuleOp::build(OpBuilder &builder, OperationState &result,
 
   // Add arguments to the body block.
   for (auto elt : ports)
-    body->addArgument(std::get<1>(elt));
+    body->addArgument(elt.type);
 
   rtl::RTLModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
@@ -120,7 +121,7 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser,
 
   // Parse the function signature.
   bool isVariadic = false;
-  if (parseFunctionSignature(parser, /*allowVariadic*/ false, entryArgs,
+  if (parseFunctionSignature(parser, /*allowVariadic=*/false, entryArgs,
                              argTypes, argAttrs, isVariadic, resultTypes,
                              resultAttrs))
     return failure();
@@ -201,7 +202,7 @@ static void printRTLModuleOp(OpAsmPrinter &p, Operation *op) {
   p << op->getName() << ' ';
   p.printSymbolName(funcName);
 
-  printFunctionSignature(p, op, argTypes, /*isVariadic*/ false, resultTypes);
+  printFunctionSignature(p, op, argTypes, /*isVariadic=*/false, resultTypes);
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size());
 }
 
@@ -213,6 +214,14 @@ static void print(OpAsmPrinter &p, RTLModuleOp op) {
   if (!body.empty())
     p.printRegion(body, /*printEntryBlockArgs=*/false,
                   /*printBlockTerminators=*/false);
+}
+
+static LogicalResult verifyRTLInstanceOp(RTLInstanceOp op) {
+  auto moduleIR = op.getParentOfType<firrtl::CircuitOp>();
+  auto referencedModule = moduleIR.lookupSymbol(op.moduleName());
+  if (!isa<rtl::RTLModuleOp>(referencedModule))
+    return failure();
+  return success();
 }
 
 /// Return true if the specified operation is a combinatorial logic op.

@@ -14,7 +14,7 @@ def RTLModuleOp : RTLOp<"module",
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<"OpBuilder &builder, OperationState &result, StringAttr name, "
-              "ArrayRef<std::tuple<StringAttr, Type, StringAttr>> ports">
+              "ArrayRef<RTLModulePortInfo> ports">
   ];
 
   let extraClassDeclaration = [{
@@ -25,7 +25,7 @@ def RTLModuleOp : RTLOp<"module",
 
     void getRTLModulePortInfo(Operation *op, SmallVectorImpl<RTLModulePortInfo> &results);
     
-    // // Decode information about the input and output ports on this module.
+    // Decode information about the input and output ports on this module.
     void getRTLPortInfo(SmallVectorImpl<RTLModulePortInfo> &results) {
       getRTLModulePortInfo(*this, results);
     }
@@ -76,9 +76,11 @@ def RTLInstanceOp : RTLOp<"instance", []> {
   let assemblyFormat = [{
      $instanceName $moduleName `(` $inputs `)` attr-dict `:` type($inputs)
   }];
+
+  let verifier = [{ return ::verifyFModuleOp(*this); }];
 }
 
-def DoneOp : RTLOp<"done", [Terminator]> {
+def DoneOp : RTLOp<"done", [Terminator, HasParent<"RTLModuleOp">]> {
   let summary = "RTL termination operation";
   let description = [{
     "rtl.done" marks the end of a region in the RTL dialect.

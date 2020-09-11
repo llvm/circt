@@ -1608,7 +1608,7 @@ void ModuleEmitter::emitStatement(rtl::RTLInstanceOp op) {
   for (int i = 0; i < portInfo.size(); ++i) {
     rtl::RTLModulePortInfo &elt = portInfo[i];
     bool isLast = &elt == &portInfo.back();
-    indent() << "  ." << StringRef(std::get<0>(elt).getValue()) << " ("
+    indent() << "  ." << StringRef(elt.name.getValue()) << " ("
              << getName(opArgs[i]) << (isLast ? ")\n" : "),\n");
   }
   indent() << ")\n";
@@ -2355,7 +2355,7 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
 
   size_t nextPort = 0;
   for (auto &port : portInfo)
-    addName(module.getArgument(nextPort++), std::get<0>(port));
+    addName(module.getArgument(nextPort++), port.name);
 
   os << "module " << module.getName() << '(';
   if (!portInfo.empty())
@@ -2370,8 +2370,8 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
   bool hasOutputs = false;
   unsigned maxTypeWidth = 0;
   for (auto &port : portInfo) {
-    auto portType = std::get<1>(port);
-    hasOutputs |= isOutput(std::get<2>(port));
+    auto portType = port.type;
+    hasOutputs |= isOutput(port.direction);
 
     int bitWidth = getBitWidthOrSentinel(portType);
     if (bitWidth == -1 || bitWidth == 1)
@@ -2389,8 +2389,8 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
 
     indent();
     // Emit the arguments.
-    auto portType = std::get<1>(portInfo[portIdx]);
-    bool isThisPortOutput = isOutput(std::get<2>(portInfo[portIdx]));
+    auto portType = portInfo[portIdx].type;
+    bool isThisPortOutput = isOutput(portInfo[portIdx].direction);
     if (isThisPortOutput)
       os << "output ";
     else
@@ -2406,8 +2406,8 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
     // If we have any more ports with the same types and the same direction,
     // emit them in a list on the same line.
     while (portIdx != e &&
-           isOutput(std::get<2>(portInfo[portIdx])) == isThisPortOutput &&
-           bitWidth == getBitWidthOrSentinel(std::get<1>(portInfo[portIdx]))) {
+           isOutput(portInfo[portIdx].direction) == isThisPortOutput &&
+           bitWidth == getBitWidthOrSentinel(portInfo[portIdx].type)) {
       // Don't exceed our preferred line length.
       StringRef name = getName(module.getArgument(portIdx));
       if (os.tell() + 2 + name.size() - startOfLinePos >
