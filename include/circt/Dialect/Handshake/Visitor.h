@@ -22,7 +22,7 @@ template <typename ConcreteType, typename ResultType = void,
           typename... ExtraArgs>
 class HandshakeVisitor {
 public:
-  ResultType dispatchVisitor(Operation *op, ExtraArgs... args) {
+  ResultType dispatchHandshakeVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<
@@ -31,7 +31,7 @@ public:
             EndOp, ForkOp, FuncOp, InstanceOp, JoinOp, LazyForkOp, LoadOp,
             MemoryOp, MergeOp, MuxOp, ReturnOp, SinkOp, SourceOp, StartOp,
             StoreOp, TerminatorOp>([&](auto opNode) -> ResultType {
-          return thisCast->visitHandshakeOp(opNode, args...);
+          return thisCast->visitHandshake(opNode, args...);
         })
         .Default([&](auto opNode) -> ResultType {
           return thisCast->visitInvalidOp(op, args...);
@@ -51,7 +51,7 @@ public:
   }
 
 #define HANDLE(OPTYPE)                                                         \
-  ResultType visitHandshakeOp(OPTYPE op, ExtraArgs... args) {                  \
+  ResultType visitHandshake(OPTYPE op, ExtraArgs... args) {                    \
     return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);   \
   }
 
@@ -90,7 +90,7 @@ template <typename ConcreteType, typename ResultType = void,
           typename... ExtraArgs>
 class StdExprVisitor {
 public:
-  ResultType dispatchVisitor(Operation *op, ExtraArgs... args) {
+  ResultType dispatchStdExprVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<
