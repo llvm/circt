@@ -6,6 +6,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/Dialect.h"
+#include "circt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/RTL/Dialect.h"
 #include "circt/Dialect/SV/Dialect.h"
 #include "circt/EmitVerilog.h"
@@ -47,6 +49,9 @@ static cl::opt<std::string> outputFilename("o", cl::desc("Output filename"),
 
 static cl::opt<bool> disableOptimization("disable-opt",
                                          cl::desc("disable optimizations"));
+
+static cl::opt<bool> lowerToRTL("lower-to-rtl",
+                                cl::desc("run the lower-to-rtl pass"));
 
 static cl::opt<bool>
     ignoreFIRLocations("ignore-fir-locators",
@@ -98,6 +103,12 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
     pm.addPass(createCSEPass());
     pm.addPass(createCanonicalizerPass());
+
+    // Run the lower-to-rtl pass if requested.
+    if (lowerToRTL) {
+      OpPassManager &nestedPM = pm.nest<firrtl::CircuitOp>();
+      nestedPM.addPass(firrtl::createLowerFIRRTLToRTLPass());
+    }
 
     if (failed(pm.run(module.get())))
       return failure();

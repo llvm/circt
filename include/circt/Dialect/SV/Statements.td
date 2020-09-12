@@ -15,6 +15,10 @@ def HasRegionTerminator : SingleBlockImplicitTerminator<"YieldOp">;
 // Control flow like-operations
 //===----------------------------------------------------------------------===//
 
+// TODO: MLIR Supports parsing/printing regions.  We should give it a try once
+// this patch is merged in our tree:
+// https://github.com/llvm/llvm-project/commit/eaeadce9bd11
+
 def IfDefOp : SVOp<"ifdef", [HasRegionTerminator]>, HasCustomParserPrinter {
   let summary = "'ifdef MACRO' block";
    
