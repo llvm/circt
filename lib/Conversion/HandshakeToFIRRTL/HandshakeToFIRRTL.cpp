@@ -10,6 +10,7 @@
 #include "circt/Conversion/HandshakeToFIRRTL/HandshakeToFIRRTL.h"
 #include "circt/Dialect/FIRRTL/Ops.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
+#include "circt/Dialect/Handshake/Visitor.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Utils.h"
 
@@ -352,8 +353,8 @@ static void buildBinaryLogic(ValueVectorList portList, Location insertLoc,
 }
 
 /// Please refer to test_sink.mlir test case.
-static void buildSinkLogic(ValueVectorList portList, Location insertLoc,
-                           ConversionPatternRewriter &rewriter) {
+static void buildOpLogic(ValueVectorList portList, Location insertLoc,
+                         ConversionPatternRewriter &rewriter, SinkOp *oldOp) {
   ValueVector argSubfields = portList.front();
   Value argValid = argSubfields[0];
   Value argReady = argSubfields[1];
@@ -371,8 +372,8 @@ static void buildSinkLogic(ValueVectorList portList, Location insertLoc,
 
 /// Currently only support {control = true}.
 /// Please refer to test_join.mlir test case.
-static void buildJoinLogic(ValueVectorList portList, Location insertLoc,
-                           ConversionPatternRewriter &rewriter) {
+static void buildOpLogic(ValueVectorList portList, Location insertLoc,
+                         ConversionPatternRewriter &rewriter, JoinOp *oldOp) {
   ValueVector resultSubfields = portList.back();
   Value resultValid = resultSubfields[0];
   Value resultReady = resultSubfields[1];
@@ -396,8 +397,8 @@ static void buildJoinLogic(ValueVectorList portList, Location insertLoc,
 }
 
 /// Please refer to test_mux.mlir test case.
-static void buildMuxLogic(ValueVectorList portList, Location insertLoc,
-                          ConversionPatternRewriter &rewriter) {
+static void buildOpLogic(ValueVectorList portList, Location insertLoc,
+                         ConversionPatternRewriter &rewriter, MuxOp *oldOp) {
   ValueVector selectSubfields = portList.front();
   Value selectValid = selectSubfields[0];
   Value selectReady = selectSubfields[1];
@@ -448,8 +449,8 @@ static void buildMuxLogic(ValueVectorList portList, Location insertLoc,
 /// Assume only one input is active. When multiple inputs are active, inputs in
 /// the front have higher priority.
 /// Please refer to test_merge.mlir test case.
-static void buildMergeLogic(ValueVectorList portList, Location insertLoc,
-                            ConversionPatternRewriter &rewriter) {
+static void buildOpLogic(ValueVectorList portList, Location insertLoc,
+                         ConversionPatternRewriter &rewriter, MergeOp *oldOp) {
   ValueVector resultSubfields = portList.back();
   Value resultValid = resultSubfields[0];
   Value resultReady = resultSubfields[1];
@@ -478,9 +479,9 @@ static void buildMergeLogic(ValueVectorList portList, Location insertLoc,
 
 /// Assume only one input is active.
 /// Please refer to test_cmerge.mlir test case.
-static void buildControlMergeLogic(handshake::ControlMergeOp *oldOp,
-                                   ValueVectorList portList, Location insertLoc,
-                                   ConversionPatternRewriter &rewriter) {
+static void buildOpLogic(ValueVectorList portList, Location insertLoc,
+                         ConversionPatternRewriter &rewriter,
+                         ControlMergeOp *oldOp) {
   unsigned numPorts = portList.size();
 
   ValueVector resultSubfields = portList[numPorts - 2];
@@ -527,9 +528,9 @@ static void buildControlMergeLogic(handshake::ControlMergeOp *oldOp,
 }
 
 /// Please refer to test_branch.mlir test case.
-static void buildBranchLogic(handshake::BranchOp *oldOp,
-                             ValueVectorList portList, Location insertLoc,
-                             ConversionPatternRewriter &rewriter) {
+static void buildOpLogic(ValueVectorList portList, Location insertLoc,
+                         ConversionPatternRewriter &rewriter,
+                         handshake::BranchOp *oldOp) {
   ValueVector argSubfields = portList[0];
   ValueVector resultSubfields = portList[1];
   Value argValid = argSubfields[0];
@@ -549,10 +550,9 @@ static void buildBranchLogic(handshake::BranchOp *oldOp,
 
 /// Two outputs conditional branch operation.
 /// Please refer to test_conditional_branch.mlir test case.
-static void buildConditionalBranchLogic(handshake::ConditionalBranchOp *oldOp,
-                                        ValueVectorList portList,
-                                        Location insertLoc,
-                                        ConversionPatternRewriter &rewriter) {
+static void buildOpLogic(ValueVectorList portList, Location insertLoc,
+                         ConversionPatternRewriter &rewriter,
+                         ConditionalBranchOp *oldOp) {
   ValueVector controlSubfields = portList[0];
   ValueVector argSubfields = portList[1];
   ValueVector result0Subfields = portList[2];
@@ -607,9 +607,9 @@ static void buildConditionalBranchLogic(handshake::ConditionalBranchOp *oldOp,
 }
 
 /// Please refer to test_lazy_fork.mlir test case.
-static void buildLazyForkLogic(handshake::LazyForkOp *oldOp,
-                               ValueVectorList portList, Location insertLoc,
-                               ConversionPatternRewriter &rewriter) {
+static void buildOpLogic(ValueVectorList portList, Location insertLoc,
+                         ConversionPatternRewriter &rewriter,
+                         LazyForkOp *oldOp) {
   ValueVector argSubfields = portList.front();
   Value argValid = argSubfields[0];
   Value argReady = argSubfields[1];
@@ -643,9 +643,8 @@ static void buildLazyForkLogic(handshake::LazyForkOp *oldOp,
 /// a timing component, and contains a register for recording which outputs
 /// have accepted the token. Eager Fork will be supported in the next patch.
 /// Please refer to test_lazy_fork.mlir test case.
-static void buildForkLogic(handshake::ForkOp *oldOp, ValueVectorList portList,
-                           Location insertLoc,
-                           ConversionPatternRewriter &rewriter) {
+static void buildOpLogic(ValueVectorList portList, Location insertLoc,
+                         ConversionPatternRewriter &rewriter, ForkOp *oldOp) {
   ValueVector argSubfields = portList.front();
   Value argValid = argSubfields[0];
   Value argReady = argSubfields[1];
@@ -676,9 +675,9 @@ static void buildForkLogic(handshake::ForkOp *oldOp, ValueVectorList portList,
 }
 
 /// Please refer to test_constant.mlir test case.
-static void buildConstantLogic(handshake::ConstantOp *oldOp,
-                               ValueVectorList portList, Location insertLoc,
-                               ConversionPatternRewriter &rewriter) {
+static void buildOpLogic(ValueVectorList portList, Location insertLoc,
+                         ConversionPatternRewriter &rewriter,
+                         handshake::ConstantOp *oldOp) {
   // The first input is control signal which will trigger the Constant
   // operation to emit tokens.
   ValueVector controlSubfields = portList.front();
@@ -700,9 +699,8 @@ static void buildConstantLogic(handshake::ConstantOp *oldOp,
       createConstantOp(constantType, constantValue, insertLoc, rewriter));
 }
 
-static void buildBufferLogic(handshake::BufferOp *oldOp,
-                             ValueVectorList portList, Location insertLoc,
-                             ConversionPatternRewriter &rewriter) {
+static void buildOpLogic(ValueVectorList portList, Location insertLoc,
+                         ConversionPatternRewriter &rewriter, BufferOp *oldOp) {
   ValueVector inputSubfields = portList[0];
   Value inputValid = inputSubfields[0];
   Value inputReady = inputSubfields[1];
@@ -802,6 +800,104 @@ static void convertReturnOp(Operation *oldOp, FModuleOp topModuleOp,
 }
 
 //===----------------------------------------------------------------------===//
+// Handshake and StdExpr Builder classes
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+class HandshakeBuilder : public HandshakeVisitor<HandshakeBuilder, bool> {
+public:
+  HandshakeBuilder(ValueVectorList portList, Location insertLoc,
+                   ConversionPatternRewriter &rewriter)
+      : portList(portList), insertLoc(insertLoc), rewriter(rewriter) {}
+
+  bool visitInvalidOp(Operation *op) { return false; }
+  using HandshakeVisitor::visitHandshake;
+
+#define HANDLE(OPTYPE)                                                         \
+  bool visitHandshake(OPTYPE op) {                                             \
+    return buildOpLogic(portList, insertLoc, rewriter, &op), true;             \
+  }
+
+  HANDLE(handshake::BranchOp);
+  HANDLE(BufferOp);
+  HANDLE(ConditionalBranchOp);
+  HANDLE(handshake::ConstantOp);
+  HANDLE(ControlMergeOp);
+  HANDLE(ForkOp);
+  HANDLE(JoinOp);
+  HANDLE(LazyForkOp);
+  HANDLE(MergeOp);
+  HANDLE(MuxOp);
+  HANDLE(SinkOp);
+#undef HANDLE
+
+private:
+  ValueVectorList portList;
+  Location insertLoc;
+  ConversionPatternRewriter &rewriter;
+}; // namespace
+
+class StdExprBuilder : public StdExprVisitor<StdExprBuilder, bool> {
+public:
+  StdExprBuilder(ValueVectorList portList, Location insertLoc,
+                 ConversionPatternRewriter &rewriter)
+      : portList(portList), insertLoc(insertLoc), rewriter(rewriter) {}
+
+  bool visitInvalidOp(Operation *op) { return false; }
+  using StdExprVisitor::visitStdExpr;
+
+#define HANDLE(OPTYPE, FIRRTLTYPE)                                             \
+  bool visitStdExpr(OPTYPE op) {                                               \
+    return buildBinaryLogic<FIRRTLTYPE>(portList, insertLoc, rewriter), true;  \
+  }
+
+  HANDLE(AddIOp, AddPrimOp);
+  HANDLE(SubIOp, SubPrimOp);
+  HANDLE(MulIOp, MulPrimOp);
+  HANDLE(SignedDivIOp, DivPrimOp);
+  HANDLE(SignedRemIOp, RemPrimOp);
+  HANDLE(UnsignedDivIOp, DivPrimOp);
+  HANDLE(UnsignedRemIOp, RemPrimOp);
+  HANDLE(XOrOp, XorPrimOp);
+  HANDLE(AndOp, AndPrimOp);
+  HANDLE(OrOp, OrPrimOp);
+  HANDLE(ShiftLeftOp, DShlPrimOp);
+  HANDLE(SignedShiftRightOp, DShrPrimOp);
+  HANDLE(UnsignedShiftRightOp, DShrPrimOp);
+#undef HANDLE
+
+  bool visitStdExpr(CmpIOp op) {
+    auto predicate = op.getPredicate();
+    switch (predicate) {
+    case CmpIPredicate::eq:
+      return buildBinaryLogic<EQPrimOp>(portList, insertLoc, rewriter), true;
+    case CmpIPredicate::ne:
+      return buildBinaryLogic<NEQPrimOp>(portList, insertLoc, rewriter), true;
+    case CmpIPredicate::slt:
+    case CmpIPredicate::ult:
+      return buildBinaryLogic<LTPrimOp>(portList, insertLoc, rewriter), true;
+    case CmpIPredicate::sle:
+    case CmpIPredicate::ule:
+      return buildBinaryLogic<LEQPrimOp>(portList, insertLoc, rewriter), true;
+    case CmpIPredicate::sgt:
+    case CmpIPredicate::ugt:
+      return buildBinaryLogic<GTPrimOp>(portList, insertLoc, rewriter), true;
+    case CmpIPredicate::sge:
+    case CmpIPredicate::uge:
+      return buildBinaryLogic<GEQPrimOp>(portList, insertLoc, rewriter), true;
+    }
+  }
+
+private:
+  ValueVectorList portList;
+  Location insertLoc;
+  ConversionPatternRewriter &rewriter;
+};
+
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // HandshakeToFIRRTL lowering Pass
 //===----------------------------------------------------------------------===//
 
@@ -864,88 +960,12 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
           ValueVectorList portList =
               extractSubfields(subModuleOp, insertLoc, rewriter);
 
-          if (isa<mlir::AddIOp>(op))
-            buildBinaryLogic<AddPrimOp>(portList, insertLoc, rewriter);
-
-          else if (isa<mlir::SubIOp>(op))
-            buildBinaryLogic<SubPrimOp>(portList, insertLoc, rewriter);
-
-          else if (isa<mlir::MulIOp>(op))
-            buildBinaryLogic<MulPrimOp>(portList, insertLoc, rewriter);
-
-          else if (isa<mlir::AndOp>(op))
-            buildBinaryLogic<AndPrimOp>(portList, insertLoc, rewriter);
-
-          else if (isa<mlir::OrOp>(op))
-            buildBinaryLogic<OrPrimOp>(portList, insertLoc, rewriter);
-
-          else if (isa<mlir::XOrOp>(op))
-            buildBinaryLogic<XorPrimOp>(portList, insertLoc, rewriter);
-
-          else if (auto cmpOp = dyn_cast<mlir::CmpIOp>(op)) {
-            auto cmpOpAttr = cmpOp.getPredicate();
-            switch (cmpOpAttr) {
-            case CmpIPredicate::eq:
-              buildBinaryLogic<EQPrimOp>(portList, insertLoc, rewriter);
-              break;
-            case CmpIPredicate::ne:
-              buildBinaryLogic<NEQPrimOp>(portList, insertLoc, rewriter);
-              break;
-            case CmpIPredicate::slt:
-              buildBinaryLogic<LTPrimOp>(portList, insertLoc, rewriter);
-              break;
-            case CmpIPredicate::sle:
-              buildBinaryLogic<LEQPrimOp>(portList, insertLoc, rewriter);
-              break;
-            case CmpIPredicate::sgt:
-              buildBinaryLogic<GTPrimOp>(portList, insertLoc, rewriter);
-              break;
-            case CmpIPredicate::sge:
-              buildBinaryLogic<GEQPrimOp>(portList, insertLoc, rewriter);
-              break;
-            }
-          } else if (isa<mlir::ShiftLeftOp>(op))
-            buildBinaryLogic<DShlPrimOp>(portList, insertLoc, rewriter);
-
-          else if (isa<mlir::SignedShiftRightOp>(op))
-            buildBinaryLogic<DShrPrimOp>(portList, insertLoc, rewriter);
-
-          // Build elastic components logic
-          else if (isa<handshake::SinkOp>(op))
-            buildSinkLogic(portList, insertLoc, rewriter);
-
-          else if (isa<handshake::JoinOp>(op))
-            buildJoinLogic(portList, insertLoc, rewriter);
-
-          else if (isa<handshake::MuxOp>(op))
-            buildMuxLogic(portList, insertLoc, rewriter);
-
-          else if (isa<handshake::MergeOp>(op))
-            buildMergeLogic(portList, insertLoc, rewriter);
-
-          else if (auto oldOp = dyn_cast<handshake::ControlMergeOp>(op))
-            buildControlMergeLogic(&oldOp, portList, insertLoc, rewriter);
-
-          else if (auto oldOp = dyn_cast<handshake::BranchOp>(op))
-            buildBranchLogic(&oldOp, portList, insertLoc, rewriter);
-
-          else if (auto oldOp = dyn_cast<handshake::ConditionalBranchOp>(op))
-            buildConditionalBranchLogic(&oldOp, portList, insertLoc, rewriter);
-
-          else if (auto oldOp = dyn_cast<handshake::ForkOp>(op))
-            buildForkLogic(&oldOp, portList, insertLoc, rewriter);
-
-          else if (auto oldOp = dyn_cast<handshake::LazyForkOp>(op))
-            buildLazyForkLogic(&oldOp, portList, insertLoc, rewriter);
-
-          else if (auto oldOp = dyn_cast<handshake::ConstantOp>(op))
-            buildConstantLogic(&oldOp, portList, insertLoc, rewriter);
-
-          else if (auto oldOp = dyn_cast<handshake::BufferOp>(op))
-            buildBufferLogic(&oldOp, portList, insertLoc, rewriter);
-
-          else
-            oldOp.emitError("Usupported operation type.");
+          if (HandshakeBuilder(portList, insertLoc, rewriter)
+                  .dispatchHandshakeVisitor(&op)) {
+          } else if (StdExprBuilder(portList, insertLoc, rewriter)
+                         .dispatchStdExprVisitor(&op)) {
+          } else
+            op.emitError("Usupported operation type");
         }
 
         // Instantiate the new created sub-module.
