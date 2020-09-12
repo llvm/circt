@@ -118,6 +118,8 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
 
+  enableGlobalDialectRegistry(true);
+
   // Register any pass manager command line options.
   registerMLIRContextCLOptions();
   registerPassManagerCLOptions();

@@ -174,7 +174,7 @@ The 'staging' tree at git@github.com:circt/llvm.git is only intended to be a tem
 
 ```
 $ cd llvm
-$ git remote add git@github.com:llvm/llvm.git
+$ git remote add llvm git@github.com:llvm/llvm-project.git
 $ git pull --rebase llvm master
 $ cd build
 $ ninja

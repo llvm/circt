@@ -44,18 +44,6 @@ public:
 };
 
 //===----------------------------------------------------------------------===//
-// LLHD Types
-//===----------------------------------------------------------------------===//
-namespace LLHDTypes {
-enum Kinds {
-  Sig = mlir::Type::FIRST_PRIVATE_EXPERIMENTAL_0_TYPE,
-  Time,
-  Array,
-  Ptr,
-};
-} // namespace LLHDTypes
-
-//===----------------------------------------------------------------------===//
 // SigType
 //===----------------------------------------------------------------------===//
 
@@ -63,9 +51,6 @@ class SigType
     : public mlir::Type::TypeBase<SigType, mlir::Type, detail::SigTypeStorage> {
 public:
   using Base::Base;
-
-  /// Return whether the given kind is of type Sig
-  static bool kindof(unsigned kind) { return kind == LLHDTypes::Sig; }
 
   /// Get a new instance of llhd sig type
   static SigType get(mlir::Type underlyingType);
@@ -85,9 +70,6 @@ class TimeType : public Type::TypeBase<TimeType, Type, DefaultTypeStorage> {
 public:
   using Base::Base;
 
-  /// Return whether the given kind is of type Time
-  static bool kindof(unsigned kind) { return kind == LLHDTypes::Time; }
-
   /// Get a new instance of type Time
   static TimeType get(MLIRContext *context);
 
@@ -99,9 +81,6 @@ class PtrType
     : public mlir::Type::TypeBase<PtrType, Type, detail::PtrTypeStorage> {
 public:
   using Base::Base;
-
-  /// Return whether the given kind is Ptr.
-  static bool kindof(unsigned kind) { return kind == LLHDTypes::Ptr; }
 
   /// Get a new instance of llhd Ptr type.
   static PtrType get(Type underlyingType);
@@ -140,9 +119,6 @@ public:
   unsigned getLength() const;
   Type getElementType() const;
 
-  /// Methods for support type inquiry through isa, cast, and dyn_cast.
-  static bool kindof(unsigned kind) { return kind == LLHDTypes::Array; }
-
   /// Get the keyword for the array type
   static llvm::StringRef getKeyword() { return "array"; }
 };
@@ -151,20 +127,11 @@ public:
 // LLHD Attributes
 //===----------------------------------------------------------------------===//
 
-namespace LLHDAttrs {
-enum Kinds {
-  Time = mlir::Attribute::FIRST_PRIVATE_EXPERIMENTAL_0_ATTR,
-};
-} // namespace LLHDAttrs
-
 class TimeAttr
     : public Attribute::AttrBase<TimeAttr, Attribute, detail::TimeAttrStorage> {
 public:
   using Base::Base;
   using ValueType = llvm::ArrayRef<unsigned>;
-
-  /// Returns whether the passed argument is of kind Time.
-  static bool kindof(unsigned kind) { return kind == LLHDAttrs::Time; }
 
   /// Get a new instance of Time attribute.
   static TimeAttr get(Type type, llvm::ArrayRef<unsigned> timeValues,

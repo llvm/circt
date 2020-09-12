@@ -15,6 +15,7 @@
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/StringSet.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
@@ -46,34 +47,24 @@ static bool isVerilogExpression(Operation *op) {
 /// Return the width of the specified FIRRTL type in bits or -1 if it isn't
 /// supported.
 static int getBitWidthOrSentinel(Type type) {
-  switch (type.getKind()) {
-  case StandardTypes::Integer:
-    return type.cast<IntegerType>().getWidth();
-
-  case FIRRTLType::Clock:
-  case FIRRTLType::Reset:
-  case FIRRTLType::AsyncReset:
-    return 1;
-
-  case FIRRTLType::SInt:
-  case FIRRTLType::UInt: {
-    // Turn zero-bit values into single bit ones for simplicity.  This occurs
-    // in the addr lines of mems with depth=1.
-    auto result = type.cast<IntType>().getWidthOrSentinel();
-    return result ? result : 1;
-  }
-
-  case FIRRTLType::Analog: {
-    auto result = type.cast<AnalogType>().getWidthOrSentinel();
-    return result ? result : 1;
-  }
-
-  case FIRRTLType::Flip:
-    return getBitWidthOrSentinel(type.cast<FlipType>().getElementType());
-
-  default:
-    return -1;
-  };
+  return TypeSwitch<Type, int>(type)
+      .Case<IntegerType>(
+          [](IntegerType integerType) { return integerType.getWidth(); })
+      .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
+      .Case<SIntType, UIntType>([](IntType intType) {
+        // Turn zero-bit values into single bit ones for simplicity.  This
+        // occurs in the addr lines of mems with depth=1.
+        auto result = intType.getWidthOrSentinel();
+        return result ? result : 1;
+      })
+      .Case<AnalogType>([](AnalogType analogType) {
+        auto result = analogType.getWidthOrSentinel();
+        return result ? result : 1;
+      })
+      .Case<FlipType>([](FlipType flipType) {
+        return getBitWidthOrSentinel(flipType.getElementType());
+      })
+      .Default([](Type) { return -1; });
 }
 
 /// Return the type of the specified value, converted to a passive type.  If "T"
@@ -654,22 +645,21 @@ struct SubExprInfo {
 
 /// Return the verilog signedness of the specified type.
 static SubExprSignedness getSignednessOf(Type type) {
-  switch (type.getKind()) {
-  default:
-    assert(0 && "unsupported type");
-  case StandardTypes::Integer:
-    return type.cast<IntegerType>().isSigned() ? IsSigned : IsUnsigned;
-  case FIRRTLType::Flip:
-    return getSignednessOf(type.cast<FlipType>().getElementType());
-  case FIRRTLType::Clock:
-  case FIRRTLType::Reset:
-  case FIRRTLType::AsyncReset:
-    return IsUnsigned;
-  case FIRRTLType::SInt:
-    return IsSigned;
-  case FIRRTLType::UInt:
-    return IsUnsigned;
-  }
+  return TypeSwitch<Type, SubExprSignedness>(type)
+      .Case<IntegerType>([](IntegerType integerType) {
+        return integerType.isSigned() ? IsSigned : IsUnsigned;
+      })
+      .Case<FlipType>([](FlipType flipType) {
+        return getSignednessOf(flipType.getElementType());
+      })
+      .Case<ClockType, ResetType, AsyncResetType>(
+          [](Type) { return IsUnsigned; })
+      .Case<SIntType>([](Type) { return IsSigned; })
+      .Case<UIntType>([](Type) { return IsUnsigned; })
+      .Default([](Type) {
+        assert(0 && "unsupported type");
+        return IsUnsigned;
+      });
 }
 
 namespace {

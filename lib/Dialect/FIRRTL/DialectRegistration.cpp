@@ -13,7 +13,8 @@ using namespace firrtl;
 static mlir::DialectRegistration<FIRRTLDialect> FIRRTLOps;
 
 /// Register all of the FIRRTL transformation passes with the PassManager.
-void circt::firrtl::registerFIRRTLPasses() {
+namespace {
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/FIRRTL/FIRRTLPasses.h.inc"
-}
+} // namespace
+void circt::firrtl::registerFIRRTLPasses() { registerPasses(); }

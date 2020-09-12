@@ -923,6 +923,7 @@ void executeHandshakeFunction(handshake::FuncOp &toplevel,
 }
 
 int main(int argc, char **argv) {
+  enableGlobalDialectRegistry(true);
   mlir::registerAllDialects();
   mlir::registerDialect<handshake::HandshakeOpsDialect>();
   InitLLVM y(argc, argv);
