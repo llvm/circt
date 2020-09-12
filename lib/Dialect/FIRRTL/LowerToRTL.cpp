@@ -50,6 +50,9 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(AsUIntPrimOp op) { return lowerNoopCast(op); }
   LogicalResult visitExpr(CatPrimOp op);
   LogicalResult visitExpr(PadPrimOp op);
+  LogicalResult visitExpr(XorRPrimOp op);
+  LogicalResult visitExpr(AndRPrimOp op);
+  LogicalResult visitExpr(OrRPrimOp op);
 
   // Binary Ops.
   template <typename ResultOpType>
@@ -297,6 +300,30 @@ LogicalResult FIRRTLLowering::visitExpr(PadPrimOp op) {
   if (!operand)
     return failure();
   return setLowering(op, operand);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(XorRPrimOp op) {
+  auto operand = getLoweredValue(op.input());
+  if (!operand)
+    return failure();
+
+  return setLoweringTo<rtl::XorROp>(op, builder->getIntegerType(1), operand);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(AndRPrimOp op) {
+  auto operand = getLoweredValue(op.input());
+  if (!operand)
+    return failure();
+
+  return setLoweringTo<rtl::AndROp>(op, builder->getIntegerType(1), operand);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(OrRPrimOp op) {
+  auto operand = getLoweredValue(op.input());
+  if (!operand)
+    return failure();
+
+  return setLoweringTo<rtl::OrROp>(op, builder->getIntegerType(1), operand);
 }
 
 //===----------------------------------------------------------------------===//

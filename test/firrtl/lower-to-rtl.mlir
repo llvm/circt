@@ -6,7 +6,7 @@
   firrtl.module @Simple(%in1: !firrtl.uint<4>,
                         %in2: !firrtl.uint<2>,
                         %in3: !firrtl.sint<8>,
-                        %out1: !firrtl.flip<uint<4>>) {
+                        %out4: !firrtl.flip<uint<4>>) {
 
     // CHECK: rtl.constant(-4 : i4) : i4
     %c12_ui4 = firrtl.constant(12 : ui4) : !firrtl.uint<4>
@@ -49,15 +49,15 @@
     // CHECK-NEXT: rtl.connect %2, %5 : i4
     firrtl.connect %2, %4 : !firrtl.uint<4>, !firrtl.uint<4>
 
-    // CHECK-NEXT: [[CAST:%.+]] = firrtl.stdIntCast %out1 : (!firrtl.flip<uint<4>>) -> i4
+    // CHECK-NEXT: [[CAST:%.+]] = firrtl.stdIntCast %out4 : (!firrtl.flip<uint<4>>) -> i4
     // CHECK-NEXT: rtl.connect [[CAST]], [[XOR]] : i4
-    firrtl.connect %out1, %5 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+    firrtl.connect %out4, %5 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
-    // CHECK-NEXT: [[CAST1:%.+]] = firrtl.stdIntCast %out1 : (!firrtl.flip<uint<4>>) -> i4
+    // CHECK-NEXT: [[CAST1:%.+]] = firrtl.stdIntCast %out4 : (!firrtl.flip<uint<4>>) -> i4
     // CHECK-NEXT: [[CAST2:%.+]] = firrtl.stdIntCast %in2 : (!firrtl.uint<2>) -> i2
     // CHECK-NEXT: [[ZEXT:%.+]] = rtl.zext [[CAST2]] : (i2) -> i4
     // CHECK-NEXT: rtl.connect [[CAST1]], [[ZEXT]] : i4
-    firrtl.connect %out1, %in2 : !firrtl.flip<uint<4>>, !firrtl.uint<2>
+    firrtl.connect %out4, %in2 : !firrtl.flip<uint<4>>, !firrtl.uint<2>
 
     // CHECK-NEXT: = rtl.wire {name = "test-name"} : i4
     firrtl.wire {name = "test-name"} : !firrtl.uint<4>
@@ -93,6 +93,15 @@
     // CHECK-NEXT: [[ZERO:%.+]] = rtl.constant(0 : i3) : i3
     // CHECK-NEXT: = rtl.concat [[CONCAT1]], [[ZERO]] : (i8, i3) -> i11
     %14 = firrtl.shl %6, 3 : (!firrtl.uint<8>) -> !firrtl.uint<11>
+
+    // CHECK-NEXT: = rtl.xorr [[CONCAT1]] : i8
+    %15 = firrtl.xorr %6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+
+    // CHECK-NEXT: = rtl.andr [[CONCAT1]] : i8
+    %16 = firrtl.andr %6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+
+    // CHECK-NEXT: = rtl.orr [[CONCAT1]] : i8
+    %17 = firrtl.orr %6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
   }
 
 
