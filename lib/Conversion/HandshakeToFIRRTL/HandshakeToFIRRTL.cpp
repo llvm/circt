@@ -868,8 +868,7 @@ public:
 #undef HANDLE
 
   bool visitStdExpr(CmpIOp op) {
-    auto predicate = op.getPredicate();
-    switch (predicate) {
+    switch (op.getPredicate()) {
     case CmpIPredicate::eq:
       return buildBinaryLogic<EQPrimOp>(portList, insertLoc, rewriter), true;
     case CmpIPredicate::ne:
