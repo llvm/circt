@@ -73,6 +73,11 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
     return lowerBinOpToVariadic<rtl::AddOp>(op);
   }
   LogicalResult visitExpr(SubPrimOp op) { return lowerBinOp<rtl::SubOp>(op); }
+  LogicalResult visitExpr(MulPrimOp op) {
+    return lowerBinOpToVariadic<rtl::MulOp>(op);
+  }
+  LogicalResult visitExpr(DivPrimOp op) { return lowerBinOp<rtl::DivOp>(op); }
+  LogicalResult visitExpr(RemPrimOp op);
 
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
@@ -342,6 +347,8 @@ LogicalResult FIRRTLLowering::lowerBinOpToVariadic(Operation *op) {
                                      ArrayRef<NamedAttribute>{});
 }
 
+/// lowerBinOp extends each operand to the destination type, then performs the
+/// specified binary operator.
 template <typename ResultOpType>
 LogicalResult FIRRTLLowering::lowerBinOp(Operation *op) {
   // Extend the two operands to match the destination type.
@@ -362,6 +369,29 @@ LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
     return failure();
 
   return setLoweringTo<rtl::ConcatOp>(op, ValueRange({lhs, rhs}));
+}
+
+LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
+  // FIRRTL has the width of (a % b) = Min(W(a), W(b)) so we need to truncate
+  // operands to the minimum width before doing the mod, not extend them.
+  auto lhs = getLoweredValue(op.lhs());
+  auto rhs = getLoweredValue(op.rhs());
+  if (!lhs || !rhs)
+    return failure();
+
+  auto resultFirType = op.getType().cast<IntType>();
+  if (!resultFirType.hasWidth())
+    return failure();
+  auto destWidth = unsigned(resultFirType.getWidthOrSentinel());
+  auto resultType = builder->getIntegerType(destWidth);
+
+  // Truncate either operand if required.
+  if (lhs.getType().cast<IntegerType>().getWidth() != destWidth)
+    lhs = builder->create<rtl::ExtractOp>(op.getLoc(), resultType, lhs, 0);
+  if (rhs.getType().cast<IntegerType>().getWidth() != destWidth)
+    rhs = builder->create<rtl::ExtractOp>(op.getLoc(), resultType, rhs, 0);
+
+  return setLoweringTo<rtl::ModOp>(op, ValueRange({lhs, rhs}));
 }
 
 //===----------------------------------------------------------------------===//

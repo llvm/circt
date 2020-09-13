@@ -703,13 +703,13 @@ FIRRTLType firrtl::getDivResult(FIRRTLType lhs, FIRRTLType rhs) {
   if (lhs.getTypeID() != rhs.getTypeID())
     return {};
 
-  int32_t width = -1;
-  if (auto lu = lhs.dyn_cast<UIntType>()) {
-    if (lu.getWidth().hasValue())
-      width = lu.getWidth().getValue();
-    return UIntType::get(lhs.getContext(), width);
-  }
+  // For unsigned, the width is the width of the numerator on the LHS.
+  if (auto lu = lhs.dyn_cast<UIntType>())
+    return UIntType::get(lhs.getContext(), lu.getWidthOrSentinel());
+
+  // For signed, the width is the width of the numerator on the LHS, plus 1.
   if (auto ls = lhs.dyn_cast<SIntType>()) {
+    int32_t width = -1;
     if (ls.getWidth().hasValue())
       width = ls.getWidth().getValue() + 1;
     return SIntType::get(lhs.getContext(), width);

@@ -24,7 +24,7 @@
     %2 = firrtl.sub %0, %1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
     // CHECK: %3 = firrtl.stdIntCast %in2 : (!firrtl.uint<2>) -> i2
-    // CHECK: %4 = rtl.sext %3 : (i2) -> i3
+    // CHECK: [[PADRES:%.+]] = rtl.sext %3 : (i2) -> i3
     %3 = firrtl.pad %in2, 3 : (!firrtl.uint<2>) -> !firrtl.sint<3>
 
     // CHECK: %5 = rtl.zext %4 : (i3) -> i4
@@ -102,6 +102,27 @@
 
     // CHECK-NEXT: = rtl.orr [[CONCAT1]] : i8
     %17 = firrtl.orr %6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+
+    // CHECK-NEXT: [[ZEXTC1:%.+]] = rtl.zext [[CONCAT1]] : (i8) -> i12
+    // CHECK-NEXT: [[ZEXT2:%.+]] = rtl.zext %2 : (i4) -> i12
+    // CHECK-NEXT: = rtl.mul [[ZEXTC1]], [[ZEXT2]] : i12
+    %18 = firrtl.mul %6, %2 : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<12>
+
+    // CHECK-NEXT: [[CAST:%.+]] = firrtl.stdIntCast %in3 : (!firrtl.sint<8>) -> i8
+    // CHECK-NEXT: [[IN3SEXT:%.+]] = rtl.sext [[CAST]] : (i8) -> i9
+    // CHECK-NEXT: [[PADRESSEXT:%.+]] = rtl.sext [[PADRES]] : (i3) -> i9
+    // CHECK-NEXT: = rtl.div [[IN3SEXT]], [[PADRESSEXT]] : i9
+    %19 = firrtl.div %in3, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<9>
+
+    // CHECK-NEXT: [[CAST:%.+]] = firrtl.stdIntCast %in3 : (!firrtl.sint<8>) -> i8
+    // CHECK-NEXT: [[IN3TRUNC:%.+]] = rtl.extract [[CAST]] from 0 : (i8) -> i3
+    // CHECK-NEXT: = rtl.mod [[IN3TRUNC]], [[PADRES]] : i3
+    %20 = firrtl.rem %in3, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<3>
+
+    // CHECK-NEXT: [[CAST:%.+]] = firrtl.stdIntCast %in3 : (!firrtl.sint<8>) -> i8
+    // CHECK-NEXT: [[IN3TRUNC:%.+]] = rtl.extract [[CAST]] from 0 : (i8) -> i3
+    // CHECK-NEXT: = rtl.mod [[PADRES]], [[IN3TRUNC]] : i3
+    %21 = firrtl.rem %3, %in3 : (!firrtl.sint<3>, !firrtl.sint<8>) -> !firrtl.sint<3>
   }
 
 
