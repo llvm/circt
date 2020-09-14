@@ -408,7 +408,13 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       // and(..., '1) -> and(...) -- identity
       if (matchPattern(inputs.back(), m_RConstant(value)) &&
           value.isAllOnesValue()) {
+        rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(),
+                                           inputs.drop_back());
+        return success();
+      }
 
+      // and(..., x, x) -> and(..., x) -- idempotent
+      if (inputs[size - 1] == inputs[size - 2]) {
         rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(),
                                            inputs.drop_back());
         return success();
@@ -417,7 +423,6 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       /// TODO: and(..., c1, c2) -> and(..., c3) -- constant folding
       /// TODO: and(x, and(...)) -> and(x, ...) -- flatten
       /// TODO: and(..., x, not(x)) -> and(..., 0) -- complement
-      /// TODO: and(..., x, x) -> and(..., x) -- idempotent
       return failure();
     }
   };

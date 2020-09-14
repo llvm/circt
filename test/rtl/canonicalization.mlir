@@ -111,3 +111,16 @@ func @mul_identity(%arg0: i11, %arg1: i11) -> i11 {
   %0 = rtl.mul %arg0, %c1_i11, %arg1 : i11
   return %0 : i11
 }
+
+// Idempotency
+
+// CHECK-LABEL: func @and_idempotent(%arg0: i11, %arg1: i11) -> i11 {
+// CHECK-NEXT:    %c9_i11 = rtl.constant(9 : i11) : i11
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.and %arg0, %arg1, %c9_i11
+// CHECK-NEXT:    return [[RES]]
+
+func @and_idempotent(%arg0: i11, %arg1 : i11) -> i11 {
+  %c9_i11 = rtl.constant(9 : i11) : i11
+  %0 = rtl.and %arg0, %arg1, %c9_i11, %c9_i11 : i11
+  return %0 : i11
+}
