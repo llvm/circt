@@ -287,10 +287,6 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
       ports);
 }
 
-//===----------------------------------------------------------------------===//
-// Combinational Logic Builders
-//===----------------------------------------------------------------------===//
-
 /// Extract all subfields of all ports of the sub-module.
 static ValueVectorList extractSubfields(FModuleOp subModuleOp,
                                         Location insertLoc,
@@ -317,10 +313,74 @@ static ValueVectorList extractSubfields(FModuleOp subModuleOp,
   return portList;
 }
 
+//===----------------------------------------------------------------------===//
+// Standard Expression Builder class
+//===----------------------------------------------------------------------===//
+
+namespace {
+class StdExprBuilder : public StdExprVisitor<StdExprBuilder, bool> {
+public:
+  StdExprBuilder(ValueVectorList portList, Location insertLoc,
+                 ConversionPatternRewriter &rewriter)
+      : portList(portList), insertLoc(insertLoc), rewriter(rewriter) {}
+  using StdExprVisitor::visitStdExpr;
+
+  template <typename OpType>
+  void buildBinaryLogic();
+
+  bool visitInvalidOp(Operation *op) { return false; }
+
+  bool visitStdExpr(CmpIOp op);
+
+#define HANDLE(OPTYPE, FIRRTLTYPE)                                             \
+  bool visitStdExpr(OPTYPE op) { return buildBinaryLogic<FIRRTLTYPE>(), true; }
+
+  HANDLE(AddIOp, AddPrimOp);
+  HANDLE(SubIOp, SubPrimOp);
+  HANDLE(MulIOp, MulPrimOp);
+  HANDLE(SignedDivIOp, DivPrimOp);
+  HANDLE(SignedRemIOp, RemPrimOp);
+  HANDLE(UnsignedDivIOp, DivPrimOp);
+  HANDLE(UnsignedRemIOp, RemPrimOp);
+  HANDLE(XOrOp, XorPrimOp);
+  HANDLE(AndOp, AndPrimOp);
+  HANDLE(OrOp, OrPrimOp);
+  HANDLE(ShiftLeftOp, DShlPrimOp);
+  HANDLE(SignedShiftRightOp, DShrPrimOp);
+  HANDLE(UnsignedShiftRightOp, DShrPrimOp);
+#undef HANDLE
+
+private:
+  ValueVectorList portList;
+  Location insertLoc;
+  ConversionPatternRewriter &rewriter;
+};
+} // namespace
+
+bool StdExprBuilder::visitStdExpr(CmpIOp op) {
+  switch (op.getPredicate()) {
+  case CmpIPredicate::eq:
+    return buildBinaryLogic<EQPrimOp>(), true;
+  case CmpIPredicate::ne:
+    return buildBinaryLogic<NEQPrimOp>(), true;
+  case CmpIPredicate::slt:
+  case CmpIPredicate::ult:
+    return buildBinaryLogic<LTPrimOp>(), true;
+  case CmpIPredicate::sle:
+  case CmpIPredicate::ule:
+    return buildBinaryLogic<LEQPrimOp>(), true;
+  case CmpIPredicate::sgt:
+  case CmpIPredicate::ugt:
+    return buildBinaryLogic<GTPrimOp>(), true;
+  case CmpIPredicate::sge:
+  case CmpIPredicate::uge:
+    return buildBinaryLogic<GEQPrimOp>(), true;
+  }
+}
+
 /// Please refer to simple_addi.mlir test case.
 template <typename OpType>
-static void buildBinaryLogic(ValueVectorList portList, Location insertLoc,
-                             ConversionPatternRewriter &rewriter) {
+void StdExprBuilder::buildBinaryLogic() {
   ValueVector arg0Subfield = portList[0];
   ValueVector arg1Subfield = portList[1];
   ValueVector resultSubfields = portList[2];
@@ -352,9 +412,41 @@ static void buildBinaryLogic(ValueVectorList portList, Location insertLoc,
   rewriter.create<ConnectOp>(insertLoc, arg1Ready, argReadyOp);
 }
 
+//===----------------------------------------------------------------------===//
+// Handshake Builder class
+//===----------------------------------------------------------------------===//
+
+namespace {
+class HandshakeBuilder : public HandshakeVisitor<HandshakeBuilder, bool> {
+public:
+  HandshakeBuilder(ValueVectorList portList, Location insertLoc,
+                   ConversionPatternRewriter &rewriter)
+      : portList(portList), insertLoc(insertLoc), rewriter(rewriter) {}
+  using HandshakeVisitor::visitHandshake;
+
+  bool visitInvalidOp(Operation *op) { return false; }
+
+  bool visitHandshake(handshake::BranchOp op);
+  bool visitHandshake(BufferOp op);
+  bool visitHandshake(ConditionalBranchOp op);
+  bool visitHandshake(handshake::ConstantOp op);
+  bool visitHandshake(ControlMergeOp op);
+  bool visitHandshake(ForkOp op);
+  bool visitHandshake(JoinOp op);
+  bool visitHandshake(LazyForkOp op);
+  bool visitHandshake(MergeOp op);
+  bool visitHandshake(MuxOp op);
+  bool visitHandshake(SinkOp op);
+
+private:
+  ValueVectorList portList;
+  Location insertLoc;
+  ConversionPatternRewriter &rewriter;
+};
+} // namespace
+
 /// Please refer to test_sink.mlir test case.
-static void buildOpLogic(ValueVectorList portList, Location insertLoc,
-                         ConversionPatternRewriter &rewriter, SinkOp *oldOp) {
+bool HandshakeBuilder::visitHandshake(SinkOp op) {
   ValueVector argSubfields = portList.front();
   Value argValid = argSubfields[0];
   Value argReady = argSubfields[1];
@@ -368,12 +460,12 @@ static void buildOpLogic(ValueVectorList portList, Location insertLoc,
 
   rewriter.eraseOp(argValid.getDefiningOp());
   rewriter.eraseOp(argData.getDefiningOp());
+  return true;
 }
 
 /// Currently only support {control = true}.
 /// Please refer to test_join.mlir test case.
-static void buildOpLogic(ValueVectorList portList, Location insertLoc,
-                         ConversionPatternRewriter &rewriter, JoinOp *oldOp) {
+bool HandshakeBuilder::visitHandshake(JoinOp op) {
   ValueVector resultSubfields = portList.back();
   Value resultValid = resultSubfields[0];
   Value resultReady = resultSubfields[1];
@@ -394,11 +486,11 @@ static void buildOpLogic(ValueVectorList portList, Location insertLoc,
     Value argReady = portList[i][1];
     rewriter.create<ConnectOp>(insertLoc, argReady, argReadyOp);
   }
+  return true;
 }
 
 /// Please refer to test_mux.mlir test case.
-static void buildOpLogic(ValueVectorList portList, Location insertLoc,
-                         ConversionPatternRewriter &rewriter, MuxOp *oldOp) {
+bool HandshakeBuilder::visitHandshake(MuxOp op) {
   ValueVector selectSubfields = portList.front();
   Value selectValid = selectSubfields[0];
   Value selectReady = selectSubfields[1];
@@ -444,13 +536,13 @@ static void buildOpLogic(ValueVectorList portList, Location insertLoc,
     if (i != e - 1)
       rewriter.setInsertionPointToStart(&branchWhenOp.elseRegion().front());
   }
+  return true;
 }
 
 /// Assume only one input is active. When multiple inputs are active, inputs in
 /// the front have higher priority.
 /// Please refer to test_merge.mlir test case.
-static void buildOpLogic(ValueVectorList portList, Location insertLoc,
-                         ConversionPatternRewriter &rewriter, MergeOp *oldOp) {
+bool HandshakeBuilder::visitHandshake(MergeOp op) {
   ValueVector resultSubfields = portList.back();
   Value resultValid = resultSubfields[0];
   Value resultReady = resultSubfields[1];
@@ -475,13 +567,12 @@ static void buildOpLogic(ValueVectorList portList, Location insertLoc,
     if (i != e - 1)
       rewriter.setInsertionPointToStart(&whenOp.elseRegion().front());
   }
+  return true;
 }
 
 /// Assume only one input is active.
 /// Please refer to test_cmerge.mlir test case.
-static void buildOpLogic(ValueVectorList portList, Location insertLoc,
-                         ConversionPatternRewriter &rewriter,
-                         ControlMergeOp *oldOp) {
+bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   unsigned numPorts = portList.size();
 
   ValueVector resultSubfields = portList[numPorts - 2];
@@ -516,7 +607,7 @@ static void buildOpLogic(ValueVectorList portList, Location insertLoc,
     rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
     rewriter.create<ConnectOp>(insertLoc, argReady, argReadyOp);
 
-    if (!oldOp->getAttrOfType<BoolAttr>("control").getValue()) {
+    if (!op.getAttrOfType<BoolAttr>("control").getValue()) {
       Value argData = argSubfields[2];
       Value resultData = resultSubfields[2];
       rewriter.create<ConnectOp>(insertLoc, resultData, argData);
@@ -525,12 +616,11 @@ static void buildOpLogic(ValueVectorList portList, Location insertLoc,
     if (i != e - 1)
       rewriter.setInsertionPointToStart(&whenOp.elseRegion().front());
   }
+  return true;
 }
 
 /// Please refer to test_branch.mlir test case.
-static void buildOpLogic(ValueVectorList portList, Location insertLoc,
-                         ConversionPatternRewriter &rewriter,
-                         handshake::BranchOp *oldOp) {
+bool HandshakeBuilder::visitHandshake(handshake::BranchOp op) {
   ValueVector argSubfields = portList[0];
   ValueVector resultSubfields = portList[1];
   Value argValid = argSubfields[0];
@@ -541,18 +631,17 @@ static void buildOpLogic(ValueVectorList portList, Location insertLoc,
   rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
   rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
 
-  if (!oldOp->isControl()) {
+  if (!op.isControl()) {
     Value argData = argSubfields[2];
     Value resultData = resultSubfields[2];
     rewriter.create<ConnectOp>(insertLoc, resultData, argData);
   }
+  return true;
 }
 
 /// Two outputs conditional branch operation.
 /// Please refer to test_conditional_branch.mlir test case.
-static void buildOpLogic(ValueVectorList portList, Location insertLoc,
-                         ConversionPatternRewriter &rewriter,
-                         ConditionalBranchOp *oldOp) {
+bool HandshakeBuilder::visitHandshake(ConditionalBranchOp op) {
   ValueVector controlSubfields = portList[0];
   ValueVector argSubfields = portList[1];
   ValueVector result0Subfields = portList[2];
@@ -580,7 +669,7 @@ static void buildOpLogic(ValueVectorList portList, Location insertLoc,
   rewriter.create<ConnectOp>(insertLoc, result0Valid, argValid);
   rewriter.create<ConnectOp>(insertLoc, argReady, result0Ready);
 
-  if (!oldOp->isControl()) {
+  if (!op.isControl()) {
     Value argData = argSubfields[2];
     Value result0Data = result0Subfields[2];
     rewriter.create<ConnectOp>(insertLoc, result0Data, argData);
@@ -595,7 +684,7 @@ static void buildOpLogic(ValueVectorList portList, Location insertLoc,
   rewriter.create<ConnectOp>(insertLoc, result1Valid, argValid);
   rewriter.create<ConnectOp>(insertLoc, argReady, result1Ready);
 
-  if (!oldOp->isControl()) {
+  if (!op.isControl()) {
     Value argData = argSubfields[2];
     Value result1Data = result1Subfields[2];
     rewriter.create<ConnectOp>(insertLoc, result1Data, argData);
@@ -604,12 +693,11 @@ static void buildOpLogic(ValueVectorList portList, Location insertLoc,
   auto control1ReadyOp = rewriter.create<AndPrimOp>(
       insertLoc, argValid.getType(), argValid, result1Ready);
   rewriter.create<ConnectOp>(insertLoc, controlReady, control1ReadyOp);
+  return true;
 }
 
 /// Please refer to test_lazy_fork.mlir test case.
-static void buildOpLogic(ValueVectorList portList, Location insertLoc,
-                         ConversionPatternRewriter &rewriter,
-                         LazyForkOp *oldOp) {
+bool HandshakeBuilder::visitHandshake(LazyForkOp op) {
   ValueVector argSubfields = portList.front();
   Value argValid = argSubfields[0];
   Value argReady = argSubfields[1];
@@ -631,20 +719,20 @@ static void buildOpLogic(ValueVectorList portList, Location insertLoc,
     Value resultValid = resultfield[0];
     rewriter.create<ConnectOp>(insertLoc, resultValid, resultValidOp);
 
-    if (!oldOp->isControl()) {
+    if (!op.isControl()) {
       Value argData = argSubfields[2];
       Value resultData = resultfield[2];
       rewriter.create<ConnectOp>(insertLoc, resultData, argData);
     }
   }
+  return true;
 }
 
 /// Currently Fork is implement as a LazyFork. An eager Fork is supposed to be
 /// a timing component, and contains a register for recording which outputs
 /// have accepted the token. Eager Fork will be supported in the next patch.
 /// Please refer to test_lazy_fork.mlir test case.
-static void buildOpLogic(ValueVectorList portList, Location insertLoc,
-                         ConversionPatternRewriter &rewriter, ForkOp *oldOp) {
+bool HandshakeBuilder::visitHandshake(ForkOp op) {
   ValueVector argSubfields = portList.front();
   Value argValid = argSubfields[0];
   Value argReady = argSubfields[1];
@@ -666,18 +754,17 @@ static void buildOpLogic(ValueVectorList portList, Location insertLoc,
     Value resultValid = resultfield[0];
     rewriter.create<ConnectOp>(insertLoc, resultValid, resultValidOp);
 
-    if (!oldOp->isControl()) {
+    if (!op.isControl()) {
       Value argData = argSubfields[2];
       Value resultData = resultfield[2];
       rewriter.create<ConnectOp>(insertLoc, resultData, argData);
     }
   }
+  return true;
 }
 
 /// Please refer to test_constant.mlir test case.
-static void buildOpLogic(ValueVectorList portList, Location insertLoc,
-                         ConversionPatternRewriter &rewriter,
-                         handshake::ConstantOp *oldOp) {
+bool HandshakeBuilder::visitHandshake(handshake::ConstantOp op) {
   // The first input is control signal which will trigger the Constant
   // operation to emit tokens.
   ValueVector controlSubfields = portList.front();
@@ -690,17 +777,17 @@ static void buildOpLogic(ValueVectorList portList, Location insertLoc,
   Value resultData = resultSubfields[2];
 
   auto constantType = FlipType::get(resultData.getType().cast<FIRRTLType>());
-  auto constantValue = oldOp->getAttrOfType<IntegerAttr>("value").getValue();
+  auto constantValue = op.getAttrOfType<IntegerAttr>("value").getValue();
 
   rewriter.create<ConnectOp>(insertLoc, resultValid, controlValid);
   rewriter.create<ConnectOp>(insertLoc, controlReady, resultReady);
   rewriter.create<ConnectOp>(
       insertLoc, resultData,
       createConstantOp(constantType, constantValue, insertLoc, rewriter));
+  return true;
 }
 
-static void buildOpLogic(ValueVectorList portList, Location insertLoc,
-                         ConversionPatternRewriter &rewriter, BufferOp *oldOp) {
+bool HandshakeBuilder::visitHandshake(BufferOp op) {
   ValueVector inputSubfields = portList[0];
   Value inputValid = inputSubfields[0];
   Value inputReady = inputSubfields[1];
@@ -711,6 +798,7 @@ static void buildOpLogic(ValueVectorList portList, Location insertLoc,
 
   Value clock = portList[2][0];
   Value reset = portList[3][0];
+  return true;
 }
 
 //===----------------------------------------------------------------------===//
@@ -798,103 +886,6 @@ static void convertReturnOp(Operation *oldOp, FModuleOp topModuleOp,
 
   rewriter.eraseOp(oldOp);
 }
-
-//===----------------------------------------------------------------------===//
-// Handshake and StdExpr Builder classes
-//===----------------------------------------------------------------------===//
-
-namespace {
-
-class HandshakeBuilder : public HandshakeVisitor<HandshakeBuilder, bool> {
-public:
-  HandshakeBuilder(ValueVectorList portList, Location insertLoc,
-                   ConversionPatternRewriter &rewriter)
-      : portList(portList), insertLoc(insertLoc), rewriter(rewriter) {}
-
-  bool visitInvalidOp(Operation *op) { return false; }
-  using HandshakeVisitor::visitHandshake;
-
-#define HANDLE(OPTYPE)                                                         \
-  bool visitHandshake(OPTYPE op) {                                             \
-    return buildOpLogic(portList, insertLoc, rewriter, &op), true;             \
-  }
-
-  HANDLE(handshake::BranchOp);
-  HANDLE(BufferOp);
-  HANDLE(ConditionalBranchOp);
-  HANDLE(handshake::ConstantOp);
-  HANDLE(ControlMergeOp);
-  HANDLE(ForkOp);
-  HANDLE(JoinOp);
-  HANDLE(LazyForkOp);
-  HANDLE(MergeOp);
-  HANDLE(MuxOp);
-  HANDLE(SinkOp);
-#undef HANDLE
-
-private:
-  ValueVectorList portList;
-  Location insertLoc;
-  ConversionPatternRewriter &rewriter;
-}; // namespace
-
-class StdExprBuilder : public StdExprVisitor<StdExprBuilder, bool> {
-public:
-  StdExprBuilder(ValueVectorList portList, Location insertLoc,
-                 ConversionPatternRewriter &rewriter)
-      : portList(portList), insertLoc(insertLoc), rewriter(rewriter) {}
-
-  bool visitInvalidOp(Operation *op) { return false; }
-  using StdExprVisitor::visitStdExpr;
-
-#define HANDLE(OPTYPE, FIRRTLTYPE)                                             \
-  bool visitStdExpr(OPTYPE op) {                                               \
-    return buildBinaryLogic<FIRRTLTYPE>(portList, insertLoc, rewriter), true;  \
-  }
-
-  HANDLE(AddIOp, AddPrimOp);
-  HANDLE(SubIOp, SubPrimOp);
-  HANDLE(MulIOp, MulPrimOp);
-  HANDLE(SignedDivIOp, DivPrimOp);
-  HANDLE(SignedRemIOp, RemPrimOp);
-  HANDLE(UnsignedDivIOp, DivPrimOp);
-  HANDLE(UnsignedRemIOp, RemPrimOp);
-  HANDLE(XOrOp, XorPrimOp);
-  HANDLE(AndOp, AndPrimOp);
-  HANDLE(OrOp, OrPrimOp);
-  HANDLE(ShiftLeftOp, DShlPrimOp);
-  HANDLE(SignedShiftRightOp, DShrPrimOp);
-  HANDLE(UnsignedShiftRightOp, DShrPrimOp);
-#undef HANDLE
-
-  bool visitStdExpr(CmpIOp op) {
-    switch (op.getPredicate()) {
-    case CmpIPredicate::eq:
-      return buildBinaryLogic<EQPrimOp>(portList, insertLoc, rewriter), true;
-    case CmpIPredicate::ne:
-      return buildBinaryLogic<NEQPrimOp>(portList, insertLoc, rewriter), true;
-    case CmpIPredicate::slt:
-    case CmpIPredicate::ult:
-      return buildBinaryLogic<LTPrimOp>(portList, insertLoc, rewriter), true;
-    case CmpIPredicate::sle:
-    case CmpIPredicate::ule:
-      return buildBinaryLogic<LEQPrimOp>(portList, insertLoc, rewriter), true;
-    case CmpIPredicate::sgt:
-    case CmpIPredicate::ugt:
-      return buildBinaryLogic<GTPrimOp>(portList, insertLoc, rewriter), true;
-    case CmpIPredicate::sge:
-    case CmpIPredicate::uge:
-      return buildBinaryLogic<GEQPrimOp>(portList, insertLoc, rewriter), true;
-    }
-  }
-
-private:
-  ValueVectorList portList;
-  Location insertLoc;
-  ConversionPatternRewriter &rewriter;
-};
-
-} // namespace
 
 //===----------------------------------------------------------------------===//
 // HandshakeToFIRRTL lowering Pass
