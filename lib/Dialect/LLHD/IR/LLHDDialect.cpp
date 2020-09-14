@@ -46,7 +46,7 @@ struct LLHDInlinerInterface : public DialectInlinerInterface {
 //===----------------------------------------------------------------------===//
 
 LLHDDialect::LLHDDialect(mlir::MLIRContext *context)
-    : Dialect(getDialectNamespace(), context) {
+    : Dialect(getDialectNamespace(), context, getTypeID()) {
   addTypes<SigType, TimeType, ArrayType, PtrType>();
   addAttributes<TimeAttr>();
   addOperations<
@@ -380,7 +380,7 @@ private:
 // Sig Type
 
 SigType SigType::get(mlir::Type underlyingType) {
-  return Base::get(underlyingType.getContext(), LLHDTypes::Sig, underlyingType);
+  return Base::get(underlyingType.getContext(), underlyingType);
 };
 
 mlir::Type SigType::getUnderlyingType() {
@@ -389,20 +389,17 @@ mlir::Type SigType::getUnderlyingType() {
 
 // Time Type
 
-TimeType TimeType::get(MLIRContext *context) {
-  return Base::get(context, LLHDTypes::Time);
-}
+TimeType TimeType::get(MLIRContext *context) { return Base::get(context); }
 
 // ArrayType
 
 ArrayType ArrayType::get(unsigned length, Type elementType) {
-  return Base::get(elementType.getContext(), LLHDTypes::Array, length,
-                   elementType);
+  return Base::get(elementType.getContext(), length, elementType);
 }
 
 ArrayType ArrayType::getChecked(unsigned length, Type elementType,
                                 Location location) {
-  return Base::getChecked(location, LLHDTypes::Array, length, elementType);
+  return Base::getChecked(location, length, elementType);
 }
 
 LogicalResult ArrayType::verifyConstructionInvariants(Location loc,
@@ -420,7 +417,7 @@ Type ArrayType::getElementType() const { return getImpl()->getElementType(); }
 // Ptr Type
 
 PtrType PtrType::get(mlir::Type underlyingType) {
-  return Base::get(underlyingType.getContext(), LLHDTypes::Ptr, underlyingType);
+  return Base::get(underlyingType.getContext(), underlyingType);
 };
 
 mlir::Type PtrType::getUnderlyingType() {
@@ -434,8 +431,7 @@ mlir::Type PtrType::getUnderlyingType() {
 
 TimeAttr TimeAttr::get(Type type, llvm::ArrayRef<unsigned> timeValues,
                        llvm::StringRef timeUnit) {
-  return Base::get(type.getContext(), LLHDAttrs::Time, type, timeValues,
-                   timeUnit);
+  return Base::get(type.getContext(), type, timeValues, timeUnit);
 }
 
 LogicalResult

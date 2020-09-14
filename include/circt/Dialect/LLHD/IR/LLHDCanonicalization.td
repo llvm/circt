@@ -8,6 +8,10 @@
 #define CIRCT_DIALECT_LLHD_IR_CANONICALIZATION_TD
 
 include "circt/Dialect/LLHD/IR/LLHD.td"
+include "mlir/Dialect/StandardOps/IR/Ops.td"
+
+def IndexAttrFromSignlessInteger : NativeCodeCall<
+  "$_builder.getIndexAttr($0.cast<IntegerAttr>().getValue().getZExtValue())">;
 
 //===----------------------------------------------------------------------===//
 // XorOp
@@ -48,12 +52,28 @@ def BooleanNeqToXor : Pat<
   (LLHD_NeqOp I1:$lhs, I1:$rhs),
   (LLHD_XorOp $lhs, $rhs)>;
 
+//===----------------------------------------------------------------------===//
+// DynExtractSliceOp
+//===----------------------------------------------------------------------===//
 
-// TODO: dexts(target,constant c) -> exts(target, c)
-// TODO: dextf(target,constant c) -> extf(target, c)
-// TODO: exts(shr(hidden, base, constant amt), 0) -> exts(base, amt) (folder)
-//       (if amt + sliceWidth <= baseWidth, common pattern of moore to
-//        extract bits)
-// TODO: exts(exts(target, a), b) -> exts(target, a+b) (folder)
+def DynExtractSliceWithLLHDConstOpStart : Pat<
+  (LLHD_DynExtractSliceOp $target, (LLHD_ConstOp $start)),
+  (LLHD_ExtractSliceOp $target, (IndexAttrFromSignlessInteger $start))>;
+
+def DynExtractSliceWithConstantOpStart : Pat<
+  (LLHD_DynExtractSliceOp $target, (ConstantOp $start)),
+  (LLHD_ExtractSliceOp $target, (IndexAttrFromSignlessInteger $start))>;
+
+//===----------------------------------------------------------------------===//
+// DynExtractElementOp
+//===----------------------------------------------------------------------===//
+
+def DynExtractElementWithLLHDConstOpIndex : Pat<
+  (LLHD_DynExtractElementOp $target, (LLHD_ConstOp $index)),
+  (LLHD_ExtractElementOp $target, (IndexAttrFromSignlessInteger $index))>;
+
+def DynExtractElementWithConstantOpIndex : Pat<
+  (LLHD_DynExtractElementOp $target, (ConstantOp $index)),
+  (LLHD_ExtractElementOp $target, (IndexAttrFromSignlessInteger $index))>;
 
 #endif // CIRCT_DIALECT_LLHD_IR_CANONICALIZATION_TD

@@ -48,6 +48,8 @@ static llvm::cl::opt<bool> verifyDiagnostics(
     llvm::cl::init(false));
 
 int main(int argc, char **argv) {
+  enableGlobalDialectRegistry(true);
+
   // Register MLIR stuff.
   registerAsmPrinterCLOptions();
   registerMLIRContextCLOptions();

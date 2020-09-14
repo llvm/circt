@@ -65,7 +65,8 @@ static int dumpLLVM(ModuleOp module, MLIRContext &context) {
   }
 
   // Translate the module, that contains the LLVM dialect, to LLVM IR.
-  auto llvmModule = mlir::translateModuleToLLVMIR(module);
+  llvm::LLVMContext llvmContext;
+  auto llvmModule = mlir::translateModuleToLLVMIR(module, llvmContext);
   if (!llvmModule) {
     llvm::errs() << "Failed to emit LLVM IR\n";
     return -1;
@@ -76,6 +77,8 @@ static int dumpLLVM(ModuleOp module, MLIRContext &context) {
 }
 
 int main(int argc, char **argv) {
+  enableGlobalDialectRegistry(true);
+
   registerDialect<llhd::LLHDDialect>();
   registerDialect<LLVM::LLVMDialect>();
   registerDialect<StandardOpsDialect>();

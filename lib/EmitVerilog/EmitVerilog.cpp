@@ -15,6 +15,7 @@
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/StringSet.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
@@ -46,34 +47,24 @@ static bool isVerilogExpression(Operation *op) {
 /// Return the width of the specified FIRRTL type in bits or -1 if it isn't
 /// supported.
 static int getBitWidthOrSentinel(Type type) {
-  switch (type.getKind()) {
-  case StandardTypes::Integer:
-    return type.cast<IntegerType>().getWidth();
-
-  case FIRRTLType::Clock:
-  case FIRRTLType::Reset:
-  case FIRRTLType::AsyncReset:
-    return 1;
-
-  case FIRRTLType::SInt:
-  case FIRRTLType::UInt: {
-    // Turn zero-bit values into single bit ones for simplicity.  This occurs
-    // in the addr lines of mems with depth=1.
-    auto result = type.cast<IntType>().getWidthOrSentinel();
-    return result ? result : 1;
-  }
-
-  case FIRRTLType::Analog: {
-    auto result = type.cast<AnalogType>().getWidthOrSentinel();
-    return result ? result : 1;
-  }
-
-  case FIRRTLType::Flip:
-    return getBitWidthOrSentinel(type.cast<FlipType>().getElementType());
-
-  default:
-    return -1;
-  };
+  return TypeSwitch<Type, int>(type)
+      .Case<IntegerType>(
+          [](IntegerType integerType) { return integerType.getWidth(); })
+      .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
+      .Case<SIntType, UIntType>([](IntType intType) {
+        // Turn zero-bit values into single bit ones for simplicity.  This
+        // occurs in the addr lines of mems with depth=1.
+        auto result = intType.getWidthOrSentinel();
+        return result ? result : 1;
+      })
+      .Case<AnalogType>([](AnalogType analogType) {
+        auto result = analogType.getWidthOrSentinel();
+        return result ? result : 1;
+      })
+      .Case<FlipType>([](FlipType flipType) {
+        return getBitWidthOrSentinel(flipType.getElementType());
+      })
+      .Default([](Type) { return -1; });
 }
 
 /// Return the type of the specified value, converted to a passive type.  If "T"
@@ -311,6 +302,8 @@ public:
   void emitStatement(sv::IfOp op);
   void emitStatement(sv::AlwaysAtPosEdgeOp op);
   void emitStatement(sv::FWriteOp op);
+  void emitStatement(sv::FatalOp op);
+  void emitStatement(sv::FinishOp op);
   void emitDecl(NodeOp op);
   void emitDecl(InstanceOp op);
   void emitDecl(RegOp op);
@@ -654,22 +647,21 @@ struct SubExprInfo {
 
 /// Return the verilog signedness of the specified type.
 static SubExprSignedness getSignednessOf(Type type) {
-  switch (type.getKind()) {
-  default:
-    assert(0 && "unsupported type");
-  case StandardTypes::Integer:
-    return type.cast<IntegerType>().isSigned() ? IsSigned : IsUnsigned;
-  case FIRRTLType::Flip:
-    return getSignednessOf(type.cast<FlipType>().getElementType());
-  case FIRRTLType::Clock:
-  case FIRRTLType::Reset:
-  case FIRRTLType::AsyncReset:
-    return IsUnsigned;
-  case FIRRTLType::SInt:
-    return IsSigned;
-  case FIRRTLType::UInt:
-    return IsUnsigned;
-  }
+  return TypeSwitch<Type, SubExprSignedness>(type)
+      .Case<IntegerType>([](IntegerType integerType) {
+        return integerType.isSigned() ? IsSigned : IsUnsigned;
+      })
+      .Case<FlipType>([](FlipType flipType) {
+        return getSignednessOf(flipType.getElementType());
+      })
+      .Case<ClockType, ResetType, AsyncResetType>(
+          [](Type) { return IsUnsigned; })
+      .Case<SIntType>([](Type) { return IsSigned; })
+      .Case<UIntType>([](Type) { return IsUnsigned; })
+      .Default([](Type) {
+        assert(0 && "unsupported type");
+        return IsUnsigned;
+      });
 }
 
 namespace {
@@ -1421,7 +1413,26 @@ void ModuleEmitter::emitStatement(sv::FWriteOp op) {
 
   indent() << "$fwrite(32'h80000002, \"";
   os.write_escaped(op.string());
-  os << "\");";
+  os << '"';
+
+  for (auto operand : op.operands()) {
+    os << ", " << emitExpressionToString(operand, ops);
+  }
+  os << ");";
+  emitLocationInfoAndNewLine(ops);
+}
+
+void ModuleEmitter::emitStatement(sv::FatalOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  indent() << "$fatal;";
+  emitLocationInfoAndNewLine(ops);
+}
+
+void ModuleEmitter::emitStatement(sv::FinishOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  indent() << "$finish;";
   emitLocationInfoAndNewLine(ops);
 }
 
@@ -1438,10 +1449,8 @@ void ModuleEmitter::emitStatement(sv::IfDefOp op) {
   emitLocationInfoAndNewLine(ops);
 
   addIndent();
-  auto *block = op.getBodyBlock();
-  auto it = block->begin(), end = std::prev(block->end());
-  for (; it != end; ++it)
-    emitOperation(&*it);
+  for (auto &op : op.getBodyBlock()->without_terminator())
+    emitOperation(&op);
   reduceIndent();
 
   indent() << "#endif\n";
@@ -1459,22 +1468,20 @@ static void emitBeginEndRegion(Block *block,
     // Not all expressions and statements are guaranteed to emit a single
     // Verilog statement (for the purposes of if statements).  Just do a simple
     // check here for now.  This can be improved over time.
-    return isa<sv::FWriteOp>(op);
+    return isa<sv::FWriteOp>(op) || isa<sv::FinishOp>(op) ||
+           isa<sv::FatalOp>(op);
   };
 
-  // Get the range of statements we want to emit, ignoring the Yield terminator.
-  auto it = block->begin(), end = std::prev(block->end());
-
   // Determine if we can omit the begin/end keywords.
-  bool hasOneStmt =
-      it != end && std::next(it) == end && isSingleVerilogStatement(*it);
+  bool hasOneStmt = llvm::hasSingleElement(block->without_terminator()) &&
+                    isSingleVerilogStatement(block->front());
   if (!hasOneStmt)
     emitter.os << " begin";
   emitter.emitLocationInfoAndNewLine(locationOps);
 
   emitter.addIndent();
-  for (; it != end; ++it)
-    emitter.emitOperation(&*it);
+  for (auto &op : block->without_terminator())
+    emitter.emitOperation(&op);
   emitter.reduceIndent();
 
   if (!hasOneStmt) {
@@ -1813,7 +1820,8 @@ static bool isExpressionUnableToInline(Operation *op) {
     // "a vector, packed array, packed structure, parameter or concatenation".
     // It cannot be an arbitrary expression.
     if (isa<HeadPrimOp>(user) || isa<TailPrimOp>(user) ||
-        isa<ShrPrimOp>(user) || isa<BitsPrimOp>(user))
+        isa<ShrPrimOp>(user) || isa<BitsPrimOp>(user) ||
+        isa<rtl::ExtractOp>(user))
       if (!isOkToBitSelectFrom(op))
         return true;
 
@@ -2071,6 +2079,8 @@ void ModuleEmitter::emitOperation(Operation *op) {
       return emitter.emitStatement(op), true;
     }
     bool visitSV(sv::FWriteOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::FatalOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::FinishOp op) { return emitter.emitStatement(op), true; }
 
     bool visitUnhandledSV(Operation *op) { return false; }
     bool visitInvalidSV(Operation *op) { return false; }

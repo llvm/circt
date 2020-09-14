@@ -7,6 +7,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -21,58 +22,42 @@ void FIRRTLType::print(raw_ostream &os) const {
       os << '<' << width.getValue() << '>';
   };
 
-  switch (getKind()) {
-  default:
-    assert(0 && "unknown dialect type to print");
-    // Ground Types Without Parameters
-  case FIRRTLType::Clock:
-    os << "clock";
-    break;
-  case FIRRTLType::Reset:
-    os << "reset";
-    break;
-  case FIRRTLType::AsyncReset:
-    os << "asyncreset";
-    break;
-
-  // Width Qualified Types
-  case FIRRTLType::SInt:
-    os << "sint";
-    printWidthQualifier(cast<SIntType>().getWidth());
-    break;
-  case FIRRTLType::UInt:
-    os << "uint";
-    printWidthQualifier(cast<UIntType>().getWidth());
-    break;
-  case FIRRTLType::Analog:
-    os << "analog";
-    printWidthQualifier(cast<AnalogType>().getWidth());
-    break;
-
-    // Derived Types
-  case FIRRTLType::Flip:
-    os << "flip<";
-    cast<FlipType>().getElementType().print(os);
-    os << '>';
-    break;
-
-  case FIRRTLType::Bundle:
-    os << "bundle<";
-    llvm::interleaveComma(cast<BundleType>().getElements(), os,
-                          [&](BundleType::BundleElement element) {
-                            os << element.first << ": ";
-                            element.second.print(os);
-                          });
-    os << '>';
-    break;
-  case FIRRTLType::Vector: {
-    auto vec = cast<FVectorType>();
-    os << "vector<";
-    vec.getElementType().print(os);
-    os << ", " << vec.getNumElements() << '>';
-    break;
-  }
-  }
+  TypeSwitch<FIRRTLType>(*this)
+      .Case<ClockType>([&](Type) { os << "clock"; })
+      .Case<ResetType>([&](Type) { os << "reset"; })
+      .Case<AsyncResetType>([&](Type) { os << "asyncreset"; })
+      .Case<SIntType>([&](SIntType sIntType) {
+        os << "sint";
+        printWidthQualifier(sIntType.getWidth());
+      })
+      .Case<UIntType>([&](UIntType uIntType) {
+        os << "uint";
+        printWidthQualifier(uIntType.getWidth());
+      })
+      .Case<AnalogType>([&](AnalogType analogType) {
+        os << "analog";
+        printWidthQualifier(analogType.getWidth());
+      })
+      .Case<FlipType>([&](FlipType flipType) {
+        os << "flip<";
+        flipType.getElementType().print(os);
+        os << '>';
+      })
+      .Case<BundleType>([&](BundleType bundleType) {
+        os << "bundle<";
+        llvm::interleaveComma(bundleType.getElements(), os,
+                              [&](BundleType::BundleElement element) {
+                                os << element.first << ": ";
+                                element.second.print(os);
+                              });
+        os << '>';
+      })
+      .Case<FVectorType>([&](FVectorType vectorType) {
+        os << "vector<";
+        vectorType.getElementType().print(os);
+        os << ", " << vectorType.getNumElements() << '>';
+      })
+      .Default([](Type) { assert(0 && "unknown dialect type to print"); });
 }
 
 //===----------------------------------------------------------------------===//
@@ -97,30 +82,16 @@ static ParseResult parseType(FIRRTLType &result, DialectAsmParser &parser) {
   if (parser.parseKeyword(&name))
     return failure();
 
-  auto kind = llvm::StringSwitch<FIRRTLType::Kind>(name)
-                  .Case("clock", FIRRTLType::Clock)
-                  .Case("reset", FIRRTLType::Reset)
-                  .Case("asyncreset", FIRRTLType::AsyncReset)
-                  .Case("sint", FIRRTLType::SInt)
-                  .Case("uint", FIRRTLType::UInt)
-                  .Case("analog", FIRRTLType::Analog)
-                  .Case("flip", FIRRTLType::Flip)
-                  .Case("bundle", FIRRTLType::Bundle)
-                  .Case("vector", FIRRTLType::Vector)
-                  .Default(FIRRTLType::Kind(FIRRTLType::LAST_KIND + 1));
   auto *context = parser.getBuilder().getContext();
 
-  switch (kind) {
-  case FIRRTLType::Clock:
+  if (name.equals("clock")) {
     return result = ClockType::get(context), success();
-  case FIRRTLType::Reset:
+  } else if (name.equals("reset")) {
     return result = ResetType::get(context), success();
-  case FIRRTLType::AsyncReset:
+  } else if (name.equals("asyncreset")) {
     return result = AsyncResetType::get(context), success();
-
-  case FIRRTLType::SInt:
-  case FIRRTLType::UInt:
-  case FIRRTLType::Analog: {
+  } else if (name.equals("sint") || name.equals("uint") ||
+             name.equals("analog")) {
     // Parse the width specifier if it exists.
     int32_t width = -1;
     if (!parser.parseOptionalLess()) {
@@ -132,25 +103,22 @@ static ParseResult parseType(FIRRTLType &result, DialectAsmParser &parser) {
                failure();
     }
 
-    if (kind == FIRRTLType::SInt)
+    if (name.equals("sint"))
       result = SIntType::get(context, width);
-    else if (kind == FIRRTLType::UInt)
+    else if (name.equals("uint"))
       result = UIntType::get(context, width);
     else {
-      assert(kind == FIRRTLType::Analog);
+      assert(name.equals("analog"));
       result = AnalogType::get(context, width);
     }
     return success();
-  }
-
-  case FIRRTLType::Flip: {
+  } else if (name.equals("flip")) {
     FIRRTLType element;
     if (parser.parseLess() || parseType(element, parser) ||
         parser.parseGreater())
       return failure();
     return result = FlipType::get(element), success();
-  }
-  case FIRRTLType::Bundle: {
+  } else if (name.equals("bundle")) {
     if (parser.parseLess())
       return failure();
 
@@ -189,8 +157,7 @@ static ParseResult parseType(FIRRTLType &result, DialectAsmParser &parser) {
     }
 
     return result = BundleType::get(elements, context), success();
-  }
-  case FIRRTLType::Vector: {
+  } else if (name.equals("vector")) {
     FIRRTLType elementType;
     unsigned width = 0;
 
@@ -200,7 +167,6 @@ static ParseResult parseType(FIRRTLType &result, DialectAsmParser &parser) {
       return failure();
 
     return result = FVectorType::get(elementType, width), success();
-  }
   }
 
   return parser.emitError(parser.getNameLoc(), "unknown firrtl type"),
@@ -222,78 +188,62 @@ Type FIRRTLDialect::parseType(DialectAsmParser &parser) const {
 /// Return true if this is a "passive" type - one that contains no "flip"
 /// types recursively within itself.
 bool FIRRTLType::isPassiveType() {
-  switch (getKind()) {
-  case FIRRTLType::Clock:
-  case FIRRTLType::Reset:
-  case FIRRTLType::AsyncReset:
-  case FIRRTLType::SInt:
-  case FIRRTLType::UInt:
-  case FIRRTLType::Analog:
-    return true;
-
-    // Derived Types
-  case FIRRTLType::Flip:
-    return false;
-  case FIRRTLType::Bundle:
-    return this->cast<BundleType>().isPassiveType();
-  case FIRRTLType::Vector:
-    return this->cast<FVectorType>().isPassiveType();
-  }
-  llvm_unreachable("unknown FIRRTL type");
+  return TypeSwitch<FIRRTLType, bool>(*this)
+      .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
+            AnalogType>([](Type) { return true; })
+      .Case<FlipType>([](Type) { return false; })
+      .Case<BundleType>(
+          [](BundleType bundleType) { return bundleType.isPassiveType(); })
+      .Case<FVectorType>(
+          [](FVectorType vectorType) { return vectorType.isPassiveType(); })
+      .Default([](Type) {
+        llvm_unreachable("unknown FIRRTL type");
+        return false;
+      });
 }
 
 /// Return this type with any flip types recursively removed from itself.
 FIRRTLType FIRRTLType::getPassiveType() {
-  switch (getKind()) {
-  case FIRRTLType::Clock:
-  case FIRRTLType::Reset:
-  case FIRRTLType::AsyncReset:
-  case FIRRTLType::SInt:
-  case FIRRTLType::UInt:
-  case FIRRTLType::Analog:
-    return *this;
-
-    // Derived Types
-  case FIRRTLType::Flip:
-    return cast<FlipType>().getElementType().getPassiveType();
-  case FIRRTLType::Bundle:
-    return cast<BundleType>().getPassiveType();
-  case FIRRTLType::Vector:
-    return cast<FVectorType>().getPassiveType();
-  }
-  llvm_unreachable("unknown FIRRTL type");
+  return TypeSwitch<FIRRTLType, FIRRTLType>(*this)
+      .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
+            AnalogType>([&](Type) { return *this; })
+      .Case<FlipType>([](FlipType flipType) {
+        return flipType.getElementType().getPassiveType();
+      })
+      .Case<BundleType>(
+          [](BundleType bundleType) { return bundleType.getPassiveType(); })
+      .Case<FVectorType>(
+          [](FVectorType vectorType) { return vectorType.getPassiveType(); })
+      .Default([](Type) {
+        llvm_unreachable("unknown FIRRTL type");
+        return FIRRTLType();
+      });
 }
 
 /// Return this type with all ground types replaced with UInt<1>.  This is
 /// used for `mem` operations.
 FIRRTLType FIRRTLType::getMaskType() {
-  switch (getKind()) {
-  case FIRRTLType::Clock:
-  case FIRRTLType::Reset:
-  case FIRRTLType::AsyncReset:
-  case FIRRTLType::SInt:
-  case FIRRTLType::UInt:
-  case FIRRTLType::Analog:
-    return UIntType::get(getContext(), 1);
-
-    // Derived Types
-  case FIRRTLType::Flip:
-    return FlipType::get(cast<FlipType>().getElementType().getMaskType());
-  case FIRRTLType::Bundle: {
-    auto bundle = cast<BundleType>();
-    SmallVector<BundleType::BundleElement, 4> newElements;
-    newElements.reserve(bundle.getElements().size());
-    for (auto elt : bundle.getElements())
-      newElements.push_back({elt.first, elt.second.getMaskType()});
-    return BundleType::get(newElements, getContext());
-  }
-  case FIRRTLType::Vector: {
-    auto vector = cast<FVectorType>();
-    return FVectorType::get(vector.getElementType().getMaskType(),
-                            vector.getNumElements());
-  }
-  }
-  llvm_unreachable("unknown FIRRTL type");
+  return TypeSwitch<FIRRTLType, FIRRTLType>(*this)
+      .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
+            AnalogType>([&](Type) { return UIntType::get(getContext(), 1); })
+      .Case<FlipType>([](FlipType flipType) {
+        return FlipType::get(flipType.getElementType().getMaskType());
+      })
+      .Case<BundleType>([&](BundleType bundleType) {
+        SmallVector<BundleType::BundleElement, 4> newElements;
+        newElements.reserve(bundleType.getElements().size());
+        for (auto elt : bundleType.getElements())
+          newElements.push_back({elt.first, elt.second.getMaskType()});
+        return BundleType::get(newElements, getContext());
+      })
+      .Case<FVectorType>([](FVectorType vectorType) {
+        return FVectorType::get(vectorType.getElementType().getMaskType(),
+                                vectorType.getNumElements());
+      })
+      .Default([](Type) {
+        llvm_unreachable("unknown FIRRTL type");
+        return FIRRTLType();
+      });
 }
 
 /// If this is an IntType, AnalogType, or sugar type for a single bit (Clock,
@@ -301,23 +251,17 @@ FIRRTLType FIRRTLType::getMaskType() {
 /// types but without a specified bitwidth.  Return -2 if this isn't a simple
 /// type.
 int32_t FIRRTLType::getBitWidthOrSentinel() {
-  switch (getKind()) {
-  default:
-    assert(0 && "unknown FIRRTL type");
-  case FIRRTLType::Clock:
-  case FIRRTLType::Reset:
-  case FIRRTLType::AsyncReset:
-    return 1;
-  case FIRRTLType::SInt:
-  case FIRRTLType::UInt:
-    return cast<IntType>().getWidthOrSentinel();
-  case FIRRTLType::Analog:
-    return cast<AnalogType>().getWidthOrSentinel();
-  case FIRRTLType::Flip:
-  case FIRRTLType::Bundle:
-  case FIRRTLType::Vector:
-    return -2;
-  }
+  return TypeSwitch<FIRRTLType, int32_t>(*this)
+      .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
+      .Case<SIntType, UIntType>(
+          [&](IntType intType) { return intType.getWidthOrSentinel(); })
+      .Case<AnalogType>(
+          [](AnalogType analogType) { return analogType.getWidthOrSentinel(); })
+      .Case<FlipType, BundleType, FVectorType>([](Type) { return -2; })
+      .Default([](Type) {
+        llvm_unreachable("unknown FIRRTL type");
+        return -2;
+      });
 }
 
 //===----------------------------------------------------------------------===//
@@ -372,7 +316,7 @@ getWidthQualifiedTypeWidth(firrtl::detail::WidthTypeStorage *impl) {
 /// Get an with a known width, or -1 for unknown.
 SIntType SIntType::get(MLIRContext *context, int32_t width) {
   assert(width >= -1 && "unknown width");
-  return Base::get(context, SInt, width);
+  return Base::get(context, width);
 }
 
 Optional<int32_t> SIntType::getWidth() {
@@ -381,7 +325,7 @@ Optional<int32_t> SIntType::getWidth() {
 
 UIntType UIntType::get(MLIRContext *context, int32_t width) {
   assert(width >= -1 && "unknown width");
-  return Base::get(context, UInt, width);
+  return Base::get(context, width);
 }
 
 Optional<int32_t> UIntType::getWidth() {
@@ -391,7 +335,7 @@ Optional<int32_t> UIntType::getWidth() {
 /// Get an with a known width, or -1 for unknown.
 AnalogType AnalogType::get(MLIRContext *context, int32_t width) {
   assert(width >= -1 && "unknown width");
-  return Base::get(context, Analog, width);
+  return Base::get(context, width);
 }
 
 Optional<int32_t> AnalogType::getWidth() {
@@ -440,45 +384,46 @@ FIRRTLType FlipType::get(FIRRTLType element) {
   // flip as far outward from an otherwise passive type as possible.  If a flip
   // is being used with an aggregate type that contains non-passive elements,
   // then it is forced into the elements to get the canonical form.
-  switch (element.getKind()) {
-  case FIRRTLType::Clock:
-  case FIRRTLType::Reset:
-  case FIRRTLType::AsyncReset:
-  case FIRRTLType::SInt:
-  case FIRRTLType::UInt:
-  case FIRRTLType::Analog:
-    break;
+  return TypeSwitch<FIRRTLType, FIRRTLType>(element)
+      .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
+            AnalogType>([&](Type) {
+        // TODO: This should maintain a canonical form, digging any flips out of
+        // sub-types.
+        auto *context = element.getContext();
+        return Base::get(context, element);
+      })
+      .Case<FlipType>([](FlipType flipType) {
+        // flip(flip(x)) -> x
+        return flipType.getElementType();
+      })
+      .Case<BundleType>([&](BundleType bundleType) {
+        // If the bundle is passive, then we're done because the flip will be at
+        // the outer level. Otherwise, it contains flip types recursively within
+        // itself that we should canonicalize.
+        if (bundleType.isPassiveType()) {
+          auto *context = element.getContext();
+          return Base::get(context, element).cast<FIRRTLType>();
+        }
 
-    // Derived Types
-  case FIRRTLType::Flip:
-    // flip(flip(x)) -> x
-    return element.cast<FlipType>().getElementType();
+        return getFlippedBundleType(bundleType.getElements());
+      })
+      .Case<FVectorType>([&](FVectorType vectorType) {
+        // If the bundle is passive, then we're done because the flip will be at
+        // the outer level. Otherwise, it contains flip types recursively within
+        // itself that we should canonicalize.
+        if (vectorType.isPassiveType()) {
+          auto *context = element.getContext();
+          return Base::get(context, element).cast<FIRRTLType>();
+        }
 
-  case FIRRTLType::Bundle: {
-    // If the bundle is passive, then we're done because the flip will be at the
-    // outer level. Otherwise, it contains flip types recursively within itself
-    // that we should canonicalize.
-    auto bundle = element.cast<BundleType>();
-    if (bundle.isPassiveType())
-      break;
-    return getFlippedBundleType(bundle.getElements());
-  }
-  case FIRRTLType::Vector: {
-    // If the bundle is passive, then we're done because the flip will be at the
-    // outer level. Otherwise, it contains flip types recursively within itself
-    // that we should canonicalize.
-    auto vec = element.cast<FVectorType>();
-    if (vec.isPassiveType())
-      break;
-    return FVectorType::get(get(vec.getElementType()), vec.getNumElements());
-  }
-  }
-
-  // TODO: This should maintain a canonical form, digging any flips out of
-  // sub-types.
-
-  auto *context = element.getContext();
-  return Base::get(context, Flip, element);
+        return FVectorType::get(get(vectorType.getElementType()),
+                                vectorType.getNumElements())
+            .cast<FIRRTLType>();
+      })
+      .Default([](Type) {
+        llvm_unreachable("unknown FIRRTL type");
+        return FIRRTLType();
+      });
 }
 
 FIRRTLType FlipType::getElementType() { return getImpl()->element; }
@@ -533,7 +478,7 @@ FIRRTLType BundleType::get(ArrayRef<BundleElement> elements,
     return FlipType::get(getFlippedBundleType(elements));
   }
 
-  return Base::get(context, Bundle, elements);
+  return Base::get(context, elements);
 }
 
 auto BundleType::getElements() -> ArrayRef<BundleElement> {
@@ -616,7 +561,7 @@ FIRRTLType FVectorType::get(FIRRTLType elementType, unsigned numElements) {
   if (auto flip = elementType.dyn_cast<FlipType>())
     return FlipType::get(FVectorType::get(flip.getElementType(), numElements));
 
-  return Base::get(elementType.getContext(), Vector,
+  return Base::get(elementType.getContext(),
                    std::make_pair(elementType, numElements));
 }
 
