@@ -75,6 +75,69 @@ firrtl.circuit "Circuit" {
   // CHECK-NEXT:  assign y = _T_0 ^ (_T | _T_0) ^ 8'h2A ^ q[15:8];
   // CHECK-NEXT:endmodule
 
+  rtl.module @B(%a: i1 {rtl.direction = "in"}, 
+                %b: i1 {rtl.direction = "out"}, 
+                %c: i1 {rtl.direction = "out"}) {
+    %0 = rtl.or %a, %a : i1
+    %1 = rtl.and %a, %a : i1
+    rtl.connect %b, %0 : i1
+    rtl.connect %c, %1 : i1
+  }
+
+  // CHECK-LABEL: module B(
+  // CHECK-NEXT:   input  a,
+  // CHECK-NEXT:   output b, c);
+  // CHECK-EMPTY: 
+  // CHECK-NEXT:   assign b = a | a;
+  // CHECK-NEXT:   assign c = a & a;
+  // CHECK-NEXT: endmodule
+
+  rtl.module @A(%d: i1 {rtl.direction = "in"}, 
+                %e: i1 {rtl.direction = "in"}, 
+                %f: i1 {rtl.direction = "out"}) {
+    %0 = rtl.and %d, %e : i1
+    rtl.connect %f, %0 : i1
+  }
+  // CHECK-LABEL: module A(
+  // CHECK-NEXT:  input  d, e,
+  // CHECK-NEXT:  output f);
+  // CHECK-EMPTY:
+  // CHECK-NEXT:  assign f = d & e;
+  // CHECK-NEXT: endmodule
+
+  rtl.module @AB(%w: i1 {rtl.direction = "in"}, 
+                 %x: i1 {rtl.direction = "in"}, 
+                 %y: i1 {rtl.direction = "out"},
+                 %z: i1 {rtl.direction = "out"}) {
+
+    %w1 = rtl.wire : i1
+    %w2 = rtl.wire : i1
+
+    rtl.instance "a1" @A(%w, %w1, %w2) : i1, i1, i1
+    rtl.instance "b1" @B(%w2, %w1, %y) : i1, i1, i1
+
+    rtl.connect %z, %x : i1
+  }
+  //CHECK-LABEL: module AB(
+  //CHECK-NEXT:   input  w, x,
+  //CHECK-NEXT:   output y, z);
+  //CHECK-EMPTY: 
+  //CHECK-NEXT:   wire _T;
+  //CHECK-NEXT:   wire _T_0;
+  //CHECK-EMPTY: 
+  //CHECK-NEXT: A a1 (
+  //CHECK-NEXT:     .d (w),
+  //CHECK-NEXT:     .e (_T),
+  //CHECK-NEXT:     .f (_T_0)
+  //CHECK-NEXT:   )
+  //CHECK-NEXT: B b1 (
+  //CHECK-NEXT:     .a (_T_0),
+  //CHECK-NEXT:     .b (_T),
+  //CHECK-NEXT:     .c (y)
+  //CHECK-NEXT:   )
+  //CHECK-NEXT:   assign z = x;
+  //CHECK-NEXT: endmodule
+
   // The "_T" value is singly used, but Verilog can't bit extract out of a not,
   // so an explicit temporary is required.
 
@@ -89,6 +152,7 @@ firrtl.circuit "Circuit" {
     %30 = firrtl.stdIntCast %28 : (i2) -> !firrtl.uint<2>
     firrtl.connect %b, %30 : !firrtl.flip<uint<1>>, !firrtl.uint<2>
   }
+
 }
 
 

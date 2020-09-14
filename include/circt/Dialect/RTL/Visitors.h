@@ -29,7 +29,7 @@ public:
                        // Reduction Operators
                        AndROp, OrROp, XorROp,
                        // Other operations.
-                       SExtOp, ZExtOp, ConcatOp, ExtractOp>(
+                       SExtOp, ZExtOp, ConcatOp, ExtractOp, DoneOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitComb(expr, args...);
             })
@@ -93,6 +93,7 @@ public:
   HANDLE(ZExtOp, Unhandled);
   HANDLE(ConcatOp, Unhandled);
   HANDLE(ExtractOp, Unhandled);
+  HANDLE(DoneOp, Unhandled);
 #undef HANDLE
 };
 
@@ -104,7 +105,7 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<ConnectOp, WireOp>([&](auto expr) -> ResultType {
+        .template Case<ConnectOp, WireOp, RTLInstanceOp>([&](auto expr) -> ResultType {
           return thisCast->visitStmt(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -143,6 +144,7 @@ public:
   // Basic nodes.
   HANDLE(ConnectOp, Unhandled)
   HANDLE(WireOp, Unhandled);
+  HANDLE(RTLInstanceOp, Unhandled);
 #undef HANDLE
 };
 
