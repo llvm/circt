@@ -8,8 +8,11 @@
 // =============================================================================
 
 #include "circt/Conversion/StandardToHandshake/StandardToHandshake.h"
-#include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
+#include "circt/Dialect/StaticLogic/StaticLogic.h"
+#include "mlir/Analysis/AffineAnalysis.h"
+#include "mlir/Analysis/AffineStructures.h"
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Function.h"
@@ -612,8 +615,9 @@ void addSinkOps(handshake::FuncOp f, OpBuilder &rewriter) {
       // Do not add sinks for unused MLIR operations which the rewriter will
       // later remove We have already replaced these ops with their handshake
       // equivalents
-      if (!isa<mlir::CondBranchOp>(op) && !isa<mlir::BranchOp>(op) &&
-          !isa<mlir::LoadOp>(op)) {
+      // TODO: should we use other indicator for op that has been erased?
+      if (!isa<mlir::CondBranchOp, mlir::BranchOp, mlir::LoadOp,
+               mlir::AffineReadOpInterface>(op)) {
 
         if (op.getNumResults() > 0) {
           for (auto result : op.getResults())
@@ -790,8 +794,8 @@ void checkMergePredecessors(Operation *op) {
 void checkDataflowConversion(handshake::FuncOp f) {
   for (Block &block : f) {
     for (Operation &op : block) {
-      if (!dyn_cast<mlir::CondBranchOp>(op) && !dyn_cast<mlir::BranchOp>(op) &&
-          !dyn_cast<mlir::LoadOp>(op) && !dyn_cast<mlir::ConstantOp>(op)) {
+      if (!isa<mlir::CondBranchOp, mlir::BranchOp, mlir::LoadOp,
+               mlir::ConstantOp, mlir::AffineReadOpInterface>(op)) {
         if (op.getNumResults() > 0) {
           for (auto result : op.getResults()) {
             checkUseCount(&op, result);
@@ -825,11 +829,16 @@ Value getOpMemRef(Operation *op) {
     return memOp.getMemRef();
   if (auto memOp = dyn_cast<mlir::StoreOp>(op))
     return memOp.getMemRef();
+  if (isa<mlir::AffineReadOpInterface, mlir::AffineWriteOpInterface>(op)) {
+    MemRefAccess access(op);
+    return access.memref;
+  }
   op->emitError("Unknown Op type");
 }
 
 bool isMemoryOp(Operation *op) {
-  return (dyn_cast<mlir::LoadOp>(op) || dyn_cast<mlir::StoreOp>(op));
+  return isa<mlir::LoadOp, mlir::StoreOp, mlir::AffineReadOpInterface,
+             mlir::AffineWriteOpInterface>(op);
 }
 
 typedef llvm::MapVector<Value, vector<Operation *>> MemRefToMemoryAccessOp;
@@ -854,7 +863,7 @@ MemRefToMemoryAccessOp replaceMemoryOps(handshake::FuncOp f,
         Value memref = getOpMemRef(&op);
         Operation *newOp = nullptr;
 
-        if (dyn_cast<mlir::LoadOp>(op)) {
+        if (isa<mlir::LoadOp>(op)) {
           // Get operands which correspond to address indices
           // This will add all operands except alloc
           SmallVector<Value, 8> operands(
@@ -863,10 +872,7 @@ MemRefToMemoryAccessOp replaceMemoryOps(handshake::FuncOp f,
           newOp =
               rewriter.create<handshake::LoadOp>(op.getLoc(), memref, operands);
           op.getResult(0).replaceAllUsesWith(newOp->getResult(0));
-
-        } else {
-
-          assert(dyn_cast<mlir::StoreOp>(op));
+        } else if (isa<mlir::StoreOp>(op)) {
           // Get operands which correspond to address indices
           // This will add all operands except alloc and data
           SmallVector<Value, 8> operands(
@@ -876,7 +882,28 @@ MemRefToMemoryAccessOp replaceMemoryOps(handshake::FuncOp f,
           newOp = rewriter.create<handshake::StoreOp>(
               op.getLoc(), dyn_cast<mlir::StoreOp>(op).getValueToStore(),
               operands);
+        } else if (isa<mlir::AffineReadOpInterface,
+                       mlir::AffineWriteOpInterface>(op)) {
+          // Get essential memref access inforamtion.
+          MemRefAccess access(&op);
+          // Use access indices as the operands for handshake load/store
+          // operands.
+          SmallVector<mlir::Value, 4> operands(access.indices);
+
+          if (isa<mlir::AffineLoadOp>(op)) {
+            newOp = rewriter.create<handshake::LoadOp>(op.getLoc(),
+                                                       access.memref, operands);
+            op.getResult(0).replaceAllUsesWith(newOp->getResult(0));
+          } else if (isa<mlir::AffineStoreOp>(op)) {
+            newOp = rewriter.create<handshake::StoreOp>(
+                op.getLoc(), op.getOperand(0), operands);
+          } else {
+            op.emitError("Affine read/write operation cannot be handled.");
+          }
+        } else {
+          op.emitError("Load/store operation cannot be handled.");
         }
+
         MemRefOps[memref].push_back(newOp);
 
         opsToErase.push_back(&op);

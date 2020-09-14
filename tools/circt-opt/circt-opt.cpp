@@ -11,11 +11,12 @@
 #include "circt/Conversion/StandardToStaticLogic/StandardToStaticLogic.h"
 #include "circt/Dialect/FIRRTL/Dialect.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
-#include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "circt/Dialect/RTL/Dialect.h"
 #include "circt/Dialect/SV/Dialect.h"
+#include "circt/Dialect/StaticLogic/StaticLogic.h"
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AsmState.h"
@@ -72,6 +73,7 @@ int main(int argc, char **argv) {
   // Register MLIR stuff
   registerDialect<StandardOpsDialect>();
   registerDialect<LLVM::LLVMDialect>();
+  registerDialect<mlir::AffineDialect>();
 
 // Register the standard passes we want.
 #define GEN_PASS_REGISTRATION_Canonicalizer
