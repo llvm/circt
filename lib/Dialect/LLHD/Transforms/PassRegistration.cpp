@@ -5,7 +5,9 @@
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "mlir/Pass/Pass.h"
 
-void mlir::llhd::initLLHDTransformationPasses() {
+namespace {
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/LLHD/Transforms/Passes.h.inc"
-}
+} // namespace
+
+void mlir::llhd::initLLHDTransformationPasses() { registerPasses(); }

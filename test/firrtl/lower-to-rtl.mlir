@@ -6,7 +6,7 @@
   firrtl.module @Simple(%in1: !firrtl.uint<4>,
                         %in2: !firrtl.uint<2>,
                         %in3: !firrtl.sint<8>,
-                        %out1: !firrtl.flip<uint<4>>) {
+                        %out4: !firrtl.flip<uint<4>>) {
 
     // CHECK: rtl.constant(-4 : i4) : i4
     %c12_ui4 = firrtl.constant(12 : ui4) : !firrtl.uint<4>
@@ -24,7 +24,7 @@
     %2 = firrtl.sub %0, %1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
     // CHECK: %3 = firrtl.stdIntCast %in2 : (!firrtl.uint<2>) -> i2
-    // CHECK: %4 = rtl.sext %3 : (i2) -> i3
+    // CHECK: [[PADRES:%.+]] = rtl.sext %3 : (i2) -> i3
     %3 = firrtl.pad %in2, 3 : (!firrtl.uint<2>) -> !firrtl.sint<3>
 
     // CHECK: %5 = rtl.zext %4 : (i3) -> i4
@@ -49,15 +49,15 @@
     // CHECK-NEXT: rtl.connect %2, %5 : i4
     firrtl.connect %2, %4 : !firrtl.uint<4>, !firrtl.uint<4>
 
-    // CHECK-NEXT: [[CAST:%.+]] = firrtl.stdIntCast %out1 : (!firrtl.flip<uint<4>>) -> i4
+    // CHECK-NEXT: [[CAST:%.+]] = firrtl.stdIntCast %out4 : (!firrtl.flip<uint<4>>) -> i4
     // CHECK-NEXT: rtl.connect [[CAST]], [[XOR]] : i4
-    firrtl.connect %out1, %5 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+    firrtl.connect %out4, %5 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
-    // CHECK-NEXT: [[CAST1:%.+]] = firrtl.stdIntCast %out1 : (!firrtl.flip<uint<4>>) -> i4
+    // CHECK-NEXT: [[CAST1:%.+]] = firrtl.stdIntCast %out4 : (!firrtl.flip<uint<4>>) -> i4
     // CHECK-NEXT: [[CAST2:%.+]] = firrtl.stdIntCast %in2 : (!firrtl.uint<2>) -> i2
     // CHECK-NEXT: [[ZEXT:%.+]] = rtl.zext [[CAST2]] : (i2) -> i4
     // CHECK-NEXT: rtl.connect [[CAST1]], [[ZEXT]] : i4
-    firrtl.connect %out1, %in2 : !firrtl.flip<uint<4>>, !firrtl.uint<2>
+    firrtl.connect %out4, %in2 : !firrtl.flip<uint<4>>, !firrtl.uint<2>
 
     // CHECK-NEXT: = rtl.wire {name = "test-name"} : i4
     firrtl.wire {name = "test-name"} : !firrtl.uint<4>
@@ -93,5 +93,106 @@
     // CHECK-NEXT: [[ZERO:%.+]] = rtl.constant(0 : i3) : i3
     // CHECK-NEXT: = rtl.concat [[CONCAT1]], [[ZERO]] : (i8, i3) -> i11
     %14 = firrtl.shl %6, 3 : (!firrtl.uint<8>) -> !firrtl.uint<11>
+
+    // CHECK-NEXT: = rtl.xorr [[CONCAT1]] : i8
+    %15 = firrtl.xorr %6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+
+    // CHECK-NEXT: = rtl.andr [[CONCAT1]] : i8
+    %16 = firrtl.andr %6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+
+    // CHECK-NEXT: = rtl.orr [[CONCAT1]] : i8
+    %17 = firrtl.orr %6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+
+    // CHECK-NEXT: [[ZEXTC1:%.+]] = rtl.zext [[CONCAT1]] : (i8) -> i12
+    // CHECK-NEXT: [[ZEXT2:%.+]] = rtl.zext %2 : (i4) -> i12
+    // CHECK-NEXT: = rtl.mul [[ZEXTC1]], [[ZEXT2]] : i12
+    %18 = firrtl.mul %6, %2 : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<12>
+
+    // CHECK-NEXT: [[CAST:%.+]] = firrtl.stdIntCast %in3 : (!firrtl.sint<8>) -> i8
+    // CHECK-NEXT: [[IN3SEXT:%.+]] = rtl.sext [[CAST]] : (i8) -> i9
+    // CHECK-NEXT: [[PADRESSEXT:%.+]] = rtl.sext [[PADRES]] : (i3) -> i9
+    // CHECK-NEXT: = rtl.div [[IN3SEXT]], [[PADRESSEXT]] : i9
+    %19 = firrtl.div %in3, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<9>
+
+    // CHECK-NEXT: [[CAST:%.+]] = firrtl.stdIntCast %in3 : (!firrtl.sint<8>) -> i8
+    // CHECK-NEXT: [[IN3TRUNC:%.+]] = rtl.extract [[CAST]] from 0 : (i8) -> i3
+    // CHECK-NEXT: = rtl.mod [[IN3TRUNC]], [[PADRES]] : i3
+    %20 = firrtl.rem %in3, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<3>
+
+    // CHECK-NEXT: [[CAST:%.+]] = firrtl.stdIntCast %in3 : (!firrtl.sint<8>) -> i8
+    // CHECK-NEXT: [[IN3TRUNC:%.+]] = rtl.extract [[CAST]] from 0 : (i8) -> i3
+    // CHECK-NEXT: = rtl.mod [[PADRES]], [[IN3TRUNC]] : i3
+    %21 = firrtl.rem %3, %in3 : (!firrtl.sint<3>, !firrtl.sint<8>) -> !firrtl.sint<3>
+  }
+
+
+//   module Print :
+//    input clock: Clock
+//    input reset: UInt<1>
+//    input a: UInt<4>
+//    input b: UInt<4>
+//    printf(clock, reset, "No operands!\n")
+//    printf(clock, reset, "Hi %x %x\n", add(a, a), b)
+
+  // CHECK-LABEL: firrtl.module @Print
+  firrtl.module @Print(%clock: !firrtl.clock, %reset: !firrtl.uint<1>,
+                       %a: !firrtl.uint<4>, %b: !firrtl.uint<4>) {
+ 
+    // CHECK-NEXT: [[CL:%.+]] = firrtl.stdIntCast %clock : (!firrtl.clock) -> i1
+    // CHECK-NEXT: [[R:%.+]] = firrtl.stdIntCast %reset : (!firrtl.uint<1>) -> i1
+    // CHECK-NEXT: sv.alwaysat_posedge [[CL]] {
+    // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
+    // CHECK-NEXT:     [[TV:%.+]] = sv.textual_value "`PRINTF_COND_" : i1
+    // CHECK-NEXT:     [[AND:%.+]] = rtl.and [[TV]], [[R]]
+    // CHECK-NEXT:     sv.if [[AND]] {
+    // CHECK-NEXT:       sv.fwrite "No operands!\0A"
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+   firrtl.printf %clock, %reset, "No operands!\0A"
+
+    // CHECK: [[ADD:%.+]] = rtl.add
+    %0 = firrtl.add %a, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
+
+    // CHECK: sv.fwrite "Hi %x %x\0A"({{.*}}) : i5, i4
+    firrtl.printf %clock, %reset, "Hi %x %x\0A"(%0, %b) : !firrtl.uint<5>, !firrtl.uint<4>
+  }
+
+
+
+// module Stop3 :
+//    input clock1: Clock
+//    input clock2: Clock
+//    input reset: UInt<1>
+//    stop(clock1, reset, 42)
+//    stop(clock2, reset, 0)
+
+  // CHECK-LABEL: firrtl.module @Stop
+  firrtl.module @Stop(%clock1: !firrtl.clock, %clock2: !firrtl.clock, %reset: !firrtl.uint<1>) {
+    // CHECK-NEXT: %0 = firrtl.stdIntCast %clock1 : (!firrtl.clock) -> i1
+    // CHECK-NEXT: %1 = firrtl.stdIntCast %reset : (!firrtl.uint<1>) -> i1
+    // CHECK-NEXT: sv.alwaysat_posedge %0 {
+    // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
+    // CHECK-NEXT:     %4 = sv.textual_value "`STOP_COND_" : i1
+    // CHECK-NEXT:     %5 = rtl.and %4, %1 : i1
+    // CHECK-NEXT:     sv.if %5 {
+    // CHECK-NEXT:       sv.fatal
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    firrtl.stop %clock1, %reset, 42
+
+    // CHECK-NEXT: %2 = firrtl.stdIntCast %clock2 : (!firrtl.clock) -> i1
+    // CHECK-NEXT: %3 = firrtl.stdIntCast %reset : (!firrtl.uint<1>) -> i1
+    // CHECK-NEXT: sv.alwaysat_posedge %2 {
+    // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
+    // CHECK-NEXT:     %4 = sv.textual_value "`STOP_COND_" : i1
+    // CHECK-NEXT:     %5 = rtl.and %4, %3 : i1
+    // CHECK-NEXT:     sv.if %5 {
+    // CHECK-NEXT:       sv.finish
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    firrtl.stop %clock2, %reset, 0
   }
 }

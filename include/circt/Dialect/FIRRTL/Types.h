@@ -20,29 +20,19 @@ struct VectorTypeStorage;
 
 using namespace mlir;
 
+class ClockType;
+class ResetType;
+class AsyncResetType;
+class SIntType;
+class UIntType;
+class AnalogType;
+class FlipType;
+class BundleType;
+class FVectorType;
+
 // This is a common base class for all FIRRTL types.
 class FIRRTLType : public Type {
 public:
-  enum Kind {
-    FIRST_KIND = Type::FIRST_PRIVATE_EXPERIMENTAL_0_TYPE,
-
-    // Ground Types Without Parameters.
-    Clock = FIRST_KIND,
-    Reset,
-    AsyncReset,
-
-    // Width Qualified Ground Types.
-    SInt,
-    UInt,
-    Analog,
-
-    // Derived Types
-    Flip,
-    Bundle,
-    Vector,
-    LAST_KIND = Vector
-  };
-
   void print(raw_ostream &os) const;
 
   /// Return true if this is a "passive" type - one that contains no "flip"
@@ -64,12 +54,8 @@ public:
 
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
-    return type.getKind() >= Type::FIRST_PRIVATE_EXPERIMENTAL_0_TYPE &&
-           type.getKind() <= FIRRTLType::LAST_KIND;
-  }
-
-  static bool kindof(unsigned kind) {
-    return kind >= FIRST_KIND && kind <= LAST_KIND;
+    return type.isa<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
+                    AnalogType, FlipType, BundleType, FVectorType>();
   }
 
 protected:
@@ -81,41 +67,35 @@ protected:
 //===----------------------------------------------------------------------===//
 
 /// `firrtl.Clock` describe wires and ports meant for carrying clock signals.
-class ClockType : public FIRRTLType::TypeBase<ClockType, FIRRTLType, DefaultTypeStorage> {
+class ClockType
+    : public FIRRTLType::TypeBase<ClockType, FIRRTLType, DefaultTypeStorage> {
 public:
   using Base::Base;
-  static ClockType get(MLIRContext *context) {
-    return Base::get(context, FIRRTLType::Clock);
-  }
-  static bool kindof(unsigned kind) { return kind == Clock; }
+  static ClockType get(MLIRContext *context) { return Base::get(context); }
 };
 
 /// `firrtl.Reset`.
 /// TODO(firrtl spec): This is not described in the FIRRTL spec.
-class ResetType : public FIRRTLType::TypeBase<ResetType, FIRRTLType, DefaultTypeStorage> {
+class ResetType
+    : public FIRRTLType::TypeBase<ResetType, FIRRTLType, DefaultTypeStorage> {
 public:
   using Base::Base;
-  static ResetType get(MLIRContext *context) {
-    return Base::get(context, FIRRTLType::Reset);
-  }
-  static bool kindof(unsigned kind) { return kind == Reset; }
+  static ResetType get(MLIRContext *context) { return Base::get(context); }
 };
 /// `firrtl.AsyncReset`.
 /// TODO(firrtl spec): This is not described in the FIRRTL spec.
-class AsyncResetType : public FIRRTLType::TypeBase<AsyncResetType, FIRRTLType, DefaultTypeStorage> {
+class AsyncResetType : public FIRRTLType::TypeBase<AsyncResetType, FIRRTLType,
+                                                   DefaultTypeStorage> {
 public:
   using Base::Base;
-  static AsyncResetType get(MLIRContext *context) {
-    return Base::get(context, FIRRTLType::AsyncReset);
-  }
-  static bool kindof(unsigned kind) { return kind == AsyncReset; }
+  static AsyncResetType get(MLIRContext *context) { return Base::get(context); }
 };
 
 //===----------------------------------------------------------------------===//
 // Width Qualified Ground Types
 //===----------------------------------------------------------------------===//
 
-template <typename ConcreteType, FIRRTLType::Kind typeKind, typename ParentType>
+template <typename ConcreteType, typename ParentType>
 class WidthQualifiedType
     : public FIRRTLType::TypeBase<ConcreteType, ParentType,
                                   detail::WidthTypeStorage> {
@@ -128,9 +108,10 @@ public:
     auto width = static_cast<ConcreteType *>(this)->getWidth();
     return width.hasValue() ? width.getValue() : -1;
   }
-
-  static bool kindof(unsigned kind) { return kind == typeKind; }
 };
+
+class SIntType;
+class UIntType;
 
 /// This is the common base class between SIntType and UIntType.
 class IntType : public FIRRTLType {
@@ -140,8 +121,8 @@ public:
   /// Return a SIntType or UInt type with the specified signedness and width.
   static IntType get(MLIRContext *context, bool isSigned, int32_t width = -1);
 
-  bool isSigned() { return getKind() == SInt; }
-  bool isUnsigned() { return getKind() == UInt; }
+  bool isSigned() { return isa<SIntType>(); }
+  bool isUnsigned() { return isa<UIntType>(); }
 
   /// Return true if this integer type has a known width.
   bool hasWidth() { return getWidth().hasValue(); }
@@ -155,13 +136,13 @@ public:
     return width.hasValue() ? width.getValue() : -1;
   }
 
-  static bool kindof(unsigned kind) { return kind == SInt || kind == UInt; }
-  static bool classof(Type type) { return kindof(type.getKind()); }
+  static bool classof(Type type) {
+    return type.isa<SIntType>() || type.isa<UIntType>();
+  }
 };
 
 /// A signed integer type, whose width may not be known.
-class SIntType
-    : public WidthQualifiedType<SIntType, FIRRTLType::SInt, IntType> {
+class SIntType : public WidthQualifiedType<SIntType, IntType> {
 public:
   using WidthQualifiedType::WidthQualifiedType;
 
@@ -173,8 +154,7 @@ public:
 };
 
 /// An unsigned integer type, whose width may not be known.
-class UIntType
-    : public WidthQualifiedType<UIntType, FIRRTLType::UInt, IntType> {
+class UIntType : public WidthQualifiedType<UIntType, IntType> {
 public:
   using WidthQualifiedType::WidthQualifiedType;
 
@@ -186,8 +166,7 @@ public:
 };
 
 // `firrtl.Analog` can be attached to multiple drivers.
-class AnalogType
-    : public WidthQualifiedType<AnalogType, FIRRTLType::Analog, FIRRTLType> {
+class AnalogType : public WidthQualifiedType<AnalogType, FIRRTLType> {
 public:
   using WidthQualifiedType::WidthQualifiedType;
 
@@ -210,8 +189,6 @@ public:
   FIRRTLType getElementType();
 
   static FIRRTLType get(FIRRTLType element);
-
-  static bool kindof(unsigned kind) { return kind == Flip; }
 };
 
 //===----------------------------------------------------------------------===//
@@ -244,8 +221,6 @@ public:
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLType getPassiveType();
-
-  static bool kindof(unsigned kind) { return kind == Bundle; }
 };
 
 //===----------------------------------------------------------------------===//
@@ -269,8 +244,6 @@ public:
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLType getPassiveType();
-
-  static bool kindof(unsigned kind) { return kind == Vector; }
 };
 
 } // namespace firrtl

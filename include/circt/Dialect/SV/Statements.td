@@ -15,6 +15,10 @@ def HasRegionTerminator : SingleBlockImplicitTerminator<"YieldOp">;
 // Control flow like-operations
 //===----------------------------------------------------------------------===//
 
+// TODO: MLIR Supports parsing/printing regions.  We should give it a try once
+// this patch is merged in our tree:
+// https://github.com/llvm/llvm-project/commit/eaeadce9bd11
+
 def IfDefOp : SVOp<"ifdef", [HasRegionTerminator]>, HasCustomParserPrinter {
   let summary = "'ifdef MACRO' block";
    
@@ -29,6 +33,14 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator]>, HasCustomParserPrinter {
   
   // TODO: ODS doesn't support parsing/printing regions yet :-(
   // let assemblyFormat = [{ $clock attr-dict $body }];*/
+
+  // TODO: ODS forces using a custom builder just to get the region terminator
+  // implicitly installed.
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<"OpBuilder &builder, OperationState &result, "
+              "StringRef cond">
+  ];
 
   let extraClassDeclaration = [{
     Block *getBodyBlock() { return &body().front(); }
@@ -45,6 +57,14 @@ def IfOp : SVOp<"if", [HasRegionTerminator]>,
   
   // TODO: ODS doesn't support parsing/printing regions yet :-(
   //let assemblyFormat = [{ $cond attr-dict $body }];
+
+  // TODO: ODS forces using a custom builder just to get the region terminator
+  // implicitly installed.
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<"OpBuilder &builder, OperationState &result, "
+              "Value cond">
+  ];
 
   let extraClassDeclaration = [{
     Block *getBodyBlock() { return &body().front(); }
@@ -64,6 +84,14 @@ def AlwaysAtPosEdgeOp : SVOp<"alwaysat_posedge", [HasRegionTerminator]>,
   // TODO: ODS doesn't support parsing/printing regions yet :-(
   //let assemblyFormat = [{ $clock attr-dict $body }];
 
+  // TODO: ODS forces using a custom builder just to get the region terminator
+  // implicitly installed.
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<"OpBuilder &builder, OperationState &result, "
+              "Value cond">
+  ];
+
   let extraClassDeclaration = [{
     Block *getBodyBlock() { return &body().front(); }
   }];
@@ -82,15 +110,39 @@ def YieldOp
    let assemblyFormat = [{attr-dict}];
 }
 
-// TODO: This needs to model the file descriptor to write on as well as the
-// arguments.
-def FWriteOp : SVOp<"fwrite", []> {
+// TODO: This needs to model the file descriptor to write on.  This is currently
+// hard coded to 32'h80000002.
+def FWriteOp : SVOp<"fwrite"> {
   let summary = "'$fwrite' statement";
    
-  let arguments = (ins StrAttr:$string);
+  let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands);
   let results = (outs);
 
   let assemblyFormat = [{
-    $string attr-dict
+    $string attr-dict (`(` $operands^ `)` `:` type($operands))?
   }];
+}
+
+def FinishOp : SVOp<"finish"> {
+  let summary = "'$finish' statement";
+  let description = [{
+    Finishes a simulation and exits the simulation process.
+  }];
+
+  let arguments = (ins);
+  let results = (outs);
+
+  let assemblyFormat = [{ attr-dict }];
+}
+
+def FatalOp : SVOp<"fatal"> {
+  let summary = "'$fatal' statement";
+  let description = [{
+    Run-time fatal assertion error.
+  }];
+
+  let arguments = (ins);
+  let results = (outs);
+
+  let assemblyFormat = [{ attr-dict }];
 }

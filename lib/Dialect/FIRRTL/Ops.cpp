@@ -653,7 +653,7 @@ static bool isSameIntegerType(FIRRTLType lhs, FIRRTLType rhs,
                               int32_t &maxWidth) {
   // Must have two integer types with the same signedness.
   auto lhsi = lhs.dyn_cast<IntType>();
-  if (!lhsi || lhsi.getKind() != rhs.getKind())
+  if (!lhsi || lhsi.getTypeID() != rhs.getTypeID())
     return false;
 
   auto lhsWidth = lhsi.getWidth();
@@ -677,7 +677,7 @@ FIRRTLType firrtl::getAddSubResult(FIRRTLType lhs, FIRRTLType rhs) {
 }
 
 FIRRTLType firrtl::getMulResult(FIRRTLType lhs, FIRRTLType rhs) {
-  if (lhs.getKind() != rhs.getKind())
+  if (lhs.getTypeID() != rhs.getTypeID())
     return {};
 
   int32_t width = -1;
@@ -700,16 +700,16 @@ FIRRTLType firrtl::getMulResult(FIRRTLType lhs, FIRRTLType rhs) {
 }
 
 FIRRTLType firrtl::getDivResult(FIRRTLType lhs, FIRRTLType rhs) {
-  if (lhs.getKind() != rhs.getKind())
+  if (lhs.getTypeID() != rhs.getTypeID())
     return {};
 
-  int32_t width = -1;
-  if (auto lu = lhs.dyn_cast<UIntType>()) {
-    if (lu.getWidth().hasValue())
-      width = lu.getWidth().getValue();
-    return UIntType::get(lhs.getContext(), width);
-  }
+  // For unsigned, the width is the width of the numerator on the LHS.
+  if (auto lu = lhs.dyn_cast<UIntType>())
+    return UIntType::get(lhs.getContext(), lu.getWidthOrSentinel());
+
+  // For signed, the width is the width of the numerator on the LHS, plus 1.
   if (auto ls = lhs.dyn_cast<SIntType>()) {
+    int32_t width = -1;
     if (ls.getWidth().hasValue())
       width = ls.getWidth().getValue() + 1;
     return SIntType::get(lhs.getContext(), width);
@@ -718,7 +718,7 @@ FIRRTLType firrtl::getDivResult(FIRRTLType lhs, FIRRTLType rhs) {
 }
 
 FIRRTLType firrtl::getRemResult(FIRRTLType lhs, FIRRTLType rhs) {
-  if (lhs.getKind() != rhs.getKind())
+  if (lhs.getTypeID() != rhs.getTypeID())
     return {};
 
   int32_t width = -1;
@@ -937,7 +937,7 @@ FIRRTLType MuxPrimOp::getResultType(FIRRTLType sel, FIRRTLType high,
     return low;
 
   // The base types need to be equivalent.
-  if (high.getKind() != low.getKind())
+  if (high.getTypeID() != low.getTypeID())
     return {};
   if (low.isa<ClockType>() || low.isa<ResetType>() || low.isa<AsyncResetType>())
     return low;

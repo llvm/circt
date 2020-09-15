@@ -24,6 +24,8 @@ std::unique_ptr<OperationPass<ModuleOp>> createProcessLoweringPass();
 
 std::unique_ptr<OperationPass<ModuleOp>> createFunctionEliminationPass();
 
+std::unique_ptr<OperationPass<ProcOp>> createMemoryToBlockArgumentPass();
+
 std::unique_ptr<OperationPass<ProcOp>> createEarlyCodeMotionPass();
 
 /// Register the LLHD Transformation passes.

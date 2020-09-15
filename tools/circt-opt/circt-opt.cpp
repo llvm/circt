@@ -70,16 +70,18 @@ static cl::opt<bool> allowUnregisteredDialects(
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
 
+  enableGlobalDialectRegistry(true);
+
   // Register MLIR stuff
   registerDialect<StandardOpsDialect>();
   registerDialect<LLVM::LLVMDialect>();
   registerDialect<mlir::AffineDialect>();
 
 // Register the standard passes we want.
-#define GEN_PASS_REGISTRATION_Canonicalizer
-#define GEN_PASS_REGISTRATION_CSE
-#define GEN_PASS_REGISTRATION_Inliner
 #include "mlir/Transforms/Passes.h.inc"
+  registerCanonicalizerPass();
+  registerCSEPass();
+  registerInlinerPass();
 
   // Register any pass manager command line options.
   registerMLIRContextCLOptions();
@@ -113,7 +115,7 @@ int main(int argc, char **argv) {
   MLIRContext context;
   if (showDialects) {
     llvm::outs() << "Registered Dialects:\n";
-    for (Dialect *dialect : context.getRegisteredDialects()) {
+    for (Dialect *dialect : context.getLoadedDialects()) {
       llvm::outs() << dialect->getNamespace() << "\n";
     }
     return 0;
@@ -134,6 +136,7 @@ int main(int argc, char **argv) {
   }
 
   return failed(MlirOptMain(output->os(), std::move(file), passPipeline,
-                            splitInputFile, verifyDiagnostics, verifyPasses,
+                            context.getDialectRegistry(), splitInputFile,
+                            verifyDiagnostics, verifyPasses,
                             allowUnregisteredDialects));
 }

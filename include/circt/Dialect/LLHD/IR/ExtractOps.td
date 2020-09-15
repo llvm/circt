@@ -53,6 +53,8 @@ def LLHD_ExtractSliceOp : LLHD_Op<"extract_slice", [
     unsigned getSliceSize()  { return getLLHDTypeWidth(result().getType()); }
     unsigned getTargetSize() { return getLLHDTypeWidth(target().getType()); }
   }];
+
+  let hasFolder = 1;
 }
 
 def LLHD_DynExtractSliceOp : LLHD_Op<"dyn_extract_slice", [
@@ -100,6 +102,8 @@ def LLHD_DynExtractSliceOp : LLHD_Op<"dyn_extract_slice", [
     unsigned getSliceWidth()  { return getLLHDTypeWidth(result().getType()); }
     unsigned getTargetWidth() { return getLLHDTypeWidth(target().getType()); }
   }];
+
+  let hasCanonicalizer = 1;
 }
 
 def LLHD_ExtractElementOp : LLHD_Op<"extract_element", [
@@ -222,4 +226,6 @@ def LLHD_DynExtractElementOp : LLHD_Op<"dyn_extract_element", [
       return targetType.cast<llhd::ArrayType>().getElementType();
     }
   }];
+
+  let hasCanonicalizer = 1;
 }

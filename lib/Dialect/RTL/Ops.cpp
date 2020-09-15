@@ -2,16 +2,227 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/FIRRTL/Ops.h"
 #include "circt/Dialect/RTL/Ops.h"
 #include "circt/Dialect/RTL/Visitors.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/StandardTypes.h"
 
 using namespace circt;
 using namespace rtl;
+
+static void buildModule(OpBuilder &builder, OperationState &result,
+                        StringAttr name, ArrayRef<RTLModulePortInfo> ports) {
+  using namespace mlir::impl;
+
+  // Add an attribute for the name.
+  result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
+
+  SmallVector<Type, 4> argTypes;
+  for (auto elt : ports)
+    argTypes.push_back(elt.type);
+
+  // Record the argument and result types as an attribute.
+  auto type = builder.getFunctionType(argTypes, /*resultTypes=*/{});
+  result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
+
+  // Record the names of the arguments if present.
+  SmallString<8> attrNameBuf;
+  SmallString<8> attrDirBuf;
+  for (size_t i = 0, e = ports.size(); i != e; ++i) {
+    if (ports[i].name.getValue().empty())
+      continue;
+
+    auto argAttr =
+        NamedAttribute(builder.getIdentifier("rtl.name"), ports[i].name);
+
+    auto dirAttr = NamedAttribute(builder.getIdentifier("rtl.direction"),
+                                  ports[i].direction);
+
+    result.addAttribute(getArgAttrName(i, attrNameBuf),
+                        builder.getDictionaryAttr({argAttr, dirAttr}));
+  }
+  result.addRegion();
+}
+
+void rtl::RTLModuleOp::build(OpBuilder &builder, OperationState &result,
+                             StringAttr name,
+                             ArrayRef<RTLModulePortInfo> ports) {
+  buildModule(builder, result, name, ports);
+
+  // Create a region and a block for the body.
+  auto *bodyRegion = result.regions[0].get();
+  Block *body = new Block();
+  bodyRegion->push_back(body);
+
+  // Add arguments to the body block.
+  for (auto elt : ports)
+    body->addArgument(elt.type);
+
+  rtl::RTLModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
+}
+
+FunctionType rtl::getModuleType(Operation *op) {
+  auto typeAttr = op->getAttrOfType<TypeAttr>(RTLModuleOp::getTypeAttrName());
+  return typeAttr.getValue().cast<FunctionType>();
+}
+
+StringAttr rtl::getRTLNameAttr(ArrayRef<NamedAttribute> attrs) {
+  for (auto &argAttr : attrs) {
+    if (argAttr.first != "rtl.name")
+      continue;
+    return argAttr.second.dyn_cast<StringAttr>();
+  }
+  return StringAttr();
+}
+
+StringAttr rtl::getRTLDirectionAttr(ArrayRef<NamedAttribute> attrs) {
+  for (auto &argAttr : attrs) {
+    if (argAttr.first != "rtl.direction")
+      continue;
+    return argAttr.second.dyn_cast<StringAttr>();
+  }
+  return StringAttr();
+}
+
+void rtl::RTLModuleOp::getRTLModulePortInfo(
+    Operation *op, SmallVectorImpl<RTLModulePortInfo> &results) {
+  auto argTypes = getModuleType(op).getInputs();
+
+  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
+    auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
+    auto type = argTypes[i].dyn_cast<IntegerType>();
+
+    results.push_back(
+        {getRTLNameAttr(argAttrs), type, getRTLDirectionAttr(argAttrs)});
+  }
+}
+
+static ParseResult parseRTLModuleOp(OpAsmParser &parser,
+                                    OperationState &result) {
+  using namespace mlir::impl;
+
+  SmallVector<OpAsmParser::OperandType, 4> entryArgs;
+  SmallVector<NamedAttrList, 4> argAttrs;
+  SmallVector<NamedAttrList, 4> resultAttrs;
+  SmallVector<Type, 4> argTypes;
+  SmallVector<Type, 4> resultTypes;
+  auto &builder = parser.getBuilder();
+
+  // Parse the name as a symbol.
+  StringAttr nameAttr;
+  if (parser.parseSymbolName(nameAttr, ::mlir::SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  // Parse the function signature.
+  bool isVariadic = false;
+  if (parseFunctionSignature(parser, /*allowVariadic=*/false, entryArgs,
+                             argTypes, argAttrs, isVariadic, resultTypes,
+                             resultAttrs))
+    return failure();
+
+  // Record the argument and result types as an attribute.  This is necessary
+  // for external modules.
+  auto type = builder.getFunctionType(argTypes, resultTypes);
+  result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
+
+  // If function attributes are present, parse them.
+  if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
+    return failure();
+
+  assert(argAttrs.size() == argTypes.size());
+  assert(resultAttrs.size() == resultTypes.size());
+
+  auto *context = result.getContext();
+
+  // Postprocess each of the arguments.  If there was no 'rtl.name'
+  // attribute, and if the argument name was non-numeric, then add the
+  // rtl.name attribute with the textual name from the IR.  The name in the
+  // text file is a load-bearing part of the IR, but we don't want the
+  // verbosity in dumps of including it explicitly in the attribute
+  // dictionary.
+  for (size_t i = 0, e = argAttrs.size(); i != e; ++i) {
+    auto &attrs = argAttrs[i];
+
+    // If an explicit name attribute was present, don't add the implicit one.
+    bool hasNameAttr = false;
+    for (auto &elt : attrs)
+      if (elt.first.str() == "rtl.name")
+        hasNameAttr = true;
+    if (hasNameAttr || entryArgs.empty())
+      continue;
+
+    auto &arg = entryArgs[i];
+
+    // The name of an argument is of the form "%42" or "%id", and since
+    // parsing succeeded, we know it always has one character.
+    assert(arg.name.size() > 1 && arg.name[0] == '%' && "Unknown MLIR name");
+    if (isdigit(arg.name[1]))
+      continue;
+
+    auto nameAttr = StringAttr::get(arg.name.drop_front(), context);
+    attrs.push_back({Identifier::get("rtl.name", context), nameAttr});
+  }
+
+  // Add the attributes to the function arguments.
+  addArgAndResultAttrs(builder, result, argAttrs, resultAttrs);
+
+  // Parse the optional function body.
+  auto *body = result.addRegion();
+  if (parser.parseOptionalRegion(
+          *body, entryArgs, entryArgs.empty() ? ArrayRef<Type>() : argTypes))
+    return failure();
+
+  RTLModuleOp::ensureTerminator(*body, parser.getBuilder(), result.location);
+  return success();
+}
+
+FunctionType getRTLModuleOpType(Operation *op) {
+  auto typeAttr =
+      op->getAttrOfType<TypeAttr>(rtl::RTLModuleOp::getTypeAttrName());
+  return typeAttr.getValue().cast<FunctionType>();
+}
+
+static void printRTLModuleOp(OpAsmPrinter &p, Operation *op) {
+  using namespace mlir::impl;
+
+  FunctionType fnType = getRTLModuleOpType(op);
+  auto argTypes = fnType.getInputs();
+  auto resultTypes = fnType.getResults();
+
+  // Print the operation and the function name.
+  auto funcName =
+      op->getAttrOfType<StringAttr>(::mlir::SymbolTable::getSymbolAttrName())
+          .getValue();
+  p << op->getName() << ' ';
+  p.printSymbolName(funcName);
+
+  printFunctionSignature(p, op, argTypes, /*isVariadic=*/false, resultTypes);
+  printFunctionAttributes(p, op, argTypes.size(), resultTypes.size());
+}
+
+static void print(OpAsmPrinter &p, RTLModuleOp op) {
+  printRTLModuleOp(p, op);
+
+  // Print the body if this is not an external function.
+  Region &body = op.getBody();
+  if (!body.empty())
+    p.printRegion(body, /*printEntryBlockArgs=*/false,
+                  /*printBlockTerminators=*/false);
+}
+
+static LogicalResult verifyRTLInstanceOp(RTLInstanceOp op) {
+  auto moduleIR = op.getParentOfType<firrtl::CircuitOp>();
+  auto referencedModule = moduleIR.lookupSymbol(op.moduleName());
+  if (!isa<rtl::RTLModuleOp>(referencedModule))
+    return failure();
+  return success();
+}
 
 /// Return true if the specified operation is a combinatorial logic op.
 bool rtl::isCombinatorial(Operation *op) {

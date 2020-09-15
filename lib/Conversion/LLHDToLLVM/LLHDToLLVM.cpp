@@ -40,8 +40,8 @@ static int resumeCounter = 0;
 static Value getGlobalString(Location loc, OpBuilder &builder,
                              LLVMTypeConverter &typeConverter,
                              LLVM::GlobalOp &str) {
-  auto i8PtrTy = LLVM::LLVMType::getInt8PtrTy(typeConverter.getDialect());
-  auto i32Ty = LLVM::LLVMType::getInt32Ty(typeConverter.getDialect());
+  auto i8PtrTy = LLVM::LLVMType::getInt8PtrTy(&typeConverter.getContext());
+  auto i32Ty = LLVM::LLVMType::getInt32Ty(&typeConverter.getContext());
 
   auto addr = builder.create<LLVM::AddressOfOp>(
       loc, str.getType().getPointerTo(), str.getName());
@@ -75,8 +75,8 @@ getOrInsertFunction(ModuleOp &module, ConversionPatternRewriter &rewriter,
 /// Return the LLVM type used to represent a signal. It corresponds to a struct
 /// with the format: {valuePtr, bitOffset, instanceIndex, globalIndex}.
 static LLVM::LLVMType getSigType(LLVM::LLVMDialect *dialect) {
-  auto i8PtrTy = LLVM::LLVMType::getInt8PtrTy(dialect);
-  auto i64Ty = LLVM::LLVMType::getInt64Ty(dialect);
+  auto i8PtrTy = LLVM::LLVMType::getInt8PtrTy(dialect->getContext());
+  auto i64Ty = LLVM::LLVMType::getInt64Ty(dialect->getContext());
   return LLVM::LLVMType::getStructTy(i8PtrTy, i64Ty, i64Ty, i64Ty);
 }
 
@@ -87,9 +87,9 @@ static std::vector<Value> getSignalDetail(ConversionPatternRewriter &rewriter,
                                           Location loc, Value signal,
                                           bool extractIndices = false) {
 
-  auto i8PtrTy = LLVM::LLVMType::getInt8PtrTy(dialect);
-  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect);
-  auto i64Ty = LLVM::LLVMType::getInt64Ty(dialect);
+  auto i8PtrTy = LLVM::LLVMType::getInt8PtrTy(dialect->getContext());
+  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect->getContext());
+  auto i64Ty = LLVM::LLVMType::getInt64Ty(dialect->getContext());
 
   std::vector<Value> result;
 
@@ -131,7 +131,7 @@ static Value createSubSig(LLVM::LLVMDialect *dialect,
                           ConversionPatternRewriter &rewriter, Location loc,
                           std::vector<Value> originDetail, Value newPtr,
                           Value newOffset) {
-  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect);
+  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect->getContext());
   auto sigTy = getSigType(dialect);
 
   // Create signal struct.
@@ -168,7 +168,7 @@ static LLVM::LLVMType getProcPersistenceTy(LLVM::LLVMDialect *dialect,
                           .cast<LLVM::LLVMType>());
     }
   });
-  return LLVM::LLVMType::getStructTy(dialect, types);
+  return LLVM::LLVMType::getStructTy(dialect->getContext(), types);
 }
 
 /// Insert a comparison block that either jumps to the trueDest block, if the
@@ -178,7 +178,7 @@ static void insertComparisonBlock(ConversionPatternRewriter &rewriter,
                                   LLVM::LLVMDialect *dialect, Location loc,
                                   Region *body, Value resumeIdx, int currIdx,
                                   Block *trueDest, Block *falseDest = nullptr) {
-  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect);
+  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect->getContext());
   auto secondBlock = ++body->begin();
   auto newBlock = rewriter.createBlock(body, secondBlock);
   auto cmpIdx = rewriter.create<LLVM::ConstantOp>(
@@ -205,7 +205,7 @@ static void insertPersistence(LLVMTypeConverter &converter,
                               LLVM::LLVMDialect *dialect, Location loc,
                               ProcOp &proc, LLVM::LLVMType &stateTy,
                               LLVM::LLVMFuncOp &converted) {
-  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect);
+  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect->getContext());
   DominanceInfo dom(converted);
 
   // Load the resume index from the process state argument.
@@ -297,15 +297,15 @@ static void insertPersistence(LLVMTypeConverter &converter,
 
 static LLVM::LLVMType convertSigType(SigType type,
                                      LLVMTypeConverter &converter) {
-  auto i64Ty = LLVM::LLVMType::getInt64Ty(converter.getDialect());
-  auto i8PtrTy = LLVM::LLVMType::getInt8PtrTy(converter.getDialect());
+  auto i64Ty = LLVM::LLVMType::getInt64Ty(&converter.getContext());
+  auto i8PtrTy = LLVM::LLVMType::getInt8PtrTy(&converter.getContext());
   return LLVM::LLVMType::getStructTy(i8PtrTy, i64Ty, i64Ty, i64Ty)
       .getPointerTo();
 }
 
 static LLVM::LLVMType convertTimeType(TimeType type,
                                       LLVMTypeConverter &converter) {
-  auto i32Ty = LLVM::LLVMType::getInt32Ty(converter.getDialect());
+  auto i32Ty = LLVM::LLVMType::getInt32Ty(&converter.getContext());
   return LLVM::LLVMType::getArrayTy(i32Ty, 3);
 }
 //===----------------------------------------------------------------------===//
@@ -332,7 +332,7 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
     // Collect used llvm types.
     auto voidTy = getVoidType();
     auto i8PtrTy = getVoidPtrType();
-    auto i32Ty = LLVM::LLVMType::getInt32Ty(&getDialect());
+    auto i32Ty = LLVM::LLVMType::getInt32Ty(&typeConverter.getContext());
     auto sigTy = getSigType(&getDialect());
 
     // Use an intermediate signature conversion to add the arguments for the
@@ -428,8 +428,8 @@ struct ProcOpConversion : public ConvertToLLVMPattern {
     // Collect used llvm types.
     auto voidTy = getVoidType();
     auto i8PtrTy = getVoidPtrType();
-    auto i1Ty = LLVM::LLVMType::getInt1Ty(&getDialect());
-    auto i32Ty = LLVM::LLVMType::getInt32Ty(&getDialect());
+    auto i1Ty = LLVM::LLVMType::getInt1Ty(&typeConverter.getContext());
+    auto i32Ty = LLVM::LLVMType::getInt32Ty(&typeConverter.getContext());
     auto senseTableTy =
         LLVM::LLVMType::getArrayTy(i1Ty, procOp.getNumArguments())
             .getPointerTo();
@@ -510,8 +510,8 @@ struct HaltOpConversion : public ConvertToLLVMPattern {
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
-    auto i1Ty = LLVM::LLVMType::getInt1Ty(&getDialect());
-    auto i32Ty = LLVM::LLVMType::getInt32Ty(&getDialect());
+    auto i1Ty = LLVM::LLVMType::getInt1Ty(&typeConverter.getContext());
+    auto i32Ty = LLVM::LLVMType::getInt32Ty(&typeConverter.getContext());
 
     auto llvmFunc = op->getParentOfType<LLVM::LLVMFuncOp>();
     auto procState = llvmFunc.getArgument(1);
@@ -567,8 +567,8 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
 
     auto voidTy = getVoidType();
     auto i8PtrTy = getVoidPtrType();
-    auto i1Ty = LLVM::LLVMType::getInt1Ty(&getDialect());
-    auto i32Ty = LLVM::LLVMType::getInt32Ty(&getDialect());
+    auto i1Ty = LLVM::LLVMType::getInt1Ty(&typeConverter.getContext());
+    auto i32Ty = LLVM::LLVMType::getInt32Ty(&typeConverter.getContext());
 
     // Get the llhd_suspend runtime function.
     auto llhdSuspendTy = LLVM::LLVMType::getFunctionTy(
@@ -664,9 +664,9 @@ struct InstOpConversion : public ConvertToLLVMPattern {
 
     auto voidTy = getVoidType();
     auto i8PtrTy = getVoidPtrType();
-    auto i1Ty = LLVM::LLVMType::getInt1Ty(&getDialect());
-    auto i32Ty = LLVM::LLVMType::getInt32Ty(&getDialect());
-    auto i64Ty = LLVM::LLVMType::getInt64Ty(&getDialect());
+    auto i1Ty = LLVM::LLVMType::getInt1Ty(&typeConverter.getContext());
+    auto i32Ty = LLVM::LLVMType::getInt32Ty(&typeConverter.getContext());
+    auto i64Ty = LLVM::LLVMType::getInt64Ty(&typeConverter.getContext());
 
     // Init function signature: (i8* %state) -> void.
     auto initFuncTy =
@@ -711,8 +711,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
     if (!parentSym) {
       owner = LLVM::createGlobalString(
           op->getLoc(), initBuilder, "instance." + ownerName.str(),
-          ownerName.str() + '\0', LLVM::Linkage::Internal,
-          typeConverter.getDialect());
+          ownerName.str() + '\0', LLVM::Linkage::Internal);
       parentSym =
           module.lookupSymbol<LLVM::GlobalOp>("instance." + ownerName.str());
     } else {
@@ -896,7 +895,7 @@ struct SigOpConversion : public ConvertToLLVMPattern {
     SigOpAdaptor transformed(operands);
 
     // Collect the used llvm types.
-    auto i32Ty = LLVM::LLVMType::getInt32Ty(typeConverter.getDialect());
+    auto i32Ty = LLVM::LLVMType::getInt32Ty(&typeConverter.getContext());
     auto sigTy = getSigType(&getDialect());
 
     // Get the signal table pointer from the arguments.
@@ -942,7 +941,8 @@ struct PrbOpConversion : public ConvertToLLVMPattern {
     // the case where a subsignal spans halfway in the last byte.
     int resWidth = prbOp.getType().getIntOrFloatBitWidth();
     int loadWidth = (llvm::divideCeil(resWidth, 8) + 1) * 8;
-    auto loadTy = LLVM::LLVMType::getIntNTy(&getDialect(), loadWidth);
+    auto loadTy =
+        LLVM::LLVMType::getIntNTy(&typeConverter.getContext(), loadWidth);
 
     // Get the signal details from the signal struct.
     auto sigDetail = getSignalDetail(rewriter, &getDialect(), op->getLoc(),
@@ -989,8 +989,8 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
     // Collect used llvm types.
     auto voidTy = getVoidType();
     auto i8PtrTy = getVoidPtrType();
-    auto i32Ty = LLVM::LLVMType::getInt32Ty(typeConverter.getDialect());
-    auto i64Ty = LLVM::LLVMType::getInt64Ty(typeConverter.getDialect());
+    auto i32Ty = LLVM::LLVMType::getInt32Ty(&typeConverter.getContext());
+    auto i64Ty = LLVM::LLVMType::getInt64Ty(&typeConverter.getContext());
     auto sigTy = getSigType(&getDialect());
 
     // Get or insert the drive library call.
@@ -1068,7 +1068,7 @@ struct NotOpConversion : public ConvertToLLVMPattern {
     // Get integer width.
     unsigned width = notOp.getType().getIntOrFloatBitWidth();
     // Get the used llvm types.
-    auto iTy = LLVM::LLVMType::getIntNTy(typeConverter.getDialect(), width);
+    auto iTy = LLVM::LLVMType::getIntNTy(&typeConverter.getContext(), width);
 
     // Get the all-ones mask operand
     APInt mask(width, 0);
@@ -1108,7 +1108,7 @@ struct ShrOpConversion : public ConvertToLLVMPattern {
       auto hdnWidth = shrOp.hidden().getType().getIntOrFloatBitWidth();
       auto full = baseWidth + hdnWidth;
 
-      auto tmpTy = LLVM::LLVMType::getIntNTy(typeConverter.getDialect(), full);
+      auto tmpTy = LLVM::LLVMType::getIntNTy(&typeConverter.getContext(), full);
 
       // Extend all operands the combined width.
       auto baseZext = rewriter.create<LLVM::ZExtOp>(op->getLoc(), tmpTy,
@@ -1141,7 +1141,7 @@ struct ShrOpConversion : public ConvertToLLVMPattern {
       return success();
     } else if (auto resTy = shrOp.result().getType().dyn_cast<SigType>()) {
       auto i8PtrTy = getVoidPtrType();
-      auto i64Ty = LLVM::LLVMType::getInt64Ty(&getDialect());
+      auto i64Ty = LLVM::LLVMType::getInt64Ty(&typeConverter.getContext());
 
       // Get the signal pointer and offset.
       auto sigDetail =
@@ -1199,15 +1199,14 @@ struct ShlOpConversion : public ConvertToLLVMPattern {
 
     ShlOpAdaptor transformed(operands);
     auto shlOp = cast<ShlOp>(op);
-    assert(!(shlOp.getType().getKind() == llhd::LLHDTypes::Sig) &&
-           "sig not yet supported");
+    assert(!shlOp.getType().isa<llhd::SigType>() && "sig not yet supported");
 
     // Get the width of the base and hidden operands combined.
     auto baseWidth = shlOp.getType().getIntOrFloatBitWidth();
     auto hdnWidth = shlOp.hidden().getType().getIntOrFloatBitWidth();
     auto full = baseWidth + hdnWidth;
 
-    auto tmpTy = LLVM::LLVMType::getIntNTy(typeConverter.getDialect(), full);
+    auto tmpTy = LLVM::LLVMType::getIntNTy(&typeConverter.getContext(), full);
 
     // Extend all operands to the combined width.
     auto baseZext =
@@ -1310,7 +1309,7 @@ struct ExtractSliceOpConversion : public ConvertToLLVMPattern {
 
     auto indexTy = typeConverter.convertType(extsOp.startAttr().getType());
     auto i8PtrTy = getVoidPtrType();
-    auto i64Ty = LLVM::LLVMType::getInt64Ty(&getDialect());
+    auto i64Ty = LLVM::LLVMType::getInt64Ty(&typeConverter.getContext());
 
     // Get the attributes as constants.
     auto startConst = rewriter.create<LLVM::ConstantOp>(op->getLoc(), indexTy,
@@ -1440,7 +1439,9 @@ mlir::llhd::createConvertLLHDToLLVMPass() {
 }
 
 /// Register the LLHD to LLVM convesion pass.
-void llhd::initLLHDToLLVMPass() {
+namespace {
 #define GEN_PASS_REGISTRATION
 #include "circt/Conversion/LLHDToLLVM/Passes.h.inc"
-}
+} // namespace
+
+void llhd::initLLHDToLLVMPass() { registerPasses(); }
