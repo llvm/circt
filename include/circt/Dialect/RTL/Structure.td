@@ -77,7 +77,7 @@ def RTLInstanceOp : RTLOp<"instance", []> {
      $instanceName $moduleName `(` $inputs `)` attr-dict `:` type($inputs)
   }];
 
-  let verifier = [{ return ::verifyFModuleOp(*this); }];
+  let verifier = [{ return ::verifyRTLInstanceOp(*this); }];
 }
 
 def DoneOp : RTLOp<"done", [Terminator, HasParent<"RTLModuleOp">]> {
