@@ -1,18 +1,18 @@
-//===- Structure.td - SV structure ops -------------------*- tablegen -*-===//
+//===- TypeDecl.td - SV type declaration ops ---------------*- tablegen -*-===//
 //
-// This describes the ops for SystemVerilog structure.
+// This describes the ops for SystemVerilog type declartions.
 //
 //===----------------------------------------------------------------------===//
 
-def HasStructureTerminator :
-    SingleBlockImplicitTerminator<"StructureTerminatorOp">;
+def HasTypeDeclTerminator :
+    SingleBlockImplicitTerminator<"TypeDeclTerminatorOp">;
 
 //===----------------------------------------------------------------------===//
 // Interface operations
 //===----------------------------------------------------------------------===//
 
 def InterfaceOp : SVOp<"interface",
-    [Symbol, SymbolTable, HasStructureTerminator]>, HasCustomParserPrinter {
+    [Symbol, SymbolTable, HasTypeDeclTerminator]> {
   let summary = "Operation to define a SystemVerilog interface";
 
   let description = [{
@@ -21,7 +21,15 @@ def InterfaceOp : SVOp<"interface",
     also a SymbolTable itself, so the symbols in its region can be looked up.
   }];
 
+  let arguments = (ins
+    SymbolNameAttr:$sym_name
+  );
+
   let regions = (region SizedRegion<1>:$body);
+
+  let assemblyFormat = [{
+    attr-dict $sym_name $body
+  }];
 }
 
 // For now, IntegerType is a placeholder for future SV dialect types
@@ -37,7 +45,7 @@ def InterfaceSignalOp : SVOp<"interface.signal",
   }];
 
   let arguments = (ins
-    StrAttr:$sym_name,
+    SymbolNameAttr:$sym_name,
     SignalTypeAttr:$type
   );
 
@@ -69,12 +77,12 @@ def InterfaceModportOp : SVOp<"interface.modport",
   let summary = "Operation to define a SystemVerilog modport for interfaces";
 
   let arguments = (ins
-    StrAttr:$sym_name,
+    SymbolNameAttr:$sym_name,
     ModportStructArrayAttr:$ports
   );
 
   let assemblyFormat = [{
-    attr-dict $sym_name $ports
+    attr-dict $sym_name custom<ModportStructs>($ports)
   }];
 }
 
@@ -82,9 +90,9 @@ def InterfaceModportOp : SVOp<"interface.modport",
 // Other operations
 //===----------------------------------------------------------------------===//
 
-def StructureTerminatorOp : SVOp<"structure_terminator",
+def TypeDeclTerminatorOp : SVOp<"type_decl_terminator",
     [NoSideEffect, Terminator, ParentOneOf<["InterfaceOp"]>]> {
-  let summary = "Terminator for structure operations";
+  let summary = "Terminator for type declaration operations";
 
   let arguments = (ins);
 }

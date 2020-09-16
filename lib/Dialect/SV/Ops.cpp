@@ -110,34 +110,48 @@ static void printAlwaysAtPosEdgeOp(OpAsmPrinter &p, AlwaysAtPosEdgeOp op) {
 }
 
 //===----------------------------------------------------------------------===//
-// Structure operations
+// TypeDecl operations
 //===----------------------------------------------------------------------===//
 
-//===----------------------------------------------------------------------===//
-// InterfaceOp
-
-static ParseResult parseInterfaceOp(OpAsmParser &parser,
-                                    OperationState &result) {
-  StringAttr nameAttr;
-  if (parser.parseSymbolName(nameAttr, ::mlir::SymbolTable::getSymbolAttrName(),
-                             result.attributes))
+static ParseResult parseModportStructs(OpAsmParser &parser,
+                                       ArrayAttr &portsAttr) {
+  if (parser.parseLParen())
     return failure();
 
-  Region *body = result.addRegion();
-  if (parser.parseRegion(*body, llvm::None, llvm::None))
+  auto context = parser.getBuilder().getContext();
+
+  SmallVector<Attribute, 8> ports;
+  do {
+    NamedAttrList tmpAttrs;
+    StringAttr direction;
+    FlatSymbolRefAttr signal;
+    if (parser.parseAttribute(direction, "port", tmpAttrs) ||
+        parser.parseAttribute(signal, "signal", tmpAttrs))
+      return failure();
+
+    ports.push_back(ModportStructAttr::get(direction, signal, context));
+  } while (succeeded(parser.parseOptionalComma()));
+
+  if (parser.parseRParen())
     return failure();
 
-  InterfaceOp::ensureTerminator(*body, parser.getBuilder(), result.location);
+  portsAttr = ArrayAttr::get(ports, context);
 
   return success();
 }
 
-static void printInterfaceOp(OpAsmPrinter &p, InterfaceOp op) {
-  p << op.getOperationName() << ' ';
-  p.printSymbolName(op.getName());
-  p.printRegion(op.body(),
-                /*printEntryBlockArgs=*/false,
-                /*printBlockTerminators=*/false);
+static void printModportStructs(OpAsmPrinter &p, ArrayAttr portsAttr) {
+  p << " (";
+  for (size_t i = 0, e = portsAttr.size(); i != e; ++i) {
+    auto port = portsAttr[i].dyn_cast<ModportStructAttr>();
+    p << port.direction();
+    p << ' ';
+    p.printSymbolName(port.signal().getRootReference());
+    if (i < e - 1) {
+      p << ", ";
+    }
+  }
+  p << ')';
 }
 
 // TableGen generated logic.
@@ -147,7 +161,4 @@ static void printInterfaceOp(OpAsmPrinter &p, InterfaceOp op) {
 #define GET_OP_CLASSES
 #include "circt/Dialect/SV/SV.cpp.inc"
 #include "circt/Dialect/SV/SVEnums.cpp.inc"
-
-namespace circt {
 #include "circt/Dialect/SV/SVStructs.cpp.inc"
-} // namespace circt

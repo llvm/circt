@@ -14,7 +14,6 @@
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/SV/SV.h.inc"
-
 #include "circt/Dialect/SV/SVEnums.h.inc"
 #include "circt/Dialect/SV/SVStructs.h.inc"
 

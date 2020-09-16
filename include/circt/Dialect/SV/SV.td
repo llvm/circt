@@ -27,14 +27,8 @@ def SVDialect : Dialect {
 class SVOp<string mnemonic, list<OpTrait> traits = []> :
     Op<SVDialect, mnemonic, traits>;
 
-// Helper classes
-class HasCustomParserPrinter {
-  code printer = [{ return ::print$cppClass(p, *this); }];
-  code parser = [{ return ::parse$cppClass(parser, result); }];
-}
-
 include "Expressions.td"
 include "Statements.td"
-include "Structure.td"
+include "TypeDecl.td"
 
 #endif // SV_TD
