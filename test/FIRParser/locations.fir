@@ -1,6 +1,6 @@
 ; RUN: circt-translate -parse-fir --mlir-print-debuginfo -verify-diagnostics %s | FileCheck %s
 
-circuit basic :  @[CIRCUIT.scala 127]
+circuit MyModule :  @[CIRCUIT.scala 127]
 
   ; CHECK-LABEL: firrtl.module @MyModule(%in: !firrtl.uint, %out: !firrtl.flip<uint<8>>) {
   module MyModule :   @[FooBar.scala 369:27]

@@ -1,6 +1,6 @@
 // RUN: circt-opt %s | FileCheck %s
 
-firrtl.circuit "Circuit" {
+firrtl.circuit "MyModule" {
 
 //module MyModule :
 //  input in: UInt<8>

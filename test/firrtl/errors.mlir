@@ -1,6 +1,6 @@
 // RUN: circt-opt %s -split-input-file -verify-diagnostics
 
-firrtl.circuit "Circuit" {
+firrtl.circuit "X" {
 
 firrtl.module @X(%b : !firrtl.unknowntype) {
   // expected-error @-1 {{unknown firrtl type}}
@@ -10,7 +10,7 @@ firrtl.module @X(%b : !firrtl.unknowntype) {
 
 // -----
 
-firrtl.circuit "Circuit" {
+firrtl.circuit "X" {
 
 firrtl.module @X(%b : !firrtl.uint<32>, %d : !firrtl.uint<16>, %out : !firrtl.uint) {
   // expected-error @+1 {{'firrtl.add' op expected 2 operands, but found 3}}
@@ -21,7 +21,7 @@ firrtl.module @X(%b : !firrtl.uint<32>, %d : !firrtl.uint<16>, %out : !firrtl.ui
 
 // -----
 
-firrtl.circuit "Circuit" {
+firrtl.circuit "MyModule" {
 
 // expected-error @+2 {{'firrtl.module' op expects regions to end with 'firrtl.done'}}
 // expected-note @+1 {{implies 'firrtl.done'}}
@@ -35,7 +35,7 @@ firrtl.circuit "Circuit" {
 
 // -----
 
-firrtl.circuit "Circuit" {
+firrtl.circuit "MyCircuit" {
 
 // expected-error @+1 {{'firrtl.module' op requires string attribute 'sym_name'}}
 "firrtl.module"() ( {

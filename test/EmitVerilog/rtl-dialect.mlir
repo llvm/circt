@@ -1,6 +1,6 @@
 // RUN: circt-translate %s -emit-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
-firrtl.circuit "Circuit" {
+firrtl.circuit "M1" {
   firrtl.module @M1(%x : !firrtl.uint<8>,
                     %y : !firrtl.flip<uint<8>>,
                     %z : i8) {
