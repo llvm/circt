@@ -31,21 +31,21 @@ std::string loopCounterTemplate =
     "\nwire[$msb_ub:0] ub$n_loop = v$n_ub;"
     "\nwire[$msb_step:0] step$n_loop = v$n_step;"
     "\nwire tstart$n_loop = t$n_tstart;"
+    "\nwire tloop_in$n_loop;"
     "\n"
     "\nreg[$msb_idx:0] prev_idx$n_loop;"
     "\nreg[$msb_ub:0] saved_ub$n_loop;"
     "\nreg[$msb_step:0] saved_step$n_loop;"
     "\nwire[$msb_idx:0] idx$n_loop = tstart$n_loop? lb$n_loop "
-    "\n                              : tloop_in$n_loop ? "
-    "(prev_idx$n_loop+saved_step)"
-    "\n: prev_idx$n_loop;"
+    ": tloop_in$n_loop ? "
+    "(prev_idx$n_loop+saved_step$n_loop): prev_idx$n_loop;"
     "\nwire tloop_out$n_loop = tstart$n_loop"
-    "\n|| ((idx$n_loop < saved_ub$n_loop)?tloop_in$n_loop"
-    "\n                          :1'b0);"
-    "\nalways@(posedge clk) saved_idx$n_loop <= idx$n_loop;"
+    "|| ((idx$n_loop < saved_ub$n_loop)?tloop_in$n_loop"
+    "                          :1'b0);"
+    "\nalways@(posedge clk) prev_idx$n_loop <= idx$n_loop;"
     "\nalways@(posedge clk) if (tstart$n_loop) begin"
     "\n  saved_ub$n_loop   <= ub$n_loop;"
-    "\n  saved_step <= step$n_loop;"
+    "\n  saved_step$n_loop <= step$n_loop;"
     "\nend"
     "\n"
     "\nwire t$n_loop = tloop_out$n_loop;"
@@ -273,6 +273,8 @@ LogicalResult VerilogPrinter::printMemWriteOp(MemWriteOp op,
 }
 
 LogicalResult VerilogPrinter::printAddOp(hir::AddOp op, unsigned indentAmount) {
+  // TODO: Handle signed and unsigned integers of unequal width using sign
+  // extension.
   Value left = op.left();
   Value right = op.right();
   Value result = op.res();
@@ -354,7 +356,7 @@ LogicalResult VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
   unsigned width_idx = getBitWidth(idx.getType());
 
   if (auto idx_intTy = idx.getType().dyn_cast<IntegerType>()) {
-    module_out << "reg[" << idx_intTy.getWidth() << "] counter" << id_loop
+    module_out << "reg[" << idx_intTy.getWidth() - 1 << ":0] counter" << id_loop
                << ";\n";
   } else {
     return emitError(op.getLoc(), "for loop induction var must be an integer");
@@ -396,18 +398,25 @@ LogicalResult VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
 LogicalResult VerilogPrinter::printOperation(Operation *inst,
                                              unsigned indentAmount) {
   if (auto op = dyn_cast<hir::ConstantOp>(inst)) {
+    module_out << "//ConstantOp\n";
     return printConstantOp(op, indentAmount);
   } else if (auto op = dyn_cast<hir::ForOp>(inst)) {
+    module_out << "//ForOp\n";
     return printForOp(op, indentAmount);
   } else if (auto op = dyn_cast<hir::ReturnOp>(inst)) {
+    module_out << "//ReturnOp\n";
     return printReturnOp(op, indentAmount);
   } else if (auto op = dyn_cast<hir::MemReadOp>(inst)) {
+    module_out << "//MemReadOp\n";
     return printMemReadOp(op, indentAmount);
   } else if (auto op = dyn_cast<hir::MemWriteOp>(inst)) {
+    module_out << "//MemWriteOp\n";
     return printMemWriteOp(op, indentAmount);
   } else if (auto op = dyn_cast<hir::AddOp>(inst)) {
+    module_out << "//AddOp\n";
     return printAddOp(op, indentAmount);
   } else if (auto op = dyn_cast<hir::TerminatorOp>(inst)) {
+    module_out << "//TerminatorOp\n";
     // Do nothing.
   } else {
     return emitError(inst->getLoc(), "Unsupported Operation!");
@@ -422,7 +431,6 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
   FunctionType funcType = op.getType();
   module_out << "module " << op.getName().str() << "(";
   for (int i = 0; i < args.size(); i++) {
-    unsigned bitwidth = 0;
     Value arg = args[i];
     Type argType = arg.getType();
     unsigned valueNumber = newValueNumber();
@@ -438,27 +446,27 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
     if (argType.isa<hir::TimeType>()) {
       module_out << "input wire t" << valueNumber;
     } else if (argType.isa<IntegerType>()) {
-      bitwidth = getBitWidth(argType);
+      unsigned bitwidth = getBitWidth(argType);
       module_out << "input wire[" << bitwidth - 1 << ":0]  ";
       module_out << "v" << valueNumber;
     } else if (argType.isa<MemrefType>()) {
       MemrefType memrefTy = argType.dyn_cast<MemrefType>();
       hir::Details::PortKind port = memrefTy.getPort();
       unsigned addrWidth = calcAddrWidth(memrefTy);
-      module_out << "output wire[" << addrWidth - 1 << ":0] v_addr"
+      module_out << "output reg[" << addrWidth - 1 << ":0] v_addr"
                  << valueNumber;
       if (port == hir::Details::r || port == hir::Details::rw) {
-        bitwidth = getBitWidth(argType);
+        unsigned bitwidth = getBitWidth(argType);
         module_out << ",\noutput wire v_rd_en" << valueNumber;
         module_out << ",\ninput wire[" << bitwidth - 1 << ":0]  "
                    << "v_rd_data" << valueNumber;
       }
       if (port == hir::Details::w || port == hir::Details::rw) {
         module_out << ",\noutput wire v_wr_en" << valueNumber;
-        bitwidth = getBitWidth(argType);
+        unsigned bitwidth = getBitWidth(argType);
         module_out << ",\n"
-                   << "output wire[" << bitwidth - 1 << ":0]  ";
-        module_out << "v_wr_data" << valueNumber;
+                   << "output reg[" << bitwidth - 1 << ":0]  "
+                   << "v_wr_data" << valueNumber;
       }
     } else {
       return emitError(op.getLoc(), "Unsupported argument type!");
@@ -467,7 +475,7 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
     if (i == args.size())
       module_out << "\n";
   }
-  module_out << ");\n\n";
+  module_out << ",\ninput clk);\n\n";
 
   for (auto arg : args)
     if (arg.getType().isa<hir::MemrefType>())
@@ -485,16 +493,17 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
 }
 
 LogicalResult VerilogPrinter::printTimeOffsets(Value timeVar) {
+  module_out << "//printTimeOffset\n";
   unsigned loc = replaceLocs.size();
   unsigned id_timeVar = mapValueToNum[timeVar];
   module_out << "reg t" << id_timeVar << "offset[$loc" << loc << "];\n";
   module_out << "always@(*) "
-             << "t" << id_timeVar << "offset[0] <= t" << id_timeVar << ";\n";
+             << "t" << id_timeVar << "offset[0] = t" << id_timeVar << ";\n";
   unsigned id_i = newValueNumber();
   module_out << "genvar i" << id_i << ";\n";
   module_out << "\ngenerate for(i" << id_i << " = 1; i" << id_i << "< $loc"
-             << loc << "; i++) begin\n";
-  module_out << "always@(clk) begin\n";
+             << loc << "; i" << id_i << "++) begin\n";
+  module_out << "always@(posedge clk) begin\n";
   module_out << "t" << id_timeVar << "offset[i" << id_i << "] <= "
              << "t" << id_timeVar << "offset[i" << id_i << "-1];\n";
   module_out << "end\n";
@@ -536,13 +545,13 @@ std::string buildDataSelectorStr(std::string &v, unsigned numInputs,
          << "];\n";
   output << "always@(*) begin\n";
   output << "if(" << v_valid << "[0] == 1'b1)\n";
-  output << v << " <= " << v_input << "[0];\n";
+  output << v << " = " << v_input << "[0];\n";
   for (int i = 1; i < numInputs; i++) {
     output << "else if(" << v_valid << "[" << i << "] == 1'b1)\n";
-    output << v << " <= " << v_input << "[" << i << "];\n";
+    output << v << " = " << v_input << "[" << i << "];\n";
   }
   output << "  else\n";
-  output << v << " <= " << dataWidth << "'d0;\n";
+  output << v << " = " << dataWidth << "'d0;\n";
   output << "end\n";
   return output.str();
 }
@@ -570,12 +579,10 @@ LogicalResult VerilogPrinter::printMemrefStub(Value mem,
     // print addr bus selector.
     output << buildDataSelectorStr(v_addr, numAccess, addrWidth);
     output << "\n";
-    // print read bus selector.
+    // print rd_en selector.
     if (memParams.numReads > 0) {
       std::string v_rd_en = "v_rd_en" + std::to_string(id_mem);
       output << buildEnableSelectorStr(v_rd_en, memParams.numReads);
-      std::string v_rd_data = "v_rd_data" + std::to_string(id_mem);
-      output << buildDataSelectorStr(v_rd_data, memParams.numReads, dataWidth);
       output << "\n";
     }
     // print write bus selector.
