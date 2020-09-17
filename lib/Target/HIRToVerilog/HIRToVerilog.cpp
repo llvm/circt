@@ -398,25 +398,25 @@ LogicalResult VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
 LogicalResult VerilogPrinter::printOperation(Operation *inst,
                                              unsigned indentAmount) {
   if (auto op = dyn_cast<hir::ConstantOp>(inst)) {
-    module_out << "//ConstantOp\n";
+    module_out << "\n//ConstantOp\n";
     return printConstantOp(op, indentAmount);
   } else if (auto op = dyn_cast<hir::ForOp>(inst)) {
-    module_out << "//ForOp\n";
+    module_out << "\n//ForOp\n";
     return printForOp(op, indentAmount);
   } else if (auto op = dyn_cast<hir::ReturnOp>(inst)) {
-    module_out << "//ReturnOp\n";
+    module_out << "\n//ReturnOp\n";
     return printReturnOp(op, indentAmount);
   } else if (auto op = dyn_cast<hir::MemReadOp>(inst)) {
-    module_out << "//MemReadOp\n";
+    module_out << "\n//MemReadOp\n";
     return printMemReadOp(op, indentAmount);
   } else if (auto op = dyn_cast<hir::MemWriteOp>(inst)) {
-    module_out << "//MemWriteOp\n";
+    module_out << "\n//MemWriteOp\n";
     return printMemWriteOp(op, indentAmount);
   } else if (auto op = dyn_cast<hir::AddOp>(inst)) {
-    module_out << "//AddOp\n";
+    module_out << "\n//AddOp\n";
     return printAddOp(op, indentAmount);
   } else if (auto op = dyn_cast<hir::TerminatorOp>(inst)) {
-    module_out << "//TerminatorOp\n";
+    module_out << "\n//TerminatorOp\n";
     // Do nothing.
   } else {
     return emitError(inst->getLoc(), "Unsupported Operation!");
@@ -444,14 +444,21 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
       module_out << ",\n";
 
     if (argType.isa<hir::TimeType>()) {
+      module_out << "//TimeType.\n";
       module_out << "input wire t" << valueNumber;
     } else if (argType.isa<IntegerType>()) {
+      module_out << "//IntegerType.\n";
       unsigned bitwidth = getBitWidth(argType);
       module_out << "input wire[" << bitwidth - 1 << ":0]  ";
       module_out << "v" << valueNumber;
     } else if (argType.isa<MemrefType>()) {
       MemrefType memrefTy = argType.dyn_cast<MemrefType>();
       hir::Details::PortKind port = memrefTy.getPort();
+      module_out << "//MemrefType : port = "
+                 << ((port == hir::Details::r)
+                         ? "r"
+                         : (port == hir::Details::w) ? "w" : "rw")
+                 << ".\n";
       unsigned addrWidth = calcAddrWidth(memrefTy);
       module_out << "output reg[" << addrWidth - 1 << ":0] v_addr"
                  << valueNumber;
@@ -475,7 +482,7 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
     if (i == args.size())
       module_out << "\n";
   }
-  module_out << ",\ninput clk);\n\n";
+  module_out << ",\n//Clock.\ninput clk);\n\n";
 
   for (auto arg : args)
     if (arg.getType().isa<hir::MemrefType>())
