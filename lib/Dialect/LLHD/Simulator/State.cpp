@@ -129,69 +129,106 @@ void Slot::insertChange(unsigned inst) { scheduled.push_back(inst); }
 //===----------------------------------------------------------------------===//
 void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
                                  uint8_t *bytes, unsigned width) {
-  int firstUnused = -1;
-  for (size_t i = 0, e = size(); i < e; ++i) {
-    if (time == begin()[i].time) {
-      begin()[i].insertChange(index, bitOffset, bytes, width);
-      return;
-    } else if (begin()[i].unused) {
-      firstUnused = i;
+  auto &s = begin()[topSlot];
+
+  // Directly add to top slot.
+  if (!s.unused && time == s.time) {
+    s.insertChange(index, bitOffset, bytes, width);
+    return;
+  }
+
+  // We need to search through the queue for an existing slot only if we're
+  // spawning an event later than the top slot. Adding to an existing slot
+  // scheduled earlier than the top slot should never happens, as then it should
+  // be the top.
+  if (events > 0 && s.time < time) {
+    for (size_t i = 0, e = size(); i < e; ++i) {
+      if (time == begin()[i].time) {
+        begin()[i].insertChange(index, bitOffset, bytes, width);
+        return;
+      }
     }
   }
 
-  ++events;
-
-  if (firstUnused >= 0) {
-    auto &curr = begin()[firstUnused];
+  // Spawn new event.
+  if (unused.size() > 0) {
+    auto u = unused.back();
+    unused.pop_back();
+    auto &curr = begin()[u];
     curr.insertChange(index, bitOffset, bytes, width);
     curr.unused = false;
     curr.time = time;
+    if (s.unused || time < s.time)
+      topSlot = u;
   } else {
     push_back(Slot(time, index, bitOffset, bytes, width));
+    if (s.unused || time < s.time)
+      topSlot = size() - 1;
   }
+  ++events;
 }
 
 void UpdateQueue::insertOrUpdate(Time time, unsigned inst) {
-  int firstUnused = -1;
-  for (size_t i = 0, e = size(); i < e; ++i) {
-    if (time == begin()[i].time) {
-      begin()[i].insertChange(inst);
-      return;
-    } else if (begin()[i].unused) {
-      firstUnused = i;
+  auto &s = begin()[topSlot];
+
+  // Directly add to top slot.
+  if (!s.unused && time == s.time) {
+    s.insertChange(inst);
+    return;
+  }
+
+  // We need to search through the queue for an existing slot only if we're
+  // spawning an event after the top slot. Adding to an existing slot scheduled
+  // earlier than the top slot should never happens, as then it should be the
+  // top.
+  if (events > 0 && s.time < time) {
+    // int firstUnused = -1;
+    for (size_t i = 0, e = size(); i < e; ++i) {
+      if (time == begin()[i].time) {
+        begin()[i].insertChange(inst);
+        return;
+      }
     }
   }
 
-  ++events;
-
-  size_t newSlot;
-  if (firstUnused >= 0) {
-    begin()[firstUnused].insertChange(inst);
-    begin()[firstUnused].unused = false;
-    begin()[firstUnused].time = time;
-    newSlot = firstUnused;
+  // Spawn new event.
+  if (unused.size() > 0) {
+    auto u = unused.back();
+    unused.pop_back();
+    auto &curr = begin()[u];
+    curr.insertChange(inst);
+    curr.unused = false;
+    curr.time = time;
+    if (s.unused || time < s.time)
+      topSlot = u;
   } else {
     Slot slot(time);
     slot.insertChange(inst);
     push_back(slot);
+    if (s.unused || time < s.time)
+      topSlot = size() - 1;
   }
+  ++events;
 }
 
 const Slot &UpdateQueue::top() {
-  auto it = std::min_element(begin(), end(), [](auto &a, auto &b) {
-    return !a.unused && (a < b || b.unused);
-  });
-  currentTop = it - begin();
-  return begin()[currentTop];
+  assert(topSlot < size() && "top is pointing out of bounds!");
+  return begin()[topSlot];
 }
 
 void UpdateQueue::pop() {
-  auto &curr = begin()[currentTop];
+  auto &curr = begin()[topSlot];
   curr.unused = true;
   curr.changesSize = 0;
   curr.scheduled.clear();
   curr.time = Time();
   --events;
+
+  unused.push_back(topSlot);
+  topSlot = std::distance(
+      begin(), std::min_element(begin(), end(), [](auto &a, auto &b) {
+        return !a.unused && (a < b || b.unused);
+      }));
 }
 
 //===----------------------------------------------------------------------===//

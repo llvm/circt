@@ -128,7 +128,8 @@ struct Slot {
 /// This is equivalent to and std::priorityQueue<Slot> ordered using the greater
 /// operator, which adds an insertion method to add changes to a slot.
 class UpdateQueue : public llvm::SmallVector<Slot, 8> {
-  size_t currentTop = 0;
+  unsigned topSlot = 0;
+  llvm::SmallVector<unsigned, 4> unused;
 
 public:
   /// Check wheter a slot for the given time already exists. If that's the case,
