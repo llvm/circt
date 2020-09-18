@@ -35,7 +35,7 @@ firrtl.circuit "MyModule" {
 
 // -----
 
-// expected-error @+1 {{'firrtl.circuit' op must contain one module that matches main name ('MyCircuit')}}
+// expected-error @+1 {{'firrtl.circuit' op must contain one module that matches main name 'MyCircuit'}}
 firrtl.circuit "MyCircuit" {
 
 "firrtl.module"() ( {
@@ -49,3 +49,18 @@ firrtl.circuit "MyCircuit" {
 
 // expected-error @+1 {{'firrtl.module' op should be embedded into a firrtl.circuit}}
 firrtl.module @X() {}
+
+// -----
+
+// expected-error @+1 {{'firrtl.circuit' op must contain one module that matches main name 'Foo'}}
+firrtl.circuit "Foo" {
+
+firrtl.module @Bar() {}
+
+}
+
+// -----
+
+// expected-error @+1 {{'firrtl.circuit' op must have a non-empty name}}
+firrtl.circuit "" {
+}
