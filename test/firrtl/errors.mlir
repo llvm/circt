@@ -35,9 +35,9 @@ firrtl.circuit "MyModule" {
 
 // -----
 
+// expected-error @+1 {{'firrtl.circuit' op must contain one module that matches main name ('MyCircuit')}}
 firrtl.circuit "MyCircuit" {
 
-// expected-error @+1 {{'firrtl.module' op requires string attribute 'sym_name'}}
 "firrtl.module"() ( {
   "firrtl.done"() : () -> ()
 }) { type = () -> ()} : () -> ()
