@@ -108,15 +108,15 @@ bool Slot::operator>(const Slot &rhs) const { return rhs.time < time; }
 
 void Slot::insertChange(int index, int bitOffset, uint8_t *bytes,
                         unsigned width) {
-  auto size = llvm::divideCeil(width, 8) + 1;
+  auto size = llvm::divideCeil(width, 64);
   if (changesSize >= changes.size()) {
     changes.push_back(std::make_pair(index, bitOffset));
-    data.push_back(APInt(
-        width, ArrayRef<uint64_t>(reinterpret_cast<uint64_t *>(bytes), size)));
+    data.push_back(
+        APInt(width, makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size)));
   } else {
     changes[changesSize] = std::make_pair(index, bitOffset);
-    data[changesSize] = APInt(
-        width, ArrayRef<uint64_t>(reinterpret_cast<uint64_t *>(bytes), size));
+    data[changesSize] =
+        APInt(width, makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size));
     ;
   }
   ++changesSize;

@@ -127,8 +127,8 @@ int Engine::simulate(int n, uint64_t maxTime) {
       // Get a buffer to apply the changes on.
       const auto &curr = state->signals[change.first];
       APInt buff(curr.size * 8,
-                 ArrayRef<uint64_t>(reinterpret_cast<uint64_t *>(curr.value),
-                                    curr.size));
+                 makeArrayRef(reinterpret_cast<uint64_t *>(curr.value),
+                              llvm::divideCeil(curr.size, 8)));
 
       // Apply all the changes to the buffer, in order of execution.
       const auto &drive = pop.data[i];
