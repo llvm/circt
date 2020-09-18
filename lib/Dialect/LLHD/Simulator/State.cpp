@@ -97,9 +97,10 @@ std::string Signal::dump(unsigned elemIndex) {
 // Slot
 //===----------------------------------------------------------------------===//
 
-Slot::Slot(Time time, int index, int bitOffset, uint8_t *bytes, unsigned width)
+Slot::Slot(Time time, int index, int bitOffset, uint8_t *bytes, unsigned width,
+           unsigned origWidth)
     : time(time) {
-  insertChange(index, bitOffset, bytes, width);
+  insertChange(index, bitOffset, bytes, width, origWidth);
 }
 
 bool Slot::operator<(const Slot &rhs) const { return time < rhs.time; }
@@ -107,7 +108,7 @@ bool Slot::operator<(const Slot &rhs) const { return time < rhs.time; }
 bool Slot::operator>(const Slot &rhs) const { return rhs.time < time; }
 
 void Slot::insertChange(int index, int bitOffset, uint8_t *bytes,
-                        unsigned width) {
+                        unsigned width, unsigned origWidth) {
   auto size = llvm::divideCeil(width, 64);
   if (changesSize >= changes.size()) {
     changes.push_back(std::make_pair(index, bitOffset));
@@ -117,8 +118,15 @@ void Slot::insertChange(int index, int bitOffset, uint8_t *bytes,
     changes[changesSize] = std::make_pair(index, bitOffset);
     data[changesSize] =
         APInt(width, makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size));
-    ;
   }
+
+  // Add signal to the changed signals list.
+  auto i = std::find_if(sigs.begin(), sigs.end(),
+                        [index](const auto &el) { return el.first == index; });
+  if (i == sigs.end())
+    sigs.push_back(std::make_pair(index, width == origWidth));
+  else
+    i->second = width == origWidth;
   ++changesSize;
 }
 
@@ -128,12 +136,13 @@ void Slot::insertChange(unsigned inst) { scheduled.push_back(inst); }
 // UpdateQueue
 //===----------------------------------------------------------------------===//
 void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
-                                 uint8_t *bytes, unsigned width) {
+                                 uint8_t *bytes, unsigned width,
+                                 unsigned origWidth) {
   auto &s = begin()[topSlot];
 
   // Directly add to top slot.
   if (!s.unused && time == s.time) {
-    s.insertChange(index, bitOffset, bytes, width);
+    s.insertChange(index, bitOffset, bytes, width, origWidth);
     return;
   }
 
@@ -144,7 +153,7 @@ void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
   if (events > 0 && s.time < time) {
     for (size_t i = 0, e = size(); i < e; ++i) {
       if (time == begin()[i].time) {
-        begin()[i].insertChange(index, bitOffset, bytes, width);
+        begin()[i].insertChange(index, bitOffset, bytes, width, origWidth);
         return;
       }
     }
@@ -155,13 +164,13 @@ void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
     auto u = unused.back();
     unused.pop_back();
     auto &curr = begin()[u];
-    curr.insertChange(index, bitOffset, bytes, width);
+    curr.insertChange(index, bitOffset, bytes, width, origWidth);
     curr.unused = false;
     curr.time = time;
     if (s.unused || time < s.time)
       topSlot = u;
   } else {
-    push_back(Slot(time, index, bitOffset, bytes, width));
+    push_back(Slot(time, index, bitOffset, bytes, width, origWidth));
     if (s.unused || time < s.time)
       topSlot = size() - 1;
   }
@@ -211,7 +220,7 @@ void UpdateQueue::insertOrUpdate(Time time, unsigned inst) {
   ++events;
 }
 
-const Slot &UpdateQueue::top() {
+Slot &UpdateQueue::top() {
   assert(topSlot < size() && "top is pointing out of bounds!");
   return begin()[topSlot];
 }
@@ -221,6 +230,7 @@ void UpdateQueue::pop() {
   curr.unused = true;
   curr.changesSize = 0;
   curr.scheduled.clear();
+  curr.sigs.clear();
   curr.time = Time();
   --events;
 
@@ -254,11 +264,6 @@ Slot State::popQueue() {
   return pop;
 }
 
-void State::pushQueue(Time t, int index, int bitOffset, uint8_t *bytes,
-                      unsigned width) {
-  // Time newTime = time + t;
-  queue.insertOrUpdate(time + t, index, bitOffset, bytes, width);
-}
 void State::pushQueue(Time t, unsigned inst) {
   Time newTime = time + t;
   queue.insertOrUpdate(newTime, inst);
@@ -299,6 +304,11 @@ int State::addSignalData(int index, std::string owner, uint8_t *value,
   // Add pointer and size to global signal table entry.
   sig.value = std::unique_ptr<uint8_t>(value);
   sig.size = size;
+
+  // For non-integer signals, set their width equal to the size of the type in
+  // memory.
+  if (signals[globalIdx].width == 0)
+    signals[globalIdx].width = size;
 
   // Add the value pointer to the signal detail struct for each instance this
   // signal appears in.

@@ -120,22 +120,41 @@ int Engine::simulate(int n, uint64_t maxTime) {
     if (traceMode >= 0)
       trace.flush();
 
-    // Apply the signal changes and dump the signals that actually changed
-    // value.
-    for (size_t i = 0, e = pop.changesSize; i < e; ++i) {
-      auto change = pop.changes[i];
-      // Get a buffer to apply the changes on.
-      const auto &curr = state->signals[change.first];
+    // Process signal changes.
+    for (auto s : pop.sigs) {
+      const auto &curr = state->signals[s.first];
       APInt buff(curr.size * 8,
                  makeArrayRef(reinterpret_cast<uint64_t *>(curr.value),
                               llvm::divideCeil(curr.size, 8)));
 
-      // Apply all the changes to the buffer, in order of execution.
-      const auto &drive = pop.data[i];
-      if (drive.getBitWidth() < buff.getBitWidth())
-        buff.insertBits(drive, change.second);
-      else
-        buff = drive;
+      // If the last drive fully updates the signal, we can iterate over the
+      // changes backwards, taking the last change and stopping. Otherwise we
+      // have to combine all the changes by processing them in order of
+      // insertion.
+      if (s.second) {
+        for (size_t i = pop.changesSize - 1; i >= 0; --i) {
+          const auto &change = pop.changes[i];
+          if (change.first == s.first) {
+            const auto &drive = pop.data[i];
+            if (drive.getBitWidth() < buff.getBitWidth())
+              buff.insertBits(drive, change.second);
+            else
+              buff = drive;
+            break;
+          }
+        }
+      } else {
+        for (size_t i = 0, e = pop.changesSize; i < e; ++i) {
+          const auto &change = pop.changes[i];
+          if (change.first == s.first) {
+            const auto &drive = pop.data[i];
+            if (drive.getBitWidth() < buff.getBitWidth())
+              buff.insertBits(drive, change.second);
+            else
+              buff = drive;
+          }
+        }
+      }
 
       // Skip if the updated signal value is equal to the initial value.
       if (std::memcmp(curr.value, buff.getRawData(), curr.size) == 0)
@@ -145,13 +164,13 @@ int Engine::simulate(int n, uint64_t maxTime) {
       std::memcpy(curr.value, buff.getRawData(), curr.size);
 
       // Add sensitive instances.
-      for (auto inst : state->signals[change.first].triggers) {
+      for (auto inst : curr.triggers) {
         // Skip if the process is not currently sensible to the signal.
         if (!state->instances[inst].isEntity) {
           const auto &sensList = state->instances[inst].sensitivityList;
           auto it = std::find_if(sensList.begin(), sensList.end(),
-                                 [&change](const SignalDetail &s) {
-                                   return s.globalIndex == change.first;
+                                 [s](const SignalDetail &sig) {
+                                   return sig.globalIndex == s.first;
                                  });
           if (sensList.end() != it &&
               state->instances[inst].procState->senses[it - sensList.begin()] ==
@@ -166,7 +185,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
 
       // Dump the updated signal.
       if (traceMode >= 0)
-        trace.addChange(change.first);
+        trace.addChange(s.first);
     }
 
     // Add scheduled process resumes to the wakeup queue.
@@ -248,6 +267,14 @@ void Engine::walkEntity(EntityOp entity, Instance &child) {
     // Add a signal to the signal table.
     if (auto sig = dyn_cast<SigOp>(op)) {
       uint64_t index = state->addSignal(sig.name().str(), child.name);
+
+      // Get the signal width for integer types. For structured types the width
+      // will be set in a later step.
+      auto underlying =
+          sig.result().getType().cast<SigType>().getUnderlyingType();
+      if (underlying.isa<IntegerType>()) {
+        state->signals[index].width = underlying.getIntOrFloatBitWidth();
+      }
       child.sensitivityList.push_back(
           SignalDetail({nullptr, 0, child.sensitivityList.size(), index}));
     }

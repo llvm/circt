@@ -72,7 +72,8 @@ void driveSignal(State *state, SignalDetail *detail, uint8_t *value,
 
   // Spawn a new event.
   state->queue.insertOrUpdate(state->time + Time(time, delta, eps), globalIndex,
-                              bitOffset, value, width);
+                              bitOffset, value, width,
+                              state->signals[globalIndex].width);
 }
 
 void llhdSuspend(State *state, ProcState *procState, int time, int delta,

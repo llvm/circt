@@ -92,6 +92,7 @@ struct Signal {
   // The list of instances this signal triggers.
   std::vector<unsigned> triggers;
   uint64_t size;
+  uint64_t width = 0;
   std::unique_ptr<uint8_t> value;
   std::vector<std::pair<unsigned, unsigned>> elements;
 };
@@ -100,7 +101,8 @@ struct Signal {
 struct Slot {
   /// Construct a new slot.
   Slot(Time time) : time(time) {}
-  Slot(Time time, int index, int bitOffset, uint8_t *bytes, unsigned width);
+  Slot(Time time, int index, int bitOffset, uint8_t *bytes, unsigned width,
+       unsigned origWidth);
 
   /// Returns true if the slot's time is smaller than the compared slot's time.
   bool operator<(const Slot &rhs) const;
@@ -109,11 +111,15 @@ struct Slot {
   bool operator>(const Slot &rhs) const;
 
   /// Insert a change.
-  void insertChange(int index, int bitOffset, uint8_t *bytes, unsigned width);
+  void insertChange(int index, int bitOffset, uint8_t *bytes, unsigned width,
+                    unsigned origWidth);
 
   /// Insert a scheduled process wakeup.
   void insertChange(unsigned inst);
 
+  // Keep track of what signals have changes and if the last drive is a full or
+  // partial drive.
+  llvm::SmallVector<std::pair<unsigned, bool>, 16> sigs;
   // Map structure: <signal-index, vec<(offset, new-value)>>.
   llvm::SmallVector<std::pair<unsigned, unsigned>, 32> changes;
   llvm::SmallVector<llvm::APInt, 32> data;
@@ -135,14 +141,14 @@ public:
   /// Check wheter a slot for the given time already exists. If that's the case,
   /// add the new change to it, else create a new slot and push it to the queue.
   void insertOrUpdate(Time time, int index, int bitOffset, uint8_t *bytes,
-                      unsigned width);
+                      unsigned width, unsigned origWidth);
 
   /// Check wheter a slot for the given time already exists. If that's the case,
   /// add the scheduled wakeup to it, else create a new slot and push it to the
   /// queue.
   void insertOrUpdate(Time time, unsigned inst);
 
-  const Slot &top();
+  Slot &top();
 
   void pop();
 
@@ -192,10 +198,6 @@ struct State {
 
   /// Pop the head of the queue and update the simulation time.
   Slot popQueue();
-
-  /// Push a new event in the event queue.
-  void pushQueue(Time time, int index, int bitOffset, uint8_t *bytes,
-                 unsigned width);
 
   /// Push a new scheduled wakeup event in the event queue.
   void pushQueue(Time time, unsigned inst);
