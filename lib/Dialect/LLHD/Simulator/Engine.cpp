@@ -91,7 +91,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
     }
   }
 
-  int i = 0;
+  int cycles = 0;
 
   // Keep track of the instances that need to wakeup.
   llvm::SmallVector<unsigned, 8> wakeupQueue;
@@ -110,7 +110,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
   while (state->queue.events > 0) {
     auto &pop = state->queue.top();
 
-    if ((n > 0 && i >= n) || (maxTime > 0 && pop.time.time > maxTime)) {
+    if ((n > 0 && cycles >= n) || (maxTime > 0 && pop.time.time > maxTime)) {
       break;
     }
 
@@ -200,7 +200,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
 
     // Clear wakeup queue.
     wakeupQueue.clear();
-    i++;
+    cycles++;
   }
 
   if (traceMode >= 0) {
@@ -208,7 +208,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
     trace.flush(/*force=*/true);
   }
 
-  llvm::errs() << "Finished at " << state->time.dump() << " (" << i
+  llvm::errs() << "Finished at " << state->time.dump() << " (" << cycles
                << " cycles)\n";
   return 0;
 }
