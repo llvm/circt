@@ -123,15 +123,15 @@ int Engine::simulate(int n, uint64_t maxTime) {
     // Process signal changes.
     startTimer(2);
     for (size_t i = 0, e = pop.changesSize; i < e;) {
-      const auto currsig = pop.changes[i].first;
+      const auto currsig = pop.sigs[i].first;
       const auto &curr = state->signals[currsig];
       APInt buff(curr.size * 8,
                  makeArrayRef(reinterpret_cast<uint64_t *>(curr.value),
                               llvm::divideCeil(curr.size, 8)));
-      while (i < e && pop.changes[i].first == currsig) {
-        const auto &change = pop.changes[i];
-        const auto offset = change.second.first;
-        const auto &drive = change.second.second;
+      while (i < e && pop.sigs[i].first == currsig) {
+        const auto &change = pop.changes[pop.sigs[i].second];
+        const auto offset = change.first;
+        const auto &drive = change.second;
         if (drive.getBitWidth() < buff.getBitWidth())
           buff.insertBits(drive, offset);
         else

@@ -111,19 +111,14 @@ void Slot::insertChange(int index, int bitOffset, uint8_t *bytes,
   auto size = llvm::divideCeil(width, 64);
   if (changesSize >= changes.size()) {
     changes.push_back(std::make_pair(
-        index,
-        std::make_pair(
-            bitOffset,
-            APInt(width,
-                  makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size)))));
+        bitOffset,
+        APInt(width, makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size))));
   } else {
     changes[changesSize] = std::make_pair(
-        index,
-        std::make_pair(
-            bitOffset,
-            APInt(width,
-                  makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size))));
+        bitOffset,
+        APInt(width, makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size)));
   }
+  sigs.push_back(std::make_pair(index, changesSize));
   ++changesSize;
 }
 
@@ -219,10 +214,8 @@ void UpdateQueue::insertOrUpdate(Time time, unsigned inst) {
 const Slot &UpdateQueue::top() {
   assert(topSlot < size() && "top is pointing out of bounds!");
   auto &top = begin()[topSlot];
-  std::stable_sort(
-      top.changes.begin(), top.changes.begin() + top.changesSize,
-      [](const auto &lhs, const auto &rhs) { return lhs.first < rhs.first; });
-  return begin()[topSlot];
+  std::sort(top.sigs.begin(), top.sigs.begin() + top.changesSize);
+  return top;
 }
 
 void UpdateQueue::pop() {
@@ -230,6 +223,7 @@ void UpdateQueue::pop() {
   curr.unused = true;
   curr.changesSize = 0;
   curr.scheduled.clear();
+  curr.sigs.clear();
   curr.time = Time();
   --events;
 

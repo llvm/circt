@@ -115,8 +115,8 @@ struct Slot {
   /// Insert a scheduled process wakeup.
   void insertChange(unsigned inst);
 
-  llvm::SmallVector<std::pair<unsigned, std::pair<unsigned, llvm::APInt>>, 32>
-      changes;
+  llvm::SmallVector<std::pair<unsigned, unsigned>, 32> sigs;
+  llvm::SmallVector<std::pair<unsigned, llvm::APInt>, 32> changes;
   size_t changesSize = 0;
 
   // Processes with scheduled wakeup.
