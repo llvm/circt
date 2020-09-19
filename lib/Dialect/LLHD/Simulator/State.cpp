@@ -97,10 +97,9 @@ std::string Signal::dump(unsigned elemIndex) {
 // Slot
 //===----------------------------------------------------------------------===//
 
-Slot::Slot(Time time, int index, int bitOffset, uint8_t *bytes, unsigned width,
-           unsigned origWidth)
+Slot::Slot(Time time, int index, int bitOffset, uint8_t *bytes, unsigned width)
     : time(time) {
-  insertChange(index, bitOffset, bytes, width, origWidth);
+  insertChange(index, bitOffset, bytes, width);
 }
 
 bool Slot::operator<(const Slot &rhs) const { return time < rhs.time; }
@@ -108,25 +107,23 @@ bool Slot::operator<(const Slot &rhs) const { return time < rhs.time; }
 bool Slot::operator>(const Slot &rhs) const { return rhs.time < time; }
 
 void Slot::insertChange(int index, int bitOffset, uint8_t *bytes,
-                        unsigned width, unsigned origWidth) {
+                        unsigned width) {
   auto size = llvm::divideCeil(width, 64);
   if (changesSize >= changes.size()) {
-    changes.push_back(std::make_pair(index, bitOffset));
-    data.push_back(
-        APInt(width, makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size)));
+    changes.push_back(std::make_pair(
+        index,
+        std::make_pair(
+            bitOffset,
+            APInt(width,
+                  makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size)))));
   } else {
-    changes[changesSize] = std::make_pair(index, bitOffset);
-    data[changesSize] =
-        APInt(width, makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size));
+    changes[changesSize] = std::make_pair(
+        index,
+        std::make_pair(
+            bitOffset,
+            APInt(width,
+                  makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size))));
   }
-
-  // Add signal to the changed signals list.
-  auto i = std::find_if(sigs.begin(), sigs.end(),
-                        [index](const auto &el) { return el.first == index; });
-  if (i == sigs.end())
-    sigs.push_back(std::make_pair(index, width == origWidth));
-  else
-    i->second = width == origWidth;
   ++changesSize;
 }
 
@@ -136,13 +133,12 @@ void Slot::insertChange(unsigned inst) { scheduled.push_back(inst); }
 // UpdateQueue
 //===----------------------------------------------------------------------===//
 void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
-                                 uint8_t *bytes, unsigned width,
-                                 unsigned origWidth) {
+                                 uint8_t *bytes, unsigned width) {
   auto &s = begin()[topSlot];
 
   // Directly add to top slot.
   if (!s.unused && time == s.time) {
-    s.insertChange(index, bitOffset, bytes, width, origWidth);
+    s.insertChange(index, bitOffset, bytes, width);
     return;
   }
 
@@ -153,7 +149,7 @@ void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
   if (events > 0 && s.time < time) {
     for (size_t i = 0, e = size(); i < e; ++i) {
       if (time == begin()[i].time) {
-        begin()[i].insertChange(index, bitOffset, bytes, width, origWidth);
+        begin()[i].insertChange(index, bitOffset, bytes, width);
         return;
       }
     }
@@ -164,13 +160,13 @@ void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
     auto u = unused.back();
     unused.pop_back();
     auto &curr = begin()[u];
-    curr.insertChange(index, bitOffset, bytes, width, origWidth);
+    curr.insertChange(index, bitOffset, bytes, width);
     curr.unused = false;
     curr.time = time;
     if (s.unused || time < s.time)
       topSlot = u;
   } else {
-    push_back(Slot(time, index, bitOffset, bytes, width, origWidth));
+    push_back(Slot(time, index, bitOffset, bytes, width));
     if (s.unused || time < s.time)
       topSlot = size() - 1;
   }
@@ -220,8 +216,12 @@ void UpdateQueue::insertOrUpdate(Time time, unsigned inst) {
   ++events;
 }
 
-Slot &UpdateQueue::top() {
+const Slot &UpdateQueue::top() {
   assert(topSlot < size() && "top is pointing out of bounds!");
+  auto &top = begin()[topSlot];
+  std::stable_sort(
+      top.changes.begin(), top.changes.begin() + top.changesSize,
+      [](const auto &lhs, const auto &rhs) { return lhs.first < rhs.first; });
   return begin()[topSlot];
 }
 
@@ -230,7 +230,6 @@ void UpdateQueue::pop() {
   curr.unused = true;
   curr.changesSize = 0;
   curr.scheduled.clear();
-  curr.sigs.clear();
   curr.time = Time();
   --events;
 

@@ -101,8 +101,7 @@ struct Signal {
 struct Slot {
   /// Construct a new slot.
   Slot(Time time) : time(time) {}
-  Slot(Time time, int index, int bitOffset, uint8_t *bytes, unsigned width,
-       unsigned origWidth);
+  Slot(Time time, int index, int bitOffset, uint8_t *bytes, unsigned width);
 
   /// Returns true if the slot's time is smaller than the compared slot's time.
   bool operator<(const Slot &rhs) const;
@@ -111,18 +110,13 @@ struct Slot {
   bool operator>(const Slot &rhs) const;
 
   /// Insert a change.
-  void insertChange(int index, int bitOffset, uint8_t *bytes, unsigned width,
-                    unsigned origWidth);
+  void insertChange(int index, int bitOffset, uint8_t *bytes, unsigned width);
 
   /// Insert a scheduled process wakeup.
   void insertChange(unsigned inst);
 
-  // Keep track of what signals have changes and if the last drive is a full or
-  // partial drive.
-  llvm::SmallVector<std::pair<unsigned, bool>, 16> sigs;
-  // Map structure: <signal-index, vec<(offset, new-value)>>.
-  llvm::SmallVector<std::pair<unsigned, unsigned>, 32> changes;
-  llvm::SmallVector<llvm::APInt, 32> data;
+  llvm::SmallVector<std::pair<unsigned, std::pair<unsigned, llvm::APInt>>, 32>
+      changes;
   size_t changesSize = 0;
 
   // Processes with scheduled wakeup.
@@ -141,14 +135,14 @@ public:
   /// Check wheter a slot for the given time already exists. If that's the case,
   /// add the new change to it, else create a new slot and push it to the queue.
   void insertOrUpdate(Time time, int index, int bitOffset, uint8_t *bytes,
-                      unsigned width, unsigned origWidth);
+                      unsigned width);
 
   /// Check wheter a slot for the given time already exists. If that's the case,
   /// add the scheduled wakeup to it, else create a new slot and push it to the
   /// queue.
   void insertOrUpdate(Time time, unsigned inst);
 
-  Slot &top();
+  const Slot &top();
 
   void pop();
 

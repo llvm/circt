@@ -108,7 +108,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
   }
 
   while (state->queue.events > 0) {
-    auto &pop = state->queue.top();
+    const auto &pop = state->queue.top();
 
     if ((n > 0 && cycles >= n) || (maxTime > 0 && pop.time.time > maxTime)) {
       break;
@@ -121,39 +121,23 @@ int Engine::simulate(int n, uint64_t maxTime) {
       trace.flush();
 
     // Process signal changes.
-    for (auto s : pop.sigs) {
-      const auto &curr = state->signals[s.first];
+    startTimer(2);
+    for (size_t i = 0, e = pop.changesSize; i < e;) {
+      const auto currsig = pop.changes[i].first;
+      const auto &curr = state->signals[currsig];
       APInt buff(curr.size * 8,
                  makeArrayRef(reinterpret_cast<uint64_t *>(curr.value),
                               llvm::divideCeil(curr.size, 8)));
+      while (i < e && pop.changes[i].first == currsig) {
+        const auto &change = pop.changes[i];
+        const auto offset = change.second.first;
+        const auto &drive = change.second.second;
+        if (drive.getBitWidth() < buff.getBitWidth())
+          buff.insertBits(drive, offset);
+        else
+          buff = drive;
 
-      // If the last drive fully updates the signal, we can iterate over the
-      // changes backwards, taking the last change and stopping. Otherwise we
-      // have to combine all the changes by processing them in order of
-      // insertion.
-      if (s.second) {
-        for (size_t i = pop.changesSize - 1; i >= 0; --i) {
-          const auto &change = pop.changes[i];
-          if (change.first == s.first) {
-            const auto &drive = pop.data[i];
-            if (drive.getBitWidth() < buff.getBitWidth())
-              buff.insertBits(drive, change.second);
-            else
-              buff = drive;
-            break;
-          }
-        }
-      } else {
-        for (size_t i = 0, e = pop.changesSize; i < e; ++i) {
-          const auto &change = pop.changes[i];
-          if (change.first == s.first) {
-            const auto &drive = pop.data[i];
-            if (drive.getBitWidth() < buff.getBitWidth())
-              buff.insertBits(drive, change.second);
-            else
-              buff = drive;
-          }
-        }
+        ++i;
       }
 
       // Skip if the updated signal value is equal to the initial value.
@@ -169,8 +153,8 @@ int Engine::simulate(int n, uint64_t maxTime) {
         if (!state->instances[inst].isEntity) {
           const auto &sensList = state->instances[inst].sensitivityList;
           auto it = std::find_if(sensList.begin(), sensList.end(),
-                                 [s](const SignalDetail &sig) {
-                                   return sig.globalIndex == s.first;
+                                 [currsig](const SignalDetail &sig) {
+                                   return sig.globalIndex == currsig;
                                  });
           if (sensList.end() != it &&
               state->instances[inst].procState->senses[it - sensList.begin()] ==
@@ -185,7 +169,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
 
       // Dump the updated signal.
       if (traceMode >= 0)
-        trace.addChange(s.first);
+        trace.addChange(currsig);
     }
 
     // Add scheduled process resumes to the wakeup queue.
