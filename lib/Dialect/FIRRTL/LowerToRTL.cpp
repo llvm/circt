@@ -12,6 +12,13 @@
 using namespace circt;
 using namespace firrtl;
 
+/// Return the type of the specified value, converted to a passive type.  If "T"
+/// Is specified, this force casts to that subtype.
+template <typename T = FIRRTLType>
+static T getPassiveTypeOf(Value v) {
+  return v.getType().cast<FIRRTLType>().getPassiveType().cast<T>();
+}
+
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
@@ -41,6 +48,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   void handleUnloweredOp(Operation *op);
   LogicalResult visitExpr(ConstantOp op);
   LogicalResult visitDecl(WireOp op);
+  LogicalResult visitDecl(NodeOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
   LogicalResult visitInvalidOp(Operation *op) { return failure(); }
 
@@ -48,13 +56,14 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult lowerNoopCast(Operation *op);
   LogicalResult visitExpr(AsSIntPrimOp op) { return lowerNoopCast(op); }
   LogicalResult visitExpr(AsUIntPrimOp op) { return lowerNoopCast(op); }
+
+  // Binary Ops.
   LogicalResult visitExpr(CatPrimOp op);
   LogicalResult visitExpr(PadPrimOp op);
   LogicalResult visitExpr(XorRPrimOp op);
   LogicalResult visitExpr(AndRPrimOp op);
   LogicalResult visitExpr(OrRPrimOp op);
 
-  // Binary Ops.
   template <typename ResultOpType>
   LogicalResult lowerBinOp(Operation *op);
   template <typename ResultOpType>
@@ -81,6 +90,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
 
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
+  LogicalResult visitExpr(CvtPrimOp op);
   LogicalResult visitExpr(HeadPrimOp op);
   LogicalResult visitExpr(ShlPrimOp op);
   LogicalResult visitExpr(ShrPrimOp op);
@@ -262,6 +272,27 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   return setLoweringTo<rtl::WireOp>(op, resultType, op.nameAttr());
 }
 
+LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
+  auto operand = getLoweredValue(op.input());
+  if (!operand)
+    return failure();
+
+  // Node operations are logical noops, but can carry a name.  If a name is
+  // present then we lower this into a wire and a connect, otherwise we just
+  // drop it.
+  if (auto name = op.getAttrOfType<StringAttr>("name")) {
+    auto wire =
+        builder->create<rtl::WireOp>(op.getLoc(), operand.getType(), name);
+    builder->create<rtl::ConnectOp>(op.getLoc(), wire, operand);
+  }
+
+  // TODO(clattner): This is dropping the location information from unnamed node
+  // ops.  I suspect that this falls below the fold in terms of things we care
+  // about given how Chisel works, but we should reevaluate with more
+  // information.
+  return setLowering(op, operand);
+}
+
 /// Handle the case where an operation wasn't lowered.  When this happens, the
 /// operands may be a mix of lowered and unlowered values.  If the operand was
 /// not lowered then leave it alone, otherwise insert a cast from the lowered
@@ -405,6 +436,20 @@ LogicalResult FIRRTLLowering::visitExpr(BitsPrimOp op) {
 
   Type resultType = builder->getIntegerType(op.getHi() - op.getLo() + 1);
   return setLoweringTo<rtl::ExtractOp>(op, resultType, input, op.getLo());
+}
+
+LogicalResult FIRRTLLowering::visitExpr(CvtPrimOp op) {
+  auto operand = getLoweredValue(op.getOperand());
+  if (!operand)
+    return failure();
+
+  // Signed to signed is a noop.
+  if (getPassiveTypeOf<IntType>(op.getOperand()).isSigned())
+    setLowering(op, operand);
+
+  // Otherwise prepend a zero bit.
+  auto zero = builder->create<rtl::ConstantOp>(op.getLoc(), APInt(1, 0));
+  return setLoweringTo<rtl::ConcatOp>(op, ValueRange({zero, operand}));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(HeadPrimOp op) {

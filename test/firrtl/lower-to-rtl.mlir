@@ -123,6 +123,18 @@
     // CHECK-NEXT: [[IN3TRUNC:%.+]] = rtl.extract [[CAST]] from 0 : (i8) -> i3
     // CHECK-NEXT: = rtl.mod [[PADRES]], [[IN3TRUNC]] : i3
     %21 = firrtl.rem %3, %in3 : (!firrtl.sint<3>, !firrtl.sint<8>) -> !firrtl.sint<3>
+
+    // CHECK-NEXT: [[CAST:%.+]] = firrtl.stdIntCast %in2 : (!firrtl.uint<2>) -> i2
+    // CHECK-NEXT: [[WIRE:%.+]] = rtl.wire {name = "n1"} : i2
+    // CHECK-NEXT: rtl.connect [[WIRE]], [[CAST]] : i2
+    %n1 = firrtl.node %in2  {name = "n1"} : !firrtl.uint<2>
+
+    // Nodes with no names are just dropped.
+    %22 = firrtl.node %n1 : !firrtl.uint<2>
+
+    // CHECK-NEXT: %false_{{.*}} = rtl.constant(false) : i1
+    // CHECK-NEXT: rtl.concat %false_{{.*}}, [[CAST]] : (i1, i2) -> i3
+    %23 = firrtl.cvt %22 : (!firrtl.uint<2>) -> !firrtl.sint<3>
   }
 
 
