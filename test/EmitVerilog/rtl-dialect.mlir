@@ -97,12 +97,16 @@ firrtl.circuit "Circuit" {
                 %f: i1 {rtl.direction = "out"}) {
     %0 = rtl.and %d, %e : i1
     rtl.connect %f, %0 : i1
+
+    %1 = rtl.mux %d, %d, %e : i1
+    rtl.connect %f, %1 : i1
   }
   // CHECK-LABEL: module A(
   // CHECK-NEXT:  input  d, e,
   // CHECK-NEXT:  output f);
   // CHECK-EMPTY:
   // CHECK-NEXT:  assign f = d & e;
+  // CHECK-NEXT:  assign f = d ? d : e;
   // CHECK-NEXT: endmodule
 
   rtl.module @AB(%w: i1 {rtl.direction = "in"}, 

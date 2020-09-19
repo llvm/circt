@@ -144,6 +144,10 @@
     // CHECK-NEXT: %c0_i4 = rtl.constant(0 : i4) : i4
     // CHECK-NEXT: [[SUB:%.+]] = rtl.sub %c0_i4, [[SEXT]] : i4
     %25 = firrtl.neg %24 : (!firrtl.sint<3>) -> !firrtl.sint<4>
+
+    // CHECK-NEXT: [[CVT4:%.+]] = rtl.sext [[CVT]] : (i3) -> i4
+    // CHECK-NEXT: rtl.mux %false, [[CVT4]], [[SUB]] : i4
+    %26 = firrtl.mux(%12, %23, %25) : (!firrtl.uint<1>, !firrtl.sint<3>, !firrtl.sint<4>) -> !firrtl.sint<4>
   }
 
 

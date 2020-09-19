@@ -98,6 +98,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(ShlPrimOp op);
   LogicalResult visitExpr(ShrPrimOp op);
   LogicalResult visitExpr(TailPrimOp op);
+  LogicalResult visitExpr(MuxPrimOp op);
 
   // Statements
   LogicalResult visitStmt(ConnectOp op);
@@ -540,6 +541,16 @@ LogicalResult FIRRTLLowering::visitExpr(TailPrimOp op) {
   auto inWidth = input.getType().cast<IntegerType>().getWidth();
   Type resultType = builder->getIntegerType(inWidth - op.getAmount());
   return setLoweringTo<rtl::ExtractOp>(op, resultType, input, 0);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(MuxPrimOp op) {
+  auto cond = getLoweredValue(op.sel());
+  auto ifTrue = getLoweredAndExtendedValue(op.high(), op.getType());
+  auto ifFalse = getLoweredAndExtendedValue(op.low(), op.getType());
+  if (!cond || !ifTrue || !ifFalse)
+    return failure();
+
+  return setLoweringTo<rtl::MuxOp>(op, ifTrue.getType(), cond, ifTrue, ifFalse);
 }
 
 //===----------------------------------------------------------------------===//

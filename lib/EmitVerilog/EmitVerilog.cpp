@@ -812,6 +812,7 @@ private:
   SubExprInfo visitExpr(SubfieldOp op);
   SubExprInfo visitExpr(ValidIfPrimOp op);
   SubExprInfo visitExpr(MuxPrimOp op);
+  SubExprInfo visitComb(rtl::MuxOp op);
   SubExprInfo visitExpr(CatPrimOp op) { return emitCat({op.lhs(), op.rhs()}); }
   SubExprInfo visitExpr(CvtPrimOp op);
   SubExprInfo visitExpr(BitsPrimOp op) {
@@ -1152,6 +1153,22 @@ SubExprInfo ExprEmitter::visitExpr(MuxPrimOp op) {
   auto lhsInfo = emitSubExpr(op.high(), VerilogPrecedence(Conditional - 1));
   os << " : ";
   auto rhsInfo = emitSubExpr(op.low(), Conditional);
+
+  SubExprSignedness signedness = IsUnsigned;
+  if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
+    signedness = IsSigned;
+
+  return {Conditional, signedness};
+}
+
+SubExprInfo ExprEmitter::visitComb(rtl::MuxOp op) {
+  // The ?: operator is right associative.
+  emitSubExpr(op.cond(), VerilogPrecedence(Conditional - 1));
+  os << " ? ";
+  auto lhsInfo =
+      emitSubExpr(op.trueValue(), VerilogPrecedence(Conditional - 1));
+  os << " : ";
+  auto rhsInfo = emitSubExpr(op.falseValue(), Conditional);
 
   SubExprSignedness signedness = IsUnsigned;
   if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
