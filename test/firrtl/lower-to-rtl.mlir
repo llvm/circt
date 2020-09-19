@@ -133,8 +133,17 @@
     %22 = firrtl.node %n1 : !firrtl.uint<2>
 
     // CHECK-NEXT: %false_{{.*}} = rtl.constant(false) : i1
-    // CHECK-NEXT: rtl.concat %false_{{.*}}, [[CAST]] : (i1, i2) -> i3
+    // CHECK-NEXT: [[CVT:%.+]] = rtl.concat %false_{{.*}}, [[CAST]] : (i1, i2) -> i3
     %23 = firrtl.cvt %22 : (!firrtl.uint<2>) -> !firrtl.sint<3>
+
+    // CHECK-NEXT: %c-1_i3 = rtl.constant(-1 : i3) : i3
+    // CHECK-NEXT: [[XOR:%.+]] = rtl.xor [[CVT]], %c-1_i3 : i3
+    %24 = firrtl.not %23 : (!firrtl.sint<3>) -> !firrtl.sint<3>
+
+    // CHECK-NEXT: [[SEXT:%.+]] = rtl.sext [[XOR]] : (i3) -> i4
+    // CHECK-NEXT: %c0_i4 = rtl.constant(0 : i4) : i4
+    // CHECK-NEXT: [[SUB:%.+]] = rtl.sub %c0_i4, [[SEXT]] : i4
+    %25 = firrtl.neg %24 : (!firrtl.sint<3>) -> !firrtl.sint<4>
   }
 
 

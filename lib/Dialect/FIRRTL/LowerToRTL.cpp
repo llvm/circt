@@ -56,18 +56,22 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult lowerNoopCast(Operation *op);
   LogicalResult visitExpr(AsSIntPrimOp op) { return lowerNoopCast(op); }
   LogicalResult visitExpr(AsUIntPrimOp op) { return lowerNoopCast(op); }
-
-  // Binary Ops.
-  LogicalResult visitExpr(CatPrimOp op);
+  LogicalResult visitExpr(CvtPrimOp op);
+  LogicalResult visitExpr(NotPrimOp op);
+  LogicalResult visitExpr(NegPrimOp op);
   LogicalResult visitExpr(PadPrimOp op);
   LogicalResult visitExpr(XorRPrimOp op);
   LogicalResult visitExpr(AndRPrimOp op);
   LogicalResult visitExpr(OrRPrimOp op);
 
+  // Binary Ops.
+
   template <typename ResultOpType>
   LogicalResult lowerBinOp(Operation *op);
   template <typename ResultOpType>
   LogicalResult lowerBinOpToVariadic(Operation *op);
+
+  LogicalResult visitExpr(CatPrimOp op);
 
   LogicalResult visitExpr(AndPrimOp op) {
     return lowerBinOpToVariadic<rtl::AndOp>(op);
@@ -90,7 +94,6 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
 
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
-  LogicalResult visitExpr(CvtPrimOp op);
   LogicalResult visitExpr(HeadPrimOp op);
   LogicalResult visitExpr(ShlPrimOp op);
   LogicalResult visitExpr(ShrPrimOp op);
@@ -330,6 +333,50 @@ LogicalResult FIRRTLLowering::lowerNoopCast(Operation *op) {
   return setLowering(op->getResult(0), operand);
 }
 
+LogicalResult FIRRTLLowering::visitExpr(CvtPrimOp op) {
+  auto operand = getLoweredValue(op.getOperand());
+  if (!operand)
+    return failure();
+
+  // Signed to signed is a noop.
+  if (getPassiveTypeOf<IntType>(op.getOperand()).isSigned())
+    setLowering(op, operand);
+
+  // Otherwise prepend a zero bit.
+  auto zero = builder->create<rtl::ConstantOp>(op.getLoc(), APInt(1, 0));
+  return setLoweringTo<rtl::ConcatOp>(op, ValueRange({zero, operand}));
+}
+
+LogicalResult FIRRTLLowering::visitExpr(NotPrimOp op) {
+  auto operand = getLoweredValue(op.input());
+  if (!operand)
+    return failure();
+  // ~x  ---> x ^ 0xFF
+  auto width = operand.getType().cast<IntegerType>().getWidth();
+  auto allOnes = builder->create<rtl::ConstantOp>(
+      op.getLoc(), APInt::getAllOnesValue(width));
+  return setLoweringTo<rtl::XorOp>(op, ValueRange({operand, allOnes}),
+                                   ArrayRef<NamedAttribute>{});
+}
+
+LogicalResult FIRRTLLowering::visitExpr(NegPrimOp op) {
+  auto operand = getLoweredValue(op.input());
+  if (!operand)
+    return failure();
+
+  // FIRRTL negate always adds a bit.
+  // -x  ---> 0-sext(x) or 0-zext(x)
+  auto resultType = lowerType(op.getType());
+  if (getPassiveTypeOf<IntType>(op.input()).isSigned())
+    operand = builder->create<rtl::SExtOp>(op.getLoc(), resultType, operand);
+  else
+    operand = builder->create<rtl::ZExtOp>(op.getLoc(), resultType, operand);
+
+  auto zero = builder->create<rtl::ConstantOp>(
+      op.getLoc(), APInt(resultType.cast<IntegerType>().getWidth(), 0));
+  return setLoweringTo<rtl::SubOp>(op, zero, operand);
+}
+
 // Pad is a noop or extension operation.
 LogicalResult FIRRTLLowering::visitExpr(PadPrimOp op) {
   auto operand = getLoweredAndExtendedValue(op.input(), op.getType());
@@ -436,20 +483,6 @@ LogicalResult FIRRTLLowering::visitExpr(BitsPrimOp op) {
 
   Type resultType = builder->getIntegerType(op.getHi() - op.getLo() + 1);
   return setLoweringTo<rtl::ExtractOp>(op, resultType, input, op.getLo());
-}
-
-LogicalResult FIRRTLLowering::visitExpr(CvtPrimOp op) {
-  auto operand = getLoweredValue(op.getOperand());
-  if (!operand)
-    return failure();
-
-  // Signed to signed is a noop.
-  if (getPassiveTypeOf<IntType>(op.getOperand()).isSigned())
-    setLowering(op, operand);
-
-  // Otherwise prepend a zero bit.
-  auto zero = builder->create<rtl::ConstantOp>(op.getLoc(), APInt(1, 0));
-  return setLoweringTo<rtl::ConcatOp>(op, ValueRange({zero, operand}));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(HeadPrimOp op) {

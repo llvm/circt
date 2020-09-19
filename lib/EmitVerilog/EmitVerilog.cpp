@@ -796,6 +796,7 @@ private:
   SubExprInfo visitExpr(XorRPrimOp op) { return emitUnary(op, "^", true); }
   SubExprInfo visitExpr(OrRPrimOp op) { return emitUnary(op, "|", true); }
   SubExprInfo visitExpr(NotPrimOp op) { return emitUnary(op, "~", false); }
+  SubExprInfo visitExpr(NegPrimOp op) { return emitUnary(op, "-", false); }
 
   // Noop cast operators.
   SubExprInfo visitExpr(AsAsyncResetPrimOp op) { return emitNoopCast(op); }
