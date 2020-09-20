@@ -181,4 +181,16 @@ def ZExtOp : RTLOp<"zext", [NoSideEffect]> {
   let verifier = [{ return ::verifyExtOp(*this); }];
 }
 
-// TODO: Bit extract range, use it for trunc.
+// Extract a range of bits from the specified input.
+def MuxOp : RTLOp<"mux",
+ [NoSideEffect, AllTypesMatch<["trueValue", "falseValue", "result"]>]> {
+  let summary = "Return one or the other operand depending on a selector bit";
+
+  let arguments = (ins I1:$cond, AnySignlessInteger:$trueValue,
+                       AnySignlessInteger:$falseValue);
+  let results = (outs AnySignlessInteger:$result);
+
+  let assemblyFormat = [{
+    $cond `,` $trueValue `,` $falseValue attr-dict `:` type($result)
+  }];
+}
