@@ -157,6 +157,17 @@ firrtl.circuit "Circuit" {
     firrtl.connect %b, %30 : !firrtl.flip<uint<1>>, !firrtl.uint<2>
   }
 
+  rtl.module @shl(%a: i1 {rtl.direction = "in"},
+                  %b: i1 {rtl.direction = "out"}) {
+    %0 = rtl.shl %a, %a : i1
+    rtl.connect %b, %0 : i1
+  }
+
+  // CHECK-LABEL:  module shl(
+  // CHECK-NEXT:   input  a,
+  // CHECK-NEXT:   output b);
+  // CHECK-EMPTY:
+  // CHECK-NEXT:   assign b = a << a;
+  // CHECK-NEXT: endmodule
+
 }
-
-

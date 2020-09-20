@@ -849,6 +849,9 @@ private:
   SubExprInfo visitComb(rtl::ModOp op) {
     return emitSignedBinary(op, Multiply, "%");
   }
+  SubExprInfo visitComb(rtl::ShlOp op) {
+    return emitSignedBinary(op, Shift, "<<");
+  }
   SubExprInfo visitComb(rtl::AndOp op) { return emitVariadic(op, And, "&"); }
   SubExprInfo visitComb(rtl::OrOp op) { return emitVariadic(op, Or, "|"); }
   SubExprInfo visitComb(rtl::XorOp op) { return emitVariadic(op, Xor, "^"); }

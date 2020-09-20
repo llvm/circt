@@ -14,3 +14,12 @@ func @bitwise(%a: i7, %b: i7) -> i21 {
   %result = rtl.concat %and1, %or1, %xor1 : (i7, i7, i7) -> i21
   return %result : i21
 }
+
+
+// CHECK-LABEL: func @shl_op(%arg0: i7, %arg1: i7) -> i7 {
+func @shl_op(%a: i7, %b: i7) -> i7 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.shl  %arg0, %arg1 : i7
+  %0  = rtl.shl  %a, %b : i7
+// CHECK-NEXT:    return [[RES]]
+  return %0 : i7
+}
