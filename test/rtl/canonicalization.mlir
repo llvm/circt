@@ -20,15 +20,16 @@ func @extract_cstfold() -> i3 {
   return %x : i3
 }
 
-// CHECK-LABEL: func @and_cstfold() -> i7 {
+// CHECK-LABEL: func @and_cstfold(%arg0: i7) -> i7 {
 // CHECK-NEXT:    %c1_i7 = rtl.constant(1 : i7)
-// CHECK-NEXT:    return %c1_i7
+// CHECK-NEXT:    %0 = rtl.and %arg0, %c1_i7 : i7
+// CHECK-NEXT:    return %0 : i7
 
-func @and_cstfold() -> i7 {
+func @and_cstfold(%arg0: i7) -> i7 {
   %c11_i7 = rtl.constant(11 : i7) : i7
   %c5_i7 = rtl.constant(5 : i7) : i7
-  %x = rtl.and %c11_i7, %c5_i7 : i7
-  return %x : i7
+  %0 = rtl.and %arg0, %c11_i7, %c5_i7 : i7
+  return %0 : i7
 }
 
 // CHECK-LABEL: func @variadic_noop(%arg0: i11) -> i11 {
