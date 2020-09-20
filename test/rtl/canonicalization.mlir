@@ -8,6 +8,8 @@ func @extract_noop(%arg0: i3) -> i3 {
   return %x : i3
 }
 
+// Constant Folding
+
 // CHECK-LABEL: func @extract_cstfold() -> i3 {
 // CHECK-NEXT:    %c-3_i3 = rtl.constant(-3 : i3)
 // CHECK-NEXT:    return  %c-3_i3
@@ -16,6 +18,17 @@ func @extract_cstfold() -> i3 {
   %c42_i12 = rtl.constant(42 : i12) : i12
   %x = rtl.extract %c42_i12 from 3 : (i12) -> i3
   return %x : i3
+}
+
+// CHECK-LABEL: func @and_cstfold() -> i7 {
+// CHECK-NEXT:    %c1_i7 = rtl.constant(1 : i7)
+// CHECK-NEXT:    return %c1_i7
+
+func @and_cstfold() -> i7 {
+  %c11_i7 = rtl.constant(11 : i7) : i7
+  %c5_i7 = rtl.constant(5 : i7) : i7
+  %x = rtl.and %c11_i7, %c5_i7 : i7
+  return %x : i7
 }
 
 // CHECK-LABEL: func @variadic_noop(%arg0: i11) -> i11 {
