@@ -16,10 +16,16 @@ func @bitwise(%a: i7, %b: i7) -> i21 {
 }
 
 
-// CHECK-LABEL: func @shl_op(%arg0: i7, %arg1: i7) -> i7 {
-func @shl_op(%a: i7, %b: i7) -> i7 {
+// CHECK-LABEL: func @shifts(%arg0: i7, %arg1: i7) -> i21 {
+func @shifts(%a: i7, %b: i7) -> i21 {
 // CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.shl  %arg0, %arg1 : i7
   %0  = rtl.shl  %a, %b : i7
-// CHECK-NEXT:    return [[RES]]
-  return %0 : i7
+// CHECK-NEXT:    [[RES1:%[0-9]+]] = rtl.shrs  %arg0, %arg1 : i7
+  %1 = rtl.shrs %a, %b : i7
+// CHECK-NEXT:    [[RES2:%[0-9]+]] = rtl.shru  %arg0, %arg1 : i7
+  %2 = rtl.shru %a, %b : i7
+// CHECK-NEXT:    [[RESULT:%[0-9]+]] = rtl.concat [[RES0]], [[RES1]], [[RES2]] : (i7, i7, i7) -> i21
+// CHECK-NEXT:    return [[RESULT]] : i21
+  %result = rtl.concat %0, %1, %2 : (i7, i7, i7) -> i21
+  return %result : i21
 }

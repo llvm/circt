@@ -157,17 +157,25 @@ firrtl.circuit "Circuit" {
     firrtl.connect %b, %30 : !firrtl.flip<uint<1>>, !firrtl.uint<2>
   }
 
-  rtl.module @shl(%a: i1 {rtl.direction = "in"},
-                  %b: i1 {rtl.direction = "out"}) {
+  rtl.module @shifts(%a: i1 {rtl.direction = "in"},
+                     %b: i1 {rtl.direction = "out"},
+                     %c: i1 {rtl.direction = "out"},
+                     %d: i1 {rtl.direction = "out"}) {
     %0 = rtl.shl %a, %a : i1
+    %1 = rtl.shru %a, %a : i1
+    %2 = rtl.shrs %a, %a : i1
     rtl.connect %b, %0 : i1
+    rtl.connect %c, %1 : i1
+    rtl.connect %d, %2 : i1
   }
 
-  // CHECK-LABEL:  module shl(
+  // CHECK-LABEL:  module shifts(
   // CHECK-NEXT:   input  a,
-  // CHECK-NEXT:   output b);
+  // CHECK-NEXT:   output b, c, d);
   // CHECK-EMPTY:
   // CHECK-NEXT:   assign b = a << a;
+  // CHECK-NEXT:   assign c = a >>> a;
+  // CHECK-NEXT:   assign d = a >> a;
   // CHECK-NEXT: endmodule
 
 }

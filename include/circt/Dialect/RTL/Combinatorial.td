@@ -95,6 +95,8 @@ def MulOp : UTVariadicRTLOp<"mul", [Commutative]>;
 def DivOp : UTBinRTLOp<"div">;
 def ModOp : UTBinRTLOp<"mod">;
 def ShlOp : UTBinRTLOp<"shl">;
+def ShrsOp : UTBinRTLOp<"shrs">;
+def ShruOp : UTBinRTLOp<"shru">;
 
 def AndOp : UTVariadicRTLOp<"and", [Commutative]>;
 def OrOp  : UTVariadicRTLOp<"or", [Commutative]>;
