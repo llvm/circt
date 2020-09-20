@@ -420,7 +420,18 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
-      /// TODO: and(..., c1, c2) -> and(..., c3) -- constant folding
+      APInt value2;
+
+      // and(..., c1, c2) -> and(..., c3) -- constant folding
+      if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
+          matchPattern(inputs[size - 2], m_RConstant(value2))) {
+        auto cst = rewriter.create<ConstantOp>(op.getLoc(), value & value2);
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+        newOperands.push_back(cst);
+        rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
       /// TODO: and(x, and(...)) -> and(x, ...) -- flatten
       /// TODO: and(..., x, not(x)) -> and(..., 0) -- complement
       return failure();
