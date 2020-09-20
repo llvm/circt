@@ -157,13 +157,13 @@ firrtl.circuit "Circuit" {
     firrtl.connect %b, %30 : !firrtl.flip<uint<1>>, !firrtl.uint<2>
   }
 
-  rtl.module @C(%a: i1 {rtl.direction = "in"},
-                %b: i1 {rtl.direction = "out"}) {
+  rtl.module @shl(%a: i1 {rtl.direction = "in"},
+                  %b: i1 {rtl.direction = "out"}) {
     %0 = rtl.shl %a, %a : i1
     rtl.connect %b, %0 : i1
   }
 
-  // CHECK-LABEL:  module C(
+  // CHECK-LABEL:  module shl(
   // CHECK-NEXT:   input  a,
   // CHECK-NEXT:   output b);
   // CHECK-EMPTY:
