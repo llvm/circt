@@ -118,7 +118,7 @@ def RegInitOp : FIRRTLOp<"reginit", [/*MemAlloc*/]> {
     ```
     }];
 
-  let arguments = (ins ClockType:$clockVal, AnyType:$resetSignal,
+  let arguments = (ins ClockType:$clockVal, ResetType:$resetSignal,
                        AnyType:$resetValue, OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
   
