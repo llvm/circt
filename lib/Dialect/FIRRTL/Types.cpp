@@ -264,6 +264,22 @@ int32_t FIRRTLType::getBitWidthOrSentinel() {
       });
 }
 
+/// Return true if this is a type usable as a reset. This must be
+/// either an abstract reset, a concrete 1-bit UInt, or an
+/// asynchronous reset.
+bool FIRRTLType::isResetType() {
+  return TypeSwitch<FIRRTLType, bool>(*this)
+    .Case<ResetType, AsyncResetType>([](Type) {
+      return true;
+    })
+    .Case<UIntType>([](UIntType a) {
+      return a.getWidth() == 1;
+    })
+    .Default([](Type) {
+      return false;
+    });
+}
+
 //===----------------------------------------------------------------------===//
 // IntType
 //===----------------------------------------------------------------------===//
