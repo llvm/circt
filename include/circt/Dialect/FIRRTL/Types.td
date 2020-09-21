@@ -19,6 +19,7 @@ def UInt1Type : Type<CPred<"$_self.isa<UIntType>() && "
                            "$_self.cast<UIntType>().getWidth() == 1">,
                            "UInt<1>">,
                 BuildableType<"UIntType::get($_builder.getContext(), 1)">;
+def ResetType : Type<CPred<"$_self.cast<FIRRTLType>().isResetType()">, "Reset, AsyncReset, or UInt<1>">;
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Enum Definitions
