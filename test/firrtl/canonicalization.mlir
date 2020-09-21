@@ -1,6 +1,6 @@
 // RUN: circt-opt -canonicalize %s | FileCheck %s
 
-firrtl.circuit "Circuit" {
+firrtl.circuit "And" {
 
 // CHECK-LABEL: firrtl.module @And
 firrtl.module @And(%in: !firrtl.uint<4>,

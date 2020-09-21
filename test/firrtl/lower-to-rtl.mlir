@@ -1,6 +1,6 @@
 // RUN: circt-opt -pass-pipeline='firrtl.circuit(lower-firrtl-to-rtl)' %s | FileCheck %s
 
- firrtl.circuit "Circuit" {
+ firrtl.circuit "Simple" {
 
   // CHECK-LABEL: firrtl.module @Simple
   firrtl.module @Simple(%in1: !firrtl.uint<4>,

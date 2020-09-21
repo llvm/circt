@@ -58,6 +58,25 @@ static ParseResult parseCircuitOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
+static LogicalResult verifyCircuitOp(CircuitOp &circuit) {
+  StringRef main = circuit.name();
+
+  // Check that the circuit has a non-empty name.
+  if (main.empty()) {
+    circuit.emitOpError("must have a non-empty name");
+    return failure();
+  }
+
+  // Check that a module matching the "main" module exists in the circuit.
+  if (!circuit.lookupSymbol(main)) {
+    circuit.emitOpError("must contain one module that matches main name '" +
+                        main + "'");
+    return failure();
+  }
+
+  return success();
+}
+
 Region &CircuitOp::getBodyRegion() { return getOperation()->getRegion(0); }
 Block *CircuitOp::getBody() { return &getBodyRegion().front(); }
 
