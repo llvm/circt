@@ -242,12 +242,6 @@ def BitsPrimOp : PrimOp<"bits"> {
   ];
 
   let extraClassDeclaration = [{
-    /// Return the highest bit included in the result.
-    unsigned getHi() { return hi().getLimitedValue(); }
-
-    /// Return the lowest bit included in the result.
-    unsigned getLo() { return lo().getLimitedValue(); }
-
     /// Return the result for inputs with the specified type, returning a null
     /// type if the input types are invalid.
     static FIRRTLType getResultType(FIRRTLType input, int32_t high,
@@ -272,8 +266,6 @@ def HeadPrimOp : PrimOp<"head"> {
   let hasCanonicalizer = 1;
 
   let extraClassDeclaration = [{
-    unsigned getAmount() { return amount().getLimitedValue(); }
-
     /// Return the result for inputs with the specified type, returning a null
     /// type if the input types are invalid.
     static FIRRTLType getResultType(FIRRTLType input, int32_t amount);
@@ -348,9 +340,6 @@ class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic> {
   }];
 
   let extraClassDeclaration = [{
-    /// Return the shift amount.
-    unsigned getAmount() { return amount().getLimitedValue(); }
-
     /// Return the result for inputs with the specified type, returning a null
     /// type if the input types are invalid.
     static FIRRTLType getResultType(FIRRTLType input, int32_t amount);
@@ -385,8 +374,6 @@ def TailPrimOp : PrimOp<"tail"> {
   let hasCanonicalizer = 1;
 
   let extraClassDeclaration = [{
-    unsigned getAmount() { return amount().getLimitedValue(); }
-
     /// Return the result for inputs with the specified type, returning a null
     /// type if the input types are invalid.
     static FIRRTLType getResultType(FIRRTLType input, int32_t amount);

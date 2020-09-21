@@ -51,13 +51,6 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
     $ruw attr-dict `:` type($result)
   }];
 
-  let builders = [
-    OpBuilder<"OpBuilder &builder, OperationState &result, "
-              "FIRRTLType resultType, unsigned readLatency, "
-              "unsigned writeLatency, uint64_t depth, RUWAttr ruw, "
-              "StringAttr name = {}">
-  ];
-
   let extraClassDeclaration = [{
     enum class PortKind { Read, Write, ReadWrite };
 
@@ -65,10 +58,6 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
     /// This returns a null type if there are duplicate port names.
     static FIRRTLType getTypeForPortList(uint64_t depth, FIRRTLType dataType,
                               ArrayRef<std::pair<Identifier, PortKind>> ports);
-
-    uint64_t getDepth() { return depth().getLimitedValue(); }
-    unsigned getReadLatency() { return readLatency().getLimitedValue(); }
-    unsigned getWriteLatency() { return writeLatency().getLimitedValue(); }
 
     /// Return the name and kind of ports supported by this memory.
     void getPorts(SmallVectorImpl<std::pair<Identifier, PortKind>> &result);
