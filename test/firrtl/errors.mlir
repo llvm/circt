@@ -64,3 +64,22 @@ firrtl.module @Bar() {}
 // expected-error @+1 {{'firrtl.circuit' op must have a non-empty name}}
 firrtl.circuit "" {
 }
+
+// -----
+
+firrtl.circuit "Foo" {
+  firrtl.module @Foo(%clk: !firrtl.uint<1>, %reset: !firrtl.uint<1>) {
+    // expected-error @+1 {{'firrtl.reg' op operand #0 must be clock, but got '!firrtl.uint<1>'}}
+    %a = firrtl.reg %clk {name = "a"} : (!firrtl.uint<1>) -> !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+  firrtl.module @Foo(%clk: !firrtl.uint<1>, %reset: !firrtl.uint<1>) {
+    %zero = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+    // expected-error @+1 {{'firrtl.reginit' op operand #0 must be clock, but got '!firrtl.uint<1>'}}
+    %a = firrtl.reginit %clk, %reset, %zero {name = "a"} : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  }
+}
