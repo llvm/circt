@@ -17,7 +17,7 @@ func @bitwise(%a: i7, %b: i7) -> i21 {
 
 // CHECK-LABEL: func @shifts(%arg0: i7, %arg1: i7) -> i21 {
 func @shifts(%a: i7, %b: i7) -> i21 {
-// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.shl  %arg0, %arg1 : i7
+// CHECK-NEXT:    [[RES0:%[0-9]+]] = rtl.shl  %arg0, %arg1 : i7
   %0  = rtl.shl  %a, %b : i7
 // CHECK-NEXT:    [[RES1:%[0-9]+]] = rtl.shrs  %arg0, %arg1 : i7
   %1 = rtl.shrs %a, %b : i7
