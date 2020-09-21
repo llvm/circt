@@ -101,7 +101,7 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
     ```
     }];
 
-  let arguments = (ins AnyType:$clockVal, OptionalAttr<StrAttr>:$name);
+  let arguments = (ins ClockType:$clockVal, OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
   
   let assemblyFormat = [{
@@ -118,7 +118,7 @@ def RegInitOp : FIRRTLOp<"reginit", [/*MemAlloc*/]> {
     ```
     }];
 
-  let arguments = (ins AnyType:$clockVal, AnyType:$resetSignal, 
+  let arguments = (ins ClockType:$clockVal, AnyType:$resetSignal,
                        AnyType:$resetValue, OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
   
