@@ -1078,8 +1078,8 @@ SubExprInfo ExprEmitter::visitComb(rtl::ConcatOp op) {
 
 SubExprInfo ExprEmitter::visitComb(rtl::ExtractOp op) {
   unsigned dstWidth = op.getType().cast<IntegerType>().getWidth();
-  return emitBitSelect(op.input(), op.getLowBit() + dstWidth - 1,
-                       op.getLowBit());
+  return emitBitSelect(op.input(), op.lowBit() + dstWidth - 1,
+                       op.lowBit());
 }
 
 /// Emit a verilog bit selection operation like x[4:0], the bit numbers are
