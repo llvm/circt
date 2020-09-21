@@ -58,6 +58,9 @@ public:
                     AnalogType, FlipType, BundleType, FVectorType>();
   }
 
+  /// Return true if this is a valid "reset" type.
+  bool isResetType();
+
 protected:
   using Type::Type;
 };
