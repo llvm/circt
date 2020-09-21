@@ -816,14 +816,13 @@ private:
   SubExprInfo visitExpr(CatPrimOp op) { return emitCat({op.lhs(), op.rhs()}); }
   SubExprInfo visitExpr(CvtPrimOp op);
   SubExprInfo visitExpr(BitsPrimOp op) {
-    return emitBitSelect(op.getOperand(), op.hi().getLimitedValue(),
-                         op.lo().getLimitedValue());
+    return emitBitSelect(op.getOperand(), op.hi(), op.lo());
   }
   SubExprInfo visitExpr(HeadPrimOp op);
   SubExprInfo visitExpr(TailPrimOp op);
   SubExprInfo visitExpr(PadPrimOp op);
   SubExprInfo visitExpr(ShlPrimOp op) { // shl(x, 4) ==> {x, 4'h0}
-    auto shAmt = op.amount().getLimitedValue();
+    auto shAmt = op.amount();
     if (shAmt)
       return emitCat(op.getOperand(), "", llvm::utostr(shAmt) + "'h0");
     return emitNoopCast(op);
@@ -1078,8 +1077,7 @@ SubExprInfo ExprEmitter::visitComb(rtl::ConcatOp op) {
 
 SubExprInfo ExprEmitter::visitComb(rtl::ExtractOp op) {
   unsigned dstWidth = op.getType().cast<IntegerType>().getWidth();
-  return emitBitSelect(op.input(), op.getLowBit() + dstWidth - 1,
-                       op.getLowBit());
+  return emitBitSelect(op.input(), op.lowBit() + dstWidth - 1, op.lowBit());
 }
 
 /// Emit a verilog bit selection operation like x[4:0], the bit numbers are
@@ -1191,7 +1189,7 @@ SubExprInfo ExprEmitter::visitExpr(HeadPrimOp op) {
   auto width = getPassiveTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
   if (width == -1)
     return visitUnhandledExpr(op);
-  auto numBits = op.amount().getLimitedValue();
+  auto numBits = op.amount();
   return emitBitSelect(op.getOperand(), width - 1, width - numBits);
 }
 
@@ -1199,7 +1197,7 @@ SubExprInfo ExprEmitter::visitExpr(TailPrimOp op) {
   auto width = getPassiveTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
   if (width == -1)
     return visitUnhandledExpr(op);
-  auto numBits = op.amount().getLimitedValue();
+  auto numBits = op.amount();
   return emitBitSelect(op.getOperand(), width - 1 - numBits, 0);
 }
 
@@ -1208,7 +1206,7 @@ SubExprInfo ExprEmitter::visitExpr(PadPrimOp op) {
   auto inWidth = inType.getWidthOrSentinel();
   if (inWidth == -1)
     return visitUnhandledExpr(op);
-  auto destWidth = op.amount().getLimitedValue();
+  auto destWidth = op.amount();
 
   // If the destination width is smaller than the input width, then this is a
   // truncation.
@@ -1248,7 +1246,7 @@ SubExprInfo ExprEmitter::visitExpr(PadPrimOp op) {
 // apparently only needed for width inference.
 SubExprInfo ExprEmitter::visitExpr(ShrPrimOp op) {
   auto width = getPassiveTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
-  unsigned shiftAmount = op.amount().getLimitedValue();
+  unsigned shiftAmount = op.amount();
   if (width == -1 || shiftAmount >= unsigned(width))
     return visitUnhandledExpr(op);
 
@@ -1422,7 +1420,7 @@ void ModuleEmitter::emitStatement(StopOp op) {
   auto condExpr = "`STOP_COND_ && " +
                   emitExpressionToString(op.cond(), ops, AndShortCircuit);
 
-  const char *action = op.exitCode().getLimitedValue() ? "$fatal;" : "$finish;";
+  const char *action = op.exitCode() ? "$fatal;" : "$finish;";
   auto locInfo = getLocationInfoAsString(ops);
 
   addAtPosEdge(action, locInfo, clockExpr, "!SYNTHESIS", condExpr);
@@ -1680,7 +1678,7 @@ void ModuleEmitter::emitDecl(RegInitOp op) {
 
 void ModuleEmitter::emitDecl(MemOp op) {
   // Check that the MemOp has been properly lowered before this.
-  if (op.getReadLatency() != 0 || op.getWriteLatency() != 1) {
+  if (op.readLatency() != 0 || op.writeLatency() != 1) {
     // FIXME: This should be an error.
     op.emitWarning("FIXME: need to support mem read/write latency correctly");
   }
@@ -1688,7 +1686,7 @@ void ModuleEmitter::emitDecl(MemOp op) {
   ops.insert(op);
 
   auto memName = getName(op.getResult());
-  uint64_t depth = op.getDepth();
+  uint64_t depth = op.depth();
   auto locInfo = getLocationInfoAsString(ops);
 
   // If we haven't already emitted a declaration of initvar, do so.
@@ -1849,8 +1847,7 @@ static bool isExpressionUnableToInline(Operation *op) {
     if (auto pad = dyn_cast<PadPrimOp>(user)) {
       auto inType = getPassiveTypeOf<IntType>(pad.getOperand());
       auto inWidth = inType.getWidthOrSentinel();
-      if (unsigned(inWidth) > pad.amount().getLimitedValue() &&
-          !isOkToBitSelectFrom(op))
+      if (unsigned(inWidth) > pad.amount() && !isOkToBitSelectFrom(op))
         return true;
     }
   }
@@ -2005,7 +2002,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       if (auto dataType = memOp.getDataTypeOrNull())
         flattenBundleTypes(dataType, "", false, fieldTypes);
 
-      uint64_t depth = memOp.getDepth();
+      uint64_t depth = memOp.depth();
       for (const auto &elt : fieldTypes) {
         indent() << "reg";
         os.indent(maxDeclNameWidth - 3 + 1);

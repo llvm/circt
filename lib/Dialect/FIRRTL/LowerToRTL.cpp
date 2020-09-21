@@ -482,8 +482,8 @@ LogicalResult FIRRTLLowering::visitExpr(BitsPrimOp op) {
   if (!input)
     return failure();
 
-  Type resultType = builder->getIntegerType(op.getHi() - op.getLo() + 1);
-  return setLoweringTo<rtl::ExtractOp>(op, resultType, input, op.getLo());
+  Type resultType = builder->getIntegerType(op.hi() - op.lo() + 1);
+  return setLoweringTo<rtl::ExtractOp>(op, resultType, input, op.lo());
 }
 
 LogicalResult FIRRTLLowering::visitExpr(HeadPrimOp op) {
@@ -492,9 +492,9 @@ LogicalResult FIRRTLLowering::visitExpr(HeadPrimOp op) {
     return failure();
 
   auto inWidth = input.getType().cast<IntegerType>().getWidth();
-  Type resultType = builder->getIntegerType(op.getAmount());
+  Type resultType = builder->getIntegerType(op.amount());
   return setLoweringTo<rtl::ExtractOp>(op, resultType, input,
-                                       inWidth - op.getAmount());
+                                       inWidth - op.amount());
 }
 
 LogicalResult FIRRTLLowering::visitExpr(ShlPrimOp op) {
@@ -503,12 +503,12 @@ LogicalResult FIRRTLLowering::visitExpr(ShlPrimOp op) {
     return failure();
 
   // Handle the degenerate case.
-  if (op.getAmount() == 0)
+  if (op.amount() == 0)
     return setLowering(op, input);
 
   // TODO: We could keep track of zeros and implicitly CSE them.
   auto zero =
-      builder->create<rtl::ConstantOp>(op.getLoc(), APInt(op.getAmount(), 0));
+      builder->create<rtl::ConstantOp>(op.getLoc(), APInt(op.amount(), 0));
   return setLoweringTo<rtl::ConcatOp>(op, ValueRange({input, zero}));
 }
 
@@ -519,7 +519,7 @@ LogicalResult FIRRTLLowering::visitExpr(ShrPrimOp op) {
 
   // Handle the special degenerate cases.
   auto inWidth = input.getType().cast<IntegerType>().getWidth();
-  auto shiftAmount = op.getAmount();
+  auto shiftAmount = op.amount();
   if (shiftAmount == inWidth) {
     // Unsigned shift by full width returns a single-bit zero.
     if (op.input().getType().cast<IntType>().isUnsigned())
@@ -539,7 +539,7 @@ LogicalResult FIRRTLLowering::visitExpr(TailPrimOp op) {
     return failure();
 
   auto inWidth = input.getType().cast<IntegerType>().getWidth();
-  Type resultType = builder->getIntegerType(inWidth - op.getAmount());
+  Type resultType = builder->getIntegerType(inWidth - op.amount());
   return setLoweringTo<rtl::ExtractOp>(op, resultType, input, 0);
 }
 
@@ -641,7 +641,7 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
   // Emit the sv.fatal or sv.finish.
   builder->setInsertionPointToStart(svIf.getBodyBlock());
 
-  if (op.exitCode().getLimitedValue())
+  if (op.exitCode())
     builder->create<sv::FatalOp>(op.getLoc());
   else
     builder->create<sv::FinishOp>(op.getLoc());

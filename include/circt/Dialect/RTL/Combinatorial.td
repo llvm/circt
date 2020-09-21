@@ -143,15 +143,6 @@ def ExtractOp : RTLOp<"extract", [NoSideEffect]> {
     $input `from` $lowBit attr-dict `:` functional-type($input, $result)
   }];
 
-  let builders = [
-    OpBuilder<"OpBuilder &builder, OperationState &result, Type resultType, "
-              "Value input, unsigned lowBit">
-  ];
-
-  let extraClassDeclaration = [{
-    unsigned getLowBit() { return lowBit().getZExtValue(); }
-  }];
-
   let hasFolder = 1;
   let verifier = [{ return ::verifyExtractOp(*this); }];
 }
