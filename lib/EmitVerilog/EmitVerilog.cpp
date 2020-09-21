@@ -816,8 +816,7 @@ private:
   SubExprInfo visitExpr(CatPrimOp op) { return emitCat({op.lhs(), op.rhs()}); }
   SubExprInfo visitExpr(CvtPrimOp op);
   SubExprInfo visitExpr(BitsPrimOp op) {
-    return emitBitSelect(op.getOperand(), op.hi(),
-                         op.lo());
+    return emitBitSelect(op.getOperand(), op.hi(), op.lo());
   }
   SubExprInfo visitExpr(HeadPrimOp op);
   SubExprInfo visitExpr(TailPrimOp op);
@@ -1078,8 +1077,7 @@ SubExprInfo ExprEmitter::visitComb(rtl::ConcatOp op) {
 
 SubExprInfo ExprEmitter::visitComb(rtl::ExtractOp op) {
   unsigned dstWidth = op.getType().cast<IntegerType>().getWidth();
-  return emitBitSelect(op.input(), op.lowBit() + dstWidth - 1,
-                       op.lowBit());
+  return emitBitSelect(op.input(), op.lowBit() + dstWidth - 1, op.lowBit());
 }
 
 /// Emit a verilog bit selection operation like x[4:0], the bit numbers are
@@ -1849,8 +1847,7 @@ static bool isExpressionUnableToInline(Operation *op) {
     if (auto pad = dyn_cast<PadPrimOp>(user)) {
       auto inType = getPassiveTypeOf<IntType>(pad.getOperand());
       auto inWidth = inType.getWidthOrSentinel();
-      if (unsigned(inWidth) > pad.amount() &&
-          !isOkToBitSelectFrom(op))
+      if (unsigned(inWidth) > pad.amount() && !isOkToBitSelectFrom(op))
         return true;
     }
   }
