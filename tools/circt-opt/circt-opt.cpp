@@ -69,11 +69,11 @@ static cl::opt<bool> allowUnregisteredDialects(
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
 
-  enableGlobalDialectRegistry(true);
+  DialectRegistry registry;
 
   // Register MLIR stuff
-  registerDialect<StandardOpsDialect>();
-  registerDialect<LLVM::LLVMDialect>();
+  registry.insert<StandardOpsDialect>();
+  registry.insert<LLVM::LLVMDialect>();
 
 // Register the standard passes we want.
 #include "mlir/Transforms/Passes.h.inc"
@@ -89,18 +89,18 @@ int main(int argc, char **argv) {
   registerAsmPrinterCLOptions();
 
   // Register our dialects.
-  registerDialect<firrtl::FIRRTLDialect>();
+  registry.insert<firrtl::FIRRTLDialect>();
   firrtl::registerFIRRTLPasses();
 
-  registerDialect<handshake::HandshakeOpsDialect>();
-  registerDialect<staticlogic::StaticLogicDialect>();
+  registry.insert<handshake::HandshakeOpsDialect>();
+  registry.insert<staticlogic::StaticLogicDialect>();
   staticlogic::registerStandardToStaticLogicPasses();
   handshake::registerStandardToHandshakePasses();
   handshake::registerHandshakeToFIRRTLPasses();
 
-  registerDialect<llhd::LLHDDialect>();
-  registerDialect<rtl::RTLDialect>();
-  registerDialect<sv::SVDialect>();
+  registry.insert<llhd::LLHDDialect>();
+  registry.insert<rtl::RTLDialect>();
+  registry.insert<sv::SVDialect>();
 
   llhd::initLLHDTransformationPasses();
   llhd::initLLHDToLLVMPass();
@@ -110,11 +110,10 @@ int main(int argc, char **argv) {
   // Parse pass names in main to ensure static initialization completed.
   cl::ParseCommandLineOptions(argc, argv, "circt modular optimizer driver\n");
 
-  MLIRContext context;
   if (showDialects) {
     llvm::outs() << "Registered Dialects:\n";
-    for (Dialect *dialect : context.getLoadedDialects()) {
-      llvm::outs() << dialect->getNamespace() << "\n";
+    for (const auto &nameAndRegistrationIt : registry) {
+      llvm::outs() << nameAndRegistrationIt.first << "\n";
     }
     return 0;
   }
@@ -134,7 +133,6 @@ int main(int argc, char **argv) {
   }
 
   return failed(MlirOptMain(output->os(), std::move(file), passPipeline,
-                            context.getDialectRegistry(), splitInputFile,
-                            verifyDiagnostics, verifyPasses,
-                            allowUnregisteredDialects));
+                            registry, splitInputFile, verifyDiagnostics,
+                            verifyPasses, allowUnregisteredDialects));
 }

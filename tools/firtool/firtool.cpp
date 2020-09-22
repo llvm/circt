@@ -73,6 +73,10 @@ static LogicalResult
 processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
               raw_ostream &os) {
   MLIRContext context;
+
+  // Register our dialects.
+  context.loadDialect<firrtl::FIRRTLDialect, rtl::RTLDialect, sv::SVDialect>();
+
   llvm::SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(ownedBuffer), llvm::SMLoc());
   SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
@@ -129,16 +133,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
 
-  enableGlobalDialectRegistry(true);
-
   // Register any pass manager command line options.
   registerMLIRContextCLOptions();
   registerPassManagerCLOptions();
-
-  // Register our dialects.
-  registerDialect<firrtl::FIRRTLDialect>();
-  registerDialect<rtl::RTLDialect>();
-  registerDialect<sv::SVDialect>();
 
   // Parse pass names in main to ensure static initialization completed.
   cl::ParseCommandLineOptions(argc, argv, "circt modular optimizer driver\n");
