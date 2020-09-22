@@ -482,7 +482,7 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
     if (i == args.size())
       module_out << "\n";
   }
-  module_out << ",\n//Clock.\ninput wire clk);\n\n";
+  module_out << ",\n//Clock.\ninput wire clk\n);\n\n";
 
   for (auto arg : args)
     if (arg.getType().isa<hir::MemrefType>())
