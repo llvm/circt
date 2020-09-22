@@ -315,7 +315,7 @@ LogicalResult VerilogPrinter::printConstantOp(hir::ConstantOp op,
     unsigned valueNumber = newValueNumber();
     mapValueToNum.insert(std::make_pair(result, valueNumber));
     module_out << "wire [" << intTy.getWidth() - 1 << " : 0] v" << valueNumber;
-    module_out << "=" << intTy.getWidth() << "'d" << value << ";\n";
+    module_out << " = " << intTy.getWidth() << "'d" << value << ";\n";
     return success();
   } else if (auto constTy = result.getType().dyn_cast<ConstType>()) {
     if (auto intTy = constTy.getElementType().dyn_cast<IntegerType>()) {
@@ -323,7 +323,7 @@ LogicalResult VerilogPrinter::printConstantOp(hir::ConstantOp op,
       mapValueToNum.insert(std::make_pair(result, valueNumber));
       module_out << "wire [" << intTy.getWidth() - 1 << " : 0] v"
                  << valueNumber;
-      module_out << "=" << intTy.getWidth() << "'d" << value << ";\n";
+      module_out << " = " << intTy.getWidth() << "'d" << value << ";\n";
       return success();
     }
   }
@@ -449,8 +449,8 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
     } else if (argType.isa<IntegerType>()) {
       module_out << "//IntegerType.\n";
       unsigned bitwidth = getBitWidth(argType);
-      module_out << "input wire[" << bitwidth - 1 << ":0]  ";
-      module_out << "v" << valueNumber;
+      module_out << "input wire[" << bitwidth - 1 << ":0]  "
+                 << "v" << valueNumber;
     } else if (argType.isa<MemrefType>()) {
       MemrefType memrefTy = argType.dyn_cast<MemrefType>();
       hir::Details::PortKind port = memrefTy.getPort();
@@ -482,7 +482,7 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
     if (i == args.size())
       module_out << "\n";
   }
-  module_out << ",\n//Clock.\ninput clk);\n\n";
+  module_out << ",\n//Clock.\ninput wire clk);\n\n";
 
   for (auto arg : args)
     if (arg.getType().isa<hir::MemrefType>())
@@ -503,13 +503,13 @@ LogicalResult VerilogPrinter::printTimeOffsets(Value timeVar) {
   module_out << "//printTimeOffset\n";
   unsigned loc = replaceLocs.size();
   unsigned id_timeVar = mapValueToNum[timeVar];
-  module_out << "reg t" << id_timeVar << "offset[$loc" << loc << "];\n";
+  module_out << "reg t" << id_timeVar << "offset[$loc" << loc << ":0];\n";
   module_out << "always@(*) "
              << "t" << id_timeVar << "offset[0] = t" << id_timeVar << ";\n";
   unsigned id_i = newValueNumber();
   module_out << "genvar i" << id_i << ";\n";
-  module_out << "\ngenerate for(i" << id_i << " = 1; i" << id_i << "< $loc"
-             << loc << "; i" << id_i << "++) begin\n";
+  module_out << "\ngenerate for(i" << id_i << " = 1; i" << id_i << "<= $loc"
+             << loc << "; i" << id_i << "= i" << id_i << " + 1) begin\n";
   module_out << "always@(posedge clk) begin\n";
   module_out << "t" << id_timeVar << "offset[i" << id_i << "] <= "
              << "t" << id_timeVar << "offset[i" << id_i << "-1];\n";
@@ -518,7 +518,7 @@ LogicalResult VerilogPrinter::printTimeOffsets(Value timeVar) {
   module_out << "endgenerate\n\n";
 
   replaceLocs.push_back(std::make_pair(loc, [=]() -> std::string {
-    return std::to_string(mapTimeToMaxOffset[timeVar] + 1);
+    return std::to_string(mapTimeToMaxOffset[timeVar]);
   }));
 }
 
@@ -547,9 +547,9 @@ std::string buildDataSelectorStr(std::string &v, unsigned numInputs,
   std::stringstream output;
   std::string v_valid = v + "_valid";
   std::string v_input = v + "_input";
-  output << "wire " << v_valid << "[" << numInputs << "];\n";
-  output << "wire[" << dataWidth - 1 << ":0] " << v_input << "[" << numInputs
-         << "];\n";
+  output << "wire " << v_valid << "[" << numInputs - 1 << ":0];\n";
+  output << "wire[" << dataWidth - 1 << ":0] " << v_input << "["
+         << numInputs - 1 << ":0];\n";
   output << "always@(*) begin\n";
   output << "if(" << v_valid << "[0] == 1'b1)\n";
   output << v << " = " << v_input << "[0];\n";

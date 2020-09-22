@@ -15,3 +15,5 @@ lit.site.cfg.py
 compile_commands.json
 .clangd
 out.sv
+*.log
+*.pb
