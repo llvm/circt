@@ -17,3 +17,4 @@ compile_commands.json
 out.sv
 *.log
 *.pb
+xsim.dir
