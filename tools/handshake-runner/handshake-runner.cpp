@@ -32,7 +32,6 @@
 #include "mlir/IR/Function.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Module.h"
-#include "mlir/InitAllDialects.h"
 #include "mlir/Parser.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
@@ -923,9 +922,6 @@ void executeHandshakeFunction(handshake::FuncOp &toplevel,
 }
 
 int main(int argc, char **argv) {
-  enableGlobalDialectRegistry(true);
-  mlir::registerAllDialects();
-  mlir::registerDialect<handshake::HandshakeOpsDialect>();
   InitLLVM y(argc, argv);
   cl::ParseCommandLineOptions(
       argc, argv,
@@ -944,6 +940,7 @@ int main(int argc, char **argv) {
 
   // Load the MLIR module.
   mlir::MLIRContext context;
+  context.loadDialect<StandardOpsDialect, handshake::HandshakeOpsDialect>();
   SourceMgr source_mgr;
   source_mgr.AddNewSourceBuffer(std::move(*file_or_err), SMLoc());
   mlir::OwningModuleRef module(mlir::parseSourceFile(source_mgr, &context));
