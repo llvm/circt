@@ -42,7 +42,7 @@ def SMemOp : FIRRTLOp<"smem", [/*MemAlloc*/]> {
 
 def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
   let summary = "Define a new mem";
-  let arguments = (ins I32Attr:$readLatency, I32Attr:$writeLatency,
+  let arguments = (ins I32Attr:$readLatency, Confined<I32Attr, [IntMinValue<1>]>:$writeLatency,
                        I64Attr:$depth, RUWAttr:$ruw,
                        OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
