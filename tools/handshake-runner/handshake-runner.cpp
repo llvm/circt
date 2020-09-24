@@ -415,16 +415,6 @@ void executeFunction(mlir::FuncOp &toplevel,
       LLVM_DEBUG(dbgs() << "STORE: " << storeTime << "\n");
       time = std::max(time, storeTime);
       storeTimes[ptr] = time;
-      // } else if (auto Op = dyn_cast<mlir::hpx::ExecutableOpInterface>(op)) {
-      //   std::vector<APInt> inInts(op.getNumOperands());
-      //   std::vector<APInt> outInts(op.getNumResults());
-      //   for (unsigned i = 0; i < op.getNumOperands(); i++)
-      //     inInts[i] = any_cast<APInt>(inValues[i]);
-      //   Op.execute(inInts, outInts);
-      //   for (unsigned i = 0; i < op.getNumResults(); i++)
-      //     outValues[i] = outInts[i];
-      //   if (!isa<mlir::hpx::SliceOp>(op) && !isa<mlir::hpx::UnsliceOp>(op))
-      //     time += 1;
     } else if (auto Op = dyn_cast<mlir::BranchOp>(op)) {
       mlir::Block *dest = Op.getDest();
       unsigned arg = 0;
@@ -871,18 +861,6 @@ void executeHandshakeFunction(handshake::FuncOp &toplevel,
       valueMap.erase(in);
     }
     if (executeStdOp(op, inValues, outValues)) {
-      // } else if (auto Op = dyn_cast<mlir::hpx::ExecutableOpInterface>(op)) {
-      //   std::vector<APInt> inInts(op.getNumOperands());
-      //   std::vector<APInt> outInts(op.getNumResults());
-      //   for (unsigned i = 0; i < op.getNumOperands(); i++) {
-      //     assert(inValues[i].hasValue());
-      //     inInts[i] = any_cast<APInt>(inValues[i]);
-      //   }
-      //   Op.execute(inInts, outInts);
-      //   for (unsigned i = 0; i < op.getNumResults(); i++)
-      //     outValues[i] = outInts[i];
-      //   if (!isa<mlir::hpx::SliceOp>(op) && !isa<mlir::hpx::UnsliceOp>(op))
-      //     time += 1;
     } else if (auto Op = dyn_cast<handshake::StartOp>(op)) {
     } else if (auto Op = dyn_cast<handshake::EndOp>(op)) {
     } else if (auto Op = dyn_cast<handshake::SinkOp>(op)) {
