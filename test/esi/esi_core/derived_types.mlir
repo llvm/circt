@@ -1,4 +1,4 @@
-// RUN: esic %s | esic | FileCheck %s
+// RUN: circt-opt %s | circt-opt | FileCheck %s
 
 // CHECK-LABEL: module
 module {
