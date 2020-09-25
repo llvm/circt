@@ -127,6 +127,7 @@ void ProcessLoweringPass::runOnOperation() {
 }
 } // namespace
 
-std::unique_ptr<OperationPass<ModuleOp>> llhd::createProcessLoweringPass() {
+std::unique_ptr<OperationPass<ModuleOp>>
+circt::llhd::createProcessLoweringPass() {
   return std::make_unique<ProcessLoweringPass>();
 }

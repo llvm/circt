@@ -233,6 +233,6 @@ void MemoryToBlockArgumentPass::runOnOperation() {
 }
 
 std::unique_ptr<OperationPass<llhd::ProcOp>>
-llhd::createMemoryToBlockArgumentPass() {
+circt::llhd::createMemoryToBlockArgumentPass() {
   return std::make_unique<MemoryToBlockArgumentPass>();
 }

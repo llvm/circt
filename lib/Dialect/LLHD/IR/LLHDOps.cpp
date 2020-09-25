@@ -123,7 +123,7 @@ struct constant_int_all_ones_matcher {
 
 } // anonymous namespace
 
-unsigned llhd::getLLHDTypeWidth(Type type) {
+unsigned circt::llhd::getLLHDTypeWidth(Type type) {
   if (auto sig = type.dyn_cast<llhd::SigType>())
     type = sig.getUnderlyingType();
   if (auto array = type.dyn_cast<llhd::ArrayType>())
@@ -532,7 +532,8 @@ static ParseResult parseEntityOp(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   auto type = parser.getBuilder().getFunctionType(argTypes, llvm::None);
-  result.addAttribute(llhd::EntityOp::getTypeAttrName(), TypeAttr::get(type));
+  result.addAttribute(circt::llhd::EntityOp::getTypeAttrName(),
+                      TypeAttr::get(type));
 
   auto *body = result.addRegion();
   parser.parseRegion(*body, args, argTypes);
@@ -588,7 +589,7 @@ static LogicalResult verify(llhd::EntityOp op) {
   return success();
 }
 
-LogicalResult llhd::EntityOp::verifyType() {
+LogicalResult circt::llhd::EntityOp::verifyType() {
   // Fail if function returns any values. An entity's outputs are specially
   // marked arguments.
   if (getNumResults() > 0)
@@ -604,7 +605,7 @@ LogicalResult llhd::EntityOp::verifyType() {
   return success();
 }
 
-LogicalResult llhd::EntityOp::verifyBody() {
+LogicalResult circt::llhd::EntityOp::verifyBody() {
   // Body must not be empty.
   if (isExternal())
     return emitOpError("defining external entity with the entity instruction "
@@ -645,7 +646,7 @@ ArrayRef<Type> llhd::EntityOp::getCallableResults() {
 // ProcOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult llhd::ProcOp::verifyType() {
+LogicalResult circt::llhd::ProcOp::verifyType() {
   // Fail if function returns more than zero values. This is because the
   // outputs of a process are specially marked arguments.
   if (getNumResults() > 0) {
@@ -663,7 +664,7 @@ LogicalResult llhd::ProcOp::verifyType() {
   return success();
 }
 
-LogicalResult llhd::ProcOp::verifyBody() {
+LogicalResult circt::llhd::ProcOp::verifyBody() {
   // Body must not be empty, this indicates an external process. We use
   // another instruction to reference external processes.
   if (isExternal()) {
@@ -762,7 +763,8 @@ static ParseResult parseProcOp(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   auto type = builder.getFunctionType(argTypes, llvm::None);
-  result.addAttribute(llhd::ProcOp::getTypeAttrName(), TypeAttr::get(type));
+  result.addAttribute(circt::llhd::ProcOp::getTypeAttrName(),
+                      TypeAttr::get(type));
 
   auto *body = result.addRegion();
   parser.parseRegion(*body, argNames,

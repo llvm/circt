@@ -1434,7 +1434,8 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
 }
 
 /// Create an LLHD to LLVM conversion pass.
-std::unique_ptr<OperationPass<ModuleOp>> llhd::createConvertLLHDToLLVMPass() {
+std::unique_ptr<OperationPass<ModuleOp>>
+circt::llhd::createConvertLLHDToLLVMPass() {
   return std::make_unique<LLHDToLLVMLoweringPass>();
 }
 

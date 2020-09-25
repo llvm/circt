@@ -43,6 +43,7 @@ void FunctionEliminationPass::runOnOperation() {
 }
 } // namespace
 
-std::unique_ptr<OperationPass<ModuleOp>> llhd::createFunctionEliminationPass() {
+std::unique_ptr<OperationPass<ModuleOp>>
+circt::llhd::createFunctionEliminationPass() {
   return std::make_unique<FunctionEliminationPass>();
 }

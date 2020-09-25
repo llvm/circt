@@ -408,13 +408,13 @@ void VerilogPrinter::addAliasVariable(Value alias, Value existing) {
 
 } // anonymous namespace
 
-LogicalResult llhd::printVerilog(ModuleOp module, raw_ostream &os) {
+LogicalResult circt::llhd::printVerilog(ModuleOp module, raw_ostream &os) {
   llvm::formatted_raw_ostream out(os);
   VerilogPrinter printer(out);
   return printer.printModule(module);
 }
 
-void llhd::registerToVerilogTranslation() {
+void circt::llhd::registerToVerilogTranslation() {
   TranslateFromMLIRRegistration registration(
       "llhd-to-verilog", [](ModuleOp module, raw_ostream &output) {
         return printVerilog(module, output);

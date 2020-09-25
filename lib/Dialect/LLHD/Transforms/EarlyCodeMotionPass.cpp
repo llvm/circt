@@ -124,6 +124,7 @@ void EarlyCodeMotionPass::runOnOperation() {
   }
 }
 
-std::unique_ptr<OperationPass<llhd::ProcOp>> llhd::createEarlyCodeMotionPass() {
+std::unique_ptr<OperationPass<llhd::ProcOp>>
+circt::llhd::createEarlyCodeMotionPass() {
   return std::make_unique<EarlyCodeMotionPass>();
 }
