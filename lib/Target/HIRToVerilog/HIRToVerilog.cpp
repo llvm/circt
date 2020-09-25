@@ -20,17 +20,18 @@
 
 using namespace mlir;
 using namespace hir;
+using namespace std;
 
 // TODO: Printer should never fail. All the checks we are doing here should
 // pass. We should implement these checks in op's verify function.
 // TODO: Replace recursive function calls.
 
 namespace {
-std::string loopCounterTemplate =
-    "\nwire[$msb_lb:0] lb$n_loop = v$n_lb;"
-    "\nwire[$msb_ub:0] ub$n_loop = v$n_ub;"
-    "\nwire[$msb_step:0] step$n_loop = v$n_step;"
-    "\nwire tstart$n_loop = t$n_tstart;"
+string loopCounterTemplate =
+    "\nwire[$msb_lb:0] lb$n_loop = $v_lb;"
+    "\nwire[$msb_ub:0] ub$n_loop = $v_ub;"
+    "\nwire[$msb_step:0] step$n_loop = $v_step;"
+    "\nwire tstart$n_loop = $v_tstart;"
     "\nwire tloop_in$n_loop;"
     "\n"
     "\nreg[$msb_idx:0] prev_idx$n_loop;"
@@ -48,16 +49,15 @@ std::string loopCounterTemplate =
     "\n  saved_step$n_loop <= step$n_loop;"
     "\nend"
     "\n"
-    "\nwire t$n_loop = tloop_out$n_loop;"
-    "\nwire[$msb_idx:0] v$n_loop = idx$n_loop;\n";
+    "\nwire $v_tloop = tloop_out$n_loop;";
 
 static unsigned max(unsigned x, unsigned y) { return x > y ? x : y; }
-static void findAndReplaceAll(std::string &data, std::string toSearch,
-                              std::string replaceStr) {
+static void findAndReplaceAll(string &data, string toSearch,
+                              string replaceStr) {
   // Get the first occurrence.
   size_t pos = data.find(toSearch);
   // Repeat till end is reached.
-  while (pos != std::string::npos) {
+  while (pos != string::npos) {
     // Replace this occurrence of Sub String.
     data.replace(pos, toSearch.size(), replaceStr);
     // Get the next occurrence from the current position.
@@ -109,7 +109,67 @@ public:
   LogicalResult printModule(ModuleOp op);
 
 private:
+  enum VerilogValueTypes { vUnknown, vWire, vMemref };
+
+  class VerilogValue {
+  public:
+    VerilogValue() : type(vUnknown), name("") {}
+    VerilogValue(VerilogValueTypes type, string name)
+        : type(type), name(name) {}
+
+    string strWire() { return name; }
+    string strWireValid() { return name + "_valid"; }
+    string strWireInput() { return name + "_input"; }
+    string strWireInput(unsigned idx) {
+      return strWireInput() + "{" + to_string(idx) + "}";
+    }
+    string strDelayedWire() { return name + "delay"; }
+    string strDelayedWire(unsigned delay) {
+      return strDelayedWire() + "[" + to_string(delay) + "]";
+    }
+
+    string strMemrefAddr() { return name + "_addr"; }
+    string strMemrefAddrValid() { return name + "_addr_valid"; }
+    string strMemrefAddrValid(unsigned idx) {
+      return strMemrefAddrValid() + "[" + to_string(idx) + "]";
+    }
+    string strMemrefAddrInput() { return name + "_addr_input"; }
+    string strMemrefAddrInput(unsigned idx) {
+      return strMemrefAddrInput() + "[" + to_string(idx) + "]";
+    }
+
+    string strMemrefRdData() { return name + "_rd_data"; }
+
+    string strMemrefWrData() { return name + "_wr_data"; }
+    string strMemrefWrDataValid() { return name + "_wr_data_valid"; }
+    string strMemrefWrDataValid(unsigned idx) {
+      return strMemrefWrDataValid() + "[" + to_string(idx) + "]";
+    }
+    string strMemrefWrDataInput() { return name + "_wr_data_input"; }
+    string strMemrefWrDataInput(unsigned idx) {
+      return strMemrefWrDataInput() + "[" + to_string(idx) + "]";
+    }
+
+    string strMemrefRdEn() { return name + "_rd_en"; }
+    string strMemrefRdEnInput() { return name + "_rd_en_input"; }
+    string strMemrefRdEnInput(unsigned idx) {
+      return strMemrefRdEnInput() + "[" + to_string(idx) + "]";
+    }
+
+    string strMemrefWrEn() { return name + "_wr_en"; }
+    string strMemrefWrEnInput() { return name + "_wr_en_input"; }
+    string strMemrefWrEnInput(unsigned idx) {
+      return strMemrefWrEnInput() + "[" + to_string(idx) + "]";
+    }
+
+  private:
+    VerilogValueTypes type;
+    string name;
+    string unrollIdx;
+  };
+
   unsigned newValueNumber() { return nextValueNum++; }
+
   LogicalResult printOperation(Operation *op, unsigned indentAmount = 0);
 
   // Individual op printers.
@@ -122,93 +182,84 @@ private:
   LogicalResult printReturnOp(hir::ReturnOp op, unsigned indentAmount = 0);
 
   // Helpers.
-  unsigned printDownCounter(std::stringstream &output, Value maxCount,
-                            Value tstart);
+  string printDownCounter(stringstream &output, Value maxCount, Value tstart);
   LogicalResult printBody(Block &block, unsigned indentAmount = 0);
   LogicalResult printMemrefStub(Value mem, unsigned indentAmount = 0);
   LogicalResult printType(Type type);
-  LogicalResult processReplacements(std::string &code);
+  LogicalResult processReplacements(string &code);
   LogicalResult printTimeOffsets(Value timeVar);
 
-  std::stringstream module_out;
+  stringstream module_out;
   llvm::formatted_raw_ostream &out;
   unsigned nextValueNum = 0;
-  llvm::DenseMap<Value, unsigned> mapValueToNum;
+  // llvm::DenseMap<Value, unsigned> mapValueToNum;
+  llvm::DenseMap<Value, VerilogValue> mapValueToVerilog;
   llvm::DenseMap<Value, int> mapConstToInt;
   llvm::DenseMap<Value, MemrefParams> mapValueToMemrefParams;
   llvm::DenseMap<Value, unsigned> mapTimeToMaxOffset;
-  SmallVector<std::pair<unsigned, std::function<std::string()>>, 4> replaceLocs;
-};
+  SmallVector<pair<unsigned, function<string()>>, 4> replaceLocs;
+}; // namespace
 
-unsigned VerilogPrinter::printDownCounter(std::stringstream &output,
-                                          Value maxCount, Value tstart) {
-  unsigned id_tstart = mapValueToNum[tstart];
-  unsigned id_maxCount = mapValueToNum[maxCount];
+string VerilogPrinter::printDownCounter(stringstream &output, Value maxCount,
+                                        Value tstart) {
   unsigned counterWidth = getBitWidth(maxCount.getType());
 
-  std::string t_tstart = "t" + std::to_string(id_tstart);
+  string v_tstart = mapValueToVerilog[tstart].strWire();
   unsigned id_counter = newValueNumber();
-  std::string v_maxCount = "v" + std::to_string(id_maxCount);
-  std::string v_counter = "v" + std::to_string(id_counter);
+  string v_maxCount = mapValueToVerilog[maxCount].strWire();
+  string v_counter = "downCount" + to_string(id_counter);
   output << "reg[" << counterWidth - 1 << ":0]" << v_counter << ";\n";
   output << "always@(posedge clk) begin\n";
-  output << "if(" << t_tstart << ")\n";
+  output << "if(" << v_tstart << ")\n";
   output << v_counter << " <= " << v_maxCount << ";\n";
   output << "else\n";
   output << v_counter << " <= (" << v_counter << ">0)?(" << v_counter
          << "-1):0;\n";
   output << "end\n";
-  return id_counter;
+  return v_counter;
 }
 
 LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
                                              unsigned indentAmount) {
-  OperandRange addr = op.addr();
   mlir::Value result = op.res();
+  unsigned id_result = newValueNumber();
+  VerilogValue v_result(vWire, "v" + to_string(id_result));
+  mapValueToVerilog.insert(make_pair(result, v_result));
+
+  OperandRange addr = op.addr();
   mlir::Value mem = op.mem();
   mlir::Value tstart = op.tstart();
   mlir::Value offset = op.offset();
 
-  unsigned id_mem = mapValueToNum[mem];
-  unsigned id_tstart = mapValueToNum[tstart];
-  unsigned id_result = newValueNumber();
+  auto v_mem = mapValueToVerilog[mem];
 
-  mapValueToNum.insert(std::make_pair(result, id_result));
-  int offsetValue = offset ? mapConstToInt[offset] : 0;
+  MemrefParams memParams = mapValueToMemrefParams[mem];
+  unsigned numAccess = memParams.numReads + memParams.numWrites;
+  unsigned numReads = memParams.numReads;
+
+  int delayValue = offset ? mapConstToInt[offset] : 0;
   unsigned width_result = getBitWidth(result.getType());
 
-  mapTimeToMaxOffset[tstart] = max(offsetValue, mapTimeToMaxOffset[tstart]);
-  MemrefParams memParams = mapValueToMemrefParams[mem];
-
-  std::string v_addr_valid =
-      "v_addr" + std::to_string(id_mem) + "_valid[" +
-      std::to_string(memParams.numReads + memParams.numWrites) + "]";
-  std::string v_addr_input =
-      "v_addr" + std::to_string(id_mem) + "_input[" +
-      std::to_string(memParams.numReads + memParams.numWrites) + "]";
-  std::string t_offset = "t" + std::to_string(id_tstart) + "offset[" +
-                         std::to_string(offsetValue) + "]";
-
-  std::string v_result = "v" + std::to_string(id_result);
-  std::string v_rd_en_input = "v_rd_en" + std::to_string(id_mem) + "_input[" +
-                              std::to_string(memParams.numReads) + "]";
-  std::string v_rd_data = "v_rd_data" + std::to_string(id_mem);
+  mapTimeToMaxOffset[tstart] = max(delayValue, mapTimeToMaxOffset[tstart]);
+  auto v_tstart = mapValueToVerilog[tstart];
 
   // Address bus assignments.
-  module_out << "assign " << v_addr_valid << " = " << t_offset << ";\n";
-  module_out << "assign " << v_addr_input << " = {";
+  module_out << "assign " << v_mem.strMemrefAddrValid(numAccess) << " = "
+             << v_tstart.strDelayedWire(delayValue) << ";\n";
+  module_out << "assign " << v_mem.strMemrefAddrInput(numAccess) << " = {";
   int i = 0;
   for (auto addrI : addr) {
     if (i++ > 0)
       module_out << ", ";
-    module_out << "v" << mapValueToNum[addrI];
+    module_out << mapValueToVerilog[addrI].strWire();
   }
   module_out << "};\n";
 
   // Read bus assignments.
-  module_out << "wire[" << (width_result - 1) << ":0]" + v_result << " = "
-             << v_rd_data << ";\n\n";
-  module_out << "assign " + v_rd_en_input << " = " << t_offset << ";\n\n";
+  module_out << "wire[" << (width_result - 1) << ":0]" + v_result.strWire()
+             << " = " << v_mem.strMemrefRdData() << ";\n\n";
+  module_out << "assign " + v_mem.strMemrefRdEnInput(numReads) << " = "
+             << v_tstart.strDelayedWire(delayValue) << ";\n\n";
 
   // Increment number of reads on the memref.
   memParams.numReads++;
@@ -224,47 +275,34 @@ LogicalResult VerilogPrinter::printMemWriteOp(MemWriteOp op,
   mlir::Value tstart = op.tstart();
   mlir::Value offset = op.offset();
 
-  unsigned id_mem = mapValueToNum[mem];
-  unsigned id_tstart = mapValueToNum[tstart];
-  unsigned id_value = mapValueToNum[value];
-
-  int offsetValue = offset ? mapConstToInt[offset] : 0;
-
-  mapTimeToMaxOffset[tstart] = max(offsetValue, mapTimeToMaxOffset[tstart]);
+  auto v_value = mapValueToVerilog[value];
+  auto v_mem = mapValueToVerilog[mem];
   MemrefParams memParams = mapValueToMemrefParams[mem];
+  unsigned numAccess = memParams.numReads + memParams.numWrites;
+  unsigned numWrites = memParams.numWrites;
 
-  std::string v_addr_valid =
-      "v_addr" + std::to_string(id_mem) + "_valid[" +
-      std::to_string(memParams.numReads + memParams.numWrites) + "]";
-  std::string v_addr_input =
-      "v_addr" + std::to_string(id_mem) + "_input[" +
-      std::to_string(memParams.numReads + memParams.numWrites) + "]";
-  std::string t_offset = "t" + std::to_string(id_tstart) + "offset[" +
-                         std::to_string(offsetValue) + "]";
+  int delayValue = offset ? mapConstToInt[offset] : 0;
 
-  module_out << "assign " << v_addr_valid << " = " << t_offset << ";\n";
-  module_out << "assign " << v_addr_input << " = {";
+  mapTimeToMaxOffset[tstart] = max(delayValue, mapTimeToMaxOffset[tstart]);
+  auto v_tstart = mapValueToVerilog[tstart];
+
+  module_out << "assign " << v_mem.strMemrefAddrValid(numAccess) << " = "
+             << v_tstart.strDelayedWire(delayValue) << ";\n";
+  module_out << "assign " << v_mem.strMemrefAddrInput(numAccess) << " = {";
   int i = 0;
   for (auto addrI : addr) {
     if (i++ > 0)
       module_out << ", ";
-    module_out << "v" << mapValueToNum[addrI];
+    module_out << mapValueToVerilog[addrI].strWire();
   }
   module_out << "};\n";
 
-  std::string v_wr_en_input = "v_wr_en" + std::to_string(id_mem) + "_input[" +
-                              std::to_string(memParams.numWrites) + "]";
-  std::string v_wr_data_input = "v_wr_data" + std::to_string(id_mem) +
-                                "_input[" +
-                                std::to_string(memParams.numWrites) + "]";
-  std::string v_wr_data_valid = "v_wr_data" + std::to_string(id_mem) +
-                                "_valid[" +
-                                std::to_string(memParams.numWrites) + "]";
-
-  std::string v_value = "v" + std::to_string(id_value);
-  module_out << "assign " << v_wr_en_input << " = " << t_offset << ";\n";
-  module_out << "assign " << v_wr_data_valid << " = " << t_offset << ";\n";
-  module_out << "assign " << v_wr_data_input << " = " << v_value << ";\n\n";
+  module_out << "assign " << v_mem.strMemrefWrEnInput(numWrites) << " = "
+             << v_tstart.strDelayedWire(delayValue) << ";\n";
+  module_out << "assign " << v_mem.strMemrefWrDataValid(numWrites) << " = "
+             << v_tstart.strDelayedWire(delayValue) << ";\n";
+  module_out << "assign " << v_mem.strMemrefWrDataInput(numWrites) << " = "
+             << v_value.strWire() << ";\n\n";
 
   // Increment number of writes on the memref.
   memParams.numWrites++;
@@ -275,17 +313,19 @@ LogicalResult VerilogPrinter::printMemWriteOp(MemWriteOp op,
 LogicalResult VerilogPrinter::printAddOp(hir::AddOp op, unsigned indentAmount) {
   // TODO: Handle signed and unsigned integers of unequal width using sign
   // extension.
+  Value result = op.res();
+  unsigned id_result = newValueNumber();
+  VerilogValue v_result(vWire, "v" + to_string(id_result));
+  mapValueToVerilog.insert(make_pair(result, v_result));
+
   Value left = op.left();
   Value right = op.right();
-  Value result = op.res();
   Type resultType = result.getType();
-  unsigned id_result = newValueNumber();
-  mapValueToNum.insert(std::make_pair(result, id_result));
   if (auto resultIntType = resultType.dyn_cast<IntegerType>()) {
     unsigned resultWidth = resultIntType.getWidth();
     module_out << "wire [" << resultWidth - 1 << " : 0] v" << id_result << " = "
-               << "v" << mapValueToNum[left] << " + "
-               << "v" << mapValueToNum[right] << ";\n";
+               << mapValueToVerilog[left].strWire() << " + "
+               << mapValueToVerilog[right].strWire() << ";\n";
     return success();
   } else if (auto resultConstType = resultType.dyn_cast<ConstType>()) {
     if (auto elementIntType =
@@ -293,7 +333,7 @@ LogicalResult VerilogPrinter::printAddOp(hir::AddOp op, unsigned indentAmount) {
       int leftValue = mapConstToInt[left];
       int rightValue = mapConstToInt[right];
       unsigned elementWidth = elementIntType.getWidth();
-      mapConstToInt.insert(std::make_pair(result, leftValue + rightValue));
+      mapConstToInt.insert(make_pair(result, leftValue + rightValue));
       module_out << "wire [" << elementWidth - 1 << " : 0] v" << id_result
                  << " = " << leftValue + rightValue << ";\n";
     }
@@ -309,20 +349,22 @@ LogicalResult VerilogPrinter::printReturnOp(hir::ReturnOp op,
 LogicalResult VerilogPrinter::printConstantOp(hir::ConstantOp op,
                                               unsigned indentAmount) {
   auto result = op.res();
+  unsigned id_result = newValueNumber();
+  VerilogValue v_result(vWire, "v" + to_string(id_result));
+  mapValueToVerilog.insert(make_pair(result, v_result));
+
   int value = op.value().getLimitedValue();
-  mapConstToInt.insert(std::make_pair(result, value));
+  mapConstToInt.insert(make_pair(result, value));
+
   if (auto intTy = result.getType().dyn_cast<IntegerType>()) {
-    unsigned valueNumber = newValueNumber();
-    mapValueToNum.insert(std::make_pair(result, valueNumber));
-    module_out << "wire [" << intTy.getWidth() - 1 << " : 0] v" << valueNumber;
+    module_out << "wire [" << intTy.getWidth() - 1 << " : 0]"
+               << v_result.strWire();
     module_out << " = " << intTy.getWidth() << "'d" << value << ";\n";
     return success();
   } else if (auto constTy = result.getType().dyn_cast<ConstType>()) {
     if (auto intTy = constTy.getElementType().dyn_cast<IntegerType>()) {
-      unsigned valueNumber = newValueNumber();
-      mapValueToNum.insert(std::make_pair(result, valueNumber));
-      module_out << "wire [" << intTy.getWidth() - 1 << " : 0] v"
-                 << valueNumber;
+      module_out << "wire [" << intTy.getWidth() - 1 << " : 0]"
+                 << v_result.strWire();
       module_out << " = " << intTy.getWidth() << "'d" << value << ";\n";
       return success();
     }
@@ -339,15 +381,15 @@ LogicalResult VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
   Value idx = op.getInductionVar();
   Value tloop = op.getIterTimeVar();
 
-  unsigned id_lb = mapValueToNum[op.lb()];
-  unsigned id_ub = mapValueToNum[op.ub()];
-  unsigned id_step = mapValueToNum[op.step()];
-  unsigned id_tstep = tstep ? mapValueToNum[op.tstep()] : -1;
-  unsigned id_tstart = mapValueToNum[op.tstart()];
-  unsigned id_loop = newValueNumber();
-
-  mapValueToNum.insert(std::make_pair(idx, id_loop));
-  mapValueToNum.insert(std::make_pair(tloop, id_loop));
+  auto v_lb = mapValueToVerilog[op.lb()];
+  auto v_ub = mapValueToVerilog[op.ub()];
+  auto v_step = mapValueToVerilog[op.step()];
+  auto v_tstart = mapValueToVerilog[op.tstart()];
+  auto id_loop = newValueNumber();
+  auto v_idx = VerilogValue(vWire, "idx" + to_string(id_loop));
+  auto v_tloop = VerilogValue(vWire, "tloop" + to_string(id_loop));
+  mapValueToVerilog.insert(make_pair(idx, v_idx));
+  mapValueToVerilog.insert(make_pair(tloop, v_tloop));
 
   unsigned width_lb = getBitWidth(op.lb().getType());
   unsigned width_ub = getBitWidth(op.ub().getType());
@@ -355,37 +397,26 @@ LogicalResult VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
   unsigned width_tstep = op.tstep() ? getBitWidth(op.tstep().getType()) : 0;
   unsigned width_idx = getBitWidth(idx.getType());
 
-  if (auto idx_intTy = idx.getType().dyn_cast<IntegerType>()) {
-    module_out << "reg[" << idx_intTy.getWidth() - 1 << ":0] counter" << id_loop
-               << ";\n";
-  } else {
-    return emitError(op.getLoc(), "for loop induction var must be an integer");
-  }
-  std::stringstream loopCounterStream;
+  stringstream loopCounterStream;
   loopCounterStream << loopCounterTemplate;
-  if (id_tstep >= 0) {
-    unsigned id_delay_counter =
-        printDownCounter(loopCounterStream, tstep, tloop);
-    loopCounterStream << "assign tloop_in$n_loop = v" << id_delay_counter
-                      << "==1;\n";
+  if (tstep) {
+    string v_delay_counter = printDownCounter(loopCounterStream, tstep, tloop);
+    loopCounterStream << "assign tloop_in$n_loop = (" << v_delay_counter
+                      << " == 1);\n";
   }
 
-  std::string loopCounterString = loopCounterStream.str();
-  findAndReplaceAll(loopCounterString, "$n_loop", std::to_string(id_loop));
-  findAndReplaceAll(loopCounterString, "$msb_idx",
-                    std::to_string(width_idx - 1));
-  findAndReplaceAll(loopCounterString, "$n_lb", std::to_string(id_lb));
-  findAndReplaceAll(loopCounterString, "$msb_lb", std::to_string(width_lb - 1));
-  findAndReplaceAll(loopCounterString, "$n_ub", std::to_string(id_ub));
-  findAndReplaceAll(loopCounterString, "$msb_ub", std::to_string(width_ub - 1));
-  findAndReplaceAll(loopCounterString, "$n_step", std::to_string(id_step));
-  findAndReplaceAll(loopCounterString, "$msb_step",
-                    std::to_string(width_step - 1));
-  findAndReplaceAll(loopCounterString, "$n_tstart", std::to_string(id_tstart));
-  if (id_tstep >= 0)
-    findAndReplaceAll(loopCounterString, "$id_tstep", std::to_string(id_tstep));
-  findAndReplaceAll(loopCounterString, "$width_tstep",
-                    std::to_string(width_tstep));
+  string loopCounterString = loopCounterStream.str();
+  findAndReplaceAll(loopCounterString, "$n_loop", to_string(id_loop));
+  findAndReplaceAll(loopCounterString, "$msb_idx", to_string(width_idx - 1));
+  findAndReplaceAll(loopCounterString, "$v_lb", v_lb.strWire());
+  findAndReplaceAll(loopCounterString, "$msb_lb", to_string(width_lb - 1));
+  findAndReplaceAll(loopCounterString, "$v_ub", v_ub.strWire());
+  findAndReplaceAll(loopCounterString, "$msb_ub", to_string(width_ub - 1));
+  findAndReplaceAll(loopCounterString, "$v_step", v_step.strWire());
+  findAndReplaceAll(loopCounterString, "$msb_step", to_string(width_step - 1));
+  findAndReplaceAll(loopCounterString, "$v_tstart", v_tstart.strWire());
+  findAndReplaceAll(loopCounterString, "$width_tstep", to_string(width_tstep));
+  findAndReplaceAll(loopCounterString, "$v_tloop", v_tloop.strWire());
   module_out << "\n//Loop" << id_loop << " begin\n";
   module_out << loopCounterString;
   module_out << "\n//Loop" << id_loop << " body\n";
@@ -433,8 +464,6 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
   for (int i = 0; i < args.size(); i++) {
     Value arg = args[i];
     Type argType = arg.getType();
-    unsigned valueNumber = newValueNumber();
-    mapValueToNum.insert(std::make_pair(arg, valueNumber));
 
     // Print verilog.
     if (i == 0)
@@ -444,14 +473,27 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
       module_out << ",\n";
 
     if (argType.isa<hir::TimeType>()) {
+      unsigned id_tstart = newValueNumber();
+      /*tstart parameter of func does not use valuenumber*/
+      auto tstart = VerilogValue(vWire, "tstart");
+      mapValueToVerilog.insert(make_pair(arg, tstart));
+
       module_out << "//TimeType.\n";
-      module_out << "input wire t" << valueNumber;
+      module_out << "input wire " << tstart.strWire();
     } else if (argType.isa<IntegerType>()) {
+      unsigned id_int_arg = newValueNumber();
+      auto v_int_arg = VerilogValue(vWire, "v" + to_string(id_int_arg));
+      mapValueToVerilog.insert(make_pair(arg, v_int_arg));
+
       module_out << "//IntegerType.\n";
       unsigned bitwidth = getBitWidth(argType);
       module_out << "input wire[" << bitwidth - 1 << ":0]  "
-                 << "v" << valueNumber;
+                 << v_int_arg.strWire();
     } else if (argType.isa<MemrefType>()) {
+      unsigned id_memref_arg = newValueNumber();
+      auto v_memref_arg = VerilogValue(vMemref, "v" + to_string(id_memref_arg));
+      mapValueToVerilog.insert(make_pair(arg, v_memref_arg));
+
       MemrefType memrefTy = argType.dyn_cast<MemrefType>();
       hir::Details::PortKind port = memrefTy.getPort();
       module_out << "//MemrefType : port = "
@@ -460,20 +502,20 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
                          : (port == hir::Details::w) ? "w" : "rw")
                  << ".\n";
       unsigned addrWidth = calcAddrWidth(memrefTy);
-      module_out << "output reg[" << addrWidth - 1 << ":0] v_addr"
-                 << valueNumber;
+      module_out << "output reg[" << addrWidth - 1 << ":0] "
+                 << v_memref_arg.strMemrefAddr();
       if (port == hir::Details::r || port == hir::Details::rw) {
         unsigned bitwidth = getBitWidth(argType);
-        module_out << ",\noutput wire v_rd_en" << valueNumber;
+        module_out << ",\noutput wire " << v_memref_arg.strMemrefRdEn();
         module_out << ",\ninput wire[" << bitwidth - 1 << ":0]  "
-                   << "v_rd_data" << valueNumber;
+                   << v_memref_arg.strMemrefRdData();
       }
       if (port == hir::Details::w || port == hir::Details::rw) {
-        module_out << ",\noutput wire v_wr_en" << valueNumber;
+        module_out << ",\noutput wire " << v_memref_arg.strMemrefWrEn();
         unsigned bitwidth = getBitWidth(argType);
         module_out << ",\n"
-                   << "output reg[" << bitwidth - 1 << ":0]  "
-                   << "v_wr_data" << valueNumber;
+                   << "output reg[" << bitwidth - 1 << ":0] "
+                   << v_memref_arg.strMemrefWrData();
       }
     } else {
       return emitError(op.getLoc(), "Unsupported argument type!");
@@ -493,7 +535,7 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
   module_out << "endmodule\n";
 
   // Pass module's code to out.
-  std::string code = module_out.str();
+  string code = module_out.str();
   processReplacements(code);
   out << code;
   return success();
@@ -502,51 +544,51 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
 LogicalResult VerilogPrinter::printTimeOffsets(Value timeVar) {
   module_out << "//printTimeOffset\n";
   unsigned loc = replaceLocs.size();
-  unsigned id_timeVar = mapValueToNum[timeVar];
-  module_out << "reg t" << id_timeVar << "offset[$loc" << loc << ":0];\n";
-  module_out << "always@(*) "
-             << "t" << id_timeVar << "offset[0] = t" << id_timeVar << ";\n";
-  unsigned id_i = newValueNumber();
-  module_out << "genvar i" << id_i << ";\n";
-  module_out << "\ngenerate for(i" << id_i << " = 1; i" << id_i << "<= $loc"
-             << loc << "; i" << id_i << "= i" << id_i << " + 1) begin\n";
+  auto v_timeVar = mapValueToVerilog[timeVar];
+  module_out << "reg " << v_timeVar.strDelayedWire() << "[$loc" << loc
+             << ":0];\n";
+  module_out << "always@(*) " << v_timeVar.strDelayedWire(0) << " = "
+             << v_timeVar.strWire() << ";\n";
+  string str_i = "i" + to_string(newValueNumber());
+  module_out << "genvar " << str_i << ";\n";
+  module_out << "\ngenerate for(" << str_i << " = 1; " << str_i << "<= $loc"
+             << loc << "; " << str_i << "= " << str_i << " + 1) begin\n";
   module_out << "always@(posedge clk) begin\n";
-  module_out << "t" << id_timeVar << "offset[i" << id_i << "] <= "
-             << "t" << id_timeVar << "offset[i" << id_i << "-1];\n";
+  module_out << v_timeVar.strDelayedWire() << "[" << str_i
+             << "] <= " << v_timeVar.strDelayedWire() << "[" << str_i
+             << "-1];\n";
   module_out << "end\n";
   module_out << "end\n";
   module_out << "endgenerate\n\n";
 
-  replaceLocs.push_back(std::make_pair(loc, [=]() -> std::string {
-    return std::to_string(mapTimeToMaxOffset[timeVar]);
-  }));
+  replaceLocs.push_back(make_pair(
+      loc, [=]() -> string { return to_string(mapTimeToMaxOffset[timeVar]); }));
 }
 
-LogicalResult VerilogPrinter::processReplacements(std::string &code) {
+LogicalResult VerilogPrinter::processReplacements(string &code) {
   for (auto replacement : replaceLocs) {
     unsigned loc = replacement.first;
-    std::function<std::string()> getReplacementString = replacement.second;
-    std::string replacementStr = getReplacementString();
-    std::stringstream locSStream;
+    function<string()> getReplacementString = replacement.second;
+    string replacementStr = getReplacementString();
+    stringstream locSStream;
     locSStream << "$loc" << loc;
     findAndReplaceAll(code, locSStream.str(), replacementStr);
   }
   return success();
 }
 
-std::string buildEnableSelectorStr(std::string &v_en, unsigned numInputs) {
-  std::stringstream output;
-  std::string v_en_input = v_en + "_input";
+string buildEnableSelectorStr(string &v_en, unsigned numInputs) {
+  stringstream output;
+  string v_en_input = v_en + "_input";
   output << "wire[" << numInputs - 1 << ":0]" << v_en_input << ";\n";
   output << "assign " << v_en << " = |" << v_en_input << ";\n";
   return output.str();
 }
 
-std::string buildDataSelectorStr(std::string &v, unsigned numInputs,
-                                 unsigned dataWidth) {
-  std::stringstream output;
-  std::string v_valid = v + "_valid";
-  std::string v_input = v + "_input";
+string buildDataSelectorStr(string &v, unsigned numInputs, unsigned dataWidth) {
+  stringstream output;
+  string v_valid = v + "_valid";
+  string v_input = v + "_input";
   output << "wire " << v_valid << "[" << numInputs - 1 << ":0];\n";
   output << "wire[" << dataWidth - 1 << ":0] " << v_input << "["
          << numInputs - 1 << ":0];\n";
@@ -568,7 +610,6 @@ LogicalResult VerilogPrinter::printMemrefStub(Value mem,
   /// Prints a placeholder $locN which is later replaced by selectors for
   /// addr,
   // rd_data, wr_data and rd_en, wr_en.
-  unsigned id_mem = mapValueToNum[mem];
   MemrefType memrefTy = mem.getType().dyn_cast<hir::MemrefType>();
   hir::Details::PortKind port = memrefTy.getPort();
   Type elementType = memrefTy.getElementType();
@@ -576,28 +617,31 @@ LogicalResult VerilogPrinter::printMemrefStub(Value mem,
   dataWidth = getBitWidth(elementType);
   unsigned addrWidth = calcAddrWidth(memrefTy);
   unsigned loc = replaceLocs.size();
-  replaceLocs.push_back(std::make_pair(loc, [=]() -> std::string {
+  replaceLocs.push_back(make_pair(loc, [=]() -> string {
     MemrefParams memParams = mapValueToMemrefParams[mem];
     unsigned numAccess = memParams.numReads + memParams.numWrites;
     if (numAccess == 0)
       return "";
-    std::stringstream output;
-    std::string v_addr = "v_addr" + std::to_string(id_mem);
+    stringstream output;
+    VerilogValue v_mem = mapValueToVerilog[mem];
+    auto v_addr = v_mem.strMemrefAddr();
     // print addr bus selector.
     output << buildDataSelectorStr(v_addr, numAccess, addrWidth);
     output << "\n";
     // print rd_en selector.
     if (memParams.numReads > 0) {
-      std::string v_rd_en = "v_rd_en" + std::to_string(id_mem);
+      string v_rd_en = v_mem.strMemrefRdEn();
       output << buildEnableSelectorStr(v_rd_en, memParams.numReads);
       output << "\n";
     }
+
     // print write bus selector.
     if (memParams.numWrites > 0) {
-      std::string v_wr_en = "v_wr_en" + std::to_string(id_mem);
-      output << buildEnableSelectorStr(v_wr_en, memParams.numWrites);
-      std::string v_wr_data = "v_wr_data" + std::to_string(id_mem);
-      output << buildDataSelectorStr(v_wr_data, memParams.numWrites, dataWidth);
+      string str_wr_en = v_mem.strMemrefWrEn();
+      output << buildEnableSelectorStr(str_wr_en, memParams.numWrites);
+      string str_wr_data = v_mem.strMemrefWrData();
+      output << buildDataSelectorStr(str_wr_data, memParams.numWrites,
+                                     dataWidth);
       output << "\n";
     }
     return output.str();

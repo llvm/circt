@@ -1,35 +1,35 @@
 `default_nettype none
 `include "out.sv"
 module Add_tb();
-wire[6:0] v_addr0;
-wire v_rd_en0;
-reg[31:0]  v_rd_data0;
-wire[6:0] v_addr1;
-wire v_rd_en1;
-reg[31:0]  v_rd_data1;
-wire[6:0] v_addr2;
-wire v_wr_en2;
-wire[63:0]  v_wr_data2;
+wire[6:0] v0_addr;
+wire v0_rd_en;
+reg[31:0]  v0_rd_data;
+wire[6:0] v1_addr;
+wire v1_rd_en;
+reg[31:0]  v1_rd_data;
+wire[6:0] v2_addr;
+wire v2_wr_en;
+wire[63:0]  v2_wr_data;
 reg t3;
 reg clk = 1'b0;
 
 Add Add_inst(
-  .v_addr0   (v_addr0   ) ,
-  .v_rd_en0  (v_rd_en0  ) ,
-  .v_rd_data0(v_rd_data0) ,
-  .v_addr1   (v_addr1   ) ,
-  .v_rd_en1  (v_rd_en1  ) ,
-  .v_rd_data1(v_rd_data1) ,
-  .v_addr2   (v_addr2   ) ,
-  .v_wr_en2  (v_wr_en2  ) ,
-  .v_wr_data2(v_wr_data2) ,
-  .t3        (t3        ) ,
+  .v0_addr   (v0_addr   ) ,
+  .v0_rd_en  (v0_rd_en  ) ,
+  .v0_rd_data(v0_rd_data) ,
+  .v1_addr   (v1_addr   ) ,
+  .v1_rd_en  (v1_rd_en  ) ,
+  .v1_rd_data(v1_rd_data) ,
+  .v2_addr   (v2_addr   ) ,
+  .v2_wr_en  (v2_wr_en  ) ,
+  .v2_wr_data(v2_wr_data) ,
+  .tstart    (t3        ) ,
   .clk       (clk       ) 
 );
 
 initial begin
-  v_rd_data0 <= 'd5;
-  v_rd_data1 <= 'd100;
+  v0_rd_data <= 'd5;
+  v1_rd_data <= 'd100;
   t3 <= 'd0;
   #9
   t3 <= 1'b1;
@@ -40,11 +40,11 @@ end
 initial begin
 end
 always@(posedge clk) begin
-  if(v_rd_en0) begin
-      v_rd_data0 <=  v_rd_data0 + 'd1;
+  if(v0_rd_en) begin
+    v0_rd_data <=  v0_rd_data + 'd1;
   end
-  if(v_rd_en1) begin
-      v_rd_data1 <=  v_rd_data1 + 'd1;
+  if(v1_rd_en) begin
+    v1_rd_data <=  v1_rd_data + 'd1;
   end
 end
 
