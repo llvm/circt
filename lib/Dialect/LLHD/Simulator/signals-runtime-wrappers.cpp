@@ -9,7 +9,7 @@
 #include "llvm/ADT/ArrayRef.h"
 
 using namespace llvm;
-using namespace mlir::llhd::sim;
+using namespace circt::llhd::sim;
 
 //===----------------------------------------------------------------------===//
 // Runtime interface

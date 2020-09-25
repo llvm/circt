@@ -16,7 +16,7 @@ def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "ModuleOp"> {
         TODO
     }];
 
-    let constructor = "mlir::llhd::createConvertLLHDToLLVMPass()";
+    let constructor = "circt::llhd::createConvertLLHDToLLVMPass()";
 }
 
 #endif // CIRCT_CONVERSION_LLHDTOLLVM_PASSES

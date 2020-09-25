@@ -24,7 +24,7 @@ def LLHD_Dialect : Dialect {
     A low-level hardware description dialect in MLIR.
   }];
 
-  let cppNamespace = "::mlir::llhd";
+  let cppNamespace = "::circt::llhd";
 
   let hasConstantMaterializer = 1;
 }

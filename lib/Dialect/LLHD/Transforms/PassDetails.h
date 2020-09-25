@@ -8,13 +8,13 @@
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "mlir/Pass/Pass.h"
 
-namespace mlir {
+namespace circt {
 namespace llhd {
 
 #define GEN_PASS_CLASSES
 #include "circt/Dialect/LLHD/Transforms/Passes.h.inc"
 
 } // namespace llhd
-} // namespace mlir
+} // namespace circt
 
 #endif // DIALECT_LLHD_TRANSFORMS_PASSDETAILS_H

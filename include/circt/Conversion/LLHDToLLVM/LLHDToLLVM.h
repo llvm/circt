@@ -11,14 +11,16 @@
 #include <memory>
 
 namespace mlir {
-
 class ModuleOp;
 class LLVMTypeConverter;
 class OwningRewritePatternList;
 template <typename T>
 class OperationPass;
+} // namespace mlir
 
+namespace circt {
 namespace llhd {
+using namespace mlir;
 
 /// Get the LLHD to LLVM conversion patterns.
 void populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
@@ -29,6 +31,6 @@ std::unique_ptr<OperationPass<ModuleOp>> createConvertLLHDToLLVMPass();
 
 void initLLHDToLLVMPass();
 } // namespace llhd
-} // namespace mlir
+} // namespace circt
 
 #endif // CIRCT_CONVERSION_LLHDTOLLVM_LLHDTOLLVM_H

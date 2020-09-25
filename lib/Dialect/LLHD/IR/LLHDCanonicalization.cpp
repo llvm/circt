@@ -7,6 +7,7 @@
 #include "mlir/IR/PatternMatch.h"
 
 using namespace mlir;
+using namespace circt;
 
 namespace {
 /// Include the patterns defined in the Declarative Rewrite framework.
