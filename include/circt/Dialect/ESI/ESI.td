@@ -10,7 +10,7 @@ include "mlir/IR/OpBase.td"
 // can define our operations.
 def ESI_Dialect : Dialect {
     let name = "esi";
-    let cppNamespace = "::mlir::esi";
+    let cppNamespace = "::circt::esi";
 }
 
 include "ESITypes.td"

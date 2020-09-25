@@ -11,7 +11,7 @@
 
 using namespace mlir;
 
-namespace mlir {
+namespace circt {
 namespace esi {
 
 static bool operator==(const FieldInfo &a, const FieldInfo &b) {
@@ -23,7 +23,7 @@ static llvm::hash_code hash_value(const FieldInfo &fi) {
 }
 
 } // namespace esi
-} // namespace mlir
+} // namespace circt
 
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/ESI/ESITypes.cpp.inc"

@@ -9,7 +9,9 @@
 #include <llvm/Support/FormatVariadic.h>
 #include <mlir/IR/DialectImplementation.h>
 
-namespace mlir {
+using namespace mlir;
+
+namespace circt {
 namespace esi {
 
 ESIDialect::ESIDialect(MLIRContext *context)
@@ -46,4 +48,4 @@ void ESIDialect::printType(Type type, DialectAsmPrinter &printer) const {
 }
 
 } // namespace esi
-} // namespace mlir
+} // namespace circt

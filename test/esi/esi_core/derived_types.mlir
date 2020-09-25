@@ -6,4 +6,9 @@ module {
     func @list1(%A: !esi.list<ui1>) {
         return
     }
+
+    // CHECK-LABEL: func @ptr(%{{.*}}: !esi.ptr<i4>)
+    func @ptr(%a: !esi.ptr<i4>) {
+        return
+    }
 }

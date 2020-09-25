@@ -24,4 +24,9 @@ module {
     func @enum1(%A: !esi.enum<["optionA", "doorNumB"]>) {
         return
     }
+
+    // CHECK-LABEL: func @struct(%{{.*}}: !esi.struct<{i,i1},{f,!esi.float<true, 4, 1>}>)
+    func @struct(%A: !esi.struct<{i, i1}, {f, !esi.float<true, 4, 1> }>) {
+        return
+    }
 }

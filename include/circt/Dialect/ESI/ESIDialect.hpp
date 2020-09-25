@@ -6,21 +6,22 @@
 
 #include <mlir/IR/Dialect.h>
 
-namespace mlir {
+namespace circt {
 namespace esi {
 
 class ESIDialect : public ::mlir::Dialect {
 public:
-  explicit ESIDialect(MLIRContext *context);
+  explicit ESIDialect(mlir::MLIRContext *context);
 
   /// Returns the prefix used in the textual IR to refer to LLHD operations
-  static StringRef getDialectNamespace() { return "esi"; }
+  static llvm::StringRef getDialectNamespace() { return "esi"; }
 
   /// Parses a type registered to this dialect
-  Type parseType(DialectAsmParser &parser) const override;
+  mlir::Type parseType(mlir::DialectAsmParser &parser) const override;
 
   /// Print a type registered to this dialect
-  void printType(Type type, DialectAsmPrinter &printer) const override;
+  void printType(mlir::Type type,
+                 mlir::DialectAsmPrinter &printer) const override;
 
   // /// Parse an attribute regustered to this dialect
   // Attribute parseAttribute(DialectAsmParser &parser, Type type) const
@@ -36,6 +37,6 @@ public:
 };
 
 } // namespace esi
-} // namespace mlir
+} // namespace circt
 
 #endif

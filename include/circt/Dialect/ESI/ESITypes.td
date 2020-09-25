@@ -31,7 +31,7 @@ def List : ESI_Type<"List"> {
 
   let parameters = (
     ins
-    "Type": $inner
+    "::mlir::Type": $inner
   );
 }
 
@@ -44,14 +44,14 @@ def MessagePointer : ESI_Type<"MessagePointer"> {
 
   let parameters = (
     ins
-    "Type": $inner
+    "::mlir::Type": $inner
   );
 }
 
 class FieldInfo_Type<string name> : ESI_Type<name> {
   let parameters = (
     ins
-    ArrayRefOfSelfAllocationParameter<"::mlir::esi::FieldInfo", "">: $fields
+    ArrayRefOfSelfAllocationParameter<"::circt::esi::FieldInfo", "">: $fields
   );
 
   let printer = [{
@@ -67,18 +67,18 @@ class FieldInfo_Type<string name> : ESI_Type<name> {
 
   let parser = [{
     SmallVector<FieldInfo, 4> parameters;
-    if (parser.parseLess()) return Type();
+    if (parser.parseLess()) return ::mlir::Type();
     while (mlir::succeeded(parser.parseOptionalLBrace())) {
       StringRef name;
-      if (parser.parseKeyword(&name)) return Type();
-      if (parser.parseComma()) return Type();
-      Type type;
-      if (parser.parseType(type)) return Type();
-      if (parser.parseRBrace()) return Type();
+      if (parser.parseKeyword(&name)) return ::mlir::Type();
+      if (parser.parseComma()) return ::mlir::Type();
+      ::mlir::Type type;
+      if (parser.parseType(type)) return ::mlir::Type();
+      if (parser.parseRBrace()) return ::mlir::Type();
       parameters.push_back(FieldInfo(name, type));
       if (parser.parseOptionalComma()) break;
     }
-    if (parser.parseGreater()) return Type();
+    if (parser.parseGreater()) return ::mlir::Type();
     return get(ctxt, parameters);
   }];
 }
@@ -100,4 +100,4 @@ def EnumType : ESI_Type<"Enum"> {
   );
 }
 
-def ESI_Type : Type<CPred<"$_self.getDialect().getTypeID() == TypeID::get<ESIDialect>()">, "ESI type">;
+def ESI_Type : Type<CPred<"$_self.getDialect().getTypeID() == ::mlir::TypeID::get<ESIDialect>()">, "ESI type">;

@@ -9,24 +9,24 @@
 #include <mlir/IR/Dialect.h>
 #include <mlir/IR/Operation.h>
 
-namespace mlir {
+namespace circt {
 namespace esi {
 
 struct FieldInfo {
   llvm::StringRef name;
-  Type type;
+  mlir::Type type;
 
 public:
-  FieldInfo(StringRef name, Type type) : name(name), type(type) {}
+  FieldInfo(llvm::StringRef name, mlir::Type type) : name(name), type(type) {}
 
   FieldInfo allocateInto(::mlir::TypeStorageAllocator &alloc) const {
-    StringRef nameCopy = alloc.copyInto(name);
+    llvm::StringRef nameCopy = alloc.copyInto(name);
     return FieldInfo(nameCopy, type);
   }
 };
 
 } // namespace esi
-} // namespace mlir
+} // namespace circt
 
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/ESI/ESITypes.h.inc"
