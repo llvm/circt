@@ -178,6 +178,7 @@ private:
   LogicalResult printDefOp(DefOp op, unsigned indentAmount = 0);
   LogicalResult printConstantOp(hir::ConstantOp op, unsigned indentAmount = 0);
   LogicalResult printForOp(ForOp op, unsigned indentAmount = 0);
+  LogicalResult printUnrollForOp(UnrollForOp op, unsigned indentAmount = 0);
   LogicalResult printMemReadOp(MemReadOp op, unsigned indentAmount = 0);
   LogicalResult printAddOp(hir::AddOp op, unsigned indentAmount = 0);
   LogicalResult printMemWriteOp(MemWriteOp op, unsigned indentAmount = 0);
@@ -375,12 +376,13 @@ LogicalResult VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
   Value idx = op.getInductionVar();
   Value tloop = op.getIterTimeVar();
 
+  auto id_loop = newValueNumber();
+  yieldTarget.push("tloop_in" + to_string(id_loop));
+
   auto v_lb = mapValueToVerilog[op.lb()];
   auto v_ub = mapValueToVerilog[op.ub()];
   auto v_step = mapValueToVerilog[op.step()];
   auto v_tstart = mapValueToVerilog[op.tstart()];
-  auto id_loop = newValueNumber();
-  yieldTarget.push("tloop_in" + to_string(id_loop));
   auto v_idx = VerilogValue(vWire, "idx" + to_string(id_loop));
   auto v_tloop = VerilogValue(vWire, "tloop" + to_string(id_loop));
   mapValueToVerilog.insert(make_pair(idx, v_idx));
@@ -412,14 +414,43 @@ LogicalResult VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
   findAndReplaceAll(loopCounterString, "$v_tstart", v_tstart.strWire());
   findAndReplaceAll(loopCounterString, "$width_tstep", to_string(width_tstep));
   findAndReplaceAll(loopCounterString, "$v_tloop", v_tloop.strWire());
-  module_out << "\n//Loop" << id_loop << " begin\n";
+  module_out << "\n//{ Loop" << id_loop << "\n";
   module_out << loopCounterString;
   module_out << "\n//Loop" << id_loop << " body\n";
   printTimeOffsets(tloop);
   printBody(op.getLoopBody().front(), indentAmount);
-  module_out << "\n//Loop" << id_loop << " end\n";
+  module_out << "\n//} Loop" << id_loop << "\n";
   yieldTarget.pop();
   return success();
+}
+
+LogicalResult VerilogPrinter::printUnrollForOp(UnrollForOp op,
+                                               unsigned indentAmount) {
+  int lb = op.lb().getLimitedValue();
+  int ub = op.ub().getLimitedValue();
+  int step = op.step().getLimitedValue();
+  int tstep = op.tstep().getValueOr(APInt()).getLimitedValue();
+  Value tstart = op.tstart();
+  Value idx = op.getInductionVar();
+  Value tloop = op.getIterTimeVar();
+
+  auto id_loop = newValueNumber();
+  yieldTarget.push("tloop_in" + to_string(id_loop));
+
+  auto v_i = VerilogValue(vWire, "i" + to_string(id_loop));
+  auto v_tloop = VerilogValue(vWire, "tloop" + to_string(id_loop));
+  mapValueToVerilog.insert(make_pair(idx, v_i));
+  mapValueToVerilog.insert(make_pair(tloop, v_tloop));
+
+  module_out << "\n//{ Loop" << id_loop << "\n";
+  module_out << "genvar i" << id_loop << ";\n";
+  module_out << "generate for(" << v_i.strWire() << " = " << lb << ";"
+             << v_i.strWire() << " < " << ub << "; " << v_i.strWire() << " = "
+             << v_i.strWire() << " + " << step << ") begin\n";
+
+  printBody(op.getLoopBody().front(), indentAmount);
+
+  module_out << "end\nendgenerate";
 }
 
 LogicalResult VerilogPrinter::printOperation(Operation *inst,
@@ -430,6 +461,9 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
   } else if (auto op = dyn_cast<hir::ForOp>(inst)) {
     module_out << "\n//ForOp\n";
     return printForOp(op, indentAmount);
+  } else if (auto op = dyn_cast<hir::UnrollForOp>(inst)) {
+    module_out << "\n//UnrollForOp\n";
+    return printUnrollForOp(op, indentAmount);
   } else if (auto op = dyn_cast<hir::ReturnOp>(inst)) {
     module_out << "\n//ReturnOp\n";
     return printReturnOp(op, indentAmount);
