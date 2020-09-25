@@ -77,6 +77,31 @@ static unsigned getBitWidth(Type ty) {
   return bitwidth;
 }
 
+static unsigned calcDataWidth(hir::MemrefType memrefTy) {
+  // FIXME: Currently we assume that all dims are power of two.
+  auto shape = memrefTy.getShape();
+  auto elementType = memrefTy.getElementType();
+  auto packing = memrefTy.getPacking();
+  unsigned elementWidth = getBitWidth(elementType);
+  int max_dim = shape.size() - 1;
+  unsigned dataWidth = getBitWidth(elementType);
+  for (int dim = 0; dim < shape.size(); dim++) {
+    bool isDistributedDim = true;
+    for (auto packedDim : packing) {
+      if (dim == packedDim) {
+        isDistributedDim = false;
+        break;
+      }
+    }
+    if (isDistributedDim) {
+      // dim0 is last in shape.
+      int dim_size = shape[max_dim - dim];
+      dataWidth *= dim_size;
+    }
+  }
+  return dataWidth;
+}
+
 static unsigned calcAddrWidth(hir::MemrefType memrefTy) {
   // FIXME: Currently we assume that all dims are power of two.
   auto shape = memrefTy.getShape();
@@ -233,6 +258,13 @@ LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
 
   OperandRange addr = op.addr();
   mlir::Value mem = op.mem();
+  auto shape = mem.getType().dyn_cast<hir::MemrefType>().getShape();
+  auto packing = mem.getType().dyn_cast<hir::MemrefType>().getPacking();
+  if (shape.size() != addr.size()) {
+    return emitError(op.getLoc(),
+                     "Dimension mismatch. Number of addresses is wrong.");
+  }
+
   mlir::Value tstart = op.tstart();
   mlir::Value offset = op.offset();
 
@@ -244,18 +276,21 @@ LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
 
   auto v_tstart = mapValueToVerilog[tstart];
 
-  // Address bus assignments.
-  module_out << "assign " << v_mem.strMemrefAddrValid(v_mem.numAccess())
-             << " = " << v_tstart.strDelayedWire(delayValue) << ";\n";
-  module_out << "assign " << v_mem.strMemrefAddrInput(v_mem.numAccess())
-             << " = {";
-  int i = 0;
-  for (auto addrI : addr) {
-    if (i++ > 0)
-      module_out << ", ";
-    module_out << mapValueToVerilog[addrI].strWire();
+  if (!packing.empty()) {
+    // Address bus assignments.
+    module_out << "assign " << v_mem.strMemrefAddrValid(v_mem.numAccess())
+               << " = " << v_tstart.strDelayedWire(delayValue) << ";\n";
+
+    module_out << "assign " << v_mem.strMemrefAddrInput(v_mem.numAccess())
+               << " = {";
+    for (int i = packing.size() - 1; i >= 0; i--) {
+      auto addrI = addr[i];
+      if (i < packing.size() - 1)
+        module_out << ", ";
+      module_out << mapValueToVerilog[addrI].strWire();
+    }
+    module_out << "};\n";
   }
-  module_out << "};\n";
 
   // Read bus assignments.
   module_out << "wire[" << (width_result - 1) << ":0]" + v_result.strWire()
@@ -265,7 +300,7 @@ LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
 
   mapValueToVerilog[mem].incNumReads();
   return success();
-}
+} // namespace
 
 LogicalResult VerilogPrinter::printMemWriteOp(MemWriteOp op,
                                               unsigned indentAmount) {
@@ -275,6 +310,13 @@ LogicalResult VerilogPrinter::printMemWriteOp(MemWriteOp op,
   mlir::Value tstart = op.tstart();
   mlir::Value offset = op.offset();
 
+  auto shape = mem.getType().dyn_cast<hir::MemrefType>().getShape();
+  auto packing = mem.getType().dyn_cast<hir::MemrefType>().getPacking();
+  if (shape.size() != addr.size()) {
+    return emitError(op.getLoc(),
+                     "Dimension mismatch. Number of addresses is wrong.");
+  }
+
   auto v_value = mapValueToVerilog[value];
   auto v_mem = mapValueToVerilog[mem];
 
@@ -283,17 +325,21 @@ LogicalResult VerilogPrinter::printMemWriteOp(MemWriteOp op,
 
   auto v_tstart = mapValueToVerilog[tstart];
 
-  module_out << "assign " << v_mem.strMemrefAddrValid(v_mem.numAccess())
-             << " = " << v_tstart.strDelayedWire(delayValue) << ";\n";
-  module_out << "assign " << v_mem.strMemrefAddrInput(v_mem.numAccess())
-             << " = {";
-  int i = 0;
-  for (auto addrI : addr) {
-    if (i++ > 0)
-      module_out << ", ";
-    module_out << mapValueToVerilog[addrI].strWire();
+  if (!packing.empty()) {
+    // Address bus assignments.
+    module_out << "assign " << v_mem.strMemrefAddrValid(v_mem.numAccess())
+               << " = " << v_tstart.strDelayedWire(delayValue) << ";\n";
+
+    module_out << "assign " << v_mem.strMemrefAddrInput(v_mem.numAccess())
+               << " = {";
+    for (int i = packing.size() - 1; i >= 0; i--) {
+      auto addrI = addr[i];
+      if (i < packing.size() - 1)
+        module_out << ", ";
+      module_out << mapValueToVerilog[addrI].strWire();
+    }
+    module_out << "};\n";
   }
-  module_out << "};\n";
 
   module_out << "assign " << v_mem.strMemrefWrEnInput(v_mem.numWrites())
              << " = " << v_tstart.strDelayedWire(delayValue) << ";\n";
@@ -555,19 +601,26 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
                          : (port == hir::Details::w) ? "w" : "rw")
                  << ".\n";
       unsigned addrWidth = calcAddrWidth(memrefTy);
-      module_out << "output reg[" << addrWidth - 1 << ":0] "
-                 << v_memref_arg.strMemrefAddr();
+      bool printComma = false;
+      unsigned dataWidth = calcDataWidth(memrefTy);
+      if (addrWidth > 0) { // add dims may be distributed.
+        module_out << "output reg[" << addrWidth - 1 << ":0] "
+                   << v_memref_arg.strMemrefAddr();
+        printComma = true;
+      }
       if (port == hir::Details::r || port == hir::Details::rw) {
-        unsigned bitwidth = getBitWidth(argType);
-        module_out << ",\noutput wire " << v_memref_arg.strMemrefRdEn();
-        module_out << ",\ninput wire[" << bitwidth - 1 << ":0]  "
+        if (printComma)
+          module_out << ",\n";
+        module_out << "output wire " << v_memref_arg.strMemrefRdEn();
+        module_out << ",\ninput wire[" << dataWidth - 1 << ":0]  "
                    << v_memref_arg.strMemrefRdData();
       }
       if (port == hir::Details::w || port == hir::Details::rw) {
-        module_out << ",\noutput wire " << v_memref_arg.strMemrefWrEn();
-        unsigned bitwidth = getBitWidth(argType);
+        if (printComma)
+          module_out << ",\n";
+        module_out << "output wire " << v_memref_arg.strMemrefWrEn();
         module_out << ",\n"
-                   << "output reg[" << bitwidth - 1 << ":0] "
+                   << "output reg[" << dataWidth - 1 << ":0] "
                    << v_memref_arg.strMemrefWrData();
       }
     } else {
@@ -684,9 +737,8 @@ LogicalResult VerilogPrinter::printMemrefStub(Value mem,
   // rd_data, wr_data and rd_en, wr_en.
   MemrefType memrefTy = mem.getType().dyn_cast<hir::MemrefType>();
   hir::Details::PortKind port = memrefTy.getPort();
-  Type elementType = memrefTy.getElementType();
   unsigned dataWidth;
-  dataWidth = getBitWidth(elementType);
+  dataWidth = calcDataWidth(memrefTy);
   unsigned addrWidth = calcAddrWidth(memrefTy);
   unsigned loc = replaceLocs.size();
   replaceLocs.push_back(make_pair(loc, [=]() -> string {
@@ -696,8 +748,10 @@ LogicalResult VerilogPrinter::printMemrefStub(Value mem,
     stringstream output;
     auto v_addr = v_mem.strMemrefAddr();
     // print addr bus selector.
-    output << buildDataSelectorStr(v_addr, v_mem.numAccess(), addrWidth);
-    output << "\n";
+    if (addrWidth > 0) {
+      output << buildDataSelectorStr(v_addr, v_mem.numAccess(), addrWidth);
+      output << "\n";
+    }
     // print rd_en selector.
     if (v_mem.numReads() > 0) {
       string v_rd_en = v_mem.strMemrefRdEn();
