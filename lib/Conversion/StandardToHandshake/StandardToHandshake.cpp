@@ -1422,6 +1422,10 @@ struct HandshakePass
     for (auto func : m.getOps<handshake::FuncOp>())
       removeBasicBlocks(func);
   }
+  /// Return the dialect that must be loaded in the context before this pass.
+  void getDependentDialects(::mlir::DialectRegistry &registry) const override {
+    registry.insert<HandshakeOpsDialect>();
+  }
 };
 
 struct HandshakeCanonicalizePass
