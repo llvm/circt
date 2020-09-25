@@ -46,7 +46,8 @@ struct LLHDInlinerInterface : public DialectInlinerInterface {
 //===----------------------------------------------------------------------===//
 
 LLHDDialect::LLHDDialect(mlir::MLIRContext *context)
-    : Dialect(getDialectNamespace(), context, getTypeID()) {
+    : Dialect(getDialectNamespace(), context,
+    ::mlir::TypeID::get<LLHDDialect>()) {
   addTypes<SigType, TimeType, ArrayType, PtrType>();
   addAttributes<TimeAttr>();
   addOperations<
