@@ -33,13 +33,13 @@ void getRTLModulePortInfo(Operation *op,
 StringAttr getRTLNameAttr(ArrayRef<NamedAttribute> attrs);
 StringAttr getRTLDirectionAttr(ArrayRef<NamedAttribute> attrs);
 
-#define GET_OP_CLASSES
-#include "circt/Dialect/RTL/RTL.h.inc"
-
 /// Return true if the specified operation is a combinatorial logic op.
 bool isCombinatorial(Operation *op);
 
 } // namespace rtl
 } // namespace circt
+
+#define GET_OP_CLASSES
+#include "circt/Dialect/RTL/RTL.h.inc"
 
 #endif // CIRCT_DIALECT_RTL_OPS_H
