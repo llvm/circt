@@ -94,12 +94,6 @@ static unsigned calcAddrWidth(hir::MemrefType memrefTy) {
   return addrWidth;
 }
 
-/// Keeps track of the number of mem_reads and mem_writes on a memref.
-struct MemrefParams {
-  unsigned numReads = 0;
-  unsigned numWrites = 0;
-};
-
 /// This class is the verilog output printer for the HIR dialect. It walks
 /// throught the module and prints the verilog in the 'out' variable.
 class VerilogPrinter {
@@ -161,11 +155,19 @@ private:
     string strMemrefWrEnInput(unsigned idx) {
       return strMemrefWrEnInput() + "[" + to_string(idx) + "]";
     }
+    int numReads() { return info.numReads; }
+    void incNumReads() { info.numReads++; }
+    int numWrites() { return info.numWrites; }
+    void incNumWrites() { info.numWrites++; }
+    int numAccess() { return info.numReads + info.numWrites; }
 
   private:
+    struct {
+      unsigned numReads = 0;
+      unsigned numWrites = 0;
+    } info;
     VerilogValueTypes type;
     string name;
-    string unrollIdx;
   };
 
   unsigned newValueNumber() { return nextValueNum++; }
@@ -196,7 +198,6 @@ private:
   // llvm::DenseMap<Value, unsigned> mapValueToNum;
   llvm::DenseMap<Value, VerilogValue> mapValueToVerilog;
   llvm::DenseMap<Value, int> mapConstToInt;
-  llvm::DenseMap<Value, MemrefParams> mapValueToMemrefParams;
   llvm::DenseMap<Value, unsigned> mapTimeToMaxOffset;
   SmallVector<pair<unsigned, function<string()>>, 4> replaceLocs;
   std::stack<string> yieldTarget;
@@ -235,10 +236,6 @@ LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
 
   auto v_mem = mapValueToVerilog[mem];
 
-  MemrefParams memParams = mapValueToMemrefParams[mem];
-  unsigned numAccess = memParams.numReads + memParams.numWrites;
-  unsigned numReads = memParams.numReads;
-
   int delayValue = offset ? mapConstToInt[offset] : 0;
   mapTimeToMaxOffset[tstart] = max(delayValue, mapTimeToMaxOffset[tstart]);
   unsigned width_result = getBitWidth(result.getType());
@@ -246,9 +243,10 @@ LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
   auto v_tstart = mapValueToVerilog[tstart];
 
   // Address bus assignments.
-  module_out << "assign " << v_mem.strMemrefAddrValid(numAccess) << " = "
-             << v_tstart.strDelayedWire(delayValue) << ";\n";
-  module_out << "assign " << v_mem.strMemrefAddrInput(numAccess) << " = {";
+  module_out << "assign " << v_mem.strMemrefAddrValid(v_mem.numAccess())
+             << " = " << v_tstart.strDelayedWire(delayValue) << ";\n";
+  module_out << "assign " << v_mem.strMemrefAddrInput(v_mem.numAccess())
+             << " = {";
   int i = 0;
   for (auto addrI : addr) {
     if (i++ > 0)
@@ -260,12 +258,10 @@ LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
   // Read bus assignments.
   module_out << "wire[" << (width_result - 1) << ":0]" + v_result.strWire()
              << " = " << v_mem.strMemrefRdData() << ";\n\n";
-  module_out << "assign " + v_mem.strMemrefRdEnInput(numReads) << " = "
+  module_out << "assign " + v_mem.strMemrefRdEnInput(v_mem.numReads()) << " = "
              << v_tstart.strDelayedWire(delayValue) << ";\n\n";
 
-  // Increment number of reads on the memref.
-  memParams.numReads++;
-  mapValueToMemrefParams[mem] = memParams;
+  mapValueToVerilog[mem].incNumReads();
   return success();
 }
 
@@ -279,18 +275,16 @@ LogicalResult VerilogPrinter::printMemWriteOp(MemWriteOp op,
 
   auto v_value = mapValueToVerilog[value];
   auto v_mem = mapValueToVerilog[mem];
-  MemrefParams memParams = mapValueToMemrefParams[mem];
-  unsigned numAccess = memParams.numReads + memParams.numWrites;
-  unsigned numWrites = memParams.numWrites;
 
   int delayValue = offset ? mapConstToInt[offset] : 0;
   mapTimeToMaxOffset[tstart] = max(delayValue, mapTimeToMaxOffset[tstart]);
 
   auto v_tstart = mapValueToVerilog[tstart];
 
-  module_out << "assign " << v_mem.strMemrefAddrValid(numAccess) << " = "
-             << v_tstart.strDelayedWire(delayValue) << ";\n";
-  module_out << "assign " << v_mem.strMemrefAddrInput(numAccess) << " = {";
+  module_out << "assign " << v_mem.strMemrefAddrValid(v_mem.numAccess())
+             << " = " << v_tstart.strDelayedWire(delayValue) << ";\n";
+  module_out << "assign " << v_mem.strMemrefAddrInput(v_mem.numAccess())
+             << " = {";
   int i = 0;
   for (auto addrI : addr) {
     if (i++ > 0)
@@ -299,16 +293,14 @@ LogicalResult VerilogPrinter::printMemWriteOp(MemWriteOp op,
   }
   module_out << "};\n";
 
-  module_out << "assign " << v_mem.strMemrefWrEnInput(numWrites) << " = "
-             << v_tstart.strDelayedWire(delayValue) << ";\n";
-  module_out << "assign " << v_mem.strMemrefWrDataValid(numWrites) << " = "
-             << v_tstart.strDelayedWire(delayValue) << ";\n";
-  module_out << "assign " << v_mem.strMemrefWrDataInput(numWrites) << " = "
-             << v_value.strWire() << ";\n\n";
+  module_out << "assign " << v_mem.strMemrefWrEnInput(v_mem.numWrites())
+             << " = " << v_tstart.strDelayedWire(delayValue) << ";\n";
+  module_out << "assign " << v_mem.strMemrefWrDataValid(v_mem.numWrites())
+             << " = " << v_tstart.strDelayedWire(delayValue) << ";\n";
+  module_out << "assign " << v_mem.strMemrefWrDataInput(v_mem.numWrites())
+             << " = " << v_value.strWire() << ";\n\n";
 
-  // Increment number of writes on the memref.
-  memParams.numWrites++;
-  mapValueToMemrefParams[mem] = memParams;
+  mapValueToVerilog[mem].incNumWrites();
   return success();
 }
 
@@ -641,30 +633,27 @@ LogicalResult VerilogPrinter::printMemrefStub(Value mem,
   unsigned addrWidth = calcAddrWidth(memrefTy);
   unsigned loc = replaceLocs.size();
   replaceLocs.push_back(make_pair(loc, [=]() -> string {
-    MemrefParams memParams = mapValueToMemrefParams[mem];
-    unsigned numAccess = memParams.numReads + memParams.numWrites;
-    if (numAccess == 0)
-      return "";
-    stringstream output;
     VerilogValue v_mem = mapValueToVerilog[mem];
+    if (v_mem.numAccess() == 0)
+      return "//Unused memref " + v_mem.strWire();
+    stringstream output;
     auto v_addr = v_mem.strMemrefAddr();
     // print addr bus selector.
-    output << buildDataSelectorStr(v_addr, numAccess, addrWidth);
+    output << buildDataSelectorStr(v_addr, v_mem.numAccess(), addrWidth);
     output << "\n";
     // print rd_en selector.
-    if (memParams.numReads > 0) {
+    if (v_mem.numReads() > 0) {
       string v_rd_en = v_mem.strMemrefRdEn();
-      output << buildEnableSelectorStr(v_rd_en, memParams.numReads);
+      output << buildEnableSelectorStr(v_rd_en, v_mem.numReads());
       output << "\n";
     }
 
     // print write bus selector.
-    if (memParams.numWrites > 0) {
+    if (v_mem.numWrites() > 0) {
       string str_wr_en = v_mem.strMemrefWrEn();
-      output << buildEnableSelectorStr(str_wr_en, memParams.numWrites);
+      output << buildEnableSelectorStr(str_wr_en, v_mem.numWrites());
       string str_wr_data = v_mem.strMemrefWrData();
-      output << buildDataSelectorStr(str_wr_data, memParams.numWrites,
-                                     dataWidth);
+      output << buildDataSelectorStr(str_wr_data, v_mem.numWrites(), dataWidth);
       output << "\n";
     }
     return output.str();
