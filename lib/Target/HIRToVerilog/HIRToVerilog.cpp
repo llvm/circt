@@ -724,7 +724,7 @@ string buildDataSelectorStr(string &v, unsigned numInputs, unsigned dataWidth) {
     output << "else if(" << v_valid << "[" << i << "] == 1'b1)\n";
     output << v << " = " << v_input << "[" << i << "];\n";
   }
-  output << "  else\n";
+  output << "else\n";
   output << v << " = " << dataWidth << "'d0;\n";
   output << "end\n";
   return output.str();
