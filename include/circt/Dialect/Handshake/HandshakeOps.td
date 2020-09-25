@@ -27,7 +27,7 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def Handshake_Dialect : Dialect {
   let name = "handshake";
-  let cppNamespace = "";
+  let cppNamespace = "::circt::handshake";
 }
 
 def MergeLikeOpInterface : OpInterface<"MergeLikeOpInterface"> {

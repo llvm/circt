@@ -378,8 +378,8 @@ namespace handshake {
 
 #include "circt/Dialect/Handshake/HandshakeInterfaces.cpp.inc"
 
-#define GET_OP_CLASSES
-#include "circt/Dialect/Handshake/HandshakeOps.cpp.inc"
-
 } // namespace handshake
 } // namespace circt
+
+#define GET_OP_CLASSES
+#include "circt/Dialect/Handshake/HandshakeOps.cpp.inc"
