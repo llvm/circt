@@ -107,7 +107,7 @@ private:
 
   class VerilogValue {
   public:
-    VerilogValue() : type(vUnknown), name("") {}
+    VerilogValue() : type(vUnknown), name("unknown") {}
     VerilogValue(VerilogValueTypes type, string name)
         : type(type), name(name) {}
 
@@ -202,6 +202,7 @@ private:
   llvm::DenseMap<Value, unsigned> mapTimeToMaxOffset;
   SmallVector<pair<unsigned, function<string()>>, 4> replaceLocs;
   std::stack<string> yieldTarget;
+  std::stack<hir::UnrollForOp> unrollForStack;
 }; // namespace
 
 string VerilogPrinter::printDownCounter(stringstream &output, Value maxCount,
@@ -431,26 +432,45 @@ LogicalResult VerilogPrinter::printUnrollForOp(UnrollForOp op,
   int step = op.step().getLimitedValue();
   int tstep = op.tstep().getValueOr(APInt()).getLimitedValue();
   Value tstart = op.tstart();
+  auto v_tstart = mapValueToVerilog[tstart];
   Value idx = op.getInductionVar();
   Value tloop = op.getIterTimeVar();
 
   auto id_loop = newValueNumber();
-  yieldTarget.push("tloop_in" + to_string(id_loop));
 
   auto v_i = VerilogValue(vWire, "i" + to_string(id_loop));
   auto v_tloop = VerilogValue(vWire, "tloop" + to_string(id_loop));
   mapValueToVerilog.insert(make_pair(idx, v_i));
   mapValueToVerilog.insert(make_pair(tloop, v_tloop));
+  yieldTarget.push("tloop_in" + to_string(id_loop) + "[" + v_i.strWire() +
+                   "+1]");
 
   module_out << "\n//{ Loop" << id_loop << "\n";
-  module_out << "genvar i" << id_loop << ";\n";
-  module_out << "generate for(" << v_i.strWire() << " = " << lb << ";"
-             << v_i.strWire() << " < " << ub << "; " << v_i.strWire() << " = "
-             << v_i.strWire() << " + " << step << ") begin\n";
+  module_out << "genvar " << v_i.strWire() << ";\n";
+  module_out << "wire[" + to_string(ub - 1) + " : " + to_string(lb) +
+                    "] tloop_in"
+             << to_string(id_loop) << ";\n";
+  module_out << "assign tloop_in" << to_string(id_loop)
+             << "[0] = " << v_tstart.strWire() << ";\n";
+  if (unrollForStack.empty())
+    module_out << "generate"; // this is the first generate
+  unrollForStack.push(op);
+  module_out << " for(" << v_i.strWire() << " = " << lb << ";" << v_i.strWire()
+             << " < " << ub << "; " << v_i.strWire() << " = " << v_i.strWire()
+             << " + " << step << ") begin\n";
+  module_out << "wire " << v_tloop.strWire() << " = tloop_in"
+             << to_string(id_loop) << "[" << v_i.strWire() << "];\n";
 
+  printTimeOffsets(tloop);
   printBody(op.getLoopBody().front(), indentAmount);
 
-  module_out << "end\nendgenerate";
+  module_out << "end\n";
+  unrollForStack.pop();
+  if (unrollForStack.empty())
+    module_out << "endgenerate";
+
+  yieldTarget.pop();
+  return success();
 }
 
 LogicalResult VerilogPrinter::printOperation(Operation *inst,
@@ -599,16 +619,19 @@ LogicalResult VerilogPrinter::printTimeOffsets(Value timeVar) {
   module_out << "always@(*) " << v_timeVar.strDelayedWire(0) << " = "
              << v_timeVar.strWire() << ";\n";
   string str_i = "i" + to_string(newValueNumber());
+  if (unrollForStack.empty())
+    module_out << "generate\n";
   module_out << "genvar " << str_i << ";\n";
-  module_out << "\ngenerate for(" << str_i << " = 1; " << str_i << "<= $loc"
-             << loc << "; " << str_i << "= " << str_i << " + 1) begin\n";
+  module_out << "\nfor(" << str_i << " = 1; " << str_i << "<= $loc" << loc
+             << "; " << str_i << "= " << str_i << " + 1) begin\n";
   module_out << "always@(posedge clk) begin\n";
   module_out << v_timeVar.strDelayedWire() << "[" << str_i
              << "] <= " << v_timeVar.strDelayedWire() << "[" << str_i
              << "-1];\n";
   module_out << "end\n";
   module_out << "end\n";
-  module_out << "endgenerate\n\n";
+  if (unrollForStack.empty())
+    module_out << "endgenerate\n\n";
 
   replaceLocs.push_back(make_pair(
       loc, [=]() -> string { return to_string(mapTimeToMaxOffset[timeVar]); }));
