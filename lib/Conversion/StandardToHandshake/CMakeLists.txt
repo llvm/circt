@@ -11,4 +11,5 @@ add_mlir_library(MLIRStandardToHandshake
   MLIRSupport
   MLIRTransforms
   MLIRHandshakeOps
+  MLIRAffineToStandard
   )

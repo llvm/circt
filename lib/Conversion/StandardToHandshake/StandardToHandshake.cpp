@@ -10,6 +10,11 @@
 #include "circt/Conversion/StandardToHandshake/StandardToHandshake.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
+#include "mlir/Analysis/AffineAnalysis.h"
+#include "mlir/Analysis/AffineStructures.h"
+#include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Affine/IR/AffineValueMap.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Function.h"
@@ -611,8 +616,9 @@ void addSinkOps(handshake::FuncOp f, OpBuilder &rewriter) {
       // Do not add sinks for unused MLIR operations which the rewriter will
       // later remove We have already replaced these ops with their handshake
       // equivalents
-      if (!isa<mlir::CondBranchOp>(op) && !isa<mlir::BranchOp>(op) &&
-          !isa<mlir::LoadOp>(op)) {
+      // TODO: should we use other indicator for op that has been erased?
+      if (!isa<mlir::CondBranchOp, mlir::BranchOp, mlir::LoadOp,
+               mlir::AffineReadOpInterface>(op)) {
 
         if (op.getNumResults() > 0) {
           for (auto result : op.getResults())
@@ -790,7 +796,7 @@ void checkDataflowConversion(handshake::FuncOp f) {
   for (Block &block : f) {
     for (Operation &op : block) {
       if (!isa<mlir::CondBranchOp, mlir::BranchOp, mlir::LoadOp,
-               mlir::ConstantOp>(op)) {
+               mlir::ConstantOp, mlir::AffineReadOpInterface>(op)) {
         if (op.getNumResults() > 0) {
           for (auto result : op.getResults()) {
             checkUseCount(&op, result);
@@ -824,10 +830,17 @@ Value getOpMemRef(Operation *op) {
     return memOp.getMemRef();
   if (auto memOp = dyn_cast<mlir::StoreOp>(op))
     return memOp.getMemRef();
+  if (isa<mlir::AffineReadOpInterface, mlir::AffineWriteOpInterface>(op)) {
+    MemRefAccess access(op);
+    return access.memref;
+  }
   op->emitError("Unknown Op type");
 }
 
-bool isMemoryOp(Operation *op) { return isa<mlir::LoadOp, mlir::StoreOp>(op); }
+bool isMemoryOp(Operation *op) {
+  return isa<mlir::LoadOp, mlir::StoreOp, mlir::AffineReadOpInterface,
+             mlir::AffineWriteOpInterface>(op);
+}
 
 typedef llvm::MapVector<Value, vector<Operation *>> MemRefToMemoryAccessOp;
 
@@ -859,18 +872,51 @@ MemRefToMemoryAccessOp replaceMemoryOps(handshake::FuncOp f,
           newOp =
               rewriter.create<handshake::LoadOp>(op.getLoc(), memref, operands);
           op.getResult(0).replaceAllUsesWith(newOp->getResult(0));
-
-        } else {
-          assert(isa<mlir::StoreOp>(op));
+        } else if (mlir::StoreOp storeOp = dyn_cast<mlir::StoreOp>(op)) {
           // Get operands which correspond to address indices
           // This will add all operands except alloc and data
-          mlir::StoreOp storeOp = dyn_cast<mlir::StoreOp>(op);
           SmallVector<Value, 8> operands(storeOp.getIndices());
 
           // Create new op where operands are store data and address indices
           newOp = rewriter.create<handshake::StoreOp>(
               op.getLoc(), storeOp.getValueToStore(), operands);
+        } else if (isa<mlir::AffineReadOpInterface,
+                       mlir::AffineWriteOpInterface>(op)) {
+          // Get essential memref access inforamtion.
+          MemRefAccess access(&op);
+          // The address of an affine load/store operation can be a result of an
+          // affine map, which is a linear combination of constants and
+          // parameters. Therefore, we should extract the affine map of each
+          // address and expand it into proper expressions that calculate the
+          // result.
+          AffineMap map;
+          if (auto loadOp = dyn_cast<mlir::AffineReadOpInterface>(op))
+            map = loadOp.getAffineMap();
+          else
+            map = dyn_cast<AffineWriteOpInterface>(op).getAffineMap();
+
+          // The returned object from expandAffineMap is an optional list of the
+          // expansion results from the given affine map, which are the actual
+          // address indices that can be used as operands for handshake
+          // LoadOp/StoreOp. The following processing requires it to be a valid
+          // result.
+          auto operands =
+              expandAffineMap(rewriter, op.getLoc(), map, access.indices);
+          assert(operands &&
+                 "Address operands of affine memref access cannot be reduced.");
+
+          if (isa<mlir::AffineReadOpInterface>(op)) {
+            newOp = rewriter.create<handshake::LoadOp>(
+                op.getLoc(), access.memref, *operands);
+            op.getResult(0).replaceAllUsesWith(newOp->getResult(0));
+          } else {
+            newOp = rewriter.create<handshake::StoreOp>(
+                op.getLoc(), op.getOperand(0), *operands);
+          }
+        } else {
+          op.emitError("Load/store operation cannot be handled.");
         }
+
         MemRefOps[memref].push_back(newOp);
 
         opsToErase.push_back(&op);
@@ -1050,8 +1096,8 @@ void setLoadDataInputs(vector<Operation *> memOps, Operation *memOp) {
 
 void setJoinControlInputs(vector<Operation *> memOps, Operation *memOp,
                           int offset, vector<int> cntrlInd) {
-  // Connect all memory ops to the join of that block (ensures that all mem ops
-  // terminate before a new block starts)
+  // Connect all memory ops to the join of that block (ensures that all mem
+  // ops terminate before a new block starts)
   for (int i = 0, e = memOps.size(); i < e; ++i) {
     auto *op = memOps[i];
     Value val = getBlockControlValue(op->getBlock());
@@ -1169,8 +1215,8 @@ void connectToMemory(handshake::FuncOp f, MemRefToMemoryAccessOp MemRefOps,
     setLoadDataInputs(memory.second, newOp);
 
     if (!lsq) {
-      // Create Joins which join done signals from memory with the control-only
-      // network
+      // Create Joins which join done signals from memory with the
+      // control-only network
       addJoinOps(rewriter, controlVals);
 
       // Connect all load/store done signals to the join of their block
@@ -1445,8 +1491,8 @@ struct HandshakeCanonicalizePass
             signalPassFailure();
           }
     // ConversionTarget target(getContext());
-    // // "Legal" function ops should have no interface variable ABI attributes.
-    // target.addDynamicallyLegalDialect<HandshakeOpsDialect,
+    // // "Legal" function ops should have no interface variable ABI
+    // attributes. target.addDynamicallyLegalDialect<HandshakeOpsDialect,
     // StandardOpsDialect>(
     //         Optional<ConversionTarget::DynamicLegalityCallbackFn>(
     //            [](Operation *op) { return op->hasOneUse(); }));
