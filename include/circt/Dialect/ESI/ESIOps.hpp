@@ -1,5 +1,8 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
+//===- ESIOps.h - ESI operations --------------------------------*- C++ -*-===//
+//
+// Defined in tablegen
+//
+//===----------------------------------------------------------------------===//
 
 #ifndef __ESI_OPS_HPP__
 #define __ESI_OPS_HPP__

@@ -1,5 +1,9 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
+//===- ESITypes.h - types for the ESI dialect -------------------*- C++ -*-===//
+//
+// Types for ESI are mostly in tablegen. This file should contain C++ types used
+// in MLIR type parameters.
+//
+//===----------------------------------------------------------------------===//
 
 #ifndef __ESI_TYPES_HPP__
 #define __ESI_TYPES_HPP__
@@ -12,6 +16,7 @@
 namespace circt {
 namespace esi {
 
+/// A field in a struct or union
 struct FieldInfo {
   llvm::StringRef name;
   mlir::Type type;
@@ -24,6 +29,8 @@ public:
     return FieldInfo(nameCopy, type);
   }
 };
+
+enum StringEncoding { ASCII, UTF8, UTF16, UTF32 };
 
 } // namespace esi
 } // namespace circt

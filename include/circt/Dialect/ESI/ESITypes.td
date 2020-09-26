@@ -1,32 +1,81 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
+//===- ESITypes.td - ESI data type definitions -------------*- tablegen -*-===//
+//
+// Data types for the ESI dialect
+//
+//===----------------------------------------------------------------------===//
 
 // Base class for other typedefs. Provides dialact-specific defaults
 class ESI_Type<string name> : TypeDef<ESI_Dialect, name> { }
 
 def FixedPoint : ESI_Type<"FixedPoint"> {
-    let mnemonic = "fixed";
+  let summary = "ESI fixed point number type";
+  let description = [{
+    A fixed point number is an approximate representation of a real number --
+    like a floating point number -- with the radix point fixed. While this
+    representation lacks the dynamic range of floating point numbers, it is
+    far simpler and more appropriate for many applications.
 
-    let parameters = (
-        ins
-        "bool": $isSigned,
-        "size_t": $wholeBits,
-        "size_t": $fractionalBits
-    );
+    It is typically represented as an `int` with the position of the radix
+    point implictly define in the instructions. ESI supports this
+    representation to not loose this type information. Operations on this
+    type need not be any more complicated than on integer representations.
+  }];
+
+  let mnemonic = "fixed";
+
+  let parameters = (
+      ins
+      "bool": $isSigned,
+      "size_t": $wholeBits,
+      "size_t": $fractionalBits
+  );
 }
 
 def FloatingPoint : ESI_Type<"FloatingPoint"> {
-    let mnemonic = "float";
+  let summary = "A floating point number with variable precision";
+  let description = [{
+    A typical floating point number with configurable signedness, exponent
+    width, and mantissa size. Note: the semantics of operations on this type
+    are not defined here. Certain operations may be IEEE754 compliant, some
+    may not.
+  }];
 
-    let parameters = (
-        ins
-        "bool": $isSigned,
-        "size_t": $expontentBits,
-        "size_t": $mantissaBits
-    );
+  let mnemonic = "float";
+
+  let parameters = (
+      ins
+      "bool": $isSigned,
+      "size_t": $expontentBits,
+      "size_t": $mantissaBits
+  );
+}
+
+def Array : ESI_Type<"Array"> {
+  let summary = "A fixes-sized list of items";
+  let description = [{
+    Standard array parameterized by a type and the fixed number of items.
+  }];
+
+  let mnemonic = "array";
+
+  let parameters = (
+    ins
+    "::mlir::Type": $inner,
+    "size_t": $size
+  );
 }
 
 def List : ESI_Type<"List"> {
+  let summary = "A variably-sized list of items";
+  let description = [{
+    A typical ordered collection (list, c++ std::vector, etc.). There are a
+    few different ways to represent this in hardware:
+
+    - In memory, a linear array of packed items
+    - On the wire (during transmit), a series of items transmitted N-items at
+    a time wherein N is a parameter of the transmission channel.
+  }];
+
   let mnemonic = "list";
 
   let parameters = (
@@ -36,18 +85,46 @@ def List : ESI_Type<"List"> {
 }
 
 def String : ESI_Type<"String"> {
+  let summary = "A variably-sized string of characters";
+  let description = [{
+    Like a string in software, but is parameterized by the string encoding.
+  }];
   let mnemonic = "string";
+
+  let parameters = (
+    ins
+    "StringEncoding": $encoding
+  );
 }
 
 def MessagePointer : ESI_Type<"MessagePointer"> {
+  let summary = "A pointer to another place with the message";
+  let description = [{
+    Offset -- in **bits** relative to the location of this field -- to
+    another field in the same message. Optionally can be negative to point to
+    data which appeared previously. (Optional so that modules can declare
+    that they don't have the ability to refer to earlier data -- that they
+    don't buffer the entire message.)
+    
+    Not valid if location doesn't point to the beginning of an item of type
+    `inner`. *Must* be recomputed if any modifications are made to the
+    message (type, list length, etc.) which invalidate the pointer.
+
+    Given the complexity, we don't anticipate this type being used often. It
+    allows software to interface with (hopefully) less data marshalling. This
+    type is subject to __massive__ changes as we explore hardware / software
+    interfaces.
+  }];
   let mnemonic = "ptr";
 
   let parameters = (
     ins
-    "::mlir::Type": $inner
+    "::mlir::Type": $inner,
+    "bool": $negativeAllowed
   );
 }
 
+// A type with an array of `FieldInfo`s
 class FieldInfo_Type<string name> : ESI_Type<name> {
   let parameters = (
     ins
@@ -84,14 +161,31 @@ class FieldInfo_Type<string name> : ESI_Type<name> {
 }
 
 def StructType : FieldInfo_Type<"Struct"> {
+  let summary = "A typical structure type";
+  let description = [{
+    A C-like struct. Alignment to be defined in the future. Will need to
+    define alignment on the wire and in memory. Given that alignment can be
+    automatically modified (based on modules' requirements) it may be more
+    appropriate to define the alignment in a 'data window'...
+  }];
   let mnemonic = "struct";
 }
 
 def UnionType : FieldInfo_Type<"Union"> {
+  let summary = "A discriminated union";
+  let description = [{
+    Unlike a C union, stores a tag which indicates the field whose data is
+    represented by this instance.
+  }];
   let mnemonic = "union";
 }
 
 def EnumType : ESI_Type<"Enum"> {
+  let summary = "A list of symbols";
+  let description = [{
+    A C-like enum
+  }];
+
   let mnemonic = "enum";
 
   let parameters = (

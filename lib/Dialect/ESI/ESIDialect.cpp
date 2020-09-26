@@ -1,5 +1,6 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
+//===- ESIDialect.cpp - ESI dialect code defs -------------------*- C++ -*-===//
+//
+//===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/ESI/ESIDialect.hpp"
 #include "circt/Dialect/ESI/ESIOps.hpp"

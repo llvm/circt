@@ -1,5 +1,6 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
+//===- ESIOps.cpp - ESI op code defs ----------------------------*- C++ -*-===//
+//
+//===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/ESI/ESIOps.hpp"
 
