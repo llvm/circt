@@ -2,13 +2,13 @@
 ; RUN: firtool %s --format=fir -verilog |           FileCheck %s --check-prefix=VERILOG
 ; RUN: firtool %s --format=fir -mlir -lower-to-rtl | circt-opt | FileCheck %s --check-prefix=MLIRLOWER
 
-circuit fir_test :
+circuit test_mod :
   module test_mod :
     input a: UInt<1>
     output b: UInt<1>
     b <= a
 
-; MLIR: firrtl.circuit "fir_test" {
+; MLIR: firrtl.circuit "test_mod" {
 
 ; MLIR-LABEL: firrtl.module @test_mod(%a: !firrtl.uint<1>, %b: !firrtl.flip<uint<1>>) {
 ; MLIR-NEXT:    firrtl.connect %b, %a : !firrtl.flip<uint<1>>, !firrtl.uint<1>
@@ -20,7 +20,7 @@ circuit fir_test :
 ; VERILOG-NEXT :   assign b = a;
 ; VERILOG-NEXT : endmodule
 
-; MLIRLOWER: firrtl.circuit "fir_test" {
+; MLIRLOWER: firrtl.circuit "test_mod" {
 ; MLIRLOWER:   firrtl.module @test_mod(%a: !firrtl.uint<1>, %b: !firrtl.flip<uint<1>>) {
 ; MLIRLOWER:     %0 = firrtl.stdIntCast %b : (!firrtl.flip<uint<1>>) -> i1
 ; MLIRLOWER:     %1 = firrtl.stdIntCast %a : (!firrtl.uint<1>) -> i1

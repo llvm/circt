@@ -1,6 +1,6 @@
 ; RUN: circt-translate -parse-fir -verify-diagnostics %s | circt-opt | FileCheck %s
 
-circuit basic :     ; CHECK: firrtl.circuit "basic" {
+circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK-LABEL: firrtl.module @MyModule(%in: !firrtl.uint, %out: !firrtl.flip<uint<8>>) {
   module MyModule :   @[FooBar.scala 369:27]

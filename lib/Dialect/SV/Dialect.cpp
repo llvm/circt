@@ -13,7 +13,8 @@ using namespace sv;
 //===----------------------------------------------------------------------===//
 
 SVDialect::SVDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context, getTypeID()) {
+    : Dialect(getDialectNamespace(), context,
+    ::mlir::TypeID::get<SVDialect>()) {
 
   // Register operations.
   addOperations<

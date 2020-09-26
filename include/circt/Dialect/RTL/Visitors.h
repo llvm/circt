@@ -23,13 +23,13 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<ConstantOp,
                        // Arithmetic and Logical Binary Operations.
-                       AddOp, SubOp, MulOp, DivOp, ModOp,
+                       AddOp, SubOp, MulOp, DivOp, ModOp, ShlOp,
                        // Bitwise operations
                        AndOp, OrOp, XorOp,
                        // Reduction Operators
                        AndROp, OrROp, XorROp,
                        // Other operations.
-                       SExtOp, ZExtOp, ConcatOp, ExtractOp, DoneOp>(
+                       SExtOp, ZExtOp, ConcatOp, ExtractOp, MuxOp, DoneOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitComb(expr, args...);
             })
@@ -79,6 +79,7 @@ public:
   HANDLE(MulOp, Binary);
   HANDLE(DivOp, Binary);
   HANDLE(ModOp, Binary);
+  HANDLE(ShlOp, Binary);
 
   HANDLE(AndOp, Variadic);
   HANDLE(OrOp, Variadic);
@@ -93,6 +94,7 @@ public:
   HANDLE(ZExtOp, Unhandled);
   HANDLE(ConcatOp, Unhandled);
   HANDLE(ExtractOp, Unhandled);
+  HANDLE(MuxOp, Unhandled);
   HANDLE(DoneOp, Unhandled);
 #undef HANDLE
 };
@@ -105,9 +107,10 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<ConnectOp, WireOp, RTLInstanceOp>([&](auto expr) -> ResultType {
-          return thisCast->visitStmt(expr, args...);
-        })
+        .template Case<ConnectOp, WireOp, RTLInstanceOp>(
+            [&](auto expr) -> ResultType {
+              return thisCast->visitStmt(expr, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidStmt(op, args...);
         });

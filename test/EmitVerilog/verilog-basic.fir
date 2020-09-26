@@ -3,7 +3,7 @@
 ; Some day this should filecheck:
 ; RUN: circt-translate -parse-fir --mlir-print-debuginfo %s | circt-opt -pass-pipeline='firrtl.circuit(lower-firrtl-to-rtl)' | circt-translate -emit-verilog -verify-diagnostics
 
-circuit Xorr :
+circuit inputs_only :
 
   module inputs_only :
     input a: UInt<1>

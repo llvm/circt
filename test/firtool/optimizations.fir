@@ -1,7 +1,7 @@
 ; RUN: firtool %s --format=fir              | circt-opt | FileCheck %s --check-prefix=OPT
 ; RUN: firtool %s --format=fir -disable-opt | circt-opt | FileCheck %s --check-prefix=NOOPT
 
-circuit optimizations :
+circuit test_cse :
   module test_cse :
     input a: UInt<4>
     output b: UInt<4>

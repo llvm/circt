@@ -1,6 +1,6 @@
 // RUN: circt-opt -pass-pipeline='firrtl.circuit(lower-firrtl-to-rtl)' %s | FileCheck %s
 
- firrtl.circuit "Circuit" {
+ firrtl.circuit "Simple" {
 
   // CHECK-LABEL: firrtl.module @Simple
   firrtl.module @Simple(%in1: !firrtl.uint<4>,
@@ -123,6 +123,31 @@
     // CHECK-NEXT: [[IN3TRUNC:%.+]] = rtl.extract [[CAST]] from 0 : (i8) -> i3
     // CHECK-NEXT: = rtl.mod [[PADRES]], [[IN3TRUNC]] : i3
     %21 = firrtl.rem %3, %in3 : (!firrtl.sint<3>, !firrtl.sint<8>) -> !firrtl.sint<3>
+
+    // CHECK-NEXT: [[CAST:%.+]] = firrtl.stdIntCast %in2 : (!firrtl.uint<2>) -> i2
+    // CHECK-NEXT: [[WIRE:%.+]] = rtl.wire {name = "n1"} : i2
+    // CHECK-NEXT: rtl.connect [[WIRE]], [[CAST]] : i2
+    %n1 = firrtl.node %in2  {name = "n1"} : !firrtl.uint<2>
+
+    // Nodes with no names are just dropped.
+    %22 = firrtl.node %n1 : !firrtl.uint<2>
+
+    // CHECK-NEXT: %false_{{.*}} = rtl.constant(false) : i1
+    // CHECK-NEXT: [[CVT:%.+]] = rtl.concat %false_{{.*}}, [[CAST]] : (i1, i2) -> i3
+    %23 = firrtl.cvt %22 : (!firrtl.uint<2>) -> !firrtl.sint<3>
+
+    // CHECK-NEXT: %c-1_i3 = rtl.constant(-1 : i3) : i3
+    // CHECK-NEXT: [[XOR:%.+]] = rtl.xor [[CVT]], %c-1_i3 : i3
+    %24 = firrtl.not %23 : (!firrtl.sint<3>) -> !firrtl.sint<3>
+
+    // CHECK-NEXT: [[SEXT:%.+]] = rtl.sext [[XOR]] : (i3) -> i4
+    // CHECK-NEXT: %c0_i4 = rtl.constant(0 : i4) : i4
+    // CHECK-NEXT: [[SUB:%.+]] = rtl.sub %c0_i4, [[SEXT]] : i4
+    %25 = firrtl.neg %24 : (!firrtl.sint<3>) -> !firrtl.sint<4>
+
+    // CHECK-NEXT: [[CVT4:%.+]] = rtl.sext [[CVT]] : (i3) -> i4
+    // CHECK-NEXT: rtl.mux %false, [[CVT4]], [[SUB]] : i4
+    %26 = firrtl.mux(%12, %23, %25) : (!firrtl.uint<1>, !firrtl.sint<3>, !firrtl.sint<4>) -> !firrtl.sint<4>
   }
 
 

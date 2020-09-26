@@ -48,24 +48,15 @@ static llvm::cl::opt<bool> verifyDiagnostics(
     llvm::cl::init(false));
 
 int main(int argc, char **argv) {
-  enableGlobalDialectRegistry(true);
-
   // Register MLIR stuff.
   registerAsmPrinterCLOptions();
   registerMLIRContextCLOptions();
-  registerDialect<StandardOpsDialect>();
-
-  // RTL and SV.
-  registerDialect<rtl::RTLDialect>();
-  registerDialect<sv::SVDialect>();
 
   // Register FIRRTL stuff.
-  registerDialect<firrtl::FIRRTLDialect>();
   registerFIRParserTranslation();
   registerVerilogEmitterTranslation();
 
   // LLHD
-  registerDialect<llhd::LLHDDialect>();
   llhd::registerToVerilogTranslation();
 
   llvm::InitLLVM y(argc, argv);
@@ -94,6 +85,10 @@ int main(int argc, char **argv) {
   auto processBuffer = [&](std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
                            raw_ostream &os) {
     MLIRContext context;
+
+    // Load relevant dialects
+    context.loadDialect<StandardOpsDialect, rtl::RTLDialect, sv::SVDialect,
+                        firrtl::FIRRTLDialect, llhd::LLHDDialect>();
 
     // Nothing here is threaded.  Disable synchronization overhead.
     context.disableMultithreading();

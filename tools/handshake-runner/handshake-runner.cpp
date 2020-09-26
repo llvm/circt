@@ -32,7 +32,6 @@
 #include "mlir/IR/Function.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Module.h"
-#include "mlir/InitAllDialects.h"
 #include "mlir/Parser.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
@@ -416,16 +415,6 @@ void executeFunction(mlir::FuncOp &toplevel,
       LLVM_DEBUG(dbgs() << "STORE: " << storeTime << "\n");
       time = std::max(time, storeTime);
       storeTimes[ptr] = time;
-      // } else if (auto Op = dyn_cast<mlir::hpx::ExecutableOpInterface>(op)) {
-      //   std::vector<APInt> inInts(op.getNumOperands());
-      //   std::vector<APInt> outInts(op.getNumResults());
-      //   for (unsigned i = 0; i < op.getNumOperands(); i++)
-      //     inInts[i] = any_cast<APInt>(inValues[i]);
-      //   Op.execute(inInts, outInts);
-      //   for (unsigned i = 0; i < op.getNumResults(); i++)
-      //     outValues[i] = outInts[i];
-      //   if (!isa<mlir::hpx::SliceOp>(op) && !isa<mlir::hpx::UnsliceOp>(op))
-      //     time += 1;
     } else if (auto Op = dyn_cast<mlir::BranchOp>(op)) {
       mlir::Block *dest = Op.getDest();
       unsigned arg = 0;
@@ -872,18 +861,6 @@ void executeHandshakeFunction(handshake::FuncOp &toplevel,
       valueMap.erase(in);
     }
     if (executeStdOp(op, inValues, outValues)) {
-      // } else if (auto Op = dyn_cast<mlir::hpx::ExecutableOpInterface>(op)) {
-      //   std::vector<APInt> inInts(op.getNumOperands());
-      //   std::vector<APInt> outInts(op.getNumResults());
-      //   for (unsigned i = 0; i < op.getNumOperands(); i++) {
-      //     assert(inValues[i].hasValue());
-      //     inInts[i] = any_cast<APInt>(inValues[i]);
-      //   }
-      //   Op.execute(inInts, outInts);
-      //   for (unsigned i = 0; i < op.getNumResults(); i++)
-      //     outValues[i] = outInts[i];
-      //   if (!isa<mlir::hpx::SliceOp>(op) && !isa<mlir::hpx::UnsliceOp>(op))
-      //     time += 1;
     } else if (auto Op = dyn_cast<handshake::StartOp>(op)) {
     } else if (auto Op = dyn_cast<handshake::EndOp>(op)) {
     } else if (auto Op = dyn_cast<handshake::SinkOp>(op)) {
@@ -923,9 +900,6 @@ void executeHandshakeFunction(handshake::FuncOp &toplevel,
 }
 
 int main(int argc, char **argv) {
-  enableGlobalDialectRegistry(true);
-  mlir::registerAllDialects();
-  mlir::registerDialect<handshake::HandshakeOpsDialect>();
   InitLLVM y(argc, argv);
   cl::ParseCommandLineOptions(
       argc, argv,
@@ -944,6 +918,7 @@ int main(int argc, char **argv) {
 
   // Load the MLIR module.
   mlir::MLIRContext context;
+  context.loadDialect<StandardOpsDialect, handshake::HandshakeOpsDialect>();
   SourceMgr source_mgr;
   source_mgr.AddNewSourceBuffer(std::move(*file_or_err), SMLoc());
   mlir::OwningModuleRef module(mlir::parseSourceFile(source_mgr, &context));

@@ -94,6 +94,7 @@ def SubOp : UTBinRTLOp<"sub">;
 def MulOp : UTVariadicRTLOp<"mul", [Commutative]>;
 def DivOp : UTBinRTLOp<"div">;
 def ModOp : UTBinRTLOp<"mod">;
+def ShlOp : UTBinRTLOp<"shl">;
 
 def AndOp : UTVariadicRTLOp<"and", [Commutative]>;
 def OrOp  : UTVariadicRTLOp<"or", [Commutative]>;
@@ -142,15 +143,6 @@ def ExtractOp : RTLOp<"extract", [NoSideEffect]> {
     $input `from` $lowBit attr-dict `:` functional-type($input, $result)
   }];
 
-  let builders = [
-    OpBuilder<"OpBuilder &builder, OperationState &result, Type resultType, "
-              "Value input, unsigned lowBit">
-  ];
-
-  let extraClassDeclaration = [{
-    unsigned getLowBit() { return lowBit().getZExtValue(); }
-  }];
-
   let hasFolder = 1;
   let verifier = [{ return ::verifyExtractOp(*this); }];
 }
@@ -181,4 +173,16 @@ def ZExtOp : RTLOp<"zext", [NoSideEffect]> {
   let verifier = [{ return ::verifyExtOp(*this); }];
 }
 
-// TODO: Bit extract range, use it for trunc.
+// Extract a range of bits from the specified input.
+def MuxOp : RTLOp<"mux",
+ [NoSideEffect, AllTypesMatch<["trueValue", "falseValue", "result"]>]> {
+  let summary = "Return one or the other operand depending on a selector bit";
+
+  let arguments = (ins I1:$cond, AnySignlessInteger:$trueValue,
+                       AnySignlessInteger:$falseValue);
+  let results = (outs AnySignlessInteger:$result);
+
+  let assemblyFormat = [{
+    $cond `,` $trueValue `,` $falseValue attr-dict `:` type($result)
+  }];
+}
