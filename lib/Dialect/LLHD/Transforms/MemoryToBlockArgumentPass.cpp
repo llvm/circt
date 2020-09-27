@@ -11,6 +11,7 @@
 #include <set>
 
 using namespace mlir;
+using namespace circt;
 
 namespace {
 
@@ -232,6 +233,6 @@ void MemoryToBlockArgumentPass::runOnOperation() {
 }
 
 std::unique_ptr<OperationPass<llhd::ProcOp>>
-mlir::llhd::createMemoryToBlockArgumentPass() {
+circt::llhd::createMemoryToBlockArgumentPass() {
   return std::make_unique<MemoryToBlockArgumentPass>();
 }

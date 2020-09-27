@@ -14,12 +14,8 @@ using namespace mlir;
 using namespace circt;
 using namespace circt::staticlogic;
 
-namespace circt {
-namespace staticlogic {
 #define GET_OP_CLASSES
 #include "circt/Dialect/StaticLogic/StaticLogic.cpp.inc"
-} // namespace staticlogic
-} // namespace circt
 
 StaticLogicDialect::StaticLogicDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context,

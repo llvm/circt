@@ -22,7 +22,7 @@ def FIRRTLDialect : Dialect {
     [FIRRTL GitHub page](https://github.com/freechipsproject/firrtl).
   }];
 
-  let cppNamespace = "firrtl";
+  let cppNamespace = "::circt::firrtl";
 }
 
 // Base class for the operation in this dialect.

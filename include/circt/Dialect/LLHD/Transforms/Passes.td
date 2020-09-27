@@ -15,7 +15,7 @@ def ProcessLowering : Pass<"llhd-process-lowering", "ModuleOp"> {
     TODO
   }];
 
-  let constructor = "mlir::llhd::createProcessLoweringPass()";
+  let constructor = "circt::llhd::createProcessLoweringPass()";
 }
 
 def MemoryToBlockArgument : Pass<"llhd-memory-to-block-argument",
@@ -66,7 +66,7 @@ def MemoryToBlockArgument : Pass<"llhd-memory-to-block-argument",
 
   }];
 
-  let constructor = "mlir::llhd::createMemoryToBlockArgumentPass()";
+  let constructor = "circt::llhd::createMemoryToBlockArgumentPass()";
 }
 
 def FunctionElimination : Pass<"llhd-function-elimination", "ModuleOp"> {
@@ -81,7 +81,7 @@ def FunctionElimination : Pass<"llhd-function-elimination", "ModuleOp"> {
     `llhd.entity`.
   }];
 
-  let constructor = "mlir::llhd::createFunctionEliminationPass()";
+  let constructor = "circt::llhd::createFunctionEliminationPass()";
 }
 
 def EarlyCodeMotion : Pass<"llhd-early-code-motion", "llhd::ProcOp"> {
@@ -99,7 +99,7 @@ def EarlyCodeMotion : Pass<"llhd-early-code-motion", "llhd::ProcOp"> {
     instructions would not be moved by other canonicalization passes.
   }];
 
-  let constructor = "mlir::llhd::createEarlyCodeMotionPass()";
+  let constructor = "circt::llhd::createEarlyCodeMotionPass()";
 }
 
 #endif // CIRCT_DIALECT_LLHD_TRANSFORMS_PASSES

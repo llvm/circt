@@ -14,7 +14,7 @@
 #include <map>
 #include <queue>
 
-namespace mlir {
+namespace circt {
 namespace llhd {
 namespace sim {
 
@@ -205,6 +205,6 @@ struct State {
 
 } // namespace sim
 } // namespace llhd
-} // namespace mlir
+} // namespace circt
 
 #endif // CIRCT_DIALECT_LLHD_SIMULATOR_STATE_H

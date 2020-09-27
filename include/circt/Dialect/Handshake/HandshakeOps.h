@@ -43,9 +43,6 @@ public:
 
 #include "circt/Dialect/Handshake/HandshakeInterfaces.h.inc"
 
-#define GET_OP_CLASSES
-#include "circt/Dialect/Handshake/HandshakeOps.h.inc"
-
 // template <typename T> struct FunctionPass : public OperationPass<T, FuncOp> {
 //   /// The polymorphic API that runs the pass over the currently held
 //   function. virtual void runOnFunction() = 0;
@@ -62,4 +59,8 @@ public:
 
 } // end namespace handshake
 } // end namespace circt
+
+#define GET_OP_CLASSES
+#include "circt/Dialect/Handshake/HandshakeOps.h.inc"
+
 #endif // MLIR_HANDSHAKEOPS_OPS_H_

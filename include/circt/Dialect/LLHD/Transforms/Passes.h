@@ -15,8 +15,9 @@ template <typename T>
 class OperationPass;
 } // namespace mlir
 
-namespace mlir {
+namespace circt {
 namespace llhd {
+using namespace mlir;
 
 class ProcOp;
 
@@ -32,6 +33,6 @@ std::unique_ptr<OperationPass<ProcOp>> createEarlyCodeMotionPass();
 void initLLHDTransformationPasses();
 
 } // namespace llhd
-} // namespace mlir
+} // namespace circt
 
 #endif // CIRCT_DIALECT_LLHD_TRANSFORMS_PASSES_H

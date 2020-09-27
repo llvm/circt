@@ -20,6 +20,7 @@
 
 using namespace llvm;
 using namespace mlir;
+using namespace circt;
 
 static cl::opt<std::string>
     inputFilename(cl::Positional, cl::desc("<input-file>"), cl::init("-"));

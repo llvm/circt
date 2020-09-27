@@ -10,8 +10,9 @@
 
 #include "mlir/IR/Operation.h"
 
-namespace mlir {
+namespace circt {
 namespace llhd {
+using namespace mlir;
 
 struct TemporalRegionAnalysis {
   using BlockMapT = DenseMap<Block *, int>;
@@ -47,6 +48,6 @@ private:
 };
 
 } // namespace llhd
-} // namespace mlir
+} // namespace circt
 
 #endif // DIALECT_LLHD_TRANSFORMS_TEMPORALREGIONS_H

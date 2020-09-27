@@ -10,4 +10,4 @@ namespace {
 #include "circt/Dialect/LLHD/Transforms/Passes.h.inc"
 } // namespace
 
-void mlir::llhd::initLLHDTransformationPasses() { registerPasses(); }
+void circt::llhd::initLLHDTransformationPasses() { registerPasses(); }

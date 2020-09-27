@@ -35,10 +35,10 @@ public:
   static StringRef getDialectNamespace() { return "staticlogic"; }
 };
 
-#define GET_OP_CLASSES
-#include "circt/Dialect/StaticLogic/StaticLogic.h.inc"
-
 } // namespace staticlogic
 } // namespace circt
+
+#define GET_OP_CLASSES
+#include "circt/Dialect/StaticLogic/StaticLogic.h.inc"
 
 #endif // CIRCT_STATICLOGIC_OPS_H_

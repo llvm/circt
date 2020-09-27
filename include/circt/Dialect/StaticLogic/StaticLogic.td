@@ -23,7 +23,7 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def StaticLogic_Dialect : Dialect {
   let name = "staticlogic";
-  let cppNamespace = "";
+  let cppNamespace = "::circt::staticlogic";
 }
 
 def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [NoSideEffect]> {

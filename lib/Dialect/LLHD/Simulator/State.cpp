@@ -13,8 +13,7 @@
 #include <string>
 
 using namespace llvm;
-using namespace mlir;
-using namespace llhd::sim;
+using namespace circt::llhd::sim;
 
 //===----------------------------------------------------------------------===//
 // Time

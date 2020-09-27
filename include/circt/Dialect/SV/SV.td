@@ -19,7 +19,7 @@ def SVDialect : Dialect {
     SystemVerilog-specific constructs in an AST-like representation.
   }];
 
-  let cppNamespace = "sv";
+  let cppNamespace = "::circt::sv";
 }
 
 // Base class for the operation in this dialect.

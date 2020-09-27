@@ -22,7 +22,7 @@ def RTLDialect : Dialect {
     representation of RTL outside of a particular use-case.
   }];
 
-  let cppNamespace = "rtl";
+  let cppNamespace = "::circt::rtl";
 }
 
 // Base class for the operation in this dialect.

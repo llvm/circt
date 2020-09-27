@@ -50,7 +50,7 @@ HandshakeOpsDialect::HandshakeOpsDialect(MLIRContext *context)
       >();
 }
 
-void ForkOp::build(Builder builder, OperationState &result, Value operand,
+void ForkOp::build(OpBuilder &builder, OperationState &result, Value operand,
                    int outputs) {
 
   auto type = operand.getType();
@@ -75,8 +75,8 @@ void handshake::ForkOp::getCanonicalizationPatterns(
   results.insert<circt::handshake::EliminateSimpleForksPattern>(context);
 }
 
-void LazyForkOp::build(Builder builder, OperationState &result, Value operand,
-                       int outputs) {
+void LazyForkOp::build(OpBuilder &builder, OperationState &result,
+                       Value operand, int outputs) {
 
   auto type = operand.getType();
 
@@ -96,7 +96,7 @@ void LazyForkOp::build(Builder builder, OperationState &result, Value operand,
   result.addAttribute("control", builder.getBoolAttr(isControl));
 }
 
-void MergeOp::build(Builder builder, OperationState &result, Value operand,
+void MergeOp::build(OpBuilder &builder, OperationState &result, Value operand,
                     int inputs) {
 
   auto type = operand.getType();
@@ -116,7 +116,7 @@ void MergeOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
   results.insert<circt::handshake::EliminateSimpleMergesPattern>(context);
 }
 
-void MuxOp::build(Builder builder, OperationState &result, Value operand,
+void MuxOp::build(OpBuilder &builder, OperationState &result, Value operand,
                   int inputs) {
 
   auto type = operand.getType();
@@ -130,7 +130,7 @@ void MuxOp::build(Builder builder, OperationState &result, Value operand,
     result.addOperands(operand);
 }
 
-void ControlMergeOp::build(Builder builder, OperationState &result,
+void ControlMergeOp::build(OpBuilder &builder, OperationState &result,
                            Value operand, int inputs) {
 
   auto type = operand.getType();
@@ -155,7 +155,7 @@ void ControlMergeOp::build(Builder builder, OperationState &result,
 //   results.insert<circt::handshake::EliminateSimpleControlMergesPattern>(context);
 // }
 
-void handshake::BranchOp::build(Builder builder, OperationState &result,
+void handshake::BranchOp::build(OpBuilder &builder, OperationState &result,
                                 Value dataOperand) {
 
   auto type = dataOperand.getType();
@@ -176,7 +176,7 @@ void handshake::BranchOp::getCanonicalizationPatterns(
   results.insert<circt::handshake::EliminateSimpleBranchesPattern>(context);
 }
 
-void handshake::ConditionalBranchOp::build(Builder builder,
+void handshake::ConditionalBranchOp::build(OpBuilder &builder,
                                            OperationState &result,
                                            Value condOperand,
                                            Value dataOperand) {
@@ -196,30 +196,30 @@ void handshake::ConditionalBranchOp::build(Builder builder,
   result.addAttribute("control", builder.getBoolAttr(isControl));
 }
 
-void StartOp::build(Builder builder, OperationState &result) {
+void StartOp::build(OpBuilder &builder, OperationState &result) {
   // Control-only output, has no type
   auto type = builder.getNoneType();
   result.types.push_back(type);
   result.addAttribute("control", builder.getBoolAttr(true));
 }
 
-void EndOp::build(Builder builder, OperationState &result, Value operand) {
+void EndOp::build(OpBuilder &builder, OperationState &result, Value operand) {
 
   result.addOperands(operand);
 }
 
-void handshake::ReturnOp::build(Builder builder, OperationState &result,
+void handshake::ReturnOp::build(OpBuilder &builder, OperationState &result,
                                 ArrayRef<Value> operands) {
 
   result.addOperands(operands);
 }
 
-void SinkOp::build(Builder builder, OperationState &result, Value operand) {
+void SinkOp::build(OpBuilder &builder, OperationState &result, Value operand) {
 
   result.addOperands(operand);
 }
 
-void handshake::ConstantOp::build(Builder builder, OperationState &result,
+void handshake::ConstantOp::build(OpBuilder &builder, OperationState &result,
                                   Attribute value, Value operand) {
 
   result.addOperands(operand);
@@ -230,7 +230,7 @@ void handshake::ConstantOp::build(Builder builder, OperationState &result,
   result.addAttribute("value", value);
 }
 
-void handshake::TerminatorOp::build(Builder builder, OperationState &result,
+void handshake::TerminatorOp::build(OpBuilder &builder, OperationState &result,
                                     ArrayRef<Block *> successors) {
   // Add all the successor blocks of the block which contains this terminator
   result.addSuccessors(successors);
@@ -238,7 +238,7 @@ void handshake::TerminatorOp::build(Builder builder, OperationState &result,
   //   result.addSuccessor(succ, {});
 }
 
-void MemoryOp::build(Builder builder, OperationState &result,
+void MemoryOp::build(OpBuilder &builder, OperationState &result,
                      ArrayRef<Value> operands, int outputs, int control_outputs,
                      bool lsq, int id, Value memref) {
 
@@ -270,7 +270,7 @@ void MemoryOp::build(Builder builder, OperationState &result,
   }
 }
 
-void handshake::LoadOp::build(Builder builder, OperationState &result,
+void handshake::LoadOp::build(OpBuilder &builder, OperationState &result,
                               Value memref, ArrayRef<Value> indices) {
 
   // Address indices
@@ -287,7 +287,7 @@ void handshake::LoadOp::build(Builder builder, OperationState &result,
   result.types.append(indices.size(), builder.getIndexType());
 }
 
-void handshake::StoreOp::build(Builder builder, OperationState &result,
+void handshake::StoreOp::build(OpBuilder &builder, OperationState &result,
                                Value valueToStore, ArrayRef<Value> indices) {
 
   // Data
@@ -303,7 +303,7 @@ void handshake::StoreOp::build(Builder builder, OperationState &result,
   result.types.append(indices.size(), builder.getIndexType());
 }
 
-void JoinOp::build(Builder builder, OperationState &result,
+void JoinOp::build(OpBuilder &builder, OperationState &result,
                    ArrayRef<Value> operands) {
 
   auto type = builder.getNoneType();
@@ -379,8 +379,8 @@ namespace handshake {
 
 #include "circt/Dialect/Handshake/HandshakeInterfaces.cpp.inc"
 
-#define GET_OP_CLASSES
-#include "circt/Dialect/Handshake/HandshakeOps.cpp.inc"
-
 } // namespace handshake
 } // namespace circt
+
+#define GET_OP_CLASSES
+#include "circt/Dialect/Handshake/HandshakeOps.cpp.inc"

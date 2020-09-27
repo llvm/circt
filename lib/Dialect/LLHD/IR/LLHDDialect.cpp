@@ -11,7 +11,8 @@
 #include "llvm/ADT/StringRef.h"
 
 using namespace mlir;
-using namespace mlir::llhd;
+using namespace circt;
+using namespace circt::llhd;
 
 //===----------------------------------------------------------------------===//
 // LLHDDialect Interfaces
@@ -228,7 +229,7 @@ void LLHDDialect::printAttribute(Attribute attr,
   }
 }
 
-namespace mlir {
+namespace circt {
 namespace llhd {
 namespace detail {
 
@@ -372,7 +373,7 @@ private:
 
 } // namespace detail
 } // namespace llhd
-} // namespace mlir
+} // namespace circt
 
 //===----------------------------------------------------------------------===//
 // LLHD Types

@@ -10,6 +10,7 @@
 #include "mlir/IR/Dominance.h"
 
 using namespace mlir;
+using namespace circt;
 
 namespace {
 struct EarlyCodeMotionPass
@@ -124,6 +125,6 @@ void EarlyCodeMotionPass::runOnOperation() {
 }
 
 std::unique_ptr<OperationPass<llhd::ProcOp>>
-mlir::llhd::createEarlyCodeMotionPass() {
+circt::llhd::createEarlyCodeMotionPass() {
   return std::make_unique<EarlyCodeMotionPass>();
 }
