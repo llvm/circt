@@ -19,6 +19,16 @@ def InterfaceOp : SVOp<"interface",
     This operation defines a named interface. Its name is a symbol that can
     be looked up when declared inside a SymbolTable operation. This operation is
     also a SymbolTable itself, so the symbols in its region can be looked up.
+
+    Example:
+
+    ```mlir
+    sv.interface @myinterface {
+      sv.interface.signal @data : i32
+      sv.interface.modport @input_port ("input" @data)
+      sv.interface.modport @output_port ("output" @data)
+    }
+    ```
   }];
 
   let arguments = (ins
@@ -42,6 +52,12 @@ def InterfaceSignalOp : SVOp<"interface.signal",
   let description = [{
     This operation defines a named signal within an interface. Its type is
     specified in an attribute, and currently supports IntegerTypes.
+
+    Example:
+
+    ```mlir
+    sv.interface.signal @data : i32
+    ```
   }];
 
   let arguments = (ins
@@ -75,6 +91,20 @@ def ModportStructArrayAttr : TypedArrayAttrBase<ModportStructAttr,
 def InterfaceModportOp : SVOp<"interface.modport",
     [Symbol, HasParent<"InterfaceOp">]> {
   let summary = "Operation to define a SystemVerilog modport for interfaces";
+
+  let description = [{
+    This operation defines a named modport within an interface. Its name is a
+    symbol that can be looked up inside its parent interface. There is an array
+    of structs that contains two fields: an enum to indicate the direction of
+    the signal in the modport, and a symbol reference to refer to the signal.
+
+    Example:
+
+    ```mlir
+    sv.interface.modport @input_port ("input" @data)
+    sv.interface.modport @output_port ("output" @data)
+    ```
+  }];
 
   let arguments = (ins
     SymbolNameAttr:$sym_name,
