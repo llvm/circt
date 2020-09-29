@@ -22,6 +22,8 @@ def FixedPoint : ESI_Type<"FixedPoint"> {
   }];
 
   let mnemonic = "fixed";
+  let parser = [{ return AutogenParser<FixedPointType, bool, size_t, size_t>($_ctxt, $_parser, {"isSigned", "wholeBits", "fractionalBits"}); }];
+  let printer = [{ AutogenPrinter($_printer, "fixed", getIsSigned(), getWholeBits(), getFractionalBits()); }];
 
   let parameters = (
       ins
@@ -40,7 +42,7 @@ def FloatingPoint : ESI_Type<"FloatingPoint"> {
     may not.
   }];
 
-  let mnemonic = "float";
+  // let mnemonic = "float";
 
   let parameters = (
       ins
@@ -56,7 +58,7 @@ def Array : ESI_Type<"Array"> {
     Standard array parameterized by a type and the fixed number of items.
   }];
 
-  let mnemonic = "array";
+  // let mnemonic = "array";
 
   let parameters = (
     ins
@@ -76,7 +78,7 @@ def List : ESI_Type<"List"> {
     a time wherein N is a parameter of the transmission channel.
   }];
 
-  let mnemonic = "list";
+  // let mnemonic = "list";
 
   let parameters = (
     ins
@@ -89,7 +91,7 @@ def String : ESI_Type<"String"> {
   let description = [{
     Like a string in software, but is parameterized by the string encoding.
   }];
-  let mnemonic = "string";
+  // let mnemonic = "string";
 
   let parameters = (
     ins
@@ -115,7 +117,7 @@ def MessagePointer : ESI_Type<"MessagePointer"> {
     type is subject to __massive__ changes as we explore hardware / software
     interfaces.
   }];
-  let mnemonic = "ptr";
+  // let mnemonic = "ptr";
 
   let parameters = (
     ins
@@ -187,6 +189,8 @@ def EnumType : ESI_Type<"Enum"> {
   }];
 
   let mnemonic = "enum";
+  let parser = [{ return AutogenParser<EnumType, llvm::ArrayRef<llvm::StringRef>>($_ctxt, $_parser, {"fields"}); }];
+  let printer = [{ AutogenPrinter($_printer, "enum", getFields()); }];
 
   let parameters = (
     ins
