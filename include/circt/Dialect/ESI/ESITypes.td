@@ -22,8 +22,8 @@ def FixedPoint : ESI_Type<"FixedPoint"> {
   }];
 
   let mnemonic = "fixed";
-  let parser = [{ return AutogenParser<FixedPointType, bool, size_t, size_t>($_ctxt, $_parser, {"isSigned", "wholeBits", "fractionalBits"}); }];
-  let printer = [{ AutogenPrinter($_printer, "fixed", getIsSigned(), getWholeBits(), getFractionalBits()); }];
+  let parser = [{ AUTOGEN_PARSER($_ctxt, $_parser, FixedPointType, isSigned, wholeBits, fractionalBits); }];
+  let printer = [{ AUTOGEN_PRINTER($_printer, fixed, isSigned, wholeBits, fractionalBits); }];
 
   let parameters = (
       ins
@@ -189,8 +189,8 @@ def EnumType : ESI_Type<"Enum"> {
   }];
 
   let mnemonic = "enum";
-  let parser = [{ return AutogenParser<EnumType, llvm::ArrayRef<llvm::StringRef>>($_ctxt, $_parser, {"fields"}); }];
-  let printer = [{ AutogenPrinter($_printer, "enum", getFields()); }];
+  let parser = [{ AUTOGEN_PARSER($_ctxt, $_parser, EnumType, fields); }];
+  let printer = [{ AUTOGEN_PRINTER($_printer, enum, fields); }];
 
   let parameters = (
     ins

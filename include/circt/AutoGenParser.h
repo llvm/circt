@@ -308,6 +308,46 @@ void AutogenPrinter(mlir::DialectAsmPrinter &printer, llvm::StringRef name,
   printer << ">";
 }
 
+#define GET_FIELD_TYPE(NAME, FIELD)                                            \
+  decltype(std::declval<NAME>().getImpl()->FIELD)
+
+#define APA1(CTXT, PAR, NAME, A)                                               \
+  AutogenParser<NAME, GET_FIELD_TYPE(NAME, A)>(CTXT, PAR, {#A})
+#define APA2(CTXT, PAR, NAME, A, B)                                            \
+  AutogenParser<NAME, GET_FIELD_TYPE(NAME, A), GET_FIELD_TYPE(NAME, B), >(     \
+      CTXT, PAR, {#A, #B})
+#define APA3(CTXT, PAR, NAME, A, B, C)                                         \
+  AutogenParser<NAME, GET_FIELD_TYPE(NAME, A), GET_FIELD_TYPE(NAME, B),        \
+                GET_FIELD_TYPE(NAME, C)>(CTXT, PAR, {#A, #B, #C})
+#define APA4(CTXT, PAR, NAME, A, B, C, D)                                      \
+  AutogenParser<NAME, GET_FIELD_TYPE(NAME, A), GET_FIELD_TYPE(NAME, B),        \
+                GET_FIELD_TYPE(NAME, C), GET_FIELD_TYPE(NAME, D)>(             \
+      CTXT, PAR, {#A, #B, #C, #D})
+#define APA5(CTXT, PAR, NAME, A, B, C, D, E)                                   \
+  AutogenParser<NAME, GET_FIELD_TYPE(NAME, A), GET_FIELD_TYPE(NAME, B),        \
+                GET_FIELD_TYPE(NAME, C), GET_FIELD_TYPE(NAME, D),              \
+                GET_FIELD_TYPE(NAME, E)>(CTXT, PAR, {#A, #B, #C, #D, #E})
+
+#define GET_MACRO(_1, _2, _3, _4, _5, NAME, ...) NAME
+#define AUTOGEN_PARSER(C, P, T, ...)                                           \
+  return GET_MACRO(__VA_ARGS__, APA5, APA4, APA3, APA2, APA1)(C, P, T,         \
+                                                              __VA_ARGS__)
+
+#define APR1(printer, name, A) AutogenPrinter(printer, #name, getImpl()->A);
+#define APR2(printer, name, A, B)                                              \
+  AutogenPrinter(printer, #name, getImpl()->A, getImpl()->B);
+#define APR3(printer, name, A, B, C)                                           \
+  AutogenPrinter(printer, #name, getImpl()->A, getImpl()->B, getImpl()->C)
+#define APR4(printer, name, A, B, C, D)                                        \
+  AutogenPrinter(printer, #name, getImpl()->A, getImpl()->B, getImpl()->C,     \
+                 getImpl()->D)
+#define APR5(printer, name, A, B, C, D, E)                                     \
+  AutogenPrinter(printer, #name, getImpl()->A, getImpl()->B, getImpl()->C,     \
+                 getImpl()->D, getImpl()->E)
+
+#define AUTOGEN_PRINTER(P, N, ...)                                             \
+  GET_MACRO(__VA_ARGS__, APR5, APR4, APR3, APR2, APR1)(P, N, __VA_ARGS__)
+
 } // namespace circt
 
 #endif // __AUTOGENPARSER_H__
