@@ -16,7 +16,7 @@
 namespace circt {
 namespace esi {
 
-/// A field in a struct or union
+// A field in a struct or union
 struct FieldInfo {
   llvm::StringRef name;
   mlir::Type type;
@@ -30,6 +30,7 @@ public:
   }
 };
 
+// Symbols for the string type encoding
 enum StringEncoding { ASCII, UTF8, UTF16, UTF32 };
 
 } // namespace esi

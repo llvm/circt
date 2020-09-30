@@ -1,5 +1,8 @@
 //===- ESITypes.cpp - ESI types code defs -----------------------*- C++ -*-===//
 //
+// Definitions for esi data types. Anything which doesn't have to be public
+// should go in here.
+//
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/ESI/ESITypes.hpp"
@@ -16,7 +19,8 @@ namespace circt {
 
 namespace autogen {
 
-// Parser for StringEncoding
+// Parser for StringEncoding. Is a specialization of the standard type parsers
+// in AutoGenParser.h.
 template <>
 struct Parse<circt::esi::StringEncoding> {
   mlir::ParseResult go(MLIRContext *ctxt, DialectAsmParser &parser,
@@ -41,7 +45,8 @@ struct Parse<circt::esi::StringEncoding> {
   }
 };
 
-// Printer for StringEncoding
+// Printer for StringEncoding. Is a specialization of the standard type printers
+// in AutoGenParser.h.
 template <>
 struct Print<circt::esi::StringEncoding> {
   static void go(DialectAsmPrinter &printer,

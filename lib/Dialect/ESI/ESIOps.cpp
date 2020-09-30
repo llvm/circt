@@ -1,5 +1,7 @@
 //===- ESIOps.cpp - ESI op code defs ----------------------------*- C++ -*-===//
 //
+// This is where op definitions will go
+//
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/ESI/ESIOps.hpp"

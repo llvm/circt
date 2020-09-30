@@ -1,5 +1,7 @@
 //===- ESIDialect.cpp - ESI dialect code defs -------------------*- C++ -*-===//
 //
+// Dialect definitions. Should be relatively standard boilerplate.
+//
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/ESI/ESIDialect.hpp"

@@ -1,5 +1,4 @@
-//===- AutoGenParser.h - standard format printer/parser ----------*- C++
-//-*-===//
+//===- AutoGenParser.h - standard format printer/parser ---------*- C++-*-===//
 //
 // Automatic (template-base) generation of parsers and printers. Defines a
 // standard format for type asm format.
@@ -12,8 +11,8 @@
 #include <mlir/IR/DialectImplementation.h>
 
 namespace circt {
-
 namespace autogen {
+
 //===----------------------------------------------------------------------===//
 //
 // Template enables identify various types for which we have specializations
@@ -49,6 +48,10 @@ using enable_if_arrayref =
 //
 //===----------------------------------------------------------------------===//
 
+// This is the "interface" specification. It's a struct (vs a function) both
+// because C++ doesn't allow partial template specification on function
+// templates. Also, some parsers require temporary storage and structs provide a
+// way to allocate stack space for that.
 template <typename T, typename Enable = void>
 struct Parse {
   mlir::ParseResult
@@ -170,10 +173,13 @@ struct Parse<T, enable_if_arrayref<T>> {
 
 //===----------------------------------------------------------------------===//
 //
-// These structs handle Type parameters' printing for common types
+// These structs handle data type parameters' printing for common types
 //
 //===----------------------------------------------------------------------===//
 
+// This is the "interface" specification for ptiner. It's a struct (vs a
+// function) because C++ doesn't allow partial template specification on
+// function templates.
 template <typename T, typename Enable = void>
 struct Print {
   static void go(mlir::DialectAsmPrinter &printer, const T &obj);
@@ -227,11 +233,20 @@ struct Print<T, enable_if_arrayref<T>> {
   }
 };
 
+//===----------------------------------------------------------------------===//
+//
+// Print ALL the parameters in comma seperated form. These are functions since
+// they can be.
+//
+//===----------------------------------------------------------------------===//
+
+// Base case
 template <typename T>
 void PrintAll(mlir::DialectAsmPrinter &printer, T t) {
   Print<T>::go(printer, t);
 }
 
+// Recursive case
 template <typename T, typename... Args>
 void PrintAll(mlir::DialectAsmPrinter &printer, T t, Args... args) {
   Print<T>::go(printer, t);
@@ -239,19 +254,31 @@ void PrintAll(mlir::DialectAsmPrinter &printer, T t, Args... args) {
   PrintAll(printer, args...);
 }
 
+//===----------------------------------------------------------------------===//
+//
+// Parse ALL the parameters in comma seperated form. These are functions since
+// they can be.
+//
+//===----------------------------------------------------------------------===//
+
+// Handle a base case
 template <typename... Args>
 struct ParseAll {};
 
+// Another base case
 template <typename T>
 struct ParseAll<T> {
   Parse<T> ParseHere;
   T result;
 
+  // Actually construct the type 'Type'. The argument list was constructed
+  // recursively. This is the base case so it is the one to call Type::get(...).
   template <typename Type, typename... ConArgs>
   mlir::Type construct(mlir::MLIRContext *ctxt, ConArgs... args) {
     return Type::get(ctxt, args..., result);
   }
 
+  // Parse this field and store it in 'result'
   mlir::ParseResult go(mlir::MLIRContext *ctxt, mlir::DialectAsmParser &parser,
                        llvm::ArrayRef<llvm::StringRef> fieldNames) {
     if (ParseHere.go(ctxt, parser, fieldNames[0], result))
@@ -267,11 +294,15 @@ struct ParseAll<T, Args...> {
   Parse<T> ParseHere;
   T result;
 
+  // Construct the type 'Type'. Build the argument list recusively.
   template <typename Type, typename... ConArgs>
   mlir::Type construct(mlir::MLIRContext *ctxt, ConArgs... args) {
     return ParseNext.template construct<Type>(ctxt, args..., result);
   }
 
+  // Parse this field, putting the parsed value in 'result'. Then parse a comma
+  // since there is another field after this one. (We are not the base case.)
+  // Call the next one.
   mlir::ParseResult go(mlir::MLIRContext *ctxt, mlir::DialectAsmParser &parser,
                        llvm::ArrayRef<llvm::StringRef> fieldNames) {
     if (ParseHere.go(ctxt, parser, fieldNames[0], result))
@@ -286,6 +317,14 @@ struct ParseAll<T, Args...> {
 
 } // namespace autogen
 
+//===----------------------------------------------------------------------===//
+//
+// Outer-level functions to call from your parser / printer code
+//
+//===----------------------------------------------------------------------===//
+
+// Generate a parser for a given list of types. Run the parser, construct the
+// type 'Type', and return it. Most of the magic is above.
 template <typename Type, typename... Args>
 mlir::Type AutogenParser(mlir::MLIRContext *ctxt,
                          mlir::DialectAsmParser &parser,
@@ -300,6 +339,7 @@ mlir::Type AutogenParser(mlir::MLIRContext *ctxt,
   return parseAll.template construct<Type>(ctxt);
 }
 
+// Print a type given a list of types
 template <typename... Args>
 void AutogenPrinter(mlir::DialectAsmPrinter &printer, llvm::StringRef name,
                     Args... args) {
@@ -308,8 +348,22 @@ void AutogenPrinter(mlir::DialectAsmPrinter &printer, llvm::StringRef name,
   printer << ">";
 }
 
+//===----------------------------------------------------------------------===//
+//
+// Using the above outer-level functions requires a bit of redundancy. (Because
+// C++ doesn't allow strings as template parameters.) These macros reduce this
+// redundancy.
+//
+// There may be some stuff in c++17 or c++20 which reduce this redundancy.
+// Ideally, we'd just specify the Type and compile time introspection would be
+// used to gather the rest of this info.
+//
+//===----------------------------------------------------------------------===//
+
+// Utility macros
 #define GET_FIELD_TYPE(NAME, FIELD)                                            \
   decltype(std::declval<NAME>().getImpl()->FIELD)
+#define GET_MACRO(_1, _2, _3, _4, _5, NAME, ...) NAME
 
 #define APA1(CTXT, PAR, NAME, A)                                               \
   AutogenParser<NAME, GET_FIELD_TYPE(NAME, A)>(CTXT, PAR, {#A})
@@ -328,7 +382,8 @@ void AutogenPrinter(mlir::DialectAsmPrinter &printer, llvm::StringRef name,
                 GET_FIELD_TYPE(NAME, C), GET_FIELD_TYPE(NAME, D),              \
                 GET_FIELD_TYPE(NAME, E)>(CTXT, PAR, {#A, #B, #C, #D, #E})
 
-#define GET_MACRO(_1, _2, _3, _4, _5, NAME, ...) NAME
+// Use this macro: AUTOGEN_PARSER(ctxt, parser, paramName1, paramName2, ...).
+// Supports up to 5 parameters (easy to add more).
 #define AUTOGEN_PARSER(C, P, T, ...)                                           \
   return GET_MACRO(__VA_ARGS__, APA5, APA4, APA3, APA2, APA1)(C, P, T,         \
                                                               __VA_ARGS__)
@@ -345,6 +400,8 @@ void AutogenPrinter(mlir::DialectAsmPrinter &printer, llvm::StringRef name,
   AutogenPrinter(printer, #name, getImpl()->A, getImpl()->B, getImpl()->C,     \
                  getImpl()->D, getImpl()->E)
 
+// Use this macro AUTOGEN_PRINTER(printer, typeMnemonic paramName1, paramName2,
+// ...). Supports up to 5 parameters (easy to add more).
 #define AUTOGEN_PRINTER(P, N, ...)                                             \
   GET_MACRO(__VA_ARGS__, APR5, APR4, APR3, APR2, APR1)(P, N, __VA_ARGS__)
 
