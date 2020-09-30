@@ -402,8 +402,8 @@ def ReturnOp : HIR_Op<"return", [HasParent<"DefOp">,NoSideEffect,
       let assemblyFormat = "(`(`$operands^`)` `:` `(`type($operands)`)`)? attr-dict";
     }
 
-def WireOp :HIR_Op<"wire", [NoSideEffect]> {
-  let summary = "Create new wire";
+def AllocOp :HIR_Op<"alloc", [NoSideEffect]> {
+  let summary = "Instantiate new hardware.";
 
   let description = [{
 
@@ -413,7 +413,7 @@ def WireOp :HIR_Op<"wire", [NoSideEffect]> {
   let arguments = (ins);
   let results = (outs WireType:$res);
 
-  let assemblyFormat = "attr-dict `:` type($res)";
+  let assemblyFormat = "`(``)`attr-dict `:` type($res)";
 }
 
 #endif // HIR_OPS

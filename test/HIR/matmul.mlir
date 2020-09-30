@@ -24,7 +24,7 @@ hir.def @MatmulKernel at %t(
     hir.yield at %ti offset %1 : !hir.const<i32>
     hir.unroll_for %j = 0 to 128 step 1 iter_time(%tj = %ti){
       hir.yield at %tj offset %1 : !hir.const<i32>
-      %C_bus = hir.wire : !hir.wire<128*i32>
+      %C_bus = hir.alloc() : !hir.wire<128*i32>
       hir.wire_write %0 to %C_bus[%0] at %tj offset %3 : !hir.const<i32> : (!hir.const<i32>, !hir.wire<128*i32>[!hir.const<i32>])
 
       %tk_end=hir.unroll_for %k = 0 to 128 step 1 iter_time(%tk = %tj tstep 1){
