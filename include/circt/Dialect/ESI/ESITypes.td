@@ -42,12 +42,14 @@ def FloatingPoint : ESI_Type<"FloatingPoint"> {
     may not.
   }];
 
-  // let mnemonic = "float";
+  let mnemonic = "float";
+  let parser = [{ AUTOGEN_PARSER($_ctxt, $_parser, FloatingPointType, isSigned, exponentBits, mantissaBits); }];
+  let printer = [{ AUTOGEN_PRINTER($_printer, float, isSigned, exponentBits, mantissaBits); }];
 
   let parameters = (
       ins
       "bool": $isSigned,
-      "size_t": $expontentBits,
+      "size_t": $exponentBits,
       "size_t": $mantissaBits
   );
 }
@@ -58,7 +60,9 @@ def Array : ESI_Type<"Array"> {
     Standard array parameterized by a type and the fixed number of items.
   }];
 
-  // let mnemonic = "array";
+  let mnemonic = "array";
+  let parser = [{ AUTOGEN_PARSER($_ctxt, $_parser, ArrayType, inner, size); }];
+  let printer = [{ AUTOGEN_PRINTER($_printer, array, inner, size); }];
 
   let parameters = (
     ins
@@ -78,7 +82,9 @@ def List : ESI_Type<"List"> {
     a time wherein N is a parameter of the transmission channel.
   }];
 
-  // let mnemonic = "list";
+  let mnemonic = "list";
+  let parser = [{ AUTOGEN_PARSER($_ctxt, $_parser, ListType, inner); }];
+  let printer = [{ AUTOGEN_PRINTER($_printer, list, inner); }];
 
   let parameters = (
     ins
@@ -91,7 +97,10 @@ def String : ESI_Type<"String"> {
   let description = [{
     Like a string in software, but is parameterized by the string encoding.
   }];
-  // let mnemonic = "string";
+
+  let mnemonic = "string";
+  let parser = [{ AUTOGEN_PARSER($_ctxt, $_parser, StringType, encoding); }];
+  let printer = [{ AUTOGEN_PRINTER($_printer, string, encoding); }];
 
   let parameters = (
     ins
@@ -117,7 +126,10 @@ def MessagePointer : ESI_Type<"MessagePointer"> {
     type is subject to __massive__ changes as we explore hardware / software
     interfaces.
   }];
-  // let mnemonic = "ptr";
+
+  let mnemonic = "ptr";
+  let parser = [{ AUTOGEN_PARSER($_ctxt, $_parser, MessagePointerType, inner, negativeAllowed); }];
+  let printer = [{ AUTOGEN_PRINTER($_printer, ptr, inner, negativeAllowed); }];
 
   let parameters = (
     ins

@@ -314,7 +314,7 @@ void AutogenPrinter(mlir::DialectAsmPrinter &printer, llvm::StringRef name,
 #define APA1(CTXT, PAR, NAME, A)                                               \
   AutogenParser<NAME, GET_FIELD_TYPE(NAME, A)>(CTXT, PAR, {#A})
 #define APA2(CTXT, PAR, NAME, A, B)                                            \
-  AutogenParser<NAME, GET_FIELD_TYPE(NAME, A), GET_FIELD_TYPE(NAME, B), >(     \
+  AutogenParser<NAME, GET_FIELD_TYPE(NAME, A), GET_FIELD_TYPE(NAME, B)>(       \
       CTXT, PAR, {#A, #B})
 #define APA3(CTXT, PAR, NAME, A, B, C)                                         \
   AutogenParser<NAME, GET_FIELD_TYPE(NAME, A), GET_FIELD_TYPE(NAME, B),        \
