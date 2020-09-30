@@ -87,7 +87,8 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
 } // end anonymous namespace
 
 FIRRTLDialect::FIRRTLDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context, getTypeID()) {
+    : Dialect(getDialectNamespace(), context,
+    ::mlir::TypeID::get<FIRRTLDialect>()) {
 
   // Register types.
   addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,

@@ -17,6 +17,7 @@
 #include "circt/Dialect/RTL/Dialect.h"
 #include "circt/Dialect/SV/Dialect.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AsmState.h"
@@ -75,6 +76,7 @@ int main(int argc, char **argv) {
   // Register MLIR stuff
   registry.insert<StandardOpsDialect>();
   registry.insert<LLVM::LLVMDialect>();
+  registry.insert<mlir::AffineDialect>();
 
 // Register the standard passes we want.
 #include "mlir/Transforms/Passes.h.inc"

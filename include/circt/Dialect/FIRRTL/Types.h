@@ -7,6 +7,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_TYPES_H
 #define CIRCT_DIALECT_FIRRTL_TYPES_H
 
+#include "circt/Dialect/FIRRTL/Dialect.h"
 #include "mlir/IR/Types.h"
 
 namespace circt {
@@ -54,8 +55,7 @@ public:
 
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
-    return type.isa<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
-                    AnalogType, FlipType, BundleType, FVectorType>();
+    return llvm::isa<FIRRTLDialect>(type.getDialect());
   }
 
   /// Return true if this is a valid "reset" type.
