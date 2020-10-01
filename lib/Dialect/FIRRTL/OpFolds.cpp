@@ -163,7 +163,7 @@ void CatPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         if (auto rhsBits =
                 dyn_cast_or_null<BitsPrimOp>(op.rhs().getDefiningOp())) {
           if (lhsBits.input() == rhsBits.input() &&
-              lhsBits.getLo() - 1 == rhsBits.getHi()) {
+              lhsBits.lo() - 1 == rhsBits.hi()) {
             rewriter.replaceOpWithNewOp<BitsPrimOp>(
                 op, op.getType(), lhsBits.input(), lhsBits.hi(), rhsBits.lo());
             return success();
@@ -188,8 +188,7 @@ OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
   if (inputType.cast<IntType>().hasWidth() &&
       matchPattern(input(), m_FConstant(value)))
-    return getIntAttr(value.lshr(getLo()).trunc(getHi() - getLo() + 1),
-                      getContext());
+    return getIntAttr(value.lshr(lo()).trunc(hi() - lo() + 1), getContext());
 
   return {};
 }
@@ -205,8 +204,8 @@ void BitsPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       auto inputOp = op.input().getDefiningOp();
       // bits(bits(x, ...), ...) -> bits(x, ...).
       if (auto innerBits = dyn_cast_or_null<BitsPrimOp>(inputOp)) {
-        auto newLo = op.getLo() + innerBits.getLo();
-        auto newHi = newLo + op.getHi() - op.getLo();
+        auto newLo = op.lo() + innerBits.lo();
+        auto newHi = newLo + op.hi() - op.lo();
         rewriter.replaceOpWithNewOp<BitsPrimOp>(op, innerBits.input(), newHi,
                                                 newLo);
         return success();
@@ -249,7 +248,7 @@ void HeadPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return failure();
 
       // If we know the input width, we can canonicalize this into a BitsPrimOp.
-      unsigned keepAmount = op.getAmount();
+      unsigned keepAmount = op.amount();
       replaceWithBits(op, op.input(), inputWidth - 1, inputWidth - keepAmount,
                       rewriter);
       return success();
@@ -328,7 +327,7 @@ OpFoldResult ShlPrimOp::fold(ArrayRef<Attribute> operands) {
   auto input = this->input();
   auto inputType =
       input.getType().cast<FIRRTLType>().getPassiveType().cast<IntType>();
-  int shiftAmount = getAmount();
+  int shiftAmount = amount();
 
   // shl(x, 0) -> x
   if (shiftAmount == 0)
@@ -350,7 +349,7 @@ OpFoldResult ShrPrimOp::fold(ArrayRef<Attribute> operands) {
   auto input = this->input();
   auto inputType =
       input.getType().cast<FIRRTLType>().getPassiveType().cast<IntType>();
-  int shiftAmount = getAmount();
+  int shiftAmount = amount();
 
   // shl(x, 0) -> x
   if (shiftAmount == 0)
@@ -395,7 +394,7 @@ void ShrPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return failure();
 
       // If we know the input width, we can canonicalize this into a BitsPrimOp.
-      unsigned shiftAmount = op.getAmount();
+      unsigned shiftAmount = op.amount();
       if (int(shiftAmount) == inputWidth) {
         // shift(x, 32) => 0 when x has 32 bits.  This is handled by fold().
         if (op.getType().cast<IntType>().isUnsigned())
@@ -432,7 +431,7 @@ void TailPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
       // If we know the input width, we can canonicalize this into a
       // BitsPrimOp.
-      unsigned dropAmount = op.getAmount();
+      unsigned dropAmount = op.amount();
       replaceWithBits(op, op.input(), inputWidth - dropAmount - 1, 0, rewriter);
       return success();
     }

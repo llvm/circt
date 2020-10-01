@@ -35,6 +35,8 @@ def CircuitOp : FIRRTLOp<"circuit",
   
   let printer = [{ return ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
+
+  let verifier = [{ return ::verifyCircuitOp(*this); }];
 }
 
 def FModuleOp : FIRRTLOp<"module",

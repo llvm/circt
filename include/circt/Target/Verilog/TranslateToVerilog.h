@@ -12,10 +12,11 @@ class raw_ostream;
 } // namespace llvm
 
 namespace mlir {
-
 struct LogicalResult;
 class ModuleOp;
+} // namespace mlir
 
+namespace circt {
 namespace llhd {
 
 mlir::LogicalResult printVerilog(mlir::ModuleOp module, llvm::raw_ostream &os);
@@ -23,6 +24,6 @@ mlir::LogicalResult printVerilog(mlir::ModuleOp module, llvm::raw_ostream &os);
 void registerToVerilogTranslation();
 
 } // namespace llhd
-} // namespace mlir
+} // namespace circt
 
 #endif // CIRCT_TARGET_VERILOG_TRANSLATETOVERILOG_H

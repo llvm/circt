@@ -134,7 +134,7 @@ def REG_MODE_BOTH : I64EnumAttrCase<"both", 4>;
 def LLHD_RegModeAttr : I64EnumAttr<"RegMode", "", [
     REG_MODE_LOW, REG_MODE_HIGH, REG_MODE_RISE, REG_MODE_FALL, REG_MODE_BOTH
   ]> {
-  let cppNamespace = "::mlir::llhd";
+  let cppNamespace = "::circt::llhd";
 }
 
 def LLHD_RegModeArrayAttr

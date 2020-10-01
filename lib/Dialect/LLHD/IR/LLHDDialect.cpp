@@ -11,7 +11,8 @@
 #include "llvm/ADT/StringRef.h"
 
 using namespace mlir;
-using namespace mlir::llhd;
+using namespace circt;
+using namespace circt::llhd;
 
 //===----------------------------------------------------------------------===//
 // LLHDDialect Interfaces
@@ -46,7 +47,8 @@ struct LLHDInlinerInterface : public DialectInlinerInterface {
 //===----------------------------------------------------------------------===//
 
 LLHDDialect::LLHDDialect(mlir::MLIRContext *context)
-    : Dialect(getDialectNamespace(), context, getTypeID()) {
+    : Dialect(getDialectNamespace(), context,
+    ::mlir::TypeID::get<LLHDDialect>()) {
   addTypes<SigType, TimeType, ArrayType, PtrType>();
   addAttributes<TimeAttr>();
   addOperations<
@@ -227,7 +229,7 @@ void LLHDDialect::printAttribute(Attribute attr,
   }
 }
 
-namespace mlir {
+namespace circt {
 namespace llhd {
 namespace detail {
 
@@ -371,7 +373,7 @@ private:
 
 } // namespace detail
 } // namespace llhd
-} // namespace mlir
+} // namespace circt
 
 //===----------------------------------------------------------------------===//
 // LLHD Types

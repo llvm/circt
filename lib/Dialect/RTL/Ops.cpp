@@ -337,15 +337,10 @@ void ConcatOp::build(OpBuilder &builder, OperationState &result,
   build(builder, result, builder.getIntegerType(resultWidth), inputs);
 }
 
-void ExtractOp::build(OpBuilder &builder, OperationState &result,
-                      Type resultType, Value input, unsigned lowBit) {
-  build(builder, result, resultType, input, llvm::APInt(32, lowBit));
-}
-
 static LogicalResult verifyExtractOp(ExtractOp op) {
   unsigned srcWidth = op.input().getType().cast<IntegerType>().getWidth();
   unsigned dstWidth = op.getType().cast<IntegerType>().getWidth();
-  if (op.getLowBit() >= srcWidth || srcWidth - op.getLowBit() < dstWidth)
+  if (op.lowBit() >= srcWidth || srcWidth - op.lowBit() < dstWidth)
     return op.emitOpError("from bit too large for input"), failure();
 
   return success();
@@ -360,7 +355,7 @@ OpFoldResult ExtractOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
   if (mlir::matchPattern(input(), m_RConstant(value))) {
     unsigned dstWidth = getType().cast<IntegerType>().getWidth();
-    return getIntAttr(value.lshr(getLowBit()).trunc(dstWidth), getContext());
+    return getIntAttr(value.lshr(lowBit()).trunc(dstWidth), getContext());
   }
   return {};
 }
@@ -408,16 +403,32 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       // and(..., '1) -> and(...) -- identity
       if (matchPattern(inputs.back(), m_RConstant(value)) &&
           value.isAllOnesValue()) {
-
         rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(),
                                            inputs.drop_back());
         return success();
       }
 
-      /// TODO: and(..., c1, c2) -> and(..., c3) -- constant folding
+      // and(..., x, x) -> and(..., x) -- idempotent
+      if (inputs[size - 1] == inputs[size - 2]) {
+        rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(),
+                                           inputs.drop_back());
+        return success();
+      }
+
+      APInt value2;
+
+      // and(..., c1, c2) -> and(..., c3) -- constant folding
+      if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
+          matchPattern(inputs[size - 2], m_RConstant(value2))) {
+        auto cst = rewriter.create<ConstantOp>(op.getLoc(), value & value2);
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+        newOperands.push_back(cst);
+        rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
       /// TODO: and(x, and(...)) -> and(x, ...) -- flatten
       /// TODO: and(..., x, not(x)) -> and(..., 0) -- complement
-      /// TODO: and(..., x, x) -> and(..., x) -- idempotent
       return failure();
     }
   };

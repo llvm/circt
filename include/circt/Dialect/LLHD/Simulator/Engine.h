@@ -15,7 +15,7 @@ namespace mlir {
 class ExecutionEngine;
 } // namespace mlir
 
-namespace mlir {
+namespace circt {
 namespace llhd {
 namespace sim {
 
@@ -62,6 +62,6 @@ private:
 
 } // namespace sim
 } // namespace llhd
-} // namespace mlir
+} // namespace circt
 
 #endif // CIRCT_DIALECT_LLHD_SIMULATOR_ENGINE_H

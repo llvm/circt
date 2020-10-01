@@ -16,7 +16,8 @@ using namespace rtl;
 //===----------------------------------------------------------------------===//
 
 RTLDialect::RTLDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context, getTypeID()) {
+    : Dialect(getDialectNamespace(), context,
+    ::mlir::TypeID::get<RTLDialect>()) {
 
   // Register operations.
   addOperations<

@@ -1,6 +1,6 @@
 // RUN: circt-translate %s -emit-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
-firrtl.circuit "Circuit" {
+firrtl.circuit "M1" {
   firrtl.module @M1(%x : !firrtl.uint<8>,
                     %y : !firrtl.flip<uint<8>>,
                     %z : i8) {
@@ -97,12 +97,16 @@ firrtl.circuit "Circuit" {
                 %f: i1 {rtl.direction = "out"}) {
     %0 = rtl.and %d, %e : i1
     rtl.connect %f, %0 : i1
+
+    %1 = rtl.mux %d, %d, %e : i1
+    rtl.connect %f, %1 : i1
   }
   // CHECK-LABEL: module A(
   // CHECK-NEXT:  input  d, e,
   // CHECK-NEXT:  output f);
   // CHECK-EMPTY:
   // CHECK-NEXT:  assign f = d & e;
+  // CHECK-NEXT:  assign f = d ? d : e;
   // CHECK-NEXT: endmodule
 
   rtl.module @AB(%w: i1 {rtl.direction = "in"}, 
@@ -153,6 +157,17 @@ firrtl.circuit "Circuit" {
     firrtl.connect %b, %30 : !firrtl.flip<uint<1>>, !firrtl.uint<2>
   }
 
+  rtl.module @shl(%a: i1 {rtl.direction = "in"},
+                  %b: i1 {rtl.direction = "out"}) {
+    %0 = rtl.shl %a, %a : i1
+    rtl.connect %b, %0 : i1
+  }
+
+  // CHECK-LABEL:  module shl(
+  // CHECK-NEXT:   input  a,
+  // CHECK-NEXT:   output b);
+  // CHECK-EMPTY:
+  // CHECK-NEXT:   assign b = a << a;
+  // CHECK-NEXT: endmodule
+
 }
-
-

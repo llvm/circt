@@ -42,7 +42,7 @@ def SMemOp : FIRRTLOp<"smem", [/*MemAlloc*/]> {
 
 def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
   let summary = "Define a new mem";
-  let arguments = (ins I32Attr:$readLatency, I32Attr:$writeLatency,
+  let arguments = (ins I32Attr:$readLatency, Confined<I32Attr, [IntMinValue<1>]>:$writeLatency,
                        I64Attr:$depth, RUWAttr:$ruw,
                        OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
@@ -51,13 +51,6 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
     $ruw attr-dict `:` type($result)
   }];
 
-  let builders = [
-    OpBuilder<"OpBuilder &builder, OperationState &result, "
-              "FIRRTLType resultType, unsigned readLatency, "
-              "unsigned writeLatency, uint64_t depth, RUWAttr ruw, "
-              "StringAttr name = {}">
-  ];
-
   let extraClassDeclaration = [{
     enum class PortKind { Read, Write, ReadWrite };
 
@@ -65,10 +58,6 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
     /// This returns a null type if there are duplicate port names.
     static FIRRTLType getTypeForPortList(uint64_t depth, FIRRTLType dataType,
                               ArrayRef<std::pair<Identifier, PortKind>> ports);
-
-    uint64_t getDepth() { return depth().getLimitedValue(); }
-    unsigned getReadLatency() { return readLatency().getLimitedValue(); }
-    unsigned getWriteLatency() { return writeLatency().getLimitedValue(); }
 
     /// Return the name and kind of ports supported by this memory.
     void getPorts(SmallVectorImpl<std::pair<Identifier, PortKind>> &result);
@@ -112,7 +101,7 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
     ```
     }];
 
-  let arguments = (ins AnyType:$clockVal, OptionalAttr<StrAttr>:$name);
+  let arguments = (ins ClockType:$clockVal, OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
   
   let assemblyFormat = [{
@@ -125,11 +114,11 @@ def RegInitOp : FIRRTLOp<"reginit", [/*MemAlloc*/]> {
   let description = [{
     Declare a new register:
     ```
-      %name = firrtl.reg %clockVal, %resetSignal, %resetValue : t1
+      %name = firrtl.reginit %clockVal, %resetSignal, %resetValue : t1
     ```
     }];
 
-  let arguments = (ins AnyType:$clockVal, AnyType:$resetSignal, 
+  let arguments = (ins ClockType:$clockVal, ResetType:$resetSignal,
                        AnyType:$resetValue, OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
   

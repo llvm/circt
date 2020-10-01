@@ -20,6 +20,7 @@
 
 using namespace llvm;
 using namespace mlir;
+using namespace circt;
 
 static cl::opt<std::string>
     inputFilename(cl::Positional, cl::desc("<input-file>"), cl::init("-"));
@@ -77,12 +78,6 @@ static int dumpLLVM(ModuleOp module, MLIRContext &context) {
 }
 
 int main(int argc, char **argv) {
-  enableGlobalDialectRegistry(true);
-
-  registerDialect<llhd::LLHDDialect>();
-  registerDialect<LLVM::LLVMDialect>();
-  registerDialect<StandardOpsDialect>();
-
   llhd::initLLHDToLLVMPass();
 
   InitLLVM y(argc, argv);
@@ -106,6 +101,10 @@ int main(int argc, char **argv) {
   // Parse the input file.
   MLIRContext context;
   OwningModuleRef module;
+
+  // Load the dialects
+  context
+      .loadDialect<llhd::LLHDDialect, LLVM::LLVMDialect, StandardOpsDialect>();
 
   if (parseMLIR(context, module))
     return 1;

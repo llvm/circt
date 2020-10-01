@@ -17,7 +17,7 @@
 #include "llvm/Support/TargetSelect.h"
 
 using namespace mlir;
-using namespace llhd::sim;
+using namespace circt::llhd::sim;
 
 Engine::Engine(llvm::raw_ostream &out, ModuleOp module, MLIRContext &context,
                std::string root)

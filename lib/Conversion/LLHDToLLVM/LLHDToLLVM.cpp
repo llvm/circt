@@ -17,15 +17,16 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
-namespace mlir {
+namespace circt {
 namespace llhd {
 #define GEN_PASS_CLASSES
 #include "circt/Conversion/LLHDToLLVM/Passes.h.inc"
 } // namespace llhd
-} // namespace mlir
+} // namespace circt
 
 using namespace mlir;
-using namespace mlir::llhd;
+using namespace circt;
+using namespace circt::llhd;
 
 // Keep a counter to infer a signal's index in his entity's signal table.
 static size_t signalCounter = 0;
@@ -1434,7 +1435,7 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
 
 /// Create an LLHD to LLVM conversion pass.
 std::unique_ptr<OperationPass<ModuleOp>>
-mlir::llhd::createConvertLLHDToLLVMPass() {
+circt::llhd::createConvertLLHDToLLVMPass() {
   return std::make_unique<LLHDToLLVMLoweringPass>();
 }
 

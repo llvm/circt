@@ -10,8 +10,10 @@
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/Function.h"
 
-namespace mlir {
+namespace circt {
 namespace llhd {
+using namespace mlir;
+
 namespace detail {
 struct SigTypeStorage;
 struct TimeAttrStorage;
@@ -162,6 +164,6 @@ public:
   static llvm::StringRef getKeyword() { return "time"; }
 };
 } // namespace llhd
-} // namespace mlir
+} // namespace circt
 
 #endif // CIRCT_DIALECT_LLHD_IR_LLHDDIALECT_H

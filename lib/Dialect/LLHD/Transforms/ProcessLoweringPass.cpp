@@ -11,6 +11,7 @@
 #include "mlir/IR/Visitors.h"
 
 using namespace mlir;
+using namespace circt;
 
 namespace {
 
@@ -127,6 +128,6 @@ void ProcessLoweringPass::runOnOperation() {
 } // namespace
 
 std::unique_ptr<OperationPass<ModuleOp>>
-mlir::llhd::createProcessLoweringPass() {
+circt::llhd::createProcessLoweringPass() {
   return std::make_unique<ProcessLoweringPass>();
 }

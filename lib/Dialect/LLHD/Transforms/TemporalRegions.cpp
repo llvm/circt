@@ -10,6 +10,7 @@
 #include "llvm/ADT/SmallPtrSet.h"
 
 using namespace mlir;
+using namespace circt;
 
 static void addBlockToTR(Block *block, int tr, DenseMap<Block *, int> &blockMap,
                          DenseMap<int, SmallVector<Block *, 8>> &trMap) {

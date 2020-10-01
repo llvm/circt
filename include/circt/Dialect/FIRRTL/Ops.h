@@ -56,13 +56,7 @@ void getModulePortInfo(Operation *op, SmallVectorImpl<ModulePortInfo> &results);
 } // namespace firrtl
 } // namespace circt
 
-namespace circt {
-namespace firrtl {
-
 #define GET_OP_CLASSES
 #include "circt/Dialect/FIRRTL/FIRRTL.h.inc"
-
-} // namespace firrtl
-} // namespace circt
 
 #endif // CIRCT_DIALECT_FIRRTL_OPS_H

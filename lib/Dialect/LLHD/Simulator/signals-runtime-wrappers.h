@@ -17,21 +17,21 @@ extern "C" {
 
 /// Allocate a new signal. The index of the new signal in the state's list of
 /// signals is returned.
-int alloc_signal(mlir::llhd::sim::State *state, int index, char *owner,
+int alloc_signal(circt::llhd::sim::State *state, int index, char *owner,
                  uint8_t *value, int64_t size);
 
 /// Add allocated constructs to a process instance.
-void alloc_proc(mlir::llhd::sim::State *state, char *owner,
-                mlir::llhd::sim::ProcState *procState);
+void alloc_proc(circt::llhd::sim::State *state, char *owner,
+                circt::llhd::sim::ProcState *procState);
 
 /// Drive a value onto a signal.
-void drive_signal(mlir::llhd::sim::State *state,
-                  mlir::llhd::sim::SignalDetail *index, uint8_t *value,
+void drive_signal(circt::llhd::sim::State *state,
+                  circt::llhd::sim::SignalDetail *index, uint8_t *value,
                   uint64_t width, int time, int delta, int eps);
 
 /// Suspend a process.
-void llhd_suspend(mlir::llhd::sim::State *state,
-                  mlir::llhd::sim::ProcState *procState, int time, int delta,
+void llhd_suspend(circt::llhd::sim::State *state,
+                  circt::llhd::sim::ProcState *procState, int time, int delta,
                   int eps);
 }
 

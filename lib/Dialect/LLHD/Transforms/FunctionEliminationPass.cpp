@@ -11,6 +11,7 @@
 #include "mlir/IR/Visitors.h"
 
 using namespace mlir;
+using namespace circt;
 
 namespace {
 
@@ -43,6 +44,6 @@ void FunctionEliminationPass::runOnOperation() {
 } // namespace
 
 std::unique_ptr<OperationPass<ModuleOp>>
-mlir::llhd::createFunctionEliminationPass() {
+circt::llhd::createFunctionEliminationPass() {
   return std::make_unique<FunctionEliminationPass>();
 }

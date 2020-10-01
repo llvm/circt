@@ -58,6 +58,25 @@ static ParseResult parseCircuitOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
+static LogicalResult verifyCircuitOp(CircuitOp &circuit) {
+  StringRef main = circuit.name();
+
+  // Check that the circuit has a non-empty name.
+  if (main.empty()) {
+    circuit.emitOpError("must have a non-empty name");
+    return failure();
+  }
+
+  // Check that a module matching the "main" module exists in the circuit.
+  if (!circuit.lookupSymbol(main)) {
+    circuit.emitOpError("must contain one module that matches main name '" +
+                        main + "'");
+    return failure();
+  }
+
+  return success();
+}
+
 Region &CircuitOp::getBodyRegion() { return getOperation()->getRegion(0); }
 Block *CircuitOp::getBody() { return &getBodyRegion().front(); }
 
@@ -344,14 +363,6 @@ static LogicalResult verifyFModuleOp(FModuleOp module) {
 //===----------------------------------------------------------------------===//
 // Declarations
 //===----------------------------------------------------------------------===//
-
-void MemOp::build(OpBuilder &builder, OperationState &result,
-                  FIRRTLType resultType, unsigned readLatency,
-                  unsigned writeLatency, uint64_t depth, RUWAttr ruw,
-                  StringAttr name) {
-  build(builder, result, resultType, llvm::APInt(32, readLatency),
-        llvm::APInt(32, writeLatency), llvm::APInt(64, depth), ruw, name);
-}
 
 /// Return the type of a mem given a list of named ports and their kind.
 /// This returns a null type if there are duplicate port names.
@@ -908,7 +919,7 @@ void BitsPrimOp::build(OpBuilder &builder, OperationState &result, Value input,
   auto type = getResultType(input.getType().cast<FIRRTLType>().getPassiveType(),
                             high, low);
   assert(type && "invalid inputs building BitsPrimOp!");
-  build(builder, result, type, input, APInt(32, high), APInt(32, low));
+  build(builder, result, type, input, high, low);
 }
 
 FIRRTLType HeadPrimOp::getResultType(FIRRTLType input, int32_t amount) {

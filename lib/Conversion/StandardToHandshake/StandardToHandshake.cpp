@@ -1410,7 +1410,7 @@ struct HandshakeInsertBufferPass
         auto bufferOp = builder.create<handshake::BufferOp>(
             op->getLoc(), value.getType(), value, /*sequential=*/true,
             /*control=*/value.getType().isa<NoneType>(),
-            /*slots=*/APInt(32, 2));
+            /*slots=*/2);
         value.replaceUsesWithIf(
             bufferOp,
             function_ref<bool(OpOperand &)>([](OpOperand &operand) -> bool {
@@ -1467,6 +1467,10 @@ struct HandshakePass
     // Legalize the resulting regions, which can have no basic blocks.
     for (auto func : m.getOps<handshake::FuncOp>())
       removeBasicBlocks(func);
+  }
+  /// Return the dialect that must be loaded in the context before this pass.
+  void getDependentDialects(::mlir::DialectRegistry &registry) const override {
+    registry.insert<HandshakeOpsDialect>();
   }
 };
 
