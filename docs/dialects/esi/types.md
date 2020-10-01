@@ -152,6 +152,38 @@ list struct {
 !esi.list<!esi.struct< {x, !esi.fixed<true, 4, 12>}, {y, !esi.fixed<true, 4, 12>} >>
 ```
 
+## String
+
+Strings are variable length constructs, with the width of each item in the
+'list' determined by the encoding. The reason we break out strings as a
+separate data type (vs a list of `ui8`) is the semantics of the encoding
+matter quite a bit at compile time. If a particular module only processes
+ASCII strings, the design doesn't want to send in UTF8.
+
+This would be better dealt with by a parameterized struct but those will not
+be supported initially.
+
+```mlir
+!esi.string<ASCII>
+!esi.string<UTF8>
+!esi.string<UTF16>
+!esi.string<UTF32>
+```
+
+## Message Pointer
+
+Message pointers are pointers to data _within_ the same message. They
+contain: a) the type of the data being pointed and b) the offset of data to
+which it is pointing **in bits** relative to the **location of the pointer**,
+*not* an absolute location. The offset can (optionally) be negative
+indicating that the data has previously occurred. As of now, message pointers
+cannot specify the guaranteed alignment, though that is desirable.
+
+```mlir
+!esi.ptr<i4, true> // Pointer to a 4-bit signed integer, negative offset allowed
+!esi.ptr<!esi.struct<...>, false> // Pointer to a struct, guaranteed positive offset
+```
+
 ## Parameterized Types
 
 **This is not currently supported!**
