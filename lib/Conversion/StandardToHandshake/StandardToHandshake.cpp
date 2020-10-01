@@ -1269,6 +1269,95 @@ void replaceCallOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
   }
 }
 
+/// Rewrite affine.for in a handshake.func into its standard form. Affine
+/// analysis should be carried out before this function being called.
+LogicalResult rewriteAffineFor(handshake::FuncOp f,
+                               ConversionPatternRewriter &rewriter) {
+  // Get all affine.for operations in the function body.
+  SmallVector<Operation *, 8> forOps;
+  f.walk([&](Operation *op) {
+    if (isa<mlir::AffineForOp>(op))
+      forOps.push_back(op);
+  });
+
+  // TODO: how to deal with nested loops?
+  for (unsigned i = 0, e = forOps.size(); i < e; i++) {
+    auto forOp = dyn_cast<mlir::AffineForOp>(forOps[i]);
+
+    // Insert lower and upper bounds right at the position of the original
+    // affine.for operation.
+    rewriter.setInsertionPoint(forOp);
+    auto loc = forOp.getLoc();
+    auto lowerBound = expandAffineMap(rewriter, loc, forOp.getLowerBoundMap(),
+                                      forOp.getLowerBoundOperands());
+    auto upperBound = expandAffineMap(rewriter, loc, forOp.getUpperBoundMap(),
+                                      forOp.getUpperBoundOperands());
+    if (!lowerBound || !upperBound)
+      return failure();
+    auto step = rewriter.create<mlir::ConstantIndexOp>(loc, forOp.getStep());
+
+    // Build blocks for a common for loop. initBlock and initPosition are the
+    // block that contains the current forOp, and the position of the forOp.
+    auto *initBlock = rewriter.getInsertionBlock();
+    auto initPosition = rewriter.getInsertionPoint();
+
+    // Split the current block into several parts. `endBlock` contains the code
+    // starting from forOp. `conditionBlock` will have the condition branch.
+    // `firstBodyBlock` is the loop body, and `lastBodyBlock` is about the loop
+    // iterator stepping.
+    // TODO: is there a simpler API for doing so?
+    auto *endBlock = rewriter.splitBlock(initBlock, initPosition);
+    auto *conditionBlock = rewriter.splitBlock(initBlock, initBlock->end());
+    auto *firstBodyBlock =
+        rewriter.splitBlock(conditionBlock, conditionBlock->begin());
+    auto *lastBodyBlock =
+        rewriter.splitBlock(firstBodyBlock, firstBodyBlock->end());
+
+    // The loop IV is first argument of the conditionBlock.
+    auto iv = conditionBlock->addArgument(rewriter.getIndexType());
+
+    // Get the loop terminator.
+    auto terminator = dyn_cast<mlir::AffineYieldOp>(forOp.getBody()->back());
+    if (!terminator)
+      return failure();
+
+    // First, we fill the content of the lastBodyBlock with how the loop
+    // iterator steps.
+    rewriter.setInsertionPointToEnd(lastBodyBlock);
+    auto stepped = rewriter.create<mlir::AddIOp>(loc, iv, step).getResult();
+
+    // Next, we get the loop carried values, which are terminator operands.
+    SmallVector<Value, 8> loopCarried;
+    loopCarried.push_back(stepped);
+    loopCarried.append(terminator.operand_begin(), terminator.operand_end());
+    rewriter.create<mlir::BranchOp>(loc, conditionBlock, loopCarried);
+
+    // Then we fill in the condition block.
+    rewriter.setInsertionPointToEnd(conditionBlock);
+    auto comparison = rewriter.create<mlir::CmpIOp>(loc, CmpIPredicate::slt, iv,
+                                                    upperBound.getValue()[0]);
+
+    rewriter.create<mlir::CondBranchOp>(loc, comparison, firstBodyBlock,
+                                        ArrayRef<Value>(), endBlock,
+                                        ArrayRef<Value>());
+
+    // We also insert the branch operation at the end of the initBlock.
+    rewriter.setInsertionPointToEnd(initBlock);
+    // TODO: should we add more operands here?
+    rewriter.create<mlir::BranchOp>(loc, conditionBlock,
+                                    lowerBound.getValue()[0]);
+
+    // Finally, setup the firstBodyBlock.
+    rewriter.setInsertionPointToEnd(firstBodyBlock);
+    rewriter.create<mlir::BranchOp>(loc, lastBodyBlock);
+
+    // Remove the original forOp.
+    rewriter.eraseOp(forOp);
+  }
+
+  return success();
+}
+
 struct HandshakeCanonicalizePattern : public ConversionPattern {
   using ConversionPattern::ConversionPattern;
   LogicalResult match(Operation *op) const override {
@@ -1343,6 +1432,9 @@ struct FuncOpLowering : public OpConversionPattern<mlir::FuncOp> {
         funcOp.getLoc(), funcOp.getName(), func_type, attributes);
     rewriter.inlineRegionBefore(funcOp.getBody(), newFuncOp.getBody(),
                                 newFuncOp.end());
+
+    // Rewrite affine.for operations.
+    rewriteAffineFor(newFuncOp, rewriter);
 
     // Perform dataflow conversion
     MemRefToMemoryAccessOp MemOps = replaceMemoryOps(newFuncOp, rewriter);
@@ -1456,7 +1548,8 @@ struct HandshakePass
     ModuleOp m = getOperation();
 
     ConversionTarget target(getContext());
-    target.addLegalDialect<HandshakeOpsDialect, StandardOpsDialect>();
+    target.addLegalDialect<HandshakeOpsDialect, mlir::AffineDialect,
+                           StandardOpsDialect>();
 
     OwningRewritePatternList patterns;
     patterns.insert<FuncOpLowering>(m.getContext());
@@ -1470,7 +1563,7 @@ struct HandshakePass
   }
   /// Return the dialect that must be loaded in the context before this pass.
   void getDependentDialects(::mlir::DialectRegistry &registry) const override {
-    registry.insert<HandshakeOpsDialect>();
+    registry.insert<HandshakeOpsDialect, mlir::AffineDialect>();
   }
 };
 
