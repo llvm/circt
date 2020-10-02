@@ -8,10 +8,8 @@
 #ifndef CIRCT_DIALECT_ESI_ESITYPES_HPP
 #define CIRCT_DIALECT_ESI_ESITYPES_HPP
 
-#include <tuple>
-
-#include <mlir/IR/Dialect.h>
-#include <mlir/IR/Operation.h>
+#include "mlir/IR/Dialect.h"
+#include "mlir/IR/Operation.h"
 
 namespace circt {
 namespace esi {

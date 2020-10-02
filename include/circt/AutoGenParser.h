@@ -1,4 +1,4 @@
-//===- AutoGenParser.h - standard format printer/parser ---------*- C++-*-===//
+//===- AutoGenParser.h - standard format printer/parser ----------*- C++-*-===//
 //
 // Automatic (template-base) generation of parsers and printers. Defines a
 // standard format for type asm format.
@@ -8,7 +8,7 @@
 #ifndef CIRCT_AUTOGENPARSER_H
 #define CIRCT_AUTOGENPARSER_H
 
-#include <mlir/IR/DialectImplementation.h>
+#include "mlir/IR/DialectImplementation.h"
 
 namespace circt {
 namespace autogen {

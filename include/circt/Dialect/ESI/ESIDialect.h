@@ -1,4 +1,4 @@
-//===- ESIDialect.h - ESI dialect Dialect class ----------------*- C++ -*-===//
+//===- ESIDialect.h - ESI dialect Dialect class -----------------*- C++ -*-===//
 //
 // The Elastic Silicon Interconnect (ESI) dialect
 //
@@ -11,7 +11,7 @@
 #ifndef CIRCT_DIALECT_ESI_ESIDIALECT_HPP
 #define CIRCT_DIALECT_ESI_ESIDIALECT_HPP
 
-#include <mlir/IR/Dialect.h>
+#include "mlir/IR/Dialect.h"
 
 namespace circt {
 namespace esi {

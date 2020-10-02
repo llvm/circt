@@ -4,7 +4,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/ESI/ESIOps.hpp"
+#include "circt/Dialect/ESI/ESIOps.h"
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/ESI/ESI.cpp.inc"

@@ -4,13 +4,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/ESI/ESIDialect.hpp"
-#include "circt/Dialect/ESI/ESIOps.hpp"
-#include "circt/Dialect/ESI/ESITypes.hpp"
+#include "circt/Dialect/ESI/ESIDialect.h"
+#include "circt/Dialect/ESI/ESIOps.h"
+#include "circt/Dialect/ESI/ESITypes.h"
 
-#include <llvm/ADT/TypeSwitch.h>
-#include <llvm/Support/FormatVariadic.h>
-#include <mlir/IR/DialectImplementation.h>
+#include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/FormatVariadic.h"
 
 using namespace mlir;
 

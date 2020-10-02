@@ -26,10 +26,10 @@ def FixedPoint : ESI_Type<"FixedPoint"> {
   let printer = [{ AUTOGEN_PRINTER($_printer, fixed, isSigned, wholeBits, fractionalBits); }];
 
   let parameters = (
-      ins
-      "bool": $isSigned,
-      "size_t": $wholeBits,
-      "size_t": $fractionalBits
+    ins
+    "bool": $isSigned,
+    "size_t": $wholeBits,
+    "size_t": $fractionalBits
   );
 }
 
@@ -47,10 +47,10 @@ def FloatingPoint : ESI_Type<"FloatingPoint"> {
   let printer = [{ AUTOGEN_PRINTER($_printer, float, isSigned, exponentBits, mantissaBits); }];
 
   let parameters = (
-      ins
-      "bool": $isSigned,
-      "size_t": $exponentBits,
-      "size_t": $mantissaBits
+    ins
+    "bool": $isSigned,
+    "size_t": $exponentBits,
+    "size_t": $mantissaBits
   );
 }
 

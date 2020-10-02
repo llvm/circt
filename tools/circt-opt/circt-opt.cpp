@@ -9,7 +9,7 @@
 #include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
 #include "circt/Conversion/StandardToHandshake/StandardToHandshake.h"
 #include "circt/Conversion/StandardToStaticLogic/StandardToStaticLogic.h"
-#include "circt/Dialect/ESI/ESIDialect.hpp"
+#include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/Dialect.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
