@@ -211,7 +211,7 @@ static void insertPersistence(LLVMTypeConverter &converter,
                               LLVM::LLVMDialect *dialect, Location loc,
                               ProcOp &proc, LLVM::LLVMType &stateTy,
                               LLVM::LLVMFuncOp &converted) {
-  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect);
+  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect->getContext());
 
   // Load the resume index from the process state argument.
   rewriter.setInsertionPoint(converted.getBody().front().getTerminator());
@@ -1415,7 +1415,7 @@ struct VarOpConversion : ConvertToLLVMPattern {
                   ConversionPatternRewriter &rewriter) const override {
     VarOpAdaptor transformed(operands);
 
-    auto i32Ty = LLVM::LLVMType::getInt32Ty(&getDialect());
+    auto i32Ty = LLVM::LLVMType::getInt32Ty(&typeConverter.getContext());
 
     auto oneC = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(1));
