@@ -38,6 +38,7 @@ static cl::opt<InputFormatKind> inputFormat(
                           "Autodetect input format"),
                clEnumValN(InputFIRFile, "fir", "Parse as .fir file"),
                clEnumValN(InputMLIRFile, "mlir", "Parse as .mlir file")),
+   
     cl::init(InputUnspecified));
 
 static cl::opt<std::string>
