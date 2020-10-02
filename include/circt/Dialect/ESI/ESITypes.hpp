@@ -5,8 +5,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef __ESI_TYPES_HPP__
-#define __ESI_TYPES_HPP__
+#ifndef CIRCT_DIALECT_ESI_ESITYPES_HPP
+#define CIRCT_DIALECT_ESI_ESITYPES_HPP
 
 #include <tuple>
 

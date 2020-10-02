@@ -4,8 +4,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef __ESI_OPS_HPP__
-#define __ESI_OPS_HPP__
+#ifndef CIRCT_DIALECT_ESI_ESIOPS_HPP
+#define CIRCT_DIALECT_ESI_ESIOPS_HPP
 
 #include "circt/Dialect/ESI/ESIDialect.hpp"
 #include "circt/Dialect/ESI/ESITypes.hpp"

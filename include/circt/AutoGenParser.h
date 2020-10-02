@@ -5,8 +5,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef __AUTOGENPARSER_H__
-#define __AUTOGENPARSER_H__
+#ifndef CIRCT_AUTOGENPARSER_H
+#define CIRCT_AUTOGENPARSER_H
 
 #include <mlir/IR/DialectImplementation.h>
 
@@ -242,16 +242,16 @@ struct Print<T, enable_if_arrayref<T>> {
 
 // Base case
 template <typename T>
-void PrintAll(mlir::DialectAsmPrinter &printer, T t) {
+void printAll(mlir::DialectAsmPrinter &printer, T t) {
   Print<T>::go(printer, t);
 }
 
 // Recursive case
 template <typename T, typename... Args>
-void PrintAll(mlir::DialectAsmPrinter &printer, T t, Args... args) {
+void printAll(mlir::DialectAsmPrinter &printer, T t, Args... args) {
   Print<T>::go(printer, t);
   printer << ", ";
-  PrintAll(printer, args...);
+  printAll(printer, args...);
 }
 
 //===----------------------------------------------------------------------===//
@@ -268,7 +268,7 @@ struct ParseAll {};
 // Another base case
 template <typename T>
 struct ParseAll<T> {
-  Parse<T> ParseHere;
+  Parse<T> parseHere;
   T result;
 
   // Actually construct the type 'Type'. The argument list was constructed
@@ -281,7 +281,7 @@ struct ParseAll<T> {
   // Parse this field and store it in 'result'
   mlir::ParseResult go(mlir::MLIRContext *ctxt, mlir::DialectAsmParser &parser,
                        llvm::ArrayRef<llvm::StringRef> fieldNames) {
-    if (ParseHere.go(ctxt, parser, fieldNames[0], result))
+    if (parseHere.go(ctxt, parser, fieldNames[0], result))
       return mlir::failure();
     return mlir::success();
   }
@@ -289,15 +289,15 @@ struct ParseAll<T> {
 
 template <typename T, typename... Args>
 struct ParseAll<T, Args...> {
-  ParseAll<Args...> ParseNext;
+  ParseAll<Args...> parseNext;
 
-  Parse<T> ParseHere;
+  Parse<T> parseHere;
   T result;
 
   // Construct the type 'Type'. Build the argument list recusively.
   template <typename Type, typename... ConArgs>
   mlir::Type construct(mlir::MLIRContext *ctxt, ConArgs... args) {
-    return ParseNext.template construct<Type>(ctxt, args..., result);
+    return parseNext.template construct<Type>(ctxt, args..., result);
   }
 
   // Parse this field, putting the parsed value in 'result'. Then parse a comma
@@ -305,11 +305,11 @@ struct ParseAll<T, Args...> {
   // Call the next one.
   mlir::ParseResult go(mlir::MLIRContext *ctxt, mlir::DialectAsmParser &parser,
                        llvm::ArrayRef<llvm::StringRef> fieldNames) {
-    if (ParseHere.go(ctxt, parser, fieldNames[0], result))
+    if (parseHere.go(ctxt, parser, fieldNames[0], result))
       return mlir::failure();
     if (parser.parseComma())
       return mlir::failure();
-    if (ParseNext.go(ctxt, parser, fieldNames.slice(1)))
+    if (parseNext.go(ctxt, parser, fieldNames.slice(1)))
       return mlir::failure();
     return mlir::success();
   }
@@ -326,7 +326,7 @@ struct ParseAll<T, Args...> {
 // Generate a parser for a given list of types. Run the parser, construct the
 // type 'Type', and return it. Most of the magic is above.
 template <typename Type, typename... Args>
-mlir::Type AutogenParser(mlir::MLIRContext *ctxt,
+mlir::Type autogenParser(mlir::MLIRContext *ctxt,
                          mlir::DialectAsmParser &parser,
                          llvm::ArrayRef<llvm::StringRef> fieldNames) {
   autogen::ParseAll<Args...> parseAll;
@@ -341,10 +341,10 @@ mlir::Type AutogenParser(mlir::MLIRContext *ctxt,
 
 // Print a type given a list of types
 template <typename... Args>
-void AutogenPrinter(mlir::DialectAsmPrinter &printer, llvm::StringRef name,
+void autogenPrinter(mlir::DialectAsmPrinter &printer, llvm::StringRef name,
                     Args... args) {
   printer << name << "<";
-  autogen::PrintAll(printer, args...);
+  autogen::printAll(printer, args...);
   printer << ">";
 }
 
@@ -366,19 +366,19 @@ void AutogenPrinter(mlir::DialectAsmPrinter &printer, llvm::StringRef name,
 #define GET_MACRO(_1, _2, _3, _4, _5, NAME, ...) NAME
 
 #define APA1(CTXT, PAR, NAME, A)                                               \
-  AutogenParser<NAME, GET_FIELD_TYPE(NAME, A)>(CTXT, PAR, {#A})
+  autogenParser<NAME, GET_FIELD_TYPE(NAME, A)>(CTXT, PAR, {#A})
 #define APA2(CTXT, PAR, NAME, A, B)                                            \
-  AutogenParser<NAME, GET_FIELD_TYPE(NAME, A), GET_FIELD_TYPE(NAME, B)>(       \
+  autogenParser<NAME, GET_FIELD_TYPE(NAME, A), GET_FIELD_TYPE(NAME, B)>(       \
       CTXT, PAR, {#A, #B})
 #define APA3(CTXT, PAR, NAME, A, B, C)                                         \
-  AutogenParser<NAME, GET_FIELD_TYPE(NAME, A), GET_FIELD_TYPE(NAME, B),        \
+  autogenParser<NAME, GET_FIELD_TYPE(NAME, A), GET_FIELD_TYPE(NAME, B),        \
                 GET_FIELD_TYPE(NAME, C)>(CTXT, PAR, {#A, #B, #C})
 #define APA4(CTXT, PAR, NAME, A, B, C, D)                                      \
-  AutogenParser<NAME, GET_FIELD_TYPE(NAME, A), GET_FIELD_TYPE(NAME, B),        \
+  autogenParser<NAME, GET_FIELD_TYPE(NAME, A), GET_FIELD_TYPE(NAME, B),        \
                 GET_FIELD_TYPE(NAME, C), GET_FIELD_TYPE(NAME, D)>(             \
       CTXT, PAR, {#A, #B, #C, #D})
 #define APA5(CTXT, PAR, NAME, A, B, C, D, E)                                   \
-  AutogenParser<NAME, GET_FIELD_TYPE(NAME, A), GET_FIELD_TYPE(NAME, B),        \
+  autogenParser<NAME, GET_FIELD_TYPE(NAME, A), GET_FIELD_TYPE(NAME, B),        \
                 GET_FIELD_TYPE(NAME, C), GET_FIELD_TYPE(NAME, D),              \
                 GET_FIELD_TYPE(NAME, E)>(CTXT, PAR, {#A, #B, #C, #D, #E})
 
@@ -388,16 +388,16 @@ void AutogenPrinter(mlir::DialectAsmPrinter &printer, llvm::StringRef name,
   return GET_MACRO(__VA_ARGS__, APA5, APA4, APA3, APA2, APA1)(C, P, T,         \
                                                               __VA_ARGS__)
 
-#define APR1(printer, name, A) AutogenPrinter(printer, #name, getImpl()->A);
+#define APR1(printer, name, A) autogenPrinter(printer, #name, getImpl()->A);
 #define APR2(printer, name, A, B)                                              \
-  AutogenPrinter(printer, #name, getImpl()->A, getImpl()->B);
+  autogenPrinter(printer, #name, getImpl()->A, getImpl()->B);
 #define APR3(printer, name, A, B, C)                                           \
-  AutogenPrinter(printer, #name, getImpl()->A, getImpl()->B, getImpl()->C)
+  autogenPrinter(printer, #name, getImpl()->A, getImpl()->B, getImpl()->C)
 #define APR4(printer, name, A, B, C, D)                                        \
-  AutogenPrinter(printer, #name, getImpl()->A, getImpl()->B, getImpl()->C,     \
+  autogenPrinter(printer, #name, getImpl()->A, getImpl()->B, getImpl()->C,     \
                  getImpl()->D)
 #define APR5(printer, name, A, B, C, D, E)                                     \
-  AutogenPrinter(printer, #name, getImpl()->A, getImpl()->B, getImpl()->C,     \
+  autogenPrinter(printer, #name, getImpl()->A, getImpl()->B, getImpl()->C,     \
                  getImpl()->D, getImpl()->E)
 
 // Use this macro AUTOGEN_PRINTER(printer, typeMnemonic paramName1, paramName2,
@@ -407,4 +407,4 @@ void AutogenPrinter(mlir::DialectAsmPrinter &printer, llvm::StringRef name,
 
 } // namespace circt
 
-#endif // __AUTOGENPARSER_H__
+#endif // CIRCT_AUTOGENPARSER_H

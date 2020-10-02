@@ -8,8 +8,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef __ESI_DIALECT_HPP__
-#define __ESI_DIALECT_HPP__
+#ifndef CIRCT_DIALECT_ESI_ESIDIALECT_HPP
+#define CIRCT_DIALECT_ESI_ESIDIALECT_HPP
 
 #include <mlir/IR/Dialect.h>
 

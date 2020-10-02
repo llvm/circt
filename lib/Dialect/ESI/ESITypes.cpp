@@ -78,7 +78,7 @@ static bool operator==(const FieldInfo &a, const FieldInfo &b) {
 }
 
 /// Compute a hash for FieldInfo. Required for data types in TypeStorage
-static llvm::hash_code hash_value(const FieldInfo &fi) {
+static llvm::hash_code hash_value(const FieldInfo &fi) { // NOLINT
   return llvm::hash_combine(fi.name, fi.type);
 }
 
