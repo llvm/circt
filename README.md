@@ -62,8 +62,8 @@ so feel free to use the current version of LLVM, but APIs may have
 changed.
 
 ```
-$ cd ~/Projects
 $ git clone git@github.com:circt/circt.git
+$ cd circt
 $ git submodule init
 $ git submodule update
 ```
@@ -74,7 +74,11 @@ $ git submodule update
 $ cd circt
 $ mkdir llvm/build
 $ cd llvm/build
-$ cmake -G Ninja ../llvm -DLLVM_ENABLE_PROJECTS="mlir" -DLLVM_TARGETS_TO_BUILD="X86;RISCV"  -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=DEBUG
+$ cmake -G Ninja ../llvm \
+    -DLLVM_ENABLE_PROJECTS="mlir" \
+    -DLLVM_TARGETS_TO_BUILD="X86;RISCV" \
+    -DLLVM_ENABLE_ASSERTIONS=ON \
+    -DCMAKE_BUILD_TYPE=DEBUG
 $ ninja
 $ ninja check-mlir
 ```
@@ -82,10 +86,14 @@ $ ninja check-mlir
 4) **Build and test CIRCT:**
 
 ```
-$ cd ~/Projects
-$ mkdir circt/build
-$ cd circt/build
-$ cmake -G Ninja .. -DMLIR_DIR=~/Projects/circt/llvm/build/lib/cmake/mlir -DLLVM_DIR=~/Projects/circt/llvm/build/lib/cmake/llvm -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=DEBUG
+$ cd circt
+$ mkdir build
+$ cd build
+$ cmake -G Ninja .. \
+    -DMLIR_DIR=$PWD/../llvm/build/lib/cmake/mlir \
+    -DLLVM_DIR=$PWD/../llvm/build/lib/cmake/llvm \
+    -DLLVM_ENABLE_ASSERTIONS=ON \
+    -DCMAKE_BUILD_TYPE=DEBUG
 $ ninja
 $ ninja check-circt
 ```
