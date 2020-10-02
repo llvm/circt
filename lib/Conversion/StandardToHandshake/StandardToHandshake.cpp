@@ -618,7 +618,7 @@ void addSinkOps(handshake::FuncOp f, OpBuilder &rewriter) {
       // equivalents
       // TODO: should we use other indicator for op that has been erased?
       if (!isa<mlir::CondBranchOp, mlir::BranchOp, mlir::LoadOp,
-               mlir::AffineReadOpInterface>(op)) {
+               mlir::AffineReadOpInterface, mlir::AffineForOp>(op)) {
 
         if (op.getNumResults() > 0) {
           for (auto result : op.getResults())
@@ -796,7 +796,8 @@ void checkDataflowConversion(handshake::FuncOp f) {
   for (Block &block : f) {
     for (Operation &op : block) {
       if (!isa<mlir::CondBranchOp, mlir::BranchOp, mlir::LoadOp,
-               mlir::ConstantOp, mlir::AffineReadOpInterface>(op)) {
+               mlir::ConstantOp, mlir::AffineReadOpInterface,
+               mlir::AffineForOp>(op)) {
         if (op.getNumResults() > 0) {
           for (auto result : op.getResults()) {
             checkUseCount(&op, result);
@@ -1304,20 +1305,26 @@ LogicalResult rewriteAffineFor(handshake::FuncOp f,
     // Split the current block into several parts. `endBlock` contains the code
     // starting from forOp. `conditionBlock` will have the condition branch.
     // `firstBodyBlock` is the loop body, and `lastBodyBlock` is about the loop
-    // iterator stepping.
+    // iterator stepping. Here we move the body region of the AffineForOp here
+    // and split it into `conditionBlock`, `firstBodyBlock`, and
+    // `lastBodyBlock`.
     // TODO: is there a simpler API for doing so?
     auto *endBlock = rewriter.splitBlock(initBlock, initPosition);
-    auto *conditionBlock = rewriter.splitBlock(initBlock, initBlock->end());
+    // Split and get the references to different parts (blocks) of the original
+    // loop body.
+    auto *conditionBlock = &forOp.region().front();
     auto *firstBodyBlock =
         rewriter.splitBlock(conditionBlock, conditionBlock->begin());
     auto *lastBodyBlock =
         rewriter.splitBlock(firstBodyBlock, firstBodyBlock->end());
+    rewriter.inlineRegionBefore(forOp.region(), endBlock);
 
-    // The loop IV is first argument of the conditionBlock.
-    auto iv = conditionBlock->addArgument(rewriter.getIndexType());
+    // The loop IV is the first argument of the conditionBlock.
+    auto iv = conditionBlock->getArgument(0);
 
-    // Get the loop terminator.
-    auto terminator = dyn_cast<mlir::AffineYieldOp>(forOp.getBody()->back());
+    // Get the loop terminator, which should be the last operation of the
+    // original loop body. And `firstBodyBlock` points to that loop body.
+    auto terminator = dyn_cast<mlir::AffineYieldOp>(firstBodyBlock->back());
     if (!terminator)
       return failure();
 
@@ -1349,9 +1356,11 @@ LogicalResult rewriteAffineFor(handshake::FuncOp f,
 
     // Finally, setup the firstBodyBlock.
     rewriter.setInsertionPointToEnd(firstBodyBlock);
+    // TODO: is it necessary to add this explicit branch operation?
     rewriter.create<mlir::BranchOp>(loc, lastBodyBlock);
 
-    // Remove the original forOp.
+    // Remove the original forOp and the terminator in the loop body.
+    rewriter.eraseOp(terminator);
     rewriter.eraseOp(forOp);
   }
 
