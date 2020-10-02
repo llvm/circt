@@ -1271,10 +1271,17 @@ void replaceCallOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
 }
 
 /// Rewrite affine.for operations in a handshake.func into its representations
-/// as a CFG in the standard dialect. It combines the for-loop related
-/// functionality of AffineToStandard and SCFToStandard. Affine analysis should
-/// be carried out before this function being called, otherwise, the affine.for
-/// operations will be eliminated and no affine analysis can be done.
+/// as a CFG in the standard dialect. Affine expressions in loop bounds will be
+/// expanded to code in the standard dialect that actually computes them. We
+/// combine the lowering of affine loops in the following two conversions:
+/// [AffineToStandard](https://mlir.llvm.org/doxygen/AffineToStandard_8cpp.html),
+/// [SCFToStandard](https://mlir.llvm.org/doxygen/SCFToStandard_8cpp_source.html)
+/// into this function.
+/// The affine memory operations will be preserved until other rewrite
+/// functions, e.g.,`replaceMemoryOps`, are called. Any affine analysis, e.g.,
+/// getting dependence information, should be carried out before calling this
+/// function; otherwise, the affine for loops will be destructed and key
+/// information will be missing.
 LogicalResult rewriteAffineFor(handshake::FuncOp f,
                                ConversionPatternRewriter &rewriter) {
   // Get all affine.for operations in the function body.
