@@ -1269,20 +1269,20 @@ void replaceCallOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
   }
 }
 
-/// Rewrite affine.for in a handshake.func into its standard form. Affine
-/// analysis should be carried out before this function being called.
+/// Rewrite affine.for operations in a handshake.func into its representations
+/// as a CFG in the standard dialect. It combines the for-loop related
+/// functionality of AffineToStandard and SCFToStandard. Affine analysis should
+/// be carried out before this function being called, otherwise, the affine.for
+/// operations will be eliminated and no affine analysis can be done.
 LogicalResult rewriteAffineFor(handshake::FuncOp f,
                                ConversionPatternRewriter &rewriter) {
   // Get all affine.for operations in the function body.
-  SmallVector<Operation *, 8> forOps;
-  f.walk([&](Operation *op) {
-    if (isa<mlir::AffineForOp>(op))
-      forOps.push_back(op);
-  });
+  SmallVector<mlir::AffineForOp, 8> forOps;
+  f.walk([&](mlir::AffineForOp op) { forOps.push_back(op); });
 
   // TODO: how to deal with nested loops?
   for (unsigned i = 0, e = forOps.size(); i < e; i++) {
-    auto forOp = dyn_cast<mlir::AffineForOp>(forOps[i]);
+    auto forOp = forOps[i];
 
     // Insert lower and upper bounds right at the position of the original
     // affine.for operation.
@@ -1548,8 +1548,7 @@ struct HandshakePass
     ModuleOp m = getOperation();
 
     ConversionTarget target(getContext());
-    target.addLegalDialect<HandshakeOpsDialect, mlir::AffineDialect,
-                           StandardOpsDialect>();
+    target.addLegalDialect<HandshakeOpsDialect, StandardOpsDialect>();
 
     OwningRewritePatternList patterns;
     patterns.insert<FuncOpLowering>(m.getContext());
@@ -1563,7 +1562,7 @@ struct HandshakePass
   }
   /// Return the dialect that must be loaded in the context before this pass.
   void getDependentDialects(::mlir::DialectRegistry &registry) const override {
-    registry.insert<HandshakeOpsDialect, mlir::AffineDialect>();
+    registry.insert<HandshakeOpsDialect>();
   }
 };
 
