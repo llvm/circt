@@ -218,7 +218,7 @@ static void insertComparisonBlock(ConversionPatternRewriter &rewriter,
                                   Region *body, Value resumeIdx, int currIdx,
                                   Block *trueDest, ValueRange trueDestArgs,
                                   Block *falseDest = nullptr) {
-  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect);
+  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect->getContext());
   auto secondBlock = ++body->begin();
   auto newBlock = rewriter.createBlock(body, secondBlock);
   auto cmpIdx = rewriter.create<LLVM::ConstantOp>(
@@ -331,7 +331,7 @@ static void insertPersistence(LLVMTypeConverter &converter,
                               ProcOp &proc, LLVM::LLVMType &stateTy,
                               LLVM::LLVMFuncOp &converted,
                               Operation *splitEntryBefore) {
-  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect);
+  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect->getContext());
 
   auto &firstBB = converted.getBody().front();
 
@@ -699,9 +699,9 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
 
     auto voidTy = getVoidType();
     auto i8PtrTy = getVoidPtrType();
-    auto i1Ty = LLVM::LLVMType::getInt1Ty(&getDialect());
-    auto i32Ty = LLVM::LLVMType::getInt32Ty(&getDialect());
-    auto i64Ty = LLVM::LLVMType::getInt64Ty(&getDialect());
+    auto i1Ty = LLVM::LLVMType::getInt1Ty(&typeConverter.getContext());
+    auto i32Ty = LLVM::LLVMType::getInt32Ty(&typeConverter.getContext());
+    auto i64Ty = LLVM::LLVMType::getInt64Ty(&typeConverter.getContext());
 
     // Get the llhd_suspend runtime function.
     auto llhdSuspendTy = LLVM::LLVMType::getFunctionTy(
