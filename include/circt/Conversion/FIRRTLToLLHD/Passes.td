@@ -9,14 +9,13 @@
 
 include "mlir/Pass/PassBase.td"
 
-def ConvertFIRRTLToLLHD : Pass<"convert-firrtl-to-llhd", "ModuleOp"> {
-    let summary = "Convert FIRRTL to Structural LLHD";
-    // TODO: add description
-    let description = [{
-        TODO
-    }];
-
-    let constructor = "circt::llhd::createConvertFIRRTLToLLHDPass()";
+def ConvertFIRRTLToLLHD : Pass<"convert-firrtl-to-llhd", "firrtl::CircuitOp"> {
+  let summary = "Convert FIRRTL to LLHD";
+  let description = [{
+    This pass translates a FIRRTL design into an equivalent structural LLHD
+    description.
+  }];
+  let constructor = "circt::llhd::createConvertFIRRTLToLLHDPass()";
 }
 
 #endif // CIRCT_CONVERSION_FIRRTLTOLLHD_PASSES

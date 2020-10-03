@@ -17,9 +17,13 @@ class OperationPass;
 }  // namespace mlir
 
 namespace circt {
+namespace firrtl {
+class CircuitOp;
+}  // namespace firrtl
+
 namespace llhd {
 using namespace mlir;
-std::unique_ptr<OperationPass<ModuleOp>> createConvertFIRRTLToLLHDPass();
+std::unique_ptr<OperationPass<firrtl::CircuitOp>> createConvertFIRRTLToLLHDPass();
 void registerFIRRTLToLLHDPasses();
 }  // namespace llhd
 }  // namespace circt
