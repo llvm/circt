@@ -76,13 +76,33 @@ func @mul_annulment(%arg0: i11, %arg1: i11, %arg2: i11) -> i11 {
 
 // Flatten
 
-// CHECK-LABEL: func @and_flatten(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+// CHECK-LABEL: func @and_flatten_in_back(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
 // CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.and %arg0, %arg1, %arg2 : i7
 // CHECK-NEXT:    return [[RES]] : i7
 
-func @and_flatten(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+func @and_flatten_in_back(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
   %and0 = rtl.and %arg1, %arg2 : i7
   %0 = rtl.and %arg0, %and0 : i7
+  return %0 : i7
+}
+
+// CHECK-LABEL: func @and_flatten_in_middle(%arg0: i7, %arg1: i7, %arg2: i7, %arg3: i7) -> i7 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.and %arg0, %arg1, %arg2, %arg3 : i7
+// CHECK-NEXT:    return [[RES]] : i7
+
+func @and_flatten_in_middle(%arg0: i7, %arg1: i7, %arg2: i7, %arg3: i7) -> i7 {
+  %and0 = rtl.and %arg1, %arg2 : i7
+  %0 = rtl.and %arg0, %and0, %arg3 : i7
+  return %0 : i7
+}
+
+// CHECK-LABEL: func @and_flatten_in_front(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.and %arg0, %arg1, %arg2 : i7
+// CHECK-NEXT:    return [[RES]] : i7
+
+func @and_flatten_in_front(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+  %and0 = rtl.and %arg0, %arg1 : i7
+  %0 = rtl.and %and0, %arg2 : i7
   return %0 : i7
 }
 
