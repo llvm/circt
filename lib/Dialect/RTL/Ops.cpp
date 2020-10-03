@@ -624,15 +624,7 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
   results.insert<Folder>(context);
 }
 
-//===----// and(x, and(...)) -> and(x, ...) -- flatten
-//      if (auto andOp = inputs.back().getDefiningOp<rtl::AndOp>()) {
-//        auto andOpInputs = andOp.inputs();
-//        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/1));
-//        for (auto input : andOpInputs)
-//          newOperands.push_back(input);
-//        rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
-//        return success();
-//      }------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
