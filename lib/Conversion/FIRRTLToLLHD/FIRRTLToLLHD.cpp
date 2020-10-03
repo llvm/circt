@@ -6,20 +6,12 @@
 
 #include "circt/Conversion/FIRRTLToLLHD/FIRRTLToLLHD.h"
 
+#include "circt/Dialect/FIRRTL/Ops.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
-#include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
-#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
-#include "mlir/IR/BlockAndValueMapping.h"
-#include "mlir/IR/Dominance.h"
-#include "mlir/Pass/Pass.h"
-#include "mlir/Transforms/DialectConversion.h"
-
-#include "circt/Dialect/FIRRTL/Ops.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/Debug.h"
+#include "mlir/Pass/Pass.h"
 
 #define DEBUG_TYPE "firrtl-to-llhd"
 
@@ -39,7 +31,7 @@ struct FIRRTLToLLHDPass : public ConvertFIRRTLToLLHDBase<FIRRTLToLLHDPass> {
   void runOnOperation() override;
   void convertModule(firrtl::FModuleOp &module);
 
-private:
+ private:
   /// A builder to emit LLHD into.
   OpBuilder *builder = nullptr;
 };
@@ -54,7 +46,8 @@ circt::llhd::createConvertFIRRTLToLLHDPass() {
 /// Run the FIRRTL to LLHD conversion pass.
 void FIRRTLToLLHDPass::runOnOperation() {
   auto circuit = getOperation();
-  LLVM_DEBUG(llvm::dbgs() << "Converting FIRRTL circuit `" << circuit.name() << "` to LLHD\n");
+  LLVM_DEBUG(llvm::dbgs() << "Converting FIRRTL circuit `" << circuit.name()
+                          << "` to LLHD\n");
 
   // Setup a builder which we use to emit LLHD ops.
   OpBuilder theBuilder(&getContext());
@@ -75,7 +68,8 @@ void FIRRTLToLLHDPass::runOnOperation() {
 
 /// Convert a single FIRRTL module.
 void FIRRTLToLLHDPass::convertModule(firrtl::FModuleOp &module) {
-  LLVM_DEBUG(llvm::dbgs() << "Converting FIRRTL module `" << module.getName() << "` to LLHD\n");
+  LLVM_DEBUG(llvm::dbgs() << "Converting FIRRTL module `" << module.getName()
+                          << "` to LLHD\n");
 
   // Map the potentially complex FIRRTL module ports to LLHD entity inputs and
   // outputs. This will become fairly involved, since the nested nature of flips
@@ -88,7 +82,8 @@ void FIRRTLToLLHDPass::convertModule(firrtl::FModuleOp &module) {
   SmallVector<StringAttr, 4> in_names;
   SmallVector<StringAttr, 4> out_names;
   for (auto &port : llvm::make_early_inc_range(module_ports)) {
-    LLVM_DEBUG(llvm::dbgs() << "  - Port " << port.first << " of type " << port.second << "\n");
+    LLVM_DEBUG(llvm::dbgs() << "  - Port " << port.first << " of type "
+                            << port.second << "\n");
 
     // For now, let's do a simple approach where we only support flip at the top
     // of a port's aggregate type.
@@ -102,8 +97,8 @@ void FIRRTLToLLHDPass::convertModule(firrtl::FModuleOp &module) {
     // Convert the type. We keep things simple for the time being.
     auto width = type.getBitWidthOrSentinel();
     if (width < 0) {
-
-      module.emitError() << "port " << port.first << " has unsupported type " << port.second;
+      module.emitError() << "port " << port.first << " has unsupported type "
+                         << port.second;
       signalPassFailure();
       continue;
     }
