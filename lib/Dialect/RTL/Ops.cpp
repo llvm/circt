@@ -427,7 +427,16 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
-      /// TODO: and(x, and(...)) -> and(x, ...) -- flatten
+      // and(x, and(...)) -> and(x, ...) -- flatten
+      if (auto andOp = inputs.back().getDefiningOp<rtl::AndOp>()) {
+        auto andOpInputs = andOp.inputs();
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/1));
+        for (auto input : andOpInputs)
+          newOperands.push_back(input);
+        rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
       /// TODO: and(..., x, not(x)) -> and(..., 0) -- complement
       return failure();
     }
@@ -470,7 +479,13 @@ void OrOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), inputs.drop_back());
         return success();
       }
-      /// TODO: or(..., x, x) -> or(..., x) -- idempotent
+
+      // or(..., x, x) -> or(..., x) -- idempotent
+      if (inputs[size - 1] == inputs[size - 2]) {
+        rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), inputs.drop_back());
+        return success();
+      }
+
       /// TODO: or(..., c1, c2) -> or(..., c3) where c3 = c1 | c2 -- constant
       /// folding
       /// TODO: or(x, or(...)) -> or(x, ...) -- flatten
@@ -609,7 +624,15 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
   results.insert<Folder>(context);
 }
 
-//===----------------------------------------------------------------------===//
+//===----// and(x, and(...)) -> and(x, ...) -- flatten
+//      if (auto andOp = inputs.back().getDefiningOp<rtl::AndOp>()) {
+//        auto andOpInputs = andOp.inputs();
+//        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/1));
+//        for (auto input : andOpInputs)
+//          newOperands.push_back(input);
+//        rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
+//        return success();
+//      }------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

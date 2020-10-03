@@ -74,6 +74,18 @@ func @mul_annulment(%arg0: i11, %arg1: i11, %arg2: i11) -> i11 {
   return %0 : i11
 }
 
+// Flatten
+
+// CHECK-LABEL: func @and_flatten(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.and %arg0, %arg1, %arg2 : i7
+// CHECK-NEXT:    return [[RES]] : i7
+
+func @and_flatten(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+  %and0 = rtl.and %arg1, %arg2 : i7
+  %0 = rtl.and %arg0, %and0 : i7
+  return %0 : i7
+}
+
 // Identities
 
 // CHECK-LABEL: func @and_identity(%arg0: i11, %arg1: i11) -> i11 {
@@ -136,5 +148,14 @@ func @mul_identity(%arg0: i11, %arg1: i11) -> i11 {
 func @and_idempotent(%arg0: i11, %arg1 : i11) -> i11 {
   %c9_i11 = rtl.constant(9 : i11) : i11
   %0 = rtl.and %arg0, %arg1, %c9_i11, %c9_i11 : i11
+  return %0 : i11
+}
+
+// CHECK-LABEL: func @or_idempotent(%arg0: i11, %arg1: i11) -> i11 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.or %arg0, %arg1
+// CHECK-NEXT:    return [[RES]]
+
+func @or_idempotent(%arg0: i11, %arg1 : i11) -> i11 {
+  %0 = rtl.or %arg0, %arg1, %arg1, %arg1 : i11
   return %0 : i11
 }
