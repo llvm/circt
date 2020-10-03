@@ -800,6 +800,15 @@ bool HandshakeBuilder::visitHandshake(BufferOp op) {
 
   Value clock = portList[2][0];
   Value reset = portList[3][0];
+
+  // FIXME: This looks unimplemented?
+  (void)outputReady;
+  (void)outputValid;
+  (void)reset;
+  (void)clock;
+  (void)inputValid;
+  (void)inputReady;
+
   return true;
 }
 
