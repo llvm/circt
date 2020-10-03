@@ -428,13 +428,30 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       }
 
       // and(x, and(...)) -> and(x, ...) -- flatten
-      if (auto andOp = inputs.back().getDefiningOp<rtl::AndOp>()) {
-        auto andOpInputs = andOp.inputs();
-        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/1));
-        for (auto input : andOpInputs)
-          newOperands.push_back(input);
-        rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
-        return success();
+      for (size_t i = 0; i != size; ++i) {
+        if (!inputs[i].hasOneUse())
+          continue;
+        if (auto andOp = inputs[i].getDefiningOp<rtl::AndOp>()) {
+          auto andOpInputs = andOp.inputs();
+          SmallVector<Value, 4> newOperands;
+          newOperands.reserve(size + andOpInputs.size());
+
+          size_t j = 0;
+          for (; j != i; ++j)
+            // Push back original operands until the andOp.
+            newOperands.push_back(inputs[j]);
+
+          for (auto andOpInput : andOpInputs)
+            // Push back operands of the flattened andOp.
+            newOperands.push_back(andOpInput);
+
+          for (j = i + 1; j != size; ++j)
+            // Push back original operands after the andOp.
+            newOperands.push_back(inputs[j]);
+
+          rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
+          return success();
+        }
       }
 
       /// TODO: and(..., x, not(x)) -> and(..., 0) -- complement
@@ -528,7 +545,6 @@ void XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       }
 
       /// TODO: xor(..., '1) -> not(xor(...))
-      /// TODO: xor(..., x, x) -> xor(..., 0) -- idempotent?
       /// TODO: xor(..., c1, c2) -> xor(..., c3) where c3 = c1 ^ c2 --
       /// constant folding
       /// TODO: xor(x, xor(...)) -> xor(x, ...) -- flatten
