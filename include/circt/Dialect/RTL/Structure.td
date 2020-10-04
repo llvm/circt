@@ -13,17 +13,17 @@ def RTLModuleOp : RTLOp<"module",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"OpBuilder &builder, OperationState &result, StringAttr name, "
-              "ArrayRef<RTLModulePortInfo> ports">
+    OpBuilder<"StringAttr name, ArrayRef<RTLModulePortInfo> ports">
   ];
 
   let extraClassDeclaration = [{
     using FunctionLike::getBody;
 
     // Implement RegionKindInterface.
-    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
 
-    void getRTLModulePortInfo(Operation *op, SmallVectorImpl<RTLModulePortInfo> &results);
+    void getRTLModulePortInfo(Operation *op,
+                              SmallVectorImpl<RTLModulePortInfo> &results);
     
     // Decode information about the input and output ports on this module.
     void getRTLPortInfo(SmallVectorImpl<RTLModulePortInfo> &results) {

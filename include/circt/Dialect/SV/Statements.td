@@ -38,8 +38,7 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator]>, HasCustomParserPrinter {
   // implicitly installed.
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"OpBuilder &builder, OperationState &result, "
-              "StringRef cond">
+    OpBuilder<"StringRef cond">
   ];
 
   let extraClassDeclaration = [{
@@ -62,8 +61,7 @@ def IfOp : SVOp<"if", [HasRegionTerminator]>,
   // implicitly installed.
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"OpBuilder &builder, OperationState &result, "
-              "Value cond">
+    OpBuilder<"Value cond">
   ];
 
   let extraClassDeclaration = [{
@@ -88,8 +86,7 @@ def AlwaysAtPosEdgeOp : SVOp<"alwaysat_posedge", [HasRegionTerminator]>,
   // implicitly installed.
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"OpBuilder &builder, OperationState &result, "
-              "Value cond">
+    OpBuilder<"Value cond">
   ];
 
   let extraClassDeclaration = [{

@@ -29,7 +29,7 @@ def ConstantOp
   }];
 
   let builders = [
-    OpBuilder<"OpBuilder &builder, OperationState &result, const APInt &value">
+    OpBuilder<"const APInt &value">
   ];
   let extraClassDeclaration = [{
     APInt getValue() { return getAttrOfType<IntegerAttr>("value").getValue(); }
@@ -126,7 +126,7 @@ def XorROp : UnaryI1ReductionRTLOp<"xorr">;
 // Concatenate a variadic list of operands together.
 def ConcatOp : VariadicRTLOp<"concat"> {
   let builders = [
-    OpBuilder<"OpBuilder &builder, OperationState &result, ValueRange inputs">
+    OpBuilder<"ValueRange inputs">
   ];
 }
 
