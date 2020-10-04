@@ -437,7 +437,28 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
-      /// TODO: and(x, and(...)) -> and(x, ...) -- flatten
+      // and(x, and(...)) -> and(x, ...) -- flatten
+      for (size_t i = 0; i != size; ++i) {
+        if (!inputs[i].hasOneUse())
+          continue;
+        auto andOp = inputs[i].getDefiningOp<rtl::AndOp>();
+        if (!andOp)
+          continue;
+
+        auto flattenedAndOpInputs = andOp.inputs();
+        SmallVector<Value, 4> newOperands;
+        newOperands.reserve(size + flattenedAndOpInputs.size());
+
+        auto andOpPosition = inputs.begin() + i;
+        newOperands.append(inputs.begin(), andOpPosition);
+        newOperands.append(flattenedAndOpInputs.begin(),
+                           flattenedAndOpInputs.end());
+        newOperands.append(andOpPosition + 1, inputs.end());
+
+        rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
       /// TODO: and(..., x, not(x)) -> and(..., 0) -- complement
       return failure();
     }
@@ -480,7 +501,13 @@ void OrOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), inputs.drop_back());
         return success();
       }
-      /// TODO: or(..., x, x) -> or(..., x) -- idempotent
+
+      // or(..., x, x) -> or(..., x) -- idempotent
+      if (inputs[size - 1] == inputs[size - 2]) {
+        rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), inputs.drop_back());
+        return success();
+      }
+
       /// TODO: or(..., c1, c2) -> or(..., c3) where c3 = c1 | c2 -- constant
       /// folding
       /// TODO: or(x, or(...)) -> or(x, ...) -- flatten
@@ -497,6 +524,10 @@ OpFoldResult XorOp::fold(ArrayRef<Attribute> operands) {
   // xor(x) -> x -- noop
   if (size == 1u)
     return inputs()[0];
+
+  // xor(x, x) -> xor ( 0 ) -- idempotent
+  if (size == 2u && inputs()[0] == inputs()[1])
+    return IntegerAttr::get(getType(), 0);
 
   return {};
 }
@@ -522,8 +553,16 @@ void XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
+      if (inputs[size - 1] == inputs[size - 2]) {
+        assert(size > 2 &&
+               "expected idompotent case for 2 elements handled already.");
+        // xor(..., x, x) -> xor (...) -- idempotent
+        rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(),
+                                           inputs.drop_back(/*n=*/2));
+        return success();
+      }
+
       /// TODO: xor(..., '1) -> not(xor(...))
-      /// TODO: xor(..., x, x) -> xor(..., 0) -- idempotent?
       /// TODO: xor(..., c1, c2) -> xor(..., c3) where c3 = c1 ^ c2 --
       /// constant folding
       /// TODO: xor(x, xor(...)) -> xor(x, ...) -- flatten

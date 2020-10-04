@@ -74,6 +74,38 @@ func @mul_annulment(%arg0: i11, %arg1: i11, %arg2: i11) -> i11 {
   return %0 : i11
 }
 
+// Flatten
+
+// CHECK-LABEL: func @and_flatten_in_back(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.and %arg0, %arg1, %arg2 : i7
+// CHECK-NEXT:    return [[RES]] : i7
+
+func @and_flatten_in_back(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+  %and0 = rtl.and %arg1, %arg2 : i7
+  %0 = rtl.and %arg0, %and0 : i7
+  return %0 : i7
+}
+
+// CHECK-LABEL: func @and_flatten_in_middle(%arg0: i7, %arg1: i7, %arg2: i7, %arg3: i7) -> i7 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.and %arg0, %arg1, %arg2, %arg3 : i7
+// CHECK-NEXT:    return [[RES]] : i7
+
+func @and_flatten_in_middle(%arg0: i7, %arg1: i7, %arg2: i7, %arg3: i7) -> i7 {
+  %and0 = rtl.and %arg1, %arg2 : i7
+  %0 = rtl.and %arg0, %and0, %arg3 : i7
+  return %0 : i7
+}
+
+// CHECK-LABEL: func @and_flatten_in_front(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.and %arg0, %arg1, %arg2 : i7
+// CHECK-NEXT:    return [[RES]] : i7
+
+func @and_flatten_in_front(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+  %and0 = rtl.and %arg0, %arg1 : i7
+  %0 = rtl.and %and0, %arg2 : i7
+  return %0 : i7
+}
+
 // Identities
 
 // CHECK-LABEL: func @and_identity(%arg0: i11, %arg1: i11) -> i11 {
@@ -136,5 +168,33 @@ func @mul_identity(%arg0: i11, %arg1: i11) -> i11 {
 func @and_idempotent(%arg0: i11, %arg1 : i11) -> i11 {
   %c9_i11 = rtl.constant(9 : i11) : i11
   %0 = rtl.and %arg0, %arg1, %c9_i11, %c9_i11 : i11
+  return %0 : i11
+}
+
+// CHECK-LABEL: func @or_idempotent(%arg0: i11, %arg1: i11) -> i11 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.or %arg0, %arg1
+// CHECK-NEXT:    return [[RES]]
+
+func @or_idempotent(%arg0: i11, %arg1 : i11) -> i11 {
+  %0 = rtl.or %arg0, %arg1, %arg1, %arg1 : i11
+  return %0 : i11
+}
+
+// CHECK-LABEL: func @xor_idempotent(%arg0: i11, %arg1: i11, %arg2: i11) -> i11 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.xor %arg0, %arg1
+// CHECK-NEXT:    return [[RES]]
+
+func @xor_idempotent(%arg0: i11, %arg1: i11, %arg2: i11) -> i11 {
+  %0 = rtl.xor %arg0, %arg1, %arg2, %arg2 : i11
+  return %0 : i11
+}
+
+// CHECK-LABEL: func @xor_idempotent_two_arguments(%arg0: i11) -> i11 {
+// CHECK-NEXT:    %c0_i11 = rtl.constant(0 : i11) : i11
+// CHECK-NEXT:    return %c0_i11 : i11
+
+func @xor_idempotent_two_arguments(%arg0: i11) -> i11 {
+  %c0_i11 = rtl.constant(0 : i11) : i11
+  %0 = rtl.xor %arg0, %arg0 : i11
   return %0 : i11
 }
