@@ -524,7 +524,7 @@ OpFoldResult XorOp::fold(ArrayRef<Attribute> operands) {
   // xor(x) -> x -- noop
   if (size == 1u)
     return inputs()[0];
-  
+
   // xor(x, x) -> 0 -- idempotent
   if (size == 2u && inputs()[0] == inputs()[1])
     return IntegerAttr::get(getType(), 0);
