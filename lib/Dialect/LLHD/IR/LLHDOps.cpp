@@ -396,27 +396,28 @@ OpFoldResult llhd::ExtractElementOp::fold(ArrayRef<Attribute> operands) {
   uint64_t index = indexAttr().getInt();
 
   // llhd.extract_element(llhd.shr(hidden, base, constant amt), index)
-  if (auto shrOp = target().getDefiningOp<llhd::ShrOp>()) {
-    IntegerAttr intAttr;
-    if (matchPattern(shrOp.amount(), m_Constant<IntegerAttr>(&intAttr))) {
-      uint64_t amt = intAttr.getValue().getZExtValue();
+  IntegerAttr intAttr;
+  if (matchPattern(target(),
+                   m_Op<llhd::ShrOp>(matchers::m_Any(), matchers::m_Any(),
+                                     m_Constant<IntegerAttr>(&intAttr)))) {
+    uint64_t amt = intAttr.getValue().getZExtValue();
+    auto shrOp = cast<llhd::ShrOp>(target().getDefiningOp());
 
-      // with amt + index < baseWidth
-      //   => llhd.extract_element(base, amt + index)
-      if (amt + index < shrOp.getBaseWidth()) {
-        targetMutable().assign(shrOp.base());
-        setAttr("index", IntegerAttr::get(indexAttr().getType(), amt + index));
-        return result();
-      }
+    // with amt + index < baseWidth
+    //   => llhd.extract_element(base, amt + index)
+    if (amt + index < shrOp.getBaseWidth()) {
+      targetMutable().assign(shrOp.base());
+      setAttr("index", IntegerAttr::get(indexAttr().getType(), amt + index));
+      return result();
+    }
 
-      // with amt + index >= baseWidth && amt + index < baseWidth + hiddenWidth
-      //   => llhd.extract_element(hidden, amt + index - baseWidth)
-      if (amt + index < shrOp.getBaseWidth() + shrOp.getHiddenWidth()) {
-        targetMutable().assign(shrOp.hidden());
-        setAttr("index", IntegerAttr::get(indexAttr().getType(),
-                                          amt + index - shrOp.getBaseWidth()));
-        return result();
-      }
+    // with amt + index >= baseWidth && amt + index < baseWidth + hiddenWidth
+    //   => llhd.extract_element(hidden, amt + index - baseWidth)
+    if (amt + index < shrOp.getBaseWidth() + shrOp.getHiddenWidth()) {
+      targetMutable().assign(shrOp.hidden());
+      setAttr("index", IntegerAttr::get(indexAttr().getType(),
+                                        amt + index - shrOp.getBaseWidth()));
+      return result();
     }
   }
 
@@ -440,9 +441,7 @@ OpFoldResult llhd::ExtractElementOp::fold(ArrayRef<Attribute> operands) {
   // llhd.extract_element(llhd.tuple(a_0, ..., a_n), i) => a_i
   if (auto tupleOp = target().getDefiningOp<llhd::TupleOp>()) {
     uint64_t index = indexAttr().getValue().getZExtValue();
-    if (index < tupleOp.values().size()) {
-      return tupleOp.values()[index];
-    }
+    return tupleOp.values()[index];
   }
 
   return nullptr;
@@ -528,7 +527,6 @@ LogicalResult llhd::DrvOp::fold(ArrayRef<Attribute> operands,
     return failure();
 
   if (matchPattern(enable(), m_Zero())) {
-    getOperation()->dropAllReferences();
     erase();
     return success();
   }
