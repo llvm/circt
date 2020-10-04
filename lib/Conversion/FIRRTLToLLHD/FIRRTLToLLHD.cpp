@@ -193,10 +193,7 @@ void FIRRTLToLLHDPass::convertModule(firrtl::FModuleOp &module) {
 /// Get the LLHD value that has been previously emitted for a FIRRTL operand.
 Value FIRRTLToLLHDPass::getConvertedValue(Value operand) {
   auto it = valueMapping.find(operand);
-  if (it == valueMapping.end()) {
-    emitError(operand.getLoc(), "operand has not been converted to LLHD");
-    return {};
-  }
+  assert(it != valueMapping.end() && "operand has not been converted to LLHD");
   return it->second;
 }
 
