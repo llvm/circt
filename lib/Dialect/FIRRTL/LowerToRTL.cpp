@@ -353,9 +353,8 @@ LogicalResult FIRRTLLowering::visitExpr(NotPrimOp op) {
   if (!operand)
     return failure();
   // ~x  ---> x ^ 0xFF
-  auto width = operand.getType().cast<IntegerType>().getWidth();
-  auto allOnes = builder->create<rtl::ConstantOp>(
-      op.getLoc(), APInt::getAllOnesValue(width));
+  auto type = operand.getType().cast<IntegerType>();
+  auto allOnes = builder->create<rtl::ConstantOp>(op.getLoc(), -1, type);
   return setLoweringTo<rtl::XorOp>(op, ValueRange({operand, allOnes}),
                                    ArrayRef<NamedAttribute>{});
 }
@@ -373,8 +372,8 @@ LogicalResult FIRRTLLowering::visitExpr(NegPrimOp op) {
   else
     operand = builder->create<rtl::ZExtOp>(op.getLoc(), resultType, operand);
 
-  auto zero = builder->create<rtl::ConstantOp>(
-      op.getLoc(), APInt(resultType.cast<IntegerType>().getWidth(), 0));
+  auto zero = builder->create<rtl::ConstantOp>(op.getLoc(), 0,
+                                               resultType.cast<IntegerType>());
   return setLoweringTo<rtl::SubOp>(op, zero, operand);
 }
 

@@ -60,7 +60,7 @@ void removeBasicBlocks(handshake::FuncOp funcOp) {
   for (auto &block : llvm::make_early_inc_range(llvm::drop_begin(funcOp, 1))) {
     block.clear();
     block.dropAllDefinedValueUses();
-    for (int i = 0; i < block.getNumArguments(); i++) {
+    for (size_t i = 0; i < block.getNumArguments(); i++) {
       block.eraseArgument(i);
     }
     block.erase();
@@ -762,7 +762,6 @@ void checkMergePredecessors(Operation *op) {
       op->emitError("merge operations in entry block must have a ")
           << "single predecessor";
   } else {
-    int data_inputs = mergeOp.dataOperands().size();
     if (operand_count > getBlockPredecessorCount(block))
       op->emitError("merge operation has ")
           << operand_count << " data inputs, but only "
@@ -835,6 +834,7 @@ Value getOpMemRef(Operation *op) {
     return access.memref;
   }
   op->emitError("Unknown Op type");
+  return Value();
 }
 
 bool isMemoryOp(Operation *op) {

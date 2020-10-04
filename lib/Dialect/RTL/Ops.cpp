@@ -279,8 +279,8 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
   return valueAttr();
 }
 
-/// Build a ConstantOp from an APInt and a FIRRTL type, handling the attribute
-/// formation for the 'value' attribute.
+/// Build a ConstantOp from an APInt, infering the result type from the
+/// width of the APInt.
 void ConstantOp::build(OpBuilder &builder, OperationState &result,
                        const APInt &value) {
 
@@ -288,6 +288,16 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
                                builder.getContext());
   auto attr = builder.getIntegerAttr(type, value);
   return build(builder, result, type, attr);
+}
+
+/// This builder allows construction of small signed integers like 0, 1, -1
+/// matching a specified MLIR IntegerType.  This shouldn't be used for general
+/// constant folding because it only works with values that can be expressed in
+/// an int64_t.  Use APInt's instead.
+void ConstantOp::build(OpBuilder &builder, OperationState &result,
+                       int64_t value, IntegerType type) {
+  auto numBits = type.getWidth();
+  build(builder, result, APInt(numBits, (uint64_t)value, /*isSigned=*/true));
 }
 
 void ConstantOp::getAsmResultNames(
