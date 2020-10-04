@@ -11,7 +11,7 @@ add_mlir_library(MLIRHandshakeToFIRRTL
   LINK_LIBS PUBLIC
   MLIRIR
   MLIRPass
-  MLIRStandardOps
+  MLIRStandard
   MLIRSupport
   MLIRTransforms
   MLIRHandshakeOps
