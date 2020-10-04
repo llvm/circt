@@ -441,27 +441,22 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       for (size_t i = 0; i != size; ++i) {
         if (!inputs[i].hasOneUse())
           continue;
-        if (auto andOp = inputs[i].getDefiningOp<rtl::AndOp>()) {
-          auto andOpInputs = andOp.inputs();
-          SmallVector<Value, 4> newOperands;
-          newOperands.reserve(size + andOpInputs.size());
+        auto andOp = inputs[i].getDefiningOp<rtl::AndOp>();
+        if (!andOp)
+          continue;
 
-          size_t j = 0;
-          for (; j != i; ++j)
-            // Push back original operands until the andOp.
-            newOperands.push_back(inputs[j]);
+        auto flattenedAndOpInputs = andOp.inputs();
+        SmallVector<Value, 4> newOperands;
+        newOperands.reserve(size + flattenedAndOpInputs.size());
 
-          for (auto andOpInput : andOpInputs)
-            // Push back operands of the flattened andOp.
-            newOperands.push_back(andOpInput);
+        auto andOpPosition = inputs.begin() + i;
+        newOperands.append(inputs.begin(), andOpPosition);
+        newOperands.append(flattenedAndOpInputs.begin(),
+                           flattenedAndOpInputs.end());
+        newOperands.append(andOpPosition + 1, inputs.end());
 
-          for (j = i + 1; j != size; ++j)
-            // Push back original operands after the andOp.
-            newOperands.push_back(inputs[j]);
-
-          rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
-          return success();
-        }
+        rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
+        return success();
       }
 
       /// TODO: and(..., x, not(x)) -> and(..., 0) -- complement
@@ -551,6 +546,23 @@ void XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
         rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(),
                                            inputs.drop_back());
+        return success();
+      }
+
+      // xor(..., x, x)->xor (..., 0)-- idempotent
+      if (inputs[size - 1] == inputs[size - 2]) {
+        if (size == 2) {
+          // If these are the only two remaining operands, replace with zero.
+          auto zero = rewriter.create<ConstantOp>(
+              op.getLoc(), 0, op.getType().cast<IntegerType>());
+
+          SmallVector<Value, 1> zeroOperand({zero});
+          rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(), zeroOperand);
+        } else {
+          // There are greater than 2 operands left. drop the last two.
+          rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(),
+                                             inputs.drop_back(/*n=*/2));
+        }
         return success();
       }
 
