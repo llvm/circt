@@ -525,6 +525,10 @@ OpFoldResult XorOp::fold(ArrayRef<Attribute> operands) {
   if (size == 1u)
     return inputs()[0];
 
+  // xor(x, x) -> xor ( 0 ) -- idempotent
+  if (size == 2u && inputs()[0] == inputs()[1])
+    return IntegerAttr::get(getType(), 0);
+
   return {};
 }
 
@@ -550,18 +554,11 @@ void XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       }
 
       if (inputs[size - 1] == inputs[size - 2]) {
-        if (size == 2) {
-          // xor(x, x) -> xor ( 0 ) -- idempotent
-          auto zero = rewriter.create<ConstantOp>(
-              op.getLoc(), 0, op.getType().cast<IntegerType>());
-
-          SmallVector<Value, 1> zeroOperand({zero});
-          rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(), zeroOperand);
-        } else {
-          // xor(..., x, x) -> xor (...) -- idempotent
-          rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(),
-                                             inputs.drop_back(/*n=*/2));
-        }
+        assert(size > 2 &&
+               "expected idompotent case for 2 elements handled already.");
+        // xor(..., x, x) -> xor (...) -- idempotent
+        rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(),
+                                           inputs.drop_back(/*n=*/2));
         return success();
       }
 
