@@ -29,7 +29,15 @@ def ConstantOp
   }];
 
   let builders = [
-    OpBuilder<"const APInt &value">
+    /// Build a ConstantOp from an APInt, infering the result type from the
+    /// width of the APInt.
+    OpBuilder<"const APInt &value">,
+
+    /// This builder allows construction of small signed integers like 0, 1, -1
+    /// matching a specified MLIR IntegerType.  This shouldn't be used for
+    /// general constant folding because it only works with values that can be
+    /// expressed in an int64_t.  Use APInt's instead.
+    OpBuilder<"int64_t value, IntegerType type">
   ];
   let extraClassDeclaration = [{
     APInt getValue() { return getAttrOfType<IntegerAttr>("value").getValue(); }
