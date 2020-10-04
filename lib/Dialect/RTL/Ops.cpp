@@ -549,17 +549,16 @@ void XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
-      // xor(..., x, x)->xor (..., 0)-- idempotent
       if (inputs[size - 1] == inputs[size - 2]) {
         if (size == 2) {
-          // If these are the only two remaining operands, replace with zero.
+          // xor(x, x) -> xor ( 0 ) -- idempotent
           auto zero = rewriter.create<ConstantOp>(
               op.getLoc(), 0, op.getType().cast<IntegerType>());
 
           SmallVector<Value, 1> zeroOperand({zero});
           rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(), zeroOperand);
         } else {
-          // There are greater than 2 operands left. drop the last two.
+          // xor(..., x, x) -> xor (...) -- idempotent
           rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(),
                                              inputs.drop_back(/*n=*/2));
         }
