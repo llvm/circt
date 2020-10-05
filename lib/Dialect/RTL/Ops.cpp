@@ -175,7 +175,7 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser,
   // Parse the optional function body.
   auto *body = result.addRegion();
   if (parser.parseOptionalRegion(
-      *body, entryArgs, entryArgs.empty() ? ArrayRef<Type>() : argTypes))
+          *body, entryArgs, entryArgs.empty() ? ArrayRef<Type>() : argTypes))
     return failure();
 
   RTLModuleOp::ensureTerminator(*body, parser.getBuilder(), result.location);
@@ -213,7 +213,7 @@ static void print(OpAsmPrinter &p, RTLModuleOp op) {
   Region &body = op.getBody();
   if (!body.empty())
     p.printRegion(body, /*printEntryBlockArgs=*/false,
-        /*printBlockTerminators=*/false);
+                  /*printBlockTerminators=*/false);
 }
 
 static LogicalResult verifyRTLInstanceOp(RTLInstanceOp op) {
@@ -563,7 +563,7 @@ void XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
       if (inputs[size - 1] == inputs[size - 2]) {
         assert(size > 2 &&
-            "expected idompotent case for 2 elements handled already.");
+               "expected idompotent case for 2 elements handled already.");
         // xor(..., x, x) -> xor (...) -- idempotent
         rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(),
                                            inputs.drop_back(/*n=*/2));
