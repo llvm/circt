@@ -408,7 +408,7 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       auto size = inputs.size();
       assert(size > 1 && "expected 2 or more operands");
 
-      APInt value;
+      APInt value, value2;
 
       // and(..., '1) -> and(...) -- identity
       if (matchPattern(inputs.back(), m_RConstant(value)) &&
@@ -424,8 +424,6 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                            inputs.drop_back());
         return success();
       }
-
-      APInt value2;
 
       // and(..., c1, c2) -> and(..., c3) -- constant folding
       if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
@@ -609,7 +607,7 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       auto size = inputs.size();
       assert(size > 1 && "expected 2 or more operands");
 
-      APInt value;
+      APInt value, value2;
 
       // add(..., 0) -> add(...) -- identity
       if (matchPattern(inputs.back(), m_RConstant(value)) &&
@@ -619,9 +617,17 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
+      // add(..., c1, c2) -> add(..., c3) where c3 = c1 + c2 -- constant folding
+      if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
+          matchPattern(inputs[size - 2], m_RConstant(value2))) {
+        auto cst = rewriter.create<ConstantOp>(op.getLoc(), value + value2);
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+        newOperands.push_back(cst);
+        rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
       /// TODO: add(..., x, x) -> add(..., shl(x, 1))
-      /// TODO: add(..., c1, c2) -> add(..., c3) where c3 = c1 + c2 --
-      /// constant folding
       /// TODO: add(x, add(...)) -> add(x, ...) -- flatten
       return failure();
     }
@@ -655,7 +661,7 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       auto size = inputs.size();
       assert(size > 1 && "expected 2 or more operands");
 
-      APInt value;
+      APInt value, value2;
 
       // mul(..., 1) -> mul(...) -- identity
       if (matchPattern(inputs.back(), m_RConstant(value)) && (value == 1u)) {
@@ -664,10 +670,17 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
-      /// TODO: mul(..., c1, c2) -> mul(..., c3) where c3 = c1 * c2 --
-      /// constant folding
-      /// TODO: mul(a, mul(...)) -> mul(a, ...) -- flatten
+      // mul(..., c1, c2) -> mul(..., c3) where c3 = c1 * c2 -- constant folding
+      if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
+          matchPattern(inputs[size - 2], m_RConstant(value2))) {
+        auto cst = rewriter.create<ConstantOp>(op.getLoc(), value * value2);
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+        newOperands.push_back(cst);
+        rewriter.replaceOpWithNewOp<MulOp>(op, op.getType(), newOperands);
+        return success();
+      }
 
+      /// TODO: mul(a, mul(...)) -> mul(a, ...) -- flatten
       return failure();
     }
   };

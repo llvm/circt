@@ -56,6 +56,30 @@ func @xor_cstfold(%arg0: i7) -> i7 {
   return %0 : i7
 }
 
+// CHECK-LABEL: func @add_cstfold(%arg0: i7) -> i7 {
+// CHECK-NEXT:    %c15_i7 = rtl.constant(15 : i7)
+// CHECK-NEXT:    %0 = rtl.add %arg0, %c15_i7 : i7
+// CHECK-NEXT:    return %0 : i7
+
+func @add_cstfold(%arg0: i7) -> i7 {
+  %c10_i7 = rtl.constant(10 : i7) : i7
+  %c5_i7 = rtl.constant(5 : i7) : i7
+  %0 = rtl.add %arg0, %c10_i7, %c5_i7 : i7
+  return %0 : i7
+}
+
+// CHECK-LABEL: func @mul_cstfold(%arg0: i7) -> i7 {
+// CHECK-NEXT:    %c15_i7 = rtl.constant(15 : i7)
+// CHECK-NEXT:    %0 = rtl.mul %arg0, %c15_i7 : i7
+// CHECK-NEXT:    return %0 : i7
+
+func @mul_cstfold(%arg0: i7) -> i7 {
+  %c3_i7 = rtl.constant(3 : i7) : i7
+  %c5_i7 = rtl.constant(5 : i7) : i7
+  %0 = rtl.mul %arg0, %c3_i7, %c5_i7 : i7
+  return %0 : i7
+}
+
 // CHECK-LABEL: func @variadic_noop(%arg0: i11) -> i11 {
 // CHECK-NEXT:    return %arg0
 
