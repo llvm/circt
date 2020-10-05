@@ -102,3 +102,23 @@ firrtl.circuit "Foo" {
     %m = firrtl.mem "Undefined" {depth = 32 : i64, name = "m", readLatency = 0 : i32, writeLatency = 0 : i32} : !firrtl.bundle<>
   }
 }
+
+
+// -----
+
+firrtl.circuit "Foo" {
+  firrtl.module @Foo(%clk: !firrtl.clock) {
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive type (contain no flips)}}
+    %a = firrtl.reg %clk {name = "a"} : (!firrtl.clock) -> !firrtl.flip<uint<1>>
+  }
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+  firrtl.module @Foo(%clk: !firrtl.clock, %reset: !firrtl.uint<1>) {
+    %zero = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+    // expected-error @+1 {{'firrtl.reginit' op result #0 must be a passive type (contain no flips)}}
+    %a = firrtl.reginit %clk, %reset, %zero {name = "a"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.flip<uint<1>>
+  }
+}

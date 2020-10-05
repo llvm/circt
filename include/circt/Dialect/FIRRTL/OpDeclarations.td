@@ -102,8 +102,8 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
     }];
 
   let arguments = (ins ClockType:$clockVal, OptionalAttr<StrAttr>:$name);
-  let results = (outs AnyType:$result);
-  
+  let results = (outs PassiveType:$result);
+
   let assemblyFormat = [{
      operands attr-dict `:` functional-type(operands, $result)
   }];
@@ -120,8 +120,8 @@ def RegInitOp : FIRRTLOp<"reginit", [/*MemAlloc*/]> {
 
   let arguments = (ins ClockType:$clockVal, ResetType:$resetSignal,
                        AnyType:$resetValue, OptionalAttr<StrAttr>:$name);
-  let results = (outs AnyType:$result);
-  
+  let results = (outs PassiveType:$result);
+
   let assemblyFormat = [{
      operands attr-dict `:` functional-type(operands, $result)
   }];
