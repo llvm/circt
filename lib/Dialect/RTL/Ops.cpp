@@ -516,7 +516,28 @@ void OrOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
-      /// TODO: or(x, or(...)) -> or(x, ...) -- flatten
+      // or(x, or(...)) -> or(x, ...) -- flatten
+      for (size_t i = 0; i != size; ++i) {
+        if (!inputs[i].hasOneUse())
+          continue;
+        auto orOp = inputs[i].getDefiningOp<rtl::OrOp>();
+        if (!orOp)
+          continue;
+
+        auto flattenedOrOpInputs = orOp.inputs();
+        SmallVector<Value, 4> newOperands;
+        newOperands.reserve(size + flattenedOrOpInputs.size());
+
+        auto orOpPosition = inputs.begin() + i;
+        newOperands.append(inputs.begin(), orOpPosition);
+        newOperands.append(flattenedOrOpInputs.begin(),
+                           flattenedOrOpInputs.end());
+        newOperands.append(orOpPosition + 1, inputs.end());
+
+        rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
       /// TODO: or(..., x, not(x)) -> or(..., '1) -- complement
       return failure();
     }
@@ -578,8 +599,29 @@ void XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
+      // xor(x, xor(...)) -> xor(x, ...) -- flatten
+      for (size_t i = 0; i != size; ++i) {
+        if (!inputs[i].hasOneUse())
+          continue;
+        auto xorOp = inputs[i].getDefiningOp<rtl::XorOp>();
+        if (!xorOp)
+          continue;
+
+        auto flattenedXorOpInputs = xorOp.inputs();
+        SmallVector<Value, 4> newOperands;
+        newOperands.reserve(size + flattenedXorOpInputs.size());
+
+        auto xorOpPosition = inputs.begin() + i;
+        newOperands.append(inputs.begin(), xorOpPosition);
+        newOperands.append(flattenedXorOpInputs.begin(),
+                           flattenedXorOpInputs.end());
+        newOperands.append(xorOpPosition + 1, inputs.end());
+
+        rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
       /// TODO: xor(..., '1) -> not(xor(...))
-      /// TODO: xor(x, xor(...)) -> xor(x, ...) -- flatten
       /// TODO: xor(..., x, not(x)) -> xor(..., '1)
       return failure();
     }
@@ -627,8 +669,30 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
+      // add(x, add(...)) -> add(x, ...) -- flatten
+      for (size_t i = 0; i != size; ++i) {
+        if (!inputs[i].hasOneUse())
+          continue;
+        auto addOp = inputs[i].getDefiningOp<rtl::AddOp>();
+        if (!addOp)
+          continue;
+
+        auto flattenedAddOpInputs = addOp.inputs();
+        SmallVector<Value, 4> newOperands;
+        newOperands.reserve(size + flattenedAddOpInputs.size());
+
+        auto addOpPosition = inputs.begin() + i;
+        newOperands.append(inputs.begin(), addOpPosition);
+        newOperands.append(flattenedAddOpInputs.begin(),
+                           flattenedAddOpInputs.end());
+        newOperands.append(addOpPosition + 1, inputs.end());
+
+        rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
       /// TODO: add(..., x, x) -> add(..., shl(x, 1))
-      /// TODO: add(x, add(...)) -> add(x, ...) -- flatten
+
       return failure();
     }
   };
@@ -680,7 +744,28 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
-      /// TODO: mul(a, mul(...)) -> mul(a, ...) -- flatten
+      // mul(a, mul(...)) -> mul(a, ...) -- flatten
+      for (size_t i = 0; i != size; ++i) {
+        if (!inputs[i].hasOneUse())
+          continue;
+        auto mulOp = inputs[i].getDefiningOp<rtl::MulOp>();
+        if (!mulOp)
+          continue;
+
+        auto flattenedMulOpInputs = mulOp.inputs();
+        SmallVector<Value, 4> newOperands;
+        newOperands.reserve(size + flattenedMulOpInputs.size());
+
+        auto mulOpPosition = inputs.begin() + i;
+        newOperands.append(inputs.begin(), mulOpPosition);
+        newOperands.append(flattenedMulOpInputs.begin(),
+                           flattenedMulOpInputs.end());
+        newOperands.append(mulOpPosition + 1, inputs.end());
+
+        rewriter.replaceOpWithNewOp<MulOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
       return failure();
     }
   };
