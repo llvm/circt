@@ -73,3 +73,33 @@ func @convert_extract_slice_int(%cI32 : i32, %cI100 : i100) {
 llhd.entity @convert_extract_slice_sig (%sI32 : !llhd.sig<i32>) -> () {
   %0 = llhd.extract_slice %sI32, 0 : !llhd.sig<i32> -> !llhd.sig<i10>
 }
+
+// CHECK-LABEL:   llvm.func @convert_insert_slice_int(
+// CHECK-SAME:                                        %[[VAL_0:.*]]: !llvm.i1,
+// CHECK-SAME:                                        %[[VAL_1:.*]]: !llvm.i10) {
+// CHECK:           %[[VAL_2:.*]] = llvm.mlir.constant(0 : index) : !llvm.i64
+// CHECK:           %[[VAL_3:.*]] = llvm.trunc %[[VAL_2]] : !llvm.i64 to !llvm.i1
+// CHECK:           %[[VAL_4:.*]] = llvm.mlir.constant(true) : !llvm.i1
+// CHECK:           %[[VAL_5:.*]] = llvm.mlir.constant(false) : !llvm.i1
+// CHECK:           %[[VAL_6:.*]] = llvm.zext %[[VAL_0]] : !llvm.i1 to !llvm.i1
+// CHECK:           %[[VAL_7:.*]] = llvm.shl %[[VAL_6]], %[[VAL_3]] : !llvm.i1
+// CHECK:           %[[VAL_8:.*]] = llvm.or %[[VAL_7]], %[[VAL_5]] : !llvm.i1
+// CHECK:           %[[VAL_9:.*]] = llvm.or %[[VAL_0]], %[[VAL_4]] : !llvm.i1
+// CHECK:           %[[VAL_10:.*]] = llvm.and %[[VAL_9]], %[[VAL_8]] : !llvm.i1
+// CHECK:           %[[VAL_11:.*]] = llvm.mlir.constant(5 : index) : !llvm.i64
+// CHECK:           %[[VAL_12:.*]] = llvm.trunc %[[VAL_11]] : !llvm.i64 to !llvm.i10
+// CHECK:           %[[VAL_13:.*]] = llvm.mlir.constant(32 : i10) : !llvm.i10
+// CHECK:           %[[VAL_14:.*]] = llvm.mlir.constant(-33 : i10) : !llvm.i10
+// CHECK:           %[[VAL_15:.*]] = llvm.zext %[[VAL_0]] : !llvm.i1 to !llvm.i10
+// CHECK:           %[[VAL_16:.*]] = llvm.shl %[[VAL_15]], %[[VAL_12]] : !llvm.i10
+// CHECK:           %[[VAL_17:.*]] = llvm.or %[[VAL_16]], %[[VAL_14]] : !llvm.i10
+// CHECK:           %[[VAL_18:.*]] = llvm.or %[[VAL_1]], %[[VAL_13]] : !llvm.i10
+// CHECK:           %[[VAL_19:.*]] = llvm.and %[[VAL_18]], %[[VAL_17]] : !llvm.i10
+// CHECK:           llvm.return
+// CHECK:         }
+func @convert_insert_slice_int (%i1 : i1, %i10 : i10) -> () {
+  %0 = llhd.insert_slice %i1, %i1, 0 : i1, i1
+  %1 = llhd.insert_slice %i10, %i1, 5 : i10, i1
+
+  return
+}
