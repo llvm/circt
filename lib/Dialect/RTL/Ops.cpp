@@ -563,7 +563,7 @@ void XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
       if (inputs[size - 1] == inputs[size - 2]) {
         assert(size > 2 &&
-               "expected idompotent case for 2 elements handled already.");
+               "expected idempotent case for 2 elements handled already.");
         // xor(..., x, x) -> xor (...) -- idempotent
         rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(),
                                            inputs.drop_back(/*n=*/2));
