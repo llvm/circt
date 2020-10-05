@@ -425,7 +425,7 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
-      // and(..., c1, c2) -> and(..., c3) -- constant folding
+      // and(..., c1, c2) -> and(..., c3) where c3 = c1 & c2 -- constant folding
       if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
           matchPattern(inputs[size - 2], m_RConstant(value2))) {
         auto cst = rewriter.create<ConstantOp>(op.getLoc(), value & value2);
