@@ -1621,9 +1621,7 @@ void ModuleEmitter::emitStatement(rtl::RTLInstanceOp op) {
   auto moduleIR = op.getParentOfType<firrtl::CircuitOp>();
   auto referencedModule =
       cast<rtl::RTLModuleOp>(moduleIR.lookupSymbol(defName));
-
-  if (!referencedModule)
-    emitOpError(op, "could not find mlir node named @" + defName);
+  assert(referencedModule && "invalid rtl.instance op");
 
   os << ' ' << defName << ' ' << instanceName << " (";
   emitLocationInfoAndNewLine(ops);
@@ -1631,7 +1629,7 @@ void ModuleEmitter::emitStatement(rtl::RTLInstanceOp op) {
   SmallVector<rtl::RTLModulePortInfo, 8> portInfo;
   referencedModule.getRTLPortInfo(portInfo);
 
-  for (int i = 0; i < portInfo.size(); ++i) {
+  for (size_t i = 0, e = portInfo.size(); i != e; ++i) {
     rtl::RTLModulePortInfo &elt = portInfo[i];
     bool isLast = &elt == &portInfo.back();
     indent() << "  ." << StringRef(elt.name.getValue()) << " ("

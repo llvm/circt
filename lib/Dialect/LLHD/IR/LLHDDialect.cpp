@@ -133,7 +133,9 @@ Type LLHDDialect::parseType(DialectAsmParser &parser) const {
   if (typeKeyword == PtrType::getKeyword())
     return parsePtrType(parser);
 
-  return Type();
+  emitError(parser.getEncodedSourceLoc(parser.getCurrentLocation()),
+            "Invalid LLHD type!");
+  return nullptr;
 }
 
 //===----------------------------------------------------------------------===//
@@ -156,6 +158,8 @@ void LLHDDialect::printType(Type type, DialectAsmPrinter &printer) const {
             << array.getElementType() << ">";
   } else if (PtrType ptr = type.dyn_cast<PtrType>()) {
     printer << ptr.getKeyword() << "<" << ptr.getUnderlyingType() << ">";
+  } else {
+    llvm_unreachable("Unknown LLHD type!");
   }
 }
 
@@ -207,7 +211,10 @@ Attribute LLHDDialect::parseAttribute(DialectAsmParser &parser,
   if (attrKeyword == TimeAttr::getKeyword()) {
     return parseTimeAttribute(parser, type);
   }
-  return Attribute();
+
+  emitError(parser.getEncodedSourceLoc(parser.getCurrentLocation()),
+            "Invalid LLHD attribute!");
+  return nullptr;
 }
 
 //===----------------------------------------------------------------------===//
@@ -226,6 +233,8 @@ void LLHDDialect::printAttribute(Attribute attr,
                                  DialectAsmPrinter &printer) const {
   if (TimeAttr time = attr.dyn_cast<TimeAttr>()) {
     printTimeAttribute(time, printer);
+  } else {
+    llvm_unreachable("Unknown LLHD attribute!");
   }
 }
 

@@ -13,7 +13,6 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BlockAndValueMapping.h"
-#include "mlir/IR/Dominance.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -165,8 +164,14 @@ static LLVM::LLVMType getProcPersistenceTy(LLVM::LLVMDialect *dialect,
   SmallVector<LLVM::LLVMType, 3> types = SmallVector<LLVM::LLVMType, 3>();
   proc.walk([&](Operation *op) -> void {
     if (op->isUsedOutsideOfBlock(op->getBlock())) {
-      types.push_back(converter.convertType(op->getResult(0).getType())
-                          .cast<LLVM::LLVMType>());
+      if (auto ptr = op->getResult(0).getType().dyn_cast<PtrType>()) {
+        // Persist the unwrapped value.
+        auto converted = converter.convertType(ptr.getUnderlyingType());
+        types.push_back(converted.cast<LLVM::LLVMType>());
+      } else {
+        types.push_back(converter.convertType(op->getResult(0).getType())
+                            .cast<LLVM::LLVMType>());
+      }
     }
   });
   return LLVM::LLVMType::getStructTy(dialect->getContext(), types);
@@ -207,7 +212,6 @@ static void insertPersistence(LLVMTypeConverter &converter,
                               ProcOp &proc, LLVM::LLVMType &stateTy,
                               LLVM::LLVMFuncOp &converted) {
   auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect->getContext());
-  DominanceInfo dom(converted);
 
   // Load the resume index from the process state argument.
   rewriter.setInsertionPoint(converted.getBody().front().getTerminator());
@@ -250,6 +254,16 @@ static void insertPersistence(LLVMTypeConverter &converter,
 
       // Store the value escaping it's definingn block in the persistence table.
       rewriter.setInsertionPointAfter(op);
+      Value toStore;
+      if (auto ptr = op->getResult(0).getType().dyn_cast<PtrType>()) {
+        // Unwrap the pointer and store it's value.
+        auto elemTy = converter.convertType(ptr.getUnderlyingType());
+        toStore = rewriter.create<LLVM::LoadOp>(loc, elemTy, op->getResult(0));
+      } else {
+        // Store the value directly.
+        toStore = op->getResult(0);
+      }
+
       auto zeroC0 = rewriter.create<LLVM::ConstantOp>(
           loc, i32Ty, rewriter.getI32IntegerAttr(0));
       auto threeC0 = rewriter.create<LLVM::ConstantOp>(
@@ -259,12 +273,12 @@ static void insertPersistence(LLVMTypeConverter &converter,
       auto gep0 = rewriter.create<LLVM::GEPOp>(
           loc, elemTy.getPointerTo(), converted.getArgument(1),
           ArrayRef<Value>({zeroC0, threeC0, indC0}));
-      rewriter.create<LLVM::StoreOp>(loc, op->getResult(0), gep0);
+      rewriter.create<LLVM::StoreOp>(loc, toStore, gep0);
 
       // Load the value from the persistence table and substitute the original
-      // use with it.
-      for (auto &use : op->getUses()) {
-        if (dom.properlyDominates(op->getBlock(), use.getOwner()->getBlock())) {
+      // use with it, whenever it is in a different block.
+      for (auto &use : llvm::make_early_inc_range(op->getUses())) {
+        if (op->getBlock() != use.getOwner()->getBlock()) {
           auto user = use.getOwner();
           rewriter.setInsertionPointToStart(user->getBlock());
           auto zeroC1 = rewriter.create<LLVM::ConstantOp>(
@@ -276,9 +290,14 @@ static void insertPersistence(LLVMTypeConverter &converter,
           auto gep1 = rewriter.create<LLVM::GEPOp>(
               loc, elemTy.getPointerTo(), converted.getArgument(1),
               ArrayRef<Value>({zeroC1, threeC1, indC1}));
-          auto load1 = rewriter.create<LLVM::LoadOp>(loc, elemTy, gep1);
-
-          use.set(load1);
+          // Use the pointer in the state struct directly for pointer types.
+          if (op->getResult(0).getType().isa<PtrType>()) {
+            use.set(gep1);
+          } else {
+            // Load the value otherwise.
+            auto load1 = rewriter.create<LLVM::LoadOp>(loc, elemTy, gep1);
+            use.set(load1);
+          }
         }
       }
       i++;
@@ -309,6 +328,14 @@ static LLVM::LLVMType convertTimeType(TimeType type,
   auto i32Ty = LLVM::LLVMType::getInt32Ty(&converter.getContext());
   return LLVM::LLVMType::getArrayTy(i32Ty, 3);
 }
+
+static LLVM::LLVMType convertPtrType(PtrType type,
+                                     LLVMTypeConverter &converter) {
+  return converter.convertType(type.getUnderlyingType())
+      .cast<LLVM::LLVMType>()
+      .getPointerTo();
+}
+
 //===----------------------------------------------------------------------===//
 // Unit conversions
 //===----------------------------------------------------------------------===//
@@ -1372,6 +1399,65 @@ struct ExtractSliceOpConversion : public ConvertToLLVMPattern {
 };
 } // namespace
 
+//===----------------------------------------------------------------------===//
+// Memory operations
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Lower a `llhd.var` operation to the LLVM dialect. This results in an alloca,
+/// followed by storing the initial value.
+struct VarOpConversion : ConvertToLLVMPattern {
+  explicit VarOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(VarOp::getOperationName(), ctx, typeConverter) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    VarOpAdaptor transformed(operands);
+
+    auto i32Ty = LLVM::LLVMType::getInt32Ty(&typeConverter.getContext());
+
+    auto oneC = rewriter.create<LLVM::ConstantOp>(
+        op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(1));
+    auto alloca = rewriter.create<LLVM::AllocaOp>(
+        op->getLoc(),
+        transformed.init().getType().cast<LLVM::LLVMType>().getPointerTo(),
+        oneC, 4);
+    rewriter.create<LLVM::StoreOp>(op->getLoc(), transformed.init(), alloca);
+    rewriter.replaceOp(op, alloca.getResult());
+    return success();
+  }
+};
+} // namespace
+
+namespace {
+/// Convert an `llhd.store` operation to LLVM. This lowers the store
+/// one-to-one as an LLVM store, but with the operands flipped.
+struct StoreOpConversion : ConvertToLLVMPattern {
+  explicit StoreOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(llhd::StoreOp::getOperationName(), ctx,
+                             typeConverter) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    llhd::StoreOpAdaptor transformed(operands);
+
+    rewriter.replaceOpWithNewOp<LLVM::StoreOp>(op, transformed.value(),
+                                               transformed.pointer());
+
+    return success();
+  }
+};
+} // namespace
+
+using LoadOpConversion =
+    OneToOneConvertToLLVMPattern<llhd::LoadOp, LLVM::LoadOp>;
+
+//===----------------------------------------------------------------------===//
+// Pass initialization
+//===----------------------------------------------------------------------===//
+
 namespace {
 struct LLHDToLLVMLoweringPass
     : public ConvertLLHDToLLVMBase<LLHDToLLVMLoweringPass> {
@@ -1398,6 +1484,10 @@ void llhd::populateLLHDToLLVMConversionPatterns(
   // Signal conversion patterns.
   patterns.insert<SigOpConversion, PrbOpConversion, DrvOpConversion>(ctx,
                                                                      converter);
+
+  // Memory conversion patterns.
+  patterns.insert<VarOpConversion, StoreOpConversion>(ctx, converter);
+  patterns.insert<LoadOpConversion>(converter);
 }
 
 void LLHDToLLVMLoweringPass::runOnOperation() {
@@ -1407,6 +1497,8 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
       [&](SigType sig) { return convertSigType(sig, converter); });
   converter.addConversion(
       [&](TimeType time) { return convertTimeType(time, converter); });
+  converter.addConversion(
+      [&](PtrType ptr) { return convertPtrType(ptr, converter); });
 
   // Apply a partial conversion first, lowering only the instances, to generate
   // the init function.

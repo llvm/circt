@@ -32,6 +32,54 @@ func @and_cstfold(%arg0: i7) -> i7 {
   return %0 : i7
 }
 
+// CHECK-LABEL: func @or_cstfold(%arg0: i7) -> i7 {
+// CHECK-NEXT:    %c15_i7 = rtl.constant(15 : i7)
+// CHECK-NEXT:    %0 = rtl.or %arg0, %c15_i7 : i7
+// CHECK-NEXT:    return %0 : i7
+
+func @or_cstfold(%arg0: i7) -> i7 {
+  %c11_i7 = rtl.constant(11 : i7) : i7
+  %c5_i7 = rtl.constant(5 : i7) : i7
+  %0 = rtl.or %arg0, %c11_i7, %c5_i7 : i7
+  return %0 : i7
+}
+
+// CHECK-LABEL: func @xor_cstfold(%arg0: i7) -> i7 {
+// CHECK-NEXT:    %c14_i7 = rtl.constant(14 : i7)
+// CHECK-NEXT:    %0 = rtl.xor %arg0, %c14_i7 : i7
+// CHECK-NEXT:    return %0 : i7
+
+func @xor_cstfold(%arg0: i7) -> i7 {
+  %c11_i7 = rtl.constant(11 : i7) : i7
+  %c5_i7 = rtl.constant(5 : i7) : i7
+  %0 = rtl.xor %arg0, %c11_i7, %c5_i7 : i7
+  return %0 : i7
+}
+
+// CHECK-LABEL: func @add_cstfold(%arg0: i7) -> i7 {
+// CHECK-NEXT:    %c15_i7 = rtl.constant(15 : i7)
+// CHECK-NEXT:    %0 = rtl.add %arg0, %c15_i7 : i7
+// CHECK-NEXT:    return %0 : i7
+
+func @add_cstfold(%arg0: i7) -> i7 {
+  %c10_i7 = rtl.constant(10 : i7) : i7
+  %c5_i7 = rtl.constant(5 : i7) : i7
+  %0 = rtl.add %arg0, %c10_i7, %c5_i7 : i7
+  return %0 : i7
+}
+
+// CHECK-LABEL: func @mul_cstfold(%arg0: i7) -> i7 {
+// CHECK-NEXT:    %c15_i7 = rtl.constant(15 : i7)
+// CHECK-NEXT:    %0 = rtl.mul %arg0, %c15_i7 : i7
+// CHECK-NEXT:    return %0 : i7
+
+func @mul_cstfold(%arg0: i7) -> i7 {
+  %c3_i7 = rtl.constant(3 : i7) : i7
+  %c5_i7 = rtl.constant(5 : i7) : i7
+  %0 = rtl.mul %arg0, %c3_i7, %c5_i7 : i7
+  return %0 : i7
+}
+
 // CHECK-LABEL: func @variadic_noop(%arg0: i11) -> i11 {
 // CHECK-NEXT:    return %arg0
 
@@ -72,6 +120,38 @@ func @mul_annulment(%arg0: i11, %arg1: i11, %arg2: i11) -> i11 {
   %c0_i11 = rtl.constant(0 : i11) : i11
   %0 = rtl.mul %arg0, %c0_i11, %arg1 : i11
   return %0 : i11
+}
+
+// Flatten
+
+// CHECK-LABEL: func @and_flatten_in_back(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.and %arg0, %arg1, %arg2 : i7
+// CHECK-NEXT:    return [[RES]] : i7
+
+func @and_flatten_in_back(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+  %and0 = rtl.and %arg1, %arg2 : i7
+  %0 = rtl.and %arg0, %and0 : i7
+  return %0 : i7
+}
+
+// CHECK-LABEL: func @and_flatten_in_middle(%arg0: i7, %arg1: i7, %arg2: i7, %arg3: i7) -> i7 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.and %arg0, %arg1, %arg2, %arg3 : i7
+// CHECK-NEXT:    return [[RES]] : i7
+
+func @and_flatten_in_middle(%arg0: i7, %arg1: i7, %arg2: i7, %arg3: i7) -> i7 {
+  %and0 = rtl.and %arg1, %arg2 : i7
+  %0 = rtl.and %arg0, %and0, %arg3 : i7
+  return %0 : i7
+}
+
+// CHECK-LABEL: func @and_flatten_in_front(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.and %arg0, %arg1, %arg2 : i7
+// CHECK-NEXT:    return [[RES]] : i7
+
+func @and_flatten_in_front(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+  %and0 = rtl.and %arg0, %arg1 : i7
+  %0 = rtl.and %and0, %arg2 : i7
+  return %0 : i7
 }
 
 // Identities
@@ -136,5 +216,33 @@ func @mul_identity(%arg0: i11, %arg1: i11) -> i11 {
 func @and_idempotent(%arg0: i11, %arg1 : i11) -> i11 {
   %c9_i11 = rtl.constant(9 : i11) : i11
   %0 = rtl.and %arg0, %arg1, %c9_i11, %c9_i11 : i11
+  return %0 : i11
+}
+
+// CHECK-LABEL: func @or_idempotent(%arg0: i11, %arg1: i11) -> i11 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.or %arg0, %arg1
+// CHECK-NEXT:    return [[RES]]
+
+func @or_idempotent(%arg0: i11, %arg1 : i11) -> i11 {
+  %0 = rtl.or %arg0, %arg1, %arg1, %arg1 : i11
+  return %0 : i11
+}
+
+// CHECK-LABEL: func @xor_idempotent(%arg0: i11, %arg1: i11, %arg2: i11) -> i11 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.xor %arg0, %arg1
+// CHECK-NEXT:    return [[RES]]
+
+func @xor_idempotent(%arg0: i11, %arg1: i11, %arg2: i11) -> i11 {
+  %0 = rtl.xor %arg0, %arg1, %arg2, %arg2 : i11
+  return %0 : i11
+}
+
+// CHECK-LABEL: func @xor_idempotent_two_arguments(%arg0: i11) -> i11 {
+// CHECK-NEXT:    %c0_i11 = rtl.constant(0 : i11) : i11
+// CHECK-NEXT:    return %c0_i11 : i11
+
+func @xor_idempotent_two_arguments(%arg0: i11) -> i11 {
+  %c0_i11 = rtl.constant(0 : i11) : i11
+  %0 = rtl.xor %arg0, %arg0 : i11
   return %0 : i11
 }
