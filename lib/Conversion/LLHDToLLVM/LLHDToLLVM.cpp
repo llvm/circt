@@ -1300,6 +1300,7 @@ struct RegOpConversion : public ConvertToLLVMPattern {
 
     // Retrieve and update previous trigger values for rising/falling edge
     // detection.
+    size_t triggerIndex = 0;
     SmallVector<Value, 4> prevTriggers;
     for (int i = 0, e = regOp.values().size(); i < e; ++i) {
       auto mode = regOp.getRegModeAt(i);
@@ -1310,7 +1311,7 @@ struct RegOpConversion : public ConvertToLLVMPattern {
         auto regIndexC = rewriter.create<LLVM::ConstantOp>(
             op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(regCounter));
         auto triggerIndexC = rewriter.create<LLVM::ConstantOp>(
-            op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(i));
+            op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(triggerIndex++));
         auto gep = rewriter.create<LLVM::GEPOp>(
             op->getLoc(), i1Ty.getPointerTo(), func.getArgument(1),
             ArrayRef<Value>({zeroC, regIndexC, triggerIndexC}));
