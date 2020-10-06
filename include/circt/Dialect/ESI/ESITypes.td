@@ -92,6 +92,19 @@ def List : ESI_Type<"List"> {
   );
 }
 
+
+def ASCII : I32EnumAttrCase<"ASCII", 1>;
+def UTF8  : I32EnumAttrCase<"UTF8",  2>;
+def UTF16 : I32EnumAttrCase<"UTF16", 3>;
+def UTF32 : I32EnumAttrCase<"UTF32", 4>;
+
+def StringEncoding : I32EnumAttr<"StringEncoding",
+    "Indicates the encoding of a string.",
+    [ASCII, UTF8, UTF16, UTF32]> {
+
+  let cppNamespace = "circt::esi";
+}
+
 def String : ESI_Type<"String"> {
   let summary = "A variably-sized string of characters";
   let description = [{

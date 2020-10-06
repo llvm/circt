@@ -11,6 +11,7 @@ add_mlir_dialect_library(MLIRESI
 
   DEPENDS
   MLIRESIIncGen
+  MLIRESIEnumsIncGen
 
   LINK_COMPONENTS
   Core

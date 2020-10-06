@@ -29,18 +29,11 @@ struct Parse<circt::esi::StringEncoding> {
     StringRef encStr;
     if (parser.parseKeyword(&encStr))
       return mlir::failure();
-    if (encStr.compare_lower("ascii") == 0)
-      result = circt::esi::StringEncoding::ASCII;
-    else if (encStr.compare_lower("utf8") == 0)
-      result = circt::esi::StringEncoding::UTF8;
-    else if (encStr.compare_lower("utf16") == 0)
-      result = circt::esi::StringEncoding::UTF16;
-    else if (encStr.compare_lower("utf32") == 0)
-      result = circt::esi::StringEncoding::UTF32;
-    else {
-      llvm::errs() << "Not a valid string encoding: " << encStr << ".\n";
+    auto maybeEnc =
+        circt::esi::symbolizeEnum<circt::esi::StringEncoding>(encStr.upper());
+    if (!maybeEnc.hasValue())
       return mlir::failure();
-    }
+    result = maybeEnc.getValue();
     return mlir::success();
   }
 };
@@ -51,20 +44,7 @@ template <>
 struct Print<circt::esi::StringEncoding> {
   static void go(DialectAsmPrinter &printer,
                  const circt::esi::StringEncoding &enc) {
-    switch (enc) {
-    case circt::esi::StringEncoding::UTF8:
-      printer << "utf8";
-      break;
-    case circt::esi::StringEncoding::UTF16:
-      printer << "utf16";
-      break;
-    case circt::esi::StringEncoding::UTF32:
-      printer << "utf32";
-      break;
-    case circt::esi::StringEncoding::ASCII:
-      printer << "ascii";
-      break;
-    }
+    printer << circt::esi::stringifyEnum(enc).lower();
   }
 };
 

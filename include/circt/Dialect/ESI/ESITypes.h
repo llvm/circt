@@ -11,6 +11,8 @@
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/Operation.h"
 
+#include "ESIDialect.h"
+
 namespace circt {
 namespace esi {
 
@@ -27,9 +29,6 @@ public:
     return FieldInfo(nameCopy, type);
   }
 };
-
-// Symbols for the string type encoding
-enum StringEncoding { ASCII, UTF8, UTF16, UTF32 };
 
 } // namespace esi
 } // namespace circt
