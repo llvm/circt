@@ -18,7 +18,7 @@ def CircuitOp : FIRRTLOp<"circuit",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"OpBuilder &builder, OperationState &result, StringAttr name">
+    OpBuilder<"StringAttr name">
   ];
 
   let extraClassDeclaration = [{
@@ -54,7 +54,7 @@ def FModuleOp : FIRRTLOp<"module",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"OpBuilder &builder, OperationState &result, StringAttr name, "
+    OpBuilder<"StringAttr name, "
               "ArrayRef<std::pair<StringAttr, FIRRTLType>> ports">
   ];
 
@@ -122,7 +122,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"OpBuilder &builder, OperationState &result, StringAttr name, "
+    OpBuilder<"StringAttr name, "
               "ArrayRef<std::pair<StringAttr, FIRRTLType>> ports, "
               "StringRef defnameAttr = StringRef()">
   ];
