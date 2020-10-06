@@ -300,6 +300,25 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
   build(builder, result, APInt(numBits, (uint64_t)value, /*isSigned=*/true));
 }
 
+/// Flattens the Nth index of `inputs` and appends the flattened input to
+/// the original inputs. This is used when flattening in the canonicalization
+/// pattern. It should only be called after `op` is checked to be an operation
+/// wihin `inputs`.
+/// Example: op(1, 2, op(3, 4), 5) -> op(1, 2, 3, 4, 5)
+template <typename Inputs, typename OpInputs>
+auto flattenNthInput(const Inputs &inputs, const OpInputs &opInputs, size_t N) {
+  assert(N < inputs.size() && "N should be an index less than `inputs` size.");
+
+  SmallVector<Value, 4> newOperands;
+  newOperands.reserve(inputs.size() + opInputs.size());
+
+  auto opPosition = inputs.begin() + N;
+  newOperands.append(inputs.begin(), opPosition);
+  newOperands.append(opInputs.begin(), opInputs.end());
+  newOperands.append(opPosition + 1, inputs.end());
+  return newOperands;
+}
+
 void ConstantOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
   auto intTy = getType().cast<IntegerType>();
@@ -442,18 +461,8 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         auto andOp = inputs[i].getDefiningOp<rtl::AndOp>();
         if (!andOp)
           continue;
-
-        auto flattenedAndOpInputs = andOp.inputs();
-        SmallVector<Value, 4> newOperands;
-        newOperands.reserve(size + flattenedAndOpInputs.size());
-
-        auto andOpPosition = inputs.begin() + i;
-        newOperands.append(inputs.begin(), andOpPosition);
-        newOperands.append(flattenedAndOpInputs.begin(),
-                           flattenedAndOpInputs.end());
-        newOperands.append(andOpPosition + 1, inputs.end());
-
-        rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
+        rewriter.replaceOpWithNewOp<AndOp>(
+            op, op.getType(), flattenNthInput(inputs, andOp.inputs(), i));
         return success();
       }
 
@@ -515,7 +524,6 @@ void OrOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
         return success();
       }
-
       // or(x, or(...)) -> or(x, ...) -- flatten
       for (size_t i = 0; i != size; ++i) {
         if (!inputs[i].hasOneUse())
@@ -524,17 +532,8 @@ void OrOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         if (!orOp)
           continue;
 
-        auto flattenedOrOpInputs = orOp.inputs();
-        SmallVector<Value, 4> newOperands;
-        newOperands.reserve(size + flattenedOrOpInputs.size());
-
-        auto orOpPosition = inputs.begin() + i;
-        newOperands.append(inputs.begin(), orOpPosition);
-        newOperands.append(flattenedOrOpInputs.begin(),
-                           flattenedOrOpInputs.end());
-        newOperands.append(orOpPosition + 1, inputs.end());
-
-        rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
+        rewriter.replaceOpWithNewOp<OrOp>(
+            op, op.getType(), flattenNthInput(inputs, orOp.inputs(), i));
         return success();
       }
 
@@ -607,17 +606,8 @@ void XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         if (!xorOp)
           continue;
 
-        auto flattenedXorOpInputs = xorOp.inputs();
-        SmallVector<Value, 4> newOperands;
-        newOperands.reserve(size + flattenedXorOpInputs.size());
-
-        auto xorOpPosition = inputs.begin() + i;
-        newOperands.append(inputs.begin(), xorOpPosition);
-        newOperands.append(flattenedXorOpInputs.begin(),
-                           flattenedXorOpInputs.end());
-        newOperands.append(xorOpPosition + 1, inputs.end());
-
-        rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(), newOperands);
+        rewriter.replaceOpWithNewOp<XorOp>(
+            op, op.getType(), flattenNthInput(inputs, xorOp.inputs(), i));
         return success();
       }
 
@@ -677,17 +667,8 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         if (!addOp)
           continue;
 
-        auto flattenedAddOpInputs = addOp.inputs();
-        SmallVector<Value, 4> newOperands;
-        newOperands.reserve(size + flattenedAddOpInputs.size());
-
-        auto addOpPosition = inputs.begin() + i;
-        newOperands.append(inputs.begin(), addOpPosition);
-        newOperands.append(flattenedAddOpInputs.begin(),
-                           flattenedAddOpInputs.end());
-        newOperands.append(addOpPosition + 1, inputs.end());
-
-        rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(), newOperands);
+        rewriter.replaceOpWithNewOp<AddOp>(
+            op, op.getType(), flattenNthInput(inputs, addOp.inputs(), i));
         return success();
       }
 
@@ -752,17 +733,8 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         if (!mulOp)
           continue;
 
-        auto flattenedMulOpInputs = mulOp.inputs();
-        SmallVector<Value, 4> newOperands;
-        newOperands.reserve(size + flattenedMulOpInputs.size());
-
-        auto mulOpPosition = inputs.begin() + i;
-        newOperands.append(inputs.begin(), mulOpPosition);
-        newOperands.append(flattenedMulOpInputs.begin(),
-                           flattenedMulOpInputs.end());
-        newOperands.append(mulOpPosition + 1, inputs.end());
-
-        rewriter.replaceOpWithNewOp<MulOp>(op, op.getType(), newOperands);
+        rewriter.replaceOpWithNewOp<MulOp>(
+            op, op.getType(), flattenNthInput(inputs, mulOp.inputs(), i));
         return success();
       }
 
