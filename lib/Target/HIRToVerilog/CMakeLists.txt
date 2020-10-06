@@ -3,6 +3,7 @@ add_mlir_library(MLIRHIRToVerilog
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/include/circt/Target/HIRToVerilog
+  ${PROJECT_SOURCE_DIR}/lib/Target/HIRToVerilog/
 
   LINK_LIBS PUBLIC
   MLIRHIR

@@ -5,6 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Target/HIRToVerilog/HIRToVerilog.h"
+#include "Helpers.h"
+#include "VerilogValue.h"
 #include "circt/Dialect/HIR/HIR.h"
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
@@ -51,74 +53,6 @@ string loopCounterTemplate =
     "\n"
     "\nwire $v_tloop = tloop_out$n_loop;";
 
-static unsigned max(unsigned x, unsigned y) { return x > y ? x : y; }
-static void findAndReplaceAll(string &data, string toSearch,
-                              string replaceStr) {
-  // Get the first occurrence.
-  size_t pos = data.find(toSearch);
-  // Repeat till end is reached.
-  while (pos != string::npos) {
-    // Replace this occurrence of Sub String.
-    data.replace(pos, toSearch.size(), replaceStr);
-    // Get the next occurrence from the current position.
-    pos = data.find(toSearch, pos + replaceStr.size());
-  }
-}
-
-static unsigned getBitWidth(Type ty) {
-  unsigned bitwidth = 0;
-  if (auto intTy = ty.dyn_cast<IntegerType>()) {
-    bitwidth = intTy.getWidth();
-  } else if (auto memrefTy = ty.dyn_cast<MemrefType>()) {
-    bitwidth = getBitWidth(memrefTy.getElementType());
-  } else if (auto constTy = ty.dyn_cast<ConstType>()) {
-    bitwidth = getBitWidth(constTy.getElementType());
-  }
-  return bitwidth;
-}
-
-static unsigned calcDataWidth(hir::MemrefType memrefTy) {
-  // FIXME: Currently we assume that all dims are power of two.
-  auto shape = memrefTy.getShape();
-  auto elementType = memrefTy.getElementType();
-  auto packing = memrefTy.getPacking();
-  unsigned elementWidth = getBitWidth(elementType);
-  int max_dim = shape.size() - 1;
-  unsigned dataWidth = getBitWidth(elementType);
-  for (int dim = 0; dim < shape.size(); dim++) {
-    bool isDistributedDim = true;
-    for (auto packedDim : packing) {
-      if (dim == packedDim) {
-        isDistributedDim = false;
-        break;
-      }
-    }
-    if (isDistributedDim) {
-      // dim0 is last in shape.
-      int dim_size = shape[max_dim - dim];
-      dataWidth *= dim_size;
-    }
-  }
-  return dataWidth;
-}
-
-static unsigned calcAddrWidth(hir::MemrefType memrefTy) {
-  // FIXME: Currently we assume that all dims are power of two.
-  auto shape = memrefTy.getShape();
-  auto elementType = memrefTy.getElementType();
-  auto packing = memrefTy.getPacking();
-  unsigned elementWidth = getBitWidth(elementType);
-  int max_dim = shape.size() - 1;
-  unsigned addrWidth = 0;
-  for (auto dim : packing) {
-    // dim0 is last in shape.
-    int dim_size = shape[max_dim - dim];
-    float log_size = log2(dim_size);
-    addrWidth += ceil(log_size);
-  }
-  return addrWidth;
-}
-
 /// This class is the verilog output printer for the HIR dialect. It walks
 /// throught the module and prints the verilog in the 'out' variable.
 class VerilogPrinter {
@@ -128,73 +62,6 @@ public:
   LogicalResult printModule(ModuleOp op);
 
 private:
-  enum VerilogValueTypes { vUnknown, vWire, vMemref };
-
-  class VerilogValue {
-  public:
-    VerilogValue() : type(vUnknown), name("unknown") {}
-    VerilogValue(VerilogValueTypes type, string name)
-        : type(type), name(name) {}
-
-    string strWire() { return name; }
-    string strWireValid() { return name + "_valid"; }
-    string strWireInput() { return name + "_input"; }
-    string strWireInput(unsigned idx) {
-      return strWireInput() + "{" + to_string(idx) + "}";
-    }
-    string strDelayedWire() { return name + "delay"; }
-    string strDelayedWire(unsigned delay) {
-      return strDelayedWire() + "[" + to_string(delay) + "]";
-    }
-
-    string strMemrefAddr() { return name + "_addr"; }
-    string strMemrefAddrValid() { return name + "_addr_valid"; }
-    string strMemrefAddrValid(unsigned idx) {
-      return strMemrefAddrValid() + "[" + to_string(idx) + "]";
-    }
-    string strMemrefAddrInput() { return name + "_addr_input"; }
-    string strMemrefAddrInput(unsigned idx) {
-      return strMemrefAddrInput() + "[" + to_string(idx) + "]";
-    }
-
-    string strMemrefRdData() { return name + "_rd_data"; }
-
-    string strMemrefWrData() { return name + "_wr_data"; }
-    string strMemrefWrDataValid() { return name + "_wr_data_valid"; }
-    string strMemrefWrDataValid(unsigned idx) {
-      return strMemrefWrDataValid() + "[" + to_string(idx) + "]";
-    }
-    string strMemrefWrDataInput() { return name + "_wr_data_input"; }
-    string strMemrefWrDataInput(unsigned idx) {
-      return strMemrefWrDataInput() + "[" + to_string(idx) + "]";
-    }
-
-    string strMemrefRdEn() { return name + "_rd_en"; }
-    string strMemrefRdEnInput() { return name + "_rd_en_input"; }
-    string strMemrefRdEnInput(unsigned idx) {
-      return strMemrefRdEnInput() + "[" + to_string(idx) + "]";
-    }
-
-    string strMemrefWrEn() { return name + "_wr_en"; }
-    string strMemrefWrEnInput() { return name + "_wr_en_input"; }
-    string strMemrefWrEnInput(unsigned idx) {
-      return strMemrefWrEnInput() + "[" + to_string(idx) + "]";
-    }
-    int numReads() { return info.numReads; }
-    void incNumReads() { info.numReads++; }
-    int numWrites() { return info.numWrites; }
-    void incNumWrites() { info.numWrites++; }
-    int numAccess() { return info.numReads + info.numWrites; }
-
-  private:
-    struct {
-      unsigned numReads = 0;
-      unsigned numWrites = 0;
-    } info;
-    VerilogValueTypes type;
-    string name;
-  };
-
   unsigned newValueNumber() { return nextValueNum++; }
 
   LogicalResult printOperation(Operation *op, unsigned indentAmount = 0);
@@ -209,11 +76,13 @@ private:
   LogicalResult printMemWriteOp(MemWriteOp op, unsigned indentAmount = 0);
   LogicalResult printReturnOp(hir::ReturnOp op, unsigned indentAmount = 0);
   LogicalResult printYieldOp(hir::YieldOp op, unsigned indentAmount = 0);
+  LogicalResult printWireWriteOp(hir::WireWriteOp op,
+                                 unsigned indentAmount = 0);
+  LogicalResult printAllocOp(hir::AllocOp op, unsigned indentAmount = 0);
 
   // Helpers.
   string printDownCounter(stringstream &output, Value maxCount, Value tstart);
   LogicalResult printBody(Block &block, unsigned indentAmount = 0);
-  LogicalResult printMemrefStub(Value mem, unsigned indentAmount = 0);
   LogicalResult printType(Type type);
   LogicalResult processReplacements(string &code);
   LogicalResult printTimeOffsets(Value timeVar);
@@ -234,26 +103,26 @@ string VerilogPrinter::printDownCounter(stringstream &output, Value maxCount,
                                         Value tstart) {
   unsigned counterWidth = getBitWidth(maxCount.getType());
 
-  string v_tstart = mapValueToVerilog[tstart].strWire();
+  auto v_tstart = mapValueToVerilog[tstart];
   unsigned id_counter = newValueNumber();
-  string v_maxCount = mapValueToVerilog[maxCount].strWire();
-  string v_counter = "downCount" + to_string(id_counter);
-  output << "reg[" << counterWidth - 1 << ":0]" << v_counter << ";\n";
+  auto v_maxCount = mapValueToVerilog[maxCount];
+  string str_counter = "downCount" + to_string(id_counter);
+  output << "reg[" << counterWidth - 1 << ":0]" << str_counter << ";\n";
   output << "always@(posedge clk) begin\n";
-  output << "if(" << v_tstart << ")\n";
-  output << v_counter << " <= " << v_maxCount << ";\n";
+  output << "if(" << v_tstart.strWire() << ")\n";
+  output << str_counter << " <= " << v_maxCount.strWire() << ";\n";
   output << "else\n";
-  output << v_counter << " <= (" << v_counter << ">0)?(" << v_counter
+  output << str_counter << " <= (" << str_counter << ">0)?(" << str_counter
          << "-1):0;\n";
   output << "end\n";
-  return v_counter;
+  return str_counter;
 }
 
 LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
                                              unsigned indentAmount) {
   mlir::Value result = op.res();
   unsigned id_result = newValueNumber();
-  VerilogValue v_result(vWire, "v" + to_string(id_result));
+  VerilogValue v_result(result.getType(), "v" + to_string(id_result));
   mapValueToVerilog.insert(make_pair(result, v_result));
 
   OperandRange addr = op.addr();
@@ -302,13 +171,40 @@ LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
   return success();
 } // namespace
 
+LogicalResult VerilogPrinter::printAllocOp(hir::AllocOp op,
+                                           unsigned indentAmount) {
+  Value result = op.res();
+  unsigned id_result = newValueNumber();
+  VerilogValue v_result(result.getType(), "v" + to_string(id_result));
+  mapValueToVerilog.insert(make_pair(result, v_result));
+
+  Type resType = result.getType();
+  if (auto wireType = resType.dyn_cast<hir::WireType>()) {
+    auto shape = wireType.getShape();
+    auto elementType = wireType.getElementType();
+    // TODO
+    module_out << "wire [" << v_result.strWire() << ";\n";
+  }
+  return success();
+}
+
+LogicalResult VerilogPrinter::printWireWriteOp(hir::WireWriteOp op,
+                                               unsigned indentAmount) {
+  Value value = op.value();
+  Value wire = op.wire();
+  auto addr = op.addr();
+  Value tstart = op.tstart();
+  auto offset = op.offset();
+  auto shape = wire.getType().dyn_cast<hir::MemrefType>().getShape();
+  return success();
+}
 LogicalResult VerilogPrinter::printMemWriteOp(MemWriteOp op,
                                               unsigned indentAmount) {
   OperandRange addr = op.addr();
-  mlir::Value mem = op.mem();
-  mlir::Value value = op.value();
-  mlir::Value tstart = op.tstart();
-  mlir::Value offset = op.offset();
+  Value mem = op.mem();
+  Value value = op.value();
+  Value tstart = op.tstart();
+  Value offset = op.offset();
 
   auto shape = mem.getType().dyn_cast<hir::MemrefType>().getShape();
   auto packing = mem.getType().dyn_cast<hir::MemrefType>().getPacking();
@@ -357,7 +253,7 @@ LogicalResult VerilogPrinter::printAddOp(hir::AddOp op, unsigned indentAmount) {
   // extension.
   Value result = op.res();
   unsigned id_result = newValueNumber();
-  VerilogValue v_result(vWire, "v" + to_string(id_result));
+  VerilogValue v_result(result.getType(), "v" + to_string(id_result));
   mapValueToVerilog.insert(make_pair(result, v_result));
 
   Value left = op.left();
@@ -392,7 +288,7 @@ LogicalResult VerilogPrinter::printConstantOp(hir::ConstantOp op,
                                               unsigned indentAmount) {
   auto result = op.res();
   unsigned id_result = newValueNumber();
-  VerilogValue v_result(vWire, "v" + to_string(id_result));
+  VerilogValue v_result(result.getType(), "v" + to_string(id_result));
   mapValueToVerilog.insert(make_pair(result, v_result));
 
   int value = op.value().getLimitedValue();
@@ -430,8 +326,8 @@ LogicalResult VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
   auto v_ub = mapValueToVerilog[op.ub()];
   auto v_step = mapValueToVerilog[op.step()];
   auto v_tstart = mapValueToVerilog[op.tstart()];
-  auto v_idx = VerilogValue(vWire, "idx" + to_string(id_loop));
-  auto v_tloop = VerilogValue(vWire, "tloop" + to_string(id_loop));
+  auto v_idx = VerilogValue(idx.getType(), "idx" + to_string(id_loop));
+  auto v_tloop = VerilogValue(tloop.getType(), "tloop" + to_string(id_loop));
   mapValueToVerilog.insert(make_pair(idx, v_idx));
   mapValueToVerilog.insert(make_pair(tloop, v_tloop));
 
@@ -484,8 +380,8 @@ LogicalResult VerilogPrinter::printUnrollForOp(UnrollForOp op,
 
   auto id_loop = newValueNumber();
 
-  auto v_i = VerilogValue(vWire, "i" + to_string(id_loop));
-  auto v_tloop = VerilogValue(vWire, "tloop" + to_string(id_loop));
+  auto v_i = VerilogValue(idx.getType(), "i" + to_string(id_loop));
+  auto v_tloop = VerilogValue(tloop.getType(), "tloop" + to_string(id_loop));
   mapValueToVerilog.insert(make_pair(idx, v_i));
   mapValueToVerilog.insert(make_pair(tloop, v_tloop));
   yieldTarget.push("tloop_in" + to_string(id_loop) + "[" + v_i.strWire() +
@@ -501,7 +397,7 @@ LogicalResult VerilogPrinter::printUnrollForOp(UnrollForOp op,
   if (unrollForStack.empty())
     module_out << "generate"; // this is the first generate
   unrollForStack.push(op);
-  module_out << " for(" << v_i.strWire() << " = " << lb << ";" << v_i.strWire()
+  module_out << " for(" << v_i.strWire() << " = " << lb << "; " << v_i.strWire()
              << " < " << ub << "; " << v_i.strWire() << " = " << v_i.strWire()
              << " + " << step << ") begin\n";
   module_out << "wire " << v_tloop.strWire() << " = tloop_in"
@@ -574,14 +470,14 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
     if (argType.isa<hir::TimeType>()) {
       unsigned id_tstart = newValueNumber();
       /*tstart parameter of func does not use valuenumber*/
-      auto tstart = VerilogValue(vWire, "tstart");
+      auto tstart = VerilogValue(arg.getType(), "tstart");
       mapValueToVerilog.insert(make_pair(arg, tstart));
 
       module_out << "//TimeType.\n";
       module_out << "input wire " << tstart.strWire();
     } else if (argType.isa<IntegerType>()) {
       unsigned id_int_arg = newValueNumber();
-      auto v_int_arg = VerilogValue(vWire, "v" + to_string(id_int_arg));
+      auto v_int_arg = VerilogValue(arg.getType(), "v" + to_string(id_int_arg));
       mapValueToVerilog.insert(make_pair(arg, v_int_arg));
 
       module_out << "//IntegerType.\n";
@@ -590,7 +486,8 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
                  << v_int_arg.strWire();
     } else if (argType.isa<MemrefType>()) {
       unsigned id_memref_arg = newValueNumber();
-      auto v_memref_arg = VerilogValue(vMemref, "v" + to_string(id_memref_arg));
+      auto v_memref_arg =
+          VerilogValue(arg.getType(), "v" + to_string(id_memref_arg));
       mapValueToVerilog.insert(make_pair(arg, v_memref_arg));
 
       MemrefType memrefTy = argType.dyn_cast<MemrefType>();
@@ -633,8 +530,17 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
   module_out << ",\n//Clock.\ninput wire clk\n);\n\n";
 
   for (auto arg : args)
-    if (arg.getType().isa<hir::MemrefType>())
-      printMemrefStub(arg);
+    if (arg.getType().isa<hir::MemrefType>()) {
+      unsigned loc = replaceLocs.size();
+      module_out << "$loc" << loc << "\n";
+
+      // Schedule updating the $loc stub with the actual defs.
+      replaceLocs.push_back(make_pair(loc, [=]() -> string {
+        auto v_arg = mapValueToVerilog[arg];
+        return v_arg.strMemrefDef();
+      }));
+    }
+
   Value tstart = args.back();
   printTimeOffsets(tstart);
   printBody(entryBlock);
@@ -699,78 +605,6 @@ LogicalResult VerilogPrinter::processReplacements(string &code) {
     locSStream << "$loc" << loc;
     findAndReplaceAll(code, locSStream.str(), replacementStr);
   }
-  return success();
-}
-
-string buildEnableSelectorStr(string &v_en, unsigned numInputs) {
-  stringstream output;
-  string v_en_input = v_en + "_input";
-  output << "wire[" << numInputs - 1 << ":0]" << v_en_input << ";\n";
-  output << "assign " << v_en << " = |" << v_en_input << ";\n";
-  return output.str();
-}
-
-string buildDataSelectorStr(string &v, unsigned numInputs, unsigned dataWidth) {
-  stringstream output;
-  string v_valid = v + "_valid";
-  string v_input = v + "_input";
-  output << "wire " << v_valid << "[" << numInputs - 1 << ":0];\n";
-  output << "wire[" << dataWidth - 1 << ":0] " << v_input << "["
-         << numInputs - 1 << ":0];\n";
-  output << "always@(*) begin\n";
-  output << "if(" << v_valid << "[0] == 1'b1)\n";
-  output << v << " = " << v_input << "[0];\n";
-  for (int i = 1; i < numInputs; i++) {
-    output << "else if(" << v_valid << "[" << i << "] == 1'b1)\n";
-    output << v << " = " << v_input << "[" << i << "];\n";
-  }
-  output << "else\n";
-  output << v << " = " << dataWidth << "'d0;\n";
-  output << "end\n";
-  return output.str();
-}
-
-LogicalResult VerilogPrinter::printMemrefStub(Value mem,
-                                              unsigned indentAmount) {
-  /// Prints a placeholder $locN which is later replaced by selectors for
-  /// addr,
-  // rd_data, wr_data and rd_en, wr_en.
-  MemrefType memrefTy = mem.getType().dyn_cast<hir::MemrefType>();
-  hir::Details::PortKind port = memrefTy.getPort();
-  unsigned dataWidth;
-  dataWidth = calcDataWidth(memrefTy);
-  unsigned addrWidth = calcAddrWidth(memrefTy);
-  unsigned loc = replaceLocs.size();
-  replaceLocs.push_back(make_pair(loc, [=]() -> string {
-    VerilogValue v_mem = mapValueToVerilog[mem];
-    if (v_mem.numAccess() == 0)
-      return "//Unused memref " + v_mem.strWire();
-    stringstream output;
-    auto v_addr = v_mem.strMemrefAddr();
-    // print addr bus selector.
-    if (addrWidth > 0) {
-      output << buildDataSelectorStr(v_addr, v_mem.numAccess(), addrWidth);
-      output << "\n";
-    }
-    // print rd_en selector.
-    if (v_mem.numReads() > 0) {
-      string v_rd_en = v_mem.strMemrefRdEn();
-      output << buildEnableSelectorStr(v_rd_en, v_mem.numReads());
-      output << "\n";
-    }
-
-    // print write bus selector.
-    if (v_mem.numWrites() > 0) {
-      string str_wr_en = v_mem.strMemrefWrEn();
-      output << buildEnableSelectorStr(str_wr_en, v_mem.numWrites());
-      string str_wr_data = v_mem.strMemrefWrData();
-      output << buildDataSelectorStr(str_wr_data, v_mem.numWrites(), dataWidth);
-      output << "\n";
-    }
-    return output.str();
-  }));
-
-  module_out << "$loc" << loc << "\n";
   return success();
 }
 
