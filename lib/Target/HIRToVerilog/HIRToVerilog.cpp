@@ -86,6 +86,7 @@ private:
   LogicalResult printType(Type type);
   LogicalResult processReplacements(string &code);
   LogicalResult printTimeOffsets(Value timeVar);
+  SmallVector<VerilogValue, 4> convertToVerilog(OperandRange operands);
 
   stringstream module_out;
   llvm::formatted_raw_ostream &out;
@@ -99,6 +100,14 @@ private:
   std::stack<hir::UnrollForOp> unrollForStack;
 }; // namespace
 
+SmallVector<VerilogValue, 4>
+VerilogPrinter::convertToVerilog(OperandRange inputs) {
+  SmallVector<VerilogValue, 4> out;
+  for (Value input : inputs) {
+    out.push_back(mapValueToVerilog[input]);
+  }
+  return out;
+}
 string VerilogPrinter::printDownCounter(stringstream &output, Value maxCount,
                                         Value tstart) {
   unsigned counterWidth = getBitWidth(maxCount.getType());
@@ -125,7 +134,7 @@ LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
   VerilogValue v_result(result.getType(), "v" + to_string(id_result));
   mapValueToVerilog.insert(make_pair(result, v_result));
 
-  OperandRange addr = op.addr();
+  auto addr = convertToVerilog(op.addr());
   mlir::Value mem = op.mem();
   auto shape = mem.getType().dyn_cast<hir::MemrefType>().getShape();
   auto packing = mem.getType().dyn_cast<hir::MemrefType>().getPacking();
@@ -147,25 +156,25 @@ LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
 
   if (!packing.empty()) {
     // Address bus assignments.
-    module_out << "assign " << v_mem.strMemrefAddrValid(v_mem.numAccess())
+    module_out << "assign " << v_mem.strMemrefAddrValid(addr, v_mem.numAccess())
                << " = " << v_tstart.strDelayedWire(delayValue) << ";\n";
 
-    module_out << "assign " << v_mem.strMemrefAddrInput(v_mem.numAccess())
+    module_out << "assign " << v_mem.strMemrefAddrInput(addr, v_mem.numAccess())
                << " = {";
     for (int i = packing.size() - 1; i >= 0; i--) {
       auto addrI = addr[i];
       if (i < packing.size() - 1)
         module_out << ", ";
-      module_out << mapValueToVerilog[addrI].strWire();
+      module_out << addrI.strWire();
     }
     module_out << "};\n";
   }
 
   // Read bus assignments.
   module_out << "wire[" << (width_result - 1) << ":0]" + v_result.strWire()
-             << " = " << v_mem.strMemrefRdData() << ";\n\n";
-  module_out << "assign " + v_mem.strMemrefRdEnInput(v_mem.numReads()) << " = "
-             << v_tstart.strDelayedWire(delayValue) << ";\n\n";
+             << " = " << v_mem.strMemrefRdData(addr) << ";\n\n";
+  module_out << "assign " + v_mem.strMemrefRdEnInput(addr, v_mem.numReads())
+             << " = " << v_tstart.strDelayedWire(delayValue) << ";\n\n";
 
   mapValueToVerilog[mem].incNumReads();
   return success();
@@ -182,8 +191,14 @@ LogicalResult VerilogPrinter::printAllocOp(hir::AllocOp op,
   if (auto wireType = resType.dyn_cast<hir::WireType>()) {
     auto shape = wireType.getShape();
     auto elementType = wireType.getElementType();
-    // TODO
-    module_out << "wire [" << v_result.strWire() << ";\n";
+    auto elementWidthStr = to_string(getBitWidth(elementType) - 1) + ":0";
+    string distDimsStr = "";
+    for (auto dim : shape) {
+      distDimsStr += "[" + to_string(dim - 1) + ":0]";
+    }
+    module_out << "wire "
+               << "[" + elementWidthStr + "] " << v_result.strWire()
+               << distDimsStr << ";\n";
   }
   return success();
 }
@@ -200,7 +215,7 @@ LogicalResult VerilogPrinter::printWireWriteOp(hir::WireWriteOp op,
 }
 LogicalResult VerilogPrinter::printMemWriteOp(MemWriteOp op,
                                               unsigned indentAmount) {
-  OperandRange addr = op.addr();
+  auto addr = convertToVerilog(op.addr());
   Value mem = op.mem();
   Value value = op.value();
   Value tstart = op.tstart();
@@ -223,25 +238,25 @@ LogicalResult VerilogPrinter::printMemWriteOp(MemWriteOp op,
 
   if (!packing.empty()) {
     // Address bus assignments.
-    module_out << "assign " << v_mem.strMemrefAddrValid(v_mem.numAccess())
+    module_out << "assign " << v_mem.strMemrefAddrValid(addr, v_mem.numAccess())
                << " = " << v_tstart.strDelayedWire(delayValue) << ";\n";
 
-    module_out << "assign " << v_mem.strMemrefAddrInput(v_mem.numAccess())
+    module_out << "assign " << v_mem.strMemrefAddrInput(addr, v_mem.numAccess())
                << " = {";
     for (int i = packing.size() - 1; i >= 0; i--) {
       auto addrI = addr[i];
       if (i < packing.size() - 1)
         module_out << ", ";
-      module_out << mapValueToVerilog[addrI].strWire();
+      module_out << addrI.strWire();
     }
     module_out << "};\n";
   }
 
-  module_out << "assign " << v_mem.strMemrefWrEnInput(v_mem.numWrites())
+  module_out << "assign " << v_mem.strMemrefWrEnInput(addr, v_mem.numWrites())
              << " = " << v_tstart.strDelayedWire(delayValue) << ";\n";
-  module_out << "assign " << v_mem.strMemrefWrDataValid(v_mem.numWrites())
+  module_out << "assign " << v_mem.strMemrefWrDataValid(addr, v_mem.numWrites())
              << " = " << v_tstart.strDelayedWire(delayValue) << ";\n";
-  module_out << "assign " << v_mem.strMemrefWrDataInput(v_mem.numWrites())
+  module_out << "assign " << v_mem.strMemrefWrDataInput(addr, v_mem.numWrites())
              << " = " << v_value.strWire() << ";\n\n";
 
   mapValueToVerilog[mem].incNumWrites();
@@ -289,10 +304,10 @@ LogicalResult VerilogPrinter::printConstantOp(hir::ConstantOp op,
   auto result = op.res();
   unsigned id_result = newValueNumber();
   VerilogValue v_result(result.getType(), "v" + to_string(id_result));
-  mapValueToVerilog.insert(make_pair(result, v_result));
-
   int value = op.value().getLimitedValue();
   mapConstToInt.insert(make_pair(result, value));
+  v_result.setIntegerConst(value);
+  mapValueToVerilog.insert(make_pair(result, v_result));
 
   if (auto intTy = result.getType().dyn_cast<IntegerType>()) {
     module_out << "wire [" << intTy.getWidth() - 1 << " : 0]"
@@ -420,6 +435,9 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
   if (auto op = dyn_cast<hir::ConstantOp>(inst)) {
     module_out << "\n//ConstantOp\n";
     return printConstantOp(op, indentAmount);
+  } else if (auto op = dyn_cast<hir::AllocOp>(inst)) {
+    module_out << "\n//AllocOp\n";
+    return printAllocOp(op, indentAmount);
   } else if (auto op = dyn_cast<hir::ForOp>(inst)) {
     module_out << "\n//ForOp\n";
     return printForOp(op, indentAmount);
@@ -489,37 +507,7 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
       auto v_memref_arg =
           VerilogValue(arg.getType(), "v" + to_string(id_memref_arg));
       mapValueToVerilog.insert(make_pair(arg, v_memref_arg));
-
-      MemrefType memrefTy = argType.dyn_cast<MemrefType>();
-      hir::Details::PortKind port = memrefTy.getPort();
-      module_out << "//MemrefType : port = "
-                 << ((port == hir::Details::r)
-                         ? "r"
-                         : (port == hir::Details::w) ? "w" : "rw")
-                 << ".\n";
-      unsigned addrWidth = calcAddrWidth(memrefTy);
-      bool printComma = false;
-      unsigned dataWidth = calcDataWidth(memrefTy);
-      if (addrWidth > 0) { // add dims may be distributed.
-        module_out << "output reg[" << addrWidth - 1 << ":0] "
-                   << v_memref_arg.strMemrefAddr();
-        printComma = true;
-      }
-      if (port == hir::Details::r || port == hir::Details::rw) {
-        if (printComma)
-          module_out << ",\n";
-        module_out << "output wire " << v_memref_arg.strMemrefRdEn();
-        module_out << ",\ninput wire[" << dataWidth - 1 << ":0]  "
-                   << v_memref_arg.strMemrefRdData();
-      }
-      if (port == hir::Details::w || port == hir::Details::rw) {
-        if (printComma)
-          module_out << ",\n";
-        module_out << "output wire " << v_memref_arg.strMemrefWrEn();
-        module_out << ",\n"
-                   << "output reg[" << dataWidth - 1 << ":0] "
-                   << v_memref_arg.strMemrefWrData();
-      }
+      module_out << v_memref_arg.strMemrefArgDef();
     } else {
       return emitError(op.getLoc(), "Unsupported argument type!");
     }
@@ -537,7 +525,7 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
       // Schedule updating the $loc stub with the actual defs.
       replaceLocs.push_back(make_pair(loc, [=]() -> string {
         auto v_arg = mapValueToVerilog[arg];
-        return v_arg.strMemrefDef();
+        return v_arg.strMemrefSel();
       }));
     }
 

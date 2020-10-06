@@ -36,31 +36,6 @@ static unsigned getBitWidth(Type ty) {
   return bitwidth;
 }
 
-static unsigned calcDataWidth(hir::MemrefType memrefTy) {
-  // FIXME: Currently we assume that all dims are power of two.
-  auto shape = memrefTy.getShape();
-  auto elementType = memrefTy.getElementType();
-  auto packing = memrefTy.getPacking();
-  unsigned elementWidth = getBitWidth(elementType);
-  int max_dim = shape.size() - 1;
-  unsigned dataWidth = getBitWidth(elementType);
-  for (int dim = 0; dim < shape.size(); dim++) {
-    bool isDistributedDim = true;
-    for (auto packedDim : packing) {
-      if (dim == packedDim) {
-        isDistributedDim = false;
-        break;
-      }
-    }
-    if (isDistributedDim) {
-      // dim0 is last in shape.
-      int dim_size = shape[max_dim - dim];
-      dataWidth *= dim_size;
-    }
-  }
-  return dataWidth;
-}
-
 static unsigned calcAddrWidth(hir::MemrefType memrefTy) {
   // FIXME: Currently we assume that all dims are power of two.
   auto shape = memrefTy.getShape();

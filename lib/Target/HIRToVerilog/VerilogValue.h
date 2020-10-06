@@ -20,6 +20,7 @@ public:
   int numReads() { return usageInfo.numReads; }
   int numWrites() { return usageInfo.numWrites; }
   int numAccess() { return usageInfo.numReads + usageInfo.numWrites; }
+  string strMemrefArgDef();
 
 private:
   SmallVector<unsigned, 4> getMemrefPackedDims() {
@@ -27,31 +28,41 @@ private:
     auto memrefType = type.dyn_cast<hir::MemrefType>();
     auto shape = memrefType.getShape();
     auto packing = memrefType.getPacking();
-    for (auto dim : shape) {
+    for (int i = 0; i < shape.size(); i++) {
       bool dimIsPacked = false;
-      for (auto packedDim : packing) {
-        if (dim == packedDim)
+      for (auto p : packing) {
+        if (i == shape.size() - 1 - p)
           dimIsPacked = true;
       }
-      if (dimIsPacked)
+      if (dimIsPacked) {
+        auto dim = shape[i];
         out.push_back(dim);
+      }
     }
     return out;
   }
 
+  string strMemrefDistDims() {
+    string out;
+    SmallVector<unsigned, 4> distDims = getMemrefDistDims();
+    for (auto dim : distDims) {
+      out += "[" + to_string(dim - 1) + ":0]";
+    }
+    return out;
+  }
   SmallVector<unsigned, 4> getMemrefDistDims() {
     SmallVector<unsigned, 4> out;
     auto memrefType = type.dyn_cast<hir::MemrefType>();
     auto shape = memrefType.getShape();
     auto packing = memrefType.getPacking();
-    for (int dim = 0; dim < shape.size(); dim++) {
+    for (int i = 0; i < shape.size(); i++) {
       bool dimIsPacked = false;
-      for (auto packedDim : packing) {
-        if (dim == packedDim)
+      for (auto p : packing) {
+        if (i == shape.size() - 1 - p)
           dimIsPacked = true;
       }
       if (!dimIsPacked)
-        out.push_back(shape[dim]);
+        out.push_back(shape[i]);
     }
     return out;
   }
@@ -78,35 +89,31 @@ private:
                               unsigned dataWidth) {
     string out;
     auto distDims = this->getMemrefDistDims();
-    string distDimsStr;
-    for (auto dim : distDims) {
-      distDimsStr += "[" + to_string(dim - 1) + ":0]";
-    }
-    out = "wire $distDimsStr $v_valid [$numInputsMinus1:0];\n"
-          "wire $distDimsStr [$dataWidthMinus1:0] $v_input "
+    string distDimsStr = strMemrefDistDims();
+
+    out = "wire $v_valid $distDimsStr [$numInputsMinus1:0];\n"
+          "wire [$dataWidthMinus1:0] $v_input $distDimsStr "
           "[$numInputsMinus1:0];\n ";
 
     if (!distDims.empty())
       out += "generate\n";
     string distDimAccessStr = "";
     for (int i = 0; i < distDims.size(); i++) {
-      string str_i = to_string(i);
+      string str_i = "i" + to_string(i);
       string str_dim = to_string(distDims[i]);
-      out += "genvar i" + str_i + ";\n";
-      out += "for(i" + str_i + " = 0; i" + str_i + " < " + str_dim + ";i" +
-             str_i + "++) begin\n";
-      distDimAccessStr += "[i" + str_i + "]";
+      out += "for(genvar " + str_i + " = 0; " + str_i + " < " + str_dim + ";" +
+             str_i + "=" + str_i + " + 1) begin\n";
+      distDimAccessStr += "[" + str_i + "]";
     }
 
     out += "always@(*) begin\n"
-           "if($v_valid[0] $distDimAccessStr)\n$v = "
-           "$v_input[0]$distDimAccessStr;\n";
+           "if($v_valid_access[0] )\n$v = "
+           "$v_input_access[0];\n";
     for (int i = 1; i < numInputs; i++) {
-      out += "else if ($v_valid[" + to_string(i) + "]$distDimAccessStr)\n";
-      out += "$v$distDimAccessStr = $v_input[" + to_string(i) +
-             "]$distDimAccessStr;\n";
+      out += "else if ($v_valid_access[" + to_string(i) + "])\n";
+      out += "$v = $v_input_access[" + to_string(i) + "];\n";
     }
-    out += "else\n $v$distDimAccessStr = $dataWidth'd0;\n";
+    out += "else\n $v = $dataWidth'd0;\n";
     out += "end\n";
     for (int i = 0; i < distDims.size(); i++) {
       out += "end\n";
@@ -114,29 +121,62 @@ private:
     if (!distDims.empty())
       out += "endgenerate\n";
 
-    findAndReplaceAll(out, "$v", str_v);
+    findAndReplaceAll(out, "$v_valid_access", str_v_valid + distDimAccessStr);
+    findAndReplaceAll(out, "$v_input_access", str_v_input + distDimAccessStr);
     findAndReplaceAll(out, "$v_valid", str_v_valid);
     findAndReplaceAll(out, "$v_input", str_v_input);
+    findAndReplaceAll(out, "$v", str_v + distDimAccessStr);
     findAndReplaceAll(out, "$dataWidthMinus1", to_string(dataWidth - 1));
     findAndReplaceAll(out, "$dataWidth", to_string(dataWidth));
     findAndReplaceAll(out, "$numInputsMinus1", to_string(numInputs - 1));
     findAndReplaceAll(out, "$distDimsStr", distDimsStr);
-    findAndReplaceAll(out, "$distDimAccessStr", distDimAccessStr);
+    return out;
+  }
+
+  string strMemrefAddrValid(unsigned idx) {
+    return strMemrefAddrValid() + "[" + to_string(idx) + "]";
+  }
+  string strMemrefAddrInput(unsigned idx) {
+    return strMemrefAddrInput() + "[" + to_string(idx) + "]";
+  }
+  string strMemrefDistDimAccess(ArrayRef<VerilogValue> addr) {
+    string out;
+    auto packing = type.dyn_cast<hir::MemrefType>().getPacking();
+    for (int i = 0; i < addr.size(); i++) {
+      bool isDistDim = true;
+      for (auto p : packing) {
+        if (p == addr.size() - 1 - i)
+          isDistDim = false;
+      }
+      if (isDistDim) {
+        VerilogValue v = addr[i];
+        if (v.isIntegerConst())
+          out += "[" + to_string(v.getIntegerConst()) + "]";
+        else
+          out += "[" + v.strWire() + " /*ERROR: expected constant.*/]";
+      }
+    }
     return out;
   }
 
 public:
-  string strMemrefDef() {
-    if (this->numAccess() == 0)
-      return "//Unused memref " + this->strWire() + ".\n";
+  void setIntegerConst(int value) {
+    isConstValue = true;
+    constValue.val_int = value;
+  }
+  bool isIntegerConst() { return isConstValue && type.isa<IntegerType>(); }
+  bool getIntegerConst() { return constValue.val_int; }
+  string strMemrefSel() {
+    // if (this->numAccess() == 0)
+    //  return "//Unused memref " + this->strWire() + ".\n";
     stringstream output;
     auto str_addr = this->strMemrefAddr();
     // print addr bus selector.
     unsigned addrWidth = calcAddrWidth(type.dyn_cast<MemrefType>());
     if (addrWidth > 0) {
       output << buildDataSelectorStr(
-          this->strMemrefAddr(), this->strMemrefAddrInput(),
-          this->strMemrefAddrValid(), this->numAccess(), addrWidth);
+          this->strMemrefAddr(), this->strMemrefAddrValid(),
+          this->strMemrefAddrInput(), this->numAccess(), addrWidth);
       output << "\n";
     }
     // print rd_en selector.
@@ -148,13 +188,14 @@ public:
 
     // print write bus selector.
     if (this->numWrites() > 0) {
-      unsigned dataWidth = calcDataWidth(type.dyn_cast<MemrefType>());
+      unsigned dataWidth =
+          getBitWidth(type.dyn_cast<MemrefType>().getElementType());
       string str_wr_en = this->strMemrefWrEn();
       output << buildEnableSelectorStr(str_wr_en, this->numWrites());
       string str_wr_data = this->strMemrefWrData();
       output << buildDataSelectorStr(
-          this->strMemrefWrData(), this->strMemrefWrDataInput(),
-          this->strMemrefWrDataValid(), this->numWrites(), dataWidth);
+          this->strMemrefWrData(), this->strMemrefWrDataValid(),
+          this->strMemrefWrDataInput(), this->numWrites(), dataWidth);
       output << "\n";
     }
     return output.str();
@@ -171,36 +212,51 @@ public:
   }
 
   string strMemrefAddr() { return name + "_addr"; }
-  string strMemrefAddrValid(unsigned idx) {
-    return strMemrefAddrValid() + "[" + to_string(idx) + "]";
+  string strMemrefAddrValid(ArrayRef<VerilogValue> addr, unsigned idx) {
+    string distDimAccessStr = strMemrefDistDimAccess(addr);
+    return strMemrefAddrValid() + distDimAccessStr + "[" + to_string(idx) + "]";
   }
-  string strMemrefAddrInput(unsigned idx) {
-    return strMemrefAddrInput() + "[" + to_string(idx) + "]";
+  string strMemrefAddrInput(ArrayRef<VerilogValue> addr, unsigned idx) {
+    string distDimAccessStr = strMemrefDistDimAccess(addr);
+    return strMemrefAddrInput() + distDimAccessStr + "[" + to_string(idx) + "]";
   }
 
-  string strMemrefRdData() { return name + "_rd_data"; }
+  string strMemrefRdData(ArrayRef<VerilogValue> addr) {
+    string distDimAccessStr = strMemrefDistDimAccess(addr);
+    return name + "_rd_data" + distDimAccessStr;
+  }
 
   string strMemrefWrData() { return name + "_wr_data"; }
-  string strMemrefWrDataValid(unsigned idx) {
-    return strMemrefWrDataValid() + "[" + to_string(idx) + "]";
+  string strMemrefWrDataValid(ArrayRef<VerilogValue> addr, unsigned idx) {
+    string distDimAccessStr = strMemrefDistDimAccess(addr);
+    return strMemrefWrDataValid() + distDimAccessStr + "[" + to_string(idx) +
+           "]";
   }
-  string strMemrefWrDataInput(unsigned idx) {
-    return strMemrefWrDataInput() + "[" + to_string(idx) + "]";
+  string strMemrefWrDataInput(ArrayRef<VerilogValue> addr, unsigned idx) {
+    string distDimAccessStr = strMemrefDistDimAccess(addr);
+    return strMemrefWrDataInput() + distDimAccessStr + "[" + to_string(idx) +
+           "]";
   }
 
   string strMemrefRdEn() { return name + "_rd_en"; }
-  string strMemrefRdEnInput(unsigned idx) {
-    return strMemrefRdEnInput() + "[" + to_string(idx) + "]";
+  string strMemrefRdEnInput(ArrayRef<VerilogValue> addr, unsigned idx) {
+    string distDimAccessStr = strMemrefDistDimAccess(addr);
+    return strMemrefRdEnInput() + distDimAccessStr + "[" + to_string(idx) + "]";
   }
 
   string strMemrefWrEn() { return name + "_wr_en"; }
-  string strMemrefWrEnInput(unsigned idx) {
-    return strMemrefWrEnInput() + "[" + to_string(idx) + "]";
+  string strMemrefWrEnInput(ArrayRef<VerilogValue> addr, unsigned idx) {
+    string distDimAccessStr = strMemrefDistDimAccess(addr);
+    return strMemrefWrEnInput() + distDimAccessStr + "[" + to_string(idx) + "]";
   }
   void incNumReads() { usageInfo.numReads++; }
   void incNumWrites() { usageInfo.numWrites++; }
 
 private:
+  bool isConstValue = false;
+  union {
+    int val_int;
+  } constValue;
   struct {
     unsigned numReads = 0;
     unsigned numWrites = 0;
@@ -208,4 +264,43 @@ private:
   Type type;
   string name;
 };
+
+string VerilogValue::strMemrefArgDef() {
+  string out;
+  MemrefType memrefTy = type.dyn_cast<MemrefType>();
+  hir::Details::PortKind port = memrefTy.getPort();
+  string portString =
+      ((port == hir::Details::r) ? "r"
+                                 : (port == hir::Details::w) ? "w" : "rw");
+  out += "//MemrefType : port = " + portString + ".\n";
+  unsigned addrWidth = calcAddrWidth(memrefTy);
+  string distDimsStr = strMemrefDistDims();
+  bool printComma = false;
+  unsigned dataWidth = getBitWidth(memrefTy.getElementType());
+  /* Verilog has wierd convension that module input/output can't have unpacked
+   * dims but can have multiple packed dims and wires can't have multiple packed
+   * dims but can have multiple unpacked dims.
+   */
+  if (addrWidth > 0) { // add dims may be distributed.
+    out += "output reg" + distDimsStr + "[" + to_string(addrWidth - 1) +
+           ":0] " + this->strMemrefAddr();
+    printComma = true;
+  }
+  if (port == hir::Details::r || port == hir::Details::rw) {
+    if (printComma)
+      out += ",\n";
+    out += "output wire " + distDimsStr + this->strMemrefRdEn();
+    out += ",\ninput wire " + distDimsStr + "[" + to_string(dataWidth - 1) +
+           ":0] " + this->strMemrefRdData(SmallVector<VerilogValue, 4>());
+    printComma = true;
+  }
+  if (port == hir::Details::w || port == hir::Details::rw) {
+    if (printComma)
+      out += ",\n";
+    out += "output wire " + distDimsStr + this->strMemrefWrEn();
+    out += ",\noutput reg " + distDimsStr + "[" + to_string(dataWidth - 1) +
+           ":0] " + this->strMemrefWrData();
+  }
+  return out;
+}
 #endif
