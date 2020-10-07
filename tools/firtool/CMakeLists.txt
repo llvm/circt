@@ -14,7 +14,7 @@ target_link_libraries(firtool PRIVATE
   MLIRSupport
   MLIRIR
   MLIROptLib
-  MLIRStandardOps
+  MLIRStandard
   MLIRTransforms
   MLIRTranslation
   )

@@ -12,7 +12,7 @@ add_mlir_dialect_library(MLIRLLHDTransforms
   LINK_LIBS PUBLIC
   MLIREDSC
   MLIRIR
-  MLIRStandardOps
+  MLIRStandard
   MLIRLLHD
   MLIRTransformUtils
 )

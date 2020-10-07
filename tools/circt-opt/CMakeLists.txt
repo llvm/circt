@@ -24,7 +24,7 @@ target_link_libraries(circt-opt
   MLIRSupport
   MLIRIR
   MLIROptLib
-  MLIRStandardOps
+  MLIRStandard
   MLIRTransforms
   MLIRLLVMIR
   )
