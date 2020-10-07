@@ -302,6 +302,7 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
 
 /// Flattens a single input in `op` if `hasOneUse` is true and it can be defined
 /// as an Op. Returns true if successful, and false otherwise.
+/// Example: op(1, 2, op(3, 4), 5) -> op(1, 2, 3, 4, 5)  // returns true
 template <typename Op>
 static bool tryFlatteningOperands(Op op, PatternRewriter &rewriter) {
   auto inputs = op.inputs();
