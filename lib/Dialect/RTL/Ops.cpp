@@ -300,6 +300,24 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
   build(builder, result, APInt(numBits, (uint64_t)value, /*isSigned=*/true));
 }
 
+/// Flattens `opInputs`, and inserts the flattened inputs to the nth index of
+/// the original inputs. This is used when flattening in the canonicalization
+/// pass. Example: op(1, 2, op(3, 4), 5) -> op(1, 2, 3, 4, 5)
+static auto flattenNthInput(mlir::OperandRange inputs,
+                            mlir::OperandRange opInputs, size_t splitIndex) {
+  assert(splitIndex < inputs.size() &&
+         "splitIndex should be less than `inputs` size.");
+
+  SmallVector<Value, 4> newOperands;
+  newOperands.reserve(inputs.size() + opInputs.size());
+
+  auto opPosition = inputs.begin() + splitIndex;
+  newOperands.append(inputs.begin(), opPosition);
+  newOperands.append(opInputs.begin(), opInputs.end());
+  newOperands.append(opPosition + 1, inputs.end());
+  return newOperands;
+}
+
 void ConstantOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
   auto intTy = getType().cast<IntegerType>();
@@ -442,18 +460,8 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         auto andOp = inputs[i].getDefiningOp<rtl::AndOp>();
         if (!andOp)
           continue;
-
-        auto flattenedAndOpInputs = andOp.inputs();
-        SmallVector<Value, 4> newOperands;
-        newOperands.reserve(size + flattenedAndOpInputs.size());
-
-        auto andOpPosition = inputs.begin() + i;
-        newOperands.append(inputs.begin(), andOpPosition);
-        newOperands.append(flattenedAndOpInputs.begin(),
-                           flattenedAndOpInputs.end());
-        newOperands.append(andOpPosition + 1, inputs.end());
-
-        rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
+        rewriter.replaceOpWithNewOp<AndOp>(
+            op, op.getType(), flattenNthInput(inputs, andOp.inputs(), i));
         return success();
       }
 
@@ -515,8 +523,19 @@ void OrOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
         return success();
       }
+      // or(x, or(...)) -> or(x, ...) -- flatten
+      for (size_t i = 0; i != size; ++i) {
+        if (!inputs[i].hasOneUse())
+          continue;
+        auto orOp = inputs[i].getDefiningOp<rtl::OrOp>();
+        if (!orOp)
+          continue;
 
-      /// TODO: or(x, or(...)) -> or(x, ...) -- flatten
+        rewriter.replaceOpWithNewOp<OrOp>(
+            op, op.getType(), flattenNthInput(inputs, orOp.inputs(), i));
+        return success();
+      }
+
       /// TODO: or(..., x, not(x)) -> or(..., '1) -- complement
       return failure();
     }
@@ -578,8 +597,20 @@ void XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
+      // xor(x, xor(...)) -> xor(x, ...) -- flatten
+      for (size_t i = 0; i != size; ++i) {
+        if (!inputs[i].hasOneUse())
+          continue;
+        auto xorOp = inputs[i].getDefiningOp<rtl::XorOp>();
+        if (!xorOp)
+          continue;
+
+        rewriter.replaceOpWithNewOp<XorOp>(
+            op, op.getType(), flattenNthInput(inputs, xorOp.inputs(), i));
+        return success();
+      }
+
       /// TODO: xor(..., '1) -> not(xor(...))
-      /// TODO: xor(x, xor(...)) -> xor(x, ...) -- flatten
       /// TODO: xor(..., x, not(x)) -> xor(..., '1)
       return failure();
     }
@@ -627,8 +658,21 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
+      // add(x, add(...)) -> add(x, ...) -- flatten
+      for (size_t i = 0; i != size; ++i) {
+        if (!inputs[i].hasOneUse())
+          continue;
+        auto addOp = inputs[i].getDefiningOp<rtl::AddOp>();
+        if (!addOp)
+          continue;
+
+        rewriter.replaceOpWithNewOp<AddOp>(
+            op, op.getType(), flattenNthInput(inputs, addOp.inputs(), i));
+        return success();
+      }
+
       /// TODO: add(..., x, x) -> add(..., shl(x, 1))
-      /// TODO: add(x, add(...)) -> add(x, ...) -- flatten
+
       return failure();
     }
   };
@@ -680,7 +724,19 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
-      /// TODO: mul(a, mul(...)) -> mul(a, ...) -- flatten
+      // mul(a, mul(...)) -> mul(a, ...) -- flatten
+      for (size_t i = 0; i != size; ++i) {
+        if (!inputs[i].hasOneUse())
+          continue;
+        auto mulOp = inputs[i].getDefiningOp<rtl::MulOp>();
+        if (!mulOp)
+          continue;
+
+        rewriter.replaceOpWithNewOp<MulOp>(
+            op, op.getType(), flattenNthInput(inputs, mulOp.inputs(), i));
+        return success();
+      }
+
       return failure();
     }
   };
