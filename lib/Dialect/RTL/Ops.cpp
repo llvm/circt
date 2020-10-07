@@ -300,8 +300,8 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
   build(builder, result, APInt(numBits, (uint64_t)value, /*isSigned=*/true));
 }
 
-/// Flattens an input in `op` if `hasOneUse` is true and it can be defined as an
-/// Op. Returns true if successful, and false otherwise.
+/// Flattens a single input in `op` if `hasOneUse` is true and it can be defined
+/// as an Op. Returns true if successful, and false otherwise.
 template <typename Op>
 static bool tryFlatteningOperands(Op op, PatternRewriter &rewriter) {
   auto inputs = op.inputs();
