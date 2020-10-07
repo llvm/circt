@@ -4,9 +4,11 @@
 
 #include "circt/Dialect/RTL/Dialect.h"
 #include "circt/Dialect/RTL/Ops.h"
+#include "circt/Dialect/RTL/Types.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/StandardTypes.h"
+#include "llvm/Support/FormatVariadic.h"
 
 using namespace circt;
 using namespace rtl;
@@ -18,6 +20,12 @@ using namespace rtl;
 RTLDialect::RTLDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context,
     ::mlir::TypeID::get<RTLDialect>()) {
+
+  // Register types.
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "circt/Dialect/RTL/RTLTypes.cpp.inc"
+      >();
 
   // Register operations.
   addOperations<
@@ -43,4 +51,24 @@ Operation *RTLDialect::materializeConstant(OpBuilder &builder, Attribute value,
       return builder.create<ConstantOp>(loc, type, attrValue);
 
   return nullptr;
+}
+
+/// Parses a type registered to this dialect
+Type RTLDialect::parseType(DialectAsmParser &parser) const {
+  llvm::StringRef mnemonic;
+  if (parser.parseKeyword(&mnemonic))
+    return Type();
+  auto genType = generatedTypeParser(getContext(), parser, mnemonic);
+  if (genType != Type())
+    return genType;
+  parser.emitError(parser.getCurrentLocation(),
+                   llvm::formatv("Could not parse rtl.{0}.\n", mnemonic));
+  return Type();
+}
+
+/// Print a type registered to this dialect
+void RTLDialect::printType(Type type, DialectAsmPrinter &printer) const {
+  if (!generatedTypePrinter(type, printer))
+    return;
+  llvm_unreachable("unexpected 'rtl' type.");
 }
