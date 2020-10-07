@@ -300,17 +300,18 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
   build(builder, result, APInt(numBits, (uint64_t)value, /*isSigned=*/true));
 }
 
-/// Flattens `opInputs`, and inserts the flattened inputs to the Nth index of
+/// Flattens `opInputs`, and inserts the flattened inputs to the nth index of
 /// the original inputs. This is used when flattening in the canonicalization
 /// pass. Example: op(1, 2, op(3, 4), 5) -> op(1, 2, 3, 4, 5)
-template <typename Inputs>
-auto flattenNthInput(const Inputs &inputs, const Inputs &opInputs, size_t N) {
-  assert(N < inputs.size() && "N should be an index less than `inputs` size.");
+static auto flattenNthInput(mlir::OperandRange inputs,
+                            mlir::OperandRange opInputs, size_t splitIndex) {
+  assert(splitIndex < inputs.size() &&
+         "splitIndex should be less than `inputs` size.");
 
   SmallVector<Value, 4> newOperands;
   newOperands.reserve(inputs.size() + opInputs.size());
 
-  auto opPosition = inputs.begin() + N;
+  auto opPosition = inputs.begin() + splitIndex;
   newOperands.append(inputs.begin(), opPosition);
   newOperands.append(opInputs.begin(), opInputs.end());
   newOperands.append(opPosition + 1, inputs.end());
