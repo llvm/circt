@@ -1,7 +1,7 @@
 `default_nettype none
 `include "out.sv"
 module Add_tb();
-wire[6:0] v0_addr;
+wire[7:0][6:0] v0_addr;
 wire v0_rd_en;
 reg[31:0]  v0_rd_data;
 wire[6:0] v1_addr;

@@ -76,28 +76,19 @@ private:
   string strMemrefWrEnInput() { return name + "_wr_en_input"; }
   Type getType() { return type; }
 
-  static string buildEnableSelectorStr(string &v_en, unsigned numInputs) {
-    stringstream output;
-    string v_en_input = v_en + "_input";
-    output << "wire[" << numInputs - 1 << ":0]" << v_en_input << ";\n";
-    output << "assign " << v_en << " = |" << v_en_input << ";\n";
-    return output.str();
-  }
-
-  string buildDataSelectorStr(string str_v, string str_v_valid,
-                              string str_v_input, unsigned numInputs,
-                              unsigned dataWidth) {
+  string buildEnableSelectorStr(string str_en, string str_en_input,
+                                unsigned numInputs) {
     string out;
-    auto distDims = this->getMemrefDistDims();
+    auto distDims = getMemrefDistDims();
     string distDimsStr = strMemrefDistDims();
+    string distDimAccessStr = "";
 
-    out = "wire $v_valid $distDimsStr [$numInputsMinus1:0];\n"
-          "wire [$dataWidthMinus1:0] $v_input $distDimsStr "
-          "[$numInputsMinus1:0];\n ";
+    // Define en_input signal.
+    out += "wire [$numInputsMinus1:0] $str_en_input $distDimsStr;\n";
 
+    // Print generate loops for distributed dimensions.
     if (!distDims.empty())
       out += "generate\n";
-    string distDimAccessStr = "";
     for (int i = 0; i < distDims.size(); i++) {
       string str_i = "i" + to_string(i);
       string str_dim = to_string(distDims[i]);
@@ -106,6 +97,50 @@ private:
       distDimAccessStr += "[" + str_i + "]";
     }
 
+    // Assign the enable signal using en_input.
+    out += "assign $str_en $distDimAccessStr =| $str_en_input "
+           "$distDimAccessStr;\n";
+
+    // Print end/endgenerate.
+    for (int i = 0; i < distDims.size(); i++) {
+      out += "end\n";
+    }
+    if (!distDims.empty())
+      out += "endgenerate\n";
+
+    findAndReplaceAll(out, "$numInputsMinus1", to_string(numInputs - 1));
+    findAndReplaceAll(out, "$str_en_input", str_en_input);
+    findAndReplaceAll(out, "$str_en", str_en);
+    findAndReplaceAll(out, "$distDimAccessStr", distDimAccessStr);
+    findAndReplaceAll(out, "$distDimsStr", distDimsStr);
+    return out;
+  }
+
+  string buildDataSelectorStr(string str_v, string str_v_valid,
+                              string str_v_input, unsigned numInputs,
+                              unsigned dataWidth) {
+    string out;
+    auto distDims = getMemrefDistDims();
+    string distDimsStr = strMemrefDistDims();
+    string distDimAccessStr = "";
+
+    // Define the valid and input wire arrays.
+    out = "wire $v_valid $distDimsStr [$numInputsMinus1:0];\n"
+          "wire [$dataWidthMinus1:0] $v_input $distDimsStr "
+          "[$numInputsMinus1:0];\n ";
+
+    // Print generate loops for distributed dimensions.
+    if (!distDims.empty())
+      out += "generate\n";
+    for (int i = 0; i < distDims.size(); i++) {
+      string str_i = "i" + to_string(i);
+      string str_dim = to_string(distDims[i]);
+      out += "for(genvar " + str_i + " = 0; " + str_i + " < " + str_dim + ";" +
+             str_i + "=" + str_i + " + 1) begin\n";
+      distDimAccessStr += "[" + str_i + "]";
+    }
+
+    // Assign the data bus($v) using valid and input arrays.
     out += "always@(*) begin\n"
            "if($v_valid_access[0] )\n$v = "
            "$v_input_access[0];\n";
@@ -115,6 +150,8 @@ private:
     }
     out += "else\n $v = $dataWidth'd0;\n";
     out += "end\n";
+
+    // Print end/endgenerate.
     for (int i = 0; i < distDims.size(); i++) {
       out += "end\n";
     }
@@ -167,35 +204,34 @@ public:
   bool isIntegerConst() { return isConstValue && type.isa<IntegerType>(); }
   bool getIntegerConst() { return constValue.val_int; }
   string strMemrefSel() {
-    // if (this->numAccess() == 0)
-    //  return "//Unused memref " + this->strWire() + ".\n";
+    // if (numAccess() == 0)
+    //  return "//Unused memref " + strWire() + ".\n";
     stringstream output;
-    auto str_addr = this->strMemrefAddr();
+    auto str_addr = strMemrefAddr();
     // print addr bus selector.
     unsigned addrWidth = calcAddrWidth(type.dyn_cast<MemrefType>());
     if (addrWidth > 0) {
-      output << buildDataSelectorStr(
-          this->strMemrefAddr(), this->strMemrefAddrValid(),
-          this->strMemrefAddrInput(), this->numAccess(), addrWidth);
+      output << buildDataSelectorStr(strMemrefAddr(), strMemrefAddrValid(),
+                                     strMemrefAddrInput(), numAccess(),
+                                     addrWidth);
       output << "\n";
     }
     // print rd_en selector.
-    if (this->numReads() > 0) {
-      string v_rd_en = this->strMemrefRdEn();
-      output << buildEnableSelectorStr(v_rd_en, this->numReads());
+    if (numReads() > 0) {
+      output << buildEnableSelectorStr(strMemrefRdEn(), strMemrefRdEnInput(),
+                                       numReads());
       output << "\n";
     }
 
     // print write bus selector.
-    if (this->numWrites() > 0) {
+    if (numWrites() > 0) {
       unsigned dataWidth =
           getBitWidth(type.dyn_cast<MemrefType>().getElementType());
-      string str_wr_en = this->strMemrefWrEn();
-      output << buildEnableSelectorStr(str_wr_en, this->numWrites());
-      string str_wr_data = this->strMemrefWrData();
-      output << buildDataSelectorStr(
-          this->strMemrefWrData(), this->strMemrefWrDataValid(),
-          this->strMemrefWrDataInput(), this->numWrites(), dataWidth);
+      output << buildEnableSelectorStr(strMemrefWrEn(), strMemrefWrEnInput(),
+                                       numWrites());
+      output << buildDataSelectorStr(strMemrefWrData(), strMemrefWrDataValid(),
+                                     strMemrefWrDataInput(), numWrites(),
+                                     dataWidth);
       output << "\n";
     }
     return output.str();
@@ -283,23 +319,23 @@ string VerilogValue::strMemrefArgDef() {
    */
   if (addrWidth > 0) { // add dims may be distributed.
     out += "output reg" + distDimsStr + "[" + to_string(addrWidth - 1) +
-           ":0] " + this->strMemrefAddr();
+           ":0] " + strMemrefAddr();
     printComma = true;
   }
   if (port == hir::Details::r || port == hir::Details::rw) {
     if (printComma)
       out += ",\n";
-    out += "output wire " + distDimsStr + this->strMemrefRdEn();
+    out += "output wire " + distDimsStr + strMemrefRdEn();
     out += ",\ninput wire " + distDimsStr + "[" + to_string(dataWidth - 1) +
-           ":0] " + this->strMemrefRdData(SmallVector<VerilogValue, 4>());
+           ":0] " + strMemrefRdData(SmallVector<VerilogValue, 4>());
     printComma = true;
   }
   if (port == hir::Details::w || port == hir::Details::rw) {
     if (printComma)
       out += ",\n";
-    out += "output wire " + distDimsStr + this->strMemrefWrEn();
+    out += "output wire " + distDimsStr + strMemrefWrEn();
     out += ",\noutput reg " + distDimsStr + "[" + to_string(dataWidth - 1) +
-           ":0] " + this->strMemrefWrData();
+           ":0] " + strMemrefWrData();
   }
   return out;
 }
