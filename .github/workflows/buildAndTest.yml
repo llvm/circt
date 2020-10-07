@@ -84,11 +84,7 @@ jobs:
         else
           DIFF_COMMIT="$PR_BASE"
         fi
-        echo "Git diff'ing against $DIFF_COMMIT"
-        CHANGED_FILES=`git diff --name-only -r $DIFF_COMMIT | grep -E '.(c|cpp|h|hpp)$' | xargs`
-        echo "Changed files: $CHANGED_FILES"
-        [ -z "$CHANGED_FILES" ] && exit 0
-        clang-format -i $CHANGED_FILES
+        git clang-format $(DIFF_COMMIT)
         git diff > clang-format.patch
         if [ -s clang-format.patch ]; then
           echo "Clang-format found formatting problems in the following files. See diff in the clang-format.patch artifact."
