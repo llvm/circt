@@ -97,7 +97,6 @@ private:
   llvm::DenseMap<Value, unsigned> mapTimeToMaxOffset;
   SmallVector<pair<unsigned, function<string()>>, 4> replaceLocs;
   std::stack<string> yieldTarget;
-  std::stack<hir::UnrollForOp> unrollForStack;
 }; // namespace
 
 SmallVector<VerilogValue, 4>
@@ -162,10 +161,11 @@ LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
     module_out << "assign " << v_mem.strMemrefAddrInput(addr, v_mem.numAccess())
                << " = {";
     for (int i = packing.size() - 1; i >= 0; i--) {
-      auto addrI = addr[i];
+      auto p = packing.size() - 1 - packing[i];
+      auto addrI = addr[p];
       if (i < packing.size() - 1)
         module_out << ", ";
-      module_out << addrI.strWire();
+      module_out << addrI.strWireOrConst();
     }
     module_out << "};\n";
   }
@@ -206,13 +206,29 @@ LogicalResult VerilogPrinter::printAllocOp(hir::AllocOp op,
 LogicalResult VerilogPrinter::printWireWriteOp(hir::WireWriteOp op,
                                                unsigned indentAmount) {
   Value value = op.value();
+  auto v_value = mapValueToVerilog[value];
   Value wire = op.wire();
-  auto addr = op.addr();
+  auto v_wire = mapValueToVerilog[wire];
+  auto addr = convertToVerilog(op.addr());
   Value tstart = op.tstart();
   auto offset = op.offset();
-  auto shape = wire.getType().dyn_cast<hir::MemrefType>().getShape();
+  auto shape = wire.getType().dyn_cast<hir::WireType>().getShape();
+  string arrayAccessStr = "";
+
+  for (auto idx : addr) {
+    if (idx.isIntegerConst()) {
+      arrayAccessStr += "[" + to_string(idx.getIntegerConst()) + "]";
+    } else {
+      arrayAccessStr +=
+          "[" + idx.strWire() + " /*ERROR: Expected integer constant.*/]";
+    }
+  }
+
+  module_out << "assign " << v_wire.strWire() << arrayAccessStr << " = "
+             << v_value.strWireOrConst() << ";\n";
   return success();
 }
+
 LogicalResult VerilogPrinter::printMemWriteOp(MemWriteOp op,
                                               unsigned indentAmount) {
   auto addr = convertToVerilog(op.addr());
@@ -257,7 +273,7 @@ LogicalResult VerilogPrinter::printMemWriteOp(MemWriteOp op,
   module_out << "assign " << v_mem.strMemrefWrDataValid(addr, v_mem.numWrites())
              << " = " << v_tstart.strDelayedWire(delayValue) << ";\n";
   module_out << "assign " << v_mem.strMemrefWrDataInput(addr, v_mem.numWrites())
-             << " = " << v_value.strWire() << ";\n\n";
+             << " = " << v_value.strWireOrConst() << ";\n\n";
 
   mapValueToVerilog[mem].incNumWrites();
   return success();
@@ -277,8 +293,8 @@ LogicalResult VerilogPrinter::printAddOp(hir::AddOp op, unsigned indentAmount) {
   if (auto resultIntType = resultType.dyn_cast<IntegerType>()) {
     unsigned resultWidth = resultIntType.getWidth();
     module_out << "wire [" << resultWidth - 1 << " : 0] v" << id_result << " = "
-               << mapValueToVerilog[left].strWire() << " + "
-               << mapValueToVerilog[right].strWire() << ";\n";
+               << mapValueToVerilog[left].strWireOrConst() << " + "
+               << mapValueToVerilog[right].strWireOrConst() << ";\n";
     return success();
   } else if (auto resultConstType = resultType.dyn_cast<ConstType>()) {
     if (auto elementIntType =
@@ -384,49 +400,41 @@ LogicalResult VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
 
 LogicalResult VerilogPrinter::printUnrollForOp(UnrollForOp op,
                                                unsigned indentAmount) {
+  Value tlast = op.tlast(); // output
   int lb = op.lb().getLimitedValue();
   int ub = op.ub().getLimitedValue();
   int step = op.step().getLimitedValue();
   int tstep = op.tstep().getValueOr(APInt()).getLimitedValue();
   Value tstart = op.tstart();
   auto v_tstart = mapValueToVerilog[tstart];
-  Value idx = op.getInductionVar();
   Value tloop = op.getIterTimeVar();
-
-  auto id_loop = newValueNumber();
-
-  auto v_i = VerilogValue(idx.getType(), "i" + to_string(id_loop));
-  auto v_tloop = VerilogValue(tloop.getType(), "tloop" + to_string(id_loop));
+  Value idx = op.getInductionVar();
+  auto v_i = VerilogValue(idx.getType(), "");
+  mapValueToVerilog.insert(make_pair(tloop, v_tstart));
   mapValueToVerilog.insert(make_pair(idx, v_i));
-  mapValueToVerilog.insert(make_pair(tloop, v_tloop));
-  yieldTarget.push("tloop_in" + to_string(id_loop) + "[" + v_i.strWire() +
-                   "+1]");
+  VerilogValue next_v_tloop = v_tstart;
+  for (int i = lb; i < ub; i += step) {
+    mapValueToVerilog[idx].setIntegerConst(i);
+    auto id_tloop = newValueNumber();
+    next_v_tloop = VerilogValue(tloop.getType(), "tloop" + to_string(id_tloop));
+    module_out << "\n//{ Unrolled body " << i << "\n";
+    module_out << "wire " << next_v_tloop.strWire() << ";\n";
+    yieldTarget.push(next_v_tloop.strWire());
 
-  module_out << "\n//{ Loop" << id_loop << "\n";
-  module_out << "genvar " << v_i.strWire() << ";\n";
-  module_out << "wire[" + to_string(ub - 1) + " : " + to_string(lb) +
-                    "] tloop_in"
-             << to_string(id_loop) << ";\n";
-  module_out << "assign tloop_in" << to_string(id_loop)
-             << "[0] = " << v_tstart.strWire() << ";\n";
-  if (unrollForStack.empty())
-    module_out << "generate"; // this is the first generate
-  unrollForStack.push(op);
-  module_out << " for(" << v_i.strWire() << " = " << lb << "; " << v_i.strWire()
-             << " < " << ub << "; " << v_i.strWire() << " = " << v_i.strWire()
-             << " + " << step << ") begin\n";
-  module_out << "wire " << v_tloop.strWire() << " = tloop_in"
-             << to_string(id_loop) << "[" << v_i.strWire() << "];\n";
+    // At first iteration, tloop -> v_tstart, whose time offsets are already
+    // printed.
+    if (i > lb)
+      printTimeOffsets(tloop);
+    auto status = printBody(op.getLoopBody().front(), indentAmount);
 
-  printTimeOffsets(tloop);
-  printBody(op.getLoopBody().front(), indentAmount);
+    yieldTarget.pop();
+    mapValueToVerilog[tloop] = next_v_tloop;
+    module_out << "\n//}\n";
+    if (status.value == LogicalResult::Failure)
+      break;
+  }
 
-  module_out << "end\n";
-  unrollForStack.pop();
-  if (unrollForStack.empty())
-    module_out << "endgenerate";
-
-  yieldTarget.pop();
+  mapValueToVerilog.insert(make_pair(tlast, next_v_tloop));
   return success();
 }
 
@@ -453,6 +461,9 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
   } else if (auto op = dyn_cast<hir::MemWriteOp>(inst)) {
     module_out << "\n//MemWriteOp\n";
     return printMemWriteOp(op, indentAmount);
+  } else if (auto op = dyn_cast<hir::WireWriteOp>(inst)) {
+    module_out << "\n//WireWriteOp\n";
+    return printWireWriteOp(op, indentAmount);
   } else if (auto op = dyn_cast<hir::AddOp>(inst)) {
     module_out << "\n//AddOp\n";
     return printAddOp(op, indentAmount);
@@ -566,8 +577,7 @@ LogicalResult VerilogPrinter::printTimeOffsets(Value timeVar) {
   module_out << "always@(*) " << v_timeVar.strDelayedWire(0) << " = "
              << v_timeVar.strWire() << ";\n";
   string str_i = "i" + to_string(newValueNumber());
-  if (unrollForStack.empty())
-    module_out << "generate\n";
+  module_out << "generate\n";
   module_out << "genvar " << str_i << ";\n";
   module_out << "\nfor(" << str_i << " = 1; " << str_i << "<= $loc" << loc
              << "; " << str_i << "= " << str_i << " + 1) begin\n";
@@ -577,8 +587,7 @@ LogicalResult VerilogPrinter::printTimeOffsets(Value timeVar) {
              << "-1];\n";
   module_out << "end\n";
   module_out << "end\n";
-  if (unrollForStack.empty())
-    module_out << "endgenerate\n\n";
+  module_out << "endgenerate\n\n";
 
   replaceLocs.push_back(make_pair(
       loc, [=]() -> string { return to_string(mapTimeToMaxOffset[timeVar]); }));

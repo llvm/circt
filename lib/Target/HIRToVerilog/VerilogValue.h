@@ -201,7 +201,16 @@ public:
     isConstValue = true;
     constValue.val_int = value;
   }
-  bool isIntegerConst() { return isConstValue && type.isa<IntegerType>(); }
+  bool isIntegerType() {
+    bool out = false;
+    if (type.isa<IntegerType>())
+      out = true;
+    else if (auto constType = type.dyn_cast<hir::ConstType>())
+      if (constType.getElementType().isa<IntegerType>())
+        out = true;
+    return out;
+  }
+  bool isIntegerConst() { return isConstValue && isIntegerType(); }
   bool getIntegerConst() { return constValue.val_int; }
   string strMemrefSel() {
     // if (numAccess() == 0)
@@ -237,7 +246,23 @@ public:
     return output.str();
   }
 
-  string strWire() { return name; }
+  string strWire() {
+    if (name == "") {
+      return "/*ERROR: Anonymus variable.*/";
+    }
+    return name;
+  }
+  string strWireOrConst() {
+    if (isIntegerConst()) {
+      string vlogDecimalLiteral =
+          to_string(getBitWidth(type)) + "'d" + to_string(getIntegerConst());
+      if (name == "")
+        return vlogDecimalLiteral;
+      return "/*" + name + "=*/ " + vlogDecimalLiteral;
+    }
+    return strWire();
+  }
+
   string strWireValid() { return name + "_valid"; }
   string strWireInput(unsigned idx) {
     return strWireInput() + "[" + to_string(idx) + "]";
