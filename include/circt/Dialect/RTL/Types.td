@@ -1,6 +1,7 @@
 //===- Types.td - RTL data type definitions ----------------*- tablegen -*-===//
 //
-// Basic data types for the RTL dialect.
+// Basic data types for the RTL dialect. These are intended to be common
+// (standard) types for hardware-oriented dialects.
 //
 //===----------------------------------------------------------------------===//
 
@@ -41,7 +42,7 @@ def UnionType : FieldInfo_Type<"Union"> {
   let parser = [{ return parseFieldInfoType<UnionType>($_ctxt, $_parser); }];
 }
 
-// Fields which are an array of stringrefs need to re-allocate all the strings
+// Fields which are an array of StringRefs need to re-allocate all the strings
 // as well as the array itself.
 class ArrayRefOfStringRef<string desc> :
   TypeParameter<"::llvm::ArrayRef<::llvm::StringRef>", desc> {
@@ -67,6 +68,6 @@ def EnumType : RTLType<"Enum"> {
 
   let parameters = (
     ins
-    ArrayRefOfStringRef<"Possible enum values">: $fields
+    ArrayRefOfStringRef<"Possible enumeration values">: $fields
   );
 }
