@@ -90,6 +90,9 @@ jobs:
           DIFF_COMMIT="$PR_BASE"
         fi
         echo "DIFF_COMMIT=$DIFF_COMMIT" >> $GITHUB_ENV
+    - name: git fetch base commit
+      run: |
+        git fetch origin $DIFF_COMMIT
     - name: clang-format
       if: ${{ always() }}
       run: |
