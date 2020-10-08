@@ -122,7 +122,7 @@ func @mul_annulment(%arg0: i11, %arg1: i11, %arg2: i11) -> i11 {
   return %0 : i11
 }
 
-// Flatten
+// Flattening
 
 // CHECK-LABEL: func @and_flatten_in_back(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
 // CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.and %arg0, %arg1, %arg2 : i7
@@ -151,6 +151,118 @@ func @and_flatten_in_middle(%arg0: i7, %arg1: i7, %arg2: i7, %arg3: i7) -> i7 {
 func @and_flatten_in_front(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
   %and0 = rtl.and %arg0, %arg1 : i7
   %0 = rtl.and %and0, %arg2 : i7
+  return %0 : i7
+}
+
+// CHECK-LABEL: func @or_flatten_in_back(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.or %arg0, %arg1, %arg2 : i7
+// CHECK-NEXT:    return [[RES]] : i7
+
+func @or_flatten_in_back(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+  %or0 = rtl.or %arg1, %arg2 : i7
+  %0 = rtl.or %arg0, %or0 : i7
+  return %0 : i7
+}
+
+// CHECK-LABEL: func @or_flatten_in_middle(%arg0: i7, %arg1: i7, %arg2: i7, %arg3: i7) -> i7 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.or %arg0, %arg1, %arg2, %arg3 : i7
+// CHECK-NEXT:    return [[RES]] : i7
+
+func @or_flatten_in_middle(%arg0: i7, %arg1: i7, %arg2: i7, %arg3: i7) -> i7 {
+  %or0 = rtl.or %arg1, %arg2 : i7
+  %0 = rtl.or %arg0, %or0, %arg3 : i7
+  return %0 : i7
+}
+
+// CHECK-LABEL: func @or_flatten_in_front(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.or %arg0, %arg1, %arg2 : i7
+// CHECK-NEXT:    return [[RES]] : i7
+
+func @or_flatten_in_front(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+  %or0 = rtl.or %arg0, %arg1 : i7
+  %0 = rtl.or %or0, %arg2 : i7
+  return %0 : i7
+}
+
+// CHECK-LABEL: func @xor_flatten_in_back(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.xor %arg0, %arg1, %arg2 : i7
+// CHECK-NEXT:    return [[RES]] : i7
+
+func @xor_flatten_in_back(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+  %xor0 = rtl.xor %arg1, %arg2 : i7
+  %0 = rtl.xor %arg0, %xor0 : i7
+  return %0 : i7
+}
+
+// CHECK-LABEL: func @xor_flatten_in_middle(%arg0: i7, %arg1: i7, %arg2: i7, %arg3: i7) -> i7 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.xor %arg0, %arg1, %arg2, %arg3 : i7
+// CHECK-NEXT:    return [[RES]] : i7
+
+func @xor_flatten_in_middle(%arg0: i7, %arg1: i7, %arg2: i7, %arg3: i7) -> i7 {
+  %xor0 = rtl.xor %arg1, %arg2 : i7
+  %0 = rtl.xor %arg0, %xor0, %arg3 : i7
+  return %0 : i7
+}
+
+// CHECK-LABEL: func @xor_flatten_in_front(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.xor %arg0, %arg1, %arg2 : i7
+// CHECK-NEXT:    return [[RES]] : i7
+
+func @xor_flatten_in_front(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+  %xor0 = rtl.xor %arg0, %arg1 : i7
+  %0 = rtl.xor %xor0, %arg2 : i7
+  return %0 : i7
+}
+
+func @add_flatten_in_back(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+  %add0 = rtl.add %arg1, %arg2 : i7
+  %0 = rtl.add %arg0, %add0 : i7
+  return %0 : i7
+}
+
+// CHECK-LABEL: func @add_flatten_in_middle(%arg0: i7, %arg1: i7, %arg2: i7, %arg3: i7) -> i7 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.add %arg0, %arg1, %arg2, %arg3 : i7
+// CHECK-NEXT:    return [[RES]] : i7
+
+func @add_flatten_in_middle(%arg0: i7, %arg1: i7, %arg2: i7, %arg3: i7) -> i7 {
+  %add0 = rtl.add %arg1, %arg2 : i7
+  %0 = rtl.add %arg0, %add0, %arg3 : i7
+  return %0 : i7
+}
+
+// CHECK-LABEL: func @add_flatten_in_front(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.add %arg0, %arg1, %arg2 : i7
+// CHECK-NEXT:    return [[RES]] : i7
+
+func @add_flatten_in_front(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+  %add0 = rtl.add %arg0, %arg1 : i7
+  %0 = rtl.add %add0, %arg2 : i7
+  return %0 : i7
+}
+
+func @mul_flatten_in_back(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+  %mul0 = rtl.mul %arg1, %arg2 : i7
+  %0 = rtl.mul %arg0, %mul0 : i7
+  return %0 : i7
+}
+
+// CHECK-LABEL: func @mul_flatten_in_middle(%arg0: i7, %arg1: i7, %arg2: i7, %arg3: i7) -> i7 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.mul %arg0, %arg1, %arg2, %arg3 : i7
+// CHECK-NEXT:    return [[RES]] : i7
+
+func @mul_flatten_in_middle(%arg0: i7, %arg1: i7, %arg2: i7, %arg3: i7) -> i7 {
+  %mul0 = rtl.mul %arg1, %arg2 : i7
+  %0 = rtl.mul %arg0, %mul0, %arg3 : i7
+  return %0 : i7
+}
+
+// CHECK-LABEL: func @mul_flatten_in_front(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.mul %arg0, %arg1, %arg2 : i7
+// CHECK-NEXT:    return [[RES]] : i7
+
+func @mul_flatten_in_front(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
+  %mul0 = rtl.mul %arg0, %arg1 : i7
+  %0 = rtl.mul %mul0, %arg2 : i7
   return %0 : i7
 }
 
