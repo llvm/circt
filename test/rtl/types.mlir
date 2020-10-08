@@ -15,7 +15,7 @@ module {
     return
   }
 
-  // CHECK-LABEL: func @union1(%arg0: !rtl.struct<{struct1,!rtl.struct<{exInt,i1},{exFP,f32}>},{float1,f32}>)
+  // CHECK-LABEL: func @union1(%arg0: !rtl.union<{struct1,!rtl.struct<{exInt,i1},{exFP,f32}>},{float1,f32}>)
   func @union1(%A: !exUnion1) {
     return
   }

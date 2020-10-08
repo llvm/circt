@@ -31,9 +31,51 @@ static llvm::hash_code hash_value(const FieldInfo &fi) { // NOLINT
 } // namespace rtl
 } // namespace circt
 
+/// The parser for both the struct and union types.
+template <typename FT>
+static Type parseFieldInfoType(MLIRContext *ctxt, DialectAsmParser &parser) {
+  SmallVector<FieldInfo, 4> parameters;
+  if (parser.parseLess())
+    return ::mlir::Type();
+  while (mlir::succeeded(parser.parseOptionalLBrace())) {
+    StringRef name;
+    if (parser.parseKeyword(&name))
+      return ::mlir::Type();
+    if (parser.parseComma())
+      return ::mlir::Type();
+    ::mlir::Type type;
+    if (parser.parseType(type))
+      return ::mlir::Type();
+    if (parser.parseRBrace())
+      return ::mlir::Type();
+    parameters.push_back(FieldInfo(name, type));
+    if (parser.parseOptionalComma())
+      break;
+  }
+  if (parser.parseGreater())
+    return ::mlir::Type();
+  return FT::get(ctxt, parameters);
+}
+
+/// The printer for both the struct and union types.
+template <typename FT>
+static void printFieldInfoType(DialectAsmPrinter &printer,
+                               const FT &typeInstance) {
+  printer << FT::getMnemonic() << "<";
+
+  for (size_t i = 0, e = typeInstance.getFields().size(); i < e; i++) {
+    const auto &field = typeInstance.getFields()[i];
+    printer << "{" << field.name << "," << field.type << "}";
+    if (i < e - 1)
+      printer << ",";
+  }
+  printer << ">";
+}
+
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/RTL/RTLTypes.cpp.inc"
 
+/// The parser for the enum type.
 Type EnumType::parse(MLIRContext *ctxt, DialectAsmParser &parser) {
   SmallVector<StringRef, 16> enumFields;
   if (parser.parseLess())

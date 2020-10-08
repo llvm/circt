@@ -15,33 +15,7 @@ class FieldInfo_Type<string name> : RTLType<name> {
     ArrayRefOfSelfAllocationParameter<"::circt::rtl::FieldInfo", "">: $fields
   );
 
-  let printer = [{
-    printer << "struct" << "<";
-    for (size_t i=0; i<getImpl()->fields.size(); i++) {
-      const auto& field = getImpl()->fields[i];
-      printer << "{" << field.name << "," << field.type << "}";
-      if (i < getImpl()->fields.size() - 1)
-        printer << ",";
-    }
-    printer << ">";
-  }];
-
-  let parser = [{
-    SmallVector<FieldInfo, 4> parameters;
-    if (parser.parseLess()) return ::mlir::Type();
-    while (mlir::succeeded(parser.parseOptionalLBrace())) {
-      StringRef name;
-      if (parser.parseKeyword(&name)) return ::mlir::Type();
-      if (parser.parseComma()) return ::mlir::Type();
-      ::mlir::Type type;
-      if (parser.parseType(type)) return ::mlir::Type();
-      if (parser.parseRBrace()) return ::mlir::Type();
-      parameters.push_back(FieldInfo(name, type));
-      if (parser.parseOptionalComma()) break;
-    }
-    if (parser.parseGreater()) return ::mlir::Type();
-    return get(ctxt, parameters);
-  }];
+  let printer = [{ printFieldInfoType($_printer, *this); }];
 }
 
 // A struct type. Inherits the parser/printer from FieldInfo_Type.
@@ -53,6 +27,7 @@ def StructType : FieldInfo_Type<"Struct"> {
     (It may be obvious, we just don't want to make any assumptions.)
   }];
   let mnemonic = "struct";
+  let parser = [{ return parseFieldInfoType<StructType>($_ctxt, $_parser); }];
 }
 
 // A union type. Inherits the parser/printer from FieldInfo_Type.
@@ -63,6 +38,7 @@ def UnionType : FieldInfo_Type<"Union"> {
     represented by this instance.
   }];
   let mnemonic = "union";
+  let parser = [{ return parseFieldInfoType<UnionType>($_ctxt, $_parser); }];
 }
 
 // Fields which are an array of stringrefs need to re-allocate all the strings
