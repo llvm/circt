@@ -1834,13 +1834,12 @@ struct ConstOpConversion : public ConvertToLLVMPattern {
     // three time values.
     if (auto timeAttr = attr.dyn_cast<TimeAttr>()) {
       auto timeTy = typeConverter.convertType(constOp.getResult().getType());
-      llvm::StringMap<uint64_t> map = {{"s", 1000000000000},
-                                       {"ms", 1000000000},
-                                       {"us", 1000000},
-                                       {"ns", 1000},
-                                       {"ps", 1}};
-      uint64_t adjusted = map[timeAttr.getTimeUnit()] * timeAttr.getTime(),
-               delta = timeAttr.getDelta(), eps = timeAttr.getEps();
+      llvm::StringMap<uint64_t> map = {
+          {"s", 12}, {"ms", 9}, {"us", 6}, {"ns", 3}, {"ps", 0}};
+      uint64_t adjusted =
+          std::pow(10, map[timeAttr.getTimeUnit()]) * timeAttr.getTime();
+      uint64_t delta = timeAttr.getDelta();
+      uint64_t eps = timeAttr.getEps();
       auto denseAttr = DenseElementsAttr::get(
           VectorType::get(3, rewriter.getI64Type()), {adjusted, delta, eps});
       rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(op, timeTy, denseAttr);
