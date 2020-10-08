@@ -10,7 +10,7 @@ target_link_libraries(circt-translate
   PRIVATE
   MLIRTranslation
   MLIRIR
-  MLIRStandardOps
+  MLIRStandard
   MLIRSupport
  
   CIRCTEmitVerilog
