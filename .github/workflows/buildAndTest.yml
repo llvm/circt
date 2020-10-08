@@ -110,7 +110,7 @@ jobs:
     - name: clang-tidy
       if: ${{ always() }}
       run: |
-        git diff -U0 $DIFF_COMMIT | clang-tidy-diff-9.py -path build -p1 -fix
+        git diff -U0 $DIFF_COMMIT | clang-tidy-diff-9.py -path build_assert -p1 -fix
         git diff --ignore-submodules > clang-tidy.patch
         if [ -s clang-tidy.patch ]; then
           echo "Clang-tidy problems in the following files. See diff in the clang-tidy.patch artifact."
