@@ -41,6 +41,7 @@ jobs:
     - name: Get CIRCT
       uses: actions/checkout@v2
       with:
+        fetch-depth: 2
         submodules: 'true'
     - name: Get LLVM Hash
       id: get-llvm-hash
@@ -72,3 +73,37 @@ jobs:
         cd build_release
         cmake .. -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=OFF -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ -DCMAKE_LINKER=lld -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit
         make check-circt -j$(nproc)
+
+    - name: clang-format
+      env:
+        PR_BASE: ${{ github.event.pull_request.base.sha }}
+      run: |
+        # Run clang-format
+        if [[ -z "$PR_BASE" ]]; then
+          DIFF_COMMIT="HEAD^"
+        else
+          DIFF_COMMIT="$PR_BASE"
+        fi
+        git clang-format-9 $DIFF_COMMIT
+        git diff --ignore-submodules > clang-format.patch
+        if [ -s clang-format.patch ]; then
+          echo "Clang-format found formatting problems in the following files. See diff in the clang-format.patch artifact."
+          git diff --ignore-submodules --name-only
+          exit 1
+        fi
+        echo "Clang-format found no formatting problems"
+        exit 0
+    - name: Upload clang-format patch
+      uses: actions/upload-artifact@v2
+      continue-on-error: true
+      if: ${{ failure() }}
+      with:
+        name: clang-format-patch
+        path: clang-format.patch
+    # Unfortunately, artifact uploads are always zips so display the diff as well
+    - name: clang-format patch display
+      if: ${{ failure() }}
+      continue-on-error: true
+      run: |
+        # Display patch
+        cat clang-format.patch
