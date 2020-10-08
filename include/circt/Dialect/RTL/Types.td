@@ -45,7 +45,7 @@ def UnionType : FieldInfo_Type<"Union"> {
 // as well as the array itself.
 class ArrayRefOfStringRef<string desc> :
   TypeParameter<"::llvm::ArrayRef<::llvm::StringRef>", desc> {
-  
+
   let allocator = [{
     ::llvm::StringRef arr$_self [$_self.size()];
     for (size_t i = 0, e = $_self.size(); i < e; ++i)
