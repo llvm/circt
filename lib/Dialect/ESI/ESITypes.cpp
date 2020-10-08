@@ -48,21 +48,7 @@ struct Print<circt::esi::StringEncoding> {
   }
 };
 
-
 } // namespace autogen
-namespace esi {
-
-/// Equality operator for FieldInfo. Required for data types in TypeStorage
-static bool operator==(const FieldInfo &a, const FieldInfo &b) {
-  return a.name == b.name && a.type == b.type;
-}
-
-/// Compute a hash for FieldInfo. Required for data types in TypeStorage
-static llvm::hash_code hash_value(const FieldInfo &fi) { // NOLINT
-  return llvm::hash_combine(fi.name, fi.type);
-}
-
-} // namespace esi
 } // namespace circt
 
 #define GET_TYPEDEF_CLASSES
