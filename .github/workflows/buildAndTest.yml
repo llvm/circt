@@ -43,6 +43,10 @@ jobs:
       with:
         fetch-depth: 2
         submodules: 'true'
+    - name: Install clang-tidy
+      run: |
+          sudo apt-get install -y clang-tidy-9
+          sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-9 100
     - name: Get LLVM Hash
       id: get-llvm-hash
       run: echo "::set-output name=hash::$(git rev-parse @:./llvm)"
@@ -74,7 +78,8 @@ jobs:
         cmake .. -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=OFF -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ -DCMAKE_LINKER=lld -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit
         make check-circt -j$(nproc)
 
-    - name: clang-format
+    - name: choose-commit
+      if: ${{ always() }}
       env:
         PR_BASE: ${{ github.event.pull_request.base.sha }}
       run: |
@@ -84,26 +89,56 @@ jobs:
         else
           DIFF_COMMIT="$PR_BASE"
         fi
+        echo "DIFF_COMMIT=$DIFF_COMMIT" >> $GITHUB_ENV
+    - name: clang-format
+      if: ${{ always() }}
+      run: |
+        # Run clang-format
         git clang-format-9 $DIFF_COMMIT
         git diff --ignore-submodules > clang-format.patch
         if [ -s clang-format.patch ]; then
           echo "Clang-format found formatting problems in the following files. See diff in the clang-format.patch artifact."
           git diff --ignore-submodules --name-only
+          git checkout .
           exit 1
         fi
         echo "Clang-format found no formatting problems"
         exit 0
-    - name: Upload clang-format patch
+    - name: clang-tidy
+      if: ${{ always() }}
+      run: |
+        git diff -U0 $DIFF_COMMIT | clang-tidy-diff-9.py -path build -p1 -fix
+        git diff --ignore-submodules > clang-tidy.patch
+        if [ -s clang-tidy.patch ]; then
+          echo "Clang-tidy problems in the following files. See diff in the clang-tidy.patch artifact."
+          git diff --ignore-submodules --name-only
+          git checkout .
+          exit 1
+        fi
+        echo "Clang-tidy found no problems"
+        exit 0
+    - name: Upload format and tidy patches
       uses: actions/upload-artifact@v2
       continue-on-error: true
       if: ${{ failure() }}
       with:
-        name: clang-format-patch
-        path: clang-format.patch
+        name: clang-format-tidy-patches
+        path: clang-*.patch
     # Unfortunately, artifact uploads are always zips so display the diff as well
-    - name: clang-format patch display
+    - name: clang format and tidy patches display
       if: ${{ failure() }}
       continue-on-error: true
       run: |
-        # Display patch
-        cat clang-format.patch
+        # Display patches
+        if [ ! -z clang-format.patch ]; then
+          echo "Clang-format patch"
+          echo "================"
+          cat clang-format.patch
+          echo "================"
+        end
+        if [ ! -z clang-tidy.patch ]; then
+          echo "Clang-tidy patch"
+          echo "================"
+          cat clang-tidy.patch
+          echo "================"
+        end
