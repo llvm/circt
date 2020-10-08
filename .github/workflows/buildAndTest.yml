@@ -69,7 +69,7 @@ jobs:
       run: |
         mkdir build_assert
         cd build_assert
-        cmake .. -DCMAKE_BUILD_TYPE=Debug -DLLVM_ENABLE_ASSERTIONS=ON -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ -DCMAKE_LINKER=lld -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit
+        cmake .. -DCMAKE_BUILD_TYPE=Debug -DLLVM_ENABLE_ASSERTIONS=ON -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ -DCMAKE_LINKER=lld -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
         make check-circt -j$(nproc)
     - name: Build and Test CIRCT (Release)
       run: |
@@ -90,6 +90,9 @@ jobs:
           DIFF_COMMIT="$PR_BASE"
         fi
         echo "DIFF_COMMIT=$DIFF_COMMIT" >> $GITHUB_ENV
+    - name: git fetch base commit
+      run: |
+        git fetch origin $DIFF_COMMIT
     - name: clang-format
       if: ${{ always() }}
       run: |
@@ -107,7 +110,7 @@ jobs:
     - name: clang-tidy
       if: ${{ always() }}
       run: |
-        git diff -U0 $DIFF_COMMIT | clang-tidy-diff-9.py -path build -p1 -fix
+        git diff -U0 $DIFF_COMMIT | clang-tidy-diff-9.py -path build_assert -p1 -fix
         git diff --ignore-submodules > clang-tidy.patch
         if [ -s clang-tidy.patch ]; then
           echo "Clang-tidy problems in the following files. See diff in the clang-tidy.patch artifact."
