@@ -15,7 +15,7 @@ jobs:
         submodules: 'true'
     - name: Get LLVM Hash
       id: get-llvm-hash
-      run: echo "::set-output name=hash::$(git submodule status)"
+      run: echo "::set-output name=hash::$(git rev-parse @:./llvm)"
       shell: bash
     - name: Cache LLVM
       id: cache-llvm
@@ -45,7 +45,7 @@ jobs:
         submodules: 'true'
     - name: Get LLVM Hash
       id: get-llvm-hash
-      run: echo "::set-output name=hash::$(git submodule status)"
+      run: echo "::set-output name=hash::$(git rev-parse @:./llvm)"
       shell: bash
     - name: Cache LLVM
       id: cache-llvm
