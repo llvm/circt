@@ -43,6 +43,10 @@ jobs:
       with:
         fetch-depth: 2
         submodules: 'true'
+    - name: Install clang-tidy
+      run: |
+          sudo apt-get install -y clang-tidy-9
+          sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-9 100
     - name: Get LLVM Hash
       id: get-llvm-hash
       run: echo "::set-output name=hash::$(git rev-parse @:./llvm)"
