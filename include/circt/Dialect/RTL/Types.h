@@ -5,8 +5,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_ESI_ESITYPES_HPP
-#define CIRCT_DIALECT_ESI_ESITYPES_HPP
+#ifndef CIRCT_DIALECT_RTL_TYPES_H
+#define CIRCT_DIALECT_RTL_TYPES_H
 
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/Operation.h"
@@ -36,4 +36,4 @@ public:
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/RTL/RTLTypes.h.inc"
 
-#endif
+#endif // CIRCT_DIALECT_RTL_TYPES_H
