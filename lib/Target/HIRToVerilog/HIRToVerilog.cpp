@@ -95,7 +95,6 @@ private:
   unsigned nextValueNum = 0;
   // llvm::DenseMap<Value, unsigned> mapValueToNum;
   llvm::DenseMap<Value, VerilogValue> mapValueToVerilog;
-  llvm::DenseMap<Value, int> mapConstToInt;
   SmallVector<pair<unsigned, function<string()>>, 4> replaceLocs;
   std::stack<string> yieldTarget;
 }; // namespace
@@ -147,7 +146,7 @@ LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
 
   auto v_mem = mapValueToVerilog[mem];
 
-  int delayValue = offset ? mapConstToInt[offset] : 0;
+  int delayValue = offset ? mapValueToVerilog[offset].getIntegerConst() : 0;
   mapValueToVerilog[tstart].updateMaxDelay(delayValue);
   unsigned width_result = getBitWidth(result.getType());
 
@@ -306,7 +305,7 @@ LogicalResult VerilogPrinter::printMemWriteOp(MemWriteOp op,
   auto v_value = mapValueToVerilog[value];
   auto v_mem = mapValueToVerilog[mem];
 
-  int delayValue = offset ? mapConstToInt[offset] : 0;
+  int delayValue = offset ? mapValueToVerilog[offset].getIntegerConst() : 0;
   mapValueToVerilog[tstart].updateMaxDelay(delayValue);
 
   auto v_tstart = mapValueToVerilog[tstart];
@@ -356,15 +355,15 @@ LogicalResult VerilogPrinter::printAddOp(hir::AddOp op, unsigned indentAmount) {
                << mapValueToVerilog[right].strConstOrWire() << ";\n";
     return success();
   } else if (auto resultConstType = resultType.dyn_cast<ConstType>()) {
-    if (auto elementIntType =
-            resultConstType.getElementType().dyn_cast<IntegerType>()) {
-      int leftValue = mapConstToInt[left];
-      int rightValue = mapConstToInt[right];
-      unsigned elementWidth = elementIntType.getWidth();
-      mapConstToInt.insert(make_pair(result, leftValue + rightValue));
-      module_out << "wire [" << elementWidth - 1 << " : 0] v" << id_result
-                 << " = " << leftValue + rightValue << ";\n";
-    }
+    auto elementIntType =
+        resultConstType.getElementType().dyn_cast<IntegerType>();
+    assert(elementIntType);
+    int leftValue = mapValueToVerilog[left].getIntegerConst();
+    int rightValue = mapValueToVerilog[right].getIntegerConst();
+    mapValueToVerilog[result].setIntegerConst(leftValue + rightValue);
+    unsigned elementWidth = elementIntType.getWidth();
+    module_out << "wire [" << elementWidth - 1 << " : 0] v" << id_result
+               << " = " << leftValue + rightValue << ";\n";
   }
   return emitError(op.getLoc(), "result must be either int or const<int>!");
 }
@@ -380,7 +379,6 @@ LogicalResult VerilogPrinter::printConstantOp(hir::ConstantOp op,
   unsigned id_result = newValueNumber();
   VerilogValue v_result(result.getType(), "v" + to_string(id_result));
   int value = op.value().getLimitedValue();
-  mapConstToInt.insert(make_pair(result, value));
   v_result.setIntegerConst(value);
   mapValueToVerilog.insert(make_pair(result, v_result));
 
@@ -626,7 +624,7 @@ LogicalResult VerilogPrinter::printYieldOp(hir::YieldOp op,
   auto operands = op.operands();
   Value tstart = op.tstart();
   Value offset = op.offset();
-  int delayValue = mapConstToInt[offset];
+  int delayValue = mapValueToVerilog[offset].getIntegerConst();
   mapValueToVerilog[tstart].updateMaxDelay(delayValue);
   auto v_tstart = mapValueToVerilog[tstart];
   if (!operands.empty())

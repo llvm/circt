@@ -211,7 +211,10 @@ public:
     return out;
   }
   bool isIntegerConst() { return isConstValue && isIntegerType(); }
-  bool getIntegerConst() { return constValue.val_int; }
+  bool getIntegerConst() {
+    assert(isIntegerConst());
+    return constValue.val_int;
+  }
   string strMemrefSel() {
     // if (numAccess() == 0)
     //  return "//Unused memref " + strWire() + ".\n";
