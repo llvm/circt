@@ -323,6 +323,10 @@ public:
   }
   void incNumReads() { usageInfo.numReads++; }
   void incNumWrites() { usageInfo.numWrites++; }
+  void updateMaxDelay(int delay) {
+    maxDelay = maxDelay > delay ? maxDelay : delay;
+  }
+  int getMaxDelay() const { return maxDelay; }
 
 private:
   bool isConstValue = false;
@@ -335,6 +339,7 @@ private:
   } usageInfo;
   Type type;
   string name;
+  int maxDelay = 0;
 };
 
 string VerilogValue::strMemrefArgDef() {

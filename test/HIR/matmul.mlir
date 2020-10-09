@@ -27,7 +27,8 @@ hir.def @MatmulKernel at %t(
       %C_bus = hir.alloc() : !hir.wire<16*i32>
       hir.wire_write %0 to %C_bus[%0] at %tj offset %3 : !hir.const<i32> : (!hir.const<i32>, !hir.wire<16*i32>[!hir.const<i32>])
 
-      %tk_end=hir.unroll_for %k = 0 to 16 step 1 iter_time(%tk = %tj tstep 1){
+      %tk_end=hir.unroll_for %k = 0 to 16 step 1 iter_time(%tk = %tj){
+        hir.yield at %tk offset %1 : !hir.const<i32>
         %i_delayed = hir.delay %i by %k : !hir.const<i32> at %ti : i32 -> i32 // hoist from j-loop
         %a = hir.mem_read %A[%i_delayed, %k] at %ti offset %k : !hir.const<i32> : !hir.memref<16*16*i32, packing=[1], r>[i32, !hir.const<i32>] -> i32 // hoist from j-loop
         %a_delayed = hir.delay %a by %j : !hir.const<i32> at %ti offset %k : !hir.const<i32> : i32 -> i32

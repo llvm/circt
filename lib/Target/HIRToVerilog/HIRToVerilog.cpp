@@ -87,7 +87,7 @@ private:
   LogicalResult printBody(Block &block, unsigned indentAmount = 0);
   LogicalResult printType(Type type);
   LogicalResult processReplacements(string &code);
-  LogicalResult printTimeOffsets(Value timeVar);
+  LogicalResult printTimeOffsets(VerilogValue timeVar);
   SmallVector<VerilogValue, 4> convertToVerilog(OperandRange operands);
 
   stringstream module_out;
@@ -96,7 +96,6 @@ private:
   // llvm::DenseMap<Value, unsigned> mapValueToNum;
   llvm::DenseMap<Value, VerilogValue> mapValueToVerilog;
   llvm::DenseMap<Value, int> mapConstToInt;
-  llvm::DenseMap<Value, unsigned> mapTimeToMaxOffset;
   SmallVector<pair<unsigned, function<string()>>, 4> replaceLocs;
   std::stack<string> yieldTarget;
 }; // namespace
@@ -143,15 +142,15 @@ LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
   assert(addr.size() == shape.size());
 
   mlir::Value tstart = op.tstart();
+  auto v_tstart = mapValueToVerilog[tstart];
   mlir::Value offset = op.offset();
 
   auto v_mem = mapValueToVerilog[mem];
 
   int delayValue = offset ? mapConstToInt[offset] : 0;
-  mapTimeToMaxOffset[tstart] = max(delayValue, mapTimeToMaxOffset[tstart]);
+  mapValueToVerilog[tstart].updateMaxDelay(delayValue);
   unsigned width_result = getBitWidth(result.getType());
 
-  auto v_tstart = mapValueToVerilog[tstart];
   if (!packing.empty()) {
     // Address bus assignments.
     module_out << "assign " << v_mem.strMemrefAddrValid(addr, v_mem.numAccess())
@@ -308,7 +307,7 @@ LogicalResult VerilogPrinter::printMemWriteOp(MemWriteOp op,
   auto v_mem = mapValueToVerilog[mem];
 
   int delayValue = offset ? mapConstToInt[offset] : 0;
-  mapTimeToMaxOffset[tstart] = max(delayValue, mapTimeToMaxOffset[tstart]);
+  mapValueToVerilog[tstart].updateMaxDelay(delayValue);
 
   auto v_tstart = mapValueToVerilog[tstart];
 
@@ -451,7 +450,7 @@ LogicalResult VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
   module_out << "\n//{ Loop" << id_loop << "\n";
   module_out << loopCounterString;
   module_out << "\n//Loop" << id_loop << " body\n";
-  printTimeOffsets(tloop);
+  printTimeOffsets(v_tloop);
   printBody(op.getLoopBody().front(), indentAmount);
   module_out << "\n//} Loop" << id_loop << "\n";
   yieldTarget.pop();
@@ -473,23 +472,27 @@ LogicalResult VerilogPrinter::printUnrollForOp(UnrollForOp op,
   mapValueToVerilog.insert(make_pair(tloop, v_tstart));
   mapValueToVerilog.insert(make_pair(idx, v_i));
   VerilogValue next_v_tloop = v_tstart;
+  auto id_loop = newValueNumber();
   for (int i = lb; i < ub; i += step) {
     mapValueToVerilog[idx].setIntegerConst(i);
     auto id_tloop = newValueNumber();
     next_v_tloop = VerilogValue(tloop.getType(), "tloop" + to_string(id_tloop));
-    module_out << "\n//{ Unrolled body " << i << "\n";
+
+    module_out << "\n//{ Unrolled body " << i
+               << " of loop" + to_string(id_loop) + ".\n";
     module_out << "wire " << next_v_tloop.strWire() << ";\n";
+
+    printTimeOffsets(next_v_tloop);
     yieldTarget.push(next_v_tloop.strWire());
 
     // At first iteration, tloop -> v_tstart, whose time offsets are already
     // printed.
-    if (i > lb)
-      printTimeOffsets(tloop);
     auto status = printBody(op.getLoopBody().front(), indentAmount);
 
     yieldTarget.pop();
     mapValueToVerilog[tloop] = next_v_tloop;
     module_out << "\n//}\n";
+
     if (status.value == LogicalResult::Failure)
       break;
   }
@@ -606,8 +609,8 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
       }));
     }
 
-  Value tstart = args.back();
-  printTimeOffsets(tstart);
+  VerilogValue v_tstart = mapValueToVerilog[args.back()];
+  printTimeOffsets(v_tstart);
   printBody(entryBlock);
   module_out << "endmodule\n";
 
@@ -624,7 +627,7 @@ LogicalResult VerilogPrinter::printYieldOp(hir::YieldOp op,
   Value tstart = op.tstart();
   Value offset = op.offset();
   int delayValue = mapConstToInt[offset];
-  mapTimeToMaxOffset[tstart] = max(delayValue, mapTimeToMaxOffset[tstart]);
+  mapValueToVerilog[tstart].updateMaxDelay(delayValue);
   auto v_tstart = mapValueToVerilog[tstart];
   if (!operands.empty())
     emitError(op.getLoc(), "YieldOp codegen does not support arguments yet!");
@@ -634,10 +637,9 @@ LogicalResult VerilogPrinter::printYieldOp(hir::YieldOp op,
   return success();
 }
 
-LogicalResult VerilogPrinter::printTimeOffsets(Value timeVar) {
+LogicalResult VerilogPrinter::printTimeOffsets(VerilogValue v_timeVar) {
   module_out << "//printTimeOffset\n";
   unsigned loc = replaceLocs.size();
-  auto v_timeVar = mapValueToVerilog[timeVar];
   module_out << "reg " << v_timeVar.strDelayedWire() << "[$loc" << loc
              << ":0];\n";
   module_out << "always@(*) " << v_timeVar.strDelayedWire(0) << " = "
@@ -656,7 +658,7 @@ LogicalResult VerilogPrinter::printTimeOffsets(Value timeVar) {
   module_out << "endgenerate\n\n";
 
   replaceLocs.push_back(make_pair(
-      loc, [=]() -> string { return to_string(mapTimeToMaxOffset[timeVar]); }));
+      loc, [=]() -> string { return to_string(v_timeVar.getMaxDelay()); }));
 }
 
 LogicalResult VerilogPrinter::processReplacements(string &code) {
