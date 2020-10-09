@@ -864,13 +864,23 @@ private:
   SubExprInfo visitComb(rtl::ConcatOp op);
   SubExprInfo visitComb(rtl::ExtractOp op);
 
-  //RTL Comparison Operations
-  SubExprInfo visitComb(rtl::LTOp op) { return emitSignedBinary(op, Comparison, "<"); }
-  SubExprInfo visitComb(rtl::LEQOp op) { return emitSignedBinary(op, Comparison, "<="); }
-  SubExprInfo visitComb(rtl::ULTOp op) { return emitBinary(op, Comparison, "<"); }
-  SubExprInfo visitComb(rtl::ULEQOp op) { return emitBinary(op, Comparison, "<="); }
+  // RTL Comparison Operations
+  SubExprInfo visitComb(rtl::LTOp op) {
+    return emitSignedBinary(op, Comparison, "<");
+  }
+  SubExprInfo visitComb(rtl::LEQOp op) {
+    return emitSignedBinary(op, Comparison, "<=");
+  }
+  SubExprInfo visitComb(rtl::ULTOp op) {
+    return emitBinary(op, Comparison, "<");
+  }
+  SubExprInfo visitComb(rtl::ULEQOp op) {
+    return emitBinary(op, Comparison, "<=");
+  }
   SubExprInfo visitComb(rtl::EQOp op) { return emitBinary(op, Equality, "=="); }
-  SubExprInfo visitComb(rtl::NEQOp op) { return emitBinary(op, Equality, "!="); }
+  SubExprInfo visitComb(rtl::NEQOp op) {
+    return emitBinary(op, Equality, "!=");
+  }
 
 private:
   SmallPtrSet<Operation *, 8> &emittedExprs;
@@ -932,10 +942,9 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
 
 SubExprInfo ExprEmitter::emitVariadic(Operation *op, VerilogPrecedence prec,
                                       const char *syntax, bool hasStrictSign) {
-  interleave(
-      op->getOperands().begin(), op->getOperands().end(),
-      [&](Value v1) { emitSubExpr(v1, prec, hasStrictSign); },
-      [&] { os << ' ' << syntax << ' '; });
+  interleave(op->getOperands().begin(), op->getOperands().end(),
+             [&](Value v1) { emitSubExpr(v1, prec, hasStrictSign); },
+             [&] { os << ' ' << syntax << ' '; });
 
   return {prec, IsUnsigned};
 }

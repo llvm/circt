@@ -87,12 +87,24 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(AddPrimOp op) {
     return lowerBinOpToVariadic<rtl::AddOp>(op);
   }
-  LogicalResult visitExpr(EQPrimOp op) { return lowerCmpOp<rtl::EQOp, rtl::EQOp>(op); }
-  LogicalResult visitExpr(NEQPrimOp op) { return lowerCmpOp<rtl::NEQOp, rtl::NEQOp>(op); }
-  LogicalResult visitExpr(LTPrimOp op) { return lowerCmpOp<rtl::LTOp, rtl::ULTOp>(op); }
-  LogicalResult visitExpr(LEQPrimOp op) { return lowerCmpOp<rtl::LEQOp, rtl::ULEQOp>(op); }
-  LogicalResult visitExpr(GTPrimOp op) { return lowerCmpOp<rtl::LTOp, rtl::ULTOp>(op, true); }
-  LogicalResult visitExpr(GEQPrimOp op) { return lowerCmpOp<rtl::LEQOp, rtl::ULEQOp>(op, true); }
+  LogicalResult visitExpr(EQPrimOp op) {
+    return lowerCmpOp<rtl::EQOp, rtl::EQOp>(op);
+  }
+  LogicalResult visitExpr(NEQPrimOp op) {
+    return lowerCmpOp<rtl::NEQOp, rtl::NEQOp>(op);
+  }
+  LogicalResult visitExpr(LTPrimOp op) {
+    return lowerCmpOp<rtl::LTOp, rtl::ULTOp>(op);
+  }
+  LogicalResult visitExpr(LEQPrimOp op) {
+    return lowerCmpOp<rtl::LEQOp, rtl::ULEQOp>(op);
+  }
+  LogicalResult visitExpr(GTPrimOp op) {
+    return lowerCmpOp<rtl::LTOp, rtl::ULTOp>(op, true);
+  }
+  LogicalResult visitExpr(GEQPrimOp op) {
+    return lowerCmpOp<rtl::LEQOp, rtl::ULEQOp>(op, true);
+  }
 
   LogicalResult visitExpr(SubPrimOp op) { return lowerBinOp<rtl::SubOp>(op); }
   LogicalResult visitExpr(MulPrimOp op) {
@@ -461,9 +473,10 @@ LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, bool flip) {
     return failure();
 
   if (flip)
-    std::swap(lhs,rhs);
+    std::swap(lhs, rhs);
 
-  auto srcFIRType = op->getOperand(0).getType().cast<FIRRTLType>().getPassiveType();
+  auto srcFIRType =
+      op->getOperand(0).getType().cast<FIRRTLType>().getPassiveType();
   auto srcIntType = srcFIRType.dyn_cast<IntType>();
   if (!srcIntType || !srcIntType.hasWidth())
     return failure();
