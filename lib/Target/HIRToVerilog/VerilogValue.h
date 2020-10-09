@@ -13,7 +13,7 @@ using namespace std;
 
 class VerilogValue {
 public:
-  VerilogValue() : type(Type()), name("unknown") {}
+  VerilogValue() : type(Type()), name("uninitialized") {}
   VerilogValue(Type type, string name) : type(type), name(name) {}
 
 public:
@@ -252,7 +252,18 @@ public:
     }
     return name;
   }
-  string strWireOrConst() {
+
+  string strConstOrError(int n = 0) {
+    if (isIntegerConst()) {
+      string constStr = to_string(getIntegerConst() + n);
+      if (name == "")
+        return constStr;
+      return "/*" + name + "=*/ " + constStr;
+    }
+    return "/*ERROR: Expected constant. */" + strWire() + "+" + to_string(n);
+  }
+
+  string strConstOrWire() {
     if (isIntegerConst()) {
       string vlogDecimalLiteral =
           to_string(getBitWidth(type)) + "'d" + to_string(getIntegerConst());
@@ -338,29 +349,25 @@ string VerilogValue::strMemrefArgDef() {
   string distDimsStr = strMemrefDistDims();
   bool printComma = false;
   unsigned dataWidth = getBitWidth(memrefTy.getElementType());
-  /* Verilog has wierd convension that module input/output can't have unpacked
-   * dims but can have multiple packed dims and wires can't have multiple packed
-   * dims but can have multiple unpacked dims.
-   */
   if (addrWidth > 0) { // add dims may be distributed.
-    out += "output reg" + distDimsStr + "[" + to_string(addrWidth - 1) +
-           ":0] " + strMemrefAddr();
+    out += "output reg[" + to_string(addrWidth - 1) + ":0] " + strMemrefAddr() +
+           distDimsStr;
     printComma = true;
   }
   if (port == hir::Details::r || port == hir::Details::rw) {
     if (printComma)
       out += ",\n";
-    out += "output wire " + distDimsStr + strMemrefRdEn();
-    out += ",\ninput wire " + distDimsStr + "[" + to_string(dataWidth - 1) +
-           ":0] " + strMemrefRdData(SmallVector<VerilogValue, 4>());
+    out += "output wire " + strMemrefRdEn() + distDimsStr;
+    out += ",\ninput wire[" + to_string(dataWidth - 1) + ":0] " +
+           strMemrefRdData(SmallVector<VerilogValue, 4>()) + distDimsStr;
     printComma = true;
   }
   if (port == hir::Details::w || port == hir::Details::rw) {
     if (printComma)
       out += ",\n";
-    out += "output wire " + distDimsStr + strMemrefWrEn();
-    out += ",\noutput reg " + distDimsStr + "[" + to_string(dataWidth - 1) +
-           ":0] " + strMemrefWrData();
+    out += "output wire " + strMemrefWrEn() + distDimsStr;
+    out += ",\noutput reg[" + to_string(dataWidth - 1) + ":0] " +
+           strMemrefWrData() + distDimsStr;
   }
   return out;
 }

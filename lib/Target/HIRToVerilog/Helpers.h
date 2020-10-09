@@ -4,6 +4,7 @@
 #include "circt/Target/HIRToVerilog/HIRToVerilog.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 
+#include <locale>
 #include <string>
 
 using namespace mlir;
@@ -11,14 +12,37 @@ using namespace hir;
 using namespace std;
 
 static unsigned max(unsigned x, unsigned y) { return x > y ? x : y; }
+static bool isTerminatingChar(char c) {
+  if (isalnum(c))
+    return false;
+  else if (c == '_')
+    return false;
+  return true;
+}
+
 static void findAndReplaceAll(string &data, string toSearch,
                               string replaceStr) {
+  int i = 0;
+  for (char c : toSearch) {
+    if (i == 0 && c == '$')
+      continue;
+    i++;
+    if (isTerminatingChar(c)) {
+      string error = "ERROR: toSearch( = \"" + toSearch +
+                     "\") can't contain any terminating characters. Found (" +
+                     c + ")";
+      printf("/*%s*/\n", error.c_str());
+      fflush(stdout);
+      assert(!isTerminatingChar(c));
+    }
+  }
   // Get the first occurrence.
   size_t pos = data.find(toSearch);
   // Repeat till end is reached.
   while (pos != string::npos) {
-    // Replace this occurrence of Sub String.
-    data.replace(pos, toSearch.size(), replaceStr);
+    // Replace this occurrence of Sub String only if its a complete word.
+    if (isTerminatingChar(data[pos + toSearch.size()]))
+      data.replace(pos, toSearch.size(), replaceStr);
     // Get the next occurrence from the current position.
     pos = data.find(toSearch, pos + replaceStr.size());
   }
