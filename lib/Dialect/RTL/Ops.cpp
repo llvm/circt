@@ -2,7 +2,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/FIRRTL/Ops.h"
 #include "circt/Dialect/RTL/Ops.h"
 #include "circt/Dialect/RTL/Visitors.h"
 #include "mlir/IR/Builders.h"
@@ -11,6 +10,7 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/StandardTypes.h"
+#include "llvm/Support/FormatVariadic.h"
 
 using namespace circt;
 using namespace rtl;
@@ -217,10 +217,23 @@ static void print(OpAsmPrinter &p, RTLModuleOp op) {
 }
 
 static LogicalResult verifyRTLInstanceOp(RTLInstanceOp op) {
-  auto moduleIR = op.getParentOfType<firrtl::CircuitOp>();
-  auto referencedModule = moduleIR.lookupSymbol(op.moduleName());
-  if (!isa<rtl::RTLModuleOp>(referencedModule))
+  auto moduleIR = op.getParentWithTrait<OpTrait::SymbolTable>();
+  if (moduleIR == nullptr) {
+    op.emitError("Must be contained within a SymbolTable region");
     return failure();
+  }
+  auto referencedModule =
+      mlir::SymbolTable::lookupSymbolIn(moduleIR, op.moduleName());
+  if (referencedModule == nullptr) {
+    op.emitError(
+        llvm::formatv("Cannot find module definition '{0}'", op.moduleName()));
+    return failure();
+  }
+  if (!isa<rtl::RTLModuleOp>(referencedModule)) {
+    op.emitError(llvm::formatv("Symbol resolved to '{0}', not a RTLModuleOp",
+                               referencedModule->getName()));
+    return failure();
+  }
   return success();
 }
 
