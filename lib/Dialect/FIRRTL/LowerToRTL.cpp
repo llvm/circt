@@ -70,6 +70,8 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult lowerBinOp(Operation *op);
   template <typename ResultOpType>
   LogicalResult lowerBinOpToVariadic(Operation *op);
+  template <typename ResultOpSignedType, typename ResultOpUnsignedType>
+  LogicalResult lowerCmpOp(Operation *op, bool flip = false);
 
   LogicalResult visitExpr(CatPrimOp op);
 
@@ -85,6 +87,13 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(AddPrimOp op) {
     return lowerBinOpToVariadic<rtl::AddOp>(op);
   }
+  LogicalResult visitExpr(EQPrimOp op) { return lowerCmpOp<rtl::EQOp, rtl::EQOp>(op); }
+  LogicalResult visitExpr(NEQPrimOp op) { return lowerCmpOp<rtl::NEQOp, rtl::NEQOp>(op); }
+  LogicalResult visitExpr(LTPrimOp op) { return lowerCmpOp<rtl::LTOp, rtl::ULTOp>(op); }
+  LogicalResult visitExpr(LEQPrimOp op) { return lowerCmpOp<rtl::LEQOp, rtl::ULEQOp>(op); }
+  LogicalResult visitExpr(GTPrimOp op) { return lowerCmpOp<rtl::LTOp, rtl::ULTOp>(op, true); }
+  LogicalResult visitExpr(GEQPrimOp op) { return lowerCmpOp<rtl::LEQOp, rtl::ULEQOp>(op, true); }
+
   LogicalResult visitExpr(SubPrimOp op) { return lowerBinOp<rtl::SubOp>(op); }
   LogicalResult visitExpr(MulPrimOp op) {
     return lowerBinOpToVariadic<rtl::MulOp>(op);
@@ -438,6 +447,32 @@ LogicalResult FIRRTLLowering::lowerBinOp(Operation *op) {
 
   // Emit the result operation.
   return setLoweringTo<ResultOpType>(op, lhs, rhs);
+}
+
+/// lowerCmpOp extends each operand to the destination type, then performs the
+/// specified binary operator.
+template <typename ResultOpSignedType, typename ResultOpUnsignedType>
+LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, bool flip) {
+  // Extend the two operands to match the destination type.
+  Type resultType = builder->getIntegerType(1);
+  auto lhs = getLoweredValue(op->getOperand(0));
+  auto rhs = getLoweredValue(op->getOperand(1));
+  if (!lhs || !rhs)
+    return failure();
+
+  if (flip)
+    std::swap(lhs,rhs);
+
+  auto srcFIRType = op->getOperand(0).getType().cast<FIRRTLType>().getPassiveType();
+  auto srcIntType = srcFIRType.dyn_cast<IntType>();
+  if (!srcIntType || !srcIntType.hasWidth())
+    return failure();
+
+  // Emit the result operation.
+  if (srcIntType.isSigned())
+    return setLoweringTo<ResultOpSignedType>(op, resultType, lhs, rhs);
+  else
+    return setLoweringTo<ResultOpUnsignedType>(op, resultType, lhs, rhs);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {

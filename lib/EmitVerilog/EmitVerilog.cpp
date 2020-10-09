@@ -771,7 +771,7 @@ private:
   SubExprInfo visitExpr(OrPrimOp op) { return emitVariadic(op, Or, "|"); }
   SubExprInfo visitExpr(XorPrimOp op) { return emitVariadic(op, Xor, "^"); }
 
-  // Comparison Operations
+  // FIRRTL Comparison Operations
   SubExprInfo visitExpr(LEQPrimOp op) {
     return emitSignedBinary(op, Comparison, "<=");
   }
@@ -863,6 +863,14 @@ private:
   SubExprInfo visitComb(rtl::ZExtOp op);
   SubExprInfo visitComb(rtl::ConcatOp op);
   SubExprInfo visitComb(rtl::ExtractOp op);
+
+  //RTL Comparison Operations
+  SubExprInfo visitComb(rtl::LTOp op) { return emitSignedBinary(op, Comparison, "<"); }
+  SubExprInfo visitComb(rtl::LEQOp op) { return emitSignedBinary(op, Comparison, "<="); }
+  SubExprInfo visitComb(rtl::ULTOp op) { return emitBinary(op, Comparison, "<"); }
+  SubExprInfo visitComb(rtl::ULEQOp op) { return emitBinary(op, Comparison, "<="); }
+  SubExprInfo visitComb(rtl::EQOp op) { return emitBinary(op, Equality, "=="); }
+  SubExprInfo visitComb(rtl::NEQOp op) { return emitBinary(op, Equality, "!="); }
 
 private:
   SmallPtrSet<Operation *, 8> &emittedExprs;

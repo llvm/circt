@@ -57,7 +57,7 @@ class BinRTLOp<string mnemonic, list<OpTrait> traits = []> :
   let results = (outs AnySignlessInteger:$result);
 
   let assemblyFormat = [{
-    $lhs `,` $rhs  attr-dict `:` functional-type($args, results)
+    $lhs `,` $rhs  attr-dict `:` functional-type($args, $results)
   }];
 }
 
@@ -68,6 +68,18 @@ class UTBinRTLOp<string mnemonic, list<OpTrait> traits = []> :
                            [SameTypeOperands, SameOperandsAndResultType])> {
    let assemblyFormat = [{
     $lhs `,` $rhs  attr-dict `:` type($result)
+  }];
+}
+
+// Binary operator with uniform input types and i1 output type.
+class CmpBinRTLOp<string mnemonic, list<OpTrait> traits = []> :
+      BinRTLOp<mnemonic,
+               !listconcat(traits, [SameTypeOperands])> {
+  let arguments = (ins AnySignlessInteger:$lhs, AnySignlessInteger:$rhs);
+  let results = (outs I1:$result);
+
+  let assemblyFormat = [{
+    $lhs `,` $rhs  attr-dict `:` functional-type(operands, $result)
   }];
 }
 
@@ -107,6 +119,13 @@ def ShlOp : UTBinRTLOp<"shl">;
 def AndOp : UTVariadicRTLOp<"and", [Commutative]>;
 def OrOp  : UTVariadicRTLOp<"or", [Commutative]>;
 def XorOp : UTVariadicRTLOp<"xor", [Commutative]>;
+
+def EQOp   : CmpBinRTLOp<"eq", [Commutative]>;
+def NEQOp  : CmpBinRTLOp<"neq", [Commutative]>;
+def LTOp   : CmpBinRTLOp<"lt">;
+def ULTOp  : CmpBinRTLOp<"ult">;
+def LEQOp  : CmpBinRTLOp<"leq">;
+def ULEQOp : CmpBinRTLOp<"uleq">;
 
 //===----------------------------------------------------------------------===//
 // Unary Operations
