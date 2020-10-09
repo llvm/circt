@@ -942,9 +942,10 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
 
 SubExprInfo ExprEmitter::emitVariadic(Operation *op, VerilogPrecedence prec,
                                       const char *syntax, bool hasStrictSign) {
-  interleave(op->getOperands().begin(), op->getOperands().end(),
-             [&](Value v1) { emitSubExpr(v1, prec, hasStrictSign); },
-             [&] { os << ' ' << syntax << ' '; });
+  interleave(
+      op->getOperands().begin(), op->getOperands().end(),
+      [&](Value v1) { emitSubExpr(v1, prec, hasStrictSign); },
+      [&] { os << ' ' << syntax << ' '; });
 
   return {prec, IsUnsigned};
 }
