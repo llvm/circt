@@ -89,7 +89,7 @@ jobs:
         else
           DIFF_COMMIT_NAME="$PR_BASE"
         fi
-        echo "DIFF_COMMIT_NAME=$DIFF_COMMIT" >> $GITHUB_ENV
+        echo "DIFF_COMMIT_NAME=$DIFF_COMMIT_NAME" >> $GITHUB_ENV
     - name: git fetch base commit
       continue-on-error: true
       run: |
