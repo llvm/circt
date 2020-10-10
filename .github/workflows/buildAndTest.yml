@@ -81,7 +81,7 @@ jobs:
     - name: choose-commit
       if: ${{ always() }}
       env:
-        PR_BASE: ${{ github.event.pull_request.base.sha }}
+        PR_BASE: ${{ github.base_ref }}
       run: |
         # Run clang-format
         if [[ -z "$PR_BASE" ]]; then
@@ -93,7 +93,8 @@ jobs:
     - name: git fetch base commit
       continue-on-error: true
       run: |
-        [[ ! "$DIFF_COMMIT" == *"HEAD"* ]] && git fetch origin $DIFF_COMMIT
+        if [[ "$DIFF_COMMIT" == *"HEAD"* ]] && exit 0
+        git fetch --recurse-submodules=no origin $DIFF_COMMIT
     - name: clang-format
       if: ${{ always() }}
       run: |
