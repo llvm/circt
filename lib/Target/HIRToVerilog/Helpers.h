@@ -1,3 +1,4 @@
+#include "llvm/Support/raw_ostream.h"
 #ifndef __HIRToVerilogHELPERS.H__
 #define __HIRToVerilogHELPERS .H__
 #include "circt/Dialect/HIR/HIR.h"
@@ -48,14 +49,23 @@ static void findAndReplaceAll(string &data, string toSearch,
   }
 }
 
-static unsigned getBitWidth(Type ty) {
+static unsigned getBitWidth(Type type) {
   unsigned bitwidth = 0;
-  if (auto intTy = ty.dyn_cast<IntegerType>()) {
+  if (type.dyn_cast<hir::TimeType>()) {
+    return 1;
+  } else if (auto intTy = type.dyn_cast<IntegerType>()) {
     bitwidth = intTy.getWidth();
-  } else if (auto memrefTy = ty.dyn_cast<MemrefType>()) {
+  } else if (auto memrefTy = type.dyn_cast<MemrefType>()) {
     bitwidth = getBitWidth(memrefTy.getElementType());
-  } else if (auto constTy = ty.dyn_cast<ConstType>()) {
+  } else if (auto constTy = type.dyn_cast<ConstType>()) {
     bitwidth = getBitWidth(constTy.getElementType());
+  } else {
+    string typeStr;
+    llvm::raw_string_ostream typeOstream(typeStr);
+    type.print(typeOstream);
+    fprintf(stderr, "\nERROR: Can't calculate getBitWidth for type %s.\n",
+            typeStr.c_str());
+    assert(false);
   }
   return bitwidth;
 }

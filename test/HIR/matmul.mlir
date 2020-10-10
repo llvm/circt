@@ -13,7 +13,7 @@
 hir.def @MatmulKernel at %t(
   %A : !hir.memref<16*16*i32, packing=[1], r>, 
   %B : !hir.memref<16*16*i32, packing=[], r>, 
-  %C : !hir.memref<16*16*i32, packing=[1], w>) -> (i32) {
+  %C : !hir.memref<16*16*i32, packing=[1], w>) -> () {
 
   %1 = hir.constant 1 : !hir.const<i32>
   %3 = hir.constant 3 : !hir.const<i32>

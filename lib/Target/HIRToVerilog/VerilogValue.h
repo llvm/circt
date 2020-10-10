@@ -11,6 +11,15 @@ using namespace mlir;
 using namespace hir;
 using namespace std;
 
+static bool isIntegerType(Type type) {
+  if (type.isa<IntegerType>())
+    return true;
+  else if (auto wireType = type.dyn_cast<WireType>())
+    return isIntegerType(wireType.getElementType());
+  else if (auto constType = type.dyn_cast<hir::ConstType>())
+    return isIntegerType(constType.getElementType());
+  return false;
+}
 class VerilogValue {
 public:
   VerilogValue() : type(Type()), name("uninitialized") {}
@@ -20,7 +29,8 @@ public:
   int numReads() { return usageInfo.numReads; }
   int numWrites() { return usageInfo.numWrites; }
   int numAccess() { return usageInfo.numReads + usageInfo.numWrites; }
-  string strMemrefArgDef();
+  string strMemrefArgDecl();
+  Type getType() { return type; }
 
 private:
   SmallVector<unsigned, 4> getMemrefPackedDims() {
@@ -68,13 +78,12 @@ private:
   }
 
   string strWireInput() { return name + "_input"; }
-  string strMemrefAddrValid() { return name + "_addr_valid"; }
+  string strMemrefAddrValid() const { return name + "_addr_valid"; }
   string strMemrefAddrInput() { return name + "_addr_input"; }
   string strMemrefWrDataValid() { return name + "_wr_data_valid"; }
   string strMemrefWrDataInput() { return name + "_wr_data_input"; }
   string strMemrefRdEnInput() { return name + "_rd_en_input"; }
   string strMemrefWrEnInput() { return name + "_wr_en_input"; }
-  Type getType() { return type; }
 
   string buildEnableSelectorStr(string str_en, string str_en_input,
                                 unsigned numInputs) {
@@ -176,7 +185,7 @@ private:
   string strMemrefAddrInput(unsigned idx) {
     return strMemrefAddrInput() + "[" + to_string(idx) + "]";
   }
-  string strMemrefDistDimAccess(ArrayRef<VerilogValue> addr) {
+  string strMemrefDistDimAccess(ArrayRef<VerilogValue *> addr) const {
     string out;
     auto packing = type.dyn_cast<hir::MemrefType>().getPacking();
     for (int i = 0; i < addr.size(); i++) {
@@ -186,11 +195,11 @@ private:
           isDistDim = false;
       }
       if (isDistDim) {
-        VerilogValue v = addr[i];
-        if (v.isIntegerConst())
-          out += "[" + to_string(v.getIntegerConst()) + "]";
+        VerilogValue *v = addr[i];
+        if (v->isIntegerConst())
+          out += "[" + to_string(v->getIntegerConst()) + "]";
         else
-          out += "[" + v.strWire() + " /*ERROR: expected constant.*/]";
+          out += "[" + v->strWire() + " /*ERROR: expected constant.*/]";
       }
     }
     return out;
@@ -201,17 +210,9 @@ public:
     isConstValue = true;
     constValue.val_int = value;
   }
-  bool isIntegerType() {
-    bool out = false;
-    if (type.isa<IntegerType>())
-      out = true;
-    else if (auto constType = type.dyn_cast<hir::ConstType>())
-      if (constType.getElementType().isa<IntegerType>())
-        out = true;
-    return out;
-  }
-  bool isIntegerConst() { return isConstValue && isIntegerType(); }
-  bool getIntegerConst() {
+
+  bool isIntegerConst() const { return isConstValue && isIntegerType(); }
+  bool getIntegerConst() const {
     assert(isIntegerConst());
     return constValue.val_int;
   }
@@ -238,7 +239,7 @@ public:
     // print write bus selector.
     if (numWrites() > 0) {
       unsigned dataWidth =
-          getBitWidth(type.dyn_cast<MemrefType>().getElementType());
+          ::getBitWidth(type.dyn_cast<MemrefType>().getElementType());
       output << buildEnableSelectorStr(strMemrefWrEn(), strMemrefWrEnInput(),
                                        numWrites());
       output << buildDataSelectorStr(strMemrefWrData(), strMemrefWrDataValid(),
@@ -249,27 +250,58 @@ public:
     return output.str();
   }
 
-  string strWire() {
+  string strWire() const {
     if (name == "") {
       return "/*ERROR: Anonymus variable.*/";
     }
     return name;
   }
 
-  string strConstOrError(int n = 0) {
+  unsigned getBitWidth() const { return ::getBitWidth(type); }
+  bool isIntegerType() const { return ::isIntegerType(type); }
+  /// Checks if the type is implemented as a verilog wire or an array of wires.
+  bool isSimpleType() const {
+    if (isIntegerType())
+      return true;
+    else if (type.isa<hir::TimeType>())
+      return true;
+    return false;
+  }
+  string strWireDecl() {
+    assert(name != "");
+    assert(isSimpleType());
+    if (auto wireType = type.dyn_cast<hir::WireType>()) {
+      auto shape = wireType.getShape();
+      auto elementType = wireType.getElementType();
+      auto elementWidthStr = to_string(::getBitWidth(elementType) - 1) + ":0";
+      string distDimsStr = "";
+      for (auto dim : shape) {
+        distDimsStr += "[" + to_string(dim - 1) + ":0]";
+      }
+      return "[" + elementWidthStr + "] " + strWire() + distDimsStr;
+    } else {
+      string out;
+      if (getBitWidth() > 1)
+        out += "[" + to_string(getBitWidth() - 1) + ":0] ";
+      return out + strWire();
+    }
+  }
+  string strConstOrError(int n = 0) const {
     if (isIntegerConst()) {
       string constStr = to_string(getIntegerConst() + n);
       if (name == "")
         return constStr;
       return "/*" + name + "=*/ " + constStr;
     }
-    return "/*ERROR: Expected constant. */" + strWire() + "+" + to_string(n);
+    fprintf(stderr, "/*ERROR: Expected constant. Found %s + %d */",
+            strWire().c_str(), n);
+    assert(false);
   }
 
-  string strConstOrWire() {
+  string strConstOrWire() const {
     if (isIntegerConst()) {
       string vlogDecimalLiteral =
-          to_string(getBitWidth(type)) + "'d" + to_string(getIntegerConst());
+          to_string(::getBitWidth(type)) + "'d" + to_string(getIntegerConst());
       if (name == "")
         return vlogDecimalLiteral;
       return "/*" + name + "=*/ " + vlogDecimalLiteral;
@@ -281,57 +313,60 @@ public:
   string strWireInput(unsigned idx) {
     return strWireInput() + "[" + to_string(idx) + "]";
   }
-  string strDelayedWire() { return name + "delay"; }
+  string strDelayedWire() const { return name + "delay"; }
   string strDelayedWire(unsigned delay) {
+    updateMaxDelay(delay);
     return strDelayedWire() + "[" + to_string(delay) + "]";
   }
 
   string strMemrefAddr() { return name + "_addr"; }
-  string strMemrefAddrValid(ArrayRef<VerilogValue> addr, unsigned idx) {
+  string strMemrefAddrValid(ArrayRef<VerilogValue *> addr, unsigned idx) const {
     string distDimAccessStr = strMemrefDistDimAccess(addr);
     return strMemrefAddrValid() + distDimAccessStr + "[" + to_string(idx) + "]";
   }
-  string strMemrefAddrInput(ArrayRef<VerilogValue> addr, unsigned idx) {
+  string strMemrefAddrInput(ArrayRef<VerilogValue *> addr, unsigned idx) {
     string distDimAccessStr = strMemrefDistDimAccess(addr);
     return strMemrefAddrInput() + distDimAccessStr + "[" + to_string(idx) + "]";
   }
 
-  string strMemrefRdData(ArrayRef<VerilogValue> addr) {
+  string strMemrefRdData() { return name + "_rd_data"; }
+  string strMemrefRdData(ArrayRef<VerilogValue *> addr) {
     string distDimAccessStr = strMemrefDistDimAccess(addr);
-    return name + "_rd_data" + distDimAccessStr;
+    return strMemrefRdData() + distDimAccessStr;
   }
 
   string strMemrefWrData() { return name + "_wr_data"; }
-  string strMemrefWrDataValid(ArrayRef<VerilogValue> addr, unsigned idx) {
+  string strMemrefWrDataValid(ArrayRef<VerilogValue *> addr, unsigned idx) {
     string distDimAccessStr = strMemrefDistDimAccess(addr);
     return strMemrefWrDataValid() + distDimAccessStr + "[" + to_string(idx) +
            "]";
   }
-  string strMemrefWrDataInput(ArrayRef<VerilogValue> addr, unsigned idx) {
+  string strMemrefWrDataInput(ArrayRef<VerilogValue *> addr, unsigned idx) {
     string distDimAccessStr = strMemrefDistDimAccess(addr);
     return strMemrefWrDataInput() + distDimAccessStr + "[" + to_string(idx) +
            "]";
   }
 
   string strMemrefRdEn() { return name + "_rd_en"; }
-  string strMemrefRdEnInput(ArrayRef<VerilogValue> addr, unsigned idx) {
+  string strMemrefRdEnInput(ArrayRef<VerilogValue *> addr, unsigned idx) {
     string distDimAccessStr = strMemrefDistDimAccess(addr);
     return strMemrefRdEnInput() + distDimAccessStr + "[" + to_string(idx) + "]";
   }
 
   string strMemrefWrEn() { return name + "_wr_en"; }
-  string strMemrefWrEnInput(ArrayRef<VerilogValue> addr, unsigned idx) {
+  string strMemrefWrEnInput(ArrayRef<VerilogValue *> addr, unsigned idx) {
     string distDimAccessStr = strMemrefDistDimAccess(addr);
     return strMemrefWrEnInput() + distDimAccessStr + "[" + to_string(idx) + "]";
   }
   void incNumReads() { usageInfo.numReads++; }
   void incNumWrites() { usageInfo.numWrites++; }
-  void updateMaxDelay(int delay) {
-    maxDelay = maxDelay > delay ? maxDelay : delay;
-  }
+
   int getMaxDelay() const { return maxDelay; }
 
 private:
+  void updateMaxDelay(int delay) {
+    maxDelay = maxDelay > delay ? maxDelay : delay;
+  }
   bool isConstValue = false;
   union {
     int val_int;
@@ -345,7 +380,7 @@ private:
   int maxDelay = 0;
 };
 
-string VerilogValue::strMemrefArgDef() {
+string VerilogValue::strMemrefArgDecl() {
   string out;
   MemrefType memrefTy = type.dyn_cast<MemrefType>();
   hir::Details::PortKind port = memrefTy.getPort();
@@ -356,7 +391,7 @@ string VerilogValue::strMemrefArgDef() {
   unsigned addrWidth = calcAddrWidth(memrefTy);
   string distDimsStr = strMemrefDistDims();
   bool printComma = false;
-  unsigned dataWidth = getBitWidth(memrefTy.getElementType());
+  unsigned dataWidth = ::getBitWidth(memrefTy.getElementType());
   if (addrWidth > 0) { // add dims may be distributed.
     out += "output reg[" + to_string(addrWidth - 1) + ":0] " + strMemrefAddr() +
            distDimsStr;
@@ -367,7 +402,7 @@ string VerilogValue::strMemrefArgDef() {
       out += ",\n";
     out += "output wire " + strMemrefRdEn() + distDimsStr;
     out += ",\ninput wire[" + to_string(dataWidth - 1) + ":0] " +
-           strMemrefRdData(SmallVector<VerilogValue, 4>()) + distDimsStr;
+           strMemrefRdData(SmallVector<VerilogValue *, 4>()) + distDimsStr;
     printComma = true;
   }
   if (port == hir::Details::w || port == hir::Details::rw) {
