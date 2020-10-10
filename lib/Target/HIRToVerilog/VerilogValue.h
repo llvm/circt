@@ -12,6 +12,7 @@ using namespace hir;
 using namespace std;
 
 static bool isIntegerType(Type type) {
+  assert(type);
   if (type.isa<IntegerType>())
     return true;
   else if (auto wireType = type.dyn_cast<WireType>())
@@ -23,7 +24,11 @@ static bool isIntegerType(Type type) {
 class VerilogValue {
 public:
   VerilogValue() : type(Type()), name("uninitialized") {}
-  VerilogValue(Type type, string name) : type(type), name(name) {}
+  VerilogValue(Type type, string name)
+      : initialized(true), type(type), name(name) {}
+  ~VerilogValue() { initialized = false; }
+  void reset() { initialized = false; }
+  bool isInitialized() { return initialized; }
 
 public:
   int numReads() { return usageInfo.numReads; }
@@ -33,6 +38,7 @@ public:
   Type getType() { return type; }
 
 private:
+  bool initialized = false;
   SmallVector<unsigned, 4> getMemrefPackedDims() {
     SmallVector<unsigned, 4> out;
     auto memrefType = type.dyn_cast<hir::MemrefType>();
@@ -267,7 +273,8 @@ public:
       return true;
     return false;
   }
-  string strWireDecl() {
+  string strWireDecl() const {
+    assert(initialized);
     assert(name != "");
     assert(isSimpleType());
     if (auto wireType = type.dyn_cast<hir::WireType>()) {

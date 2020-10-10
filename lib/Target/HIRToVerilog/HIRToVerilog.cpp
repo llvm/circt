@@ -19,6 +19,7 @@
 #include "llvm/Support/FormattedStream.h"
 
 #include <functional>
+#include <list>
 #include <string>
 
 using namespace mlir;
@@ -64,26 +65,63 @@ public:
 
 private:
   unsigned newValueNumber() { return nextValueNum++; }
-  class verilogMapperClass {
+
+  class VerilogMapperClass {
   private:
     llvm::DenseMap<Value, VerilogValue *> mapValueToVerilogValuePtr;
-    SmallVector<VerilogValue, 4> verilogValueStore;
+    list<VerilogValue> verilogValueStore;
+    stack<unsigned> topOfStack;
 
   public:
-    VerilogValue *get_mut(Value v) { return mapValueToVerilogValuePtr[v]; }
-    const VerilogValue get(Value v) { return *mapValueToVerilogValuePtr[v]; }
-    void insert(Value v, VerilogValue *vv) {
+    unsigned push_stack() {
+
+      auto end = verilogValueStore.size();
+      //--end;
+      topOfStack.push(end);
+      fprintf(stderr, "level=%d, push_stack = %d\n", topOfStack.size(),
+              verilogValueStore.size());
+      fflush(stderr);
+      return verilogValueStore.size();
+    }
+    unsigned pop_stack() {
+      auto numDeletes = verilogValueStore.size() - topOfStack.top();
+      // for (int i = 0; i < numDeletes ; i++) {
+      //  verilogValueStore.pop_back();
+      //}
+      auto last = verilogValueStore.end();
+      for (int i = 0; i < numDeletes; i++) {
+        --last;
+        last->reset();
+      }
+      topOfStack.pop();
+      fprintf(stderr, "level=%d, pop_stack = %d\n", topOfStack.size(),
+              verilogValueStore.size());
+      fflush(stderr);
+      return verilogValueStore.size();
+    }
+    VerilogValue *get_mut(Value v) {
+      assert(v);
+      assert(mapValueToVerilogValuePtr.find(v) !=
+             mapValueToVerilogValuePtr.end());
+      auto out = mapValueToVerilogValuePtr[v];
+      assert(out->isInitialized());
+      return out;
+    }
+
+    const VerilogValue get(Value v) { return *get_mut(v); }
+    void insert_ptr(Value v, VerilogValue *vv) {
+      assert(vv->isInitialized());
       mapValueToVerilogValuePtr.insert(make_pair(v, vv));
     }
-    void remap(Value v, VerilogValue vv) {
-      verilogValueStore.push_back(vv);
-      VerilogValue *ptr_vv = &verilogValueStore[verilogValueStore.size() - 1];
-      mapValueToVerilogValuePtr[v] = ptr_vv;
+    void remap(Value v, VerilogValue *vv) {
+      assert(vv->isInitialized());
+      assert(mapValueToVerilogValuePtr.find(v) !=
+             mapValueToVerilogValuePtr.end());
+      mapValueToVerilogValuePtr[v] = vv;
     }
     void insert(Value v, VerilogValue vv) {
       verilogValueStore.push_back(vv);
-      VerilogValue *ptr_vv = &verilogValueStore[verilogValueStore.size() - 1];
-      insert(v, ptr_vv);
+      insert_ptr(v, &verilogValueStore.back());
     }
   } verilogMapper;
 
@@ -136,7 +174,8 @@ VerilogPrinter::registerResults(ResultRange results) {
   SmallVector<VerilogValue *, 4> out;
   for (Value result : results) {
     verilogMapper.insert(
-        result, VerilogValue(result.getType(), "v" + newValueNumber()));
+        result,
+        VerilogValue(result.getType(), "v" + to_string(newValueNumber())));
     out.push_back(verilogMapper.get_mut(result));
   }
   return out;
@@ -164,8 +203,7 @@ string VerilogPrinter::printDownCounter(stringstream &output, Value maxCount,
 LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
                                              unsigned indentAmount) {
   Value result = op.res();
-  unsigned id_result = newValueNumber();
-  VerilogValue v_result(result.getType(), "v" + to_string(id_result));
+  VerilogValue v_result(result.getType(), "v" + to_string(newValueNumber()));
   verilogMapper.insert(result, v_result);
 
   auto addr = convertToVerilog(op.addr());
@@ -178,9 +216,12 @@ LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
   Value tstart = op.tstart();
   VerilogValue *v_tstart = verilogMapper.get_mut(tstart);
   Value offset = op.offset();
-  VerilogValue *v_offset = verilogMapper.get_mut(offset);
+  int delayValue = 0;
+  if (offset) {
+    VerilogValue *v_offset = verilogMapper.get_mut(offset);
+    delayValue = offset ? v_offset->getIntegerConst() : 0;
+  }
   VerilogValue *v_mem = verilogMapper.get_mut(mem);
-  int delayValue = offset ? v_offset->getIntegerConst() : 0;
   unsigned width_result = getBitWidth(result.getType());
   if (!packing.empty()) {
     // Address bus assignments.
@@ -283,13 +324,13 @@ LogicalResult VerilogPrinter::printDelayOp(hir::DelayOp op,
   Value delay = op.delay();
   VerilogValue *v_delay = verilogMapper.get_mut(delay);
   Value result = op.res();
-  VerilogValue v_result =
-      VerilogValue(result.getType(), "v" + newValueNumber());
-  verilogMapper.insert(result, v_result);
-
+  verilogMapper.insert(result, VerilogValue(result.getType(),
+                                            "v" + to_string(newValueNumber())));
+  VerilogValue *v_result = verilogMapper.get_mut(result);
+  v_result->strWireDecl();
   // Propagate constant value.
   if (v_input->isIntegerConst()) {
-    v_result.setIntegerConst(v_input->getIntegerConst());
+    v_result->setIntegerConst(v_input->getIntegerConst());
   }
   string str_shiftreg = "shiftreg" + to_string(newValueNumber());
   module_out << "reg [" << getBitWidth(input.getType()) - 1 << ":0]"
@@ -300,7 +341,7 @@ LogicalResult VerilogPrinter::printDelayOp(hir::DelayOp op,
   module_out << "always@(posedge clk) " << str_shiftreg << "["
              << v_delay->strConstOrError() << ":1] = " << str_shiftreg << "["
              << v_delay->strConstOrError(-1) << ":0];\n";
-  module_out << "wire " << v_result.strWireDecl() << " = " << str_shiftreg
+  module_out << "wire " << v_result->strWireDecl() << " = " << str_shiftreg
              << "[" << v_delay->strConstOrError() << "];\n";
   return success();
 }
@@ -532,9 +573,10 @@ LogicalResult VerilogPrinter::printUnrollForOp(UnrollForOp op,
   VerilogValue *v_tstart = verilogMapper.get_mut(tstart);
   Value tloop = op.getIterTimeVar();
   Value idx = op.getInductionVar();
-  verilogMapper.insert(tloop, v_tstart);
+  verilogMapper.insert_ptr(tloop, v_tstart);
   verilogMapper.insert(idx, VerilogValue(idx.getType(), ""));
-  VerilogValue next_v_tloop = *v_tstart;
+  VerilogValue *ptr_v_tloop = v_tstart;
+  VerilogValue next_v_tloop;
   auto id_loop = newValueNumber();
   for (int i = lb; i < ub; i += step) {
     verilogMapper.get_mut(idx)->setIntegerConst(i);
@@ -553,14 +595,20 @@ LogicalResult VerilogPrinter::printUnrollForOp(UnrollForOp op,
     auto status = printBody(op.getLoopBody().front(), indentAmount);
 
     yieldTarget.pop();
-    verilogMapper.remap(tloop, next_v_tloop);
+    verilogMapper.remap(tloop, ptr_v_tloop);
+    ptr_v_tloop = &next_v_tloop;
     module_out << "\n//}\n";
 
     if (status.value == LogicalResult::Failure)
       break;
   }
 
-  verilogMapper.insert(tlast, verilogMapper.get_mut(tloop));
+  verilogMapper.insert(
+      tlast, VerilogValue(tlast.getType(), "t" + to_string(newValueNumber())));
+  VerilogValue v_tlast = verilogMapper.get(tlast);
+  module_out << "wire " << v_tlast.strWireDecl() << ";\n";
+  module_out << "assign " << v_tlast.strWire() << " = "
+             << ptr_v_tloop->strWire();
   return success();
 }
 
@@ -748,12 +796,17 @@ LogicalResult VerilogPrinter::processReplacements(string &code) {
 
 LogicalResult VerilogPrinter::printBody(Block &block, unsigned indentAmount) {
   // Print the operations within the entity.
+  unsigned n_before = verilogMapper.push_stack();
+  module_out << "//{printBody #VerilogValues = " << n_before << ";\n";
   for (auto iter = block.begin(); iter != block.end(); ++iter) {
     auto error = printOperation(&(*iter), 4);
     if (failed(error)) {
       return error;
     }
   }
+
+  unsigned n_after = verilogMapper.pop_stack();
+  module_out << "//}printBody #VerilogValues = " << n_after << ";\n";
 }
 
 LogicalResult VerilogPrinter::printModule(ModuleOp module) {
