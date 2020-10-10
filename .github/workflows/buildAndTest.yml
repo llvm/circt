@@ -93,8 +93,12 @@ jobs:
     - name: git fetch base commit
       continue-on-error: true
       run: |
-        [[ ! "$DIFF_COMMIT_NAME" == *"HEAD"* ]] && git fetch --recurse-submodules=no origin $DIFF_COMMIT_NAME
-        DIFF_COMMIT_SHA=$( git rev-parse $DIFF_COMMIT_NAME )
+        if [[ ! "$DIFF_COMMIT_NAME" == *"HEAD"* ]]; then
+          git fetch --recurse-submodules=no origin $DIFF_COMMIT_NAME
+          DIFF_COMMIT_SHA=$( git rev-parse origin/$DIFF_COMMIT_NAME )
+        else
+          DIFF_COMMIT_SHA=$( git rev-parse $DIFF_COMMIT_NAME )
+        fi
         echo "DIFF_COMMIT=$DIFF_COMMIT_SHA" >> $GITHUB_ENV
     - name: clang-format
       if: ${{ always() }}
