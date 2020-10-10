@@ -81,19 +81,25 @@ jobs:
     - name: choose-commit
       if: ${{ always() }}
       env:
-        PR_BASE: ${{ github.event.pull_request.base.sha }}
+        PR_BASE: ${{ github.base_ref }}
       run: |
         # Run clang-format
         if [[ -z "$PR_BASE" ]]; then
-          DIFF_COMMIT="HEAD^"
+          DIFF_COMMIT_NAME="HEAD^"
         else
-          DIFF_COMMIT="$PR_BASE"
+          DIFF_COMMIT_NAME="$PR_BASE"
         fi
-        echo "DIFF_COMMIT=$DIFF_COMMIT" >> $GITHUB_ENV
+        echo "DIFF_COMMIT_NAME=$DIFF_COMMIT_NAME" >> $GITHUB_ENV
     - name: git fetch base commit
       continue-on-error: true
       run: |
-        [[ ! "$DIFF_COMMIT" == *"HEAD"* ]] && git fetch origin $DIFF_COMMIT
+        if [[ ! "$DIFF_COMMIT_NAME" == *"HEAD"* ]]; then
+          git fetch --recurse-submodules=no origin $DIFF_COMMIT_NAME
+          DIFF_COMMIT_SHA=$( git rev-parse origin/$DIFF_COMMIT_NAME )
+        else
+          DIFF_COMMIT_SHA=$( git rev-parse $DIFF_COMMIT_NAME )
+        fi
+        echo "DIFF_COMMIT=$DIFF_COMMIT_SHA" >> $GITHUB_ENV
     - name: clang-format
       if: ${{ always() }}
       run: |
