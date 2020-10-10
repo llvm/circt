@@ -98,7 +98,7 @@ jobs:
       if: ${{ always() }}
       run: |
         # Run clang-format
-        git clang-format-9 $DIFF_COMMIT
+        git clang-format-9 $( git rev-parse $DIFF_COMMIT )
         git diff --ignore-submodules > clang-format.patch
         if [ -s clang-format.patch ]; then
           echo "Clang-format found formatting problems in the following files. See diff in the clang-format.patch artifact."
