@@ -85,20 +85,22 @@ jobs:
       run: |
         # Run clang-format
         if [[ -z "$PR_BASE" ]]; then
-          DIFF_COMMIT="HEAD^"
+          DIFF_COMMIT_NAME="HEAD^"
         else
-          DIFF_COMMIT="$PR_BASE"
+          DIFF_COMMIT_NAME="$PR_BASE"
         fi
-        echo "DIFF_COMMIT=$DIFF_COMMIT" >> $GITHUB_ENV
+        echo "DIFF_COMMIT_NAME=$DIFF_COMMIT" >> $GITHUB_ENV
     - name: git fetch base commit
       continue-on-error: true
       run: |
-        [[ ! "$DIFF_COMMIT" == *"HEAD"* ]] && git fetch --recurse-submodules=no origin $DIFF_COMMIT
+        [[ ! "$DIFF_COMMIT_NAME" == *"HEAD"* ]] && git fetch --recurse-submodules=no origin $DIFF_COMMIT_NAME
+        DIFF_COMMIT_SHA=$( git rev-parse $DIFF_COMMIT_NAME )
+        echo "DIFF_COMMIT=$DIFF_COMMIT_SHA" >> $GITHUB_ENV
     - name: clang-format
       if: ${{ always() }}
       run: |
         # Run clang-format
-        git clang-format-9 $( git rev-parse $DIFF_COMMIT )
+        git clang-format-9 $DIFF_COMMIT
         git diff --ignore-submodules > clang-format.patch
         if [ -s clang-format.patch ]; then
           echo "Clang-format found formatting problems in the following files. See diff in the clang-format.patch artifact."
