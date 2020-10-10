@@ -30,12 +30,15 @@ using namespace circt::llhd;
 // Keep a counter to infer a signal's index in his entity's signal table.
 static size_t signalCounter = 0;
 
+// Keep a counter to infer a reg's index in his entity.
 static size_t regCounter = 0;
 
 //===----------------------------------------------------------------------===//
 // Helpers
 //===----------------------------------------------------------------------===//
 
+/// Returns the bit width of the given integer type for both the standard
+/// integer type and the llvm dialect integer type.
 static unsigned getStdOrLLVMIntegerWidth(Type type) {
   if (auto llvmTy = type.dyn_cast<LLVM::LLVMType>())
     return llvmTy.getIntegerBitWidth();
@@ -195,8 +198,10 @@ static LLVM::LLVMType getProcPersistenceTy(LLVM::LLVMDialect *dialect,
         auto converted = converter.convertType(ptr.getUnderlyingType());
         types.push_back(converted.cast<LLVM::LLVMType>());
       } else if (op->getResult(0).getType().isa<SigType>()) {
+        // Persist unwrapped signal structure.
         types.push_back(getSigType(dialect));
       } else {
+        // Persist the value as is.
         types.push_back(converter.convertType(op->getResult(0).getType())
                             .cast<LLVM::LLVMType>());
       }
@@ -205,8 +210,10 @@ static LLVM::LLVMType getProcPersistenceTy(LLVM::LLVMDialect *dialect,
 
   // Also persist block arguments escaping their defining block.
   for (auto &block : proc.getBlocks()) {
+    // Skip entry block (contains the function signature in its args).
     if (block.isEntryBlock())
       continue;
+
     for (auto arg : block.getArguments()) {
       if (arg.isUsedOutsideOfBlock(&block)) {
         types.push_back(
@@ -234,8 +241,8 @@ static void insertComparisonBlock(ConversionPatternRewriter &rewriter,
   auto cmpRes = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::eq,
                                               resumeIdx, cmpIdx);
 
-  // Default to jumpumping to the next block for the false, if it is not
-  // provided.
+  // Default to jumping to the next block for the false case, if no explicit
+  // block is provided.
   if (!falseDest)
     falseDest = &*secondBlock;
 
@@ -274,7 +281,6 @@ static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
                          Value persist) {
   auto elemTy = stateTy.getStructElementType(3).getStructElementType(i);
 
-  // Store the value escaping it's definingn block in the persistence table.
   if (auto arg = persist.dyn_cast<BlockArgument>()) {
     rewriter.setInsertionPointToStart(arg.getParentBlock());
   } else {
@@ -288,14 +294,15 @@ static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
     // Redirect uses of the pointer in the same block to the pointer in the
     // persistence state. This ensures that stores and loads all operate on the
     // same value.
-    for (auto &use : llvm::make_early_inc_range(persist.getUses())) {
-      if (persist.getParentBlock() == use.getOwner()->getBlock())
-        use.set(gep0);
-    }
+    // for (auto &use : llvm::make_early_inc_range(persist.getUses())) {
+    //   if (persist.getParentBlock() == use.getOwner()->getBlock())
+    //     use.set(gep0);
+    // }
     // Unwrap the pointer and store it's value.
     auto elemTy = converter.convertType(ptr.getUnderlyingType());
     toStore = rewriter.create<LLVM::LoadOp>(loc, elemTy, persist);
   } else if (persist.getType().isa<SigType>()) {
+    // Unwrap and store the signal struct.
     toStore = rewriter.create<LLVM::LoadOp>(loc, getSigType(dialect), persist);
   } else {
     // Store the value directly.
@@ -310,6 +317,9 @@ static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
     auto user = use.getOwner();
     if (persist.getParentBlock() != user->getBlock() ||
         (isa<WaitOp>(user) && isWaitDestArg(cast<WaitOp>(user), persist))) {
+      // The destination args of a wait op have to be loaded in the entry block
+      // of the function, before jumping to the resume destination, so they can
+      // be passed as block arguments by the comparison block.
       if (isa<WaitOp>(user) && isWaitDestArg(cast<WaitOp>(user), persist))
         rewriter.setInsertionPoint(
             user->getParentRegion()->front().getTerminator());
@@ -343,9 +353,13 @@ static void insertPersistence(LLVMTypeConverter &converter,
 
   auto &firstBB = converted.getBody().front();
 
+  // Split entry block such that all the operations contained in it in the
+  // original process appear after the comparison blocks.
   auto splitFirst =
       rewriter.splitBlock(&firstBB, splitEntryBefore->getIterator());
 
+  // Insert dummy branch terminator at the new end of the function's entry
+  // block.
   rewriter.setInsertionPointToEnd(&firstBB);
   rewriter.create<LLVM::BrOp>(loc, ValueRange(), splitFirst);
 
@@ -368,8 +382,8 @@ static void insertPersistence(LLVMTypeConverter &converter,
 
   auto body = &converted.getBody();
 
-  // Redirect the entry block to a first comparison block. If on a fresh start,
-  // start from where original entry would have jumped, else the process is in
+  // Redirect the entry block to a first comparison block. If on a first
+  // execution, jump to the new (splitted) entry block, else the process is in
   // an illegal state and jump to the abort block.
   insertComparisonBlock(rewriter, dialect, loc, body, larg, 0,
                         body->front().getSuccessor(0), ValueRange(),
@@ -419,7 +433,7 @@ static void insertPersistence(LLVMTypeConverter &converter,
 }
 
 /// Return a struct type of arrays containing one entry for each RegOp condition
-/// that needs more than one state of the trigger to infer it (i.e. `both`,
+/// that require more than one state of the trigger to infer it (i.e. `both`,
 /// `rise` and `fall`).
 static LLVM::LLVMType getRegStateTy(LLVM::LLVMDialect *dialect,
                                     Operation *entity) {
@@ -440,8 +454,8 @@ static LLVM::LLVMType getRegStateTy(LLVM::LLVMDialect *dialect,
 }
 
 /// Create a zext operation by one bit on the given value. This is useful when
-/// passing indexes to a GEP instructions, which treats indexes as signed
-/// values, by ensuring the expected index is picked.
+/// passing unsigned indexes to a GEP instruction, which treats indexes as
+/// signed values, to avoid unexpected "sign overflows".
 static Value zextByOne(Location loc, ConversionPatternRewriter &rewriter,
                        Value value) {
   auto valueTy = value.getType().cast<LLVM::LLVMType>();
@@ -510,7 +524,9 @@ static LLVM::LLVMType convertTupleType(TupleType type,
 
 namespace {
 /// Convert an `llhd.entity` entity to LLVM dialect. The result is an
-/// `llvm.func` which takes a pointer to the state as arguments.
+/// `llvm.func` which takes a pointer to the global simulation state, a pointer
+/// to the entity's local state, and a pointer to the instance's signal table as
+/// arguments.
 struct EntityOpConversion : public ConvertToLLVMPattern {
   explicit EntityOpConversion(MLIRContext *ctx,
                               LLVMTypeConverter &typeConverter)
@@ -691,8 +707,8 @@ struct ProcOpConversion : public ConvertToLLVMPattern {
     insertPersistence(typeConverter, rewriter, &getDialect(), op->getLoc(),
                       procOp, stateTy, llvmFunc, &firstOp);
 
-    // Convert the block argument types after inserting the persistence, since
-    // this messes up the block argument uses.
+    // Convert the block argument types after inserting the persistence, as this
+    // would otherwise interfere with the persistence generation.
     if (failed(rewriter.convertRegionTypes(&llvmFunc.getBody(), typeConverter,
                                            &final))) {
       return failure();
@@ -859,6 +875,10 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
 };
 } // namespace
 
+/// Recursively clone the init origin of a sig operation into the init function,
+/// up to the initial constant value(s). This is required to clone the
+/// initialization of array and tuple signals, where the init operant cannot
+/// originate from a constant operation.
 static Operation *recursiveCloneInit(OpBuilder &initBuilder, Operation *op) {
   if (auto arrayUniformOp = dyn_cast<ArrayUniformOp>(op)) {
     auto init =
@@ -1334,8 +1354,10 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
 
     // Get the state pointer from the function arguments.
     Value statePtr = op->getParentOfType<LLVM::LLVMFuncOp>().getArgument(0);
-    auto underlyingTy = drvOp.value().getType();
+
+    // Get signal width.
     Value sigWidth;
+    auto underlyingTy = drvOp.value().getType();
     if (isArrayOrTuple(underlyingTy)) {
       auto llvmPtrTy = typeConverter.convertType(underlyingTy)
                            .cast<LLVM::LLVMType>()
@@ -1411,8 +1433,8 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
 
 namespace {
 /// Convert an `llhd.reg` operation to LLVM dialect. This generates a series of
-/// comparisons (blocks) that end up driving the signal with apropriate
-/// arguments.
+/// comparisons (blocks) that end up driving the signal with the arguments of
+/// the first matching trigger from the trigger list.
 struct RegOpConversion : public ConvertToLLVMPattern {
   explicit RegOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
       : ConvertToLLVMPattern(RegOp::getOperationName(), ctx, typeConverter) {}
@@ -1451,7 +1473,8 @@ struct RegOpConversion : public ConvertToLLVMPattern {
                                        gep);
       }
     }
-    // Create blocks for drive and continue
+
+    // Create blocks for drive and continue.
     auto block = op->getBlock();
     auto continueBlock = block->splitBlock(op);
 
@@ -1674,7 +1697,7 @@ struct ShrOpConversion : public ConvertToLLVMPattern {
 } // namespace
 
 namespace {
-/// Convert an `llhd.shr` operation to LLVM dialect. All the operands are
+/// Convert an `llhd.shl` operation to LLVM dialect. All the operands are
 /// extended to the width obtained by combining the hidden and base values. This
 /// combined value is then shifted right by `hidden_width - amount` (exposing
 /// the hidden value) and truncated to the base length
@@ -1744,6 +1767,7 @@ using XorOpConversion = OneToOneConvertToLLVMPattern<llhd::XorOp, LLVM::XOrOp>;
 //===----------------------------------------------------------------------===//
 
 namespace {
+/// Convert a NegOp to LLVM dialect.
 struct NegOpConversion : public ConvertToLLVMPattern {
   explicit NegOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
       : ConvertToLLVMPattern(llhd::NegOp::getOperationName(), ctx,
@@ -1765,7 +1789,9 @@ struct NegOpConversion : public ConvertToLLVMPattern {
 };
 
 } // namespace
+
 namespace {
+/// Convert an EqOp to LLVM dialect.
 struct EqOpConversion : public ConvertToLLVMPattern {
   explicit EqOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
       : ConvertToLLVMPattern(llhd::EqOp::getOperationName(), ctx,
@@ -1788,6 +1814,7 @@ struct EqOpConversion : public ConvertToLLVMPattern {
 } // namespace
 
 namespace {
+/// Convert a NeqOp to LLVM dialect.
 struct NeqOpConversion : public ConvertToLLVMPattern {
   explicit NeqOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
       : ConvertToLLVMPattern(llhd::NeqOp::getOperationName(), ctx,
@@ -1815,9 +1842,8 @@ struct NeqOpConversion : public ConvertToLLVMPattern {
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Lower an LLHD constant operation to LLVM dialect. Time constants are lowered
-/// to an array of 3 integers, containing the 3 time values. The other const
-/// types are lowered to an equivalent `llvm.mlir.constant` operation.
+/// Lower an LLHD constant operation to an equivalent LLVM dialect constant
+/// operation.
 struct ConstOpConversion : public ConvertToLLVMPattern {
   explicit ConstOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
       : ConvertToLLVMPattern(llhd::ConstOp::getOperationName(), ctx,
@@ -1858,7 +1884,7 @@ struct ConstOpConversion : public ConvertToLLVMPattern {
 
 namespace {
 /// Convert an ArrayOp operation to the LLVM dialect. An equivalent and
-/// initialized llvm array type is generated.
+/// initialized llvm dialect array type is generated.
 struct ArrayOpConversion : public ConvertToLLVMPattern {
   explicit ArrayOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
       : ConvertToLLVMPattern(llhd::ArrayOp::getOperationName(), ctx,
@@ -1885,8 +1911,8 @@ struct ArrayOpConversion : public ConvertToLLVMPattern {
 
 namespace {
 /// Convert an ArrayUniformOp operation to the LLVM dialect. An equivalent llvm
-/// array type is generated, which values are all initialized to the `init`
-/// operand's value.
+/// dialect array type is generated, which values are all initialized to the
+/// `init` operand's value.
 struct ArrayUniformOpConversion : public ConvertToLLVMPattern {
   explicit ArrayUniformOpConversion(MLIRContext *ctx,
                                     LLVMTypeConverter &typeConverter)
@@ -1914,6 +1940,8 @@ struct ArrayUniformOpConversion : public ConvertToLLVMPattern {
 } // namespace
 
 namespace {
+/// Convert a TupleOp operation to the LLVM dialect. An equivalent and
+/// initialized llvm dialect tuple type is generated.
 struct TupleOpConversion : public ConvertToLLVMPattern {
   explicit TupleOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
       : ConvertToLLVMPattern(llhd::TupleOp::getOperationName(), ctx,
@@ -2000,9 +2028,11 @@ static Value shiftArraySigPointer(Location loc,
 }
 
 namespace {
-/// Convert an llhd.exts operation. For integers, the value is shifted to the
-/// start index and then truncated to the final length. For signals, a new
-/// subsignal is created, pointing to the defined slice.
+/// Convert an ExtractSliceOp to LLVM dialect. For integers, the value is
+/// shifted to the start index and then truncated to the final length. For
+/// signals, a new subsignal is created, pointing to the defined slice. For
+/// array types, a new, "shorter", array is created, containing the elements of
+/// the slice.
 struct ExtractSliceOpConversion : public ConvertToLLVMPattern {
   explicit ExtractSliceOpConversion(MLIRContext *ctx,
                                     LLVMTypeConverter &typeConverter)
@@ -2039,6 +2069,7 @@ struct ExtractSliceOpConversion : public ConvertToLLVMPattern {
         // Adjust the slice starting point by the signal's offset.
         auto adjustedStart = rewriter.create<LLVM::AddOp>(
             op->getLoc(), sigDetail[1], startConst);
+
         // Get the shifted pointer and new byte offset.
         auto adjusted = shiftIntegerSigPointer(
             op->getLoc(), &getDialect(), rewriter, sigDetail[0], adjustedStart);
@@ -2134,8 +2165,6 @@ static Value arrayBoundaryCheck(Location loc,
   rewriter.setInsertionPointToEnd(compBlock);
   auto last = rewriter.create<LLVM::ConstantOp>(
       loc, i64Ty, rewriter.getI64IntegerAttr(arrTy.getArrayNumElements() - 1));
-  // auto upperOffset = rewriter.create<LLVM::MulOp>(loc, nElems, size);
-  // auto upper = rewriter.create<LLVM::AddOp>(loc, ptr, upperOffset);
   auto gepLast = rewriter.create<LLVM::GEPOp>(
       loc, arrTy.getArrayElementType().getPointerTo(), ptr,
       ArrayRef<Value>(last));
@@ -2155,6 +2184,7 @@ static Value arrayBoundaryCheck(Location loc,
 }
 
 namespace {
+/// Convert a DynExtractSliceOp to LLVM dialect.
 struct DynExtractSliceOpConversion : public ConvertToLLVMPattern {
   explicit DynExtractSliceOpConversion(MLIRContext *ctx,
                                        LLVMTypeConverter &typeConverter)
@@ -2179,6 +2209,7 @@ struct DynExtractSliceOpConversion : public ConvertToLLVMPattern {
 
       return success();
     }
+
     if (auto resTy = extsOp.result().getType().dyn_cast<SigType>()) {
       auto sigDetail =
           getSignalDetail(rewriter, &getDialect(), op->getLoc(),
@@ -2256,6 +2287,7 @@ struct DynExtractSliceOpConversion : public ConvertToLLVMPattern {
 } // namespace
 
 namespace {
+/// Covnert an ExtractElementOp to LLVM dialect.
 struct ExtractElementOpConversion : public ConvertToLLVMPattern {
   explicit ExtractElementOpConversion(MLIRContext *ctx,
                                       LLVMTypeConverter &typeConverter)
@@ -2315,6 +2347,7 @@ struct ExtractElementOpConversion : public ConvertToLLVMPattern {
 } // namespace
 
 namespace {
+/// Convert a DynExtractElementOp to LLVM dialect.
 struct DynExtractElementOpConversion : public ConvertToLLVMPattern {
   explicit DynExtractElementOpConversion(MLIRContext *ctx,
                                          LLVMTypeConverter &typeConverter)
@@ -2466,6 +2499,7 @@ struct InsertSliceOpConversion : public ConvertToLLVMPattern {
 } // namespace
 
 namespace {
+/// Convert an InsertElementOp to LLVM dialect.
 struct InsertElementOpConversion : public ConvertToLLVMPattern {
   explicit InsertElementOpConversion(MLIRContext *ctx,
                                      LLVMTypeConverter &typeConverter)
