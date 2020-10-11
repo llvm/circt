@@ -20,8 +20,8 @@ namespace circt {
 namespace llhd {
 #define GEN_PASS_CLASSES
 #include "circt/Conversion/FIRRTLToLLHD/Passes.h.inc"
-}  // namespace llhd
-}  // namespace circt
+} // namespace llhd
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -46,7 +46,7 @@ struct FIRRTLToLLHDPass
   LogicalResult visitStmt(firrtl::DoneOp op) { return success(); }
   LogicalResult visitStmt(firrtl::ConnectOp op);
 
- private:
+private:
   /// A builder to emit LLHD into.
   OpBuilder *builder = nullptr;
 
@@ -55,7 +55,7 @@ struct FIRRTLToLLHDPass
   Value getConvertedValue(Value operand);
   Value getConvertedAndExtendedValue(Value operand, Type destType);
 };
-}  // namespace
+} // namespace
 
 /// Create a FIRRTL to LLHD conversion pass.
 std::unique_ptr<OperationPass<ModuleOp>>
@@ -117,8 +117,8 @@ void FIRRTLToLLHDPass::convertModule(firrtl::FModuleOp &module) {
   SmallVector<unsigned, 4> outIndices;
   for (unsigned i = 0; i < modulePorts.size(); i++) {
     auto &port = modulePorts[i];
-    LLVM_DEBUG(llvm::dbgs() << "Port " << port.first << " of type "
-                            << port.second << "\n");
+    LLVM_DEBUG(llvm::dbgs()
+               << "Port " << port.first << " of type " << port.second << "\n");
 
     // For now, let's do a simple approach where we only support flip at the top
     // of a port's aggregate type.
@@ -182,7 +182,8 @@ void FIRRTLToLLHDPass::convertModule(firrtl::FModuleOp &module) {
   // Populate the entity.
   builder->setInsertionPoint(entity.body().front().getTerminator());
   for (auto &op : module.getBodyBlock()->getOperations()) {
-    if (failed(dispatchVisitor(&op))) signalPassFailure();
+    if (failed(dispatchVisitor(&op)))
+      signalPassFailure();
   }
 }
 
@@ -228,7 +229,8 @@ LogicalResult FIRRTLToLLHDPass::visitStmt(firrtl::ConnectOp op) {
 
   auto dst = getConvertedValue(op.lhs());
   auto src = getConvertedAndExtendedValue(op.rhs(), op.lhs().getType());
-  if (!dst || !src) return failure();
+  if (!dst || !src)
+    return failure();
 
   LLVM_DEBUG(llvm::dbgs() << "Assigning " << src.getType() << " to "
                           << dst.getType() << "\n");
@@ -245,7 +247,8 @@ LogicalResult FIRRTLToLLHDPass::visitStmt(firrtl::ConnectOp op) {
 
   // Construct the `1d` time value for the drive.
   auto timeType = TimeType::get(&getContext());
-  auto deltaAttr = TimeAttr::get(timeType, std::array<unsigned, 3>{0, 1, 0}, "s");
+  auto deltaAttr =
+      TimeAttr::get(timeType, std::array<unsigned, 3>{0, 1, 0}, "s");
   auto delta = builder->create<ConstOp>(op.getLoc(), timeType, deltaAttr);
 
   // Construct a constant one for the drive condition.
@@ -262,6 +265,6 @@ LogicalResult FIRRTLToLLHDPass::visitStmt(firrtl::ConnectOp op) {
 namespace {
 #define GEN_PASS_REGISTRATION
 #include "circt/Conversion/FIRRTLToLLHD/Passes.h.inc"
-}  // namespace
+} // namespace
 
 void circt::llhd::registerFIRRTLToLLHDPasses() { registerPasses(); }
