@@ -364,7 +364,7 @@ static void insertPersistence(LLVMTypeConverter &converter,
   rewriter.create<LLVM::BrOp>(loc, ValueRange(), splitFirst);
 
   // Load the resume index from the process state argument.
-  rewriter.setInsertionPoint(converted.getBody().front().getTerminator());
+  rewriter.setInsertionPoint(firstBB.getTerminator());
   auto zeroC = rewriter.create<LLVM::ConstantOp>(loc, i32Ty,
                                                  rewriter.getI32IntegerAttr(0));
   auto oneC = rewriter.create<LLVM::ConstantOp>(loc, i32Ty,
@@ -375,19 +375,17 @@ static void insertPersistence(LLVMTypeConverter &converter,
 
   auto larg = rewriter.create<LLVM::LoadOp>(loc, i32Ty, gep);
 
-  // Insert an abort block as the last block.
-  auto abortBlock =
-      rewriter.createBlock(&converted.getBody(), converted.getBody().end());
-  rewriter.create<LLVM::ReturnOp>(loc, ValueRange());
-
   auto body = &converted.getBody();
+
+  // Insert an abort block as the last block.
+  auto abortBlock = rewriter.createBlock(body, body->end());
+  rewriter.create<LLVM::ReturnOp>(loc, ValueRange());
 
   // Redirect the entry block to a first comparison block. If on a first
   // execution, jump to the new (splitted) entry block, else the process is in
   // an illegal state and jump to the abort block.
-  insertComparisonBlock(rewriter, dialect, loc, body, larg, 0,
-                        body->front().getSuccessor(0), ValueRange(),
-                        abortBlock);
+  insertComparisonBlock(rewriter, dialect, loc, body, larg, 0, splitFirst,
+                        ValueRange(), abortBlock);
 
   // Keep track of the index in the presistence table of the operation we
   // are currently processing.
@@ -421,8 +419,10 @@ static void insertPersistence(LLVMTypeConverter &converter,
 
   // Also persist argument blocks escaping their defining block.
   for (auto &block : converted.getBlocks()) {
+    // Skip entry block as it contains the function signature.
     if (block.isEntryBlock())
       continue;
+
     for (auto arg : block.getArguments()) {
       if (arg.isUsedOutsideOfBlock(&block)) {
         persistValue(dialect, loc, converter, rewriter, stateTy, i,
