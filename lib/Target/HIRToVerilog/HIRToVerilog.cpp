@@ -76,29 +76,18 @@ private:
     unsigned push_stack() {
 
       auto end = verilogValueStore.size();
-      //--end;
       topOfStack.push(end);
-      fprintf(stderr, "level=%d, push_stack = %d\n", topOfStack.size(),
-              verilogValueStore.size());
-      fflush(stderr);
       return verilogValueStore.size();
     }
     unsigned pop_stack() {
       auto numDeletes = verilogValueStore.size() - topOfStack.top();
-      // for (int i = 0; i < numDeletes ; i++) {
-      //  verilogValueStore.pop_back();
-      //}
-      auto last = verilogValueStore.end();
       for (int i = 0; i < numDeletes; i++) {
-        --last;
-        last->reset();
+        verilogValueStore.pop_back();
       }
       topOfStack.pop();
-      fprintf(stderr, "level=%d, pop_stack = %d\n", topOfStack.size(),
-              verilogValueStore.size());
-      fflush(stderr);
       return verilogValueStore.size();
     }
+
     VerilogValue *get_mut(Value v) {
       assert(v);
       assert(mapValueToVerilogValuePtr.find(v) !=
@@ -107,18 +96,13 @@ private:
       assert(out->isInitialized());
       return out;
     }
-
     const VerilogValue get(Value v) { return *get_mut(v); }
+
     void insert_ptr(Value v, VerilogValue *vv) {
-      assert(vv->isInitialized());
-      mapValueToVerilogValuePtr.insert(make_pair(v, vv));
-    }
-    void remap(Value v, VerilogValue *vv) {
-      assert(vv->isInitialized());
-      assert(mapValueToVerilogValuePtr.find(v) !=
-             mapValueToVerilogValuePtr.end());
       mapValueToVerilogValuePtr[v] = vv;
+      assert(mapValueToVerilogValuePtr[v]->isInitialized());
     }
+
     void insert(Value v, VerilogValue vv) {
       verilogValueStore.push_back(vv);
       insert_ptr(v, &verilogValueStore.back());
@@ -595,7 +579,7 @@ LogicalResult VerilogPrinter::printUnrollForOp(UnrollForOp op,
     auto status = printBody(op.getLoopBody().front(), indentAmount);
 
     yieldTarget.pop();
-    verilogMapper.remap(tloop, ptr_v_tloop);
+    verilogMapper.insert_ptr(tloop, ptr_v_tloop);
     ptr_v_tloop = &next_v_tloop;
     module_out << "\n//}\n";
 
