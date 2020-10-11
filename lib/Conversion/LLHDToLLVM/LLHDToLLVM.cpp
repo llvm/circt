@@ -291,13 +291,6 @@ static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
 
   Value toStore;
   if (auto ptr = persist.getType().dyn_cast<PtrType>()) {
-    // Redirect uses of the pointer in the same block to the pointer in the
-    // persistence state. This ensures that stores and loads all operate on the
-    // same value.
-    // for (auto &use : llvm::make_early_inc_range(persist.getUses())) {
-    //   if (persist.getParentBlock() == use.getOwner()->getBlock())
-    //     use.set(gep0);
-    // }
     // Unwrap the pointer and store it's value.
     auto elemTy = converter.convertType(ptr.getUnderlyingType());
     toStore = rewriter.create<LLVM::LoadOp>(loc, elemTy, persist);
@@ -315,8 +308,15 @@ static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
   // use with it, whenever it is in a different block.
   for (auto &use : llvm::make_early_inc_range(persist.getUses())) {
     auto user = use.getOwner();
-    if (persist.getParentBlock() != user->getBlock() ||
-        (isa<WaitOp>(user) && isWaitDestArg(cast<WaitOp>(user), persist))) {
+    if (persist.getType().isa<PtrType>() && user != toStore.getDefiningOp() &&
+        persist.getParentBlock() == user->getBlock()) {
+      // Redirect uses of the pointer in the same block to the pointer in the
+      // persistence state. This ensures that stores and loads all operate on
+      // the same value.
+      use.set(gep0);
+    } else if (persist.getParentBlock() != user->getBlock() ||
+               (isa<WaitOp>(user) &&
+                isWaitDestArg(cast<WaitOp>(user), persist))) {
       // The destination args of a wait op have to be loaded in the entry block
       // of the function, before jumping to the resume destination, so they can
       // be passed as block arguments by the comparison block.
