@@ -154,7 +154,7 @@ jobs:
             -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ \
             -DCMAKE_LINKER=lld \
             -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_CXX_COMPILER=clang++ 
+            -DCMAKE_CXX_COMPILER=clang++ \
             -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit
           make check-circt -j$(nproc)
 
