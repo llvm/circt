@@ -10,9 +10,9 @@
 #include "circt/Dialect/FIRRTL/Visitors.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/Debug.h"
-#include "mlir/Pass/Pass.h"
 
 #define DEBUG_TYPE "firrtl-to-llhd"
 
@@ -106,27 +106,27 @@ void FIRRTLToLLHDPass::convertModule(firrtl::FModuleOp &module) {
   // Map the potentially complex FIRRTL module ports to LLHD entity inputs and
   // outputs. This will become fairly involved, since the nested nature of flips
   // and bundle types requires refactoring of the ports.
-  SmallVector<firrtl::ModulePortInfo, 4> module_ports;
-  module.getPortInfo(module_ports);
+  SmallVector<firrtl::ModulePortInfo, 4> modulePorts;
+  module.getPortInfo(modulePorts);
 
   SmallVector<Type, 4> ins;
   SmallVector<Type, 4> outs;
-  SmallVector<StringAttr, 4> in_names;
-  SmallVector<StringAttr, 4> out_names;
-  SmallVector<unsigned, 4> in_indices;
-  SmallVector<unsigned, 4> out_indices;
-  for (unsigned i = 0; i < module_ports.size(); i++) {
-    auto &port = module_ports[i];
+  SmallVector<StringAttr, 4> inNames;
+  SmallVector<StringAttr, 4> outNames;
+  SmallVector<unsigned, 4> inIndices;
+  SmallVector<unsigned, 4> outIndices;
+  for (unsigned i = 0; i < modulePorts.size(); i++) {
+    auto &port = modulePorts[i];
     LLVM_DEBUG(llvm::dbgs() << "Port " << port.first << " of type "
                             << port.second << "\n");
 
     // For now, let's do a simple approach where we only support flip at the top
     // of a port's aggregate type.
-    bool is_flip = false;
+    bool isFlip = false;
     firrtl::FIRRTLType type = port.second;
-    if (auto flip_type = port.second.dyn_cast<firrtl::FlipType>()) {
-      is_flip = true;
-      type = flip_type.getElementType();
+    if (auto flipType = port.second.dyn_cast<firrtl::FlipType>()) {
+      isFlip = true;
+      type = flipType.getElementType();
     }
 
     // Convert the type. We keep things simple for the time being.
@@ -137,32 +137,32 @@ void FIRRTLToLLHDPass::convertModule(firrtl::FModuleOp &module) {
       signalPassFailure();
       continue;
     }
-    auto conv_type = SigType::get(builder->getIntegerType(width));
+    auto convType = SigType::get(builder->getIntegerType(width));
 
     // Add to the list of inputs or outputs, depending on flip state.
-    if (is_flip) {
-      outs.push_back(conv_type);
-      out_names.push_back(port.first);
-      out_indices.push_back(i);
+    if (isFlip) {
+      outs.push_back(convType);
+      outNames.push_back(port.first);
+      outIndices.push_back(i);
     } else {
-      ins.push_back(conv_type);
-      in_names.push_back(port.first);
-      in_indices.push_back(i);
+      ins.push_back(convType);
+      inNames.push_back(port.first);
+      inIndices.push_back(i);
     }
   }
 
   // Concatenate inputs and outputs and mark the split point for the entity.
   // Then assemble the entity signature type.
-  auto num_ins = ins.size();
+  auto numIns = ins.size();
   ins.append(outs.begin(), outs.end());
-  in_names.append(out_names.begin(), out_names.end());
-  in_indices.append(out_indices.begin(), out_indices.end());
-  auto entity_type = builder->getFunctionType(ins, llvm::None);
+  inNames.append(outNames.begin(), outNames.end());
+  inIndices.append(outIndices.begin(), outIndices.end());
+  auto entityType = builder->getFunctionType(ins, llvm::None);
 
   // Create an LLHD entity for this module.
-  auto entity = builder->create<EntityOp>(module.getLoc(), num_ins);
+  auto entity = builder->create<EntityOp>(module.getLoc(), numIns);
   entity.setName(module.getName());
-  entity.setAttr("type", TypeAttr::get(entity_type));
+  entity.setAttr("type", TypeAttr::get(entityType));
   EntityOp::ensureTerminator(entity.body(), *builder, entity.getLoc());
 
   // Populate the arguments for the entity. This includes initializing the value
@@ -170,13 +170,13 @@ void FIRRTLToLLHDPass::convertModule(firrtl::FModuleOp &module) {
   // LLHD entity inputs/outputs. These are likely to be in a different order,
   // such that we use the indirection indices gathered above.
   auto args = entity.body().addArguments(ins);
-  for (auto arg : llvm::zip(args, in_indices)) {
-    auto firrtl_arg = module.getBodyBlock()->getArgument(std::get<1>(arg));
-    auto llhd_arg = std::get<0>(arg);
+  for (auto arg : llvm::zip(args, inIndices)) {
+    auto firrtlArg = module.getBodyBlock()->getArgument(std::get<1>(arg));
+    auto llhdArg = std::get<0>(arg);
     LLVM_DEBUG(llvm::dbgs()
-               << "Map FIRRTL port " << firrtl_arg.getArgNumber()
-               << " to LLHD port " << llhd_arg.getArgNumber() << "\n");
-    valueMapping[firrtl_arg] = llhd_arg;
+               << "Map FIRRTL port " << firrtlArg.getArgNumber()
+               << " to LLHD port " << llhdArg.getArgNumber() << "\n");
+    valueMapping[firrtlArg] = llhdArg;
   }
 
   // Populate the entity.
@@ -239,22 +239,22 @@ LogicalResult FIRRTLToLLHDPass::visitStmt(firrtl::ConnectOp op) {
   // If we are connecting two signals, e.g. an input to an output port, use an
   // `llhd.con` operation. Otherwise use `llhd.drv` to drive the RHS onto the
   // signal of the LHS.
-  if (auto sig_ty = src.getType().dyn_cast<SigType>()) {
-    src = builder->create<PrbOp>(op.getLoc(), sig_ty.getUnderlyingType(), src);
+  if (auto sigTy = src.getType().dyn_cast<SigType>()) {
+    src = builder->create<PrbOp>(op.getLoc(), sigTy.getUnderlyingType(), src);
   }
 
   // Construct the `1d` time value for the drive.
-  auto time_type = TimeType::get(&getContext());
-  auto delta_attr = TimeAttr::get(time_type, std::array<unsigned, 3>{0, 1, 0}, "s");
-  auto delta = builder->create<ConstOp>(op.getLoc(), time_type, delta_attr);
+  auto timeType = TimeType::get(&getContext());
+  auto deltaAttr = TimeAttr::get(timeType, std::array<unsigned, 3>{0, 1, 0}, "s");
+  auto delta = builder->create<ConstOp>(op.getLoc(), timeType, deltaAttr);
 
   // Construct a constant one for the drive condition.
-  auto bool_type = builder->getIntegerType(1);
-  auto const_one_attr = IntegerAttr::get(bool_type, 1);
-  auto const_one = builder->create<ConstOp>(op.getLoc(), bool_type, const_one_attr);
+  auto boolType = builder->getIntegerType(1);
+  auto constOneAttr = IntegerAttr::get(boolType, 1);
+  auto constOne = builder->create<ConstOp>(op.getLoc(), boolType, constOneAttr);
 
   // Emit the drive operation.
-  builder->create<DrvOp>(op.getLoc(), dst, src, delta, const_one);
+  builder->create<DrvOp>(op.getLoc(), dst, src, delta, constOne);
   return success();
 }
 
