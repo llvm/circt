@@ -14,14 +14,14 @@ namespace mlir {
 class ModuleOp;
 template <typename T>
 class OperationPass;
-}  // namespace mlir
+} // namespace mlir
 
 namespace circt {
 namespace llhd {
 using namespace mlir;
 std::unique_ptr<OperationPass<ModuleOp>> createConvertFIRRTLToLLHDPass();
 void registerFIRRTLToLLHDPasses();
-}  // namespace llhd
-}  // namespace circt
+} // namespace llhd
+} // namespace circt
 
-#endif  // CIRCT_CONVERSION_FIRRTLTOLLHD_FIRRTLTOLLHD_H_
+#endif // CIRCT_CONVERSION_FIRRTLTOLLHD_FIRRTLTOLLHD_H_
