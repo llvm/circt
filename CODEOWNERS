@@ -1,0 +1,11 @@
+# GitHub code owners definitions
+
+# Dialect/<DialectName> will match both that directory under /include and /lib
+
+Dialect/FIRRTL @lattner
+Dialect/RTL @lattner
+Dialect/SV @lattner
+
+Dialect/Handshake @hanchenye @stephenneuendorffer
+Dialect/StaticLogic @hanchenye @stephenneuendorffer
+Dialect/LLHD @fabianschuiki
