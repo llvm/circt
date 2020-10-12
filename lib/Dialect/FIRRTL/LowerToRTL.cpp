@@ -461,28 +461,34 @@ LogicalResult FIRRTLLowering::lowerBinOp(Operation *op) {
   return setLoweringTo<ResultOpType>(op, lhs, rhs);
 }
 
-/// lowerCmpOp extends each operand to the destination type, then performs the
+/// lowerCmpOp extends each operand to the longest type, then performs the
 /// specified binary operator.
 template <typename ResultOpSignedType, typename ResultOpUnsignedType>
 LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, bool flip) {
-  // Extend the two operands to match the destination type.
+  // Extend the two operands to match the longest type.
   Type resultType = builder->getIntegerType(1);
-  auto lhs = getLoweredValue(op->getOperand(0));
-  auto rhs = getLoweredValue(op->getOperand(1));
+  auto lhsFIRType =
+      op->getOperand(0).getType().cast<FIRRTLType>().getPassiveType();
+  auto lhsIntType = lhsFIRType.dyn_cast<IntType>();
+  auto rhsFIRType =
+      op->getOperand(1).getType().cast<FIRRTLType>().getPassiveType();
+  auto rhsIntType = rhsFIRType.dyn_cast<IntType>();
+  
+  if (!lhsIntType || !lhsIntType.hasWidth() || !rhsIntType || !rhsIntType.hasWidth())
+    return failure();
+  
+  Type cmpType = *lhsIntType.getWidth() < *rhsIntType.getWidth() ? rhsFIRType : lhsFIRType;
+
+  auto lhs = getLoweredAndExtendedValue(op->getOperand(0), cmpType);
+  auto rhs = getLoweredAndExtendedValue(op->getOperand(1), cmpType);
   if (!lhs || !rhs)
     return failure();
 
   if (flip)
     std::swap(lhs, rhs);
 
-  auto srcFIRType =
-      op->getOperand(0).getType().cast<FIRRTLType>().getPassiveType();
-  auto srcIntType = srcFIRType.dyn_cast<IntType>();
-  if (!srcIntType || !srcIntType.hasWidth())
-    return failure();
-
   // Emit the result operation.
-  if (srcIntType.isSigned())
+  if (lhsIntType.isSigned())
     return setLoweringTo<ResultOpSignedType>(op, resultType, lhs, rhs);
   else
     return setLoweringTo<ResultOpUnsignedType>(op, resultType, lhs, rhs);

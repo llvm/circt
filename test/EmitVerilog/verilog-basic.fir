@@ -188,6 +188,48 @@ circuit inputs_only :
 ; CHECK-NEXT:  endmodule
 
 
+  module Extend :
+    input a: UInt<4>
+    input b: UInt<6>
+    input c: SInt<3>
+    input d: SInt<5>
+    output out: UInt<1>
+    out <= lt(a, b)
+    out <= lt(c, d)
+    out <= leq(a, b)
+    out <= leq(c, d)
+    out <= gt(a, b)
+    out <= gt(c, d)
+    out <= geq(a, b)
+    out <= geq(c, d)
+    out <= eq(a, b)
+    out <= eq(c, d)
+    out <= neq(a, b)
+    out <= neq(c, d)
+
+
+; CHECK-LABEL: module Extend(
+; CHECK-NEXT:     input  [3:0] a,
+; CHECK-NEXT:     input  [5:0] b,
+; CHECK-NEXT:     input  [2:0] c,
+; CHECK-NEXT:     input  [4:0] d,
+; CHECK-NEXT:     output       out);
+; CHECK-EMPTY:
+; CHECK-NEXT:     assign out = a < b;
+; CHECK-NEXT:     assign out = $signed(c) < $signed(d);
+; CHECK-NEXT:     assign out = a <= b;
+; CHECK-NEXT:     assign out = $signed(c) <= $signed(d);
+; CHECK-NEXT:     assign out = a > b;
+; CHECK-NEXT:     assign out = $signed(c) > $signed(d);
+; CHECK-NEXT:     assign out = a >= b;
+; CHECK-NEXT:     assign out = $signed(c) >= $signed(d);
+; CHECK-NEXT:     assign out = a == b;
+; CHECK-NEXT:     assign out = c == d;
+; CHECK-NEXT:     assign out = a != b;
+; CHECK-NEXT:     assign out = c != d;
+; CHECK-NEXT:  endmodule
+
+
 ; CHECK-LABEL: module MultiUseExpr(
 ; CHECK-NEXT:    input  [3:0] a,
 ; CHECK-NEXT:    output       b);
