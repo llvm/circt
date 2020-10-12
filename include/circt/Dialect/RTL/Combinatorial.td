@@ -79,7 +79,7 @@ class CmpBinRTLOp<string mnemonic, list<OpTrait> traits = []> :
   let results = (outs I1:$result);
 
   let assemblyFormat = [{
-    $lhs `,` $rhs  attr-dict `:` functional-type(operands, $result)
+    $lhs `,` $rhs  attr-dict `:` type($lhs)
   }];
 }
 

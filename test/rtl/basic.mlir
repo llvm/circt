@@ -36,23 +36,23 @@ func @test1(%arg0: i3, %arg1: i1) -> i50 {
   // CHECK-NEXT: rtl.add [[RES9]], [[RES10]] : i19
   %add = rtl.add %small1, %small2 : i19
 
-  // CHECK-NEXT: rtl.eq [[RES9]], [[RES10]] : (i19, i19) -> i1
-  %eq = rtl.eq %small1, %small2 : (i19, i19) -> i1
+  // CHECK-NEXT: rtl.eq [[RES9]], [[RES10]] : i19
+  %eq = rtl.eq %small1, %small2 : i19
 
-  // CHECK-NEXT: rtl.neq [[RES9]], [[RES10]] : (i19, i19) -> i1
-  %neq = rtl.neq %small1, %small2 : (i19, i19) -> i1
+  // CHECK-NEXT: rtl.neq [[RES9]], [[RES10]] : i19
+  %neq = rtl.neq %small1, %small2 : i19
 
-  // CHECK-NEXT: rtl.lt [[RES9]], [[RES10]] : (i19, i19) -> i1
-  %lt = rtl.lt %small1, %small2 : (i19, i19) -> i1
+  // CHECK-NEXT: rtl.lt [[RES9]], [[RES10]] : i19
+  %lt = rtl.lt %small1, %small2 : i19
 
-  // CHECK-NEXT: rtl.ult [[RES9]], [[RES10]] : (i19, i19) -> i1
-  %ult = rtl.ult %small1, %small2 : (i19, i19) -> i1
+  // CHECK-NEXT: rtl.ult [[RES9]], [[RES10]] : i19
+  %ult = rtl.ult %small1, %small2 : i19
 
-  // CHECK-NEXT: rtl.leq [[RES9]], [[RES10]] : (i19, i19) -> i1
-  %leq = rtl.leq %small1, %small2 : (i19, i19) -> i1
+  // CHECK-NEXT: rtl.leq [[RES9]], [[RES10]] : i19
+  %leq = rtl.leq %small1, %small2 : i19
 
-  // CHECK-NEXT: rtl.uleq [[RES9]], [[RES10]] : (i19, i19) -> i1
-  %uleq = rtl.uleq %small1, %small2 : (i19, i19) -> i1
+  // CHECK-NEXT: rtl.uleq [[RES9]], [[RES10]] : i19
+  %uleq = rtl.uleq %small1, %small2 : i19
 
   // CHECK-NEXT:  = rtl.wire : i4
   %w = rtl.wire : i4
