@@ -27,7 +27,7 @@ public:
                        // Bitwise operations
                        AndOp, OrOp, XorOp,
                        // Comparison operations
-                       EQOp, NEQOp, LTOp, ULTOp, LEQOp, ULEQOp,
+                       ICmpOp,
                        // Reduction Operators
                        AndROp, OrROp, XorROp,
                        // Other operations.
@@ -91,12 +91,7 @@ public:
   HANDLE(OrROp, Unary);
   HANDLE(XorROp, Unary);
 
-  HANDLE(EQOp, Binary);
-  HANDLE(NEQOp, Binary);
-  HANDLE(LTOp, Binary);
-  HANDLE(ULTOp, Binary);
-  HANDLE(LEQOp, Binary);
-  HANDLE(ULEQOp, Binary);
+  HANDLE(ICmpOp, Binary);
 
   // Other operations.
   HANDLE(SExtOp, Unhandled);

@@ -71,18 +71,6 @@ class UTBinRTLOp<string mnemonic, list<OpTrait> traits = []> :
   }];
 }
 
-// Binary operator with uniform input types and i1 output type.
-class CmpBinRTLOp<string mnemonic, list<OpTrait> traits = []> :
-      BinRTLOp<mnemonic,
-               !listconcat(traits, [SameTypeOperands])> {
-  let arguments = (ins AnySignlessInteger:$lhs, AnySignlessInteger:$rhs);
-  let results = (outs I1:$result);
-
-  let assemblyFormat = [{
-    $lhs `,` $rhs  attr-dict `:` type($lhs)
-  }];
-}
-
 // Base class for variadic operators.
 class VariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
       RTLOp<mnemonic, !listconcat(traits, [NoSideEffect])> {
@@ -120,12 +108,27 @@ def AndOp : UTVariadicRTLOp<"and", [Commutative]>;
 def OrOp  : UTVariadicRTLOp<"or", [Commutative]>;
 def XorOp : UTVariadicRTLOp<"xor", [Commutative]>;
 
-def EQOp   : CmpBinRTLOp<"eq", [Commutative]>;
-def NEQOp  : CmpBinRTLOp<"neq", [Commutative]>;
-def LTOp   : CmpBinRTLOp<"lt">;
-def ULTOp  : CmpBinRTLOp<"ult">;
-def LEQOp  : CmpBinRTLOp<"leq">;
-def ULEQOp : CmpBinRTLOp<"uleq">;
+def ICmpPredicateEQ  : I64EnumAttrCase<"eq", 0>;
+def ICmpPredicateNE  : I64EnumAttrCase<"ne", 1>;
+def ICmpPredicateSLT : I64EnumAttrCase<"slt", 2>;
+def ICmpPredicateSLE : I64EnumAttrCase<"sle", 3>;
+def ICmpPredicateULT : I64EnumAttrCase<"ult", 4>;
+def ICmpPredicateULE : I64EnumAttrCase<"ule", 5>;
+def ICmpPredicate : I64EnumAttr<
+    "ICmpPredicate",
+    "rtl.icmp comparison predicate",
+    [ICmpPredicateEQ, ICmpPredicateNE,
+     ICmpPredicateSLT, ICmpPredicateSLE,
+     ICmpPredicateULT, ICmpPredicateULE]>;
+
+// Other integer operations.
+def ICmpOp : RTLOp<"icmp", [NoSideEffect, SameTypeOperands]> {
+  let arguments = (ins ICmpPredicate:$predicate, AnySignlessInteger:$lhs, AnySignlessInteger:$rhs);
+  let results = (outs I1:$result);
+
+  let parser = [{ return parseICmpOp(parser, result); }];
+  let printer = [{ printICmpOp(p, *this); }];
+}
 
 //===----------------------------------------------------------------------===//
 // Unary Operations

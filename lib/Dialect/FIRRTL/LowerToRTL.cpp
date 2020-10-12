@@ -70,8 +70,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult lowerBinOp(Operation *op);
   template <typename ResultOpType>
   LogicalResult lowerBinOpToVariadic(Operation *op);
-  template <typename ResultOpSignedType, typename ResultOpUnsignedType>
-  LogicalResult lowerCmpOp(Operation *op, bool flip = false);
+  LogicalResult lowerCmpOp(Operation *op, ICmpPredicate SignedOp, ICmpPredicate UnSignedOp, bool flip = false);
 
   LogicalResult visitExpr(CatPrimOp op);
 
@@ -88,22 +87,22 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
     return lowerBinOpToVariadic<rtl::AddOp>(op);
   }
   LogicalResult visitExpr(EQPrimOp op) {
-    return lowerCmpOp<rtl::EQOp, rtl::EQOp>(op);
+    return lowerCmpOp(op, ICmpPredicate::eq, ICmpPredicate::eq);
   }
   LogicalResult visitExpr(NEQPrimOp op) {
-    return lowerCmpOp<rtl::NEQOp, rtl::NEQOp>(op);
+    return lowerCmpOp(op, ICmpPredicate::ne, ICmpPredicate::ne);
   }
   LogicalResult visitExpr(LTPrimOp op) {
-    return lowerCmpOp<rtl::LTOp, rtl::ULTOp>(op);
+    return lowerCmpOp(op, ICmpPredicate::slt, ICmpPredicate::ult);
   }
   LogicalResult visitExpr(LEQPrimOp op) {
-    return lowerCmpOp<rtl::LEQOp, rtl::ULEQOp>(op);
+    return lowerCmpOp(op, ICmpPredicate::sle, ICmpPredicate::ule);
   }
   LogicalResult visitExpr(GTPrimOp op) {
-    return lowerCmpOp<rtl::LTOp, rtl::ULTOp>(op, true);
+    return lowerCmpOp(op, ICmpPredicate::slt, ICmpPredicate::ult, true);
   }
   LogicalResult visitExpr(GEQPrimOp op) {
-    return lowerCmpOp<rtl::LEQOp, rtl::ULEQOp>(op, true);
+    return lowerCmpOp(op, ICmpPredicate::sle, ICmpPredicate::ule, true);
   }
 
   LogicalResult visitExpr(SubPrimOp op) { return lowerBinOp<rtl::SubOp>(op); }
@@ -463,8 +462,7 @@ LogicalResult FIRRTLLowering::lowerBinOp(Operation *op) {
 
 /// lowerCmpOp extends each operand to the longest type, then performs the
 /// specified binary operator.
-template <typename ResultOpSignedType, typename ResultOpUnsignedType>
-LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, bool flip) {
+LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, ICmpPredicate SignedOp, ICmpPredicate UnsignedOp, bool flip) {
   // Extend the two operands to match the longest type.
   Type resultType = builder->getIntegerType(1);
   auto lhsFIRType =
@@ -491,9 +489,9 @@ LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, bool flip) {
 
   // Emit the result operation.
   if (lhsIntType.isSigned())
-    return setLoweringTo<ResultOpSignedType>(op, resultType, lhs, rhs);
+    return setLoweringTo<rtl::ICmpOp>(op, resultType, SignedOp, lhs, rhs);
   else
-    return setLoweringTo<ResultOpUnsignedType>(op, resultType, lhs, rhs);
+    return setLoweringTo<rtl::ICmpOp>(op, resultType, UnsignedOp, lhs, rhs);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
