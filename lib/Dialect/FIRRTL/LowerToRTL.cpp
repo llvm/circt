@@ -473,11 +473,13 @@ LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, bool flip) {
   auto rhsFIRType =
       op->getOperand(1).getType().cast<FIRRTLType>().getPassiveType();
   auto rhsIntType = rhsFIRType.dyn_cast<IntType>();
-  
-  if (!lhsIntType || !lhsIntType.hasWidth() || !rhsIntType || !rhsIntType.hasWidth())
+
+  if (!lhsIntType || !lhsIntType.hasWidth() || !rhsIntType ||
+      !rhsIntType.hasWidth())
     return failure();
-  
-  Type cmpType = *lhsIntType.getWidth() < *rhsIntType.getWidth() ? rhsFIRType : lhsFIRType;
+
+  Type cmpType =
+      *lhsIntType.getWidth() < *rhsIntType.getWidth() ? rhsFIRType : lhsFIRType;
 
   auto lhs = getLoweredAndExtendedValue(op->getOperand(0), cmpType);
   auto rhs = getLoweredAndExtendedValue(op->getOperand(1), cmpType);
