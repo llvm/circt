@@ -202,10 +202,7 @@ private:
       }
       if (isDistDim) {
         VerilogValue *v = addr[i];
-        if (v->isIntegerConst())
-          out += "[" + to_string(v->getIntegerConst()) + "]";
-        else
-          out += "[" + v->strWire() + " /*ERROR: expected constant.*/]";
+        out += "[" + v->strConstOrError() + "]";
       }
     }
     return out;
@@ -215,16 +212,17 @@ public:
   void setIntegerConst(int value) {
     isConstValue = true;
     constValue.val_int = value;
+    assert(getIntegerConst() == value);
   }
 
   bool isIntegerConst() const { return isConstValue && isIntegerType(); }
-  bool getIntegerConst() const {
+  int getIntegerConst() const {
     assert(isIntegerConst());
     return constValue.val_int;
   }
-  string strMemrefSel() {
-    // if (numAccess() == 0)
-    //  return "//Unused memref " + strWire() + ".\n";
+  string strMemrefSelDecl() {
+    if (numAccess() == 0)
+      return "//Unused memref " + strWire() + ".\n";
     stringstream output;
     auto str_addr = strMemrefAddr();
     // print addr bus selector.
@@ -368,11 +366,11 @@ public:
   void incNumReads() { usageInfo.numReads++; }
   void incNumWrites() { usageInfo.numWrites++; }
 
-  int getMaxDelay() const { return maxDelay; }
+  unsigned getMaxDelay() const { return maxDelay; }
 
 private:
-  void updateMaxDelay(int delay) {
-    maxDelay = maxDelay > delay ? maxDelay : delay;
+  void updateMaxDelay(unsigned delay) {
+    maxDelay = (maxDelay > delay) ? maxDelay : delay;
   }
   bool isConstValue = false;
   union {
@@ -384,7 +382,7 @@ private:
   } usageInfo;
   Type type;
   string name;
-  int maxDelay = 0;
+  unsigned maxDelay = 0;
 };
 
 string VerilogValue::strMemrefArgDecl() {
