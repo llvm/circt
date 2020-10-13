@@ -1846,10 +1846,9 @@ struct ShrOpConversion : public ConvertToLLVMPattern {
       auto insertHidden = rewriter.create<InsertSliceOp>(
           op->getLoc(), combinedTy, insertBase, shrOp.hidden(),
           rewriter.getIndexAttr(baseTy.getArrayNumElements()));
-      auto extract = rewriter.create<DynExtractSliceOp>(
-          op->getLoc(), arrTy, insertHidden, transformed.amount());
+      rewriter.replaceOpWithNewOp<DynExtractSliceOp>(op, arrTy, insertHidden,
+                                                     transformed.amount());
 
-      rewriter.replaceOp(op, extract.getResult());
       return success();
     }
 
