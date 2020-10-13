@@ -37,7 +37,7 @@ struct RTLOpAsmDialectInterface : public OpAsmDialectInterface {
 
 RTLDialect::RTLDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context,
-              ::mlir::TypeID::get<RTLDialect>()) {
+    ::mlir::TypeID::get<RTLDialect>()) {
 
   // Register operations.
   addOperations<
