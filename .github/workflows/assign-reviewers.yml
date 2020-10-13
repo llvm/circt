@@ -1,0 +1,14 @@
+name: "Assign reviewers"
+on:
+  pull_request:
+    types:  [ ready_for_review ]
+    branches: [ master ]
+
+jobs:
+  assign_reviewer:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: shufo/auto-assign-reviewer-by-files@v1.1.1
+      with:
+        config: 'CODEOWNERS.yml'
+        token: ${{ secrets.GITHUB_TOKEN }}
