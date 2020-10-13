@@ -2021,17 +2021,24 @@ struct ConstOpConversion : public ConvertToLLVMPattern {
     // three time values.
     if (auto timeAttr = attr.dyn_cast<TimeAttr>()) {
       auto timeTy = typeConverter.convertType(constOp.getResult().getType());
+
+      // Convert real-time element to ps.
       llvm::StringMap<uint64_t> map = {
           {"s", 12}, {"ms", 9}, {"us", 6}, {"ns", 3}, {"ps", 0}};
       uint64_t adjusted =
           std::pow(10, map[timeAttr.getTimeUnit()]) * timeAttr.getTime();
+
+      // Get sub-steps.
       uint64_t delta = timeAttr.getDelta();
       uint64_t eps = timeAttr.getEps();
+
+      // Create time constant.
       auto denseAttr = DenseElementsAttr::get(
           VectorType::get(3, rewriter.getI64Type()), {adjusted, delta, eps});
       rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(op, timeTy, denseAttr);
       return success();
     }
+
     // Get the converted llvm type.
     auto intType = typeConverter.convertType(attr.getType());
     // Replace the operation with an llvm constant op.
