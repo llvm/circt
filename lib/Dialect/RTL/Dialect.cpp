@@ -18,8 +18,7 @@ using namespace rtl;
 namespace {
 
 // We implement the OpAsmDialectInterface so that RTL dialect operations
-// automatically interpret the name attribute on function arguments and
-// on operations as their SSA name.
+// automatically interpret the name attribute on operations as their SSA name.
 struct RTLOpAsmDialectInterface : public OpAsmDialectInterface {
   using OpAsmDialectInterface::OpAsmDialectInterface;
 
