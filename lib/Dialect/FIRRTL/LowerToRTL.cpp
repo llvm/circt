@@ -70,8 +70,8 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult lowerBinOp(Operation *op);
   template <typename ResultOpType>
   LogicalResult lowerBinOpToVariadic(Operation *op);
-  LogicalResult lowerCmpOp(Operation *op, ICmpPredicate PredOp,
-                           ICmpPredicate UnSignedOp);
+  LogicalResult lowerCmpOp(Operation *op, ICmpPredicate signedOp,
+                           ICmpPredicate unsignedOp);
 
   LogicalResult visitExpr(CatPrimOp op);
 
