@@ -1035,9 +1035,9 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
     }
 
     // Set sense flags for observed signals.
-    for (auto observation : transformed.obs()) {
+    for (auto observed : transformed.obs()) {
       auto instIndexPtr = rewriter.create<LLVM::GEPOp>(
-          op->getLoc(), i64Ty.getPointerTo(), observation,
+          op->getLoc(), i64Ty.getPointerTo(), observed,
           ArrayRef<Value>({zeroC, twoC}));
       auto instIndex =
           rewriter.create<LLVM::LoadOp>(op->getLoc(), i64Ty, instIndexPtr);
