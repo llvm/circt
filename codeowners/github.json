@@ -1,0 +1,6 @@
+{
+  "name": "Add John to any github config PR",
+  "includes": [".github/**"],
+  "action": "review",
+  "users": ["teqdruid"]
+}

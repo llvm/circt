@@ -1,0 +1,6 @@
+{
+  "name": "Add code owner for triage",
+  "includes": ["**/Dialect/StaticLogic/**"],
+  "action": "review",
+  "users": ["hanchenye", "stephenneuendorffer"]
+}

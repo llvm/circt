@@ -1,0 +1,22 @@
+name: "Assign reviewers"
+on:
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  # Automatically request reviews from the code owner identified in a set of
+  # JSON files in codeowners/.
+  assign_reviewer:
+    name: Assign reviews
+    runs-on: ubuntu-latest
+    steps:
+      - name: apply-herald-rules
+        id: herald
+        uses: gagoar/use-herald-action@v2.2.0
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          rulesLocation: codeowners/*.json
+          DEBUG: '*'
+      # Output the decisions
+      - name: Store response payload to file
+        run: echo '${{ steps.herald.outputs.appliedRules }}'
