@@ -36,8 +36,11 @@ func @test1(%arg0: i3, %arg1: i1) -> i50 {
   // CHECK-NEXT: rtl.add [[RES9]], [[RES10]] : i19
   %add = rtl.add %small1, %small2 : i19
 
-  // CHECK-NEXT:  = rtl.wire : i4
-  %w = rtl.wire : i4
+  // CHECK-NEXT: %rtl.wire : i4
+  %w1 = rtl.wire : i4
+
+  // CHECK-NEXT: %renamed = rtl.wire { name = "renamed" } : i4
+  %w2 = rtl.wire { name = "renamed" } : i4
 
   // CHECK-NEXT: = rtl.mux %arg1, [[RES2]], [[RES3]] : i7
   %mux = rtl.mux %arg1, %d, %e : i7
