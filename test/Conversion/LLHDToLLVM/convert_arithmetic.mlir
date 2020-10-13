@@ -4,10 +4,10 @@
 // CHECK-LABEL:   llvm.func @convert_neg(
 // CHECK-SAME:                           %[[VAL_0:.*]]: !llvm.i1,
 // CHECK-SAME:                           %[[VAL_1:.*]]: !llvm.i32) {
-// CHECK:           %[[VAL_2:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i1
-// CHECK:           %[[VAL_3:.*]] = llvm.sub %[[VAL_2]], %[[VAL_0]] : !llvm.i1
-// CHECK:           %[[VAL_4:.*]] = llvm.mlir.constant(0 : i32) : !llvm.i32
-// CHECK:           %[[VAL_5:.*]] = llvm.sub %[[VAL_4]], %[[VAL_1]] : !llvm.i32
+// CHECK:           %[[VAL_2:.*]] = llvm.mlir.constant(-1 : i32) : !llvm.i1
+// CHECK:           %[[VAL_3:.*]] = llvm.mul %[[VAL_2]], %[[VAL_0]] : !llvm.i1
+// CHECK:           %[[VAL_4:.*]] = llvm.mlir.constant(-1 : i32) : !llvm.i32
+// CHECK:           %[[VAL_5:.*]] = llvm.mul %[[VAL_4]], %[[VAL_1]] : !llvm.i32
 // CHECK:           llvm.return
 // CHECK:         }
 func @convert_neg(%i1 : i1, %i32 : i32) {
