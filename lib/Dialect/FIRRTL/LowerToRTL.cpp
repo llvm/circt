@@ -463,8 +463,8 @@ LogicalResult FIRRTLLowering::lowerBinOp(Operation *op) {
 
 /// lowerCmpOp extends each operand to the longest type, then performs the
 /// specified binary operator.
-LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, ICmpPredicate SignedOp,
-                                         ICmpPredicate UnsignedOp) {
+LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, ICmpPredicate signedOp,
+                                         ICmpPredicate unsignedOp) {
   // Extend the two operands to match the longest type.
   Type resultType = builder->getIntegerType(1);
   auto lhsFIRType =
@@ -487,10 +487,8 @@ LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, ICmpPredicate SignedOp,
     return failure();
 
   // Emit the result operation.
-  if (lhsIntType.isSigned())
-    return setLoweringTo<rtl::ICmpOp>(op, resultType, SignedOp, lhs, rhs);
-  else
-    return setLoweringTo<rtl::ICmpOp>(op, resultType, UnsignedOp, lhs, rhs);
+  return setLoweringTo<rtl::ICmpOp>(
+      op, resultType, lhsIntType.isSigned() ? signedOp : unsignedOp, lhs, rhs);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
