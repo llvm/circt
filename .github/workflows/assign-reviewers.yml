@@ -16,7 +16,7 @@ jobs:
           submodules: 'false'
       - name: apply-herald-rules
         id: herald
-        uses: gagoar/use-herald-action@v2.2.0
+        uses: gagoar/use-herald-action@master
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           rulesLocation: codeowners/*.json
