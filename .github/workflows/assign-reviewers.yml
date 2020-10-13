@@ -6,8 +6,8 @@ on:
 jobs:
   # Automatically request reviews from the code owner identified in a set of
   # JSON files in codeowners/.
-  assign_reviewer:
-    name: Assign reviews
+  request_reviewer:
+    name: "Request review from code owner"
     runs-on: ubuntu-latest
     steps:
       - name: Get CIRCT
