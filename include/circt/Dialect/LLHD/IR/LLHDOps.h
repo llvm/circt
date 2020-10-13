@@ -16,7 +16,7 @@
 namespace circt {
 namespace llhd {
 
-unsigned getLLHDTypeWidth(Type type);
+unsigned getLLHDTypeWidth(Type t);
 
 } // namespace llhd
 } // namespace circt
