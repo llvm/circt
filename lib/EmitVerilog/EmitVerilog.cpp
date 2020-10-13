@@ -867,7 +867,7 @@ private:
   // RTL Comparison Operations
   SubExprInfo visitComb(rtl::ICmpOp op) {
     std::array<const char *, 10> symop{"==", "!=", "<",  "<=", "<",
-                                      "<=", ">",  ">=", ">",  ">="};
+                                       "<=", ">",  ">=", ">",  ">="};
     return emitSignedBinary(op, Comparison,
                             symop[static_cast<uint64_t>(op.predicate())]);
   }
