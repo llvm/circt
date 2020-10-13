@@ -607,6 +607,7 @@ static Value getBaseValue(Location loc, ConversionPatternRewriter &rewriter,
     }
     return struc;
   }
+
   if (elemTy.isArrayTy()) {
     Value arr = rewriter.create<LLVM::UndefOp>(loc, elemTy);
     auto toInsert = getBaseValue(loc, rewriter, elemTy.getArrayElementType());
@@ -614,7 +615,9 @@ static Value getBaseValue(Location loc, ConversionPatternRewriter &rewriter,
       arr = rewriter.create<LLVM::InsertValueOp>(loc, elemTy, arr, toInsert,
                                                  rewriter.getI32ArrayAttr(i));
     }
+    return arr;
   }
+
   return rewriter.create<LLVM::ConstantOp>(loc, elemTy,
                                            rewriter.getI32IntegerAttr(0));
 }
