@@ -26,6 +26,8 @@ public:
                        AddOp, SubOp, MulOp, DivOp, ModOp, ShlOp,
                        // Bitwise operations
                        AndOp, OrOp, XorOp,
+                       // Comparison operations
+                       ICmpOp,
                        // Reduction Operators
                        AndROp, OrROp, XorROp,
                        // Other operations.
@@ -88,6 +90,8 @@ public:
   HANDLE(AndROp, Unary);
   HANDLE(OrROp, Unary);
   HANDLE(XorROp, Unary);
+
+  HANDLE(ICmpOp, Binary);
 
   // Other operations.
   HANDLE(SExtOp, Unhandled);

@@ -1,7 +1,7 @@
-name: "Assign reviewers"
+name: "Request review from code owner"
 on:
-  pull_request:
-    branches: [ master ]
+  pull_request_target:
+    # branches: [ master ]
 
 jobs:
   # Automatically request reviews from the code owner identified in a set of
@@ -17,6 +17,7 @@ jobs:
       - name: apply-herald-rules
         id: herald
         uses: gagoar/use-herald-action@master
+        continue-on-error: true
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           rulesLocation: codeowners/*.json

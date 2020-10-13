@@ -7,11 +7,12 @@ add_mlir_dialect_library(MLIRRTL
 
   DEPENDS
   MLIRRTLIncGen
-
+  MLIRRTLEnumsIncGen
+  
   LINK_COMPONENTS
   Support
 
   LINK_LIBS PUBLIC
    )
 
-add_dependencies(mlir-headers MLIRRTLIncGen)
+add_dependencies(mlir-headers MLIRRTLIncGen MLIRRTLEnumsIncGen)

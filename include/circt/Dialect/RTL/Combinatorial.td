@@ -57,7 +57,7 @@ class BinRTLOp<string mnemonic, list<OpTrait> traits = []> :
   let results = (outs AnySignlessInteger:$result);
 
   let assemblyFormat = [{
-    $lhs `,` $rhs  attr-dict `:` functional-type($args, results)
+    $lhs `,` $rhs  attr-dict `:` functional-type($args, $results)
   }];
 }
 
@@ -107,6 +107,34 @@ def ShlOp : UTBinRTLOp<"shl">;
 def AndOp : UTVariadicRTLOp<"and", [Commutative]>;
 def OrOp  : UTVariadicRTLOp<"or", [Commutative]>;
 def XorOp : UTVariadicRTLOp<"xor", [Commutative]>;
+
+def ICmpPredicateEQ  : I64EnumAttrCase<"eq", 0>;
+def ICmpPredicateNE  : I64EnumAttrCase<"ne", 1>;
+def ICmpPredicateSLT : I64EnumAttrCase<"slt", 2>;
+def ICmpPredicateSLE : I64EnumAttrCase<"sle", 3>;
+def ICmpPredicateSGT : I64EnumAttrCase<"sgt", 4>;
+def ICmpPredicateSGE : I64EnumAttrCase<"sge", 5>;
+def ICmpPredicateULT : I64EnumAttrCase<"ult", 6>;
+def ICmpPredicateULE : I64EnumAttrCase<"ule", 7>;
+def ICmpPredicateUGT : I64EnumAttrCase<"ugt", 8>;
+def ICmpPredicateUGE : I64EnumAttrCase<"uge", 9>;
+def ICmpPredicate : I64EnumAttr<
+    "ICmpPredicate",
+    "rtl.icmp comparison predicate",
+    [ICmpPredicateEQ, ICmpPredicateNE, ICmpPredicateSLT, ICmpPredicateSLE,
+     ICmpPredicateSGT, ICmpPredicateSGE, ICmpPredicateULT, ICmpPredicateULE,
+     ICmpPredicateUGT, ICmpPredicateUGE]>;
+
+// Other integer operations.
+def ICmpOp : RTLOp<"icmp", [NoSideEffect, SameTypeOperands]> {
+  let arguments = (ins ICmpPredicate:$predicate, 
+                   AnySignlessInteger:$lhs, AnySignlessInteger:$rhs);
+  let results = (outs I1:$result);
+
+  let assemblyFormat = [{
+    $predicate $lhs `,` $rhs  attr-dict `:` type($lhs)
+  }];
+}
 
 //===----------------------------------------------------------------------===//
 // Unary Operations
