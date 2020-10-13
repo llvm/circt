@@ -2299,8 +2299,8 @@ struct DynExtractSliceOpConversion : public ConvertToLLVMPattern {
           op->getLoc(), i64Ty, rewriter.getI64IntegerAttr(1));
       auto zextStart = zextByOne(op->getLoc(), rewriter, transformed.start());
 
-      // ExtractValueOp only takes attribute arguments for the indexes, so we
-      // need to store the array into the stack and use gep+load to get the
+      // LLVM::ExtractValueOp only takes attribute arguments for the indexes, so
+      // we need to store the array into the stack and use gep+load to get the
       // elements dynamically.
       auto targetPtr = rewriter.create<LLVM::AllocaOp>(
           op->getLoc(), targetTy.getPointerTo(), ArrayRef<Value>(oneC));
@@ -2331,7 +2331,7 @@ struct DynExtractSliceOpConversion : public ConvertToLLVMPattern {
 } // namespace
 
 namespace {
-/// Covnert an ExtractElementOp to LLVM dialect.
+/// Convert an ExtractElementOp to LLVM dialect.
 struct ExtractElementOpConversion : public ConvertToLLVMPattern {
   explicit ExtractElementOpConversion(MLIRContext *ctx,
                                       LLVMTypeConverter &typeConverter)
