@@ -124,10 +124,11 @@ def ICmpPredicate : I64EnumAttr<
     [ICmpPredicateEQ, ICmpPredicateNE, ICmpPredicateSLT, ICmpPredicateSLE,
      ICmpPredicateSGT, ICmpPredicateSGE, ICmpPredicateULT, ICmpPredicateULE,
      ICmpPredicateUGT, ICmpPredicateUGE]>;
-     
+
 // Other integer operations.
 def ICmpOp : RTLOp<"icmp", [NoSideEffect, SameTypeOperands]> {
-  let arguments = (ins ICmpPredicate:$predicate, AnySignlessInteger:$lhs, AnySignlessInteger:$rhs);
+  let arguments = (ins ICmpPredicate:$predicate, 
+                   AnySignlessInteger:$lhs, AnySignlessInteger:$rhs);
   let results = (outs I1:$result);
 
   let assemblyFormat = [{
