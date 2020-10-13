@@ -6,7 +6,7 @@ on:
 
 jobs:
   assign_reviewer:
-    - name: apply herald rules
+    - name: apply-herald-rules
       id: herald
       uses: gagoar/use-herald-action@v2.2.0
       with:
