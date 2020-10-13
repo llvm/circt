@@ -1939,11 +1939,11 @@ struct NegOpConversion : public ConvertToLLVMPattern {
                   ConversionPatternRewriter &rewriter) const override {
     NegOpAdaptor transformed(operands);
 
-    auto zeroC = rewriter.create<LLVM::ConstantOp>(
+    auto negOne = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), transformed.value().getType(),
-        rewriter.getI32IntegerAttr(0));
-    rewriter.replaceOpWithNewOp<LLVM::SubOp>(op, transformed.value().getType(),
-                                             zeroC, transformed.value());
+        rewriter.getI32IntegerAttr(-1));
+    rewriter.replaceOpWithNewOp<LLVM::MulOp>(op, transformed.value().getType(),
+                                             negOne, transformed.value());
 
     return success();
   }
