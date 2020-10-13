@@ -10,6 +10,10 @@ jobs:
     name: Assign reviews
     runs-on: ubuntu-latest
     steps:
+      - name: Get CIRCT
+        uses: actions/checkout@v2
+        with:
+          submodules: 'false'
       - name: apply-herald-rules
         id: herald
         uses: gagoar/use-herald-action@v2.2.0
