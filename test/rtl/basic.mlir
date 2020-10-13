@@ -69,6 +69,9 @@ func @test1(%arg0: i3, %arg1: i1) -> i50 {
   // CHECK-NEXT:  = rtl.wire : i4
   %w = rtl.wire : i4
 
+  // CHECK-NEXT: %after = rtl.wire {name = "after"} : i4
+  %before = rtl.wire { name = "after" } : i4
+
   // CHECK-NEXT: = rtl.mux %arg1, [[RES2]], [[RES3]] : i7
   %mux = rtl.mux %arg1, %d, %e : i7
 

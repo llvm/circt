@@ -15,6 +15,25 @@ using namespace rtl;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
+namespace {
+
+// We implement the OpAsmDialectInterface so that RTL dialect operations
+// automatically interpret the name attribute on operations as their SSA name.
+struct RTLOpAsmDialectInterface : public OpAsmDialectInterface {
+  using OpAsmDialectInterface::OpAsmDialectInterface;
+
+  /// Get a special name to use when printing the given operation. See
+  /// OpAsmInterface.td#getAsmResultNames for usage details and documentation.
+  void getAsmResultNames(Operation *op,
+                         OpAsmSetValueNameFn setNameFn) const override {
+    // If an operation have an optional 'name' attribute, use it.
+    if (isa<WireOp>(op) && op->getNumResults() > 0)
+      if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
+        setNameFn(op->getResult(0), nameAttr.getValue());
+  }
+};
+} // end anonymous namespace
+
 RTLDialect::RTLDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context,
     ::mlir::TypeID::get<RTLDialect>()) {
@@ -24,6 +43,9 @@ RTLDialect::RTLDialect(MLIRContext *context)
 #define GET_OP_LIST
 #include "circt/Dialect/RTL/RTL.cpp.inc"
       >();
+
+  // Register interface implementations.
+  addInterfaces<RTLOpAsmDialectInterface>();
 }
 
 RTLDialect::~RTLDialect() {}
