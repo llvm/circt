@@ -1161,6 +1161,8 @@ struct InstOpConversion : public ConvertToLLVMPattern {
     if (auto child = module.lookupSymbol<EntityOp>(instOp.callee())) {
       auto regStateTy = getRegStateTy(&getDialect(), child.getOperation());
       auto regStatePtrTy = regStateTy.getPointerTo();
+
+      // Get reg state size.
       auto oneC = initBuilder.create<LLVM::ConstantOp>(
           op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(1));
       auto regNull =
@@ -1169,6 +1171,8 @@ struct InstOpConversion : public ConvertToLLVMPattern {
           op->getLoc(), regStatePtrTy, regNull, ArrayRef<Value>({oneC}));
       auto regSize =
           initBuilder.create<LLVM::PtrToIntOp>(op->getLoc(), i64Ty, regGep);
+
+      // Malloc reg state.
       auto regMall =
           initBuilder
               .create<LLVM::CallOp>(op->getLoc(), i8PtrTy,
@@ -1179,6 +1183,8 @@ struct InstOpConversion : public ConvertToLLVMPattern {
           op->getLoc(), regStatePtrTy, regMall);
       auto zeroB = initBuilder.create<LLVM::ConstantOp>(
           op->getLoc(), i1Ty, rewriter.getBoolAttr(false));
+
+      // Zero-initialize reg state entries.
       for (size_t i = 0, e = regStateTy.getStructNumElements(); i < e; ++i) {
         size_t f = regStateTy.getStructElementType(i).getArrayNumElements();
         for (size_t j = 0; j < f; ++j) {
@@ -1192,9 +1198,12 @@ struct InstOpConversion : public ConvertToLLVMPattern {
           initBuilder.create<LLVM::StoreOp>(op->getLoc(), zeroB, regGep);
         }
       }
+
+      // Add reg state pointer to global state.
       initBuilder.create<LLVM::CallOp>(
           op->getLoc(), voidTy, rewriter.getSymbolRefAttr(allocEntityFunc),
           ArrayRef<Value>({initStatePtr, owner, regMall}));
+
       // Index of the signal in the entity's signal table.
       int initCounter = 0;
       // Walk over the entity and generate mallocs for each one of its signals.
