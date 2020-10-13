@@ -70,6 +70,8 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult lowerBinOp(Operation *op);
   template <typename ResultOpType>
   LogicalResult lowerBinOpToVariadic(Operation *op);
+  LogicalResult lowerCmpOp(Operation *op, ICmpPredicate signedOp,
+                           ICmpPredicate unsignedOp);
 
   LogicalResult visitExpr(CatPrimOp op);
 
@@ -85,6 +87,25 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(AddPrimOp op) {
     return lowerBinOpToVariadic<rtl::AddOp>(op);
   }
+  LogicalResult visitExpr(EQPrimOp op) {
+    return lowerCmpOp(op, ICmpPredicate::eq, ICmpPredicate::eq);
+  }
+  LogicalResult visitExpr(NEQPrimOp op) {
+    return lowerCmpOp(op, ICmpPredicate::ne, ICmpPredicate::ne);
+  }
+  LogicalResult visitExpr(LTPrimOp op) {
+    return lowerCmpOp(op, ICmpPredicate::slt, ICmpPredicate::ult);
+  }
+  LogicalResult visitExpr(LEQPrimOp op) {
+    return lowerCmpOp(op, ICmpPredicate::sle, ICmpPredicate::ule);
+  }
+  LogicalResult visitExpr(GTPrimOp op) {
+    return lowerCmpOp(op, ICmpPredicate::sgt, ICmpPredicate::ugt);
+  }
+  LogicalResult visitExpr(GEQPrimOp op) {
+    return lowerCmpOp(op, ICmpPredicate::sge, ICmpPredicate::uge);
+  }
+
   LogicalResult visitExpr(SubPrimOp op) { return lowerBinOp<rtl::SubOp>(op); }
   LogicalResult visitExpr(MulPrimOp op) {
     return lowerBinOpToVariadic<rtl::MulOp>(op);
@@ -438,6 +459,36 @@ LogicalResult FIRRTLLowering::lowerBinOp(Operation *op) {
 
   // Emit the result operation.
   return setLoweringTo<ResultOpType>(op, lhs, rhs);
+}
+
+/// lowerCmpOp extends each operand to the longest type, then performs the
+/// specified binary operator.
+LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, ICmpPredicate signedOp,
+                                         ICmpPredicate unsignedOp) {
+  // Extend the two operands to match the longest type.
+  Type resultType = builder->getIntegerType(1);
+  auto lhsFIRType =
+      op->getOperand(0).getType().cast<FIRRTLType>().getPassiveType();
+  auto lhsIntType = lhsFIRType.dyn_cast<IntType>();
+  auto rhsFIRType =
+      op->getOperand(1).getType().cast<FIRRTLType>().getPassiveType();
+  auto rhsIntType = rhsFIRType.dyn_cast<IntType>();
+
+  if (!lhsIntType || !lhsIntType.hasWidth() || !rhsIntType ||
+      !rhsIntType.hasWidth())
+    return failure();
+
+  Type cmpType =
+      *lhsIntType.getWidth() < *rhsIntType.getWidth() ? rhsFIRType : lhsFIRType;
+
+  auto lhs = getLoweredAndExtendedValue(op->getOperand(0), cmpType);
+  auto rhs = getLoweredAndExtendedValue(op->getOperand(1), cmpType);
+  if (!lhs || !rhs)
+    return failure();
+
+  // Emit the result operation.
+  return setLoweringTo<rtl::ICmpOp>(
+      op, resultType, lhsIntType.isSigned() ? signedOp : unsignedOp, lhs, rhs);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {

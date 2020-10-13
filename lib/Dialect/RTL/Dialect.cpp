@@ -44,3 +44,6 @@ Operation *RTLDialect::materializeConstant(OpBuilder &builder, Attribute value,
 
   return nullptr;
 }
+
+// Provide implementations for the enums we use.
+#include "circt/Dialect/RTL/RTLEnums.cpp.inc"
