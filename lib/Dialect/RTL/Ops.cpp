@@ -744,54 +744,6 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 }
 
 //===----------------------------------------------------------------------===//
-// Printing/parsing for RTL::ICmpOp.
-//===----------------------------------------------------------------------===//
-static void printICmpOp(OpAsmPrinter &p, ICmpOp &op) {
-  p << op.getOperationName() << " \"" << stringifyICmpPredicate(op.predicate())
-    << "\" " << op.getOperand(0) << ", " << op.getOperand(1);
-  p.printOptionalAttrDict(op.getAttrs(), {"predicate"});
-  p << " : " << op.lhs().getType();
-}
-
-// <operation> ::= `rtl.icmp` string-literal ssa-use `,` ssa-use
-//                 attribute-dict? `:` type
-static ParseResult parseICmpOp(OpAsmParser &parser, OperationState &result) {
-  Builder &builder = parser.getBuilder();
-
-  StringAttr predicateAttr;
-  OpAsmParser::OperandType lhs, rhs;
-  Type type;
-  llvm::SMLoc predicateLoc, trailingTypeLoc;
-  if (parser.getCurrentLocation(&predicateLoc) ||
-      parser.parseAttribute(predicateAttr, "predicate", result.attributes) ||
-      parser.parseOperand(lhs) || parser.parseComma() ||
-      parser.parseOperand(rhs) ||
-      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
-      parser.getCurrentLocation(&trailingTypeLoc) || parser.parseType(type) ||
-      parser.resolveOperand(lhs, type, result.operands) ||
-      parser.resolveOperand(rhs, type, result.operands))
-    return failure();
-
-  // Replace the string attribute `predicate` with an integer attribute.
-  int64_t predicateValue = 0;
-    Optional<ICmpPredicate> predicate =
-        symbolizeICmpPredicate(predicateAttr.getValue());
-    if (!predicate)
-      return parser.emitError(predicateLoc)
-             << "'" << predicateAttr.getValue()
-             << "' is an incorrect value of the 'predicate' attribute";
-    predicateValue = static_cast<int64_t>(predicate.getValue());
-
-  result.attributes.set("predicate",
-                        parser.getBuilder().getI64IntegerAttr(predicateValue));
-
-  auto resultType = builder.getIntegerType(1);
-
-  result.addTypes({resultType});
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

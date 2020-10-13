@@ -54,6 +54,18 @@ func @test1(%arg0: i3, %arg1: i1) -> i50 {
   // CHECK-NEXT: rtl.icmp "ule" [[RES9]], [[RES10]] : i19
   %uleq = rtl.icmp "ule" %small1, %small2 : i19
 
+  // CHECK-NEXT: rtl.icmp "sgt" [[RES9]], [[RES10]] : i19
+  %gt = rtl.icmp "sgt" %small1, %small2 : i19
+
+  // CHECK-NEXT: rtl.icmp "ugt" [[RES9]], [[RES10]] : i19
+  %ugt = rtl.icmp "ugt" %small1, %small2 : i19
+
+  // CHECK-NEXT: rtl.icmp "sge" [[RES9]], [[RES10]] : i19
+  %geq = rtl.icmp "sge" %small1, %small2 : i19
+
+  // CHECK-NEXT: rtl.icmp "uge" [[RES9]], [[RES10]] : i19
+  %ugeq = rtl.icmp "uge" %small1, %small2 : i19
+
   // CHECK-NEXT:  = rtl.wire : i4
   %w = rtl.wire : i4
 

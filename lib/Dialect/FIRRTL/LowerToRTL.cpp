@@ -70,7 +70,8 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult lowerBinOp(Operation *op);
   template <typename ResultOpType>
   LogicalResult lowerBinOpToVariadic(Operation *op);
-  LogicalResult lowerCmpOp(Operation *op, ICmpPredicate SignedOp, ICmpPredicate UnSignedOp, bool flip = false);
+  LogicalResult lowerCmpOp(Operation *op, ICmpPredicate PredOp,
+                           ICmpPredicate UnSignedOp);
 
   LogicalResult visitExpr(CatPrimOp op);
 
@@ -99,10 +100,10 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
     return lowerCmpOp(op, ICmpPredicate::sle, ICmpPredicate::ule);
   }
   LogicalResult visitExpr(GTPrimOp op) {
-    return lowerCmpOp(op, ICmpPredicate::slt, ICmpPredicate::ult, true);
+    return lowerCmpOp(op, ICmpPredicate::sgt, ICmpPredicate::ugt);
   }
   LogicalResult visitExpr(GEQPrimOp op) {
-    return lowerCmpOp(op, ICmpPredicate::sle, ICmpPredicate::ule, true);
+    return lowerCmpOp(op, ICmpPredicate::sge, ICmpPredicate::uge);
   }
 
   LogicalResult visitExpr(SubPrimOp op) { return lowerBinOp<rtl::SubOp>(op); }
@@ -462,7 +463,8 @@ LogicalResult FIRRTLLowering::lowerBinOp(Operation *op) {
 
 /// lowerCmpOp extends each operand to the longest type, then performs the
 /// specified binary operator.
-LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, ICmpPredicate SignedOp, ICmpPredicate UnsignedOp, bool flip) {
+LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, ICmpPredicate SignedOp,
+                                         ICmpPredicate UnsignedOp) {
   // Extend the two operands to match the longest type.
   Type resultType = builder->getIntegerType(1);
   auto lhsFIRType =
@@ -483,9 +485,6 @@ LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, ICmpPredicate SignedOp, 
   auto rhs = getLoweredAndExtendedValue(op->getOperand(1), cmpType);
   if (!lhs || !rhs)
     return failure();
-
-  if (flip)
-    std::swap(lhs, rhs);
 
   // Emit the result operation.
   if (lhsIntType.isSigned())
