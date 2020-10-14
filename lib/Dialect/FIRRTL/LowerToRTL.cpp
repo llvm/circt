@@ -220,6 +220,11 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
 
   // Cast FIRRTL -> standard type.
   auto loc = builder->getInsertionPoint()->getLoc();
+  if (!firType.isPassiveType()) {
+    value =
+        builder->create<AsPassivePrimOp>(loc, firType.getPassiveType(), value);
+  }
+
   return builder->create<StdIntCast>(loc, resultType, value);
 }
 

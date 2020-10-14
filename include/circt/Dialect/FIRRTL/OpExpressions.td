@@ -174,8 +174,8 @@ def DShlPrimOp : BinaryPrimOp<"dshl", "getDShlResult">;
 def DShrPrimOp : BinaryPrimOp<"dshr", "getDShrResult">;
 
 def ValidIfPrimOp : BinaryPrimOp<"validif", "getValidIfResult"> {
-  let arguments = (ins UInt1Type:$lhs, AnyType:$rhs);
-  let results = (outs AnyType:$result);
+  let arguments = (ins UInt1Type:$lhs, PassiveType:$rhs);
+  let results = (outs PassiveType:$result);
 }
 
 //===----------------------------------------------------------------------===//
@@ -238,8 +238,8 @@ def AsPassivePrimOp
 //===----------------------------------------------------------------------===//
 
 def BitsPrimOp : PrimOp<"bits"> {
-  let arguments = (ins AnyType:$input, I32Attr:$hi, I32Attr:$lo);
-  let results = (outs AnyType:$result);
+  let arguments = (ins IntType:$input, I32Attr:$hi, I32Attr:$lo);
+  let results = (outs UIntType:$result);
   
   let assemblyFormat = [{
     $input $hi `to` $lo attr-dict `:` functional-type($input, $result)
@@ -267,8 +267,8 @@ def BitsPrimOp : PrimOp<"bits"> {
 }
 
 def HeadPrimOp : PrimOp<"head"> {
-  let arguments = (ins AnyType:$input, I32Attr:$amount);
-  let results = (outs AnyType:$result);
+  let arguments = (ins IntType:$input, I32Attr:$amount);
+  let results = (outs UIntType:$result);
 
   let assemblyFormat = [{
     $input `,` $amount attr-dict `:` functional-type($input, $result)
@@ -290,8 +290,8 @@ def HeadPrimOp : PrimOp<"head"> {
 }
 
 def MuxPrimOp : PrimOp<"mux"> {
-  let arguments = (ins AnyType:$sel, AnyType:$high, AnyType:$low);
-  let results = (outs AnyType:$result);
+  let arguments = (ins UInt1Type:$sel, PassiveType:$high, PassiveType:$low);
+  let results = (outs PassiveType:$result);
   
   let assemblyFormat = [{
     `(` operands `)` attr-dict `:` functional-type(operands, $result)
@@ -314,8 +314,8 @@ def MuxPrimOp : PrimOp<"mux"> {
 }
 
 def PadPrimOp : PrimOp<"pad"> {
-  let arguments = (ins AnyType:$input, I32Attr:$amount);
-  let results = (outs AnyType:$result);
+  let arguments = (ins IntType:$input, I32Attr:$amount);
+  let results = (outs IntType:$result);
 
   let assemblyFormat = [{
     $input `,` $amount attr-dict `:` functional-type($input, $result)
@@ -343,8 +343,8 @@ def PadPrimOp : PrimOp<"pad"> {
 }
 
 class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic> {
-  let arguments = (ins AnyType:$input, I32Attr:$amount);
-  let results = (outs AnyType:$result);
+  let arguments = (ins IntType:$input, I32Attr:$amount);
+  let results = (outs IntType:$result);
   
   let assemblyFormat = [{
     $input `,` $amount attr-dict `:` functional-type($input, $result)
@@ -369,8 +369,8 @@ let hasFolder = 1, hasCanonicalizer = 1 in
 def ShrPrimOp : ShiftPrimOp<"shr">;
 
 def TailPrimOp : PrimOp<"tail"> {
-  let arguments = (ins AnyType:$input, I32Attr:$amount);
-  let results = (outs AnyType:$result);
+  let arguments = (ins IntType:$input, I32Attr:$amount);
+  let results = (outs UIntType:$result);
   
   let assemblyFormat = [{
     $input `,` $amount attr-dict `:` functional-type($input, $result)
@@ -402,7 +402,7 @@ def TailPrimOp : PrimOp<"tail"> {
 //===----------------------------------------------------------------------===//
 
 // This operation converts from an SInt/UInt to a signless integer type, or
-// visa-versa.
+// visa-versa.  FIRRTL source/destination types must be passive.
 def StdIntCast : FIRRTLOp<"stdIntCast", [NoSideEffect]> {
   let arguments = (ins AnyType:$input);
   let results = (outs AnyType:$result);

@@ -49,11 +49,13 @@
     // CHECK-NEXT: rtl.connect %2, %5 : i4
     firrtl.connect %2, %4 : !firrtl.uint<4>, !firrtl.uint<4>
 
-    // CHECK-NEXT: [[CAST:%.+]] = firrtl.stdIntCast %out4 : (!firrtl.flip<uint<4>>) -> i4
-    // CHECK-NEXT: rtl.connect [[CAST]], [[XOR]] : i4
+    // CHECK-NEXT: [[CAST1:%.+]] = firrtl.asPassive %out4 : (!firrtl.flip<uint<4>>) -> !firrtl.uint<4>
+    // CHECK-NEXT: [[CAST2:%.+]] = firrtl.stdIntCast [[CAST1]] : (!firrtl.uint<4>) -> i4
+    // CHECK-NEXT: rtl.connect [[CAST2]], [[XOR]] : i4
     firrtl.connect %out4, %5 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
-    // CHECK-NEXT: [[CAST1:%.+]] = firrtl.stdIntCast %out4 : (!firrtl.flip<uint<4>>) -> i4
+    // CHECK-NEXT: [[CAST0:%.+]] = firrtl.asPassive %out4 : (!firrtl.flip<uint<4>>) -> !firrtl.uint<4>
+    // CHECK-NEXT: [[CAST1:%.+]] = firrtl.stdIntCast [[CAST0]] : (!firrtl.uint<4>) -> i4
     // CHECK-NEXT: [[CAST2:%.+]] = firrtl.stdIntCast %in2 : (!firrtl.uint<2>) -> i2
     // CHECK-NEXT: [[ZEXT:%.+]] = rtl.zext [[CAST2]] : (i2) -> i4
     // CHECK-NEXT: rtl.connect [[CAST1]], [[ZEXT]] : i4
