@@ -41,7 +41,7 @@ static bool isVerilogExpression(Operation *op) {
   // All FIRRTL expressions and RTL combinatorial logic ops are Verilog
   // expressions.
   return isExpression(op) || rtl::isCombinatorial(op) ||
-         isa<sv::TextualValueOp>(op);
+         isa<sv::TextualValueOp>(op) || isa<AsPassivePrimOp>(op);
 }
 
 /// Return the width of the specified FIRRTL type in bits or -1 if it isn't
@@ -94,7 +94,8 @@ static unsigned getPrintedIntWidth(unsigned value) {
 static bool isNoopCast(Operation *op) {
   // These are always noop casts.
   if (isa<AsAsyncResetPrimOp>(op) || isa<AsClockPrimOp>(op) ||
-      isa<AsUIntPrimOp>(op) || isa<AsSIntPrimOp>(op))
+      isa<AsUIntPrimOp>(op) || isa<AsSIntPrimOp>(op) ||
+      isa<AsPassivePrimOp>(op))
     return true;
 
   // cvt from signed is noop.
@@ -807,6 +808,7 @@ private:
   // client as necessary.
   SubExprInfo visitExpr(AsUIntPrimOp op) { return emitNoopCast(op); }
   SubExprInfo visitExpr(AsSIntPrimOp op) { return emitNoopCast(op); }
+  SubExprInfo visitExpr(AsPassivePrimOp op) { return emitNoopCast(op); }
 
   // Other
   SubExprInfo visitExpr(SubfieldOp op);
@@ -1827,9 +1829,18 @@ void ModuleEmitter::emitDecl(MemOp op) {
 /// Most expressions are invalid to bit-select from in Verilog, but some things
 /// are ok.  Return true if it is ok to inline bitselect from the result of this
 /// expression.  It is conservatively correct to return false.
-static bool isOkToBitSelectFrom(Operation *op) {
+static bool isOkToBitSelectFrom(Value v) {
+  // Module ports are always ok to bit select from.
+  auto *op = v.getDefiningOp();
+  if (!op)
+    return true;
+
   if (isa<SubfieldOp>(op))
     return true;
+
+  // AsPassivePrimOp is transparent.
+  if (auto cast = dyn_cast<AsPassivePrimOp>(op))
+    return isOkToBitSelectFrom(cast.getOperand());
 
   // TODO: We could handle concat and other operators here.
   return false;
@@ -1838,7 +1849,7 @@ static bool isOkToBitSelectFrom(Operation *op) {
 /// Return true if we are unable to ever inline the specified operation.  This
 /// happens because not all Verilog expressions are composable.
 static bool isExpressionUnableToInline(Operation *op) {
-  // Can the users of the operation to see if any of them need this to be
+  // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
   for (auto user : op->getUsers()) {
     // Verilog bit selection is required by the standard to be:
@@ -1847,13 +1858,14 @@ static bool isExpressionUnableToInline(Operation *op) {
     if (isa<HeadPrimOp>(user) || isa<TailPrimOp>(user) ||
         isa<ShrPrimOp>(user) || isa<BitsPrimOp>(user) ||
         isa<rtl::ExtractOp>(user))
-      if (!isOkToBitSelectFrom(op))
+      if (!isOkToBitSelectFrom(op->getResult(0)))
         return true;
 
     if (auto pad = dyn_cast<PadPrimOp>(user)) {
       auto inType = getPassiveTypeOf<IntType>(pad.getOperand());
       auto inWidth = inType.getWidthOrSentinel();
-      if (unsigned(inWidth) > pad.amount() && !isOkToBitSelectFrom(op))
+      if (unsigned(inWidth) > pad.amount() &&
+          !isOkToBitSelectFrom(op->getResult(0)))
         return true;
     }
   }
