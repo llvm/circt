@@ -122,8 +122,8 @@ class PrimOp<string mnemonic, list<OpTrait> traits = []> :
 class BinaryPrimOp<string mnemonic, string resultTypeFunction, 
                    list<OpTrait> traits = []> :
     PrimOp<mnemonic, traits> {
-  let arguments = (ins AnyType:$lhs, AnyType:$rhs);
-  let results = (outs AnyType:$result);
+  let arguments = (ins IntType:$lhs, IntType:$rhs);
+  let results = (outs IntType:$result);
   
   let assemblyFormat = [{
     $lhs `,` $rhs  attr-dict `:`
@@ -173,18 +173,22 @@ def CatPrimOp  : BinaryPrimOp<"cat", "getCatResult">;
 def DShlPrimOp : BinaryPrimOp<"dshl", "getDShlResult">;
 def DShrPrimOp : BinaryPrimOp<"dshr", "getDShrResult">;
 
-def ValidIfPrimOp : BinaryPrimOp<"validif", "getValidIfResult">;
+def ValidIfPrimOp : BinaryPrimOp<"validif", "getValidIfResult"> {
+  let arguments = (ins UInt1Type:$lhs, AnyType:$rhs);
+  let results = (outs AnyType:$result);
+}
 
 //===----------------------------------------------------------------------===//
 // Unary Operations
 //===----------------------------------------------------------------------===//
 
 // Base class for binary primitive operators.
-class UnaryPrimOp<string mnemonic, string resultTypeFunction, 
+class UnaryPrimOp<string mnemonic, string resultTypeFunction,
+                  Type resultType, Type srcType,
                   list<OpTrait> traits = []> :
     PrimOp<mnemonic, traits> {
-  let arguments = (ins AnyType:$input);
-  let results = (outs AnyType:$result);
+  let arguments = (ins srcType:$input);
+  let results = (outs resultType:$result);
   
   let assemblyFormat = [{
     $input attr-dict `:` functional-type($input, $result)
@@ -205,20 +209,29 @@ class UnaryPrimOp<string mnemonic, string resultTypeFunction,
   }])));
 }
 
-def AsSIntPrimOp       : UnaryPrimOp<"asSInt", "getAsSIntResult">;
-def AsUIntPrimOp       : UnaryPrimOp<"asUInt", "getAsUIntResult">;
-def AsAsyncResetPrimOp : UnaryPrimOp<"asAsyncReset", "getAsAsyncResetResult">;
-def AsClockPrimOp      : UnaryPrimOp<"asClock", "getAsClockResult">;
-def CvtPrimOp          : UnaryPrimOp<"cvt", "getCvtResult">;
-def NegPrimOp          : UnaryPrimOp<"neg", "getNegResult">;
-def NotPrimOp          : UnaryPrimOp<"not", "getNotResult">;
+def AsSIntPrimOp
+  : UnaryPrimOp<"asSInt", "getAsSIntResult", SIntType, UIntSIntClockType>;
+def AsUIntPrimOp
+  : UnaryPrimOp<"asUInt", "getAsUIntResult", UIntType, UIntSIntClockType>;
+def AsAsyncResetPrimOp
+  : UnaryPrimOp<"asAsyncReset", "getAsAsyncResetResult",
+                ResetType, UIntSIntClockType>;
+def AsClockPrimOp
+  : UnaryPrimOp<"asClock", "getAsClockResult", ClockType, UIntSIntClockType>;
+def CvtPrimOp : UnaryPrimOp<"cvt", "getCvtResult", SIntType, IntType>;
+def NegPrimOp : UnaryPrimOp<"neg", "getNegResult", SIntType, IntType>;
+def NotPrimOp : UnaryPrimOp<"not", "getNotResult", UIntType, IntType>;
 
-def AndRPrimOp         : UnaryPrimOp<"andr", "getReductionResult">;
-def OrRPrimOp          : UnaryPrimOp<"orr", "getReductionResult">;
-def XorRPrimOp         : UnaryPrimOp<"xorr", "getReductionResult">;
+def AndRPrimOp
+  : UnaryPrimOp<"andr", "getReductionResult", UIntType, IntType>;
+def OrRPrimOp
+  : UnaryPrimOp<"orr", "getReductionResult", UIntType, IntType>;
+def XorRPrimOp
+  : UnaryPrimOp<"xorr", "getReductionResult", UIntType, IntType>;
 
 // This is an MLIR specific pseudo op.
-def AsPassivePrimOp    : UnaryPrimOp<"asPassive", "getAsPassiveResult">;
+def AsPassivePrimOp
+  : UnaryPrimOp<"asPassive", "getAsPassiveResult", PassiveType, AnyType>;
 
 //===----------------------------------------------------------------------===//
 // Other Operations

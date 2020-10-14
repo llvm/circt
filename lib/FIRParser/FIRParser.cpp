@@ -1007,6 +1007,14 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
                      "expected expression in primitive operand"))
           return failure();
 
+        // If the operand contains a flip, strip it out with an asPassive op.
+        if (!operand.getType().cast<FIRRTLType>().isPassiveType()) {
+          auto passiveType =
+              operand.getType().cast<FIRRTLType>().getPassiveType();
+          operand = builder.create<AsPassivePrimOp>(translateLocation(loc),
+                                                    passiveType, operand);
+        }
+
         operands.push_back(operand);
         return success();
       }))
@@ -1014,7 +1022,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
 
   SmallVector<FIRRTLType, 4> opTypes;
   for (auto v : operands)
-    opTypes.push_back(v.getType().cast<FIRRTLType>().getPassiveType());
+    opTypes.push_back(v.getType().cast<FIRRTLType>());
 
   auto typeError = [&](StringRef opName) -> ParseResult {
     auto diag = emitError(loc, "invalid input types for '") << opName << "': ";

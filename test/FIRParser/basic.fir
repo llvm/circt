@@ -250,6 +250,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.andr %n12
     node value = andr(_GEN_43)    ;; Uses n12 directly.
 
+    ; CHECK: [[autoP:%.+]] = firrtl.asPassive %auto : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
+    ; CHECK-NEXT: = firrtl.not [[autoP]] : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    node n13 = not(auto)
+
 
     ; CHECK: %_M = firrtl.mem "Undefined" {depth = 8 : i64, name = "_M",
     ; CHECK:   readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<

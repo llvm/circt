@@ -138,12 +138,14 @@
 
     // CHECK-NEXT: %c-1_i3 = rtl.constant(-1 : i3) : i3
     // CHECK-NEXT: [[XOR:%.+]] = rtl.xor [[CVT]], %c-1_i3 : i3
-    %24 = firrtl.not %23 : (!firrtl.sint<3>) -> !firrtl.sint<3>
+    %24 = firrtl.not %23 : (!firrtl.sint<3>) -> !firrtl.uint<3>
+
+    %s24 = firrtl.asSInt %24 : (!firrtl.uint<3>) -> !firrtl.sint<3>
 
     // CHECK-NEXT: [[SEXT:%.+]] = rtl.sext [[XOR]] : (i3) -> i4
     // CHECK-NEXT: %c0_i4 = rtl.constant(0 : i4) : i4
     // CHECK-NEXT: [[SUB:%.+]] = rtl.sub %c0_i4, [[SEXT]] : i4
-    %25 = firrtl.neg %24 : (!firrtl.sint<3>) -> !firrtl.sint<4>
+    %25 = firrtl.neg %s24 : (!firrtl.sint<3>) -> !firrtl.sint<4>
 
     // CHECK-NEXT: [[CVT4:%.+]] = rtl.sext [[CVT]] : (i3) -> i4
     // CHECK-NEXT: rtl.mux %false, [[CVT4]], [[SUB]] : i4
