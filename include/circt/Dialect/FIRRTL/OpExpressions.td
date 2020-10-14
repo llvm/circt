@@ -92,7 +92,7 @@ def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect]> {
     ```
     }];
 
-  let arguments = (ins AnyType:$input, AnyType:$index);
+  let arguments = (ins AnyType:$input, UIntType:$index);
   let results = (outs AnyType:$result);
   
   // TODO: Could drop the result type, inferring it from the source.

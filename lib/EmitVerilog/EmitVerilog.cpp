@@ -67,11 +67,10 @@ static int getBitWidthOrSentinel(Type type) {
       .Default([](Type) { return -1; });
 }
 
-/// Return the type of the specified value, converted to a passive type.  If "T"
-/// Is specified, this force casts to that subtype.
+/// Return the type of the specified value, force casting to the subtype.
 template <typename T = FIRRTLType>
-static T getPassiveTypeOf(Value v) {
-  return v.getType().cast<FIRRTLType>().getPassiveType().cast<T>();
+static T getTypeOf(Value v) {
+  return v.getType().cast<T>();
 }
 
 /// Given an integer value, return the number of characters it will take to
@@ -1189,14 +1188,14 @@ SubExprInfo ExprEmitter::visitComb(rtl::MuxOp op) {
 }
 
 SubExprInfo ExprEmitter::visitExpr(CvtPrimOp op) {
-  if (getPassiveTypeOf<IntType>(op.getOperand()).isSigned())
+  if (getTypeOf<IntType>(op.getOperand()).isSigned())
     return emitNoopCast(op);
 
   return emitCat(op.getOperand(), "1'b0");
 }
 
 SubExprInfo ExprEmitter::visitExpr(HeadPrimOp op) {
-  auto width = getPassiveTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
+  auto width = getTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
   if (width == -1)
     return visitUnhandledExpr(op);
   auto numBits = op.amount();
@@ -1204,7 +1203,7 @@ SubExprInfo ExprEmitter::visitExpr(HeadPrimOp op) {
 }
 
 SubExprInfo ExprEmitter::visitExpr(TailPrimOp op) {
-  auto width = getPassiveTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
+  auto width = getTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
   if (width == -1)
     return visitUnhandledExpr(op);
   auto numBits = op.amount();
@@ -1212,7 +1211,7 @@ SubExprInfo ExprEmitter::visitExpr(TailPrimOp op) {
 }
 
 SubExprInfo ExprEmitter::visitExpr(PadPrimOp op) {
-  auto inType = getPassiveTypeOf<IntType>(op.getOperand());
+  auto inType = getTypeOf<IntType>(op.getOperand());
   auto inWidth = inType.getWidthOrSentinel();
   if (inWidth == -1)
     return visitUnhandledExpr(op);
@@ -1255,7 +1254,7 @@ SubExprInfo ExprEmitter::visitExpr(PadPrimOp op) {
 // TODO(verilog dialect): There is no need to persist shifts. They are
 // apparently only needed for width inference.
 SubExprInfo ExprEmitter::visitExpr(ShrPrimOp op) {
-  auto width = getPassiveTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
+  auto width = getTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
   unsigned shiftAmount = op.amount();
   if (width == -1 || shiftAmount >= unsigned(width))
     return visitUnhandledExpr(op);
@@ -1862,7 +1861,7 @@ static bool isExpressionUnableToInline(Operation *op) {
         return true;
 
     if (auto pad = dyn_cast<PadPrimOp>(user)) {
-      auto inType = getPassiveTypeOf<IntType>(pad.getOperand());
+      auto inType = getTypeOf<IntType>(pad.getOperand());
       auto inWidth = inType.getWidthOrSentinel();
       if (unsigned(inWidth) > pad.amount() &&
           !isOkToBitSelectFrom(op->getResult(0)))

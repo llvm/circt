@@ -12,11 +12,10 @@
 using namespace circt;
 using namespace firrtl;
 
-/// Return the type of the specified value, converted to a passive type.  If "T"
-/// Is specified, this force casts to that subtype.
+/// Return the type of the specified value, casted to the template type.
 template <typename T = FIRRTLType>
-static T getPassiveTypeOf(Value v) {
-  return v.getType().cast<FIRRTLType>().getPassiveType().cast<T>();
+static T getTypeOf(Value v) {
+  return v.getType().cast<T>();
 }
 
 //===----------------------------------------------------------------------===//
@@ -241,8 +240,8 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
   if (!result)
     return {};
 
-  auto destFIRType = destType.cast<FIRRTLType>().getPassiveType();
-  if (value.getType().cast<FIRRTLType>().getPassiveType() == destFIRType)
+  auto destFIRType = destType.cast<FIRRTLType>();
+  if (value.getType().cast<FIRRTLType>() == destFIRType)
     return result;
 
   // We only know how to extend integer types with known width.
@@ -366,7 +365,7 @@ LogicalResult FIRRTLLowering::visitExpr(CvtPrimOp op) {
     return failure();
 
   // Signed to signed is a noop.
-  if (getPassiveTypeOf<IntType>(op.getOperand()).isSigned())
+  if (getTypeOf<IntType>(op.getOperand()).isSigned())
     setLowering(op, operand);
 
   // Otherwise prepend a zero bit.
@@ -393,7 +392,7 @@ LogicalResult FIRRTLLowering::visitExpr(NegPrimOp op) {
   // FIRRTL negate always adds a bit.
   // -x  ---> 0-sext(x) or 0-zext(x)
   auto resultType = lowerType(op.getType());
-  if (getPassiveTypeOf<IntType>(op.input()).isSigned())
+  if (getTypeOf<IntType>(op.input()).isSigned())
     operand = builder->create<rtl::SExtOp>(op.getLoc(), resultType, operand);
   else
     operand = builder->create<rtl::ZExtOp>(op.getLoc(), resultType, operand);
@@ -471,20 +470,13 @@ LogicalResult FIRRTLLowering::lowerBinOp(Operation *op) {
 LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, ICmpPredicate signedOp,
                                          ICmpPredicate unsignedOp) {
   // Extend the two operands to match the longest type.
-  Type resultType = builder->getIntegerType(1);
-  auto lhsFIRType =
-      op->getOperand(0).getType().cast<FIRRTLType>().getPassiveType();
-  auto lhsIntType = lhsFIRType.dyn_cast<IntType>();
-  auto rhsFIRType =
-      op->getOperand(1).getType().cast<FIRRTLType>().getPassiveType();
-  auto rhsIntType = rhsFIRType.dyn_cast<IntType>();
-
-  if (!lhsIntType || !lhsIntType.hasWidth() || !rhsIntType ||
-      !rhsIntType.hasWidth())
+  auto lhsIntType = op->getOperand(0).getType().cast<IntType>();
+  auto rhsIntType = op->getOperand(1).getType().cast<IntType>();
+  if (!lhsIntType.hasWidth() || !rhsIntType.hasWidth())
     return failure();
 
   Type cmpType =
-      *lhsIntType.getWidth() < *rhsIntType.getWidth() ? rhsFIRType : lhsFIRType;
+      *lhsIntType.getWidth() < *rhsIntType.getWidth() ? rhsIntType : lhsIntType;
 
   auto lhs = getLoweredAndExtendedValue(op->getOperand(0), cmpType);
   auto rhs = getLoweredAndExtendedValue(op->getOperand(1), cmpType);
@@ -492,6 +484,7 @@ LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, ICmpPredicate signedOp,
     return failure();
 
   // Emit the result operation.
+  Type resultType = builder->getIntegerType(1);
   return setLoweringTo<rtl::ICmpOp>(
       op, resultType, lhsIntType.isSigned() ? signedOp : unsignedOp, lhs, rhs);
 }
@@ -616,7 +609,8 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   auto dest = getLoweredValue(op.lhs());
 
   // The source can be a smaller integer, extend it as appropriate if so.
-  Value src = getLoweredAndExtendedValue(op.rhs(), op.lhs().getType());
+  auto lhsType = op.lhs().getType().cast<FIRRTLType>().getPassiveType();
+  Value src = getLoweredAndExtendedValue(op.rhs(), lhsType);
 
   if (!dest || !src)
     return failure();

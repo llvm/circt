@@ -644,7 +644,7 @@ FIRRTLType SubindexOp::getResultType(FIRRTLType inType, unsigned fieldIdx) {
 
 FIRRTLType SubaccessOp::getResultType(FIRRTLType inType, FIRRTLType indexType) {
   if (auto vectorType = inType.dyn_cast<FVectorType>())
-    if (indexType.getPassiveType().isa<UIntType>())
+    if (indexType.isa<UIntType>())
       return vectorType.getElementType();
 
   if (auto flipType = inType.dyn_cast<FlipType>())
@@ -916,8 +916,7 @@ FIRRTLType BitsPrimOp::getResultType(FIRRTLType input, int32_t high,
 
 void BitsPrimOp::build(OpBuilder &builder, OperationState &result, Value input,
                        unsigned high, unsigned low) {
-  auto type = getResultType(input.getType().cast<FIRRTLType>().getPassiveType(),
-                            high, low);
+  auto type = getResultType(input.getType().cast<FIRRTLType>(), high, low);
   assert(type && "invalid inputs building BitsPrimOp!");
   build(builder, result, type, input, high, low);
 }

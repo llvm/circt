@@ -960,16 +960,23 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result,
       parseToken(FIRToken::r_square, "expected ']' in subscript"))
     return failure();
 
+  // If the index expression is a flip type, strip it off.
+  auto indexType = index.getType().cast<FIRRTLType>();
+  if (!indexType.isPassiveType()) {
+    indexType = indexType.getPassiveType();
+    index = builder.create<AsPassivePrimOp>(translateLocation(indexLoc),
+                                            indexType, index);
+  }
+
   // Make sure the index expression is valid and compute the result type for the
   // expression.
   auto resultType = result.getType().cast<FIRRTLType>();
-  resultType = SubaccessOp::getResultType(resultType,
-                                          index.getType().cast<FIRRTLType>());
+  resultType = SubaccessOp::getResultType(resultType, indexType);
   if (!resultType) {
     // TODO(QoI): This error would be nicer with a .fir pretty print of the
     // type.
     emitError(indexLoc, "invalid dynamic subaccess into ")
-        << result.getType() << " with index of type " << index.getType();
+        << result.getType() << " with index of type " << indexType;
     return failure();
   }
 

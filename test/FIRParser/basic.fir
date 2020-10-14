@@ -215,7 +215,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.subaccess %_t[%i8] : (!firrtl.vector<uint<1>, 12>, !firrtl.uint<8>) -> !firrtl.uint<1>
     auto <= _t[i8]
 
-    ; CHECK: firrtl.subaccess %_t[%auto] : (!firrtl.vector<uint<1>, 12>, !firrtl.flip<uint<1>>) -> !firrtl.uint<1>
+    ; CHECK: [[autoP:%.+]] = firrtl.asPassive %auto : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
+    ; CHECK: firrtl.subaccess %_t{{\[}}[[autoP]]] : (!firrtl.vector<uint<1>, 12>, !firrtl.uint<1>) -> !firrtl.uint<1>
     auto <= _t[auto]
 
     ; CHECK: %myMem = firrtl.cmem {name = "myMem"} : !firrtl.vector<bundle<id: uint<4>, resp: uint<2>>, 8>
