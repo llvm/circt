@@ -224,7 +224,7 @@ llhd.proc @convert_persistent_value () -> (%out0 : !llhd.sig<i1>, %out1 : !llhd.
 // CHECK:           %[[VAL_42:.*]] = llvm.extractvalue %[[VAL_23]][0 : i32] : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_43:.*]] = llvm.extractvalue %[[VAL_23]][1 : i32] : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_44:.*]] = llvm.extractvalue %[[VAL_23]][2 : i32] : !llvm.array<3 x i64>
-// CHECK:           %[[VAL_45:.*]] = llvm.call @llhd_suspend(%[[VAL_0]], %[[VAL_41]], %[[VAL_42]], %[[VAL_43]], %[[VAL_44]]) : (!llvm.ptr<i8>, !llvm.ptr<i8>, !llvm.i64, !llvm.i64, !llvm.i64) -> !llvm.void
+// CHECK:           %[[VAL_45:.*]] = llvm.call @llhdSuspend(%[[VAL_0]], %[[VAL_41]], %[[VAL_42]], %[[VAL_43]], %[[VAL_44]]) : (!llvm.ptr<i8>, !llvm.ptr<i8>, !llvm.i64, !llvm.i64, !llvm.i64) -> !llvm.void
 // CHECK:           llvm.return
 // CHECK:         ^bb8:
 // CHECK:           %[[VAL_46:.*]] = llvm.mlir.constant(2 : i32) : !llvm.i32
@@ -288,7 +288,7 @@ llhd.proc @convert_persistent_value () -> (%out0 : !llhd.sig<i1>, %out1 : !llhd.
 // CHECK:           %[[VAL_91:.*]] = llvm.extractvalue %[[VAL_72]][0 : i32] : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_92:.*]] = llvm.extractvalue %[[VAL_72]][1 : i32] : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_93:.*]] = llvm.extractvalue %[[VAL_72]][2 : i32] : !llvm.array<3 x i64>
-// CHECK:           %[[VAL_94:.*]] = llvm.call @llhd_suspend(%[[VAL_0]], %[[VAL_90]], %[[VAL_91]], %[[VAL_92]], %[[VAL_93]]) : (!llvm.ptr<i8>, !llvm.ptr<i8>, !llvm.i64, !llvm.i64, !llvm.i64) -> !llvm.void
+// CHECK:           %[[VAL_94:.*]] = llvm.call @llhdSuspend(%[[VAL_0]], %[[VAL_90]], %[[VAL_91]], %[[VAL_92]], %[[VAL_93]]) : (!llvm.ptr<i8>, !llvm.ptr<i8>, !llvm.i64, !llvm.i64, !llvm.i64) -> !llvm.void
 // CHECK:           llvm.return
 // CHECK:         ^bb10:
 // CHECK:           %[[VAL_95:.*]] = llvm.mlir.constant(4 : i32) : !llvm.i32

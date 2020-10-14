@@ -995,12 +995,12 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
     auto i32Ty = LLVM::LLVMType::getInt32Ty(&typeConverter.getContext());
     auto i64Ty = LLVM::LLVMType::getInt64Ty(&typeConverter.getContext());
 
-    // Get the llhd_suspend runtime function.
+    // Get the llhdSuspend runtime function.
     auto llhdSuspendTy = LLVM::LLVMType::getFunctionTy(
         voidTy, {i8PtrTy, i8PtrTy, i64Ty, i64Ty, i64Ty}, /*isVarArg=*/false);
     auto module = op->getParentOfType<ModuleOp>();
     auto llhdSuspendFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
-                                               "llhd_suspend", llhdSuspendTy);
+                                               "llhdSuspend", llhdSuspendTy);
 
     auto statePtr = llvmFunc.getArgument(0);
     auto procState = llvmFunc.getArgument(1);
@@ -1079,7 +1079,7 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
 
 namespace {
 /// Lower an llhd.inst operation to LLVM dialect. This generates malloc calls
-/// and alloc_signal calls (to store the pointer into the state) for each signal
+/// and allocSignal calls (to store the pointer into the state) for each signal
 /// in the instantiated entity.
 struct InstOpConversion : public ConvertToLLVMPattern {
   explicit InstOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
@@ -1114,25 +1114,25 @@ struct InstOpConversion : public ConvertToLLVMPattern {
     auto mallFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
                                         "malloc", mallocSigFuncTy);
 
-    // Get or insert the alloc_signal library call definition.
-    // Alloc_signal function signature: (i8* %state, i8* %sig_name, i8*
+    // Get or insert the allocSignal library call definition.
+    // allocSignal function signature: (i8* %state, i8* %sig_name, i8*
     // %sig_owner, i32 %value) -> i32 %sig_index.
     auto allocSigFuncTy = LLVM::LLVMType::getFunctionTy(
         i32Ty, {i8PtrTy, i32Ty, i8PtrTy, i8PtrTy, i64Ty}, /*isVarArg=*/false);
     auto sigFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
-                                       "alloc_signal", allocSigFuncTy);
+                                       "allocSignal", allocSigFuncTy);
 
-    // Get or insert Alloc_proc library call definition.
+    // Get or insert allocProc library call definition.
     auto allocProcFuncTy = LLVM::LLVMType::getFunctionTy(
         voidTy, {i8PtrTy, i8PtrTy, i8PtrTy}, /*isVarArg=*/false);
     auto allocProcFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
-                                             "alloc_proc", allocProcFuncTy);
+                                             "allocProc", allocProcFuncTy);
 
-    // Get or insert alloc_entity library call definition.
+    // Get or insert allocEntity library call definition.
     auto allocEntityFuncTy = LLVM::LLVMType::getFunctionTy(
         voidTy, {i8PtrTy, i8PtrTy, i8PtrTy}, /*isVarArg=*/false);
     auto allocEntityFunc = getOrInsertFunction(
-        module, rewriter, op->getLoc(), "alloc_entity", allocEntityFuncTy);
+        module, rewriter, op->getLoc(), "allocEntity", allocEntityFuncTy);
 
     Value initStatePtr = initFunc.getArgument(0);
 
@@ -1480,7 +1480,7 @@ struct PrbOpConversion : public ConvertToLLVMPattern {
 namespace {
 /// Convert an `llhd.drv` operation to LLVM dialect. The result is a library
 /// call to the
-/// `@drive_signal` function, which declaration is inserted at the beginning of
+/// `@driveSignal` function, which declaration is inserted at the beginning of
 /// the module if missing. The required arguments are either generated or
 /// fetched.
 struct DrvOpConversion : public ConvertToLLVMPattern {
@@ -1512,7 +1512,7 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
         {i8PtrTy, sigTy.getPointerTo(), i8PtrTy, i64Ty, i64Ty, i64Ty, i64Ty},
         /*isVarArg=*/false);
     auto drvFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
-                                       "drive_signal", drvFuncTy);
+                                       "driveSignal", drvFuncTy);
 
     // Get the state pointer from the function arguments.
     Value statePtr = op->getParentOfType<LLVM::LLVMFuncOp>().getArgument(0);
@@ -1580,7 +1580,7 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
         op->getLoc(), i64Ty, transformed.time(),
         rewriter.getI32ArrayAttr(ArrayRef<int32_t>({2})));
 
-    // Define the drive_signal library call arguments.
+    // Define the driveSignal library call arguments.
     std::array<Value, 7> args(
         {statePtr, transformed.signal(), bc, sigWidth, realTime, delta, eps});
     // Create the library call.
