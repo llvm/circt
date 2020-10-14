@@ -358,3 +358,16 @@ func @xor_idempotent_two_arguments(%arg0: i11) -> i11 {
   %0 = rtl.xor %arg0, %arg0 : i11
   return %0 : i11
 }
+
+// Shift left
+
+// CHECK-LABEL: func @add_shift_left(%arg0: i11, %arg1: i11) -> i11 {
+// CHECK-NEXT:    %c1_i11 = rtl.constant(1 : i11) : i11
+// CHECK-NEXT:   [[RES:%[0-9]+]] = rtl.shl %arg1, %c1_i11
+// CHECK-NEXT:    return [[RES]]
+
+func @add_shift_left(%arg0: i11, %arg1: i11) -> i11 {
+  %c1_i11 = rtl.constant(1 : i11) : i11
+  %0 = rtl.add %arg1, %arg1 : i11
+  return %0 : i11
+}

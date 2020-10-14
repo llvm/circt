@@ -657,11 +657,23 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
+      // add(..., x, x) -> add(..., shl(x, 1))
+      if (inputs[size - 1] == inputs[size - 2]) {
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+
+        auto one = rewriter.create<ConstantOp>(
+            op.getLoc(), 1, op.getType().cast<IntegerType>());
+        auto shiftLeftOp =
+            rewriter.create<rtl::ShlOp>(op.getLoc(), inputs.back(), one);
+
+        newOperands.push_back(shiftLeftOp);
+        rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
       // add(x, add(...)) -> add(x, ...) -- flatten
       if (tryFlatteningOperands(op, rewriter))
         return success();
-
-      /// TODO: add(..., x, x) -> add(..., shl(x, 1))
 
       return failure();
     }
