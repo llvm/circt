@@ -320,7 +320,7 @@ static ParseResult parseWireOp(OpAsmParser &parser, OperationState &result) {
     return success();
 
   auto resultName = parser.getResultName(0);
-  if (!resultName.first.empty() && !isdigit(resultName.first[0])){
+  if (!resultName.first.empty() && !isdigit(resultName.first[0])) {
     StringRef name = resultName.first;
     auto *context = result.getContext();
     auto nameAttr = parser.getBuilder().getStringAttr(name);
