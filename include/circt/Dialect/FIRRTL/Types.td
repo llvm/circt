@@ -19,10 +19,15 @@ def UInt1Type : Type<CPred<"$_self.isa<UIntType>() && "
                            "$_self.cast<UIntType>().getWidth() == 1">,
                            "UInt<1>">,
                 BuildableType<"UIntType::get($_builder.getContext(), 1)">;
-def ResetType : Type<CPred<"$_self.cast<FIRRTLType>().isResetType()">, "Reset, AsyncReset, or UInt<1>">;
+
+def ResetType : Type<CPred<"$_self.cast<FIRRTLType>().isResetType()">,
+                    "Reset, AsyncReset, or UInt<1>">;
 
 def PassiveType : Type<CPred<"$_self.cast<FIRRTLType>().isPassiveType()">,
                        "a passive type (contain no flips)">;
+
+def UIntSIntClockType : AnyTypeOf<[SIntType, UIntType, ClockType],
+                                  "sint, uint, or clock">;
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Enum Definitions
