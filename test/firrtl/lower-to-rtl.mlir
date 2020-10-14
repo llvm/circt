@@ -59,7 +59,7 @@
     // CHECK-NEXT: rtl.connect [[CAST1]], [[ZEXT]] : i4
     firrtl.connect %out4, %in2 : !firrtl.flip<uint<4>>, !firrtl.uint<2>
 
-    // CHECK-NEXT: = rtl.wire {name = "test-name"} : i4
+    // CHECK-NEXT: %test-name = rtl.wire : i4
     firrtl.wire {name = "test-name"} : !firrtl.uint<4>
 
     // CHECK-NEXT: = rtl.wire : i2
@@ -125,7 +125,7 @@
     %21 = firrtl.rem %3, %in3 : (!firrtl.sint<3>, !firrtl.sint<8>) -> !firrtl.sint<3>
 
     // CHECK-NEXT: [[CAST:%.+]] = firrtl.stdIntCast %in2 : (!firrtl.uint<2>) -> i2
-    // CHECK-NEXT: [[WIRE:%.+]] = rtl.wire {name = "n1"} : i2
+    // CHECK-NEXT: [[WIRE:%n1]] = rtl.wire : i2
     // CHECK-NEXT: rtl.connect [[WIRE]], [[CAST]] : i2
     %n1 = firrtl.node %in2  {name = "n1"} : !firrtl.uint<2>
 

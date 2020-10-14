@@ -32,8 +32,7 @@ def WireOp : RTLOp<"wire"> {
 
   let arguments = (ins OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
-  
-  let assemblyFormat = [{
-     attr-dict `:` type($result)
-  }];
+
+  let printer = [{ printWireOp(p, *this); }];
+  let parser = [{ return parseWireOp(parser, result); }];
 }

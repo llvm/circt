@@ -126,17 +126,17 @@ firrtl.circuit "M1" {
   //CHECK-NEXT:   input  w, x,
   //CHECK-NEXT:   output y, z);
   //CHECK-EMPTY: 
-  //CHECK-NEXT:   wire _T;
-  //CHECK-NEXT:   wire _T_0;
+  //CHECK-NEXT:   wire w1;
+  //CHECK-NEXT:   wire w2;
   //CHECK-EMPTY: 
   //CHECK-NEXT: A a1 (
   //CHECK-NEXT:     .d (w),
-  //CHECK-NEXT:     .e (_T),
-  //CHECK-NEXT:     .f (_T_0)
+  //CHECK-NEXT:     .e (w1),
+  //CHECK-NEXT:     .f (w2)
   //CHECK-NEXT:   )
   //CHECK-NEXT: B b1 (
-  //CHECK-NEXT:     .a (_T_0),
-  //CHECK-NEXT:     .b (_T),
+  //CHECK-NEXT:     .a (w2),
+  //CHECK-NEXT:     .b (w1),
   //CHECK-NEXT:     .c (y)
   //CHECK-NEXT:   )
   //CHECK-NEXT:   assign z = x;
