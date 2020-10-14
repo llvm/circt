@@ -66,11 +66,19 @@ func @test1(%arg0: i3, %arg1: i1) -> i50 {
   // CHECK-NEXT: rtl.icmp "uge" [[RES9]], [[RES10]] : i19
   %ugeq = rtl.icmp "uge" %small1, %small2 : i19
 
-  // CHECK-NEXT:  = rtl.wire : i4
+  // CHECK-NEXT: %w = rtl.wire : i4
   %w = rtl.wire : i4
 
-  // CHECK-NEXT: %after = rtl.wire {name = "after"} : i4
-  %before = rtl.wire { name = "after" } : i4
+  // CHECK-NEXT: %after1 = rtl.wire : i4
+  %before1 = rtl.wire {name = "after1"} : i4
+
+  // CHECK-NEXT: %after2_conflict = rtl.wire : i4
+  // CHECK-NEXT: %after2_conflict_0 = rtl.wire {name = "after2_conflict"} : i4
+  %before2_0 = rtl.wire {name = "after2_conflict"} : i4
+  %before2_1 = rtl.wire {name = "after2_conflict"} : i4
+
+  // CHECK-NEXT: %after3 = rtl.wire {someAttr = "foo"} : i4
+  %before3 = rtl.wire {name = "after3", someAttr = "foo"} : i4
 
   // CHECK-NEXT: = rtl.mux %arg1, [[RES2]], [[RES3]] : i7
   %mux = rtl.mux %arg1, %d, %e : i7
