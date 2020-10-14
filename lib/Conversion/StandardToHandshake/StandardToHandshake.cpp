@@ -26,8 +26,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
 #include "mlir/Transforms/Utils.h"
-#include <fstream>
-#include <iostream>
+#include "llvm/Support/raw_ostream.h"
 #include <map>
 
 using namespace mlir;
@@ -69,7 +68,7 @@ void removeBasicBlocks(handshake::FuncOp funcOp) {
 
 template <typename FuncOp>
 void dotPrint(FuncOp f, string name) {
-  // Prints DOT representation of the dataflow graph, used for debugging
+  // Prints DOT representation of the dataflow graph, used for debugging.
   DenseMap<Block *, unsigned> blockIDs;
   DenseMap<Operation *, unsigned> opIDs;
   unsigned i = 0;
@@ -81,9 +80,8 @@ void dotPrint(FuncOp f, string name) {
       opIDs[&op] = j++;
   }
 
-  std::ofstream outfile;
-
-  outfile.open(name + ".dot");
+  std::error_code ec;
+  llvm::raw_fd_ostream outfile(name + ".dot", ec);
 
   outfile << "Digraph G {\n\tsplines=spline;\n";
 
