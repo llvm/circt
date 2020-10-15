@@ -40,7 +40,7 @@ func @test_and() {
 func @notModule () {}
 
 rtl.module @A(%arg0: i1) {
-  // expected-error @+1 {{Symbol resolved to 'func', not a RTLModuleOp}}
+  // expected-error @+1 {{Symbol resolved to 'func', not a RTL[Ext]ModuleOp}}
   rtl.instance "foo" @notModule(%arg0) : i1
 }
 
