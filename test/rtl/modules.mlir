@@ -1,13 +1,12 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
 module {
-  rtl.module @B(%a: i1 {rtl.direction = "in"}, 
-                %b: i1 {rtl.direction = "out"}, 
-                %c: i1 {rtl.direction = "out"}) {
+  rtl.module @B(%a: i1 {rtl.direction = "in"}) -> (i1, i1) {
     %0 = rtl.or %a, %a : i1
     %1 = rtl.and %a, %a : i1
-    rtl.connect %b, %0 : i1
-    rtl.connect %c, %1 : i1
+    rtl.done %0, %1: i1, i1
+    // rtl.connect %b, %0 : i1
+    // rtl.connect %c, %1 : i1
   }
 
   // CHECK-LABEL: rtl.module @B(%arg0: i1 {rtl.direction = "in", rtl.name = "a"}, %arg1: i1 {rtl.direction = "out", rtl.name = "b"}, %arg2: i1 {rtl.direction = "out", rtl.name = "c"})

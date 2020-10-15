@@ -118,20 +118,25 @@ def RTLInstanceOp : RTLOp<"instance", []> {
   let arguments = (ins StrAttr:$instanceName,
                        FlatSymbolRefAttr:$moduleName,
                        Variadic<AnySignlessInteger>:$inputs);
-  let results = (outs);
+  let results = (outs Variadic<AnyType>);
   
   let assemblyFormat = [{
-     $instanceName $moduleName `(` $inputs `)` attr-dict `:` type($inputs)
+     $instanceName $moduleName `(` $inputs `)` attr-dict `:` functional-type($inputs, results)
   }];
 
   let verifier = [{ return ::verifyRTLInstanceOp(*this); }];
 }
 
-def DoneOp : RTLOp<"done", [Terminator, HasParent<"RTLModuleOp">]> {
+def DoneOp : RTLOp<"done", [Terminator, HasParent<"RTLModuleOp">,
+                            NoSideEffect, ReturnLike]> {
   let summary = "RTL termination operation";
   let description = [{
     "rtl.done" marks the end of a region in the RTL dialect.
   }];
 
-  let arguments = (ins);
+  let arguments = (ins Variadic<AnyType>:$operands);
+
+  let builders = [OpBuilder<"", [{ build($_builder, $_state, llvm::None); }]>];
+
+  let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
 }
