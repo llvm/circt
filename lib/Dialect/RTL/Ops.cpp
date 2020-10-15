@@ -95,7 +95,7 @@ void rtl::getRTLModulePortInfo(Operation *op,
 
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
-    auto type = argTypes[i].dyn_cast<IntegerType>();
+    auto type = argTypes[i];
 
     results.push_back(
         {getRTLNameAttr(argAttrs), type, getRTLDirectionAttr(argAttrs)});

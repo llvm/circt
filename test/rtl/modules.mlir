@@ -41,4 +41,12 @@ module {
   // CHECK-NEXT:  rtl.instance "b1" @B(%arg0, %arg1, %arg2) : i1, i1, i1
   // CHECK-NEXT:  rtl.instance "c1" @C(%arg0, %arg1, %arg2) : i1, i1, i1
 
+  rtl.module @AnyType1(%a: vector< 3 x i8 > { rtl.direction = "in" }) { }
+  
+  %vec = constant dense < 0 > : vector<3xi8>
+  rtl.instance "anyType1" @AnyType1(%vec) : vector<3xi8>
+
+  // CHECK-LABEL: rtl.module @AnyType1(%arg0: vector<3xi8> {rtl.direction = "in", rtl.name = "a"})
+  // CHECK:       %cst = constant dense<0> : vector<3xi8>
+  // CHECK-NEXT:  rtl.instance "anyType1" @AnyType1(%cst) : vector<3xi8>
 }
