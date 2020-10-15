@@ -1056,14 +1056,11 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
     // Spawn scheduled event, if present.
     if (waitOp.time()) {
       auto realTime = rewriter.create<LLVM::ExtractValueOp>(
-          op->getLoc(), i64Ty, transformed.time(),
-          rewriter.getI32ArrayAttr(ArrayRef<int32_t>({0})));
+          op->getLoc(), i64Ty, transformed.time(), rewriter.getI32ArrayAttr(0));
       auto delta = rewriter.create<LLVM::ExtractValueOp>(
-          op->getLoc(), i64Ty, transformed.time(),
-          rewriter.getI32ArrayAttr(ArrayRef<int32_t>({1})));
+          op->getLoc(), i64Ty, transformed.time(), rewriter.getI32ArrayAttr(1));
       auto eps = rewriter.create<LLVM::ExtractValueOp>(
-          op->getLoc(), i64Ty, transformed.time(),
-          rewriter.getI32ArrayAttr(ArrayRef<int32_t>({2})));
+          op->getLoc(), i64Ty, transformed.time(), rewriter.getI32ArrayAttr(2));
 
       std::array<Value, 5> args({statePtr, procStateBC, realTime, delta, eps});
       rewriter.create<LLVM::CallOp>(op->getLoc(), voidTy,
@@ -1571,14 +1568,11 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
 
     // Get the time values.
     auto realTime = rewriter.create<LLVM::ExtractValueOp>(
-        op->getLoc(), i64Ty, transformed.time(),
-        rewriter.getI32ArrayAttr(ArrayRef<int32_t>({0})));
+        op->getLoc(), i64Ty, transformed.time(), rewriter.getI32ArrayAttr(0));
     auto delta = rewriter.create<LLVM::ExtractValueOp>(
-        op->getLoc(), i64Ty, transformed.time(),
-        rewriter.getI32ArrayAttr(ArrayRef<int32_t>({1})));
+        op->getLoc(), i64Ty, transformed.time(), rewriter.getI32ArrayAttr(1));
     auto eps = rewriter.create<LLVM::ExtractValueOp>(
-        op->getLoc(), i64Ty, transformed.time(),
-        rewriter.getI32ArrayAttr(ArrayRef<int32_t>({2})));
+        op->getLoc(), i64Ty, transformed.time(), rewriter.getI32ArrayAttr(2));
 
     // Define the driveSignal library call arguments.
     std::array<Value, 7> args(
