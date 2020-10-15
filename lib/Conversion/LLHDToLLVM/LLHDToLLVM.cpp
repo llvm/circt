@@ -83,7 +83,7 @@ getOrInsertFunction(ModuleOp &module, ConversionPatternRewriter &rewriter,
 
 /// Return the LLVM type used to represent a signal. It corresponds to a struct
 /// with the format: {valuePtr, bitOffset, instanceIndex, globalIndex}.
-static LLVM::LLVMType getSigType(LLVM::LLVMDialect *dialect) {
+static LLVM::LLVMType getLLVMSigType(LLVM::LLVMDialect *dialect) {
   auto i8PtrTy = LLVM::LLVMType::getInt8PtrTy(dialect->getContext());
   auto i64Ty = LLVM::LLVMType::getInt64Ty(dialect->getContext());
   return LLVM::LLVMType::getStructTy(i8PtrTy, i64Ty, i64Ty, i64Ty);
@@ -141,7 +141,7 @@ static Value createSubSig(LLVM::LLVMDialect *dialect,
                           std::vector<Value> originDetail, Value newPtr,
                           Value newOffset) {
   auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect->getContext());
-  auto sigTy = getSigType(dialect);
+  auto sigTy = getLLVMSigType(dialect);
 
   // Create signal struct.
   auto sigUndef = rewriter.create<LLVM::UndefOp>(loc, sigTy);
@@ -300,7 +300,8 @@ static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
     toStore = rewriter.create<LLVM::LoadOp>(loc, elemTy, persist);
   } else if (persist.getType().isa<SigType>()) {
     // Unwrap and store the signal struct.
-    toStore = rewriter.create<LLVM::LoadOp>(loc, getSigType(dialect), persist);
+    toStore =
+        rewriter.create<LLVM::LoadOp>(loc, getLLVMSigType(dialect), persist);
   } else {
     // Store the value directly.
     toStore = persist;
@@ -751,7 +752,7 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
     auto voidTy = getVoidType();
     auto i8PtrTy = getVoidPtrType();
     auto i32Ty = LLVM::LLVMType::getInt32Ty(&typeConverter.getContext());
-    auto sigTy = getSigType(&getDialect());
+    auto sigTy = getLLVMSigType(&getDialect());
     auto entityStatePtrTy = getRegStateTy(&getDialect(), op).getPointerTo();
 
     regCounter = 0;
@@ -859,7 +860,7 @@ struct ProcOpConversion : public ConvertToLLVMPattern {
         /* current instance  */ i8PtrTy, /* resume index */ i32Ty,
         /* sense flags */ senseTableTy, /* persistent types */
         getProcPersistenceTy(&getDialect(), typeConverter, procOp));
-    auto sigTy = getSigType(&getDialect());
+    auto sigTy = getLLVMSigType(&getDialect());
 
     // Keep track of the original first operation of the process, to know where
     // to split the first block to insert comparison blocks.
@@ -1398,7 +1399,7 @@ struct SigOpConversion : public ConvertToLLVMPattern {
 
     // Collect the used llvm types.
     auto i32Ty = LLVM::LLVMType::getInt32Ty(&typeConverter.getContext());
-    auto sigTy = getSigType(&getDialect());
+    auto sigTy = getLLVMSigType(&getDialect());
 
     // Get the signal table pointer from the arguments.
     Value sigTablePtr = op->getParentOfType<LLVM::LLVMFuncOp>().getArgument(2);
@@ -1505,7 +1506,7 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
     auto i1Ty = LLVM::LLVMType::getInt1Ty(&typeConverter.getContext());
     auto i32Ty = LLVM::LLVMType::getInt32Ty(&typeConverter.getContext());
     auto i64Ty = LLVM::LLVMType::getInt64Ty(&typeConverter.getContext());
-    auto sigTy = getSigType(&getDialect());
+    auto sigTy = getLLVMSigType(&getDialect());
 
     // Get or insert the drive library call.
     auto drvFuncTy = LLVM::LLVMType::getFunctionTy(
