@@ -184,6 +184,13 @@ static bool isWaitDestArg(Operation *op) {
   return false;
 }
 
+/// Unwrap the given LLVM pointer type, returning its element value.
+static LLVM::LLVMType unwrapLLVMPtr(Type ty) {
+  auto castTy = ty.cast<LLVM::LLVMType>();
+  assert(castTy.isPointerTy() && "type is not an LLVM pointer");
+  return castTy.getPointerElementTy();
+}
+
 /// Gather the types of values that are used outside of the block they're
 /// defined in. An LLVMType structure containing those types, in order of
 /// appearance, is returned.
@@ -193,17 +200,14 @@ static LLVM::LLVMType getProcPersistenceTy(LLVM::LLVMDialect *dialect,
   SmallVector<LLVM::LLVMType, 3> types = SmallVector<LLVM::LLVMType, 3>();
   proc.walk([&](Operation *op) -> void {
     if (op->isUsedOutsideOfBlock(op->getBlock()) || isWaitDestArg(op)) {
-      if (auto ptr = op->getResult(0).getType().dyn_cast<PtrType>()) {
+      auto ty = op->getResult(0).getType();
+      auto convertedTy = converter.convertType(ty);
+      if (ty.isa<PtrType, SigType>()) {
         // Persist the unwrapped value.
-        auto converted = converter.convertType(ptr.getUnderlyingType());
-        types.push_back(converted.cast<LLVM::LLVMType>());
-      } else if (op->getResult(0).getType().isa<SigType>()) {
-        // Persist unwrapped signal structure.
-        types.push_back(getSigType(dialect));
+        types.push_back(unwrapLLVMPtr(convertedTy));
       } else {
         // Persist the value as is.
-        types.push_back(converter.convertType(op->getResult(0).getType())
-                            .cast<LLVM::LLVMType>());
+        types.push_back(convertedTy.cast<LLVM::LLVMType>());
       }
     }
   });
