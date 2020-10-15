@@ -117,7 +117,7 @@ def RTLInstanceOp : RTLOp<"instance", []> {
 
   let arguments = (ins StrAttr:$instanceName,
                        FlatSymbolRefAttr:$moduleName,
-                       Variadic<AnySignlessInteger>:$inputs);
+                       Variadic<AnyType>:$inputs);
   let results = (outs);
   
   let assemblyFormat = [{
