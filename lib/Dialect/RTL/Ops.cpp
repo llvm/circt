@@ -89,8 +89,8 @@ StringAttr rtl::getRTLDirectionAttr(ArrayRef<NamedAttribute> attrs) {
   return StringAttr();
 }
 
-void rtl::RTLModuleOp::getRTLModulePortInfo(
-    Operation *op, SmallVectorImpl<RTLModulePortInfo> &results) {
+void rtl::getRTLModulePortInfo(Operation *op,
+                               SmallVectorImpl<RTLModulePortInfo> &results) {
   auto argTypes = getModuleType(op).getInputs();
 
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
@@ -102,8 +102,8 @@ void rtl::RTLModuleOp::getRTLModulePortInfo(
   }
 }
 
-static ParseResult parseRTLModuleOp(OpAsmParser &parser,
-                                    OperationState &result) {
+static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
+                                    bool isExtModule = false) {
   using namespace mlir::impl;
 
   SmallVector<OpAsmParser::OperandType, 4> entryArgs;
@@ -178,8 +178,14 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser,
           *body, entryArgs, entryArgs.empty() ? ArrayRef<Type>() : argTypes))
     return failure();
 
-  RTLModuleOp::ensureTerminator(*body, parser.getBuilder(), result.location);
+  if (!isExtModule)
+    RTLModuleOp::ensureTerminator(*body, parser.getBuilder(), result.location);
   return success();
+}
+
+static ParseResult parseRTLExtModuleOp(OpAsmParser &parser,
+                                       OperationState &result) {
+  return parseRTLModuleOp(parser, result, /*isExtModule:*/ true);
 }
 
 FunctionType getRTLModuleOpType(Operation *op) {
@@ -206,6 +212,10 @@ static void printRTLModuleOp(OpAsmPrinter &p, Operation *op) {
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size());
 }
 
+static void print(OpAsmPrinter &p, RTLExtModuleOp op) {
+  printRTLModuleOp(p, op);
+}
+
 static void print(OpAsmPrinter &p, RTLModuleOp op) {
   printRTLModuleOp(p, op);
 
@@ -229,9 +239,11 @@ static LogicalResult verifyRTLInstanceOp(RTLInstanceOp op) {
         llvm::formatv("Cannot find module definition '{0}'", op.moduleName()));
     return failure();
   }
-  if (!isa<rtl::RTLModuleOp>(referencedModule)) {
-    op.emitError(llvm::formatv("Symbol resolved to '{0}', not a RTLModuleOp",
-                               referencedModule->getName()));
+  if (!isa<rtl::RTLModuleOp>(referencedModule) &&
+      !isa<rtl::RTLExtModuleOp>(referencedModule)) {
+    op.emitError(
+        llvm::formatv("Symbol resolved to '{0}', not a RTL[Ext]ModuleOp",
+                      referencedModule->getName()));
     return failure();
   }
   return success();

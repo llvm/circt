@@ -108,6 +108,9 @@ firrtl.circuit "M1" {
   // CHECK-NEXT:  assign f = d & e;
   // CHECK-NEXT:  assign f = d ? d : e;
   // CHECK-NEXT: endmodule
+  rtl.module @AAA(%d: i1 {rtl.direction = "in"}, 
+                %e: i1 {rtl.direction = "in"}, 
+                %f: i1 {rtl.direction = "out"}){}
 
   rtl.module @AB(%w: i1 {rtl.direction = "in"}, 
                  %x: i1 {rtl.direction = "in"}, 
@@ -117,7 +120,7 @@ firrtl.circuit "M1" {
     %w1 = rtl.wire : i1
     %w2 = rtl.wire : i1
 
-    rtl.instance "a1" @A(%w, %w1, %w2) : i1, i1, i1
+    rtl.instance "a1" @AAA(%w, %w1, %w2) : i1, i1, i1
     rtl.instance "b1" @B(%w2, %w1, %y) : i1, i1, i1
 
     rtl.connect %z, %x : i1

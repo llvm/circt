@@ -112,8 +112,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let summary = "FIRRTL extmodule";
   let description = [{
     The "firrtl.extmodule" operation represents an external reference to a
-    Verilog module, including a given name, a list of ports, and a body that
-    represents the connections within the module.
+    Verilog module, including a given name and a list of ports.
   }];
   let arguments = (ins OptionalAttr<StrAttr>:$defname,
                        OptionalAttr<DictionaryAttr>:$parameters);

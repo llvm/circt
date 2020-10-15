@@ -22,9 +22,6 @@ def RTLModuleOp : RTLOp<"module",
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
 
-    void getRTLModulePortInfo(Operation *op,
-                              SmallVectorImpl<RTLModulePortInfo> &results);
-    
     // Decode information about the input and output ports on this module.
     void getRTLPortInfo(SmallVectorImpl<RTLModulePortInfo> &results) {
       getRTLModulePortInfo(*this, results);
@@ -60,6 +57,56 @@ def RTLModuleOp : RTLOp<"module",
   let printer = [{ return ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
+
+def RTLExtModuleOp : RTLOp<"extmodule",
+      [IsolatedFromAbove, FunctionLike, Symbol]> {
+  let summary = "RTL external Module";
+  let description = [{
+    The "rtl.extmodule" operation represents an external reference to a Verilog
+    module, including a given name and a list of ports.
+  }];
+  let arguments = (ins OptionalAttr<DictionaryAttr>:$parameters);
+  let results = (outs);
+  let regions = (region AnyRegion:$body);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<"StringAttr name, ArrayRef<RTLModulePortInfo> ports">
+  ];
+
+  let extraClassDeclaration = [{   
+    // Decode information about the input and output ports on this module.
+    void getRTLPortInfo(SmallVectorImpl<RTLModulePortInfo> &results) {
+      getRTLModulePortInfo(*this, results);
+    }
+
+  private:
+    // This trait needs access to the hooks defined below.
+    friend class OpTrait::FunctionLike<RTLExtModuleOp>;
+
+    /// Returns the number of arguments, implementing OpTrait::FunctionLike.
+    unsigned getNumFuncArguments() { return getType().getInputs().size(); }
+    /// Returns the number of results, implementing OpTrait::FunctionLike.
+    unsigned getNumFuncResults() { return getType().getResults().size(); }
+
+    /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
+    /// attribute is present and checks if it holds a function type.  Ensures
+    /// getType, getNumFuncArguments, and getNumFuncResults can be called
+    ///  safely.
+    LogicalResult verifyType() {
+      auto type = getTypeAttr().getValue();
+      if (!type.isa<FunctionType>())
+        return emitOpError("requires '" + getTypeAttrName() +
+                           "' attribute of function type");
+      return success();
+    }
+  public:
+  }];
+
+  let printer = [{ return ::print(p, *this); }];
+  let parser = [{ return ::parse$cppClass(parser, result); }];
+}
+
 
 def RTLInstanceOp : RTLOp<"instance", []> {
   let summary = "Create an instance of a module";
