@@ -13,7 +13,7 @@ def InstanceOp : FIRRTLOp<"instance"> {
 
   let arguments = (ins FlatSymbolRefAttr:$moduleName,
                        OptionalAttr<StrAttr>:$name);
-  let results = (outs AnyType:$result);
+  let results = (outs FIRRTLType:$result);
   
   let assemblyFormat = [{
      $moduleName attr-dict `:` type($result)
@@ -23,7 +23,7 @@ def InstanceOp : FIRRTLOp<"instance"> {
 def CMemOp : FIRRTLOp<"cmem", [/*MemAlloc*/]> {
   let summary = "Define a new cmem";
   let arguments = (ins OptionalAttr<StrAttr>:$name);
-  let results = (outs AnyType:$result);
+  let results = (outs FIRRTLType:$result);
   
   let assemblyFormat = [{
      attr-dict `:` type($result)
@@ -33,7 +33,7 @@ def CMemOp : FIRRTLOp<"cmem", [/*MemAlloc*/]> {
 def SMemOp : FIRRTLOp<"smem", [/*MemAlloc*/]> {
   let summary = "Define a new smem";
   let arguments = (ins RUWAttr:$ruw, OptionalAttr<StrAttr>:$name);
-  let results = (outs AnyType:$result);
+  let results = (outs FIRRTLType:$result);
 
   let assemblyFormat = [{
     $ruw attr-dict `:` type($result)
@@ -42,10 +42,11 @@ def SMemOp : FIRRTLOp<"smem", [/*MemAlloc*/]> {
 
 def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
   let summary = "Define a new mem";
-  let arguments = (ins I32Attr:$readLatency, Confined<I32Attr, [IntMinValue<1>]>:$writeLatency,
+  let arguments = (ins I32Attr:$readLatency,
+                       Confined<I32Attr, [IntMinValue<1>]>:$writeLatency,
                        I64Attr:$depth, RUWAttr:$ruw,
                        OptionalAttr<StrAttr>:$name);
-  let results = (outs AnyType:$result);
+  let results = (outs FIRRTLType:$result);
 
   let assemblyFormat = [{
     $ruw attr-dict `:` type($result)
@@ -84,8 +85,8 @@ def NodeOp : FIRRTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
     ```
     }];
 
-  let arguments = (ins AnyType:$input, OptionalAttr<StrAttr>:$name);
-  let results = (outs AnyType:$result);
+  let arguments = (ins FIRRTLType:$input, OptionalAttr<StrAttr>:$name);
+  let results = (outs FIRRTLType:$result);
   
   let assemblyFormat = [{
      $input attr-dict `:` type($input)
@@ -119,7 +120,7 @@ def RegInitOp : FIRRTLOp<"reginit", [/*MemAlloc*/]> {
     }];
 
   let arguments = (ins ClockType:$clockVal, ResetType:$resetSignal,
-                       AnyType:$resetValue, OptionalAttr<StrAttr>:$name);
+                       PassiveType:$resetValue, OptionalAttr<StrAttr>:$name);
   let results = (outs PassiveType:$result);
 
   let assemblyFormat = [{
@@ -137,7 +138,7 @@ def WireOp : FIRRTLOp<"wire", []> {
     }];
 
   let arguments = (ins OptionalAttr<StrAttr>:$name);
-  let results = (outs AnyType:$result);
+  let results = (outs FIRRTLType:$result);
   
   let assemblyFormat = [{
      attr-dict `:` type($result)

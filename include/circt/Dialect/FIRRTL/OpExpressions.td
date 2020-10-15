@@ -38,8 +38,8 @@ def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
     ```
     }];
 
-  let arguments = (ins AnyType:$input, StrAttr:$fieldname);
-  let results = (outs AnyType:$result);
+  let arguments = (ins FIRRTLType:$input, StrAttr:$fieldname);
+  let results = (outs FIRRTLType:$result);
   
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat = [{
@@ -66,8 +66,8 @@ def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
     ```
     }];
 
-  let arguments = (ins AnyType:$input, I32Attr:$index);
-  let results = (outs AnyType:$result);
+  let arguments = (ins FIRRTLType:$input, I32Attr:$index);
+  let results = (outs FIRRTLType:$result);
   
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat = [{
@@ -92,8 +92,8 @@ def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect]> {
     ```
     }];
 
-  let arguments = (ins AnyType:$input, UIntType:$index);
-  let results = (outs AnyType:$result);
+  let arguments = (ins FIRRTLType:$input, UIntType:$index);
+  let results = (outs FIRRTLType:$result);
   
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat = [{
@@ -231,7 +231,7 @@ def XorRPrimOp
 
 // This is an MLIR specific pseudo op.
 def AsPassivePrimOp
-  : UnaryPrimOp<"asPassive", "getAsPassiveResult", PassiveType, AnyType>;
+  : UnaryPrimOp<"asPassive", "getAsPassiveResult", PassiveType, FIRRTLType>;
 
 //===----------------------------------------------------------------------===//
 // Other Operations
@@ -401,11 +401,16 @@ def TailPrimOp : PrimOp<"tail"> {
 // Conversions to/from fixed-width signless integer types in standard dialect.
 //===----------------------------------------------------------------------===//
 
-// This operation converts from an SInt/UInt to a signless integer type, or
-// visa-versa.  FIRRTL source/destination types must be passive.
+// firrtl.stdIntCast takes inputs and results that are either signless integers
+// or integer-like things in the FIRRTL dialect.
+def IntCastType : AnyTypeOf<[PassiveType, AnySignlessInteger],
+                            "passive FIRRTL type or signless builtin integer">;
+
+// This operation converts from an SInt/UInt/Clock/etc to a signless integer
+// type, or visa-versa.  FIRRTL source/destination types must be passive.
 def StdIntCast : FIRRTLOp<"stdIntCast", [NoSideEffect]> {
-  let arguments = (ins AnyType:$input);
-  let results = (outs AnyType:$result);
+  let arguments = (ins IntCastType:$input);
+  let results = (outs IntCastType:$result);
 
   let assemblyFormat = [{
     $input attr-dict `:` functional-type($input, $result)
