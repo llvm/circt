@@ -18,12 +18,69 @@ static T getTypeOf(Value v) {
   return v.getType().cast<T>();
 }
 
-//===----------------------------------------------------------------------===//
-// Pass Infrastructure
-//===----------------------------------------------------------------------===//
-
 #define GEN_PASS_CLASSES
 #include "circt/Dialect/FIRRTL/FIRRTLPasses.h.inc"
+
+//===----------------------------------------------------------------------===//
+// firrtl.module Lowering Pass
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct FIRRTLModuleLowering
+    : public LowerFIRRTLToRTLModuleBase<FIRRTLModuleLowering> {
+
+  void runOnOperation() override;
+
+private:
+  void lowerModule(FModuleOp op);
+};
+} // end anonymous namespace
+
+/// This is the pass constructor.
+std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLToRTLModulePass() {
+  return std::make_unique<FIRRTLModuleLowering>();
+}
+
+/// Run on the firrtl.circuit operation, lowering any firrtl.module operations
+/// it contains.
+void FIRRTLModuleLowering::runOnOperation() {
+  // FIRRTL Circuit is a single block.
+  auto *circuitBody = getOperation().getBody();
+
+  // Iterate through each operation in the circuit body, transforming any
+  // FModule's we come across.  We maintain 'builder' for each invocation.
+  OpBuilder theBuilder(&getContext());
+  for (auto opIt = circuitBody->getOperations().begin(),
+            opEnd = circuitBody->getOperations().end();
+       opIt != opEnd;) {
+    // Step through the operations carefully to avoid invalidating the iterator.
+    if (auto module = dyn_cast<FModuleOp>(*opIt++))
+      lowerModule(module);
+  }
+}
+
+/// Run on each module, transforming it from an firrtl.module into an
+/// rtl.module, then deleting the old one.
+void FIRRTLModuleLowering::lowerModule(FModuleOp op) {
+  OpBuilder builder(op);
+  SmallVector<rtl::RTLModulePortInfo, 8> ports;
+
+  // TODO: Map the ports over.
+
+  auto nameAttr = builder.getStringAttr(op.getName());
+  builder.create<rtl::RTLModuleOp>(op.getLoc(), nameAttr, ports);
+
+  // TODO: Splice the body over.
+
+  // TODO: Update instances.
+
+  // Finally, remove the firrtl.module operation.
+  op.getOperation()->erase();
+}
+
+//===----------------------------------------------------------------------===//
+// Module Body Lowering Pass
+//===----------------------------------------------------------------------===//
 
 namespace {
 struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,

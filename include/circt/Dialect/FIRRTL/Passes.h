@@ -22,6 +22,7 @@ class Pass;
 namespace circt {
 namespace firrtl {
 
+std::unique_ptr<mlir::Pass> createLowerFIRRTLToRTLModulePass();
 std::unique_ptr<mlir::Pass> createLowerFIRRTLToRTLPass();
 
 } // namespace firrtl
