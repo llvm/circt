@@ -60,13 +60,12 @@ def RTLModuleOp : RTLOp<"module",
 
 def RTLExtModuleOp : RTLOp<"extmodule",
       [IsolatedFromAbove, FunctionLike, Symbol]> {
-  let summary = "RTL extModule";
+  let summary = "RTL external Module";
   let description = [{
     The "rtl.extmodule" operation represents an external reference to a Verilog
     module, including a given name and a list of ports.
   }];
-  let arguments = (ins OptionalAttr<StrAttr>:$defname,
-                       OptionalAttr<DictionaryAttr>:$parameters);
+  let arguments = (ins OptionalAttr<DictionaryAttr>:$parameters);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 

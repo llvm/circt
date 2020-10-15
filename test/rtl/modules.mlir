@@ -21,6 +21,14 @@ module {
                    %c: i1 {rtl.direction = "out"})
 
   // CHECK-LABEL: rtl.extmodule @C(i1 {rtl.direction = "in", rtl.name = "a"}, i1 {rtl.direction = "out", rtl.name = "b"}, i1 {rtl.direction = "out", rtl.name = "c"})
+  // CHECK-NOT: {
+
+  rtl.extmodule @D_ATTR(%a: i1 {rtl.direction = "in"}, 
+                   %b: i1 {rtl.direction = "out"}, 
+                   %c: i1 {rtl.direction = "out"}) attributes {filename = "test.v", parameters = {DEFAULT = 0 : i64}}
+
+  // CHECK-LABEL: rtl.extmodule @D_ATTR(i1 {rtl.direction = "in", rtl.name = "a"}, i1 {rtl.direction = "out", rtl.name = "b"}, i1 {rtl.direction = "out", rtl.name = "c"}) attributes {filename = "test.v", parameters = {DEFAULT = 0 : i64}}
+  // CHECK-NOT: {
 
   rtl.module @A(%d: i1 {rtl.direction = "in"}, 
                 %e: i1 {rtl.direction = "in"}, 
