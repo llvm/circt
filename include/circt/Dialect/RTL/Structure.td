@@ -58,12 +58,12 @@ def RTLModuleOp : RTLOp<"module",
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
-def RTLExtModuleOp : RTLOp<"extmodule",
+def RTLExternModuleOp : RTLOp<"externmodule",
       [IsolatedFromAbove, FunctionLike, Symbol]> {
   let summary = "RTL external Module";
   let description = [{
-    The "rtl.extmodule" operation represents an external reference to a Verilog
-    module, including a given name and a list of ports.
+    The "rtl.externmodule" operation represents an external reference to a
+    Verilog module, including a given name and a list of ports.
   }];
   let arguments = (ins OptionalAttr<DictionaryAttr>:$parameters);
   let results = (outs);
@@ -82,7 +82,7 @@ def RTLExtModuleOp : RTLOp<"extmodule",
 
   private:
     // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<RTLExtModuleOp>;
+    friend class OpTrait::FunctionLike<RTLExternModuleOp>;
 
     /// Returns the number of arguments, implementing OpTrait::FunctionLike.
     unsigned getNumFuncArguments() { return getType().getInputs().size(); }

@@ -183,8 +183,8 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
   return success();
 }
 
-static ParseResult parseRTLExtModuleOp(OpAsmParser &parser,
-                                       OperationState &result) {
+static ParseResult parseRTLExternModuleOp(OpAsmParser &parser,
+                                          OperationState &result) {
   return parseRTLModuleOp(parser, result, /*isExtModule:*/ true);
 }
 
@@ -212,7 +212,7 @@ static void printRTLModuleOp(OpAsmPrinter &p, Operation *op) {
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size());
 }
 
-static void print(OpAsmPrinter &p, RTLExtModuleOp op) {
+static void print(OpAsmPrinter &p, RTLExternModuleOp op) {
   printRTLModuleOp(p, op);
 }
 
@@ -240,7 +240,7 @@ static LogicalResult verifyRTLInstanceOp(RTLInstanceOp op) {
     return failure();
   }
   if (!isa<rtl::RTLModuleOp>(referencedModule) &&
-      !isa<rtl::RTLExtModuleOp>(referencedModule)) {
+      !isa<rtl::RTLExternModuleOp>(referencedModule)) {
     op.emitError(
         llvm::formatv("Symbol resolved to '{0}', not a RTL[Ext]ModuleOp",
                       referencedModule->getName()));
