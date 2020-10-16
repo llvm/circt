@@ -58,7 +58,7 @@ def RTLModuleOp : RTLOp<"module",
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
-def RTLExtModuleOp : RTLOp<"extmodule",
+def RTLExternModuleOp : RTLOp<"externmodule",
       [IsolatedFromAbove, FunctionLike, Symbol]> {
   let summary = "RTL external Module";
   let description = [{
