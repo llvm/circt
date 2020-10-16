@@ -27,12 +27,6 @@ using namespace mlir;
 using namespace circt;
 using namespace circt::llhd;
 
-// Keep a counter to infer a signal's index in his entity's signal table.
-static size_t signalCounter = 0;
-
-// Keep a counter to infer a reg's index in his entity.
-static size_t regCounter = 0;
-
 //===----------------------------------------------------------------------===//
 // Helpers
 //===----------------------------------------------------------------------===//
@@ -736,9 +730,11 @@ namespace {
 /// arguments.
 struct EntityOpConversion : public ConvertToLLVMPattern {
   explicit EntityOpConversion(MLIRContext *ctx,
-                              LLVMTypeConverter &typeConverter)
+                              LLVMTypeConverter &typeConverter,
+                              size_t &sigCounter, size_t &regCounter)
       : ConvertToLLVMPattern(llhd::EntityOp::getOperationName(), ctx,
-                             typeConverter) {}
+                             typeConverter),
+        sigCounter(sigCounter), regCounter(regCounter) {}
 
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
@@ -778,8 +774,8 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
 
     // The first n elements of the signal table represent the entity arguments,
     // while the remaining elements represent the entity's owned signals.
-    signalCounter = entityOp.getNumArguments();
-    for (size_t i = 0; i < signalCounter; ++i) {
+    sigCounter = entityOp.getNumArguments();
+    for (size_t i = 0; i < sigCounter; ++i) {
       // Create gep operations from the signal table for each original argument.
       auto index = bodyBuilder.create<LLVM::ConstantOp>(
           op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(i));
@@ -810,6 +806,10 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
 
     return success();
   }
+
+private:
+  size_t &sigCounter;
+  size_t &regCounter;
 };
 } // namespace
 
@@ -1387,9 +1387,11 @@ namespace {
 /// entity get's lowered to a load of the i-th element of the signal table,
 /// passed as an argument.
 struct SigOpConversion : public ConvertToLLVMPattern {
-  explicit SigOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
+  explicit SigOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter,
+                           size_t &sigCounter)
       : ConvertToLLVMPattern(llhd::SigOp::getOperationName(), ctx,
-                             typeConverter) {}
+                             typeConverter),
+        sigCounter(sigCounter) {}
 
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
@@ -1406,8 +1408,8 @@ struct SigOpConversion : public ConvertToLLVMPattern {
 
     // Get the index in the signal table and increase counter.
     auto indexConst = rewriter.create<LLVM::ConstantOp>(
-        op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(signalCounter));
-    signalCounter++;
+        op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(sigCounter));
+    ++sigCounter;
 
     // Insert a gep to the signal index in the signal table argument.
     rewriter.replaceOpWithNewOp<LLVM::GEPOp>(
@@ -1415,6 +1417,9 @@ struct SigOpConversion : public ConvertToLLVMPattern {
 
     return success();
   }
+
+private:
+  size_t &sigCounter;
 };
 } // namespace
 
@@ -1597,8 +1602,10 @@ namespace {
 /// comparisons (blocks) that end up driving the signal with the arguments of
 /// the first matching trigger from the trigger list.
 struct RegOpConversion : public ConvertToLLVMPattern {
-  explicit RegOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(RegOp::getOperationName(), ctx, typeConverter) {}
+  explicit RegOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter,
+                           size_t &regCounter)
+      : ConvertToLLVMPattern(RegOp::getOperationName(), ctx, typeConverter),
+        regCounter(regCounter) {}
 
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
@@ -1724,6 +1731,9 @@ struct RegOpConversion : public ConvertToLLVMPattern {
 
     return success();
   }
+
+private:
+  size_t &regCounter;
 }; // namespace
 } // namespace
 
@@ -2630,7 +2640,8 @@ struct LLHDToLLVMLoweringPass
 } // namespace
 
 void llhd::populateLLHDToLLVMConversionPatterns(
-    LLVMTypeConverter &converter, OwningRewritePatternList &patterns) {
+    LLVMTypeConverter &converter, OwningRewritePatternList &patterns,
+    size_t &sigCounter, size_t &regCounter) {
   MLIRContext *ctx = converter.getDialect()->getContext();
 
   // Value creation conversion patterns.
@@ -2656,12 +2667,14 @@ void llhd::populateLLHDToLLVMConversionPatterns(
                                                                     converter);
 
   // Unit conversion patterns.
-  patterns.insert<EntityOpConversion, TerminatorOpConversion, ProcOpConversion,
-                  WaitOpConversion, HaltOpConversion>(ctx, converter);
+  patterns.insert<TerminatorOpConversion, ProcOpConversion, WaitOpConversion,
+                  HaltOpConversion>(ctx, converter);
+  patterns.insert<EntityOpConversion>(ctx, converter, sigCounter, regCounter);
 
   // Signal conversion patterns.
-  patterns.insert<SigOpConversion, PrbOpConversion, DrvOpConversion,
-                  RegOpConversion>(ctx, converter);
+  patterns.insert<PrbOpConversion, DrvOpConversion>(ctx, converter);
+  patterns.insert<SigOpConversion>(ctx, converter, sigCounter);
+  patterns.insert<RegOpConversion>(ctx, converter, regCounter);
 
   // Memory conversion patterns.
   patterns.insert<VarOpConversion, StoreOpConversion>(ctx, converter);
@@ -2669,6 +2682,12 @@ void llhd::populateLLHDToLLVMConversionPatterns(
 }
 
 void LLHDToLLVMLoweringPass::runOnOperation() {
+  // Keep a counter to infer a signal's index in his entity's signal table.
+  size_t sigCounter = 0;
+
+  // Keep a counter to infer a reg's index in his entity.
+  size_t regCounter = 0;
+
   OwningRewritePatternList patterns;
   auto converter = mlir::LLVMTypeConverter(&getContext());
   converter.addConversion(
@@ -2696,7 +2715,8 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
 
   // Setup the full conversion.
   populateStdToLLVMConversionPatterns(converter, patterns);
-  populateLLHDToLLVMConversionPatterns(converter, patterns);
+  populateLLHDToLLVMConversionPatterns(converter, patterns, sigCounter,
+                                       regCounter);
 
   target.addLegalDialect<LLVM::LLVMDialect>();
   target.addLegalOp<ModuleOp, ModuleTerminatorOp>();

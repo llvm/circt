@@ -24,7 +24,9 @@ using namespace mlir;
 
 /// Get the LLHD to LLVM conversion patterns.
 void populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
-                                          OwningRewritePatternList &patterns);
+                                          OwningRewritePatternList &patterns,
+                                          size_t &sigCounter,
+                                          size_t &regCounter);
 
 /// Create an LLHD to LLVM conversion pass.
 std::unique_ptr<OperationPass<ModuleOp>> createConvertLLHDToLLVMPass();
