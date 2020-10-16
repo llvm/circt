@@ -1,6 +1,6 @@
 def RTLModuleOp : RTLOp<"module",
       [IsolatedFromAbove, FunctionLike, Symbol, RegionKindInterface,
-       SingleBlockImplicitTerminator<"DoneOp">]> {
+       SingleBlockImplicitTerminator<"OutputOp">]> {
   let summary = "RTL Module";
   let description = [{
     The "rtl.module" operation represents a Verilog module, including a given
@@ -127,11 +127,12 @@ def RTLInstanceOp : RTLOp<"instance", []> {
   let verifier = [{ return ::verifyRTLInstanceOp(*this); }];
 }
 
-def DoneOp : RTLOp<"done", [Terminator, HasParent<"RTLModuleOp">,
-                            NoSideEffect, ReturnLike]> {
+def OutputOp : RTLOp<"output", [Terminator, HasParent<"RTLModuleOp">,
+                                NoSideEffect, ReturnLike]> {
   let summary = "RTL termination operation";
   let description = [{
-    "rtl.done" marks the end of a region in the RTL dialect.
+    "rtl.output" marks the end of a region in the RTL dialect and the values
+    to put on the output ports.
   }];
 
   let arguments = (ins Variadic<AnyType>:$operands);
@@ -139,4 +140,6 @@ def DoneOp : RTLOp<"done", [Terminator, HasParent<"RTLModuleOp">,
   let builders = [OpBuilder<"", [{ build($_builder, $_state, llvm::None); }]>];
 
   let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
+
+  let verifier = [{ return ::verifyOutputOp(this); }];
 }

@@ -31,7 +31,7 @@ public:
                        // Reduction Operators
                        AndROp, OrROp, XorROp,
                        // Other operations.
-                       SExtOp, ZExtOp, ConcatOp, ExtractOp, MuxOp, DoneOp>(
+                       SExtOp, ZExtOp, ConcatOp, ExtractOp, MuxOp, OutputOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitComb(expr, args...);
             })
@@ -99,7 +99,7 @@ public:
   HANDLE(ConcatOp, Unhandled);
   HANDLE(ExtractOp, Unhandled);
   HANDLE(MuxOp, Unhandled);
-  HANDLE(DoneOp, Unhandled);
+  HANDLE(OutputOp, Unhandled);
 #undef HANDLE
 };
 

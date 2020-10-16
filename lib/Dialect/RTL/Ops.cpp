@@ -4,9 +4,11 @@
 
 #include "circt/Dialect/RTL/Ops.h"
 #include "circt/Dialect/RTL/Visitors.h"
+#include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
+#include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/StandardTypes.h"
@@ -97,8 +99,16 @@ void rtl::getRTLModulePortInfo(Operation *op,
     auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
     auto type = argTypes[i].dyn_cast<IntegerType>();
 
+    results.push_back({getRTLNameAttr(argAttrs), type,
+                       getRTLDirectionAttr(argAttrs), /* isResult */ false});
+  }
+
+  auto resultTypes = getModuleType(op).getResults();
+  for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
+    auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
+    auto dir = StringAttr::get("out", op->getContext());
     results.push_back(
-        {getRTLNameAttr(argAttrs), type, getRTLDirectionAttr(argAttrs)});
+        {getRTLNameAttr(argAttrs), resultTypes[i], dir, /* isResult */ true});
   }
 }
 
@@ -246,6 +256,39 @@ static LogicalResult verifyRTLInstanceOp(RTLInstanceOp op) {
                       referencedModule->getName()));
     return failure();
   }
+  return success();
+}
+
+/// Verify that the num of operands and types fit the declared results.
+static LogicalResult verifyOutputOp(OutputOp *op) {
+  OperandRange outputValues = op->getOperands();
+  Operation *moduleOp = op->getParentWithTrait<OpTrait::FunctionLike>();
+
+  // Check that our region has results
+  if (!moduleOp) {
+    op->emitOpError("operation expected to be in FunctionLike region.");
+    return failure();
+  }
+
+  // Check that the we (rtl.output) have the same number of operands as our
+  // region has results.
+  FunctionType modType = getModuleType(moduleOp);
+  ArrayRef<Type> modResults = modType.getResults();
+  if (modResults.size() != outputValues.size()) {
+    op->emitOpError("must have same number of operands as region results.");
+    return failure();
+  }
+
+  // Check that the types of our operands and the region's results match.
+  for (size_t i = 0, e = modResults.size(); i < e; ++i) {
+    if (modResults[i] != outputValues[i].getType()) {
+      op->emitOpError(llvm::formatv(
+          "output types must match. In operand {0}, expected {1} but got {2}.",
+          i, modResults[i], outputValues[i].getType()));
+      return failure();
+    }
+  }
+
   return success();
 }
 

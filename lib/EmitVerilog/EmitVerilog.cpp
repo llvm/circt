@@ -2496,6 +2496,19 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
           -> ModuleEmitter::ConditionalStmtKind { return condStmt.kind; });
   reduceIndent();
 
+  Operation *term = module.getBodyBlock()->getTerminator();
+  if (isa<rtl::OutputOp>(term)) {
+    OperandRange outputValues = term->getOperands();
+    auto modResult = module.getType().getResults();
+
+    // This should have been checked in the OutputOp verifier.
+    assert(outputValues.size() != modResult.size() &&
+           "Number of operands must match number of module results");
+    // for (size_t i = 0, e = outputValues.size(); i < e; ++i)
+    //   indent() << llvm::formatv("assign {0} = {1};", nameTable[modResult[i]],
+    //                             nameTable[outputValues[i]]);
+  }
+
   os << "endmodule\n\n";
 }
 
@@ -2586,8 +2599,7 @@ void CircuitEmitter::emitCircuit(CircuitOp circuit) {
 
     // Ignore the done terminator at the end of the circuit.
     // Ignore 'ext modules'.
-    if (isa<rtl::DoneOp>(op) || isa<firrtl::DoneOp>(op) ||
-        isa<FExtModuleOp>(op))
+    if (isa<firrtl::DoneOp>(op) || isa<FExtModuleOp>(op))
       continue;
 
     op.emitError("unknown operation");

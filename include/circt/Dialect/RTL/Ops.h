@@ -23,6 +23,7 @@ struct RTLModulePortInfo {
   StringAttr name;
   Type type;
   StringAttr direction;
+  bool isResult;
 };
 
 // typedef std::tuple<StringAttr, Type, StringAttr> RTLModulePortInfo;
