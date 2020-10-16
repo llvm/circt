@@ -9,6 +9,14 @@
 
 include "mlir/Pass/PassBase.td"
 
+/// Lower firrtl.module's to rtl.module.
+def LowerFIRRTLToRTLModule
+  : Pass<"lower-firrtl-to-rtl-module", "firrtl::CircuitOp"> {
+  let summary = "Lower FIRRTL to RTL Modules";
+  let constructor = "circt::firrtl::createLowerFIRRTLToRTLModulePass()";
+}
+
+/// Lower the contents of an firrtl.module to the RTL dialect.
 def LowerFIRRTLToRTL : Pass<"lower-firrtl-to-rtl", "firrtl::FModuleOp"> {
   let summary = "Lower FIRRTL to RTL";
   let constructor = "circt::firrtl::createLowerFIRRTLToRTLPass()";

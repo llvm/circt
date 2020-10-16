@@ -960,16 +960,23 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result,
       parseToken(FIRToken::r_square, "expected ']' in subscript"))
     return failure();
 
+  // If the index expression is a flip type, strip it off.
+  auto indexType = index.getType().cast<FIRRTLType>();
+  if (!indexType.isPassiveType()) {
+    indexType = indexType.getPassiveType();
+    index = builder.create<AsPassivePrimOp>(translateLocation(indexLoc),
+                                            indexType, index);
+  }
+
   // Make sure the index expression is valid and compute the result type for the
   // expression.
   auto resultType = result.getType().cast<FIRRTLType>();
-  resultType = SubaccessOp::getResultType(resultType,
-                                          index.getType().cast<FIRRTLType>());
+  resultType = SubaccessOp::getResultType(resultType, indexType);
   if (!resultType) {
     // TODO(QoI): This error would be nicer with a .fir pretty print of the
     // type.
     emitError(indexLoc, "invalid dynamic subaccess into ")
-        << result.getType() << " with index of type " << index.getType();
+        << result.getType() << " with index of type " << indexType;
     return failure();
   }
 
@@ -1007,6 +1014,14 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
                      "expected expression in primitive operand"))
           return failure();
 
+        // If the operand contains a flip, strip it out with an asPassive op.
+        if (!operand.getType().cast<FIRRTLType>().isPassiveType()) {
+          auto passiveType =
+              operand.getType().cast<FIRRTLType>().getPassiveType();
+          operand = builder.create<AsPassivePrimOp>(translateLocation(loc),
+                                                    passiveType, operand);
+        }
+
         operands.push_back(operand);
         return success();
       }))
@@ -1014,7 +1029,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
 
   SmallVector<FIRRTLType, 4> opTypes;
   for (auto v : operands)
-    opTypes.push_back(v.getType().cast<FIRRTLType>().getPassiveType());
+    opTypes.push_back(v.getType().cast<FIRRTLType>());
 
   auto typeError = [&](StringRef opName) -> ParseResult {
     auto diag = emitError(loc, "invalid input types for '") << opName << "': ";

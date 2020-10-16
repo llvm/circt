@@ -129,17 +129,17 @@ firrtl.circuit "M1" {
   //CHECK-NEXT:   input  w, x,
   //CHECK-NEXT:   output y, z);
   //CHECK-EMPTY: 
-  //CHECK-NEXT:   wire _T;
-  //CHECK-NEXT:   wire _T_0;
+  //CHECK-NEXT:   wire w1;
+  //CHECK-NEXT:   wire w2;
   //CHECK-EMPTY: 
   //CHECK-NEXT: A a1 (
   //CHECK-NEXT:     .d (w),
-  //CHECK-NEXT:     .e (_T),
-  //CHECK-NEXT:     .f (_T_0)
+  //CHECK-NEXT:     .e (w1),
+  //CHECK-NEXT:     .f (w2)
   //CHECK-NEXT:   )
   //CHECK-NEXT: B b1 (
-  //CHECK-NEXT:     .a (_T_0),
-  //CHECK-NEXT:     .b (_T),
+  //CHECK-NEXT:     .a (w2),
+  //CHECK-NEXT:     .b (w1),
   //CHECK-NEXT:     .c (y)
   //CHECK-NEXT:   )
   //CHECK-NEXT:   assign z = x;
@@ -155,7 +155,8 @@ firrtl.circuit "M1" {
     %26 = firrtl.not %a : (!firrtl.uint<4>) -> !firrtl.uint<4>
     %27 = firrtl.stdIntCast %26 : (!firrtl.uint<4>) -> i4
     %28 = rtl.extract %27 from 2 : (i4) -> i2
-    %29 = firrtl.stdIntCast %b : (!firrtl.flip<uint<1>>) -> i1
+    %fb = firrtl.asPassive %b : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
+    %29 = firrtl.stdIntCast %fb : (!firrtl.uint<1>) -> i1
     %30 = firrtl.stdIntCast %28 : (i2) -> !firrtl.uint<2>
     firrtl.connect %b, %30 : !firrtl.flip<uint<1>>, !firrtl.uint<2>
   }

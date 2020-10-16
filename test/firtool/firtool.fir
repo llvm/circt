@@ -22,8 +22,9 @@ circuit test_mod :
 
 ; MLIRLOWER: firrtl.circuit "test_mod" {
 ; MLIRLOWER:   firrtl.module @test_mod(%a: !firrtl.uint<1>, %b: !firrtl.flip<uint<1>>) {
-; MLIRLOWER:     %0 = firrtl.stdIntCast %b : (!firrtl.flip<uint<1>>) -> i1
-; MLIRLOWER:     %1 = firrtl.stdIntCast %a : (!firrtl.uint<1>) -> i1
-; MLIRLOWER:     rtl.connect %0, %1 : i1
+; MLIRLOWER:     %0 = firrtl.asPassive %b : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
+; MLIRLOWER:     %1 = firrtl.stdIntCast %0 : (!firrtl.uint<1>) -> i1
+; MLIRLOWER:     %2 = firrtl.stdIntCast %a : (!firrtl.uint<1>) -> i1
+; MLIRLOWER:     rtl.connect %1, %2 : i1
 ; MLIRLOWER:   }
 ; MLIRLOWER: }

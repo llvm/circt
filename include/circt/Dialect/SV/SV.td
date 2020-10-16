@@ -8,6 +8,7 @@
 #define SV_TD
 
 include "mlir/IR/OpBase.td"
+include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def SVDialect : Dialect {
@@ -28,5 +29,6 @@ class SVOp<string mnemonic, list<OpTrait> traits = []> :
 
 include "Expressions.td"
 include "Statements.td"
+include "TypeDecl.td"
 
 #endif // SV_TD

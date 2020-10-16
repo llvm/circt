@@ -12,19 +12,129 @@
 using namespace circt;
 using namespace firrtl;
 
-/// Return the type of the specified value, converted to a passive type.  If "T"
-/// Is specified, this force casts to that subtype.
+/// Return the type of the specified value, casted to the template type.
 template <typename T = FIRRTLType>
-static T getPassiveTypeOf(Value v) {
-  return v.getType().cast<FIRRTLType>().getPassiveType().cast<T>();
+static T getTypeOf(Value v) {
+  return v.getType().cast<T>();
 }
-
-//===----------------------------------------------------------------------===//
-// Pass Infrastructure
-//===----------------------------------------------------------------------===//
 
 #define GEN_PASS_CLASSES
 #include "circt/Dialect/FIRRTL/FIRRTLPasses.h.inc"
+
+/// Given a FIRRTL type, return the corresponding type for the RTL dialect.
+/// This returns a null type if it cannot be lowered.
+static Type lowerType(Type type) {
+  auto firType = type.dyn_cast<FIRRTLType>();
+  if (!firType)
+    return {};
+
+  // Ignore flip types.
+  firType = firType.getPassiveType();
+
+  auto width = firType.getBitWidthOrSentinel();
+  if (width >= 0) // IntType, analog with known width, clock, etc.
+    return IntegerType::get(width, type.getContext());
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// firrtl.module Lowering Pass
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct FIRRTLModuleLowering
+    : public LowerFIRRTLToRTLModuleBase<FIRRTLModuleLowering> {
+
+  void runOnOperation() override;
+
+private:
+  void lowerModule(FModuleOp op);
+};
+} // end anonymous namespace
+
+/// This is the pass constructor.
+std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLToRTLModulePass() {
+  return std::make_unique<FIRRTLModuleLowering>();
+}
+
+/// Run on the firrtl.circuit operation, lowering any firrtl.module operations
+/// it contains.
+void FIRRTLModuleLowering::runOnOperation() {
+  // TODO: We should drop the CircuitOp as well.
+  auto *circuitBody = getOperation().getBody();
+
+  // Iterate through each operation in the circuit body, transforming any
+  // FModule's we come across.  We maintain 'builder' for each invocation.
+  OpBuilder theBuilder(&getContext());
+  for (auto opIt = circuitBody->getOperations().begin(),
+            opEnd = circuitBody->getOperations().end();
+       opIt != opEnd;) {
+    // Step through the operations carefully to avoid invalidating the iterator.
+    if (auto module = dyn_cast<FModuleOp>(*opIt++))
+      lowerModule(module);
+
+    // TODO: Lower extmodule.
+  }
+}
+
+/// Run on each module, transforming it from an firrtl.module into an
+/// rtl.module, then deleting the old one.
+void FIRRTLModuleLowering::lowerModule(FModuleOp op) {
+  OpBuilder builder(op);
+
+  // Map the ports over, lowering their types as we go.
+  SmallVector<ModulePortInfo, 8> firrtlPorts;
+  op.getPortInfo(firrtlPorts);
+
+  SmallVector<rtl::RTLModulePortInfo, 8> ports;
+  ports.reserve(firrtlPorts.size());
+  for (auto firrtlPort : firrtlPorts) {
+    rtl::RTLModulePortInfo rtlPort;
+
+    rtlPort.name = firrtlPort.first;
+
+    auto firrtlType = firrtlPort.second;
+    rtlPort.type = lowerType(firrtlType);
+
+    // We can't lower all types, so make sure to cleanly reject them.
+    if (!rtlPort.type) {
+      op.emitError("cannot lower this port type to RTL");
+      return;
+    }
+
+    // Figure out the direction of the port.
+    const char *direction;
+    if (firrtlType.isa<FlipType>()) {
+      // If the top-level type in FIRRTL is a flip, then this is an output.
+      assert(firrtlType.cast<FlipType>().getElementType().isPassiveType() &&
+             "Flip types should be completely passive internally");
+      direction = "out";
+    } else if (firrtlType.cast<FIRRTLType>().isPassiveType()) {
+      direction = "input";
+    } else {
+      // This isn't currently expressible in low-firrtl, due to bundle types
+      // being lowered.
+      direction = "inout";
+    }
+    rtlPort.direction = builder.getStringAttr(direction);
+    ports.push_back(rtlPort);
+  }
+
+  auto nameAttr = builder.getStringAttr(op.getName());
+  builder.create<rtl::RTLModuleOp>(op.getLoc(), nameAttr, ports);
+
+  // TODO: Splice the body over.
+
+  // TODO: Update instances.
+
+  // Finally, remove the firrtl.module operation.
+  op.getOperation()->erase();
+}
+
+//===----------------------------------------------------------------------===//
+// Module Body Lowering Pass
+//===----------------------------------------------------------------------===//
 
 namespace {
 struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
@@ -33,7 +143,6 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   void runOnOperation() override;
 
   // Helpers.
-  Type lowerType(Type firrtlType);
   Value getLoweredValue(Value operand);
   Value getLoweredAndExtendedValue(Value operand, Type destType);
   LogicalResult setLowering(Value orig, Value result);
@@ -70,6 +179,8 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult lowerBinOp(Operation *op);
   template <typename ResultOpType>
   LogicalResult lowerBinOpToVariadic(Operation *op);
+  LogicalResult lowerCmpOp(Operation *op, ICmpPredicate signedOp,
+                           ICmpPredicate unsignedOp);
 
   LogicalResult visitExpr(CatPrimOp op);
 
@@ -85,6 +196,25 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(AddPrimOp op) {
     return lowerBinOpToVariadic<rtl::AddOp>(op);
   }
+  LogicalResult visitExpr(EQPrimOp op) {
+    return lowerCmpOp(op, ICmpPredicate::eq, ICmpPredicate::eq);
+  }
+  LogicalResult visitExpr(NEQPrimOp op) {
+    return lowerCmpOp(op, ICmpPredicate::ne, ICmpPredicate::ne);
+  }
+  LogicalResult visitExpr(LTPrimOp op) {
+    return lowerCmpOp(op, ICmpPredicate::slt, ICmpPredicate::ult);
+  }
+  LogicalResult visitExpr(LEQPrimOp op) {
+    return lowerCmpOp(op, ICmpPredicate::sle, ICmpPredicate::ule);
+  }
+  LogicalResult visitExpr(GTPrimOp op) {
+    return lowerCmpOp(op, ICmpPredicate::sgt, ICmpPredicate::ugt);
+  }
+  LogicalResult visitExpr(GEQPrimOp op) {
+    return lowerCmpOp(op, ICmpPredicate::sge, ICmpPredicate::uge);
+  }
+
   LogicalResult visitExpr(SubPrimOp op) { return lowerBinOp<rtl::SubOp>(op); }
   LogicalResult visitExpr(MulPrimOp op) {
     return lowerBinOpToVariadic<rtl::MulOp>(op);
@@ -157,23 +287,6 @@ void FIRRTLLowering::runOnOperation() {
 // Helpers
 //===----------------------------------------------------------------------===//
 
-/// Given a FIRRTL type, return the corresponding type for the RTL dialect.
-/// This returns a null type if it cannot be lowered.
-Type FIRRTLLowering::lowerType(Type type) {
-  auto firType = type.dyn_cast<FIRRTLType>();
-  if (!firType)
-    return {};
-
-  // Ignore flip types.
-  firType = firType.getPassiveType();
-
-  auto width = firType.getBitWidthOrSentinel();
-  if (width >= 0) // IntType, analog with known width, clock, etc.
-    return IntegerType::get(width, type.getContext());
-
-  return {};
-}
-
 /// Return the lowered value corresponding to the specified original value.
 /// This returns a null value for FIRRTL values that cannot be lowered, e.g.
 /// unknown width integers.
@@ -199,6 +312,11 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
 
   // Cast FIRRTL -> standard type.
   auto loc = builder->getInsertionPoint()->getLoc();
+  if (!firType.isPassiveType()) {
+    value =
+        builder->create<AsPassivePrimOp>(loc, firType.getPassiveType(), value);
+  }
+
   return builder->create<StdIntCast>(loc, resultType, value);
 }
 
@@ -215,8 +333,8 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
   if (!result)
     return {};
 
-  auto destFIRType = destType.cast<FIRRTLType>().getPassiveType();
-  if (value.getType().cast<FIRRTLType>().getPassiveType() == destFIRType)
+  auto destFIRType = destType.cast<FIRRTLType>();
+  if (value.getType().cast<FIRRTLType>() == destFIRType)
     return result;
 
   // We only know how to extend integer types with known width.
@@ -340,7 +458,7 @@ LogicalResult FIRRTLLowering::visitExpr(CvtPrimOp op) {
     return failure();
 
   // Signed to signed is a noop.
-  if (getPassiveTypeOf<IntType>(op.getOperand()).isSigned())
+  if (getTypeOf<IntType>(op.getOperand()).isSigned())
     setLowering(op, operand);
 
   // Otherwise prepend a zero bit.
@@ -367,7 +485,7 @@ LogicalResult FIRRTLLowering::visitExpr(NegPrimOp op) {
   // FIRRTL negate always adds a bit.
   // -x  ---> 0-sext(x) or 0-zext(x)
   auto resultType = lowerType(op.getType());
-  if (getPassiveTypeOf<IntType>(op.input()).isSigned())
+  if (getTypeOf<IntType>(op.input()).isSigned())
     operand = builder->create<rtl::SExtOp>(op.getLoc(), resultType, operand);
   else
     operand = builder->create<rtl::ZExtOp>(op.getLoc(), resultType, operand);
@@ -438,6 +556,30 @@ LogicalResult FIRRTLLowering::lowerBinOp(Operation *op) {
 
   // Emit the result operation.
   return setLoweringTo<ResultOpType>(op, lhs, rhs);
+}
+
+/// lowerCmpOp extends each operand to the longest type, then performs the
+/// specified binary operator.
+LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, ICmpPredicate signedOp,
+                                         ICmpPredicate unsignedOp) {
+  // Extend the two operands to match the longest type.
+  auto lhsIntType = op->getOperand(0).getType().cast<IntType>();
+  auto rhsIntType = op->getOperand(1).getType().cast<IntType>();
+  if (!lhsIntType.hasWidth() || !rhsIntType.hasWidth())
+    return failure();
+
+  Type cmpType =
+      *lhsIntType.getWidth() < *rhsIntType.getWidth() ? rhsIntType : lhsIntType;
+
+  auto lhs = getLoweredAndExtendedValue(op->getOperand(0), cmpType);
+  auto rhs = getLoweredAndExtendedValue(op->getOperand(1), cmpType);
+  if (!lhs || !rhs)
+    return failure();
+
+  // Emit the result operation.
+  Type resultType = builder->getIntegerType(1);
+  return setLoweringTo<rtl::ICmpOp>(
+      op, resultType, lhsIntType.isSigned() ? signedOp : unsignedOp, lhs, rhs);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
@@ -560,7 +702,8 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   auto dest = getLoweredValue(op.lhs());
 
   // The source can be a smaller integer, extend it as appropriate if so.
-  Value src = getLoweredAndExtendedValue(op.rhs(), op.lhs().getType());
+  auto lhsType = op.lhs().getType().cast<FIRRTLType>().getPassiveType();
+  Value src = getLoweredAndExtendedValue(op.rhs(), lhsType);
 
   if (!dest || !src)
     return failure();

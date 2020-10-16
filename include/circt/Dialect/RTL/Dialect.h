@@ -27,4 +27,7 @@ public:
 } // namespace rtl
 } // namespace circt
 
+// Pull in all enum type definitions and utility function declarations.
+#include "circt/Dialect/RTL/RTLEnums.h.inc"
+
 #endif // CIRCT_DIALECT_RTL_DIALECT_H

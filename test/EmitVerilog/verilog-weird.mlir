@@ -4,12 +4,18 @@ firrtl.circuit "M1" {
   firrtl.module @M1(%x : !firrtl.uint<8> { firrtl.name = "y"},
                     %y : !firrtl.flip<uint<8>>) {
     firrtl.connect %y, %x : !firrtl.flip<uint<8>>, !firrtl.uint<8>
+
+    %a = firrtl.asPassive %y : (!firrtl.flip<uint<8>>) -> !firrtl.uint<8>
+    %b = firrtl.not %a : (!firrtl.uint<8>) -> !firrtl.uint<8>
+    firrtl.connect %y, %b : !firrtl.flip<uint<8>>, !firrtl.uint<8>
   }
+
   // CHECK-LABEL: module M1(
   // CHECK-NEXT:    input  [7:0] y,
   // CHECK-NEXT:    output [7:0] y_0);
   // CHECK-EMPTY:
   // CHECK-NEXT:    assign y_0 = y;
+  // CHECK-NEXT:    assign y_0 = ~y_0;
   // CHECK-NEXT:  endmodule
 
   firrtl.module @M2(%in : !firrtl.uint<8> { firrtl.name = "some name"},

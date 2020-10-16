@@ -41,7 +41,7 @@ static bool isVerilogExpression(Operation *op) {
   // All FIRRTL expressions and RTL combinatorial logic ops are Verilog
   // expressions.
   return isExpression(op) || rtl::isCombinatorial(op) ||
-         isa<sv::TextualValueOp>(op);
+         isa<sv::TextualValueOp>(op) || isa<AsPassivePrimOp>(op);
 }
 
 /// Return the width of the specified FIRRTL type in bits or -1 if it isn't
@@ -67,11 +67,10 @@ static int getBitWidthOrSentinel(Type type) {
       .Default([](Type) { return -1; });
 }
 
-/// Return the type of the specified value, converted to a passive type.  If "T"
-/// Is specified, this force casts to that subtype.
+/// Return the type of the specified value, force casting to the subtype.
 template <typename T = FIRRTLType>
-static T getPassiveTypeOf(Value v) {
-  return v.getType().cast<FIRRTLType>().getPassiveType().cast<T>();
+static T getTypeOf(Value v) {
+  return v.getType().cast<T>();
 }
 
 /// Given an integer value, return the number of characters it will take to
@@ -94,7 +93,8 @@ static unsigned getPrintedIntWidth(unsigned value) {
 static bool isNoopCast(Operation *op) {
   // These are always noop casts.
   if (isa<AsAsyncResetPrimOp>(op) || isa<AsClockPrimOp>(op) ||
-      isa<AsUIntPrimOp>(op) || isa<AsSIntPrimOp>(op))
+      isa<AsUIntPrimOp>(op) || isa<AsSIntPrimOp>(op) ||
+      isa<AsPassivePrimOp>(op))
     return true;
 
   // cvt from signed is noop.
@@ -771,7 +771,7 @@ private:
   SubExprInfo visitExpr(OrPrimOp op) { return emitVariadic(op, Or, "|"); }
   SubExprInfo visitExpr(XorPrimOp op) { return emitVariadic(op, Xor, "^"); }
 
-  // Comparison Operations
+  // FIRRTL Comparison Operations
   SubExprInfo visitExpr(LEQPrimOp op) {
     return emitSignedBinary(op, Comparison, "<=");
   }
@@ -807,6 +807,7 @@ private:
   // client as necessary.
   SubExprInfo visitExpr(AsUIntPrimOp op) { return emitNoopCast(op); }
   SubExprInfo visitExpr(AsSIntPrimOp op) { return emitNoopCast(op); }
+  SubExprInfo visitExpr(AsPassivePrimOp op) { return emitNoopCast(op); }
 
   // Other
   SubExprInfo visitExpr(SubfieldOp op);
@@ -863,6 +864,14 @@ private:
   SubExprInfo visitComb(rtl::ZExtOp op);
   SubExprInfo visitComb(rtl::ConcatOp op);
   SubExprInfo visitComb(rtl::ExtractOp op);
+
+  // RTL Comparison Operations
+  SubExprInfo visitComb(rtl::ICmpOp op) {
+    std::array<const char *, 10> symop{"==", "!=", "<",  "<=", "<",
+                                       "<=", ">",  ">=", ">",  ">="};
+    return emitSignedBinary(op, Comparison,
+                            symop[static_cast<uint64_t>(op.predicate())]);
+  }
 
 private:
   SmallPtrSet<Operation *, 8> &emittedExprs;
@@ -1179,14 +1188,14 @@ SubExprInfo ExprEmitter::visitComb(rtl::MuxOp op) {
 }
 
 SubExprInfo ExprEmitter::visitExpr(CvtPrimOp op) {
-  if (getPassiveTypeOf<IntType>(op.getOperand()).isSigned())
+  if (getTypeOf<IntType>(op.getOperand()).isSigned())
     return emitNoopCast(op);
 
   return emitCat(op.getOperand(), "1'b0");
 }
 
 SubExprInfo ExprEmitter::visitExpr(HeadPrimOp op) {
-  auto width = getPassiveTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
+  auto width = getTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
   if (width == -1)
     return visitUnhandledExpr(op);
   auto numBits = op.amount();
@@ -1194,7 +1203,7 @@ SubExprInfo ExprEmitter::visitExpr(HeadPrimOp op) {
 }
 
 SubExprInfo ExprEmitter::visitExpr(TailPrimOp op) {
-  auto width = getPassiveTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
+  auto width = getTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
   if (width == -1)
     return visitUnhandledExpr(op);
   auto numBits = op.amount();
@@ -1202,7 +1211,7 @@ SubExprInfo ExprEmitter::visitExpr(TailPrimOp op) {
 }
 
 SubExprInfo ExprEmitter::visitExpr(PadPrimOp op) {
-  auto inType = getPassiveTypeOf<IntType>(op.getOperand());
+  auto inType = getTypeOf<IntType>(op.getOperand());
   auto inWidth = inType.getWidthOrSentinel();
   if (inWidth == -1)
     return visitUnhandledExpr(op);
@@ -1245,7 +1254,7 @@ SubExprInfo ExprEmitter::visitExpr(PadPrimOp op) {
 // TODO(verilog dialect): There is no need to persist shifts. They are
 // apparently only needed for width inference.
 SubExprInfo ExprEmitter::visitExpr(ShrPrimOp op) {
-  auto width = getPassiveTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
+  auto width = getTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
   unsigned shiftAmount = op.amount();
   if (width == -1 || shiftAmount >= unsigned(width))
     return visitUnhandledExpr(op);
@@ -1819,9 +1828,18 @@ void ModuleEmitter::emitDecl(MemOp op) {
 /// Most expressions are invalid to bit-select from in Verilog, but some things
 /// are ok.  Return true if it is ok to inline bitselect from the result of this
 /// expression.  It is conservatively correct to return false.
-static bool isOkToBitSelectFrom(Operation *op) {
+static bool isOkToBitSelectFrom(Value v) {
+  // Module ports are always ok to bit select from.
+  auto *op = v.getDefiningOp();
+  if (!op)
+    return true;
+
   if (isa<SubfieldOp>(op))
     return true;
+
+  // AsPassivePrimOp is transparent.
+  if (auto cast = dyn_cast<AsPassivePrimOp>(op))
+    return isOkToBitSelectFrom(cast.getOperand());
 
   // TODO: We could handle concat and other operators here.
   return false;
@@ -1830,7 +1848,7 @@ static bool isOkToBitSelectFrom(Operation *op) {
 /// Return true if we are unable to ever inline the specified operation.  This
 /// happens because not all Verilog expressions are composable.
 static bool isExpressionUnableToInline(Operation *op) {
-  // Can the users of the operation to see if any of them need this to be
+  // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
   for (auto user : op->getUsers()) {
     // Verilog bit selection is required by the standard to be:
@@ -1839,13 +1857,14 @@ static bool isExpressionUnableToInline(Operation *op) {
     if (isa<HeadPrimOp>(user) || isa<TailPrimOp>(user) ||
         isa<ShrPrimOp>(user) || isa<BitsPrimOp>(user) ||
         isa<rtl::ExtractOp>(user))
-      if (!isOkToBitSelectFrom(op))
+      if (!isOkToBitSelectFrom(op->getResult(0)))
         return true;
 
     if (auto pad = dyn_cast<PadPrimOp>(user)) {
-      auto inType = getPassiveTypeOf<IntType>(pad.getOperand());
+      auto inType = getTypeOf<IntType>(pad.getOperand());
       auto inWidth = inType.getWidthOrSentinel();
-      if (unsigned(inWidth) > pad.amount() && !isOkToBitSelectFrom(op))
+      if (unsigned(inWidth) > pad.amount() &&
+          !isOkToBitSelectFrom(op->getResult(0)))
         return true;
     }
   }

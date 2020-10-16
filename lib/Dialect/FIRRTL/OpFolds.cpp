@@ -178,7 +178,7 @@ void CatPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 }
 
 OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
-  auto inputType = input().getType().cast<FIRRTLType>().getPassiveType();
+  auto inputType = input().getType().cast<FIRRTLType>();
   // If we are extracting the entire input, then return it.
   if (inputType == getType() &&
       inputType.cast<IntType>().getWidthOrSentinel() != -1)
@@ -238,12 +238,8 @@ void HeadPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
     LogicalResult matchAndRewrite(HeadPrimOp op,
                                   PatternRewriter &rewriter) const override {
-      auto inputWidth = op.input()
-                            .getType()
-                            .cast<FIRRTLType>()
-                            .getPassiveType()
-                            .cast<IntType>()
-                            .getWidthOrSentinel();
+      auto inputWidth =
+          op.input().getType().cast<IntType>().getWidthOrSentinel();
       if (inputWidth == -1)
         return failure();
 
@@ -302,8 +298,7 @@ OpFoldResult PadPrimOp::fold(ArrayRef<Attribute> operands) {
     return input;
 
   // Need to know the input width.
-  auto inputType =
-      input.getType().cast<FIRRTLType>().getPassiveType().cast<IntType>();
+  auto inputType = input.getType().cast<IntType>();
   int32_t width = inputType.getWidthOrSentinel();
   if (width == -1)
     return {};
@@ -325,8 +320,7 @@ OpFoldResult PadPrimOp::fold(ArrayRef<Attribute> operands) {
 
 OpFoldResult ShlPrimOp::fold(ArrayRef<Attribute> operands) {
   auto input = this->input();
-  auto inputType =
-      input.getType().cast<FIRRTLType>().getPassiveType().cast<IntType>();
+  auto inputType = input.getType().cast<IntType>();
   int shiftAmount = amount();
 
   // shl(x, 0) -> x
@@ -347,8 +341,7 @@ OpFoldResult ShlPrimOp::fold(ArrayRef<Attribute> operands) {
 
 OpFoldResult ShrPrimOp::fold(ArrayRef<Attribute> operands) {
   auto input = this->input();
-  auto inputType =
-      input.getType().cast<FIRRTLType>().getPassiveType().cast<IntType>();
+  auto inputType = input.getType().cast<IntType>();
   int shiftAmount = amount();
 
   // shl(x, 0) -> x
@@ -384,12 +377,8 @@ void ShrPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
     LogicalResult matchAndRewrite(ShrPrimOp op,
                                   PatternRewriter &rewriter) const override {
-      auto inputWidth = op.input()
-                            .getType()
-                            .cast<FIRRTLType>()
-                            .getPassiveType()
-                            .cast<IntType>()
-                            .getWidthOrSentinel();
+      auto inputWidth =
+          op.input().getType().cast<IntType>().getWidthOrSentinel();
       if (inputWidth == -1)
         return failure();
 
@@ -420,12 +409,8 @@ void TailPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
     LogicalResult matchAndRewrite(TailPrimOp op,
                                   PatternRewriter &rewriter) const override {
-      auto inputWidth = op.input()
-                            .getType()
-                            .cast<FIRRTLType>()
-                            .getPassiveType()
-                            .cast<IntType>()
-                            .getWidthOrSentinel();
+      auto inputWidth =
+          op.input().getType().cast<IntType>().getWidthOrSentinel();
       if (inputWidth == -1)
         return failure();
 

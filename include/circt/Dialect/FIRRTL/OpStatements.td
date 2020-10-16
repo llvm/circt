@@ -7,9 +7,9 @@
 def MemoryPortOp : FIRRTLOp<"memoryport", []> {
   let summary = "Access a memory";
 
-  let arguments = (ins AnyType:$memory, AnyType:$index, AnyType:$clock,
+  let arguments = (ins FIRRTLType:$memory, IntType:$index, ClockType:$clock,
                        MemDirAttr:$direction, OptionalAttr<StrAttr>:$name);
-  let results = (outs AnyType:$result);
+  let results = (outs FIRRTLType:$result);
 
   let assemblyFormat = [{
     $direction $memory `,` $index `,` $clock attr-dict `:`
@@ -20,7 +20,7 @@ def MemoryPortOp : FIRRTLOp<"memoryport", []> {
 def AttachOp : FIRRTLOp<"attach"> {
   let summary = "Analog Attach Statement";
 
-  let arguments = (ins Variadic<AnyType>:$operands);
+  let arguments = (ins Variadic<FIRRTLType>:$operands);
   let results = (outs);
 
   let assemblyFormat = [{
@@ -38,7 +38,7 @@ def ConnectOp : FIRRTLOp<"connect", []> {
     ```
     }];
 
-  let arguments = (ins AnyType:$lhs, AnyType:$rhs);
+  let arguments = (ins FIRRTLType:$lhs, FIRRTLType:$rhs);
   let results = (outs);
   
   let assemblyFormat = [{
@@ -55,7 +55,7 @@ def PartialConnectOp : FIRRTLOp<"partialconnect", []> {
     ```
     }];
 
-  let arguments = (ins AnyType:$lhs, AnyType:$rhs);
+  let arguments = (ins FIRRTLType:$lhs, FIRRTLType:$rhs);
   let results = (outs);
   
   let assemblyFormat = [{
@@ -68,14 +68,13 @@ def InvalidOp : FIRRTLOp<"invalid", []> {
   let description = [{
     Invalidate Operation:
     ```
-       %result = firrtl.invalid : i8
+      firrtl.invalid %result : !firrtl.uint<1>
     ```
 
-    The invalid operation produces a value of unspecified value.  Drivers may
-    be attached to it with `firrtl.connect`.
+    The invalid operation produces a value of unspecified value.
   }];
 
-  let arguments = (ins AnyType:$operand);
+  let arguments = (ins FIRRTLType:$operand);
   let results = (outs);
   
   let assemblyFormat = [{
@@ -87,7 +86,7 @@ def PrintFOp : FIRRTLOp<"printf", []> {
   let summary = "Formatted Print Statement";
 
   let arguments = (ins ClockType:$clock, UInt1Type:$cond, StrAttr:$formatString, 
-                       Variadic<AnyType>:$operands);
+                       Variadic<FIRRTLType>:$operands);
   let results = (outs);
   
   let assemblyFormat = [{
@@ -134,7 +133,7 @@ def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">]> {
     only when the given condition is high. The condition must have a 1-bit
     unsigned integer type.
   }];
-  let arguments = (ins AnyType:$condition);
+  let arguments = (ins UInt1Type:$condition);
   let results = (outs);
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
 
