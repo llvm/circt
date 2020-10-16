@@ -66,6 +66,12 @@ void rtl::RTLModuleOp::build(OpBuilder &builder, OperationState &result,
   rtl::RTLModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
 
+void rtl::RTLExternModuleOp::build(OpBuilder &builder, OperationState &result,
+                                   StringAttr name,
+                                   ArrayRef<RTLModulePortInfo> ports) {
+  buildModule(builder, result, name, ports);
+}
+
 FunctionType rtl::getModuleType(Operation *op) {
   auto typeAttr = op->getAttrOfType<TypeAttr>(RTLModuleOp::getTypeAttrName());
   return typeAttr.getValue().cast<FunctionType>();
