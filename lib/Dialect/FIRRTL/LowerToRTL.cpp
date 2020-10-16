@@ -104,20 +104,18 @@ void FIRRTLModuleLowering::lowerModule(FModuleOp op) {
     }
 
     // Figure out the direction of the port.
-    const char *direction;
     if (firrtlType.isa<FlipType>()) {
       // If the top-level type in FIRRTL is a flip, then this is an output.
       assert(firrtlType.cast<FlipType>().getElementType().isPassiveType() &&
              "Flip types should be completely passive internally");
-      direction = "out";
+      rtlPort.direction = rtl::PortDirection::OUTPUT;
     } else if (firrtlType.cast<FIRRTLType>().isPassiveType()) {
-      direction = "input";
+      rtlPort.direction = rtl::PortDirection::INPUT;
     } else {
       // This isn't currently expressible in low-firrtl, due to bundle types
       // being lowered.
-      direction = "inout";
+      rtlPort.direction = rtl::PortDirection::INOUT;
     }
-    rtlPort.direction = builder.getStringAttr(direction);
     ports.push_back(rtlPort);
   }
 

@@ -25,28 +25,36 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
 
   SmallVector<Type, 4> argTypes;
-  for (auto elt : ports)
-    argTypes.push_back(elt.type);
+  SmallVector<Type, 4> resultTypes;
+  for (auto elt : ports) {
+    if (elt.direction == PortDirection::OUTPUT)
+      resultTypes.push_back(elt.type);
+    else
+      argTypes.push_back(elt.type);
+  }
 
   // Record the argument and result types as an attribute.
-  auto type = builder.getFunctionType(argTypes, /*resultTypes=*/{});
+  auto type = builder.getFunctionType(argTypes, resultTypes);
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
 
   // Record the names of the arguments if present.
   SmallString<8> attrNameBuf;
   SmallString<8> attrDirBuf;
-  for (size_t i = 0, e = ports.size(); i != e; ++i) {
-    if (ports[i].name.getValue().empty())
-      continue;
+  for (const RTLModulePortInfo &port : ports) {
+    SmallVector<NamedAttribute, 2> argAttrs;
+    if (!port.name.getValue().empty())
+      argAttrs.push_back(
+          NamedAttribute(builder.getIdentifier("rtl.name"), port.name));
 
-    auto argAttr =
-        NamedAttribute(builder.getIdentifier("rtl.name"), ports[i].name);
+    if (port.direction == PortDirection::INOUT)
+      argAttrs.push_back(
+          NamedAttribute(builder.getIdentifier("rtl.inout"),
+                         BoolAttr::get(true, builder.getContext())));
 
-    auto dirAttr = NamedAttribute(builder.getIdentifier("rtl.direction"),
-                                  ports[i].direction);
-
-    result.addAttribute(getArgAttrName(i, attrNameBuf),
-                        builder.getDictionaryAttr({argAttr, dirAttr}));
+    StringRef attrName = port.direction == PortDirection::OUTPUT
+                             ? getResultAttrName(port.argNum, attrNameBuf)
+                             : getArgAttrName(port.argNum, attrNameBuf);
+    result.addAttribute(attrName, builder.getDictionaryAttr(argAttrs));
   }
   result.addRegion();
 }
@@ -63,7 +71,8 @@ void rtl::RTLModuleOp::build(OpBuilder &builder, OperationState &result,
 
   // Add arguments to the body block.
   for (auto elt : ports)
-    body->addArgument(elt.type);
+    if (elt.direction != PortDirection::OUTPUT)
+      body->addArgument(elt.type);
 
   rtl::RTLModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
@@ -82,13 +91,13 @@ StringAttr rtl::getRTLNameAttr(ArrayRef<NamedAttribute> attrs) {
   return StringAttr();
 }
 
-StringAttr rtl::getRTLDirectionAttr(ArrayRef<NamedAttribute> attrs) {
+static bool isRTLInoutArg(ArrayRef<NamedAttribute> attrs) {
   for (auto &argAttr : attrs) {
-    if (argAttr.first != "rtl.direction")
+    if (argAttr.first != "rtl.inout")
       continue;
-    return argAttr.second.dyn_cast<StringAttr>();
+    return argAttr.second.dyn_cast<BoolAttr>().getValue();
   }
-  return StringAttr();
+  return false;
 }
 
 void rtl::getRTLModulePortInfo(Operation *op,
@@ -97,18 +106,18 @@ void rtl::getRTLModulePortInfo(Operation *op,
 
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
-    auto type = argTypes[i];
+    bool isInout = isRTLInoutArg(argAttrs);
 
-    results.push_back({getRTLNameAttr(argAttrs), type,
-                       getRTLDirectionAttr(argAttrs), /* isResult */ false});
+    results.push_back({getRTLNameAttr(argAttrs),
+                       isInout ? PortDirection::INOUT : PortDirection::INPUT,
+                       argTypes[i], i});
   }
 
   auto resultTypes = getModuleType(op).getResults();
   for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
     auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
-    auto dir = StringAttr::get("out", op->getContext());
     results.push_back(
-        {getRTLNameAttr(argAttrs), resultTypes[i], dir, /* isResult */ true});
+        {getRTLNameAttr(argAttrs), PortDirection::OUTPUT, resultTypes[i], i});
   }
 }
 

@@ -323,6 +323,16 @@ public:
     return entry->getKey();
   }
 
+  StringRef getPortName(const rtl::RTLModulePortInfo &port,
+                        rtl::RTLModuleOp &module,
+                        SmallVectorImpl<char> &nameBuffer) {
+    if (!port.name.getValue().empty())
+      return port.name.getValue();
+    if (port.direction != rtl::PortDirection::OUTPUT)
+      return getName(module.getArgument(port.argNum));
+    return ("result" + Twine(port.argNum)).toStringRef(nameBuffer);
+  }
+
   /// Return the location information as a (potentially empty) string.
   std::string getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops);
 
@@ -2406,17 +2416,13 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
   if (!portInfo.empty())
     os << '\n';
 
-  auto isOutput = [](StringAttr direction) -> bool {
-    return direction.getValue().str() == "out";
-  };
-
   // Determine the width of the widest type we have to print so everything
   // lines up nicely.
   bool hasOutputs = false;
   unsigned maxTypeWidth = 0;
   for (auto &port : portInfo) {
     auto portType = port.type;
-    hasOutputs |= isOutput(port.direction);
+    hasOutputs |= port.direction == rtl::PortDirection::OUTPUT;
 
     int bitWidth = getBitWidthOrSentinel(portType);
     if (bitWidth == -1 || bitWidth == 1)
@@ -2435,8 +2441,8 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
     indent();
     // Emit the arguments.
     auto portType = portInfo[portIdx].type;
-    bool isThisPortOutput = isOutput(portInfo[portIdx].direction);
-    if (isThisPortOutput)
+    rtl::PortDirection thisPortDirection = portInfo[portIdx].direction;
+    if (thisPortDirection == rtl::PortDirection::OUTPUT)
       os << "output ";
     else
       os << (hasOutputs ? "input  " : "input ");
@@ -2445,16 +2451,16 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
     emitTypePaddedToWidth(portType, maxTypeWidth, module);
 
     // Emit the name.
-    os << getName(module.getArgument(portIdx));
+    SmallString<32> nameBuff;
+    os << getPortName(portInfo[portIdx], module, nameBuff);
     ++portIdx;
 
     // If we have any more ports with the same types and the same direction,
     // emit them in a list on the same line.
-    while (portIdx != e &&
-           isOutput(portInfo[portIdx].direction) == isThisPortOutput &&
+    while (portIdx != e && portInfo[portIdx].direction == thisPortDirection &&
            bitWidth == getBitWidthOrSentinel(portInfo[portIdx].type)) {
       // Don't exceed our preferred line length.
-      StringRef name = getName(module.getArgument(portIdx));
+      StringRef name = getPortName(portInfo[portIdx], module, nameBuff);
       if (os.tell() + 2 + name.size() - startOfLinePos >
           // We use "-2" here because we need a trailing comma or ); for the
           // decl.

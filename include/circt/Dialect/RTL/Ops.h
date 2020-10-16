@@ -21,9 +21,10 @@ namespace rtl {
 // This holds the name, type, direction of a module's ports
 struct RTLModulePortInfo {
   StringAttr name;
+  PortDirection direction;
   Type type;
-  StringAttr direction;
-  bool isResult;
+  size_t argNum; // Either the argument index or the result index depending on
+                 // the direction.
 };
 
 // typedef std::tuple<StringAttr, Type, StringAttr> RTLModulePortInfo;
@@ -33,7 +34,7 @@ FunctionType getModuleType(Operation *op);
 void getRTLModulePortInfo(Operation *op,
                           SmallVectorImpl<RTLModulePortInfo> &results);
 StringAttr getRTLNameAttr(ArrayRef<NamedAttribute> attrs);
-StringAttr getRTLDirectionAttr(ArrayRef<NamedAttribute> attrs);
+// StringAttr getRTLDirectionAttr(ArrayRef<NamedAttribute> attrs);
 
 /// Return true if the specified operation is a combinatorial logic op.
 bool isCombinatorial(Operation *op);
