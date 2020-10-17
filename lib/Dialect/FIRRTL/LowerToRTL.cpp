@@ -80,12 +80,12 @@ void FIRRTLModuleLowering::runOnOperation() {
 
 /// Run on each module, transforming it from an firrtl.module into an
 /// rtl.module, then deleting the old one.
-void FIRRTLModuleLowering::lowerModule(FModuleOp op) {
-  OpBuilder builder(op);
+void FIRRTLModuleLowering::lowerModule(FModuleOp oldModule) {
+  OpBuilder builder(oldModule);
 
   // Map the ports over, lowering their types as we go.
   SmallVector<ModulePortInfo, 8> firrtlPorts;
-  op.getPortInfo(firrtlPorts);
+  oldModule.getPortInfo(firrtlPorts);
 
   SmallVector<rtl::RTLModulePortInfo, 8> ports;
   ports.reserve(firrtlPorts.size());
@@ -93,13 +93,12 @@ void FIRRTLModuleLowering::lowerModule(FModuleOp op) {
     rtl::RTLModulePortInfo rtlPort;
 
     rtlPort.name = firrtlPort.first;
-
     auto firrtlType = firrtlPort.second;
     rtlPort.type = lowerType(firrtlType);
 
     // We can't lower all types, so make sure to cleanly reject them.
     if (!rtlPort.type) {
-      op.emitError("cannot lower this port type to RTL");
+      oldModule.emitError("cannot lower this port type to RTL");
       return;
     }
 
@@ -121,15 +120,43 @@ void FIRRTLModuleLowering::lowerModule(FModuleOp op) {
     ports.push_back(rtlPort);
   }
 
-  auto nameAttr = builder.getStringAttr(op.getName());
-  builder.create<rtl::RTLModuleOp>(op.getLoc(), nameAttr, ports);
+  // Build the new rtl.module op.
+  auto nameAttr = builder.getStringAttr(oldModule.getName());
+  auto newModule =
+      builder.create<rtl::RTLModuleOp>(oldModule.getLoc(), nameAttr, ports);
 
-  // TODO: Splice the body over.
+  OpBuilder bodyBuilder(newModule.body());
+
+  // Insert argument casts, and revector users in the old body to use them.
+  for (size_t i = 0, e = ports.size(); i != e; ++i) {
+    auto oldArg = oldModule.body().getArgument(i);
+    auto newArg = newModule.body().getArgument(i);
+
+    // Cast the argument to the old type, reintroducing sign information in the
+    // rtl.module body.
+    Value castedNewArg = bodyBuilder.create<StdIntCast>(
+        oldModule.getLoc(),
+        oldArg.getType().cast<FIRRTLType>().getPassiveType(), newArg);
+
+    if (oldArg.getType() != castedNewArg.getType())
+      castedNewArg = bodyBuilder.create<AsNonPassivePrimOp>(
+          oldModule.getLoc(), oldArg.getType(), castedNewArg);
+
+    // Switch all uses of the old operands to the new ones.
+    oldArg.replaceAllUsesWith(castedNewArg);
+  }
+
+  // Splice the body over, don't move the old terminator over though.
+  auto &oldBlockInstList = oldModule.getBodyBlock()->getOperations();
+  auto &newBlockInstList = newModule.getBodyBlock()->getOperations();
+  newBlockInstList.splice(std::prev(newBlockInstList.end()), oldBlockInstList,
+                          oldBlockInstList.begin(),
+                          std::prev(oldBlockInstList.end()));
 
   // TODO: Update instances.
 
   // Finally, remove the firrtl.module operation.
-  op.getOperation()->erase();
+  oldModule.getOperation()->erase();
 }
 
 //===----------------------------------------------------------------------===//

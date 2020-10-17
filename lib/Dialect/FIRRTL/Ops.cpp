@@ -889,10 +889,6 @@ FIRRTLType firrtl::getReductionResult(FIRRTLType input) {
   return UIntType::get(input.getContext(), 1);
 }
 
-FIRRTLType firrtl::getAsPassiveResult(FIRRTLType input) {
-  return input.getPassiveType();
-}
-
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//

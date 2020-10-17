@@ -41,7 +41,8 @@ static bool isVerilogExpression(Operation *op) {
   // All FIRRTL expressions and RTL combinatorial logic ops are Verilog
   // expressions.
   return isExpression(op) || rtl::isCombinatorial(op) ||
-         isa<sv::TextualValueOp>(op) || isa<AsPassivePrimOp>(op);
+         isa<sv::TextualValueOp>(op) || isa<AsPassivePrimOp>(op) ||
+         isa<AsNonPassivePrimOp>(op);
 }
 
 /// Return the width of the specified FIRRTL type in bits or -1 if it isn't
@@ -94,7 +95,7 @@ static bool isNoopCast(Operation *op) {
   // These are always noop casts.
   if (isa<AsAsyncResetPrimOp>(op) || isa<AsClockPrimOp>(op) ||
       isa<AsUIntPrimOp>(op) || isa<AsSIntPrimOp>(op) ||
-      isa<AsPassivePrimOp>(op))
+      isa<AsPassivePrimOp>(op) || isa<AsNonPassivePrimOp>(op))
     return true;
 
   // cvt from signed is noop.
@@ -808,6 +809,7 @@ private:
   SubExprInfo visitExpr(AsUIntPrimOp op) { return emitNoopCast(op); }
   SubExprInfo visitExpr(AsSIntPrimOp op) { return emitNoopCast(op); }
   SubExprInfo visitExpr(AsPassivePrimOp op) { return emitNoopCast(op); }
+  SubExprInfo visitExpr(AsNonPassivePrimOp op) { return emitNoopCast(op); }
 
   // Other
   SubExprInfo visitExpr(SubfieldOp op);
@@ -1837,8 +1839,10 @@ static bool isOkToBitSelectFrom(Value v) {
   if (isa<SubfieldOp>(op))
     return true;
 
-  // AsPassivePrimOp is transparent.
+  // As{Non}PassivePrimOp is transparent.
   if (auto cast = dyn_cast<AsPassivePrimOp>(op))
+    return isOkToBitSelectFrom(cast.getOperand());
+  if (auto cast = dyn_cast<AsNonPassivePrimOp>(op))
     return isOkToBitSelectFrom(cast.getOperand());
 
   // TODO: We could handle concat and other operators here.
