@@ -154,9 +154,9 @@ struct Instance {
   size_t nArgs = 0;
   // The arguments and signals of this instance.
   std::vector<SignalDetail> sensitivityList;
-  ProcState *procState;
+  std::unique_ptr<ProcState> procState;
+  std::unique_ptr<uint8_t> entityState;
   Time expectedWakeup;
-  uint8_t *entityState;
 };
 
 /// The simulator's state. It contains the current simulation time, signal

@@ -198,7 +198,7 @@ void Engine::buildLayout(ModuleOp module) {
   // The root is always an instance.
   rootInst.isEntity = true;
   // Store the root instance.
-  state->instances[rootInst.unit + "." + rootInst.name] = rootInst;
+  state->instances[rootInst.unit + "." + rootInst.name] = std::move(rootInst);
 
   // Add triggers to signals.
   for (auto &inst : state->instances) {
@@ -272,7 +272,7 @@ void Engine::walkEntity(EntityOp entity, Instance &child) {
         }
 
         // Store the created instance.
-        state->instances[newChild.name] = newChild;
+        state->instances[newChild.name] = std::move(newChild);
       }
     }
   });

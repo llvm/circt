@@ -133,13 +133,10 @@ State::~State() {
       std::free(signals[i].value);
 
   for (auto &entry : instances) {
-    auto inst = entry.getValue();
+    auto &inst = entry.getValue();
     if (inst.procState) {
       std::free(inst.procState->inst);
       std::free(inst.procState->senses);
-      std::free(inst.procState);
-    } else if (inst.entityState) {
-      std::free(inst.entityState);
     }
   }
 }
@@ -167,7 +164,7 @@ int State::addSignal(std::string name, std::string owner) {
 }
 
 void State::addProcPtr(std::string name, ProcState *procStatePtr) {
-  instances[name].procState = procStatePtr;
+  instances[name].procState = std::unique_ptr<ProcState>(procStatePtr);
   // Copy string to owner name ptr.
   name.copy(instances[name].procState->inst, name.size());
   // Ensure the string is null-terminated.
@@ -176,7 +173,7 @@ void State::addProcPtr(std::string name, ProcState *procStatePtr) {
 
 int State::addSignalData(int index, std::string owner, uint8_t *value,
                          uint64_t size) {
-  auto inst = instances[owner];
+  auto &inst = instances[owner];
   uint64_t globalIdx = inst.sensitivityList[index + inst.nArgs].globalIndex;
 
   // Add pointer and size to global signal table entry.
