@@ -701,7 +701,7 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       auto mulOp = inputs[size - 1].getDefiningOp<rtl::MulOp>();
       APInt multiplier;
 
-      // add(..., x, mul(x, c) -> add(..., x, shl(x, s)), where (c + 1) is a
+      // add(..., x, mul(x, c) -> add(..., shl(x, s)), where (c + 1) is a
       // power of two and s = log2(c + 1).
       if (mulOp && mulOp.inputs()[0] == inputs[size - 2] &&
           matchPattern(mulOp.inputs()[1], m_RConstant(multiplier)) &&
