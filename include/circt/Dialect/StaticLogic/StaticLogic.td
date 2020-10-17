@@ -69,8 +69,8 @@ def RegisterOp : Op<StaticLogic_Dialect, "register",
   let summary = "register operation";
   let description = [{
     The "staticlogic.register" operation is the terminator of blocks inside of a
-    pipeline region. In the further lowering, operands of this operation are
-    corresponding to registers between pipeline stages.
+    pipeline region. In the further lowering, operands of this operation will be
+    lowered to registers between pipeline stages.
   }];
 
   let arguments = (ins Variadic<AnyType>:$destOperands);
