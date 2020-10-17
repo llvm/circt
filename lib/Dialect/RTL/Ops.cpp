@@ -671,6 +671,54 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
+      auto shlOp = inputs[size - 1].getDefiningOp<rtl::ShlOp>();
+      APInt shift;
+
+      // add(..., x, shl(x, c)) -> add(..., mul(x, c * 2 + 1))
+      if (shlOp && shlOp.lhs() == inputs[size - 2] &&
+          matchPattern(shlOp.rhs(), m_RConstant(shift))) {
+
+        auto numBits =
+            shlOp.getOperand(1).getType().cast<IntegerType>().getWidth();
+        APInt one(numBits, 1, /*isSigned=*/false);
+        APInt two(numBits, 2, /*isSigned=*/false);
+
+        auto multiplier = rewriter.create<ConstantOp>(
+            op.getLoc(), (shift * two + one).getLimitedValue(),
+            op.getType().cast<IntegerType>());
+
+        SmallVector<Value, 2> mulInputs;
+        mulInputs.push_back(shlOp.lhs());
+        mulInputs.push_back(multiplier);
+        auto mulOp = rewriter.create<rtl::MulOp>(op.getLoc(), mulInputs);
+
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+        newOperands.push_back(mulOp);
+        rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
+      auto mulOp = inputs[size - 1].getDefiningOp<rtl::MulOp>();
+      APInt multiplier;
+
+      // add(..., x, mul(x, c) -> add(..., x, shl(x, s)), where (c + 1) is a
+      // power of two and s = log2(c + 1).
+      if (mulOp && mulOp.inputs()[0] == inputs[size - 2] &&
+          matchPattern(mulOp.inputs()[1], m_RConstant(multiplier)) &&
+          (++multiplier).isPowerOf2()) {
+
+        auto shift =
+            rewriter.create<ConstantOp>(op.getLoc(), multiplier.exactLogBase2(),
+                                        op.getType().cast<IntegerType>());
+        auto shlOp =
+            rewriter.create<rtl::ShlOp>(op.getLoc(), mulOp.inputs()[0], shift);
+
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+        newOperands.push_back(shlOp);
+        rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
       // add(x, add(...)) -> add(x, ...) -- flatten
       if (tryFlatteningOperands(op, rewriter))
         return success();
