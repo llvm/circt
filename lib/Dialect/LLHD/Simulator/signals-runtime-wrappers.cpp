@@ -50,7 +50,7 @@ void driveSignal(State *state, SignalDetail *detail, uint8_t *value,
   Time sTime(time, delta, eps);
 
   int bitOffset =
-      (detail->value - state->signals[globalIndex].value) * 8 + offset;
+      (detail->value - state->signals[globalIndex].value.get()) * 8 + offset;
 
   // Spawn a new event.
   state->pushQueue(sTime, globalIndex, bitOffset, drive);

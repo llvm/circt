@@ -60,7 +60,7 @@ Signal::Signal(std::string name, std::string owner, uint8_t *value,
 bool Signal::operator==(const Signal &rhs) const {
   if (owner != rhs.owner || name != rhs.name || size != rhs.size)
     return false;
-  return std::memcmp(value, rhs.value, size);
+  return std::memcmp(value.get(), rhs.value.get(), size);
 }
 
 bool Signal::operator<(const Signal &rhs) const {
@@ -76,7 +76,7 @@ std::string Signal::dump() {
   raw_string_ostream ss(ret);
   ss << "0x";
   for (int i = size - 1; i >= 0; --i) {
-    ss << format_hex_no_prefix(static_cast<int>(value[i]), 2);
+    ss << format_hex_no_prefix(static_cast<int>(value.get()[i]), 2);
   }
   return ss.str();
 }
@@ -128,10 +128,6 @@ void UpdateQueue::insertOrUpdate(Time time, std::string inst) {
 //===----------------------------------------------------------------------===//
 
 State::~State() {
-  for (int i = 0, e = signals.size(); i < e; ++i)
-    if (signals[i].value)
-      std::free(signals[i].value);
-
   for (auto &entry : instances) {
     auto &inst = entry.getValue();
     if (inst.procState) {
@@ -175,17 +171,18 @@ int State::addSignalData(int index, std::string owner, uint8_t *value,
                          uint64_t size) {
   auto &inst = instances[owner];
   uint64_t globalIdx = inst.sensitivityList[index + inst.nArgs].globalIndex;
+  auto &sig = signals[globalIdx];
 
   // Add pointer and size to global signal table entry.
-  signals[globalIdx].value = value;
-  signals[globalIdx].size = size;
+  sig.value = std::unique_ptr<uint8_t>(value);
+  sig.size = size;
 
   // Add the value pointer to the signal detail struct for each instance this
   // signal appears in.
   for (auto inst : signals[globalIdx].triggers) {
     for (auto &detail : instances[inst].sensitivityList) {
       if (detail.globalIndex == globalIdx) {
-        detail.value = value;
+        detail.value = sig.value.get();
       }
     }
   }

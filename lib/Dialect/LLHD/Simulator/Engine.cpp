@@ -101,9 +101,10 @@ int Engine::simulate(int n) {
     for (auto change : pop.changes) {
       // Get a buffer to apply the changes on.
       Signal *curr = &(state->signals[change.first]);
-      APInt buff(curr->size * 8,
-                 ArrayRef<uint64_t>(reinterpret_cast<uint64_t *>(curr->value),
-                                    curr->size));
+      APInt buff(
+          curr->size * 8,
+          ArrayRef<uint64_t>(reinterpret_cast<uint64_t *>(curr->value.get()),
+                             curr->size));
 
       // Apply all the changes to the buffer, in order of execution.
       for (auto drive : change.second) {
@@ -114,11 +115,11 @@ int Engine::simulate(int n) {
       }
 
       // Skip if the updated signal value is equal to the initial value.
-      if (std::memcmp(curr->value, buff.getRawData(), curr->size) == 0)
+      if (std::memcmp(curr->value.get(), buff.getRawData(), curr->size) == 0)
         continue;
 
       // Apply the signal update.
-      std::memcpy(curr->value, buff.getRawData(),
+      std::memcpy(curr->value.get(), buff.getRawData(),
                   state->signals[change.first].size);
 
       // Add sensitive instances.

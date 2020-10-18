@@ -65,6 +65,9 @@ struct Signal {
   /// Construct a signal with the given name, owner and initial value.
   Signal(std::string name, std::string owner, uint8_t *value, uint64_t size);
 
+  /// Default move constructor.
+  Signal(Signal &&) = default;
+
   /// Default signal destructor.
   ~Signal() = default;
 
@@ -85,7 +88,7 @@ struct Signal {
   std::vector<std::string> triggers;
   int origin = -1;
   uint64_t size;
-  uint8_t *value;
+  std::unique_ptr<uint8_t> value;
 };
 
 /// The simulator's internal representation of one queue slot.
