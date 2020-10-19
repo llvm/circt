@@ -49,7 +49,11 @@ struct FIRRTLModuleLowering
   void runOnOperation() override;
 
 private:
+  LogicalResult lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
+                           SmallVectorImpl<rtl::RTLModulePortInfo> &ports,
+                           Operation *moduleOp);
   void lowerModule(FModuleOp oldModule, Block *topLevelModule);
+  void lowerExtModule(FExtModuleOp oldModule, Block *topLevelModule);
 };
 } // end anonymous namespace
 
@@ -80,13 +84,25 @@ void FIRRTLModuleLowering::runOnOperation() {
   // Iterate through each operation in the circuit body, transforming any
   // FModule's we come across.
   for (auto opIt = circuitBody->getOperations().begin(),
-            opEnd = circuitBody->getOperations().end();
+            opEnd = std::prev(circuitBody->getOperations().end());
        opIt != opEnd;) {
     // Step through the operations carefully to avoid invalidating the iterator.
-    if (auto module = dyn_cast<FModuleOp>(*opIt++))
+    auto &op = *opIt++;
+    if (auto module = dyn_cast<FModuleOp>(op)) {
       lowerModule(module, moduleBody);
+      continue;
+    }
 
-    // TODO: Lower extmodule.
+    if (auto extModule = dyn_cast<FExtModuleOp>(op)) {
+      lowerExtModule(extModule, moduleBody);
+      continue;
+    }
+
+    // Otherwise we don't know what this is.  We are just going to drop it,
+    // but emit an error so the client has some chance to know that this is
+    // going to happen.
+    op.emitError("unexpected operation '" + op.getName().getStringRef().str() +
+                 "' in a firrtl.circuit");
   }
 
   // Now that the modules are moved over, remove the Circuit.  We pop the 'main
@@ -96,17 +112,11 @@ void FIRRTLModuleLowering::runOnOperation() {
   circuit.erase();
 }
 
-/// Run on each module, transforming it from an firrtl.module into an
-/// rtl.module, then deleting the old one.
-void FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
-                                       Block *topLevelModule) {
-  OpBuilder builder(topLevelModule->getTerminator());
+LogicalResult
+FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
+                                 SmallVectorImpl<rtl::RTLModulePortInfo> &ports,
+                                 Operation *moduleOp) {
 
-  // Map the ports over, lowering their types as we go.
-  SmallVector<ModulePortInfo, 8> firrtlPorts;
-  oldModule.getPortInfo(firrtlPorts);
-
-  SmallVector<rtl::RTLModulePortInfo, 8> ports;
   ports.reserve(firrtlPorts.size());
   for (auto firrtlPort : firrtlPorts) {
     rtl::RTLModulePortInfo rtlPort;
@@ -117,8 +127,8 @@ void FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
 
     // We can't lower all types, so make sure to cleanly reject them.
     if (!rtlPort.type) {
-      oldModule.emitError("cannot lower this port type to RTL");
-      return;
+      moduleOp->emitError("cannot lower this port type to RTL");
+      return failure();
     }
 
     // Figure out the direction of the port.
@@ -135,11 +145,44 @@ void FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
       // being lowered.
       direction = "inout";
     }
-    rtlPort.direction = builder.getStringAttr(direction);
+    rtlPort.direction = StringAttr::get(direction, moduleOp->getContext());
     ports.push_back(rtlPort);
   }
+  return success();
+}
+
+void FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
+                                          Block *topLevelModule) {
+  // Map the ports over, lowering their types as we go.
+  SmallVector<ModulePortInfo, 8> firrtlPorts;
+  oldModule.getPortInfo(firrtlPorts);
+  SmallVector<rtl::RTLModulePortInfo, 8> ports;
+  if (failed(lowerPorts(firrtlPorts, ports, oldModule)))
+    return;
 
   // Build the new rtl.module op.
+  OpBuilder builder(topLevelModule->getTerminator());
+  auto nameAttr = builder.getStringAttr(oldModule.getName());
+  (void)builder.create<rtl::RTLExternModuleOp>(oldModule.getLoc(), nameAttr,
+                                               ports);
+
+  // Finally remove the extmodule.
+  oldModule.getOperation()->erase();
+}
+
+/// Run on each firrtl.module, transforming it from an firrtl.module into an
+/// rtl.module, then deleting the old one.
+void FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
+                                       Block *topLevelModule) {
+  // Map the ports over, lowering their types as we go.
+  SmallVector<ModulePortInfo, 8> firrtlPorts;
+  oldModule.getPortInfo(firrtlPorts);
+  SmallVector<rtl::RTLModulePortInfo, 8> ports;
+  if (failed(lowerPorts(firrtlPorts, ports, oldModule)))
+    return;
+
+  // Build the new rtl.module op.
+  OpBuilder builder(topLevelModule->getTerminator());
   auto nameAttr = builder.getStringAttr(oldModule.getName());
   auto newModule =
       builder.create<rtl::RTLModuleOp>(oldModule.getLoc(), nameAttr, ports);

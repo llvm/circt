@@ -3,8 +3,18 @@
  // The firrtl.circuit should be removed, the main module name moved to an
  // attribute on the module.
  // CHECK-LABEL: {{^}}module attributes {firrtl.mainModule = "Simple"} {
- // CHECK-NOT: firrtl.circuit 
+ // CHECK-NOT: firrtl.circuit
  firrtl.circuit "Simple" {
+
+   // CHECK-LABEL: rtl.externmodule @MyParameterizedExtModule(
+   // CHECK: i1 {rtl.direction = "input", rtl.name = "in"},
+   // CHECK: i8 {rtl.direction = "out", rtl.name = "out"})
+   firrtl.extmodule @MyParameterizedExtModule(!firrtl.uint<1> {firrtl.name = "in"}, !firrtl.flip<uint<8>> {firrtl.name = "out"})
+      attributes {defname = "name_thing",
+                  parameters = {DEFAULT = 0 : i64,
+                                DEPTH = 3.242000e+01 : f64,
+                                FORMAT = "xyz_timeout=%d\0A",
+                                WIDTH = 32 : i8}}
 
    // CHECK-LABEL: rtl.module @Simple(
    // CHECK: %arg0: i4 {rtl.direction = "input", rtl.name = "in1"},
@@ -81,4 +91,8 @@
   // expected-error @+1 {{cannot lower this port type to RTL}}
   firrtl.module @CantLowerArgument(%arg: !firrtl.bundle<int_1: flip<uint<1>>, int_out: uint<2>>) {
   }   // CHECK-NEXT: }
+
+  // expected-error @+1 {{unexpected operation 'func' in a firrtl.circuit}}
+  func @UnknownFunction() {
+  }
 }
