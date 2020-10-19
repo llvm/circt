@@ -229,10 +229,6 @@ def OrRPrimOp
 def XorRPrimOp
   : UnaryPrimOp<"xorr", "getReductionResult", UIntType, IntType>;
 
-// This is an MLIR specific pseudo op.
-def AsPassivePrimOp
-  : UnaryPrimOp<"asPassive", "getAsPassiveResult", PassiveType, FIRRTLType>;
-
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
@@ -417,4 +413,26 @@ def StdIntCast : FIRRTLOp<"stdIntCast", [NoSideEffect]> {
   }];
 
   let verifier = [{ return ::verifyStdIntCast(*this); }];
+}
+
+// MLIR specific pseudo ops.
+
+// Convert a value with non-passive type to a value with passive type.
+def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect]> {
+  let arguments = (ins FIRRTLType:$input);
+  let results = (outs PassiveType:$result);
+
+  let assemblyFormat = [{
+    $input attr-dict `:` functional-type($input, $result)
+  }];
+}
+
+// Convert a passive value to a non-passive type.
+def AsNonPassivePrimOp : FIRRTLOp<"asNonPassive", [NoSideEffect]> {
+  let arguments = (ins PassiveType:$input);
+  let results = (outs FIRRTLType:$result);
+
+  let assemblyFormat = [{
+    $input attr-dict `:` functional-type($input, $result)
+  }];
 }

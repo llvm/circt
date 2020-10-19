@@ -49,7 +49,11 @@ struct FIRRTLModuleLowering
   void runOnOperation() override;
 
 private:
-  void lowerModule(FModuleOp op);
+  LogicalResult lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
+                           SmallVectorImpl<rtl::RTLModulePortInfo> &ports,
+                           Operation *moduleOp);
+  void lowerModule(FModuleOp oldModule, Block *topLevelModule);
+  void lowerExtModule(FExtModuleOp oldModule, Block *topLevelModule);
 };
 } // end anonymous namespace
 
@@ -61,33 +65,58 @@ std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLToRTLModulePass() {
 /// Run on the firrtl.circuit operation, lowering any firrtl.module operations
 /// it contains.
 void FIRRTLModuleLowering::runOnOperation() {
+  // We run on the top level modules in the IR blob.  Start by finding the
+  // firrtl.circuit within it.  If there is none, then there is nothing to do.
+  auto *moduleBody = getOperation().getBody();
+
+  CircuitOp circuit;
+  for (auto &op : *moduleBody) {
+    if ((circuit = dyn_cast<CircuitOp>(&op)))
+      break;
+  }
+
+  if (!circuit)
+    return;
+
   // TODO: We should drop the CircuitOp as well.
-  auto *circuitBody = getOperation().getBody();
+  auto *circuitBody = circuit.getBody();
 
   // Iterate through each operation in the circuit body, transforming any
-  // FModule's we come across.  We maintain 'builder' for each invocation.
-  OpBuilder theBuilder(&getContext());
+  // FModule's we come across.
   for (auto opIt = circuitBody->getOperations().begin(),
-            opEnd = circuitBody->getOperations().end();
+            opEnd = std::prev(circuitBody->getOperations().end());
        opIt != opEnd;) {
     // Step through the operations carefully to avoid invalidating the iterator.
-    if (auto module = dyn_cast<FModuleOp>(*opIt++))
-      lowerModule(module);
+    auto &op = *opIt++;
+    if (auto module = dyn_cast<FModuleOp>(op)) {
+      lowerModule(module, moduleBody);
+      continue;
+    }
 
-    // TODO: Lower extmodule.
+    if (auto extModule = dyn_cast<FExtModuleOp>(op)) {
+      lowerExtModule(extModule, moduleBody);
+      continue;
+    }
+
+    // Otherwise we don't know what this is.  We are just going to drop it,
+    // but emit an error so the client has some chance to know that this is
+    // going to happen.
+    op.emitError("unexpected operation '" + op.getName().getStringRef().str() +
+                 "' in a firrtl.circuit");
   }
+
+  // Now that the modules are moved over, remove the Circuit.  We pop the 'main
+  // module' specified in the Circuit into an attribute on the top level module.
+  getOperation().setAttr("firrtl.mainModule",
+                         StringAttr::get(circuit.name(), circuit.getContext()));
+  circuit.erase();
 }
 
-/// Run on each module, transforming it from an firrtl.module into an
-/// rtl.module, then deleting the old one.
-void FIRRTLModuleLowering::lowerModule(FModuleOp op) {
-  OpBuilder builder(op);
+LogicalResult
+FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
+                                 SmallVectorImpl<rtl::RTLModulePortInfo> &ports,
+                                 Operation *moduleOp) {
 
-  // Map the ports over, lowering their types as we go.
-  SmallVector<ModulePortInfo, 8> firrtlPorts;
-  op.getPortInfo(firrtlPorts);
-
-  SmallVector<rtl::RTLModulePortInfo, 8> ports;
   ports.reserve(firrtlPorts.size());
   size_t numArgs = 0;
   size_t numResults = 0;
@@ -95,14 +124,13 @@ void FIRRTLModuleLowering::lowerModule(FModuleOp op) {
     rtl::RTLModulePortInfo rtlPort;
 
     rtlPort.name = firrtlPort.first;
-
     auto firrtlType = firrtlPort.second;
     rtlPort.type = lowerType(firrtlType);
 
     // We can't lower all types, so make sure to cleanly reject them.
     if (!rtlPort.type) {
-      op.emitError("cannot lower this port type to RTL");
-      return;
+      moduleOp->emitError("cannot lower this port type to RTL");
+      return failure();
     }
 
     // Figure out the direction of the port.
@@ -123,16 +151,77 @@ void FIRRTLModuleLowering::lowerModule(FModuleOp op) {
     }
     ports.push_back(rtlPort);
   }
+  return success();
+}
 
-  auto nameAttr = builder.getStringAttr(op.getName());
-  builder.create<rtl::RTLModuleOp>(op.getLoc(), nameAttr, ports);
+void FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
+                                          Block *topLevelModule) {
+  // Map the ports over, lowering their types as we go.
+  SmallVector<ModulePortInfo, 8> firrtlPorts;
+  oldModule.getPortInfo(firrtlPorts);
+  SmallVector<rtl::RTLModulePortInfo, 8> ports;
+  if (failed(lowerPorts(firrtlPorts, ports, oldModule)))
+    return;
 
-  // TODO: Splice the body over.
+  // Build the new rtl.module op.
+  OpBuilder builder(topLevelModule->getTerminator());
+  auto nameAttr = builder.getStringAttr(oldModule.getName());
+  (void)builder.create<rtl::RTLExternModuleOp>(oldModule.getLoc(), nameAttr,
+                                               ports);
+
+  // Finally remove the extmodule.
+  oldModule.getOperation()->erase();
+}
+
+/// Run on each firrtl.module, transforming it from an firrtl.module into an
+/// rtl.module, then deleting the old one.
+void FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
+                                       Block *topLevelModule) {
+  // Map the ports over, lowering their types as we go.
+  SmallVector<ModulePortInfo, 8> firrtlPorts;
+  oldModule.getPortInfo(firrtlPorts);
+  SmallVector<rtl::RTLModulePortInfo, 8> ports;
+  if (failed(lowerPorts(firrtlPorts, ports, oldModule)))
+    return;
+
+  // Build the new rtl.module op.
+  OpBuilder builder(topLevelModule->getTerminator());
+  auto nameAttr = builder.getStringAttr(oldModule.getName());
+  auto newModule =
+      builder.create<rtl::RTLModuleOp>(oldModule.getLoc(), nameAttr, ports);
+
+  OpBuilder bodyBuilder(newModule.body());
+
+  // Insert argument casts, and revector users in the old body to use them.
+  for (size_t i = 0, e = ports.size(); i != e; ++i) {
+    auto oldArg = oldModule.body().getArgument(i);
+    auto newArg = newModule.body().getArgument(i);
+
+    // Cast the argument to the old type, reintroducing sign information in the
+    // rtl.module body.
+    Value castedNewArg = bodyBuilder.create<StdIntCast>(
+        oldModule.getLoc(),
+        oldArg.getType().cast<FIRRTLType>().getPassiveType(), newArg);
+
+    if (oldArg.getType() != castedNewArg.getType())
+      castedNewArg = bodyBuilder.create<AsNonPassivePrimOp>(
+          oldModule.getLoc(), oldArg.getType(), castedNewArg);
+
+    // Switch all uses of the old operands to the new ones.
+    oldArg.replaceAllUsesWith(castedNewArg);
+  }
+
+  // Splice the body over, don't move the old terminator over though.
+  auto &oldBlockInstList = oldModule.getBodyBlock()->getOperations();
+  auto &newBlockInstList = newModule.getBodyBlock()->getOperations();
+  newBlockInstList.splice(std::prev(newBlockInstList.end()), oldBlockInstList,
+                          oldBlockInstList.begin(),
+                          std::prev(oldBlockInstList.end()));
 
   // TODO: Update instances.
 
   // Finally, remove the firrtl.module operation.
-  op.getOperation()->erase();
+  oldModule.getOperation()->erase();
 }
 
 //===----------------------------------------------------------------------===//
