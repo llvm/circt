@@ -49,7 +49,7 @@ struct FIRRTLModuleLowering
   void runOnOperation() override;
 
 private:
-  void lowerModule(FModuleOp op);
+  void lowerModule(FModuleOp oldModule, Block *topLevelModule);
 };
 } // end anonymous namespace
 
@@ -61,27 +61,46 @@ std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLToRTLModulePass() {
 /// Run on the firrtl.circuit operation, lowering any firrtl.module operations
 /// it contains.
 void FIRRTLModuleLowering::runOnOperation() {
+  // We run on the top level modules in the IR blob.  Start by finding the
+  // firrtl.circuit within it.  If there is none, then there is nothing to do.
+  auto *moduleBody = getOperation().getBody();
+
+  CircuitOp circuit;
+  for (auto &op : *moduleBody) {
+    if ((circuit = dyn_cast<CircuitOp>(&op)))
+      break;
+  }
+
+  if (!circuit)
+    return;
+
   // TODO: We should drop the CircuitOp as well.
-  auto *circuitBody = getOperation().getBody();
+  auto *circuitBody = circuit.getBody();
 
   // Iterate through each operation in the circuit body, transforming any
-  // FModule's we come across.  We maintain 'builder' for each invocation.
-  OpBuilder theBuilder(&getContext());
+  // FModule's we come across.
   for (auto opIt = circuitBody->getOperations().begin(),
             opEnd = circuitBody->getOperations().end();
        opIt != opEnd;) {
     // Step through the operations carefully to avoid invalidating the iterator.
     if (auto module = dyn_cast<FModuleOp>(*opIt++))
-      lowerModule(module);
+      lowerModule(module, moduleBody);
 
     // TODO: Lower extmodule.
   }
+
+  // Now that the modules are moved over, remove the Circuit.  We pop the 'main
+  // module' specified in the Circuit into an attribute on the top level module.
+  getOperation().setAttr("firrtl.mainModule",
+                         StringAttr::get(circuit.name(), circuit.getContext()));
+  circuit.erase();
 }
 
 /// Run on each module, transforming it from an firrtl.module into an
 /// rtl.module, then deleting the old one.
-void FIRRTLModuleLowering::lowerModule(FModuleOp oldModule) {
-  OpBuilder builder(oldModule);
+void FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
+                                       Block *topLevelModule) {
+  OpBuilder builder(topLevelModule->getTerminator());
 
   // Map the ports over, lowering their types as we go.
   SmallVector<ModulePortInfo, 8> firrtlPorts;

@@ -1,6 +1,9 @@
 // RUN: circt-opt -pass-pipeline='lower-firrtl-to-rtl-module' %s -verify-diagnostics  | FileCheck %s
 
-// CHECK-LABEL: firrtl.circuit "Simple"
+ // The firrtl.circuit should be removed, the main module name moved to an
+ // attribute on the module.
+ // CHECK-LABEL: {{^}}module attributes {firrtl.mainModule = "Simple"} {
+ // CHECK-NOT: firrtl.circuit 
  firrtl.circuit "Simple" {
 
    // CHECK-LABEL: rtl.module @Simple(
@@ -75,7 +78,6 @@
     firrtl.stop %clock2, %reset, 0
   }  // CHECK-NEXT: }
 
-  // CHECK-LABEL: firrtl.module @CantLowerArgument(%arg:
   // expected-error @+1 {{cannot lower this port type to RTL}}
   firrtl.module @CantLowerArgument(%arg: !firrtl.bundle<int_1: flip<uint<1>>, int_out: uint<2>>) {
   }   // CHECK-NEXT: }
