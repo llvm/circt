@@ -122,3 +122,72 @@ firrtl.circuit "Foo" {
     %a = firrtl.reginit %clk, %reset, %zero {name = "a"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.flip<uint<1>>
   }
 }
+
+// -----
+
+firrtl.circuit "Foo" {
+
+  // expected-error @+1 {{'firrtl.extmodule' op attribute 'defname' with value "Bar" conflicts with the name of another module in the circuit}}
+  firrtl.extmodule @Foo() attributes { defname = "Bar" }
+  // expected-note @+1 {{previous module declared here}}
+  firrtl.module @Bar() {}
+  // Allow an extmodule to conflict with its own symbol name
+  firrtl.extmodule @Baz() attributes { defname = "Baz" }
+
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+
+  // expected-note @+1 {{previous extmodule definition occurred here}}
+  firrtl.extmodule @Foo(%a : !firrtl.uint<1>) attributes { defname = "Foo" }
+  // expected-error @+1 {{'firrtl.extmodule' op with 'defname' attribute "Foo" has 0 ports which is different from a previously defined extmodule with the same 'defname' which has 1 ports}}
+  firrtl.extmodule @Bar() attributes { defname = "Foo" }
+
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+
+  // expected-note @+1 {{previous extmodule definition occurred here}}
+  firrtl.extmodule @Foo(%a : !firrtl.uint<1>) attributes { defname = "Foo" }
+  // expected-error @+1 {{'firrtl.extmodule' op with 'defname' attribute "Foo" has a port with name "b" which does not match the name of the port in the same position of a previously defined extmodule with the same 'defname', expected port to have name "a"}}
+  firrtl.extmodule @Foo_(%b : !firrtl.uint<1>) attributes { defname = "Foo" }
+
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+
+  firrtl.extmodule @Foo(%a : !firrtl.uint<2>) attributes { defname = "Foo", parameters = { width = 2 : i32 } }
+  // expected-note @+1 {{previous extmodule definition occurred here}}
+  firrtl.extmodule @Bar(%a : !firrtl.uint<1>) attributes { defname = "Foo" }
+  // expected-error @+1 {{'firrtl.extmodule' op with 'defname' attribute "Foo" has a port with name "a" which has a different type '!firrtl.uint<2>' which does not match the type of the port in the same position of a previously defined extmodule with the same 'defname', expected port to have type '!firrtl.uint<1>'}}
+  firrtl.extmodule @Baz(%a : !firrtl.uint<2>) attributes { defname = "Foo" }
+
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+
+  // expected-note @+1 {{previous extmodule definition occurred here}}
+  firrtl.extmodule @Foo(%a : !firrtl.uint<1>) attributes { defname = "Foo" }
+  // expected-error @+1 {{'firrtl.extmodule' op with 'defname' attribute "Foo" has a port with name "a" which has a different type '!firrtl.sint<1>' which does not match the type of the port in the same position of a previously defined extmodule with the same 'defname', expected port to have type '!firrtl.uint<1>'}}
+  firrtl.extmodule @Foo_(%a : !firrtl.sint<1>) attributes { defname = "Foo" }
+
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+
+  // expected-note @+1 {{previous extmodule definition occurred here}}
+  firrtl.extmodule @Foo(%a : !firrtl.uint<2>) attributes { defname = "Foo", parameters = { width = 2 : i32 } }
+  // expected-error @+1 {{'firrtl.extmodule' op with 'defname' attribute "Foo" has a port with name "a" which has a different type '!firrtl.sint' which does not match the type of the port in the same position of a previously defined extmodule with the same 'defname', expected port to have type '!firrtl.uint'}}
+  firrtl.extmodule @Bar(%a : !firrtl.sint<1>) attributes { defname = "Foo" }
+
+}
