@@ -16,6 +16,7 @@
 #include "mlir/Translation.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
@@ -295,6 +296,7 @@ public:
   void emitStatement(AttachOp op);
   void emitStatement(ConnectOp op);
   void emitStatement(rtl::ConnectOp op);
+  void emitStatement(rtl::OutputOp op);
   void emitStatement(rtl::RTLInstanceOp op);
   void emitStatement(PrintFOp op);
   void emitStatement(StopOp op);
@@ -312,25 +314,40 @@ public:
   void emitOperation(Operation *op);
 
   void collectNamesEmitDecls(Block &block);
-  void addName(Value value, StringRef name);
-  void addName(Value value, StringAttr nameAttr) {
-    addName(value, nameAttr ? nameAttr.getValue() : "");
+  // Use as key in 'nameTable'. This is an xor field either `Value` can be valid
+  // or `size_t`. If the former, it's any value in the module. If the former, we
+  // need to return the signal name for the result index specified by this
+  // number.
+  using ValueOrResult = std::tuple<Value, size_t>;
+  void addName(ValueOrResult value, StringRef name);
+  void addName(Value value, StringAttr name) {
+    addName(std::make_tuple(value, 0), name ? name.getValue() : "");
+  }
+  void addName(rtl::RTLModuleOp &mod, rtl::RTLModulePortInfo &port) {
+    if (port.direction == rtl::PortDirection::OUTPUT)
+      addName(std::make_tuple(Value(), port.argNum),
+              port.name ? port.name.getValue() : "");
+    else
+      addName(std::make_tuple(mod.getArgument(port.argNum), 0),
+              port.name ? port.name.getValue() : "");
   }
 
   StringRef getName(Value value) {
-    auto *entry = nameTable[value];
+    auto *entry = nameTable[std::make_tuple(value, 0)];
+    // auto *entry = nameTable[value];
     assert(entry && "value expected a name but doesn't have one");
     return entry->getKey();
   }
-
-  StringRef getPortName(const rtl::RTLModulePortInfo &port,
-                        rtl::RTLModuleOp &module,
-                        SmallVectorImpl<char> &nameBuffer) {
-    if (!port.name.getValue().empty())
-      return port.name.getValue();
-    if (port.direction != rtl::PortDirection::OUTPUT)
-      return getName(module.getArgument(port.argNum));
-    return ("result" + Twine(port.argNum)).toStringRef(nameBuffer);
+  StringRef getResultName(size_t resultIdx) {
+    // return "out";
+    auto *entry = nameTable[std::make_tuple(Value(), resultIdx)];
+    assert(entry && "result index expected a name but doesn't have one");
+    return entry->getKey();
+  }
+  StringRef getName(rtl::RTLModuleOp &mod, rtl::RTLModulePortInfo &port) {
+    if (port.direction == rtl::PortDirection::OUTPUT)
+      return getResultName(port.argNum);
+    return getName(mod.getArgument(port.argNum));
   }
 
   /// Return the location information as a (potentially empty) string.
@@ -434,7 +451,8 @@ public:
   std::vector<ConditionalStatement> conditionalStmts;
 
   llvm::StringSet<> usedNames;
-  llvm::DenseMap<Value, llvm::StringMapEntry<llvm::NoneType> *> nameTable;
+  llvm::DenseMap<ValueOrResult, llvm::StringMapEntry<llvm::NoneType> *>
+      nameTable;
   size_t nextGeneratedNameID = 0;
 
   /// This set keeps track of all of the expression nodes that need to be
@@ -452,7 +470,7 @@ public:
 
 /// Add the specified name to the name table, auto-uniquing the name if
 /// required.  If the name is empty, then this creates a unique temp name.
-void ModuleEmitter::addName(Value value, StringRef name) {
+void ModuleEmitter::addName(ValueOrResult value, StringRef name) {
   if (name.empty())
     name = "_T";
 
@@ -1403,6 +1421,18 @@ void ModuleEmitter::emitStatement(rtl::ConnectOp op) {
   emitLocationInfoAndNewLine(ops);
 }
 
+void ModuleEmitter::emitStatement(rtl::OutputOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  for (size_t i = 0, e = op.getNumOperands(); i < e; ++i) {
+    indent() << "assign " << getResultName(i) << " = ";
+    emitExpression(op.getOperand(i), ops);
+    os << ';';
+    emitLocationInfoAndNewLine(ops);
+  }
+}
+
 void ModuleEmitter::emitStatement(PrintFOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -2098,6 +2128,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitStmt(rtl::ConnectOp op) {
       return emitter.emitStatement(op), true;
     }
+    bool visitStmt(rtl::OutputOp op) { return emitter.emitStatement(op), true; }
     bool visitStmt(rtl::RTLInstanceOp op) {
       return emitter.emitStatement(op), true;
     }
@@ -2408,9 +2439,13 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
   SmallVector<rtl::RTLModulePortInfo, 8> portInfo;
   module.getRTLPortInfo(portInfo);
 
-  size_t nextPort = 0;
   for (auto &port : portInfo)
-    addName(module.getArgument(nextPort++), port.name);
+    addName(module, port);
+  //   if (port.direction == rtl::PortDirection::OUTPUT) {
+  //     addName(module.getRe)
+  //   } else
+  //     addName(module.getArgument(port.argNum), port.name);
+  // }
 
   os << "module " << module.getName() << '(';
   if (!portInfo.empty())
@@ -2451,8 +2486,7 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
     emitTypePaddedToWidth(portType, maxTypeWidth, module);
 
     // Emit the name.
-    SmallString<32> nameBuff;
-    os << getPortName(portInfo[portIdx], module, nameBuff);
+    os << getName(module, portInfo[portIdx]);
     ++portIdx;
 
     // If we have any more ports with the same types and the same direction,
@@ -2460,7 +2494,7 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
     while (portIdx != e && portInfo[portIdx].direction == thisPortDirection &&
            bitWidth == getBitWidthOrSentinel(portInfo[portIdx].type)) {
       // Don't exceed our preferred line length.
-      StringRef name = getPortName(portInfo[portIdx], module, nameBuff);
+      StringRef name = getName(module, portInfo[portIdx]);
       if (os.tell() + 2 + name.size() - startOfLinePos >
           // We use "-2" here because we need a trailing comma or ); for the
           // decl.
@@ -2501,19 +2535,6 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
       [](const ModuleEmitter::ConditionalStatement &condStmt)
           -> ModuleEmitter::ConditionalStmtKind { return condStmt.kind; });
   reduceIndent();
-
-  Operation *term = module.getBodyBlock()->getTerminator();
-  if (isa<rtl::OutputOp>(term)) {
-    OperandRange outputValues = term->getOperands();
-    auto modResult = module.getType().getResults();
-
-    // This should have been checked in the OutputOp verifier.
-    assert(outputValues.size() != modResult.size() &&
-           "Number of operands must match number of module results");
-    // for (size_t i = 0, e = outputValues.size(); i < e; ++i)
-    //   indent() << llvm::formatv("assign {0} = {1};", nameTable[modResult[i]],
-    //                             nameTable[outputValues[i]]);
-  }
 
   os << "endmodule\n\n";
 }

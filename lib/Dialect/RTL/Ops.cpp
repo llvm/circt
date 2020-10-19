@@ -115,7 +115,7 @@ void rtl::getRTLModulePortInfo(Operation *op,
 
   auto resultTypes = getModuleType(op).getResults();
   for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
-    auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
+    auto argAttrs = ::mlir::impl::getResultAttrs(op, i);
     results.push_back(
         {getRTLNameAttr(argAttrs), PortDirection::OUTPUT, resultTypes[i], i});
   }
@@ -140,10 +140,16 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
 
   // Parse the function signature.
   bool isVariadic = false;
+
   if (parseFunctionSignature(parser, /*allowVariadic=*/false, entryArgs,
                              argTypes, argAttrs, isVariadic, resultTypes,
                              resultAttrs))
     return failure();
+
+  // if (parseFunctionSignature(parser, /*allowVariadic=*/false, entryArgs,
+  //  argTypes, argAttrs, isVariadic, resultTypes,
+  //  resultAttrs))
+  // return failure();
 
   // Record the argument and result types as an attribute.  This is necessary
   // for external modules.
@@ -242,7 +248,7 @@ static void print(OpAsmPrinter &p, RTLModuleOp op) {
   Region &body = op.getBody();
   if (!body.empty())
     p.printRegion(body, /*printEntryBlockArgs=*/false,
-                  /*printBlockTerminators=*/false);
+                  /*printBlockTerminators=*/true);
 }
 
 static LogicalResult verifyRTLInstanceOp(RTLInstanceOp op) {

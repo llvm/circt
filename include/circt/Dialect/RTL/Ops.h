@@ -18,7 +18,14 @@
 namespace circt {
 namespace rtl {
 
-// This holds the name, type, direction of a module's ports
+/// A RTL module ports direction.
+enum PortDirection {
+  INPUT = 1,
+  OUTPUT = 2,
+  INOUT = 3,
+};
+
+/// This holds the name, type, direction of a module's ports
 struct RTLModulePortInfo {
   StringAttr name;
   PortDirection direction;
@@ -27,14 +34,11 @@ struct RTLModulePortInfo {
                  // the direction.
 };
 
-// typedef std::tuple<StringAttr, Type, StringAttr> RTLModulePortInfo;
-
 FunctionType getModuleType(Operation *op);
 
 void getRTLModulePortInfo(Operation *op,
                           SmallVectorImpl<RTLModulePortInfo> &results);
 StringAttr getRTLNameAttr(ArrayRef<NamedAttribute> attrs);
-// StringAttr getRTLDirectionAttr(ArrayRef<NamedAttribute> attrs);
 
 /// Return true if the specified operation is a combinatorial logic op.
 bool isCombinatorial(Operation *op);

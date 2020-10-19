@@ -1,14 +1,3 @@
-// Direction enum
-def INPUT_PORT  : I32EnumAttrCase<"INPUT", 1>;
-def OUTPUT_PORT : I32EnumAttrCase<"OUTPUT",  2>;
-def INOUT_PORT  : I32EnumAttrCase<"INOUT", 3>;
-def PortDirection : I32EnumAttr<"PortDirection",
-    "The direction of an RTL modules port.",
-    [INPUT_PORT, OUTPUT_PORT, INOUT_PORT]> {
-
-  let cppNamespace = "circt::rtl";
-}
-
 def RTLModuleOp : RTLOp<"module",
       [IsolatedFromAbove, FunctionLike, Symbol, RegionKindInterface,
        SingleBlockImplicitTerminator<"OutputOp">]> {

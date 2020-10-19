@@ -89,6 +89,8 @@ void FIRRTLModuleLowering::lowerModule(FModuleOp op) {
 
   SmallVector<rtl::RTLModulePortInfo, 8> ports;
   ports.reserve(firrtlPorts.size());
+  size_t numArgs = 0;
+  size_t numResults = 0;
   for (auto firrtlPort : firrtlPorts) {
     rtl::RTLModulePortInfo rtlPort;
 
@@ -109,12 +111,15 @@ void FIRRTLModuleLowering::lowerModule(FModuleOp op) {
       assert(firrtlType.cast<FlipType>().getElementType().isPassiveType() &&
              "Flip types should be completely passive internally");
       rtlPort.direction = rtl::PortDirection::OUTPUT;
+      rtlPort.argNum = numResults++;
     } else if (firrtlType.cast<FIRRTLType>().isPassiveType()) {
       rtlPort.direction = rtl::PortDirection::INPUT;
+      rtlPort.argNum = numArgs++;
     } else {
       // This isn't currently expressible in low-firrtl, due to bundle types
       // being lowered.
       rtlPort.direction = rtl::PortDirection::INOUT;
+      rtlPort.argNum = numArgs++;
     }
     ports.push_back(rtlPort);
   }
