@@ -274,13 +274,7 @@ static void printUnrollForOp(OpAsmPrinter &printer, UnrollForOp op) {
   printer << "hir.unroll_for"
           << " " << op.getInductionVar() << " = " << op.lb() << " to "
           << op.ub() << " step " << op.step() << " iter_time( "
-          << op.getIterTimeVar() << " = " << op.tstart();
-
-  // print optional tstep.
-
-  if (op.tstep().hasValue())
-    printer << " tstep " << op.tstep().getValue();
-  printer << " ) ";
+          << op.getIterTimeVar() << " = " << op.tstart() << " ) ";
 
   printer.printRegion(op.region(),
                       /*printEntryBlockArgs=*/false,
@@ -292,7 +286,6 @@ static ParseResult parseUnrollForOp(OpAsmParser &parser,
   auto &builder = parser.getBuilder();
   Type timeTypeVar = getTimeType(parser);
   Type tstartRawType = timeTypeVar;
-  Type tstepRawType = getConstIntType(parser, 32);
   Type regionRawOperandTypes[2];
   ArrayRef<Type> regionOperandTypes(regionRawOperandTypes);
   regionRawOperandTypes[0] = getConstIntType(parser, 32);
@@ -302,7 +295,6 @@ static ParseResult parseUnrollForOp(OpAsmParser &parser,
   IntegerAttr ubAttr;
   IntegerAttr stepAttr;
   OpAsmParser::OperandType tstartRawOperand;
-  OpAsmParser::OperandType tstepRawOperand;
   OpAsmParser::OperandType regionRawOperands[2];
 
   ArrayRef<OpAsmParser::OperandType> regionOperands(regionRawOperands);
@@ -324,12 +316,6 @@ static ParseResult parseUnrollForOp(OpAsmParser &parser,
       parser.parseRegionArgument(regionRawOperands[1]) || parser.parseEqual() ||
       parser.parseOperand(tstartRawOperand))
     return failure();
-
-  // Parse optional tstep.
-  if (!parser.parseOptionalKeyword("tstep")) {
-    if (parseIntegerAttr(stepAttr, 32, "tstep", parser, result))
-      return failure();
-  }
 
   // Parse the type of induction variable.
   if (parser.parseRParen())

@@ -22,18 +22,84 @@ static bool isIntegerType(Type type) {
   return false;
 }
 class VerilogValue {
+private:
+  SmallVector<unsigned, 4> distDims;
+  SmallVector<unsigned, 4> distDimPos;
+  struct {
+    SmallVector<int, 1> numReads;
+    SmallVector<int, 1> numWrites;
+  } usageInfo;
+  Type type;
+  string name;
+  Value value;
+
 public:
-  VerilogValue() : type(Type()), name("uninitialized") {}
-  VerilogValue(Type type, string name)
-      : initialized(true), type(type), name(name) {}
+  VerilogValue() : value(Value()), type(Type()), name("uninitialized") {}
+  VerilogValue(Value value, string name)
+      : initialized(true), value(value), type(value.getType()), name(name) {
+    string out;
+    auto size = 1;
+    if (type.isa<MemrefType>()) {
+      auto packing = type.dyn_cast<hir::MemrefType>().getPacking();
+      auto shape = type.dyn_cast<hir::MemrefType>().getShape();
+      for (int i = 0; i < shape.size(); i++) {
+        bool isDistDim = true;
+        for (auto p : packing) {
+          if (i == shape.size() - p - 1)
+            isDistDim = false;
+        }
+        if (isDistDim) {
+          distDims.push_back(shape[i]);
+          distDimPos.push_back(i);
+          size *= shape[i];
+        }
+      }
+    }
+    usageInfo.numReads.insert(usageInfo.numReads.begin(), size, 0);
+    usageInfo.numWrites.insert(usageInfo.numWrites.begin(), size, 0);
+  }
   ~VerilogValue() { initialized = false; }
   void reset() { initialized = false; }
   bool isInitialized() { return initialized; }
 
 public:
-  int numReads() { return usageInfo.numReads; }
-  int numWrites() { return usageInfo.numWrites; }
-  int numAccess() { return usageInfo.numReads + usageInfo.numWrites; }
+  int numReads(ArrayRef<VerilogValue *> addr) {
+    unsigned pos = posMemrefDistDimAccess(addr);
+    return usageInfo.numReads[pos];
+  }
+  int numWrites(ArrayRef<VerilogValue *> addr) {
+    unsigned pos = posMemrefDistDimAccess(addr);
+    return usageInfo.numWrites[pos];
+  }
+  unsigned numAccess(ArrayRef<VerilogValue *> addr) {
+    unsigned pos = posMemrefDistDimAccess(addr);
+    return usageInfo.numReads[pos] + usageInfo.numWrites[pos];
+  }
+  unsigned maxNumReads() {
+    unsigned out = 0;
+    for (int i = 0; i < usageInfo.numReads.size(); i++) {
+      unsigned nReads = usageInfo.numReads[i];
+      out = (out > nReads) ? out : nReads;
+    }
+    return out;
+  }
+  unsigned maxNumWrites() {
+    unsigned out = 0;
+    for (int i = 0; i < usageInfo.numReads.size(); i++) {
+      unsigned nWrites = usageInfo.numWrites[i];
+      out = (out > nWrites) ? out : nWrites;
+    }
+    return out;
+  }
+  unsigned maxNumAccess() {
+    unsigned out = 0;
+    for (int i = 0; i < usageInfo.numReads.size(); i++) {
+      unsigned nAccess = usageInfo.numReads[i] + usageInfo.numWrites[i];
+      out = (out > nAccess) ? out : nAccess;
+    }
+    return out;
+  }
+
   string strMemrefArgDecl();
   Type getType() { return type; }
 
@@ -140,7 +206,7 @@ private:
     string distDimAccessStr = "";
 
     // Define the valid and input wire arrays.
-    out = "wire $v_valid $distDimsStr [$numInputsMinus1:0];\n"
+    out = "wire $v_valid $distDimsStr [$numInputsMinus1:0] ;\n"
           "wire [$dataWidthMinus1:0] $v_input $distDimsStr "
           "[$numInputsMinus1:0];\n ";
 
@@ -191,7 +257,22 @@ private:
   string strMemrefAddrInput(unsigned idx) {
     return strMemrefAddrInput() + "[" + to_string(idx) + "]";
   }
+
+  unsigned posMemrefDistDimAccess(ArrayRef<VerilogValue *> addr) const {
+    assert(type.isa<hir::MemrefType>());
+    unsigned out = 0;
+    auto packing = type.dyn_cast<hir::MemrefType>().getPacking();
+    for (int i = 0; i < distDimPos.size(); i++) {
+      auto pos = distDimPos[i];
+      int v = addr[pos]->getIntegerConst();
+      out *= distDims[i];
+      out += v;
+    }
+    return out;
+  }
+
   string strMemrefDistDimAccess(ArrayRef<VerilogValue *> addr) const {
+    assert(type.isa<hir::MemrefType>());
     string out;
     auto packing = type.dyn_cast<hir::MemrefType>().getPacking();
     for (int i = 0; i < addr.size(); i++) {
@@ -217,11 +298,14 @@ public:
 
   bool isIntegerConst() const { return isConstValue && isIntegerType(); }
   int getIntegerConst() const {
-    assert(isIntegerConst());
+    if (!isIntegerConst()) {
+      emitError(value.getLoc(), "ERROR: Expected const.\n");
+      assert(false);
+    }
     return constValue.val_int;
   }
   string strMemrefSelDecl() {
-    if (numAccess() == 0)
+    if (maxNumAccess() == 0)
       return "//Unused memref " + strWire() + ".\n";
     stringstream output;
     auto str_addr = strMemrefAddr();
@@ -229,25 +313,25 @@ public:
     unsigned addrWidth = calcAddrWidth(type.dyn_cast<MemrefType>());
     if (addrWidth > 0) {
       output << buildDataSelectorStr(strMemrefAddr(), strMemrefAddrValid(),
-                                     strMemrefAddrInput(), numAccess(),
+                                     strMemrefAddrInput(), maxNumAccess(),
                                      addrWidth);
       output << "\n";
     }
     // print rd_en selector.
-    if (numReads() > 0) {
+    if (maxNumReads() > 0) {
       output << buildEnableSelectorStr(strMemrefRdEn(), strMemrefRdEnInput(),
-                                       numReads());
+                                       maxNumReads());
       output << "\n";
     }
 
     // print write bus selector.
-    if (numWrites() > 0) {
+    if (maxNumWrites() > 0) {
       unsigned dataWidth =
           ::getBitWidth(type.dyn_cast<MemrefType>().getElementType());
       output << buildEnableSelectorStr(strMemrefWrEn(), strMemrefWrEnInput(),
-                                       numWrites());
+                                       maxNumWrites());
       output << buildDataSelectorStr(strMemrefWrData(), strMemrefWrDataValid(),
-                                     strMemrefWrDataInput(), numWrites(),
+                                     strMemrefWrDataInput(), maxNumWrites(),
                                      dataWidth);
       output << "\n";
     }
@@ -363,8 +447,14 @@ public:
     string distDimAccessStr = strMemrefDistDimAccess(addr);
     return strMemrefWrEnInput() + distDimAccessStr + "[" + to_string(idx) + "]";
   }
-  void incNumReads() { usageInfo.numReads++; }
-  void incNumWrites() { usageInfo.numWrites++; }
+  void incMemrefNumReads(ArrayRef<VerilogValue *> addr) {
+    unsigned pos = posMemrefDistDimAccess(addr);
+    usageInfo.numReads[pos]++;
+  }
+  void incMemrefNumWrites(ArrayRef<VerilogValue *> addr) {
+    unsigned pos = posMemrefDistDimAccess(addr);
+    usageInfo.numWrites[pos]++;
+  }
 
   unsigned getMaxDelay() const { return maxDelay; }
 
@@ -376,12 +466,7 @@ private:
   union {
     int val_int;
   } constValue;
-  struct {
-    unsigned numReads = 0;
-    unsigned numWrites = 0;
-  } usageInfo;
-  Type type;
-  string name;
+
   unsigned maxDelay = 0;
 };
 

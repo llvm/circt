@@ -239,13 +239,13 @@ def UnrollForOp : HIR_Op<"unroll_for",
         This op implements a sequential for loop.
           Example:
           ```
-          mlir %tdone=hir.for %i = 0 to %N step 1 at iter_time(%ti = %t tstep 2)
+          mlir %tdone=hir.for %i = 0 to %N step 1 at iter_time(%ti = %t)
           {}
         ```
       }];
 
       let arguments = (ins I32Attr: $lb, I32Attr: $ub, I32Attr: $step, 
-          TimeType:$tstart, OptionalAttr<I32Attr>: $tstep);
+          TimeType:$tstart);
       let regions = (region SizedRegion<1>:$region);
       let results = (outs TimeType:$tlast);
 
