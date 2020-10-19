@@ -38,13 +38,14 @@ initial begin
   tstart <= 1'b0;
 end
 
-generate for(genvar i=0;i<16;i++) begin
+generate for(genvar k=0;k<16;k++) begin
   always@(posedge clk) begin
-    v0_rd_data[i] <=  {32'd0,v0_addr[i]+1};
+    //v0_rd_data[k] <=  {32'd0,v0_addr[k]+1};
+    v0_rd_data[k] <=  {32'd0,v0_addr[k]+k+1};
   end
   for(genvar j=0;j<16;j++) begin
     always@(posedge clk) begin
-      v1_rd_data[i][j]<=  v1_rd_en[i][j]?32'd1:32'd255;
+      v1_rd_data[k][j]<=  v1_rd_en[k][j]?(k+j):32'd255;
     end
   end
 end
