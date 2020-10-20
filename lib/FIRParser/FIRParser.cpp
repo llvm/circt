@@ -773,6 +773,7 @@ private:
   ParseResult parseStop();
   ParseResult parseAssert();
   ParseResult parseAssume();
+  ParseResult parseCover();
   ParseResult parseWhen(unsigned whenIndent);
   ParseResult parseLeadingExpStmt(Value lhs, SubOpVector &subOps);
 
@@ -1270,6 +1271,8 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
     return parseAssert();
   case FIRToken::lp_assume:
     return parseAssume();
+  case FIRToken::lp_cover:
+    return parseCover();
   case FIRToken::kw_when:
     return parseWhen(stmtIndent);
   default: {
@@ -1540,6 +1543,30 @@ ParseResult FIRStmtParser::parseAssume() {
   auto messageUnescaped = FIRToken::getStringValue(message);
   builder.create<AssumeOp>(info.getLoc(), clock, predicate, enable,
                            builder.getStringAttr(messageUnescaped));
+  return success();
+}
+
+/// cover ::= 'cover(' exp exp exp StringLit ')' info?
+ParseResult FIRStmtParser::parseCover() {
+  LocWithInfo info(getToken().getLoc(), this);
+  consumeToken(FIRToken::lp_cover);
+
+  SmallVector<Operation *, 8> subOps;
+
+  Value clock, predicate, enable;
+  StringRef message;
+  if (parseExp(clock, subOps, "expected clock expression in 'cover'") ||
+      parseExp(predicate, subOps, "expected predicate in 'cover'") ||
+      parseExp(enable, subOps, "expected enable in 'cover'") ||
+      parseGetSpelling(message) ||
+      parseToken(FIRToken::string, "expected message in 'cover'") ||
+      parseToken(FIRToken::r_paren, "expected ')' in 'cover'") ||
+      parseOptionalInfo(info, subOps))
+    return failure();
+
+  auto messageUnescaped = FIRToken::getStringValue(message);
+  builder.create<CoverOp>(info.getLoc(), clock, predicate, enable,
+                          builder.getStringAttr(messageUnescaped));
   return success();
 }
 

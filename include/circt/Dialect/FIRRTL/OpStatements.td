@@ -147,6 +147,17 @@ def AssumeOp : FIRRTLOp<"assume", []> {
   }];
 }
 
+def CoverOp : FIRRTLOp<"cover", []> {
+  let summary = "Cover Verification Statement";
+
+  let arguments = (ins ClockType:$clock, UInt1Type:$predicate, UInt1Type:$enable, StrAttr:$message);
+  let results = (outs);
+
+  let assemblyFormat = [{
+    $clock `,` $predicate `,` $enable `,` $message attr-dict
+  }];
+}
+
 def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">]> {
   let summary = "When Statement";
   let description = [{
