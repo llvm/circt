@@ -128,7 +128,8 @@ def StopOp : FIRRTLOp<"stop", []> {
 def AssertOp : FIRRTLOp<"assert", []> {
   let summary = "Assert Verification Statement";
 
-  let arguments = (ins ClockType:$clock, UInt1Type:$predicate, UInt1Type:$enable, StrAttr:$message);
+  let arguments = (ins ClockType:$clock, UInt1Type:$predicate, UInt1Type:$enable,
+    StrAttr:$message);
   let results = (outs);
 
   let assemblyFormat = [{
@@ -139,7 +140,8 @@ def AssertOp : FIRRTLOp<"assert", []> {
 def AssumeOp : FIRRTLOp<"assume", []> {
   let summary = "Assume Verification Statement";
 
-  let arguments = (ins ClockType:$clock, UInt1Type:$predicate, UInt1Type:$enable, StrAttr:$message);
+  let arguments = (ins ClockType:$clock, UInt1Type:$predicate, UInt1Type:$enable,
+    StrAttr:$message);
   let results = (outs);
 
   let assemblyFormat = [{
@@ -150,7 +152,8 @@ def AssumeOp : FIRRTLOp<"assume", []> {
 def CoverOp : FIRRTLOp<"cover", []> {
   let summary = "Cover Verification Statement";
 
-  let arguments = (ins ClockType:$clock, UInt1Type:$predicate, UInt1Type:$enable, StrAttr:$message);
+  let arguments = (ins ClockType:$clock, UInt1Type:$predicate, UInt1Type:$enable,
+    StrAttr:$message);
   let results = (outs);
 
   let assemblyFormat = [{
