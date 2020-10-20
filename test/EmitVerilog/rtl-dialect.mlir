@@ -122,8 +122,9 @@ firrtl.circuit "M1" {
   //CHECK-NEXT:   input  w, x,
   //CHECK-NEXT:   output y, z);
   //CHECK-EMPTY: 
-  //CHECK-NEXT:   wire w1;
   //CHECK-NEXT:   wire w2;
+  //CHECK-NEXT:   wire w1;
+  //CHECK-NEXT:   wire y_0;
   //CHECK-EMPTY: 
   //CHECK-NEXT: A a1 (
   //CHECK-NEXT:     .d (w),
@@ -133,8 +134,9 @@ firrtl.circuit "M1" {
   //CHECK-NEXT: B b1 (
   //CHECK-NEXT:     .a (w2),
   //CHECK-NEXT:     .b (w1),
-  //CHECK-NEXT:     .c (y)
+  //CHECK-NEXT:     .c (y_0)
   //CHECK-NEXT:   )
+  //CHECK-NEXT:   assign y = y_0;
   //CHECK-NEXT:   assign z = x;
   //CHECK-NEXT: endmodule
 

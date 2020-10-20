@@ -288,38 +288,9 @@ static LogicalResult verifyRTLInstanceOp(RTLInstanceOp op) {
   return success();
 }
 
-/// Verify that the num of operands and types fit the declared results.
-static LogicalResult verifyOutputOp(OutputOp *op) {
-  OperandRange outputValues = op->getOperands();
-  Operation *moduleOp = op->getParentWithTrait<OpTrait::FunctionLike>();
-
-  // Check that our region has results
-  if (!moduleOp) {
-    op->emitOpError("operation expected to be in FunctionLike region.");
-    return failure();
-  }
-
-  // Check that the we (rtl.output) have the same number of operands as our
-  // region has results.
-  FunctionType modType = getModuleType(moduleOp);
-  ArrayRef<Type> modResults = modType.getResults();
-  if (modResults.size() != outputValues.size()) {
-    op->emitOpError("must have same number of operands as region results.");
-    return failure();
-  }
-
-  // Check that the types of our operands and the region's results match.
-  for (size_t i = 0, e = modResults.size(); i < e; ++i) {
-    if (modResults[i] != outputValues[i].getType()) {
-      op->emitOpError(llvm::formatv("output types must match module. In "
-                                    "operand {0}, expected {1} but got {2}.",
-                                    i, modResults[i],
-                                    outputValues[i].getType()));
-      return failure();
-    }
-  }
-
-  return success();
+StringAttr RTLInstanceOp::getResultName(size_t idx) {
+  SmallString<16> attrName = llvm::formatv("rtl.rname{0}", idx);
+  return getAttrOfType<StringAttr>(attrName.str());
 }
 
 ParseResult parseResultNames(OpAsmParser &p, NamedAttrList &attrDict) {
@@ -355,7 +326,7 @@ void printResultNames(OpAsmPrinter &p, RTLInstanceOp *op) {
       llvm::raw_svector_ostream tmpStream(resultNameStr);
       p.printOperand(op->getResult(resultIdx), tmpStream);
       auto expectedName = it->second.dyn_cast<StringAttr>();
-      if (expectedName ||
+      if (expectedName &&
           tmpStream.str().drop_front() == expectedName.getValue()) {
         elideFields.push_back(attrName);
       }
@@ -375,6 +346,44 @@ void RTLInstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
                   it->second.dyn_cast<StringAttr>().getValue());
     }
   }
+}
+
+//===----------------------------------------------------------------------===//
+// RTLOutputOp
+//===----------------------------------------------------------------------===/
+
+/// Verify that the num of operands and types fit the declared results.
+static LogicalResult verifyOutputOp(OutputOp *op) {
+  OperandRange outputValues = op->getOperands();
+  Operation *moduleOp = op->getParentWithTrait<OpTrait::FunctionLike>();
+
+  // Check that our region has results
+  if (!moduleOp) {
+    op->emitOpError("operation expected to be in FunctionLike region.");
+    return failure();
+  }
+
+  // Check that the we (rtl.output) have the same number of operands as our
+  // region has results.
+  FunctionType modType = getModuleType(moduleOp);
+  ArrayRef<Type> modResults = modType.getResults();
+  if (modResults.size() != outputValues.size()) {
+    op->emitOpError("must have same number of operands as region results.");
+    return failure();
+  }
+
+  // Check that the types of our operands and the region's results match.
+  for (size_t i = 0, e = modResults.size(); i < e; ++i) {
+    if (modResults[i] != outputValues[i].getType()) {
+      op->emitOpError(llvm::formatv("output types must match module. In "
+                                    "operand {0}, expected {1} but got {2}.",
+                                    i, modResults[i],
+                                    outputValues[i].getType()));
+      return failure();
+    }
+  }
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

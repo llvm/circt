@@ -1673,6 +1673,7 @@ void ModuleEmitter::emitStatement(rtl::RTLInstanceOp op) {
   StringRef defName = op.moduleName();
 
   auto opArgs = op.inputs();
+  auto opResults = op.getResults();
 
   auto moduleIR = op.getParentOfType<firrtl::CircuitOp>();
   auto referencedModule =
@@ -1689,7 +1690,7 @@ void ModuleEmitter::emitStatement(rtl::RTLInstanceOp op) {
     rtl::RTLModulePortInfo &elt = portInfo[i];
     bool isLast = &elt == &portInfo.back();
     StringRef valueName = elt.direction == rtl::PortDirection::OUTPUT
-                              ? getResultName(elt.argNum)
+                              ? getName(opResults[elt.argNum])
                               : getName(opArgs[elt.argNum]);
     indent() << "  ." << StringRef(elt.name.getValue()) << " (" << valueName
              << (isLast ? ")\n" : "),\n");
@@ -1970,14 +1971,14 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
   };
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  SmallVector<Operation *, 16> declsToEmit;
+  SmallVector<OpResult, 16> declsToEmit;
 
   for (auto &op : block) {
     if (op.getNumResults() == 0)
       continue;
 
     for (size_t i = 0, e = op.getNumResults(); i < e; ++i) {
-      Value result = op.getResult(i);
+      OpResult result = op.getResult(i);
 
       // If this is an expression emitted inline or unused, it doesn't need a
       // name.
@@ -1993,21 +1994,22 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
       // Otherwise, it must be an expression or a declaration like a wire.
       StringAttr resultName;
-      // if (auto instOp = dyn_cast<rtl::RTLInstanceOp>(op))
-      // resultName = instOp.resultNames()[i].dyn_cast<StringAttr>();
-      // else
-      resultName = op.getAttrOfType<StringAttr>("name");
+      if (auto instOp = dyn_cast<rtl::RTLInstanceOp>(op))
+        resultName = instOp.getResultName(i);
+      else
+        resultName = op.getAttrOfType<StringAttr>("name");
       addName(result, resultName);
 
-      // If we are emitting inline wire decls, don't measure or emit this wire.
+      // If we are emitting inline wire decls, don't measure or emit this
+      // wire.
       if (isExpr && emitInlineWireDecls)
         continue;
 
       // FIXME(verilog dialect): This can cause name collisions, because the
       // base name may be unique but the suffixed names may not be.  The right
-      // way to solve this is to change the instances and mems in a new Verilog
-      // dialect to use multiple return values, exposing the independent
-      // Value's.
+      // way to solve this is to change the instances and mems in a new
+      // Verilog dialect to use multiple return values, exposing the
+      // independent Value's.
 
       // Determine what kind of thing this is, and how much space it needs.
       maxDeclNameWidth =
@@ -2027,7 +2029,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
         if (bitWidth == -1) {
           emitError(&op, getName(result))
               << elt.suffix << " has an unsupported verilog type " << elt.type;
-          result = Value();
+          result = OpResult();
           break;
         }
 
@@ -2040,29 +2042,30 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
       // Emit this declaration.
       if (result)
-        declsToEmit.push_back(&op);
+        declsToEmit.push_back(result);
     }
   }
 
   SmallPtrSet<Operation *, 8> ops;
 
   // Okay, now that we have measured the things to emit, emit the things.
-  for (auto *decl : declsToEmit) {
+  for (auto result : declsToEmit) {
     ops.clear();
-    ops.insert(decl);
+    ops.insert(result.getDefiningOp());
 
-    auto word = getVerilogDeclWord(decl);
+    Operation *op = result.getDefiningOp();
+    auto word = getVerilogDeclWord(op);
 
     // Flatten the type for processing of each individual element.
     fieldTypes.clear();
-    flattenBundleTypes(decl->getResult(0).getType(), "", false, fieldTypes);
+    flattenBundleTypes(result.getType(), "", false, fieldTypes);
 
     bool isFirst = true;
     for (const auto &elt : fieldTypes) {
       indent() << word;
       os.indent(maxDeclNameWidth - word.size() + 1);
-      emitTypePaddedToWidth(elt.type, maxTypeWidth, decl);
-      os << getName(decl->getResult(0)) << elt.suffix << ';';
+      emitTypePaddedToWidth(elt.type, maxTypeWidth, op);
+      os << getName(result) << elt.suffix << ';';
 
       if (isFirst)
         emitLocationInfoAndNewLine(ops);
@@ -2072,7 +2075,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
     // Handle the reg declaration for a memory specially because we need to
     // handle aggregate types and depths.
-    if (auto memOp = dyn_cast<MemOp>(decl)) {
+    if (auto memOp = dyn_cast<MemOp>(op)) {
       fieldTypes.clear();
       if (auto dataType = memOp.getDataTypeOrNull())
         flattenBundleTypes(dataType, "", false, fieldTypes);
@@ -2081,8 +2084,8 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       for (const auto &elt : fieldTypes) {
         indent() << "reg";
         os.indent(maxDeclNameWidth - 3 + 1);
-        emitTypePaddedToWidth(elt.type, maxTypeWidth, decl);
-        os << getName(decl->getResult(0)) << elt.suffix;
+        emitTypePaddedToWidth(elt.type, maxTypeWidth, op);
+        os << getName(result) << elt.suffix;
         os << '[' << (depth - 1) << ":0];\n";
       }
     }

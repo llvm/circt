@@ -120,6 +120,10 @@ def RTLInstanceOp : RTLOp<"instance",
                        FlatSymbolRefAttr:$moduleName,
                        Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>);
+
+  let extraClassDeclaration = [{   
+    StringAttr getResultName(size_t i);
+  }];
   
   let assemblyFormat = [{
     $instanceName $moduleName `(` $inputs `)` custom<ResultNames>( attr-dict ) `:` functional-type($inputs, results)
