@@ -1028,7 +1028,7 @@ FIRRTLType TailPrimOp::getResultType(FIRRTLType input, int32_t amount) {
     width -= amount;
   }
 
-  return IntType::get(input.getContext(), inputi.isSigned(), width);
+  return IntType::get(input.getContext(), false, width);
 }
 
 //===----------------------------------------------------------------------===//
