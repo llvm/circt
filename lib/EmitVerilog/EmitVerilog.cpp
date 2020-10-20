@@ -11,6 +11,7 @@
 #include "circt/Dialect/SV/Ops.h"
 #include "circt/Dialect/SV/Visitors.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/Module.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Translation.h"
@@ -333,14 +334,18 @@ public:
               port.name ? port.name.getValue() : "");
   }
 
+  Optional<StringRef> getNameOptional(Value value) {
+    auto *entry = nameTable[std::make_tuple(value, 0)];
+    if (entry)
+      return entry->getKey();
+    return Optional<StringRef>();
+  }
   StringRef getName(Value value) {
     auto *entry = nameTable[std::make_tuple(value, 0)];
-    // auto *entry = nameTable[value];
     assert(entry && "value expected a name but doesn't have one");
     return entry->getKey();
   }
   StringRef getResultName(size_t resultIdx) {
-    // return "out";
     auto *entry = nameTable[std::make_tuple(Value(), resultIdx)];
     assert(entry && "result index expected a name but doesn't have one");
     return entry->getKey();
@@ -1987,7 +1992,12 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       }
 
       // Otherwise, it must be an expression or a declaration like a wire.
-      addName(result, op.getAttrOfType<StringAttr>("name"));
+      StringAttr resultName;
+      // if (auto instOp = dyn_cast<rtl::RTLInstanceOp>(op))
+      // resultName = instOp.resultNames()[i].dyn_cast<StringAttr>();
+      // else
+      resultName = op.getAttrOfType<StringAttr>("name");
+      addName(result, resultName);
 
       // If we are emitting inline wire decls, don't measure or emit this wire.
       if (isExpr && emitInlineWireDecls)

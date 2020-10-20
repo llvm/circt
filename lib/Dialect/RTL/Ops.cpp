@@ -17,6 +17,10 @@
 using namespace circt;
 using namespace rtl;
 
+//===----------------------------------------------------------------------===//
+// RTLModuleOp
+//===----------------------------------------------------------------------===/
+
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<RTLModulePortInfo> ports) {
   using namespace mlir::impl;
@@ -257,6 +261,10 @@ static void print(OpAsmPrinter &p, RTLModuleOp op) {
                   /*printBlockTerminators=*/true);
 }
 
+//===----------------------------------------------------------------------===//
+// RTLInstanceOp
+//===----------------------------------------------------------------------===/
+
 static LogicalResult verifyRTLInstanceOp(RTLInstanceOp op) {
   auto moduleIR = op.getParentWithTrait<OpTrait::SymbolTable>();
   if (moduleIR == nullptr) {
@@ -303,15 +311,75 @@ static LogicalResult verifyOutputOp(OutputOp *op) {
   // Check that the types of our operands and the region's results match.
   for (size_t i = 0, e = modResults.size(); i < e; ++i) {
     if (modResults[i] != outputValues[i].getType()) {
-      op->emitOpError(llvm::formatv(
-          "output types must match. In operand {0}, expected {1} but got {2}.",
-          i, modResults[i], outputValues[i].getType()));
+      op->emitOpError(llvm::formatv("output types must match module. In "
+                                    "operand {0}, expected {1} but got {2}.",
+                                    i, modResults[i],
+                                    outputValues[i].getType()));
       return failure();
     }
   }
 
   return success();
 }
+
+ParseResult parseResultNames(OpAsmParser &p, NamedAttrList &attrDict) {
+  MLIRContext *ctxt = p.getBuilder().getContext();
+  if (p.parseOptionalAttrDict(attrDict))
+    return failure();
+
+  for (size_t i = 0, e = p.getNumResults(); i < e; ++i) {
+    SmallString<16> id = llvm::formatv("rtl.rname{0}", i);
+    Identifier resultNameKey = Identifier::get(id, ctxt);
+    if (attrDict.getNamed(resultNameKey))
+      continue;
+
+    StringAttr resultName = StringAttr::get(p.getResultName(i).first, ctxt);
+    attrDict.push_back(NamedAttribute(resultNameKey, resultName));
+  }
+  return success();
+}
+
+void printResultNames(OpAsmPrinter &p, RTLInstanceOp *op) {
+  SmallVector<StringRef, 8> elideFields = {"instanceName", "moduleName"};
+
+  NamedAttrList attrs = op->getAttrs();
+  for (auto it = attrs.begin(), e = attrs.end(); it < e; ++it) {
+    StringRef attrName = it->first.strref();
+    if (attrName.startswith("rtl.rname")) {
+      auto numberStr = attrName.substr(9);
+      size_t resultIdx;
+      if (numberStr.getAsInteger<size_t>(10, resultIdx))
+        continue;
+
+      SmallString<32> resultNameStr;
+      llvm::raw_svector_ostream tmpStream(resultNameStr);
+      p.printOperand(op->getResult(resultIdx), tmpStream);
+      auto expectedName = it->second.dyn_cast<StringAttr>();
+      if (expectedName ||
+          tmpStream.str().drop_front() == expectedName.getValue()) {
+        elideFields.push_back(attrName);
+      }
+    }
+  }
+  p.printOptionalAttrDict(op->getAttrs(), elideFields);
+}
+
+void RTLInstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  NamedAttrList attrs = getAttrs();
+  for (auto it = attrs.begin(), e = attrs.end(); it < e; ++it) {
+    if (it->first.strref().startswith("rtl.rname")) {
+      auto numberStr = it->first.strref().substr(9);
+      size_t resultIdx;
+      if (!numberStr.getAsInteger<size_t>(10, resultIdx))
+        setNameFn(getResult(resultIdx),
+                  it->second.dyn_cast<StringAttr>().getValue());
+    }
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// RTL combinational ops
+//===----------------------------------------------------------------------===/
 
 /// Return true if the specified operation is a combinatorial logic op.
 bool rtl::isCombinatorial(Operation *op) {

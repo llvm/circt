@@ -108,7 +108,8 @@ def RTLExternModuleOp : RTLOp<"externmodule",
 }
 
 
-def RTLInstanceOp : RTLOp<"instance", []> {
+def RTLInstanceOp : RTLOp<"instance",
+                          [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let summary = "Create an instance of a module";
   let description = [{
     This represents an instance of a module. The inputs and results are 
@@ -121,7 +122,7 @@ def RTLInstanceOp : RTLOp<"instance", []> {
   let results = (outs Variadic<AnyType>);
   
   let assemblyFormat = [{
-     $instanceName $moduleName `(` $inputs `)` attr-dict `:` functional-type($inputs, results)
+    $instanceName $moduleName `(` $inputs `)` custom<ResultNames>( attr-dict ) `:` functional-type($inputs, results)
   }];
 
   let verifier = [{ return ::verifyRTLInstanceOp(*this); }];
