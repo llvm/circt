@@ -22,6 +22,8 @@ def UInt1Type : Type<CPred<"$_self.isa<UIntType>() && "
                            "UInt<1>">,
                 BuildableType<"UIntType::get($_builder.getContext(), 1)">;
 
+def AsyncResetType : Type<CPred<"$_self.isa<AsyncResetType>()">, "AsyncReset">;
+
 def ResetType : Type<CPred<"$_self.isa<FIRRTLType>() && "
                            "$_self.cast<FIRRTLType>().isResetType()">,
                     "Reset, AsyncReset, or UInt<1>">;
