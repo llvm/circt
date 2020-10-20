@@ -772,6 +772,7 @@ private:
   ParseResult parseSkip();
   ParseResult parseStop();
   ParseResult parseAssert();
+  ParseResult parseAssume();
   ParseResult parseWhen(unsigned whenIndent);
   ParseResult parseLeadingExpStmt(Value lhs, SubOpVector &subOps);
 
@@ -1267,6 +1268,8 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
     return parseStop();
   case FIRToken::lp_assert:
     return parseAssert();
+  case FIRToken::lp_assume:
+    return parseAssume();
   case FIRToken::kw_when:
     return parseWhen(stmtIndent);
   default: {
@@ -1512,6 +1515,30 @@ ParseResult FIRStmtParser::parseAssert() {
 
   auto messageUnescaped = FIRToken::getStringValue(message);
   builder.create<AssertOp>(info.getLoc(), clock, predicate, enable,
+                           builder.getStringAttr(messageUnescaped));
+  return success();
+}
+
+/// assume ::= 'assume(' exp exp exp StringLit ')' info?
+ParseResult FIRStmtParser::parseAssume() {
+  LocWithInfo info(getToken().getLoc(), this);
+  consumeToken(FIRToken::lp_assume);
+
+  SmallVector<Operation *, 8> subOps;
+
+  Value clock, predicate, enable;
+  StringRef message;
+  if (parseExp(clock, subOps, "expected clock expression in 'assume'") ||
+      parseExp(predicate, subOps, "expected predicate in 'assume'") ||
+      parseExp(enable, subOps, "expected enable in 'assume'") ||
+      parseGetSpelling(message) ||
+      parseToken(FIRToken::string, "expected message in 'assume'") ||
+      parseToken(FIRToken::r_paren, "expected ')' in 'assume'") ||
+      parseOptionalInfo(info, subOps))
+    return failure();
+
+  auto messageUnescaped = FIRToken::getStringValue(message);
+  builder.create<AssumeOp>(info.getLoc(), clock, predicate, enable,
                            builder.getStringAttr(messageUnescaped));
   return success();
 }

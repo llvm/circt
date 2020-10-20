@@ -291,6 +291,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     en <= not(reset)
     ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid"
     assert(clock, pred, en, "X equals Y when Z is valid")
+    ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid"
+    assume(clock, pred, en, "X equals Y when Z is valid")
 
   ; CHECK-LABEL: firrtl.module @type_handling(
   module type_handling :

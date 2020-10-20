@@ -115,6 +115,7 @@ TOK_KEYWORD(write)
 TOK_LPKEYWORD(printf)
 TOK_LPKEYWORD(stop)
 TOK_LPKEYWORD(assert)
+TOK_LPKEYWORD(assume)
 
 // These are for LPKEYWORD cases that correspond to a primitive operation.
 TOK_LPKEYWORD_PRIM(add, AddPrimOp)
