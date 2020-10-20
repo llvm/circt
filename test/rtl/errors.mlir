@@ -41,12 +41,12 @@ func @notModule () {}
 
 rtl.module @A(%arg0: i1) {
   // expected-error @+1 {{Symbol resolved to 'func', not a RTL[Ext]ModuleOp}}
-  rtl.instance "foo" @notModule(%arg0) : i1
+  rtl.instance "foo" @notModule(%arg0) : (i1) -> ()
 }
 
 // -----
 
 rtl.module @A(%arg0: i1) {
   // expected-error @+1 {{Cannot find module definition 'doesNotExist'}}
-  rtl.instance "b1" @doesNotExist(%arg0) : i1
+  rtl.instance "b1" @doesNotExist(%arg0) : (i1) -> ()
 }
