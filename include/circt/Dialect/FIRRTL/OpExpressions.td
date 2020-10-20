@@ -366,7 +366,7 @@ def ShrPrimOp : ShiftPrimOp<"shr">;
 
 def TailPrimOp : PrimOp<"tail"> {
   let arguments = (ins IntType:$input, I32Attr:$amount);
-  let results = (outs UIntType:$result);
+  let results = (outs IntType:$result);
   
   let assemblyFormat = [{
     $input `,` $amount attr-dict `:` functional-type($input, $result)
