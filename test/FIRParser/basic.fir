@@ -50,6 +50,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module types :
     input c: Clock         ; CHECK: %c: !firrtl.clock,
     input r: Reset         ; CHECK: %r: !firrtl.reset,
+    input ar: AsyncReset   ; CHECK: %ar: !firrtl.asyncreset,
     input a: Analog        ; CHECK: %a: !firrtl.analog,
     input a8: Analog<8>    ; CHECK: %a8: !firrtl.analog<8>,
     input s: SInt          ; CHECK: %s: !firrtl.sint,

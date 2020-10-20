@@ -518,6 +518,7 @@ ParseResult FIRParser::parseFieldId(StringRef &result, const Twine &message) {
 
 /// type ::= 'Clock'
 ///      ::= 'Reset'
+///      ::= 'AsyncReset'
 ///      ::= 'UInt' optional-width
 ///      ::= 'SInt' optional-width
 ///      ::= 'Analog' optional-width
@@ -526,7 +527,6 @@ ParseResult FIRParser::parseFieldId(StringRef &result, const Twine &message) {
 ///
 /// field: 'flip'? fieldId ':' type
 ///
-// FIXME: 'AsyncReset' is also handled by the parser but is not in the spec.
 ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
   switch (getToken().getKind()) {
   default:
@@ -540,6 +540,11 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
   case FIRToken::kw_Reset:
     consumeToken(FIRToken::kw_Reset);
     result = ResetType::get(getContext());
+    break;
+
+  case FIRToken::kw_AsyncReset:
+    consumeToken(FIRToken::kw_AsyncReset);
+    result = AsyncResetType::get(getContext());
     break;
 
   case FIRToken::kw_UInt:
