@@ -657,16 +657,33 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
-      // add(..., x, x) -> add(..., mul(x, 2))
+      // add(..., x, x) -> add(..., shl(x, 1))
       if (inputs[size - 1] == inputs[size - 2]) {
-        SmallVector<Value, 2> mulInputs;
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
 
-        auto two = rewriter.create<ConstantOp>(
-            op.getLoc(), 2, op.getType().cast<IntegerType>());
-        mulInputs.push_back(inputs.back());
-        mulInputs.push_back(two);
+        auto one = rewriter.create<ConstantOp>(
+            op.getLoc(), 1, op.getType().cast<IntegerType>());
+        auto shiftLeftOp =
+            rewriter.create<rtl::ShlOp>(op.getLoc(), inputs.back(), one);
 
-        auto mulOp = rewriter.create<rtl::MulOp>(op.getLoc(), mulInputs);
+        newOperands.push_back(shiftLeftOp);
+        rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
+      auto shlOp = inputs[size - 1].getDefiningOp<rtl::ShlOp>();
+      APInt shift;
+
+      // add(..., x, shl(x, c)) -> add(..., mul(x, (1 << c) + 1))
+      if (shlOp && shlOp.lhs() == inputs[size - 2] &&
+          matchPattern(shlOp.rhs(), m_RConstant(shift))) {
+
+        APInt one(/*numBits=*/shift.getBitWidth(), 1, /*isSigned=*/false);
+        auto rhs =
+            rewriter.create<ConstantOp>(op.getLoc(), (one << shift) + one);
+
+        Value factors[2] = {shlOp.lhs(), rhs};
+        auto mulOp = rewriter.create<rtl::MulOp>(op.getLoc(), factors);
 
         SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
         newOperands.push_back(mulOp);
@@ -682,19 +699,13 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
           mulOp.inputs()[0] == inputs[size - 2] &&
           matchPattern(mulOp.inputs()[1], m_RConstant(multiplier))) {
 
-        SmallVector<Value, 2> mulInputs(mulOp.inputs().drop_back());
+        APInt one(/*numBits=*/multiplier.getBitWidth(), 1, /*isSigned=*/false);
 
-        auto numBits =
-            mulOp.getOperand(1).getType().cast<IntegerType>().getWidth();
-        APInt one(numBits, 1, /*isSigned=*/false);
-
-        auto rhs = rewriter.create<ConstantOp>(
-            op.getLoc(), (multiplier + one).getLimitedValue(),
-            op.getType().cast<IntegerType>());
-        mulInputs.push_back(rhs);
+        auto rhs = rewriter.create<ConstantOp>(op.getLoc(), multiplier + one);
+        std::array<Value, 2> factors = {mulOp.inputs()[0], rhs};
+        auto newMulOp = rewriter.create<rtl::MulOp>(op.getLoc(), factors);
 
         SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
-        auto newMulOp = rewriter.create<rtl::MulOp>(op.getLoc(), mulInputs);
         newOperands.push_back(newMulOp);
         rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(), newOperands);
         return success();
@@ -738,7 +749,7 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
       APInt value, value2;
 
-      // mul(x, c) -> mul(shl(x, n)), where c is a power of two, & n = log2(c)
+      // mul(x, c) -> mul( shl(x, log2(c)) ), where c is a power of two
       if (size == 2 && matchPattern(inputs.back(), m_RConstant(value)) &&
           value.isPowerOf2()) {
         auto shift =
@@ -746,8 +757,7 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                         op.getType().cast<IntegerType>());
         auto shlOp = rewriter.create<rtl::ShlOp>(op.getLoc(), inputs[0], shift);
 
-        SmallVector<Value, 1> newOperands;
-        newOperands.push_back(shlOp);
+        std::array<Value, 1> newOperands = {shlOp};
         rewriter.replaceOpWithNewOp<MulOp>(op, op.getType(), newOperands);
         return success();
       }
