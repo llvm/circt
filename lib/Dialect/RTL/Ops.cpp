@@ -734,11 +734,58 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
+      // add(..., x, x) -> add(..., shl(x, 1))
+      if (inputs[size - 1] == inputs[size - 2]) {
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+
+        auto one = rewriter.create<ConstantOp>(
+            op.getLoc(), 1, op.getType().cast<IntegerType>());
+        auto shiftLeftOp =
+            rewriter.create<rtl::ShlOp>(op.getLoc(), inputs.back(), one);
+
+        newOperands.push_back(shiftLeftOp);
+        rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
+      auto shlOp = inputs[size - 1].getDefiningOp<rtl::ShlOp>();
+      // add(..., x, shl(x, c)) -> add(..., mul(x, (1 << c) + 1))
+      if (shlOp && shlOp.lhs() == inputs[size - 2] &&
+          matchPattern(shlOp.rhs(), m_RConstant(value))) {
+
+        APInt one(/*numBits=*/value.getBitWidth(), 1, /*isSigned=*/false);
+        auto rhs =
+            rewriter.create<ConstantOp>(op.getLoc(), (one << value) + one);
+
+        std::array<Value, 2> factors = {shlOp.lhs(), rhs};
+        auto mulOp = rewriter.create<rtl::MulOp>(op.getLoc(), factors);
+
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+        newOperands.push_back(mulOp);
+        rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
+      auto mulOp = inputs[size - 1].getDefiningOp<rtl::MulOp>();
+      // add(..., x, mul(x, c)) -> add(..., mul(x, c + 1))
+      if (mulOp && mulOp.inputs().size() == 2 &&
+          mulOp.inputs()[0] == inputs[size - 2] &&
+          matchPattern(mulOp.inputs()[1], m_RConstant(value))) {
+
+        APInt one(/*numBits=*/value.getBitWidth(), 1, /*isSigned=*/false);
+        auto rhs = rewriter.create<ConstantOp>(op.getLoc(), value + one);
+        std::array<Value, 2> factors = {mulOp.inputs()[0], rhs};
+        auto newMulOp = rewriter.create<rtl::MulOp>(op.getLoc(), factors);
+
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+        newOperands.push_back(newMulOp);
+        rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
       // add(x, add(...)) -> add(x, ...) -- flatten
       if (tryFlatteningOperands(op, rewriter))
         return success();
-
-      /// TODO: add(..., x, x) -> add(..., shl(x, 1))
 
       return failure();
     }
@@ -773,6 +820,19 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       assert(size > 1 && "expected 2 or more operands");
 
       APInt value, value2;
+
+      // mul(x, c) -> shl(x, log2(c)), where c is a power of two.
+      if (size == 2 && matchPattern(inputs.back(), m_RConstant(value)) &&
+          value.isPowerOf2()) {
+        auto shift =
+            rewriter.create<ConstantOp>(op.getLoc(), value.exactLogBase2(),
+                                        op.getType().cast<IntegerType>());
+        auto shlOp = rewriter.create<rtl::ShlOp>(op.getLoc(), inputs[0], shift);
+
+        rewriter.replaceOpWithNewOp<MulOp>(op, op.getType(),
+                                           ArrayRef<Value>(shlOp));
+        return success();
+      }
 
       // mul(..., 1) -> mul(...) -- identity
       if (matchPattern(inputs.back(), m_RConstant(value)) && (value == 1u)) {
