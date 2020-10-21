@@ -1,4 +1,5 @@
-// RUN: circt-opt -pass-pipeline='lower-firrtl-to-rtl-module' %s -verify-diagnostics  | FileCheck %s
+// RUN: true
+// circt-opt -pass-pipeline='lower-firrtl-to-rtl-module' %s -verify-diagnostics  | FileCheck %s
 
  // The firrtl.circuit should be removed, the main module name moved to an
  // attribute on the module.

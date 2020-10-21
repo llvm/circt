@@ -285,6 +285,17 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.attach(%a8, %a8, %a8) :
     attach (a8, a8, a8)
 
+    wire pred: UInt <1>
+    wire en: UInt <1>
+    pred <= eq(i8, i8)
+    en <= not(reset)
+    ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid"
+    assert(clock, pred, en, "X equals Y when Z is valid")
+    ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid"
+    assume(clock, pred, en, "X equals Y when Z is valid")
+    ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid"
+    cover(clock, pred, en, "X equals Y when Z is valid")
+
   ; CHECK-LABEL: firrtl.module @type_handling(
   module type_handling :
     wire _t_6 : { flip b : { bits : { source : UInt<7> } } }

@@ -250,12 +250,12 @@ jobs:
             echo "================"
             cat clang-format.patch
             echo "================"
-          end
+          fi
           if [ ! -z clang-tidy.patch ]; then
             echo "Clang-tidy patch"
             echo "================"
             cat clang-tidy.patch
             echo "================"
-          end
+          fi
 
     # --- end of build-circt job.

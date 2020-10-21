@@ -1,18 +1,23 @@
-name: "Assign reviewers"
+name: "Request review from code owner"
 on:
-  pull_request:
+  pull_request_target:
     branches: [ master ]
 
 jobs:
   # Automatically request reviews from the code owner identified in a set of
   # JSON files in codeowners/.
-  assign_reviewer:
-    name: Assign reviews
+  request_reviewer:
+    name: "Request review from code owner"
     runs-on: ubuntu-latest
     steps:
+      - name: Get CIRCT
+        uses: actions/checkout@v2
+        with:
+          submodules: 'false'
       - name: apply-herald-rules
         id: herald
-        uses: gagoar/use-herald-action@v2.2.0
+        uses: gagoar/use-herald-action@master
+        continue-on-error: true
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           rulesLocation: codeowners/*.json
