@@ -672,15 +672,13 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       }
 
       auto shlOp = inputs[size - 1].getDefiningOp<rtl::ShlOp>();
-      APInt shift;
-
       // add(..., x, shl(x, c)) -> add(..., mul(x, (1 << c) + 1))
       if (shlOp && shlOp.lhs() == inputs[size - 2] &&
-          matchPattern(shlOp.rhs(), m_RConstant(shift))) {
+          matchPattern(shlOp.rhs(), m_RConstant(value))) {
 
-        APInt one(/*numBits=*/shift.getBitWidth(), 1, /*isSigned=*/false);
+        APInt one(/*numBits=*/value.getBitWidth(), 1, /*isSigned=*/false);
         auto rhs =
-            rewriter.create<ConstantOp>(op.getLoc(), (one << shift) + one);
+            rewriter.create<ConstantOp>(op.getLoc(), (one << value) + one);
 
         std::array<Value, 2> factors = {shlOp.lhs(), rhs};
         auto mulOp = rewriter.create<rtl::MulOp>(op.getLoc(), factors);
@@ -692,16 +690,13 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       }
 
       auto mulOp = inputs[size - 1].getDefiningOp<rtl::MulOp>();
-      APInt multiplier;
-
       // add(..., x, mul(x, c)) -> add(..., mul(x, c + 1))
       if (mulOp && mulOp.inputs().size() == 2 &&
           mulOp.inputs()[0] == inputs[size - 2] &&
-          matchPattern(mulOp.inputs()[1], m_RConstant(multiplier))) {
+          matchPattern(mulOp.inputs()[1], m_RConstant(value))) {
 
-        APInt one(/*numBits=*/multiplier.getBitWidth(), 1, /*isSigned=*/false);
-
-        auto rhs = rewriter.create<ConstantOp>(op.getLoc(), multiplier + one);
+        APInt one(/*numBits=*/value.getBitWidth(), 1, /*isSigned=*/false);
+        auto rhs = rewriter.create<ConstantOp>(op.getLoc(), value + one);
         std::array<Value, 2> factors = {mulOp.inputs()[0], rhs};
         auto newMulOp = rewriter.create<rtl::MulOp>(op.getLoc(), factors);
 
@@ -749,7 +744,7 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
       APInt value, value2;
 
-      // mul(x, c) -> mul( shl(x, log2(c)) ), where c is a power of two
+      // mul(x, c) -> mul( shl(x, log2(c)) ), where c is a power of two.
       if (size == 2 && matchPattern(inputs.back(), m_RConstant(value)) &&
           value.isPowerOf2()) {
         auto shift =
