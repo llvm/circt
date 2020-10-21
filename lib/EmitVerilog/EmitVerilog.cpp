@@ -2489,10 +2489,17 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
     // Emit the arguments.
     auto portType = portInfo[portIdx].type;
     rtl::PortDirection thisPortDirection = portInfo[portIdx].direction;
-    if (thisPortDirection == rtl::PortDirection::OUTPUT)
+    switch (thisPortDirection) {
+    case rtl::PortDirection::OUTPUT:
       os << "output ";
-    else
+      break;
+    case rtl::PortDirection::INPUT:
       os << (hasOutputs ? "input  " : "input ");
+      break;
+    case rtl::PortDirection::INOUT:
+      os << (hasOutputs ? "inout  " : "inout ");
+      break;
+    }
 
     int bitWidth = getBitWidthOrSentinel(portType);
     emitTypePaddedToWidth(portType, maxTypeWidth, module);

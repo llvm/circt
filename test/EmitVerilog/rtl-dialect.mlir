@@ -82,7 +82,7 @@ firrtl.circuit "M1" {
   }
 
   // CHECK-LABEL: module B(
-  // CHECK-NEXT:   input  a,
+  // CHECK-NEXT:   inout  a,
   // CHECK-NEXT:   output b, c);
   // CHECK-EMPTY: 
   // CHECK-NEXT:   assign b = a | a;
