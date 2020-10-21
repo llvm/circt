@@ -21,7 +21,10 @@ for more information.
 3) Contribute code.  CIRCT follows all of the LLVM Policies: you can create pull
    requests for the CIRCT repository, and gain commit access using the [standard
    LLVM policies](https://llvm.discourse.group/c/Projects-that-want-to-become-official-LLVM-Projects/circt/).
-   Also check out the current overview of the [dialects and their interaction](docs/dialects.svg).
+
+Also take a look at the following diagram, which gives a brief overview of the current [dialects and how they interact](docs/dialects.svg):
+
+<p align="center"><img src="docs/dialects.svg"/></p>
 
 ## Motivation
 
