@@ -89,7 +89,8 @@ void FIRRTLModuleLowering::runOnOperation() {
     // Step through the operations carefully to avoid invalidating the iterator.
     auto &op = *opIt++;
     if (auto module = dyn_cast<FModuleOp>(op)) {
-      lowerModule(module, moduleBody);
+      // TODO: lowerModule method is broken.
+      // lowerModule(module, moduleBody);
       continue;
     }
 
@@ -118,6 +119,8 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
                                  Operation *moduleOp) {
 
   ports.reserve(firrtlPorts.size());
+  size_t numArgs = 0;
+  size_t numResults = 0;
   for (auto firrtlPort : firrtlPorts) {
     rtl::RTLModulePortInfo rtlPort;
 
@@ -132,20 +135,21 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
     }
 
     // Figure out the direction of the port.
-    const char *direction;
     if (firrtlType.isa<FlipType>()) {
       // If the top-level type in FIRRTL is a flip, then this is an output.
       assert(firrtlType.cast<FlipType>().getElementType().isPassiveType() &&
              "Flip types should be completely passive internally");
-      direction = "out";
+      rtlPort.direction = rtl::PortDirection::OUTPUT;
+      rtlPort.argNum = numResults++;
     } else if (firrtlType.cast<FIRRTLType>().isPassiveType()) {
-      direction = "input";
+      rtlPort.direction = rtl::PortDirection::INPUT;
+      rtlPort.argNum = numArgs++;
     } else {
       // This isn't currently expressible in low-firrtl, due to bundle types
       // being lowered.
-      direction = "inout";
+      rtlPort.direction = rtl::PortDirection::INOUT;
+      rtlPort.argNum = numArgs++;
     }
-    rtlPort.direction = StringAttr::get(direction, moduleOp->getContext());
     ports.push_back(rtlPort);
   }
   return success();
