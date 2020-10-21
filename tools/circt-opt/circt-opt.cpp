@@ -93,8 +93,6 @@ int main(int argc, char **argv) {
   registerAsmPrinterCLOptions();
 
   // Register our dialects.
-  registry.insert<esi::ESIDialect>();
-
   registry.insert<firrtl::FIRRTLDialect>();
   firrtl::registerFIRRTLPasses();
 
@@ -104,6 +102,7 @@ int main(int argc, char **argv) {
   handshake::registerStandardToHandshakePasses();
   handshake::registerHandshakeToFIRRTLPasses();
 
+  registry.insert<esi::ESIDialect>();
   registry.insert<llhd::LLHDDialect>();
   registry.insert<rtl::RTLDialect>();
   registry.insert<sv::SVDialect>();

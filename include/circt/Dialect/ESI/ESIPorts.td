@@ -1,19 +1,12 @@
-//===- ESITypes.td - ESI data type definitions -------------*- tablegen -*-===//
-//
-// Data types for the ESI dialect.
-//
-//===----------------------------------------------------------------------===//
-
-
-
-// -------------
-// ESI port specifications
+//===- ESIPorts.td - ESI port specifications ---------------*- tablegen -*-===//
 //
 // ESI ports are the primary mechanism on which the ESI dialect operates. They
 // represent an ESI communication flows of various kinds. At first, ESI will
 // only support 'channels' -- unidirectional, point-to-point,
 // latency-insensitive streams.
-// -------------
+//
+//===----------------------------------------------------------------------===//
+
 class ESI_Port<string name> : TypeDef<ESI_Dialect, name> {
   let cppClassName = name # "Port";
 }

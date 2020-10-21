@@ -1,6 +1,6 @@
 //===- ESIOps.cpp - ESI op code defs ----------------------------*- C++ -*-===//
 //
-// This is where op definitions will go
+// This is where op definitions live.
 //
 //===----------------------------------------------------------------------===//
 

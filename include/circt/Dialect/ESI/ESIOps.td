@@ -1,6 +1,6 @@
 //===- ESIOps.td - ESI dialect operation definitions --------- tablegen -*-===//
 //
-// This is where any operations for the ESI dialect will go
+// This is where any operations for the ESI dialect live.
 //
 //===----------------------------------------------------------------------===//
 

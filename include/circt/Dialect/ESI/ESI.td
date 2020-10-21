@@ -15,7 +15,7 @@ def ESI_Dialect : Dialect {
     let cppNamespace = "::circt::esi";
 }
 
-include "ESITypes.td"
+include "ESIPorts.td"
 include "ESIOps.td"
 
 #endif // ESI_TD
