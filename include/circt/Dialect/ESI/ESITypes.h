@@ -5,8 +5,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_ESI_ESITYPES_HPP
-#define CIRCT_DIALECT_ESI_ESITYPES_HPP
+#ifndef CIRCT_DIALECT_ESI_ESITYPES_H
+#define CIRCT_DIALECT_ESI_ESITYPES_H
 
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/Operation.h"
