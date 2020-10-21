@@ -4,9 +4,11 @@
 
 #include "circt/Dialect/RTL/Dialect.h"
 #include "circt/Dialect/RTL/Ops.h"
+#include "circt/Dialect/RTL/Types.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/StandardTypes.h"
+#include "llvm/Support/FormatVariadic.h"
 
 using namespace circt;
 using namespace rtl;
@@ -36,7 +38,13 @@ struct RTLOpAsmDialectInterface : public OpAsmDialectInterface {
 
 RTLDialect::RTLDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context,
-    ::mlir::TypeID::get<RTLDialect>()) {
+              ::mlir::TypeID::get<RTLDialect>()) {
+
+  // Register types.
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "circt/Dialect/RTL/RTLTypes.cpp.inc"
+      >();
 
   // Register operations.
   addOperations<
@@ -69,3 +77,25 @@ Operation *RTLDialect::materializeConstant(OpBuilder &builder, Attribute value,
 
 // Provide implementations for the enums we use.
 #include "circt/Dialect/RTL/RTLEnums.cpp.inc"
+
+/// Parses a type registered to this dialect. Parse out the mnemonic then invoke
+/// the tblgen'd type parser dispatcher.
+Type RTLDialect::parseType(DialectAsmParser &parser) const {
+  llvm::StringRef mnemonic;
+  if (parser.parseKeyword(&mnemonic))
+    return Type();
+  auto genType = generatedTypeParser(getContext(), parser, mnemonic);
+  if (genType)
+    return genType;
+  parser.emitError(parser.getCurrentLocation(), "Could not parse rtl.")
+      << mnemonic << ".";
+  return Type();
+}
+
+/// Print a type registered to this dialect. Try the tblgen'd type printer
+/// dispatcher then fail since all RTL types are defined via ODS.
+void RTLDialect::printType(Type type, DialectAsmPrinter &printer) const {
+  if (succeeded(generatedTypePrinter(type, printer)))
+    return;
+  llvm_unreachable("unexpected 'rtl' type");
+}

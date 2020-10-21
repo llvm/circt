@@ -55,3 +55,9 @@ rtl.module @A(%arg0: i1) {
 
 // expected-error @+1 {{'rtl.output' op must have same number of operands as region results}}
 rtl.module @A() -> (i1) { }
+
+// -----
+
+// expected-error @+2 {{rtl.array only supports one dimension}}
+// expected-error @+1 {{Could not parse rtl.array}}
+func @arrayDims(%a: !rtl.array<3 x 4 x i5>) { }
