@@ -744,7 +744,7 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
       APInt value, value2;
 
-      // mul(x, c) -> mul( shl(x, log2(c)) ), where c is a power of two.
+      // mul(x, c) -> shl(x, log2(c)), where c is a power of two.
       if (size == 2 && matchPattern(inputs.back(), m_RConstant(value)) &&
           value.isPowerOf2()) {
         auto shift =
