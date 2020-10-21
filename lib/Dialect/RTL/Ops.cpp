@@ -682,7 +682,7 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         auto rhs =
             rewriter.create<ConstantOp>(op.getLoc(), (one << shift) + one);
 
-        Value factors[2] = {shlOp.lhs(), rhs};
+        std::array<Value, 2> factors = {shlOp.lhs(), rhs};
         auto mulOp = rewriter.create<rtl::MulOp>(op.getLoc(), factors);
 
         SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
