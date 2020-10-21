@@ -11,13 +11,11 @@
 #include "circt/Dialect/SV/Ops.h"
 #include "circt/Dialect/SV/Visitors.h"
 #include "circt/Support/LLVM.h"
-#include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/Module.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
-#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
@@ -316,44 +314,16 @@ public:
   void emitOperation(Operation *op);
 
   void collectNamesEmitDecls(Block &block);
-  // Use as key in 'nameTable'. This is an xor field either `Value` can be valid
-  // or `size_t`. If the former, it's any value in the module. If the former, we
-  // need to return the signal name for the result index specified by this
-  // number.
-  using ValueOrResult = std::tuple<Value, size_t>;
-  void addName(ValueOrResult value, StringRef name);
-  void addName(Value value, StringAttr name) {
-    addName(std::make_tuple(value, 0), name ? name.getValue() : "");
-  }
-  void addName(rtl::RTLModuleOp &mod, rtl::RTLModulePortInfo &port) {
-    if (port.direction == rtl::PortDirection::OUTPUT)
-      addName(std::make_tuple(Value(), port.argNum),
-              port.name ? port.name.getValue() : "");
-    else
-      addName(std::make_tuple(mod.getArgument(port.argNum), 0),
-              port.name ? port.name.getValue() : "");
+  bool collectNamesEmitWires(rtl::RTLInstanceOp &inst);
+  StringRef addName(Value value, StringRef name);
+  StringRef addName(Value value, StringAttr nameAttr) {
+    return addName(value, nameAttr ? nameAttr.getValue() : "");
   }
 
-  Optional<StringRef> getNameOptional(Value value) {
-    auto *entry = nameTable[std::make_tuple(value, 0)];
-    if (entry)
-      return entry->getKey();
-    return Optional<StringRef>();
-  }
   StringRef getName(Value value) {
-    auto *entry = nameTable[std::make_tuple(value, 0)];
+    auto *entry = nameTable[value];
     assert(entry && "value expected a name but doesn't have one");
     return entry->getKey();
-  }
-  StringRef getResultName(size_t resultIdx) {
-    auto *entry = nameTable[std::make_tuple(Value(), resultIdx)];
-    assert(entry && "result index expected a name but doesn't have one");
-    return entry->getKey();
-  }
-  StringRef getName(rtl::RTLModuleOp &mod, rtl::RTLModulePortInfo &port) {
-    if (port.direction == rtl::PortDirection::OUTPUT)
-      return getResultName(port.argNum);
-    return getName(mod.getArgument(port.argNum));
   }
 
   /// Return the location information as a (potentially empty) string.
@@ -457,8 +427,7 @@ public:
   std::vector<ConditionalStatement> conditionalStmts;
 
   llvm::StringSet<> usedNames;
-  llvm::DenseMap<ValueOrResult, llvm::StringMapEntry<llvm::NoneType> *>
-      nameTable;
+  llvm::DenseMap<Value, llvm::StringMapEntry<llvm::NoneType> *> nameTable;
   size_t nextGeneratedNameID = 0;
 
   /// This set keeps track of all of the expression nodes that need to be
@@ -476,7 +445,7 @@ public:
 
 /// Add the specified name to the name table, auto-uniquing the name if
 /// required.  If the name is empty, then this creates a unique temp name.
-void ModuleEmitter::addName(ValueOrResult value, StringRef name) {
+StringRef ModuleEmitter::addName(Value value, StringRef name) {
   if (name.empty())
     name = "_T";
 
@@ -522,7 +491,7 @@ void ModuleEmitter::addName(ValueOrResult value, StringRef name) {
     auto insertResult = usedNames.insert(name);
     if (insertResult.second) {
       nameTable[value] = &*insertResult.first;
-      return;
+      return insertResult.first->getKey();
     }
   }
 
@@ -541,7 +510,7 @@ void ModuleEmitter::addName(ValueOrResult value, StringRef name) {
       auto insertResult = usedNames.insert(name);
       if (insertResult.second) {
         nameTable[value] = &*insertResult.first;
-        return;
+        return insertResult.first->getKey();
       }
     }
 
@@ -1432,11 +1401,18 @@ void ModuleEmitter::emitStatement(rtl::OutputOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  for (size_t i = 0, e = op.getNumOperands(); i < e; ++i) {
-    indent() << "assign " << getResultName(i) << " = ";
-    emitExpression(op.getOperand(i), ops);
+  SmallVector<rtl::RTLModulePortInfo, 8> ports;
+  rtl::RTLModuleOp parent = op.getParentOfType<rtl::RTLModuleOp>();
+  parent.getRTLPortInfo(ports);
+  size_t operandIndex = 0;
+  for (rtl::RTLModulePortInfo port : ports) {
+    if (port.direction != rtl::PortDirection::OUTPUT)
+      continue;
+    indent() << "assign " << port.name.getValue() << " = ";
+    emitExpression(op.getOperand(operandIndex), ops);
     os << ';';
     emitLocationInfoAndNewLine(ops);
+    ++operandIndex;
   }
 }
 
@@ -1971,101 +1947,97 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
   };
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  SmallVector<OpResult, 16> declsToEmit;
-
+  SmallVector<Operation *, 16> declsToEmit;
+  bool rtlInstanceDeclaredWires = false;
   for (auto &op : block) {
+    if (auto rtlInstance = dyn_cast<rtl::RTLInstanceOp>(op)) {
+      rtlInstanceDeclaredWires |= collectNamesEmitWires(rtlInstance);
+      continue;
+    }
     if (op.getNumResults() == 0)
       continue;
 
-    for (size_t i = 0, e = op.getNumResults(); i < e; ++i) {
-      OpResult result = op.getResult(i);
+    assert(op.getNumResults() == 1 && "firrtl only has single-op results");
+    Value result = op.getResult(0);
 
-      // If this is an expression emitted inline or unused, it doesn't need a
-      // name.
-      bool isExpr = isVerilogExpression(&op);
-      if (isExpr) {
-        // If this expression is dead, or can be emitted inline, ignore it.
-        if (result.use_empty() || isExpressionEmittedInline(&op))
-          continue;
-
-        // Remember that this expression should be emitted out of line.
-        outOfLineExpressions.insert(&op);
-      }
-
-      // Otherwise, it must be an expression or a declaration like a wire.
-      StringAttr resultName;
-      if (auto instOp = dyn_cast<rtl::RTLInstanceOp>(op))
-        resultName = instOp.getResultName(i);
-      else
-        resultName = op.getAttrOfType<StringAttr>("name");
-      addName(result, resultName);
-
-      // If we are emitting inline wire decls, don't measure or emit this
-      // wire.
-      if (isExpr && emitInlineWireDecls)
+    // If this is an expression emitted inline or unused, it doesn't need a
+    // name.
+    bool isExpr = isVerilogExpression(&op);
+    if (isExpr) {
+      // If this expression is dead, or can be emitted inline, ignore it.
+      if (result.use_empty() || isExpressionEmittedInline(&op))
         continue;
 
-      // FIXME(verilog dialect): This can cause name collisions, because the
-      // base name may be unique but the suffixed names may not be.  The right
-      // way to solve this is to change the instances and mems in a new
-      // Verilog dialect to use multiple return values, exposing the
-      // independent Value's.
-
-      // Determine what kind of thing this is, and how much space it needs.
-      maxDeclNameWidth =
-          std::max(getVerilogDeclWord(&op).size(), maxDeclNameWidth);
-
-      // Flatten the type for processing of each individual element.
-      fieldTypes.clear();
-      flattenBundleTypes(result.getType(), "", false, fieldTypes);
-
-      // Handle the reg declaration for a memory specially.
-      if (auto memOp = dyn_cast<MemOp>(&op))
-        if (auto dataType = memOp.getDataTypeOrNull())
-          flattenBundleTypes(dataType, "", false, fieldTypes);
-
-      for (const auto &elt : fieldTypes) {
-        int bitWidth = getBitWidthOrSentinel(elt.type);
-        if (bitWidth == -1) {
-          emitError(&op, getName(result))
-              << elt.suffix << " has an unsupported verilog type " << elt.type;
-          result = OpResult();
-          break;
-        }
-
-        if (bitWidth != 1) { // Width 1 is implicit.
-          // Add 5 to count the width of the "[:0] ".
-          size_t thisWidth = getPrintedIntWidth(bitWidth - 1) + 5;
-          maxTypeWidth = std::max(thisWidth, maxTypeWidth);
-        }
-      }
-
-      // Emit this declaration.
-      if (result)
-        declsToEmit.push_back(result);
+      // Remember that this expression should be emitted out of line.
+      outOfLineExpressions.insert(&op);
     }
-  }
 
-  SmallPtrSet<Operation *, 8> ops;
+    // Otherwise, it must be an expression or a declaration like a wire.
+    addName(result, op.getAttrOfType<StringAttr>("name"));
 
-  // Okay, now that we have measured the things to emit, emit the things.
-  for (auto result : declsToEmit) {
-    ops.clear();
-    ops.insert(result.getDefiningOp());
+    // If we are emitting inline wire decls, don't measure or emit this wire.
+    if (isExpr && emitInlineWireDecls)
+      continue;
 
-    Operation *op = result.getDefiningOp();
-    auto word = getVerilogDeclWord(op);
+    // FIXME(verilog dialect): This can cause name collisions, because the
+    // base name may be unique but the suffixed names may not be.  The right
+    // way to solve this is to change the instances and mems in a new Verilog
+    // dialect to use multiple return values, exposing the independent
+    // Value's.
+
+    // Determine what kind of thing this is, and how much space it needs.
+    maxDeclNameWidth =
+        std::max(getVerilogDeclWord(&op).size(), maxDeclNameWidth);
 
     // Flatten the type for processing of each individual element.
     fieldTypes.clear();
     flattenBundleTypes(result.getType(), "", false, fieldTypes);
 
+    // Handle the reg declaration for a memory specially.
+    if (auto memOp = dyn_cast<MemOp>(&op))
+      if (auto dataType = memOp.getDataTypeOrNull())
+        flattenBundleTypes(dataType, "", false, fieldTypes);
+
+    for (const auto &elt : fieldTypes) {
+      int bitWidth = getBitWidthOrSentinel(elt.type);
+      if (bitWidth == -1) {
+        emitError(&op, getName(result))
+            << elt.suffix << " has an unsupported verilog type " << elt.type;
+        result = Value();
+        break;
+      }
+
+      if (bitWidth != 1) { // Width 1 is implicit.
+        // Add 5 to count the width of the "[:0] ".
+        size_t thisWidth = getPrintedIntWidth(bitWidth - 1) + 5;
+        maxTypeWidth = std::max(thisWidth, maxTypeWidth);
+      }
+    }
+
+    // Emit this declaration.
+    if (result)
+      declsToEmit.push_back(&op);
+  }
+
+  SmallPtrSet<Operation *, 8> ops;
+
+  // Okay, now that we have measured the things to emit, emit the things.
+  for (auto *decl : declsToEmit) {
+    ops.clear();
+    ops.insert(decl);
+
+    auto word = getVerilogDeclWord(decl);
+
+    // Flatten the type for processing of each individual element.
+    fieldTypes.clear();
+    flattenBundleTypes(decl->getResult(0).getType(), "", false, fieldTypes);
+
     bool isFirst = true;
     for (const auto &elt : fieldTypes) {
       indent() << word;
       os.indent(maxDeclNameWidth - word.size() + 1);
-      emitTypePaddedToWidth(elt.type, maxTypeWidth, op);
-      os << getName(result) << elt.suffix << ';';
+      emitTypePaddedToWidth(elt.type, maxTypeWidth, decl);
+      os << getName(decl->getResult(0)) << elt.suffix << ';';
 
       if (isFirst)
         emitLocationInfoAndNewLine(ops);
@@ -2075,7 +2047,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
     // Handle the reg declaration for a memory specially because we need to
     // handle aggregate types and depths.
-    if (auto memOp = dyn_cast<MemOp>(op)) {
+    if (auto memOp = dyn_cast<MemOp>(decl)) {
       fieldTypes.clear();
       if (auto dataType = memOp.getDataTypeOrNull())
         flattenBundleTypes(dataType, "", false, fieldTypes);
@@ -2084,15 +2056,36 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       for (const auto &elt : fieldTypes) {
         indent() << "reg";
         os.indent(maxDeclNameWidth - 3 + 1);
-        emitTypePaddedToWidth(elt.type, maxTypeWidth, op);
-        os << getName(result) << elt.suffix;
+        emitTypePaddedToWidth(elt.type, maxTypeWidth, decl);
+        os << getName(decl->getResult(0)) << elt.suffix;
         os << '[' << (depth - 1) << ":0];\n";
       }
     }
   }
 
-  if (!declsToEmit.empty())
+  if (!declsToEmit.empty() || rtlInstanceDeclaredWires)
     os << '\n';
+}
+
+bool ModuleEmitter::collectNamesEmitWires(rtl::RTLInstanceOp &op) {
+  for (size_t i = 0, e = op.getNumResults(); i < e; ++i) {
+    auto result = op.getResult(i);
+    StringRef wireName = addName(result, op.getResultName(i));
+
+    Type resultType = result.getType();
+    if (auto intType = resultType.dyn_cast<IntegerType>()) {
+      if (intType.getWidth() == 1) {
+        indent() << "wire " << wireName << ";\n";
+      } else {
+        indent() << "wire [" << intType.getWidth() - 1 << ":0] " << wireName
+                 << ";\n";
+      }
+    } else {
+      indent() << "// Type '" << resultType
+               << "' not supported in verilog output yet.\n";
+    }
+  }
+  return op.getNumResults() != 0;
 }
 
 void ModuleEmitter::emitOperation(Operation *op) {
@@ -2461,12 +2454,10 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
   module.getRTLPortInfo(portInfo);
 
   for (auto &port : portInfo)
-    addName(module, port);
-  //   if (port.direction == rtl::PortDirection::OUTPUT) {
-  //     addName(module.getRe)
-  //   } else
-  //     addName(module.getArgument(port.argNum), port.name);
-  // }
+    if (port.direction == rtl::PortDirection::OUTPUT)
+      usedNames.insert(port.name.getValue());
+    else
+      addName(module.getArgument(port.argNum), port.name);
 
   os << "module " << module.getName() << '(';
   if (!portInfo.empty())
@@ -2507,7 +2498,7 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
     emitTypePaddedToWidth(portType, maxTypeWidth, module);
 
     // Emit the name.
-    os << getName(module, portInfo[portIdx]);
+    os << portInfo[portIdx].name.getValue();
     ++portIdx;
 
     // If we have any more ports with the same types and the same direction,
@@ -2515,7 +2506,7 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
     while (portIdx != e && portInfo[portIdx].direction == thisPortDirection &&
            bitWidth == getBitWidthOrSentinel(portInfo[portIdx].type)) {
       // Don't exceed our preferred line length.
-      StringRef name = getName(module, portInfo[portIdx]);
+      StringRef name = portInfo[portIdx].name.getValue();
       if (os.tell() + 2 + name.size() - startOfLinePos >
           // We use "-2" here because we need a trailing comma or ); for the
           // decl.
