@@ -682,7 +682,7 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
           mulOp.inputs()[0] == inputs[size - 2] &&
           matchPattern(mulOp.inputs()[1], m_RConstant(multiplier))) {
 
-        SmallVector<Value, 2> mulInputs(mulOp.inputs().drop_back(/*n=*/1));
+        SmallVector<Value, 2> mulInputs(mulOp.inputs().drop_back());
 
         auto numBits =
             mulOp.getOperand(1).getType().cast<IntegerType>().getWidth();
