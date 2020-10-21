@@ -51,9 +51,8 @@ static void buildModule(OpBuilder &builder, OperationState &result,
           NamedAttribute(builder.getIdentifier("rtl.name"), port.name));
 
     if (port.direction == PortDirection::INOUT)
-      argAttrs.push_back(
-          NamedAttribute(builder.getIdentifier("rtl.inout"),
-                         BoolAttr::get(true, builder.getContext())));
+      argAttrs.push_back(NamedAttribute(builder.getIdentifier("rtl.inout"),
+                                        builder.getUnitAttr()));
 
     StringRef attrName = port.direction == PortDirection::OUTPUT
                              ? getResultAttrName(port.argNum, attrNameBuf)
@@ -103,9 +102,8 @@ StringAttr rtl::getRTLNameAttr(ArrayRef<NamedAttribute> attrs) {
 
 static bool isRTLInoutArg(ArrayRef<NamedAttribute> attrs) {
   for (auto &argAttr : attrs) {
-    if (argAttr.first != "rtl.inout")
-      continue;
-    return argAttr.second.dyn_cast<BoolAttr>().getValue();
+    if (argAttr.first == "rtl.inout")
+      return true;
   }
   return false;
 }

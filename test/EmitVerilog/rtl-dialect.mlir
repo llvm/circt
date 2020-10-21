@@ -75,7 +75,7 @@ firrtl.circuit "M1" {
   // CHECK-NEXT:  assign y = _T_0 ^ (_T | _T_0) ^ 8'h2A ^ q[15:8];
   // CHECK-NEXT:endmodule
 
-  rtl.module @B(%a: i1) -> (i1 {rtl.name = "b"}, i1 {rtl.name = "c"}) {
+  rtl.module @B(%a: i1 { rtl.inout }) -> (i1 {rtl.name = "b"}, i1 {rtl.name = "c"}) {
     %0 = rtl.or %a, %a : i1
     %1 = rtl.and %a, %a : i1
     rtl.output %0, %1 : i1, i1
