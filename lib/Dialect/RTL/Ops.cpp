@@ -752,8 +752,8 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                         op.getType().cast<IntegerType>());
         auto shlOp = rewriter.create<rtl::ShlOp>(op.getLoc(), inputs[0], shift);
 
-        std::array<Value, 1> newOperands = {shlOp};
-        rewriter.replaceOpWithNewOp<MulOp>(op, op.getType(), newOperands);
+        rewriter.replaceOpWithNewOp<MulOp>(op, op.getType(),
+                                           ArrayRef<Value>(shlOp));
         return success();
       }
 

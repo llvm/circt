@@ -359,7 +359,7 @@ func @xor_idempotent_two_arguments(%arg0: i11) -> i11 {
   return %0 : i11
 }
 
-// Add reduction to products
+// Add reduction to shift left and multiplication.
 
 // CHECK-LABEL: func @add_reduction1(%arg0: i11, %arg1: i11) -> i11 {
 // CHECK-NEXT:    %c1_i11 = rtl.constant(1 : i11) : i11
@@ -396,7 +396,7 @@ func @add_reduction3(%arg0: i11, %arg1: i11) -> i11 {
   return %1 : i11
 }
 
-// Multiply reduction to shift left
+// Multiply reduction to shift left.
 
 // CHECK-LABEL: func @multiply_reduction(%arg0: i11, %arg1: i11) -> i11 {
 // CHECK-NEXT:    %c1_i11 = rtl.constant(1 : i11) : i11
