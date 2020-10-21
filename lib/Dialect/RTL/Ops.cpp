@@ -12,7 +12,6 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/StandardTypes.h"
-#include "llvm/Support/FormatVariadic.h"
 
 using namespace circt;
 using namespace rtl;
@@ -267,15 +266,13 @@ static LogicalResult verifyRTLInstanceOp(RTLInstanceOp op) {
   auto referencedModule =
       mlir::SymbolTable::lookupSymbolIn(moduleIR, op.moduleName());
   if (referencedModule == nullptr) {
-    op.emitError(
-        llvm::formatv("Cannot find module definition '{0}'", op.moduleName()));
+    op.emitError("Cannot find module definition '") << op.moduleName() << "'.";
     return failure();
   }
   if (!isa<rtl::RTLModuleOp>(referencedModule) &&
       !isa<rtl::RTLExternModuleOp>(referencedModule)) {
-    op.emitError(
-        llvm::formatv("Symbol resolved to '{0}', not a RTL[Ext]ModuleOp",
-                      referencedModule->getName()));
+    op.emitError("Symbol resolved to '")
+        << referencedModule->getName() << "' which is not a RTL[Ext]ModuleOp.";
     return failure();
   }
   return success();
@@ -374,17 +371,19 @@ void RTLInstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 /// Verify that the num of operands and types fit the declared results.
 static LogicalResult verifyOutputOp(OutputOp *op) {
   OperandRange outputValues = op->getOperands();
-  Operation *moduleOp = op->getParentWithTrait<OpTrait::FunctionLike>();
+  auto opParent = op->getParentOp();
 
-  // Check that our region has results
-  if (!moduleOp) {
-    op->emitOpError("operation expected to be in FunctionLike region.");
+  // Check that we are in the correct region. OutputOp should be directly
+  // contained by an RTLModuleOp region. We'll loosen this restriction if
+  // there's a compelling use case.
+  if (!isa<RTLModuleOp>(opParent)) {
+    op->emitOpError("operation expected to be in a RTLModuleOp.");
     return failure();
   }
 
   // Check that the we (rtl.output) have the same number of operands as our
   // region has results.
-  FunctionType modType = getModuleType(moduleOp);
+  FunctionType modType = getModuleType(opParent);
   ArrayRef<Type> modResults = modType.getResults();
   if (modResults.size() != outputValues.size()) {
     op->emitOpError("must have same number of operands as region results.");
@@ -394,10 +393,10 @@ static LogicalResult verifyOutputOp(OutputOp *op) {
   // Check that the types of our operands and the region's results match.
   for (size_t i = 0, e = modResults.size(); i < e; ++i) {
     if (modResults[i] != outputValues[i].getType()) {
-      op->emitOpError(llvm::formatv("output types must match module. In "
-                                    "operand {0}, expected {1} but got {2}.",
-                                    i, modResults[i],
-                                    outputValues[i].getType()));
+      op->emitOpError("output types must match module. In "
+                      "operand ")
+          << i << ", expected " << modResults[i] << ", but got "
+          << outputValues[i].getType() << ".";
       return failure();
     }
   }
