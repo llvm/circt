@@ -30,8 +30,8 @@ struct RTLModulePortInfo {
   StringAttr name;
   PortDirection direction;
   Type type;
-  size_t argNum; // Either the argument index or the result index depending on
-                 // the direction.
+  size_t argNum = ~0U; // Either the argument index or the result index
+                       // depending on the direction.
 
   inline StringRef getName() { return name ? name.getValue() : ""; }
 };
