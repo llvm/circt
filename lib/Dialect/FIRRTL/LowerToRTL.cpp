@@ -89,7 +89,8 @@ void FIRRTLModuleLowering::runOnOperation() {
     // Step through the operations carefully to avoid invalidating the iterator.
     auto &op = *opIt++;
     if (auto module = dyn_cast<FModuleOp>(op)) {
-      lowerModule(module, moduleBody);
+      // TODO: lowerModule method is broken.
+      // lowerModule(module, moduleBody);
       continue;
     }
 
