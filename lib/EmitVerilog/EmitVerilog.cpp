@@ -2453,11 +2453,18 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
   SmallVector<rtl::RTLModulePortInfo, 8> portInfo;
   module.getRTLPortInfo(portInfo);
 
-  for (auto &port : portInfo)
+  for (auto &port : portInfo) {
+    StringRef name = port.name.getValue();
+    if (name.empty()) {
+      llvm::errs() << "Found port without a name. Port names are required for "
+                      "Verilog synthesis.\n";
+      name = "<<NO-NAME-FOUND>>";
+    }
     if (port.direction == rtl::PortDirection::OUTPUT)
-      usedNames.insert(port.name.getValue());
+      usedNames.insert(name);
     else
-      addName(module.getArgument(port.argNum), port.name);
+      addName(module.getArgument(port.argNum), name);
+  }
 
   os << "module " << module.getName() << '(';
   if (!portInfo.empty())
