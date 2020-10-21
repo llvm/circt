@@ -2415,10 +2415,6 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
 }
 
 void ModuleEmitter::emitRTLExternModule(rtl::RTLExternModuleOp module) {
-  // Add all the ports to the name table.
-  SmallVector<rtl::RTLModulePortInfo, 8> portInfo;
-  module.getRTLPortInfo(portInfo);
-
   os << "// external module " << module.getName() << "\n\n";
 }
 
