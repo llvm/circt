@@ -1635,9 +1635,9 @@ void ModuleEmitter::emitStatement(rtl::RTLInstanceOp op) {
   if (auto moduleIR = op.getParentOfType<firrtl::CircuitOp>()) {
     auto moduleOp = moduleIR.lookupSymbol(defName);
     if (auto m = cast<rtl::RTLModuleOp>(moduleOp)) {
-        m.getRTLPortInfo(portInfo);
+      m.getRTLPortInfo(portInfo);
     } else if (auto m = cast<rtl::RTLExternModuleOp>(moduleOp)) {
-        m.getRTLPortInfo(portInfo);    
+      m.getRTLPortInfo(portInfo);
     } else {
       assert(0 && "invalid rtl.instance op");
     }
@@ -1646,7 +1646,7 @@ void ModuleEmitter::emitStatement(rtl::RTLInstanceOp op) {
     if (isa<rtl::RTLModuleOp>(moduleOp)) {
       cast<rtl::RTLModuleOp>(moduleOp).getRTLPortInfo(portInfo);
     } else if (isa<rtl::RTLExternModuleOp>(moduleOp)) {
-      cast<rtl::RTLExternModuleOp>(moduleOp).getRTLPortInfo(portInfo);    
+      cast<rtl::RTLExternModuleOp>(moduleOp).getRTLPortInfo(portInfo);
     } else {
       assert(0 && "invalid rtl.instance op");
     }
