@@ -1397,6 +1397,8 @@ void ModuleEmitter::emitStatement(rtl::ConnectOp op) {
   emitLocationInfoAndNewLine(ops);
 }
 
+/// For OutputOp we put "assign" statements at the end of the Verilog module to
+/// assign the module outputs to intermediate wires.
 void ModuleEmitter::emitStatement(rtl::OutputOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -1408,7 +1410,7 @@ void ModuleEmitter::emitStatement(rtl::OutputOp op) {
   for (rtl::RTLModulePortInfo port : ports) {
     if (port.direction != rtl::PortDirection::OUTPUT)
       continue;
-    indent() << "assign " << port.name.getValue() << " = ";
+    indent() << "assign " << port.getName() << " = ";
     emitExpression(op.getOperand(operandIndex), ops);
     os << ';';
     emitLocationInfoAndNewLine(ops);
@@ -1668,7 +1670,7 @@ void ModuleEmitter::emitStatement(rtl::RTLInstanceOp op) {
     StringRef valueName = elt.direction == rtl::PortDirection::OUTPUT
                               ? getName(opResults[elt.argNum])
                               : getName(opArgs[elt.argNum]);
-    indent() << "  ." << StringRef(elt.name.getValue()) << " (" << valueName
+    indent() << "  ." << StringRef(elt.getName()) << " (" << valueName
              << (isLast ? ")\n" : "),\n");
   }
   indent() << ")\n";
@@ -2083,6 +2085,8 @@ bool ModuleEmitter::collectNamesEmitWires(rtl::RTLInstanceOp &op) {
     } else {
       indent() << "// Type '" << resultType
                << "' not supported in verilog output yet.\n";
+      op.emitOpError("Type of result not supported for verilog output. Type: ")
+          << resultType << ".";
     }
   }
   return op.getNumResults() != 0;
@@ -2454,10 +2458,11 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
   module.getRTLPortInfo(portInfo);
 
   for (auto &port : portInfo) {
-    StringRef name = port.name.getValue();
+    StringRef name = port.getName();
     if (name.empty()) {
-      llvm::errs() << "Found port without a name. Port names are required for "
-                      "Verilog synthesis.\n";
+      module.emitOpError(
+          "Found port without a name. Port names are required for "
+          "Verilog synthesis.\n");
       name = "<<NO-NAME-FOUND>>";
     }
     if (port.direction == rtl::PortDirection::OUTPUT)
@@ -2512,7 +2517,7 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
     emitTypePaddedToWidth(portType, maxTypeWidth, module);
 
     // Emit the name.
-    os << portInfo[portIdx].name.getValue();
+    os << portInfo[portIdx].getName();
     ++portIdx;
 
     // If we have any more ports with the same types and the same direction,
@@ -2520,7 +2525,7 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
     while (portIdx != e && portInfo[portIdx].direction == thisPortDirection &&
            bitWidth == getBitWidthOrSentinel(portInfo[portIdx].type)) {
       // Don't exceed our preferred line length.
-      StringRef name = portInfo[portIdx].name.getValue();
+      StringRef name = portInfo[portIdx].getName();
       if (os.tell() + 2 + name.size() - startOfLinePos >
           // We use "-2" here because we need a trailing comma or ); for the
           // decl.

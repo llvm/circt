@@ -50,3 +50,8 @@ rtl.module @A(%arg0: i1) {
   // expected-error @+1 {{Cannot find module definition 'doesNotExist'}}
   rtl.instance "b1" @doesNotExist(%arg0) : (i1) -> ()
 }
+
+// -----
+
+// expected-error @+1 {{'rtl.output' op must have same number of operands as region results}}
+rtl.module @A() -> (i1) { }

@@ -32,6 +32,8 @@ struct RTLModulePortInfo {
   Type type;
   size_t argNum; // Either the argument index or the result index depending on
                  // the direction.
+
+  inline StringRef getName() { return name ? name.getValue() : ""; }
 };
 
 FunctionType getModuleType(Operation *op);

@@ -99,7 +99,7 @@ StringAttr rtl::getRTLNameAttr(ArrayRef<NamedAttribute> attrs) {
   return StringAttr();
 }
 
-static bool isRTLInoutArg(ArrayRef<NamedAttribute> attrs) {
+static bool containsInOutAttr(ArrayRef<NamedAttribute> attrs) {
   for (auto &argAttr : attrs) {
     if (argAttr.first == "rtl.inout")
       return true;
@@ -113,7 +113,7 @@ void rtl::getRTLModulePortInfo(Operation *op,
 
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
-    bool isInout = isRTLInoutArg(argAttrs);
+    bool isInout = containsInOutAttr(argAttrs);
 
     results.push_back({getRTLNameAttr(argAttrs),
                        isInout ? PortDirection::INOUT : PortDirection::INPUT,
@@ -295,8 +295,7 @@ ParseResult parseResultNames(OpAsmParser &p, NamedAttrList &attrDict) {
   // Assemble the result names from the asm.
   SmallVector<Attribute, 8> names;
   for (size_t i = 0, e = p.getNumResults(); i < e; ++i) {
-    StringAttr resultName = StringAttr::get(p.getResultName(i).first, ctxt);
-    names.push_back(resultName);
+    names.push_back(StringAttr::get(p.getResultName(i).first, ctxt));
   }
 
   // Look for existing result names in the attr-dict and if they exist and are

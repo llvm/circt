@@ -126,7 +126,8 @@ def RTLInstanceOp : RTLOp<"instance",
   }];
   
   let assemblyFormat = [{
-    $instanceName $moduleName `(` $inputs `)` custom<ResultNames>( attr-dict ) `:` functional-type($inputs, results)
+    $instanceName $moduleName `(` $inputs `)` custom<ResultNames>( attr-dict )
+      `:` functional-type($inputs, results)
   }];
 
   let verifier = [{ return ::verifyRTLInstanceOp(*this); }];
