@@ -154,11 +154,6 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
                              resultAttrs))
     return failure();
 
-  // if (parseFunctionSignature(parser, /*allowVariadic=*/false, entryArgs,
-  //  argTypes, argAttrs, isVariadic, resultTypes,
-  //  resultAttrs))
-  // return failure();
-
   // Record the argument and result types as an attribute.  This is necessary
   // for external modules.
   auto type = builder.getFunctionType(argTypes, resultTypes);
@@ -287,63 +282,89 @@ static LogicalResult verifyRTLInstanceOp(RTLInstanceOp op) {
 }
 
 StringAttr RTLInstanceOp::getResultName(size_t idx) {
-  SmallString<16> attrName = llvm::formatv("rtl.rname{0}", idx);
-  return getAttrOfType<StringAttr>(attrName.str());
+  if (auto nameAttrList = getAttrOfType<ArrayAttr>("name"))
+    if (idx < nameAttrList.size())
+      return nameAttrList[idx].dyn_cast<StringAttr>();
+  return StringAttr();
 }
 
+/// Intercept the `attr-dict` parsing to inject the result names which _may_ be
+/// missing.
 ParseResult parseResultNames(OpAsmParser &p, NamedAttrList &attrDict) {
   MLIRContext *ctxt = p.getBuilder().getContext();
   if (p.parseOptionalAttrDict(attrDict))
     return failure();
 
+  // Assemble the result names from the asm.
+  SmallVector<Attribute, 8> names;
   for (size_t i = 0, e = p.getNumResults(); i < e; ++i) {
-    SmallString<16> id = llvm::formatv("rtl.rname{0}", i);
-    Identifier resultNameKey = Identifier::get(id, ctxt);
-    if (attrDict.getNamed(resultNameKey))
-      continue;
-
     StringAttr resultName = StringAttr::get(p.getResultName(i).first, ctxt);
-    attrDict.push_back(NamedAttribute(resultNameKey, resultName));
+    names.push_back(resultName);
   }
-  return success();
-}
 
-void printResultNames(OpAsmPrinter &p, RTLInstanceOp *op) {
-  SmallVector<StringRef, 8> elideFields = {"instanceName", "moduleName"};
-
-  NamedAttrList attrs = op->getAttrs();
-  for (auto it = attrs.begin(), e = attrs.end(); it < e; ++it) {
-    StringRef attrName = it->first.strref();
-    if (attrName.startswith("rtl.rname")) {
-      auto numberStr = attrName.substr(9);
-      size_t resultIdx;
-      if (numberStr.getAsInteger<size_t>(10, resultIdx))
-        continue;
-
-      SmallString<32> resultNameStr;
-      llvm::raw_svector_ostream tmpStream(resultNameStr);
-      p.printOperand(op->getResult(resultIdx), tmpStream);
-      auto expectedName = it->second.dyn_cast<StringAttr>();
-      if (expectedName &&
-          tmpStream.str().drop_front() == expectedName.getValue()) {
-        elideFields.push_back(attrName);
+  // Look for existing result names in the attr-dict and if they exist and are
+  // non-empty, replace them in the 'names' vector.
+  auto resultNamesID = Identifier::get("name", ctxt);
+  if (auto namesAttr = attrDict.getNamed(resultNamesID)) {
+    // It must be an ArrayAttr.
+    if (auto nameAttrList = namesAttr->second.dyn_cast<ArrayAttr>()) {
+      for (size_t i = 0, e = nameAttrList.size(); i < e; ++i) {
+        // List of result names must be no longer than number of results.
+        if (i >= names.size())
+          break;
+        // And it must be a string.
+        if (auto resultNameStringAttr =
+                nameAttrList[i].dyn_cast<StringAttr>()) {
+          // Only replace if non-empty.
+          if (!resultNameStringAttr.getValue().empty())
+            names[i] = resultNameStringAttr;
+        }
       }
     }
   }
+  attrDict.set("name", ArrayAttr::get(names, ctxt));
+  return success();
+}
+
+/// Intercept the `attr-dict` printing to determine whether or not we can elide
+/// the result names attribute.
+void printResultNames(OpAsmPrinter &p, RTLInstanceOp *op) {
+  SmallVector<StringRef, 8> elideFields = {"instanceName", "moduleName"};
+
+  // If any names don't match what the printer is going to emit, keep the
+  // attributes.
+  bool nameDisagreement = false;
+  ArrayAttr nameAttrList = op->getAttrOfType<ArrayAttr>("name");
+  // Look for result names to possibly elide.
+  if (nameAttrList && nameAttrList.size() <= op->getNumResults()) {
+    // Check that all the result names have been kept.
+    for (size_t i = 0, e = nameAttrList.size(); i < e; ++i) {
+      // Name must be a string.
+      if (auto expectedName = nameAttrList[i].dyn_cast<StringAttr>()) {
+        // Check for disagreement
+        SmallString<32> resultNameStr;
+        llvm::raw_svector_ostream tmpStream(resultNameStr);
+        p.printOperand(op->getResult(i), tmpStream);
+        if (tmpStream.str().drop_front() != expectedName.getValue()) {
+          nameDisagreement = true;
+        }
+      }
+    }
+  }
+  if (!nameDisagreement)
+    elideFields.push_back("name");
+
   p.printOptionalAttrDict(op->getAttrs(), elideFields);
 }
 
+/// Suggest a name for each result value based on the saved result names
+/// attribute.
 void RTLInstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  NamedAttrList attrs = getAttrs();
-  for (auto it = attrs.begin(), e = attrs.end(); it < e; ++it) {
-    if (it->first.strref().startswith("rtl.rname")) {
-      auto numberStr = it->first.strref().substr(9);
-      size_t resultIdx;
-      if (!numberStr.getAsInteger<size_t>(10, resultIdx))
-        setNameFn(getResult(resultIdx),
-                  it->second.dyn_cast<StringAttr>().getValue());
-    }
-  }
+  ArrayAttr nameAttrList = getAttrOfType<ArrayAttr>("name");
+  if (nameAttrList && nameAttrList.size() <= getNumResults())
+    for (size_t i = 0, e = nameAttrList.size(); i < e; ++i)
+      if (auto resultName = nameAttrList[i].dyn_cast<StringAttr>())
+        setNameFn(getResult(i), resultName.getValue());
 }
 
 //===----------------------------------------------------------------------===//
