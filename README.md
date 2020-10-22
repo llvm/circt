@@ -22,6 +22,10 @@ for more information.
    requests for the CIRCT repository, and gain commit access using the [standard
    LLVM policies](https://llvm.discourse.group/c/Projects-that-want-to-become-official-LLVM-Projects/circt/).
 
+Also take a look at the following diagram, which gives a brief overview of the current [dialects and how they interact](docs/dialects.svg):
+
+<p align="center"><img src="docs/dialects.svg"/></p>
+
 ## Motivation
 
 The EDA industry has well-known and widely used proprietary and open source
