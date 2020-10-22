@@ -49,17 +49,19 @@
     // CHECK-NEXT: rtl.connect %2, %5 : i4
     firrtl.connect %2, %4 : !firrtl.uint<4>, !firrtl.uint<4>
 
-    // CHECK-NEXT: [[CAST:%.+]] = firrtl.stdIntCast %out4 : (!firrtl.flip<uint<4>>) -> i4
-    // CHECK-NEXT: rtl.connect [[CAST]], [[XOR]] : i4
+    // CHECK-NEXT: [[CAST1:%.+]] = firrtl.asPassive %out4 : (!firrtl.flip<uint<4>>) -> !firrtl.uint<4>
+    // CHECK-NEXT: [[CAST2:%.+]] = firrtl.stdIntCast [[CAST1]] : (!firrtl.uint<4>) -> i4
+    // CHECK-NEXT: rtl.connect [[CAST2]], [[XOR]] : i4
     firrtl.connect %out4, %5 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
-    // CHECK-NEXT: [[CAST1:%.+]] = firrtl.stdIntCast %out4 : (!firrtl.flip<uint<4>>) -> i4
+    // CHECK-NEXT: [[CAST0:%.+]] = firrtl.asPassive %out4 : (!firrtl.flip<uint<4>>) -> !firrtl.uint<4>
+    // CHECK-NEXT: [[CAST1:%.+]] = firrtl.stdIntCast [[CAST0]] : (!firrtl.uint<4>) -> i4
     // CHECK-NEXT: [[CAST2:%.+]] = firrtl.stdIntCast %in2 : (!firrtl.uint<2>) -> i2
     // CHECK-NEXT: [[ZEXT:%.+]] = rtl.zext [[CAST2]] : (i2) -> i4
     // CHECK-NEXT: rtl.connect [[CAST1]], [[ZEXT]] : i4
     firrtl.connect %out4, %in2 : !firrtl.flip<uint<4>>, !firrtl.uint<2>
 
-    // CHECK-NEXT: = rtl.wire {name = "test-name"} : i4
+    // CHECK-NEXT: %test-name = rtl.wire : i4
     firrtl.wire {name = "test-name"} : !firrtl.uint<4>
 
     // CHECK-NEXT: = rtl.wire : i2
@@ -125,7 +127,7 @@
     %21 = firrtl.rem %3, %in3 : (!firrtl.sint<3>, !firrtl.sint<8>) -> !firrtl.sint<3>
 
     // CHECK-NEXT: [[CAST:%.+]] = firrtl.stdIntCast %in2 : (!firrtl.uint<2>) -> i2
-    // CHECK-NEXT: [[WIRE:%.+]] = rtl.wire {name = "n1"} : i2
+    // CHECK-NEXT: [[WIRE:%n1]] = rtl.wire : i2
     // CHECK-NEXT: rtl.connect [[WIRE]], [[CAST]] : i2
     %n1 = firrtl.node %in2  {name = "n1"} : !firrtl.uint<2>
 
@@ -138,12 +140,14 @@
 
     // CHECK-NEXT: %c-1_i3 = rtl.constant(-1 : i3) : i3
     // CHECK-NEXT: [[XOR:%.+]] = rtl.xor [[CVT]], %c-1_i3 : i3
-    %24 = firrtl.not %23 : (!firrtl.sint<3>) -> !firrtl.sint<3>
+    %24 = firrtl.not %23 : (!firrtl.sint<3>) -> !firrtl.uint<3>
+
+    %s24 = firrtl.asSInt %24 : (!firrtl.uint<3>) -> !firrtl.sint<3>
 
     // CHECK-NEXT: [[SEXT:%.+]] = rtl.sext [[XOR]] : (i3) -> i4
     // CHECK-NEXT: %c0_i4 = rtl.constant(0 : i4) : i4
     // CHECK-NEXT: [[SUB:%.+]] = rtl.sub %c0_i4, [[SEXT]] : i4
-    %25 = firrtl.neg %24 : (!firrtl.sint<3>) -> !firrtl.sint<4>
+    %25 = firrtl.neg %s24 : (!firrtl.sint<3>) -> !firrtl.sint<4>
 
     // CHECK-NEXT: [[CVT4:%.+]] = rtl.sext [[CVT]] : (i3) -> i4
     // CHECK-NEXT: rtl.mux %false, [[CVT4]], [[SUB]] : i4

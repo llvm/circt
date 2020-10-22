@@ -26,10 +26,12 @@ public:
                        AddOp, SubOp, MulOp, DivOp, ModOp, ShlOp,
                        // Bitwise operations
                        AndOp, OrOp, XorOp,
+                       // Comparison operations
+                       ICmpOp,
                        // Reduction Operators
                        AndROp, OrROp, XorROp,
                        // Other operations.
-                       SExtOp, ZExtOp, ConcatOp, ExtractOp, MuxOp, DoneOp>(
+                       SExtOp, ZExtOp, ConcatOp, ExtractOp, MuxOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitComb(expr, args...);
             })
@@ -89,13 +91,14 @@ public:
   HANDLE(OrROp, Unary);
   HANDLE(XorROp, Unary);
 
+  HANDLE(ICmpOp, Binary);
+
   // Other operations.
   HANDLE(SExtOp, Unhandled);
   HANDLE(ZExtOp, Unhandled);
   HANDLE(ConcatOp, Unhandled);
   HANDLE(ExtractOp, Unhandled);
   HANDLE(MuxOp, Unhandled);
-  HANDLE(DoneOp, Unhandled);
 #undef HANDLE
 };
 
@@ -107,7 +110,7 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<ConnectOp, WireOp, RTLInstanceOp>(
+        .template Case<ConnectOp, OutputOp, WireOp, RTLInstanceOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitStmt(expr, args...);
             })
@@ -145,7 +148,8 @@ public:
   }
 
   // Basic nodes.
-  HANDLE(ConnectOp, Unhandled)
+  HANDLE(ConnectOp, Unhandled);
+  HANDLE(OutputOp, Unhandled);
   HANDLE(WireOp, Unhandled);
   HANDLE(RTLInstanceOp, Unhandled);
 #undef HANDLE

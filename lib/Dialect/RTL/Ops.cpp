@@ -2,18 +2,23 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/FIRRTL/Ops.h"
 #include "circt/Dialect/RTL/Ops.h"
 #include "circt/Dialect/RTL/Visitors.h"
+#include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
+#include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/StandardTypes.h"
 
 using namespace circt;
 using namespace rtl;
+
+//===----------------------------------------------------------------------===//
+// RTLModuleOp
+//===----------------------------------------------------------------------===/
 
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<RTLModulePortInfo> ports) {
@@ -23,28 +28,35 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
 
   SmallVector<Type, 4> argTypes;
-  for (auto elt : ports)
-    argTypes.push_back(elt.type);
+  SmallVector<Type, 4> resultTypes;
+  for (auto elt : ports) {
+    if (elt.direction == PortDirection::OUTPUT)
+      resultTypes.push_back(elt.type);
+    else
+      argTypes.push_back(elt.type);
+  }
 
   // Record the argument and result types as an attribute.
-  auto type = builder.getFunctionType(argTypes, /*resultTypes=*/{});
+  auto type = builder.getFunctionType(argTypes, resultTypes);
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
 
   // Record the names of the arguments if present.
   SmallString<8> attrNameBuf;
   SmallString<8> attrDirBuf;
-  for (size_t i = 0, e = ports.size(); i != e; ++i) {
-    if (ports[i].name.getValue().empty())
-      continue;
+  for (const RTLModulePortInfo &port : ports) {
+    SmallVector<NamedAttribute, 2> argAttrs;
+    if (!port.name.getValue().empty())
+      argAttrs.push_back(
+          NamedAttribute(builder.getIdentifier("rtl.name"), port.name));
 
-    auto argAttr =
-        NamedAttribute(builder.getIdentifier("rtl.name"), ports[i].name);
+    if (port.direction == PortDirection::INOUT)
+      argAttrs.push_back(NamedAttribute(builder.getIdentifier("rtl.inout"),
+                                        builder.getUnitAttr()));
 
-    auto dirAttr = NamedAttribute(builder.getIdentifier("rtl.direction"),
-                                  ports[i].direction);
-
-    result.addAttribute(getArgAttrName(i, attrNameBuf),
-                        builder.getDictionaryAttr({argAttr, dirAttr}));
+    StringRef attrName = port.direction == PortDirection::OUTPUT
+                             ? getResultAttrName(port.argNum, attrNameBuf)
+                             : getArgAttrName(port.argNum, attrNameBuf);
+    result.addAttribute(attrName, builder.getDictionaryAttr(argAttrs));
   }
   result.addRegion();
 }
@@ -61,9 +73,16 @@ void rtl::RTLModuleOp::build(OpBuilder &builder, OperationState &result,
 
   // Add arguments to the body block.
   for (auto elt : ports)
-    body->addArgument(elt.type);
+    if (elt.direction != PortDirection::OUTPUT)
+      body->addArgument(elt.type);
 
   rtl::RTLModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
+}
+
+void rtl::RTLExternModuleOp::build(OpBuilder &builder, OperationState &result,
+                                   StringAttr name,
+                                   ArrayRef<RTLModulePortInfo> ports) {
+  buildModule(builder, result, name, ports);
 }
 
 FunctionType rtl::getModuleType(Operation *op) {
@@ -80,30 +99,37 @@ StringAttr rtl::getRTLNameAttr(ArrayRef<NamedAttribute> attrs) {
   return StringAttr();
 }
 
-StringAttr rtl::getRTLDirectionAttr(ArrayRef<NamedAttribute> attrs) {
+static bool containsInOutAttr(ArrayRef<NamedAttribute> attrs) {
   for (auto &argAttr : attrs) {
-    if (argAttr.first != "rtl.direction")
-      continue;
-    return argAttr.second.dyn_cast<StringAttr>();
+    if (argAttr.first == "rtl.inout")
+      return true;
   }
-  return StringAttr();
+  return false;
 }
 
-void rtl::RTLModuleOp::getRTLModulePortInfo(
-    Operation *op, SmallVectorImpl<RTLModulePortInfo> &results) {
+void rtl::getRTLModulePortInfo(Operation *op,
+                               SmallVectorImpl<RTLModulePortInfo> &results) {
   auto argTypes = getModuleType(op).getInputs();
 
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
-    auto type = argTypes[i].dyn_cast<IntegerType>();
+    bool isInout = containsInOutAttr(argAttrs);
 
+    results.push_back({getRTLNameAttr(argAttrs),
+                       isInout ? PortDirection::INOUT : PortDirection::INPUT,
+                       argTypes[i], i});
+  }
+
+  auto resultTypes = getModuleType(op).getResults();
+  for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
+    auto argAttrs = ::mlir::impl::getResultAttrs(op, i);
     results.push_back(
-        {getRTLNameAttr(argAttrs), type, getRTLDirectionAttr(argAttrs)});
+        {getRTLNameAttr(argAttrs), PortDirection::OUTPUT, resultTypes[i], i});
   }
 }
 
-static ParseResult parseRTLModuleOp(OpAsmParser &parser,
-                                    OperationState &result) {
+static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
+                                    bool isExtModule = false) {
   using namespace mlir::impl;
 
   SmallVector<OpAsmParser::OperandType, 4> entryArgs;
@@ -121,6 +147,7 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser,
 
   // Parse the function signature.
   bool isVariadic = false;
+
   if (parseFunctionSignature(parser, /*allowVariadic=*/false, entryArgs,
                              argTypes, argAttrs, isVariadic, resultTypes,
                              resultAttrs))
@@ -178,8 +205,14 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser,
           *body, entryArgs, entryArgs.empty() ? ArrayRef<Type>() : argTypes))
     return failure();
 
-  RTLModuleOp::ensureTerminator(*body, parser.getBuilder(), result.location);
+  if (!isExtModule)
+    RTLModuleOp::ensureTerminator(*body, parser.getBuilder(), result.location);
   return success();
+}
+
+static ParseResult parseRTLExternModuleOp(OpAsmParser &parser,
+                                          OperationState &result) {
+  return parseRTLModuleOp(parser, result, /*isExtModule:*/ true);
 }
 
 FunctionType getRTLModuleOpType(Operation *op) {
@@ -206,6 +239,10 @@ static void printRTLModuleOp(OpAsmPrinter &p, Operation *op) {
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size());
 }
 
+static void print(OpAsmPrinter &p, RTLExternModuleOp op) {
+  printRTLModuleOp(p, op);
+}
+
 static void print(OpAsmPrinter &p, RTLModuleOp op) {
   printRTLModuleOp(p, op);
 
@@ -213,16 +250,162 @@ static void print(OpAsmPrinter &p, RTLModuleOp op) {
   Region &body = op.getBody();
   if (!body.empty())
     p.printRegion(body, /*printEntryBlockArgs=*/false,
-                  /*printBlockTerminators=*/false);
+                  /*printBlockTerminators=*/true);
 }
 
+//===----------------------------------------------------------------------===//
+// RTLInstanceOp
+//===----------------------------------------------------------------------===/
+
 static LogicalResult verifyRTLInstanceOp(RTLInstanceOp op) {
-  auto moduleIR = op.getParentOfType<firrtl::CircuitOp>();
-  auto referencedModule = moduleIR.lookupSymbol(op.moduleName());
-  if (!isa<rtl::RTLModuleOp>(referencedModule))
+  auto moduleIR = op.getParentWithTrait<OpTrait::SymbolTable>();
+  if (moduleIR == nullptr) {
+    op.emitError("Must be contained within a SymbolTable region");
     return failure();
+  }
+  auto referencedModule =
+      mlir::SymbolTable::lookupSymbolIn(moduleIR, op.moduleName());
+  if (referencedModule == nullptr) {
+    op.emitError("Cannot find module definition '") << op.moduleName() << "'.";
+    return failure();
+  }
+  if (!isa<rtl::RTLModuleOp>(referencedModule) &&
+      !isa<rtl::RTLExternModuleOp>(referencedModule)) {
+    op.emitError("Symbol resolved to '")
+        << referencedModule->getName() << "' which is not a RTL[Ext]ModuleOp.";
+    return failure();
+  }
   return success();
 }
+
+StringAttr RTLInstanceOp::getResultName(size_t idx) {
+  if (auto nameAttrList = getAttrOfType<ArrayAttr>("name"))
+    if (idx < nameAttrList.size())
+      return nameAttrList[idx].dyn_cast<StringAttr>();
+  return StringAttr();
+}
+
+/// Intercept the `attr-dict` parsing to inject the result names which _may_ be
+/// missing.
+ParseResult parseResultNames(OpAsmParser &p, NamedAttrList &attrDict) {
+  MLIRContext *ctxt = p.getBuilder().getContext();
+  if (p.parseOptionalAttrDict(attrDict))
+    return failure();
+
+  // Assemble the result names from the asm.
+  SmallVector<Attribute, 8> names;
+  for (size_t i = 0, e = p.getNumResults(); i < e; ++i) {
+    names.push_back(StringAttr::get(p.getResultName(i).first, ctxt));
+  }
+
+  // Look for existing result names in the attr-dict and if they exist and are
+  // non-empty, replace them in the 'names' vector.
+  auto resultNamesID = Identifier::get("name", ctxt);
+  if (auto namesAttr = attrDict.getNamed(resultNamesID)) {
+    // It must be an ArrayAttr.
+    if (auto nameAttrList = namesAttr->second.dyn_cast<ArrayAttr>()) {
+      for (size_t i = 0, e = nameAttrList.size(); i < e; ++i) {
+        // List of result names must be no longer than number of results.
+        if (i >= names.size())
+          break;
+        // And it must be a string.
+        if (auto resultNameStringAttr =
+                nameAttrList[i].dyn_cast<StringAttr>()) {
+          // Only replace if non-empty.
+          if (!resultNameStringAttr.getValue().empty())
+            names[i] = resultNameStringAttr;
+        }
+      }
+    }
+  }
+  attrDict.set("name", ArrayAttr::get(names, ctxt));
+  return success();
+}
+
+/// Intercept the `attr-dict` printing to determine whether or not we can elide
+/// the result names attribute.
+void printResultNames(OpAsmPrinter &p, RTLInstanceOp *op) {
+  SmallVector<StringRef, 8> elideFields = {"instanceName", "moduleName"};
+
+  // If any names don't match what the printer is going to emit, keep the
+  // attributes.
+  bool nameDisagreement = false;
+  ArrayAttr nameAttrList = op->getAttrOfType<ArrayAttr>("name");
+  // Look for result names to possibly elide.
+  if (nameAttrList && nameAttrList.size() <= op->getNumResults()) {
+    // Check that all the result names have been kept.
+    for (size_t i = 0, e = nameAttrList.size(); i < e; ++i) {
+      // Name must be a string.
+      if (auto expectedName = nameAttrList[i].dyn_cast<StringAttr>()) {
+        // Check for disagreement
+        SmallString<32> resultNameStr;
+        llvm::raw_svector_ostream tmpStream(resultNameStr);
+        p.printOperand(op->getResult(i), tmpStream);
+        if (tmpStream.str().drop_front() != expectedName.getValue()) {
+          nameDisagreement = true;
+        }
+      }
+    }
+  }
+  if (!nameDisagreement)
+    elideFields.push_back("name");
+
+  p.printOptionalAttrDict(op->getAttrs(), elideFields);
+}
+
+/// Suggest a name for each result value based on the saved result names
+/// attribute.
+void RTLInstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  ArrayAttr nameAttrList = getAttrOfType<ArrayAttr>("name");
+  if (nameAttrList && nameAttrList.size() <= getNumResults())
+    for (size_t i = 0, e = nameAttrList.size(); i < e; ++i)
+      if (auto resultName = nameAttrList[i].dyn_cast<StringAttr>())
+        setNameFn(getResult(i), resultName.getValue());
+}
+
+//===----------------------------------------------------------------------===//
+// RTLOutputOp
+//===----------------------------------------------------------------------===/
+
+/// Verify that the num of operands and types fit the declared results.
+static LogicalResult verifyOutputOp(OutputOp *op) {
+  OperandRange outputValues = op->getOperands();
+  auto opParent = op->getParentOp();
+
+  // Check that we are in the correct region. OutputOp should be directly
+  // contained by an RTLModuleOp region. We'll loosen this restriction if
+  // there's a compelling use case.
+  if (!isa<RTLModuleOp>(opParent)) {
+    op->emitOpError("operation expected to be in a RTLModuleOp.");
+    return failure();
+  }
+
+  // Check that the we (rtl.output) have the same number of operands as our
+  // region has results.
+  FunctionType modType = getModuleType(opParent);
+  ArrayRef<Type> modResults = modType.getResults();
+  if (modResults.size() != outputValues.size()) {
+    op->emitOpError("must have same number of operands as region results.");
+    return failure();
+  }
+
+  // Check that the types of our operands and the region's results match.
+  for (size_t i = 0, e = modResults.size(); i < e; ++i) {
+    if (modResults[i] != outputValues[i].getType()) {
+      op->emitOpError("output types must match module. In "
+                      "operand ")
+          << i << ", expected " << modResults[i] << ", but got "
+          << outputValues[i].getType() << ".";
+      return failure();
+    }
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// RTL combinational ops
+//===----------------------------------------------------------------------===/
 
 /// Return true if the specified operation is a combinatorial logic op.
 bool rtl::isCombinatorial(Operation *op) {
@@ -256,6 +439,65 @@ struct ConstantIntMatcher {
 
 static inline ConstantIntMatcher m_RConstant(APInt &value) {
   return ConstantIntMatcher(value);
+}
+
+//===----------------------------------------------------------------------===//
+// WireOp
+//===----------------------------------------------------------------------===//
+
+static void printWireOp(OpAsmPrinter &p, WireOp &op) {
+  p << op.getOperationName();
+  // Note that we only need to print the "name" attribute if the asmprinter
+  // result name disagrees with it.  This can happen in strange cases, e.g.
+  // when there are conflicts.
+  bool namesDisagree = false;
+
+  SmallString<32> resultNameStr;
+  llvm::raw_svector_ostream tmpStream(resultNameStr);
+  p.printOperand(op.getResult(), tmpStream);
+  auto expectedName = op.nameAttr();
+  if (!expectedName ||
+      tmpStream.str().drop_front() != expectedName.getValue()) {
+    namesDisagree = true;
+  }
+
+  if (namesDisagree)
+    p.printOptionalAttrDict(op.getAttrs());
+  else
+    p.printOptionalAttrDict(op.getAttrs(), {"name"});
+
+  p << " : " << op.getType();
+}
+
+static ParseResult parseWireOp(OpAsmParser &parser, OperationState &result) {
+  Type resultType;
+
+  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(resultType))
+    return failure();
+
+  result.addTypes(resultType);
+
+  // If the attribute dictionary contains no 'name' attribute, infer it from
+  // the SSA name (if specified).
+  bool hadName = llvm::any_of(result.attributes, [](NamedAttribute attr) {
+    return attr.first == "name";
+  });
+
+  // If there was no name specified, check to see if there was a useful name
+  // specified in the asm file.
+  if (hadName)
+    return success();
+
+  auto resultName = parser.getResultName(0);
+  if (!resultName.first.empty() && !isdigit(resultName.first[0])) {
+    StringRef name = resultName.first;
+    auto *context = result.getContext();
+    auto nameAttr = parser.getBuilder().getStringAttr(name);
+    result.attributes.push_back({Identifier::get("name", context), nameAttr});
+  }
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -298,6 +540,35 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
                        int64_t value, IntegerType type) {
   auto numBits = type.getWidth();
   build(builder, result, APInt(numBits, (uint64_t)value, /*isSigned=*/true));
+}
+
+/// Flattens a single input in `op` if `hasOneUse` is true and it can be defined
+/// as an Op. Returns true if successful, and false otherwise.
+/// Example: op(1, 2, op(3, 4), 5) -> op(1, 2, 3, 4, 5)  // returns true
+template <typename Op>
+static bool tryFlatteningOperands(Op op, PatternRewriter &rewriter) {
+  auto inputs = op.inputs();
+
+  for (size_t i = 0, size = inputs.size(); i != size; ++i) {
+    if (!inputs[i].hasOneUse())
+      continue;
+    auto flattenOp = inputs[i].template getDefiningOp<Op>();
+    if (!flattenOp)
+      continue;
+    auto flattenOpInputs = flattenOp.inputs();
+
+    SmallVector<Value, 4> newOperands;
+    newOperands.reserve(size + flattenOpInputs.size());
+
+    auto flattenOpIndex = inputs.begin() + i;
+    newOperands.append(inputs.begin(), flattenOpIndex);
+    newOperands.append(flattenOpInputs.begin(), flattenOpInputs.end());
+    newOperands.append(flattenOpIndex + 1, inputs.end());
+
+    rewriter.replaceOpWithNewOp<Op>(op, op.getType(), newOperands);
+    return true;
+  }
+  return false;
 }
 
 void ConstantOp::getAsmResultNames(
@@ -408,7 +679,7 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       auto size = inputs.size();
       assert(size > 1 && "expected 2 or more operands");
 
-      APInt value;
+      APInt value, value2;
 
       // and(..., '1) -> and(...) -- identity
       if (matchPattern(inputs.back(), m_RConstant(value)) &&
@@ -425,9 +696,7 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
-      APInt value2;
-
-      // and(..., c1, c2) -> and(..., c3) -- constant folding
+      // and(..., c1, c2) -> and(..., c3) where c3 = c1 & c2 -- constant folding
       if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
           matchPattern(inputs[size - 2], m_RConstant(value2))) {
         auto cst = rewriter.create<ConstantOp>(op.getLoc(), value & value2);
@@ -438,26 +707,8 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       }
 
       // and(x, and(...)) -> and(x, ...) -- flatten
-      for (size_t i = 0; i != size; ++i) {
-        if (!inputs[i].hasOneUse())
-          continue;
-        auto andOp = inputs[i].getDefiningOp<rtl::AndOp>();
-        if (!andOp)
-          continue;
-
-        auto flattenedAndOpInputs = andOp.inputs();
-        SmallVector<Value, 4> newOperands;
-        newOperands.reserve(size + flattenedAndOpInputs.size());
-
-        auto andOpPosition = inputs.begin() + i;
-        newOperands.append(inputs.begin(), andOpPosition);
-        newOperands.append(flattenedAndOpInputs.begin(),
-                           flattenedAndOpInputs.end());
-        newOperands.append(andOpPosition + 1, inputs.end());
-
-        rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
+      if (tryFlatteningOperands(op, rewriter))
         return success();
-      }
 
       /// TODO: and(..., x, not(x)) -> and(..., 0) -- complement
       return failure();
@@ -492,7 +743,7 @@ void OrOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       auto size = inputs.size();
       assert(size > 1 && "expected 2 or more operands");
 
-      APInt value;
+      APInt value, value2;
 
       // or(..., 0) -> or(...) -- identity
       if (matchPattern(inputs.back(), m_RConstant(value)) &&
@@ -508,9 +759,20 @@ void OrOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
-      /// TODO: or(..., c1, c2) -> or(..., c3) where c3 = c1 | c2 -- constant
-      /// folding
-      /// TODO: or(x, or(...)) -> or(x, ...) -- flatten
+      // or(..., c1, c2) -> or(..., c3) where c3 = c1 | c2 -- constant folding
+      if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
+          matchPattern(inputs[size - 2], m_RConstant(value2))) {
+        auto cst = rewriter.create<ConstantOp>(op.getLoc(), value | value2);
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+        newOperands.push_back(cst);
+        rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
+      // or(x, or(...)) -> or(x, ...) -- flatten
+      if (tryFlatteningOperands(op, rewriter))
+        return success();
+
       /// TODO: or(..., x, not(x)) -> or(..., '1) -- complement
       return failure();
     }
@@ -542,7 +804,7 @@ void XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       auto size = inputs.size();
       assert(size > 1 && "expected 2 or more operands");
 
-      APInt value;
+      APInt value, value2;
 
       // xor(..., 0) -> xor(...) -- identity
       if (matchPattern(inputs.back(), m_RConstant(value)) &&
@@ -555,17 +817,28 @@ void XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
       if (inputs[size - 1] == inputs[size - 2]) {
         assert(size > 2 &&
-               "expected idompotent case for 2 elements handled already.");
+               "expected idempotent case for 2 elements handled already.");
         // xor(..., x, x) -> xor (...) -- idempotent
         rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(),
                                            inputs.drop_back(/*n=*/2));
         return success();
       }
 
+      // xor(..., c1, c2) -> xor(..., c3) where c3 = c1 ^ c2 -- constant folding
+      if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
+          matchPattern(inputs[size - 2], m_RConstant(value2))) {
+        auto cst = rewriter.create<ConstantOp>(op.getLoc(), value ^ value2);
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+        newOperands.push_back(cst);
+        rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
+      // xor(x, xor(...)) -> xor(x, ...) -- flatten
+      if (tryFlatteningOperands(op, rewriter))
+        return success();
+
       /// TODO: xor(..., '1) -> not(xor(...))
-      /// TODO: xor(..., c1, c2) -> xor(..., c3) where c3 = c1 ^ c2 --
-      /// constant folding
-      /// TODO: xor(x, xor(...)) -> xor(x, ...) -- flatten
       /// TODO: xor(..., x, not(x)) -> xor(..., '1)
       return failure();
     }
@@ -593,7 +866,7 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       auto size = inputs.size();
       assert(size > 1 && "expected 2 or more operands");
 
-      APInt value;
+      APInt value, value2;
 
       // add(..., 0) -> add(...) -- identity
       if (matchPattern(inputs.back(), m_RConstant(value)) &&
@@ -603,10 +876,69 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
-      /// TODO: add(..., x, x) -> add(..., shl(x, 1))
-      /// TODO: add(..., c1, c2) -> add(..., c3) where c3 = c1 + c2 --
-      /// constant folding
-      /// TODO: add(x, add(...)) -> add(x, ...) -- flatten
+      // add(..., c1, c2) -> add(..., c3) where c3 = c1 + c2 -- constant folding
+      if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
+          matchPattern(inputs[size - 2], m_RConstant(value2))) {
+        auto cst = rewriter.create<ConstantOp>(op.getLoc(), value + value2);
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+        newOperands.push_back(cst);
+        rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
+      // add(..., x, x) -> add(..., shl(x, 1))
+      if (inputs[size - 1] == inputs[size - 2]) {
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+
+        auto one = rewriter.create<ConstantOp>(
+            op.getLoc(), 1, op.getType().cast<IntegerType>());
+        auto shiftLeftOp =
+            rewriter.create<rtl::ShlOp>(op.getLoc(), inputs.back(), one);
+
+        newOperands.push_back(shiftLeftOp);
+        rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
+      auto shlOp = inputs[size - 1].getDefiningOp<rtl::ShlOp>();
+      // add(..., x, shl(x, c)) -> add(..., mul(x, (1 << c) + 1))
+      if (shlOp && shlOp.lhs() == inputs[size - 2] &&
+          matchPattern(shlOp.rhs(), m_RConstant(value))) {
+
+        APInt one(/*numBits=*/value.getBitWidth(), 1, /*isSigned=*/false);
+        auto rhs =
+            rewriter.create<ConstantOp>(op.getLoc(), (one << value) + one);
+
+        std::array<Value, 2> factors = {shlOp.lhs(), rhs};
+        auto mulOp = rewriter.create<rtl::MulOp>(op.getLoc(), factors);
+
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+        newOperands.push_back(mulOp);
+        rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
+      auto mulOp = inputs[size - 1].getDefiningOp<rtl::MulOp>();
+      // add(..., x, mul(x, c)) -> add(..., mul(x, c + 1))
+      if (mulOp && mulOp.inputs().size() == 2 &&
+          mulOp.inputs()[0] == inputs[size - 2] &&
+          matchPattern(mulOp.inputs()[1], m_RConstant(value))) {
+
+        APInt one(/*numBits=*/value.getBitWidth(), 1, /*isSigned=*/false);
+        auto rhs = rewriter.create<ConstantOp>(op.getLoc(), value + one);
+        std::array<Value, 2> factors = {mulOp.inputs()[0], rhs};
+        auto newMulOp = rewriter.create<rtl::MulOp>(op.getLoc(), factors);
+
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+        newOperands.push_back(newMulOp);
+        rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
+      // add(x, add(...)) -> add(x, ...) -- flatten
+      if (tryFlatteningOperands(op, rewriter))
+        return success();
+
       return failure();
     }
   };
@@ -639,7 +971,20 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       auto size = inputs.size();
       assert(size > 1 && "expected 2 or more operands");
 
-      APInt value;
+      APInt value, value2;
+
+      // mul(x, c) -> shl(x, log2(c)), where c is a power of two.
+      if (size == 2 && matchPattern(inputs.back(), m_RConstant(value)) &&
+          value.isPowerOf2()) {
+        auto shift =
+            rewriter.create<ConstantOp>(op.getLoc(), value.exactLogBase2(),
+                                        op.getType().cast<IntegerType>());
+        auto shlOp = rewriter.create<rtl::ShlOp>(op.getLoc(), inputs[0], shift);
+
+        rewriter.replaceOpWithNewOp<MulOp>(op, op.getType(),
+                                           ArrayRef<Value>(shlOp));
+        return success();
+      }
 
       // mul(..., 1) -> mul(...) -- identity
       if (matchPattern(inputs.back(), m_RConstant(value)) && (value == 1u)) {
@@ -648,9 +993,19 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
-      /// TODO: mul(..., c1, c2) -> mul(..., c3) where c3 = c1 * c2 --
-      /// constant folding
-      /// TODO: mul(a, mul(...)) -> mul(a, ...) -- flatten
+      // mul(..., c1, c2) -> mul(..., c3) where c3 = c1 * c2 -- constant folding
+      if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
+          matchPattern(inputs[size - 2], m_RConstant(value2))) {
+        auto cst = rewriter.create<ConstantOp>(op.getLoc(), value * value2);
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+        newOperands.push_back(cst);
+        rewriter.replaceOpWithNewOp<MulOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
+      // mul(a, mul(...)) -> mul(a, ...) -- flatten
+      if (tryFlatteningOperands(op, rewriter))
+        return success();
 
       return failure();
     }

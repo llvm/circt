@@ -644,7 +644,7 @@ FIRRTLType SubindexOp::getResultType(FIRRTLType inType, unsigned fieldIdx) {
 
 FIRRTLType SubaccessOp::getResultType(FIRRTLType inType, FIRRTLType indexType) {
   if (auto vectorType = inType.dyn_cast<FVectorType>())
-    if (indexType.getPassiveType().isa<UIntType>())
+    if (indexType.isa<UIntType>())
       return vectorType.getElementType();
 
   if (auto flipType = inType.dyn_cast<FlipType>())
@@ -889,10 +889,6 @@ FIRRTLType firrtl::getReductionResult(FIRRTLType input) {
   return UIntType::get(input.getContext(), 1);
 }
 
-FIRRTLType firrtl::getAsPassiveResult(FIRRTLType input) {
-  return input.getPassiveType();
-}
-
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
@@ -916,8 +912,7 @@ FIRRTLType BitsPrimOp::getResultType(FIRRTLType input, int32_t high,
 
 void BitsPrimOp::build(OpBuilder &builder, OperationState &result, Value input,
                        unsigned high, unsigned low) {
-  auto type = getResultType(input.getType().cast<FIRRTLType>().getPassiveType(),
-                            high, low);
+  auto type = getResultType(input.getType().cast<FIRRTLType>(), high, low);
   assert(type && "invalid inputs building BitsPrimOp!");
   build(builder, result, type, input, high, low);
 }
@@ -1033,7 +1028,7 @@ FIRRTLType TailPrimOp::getResultType(FIRRTLType input, int32_t amount) {
     width -= amount;
   }
 
-  return IntType::get(input.getContext(), inputi.isSigned(), width);
+  return IntType::get(input.getContext(), false, width);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1047,14 +1042,12 @@ static LogicalResult verifyStdIntCast(StdIntCast cast) {
   FIRRTLType firType;
   IntegerType integerType;
   if ((firType = cast.getOperand().getType().dyn_cast<FIRRTLType>())) {
-    firType = firType.getPassiveType();
     integerType = cast.getType().dyn_cast<IntegerType>();
     if (!integerType) {
       cast.emitError("result type must be a signless integer");
       return failure();
     }
   } else if ((firType = cast.getType().dyn_cast<FIRRTLType>())) {
-    firType = firType.getPassiveType();
     integerType = cast.getOperand().getType().dyn_cast<IntegerType>();
     if (!integerType) {
       cast.emitError("operand type must be a signless integer");

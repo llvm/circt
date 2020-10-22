@@ -114,6 +114,9 @@ TOK_KEYWORD(write)
 // FIRToken::lp_foo enums.
 TOK_LPKEYWORD(printf)
 TOK_LPKEYWORD(stop)
+TOK_LPKEYWORD(assert)
+TOK_LPKEYWORD(assume)
+TOK_LPKEYWORD(cover)
 
 // These are for LPKEYWORD cases that correspond to a primitive operation.
 TOK_LPKEYWORD_PRIM(add, AddPrimOp)

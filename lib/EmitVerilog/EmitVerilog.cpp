@@ -41,7 +41,8 @@ static bool isVerilogExpression(Operation *op) {
   // All FIRRTL expressions and RTL combinatorial logic ops are Verilog
   // expressions.
   return isExpression(op) || rtl::isCombinatorial(op) ||
-         isa<sv::TextualValueOp>(op);
+         isa<sv::TextualValueOp>(op) || isa<AsPassivePrimOp>(op) ||
+         isa<AsNonPassivePrimOp>(op);
 }
 
 /// Return the width of the specified FIRRTL type in bits or -1 if it isn't
@@ -67,11 +68,10 @@ static int getBitWidthOrSentinel(Type type) {
       .Default([](Type) { return -1; });
 }
 
-/// Return the type of the specified value, converted to a passive type.  If "T"
-/// Is specified, this force casts to that subtype.
+/// Return the type of the specified value, force casting to the subtype.
 template <typename T = FIRRTLType>
-static T getPassiveTypeOf(Value v) {
-  return v.getType().cast<FIRRTLType>().getPassiveType().cast<T>();
+static T getTypeOf(Value v) {
+  return v.getType().cast<T>();
 }
 
 /// Given an integer value, return the number of characters it will take to
@@ -94,7 +94,8 @@ static unsigned getPrintedIntWidth(unsigned value) {
 static bool isNoopCast(Operation *op) {
   // These are always noop casts.
   if (isa<AsAsyncResetPrimOp>(op) || isa<AsClockPrimOp>(op) ||
-      isa<AsUIntPrimOp>(op) || isa<AsSIntPrimOp>(op))
+      isa<AsUIntPrimOp>(op) || isa<AsSIntPrimOp>(op) ||
+      isa<AsPassivePrimOp>(op) || isa<AsNonPassivePrimOp>(op))
     return true;
 
   // cvt from signed is noop.
@@ -295,6 +296,7 @@ public:
   void emitStatement(AttachOp op);
   void emitStatement(ConnectOp op);
   void emitStatement(rtl::ConnectOp op);
+  void emitStatement(rtl::OutputOp op);
   void emitStatement(rtl::RTLInstanceOp op);
   void emitStatement(PrintFOp op);
   void emitStatement(StopOp op);
@@ -312,9 +314,10 @@ public:
   void emitOperation(Operation *op);
 
   void collectNamesEmitDecls(Block &block);
-  void addName(Value value, StringRef name);
-  void addName(Value value, StringAttr nameAttr) {
-    addName(value, nameAttr ? nameAttr.getValue() : "");
+  bool collectNamesEmitWires(rtl::RTLInstanceOp &inst);
+  StringRef addName(Value value, StringRef name);
+  StringRef addName(Value value, StringAttr nameAttr) {
+    return addName(value, nameAttr ? nameAttr.getValue() : "");
   }
 
   StringRef getName(Value value) {
@@ -442,7 +445,7 @@ public:
 
 /// Add the specified name to the name table, auto-uniquing the name if
 /// required.  If the name is empty, then this creates a unique temp name.
-void ModuleEmitter::addName(Value value, StringRef name) {
+StringRef ModuleEmitter::addName(Value value, StringRef name) {
   if (name.empty())
     name = "_T";
 
@@ -488,7 +491,7 @@ void ModuleEmitter::addName(Value value, StringRef name) {
     auto insertResult = usedNames.insert(name);
     if (insertResult.second) {
       nameTable[value] = &*insertResult.first;
-      return;
+      return insertResult.first->getKey();
     }
   }
 
@@ -507,7 +510,7 @@ void ModuleEmitter::addName(Value value, StringRef name) {
       auto insertResult = usedNames.insert(name);
       if (insertResult.second) {
         nameTable[value] = &*insertResult.first;
-        return;
+        return insertResult.first->getKey();
       }
     }
 
@@ -771,7 +774,7 @@ private:
   SubExprInfo visitExpr(OrPrimOp op) { return emitVariadic(op, Or, "|"); }
   SubExprInfo visitExpr(XorPrimOp op) { return emitVariadic(op, Xor, "^"); }
 
-  // Comparison Operations
+  // FIRRTL Comparison Operations
   SubExprInfo visitExpr(LEQPrimOp op) {
     return emitSignedBinary(op, Comparison, "<=");
   }
@@ -807,6 +810,8 @@ private:
   // client as necessary.
   SubExprInfo visitExpr(AsUIntPrimOp op) { return emitNoopCast(op); }
   SubExprInfo visitExpr(AsSIntPrimOp op) { return emitNoopCast(op); }
+  SubExprInfo visitExpr(AsPassivePrimOp op) { return emitNoopCast(op); }
+  SubExprInfo visitExpr(AsNonPassivePrimOp op) { return emitNoopCast(op); }
 
   // Other
   SubExprInfo visitExpr(SubfieldOp op);
@@ -863,6 +868,14 @@ private:
   SubExprInfo visitComb(rtl::ZExtOp op);
   SubExprInfo visitComb(rtl::ConcatOp op);
   SubExprInfo visitComb(rtl::ExtractOp op);
+
+  // RTL Comparison Operations
+  SubExprInfo visitComb(rtl::ICmpOp op) {
+    std::array<const char *, 10> symop{"==", "!=", "<",  "<=", "<",
+                                       "<=", ">",  ">=", ">",  ">="};
+    return emitSignedBinary(op, Comparison,
+                            symop[static_cast<uint64_t>(op.predicate())]);
+  }
 
 private:
   SmallPtrSet<Operation *, 8> &emittedExprs;
@@ -1179,14 +1192,14 @@ SubExprInfo ExprEmitter::visitComb(rtl::MuxOp op) {
 }
 
 SubExprInfo ExprEmitter::visitExpr(CvtPrimOp op) {
-  if (getPassiveTypeOf<IntType>(op.getOperand()).isSigned())
+  if (getTypeOf<IntType>(op.getOperand()).isSigned())
     return emitNoopCast(op);
 
   return emitCat(op.getOperand(), "1'b0");
 }
 
 SubExprInfo ExprEmitter::visitExpr(HeadPrimOp op) {
-  auto width = getPassiveTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
+  auto width = getTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
   if (width == -1)
     return visitUnhandledExpr(op);
   auto numBits = op.amount();
@@ -1194,7 +1207,7 @@ SubExprInfo ExprEmitter::visitExpr(HeadPrimOp op) {
 }
 
 SubExprInfo ExprEmitter::visitExpr(TailPrimOp op) {
-  auto width = getPassiveTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
+  auto width = getTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
   if (width == -1)
     return visitUnhandledExpr(op);
   auto numBits = op.amount();
@@ -1202,7 +1215,7 @@ SubExprInfo ExprEmitter::visitExpr(TailPrimOp op) {
 }
 
 SubExprInfo ExprEmitter::visitExpr(PadPrimOp op) {
-  auto inType = getPassiveTypeOf<IntType>(op.getOperand());
+  auto inType = getTypeOf<IntType>(op.getOperand());
   auto inWidth = inType.getWidthOrSentinel();
   if (inWidth == -1)
     return visitUnhandledExpr(op);
@@ -1245,7 +1258,7 @@ SubExprInfo ExprEmitter::visitExpr(PadPrimOp op) {
 // TODO(verilog dialect): There is no need to persist shifts. They are
 // apparently only needed for width inference.
 SubExprInfo ExprEmitter::visitExpr(ShrPrimOp op) {
-  auto width = getPassiveTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
+  auto width = getTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
   unsigned shiftAmount = op.amount();
   if (width == -1 || shiftAmount >= unsigned(width))
     return visitUnhandledExpr(op);
@@ -1382,6 +1395,27 @@ void ModuleEmitter::emitStatement(rtl::ConnectOp op) {
   emitExpression(op.src(), ops);
   os << ';';
   emitLocationInfoAndNewLine(ops);
+}
+
+/// For OutputOp we put "assign" statements at the end of the Verilog module to
+/// assign the module outputs to intermediate wires.
+void ModuleEmitter::emitStatement(rtl::OutputOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  SmallVector<rtl::RTLModulePortInfo, 8> ports;
+  rtl::RTLModuleOp parent = op.getParentOfType<rtl::RTLModuleOp>();
+  parent.getRTLPortInfo(ports);
+  size_t operandIndex = 0;
+  for (rtl::RTLModulePortInfo port : ports) {
+    if (port.direction != rtl::PortDirection::OUTPUT)
+      continue;
+    indent() << "assign " << port.getName() << " = ";
+    emitExpression(op.getOperand(operandIndex), ops);
+    os << ';';
+    emitLocationInfoAndNewLine(ops);
+    ++operandIndex;
+  }
 }
 
 void ModuleEmitter::emitStatement(PrintFOp op) {
@@ -1617,6 +1651,7 @@ void ModuleEmitter::emitStatement(rtl::RTLInstanceOp op) {
   StringRef defName = op.moduleName();
 
   auto opArgs = op.inputs();
+  auto opResults = op.getResults();
 
   auto moduleIR = op.getParentOfType<firrtl::CircuitOp>();
   auto referencedModule =
@@ -1632,8 +1667,11 @@ void ModuleEmitter::emitStatement(rtl::RTLInstanceOp op) {
   for (size_t i = 0, e = portInfo.size(); i != e; ++i) {
     rtl::RTLModulePortInfo &elt = portInfo[i];
     bool isLast = &elt == &portInfo.back();
-    indent() << "  ." << StringRef(elt.name.getValue()) << " ("
-             << getName(opArgs[i]) << (isLast ? ")\n" : "),\n");
+    StringRef valueName = elt.direction == rtl::PortDirection::OUTPUT
+                              ? getName(opResults[elt.argNum])
+                              : getName(opArgs[elt.argNum]);
+    indent() << "  ." << StringRef(elt.getName()) << " (" << valueName
+             << (isLast ? ")\n" : "),\n");
   }
   indent() << ")\n";
 }
@@ -1819,9 +1857,20 @@ void ModuleEmitter::emitDecl(MemOp op) {
 /// Most expressions are invalid to bit-select from in Verilog, but some things
 /// are ok.  Return true if it is ok to inline bitselect from the result of this
 /// expression.  It is conservatively correct to return false.
-static bool isOkToBitSelectFrom(Operation *op) {
+static bool isOkToBitSelectFrom(Value v) {
+  // Module ports are always ok to bit select from.
+  auto *op = v.getDefiningOp();
+  if (!op)
+    return true;
+
   if (isa<SubfieldOp>(op))
     return true;
+
+  // As{Non}PassivePrimOp is transparent.
+  if (auto cast = dyn_cast<AsPassivePrimOp>(op))
+    return isOkToBitSelectFrom(cast.getOperand());
+  if (auto cast = dyn_cast<AsNonPassivePrimOp>(op))
+    return isOkToBitSelectFrom(cast.getOperand());
 
   // TODO: We could handle concat and other operators here.
   return false;
@@ -1830,7 +1879,7 @@ static bool isOkToBitSelectFrom(Operation *op) {
 /// Return true if we are unable to ever inline the specified operation.  This
 /// happens because not all Verilog expressions are composable.
 static bool isExpressionUnableToInline(Operation *op) {
-  // Can the users of the operation to see if any of them need this to be
+  // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
   for (auto user : op->getUsers()) {
     // Verilog bit selection is required by the standard to be:
@@ -1839,13 +1888,14 @@ static bool isExpressionUnableToInline(Operation *op) {
     if (isa<HeadPrimOp>(user) || isa<TailPrimOp>(user) ||
         isa<ShrPrimOp>(user) || isa<BitsPrimOp>(user) ||
         isa<rtl::ExtractOp>(user))
-      if (!isOkToBitSelectFrom(op))
+      if (!isOkToBitSelectFrom(op->getResult(0)))
         return true;
 
     if (auto pad = dyn_cast<PadPrimOp>(user)) {
-      auto inType = getPassiveTypeOf<IntType>(pad.getOperand());
+      auto inType = getTypeOf<IntType>(pad.getOperand());
       auto inWidth = inType.getWidthOrSentinel();
-      if (unsigned(inWidth) > pad.amount() && !isOkToBitSelectFrom(op))
+      if (unsigned(inWidth) > pad.amount() &&
+          !isOkToBitSelectFrom(op->getResult(0)))
         return true;
     }
   }
@@ -1900,9 +1950,13 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
   SmallVector<Operation *, 16> declsToEmit;
-
+  bool rtlInstanceDeclaredWires = false;
   for (auto &op : block) {
-    if (op.getNumResults() == 0 || isa<rtl::RTLInstanceOp>(op))
+    if (auto rtlInstance = dyn_cast<rtl::RTLInstanceOp>(op)) {
+      rtlInstanceDeclaredWires |= collectNamesEmitWires(rtlInstance);
+      continue;
+    }
+    if (op.getNumResults() == 0)
       continue;
 
     assert(op.getNumResults() == 1 && "firrtl only has single-op results");
@@ -2011,8 +2065,31 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     }
   }
 
-  if (!declsToEmit.empty())
+  if (!declsToEmit.empty() || rtlInstanceDeclaredWires)
     os << '\n';
+}
+
+bool ModuleEmitter::collectNamesEmitWires(rtl::RTLInstanceOp &op) {
+  for (size_t i = 0, e = op.getNumResults(); i < e; ++i) {
+    auto result = op.getResult(i);
+    StringRef wireName = addName(result, op.getResultName(i));
+
+    Type resultType = result.getType();
+    if (auto intType = resultType.dyn_cast<IntegerType>()) {
+      if (intType.getWidth() == 1) {
+        indent() << "wire " << wireName << ";\n";
+      } else {
+        indent() << "wire [" << intType.getWidth() - 1 << ":0] " << wireName
+                 << ";\n";
+      }
+    } else {
+      indent() << "// Type '" << resultType
+               << "' not supported in verilog output yet.\n";
+      op.emitOpError("Type of result not supported for verilog output. Type: ")
+          << resultType << ".";
+    }
+  }
+  return op.getNumResults() != 0;
 }
 
 void ModuleEmitter::emitOperation(Operation *op) {
@@ -2069,6 +2146,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitStmt(rtl::ConnectOp op) {
       return emitter.emitStatement(op), true;
     }
+    bool visitStmt(rtl::OutputOp op) { return emitter.emitStatement(op), true; }
     bool visitStmt(rtl::RTLInstanceOp op) {
       return emitter.emitStatement(op), true;
     }
@@ -2379,17 +2457,23 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
   SmallVector<rtl::RTLModulePortInfo, 8> portInfo;
   module.getRTLPortInfo(portInfo);
 
-  size_t nextPort = 0;
-  for (auto &port : portInfo)
-    addName(module.getArgument(nextPort++), port.name);
+  for (auto &port : portInfo) {
+    StringRef name = port.getName();
+    if (name.empty()) {
+      module.emitOpError(
+          "Found port without a name. Port names are required for "
+          "Verilog synthesis.\n");
+      name = "<<NO-NAME-FOUND>>";
+    }
+    if (port.direction == rtl::PortDirection::OUTPUT)
+      usedNames.insert(name);
+    else
+      addName(module.getArgument(port.argNum), name);
+  }
 
   os << "module " << module.getName() << '(';
   if (!portInfo.empty())
     os << '\n';
-
-  auto isOutput = [](StringAttr direction) -> bool {
-    return direction.getValue().str() == "out";
-  };
 
   // Determine the width of the widest type we have to print so everything
   // lines up nicely.
@@ -2397,7 +2481,7 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
   unsigned maxTypeWidth = 0;
   for (auto &port : portInfo) {
     auto portType = port.type;
-    hasOutputs |= isOutput(port.direction);
+    hasOutputs |= port.direction == rtl::PortDirection::OUTPUT;
 
     int bitWidth = getBitWidthOrSentinel(portType);
     if (bitWidth == -1 || bitWidth == 1)
@@ -2416,26 +2500,32 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
     indent();
     // Emit the arguments.
     auto portType = portInfo[portIdx].type;
-    bool isThisPortOutput = isOutput(portInfo[portIdx].direction);
-    if (isThisPortOutput)
+    rtl::PortDirection thisPortDirection = portInfo[portIdx].direction;
+    switch (thisPortDirection) {
+    case rtl::PortDirection::OUTPUT:
       os << "output ";
-    else
+      break;
+    case rtl::PortDirection::INPUT:
       os << (hasOutputs ? "input  " : "input ");
+      break;
+    case rtl::PortDirection::INOUT:
+      os << (hasOutputs ? "inout  " : "inout ");
+      break;
+    }
 
     int bitWidth = getBitWidthOrSentinel(portType);
     emitTypePaddedToWidth(portType, maxTypeWidth, module);
 
     // Emit the name.
-    os << getName(module.getArgument(portIdx));
+    os << portInfo[portIdx].getName();
     ++portIdx;
 
     // If we have any more ports with the same types and the same direction,
     // emit them in a list on the same line.
-    while (portIdx != e &&
-           isOutput(portInfo[portIdx].direction) == isThisPortOutput &&
+    while (portIdx != e && portInfo[portIdx].direction == thisPortDirection &&
            bitWidth == getBitWidthOrSentinel(portInfo[portIdx].type)) {
       // Don't exceed our preferred line length.
-      StringRef name = getName(module.getArgument(portIdx));
+      StringRef name = portInfo[portIdx].getName();
       if (os.tell() + 2 + name.size() - startOfLinePos >
           // We use "-2" here because we need a trailing comma or ); for the
           // decl.
@@ -2567,8 +2657,7 @@ void CircuitEmitter::emitCircuit(CircuitOp circuit) {
 
     // Ignore the done terminator at the end of the circuit.
     // Ignore 'ext modules'.
-    if (isa<rtl::DoneOp>(op) || isa<firrtl::DoneOp>(op) ||
-        isa<FExtModuleOp>(op))
+    if (isa<firrtl::DoneOp>(op) || isa<FExtModuleOp>(op))
       continue;
 
     op.emitError("unknown operation");

@@ -5,6 +5,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Conversion/FIRRTLToLLHD/FIRRTLToLLHD.h"
 #include "circt/Conversion/HandshakeToFIRRTL/HandshakeToFIRRTL.h"
 #include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
 #include "circt/Conversion/StandardToHandshake/StandardToHandshake.h"
@@ -106,6 +107,7 @@ int main(int argc, char **argv) {
 
   llhd::initLLHDTransformationPasses();
   llhd::initLLHDToLLVMPass();
+  llhd::registerFIRRTLToLLHDPasses();
 
   PassPipelineCLParser passPipeline("", "Compiler passes to run");
 

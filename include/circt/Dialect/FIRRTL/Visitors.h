@@ -36,7 +36,7 @@ public:
             CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
-            TailPrimOp,
+            TailPrimOp, AsPassivePrimOp, AsNonPassivePrimOp,
 
             // Standard Dialect integer conversion.
             StdIntCast>([&](auto expr) -> ResultType {
@@ -127,6 +127,8 @@ public:
   HANDLE(ShlPrimOp, Unhandled);
   HANDLE(ShrPrimOp, Unhandled);
   HANDLE(TailPrimOp, Unhandled);
+  HANDLE(AsPassivePrimOp, Unhandled);
+  HANDLE(AsNonPassivePrimOp, Unhandled);
 
   // Standard Dialect integer conversion.
   HANDLE(StdIntCast, Unhandled);

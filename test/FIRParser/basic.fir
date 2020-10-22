@@ -50,6 +50,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module types :
     input c: Clock         ; CHECK: %c: !firrtl.clock,
     input r: Reset         ; CHECK: %r: !firrtl.reset,
+    input ar: AsyncReset   ; CHECK: %ar: !firrtl.asyncreset,
     input a: Analog        ; CHECK: %a: !firrtl.analog,
     input a8: Analog<8>    ; CHECK: %a8: !firrtl.analog<8>,
     input s: SInt          ; CHECK: %s: !firrtl.sint,
@@ -194,6 +195,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.head %i8, 4 : (!firrtl.uint<8>) -> !firrtl.uint<4>
     node n10 = add(add(tail(i8, 7), tail(i8, 0)), head(i8, 4))
 
+    ; CHECK: firrtl.tail %{{.*}}, 3 : (!firrtl.sint<8>) -> !firrtl.uint<5>
+    node n10s = tail(asSInt(i8), 3)
+    
     ; The Scala implementation of FIRRTL prints registers without a reset value
     ; using the register name as the reset.  Make sure we handle this for
     ; compatibility.
@@ -215,7 +219,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.subaccess %_t[%i8] : (!firrtl.vector<uint<1>, 12>, !firrtl.uint<8>) -> !firrtl.uint<1>
     auto <= _t[i8]
 
-    ; CHECK: firrtl.subaccess %_t[%auto] : (!firrtl.vector<uint<1>, 12>, !firrtl.flip<uint<1>>) -> !firrtl.uint<1>
+    ; CHECK: [[autoP:%.+]] = firrtl.asPassive %auto : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
+    ; CHECK: firrtl.subaccess %_t{{\[}}[[autoP]]] : (!firrtl.vector<uint<1>, 12>, !firrtl.uint<1>) -> !firrtl.uint<1>
     auto <= _t[auto]
 
     ; CHECK: %myMem = firrtl.cmem {name = "myMem"} : !firrtl.vector<bundle<id: uint<4>, resp: uint<2>>, 8>
@@ -250,6 +255,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.andr %n12
     node value = andr(_GEN_43)    ;; Uses n12 directly.
 
+    ; CHECK: [[autoP:%.+]] = firrtl.asPassive %auto : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
+    ; CHECK-NEXT: = firrtl.not [[autoP]] : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    node n13 = not(auto)
+
 
     ; CHECK: %_M = firrtl.mem "Undefined" {depth = 8 : i64, name = "_M",
     ; CHECK:   readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<
@@ -275,6 +284,17 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: firrtl.attach(%a8, %a8, %a8) :
     attach (a8, a8, a8)
+
+    wire pred: UInt <1>
+    wire en: UInt <1>
+    pred <= eq(i8, i8)
+    en <= not(reset)
+    ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid"
+    assert(clock, pred, en, "X equals Y when Z is valid")
+    ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid"
+    assume(clock, pred, en, "X equals Y when Z is valid")
+    ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid"
+    cover(clock, pred, en, "X equals Y when Z is valid")
 
   ; CHECK-LABEL: firrtl.module @type_handling(
   module type_handling :

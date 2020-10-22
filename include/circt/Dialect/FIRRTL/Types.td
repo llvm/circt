@@ -8,6 +8,8 @@
 // FIRRTL Types Definitions
 //===----------------------------------------------------------------------===//
 
+def FIRRTLType : Type<CPred<"$_self.isa<FIRRTLType>()">, "FIRRTLType">;
+
 def ClockType : Type<CPred<"$_self.isa<ClockType>()">, "clock">,
                 BuildableType<"ClockType::get($_builder.getContext())">;
 
@@ -19,7 +21,19 @@ def UInt1Type : Type<CPred<"$_self.isa<UIntType>() && "
                            "$_self.cast<UIntType>().getWidth() == 1">,
                            "UInt<1>">,
                 BuildableType<"UIntType::get($_builder.getContext(), 1)">;
-def ResetType : Type<CPred<"$_self.cast<FIRRTLType>().isResetType()">, "Reset, AsyncReset, or UInt<1>">;
+
+def AsyncResetType : Type<CPred<"$_self.isa<AsyncResetType>()">, "AsyncReset">;
+
+def ResetType : Type<CPred<"$_self.isa<FIRRTLType>() && "
+                           "$_self.cast<FIRRTLType>().isResetType()">,
+                    "Reset, AsyncReset, or UInt<1>">;
+
+def PassiveType : Type<CPred<"$_self.isa<FIRRTLType>() && "
+                             "$_self.cast<FIRRTLType>().isPassiveType()">,
+                       "a passive type (contain no flips)">;
+
+def UIntSIntClockType : AnyTypeOf<[SIntType, UIntType, ClockType],
+                                  "sint, uint, or clock">;
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Enum Definitions

@@ -24,13 +24,34 @@ func @test_extract(%arg0: i4) {
 // -----
 
 func @test_extract(%arg0: i4) {
-   // expected-error @+1 {{'rtl.extract' op from bit too large for input}}
+  // expected-error @+1 {{'rtl.extract' op from bit too large for input}}
   %b = rtl.extract %arg0 from 2 : (i4) -> i3
 }
 
 // -----
 
 func @test_and() {
-   // expected-error @+1 {{'rtl.and' op expected 1 or more operands}}
+  // expected-error @+1 {{'rtl.and' op expected 1 or more operands}}
   %b = rtl.and : i111
 }
+
+// -----
+
+func @notModule () {}
+
+rtl.module @A(%arg0: i1) {
+  // expected-error @+1 {{Symbol resolved to 'func' which is not a RTL[Ext]ModuleOp}}
+  rtl.instance "foo" @notModule(%arg0) : (i1) -> ()
+}
+
+// -----
+
+rtl.module @A(%arg0: i1) {
+  // expected-error @+1 {{Cannot find module definition 'doesNotExist'}}
+  rtl.instance "b1" @doesNotExist(%arg0) : (i1) -> ()
+}
+
+// -----
+
+// expected-error @+1 {{'rtl.output' op must have same number of operands as region results}}
+rtl.module @A() -> (i1) { }

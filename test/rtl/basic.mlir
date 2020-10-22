@@ -36,8 +36,49 @@ func @test1(%arg0: i3, %arg1: i1) -> i50 {
   // CHECK-NEXT: rtl.add [[RES9]], [[RES10]] : i19
   %add = rtl.add %small1, %small2 : i19
 
-  // CHECK-NEXT:  = rtl.wire : i4
+  // CHECK-NEXT: rtl.icmp "eq" [[RES9]], [[RES10]] : i19
+  %eq = rtl.icmp "eq" %small1, %small2 : i19
+
+  // CHECK-NEXT: rtl.icmp "ne" [[RES9]], [[RES10]] : i19
+  %neq = rtl.icmp "ne" %small1, %small2 : i19
+
+  // CHECK-NEXT: rtl.icmp "slt" [[RES9]], [[RES10]] : i19
+  %lt = rtl.icmp "slt" %small1, %small2 : i19
+
+  // CHECK-NEXT: rtl.icmp "ult" [[RES9]], [[RES10]] : i19
+  %ult = rtl.icmp "ult" %small1, %small2 : i19
+
+  // CHECK-NEXT: rtl.icmp "sle" [[RES9]], [[RES10]] : i19
+  %leq = rtl.icmp "sle" %small1, %small2 : i19
+
+  // CHECK-NEXT: rtl.icmp "ule" [[RES9]], [[RES10]] : i19
+  %uleq = rtl.icmp "ule" %small1, %small2 : i19
+
+  // CHECK-NEXT: rtl.icmp "sgt" [[RES9]], [[RES10]] : i19
+  %gt = rtl.icmp "sgt" %small1, %small2 : i19
+
+  // CHECK-NEXT: rtl.icmp "ugt" [[RES9]], [[RES10]] : i19
+  %ugt = rtl.icmp "ugt" %small1, %small2 : i19
+
+  // CHECK-NEXT: rtl.icmp "sge" [[RES9]], [[RES10]] : i19
+  %geq = rtl.icmp "sge" %small1, %small2 : i19
+
+  // CHECK-NEXT: rtl.icmp "uge" [[RES9]], [[RES10]] : i19
+  %ugeq = rtl.icmp "uge" %small1, %small2 : i19
+
+  // CHECK-NEXT: %w = rtl.wire : i4
   %w = rtl.wire : i4
+
+  // CHECK-NEXT: %after1 = rtl.wire : i4
+  %before1 = rtl.wire {name = "after1"} : i4
+
+  // CHECK-NEXT: %after2_conflict = rtl.wire : i4
+  // CHECK-NEXT: %after2_conflict_0 = rtl.wire {name = "after2_conflict"} : i4
+  %before2_0 = rtl.wire {name = "after2_conflict"} : i4
+  %before2_1 = rtl.wire {name = "after2_conflict"} : i4
+
+  // CHECK-NEXT: %after3 = rtl.wire {someAttr = "foo"} : i4
+  %before3 = rtl.wire {name = "after3", someAttr = "foo"} : i4
 
   // CHECK-NEXT: = rtl.mux %arg1, [[RES2]], [[RES3]] : i7
   %mux = rtl.mux %arg1, %d, %e : i7
