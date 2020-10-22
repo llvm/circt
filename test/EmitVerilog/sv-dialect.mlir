@@ -33,7 +33,7 @@ firrtl.circuit "M1" {
       sv.fatal
       // CHECK-NEXT:   $finish
       sv.finish
-      // CHECK-NEXT:   end
+      // CHECK-NEXT:   {{end$}}
     }
   }
 }

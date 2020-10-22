@@ -336,7 +336,7 @@ circuit inputs_only :
   ; CHECK-NEXT:        if (`STOP_COND_ && reset) begin
   ; CHECK-NEXT:          $fatal;
   ; CHECK-NEXT:          $finish;
-  ; CHECK-NEXT:        end
+  ; CHECK-NEXT:        {{end$}}
   ; CHECK-NEXT:      `endif // !SYNTHESIS
   ; CHECK-NEXT:    end // always @(posedge)
   ; CHECK-NEXT:  endmodule
@@ -407,7 +407,7 @@ circuit inputs_only :
   ; CHECK-EMPTY:
   ; CHECK-NEXT:   always @(posedge clock) begin
   ; CHECK-NEXT:     count <= reset ? 2'h0 : cond ? value : count;
-  ; CHECK-NEXT:   end
+  ; CHECK-NEXT:   {{end //}}
   ; CHECK-NEXT: endmodule
   module UninitReg1 :
     input clock: Clock
@@ -443,7 +443,7 @@ circuit inputs_only :
 ; CHECK-EMPTY:
 ; CHECK-NEXT:   always @(posedge clock or posedge reset) begin
 ; CHECK-NEXT:     reg_0 <= io_en ? io_d : reg_0;
-; CHECK-NEXT:   end
+; CHECK-NEXT:   {{end //}}
 ; CHECK-NEXT: endmodule
 
   module InitReg1 :
