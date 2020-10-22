@@ -277,12 +277,14 @@ void VerilogEmitterBase::emitTypePaddedToWidth(Type type, size_t padToWidth,
 namespace {
 
 class ModuleEmitter : public VerilogEmitterBase {
+
 public:
   explicit ModuleEmitter(VerilogEmitterState &state)
       : VerilogEmitterBase(state) {}
 
   void emitFModule(FModuleOp module);
   void emitRTLModule(rtl::RTLModuleOp module);
+  void emitRTLExternModule(rtl::RTLExternModuleOp module);
   void emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
                       bool forceRootExpr = false);
 
@@ -1653,16 +1655,31 @@ void ModuleEmitter::emitStatement(rtl::RTLInstanceOp op) {
   auto opArgs = op.inputs();
   auto opResults = op.getResults();
 
-  auto moduleIR = op.getParentOfType<firrtl::CircuitOp>();
-  auto referencedModule =
-      cast<rtl::RTLModuleOp>(moduleIR.lookupSymbol(defName));
-  assert(referencedModule && "invalid rtl.instance op");
+  SmallVector<rtl::RTLModulePortInfo, 8> portInfo;
+  if (auto moduleIR = op.getParentOfType<firrtl::CircuitOp>()) {
+    auto moduleOp = moduleIR.lookupSymbol(defName);
+    if (auto m = cast<rtl::RTLModuleOp>(moduleOp)) {
+      m.getRTLPortInfo(portInfo);
+    } else if (auto m = cast<rtl::RTLExternModuleOp>(moduleOp)) {
+      m.getRTLPortInfo(portInfo);
+    } else {
+      assert(0 && "invalid rtl.instance op");
+    }
+  } else if (auto moduleIR = op.getParentOfType<mlir::ModuleOp>()) {
+    auto moduleOp = moduleIR.lookupSymbol(defName);
+    if (isa<rtl::RTLModuleOp>(moduleOp)) {
+      cast<rtl::RTLModuleOp>(moduleOp).getRTLPortInfo(portInfo);
+    } else if (isa<rtl::RTLExternModuleOp>(moduleOp)) {
+      cast<rtl::RTLExternModuleOp>(moduleOp).getRTLPortInfo(portInfo);
+    } else {
+      assert(0 && "invalid rtl.instance op");
+    }
+  } else {
+    assert(0 && "unknown parent module type");
+  }
 
   os << ' ' << defName << ' ' << instanceName << " (";
   emitLocationInfoAndNewLine(ops);
-
-  SmallVector<rtl::RTLModulePortInfo, 8> portInfo;
-  referencedModule.getRTLPortInfo(portInfo);
 
   for (size_t i = 0, e = portInfo.size(); i != e; ++i) {
     rtl::RTLModulePortInfo &elt = portInfo[i];
@@ -1673,7 +1690,7 @@ void ModuleEmitter::emitStatement(rtl::RTLInstanceOp op) {
     indent() << "  ." << StringRef(elt.getName()) << " (" << valueName
              << (isLast ? ")\n" : "),\n");
   }
-  indent() << ")\n";
+  indent() << ");\n";
 }
 
 void ModuleEmitter::emitDecl(RegOp op) {
@@ -2452,6 +2469,10 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
   os << "endmodule\n\n";
 }
 
+void ModuleEmitter::emitRTLExternModule(rtl::RTLExternModuleOp module) {
+  os << "// external module " << module.getName() << "\n\n";
+}
+
 void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
   // Add all the ports to the name table.
   SmallVector<rtl::RTLModulePortInfo, 8> portInfo;
@@ -2653,6 +2674,9 @@ void CircuitEmitter::emitCircuit(CircuitOp circuit) {
     } else if (auto module = dyn_cast<rtl::RTLModuleOp>(op)) {
       ModuleEmitter(state).emitRTLModule(module);
       continue;
+    } else if (auto module = dyn_cast<rtl::RTLExternModuleOp>(op)) {
+      ModuleEmitter(state).emitRTLExternModule(module);
+      continue;
     }
 
     // Ignore the done terminator at the end of the circuit.
@@ -2668,6 +2692,10 @@ void CircuitEmitter::emitMLIRModule(ModuleOp module) {
   for (auto &op : *module.getBody()) {
     if (auto circuit = dyn_cast<CircuitOp>(op))
       emitCircuit(circuit);
+    else if (auto module = dyn_cast<rtl::RTLModuleOp>(op))
+      ModuleEmitter(state).emitRTLModule(module);
+    else if (auto module = dyn_cast<rtl::RTLExternModuleOp>(op))
+      ModuleEmitter(state).emitRTLExternModule(module);
     else if (!isa<ModuleTerminatorOp>(op))
       op.emitError("unknown operation");
   }
