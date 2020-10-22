@@ -47,6 +47,11 @@ public:
   /// used for `mem` operations.
   FIRRTLType getMaskType();
 
+  /// Return this type with widths of all ground types removed. This
+  /// enables two types to be compared by structure and name ignoring
+  /// widths.
+  FIRRTLType getWidthlessType();
+
   /// If this is an IntType, AnalogType, or sugar type for a single bit (Clock,
   /// Reset, etc) then return the bitwidth.  Return -1 if the is one of these
   /// types but without a specified bitwidth.  Return -2 if this isn't a simple
