@@ -4,7 +4,9 @@
 //
 // ESI is a system interconnect generator. It is type safe and
 // latency-insensitive. It can be used for on-chip, inter-chip, and host-chip
-// communication.
+// communication. It is also intended to help with incremental adoption and
+// integration with existing RTL as it provides a standardized, typed interface
+// to the outside world.
 //
 //===----------------------------------------------------------------------===//
 

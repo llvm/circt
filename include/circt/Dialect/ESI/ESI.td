@@ -12,8 +12,8 @@ include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def ESI_Dialect : Dialect {
-    let name = "esi";
-    let cppNamespace = "::circt::esi";
+  let name = "esi";
+  let cppNamespace = "::circt::esi";
 }
 
 include "ESIPorts.td"
