@@ -53,4 +53,4 @@ void ESIDialect::printType(Type type, DialectAsmPrinter &printer) const {
 } // namespace esi
 } // namespace circt
 
-#include "circt/Dialect/ESI/ESIEnums.cpp.inc"
+#include "circt/Dialect/ESI/ESIAttrs.cpp.inc"

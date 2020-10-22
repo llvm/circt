@@ -34,6 +34,6 @@ public:
 } // namespace esi
 } // namespace circt
 
-#include "circt/Dialect/ESI/ESIEnums.h.inc"
+#include "circt/Dialect/ESI/ESIAttrs.h.inc"
 
 #endif

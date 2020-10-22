@@ -9,6 +9,7 @@
 #define ESI_TD
 
 include "mlir/IR/OpBase.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def ESI_Dialect : Dialect {
     let name = "esi";

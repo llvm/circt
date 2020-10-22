@@ -21,8 +21,8 @@ def Channel : ESI_Port<"Channel"> {
   }];
 
   let mnemonic = "channel";
-  let parameters = (
-    ins
-    "Type":$inner
-  );
+  let parameters = (ins "Type":$inner);
 }
+
+def ChannelType :
+  Type<CPred<"$_self.isa<::circt::esi::ChannelPort>()">, "">;
