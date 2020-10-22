@@ -1,6 +1,3 @@
-# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT License.
-
 add_mlir_dialect_library(MLIRESI
   ESIDialect.cpp
   ESIOps.cpp

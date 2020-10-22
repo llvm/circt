@@ -45,16 +45,10 @@ ParseResult parseChannelBuffer(OpAsmParser &parser, OperationState &result) {
 }
 
 void print(OpAsmPrinter &p, ChannelBuffer &op) {
-  p << "esi.buffer";
-  p << " ";
-  p << op.input();
-  p << " ";
+  p << "esi.buffer " << op.input() << " ";
   p.printAttributeWithoutType(op.options());
   p.printOptionalAttrDict(op.getAttrs(), /*elidedAttrs=*/{"options"});
-  p << " "
-    << ":";
-  p << " ";
-  p << op.output().getType().cast<ChannelPort>().getInner();
+  p << " : " << op.output().getType().cast<ChannelPort>().getInner();
 }
 
 #define GET_OP_CLASSES
