@@ -42,7 +42,7 @@ bool Time::isZero() { return (time == 0 && delta == 0 && eps == 0); }
 std::string Time::dump() {
   std::string ret;
   raw_string_ostream ss(ret);
-  ss << time << "ns " << delta << "d " << eps << "e";
+  ss << time << "ps " << delta << "d " << eps << "e";
   return ss.str();
 }
 
@@ -60,7 +60,7 @@ Signal::Signal(std::string name, std::string owner, uint8_t *value,
 bool Signal::operator==(const Signal &rhs) const {
   if (owner != rhs.owner || name != rhs.name || size != rhs.size)
     return false;
-  return std::memcmp(value, rhs.value, size);
+  return std::memcmp(value.get(), rhs.value.get(), size);
 }
 
 bool Signal::operator<(const Signal &rhs) const {
@@ -76,7 +76,7 @@ std::string Signal::dump() {
   raw_string_ostream ss(ret);
   ss << "0x";
   for (int i = size - 1; i >= 0; --i) {
-    ss << format_hex_no_prefix(static_cast<int>(value[i]), 2);
+    ss << format_hex_no_prefix(static_cast<int>(value.get()[i]), 2);
   }
   return ss.str();
 }
@@ -128,16 +128,11 @@ void UpdateQueue::insertOrUpdate(Time time, std::string inst) {
 //===----------------------------------------------------------------------===//
 
 State::~State() {
-  for (int i = 0, e = signals.size(); i < e; ++i)
-    if (signals[i].value)
-      std::free(signals[i].value);
-
   for (auto &entry : instances) {
-    auto inst = entry.getValue();
-    if (!inst.isEntity && inst.procState) {
+    auto &inst = entry.getValue();
+    if (inst.procState) {
       std::free(inst.procState->inst);
       std::free(inst.procState->senses);
-      std::free(inst.procState);
     }
   }
 }
@@ -156,6 +151,7 @@ void State::pushQueue(Time t, int index, int bitOffset, APInt &bytes) {
 void State::pushQueue(Time t, std::string inst) {
   Time newTime = time + t;
   queue.insertOrUpdate(newTime, inst);
+  instances[inst].expectedWakeup = newTime;
 }
 
 int State::addSignal(std::string name, std::string owner) {
@@ -164,7 +160,7 @@ int State::addSignal(std::string name, std::string owner) {
 }
 
 void State::addProcPtr(std::string name, ProcState *procStatePtr) {
-  instances[name].procState = procStatePtr;
+  instances[name].procState = std::unique_ptr<ProcState>(procStatePtr);
   // Copy string to owner name ptr.
   name.copy(instances[name].procState->inst, name.size());
   // Ensure the string is null-terminated.
@@ -173,20 +169,20 @@ void State::addProcPtr(std::string name, ProcState *procStatePtr) {
 
 int State::addSignalData(int index, std::string owner, uint8_t *value,
                          uint64_t size) {
-  auto inst = instances[owner];
+  auto &inst = instances[owner];
   uint64_t globalIdx = inst.sensitivityList[index + inst.nArgs].globalIndex;
+  auto &sig = signals[globalIdx];
 
   // Add pointer and size to global signal table entry.
-  signals[globalIdx].value = value;
-  signals[globalIdx].size = size;
+  sig.value = std::unique_ptr<uint8_t>(value);
+  sig.size = size;
 
   // Add the value pointer to the signal detail struct for each instance this
   // signal appears in.
   for (auto inst : signals[globalIdx].triggers) {
     for (auto &detail : instances[inst].sensitivityList) {
       if (detail.globalIndex == globalIdx) {
-        detail.value = value;
-        break;
+        detail.value = sig.value.get();
       }
     }
   }
@@ -196,13 +192,8 @@ int State::addSignalData(int index, std::string owner, uint8_t *value,
 void State::dumpSignal(llvm::raw_ostream &out, int index) {
   auto &sig = signals[index];
   for (auto inst : sig.triggers) {
-    std::string curr = inst, path = inst;
-    while (instances[curr].name != sig.owner) {
-      curr = instances[curr].parent;
-      path = curr + "/" + path;
-    }
-    out << time.dump() << "  " << path << "/" << sig.name << "  " << sig.dump()
-        << "\n";
+    out << time.dump() << "  " << instances[inst].path << "/" << sig.name
+        << "  " << sig.dump() << "\n";
   }
 }
 
@@ -211,6 +202,7 @@ void State::dumpLayout() {
   for (auto &inst : instances) {
     llvm::errs() << inst.getKey().str() << ":\n";
     llvm::errs() << "---parent: " << inst.getValue().parent << "\n";
+    llvm::errs() << "---path: " << inst.getValue().path << "\n";
     llvm::errs() << "---isEntity: " << inst.getValue().isEntity << "\n";
     llvm::errs() << "---sensitivity list: ";
     for (auto in : inst.getValue().sensitivityList) {

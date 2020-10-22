@@ -24,7 +24,7 @@ struct Time {
   Time() = default;
 
   /// Construct with given time values.
-  Time(unsigned time, unsigned delta, unsigned eps)
+  Time(uint64_t time, uint64_t delta, uint64_t eps)
       : time(time), delta(delta), eps(eps) {}
 
   /// Compare the time values in order of time, delta, eps.
@@ -42,9 +42,9 @@ struct Time {
   /// Get the stored time in a printable format.
   std::string dump();
 
-  unsigned time;
-  unsigned delta;
-  unsigned eps;
+  uint64_t time;
+  uint64_t delta;
+  uint64_t eps;
 
 private:
 };
@@ -64,6 +64,9 @@ struct Signal {
 
   /// Construct a signal with the given name, owner and initial value.
   Signal(std::string name, std::string owner, uint8_t *value, uint64_t size);
+
+  /// Default move constructor.
+  Signal(Signal &&) = default;
 
   /// Default signal destructor.
   ~Signal() = default;
@@ -85,7 +88,7 @@ struct Signal {
   std::vector<std::string> triggers;
   int origin = -1;
   uint64_t size;
-  uint8_t *value;
+  std::unique_ptr<uint8_t> value;
 };
 
 /// The simulator's internal representation of one queue slot.
@@ -140,19 +143,23 @@ struct Instance {
   Instance() = default;
 
   Instance(std::string name, std::string parent)
-      : name(name), parent(parent), procState(nullptr) {}
+      : name(name), parent(parent), procState(nullptr), entityState(nullptr) {}
 
   // The instance name.
   std::string name;
   // The instance parent's name.
   std::string parent;
+  // The instance's hierarchical path.
+  std::string path;
   // The instance's base unit.
   std::string unit;
   bool isEntity;
   size_t nArgs = 0;
   // The arguments and signals of this instance.
   std::vector<SignalDetail> sensitivityList;
-  ProcState *procState;
+  std::unique_ptr<ProcState> procState;
+  std::unique_ptr<uint8_t> entityState;
+  Time expectedWakeup;
 };
 
 /// The simulator's state. It contains the current simulation time, signal
