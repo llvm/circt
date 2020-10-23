@@ -60,6 +60,6 @@ public:
 };
 } // namespace sim
 } // namespace llhd
-} // namespace mlir
+} // namespace circt
 
 #endif // CIRCT_DIALECT_LLHD_SIMULATOR_TRACE_H

@@ -24,13 +24,13 @@ int allocSignal(State *state, int index, char *owner, uint8_t *value,
 }
 
 void addSigArrayElements(State *state, unsigned index, unsigned size,
-                            unsigned numElements) {
+                         unsigned numElements) {
   for (size_t i = 0; i < numElements; ++i)
     state->addSignalElement(index, size * i, size);
 }
 
 void addSigStructElement(State *state, unsigned index, unsigned offset,
-                            unsigned size) {
+                         unsigned size) {
   state->addSignalElement(index, offset, size);
 }
 
