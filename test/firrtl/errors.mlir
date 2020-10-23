@@ -47,7 +47,7 @@ firrtl.circuit "MyCircuit" {
 // -----
 
 
-// expected-error @+1 {{'firrtl.module' op should be embedded into a firrtl.circuit}}
+// expected-error @+1 {{'firrtl.module' op should be embedded into a 'firrtl.circuit'}}
 firrtl.module @X() {}
 
 // -----
@@ -189,5 +189,27 @@ firrtl.circuit "Foo" {
   firrtl.extmodule @Foo(%a : !firrtl.uint<2>) attributes { defname = "Foo", parameters = { width = 2 : i32 } }
   // expected-error @+1 {{'firrtl.extmodule' op with 'defname' attribute "Foo" has a port with name "a" which has a different type '!firrtl.sint' which does not match the type of the port in the same position of a previously defined extmodule with the same 'defname', expected port to have type '!firrtl.uint'}}
   firrtl.extmodule @Bar(%a : !firrtl.sint<1>) attributes { defname = "Foo" }
+
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+
+  firrtl.module @Foo()
+  // expected-error @+1 {{'firrtl.instance' op should be embedded in a 'firrtl.module'}}
+  %a = firrtl.instance @Foo : !firrtl.bundle<>
+
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+
+  // expected-note @+1 {{containing module declared here}}
+  firrtl.module @Foo() {
+    // expected-error @+1 {{'firrtl.instance' op is a recursive instantiation of its containing module}}
+    %a = firrtl.instance @Foo : !firrtl.bundle<>
+  }
 
 }
