@@ -470,7 +470,7 @@ static LogicalResult verifyFModuleOp(FModuleOp &module) {
 // Declarations
 //===----------------------------------------------------------------------===//
 
-/// Verify the correctness of an InstanceOp
+/// Verify the correctness of an InstanceOp.
 static LogicalResult verifyInstanceOp(InstanceOp &instance) {
 
   // Check that this instance is inside a module.
