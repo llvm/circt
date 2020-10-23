@@ -150,8 +150,7 @@ static LogicalResult verifyCircuitOp(CircuitOp &circuit) {
     for (auto p : llvm::zip(ports, collidingPorts)) {
       StringAttr aName, bName;
       FIRRTLType aType, bType;
-      std::forward_as_tuple(std::tie(aName, aType),
-                            std::tie(bName, bType)) = p;
+      std::forward_as_tuple(std::tie(aName, aType), std::tie(bName, bType)) = p;
       if (extModule.parameters() || collidingExtModule.parameters()) {
         aType = aType.getWidthlessType();
         bType = bType.getWidthlessType();
