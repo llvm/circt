@@ -459,7 +459,7 @@ static LogicalResult verifyFModuleOp(FModuleOp &module) {
   // The parent op must be a circuit op.
   auto parentOp = dyn_cast<CircuitOp>(module.getParentOp());
   if (!parentOp) {
-    module.emitOpError("should be embedded into a firrtl.circuit");
+    module.emitOpError("should be embedded into a 'firrtl.circuit'");
     return failure();
   }
 
