@@ -457,7 +457,7 @@ static ParseResult parseFExtModuleOp(OpAsmParser &parser,
 
 static LogicalResult verifyFModuleOp(FModuleOp &module) {
   // The parent op must be a circuit op.
-  auto parentOp = dyn_cast<CircuitOp>(module.getParentOp());
+  auto parentOp = dyn_cast_or_null<CircuitOp>(module.getParentOp());
   if (!parentOp) {
     module.emitOpError("should be embedded into a 'firrtl.circuit'");
     return failure();
