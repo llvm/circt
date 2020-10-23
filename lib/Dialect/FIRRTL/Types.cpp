@@ -246,6 +246,30 @@ FIRRTLType FIRRTLType::getMaskType() {
       });
 }
 
+/// Remove the widths from this type. All widths are replaced with an
+/// unknown width.
+FIRRTLType FIRRTLType::getWidthlessType() {
+  return TypeSwitch<FIRRTLType, FIRRTLType>(*this)
+      .Case<ClockType, ResetType, AsyncResetType>([](auto a) { return a; })
+      .Case<UIntType, SIntType, AnalogType>(
+          [&](auto a) { return a.get(getContext(), -1); })
+      .Case<BundleType>([&](auto a) {
+        SmallVector<BundleType::BundleElement, 4> newElements;
+        newElements.reserve(a.getElements().size());
+        for (auto elt : a.getElements())
+          newElements.push_back({elt.first, elt.second.getWidthlessType()});
+        return BundleType::get(newElements, getContext());
+      })
+      .Case<FVectorType>([](auto a) {
+        return FVectorType::get(a.getElementType().getWidthlessType(),
+                                a.getNumElements());
+      })
+      .Default([](auto) {
+        llvm_unreachable("unknown FIRRTL type");
+        return FIRRTLType();
+      });
+}
+
 /// If this is an IntType, AnalogType, or sugar type for a single bit (Clock,
 /// Reset, etc) then return the bitwidth.  Return -1 if the is one of these
 /// types but without a specified bitwidth.  Return -2 if this isn't a simple

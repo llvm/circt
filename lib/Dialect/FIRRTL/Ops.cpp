@@ -7,6 +7,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/StandardTypes.h"
+#include "llvm/ADT/DenseMap.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -72,6 +73,111 @@ static LogicalResult verifyCircuitOp(CircuitOp &circuit) {
     circuit.emitOpError("must contain one module that matches main name '" +
                         main + "'");
     return failure();
+  }
+
+  // Store a mapping of defname to either the first external module
+  // that defines it or, preferentially, the first external module
+  // that defines it and has no parameters.
+  llvm::DenseMap<Attribute, FExtModuleOp> defnameMap;
+
+  // Verify external modules.
+  for (auto &op : *circuit.getBody()) {
+    auto extModule = dyn_cast<FExtModuleOp>(op);
+    if (!extModule)
+      continue;
+
+    auto defname = extModule.defnameAttr();
+    if (!defname)
+      continue;
+
+    // Check that this extmodule's defname does not conflict with
+    // the symbol name of any module.
+    auto collidingModule = circuit.lookupSymbol(defname.getValue());
+    if (isa_and_nonnull<FModuleOp>(collidingModule)) {
+      auto diag =
+          op.emitOpError()
+          << "attribute 'defname' with value " << defname
+          << " conflicts with the name of another module in the circuit";
+      diag.attachNote(collidingModule->getLoc())
+          << "previous module declared here";
+      return failure();
+    }
+
+    // Find an optional extmodule with a defname collision. Update
+    // the defnameMap if this is the first extmodule with that
+    // defname or if the current extmodule takes no parameters and
+    // the collision does. The latter condition improves later
+    // extmodule verification as checking against a parameterless
+    // module is stricter.
+    FExtModuleOp collidingExtModule;
+    if (auto &value = defnameMap[defname]) {
+      collidingExtModule = value;
+      if (value.parameters() && !extModule.parameters())
+        value = extModule;
+    } else {
+      value = extModule;
+      // Go to the next extmodule if no extmodule with the same
+      // defname was found.
+      continue;
+    }
+
+    // Check that the number of ports is exactly the same.
+    SmallVector<std::pair<StringAttr, FIRRTLType>, 8> ports;
+    SmallVector<std::pair<StringAttr, FIRRTLType>, 8> collidingPorts;
+    extModule.getPortInfo(ports);
+    collidingExtModule.getPortInfo(collidingPorts);
+    if (ports.size() != collidingPorts.size()) {
+      auto diag = op.emitOpError()
+                  << "with 'defname' attribute " << defname << " has "
+                  << ports.size()
+                  << " ports which is different from a previously defined "
+                     "extmodule with the same 'defname' which has "
+                  << collidingPorts.size() << " ports";
+      diag.attachNote(collidingExtModule.getLoc())
+          << "previous extmodule definition occurred here";
+      return failure();
+    }
+
+    // Check that ports match for name and type. Since parameters
+    // *might* affect widths, ignore widths if either module has
+    // parameters. Note that this allows for misdetections, but
+    // has zero false positives.
+    for (auto p : llvm::zip(ports, collidingPorts)) {
+      StringAttr aName, bName;
+      FIRRTLType aType, bType;
+      std::forward_as_tuple(std::tie(aName, aType), std::tie(bName, bType)) = p;
+      if (extModule.parameters() || collidingExtModule.parameters()) {
+        aType = aType.getWidthlessType();
+        bType = bType.getWidthlessType();
+      }
+      if (aName != bName) {
+        auto diag = op.emitOpError()
+                    << "with 'defname' attribute " << defname
+                    << " has a port with name " << aName
+                    << " which does not match the name of the port "
+                    << "in the same position of a previously defined "
+                    << "extmodule with the same 'defname', expected port "
+                       "to have name "
+                    << bName;
+        diag.attachNote(collidingExtModule.getLoc())
+            << "previous extmodule definition occurred here";
+        return failure();
+      }
+      if (aType != bType) {
+        auto diag = op.emitOpError()
+                    << "with 'defname' attribute " << defname
+                    << " has a port with name " << aName
+                    << " which has a different type " << aType
+                    << " which does not match the type of the port in "
+                       "the same position of a previously defined "
+                       "extmodule with the same 'defname', expected port "
+                       "to have type "
+                    << bType;
+        diag.attachNote(collidingExtModule.getLoc())
+            << "previous extmodule definition occurred here";
+        return failure();
+      }
+    }
   }
 
   return success();
