@@ -110,21 +110,16 @@ static LogicalResult verifyCircuitOp(CircuitOp &circuit) {
     // extmodule verification as checking against a parameterless
     // module is stricter.
     FExtModuleOp collidingExtModule;
-    {
-      auto &value = defnameMap[defname];
-      if (value) {
-        collidingExtModule = value;
-        if (value.parameters() && !extModule.parameters())
-          value = extModule;
-      } else {
+    if (auto &value = defnameMap[defname]) {
+      collidingExtModule = value;
+      if (value.parameters() && !extModule.parameters())
         value = extModule;
-      }
-    }
-
-    // Go to next extmodule if no extmodule with the same defname
-    // was found.
-    if (!collidingExtModule)
+    } else {
+      value = extModule;
+      // Go to the next extmodule if no extmodule with the same
+      // defname was found.
       continue;
+    }
 
     // Check that the number of ports is exactly the same.
     SmallVector<std::pair<StringAttr, FIRRTLType>, 8> ports;
