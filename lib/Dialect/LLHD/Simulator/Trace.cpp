@@ -4,7 +4,7 @@
 
 #include <regex>
 
-using namespace mlir::llhd::sim;
+using namespace circt::llhd::sim;
 
 void Trace::addChange(unsigned sigIndex) {
   currentTime = state->time;
@@ -17,7 +17,7 @@ void Trace::addChange(unsigned sigIndex) {
 }
 
 void Trace::addChangeFull(unsigned sigIndex) {
-  auto sig = state->signals[sigIndex];
+  auto &sig = state->signals[sigIndex];
   // Add a change for all signal elements.
   if (sig.elements.size() > 0) {
     for (size_t i = 0, e = sig.elements.size(); i < e; ++i) {
@@ -40,7 +40,7 @@ void Trace::addChangeFull(unsigned sigIndex) {
 }
 
 void Trace::addChangeReduced(unsigned sigIndex) {
-  auto sig = state->signals[sigIndex];
+  auto &sig = state->signals[sigIndex];
   auto root = state->root;
   if (sig.owner == root) {
     // Add a change for all signal sub-elements.
@@ -62,7 +62,7 @@ void Trace::addChangeReduced(unsigned sigIndex) {
 }
 
 void Trace::addChangeMerged(unsigned sigIndex) {
-  auto sig = state->signals[sigIndex];
+  auto &sig = state->signals[sigIndex];
   auto time = state->time;
   // Add a change for all sub-elements
   if (sig.elements.size() > 0) {
@@ -106,7 +106,7 @@ void Trace::flushMerged() {
   // Move the merged changes to the changes vector for dumping.
   for (auto elem : mergedChanges) {
     auto sigIndex = elem.first.first;
-    auto sig = state->signals[sigIndex];
+    auto &sig = state->signals[sigIndex];
     auto change = elem.second;
     // Filter out changes that do not actually introduce changes
     if (lastValue[elem.first] != change.second) {
@@ -127,7 +127,7 @@ void Trace::flushMerged() {
       } else if (mode == mergedReduce || mode == namedOnly) {
         // Add the changes for the top-level signals only.
         auto sigIndex = elem.first.first;
-        auto sig = state->signals[sigIndex];
+        auto &sig = state->signals[sigIndex];
         auto root = state->root;
         if (sig.owner == root &&
             (mode == mergedReduce ||

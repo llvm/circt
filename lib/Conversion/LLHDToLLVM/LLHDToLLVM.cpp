@@ -1131,7 +1131,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
         voidTy, {i8PtrTy, i32Ty, i32Ty, i32Ty}, /*isVarArg=*/false);
     auto addSigElemFunc =
         getOrInsertFunction(module, rewriter, op->getLoc(),
-                            "add_sig_array_elements", addSigArrElemFuncTy);
+                            "addSigArrayElements", addSigArrElemFuncTy);
 
     // Add information about one element of a struct stored in a signal.
     // Signature: (i8* state, i32 signalIndex, i32 offset, i32 size) -> void
@@ -1139,7 +1139,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
         voidTy, {i8PtrTy, i32Ty, i32Ty, i32Ty}, /*isVarArg=*/false);
     auto addSigStructFunc =
         getOrInsertFunction(module, rewriter, op->getLoc(),
-                            "add_sig_struct_element", addSigStructElemFuncTy);
+                            "addSigStructElement", addSigStructElemFuncTy);
 
     // Get or insert Alloc_proc library call definition.
     auto allocProcFuncTy = LLVM::LLVMType::getFunctionTy(

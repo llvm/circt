@@ -84,7 +84,7 @@ std::string Signal::dump() {
 std::string Signal::dump(unsigned elemIndex) {
   assert(elements.size() > 0 && "the signal type has to be tuple or array!");
   auto elemSize = elements[elemIndex].second;
-  auto ptr = value + elements[elemIndex].first;
+  auto ptr = value.get() + elements[elemIndex].first;
   std::string ret;
   raw_string_ostream ss(ret);
   ss << "0x";
@@ -181,6 +181,7 @@ void State::addProcPtr(std::string name, ProcState *procStatePtr) {
 
 int State::addSignalData(int index, std::string owner, uint8_t *value,
                          uint64_t size) {
+  llvm::outs() << owner << "\n";
   auto &inst = instances[owner];
   uint64_t globalIdx = inst.sensitivityList[index + inst.nArgs].globalIndex;
   auto &sig = signals[globalIdx];

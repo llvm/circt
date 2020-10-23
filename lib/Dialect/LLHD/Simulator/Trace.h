@@ -10,7 +10,7 @@ namespace llvm {
 class raw_ostream;
 }
 
-namespace mlir {
+namespace circt {
 namespace llhd {
 namespace sim {
 
