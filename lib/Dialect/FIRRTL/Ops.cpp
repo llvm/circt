@@ -485,10 +485,11 @@ static LogicalResult verifyInstanceOp(InstanceOp &instance) {
   // inside a module.
   auto circuit = instance.getParentOfType<CircuitOp>();
 
-  // Check that this instance doesn't recursively instantiate its wrapping module.
+  // Check that this instance doesn't recursively instantiate its wrapping
+  // module.
   if (circuit.lookupSymbol(instance.moduleName()) == module) {
     auto diag = instance.emitOpError()
-      << "is a recursive instantiation of its containing module";
+                << "is a recursive instantiation of its containing module";
     diag.attachNote(module.getLoc()) << "containing module declared here";
     return failure();
   }
