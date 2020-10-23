@@ -191,3 +191,25 @@ firrtl.circuit "Foo" {
   firrtl.extmodule @Bar(%a : !firrtl.sint<1>) attributes { defname = "Foo" }
 
 }
+
+// -----
+
+firrtl.circuit "Foo" {
+
+  firrtl.module @Foo()
+  // expected-error @+1 {{'firrtl.instance' op should be embedded in a 'firrtl.module'}}
+  %a = firrtl.instance @Foo : !firrtl.bundle<>
+
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+
+  // expected-note @+1 {{containing module declared here}}
+  firrtl.module @Foo() {
+    // expected-error @+1 {{'firrtl.instance' op is a recursive instantiation of its containing module}}
+    %a = firrtl.instance @Foo : !firrtl.bundle<>
+  }
+
+}

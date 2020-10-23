@@ -18,6 +18,8 @@ def InstanceOp : FIRRTLOp<"instance"> {
   let assemblyFormat = [{
      $moduleName attr-dict `:` type($result)
   }];
+
+  let verifier = [{ return ::verifyInstanceOp(*this); }];
 }
 
 def CMemOp : FIRRTLOp<"cmem", [/*MemAlloc*/]> {

@@ -470,6 +470,32 @@ static LogicalResult verifyFModuleOp(FModuleOp &module) {
 // Declarations
 //===----------------------------------------------------------------------===//
 
+/// Verify the correctness of an InstanceOp
+static LogicalResult verifyInstanceOp(InstanceOp &instance) {
+
+  // Check that this instance is inside a module.
+  auto module = dyn_cast<FModuleOp>(instance.getParentOp());
+  if (!module) {
+    instance.emitOpError("should be embedded in a 'firrtl.module'");
+    return failure();
+  }
+
+  // Note: this *cannot* be null since modules are guaranteed to be
+  // inside a circuit, and it was verified above that this instance is
+  // inside a module.
+  auto circuit = instance.getParentOfType<CircuitOp>();
+
+  // Check that this instance doesn't recursively instantiate its wrapping module.
+  if (circuit.lookupSymbol(instance.moduleName()) == module) {
+    auto diag = instance.emitOpError()
+      << "is a recursive instantiation of its containing module";
+    diag.attachNote(module.getLoc()) << "containing module declared here";
+    return failure();
+  }
+
+  return success();
+}
+
 /// Return the type of a mem given a list of named ports and their kind.
 /// This returns a null type if there are duplicate port names.
 FIRRTLType
