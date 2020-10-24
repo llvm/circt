@@ -1,4 +1,6 @@
-// RUN: circt-translate %s -emit-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
+// RUN: circt-translate %s -emit-verilog -verify-diagnostics | tee %t1.sv | FileCheck %s --strict-whitespace
+// This test does not compile with Verilator!
+// RUN: true || verilator -lint-only --top-module M1 %t1.sv
 
 firrtl.circuit "M1" {
   // CHECK-LABEL: module M1(
@@ -37,5 +39,3 @@ firrtl.circuit "M1" {
     }
   }
 }
-
-
