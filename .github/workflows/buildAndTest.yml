@@ -108,7 +108,7 @@ jobs:
   # Build CIRCT and run its tests.
   build-circt:
     name: Build and Test
-    needs: build-circt
+    needs: [build-llvm, build-verilator]
     runs-on: ubuntu-latest
     steps:
       - name: Configure Environment
