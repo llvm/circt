@@ -5,9 +5,9 @@ module add(
   input wire tstart,
   input wire clk
 );
-  always@(posedge clk) begin
-    out <= in1+in2;
-  end
+always@(posedge clk) begin
+  out <= in1+in2;
+end
 endmodule
 module mult(
   output reg[31:0] out,
@@ -16,9 +16,10 @@ module mult(
   input wire tstart,
   input wire clk
 );
-  reg[31:0] out1;
-  always@(posedge clk) begin
-    out1 <= in1*in2;
-    out <= out1;
-  end
+reg[31:0] out1;
+always@(posedge clk) begin
+  out1 <= in1*in2;
+  out <= out1;
+end
 endmodule
+

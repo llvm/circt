@@ -18,6 +18,7 @@ enum Kinds {
   TimeKind = Type::FIRST_PRIVATE_EXPERIMENTAL_0_TYPE,
   ConstKind,
   MemrefKind,
+  StreamKind,
   WireKind
 };
 
@@ -85,6 +86,43 @@ struct MemrefTypeStorage : public TypeStorage {
 
   ArrayRef<unsigned> shape;
   ArrayRef<unsigned> packing;
+  Type elementType;
+  PortKind port;
+};
+
+/// Storage class for StreamType.
+struct StreamTypeStorage : public TypeStorage {
+  StreamTypeStorage(Type elementType, PortKind port)
+      : elementType(elementType), port(port) {}
+
+  /// The hash key for this storage is a pair of the integer and type params.
+  using KeyTy = std::tuple<Type, PortKind>;
+
+  /// Define the comparison function for the key type.
+  bool operator==(const KeyTy &key) const {
+    return key == KeyTy(elementType, port);
+  }
+
+  /// Define a hash function for the key type.
+  static hash_code hashKey(const KeyTy &key) {
+    return hash_combine(std::get<0>(key), std::get<1>(key));
+  }
+
+  /// Define a construction function for the key type.
+  static KeyTy getKey(ArrayRef<unsigned> shape, Type elementType,
+                      ArrayRef<unsigned> packing, PortKind port = rw) {
+    return KeyTy(elementType, port);
+  }
+
+  /// Define a construction method for creating a new instance of this storage.
+  static StreamTypeStorage *construct(TypeStorageAllocator &allocator,
+                                      const KeyTy &key) {
+    Type elementType = std::get<0>(key);
+    Details::PortKind port = std::get<1>(key);
+    return new (allocator.allocate<StreamTypeStorage>())
+        StreamTypeStorage(elementType, port);
+  }
+
   Type elementType;
   PortKind port;
 };
@@ -171,6 +209,22 @@ public:
   ArrayRef<unsigned> getShape() { return getImpl()->shape; }
   Type getElementType() { return getImpl()->elementType; }
   ArrayRef<unsigned> getPacking() { return getImpl()->packing; }
+  Details::PortKind getPort() { return getImpl()->port; }
+};
+
+/// This class defines hir.stream type in the dialect.
+class StreamType
+    : public Type::TypeBase<StreamType, Type, Details::StreamTypeStorage> {
+public:
+  using Base::Base;
+
+  static bool kindof(unsigned kind) { return kind == StreamKind; }
+  static StringRef getKeyword() { return "stream"; }
+  static StreamType get(MLIRContext *context, Type elementType,
+                        Details::PortKind port) {
+    return Base::get(context, StreamKind, elementType, port);
+  }
+  Type getElementType() { return getImpl()->elementType; }
   Details::PortKind getPort() { return getImpl()->port; }
 };
 

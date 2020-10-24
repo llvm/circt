@@ -5,8 +5,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/HIR/HIR.h"
 #include "circt/Dialect/HIR/HIRDialect.h"
+#include "circt/Dialect/HIR/HIR.h"
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
@@ -22,7 +22,7 @@ using namespace hir;
 
 HIRDialect::HIRDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context) {
-  addTypes<TimeType, ConstType, MemrefType, WireType>();
+  addTypes<TimeType, StreamType, ConstType, MemrefType, WireType>();
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/HIR/HIR.cpp.inc"
@@ -175,6 +175,47 @@ static void printMemrefType(MemrefType memrefTy, DialectAsmPrinter &printer) {
   printer << ">";
 }
 
+// Stream Type.
+static Type parseStreamType(DialectAsmParser &parser, MLIRContext *context) {
+  Type elementType;
+  hir::Details::PortKind default_port = hir::Details::rw;
+  hir::Details::PortKind port;
+  if (parser.parseLess())
+    return Type();
+
+  if (parser.parseType(elementType))
+    return Type();
+
+  if (parser.parseComma())
+    return Type();
+
+  if (Helpers::parsePortKind(parser, port))
+    return Type();
+  if (parser.parseGreater())
+    return Type();
+
+  return StreamType::get(context, elementType, port);
+}
+
+static void printStreamType(StreamType streamType, DialectAsmPrinter &printer) {
+  auto elementType = streamType.getElementType();
+  auto port = streamType.getPort();
+  printer << streamType.getKeyword();
+  printer << "<";
+  printer << elementType << ", ";
+
+  if (port == Details::r) {
+    printer << ", r";
+  } else if (port == Details::w) {
+    printer << ", w";
+  } else if (port == Details::rw) {
+    printer << "";
+  } else {
+    printer << ", unknown";
+  }
+  printer << ">";
+}
+
 // WireType.
 static Type parseWireType(DialectAsmParser &parser, MLIRContext *context) {
   SmallVector<unsigned, 4> shape;
@@ -264,6 +305,9 @@ Type HIRDialect::parseType(DialectAsmParser &parser) const {
 
   if (typeKeyword == ConstType::getKeyword())
     return parseConstType(parser, getContext());
+
+  if (typeKeyword == StreamType::getKeyword())
+    return parseStreamType(parser, getContext());
 
   return parser.emitError(parser.getNameLoc(), "unknown hir type"), Type();
 }

@@ -11,15 +11,35 @@
 //    storage_type=bram2P}
 
 hir.def @hirMatmulKernel at %t(
-  %A : !hir.memref<16*16*i32, packing=[1], r>, 
   %B : !hir.memref<16*16*i32, packing=[], r>, 
-  %C : !hir.memref<16*16*i32, packing=[1], w>) -> () {
+  %C : !hir.memref<16*16*i32, packing=[1], w>,
+  %Sa : !hir.stream<i32,r>) -> () {
 
   %1 = hir.constant 1 : !hir.const<i32>
   %3 = hir.constant 3 : !hir.const<i32>
   %4 = hir.constant 4 : !hir.const<i32>
   %0 = hir.constant 0 : !hir.const<i32>
   %16 = hir.constant 16 : !hir.const<i32>
+  
+  %A,%Aw = hir.alloc() : !hir.memref<16*16*i32, packing=[1],r>,!hir.memref<16*16*i32, packing=[1], w>
+
+  //Write to block ram A.
+  hir.for %i : i32 = %0 : !hir.const<i32> to %16 : !hir.const<i32> step %1 : !hir.const<i32> iter_time(%ti = %t){
+    %val = hir.alloc() : !hir.wire<1*i32>
+
+    hir.for %k : i32 = %0 : !hir.const<i32> to %16 : !hir.const<i32> step %1 : !hir.const<i32> iter_time(%tj = %ti){
+      %v = hir.pop %Sa at %tj : !hir.stream<i32,r> -> i32
+      hir.wire_write %v to %val[%0] at %tj : (i32, !hir.wire<1*i32>[!hir.const<i32>])
+    }
+
+    %tk_end=hir.unroll_for %k = 0 to 16 step 1 iter_time(%tk = %ti){
+      %v = hir.wire_read %val[%0] at %tk  : !hir.wire<1*i32>[!hir.const<i32>] -> i32
+      hir.mem_write %v to %Aw[%i, %k] at %tk : (i32, !hir.memref<16*16*i32, packing=[1], w>[i32, !hir.const<i32>])
+      hir.yield at %tk offset %1 : !hir.const<i32>
+    }
+    hir.yield at %tk_end 
+  }
+
   hir.for %i : i32 = %0 : !hir.const<i32> to %16 : !hir.const<i32> step %1 : !hir.const<i32> iter_time(%ti = %t){
     hir.yield at %ti offset %1 : !hir.const<i32>
     hir.unroll_for %j = 0 to 16 step 1 iter_time(%tj = %ti){

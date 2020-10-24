@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Target/HIRToVerilog/HIRToVerilog.h"
+#include "Generators.h"
 #include "Helpers.h"
 #include "VerilogValue.h"
 #include "circt/Dialect/HIR/HIR.h"
@@ -181,6 +182,7 @@ private:
   LogicalResult printAllocOp(hir::AllocOp op, unsigned indentAmount = 0);
   LogicalResult printDelayOp(hir::DelayOp op, unsigned indentAmount = 0);
   LogicalResult printCallOp(hir::CallOp op, unsigned indentAmount = 0);
+  LogicalResult printPopOp(hir::PopOp op, unsigned indentAmount = 0);
 
   // Helpers.
   string printDownCounter(stringstream &output, Value maxCount, Value tstart);
@@ -289,6 +291,21 @@ LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
   return success();
 } // namespace
 
+LogicalResult VerilogPrinter::printPopOp(hir::PopOp op, unsigned indentAmount) {
+  Value result = op.res();
+  Value input = op.input();
+  VerilogValue v_input = verilogMapper.get(input);
+  verilogMapper.insert(result,
+                       VerilogValue(result, "v" + to_string(newValueNumber())));
+  VerilogValue *v_result = verilogMapper.get_mut(result);
+  VerilogValue *v_tstart = verilogMapper.get_mut(op.tstart());
+  module_out << "assign " << v_input.strStreamPop() << " = "
+             << v_tstart->strWire() << ";\n";
+  module_out << "wire " << v_result->strWireDecl() << " = "
+             << v_input.strStreamData() << ";\n";
+  return success();
+}
+
 LogicalResult VerilogPrinter::printCallOp(hir::CallOp op,
                                           unsigned indentAmount) {
   ResultRange results = op.res();
@@ -377,7 +394,6 @@ LogicalResult VerilogPrinter::printDelayOp(hir::DelayOp op,
   verilogMapper.insert(result,
                        VerilogValue(result, "v" + to_string(newValueNumber())));
   VerilogValue *v_result = verilogMapper.get_mut(result);
-  v_result->strWireDecl();
   // Propagate constant value.
   if (v_input->isIntegerConst()) {
     v_result->setIntegerConst(v_input->getIntegerConst());
@@ -402,11 +418,46 @@ LogicalResult VerilogPrinter::printDelayOp(hir::DelayOp op,
 
 LogicalResult VerilogPrinter::printAllocOp(hir::AllocOp op,
                                            unsigned indentAmount) {
-  Value result = op.res();
-  unsigned id_result = newValueNumber();
-  VerilogValue v_result(result, "v" + to_string(id_result));
-  verilogMapper.insert(result, v_result);
-  module_out << "wire " << v_result.strWireDecl() << ";\n";
+  Operation::result_range result = op.res();
+  if (result[0].getType().isa<MemrefType>()) {
+    if (result.size() == 1) {
+      string str_id_result = to_string(newValueNumber());
+      VerilogValue v_result(result[0], "v" + str_id_result);
+      module_out << v_result.strMemrefInstDecl();
+      verilogMapper.insert(result[0], v_result);
+      string loc = replacer.insert([=]() -> string {
+        return verilogMapper.get_mut(result[0])->strMemrefSelDecl();
+      });
+      module_out << loc << "\n";
+    } else {
+      assert(result.size() == 2);
+      Value r0 = result[0];
+      Value r1 = result[1];
+      assert(r1.getType().isa<MemrefType>());
+      // For now only support below set.
+      assert(r0.getType().dyn_cast<MemrefType>().getPort() == Details::r);
+      assert(r1.getType().dyn_cast<MemrefType>().getPort() == Details::w);
+      for (int i = 0; i < 2; i++) {
+        string str_id_result = to_string(newValueNumber());
+        VerilogValue v_result(result[i], "v" + str_id_result);
+        module_out << v_result.strMemrefInstDecl();
+        verilogMapper.insert(result[i], v_result);
+        string loc = replacer.insert([=]() -> string {
+          return verilogMapper.get_mut(result[i])->strMemrefSelDecl();
+        });
+        module_out << loc << "\n";
+      }
+      if (verilogMapper.get(r0).getPacking().size() > 0)
+        module_out << gen_bram("bram_tdp_rf_rf", verilogMapper.get(r0),
+                               verilogMapper.get(r1));
+    }
+  } else {
+    assert(result.size() == 1);
+    string str_id_result = to_string(newValueNumber());
+    VerilogValue v_result(result[0], "v" + str_id_result);
+    verilogMapper.insert(result[0], v_result);
+    module_out << "wire " << v_result.strWireDecl() << ";\n";
+  }
   return success();
 }
 
@@ -471,7 +522,9 @@ LogicalResult VerilogPrinter::printMemWriteOp(MemWriteOp op,
   Value tstart = op.tstart();
   VerilogValue *v_tstart = verilogMapper.get_mut(tstart);
   Value offset = op.offset();
-  VerilogValue *v_offset = verilogMapper.get_mut(offset);
+  VerilogValue *v_offset;
+  if (offset)
+    v_offset = verilogMapper.get_mut(offset);
 
   auto shape = mem.getType().dyn_cast<hir::MemrefType>().getShape();
   auto packing = mem.getType().dyn_cast<hir::MemrefType>().getPacking();
@@ -705,6 +758,9 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
   } else if (auto op = dyn_cast<hir::CallOp>(inst)) {
     module_out << "\n//" << formattedOp(inst, "CallOp");
     return printCallOp(op, indentAmount);
+  } else if (auto op = dyn_cast<hir::PopOp>(inst)) {
+    module_out << "\n//" << formattedOp(inst, "PopOp");
+    return printPopOp(op, indentAmount);
   } else if (auto op = dyn_cast<hir::AllocOp>(inst)) {
     module_out << "\n//" << formattedOp(inst, "AllocOp");
     return printAllocOp(op, indentAmount);
@@ -781,6 +837,11 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
       module_out << "//IntegerType.\n";
       unsigned bitwidth = getBitWidth(argType);
       module_out << "input wire" << v_int_arg.strWireDecl();
+    } else if (argType.isa<StreamType>()) {
+      unsigned id_arg = newValueNumber();
+      auto v_arg = VerilogValue(arg, "v" + to_string(id_arg));
+      verilogMapper.insert(arg, v_arg);
+      module_out << v_arg.strStreamArgDecl();
     } else if (argType.isa<MemrefType>()) {
       unsigned id_memref_arg = newValueNumber();
       auto v_memref_arg = VerilogValue(arg, "v" + to_string(id_memref_arg));
@@ -823,8 +884,10 @@ LogicalResult VerilogPrinter::printYieldOp(hir::YieldOp op,
   auto operands = op.operands();
   VerilogValue *v_tstart = verilogMapper.get_mut(op.tstart());
   Value offset = op.offset();
-  const VerilogValue v_offset = verilogMapper.get(offset);
-  int delayValue = v_offset.getIntegerConst();
+  int delayValue = 0;
+  if (offset)
+    delayValue = verilogMapper.get(offset).getIntegerConst();
+
   if (!operands.empty())
     emitError(op.getLoc(), "YieldOp codegen does not support arguments yet!");
   string tloop_in = yieldTarget.top();
