@@ -33,7 +33,8 @@ struct RTLModulePortInfo {
   size_t argNum = ~0U; // Either the argument index or the result index
                        // depending on the direction.
 
-  inline StringRef getName() { return name ? name.getValue() : ""; }
+  StringRef getName() const { return name ? name.getValue() : ""; }
+  bool isOutput() const { return direction == OUTPUT; }
 };
 
 FunctionType getModuleType(Operation *op);

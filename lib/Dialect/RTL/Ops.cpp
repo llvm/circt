@@ -30,7 +30,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   SmallVector<Type, 4> argTypes;
   SmallVector<Type, 4> resultTypes;
   for (auto elt : ports) {
-    if (elt.direction == PortDirection::OUTPUT)
+    if (elt.isOutput())
       resultTypes.push_back(elt.type);
     else
       argTypes.push_back(elt.type);
@@ -53,7 +53,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
       argAttrs.push_back(NamedAttribute(builder.getIdentifier("rtl.inout"),
                                         builder.getUnitAttr()));
 
-    StringRef attrName = port.direction == PortDirection::OUTPUT
+    StringRef attrName = port.isOutput()
                              ? getResultAttrName(port.argNum, attrNameBuf)
                              : getArgAttrName(port.argNum, attrNameBuf);
     result.addAttribute(attrName, builder.getDictionaryAttr(argAttrs));
@@ -73,7 +73,7 @@ void rtl::RTLModuleOp::build(OpBuilder &builder, OperationState &result,
 
   // Add arguments to the body block.
   for (auto elt : ports)
-    if (elt.direction != PortDirection::OUTPUT)
+    if (!elt.isOutput())
       body->addArgument(elt.type);
 
   rtl::RTLModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
