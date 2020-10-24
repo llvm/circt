@@ -250,7 +250,7 @@ jobs:
           make check-circt -j$(nproc)
 
       # --------
-      # Run some linting.
+      # Lint the CIRCT C++ code.
       # -------
 
       # Choose the git commit to diff against for the purposes of linting.
