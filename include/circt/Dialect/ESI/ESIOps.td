@@ -12,7 +12,7 @@ class ESI_Op<string mnemonic, list<OpTrait> traits = []> :
 def ChannelBufferOptions : StructAttr<"ChannelBufferOptions", ESI_Dialect, [
     // 'Stages' is used to specify a specific number of cycles (pipeline stages)
     // to use on this channel. Must be greater than 0.
-    StructFieldAttr<"stages", OptionalAttr<AnyI64Attr>>
+    StructFieldAttr<"stages", OptionalAttr< Confined<AnyI64Attr, [IntMinValue<1>]> >>
   ]>;
 
 def ChannelBuffer : ESI_Op<"buffer", [NoSideEffect, SameTypeOperands]> {
