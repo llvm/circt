@@ -181,7 +181,6 @@ void State::addProcPtr(std::string name, ProcState *procStatePtr) {
 
 int State::addSignalData(int index, std::string owner, uint8_t *value,
                          uint64_t size) {
-  llvm::outs() << owner << "\n";
   auto &inst = instances[owner];
   uint64_t globalIdx = inst.sensitivityList[index + inst.nArgs].globalIndex;
   auto &sig = signals[globalIdx];
