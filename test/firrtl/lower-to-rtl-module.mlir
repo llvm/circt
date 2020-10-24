@@ -1,5 +1,4 @@
-// RUN: true
-// circt-opt -pass-pipeline='lower-firrtl-to-rtl-module' %s -verify-diagnostics  | FileCheck %s
+// RUN: circt-opt -pass-pipeline='lower-firrtl-to-rtl-module' %s -verify-diagnostics  | FileCheck %s
 
  // The firrtl.circuit should be removed, the main module name moved to an
  // attribute on the module.
@@ -8,8 +7,7 @@
  firrtl.circuit "Simple" {
 
    // CHECK-LABEL: rtl.externmodule @MyParameterizedExtModule(
-   // CHECK: i1 {rtl.direction = "input", rtl.name = "in"},
-   // CHECK: i8 {rtl.direction = "out", rtl.name = "out"})
+   // CHECK: i1 {rtl.name = "in"}) -> (i8 {rtl.name = "out"})
    firrtl.extmodule @MyParameterizedExtModule(!firrtl.uint<1> {firrtl.name = "in"}, !firrtl.flip<uint<8>> {firrtl.name = "out"})
       attributes {defname = "name_thing",
                   parameters = {DEFAULT = 0 : i64,
@@ -18,10 +16,10 @@
                                 WIDTH = 32 : i8}}
 
    // CHECK-LABEL: rtl.module @Simple(
-   // CHECK: %arg0: i4 {rtl.direction = "input", rtl.name = "in1"},
-   // CHECK: %arg1: i2 {rtl.direction = "input", rtl.name = "in2"},
-   // CHECK: %arg2: i8 {rtl.direction = "input", rtl.name = "in3"},
-   // CHECK: %arg3: i4 {rtl.direction = "out", rtl.name = "out4"}) {
+   // CHECK: %arg0: i4 {rtl.name = "in1"},
+   // CHECK: %arg1: i2 {rtl.name = "in2"},
+   // CHECK: %arg2: i8 {rtl.name = "in3"})
+   // CHECK: -> (i4 {rtl.name = "out4"}) {
    firrtl.module @Simple(%in1: !firrtl.uint<4>,
                         %in2: !firrtl.uint<2>,
                         %in3: !firrtl.sint<8>,
@@ -30,8 +28,9 @@
    // CHECK-NEXT: %0 = firrtl.stdIntCast %arg0 : (i4) -> !firrtl.uint<4>
    // CHECK-NEXT: %1 = firrtl.stdIntCast %arg1 : (i2) -> !firrtl.uint<2>
    // CHECK-NEXT: %2 = firrtl.stdIntCast %arg2 : (i8) -> !firrtl.sint<8>
-   // CHECK-NEXT: %3 = firrtl.stdIntCast %arg3 : (i4) -> !firrtl.uint<4>
-   // CHECK-NEXT: %4 = firrtl.asNonPassive %3 : (!firrtl.uint<4>) -> !firrtl.flip<uint<4>>
+   // CHECK-NEXT: %3 = rtl.wire : i4
+   // CHECK-NEXT: %4 = firrtl.stdIntCast %3 : (i4) -> !firrtl.uint<4>
+   // CHECK-NEXT: %5 = firrtl.asNonPassive %4 : (!firrtl.uint<4>) -> !firrtl.flip<uint<4>>
 
     // CHECK-NEXT: firrtl.asUInt %0
     %1 = firrtl.asUInt %in1 : (!firrtl.uint<4>) -> !firrtl.uint<4>
@@ -45,15 +44,16 @@
     %4 = firrtl.pad %3, 4 : (!firrtl.sint<3>) -> !firrtl.uint<4>
     // CHECK-NEXT: firrtl.xor %1
     %5 = firrtl.xor %in2, %4 : (!firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
-    // CHECK-NEXT: firrtl.connect %4
+    // CHECK-NEXT: firrtl.connect %5
     firrtl.connect %out4, %5 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+    // CHECK-NEXT: rtl.output %3 : i4
   }    // CHECK-NEXT: }
 
   // CHECK-LABEL: rtl.module @Print(
-  // CHECK: %arg0: i1 {rtl.direction = "input", rtl.name = "clock"},
-  // CHECK: %arg1: i1 {rtl.direction = "input", rtl.name = "reset"},
-  // CHECK: %arg2: i4 {rtl.direction = "input", rtl.name = "a"},
-  // CHECK: %arg3: i4 {rtl.direction = "input", rtl.name = "b"}) {
+  // CHECK: %arg0: i1 {rtl.name = "clock"},
+  // CHECK: %arg1: i1 {rtl.name = "reset"},
+  // CHECK: %arg2: i4 {rtl.name = "a"},
+  // CHECK: %arg3: i4 {rtl.name = "b"}) {
   firrtl.module @Print(%clock: !firrtl.clock, %reset: !firrtl.uint<1>,
                        %a: !firrtl.uint<4>, %b: !firrtl.uint<4>) {
     // CHECK-NEXT: %0 = firrtl.stdIntCast %arg0 : (i1) -> !firrtl.clock
@@ -69,12 +69,13 @@
 
     // CHECK-NEXT: firrtl.printf %0, %1
     firrtl.printf %clock, %reset, "Hi %x %x\0A"(%0, %b) : !firrtl.uint<5>, !firrtl.uint<4>
-  }  // CHECK-NEXT: }
+    // CHECK-NEXT: rtl.output
+}  // CHECK-NEXT: }
 
   // CHECK-LABEL: rtl.module @Stop(
-  // CHECK: %arg0: i1 {rtl.direction = "input", rtl.name = "clock1"},
-  // CHECK: %arg1: i1 {rtl.direction = "input", rtl.name = "clock2"},
-  // CHECK: %arg2: i1 {rtl.direction = "input", rtl.name = "reset"}) {
+  // CHECK: %arg0: i1 {rtl.name = "clock1"},
+  // CHECK: %arg1: i1 {rtl.name = "clock2"},
+  // CHECK: %arg2: i1 {rtl.name = "reset"}) {
   firrtl.module @Stop(%clock1: !firrtl.clock,
                       %clock2: !firrtl.clock,
                       %reset: !firrtl.uint<1>) {
@@ -87,6 +88,7 @@
 
     // CHECK-NEXT: firrtl.stop %1, %2, 0
     firrtl.stop %clock2, %reset, 0
+    // CHECK-NEXT: rtl.output
   }  // CHECK-NEXT: }
 
   // expected-error @+1 {{cannot lower this port type to RTL}}
