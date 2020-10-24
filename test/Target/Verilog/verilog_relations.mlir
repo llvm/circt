@@ -1,4 +1,5 @@
-//RUN: circt-translate --llhd-to-verilog %s | FileCheck %s
+// RUN: circt-translate --llhd-to-verilog %s | tee %t1.sv | FileCheck %s
+// RUN: verilator -lint-only --top-module _check_relations %t1.sv
 
 // CHECK-LABEL: _check_relations
 llhd.entity @check_relations() -> () {

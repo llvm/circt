@@ -1,4 +1,6 @@
-; RUN: circt-translate -parse-fir --mlir-print-debuginfo %s | circt-translate -emit-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
+; RUN: circt-translate -parse-fir --mlir-print-debuginfo %s | circt-translate -emit-verilog -verify-diagnostics | tee %t1.sv | FileCheck %s --strict-whitespace
+; TODO: This test fails to lint with Verilator.
+; RUN: true || verilator --lint-only --top-module Expressions %t1.sv
 
 ; Some day this should filecheck:
 ; RUN: circt-translate -parse-fir --mlir-print-debuginfo %s | circt-opt -pass-pipeline='firrtl.circuit(lower-firrtl-to-rtl)' | circt-translate -emit-verilog -verify-diagnostics

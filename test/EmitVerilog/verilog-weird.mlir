@@ -1,4 +1,5 @@
 // RUN: circt-translate %s -emit-verilog -verify-diagnostics | tee %t1.sv | FileCheck %s --strict-whitespace
+// TODO: This test produces verilator warnings.
 // RUN: verilator -lint-only --top-module M1 %t1.sv -Wno-fatal
 
 firrtl.circuit "M1" {
