@@ -93,8 +93,7 @@ jobs:
       # There are packages not installed which we need to compile Verilator.
       - name: Install additional packages
         run: |
-          sudo apt-get install -y \
-            libfl2 libfl-dev              # Verilator dependencies
+          sudo apt-get install -y libfl2 libfl-dev
 
       # Build Verilator if we didn't hit in the cache.
       - name: Build Verilator
@@ -135,8 +134,8 @@ jobs:
       - name: Install additional packages
         run: |
           sudo apt-get install -y \
-            clang-tidy-9       # We'll be running clang-tidy later on \
-            libfl2 libfl-dev   # Verilator dependencies
+            clang-tidy-9 \
+            libfl2 libfl-dev
           sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy \
             /usr/bin/clang-tidy-9 100
 
