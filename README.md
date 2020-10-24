@@ -94,7 +94,17 @@ $ ninja
 $ ninja check-mlir
 ```
 
-4) **Build and test CIRCT:**
+4) **Build Verilator**
+
+```
+$ cd verilator
+$ autoconf
+$ export VERILATOR_ROOT=`pwd`
+$ ./configure
+$ make -j$(nproc)
+```
+
+5) **Build and test CIRCT:**
 
 ```
 $ cd circt
