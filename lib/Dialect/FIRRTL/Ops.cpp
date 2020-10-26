@@ -952,15 +952,11 @@ FIRRTLType firrtl::getValidIfResult(FIRRTLType lhs, FIRRTLType rhs) {
 //===----------------------------------------------------------------------===//
 
 FIRRTLType firrtl::getAsAsyncResetResult(FIRRTLType input) {
-  if (input.isa<UIntType>() || input.isa<SIntType>() || input.isa<ClockType>())
-    return AsyncResetType::get(input.getContext());
-  return {};
+  return AsyncResetType::get(input.getContext());
 }
 
 FIRRTLType firrtl::getAsClockResult(FIRRTLType input) {
-  if (input.isa<UIntType>() || input.isa<SIntType>() || input.isa<ClockType>())
-    return ClockType::get(input.getContext());
-  return {};
+  return ClockType::get(input.getContext());
 }
 
 FIRRTLType firrtl::getAsSIntResult(FIRRTLType input) {
@@ -971,6 +967,8 @@ FIRRTLType firrtl::getAsSIntResult(FIRRTLType input) {
     return input;
   if (auto ui = input.dyn_cast<UIntType>())
     return SIntType::get(input.getContext(), ui.getWidthOrSentinel());
+  if (auto a = input.dyn_cast<AnalogType>())
+    return SIntType::get(input.getContext(), a.getWidthOrSentinel());
   return {};
 }
 
@@ -982,6 +980,8 @@ FIRRTLType firrtl::getAsUIntResult(FIRRTLType input) {
     return input;
   if (auto si = input.dyn_cast<SIntType>())
     return UIntType::get(input.getContext(), si.getWidthOrSentinel());
+  if (auto a = input.dyn_cast<AnalogType>())
+    return UIntType::get(input.getContext(), a.getWidthOrSentinel());
   return {};
 }
 

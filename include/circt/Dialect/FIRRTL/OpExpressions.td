@@ -210,14 +210,14 @@ class UnaryPrimOp<string mnemonic, string resultTypeFunction,
 }
 
 def AsSIntPrimOp
-  : UnaryPrimOp<"asSInt", "getAsSIntResult", SIntType, UIntSIntClockType>;
+  : UnaryPrimOp<"asSInt", "getAsSIntResult", SIntType, FIRRTLType>;
 def AsUIntPrimOp
-  : UnaryPrimOp<"asUInt", "getAsUIntResult", UIntType, UIntSIntClockType>;
+  : UnaryPrimOp<"asUInt", "getAsUIntResult", UIntType, FIRRTLType>;
 def AsAsyncResetPrimOp
   : UnaryPrimOp<"asAsyncReset", "getAsAsyncResetResult",
-                ResetType, UIntSIntClockType>;
+                AsyncResetType, OneBitCastableType>;
 def AsClockPrimOp
-  : UnaryPrimOp<"asClock", "getAsClockResult", ClockType, UIntSIntClockType>;
+  : UnaryPrimOp<"asClock", "getAsClockResult", ClockType, OneBitCastableType>;
 def CvtPrimOp : UnaryPrimOp<"cvt", "getCvtResult", SIntType, IntType>;
 def NegPrimOp : UnaryPrimOp<"neg", "getNegResult", SIntType, IntType>;
 def NotPrimOp : UnaryPrimOp<"not", "getNotResult", UIntType, IntType>;
