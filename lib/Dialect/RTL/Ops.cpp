@@ -324,15 +324,16 @@ ParseResult parseResultNames(OpAsmParser &p, NamedAttrList &attrDict) {
 
 /// Intercept the `attr-dict` printing to determine whether or not we can elide
 /// the result names attribute.
-void printResultNames(OpAsmPrinter &p, RTLInstanceOp *op) {
+void printResultNames(OpAsmPrinter &p, RTLInstanceOp op,
+                      const MutableDictionaryAttr &) {
   SmallVector<StringRef, 8> elideFields = {"instanceName", "moduleName"};
 
   // If any names don't match what the printer is going to emit, keep the
   // attributes.
   bool nameDisagreement = false;
-  ArrayAttr nameAttrList = op->getAttrOfType<ArrayAttr>("name");
+  ArrayAttr nameAttrList = op.getAttrOfType<ArrayAttr>("name");
   // Look for result names to possibly elide.
-  if (nameAttrList && nameAttrList.size() <= op->getNumResults()) {
+  if (nameAttrList && nameAttrList.size() <= op.getNumResults()) {
     // Check that all the result names have been kept.
     for (size_t i = 0, e = nameAttrList.size(); i < e; ++i) {
       // Name must be a string.
@@ -340,7 +341,7 @@ void printResultNames(OpAsmPrinter &p, RTLInstanceOp *op) {
         // Check for disagreement
         SmallString<32> resultNameStr;
         llvm::raw_svector_ostream tmpStream(resultNameStr);
-        p.printOperand(op->getResult(i), tmpStream);
+        p.printOperand(op.getResult(i), tmpStream);
         if (tmpStream.str().drop_front() != expectedName.getValue()) {
           nameDisagreement = true;
         }
@@ -350,7 +351,7 @@ void printResultNames(OpAsmPrinter &p, RTLInstanceOp *op) {
   if (!nameDisagreement)
     elideFields.push_back("name");
 
-  p.printOptionalAttrDict(op->getAttrs(), elideFields);
+  p.printOptionalAttrDict(op.getAttrs(), elideFields);
 }
 
 /// Suggest a name for each result value based on the saved result names
