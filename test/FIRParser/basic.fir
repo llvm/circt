@@ -58,18 +58,22 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input u: UInt          ; CHECK: %u: !firrtl.uint,
     input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
     ; CHECK: %bf: !firrtl.bundle<int_1: flip<uint<1>>, int_out: uint<2>>
-    
+
     input vec: UInt<1>[4] ; CHECK: %vec: !firrtl.vector<uint<1>, 4>) {
-    
+
 
   ; CHECK-LABEL: firrtl.module @stmts(
   module stmts :
-    input reset : UInt<1>    ; CHECK: %reset: !firrtl.uint<1>,
-    input clock : Clock      ; CHECK: %clock: !firrtl.clock,
-    output auto : UInt<1>    ; CHECK: %auto: !firrtl.flip<uint<1>>,
-    input i8 : UInt<8>       ; CHECK: %i8: !firrtl.uint<8>,
-    input s8 : SInt<8>       ; CHECK: %s8: !firrtl.sint<8>,
-    input a8 : Analog<8>     ; CHECK: %a8: !firrtl.analog<8>)
+    input reset : UInt<1>         ; CHECK: %reset: !firrtl.uint<1>,
+    input reset_async: AsyncReset ; CHECK: %reset_async: !firrtl.asyncreset,
+    input reset_abstract: Reset   ; CHECK: %reset_abstract: !firrtl.reset,
+    input clock : Clock           ; CHECK: %clock: !firrtl.clock,
+    output auto : UInt<1>         ; CHECK: %auto: !firrtl.flip<uint<1>>,
+    input i8 : UInt<8>            ; CHECK: %i8: !firrtl.uint<8>,
+    input s1 : SInt<1>            ; CHECK: %s1: !firrtl.sint<1>,
+    input s8 : SInt<8>            ; CHECK: %s8: !firrtl.sint<8>,
+    input a1 : Analog<1>          ; CHECK: %a1: !firrtl.analog<1>,
+    input a8 : Analog<8>          ; CHECK: %a8: !firrtl.analog<8>)
 
     ; CHECK: %_t = firrtl.wire {name = "_t"} : !firrtl.vector<uint<1>, 12>
     wire _t : UInt<1>[12] @[Nodes.scala 370:76]
@@ -115,8 +119,57 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.asClock %reset : (!firrtl.uint<1>) -> !firrtl.clock
     node n3 = asClock(reset)
 
+    ; CHECK: firrtl.asUInt %clock : (!firrtl.clock) -> !firrtl.uint<1>
+    node check_u0 = asUInt(clock)
+    ; CHECK: firrtl.asUInt %i8 : (!firrtl.uint<8>) -> !firrtl.uint<8>
+    node check_u1 = asUInt(i8)
+    ; CHECK: firrtl.asUInt %s8 : (!firrtl.sint<8>) -> !firrtl.uint<8>
+    node check_u2 = asUInt(s8)
+    ; CHECK: firrtl.asUInt %a8 : (!firrtl.analog<8>) -> !firrtl.uint<8>
+    node check_u3 = asUInt(a8)
+    ; CHECK: firrtl.asUInt %reset_abstract : (!firrtl.reset) -> !firrtl.uint<1>
+    node check_u5 = asUInt(reset_abstract)
+    ; CHECK: firrtl.asUInt %reset_async : (!firrtl.asyncreset) -> !firrtl.uint<1>
+    node check_u6 = asUInt(reset_async)
+
+    ; CHECK: firrtl.asSInt %clock : (!firrtl.clock) -> !firrtl.sint<1>
+    node check_s0 = asSInt(clock)
+    ; CHECK: firrtl.asSInt %i8 : (!firrtl.uint<8>) -> !firrtl.sint<8>
+    node check_s1 = asSInt(i8)
+    ; CHECK: firrtl.asSInt %s8 : (!firrtl.sint<8>) -> !firrtl.sint<8>
+    node check_s2 = asSInt(s8)
+    ; CHECK: firrtl.asSInt %a8 : (!firrtl.analog<8>) -> !firrtl.sint<8>
+    node check_s3 = asSInt(a8)
+    ; CHECK: firrtl.asSInt %reset_abstract : (!firrtl.reset) -> !firrtl.sint<1>
+    node check_s5 = asSInt(reset_abstract)
+    ; CHECK: firrtl.asSInt %reset_async : (!firrtl.asyncreset) -> !firrtl.sint<1>
+    node check_s6 = asSInt(reset_async)
+
+    ; CHECK: firrtl.asAsyncReset %clock : (!firrtl.clock) -> !firrtl.asyncreset
+    node check_ar0 = asAsyncReset(clock)
     ; CHECK: firrtl.asAsyncReset %reset : (!firrtl.uint<1>) -> !firrtl.asyncreset
-    node ar = asAsyncReset(reset)
+    node check_ar1 = asAsyncReset(reset)
+    ; CHECK: firrtl.asAsyncReset %s1 : (!firrtl.sint<1>) -> !firrtl.asyncreset
+    node check_ar2 = asAsyncReset(s1)
+    ; CHECK: firrtl.asAsyncReset %a1 : (!firrtl.analog<1>) -> !firrtl.asyncreset
+    node check_ar3 = asAsyncReset(a1)
+    ; CHECK: firrtl.asAsyncReset %reset_abstract : (!firrtl.reset) -> !firrtl.asyncreset
+    node check_ar4 = asAsyncReset(reset_abstract)
+    ; CHECK: firrtl.asAsyncReset %reset_async : (!firrtl.asyncreset) -> !firrtl.asyncreset
+    node check_ar5 = asAsyncReset(reset_async)
+
+    ; CHECK: firrtl.asClock %clock : (!firrtl.clock) -> !firrtl.clock
+    node check_c0 = asClock(clock)
+    ; CHECK: firrtl.asClock %reset : (!firrtl.uint<1>) -> !firrtl.clock
+    node check_c1 = asClock(reset)
+    ; CHECK: firrtl.asClock %s1 : (!firrtl.sint<1>) -> !firrtl.clock
+    node check_c2 = asClock(s1)
+    ; CHECK: firrtl.asClock %a1 : (!firrtl.analog<1>) -> !firrtl.clock
+    node check_c3 = asClock(a1)
+    ; CHECK: firrtl.asClock %reset_abstract : (!firrtl.reset) -> !firrtl.clock
+    node check_c4 = asClock(reset_abstract)
+    ; CHECK: firrtl.asClock %reset_async : (!firrtl.asyncreset) -> !firrtl.clock
+    node check_c5 = asClock(reset_async)
 
     ; CHECK: %c42_ui10 = firrtl.constant(42 : ui10) : !firrtl.uint<10>
     ; CHECK: %c171_ui8 = firrtl.constant(171 : ui8) : !firrtl.uint<8>
