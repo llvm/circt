@@ -6,6 +6,36 @@
 
 using namespace circt::llhd::sim;
 
+void Trace::pushChange(std::string inst, Signal &sig, int elem = -1) {
+  std::string valueDump;
+  std::string path;
+  llvm::raw_string_ostream ss(path);
+
+  ss << state->instances[inst].path << '/' << sig.name;
+
+  if (elem >= 0) {
+    // Add element index to the hierarchical path.
+    ss << '[' << elem << ']';
+    // Get element value dump.
+    valueDump = sig.dump(elem);
+  } else {
+    // Get signal value dump.
+    valueDump = sig.dump();
+  }
+
+  changes.push_back(std::make_pair(path, valueDump));
+}
+
+void Trace::pushAllChanges(std::string inst, Signal &sig) {
+  if (sig.elements.size() > 0) {
+    for (size_t i = 0, e = sig.elements.size(); i < e; ++i) {
+      pushChange(inst, sig, i);
+    }
+  } else {
+    pushChange(inst, sig);
+  }
+}
+
 void Trace::addChange(unsigned sigIndex) {
   currentTime = state->time;
   if (mode == full)
@@ -18,24 +48,8 @@ void Trace::addChange(unsigned sigIndex) {
 
 void Trace::addChangeFull(unsigned sigIndex) {
   auto &sig = state->signals[sigIndex];
-  // Add a change for all signal elements.
-  if (sig.elements.size() > 0) {
-    for (size_t i = 0, e = sig.elements.size(); i < e; ++i) {
-      auto valueDump = sig.dump(i);
-      for (auto inst : sig.triggers) {
-        std::string path;
-        llvm::raw_string_ostream ss(path);
-        ss << state->instances[inst].path << '/' << sig.name << '[' << i << ']';
-        changes.push_back(std::make_pair(path, valueDump));
-      }
-    }
-  } else {
-    // Add a change for the whole signal.
-    auto valueDump = sig.dump();
-    for (auto inst : sig.triggers) {
-      auto path = state->instances[inst].path + '/' + sig.name;
-      changes.push_back(std::make_pair(path, valueDump));
-    }
+  for (auto inst : sig.triggers) {
+    pushAllChanges(inst, sig);
   }
 }
 
@@ -43,29 +57,15 @@ void Trace::addChangeReduced(unsigned sigIndex) {
   auto &sig = state->signals[sigIndex];
   auto root = state->root;
   if (sig.owner == root) {
-    // Add a change for all signal sub-elements.
-    if (sig.elements.size() > 0) {
-      for (size_t i = 0, e = sig.elements.size(); i < e; ++i) {
-        auto valueDump = sig.dump(i);
-        std::string path;
-        llvm::raw_string_ostream ss(path);
-        ss << state->instances[root].path << '/' << sig.name << '[' << i << ']';
-        changes.push_back(std::make_pair(path, valueDump));
-      }
-    } else {
-      // Add a change for the whole signal.
-      auto valueDump = sig.dump();
-      auto path = state->instances[root].path + '/' + sig.name;
-      changes.push_back(std::make_pair(path, valueDump));
-    }
+    pushAllChanges(root, sig);
   }
 }
 
 void Trace::addChangeMerged(unsigned sigIndex) {
   auto &sig = state->signals[sigIndex];
   auto time = state->time;
-  // Add a change for all sub-elements
   if (sig.elements.size() > 0) {
+    // Add a change for all sub-elements
     for (size_t i = 0, e = sig.elements.size(); i < e; ++i) {
       auto valueDump = sig.dump(i);
       mergedChanges[std::make_pair(sigIndex, i)] =

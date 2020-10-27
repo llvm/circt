@@ -39,6 +39,9 @@ class Trace {
       mergedChanges;
   std::map<std::pair<unsigned, unsigned>, std::string> lastValue;
 
+  void pushChange(std::string inst, Signal &sig, int elem);
+  void pushAllChanges(std::string inst, Signal &sig);
+
   void addChangeFull(unsigned);
   void addChangeReduced(unsigned);
   void addChangeMerged(unsigned);
