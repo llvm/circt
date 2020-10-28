@@ -308,6 +308,9 @@ public:
   void emitStatement(sv::FWriteOp op);
   void emitStatement(sv::FatalOp op);
   void emitStatement(sv::FinishOp op);
+  void emitStatement(sv::AssertOp op);
+  void emitStatement(sv::AssumeOp op);
+  void emitStatement(sv::CoverOp op);
   void emitDecl(NodeOp op);
   void emitDecl(InstanceOp op);
   void emitDecl(RegOp op);
@@ -1491,6 +1494,27 @@ void ModuleEmitter::emitStatement(sv::FinishOp op) {
   emitLocationInfoAndNewLine(ops);
 }
 
+void ModuleEmitter::emitStatement(sv::AssertOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  indent() << "assert(" << emitExpressionToString(op.predicate(), ops) << ");";
+  emitLocationInfoAndNewLine(ops);
+}
+
+void ModuleEmitter::emitStatement(sv::AssumeOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  indent() << "assume(" << emitExpressionToString(op.property(), ops) << ");";
+  emitLocationInfoAndNewLine(ops);
+}
+
+void ModuleEmitter::emitStatement(sv::CoverOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  indent() << "cover(" << emitExpressionToString(op.property(), ops) << ");";
+  emitLocationInfoAndNewLine(ops);
+}
+
 void ModuleEmitter::emitStatement(sv::IfDefOp op) {
   auto cond = op.cond();
 
@@ -1524,7 +1548,8 @@ static void emitBeginEndRegion(Block *block,
     // Verilog statement (for the purposes of if statements).  Just do a simple
     // check here for now.  This can be improved over time.
     return isa<sv::FWriteOp>(op) || isa<sv::FinishOp>(op) ||
-           isa<sv::FatalOp>(op);
+           isa<sv::FatalOp>(op) || isa<sv::AssertOp>(op) ||
+           isa<sv::AssumeOp>(op) || isa<sv::CoverOp>(op);
   };
 
   // Determine if we can omit the begin/end keywords.
@@ -2191,6 +2216,9 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitSV(sv::FWriteOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::FatalOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::FinishOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::AssertOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::AssumeOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::CoverOp op) { return emitter.emitStatement(op), true; }
 
     bool visitUnhandledSV(Operation *op) { return false; }
     bool visitInvalidSV(Operation *op) { return false; }
