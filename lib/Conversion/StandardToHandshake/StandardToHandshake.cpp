@@ -1567,7 +1567,7 @@ struct HandshakePass
     OwningRewritePatternList patterns;
     patterns.insert<FuncOpLowering>(m.getContext());
 
-    if (failed(applyPartialConversion(m, target, patterns)))
+    if (failed(applyPartialConversion(m, target, std::move(patterns))))
       signalPassFailure();
 
     // Legalize the resulting regions, which can have no basic blocks.

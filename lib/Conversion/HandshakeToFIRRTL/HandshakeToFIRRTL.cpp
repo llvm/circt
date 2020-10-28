@@ -993,7 +993,7 @@ public:
     OwningRewritePatternList patterns;
     patterns.insert<HandshakeFuncOpLowering>(op.getContext());
 
-    if (failed(applyPartialConversion(op, target, patterns)))
+    if (failed(applyPartialConversion(op, target, std::move(patterns))))
       signalPassFailure();
   }
 };
