@@ -353,4 +353,10 @@ jobs:
             echo "================"
           fi
 
+      # Run the Verilator tests in the Verilator container.
+      - name: Run Verilator tests
+        uses: docker://verilator/verilator:4.032
+        run: |
+          cmake --build build_assert --target check-circt
+
     # --- end of build-circt job.
