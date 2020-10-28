@@ -30,11 +30,11 @@ firrtl.circuit "M1" {
       sv.fwrite "Bye %x\n"(%tmp) : i8
 
       // CHECK-NEXT:     assert(cond);
-      sv.assert(%cond) : i1
+      sv.assert %cond : i1
       // CHECK-NEXT:     assume(cond);
-      sv.assume(%cond) : i1
+      sv.assume %cond : i1
       // CHECK-NEXT:     cover(cond);
-      sv.cover(%cond) : i1
+      sv.cover %cond : i1
 
       // CHECK-NEXT:   $fatal
       sv.fatal
