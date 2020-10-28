@@ -365,7 +365,7 @@ void RTLInstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 //===----------------------------------------------------------------------===//
 // RTLOutputOp
-//===----------------------------------------------------------------------===/
+//===----------------------------------------------------------------------===//
 
 /// Verify that the num of operands and types fit the declared results.
 static LogicalResult verifyOutputOp(OutputOp *op) {
@@ -405,7 +405,7 @@ static LogicalResult verifyOutputOp(OutputOp *op) {
 
 //===----------------------------------------------------------------------===//
 // RTL combinational ops
-//===----------------------------------------------------------------------===/
+//===----------------------------------------------------------------------===//
 
 /// Return true if the specified operation is a combinatorial logic op.
 bool rtl::isCombinatorial(Operation *op) {
