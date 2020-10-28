@@ -40,7 +40,7 @@ def ConnectOp : FIRRTLOp<"connect", []> {
 
   let arguments = (ins FIRRTLType:$lhs, FIRRTLType:$rhs);
   let results = (outs);
-  
+
   let assemblyFormat = [{
     $lhs `,` $rhs  attr-dict `:` type($lhs) `,` type($rhs)
   }];
@@ -57,7 +57,7 @@ def PartialConnectOp : FIRRTLOp<"partialconnect", []> {
 
   let arguments = (ins FIRRTLType:$lhs, FIRRTLType:$rhs);
   let results = (outs);
-  
+
   let assemblyFormat = [{
     $lhs `,` $rhs  attr-dict `:` type($lhs) `,` type($rhs)
   }];
@@ -76,7 +76,7 @@ def InvalidOp : FIRRTLOp<"invalid", []> {
 
   let arguments = (ins FIRRTLType:$operand);
   let results = (outs);
-  
+
   let assemblyFormat = [{
     $operand attr-dict `:` type($operand)
   }];
@@ -85,10 +85,10 @@ def InvalidOp : FIRRTLOp<"invalid", []> {
 def PrintFOp : FIRRTLOp<"printf", []> {
   let summary = "Formatted Print Statement";
 
-  let arguments = (ins ClockType:$clock, UInt1Type:$cond, StrAttr:$formatString, 
+  let arguments = (ins ClockType:$clock, UInt1Type:$cond, StrAttr:$formatString,
                        Variadic<FIRRTLType>:$operands);
   let results = (outs);
-  
+
   let assemblyFormat = [{
     $clock `,` $cond `,` $formatString attr-dict (`(` $operands^ `)`
     `:` type($operands))?
@@ -108,7 +108,7 @@ def SkipOp : FIRRTLOp<"skip", [NoSideEffect]> {
 
   let arguments = (ins);
   let results = (outs);
-  
+
   let assemblyFormat = [{
     attr-dict
   }];
@@ -119,7 +119,7 @@ def StopOp : FIRRTLOp<"stop", []> {
 
   let arguments = (ins ClockType:$clock, UInt1Type:$cond, I32Attr:$exitCode);
   let results = (outs);
-  
+
   let assemblyFormat = [{
     $clock `,` $cond `,` $exitCode attr-dict
   }];
@@ -197,7 +197,7 @@ def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">]> {
       return OpBuilder(&body, std::prev(body.end()));
     }
   }];
-  
+
   let printer = [{ return ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }

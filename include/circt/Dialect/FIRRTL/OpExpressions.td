@@ -16,7 +16,7 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
 
   let arguments = (ins APIntAttr:$value);
   let results = (outs IntType:$result);
-  
+
   let assemblyFormat = [{
      `(` $value `)` attr-dict `:` type($result)
   }];
@@ -40,7 +40,7 @@ def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
 
   let arguments = (ins FIRRTLType:$input, StrAttr:$fieldname);
   let results = (outs FIRRTLType:$result);
-  
+
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat = [{
      $input `(` $fieldname `)` attr-dict `:` functional-type($input, $result)
@@ -59,7 +59,7 @@ def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
   let description = [{
     The subindex expression statically refers, by index, to a subelement
     of an expression with a vector type. The index must be a non-negative
-    integer and cannot be equal to or exceed the length of the vector it 
+    integer and cannot be equal to or exceed the length of the vector it
     indexes.
     ```
       %result = firrtl.subindex %input[index] : t1, t2
@@ -68,7 +68,7 @@ def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
 
   let arguments = (ins FIRRTLType:$input, I32Attr:$index);
   let results = (outs FIRRTLType:$result);
-  
+
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat = [{
      $input `[` $index `]` attr-dict `:` functional-type($input, $result)
@@ -84,7 +84,7 @@ def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
 def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect]> {
   let summary = "Extract a dynamic element of a vector value";
   let description = [{
-    The subaccess expression dynamically refers to a subelement of a 
+    The subaccess expression dynamically refers to a subelement of a
     vector-typed expression using a calculated index. The index must be an
     expression with an unsigned integer type.
     ```
@@ -94,7 +94,7 @@ def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect]> {
 
   let arguments = (ins FIRRTLType:$input, UIntType:$index);
   let results = (outs FIRRTLType:$result);
-  
+
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat = [{
      $input `[` $index `]` attr-dict `:` functional-type(operands, $result)
@@ -119,12 +119,12 @@ class PrimOp<string mnemonic, list<OpTrait> traits = []> :
 //===----------------------------------------------------------------------===//
 
 // Base class for binary primitive operators.
-class BinaryPrimOp<string mnemonic, string resultTypeFunction, 
+class BinaryPrimOp<string mnemonic, string resultTypeFunction,
                    list<OpTrait> traits = []> :
     PrimOp<mnemonic, traits> {
   let arguments = (ins IntType:$lhs, IntType:$rhs);
   let results = (outs IntType:$result);
-  
+
   let assemblyFormat = [{
     $lhs `,` $rhs  attr-dict `:`
        `(` type($lhs) `,` type($rhs) `)` `->` type($result)
@@ -189,7 +189,7 @@ class UnaryPrimOp<string mnemonic, string resultTypeFunction,
     PrimOp<mnemonic, traits> {
   let arguments = (ins srcType:$input);
   let results = (outs resultType:$result);
-  
+
   let assemblyFormat = [{
     $input attr-dict `:` functional-type($input, $result)
   }];
@@ -236,7 +236,7 @@ def XorRPrimOp
 def BitsPrimOp : PrimOp<"bits"> {
   let arguments = (ins IntType:$input, I32Attr:$hi, I32Attr:$lo);
   let results = (outs UIntType:$result);
-  
+
   let assemblyFormat = [{
     $input $hi `to` $lo attr-dict `:` functional-type($input, $result)
   }];
@@ -288,7 +288,7 @@ def HeadPrimOp : PrimOp<"head"> {
 def MuxPrimOp : PrimOp<"mux"> {
   let arguments = (ins UInt1Type:$sel, PassiveType:$high, PassiveType:$low);
   let results = (outs PassiveType:$result);
-  
+
   let assemblyFormat = [{
     `(` operands `)` attr-dict `:` functional-type(operands, $result)
   }];
@@ -341,7 +341,7 @@ def PadPrimOp : PrimOp<"pad"> {
 class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic> {
   let arguments = (ins IntType:$input, I32Attr:$amount);
   let results = (outs IntType:$result);
-  
+
   let assemblyFormat = [{
     $input `,` $amount attr-dict `:` functional-type($input, $result)
   }];
@@ -367,7 +367,7 @@ def ShrPrimOp : ShiftPrimOp<"shr">;
 def TailPrimOp : PrimOp<"tail"> {
   let arguments = (ins IntType:$input, I32Attr:$amount);
   let results = (outs UIntType:$result);
-  
+
   let assemblyFormat = [{
     $input `,` $amount attr-dict `:` functional-type($input, $result)
   }];
