@@ -3,6 +3,7 @@
 import os
 import platform
 import re
+import shutil
 import subprocess
 import tempfile
 
@@ -51,16 +52,21 @@ config.test_exec_root = os.path.join(config.circt_obj_root, 'test')
 # Tweak the PATH to include the tools dir.
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 
-verilator_path = os.path.join(config.circt_src_root, "verilator", "bin")
-tool_dirs = [config.circt_tools_dir, config.mlir_tools_dir,
-             config.llvm_tools_dir, verilator_path]
+tool_dirs = [config.circt_tools_dir,
+             config.mlir_tools_dir, config.llvm_tools_dir]
 tools = [
     'firtool',
     'handshake-runner',
     'circt-opt',
     'circt-translate',
-    'llhd-sim',
-    'verilator'
+    'llhd-sim'
 ]
+
+# Search for and enable Verilator
+verilator_path = shutil.which('verilator')
+if verilator_path is not None:
+  tool_dirs.append(os.path.dirname(verilator_path))
+  tools.append('verilator')
+  config.available_features.add('verilator')
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)
