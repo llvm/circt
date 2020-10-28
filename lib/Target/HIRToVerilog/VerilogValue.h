@@ -81,7 +81,10 @@ public:
       unsigned nReads = usageInfo.numReads[i];
       // TODO: We don't yet support different number of reads to different
       // wires in array.
-      assert(i == 0 || out == nReads);
+      if (i != 0 && out != nReads) {
+        emitWarning(this->value.getLoc(),
+                    "Number of reads is not same for all elements.");
+      }
       out = (out > nReads) ? out : nReads;
     }
     return out;
@@ -92,7 +95,10 @@ public:
       unsigned nWrites = usageInfo.numWrites[i];
       // TODO: We don't yet support different number of writes to different
       // wires in array.
-      assert(i == 0 || out == nWrites);
+      if (i != 0 && out != nWrites) {
+        emitWarning(this->value.getLoc(),
+                    "Number of writes is not same for all elements.");
+      }
       out = (out > nWrites) ? out : nWrites;
     }
     return out;
@@ -103,7 +109,10 @@ public:
       unsigned nAccess = usageInfo.numReads[i] + usageInfo.numWrites[i];
       // TODO: We don't yet support different number of access to different
       // wires in array.
-      assert(i == 0 || out == nAccess);
+      if (i != 0 && out != nAccess) {
+        emitWarning(this->value.getLoc(),
+                    "Number of access is not same for all elements.");
+      }
       out = (out > nAccess) ? out : nAccess;
     }
     return out;
@@ -338,7 +347,8 @@ public:
     return constValue.val_int;
   }
   string strMemrefSelDecl() {
-    if (maxNumAccess() == 0)
+    auto numAccess = maxNumAccess();
+    if (numAccess == 0)
       return "//Unused memref " + strWire() + ".\n";
     stringstream output;
     auto str_addr = strMemrefAddr();
@@ -346,7 +356,7 @@ public:
     unsigned addrWidth = calcAddrWidth(type.dyn_cast<MemrefType>());
     if (addrWidth > 0) {
       output << buildDataSelectorStr(strMemrefAddr(), strMemrefAddrValid(),
-                                     strMemrefAddrInput(), maxNumAccess(),
+                                     strMemrefAddrInput(), numAccess,
                                      addrWidth);
       output << "\n";
     }
@@ -418,6 +428,17 @@ public:
     fprintf(stderr, "/*ERROR: Expected constant. Found %s + %d */",
             strWire().c_str(), n);
     assert(false);
+  }
+
+  string strConstOrWire(unsigned bitwidth) const {
+    if (isIntegerConst()) {
+      string vlogDecimalLiteral =
+          to_string(bitwidth) + "'d" + to_string(getIntegerConst());
+      if (name == "")
+        return vlogDecimalLiteral;
+      return "/*" + name + "=*/ " + vlogDecimalLiteral;
+    }
+    return strWire() + "[" + to_string(bitwidth - 1) + ":0]";
   }
 
   string strConstOrWire() const {
@@ -523,8 +544,7 @@ string VerilogValue::strMemrefInstDecl() const {
   }
   if (port == hir::Details::r || port == hir::Details::rw) {
     out_decls += "wire " + strMemrefRdEn() + distDimsStr + ";\n";
-    out_decls += string(addrWidth > 0 ? "wire" : "reg") + "[" +
-                 to_string(dataWidth - 1) + ":0] " +
+    out_decls += "logic[" + to_string(dataWidth - 1) + ":0] " +
                  strMemrefRdData(SmallVector<VerilogValue *, 4>()) +
                  distDimsStr + ";\n";
   }

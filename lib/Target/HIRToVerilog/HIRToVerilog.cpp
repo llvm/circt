@@ -126,8 +126,12 @@ private:
 
     VerilogValue *get_mut(Value v) {
       assert(v);
-      assert(mapValueToVerilogValuePtr.find(v) !=
-             mapValueToVerilogValuePtr.end());
+      if (mapValueToVerilogValuePtr.find(v) ==
+          mapValueToVerilogValuePtr.end()) {
+        emitError(v.getDefiningOp()->getLoc(),
+                  "could not find VerilogValue for this mlir::Value!");
+        assert(false);
+      }
       auto out = mapValueToVerilogValuePtr[v];
       assert(out->isInitialized());
       return out;
@@ -173,6 +177,7 @@ private:
   LogicalResult printUnrollForOp(UnrollForOp op, unsigned indentAmount = 0);
   LogicalResult printMemReadOp(MemReadOp op, unsigned indentAmount = 0);
   LogicalResult printAddOp(hir::AddOp op, unsigned indentAmount = 0);
+  LogicalResult printSubtractOp(hir::SubtractOp op, unsigned indentAmount = 0);
   LogicalResult printMemWriteOp(MemWriteOp op, unsigned indentAmount = 0);
   LogicalResult printReturnOp(hir::ReturnOp op, unsigned indentAmount = 0);
   LogicalResult printYieldOp(hir::YieldOp op, unsigned indentAmount = 0);
@@ -273,9 +278,10 @@ LogicalResult VerilogPrinter::printMemReadOp(MemReadOp op,
     for (int i = packing.size() - 1; i >= 0; i--) {
       auto p = addr.size() - 1 - packing[i];
       auto addrI = addr[p];
+      auto dimI = shape[p];
       if (i < packing.size() - 1)
         module_out << ", ";
-      module_out << addrI->strConstOrWire();
+      module_out << addrI->strConstOrWire(ceil(log2(dimI)));
     }
     module_out << "};\n";
   }
@@ -405,14 +411,16 @@ LogicalResult VerilogPrinter::printDelayOp(hir::DelayOp op,
              << "'{default:0};\n";
 
   module_out << "always@(*) " << str_shiftreg
-             << "[0] = " << v_input->strConstOrWire() << ";\n";
+             << "[0] <= " << v_input->strConstOrWire() << ";\n";
   if (v_delay->getIntegerConst() > 0) {
     module_out << "always@(posedge clk) " << str_shiftreg << "["
-               << v_delay->strConstOrError() << ":1] = " << str_shiftreg << "["
+               << v_delay->strConstOrError() << ":1] <= " << str_shiftreg << "["
                << v_delay->strConstOrError(-1) << ":0];\n";
   }
   module_out << "wire " << v_result->strWireDecl() << " = " << str_shiftreg
              << "[" << v_delay->strConstOrError() << "];\n";
+  if (v_result->getType().isa<hir::TimeType>())
+    printTimeOffsets(v_result);
   return success();
 }
 
@@ -440,16 +448,18 @@ LogicalResult VerilogPrinter::printAllocOp(hir::AllocOp op,
       for (int i = 0; i < 2; i++) {
         string str_id_result = to_string(newValueNumber());
         VerilogValue v_result(result[i], "v" + str_id_result);
+        module_out << "//strMemrefInstDecl\n";
         module_out << v_result.strMemrefInstDecl();
         verilogMapper.insert(result[i], v_result);
         string loc = replacer.insert([=]() -> string {
           return verilogMapper.get_mut(result[i])->strMemrefSelDecl();
         });
+        module_out << "//strMemrefSelDecl\n";
         module_out << loc << "\n";
       }
-      if (verilogMapper.get(r0).getPacking().size() > 0)
-        module_out << gen_bram("bram_tdp_rf_rf", verilogMapper.get(r0),
-                               verilogMapper.get(r1));
+      module_out << "\n //Instantiate Memory.\n";
+      module_out << gen_bram("bram_tdp_rf_rf", verilogMapper.get(r0),
+                             verilogMapper.get(r1));
     }
   } else {
     assert(result.size() == 1);
@@ -477,12 +487,7 @@ LogicalResult VerilogPrinter::printWireReadOp(hir::WireReadOp op,
   auto shape = wire.getType().dyn_cast<hir::WireType>().getShape();
   string arrayAccessStr = "";
   for (auto idx : addr) {
-    if (idx->isIntegerConst()) {
-      arrayAccessStr += "[" + to_string(idx->getIntegerConst()) + "]";
-    } else {
-      arrayAccessStr +=
-          "[" + idx->strWire() + " /*ERROR: Expected integer constant.*/]";
-    }
+    arrayAccessStr += "[" + idx->strConstOrError() + "]";
   }
   module_out << "wire " << v_result.strWireDecl() << " = " << v_wire->strWire()
              << arrayAccessStr << ";\n";
@@ -551,7 +556,7 @@ LogicalResult VerilogPrinter::printMemWriteOp(MemWriteOp op,
       auto addrI = addr[i];
       if (i < packing.size() - 1)
         module_out << ", ";
-      module_out << addrI->strWire();
+      module_out << addrI->strConstOrWire();
     }
     module_out << "};\n";
   }
@@ -592,6 +597,36 @@ LogicalResult VerilogPrinter::printAddOp(hir::AddOp op, unsigned indentAmount) {
                << ";\n";
     if (v_left.isIntegerConst() && v_right.isIntegerConst()) {
       v_result.setIntegerConst(v_left.getIntegerConst() +
+                               v_right.getIntegerConst());
+    }
+  }
+  verilogMapper.insert(result, v_result);
+  return success();
+}
+
+LogicalResult VerilogPrinter::printSubtractOp(hir::SubtractOp op,
+                                              unsigned indentAmount) {
+  // TODO: Handle signed and unsigned integers of unequal width using sign
+  // extension.
+  Value result = op.res();
+  unsigned id_result = newValueNumber();
+  VerilogValue v_result(result, "v" + to_string(id_result));
+
+  const VerilogValue v_left = verilogMapper.get(op.left());
+  const VerilogValue v_right = verilogMapper.get(op.right());
+  Type resultType = result.getType();
+  if (resultType.isa<hir::ConstType>()) {
+    module_out << "wire " << v_result.strWireDecl() << " = "
+               << v_left.strConstOrError() << " - " << v_right.strConstOrError()
+               << ";\n";
+    v_result.setIntegerConst(v_left.getIntegerConst() -
+                             v_right.getIntegerConst());
+  } else {
+    module_out << "wire " << v_result.strWireDecl() << " = "
+               << v_left.strConstOrWire() << " - " << v_right.strConstOrWire()
+               << ";\n";
+    if (v_left.isIntegerConst() && v_right.isIntegerConst()) {
+      v_result.setIntegerConst(v_left.getIntegerConst() -
                                v_right.getIntegerConst());
     }
   }
@@ -791,6 +826,9 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
   } else if (auto op = dyn_cast<hir::AddOp>(inst)) {
     module_out << "\n//" << formattedOp(inst, "AddOp");
     return printAddOp(op, indentAmount);
+  } else if (auto op = dyn_cast<hir::SubtractOp>(inst)) {
+    module_out << "\n//" << formattedOp(inst, "SubtractOp");
+    return printSubtractOp(op, indentAmount);
   } else if (auto op = dyn_cast<hir::YieldOp>(inst)) {
     module_out << "\n//" << formattedOp(inst, "YieldOp");
     return printYieldOp(op, indentAmount);
@@ -904,7 +942,7 @@ LogicalResult VerilogPrinter::printTimeOffsets(const VerilogValue *v_timeVar) {
   module_out << "reg " << v_timeVar->strDelayedWire() << "[" << loc
              << ":0] = '{default:0} ;\n";
   module_out << "always@(*) " << v_timeVar->strDelayedWire()
-             << "[0] = " << v_timeVar->strWire() << ";\n";
+             << "[0] <= " << v_timeVar->strWire() << ";\n";
   string str_i = "i" + to_string(newValueNumber());
   module_out << "generate\n";
   module_out << "genvar " << str_i << ";\n";

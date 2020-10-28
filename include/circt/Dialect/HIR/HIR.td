@@ -213,7 +213,7 @@ def ForOp : HIR_Op<"for",
       let description = [{
         This op implements a sequential for loop.
           ```mlir
-          %tdone=hir.for %i = 0 to %N step 1 at iter_time(%ti = %t tstep 2) {
+          hir.for %i = 0 to %N step 1 at iter_time(%ti = %t tstep 2) {
             hir.for %j = %lb to %ub step %s at iter_time(%tj = %ti) 
               iter_args(%xx = %x at %tj){   
                 %yy = hir.delay %xx by 1 at %tj
@@ -384,6 +384,21 @@ def AddOp : HIR_Op<"add",[NoSideEffect]>{
 Examples:
     ```mlir %1 = hir.add (%x, %y) : (i32, i32) -> (i32)```
     ```mlir %1 = hir.add (%x, %y) : (!hir.const<i32>, !hir.conts<i32>) -> (!hir.const<i32>)```
+  }];
+
+  let arguments = (ins AnyType: $left, AnyType:$right);
+  let results = (outs AnyType: $res);
+
+  let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(`
+      type($left) `,` type($right) `)` `->` `(` type($res) `)`}];
+}
+
+def SubtractOp : HIR_Op<"subtract",[NoSideEffect]>{
+  let summary = "Subtract two hir.val values";
+  let description = [{
+Examples:
+    ```mlir %1 = hir.subtract (%x, %y) : (i32, i32) -> (i32)```
+    ```mlir %1 = hir.subtract (%x, %y) : (!hir.const<i32>, !hir.conts<i32>) -> (!hir.const<i32>)```
   }];
 
   let arguments = (ins AnyType: $left, AnyType:$right);
