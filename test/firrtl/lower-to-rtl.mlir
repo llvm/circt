@@ -245,7 +245,7 @@
     // CHECK-NEXT: %2 = firrtl.stdIntCast %aCond : (!firrtl.uint<1>) -> i1
     // CHECK-NEXT: sv.alwaysat_posedge %0 {
     // CHECK-NEXT:   sv.if %1 {
-    // CHECK-NEXT:     sv.assert(%2) : i1
+    // CHECK-NEXT:     sv.assert %2 : i1
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     firrtl.assert %clock, %aCond, %aEn, "assert0"
@@ -254,7 +254,7 @@
     // CHECK-NEXT: %5 = firrtl.stdIntCast %bCond : (!firrtl.uint<1>) -> i1
     // CHECK-NEXT: sv.alwaysat_posedge %3 {
     // CHECK-NEXT:   sv.if %4 {
-    // CHECK-NEXT:     sv.assume(%5) : i1
+    // CHECK-NEXT:     sv.assume %5  : i1
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     firrtl.assume %clock, %bCond, %bEn, "assume0"
@@ -263,7 +263,7 @@
     // CHECK-NEXT: %8 = firrtl.stdIntCast %cCond : (!firrtl.uint<1>) -> i1
     // CHECK-NEXT: sv.alwaysat_posedge %6 {
     // CHECK-NEXT:   sv.if %7 {
-    // CHECK-NEXT:     sv.cover(%8) : i1
+    // CHECK-NEXT:     sv.cover %8 : i1
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     firrtl.cover %clock, %cCond, %cEn, "cover0"
