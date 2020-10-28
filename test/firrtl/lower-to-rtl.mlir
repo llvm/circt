@@ -224,4 +224,49 @@
     // CHECK-NEXT: }
     firrtl.stop %clock2, %reset, 0
   }
+
+// circuit Verification:
+//   module Verification:
+//     input clock: Clock
+//     input aCond: UInt<8>
+//     input aEn: UInt<8>
+//     input bCond: UInt<1>
+//     input bEn: UInt<1>
+//     input cCond: UInt<1>
+//     input cEn: UInt<1>
+//     assert(clock, bCond, bEn, "assert0")
+//     assume(clock, aCond, aEn, "assume0")
+//     cover(clock,  cCond, cEn, "cover0")
+
+  // CHECK-LABEL: firrtl.module @Verification
+  firrtl.module @Verification(%clock: !firrtl.clock, %aCond: !firrtl.uint<1>, %aEn: !firrtl.uint<1>, %bCond: !firrtl.uint<1>, %bEn: !firrtl.uint<1>, %cCond: !firrtl.uint<1>, %cEn: !firrtl.uint<1>) {
+    // CHECK-NEXT: %0 = firrtl.stdIntCast %clock : (!firrtl.clock) -> i1
+    // CHECK-NEXT: %1 = firrtl.stdIntCast %aEn : (!firrtl.uint<1>) -> i1
+    // CHECK-NEXT: %2 = firrtl.stdIntCast %aCond : (!firrtl.uint<1>) -> i1
+    // CHECK-NEXT: sv.alwaysat_posedge %0 {
+    // CHECK-NEXT:   sv.if %1 {
+    // CHECK-NEXT:     sv.assert %2 : i1
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    firrtl.assert %clock, %aCond, %aEn, "assert0"
+    // CHECK-NEXT: %3 = firrtl.stdIntCast %clock : (!firrtl.clock) -> i1
+    // CHECK-NEXT: %4 = firrtl.stdIntCast %bEn : (!firrtl.uint<1>) -> i1
+    // CHECK-NEXT: %5 = firrtl.stdIntCast %bCond : (!firrtl.uint<1>) -> i1
+    // CHECK-NEXT: sv.alwaysat_posedge %3 {
+    // CHECK-NEXT:   sv.if %4 {
+    // CHECK-NEXT:     sv.assume %5  : i1
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    firrtl.assume %clock, %bCond, %bEn, "assume0"
+    // CHECK-NEXT: %6 = firrtl.stdIntCast %clock : (!firrtl.clock) -> i1
+    // CHECK-NEXT: %7 = firrtl.stdIntCast %cEn : (!firrtl.uint<1>) -> i1
+    // CHECK-NEXT: %8 = firrtl.stdIntCast %cCond : (!firrtl.uint<1>) -> i1
+    // CHECK-NEXT: sv.alwaysat_posedge %6 {
+    // CHECK-NEXT:   sv.if %7 {
+    // CHECK-NEXT:     sv.cover %8 : i1
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    firrtl.cover %clock, %cCond, %cEn, "cover0"
+  }
+
 }

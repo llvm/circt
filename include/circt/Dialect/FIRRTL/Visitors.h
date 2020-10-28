@@ -144,7 +144,8 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<AttachOp, ConnectOp, DoneOp, InvalidOp, MemoryPortOp,
-                       PartialConnectOp, PrintFOp, SkipOp, StopOp, WhenOp>(
+                       PartialConnectOp, PrintFOp, SkipOp, StopOp, WhenOp,
+                       AssertOp, AssumeOp, CoverOp>(
             [&](auto opNode) -> ResultType {
               return thisCast->visitStmt(opNode, args...);
             })
@@ -180,6 +181,9 @@ public:
   HANDLE(SkipOp);
   HANDLE(StopOp);
   HANDLE(WhenOp);
+  HANDLE(AssertOp);
+  HANDLE(AssumeOp);
+  HANDLE(CoverOp);
 #undef HANDLE
 };
 

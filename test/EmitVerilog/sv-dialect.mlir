@@ -27,7 +27,14 @@ firrtl.circuit "M1" {
 
       // CHECK-NEXT:     $fwrite(32'h80000002, "Bye %x\n", val + val);
       %tmp = rtl.add %val, %val : i8
-      sv.fwrite "Bye %x\n"(%tmp) : i8 
+      sv.fwrite "Bye %x\n"(%tmp) : i8
+
+      // CHECK-NEXT:     assert(cond);
+      sv.assert %cond : i1
+      // CHECK-NEXT:     assume(cond);
+      sv.assume %cond : i1
+      // CHECK-NEXT:     cover(cond);
+      sv.cover %cond : i1
 
       // CHECK-NEXT:   $fatal
       sv.fatal

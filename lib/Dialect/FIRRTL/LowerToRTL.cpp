@@ -344,6 +344,9 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitStmt(ConnectOp op);
   LogicalResult visitStmt(PrintFOp op);
   LogicalResult visitStmt(StopOp op);
+  LogicalResult visitStmt(AssertOp op);
+  LogicalResult visitStmt(AssumeOp op);
+  LogicalResult visitStmt(CoverOp op);
 
 private:
   /// This builder is set to the right location for each visit call.
@@ -352,6 +355,42 @@ private:
   /// Each value lowered (e.g. operation result) is kept track in this map.  The
   /// key should have a FIRRTL type, the result will have an RTL dialect type.
   DenseMap<Value, Value> valueMapping;
+
+  /// Template for lowering verification statements from type A to
+  /// type B.
+  ///
+  /// For example, lowering the "foo" op to the "bar" op would start
+  /// with:
+  ///
+  ///     foo(clock, condition, enable, "message")
+  ///
+  /// This becomes a Verilog clocking block with the "bar" op guarded
+  /// by an if enable:
+  ///
+  ///     always @(posedge clock) begin
+  ///       if (enable) begin
+  ///         bar(condition);
+  ///       end
+  ///     end
+  template <typename A, typename B>
+  LogicalResult lowerVerificationStatement(A op) {
+    auto clock = getLoweredValue(op.clock());
+    auto enable = getLoweredValue(op.enable());
+    auto predicate = getLoweredValue(op.predicate());
+    if (!clock || !enable || !predicate)
+      return failure();
+
+    auto always = builder->create<sv::AlwaysAtPosEdgeOp>(op.getLoc(), clock);
+    auto oldIP = &*builder->getInsertionPoint();
+    builder->setInsertionPointToStart(always.getBody());
+
+    auto svIf = builder->create<sv::IfOp>(op.getLoc(), enable);
+    builder->setInsertionPointToStart(svIf.getBodyBlock());
+    builder->create<B>(op.getLoc(), predicate);
+    builder->setInsertionPoint(oldIP);
+
+    return success();
+  }
 };
 } // end anonymous namespace
 
@@ -900,4 +939,19 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
 
   builder->setInsertionPoint(oldIP);
   return success();
+}
+
+// Lower an assert to SystemVerilog.
+LogicalResult FIRRTLLowering::visitStmt(AssertOp op) {
+  return lowerVerificationStatement<AssertOp, sv::AssertOp>(op);
+}
+
+// Lower an assume to SystemVerilog.
+LogicalResult FIRRTLLowering::visitStmt(AssumeOp op) {
+  return lowerVerificationStatement<AssumeOp, sv::AssumeOp>(op);
+}
+
+// Lower a cover to SystemVerilog.
+LogicalResult FIRRTLLowering::visitStmt(CoverOp op) {
+  return lowerVerificationStatement<CoverOp, sv::CoverOp>(op);
 }

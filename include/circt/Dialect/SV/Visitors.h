@@ -24,7 +24,9 @@ public:
                        // Control flow.
                        IfDefOp, IfOp, AlwaysAtPosEdgeOp,
                        // Other Statements.
-                       YieldOp, FWriteOp, FatalOp, FinishOp>(
+                       YieldOp, FWriteOp, FatalOp, FinishOp,
+                       // Verification statements.
+                       AssertOp, AssumeOp, CoverOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitSV(expr, args...);
             })
@@ -63,6 +65,11 @@ public:
   HANDLE(FWriteOp, Unhandled);
   HANDLE(FatalOp, Unhandled);
   HANDLE(FinishOp, Unhandled);
+
+  // Verification statements.
+  HANDLE(AssertOp, Unhandled);
+  HANDLE(AssumeOp, Unhandled);
+  HANDLE(CoverOp, Unhandled);
 #undef HANDLE
 };
 

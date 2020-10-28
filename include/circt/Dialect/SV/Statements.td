@@ -143,3 +143,43 @@ def FatalOp : SVOp<"fatal"> {
 
   let assemblyFormat = [{ attr-dict }];
 }
+
+//===----------------------------------------------------------------------===//
+// Verification Statements
+//===----------------------------------------------------------------------===//
+
+def AssertOp : SVOp<"assert"> {
+  let summary = "immediate assertion statement";
+  let description = [{
+    Assert that a specific condition is always true.
+  }];
+
+  let arguments = (ins AnyType:$predicate);
+  let results = (outs);
+
+  let assemblyFormat = [{ attr-dict $predicate `:` type($predicate) }];
+}
+
+def AssumeOp : SVOp<"assume"> {
+  let summary = "assume property statement";
+  let description = [{
+    Assume that a specific property is always true.
+  }];
+
+  let arguments = (ins AnyType:$property);
+  let results = (outs);
+
+  let assemblyFormat = [{ attr-dict $property `:` type($property) }];
+}
+
+def CoverOp : SVOp<"cover"> {
+  let summary = "functional coverage statement";
+  let description = [{
+    Assert that a specific property happens during the course of execution.
+  }];
+
+  let arguments = (ins AnyType:$property);
+  let results = (outs);
+
+  let assemblyFormat = [{ attr-dict $property `:` type($property) }];
+}
