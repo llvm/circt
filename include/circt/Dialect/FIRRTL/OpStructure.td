@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 def CircuitOp : FIRRTLOp<"circuit",
-      [IsolatedFromAbove, SymbolTable, 
+      [IsolatedFromAbove, SymbolTable,
        SingleBlockImplicitTerminator<"DoneOp">]> {
   let summary = "FIRRTL Circuit";
   let description = [{
@@ -32,7 +32,7 @@ def CircuitOp : FIRRTLOp<"circuit",
     Region &getBodyRegion();
     Block *getBody();
   }];
-  
+
   let printer = [{ return ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
 
