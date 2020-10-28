@@ -94,17 +94,7 @@ $ ninja
 $ ninja check-mlir
 ```
 
-4) **Build Verilator**
-
-```
-$ cd verilator
-$ autoconf
-$ export VERILATOR_ROOT=`pwd`
-$ ./configure
-$ make -j$(nproc)
-```
-
-5) **Build and test CIRCT:**
+4) **Build and test CIRCT:**
 
 ```
 $ cd circt
@@ -145,6 +135,14 @@ build() {
 
 This allows you to invoke `build check-circt` from any directory and have it do
 the right thing.
+
+6) **Run the SystemVerilog tests:** (optional)
+
+[Verilator](https://github.com/verilator/verilator) is required to check
+SystemVerilog code. To run the tests, build or install a **recent** version
+of Verilator (at least v4.034). (Some Linux distributions have *ancient*
+versions.) If Verilator is in your PATH, `build check-circt` should run the
+tests which require Verilator.
 
 ## Submitting changes to CIRCT
 
