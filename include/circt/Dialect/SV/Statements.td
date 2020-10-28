@@ -157,7 +157,7 @@ def AssertOp : SVOp<"assert"> {
   let arguments = (ins AnyType:$predicate);
   let results = (outs);
 
-  let assemblyFormat = [{ attr-dict `(` $predicate `)` `:` type($predicate) }];
+  let assemblyFormat = [{ attr-dict $predicate `:` type($predicate) }];
 }
 
 def AssumeOp : SVOp<"assume"> {
@@ -169,7 +169,7 @@ def AssumeOp : SVOp<"assume"> {
   let arguments = (ins AnyType:$property);
   let results = (outs);
 
-  let assemblyFormat = [{ attr-dict `(` $property `)` `:` type($property) }];
+  let assemblyFormat = [{ attr-dict $property `:` type($property) }];
 }
 
 def CoverOp : SVOp<"cover"> {
@@ -181,5 +181,5 @@ def CoverOp : SVOp<"cover"> {
   let arguments = (ins AnyType:$property);
   let results = (outs);
 
-  let assemblyFormat = [{ attr-dict `(` $property `)` `:` type($property) }];
+  let assemblyFormat = [{ attr-dict $property `:` type($property) }];
 }
