@@ -357,7 +357,8 @@ jobs:
       - name: Run Verilator tests
         uses: docker://verilator/verilator:4.102
         with:
-          args: |
-            cmake --build build_assert --target check-circt
+          args: --entrypoint /bin/bash -c "
+            cd build_assert && make check-circt
+          "
 
     # --- end of build-circt job.
