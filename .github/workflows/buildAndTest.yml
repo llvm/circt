@@ -355,7 +355,7 @@ jobs:
 
       # Run the Verilator tests in the Verilator container.
       - name: Run Verilator tests
-        uses: docker://verilator/verilator:4.032
+        uses: docker://verilator/verilator:4.102
         with:
           args: |
             cmake --build build_assert --target check-circt
