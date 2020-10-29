@@ -72,7 +72,7 @@ void Trace::addChangeMerged(unsigned sigIndex) {
   } else {
     // Add one change for the whole signal.
     auto valueDump = sig.dump();
-    mergedChanges[std::make_pair(sigIndex, 0)] = valueDump;
+    mergedChanges[std::make_pair(sigIndex, -1)] = valueDump;
   }
 }
 
@@ -103,6 +103,7 @@ void Trace::flushMerged() {
   // Move the merged changes to the changes vector for dumping.
   for (auto elem : mergedChanges) {
     auto sigIndex = elem.first.first;
+    auto sigElem = elem.first.second;
     auto &sig = state->signals[sigIndex];
     auto change = elem.second;
     // Filter out changes that do not actually introduce changes
@@ -110,36 +111,16 @@ void Trace::flushMerged() {
       // Add the changes for all signals.
       if (mode == merged) {
         for (auto inst : sig.triggers) {
-          if (sig.elements.size() > 0) {
-            std::string path;
-            llvm::raw_string_ostream ss(path);
-            ss << state->instances[inst].path << '/' << sig.name << '['
-               << elem.first.second << ']';
-            changes.push_back(std::make_pair(path, change));
-          } else {
-            auto path = state->instances[inst].path + '/' + sig.name;
-            changes.push_back(std::make_pair(path, change));
-          }
+          pushChange(inst, sig, sigElem);
         }
       } else if (mode == mergedReduce || mode == namedOnly) {
         // Add the changes for the top-level signals only.
-        auto sigIndex = elem.first.first;
-        auto &sig = state->signals[sigIndex];
         auto root = state->root;
         if (sig.owner == root &&
             (mode == mergedReduce ||
              (mode == namedOnly && sig.owner == root &&
               !std::regex_match(sig.name, std::regex("(sig)?[0-9]*"))))) {
-          if (sig.elements.size() > 0) {
-            std::string path;
-            llvm::raw_string_ostream ss(path);
-            ss << state->instances[root].path << '/' << sig.name << '['
-               << elem.first.second << ']';
-            changes.push_back(std::make_pair(path, change));
-          } else {
-            auto path = state->instances[root].path + '/' + sig.name;
-            changes.push_back(std::make_pair(path, change));
-          }
+          pushChange(root, sig, sigElem);
         }
       }
       lastValue[elem.first] = change;
