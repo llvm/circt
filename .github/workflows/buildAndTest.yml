@@ -358,6 +358,6 @@ jobs:
         uses: docker://verilator/verilator:4.102
         with:
           entrypoint: /bin/bash
-          args: -c "cd build_assert && make check-circt"
+          args: -c "cd build_assert && ../llvm/build/bin/llvm-lit test"
 
     # --- end of build-circt job.
