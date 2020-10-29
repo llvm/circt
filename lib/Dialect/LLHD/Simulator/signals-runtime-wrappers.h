@@ -27,7 +27,7 @@ void addSigArrayElements(circt::llhd::sim::State *state, unsigned index,
 /// Add offset and size information for one element of a struct signal. Elements
 /// are assumed to be added (by calling this function) in sequential order, from
 /// first to last.
-void addSigStructSlement(circt::llhd::sim::State *state, unsigned index,
+void addSigStructElement(circt::llhd::sim::State *state, unsigned index,
                          unsigned offset, unsigned size);
 
 /// Add allocated constructs to a process instance.
