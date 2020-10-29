@@ -28,10 +28,12 @@ void Trace::pushChange(std::string inst, Signal &sig, int elem = -1) {
 
 void Trace::pushAllChanges(std::string inst, Signal &sig) {
   if (sig.elements.size() > 0) {
+    // Push changes for all signal elements.
     for (size_t i = 0, e = sig.elements.size(); i < e; ++i) {
       pushChange(inst, sig, i);
     }
   } else {
+    // Push one change for the whole signal.
     pushChange(inst, sig);
   }
 }
@@ -113,12 +115,13 @@ void Trace::flushMerged() {
         for (auto inst : sig.triggers) {
           pushChange(inst, sig, sigElem);
         }
-      } else if (mode == mergedReduce || mode == namedOnly) {
-        // Add the changes for the top-level signals only.
+      } else {
+        // Add the changes for the top-level signals only and filter out
+        // default-named signals (if enabled).
         auto root = state->root;
         if (sig.owner == root &&
             (mode == mergedReduce ||
-             (mode == namedOnly && sig.owner == root &&
+             (mode == namedOnly &&
               !std::regex_match(sig.name, std::regex("(sig)?[0-9]*"))))) {
           pushChange(root, sig, sigElem);
         }
@@ -132,6 +135,8 @@ void Trace::flushMerged() {
                std::pair<std::string, std::string> &rhs) -> bool {
               return lhs.first < rhs.first;
             });
+
+  // Flush the changes to output stream.
   out << currentTime.time << "ps\n";
   for (auto change : changes) {
     out << "  " << change.first << "  " << change.second << "\n";
