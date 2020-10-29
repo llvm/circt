@@ -136,7 +136,7 @@ build() {
 This allows you to invoke `build check-circt` from any directory and have it do
 the right thing.
 
-6) **Run the SystemVerilog tests:** (optional)
+6) **Run the Verilator tests:** (optional)
 
 [Verilator](https://github.com/verilator/verilator) is required to check
 SystemVerilog code. To run the tests, build or install a **recent** version
@@ -144,18 +144,9 @@ of Verilator (at least v4.034). (Some Linux distributions have *ancient*
 versions.) If Verilator is in your PATH, `build check-circt` should run the
 tests which require Verilator.
 
-The `verilator` submodule contains a known compatible version of Verilator
-(passes all of our tests). You can build it for local use:
-
-```
-$ cd verilator
-$ autoconf
-$ export VERILATOR_ROOT=`pwd`/install
-$ ./configure --prefix=`pwd`/install
-$ make -j$(nproc)
-$ make install
-$ export PATH=`pwd`/install/bin:$PATH
-```
+We provide a script `utils/get-verilator.sh` to automate the download and
+compilation of Verilator into a known location. The testing script will check
+this location first.
 
 ## Submitting changes to CIRCT
 

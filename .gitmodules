@@ -2,7 +2,3 @@
 	path = llvm
 	url = git@github.com:circt/llvm.git
 	shallow = true
-[submodule "verilator"]
-	path = verilator
-	url = git@github.com:verilator/verilator.git
-	shallow = true

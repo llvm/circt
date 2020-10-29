@@ -59,55 +59,6 @@ jobs:
 
   # --- end of build-llvm job.
 
-  # Build the Verilator submodule then cache it. Do not rebuild if hit in the
-  # cache.
-  build-verilator:
-    name: Build Verilator
-    runs-on: ubuntu-latest
-    steps:
-      # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
-      # time.
-      - name: Get CIRCT
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 2
-          submodules: "true"
-
-      # Extract the Verilator submodule hash for use in the cache key.
-      - name: Get Verilator Hash
-        id: get-verilator-hash
-        run: echo "::set-output name=hash::$(git rev-parse @:./verilator)"
-        shell: bash
-
-      # Try to fetch Verilator from the cache.
-      - name: Cache Verilator
-        id: cache-verilator
-        uses: actions/cache@v2
-        with:
-          path: verilator
-          key: ${{ runner.os }}-verilator-install-${{ steps.get-verilator-hash.outputs.hash }}
-
-      # There are packages not installed which we need to compile Verilator.
-      - name: Install additional packages
-        run: |
-          sudo apt-get install -y libfl2 libfl-dev
-
-      # Build Verilator if we didn't hit in the cache.
-      - name: Build Verilator
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: |
-          cd verilator
-          autoconf
-          export VERILATOR_ROOT=`pwd`/install
-          ./configure --prefix=`pwd`/install
-          make -j$(nproc)
-          make install
-
-    # Installing the results into the cache is an action which is automatically
-    # added by the cache action above.
-
-  # --- end of build-verilator job.
-
   # Build CIRCT and run its tests.
   build-circt:
     name: Build and Test
@@ -117,8 +68,6 @@ jobs:
       - name: Configure Environment
         run: |
           echo "::add-path::$GITHUB_WORKSPACE/llvm/install/bin"
-          echo "::add-path::$GITHUB_WORKSPACE/verilator/install/bin"
-          echo "VERILATOR_ROOT=$GITHUB_WORKSPACE/verilator" >> $GITHUB_ENV
 
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -179,37 +128,6 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DLLVM_ENABLE_ASSERTIONS=ON
           cmake --build . --target install -- -j$(nproc)
-
-      # --------
-      # Restore Verilator from cache and build if it's not in there.
-      # --------
-
-      # Extract the Verilator submodule hash for use in the cache key.
-      - name: Get Verilator Hash
-        id: get-verilator-hash
-        run: echo "::set-output name=hash::$(git rev-parse @:./verilator)"
-        shell: bash
-
-      # Try to fetch Verilator from the cache.
-      - name: Cache Verilator
-        id: cache-verilator
-        uses: actions/cache@v2
-        with:
-          path: verilator
-          key: ${{ runner.os }}-verilator-install-${{ steps.get-verilator-hash.outputs.hash }}
-
-      # Build Verilator if we didn't hit in the cache. Even though we build it
-      # in the previous job, there is a low chance that it'll have been evicted
-      # by the time we get here
-      - name: Build Verilator
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: |
-          cd verilator
-          autoconf
-          export VERILATOR_ROOT=`pwd`/install
-          ./configure --prefix=`pwd`/install
-          make -j$(nproc)
-          make install
 
       # --------
       # Build and test CIRCT in both debug and release mode.

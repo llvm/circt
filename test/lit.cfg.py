@@ -63,7 +63,11 @@ tools = [
 ]
 
 # Search for and enable Verilator
-verilator_path = shutil.which('verilator')
+verilator_ext_path = os.path.join(config.test_source_root, "../ext/bin")
+if os.path.exists(os.path.join(verilator_ext_path, "verilator")):
+  verilator_path = verilator_ext_path
+else:
+  verilator_path = shutil.which('verilator')
 if verilator_path is not None:
   tool_dirs.append(os.path.dirname(verilator_path))
   tools.append('verilator')
