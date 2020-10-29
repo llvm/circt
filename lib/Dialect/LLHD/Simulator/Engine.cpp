@@ -210,7 +210,7 @@ void Engine::buildLayout(ModuleOp module) {
 
   // Build root instance, the parent and instance names are the same for the
   // root.
-  Instance rootInst(root, root);
+  Instance rootInst(state->root, state->root);
   rootInst.unit = root;
   rootInst.path = root;
 
@@ -220,7 +220,7 @@ void Engine::buildLayout(ModuleOp module) {
   // The root is always an instance.
   rootInst.isEntity = true;
   // Store the root instance.
-  state->instances[rootInst.unit + "." + rootInst.name] = std::move(rootInst);
+  state->instances[rootInst.name] = std::move(rootInst);
 
   // Add triggers to signals.
   for (auto &inst : state->instances) {
