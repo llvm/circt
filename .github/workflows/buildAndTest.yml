@@ -62,12 +62,11 @@ jobs:
   # Build CIRCT and run its tests.
   build-circt:
     name: Build and Test
-    needs: [build-llvm]
+    needs: build-llvm
     runs-on: ubuntu-latest
     steps:
       - name: Configure Environment
-        run: |
-          echo "::add-path::$GITHUB_WORKSPACE/llvm/install/bin"
+        run: echo "::add-path::$GITHUB_WORKSPACE/llvm/install/bin"
 
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -77,8 +76,8 @@ jobs:
           fetch-depth: 2
           submodules: "true"
 
-      # There are packages not installed which we need.
-      - name: Install additional packages
+      # We'll be running clang-tidy later in this flow.
+      - name: Install clang-tidy
         run: |
           sudo apt-get install -y clang-tidy-9
           sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy \
