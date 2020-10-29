@@ -62,7 +62,7 @@ jobs:
   # Build CIRCT and run its tests.
   build-circt:
     name: Build and Test
-    needs: [build-llvm, build-verilator]
+    needs: [build-llvm]
     runs-on: ubuntu-latest
     steps:
       - name: Configure Environment
@@ -80,9 +80,7 @@ jobs:
       # There are packages not installed which we need.
       - name: Install additional packages
         run: |
-          sudo apt-get install -y \
-            clang-tidy-9 \
-            libfl2 libfl-dev
+          sudo apt-get install -y clang-tidy-9
           sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy \
             /usr/bin/clang-tidy-9 100
 
@@ -269,12 +267,5 @@ jobs:
             cat clang-tidy.patch
             echo "================"
           fi
-
-      # Run the Verilator tests in the Verilator container.
-      - name: Run Verilator tests
-        uses: docker://verilator/verilator:4.102
-        with:
-          entrypoint: /bin/bash
-          args: -c "cd build_assert && ../llvm/build/bin/llvm-lit test"
 
     # --- end of build-circt job.

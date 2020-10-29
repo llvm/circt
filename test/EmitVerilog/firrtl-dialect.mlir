@@ -1,6 +1,4 @@
-// RUN: circt-translate %s -emit-verilog -verify-diagnostics | tee %t1.sv | FileCheck %s --strict-whitespace
-// TODO: This test produces lint warnings.
-// RUN: verilator -lint-only --top-module M1 %t1.sv -Wno-fatal
+// RUN: circt-translate %s -emit-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 firrtl.circuit "M1" {
   firrtl.module @M1(%x : !firrtl.uint<8>,

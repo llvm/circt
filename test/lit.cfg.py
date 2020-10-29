@@ -22,7 +22,7 @@ config.name = 'CIRCT'
 config.test_format = lit.formats.ShTest(not llvm_config.use_lit_shell)
 
 # suffixes: A list of file extensions to treat as test files.
-config.suffixes = ['.td', '.mlir', '.ll', '.fir']
+config.suffixes = ['.td', '.mlir', '.ll', '.fir', '.sv']
 
 # test_source_root: The root path where tests are located.
 config.test_source_root = os.path.dirname(__file__)
@@ -63,9 +63,9 @@ tools = [
 ]
 
 # Search for and enable Verilator
-verilator_ext_path = os.path.join(config.test_source_root, "../ext/bin")
-if os.path.exists(os.path.join(verilator_ext_path, "verilator")):
-  verilator_path = verilator_ext_path
+verilator_ext = os.path.join(config.test_source_root, "../ext/bin", "verilator")
+if os.path.exists(verilator_ext):
+  verilator_path = verilator_ext
 else:
   verilator_path = shutil.which('verilator')
 if verilator_path is not None:

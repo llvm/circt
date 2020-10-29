@@ -1,5 +1,4 @@
-// RUN: circt-translate %s -emit-verilog -verify-diagnostics | tee %t1.sv | FileCheck %s --strict-whitespace
-// RUN: verilator -lint-only --top-module AB %t1.sv
+// RUN: circt-translate %s -emit-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 module {
   rtl.externmodule @E(%a: i1 {rtl.direction = "in"}, 
