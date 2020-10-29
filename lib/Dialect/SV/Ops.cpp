@@ -140,7 +140,8 @@ static ParseResult parseModportStructs(OpAsmParser &parser,
   return success();
 }
 
-static void printModportStructs(OpAsmPrinter &p, ArrayAttr portsAttr) {
+static void printModportStructs(OpAsmPrinter &p, Operation *,
+                                ArrayAttr portsAttr) {
   p << " (";
   for (size_t i = 0, e = portsAttr.size(); i != e; ++i) {
     auto port = portsAttr[i].dyn_cast<ModportStructAttr>();

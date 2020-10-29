@@ -2710,7 +2710,8 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
   target.addLegalOp<LLVM::DialectCastOp>();
 
   // Apply the partial conversion.
-  if (failed(applyPartialConversion(getOperation(), target, patterns)))
+  if (failed(
+          applyPartialConversion(getOperation(), target, std::move(patterns))))
     signalPassFailure();
 
   // Setup the full conversion.
@@ -2723,7 +2724,7 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
   target.addIllegalOp<LLVM::DialectCastOp>();
 
   // Apply the full conversion.
-  if (failed(applyFullConversion(getOperation(), target, patterns)))
+  if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
     signalPassFailure();
 }
 
