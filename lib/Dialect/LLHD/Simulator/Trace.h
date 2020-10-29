@@ -34,6 +34,7 @@ class Trace {
   std::unique_ptr<State> const &state;
   TraceMode mode;
   Time currentTime;
+  std::vector<bool> isTraced;
   std::vector<std::pair<std::string, std::string>> changes;
   std::map<std::pair<unsigned, int>, std::string> mergedChanges;
   std::map<std::pair<unsigned, int>, std::string> lastValue;
@@ -51,8 +52,7 @@ class Trace {
 
 public:
   Trace(std::unique_ptr<State> const &state, llvm::raw_ostream &out,
-        TraceMode mode)
-      : out(out), state(state), mode(mode) {}
+        TraceMode mode);
 
   /// Add a value change.
   void addChange(unsigned);

@@ -6,6 +6,22 @@
 
 using namespace circt::llhd::sim;
 
+Trace::Trace(std::unique_ptr<State> const &state, llvm::raw_ostream &out,
+             TraceMode mode)
+    : out(out), state(state), mode(mode) {
+  auto root = state->root;
+  for (auto &sig : state->signals) {
+    if (mode != full && mode != merged && sig.owner != root) {
+      isTraced.push_back(false);
+    } else if (mode == namedOnly &&
+               std::regex_match(sig.name, std::regex("(sig)?[0-9]*"))) {
+      isTraced.push_back(false);
+    } else {
+      isTraced.push_back(true);
+    }
+  }
+}
+
 void Trace::pushChange(std::string inst, Signal &sig, int elem = -1) {
   std::string valueDump;
   std::string path;
@@ -40,16 +56,20 @@ void Trace::pushAllChanges(std::string inst, Signal &sig) {
 
 void Trace::addChange(unsigned sigIndex) {
   currentTime = state->time;
-  if (mode == full)
-    addChangeFull(sigIndex);
-  else if (mode == reduced)
-    addChangeReduced(sigIndex);
-  else if (mode == merged || mode == mergedReduce || mode == namedOnly)
-    addChangeMerged(sigIndex);
+  if (isTraced[sigIndex]) {
+    if (mode == full)
+      addChangeFull(sigIndex);
+    else if (mode == reduced)
+      addChangeReduced(sigIndex);
+    else if (mode == merged || mode == mergedReduce || mode == namedOnly)
+      addChangeMerged(sigIndex);
+  }
 }
 
 void Trace::addChangeFull(unsigned sigIndex) {
   auto &sig = state->signals[sigIndex];
+
+  // Add a change for each connected instance.
   for (auto inst : sig.triggers) {
     pushAllChanges(inst, sig);
   }
@@ -57,10 +77,7 @@ void Trace::addChangeFull(unsigned sigIndex) {
 
 void Trace::addChangeReduced(unsigned sigIndex) {
   auto &sig = state->signals[sigIndex];
-  auto root = state->root;
-  if (sig.owner == root) {
-    pushAllChanges(root, sig);
-  }
+  pushAllChanges(state->root, sig);
 }
 
 void Trace::addChangeMerged(unsigned sigIndex) {
@@ -110,24 +127,17 @@ void Trace::flushMerged() {
     auto change = elem.second;
     // Filter out changes that do not actually introduce changes
     if (lastValue[elem.first] != change) {
-      // Add the changes for all signals.
       if (mode == merged) {
+        // Add the changes for all connected instances.
         for (auto inst : sig.triggers) {
           pushChange(inst, sig, sigElem);
         }
       } else {
-        // Add the changes for the top-level signals only and filter out
-        // default-named signals (if enabled).
-        auto root = state->root;
-        if (sig.owner == root &&
-            (mode == mergedReduce ||
-             (mode == namedOnly &&
-              !std::regex_match(sig.name, std::regex("(sig)?[0-9]*"))))) {
-          pushChange(root, sig, sigElem);
-        }
+        // Add change only for owner instance.
+        pushChange(sig.owner, sig, sigElem);
       }
-      lastValue[elem.first] = change;
     }
+    lastValue[elem.first] = change;
   }
 
   std::sort(changes.begin(), changes.end(),
