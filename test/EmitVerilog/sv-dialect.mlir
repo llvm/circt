@@ -1,6 +1,4 @@
-// RUN: circt-translate %s -emit-verilog -verify-diagnostics | tee %t1.sv | FileCheck %s --strict-whitespace
-// TODO: This test does not compile with Verilator. Should it?
-// RUN: true || verilator -lint-only --top-module M1 %t1.sv
+// RUN: circt-translate %s -emit-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 firrtl.circuit "M1" {
   // CHECK-LABEL: module M1(

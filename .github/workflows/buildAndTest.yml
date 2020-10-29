@@ -9,9 +9,6 @@ jobs:
     name: Build LLVM
     runs-on: ubuntu-latest
     steps:
-      - name: Configure Environment
-        run: echo "::add-path::$GITHUB_WORKSPACE/llvm/install/bin"
-
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
       - name: Get CIRCT
@@ -101,9 +98,10 @@ jobs:
         run: |
           cd verilator
           autoconf
-          export VERILATOR_ROOT=`pwd`
-          ./configure
+          export VERILATOR_ROOT=`pwd`/install
+          ./configure --prefix=`pwd`/install
           make -j$(nproc)
+          make install
 
     # Installing the results into the cache is an action which is automatically
     # added by the cache action above.
@@ -119,7 +117,7 @@ jobs:
       - name: Configure Environment
         run: |
           echo "::add-path::$GITHUB_WORKSPACE/llvm/install/bin"
-          echo "::add-path::$GITHUB_WORKSPACE/verilator/bin"
+          echo "::add-path::$GITHUB_WORKSPACE/verilator/install/bin"
           echo "VERILATOR_ROOT=$GITHUB_WORKSPACE/verilator" >> $GITHUB_ENV
 
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
@@ -208,9 +206,10 @@ jobs:
         run: |
           cd verilator
           autoconf
-          export VERILATOR_ROOT=`pwd`
-          ./configure
+          export VERILATOR_ROOT=`pwd`/install
+          ./configure --prefix=`pwd`/install
           make -j$(nproc)
+          make install
 
       # --------
       # Build and test CIRCT in both debug and release mode.

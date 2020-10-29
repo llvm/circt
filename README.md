@@ -144,6 +144,19 @@ of Verilator (at least v4.034). (Some Linux distributions have *ancient*
 versions.) If Verilator is in your PATH, `build check-circt` should run the
 tests which require Verilator.
 
+The `verilator` submodule contains a known compatible version of Verilator
+(passes all of our tests). You can build it for local use:
+
+```
+$ cd verilator
+$ autoconf
+$ export VERILATOR_ROOT=`pwd`/install
+$ ./configure --prefix=`pwd`/install
+$ make -j$(nproc)
+$ make install
+$ export PATH=`pwd`/install/bin:$PATH
+```
+
 ## Submitting changes to CIRCT
 
 The project is small so there are few formal process yet.  We generally follow

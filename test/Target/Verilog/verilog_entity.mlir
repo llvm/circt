@@ -1,6 +1,4 @@
-// RUN: circt-translate --llhd-to-verilog %s | tee %t1.sv | FileCheck %s
-// TODO: This test fails to lint with Verilator.
-// RUN: true || verilator -lint-only --top-module _check_inst %t1.sv
+// RUN: circt-translate --llhd-to-verilog %s | FileCheck %s
 
 // CHECK: module _empty;
 llhd.entity @empty () -> () {
