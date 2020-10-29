@@ -35,8 +35,7 @@ class Trace {
   TraceMode mode;
   Time currentTime;
   std::vector<std::pair<std::string, std::string>> changes;
-  std::map<std::pair<unsigned, unsigned>, std::pair<Time, std::string>>
-      mergedChanges;
+  std::map<std::pair<unsigned, unsigned>, std::string> mergedChanges;
   std::map<std::pair<unsigned, unsigned>, std::string> lastValue;
 
   void pushChange(std::string inst, Signal &sig, int elem);

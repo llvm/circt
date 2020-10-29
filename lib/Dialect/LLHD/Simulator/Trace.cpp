@@ -63,19 +63,16 @@ void Trace::addChangeReduced(unsigned sigIndex) {
 
 void Trace::addChangeMerged(unsigned sigIndex) {
   auto &sig = state->signals[sigIndex];
-  auto time = state->time;
   if (sig.elements.size() > 0) {
     // Add a change for all sub-elements
     for (size_t i = 0, e = sig.elements.size(); i < e; ++i) {
       auto valueDump = sig.dump(i);
-      mergedChanges[std::make_pair(sigIndex, i)] =
-          std::make_pair(time, valueDump);
+      mergedChanges[std::make_pair(sigIndex, i)] = valueDump;
     }
   } else {
     // Add one change for the whole signal.
     auto valueDump = sig.dump();
-    mergedChanges[std::make_pair(sigIndex, 0)] =
-        std::make_pair(time, valueDump);
+    mergedChanges[std::make_pair(sigIndex, 0)] = valueDump;
   }
 }
 
@@ -109,7 +106,7 @@ void Trace::flushMerged() {
     auto &sig = state->signals[sigIndex];
     auto change = elem.second;
     // Filter out changes that do not actually introduce changes
-    if (lastValue[elem.first] != change.second) {
+    if (lastValue[elem.first] != change) {
       // Add the changes for all signals.
       if (mode == merged) {
         for (auto inst : sig.triggers) {
@@ -118,10 +115,10 @@ void Trace::flushMerged() {
             llvm::raw_string_ostream ss(path);
             ss << state->instances[inst].path << '/' << sig.name << '['
                << elem.first.second << ']';
-            changes.push_back(std::make_pair(path, change.second));
+            changes.push_back(std::make_pair(path, change));
           } else {
             auto path = state->instances[inst].path + '/' + sig.name;
-            changes.push_back(std::make_pair(path, change.second));
+            changes.push_back(std::make_pair(path, change));
           }
         }
       } else if (mode == mergedReduce || mode == namedOnly) {
@@ -138,14 +135,14 @@ void Trace::flushMerged() {
             llvm::raw_string_ostream ss(path);
             ss << state->instances[root].path << '/' << sig.name << '['
                << elem.first.second << ']';
-            changes.push_back(std::make_pair(path, change.second));
+            changes.push_back(std::make_pair(path, change));
           } else {
             auto path = state->instances[root].path + '/' + sig.name;
-            changes.push_back(std::make_pair(path, change.second));
+            changes.push_back(std::make_pair(path, change));
           }
         }
       }
-      lastValue[elem.first] = change.second;
+      lastValue[elem.first] = change;
     }
   }
 
