@@ -175,7 +175,7 @@ def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">]> {
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"Value condition, bool withElseRegion">
+    OpBuilderDAG<(ins "Value":$condition, "bool":$withElseRegion)>
   ];
 
   let extraClassDeclaration = [{

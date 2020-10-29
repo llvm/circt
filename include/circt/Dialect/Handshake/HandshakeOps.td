@@ -79,24 +79,24 @@ def FuncOp : Op<Handshake_Dialect, "func", [
   let skipDefaultBuilders = 1;
 
   let builders =
-      [OpBuilder<"StringRef name, FunctionType type, "
-                 "ArrayRef<NamedAttribute> attrs = {}, "
-                 "ArrayRef<MutableDictionaryAttr> argAttrs = {}",
-                 [{
-                   $_state.addAttribute(SymbolTable::getSymbolAttrName(),
-                                       $_builder.getStringAttr(name));
-                   $_state.addAttribute(getTypeAttrName(), TypeAttr::get(type));
-                   $_state.attributes.append(attrs.begin(), attrs.end());
-                   $_state.addRegion();
+       [OpBuilderDAG<(ins "StringRef":$name, "FunctionType":$type,
+                      CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs,
+                      CArg<"ArrayRef<MutableDictionaryAttr>", "{}">:$argAttrs),
+                      [{
+                     $_state.addAttribute(SymbolTable::getSymbolAttrName(),
+                                         $_builder.getStringAttr(name));
+                     $_state.addAttribute(getTypeAttrName(), TypeAttr::get(type));
+                     $_state.attributes.append(attrs.begin(), attrs.end());
+                     $_state.addRegion();
 
-                   // Not needed?? Arguments are already included in attrs
-                   /* assert(type.getNumInputs() == argAttrs.size());
-                    SmallString<8> argAttrName;
-                    for (unsigned i = 0, e = type.getNumInputs(); i != e; ++i)
-                      if (auto argDict = argAttrs[i].getDictionary())
-                        $_state.addAttribute(getArgAttrName(i, argAttrName),
-                    argDict);*/
-                 }]>];
+                     // Not needed?? Arguments are already included in attrs
+                     /* assert(type.getNumInputs() == argAttrs.size());
+                      SmallString<8> argAttrName;
+                      for (unsigned i = 0, e = type.getNumInputs(); i != e; ++i)
+                        if (auto argDict = argAttrs[i].getDictionary())
+                          $_state.addAttribute(getArgAttrName(i, argAttrName),
+                      argDict);*/
+                   }]>];
 
   let extraClassDeclaration = [{
     // Add an entry block to an empty function, and set up the block arguments
@@ -202,18 +202,20 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
   let arguments = (ins FlatSymbolRefAttr:$module, Variadic<AnyType>:$operands);
   let results = (outs Variadic<AnyType>);
 
-  let builders = [OpBuilder<
-    "FuncOp module, ValueRange operands = {}", [{
+  let builders = [OpBuilderDAG<
+    (ins "FuncOp":$module, CArg<"ValueRange", "{}">:$operands), [{
       $_state.addOperands(operands);
       $_state.addAttribute("module", $_builder.getSymbolRefAttr(module));
       $_state.addTypes(module.getType().getResults());
-  }]>, OpBuilder<
-    "SymbolRefAttr module, ArrayRef<Type> results, ValueRange operands = {}", [{
+  }]>, OpBuilderDAG<
+    (ins "SymbolRefAttr":$module, "ArrayRef<Type>":$results,
+     CArg<"ValueRange", "{}">:$operands), [{
       $_state.addOperands(operands);
       $_state.addAttribute("module", module);
       $_state.addTypes(results);
-  }]>, OpBuilder<
-    "StringRef module, ArrayRef<Type> results, ValueRange operands = {}", [{
+  }]>, OpBuilderDAG<
+    (ins "StringRef":$module, "ArrayRef<Type>":$results,
+     CArg<"ValueRange", "{}">:$operands), [{
       build($_builder, $_state, $_builder.getSymbolRefAttr(module), results,
             operands);
   }]>];
@@ -258,7 +260,7 @@ def ReturnOp : Handshake_Op<"return", [Terminator]> {
 
   let skipDefaultBuilders = 1;
 
-  let builders = [OpBuilder<"ArrayRef<Value> operands">];
+  let builders = [OpBuilderDAG<(ins "ArrayRef<Value>":$operands)>];
 
   let printer = [{ return ::print(p, *this); }];
   let verifier = [{ return ::verify(*this); }];
@@ -306,7 +308,7 @@ def ForkOp : Handshake_Op<"fork", [NoSideEffect]> {
 
   let hasCanonicalizer = 1;
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<"Value operand, int outputs ">];
+  let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$outputs)>];
 
   let extraClassDeclaration = [{
     bool isControl() { return getAttrOfType<BoolAttr>("control").getValue(); }
@@ -325,7 +327,7 @@ def LazyForkOp : Handshake_Op<"lazy_fork", [NoSideEffect]> {
   let results = (outs Variadic<AnyType>);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<"Value operand, int outputs ">];
+  let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$outputs)>];
 
   let extraClassDeclaration = [{
     bool isControl() {  return getAttrOfType<BoolAttr>("control").getValue(); }
@@ -346,7 +348,7 @@ def MergeOp : Handshake_Op<"merge", [NoSideEffect, MergeLikeOpInterface]> {
 
   let hasCanonicalizer = 1;
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<"Value  operand, int inputs ">];
+  let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$inputs)>];
 }
 
 def MuxOp : Handshake_Op<"mux", [NoSideEffect, MergeLikeOpInterface]> {
@@ -366,7 +368,7 @@ def MuxOp : Handshake_Op<"mux", [NoSideEffect, MergeLikeOpInterface]> {
   let results = (outs AnyType);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<"Value  operand, int inputs ">];
+  let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$inputs)>];
 }
 
 def ControlMergeOp : Handshake_Op<"control_merge",
@@ -385,7 +387,7 @@ def ControlMergeOp : Handshake_Op<"control_merge",
   let results = (outs Variadic<AnyType>);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<"Value  operand, int inputs ">];
+  let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$inputs)>];
 }
 
 def BranchOp : Handshake_Op<"branch", [NoSideEffect]> {
@@ -401,7 +403,7 @@ def BranchOp : Handshake_Op<"branch", [NoSideEffect]> {
   let results = (outs AnyType : $dataResult);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<"Value dataOperand ">];
+  let builders = [OpBuilderDAG<(ins "Value":$dataOperand)>];
 
   let hasCanonicalizer = 1;
   let extraClassDeclaration = [{
@@ -426,7 +428,7 @@ def ConditionalBranchOp : Handshake_Op<"conditional_branch", [NoSideEffect]> {
                       AnyType : $falseResult);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<"Value condOperand, Value dataOperand ">];
+  let builders = [OpBuilderDAG<(ins "Value":$condOperand, "Value":$dataOperand)>];
 
   let extraClassDeclaration = [{
     // These are the indices into the dests list.
@@ -451,7 +453,7 @@ def SinkOp : Handshake_Op<"sink", []> {
   let arguments = (ins AnyType);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<"Value  operand ">];
+  let builders = [OpBuilderDAG<(ins "Value":$operand)>];
 }
 
 def SourceOp : Handshake_Op<"source", [NoSideEffect]> {
@@ -477,7 +479,7 @@ def ConstantOp : Handshake_Op<"constant", [NoSideEffect]> {
   let results = (outs AnyType);
 
   // let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<"Attribute value, Value  operand">];
+  let builders = [OpBuilderDAG<(ins "Attribute":$value, "Value":$operand)>];
 
   let extraClassDeclaration = [{
     Attribute getValue() { return getAttr("value"); }
@@ -495,7 +497,7 @@ def EndOp : Handshake_Op<"end"> {
   let arguments = (ins AnyType : $control, Variadic<AnyType>);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<"Value  operand">];
+  let builders = [OpBuilderDAG<(ins "Value":$operand)>];
 }
 
 def StartOp : Handshake_Op<"start", [NoSideEffect]> {
@@ -509,7 +511,7 @@ def StartOp : Handshake_Op<"start", [NoSideEffect]> {
   let results = (outs NoneType);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<"">];
+  let builders = [OpBuilderDAG<(ins)>];
 }
 
 def TerminatorOp : Handshake_Op<"terminator", [Terminator]> {
@@ -523,7 +525,7 @@ def TerminatorOp : Handshake_Op<"terminator", [Terminator]> {
 
   let successors = (successor VariadicSuccessor<AnySuccessor>:$dests);
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<"ArrayRef<Block *> successors ">];
+  let builders = [OpBuilderDAG<(ins "ArrayRef<Block *>":$successors)>];
 }
 
 def MemRefTypeAttr : TypeAttrBase<"MemRefType", "memref type attribute">;
@@ -546,9 +548,9 @@ def MemoryOp : Handshake_Op<"memory"> {
   let results = (outs Variadic<AnyType>);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<
-      "ArrayRef<Value> operands, int outputs, int control_outputs, bool lsq, "
-      "int id, Value memref ">
+  let builders = [OpBuilderDAG<(
+      ins "ArrayRef<Value>":$operands, "int":$outputs, "int":$control_outputs, "bool":$lsq,
+      "int":$id, "Value":$memref)>
   ];
   let extraClassDeclaration = [{
     APInt getLdCount() {
@@ -583,7 +585,7 @@ def LoadOp : Handshake_Op<"load"> {
   let arguments = (ins Variadic<Index>, AnyType, NoneType);
   let results = (outs AnyType, Variadic<Index>:$addressResults);
 
-  let builders = [OpBuilder<"Value memref, ArrayRef<Value> indices ">];
+  let builders = [OpBuilderDAG<(ins "Value":$memref, "ArrayRef<Value>":$indices)>];
 
 }
 
@@ -604,7 +606,7 @@ def StoreOp : Handshake_Op<"store"> {
   let results = (outs AnyType, Variadic<Index>);
 
   let builders =
-      [OpBuilder<"Value valueToStore, ArrayRef<Value> indices ">];
+      [OpBuilderDAG<(ins "Value":$valueToStore, "ArrayRef<Value>":$indices)>];
 }
 
 def JoinOp : Handshake_Op<"join"> {
@@ -617,7 +619,7 @@ def JoinOp : Handshake_Op<"join"> {
   let results = (outs NoneType);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<"ArrayRef<Value> operands">];
+  let builders = [OpBuilderDAG<(ins "ArrayRef<Value>":$operands)>];
 }
 
 def I4 : I<4>;

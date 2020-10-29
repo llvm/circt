@@ -13,7 +13,7 @@ def RTLModuleOp : RTLOp<"module",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"StringAttr name, ArrayRef<RTLModulePortInfo> ports">
+    OpBuilderDAG<(ins "StringAttr":$name, "ArrayRef<RTLModulePortInfo>":$ports)>
   ];
 
   let extraClassDeclaration = [{
@@ -71,7 +71,7 @@ def RTLExternModuleOp : RTLOp<"externmodule",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"StringAttr name, ArrayRef<RTLModulePortInfo> ports">
+    OpBuilderDAG<(ins "StringAttr":$name, "ArrayRef<RTLModulePortInfo>":$ports)>
   ];
 
   let extraClassDeclaration = [{   
@@ -143,7 +143,7 @@ def OutputOp : RTLOp<"output", [Terminator, HasParent<"RTLModuleOp">,
 
   let arguments = (ins Variadic<AnyType>:$operands);
 
-  let builders = [OpBuilder<"", [{ build($_builder, $_state, llvm::None); }]>];
+  let builders = [OpBuilderDAG<(ins), [{ build($_builder, $_state, llvm::None); }]>];
 
   let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
 

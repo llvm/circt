@@ -22,7 +22,7 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
   }];
 
   let builders = [
-    OpBuilder<"IntType type, const APInt &value">
+    OpBuilderDAG<(ins "IntType":$type, "const APInt &":$value)>
   ];
   let hasFolder = 1;
   let verifier = [{ return ::verifyConstantOp(*this); }];
@@ -245,7 +245,7 @@ def BitsPrimOp : PrimOp<"bits"> {
   let hasFolder = 1;
 
   let builders = [
-    OpBuilder<"Value input, unsigned high, unsigned low">
+    OpBuilderDAG<(ins "Value":$input, "unsigned":$high, "unsigned":$low)>
   ];
 
   let extraClassDeclaration = [{
