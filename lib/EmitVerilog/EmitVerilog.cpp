@@ -1410,7 +1410,7 @@ void ModuleEmitter::emitStatement(rtl::OutputOp op) {
   parent.getRTLPortInfo(ports);
   size_t operandIndex = 0;
   for (rtl::RTLModulePortInfo port : ports) {
-    if (port.direction != rtl::PortDirection::OUTPUT)
+    if (!port.isOutput())
       continue;
     indent() << "assign " << port.getName() << " = ";
     emitExpression(op.getOperand(operandIndex), ops);
@@ -1684,9 +1684,8 @@ void ModuleEmitter::emitStatement(rtl::RTLInstanceOp op) {
   for (size_t i = 0, e = portInfo.size(); i != e; ++i) {
     rtl::RTLModulePortInfo &elt = portInfo[i];
     bool isLast = &elt == &portInfo.back();
-    StringRef valueName = elt.direction == rtl::PortDirection::OUTPUT
-                              ? getName(opResults[elt.argNum])
-                              : getName(opArgs[elt.argNum]);
+    StringRef valueName = elt.isOutput() ? getName(opResults[elt.argNum])
+                                         : getName(opArgs[elt.argNum]);
     indent() << "  ." << StringRef(elt.getName()) << " (" << valueName
              << (isLast ? ")\n" : "),\n");
   }
@@ -2486,7 +2485,7 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
           "Verilog synthesis.\n");
       name = "<<NO-NAME-FOUND>>";
     }
-    if (port.direction == rtl::PortDirection::OUTPUT)
+    if (port.isOutput())
       usedNames.insert(name);
     else
       addName(module.getArgument(port.argNum), name);
@@ -2502,7 +2501,7 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
   unsigned maxTypeWidth = 0;
   for (auto &port : portInfo) {
     auto portType = port.type;
-    hasOutputs |= port.direction == rtl::PortDirection::OUTPUT;
+    hasOutputs |= port.isOutput();
 
     int bitWidth = getBitWidthOrSentinel(portType);
     if (bitWidth == -1 || bitWidth == 1)

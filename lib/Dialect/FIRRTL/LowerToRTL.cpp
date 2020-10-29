@@ -78,7 +78,6 @@ void FIRRTLModuleLowering::runOnOperation() {
   if (!circuit)
     return;
 
-  // TODO: We should drop the CircuitOp as well.
   auto *circuitBody = circuit.getBody();
 
   // Iterate through each operation in the circuit body, transforming any
@@ -89,8 +88,7 @@ void FIRRTLModuleLowering::runOnOperation() {
     // Step through the operations carefully to avoid invalidating the iterator.
     auto &op = *opIt++;
     if (auto module = dyn_cast<FModuleOp>(op)) {
-      // TODO: lowerModule method is broken.
-      // lowerModule(module, moduleBody);
+      lowerModule(module, moduleBody);
       continue;
     }
 
@@ -194,12 +192,28 @@ void FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
   OpBuilder bodyBuilder(newModule.body());
 
   // Insert argument casts, and revector users in the old body to use them.
-  for (size_t i = 0, e = ports.size(); i != e; ++i) {
-    auto oldArg = oldModule.body().getArgument(i);
-    auto newArg = newModule.body().getArgument(i);
+  size_t nextNewArg = 0;
+  size_t firrtlArg = 0;
+  SmallVector<Value, 4> outputs;
+  for (auto &port : ports) {
+    // Inputs and outputs are both modeled as arguments in the FIRRTL level.
+    auto oldArg = oldModule.body().getArgument(firrtlArg++);
 
-    // Cast the argument to the old type, reintroducing sign information in the
-    // rtl.module body.
+    Value newArg;
+    if (!port.isOutput()) {
+      // Inputs and InOuts are modeled as arguments in the result, so we can
+      // just map them over.
+      newArg = newModule.body().getArgument(nextNewArg++);
+    } else {
+      // Outputs need a temporary wire so they can be assign'd to, which we then
+      // return.
+      newArg = bodyBuilder.create<rtl::WireOp>(oldModule.getLoc(), port.type,
+                                               /*name=*/StringAttr());
+      outputs.push_back(newArg);
+    }
+
+    // Cast the argument to the old type, reintroducing sign information in
+    // the rtl.module body.
     Value castedNewArg = bodyBuilder.create<StdIntCast>(
         oldModule.getLoc(),
         oldArg.getType().cast<FIRRTLType>().getPassiveType(), newArg);
@@ -211,6 +225,9 @@ void FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
     // Switch all uses of the old operands to the new ones.
     oldArg.replaceAllUsesWith(castedNewArg);
   }
+
+  // Update the rtl.output terminator with the list of outputs we have.
+  newModule.getBodyBlock()->getTerminator()->setOperands(outputs);
 
   // Splice the body over, don't move the old terminator over though.
   auto &oldBlockInstList = oldModule.getBodyBlock()->getOperations();

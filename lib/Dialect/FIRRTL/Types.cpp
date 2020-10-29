@@ -251,6 +251,9 @@ FIRRTLType FIRRTLType::getMaskType() {
 FIRRTLType FIRRTLType::getWidthlessType() {
   return TypeSwitch<FIRRTLType, FIRRTLType>(*this)
       .Case<ClockType, ResetType, AsyncResetType>([](auto a) { return a; })
+      .Case<FlipType>([](FlipType a) {
+        return FlipType::get(a.getElementType().getWidthlessType());
+      })
       .Case<UIntType, SIntType, AnalogType>(
           [&](auto a) { return a.get(getContext(), -1); })
       .Case<BundleType>([&](auto a) {
