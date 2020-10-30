@@ -115,7 +115,13 @@ static Value createConstantOp(FIRRTLType opType, APInt value,
 /// type (if applied); 5) whether the elastic component is for the control path
 /// (if applied).
 static std::string getSubModuleName(Operation *oldOp) {
-  std::string subModuleName = oldOp->getName().getStringRef().str() + "_" +
+  /// The dialect name is separated from the operation name by '.', which is not
+  /// valid in SystemVerilog module names. In case this name is used in
+  /// SystemVerilog output, replace '.' with '_'.
+  std::string prefix = oldOp->getName().getStringRef().str();
+  std::replace(prefix.begin(), prefix.end(), '.', '_');
+
+  std::string subModuleName = prefix + "_" +
                               std::to_string(oldOp->getNumOperands()) + "ins_" +
                               std::to_string(oldOp->getNumResults()) + "outs";
 
