@@ -34,6 +34,7 @@ config.mlir_tools_dir = "@MLIR_TOOLS_DIR@"
 config.circt_src_root = "@CIRCT_SOURCE_DIR@"
 config.circt_obj_root = "@CIRCT_BINARY_DIR@"
 config.circt_tools_dir = "@CIRCT_TOOLS_DIR@"
+config.verilator_path = "@VERILATOR_PATH@"
 
 # Support substitution of the tools_dir with user parameters. This is
 # used when we can't determine the tool dir at configuration time.

@@ -2,3 +2,6 @@ build
 .vscode
 #*
 *~
+
+# External software
+/ext
