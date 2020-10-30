@@ -44,6 +44,8 @@ class Trace {
 
   void addChangeMerged(unsigned);
 
+  void sortChanges();
+
   void flushFull();
   void flushMerged();
 

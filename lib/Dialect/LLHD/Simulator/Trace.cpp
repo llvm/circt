@@ -93,6 +93,14 @@ void Trace::addChangeMerged(unsigned sigIndex) {
   }
 }
 
+void Trace::sortChanges() {
+  std::sort(changes.begin(), changes.end(),
+            [](std::pair<std::string, std::string> &lhs,
+               std::pair<std::string, std::string> &rhs) -> bool {
+              return lhs.first < rhs.first;
+            });
+}
+
 void Trace::flush(bool force) {
   if (changes.size() > 0 || mergedChanges.size() > 0) {
     if (mode == full || mode == reduced)
@@ -104,11 +112,8 @@ void Trace::flush(bool force) {
 }
 
 void Trace::flushFull() {
-  std::sort(changes.begin(), changes.end(),
-            [](std::pair<std::string, std::string> &lhs,
-               std::pair<std::string, std::string> &rhs) -> bool {
-              return lhs.first < rhs.first;
-            });
+  sortChanges();
+
   auto timeDump = currentTime.dump();
   for (auto change : changes) {
     out << timeDump << "  " << change.first << "  " << change.second << "\n";
@@ -135,11 +140,7 @@ void Trace::flushMerged() {
     }
   }
 
-  std::sort(changes.begin(), changes.end(),
-            [](std::pair<std::string, std::string> &lhs,
-               std::pair<std::string, std::string> &rhs) -> bool {
-              return lhs.first < rhs.first;
-            });
+  sortChanges();
 
   // Flush the changes to output stream.
   out << currentTime.time << "ps\n";
