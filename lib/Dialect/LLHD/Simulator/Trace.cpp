@@ -1,3 +1,10 @@
+//===- Trace.cpp - Simulation trace implementation ------------------------===//
+//
+// This file implements the Trace class, used to handle the signal trace
+// generation for the llhd-sim tool.
+//
+//===----------------------------------------------------------------------===//
+
 #include "Trace.h"
 
 #include "llvm/Support/raw_ostream.h"

@@ -1,3 +1,10 @@
+//===- Trace.h - Simulation trace definition --------------------*- C++ -*-===//
+//
+// This file defines the Trace class, used to handle the signal trace generation
+// for the llhd-sim tool.
+//
+//===----------------------------------------------------------------------===//
+
 #ifndef CIRCT_DIALECT_LLHD_SIMULATOR_TRACE_H
 #define CIRCT_DIALECT_LLHD_SIMULATOR_TRACE_H
 
