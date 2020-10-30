@@ -67,7 +67,12 @@ include_directories(${PROJECT_BINARY_DIR}/include)
 # Detect if Verilator is present
 find_program(VERILATOR_PATH "verilator" PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ext/bin" NO_DEFAULT_PATH)
 find_program(VERILATOR_PATH "verilator")
-message(STATUS "Found Verilator at ${VERILATOR_PATH}")
+if(${VERILATOR_PATH} STREQUAL "VERILATOR_PATH-NOTFOUND")
+  set(VERILATOR_PATH "")
+  message(STATUS "Did not find Verilator.")
+else()
+  message(STATUS "Found Verilator at ${VERILATOR_PATH}.")
+endif()
 
 add_subdirectory(include/circt)
 add_subdirectory(lib)
