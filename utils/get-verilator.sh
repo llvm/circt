@@ -14,4 +14,5 @@ autoconf
 ./configure --prefix=`pwd`/..
 make -j$(nproc)
 make install
+cd ..
 rm -r verilator-$VERILATOR_VER v$VERILATOR_VER.tar.gz

@@ -146,7 +146,16 @@ tests which require Verilator.
 
 We provide a script `utils/get-verilator.sh` to automate the download and
 compilation of Verilator into a known location. The testing script will check
-this location first.
+this location first. This script assumes that all the Verilator package
+dependencies are installed on your system. They are:
+
+- make
+- autoconf
+- g++
+- flex
+- bison
+- libfl2     # Ubuntu only (ignore if gives error)
+- libfl-dev  # Ubuntu only (ignore if gives error)
 
 ## Submitting changes to CIRCT
 
