@@ -254,10 +254,10 @@ static void print(OpAsmPrinter &p, RTLModuleOp op) {
 }
 
 //===----------------------------------------------------------------------===//
-// RTLInstanceOp
+// InstanceOp
 //===----------------------------------------------------------------------===/
 
-static LogicalResult verifyRTLInstanceOp(RTLInstanceOp op) {
+static LogicalResult verifyInstanceOp(InstanceOp op) {
   auto *moduleIR = op.getParentWithTrait<OpTrait::SymbolTable>();
   if (moduleIR == nullptr) {
     op.emitError("Must be contained within a SymbolTable region");
@@ -278,7 +278,7 @@ static LogicalResult verifyRTLInstanceOp(RTLInstanceOp op) {
   return success();
 }
 
-StringAttr RTLInstanceOp::getResultName(size_t idx) {
+StringAttr InstanceOp::getResultName(size_t idx) {
   if (auto nameAttrList = getAttrOfType<ArrayAttr>("name"))
     if (idx < nameAttrList.size())
       return nameAttrList[idx].dyn_cast<StringAttr>();
@@ -324,7 +324,7 @@ ParseResult parseResultNames(OpAsmParser &p, NamedAttrList &attrDict) {
 
 /// Intercept the `attr-dict` printing to determine whether or not we can elide
 /// the result names attribute.
-void printResultNames(OpAsmPrinter &p, RTLInstanceOp op,
+void printResultNames(OpAsmPrinter &p, InstanceOp op,
                       const MutableDictionaryAttr &) {
   SmallVector<StringRef, 8> elideFields = {"instanceName", "moduleName"};
 
@@ -356,7 +356,7 @@ void printResultNames(OpAsmPrinter &p, RTLInstanceOp op,
 
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
-void RTLInstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   ArrayAttr nameAttrList = getAttrOfType<ArrayAttr>("name");
   if (nameAttrList && nameAttrList.size() <= getNumResults())
     for (size_t i = 0, e = nameAttrList.size(); i < e; ++i)

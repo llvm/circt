@@ -299,7 +299,7 @@ public:
   void emitStatement(ConnectOp op);
   void emitStatement(rtl::ConnectOp op);
   void emitStatement(rtl::OutputOp op);
-  void emitStatement(rtl::RTLInstanceOp op);
+  void emitStatement(rtl::InstanceOp op);
   void emitStatement(PrintFOp op);
   void emitStatement(StopOp op);
   void emitStatement(sv::IfDefOp op);
@@ -319,7 +319,7 @@ public:
   void emitOperation(Operation *op);
 
   void collectNamesEmitDecls(Block &block);
-  bool collectNamesEmitWires(rtl::RTLInstanceOp &inst);
+  bool collectNamesEmitWires(rtl::InstanceOp &inst);
   StringRef addName(Value value, StringRef name);
   StringRef addName(Value value, StringAttr nameAttr) {
     return addName(value, nameAttr ? nameAttr.getValue() : "");
@@ -1668,7 +1668,7 @@ void ModuleEmitter::emitDecl(InstanceOp op) {
   indent() << ");\n";
 }
 
-void ModuleEmitter::emitStatement(rtl::RTLInstanceOp op) {
+void ModuleEmitter::emitStatement(rtl::InstanceOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1991,7 +1991,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
   SmallVector<Operation *, 16> declsToEmit;
   bool rtlInstanceDeclaredWires = false;
   for (auto &op : block) {
-    if (auto rtlInstance = dyn_cast<rtl::RTLInstanceOp>(op)) {
+    if (auto rtlInstance = dyn_cast<rtl::InstanceOp>(op)) {
       rtlInstanceDeclaredWires |= collectNamesEmitWires(rtlInstance);
       continue;
     }
@@ -2108,7 +2108,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     os << '\n';
 }
 
-bool ModuleEmitter::collectNamesEmitWires(rtl::RTLInstanceOp &op) {
+bool ModuleEmitter::collectNamesEmitWires(rtl::InstanceOp &op) {
   for (size_t i = 0, e = op.getNumResults(); i < e; ++i) {
     auto result = op.getResult(i);
     StringRef wireName = addName(result, op.getResultName(i));
@@ -2186,7 +2186,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
       return emitter.emitStatement(op), true;
     }
     bool visitStmt(rtl::OutputOp op) { return emitter.emitStatement(op), true; }
-    bool visitStmt(rtl::RTLInstanceOp op) {
+    bool visitStmt(rtl::InstanceOp op) {
       return emitter.emitStatement(op), true;
     }
     bool visitStmt(rtl::WireOp op) { return true; }

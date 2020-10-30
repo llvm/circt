@@ -107,9 +107,8 @@ def RTLExternModuleOp : RTLOp<"externmodule",
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
-
-def RTLInstanceOp : RTLOp<"instance",
-                          [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
+def InstanceOp : RTLOp<"instance",
+                       [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let summary = "Create an instance of a module";
   let description = [{
     This represents an instance of a module. The inputs and results are 
@@ -130,7 +129,7 @@ def RTLInstanceOp : RTLOp<"instance",
       `:` functional-type($inputs, results)
   }];
 
-  let verifier = [{ return ::verifyRTLInstanceOp(*this); }];
+  let verifier = [{ return ::verifyInstanceOp(*this); }];
 }
 
 def OutputOp : RTLOp<"output", [Terminator, HasParent<"RTLModuleOp">,

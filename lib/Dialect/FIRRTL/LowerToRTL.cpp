@@ -352,9 +352,9 @@ void FIRRTLModuleLowering::lowerInstance(
   if (oldInstance.name().hasValue())
     instanceName = oldInstance.name().getValue();
 
-  auto newInst = builder.create<rtl::RTLInstanceOp>(
-      oldInstance.getLoc(), resultTypes, instanceName, newModule.getName(),
-      operands);
+  auto newInst = builder.create<rtl::InstanceOp>(oldInstance.getLoc(),
+                                                 resultTypes, instanceName,
+                                                 newModule.getName(), operands);
 
   // Now that we have the new rtl.instance, we need to remap all of the users
   // of the firrtl.instance.  Burn through them connecting them up the right
