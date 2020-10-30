@@ -66,7 +66,5 @@ def CosimEndpoint : ESI_Op<"cosim", []> {
   let arguments = (ins ChannelType:$input, CosimEpOptions:$options);
   let results = (outs ChannelType:$output);
 
-  // let printer = [{ return ::print(p, *this); }];
-  // let parser = [{ return ::parse$cppClass(parser, result); }];
   let assemblyFormat = [{ `(` $input `)` $options attr-dict `:` type($input) `->` type($output) }];
 }
