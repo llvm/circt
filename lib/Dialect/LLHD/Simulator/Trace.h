@@ -23,47 +23,47 @@ namespace sim {
 
 enum TraceMode { full, reduced, merged, mergedReduce, namedOnly };
 
-/// Class for generating a signal change trace.
-/// This offers various trace formats:
-/// - full: a human-readable and diff-friendly trace which lists all the signal
-/// changes for all time steps of the simulation. The changes inside a time step
-/// are ordered by the signal paths.
-/// - reduced: same as full, but only the signals of the top-level entity are
-/// dumped.
-/// - merged: a human-readable format that merges all the delta step and epsilon
-/// step changes into their real-time step. This makes visual inspection against
-/// other traces format easier, whenever they don't have infinitesimal sub-steps
-/// (e.g. VCD).
-/// - merged-reduce: same as merged, but only the signals of the top-level
-/// entity are dumped.
 class Trace {
   llvm::raw_ostream &out;
   std::unique_ptr<State> const &state;
   TraceMode mode;
   Time currentTime;
+  // Each entry defines if the respective signal is active for tracing.
   std::vector<bool> isTraced;
+  // Buffer of changes ready to be flushed.
   std::vector<std::pair<std::string, std::string>> changes;
+  // Buffer of changes for the merged formats.
   std::map<std::pair<unsigned, int>, std::string> mergedChanges;
+  // Buffer of last dumped change for each signal.
   std::map<std::tuple<std::string, unsigned, int>, std::string> lastValue;
 
+  /// Push one change to the changes vector.
   void pushChange(std::string inst, unsigned sigIndex, int elem);
+  /// Push one change for each element of a signal if it is of a structured
+  /// type, or the full signal otherwise.
   void pushAllChanges(std::string inst, unsigned sigIndex);
 
+  /// Add a merged change to the change buffer.
   void addChangeMerged(unsigned);
 
+  /// Sorts the changes buffer lexicographically wrt. the hierarchical paths.
   void sortChanges();
 
+  /// Flush the changes buffer to the output stream with full format.
   void flushFull();
+  // Flush the changes buffer to the output stream with merged format.
   void flushMerged();
 
 public:
   Trace(std::unique_ptr<State> const &state, llvm::raw_ostream &out,
         TraceMode mode);
 
-  /// Add a value change.
+  /// Add a value change to the trace changes buffer.
   void addChange(unsigned);
 
-  /// Flush the changes to the output stream.
+  /// Flush the changes buffer to the output stream. The flush can be forced for
+  /// merged changes, flushing even if the next real-time step has not been
+  /// reached.
   void flush(bool force = false);
 };
 } // namespace sim

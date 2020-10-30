@@ -27,12 +27,13 @@ public:
   /// Initialize an LLHD simulation engine. This initializes the state, as well
   /// as the mlir::ExecutionEngine with the given module.
   Engine(llvm::raw_ostream &out, ModuleOp module, MLIRContext &context,
-         std::string root, int mode);
+         std::string root, int traceMode);
 
   /// Default destructor
   ~Engine();
 
-  /// Run simulation up to n steps. Pass n=0 to run indefinitely.
+  /// Run simulation up to n steps or maxTime picoseconds of simulation time.
+  /// n=0 and T=0 make the simulation run indefinitely.
   int simulate(int n, uint64_t maxTime);
 
   /// Build the instance layout of the design.

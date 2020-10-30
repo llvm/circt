@@ -79,12 +79,11 @@ struct Signal {
   /// owner.
   bool operator<(const Signal &rhs) const;
 
-  /// Return the signal value in dumpable format: "0x<value>".
+  /// Return the value of the signal in hexadecimal string format.
   std::string dump();
 
-  /// Return the value of the i-th element of the signal in dumpable format. If
-  /// the signal is not of tuple or array type (i.e. has no sub-elements), an
-  /// assertion is thrown.
+  /// Return the value of the i-th element of the signal in hexadecimal string
+  /// format.
   std::string dump(unsigned);
 
   std::string name;

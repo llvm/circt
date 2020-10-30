@@ -21,8 +21,8 @@ using namespace mlir;
 using namespace circt::llhd::sim;
 
 Engine::Engine(llvm::raw_ostream &out, ModuleOp module, MLIRContext &context,
-               std::string root, int mode)
-    : out(out), root(root), traceMode(mode) {
+               std::string root, int traceMode)
+    : out(out), root(root), traceMode(traceMode) {
   state = std::make_unique<State>();
   state->root = root + '.' + root;
 
@@ -78,7 +78,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
   }
 
   if (traceMode >= 0) {
-    // Dump the signals' initial values.
+    // Add changes for all the signals' initial values.
     for (size_t i = 0, e = state->signals.size(); i < e; ++i) {
       trace.addChange(i);
     }

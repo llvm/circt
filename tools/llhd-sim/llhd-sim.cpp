@@ -34,9 +34,9 @@ static cl::opt<int> nSteps("n", cl::desc("Set the maximum number of steps"),
 
 static cl::opt<uint64_t> maxTime(
     "T",
-    cl::desc("Stop the simulation after the given amount of picoseconds, "
-             "inclusive (including all sub-steps for that real-time step). "),
-    cl::value_desc("max-steps"));
+    cl::desc("Stop the simulation after the given amount of simulation time in "
+             "picoseconds, including all sub-steps for that real-time step"),
+    cl::value_desc("max-time"));
 
 static cl::opt<bool>
     dumpLLVMDialect("dump-llvm-dialect",
@@ -69,23 +69,20 @@ enum TraceFormat {
 static cl::opt<TraceFormat> traceMode(
     "trace-format", cl::desc("Choose the dump format:"), cl::init(full),
     cl::values(
-        clEnumVal(full, "A human readable and diff-friendly dump of all the "
-                        "signal changes, default"),
-        clEnumVal(reduced,
-                  "A human readable dump of only the root-level signals"),
-        clEnumVal(merged, "A human readable dump of all signal changes, where "
-                          "all delta steps and epsilon steps are merged into "
-                          "their real-time steps"),
+        clEnumVal(full, "Dump signal changes for every time step and sub-step, "
+                        "for each signal and connected instance"),
+        clEnumVal(reduced, "Dump signal changes for every time-step and "
+                           "sub-step, only for the top-level signals"),
+        clEnumVal(merged,
+                  "Only dump changes for real-time steps, for all signals and "
+                  "connected instances"),
         clEnumValN(mergedReduce, "merged-reduce",
-                   "A human readable dump of only the root level signals, "
-                   "where all delta steps and epsilon steps are merged into "
-                   "their real-time steps"),
+                   "Only dump changes for real-time steps, only for the "
+                   "top-level signals"),
         clEnumValN(namedOnly, "named-only",
-                   "A human readable dump of only the root level signals, "
-                   "where all delta steps and epsilon steps are merged into "
-                   "their real-time steps, and default-named signals (i.e. "
-                   "with name 'sig[0-9]*') are filtered out."),
-        clEnumValN(noTrace, "no-trace", "Don't dump the signal trace")));
+                   "Only dump changes for real-time steps, only for top-level "
+                   "signals not having a default name (i.e. '(sig)?[0-9]*')"),
+        clEnumValN(noTrace, "no-trace", "Don't dump a signal trace")));
 
 static int dumpLLVM(ModuleOp module, MLIRContext &context) {
   if (dumpLLVMDialect) {

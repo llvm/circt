@@ -29,6 +29,10 @@ Trace::Trace(std::unique_ptr<State> const &state, llvm::raw_ostream &out,
   }
 }
 
+//===----------------------------------------------------------------------===//
+// Changes gathering methods
+//===----------------------------------------------------------------------===//
+
 void Trace::pushChange(std::string inst, unsigned sigIndex, int elem = -1) {
   auto &sig = state->signals[sigIndex];
   std::string valueDump;
@@ -99,6 +103,10 @@ void Trace::addChangeMerged(unsigned sigIndex) {
     mergedChanges[std::make_pair(sigIndex, -1)] = valueDump;
   }
 }
+
+//===----------------------------------------------------------------------===//
+// Flush methods
+//===----------------------------------------------------------------------===//
 
 void Trace::sortChanges() {
   std::sort(changes.begin(), changes.end(),

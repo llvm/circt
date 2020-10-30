@@ -1124,7 +1124,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
     auto sigFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
                                        "allocSignal", allocSigFuncTy);
 
-    // Add information about the elements of an array stored in a signal.
+    // Add information about the elements of an array signal to the state.
     // Signature: (i8* state, i32 signalIndex, i32 size, i32 numElements) ->
     // void
     auto addSigArrElemFuncTy = LLVM::LLVMType::getFunctionTy(
@@ -1133,7 +1133,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
         getOrInsertFunction(module, rewriter, op->getLoc(),
                             "addSigArrayElements", addSigArrElemFuncTy);
 
-    // Add information about one element of a struct stored in a signal.
+    // Add information about one element of a struct signal to the state.
     // Signature: (i8* state, i32 signalIndex, i32 offset, i32 size) -> void
     auto addSigStructElemFuncTy = LLVM::LLVMType::getFunctionTy(
         voidTy, {i8PtrTy, i32Ty, i32Ty, i32Ty}, /*isVarArg=*/false);
@@ -1282,8 +1282,11 @@ struct InstOpConversion : public ConvertToLLVMPattern {
 
         std::array<Value, 5> args(
             {initStatePtr, indexConst, owner, mall, passSize});
-        auto index = initBuilder.create<LLVM::CallOp>(
-            op.getLoc(), i32Ty, rewriter.getSymbolRefAttr(sigFunc), args);
+        auto sigIndex =
+            initBuilder
+                .create<LLVM::CallOp>(op.getLoc(), i32Ty,
+                                      rewriter.getSymbolRefAttr(sigFunc), args)
+                .getResult(0);
 
         // Add structured underlying type information.
         if (underlyingTy.isArrayTy()) {
@@ -1307,8 +1310,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
           initBuilder.create<LLVM::CallOp>(
               op.getLoc(), llvm::None,
               rewriter.getSymbolRefAttr(addSigElemFunc),
-              ArrayRef<Value>(
-                  {initStatePtr, index.getResult(0), toInt, numElements}));
+              ArrayRef<Value>({initStatePtr, sigIndex, toInt, numElements}));
         } else if (underlyingTy.isStructTy()) {
           auto zeroC = initBuilder.create<LLVM::ConstantOp>(
               op.getLoc(), i32Ty, rewriter.getI32IntegerAttr(0));
@@ -1345,8 +1347,8 @@ struct InstOpConversion : public ConvertToLLVMPattern {
             initBuilder.create<LLVM::CallOp>(
                 op.getLoc(), llvm::None,
                 rewriter.getSymbolRefAttr(addSigStructFunc),
-                ArrayRef<Value>({initStatePtr, index.getResult(0), elemToInt,
-                                 elemSizeToInt}));
+                ArrayRef<Value>(
+                    {initStatePtr, sigIndex, elemToInt, elemSizeToInt}));
           }
         }
       });
