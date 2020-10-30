@@ -22,10 +22,12 @@ Trace::Trace(std::unique_ptr<State> const &state, llvm::raw_ostream &out,
   }
 }
 
-void Trace::pushChange(std::string inst, Signal &sig, int elem = -1) {
+void Trace::pushChange(std::string inst, unsigned sigIndex, int elem = -1) {
+  auto &sig = state->signals[sigIndex];
   std::string valueDump;
   std::string path;
   llvm::raw_string_ostream ss(path);
+  auto lastValKey = std::make_tuple(inst, sigIndex, elem);
 
   ss << state->instances[inst].path << '/' << sig.name;
 
@@ -39,45 +41,41 @@ void Trace::pushChange(std::string inst, Signal &sig, int elem = -1) {
     valueDump = sig.dump();
   }
 
-  changes.push_back(std::make_pair(path, valueDump));
+  // Check wheter we have an actual change from last value.
+  if (valueDump != lastValue[lastValKey]) {
+    changes.push_back(std::make_pair(path, valueDump));
+    lastValue[lastValKey] = valueDump;
+  }
 }
 
-void Trace::pushAllChanges(std::string inst, Signal &sig) {
+void Trace::pushAllChanges(std::string inst, unsigned sigIndex) {
+  auto &sig = state->signals[sigIndex];
   if (sig.elements.size() > 0) {
     // Push changes for all signal elements.
     for (size_t i = 0, e = sig.elements.size(); i < e; ++i) {
-      pushChange(inst, sig, i);
+      pushChange(inst, sigIndex, i);
     }
   } else {
     // Push one change for the whole signal.
-    pushChange(inst, sig);
+    pushChange(inst, sigIndex);
   }
 }
 
 void Trace::addChange(unsigned sigIndex) {
   currentTime = state->time;
   if (isTraced[sigIndex]) {
-    if (mode == full)
-      addChangeFull(sigIndex);
-    else if (mode == reduced)
-      addChangeReduced(sigIndex);
-    else if (mode == merged || mode == mergedReduce || mode == namedOnly)
+    if (mode == full) {
+      auto &sig = state->signals[sigIndex];
+      // Add a change for each connected instance.
+      for (auto inst : sig.triggers) {
+        pushAllChanges(inst, sigIndex);
+      }
+    } else if (mode == reduced) {
+      pushAllChanges(state->root, sigIndex);
+    } else if (mode == merged || mode == mergedReduce || mode == namedOnly) {
       addChangeMerged(sigIndex);
+    }
   }
-}
-
-void Trace::addChangeFull(unsigned sigIndex) {
-  auto &sig = state->signals[sigIndex];
-
-  // Add a change for each connected instance.
-  for (auto inst : sig.triggers) {
-    pushAllChanges(inst, sig);
-  }
-}
-
-void Trace::addChangeReduced(unsigned sigIndex) {
-  auto &sig = state->signals[sigIndex];
-  pushAllChanges(state->root, sig);
 }
 
 void Trace::addChangeMerged(unsigned sigIndex) {
@@ -125,19 +123,16 @@ void Trace::flushMerged() {
     auto sigElem = elem.first.second;
     auto &sig = state->signals[sigIndex];
     auto change = elem.second;
-    // Filter out changes that do not actually introduce changes
-    if (lastValue[elem.first] != change) {
-      if (mode == merged) {
-        // Add the changes for all connected instances.
-        for (auto inst : sig.triggers) {
-          pushChange(inst, sig, sigElem);
-        }
-      } else {
-        // Add change only for owner instance.
-        pushChange(sig.owner, sig, sigElem);
+
+    if (mode == merged) {
+      // Add the changes for all connected instances.
+      for (auto inst : sig.triggers) {
+        pushChange(inst, sigIndex, sigElem);
       }
+    } else {
+      // Add change only for owner instance.
+      pushChange(sig.owner, sigIndex, sigElem);
     }
-    lastValue[elem.first] = change;
   }
 
   std::sort(changes.begin(), changes.end(),

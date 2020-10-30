@@ -37,15 +37,12 @@ class Trace {
   std::vector<bool> isTraced;
   std::vector<std::pair<std::string, std::string>> changes;
   std::map<std::pair<unsigned, int>, std::string> mergedChanges;
-  std::map<std::pair<unsigned, int>, std::string> lastValue;
+  std::map<std::tuple<std::string, unsigned, int>, std::string> lastValue;
 
-  void pushChange(std::string inst, Signal &sig, int elem);
-  void pushAllChanges(std::string inst, Signal &sig);
+  void pushChange(std::string inst, unsigned sigIndex, int elem);
+  void pushAllChanges(std::string inst, unsigned sigIndex);
 
-  void addChangeFull(unsigned);
-  void addChangeReduced(unsigned);
   void addChangeMerged(unsigned);
-  void addChangeMergedReduce(unsigned);
 
   void flushFull();
   void flushMerged();
