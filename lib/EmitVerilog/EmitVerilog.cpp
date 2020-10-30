@@ -1604,18 +1604,15 @@ void ModuleEmitter::emitDecl(InstanceOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  auto instanceName = getName(op.getResult());
-  StringRef defName = op.moduleName();
+  auto *referencedModule = op.getReferencedModule();
+  FExtModuleOp referencedExtModule;
 
   // If this is referencing an extmodule with a specified defname, then use
   // the defName from it as the actual module name we reference.  This exists
   // because FIRRTL is not parameterized like verilog is - it introduces
   // redundant extmodule instances to encode different parameter
   // configurations.
-  auto moduleIR = op.getParentOfType<CircuitOp>();
-  auto referencedModule = moduleIR.lookupSymbol(defName);
-  FExtModuleOp referencedExtModule;
-
+  StringRef defName = op.moduleName();
   if (!referencedModule)
     emitOpError(op, "could not find mlir node named @" + defName);
   else if ((referencedExtModule = dyn_cast<FExtModuleOp>(referencedModule)))
@@ -1655,6 +1652,7 @@ void ModuleEmitter::emitDecl(InstanceOp op) {
       }
     }
 
+  auto instanceName = getName(op.getResult());
   os << ' ' << instanceName << " (";
   emitLocationInfoAndNewLine(ops);
 

@@ -258,7 +258,7 @@ static void print(OpAsmPrinter &p, RTLModuleOp op) {
 //===----------------------------------------------------------------------===/
 
 static LogicalResult verifyRTLInstanceOp(RTLInstanceOp op) {
-  auto moduleIR = op.getParentWithTrait<OpTrait::SymbolTable>();
+  auto *moduleIR = op.getParentWithTrait<OpTrait::SymbolTable>();
   if (moduleIR == nullptr) {
     op.emitError("Must be contained within a SymbolTable region");
     return failure();

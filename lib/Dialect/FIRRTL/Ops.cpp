@@ -470,6 +470,16 @@ static LogicalResult verifyFModuleOp(FModuleOp &module) {
 // Declarations
 //===----------------------------------------------------------------------===//
 
+/// Lookup the module or extmodule for the symbol.  This returns null on
+/// invalid IR.
+Operation *InstanceOp::getReferencedModule() {
+  auto circuit = getParentOfType<CircuitOp>();
+  if (!circuit)
+    return nullptr;
+
+  return circuit.lookupSymbol(moduleName());
+}
+
 /// Verify the correctness of an InstanceOp.
 static LogicalResult verifyInstanceOp(InstanceOp &instance) {
 
@@ -480,14 +490,15 @@ static LogicalResult verifyInstanceOp(InstanceOp &instance) {
     return failure();
   }
 
-  // Note: this *cannot* be null since modules are guaranteed to be
-  // inside a circuit, and it was verified above that this instance is
-  // inside a module.
-  auto circuit = instance.getParentOfType<CircuitOp>();
+  auto *referencedModule = instance.getReferencedModule();
+  if (!referencedModule) {
+    instance.emitOpError("invalid symbol reference");
+    return failure();
+  }
 
   // Check that this instance doesn't recursively instantiate its wrapping
   // module.
-  if (circuit.lookupSymbol(instance.moduleName()) == module) {
+  if (referencedModule == module) {
     auto diag = instance.emitOpError()
                 << "is a recursive instantiation of its containing module";
     diag.attachNote(module.getLoc()) << "containing module declared here";
