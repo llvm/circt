@@ -9,6 +9,8 @@
 #define ESI_TD
 
 include "mlir/IR/OpBase.td"
+include "mlir/IR/RegionKindInterface.td"
+include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def ESI_Dialect : Dialect {
@@ -16,7 +18,11 @@ def ESI_Dialect : Dialect {
   let cppNamespace = "::circt::esi";
 }
 
+class ESI_Op<string mnemonic, list<OpTrait> traits = []> :
+    Op<ESI_Dialect, mnemonic, traits>;
+
 include "ESIPorts.td"
+include "ESIIntegrationOps.td"
 include "ESIOps.td"
 
 #endif // ESI_TD

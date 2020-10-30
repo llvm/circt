@@ -1,3 +1,5 @@
+# find_package(CapnProto CONFIG PATHS "${CMAKE_SOURCE_DIR}/ext")
+
 add_mlir_dialect_library(MLIRESI
   ESIDialect.cpp
   ESIOps.cpp

@@ -51,5 +51,10 @@ void print(OpAsmPrinter &p, ChannelBuffer &op) {
   p << " : " << op.output().getType().cast<ChannelPort>().getInner();
 }
 
+template <typename T>
+static ParseResult parseOptions(OpAsmParser &p, T &opts) {
+  return p.parseAttribute(opts);
+}
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/ESI/ESI.cpp.inc"
