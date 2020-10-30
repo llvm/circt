@@ -62,14 +62,9 @@ tools = [
     'llhd-sim'
 ]
 
-# Search for and enable Verilator
-verilator_ext = os.path.join(config.test_source_root, "../ext/bin", "verilator")
-if os.path.exists(verilator_ext):
-  verilator_path = verilator_ext
-else:
-  verilator_path = shutil.which('verilator')
-if verilator_path is not None:
-  tool_dirs.append(os.path.dirname(verilator_path))
+# Enable Verilator if it has been detected.
+if config.verilator_path != "":
+  tool_dirs.append(os.path.dirname(config.verilator_path))
   tools.append('verilator')
   config.available_features.add('verilator')
 

@@ -64,6 +64,11 @@ include_directories(${MLIR_INCLUDE_DIRS})
 include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_BINARY_DIR}/include)
 
+# Detect if Verilator is present
+find_program(VERILATOR_PATH "verilator" PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ext/bin" NO_DEFAULT_PATH)
+find_program(VERILATOR_PATH "verilator")
+message(STATUS "Found Verilator at ${VERILATOR_PATH}")
+
 add_subdirectory(include/circt)
 add_subdirectory(lib)
 add_subdirectory(tools)
