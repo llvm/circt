@@ -6,3 +6,5 @@ mlir_tablegen(ESIAttrs.h.inc -gen-struct-attr-decls)
 mlir_tablegen(ESIAttrs.cpp.inc -gen-struct-attr-defs)
 
 add_public_tablegen_target(MLIRESIEnumsIncGen)
+
+add_subdirectory(cosim)
