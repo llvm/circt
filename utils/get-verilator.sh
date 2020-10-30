@@ -1,5 +1,5 @@
 #!/bin/bash
-# Downloads, compiles, and installs Verilator into $/ext/verilator
+# Downloads, compiles, and installs Verilator into $/ext
 
 EXT_DIR=$(cd "$(dirname "$BASH_SOURCE[0]")/../ext" && pwd)
 VERILATOR_VER=4.102
