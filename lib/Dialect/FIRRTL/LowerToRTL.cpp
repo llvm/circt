@@ -122,12 +122,8 @@ void FIRRTLModuleLowering::runOnOperation() {
   // TODO: This is a trivially parallelizable for loop.  We should be able to
   // process each module in parallel.
   for (auto &op : circuitBody->getOperations()) {
-    auto module = dyn_cast<FModuleOp>(op);
-    if (!module)
-      continue;
-
-    lowerModuleBody(module, oldToNewModuleMap);
-    continue;
+    if (auto module = dyn_cast<FModuleOp>(op))
+      lowerModuleBody(module, oldToNewModuleMap);
   }
 
   // Finally delete all the old modules.
@@ -355,6 +351,7 @@ void FIRRTLModuleLowering::lowerInstance(
   StringRef instanceName;
   if (oldInstance.name().hasValue())
     instanceName = oldInstance.name().getValue();
+
   auto newInst = builder.create<rtl::RTLInstanceOp>(
       oldInstance.getLoc(), resultTypes, instanceName, newModule.getName(),
       operands);
@@ -376,7 +373,7 @@ void FIRRTLModuleLowering::lowerInstance(
     for (auto &port : portInfo) {
       if (port.first == subfield.fieldnameAttr())
         break;
-      // port.second.dump();
+
       if (port.second.isa<FlipType>())
         ++resultNo;
       else
