@@ -4,7 +4,7 @@ input wire clka,clkb,ena,enb,wea,web;
 input wire [$clog2(SIZE)-1:0] addra,addrb;
 input wire [WIDTH-1:0] dia,dib;
 output reg [WIDTH-1:0] doa,dob;
-reg [WIDTH-1:0] ram [SIZE-1:0];
+(* ram_style = "block" *) reg [WIDTH-1:0] ram [SIZE-1:0];
 //reg [WIDTH-1:0] doa,dob;
 always @(posedge clka)
 begin

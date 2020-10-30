@@ -9,6 +9,7 @@ always@(posedge clk) begin
   out <= in1+in2;
 end
 endmodule
+
 module mult(
   output reg[31:0] out,
   input  wire[31:0] in1,

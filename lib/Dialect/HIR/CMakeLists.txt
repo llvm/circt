@@ -1,3 +1,4 @@
+add_subdirectory(Verification)
 add_compile_options(-Werror -Wall -Wextra)
 add_mlir_dialect_library(MLIRHIR
   HIRDialect.cpp
