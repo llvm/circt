@@ -152,8 +152,7 @@ static std::string getSubModuleName(Operation *oldOp) {
 /// supported in the next patch.
 static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
                                    ConversionPatternRewriter &rewriter) {
-  using ModulePort = std::pair<StringAttr, FIRRTLType>;
-  llvm::SmallVector<ModulePort, 8> ports;
+  llvm::SmallVector<ModulePortInfo, 8> ports;
 
   // Add all inputs of funcOp.
   unsigned args_idx = 0;
@@ -165,7 +164,7 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
       funcOp.emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back(ModulePort(portName, bundlePortType));
+    ports.push_back({portName, bundlePortType});
     args_idx += 1;
   }
 
@@ -178,24 +177,24 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
       funcOp.emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back(ModulePort(portName, bundlePortType));
+    ports.push_back({portName, bundlePortType});
     args_idx += 1;
   }
 
   // Add clock and reset signals.
   if (numClocks == 1) {
-    ports.push_back(ModulePort(rewriter.getStringAttr("clock"),
-                               rewriter.getType<ClockType>()));
-    ports.push_back(ModulePort(rewriter.getStringAttr("reset"),
-                               rewriter.getType<UIntType>(1)));
+    ports.push_back(
+        {rewriter.getStringAttr("clock"), rewriter.getType<ClockType>()});
+    ports.push_back(
+        {rewriter.getStringAttr("reset"), rewriter.getType<UIntType>(1)});
   } else if (numClocks > 1) {
     for (unsigned i = 0; i < numClocks; ++i) {
       auto clockName = "clock" + std::to_string(i);
       auto resetName = "reset" + std::to_string(i);
-      ports.push_back(ModulePort(rewriter.getStringAttr(clockName),
-                                 rewriter.getType<ClockType>()));
-      ports.push_back(ModulePort(rewriter.getStringAttr(resetName),
-                                 rewriter.getType<UIntType>(1)));
+      ports.push_back(
+          {rewriter.getStringAttr(clockName), rewriter.getType<ClockType>()});
+      ports.push_back(
+          {rewriter.getStringAttr(resetName), rewriter.getType<UIntType>(1)});
     }
   }
 
@@ -252,8 +251,7 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
                                    bool hasClock,
                                    ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPoint(topModuleOp);
-  using ModulePort = std::pair<StringAttr, FIRRTLType>;
-  llvm::SmallVector<ModulePort, 8> ports;
+  llvm::SmallVector<ModulePortInfo, 8> ports;
 
   // Add all inputs of oldOp.
   unsigned args_idx = 0;
@@ -265,7 +263,7 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
       oldOp->emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back(ModulePort(portName, bundlePortType));
+    ports.push_back({portName, bundlePortType});
     args_idx += 1;
   }
 
@@ -278,16 +276,16 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
       oldOp->emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back(ModulePort(portName, bundlePortType));
+    ports.push_back({portName, bundlePortType});
     args_idx += 1;
   }
 
   // Add clock and reset signals.
   if (hasClock) {
-    ports.push_back(ModulePort(rewriter.getStringAttr("clock"),
-                               rewriter.getType<ClockType>()));
-    ports.push_back(ModulePort(rewriter.getStringAttr("reset"),
-                               rewriter.getType<UIntType>(1)));
+    ports.push_back(
+        {rewriter.getStringAttr("clock"), rewriter.getType<ClockType>()});
+    ports.push_back(
+        {rewriter.getStringAttr("reset"), rewriter.getType<UIntType>(1)});
   }
 
   return rewriter.create<FModuleOp>(

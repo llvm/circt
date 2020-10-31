@@ -2397,23 +2397,20 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
 
   size_t nextPort = 0;
   for (auto &port : portInfo)
-    addName(module.getArgument(nextPort++), port.first);
+    addName(module.getArgument(nextPort++), port.name);
 
   os << "module " << module.getName() << '(';
   if (!portInfo.empty())
     os << '\n';
-
-  auto isOutput = [](FIRRTLType type) -> bool { return type.isa<FlipType>(); };
 
   // Determine the width of the widest type we have to print so everything
   // lines up nicely.
   bool hasOutputs = false;
   unsigned maxTypeWidth = 0;
   for (auto &port : portInfo) {
-    auto portType = port.second;
-    hasOutputs |= isOutput(portType);
+    hasOutputs |= port.isOutput();
 
-    int bitWidth = getBitWidthOrSentinel(portType);
+    int bitWidth = getBitWidthOrSentinel(port.type);
     if (bitWidth == -1 || bitWidth == 1)
       continue; // The error case is handled below.
 
@@ -2429,8 +2426,8 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
 
     indent();
     // Emit the arguments.
-    auto portType = portInfo[portIdx].second;
-    bool isThisPortOutput = isOutput(portType);
+    auto portType = portInfo[portIdx].type;
+    bool isThisPortOutput = portInfo[portIdx].isOutput();
     if (isThisPortOutput)
       os << "output ";
     else
@@ -2445,9 +2442,8 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
 
     // If we have any more ports with the same types and the same direction,
     // emit them in a list on the same line.
-    while (portIdx != e &&
-           isOutput(portInfo[portIdx].second) == isThisPortOutput &&
-           bitWidth == getBitWidthOrSentinel(portInfo[portIdx].second)) {
+    while (portIdx != e && portInfo[portIdx].isOutput() == isThisPortOutput &&
+           bitWidth == getBitWidthOrSentinel(portInfo[portIdx].type)) {
       // Don't exceed our preferred line length.
       StringRef name = getName(module.getArgument(portIdx));
       if (os.tell() + 2 + name.size() - startOfLinePos >

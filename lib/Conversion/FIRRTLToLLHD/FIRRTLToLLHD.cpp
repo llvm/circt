@@ -118,13 +118,13 @@ void FIRRTLToLLHDPass::convertModule(firrtl::FModuleOp &module) {
   for (unsigned i = 0; i < modulePorts.size(); i++) {
     auto &port = modulePorts[i];
     LLVM_DEBUG(llvm::dbgs()
-               << "Port " << port.first << " of type " << port.second << "\n");
+               << "Port " << port.name << " of type " << port.type << "\n");
 
     // For now, let's do a simple approach where we only support flip at the top
     // of a port's aggregate type.
     bool isFlip = false;
-    firrtl::FIRRTLType type = port.second;
-    if (auto flipType = port.second.dyn_cast<firrtl::FlipType>()) {
+    firrtl::FIRRTLType type = port.type;
+    if (auto flipType = type.dyn_cast<firrtl::FlipType>()) {
       isFlip = true;
       type = flipType.getElementType();
     }
@@ -132,8 +132,8 @@ void FIRRTLToLLHDPass::convertModule(firrtl::FModuleOp &module) {
     // Convert the type. We keep things simple for the time being.
     auto width = type.getBitWidthOrSentinel();
     if (width < 0) {
-      module.emitError() << "port " << port.first << " has unsupported type "
-                         << port.second;
+      module.emitError() << "port " << port.name << " has unsupported type "
+                         << port.type;
       signalPassFailure();
       continue;
     }
@@ -142,11 +142,11 @@ void FIRRTLToLLHDPass::convertModule(firrtl::FModuleOp &module) {
     // Add to the list of inputs or outputs, depending on flip state.
     if (isFlip) {
       outs.push_back(convType);
-      outNames.push_back(port.first);
+      outNames.push_back(port.name);
       outIndices.push_back(i);
     } else {
       ins.push_back(convType);
-      inNames.push_back(port.first);
+      inNames.push_back(port.name);
       inIndices.push_back(i);
     }
   }

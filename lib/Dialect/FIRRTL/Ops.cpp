@@ -122,8 +122,8 @@ static LogicalResult verifyCircuitOp(CircuitOp &circuit) {
     }
 
     // Check that the number of ports is exactly the same.
-    SmallVector<std::pair<StringAttr, FIRRTLType>, 8> ports;
-    SmallVector<std::pair<StringAttr, FIRRTLType>, 8> collidingPorts;
+    SmallVector<ModulePortInfo, 8> ports;
+    SmallVector<ModulePortInfo, 8> collidingPorts;
     extModule.getPortInfo(ports);
     collidingExtModule.getPortInfo(collidingPorts);
     if (ports.size() != collidingPorts.size()) {
@@ -143,9 +143,9 @@ static LogicalResult verifyCircuitOp(CircuitOp &circuit) {
     // parameters. Note that this allows for misdetections, but
     // has zero false positives.
     for (auto p : llvm::zip(ports, collidingPorts)) {
-      StringAttr aName, bName;
-      FIRRTLType aType, bType;
-      std::forward_as_tuple(std::tie(aName, aType), std::tie(bName, bType)) = p;
+      StringAttr aName = std::get<0>(p).name, bName = std::get<1>(p).name;
+      FIRRTLType aType = std::get<0>(p).type, bType = std::get<1>(p).type;
+
       if (extModule.parameters() || collidingExtModule.parameters()) {
         aType = aType.getWidthlessType();
         bType = bType.getWidthlessType();
@@ -217,8 +217,7 @@ void firrtl::getModulePortInfo(Operation *op,
 }
 
 static void buildModule(OpBuilder &builder, OperationState &result,
-                        StringAttr name,
-                        ArrayRef<std::pair<StringAttr, FIRRTLType>> ports) {
+                        StringAttr name, ArrayRef<ModulePortInfo> ports) {
   using namespace mlir::impl;
 
   // Add an attribute for the name.
@@ -226,7 +225,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 
   SmallVector<Type, 4> argTypes;
   for (auto elt : ports)
-    argTypes.push_back(elt.second);
+    argTypes.push_back(elt.type);
 
   // Record the argument and result types as an attribute.
   auto type = builder.getFunctionType(argTypes, /*resultTypes*/ {});
@@ -235,11 +234,11 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   // Record the names of the arguments if present.
   SmallString<8> attrNameBuf;
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
-    if (ports[i].first.getValue().empty())
+    if (ports[i].getName().empty())
       continue;
 
     auto argAttr =
-        NamedAttribute(builder.getIdentifier("firrtl.name"), ports[i].first);
+        NamedAttribute(builder.getIdentifier("firrtl.name"), ports[i].name);
 
     result.addAttribute(getArgAttrName(i, attrNameBuf),
                         builder.getDictionaryAttr(argAttr));
@@ -249,8 +248,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 }
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
-                      StringAttr name,
-                      ArrayRef<std::pair<StringAttr, FIRRTLType>> ports) {
+                      StringAttr name, ArrayRef<ModulePortInfo> ports) {
   buildModule(builder, result, name, ports);
 
   // Create a region and a block for the body.
@@ -260,14 +258,13 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 
   // Add arguments to the body block.
   for (auto elt : ports)
-    body->addArgument(elt.second);
+    body->addArgument(elt.type);
 
   FModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
 
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
-                         StringAttr name,
-                         ArrayRef<std::pair<StringAttr, FIRRTLType>> ports,
+                         StringAttr name, ArrayRef<ModulePortInfo> ports,
                          StringRef defnameAttr) {
   buildModule(builder, result, name, ports);
   if (!defnameAttr.empty())
@@ -513,7 +510,7 @@ static LogicalResult verifyInstanceOp(InstanceOp &instance) {
 FIRRTLType
 MemOp::getTypeForPortList(uint64_t depth, FIRRTLType dataType,
                           ArrayRef<std::pair<Identifier, PortKind>> portList) {
-  assert(dataType.isPassiveType() && "mem can only have passive datatype");
+  assert(dataType.isPassive() && "mem can only have passive datatype");
 
   auto *context = dataType.getContext();
 

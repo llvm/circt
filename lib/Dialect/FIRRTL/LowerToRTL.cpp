@@ -148,9 +148,8 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
   for (auto firrtlPort : firrtlPorts) {
     rtl::RTLModulePortInfo rtlPort;
 
-    rtlPort.name = firrtlPort.first;
-    auto firrtlType = firrtlPort.second;
-    rtlPort.type = lowerType(firrtlType);
+    rtlPort.name = firrtlPort.name;
+    rtlPort.type = lowerType(firrtlPort.type);
 
     // We can't lower all types, so make sure to cleanly reject them.
     if (!rtlPort.type) {
@@ -159,13 +158,10 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
     }
 
     // Figure out the direction of the port.
-    if (firrtlType.isa<FlipType>()) {
-      // If the top-level type in FIRRTL is a flip, then this is an output.
-      assert(firrtlType.cast<FlipType>().getElementType().isPassiveType() &&
-             "Flip types should be completely passive internally");
+    if (firrtlPort.isOutput()) {
       rtlPort.direction = rtl::PortDirection::OUTPUT;
       rtlPort.argNum = numResults++;
-    } else if (firrtlType.cast<FIRRTLType>().isPassiveType()) {
+    } else if (firrtlPort.isInput()) {
       rtlPort.direction = rtl::PortDirection::INPUT;
       rtlPort.argNum = numArgs++;
     } else {
@@ -329,19 +325,20 @@ void FIRRTLModuleLowering::lowerInstance(
   OpBuilder builder(oldInstance);
   SmallVector<Type, 8> resultTypes;
   SmallVector<Value, 8> operands;
-  for (const auto &port : portInfo) {
-    auto portType = lowerType(port.second);
+  for (auto &port : portInfo) {
+    auto portType = lowerType(port.type);
     if (!portType)
       return;
 
-    // TODO: Handle inout ports when we can lower bundles from mid FIRRTL.
-    if (port.second.isa<FlipType>())
+    if (port.isOutput())
       // outputs become results.
       resultTypes.push_back(portType);
     else {
+      assert(port.isInput() &&
+             "TODO: Handle inout ports when we can lower mid FIRRTL bundles");
       // Create a wire for each input/inout operand, so there is something to
       // connect to.
-      auto name = builder.getStringAttr(port.first.getValue().str() + ".wire");
+      auto name = builder.getStringAttr(port.getName().str() + ".wire");
       operands.push_back(
           builder.create<rtl::WireOp>(oldInstance.getLoc(), portType, name));
     }
@@ -371,10 +368,10 @@ void FIRRTLModuleLowering::lowerInstance(
     // Figure out which inputNo or resultNo this is.
     size_t inputNo = 0, resultNo = 0;
     for (auto &port : portInfo) {
-      if (port.first == subfield.fieldnameAttr())
+      if (port.name == subfield.fieldnameAttr())
         break;
 
-      if (port.second.isa<FlipType>())
+      if (port.isOutput())
         ++resultNo;
       else
         ++inputNo;
@@ -617,7 +614,7 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
 
   // Cast FIRRTL -> standard type.
   auto loc = builder->getInsertionPoint()->getLoc();
-  if (!firType.isPassiveType()) {
+  if (!firType.isPassive()) {
     value =
         builder->create<AsPassivePrimOp>(loc, firType.getPassiveType(), value);
   }

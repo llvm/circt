@@ -44,7 +44,22 @@ FIRRTLType getNotResult(FIRRTLType input);
 FIRRTLType getReductionResult(FIRRTLType input);
 FIRRTLType getAsPassiveResult(FIRRTLType input);
 
-typedef std::pair<StringAttr, FIRRTLType> ModulePortInfo;
+/// This holds the name and type that describes the module's ports.
+struct ModulePortInfo {
+  StringAttr name;
+  FIRRTLType type;
+
+  StringRef getName() const { return name ? name.getValue() : ""; }
+
+  /// Return true if this is a simple output-only port.
+  bool isOutput() { return type.isa<FlipType>(); }
+
+  /// Return true if this is a simple input-only port.
+  bool isInput() { return type.isPassive(); }
+
+  /// Return true if this is an inout port.
+  bool isInOut() { return !isOutput() && !isInput(); }
+};
 
 /// Return the function type that corresponds to a module.
 FunctionType getModuleType(Operation *op);
