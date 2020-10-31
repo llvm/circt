@@ -94,7 +94,7 @@ static FIRRTLType getBundleType(Type type, bool isFlip) {
       .Case<NoneType>([&](NoneType) {
         return buildBundleType(/*dataType=*/nullptr, isFlip, context);
       })
-      .Default([&](Type) { return FIRRTLType(nullptr); });
+      .Default([&](Type) { return FIRRTLType(); });
 }
 
 static Value createConstantOp(FIRRTLType opType, APInt value,
@@ -105,8 +105,9 @@ static Value createConstantOp(FIRRTLType opType, APInt value,
                                         intOpType.isSigned());
     return rewriter.create<firrtl::ConstantOp>(
         insertLoc, opType, rewriter.getIntegerAttr(type, value));
-  } else
-    return Value(nullptr);
+  }
+
+  return Value();
 }
 
 /// Construct a name for creating FIRRTL sub-module. The returned string
@@ -155,9 +156,9 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
   llvm::SmallVector<ModulePortInfo, 8> ports;
 
   // Add all inputs of funcOp.
-  unsigned args_idx = 0;
+  unsigned argIndex = 0;
   for (auto &arg : funcOp.getArguments()) {
-    auto portName = rewriter.getStringAttr("arg" + std::to_string(args_idx));
+    auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
     auto bundlePortType = getBundleType(arg.getType(), /*isFlip=*/false);
 
     if (!bundlePortType)
@@ -165,12 +166,12 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
                        "(signed, unsigned, signless), index, none.");
 
     ports.push_back({portName, bundlePortType});
-    args_idx += 1;
+    ++argIndex;
   }
 
   // Add all outputs of funcOp.
   for (auto portType : funcOp.getType().getResults()) {
-    auto portName = rewriter.getStringAttr("arg" + std::to_string(args_idx));
+    auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
     auto bundlePortType = getBundleType(portType, /*isFlip=*/true);
 
     if (!bundlePortType)
@@ -178,7 +179,7 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
                        "(signed, unsigned, signless), index, none.");
 
     ports.push_back({portName, bundlePortType});
-    args_idx += 1;
+    ++argIndex;
   }
 
   // Add clock and reset signals.
@@ -212,10 +213,10 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
 
   // Replace uses of each argument of the second block with the corresponding
   // argument of the entry block.
-  args_idx = 0;
+  argIndex = 0;
   for (auto &oldArg : secondBlock->getArguments()) {
-    oldArg.replaceAllUsesWith(entryBlock->getArgument(args_idx));
-    args_idx += 1;
+    oldArg.replaceAllUsesWith(entryBlock->getArgument(argIndex));
+    ++argIndex;
   }
 
   // Move all operations of the second block to the entry block.
@@ -254,9 +255,9 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
   llvm::SmallVector<ModulePortInfo, 8> ports;
 
   // Add all inputs of oldOp.
-  unsigned args_idx = 0;
+  unsigned argIndex = 0;
   for (auto portType : oldOp->getOperands().getTypes()) {
-    auto portName = rewriter.getStringAttr("arg" + std::to_string(args_idx));
+    auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
     auto bundlePortType = getBundleType(portType, /*isFlip=*/false);
 
     if (!bundlePortType)
@@ -264,12 +265,12 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
                        "(signed, unsigned, signless), index, none.");
 
     ports.push_back({portName, bundlePortType});
-    args_idx += 1;
+    ++argIndex;
   }
 
   // Add all outputs of oldOp.
   for (auto portType : oldOp->getResults().getTypes()) {
-    auto portName = rewriter.getStringAttr("arg" + std::to_string(args_idx));
+    auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
     auto bundlePortType = getBundleType(portType, /*isFlip=*/true);
 
     if (!bundlePortType)
@@ -277,7 +278,7 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
                        "(signed, unsigned, signless), index, none.");
 
     ports.push_back({portName, bundlePortType});
-    args_idx += 1;
+    ++argIndex;
   }
 
   // Add clock and reset signals.
@@ -831,15 +832,15 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
   MLIRContext *context = subModuleOp.getContext();
 
   // Bundle all ports of the instance into a new flattened bundle type.
-  unsigned args_idx = 0;
+  unsigned argIndex = 0;
   for (auto &arg : subModuleOp.getArguments()) {
-    std::string argName = "arg" + std::to_string(args_idx);
+    std::string argName = "arg" + std::to_string(argIndex);
     auto argId = rewriter.getIdentifier(argName);
 
     // All ports of the instance operation are flipped.
     auto argType = FlipType::get(arg.getType().cast<FIRRTLType>());
     elements.push_back(BundleElement(argId, argType));
-    args_idx += 1;
+    ++argIndex;
   }
 
   // Create a instance operation.
@@ -850,7 +851,7 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
 
   // Connect the new created instance with its predecessors and successors in
   // the top-module.
-  unsigned ports_idx = 0;
+  unsigned portIndex = 0;
   for (auto &element : instType.cast<BundleType>().getElements()) {
     Identifier elementName = element.first;
     FIRRTLType elementType = element.second;
@@ -866,20 +867,20 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
                                    [](BlockArgument &arg) -> bool {
                                      return arg.getType().isa<ClockType>();
                                    });
-    if (ports_idx < numIns) {
+    if (portIndex < numIns) {
       // Connect input ports.
       rewriter.create<ConnectOp>(oldOp->getLoc(), subfieldOp,
-                                 oldOp->getOperand(ports_idx));
-    } else if (ports_idx < numArgs) {
+                                 oldOp->getOperand(portIndex));
+    } else if (portIndex < numArgs) {
       // Connect output ports.
-      Value result = oldOp->getResult(ports_idx - numIns);
+      Value result = oldOp->getResult(portIndex - numIns);
       result.replaceAllUsesWith(subfieldOp);
     } else {
       // Connect clock or reset signal.
-      auto signal = *(firstClock + 2 * clockDomain + ports_idx - numArgs);
+      auto signal = *(firstClock + 2 * clockDomain + portIndex - numArgs);
       rewriter.create<ConnectOp>(oldOp->getLoc(), subfieldOp, signal);
     }
-    ports_idx += 1;
+    ++portIndex;
   }
   rewriter.eraseOp(oldOp);
 }
@@ -892,11 +893,11 @@ static void convertReturnOp(Operation *oldOp, FModuleOp topModuleOp,
 
   // Connect each operand of the old return operation with the corresponding
   // output ports.
-  unsigned args_idx = 0;
+  unsigned argIndex = 0;
   for (auto result : oldOp->getOperands()) {
     rewriter.create<ConnectOp>(
-        oldOp->getLoc(), topModuleOp.getArgument(numIns + args_idx), result);
-    args_idx += 1;
+        oldOp->getLoc(), topModuleOp.getArgument(numIns + argIndex), result);
+    ++argIndex;
   }
 
   rewriter.eraseOp(oldOp);
