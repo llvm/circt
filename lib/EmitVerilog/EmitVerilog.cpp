@@ -1678,28 +1678,11 @@ void ModuleEmitter::emitStatement(rtl::InstanceOp op) {
   auto opArgs = op.inputs();
   auto opResults = op.getResults();
 
+  auto *moduleOp = op.getReferencedModule();
+  assert(moduleOp && "Invalid IR");
+
   SmallVector<rtl::ModulePortInfo, 8> portInfo;
-  if (auto moduleIR = op.getParentOfType<firrtl::CircuitOp>()) {
-    auto moduleOp = moduleIR.lookupSymbol(defName);
-    if (auto m = cast<rtl::RTLModuleOp>(moduleOp)) {
-      m.getPortInfo(portInfo);
-    } else if (auto m = cast<rtl::RTLExternModuleOp>(moduleOp)) {
-      m.getPortInfo(portInfo);
-    } else {
-      assert(0 && "invalid rtl.instance op");
-    }
-  } else if (auto moduleIR = op.getParentOfType<mlir::ModuleOp>()) {
-    auto moduleOp = moduleIR.lookupSymbol(defName);
-    if (isa<rtl::RTLModuleOp>(moduleOp)) {
-      cast<rtl::RTLModuleOp>(moduleOp).getPortInfo(portInfo);
-    } else if (isa<rtl::RTLExternModuleOp>(moduleOp)) {
-      cast<rtl::RTLExternModuleOp>(moduleOp).getPortInfo(portInfo);
-    } else {
-      assert(0 && "invalid rtl.instance op");
-    }
-  } else {
-    assert(0 && "unknown parent module type");
-  }
+  getModulePortInfo(moduleOp, portInfo);
 
   os << ' ' << defName << ' ' << instanceName << " (";
   emitLocationInfoAndNewLine(ops);
