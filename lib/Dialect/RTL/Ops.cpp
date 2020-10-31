@@ -10,6 +10,7 @@
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/Matchers.h"
+#include "mlir/IR/Module.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/StandardTypes.h"
 
@@ -256,22 +257,33 @@ static void print(OpAsmPrinter &p, RTLModuleOp op) {
 // InstanceOp
 //===----------------------------------------------------------------------===/
 
+/// Lookup the module or extmodule for the symbol.  This returns null on
+/// invalid IR.
+Operation *InstanceOp::getReferencedModule() {
+  auto topLevelModuleOp = getParentOfType<ModuleOp>();
+  if (!topLevelModuleOp)
+    return nullptr;
+
+  return topLevelModuleOp.lookupSymbol(moduleName());
+}
+
 static LogicalResult verifyInstanceOp(InstanceOp op) {
-  auto *moduleIR = op.getParentWithTrait<OpTrait::SymbolTable>();
-  if (moduleIR == nullptr) {
-    op.emitError("Must be contained within a SymbolTable region");
+  // Check that this instance is inside a module.
+  auto module = dyn_cast<RTLModuleOp>(op.getParentOp());
+  if (!module) {
+    op.emitOpError("should be embedded in an 'rtl.module'");
     return failure();
   }
-  auto referencedModule =
-      mlir::SymbolTable::lookupSymbolIn(moduleIR, op.moduleName());
+
+  auto referencedModule = op.getReferencedModule();
   if (referencedModule == nullptr) {
-    op.emitError("Cannot find module definition '") << op.moduleName() << "'.";
+    op.emitError("Cannot find module definition '") << op.moduleName() << "'";
     return failure();
   }
   if (!isa<rtl::RTLModuleOp>(referencedModule) &&
       !isa<rtl::RTLExternModuleOp>(referencedModule)) {
     op.emitError("Symbol resolved to '")
-        << referencedModule->getName() << "' which is not a RTL[Ext]ModuleOp.";
+        << referencedModule->getName() << "' which is not a RTL[Ext]ModuleOp";
     return failure();
   }
   return success();

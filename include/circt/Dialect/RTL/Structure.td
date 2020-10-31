@@ -1,6 +1,6 @@
 def RTLModuleOp : RTLOp<"module",
       [IsolatedFromAbove, FunctionLike, Symbol, RegionKindInterface,
-       SingleBlockImplicitTerminator<"OutputOp">]> {
+       SingleBlockImplicitTerminator<"OutputOp">, HasParent<"mlir::ModuleOp">]>{
   let summary = "RTL Module";
   let description = [{
     The "rtl.module" operation represents a Verilog module, including a given
@@ -59,7 +59,7 @@ def RTLModuleOp : RTLOp<"module",
 }
 
 def RTLExternModuleOp : RTLOp<"externmodule",
-      [IsolatedFromAbove, FunctionLike, Symbol]> {
+      [IsolatedFromAbove, FunctionLike, Symbol, HasParent<"mlir::ModuleOp">]> {
   let summary = "RTL external Module";
   let description = [{
     The "rtl.externmodule" operation represents an external reference to a
@@ -122,6 +122,10 @@ def InstanceOp : RTLOp<"instance",
 
   let extraClassDeclaration = [{   
     StringAttr getResultName(size_t i);
+
+    /// Lookup the module or extmodule for the symbol.  This returns null on
+    /// invalid IR.
+    Operation *getReferencedModule();
   }];
   
   let assemblyFormat = [{
@@ -142,7 +146,8 @@ def OutputOp : RTLOp<"output", [Terminator, HasParent<"RTLModuleOp">,
 
   let arguments = (ins Variadic<AnyType>:$operands);
 
-  let builders = [OpBuilderDAG<(ins), [{ build($_builder, $_state, llvm::None); }]>];
+  let builders = [OpBuilderDAG<(ins),
+                               [{ build($_builder, $_state, llvm::None); }]>];
 
   let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
 

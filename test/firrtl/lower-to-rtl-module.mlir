@@ -82,6 +82,16 @@
 
     // CHECK: firrtl.printf {{.*}}"%x"([[INSTOUTC1]])
     firrtl.printf %clock, %reset, "%x"(%3) : !firrtl.uint<4>
+ 
+      
+      // TODO: Support parameterization.
+      //%myext = firrtl.instance @MyExtModule {name = "myext"} : !firrtl.bundle<in: flip<uint>, out: uint<8>>
+      //%9 = firrtl.subfield %myext("in") : (!firrtl.bundle<in: flip<uint>, out: uint<8>>) -> !firrtl.flip<uint>
+      //firrtl.connect %9, %i8 : !firrtl.flip<uint>, !firrtl.uint<8>
+      //%10 = firrtl.subfield %myext("out") : (!firrtl.bundle<in: flip<uint>, out: uint<8>>) -> !firrtl.uint<8>
+      //firrtl.printf %clock, %reset, "Something interesting! %x"(%10) : !firrtl.uint<8>
+      //%11 = firrtl.subaccess %_t[%i8] : (!firrtl.vector<uint<1>, 12>, !firrtl.uint<8>) -> !firrtl.uint<1>
+      //firrtl.connect %auto, %11 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
   }
 
   // CHECK-LABEL: rtl.module @Print(
