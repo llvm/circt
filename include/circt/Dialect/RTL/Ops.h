@@ -26,7 +26,7 @@ enum PortDirection {
 };
 
 /// This holds the name, type, direction of a module's ports
-struct RTLModulePortInfo {
+struct ModulePortInfo {
   StringAttr name;
   PortDirection direction;
   Type type;
@@ -39,8 +39,7 @@ struct RTLModulePortInfo {
 
 FunctionType getModuleType(Operation *op);
 
-void getRTLModulePortInfo(Operation *op,
-                          SmallVectorImpl<RTLModulePortInfo> &results);
+void getModulePortInfo(Operation *op, SmallVectorImpl<ModulePortInfo> &results);
 StringAttr getRTLNameAttr(ArrayRef<NamedAttribute> attrs);
 
 /// Return true if the specified operation is a combinatorial logic op.

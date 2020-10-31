@@ -1408,11 +1408,11 @@ void ModuleEmitter::emitStatement(rtl::OutputOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  SmallVector<rtl::RTLModulePortInfo, 8> ports;
+  SmallVector<rtl::ModulePortInfo, 8> ports;
   rtl::RTLModuleOp parent = op.getParentOfType<rtl::RTLModuleOp>();
-  parent.getRTLPortInfo(ports);
+  parent.getPortInfo(ports);
   size_t operandIndex = 0;
-  for (rtl::RTLModulePortInfo port : ports) {
+  for (rtl::ModulePortInfo port : ports) {
     if (!port.isOutput())
       continue;
     indent() << "assign " << port.getName() << " = ";
@@ -1678,22 +1678,22 @@ void ModuleEmitter::emitStatement(rtl::InstanceOp op) {
   auto opArgs = op.inputs();
   auto opResults = op.getResults();
 
-  SmallVector<rtl::RTLModulePortInfo, 8> portInfo;
+  SmallVector<rtl::ModulePortInfo, 8> portInfo;
   if (auto moduleIR = op.getParentOfType<firrtl::CircuitOp>()) {
     auto moduleOp = moduleIR.lookupSymbol(defName);
     if (auto m = cast<rtl::RTLModuleOp>(moduleOp)) {
-      m.getRTLPortInfo(portInfo);
+      m.getPortInfo(portInfo);
     } else if (auto m = cast<rtl::RTLExternModuleOp>(moduleOp)) {
-      m.getRTLPortInfo(portInfo);
+      m.getPortInfo(portInfo);
     } else {
       assert(0 && "invalid rtl.instance op");
     }
   } else if (auto moduleIR = op.getParentOfType<mlir::ModuleOp>()) {
     auto moduleOp = moduleIR.lookupSymbol(defName);
     if (isa<rtl::RTLModuleOp>(moduleOp)) {
-      cast<rtl::RTLModuleOp>(moduleOp).getRTLPortInfo(portInfo);
+      cast<rtl::RTLModuleOp>(moduleOp).getPortInfo(portInfo);
     } else if (isa<rtl::RTLExternModuleOp>(moduleOp)) {
-      cast<rtl::RTLExternModuleOp>(moduleOp).getRTLPortInfo(portInfo);
+      cast<rtl::RTLExternModuleOp>(moduleOp).getPortInfo(portInfo);
     } else {
       assert(0 && "invalid rtl.instance op");
     }
@@ -1705,7 +1705,7 @@ void ModuleEmitter::emitStatement(rtl::InstanceOp op) {
   emitLocationInfoAndNewLine(ops);
 
   for (size_t i = 0, e = portInfo.size(); i != e; ++i) {
-    rtl::RTLModulePortInfo &elt = portInfo[i];
+    rtl::ModulePortInfo &elt = portInfo[i];
     bool isLast = &elt == &portInfo.back();
     StringRef valueName = elt.isOutput() ? getName(opResults[elt.argNum])
                                          : getName(opArgs[elt.argNum]);
@@ -2496,8 +2496,8 @@ void ModuleEmitter::emitRTLExternModule(rtl::RTLExternModuleOp module) {
 
 void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
   // Add all the ports to the name table.
-  SmallVector<rtl::RTLModulePortInfo, 8> portInfo;
-  module.getRTLPortInfo(portInfo);
+  SmallVector<rtl::ModulePortInfo, 8> portInfo;
+  module.getPortInfo(portInfo);
 
   for (auto &port : portInfo) {
     StringRef name = port.getName();

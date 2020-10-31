@@ -13,7 +13,7 @@ def RTLModuleOp : RTLOp<"module",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringAttr":$name, "ArrayRef<RTLModulePortInfo>":$ports)>
+    OpBuilderDAG<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports)>
   ];
 
   let extraClassDeclaration = [{
@@ -23,8 +23,8 @@ def RTLModuleOp : RTLOp<"module",
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
 
     // Decode information about the input and output ports on this module.
-    void getRTLPortInfo(SmallVectorImpl<RTLModulePortInfo> &results) {
-      getRTLModulePortInfo(*this, results);
+    void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
+      getModulePortInfo(*this, results);
     }
 
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
@@ -71,13 +71,13 @@ def RTLExternModuleOp : RTLOp<"externmodule",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringAttr":$name, "ArrayRef<RTLModulePortInfo>":$ports)>
+    OpBuilderDAG<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports)>
   ];
 
   let extraClassDeclaration = [{   
     // Decode information about the input and output ports on this module.
-    void getRTLPortInfo(SmallVectorImpl<RTLModulePortInfo> &results) {
-      getRTLModulePortInfo(*this, results);
+    void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
+      getModulePortInfo(*this, results);
     }
 
   private:

@@ -50,7 +50,7 @@ struct FIRRTLModuleLowering
 
 private:
   LogicalResult lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
-                           SmallVectorImpl<rtl::RTLModulePortInfo> &ports,
+                           SmallVectorImpl<rtl::ModulePortInfo> &ports,
                            Operation *moduleOp);
   rtl::RTLModuleOp lowerModule(FModuleOp oldModule, Block *topLevelModule);
   rtl::RTLExternModuleOp lowerExtModule(FExtModuleOp oldModule,
@@ -139,14 +139,14 @@ void FIRRTLModuleLowering::runOnOperation() {
 
 LogicalResult
 FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
-                                 SmallVectorImpl<rtl::RTLModulePortInfo> &ports,
+                                 SmallVectorImpl<rtl::ModulePortInfo> &ports,
                                  Operation *moduleOp) {
 
   ports.reserve(firrtlPorts.size());
   size_t numArgs = 0;
   size_t numResults = 0;
   for (auto firrtlPort : firrtlPorts) {
-    rtl::RTLModulePortInfo rtlPort;
+    rtl::ModulePortInfo rtlPort;
 
     rtlPort.name = firrtlPort.name;
     rtlPort.type = lowerType(firrtlPort.type);
@@ -181,7 +181,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   // Map the ports over, lowering their types as we go.
   SmallVector<ModulePortInfo, 8> firrtlPorts;
   oldModule.getPortInfo(firrtlPorts);
-  SmallVector<rtl::RTLModulePortInfo, 8> ports;
+  SmallVector<rtl::ModulePortInfo, 8> ports;
   if (failed(lowerPorts(firrtlPorts, ports, oldModule)))
     return {};
 
@@ -199,7 +199,7 @@ rtl::RTLModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
   // Map the ports over, lowering their types as we go.
   SmallVector<ModulePortInfo, 8> firrtlPorts;
   oldModule.getPortInfo(firrtlPorts);
-  SmallVector<rtl::RTLModulePortInfo, 8> ports;
+  SmallVector<rtl::ModulePortInfo, 8> ports;
   if (failed(lowerPorts(firrtlPorts, ports, oldModule)))
     return {};
 
@@ -256,8 +256,8 @@ void FIRRTLModuleLowering::lowerModuleBody(
   OpBuilder bodyBuilder(newModule.body());
 
   // Insert argument casts, and re-vector users in the old body to use them.
-  SmallVector<rtl::RTLModulePortInfo, 8> ports;
-  newModule.getRTLPortInfo(ports);
+  SmallVector<rtl::ModulePortInfo, 8> ports;
+  newModule.getPortInfo(ports);
 
   size_t nextNewArg = 0;
   size_t firrtlArg = 0;

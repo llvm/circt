@@ -21,7 +21,7 @@ using namespace rtl;
 //===----------------------------------------------------------------------===/
 
 static void buildModule(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<RTLModulePortInfo> ports) {
+                        StringAttr name, ArrayRef<ModulePortInfo> ports) {
   using namespace mlir::impl;
 
   // Add an attribute for the name.
@@ -43,7 +43,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   // Record the names of the arguments if present.
   SmallString<8> attrNameBuf;
   SmallString<8> attrDirBuf;
-  for (const RTLModulePortInfo &port : ports) {
+  for (const ModulePortInfo &port : ports) {
     SmallVector<NamedAttribute, 2> argAttrs;
     if (!port.name.getValue().empty())
       argAttrs.push_back(
@@ -62,8 +62,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 }
 
 void rtl::RTLModuleOp::build(OpBuilder &builder, OperationState &result,
-                             StringAttr name,
-                             ArrayRef<RTLModulePortInfo> ports) {
+                             StringAttr name, ArrayRef<ModulePortInfo> ports) {
   buildModule(builder, result, name, ports);
 
   // Create a region and a block for the body.
@@ -81,7 +80,7 @@ void rtl::RTLModuleOp::build(OpBuilder &builder, OperationState &result,
 
 void rtl::RTLExternModuleOp::build(OpBuilder &builder, OperationState &result,
                                    StringAttr name,
-                                   ArrayRef<RTLModulePortInfo> ports) {
+                                   ArrayRef<ModulePortInfo> ports) {
   buildModule(builder, result, name, ports);
 }
 
@@ -107,8 +106,8 @@ static bool containsInOutAttr(ArrayRef<NamedAttribute> attrs) {
   return false;
 }
 
-void rtl::getRTLModulePortInfo(Operation *op,
-                               SmallVectorImpl<RTLModulePortInfo> &results) {
+void rtl::getModulePortInfo(Operation *op,
+                            SmallVectorImpl<ModulePortInfo> &results) {
   auto argTypes = getModuleType(op).getInputs();
 
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
