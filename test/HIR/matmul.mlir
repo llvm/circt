@@ -75,7 +75,7 @@ hir.def @hirMatmulKernel at %t(
         %a = hir.mem_read %A[%i_delayed, %k] at %ti offset %k : !hir.const<i32> : !hir.memref<16*16*i32, packing=[1], r>[i32, !hir.const<i32>] -> i32 // hoist from j-loop
         %a_delayed = hir.delay %a by %j : !hir.const<i32> at %ti offset %k : !hir.const<i32> : i32 -> i32
         %b = hir.mem_read %B[%k, %j] at %tk : !hir.memref<16*16*i32, packing=[], r>[!hir.const<i32>, !hir.const<i32>] -> i32
-        %ab = hir.call @mult(%a_delayed, %b) at %tk offset %1: !hir.const<i32> : (i32, i32) -> (i32)
+        %ab = hir.call @mult(%a_delayed, %b) at %tk offset %1: !hir.const<i32> {delay=2}: (i32, i32) -> (i32)
         %c_prev = hir.wire_read %C_bus[%k] at %tk offset %3 : !hir.const<i32> : !hir.wire<17*i32>[!hir.const<i32>] -> i32
         %c = hir.call @add(%ab, %c_prev) at %tk offset %3 : !hir.const<i32> : (i32, i32) -> (i32)
         %kPlus1 = hir.add(%k, %1) : (!hir.const<i32>, !hir.const<i32>) -> (!hir.const<i32>)

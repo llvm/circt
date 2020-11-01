@@ -355,7 +355,7 @@ def ConstantOp : HIR_Op<"constant" > {
   }];
 
   let arguments = (ins I32Attr:$value);
-  let results = (outs AnyType : $res);
+  let results = (outs ConstType : $res);
 
   let assemblyFormat = [{ $value attr-dict `:` type($res)}];
 }

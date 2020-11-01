@@ -19,7 +19,7 @@ class ModuleOp;
 namespace hir {
 
 /// Register the schedule verifier for HIR dialect.
-void registerHIRScheduleVerifier();
+void registerScheduleVerifier();
 
 } // namespace hir.
 } // namespace mlir.

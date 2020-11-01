@@ -841,7 +841,6 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
 } // namespace
 
 LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
-  // An EntityOp always has a single block.
   Block &entryBlock = op.getBody().front();
   auto args = entryBlock.getArguments();
   assert(op.getNumResults() == 0);

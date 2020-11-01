@@ -1,8 +1,8 @@
 // RUN : circt-opt %s | FileCheck %s
 
-hir.def @mult(%x, %y) at %t {time_domains = [0 : i32, 0 : i32, 0 : i32], 
+hir.def @mult at %t (%x:i32, %y:i32) ->(){time_domains = [0 : i32, 0 : i32, 0 : i32], 
                             time_offsets = [0 : i32, 0 : i32, 4 : i32], 
-                            verilog_module= "iMult32"} : (!hir.int, !hir.int) -> (!hir.int) 
+                            verilog_module= "iMult32"}  
 
 hir.def @add(%x, %y) at %t {time_domains = [0 : i32, 0 : i32, 0 : i32], 
                             time_offsets = [0 : i32, 0 : i32, 1 : i32]} : (!hir.int, !hir.int) -> (!hir.int){}
