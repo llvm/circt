@@ -239,10 +239,10 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
-  firrtl.module @Callee(%arg0: !firrtl.uint<0>, %arg1: !firrtl.bundle<valid: uint<1>>) { }
+  firrtl.module @Callee(%arg0: !firrtl.uint<1>, %arg1: !firrtl.bundle<valid: uint<1>>) { }
 
   firrtl.module @Foo() {
     // expected-error @+1 {{'firrtl.instance' op output bundle type must match module. In element 1, expected '!firrtl.bundle<valid: uint<1>>', but got '!firrtl.bundle<valid: uint<2>>'}}
-    %b = firrtl.instance @Callee : !firrtl.bundle<arg0: uint<0>, arg1: bundle<valid: uint<2>>>
+    %a = firrtl.instance @Callee : !firrtl.bundle<arg0: uint<1>, arg1: bundle<valid: uint<2>>>
   }
 }
