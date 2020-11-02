@@ -519,7 +519,7 @@ static LogicalResult verifyInstanceOp(InstanceOp &instance) {
       return failure();
     }
 
-    for (size_t i = 0, e = bundleElements.size(); i != e; i++) {
+    for (size_t i = 0; i != e; i++) {
       auto expectedType = referencedFModule.getArgument(i)
                               .getType()
                               .cast<FIRRTLType>()
