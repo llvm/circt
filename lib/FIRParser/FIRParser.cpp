@@ -799,7 +799,7 @@ private:
 /// a passive-typed value and return that.
 Value FIRStmtParser::convertToPassive(Value input, Location loc) {
   auto inType = input.getType().cast<FIRRTLType>();
-  if (inType.isPassiveType())
+  if (inType.isPassive())
     return input;
 
   return builder.create<AsPassivePrimOp>(loc, inType.getPassiveType(), input);
@@ -970,7 +970,7 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result,
 
   // If the index expression is a flip type, strip it off.
   auto indexType = index.getType().cast<FIRRTLType>();
-  if (!indexType.isPassiveType()) {
+  if (!indexType.isPassive()) {
     indexType = indexType.getPassiveType();
     index = builder.create<AsPassivePrimOp>(translateLocation(indexLoc),
                                             indexType, index);
@@ -1023,7 +1023,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
           return failure();
 
         // If the operand contains a flip, strip it out with an asPassive op.
-        if (!operand.getType().cast<FIRRTLType>().isPassiveType()) {
+        if (!operand.getType().cast<FIRRTLType>().isPassive()) {
           auto passiveType =
               operand.getType().cast<FIRRTLType>().getPassiveType();
           operand = builder.create<AsPassivePrimOp>(translateLocation(loc),
@@ -1730,8 +1730,8 @@ ParseResult FIRStmtParser::parseInstance() {
   results.reserve(modulePorts.size());
 
   for (auto port : modulePorts) {
-    results.push_back({builder.getIdentifier(port.first.getValue()),
-                       FlipType::get(port.second)});
+    results.push_back(
+        {builder.getIdentifier(port.getName()), FlipType::get(port.type)});
   }
   auto resultType = BundleType::get(results, getContext());
   auto result = builder.create<InstanceOp>(info.getLoc(), resultType,
@@ -1898,7 +1898,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     }
   }
 
-  if (!type.isPassiveType()) {
+  if (!type.isPassive()) {
     emitError(info.getFIRLoc(), "'mem' data-type must be a passive type");
     return failure();
   }
@@ -2172,7 +2172,7 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   // for arguments in an external module.  This detects multiple definitions
   // of the same name.
   for (auto &entry : portListAndLoc) {
-    if (addSymbolEntry(entry.first.first.getValue(), Value(), entry.second))
+    if (addSymbolEntry(entry.first.getName(), Value(), entry.second))
       return failure();
   }
 
@@ -2270,7 +2270,7 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
   // block arguments.
   auto argIt = fmodule.args_begin();
   for (auto &entry : portListAndLoc) {
-    if (addSymbolEntry(entry.first.first.getValue(), *argIt, entry.second))
+    if (addSymbolEntry(entry.first.getName(), *argIt, entry.second))
       return failure();
     ++argIt;
   }

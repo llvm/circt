@@ -49,6 +49,51 @@
     // CHECK-NEXT: rtl.output %3 : i4
   }    // CHECK-NEXT: }
 
+ // CHECK-LABEL: rtl.module @TestInstance(
+  firrtl.module @TestInstance(%u2: !firrtl.uint<2>, %s8: !firrtl.sint<8>,
+                              %clock: !firrtl.clock,
+                              %reset: !firrtl.uint<1>) {
+    // CHECK: [[U2CAST:%.+]] = firrtl.stdIntCast %arg0 : (i2) -> !firrtl.uint<2>
+
+    // CHECK: %in1.wire = rtl.wire : i4
+    // CHECK-NEXT: %in2.wire = rtl.wire : i2
+    // CHECK-NEXT: %in3.wire = rtl.wire : i8
+    // CHECK-NEXT: [[INSTOUT:%.+]] = rtl.instance "xyz" @Simple(%in1.wire, %in2.wire, %in3.wire) : (i4, i2, i8) -> i4
+    %xyz = firrtl.instance @Simple {name = "xyz"}
+     : !firrtl.bundle<in1: flip<uint<4>>, in2: flip<uint<2>>,
+                      in3: flip<sint<8>>, out4: uint<4>>
+
+    // CHECK-NEXT: [[INSTOUTC1:%.+]] = firrtl.stdIntCast [[INSTOUT]] : (i4) -> !firrtl.uint<4>
+
+
+    // CHECK: [[IN1C:%.+]] = firrtl.stdIntCast %in1.wire : (i4) -> !firrtl.uint<4>
+    // CHECK: [[IN1C2:%.+]] = firrtl.asNonPassive [[IN1C]] : (!firrtl.uint<4>) -> !firrtl.flip<uint<4>>
+    // CHECK:  firrtl.connect [[IN1C2]], [[U2CAST]]
+    %0 = firrtl.subfield %xyz("in1") : (!firrtl.bundle<in1: flip<uint<4>>, in2: flip<uint<2>>, in3: flip<sint<8>>, out4: uint<4>>) -> !firrtl.flip<uint<4>>
+    firrtl.connect %0, %u2 : !firrtl.flip<uint<4>>, !firrtl.uint<2>
+
+    %1 = firrtl.subfield %xyz("in2") : (!firrtl.bundle<in1: flip<uint<4>>, in2: flip<uint<2>>, in3: flip<sint<8>>, out4: uint<4>>) -> !firrtl.flip<uint<2>>
+    firrtl.connect %1, %u2 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
+
+    %2 = firrtl.subfield %xyz("in3")  : (!firrtl.bundle<in1: flip<uint<4>>, in2: flip<uint<2>>, in3: flip<sint<8>>, out4: uint<4>>) -> !firrtl.flip<sint<8>>
+    firrtl.connect %2, %s8 : !firrtl.flip<sint<8>>, !firrtl.sint<8>
+
+    %3 = firrtl.subfield %xyz("out4")  : (!firrtl.bundle<in1: flip<uint<4>>, in2: flip<uint<2>>, in3: flip<sint<8>>, out4: uint<4>>) -> !firrtl.uint<4>
+
+    // CHECK: firrtl.printf {{.*}}"%x"([[INSTOUTC1]])
+    firrtl.printf %clock, %reset, "%x"(%3) : !firrtl.uint<4>
+ 
+      
+      // TODO: Support parameterization.
+      //%myext = firrtl.instance @MyExtModule {name = "myext"} : !firrtl.bundle<in: flip<uint>, out: uint<8>>
+      //%9 = firrtl.subfield %myext("in") : (!firrtl.bundle<in: flip<uint>, out: uint<8>>) -> !firrtl.flip<uint>
+      //firrtl.connect %9, %i8 : !firrtl.flip<uint>, !firrtl.uint<8>
+      //%10 = firrtl.subfield %myext("out") : (!firrtl.bundle<in: flip<uint>, out: uint<8>>) -> !firrtl.uint<8>
+      //firrtl.printf %clock, %reset, "Something interesting! %x"(%10) : !firrtl.uint<8>
+      //%11 = firrtl.subaccess %_t[%i8] : (!firrtl.vector<uint<1>, 12>, !firrtl.uint<8>) -> !firrtl.uint<1>
+      //firrtl.connect %auto, %11 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  }
+
   // CHECK-LABEL: rtl.module @Print(
   // CHECK: %arg0: i1 {rtl.name = "clock"},
   // CHECK: %arg1: i1 {rtl.name = "reset"},

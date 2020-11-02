@@ -1,6 +1,6 @@
 def RTLModuleOp : RTLOp<"module",
       [IsolatedFromAbove, FunctionLike, Symbol, RegionKindInterface,
-       SingleBlockImplicitTerminator<"OutputOp">]> {
+       SingleBlockImplicitTerminator<"OutputOp">, HasParent<"mlir::ModuleOp">]>{
   let summary = "RTL Module";
   let description = [{
     The "rtl.module" operation represents a Verilog module, including a given
@@ -13,7 +13,7 @@ def RTLModuleOp : RTLOp<"module",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringAttr":$name, "ArrayRef<RTLModulePortInfo>":$ports)>
+    OpBuilderDAG<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports)>
   ];
 
   let extraClassDeclaration = [{
@@ -23,8 +23,8 @@ def RTLModuleOp : RTLOp<"module",
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
 
     // Decode information about the input and output ports on this module.
-    void getRTLPortInfo(SmallVectorImpl<RTLModulePortInfo> &results) {
-      getRTLModulePortInfo(*this, results);
+    void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
+      getModulePortInfo(*this, results);
     }
 
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
@@ -59,7 +59,7 @@ def RTLModuleOp : RTLOp<"module",
 }
 
 def RTLExternModuleOp : RTLOp<"externmodule",
-      [IsolatedFromAbove, FunctionLike, Symbol]> {
+      [IsolatedFromAbove, FunctionLike, Symbol, HasParent<"mlir::ModuleOp">]> {
   let summary = "RTL external Module";
   let description = [{
     The "rtl.externmodule" operation represents an external reference to a
@@ -71,13 +71,13 @@ def RTLExternModuleOp : RTLOp<"externmodule",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringAttr":$name, "ArrayRef<RTLModulePortInfo>":$ports)>
+    OpBuilderDAG<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports)>
   ];
 
   let extraClassDeclaration = [{   
     // Decode information about the input and output ports on this module.
-    void getRTLPortInfo(SmallVectorImpl<RTLModulePortInfo> &results) {
-      getRTLModulePortInfo(*this, results);
+    void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
+      getModulePortInfo(*this, results);
     }
 
   private:
@@ -107,9 +107,8 @@ def RTLExternModuleOp : RTLOp<"externmodule",
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
-
-def RTLInstanceOp : RTLOp<"instance",
-                          [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
+def InstanceOp : RTLOp<"instance",
+                       [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let summary = "Create an instance of a module";
   let description = [{
     This represents an instance of a module. The inputs and results are 
@@ -123,6 +122,10 @@ def RTLInstanceOp : RTLOp<"instance",
 
   let extraClassDeclaration = [{   
     StringAttr getResultName(size_t i);
+
+    /// Lookup the module or extmodule for the symbol.  This returns null on
+    /// invalid IR.
+    Operation *getReferencedModule();
   }];
   
   let assemblyFormat = [{
@@ -130,7 +133,7 @@ def RTLInstanceOp : RTLOp<"instance",
       `:` functional-type($inputs, results)
   }];
 
-  let verifier = [{ return ::verifyRTLInstanceOp(*this); }];
+  let verifier = [{ return ::verifyInstanceOp(*this); }];
 }
 
 def OutputOp : RTLOp<"output", [Terminator, HasParent<"RTLModuleOp">,
@@ -143,7 +146,8 @@ def OutputOp : RTLOp<"output", [Terminator, HasParent<"RTLModuleOp">,
 
   let arguments = (ins Variadic<AnyType>:$operands);
 
-  let builders = [OpBuilderDAG<(ins), [{ build($_builder, $_state, llvm::None); }]>];
+  let builders = [OpBuilderDAG<(ins),
+                               [{ build($_builder, $_state, llvm::None); }]>];
 
   let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
 
