@@ -1,4 +1,4 @@
-//===- RegisterAllDialects.cpp - Registers all CIRCT dialects from C ------===//
+//===- RTLDialect.cpp - C Interface for RTL Dialect -----------------------===//
 //
 //===----------------------------------------------------------------------===//
 
