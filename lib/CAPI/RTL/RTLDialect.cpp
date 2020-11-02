@@ -2,11 +2,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "mlir-c/IR.h"
 #include "circt-c/RTLDialect.h"
+#include "circt/Dialect/RTL/Ops.h"
+#include "mlir-c/IR.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Support.h"
-#include "circt/Dialect/RTL/Ops.h"
 
 void mlirContextRegisterRTLDialect(MlirContext context) {
   unwrap(context)->getDialectRegistry().insert<circt::rtl::RTLDialect>();
