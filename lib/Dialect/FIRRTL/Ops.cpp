@@ -503,29 +503,32 @@ static LogicalResult verifyInstanceOp(InstanceOp &instance) {
   }
 
   // Check that the result type is consistent with its module.
-  if (auto called_module =
-          dyn_cast<FModuleOp>(circuit.lookupSymbol(instance.moduleName()))) {
+  if (auto referencedFModule = dyn_cast<FModuleOp>(referencedModule)) {
     auto bundle = instance.getResult()
                       .getType()
                       .cast<FIRRTLType>()
                       .getPassiveType()
                       .cast<BundleType>();
-    auto bundle_elements = bundle.getElements();
-    size_t e = bundle_elements.size();
-    if(e != called_module.getNumArguments()){
-      instance.emitOpError(
-       "should have the same number of results as the called module");
-       return failure();
-    }
-    for (size_t i = 0, e = bundle_elements.size(); i != e; i++) {
-      if (bundle_elements[i].second != called_module.getArgument(i)
-                                           .getType()
-                                           .cast<FIRRTLType>()
-                                           .getPassiveType()) {
+    auto bundleElements = bundle.getElements();
+    size_t e = bundleElements.size();
 
-        instance.emitOpError() << "should have the consistent result type with "
-                                  "the called module. The "
-                               << i << " th argument does not match";
+    if (e != referencedFModule.getNumArguments()) {
+      instance.emitOpError()
+          << "has a wrong size of bundle type, expected size is "
+          << referencedFModule.getNumArguments() << " but got " << e;
+      return failure();
+    }
+
+    for (size_t i = 0, e = bundleElements.size(); i != e; i++) {
+      auto expectedType = referencedFModule.getArgument(i)
+                              .getType()
+                              .cast<FIRRTLType>()
+                              .getPassiveType();
+      if (bundleElements[i].second != expectedType) {
+        instance.emitOpError("output bundle type must match module. In "
+                             "element ")
+            << i << ", expected " << expectedType << ", but got "
+            << bundleElements[i].second;
         return failure();
       }
     }
