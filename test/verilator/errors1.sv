@@ -1,5 +1,5 @@
 // REQUIRES: verilator
-// RUN: (verilator --cc --top-module main -Wall -Wpedantic %s || true) 2>&1 | FileCheck %s
+// RUN: not verilator --cc --top-module main -Wall -Wpedantic %s 2>&1 | FileCheck %s
 
 // Tell Verilator not to complain about multiple modules in same file.
 /* verilator lint_off DECLFILENAME */
