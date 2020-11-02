@@ -213,3 +213,15 @@ firrtl.circuit "Foo" {
   }
 
 }
+
+// -----
+
+firrtl.circuit "Foo" {
+  firrtl.module @Bar(%arg0: !firrtl.bundle<valid: uint<1>>) { }
+
+  firrtl.module @Foo() {
+    // expected-error @+1 {{'firrtl.instance' op is a recursive instantiation of its containing module}}
+    %a = firrtl.instance @Bar : !firrtl.bundle<valid: uint<2>>
+  }
+
+}

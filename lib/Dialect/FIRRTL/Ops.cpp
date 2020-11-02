@@ -502,6 +502,35 @@ static LogicalResult verifyInstanceOp(InstanceOp &instance) {
     return failure();
   }
 
+  // Check that the result type is consistent with its module.
+  if (auto called_module =
+          dyn_cast<FModuleOp>(circuit.lookupSymbol(instance.moduleName()))) {
+    auto bundle = instance.getResult()
+                      .getType()
+                      .cast<FIRRTLType>()
+                      .getPassiveType()
+                      .cast<BundleType>();
+    auto bundle_elements = bundle.getElements();
+    size_t e = bundle_elements.size();
+    if(e != called_module.getNumArguments()){
+      instance.emitOpError(
+       "should have the same number of results as the called module");
+       return failure();
+    }
+    for (size_t i = 0, e = bundle_elements.size(); i != e; i++) {
+      if (bundle_elements[i].second != called_module.getArgument(i)
+                                           .getType()
+                                           .cast<FIRRTLType>()
+                                           .getPassiveType()) {
+
+        instance.emitOpError() << "should have the consistent result type with "
+                                  "the called module. The "
+                               << i << " th argument does not match";
+        return failure();
+      }
+    }
+  }
+
   return success();
 }
 
