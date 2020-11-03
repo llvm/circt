@@ -1,7 +1,7 @@
 //===- RTLDialect.cpp - C Interface for the RTL Dialect -------------------===//
 //
 //  Implements a C Interface for the RTL Dialect
-// 
+//
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/RTLDialect.h"
