@@ -236,7 +236,6 @@ firrtl.circuit "Foo" {
     // expected-error @+1 {{'firrtl.instance' op has a wrong size of bundle type, expected size is 1 but got 0}}
     %a = firrtl.instance @Callee : !firrtl.bundle<>
   }
-}
 
 // -----
 
@@ -248,4 +247,25 @@ firrtl.circuit "Foo" {
     // expected-error @+1 {{'firrtl.instance' op output bundle type must match module. In element 1, expected '!firrtl.bundle<valid: uint<1>>', but got '!firrtl.bundle<valid: uint<2>>'.}}
     %a = firrtl.instance @Callee : !firrtl.bundle<arg0: uint<1>, arg1: bundle<valid: uint<2>>>
   }
+
+// ----- 
+
+firrtl.circuit "X" {
+
+firrtl.module @X(%a : !firrtl.uint<4>) {
+  // expected-error @+1 {{high must be >= low, but got high = 3, low = 4}}
+  %0 = firrtl.bits %a 3 to 4 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+}
+
+}
+
+// -----
+
+firrtl.circuit "X" {
+
+firrtl.module @X(%a : !firrtl.uint<4>) {
+  // expected-error @+1 {{high must be < width of input, but got high = 4, width = 4}}
+  %0 = firrtl.bits %a 4 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+}
+
 }

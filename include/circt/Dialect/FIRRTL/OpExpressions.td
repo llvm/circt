@@ -260,6 +260,8 @@ def BitsPrimOp : PrimOp<"bits"> {
       return getResultType(inputs[0], integers[0], integers[1]);
     }
   }];
+
+  let verifier = [{ return ::verifyBitsPrimOp(*this); }];
 }
 
 def HeadPrimOp : PrimOp<"head"> {

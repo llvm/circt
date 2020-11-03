@@ -1072,6 +1072,26 @@ FIRRTLType firrtl::getReductionResult(FIRRTLType input) {
 // Other Operations
 //===----------------------------------------------------------------------===//
 
+static LogicalResult verifyBitsPrimOp(BitsPrimOp bits) {
+  // High must be >= low.
+  if (bits.hi() < bits.lo()) {
+    bits.emitError() << "high must be >= low, but got high = " << bits.hi()
+                     << ", low = " << bits.lo();
+    return failure();
+  }
+
+  // Input width must be > high.
+  int32_t width =
+      bits.input().getType().cast<IntType>().getBitWidthOrSentinel();
+  if (width != -1 && int32_t(bits.hi()) >= width) {
+    bits.emitError() << "high must be < width of input, but got high = "
+                     << bits.hi() << ", width = " << width;
+    return failure();
+  }
+
+  return success();
+}
+
 FIRRTLType BitsPrimOp::getResultType(FIRRTLType input, int32_t high,
                                      int32_t low) {
   auto inputi = input.dyn_cast<IntType>();
