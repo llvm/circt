@@ -526,10 +526,13 @@ static LogicalResult verifyInstanceOp(InstanceOp &instance) {
                               .cast<FIRRTLType>()
                               .getPassiveType();
       if (bundleElements[i].second != expectedType) {
-        instance.emitOpError("output bundle type must match module. In "
-                             "element ")
+        auto diag = instance.emitOpError() << 
+        "output bundle type must match module. In "
+                             "element "
             << i << ", expected " << expectedType << ", but got "
-            << bundleElements[i].second;
+            << bundleElements[i].second << ".";
+        
+        diag.attachNote(referencedFModule.getLoc()) << "original module declared here";
         return failure();
       }
     }

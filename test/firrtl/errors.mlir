@@ -217,8 +217,9 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
-  firrtl.module @Callee(%arg0: !firrtl.uint<1>) { }
 
+  // expected-note @+1 {{original module declared here}}
+  firrtl.module @Callee(%arg0: !firrtl.uint<1>) { }
   firrtl.module @Foo() {
     // expected-error @+1 {{'firrtl.instance' op output bundle type must match module. In element 0, expected '!firrtl.uint<1>', but got '!firrtl.uint<2>'}}
     %a = firrtl.instance @Callee : !firrtl.bundle<arg0: uint<2>>
@@ -228,8 +229,9 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
-  firrtl.module @Callee(%arg0: !firrtl.uint<1> ) { }
 
+  // expected-note @+1 {{original module declared here}}
+  firrtl.module @Callee(%arg0: !firrtl.uint<1> ) { }
   firrtl.module @Foo() {
     // expected-error @+1 {{'firrtl.instance' op has a wrong size of bundle type, expected size is 1 but got 0}}
     %a = firrtl.instance @Callee : !firrtl.bundle<>
@@ -239,8 +241,9 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
-  firrtl.module @Callee(%arg0: !firrtl.uint<1>, %arg1: !firrtl.bundle<valid: uint<1>>) { }
 
+  // expected-note @+1 {{original module declared here}}
+  firrtl.module @Callee(%arg0: !firrtl.uint<1>, %arg1: !firrtl.bundle<valid: uint<1>>) { }
   firrtl.module @Foo() {
     // expected-error @+1 {{'firrtl.instance' op output bundle type must match module. In element 1, expected '!firrtl.bundle<valid: uint<1>>', but got '!firrtl.bundle<valid: uint<2>>'}}
     %a = firrtl.instance @Callee : !firrtl.bundle<arg0: uint<1>, arg1: bundle<valid: uint<2>>>
