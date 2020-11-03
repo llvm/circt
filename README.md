@@ -107,6 +107,8 @@ $ cmake -G Ninja .. \
     -DCMAKE_BUILD_TYPE=DEBUG
 $ ninja
 $ ninja check-circt
+$ ninja check-circt-integration # Run the integration tests, which require
+                                # additional software to be present.
 ```
 
 The `-DCMAKE_BUILD_TYPE=DEBUG` flag enables debug information, which makes the
