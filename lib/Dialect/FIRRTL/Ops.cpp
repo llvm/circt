@@ -513,9 +513,10 @@ static LogicalResult verifyInstanceOp(InstanceOp &instance) {
     size_t e = bundleElements.size();
 
     if (e != referencedFModule.getNumArguments()) {
-      instance.emitOpError()
+      auto diag = instance.emitOpError()
           << "has a wrong size of bundle type, expected size is "
           << referencedFModule.getNumArguments() << " but got " << e;
+      diag.attachNote(referencedFModule.getLoc()) << "original module declared here";
       return failure();
     }
 
