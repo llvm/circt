@@ -502,6 +502,44 @@ static LogicalResult verifyInstanceOp(InstanceOp &instance) {
     return failure();
   }
 
+  // Check that the result type is consistent with its module.
+  if (auto referencedFModule = dyn_cast<FModuleOp>(referencedModule)) {
+    auto bundle = instance.getResult()
+                      .getType()
+                      .cast<FIRRTLType>()
+                      .getPassiveType()
+                      .cast<BundleType>();
+    auto bundleElements = bundle.getElements();
+    size_t e = bundleElements.size();
+
+    if (e != referencedFModule.getNumArguments()) {
+      auto diag = instance.emitOpError()
+                  << "has a wrong size of bundle type, expected size is "
+                  << referencedFModule.getNumArguments() << " but got " << e;
+      diag.attachNote(referencedFModule.getLoc())
+          << "original module declared here";
+      return failure();
+    }
+
+    for (size_t i = 0; i != e; i++) {
+      auto expectedType = referencedFModule.getArgument(i)
+                              .getType()
+                              .cast<FIRRTLType>()
+                              .getPassiveType();
+      if (bundleElements[i].second != expectedType) {
+        auto diag = instance.emitOpError()
+                    << "output bundle type must match module. In "
+                       "element "
+                    << i << ", expected " << expectedType << ", but got "
+                    << bundleElements[i].second << ".";
+
+        diag.attachNote(referencedFModule.getLoc())
+            << "original module declared here";
+        return failure();
+      }
+    }
+  }
+
   return success();
 }
 
