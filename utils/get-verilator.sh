@@ -11,7 +11,7 @@ wget https://github.com/verilator/verilator/archive/v$VERILATOR_VER.tar.gz
 tar -zxf v$VERILATOR_VER.tar.gz
 cd verilator-$VERILATOR_VER
 autoconf
-./configure --prefix=`pwd`/..
+./configure --prefix=$EXT_DIR
 make -j$(nproc)
 make install
 cd ..
