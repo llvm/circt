@@ -275,7 +275,7 @@ firrtl.module @X(%a : !firrtl.uint<4>) {
 firrtl.circuit "X" {
 
 firrtl.module @X(%a : !firrtl.uint<4>) {
-  // expected-error @+1 {{width of the result type must be equal to (high - low + 1), expected 3 but got = 2}}
+  // expected-error @+1 {{width of the result type must be equal to (high - low + 1), expected 3 but got 2}}
   %0 = firrtl.bits %a 3 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<2>
 }
 

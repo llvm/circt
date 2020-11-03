@@ -1099,7 +1099,7 @@ static LogicalResult verifyBitsPrimOp(BitsPrimOp bits) {
   if (resultWidth != -1 && int32_t(hi - lo + 1) != resultWidth) {
     bits.emitError() << "width of the result type must be equal to (high - low "
                         "+ 1), expected "
-                     << hi - lo + 1 << " but got = " << resultWidth;
+                     << hi - lo + 1 << " but got " << resultWidth;
     return failure();
   }
 
