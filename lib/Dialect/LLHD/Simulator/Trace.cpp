@@ -109,23 +109,23 @@ void Trace::sortChanges() {
 }
 
 void Trace::flush(bool force) {
-  if (changes.size() > 0 || mergedChanges.size() > 0) {
-    if (mode == full || mode == reduced)
-      flushFull();
-    else if (mode == merged || mode == mergedReduce || mode == namedOnly)
-      if (state->time.time > currentTime.time || force)
-        flushMerged();
-  }
+  if (mode == full || mode == reduced)
+    flushFull();
+  else if (mode == merged || mode == mergedReduce || mode == namedOnly)
+    if (state->time.time > currentTime.time || force)
+      flushMerged();
 }
 
 void Trace::flushFull() {
-  sortChanges();
+  if (changes.size() > 0) {
+    sortChanges();
 
-  auto timeDump = currentTime.dump();
-  for (auto change : changes) {
-    out << timeDump << "  " << change.first << "  " << change.second << "\n";
+    auto timeDump = currentTime.dump();
+    for (auto change : changes) {
+      out << timeDump << "  " << change.first << "  " << change.second << "\n";
+    }
+    changes.clear();
   }
-  changes.clear();
 }
 
 void Trace::flushMerged() {
@@ -147,13 +147,15 @@ void Trace::flushMerged() {
     }
   }
 
-  sortChanges();
+  if (changes.size() > 0) {
+    sortChanges();
 
-  // Flush the changes to output stream.
-  out << currentTime.time << "ps\n";
-  for (auto change : changes) {
-    out << "  " << change.first << "  " << change.second << "\n";
+    // Flush the changes to output stream.
+    out << currentTime.time << "ps\n";
+    for (auto change : changes) {
+      out << "  " << change.first << "  " << change.second << "\n";
+    }
+    mergedChanges.clear();
+    changes.clear();
   }
-  mergedChanges.clear();
-  changes.clear();
 }
