@@ -1074,11 +1074,12 @@ FIRRTLType firrtl::getReductionResult(FIRRTLType input) {
 
 static LogicalResult verifyBitsPrimOp(BitsPrimOp bits) {
   uint32_t hi = bits.hi(), lo = bits.lo();
+
   // High must be >= low.
   if (hi < lo) {
     bits.emitError()
-        << "high must be equal or greater than low, but got high = "
-        << bits.hi() << ", low = " << bits.lo();
+        << "high must be equal or greater than low, but got high = " << hi
+        << ", low = " << lo;
     return failure();
   }
 
