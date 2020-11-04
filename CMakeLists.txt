@@ -98,6 +98,17 @@ install(DIRECTORY include/circt
   PATTERN "LICENSE.TXT"
   )
 
+install(DIRECTORY include/circt-c
+  DESTINATION include
+  COMPONENT circt-headers
+  FILES_MATCHING
+  PATTERN "*.def"
+  PATTERN "*.h"
+  PATTERN "*.inc"
+  PATTERN "*.td"
+  PATTERN "LICENSE.TXT"
+  )
+
 install(DIRECTORY ${CIRCT_INCLUDE_DIR}/circt
   DESTINATION include
   COMPONENT circt-headers
