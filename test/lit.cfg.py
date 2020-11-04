@@ -59,6 +59,7 @@ tools = [
     'handshake-runner',
     'circt-opt',
     'circt-translate',
+    'circt-capi-ir-test',
     'llhd-sim'
 ]
 
