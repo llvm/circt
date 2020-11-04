@@ -249,6 +249,7 @@ firrtl.circuit "Foo" {
     %a = firrtl.instance @Callee : !firrtl.bundle<arg0: uint<1>, arg1: bundle<valid: uint<2>>>
   }
 }
+
 // ----- 
 
 firrtl.circuit "X" {
