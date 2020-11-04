@@ -9,6 +9,7 @@
 #include "circt/Dialect/FIRRTL/Ops.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/RTL/Dialect.h"
+#include "circt/Dialect/RTL/Ops.h"
 #include "circt/Dialect/SV/Dialect.h"
 #include "circt/EmitVerilog.h"
 #include "circt/FIRParser.h"
@@ -102,7 +103,8 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // If enabled, run the optimizer.
   if (!disableOptimization) {
     // Apply any pass manager command line options.
-    PassManager pm(&context, /*verifyPasses:*/ true);
+    PassManager pm(&context);
+    pm.enableVerifier(true);
     applyPassManagerCLOptions(pm);
 
     pm.addPass(createCSEPass());
@@ -111,7 +113,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     // Run the lower-to-rtl pass if requested.
     if (lowerToRTL) {
       pm.addPass(firrtl::createLowerFIRRTLToRTLModulePass());
-      pm.addPass(firrtl::createLowerFIRRTLToRTLPass());
+      pm.nest<rtl::RTLModuleOp>().addPass(firrtl::createLowerFIRRTLToRTLPass());
     }
 
     if (failed(pm.run(module.get())))
