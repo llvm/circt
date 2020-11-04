@@ -11,11 +11,11 @@
  */
 
 #include "mlir-c/IR.h"
+#include "circt-c/RTLDialect.h"
 #include "mlir-c/AffineExpr.h"
 #include "mlir-c/AffineMap.h"
 #include "mlir-c/Diagnostics.h"
 #include "mlir-c/Registration.h"
-#include "circt-c/RTLDialect.h"
 
 #include <assert.h>
 #include <math.h>
