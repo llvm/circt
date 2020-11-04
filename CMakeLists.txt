@@ -79,6 +79,7 @@ add_subdirectory(lib)
 add_subdirectory(tools)
 #add_subdirectory(unittests)
 add_subdirectory(test)
+add_subdirectory(integration_test)
 
 #option(CIRCT_INCLUDE_DOCS "Generate build targets for the CIRCT docs."
 #  ${LLVM_INCLUDE_DOCS} ${MLIR_INCLUDE_DOCS})
