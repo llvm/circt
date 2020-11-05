@@ -112,3 +112,13 @@ circuit test :
   module invalid_name :
     input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
     node n4 = add(bf, bf)  ; expected-error {{invalid input types for 'add'}}
+
+;// -----
+
+circuit test :
+  module invalid_bits:
+     input a: UInt<8>
+     output b: UInt<4>
+     ; expected-error@+2 {{high must be equal or greater than low, but got high = 4, low = 7}};
+     ; expected-error@+1 {{invalid input types for 'bits': '!firrtl.uint<8>'}}
+     b <= bits(a, 4, 7)
