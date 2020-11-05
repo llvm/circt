@@ -50,7 +50,8 @@ def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
     /// Compute the result of a Subfield operation on a value of the specified
     /// type and extracting the specified field name.  If the request is
     /// invalid, then a null type is returned.
-    static FIRRTLType getResultType(FIRRTLType inType, StringRef fieldName, Location loc);
+    static FIRRTLType getResultType(FIRRTLType inType, StringRef fieldName,
+                                    Location loc);
   }];
 }
 
@@ -77,7 +78,8 @@ def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
   let extraClassDeclaration = [{
     /// Compute the result of a Subindex operation on a value of the specified
     /// type.  If the request is invalid, then a null type is returned.
-    static FIRRTLType getResultType(FIRRTLType inType, unsigned fieldIdx, Location loc);
+    static FIRRTLType getResultType(FIRRTLType inType, unsigned fieldIdx,
+                                    Location loc);
   }];
 }
 
@@ -103,7 +105,8 @@ def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect]> {
   let extraClassDeclaration = [{
     /// Compute the result of a Subaccess operation on a value of the specified
     /// type.  If the request is invalid, then a null type is returned.
-    static FIRRTLType getResultType(FIRRTLType baseType, FIRRTLType indexType, Location loc);
+    static FIRRTLType getResultType(FIRRTLType baseType, FIRRTLType indexType,
+                                    Location loc);
   }];
 }
 //===----------------------------------------------------------------------===//
@@ -133,7 +136,8 @@ class BinaryPrimOp<string mnemonic, string resultTypeFunction,
   let extraClassDeclaration = !cast<code>(!strconcat(!cast<string>([{
     /// Return the result for inputs with the specified type, returning a null
     /// type if the input types are invalid.
-    static FIRRTLType getResultType(FIRRTLType lhs, FIRRTLType rhs, Location loc) {
+    static FIRRTLType getResultType(FIRRTLType lhs, FIRRTLType rhs,
+                                    Location loc) {
       return }]), resultTypeFunction, !cast<string>([{(lhs, rhs);
     }
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
@@ -277,7 +281,8 @@ def HeadPrimOp : PrimOp<"head"> {
   let extraClassDeclaration = [{
     /// Return the result for inputs with the specified type, returning a null
     /// type if the input types are invalid.
-    static FIRRTLType getResultType(FIRRTLType input, int32_t amount, Location loc);
+    static FIRRTLType getResultType(FIRRTLType input, int32_t amount,
+                                    Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
                                     ArrayRef<int32_t> integers, Location loc) {
       if (inputs.size() != 1 || integers.size() != 1)
@@ -330,7 +335,8 @@ def PadPrimOp : PrimOp<"pad"> {
   let extraClassDeclaration = [{
     /// Return the result for inputs with the specified type, returning a null
     /// type if the input types are invalid.
-    static FIRRTLType getResultType(FIRRTLType input, int32_t amount, Location loc);
+    static FIRRTLType getResultType(FIRRTLType input, int32_t amount,
+                                    Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
                                     ArrayRef<int32_t> integers, Location loc) {
       if (inputs.size() != 1 || integers.size() != 1)
@@ -351,7 +357,8 @@ class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic> {
   let extraClassDeclaration = [{
     /// Return the result for inputs with the specified type, returning a null
     /// type if the input types are invalid.
-    static FIRRTLType getResultType(FIRRTLType input, int32_t amount, Location loc);
+    static FIRRTLType getResultType(FIRRTLType input, int32_t amount,
+                                    Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
                                     ArrayRef<int32_t> integers, Location loc) {
       if (inputs.size() != 1 || integers.size() != 1)
@@ -385,7 +392,8 @@ def TailPrimOp : PrimOp<"tail"> {
   let extraClassDeclaration = [{
     /// Return the result for inputs with the specified type, returning a null
     /// type if the input types are invalid.
-    static FIRRTLType getResultType(FIRRTLType input, int32_t amount, Location loc);
+    static FIRRTLType getResultType(FIRRTLType input, int32_t amount,
+                                    Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
                                     ArrayRef<int32_t> integers, Location loc) {
       if (inputs.size() != 1 || integers.size() != 1)
