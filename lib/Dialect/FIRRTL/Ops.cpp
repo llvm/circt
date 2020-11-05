@@ -4,6 +4,7 @@
 
 #include "circt/Dialect/FIRRTL/Ops.h"
 #include "circt/Dialect/FIRRTL/Visitors.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/StandardTypes.h"
@@ -1078,28 +1079,16 @@ FIRRTLType firrtl::getReductionResult(FIRRTLType input) {
 static LogicalResult verifyBitsPrimOp(BitsPrimOp bits) {
   uint32_t hi = bits.hi(), lo = bits.lo();
 
-  // High must be >= low.
-  if (hi < lo) {
-    bits.emitError()
-        << "high must be equal or greater than low, but got high = " << hi
-        << ", low = " << lo;
+  auto expectedType =
+      BitsPrimOp::getResultType(bits.input().getType().cast<FIRRTLType>(),
+                                (int32_t)hi, (int32_t)lo, bits.getLoc());
+  if (!expectedType)
     return failure();
-  }
 
-  // Input width must be > high.
-  int32_t width =
-      bits.input().getType().cast<IntType>().getBitWidthOrSentinel();
-  if (width != -1 && int32_t(hi) >= width) {
-    bits.emitError()
-        << "high must be smaller than the width of input, but got high = " << hi
-        << ", width = " << width;
-    return failure();
-  }
-
-  // Result type should be int type with (high - low + 1) width.
   int32_t resultWidth =
       bits.result().getType().cast<IntType>().getBitWidthOrSentinel();
-  if (resultWidth != -1 && int32_t(hi - lo + 1) != resultWidth) {
+  if (resultWidth != -1 &&
+      expectedType.cast<IntType>().getBitWidthOrSentinel() != resultWidth) {
     bits.emitError() << "width of the result type must be equal to (high - low "
                         "+ 1), expected "
                      << hi - lo + 1 << " but got " << resultWidth;
@@ -1113,15 +1102,34 @@ FIRRTLType BitsPrimOp::getResultType(FIRRTLType input, int32_t high,
                                      int32_t low, Location loc) {
   auto inputi = input.dyn_cast<IntType>();
 
-  // High must be >= low and both most be non-negative.
-  if (!inputi || high < low || low < 0)
+  if (!inputi) {
+    mlir::emitError(loc) << "input type should be the int type but got "
+                         << input;
     return {};
+  }
+
+  // High must be >= low and both most be non-negative.
+  if (high < low) {
+    mlir::emitError(loc)
+        << "high must be equal or greater than low, but got high = " << high
+        << ", low = " << low;
+    return {};
+  }
+
+  if (low < 0) {
+    mlir::emitError(loc) << "low must be non-negative but got" << low;
+    return {};
+  }
 
   // If the input has staticly known width, check it.  Both and low must be
   // strictly less than width.
   int32_t width = inputi.getWidthOrSentinel();
-  if (width != -1 && high >= width)
+  if (width != -1 && high >= width) {
+    mlir::emitError(loc)
+        << "high must be smaller than the width of input, but got high = "
+        << high << ", width = " << width;
     return {};
+  }
 
   return UIntType::get(input.getContext(), high - low + 1);
 }
