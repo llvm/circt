@@ -1087,11 +1087,13 @@ static LogicalResult verifyBitsPrimOp(BitsPrimOp bits) {
 
   int32_t resultWidth =
       bits.result().getType().cast<IntType>().getBitWidthOrSentinel();
+  int32_t expectedWidth = expectedType.cast<IntType>().getBitWidthOrSentinel();
+
   if (resultWidth != -1 &&
-      expectedType.cast<IntType>().getBitWidthOrSentinel() != resultWidth) {
+       expectedWidth != resultWidth) {
     bits.emitError() << "width of the result type must be equal to (high - low "
                         "+ 1), expected "
-                     << hi - lo + 1 << " but got " << resultWidth;
+                     << expectedWidth  << " but got " << resultWidth;
     return failure();
   }
 
