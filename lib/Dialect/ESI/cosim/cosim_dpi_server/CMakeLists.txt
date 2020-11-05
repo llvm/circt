@@ -5,6 +5,11 @@ if(ESI_COSIM)
     Server.cpp
     EndPoint.cpp)
 
+  set_target_properties(EsiCosimDpiServer
+      PROPERTIES
+          LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+          RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+  )
   add_dependencies(EsiCosimDpiServer CosimCapnp)
   target_link_libraries(EsiCosimDpiServer PRIVATE
       CapnProto::kj CapnProto::kj-async CapnProto::kj-gzip

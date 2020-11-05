@@ -1,6 +1,6 @@
 // REQUIRES: verilator
 // RUN: circt-translate %s -emit-verilog -verify-diagnostics > %t1.sv
-// RUN: verilator --cc --top-module main -sv %t1.sv --build --exe %S/driver.cpp
+// RUN: verilator --cc --top-module main -sv %t1.sv --build --exe %S/../driver.cpp
 // RUN: ./obj_dir/Vmain --cycles 8 2>&1 | FileCheck %s
 
 module {

@@ -19,9 +19,9 @@ import Cosim_DpiPkg::*;
 
 module Cosim_Endpoint
 #(
-   parameter int ENDPOINT_ID,
-   parameter longint ESI_TYPE_ID,
-   parameter int TYPE_SIZE_BITS
+   parameter int ENDPOINT_ID = -1,
+   parameter longint ESI_TYPE_ID = -1,
+   parameter int TYPE_SIZE_BITS = -1
 )
 (
    input  logic clk,
