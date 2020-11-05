@@ -417,12 +417,7 @@ void TailPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       // If we know the input width, we can canonicalize this into a
       // BitsPrimOp.
       unsigned dropAmount = op.amount();
-      // We may be truncating to a zero width result, bits doesn't like this
-      if (inputWidth - dropAmount == 0)
-        return failure();
-
       replaceWithBits(op, op.input(), inputWidth - dropAmount - 1, 0, rewriter);
-
       return success();
     }
   };

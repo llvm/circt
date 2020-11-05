@@ -1,5 +1,4 @@
-; RUN: firtool %s --format=fir              | circt-opt | FileCheck %s --check-prefix=PARSE
-; RUN: firtool %s --format=fir -disable-opt | circt-opt -pass-pipeline='firrtl.circuit(lower-firrtl-to-rtl)' | FileCheck %s --check-prefix=RTL
+; RUN: firtool %s --format=fir              | circt-opt | FileCheck %s 
 
 circuit foo :
 
@@ -17,5 +16,4 @@ circuit foo :
       read-under-write => undefined
     
     bar.io_deq_bits_MPORT.addr <= UInt<1>("h0")
-; PARSE:       firrtl.connect %1, %2 : !firrtl.uint<0>, !firrtl.uint<0>
-; RTL:      rtl.connect %3, %2 : i0
+; CHECK-NOT:       firrtl.connect
