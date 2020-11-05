@@ -122,8 +122,8 @@ static LogicalResult verifyCircuitOp(CircuitOp &circuit) {
     }
 
     // Check that the number of ports is exactly the same.
-    SmallVector<std::pair<StringAttr, FIRRTLType>, 8> ports;
-    SmallVector<std::pair<StringAttr, FIRRTLType>, 8> collidingPorts;
+    SmallVector<ModulePortInfo, 8> ports;
+    SmallVector<ModulePortInfo, 8> collidingPorts;
     extModule.getPortInfo(ports);
     collidingExtModule.getPortInfo(collidingPorts);
     if (ports.size() != collidingPorts.size()) {
@@ -143,9 +143,9 @@ static LogicalResult verifyCircuitOp(CircuitOp &circuit) {
     // parameters. Note that this allows for misdetections, but
     // has zero false positives.
     for (auto p : llvm::zip(ports, collidingPorts)) {
-      StringAttr aName, bName;
-      FIRRTLType aType, bType;
-      std::forward_as_tuple(std::tie(aName, aType), std::tie(bName, bType)) = p;
+      StringAttr aName = std::get<0>(p).name, bName = std::get<1>(p).name;
+      FIRRTLType aType = std::get<0>(p).type, bType = std::get<1>(p).type;
+
       if (extModule.parameters() || collidingExtModule.parameters()) {
         aType = aType.getWidthlessType();
         bType = bType.getWidthlessType();
@@ -217,8 +217,7 @@ void firrtl::getModulePortInfo(Operation *op,
 }
 
 static void buildModule(OpBuilder &builder, OperationState &result,
-                        StringAttr name,
-                        ArrayRef<std::pair<StringAttr, FIRRTLType>> ports) {
+                        StringAttr name, ArrayRef<ModulePortInfo> ports) {
   using namespace mlir::impl;
 
   // Add an attribute for the name.
@@ -226,7 +225,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 
   SmallVector<Type, 4> argTypes;
   for (auto elt : ports)
-    argTypes.push_back(elt.second);
+    argTypes.push_back(elt.type);
 
   // Record the argument and result types as an attribute.
   auto type = builder.getFunctionType(argTypes, /*resultTypes*/ {});
@@ -235,11 +234,11 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   // Record the names of the arguments if present.
   SmallString<8> attrNameBuf;
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
-    if (ports[i].first.getValue().empty())
+    if (ports[i].getName().empty())
       continue;
 
     auto argAttr =
-        NamedAttribute(builder.getIdentifier("firrtl.name"), ports[i].first);
+        NamedAttribute(builder.getIdentifier("firrtl.name"), ports[i].name);
 
     result.addAttribute(getArgAttrName(i, attrNameBuf),
                         builder.getDictionaryAttr(argAttr));
@@ -249,8 +248,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 }
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
-                      StringAttr name,
-                      ArrayRef<std::pair<StringAttr, FIRRTLType>> ports) {
+                      StringAttr name, ArrayRef<ModulePortInfo> ports) {
   buildModule(builder, result, name, ports);
 
   // Create a region and a block for the body.
@@ -260,14 +258,13 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 
   // Add arguments to the body block.
   for (auto elt : ports)
-    body->addArgument(elt.second);
+    body->addArgument(elt.type);
 
   FModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
 
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
-                         StringAttr name,
-                         ArrayRef<std::pair<StringAttr, FIRRTLType>> ports,
+                         StringAttr name, ArrayRef<ModulePortInfo> ports,
                          StringRef defnameAttr) {
   buildModule(builder, result, name, ports);
   if (!defnameAttr.empty())
@@ -505,6 +502,44 @@ static LogicalResult verifyInstanceOp(InstanceOp &instance) {
     return failure();
   }
 
+  // Check that the result type is consistent with its module.
+  if (auto referencedFModule = dyn_cast<FModuleOp>(referencedModule)) {
+    auto bundle = instance.getResult()
+                      .getType()
+                      .cast<FIRRTLType>()
+                      .getPassiveType()
+                      .cast<BundleType>();
+    auto bundleElements = bundle.getElements();
+    size_t e = bundleElements.size();
+
+    if (e != referencedFModule.getNumArguments()) {
+      auto diag = instance.emitOpError()
+                  << "has a wrong size of bundle type, expected size is "
+                  << referencedFModule.getNumArguments() << " but got " << e;
+      diag.attachNote(referencedFModule.getLoc())
+          << "original module declared here";
+      return failure();
+    }
+
+    for (size_t i = 0; i != e; i++) {
+      auto expectedType = referencedFModule.getArgument(i)
+                              .getType()
+                              .cast<FIRRTLType>()
+                              .getPassiveType();
+      if (bundleElements[i].second != expectedType) {
+        auto diag = instance.emitOpError()
+                    << "output bundle type must match module. In "
+                       "element "
+                    << i << ", expected " << expectedType << ", but got "
+                    << bundleElements[i].second << ".";
+
+        diag.attachNote(referencedFModule.getLoc())
+            << "original module declared here";
+        return failure();
+      }
+    }
+  }
+
   return success();
 }
 
@@ -513,7 +548,7 @@ static LogicalResult verifyInstanceOp(InstanceOp &instance) {
 FIRRTLType
 MemOp::getTypeForPortList(uint64_t depth, FIRRTLType dataType,
                           ArrayRef<std::pair<Identifier, PortKind>> portList) {
-  assert(dataType.isPassiveType() && "mem can only have passive datatype");
+  assert(dataType.isPassive() && "mem can only have passive datatype");
 
   auto *context = dataType.getContext();
 
@@ -535,7 +570,8 @@ MemOp::getTypeForPortList(uint64_t depth, FIRRTLType dataType,
 
   // Figure out the number of bits needed for the address, and thus the address
   // type to use.
-  auto addressType = UIntType::get(context, llvm::Log2_64_Ceil(depth));
+  auto addressType =
+      UIntType::get(context, std::max(1U, llvm::Log2_64_Ceil(depth)));
 
   auto getId = [&](StringRef name) -> Identifier {
     return Identifier::get(name, context);
@@ -1036,6 +1072,40 @@ FIRRTLType firrtl::getReductionResult(FIRRTLType input) {
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
+
+static LogicalResult verifyBitsPrimOp(BitsPrimOp bits) {
+  uint32_t hi = bits.hi(), lo = bits.lo();
+
+  // High must be >= low.
+  if (hi < lo) {
+    bits.emitError()
+        << "high must be equal or greater than low, but got high = " << hi
+        << ", low = " << lo;
+    return failure();
+  }
+
+  // Input width must be > high.
+  int32_t width =
+      bits.input().getType().cast<IntType>().getBitWidthOrSentinel();
+  if (width != -1 && int32_t(hi) >= width) {
+    bits.emitError()
+        << "high must be smaller than the width of input, but got high = " << hi
+        << ", width = " << width;
+    return failure();
+  }
+
+  // Result type should be int type with (high - low + 1) width.
+  int32_t resultWidth =
+      bits.result().getType().cast<IntType>().getBitWidthOrSentinel();
+  if (resultWidth != -1 && int32_t(hi - lo + 1) != resultWidth) {
+    bits.emitError() << "width of the result type must be equal to (high - low "
+                        "+ 1), expected "
+                     << hi - lo + 1 << " but got " << resultWidth;
+    return failure();
+  }
+
+  return success();
+}
 
 FIRRTLType BitsPrimOp::getResultType(FIRRTLType input, int32_t high,
                                      int32_t low) {

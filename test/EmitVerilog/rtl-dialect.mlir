@@ -83,5 +83,4 @@ module {
   // CHECK-EMPTY:
   // CHECK-NEXT:   assign b = a << a;
   // CHECK-NEXT: endmodule
-
 }

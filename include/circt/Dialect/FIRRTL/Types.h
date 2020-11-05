@@ -38,7 +38,7 @@ public:
 
   /// Return true if this is a "passive" type - one that contains no "flip"
   /// types recursively within itself.
-  bool isPassiveType();
+  bool isPassive();
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLType getPassiveType();
@@ -225,7 +225,7 @@ public:
 
   /// Return true if this is a "passive" type - one that contains no "flip"
   /// types recursively within itself.
-  bool isPassiveType();
+  bool isPassive();
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLType getPassiveType();
@@ -248,7 +248,7 @@ public:
 
   /// Return true if this is a "passive" type - one that contains no "flip"
   /// types recursively within itself.
-  bool isPassiveType();
+  bool isPassive();
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLType getPassiveType();

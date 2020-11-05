@@ -36,7 +36,7 @@ def ResetType : Type<CPred<"$_self.isa<FIRRTLType>() && "
                     "Reset, AsyncReset, or UInt<1>">;
 
 def PassiveType : Type<CPred<"$_self.isa<FIRRTLType>() && "
-                             "$_self.cast<FIRRTLType>().isPassiveType()">,
+                             "$_self.cast<FIRRTLType>().isPassive()">,
                        "a passive type (contain no flips)">;
 
 def UIntSIntClockType : AnyTypeOf<[SIntType, UIntType, ClockType],

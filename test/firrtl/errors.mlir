@@ -213,3 +213,72 @@ firrtl.circuit "Foo" {
   }
 
 }
+
+// -----
+
+firrtl.circuit "Foo" {
+
+  // expected-note @+1 {{original module declared here}}
+  firrtl.module @Callee(%arg0: !firrtl.uint<1>) { }
+  firrtl.module @Foo() {
+    // expected-error @+1 {{'firrtl.instance' op output bundle type must match module. In element 0, expected '!firrtl.uint<1>', but got '!firrtl.uint<2>'.}}
+    %a = firrtl.instance @Callee : !firrtl.bundle<arg0: uint<2>>
+  }
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+
+  // expected-note @+1 {{original module declared here}}
+  firrtl.module @Callee(%arg0: !firrtl.uint<1> ) { }
+  firrtl.module @Foo() {
+    // expected-error @+1 {{'firrtl.instance' op has a wrong size of bundle type, expected size is 1 but got 0}}
+    %a = firrtl.instance @Callee : !firrtl.bundle<>
+  }
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+
+  // expected-note @+1 {{original module declared here}}
+  firrtl.module @Callee(%arg0: !firrtl.uint<1>, %arg1: !firrtl.bundle<valid: uint<1>>) { }
+  firrtl.module @Foo() {
+    // expected-error @+1 {{'firrtl.instance' op output bundle type must match module. In element 1, expected '!firrtl.bundle<valid: uint<1>>', but got '!firrtl.bundle<valid: uint<2>>'.}}
+    %a = firrtl.instance @Callee : !firrtl.bundle<arg0: uint<1>, arg1: bundle<valid: uint<2>>>
+  }
+}
+
+// ----- 
+
+firrtl.circuit "X" {
+
+firrtl.module @X(%a : !firrtl.uint<4>) {
+  // expected-error @+1 {{high must be equal or greater than low, but got high = 3, low = 4}}
+  %0 = firrtl.bits %a 3 to 4 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+}
+
+}
+
+// -----
+
+firrtl.circuit "X" {
+
+firrtl.module @X(%a : !firrtl.uint<4>) {
+  // expected-error @+1 {{high must be smaller than the width of input, but got high = 4, width = 4}}
+  %0 = firrtl.bits %a 4 to 3 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+}
+
+}
+
+// -----
+
+firrtl.circuit "X" {
+
+firrtl.module @X(%a : !firrtl.uint<4>) {
+  // expected-error @+1 {{width of the result type must be equal to (high - low + 1), expected 3 but got 2}}
+  %0 = firrtl.bits %a 3 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+}
+
+}

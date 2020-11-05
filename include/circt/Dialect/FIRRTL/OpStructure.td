@@ -54,14 +54,14 @@ def FModuleOp : FIRRTLOp<"module",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringAttr":$name, "ArrayRef<std::pair<StringAttr, FIRRTLType>>":$ports)>
+    OpBuilderDAG<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports)>
   ];
 
   let extraClassDeclaration = [{
     using FunctionLike::getBody;
 
     // Implement RegionKindInterface.
-    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
 
     // Decode information about the input and output ports on this module.
     void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
@@ -121,7 +121,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilderDAG<(ins "StringAttr":$name,
-                      "ArrayRef<std::pair<StringAttr, FIRRTLType>>":$ports,
+                      "ArrayRef<ModulePortInfo>":$ports,
                       CArg<"StringRef", "StringRef()">:$defnamAttr)>
   ];
 

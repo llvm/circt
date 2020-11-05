@@ -82,6 +82,7 @@ add_subdirectory(lib)
 add_subdirectory(tools)
 #add_subdirectory(unittests)
 add_subdirectory(test)
+add_subdirectory(integration_test)
 
 #option(CIRCT_INCLUDE_DOCS "Generate build targets for the CIRCT docs."
 #  ${LLVM_INCLUDE_DOCS} ${MLIR_INCLUDE_DOCS})
@@ -90,6 +91,17 @@ add_subdirectory(test)
 #endif()
 
 install(DIRECTORY include/circt
+  DESTINATION include
+  COMPONENT circt-headers
+  FILES_MATCHING
+  PATTERN "*.def"
+  PATTERN "*.h"
+  PATTERN "*.inc"
+  PATTERN "*.td"
+  PATTERN "LICENSE.TXT"
+  )
+
+install(DIRECTORY include/circt-c
   DESTINATION include
   COMPONENT circt-headers
   FILES_MATCHING

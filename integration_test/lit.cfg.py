@@ -47,7 +47,7 @@ config.excludes = ['Inputs', 'CMakeLists.txt', 'README.txt', 'LICENSE.txt']
 config.test_source_root = os.path.dirname(__file__)
 
 # test_exec_root: The root path where tests should be run.
-config.test_exec_root = os.path.join(config.circt_obj_root, 'test')
+config.test_exec_root = os.path.join(config.circt_obj_root, 'integration_test')
 
 # Tweak the PATH to include the tools dir.
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
@@ -55,12 +55,8 @@ llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 tool_dirs = [config.circt_tools_dir,
              config.mlir_tools_dir, config.llvm_tools_dir]
 tools = [
-    'firtool',
-    'handshake-runner',
     'circt-opt',
     'circt-translate',
-    'circt-capi-ir-test',
-    'llhd-sim'
 ]
 
 # Enable Verilator if it has been detected.
