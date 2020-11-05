@@ -1688,7 +1688,7 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs, SubOpVector &subOps) {
     return failure();
 
   if (kind == FIRToken::less_equal)
-    builder.create<ConnectOp>(info.getLoc(), lhs, rhs).dump();
+    builder.create<ConnectOp>(info.getLoc(), lhs, rhs);
   else {
     assert(kind == FIRToken::less_minus && "unexpected kind");
     builder.create<PartialConnectOp>(info.getLoc(), lhs, rhs);
