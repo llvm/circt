@@ -794,7 +794,8 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
 }
 
 // Return the result of a subfield operation.
-FIRRTLType SubfieldOp::getResultType(FIRRTLType inType, StringRef fieldName) {
+FIRRTLType SubfieldOp::getResultType(FIRRTLType inType, StringRef fieldName,
+                                     Location loc) {
   if (auto bundleType = inType.dyn_cast<BundleType>()) {
     for (auto &elt : bundleType.getElements()) {
       if (elt.first == fieldName)
@@ -803,31 +804,33 @@ FIRRTLType SubfieldOp::getResultType(FIRRTLType inType, StringRef fieldName) {
   }
 
   if (auto flipType = inType.dyn_cast<FlipType>())
-    if (auto subType = getResultType(flipType.getElementType(), fieldName))
+    if (auto subType = getResultType(flipType.getElementType(), fieldName, loc))
       return FlipType::get(subType);
 
   return {};
 }
 
-FIRRTLType SubindexOp::getResultType(FIRRTLType inType, unsigned fieldIdx) {
+FIRRTLType SubindexOp::getResultType(FIRRTLType inType, unsigned fieldIdx,
+                                     Location loc) {
   if (auto vectorType = inType.dyn_cast<FVectorType>())
     if (fieldIdx < vectorType.getNumElements())
       return vectorType.getElementType();
 
   if (auto flipType = inType.dyn_cast<FlipType>())
-    if (auto subType = getResultType(flipType.getElementType(), fieldIdx))
+    if (auto subType = getResultType(flipType.getElementType(), fieldIdx, loc))
       return FlipType::get(subType);
 
   return {};
 }
 
-FIRRTLType SubaccessOp::getResultType(FIRRTLType inType, FIRRTLType indexType) {
+FIRRTLType SubaccessOp::getResultType(FIRRTLType inType, FIRRTLType indexType,
+                                      Location loc) {
   if (auto vectorType = inType.dyn_cast<FVectorType>())
     if (indexType.isa<UIntType>())
       return vectorType.getElementType();
 
   if (auto flipType = inType.dyn_cast<FlipType>())
-    if (auto subType = getResultType(flipType.getElementType(), indexType))
+    if (auto subType = getResultType(flipType.getElementType(), indexType, loc))
       return FlipType::get(subType);
 
   return {};
@@ -1107,7 +1110,7 @@ static LogicalResult verifyBitsPrimOp(BitsPrimOp bits) {
 }
 
 FIRRTLType BitsPrimOp::getResultType(FIRRTLType input, int32_t high,
-                                     int32_t low) {
+                                     int32_t low, Location loc) {
   auto inputi = input.dyn_cast<IntType>();
 
   // High must be >= low and both most be non-negative.
@@ -1125,12 +1128,14 @@ FIRRTLType BitsPrimOp::getResultType(FIRRTLType input, int32_t high,
 
 void BitsPrimOp::build(OpBuilder &builder, OperationState &result, Value input,
                        unsigned high, unsigned low) {
-  auto type = getResultType(input.getType().cast<FIRRTLType>(), high, low);
+  auto type = getResultType(input.getType().cast<FIRRTLType>(), high, low,
+                            result.location);
   assert(type && "invalid inputs building BitsPrimOp!");
   build(builder, result, type, input, high, low);
 }
 
-FIRRTLType HeadPrimOp::getResultType(FIRRTLType input, int32_t amount) {
+FIRRTLType HeadPrimOp::getResultType(FIRRTLType input, int32_t amount,
+                                     Location loc) {
   auto inputi = input.dyn_cast<IntType>();
   if (amount <= 0 || !inputi)
     return {};
@@ -1144,7 +1149,7 @@ FIRRTLType HeadPrimOp::getResultType(FIRRTLType input, int32_t amount) {
 }
 
 FIRRTLType MuxPrimOp::getResultType(FIRRTLType sel, FIRRTLType high,
-                                    FIRRTLType low) {
+                                    FIRRTLType low, Location loc) {
   // Sel needs to be a one bit uint or an unknown width uint.
   auto selui = sel.dyn_cast<UIntType>();
   if (!selui || selui.getWidthOrSentinel() > 1)
@@ -1190,7 +1195,8 @@ FIRRTLType MuxPrimOp::getResultType(FIRRTLType sel, FIRRTLType high,
   return {};
 }
 
-FIRRTLType PadPrimOp::getResultType(FIRRTLType input, int32_t amount) {
+FIRRTLType PadPrimOp::getResultType(FIRRTLType input, int32_t amount,
+                                    Location loc) {
   auto inputi = input.dyn_cast<IntType>();
   if (amount < 0 || !inputi)
     return {};
@@ -1203,7 +1209,8 @@ FIRRTLType PadPrimOp::getResultType(FIRRTLType input, int32_t amount) {
   return IntType::get(input.getContext(), inputi.isSigned(), width);
 }
 
-FIRRTLType ShlPrimOp::getResultType(FIRRTLType input, int32_t amount) {
+FIRRTLType ShlPrimOp::getResultType(FIRRTLType input, int32_t amount,
+                                    Location loc) {
   auto inputi = input.dyn_cast<IntType>();
   if (amount < 0 || !inputi)
     return {};
@@ -1215,7 +1222,8 @@ FIRRTLType ShlPrimOp::getResultType(FIRRTLType input, int32_t amount) {
   return IntType::get(input.getContext(), inputi.isSigned(), width);
 }
 
-FIRRTLType ShrPrimOp::getResultType(FIRRTLType input, int32_t amount) {
+FIRRTLType ShrPrimOp::getResultType(FIRRTLType input, int32_t amount,
+                                    Location loc) {
   auto inputi = input.dyn_cast<IntType>();
   if (amount < 0 || !inputi)
     return {};
@@ -1227,7 +1235,8 @@ FIRRTLType ShrPrimOp::getResultType(FIRRTLType input, int32_t amount) {
   return IntType::get(input.getContext(), inputi.isSigned(), width);
 }
 
-FIRRTLType TailPrimOp::getResultType(FIRRTLType input, int32_t amount) {
+FIRRTLType TailPrimOp::getResultType(FIRRTLType input, int32_t amount,
+                                     Location loc) {
   auto inputi = input.dyn_cast<IntType>();
   if (amount < 0 || !inputi)
     return {};
