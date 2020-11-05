@@ -15,5 +15,5 @@ circuit foo :
       writer => MPORT
       read-under-write => undefined
     
-    bar.io_deq_bits_MPORT.addr <= UInt<1>("h0")
-; CHECK-NOT:       firrtl.connect
+; CHECK:         %bar = firrtl.mem "Undefined" {depth = 1 : i64, name = "bar", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<MPORT: bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<3>, mask: uint<1>>, io_deq_bits_MPORT: bundle<addr: uint<1>, en: uint<1>, clk: clock, data: flip<uint<3>>>>
+

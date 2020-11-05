@@ -1683,16 +1683,9 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs, SubOpVector &subOps) {
       parseOptionalInfo(info, subOps))
     return failure();
 
-  if (kind == FIRToken::less_equal) {
-    // Firrtl will connect a 1-width value to a 0-width addr bus for inferred
-    // memories, special case assignments from 1-bit to 0-bit.  We may want to ignore all asignments to 0-bit
-    if (lhs.getType().cast<FIRRTLType>().getBitWidthOrSentinel() == 0 &&
-        rhs.getType().cast<FIRRTLType>().getBitWidthOrSentinel() == 1)
-      // Ignore this operation
-      return success();
-
+  if (kind == FIRToken::less_equal)
     builder.create<ConnectOp>(info.getLoc(), lhs, rhs).dump();
-  } else {
+  else {
     assert(kind == FIRToken::less_minus && "unexpected kind");
     builder.create<PartialConnectOp>(info.getLoc(), lhs, rhs);
   }
