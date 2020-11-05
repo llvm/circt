@@ -570,7 +570,8 @@ MemOp::getTypeForPortList(uint64_t depth, FIRRTLType dataType,
 
   // Figure out the number of bits needed for the address, and thus the address
   // type to use.
-  auto addressType = UIntType::get(context, llvm::Log2_64_Ceil(depth));
+  auto addressType =
+      UIntType::get(context, std::max(1U, llvm::Log2_64_Ceil(depth)));
 
   auto getId = [&](StringRef name) -> Identifier {
     return Identifier::get(name, context);
