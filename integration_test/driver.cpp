@@ -11,14 +11,22 @@
 #include "verilated_vcd_c.h"
 #endif
 
+#include "signal.h"
 #include <iostream>
 
 vluint64_t timeStamp;
 
-// Called by $time in Verilog
+// Stop the simulation gracefully on ctrl-c.
+volatile bool stopSimulation = false;
+void handle_sigint(int) { stopSimulation = true; }
+
+// Called by $time in Verilog.
 double sc_time_stamp() { return timeStamp; }
 
 int main(int argc, char **argv) {
+  // Register graceful exit handler.
+  signal(SIGINT, handle_sigint);
+
   Verilated::commandArgs(argc, argv);
 
   size_t numCyclesToRun = 0;
@@ -63,7 +71,8 @@ int main(int argc, char **argv) {
   dut.rstn = 1;
 
   // Run for the specified number of cycles out of reset.
-  for (; timeStamp <= (numCyclesToRun * 2) && !Verilated::gotFinish();
+  for (; timeStamp <= (numCyclesToRun * 2) && !Verilated::gotFinish() &&
+         !stopSimulation;
        timeStamp++) {
     dut.eval();
     dut.clk = !dut.clk;
@@ -80,4 +89,5 @@ int main(int argc, char **argv) {
 #endif
 
   std::cout << "[driver] Ending simulation at tick #" << timeStamp << std::endl;
+  return 0;
 }

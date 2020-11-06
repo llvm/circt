@@ -3,6 +3,7 @@ import lit.formats
 
 import os
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -145,7 +146,8 @@ class CosimTestRunner:
             script.write("\n\n")
 
             # Run the lines specified in the test file.
-            script.writelines(f"{x}\n" for x in self.runs)
+            script.writelines(
+                f"{x}\n" for x in self.runs)
 
         timedout = False
         try:
@@ -166,24 +168,31 @@ class CosimTestRunner:
             timeout = None
             if self.litConfig.maxIndividualTestTime > 0:
                 timeout = self.litConfig.maxIndividualTestTime
-            testProc = subprocess.run([sys.executable, "script.py"],
+            testProc = subprocess.run([sys.executable, "-u", "script.py"],
                                       stdout=testStdout, stderr=testStderr,
                                       timeout=timeout, cwd=self.execdir)
-        except TimeoutError:
+        except subprocess.TimeoutExpired:
             timedout = True
         finally:
             # Make sure to stop the simulation no matter what.
             if simProc:
-                simProc.terminate()
+                simProc.send_signal(signal.SIGINT)
+                # Allow the simulation time to flush its outputs.
+                try:
+                    simProc.wait(timeout=1.0)
+                except subprocess.TimeoutExpired:
+                    simProc.kill()
             simStderr.close()
             simStdout.close()
+            testStdout.close()
+            testStderr.close()
 
         # Read the output log files and return the proper result.
         err, logs = self.readLogs()
-        logs += f"---- Test process exit code: {testProc.returncode}\n"
         if timedout:
             result = Test.TIMEOUT
         else:
+            logs += f"---- Test process exit code: {testProc.returncode}\n"
             result = Test.PASS if testProc.returncode == 0 and not err else Test.FAIL
         return Test.Result(result, logs)
 

@@ -57,27 +57,6 @@ module main(
         end
     end
 
-    //     #10
-    //     // Accept 1 token
-    //     DataOutReady = 1;
-    //     #1
-    //     @(posedge clk && DataOutValid);
-    //     #1
-    //     $display("Recv'd: %h", DataOut);
-    //     DataOutReady = 0;
-    //     #8
-
-    //     #10
-    //     // Send a token
-    //     DataIn = 1024'hDEADBEEF;
-    //     DataInValid = 1;
-    //     @(posedge clk && DataInReady);
-    //     #1
-    //     DataInValid = 0;
-    //     #9
-    //     $finish();
-    // end
-
 `ifndef VERILATOR
     // Clock
     initial
