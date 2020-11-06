@@ -20,7 +20,7 @@ class EndPointServer
 public:
   EndPointServer(std::unique_ptr<EndPoint> &ep) : _EndPoint(ep), _Open(true) {}
 
-  ~EndPointServer() {
+  virtual ~EndPointServer() {
     if (_Open)
       _EndPoint->ReturnForUse();
   }
@@ -37,6 +37,7 @@ class CosimServer : public CosimDpiServer::Server {
 
 public:
   CosimServer(EndPointRegistry *reg) : _Reg(reg) {}
+  virtual ~CosimServer() {}
 
   kj::Promise<void> list(ListContext ctxt);
   kj::Promise<void> open(OpenContext ctxt);

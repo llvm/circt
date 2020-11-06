@@ -21,7 +21,6 @@ public:
 
 private:
   uint64_t _EsiTypeId;
-  int _MaxSize;
   bool _InUse;
 
   typedef std::lock_guard<std::mutex> Lock;
@@ -31,7 +30,8 @@ private:
 
 public:
   EndPoint(uint64_t EsiTypeId, int MaxSize)
-      : _EsiTypeId(EsiTypeId), _MaxSize(MaxSize), _InUse(false) {}
+      : _EsiTypeId(EsiTypeId), _InUse(false) {}
+  virtual ~EndPoint() {}
 
   uint64_t GetEsiTypeId() { return _EsiTypeId; }
 

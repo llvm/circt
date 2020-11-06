@@ -74,7 +74,7 @@ DPI int sv2c_cosimserver_ep_tryget(unsigned int endpoint_id,
     return -1;
   }
 
-  if (*data_limit == ~0) { // used default param
+  if (*data_limit == ~0u) { // used default param
     *data_limit = svSizeOfArray(data);
   }
 
@@ -92,7 +92,7 @@ DPI int sv2c_cosimserver_ep_tryget(unsigned int endpoint_id,
         return -4;
       }
 
-      long i;
+      size_t i;
       for (i = 0; i < msg->size(); i++) {
         auto b = msg->at(i);
         *(char *)svGetArrElemPtr1(data, i) = b;
