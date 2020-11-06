@@ -1,6 +1,6 @@
 // IMPORT: cosim.loopback.base_dpi_test as test
 // RUN: rpc = test.LoopbackTester(rpcSchemaPath)
-// RUN: test.write_read_many(5)
+// RUN: rpc.write_read_many(5)
 
 import Cosim_DpiPkg::*;
 

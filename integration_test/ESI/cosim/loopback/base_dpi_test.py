@@ -63,7 +63,7 @@ class LoopbackTester:
         assert openResp.iface is not None
         return openResp.iface
 
-    def test_write_read(self):
+    def write_read(self):
         ep = self.openEP()
         print("Testing writes")
         dataSent = self.write(ep)
@@ -73,8 +73,7 @@ class LoopbackTester:
         ep.close().wait()
         assert dataSent == dataRecv
 
-    @pytest.mark.nolic
-    def test_write_read_many(self, num_msgs=50):
+    def write_read_many(self, num_msgs=50):
         ep = self.openEP()
         print("Testing writes")
         dataSent = list()
