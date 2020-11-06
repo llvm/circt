@@ -1,6 +1,6 @@
-// REQUIRES: esi-cosim
-// RUN: verilator --cc --top-module main -sv %ESIINC%/cosim/*.sv %s --build --exe  %S/../../../driver.cpp %ESICOSIM% -LDFLAGS '-Wl,-rpath=%shlibdir'
-// RUN: ./obj_dir/Vmain --cycles -1
+// IMPORT: cosim.loopback.base_dpi_test as test
+// RUN: rpc = test.LoopbackTester(rpcSchemaPath)
+// RUN: test.write_read_many(5)
 
 import Cosim_DpiPkg::*;
 

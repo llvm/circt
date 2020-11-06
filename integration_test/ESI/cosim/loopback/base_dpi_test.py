@@ -9,32 +9,24 @@ import subprocess
 import io
 import pytest
 
-cosimDir = os.path.join(os.path.dirname(__file__), "..", "..")
 
-
-class TestLoopbackBaseDPI:
-    def rpc(self):
-        self.dpi = capnp.load(os.path.join(
-            cosimDir, "cosim_dpi_server", "esi_cosim_dpi.capnp"))
+class LoopbackTester:
+    def __init__(self, schemaPath):
+        self.dpi = capnp.load(schemaPath)
         hostname = os.uname()[1]
         self.rpc_client = capnp.TwoPartyClient(f"{hostname}:1111")
         self.cosim = self.rpc_client.bootstrap().cast_as(self.dpi.CosimDpiServer)
-        return self.cosim
 
-    @pytest.mark.nolic
     def test_list(self):
-        cosim = self.rpc()
-        ifaces = cosim.list().wait().ifaces
+        ifaces = self.cosim.list().wait().ifaces
         print(ifaces)
         assert len(ifaces) > 0
 
-    @pytest.mark.nolic
     def test_open_close(self):
-        cosim = self.rpc()
-        ifaces = cosim.list().wait().ifaces
+        ifaces = self.cosim.list().wait().ifaces
         print(ifaces)
         print(ifaces[0])
-        openResp = cosim.open(ifaces[0]).wait()
+        openResp = self.cosim.open(ifaces[0]).wait()
         print(openResp)
         assert openResp.iface is not None
         ep = openResp.iface
@@ -63,16 +55,14 @@ class TestLoopbackBaseDPI:
         return data
 
     def openEP(self):
-        cosim = self.rpc()
-        ifaces = cosim.list().wait().ifaces
+        ifaces = self.cosim.list().wait().ifaces
         print(ifaces)
         print(ifaces[0])
-        openResp = cosim.open(ifaces[0]).wait()
+        openResp = self.cosim.open(ifaces[0]).wait()
         print(openResp)
         assert openResp.iface is not None
         return openResp.iface
 
-    @pytest.mark.nolic
     def test_write_read(self):
         ep = self.openEP()
         print("Testing writes")
@@ -97,8 +87,3 @@ class TestLoopbackBaseDPI:
             dataRecv.append(self.read(ep))
         ep.close().wait()
         assert dataSent == dataRecv
-
-
-if __name__ == "__main__":
-    test = TestLoopbackBaseDPI()
-    test.test_write_read_many(5)
