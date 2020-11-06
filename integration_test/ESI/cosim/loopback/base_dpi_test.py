@@ -19,15 +19,11 @@ class LoopbackTester:
 
     def test_list(self):
         ifaces = self.cosim.list().wait().ifaces
-        print(ifaces)
         assert len(ifaces) > 0
 
     def test_open_close(self):
         ifaces = self.cosim.list().wait().ifaces
-        print(ifaces)
-        print(ifaces[0])
         openResp = self.cosim.open(ifaces[0]).wait()
-        print(openResp)
         assert openResp.iface is not None
         ep = openResp.iface
         ep.close().wait()
@@ -47,19 +43,14 @@ class LoopbackTester:
             else:
                 time.sleep(0.1)
         assert recvResp.resp is not None
-        # print (recvResp)
         dataMsg = recvResp.resp.as_struct(self.dpi.UntypedData)
-        # print (dataMsg)
         data = dataMsg.data
         print(binascii.hexlify(data))
         return data
 
     def openEP(self):
         ifaces = self.cosim.list().wait().ifaces
-        print(ifaces)
-        print(ifaces[0])
         openResp = self.cosim.open(ifaces[0]).wait()
-        print(openResp)
         assert openResp.iface is not None
         return openResp.iface
 

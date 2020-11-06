@@ -2,14 +2,9 @@ import lit.Test as Test
 import lit.formats
 
 import os
-import importlib
-from pprint import pprint
-import subprocess
 import re
-import signal
+import subprocess
 import sys
-import traceback
-import time
 
 formatsDir = os.path.dirname(__file__)
 
@@ -20,6 +15,7 @@ class CosimTest(lit.formats.FileBasedTest):
             return Test.Result(Test.UNSUPPORTED, "ESI-Cosim feature not present")
         if 'verilator' not in test.config.available_features:
             return Test.Result(Test.UNSUPPORTED, "Verilator not present")
+
         testRun = CosimTestRunner(test, litConfig)
         parsed = testRun.parse()
         if parsed.code != Test.PASS:
@@ -27,7 +23,6 @@ class CosimTest(lit.formats.FileBasedTest):
         compiled = testRun.compile()
         if compiled.code != Test.PASS:
             return compiled
-
         return testRun.run()
 
 
@@ -36,16 +31,13 @@ class CosimTestRunner:
         self.test = test
         self.litConfig = litConfig
         self.file = test.getSourcePath()
+        self.srcdir = os.path.dirname(self.file)
         self.execdir = test.getExecPath()
         self.runs = list()
         self.sources = list()
         self.cppSources = list()
         self.imports = list()
         self.top = "main"
-        if litConfig.maxIndividualTestTime > 0:
-            self.deadline = time.time() + litConfig.maxIndividualTestTime
-        else:
-            self.deadline = None
 
     def parse(self):
         fileReader = open(self.file, "r")
@@ -65,17 +57,22 @@ class CosimTestRunner:
 
     def compile(self):
         if len(self.sources) == 0:
-            self.sources.append(self.file)
+            sources = [self.file]
+        else:
+            sources = [(src if os.path.isabs(src) else os.path.join(
+                self.srcdir, src)) for src in self.sources]
         if len(self.cppSources) == 0:
-            self.cppSources.append(os.path.join(
-                formatsDir, "..", "driver.cpp"))
+            cppSources = [os.path.join(formatsDir, "..", "driver.cpp")]
+        else:
+            cppSources = [(src if os.path.isabs(src) else os.path.join(
+                self.srcdir, src)) for src in self.cppSources]
 
         cfg = self.test.config
         cosimInclude = os.path.join(
             cfg.circt_include_dir, "circt", "Dialect", "ESI", "cosim")
-        self.sources.insert(0, os.path.join(cosimInclude, "Cosim_DpiPkg.sv"))
-        self.sources.insert(1, os.path.join(cosimInclude, "Cosim_Endpoint.sv"))
-        sources = " ".join(self.sources + self.cppSources)
+        sources.insert(0, os.path.join(cosimInclude, "Cosim_DpiPkg.sv"))
+        sources.insert(1, os.path.join(cosimInclude, "Cosim_Endpoint.sv"))
+        sources = " ".join(sources + cppSources)
         os.makedirs(self.execdir, exist_ok=True)
         vrun = subprocess.run(
             f"{cfg.verilator_path} --cc --top-module {self.top} --build --exe {sources} {cfg.esi_cosim_path} -LDFLAGS '-Wl,-rpath={cfg.circt_shlib_dir}'".split(),
@@ -86,61 +83,61 @@ class CosimTestRunner:
         return Test.Result(Test.PASS if vrun.returncode == 0 else Test.FAIL, output)
 
     def run(self):
-        pid = os.fork()
-        if pid == 0:
-            # Does not return. Runs test and exits.
-            signal.signal(signal.SIGINT, signal.default_int_handler)
-            self.runTest()
+        with open(os.path.join(self.execdir, "script.py"), "w") as script:
+            cfg = self.test.config
+            allDicts = list(self.test.config.__dict__.items()) + \
+                list(self.litConfig.__dict__.items())
+            vars = dict([(key, value)
+                         for (key, value) in allDicts if isinstance(value, str)])
+            vars["execdir"] = self.execdir
+            vars["srcdir"] = self.srcdir
+            vars["srcfile"] = self.file
+            vars["rpcSchemaPath"] = os.path.join(
+                cfg.circt_include_dir, "circt", "Dialect", "ESI", "cosim",
+                "CosimDpi.capnp")
+            script.writelines(f"{name} = \"{value}\"\n" for (
+                name, value) in vars.items())
+            script.write("\n\n")
 
-        rc = waitpid_deadline(pid, self.deadline)
-        if rc == False:
-            os.kill(pid, signal.SIGINT)
-            os.kill(pid, signal.SIGINT)
-            if waitpid_deadline(pid, time.time() + 5.0) == False:
-                print(f"Force kill {pid}")
-                os.kill(pid, signal.SIGKILL)
-            (_, msg) = self.readLogs()
-            return Test.Result(Test.TIMEOUT, msg)
+            script.write(f"import sys\n")
+            script.write(
+                f"sys.path.append(\"{os.path.dirname(self.file)}\")\n")
+            script.writelines(f"import {imp}\n" for imp in self.imports)
+            script.write("\n\n")
 
-        procrc = rc[1]
-        (err, msg) = self.readLogs()
-        passed = not err and procrc == 0
-        return Test.Result(Test.PASS if passed else Test.FAIL, msg)
+            script.writelines(f"{x}\n" for x in self.runs)
 
-    def runTest(self):
-        os.chdir(self.execdir)
+        timedout = False
         try:
-            sys.stdout = open("test_stdout.log", "w")
-            sys.stderr = open("test_stderr.log", "w")
-
-            simStdout = open("sim_stdout.log", "w")
-            simStderr = open("sim_stderr.log", "w")
+            simStdout = open(os.path.join(self.execdir, "sim_stdout.log"), "w")
+            simStderr = open(os.path.join(self.execdir, "sim_stderr.log"), "w")
             simProc = subprocess.Popen([f"./obj_dir/V{self.top}", "--cycles", "-1"],
-                                       stdout=simStdout, stderr=simStderr)
-            result = False
-            try:
-                cfg = self.test.config
-                rpcSchemaPath = os.path.join(
-                    cfg.circt_include_dir, "circt", "Dialect", "ESI", "cosim", "CosimDpi.capnp")
-                for imp in self.imports:
-                    exec(f"import {imp}")
-                for run in self.runs:
-                    sys.stdout.flush()
-                    sys.stderr.flush()
-                    exec(run)
-                result = True
-            except KeyboardInterrupt:
-                pass
-            except Exception:
-                traceback.print_exc()
-            finally:
-                simProc.kill()
-                simStderr.close()
-                simStdout.close()
+                                       stdout=simStdout, stderr=simStderr, cwd=self.execdir)
+
+            testStdout = open(os.path.join(
+                self.execdir, "test_stdout.log"), "w")
+            testStderr = open(os.path.join(
+                self.execdir, "test_stderr.log"), "w")
+            timeout = None
+            if self.litConfig.maxIndividualTestTime > 0:
+                timeout = self.litConfig.maxIndividualTestTime
+            testProc = subprocess.run([sys.executable, "script.py"],
+                                      stdout=testStdout, stderr=testStderr,
+                                      timeout=timeout, cwd=self.execdir)
+        except TimeoutError:
+            timedout = True
         finally:
-            sys.stdout.flush()
-            sys.stderr.flush()
-            os._exit(0 if result else 1)
+            if simProc:
+                simProc.terminate()
+            simStderr.close()
+            simStdout.close()
+        err, logs = self.readLogs()
+        logs += f"---- Test process exit code: {testProc.returncode}\n"
+        if timedout:
+            result = Test.TIMEOUT
+        else:
+            result = Test.PASS if testProc.returncode == 0 and not err else Test.FAIL
+        return Test.Result(result, logs)
 
     def readLogs(self):
         foundErr = False
@@ -167,16 +164,3 @@ class CosimTestRunner:
                 foundErr = True
 
         return (foundErr, ret)
-
-
-def waitpid_deadline(pid, deadline):
-    if deadline == None:
-        (waitpid, rc) = os.waitpid(pid, 0)
-        return (True, rc)
-
-    while time.time() < deadline:
-        (waitpid, rc) = os.waitpid(pid, os.WNOHANG)
-        if waitpid != 0:
-            return (True, rc)
-        time.sleep(0.01)
-    return False
