@@ -730,8 +730,8 @@ void FIRRTLLowering::handleUnloweredOp(Operation *op) {
       continue;
 
     // Otherwise, insert a cast from the lowered value.
-    Value mapped = builder->create<StdIntCast>(op->getLoc(),
-                                               origValue.getType(), it->second);
+    Value mapped = castToFIRRTLType(op->getLoc(), it->second,
+                                    origValue.getType(), *builder);
     operand.set(mapped);
   }
 }
