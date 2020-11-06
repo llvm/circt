@@ -730,12 +730,13 @@ void FIRRTLLowering::handleUnloweredOp(Operation *op) {
       continue;
 
     // Otherwise, insert a cast from the lowered value.
-    Value mapped = builder->create<StdIntCast>(op->getLoc(),
-                                               origValue.getType().cast<FIRRTLType>().getPassiveType(), it->second);
+    Value mapped = builder->create<StdIntCast>(
+        op->getLoc(), origValue.getType().cast<FIRRTLType>().getPassiveType(),
+        it->second);
     if (!origValue.getType().cast<FIRRTLType>().isPassive())
       mapped = builder->create<AsNonPassivePrimOp>(op->getLoc(),
-                                               origValue.getType(), mapped);
-    
+                                                   origValue.getType(), mapped);
+
     operand.set(mapped);
   }
 }
