@@ -269,4 +269,23 @@
     firrtl.cover %clock, %cCond, %cEn, "cover0"
   }
 
+  firrtl.module @bar(%io_cpu_flush: !firrtl.uint<1>) {}
+  //CHECK-LABEL: firrtl.module @foo
+  firrtl.module @foo() {
+    %fetch = firrtl.instance @bar {name = "fetch"} : !firrtl.bundle<io_cpu_flush: flip<uint<1>>>
+    // CHECK-NEXT:  %fetch = firrtl.instance @bar {name = "fetch"} : !firrtl.flip<bundle<io_cpu_flush: uint<1>>>
+    %1454 = firrtl.subfield %fetch("io_cpu_flush") : (!firrtl.bundle<io_cpu_flush: flip<uint<1>>>) -> !firrtl.flip<uint<1>>
+    // CHECK-NEXT:  %0 = firrtl.subfield %fetch("io_cpu_flush") : (!firrtl.flip<bundle<io_cpu_flush: uint<1>>>) -> !firrtl.flip<uint<1>>
+    %hits_1_7 = firrtl.node %1454 {name = "hits_1_7"} : !firrtl.flip<uint<1>>
+    // CHECK-NEXT:  %1 = firrtl.asPassive %0 : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
+    // CHECK-NEXT:  %2 = firrtl.stdIntCast %1 : (!firrtl.uint<1>) -> i1
+    // CHECK-NEXT:  %hits_1_7 = rtl.wire : i1
+    // CHECK-NEXT:  rtl.connect %hits_1_7, %2 : i1
+    %1455 = firrtl.asPassive %hits_1_7 : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
+    // CHECK-NEXT:  %3 = firrtl.stdIntCast %2 : (i1) -> !firrtl.uint<1>
+    // CHECK-NEXT:  %4 = firrtl.asNonPassive %3 : (!firrtl.uint<1>) -> !firrtl.flip<uint<1>>
+    // CHECK-NEXT:  %5 = firrtl.asPassive %4 : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
+  }
+
 }
+
