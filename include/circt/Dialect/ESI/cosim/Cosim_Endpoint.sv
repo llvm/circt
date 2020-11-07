@@ -1,19 +1,10 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-// Copyright (c) Microsoft Corporation. All rights reserved.
-// =============================================================================
-// Package: CosimCore_EndpointBasePkg
+//===- Cosim_Endpoint.sv - ESI cosim primary RTL module ---------*- C++ -*-===//
 //
-// Authors:
-// - John Demme (john.demme@microsoft.com)
+// Package: Cosim_DpiPkg
 //
-// Based on code written by:
-// - Andrew Lenharth (andrew.lenharth@microsoft.com)
+// Main cosim <--> dpi bridge module.
 //
-// Description:
-//   Main cosim <--> dpi bridge module
-// =============================================================================
+//===----------------------------------------------------------------------===//
 
 import Cosim_DpiPkg::*;
 
@@ -50,7 +41,8 @@ module Cosim_Endpoint
       rc = cosim_init();
       if (rc != 0)
         $error("Cosim init failed (%d)", rc);
-      rc = cosim_ep_register(ENDPOINT_ID, SEND_TYPE_ID, SEND_TYPE_SIZE_BYTES, RECV_TYPE_ID, RECV_TYPE_SIZE_BYTES);
+      rc = cosim_ep_register(ENDPOINT_ID, SEND_TYPE_ID, SEND_TYPE_SIZE_BYTES,
+                             RECV_TYPE_ID, RECV_TYPE_SIZE_BYTES);
       if (rc != 0)
         $error("Cosim endpoint (%d) register failed: %d", ENDPOINT_ID, rc);
       Initialized = 1'b1;
@@ -62,9 +54,11 @@ module Cosim_Endpoint
   ///
 
   localparam int SEND_TYPE_SIZE_BYTES = int'((SEND_TYPE_SIZE_BITS+7)/8);
-  localparam int SEND_TYPE_SIZE_BITS_DIFF = SEND_TYPE_SIZE_BITS % 8; // The number of bits over a byte
+  // The number of bits over a byte
+  localparam int SEND_TYPE_SIZE_BITS_DIFF = SEND_TYPE_SIZE_BITS % 8;
   localparam int SEND_TYPE_SIZE_BYTES_FLOOR = int'(SEND_TYPE_SIZE_BITS/8);
-  localparam int SEND_TYPE_SIZE_BYTES_FLOOR_IN_BITS = SEND_TYPE_SIZE_BYTES_FLOOR * 8;
+  localparam int SEND_TYPE_SIZE_BYTES_FLOOR_IN_BITS
+      = SEND_TYPE_SIZE_BYTES_FLOOR * 8;
 
   byte unsigned DataOutBuffer[SEND_TYPE_SIZE_BYTES-1:0];
   always@(posedge clk)
@@ -72,47 +66,31 @@ module Cosim_Endpoint
     if (rstn && Initialized)
     begin
       if (DataOutValid && DataOutReady) // A transfer occurred
-      begin
         DataOutValid <= 1'b0;
-      end
 
-      if (!DataOutValid || DataOutReady)
-      begin
+      if (!DataOutValid || DataOutReady) begin
         int data_limit;
         int rc;
 
         data_limit = SEND_TYPE_SIZE_BYTES;
         rc = cosim_ep_tryget(ENDPOINT_ID, DataOutBuffer, data_limit);
-        if (rc < 0)
-        begin
+        if (rc < 0) begin
           $error("cosim_ep_tryget(%d, *, %d -> %d) returned an error (%d)",
             ENDPOINT_ID, SEND_TYPE_SIZE_BYTES, data_limit, rc);
-        end
-        else if (rc > 0)
-        begin
+        end else if (rc > 0) begin
           $error("cosim_ep_tryget(%d, *, %d -> %d) had data left over! (%d)",
             ENDPOINT_ID, SEND_TYPE_SIZE_BYTES, data_limit, rc);
-        end
-        else if (rc == 0)
-        begin
+        end else if (rc == 0) begin
           if (data_limit == SEND_TYPE_SIZE_BYTES)
-          begin
             DataOutValid <= 1'b1;
-          end
           else if (data_limit == 0)
-          begin
-            // No message
-          end
+            begin end // No message
           else
-          begin
-            $error("cosim_ep_tryget(%d, *, %d -> %d) did not load entire buffer!",
-                ENDPOINT_ID, SEND_TYPE_SIZE_BYTES, data_limit);
-          end
+            $error("cosim_ep_tryget(%d, *, %d -> %d) did not load entire",
+                   "buffer!", ENDPOINT_ID, SEND_TYPE_SIZE_BYTES, data_limit);
         end
       end
-    end
-    else
-    begin
+    end else begin
         DataOutValid <= 1'b0;
     end
   end
@@ -121,21 +99,22 @@ module Cosim_Endpoint
   genvar iOut;
   generate
     for (iOut=0; iOut<SEND_TYPE_SIZE_BYTES_FLOOR; iOut++)
-    begin
       assign DataOut[((iOut+1)*8)-1:iOut*8] = DataOutBuffer[iOut];
-    end
     if (SEND_TYPE_SIZE_BITS_DIFF != 0)
-      assign DataOut[SEND_TYPE_SIZE_BYTES_FLOOR_IN_BITS + SEND_TYPE_SIZE_BITS_DIFF - 1 : SEND_TYPE_SIZE_BYTES_FLOOR_IN_BITS]
-        = DataOutBuffer[SEND_TYPE_SIZE_BYTES-1][SEND_TYPE_SIZE_BITS_DIFF-1:0];
+      assign DataOut[SEND_TYPE_SIZE_BYTES_FLOOR_IN_BITS + 
+                     SEND_TYPE_SIZE_BITS_DIFF - 1 :
+                       SEND_TYPE_SIZE_BYTES_FLOOR_IN_BITS]
+             = DataOutBuffer[SEND_TYPE_SIZE_BYTES-1]
+                            [SEND_TYPE_SIZE_BITS_DIFF-1:0];
   endgenerate
 
-  initial
-  begin
+  initial begin
     $display("SEND_TYPE_SIZE_BITS: %d", SEND_TYPE_SIZE_BITS);
     $display("SEND_TYPE_SIZE_BYTES: %d", SEND_TYPE_SIZE_BYTES);
     $display("SEND_TYPE_SIZE_BITS_DIFF: %d", SEND_TYPE_SIZE_BITS_DIFF);
     $display("SEND_TYPE_SIZE_BYTES_FLOOR: %d", SEND_TYPE_SIZE_BYTES_FLOOR);
-    $display("SEND_TYPE_SIZE_BYTES_FLOOR_IN_BITS: %d", SEND_TYPE_SIZE_BYTES_FLOOR_IN_BITS);
+    $display("SEND_TYPE_SIZE_BYTES_FLOOR_IN_BITS: %d",
+             SEND_TYPE_SIZE_BYTES_FLOOR_IN_BITS);
   end
 
 
@@ -144,26 +123,23 @@ module Cosim_Endpoint
   ///
 
   localparam int RECV_TYPE_SIZE_BYTES = int'((RECV_TYPE_SIZE_BITS+7)/8);
-  localparam int RECV_TYPE_SIZE_BITS_DIFF = RECV_TYPE_SIZE_BITS % 8; // The number of bits over a byte
+  // The number of bits over a byte
+  localparam int RECV_TYPE_SIZE_BITS_DIFF = RECV_TYPE_SIZE_BITS % 8;
   localparam int RECV_TYPE_SIZE_BYTES_FLOOR = int'(RECV_TYPE_SIZE_BITS/8);
-  localparam int RECV_TYPE_SIZE_BYTES_FLOOR_IN_BITS = RECV_TYPE_SIZE_BYTES_FLOOR * 8;
+  localparam int RECV_TYPE_SIZE_BYTES_FLOOR_IN_BITS
+      = RECV_TYPE_SIZE_BYTES_FLOOR * 8;
 
   assign DataInReady = 1'b1;
   byte unsigned DataInBuffer[RECV_TYPE_SIZE_BYTES-1:0];
 
-  always@(posedge clk)
-  begin
-    if (rstn && Initialized)
-    begin
-      if (DataInValid)
-      begin
+  always@(posedge clk) begin
+    if (rstn && Initialized) begin
+      if (DataInValid) begin
         int rc;
         rc = cosim_ep_tryput(ENDPOINT_ID, DataInBuffer, RECV_TYPE_SIZE_BYTES);
         if (rc != 0)
-        begin
           $error("cosim_ep_tryput(%d, *, %d) = %d Error! (Data lost)",
             ENDPOINT_ID, RECV_TYPE_SIZE_BYTES, rc);
-        end
       end
     end
   end
@@ -172,21 +148,22 @@ module Cosim_Endpoint
   genvar iIn;
   generate
     for (iIn=0; iIn<RECV_TYPE_SIZE_BYTES_FLOOR; iIn++)
-    begin
       assign DataInBuffer[iIn] = DataIn[((iIn+1)*8)-1:iIn*8];
-    end
     if (RECV_TYPE_SIZE_BITS_DIFF != 0)
-      assign DataInBuffer[RECV_TYPE_SIZE_BYTES-1][RECV_TYPE_SIZE_BITS_DIFF-1:0] =
-        DataIn[RECV_TYPE_SIZE_BYTES_FLOOR_IN_BITS + RECV_TYPE_SIZE_BITS_DIFF - 1 : RECV_TYPE_SIZE_BYTES_FLOOR_IN_BITS];
+      assign DataInBuffer[RECV_TYPE_SIZE_BYTES-1]
+                         [RECV_TYPE_SIZE_BITS_DIFF-1:0] =
+             DataIn[RECV_TYPE_SIZE_BYTES_FLOOR_IN_BITS +
+                    RECV_TYPE_SIZE_BITS_DIFF - 1 :
+                      RECV_TYPE_SIZE_BYTES_FLOOR_IN_BITS];
   endgenerate
 
-  initial
-  begin
+  initial begin
     $display("RECV_TYPE_SIZE_BITS: %d", RECV_TYPE_SIZE_BITS);
     $display("RECV_TYPE_SIZE_BYTES: %d", RECV_TYPE_SIZE_BYTES);
     $display("RECV_TYPE_SIZE_BITS_DIFF: %d", RECV_TYPE_SIZE_BITS_DIFF);
     $display("RECV_TYPE_SIZE_BYTES_FLOOR: %d", RECV_TYPE_SIZE_BYTES_FLOOR);
-    $display("RECV_TYPE_SIZE_BYTES_FLOOR_IN_BITS: %d", RECV_TYPE_SIZE_BYTES_FLOOR_IN_BITS);
+    $display("RECV_TYPE_SIZE_BYTES_FLOOR_IN_BITS: %d",
+             RECV_TYPE_SIZE_BYTES_FLOOR_IN_BITS);
   end
 
 endmodule
