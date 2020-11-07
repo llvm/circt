@@ -1,7 +1,7 @@
 #ifndef CIRCT_DIALECT_ESI_COSIM_ENDPOINT_H
 #define CIRCT_DIALECT_ESI_COSIM_ENDPOINT_H
 
-//===- EndPoint.h - Cosim endpoint server ----------------------*- C++ -*-===//
+//===- Endpoint.h - Cosim endpoint server ----------------------*- C++ -*-===//
 //
 // Declare the class which is used to model DPI endpoints.
 //
@@ -33,7 +33,8 @@ public:
   using BlobPtr = std::shared_ptr<Blob>;
 
 private:
-  const uint64_t esiTypeId;
+  const uint64_t sendTypeId;
+  const uint64_t recvTypeId;
   bool inUse;
 
   using Lock = std::lock_guard<std::mutex>;
@@ -48,13 +49,15 @@ private:
   std::queue<BlobPtr> toClient;
 
 public:
-  Endpoint(uint64_t esiTypeId, int maxSize);
+  Endpoint(uint64_t sendTypeId, int sendTypeMaxSize, uint64_t recvTypeId,
+           int recvTypeMaxSize);
   virtual ~Endpoint();
   /// Disallow copying. There is only ONE endpoint so copying is almost always a
   /// bug.
   Endpoint(const Endpoint &) = delete;
 
-  uint64_t getEsiTypeId() const { return esiTypeId; }
+  uint64_t getSendTypeId() const { return sendTypeId; }
+  uint64_t getRecvTypeId() const { return recvTypeId; }
 
   bool setInUse();
   void returnForUse();
@@ -104,7 +107,8 @@ public:
   ~EndpointRegistry();
 
   /// Takes ownership of ep
-  void registerEndpoint(int epId, long long esiTypeId, int typeSize);
+  void registerEndpoint(int epId, uint64_t sendTypeId, int sendTypeMaxSize,
+                        uint64_t recvTypeId, int recvTypeMaxSize);
 
   /// Get the specified endpoint, if it exists. Return false if it does not.
   bool get(int epId, Endpoint *&);

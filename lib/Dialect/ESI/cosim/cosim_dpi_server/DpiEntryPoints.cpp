@@ -53,13 +53,15 @@ static int validateSvOpenArray(const svOpenArrayHandle data,
 
 // Register simulated device endpoints.
 // - return 0 on success, non-zero on failure (duplicate EP registered).
-DPI int sv2cCosimserverEpRegister(int endpointId, long long esiTypeId,
-                                  int typeSize) {
+DPI int sv2cCosimserverEpRegister(int endpointId, long long sendTypeId,
+                                  int sendTypeSize, long long recvTypeId,
+                                  int recvTypeSize) {
   // Ensure the server has been constructed.
   sv2cCosimserverInit();
   try {
     // Then register with it.
-    server->endpoints.registerEndpoint(endpointId, esiTypeId, typeSize);
+    server->endpoints.registerEndpoint(endpointId, sendTypeId, sendTypeSize,
+                                       recvTypeId, recvTypeSize);
     return 0;
   } catch (const runtime_error &rt) {
     cerr << rt.what() << endl;

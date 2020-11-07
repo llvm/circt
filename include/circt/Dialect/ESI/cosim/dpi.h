@@ -18,21 +18,15 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-// DPI IMPORTS
-// DPI import at Cosim_DpiPkg.sv:29:16
-extern int sv2cCosimserverEpRegister(int endpointId, long long esiTypeId,
-                                        int typeSize);
-// DPI import at Cosim_DpiPkg.sv:56:16
+extern int sv2cCosimserverEpRegister(int endpointId, long long sendTypeId,
+                                     int sendTypeSize, long long recvTypeId,
+                                     int recvTypeSize);
 extern int sv2cCosimserverEpTryGet(unsigned int endpointId,
-                                      const svOpenArrayHandle data,
-                                      unsigned int *sizeBytes);
-// DPI import at Cosim_DpiPkg.sv:45:16
+                                   const svOpenArrayHandle data,
+                                   unsigned int *sizeBytes);
 extern int sv2cCosimserverEpTryPut(unsigned int endpointId,
-                                      const svOpenArrayHandle data,
-                                      int dataLimit);
-// DPI import at Cosim_DpiPkg.sv:22:54
+                                   const svOpenArrayHandle data, int dataLimit);
 extern void sv2cCosimserverFini();
-// DPI import at Cosim_DpiPkg.sv:19:53
 extern int sv2cCosimserverInit();
 #ifdef __cplusplus
 }

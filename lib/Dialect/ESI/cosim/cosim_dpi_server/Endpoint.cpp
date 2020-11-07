@@ -4,12 +4,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/ESI/cosim/EndPoint.h"
+#include "circt/Dialect/ESI/cosim/Endpoint.h"
 
 using namespace circt::esi::cosim;
 
-Endpoint::Endpoint(uint64_t esiTypeId, int maxSize)
-    : esiTypeId(esiTypeId), inUse(false) {}
+Endpoint::Endpoint(uint64_t sendTypeId, int sendTypeMaxSize,
+                   uint64_t recvTypeId, int recvTypeMaxSize)
+    : sendTypeId(sendTypeId), recvTypeId(recvTypeId), inUse(false) {}
 Endpoint::~Endpoint() {}
 
 bool Endpoint::setInUse() {
@@ -32,14 +33,17 @@ EndpointRegistry::~EndpointRegistry() {
   endpoints.clear();
 }
 
-void EndpointRegistry::registerEndpoint(int epId, long long esiTypeId,
-                                        int typeSize) {
+void EndpointRegistry::registerEndpoint(int epId, uint64_t sendTypeId,
+                                        int sendTypeMaxSize,
+                                        uint64_t recvTypeId,
+                                        int recvTypeMaxSize) {
   Lock g(m);
   if (endpoints.find(epId) != endpoints.end()) {
     throw std::runtime_error("Endpoint ID already exists!");
   }
   endpoints.emplace(std::piecewise_construct, std::forward_as_tuple(epId),
-                    std::forward_as_tuple(esiTypeId, typeSize));
+                    std::forward_as_tuple(sendTypeId, sendTypeMaxSize,
+                                          recvTypeId, recvTypeMaxSize));
 }
 
 bool EndpointRegistry::get(int epId, Endpoint *&ep) {

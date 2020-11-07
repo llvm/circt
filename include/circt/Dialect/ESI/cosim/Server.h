@@ -9,7 +9,7 @@
 #ifndef CIRCT_DIALECT_ESI_COSIM_SERVER_H
 #define CIRCT_DIALECT_ESI_COSIM_SERVER_H
 
-#include "EndPoint.h"
+#include "Endpoint.h"
 #include "circt/Dialect/ESI/cosim/CosimDpi.capnp.h"
 #include <capnp/any.h>
 #include <capnp/ez-rpc.h>

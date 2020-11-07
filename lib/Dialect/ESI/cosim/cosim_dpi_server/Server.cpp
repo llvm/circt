@@ -85,7 +85,8 @@ kj::Promise<void> CosimServer::list(ListContext context) {
   unsigned int ctr = 0u;
   reg->iterateEndpoints([&](int id, const Endpoint &ep) {
     ifaces[ctr].setEndpointID(id);
-    ifaces[ctr].setTypeID(ep.getEsiTypeId());
+    ifaces[ctr].setSendTypeID(ep.getSendTypeId());
+    ifaces[ctr].setRecvTypeID(ep.getRecvTypeId());
     ctr++;
   });
   return kj::READY_NOW;

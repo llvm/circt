@@ -29,8 +29,10 @@ module main(
 
     Cosim_Endpoint #(
         .ENDPOINT_ID(1),
-        .ESI_TYPE_ID(1),
-        .TYPE_SIZE_BITS(TYPE_SIZE_BITS)
+        .RECV_TYPE_ID(1),
+        .RECV_TYPE_SIZE_BITS(TYPE_SIZE_BITS),
+        .SEND_TYPE_ID(1),
+        .SEND_TYPE_SIZE_BITS(TYPE_SIZE_BITS)
     ) ep (
         .*
     );

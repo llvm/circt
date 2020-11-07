@@ -24,9 +24,16 @@ import "DPI-C" sv2cCosimserverFini = function void cosim_fini();
 // - return 0 on success, non-zero on failure (duplicate EP registered).
 import "DPI-C" sv2cCosimserverEpRegister =
   function int cosim_ep_register(
+      // The endpoint ID.
       input int endpoint_id,
-      input longint esi_type_id,
-      input int type_size);
+      // The capnp type id which the _RPC client_ is sending us.
+      input longint send_type_id,
+      // The send types max size, in bytes.
+      input int send_type_size,
+      // The capnp type id which we are sending to the _RPC client_.
+      input longint esi_recv_type_id,
+      // The recv types max size, in bytes.
+      input int recv_type_size);
 
 // --------------------- Endpoint Accessors -----------------------------------
 
