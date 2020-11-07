@@ -35,7 +35,7 @@ class Trace {
   // Buffer of changes for the merged formats.
   std::map<std::pair<unsigned, int>, std::string> mergedChanges;
   // Buffer of last dumped change for each signal.
-  std::map<std::tuple<std::string, unsigned, int>, std::string> lastValue;
+  std::map<std::pair<std::string, int>, std::string> lastValue;
 
   /// Push one change to the changes vector.
   void pushChange(std::string inst, unsigned sigIndex, int elem);

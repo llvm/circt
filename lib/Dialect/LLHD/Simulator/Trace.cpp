@@ -38,7 +38,6 @@ void Trace::pushChange(std::string inst, unsigned sigIndex, int elem = -1) {
   std::string valueDump;
   std::string path;
   llvm::raw_string_ostream ss(path);
-  auto lastValKey = std::make_tuple(inst, sigIndex, elem);
 
   ss << state->instances[inst].path << '/' << sig.name;
 
@@ -53,6 +52,7 @@ void Trace::pushChange(std::string inst, unsigned sigIndex, int elem = -1) {
   }
 
   // Check wheter we have an actual change from last value.
+  auto lastValKey = std::make_pair(path, elem);
   if (valueDump != lastValue[lastValKey]) {
     changes.push_back(std::make_pair(path, valueDump));
     lastValue[lastValKey] = valueDump;
