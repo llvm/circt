@@ -902,7 +902,8 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result,
   // Make sure the field name matches up with the input value's type and
   // compute the result type for the expression.
   auto resultType = result.getType().cast<FIRRTLType>();
-  resultType = SubfieldOp::getResultType(resultType, fieldName);
+  resultType =
+      SubfieldOp::getResultType(resultType, fieldName, translateLocation(loc));
   if (!resultType) {
     // TODO(QoI): This error would be nicer with a .fir pretty print of the
     // type.
@@ -938,7 +939,8 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result,
   // Make sure the index expression is valid and compute the result type for the
   // expression.
   auto resultType = result.getType().cast<FIRRTLType>();
-  resultType = SubindexOp::getResultType(resultType, indexNo);
+  resultType = SubindexOp::getResultType(resultType, indexNo,
+                                         translateLocation(indexLoc));
   if (!resultType) {
     // TODO(QoI): This error would be nicer with a .fir pretty print of the
     // type.
@@ -979,7 +981,8 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result,
   // Make sure the index expression is valid and compute the result type for the
   // expression.
   auto resultType = result.getType().cast<FIRRTLType>();
-  resultType = SubaccessOp::getResultType(resultType, indexType);
+  resultType = SubaccessOp::getResultType(resultType, indexType,
+                                          translateLocation(indexLoc));
   if (!resultType) {
     // TODO(QoI): This error would be nicer with a .fir pretty print of the
     // type.
@@ -1086,7 +1089,8 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
 
 #define TOK_LPKEYWORD_PRIM(SPELLING, CLASS)                                    \
   case FIRToken::lp_##SPELLING: {                                              \
-    auto resultTy = CLASS::getResultType(opTypes, integers);                   \
+    auto resultTy =                                                            \
+        CLASS::getResultType(opTypes, integers, translateLocation(loc));       \
     if (!resultTy)                                                             \
       return typeError(#SPELLING);                                             \
     result = builder.create<CLASS>(translateLocation(loc), resultTy,           \

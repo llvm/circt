@@ -18,6 +18,9 @@ project(circt LANGUAGES CXX C)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
+option(LLVM_INCLUDE_TOOLS "Generate build targets for the LLVM tools." ON)
+option(LLVM_BUILD_TOOLS "Build the LLVM tools. If OFF, just generate build targets." ON)
+
 find_package(MLIR REQUIRED CONFIG)
 
 message(STATUS "Using MLIRConfig.cmake in: ${MLIR_DIR}")
