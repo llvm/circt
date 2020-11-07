@@ -6,6 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_ESI_COSIM_SERVER_H
+#define CIRCT_DIALECT_ESI_COSIM_SERVER_H
+
 #include "EndPoint.h"
 #include "circt/Dialect/ESI/cosim/CosimDpi.capnp.h"
 #include <capnp/any.h>
@@ -15,9 +18,6 @@
 #include <map>
 #include <thread>
 
-#ifndef __COSIM_DPI_SERVER_H__
-#define __COSIM_DPI_SERVER_H__
-
 namespace circt {
 namespace esi {
 namespace cosim {
@@ -26,23 +26,23 @@ namespace cosim {
 /// wrapper around an `EndPoint` object. Whereas the `EndPoints` are long-lived
 /// (associate with the RTL endpoint), this class is constructed/destructed when
 /// the client open()s it.
-class EndPointServer
+class EndpointServer
     : public EsiDpiEndpoint<capnp::AnyPointer, capnp::AnyPointer>::Server {
   /// The wrapped endpoint.
-  EndPoint *_EndPoint;
+  Endpoint *endpoint;
   /// Signals that this endpoint has been opened by a client and hasn't been
   /// closed by said client.
-  bool _Open;
+  bool open;
 
 public:
-  EndPointServer(EndPoint *ep) : _EndPoint(ep), _Open(true) {}
+  EndpointServer(Endpoint *ep) : endpoint(ep), open(true) {}
 
-  virtual ~EndPointServer() {
-    if (_Open)
-      _EndPoint->ReturnForUse();
+  virtual ~EndpointServer() {
+    if (open)
+      endpoint->returnForUse();
   }
 
-  EndPoint *GetEndPoint() { return _EndPoint; }
+  Endpoint *getEndPoint() { return endpoint; }
 
   kj::Promise<void> send(SendContext);
   kj::Promise<void> recv(RecvContext);
@@ -52,10 +52,10 @@ public:
 /// Implements the `CosimDpiServer` interface from the RPC schema.
 class CosimServer : public CosimDpiServer::Server {
   /// The registry of endpoints.
-  EndPointRegistry *_Reg;
+  EndpointRegistry *reg;
 
 public:
-  CosimServer(EndPointRegistry *reg) : _Reg(reg) {}
+  CosimServer(EndpointRegistry *reg) : reg(reg) {}
   virtual ~CosimServer() {}
 
   /// List all the registered interfaces.
@@ -70,20 +70,20 @@ public:
 /// interactions between the capnp (really libkj) async model.
 class RpcServer {
 public:
-  EndPointRegistry EndPoints;
+  EndpointRegistry endpoints;
 
-  RpcServer() : _RpcServer(nullptr), _MainThread(nullptr), _Stop(false) {}
+  RpcServer() : rpcServer(nullptr), mainThread(nullptr), stopSig(false) {}
   ~RpcServer();
 
-  void Run(uint16_t port);
-  void Stop();
+  void run(uint16_t port);
+  void stop();
 
 private:
-  void MainLoop(uint16_t port);
+  void mainLoop(uint16_t port);
 
-  capnp::EzRpcServer *_RpcServer;
-  std::thread *_MainThread;
-  volatile bool _Stop;
+  capnp::EzRpcServer *rpcServer;
+  std::thread *mainThread;
+  volatile bool stopSig;
 };
 
 } // namespace cosim

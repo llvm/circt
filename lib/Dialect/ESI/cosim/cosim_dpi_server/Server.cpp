@@ -20,18 +20,18 @@
 using namespace capnp;
 using namespace circt::esi::cosim;
 
-kj::Promise<void> EndPointServer::close(CloseContext context) {
-  KJ_REQUIRE(_Open, "EndPoint closed already");
-  _Open = false;
-  _EndPoint->ReturnForUse();
+kj::Promise<void> EndpointServer::close(CloseContext context) {
+  KJ_REQUIRE(open, "EndPoint closed already");
+  open = false;
+  endpoint->returnForUse();
   return kj::READY_NOW;
 }
 
 /// 'Send' is from the client perspective, so this is a message we are recieving.
 /// The only way I could figure out to copy the raw message is a double copy. I
 /// was have issues getting libkj's arrays to play nice with others.
-kj::Promise<void> EndPointServer::send(SendContext context) {
-  KJ_REQUIRE(_Open, "EndPoint closed already");
+kj::Promise<void> EndpointServer::send(SendContext context) {
+  KJ_REQUIRE(open, "EndPoint closed already");
   auto capnpMsgPointer = context.getParams().getMsg();
   KJ_REQUIRE(capnpMsgPointer.isStruct(),
              "Only messages can go in the 'msg' parameter");
@@ -46,22 +46,22 @@ kj::Promise<void> EndPointServer::send(SendContext context) {
 
   // Now copy it into a blob and queue it.
   auto fstSegmentData = segments[0].asBytes();
-  auto blob = std::make_shared<EndPoint::Blob>(fstSegmentData.begin(),
+  auto blob = std::make_shared<Endpoint::Blob>(fstSegmentData.begin(),
                                                fstSegmentData.end());
-  _EndPoint->PushMessageToSim(blob);
+  endpoint->pushMessageToSim(blob);
   return kj::READY_NOW;
 }
 
 /// This is the client polling for a message. If one is available, send it.
 /// TODO: implement a blocking call with a timeout.
-kj::Promise<void> EndPointServer::recv(RecvContext context) {
-  KJ_REQUIRE(_Open, "EndPoint closed already");
+kj::Promise<void> EndpointServer::recv(RecvContext context) {
+  KJ_REQUIRE(open, "EndPoint closed already");
   KJ_REQUIRE(!context.getParams().getBlock(),
              "Blocking recv() not supported yet");
 
   // Try to pop a message.
-  EndPoint::BlobPtr blob;
-  auto msgPresent = _EndPoint->GetMessageToClient(blob);
+  Endpoint::BlobPtr blob;
+  auto msgPresent = endpoint->getMessageToClient(blob);
   context.getResults().setHasData(msgPresent);
   if (msgPresent) {
     KJ_REQUIRE(blob->size() % 8 == 0,
@@ -81,34 +81,34 @@ kj::Promise<void> EndPointServer::recv(RecvContext context) {
 }
 
 kj::Promise<void> CosimServer::list(ListContext context) {
-  auto ifaces = context.getResults().initIfaces((unsigned int)_Reg->Size());
+  auto ifaces = context.getResults().initIfaces((unsigned int)reg->size());
   unsigned int ctr = 0u;
-  _Reg->IterateEndpoints([&](int id, const EndPoint& ep) {
+  reg->iterateEndpoints([&](int id, const Endpoint &ep) {
     ifaces[ctr].setEndpointID(id);
-    ifaces[ctr].setTypeID(ep.GetEsiTypeId());
+    ifaces[ctr].setTypeID(ep.getEsiTypeId());
     ctr++;
   });
   return kj::READY_NOW;
 }
 
 kj::Promise<void> CosimServer::open(OpenContext ctxt) {
-  EndPoint* ep;
-  bool found = _Reg->Get(ctxt.getParams().getIface().getEndpointID(), ep);
+  Endpoint *ep;
+  bool found = reg->get(ctxt.getParams().getIface().getEndpointID(), ep);
   KJ_REQUIRE(found, "Could not find endpoint");
 
-  auto gotLock = ep->SetInUse();
+  auto gotLock = ep->setInUse();
   KJ_REQUIRE(gotLock, "Endpoint in use");
 
   ctxt.getResults().setIface(EsiDpiEndpoint<AnyPointer, AnyPointer>::Client(
-      kj::heap<EndPointServer>(ep)));
+      kj::heap<EndpointServer>(ep)));
   return kj::READY_NOW;
 }
 
-RpcServer::~RpcServer() { Stop(); }
+RpcServer::~RpcServer() { stop(); }
 
-void RpcServer::MainLoop(uint16_t port) {
-  _RpcServer = new EzRpcServer(kj::heap<CosimServer>(&EndPoints), "*", port);
-  auto &waitScope = _RpcServer->getWaitScope();
+void RpcServer::mainLoop(uint16_t port) {
+  rpcServer = new EzRpcServer(kj::heap<CosimServer>(&endpoints), "*", port);
+  auto &waitScope = rpcServer->getWaitScope();
 
   // OK, this is uber hacky, but it unblocks me and isn't too inefficient. The
   // problem is that I can't figure out how read the stop signal from libkj
@@ -120,25 +120,25 @@ void RpcServer::MainLoop(uint16_t port) {
   // pipe to deliver a shutdown signal.
   //
   // TODO: Figure out how to do this properly, if possible.
-  while (!_Stop) {
+  while (!stopSig) {
     waitScope.poll();
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 }
 
-void RpcServer::Run(uint16_t port) {
-  if (_MainThread == nullptr) {
-    _MainThread = new std::thread(&RpcServer::MainLoop, this, port);
+void RpcServer::run(uint16_t port) {
+  if (mainThread == nullptr) {
+    mainThread = new std::thread(&RpcServer::mainLoop, this, port);
   } else {
     throw std::runtime_error("Cannot Run() RPC server more than once!");
   }
 }
 
-void RpcServer::Stop() {
-  if (_MainThread == nullptr) {
+void RpcServer::stop() {
+  if (mainThread == nullptr) {
     throw std::runtime_error("RpcServer not Run()");
-  } else if (!_Stop) {
-    _Stop = true;
-    _MainThread->join();
+  } else if (!stopSig) {
+    stopSig = true;
+    mainThread->join();
   }
 }

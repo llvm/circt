@@ -1,15 +1,13 @@
-// Verilated -*- C++ -*-
-// DESCRIPTION: Verilator output: Prototypes for DPI import and export
-// functions.
+//===- dpi.h - DPI function C++ declarations -------------------*- C++ -*-===//
 //
-// Verilator includes this file in all generated .cpp files that use DPI
-// functions. Manually include this file where DPI .c import functions are
-// declared to ensure the C functions match the expectations of the DPI imports.
+// Originally generated from 'Cosim_DpiPkg.sv'.
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef CIRCT_DIALECT_ESI_COSIM_DPI_H
+#define CIRCT_DIALECT_ESI_COSIM_DPI_H
 
 #include "svdpi.h"
-
-#ifndef __COSIM_DPI_HPP__
-#define __COSIM_DPI_HPP__
 
 #ifdef _WIN32
 #define DPI extern "C" __declspec(dllexport)
@@ -22,22 +20,23 @@ extern "C" {
 #endif
 // DPI IMPORTS
 // DPI import at Cosim_DpiPkg.sv:29:16
-extern int sv2c_cosimserver_ep_register(int endpoint_id, long long esi_type_id,
-                                        int type_size);
+extern int sv2cCosimserverEpRegister(int endpointId, long long esiTypeId,
+                                        int typeSize);
 // DPI import at Cosim_DpiPkg.sv:56:16
-extern int sv2c_cosimserver_ep_tryget(unsigned int endpoint_id,
+extern int sv2cCosimserverEpTryGet(unsigned int endpointId,
                                       const svOpenArrayHandle data,
-                                      unsigned int *size_bytes);
+                                      unsigned int *sizeBytes);
 // DPI import at Cosim_DpiPkg.sv:45:16
-extern int sv2c_cosimserver_ep_tryput(unsigned int endpoint_id,
+extern int sv2cCosimserverEpTryPut(unsigned int endpointId,
                                       const svOpenArrayHandle data,
-                                      int data_limit);
+                                      int dataLimit);
 // DPI import at Cosim_DpiPkg.sv:22:54
-extern void sv2c_cosimserver_fini();
+extern void sv2cCosimserverFini();
 // DPI import at Cosim_DpiPkg.sv:19:53
-extern int sv2c_cosimserver_init();
+extern int sv2cCosimserverInit();
 #ifdef __cplusplus
 }
+
 #endif
 
 #endif

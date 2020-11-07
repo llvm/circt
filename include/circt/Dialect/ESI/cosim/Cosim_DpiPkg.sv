@@ -12,17 +12,17 @@ package Cosim_DpiPkg;
 
 // Start cosimserver (spawns server for RTL-initiated work, listens for
 // connections from new SW-clients).
-import "DPI-C" sv2c_cosimserver_init = function int cosim_init();
+import "DPI-C" sv2cCosimserverInit = function int cosim_init();
 
 // Teardown cosimserver (disconnects from primary server port, stops connections
 // from active clients).
-import "DPI-C" sv2c_cosimserver_fini = function void cosim_fini();
+import "DPI-C" sv2cCosimserverFini = function void cosim_fini();
 
 // --------------------- Endpoint Management ----------------------------------
 
 // Register simulated device endpoints.
 // - return 0 on success, non-zero on failure (duplicate EP registered).
-import "DPI-C" sv2c_cosimserver_ep_register =
+import "DPI-C" sv2cCosimserverEpRegister =
   function int cosim_ep_register(
       input int endpoint_id,
       input longint esi_type_id,
@@ -32,7 +32,7 @@ import "DPI-C" sv2c_cosimserver_ep_register =
 
 // Attempt to send data to a client.
 // - return 0 on success, negative on failure (unregistered EP).
-import "DPI-C" sv2c_cosimserver_ep_tryput = 
+import "DPI-C" sv2cCosimserverEpTryPut = 
   function int cosim_ep_tryput(
     // The ID of the endpoint to which the data should be sent.
     input int unsigned endpoint_id,
@@ -48,7 +48,7 @@ import "DPI-C" sv2c_cosimserver_ep_tryput =
 //   - Assumes buffer is large enough to contain entire message. Fails if not
 //     large enough. (In the future, will add support for getting the message into a
 //     fixed-size buffer over multiple calls.)
-import "DPI-C" sv2c_cosimserver_ep_tryget = 
+import "DPI-C" sv2cCosimserverEpTryGet = 
   function int cosim_ep_tryget(
     // The ID of the endpoint from which data should be recieved.
     input  int unsigned endpoint_id,

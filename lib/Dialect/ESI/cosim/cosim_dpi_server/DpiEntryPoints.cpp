@@ -52,13 +52,13 @@ static int validate_sv_open_array(const svOpenArrayHandle data,
 
 // Register simulated device endpoints.
 // - return 0 on success, non-zero on failure (duplicate EP registered).
-DPI int sv2c_cosimserver_ep_register(int endpoint_id, long long esi_type_id,
-                                     int type_size) {
+DPI int sv2cCosimserverEpRegister(int endpoint_id, long long esi_type_id,
+                                  int type_size) {
   // Ensure the server has been constructed.
-  sv2c_cosimserver_init();
+  sv2cCosimserverInit();
   try {
     // Then register with it.
-    server->EndPoints.RegisterEndPoint(endpoint_id, esi_type_id, type_size);
+    server->endpoints.registerEndpoint(endpoint_id, esi_type_id, type_size);
     return 0;
   } catch (const runtime_error &rt) {
     cerr << rt.what() << endl;
@@ -72,16 +72,16 @@ DPI int sv2c_cosimserver_ep_register(int endpoint_id, long long esi_type_id,
 //   - Assumes buffer is large enough to contain entire message. Fails if not
 //     large enough. (In the future, will add support for getting the message
 //     into a fixed-size buffer over multiple calls.)
-DPI int sv2c_cosimserver_ep_tryget(unsigned int endpoint_id,
-                                   const svOpenArrayHandle data,
-                                   unsigned int *dataSize) {
+DPI int sv2cCosimserverEpTryGet(unsigned int endpoint_id,
+                                const svOpenArrayHandle data,
+                                unsigned int *dataSize) {
   if (server == nullptr)
     return -3;
 
   try {
-    EndPoint::BlobPtr msg;
+    Endpoint::BlobPtr msg;
     // Poll for a message.
-    if (server->EndPoints[endpoint_id].GetMessageToSim(msg)) {
+    if (server->endpoints[endpoint_id].getMessageToSim(msg)) {
 
       // Do the validation only if there's a message available. Since the
       // simulator is going to poll up to every tick and there's not going to be
@@ -133,8 +133,8 @@ DPI int sv2c_cosimserver_ep_tryget(unsigned int endpoint_id,
 
 // Attempt to send data to a client.
 // - return 0 on success, negative on failure (unregistered EP).
-DPI int sv2c_cosimserver_ep_tryput(unsigned int endpoint_id,
-                                   const svOpenArrayHandle data, int dataSize) {
+DPI int sv2cCosimserverEpTryPut(unsigned int endpoint_id,
+                                const svOpenArrayHandle data, int dataSize) {
   if (server == nullptr)
     return -1;
 
@@ -154,13 +154,13 @@ DPI int sv2c_cosimserver_ep_tryput(unsigned int endpoint_id,
   }
 
   try {
-    EndPoint::BlobPtr blob = make_shared<EndPoint::Blob>(dataSize);
+    Endpoint::BlobPtr blob = make_shared<Endpoint::Blob>(dataSize);
     // Copy the message data into 'blob'.
     for (long i = 0; i < dataSize; i++) {
       blob->at(i) = *(char *)svGetArrElemPtr1(data, i);
     }
     // Queue the blob.
-    server->EndPoints[endpoint_id].PushMessageToClient(blob);
+    server->endpoints[endpoint_id].pushMessageToClient(blob);
     return 0;
   } catch (const runtime_error &e) {
     cout << e.what() << '\n';
@@ -170,21 +170,21 @@ DPI int sv2c_cosimserver_ep_tryput(unsigned int endpoint_id,
 
 // Teardown cosimserver (disconnects from primary server port, stops connections
 // from active clients).
-DPI void sv2c_cosimserver_fini() {
+DPI void sv2cCosimserverFini() {
   std::cout << "[cosim] Tearing down RPC server." << std::endl;
   if (server != nullptr) {
-    server->Stop();
+    server->stop();
     server = nullptr;
   }
 }
 
 // Start cosimserver (spawns server for RTL-initiated work, listens for
 // connections from new SW-clients).
-DPI int sv2c_cosimserver_init() {
+DPI int sv2cCosimserverInit() {
   if (server == nullptr) {
     std::cout << "[cosim] Starting RPC server." << std::endl;
     server = new RpcServer();
-    server->Run(1111);
+    server->run(1111);
   }
   return 0;
 }
