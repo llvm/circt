@@ -147,16 +147,8 @@ static std::string getSubModuleName(Operation *oldOp) {
 static Value createMuxTree(ArrayRef<Value> inputs, Value select,
                            FIRRTLType selectType, Location insertLoc,
                            ConversionPatternRewriter &rewriter) {
-  // Get the bits we are using to select and the number of inputs.
-  int32_t selectBits = selectType.getBitWidthOrSentinel();
-  assert(selectBits > 0 && "select bitwidth must be defined");
-
-  double maxInputs = std::pow(2, selectBits);
-  unsigned numInputs = inputs.size();
-  assert(numInputs > 1 && "need at least two inputs to mux");
-  assert(maxInputs > numInputs && "select bitwidth cannot mux all inputs");
-
   // Variables used to control iteration and select the appropriate bit.
+  unsigned numInputs = inputs.size();
   double numLayers = std::ceil(std::log2(numInputs));
   unsigned selectIdx = 0;
 
@@ -210,8 +202,7 @@ static Value createMuxTree(ArrayRef<Value> inputs, Value select,
     muxes.push_back(values);
   }
 
-  // Get the last layer of muxes, which should have a single value, and return
-  // it.
+  // Get the last layer of muxes, which has a single value, and return it.
   ArrayRef<Value> lastLayer = muxes.back();
   assert(lastLayer.size() == 1 && "mux tree didn't result in a single value");
   return lastLayer[0];

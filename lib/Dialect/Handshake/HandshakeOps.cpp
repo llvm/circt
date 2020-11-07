@@ -43,7 +43,7 @@ namespace handshake {
 
 HandshakeOpsDialect::HandshakeOpsDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context,
-    ::mlir::TypeID::get<HandshakeOpsDialect>()) {
+              ::mlir::TypeID::get<HandshakeOpsDialect>()) {
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/Handshake/HandshakeOps.cpp.inc"
@@ -128,6 +128,31 @@ void MuxOp::build(OpBuilder &builder, OperationState &result, Value operand,
   // Operands from predecessor blocks
   for (int i = 0, e = inputs; i < e; ++i)
     result.addOperands(operand);
+}
+
+static LogicalResult verify(MuxOp op) {
+  unsigned numDataOperands = static_cast<int>(op.dataOperands().size());
+  if (numDataOperands < 2)
+    return op.emitError("need at least two inputs to mux");
+
+  auto selectType = op.selectOperand().getType();
+
+  unsigned selectBits;
+  if (auto integerType = selectType.dyn_cast<IntegerType>())
+    selectBits = integerType.getWidth();
+  else if (selectType.isIndex())
+    selectBits = IndexType::kInternalStorageBitWidth;
+  else
+    return op.emitError("unsupported type for select operand: ") << selectType;
+
+  double maxDataOperands = std::pow(2, selectBits);
+  if (numDataOperands > maxDataOperands)
+    return op.emitError("select bitwidth was ")
+           << selectBits << ", which can mux "
+           << static_cast<int64_t>(maxDataOperands) << " operands, but found "
+           << numDataOperands << " operands";
+
+  return success();
 }
 
 void ControlMergeOp::build(OpBuilder &builder, OperationState &result,
