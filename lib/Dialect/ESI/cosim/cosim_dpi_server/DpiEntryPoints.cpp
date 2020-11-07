@@ -18,6 +18,7 @@ static RpcServer *server = nullptr;
 // ---- Helper functions ----
 
 /// Check that an array is an array of bytes and has some size.
+// NOLINTNEXTLINE(misc-misplaced-const)
 static int validateSvOpenArray(const svOpenArrayHandle data,
                                   int expectedElemSize) {
   int err = 0;
@@ -73,6 +74,7 @@ DPI int sv2cCosimserverEpRegister(int endpointId, long long esiTypeId,
 //     large enough. (In the future, will add support for getting the message
 //     into a fixed-size buffer over multiple calls.)
 DPI int sv2cCosimserverEpTryGet(unsigned int endpointId,
+                                // NOLINTNEXTLINE(misc-misplaced-const)
                                 const svOpenArrayHandle data,
                                 unsigned int *dataSize) {
   if (server == nullptr)
@@ -134,6 +136,7 @@ DPI int sv2cCosimserverEpTryGet(unsigned int endpointId,
 // Attempt to send data to a client.
 // - return 0 on success, negative on failure (unregistered EP).
 DPI int sv2cCosimserverEpTryPut(unsigned int endpointId,
+                                // NOLINTNEXTLINE(misc-misplaced-const)
                                 const svOpenArrayHandle data, int dataSize) {
   if (server == nullptr)
     return -1;
