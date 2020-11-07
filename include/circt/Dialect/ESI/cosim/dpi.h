@@ -21,19 +21,14 @@
 extern "C" {
 #endif
 // DPI IMPORTS
-// DPI import at Cosim_DpiPkg.sv:51:17
-extern int sv2c_cosimserver_conn_connected(unsigned int endpoint_id);
 // DPI import at Cosim_DpiPkg.sv:29:16
 extern int sv2c_cosimserver_ep_register(int endpoint_id, long long esi_type_id,
                                         int type_size);
-// DPI import at Cosim_DpiPkg.sv:45:16
-extern int sv2c_cosimserver_ep_test(unsigned int endpoint_id,
-                                    unsigned int *msg_size);
-// DPI import at Cosim_DpiPkg.sv:67:16
+// DPI import at Cosim_DpiPkg.sv:56:16
 extern int sv2c_cosimserver_ep_tryget(unsigned int endpoint_id,
                                       const svOpenArrayHandle data,
                                       unsigned int *size_bytes);
-// DPI import at Cosim_DpiPkg.sv:56:16
+// DPI import at Cosim_DpiPkg.sv:45:16
 extern int sv2c_cosimserver_ep_tryput(unsigned int endpoint_id,
                                       const svOpenArrayHandle data,
                                       int data_limit);

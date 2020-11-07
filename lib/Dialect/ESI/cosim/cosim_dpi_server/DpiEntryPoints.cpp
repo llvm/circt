@@ -1,5 +1,9 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
+//===- DpiEntryPoints.cpp - ESI cosim DPI calls -----------------*- C++ -*-===//
+//
+// Cosim DPI function implementations. Mostly C-C++ gaskets to the C++
+// RpcServer.
+//
+//===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/ESI/cosim/Server.h"
 #include "circt/Dialect/ESI/cosim/dpi.h"
@@ -7,10 +11,13 @@
 #include <algorithm>
 
 using namespace std;
+using namespace circt::esi::cosim;
 
-RpcServer *server = nullptr;
+static RpcServer *server = nullptr;
 
-// check that an array is an array of bytes and has some size
+// ---- Helper functions ----
+
+/// Check that an array is an array of bytes and has some size.
 static int validate_sv_open_array(const svOpenArrayHandle data,
                                   int expected_elem_size) {
   int err = 0;
@@ -41,14 +48,16 @@ static int validate_sv_open_array(const svOpenArrayHandle data,
   return err;
 }
 
-// DPI entry points
+// ---- DPI entry points ----
 
-DPI int sv2c_cosimserver_conn_connected(unsigned int endpoint_id) { return 1; }
-
+// Register simulated device endpoints.
+// - return 0 on success, non-zero on failure (duplicate EP registered).
 DPI int sv2c_cosimserver_ep_register(int endpoint_id, long long esi_type_id,
                                      int type_size) {
+  // Ensure the server has been constructed.
   sv2c_cosimserver_init();
   try {
+    // Then register with it.
     server->EndPoints.RegisterEndPoint(endpoint_id, esi_type_id, type_size);
     return 0;
   } catch (const runtime_error &rt) {
@@ -57,64 +66,75 @@ DPI int sv2c_cosimserver_ep_register(int endpoint_id, long long esi_type_id,
   }
 }
 
-DPI int sv2c_cosimserver_ep_test(unsigned int endpoint_id,
-                                 unsigned int *msg_size) {
-  return -1;
-}
-
+// Attempt to recieve data from a client.
+//   - Returns negative when call failed (e.g. EP not registered).
+//   - If no message, return 0 with size_bytes == 0.
+//   - Assumes buffer is large enough to contain entire message. Fails if not
+//     large enough. (In the future, will add support for getting the message
+//     into a fixed-size buffer over multiple calls.)
 DPI int sv2c_cosimserver_ep_tryget(unsigned int endpoint_id,
                                    const svOpenArrayHandle data,
-                                   unsigned int *data_limit) {
+                                   unsigned int *dataSize) {
   if (server == nullptr)
     return -3;
 
-  if (validate_sv_open_array(data, sizeof(int8_t)) != 0) {
-    printf("ERROR: DPI-func=%s line=%d event=invalid-sv-array\n", __func__,
-           __LINE__);
-    return -1;
-  }
-
-  if (*data_limit == ~0u) { // used default param
-    *data_limit = svSizeOfArray(data);
-  }
-
-  if (*data_limit > (unsigned)svSizeOfArray(data)) {
-    printf("ERROR: DPI-func=%s line %d event=invalid-size (max %d)\n", __func__,
-           __LINE__, (unsigned)svSizeOfArray(data));
-    return -2;
-  }
-
   try {
     EndPoint::BlobPtr msg;
-    if (server->EndPoints[endpoint_id]->GetMessageToSim(msg)) {
-      if (msg->size() > *data_limit) {
+    // Poll for a message.
+    if (server->EndPoints[endpoint_id].GetMessageToSim(msg)) {
+
+      // Do the validation only if there's a message available. Since the
+      // simulator is going to poll up to every tick and there's not going to be
+      // a message most of the time, this is important for performance.
+
+      if (validate_sv_open_array(data, sizeof(int8_t)) != 0) {
+        printf("ERROR: DPI-func=%s line=%d event=invalid-sv-array\n", __func__,
+              __LINE__);
+        return -1;
+      }
+
+      // Detect or verify size of buffer.
+      if (*dataSize == ~0u) {
+        *dataSize = svSizeOfArray(data);
+      } else if (*dataSize > (unsigned)svSizeOfArray(data)) {
+        printf("ERROR: DPI-func=%s line %d event=invalid-size (max %d)\n", __func__,
+              __LINE__, (unsigned)svSizeOfArray(data));
+        return -2;
+      }
+      // Verify it'll fit.
+      if (msg->size() > *dataSize) {
         printf("ERROR: Message size too big to fit in RTL buffer\n");
         return -4;
       }
 
+      // Copy the message data.
       size_t i;
       for (i = 0; i < msg->size(); i++) {
         auto b = msg->at(i);
         *(char *)svGetArrElemPtr1(data, i) = b;
       }
-      for (; i < (*data_limit); i++) {
+      // Zero out the rest of the buffer.
+      for (; i < (*dataSize); i++) {
         *(char *)svGetArrElemPtr1(data, i) = 0;
       }
-      *data_limit = msg->size();
+      // Set the output data size.
+      *dataSize = msg->size();
       return 0;
     } else {
-      *data_limit = 0;
+      // No message.
+      *dataSize = 0;
       return 0;
     }
   } catch (const runtime_error &rt) {
-    cout << rt.what() << endl;
+    std::cout << rt.what() << std::endl;
     return -5;
   }
 }
 
+// Attempt to send data to a client.
+// - return 0 on success, negative on failure (unregistered EP).
 DPI int sv2c_cosimserver_ep_tryput(unsigned int endpoint_id,
-                                   const svOpenArrayHandle data,
-                                   int data_limit) {
+                                   const svOpenArrayHandle data, int dataSize) {
   if (server == nullptr)
     return -1;
 
@@ -124,22 +144,23 @@ DPI int sv2c_cosimserver_ep_tryput(unsigned int endpoint_id,
     return -3;
   }
 
-  if (data_limit < 0) { // used default param
-    data_limit = svSizeOfArray(data);
-  }
-  if (data_limit > svSizeOfArray(data)) { // not enough data
+  // Detect or verify size.
+  if (dataSize < 0) {
+    dataSize = svSizeOfArray(data);
+  } else if (dataSize > svSizeOfArray(data)) { // not enough data
     printf("ERROR: DPI-func=%s line %d event=invalid-size limit %d array %d\n",
-           __func__, __LINE__, data_limit, svSizeOfArray(data));
+           __func__, __LINE__, dataSize, svSizeOfArray(data));
     return -2;
   }
 
   try {
-
-    EndPoint::BlobPtr blob = make_shared<EndPoint::Blob>(data_limit);
-    for (long i = 0; i < data_limit; i++) {
+    EndPoint::BlobPtr blob = make_shared<EndPoint::Blob>(dataSize);
+    // Copy the message data into 'blob'.
+    for (long i = 0; i < dataSize; i++) {
       blob->at(i) = *(char *)svGetArrElemPtr1(data, i);
     }
-    server->EndPoints[endpoint_id]->PushMessageToClient(blob);
+    // Queue the blob.
+    server->EndPoints[endpoint_id].PushMessageToClient(blob);
     return 0;
   } catch (const runtime_error &e) {
     cout << e.what() << '\n';
@@ -147,17 +168,21 @@ DPI int sv2c_cosimserver_ep_tryput(unsigned int endpoint_id,
   }
 }
 
+// Teardown cosimserver (disconnects from primary server port, stops connections
+// from active clients).
 DPI void sv2c_cosimserver_fini() {
-  cout << "dpi_finish" << endl;
+  std::cout << "[cosim] Tearing down RPC server." << std::endl;
   if (server != nullptr) {
     server->Stop();
     server = nullptr;
   }
 }
 
+// Start cosimserver (spawns server for RTL-initiated work, listens for
+// connections from new SW-clients).
 DPI int sv2c_cosimserver_init() {
   if (server == nullptr) {
-    std::cout << "init()" << std::endl;
+    std::cout << "[cosim] Starting RPC server." << std::endl;
     server = new RpcServer();
     server->Run(1111);
   }

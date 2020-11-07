@@ -1,73 +1,64 @@
-// Copyright (c) Microsoft Corporation. All rights reserved.
-// =============================================================================
+//===- Cosim_DpiPkg.sv - ESI cosim DPI declarations -------------*- C++ -*-===//
+//
 // Package: CosimCore_DpiPkg
 //
-// Authors:
-// - John Demme (john.demme@microsoft.com)
-// - Hari Angepat (hari.angepat@microsoft.com)
-// - Andrew Lenharth (andrew.lenharth@microsoft.com)
+// DPI-exposed funcs for cosimserver cosimulation unit-test.
 //
-// Description:
-//   DPI-exposed funcs for cosimserver cosimulation unit-test
-// =============================================================================
+//===----------------------------------------------------------------------===//
 
 package Cosim_DpiPkg;
 
-// --------------------- Cosim Socket Server ------------------------------
+// --------------------- Cosim RPC Server -------------------------------------
 
-// Start cosimserver (spawns server for RTL-initiated work, listens for connections from new SW-clients)
+// Start cosimserver (spawns server for RTL-initiated work, listens for
+// connections from new SW-clients).
 import "DPI-C" sv2c_cosimserver_init = function int cosim_init();
 
-// Teardown cosimserver (disconnects from primary server port, stops connections from active clients)
+// Teardown cosimserver (disconnects from primary server port, stops connections
+// from active clients).
 import "DPI-C" sv2c_cosimserver_fini = function void cosim_fini();
 
-// --------------------- Endpoint Management ------------------------------
+// --------------------- Endpoint Management ----------------------------------
 
-// Register simulated device endpoints
-// - return 0 on success, non-zero on failure (duplicate EP registered)
+// Register simulated device endpoints.
+// - return 0 on success, non-zero on failure (duplicate EP registered).
 import "DPI-C" sv2c_cosimserver_ep_register =
   function int cosim_ep_register(
       input int endpoint_id,
       input longint esi_type_id,
       input int type_size);
 
-// --------------------- Endpoint Accessors ------------------------------
+// --------------------- Endpoint Accessors -----------------------------------
 
-// Access a simulated device endpoint (only 1 active client supported per endpoint)
-// - return 0 on success, negative on failure (unregistered EP)
-// - tryget may return 0 but provide size_bytes=0
-// - size_bytes can be used to indicate the actual number of valid bytes provided in the data[] array
-// => ie) can allocate a fixed max-length data[4096] tmp buffer that is used for all DPI calls, while supporting variable length messages
-
-//returns number of messages in queue.  negative for error.
-// sets msg_size to size of first message.  Some implementations may not indicate more than one message in the queue despite multiple messages.
-import "DPI-C" sv2c_cosimserver_ep_test =
-  function int cosim_ep_test(
-    input int unsigned endpoint_id,
-    output int unsigned msg_size);
-
-//returns if client is still alive.  negative for error
-import "DPI-C" sv2c_cosimserver_conn_connected = 
-   function int cosim_conn_connected(input int unsigned endpoint_id);
-
-// Access a simulated device endpoint (multi-client supported per endpoint)
-// - return 0 on success, negative on failure (unregistered EP)
+// Attempt to send data to a client.
+// - return 0 on success, negative on failure (unregistered EP).
 import "DPI-C" sv2c_cosimserver_ep_tryput = 
   function int cosim_ep_tryput(
+    // The ID of the endpoint to which the data should be sent.
     input int unsigned endpoint_id,
+    // A data buffer.
     input byte unsigned data[],
-    input int data_limit = -1
+    // (Optional) Size of the buffer. If negative, will be dynamically detected.
+    input int data_size = -1
     );
 
-// returns number of missing bytes (bytes beyond size_bytes) on success and sets size = number of bytes in message
-// Sufficient buffers should always return 0 on success
-// on failure, return negative.  
-//If no message, return 0 with size == 0
+// Attempt to recieve data from a client.
+//   - Returns negative when call failed (e.g. EP not registered).
+//   - If no message, return 0 with size_bytes == 0.
+//   - Assumes buffer is large enough to contain entire message. Fails if not
+//     large enough. (In the future, will add support for getting the message into a
+//     fixed-size buffer over multiple calls.)
 import "DPI-C" sv2c_cosimserver_ep_tryget = 
   function int cosim_ep_tryget(
+    // The ID of the endpoint from which data should be recieved.
     input  int unsigned endpoint_id,
-    inout byte unsigned data[], // This should be 'output', but Verilator doesn't seem to have a way to do this
-    inout  int unsigned size_bytes
+    // The buffer in which to put the data. This should be 'output', but the
+    // open source simulator Verilator doesn't seem to have a way to do this.
+    inout byte unsigned data[],
+    // Input: indicates the size of the data[] buffer. If -1, dynamically detect
+    // size.
+    // Output: the size of the message.
+    inout  int unsigned data_size
     );
 
-endpackage // CoSim_Dpi
+endpackage // Cosim_DpiPkg
