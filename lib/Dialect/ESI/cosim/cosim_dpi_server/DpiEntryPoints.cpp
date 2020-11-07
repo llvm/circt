@@ -18,8 +18,8 @@ static RpcServer *server = nullptr;
 // ---- Helper functions ----
 
 /// Check that an array is an array of bytes and has some size.
-static int validate_sv_open_array(const svOpenArrayHandle data,
-                                  int expected_elem_size) {
+static int validateSvOpenArray(const svOpenArrayHandle data,
+                                  int expectedElemSize) {
   int err = 0;
   if (svDimensions(data) != 1) {
     printf("DPI-C: ERROR passed array argument that doesn't have expected 1D "
@@ -31,18 +31,18 @@ static int validate_sv_open_array(const svOpenArrayHandle data,
            "(ptr==NULL)\n");
     err++;
   }
-  int total_bytes = svSizeOfArray(data);
-  if (total_bytes == 0) {
+  int totalBytes = svSizeOfArray(data);
+  if (totalBytes == 0) {
     printf("DPI-C: ERROR passed array argument that doesn't have C layout "
            "(total_bytes==0)\n");
     err++;
   }
-  int num_elems = svSize(data, 1);
-  int elem_size = num_elems == 0 ? 0 : (total_bytes / num_elems);
-  if (num_elems * expected_elem_size != total_bytes) {
+  int numElems = svSize(data, 1);
+  int elemSize = numElems == 0 ? 0 : (totalBytes / numElems);
+  if (numElems * expectedElemSize != totalBytes) {
     printf("DPI-C: ERROR: passed array argument that doesn't have expected "
            "element-size: expected=%d actual=%d\n",
-           expected_elem_size, elem_size);
+           expectedElemSize, elemSize);
     err++;
   }
   return err;
@@ -52,13 +52,13 @@ static int validate_sv_open_array(const svOpenArrayHandle data,
 
 // Register simulated device endpoints.
 // - return 0 on success, non-zero on failure (duplicate EP registered).
-DPI int sv2cCosimserverEpRegister(int endpoint_id, long long esi_type_id,
-                                  int type_size) {
+DPI int sv2cCosimserverEpRegister(int endpointId, long long esiTypeId,
+                                  int typeSize) {
   // Ensure the server has been constructed.
   sv2cCosimserverInit();
   try {
     // Then register with it.
-    server->endpoints.registerEndpoint(endpoint_id, esi_type_id, type_size);
+    server->endpoints.registerEndpoint(endpointId, esiTypeId, typeSize);
     return 0;
   } catch (const runtime_error &rt) {
     cerr << rt.what() << endl;
@@ -72,7 +72,7 @@ DPI int sv2cCosimserverEpRegister(int endpoint_id, long long esi_type_id,
 //   - Assumes buffer is large enough to contain entire message. Fails if not
 //     large enough. (In the future, will add support for getting the message
 //     into a fixed-size buffer over multiple calls.)
-DPI int sv2cCosimserverEpTryGet(unsigned int endpoint_id,
+DPI int sv2cCosimserverEpTryGet(unsigned int endpointId,
                                 const svOpenArrayHandle data,
                                 unsigned int *dataSize) {
   if (server == nullptr)
@@ -81,13 +81,13 @@ DPI int sv2cCosimserverEpTryGet(unsigned int endpoint_id,
   try {
     Endpoint::BlobPtr msg;
     // Poll for a message.
-    if (server->endpoints[endpoint_id].getMessageToSim(msg)) {
+    if (server->endpoints[endpointId].getMessageToSim(msg)) {
 
       // Do the validation only if there's a message available. Since the
       // simulator is going to poll up to every tick and there's not going to be
       // a message most of the time, this is important for performance.
 
-      if (validate_sv_open_array(data, sizeof(int8_t)) != 0) {
+      if (validateSvOpenArray(data, sizeof(int8_t)) != 0) {
         printf("ERROR: DPI-func=%s line=%d event=invalid-sv-array\n", __func__,
               __LINE__);
         return -1;
@@ -133,12 +133,12 @@ DPI int sv2cCosimserverEpTryGet(unsigned int endpoint_id,
 
 // Attempt to send data to a client.
 // - return 0 on success, negative on failure (unregistered EP).
-DPI int sv2cCosimserverEpTryPut(unsigned int endpoint_id,
+DPI int sv2cCosimserverEpTryPut(unsigned int endpointId,
                                 const svOpenArrayHandle data, int dataSize) {
   if (server == nullptr)
     return -1;
 
-  if (validate_sv_open_array(data, sizeof(int8_t)) != 0) {
+  if (validateSvOpenArray(data, sizeof(int8_t)) != 0) {
     printf("ERROR: DPI-func=%s line=%d event=invalid-sv-array\n", __func__,
            __LINE__);
     return -3;
@@ -160,7 +160,7 @@ DPI int sv2cCosimserverEpTryPut(unsigned int endpoint_id,
       blob->at(i) = *(char *)svGetArrElemPtr1(data, i);
     }
     // Queue the blob.
-    server->endpoints[endpoint_id].pushMessageToClient(blob);
+    server->endpoints[endpointId].pushMessageToClient(blob);
     return 0;
   } catch (const runtime_error &e) {
     cout << e.what() << '\n';

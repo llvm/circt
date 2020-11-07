@@ -8,8 +8,8 @@
 
 using namespace circt::esi::cosim;
 
-Endpoint::Endpoint(uint64_t EsiTypeId, int MaxSize)
-    : esiTypeId(EsiTypeId), inUse(false) {}
+Endpoint::Endpoint(uint64_t esiTypeId, int maxSize)
+    : esiTypeId(esiTypeId), inUse(false) {}
 Endpoint::~Endpoint() {}
 
 bool Endpoint::setInUse() {
@@ -32,40 +32,40 @@ EndpointRegistry::~EndpointRegistry() {
   endpoints.clear();
 }
 
-void EndpointRegistry::registerEndpoint(int ep_id, long long esi_type_id,
-                                        int type_size) {
+void EndpointRegistry::registerEndpoint(int epId, long long esiTypeId,
+                                        int typeSize) {
   Lock g(m);
-  if (endpoints.find(ep_id) != endpoints.end()) {
+  if (endpoints.find(epId) != endpoints.end()) {
     throw std::runtime_error("Endpoint ID already exists!");
   }
-  endpoints.emplace(std::piecewise_construct, std::forward_as_tuple(ep_id),
-                    std::forward_as_tuple(esi_type_id, type_size));
+  endpoints.emplace(std::piecewise_construct, std::forward_as_tuple(epId),
+                    std::forward_as_tuple(esiTypeId, typeSize));
 }
 
-bool EndpointRegistry::get(int ep_id, Endpoint *&ep) {
+bool EndpointRegistry::get(int epId, Endpoint *&ep) {
   Lock g(m);
-  auto it = endpoints.find(ep_id);
+  auto it = endpoints.find(epId);
   if (it == endpoints.end())
     return false;
   ep = &it->second;
   return true;
 }
 
-Endpoint &EndpointRegistry::operator[](int ep_id) {
+Endpoint &EndpointRegistry::operator[](int epId) {
   Lock g(m);
-  auto it = endpoints.find(ep_id);
+  auto it = endpoints.find(epId);
   if (it == endpoints.end())
     throw std::runtime_error("Could not locate Endpoint");
   return it->second;
 }
 
 void EndpointRegistry::iterateEndpoints(
-    std::function<void(int, const Endpoint &)> F) const {
+    std::function<void(int, const Endpoint &)> f) const {
   // This function is logically const, but modification is needed to obtain a
   // lock.
   Lock g(const_cast<EndpointRegistry *>(this)->m);
   for (const auto &ep : endpoints) {
-    F(ep.first, ep.second);
+    f(ep.first, ep.second);
   }
 }
 

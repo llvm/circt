@@ -10,8 +10,8 @@
  * This file is from the SystemVerilog IEEE 1800-2017 Annex I.
  */
 
-#ifndef INCLUDED_SVDPI
-#define INCLUDED_SVDPI
+#ifndef CIRCT_DIALECT_ESI_COSIM_SVDPI_H
+#define CIRCT_DIALECT_ESI_COSIM_SVDPI_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -83,7 +83,7 @@ typedef svScalar svLogic; /* scalar */
  */
 #ifndef VPI_VECVAL
 #define VPI_VECVAL
-typedef struct t_vpi_vecval {
+typedef struct TVpiVecval {
   uint32_t aval;
   uint32_t bval;
 } s_vpi_vecval, *p_vpi_vecval;
