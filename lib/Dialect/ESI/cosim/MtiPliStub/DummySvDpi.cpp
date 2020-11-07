@@ -25,7 +25,7 @@
 #undef EETERN
 #define EETERN DPI_EXTERN DPI_DLLESPEC
 
-#include "circt/Dialect/ESI/cosim/svdpi.h"
+#include "external/dpi/svdpi.h"
 
 //======================================================================
 //======================================================================
