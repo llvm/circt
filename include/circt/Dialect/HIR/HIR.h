@@ -27,25 +27,6 @@ namespace Details {
 /// and rw => read-write port.
 enum PortKind { r = 0, w = 1, rw = 2 };
 
-/// Storage class for ConstType.
-struct ConstTypeStorage : public TypeStorage {
-  ConstTypeStorage(Type elementType) : elementType(elementType) {}
-
-  /// The hash key for this storage is a pair of the integer and type params.
-  using KeyTy = Type;
-
-  /// Define the comparison function for the key type.
-  bool operator==(const KeyTy &key) const { return key == KeyTy(elementType); }
-
-  /// Define a construction method for creating a new instance of this storage.
-  static ConstTypeStorage *construct(TypeStorageAllocator &allocator,
-                                     const KeyTy &key) {
-    return new (allocator.allocate<ConstTypeStorage>()) ConstTypeStorage(key);
-  }
-
-  Type elementType;
-};
-
 /// Storage class for MemrefType.
 struct MemrefTypeStorage : public TypeStorage {
   MemrefTypeStorage(ArrayRef<unsigned> shape, Type elementType,
@@ -181,16 +162,14 @@ public:
 };
 
 /// This class defines hir.const type in the dialect.
-class ConstType
-    : public Type::TypeBase<ConstType, Type, Details::ConstTypeStorage> {
+class ConstType : public Type::TypeBase<ConstType, Type, DefaultTypeStorage> {
 public:
   using Base::Base;
   static bool kindof(unsigned kind) { return kind == ConstKind; }
   static StringRef getKeyword() { return "const"; }
-  static ConstType get(MLIRContext *context, Type elementType) {
-    return Base::get(context, ConstKind, elementType);
+  static ConstType get(MLIRContext *context) {
+    return Base::get(context, ConstKind);
   }
-  Type getElementType() { return getImpl()->elementType; }
 };
 
 /// This class defines hir.memref type in the dialect.

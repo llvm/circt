@@ -31,9 +31,8 @@ static IntegerAttr getIntegerAttr(OpAsmParser &parser, int width, int value) {
 static Type getIntegerType(OpAsmParser &parser, int bitwidth) {
   return IntegerType::get(bitwidth, parser.getBuilder().getContext());
 }
-static ConstType getConstIntType(OpAsmParser &parser, int bitwidth) {
-  return ConstType::get(parser.getBuilder().getContext(),
-                        getIntegerType(parser, bitwidth));
+static ConstType getConstIntType(OpAsmParser &parser) {
+  return ConstType::get(parser.getBuilder().getContext());
 }
 
 static Type getTimeType(OpAsmParser &parser) {
@@ -104,46 +103,6 @@ static ParseResult parseOptionalTypes(OpAsmParser &parser,
   return success();
 }
 
-static ParseResult parseAndResolveTimeOperand(OpAsmParser &parser,
-                                              OperationState &result) {
-
-  OpAsmParser::OperandType tstart;
-  OpAsmParser::OperandType offsetVar;
-  if (parser.parseOperand(tstart))
-    return failure();
-  if (parser.resolveOperand(tstart, getTimeType(parser), result.operands))
-    return failure();
-  if (parser.parseOptionalKeyword("offset"))
-    return success();
-
-  auto offsetIsIdx = parser.parseOptionalOperand(offsetVar);
-  if (offsetIsIdx.hasValue()) {
-    if (parser.resolveOperand(offsetVar, getConstIntType(parser, 32),
-                              result.operands)) {
-      return failure();
-    } else
-      return success();
-  }
-  IntegerAttr offset;
-  if (parser.parseAttribute(offset, getIntegerType(parser, 32), "offset",
-                            result.attributes))
-    return failure();
-}
-
-static ParseResult parseTimeOperand(OpAsmParser &parser,
-                                    OpAsmParser::OperandType &timeVar,
-                                    StringRef attrName, NamedAttrList &attrs) {
-  if (parser.parseOperand(timeVar))
-    return failure();
-  if (parser.parseOptionalKeyword("offset"))
-    return success();
-  IntegerAttr offset;
-  if (parser.parseAttribute(offset, getIntegerType(parser, 32), attrName,
-                            attrs))
-    return failure();
-  return success();
-}
-
 static ParseResult parseFunctionType(OpAsmParser &parser, int num_operands,
                                      SmallVectorImpl<Type> &operandTypes,
                                      SmallVectorImpl<Type> &resultTypes) {
@@ -162,7 +121,6 @@ static ParseResult parseFunctionType(OpAsmParser &parser, int num_operands,
 /// ForOp.
 /// Example:
 /// hir.for %i = %l to %u step %s iter_time(%ti = %t){...}
-/// hir.for %i = %l to %u step %s iter_time(%ti = %t tstep %n){...}
 static void printForOp(OpAsmPrinter &printer, ForOp op) {
   printer << "hir.for"
           << " " << op.getInductionVar() << " : "
@@ -170,13 +128,7 @@ static void printForOp(OpAsmPrinter &printer, ForOp op) {
           << op.lb().getType() << " to " << op.ub() << " : "
           << op.ub().getType() << " step " << op.step() << " : "
           << op.step().getType() << " iter_time( " << op.getIterTimeVar()
-          << " = " << op.tstart();
-
-  // print optional tstep.
-
-  if (op.getNumOperands() == 5)
-    printer << " tstep " << op.tstep() << " : " << op.tstep().getType();
-  printer << " ) ";
+          << " = " << op.tstart() << " offset" << op.offset() << ")";
 
   printer.printRegion(op.region(),
                       /*printEntryBlockArgs=*/false,
@@ -191,16 +143,16 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
   Type ubRawType;
   Type stepRawType;
   Type tstartRawType = timeTy;
-  Type tstepRawType;
+  Type offsetType = getConstIntType(parser);
   Type regionRawOperandTypes[2];
   ArrayRef<Type> regionOperandTypes(regionRawOperandTypes);
   regionRawOperandTypes[1] = timeTy;
 
   OpAsmParser::OperandType lbRawOperand;
   OpAsmParser::OperandType ubRawOperand;
+  OpAsmParser::OperandType offsetRawOperand;
   OpAsmParser::OperandType stepRawOperand;
   OpAsmParser::OperandType tstartRawOperand;
-  OpAsmParser::OperandType tstepRawOperand;
   OpAsmParser::OperandType regionRawOperands[2];
 
   ArrayRef<OpAsmParser::OperandType> regionOperands(regionRawOperands);
@@ -219,29 +171,16 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
   // Parse iter time.
   if (parser.parseKeyword("iter_time") || parser.parseLParen() ||
       parser.parseRegionArgument(regionRawOperands[1]) || parser.parseEqual() ||
-      parser.parseOperand(tstartRawOperand))
-    return failure();
-
-  // Parse optional tstep.
-  bool hasTstep = false;
-  if (!parser.parseOptionalKeyword("tstep")) {
-    if (parser.parseOperand(tstepRawOperand) ||
-        parser.parseColonType(tstepRawType))
-      return failure();
-    hasTstep = true;
-  }
-  if (parser.parseRParen())
+      parser.parseOperand(tstartRawOperand) || parser.parseKeyword("offset") ||
+      parser.parseOperand(offsetRawOperand) || parser.parseRParen())
     return failure();
 
   if (parser.resolveOperand(lbRawOperand, lbRawType, result.operands) ||
       parser.resolveOperand(ubRawOperand, ubRawType, result.operands) ||
       parser.resolveOperand(stepRawOperand, stepRawType, result.operands) ||
-      parser.resolveOperand(tstartRawOperand, tstartRawType, result.operands))
+      parser.resolveOperand(tstartRawOperand, tstartRawType, result.operands) ||
+      parser.resolveOperand(offsetRawOperand, offsetType, result.operands))
     return failure();
-
-  if (hasTstep)
-    if (parser.resolveOperand(tstepRawOperand, tstepRawType, result.operands))
-      return failure();
 
   // Parse the body region.
 
@@ -269,7 +208,6 @@ LogicalResult ForOp::moveOutOfLoop(ArrayRef<Operation *> ops) {
 /// UnrollForOp.
 /// Example:
 /// hir.unroll_for %i = 0 to 100 step 3 iter_time(%ti = %t){...}
-/// hir.unroll_for %i = %l to %u step %s iter_time(%ti = %t tstep 3){...}
 static void printUnrollForOp(OpAsmPrinter &printer, UnrollForOp op) {
   printer << "hir.unroll_for"
           << " " << op.getInductionVar() << " = " << op.lb() << " to "
@@ -288,7 +226,7 @@ static ParseResult parseUnrollForOp(OpAsmParser &parser,
   Type tstartRawType = timeTypeVar;
   Type regionRawOperandTypes[2];
   ArrayRef<Type> regionOperandTypes(regionRawOperandTypes);
-  regionRawOperandTypes[0] = getConstIntType(parser, 32);
+  regionRawOperandTypes[0] = getConstIntType(parser);
   regionRawOperandTypes[1] = timeTypeVar;
 
   IntegerAttr lbAttr;
@@ -364,7 +302,6 @@ static ParseResult parseDefOp(OpAsmParser &parser, OperationState &result) {
   if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
                              result.attributes))
     return failure();
-
   // Parse tstart.
   if (parser.parseKeyword("at") || parser.parseRegionArgument(tstart))
     return failure();

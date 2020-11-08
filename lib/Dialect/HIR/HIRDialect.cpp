@@ -268,25 +268,6 @@ static void printWireType(WireType wireTy, DialectAsmPrinter &printer) {
   }
   printer << ">";
 }
-// ConsType.
-
-static Type parseConstType(DialectAsmParser &parser, MLIRContext *context) {
-  Type elementType;
-  if (parser.parseLess() || parser.parseType(elementType) ||
-      parser.parseGreater())
-    return Type();
-
-  auto constTy = ConstType::get(context, elementType);
-  return constTy;
-}
-
-static void printConstType(ConstType constTy, DialectAsmPrinter &printer) {
-  printer << constTy.getKeyword();
-  printer << "<";
-  auto elementType = constTy.getElementType();
-  printer << elementType;
-  printer << ">";
-}
 
 // parseType and printType.
 Type HIRDialect::parseType(DialectAsmParser &parser) const {
@@ -304,7 +285,7 @@ Type HIRDialect::parseType(DialectAsmParser &parser) const {
     return parseWireType(parser, getContext());
 
   if (typeKeyword == ConstType::getKeyword())
-    return parseConstType(parser, getContext());
+    return ConstType::get(getContext());
 
   if (typeKeyword == StreamType::getKeyword())
     return parseStreamType(parser, getContext());
@@ -326,7 +307,7 @@ void HIRDialect::printType(Type type, DialectAsmPrinter &printer) const {
     return;
   }
   if (ConstType constTy = type.dyn_cast<ConstType>()) {
-    printConstType(constTy, printer);
+    printer << constTy.getKeyword();
     return;
   }
 }

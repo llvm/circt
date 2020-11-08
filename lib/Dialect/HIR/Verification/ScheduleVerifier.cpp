@@ -88,7 +88,8 @@ public:
     return it->getSecond();
   }
 
-  bool check(mlir::Location loc, Value v, Value t, unsigned delay) {
+  bool check(mlir::Location op_loc, mlir::Location def_loc, Value v, Value t,
+             unsigned delay, std::string use_loc) {
     // consts are valid at any time.
     Type v_type = v.getType();
     if (v_type.isa<hir::ConstType>() || v_type.isa<hir::MemrefType>() ||
@@ -99,9 +100,15 @@ public:
       return false;
     if (instant.t == t && instant.delay == delay)
       return true;
-
-    emitError(loc, "Schedule mismatch!")
-        .attachNote(v.getLoc())
+    std::string error;
+    if (instant.t != t)
+      error = "Schedule error: mismatched time instants in " + use_loc + "!";
+    else
+      error = "Schedule error: mismatched delay (" +
+              std::to_string(instant.delay) + " vs " + std::to_string(delay) +
+              ") in " + use_loc + "!";
+    emitError(op_loc, error)
+        .attachNote(def_loc)
         .append("Prior definition here.");
 
     return false;
@@ -154,8 +161,23 @@ private:
       emitError(v.getLoc(), "failed to find integer const.");
       return 0;
     }
+    return mapValueToIntConst[v];
   }
+
+  mlir::Location getDefiningLoc(Value v) {
+    auto it = mapValueToDefiningLoc.find(v);
+    if (it != mapValueToDefiningLoc.end()) {
+      return it->getSecond();
+    } else {
+      return v.getLoc();
+    }
+  }
+
   llvm::DenseMap<Value, int> mapValueToIntConst;
+
+  // Used for loc of region parameters such as induction var.
+  llvm::DenseMap<Value, mlir::Location> mapValueToDefiningLoc;
+  std::vector<Operation *> opsToErase;
 
 private:
   Schedule schedule;
@@ -180,22 +202,31 @@ bool ScheduleVerifier::inspectOp(hir::ConstantOp op) {
 bool ScheduleVerifier::inspectOp(ForOp op) {
   Value idx = op.getInductionVar();
   Value tloop = op.getIterTimeVar();
+  unsigned delayValue = getIntegerConstOrError(op.offset());
+  assert(delayValue > 0);
   schedule.insert(tloop, tloop, 0);
   schedule.insert(idx, tloop, 0);
-
+  mapValueToDefiningLoc.insert(std::make_pair(idx, op.getLoc()));
+  mapValueToDefiningLoc.insert(std::make_pair(tloop, op.getLoc()));
   bool ok;
-  ok &= schedule.check(op.getLoc(), op.lb(), op.tstart(), 0);
-  ok &= schedule.check(op.getLoc(), op.ub(), op.tstart(), 0);
-  ok &= schedule.check(op.getLoc(), op.step(), op.tstart(), 0);
-  ok &= schedule.check(op.getLoc(), op.tstep(), op.tstart(), 0);
+  ok &= schedule.check(op.getLoc(), getDefiningLoc(op.lb()), op.lb(),
+                       op.tstart(), delayValue - 1, "lower bound");
+  ok &= schedule.check(op.getLoc(), getDefiningLoc(op.ub()), op.ub(),
+                       op.tstart(), delayValue - 1, "upper bound");
+  ok &= schedule.check(op.getLoc(), getDefiningLoc(op.step()), op.step(),
+                       op.tstart(), delayValue - 1, "step");
+  yieldPoints.push(TimeInstant());
   inspectBody(op.getLoopBody().front());
+  yieldPoints.pop();
   return ok;
-}
+} // namespace
 
 bool ScheduleVerifier::inspectOp(UnrollForOp op) {
   Value tloop = op.getIterTimeVar();
   Value idx = op.getInductionVar();
   Value tstart = op.tstart();
+  mapValueToDefiningLoc.insert(std::make_pair(idx, op.getLoc()));
+  mapValueToDefiningLoc.insert(std::make_pair(tloop, op.getLoc()));
   schedule.insert(tloop, tstart, 0);
   schedule.insert(idx, tloop, 0);
   yieldPoints.push(TimeInstant());
@@ -206,6 +237,7 @@ bool ScheduleVerifier::inspectOp(UnrollForOp op) {
     schedule.insert(tloop, yieldPoint.t, yieldPoint.delay);
     schedule.insert(idx, yieldPoint.t, yieldPoint.delay);
   }
+  yieldPoints.pop();
   return true;
 }
 
@@ -213,10 +245,14 @@ bool ScheduleVerifier::inspectOp(MemReadOp op) {
   auto addr = op.addr();
   Value result = op.res();
   Value tstart = op.tstart();
-  unsigned delay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
+  int delay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
+  assert(delay >= 0);
 
+  int c = 0;
   for (auto addrI : addr) {
-    schedule.check(op.getLoc(), addrI, tstart, delay);
+    schedule.check(op.getLoc(), getDefiningLoc(addrI), addrI, tstart, delay,
+                   "address " + std::to_string(c));
+    c++;
   }
   // FIXME: Assume MemReadOp delay is one cycle.
   schedule.insert(result, tstart, delay + 1);
@@ -227,11 +263,16 @@ bool ScheduleVerifier::inspectOp(MemWriteOp op) {
   auto addr = op.addr();
   Value value = op.value();
   Value tstart = op.tstart();
-  unsigned delay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
-
-  schedule.check(op.getLoc(), value, tstart, delay);
+  int delay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
+  assert(delay >= 0);
+  int c = 0;
+  schedule.check(op.getLoc(), getDefiningLoc(value), value, tstart, delay,
+                 "input var");
   for (auto addrI : addr) {
-    schedule.check(op.getLoc(), addrI, tstart, delay);
+    mlir::Location loc_addrI = getDefiningLoc(addrI);
+    schedule.check(op.getLoc(), loc_addrI, addrI, tstart, delay,
+                   "address " + std::to_string(c));
+    c++;
   }
   return true;
 }
@@ -247,7 +288,8 @@ bool ScheduleVerifier::inspectOp(hir::AddOp op) {
     TimeInstant instant = schedule.getTimeInstantOrError(left);
     if (!instant.t)
       return false;
-    schedule.check(op.getLoc(), right, instant.t, instant.delay);
+    schedule.check(op.getLoc(), getDefiningLoc(right), right, instant.t,
+                   instant.delay, "right operand");
     schedule.insert(result, instant.t, instant.delay);
   }
   return true;
@@ -264,7 +306,8 @@ bool ScheduleVerifier::inspectOp(hir::SubtractOp op) {
     TimeInstant instant = schedule.getTimeInstantOrError(left);
     if (!instant.t)
       return false;
-    schedule.check(op.getLoc(), right, instant.t, instant.delay);
+    schedule.check(op.getLoc(), getDefiningLoc(right), right, instant.t,
+                   instant.delay, "right operand");
     schedule.insert(result, instant.t, instant.delay);
   }
   return true;
@@ -282,7 +325,8 @@ bool ScheduleVerifier::inspectOp(hir::YieldOp op) {
 
 bool ScheduleVerifier::inspectOp(hir::WireWriteOp op) {
   unsigned delay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
-  schedule.check(op.getLoc(), op.value(), op.tstart(), delay);
+  schedule.check(op.getLoc(), getDefiningLoc(op.value()), op.value(),
+                 op.tstart(), delay, "input var");
   return true;
 }
 
@@ -297,7 +341,8 @@ bool ScheduleVerifier::inspectOp(hir::AllocOp op) { return true; }
 bool ScheduleVerifier::inspectOp(hir::DelayOp op) {
   unsigned delay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
   unsigned latency = getIntegerConstOrError(op.delay());
-  schedule.check(op.getLoc(), op.input(), op.tstart(), delay);
+  schedule.check(op.getLoc(), getDefiningLoc(op.input()), op.input(),
+                 op.tstart(), delay, "input var");
   schedule.insert(op.res(), op.tstart(), delay + latency);
   return true;
 }
@@ -313,7 +358,8 @@ bool ScheduleVerifier::inspectOp(hir::CallOp op) {
   assert(output_latency.size() == results.size());
   for (int i = 0; i < operands.size(); i++) {
     auto latency = input_latency[i].cast<IntegerAttr>().getInt();
-    schedule.check(op.getLoc(), operands[i], op.tstart(), latency);
+    schedule.check(op.getLoc(), getDefiningLoc(operands[i]), operands[i],
+                   op.tstart(), latency, "operand " + std::to_string(i));
     return true;
   }
   for (int i = 0; i < results.size(); i++) {
@@ -370,6 +416,9 @@ bool ScheduleVerifier::inspectBody(Block &block) {
     if (!inspectOp(&(*iter))) {
       return false;
     }
+  }
+  for (auto operation : opsToErase) {
+    operation->erase();
   }
 }
 } // end anonymous namespace

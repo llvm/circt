@@ -1,7 +1,7 @@
 `default_nettype none
-`include "out.sv"
+`include "../../array_add.sv"
 module Add_tb();
-wire[7:0][6:0] v0_addr;
+wire[6:0] v0_addr;
 wire v0_rd_en;
 reg[31:0]  v0_rd_data;
 wire[6:0] v1_addr;
@@ -9,11 +9,11 @@ wire v1_rd_en;
 reg[31:0]  v1_rd_data;
 wire[6:0] v2_addr;
 wire v2_wr_en;
-wire[63:0]  v2_wr_data;
+wire[31:0]  v2_wr_data;
 reg t3;
 reg clk = 1'b0;
 
-Add Add_inst(
+Array_Add Add_inst(
   .v0_addr   (v0_addr   ) ,
   .v0_rd_en  (v0_rd_en  ) ,
   .v0_rd_data(v0_rd_data) ,

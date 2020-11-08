@@ -1,3 +1,5 @@
+`ifndef HIR_HELPER
+`define HIR_HELPER
 module add(
   output reg[31:0] out,
   input  wire[31:0] in1,
@@ -23,4 +25,4 @@ always@(posedge clk) begin
   out <= out1;
 end
 endmodule
-
+`endif

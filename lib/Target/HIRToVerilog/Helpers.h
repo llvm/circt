@@ -55,10 +55,6 @@ static unsigned getBitWidth(Type type) {
     return 1;
   } else if (auto intTy = type.dyn_cast<IntegerType>()) {
     bitwidth = intTy.getWidth();
-  } else if (auto memrefTy = type.dyn_cast<MemrefType>()) {
-    bitwidth = getBitWidth(memrefTy.getElementType());
-  } else if (auto constTy = type.dyn_cast<ConstType>()) {
-    bitwidth = getBitWidth(constTy.getElementType());
   } else {
     string typeStr;
     llvm::raw_string_ostream typeOstream(typeStr);

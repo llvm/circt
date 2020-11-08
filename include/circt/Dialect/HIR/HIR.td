@@ -110,9 +110,8 @@ def MemReadOp : HIR_Op<"mem_read", [NoSideEffect,AttrSizedOperandSegments]> {
       Variadic<AnyType>:$addr, TimeType : $tstart,
       Optional<ConstType>: $offset);
   let results = (outs AnyType: $res);
-  let assemblyFormat = [{$mem `[`  $addr `]` `at` $tstart (`offset` $offset^ `:` 
-      type($offset))? attr-dict `:` type($mem) `[` type($addr) `]` `->` 
-    type($res)}];
+  let assemblyFormat = [{$mem `[`  $addr `]` `at` $tstart (`offset` $offset^)? 
+    attr-dict `:` type($mem) `[` type($addr) `]` `->` type($res)}];
 }
 
 def MemWriteOp : HIR_Op<"mem_write", [AttrSizedOperandSegments]> {
@@ -131,7 +130,7 @@ def MemWriteOp : HIR_Op<"mem_write", [AttrSizedOperandSegments]> {
       TimeType :$tstart, Optional<ConstType>:$offset);
   let results = (outs );
   let assemblyFormat = [{$value `to` $mem  `[` $addr `]` `at` $tstart 
-    (`offset` $offset^ `:` type($offset))? attr-dict 
+    (`offset` $offset^ )? attr-dict 
       `:` `(`type($value) `,` type($mem)`[`type($addr) `]` `)`}];
 }
 
@@ -149,7 +148,7 @@ def WireReadOp : HIR_Op<"wire_read", [NoSideEffect,AttrSizedOperandSegments]> {
 
   let results = (outs AnyType: $res);
 
-  let assemblyFormat = [{$wire  `[`$addr`]`  `at` $tstart (`offset` $offset^ `:` type($offset))?
+  let assemblyFormat = [{$wire  `[`$addr`]`  `at` $tstart (`offset` $offset^ )?
     attr-dict `:` type($wire) `[`type($addr)`]` `->` type($res)}];
 }
 
@@ -168,7 +167,7 @@ def WireWriteOp : HIR_Op<"wire_write", [AttrSizedOperandSegments]> {
   let results = (outs );
 
   let assemblyFormat = [{$value `to` $wire  `[`$addr`]` `at` $tstart 
-    (`offset` $offset^ `:` type($offset))? attr-dict `:` `(`type($value) `,`
+    (`offset` $offset^ )? attr-dict `:` `(`type($value) `,`
         type($wire) `[`type($addr)`]` `)`}];
 }
 
@@ -202,9 +201,62 @@ Example:
   let arguments = (ins AnyType : $input, ConstType:$delay, 
       TimeType:$tstart, Optional<ConstType>: $offset);
   let results = (outs AnyType : $res);
-  let assemblyFormat = [{$input `by` $delay `:` type($delay) `at` $tstart (`offset` $offset^ `:` type($offset))? 
-    attr-dict `:` type($input) `->` type($res)}];
+  let assemblyFormat = [{$input `by` $delay `:` type($delay) `at` 
+    $tstart (`offset` $offset^ )? attr-dict `:` type($input) `->` type($res)}];
 }
+
+//def WhileOp : HIR_Op<"while", 
+//    [ImplicitTerminator, RecursiveSideEffects]> {
+//      let summary = "While loop";
+//      let description = [{
+//        This op implements while loop.
+//          ```mlir
+//          hir.while (%cond) at %t {
+//            ...
+//          }else{
+//            ...
+//          }
+//        ```
+//      }];
+//
+//      let arguments = (ins AnyType: $cond, TimeType:$tstart);
+//      let regions = (region SizedRegion<1>:$if_body, SizedRegion<1>:$else_body);
+//      let results = (outs );
+//
+//      //let extraClassDeclaration = [{
+//      //  Value getIfBody() { return TODO; }
+//      //  Value getElseBody() { return TODO; }
+//      //}];
+//
+//      let parser = [{return parse$cppClass(parser,result);}];
+//      let printer = [{return print$cppClass(p,*this);}];
+//  }
+//def IfOp : HIR_Op<"if", 
+//    [ImplicitTerminator, RecursiveSideEffects]> {
+//      let summary = "if-else operation";
+//      let description = [{
+//        This op implements if-else statement.
+//          ```mlir
+//          hir.if (%cond) at %t {
+//            ...
+//          }else{
+//            ...
+//          }
+//        ```
+//      }];
+//
+//      let arguments = (ins AnyType: $cond, TimeType:$tstart);
+//      let regions = (region SizedRegion<1>:$if_body, SizedRegion<1>:$else_body);
+//      let results = (outs );
+//
+//      //let extraClassDeclaration = [{
+//      //  Value getIfBody() { return TODO; }
+//      //  Value getElseBody() { return TODO; }
+//      //}];
+//
+//      let parser = [{return parse$cppClass(parser,result);}];
+//      let printer = [{return print$cppClass(p,*this);}];
+//  }
 
 def ForOp : HIR_Op<"for", 
     [ImplicitTerminator, RecursiveSideEffects,
@@ -213,20 +265,21 @@ def ForOp : HIR_Op<"for",
       let description = [{
         This op implements a sequential for loop.
           ```mlir
-          hir.for %i = 0 to %N step 1 at iter_time(%ti = %t tstep 2) {
-            hir.for %j = %lb to %ub step %s at iter_time(%tj = %ti) 
+          hir.for %i = 0 to %N step 1 at iter_time(%ti = %t offset %1) {
+            hir.for %j = %lb to %ub step %s at iter_time(%tj = %ti offset %1) 
               iter_args(%xx = %x at %tj){   
                 %yy = hir.delay %xx by 1 at %tj
-                  hir.yield %yy at %tj+1;
+                  hir.yield %yy at %tj offset 1;
               }
+              hir.yield at %ti offset 1;
           }
         ```
       }];
 
       let arguments = (ins AnyType: $lb, AnyType: $ub, AnyType: $step, 
-          TimeType:$tstart, Optional<AnyType>: $tstep);
+          TimeType:$tstart, ConstType : $offset);
       let regions = (region SizedRegion<1>:$region);
-      let results = (outs TimeType:$tlast);
+      let results = (outs TimeType:$tfinish);
 
       let extraClassDeclaration = [{
         Value getInductionVar() { return getBody()->getArgument(0); }
@@ -278,7 +331,7 @@ def CallOp : HIR_Op<"call",[AttrSizedOperandSegments] > {
   let results = (outs Variadic<AnyType> : $res);
 
   let assemblyFormat = [{
-    $callee `(` $operands `)` `at` $tstart (`offset` $offset^ `:` type($offset))? attr-dict 
+    $callee `(` $operands `)` `at` $tstart (`offset` $offset^ )? attr-dict 
       `:` functional-type($operands, $res)
   }];
 }
@@ -297,9 +350,8 @@ def DefOp : HIR_Op<"def",
 
       let arguments = (ins
           TypeAttr:$type,
-          StrAttr:$sym_name,
-          OptionalAttr<I32ArrayAttr> : $time_domains, 
-          OptionalAttr<I32ArrayAttr>: $time_offsets);
+          StrAttr:$sym_name
+          );
 
       let regions = (region SizedRegion<1>:$region);
       let results = (outs );
@@ -342,7 +394,7 @@ def YieldOp : HIR_Op<"yield", [AttrSizedOperandSegments] > {
   let results = (outs );
 
   let assemblyFormat = [{ attr-dict (`(` $operands^ `)` `:` type($operands))? 
-    `at` $tstart (`offset` $offset^ `:` type($offset))?}];
+    `at` $tstart (`offset` $offset^ )?}];
 }
 
 def ConstantOp : HIR_Op<"constant" > {
@@ -373,7 +425,7 @@ def CastOp : HIR_Op<"cast">{
       Optional<ConstType>:$offset);
   let results = (outs AnyType : $res);
 
-  let assemblyFormat = [{ $input  `at` $tstart (`offset` $offset^ `:` type($offset))? attr-dict
+  let assemblyFormat = [{ $input  `at` $tstart (`offset` $offset^ )? attr-dict
     `:` type($input) `->` type($res)}];
 
 }

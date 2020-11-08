@@ -15,11 +15,11 @@ hir.def @hirMatmulKernel at %t(
   %Bi : !hir.memref<16*16*i32, r>, 
   %Co : !hir.memref<16*16*i32, w>) -> () {
 
+  %0 = hir.constant 0 : !hir.const<i32>
   %1 = hir.constant 1 : !hir.const<i32>
   %2 = hir.constant 2 : !hir.const<i32>
   %3 = hir.constant 3 : !hir.const<i32>
   %4 = hir.constant 4 : !hir.const<i32>
-  %0 = hir.constant 0 : !hir.const<i32>
   %15 = hir.constant 15 : !hir.const<i32>
   %16 = hir.constant 16 : !hir.const<i32>
   %32 = hir.constant 32 : !hir.const<i32>

@@ -15,12 +15,13 @@ static bool isIntegerType(Type type) {
   assert(type);
   if (type.isa<IntegerType>())
     return true;
+  else if (type.isa<hir::ConstType>())
+    return true;
   else if (auto wireType = type.dyn_cast<WireType>())
     return isIntegerType(wireType.getElementType());
-  else if (auto constType = type.dyn_cast<hir::ConstType>())
-    return isIntegerType(constType.getElementType());
   return false;
 }
+
 class VerilogValue {
 private:
   SmallVector<unsigned, 4> distDims;
@@ -246,7 +247,7 @@ private:
       out += "else if ($v_valid_access[" + to_string(i) + "])\n";
       out += "$v = $v_input_access[" + to_string(i) + "];\n";
     }
-    out += "else\n $v = $dataWidth'd0;\n";
+    out += "else\n $v = 'x;\n";
     out += "end\n";
 
     // Print end/endgenerate.
@@ -388,7 +389,17 @@ public:
     return name;
   }
 
-  unsigned getBitWidth() const { return ::getBitWidth(type); }
+  unsigned getBitWidth() const {
+    if (isIntegerConst()) {
+      int val = std::abs(getIntegerConst());
+      if (val > 0)
+        return std::ceil(std::log2(val + 1));
+      else
+        return 1;
+    }
+    return ::getBitWidth(type);
+  }
+
   bool isIntegerType() const { return ::isIntegerType(type); }
   /// Checks if the type is implemented as a verilog wire or an array of wires.
   bool isSimpleType() const {
@@ -444,7 +455,7 @@ public:
   string strConstOrWire() const {
     if (isIntegerConst()) {
       string vlogDecimalLiteral =
-          to_string(::getBitWidth(type)) + "'d" + to_string(getIntegerConst());
+          to_string(getBitWidth()) + "'d" + to_string(getIntegerConst());
       if (name == "")
         return vlogDecimalLiteral;
       return "/*" + name + "=*/ " + vlogDecimalLiteral;
