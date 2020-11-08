@@ -286,6 +286,5 @@
     // CHECK-NEXT:  %4 = firrtl.asNonPassive %3 : (!firrtl.uint<1>) -> !firrtl.flip<uint<1>>
     // CHECK-NEXT:  %5 = firrtl.asPassive %4 : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
   }
-
 }
 

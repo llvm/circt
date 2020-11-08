@@ -257,8 +257,8 @@ void FIRRTLModuleLowering::lowerModuleBody(
   ImplicitLocOpBuilder bodyBuilder(oldModule.getLoc(), newModule.body());
 
   // Insert argument casts, and re-vector users in the old body to use them.
-  SmallVector<rtl::ModulePortInfo, 8> ports;
-  newModule.getPortInfo(ports);
+  SmallVector<ModulePortInfo, 8> ports;
+  oldModule.getPortInfo(ports);
 
   size_t nextNewArg = 0;
   size_t firrtlArg = 0;
@@ -275,7 +275,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
     } else {
       // Outputs need a temporary wire so they can be assign'd to, which we then
       // return.
-      newArg = bodyBuilder.create<rtl::WireOp>(port.type,
+      newArg = bodyBuilder.create<rtl::WireOp>(lowerType(port.type),
                                                /*name=*/StringAttr());
       outputs.push_back(newArg);
     }

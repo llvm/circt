@@ -47,7 +47,7 @@
     // CHECK-NEXT: firrtl.connect %5
     firrtl.connect %out4, %5 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
     // CHECK-NEXT: rtl.output %3 : i4
-  }    // CHECK-NEXT: }
+  }
 
  // CHECK-LABEL: rtl.module @TestInstance(
   firrtl.module @TestInstance(%u2: !firrtl.uint<2>, %s8: !firrtl.sint<8>,
@@ -85,8 +85,7 @@
  
 
     // Parameterized module reference.
-
-    // rtl.instance carries the parameters, unlike at the firrtl layer.
+    // rtl.instance carries the parameters, unlike at the FIRRTL layer.
 
     // CHECK-NEXT: %in.wire = rtl.wire : i1
 
@@ -128,7 +127,7 @@
     // CHECK-NEXT: firrtl.printf %0, %1
     firrtl.printf %clock, %reset, "Hi %x %x\0A"(%0, %b) : !firrtl.uint<5>, !firrtl.uint<4>
     // CHECK-NEXT: rtl.output
-}  // CHECK-NEXT: }
+  }
 
   // CHECK-LABEL: rtl.module @Stop(
   // CHECK: %arg0: i1 {rtl.name = "clock1"},
@@ -147,7 +146,7 @@
     // CHECK-NEXT: firrtl.stop %1, %2, 0
     firrtl.stop %clock2, %reset, 0
     // CHECK-NEXT: rtl.output
-  }  // CHECK-NEXT: }
+  }
 
   // expected-error @+1 {{cannot lower this port type to RTL}}
   firrtl.module @CantLowerArgument(%arg: !firrtl.bundle<int_1: flip<uint<1>>, int_out: uint<2>>) {
@@ -155,5 +154,20 @@
 
   // expected-error @+1 {{unexpected operation 'func' in a firrtl.circuit}}
   func @UnknownFunction() {
+  }
+
+  // CHECK-LABEL: rtl.module @OutputFirst(%arg0: i1 {rtl.name = "in1"}, %arg1: i4 {rtl.name = "in4"}) -> (i4 {rtl.name = "out4"}) {
+  firrtl.module @OutputFirst(%out4: !firrtl.flip<uint<4>>,
+                             %in1: !firrtl.uint<1>,
+                             %in4: !firrtl.uint<4>) {
+    // CHECK-NEXT: %0 = rtl.wire : i4
+    // CHECK-NEXT: %1 = firrtl.stdIntCast %0 : (i4) -> !firrtl.uint<4>
+    // CHECK-NEXT: %2 = firrtl.asNonPassive %1 : (!firrtl.uint<4>) -> !firrtl.flip<uint<4>>
+    // CHECK-NEXT: %3 = firrtl.stdIntCast %arg0 : (i1) -> !firrtl.uint<1>
+    // CHECK-NEXT: %4 = firrtl.stdIntCast %arg1 : (i4) -> !firrtl.uint<4>
+    // CHECK-NEXT: firrtl.connect %2, %4 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+    firrtl.connect %out4, %in4 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+
+    // CHECK-NEXT: rtl.output %0 : i4
   }
 }
