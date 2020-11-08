@@ -83,15 +83,28 @@
     // CHECK: firrtl.printf {{.*}}"%x"([[INSTOUTC1]])
     firrtl.printf %clock, %reset, "%x"(%3) : !firrtl.uint<4>
  
-      
-      // TODO: Support parameterization.
-      //%myext = firrtl.instance @MyExtModule {name = "myext"} : !firrtl.bundle<in: flip<uint>, out: uint<8>>
-      //%9 = firrtl.subfield %myext("in") : (!firrtl.bundle<in: flip<uint>, out: uint<8>>) -> !firrtl.flip<uint>
-      //firrtl.connect %9, %i8 : !firrtl.flip<uint>, !firrtl.uint<8>
-      //%10 = firrtl.subfield %myext("out") : (!firrtl.bundle<in: flip<uint>, out: uint<8>>) -> !firrtl.uint<8>
-      //firrtl.printf %clock, %reset, "Something interesting! %x"(%10) : !firrtl.uint<8>
-      //%11 = firrtl.subaccess %_t[%i8] : (!firrtl.vector<uint<1>, 12>, !firrtl.uint<8>) -> !firrtl.uint<1>
-      //firrtl.connect %auto, %11 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+
+    // Parameterized module reference.
+
+    // rtl.instance carries the parameters, unlike at the firrtl layer.
+
+    // CHECK-NEXT: %in.wire = rtl.wire : i1
+
+    // CHECK-NEXT: [[OUT:%.+]] = rtl.instance "myext" @MyParameterizedExtModule(%in.wire)  {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1) -> i8
+    %myext = firrtl.instance @MyParameterizedExtModule {name = "myext"}
+      : !firrtl.bundle<in: flip<uint<1>>, out: uint<8>>
+
+    // CHECK-NEXT: [[OUTC:%.+]] = firrtl.stdIntCast [[OUT]] : (i8) -> !firrtl.uint<8>
+    // CHECK-NEXT: [[INC:%.+]]  = firrtl.stdIntCast %in.wire : (i1) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[INC2:%.+]] = firrtl.asNonPassive [[INC]] : (!firrtl.uint<1>) -> !firrtl.flip<uint<1>>
+
+    // CHECK-NEXT: firrtl.connect [[INC2]], {{.*}} : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    %9 = firrtl.subfield %myext("in") : (!firrtl.bundle<in: flip<uint<1>>, out: uint<8>>) -> !firrtl.flip<uint<1>>
+    firrtl.connect %9, %reset : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+
+    // CHECK-NEXT: firrtl.printf {{.*}}, {{.*}}, "Something interesting! %x"([[OUTC]]) : !firrtl.uint<8>
+    %10 = firrtl.subfield %myext("out") : (!firrtl.bundle<in: flip<uint<1>>, out: uint<8>>) -> !firrtl.uint<8>
+    firrtl.printf %clock, %reset, "Something interesting! %x"(%10) : !firrtl.uint<8>
   }
 
   // CHECK-LABEL: rtl.module @Print(

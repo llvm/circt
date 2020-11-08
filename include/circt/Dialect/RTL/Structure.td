@@ -65,7 +65,7 @@ def RTLExternModuleOp : RTLOp<"externmodule",
     The "rtl.externmodule" operation represents an external reference to a
     Verilog module, including a given name and a list of ports.
   }];
-  let arguments = (ins OptionalAttr<DictionaryAttr>:$parameters);
+  let arguments = (ins);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
@@ -112,12 +112,14 @@ def InstanceOp : RTLOp<"instance",
   let summary = "Create an instance of a module";
   let description = [{
     This represents an instance of a module. The inputs and results are 
-    the referenced module's inputs and outputs. 
+    the referenced module's inputs and outputs.  Any parameters are stored in
+    the "parameters" dictionary.
   }];
 
   let arguments = (ins StrAttr:$instanceName,
                        FlatSymbolRefAttr:$moduleName,
-                       Variadic<AnyType>:$inputs);
+                       Variadic<AnyType>:$inputs,
+                       OptionalAttr<DictionaryAttr>:$parameters);
   let results = (outs Variadic<AnyType>);
 
   let extraClassDeclaration = [{   
@@ -129,7 +131,7 @@ def InstanceOp : RTLOp<"instance",
   }];
   
   let assemblyFormat = [{
-    $instanceName $moduleName `(` $inputs `)` custom<ResultNames>( attr-dict )
+    $instanceName $moduleName `(` $inputs `)` custom<ResultNames>(attr-dict)
       `:` functional-type($inputs, results)
   }];
 

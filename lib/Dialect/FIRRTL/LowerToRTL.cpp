@@ -312,10 +312,16 @@ void FIRRTLModuleLowering::lowerInstance(
     DenseMap<Operation *, Operation *> &oldToNewModuleMap) {
 
   auto *oldModule = oldInstance.getReferencedModule();
-  auto newModule =
-      dyn_cast_or_null<rtl::RTLModuleOp>(oldToNewModuleMap[oldModule]);
+  auto newModule = oldToNewModuleMap[oldModule];
   if (!newModule)
     return;
+
+  // If this is a referenced to a parameterized extmodule, then bring the
+  // parameters over to this instance.
+  DictionaryAttr parameters;
+  if (auto oldExtModule = dyn_cast<FExtModuleOp>(oldModule))
+    if (auto paramsOptional = oldExtModule.parameters())
+      parameters = paramsOptional.getValue();
 
   // Decode information about the input and output ports on the referenced
   // module.
@@ -343,13 +349,16 @@ void FIRRTLModuleLowering::lowerInstance(
     }
   }
 
-  // Create the new rtl.instance operation.
-  StringRef instanceName;
-  if (oldInstance.name().hasValue())
-    instanceName = oldInstance.name().getValue();
+  // Use the symbol from the module we are referencing.
+  FlatSymbolRefAttr symbolAttr = builder.getSymbolRefAttr(newModule);
 
-  auto newInst = builder.create<rtl::InstanceOp>(resultTypes, instanceName,
-                                                 newModule.getName(), operands);
+  // Create the new rtl.instance operation.
+  StringAttr instanceName;
+  if (oldInstance.name().hasValue())
+    instanceName = oldInstance.nameAttr();
+
+  auto newInst = builder.create<rtl::InstanceOp>(
+      resultTypes, instanceName, symbolAttr, operands, parameters);
 
   // Now that we have the new rtl.instance, we need to remap all of the users
   // of the firrtl.instance.  Burn through them connecting them up the right
