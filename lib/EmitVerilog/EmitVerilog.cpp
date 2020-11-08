@@ -1672,19 +1672,13 @@ void ModuleEmitter::emitStatement(rtl::InstanceOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  auto instanceName = op.instanceName();
-  StringRef defName = op.moduleName();
-
-  auto opArgs = op.inputs();
-  auto opResults = op.getResults();
-
   auto *moduleOp = op.getReferencedModule();
   assert(moduleOp && "Invalid IR");
 
   SmallVector<rtl::ModulePortInfo, 8> portInfo;
   getModulePortInfo(moduleOp, portInfo);
 
-  os << ' ' << defName;
+  indent() << op.moduleName();
 
   // Helper that prints a parameter constant value in a Verilog compatible way.
   auto printParmValue = [&](Attribute value) {
@@ -1717,11 +1711,12 @@ void ModuleEmitter::emitStatement(rtl::InstanceOp op) {
     }
   }
 
-  os << ' ' << instanceName << " (";
+  os << ' ' << op.instanceName() << " (";
   emitLocationInfoAndNewLine(ops);
 
-  for (size_t i = 0, e = portInfo.size(); i != e; ++i) {
-    rtl::ModulePortInfo &elt = portInfo[i];
+  auto opArgs = op.inputs();
+  auto opResults = op.getResults();
+  for (auto &elt : portInfo) {
     bool isLast = &elt == &portInfo.back();
     StringRef valueName = elt.isOutput() ? getName(opResults[elt.argNum])
                                          : getName(opArgs[elt.argNum]);
