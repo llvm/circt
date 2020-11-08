@@ -7,6 +7,7 @@
 #include "circt/Dialect/FIRRTL/Visitors.h"
 #include "circt/Dialect/RTL/Ops.h"
 #include "circt/Dialect/SV/Ops.h"
+#include "circt/Support/ImplicitLocOpBuilder.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Pass/Pass.h"
 using namespace circt;
@@ -210,14 +211,14 @@ rtl::RTLModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
 }
 
 /// Cast from a standard type to a FIRRTL type, potentially with a flip.
-static Value castToFIRRTLType(Location loc, Value val, Type type,
-                              OpBuilder &builder) {
-  val = builder.create<StdIntCast>(
-      loc, type.cast<FIRRTLType>().getPassiveType(), val);
+static Value castToFIRRTLType(Value val, Type type,
+                              ImplicitLocOpBuilder &builder) {
+  val =
+      builder.create<StdIntCast>(type.cast<FIRRTLType>().getPassiveType(), val);
 
   // Handle the flip type if needed.
   if (type != val.getType())
-    val = builder.create<AsNonPassivePrimOp>(loc, type, val);
+    val = builder.create<AsNonPassivePrimOp>(type, val);
   return val;
 }
 
@@ -253,7 +254,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
       instance.erase();
   }
 
-  OpBuilder bodyBuilder(newModule.body());
+  ImplicitLocOpBuilder bodyBuilder(oldModule.getLoc(), newModule.body());
 
   // Insert argument casts, and re-vector users in the old body to use them.
   SmallVector<rtl::ModulePortInfo, 8> ports;
@@ -274,15 +275,14 @@ void FIRRTLModuleLowering::lowerModuleBody(
     } else {
       // Outputs need a temporary wire so they can be assign'd to, which we then
       // return.
-      newArg = bodyBuilder.create<rtl::WireOp>(oldModule.getLoc(), port.type,
+      newArg = bodyBuilder.create<rtl::WireOp>(port.type,
                                                /*name=*/StringAttr());
       outputs.push_back(newArg);
     }
 
     // Cast the argument to the old type, reintroducing sign information in
     // the rtl.module body.
-    newArg = castToFIRRTLType(oldModule.getLoc(), newArg, oldArg.getType(),
-                              bodyBuilder);
+    newArg = castToFIRRTLType(newArg, oldArg.getType(), bodyBuilder);
 
     // Switch all uses of the old operands to the new ones.
     oldArg.replaceAllUsesWith(newArg);
@@ -322,7 +322,7 @@ void FIRRTLModuleLowering::lowerInstance(
   SmallVector<ModulePortInfo, 8> portInfo;
   getModulePortInfo(oldModule, portInfo);
 
-  OpBuilder builder(oldInstance);
+  ImplicitLocOpBuilder builder(oldInstance.getLoc(), oldInstance);
   SmallVector<Type, 8> resultTypes;
   SmallVector<Value, 8> operands;
   for (auto &port : portInfo) {
@@ -339,8 +339,7 @@ void FIRRTLModuleLowering::lowerInstance(
       // Create a wire for each input/inout operand, so there is something to
       // connect to.
       auto name = builder.getStringAttr(port.getName().str() + ".wire");
-      operands.push_back(
-          builder.create<rtl::WireOp>(oldInstance.getLoc(), portType, name));
+      operands.push_back(builder.create<rtl::WireOp>(portType, name));
     }
   }
 
@@ -349,8 +348,7 @@ void FIRRTLModuleLowering::lowerInstance(
   if (oldInstance.name().hasValue())
     instanceName = oldInstance.name().getValue();
 
-  auto newInst = builder.create<rtl::InstanceOp>(oldInstance.getLoc(),
-                                                 resultTypes, instanceName,
+  auto newInst = builder.create<rtl::InstanceOp>(resultTypes, instanceName,
                                                  newModule.getName(), operands);
 
   // Now that we have the new rtl.instance, we need to remap all of the users
@@ -388,8 +386,7 @@ void FIRRTLModuleLowering::lowerInstance(
     }
 
     // Cast the value to the right signedness and flippedness.
-    auto val = castToFIRRTLType(oldInstance.getLoc(), resultVal,
-                                subfield.getType(), builder);
+    auto val = castToFIRRTLType(resultVal, subfield.getType(), builder);
     subfield.replaceAllUsesWith(val);
     subfield.erase();
   }
@@ -503,7 +500,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
 
 private:
   /// This builder is set to the right location for each visit call.
-  OpBuilder *builder = nullptr;
+  ImplicitLocOpBuilder *builder = nullptr;
 
   /// Each value lowered (e.g. operation result) is kept track in this map.  The
   /// key should have a FIRRTL type, the result will have an RTL dialect type.
@@ -525,21 +522,21 @@ private:
   ///         bar(condition);
   ///       end
   ///     end
-  template <typename A, typename B>
-  LogicalResult lowerVerificationStatement(A op) {
+  template <typename AOpTy, typename BOpTy>
+  LogicalResult lowerVerificationStatement(AOpTy op) {
     auto clock = getLoweredValue(op.clock());
     auto enable = getLoweredValue(op.enable());
     auto predicate = getLoweredValue(op.predicate());
     if (!clock || !enable || !predicate)
       return failure();
 
-    auto always = builder->create<sv::AlwaysAtPosEdgeOp>(op.getLoc(), clock);
+    auto always = builder->create<sv::AlwaysAtPosEdgeOp>(clock);
     auto oldIP = &*builder->getInsertionPoint();
     builder->setInsertionPointToStart(always.getBody());
 
-    auto svIf = builder->create<sv::IfOp>(op.getLoc(), enable);
+    auto svIf = builder->create<sv::IfOp>(enable);
     builder->setInsertionPointToStart(svIf.getBodyBlock());
-    builder->create<B>(op.getLoc(), predicate);
+    builder->create<BOpTy>(predicate);
     builder->setInsertionPoint(oldIP);
 
     return success();
@@ -563,10 +560,11 @@ void FIRRTLLowering::runOnOperation() {
 
   // Iterate through each operation in the module body, attempting to lower
   // each of them.  We maintain 'builder' for each invocation.
-  OpBuilder theBuilder(&getContext());
+  ImplicitLocOpBuilder theBuilder(getOperation().getLoc(), &getContext());
   builder = &theBuilder;
   for (auto &op : body->getOperations()) {
     builder->setInsertionPoint(&op);
+    builder->setLoc(op.getLoc());
     if (succeeded(dispatchVisitor(&op))) {
       opsToRemove.push_back(&op);
     } else {
@@ -613,13 +611,10 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
     return {};
 
   // Cast FIRRTL -> standard type.
-  auto loc = builder->getInsertionPoint()->getLoc();
-  if (!firType.isPassive()) {
-    value =
-        builder->create<AsPassivePrimOp>(loc, firType.getPassiveType(), value);
-  }
+  if (!firType.isPassive())
+    value = builder->create<AsPassivePrimOp>(firType.getPassiveType(), value);
 
-  return builder->create<StdIntCast>(loc, resultType, value);
+  return builder->create<StdIntCast>(resultType, value);
 }
 
 /// Return the lowered value corresponding to the specified original value and
@@ -649,18 +644,17 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
   if (srcWidth == destWidth)
     return result;
 
-  auto loc = builder->getInsertionPoint()->getLoc();
   if (srcWidth > destWidth) {
-    emitError(loc) << "operand should not be a truncation";
+    builder->emitError("operand should not be a truncation");
     return {};
   }
 
   auto resultType = builder->getIntegerType(destWidth);
 
   if (destIntType.isSigned())
-    return builder->create<rtl::SExtOp>(loc, resultType, result);
+    return builder->create<rtl::SExtOp>(resultType, result);
 
-  return builder->create<rtl::ZExtOp>(loc, resultType, result);
+  return builder->create<rtl::ZExtOp>(resultType, result);
 }
 
 /// Set the lowered value of 'orig' to 'result', remembering this in a map.
@@ -680,7 +674,7 @@ LogicalResult FIRRTLLowering::setLowering(Value orig, Value result) {
 template <typename ResultOpType, typename... CtorArgTypes>
 LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
                                             CtorArgTypes... args) {
-  auto result = builder->create<ResultOpType>(orig->getLoc(), args...);
+  auto result = builder->create<ResultOpType>(args...);
   return setLowering(orig->getResult(0), result);
 }
 
@@ -705,9 +699,8 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   // present then we lower this into a wire and a connect, otherwise we just
   // drop it.
   if (auto name = op.getAttrOfType<StringAttr>("name")) {
-    auto wire =
-        builder->create<rtl::WireOp>(op.getLoc(), operand.getType(), name);
-    builder->create<rtl::ConnectOp>(op.getLoc(), wire, operand);
+    auto wire = builder->create<rtl::WireOp>(operand.getType(), name);
+    builder->create<rtl::ConnectOp>(wire, operand);
   }
 
   // TODO(clattner): This is dropping the location information from unnamed node
@@ -730,8 +723,7 @@ void FIRRTLLowering::handleUnloweredOp(Operation *op) {
       continue;
 
     // Otherwise, insert a cast from the lowered value.
-    Value mapped = castToFIRRTLType(op->getLoc(), it->second,
-                                    origValue.getType(), *builder);
+    Value mapped = castToFIRRTLType(it->second, origValue.getType(), *builder);
     operand.set(mapped);
   }
 }
@@ -764,7 +756,7 @@ LogicalResult FIRRTLLowering::visitExpr(CvtPrimOp op) {
     setLowering(op, operand);
 
   // Otherwise prepend a zero bit.
-  auto zero = builder->create<rtl::ConstantOp>(op.getLoc(), APInt(1, 0));
+  auto zero = builder->create<rtl::ConstantOp>(APInt(1, 0));
   return setLoweringTo<rtl::ConcatOp>(op, ValueRange({zero, operand}));
 }
 
@@ -774,7 +766,7 @@ LogicalResult FIRRTLLowering::visitExpr(NotPrimOp op) {
     return failure();
   // ~x  ---> x ^ 0xFF
   auto type = operand.getType().cast<IntegerType>();
-  auto allOnes = builder->create<rtl::ConstantOp>(op.getLoc(), -1, type);
+  auto allOnes = builder->create<rtl::ConstantOp>(-1, type);
   return setLoweringTo<rtl::XorOp>(op, ValueRange({operand, allOnes}),
                                    ArrayRef<NamedAttribute>{});
 }
@@ -788,12 +780,12 @@ LogicalResult FIRRTLLowering::visitExpr(NegPrimOp op) {
   // -x  ---> 0-sext(x) or 0-zext(x)
   auto resultType = lowerType(op.getType());
   if (getTypeOf<IntType>(op.input()).isSigned())
-    operand = builder->create<rtl::SExtOp>(op.getLoc(), resultType, operand);
+    operand = builder->create<rtl::SExtOp>(resultType, operand);
   else
-    operand = builder->create<rtl::ZExtOp>(op.getLoc(), resultType, operand);
+    operand = builder->create<rtl::ZExtOp>(resultType, operand);
 
-  auto zero = builder->create<rtl::ConstantOp>(op.getLoc(), 0,
-                                               resultType.cast<IntegerType>());
+  auto zero =
+      builder->create<rtl::ConstantOp>(0, resultType.cast<IntegerType>());
   return setLoweringTo<rtl::SubOp>(op, zero, operand);
 }
 
@@ -909,9 +901,9 @@ LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
 
   // Truncate either operand if required.
   if (lhs.getType().cast<IntegerType>().getWidth() != destWidth)
-    lhs = builder->create<rtl::ExtractOp>(op.getLoc(), resultType, lhs, 0);
+    lhs = builder->create<rtl::ExtractOp>(resultType, lhs, 0);
   if (rhs.getType().cast<IntegerType>().getWidth() != destWidth)
-    rhs = builder->create<rtl::ExtractOp>(op.getLoc(), resultType, rhs, 0);
+    rhs = builder->create<rtl::ExtractOp>(resultType, rhs, 0);
 
   return setLoweringTo<rtl::ModOp>(op, ValueRange({lhs, rhs}));
 }
@@ -950,8 +942,7 @@ LogicalResult FIRRTLLowering::visitExpr(ShlPrimOp op) {
     return setLowering(op, input);
 
   // TODO: We could keep track of zeros and implicitly CSE them.
-  auto zero =
-      builder->create<rtl::ConstantOp>(op.getLoc(), APInt(op.amount(), 0));
+  auto zero = builder->create<rtl::ConstantOp>(APInt(op.amount(), 0));
   return setLoweringTo<rtl::ConcatOp>(op, ValueRange({input, zero}));
 }
 
@@ -1010,7 +1001,7 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   if (!dest || !src)
     return failure();
 
-  builder->create<rtl::ConnectOp>(op.getLoc(), dest, src);
+  builder->create<rtl::ConnectOp>(dest, src);
   return success();
 }
 
@@ -1031,26 +1022,26 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
       return failure();
   }
 
-  auto always = builder->create<sv::AlwaysAtPosEdgeOp>(op.getLoc(), clock);
+  auto always = builder->create<sv::AlwaysAtPosEdgeOp>(clock);
 
   // We're going to move insertion points.
   auto oldIP = &*builder->getInsertionPoint();
 
   // Emit an "#ifndef SYNTHESIS" guard into the always block.
   builder->setInsertionPointToStart(always.getBody());
-  auto ifndef = builder->create<sv::IfDefOp>(op.getLoc(), "!SYNTHESIS");
+  auto ifndef = builder->create<sv::IfDefOp>("!SYNTHESIS");
 
   // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
   builder->setInsertionPointToStart(ifndef.getBodyBlock());
-  Value ifCond = builder->create<sv::TextualValueOp>(
-      op.getLoc(), cond.getType(), "`PRINTF_COND_");
-  ifCond = builder->create<rtl::AndOp>(op.getLoc(), ValueRange{ifCond, cond},
+  Value ifCond =
+      builder->create<sv::TextualValueOp>(cond.getType(), "`PRINTF_COND_");
+  ifCond = builder->create<rtl::AndOp>(ValueRange{ifCond, cond},
                                        ArrayRef<NamedAttribute>{});
-  auto svIf = builder->create<sv::IfOp>(op.getLoc(), ifCond);
+  auto svIf = builder->create<sv::IfOp>(ifCond);
 
   // Emit the sv.fwrite.
   builder->setInsertionPointToStart(svIf.getBodyBlock());
-  builder->create<sv::FWriteOp>(op.getLoc(), op.formatString(), operands);
+  builder->create<sv::FWriteOp>(op.formatString(), operands);
 
   builder->setInsertionPoint(oldIP);
   return success();
@@ -1065,30 +1056,30 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
   if (!clock || !cond)
     return failure();
 
-  auto always = builder->create<sv::AlwaysAtPosEdgeOp>(op.getLoc(), clock);
+  auto always = builder->create<sv::AlwaysAtPosEdgeOp>(clock);
 
   // We're going to move insertion points.
   auto oldIP = &*builder->getInsertionPoint();
 
   // Emit an "#ifndef SYNTHESIS" guard into the always block.
   builder->setInsertionPointToStart(always.getBody());
-  auto ifndef = builder->create<sv::IfDefOp>(op.getLoc(), "!SYNTHESIS");
+  auto ifndef = builder->create<sv::IfDefOp>("!SYNTHESIS");
 
   // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
   builder->setInsertionPointToStart(ifndef.getBodyBlock());
-  Value ifCond = builder->create<sv::TextualValueOp>(
-      op.getLoc(), cond.getType(), "`STOP_COND_");
-  ifCond = builder->create<rtl::AndOp>(op.getLoc(), ValueRange{ifCond, cond},
+  Value ifCond =
+      builder->create<sv::TextualValueOp>(cond.getType(), "`STOP_COND_");
+  ifCond = builder->create<rtl::AndOp>(ValueRange{ifCond, cond},
                                        ArrayRef<NamedAttribute>{});
-  auto svIf = builder->create<sv::IfOp>(op.getLoc(), ifCond);
+  auto svIf = builder->create<sv::IfOp>(ifCond);
 
   // Emit the sv.fatal or sv.finish.
   builder->setInsertionPointToStart(svIf.getBodyBlock());
 
   if (op.exitCode())
-    builder->create<sv::FatalOp>(op.getLoc());
+    builder->create<sv::FatalOp>();
   else
-    builder->create<sv::FinishOp>(op.getLoc());
+    builder->create<sv::FinishOp>();
 
   builder->setInsertionPoint(oldIP);
   return success();
