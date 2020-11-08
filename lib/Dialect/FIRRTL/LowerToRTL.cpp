@@ -530,14 +530,12 @@ private:
     if (!clock || !enable || !predicate)
       return failure();
 
-    auto always = builder->create<sv::AlwaysAtPosEdgeOp>(clock);
-    auto oldIP = &*builder->getInsertionPoint();
-    builder->setInsertionPointToStart(always.getBody());
-
-    auto svIf = builder->create<sv::IfOp>(enable);
-    builder->setInsertionPointToStart(svIf.getBodyBlock());
-    builder->create<BOpTy>(predicate);
-    builder->setInsertionPoint(oldIP);
+    builder->create<sv::AlwaysAtPosEdgeOp>(clock, [&]() {
+      builder->create<sv::IfOp>(enable, [&]() {
+        // Create BOpTy inside the always/if.
+        builder->create<BOpTy>(predicate);
+      });
+    });
 
     return success();
   }
@@ -1008,7 +1006,6 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
 // Printf is a macro op that lowers to an sv.ifdef, an sv.if, and an sv.fwrite
 // all nested together.
 LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
-  // Emit this into an "sv.alwaysat_posedge" body.
   auto clock = getLoweredValue(op.clock());
   auto cond = getLoweredValue(op.cond());
   if (!clock || !cond)
@@ -1022,28 +1019,22 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
       return failure();
   }
 
-  auto always = builder->create<sv::AlwaysAtPosEdgeOp>(clock);
+  // Emit this into an "sv.alwaysat_posedge" body.
+  builder->create<sv::AlwaysAtPosEdgeOp>(clock, [&]() {
+    // Emit an "#ifndef SYNTHESIS" guard into the always block.
+    builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
+      // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
+      Value ifCond =
+          builder->create<sv::TextualValueOp>(cond.getType(), "`PRINTF_COND_");
+      ifCond = builder->create<rtl::AndOp>(ValueRange{ifCond, cond},
+                                           ArrayRef<NamedAttribute>{});
+      builder->create<sv::IfOp>(ifCond, [&]() {
+        // Emit the sv.fwrite.
+        builder->create<sv::FWriteOp>(op.formatString(), operands);
+      });
+    });
+  });
 
-  // We're going to move insertion points.
-  auto oldIP = &*builder->getInsertionPoint();
-
-  // Emit an "#ifndef SYNTHESIS" guard into the always block.
-  builder->setInsertionPointToStart(always.getBody());
-  auto ifndef = builder->create<sv::IfDefOp>("!SYNTHESIS");
-
-  // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
-  builder->setInsertionPointToStart(ifndef.getBodyBlock());
-  Value ifCond =
-      builder->create<sv::TextualValueOp>(cond.getType(), "`PRINTF_COND_");
-  ifCond = builder->create<rtl::AndOp>(ValueRange{ifCond, cond},
-                                       ArrayRef<NamedAttribute>{});
-  auto svIf = builder->create<sv::IfOp>(ifCond);
-
-  // Emit the sv.fwrite.
-  builder->setInsertionPointToStart(svIf.getBodyBlock());
-  builder->create<sv::FWriteOp>(op.formatString(), operands);
-
-  builder->setInsertionPoint(oldIP);
   return success();
 }
 
@@ -1056,32 +1047,24 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
   if (!clock || !cond)
     return failure();
 
-  auto always = builder->create<sv::AlwaysAtPosEdgeOp>(clock);
+  builder->create<sv::AlwaysAtPosEdgeOp>(clock, [&]() {
+    // Emit an "#ifndef SYNTHESIS" guard into the always block.
+    builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
+      // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
+      Value ifCond =
+          builder->create<sv::TextualValueOp>(cond.getType(), "`STOP_COND_");
+      ifCond = builder->create<rtl::AndOp>(ValueRange{ifCond, cond},
+                                           ArrayRef<NamedAttribute>{});
+      builder->create<sv::IfOp>(ifCond, [&]() {
+        // Emit the sv.fatal or sv.finish.
+        if (op.exitCode())
+          builder->create<sv::FatalOp>();
+        else
+          builder->create<sv::FinishOp>();
+      });
+    });
+  });
 
-  // We're going to move insertion points.
-  auto oldIP = &*builder->getInsertionPoint();
-
-  // Emit an "#ifndef SYNTHESIS" guard into the always block.
-  builder->setInsertionPointToStart(always.getBody());
-  auto ifndef = builder->create<sv::IfDefOp>("!SYNTHESIS");
-
-  // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
-  builder->setInsertionPointToStart(ifndef.getBodyBlock());
-  Value ifCond =
-      builder->create<sv::TextualValueOp>(cond.getType(), "`STOP_COND_");
-  ifCond = builder->create<rtl::AndOp>(ValueRange{ifCond, cond},
-                                       ArrayRef<NamedAttribute>{});
-  auto svIf = builder->create<sv::IfOp>(ifCond);
-
-  // Emit the sv.fatal or sv.finish.
-  builder->setInsertionPointToStart(svIf.getBodyBlock());
-
-  if (op.exitCode())
-    builder->create<sv::FatalOp>();
-  else
-    builder->create<sv::FinishOp>();
-
-  builder->setInsertionPoint(oldIP);
   return success();
 }
 

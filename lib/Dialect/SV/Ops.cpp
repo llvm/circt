@@ -17,10 +17,18 @@ using namespace sv;
 // IfDefOp
 
 void IfDefOp::build(OpBuilder &odsBuilder, OperationState &result,
-                    StringRef cond) {
+                    StringRef cond, std::function<void()> bodyCtor) {
   result.addAttribute("cond", odsBuilder.getStringAttr(cond));
   Region *body = result.addRegion();
   IfDefOp::ensureTerminator(*body, odsBuilder, result.location);
+
+  // Fill in the body of the #ifdef.
+  if (bodyCtor) {
+    auto oldIP = &*odsBuilder.getInsertionPoint();
+    odsBuilder.setInsertionPointToStart(&*body->begin());
+    bodyCtor();
+    odsBuilder.setInsertionPoint(oldIP);
+  }
 }
 
 static ParseResult parseIfDefOp(OpAsmParser &parser, OperationState &result) {
@@ -47,10 +55,19 @@ static void printIfDefOp(OpAsmPrinter &p, IfDefOp op) {
 //===----------------------------------------------------------------------===//
 // IfOp
 
-void IfOp::build(OpBuilder &odsBuilder, OperationState &result, Value cond) {
+void IfOp::build(OpBuilder &odsBuilder, OperationState &result, Value cond,
+                 std::function<void()> bodyCtor) {
   result.addOperands(cond);
   Region *body = result.addRegion();
   IfOp::ensureTerminator(*body, odsBuilder, result.location);
+
+  // Fill in the body of the #ifdef.
+  if (bodyCtor) {
+    auto oldIP = &*odsBuilder.getInsertionPoint();
+    odsBuilder.setInsertionPointToStart(&*body->begin());
+    bodyCtor();
+    odsBuilder.setInsertionPoint(oldIP);
+  }
 }
 
 static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
@@ -79,10 +96,18 @@ static void printIfOp(OpAsmPrinter &p, IfOp op) {
 // AlwaysAtPosEdgeOp
 
 void AlwaysAtPosEdgeOp::build(OpBuilder &odsBuilder, OperationState &result,
-                              Value clock) {
+                              Value clock, std::function<void()> bodyCtor) {
   result.addOperands(clock);
   Region *body = result.addRegion();
   AlwaysAtPosEdgeOp::ensureTerminator(*body, odsBuilder, result.location);
+
+  // Fill in the body of the #ifdef.
+  if (bodyCtor) {
+    auto oldIP = &*odsBuilder.getInsertionPoint();
+    odsBuilder.setInsertionPointToStart(&*body->begin());
+    bodyCtor();
+    odsBuilder.setInsertionPoint(oldIP);
+  }
 }
 
 static ParseResult parseAlwaysAtPosEdgeOp(OpAsmParser &parser,

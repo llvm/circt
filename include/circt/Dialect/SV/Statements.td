@@ -38,7 +38,8 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator]>, HasCustomParserPrinter {
   // implicitly installed.
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringRef":$cond)>
+    OpBuilderDAG<(ins "StringRef":$cond,
+                      CArg<"std::function<void()>", "{}">:$bodyCtor)>
   ];
 
   let extraClassDeclaration = [{
@@ -61,7 +62,8 @@ def IfOp : SVOp<"if", [HasRegionTerminator]>,
   // implicitly installed.
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "Value":$cond)>
+    OpBuilderDAG<(ins "Value":$cond,
+                      CArg<"std::function<void()>", "{}">:$bodyCtor)>
   ];
 
   let extraClassDeclaration = [{
@@ -86,7 +88,8 @@ def AlwaysAtPosEdgeOp : SVOp<"alwaysat_posedge", [HasRegionTerminator]>,
   // implicitly installed.
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "Value":$cond)>
+    OpBuilderDAG<(ins "Value":$cond,
+                      CArg<"std::function<void()>", "{}">:$bodyCtor)>
   ];
 
   let extraClassDeclaration = [{
