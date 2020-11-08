@@ -681,14 +681,31 @@ void WhenOp::createElseRegion() {
 }
 
 void WhenOp::build(OpBuilder &builder, OperationState &result, Value condition,
-                   bool withElseRegion) {
+                   bool withElseRegion, std::function<void()> thenCtor,
+                   std::function<void()> elseCtor) {
   result.addOperands(condition);
 
   Region *thenRegion = result.addRegion();
   Region *elseRegion = result.addRegion();
   WhenOp::ensureTerminator(*thenRegion, builder, result.location);
-  if (withElseRegion)
+
+  if (thenCtor) {
+    auto oldIP = &*builder.getInsertionPoint();
+    builder.setInsertionPointToStart(&*thenRegion->begin());
+    thenCtor();
+    builder.setInsertionPoint(oldIP);
+  }
+
+  if (withElseRegion) {
     WhenOp::ensureTerminator(*elseRegion, builder, result.location);
+
+    if (elseCtor) {
+      auto oldIP = &*builder.getInsertionPoint();
+      builder.setInsertionPointToStart(&*elseRegion->begin());
+      elseCtor();
+      builder.setInsertionPoint(oldIP);
+    }
+  }
 }
 
 //===----------------------------------------------------------------------===//

@@ -175,7 +175,9 @@ def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">]> {
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "Value":$condition, "bool":$withElseRegion)>
+    OpBuilderDAG<(ins "Value":$condition, "bool":$withElseRegion,
+                      CArg<"std::function<void()>", "{}">:$thenCtor,
+                      CArg<"std::function<void()>", "{}">:$elseCtor)>
   ];
 
   let assemblyFormat = [{
