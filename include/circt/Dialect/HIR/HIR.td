@@ -337,7 +337,7 @@ def CallOp : HIR_Op<"call",[AttrSizedOperandSegments] > {
 }
 
 def DefOp : HIR_Op<"def",
-    [DeclareOpInterfaceMethods<CallableOpInterface>, FunctionLike,IsolatedFromAbove,Symbol] > {
+    [DeclareOpInterfaceMethods<CallableOpInterface>, FunctionLike, IsolatedFromAbove,Symbol] > {
       let summary = "Function definition";
       let description = [{
         This Op creates a new function 
@@ -350,7 +350,9 @@ def DefOp : HIR_Op<"def",
 
       let arguments = (ins
           TypeAttr:$type,
-          StrAttr:$sym_name
+          StrAttr:$sym_name,
+          ArrayAttr:$input_delays,
+          ArrayAttr:$output_delays
           );
 
       let regions = (region SizedRegion<1>:$region);

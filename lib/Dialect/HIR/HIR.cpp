@@ -25,8 +25,9 @@ using namespace llvm;
 // Helper Methods.
 
 static IntegerAttr getIntegerAttr(OpAsmParser &parser, int width, int value) {
-  IntegerAttr::get(IntegerType::get(32, parser.getBuilder().getContext()),
-                   APInt(32, 0));
+  return IntegerAttr::get(
+      IntegerType::get(width, parser.getBuilder().getContext()),
+      APInt(width, value));
 }
 static Type getIntegerType(OpAsmParser &parser, int bitwidth) {
   return IntegerType::get(bitwidth, parser.getBuilder().getContext());
@@ -288,6 +289,105 @@ LogicalResult UnrollForOp::moveOutOfLoop(ArrayRef<Operation *> ops) {
 /// DefOp
 /// Example:
 /// hir.def @foo at %t (%x :!hir.int, %y:!hir.int) ->(!hir.int){}
+
+static ParseResult parseDefSignature(
+    OpAsmParser &parser, SmallVectorImpl<OpAsmParser::OperandType> &entryArgs,
+    SmallVectorImpl<Type> &argTypes, SmallVectorImpl<NamedAttrList> &argAttrs,
+    SmallVectorImpl<Type> &resultTypes,
+    SmallVectorImpl<NamedAttrList> &resultAttrs, OperationState &result) {
+
+  SmallVector<Attribute, 4> input_delays;
+  SmallVector<Attribute, 4> output_delays;
+  // parse operand args
+  if (parser.parseLParen())
+    return failure();
+
+  while (1) {
+    // Parse operand and type
+    OpAsmParser::OperandType operand;
+    Type operandType;
+    if (parser.parseOperand(operand) || parser.parseColon() ||
+        parser.parseType(operandType))
+      return failure();
+    entryArgs.push_back(operand);
+    argTypes.push_back(operandType);
+
+    // Parse argAttr
+    if (operandType.isa<IntegerType>() &&
+        !parser.parseOptionalKeyword("delay")) {
+      NamedAttrList tempAttrs;
+      IntegerAttr delayAttr;
+      if (parser.parseAttribute(delayAttr, getIntegerType(parser, 64), "delay",
+                                tempAttrs))
+        return failure();
+      input_delays.push_back(delayAttr);
+    } else {
+      // Default delay is 0.
+      input_delays.push_back(getIntegerAttr(parser, 64, 0));
+    }
+
+    NamedAttrList blankAttrs;
+    argAttrs.push_back(blankAttrs);
+
+    if (parser.parseOptionalComma())
+      break;
+  }
+  if (parser.parseRParen())
+    return failure();
+
+  ArrayAttr argDelayAttrs = parser.getBuilder().getArrayAttr(input_delays);
+  result.attributes.push_back(
+      parser.getBuilder().getNamedAttr("input_delays", argDelayAttrs));
+
+  // Return if no output args.
+  if (parser.parseOptionalArrow()) {
+    // blank output_delays attr
+    ArrayAttr resultDelayAttrs =
+        parser.getBuilder().getArrayAttr(output_delays);
+    result.attributes.push_back(
+        parser.getBuilder().getNamedAttr("output_delays", resultDelayAttrs));
+    return success();
+  }
+
+  // parse result args
+  if (parser.parseLParen())
+    return failure();
+
+  while (1) {
+    // Parse result type
+    Type resultType;
+    if (parser.parseType(resultType))
+      return failure();
+    resultTypes.push_back(resultType);
+
+    // Parse delayAttr
+    if (resultType.isa<IntegerType>() &&
+        !parser.parseOptionalKeyword("delay")) {
+      IntegerAttr delayAttr;
+      NamedAttrList tempAttrs;
+      if (parser.parseAttribute(delayAttr, getIntegerType(parser, 64), "delay",
+                                tempAttrs))
+        return failure();
+      output_delays.push_back(delayAttr);
+    } else {
+      // Default delay is 0.
+      output_delays.push_back(getIntegerAttr(parser, 64, 0));
+    }
+    NamedAttrList blankAttrs;
+    resultAttrs.push_back(blankAttrs);
+    if (parser.parseOptionalComma())
+      break;
+  }
+  if (parser.parseRParen())
+    return failure();
+
+  ArrayAttr resultDelayAttrs = parser.getBuilder().getArrayAttr(output_delays);
+  result.attributes.push_back(
+      parser.getBuilder().getNamedAttr("output_delays", resultDelayAttrs));
+  return success();
+}
+
+// Parse method.
 static ParseResult parseDefOp(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::OperandType, 4> entryArgs;
   OpAsmParser::OperandType tstart;
@@ -308,17 +408,16 @@ static ParseResult parseDefOp(OpAsmParser &parser, OperationState &result) {
 
   // Parse the function signature.
   bool isVariadic = false;
-  if (impl::parseFunctionSignature(parser, /*allowVariadic=*/false, entryArgs,
-                                   argTypes, argAttrs, isVariadic, resultTypes,
-                                   resultAttrs))
+  if (parseDefSignature(parser, entryArgs, argTypes, argAttrs, resultTypes,
+                        resultAttrs, result))
     return failure();
 
   auto fnType = builder.getFunctionType(argTypes, resultTypes);
   result.addAttribute(impl::getTypeAttrName(), TypeAttr::get(fnType));
 
   // If additional attributes are present, parse them.
-  if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
-    return failure();
+  // if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
+  //  return failure();
 
   // Add the attributes to the function arguments.
   assert(argAttrs.size() == argTypes.size());
