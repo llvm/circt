@@ -15,7 +15,7 @@ module {
   // CHECK-LABEL: module B(
   // CHECK-NEXT:   inout  a,
   // CHECK-NEXT:   output b, c);
-  // CHECK-EMPTY: 
+  // CHECK-EMPTY:
   // CHECK-NEXT:   assign b = a | a;
   // CHECK-NEXT:   assign c = a & a;
   // CHECK-NEXT: endmodule
@@ -54,40 +54,40 @@ module {
     %p = rtl.instance "paramd" @EXT_W_PARAMS(%w) {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1) -> i1
     rtl.output %y, %x, %p : i1, i1, i1
   }
+  // CHECK-LABEL: module AB(
+  // CHECK-NEXT:   input  w, x,
+  // CHECK-NEXT:   output y, z, p);
+  // CHECK-EMPTY:
+  // CHECK-NEXT:   wire w2;
+  // CHECK-NEXT:   wire w1;
+  // CHECK-NEXT:   wire y_0;
+  // CHECK-NEXT:   wire p_1;
+  // CHECK-EMPTY:
+  // CHECK-NEXT: A a1 (
+  // CHECK-NEXT:     .d (w),
+  // CHECK-NEXT:     .e (w1),
+  // CHECK-NEXT:     .f (w2)
+  // CHECK-NEXT:   )
+  // CHECK-NEXT: B b1 (
+  // CHECK-NEXT:     .a (w2),
+  // CHECK-NEXT:     .b (w1),
+  // CHECK-NEXT:     .c (y_0)
+  // CHECK-NEXT:   )
+  // CHECK-NEXT: EXT_W_PARAMS #(.DEFAULT(0), .DEPTH(3.242000e+01), .FORMAT("xyz_timeout=%d\n"), .WIDTH(32)) paramd (
+  // CHECK-NEXT:  .a (w),
+  // CHECK-NEXT:  .out (p_1)
+  // CHECK-NEXT: );
+  // CHECK-NEXT:   assign y = y_0;
+  // CHECK-NEXT:   assign z = x;
+  // CHECK-NEXT:   assign p = p_1;
+  // CHECK-NEXT: endmodule
 
-  //CHECK-LABEL: module AB(
-  //CHECK-NEXT:   input  w, x,
-  //CHECK-NEXT:   output y, z, p);
-  //CHECK-EMPTY: 
-  //CHECK-NEXT:   wire w2;
-  //CHECK-NEXT:   wire w1;
-  //CHECK-NEXT:   wire y_0;
-  //CHECK-NEXT:   wire p_1;
-  //CHECK-EMPTY: 
-  //CHECK-NEXT: A a1 (
-  //CHECK-NEXT:     .d (w),
-  //CHECK-NEXT:     .e (w1),
-  //CHECK-NEXT:     .f (w2)
-  //CHECK-NEXT:   )
-  //CHECK-NEXT: B b1 (
-  //CHECK-NEXT:     .a (w2),
-  //CHECK-NEXT:     .b (w1),
-  //CHECK-NEXT:     .c (y_0)
-  //CHECK-NEXT:   )
-  //CHECK-NEXT: EXT_W_PARAMS #(.DEFAULT(0), .DEPTH(3.242000e+01), .FORMAT("xyz_timeout=%d\n"), .WIDTH(32)) paramd (
-  //CHECK-NEXT:  .a (w),
-  //CHECK-NEXT:  .out (p_1)
-  //CHECK-NEXT: );
-  //CHECK-NEXT:   assign y = y_0;
-  //CHECK-NEXT:   assign z = x;
-  //CHECK-NEXT:   assign p = p_1;
-  //CHECK-NEXT: endmodule
+
 
   rtl.module @shl(%a: i1) -> (i1 {rtl.name = "b"}) {
     %0 = rtl.shl %a, %a : i1
     rtl.output %0 : i1
   }
-
   // CHECK-LABEL:  module shl(
   // CHECK-NEXT:   input  a,
   // CHECK-NEXT:   output b);
