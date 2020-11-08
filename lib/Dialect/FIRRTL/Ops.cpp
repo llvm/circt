@@ -691,61 +691,6 @@ void WhenOp::build(OpBuilder &builder, OperationState &result, Value condition,
     WhenOp::ensureTerminator(*elseRegion, builder, result.location);
 }
 
-static void print(OpAsmPrinter &p, WhenOp op) {
-  p << op.getOperationName() << " ";
-  p.printOperand(op.condition());
-
-  p.printRegion(op.thenRegion(),
-                /*printEntryBlockArgs=*/false,
-                /*printBlockTerminators=*/false);
-
-  // Print the 'else' regions if it has any blocks.
-  auto &elseRegion = op.elseRegion();
-  if (!elseRegion.empty()) {
-    p << " else";
-    p.printRegion(elseRegion,
-                  /*printEntryBlockArgs=*/false,
-                  /*printBlockTerminators=*/false);
-  }
-
-  // Print the attribute list.
-  p.printOptionalAttrDictWithKeyword(op.getAttrs());
-}
-
-static ParseResult parseWhenOp(OpAsmParser &parser, OperationState &result) {
-  // Parse the module name.
-  OpAsmParser::OperandType conditionOperand;
-  if (parser.parseOperand(conditionOperand) ||
-      parser.resolveOperand(conditionOperand,
-                            UIntType::get(result.getContext(), 1),
-                            result.operands))
-    return failure();
-
-  // Create the regions for 'then' and 'else'.  The latter must be created even
-  // if it remains empty for the validity of the operation.
-  result.regions.reserve(2);
-  Region *thenRegion = result.addRegion();
-  Region *elseRegion = result.addRegion();
-
-  // Parse the 'then' region.
-  if (parser.parseRegion(*thenRegion, {}, {}))
-    return failure();
-  WhenOp::ensureTerminator(*thenRegion, parser.getBuilder(), result.location);
-
-  // If we find an 'else' keyword then parse the 'else' region.
-  if (!parser.parseOptionalKeyword("else")) {
-    if (parser.parseRegion(*elseRegion, {}, {}))
-      return failure();
-    WhenOp::ensureTerminator(*elseRegion, parser.getBuilder(), result.location);
-  }
-
-  // Parse the optional attribute list.
-  if (parser.parseOptionalAttrDict(result.attributes))
-    return failure();
-
-  return success();
-}
-
 //===----------------------------------------------------------------------===//
 // Expressions
 //===----------------------------------------------------------------------===//

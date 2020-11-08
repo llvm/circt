@@ -4,22 +4,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-class HasCustomParserPrinter {
-  code printer = [{ return ::print$cppClass(p, *this); }];
-  code parser = [{ return ::parse$cppClass(parser, result); }];
-}
-
 def HasRegionTerminator : SingleBlockImplicitTerminator<"YieldOp">;
 
 //===----------------------------------------------------------------------===//
 // Control flow like-operations
 //===----------------------------------------------------------------------===//
 
-// TODO: MLIR Supports parsing/printing regions.  We should give it a try once
-// this patch is merged in our tree:
-// https://github.com/llvm/llvm-project/commit/eaeadce9bd11
-
-def IfDefOp : SVOp<"ifdef", [HasRegionTerminator]>, HasCustomParserPrinter {
+def IfDefOp : SVOp<"ifdef", [HasRegionTerminator]> {
   let summary = "'ifdef MACRO' block";
    
    let description = [{
@@ -31,8 +22,7 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator]>, HasCustomParserPrinter {
   let arguments = (ins StrAttr:$cond);
   let results = (outs);
   
-  // TODO: ODS doesn't support parsing/printing regions yet :-(
-  // let assemblyFormat = [{ $clock attr-dict $body }];*/
+  let assemblyFormat = [{ $cond regions attr-dict }];
 
   // TODO: ODS forces using a custom builder just to get the region terminator
   // implicitly installed.
@@ -47,16 +37,14 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator]>, HasCustomParserPrinter {
   }];
 }
 
-def IfOp : SVOp<"if", [HasRegionTerminator]>,
-           HasCustomParserPrinter {
+def IfOp : SVOp<"if", [HasRegionTerminator]> {
   let summary = "'if (cond)' block";
   
   let regions = (region SizedRegion<1>:$body);
   let arguments = (ins I1:$cond);
   let results = (outs);
   
-  // TODO: ODS doesn't support parsing/printing regions yet :-(
-  //let assemblyFormat = [{ $cond attr-dict $body }];
+  let assemblyFormat = [{ $cond $body attr-dict }];
 
   // TODO: ODS forces using a custom builder just to get the region terminator
   // implicitly installed.
@@ -73,16 +61,14 @@ def IfOp : SVOp<"if", [HasRegionTerminator]>,
 
 // TODO: This should be generalized, e.g. with an enum to specify the edge
 // trigger behavior.
-def AlwaysAtPosEdgeOp : SVOp<"alwaysat_posedge", [HasRegionTerminator]>,
-                        HasCustomParserPrinter {
+def AlwaysAtPosEdgeOp : SVOp<"alwaysat_posedge", [HasRegionTerminator]> {
   let summary = "'always @(posedge ...)'' block";
   
   let regions = (region SizedRegion<1>:$body);
   let arguments = (ins I1:$clock);
   let results = (outs);
   
-  // TODO: ODS doesn't support parsing/printing regions yet :-(
-  //let assemblyFormat = [{ $clock attr-dict $body }];
+  let assemblyFormat = [{ $clock $body attr-dict }];
 
   // TODO: ODS forces using a custom builder just to get the region terminator
   // implicitly installed.

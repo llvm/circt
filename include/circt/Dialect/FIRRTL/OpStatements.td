@@ -178,6 +178,10 @@ def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">]> {
     OpBuilderDAG<(ins "Value":$condition, "bool":$withElseRegion)>
   ];
 
+  let assemblyFormat = [{
+    $condition $thenRegion (`else` $elseRegion^)? attr-dict-with-keyword
+  }];
+
   let extraClassDeclaration = [{
     OpBuilder getThenBodyBuilder() {
       assert(!thenRegion().empty() && "Unexpected empty 'then' region.");
@@ -197,7 +201,4 @@ def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">]> {
       return OpBuilder(&body, std::prev(body.end()));
     }
   }];
-
-  let printer = [{ return ::print(p, *this); }];
-  let parser = [{ return ::parse$cppClass(parser, result); }];
 }

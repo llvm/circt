@@ -31,27 +31,6 @@ void IfDefOp::build(OpBuilder &odsBuilder, OperationState &result,
   }
 }
 
-static ParseResult parseIfDefOp(OpAsmParser &parser, OperationState &result) {
-  StringAttr cond;
-  Region *body = result.addRegion();
-  if (parser.parseAttribute(cond, "cond", result.attributes) ||
-      parser.parseRegion(*body, llvm::None, llvm::None) ||
-      parser.parseOptionalAttrDict(result.attributes))
-    return failure();
-
-  IfDefOp::ensureTerminator(*body, parser.getBuilder(), result.location);
-  return success();
-}
-
-static void printIfDefOp(OpAsmPrinter &p, IfDefOp op) {
-  p << op.getOperationName() << ' ';
-  p.printAttribute(op.condAttr());
-  p.printRegion(op.body(),
-                /*printEntryBlockArgs=*/false,
-                /*printBlockTerminators=*/false);
-  p.printOptionalAttrDict(op.getAttrs(), {"cond"});
-}
-
 //===----------------------------------------------------------------------===//
 // IfOp
 
@@ -70,28 +49,6 @@ void IfOp::build(OpBuilder &odsBuilder, OperationState &result, Value cond,
   }
 }
 
-static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
-  OpAsmParser::OperandType cond;
-  Region *body = result.addRegion();
-  if (parser.parseOperand(cond) ||
-      parser.resolveOperand(cond, parser.getBuilder().getI1Type(),
-                            result.operands) ||
-      parser.parseRegion(*body, llvm::None, llvm::None) ||
-      parser.parseOptionalAttrDict(result.attributes))
-    return failure();
-
-  IfOp::ensureTerminator(*body, parser.getBuilder(), result.location);
-  return success();
-}
-
-static void printIfOp(OpAsmPrinter &p, IfOp op) {
-  p << op.getOperationName() << ' ' << op.cond();
-  p.printRegion(op.body(),
-                /*printEntryBlockArgs=*/false,
-                /*printBlockTerminators=*/false);
-  p.printOptionalAttrDict(op.getAttrs());
-}
-
 //===----------------------------------------------------------------------===//
 // AlwaysAtPosEdgeOp
 
@@ -108,30 +65,6 @@ void AlwaysAtPosEdgeOp::build(OpBuilder &odsBuilder, OperationState &result,
     bodyCtor();
     odsBuilder.setInsertionPoint(oldIP);
   }
-}
-
-static ParseResult parseAlwaysAtPosEdgeOp(OpAsmParser &parser,
-                                          OperationState &result) {
-  OpAsmParser::OperandType clock;
-  Region *body = result.addRegion();
-  if (parser.parseOperand(clock) ||
-      parser.resolveOperand(clock, parser.getBuilder().getI1Type(),
-                            result.operands) ||
-      parser.parseRegion(*body, llvm::None, llvm::None) ||
-      parser.parseOptionalAttrDict(result.attributes))
-    return failure();
-
-  AlwaysAtPosEdgeOp::ensureTerminator(*body, parser.getBuilder(),
-                                      result.location);
-  return success();
-}
-
-static void printAlwaysAtPosEdgeOp(OpAsmPrinter &p, AlwaysAtPosEdgeOp op) {
-  p << op.getOperationName() << ' ' << op.clock();
-  p.printRegion(op.body(),
-                /*printEntryBlockArgs=*/false,
-                /*printBlockTerminators=*/false);
-  p.printOptionalAttrDict(op.getAttrs());
 }
 
 //===----------------------------------------------------------------------===//
