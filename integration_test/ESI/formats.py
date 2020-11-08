@@ -4,6 +4,7 @@ import lit.formats
 import os
 import re
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -116,6 +117,12 @@ class CosimTestRunner:
         Not perfect since we don't know when the cosim RPC server in the
         simulation has started accepting connections."""
 
+        # Find available port.
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(('', 0))
+        port = sock.getsockname()[1]
+        sock.close()
+
         with open(os.path.join(self.execdir, "script.py"), "w") as script:
             # Include a bunch of config variables at the beginning of the
             # script for use by the test code.
@@ -138,12 +145,15 @@ class CosimTestRunner:
 
             # Add the test files directory and this files directory to the
             # pythonpath.
+            script.write(f"import os\n")
             script.write(f"import sys\n")
             script.write(
                 f"sys.path.append(\"{os.path.dirname(self.file)}\")\n")
             script.write(
                 f"sys.path.append(\"{os.path.dirname(__file__)}\")\n")
             script.write("\n\n")
+            script.write(
+                "simhostport = f'{os.uname()[1]}:" + str(port) + "'\n")
 
             # Run the lines specified in the test file.
             script.writelines(
@@ -154,9 +164,14 @@ class CosimTestRunner:
             # Run the simulation.
             simStdout = open(os.path.join(self.execdir, "sim_stdout.log"), "w")
             simStderr = open(os.path.join(self.execdir, "sim_stderr.log"), "w")
-            simProc = subprocess.Popen([f"./obj_dir/V{self.top}", "--cycles", "-1"],
-                                       stdout=simStdout, stderr=simStderr, cwd=self.execdir)
-            # Wait a set amount of time for the simulation to start accepting RPC connections.
+            simEnv = os.environ.copy()
+            simEnv["COSIM_PORT"] = str(port)
+            simProc = subprocess.Popen(
+                [f"./obj_dir/V{self.top}", "--cycles", "-1"],
+                stdout=simStdout, stderr=simStderr, cwd=self.execdir,
+                env=simEnv)
+            # Wait a set amount of time for the simulation to start accepting
+            # RPC connections.
             # TODO: Check if the server is up by polling.
             time.sleep(0.05)
 

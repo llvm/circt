@@ -11,10 +11,9 @@ import pytest
 
 
 class LoopbackTester:
-    def __init__(self, schemaPath):
+    def __init__(self, schemaPath, hostPort):
         self.dpi = capnp.load(schemaPath)
-        hostname = os.uname()[1]
-        self.rpc_client = capnp.TwoPartyClient(f"{hostname}:1111")
+        self.rpc_client = capnp.TwoPartyClient(hostPort)
         self.cosim = self.rpc_client.bootstrap().cast_as(self.dpi.CosimDpiServer)
 
     def test_list(self):

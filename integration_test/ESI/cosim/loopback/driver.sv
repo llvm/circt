@@ -1,5 +1,5 @@
 // PY: import base_dpi_test as test
-// PY: rpc = test.LoopbackTester(rpcSchemaPath)
+// PY: rpc = test.LoopbackTester(rpcSchemaPath, simhostport)
 // PY: rpc.write_read_many(5)
 
 import Cosim_DpiPkg::*;
