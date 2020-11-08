@@ -70,18 +70,18 @@ static cl::opt<TraceFormat> traceMode(
     "trace-format", cl::desc("Choose the dump format:"), cl::init(full),
     cl::values(
         clEnumVal(full, "Dump signal changes for every time step and sub-step, "
-                        "for each signal and connected instance"),
+                        "for all instances"),
         clEnumVal(reduced, "Dump signal changes for every time-step and "
-                           "sub-step, only for the top-level signals"),
+                           "sub-step, only for the top-level instance"),
         clEnumVal(merged,
-                  "Only dump changes for real-time steps, for all signals and "
-                  "connected instances"),
+                  "Only dump changes for real-time steps, for all instances"),
         clEnumValN(mergedReduce, "merged-reduce",
                    "Only dump changes for real-time steps, only for the "
-                   "top-level signals"),
-        clEnumValN(namedOnly, "named-only",
-                   "Only dump changes for real-time steps, only for top-level "
-                   "signals not having a default name (i.e. '(sig)?[0-9]*')"),
+                   "top-level instance"),
+        clEnumValN(
+            namedOnly, "named-only",
+            "Only dump changes for real-time steps, only for top-level "
+            "instance and signals not having the default name '(sig)?[0-9]*'"),
         clEnumValN(noTrace, "no-trace", "Don't dump a signal trace")));
 
 static int dumpLLVM(ModuleOp module, MLIRContext &context) {
