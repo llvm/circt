@@ -568,6 +568,7 @@ void FIRRTLLowering::runOnOperation() {
   auto *body = getOperation().getBodyBlock();
 
   SmallVector<Operation *, 16> opsToRemove;
+  SmallVector<Operation *, 16> castsToTryRemove;
 
   // Iterate through each operation in the module body, attempting to lower
   // each of them.  We maintain 'builder' for each invocation.
@@ -582,6 +583,12 @@ void FIRRTLLowering::runOnOperation() {
       // If lowering didn't succeed, then make sure to rewrite operands that
       // refer to lowered values.
       handleUnloweredOp(&op);
+
+      // If this was a cast, try to remove it on a best-effort basis.  These are
+      // generally from module port lowering and instance lowering.
+      if (isa<AsPassivePrimOp>(op) || isa<AsNonPassivePrimOp>(op) ||
+          isa<StdIntCast>(op))
+        castsToTryRemove.push_back(&op);
     }
   }
   builder = nullptr;
@@ -592,6 +599,15 @@ void FIRRTLLowering::runOnOperation() {
   // will be changed to use the newly lowered ops.
   while (!opsToRemove.empty())
     opsToRemove.pop_back_val()->erase();
+
+  // Now try to remove any casts if they are dead.
+  while (!castsToTryRemove.empty()) {
+    auto *cast = castsToTryRemove.pop_back_val();
+    assert(cast->getNumResults() == 1 && cast->getNumOperands() == 1 &&
+           "unexpected cast");
+    if (cast->use_empty())
+      cast->erase();
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -613,7 +629,8 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
   if (it != valueMapping.end())
     return it->second;
 
-  // Otherwise, we need to introduce a cast to the right FIRRTL type.
+  // Otherwise, we need to introduce (or look through) a cast to the right
+  // FIRRTL type.
   auto resultType = lowerType(firType);
   if (!resultType)
     return value;
@@ -622,8 +639,24 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
     return {};
 
   // Cast FIRRTL -> standard type.
-  if (!firType.isPassive())
-    value = builder->create<AsPassivePrimOp>(firType.getPassiveType(), value);
+  if (!firType.isPassive()) {
+    auto passiveType = firType.getPassiveType();
+
+    // If the input is an asNonPassive conversion from the right type then
+    // just use its inputs. This is common when dealing with lowered instances.
+    if (auto castVal = dyn_cast<AsNonPassivePrimOp>(value.getDefiningOp()))
+      if (castVal.getOperand().getType() == passiveType)
+        value = castVal.getOperand();
+
+    if (value.getType() != passiveType)
+      value = builder->create<AsPassivePrimOp>(passiveType, value);
+  }
+
+  // If the input is being casted from the type we already want, then just
+  // return it.  This is typical for module ports, which are already lowered.
+  if (auto castVal = dyn_cast<StdIntCast>(value.getDefiningOp()))
+    if (castVal.getOperand().getType() == resultType)
+      return castVal.getOperand();
 
   return builder->create<StdIntCast>(resultType, value);
 }

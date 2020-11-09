@@ -110,8 +110,8 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
     // Run the lower-to-rtl pass if requested.
     if (lowerToRTL) {
-      OpPassManager &nestedPM = pm.nest<firrtl::CircuitOp>();
-      nestedPM.addPass(firrtl::createLowerFIRRTLToRTLPass());
+      pm.addPass(firrtl::createLowerFIRRTLToRTLModulePass());
+      pm.addPass(firrtl::createLowerFIRRTLToRTLPass());
     }
 
     if (failed(pm.run(module.get())))
