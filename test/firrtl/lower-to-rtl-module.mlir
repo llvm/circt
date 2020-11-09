@@ -8,6 +8,7 @@
 
    // CHECK-LABEL: rtl.externmodule @MyParameterizedExtModule(
    // CHECK: i1 {rtl.name = "in"}) -> (i8 {rtl.name = "out"})
+   // CHECK: attributes {verilogName = "name_thing"}
    firrtl.extmodule @MyParameterizedExtModule(!firrtl.uint<1> {firrtl.name = "in"}, !firrtl.flip<uint<8>> {firrtl.name = "out"})
       attributes {defname = "name_thing",
                   parameters = {DEFAULT = 0 : i64,

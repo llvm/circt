@@ -1675,10 +1675,14 @@ void ModuleEmitter::emitStatement(rtl::InstanceOp op) {
   auto *moduleOp = op.getReferencedModule();
   assert(moduleOp && "Invalid IR");
 
-  SmallVector<rtl::ModulePortInfo, 8> portInfo;
-  getModulePortInfo(moduleOp, portInfo);
-
-  indent() << op.moduleName();
+  // If this is a reference to an external module with a hard coded Verilog
+  // name, then use it here.  This is a hack because we lack proper support for
+  // parameterized modules in the RTL dialect.
+  if (auto extMod = dyn_cast<rtl::RTLExternModuleOp>(moduleOp)) {
+    indent() << extMod.getVerilogModuleName();
+  } else {
+    indent() << op.moduleName();
+  }
 
   // Helper that prints a parameter constant value in a Verilog compatible way.
   auto printParmValue = [&](Attribute value) {
@@ -1713,6 +1717,9 @@ void ModuleEmitter::emitStatement(rtl::InstanceOp op) {
 
   os << ' ' << op.instanceName() << " (";
   emitLocationInfoAndNewLine(ops);
+
+  SmallVector<rtl::ModulePortInfo, 8> portInfo;
+  getModulePortInfo(moduleOp, portInfo);
 
   auto opArgs = op.inputs();
   auto opResults = op.getResults();

@@ -64,14 +64,21 @@ def RTLExternModuleOp : RTLOp<"externmodule",
   let description = [{
     The "rtl.externmodule" operation represents an external reference to a
     Verilog module, including a given name and a list of ports.
+
+    The 'verilogName' attribute (when present) specifies the spelling of the
+    module name in Verilog we can use.  TODO: This is a hack because we don't
+    have proper parameterization in the rtl.dialect.  We need a way to represent
+    parameterized types instead of just concrete types.
   }];
-  let arguments = (ins);
+  let arguments = (ins OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports)>
+    OpBuilderDAG<(ins "StringAttr":$name,
+                      "ArrayRef<ModulePortInfo>":$ports,
+                      CArg<"StringRef", "StringRef()">:$verilogName)>
   ];
 
   let extraClassDeclaration = [{   
@@ -79,6 +86,11 @@ def RTLExternModuleOp : RTLOp<"externmodule",
     void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
       getModulePortInfo(*this, results);
     }
+
+    /// Return the name to use for the Verilog module that we're referencing
+    /// here.  This is typically the symbol, but can be overridden with the
+    /// verilogName attribute.
+    StringRef getVerilogModuleName();
 
   private:
     // This trait needs access to the hooks defined below.

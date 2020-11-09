@@ -186,11 +186,15 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   if (failed(lowerPorts(firrtlPorts, ports, oldModule)))
     return {};
 
+  StringRef verilogName;
+  if (auto defName = oldModule.defname())
+    verilogName = defName.getValue();
+
   // Build the new rtl.module op.
   OpBuilder builder(topLevelModule->getTerminator());
   auto nameAttr = builder.getStringAttr(oldModule.getName());
   return builder.create<rtl::RTLExternModuleOp>(oldModule.getLoc(), nameAttr,
-                                                ports);
+                                                ports, verilogName);
 }
 
 /// Run on each firrtl.module, transforming it from an firrtl.module into an
