@@ -1003,11 +1003,11 @@ LogicalResult FIRRTLLowering::visitExpr(MuxPrimOp op) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
-  auto dest = getLoweredValue(op.lhs());
+  auto dest = getLoweredValue(op.dest());
 
   // The source can be a smaller integer, extend it as appropriate if so.
-  auto lhsType = op.lhs().getType().cast<FIRRTLType>().getPassiveType();
-  Value src = getLoweredAndExtendedValue(op.rhs(), lhsType);
+  auto destType = op.dest().getType().cast<FIRRTLType>().getPassiveType();
+  Value src = getLoweredAndExtendedValue(op.src(), destType);
 
   if (!dest || !src)
     return failure();

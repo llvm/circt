@@ -1358,34 +1358,34 @@ void ModuleEmitter::emitStatement(ConnectOp op) {
   ops.insert(op);
 
   // Connect to a register has "special" behavior.
-  auto lhs = op.lhs();
+  auto dest = op.dest();
   auto addRegAssign = [&](const std::string &clockExpr, Value value) {
     std::string action =
-        getName(lhs).str() + " <= " + emitExpressionToString(value, ops) + ";";
+        getName(dest).str() + " <= " + emitExpressionToString(value, ops) + ";";
     auto locStr = getLocationInfoAsString(ops);
     addAtPosEdge(action, locStr, clockExpr);
     return;
   };
 
-  if (auto regOp = dyn_cast_or_null<RegOp>(lhs.getDefiningOp())) {
+  if (auto regOp = dyn_cast_or_null<RegOp>(dest.getDefiningOp())) {
     auto clockExpr = emitExpressionToString(regOp.clockVal(), ops);
-    addRegAssign(clockExpr, op.rhs());
+    addRegAssign(clockExpr, op.src());
     return;
   }
 
-  if (auto regInitOp = dyn_cast_or_null<RegInitOp>(lhs.getDefiningOp())) {
+  if (auto regInitOp = dyn_cast_or_null<RegInitOp>(dest.getDefiningOp())) {
     auto clockExpr = emitExpressionToString(regInitOp.clockVal(), ops);
     clockExpr +=
         " or posedge " + emitExpressionToString(regInitOp.resetSignal(), ops);
 
-    addRegAssign(clockExpr, op.rhs());
+    addRegAssign(clockExpr, op.src());
     return;
   }
 
   indent() << "assign ";
-  emitExpression(lhs, ops);
+  emitExpression(dest, ops);
   os << " = ";
-  emitExpression(op.rhs(), ops);
+  emitExpression(op.src(), ops);
   os << ';';
   emitLocationInfoAndNewLine(ops);
 }

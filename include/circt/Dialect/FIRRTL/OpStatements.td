@@ -34,15 +34,15 @@ def ConnectOp : FIRRTLOp<"connect", []> {
   let description = [{
     Connect Operation:
     ```
-      firrtl.connect %lhs, %rhs : t1, t2
+      firrtl.connect %dest, %src : t1, t2
     ```
     }];
 
-  let arguments = (ins FIRRTLType:$lhs, FIRRTLType:$rhs);
+  let arguments = (ins FIRRTLType:$dest, FIRRTLType:$src);
   let results = (outs);
 
   let assemblyFormat = [{
-    $lhs `,` $rhs  attr-dict `:` type($lhs) `,` type($rhs)
+    $dest `,` $src  attr-dict `:` type($dest) `,` type($src)
   }];
 }
 
@@ -51,15 +51,15 @@ def PartialConnectOp : FIRRTLOp<"partialconnect", []> {
   let description = [{
     Connect two values with fewer constraints:
     ```
-      firrtl.partialconnect %lhs, %rhs : t1, t2
+      firrtl.partialconnect %dest, %src : t1, t2
     ```
     }];
 
-  let arguments = (ins FIRRTLType:$lhs, FIRRTLType:$rhs);
+  let arguments = (ins FIRRTLType:$dest, FIRRTLType:$src);
   let results = (outs);
 
   let assemblyFormat = [{
-    $lhs `,` $rhs  attr-dict `:` type($lhs) `,` type($rhs)
+    $dest `,` $src  attr-dict `:` type($dest) `,` type($src)
   }];
 }
 
