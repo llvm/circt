@@ -1014,7 +1014,7 @@ LogicalResult FIRRTLLowering::visitExpr(ShrPrimOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(DShlPrimOp op) {
-  // rtl has equal types for these, firrtl doesn't
+  // rtl has equal types for these, firrtl doesn't.
   auto lhs = getLoweredAndExtendedValue(op.lhs(), op.result().getType());
   if (!lhs)
     return failure();
@@ -1027,7 +1027,7 @@ LogicalResult FIRRTLLowering::visitExpr(DShlPrimOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(DShrPrimOp op) {
-  // rtl has equal types for these, firrtl doesn't
+  // rtl has equal types for these, firrtl doesn't.
   auto lhs = getLoweredAndExtendedValue(op.lhs(), op.result().getType());
   if (!lhs)
     return failure();
