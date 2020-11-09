@@ -201,7 +201,7 @@ Example:
   let arguments = (ins AnyType : $input, ConstType:$delay, 
       TimeType:$tstart, Optional<ConstType>: $offset);
   let results = (outs AnyType : $res);
-  let assemblyFormat = [{$input `by` $delay `:` type($delay) `at` 
+  let assemblyFormat = [{$input `by` $delay `at` 
     $tstart (`offset` $offset^ )? attr-dict `:` type($input) `->` type($res)}];
 }
 
@@ -327,13 +327,17 @@ def CallOp : HIR_Op<"call",[AttrSizedOperandSegments] > {
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$callee, Variadic<AnyType>:$operands,
-      TimeType:$tstart, Optional<ConstType>: $offset);
+      TimeType:$tstart, Optional<ConstType>: $offset, 
+      ArrayAttr:$input_delays,
+      ArrayAttr:$output_delays);
   let results = (outs Variadic<AnyType> : $res);
 
-  let assemblyFormat = [{
-    $callee `(` $operands `)` `at` $tstart (`offset` $offset^ )? attr-dict 
-      `:` functional-type($operands, $res)
-  }];
+  let parser = [{return parse$cppClass(parser,result);}];
+  let printer = [{return print$cppClass(p,*this);}];
+  //let assemblyFormat = [{
+  //  $callee `(` $operands `)` `at` $tstart (`offset` $offset^ )? attr-dict 
+  //    `:` functional-type($operands, $res)
+  //}];
 }
 
 def DefOp : HIR_Op<"def",
@@ -411,7 +415,7 @@ def ConstantOp : HIR_Op<"constant" > {
   let arguments = (ins I32Attr:$value);
   let results = (outs ConstType : $res);
 
-  let assemblyFormat = [{ $value attr-dict `:` type($res)}];
+  let assemblyFormat = [{ $value attr-dict }];
 }
 
 def CastOp : HIR_Op<"cast">{

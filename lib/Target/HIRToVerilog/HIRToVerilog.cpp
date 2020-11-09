@@ -129,14 +129,14 @@ private:
   void region_begin() {
     verilogMapper.push_frame();
     replacer.push_frame();
-    module_out << "\n//{Region  (level = " << verilogMapper.stack_level()
-               << ").\n";
-    module_out << "//#VerilogValues = " << verilogMapper.size() << ".\n";
+    // module_out << "\n//{Region  (level = " << verilogMapper.stack_level()
+    //           << ").\n";
+    // module_out << "//#VerilogValues = " << verilogMapper.size() << ".\n";
   }
   void region_end() {
-    module_out << "\n// #VerilogValues = " << verilogMapper.size() << ".\n";
-    module_out << "//}Region  (level = " << verilogMapper.stack_level()
-               << ").\n";
+    // module_out << "\n// #VerilogValues = " << verilogMapper.size() << ".\n";
+    // module_out << "//}Region  (level = " << verilogMapper.stack_level()
+    //           << ").\n";
 
     // replacer should process this frame's replacements before verilogMapper
     // pops its frame.
@@ -176,6 +176,7 @@ private:
   llvm::formatted_raw_ostream &out;
   unsigned nextValueNum = 0;
   std::stack<std::pair<RegionKind, string>> yieldTarget;
+  SmallVector<std::string, 4> outputVerilogNames;
 }; // namespace
 
 SmallVector<VerilogValue *, 4>
@@ -359,8 +360,8 @@ LogicalResult VerilogPrinter::printDelayOp(hir::DelayOp op,
     v_result->setIntegerConst(v_input->getIntegerConst());
     return success();
   }
-  Value delay = op.delay();
-  VerilogValue *v_delay = verilogMapper.get_mut(delay);
+  Value delayValue = op.delay();
+  VerilogValue *v_delay = verilogMapper.get_mut(delayValue);
   Value result = op.res();
   verilogMapper.insert(result,
                        VerilogValue(result, "v" + to_string(newValueNumber())));
@@ -599,8 +600,14 @@ LogicalResult VerilogPrinter::printSubtractOp(hir::SubtractOp op,
 
 LogicalResult VerilogPrinter::printReturnOp(hir::ReturnOp op,
                                             unsigned indentAmount) {
-  assert(op.operands().size() == 0);
-  module_out << "\n//hir.return => NOP\n"; // TODO
+  auto outputs = op.operands();
+  assert(outputs.size() == outputVerilogNames.size());
+  for (int i = 0; i < outputs.size(); i++) {
+    Value output = outputs[i];
+    string &verilogName = outputVerilogNames[i];
+    module_out << "assign " << verilogName << " = "
+               << verilogMapper.get(output).strConstOrWire() << ";\n";
+  }
 }
 
 LogicalResult VerilogPrinter::printConstantOp(hir::ConstantOp op,
@@ -862,20 +869,36 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
 LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
   Block &entryBlock = op.getBody().front();
   auto args = entryBlock.getArguments();
-  assert(op.getNumResults() == 0);
+  auto resTypes = op.getType().getResults();
   // Print the module signature.
   FunctionType funcType = op.getType();
   module_out << "module " << op.getName().str() << "(";
+  module_out << "\n//Outputs.\n";
+  bool firstVerilogArg = true;
+  for (int i = 0; i < resTypes.size(); i++) {
+    if (!firstVerilogArg)
+      module_out << ",";
+    module_out << "\n";
+    firstVerilogArg = false;
+    Type type = resTypes[i];
+    assert(type.isa<IntegerType>());
+    std::string verilogName = "out" + std::to_string(i);
+    outputVerilogNames.push_back(verilogName);
+    unsigned width = type.dyn_cast<IntegerType>().getWidth();
+    module_out << "output wire[" << width - 1 << ":0] " << verilogName;
+  }
+
+  module_out << "\n//Inputs.\n";
   for (int i = 0; i < args.size(); i++) {
     Value arg = args[i];
     Type argType = arg.getType();
 
     // Print verilog.
-    if (i == 0)
-      module_out << "\n";
 
-    if (i > 0)
-      module_out << ",\n";
+    if (!firstVerilogArg)
+      module_out << ",";
+    firstVerilogArg = false;
+    module_out << "\n";
 
     if (argType.isa<hir::TimeType>()) {
       unsigned id_tstart = newValueNumber();

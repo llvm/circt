@@ -10,7 +10,7 @@ hir.def @Array_Add at %t (%A:!hir.memref<128*i32, r>,
     %a = hir.mem_read %A[%i] at %ti :!hir.memref<128*i32,r>[i8] -> i32
     %b = hir.mem_read %B[%i] at %ti : !hir.memref<128*i32, r>[i8] -> i32
     %c = hir.add (%a, %b) : (i32, i32) -> (i32)
-    %i1 = hir.delay %i by %1 : !hir.const at %ti : i8 -> i8 
+    %i1 = hir.delay %i by %1 at %ti : i8 -> i8 
     hir.mem_write %c to %C[%i1] at %ti offset %1 : (i32, !hir.memref<128*i32, w>[i8])
   }
   hir.return

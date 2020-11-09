@@ -118,6 +118,180 @@ static ParseResult parseFunctionType(OpAsmParser &parser, int num_operands,
     return failure();
   return success();
 }
+/// CallOp
+/// Syntax:
+/// $callee `(` $operands `)` `at` $tstart (`offset` $offset^ )?
+///   `:` ($operand (delay $delay^)?) `->` ($results)
+
+static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
+
+  SmallVector<OpAsmParser::OperandType, 4> operands;
+  SmallVector<Type, 4> argTypes;
+  SmallVector<Type, 4> resultTypes;
+  OpAsmParser::OperandType tstart;
+  OpAsmParser::OperandType offset;
+  FlatSymbolRefAttr calleeAttr;
+  if (parser.parseAttribute(calleeAttr,
+                            parser.getBuilder().getType<::mlir::NoneType>(),
+                            "callee", result.attributes))
+    return failure();
+
+  if (parser.parseLParen())
+    return failure();
+
+  if (parser.parseOperandList(operands))
+    return failure();
+  if (parser.parseRParen())
+    return failure();
+  if (parser.parseKeyword("at"))
+    return failure();
+
+  if (parser.parseOperand(tstart))
+    return failure();
+
+  bool offset_present = false;
+  if (succeeded(parser.parseOptionalKeyword("offset"))) {
+    offset_present = true;
+    if (parser.parseOperand(offset))
+      return failure();
+  }
+  if (parser.parseColon())
+    return failure();
+
+  // parse arg types and delays.
+  SmallVector<Attribute, 4> input_delays;
+  SmallVector<Attribute, 4> output_delays;
+
+  if (parser.parseLParen())
+    return failure();
+  int count = 0;
+  auto argLoc = parser.getCurrentLocation();
+  while (1) {
+    Type type;
+    IntegerAttr delayAttr;
+    if (parser.parseType(type))
+      return failure();
+    argTypes.push_back(type);
+    NamedAttrList tempAttrs;
+    if (type.isa<IntegerType>() &&
+        succeeded(parser.parseOptionalKeyword("delay"))) {
+      if (parser.parseAttribute(delayAttr, getIntegerType(parser, 64), "delay",
+                                tempAttrs))
+        return failure();
+      input_delays.push_back(delayAttr);
+    } else {
+      // Default delay is 0.
+      input_delays.push_back(getIntegerAttr(parser, 64, 0));
+    }
+    count++;
+    if (parser.parseOptionalComma())
+      break;
+  }
+
+  if (parser.parseRParen())
+    return failure();
+
+  ArrayAttr argDelayAttrs = parser.getBuilder().getArrayAttr(input_delays);
+  result.attributes.push_back(
+      parser.getBuilder().getNamedAttr("input_delays", argDelayAttrs));
+
+  // resolve operands.
+  parser.resolveOperands(operands, argTypes, argLoc, result.operands);
+  parser.resolveOperand(tstart, getTimeType(parser), result.operands);
+  if (offset_present)
+    parser.resolveOperand(offset, getConstIntType(parser), result.operands);
+
+  // Return if no output args.
+  if (parser.parseOptionalArrow()) {
+    // blank output_delays attr
+    ArrayAttr resultDelayAttrs =
+        parser.getBuilder().getArrayAttr(output_delays);
+    result.attributes.push_back(
+        parser.getBuilder().getNamedAttr("output_delays", resultDelayAttrs));
+
+    auto fnType = parser.getBuilder().getFunctionType(argTypes, resultTypes);
+    result.addAttribute(impl::getTypeAttrName(), TypeAttr::get(fnType));
+    return success();
+  }
+
+  if (parser.parseLParen())
+    return failure();
+
+  while (1) {
+    Type type;
+    IntegerAttr delayAttr;
+    if (parser.parseType(type))
+      return failure();
+    resultTypes.push_back(type);
+    NamedAttrList tempAttrs;
+    if (type.isa<IntegerType>() &&
+        succeeded(parser.parseOptionalKeyword("delay"))) {
+      if (parser.parseAttribute(delayAttr, getIntegerType(parser, 64), "delay",
+                                tempAttrs))
+        return failure();
+      output_delays.push_back(delayAttr);
+    } else {
+      // Default delay is 0.
+      output_delays.push_back(getIntegerAttr(parser, 64, 0));
+    }
+    if (parser.parseOptionalComma())
+      break;
+  }
+
+  if (parser.parseRParen())
+    return failure();
+
+  ArrayAttr resultDelayAttrs = parser.getBuilder().getArrayAttr(output_delays);
+  result.attributes.push_back(
+      parser.getBuilder().getNamedAttr("output_delays", resultDelayAttrs));
+
+  result.addTypes(resultTypes);
+
+  result.addAttribute("operand_segment_sizes",
+                      parser.getBuilder().getI32VectorAttr(
+                          {static_cast<int32_t>(operands.size()), 1,
+                           static_cast<int32_t>(offset_present ? 1 : 0)}));
+  return success();
+}
+
+static void printCallOp(OpAsmPrinter &printer, CallOp op) {
+  auto input_delays = op.input_delays();
+  auto output_delays = op.output_delays();
+  auto operands = op.operands();
+  auto resultTypes = op.getResultTypes();
+  assert(input_delays.size() == operands.size());
+  assert(output_delays.size() == resultTypes.size());
+  printer << "hir.call @" << op.callee() << "(" << op.operands() << ") at "
+          << op.tstart();
+  if (op.offset())
+    printer << " offset " << op.offset();
+  printer << " : (";
+  for (int i = 0; i < operands.size(); i++) {
+    if (i > 0)
+      printer << ", ";
+    Type type = operands[i].getType();
+    int delay = input_delays[i].dyn_cast<IntegerAttr>().getInt();
+    assert(delay >= 0);
+    printer << type;
+    if (delay > 0)
+      printer << " delay " << delay;
+  }
+  printer << ")";
+  if (resultTypes.size() == 0)
+    return;
+  printer << " -> (";
+  for (int i = 0; i < resultTypes.size(); i++) {
+    if (i > 0)
+      printer << ", ";
+    Type type = resultTypes[i];
+    int delay = output_delays[i].dyn_cast<IntegerAttr>().getInt();
+    assert(delay >= 0);
+    printer << type;
+    if (delay > 0)
+      printer << " delay " << delay;
+  }
+  printer << ")";
+}
 
 /// ForOp.
 /// Example:
@@ -431,6 +605,47 @@ static ParseResult parseDefOp(OpAsmParser &parser, OperationState &result) {
   return parser.parseOptionalRegion(*body, entryArgs, argTypes);
 }
 
+static void printDefSignature(OpAsmPrinter &printer, DefOp op) {
+  auto fnType = op.getType();
+  Region &body = op.getOperation()->getRegion(0);
+  auto argTypes = fnType.getInputs();
+  auto resTypes = fnType.getResults();
+  ArrayAttr input_delays = op.input_delays();
+  ArrayAttr output_delays = op.output_delays();
+  printer << "(";
+  bool firstArg = true;
+  for (int i = 0; i < argTypes.size(); i++) {
+    if (!firstArg)
+      printer << ", ";
+    firstArg = false;
+    Type type = argTypes[i];
+    auto arg = body.front().getArgument(i);
+    int delay = input_delays[i].dyn_cast<IntegerAttr>().getInt();
+    assert(delay >= 0);
+    printer << arg << " : " << type;
+    if (delay > 0)
+      printer << " delay " << delay;
+  }
+  printer << ")";
+  if (resTypes.size() == 0)
+    return;
+
+  printer << " -> (";
+  bool firstRes = true;
+  for (int i = 0; i < resTypes.size(); i++) {
+    if (!firstRes)
+      printer << ",";
+    firstRes = false;
+    Type type = resTypes[i];
+    int delay = output_delays[i].dyn_cast<IntegerAttr>().getInt();
+    assert(delay >= 0);
+    printer << type;
+    if (delay > 0)
+      printer << " delay " << delay;
+  }
+  printer << ")";
+}
+
 static void printDefOp(OpAsmPrinter &printer, DefOp op) {
   // Print function name, signature, and control.
   printer << "hir.def ";
@@ -440,11 +655,7 @@ static void printDefOp(OpAsmPrinter &printer, DefOp op) {
           << body.front().getArgument(body.front().getNumArguments() - 1)
           << " ";
 
-  auto fnType = op.getType();
-  impl::printFunctionSignature(printer, op, fnType.getInputs(),
-                               /*isVariadic=*/false, fnType.getResults());
-  impl::printFunctionAttributes(printer, op, fnType.getNumInputs(),
-                                fnType.getNumResults());
+  printDefSignature(printer, op);
 
   // Print the body if this is not an external function.
   if (!body.empty())
