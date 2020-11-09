@@ -464,6 +464,25 @@ static LogicalResult verifyFModuleOp(FModuleOp &module) {
   return success();
 }
 
+static LogicalResult verifyFExtModuleOp(FExtModuleOp &op) {
+  if (auto paramDictOpt = op.parameters()) {
+    DictionaryAttr paramDict = paramDictOpt.getValue();
+    auto checkParmValue = [&](NamedAttribute elt) -> bool {
+      auto value = elt.second;
+      if (value.isa<IntegerAttr>() || value.isa<StringAttr>() ||
+          value.isa<FloatAttr>())
+        return true;
+      op.emitError() << "has unknown extmodule parameter value '" << elt.first
+                     << "' = " << value;
+      return false;
+    };
+
+    if (!llvm::all_of(paramDict, checkParmValue))
+      return failure();
+  }
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Declarations
 //===----------------------------------------------------------------------===//

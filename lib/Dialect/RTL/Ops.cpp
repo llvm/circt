@@ -299,6 +299,23 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
         << referencedModule->getName() << "' which is not a RTL[Ext]ModuleOp";
     return failure();
   }
+
+  if (auto paramDictOpt = op.parameters()) {
+    DictionaryAttr paramDict = paramDictOpt.getValue();
+    auto checkParmValue = [&](NamedAttribute elt) -> bool {
+      auto value = elt.second;
+      if (value.isa<IntegerAttr>() || value.isa<StringAttr>() ||
+          value.isa<FloatAttr>())
+        return true;
+      op.emitError() << "has unknown extmodule parameter value '" << elt.first
+                     << "' = " << value;
+      return false;
+    };
+
+    if (!llvm::all_of(paramDict, checkParmValue))
+      return failure();
+  }
+
   return success();
 }
 
