@@ -8,6 +8,7 @@
 
    // CHECK-LABEL: rtl.externmodule @MyParameterizedExtModule(
    // CHECK: i1 {rtl.name = "in"}) -> (i8 {rtl.name = "out"})
+   // CHECK: attributes {verilogName = "name_thing"}
    firrtl.extmodule @MyParameterizedExtModule(!firrtl.uint<1> {firrtl.name = "in"}, !firrtl.flip<uint<8>> {firrtl.name = "out"})
       attributes {defname = "name_thing",
                   parameters = {DEFAULT = 0 : i64,
@@ -47,7 +48,7 @@
     // CHECK-NEXT: firrtl.connect %5
     firrtl.connect %out4, %5 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
     // CHECK-NEXT: rtl.output %3 : i4
-  }    // CHECK-NEXT: }
+  }
 
  // CHECK-LABEL: rtl.module @TestInstance(
   firrtl.module @TestInstance(%u2: !firrtl.uint<2>, %s8: !firrtl.sint<8>,
@@ -83,15 +84,27 @@
     // CHECK: firrtl.printf {{.*}}"%x"([[INSTOUTC1]])
     firrtl.printf %clock, %reset, "%x"(%3) : !firrtl.uint<4>
  
-      
-      // TODO: Support parameterization.
-      //%myext = firrtl.instance @MyExtModule {name = "myext"} : !firrtl.bundle<in: flip<uint>, out: uint<8>>
-      //%9 = firrtl.subfield %myext("in") : (!firrtl.bundle<in: flip<uint>, out: uint<8>>) -> !firrtl.flip<uint>
-      //firrtl.connect %9, %i8 : !firrtl.flip<uint>, !firrtl.uint<8>
-      //%10 = firrtl.subfield %myext("out") : (!firrtl.bundle<in: flip<uint>, out: uint<8>>) -> !firrtl.uint<8>
-      //firrtl.printf %clock, %reset, "Something interesting! %x"(%10) : !firrtl.uint<8>
-      //%11 = firrtl.subaccess %_t[%i8] : (!firrtl.vector<uint<1>, 12>, !firrtl.uint<8>) -> !firrtl.uint<1>
-      //firrtl.connect %auto, %11 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+
+    // Parameterized module reference.
+    // rtl.instance carries the parameters, unlike at the FIRRTL layer.
+
+    // CHECK-NEXT: %in.wire = rtl.wire : i1
+
+    // CHECK-NEXT: [[OUT:%.+]] = rtl.instance "myext" @MyParameterizedExtModule(%in.wire)  {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1) -> i8
+    %myext = firrtl.instance @MyParameterizedExtModule {name = "myext"}
+      : !firrtl.bundle<in: flip<uint<1>>, out: uint<8>>
+
+    // CHECK-NEXT: [[OUTC:%.+]] = firrtl.stdIntCast [[OUT]] : (i8) -> !firrtl.uint<8>
+    // CHECK-NEXT: [[INC:%.+]]  = firrtl.stdIntCast %in.wire : (i1) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[INC2:%.+]] = firrtl.asNonPassive [[INC]] : (!firrtl.uint<1>) -> !firrtl.flip<uint<1>>
+
+    // CHECK-NEXT: firrtl.connect [[INC2]], {{.*}} : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    %9 = firrtl.subfield %myext("in") : (!firrtl.bundle<in: flip<uint<1>>, out: uint<8>>) -> !firrtl.flip<uint<1>>
+    firrtl.connect %9, %reset : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+
+    // CHECK-NEXT: firrtl.printf {{.*}}, {{.*}}, "Something interesting! %x"([[OUTC]]) : !firrtl.uint<8>
+    %10 = firrtl.subfield %myext("out") : (!firrtl.bundle<in: flip<uint<1>>, out: uint<8>>) -> !firrtl.uint<8>
+    firrtl.printf %clock, %reset, "Something interesting! %x"(%10) : !firrtl.uint<8>
   }
 
   // CHECK-LABEL: rtl.module @Print(
@@ -115,7 +128,7 @@
     // CHECK-NEXT: firrtl.printf %0, %1
     firrtl.printf %clock, %reset, "Hi %x %x\0A"(%0, %b) : !firrtl.uint<5>, !firrtl.uint<4>
     // CHECK-NEXT: rtl.output
-}  // CHECK-NEXT: }
+  }
 
   // CHECK-LABEL: rtl.module @Stop(
   // CHECK: %arg0: i1 {rtl.name = "clock1"},
@@ -134,7 +147,7 @@
     // CHECK-NEXT: firrtl.stop %1, %2, 0
     firrtl.stop %clock2, %reset, 0
     // CHECK-NEXT: rtl.output
-  }  // CHECK-NEXT: }
+  }
 
   // expected-error @+1 {{cannot lower this port type to RTL}}
   firrtl.module @CantLowerArgument(%arg: !firrtl.bundle<int_1: flip<uint<1>>, int_out: uint<2>>) {
@@ -142,5 +155,20 @@
 
   // expected-error @+1 {{unexpected operation 'func' in a firrtl.circuit}}
   func @UnknownFunction() {
+  }
+
+  // CHECK-LABEL: rtl.module @OutputFirst(%arg0: i1 {rtl.name = "in1"}, %arg1: i4 {rtl.name = "in4"}) -> (i4 {rtl.name = "out4"}) {
+  firrtl.module @OutputFirst(%out4: !firrtl.flip<uint<4>>,
+                             %in1: !firrtl.uint<1>,
+                             %in4: !firrtl.uint<4>) {
+    // CHECK-NEXT: %0 = rtl.wire : i4
+    // CHECK-NEXT: %1 = firrtl.stdIntCast %0 : (i4) -> !firrtl.uint<4>
+    // CHECK-NEXT: %2 = firrtl.asNonPassive %1 : (!firrtl.uint<4>) -> !firrtl.flip<uint<4>>
+    // CHECK-NEXT: %3 = firrtl.stdIntCast %arg0 : (i1) -> !firrtl.uint<1>
+    // CHECK-NEXT: %4 = firrtl.stdIntCast %arg1 : (i4) -> !firrtl.uint<4>
+    // CHECK-NEXT: firrtl.connect %2, %4 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+    firrtl.connect %out4, %in4 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+
+    // CHECK-NEXT: rtl.output %0 : i4
   }
 }

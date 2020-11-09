@@ -23,3 +23,11 @@ func @shl_op(%a: i7, %b: i7) -> i7 {
 // CHECK-NEXT:    return [[RES]]
   return %0 : i7
 }
+
+// CHECK-LABEL: func @shr_op(%arg0: i7, %arg1: i7) -> i7 {
+func @shr_op(%a: i7, %b: i7) -> i7 {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.shr  %arg0, %arg1 : i7
+  %0  = rtl.shr  %a, %b : i7
+// CHECK-NEXT:    return [[RES]]
+  return %0 : i7
+}

@@ -79,10 +79,23 @@ void rtl::RTLModuleOp::build(OpBuilder &builder, OperationState &result,
   rtl::RTLModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
 
+/// Return the name to use for the Verilog module that we're referencing
+/// here.  This is typically the symbol, but can be overridden with the
+/// verilogName attribute.
+StringRef RTLExternModuleOp::getVerilogModuleName() {
+  if (auto vname = verilogName())
+    return vname.getValue();
+  return getName();
+}
+
 void rtl::RTLExternModuleOp::build(OpBuilder &builder, OperationState &result,
                                    StringAttr name,
-                                   ArrayRef<ModulePortInfo> ports) {
+                                   ArrayRef<ModulePortInfo> ports,
+                                   StringRef verilogName) {
   buildModule(builder, result, name, ports);
+
+  if (!verilogName.empty())
+    result.addAttribute("verilogName", builder.getStringAttr(verilogName));
 }
 
 FunctionType rtl::getModuleType(Operation *op) {

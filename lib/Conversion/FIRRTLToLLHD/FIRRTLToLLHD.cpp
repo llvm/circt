@@ -227,8 +227,8 @@ LogicalResult FIRRTLToLLHDPass::visitInvalidOp(Operation *op) {
 LogicalResult FIRRTLToLLHDPass::visitStmt(firrtl::ConnectOp op) {
   LLVM_DEBUG(llvm::dbgs() << "Converting " << op << "\n");
 
-  auto dst = getConvertedValue(op.lhs());
-  auto src = getConvertedAndExtendedValue(op.rhs(), op.lhs().getType());
+  auto dst = getConvertedValue(op.dest());
+  auto src = getConvertedAndExtendedValue(op.src(), op.dest().getType());
   if (!dst || !src)
     return failure();
 
