@@ -182,14 +182,24 @@ private:
 private:
   Schedule schedule;
   std::stack<TimeInstant> yieldPoints;
+  ArrayAttr output_delays;
+  Value tstart;
 };
 
 bool ScheduleVerifier::inspectOp(DefOp op) {
   Block &entryBlock = op.getBody().front();
+  // args also contains tstart;
   auto args = entryBlock.getArguments();
   Value tstart = args.back();
+  this->tstart = tstart;
+  auto input_delays = op.input_delays();
+  this->output_delays = op.output_delays();
   // Indentity map for root level time vars.
   schedule.insert(tstart, tstart, 0);
+  for (int i = 0; i < input_delays.size(); i++) {
+    int delay = input_delays[i].dyn_cast<IntegerAttr>().getInt();
+    schedule.insert(args[i], tstart, delay);
+  }
   inspectBody(entryBlock);
   return true;
 }
@@ -248,7 +258,7 @@ bool ScheduleVerifier::inspectOp(MemReadOp op) {
   int delay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
   assert(delay >= 0);
 
-  int c = 0;
+  int c = 1;
   for (auto addrI : addr) {
     schedule.check(op.getLoc(), getDefiningLoc(addrI), addrI, tstart, delay,
                    "address " + std::to_string(c));
@@ -265,9 +275,9 @@ bool ScheduleVerifier::inspectOp(MemWriteOp op) {
   Value tstart = op.tstart();
   int delay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
   assert(delay >= 0);
-  int c = 0;
   schedule.check(op.getLoc(), getDefiningLoc(value), value, tstart, delay,
                  "input var");
+  int c = 1;
   for (auto addrI : addr) {
     mlir::Location loc_addrI = getDefiningLoc(addrI);
     schedule.check(op.getLoc(), loc_addrI, addrI, tstart, delay,
@@ -313,7 +323,16 @@ bool ScheduleVerifier::inspectOp(hir::SubtractOp op) {
   return true;
 }
 
-bool ScheduleVerifier::inspectOp(hir::ReturnOp op) { return true; }
+bool ScheduleVerifier::inspectOp(hir::ReturnOp op) {
+  auto operands = op.operands();
+  for (int i = 0; i < operands.size(); i++) {
+    Value operand = operands[i];
+    int delay = this->output_delays[i].dyn_cast<IntegerAttr>().getInt();
+    schedule.check(op.getLoc(), getDefiningLoc(operand), operand, this->tstart,
+                   delay, "return operand " + std::to_string(i + 1));
+  }
+  return true;
+}
 
 bool ScheduleVerifier::inspectOp(hir::YieldOp op) {
   Value tstart = op.tstart();
@@ -352,21 +371,20 @@ bool ScheduleVerifier::inspectOp(hir::CallOp op) {
   auto operands = op.operands();
   Value tstart = op.tstart();
   unsigned delay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
-  ArrayAttr input_latency = op.getAttrOfType<ArrayAttr>("input_latency");
-  ArrayAttr output_latency = op.getAttrOfType<ArrayAttr>("output_latency");
-  assert(input_latency.size() == operands.size());
-  assert(output_latency.size() == results.size());
+  ArrayAttr input_delays = op.getAttrOfType<ArrayAttr>("input_delays");
+  ArrayAttr output_delays = op.getAttrOfType<ArrayAttr>("output_delays");
+  assert(input_delays.size() == operands.size());
+  assert(output_delays.size() == results.size());
   for (int i = 0; i < operands.size(); i++) {
-    auto latency = input_latency[i].cast<IntegerAttr>().getInt();
+    auto delay = input_delays[i].cast<IntegerAttr>().getInt();
     schedule.check(op.getLoc(), getDefiningLoc(operands[i]), operands[i],
-                   op.tstart(), latency, "operand " + std::to_string(i));
-    return true;
+                   op.tstart(), delay, "operand " + std::to_string(i + 1));
   }
   for (int i = 0; i < results.size(); i++) {
-    auto latency = output_latency[i].cast<IntegerAttr>().getInt();
-    schedule.insert(results[i], op.tstart(), latency);
-    return true;
+    auto delay = output_delays[i].cast<IntegerAttr>().getInt();
+    schedule.insert(results[i], op.tstart(), delay);
   }
+  return true;
 }
 
 bool ScheduleVerifier::inspectOp(hir::PopOp op) { return true; }
