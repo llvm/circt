@@ -1361,34 +1361,34 @@ void ModuleEmitter::emitStatement(ConnectOp op) {
   ops.insert(op);
 
   // Connect to a register has "special" behavior.
-  auto lhs = op.lhs();
+  auto dest = op.dest();
   auto addRegAssign = [&](const std::string &clockExpr, Value value) {
     std::string action =
-        getName(lhs).str() + " <= " + emitExpressionToString(value, ops) + ";";
+        getName(dest).str() + " <= " + emitExpressionToString(value, ops) + ";";
     auto locStr = getLocationInfoAsString(ops);
     addAtPosEdge(action, locStr, clockExpr);
     return;
   };
 
-  if (auto regOp = dyn_cast_or_null<RegOp>(lhs.getDefiningOp())) {
+  if (auto regOp = dyn_cast_or_null<RegOp>(dest.getDefiningOp())) {
     auto clockExpr = emitExpressionToString(regOp.clockVal(), ops);
-    addRegAssign(clockExpr, op.rhs());
+    addRegAssign(clockExpr, op.src());
     return;
   }
 
-  if (auto regInitOp = dyn_cast_or_null<RegInitOp>(lhs.getDefiningOp())) {
+  if (auto regInitOp = dyn_cast_or_null<RegInitOp>(dest.getDefiningOp())) {
     auto clockExpr = emitExpressionToString(regInitOp.clockVal(), ops);
     clockExpr +=
         " or posedge " + emitExpressionToString(regInitOp.resetSignal(), ops);
 
-    addRegAssign(clockExpr, op.rhs());
+    addRegAssign(clockExpr, op.src());
     return;
   }
 
   indent() << "assign ";
-  emitExpression(lhs, ops);
+  emitExpression(dest, ops);
   os << " = ";
-  emitExpression(op.rhs(), ops);
+  emitExpression(op.src(), ops);
   os << ';';
   emitLocationInfoAndNewLine(ops);
 }
@@ -1675,23 +1675,58 @@ void ModuleEmitter::emitStatement(rtl::InstanceOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  auto instanceName = op.instanceName();
-  StringRef defName = op.moduleName();
-
-  auto opArgs = op.inputs();
-  auto opResults = op.getResults();
-
   auto *moduleOp = op.getReferencedModule();
   assert(moduleOp && "Invalid IR");
+
+  // If this is a reference to an external module with a hard coded Verilog
+  // name, then use it here.  This is a hack because we lack proper support for
+  // parameterized modules in the RTL dialect.
+  if (auto extMod = dyn_cast<rtl::RTLExternModuleOp>(moduleOp)) {
+    indent() << extMod.getVerilogModuleName();
+  } else {
+    indent() << op.moduleName();
+  }
+
+  // Helper that prints a parameter constant value in a Verilog compatible way.
+  auto printParmValue = [&](Attribute value) {
+    if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
+      os << intAttr.getValue();
+    } else if (auto strAttr = value.dyn_cast<StringAttr>()) {
+      os << '"';
+      os.write_escaped(strAttr.getValue());
+      os << '"';
+    } else if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
+      // TODO: relying on float printing to be precise is not a good idea.
+      os << fpAttr.getValueAsDouble();
+    } else {
+      os << "<<UNKNOWN MLIRATTR: " << value << ">>";
+      emitOpError(op, "unknown extmodule parameter value");
+    }
+  };
+
+  // If this is a parameterized module, then emit the parameters.
+  if (auto paramDictOpt = op.parameters()) {
+    DictionaryAttr paramDict = paramDictOpt.getValue();
+    if (!paramDict.empty()) {
+      os << " #(";
+      llvm::interleaveComma(paramDict, os, [&](NamedAttribute elt) {
+        os << '.' << elt.first << '(';
+        printParmValue(elt.second);
+        os << ')';
+      });
+      os << ')';
+    }
+  }
+
+  os << ' ' << op.instanceName() << " (";
+  emitLocationInfoAndNewLine(ops);
 
   SmallVector<rtl::ModulePortInfo, 8> portInfo;
   getModulePortInfo(moduleOp, portInfo);
 
-  os << ' ' << defName << ' ' << instanceName << " (";
-  emitLocationInfoAndNewLine(ops);
-
-  for (size_t i = 0, e = portInfo.size(); i != e; ++i) {
-    rtl::ModulePortInfo &elt = portInfo[i];
+  auto opArgs = op.inputs();
+  auto opResults = op.getResults();
+  for (auto &elt : portInfo) {
     bool isLast = &elt == &portInfo.back();
     StringRef valueName = elt.isOutput() ? getName(opResults[elt.argNum])
                                          : getName(opArgs[elt.argNum]);
