@@ -504,6 +504,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(DShrPrimOp op);
   LogicalResult visitExpr(TailPrimOp op);
   LogicalResult visitExpr(MuxPrimOp op);
+  LogicalResult visitExpr(ValidIfPrimOp op);
 
   // Statements
   LogicalResult visitStmt(ConnectOp op);
@@ -1057,6 +1058,16 @@ LogicalResult FIRRTLLowering::visitExpr(MuxPrimOp op) {
     return failure();
 
   return setLoweringTo<rtl::MuxOp>(op, ifTrue.getType(), cond, ifTrue, ifFalse);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(ValidIfPrimOp op) {
+  // It isn't clear to me why it it is ok to ignore the binding condition,
+  // but this is what the existing FIRRTL verilog emitter does.
+  auto val = getLoweredValue(op.rhs());
+  if (!val)
+    return failure();
+
+  return setLowering(op, val);
 }
 
 //===----------------------------------------------------------------------===//
