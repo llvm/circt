@@ -500,6 +500,8 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(HeadPrimOp op);
   LogicalResult visitExpr(ShlPrimOp op);
   LogicalResult visitExpr(ShrPrimOp op);
+  LogicalResult visitExpr(DShlPrimOp op);
+  LogicalResult visitExpr(DShrPrimOp op);
   LogicalResult visitExpr(TailPrimOp op);
   LogicalResult visitExpr(MuxPrimOp op);
 
@@ -1009,6 +1011,32 @@ LogicalResult FIRRTLLowering::visitExpr(ShrPrimOp op) {
 
   Type resultType = builder->getIntegerType(inWidth - shiftAmount);
   return setLoweringTo<rtl::ExtractOp>(op, resultType, input, shiftAmount);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(DShlPrimOp op) {
+  // rtl has equal types for these, firrtl doesn't.
+  auto lhs = getLoweredAndExtendedValue(op.lhs(), op.result().getType());
+  if (!lhs)
+    return failure();
+
+  auto rhs = getLoweredAndExtendedValue(op.rhs(), op.result().getType());
+  if (!rhs)
+    return failure();
+
+  return setLoweringTo<rtl::ShlOp>(op, lhs, rhs);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(DShrPrimOp op) {
+  // rtl has equal types for these, firrtl doesn't.
+  auto lhs = getLoweredAndExtendedValue(op.lhs(), op.result().getType());
+  if (!lhs)
+    return failure();
+
+  auto rhs = getLoweredAndExtendedValue(op.rhs(), op.result().getType());
+  if (!rhs)
+    return failure();
+
+  return setLoweringTo<rtl::ShrOp>(op, lhs, rhs);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(TailPrimOp op) {
