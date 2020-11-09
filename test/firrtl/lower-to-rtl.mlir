@@ -152,6 +152,9 @@
     // CHECK-NEXT: [[CVT4:%.+]] = rtl.sext [[CVT]] : (i3) -> i4
     // CHECK-NEXT: rtl.mux %false, [[CVT4]], [[SUB]] : i4
     %26 = firrtl.mux(%12, %23, %25) : (!firrtl.uint<1>, !firrtl.sint<3>, !firrtl.sint<4>) -> !firrtl.sint<4>
+  
+    // CHECK-NEXT: rtl.stdIntCast %in1 : (!firrtl.uint<4>) -> i4
+    %27 = firrtl.validif %12, %in1 : (!firrtl.uint<1>, !firrtl.uint<4>) -> !firrtl.uint<4>
   }
 
 
