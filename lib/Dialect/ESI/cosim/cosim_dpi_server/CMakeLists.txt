@@ -14,7 +14,7 @@ if(ESI_COSIM)
   target_link_libraries(EsiCosimDpiServer PRIVATE
       CapnProto::kj CapnProto::kj-async CapnProto::kj-gzip
       CapnProto::capnp CapnProto::capnp-rpc 
-      MtiPli CosimCapnp)
+      MtiPli EsiCosimCapnp)
 
   target_include_directories(EsiCosimDpiServer PRIVATE ${CAPNPC_OUTPUT_DIR})
   target_include_directories(EsiCosimDpiServer PRIVATE ${CAPNP_INCLUDE_DIRS})
