@@ -1,4 +1,4 @@
-//===- Cosim_Endpoint.sv - ESI cosim primary RTL module ---------*- C++ -*-===//
+//===- Cosim_Endpoint.sv - ESI cosim primary RTL module -----*- verilog -*-===//
 //
 // Package: Cosim_DpiPkg
 //
@@ -28,15 +28,13 @@ module Cosim_Endpoint
   output logic DataInReady,
   input  logic [RECV_TYPE_SIZE_BITS-1:0] DataIn
 );
-  
+
   bit Initialized;
 
-  // Handle initialization logic
-  always@(posedge clk)
-  begin
-    // We've been instructed to start AND we're uninitialized
-    if (!Initialized)
-    begin
+  // Handle initialization logic.
+  always@(posedge clk) begin
+    // We've been instructed to start AND we're uninitialized.
+    if (!Initialized) begin
       int rc;
       rc = cosim_init();
       if (rc != 0)
@@ -50,22 +48,20 @@ module Cosim_Endpoint
   end
 
   /// *******************
-  /// Data out management
+  /// Data out management.
   ///
 
   localparam int SEND_TYPE_SIZE_BYTES = int'((SEND_TYPE_SIZE_BITS+7)/8);
-  // The number of bits over a byte
+  // The number of bits over a byte.
   localparam int SEND_TYPE_SIZE_BITS_DIFF = SEND_TYPE_SIZE_BITS % 8;
   localparam int SEND_TYPE_SIZE_BYTES_FLOOR = int'(SEND_TYPE_SIZE_BITS/8);
   localparam int SEND_TYPE_SIZE_BYTES_FLOOR_IN_BITS
       = SEND_TYPE_SIZE_BYTES_FLOOR * 8;
 
   byte unsigned DataOutBuffer[SEND_TYPE_SIZE_BYTES-1:0];
-  always@(posedge clk)
-  begin
-    if (rstn && Initialized)
-    begin
-      if (DataOutValid && DataOutReady) // A transfer occurred
+  always @(posedge clk) begin
+    if (rstn && Initialized) begin
+      if (DataOutValid && DataOutReady) // A transfer occurred.
         DataOutValid <= 1'b0;
 
       if (!DataOutValid || DataOutReady) begin
@@ -84,28 +80,29 @@ module Cosim_Endpoint
           if (data_limit == SEND_TYPE_SIZE_BYTES)
             DataOutValid <= 1'b1;
           else if (data_limit == 0)
-            begin end // No message
+            begin end // No message.
           else
             $error("cosim_ep_tryget(%d, *, %d -> %d) did not load entire",
                    "buffer!", ENDPOINT_ID, SEND_TYPE_SIZE_BYTES, data_limit);
         end
       end
     end else begin
-        DataOutValid <= 1'b0;
+      DataOutValid <= 1'b0;
     end
   end
 
-  // Assign packed output bit array from unpacked byte array
+  // Assign packed output bit array from unpacked byte array.
   genvar iOut;
   generate
     for (iOut=0; iOut<SEND_TYPE_SIZE_BYTES_FLOOR; iOut++)
       assign DataOut[((iOut+1)*8)-1:iOut*8] = DataOutBuffer[iOut];
     if (SEND_TYPE_SIZE_BITS_DIFF != 0)
-      assign DataOut[SEND_TYPE_SIZE_BYTES_FLOOR_IN_BITS + 
-                     SEND_TYPE_SIZE_BITS_DIFF - 1 :
-                       SEND_TYPE_SIZE_BYTES_FLOOR_IN_BITS]
-             = DataOutBuffer[SEND_TYPE_SIZE_BYTES-1]
-                            [SEND_TYPE_SIZE_BITS_DIFF-1:0];
+      // If the type is not a multiple of 8, we've got to copy the extra bits.
+      assign DataOut[(SEND_TYPE_SIZE_BYTES_FLOOR_IN_BITS +
+                      SEND_TYPE_SIZE_BITS_DIFF - 1) :
+                        SEND_TYPE_SIZE_BYTES_FLOOR_IN_BITS]
+             = DataOutBuffer[SEND_TYPE_SIZE_BYTES - 1]
+                            [SEND_TYPE_SIZE_BITS_DIFF - 1 : 0];
   endgenerate
 
   initial begin
@@ -119,11 +116,11 @@ module Cosim_Endpoint
 
 
   /// **********************
-  /// Data in management
+  /// Data in management.
   ///
 
   localparam int RECV_TYPE_SIZE_BYTES = int'((RECV_TYPE_SIZE_BITS+7)/8);
-  // The number of bits over a byte
+  // The number of bits over a byte.
   localparam int RECV_TYPE_SIZE_BITS_DIFF = RECV_TYPE_SIZE_BITS % 8;
   localparam int RECV_TYPE_SIZE_BYTES_FLOOR = int'(RECV_TYPE_SIZE_BITS/8);
   localparam int RECV_TYPE_SIZE_BYTES_FLOOR_IN_BITS
@@ -144,17 +141,18 @@ module Cosim_Endpoint
     end
   end
 
-  // Assign packed input bit array to unpacked byte array
+  // Assign packed input bit array to unpacked byte array.
   genvar iIn;
   generate
     for (iIn=0; iIn<RECV_TYPE_SIZE_BYTES_FLOOR; iIn++)
       assign DataInBuffer[iIn] = DataIn[((iIn+1)*8)-1:iIn*8];
     if (RECV_TYPE_SIZE_BITS_DIFF != 0)
-      assign DataInBuffer[RECV_TYPE_SIZE_BYTES-1]
-                         [RECV_TYPE_SIZE_BITS_DIFF-1:0] =
-             DataIn[RECV_TYPE_SIZE_BYTES_FLOOR_IN_BITS +
-                    RECV_TYPE_SIZE_BITS_DIFF - 1 :
-                      RECV_TYPE_SIZE_BYTES_FLOOR_IN_BITS];
+      // If the type is not a multiple of 8, we've got to copy the extra bits.
+      assign DataInBuffer[RECV_TYPE_SIZE_BYTES - 1]
+                         [RECV_TYPE_SIZE_BITS_DIFF - 1:0] =
+             DataIn[(RECV_TYPE_SIZE_BYTES_FLOOR_IN_BITS +
+                     RECV_TYPE_SIZE_BITS_DIFF - 1) :
+                       RECV_TYPE_SIZE_BYTES_FLOOR_IN_BITS];
   endgenerate
 
   initial begin

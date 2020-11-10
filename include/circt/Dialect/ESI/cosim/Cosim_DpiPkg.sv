@@ -1,4 +1,4 @@
-//===- Cosim_DpiPkg.sv - ESI cosim DPI declarations -------------*- C++ -*-===//
+//===- Cosim_DpiPkg.sv - ESI cosim DPI declarations ---------*- verilog -*-===//
 //
 // Package: Cosim_DpiPkg
 //
