@@ -15,7 +15,7 @@
 
 namespace llvm {
 class raw_ostream;
-}
+} // namespace llvm
 
 namespace circt {
 namespace llhd {
