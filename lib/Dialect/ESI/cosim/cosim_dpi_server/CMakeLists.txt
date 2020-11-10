@@ -10,7 +10,7 @@ if(ESI_COSIM)
           LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
           RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
   )
-  add_dependencies(EsiCosimDpiServer CosimCapnp)
+  add_dependencies(EsiCosimDpiServer EsiCosimCapnp)
   target_link_libraries(EsiCosimDpiServer PRIVATE
       CapnProto::kj CapnProto::kj-async CapnProto::kj-gzip
       CapnProto::capnp CapnProto::capnp-rpc 

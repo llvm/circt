@@ -28,12 +28,12 @@ struct LLHDInlinerInterface : public DialectInlinerInterface {
   //===--------------------------------------------------------------------===//
 
   /// All operations within LLHD can be inlined.
-  bool isLegalToInline(Operation *, Region *,
+  bool isLegalToInline(Operation *, Region *, bool,
                        BlockAndValueMapping &) const final {
     return true;
   }
 
-  bool isLegalToInline(Region *, Region *src,
+  bool isLegalToInline(Region *, Region *src, bool,
                        BlockAndValueMapping &) const final {
     // Don't inline processes and entities
     return !isa<llhd::ProcOp>(src->getParentOp()) &&

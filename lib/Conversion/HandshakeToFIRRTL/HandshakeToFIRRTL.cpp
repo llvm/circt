@@ -143,6 +143,91 @@ static std::string getSubModuleName(Operation *oldOp) {
   return subModuleName;
 }
 
+/// Construct a tree of 1-bit muxes to multiplex arbitrary numbers of signals.
+static Value createMuxTree(ArrayRef<Value> inputs, Value select,
+                           FIRRTLType selectType, Location insertLoc,
+                           ConversionPatternRewriter &rewriter) {
+  // Variables used to control iteration and select the appropriate bit.
+  unsigned numInputs = inputs.size();
+  double numLayers = std::ceil(std::log2(numInputs));
+  unsigned selectIdx = 0;
+
+  // Keep a vector of ValueRanges to represent the mux tree. Each value in the
+  // range is the output of a mux.
+  SmallVector<ArrayRef<Value>, 2> muxes;
+
+  // Helpers for repetetive calls.
+  auto createBits = [&](Value select, unsigned idx) {
+    return rewriter.create<BitsPrimOp>(insertLoc, select, idx, idx);
+  };
+
+  auto createMux = [&](Value select, ArrayRef<Value> operands, unsigned idx) {
+    return rewriter.create<MuxPrimOp>(insertLoc, operands[0].getType(), select,
+                                      operands[idx + 1], operands[idx]);
+  };
+
+  // Create an op to extract the least significant select bit.
+  auto selectBit = createBits(select, selectIdx);
+
+  // Create the first layer of muxes for the inputs.
+  SmallVector<Value, 4> initialValues;
+  for (unsigned i = 0; i < numInputs - 1; i += 2)
+    initialValues.push_back(createMux(selectBit, inputs, i));
+
+  // If the number of inputs is odd, we need to add the last input as well.
+  if (numInputs % 2)
+    initialValues.push_back(inputs[numInputs - 1]);
+
+  muxes.push_back(initialValues);
+
+  // Create any inner layers of muxes.
+  for (unsigned layer = 1; layer < numLayers; ++layer, ++selectIdx) {
+    // Get the previous layer of muxes.
+    ArrayRef<Value> prevLayer = muxes[layer - 1];
+    unsigned prevSize = prevLayer.size();
+
+    // Create an op to extract the select bit.
+    selectBit = createBits(select, selectIdx);
+
+    // Create this layer of muxes.
+    SmallVector<Value, 4> values;
+    for (unsigned i = 0; i < prevSize - 1; i += 2)
+      values.push_back(createMux(selectBit, prevLayer, i));
+
+    // If the number of values in the previous layer is odd, we need to add the
+    // last value as well.
+    if (prevSize % 2)
+      values.push_back(prevLayer[prevSize - 1]);
+
+    muxes.push_back(values);
+  }
+
+  // Get the last layer of muxes, which has a single value, and return it.
+  ArrayRef<Value> lastLayer = muxes.back();
+  assert(lastLayer.size() == 1 && "mux tree didn't result in a single value");
+  return lastLayer[0];
+}
+
+/// Construct a decoder by dynamically shifting 1 bit by the input amount.
+/// See http://www.imm.dtu.dk/~masca/chisel-book.pdf Section 5.2.
+static Value createDecoder(Value input, unsigned width, Location insertLoc,
+                           ConversionPatternRewriter &rewriter) {
+  auto *context = rewriter.getContext();
+
+  // Get a type for the result based on the explicitly specified width.
+  auto resultType = UIntType::get(context, width);
+
+  // Get a type for a single unsigned bit.
+  auto bitType = UIntType::get(context, 1);
+
+  // Create a constant of for one bit.
+  auto bit =
+      rewriter.create<firrtl::ConstantOp>(insertLoc, bitType, APInt(1, 1));
+
+  // Shift the bit dynamically by the input amount.
+  return rewriter.create<DShlPrimOp>(insertLoc, resultType, bit, input);
+}
+
 //===----------------------------------------------------------------------===//
 // FIRRTL Top-module Related Functions
 //===----------------------------------------------------------------------===//
@@ -497,6 +582,9 @@ bool HandshakeBuilder::visitHandshake(JoinOp op) {
 }
 
 /// Please refer to test_mux.mlir test case.
+/// Lowers the MuxOp into primitive FIRRTL ops.
+/// See http://www.cs.columbia.edu/~sedwards/papers/edwards2019compositional.pdf
+/// Section 3.3.
 bool HandshakeBuilder::visitHandshake(MuxOp op) {
   ValueVector selectSubfields = portList.front();
   Value selectValid = selectSubfields[0];
@@ -509,40 +597,61 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
   Value resultReady = resultSubfields[1];
   Value resultData = resultSubfields[2];
 
-  // Mux will work only when the select input is active.
-  auto validWhenOp = rewriter.create<WhenOp>(insertLoc, selectValid,
-                                             /*withElseRegion=*/false);
-  rewriter.setInsertionPointToStart(&validWhenOp.thenRegion().front());
-
-  // Walk through each input to create a chain of when operation.
+  // Walk through each arg data to collect the subfields.
+  SmallVector<Value, 4> argValid;
+  SmallVector<Value, 4> argReady;
+  SmallVector<Value, 4> argData;
   for (unsigned i = 1, e = portList.size() - 1; i < e; ++i) {
     ValueVector argSubfields = portList[i];
-    Value argValid = argSubfields[0];
-    Value argReady = argSubfields[1];
-    Value argData = argSubfields[2];
-
-    auto conditionOp = rewriter.create<EQPrimOp>(
-        insertLoc, UIntType::get(rewriter.getContext(), 1), selectData,
-        createConstantOp(selectType, APInt(64, i), insertLoc, rewriter));
-
-    // If the current input is not the last one, the new created when
-    // operation will have an else region.
-    auto branchWhenOp = rewriter.create<WhenOp>(
-        insertLoc, conditionOp, /*withElseRegion=*/(i != e - 1));
-
-    rewriter.setInsertionPointToStart(&branchWhenOp.thenRegion().front());
-    rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
-    rewriter.create<ConnectOp>(insertLoc, resultData, argData);
-    rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
-
-    // Select will be ready to accept new token when data has been passed from
-    // input to output.
-    auto selectReadyOp = rewriter.create<AndPrimOp>(
-        insertLoc, argValid.getType(), argValid, resultReady);
-    rewriter.create<ConnectOp>(insertLoc, selectReady, selectReadyOp);
-    if (i != e - 1)
-      rewriter.setInsertionPointToStart(&branchWhenOp.elseRegion().front());
+    argValid.push_back(argSubfields[0]);
+    argReady.push_back(argSubfields[1]);
+    argData.push_back(argSubfields[2]);
   }
+
+  // Mux the arg data.
+  auto muxedData =
+      createMuxTree(argData, selectData, selectType, insertLoc, rewriter);
+
+  // Connect the selected data signal to the result data.
+  rewriter.create<ConnectOp>(insertLoc, resultData, muxedData);
+
+  // Mux the arg valids.
+  auto muxedValid =
+      createMuxTree(argValid, selectData, selectType, insertLoc, rewriter);
+
+  // And that with the select valid.
+  auto muxedAndSelectValid = rewriter.create<AndPrimOp>(
+      insertLoc, muxedValid.getType(), muxedValid, selectValid);
+
+  // Connect that to the result valid.
+  rewriter.create<ConnectOp>(insertLoc, resultValid, muxedAndSelectValid);
+
+  // And the result valid with the result ready.
+  auto resultValidAndReady =
+      rewriter.create<AndPrimOp>(insertLoc, muxedAndSelectValid.getType(),
+                                 muxedAndSelectValid, resultReady);
+
+  // Connect that to the select ready.
+  rewriter.create<ConnectOp>(insertLoc, selectReady, resultValidAndReady);
+
+  // Create a decoder for the select data.
+  auto decodedSelect =
+      createDecoder(selectData, argData.size(), insertLoc, rewriter);
+
+  // Walk through each arg data.
+  for (unsigned i = 0, e = argData.size(); i != e; ++i) {
+    // Select the bit for this arg.
+    auto oneHot = rewriter.create<BitsPrimOp>(insertLoc, decodedSelect, i, i);
+
+    // And that with the result valid and ready.
+    auto oneHotAndResultValidAndReady = rewriter.create<AndPrimOp>(
+        insertLoc, oneHot.getType(), oneHot, resultValidAndReady);
+
+    // Connect that to this arg ready.
+    rewriter.create<ConnectOp>(insertLoc, argReady[i],
+                               oneHotAndResultValidAndReady);
+  }
+
   return true;
 }
 
