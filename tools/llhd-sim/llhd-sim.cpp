@@ -32,6 +32,12 @@ static cl::opt<std::string> outputFilename("o", cl::desc("Output filename"),
 static cl::opt<int> nSteps("n", cl::desc("Set the maximum number of steps"),
                            cl::value_desc("max-steps"));
 
+static cl::opt<uint64_t> maxTime(
+    "T",
+    cl::desc("Stop the simulation after the given amount of simulation time in "
+             "picoseconds, including all sub-steps for that real-time step"),
+    cl::value_desc("max-time"));
+
 static cl::opt<bool>
     dumpLLVMDialect("dump-llvm-dialect",
                     cl::desc("Dump the LLVM IR dialect module"));
@@ -51,12 +57,32 @@ static cl::opt<std::string> root(
     cl::value_desc("root_name"), cl::init("root"));
 static cl::alias rootA("r", cl::desc("Alias for -root"), cl::aliasopt(root));
 
-static int parseMLIR(MLIRContext &context, OwningModuleRef &module) {
-  module = parseSourceFile(inputFilename, &context);
-  if (!module)
-    return 1;
-  return 0;
-}
+enum TraceFormat {
+  full,
+  reduced,
+  merged,
+  mergedReduce,
+  namedOnly,
+  noTrace = -1
+};
+
+static cl::opt<TraceFormat> traceMode(
+    "trace-format", cl::desc("Choose the dump format:"), cl::init(full),
+    cl::values(
+        clEnumVal(full, "Dump signal changes for every time step and sub-step, "
+                        "for all instances"),
+        clEnumVal(reduced, "Dump signal changes for every time-step and "
+                           "sub-step, only for the top-level instance"),
+        clEnumVal(merged,
+                  "Only dump changes for real-time steps, for all instances"),
+        clEnumValN(mergedReduce, "merged-reduce",
+                   "Only dump changes for real-time steps, only for the "
+                   "top-level instance"),
+        clEnumValN(
+            namedOnly, "named-only",
+            "Only dump changes for real-time steps, only for top-level "
+            "instance and signals not having the default name '(sig)?[0-9]*'"),
+        clEnumValN(noTrace, "no-trace", "Don't dump a signal trace")));
 
 static int dumpLLVM(ModuleOp module, MLIRContext &context) {
   if (dumpLLVMDialect) {
@@ -99,15 +125,15 @@ int main(int argc, char **argv) {
   }
 
   // Parse the input file.
-  MLIRContext context;
-  OwningModuleRef module;
+  SourceMgr mgr;
+  mgr.AddNewSourceBuffer(std::move(file), SMLoc());
 
+  MLIRContext context;
   // Load the dialects
   context
       .loadDialect<llhd::LLHDDialect, LLVM::LLVMDialect, StandardOpsDialect>();
 
-  if (parseMLIR(context, module))
-    return 1;
+  OwningModuleRef module(parseSourceFile(mgr, &context));
 
   if (dumpMLIR) {
     module->dump();
@@ -115,7 +141,7 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  llhd::sim::Engine engine(output->os(), *module, context, root);
+  llhd::sim::Engine engine(output->os(), *module, context, root, traceMode);
 
   if (dumpLLVMDialect || dumpLLVMIR) {
     return dumpLLVM(engine.getModule(), context);
@@ -127,7 +153,7 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  engine.simulate(nSteps);
+  engine.simulate(nSteps, maxTime);
 
   output->keep();
   return 0;

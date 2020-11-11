@@ -1,7 +1,8 @@
 // RUN: llhd-sim %s | FileCheck %s
 
-// CHECK: 0ps 0d 0e  root/sig  0xffffffff
-// CHECK-NEXT: 0ps 0d 1e  root/sig  0x0000ffff
+// CHECK: 0ps 0d 0e  root/sig[0]  0xffff
+// CHECK-NEXT: 0ps 0d 0e  root/sig[1]  0xffff
+// CHECK-NEXT: 0ps 0d 1e  root/sig[1]  0x0000
 llhd.entity @root () -> () {
     %0 = llhd.const -1 : i8
     %1 = llhd.array_uniform %0 : !llhd.array<2 x i8>
