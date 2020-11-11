@@ -156,6 +156,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
 
   let printer = [{ return ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
+  let verifier = [{ return ::verifyFExtModuleOp(*this); }];
 }
 
 def DoneOp : FIRRTLOp<"done", [Terminator]> {
