@@ -145,7 +145,7 @@ static std::string getSubModuleName(Operation *oldOp) {
 
 /// Construct a tree of 1-bit muxes to multiplex arbitrary numbers of signals.
 static Value createMuxTree(ArrayRef<Value> inputs, Value select,
-                           FIRRTLType selectType, Location insertLoc,
+                           Location insertLoc,
                            ConversionPatternRewriter &rewriter) {
   // Variables used to control iteration and select the appropriate bit.
   unsigned numInputs = inputs.size();
@@ -590,7 +590,6 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
   Value selectValid = selectSubfields[0];
   Value selectReady = selectSubfields[1];
   Value selectData = selectSubfields[2];
-  auto selectType = selectData.getType().cast<FIRRTLType>();
 
   ValueVector resultSubfields = portList.back();
   Value resultValid = resultSubfields[0];
@@ -609,15 +608,13 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
   }
 
   // Mux the arg data.
-  auto muxedData =
-      createMuxTree(argData, selectData, selectType, insertLoc, rewriter);
+  auto muxedData = createMuxTree(argData, selectData, insertLoc, rewriter);
 
   // Connect the selected data signal to the result data.
   rewriter.create<ConnectOp>(insertLoc, resultData, muxedData);
 
   // Mux the arg valids.
-  auto muxedValid =
-      createMuxTree(argValid, selectData, selectType, insertLoc, rewriter);
+  auto muxedValid = createMuxTree(argValid, selectData, insertLoc, rewriter);
 
   // And that with the select valid.
   auto muxedAndSelectValid = rewriter.create<AndPrimOp>(
