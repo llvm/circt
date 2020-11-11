@@ -464,6 +464,26 @@ static LogicalResult verifyFModuleOp(FModuleOp &module) {
   return success();
 }
 
+static LogicalResult verifyFExtModuleOp(FExtModuleOp &op) {
+  auto paramDictOpt = op.parameters();
+  if (!paramDictOpt)
+    return success();
+  DictionaryAttr paramDict = paramDictOpt.getValue();
+  auto checkParmValue = [&](NamedAttribute elt) -> bool {
+    auto value = elt.second;
+    if (value.isa<IntegerAttr>() || value.isa<StringAttr>() ||
+        value.isa<FloatAttr>())
+      return true;
+    op.emitError() << "has unknown extmodule parameter value '" << elt.first
+                   << "' = " << value;
+    return false;
+  };
+
+  if (!llvm::all_of(paramDict, checkParmValue))
+    return failure();
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Declarations
 //===----------------------------------------------------------------------===//
@@ -681,69 +701,31 @@ void WhenOp::createElseRegion() {
 }
 
 void WhenOp::build(OpBuilder &builder, OperationState &result, Value condition,
-                   bool withElseRegion) {
+                   bool withElseRegion, std::function<void()> thenCtor,
+                   std::function<void()> elseCtor) {
   result.addOperands(condition);
 
   Region *thenRegion = result.addRegion();
   Region *elseRegion = result.addRegion();
   WhenOp::ensureTerminator(*thenRegion, builder, result.location);
-  if (withElseRegion)
+
+  if (thenCtor) {
+    auto oldIP = &*builder.getInsertionPoint();
+    builder.setInsertionPointToStart(&*thenRegion->begin());
+    thenCtor();
+    builder.setInsertionPoint(oldIP);
+  }
+
+  if (withElseRegion) {
     WhenOp::ensureTerminator(*elseRegion, builder, result.location);
-}
 
-static void print(OpAsmPrinter &p, WhenOp op) {
-  p << op.getOperationName() << " ";
-  p.printOperand(op.condition());
-
-  p.printRegion(op.thenRegion(),
-                /*printEntryBlockArgs=*/false,
-                /*printBlockTerminators=*/false);
-
-  // Print the 'else' regions if it has any blocks.
-  auto &elseRegion = op.elseRegion();
-  if (!elseRegion.empty()) {
-    p << " else";
-    p.printRegion(elseRegion,
-                  /*printEntryBlockArgs=*/false,
-                  /*printBlockTerminators=*/false);
+    if (elseCtor) {
+      auto oldIP = &*builder.getInsertionPoint();
+      builder.setInsertionPointToStart(&*elseRegion->begin());
+      elseCtor();
+      builder.setInsertionPoint(oldIP);
+    }
   }
-
-  // Print the attribute list.
-  p.printOptionalAttrDictWithKeyword(op.getAttrs());
-}
-
-static ParseResult parseWhenOp(OpAsmParser &parser, OperationState &result) {
-  // Parse the module name.
-  OpAsmParser::OperandType conditionOperand;
-  if (parser.parseOperand(conditionOperand) ||
-      parser.resolveOperand(conditionOperand,
-                            UIntType::get(result.getContext(), 1),
-                            result.operands))
-    return failure();
-
-  // Create the regions for 'then' and 'else'.  The latter must be created even
-  // if it remains empty for the validity of the operation.
-  result.regions.reserve(2);
-  Region *thenRegion = result.addRegion();
-  Region *elseRegion = result.addRegion();
-
-  // Parse the 'then' region.
-  if (parser.parseRegion(*thenRegion, {}, {}))
-    return failure();
-  WhenOp::ensureTerminator(*thenRegion, parser.getBuilder(), result.location);
-
-  // If we find an 'else' keyword then parse the 'else' region.
-  if (!parser.parseOptionalKeyword("else")) {
-    if (parser.parseRegion(*elseRegion, {}, {}))
-      return failure();
-    WhenOp::ensureTerminator(*elseRegion, parser.getBuilder(), result.location);
-  }
-
-  // Parse the optional attribute list.
-  if (parser.parseOptionalAttrDict(result.attributes))
-    return failure();
-
-  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -764,18 +746,11 @@ static LogicalResult verifyConstantOp(ConstantOp constant) {
   // If the result type has a bitwidth, then the attribute must match its width.
   auto intType = constant.getType().cast<IntType>();
   auto width = intType.getWidthOrSentinel();
-  if (width != -1 && (int)constant.value().getBitWidth() != width) {
-    constant.emitError(
+  if (width != -1 && (int)constant.value().getBitWidth() != width)
+    return constant.emitError(
         "firrtl.constant attribute bitwidth doesn't match return type");
-    return failure();
-  }
 
   return success();
-}
-
-OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
-  assert(operands.empty() && "constant has no operands");
-  return valueAttr();
 }
 
 /// Build a ConstantOp from an APInt and a FIRRTL type, handling the attribute
@@ -1090,12 +1065,11 @@ static LogicalResult verifyBitsPrimOp(BitsPrimOp bits) {
       bits.result().getType().cast<IntType>().getBitWidthOrSentinel();
   int32_t expectedWidth = expectedType.cast<IntType>().getBitWidthOrSentinel();
 
-  if (resultWidth != -1 && expectedWidth != resultWidth) {
-    bits.emitError() << "width of the result type must be equal to (high - low "
-                        "+ 1), expected "
-                     << expectedWidth << " but got " << resultWidth;
-    return failure();
-  }
+  if (resultWidth != -1 && expectedWidth != resultWidth)
+    return bits.emitError()
+           << "width of the result type must be equal to (high - low "
+              "+ 1), expected "
+           << expectedWidth << " but got " << resultWidth;
 
   return success();
 }
@@ -1275,30 +1249,25 @@ static LogicalResult verifyStdIntCast(StdIntCast cast) {
   IntegerType integerType;
   if ((firType = cast.getOperand().getType().dyn_cast<FIRRTLType>())) {
     integerType = cast.getType().dyn_cast<IntegerType>();
-    if (!integerType) {
-      cast.emitError("result type must be a signless integer");
-      return failure();
-    }
+    if (!integerType)
+      return cast.emitError("result type must be a signless integer");
   } else if ((firType = cast.getType().dyn_cast<FIRRTLType>())) {
     integerType = cast.getOperand().getType().dyn_cast<IntegerType>();
-    if (!integerType) {
-      cast.emitError("operand type must be a signless integer");
-      return failure();
-    }
+    if (!integerType)
+      return cast.emitError("operand type must be a signless integer");
   } else {
-    cast.emitError("either source or result type must be integer type");
-    return failure();
+    return cast.emitError("either source or result type must be integer type");
   }
 
   int32_t intWidth = firType.getBitWidthOrSentinel();
   if (intWidth == -2)
     return cast.emitError("firrtl type isn't simple bit type");
   if (intWidth == -1)
-    return cast.emitError("SInt/UInt type must have a width"), failure();
+    return cast.emitError("SInt/UInt type must have a width");
   if (!integerType.isSignless())
-    return cast.emitError("standard integer type must be signless"), failure();
+    return cast.emitError("standard integer type must be signless");
   if (unsigned(intWidth) != integerType.getWidth())
-    return cast.emitError("source and result width must match"), failure();
+    return cast.emitError("source and result width must match");
 
   return success();
 }

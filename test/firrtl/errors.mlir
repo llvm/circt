@@ -196,6 +196,15 @@ firrtl.circuit "Foo" {
 
 firrtl.circuit "Foo" {
 
+  // expected-error @+1 {{has unknown extmodule parameter value 'width' = @Foo}}
+  firrtl.extmodule @Foo(%a : !firrtl.uint<2>) attributes { defname = "Foo", parameters = { width = @Foo } }
+
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+
   firrtl.module @Foo()
   // expected-error @+1 {{'firrtl.instance' op should be embedded in a 'firrtl.module'}}
   %a = firrtl.instance @Foo : !firrtl.bundle<>

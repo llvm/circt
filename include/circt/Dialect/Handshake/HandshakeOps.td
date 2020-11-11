@@ -354,6 +354,7 @@ def MuxOp : Handshake_Op<"mux", [NoSideEffect, MergeLikeOpInterface]> {
 
   let skipDefaultBuilders = 1;
   let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$inputs)>];
+  let verifier = [{ return ::verify(*this); }];
 }
 
 def ControlMergeOp : Handshake_Op<"control_merge",

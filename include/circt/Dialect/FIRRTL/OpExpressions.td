@@ -422,6 +422,7 @@ def StdIntCast : FIRRTLOp<"stdIntCast", [NoSideEffect]> {
     $input attr-dict `:` functional-type($input, $result)
   }];
 
+  let hasFolder = 1;
   let verifier = [{ return ::verifyStdIntCast(*this); }];
 }
 
@@ -432,6 +433,7 @@ def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect]> {
   let arguments = (ins FIRRTLType:$input);
   let results = (outs PassiveType:$result);
 
+  let hasFolder = 1;
   let assemblyFormat = [{
     $input attr-dict `:` functional-type($input, $result)
   }];
@@ -442,6 +444,7 @@ def AsNonPassivePrimOp : FIRRTLOp<"asNonPassive", [NoSideEffect]> {
   let arguments = (ins PassiveType:$input);
   let results = (outs FIRRTLType:$result);
 
+  let hasFolder = 1;
   let assemblyFormat = [{
     $input attr-dict `:` functional-type($input, $result)
   }];

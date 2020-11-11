@@ -79,16 +79,20 @@ struct Signal {
   /// owner.
   bool operator<(const Signal &rhs) const;
 
-  /// Return the signal value in dumpable format: "0x<value>".
+  /// Return the value of the signal in hexadecimal string format.
   std::string dump();
+
+  /// Return the value of the i-th element of the signal in hexadecimal string
+  /// format.
+  std::string dump(unsigned);
 
   std::string name;
   std::string owner;
   // The list of instances this signal triggers.
   std::vector<std::string> triggers;
-  int origin = -1;
   uint64_t size;
   std::unique_ptr<uint8_t> value;
+  std::vector<std::pair<unsigned, unsigned>> elements;
 };
 
 /// The simulator's internal representation of one queue slot.
@@ -189,6 +193,8 @@ struct State {
 
   int addSignalData(int index, std::string owner, uint8_t *value,
                     uint64_t size);
+
+  void addSignalElement(unsigned, unsigned, unsigned);
 
   /// Add a pointer to the process persistence state to a process instance.
   void addProcPtr(std::string name, ProcState *procStatePtr);

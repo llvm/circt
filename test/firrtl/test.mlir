@@ -76,4 +76,15 @@ firrtl.module @ClockCast(%clock: !firrtl.clock, %in1 : i1) {
   %1 = firrtl.stdIntCast %in1 : (i1) -> !firrtl.clock
 }
 
+
+// CHECK-LABEL: @TestDshRL
+firrtl.module @TestDshRL(%in1 : !firrtl.uint<2>, %in2: !firrtl.uint<3>) {
+  // CHECK: %0 = firrtl.dshl %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<9>
+  %0 = firrtl.dshl %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<9>
+
+  // CHECK: %1 = firrtl.dshr %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<9>
+  %1 = firrtl.dshr %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<9>
+}
+
+
 }
