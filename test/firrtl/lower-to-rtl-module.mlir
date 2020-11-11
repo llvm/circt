@@ -178,8 +178,8 @@
                              %outC: !firrtl.flip<uint<4>>,
                              %outD: !firrtl.flip<uint<4>>) {
     // CHECK-NEXT: %0 = firrtl.stdIntCast %arg0 : (i4) -> !firrtl.uint<4>
-    // CHECK-NEXT:%1 = firrtl.stdIntCast %arg1 : (i4) -> !firrtl.uint<4>
-    // CHECK-NEXT:%2 = firrtl.stdIntCast %arg2 : (i4) -> !firrtl.uint<4>
+    // CHECK-NEXT: %1 = firrtl.stdIntCast %arg1 : (i4) -> !firrtl.uint<4>
+    // CHECK-NEXT: %2 = firrtl.stdIntCast %arg2 : (i4) -> !firrtl.uint<4>
 
     // CHECK: [[OUTB:%.+]] = rtl.wire : i4
     // CHECK: [[OUTC:%.+]] = rtl.wire : i4
@@ -202,7 +202,6 @@
 
     // No connections to outD.
 
-    // CHECK: [[ACAST:%.+]] = firrtl.stdIntCast %0 : (!firrtl.uint<4>) -> i4
-    // CHECK: rtl.output [[ACAST]], %3,
+    // CHECK: rtl.output %arg0, %3,
   }
 }

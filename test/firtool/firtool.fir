@@ -22,8 +22,6 @@ circuit test_mod :
 
 ; MLIRLOWER: module attributes {firrtl.mainModule = "test_mod"} {
 ; MLIRLOWER:   rtl.module @test_mod(%arg0: i1 {rtl.name = "a"}) -> (i1 {rtl.name = "b"}) {
-; MLIRLOWER:     %0 = firrtl.stdIntCast %arg0 : (i1) -> !firrtl.uint<1>
-; MLIRLOWER:     %1 = firrtl.stdIntCast %0 : (!firrtl.uint<1>) -> i1
-; MLIRLOWER:     rtl.output %1 : i1
+; MLIRLOWER:     rtl.output %arg0 : i1
 ; MLIRLOWER:   }
 ; MLIRLOWER: }

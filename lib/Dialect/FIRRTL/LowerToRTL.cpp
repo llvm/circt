@@ -42,12 +42,12 @@ static Type lowerType(Type type) {
 /// Cast from a standard type to a FIRRTL type, potentially with a flip.
 static Value castToFIRRTLType(Value val, Type type,
                               ImplicitLocOpBuilder &builder) {
-  val =
-      builder.create<StdIntCast>(type.cast<FIRRTLType>().getPassiveType(), val);
+  val = builder.createOrFold<StdIntCast>(
+      type.cast<FIRRTLType>().getPassiveType(), val);
 
   // Handle the flip type if needed.
   if (type != val.getType())
-    val = builder.create<AsNonPassivePrimOp>(type, val);
+    val = builder.createOrFold<AsNonPassivePrimOp>(type, val);
   return val;
 }
 
@@ -56,8 +56,8 @@ static Value castFromFIRRTLType(Value val, Type type,
                                 ImplicitLocOpBuilder &builder) {
   auto passiveType = val.getType().cast<FIRRTLType>().getPassiveType();
   if (val.getType() != passiveType)
-    val = builder.create<AsPassivePrimOp>(passiveType, val);
-  return builder.create<StdIntCast>(type, val);
+    val = builder.createOrFold<AsPassivePrimOp>(passiveType, val);
+  return builder.createOrFold<StdIntCast>(type, val);
 }
 
 //===----------------------------------------------------------------------===//
@@ -713,16 +713,10 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
         value = castVal.getOperand();
 
     if (value.getType() != passiveType)
-      value = builder->create<AsPassivePrimOp>(passiveType, value);
+      value = builder->createOrFold<AsPassivePrimOp>(passiveType, value);
   }
 
-  // If the input is being casted from the type we already want, then just
-  // return it.  This is typical for module ports, which are already lowered.
-  if (auto castVal = dyn_cast<StdIntCast>(value.getDefiningOp()))
-    if (castVal.getOperand().getType() == resultType)
-      return castVal.getOperand();
-
-  return builder->create<StdIntCast>(resultType, value);
+  return builder->createOrFold<StdIntCast>(resultType, value);
 }
 
 /// Return the lowered value corresponding to the specified original value and

@@ -1249,6 +1249,15 @@ FIRRTLType TailPrimOp::getResultType(FIRRTLType input, int32_t amount,
 // Conversions to/from fixed-width signless integer types in standard dialect.
 //===----------------------------------------------------------------------===//
 
+OpFoldResult StdIntCast::fold(ArrayRef<Attribute> operands) {
+  if (auto castInput =
+          dyn_cast_or_null<StdIntCast>(getOperand().getDefiningOp()))
+    if (castInput.getOperand().getType() == getType())
+      return castInput.getOperand();
+
+  return {};
+}
+
 static LogicalResult verifyStdIntCast(StdIntCast cast) {
   // Either the input or result must have signless standard integer type, the
   // other must be a FIRRTL type that lowers to one, and their widths must
@@ -1257,32 +1266,45 @@ static LogicalResult verifyStdIntCast(StdIntCast cast) {
   IntegerType integerType;
   if ((firType = cast.getOperand().getType().dyn_cast<FIRRTLType>())) {
     integerType = cast.getType().dyn_cast<IntegerType>();
-    if (!integerType) {
-      cast.emitError("result type must be a signless integer");
-      return failure();
-    }
+    if (!integerType)
+      return cast.emitError("result type must be a signless integer");
   } else if ((firType = cast.getType().dyn_cast<FIRRTLType>())) {
     integerType = cast.getOperand().getType().dyn_cast<IntegerType>();
-    if (!integerType) {
-      cast.emitError("operand type must be a signless integer");
-      return failure();
-    }
+    if (!integerType)
+      return cast.emitError("operand type must be a signless integer");
   } else {
-    cast.emitError("either source or result type must be integer type");
-    return failure();
+    return cast.emitError("either source or result type must be integer type");
   }
 
   int32_t intWidth = firType.getBitWidthOrSentinel();
   if (intWidth == -2)
     return cast.emitError("firrtl type isn't simple bit type");
   if (intWidth == -1)
-    return cast.emitError("SInt/UInt type must have a width"), failure();
+    return cast.emitError("SInt/UInt type must have a width");
   if (!integerType.isSignless())
-    return cast.emitError("standard integer type must be signless"), failure();
+    return cast.emitError("standard integer type must be signless");
   if (unsigned(intWidth) != integerType.getWidth())
-    return cast.emitError("source and result width must match"), failure();
+    return cast.emitError("source and result width must match");
 
   return success();
+}
+
+OpFoldResult AsPassivePrimOp::fold(ArrayRef<Attribute> operands) {
+  if (auto castInput =
+          dyn_cast_or_null<AsNonPassivePrimOp>(getOperand().getDefiningOp()))
+    if (castInput.getOperand().getType() == getType())
+      return castInput.getOperand();
+
+  return {};
+}
+
+OpFoldResult AsNonPassivePrimOp::fold(ArrayRef<Attribute> operands) {
+  if (auto castInput =
+          dyn_cast_or_null<AsPassivePrimOp>(getOperand().getDefiningOp()))
+    if (castInput.getOperand().getType() == getType())
+      return castInput.getOperand();
+
+  return {};
 }
 
 //===----------------------------------------------------------------------===//
