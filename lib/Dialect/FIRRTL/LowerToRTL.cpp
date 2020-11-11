@@ -1089,14 +1089,21 @@ LogicalResult FIRRTLLowering::visitExpr(DShlPrimOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(DShrPrimOp op) {
-  // rtl has equal types for these, firrtl doesn't.
+  // rtl has equal types for these, firrtl doesn't.  The type of the firrtl RHS
+  // may be wider than the LHS.
   auto lhs = getLoweredAndExtendedValue(op.lhs(), op.result().getType());
-  if (!lhs)
+  auto rhs = getLoweredValue(op.rhs());
+  if (!lhs || !rhs)
     return failure();
 
-  auto rhs = getLoweredAndExtendedValue(op.rhs(), op.result().getType());
-  if (!rhs)
-    return failure();
+  // If we need to extend or truncate the shift amount, do so.
+  if (lhs.getType() != rhs.getType()) {
+    if (lhs.getType().getIntOrFloatBitWidth() >
+        rhs.getType().getIntOrFloatBitWidth())
+      rhs = builder->create<rtl::ZExtOp>(lhs.getType(), rhs);
+    else
+      rhs = builder->create<rtl::ExtractOp>(lhs.getType(), rhs, 0);
+  }
 
   return setLoweringTo<rtl::ShrOp>(op, lhs, rhs);
 }
