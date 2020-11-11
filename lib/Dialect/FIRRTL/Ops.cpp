@@ -753,11 +753,6 @@ static LogicalResult verifyConstantOp(ConstantOp constant) {
   return success();
 }
 
-OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
-  assert(operands.empty() && "constant has no operands");
-  return valueAttr();
-}
-
 /// Build a ConstantOp from an APInt and a FIRRTL type, handling the attribute
 /// formation for the 'value' attribute.
 void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
@@ -1246,15 +1241,6 @@ FIRRTLType TailPrimOp::getResultType(FIRRTLType input, int32_t amount,
 // Conversions to/from fixed-width signless integer types in standard dialect.
 //===----------------------------------------------------------------------===//
 
-OpFoldResult StdIntCast::fold(ArrayRef<Attribute> operands) {
-  if (auto castInput =
-          dyn_cast_or_null<StdIntCast>(getOperand().getDefiningOp()))
-    if (castInput.getOperand().getType() == getType())
-      return castInput.getOperand();
-
-  return {};
-}
-
 static LogicalResult verifyStdIntCast(StdIntCast cast) {
   // Either the input or result must have signless standard integer type, the
   // other must be a FIRRTL type that lowers to one, and their widths must
@@ -1284,24 +1270,6 @@ static LogicalResult verifyStdIntCast(StdIntCast cast) {
     return cast.emitError("source and result width must match");
 
   return success();
-}
-
-OpFoldResult AsPassivePrimOp::fold(ArrayRef<Attribute> operands) {
-  if (auto castInput =
-          dyn_cast_or_null<AsNonPassivePrimOp>(getOperand().getDefiningOp()))
-    if (castInput.getOperand().getType() == getType())
-      return castInput.getOperand();
-
-  return {};
-}
-
-OpFoldResult AsNonPassivePrimOp::fold(ArrayRef<Attribute> operands) {
-  if (auto castInput =
-          dyn_cast_or_null<AsPassivePrimOp>(getOperand().getDefiningOp()))
-    if (castInput.getOperand().getType() == getType())
-      return castInput.getOperand();
-
-  return {};
 }
 
 //===----------------------------------------------------------------------===//
