@@ -116,6 +116,7 @@ install(DIRECTORY include/circt
   PATTERN "*.h"
   PATTERN "*.inc"
   PATTERN "*.td"
+  PATTERN "*.sv"
   PATTERN "LICENSE.TXT"
   )
 
