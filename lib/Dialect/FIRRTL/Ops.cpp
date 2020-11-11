@@ -746,11 +746,9 @@ static LogicalResult verifyConstantOp(ConstantOp constant) {
   // If the result type has a bitwidth, then the attribute must match its width.
   auto intType = constant.getType().cast<IntType>();
   auto width = intType.getWidthOrSentinel();
-  if (width != -1 && (int)constant.value().getBitWidth() != width) {
-    constant.emitError(
+  if (width != -1 && (int)constant.value().getBitWidth() != width)
+    return constant.emitError(
         "firrtl.constant attribute bitwidth doesn't match return type");
-    return failure();
-  }
 
   return success();
 }
@@ -1072,12 +1070,11 @@ static LogicalResult verifyBitsPrimOp(BitsPrimOp bits) {
       bits.result().getType().cast<IntType>().getBitWidthOrSentinel();
   int32_t expectedWidth = expectedType.cast<IntType>().getBitWidthOrSentinel();
 
-  if (resultWidth != -1 && expectedWidth != resultWidth) {
-    bits.emitError() << "width of the result type must be equal to (high - low "
-                        "+ 1), expected "
-                     << expectedWidth << " but got " << resultWidth;
-    return failure();
-  }
+  if (resultWidth != -1 && expectedWidth != resultWidth)
+    return bits.emitError()
+           << "width of the result type must be equal to (high - low "
+              "+ 1), expected "
+           << expectedWidth << " but got " << resultWidth;
 
   return success();
 }

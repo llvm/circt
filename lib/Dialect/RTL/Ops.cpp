@@ -289,16 +289,15 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
   }
 
   auto referencedModule = op.getReferencedModule();
-  if (referencedModule == nullptr) {
-    op.emitError("Cannot find module definition '") << op.moduleName() << "'";
-    return failure();
-  }
+  if (referencedModule == nullptr)
+    return op.emitError("Cannot find module definition '")
+           << op.moduleName() << "'";
+
   if (!isa<rtl::RTLModuleOp>(referencedModule) &&
-      !isa<rtl::RTLExternModuleOp>(referencedModule)) {
-    op.emitError("Symbol resolved to '")
-        << referencedModule->getName() << "' which is not a RTL[Ext]ModuleOp";
-    return failure();
-  }
+      !isa<rtl::RTLExternModuleOp>(referencedModule))
+    return op.emitError("Symbol resolved to '")
+           << referencedModule->getName()
+           << "' which is not a RTL[Ext]ModuleOp";
 
   if (auto paramDictOpt = op.parameters()) {
     DictionaryAttr paramDict = paramDictOpt.getValue();
@@ -549,11 +548,9 @@ static ParseResult parseWireOp(OpAsmParser &parser, OperationState &result) {
 static LogicalResult verifyConstantOp(ConstantOp constant) {
   // If the result type has a bitwidth, then the attribute must match its width.
   auto intType = constant.getType().cast<IntegerType>();
-  if (constant.value().getBitWidth() != intType.getWidth()) {
-    constant.emitError(
+  if (constant.value().getBitWidth() != intType.getWidth())
+    return constant.emitError(
         "firrtl.constant attribute bitwidth doesn't match return type");
-    return failure();
-  }
 
   return success();
 }
