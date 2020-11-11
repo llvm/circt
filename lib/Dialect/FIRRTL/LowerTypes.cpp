@@ -94,9 +94,6 @@ struct FIRRTLTypesLowering
   Optional<Value> getBundleLowering(Value oldValue, StringRef flatField);
   void getAllBundleLowerings(Value oldValue, SmallVectorImpl<Value> &results);
 
-  void setInstanceLowering(Value oldValue, Value newValue);
-  Value getInstanceLowering(Value oldValue);
-
   void setSubfieldLowering(Value subfield, Value rootBundle,
                            std::string suffix);
   Optional<ValueField> getSubfieldLowering(Value subfield);
@@ -116,10 +113,6 @@ private:
   // State to keep a mapping from original bundle values to flattened names and
   // flattened values.
   DenseMap<Value, llvm::StringMap<Value>> loweredBundleValues;
-
-  // State to keep a mapping from original instances to new instances with their
-  // bundles flattened.
-  DenseMap<Value, Value> loweredInstances;
 
   // State to keep a necessary info when traversing potentially nested subfields
   // of bundles: the root bundle and the fieldname suffix computed so far.
@@ -215,8 +208,14 @@ LogicalResult FIRRTLTypesLowering::visitDecl(InstanceOp op) {
   auto newInstance = builder->create<InstanceOp>(
       op.getLoc(), newType, op.moduleNameAttr(), op.nameAttr());
 
-  // Store the mapping from the old instance to the new one.
-  setInstanceLowering(op, newInstance);
+  // Create new subfield ops for each field of the instance.
+  for (auto element : bundleElements) {
+    auto newSubfield = builder->create<SubfieldOp>(op.getLoc(), element.second,
+                                                   newInstance, element.first);
+
+    // Map the flattened suffix for the original bundle to the new value.
+    setBundleLowering(op, element.first, newSubfield);
+  }
 
   removeOp(op);
 
@@ -232,6 +231,37 @@ LogicalResult FIRRTLTypesLowering::visitExpr(SubfieldOp op) {
   Value result = op.result();
   StringRef fieldname = op.fieldname();
 
+  // Always mark the op for removal.
+  removeOp(op);
+
+  // Handle instance subfields.
+  if (input.getDefiningOp<InstanceOp>()) {
+    // Get the element type in the original instance.
+    BundleType oldType = input.getType().cast<BundleType>();
+    FIRRTLType elementType = oldType.getElementType(fieldname);
+    assert(elementType && "no element found in lowered bundle");
+
+    // Flatten any bundle types.
+    SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+    flattenBundleTypes(elementType, fieldname, false, fieldTypes);
+
+    for (auto field : fieldTypes) {
+      // Look up the new subfield from the new instance.
+      auto newValue = getBundleLowering(input, field.suffix);
+      assert(newValue.hasValue() && "no lowered value for instance subfield");
+
+      // Get the subfield name without the prefix.
+      auto newSubfieldName =
+          StringRef(field.suffix).drop_front(fieldname.size());
+
+      // Remember the new subfield under the subfield name without the prefix.
+      setBundleLowering(result, newSubfieldName, newValue.getValue());
+    }
+
+    return success();
+  }
+
+  // Handle subfields of block arguments and other subfields.
   Value rootBundle;
   SmallString<16> suffix;
   if (input.isa<BlockArgument>()) {
@@ -253,36 +283,6 @@ LogicalResult FIRRTLTypesLowering::visitExpr(SubfieldOp op) {
     suffix.assign(subfieldInfo.second);
     suffix.push_back('_');
     suffix.append(fieldname);
-  } else {
-    assert(input.getDefiningOp<InstanceOp>());
-
-    // When the input is from an instance, look up the new instance.
-    Value newInstance = getInstanceLowering(input);
-    assert(newInstance && "no instance lowering for input");
-
-    // Check if this subfield was originally a bundle type.
-    BundleType oldType = input.getType().cast<BundleType>();
-    FIRRTLType elementType = oldType.getElementType(fieldname);
-    assert(elementType && "no element found in lowered bundle");
-
-    if (elementType.isa<BundleType>()) {
-      // If it was a bundle, flatten it the usual way.
-      SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-      flattenBundleTypes(elementType, fieldname, false, fieldTypes);
-
-      for (auto field : fieldTypes) {
-        // Create a new subfield for the flattened field.
-        auto newSubfield = builder->create<SubfieldOp>(
-            op.getLoc(), getPortType(field), newInstance, field.suffix);
-
-        // Use the original result and the sub-field name (without the prefix)
-        // to remember the new subfield.
-        auto newSubfieldName =
-            StringRef(field.suffix).drop_front(fieldname.size());
-
-        setBundleLowering(result, newSubfieldName, newSubfield);
-      }
-    }
   }
 
   Optional<Value> newValue = getBundleLowering(rootBundle, suffix);
@@ -294,8 +294,6 @@ LogicalResult FIRRTLTypesLowering::visitExpr(SubfieldOp op) {
     // Otherwise, remember the root bundle and the suffix so far.
     setSubfieldLowering(result, rootBundle, std::string(suffix));
   }
-
-  removeOp(op);
 
   return success();
 }
@@ -421,18 +419,6 @@ void FIRRTLTypesLowering::getAllBundleLowerings(
   }
 }
 
-// Store the mapping from an original instance value to a new instance value
-// that has its bundles flattened.
-void FIRRTLTypesLowering::setInstanceLowering(Value oldValue, Value newValue) {
-  loweredInstances[oldValue] = newValue;
-}
-
-// For a mapped instance value, retrieve and return the new instance with
-// bundles flattened.
-Value FIRRTLTypesLowering::getInstanceLowering(Value oldValue) {
-  return loweredInstances[oldValue];
-}
-
 // Store the mapping from a subfield to its root bundle as well as the currently
 // constructed suffix. Eventually, the full suffix will be built, which will map
 // to a flat field name.
@@ -469,6 +455,5 @@ void FIRRTLTypesLowering::cleanup() {
   argsToRemove.clear();
 
   loweredBundleValues.clear();
-  loweredInstances.clear();
   loweredSubfieldInfo.clear();
 }
