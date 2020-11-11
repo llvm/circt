@@ -29,9 +29,6 @@
    // CHECK-NEXT: %0 = firrtl.stdIntCast %arg0 : (i4) -> !firrtl.uint<4>
    // CHECK-NEXT: %1 = firrtl.stdIntCast %arg1 : (i2) -> !firrtl.uint<2>
    // CHECK-NEXT: %2 = firrtl.stdIntCast %arg2 : (i8) -> !firrtl.sint<8>
-   // CHECK-NEXT: %3 = rtl.wire : i4
-   // CHECK-NEXT: %4 = firrtl.stdIntCast %3 : (i4) -> !firrtl.uint<4>
-   // CHECK-NEXT: %5 = firrtl.asNonPassive %4 : (!firrtl.uint<4>) -> !firrtl.flip<uint<4>>
 
     // CHECK-NEXT: firrtl.asUInt %0
     %1 = firrtl.asUInt %in1 : (!firrtl.uint<4>) -> !firrtl.uint<4>
@@ -43,11 +40,12 @@
     %3 = firrtl.pad %in2, 3 : (!firrtl.uint<2>) -> !firrtl.sint<3>
     // CHECK-NEXT: firrtl.pad
     %4 = firrtl.pad %3, 4 : (!firrtl.sint<3>) -> !firrtl.uint<4>
-    // CHECK-NEXT: firrtl.xor %1
+    // CHECK-NEXT: [[XOR:%.+]] = firrtl.xor %1
     %5 = firrtl.xor %in2, %4 : (!firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
-    // CHECK-NEXT: firrtl.connect %5
+
+    // CHECK-NEXT: [[RESULT:%.+]] = firrtl.stdIntCast [[XOR]]
     firrtl.connect %out4, %5 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
-    // CHECK-NEXT: rtl.output %3 : i4
+    // CHECK-NEXT: rtl.output [[RESULT]] : i4
   }
 
  // CHECK-LABEL: rtl.module @TestInstance(
@@ -161,14 +159,50 @@
   firrtl.module @OutputFirst(%out4: !firrtl.flip<uint<4>>,
                              %in1: !firrtl.uint<1>,
                              %in4: !firrtl.uint<4>) {
-    // CHECK-NEXT: %0 = rtl.wire : i4
-    // CHECK-NEXT: %1 = firrtl.stdIntCast %0 : (i4) -> !firrtl.uint<4>
-    // CHECK-NEXT: %2 = firrtl.asNonPassive %1 : (!firrtl.uint<4>) -> !firrtl.flip<uint<4>>
-    // CHECK-NEXT: %3 = firrtl.stdIntCast %arg0 : (i1) -> !firrtl.uint<1>
-    // CHECK-NEXT: %4 = firrtl.stdIntCast %arg1 : (i4) -> !firrtl.uint<4>
-    // CHECK-NEXT: firrtl.connect %2, %4 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+    // CHECK-NEXT: %0 = firrtl.stdIntCast %arg0 : (i1) -> !firrtl.uint<1>
+    // CHECK-NEXT: %1 = firrtl.stdIntCast %arg1 : (i4) -> !firrtl.uint<4>
+    // CHECK-NEXT: %2 = firrtl.stdIntCast %1 : (!firrtl.uint<4>) -> i4
     firrtl.connect %out4, %in4 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
-    // CHECK-NEXT: rtl.output %0 : i4
+    // CHECK-NEXT: rtl.output %2 : i4
+  }
+
+  // CHECK-LABEL: rtl.module @PortMadness(
+  // CHECK: %arg0: i4 {rtl.name = "inA"}, %arg1: i4 {rtl.name = "inB"}, %arg2: i4 {rtl.name = "inC"})
+  // CHECK: -> (i4 {rtl.name = "outA"}, i4 {rtl.name = "outB"}, i4 {rtl.name = "outC"}, i4 {rtl.name = "outD"}) {
+  firrtl.module @PortMadness(%inA: !firrtl.uint<4>,
+                             %inB: !firrtl.uint<4>,
+                             %inC: !firrtl.uint<4>,
+                             %outA: !firrtl.flip<uint<4>>,
+                             %outB: !firrtl.flip<uint<4>>,
+                             %outC: !firrtl.flip<uint<4>>,
+                             %outD: !firrtl.flip<uint<4>>) {
+    // CHECK-NEXT: %0 = firrtl.stdIntCast %arg0 : (i4) -> !firrtl.uint<4>
+    // CHECK-NEXT:%1 = firrtl.stdIntCast %arg1 : (i4) -> !firrtl.uint<4>
+    // CHECK-NEXT:%2 = firrtl.stdIntCast %arg2 : (i4) -> !firrtl.uint<4>
+
+    // CHECK: [[OUTB:%.+]] = rtl.wire : i4
+    // CHECK: [[OUTC:%.+]] = rtl.wire : i4
+    // CHECK: [[OUTD:%.+]] = rtl.wire : i4
+
+    // Normal
+    firrtl.connect %outA, %inA : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+
+    // Multi connect
+    firrtl.connect %outB, %inA : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+    firrtl.connect %outB, %inB : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+
+    // Use of output as an input.
+    %tmp = firrtl.asPassive %outC : (!firrtl.flip<uint<4>>) -> !firrtl.uint<4>
+    %0 = firrtl.sub %inA, %tmp : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+
+    // Use of an input as an output.
+    %tmp2 = firrtl.asNonPassive %inC : (!firrtl.uint<4>) -> !firrtl.flip<uint<4>>
+    firrtl.connect %tmp2, %inA : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+
+    // No connections to outD.
+
+    // CHECK: [[ACAST:%.+]] = firrtl.stdIntCast %0 : (!firrtl.uint<4>) -> i4
+    // CHECK: rtl.output [[ACAST]], %3,
   }
 }

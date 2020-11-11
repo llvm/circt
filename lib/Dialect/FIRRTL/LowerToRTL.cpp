@@ -39,6 +39,27 @@ static Type lowerType(Type type) {
   return {};
 }
 
+/// Cast from a standard type to a FIRRTL type, potentially with a flip.
+static Value castToFIRRTLType(Value val, Type type,
+                              ImplicitLocOpBuilder &builder) {
+  val =
+      builder.create<StdIntCast>(type.cast<FIRRTLType>().getPassiveType(), val);
+
+  // Handle the flip type if needed.
+  if (type != val.getType())
+    val = builder.create<AsNonPassivePrimOp>(type, val);
+  return val;
+}
+
+/// Cast from a FIRRTL type (potentially with a flip) to a standard type.
+static Value castFromFIRRTLType(Value val, Type type,
+                                ImplicitLocOpBuilder &builder) {
+  auto passiveType = val.getType().cast<FIRRTLType>().getPassiveType();
+  if (val.getType() != passiveType)
+    val = builder.create<AsPassivePrimOp>(passiveType, val);
+  return builder.create<StdIntCast>(type, val);
+}
+
 //===----------------------------------------------------------------------===//
 // firrtl.module Lowering Pass
 //===----------------------------------------------------------------------===//
@@ -214,16 +235,36 @@ rtl::RTLModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
   return builder.create<rtl::RTLModuleOp>(oldModule.getLoc(), nameAttr, ports);
 }
 
-/// Cast from a standard type to a FIRRTL type, potentially with a flip.
-static Value castToFIRRTLType(Value val, Type type,
-                              ImplicitLocOpBuilder &builder) {
-  val =
-      builder.create<StdIntCast>(type.cast<FIRRTLType>().getPassiveType(), val);
+/// Given an output port, check to see if all of the uses of the output port are
+/// connects.  If so, remove the connect and return the value being used.  If
+/// this isn't a situation we can handle, just return null.
+static Value tryToFindOutputValue(Value portValue) {
+  SmallVector<ConnectOp, 2> connects;
+  for (auto *use : portValue.getUsers()) {
+    // We only know about 'connect' uses.
+    auto connect = dyn_cast<ConnectOp>(use);
+    if (!connect)
+      return {};
 
-  // Handle the flip type if needed.
-  if (type != val.getType())
-    val = builder.create<AsNonPassivePrimOp>(type, val);
-  return val;
+    connects.push_back(connect);
+  }
+
+  // For now just handle the case where the output port has a single connect.
+  if (connects.size() != 1)
+    return {};
+
+  auto connectSrc = connects[0].src();
+
+  // We know it must be the destination operand due to the types, but the source
+  // may not match the destination width.
+  // TODO: Extension/truncation, for now require an exact match.
+  if (portValue.getType().cast<FIRRTLType>().getPassiveType() !=
+      connectSrc.getType())
+    return {};
+
+  // Remove the connect and use its source as the value for the output.
+  connects[0].erase();
+  return connectSrc;
 }
 
 /// Now that we have the operations for the rtl.module's corresponding to the
@@ -260,6 +301,13 @@ void FIRRTLModuleLowering::lowerModuleBody(
 
   ImplicitLocOpBuilder bodyBuilder(oldModule.getLoc(), newModule.body());
 
+  // Use a placeholder instruction be a cursor that indicates where we want to
+  // move the new function body to.  This is important because we insert some
+  // ops at the start of the function and some at the end, and the body is
+  // currently empty to avoid iterator invalidation.
+  auto cursor = bodyBuilder.create<rtl::ConstantOp>(APInt(1, 1));
+  bodyBuilder.setInsertionPoint(cursor);
+
   // Insert argument casts, and re-vector users in the old body to use them.
   SmallVector<ModulePortInfo, 8> ports;
   oldModule.getPortInfo(ports);
@@ -267,6 +315,11 @@ void FIRRTLModuleLowering::lowerModuleBody(
   size_t nextNewArg = 0;
   size_t firrtlArg = 0;
   SmallVector<Value, 4> outputs;
+
+  // This is the terminator in the new module.
+  auto outputOp = newModule.getBodyBlock()->getTerminator();
+  ImplicitLocOpBuilder outputBuilder(oldModule.getLoc(), outputOp);
+
   for (auto &port : ports) {
     // Inputs and outputs are both modeled as arguments in the FIRRTL level.
     auto oldArg = oldModule.body().getArgument(firrtlArg++);
@@ -276,9 +329,16 @@ void FIRRTLModuleLowering::lowerModuleBody(
       // Inputs and InOuts are modeled as arguments in the result, so we can
       // just map them over.
       newArg = newModule.body().getArgument(nextNewArg++);
+    } else if (auto value = tryToFindOutputValue(oldArg)) {
+      // If we were able to find the value being connected to the output,
+      // directly use it!
+      newArg = value;
+      newArg = castFromFIRRTLType(newArg, lowerType(port.type), outputBuilder);
+      outputs.push_back(newArg);
+      continue;
     } else {
-      // Outputs need a temporary wire so they can be assign'd to, which we then
-      // return.
+      // Outputs need a temporary wire so they can be connect'd to, which we
+      // then return.
       newArg = bodyBuilder.create<rtl::WireOp>(lowerType(port.type),
                                                /*name=*/StringAttr());
       outputs.push_back(newArg);
@@ -293,21 +353,22 @@ void FIRRTLModuleLowering::lowerModuleBody(
   }
 
   // Update the rtl.output terminator with the list of outputs we have.
-  newModule.getBodyBlock()->getTerminator()->setOperands(outputs);
+  outputOp->setOperands(outputs);
 
   // Finally splice the body over, don't move the old terminator over though.
   auto &oldBlockInstList = oldModule.getBodyBlock()->getOperations();
   auto &newBlockInstList = newModule.getBodyBlock()->getOperations();
-  newBlockInstList.splice(std::prev(newBlockInstList.end()), oldBlockInstList,
+  newBlockInstList.splice(Block::iterator(cursor), oldBlockInstList,
                           oldBlockInstList.begin(),
                           std::prev(oldBlockInstList.end()));
+
+  cursor.erase();
 }
 
-/// lowerInstance - Lower a firrtl.instance operation to an rtl.instance
-/// operation.  This is a bit more involved than it sounds because we have to
-/// clean up the subfield operations that are hanging off of it, handle the
-/// differences between FIRRTL and RTL approaches to module parameterization and
-/// output ports.
+/// Lower a firrtl.instance operation to an rtl.instance operation.  This is a
+/// bit more involved than it sounds because we have to clean up the subfield
+/// operations that are hanging off of it, handle the differences between FIRRTL
+/// and RTL approaches to module parameterization and output ports.
 ///
 /// On success, this returns with the firrtl.instance op having no users,
 /// letting the caller erase it.
@@ -645,8 +706,8 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
   if (!firType.isPassive()) {
     auto passiveType = firType.getPassiveType();
 
-    // If the input is an asNonPassive conversion from the right type then
-    // just use its inputs. This is common when dealing with lowered instances.
+    // If the input is an asNonPassive conversion from the right type then just
+    // use its inputs. This is common when dealing with lowered instances.
     if (auto castVal = dyn_cast<AsNonPassivePrimOp>(value.getDefiningOp()))
       if (castVal.getOperand().getType() == passiveType)
         value = castVal.getOperand();
