@@ -5,6 +5,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+// clang-tidy seems to expect the absolute path in the header guard on some
+// systems, so just disable it.
+// NOLINTNEXTLINE(llvm-header-guard)
 #ifndef CIRCT_DIALECT_LLHD_SIMULATOR_TRACE_H
 #define CIRCT_DIALECT_LLHD_SIMULATOR_TRACE_H
 
