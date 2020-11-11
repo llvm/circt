@@ -1141,7 +1141,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
         getOrInsertFunction(module, rewriter, op->getLoc(),
                             "addSigStructElement", addSigStructElemFuncTy);
 
-    // Get or insert Alloc_proc library call definition.
+    // Get or insert allocProc library call definition.
     auto allocProcFuncTy = LLVM::LLVMType::getFunctionTy(
         voidTy, {i8PtrTy, i8PtrTy, i8PtrTy}, /*isVarArg=*/false);
     auto allocProcFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
