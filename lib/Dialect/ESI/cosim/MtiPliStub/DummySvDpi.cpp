@@ -1,187 +1,226 @@
-// -*- mode: C++; c-file-style: "cc-mode" -*-
-//*************************************************************************
-// Based on code from Verilator:
+//===- DummySvDpi.cpp - Dummy stubs the svdpi.h -----------------*- C++ -*-===//
 //
-// Copyright 2009-2020 by Wilson Snyder. This program is free software; you can
-// redistribute it and/or modify it under the terms of either the GNU
-// Lesser General Public License Version 3 or the Perl Artistic License
-// Version 2.0.
-// SPDX-License-Identifier: LGPL-3.0-only OR Artistic-2.0
+// Dummy stubs for every function in svdpi.h. This produces an MtiPli.so for
+// linking a DPI library in the absence of a simulator. Should dynamicall link
+// with the MtiPli library supplied with the simulator at runtime. This shared
+// object should not be distributed with CIRCT.
 //
-//=========================================================================
-///
-/// \file
-/// \brief Stub functions purely for compilation so we don't have to have an RTL
-/// simulator to link against
-///
-//=========================================================================
-
-#define _VERILATED_DPI_CPP_
-
-// On MSVC++ we need svdpi.h to declare exports, not imports
-#define DPI_PROTOTYPES
-#undef XXTERN
-#define XXTERN DPI_EXTERN DPI_DLLESPEC
-#undef EETERN
-#define EETERN DPI_EXTERN DPI_DLLESPEC
+//===----------------------------------------------------------------------===//
 
 #include "external/dpi/svdpi.h"
+#undef NDEBUG
+#include <cassert>
 
-//======================================================================
-//======================================================================
-//======================================================================
-// DPI ROUTINES
-
-const char *svDpiVersion() { return "1800-2005"; }
-
-//======================================================================
-// Bit-select utility functions.
-
-svBit svGetBitselBit(const svBitVecVal *sp, int bit) { return 0; }
-svLogic svGetBitselLogic(const svLogicVecVal *sp, int bit) { return 0; }
-
-void svPutBitselBit(svBitVecVal *dp, int bit, svBit s) {}
-void svPutBitselLogic(svLogicVecVal *dp, int bit, svLogic s) {}
-
-void svGetPartselBit(svBitVecVal *dp, const svBitVecVal *sp, int lsb,
-                     int width) {}
-void svGetPartselLogic(svLogicVecVal *dp, const svLogicVecVal *sp, int lsb,
-                       int width) {}
-void svPutPartselBit(svBitVecVal *dp, const svBitVecVal s, int lbit,
-                     int width) {}
-
-// cppcheck-suppress passedByValue
-void svPutPartselLogic(svLogicVecVal *dp, const svLogicVecVal s, int lbit,
-                       int width) {}
-
-//======================================================================
-// Open array querying functions
-
-int svLeft(const svOpenArrayHandle h, int d) { return 0; }
-int svRight(const svOpenArrayHandle h, int d) { return 0; }
-int svLow(const svOpenArrayHandle h, int d) { return 0; }
-int svHigh(const svOpenArrayHandle h, int d) { return 0; }
-int svIncrement(const svOpenArrayHandle h, int d) { return 0; }
-int svSize(const svOpenArrayHandle h, int d) { return 0; }
-int svDimensions(const svOpenArrayHandle h) { return 0; }
-/// Return pointer to open array data, or NULL if not in IEEE standard C layout
-void *svGetArrayPtr(const svOpenArrayHandle h) { return nullptr; }
-/// Return size of open array, or 0 if not in IEEE standard C layout
-int svSizeOfArray(const svOpenArrayHandle h) { return 0; }
-
-//======================================================================
-// DPI accessors that simply call above functions
-
-void *svGetArrElemPtr(const svOpenArrayHandle h, int indx1, ...) {
-  return nullptr;
+const char *svDpiVersion(void) {
+  assert(false && "Linking error: should not ever execute.");
 }
-void *svGetArrElemPtr1(const svOpenArrayHandle h, int indx1) { return nullptr; }
-void *svGetArrElemPtr2(const svOpenArrayHandle h, int indx1, int indx2) {
-  return nullptr;
+svBit svGetBitselBit(const svBitVecVal *s, int i) {
+  assert(false && "Linking error: should not ever execute.");
 }
-void *svGetArrElemPtr3(const svOpenArrayHandle h, int indx1, int indx2,
+svLogic svGetBitselLogic(const svLogicVecVal *s, int i) {
+  assert(false && "Linking error: should not ever execute.");
+}
+void svPutBitselBit(svBitVecVal *d, int i, svBit s) {
+  assert(false && "Linking error: should not ever execute.");
+}
+void svPutBitselLogic(svLogicVecVal *d, int i, svLogic s) {
+  assert(false && "Linking error: should not ever execute.");
+}
+void svGetPartselBit(svBitVecVal *d, const svBitVecVal *s, int i, int w) {
+  assert(false && "Linking error: should not ever execute.");
+}
+void svGetPartselLogic(svLogicVecVal *d, const svLogicVecVal *s, int i, int w) {
+  assert(false && "Linking error: should not ever execute.");
+}
+void svPutPartselBit(svBitVecVal *d, const svBitVecVal s, int i, int w) {
+  assert(false && "Linking error: should not ever execute.");
+}
+void svPutPartselLogic(svLogicVecVal *d, const svLogicVecVal s, int i, int w) {
+  assert(false && "Linking error: should not ever execute.");
+}
+int svLeft(const svOpenArrayHandle h, int d) {
+  assert(false && "Linking error: should not ever execute.");
+}
+int svRight(const svOpenArrayHandle h, int d) {
+  assert(false && "Linking error: should not ever execute.");
+}
+int svLow(const svOpenArrayHandle h, int d) {
+  assert(false && "Linking error: should not ever execute.");
+}
+int svHigh(const svOpenArrayHandle h, int d) {
+  assert(false && "Linking error: should not ever execute.");
+}
+int svIncrement(const svOpenArrayHandle h, int d) {
+  assert(false && "Linking error: should not ever execute.");
+}
+int svSize(const svOpenArrayHandle h, int d) {
+  assert(false && "Linking error: should not ever execute.");
+}
+int svDimensions(const svOpenArrayHandle h) {
+  assert(false && "Linking error: should not ever execute.");
+}
+void *svGetArrayPtr(const svOpenArrayHandle) {
+  assert(false && "Linking error: should not ever execute.");
+}
+int svSizeOfArray(const svOpenArrayHandle) {
+  assert(false && "Linking error: should not ever execute.");
+}
+void *svGetArrElemPtr(const svOpenArrayHandle, int indx1, ...) {
+  assert(false && "Linking error: should not ever execute.");
+}
+void *svGetArrElemPtr1(const svOpenArrayHandle, int indx1) {
+  assert(false && "Linking error: should not ever execute.");
+}
+void *svGetArrElemPtr2(const svOpenArrayHandle, int indx1, int indx2) {
+  assert(false && "Linking error: should not ever execute.");
+}
+void *svGetArrElemPtr3(const svOpenArrayHandle, int indx1, int indx2,
                        int indx3) {
-  return nullptr;
+  assert(false && "Linking error: should not ever execute.");
 }
-
 void svPutBitArrElemVecVal(const svOpenArrayHandle d, const svBitVecVal *s,
-                           int indx1, ...) {}
+                           int indx1, ...) {
+  assert(false && "Linking error: should not ever execute.");
+}
 void svPutBitArrElem1VecVal(const svOpenArrayHandle d, const svBitVecVal *s,
-                            int indx1) {}
+                            int indx1) {
+  assert(false && "Linking error: should not ever execute.");
+}
 void svPutBitArrElem2VecVal(const svOpenArrayHandle d, const svBitVecVal *s,
-                            int indx1, int indx2) {}
+                            int indx1, int indx2) {
+  assert(false && "Linking error: should not ever execute.");
+}
 void svPutBitArrElem3VecVal(const svOpenArrayHandle d, const svBitVecVal *s,
-                            int indx1, int indx2, int indx3) {}
+                            int indx1, int indx2, int indx3) {
+  assert(false && "Linking error: should not ever execute.");
+}
 void svPutLogicArrElemVecVal(const svOpenArrayHandle d, const svLogicVecVal *s,
-                             int indx1, ...) {}
+                             int indx1, ...) {
+  assert(false && "Linking error: should not ever execute.");
+}
 void svPutLogicArrElem1VecVal(const svOpenArrayHandle d, const svLogicVecVal *s,
-                              int indx1) {}
+                              int indx1) {
+  assert(false && "Linking error: should not ever execute.");
+}
 void svPutLogicArrElem2VecVal(const svOpenArrayHandle d, const svLogicVecVal *s,
-                              int indx1, int indx2) {}
+                              int indx1, int indx2) {
+  assert(false && "Linking error: should not ever execute.");
+}
 void svPutLogicArrElem3VecVal(const svOpenArrayHandle d, const svLogicVecVal *s,
-                              int indx1, int indx2, int indx3) {}
-
-//======================================================================
-// From simulator storage into user space
-
+                              int indx1, int indx2, int indx3) {
+  assert(false && "Linking error: should not ever execute.");
+}
 void svGetBitArrElemVecVal(svBitVecVal *d, const svOpenArrayHandle s, int indx1,
-                           ...) {}
+                           ...) {
+  assert(false && "Linking error: should not ever execute.");
+}
 void svGetBitArrElem1VecVal(svBitVecVal *d, const svOpenArrayHandle s,
-                            int indx1) {}
+                            int indx1) {
+  assert(false && "Linking error: should not ever execute.");
+}
 void svGetBitArrElem2VecVal(svBitVecVal *d, const svOpenArrayHandle s,
-                            int indx1, int indx2) {}
+                            int indx1, int indx2) {
+  assert(false && "Linking error: should not ever execute.");
+}
 void svGetBitArrElem3VecVal(svBitVecVal *d, const svOpenArrayHandle s,
-                            int indx1, int indx2, int indx3) {}
+                            int indx1, int indx2, int indx3) {
+  assert(false && "Linking error: should not ever execute.");
+}
 void svGetLogicArrElemVecVal(svLogicVecVal *d, const svOpenArrayHandle s,
-                             int indx1, ...) {}
+                             int indx1, ...) {
+  assert(false && "Linking error: should not ever execute.");
+}
 void svGetLogicArrElem1VecVal(svLogicVecVal *d, const svOpenArrayHandle s,
-                              int indx1) {}
+                              int indx1) {
+  assert(false && "Linking error: should not ever execute.");
+}
 void svGetLogicArrElem2VecVal(svLogicVecVal *d, const svOpenArrayHandle s,
-                              int indx1, int indx2) {}
+                              int indx1, int indx2) {
+  assert(false && "Linking error: should not ever execute.");
+}
 void svGetLogicArrElem3VecVal(svLogicVecVal *d, const svOpenArrayHandle s,
-                              int indx1, int indx2, int indx3) {}
-
-svBit svGetBitArrElem(const svOpenArrayHandle s, int indx1, ...) { return 0; }
-
-svBit svGetBitArrElem1(const svOpenArrayHandle s, int indx1) { return 0; }
+                              int indx1, int indx2, int indx3) {
+  assert(false && "Linking error: should not ever execute.");
+}
+svBit svGetBitArrElem(const svOpenArrayHandle s, int indx1, ...) {
+  assert(false && "Linking error: should not ever execute.");
+}
+svBit svGetBitArrElem1(const svOpenArrayHandle s, int indx1) {
+  assert(false && "Linking error: should not ever execute.");
+}
 svBit svGetBitArrElem2(const svOpenArrayHandle s, int indx1, int indx2) {
-  return 0;
+  assert(false && "Linking error: should not ever execute.");
 }
 svBit svGetBitArrElem3(const svOpenArrayHandle s, int indx1, int indx2,
                        int indx3) {
-  return 0;
+  assert(false && "Linking error: should not ever execute.");
 }
 svLogic svGetLogicArrElem(const svOpenArrayHandle s, int indx1, ...) {
-  return 0;
+  assert(false && "Linking error: should not ever execute.");
 }
-
-svLogic svGetLogicArrElem1(const svOpenArrayHandle s, int indx1) { return 0; }
+svLogic svGetLogicArrElem1(const svOpenArrayHandle s, int indx1) {
+  assert(false && "Linking error: should not ever execute.");
+}
 svLogic svGetLogicArrElem2(const svOpenArrayHandle s, int indx1, int indx2) {
-  return 0;
+  assert(false && "Linking error: should not ever execute.");
 }
 svLogic svGetLogicArrElem3(const svOpenArrayHandle s, int indx1, int indx2,
                            int indx3) {
-  return 0;
+  assert(false && "Linking error: should not ever execute.");
 }
-
-void svPutBitArrElem(const svOpenArrayHandle d, svBit value, int indx1, ...) {}
-
-void svPutBitArrElem1(const svOpenArrayHandle d, svBit value, int indx1) {}
-void svPutBitArrElem2(const svOpenArrayHandle d, svBit value, int indx1,
-                      int indx2) {}
-void svPutBitArrElem3(const svOpenArrayHandle d, svBit value, int indx1,
-                      int indx2, int indx3) {}
 void svPutLogicArrElem(const svOpenArrayHandle d, svLogic value, int indx1,
-                       ...) {}
-
-void svPutLogicArrElem1(const svOpenArrayHandle d, svLogic value, int indx1) {}
-void svPutLogicArrElem2(const svOpenArrayHandle d, svLogic value, int indx1,
-                        int indx2) {}
-void svPutLogicArrElem3(const svOpenArrayHandle d, svLogic value, int indx1,
-                        int indx2, int indx3) {}
-
-//======================================================================
-// Functions for working with DPI context
-
-svScope svGetScope() { return nullptr; }
-
-svScope svSetScope(const svScope scope) { return nullptr; }
-
-const char *svGetNameFromScope(const svScope scope) { return nullptr; }
-
-svScope svGetScopeFromName(const char *scopeName) { return nullptr; }
-
-int svPutUserData(const svScope scope, void *userKey, void *userData) {
-  return 0;
+                       ...) {
+  assert(false && "Linking error: should not ever execute.");
 }
-
-void *svGetUserData(const svScope scope, void *userKey) { return 0; }
-
-int svGetCallerInfo(const char **fileNamepp, int *lineNumberp) { return false; }
-
-//======================================================================
-// Disables
-
-int svIsDisabledState() { return 0; }
-
-void svAckDisabledState() {}
+void svPutLogicArrElem1(const svOpenArrayHandle d, svLogic value, int indx1) {
+  assert(false && "Linking error: should not ever execute.");
+}
+void svPutLogicArrElem2(const svOpenArrayHandle d, svLogic value, int indx1,
+                        int indx2) {
+  assert(false && "Linking error: should not ever execute.");
+}
+void svPutLogicArrElem3(const svOpenArrayHandle d, svLogic value, int indx1,
+                        int indx2, int indx3) {
+  assert(false && "Linking error: should not ever execute.");
+}
+void svPutBitArrElem(const svOpenArrayHandle d, svBit value, int indx1, ...) {
+  assert(false && "Linking error: should not ever execute.");
+}
+void svPutBitArrElem1(const svOpenArrayHandle d, svBit value, int indx1) {
+  assert(false && "Linking error: should not ever execute.");
+}
+void svPutBitArrElem2(const svOpenArrayHandle d, svBit value, int indx1,
+                      int indx2) {
+  assert(false && "Linking error: should not ever execute.");
+}
+void svPutBitArrElem3(const svOpenArrayHandle d, svBit value, int indx1,
+                      int indx2, int indx3) {
+  assert(false && "Linking error: should not ever execute.");
+}
+svScope svGetScope(void) {
+  assert(false && "Linking error: should not ever execute.");
+}
+svScope svSetScope(const svScope scope) {
+  assert(false && "Linking error: should not ever execute.");
+}
+const char *svGetNameFromScope(const svScope) {
+  assert(false && "Linking error: should not ever execute.");
+}
+svScope svGetScopeFromName(const char *scopeName) {
+  assert(false && "Linking error: should not ever execute.");
+}
+int svPutUserData(const svScope scope, void *userKey, void *userData) {
+  assert(false && "Linking error: should not ever execute.");
+}
+void *svGetUserData(const svScope scope, void *userKey) {
+  assert(false && "Linking error: should not ever execute.");
+}
+int svGetCallerInfo(const char **fileName, int *lineNumber) {
+  assert(false && "Linking error: should not ever execute.");
+}
+int svIsDisabledState(void) {
+  assert(false && "Linking error: should not ever execute.");
+}
+void svAckDisabledState(void) {
+  assert(false && "Linking error: should not ever execute.");
+}
