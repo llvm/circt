@@ -9,5 +9,6 @@ add_mlir_conversion_library(MLIRFIRRTLToLLHD
 
   LINK_LIBS PUBLIC
   MLIRLLHD
+  MLIRFIRRTL
   MLIRTransforms
 )

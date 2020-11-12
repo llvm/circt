@@ -12,6 +12,7 @@ add_mlir_dialect_library(MLIRSV
   Support
 
   LINK_LIBS PUBLIC
+  MLIRIR
    )
 
 add_dependencies(mlir-headers MLIRSVIncGen)
