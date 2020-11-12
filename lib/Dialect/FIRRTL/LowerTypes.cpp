@@ -10,7 +10,6 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/FIRRTL/Types.h"
 #include "circt/Dialect/FIRRTL/Visitors.h"
-#include "llvm/ADT/StringMap.h"
 using namespace circt;
 using namespace firrtl;
 
@@ -67,7 +66,7 @@ struct FIRRTLTypesLowering
     : public LowerFIRRTLTypesBase<FIRRTLTypesLowering>,
       public FIRRTLVisitor<FIRRTLTypesLowering, LogicalResult> {
 
-  using ValueField = std::pair<Value, std::string>;
+  using ValueIdentifier = std::pair<Value, Identifier>;
   using FIRRTLVisitor<FIRRTLTypesLowering, LogicalResult>::visitDecl;
   using FIRRTLVisitor<FIRRTLTypesLowering, LogicalResult>::visitExpr;
   using FIRRTLVisitor<FIRRTLTypesLowering, LogicalResult>::visitStmt;
@@ -106,9 +105,8 @@ private:
   SmallVector<unsigned, 8> argsToRemove;
   SmallVector<Operation *, 16> opsToRemove;
 
-  // State to keep a mapping from original bundle values to flattened names and
-  // flattened values.
-  DenseMap<Value, llvm::StringMap<Value>> loweredBundleValues;
+  // State to keep a mapping from (Value, Identifier) pairs to flattened values.
+  DenseMap<ValueIdentifier, Value> loweredBundleValues;
 };
 } // end anonymous namespace
 
@@ -349,7 +347,8 @@ Value FIRRTLTypesLowering::addArgument(Type type, unsigned oldArgNumber,
 // to flat values.
 void FIRRTLTypesLowering::setBundleLowering(Value oldValue, StringRef flatField,
                                             Value newValue) {
-  auto &entry = loweredBundleValues[oldValue][flatField];
+  auto flatFieldId = builder->getIdentifier(flatField);
+  auto &entry = loweredBundleValues[ValueIdentifier(oldValue, flatFieldId)];
   assert(!entry && "bundle lowering has already been set");
   entry = newValue;
 }
@@ -358,7 +357,8 @@ void FIRRTLTypesLowering::setBundleLowering(Value oldValue, StringRef flatField,
 // the flat value if it exists.
 Value FIRRTLTypesLowering::getBundleLowering(Value oldValue,
                                              StringRef flatField) {
-  auto &entry = loweredBundleValues[oldValue][flatField];
+  auto flatFieldId = builder->getIdentifier(flatField);
+  auto &entry = loweredBundleValues[ValueIdentifier(oldValue, flatFieldId)];
   assert(entry && "bundle lowering was not set");
   return entry;
 }
@@ -367,19 +367,9 @@ Value FIRRTLTypesLowering::getBundleLowering(Value oldValue,
 // field.
 void FIRRTLTypesLowering::getAllBundleLowerings(
     Value value, SmallVectorImpl<Value> &results) {
-  if (!loweredBundleValues.count(value))
-    return;
-
   BundleType bundleType = value.getType().cast<BundleType>();
-  for (auto element : bundleType.getElements()) {
-    SmallString<16> loweredName;
-    loweredName.append(element.first);
-
-    assert(loweredBundleValues[value].count(loweredName) &&
-           "no lowered bundle value");
-
-    results.push_back(loweredBundleValues[value][loweredName]);
-  }
+  for (auto element : bundleType.getElements())
+    results.push_back(getBundleLowering(value, element.first));
 }
 
 // Remember an argument number to erase during cleanup.
