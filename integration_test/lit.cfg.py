@@ -32,6 +32,8 @@ config.test_exec_root = os.path.join(config.circt_obj_root, 'test')
 
 config.substitutions.append(('%PATH%', config.environment['PATH']))
 config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
+config.substitutions.append(('%shlibdir', config.circt_shlib_dir))
+config.substitutions.append(('%INC%', config.circt_include_dir))
 
 llvm_config.with_system_environment(
     ['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
@@ -51,6 +53,7 @@ config.test_exec_root = os.path.join(config.circt_obj_root, 'integration_test')
 
 # Tweak the PATH to include the tools dir.
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
+# Substitute '%l' with the path to the build lib dir.
 
 tool_dirs = [config.circt_tools_dir,
              config.mlir_tools_dir, config.llvm_tools_dir]
@@ -64,5 +67,11 @@ if config.verilator_path != "":
   tool_dirs.append(os.path.dirname(config.verilator_path))
   tools.append('verilator')
   config.available_features.add('verilator')
+
+# Enable ESI cosim tests if they have been built.
+if config.esi_cosim_path != "":
+  config.available_features.add('esi-cosim')
+  config.substitutions.append(('%ESIINC%', f'{config.circt_include_dir}/circt/Dialect/ESI/'))
+  config.substitutions.append(('%ESICOSIM%', f'{config.esi_cosim_path}'))
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)

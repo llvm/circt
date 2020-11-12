@@ -3,6 +3,7 @@ build
 #*
 *~
 .DS_Store
+__pycache__
 
 # External software
 /ext
