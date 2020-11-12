@@ -7,4 +7,5 @@ add_mlir_library(CIRCTFIRParser
 
   LINK_LIBS PUBLIC
   MLIRFIRRTL
+  MLIRTranslation
   )

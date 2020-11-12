@@ -13,6 +13,10 @@ add_mlir_dialect_library(MLIRFIRRTL
   Support
 
   LINK_LIBS PUBLIC
+  MLIRIR
+  MLIRPass
+  MLIRRTL
+  MLIRSV
    )
 
 add_dependencies(mlir-headers MLIRFIRRTLIncGen MLIRFIRRTLEnumsIncGen)
