@@ -142,3 +142,28 @@ thread is through per-endpoint, thread-safe queues. The DPI functions poll
 for incoming data or push outgoing data to/from said queues. There is no flow
 control yet so it is currently very easy to bloat the infinitely-sized
 queues. For the time being, flow-contol has be handled at a higher level.
+
+## Compiling ESI cosim
+
+ESI cosim requires a recent version of Cap'nProto to be installed. A script
+is provided (`utils/get-capnp.sh`) which installs a known-working version to
+`ext/`. If the build system detects Cap'nProto is installed (either
+system-wide or in `ext/`), the ESI cosim DPI code will be enabled as the
+`EsiCosimDpiServer` target.
+
+## Running the ESI cosim integration tests
+
+To run the tests, you'll need recent versions of Verilator, Cap'nProto, and
+pycapnp installed. For the former two, the are scripts provided in the
+`utils/` directory which will download, compile, and place a known-working
+version in `ext/` (which the tests know about). For pycapnp, you should use
+PIP: `pip3 install pycapnp`.
+
+Once you've got the three above requirements installed, just run the CIRCT
+integration tests. They are configured to detect the three above requirements
+and run the tests if they're all present.
+
+```sh
+cd build # Or wherever you're building CIRCT.
+ninja check-circt-integration # Will run all the CIRCT integration tests.
+```
