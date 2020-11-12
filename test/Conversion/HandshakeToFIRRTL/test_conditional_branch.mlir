@@ -23,10 +23,9 @@
 // CHECK:   firrtl.connect %8, %5 : !firrtl.flip<uint<64>>, !firrtl.uint<64>
 // CHECK:   firrtl.connect %11, %5 : !firrtl.flip<uint<64>>, !firrtl.uint<64>
 // CHECK:   %16 = firrtl.mux(%2, %7, %10) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   %17 = firrtl.and %16, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %17 = firrtl.and %16, %12 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:   firrtl.connect %4, %17 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
-// CHECK:   %18 = firrtl.and %16, %12 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   firrtl.connect %1, %18 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+// CHECK:   firrtl.connect %1, %17 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 // CHECK: }
 
 // CHECK-LABEL: firrtl.module @test_conditional_branch(

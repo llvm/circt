@@ -804,15 +804,12 @@ bool HandshakeBuilder::visitHandshake(ConditionalBranchOp op) {
       insertLoc, trueResultReady.getType(), conditionData, trueResultReady,
       falseResultReady);
 
-  rewriter.create<ConnectOp>(
-      insertLoc, argReady,
+  auto conditionArgReady =
       rewriter.create<AndPrimOp>(insertLoc, selectedResultReady.getType(),
-                                 selectedResultReady, conditionValid));
+                                 selectedResultReady, conditionArgValid);
 
-  rewriter.create<ConnectOp>(
-      insertLoc, conditionReady,
-      rewriter.create<AndPrimOp>(insertLoc, selectedResultReady.getType(),
-                                 selectedResultReady, conditionArgValid));
+  rewriter.create<ConnectOp>(insertLoc, argReady, conditionArgReady);
+  rewriter.create<ConnectOp>(insertLoc, conditionReady, conditionArgReady);
 
   return true;
 }
