@@ -958,6 +958,12 @@ FIRRTLType firrtl::getDShlResult(FIRRTLType lhs, FIRRTLType rhs) {
   return IntType::get(lhs.getContext(), lhsi.isSigned(), width);
 }
 
+FIRRTLType firrtl::getDShlwResult(FIRRTLType lhs, FIRRTLType rhs) {
+  if (!lhs.isa<IntType>() || !rhs.isa<UIntType>())
+    return {};
+  return lhs;
+}
+
 FIRRTLType firrtl::getDShrResult(FIRRTLType lhs, FIRRTLType rhs) {
   if (!lhs.isa<IntType>() || !rhs.isa<UIntType>())
     return {};

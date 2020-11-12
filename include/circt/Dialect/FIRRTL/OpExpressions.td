@@ -175,6 +175,7 @@ def NEQPrimOp : BinaryPrimOp<"neq", "getCompareResult", [Commutative]>;
 let hasCanonicalizer = 1 in
 def CatPrimOp  : BinaryPrimOp<"cat", "getCatResult">;
 def DShlPrimOp : BinaryPrimOp<"dshl", "getDShlResult">;
+def DShlwPrimOp : BinaryPrimOp<"dshlw", "getDShlwResult">;
 def DShrPrimOp : BinaryPrimOp<"dshr", "getDShrResult">;
 
 def ValidIfPrimOp : BinaryPrimOp<"validif", "getValidIfResult"> {

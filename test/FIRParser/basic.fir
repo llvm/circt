@@ -225,6 +225,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   
     ; CHECK: firrtl.dshl %i8, %{{.*}} : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<23>
     node n6 = dshl(i8, UInt<4>(7))
+    ; CHECK: firrtl.dshlw %i8, %{{.*}} : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<8>
+    node n6s = dshlw(i8, UInt<4>(7))
 
     ; CHECK: firrtl.cat %{{.*}}, %{{.*}} : (!firrtl.uint<12>, !firrtl.uint<23>) -> !firrtl.uint<35>
     node n7 = cat(n5, n6)
