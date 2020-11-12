@@ -87,15 +87,14 @@ private:
   void lowerArg(BlockArgument arg, FIRRTLType type);
 
   // Helpers to manage state.
-  Value addArgument(Type type, unsigned oldArgNumber,
-                    StringRef nameSuffix = "");
+  Value addArg(Type type, unsigned oldArgNumber, StringRef nameSuffix = "");
 
   void setBundleLowering(Value oldValue, StringRef flatField, Value newValue);
   Value getBundleLowering(Value oldValue, StringRef flatField);
   void getAllBundleLowerings(Value oldValue, SmallVectorImpl<Value> &results);
 
-  void removeArg(unsigned argNumber);
-  void removeOp(Operation *op);
+  void removeArgLater(unsigned argNumber);
+  void removeOpLater(Operation *op);
   void cleanup();
 
   // The builder is set and maintained in the main loop.
@@ -152,7 +151,7 @@ void FIRRTLTypesLowering::lowerArg(BlockArgument arg, FIRRTLType type) {
   for (auto field : fieldTypes) {
     // Create new block arguments.
     auto type = getPortType(field);
-    auto newValue = addArgument(type, arg.getArgNumber(), field.suffix);
+    auto newValue = addArg(type, arg.getArgNumber(), field.suffix);
 
     // If this field was flattened from a bundle.
     if (!field.suffix.empty()) {
@@ -211,7 +210,7 @@ LogicalResult FIRRTLTypesLowering::visitDecl(InstanceOp op) {
     setBundleLowering(op, element.first, newSubfield);
   }
 
-  removeOp(op);
+  removeOpLater(op);
 
   return success();
 }
@@ -257,7 +256,7 @@ LogicalResult FIRRTLTypesLowering::visitExpr(SubfieldOp op) {
       setBundleLowering(result, partialSuffix, newValue);
   }
 
-  removeOp(op);
+  removeOpLater(op);
 
   return success();
 }
@@ -296,7 +295,7 @@ LogicalResult FIRRTLTypesLowering::visitStmt(ConnectOp op) {
     builder->create<ConnectOp>(op.getLoc(), newDest, newSrc);
   }
 
-  removeOp(op);
+  removeOpLater(op);
 
   return success();
 }
@@ -319,8 +318,8 @@ static DictionaryAttr getArgAttrs(StringAttr nameAttr, StringRef suffix,
 // Creates and returns a new block argument of the specified type to the module.
 // This also maintains the name attribute for the new argument, possibly with a
 // new suffix appended.
-Value FIRRTLTypesLowering::addArgument(Type type, unsigned oldArgNumber,
-                                       StringRef nameSuffix) {
+Value FIRRTLTypesLowering::addArg(Type type, unsigned oldArgNumber,
+                                  StringRef nameSuffix) {
   FModuleOp module = getOperation();
   Block *body = module.getBodyBlock();
 
@@ -338,7 +337,7 @@ Value FIRRTLTypesLowering::addArgument(Type type, unsigned oldArgNumber,
   }
 
   // Remember to delete the original block argument.
-  removeArg(oldArgNumber);
+  removeArgLater(oldArgNumber);
 
   return newValue;
 }
@@ -373,12 +372,14 @@ void FIRRTLTypesLowering::getAllBundleLowerings(
 }
 
 // Remember an argument number to erase during cleanup.
-void FIRRTLTypesLowering::removeArg(unsigned argNumber) {
+void FIRRTLTypesLowering::removeArgLater(unsigned argNumber) {
   argsToRemove.push_back(argNumber);
 }
 
 // Remember an operation to erase during cleanup.
-void FIRRTLTypesLowering::removeOp(Operation *op) { opsToRemove.push_back(op); }
+void FIRRTLTypesLowering::removeOpLater(Operation *op) {
+  opsToRemove.push_back(op);
+}
 
 // Handle deferred removals of operations and block arguments when done. Also
 // clean up state.
