@@ -10,8 +10,8 @@
  * This file is from the SystemVerilog IEEE 1800-2017 Annex I.
  */
 
-#ifndef CIRCT_DIALECT_ESI_COSIM_SVDPI_H
-#define CIRCT_DIALECT_ESI_COSIM_SVDPI_H
+#ifndef EXTERNAL_DPI_SVDPI_H
+#define EXTERNAL_DPI_SVDPI_H
 
 #ifdef __cplusplus
 extern "C" {
