@@ -760,18 +760,18 @@ bool HandshakeBuilder::visitHandshake(handshake::BranchOp op) {
 bool HandshakeBuilder::visitHandshake(ConditionalBranchOp op) {
   ValueVector conditionSubfields = portList[0];
   ValueVector argSubfields = portList[1];
-  ValueVector result0Subfields = portList[2];
-  ValueVector result1Subfields = portList[3];
+  ValueVector trueResultSubfields = portList[2];
+  ValueVector falseResultSubfields = portList[3];
 
   Value conditionValid = conditionSubfields[0];
   Value conditionReady = conditionSubfields[1];
   Value conditionData = conditionSubfields[2];
   Value argValid = argSubfields[0];
   Value argReady = argSubfields[1];
-  Value trueResultValid = result0Subfields[0];
-  Value trueResultReady = result0Subfields[1];
-  Value falseResultValid = result1Subfields[0];
-  Value falseResultReady = result1Subfields[1];
+  Value trueResultValid = trueResultSubfields[0];
+  Value trueResultReady = trueResultSubfields[1];
+  Value falseResultValid = falseResultSubfields[0];
+  Value falseResultReady = falseResultSubfields[1];
 
   auto conditionArgValid = rewriter.create<AndPrimOp>(
       insertLoc, conditionValid.getType(), conditionValid, argValid);
@@ -793,8 +793,8 @@ bool HandshakeBuilder::visitHandshake(ConditionalBranchOp op) {
   // Connect data signal of both results if applied.
   if (!op.isControl()) {
     Value argData = argSubfields[2];
-    Value trueResultData = result0Subfields[2];
-    Value falseResultData = result1Subfields[2];
+    Value trueResultData = trueResultSubfields[2];
+    Value falseResultData = falseResultSubfields[2];
     rewriter.create<ConnectOp>(insertLoc, trueResultData, argData);
     rewriter.create<ConnectOp>(insertLoc, falseResultData, argData);
   }
