@@ -74,10 +74,6 @@ struct FIRRTLTypesLowering
 
   void runOnOperation() override;
 
-private:
-  // Lowering module block arguments.
-  void lowerArg(BlockArgument arg, FIRRTLType type);
-
   // Lowering operations.
   LogicalResult visitDecl(InstanceOp op);
   LogicalResult visitExpr(SubfieldOp op);
@@ -87,12 +83,16 @@ private:
   LogicalResult visitUnhandledOp(Operation *op) { return success(); }
   LogicalResult visitInvalidOp(Operation *op) { return success(); }
 
+private:
+  // Lowering module block arguments.
+  void lowerArg(BlockArgument arg, FIRRTLType type);
+
   // Helpers to manage state.
   Value addArgument(Type type, unsigned oldArgNumber,
                     StringRef nameSuffix = "");
 
   void setBundleLowering(Value oldValue, StringRef flatField, Value newValue);
-  Optional<Value> getBundleLowering(Value oldValue, StringRef flatField);
+  Value getBundleLowering(Value oldValue, StringRef flatField);
   void getAllBundleLowerings(Value oldValue, SmallVectorImpl<Value> &results);
 
   void removeArg(unsigned argNumber);
@@ -241,7 +241,6 @@ LogicalResult FIRRTLTypesLowering::visitExpr(SubfieldOp op) {
   for (auto field : fieldTypes) {
     // Look up the mapping for this suffix.
     auto newValue = getBundleLowering(input, field.suffix);
-    assert(newValue.hasValue() && "no lowered value for instance subfield");
 
     // The prefix is the field name and possibly field separator.
     auto prefixSize = fieldname.size();
@@ -254,10 +253,10 @@ LogicalResult FIRRTLTypesLowering::visitExpr(SubfieldOp op) {
     // If we are at the leaf of a bundle.
     if (partialSuffix.empty())
       // Replace the result with the flattened value.
-      result.replaceAllUsesWith(newValue.getValue());
+      result.replaceAllUsesWith(newValue);
     else
       // Map the partial suffix for the result value to the flattened value.
-      setBundleLowering(result, partialSuffix, newValue.getValue());
+      setBundleLowering(result, partialSuffix, newValue);
   }
 
   removeOp(op);
@@ -357,13 +356,11 @@ void FIRRTLTypesLowering::setBundleLowering(Value oldValue, StringRef flatField,
 
 // For a mapped bundle typed value and a flat subfield name, retrieve and return
 // the flat value if it exists.
-Optional<Value> FIRRTLTypesLowering::getBundleLowering(Value oldValue,
-                                                       StringRef flatField) {
-  if (oldValue && loweredBundleValues.count(oldValue) &&
-      loweredBundleValues[oldValue].count(flatField))
-    return Optional<Value>(loweredBundleValues[oldValue][flatField]);
-
-  return None;
+Value FIRRTLTypesLowering::getBundleLowering(Value oldValue,
+                                             StringRef flatField) {
+  auto &entry = loweredBundleValues[oldValue][flatField];
+  assert(entry && "bundle lowering was not set");
+  return entry;
 }
 
 // For a mapped bundle typed value, retrieve and return the flat values for each
