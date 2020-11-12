@@ -464,6 +464,26 @@ static LogicalResult verifyFModuleOp(FModuleOp &module) {
   return success();
 }
 
+static LogicalResult verifyFExtModuleOp(FExtModuleOp &op) {
+  auto paramDictOpt = op.parameters();
+  if (!paramDictOpt)
+    return success();
+  DictionaryAttr paramDict = paramDictOpt.getValue();
+  auto checkParmValue = [&](NamedAttribute elt) -> bool {
+    auto value = elt.second;
+    if (value.isa<IntegerAttr>() || value.isa<StringAttr>() ||
+        value.isa<FloatAttr>())
+      return true;
+    op.emitError() << "has unknown extmodule parameter value '" << elt.first
+                   << "' = " << value;
+    return false;
+  };
+
+  if (!llvm::all_of(paramDict, checkParmValue))
+    return failure();
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Declarations
 //===----------------------------------------------------------------------===//
@@ -726,18 +746,11 @@ static LogicalResult verifyConstantOp(ConstantOp constant) {
   // If the result type has a bitwidth, then the attribute must match its width.
   auto intType = constant.getType().cast<IntType>();
   auto width = intType.getWidthOrSentinel();
-  if (width != -1 && (int)constant.value().getBitWidth() != width) {
-    constant.emitError(
+  if (width != -1 && (int)constant.value().getBitWidth() != width)
+    return constant.emitError(
         "firrtl.constant attribute bitwidth doesn't match return type");
-    return failure();
-  }
 
   return success();
-}
-
-OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
-  assert(operands.empty() && "constant has no operands");
-  return valueAttr();
 }
 
 /// Build a ConstantOp from an APInt and a FIRRTL type, handling the attribute
@@ -945,6 +958,12 @@ FIRRTLType firrtl::getDShlResult(FIRRTLType lhs, FIRRTLType rhs) {
   return IntType::get(lhs.getContext(), lhsi.isSigned(), width);
 }
 
+FIRRTLType firrtl::getDShlwResult(FIRRTLType lhs, FIRRTLType rhs) {
+  if (!lhs.isa<IntType>() || !rhs.isa<UIntType>())
+    return {};
+  return lhs;
+}
+
 FIRRTLType firrtl::getDShrResult(FIRRTLType lhs, FIRRTLType rhs) {
   if (!lhs.isa<IntType>() || !rhs.isa<UIntType>())
     return {};
@@ -1052,12 +1071,11 @@ static LogicalResult verifyBitsPrimOp(BitsPrimOp bits) {
       bits.result().getType().cast<IntType>().getBitWidthOrSentinel();
   int32_t expectedWidth = expectedType.cast<IntType>().getBitWidthOrSentinel();
 
-  if (resultWidth != -1 && expectedWidth != resultWidth) {
-    bits.emitError() << "width of the result type must be equal to (high - low "
-                        "+ 1), expected "
-                     << expectedWidth << " but got " << resultWidth;
-    return failure();
-  }
+  if (resultWidth != -1 && expectedWidth != resultWidth)
+    return bits.emitError()
+           << "width of the result type must be equal to (high - low "
+              "+ 1), expected "
+           << expectedWidth << " but got " << resultWidth;
 
   return success();
 }
@@ -1237,30 +1255,25 @@ static LogicalResult verifyStdIntCast(StdIntCast cast) {
   IntegerType integerType;
   if ((firType = cast.getOperand().getType().dyn_cast<FIRRTLType>())) {
     integerType = cast.getType().dyn_cast<IntegerType>();
-    if (!integerType) {
-      cast.emitError("result type must be a signless integer");
-      return failure();
-    }
+    if (!integerType)
+      return cast.emitError("result type must be a signless integer");
   } else if ((firType = cast.getType().dyn_cast<FIRRTLType>())) {
     integerType = cast.getOperand().getType().dyn_cast<IntegerType>();
-    if (!integerType) {
-      cast.emitError("operand type must be a signless integer");
-      return failure();
-    }
+    if (!integerType)
+      return cast.emitError("operand type must be a signless integer");
   } else {
-    cast.emitError("either source or result type must be integer type");
-    return failure();
+    return cast.emitError("either source or result type must be integer type");
   }
 
   int32_t intWidth = firType.getBitWidthOrSentinel();
   if (intWidth == -2)
     return cast.emitError("firrtl type isn't simple bit type");
   if (intWidth == -1)
-    return cast.emitError("SInt/UInt type must have a width"), failure();
+    return cast.emitError("SInt/UInt type must have a width");
   if (!integerType.isSignless())
-    return cast.emitError("standard integer type must be signless"), failure();
+    return cast.emitError("standard integer type must be signless");
   if (unsigned(intWidth) != integerType.getWidth())
-    return cast.emitError("source and result width must match"), failure();
+    return cast.emitError("source and result width must match");
 
   return success();
 }

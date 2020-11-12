@@ -15,6 +15,8 @@ set(CIRCT_TEST_DEPENDS
   handshake-runner
   firtool
   llhd-sim
+  mlir-opt
+  mlir-cpu-runner
   )
 
 add_lit_testsuite(check-circt "Running the CIRCT regression tests"

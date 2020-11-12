@@ -136,7 +136,7 @@ class CosimTestRunner:
             vars["srcfile"] = self.file
             # 'rpcSchemaPath' points to the CapnProto schema for RPC and is the
             # one that nearly all scripts are going to need.
-            vars["rpcSchemaPath"] = os.path.join(
+            vars["rpcschemapath"] = os.path.join(
                 cfg.circt_include_dir, "circt", "Dialect", "ESI", "cosim",
                 "CosimDpi.capnp")
             script.writelines(f"{name} = \"{value}\"\n" for (

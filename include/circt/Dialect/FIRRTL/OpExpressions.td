@@ -175,6 +175,7 @@ def NEQPrimOp : BinaryPrimOp<"neq", "getCompareResult", [Commutative]>;
 let hasCanonicalizer = 1 in
 def CatPrimOp  : BinaryPrimOp<"cat", "getCatResult">;
 def DShlPrimOp : BinaryPrimOp<"dshl", "getDShlResult">;
+def DShlwPrimOp : BinaryPrimOp<"dshlw", "getDShlwResult">;
 def DShrPrimOp : BinaryPrimOp<"dshr", "getDShrResult">;
 
 def ValidIfPrimOp : BinaryPrimOp<"validif", "getValidIfResult"> {
@@ -422,6 +423,7 @@ def StdIntCast : FIRRTLOp<"stdIntCast", [NoSideEffect]> {
     $input attr-dict `:` functional-type($input, $result)
   }];
 
+  let hasFolder = 1;
   let verifier = [{ return ::verifyStdIntCast(*this); }];
 }
 
@@ -432,6 +434,7 @@ def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect]> {
   let arguments = (ins FIRRTLType:$input);
   let results = (outs PassiveType:$result);
 
+  let hasFolder = 1;
   let assemblyFormat = [{
     $input attr-dict `:` functional-type($input, $result)
   }];
@@ -442,6 +445,7 @@ def AsNonPassivePrimOp : FIRRTLOp<"asNonPassive", [NoSideEffect]> {
   let arguments = (ins PassiveType:$input);
   let results = (outs FIRRTLType:$result);
 
+  let hasFolder = 1;
   let assemblyFormat = [{
     $input attr-dict `:` functional-type($input, $result)
   }];

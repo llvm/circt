@@ -64,7 +64,7 @@ public:
   typename std::enable_if<OpTy::template hasTrait<mlir::OpTrait::OneResult>(),
                           Value>::type
   createOrFold(Args &&... args) {
-    OpBuilder::createOrFold<OpTy>(curLoc, std::forward<Args>(args)...);
+    return OpBuilder::createOrFold<OpTy>(curLoc, std::forward<Args>(args)...);
   }
 
   /// Overload to create or fold a zero result operation.

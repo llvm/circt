@@ -2,7 +2,8 @@ set(CIRCT_INTEGRATION_TEST_DEPENDS
   FileCheck count not
   circt-opt
   circt-translate)
-  
+
+# If ESI Cosim is available to build then enable its tests.
 if (TARGET EsiCosimDpiServer)
   list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS EsiCosimDpiServer)
   get_property(ESI_COSIM_LIB_DIR TARGET EsiCosimDpiServer PROPERTY LIBRARY_OUTPUT_DIRECTORY)

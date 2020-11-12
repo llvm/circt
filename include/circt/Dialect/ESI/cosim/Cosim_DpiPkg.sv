@@ -1,4 +1,4 @@
-//===- Cosim_DpiPkg.sv - ESI cosim DPI declarations -------------*- C++ -*-===//
+//===- Cosim_DpiPkg.sv - ESI cosim DPI declarations ---------*- verilog -*-===//
 //
 // Package: Cosim_DpiPkg
 //
@@ -8,7 +8,7 @@
 
 package Cosim_DpiPkg;
 
-// --------------------- Cosim RPC Server -------------------------------------
+// --------------------- Cosim RPC Server --------------------------------------
 
 // Start cosimserver (spawns server for RTL-initiated work, listens for
 // connections from new SW-clients).
@@ -18,7 +18,7 @@ import "DPI-C" sv2cCosimserverInit = function int cosim_init();
 // from active clients).
 import "DPI-C" sv2cCosimserverFini = function void cosim_fini();
 
-// --------------------- Endpoint Management ----------------------------------
+// --------------------- Endpoint Management -----------------------------------
 
 // Register simulated device endpoints.
 // - return 0 on success, non-zero on failure (duplicate EP registered).
@@ -35,7 +35,7 @@ import "DPI-C" sv2cCosimserverEpRegister =
     // The recv types max size, in bytes.
     input int recv_type_size);
 
-// --------------------- Endpoint Accessors -----------------------------------
+// --------------------- Endpoint Accessors ------------------------------------
 
 // Attempt to send data to a client.
 // - return 0 on success, negative on failure (unregistered EP).
@@ -53,8 +53,8 @@ import "DPI-C" sv2cCosimserverEpTryPut =
 //   - Returns negative when call failed (e.g. EP not registered).
 //   - If no message, return 0 with size_bytes == 0.
 //   - Assumes buffer is large enough to contain entire message. Fails if not
-//     large enough. (In the future, will add support for getting the message into a
-//     fixed-size buffer over multiple calls.)
+//   large enough. (In the future, will add support for getting the message into
+//   a fixed-size buffer over multiple calls.)
 import "DPI-C" sv2cCosimserverEpTryGet = 
   function int cosim_ep_tryget(
     // The ID of the endpoint from which data should be recieved.

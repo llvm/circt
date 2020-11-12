@@ -30,6 +30,7 @@ FIRRTLType getCompareResult(FIRRTLType lhs, FIRRTLType rhs);
 FIRRTLType getBitwiseBinaryResult(FIRRTLType lhs, FIRRTLType rhs);
 FIRRTLType getCatResult(FIRRTLType lhs, FIRRTLType rhs);
 FIRRTLType getDShlResult(FIRRTLType lhs, FIRRTLType rhs);
+FIRRTLType getDShlwResult(FIRRTLType lhs, FIRRTLType rhs);
 FIRRTLType getDShrResult(FIRRTLType lhs, FIRRTLType rhs);
 FIRRTLType getValidIfResult(FIRRTLType lhs, FIRRTLType rhs);
 

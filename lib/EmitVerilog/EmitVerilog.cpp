@@ -795,6 +795,7 @@ private:
   SubExprInfo visitExpr(EQPrimOp op) { return emitBinary(op, Equality, "=="); }
   SubExprInfo visitExpr(NEQPrimOp op) { return emitBinary(op, Equality, "!="); }
   SubExprInfo visitExpr(DShlPrimOp op) { return emitBinary(op, Shift, "<<"); }
+  SubExprInfo visitExpr(DShlwPrimOp op) { return emitBinary(op, Shift, "<<"); }
   SubExprInfo visitExpr(DShrPrimOp op) {
     return emitSignedBinary(op, Shift, ">>>");
   }

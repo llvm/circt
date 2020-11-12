@@ -100,7 +100,7 @@ module attributes {firrtl.mainModule = "Simple"} {
 
     // CHECK-NEXT: [[ZEXTC1:%.+]] = rtl.zext [[CONCAT1]] : (i8) -> i12
     // CHECK-NEXT: [[ZEXT2:%.+]] = rtl.zext [[SUB]] : (i4) -> i12
-    // CHECK-NEXT: = rtl.mul [[ZEXTC1]], [[ZEXT2]] : i12
+    // CHECK-NEXT: [[VAL18:%.+]] = rtl.mul [[ZEXTC1]], [[ZEXT2]] : i12
     %18 = firrtl.mul %6, %2 : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<12>
 
     // CHECK-NEXT: [[IN3SEXT:%.+]] = rtl.sext %arg2 : (i8) -> i9
@@ -146,6 +146,10 @@ module attributes {firrtl.mainModule = "Simple"} {
     %27 = firrtl.validif %12, %18 : (!firrtl.uint<1>, !firrtl.uint<12>) -> !firrtl.uint<12>
     // CHECK-NEXT: rtl.andr
     %28 = firrtl.andr %27 : (!firrtl.uint<12>) -> !firrtl.uint<1>
+
+    // CHECK-NEXT: = rtl.extract [[VAL18]] from 0 : (i12) -> i3
+    // CHECK-NEXT: = rtl.shr [[XOR]], {{.*}} : i3
+    %29 = firrtl.dshr %24, %18 : (!firrtl.uint<3>, !firrtl.uint<12>) -> !firrtl.uint<3>
 
     // CHECK-NEXT: rtl.output %tmp3 : i4
     rtl.output %tmp3 : i4

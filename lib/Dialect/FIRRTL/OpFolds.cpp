@@ -10,10 +10,6 @@
 using namespace circt;
 using namespace firrtl;
 
-//===----------------------------------------------------------------------===//
-// Fold Hooks
-//===----------------------------------------------------------------------===//
-
 static Attribute getIntAttr(const APInt &value, MLIRContext *context) {
   return IntegerAttr::get(IntegerType::get(value.getBitWidth(), context),
                           value);
@@ -35,6 +31,15 @@ struct ConstantIntMatcher {
 
 static inline ConstantIntMatcher m_FConstant(APInt &value) {
   return ConstantIntMatcher(value);
+}
+
+//===----------------------------------------------------------------------===//
+// Fold Hooks
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
+  assert(operands.empty() && "constant has no operands");
+  return valueAttr();
 }
 
 // TODO: Move to DRR.
@@ -423,4 +428,35 @@ void TailPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
   };
 
   results.insert<Folder>(context);
+}
+
+//===----------------------------------------------------------------------===//
+// Conversions
+//===----------------------------------------------------------------------===//
+
+OpFoldResult StdIntCast::fold(ArrayRef<Attribute> operands) {
+  if (auto castInput =
+          dyn_cast_or_null<StdIntCast>(getOperand().getDefiningOp()))
+    if (castInput.getOperand().getType() == getType())
+      return castInput.getOperand();
+
+  return {};
+}
+
+OpFoldResult AsPassivePrimOp::fold(ArrayRef<Attribute> operands) {
+  if (auto castInput =
+          dyn_cast_or_null<AsNonPassivePrimOp>(getOperand().getDefiningOp()))
+    if (castInput.getOperand().getType() == getType())
+      return castInput.getOperand();
+
+  return {};
+}
+
+OpFoldResult AsNonPassivePrimOp::fold(ArrayRef<Attribute> operands) {
+  if (auto castInput =
+          dyn_cast_or_null<AsPassivePrimOp>(getOperand().getDefiningOp()))
+    if (castInput.getOperand().getType() == getType())
+      return castInput.getOperand();
+
+  return {};
 }

@@ -22,8 +22,6 @@ circuit test_mod :
 
 ; MLIRLOWER: module attributes {firrtl.mainModule = "test_mod"} {
 ; MLIRLOWER:   rtl.module @test_mod(%arg0: i1 {rtl.name = "a"}) -> (i1 {rtl.name = "b"}) {
-; MLIRLOWER:     %0 = rtl.wire : i1
-; MLIRLOWER:     rtl.connect %0, %arg0 : i1
-; MLIRLOWER:     rtl.output %0 : i1
+; MLIRLOWER:     rtl.output %arg0 : i1
 ; MLIRLOWER:   }
 ; MLIRLOWER: }
