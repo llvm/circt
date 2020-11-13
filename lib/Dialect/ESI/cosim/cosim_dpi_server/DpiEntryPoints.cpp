@@ -10,8 +10,8 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <iostream>
 
-using namespace std;
 using namespace circt::esi::cosim;
 
 static RpcServer *server = nullptr;
@@ -76,8 +76,8 @@ DPI int sv2cCosimserverEpRegister(int endpointId, long long sendTypeId,
     server->endpoints.registerEndpoint(endpointId, sendTypeId, sendTypeSize,
                                        recvTypeId, recvTypeSize);
     return 0;
-  } catch (const runtime_error &rt) {
-    cerr << rt.what() << endl;
+  } catch (const std::runtime_error &rt) {
+    fprintf(stderr, "%s\n", rt.what());
     return 1;
   }
 }
@@ -142,8 +142,8 @@ DPI int sv2cCosimserverEpTryGet(unsigned int endpointId,
       *dataSize = 0;
       return 0;
     }
-  } catch (const runtime_error &rt) {
-    std::cout << rt.what() << std::endl;
+  } catch (const std::runtime_error &rt) {
+    fprintf(stderr, "%s\n", rt.what());
     return -5;
   }
 }
@@ -172,7 +172,7 @@ DPI int sv2cCosimserverEpTryPut(unsigned int endpointId,
   }
 
   try {
-    Endpoint::BlobPtr blob = make_shared<Endpoint::Blob>(dataSize);
+    Endpoint::BlobPtr blob = std::make_shared<Endpoint::Blob>(dataSize);
     // Copy the message data into 'blob'.
     for (long i = 0; i < dataSize; i++) {
       blob->at(i) = *(char *)svGetArrElemPtr1(data, i);
@@ -180,8 +180,8 @@ DPI int sv2cCosimserverEpTryPut(unsigned int endpointId,
     // Queue the blob.
     server->endpoints[endpointId].pushMessageToClient(blob);
     return 0;
-  } catch (const runtime_error &e) {
-    cout << e.what() << '\n';
+  } catch (const std::runtime_error &e) {
+    std::cerr << e.what() << std::endl;
     return -4;
   }
 }

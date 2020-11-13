@@ -13,6 +13,9 @@ Endpoint::Endpoint(uint64_t sendTypeId, int sendTypeMaxSize,
     : sendTypeId(sendTypeId), recvTypeId(recvTypeId), inUse(false) {}
 Endpoint::~Endpoint() {}
 
+uint64_t Endpoint::getSendTypeId() const { return sendTypeId; }
+uint64_t Endpoint::getRecvTypeId() const { return recvTypeId; }
+
 bool Endpoint::setInUse() {
   Lock g(m);
   if (inUse)
@@ -28,19 +31,13 @@ void Endpoint::returnForUse() {
   inUse = false;
 }
 
-EndpointRegistry::~EndpointRegistry() {
-  Lock g(m);
-  endpoints.clear();
-}
-
 void EndpointRegistry::registerEndpoint(int epId, uint64_t sendTypeId,
                                         int sendTypeMaxSize,
                                         uint64_t recvTypeId,
                                         int recvTypeMaxSize) {
   Lock g(m);
-  if (endpoints.find(epId) != endpoints.end()) {
+  if (endpoints.find(epId) != endpoints.end())
     throw std::runtime_error("Endpoint ID already exists!");
-  }
   endpoints.emplace(std::piecewise_construct, std::forward_as_tuple(epId),
                     std::forward_as_tuple(sendTypeId, sendTypeMaxSize,
                                           recvTypeId, recvTypeMaxSize));
@@ -53,14 +50,6 @@ bool EndpointRegistry::get(int epId, Endpoint *&ep) {
     return false;
   ep = &it->second;
   return true;
-}
-
-Endpoint &EndpointRegistry::operator[](int epId) {
-  Lock g(m);
-  auto it = endpoints.find(epId);
-  if (it == endpoints.end())
-    throw std::runtime_error("Could not locate Endpoint");
-  return it->second;
 }
 
 void EndpointRegistry::iterateEndpoints(

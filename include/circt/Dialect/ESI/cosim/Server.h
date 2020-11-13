@@ -9,14 +9,12 @@
 #ifndef CIRCT_DIALECT_ESI_COSIM_SERVER_H
 #define CIRCT_DIALECT_ESI_COSIM_SERVER_H
 
-#include "Endpoint.h"
+#include "circt/Dialect/ESI/cosim/Endpoint.h"
 #include "circt/Dialect/ESI/cosim/CosimDpi.capnp.h"
-#include <capnp/any.h>
-#include <capnp/ez-rpc.h>
-#include <iostream>
-#include <kj/async.h>
-#include <map>
-#include <thread>
+
+namespace std {
+class thread;
+}
 
 namespace circt {
 namespace esi {
@@ -26,37 +24,35 @@ namespace cosim {
 /// wrapper around an `EndPoint` object. Whereas the `EndPoints` are long-lived
 /// (associate with the RTL endpoint), this class is constructed/destructed when
 /// the client open()s it.
-class EndpointServer
+class EndpointServer final
     : public EsiDpiEndpoint<capnp::AnyPointer, capnp::AnyPointer>::Server {
   /// The wrapped endpoint.
-  Endpoint *endpoint;
+  Endpoint &endpoint;
   /// Signals that this endpoint has been opened by a client and hasn't been
   /// closed by said client.
   bool open;
 
 public:
-  EndpointServer(Endpoint *ep) : endpoint(ep), open(true) {}
+  EndpointServer(Endpoint &ep);
+  /// Release the Endpoint should the client disconnect without properly closing
+  /// it.
+  ~EndpointServer();
+  /// Disallow copying as the 'open' variable needs to track the endpoint.
+  EndpointServer(const EndpointServer &) = delete;
 
-  virtual ~EndpointServer() {
-    if (open)
-      endpoint->returnForUse();
-  }
-
-  Endpoint *getEndPoint() { return endpoint; }
-
+  /// Implement the EsiDpiEndpoint RPC interface.
   kj::Promise<void> send(SendContext);
   kj::Promise<void> recv(RecvContext);
   kj::Promise<void> close(CloseContext);
 };
 
 /// Implements the `CosimDpiServer` interface from the RPC schema.
-class CosimServer : public CosimDpiServer::Server {
-  /// The registry of endpoints.
+class CosimServer final : public CosimDpiServer::Server {
+  /// The registry of endpoints. The RpcServer class owns this.
   EndpointRegistry *reg;
 
 public:
-  CosimServer(EndpointRegistry *reg) : reg(reg) {}
-  virtual ~CosimServer() {}
+  CosimServer(EndpointRegistry *reg);
 
   /// List all the registered interfaces.
   kj::Promise<void> list(ListContext ctxt);
@@ -66,22 +62,23 @@ public:
 
 /// The main RpcServer. Does not implement any capnp RPC interfaces but contains
 /// the capnp main RPC server. We run the capnp server in its own thread to be
-/// more responsive to network traffic and so we do not have to reason about
-/// interactions between the capnp (really libkj) async model.
+/// more responsive to network traffic and so as to not slow down the
+/// simulation and be more responsive to network traffic.
 class RpcServer {
 public:
   EndpointRegistry endpoints;
 
-  RpcServer() : rpcServer(nullptr), mainThread(nullptr), stopSig(false) {}
+  RpcServer();
   ~RpcServer();
 
+  /// Start and stop the server thread.
   void run(uint16_t port);
   void stop();
 
 private:
+  /// The thread's main loop function. Exits on shutdown.
   void mainLoop(uint16_t port);
 
-  capnp::EzRpcServer *rpcServer;
   std::thread *mainThread;
   volatile bool stopSig;
 };

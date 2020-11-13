@@ -12,24 +12,52 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/ESI/cosim/Server.h"
-#include <capnp/layout.h>
-#include <capnp/message.h>
-#include <kj/debug.h>
-#include <stdexcept>
+#include <capnp/ez-rpc.h>
+#include <thread>
 
 using namespace capnp;
 using namespace circt::esi::cosim;
 
-kj::Promise<void> EndpointServer::close(CloseContext context) {
+/// ------ EndpointServer definitions.
+
+EndpointServer::EndpointServer(Endpoint &ep) : endpoint(ep), open(true) {}
+EndpointServer::~EndpointServer() {
+  if (open)
+    endpoint.returnForUse();
+}
+
+/// This is the client polling for a message. If one is available, send it.
+/// TODO: implement a blocking call with a timeout.
+kj::Promise<void> EndpointServer::recv(RecvContext context) {
   KJ_REQUIRE(open, "EndPoint closed already");
-  open = false;
-  endpoint->returnForUse();
+  KJ_REQUIRE(!context.getParams().getBlock(),
+             "Blocking recv() not supported yet");
+
+  // Try to pop a message.
+  Endpoint::BlobPtr blob;
+  auto msgPresent = endpoint.getMessageToClient(blob);
+  context.getResults().setHasData(msgPresent);
+  if (msgPresent) {
+    KJ_REQUIRE(blob->size() % 8 == 0,
+               "Response msg was malformed. Size of response was not a "
+               "multiple of 8 bytes.");
+    // Copy the blob into a single segment.
+    auto segment =
+        kj::ArrayPtr<word>((word *)blob->data(), blob->size() / 8).asConst();
+    // Create a single-element array of segments.
+    auto segments = kj::heapArray({segment});
+    // Create an object which will read the segments into a message on send.
+    auto msgReader = std::make_unique<SegmentArrayMessageReader>(segments);
+    // Send.
+    context.getResults().getResp().set(msgReader->getRoot<AnyPointer>());
+  }
   return kj::READY_NOW;
 }
 
-/// 'Send' is from the client perspective, so this is a message we are recieving.
-/// The only way I could figure out to copy the raw message is a double copy. I
-/// was have issues getting libkj's arrays to play nice with others.
+/// 'Send' is from the client perspective, so this is a message we are
+/// recieving. The only way I could figure out to copy the raw message is a
+/// double copy. I was have issues getting libkj's arrays to play nice with
+/// others.
 kj::Promise<void> EndpointServer::send(SendContext context) {
   KJ_REQUIRE(open, "EndPoint closed already");
   auto capnpMsgPointer = context.getParams().getMsg();
@@ -48,37 +76,20 @@ kj::Promise<void> EndpointServer::send(SendContext context) {
   auto fstSegmentData = segments[0].asBytes();
   auto blob = std::make_shared<Endpoint::Blob>(fstSegmentData.begin(),
                                                fstSegmentData.end());
-  endpoint->pushMessageToSim(blob);
+  endpoint.pushMessageToSim(blob);
   return kj::READY_NOW;
 }
 
-/// This is the client polling for a message. If one is available, send it.
-/// TODO: implement a blocking call with a timeout.
-kj::Promise<void> EndpointServer::recv(RecvContext context) {
+kj::Promise<void> EndpointServer::close(CloseContext context) {
   KJ_REQUIRE(open, "EndPoint closed already");
-  KJ_REQUIRE(!context.getParams().getBlock(),
-             "Blocking recv() not supported yet");
-
-  // Try to pop a message.
-  Endpoint::BlobPtr blob;
-  auto msgPresent = endpoint->getMessageToClient(blob);
-  context.getResults().setHasData(msgPresent);
-  if (msgPresent) {
-    KJ_REQUIRE(blob->size() % 8 == 0,
-               "Response msg was malformed. Size of response was not a "
-               "multiple of 8 bytes.");
-    // Copy the blob into a single segment.
-    auto segment =
-        kj::ArrayPtr<word>((word *)blob->data(), blob->size() / 8).asConst();
-    // Create a single-element array of segments.
-    auto segments = kj::heapArray({segment});
-    // Create an object which will read the segments into a message on send.
-    auto msgReader = std::make_unique<SegmentArrayMessageReader>(segments);
-    // Send.
-    context.getResults().getResp().set(msgReader->getRoot<AnyPointer>());
-  }
+  open = false;
+  endpoint.returnForUse();
   return kj::READY_NOW;
 }
+
+/// ----- CosimServer definitions.
+
+CosimServer::CosimServer(EndpointRegistry *reg) : reg(reg) {}
 
 kj::Promise<void> CosimServer::list(ListContext context) {
   auto ifaces = context.getResults().initIfaces((unsigned int)reg->size());
@@ -101,17 +112,21 @@ kj::Promise<void> CosimServer::open(OpenContext ctxt) {
   KJ_REQUIRE(gotLock, "Endpoint in use");
 
   ctxt.getResults().setIface(EsiDpiEndpoint<AnyPointer, AnyPointer>::Client(
-      kj::heap<EndpointServer>(ep)));
+      kj::heap<EndpointServer>(*ep)));
   return kj::READY_NOW;
 }
 
+/// ----- RpcServer definitions.
+
+RpcServer::RpcServer() : mainThread(nullptr), stopSig(false) {}
 RpcServer::~RpcServer() { stop(); }
 
 void RpcServer::mainLoop(uint16_t port) {
-  rpcServer = new EzRpcServer(kj::heap<CosimServer>(&endpoints), "*", port);
-  auto &waitScope = rpcServer->getWaitScope();
+  capnp::EzRpcServer rpcServer(kj::heap<CosimServer>(&endpoints),
+                               /* bindAddress */ "*", port);
+  auto &waitScope = rpcServer.getWaitScope();
 
-  // OK, this is uber hacky, but it unblocks me and isn't too inefficient. The
+  // OK, this is uber hacky, but it unblocks me and isn't _too_ inefficient. The
   // problem is that I can't figure out how read the stop signal from libkj
   // asyncrony land.
   //
@@ -127,6 +142,7 @@ void RpcServer::mainLoop(uint16_t port) {
   }
 }
 
+/// Start the server if not already started.
 void RpcServer::run(uint16_t port) {
   if (mainThread == nullptr) {
     mainThread = new std::thread(&RpcServer::mainLoop, this, port);
@@ -135,6 +151,7 @@ void RpcServer::run(uint16_t port) {
   }
 }
 
+/// Signal the RPC server thread to stop. Wait for it to exit.
 void RpcServer::stop() {
   if (mainThread == nullptr) {
     throw std::runtime_error("RpcServer not Run()");
