@@ -9,8 +9,8 @@
 #ifndef CIRCT_DIALECT_ESI_COSIM_SERVER_H
 #define CIRCT_DIALECT_ESI_COSIM_SERVER_H
 
-#include "circt/Dialect/ESI/cosim/Endpoint.h"
 #include "circt/Dialect/ESI/cosim/CosimDpi.capnp.h"
+#include "circt/Dialect/ESI/cosim/Endpoint.h"
 
 namespace std {
 class thread;

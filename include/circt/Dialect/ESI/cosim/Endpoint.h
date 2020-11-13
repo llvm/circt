@@ -37,8 +37,8 @@ public:
   Endpoint(uint64_t sendTypeId, int sendTypeMaxSize, uint64_t recvTypeId,
            int recvTypeMaxSize);
   ~Endpoint();
-  /// Disallow copying. There is only ONE endpoint object per logical endpoint so
-  /// copying is almost always a bug.
+  /// Disallow copying. There is only ONE endpoint object per logical endpoint
+  /// so copying is almost always a bug.
   Endpoint(const Endpoint &) = delete;
 
   uint64_t getSendTypeId() const;
@@ -112,10 +112,10 @@ public:
 
   /// Get the specified endpoint, if it exists. Return false if it does not.
   bool get(int epId, Endpoint *&);
-  /// Get the specified endpoint, throwing an exception if it doesn't exist. This
-  /// method is defined inline so it can be inlined at compile time. Performance
-  /// is important here since this method is used in the polling call from the
-  /// simulator.
+  /// Get the specified endpoint, throwing an exception if it doesn't exist.
+  /// This method is defined inline so it can be inlined at compile time.
+  /// Performance is important here since this method is used in the polling
+  /// call from the simulator.
   Endpoint &operator[](int epId) {
     Lock g(m);
     auto it = endpoints.find(epId);

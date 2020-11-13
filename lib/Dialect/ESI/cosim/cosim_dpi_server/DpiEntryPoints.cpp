@@ -33,7 +33,7 @@ int getPort() {
 /// Check that an array is an array of bytes and has some size.
 // NOLINTNEXTLINE(misc-misplaced-const)
 static int validateSvOpenArray(const svOpenArrayHandle data,
-                                  int expectedElemSize) {
+                               int expectedElemSize) {
   int err = 0;
   if (svDimensions(data) != 1) {
     printf("DPI-C: ERROR passed array argument that doesn't have expected 1D "
@@ -106,7 +106,7 @@ DPI int sv2cCosimserverEpTryGet(unsigned int endpointId,
 
       if (validateSvOpenArray(data, sizeof(int8_t)) != 0) {
         printf("ERROR: DPI-func=%s line=%d event=invalid-sv-array\n", __func__,
-              __LINE__);
+               __LINE__);
         return -1;
       }
 
@@ -114,8 +114,8 @@ DPI int sv2cCosimserverEpTryGet(unsigned int endpointId,
       if (*dataSize == ~0u) {
         *dataSize = svSizeOfArray(data);
       } else if (*dataSize > (unsigned)svSizeOfArray(data)) {
-        printf("ERROR: DPI-func=%s line %d event=invalid-size (max %d)\n", __func__,
-              __LINE__, (unsigned)svSizeOfArray(data));
+        printf("ERROR: DPI-func=%s line %d event=invalid-size (max %d)\n",
+               __func__, __LINE__, (unsigned)svSizeOfArray(data));
         return -2;
       }
       // Verify it'll fit.
