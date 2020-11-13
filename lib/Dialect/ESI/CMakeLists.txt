@@ -21,3 +21,5 @@ add_mlir_dialect_library(MLIRESI
 
 
 add_dependencies(mlir-headers MLIRESIIncGen)
+
+add_subdirectory(cosim)
