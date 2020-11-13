@@ -20,6 +20,7 @@
 include "mlir/IR/OpBase.td"
 #endif // OP_BASE
 
+include "HandshakeInterfaces.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/Interfaces/CallInterfaces.td"
@@ -28,22 +29,6 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 def Handshake_Dialect : Dialect {
   let name = "handshake";
   let cppNamespace = "::circt::handshake";
-}
-
-def MergeLikeOpInterface : OpInterface<"MergeLikeOpInterface"> {
-  let description = [{
-     Some handshake operations can have predecessors in other
-     blocks. This is primarily useful for verification purposes during
-     lowering from other dialect, such as the standard CDFG dialect.
-  }];
-
-  let methods = [
-    InterfaceMethod<[{
-
-	}],
-      "OperandRange", "dataOperands", (ins)
-    >,
- ];
 }
 
 // Base class for Handshake dialect ops.
@@ -369,6 +354,7 @@ def MuxOp : Handshake_Op<"mux", [NoSideEffect, MergeLikeOpInterface]> {
 
   let skipDefaultBuilders = 1;
   let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$inputs)>];
+  let verifier = [{ return ::verify(*this); }];
 }
 
 def ControlMergeOp : Handshake_Op<"control_merge",

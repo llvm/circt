@@ -81,6 +81,18 @@ std::string Signal::dump() {
   return ss.str();
 }
 
+std::string Signal::dump(unsigned elemIndex) {
+  assert(elements.size() > 0 && "the signal type has to be tuple or array!");
+  auto elemSize = elements[elemIndex].second;
+  auto ptr = value.get() + elements[elemIndex].first;
+  std::string ret;
+  raw_string_ostream ss(ret);
+  ss << "0x";
+  for (int i = elemSize - 1; i >= 0; --i) {
+    ss << format_hex_no_prefix(static_cast<int>(ptr[i]), 2);
+  }
+  return ret;
+}
 //===----------------------------------------------------------------------===//
 // Slot
 //===----------------------------------------------------------------------===//
@@ -187,6 +199,10 @@ int State::addSignalData(int index, std::string owner, uint8_t *value,
     }
   }
   return globalIdx;
+}
+
+void State::addSignalElement(unsigned index, unsigned offset, unsigned size) {
+  signals[index].elements.push_back(std::make_pair(offset, size));
 }
 
 void State::dumpSignal(llvm::raw_ostream &out, int index) {

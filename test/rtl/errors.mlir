@@ -55,3 +55,12 @@ rtl.module @A(%arg0: i1) {
 
 // expected-error @+1 {{'rtl.output' op must have same number of operands as region results}}
 rtl.module @A() -> (i1) { }
+
+// -----
+
+rtl.module @A () {}
+
+rtl.module @B() {
+  // expected-error @+1 {{has unknown extmodule parameter value 'width' = @Foo}}
+  rtl.instance "foo" @A() { parameters = { width = @Foo } }: () -> ()
+}

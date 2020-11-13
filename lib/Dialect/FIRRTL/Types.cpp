@@ -187,15 +187,15 @@ Type FIRRTLDialect::parseType(DialectAsmParser &parser) const {
 
 /// Return true if this is a "passive" type - one that contains no "flip"
 /// types recursively within itself.
-bool FIRRTLType::isPassiveType() {
+bool FIRRTLType::isPassive() {
   return TypeSwitch<FIRRTLType, bool>(*this)
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
             AnalogType>([](Type) { return true; })
       .Case<FlipType>([](Type) { return false; })
       .Case<BundleType>(
-          [](BundleType bundleType) { return bundleType.isPassiveType(); })
+          [](BundleType bundleType) { return bundleType.isPassive(); })
       .Case<FVectorType>(
-          [](FVectorType vectorType) { return vectorType.isPassiveType(); })
+          [](FVectorType vectorType) { return vectorType.isPassive(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return false;
@@ -296,15 +296,9 @@ int32_t FIRRTLType::getBitWidthOrSentinel() {
 /// asynchronous reset.
 bool FIRRTLType::isResetType() {
   return TypeSwitch<FIRRTLType, bool>(*this)
-    .Case<ResetType, AsyncResetType>([](Type) {
-      return true;
-    })
-    .Case<UIntType>([](UIntType a) {
-      return a.getWidth() == 1;
-    })
-    .Default([](Type) {
-      return false;
-    });
+      .Case<ResetType, AsyncResetType>([](Type) { return true; })
+      .Case<UIntType>([](UIntType a) { return a.getWidth() == 1; })
+      .Default([](Type) { return false; });
 }
 
 //===----------------------------------------------------------------------===//
@@ -443,7 +437,7 @@ FIRRTLType FlipType::get(FIRRTLType element) {
         // If the bundle is passive, then we're done because the flip will be at
         // the outer level. Otherwise, it contains flip types recursively within
         // itself that we should canonicalize.
-        if (bundleType.isPassiveType()) {
+        if (bundleType.isPassive()) {
           auto *context = element.getContext();
           return Base::get(context, element).cast<FIRRTLType>();
         }
@@ -454,7 +448,7 @@ FIRRTLType FlipType::get(FIRRTLType element) {
         // If the bundle is passive, then we're done because the flip will be at
         // the outer level. Otherwise, it contains flip types recursively within
         // itself that we should canonicalize.
-        if (vectorType.isPassiveType()) {
+        if (vectorType.isPassive()) {
           auto *context = element.getContext();
           return Base::get(context, element).cast<FIRRTLType>();
         }
@@ -487,7 +481,7 @@ struct BundleTypeStorage : mlir::TypeStorage {
     bool isPassive = llvm::all_of(
         elements, [](const BundleType::BundleElement &elt) -> bool {
           auto eltType = elt.second;
-          return eltType.isPassiveType();
+          return eltType.isPassive();
         });
     passiveTypeInfo.setInt(isPassive);
   }
@@ -528,7 +522,7 @@ auto BundleType::getElements() -> ArrayRef<BundleElement> {
   return getImpl()->elements;
 }
 
-bool BundleType::isPassiveType() { return getImpl()->passiveTypeInfo.getInt(); }
+bool BundleType::isPassive() { return getImpl()->passiveTypeInfo.getInt(); }
 
 /// Return this type with any flip types recursively removed from itself.
 FIRRTLType BundleType::getPassiveType() {
@@ -578,7 +572,7 @@ struct VectorTypeStorage : mlir::TypeStorage {
   using KeyTy = std::pair<FIRRTLType, unsigned>;
 
   VectorTypeStorage(KeyTy value) : value(value) {
-    passiveTypeInfo.setInt(value.first.isPassiveType());
+    passiveTypeInfo.setInt(value.first.isPassive());
   }
 
   bool operator==(const KeyTy &key) const { return key == value; }
@@ -612,9 +606,7 @@ FIRRTLType FVectorType::getElementType() { return getImpl()->value.first; }
 
 unsigned FVectorType::getNumElements() { return getImpl()->value.second; }
 
-bool FVectorType::isPassiveType() {
-  return getImpl()->passiveTypeInfo.getInt();
-}
+bool FVectorType::isPassive() { return getImpl()->passiveTypeInfo.getInt(); }
 
 /// Return this type with any flip types recursively removed from itself.
 FIRRTLType FVectorType::getPassiveType() {

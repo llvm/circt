@@ -4,6 +4,7 @@
 
 #include "circt/Dialect/FIRRTL/Ops.h"
 #include "circt/Dialect/FIRRTL/Visitors.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/StandardTypes.h"
@@ -122,8 +123,8 @@ static LogicalResult verifyCircuitOp(CircuitOp &circuit) {
     }
 
     // Check that the number of ports is exactly the same.
-    SmallVector<std::pair<StringAttr, FIRRTLType>, 8> ports;
-    SmallVector<std::pair<StringAttr, FIRRTLType>, 8> collidingPorts;
+    SmallVector<ModulePortInfo, 8> ports;
+    SmallVector<ModulePortInfo, 8> collidingPorts;
     extModule.getPortInfo(ports);
     collidingExtModule.getPortInfo(collidingPorts);
     if (ports.size() != collidingPorts.size()) {
@@ -143,9 +144,9 @@ static LogicalResult verifyCircuitOp(CircuitOp &circuit) {
     // parameters. Note that this allows for misdetections, but
     // has zero false positives.
     for (auto p : llvm::zip(ports, collidingPorts)) {
-      StringAttr aName, bName;
-      FIRRTLType aType, bType;
-      std::forward_as_tuple(std::tie(aName, aType), std::tie(bName, bType)) = p;
+      StringAttr aName = std::get<0>(p).name, bName = std::get<1>(p).name;
+      FIRRTLType aType = std::get<0>(p).type, bType = std::get<1>(p).type;
+
       if (extModule.parameters() || collidingExtModule.parameters()) {
         aType = aType.getWidthlessType();
         bType = bType.getWidthlessType();
@@ -217,8 +218,7 @@ void firrtl::getModulePortInfo(Operation *op,
 }
 
 static void buildModule(OpBuilder &builder, OperationState &result,
-                        StringAttr name,
-                        ArrayRef<std::pair<StringAttr, FIRRTLType>> ports) {
+                        StringAttr name, ArrayRef<ModulePortInfo> ports) {
   using namespace mlir::impl;
 
   // Add an attribute for the name.
@@ -226,7 +226,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 
   SmallVector<Type, 4> argTypes;
   for (auto elt : ports)
-    argTypes.push_back(elt.second);
+    argTypes.push_back(elt.type);
 
   // Record the argument and result types as an attribute.
   auto type = builder.getFunctionType(argTypes, /*resultTypes*/ {});
@@ -235,11 +235,11 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   // Record the names of the arguments if present.
   SmallString<8> attrNameBuf;
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
-    if (ports[i].first.getValue().empty())
+    if (ports[i].getName().empty())
       continue;
 
     auto argAttr =
-        NamedAttribute(builder.getIdentifier("firrtl.name"), ports[i].first);
+        NamedAttribute(builder.getIdentifier("firrtl.name"), ports[i].name);
 
     result.addAttribute(getArgAttrName(i, attrNameBuf),
                         builder.getDictionaryAttr(argAttr));
@@ -249,8 +249,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 }
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
-                      StringAttr name,
-                      ArrayRef<std::pair<StringAttr, FIRRTLType>> ports) {
+                      StringAttr name, ArrayRef<ModulePortInfo> ports) {
   buildModule(builder, result, name, ports);
 
   // Create a region and a block for the body.
@@ -260,14 +259,13 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 
   // Add arguments to the body block.
   for (auto elt : ports)
-    body->addArgument(elt.second);
+    body->addArgument(elt.type);
 
   FModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
 
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
-                         StringAttr name,
-                         ArrayRef<std::pair<StringAttr, FIRRTLType>> ports,
+                         StringAttr name, ArrayRef<ModulePortInfo> ports,
                          StringRef defnameAttr) {
   buildModule(builder, result, name, ports);
   if (!defnameAttr.empty())
@@ -466,6 +464,26 @@ static LogicalResult verifyFModuleOp(FModuleOp &module) {
   return success();
 }
 
+static LogicalResult verifyFExtModuleOp(FExtModuleOp &op) {
+  auto paramDictOpt = op.parameters();
+  if (!paramDictOpt)
+    return success();
+  DictionaryAttr paramDict = paramDictOpt.getValue();
+  auto checkParmValue = [&](NamedAttribute elt) -> bool {
+    auto value = elt.second;
+    if (value.isa<IntegerAttr>() || value.isa<StringAttr>() ||
+        value.isa<FloatAttr>())
+      return true;
+    op.emitError() << "has unknown extmodule parameter value '" << elt.first
+                   << "' = " << value;
+    return false;
+  };
+
+  if (!llvm::all_of(paramDict, checkParmValue))
+    return failure();
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Declarations
 //===----------------------------------------------------------------------===//
@@ -505,6 +523,44 @@ static LogicalResult verifyInstanceOp(InstanceOp &instance) {
     return failure();
   }
 
+  // Check that the result type is consistent with its module.
+  if (auto referencedFModule = dyn_cast<FModuleOp>(referencedModule)) {
+    auto bundle = instance.getResult()
+                      .getType()
+                      .cast<FIRRTLType>()
+                      .getPassiveType()
+                      .cast<BundleType>();
+    auto bundleElements = bundle.getElements();
+    size_t e = bundleElements.size();
+
+    if (e != referencedFModule.getNumArguments()) {
+      auto diag = instance.emitOpError()
+                  << "has a wrong size of bundle type, expected size is "
+                  << referencedFModule.getNumArguments() << " but got " << e;
+      diag.attachNote(referencedFModule.getLoc())
+          << "original module declared here";
+      return failure();
+    }
+
+    for (size_t i = 0; i != e; i++) {
+      auto expectedType = referencedFModule.getArgument(i)
+                              .getType()
+                              .cast<FIRRTLType>()
+                              .getPassiveType();
+      if (bundleElements[i].second != expectedType) {
+        auto diag = instance.emitOpError()
+                    << "output bundle type must match module. In "
+                       "element "
+                    << i << ", expected " << expectedType << ", but got "
+                    << bundleElements[i].second << ".";
+
+        diag.attachNote(referencedFModule.getLoc())
+            << "original module declared here";
+        return failure();
+      }
+    }
+  }
+
   return success();
 }
 
@@ -513,7 +569,7 @@ static LogicalResult verifyInstanceOp(InstanceOp &instance) {
 FIRRTLType
 MemOp::getTypeForPortList(uint64_t depth, FIRRTLType dataType,
                           ArrayRef<std::pair<Identifier, PortKind>> portList) {
-  assert(dataType.isPassiveType() && "mem can only have passive datatype");
+  assert(dataType.isPassive() && "mem can only have passive datatype");
 
   auto *context = dataType.getContext();
 
@@ -535,7 +591,8 @@ MemOp::getTypeForPortList(uint64_t depth, FIRRTLType dataType,
 
   // Figure out the number of bits needed for the address, and thus the address
   // type to use.
-  auto addressType = UIntType::get(context, llvm::Log2_64_Ceil(depth));
+  auto addressType =
+      UIntType::get(context, std::max(1U, llvm::Log2_64_Ceil(depth)));
 
   auto getId = [&](StringRef name) -> Identifier {
     return Identifier::get(name, context);
@@ -644,69 +701,31 @@ void WhenOp::createElseRegion() {
 }
 
 void WhenOp::build(OpBuilder &builder, OperationState &result, Value condition,
-                   bool withElseRegion) {
+                   bool withElseRegion, std::function<void()> thenCtor,
+                   std::function<void()> elseCtor) {
   result.addOperands(condition);
 
   Region *thenRegion = result.addRegion();
   Region *elseRegion = result.addRegion();
   WhenOp::ensureTerminator(*thenRegion, builder, result.location);
-  if (withElseRegion)
+
+  if (thenCtor) {
+    auto oldIP = &*builder.getInsertionPoint();
+    builder.setInsertionPointToStart(&*thenRegion->begin());
+    thenCtor();
+    builder.setInsertionPoint(oldIP);
+  }
+
+  if (withElseRegion) {
     WhenOp::ensureTerminator(*elseRegion, builder, result.location);
-}
 
-static void print(OpAsmPrinter &p, WhenOp op) {
-  p << op.getOperationName() << " ";
-  p.printOperand(op.condition());
-
-  p.printRegion(op.thenRegion(),
-                /*printEntryBlockArgs=*/false,
-                /*printBlockTerminators=*/false);
-
-  // Print the 'else' regions if it has any blocks.
-  auto &elseRegion = op.elseRegion();
-  if (!elseRegion.empty()) {
-    p << " else";
-    p.printRegion(elseRegion,
-                  /*printEntryBlockArgs=*/false,
-                  /*printBlockTerminators=*/false);
+    if (elseCtor) {
+      auto oldIP = &*builder.getInsertionPoint();
+      builder.setInsertionPointToStart(&*elseRegion->begin());
+      elseCtor();
+      builder.setInsertionPoint(oldIP);
+    }
   }
-
-  // Print the attribute list.
-  p.printOptionalAttrDictWithKeyword(op.getAttrs());
-}
-
-static ParseResult parseWhenOp(OpAsmParser &parser, OperationState &result) {
-  // Parse the module name.
-  OpAsmParser::OperandType conditionOperand;
-  if (parser.parseOperand(conditionOperand) ||
-      parser.resolveOperand(conditionOperand,
-                            UIntType::get(result.getContext(), 1),
-                            result.operands))
-    return failure();
-
-  // Create the regions for 'then' and 'else'.  The latter must be created even
-  // if it remains empty for the validity of the operation.
-  result.regions.reserve(2);
-  Region *thenRegion = result.addRegion();
-  Region *elseRegion = result.addRegion();
-
-  // Parse the 'then' region.
-  if (parser.parseRegion(*thenRegion, {}, {}))
-    return failure();
-  WhenOp::ensureTerminator(*thenRegion, parser.getBuilder(), result.location);
-
-  // If we find an 'else' keyword then parse the 'else' region.
-  if (!parser.parseOptionalKeyword("else")) {
-    if (parser.parseRegion(*elseRegion, {}, {}))
-      return failure();
-    WhenOp::ensureTerminator(*elseRegion, parser.getBuilder(), result.location);
-  }
-
-  // Parse the optional attribute list.
-  if (parser.parseOptionalAttrDict(result.attributes))
-    return failure();
-
-  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -727,18 +746,11 @@ static LogicalResult verifyConstantOp(ConstantOp constant) {
   // If the result type has a bitwidth, then the attribute must match its width.
   auto intType = constant.getType().cast<IntType>();
   auto width = intType.getWidthOrSentinel();
-  if (width != -1 && (int)constant.value().getBitWidth() != width) {
-    constant.emitError(
+  if (width != -1 && (int)constant.value().getBitWidth() != width)
+    return constant.emitError(
         "firrtl.constant attribute bitwidth doesn't match return type");
-    return failure();
-  }
 
   return success();
-}
-
-OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
-  assert(operands.empty() && "constant has no operands");
-  return valueAttr();
 }
 
 /// Build a ConstantOp from an APInt and a FIRRTL type, handling the attribute
@@ -759,7 +771,8 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
 }
 
 // Return the result of a subfield operation.
-FIRRTLType SubfieldOp::getResultType(FIRRTLType inType, StringRef fieldName) {
+FIRRTLType SubfieldOp::getResultType(FIRRTLType inType, StringRef fieldName,
+                                     Location loc) {
   if (auto bundleType = inType.dyn_cast<BundleType>()) {
     for (auto &elt : bundleType.getElements()) {
       if (elt.first == fieldName)
@@ -768,31 +781,33 @@ FIRRTLType SubfieldOp::getResultType(FIRRTLType inType, StringRef fieldName) {
   }
 
   if (auto flipType = inType.dyn_cast<FlipType>())
-    if (auto subType = getResultType(flipType.getElementType(), fieldName))
+    if (auto subType = getResultType(flipType.getElementType(), fieldName, loc))
       return FlipType::get(subType);
 
   return {};
 }
 
-FIRRTLType SubindexOp::getResultType(FIRRTLType inType, unsigned fieldIdx) {
+FIRRTLType SubindexOp::getResultType(FIRRTLType inType, unsigned fieldIdx,
+                                     Location loc) {
   if (auto vectorType = inType.dyn_cast<FVectorType>())
     if (fieldIdx < vectorType.getNumElements())
       return vectorType.getElementType();
 
   if (auto flipType = inType.dyn_cast<FlipType>())
-    if (auto subType = getResultType(flipType.getElementType(), fieldIdx))
+    if (auto subType = getResultType(flipType.getElementType(), fieldIdx, loc))
       return FlipType::get(subType);
 
   return {};
 }
 
-FIRRTLType SubaccessOp::getResultType(FIRRTLType inType, FIRRTLType indexType) {
+FIRRTLType SubaccessOp::getResultType(FIRRTLType inType, FIRRTLType indexType,
+                                      Location loc) {
   if (auto vectorType = inType.dyn_cast<FVectorType>())
     if (indexType.isa<UIntType>())
       return vectorType.getElementType();
 
   if (auto flipType = inType.dyn_cast<FlipType>())
-    if (auto subType = getResultType(flipType.getElementType(), indexType))
+    if (auto subType = getResultType(flipType.getElementType(), indexType, loc))
       return FlipType::get(subType);
 
   return {};
@@ -943,6 +958,12 @@ FIRRTLType firrtl::getDShlResult(FIRRTLType lhs, FIRRTLType rhs) {
   return IntType::get(lhs.getContext(), lhsi.isSigned(), width);
 }
 
+FIRRTLType firrtl::getDShlwResult(FIRRTLType lhs, FIRRTLType rhs) {
+  if (!lhs.isa<IntType>() || !rhs.isa<UIntType>())
+    return {};
+  return lhs;
+}
+
 FIRRTLType firrtl::getDShrResult(FIRRTLType lhs, FIRRTLType rhs) {
   if (!lhs.isa<IntType>() || !rhs.isa<UIntType>())
     return {};
@@ -1037,31 +1058,74 @@ FIRRTLType firrtl::getReductionResult(FIRRTLType input) {
 // Other Operations
 //===----------------------------------------------------------------------===//
 
+static LogicalResult verifyBitsPrimOp(BitsPrimOp bits) {
+  uint32_t hi = bits.hi(), lo = bits.lo();
+
+  auto expectedType =
+      BitsPrimOp::getResultType(bits.input().getType().cast<FIRRTLType>(),
+                                (int32_t)hi, (int32_t)lo, bits.getLoc());
+  if (!expectedType)
+    return failure();
+
+  int32_t resultWidth =
+      bits.result().getType().cast<IntType>().getBitWidthOrSentinel();
+  int32_t expectedWidth = expectedType.cast<IntType>().getBitWidthOrSentinel();
+
+  if (resultWidth != -1 && expectedWidth != resultWidth)
+    return bits.emitError()
+           << "width of the result type must be equal to (high - low "
+              "+ 1), expected "
+           << expectedWidth << " but got " << resultWidth;
+
+  return success();
+}
+
 FIRRTLType BitsPrimOp::getResultType(FIRRTLType input, int32_t high,
-                                     int32_t low) {
+                                     int32_t low, Location loc) {
   auto inputi = input.dyn_cast<IntType>();
 
-  // High must be >= low and both most be non-negative.
-  if (!inputi || high < low || low < 0)
+  if (!inputi) {
+    mlir::emitError(loc) << "input type should be the int type but got "
+                         << input;
     return {};
+  }
+
+  // High must be >= low and both most be non-negative.
+  if (high < low) {
+    mlir::emitError(loc)
+        << "high must be equal or greater than low, but got high = " << high
+        << ", low = " << low;
+    return {};
+  }
+
+  if (low < 0) {
+    mlir::emitError(loc) << "low must be non-negative but got" << low;
+    return {};
+  }
 
   // If the input has staticly known width, check it.  Both and low must be
   // strictly less than width.
   int32_t width = inputi.getWidthOrSentinel();
-  if (width != -1 && high >= width)
+  if (width != -1 && high >= width) {
+    mlir::emitError(loc)
+        << "high must be smaller than the width of input, but got high = "
+        << high << ", width = " << width;
     return {};
+  }
 
   return UIntType::get(input.getContext(), high - low + 1);
 }
 
 void BitsPrimOp::build(OpBuilder &builder, OperationState &result, Value input,
                        unsigned high, unsigned low) {
-  auto type = getResultType(input.getType().cast<FIRRTLType>(), high, low);
+  auto type = getResultType(input.getType().cast<FIRRTLType>(), high, low,
+                            result.location);
   assert(type && "invalid inputs building BitsPrimOp!");
   build(builder, result, type, input, high, low);
 }
 
-FIRRTLType HeadPrimOp::getResultType(FIRRTLType input, int32_t amount) {
+FIRRTLType HeadPrimOp::getResultType(FIRRTLType input, int32_t amount,
+                                     Location loc) {
   auto inputi = input.dyn_cast<IntType>();
   if (amount <= 0 || !inputi)
     return {};
@@ -1075,7 +1139,7 @@ FIRRTLType HeadPrimOp::getResultType(FIRRTLType input, int32_t amount) {
 }
 
 FIRRTLType MuxPrimOp::getResultType(FIRRTLType sel, FIRRTLType high,
-                                    FIRRTLType low) {
+                                    FIRRTLType low, Location loc) {
   // Sel needs to be a one bit uint or an unknown width uint.
   auto selui = sel.dyn_cast<UIntType>();
   if (!selui || selui.getWidthOrSentinel() > 1)
@@ -1121,7 +1185,8 @@ FIRRTLType MuxPrimOp::getResultType(FIRRTLType sel, FIRRTLType high,
   return {};
 }
 
-FIRRTLType PadPrimOp::getResultType(FIRRTLType input, int32_t amount) {
+FIRRTLType PadPrimOp::getResultType(FIRRTLType input, int32_t amount,
+                                    Location loc) {
   auto inputi = input.dyn_cast<IntType>();
   if (amount < 0 || !inputi)
     return {};
@@ -1134,7 +1199,8 @@ FIRRTLType PadPrimOp::getResultType(FIRRTLType input, int32_t amount) {
   return IntType::get(input.getContext(), inputi.isSigned(), width);
 }
 
-FIRRTLType ShlPrimOp::getResultType(FIRRTLType input, int32_t amount) {
+FIRRTLType ShlPrimOp::getResultType(FIRRTLType input, int32_t amount,
+                                    Location loc) {
   auto inputi = input.dyn_cast<IntType>();
   if (amount < 0 || !inputi)
     return {};
@@ -1146,7 +1212,8 @@ FIRRTLType ShlPrimOp::getResultType(FIRRTLType input, int32_t amount) {
   return IntType::get(input.getContext(), inputi.isSigned(), width);
 }
 
-FIRRTLType ShrPrimOp::getResultType(FIRRTLType input, int32_t amount) {
+FIRRTLType ShrPrimOp::getResultType(FIRRTLType input, int32_t amount,
+                                    Location loc) {
   auto inputi = input.dyn_cast<IntType>();
   if (amount < 0 || !inputi)
     return {};
@@ -1158,7 +1225,8 @@ FIRRTLType ShrPrimOp::getResultType(FIRRTLType input, int32_t amount) {
   return IntType::get(input.getContext(), inputi.isSigned(), width);
 }
 
-FIRRTLType TailPrimOp::getResultType(FIRRTLType input, int32_t amount) {
+FIRRTLType TailPrimOp::getResultType(FIRRTLType input, int32_t amount,
+                                     Location loc) {
   auto inputi = input.dyn_cast<IntType>();
   if (amount < 0 || !inputi)
     return {};
@@ -1187,30 +1255,25 @@ static LogicalResult verifyStdIntCast(StdIntCast cast) {
   IntegerType integerType;
   if ((firType = cast.getOperand().getType().dyn_cast<FIRRTLType>())) {
     integerType = cast.getType().dyn_cast<IntegerType>();
-    if (!integerType) {
-      cast.emitError("result type must be a signless integer");
-      return failure();
-    }
+    if (!integerType)
+      return cast.emitError("result type must be a signless integer");
   } else if ((firType = cast.getType().dyn_cast<FIRRTLType>())) {
     integerType = cast.getOperand().getType().dyn_cast<IntegerType>();
-    if (!integerType) {
-      cast.emitError("operand type must be a signless integer");
-      return failure();
-    }
+    if (!integerType)
+      return cast.emitError("operand type must be a signless integer");
   } else {
-    cast.emitError("either source or result type must be integer type");
-    return failure();
+    return cast.emitError("either source or result type must be integer type");
   }
 
   int32_t intWidth = firType.getBitWidthOrSentinel();
   if (intWidth == -2)
     return cast.emitError("firrtl type isn't simple bit type");
   if (intWidth == -1)
-    return cast.emitError("SInt/UInt type must have a width"), failure();
+    return cast.emitError("SInt/UInt type must have a width");
   if (!integerType.isSignless())
-    return cast.emitError("standard integer type must be signless"), failure();
+    return cast.emitError("standard integer type must be signless");
   if (unsigned(intWidth) != integerType.getWidth())
-    return cast.emitError("source and result width must match"), failure();
+    return cast.emitError("source and result width must match");
 
   return success();
 }

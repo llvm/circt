@@ -17,7 +17,7 @@ def LowerFIRRTLToRTLModule
 }
 
 /// Lower the contents of an firrtl.module to the RTL dialect.
-def LowerFIRRTLToRTL : Pass<"lower-firrtl-to-rtl", "firrtl::FModuleOp"> {
+def LowerFIRRTLToRTL : Pass<"lower-firrtl-to-rtl", "rtl::RTLModuleOp"> {
   let summary = "Lower FIRRTL to RTL";
   let constructor = "circt::firrtl::createLowerFIRRTLToRTLPass()";
 }

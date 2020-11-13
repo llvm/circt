@@ -53,6 +53,7 @@ circuit inputs_only :
     node x11 = xor(xor(pad(in4, 6), asUInt(pad(asSInt(in4), 6))),
                    asUInt(pad(asSInt(clock), 6)))
     node x12 = shl(in4, 0)
+    node x13 = dshlw(in4, in4)
 
 ; CHECK-LABEL: module Expressions(
 ; CHECK-NEXT:     input  [3:0] in4,
@@ -72,6 +73,7 @@ circuit inputs_only :
 ; CHECK-NEXT:     wire [3:0] x10;
 ; CHECK-NEXT:     wire [5:0] x11;
 ; CHECK-NEXT:     wire [3:0] x12;
+; CHECK-NEXT:     wire [3:0] x13;
 ; CHECK-EMPTY:
 ; CHECK-NEXT:     assign out1 = ^in4;
 ; CHECK-NEXT:     assign out1 = &in4;
@@ -92,6 +94,7 @@ circuit inputs_only :
 ; CHECK-NEXT:     assign x10 = in4;
 ; CHECK-NEXT:     assign x11 = {{\{\{}}2'd0}, in4} ^ {{\{\{}}2{in4[3]}}, in4} ^ {6{clock}};
 ; CHECK-NEXT:     assign x12 = in4;
+; CHECK-NEXT:     assign x13 = in4 << in4;
 ; CHECK-NEXT:  endmodule
 
 

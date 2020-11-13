@@ -1,22 +1,22 @@
 // RUN: llhd-sim %s -n 10 | FileCheck %s
 
-// CHECK: 0ps 0d 0e  root/sig1  0x00000000
+// CHECK: 0ps 0d 0e  root/clock  0x00
+// CHECK-NEXT: 0ps 0d 0e  root/sig1  0x00000000
 // CHECK-NEXT: 0ps 0d 0e  root/sig2  0x00000000
-// CHECK-NEXT: 0ps 0d 0e  root/clock  0x00
 // CHECK-NEXT: 1000ps 0d 0e  root/sig1  0x00000002
 // CHECK-NEXT: 2000ps 0d 0e  root/clock  0x01
 // CHECK-NEXT: 3000ps 0d 0e  root/sig1  0x00000001
 // CHECK-NEXT: 3000ps 0d 0e  root/sig2  0xffffffff
-// CHECK-NEXT: 4000ps 0d 0e  root/sig1  0x00000003
 // CHECK-NEXT: 4000ps 0d 0e  root/clock  0x00
+// CHECK-NEXT: 4000ps 0d 0e  root/sig1  0x00000003
 // CHECK-NEXT: 5000ps 0d 0e  root/sig1  0x00000000
 // CHECK-NEXT: 5000ps 0d 0e  root/sig2  0x00000000
-// CHECK-NEXT: 6000ps 0d 0e  root/sig1  0x00000002
 // CHECK-NEXT: 6000ps 0d 0e  root/clock  0x01
+// CHECK-NEXT: 6000ps 0d 0e  root/sig1  0x00000002
 // CHECK-NEXT: 7000ps 0d 0e  root/sig1  0x00000001
 // CHECK-NEXT: 7000ps 0d 0e  root/sig2  0xffffffff
-// CHECK-NEXT: 8000ps 0d 0e  root/sig1  0x00000003
 // CHECK-NEXT: 8000ps 0d 0e  root/clock  0x00
+// CHECK-NEXT: 8000ps 0d 0e  root/sig1  0x00000003
 // CHECK-NEXT: 9000ps 0d 0e  root/sig1  0x00000000
 // CHECK-NEXT: 9000ps 0d 0e  root/sig2  0x00000000
 llhd.entity @root () -> () {

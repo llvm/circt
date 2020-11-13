@@ -21,10 +21,10 @@ def InstanceOp : FIRRTLOp<"instance"> {
 
   let verifier = [{ return ::verifyInstanceOp(*this); }];
 
- let extraClassDeclaration = [{
-   /// Lookup the module or extmodule for the symbol.  This returns null on
-   /// invalid IR.
-   Operation *getReferencedModule();
+  let extraClassDeclaration = [{
+    /// Lookup the module or extmodule for the symbol.  This returns null on
+    /// invalid IR.
+    Operation *getReferencedModule();
   }];
 }
 

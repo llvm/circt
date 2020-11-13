@@ -94,7 +94,7 @@ static FIRRTLType getBundleType(Type type, bool isFlip) {
       .Case<NoneType>([&](NoneType) {
         return buildBundleType(/*dataType=*/nullptr, isFlip, context);
       })
-      .Default([&](Type) { return FIRRTLType(nullptr); });
+      .Default([&](Type) { return FIRRTLType(); });
 }
 
 static Value createConstantOp(FIRRTLType opType, APInt value,
@@ -105,8 +105,9 @@ static Value createConstantOp(FIRRTLType opType, APInt value,
                                         intOpType.isSigned());
     return rewriter.create<firrtl::ConstantOp>(
         insertLoc, opType, rewriter.getIntegerAttr(type, value));
-  } else
-    return Value(nullptr);
+  }
+
+  return Value();
 }
 
 /// Construct a name for creating FIRRTL sub-module. The returned string
@@ -142,6 +143,91 @@ static std::string getSubModuleName(Operation *oldOp) {
   return subModuleName;
 }
 
+/// Construct a tree of 1-bit muxes to multiplex arbitrary numbers of signals.
+static Value createMuxTree(ArrayRef<Value> inputs, Value select,
+                           Location insertLoc,
+                           ConversionPatternRewriter &rewriter) {
+  // Variables used to control iteration and select the appropriate bit.
+  unsigned numInputs = inputs.size();
+  double numLayers = std::ceil(std::log2(numInputs));
+  unsigned selectIdx = 0;
+
+  // Keep a vector of ValueRanges to represent the mux tree. Each value in the
+  // range is the output of a mux.
+  SmallVector<ArrayRef<Value>, 2> muxes;
+
+  // Helpers for repetetive calls.
+  auto createBits = [&](Value select, unsigned idx) {
+    return rewriter.create<BitsPrimOp>(insertLoc, select, idx, idx);
+  };
+
+  auto createMux = [&](Value select, ArrayRef<Value> operands, unsigned idx) {
+    return rewriter.create<MuxPrimOp>(insertLoc, operands[0].getType(), select,
+                                      operands[idx + 1], operands[idx]);
+  };
+
+  // Create an op to extract the least significant select bit.
+  auto selectBit = createBits(select, selectIdx);
+
+  // Create the first layer of muxes for the inputs.
+  SmallVector<Value, 4> initialValues;
+  for (unsigned i = 0; i < numInputs - 1; i += 2)
+    initialValues.push_back(createMux(selectBit, inputs, i));
+
+  // If the number of inputs is odd, we need to add the last input as well.
+  if (numInputs % 2)
+    initialValues.push_back(inputs[numInputs - 1]);
+
+  muxes.push_back(initialValues);
+
+  // Create any inner layers of muxes.
+  for (unsigned layer = 1; layer < numLayers; ++layer, ++selectIdx) {
+    // Get the previous layer of muxes.
+    ArrayRef<Value> prevLayer = muxes[layer - 1];
+    unsigned prevSize = prevLayer.size();
+
+    // Create an op to extract the select bit.
+    selectBit = createBits(select, selectIdx);
+
+    // Create this layer of muxes.
+    SmallVector<Value, 4> values;
+    for (unsigned i = 0; i < prevSize - 1; i += 2)
+      values.push_back(createMux(selectBit, prevLayer, i));
+
+    // If the number of values in the previous layer is odd, we need to add the
+    // last value as well.
+    if (prevSize % 2)
+      values.push_back(prevLayer[prevSize - 1]);
+
+    muxes.push_back(values);
+  }
+
+  // Get the last layer of muxes, which has a single value, and return it.
+  ArrayRef<Value> lastLayer = muxes.back();
+  assert(lastLayer.size() == 1 && "mux tree didn't result in a single value");
+  return lastLayer[0];
+}
+
+/// Construct a decoder by dynamically shifting 1 bit by the input amount.
+/// See http://www.imm.dtu.dk/~masca/chisel-book.pdf Section 5.2.
+static Value createDecoder(Value input, unsigned width, Location insertLoc,
+                           ConversionPatternRewriter &rewriter) {
+  auto *context = rewriter.getContext();
+
+  // Get a type for the result based on the explicitly specified width.
+  auto resultType = UIntType::get(context, width);
+
+  // Get a type for a single unsigned bit.
+  auto bitType = UIntType::get(context, 1);
+
+  // Create a constant of for one bit.
+  auto bit =
+      rewriter.create<firrtl::ConstantOp>(insertLoc, bitType, APInt(1, 1));
+
+  // Shift the bit dynamically by the input amount.
+  return rewriter.create<DShlPrimOp>(insertLoc, resultType, bit, input);
+}
+
 //===----------------------------------------------------------------------===//
 // FIRRTL Top-module Related Functions
 //===----------------------------------------------------------------------===//
@@ -152,50 +238,49 @@ static std::string getSubModuleName(Operation *oldOp) {
 /// supported in the next patch.
 static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
                                    ConversionPatternRewriter &rewriter) {
-  using ModulePort = std::pair<StringAttr, FIRRTLType>;
-  llvm::SmallVector<ModulePort, 8> ports;
+  llvm::SmallVector<ModulePortInfo, 8> ports;
 
   // Add all inputs of funcOp.
-  unsigned args_idx = 0;
+  unsigned argIndex = 0;
   for (auto &arg : funcOp.getArguments()) {
-    auto portName = rewriter.getStringAttr("arg" + std::to_string(args_idx));
+    auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
     auto bundlePortType = getBundleType(arg.getType(), /*isFlip=*/false);
 
     if (!bundlePortType)
       funcOp.emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back(ModulePort(portName, bundlePortType));
-    args_idx += 1;
+    ports.push_back({portName, bundlePortType});
+    ++argIndex;
   }
 
   // Add all outputs of funcOp.
   for (auto portType : funcOp.getType().getResults()) {
-    auto portName = rewriter.getStringAttr("arg" + std::to_string(args_idx));
+    auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
     auto bundlePortType = getBundleType(portType, /*isFlip=*/true);
 
     if (!bundlePortType)
       funcOp.emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back(ModulePort(portName, bundlePortType));
-    args_idx += 1;
+    ports.push_back({portName, bundlePortType});
+    ++argIndex;
   }
 
   // Add clock and reset signals.
   if (numClocks == 1) {
-    ports.push_back(ModulePort(rewriter.getStringAttr("clock"),
-                               rewriter.getType<ClockType>()));
-    ports.push_back(ModulePort(rewriter.getStringAttr("reset"),
-                               rewriter.getType<UIntType>(1)));
+    ports.push_back(
+        {rewriter.getStringAttr("clock"), rewriter.getType<ClockType>()});
+    ports.push_back(
+        {rewriter.getStringAttr("reset"), rewriter.getType<UIntType>(1)});
   } else if (numClocks > 1) {
     for (unsigned i = 0; i < numClocks; ++i) {
       auto clockName = "clock" + std::to_string(i);
       auto resetName = "reset" + std::to_string(i);
-      ports.push_back(ModulePort(rewriter.getStringAttr(clockName),
-                                 rewriter.getType<ClockType>()));
-      ports.push_back(ModulePort(rewriter.getStringAttr(resetName),
-                                 rewriter.getType<UIntType>(1)));
+      ports.push_back(
+          {rewriter.getStringAttr(clockName), rewriter.getType<ClockType>()});
+      ports.push_back(
+          {rewriter.getStringAttr(resetName), rewriter.getType<UIntType>(1)});
     }
   }
 
@@ -213,10 +298,10 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
 
   // Replace uses of each argument of the second block with the corresponding
   // argument of the entry block.
-  args_idx = 0;
+  argIndex = 0;
   for (auto &oldArg : secondBlock->getArguments()) {
-    oldArg.replaceAllUsesWith(entryBlock->getArgument(args_idx));
-    args_idx += 1;
+    oldArg.replaceAllUsesWith(entryBlock->getArgument(argIndex));
+    ++argIndex;
   }
 
   // Move all operations of the second block to the entry block.
@@ -252,42 +337,41 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
                                    bool hasClock,
                                    ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPoint(topModuleOp);
-  using ModulePort = std::pair<StringAttr, FIRRTLType>;
-  llvm::SmallVector<ModulePort, 8> ports;
+  llvm::SmallVector<ModulePortInfo, 8> ports;
 
   // Add all inputs of oldOp.
-  unsigned args_idx = 0;
+  unsigned argIndex = 0;
   for (auto portType : oldOp->getOperands().getTypes()) {
-    auto portName = rewriter.getStringAttr("arg" + std::to_string(args_idx));
+    auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
     auto bundlePortType = getBundleType(portType, /*isFlip=*/false);
 
     if (!bundlePortType)
       oldOp->emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back(ModulePort(portName, bundlePortType));
-    args_idx += 1;
+    ports.push_back({portName, bundlePortType});
+    ++argIndex;
   }
 
   // Add all outputs of oldOp.
   for (auto portType : oldOp->getResults().getTypes()) {
-    auto portName = rewriter.getStringAttr("arg" + std::to_string(args_idx));
+    auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
     auto bundlePortType = getBundleType(portType, /*isFlip=*/true);
 
     if (!bundlePortType)
       oldOp->emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back(ModulePort(portName, bundlePortType));
-    args_idx += 1;
+    ports.push_back({portName, bundlePortType});
+    ++argIndex;
   }
 
   // Add clock and reset signals.
   if (hasClock) {
-    ports.push_back(ModulePort(rewriter.getStringAttr("clock"),
-                               rewriter.getType<ClockType>()));
-    ports.push_back(ModulePort(rewriter.getStringAttr("reset"),
-                               rewriter.getType<UIntType>(1)));
+    ports.push_back(
+        {rewriter.getStringAttr("clock"), rewriter.getType<ClockType>()});
+    ports.push_back(
+        {rewriter.getStringAttr("reset"), rewriter.getType<UIntType>(1)});
   }
 
   return rewriter.create<FModuleOp>(
@@ -498,52 +582,73 @@ bool HandshakeBuilder::visitHandshake(JoinOp op) {
 }
 
 /// Please refer to test_mux.mlir test case.
+/// Lowers the MuxOp into primitive FIRRTL ops.
+/// See http://www.cs.columbia.edu/~sedwards/papers/edwards2019compositional.pdf
+/// Section 3.3.
 bool HandshakeBuilder::visitHandshake(MuxOp op) {
   ValueVector selectSubfields = portList.front();
   Value selectValid = selectSubfields[0];
   Value selectReady = selectSubfields[1];
   Value selectData = selectSubfields[2];
-  auto selectType = selectData.getType().cast<FIRRTLType>();
 
   ValueVector resultSubfields = portList.back();
   Value resultValid = resultSubfields[0];
   Value resultReady = resultSubfields[1];
   Value resultData = resultSubfields[2];
 
-  // Mux will work only when the select input is active.
-  auto validWhenOp = rewriter.create<WhenOp>(insertLoc, selectValid,
-                                             /*withElseRegion=*/false);
-  rewriter.setInsertionPointToStart(&validWhenOp.thenRegion().front());
-
-  // Walk through each input to create a chain of when operation.
+  // Walk through each arg data to collect the subfields.
+  SmallVector<Value, 4> argValid;
+  SmallVector<Value, 4> argReady;
+  SmallVector<Value, 4> argData;
   for (unsigned i = 1, e = portList.size() - 1; i < e; ++i) {
     ValueVector argSubfields = portList[i];
-    Value argValid = argSubfields[0];
-    Value argReady = argSubfields[1];
-    Value argData = argSubfields[2];
-
-    auto conditionOp = rewriter.create<EQPrimOp>(
-        insertLoc, UIntType::get(rewriter.getContext(), 1), selectData,
-        createConstantOp(selectType, APInt(64, i), insertLoc, rewriter));
-
-    // If the current input is not the last one, the new created when
-    // operation will have an else region.
-    auto branchWhenOp = rewriter.create<WhenOp>(
-        insertLoc, conditionOp, /*withElseRegion=*/(i != e - 1));
-
-    rewriter.setInsertionPointToStart(&branchWhenOp.thenRegion().front());
-    rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
-    rewriter.create<ConnectOp>(insertLoc, resultData, argData);
-    rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
-
-    // Select will be ready to accept new token when data has been passed from
-    // input to output.
-    auto selectReadyOp = rewriter.create<AndPrimOp>(
-        insertLoc, argValid.getType(), argValid, resultReady);
-    rewriter.create<ConnectOp>(insertLoc, selectReady, selectReadyOp);
-    if (i != e - 1)
-      rewriter.setInsertionPointToStart(&branchWhenOp.elseRegion().front());
+    argValid.push_back(argSubfields[0]);
+    argReady.push_back(argSubfields[1]);
+    argData.push_back(argSubfields[2]);
   }
+
+  // Mux the arg data.
+  auto muxedData = createMuxTree(argData, selectData, insertLoc, rewriter);
+
+  // Connect the selected data signal to the result data.
+  rewriter.create<ConnectOp>(insertLoc, resultData, muxedData);
+
+  // Mux the arg valids.
+  auto muxedValid = createMuxTree(argValid, selectData, insertLoc, rewriter);
+
+  // And that with the select valid.
+  auto muxedAndSelectValid = rewriter.create<AndPrimOp>(
+      insertLoc, muxedValid.getType(), muxedValid, selectValid);
+
+  // Connect that to the result valid.
+  rewriter.create<ConnectOp>(insertLoc, resultValid, muxedAndSelectValid);
+
+  // And the result valid with the result ready.
+  auto resultValidAndReady =
+      rewriter.create<AndPrimOp>(insertLoc, muxedAndSelectValid.getType(),
+                                 muxedAndSelectValid, resultReady);
+
+  // Connect that to the select ready.
+  rewriter.create<ConnectOp>(insertLoc, selectReady, resultValidAndReady);
+
+  // Create a decoder for the select data.
+  auto decodedSelect =
+      createDecoder(selectData, argData.size(), insertLoc, rewriter);
+
+  // Walk through each arg data.
+  for (unsigned i = 0, e = argData.size(); i != e; ++i) {
+    // Select the bit for this arg.
+    auto oneHot = rewriter.create<BitsPrimOp>(insertLoc, decodedSelect, i, i);
+
+    // And that with the result valid and ready.
+    auto oneHotAndResultValidAndReady = rewriter.create<AndPrimOp>(
+        insertLoc, oneHot.getType(), oneHot, resultValidAndReady);
+
+    // Connect that to this arg ready.
+    rewriter.create<ConnectOp>(insertLoc, argReady[i],
+                               oneHotAndResultValidAndReady);
+  }
+
   return true;
 }
 
@@ -650,57 +755,59 @@ bool HandshakeBuilder::visitHandshake(handshake::BranchOp op) {
 /// Two outputs conditional branch operation.
 /// Please refer to test_conditional_branch.mlir test case.
 bool HandshakeBuilder::visitHandshake(ConditionalBranchOp op) {
-  ValueVector controlSubfields = portList[0];
+  ValueVector conditionSubfields = portList[0];
   ValueVector argSubfields = portList[1];
-  ValueVector result0Subfields = portList[2];
-  ValueVector result1Subfields = portList[3];
+  ValueVector trueResultSubfields = portList[2];
+  ValueVector falseResultSubfields = portList[3];
 
-  Value controlValid = controlSubfields[0];
-  Value controlReady = controlSubfields[1];
-  Value controlData = controlSubfields[2];
+  Value conditionValid = conditionSubfields[0];
+  Value conditionReady = conditionSubfields[1];
+  Value conditionData = conditionSubfields[2];
   Value argValid = argSubfields[0];
   Value argReady = argSubfields[1];
-  Value result0Valid = result0Subfields[0];
-  Value result0Ready = result0Subfields[1];
-  Value result1Valid = result1Subfields[0];
-  Value result1Ready = result1Subfields[1];
+  Value trueResultValid = trueResultSubfields[0];
+  Value trueResultReady = trueResultSubfields[1];
+  Value falseResultValid = falseResultSubfields[0];
+  Value falseResultReady = falseResultSubfields[1];
 
-  // ConditionalBranch will work only when the control input is active.
-  auto validWhenOp = rewriter.create<WhenOp>(insertLoc, controlValid,
-                                             /*withElseRegion=*/false);
-  rewriter.setInsertionPointToStart(&validWhenOp.thenRegion().front());
-  auto branchWhenOp = rewriter.create<WhenOp>(insertLoc, controlData,
-                                              /*withElseRegion=*/true);
+  auto conditionArgValid = rewriter.create<AndPrimOp>(
+      insertLoc, conditionValid.getType(), conditionValid, argValid);
 
-  // When control signal is true, the first branch is selected
-  rewriter.setInsertionPointToStart(&branchWhenOp.thenRegion().front());
-  rewriter.create<ConnectOp>(insertLoc, result0Valid, argValid);
-  rewriter.create<ConnectOp>(insertLoc, argReady, result0Ready);
+  auto conditionNot = rewriter.create<NotPrimOp>(
+      insertLoc, conditionData.getType(), conditionData);
 
+  // Connect valid signal of both results.
+  rewriter.create<ConnectOp>(
+      insertLoc, trueResultValid,
+      rewriter.create<AndPrimOp>(insertLoc, conditionData.getType(),
+                                 conditionData, conditionArgValid));
+
+  rewriter.create<ConnectOp>(
+      insertLoc, falseResultValid,
+      rewriter.create<AndPrimOp>(insertLoc, conditionNot.getType(),
+                                 conditionNot, conditionArgValid));
+
+  // Connect data signal of both results if applied.
   if (!op.isControl()) {
     Value argData = argSubfields[2];
-    Value result0Data = result0Subfields[2];
-    rewriter.create<ConnectOp>(insertLoc, result0Data, argData);
+    Value trueResultData = trueResultSubfields[2];
+    Value falseResultData = falseResultSubfields[2];
+    rewriter.create<ConnectOp>(insertLoc, trueResultData, argData);
+    rewriter.create<ConnectOp>(insertLoc, falseResultData, argData);
   }
 
-  auto control0ReadyOp = rewriter.create<AndPrimOp>(
-      insertLoc, argValid.getType(), argValid, result0Ready);
-  rewriter.create<ConnectOp>(insertLoc, controlReady, control0ReadyOp);
+  // Connect ready signal of input and condition.
+  auto selectedResultReady = rewriter.create<MuxPrimOp>(
+      insertLoc, trueResultReady.getType(), conditionData, trueResultReady,
+      falseResultReady);
 
-  // When control signal is false, the second branch is selected
-  rewriter.setInsertionPointToStart(&branchWhenOp.elseRegion().front());
-  rewriter.create<ConnectOp>(insertLoc, result1Valid, argValid);
-  rewriter.create<ConnectOp>(insertLoc, argReady, result1Ready);
+  auto conditionArgReady =
+      rewriter.create<AndPrimOp>(insertLoc, selectedResultReady.getType(),
+                                 selectedResultReady, conditionArgValid);
 
-  if (!op.isControl()) {
-    Value argData = argSubfields[2];
-    Value result1Data = result1Subfields[2];
-    rewriter.create<ConnectOp>(insertLoc, result1Data, argData);
-  }
+  rewriter.create<ConnectOp>(insertLoc, argReady, conditionArgReady);
+  rewriter.create<ConnectOp>(insertLoc, conditionReady, conditionArgReady);
 
-  auto control1ReadyOp = rewriter.create<AndPrimOp>(
-      insertLoc, argValid.getType(), argValid, result1Ready);
-  rewriter.create<ConnectOp>(insertLoc, controlReady, control1ReadyOp);
   return true;
 }
 
@@ -833,15 +940,15 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
   MLIRContext *context = subModuleOp.getContext();
 
   // Bundle all ports of the instance into a new flattened bundle type.
-  unsigned args_idx = 0;
+  unsigned argIndex = 0;
   for (auto &arg : subModuleOp.getArguments()) {
-    std::string argName = "arg" + std::to_string(args_idx);
+    std::string argName = "arg" + std::to_string(argIndex);
     auto argId = rewriter.getIdentifier(argName);
 
     // All ports of the instance operation are flipped.
     auto argType = FlipType::get(arg.getType().cast<FIRRTLType>());
     elements.push_back(BundleElement(argId, argType));
-    args_idx += 1;
+    ++argIndex;
   }
 
   // Create a instance operation.
@@ -852,7 +959,7 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
 
   // Connect the new created instance with its predecessors and successors in
   // the top-module.
-  unsigned ports_idx = 0;
+  unsigned portIndex = 0;
   for (auto &element : instType.cast<BundleType>().getElements()) {
     Identifier elementName = element.first;
     FIRRTLType elementType = element.second;
@@ -868,20 +975,20 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
                                    [](BlockArgument &arg) -> bool {
                                      return arg.getType().isa<ClockType>();
                                    });
-    if (ports_idx < numIns) {
+    if (portIndex < numIns) {
       // Connect input ports.
       rewriter.create<ConnectOp>(oldOp->getLoc(), subfieldOp,
-                                 oldOp->getOperand(ports_idx));
-    } else if (ports_idx < numArgs) {
+                                 oldOp->getOperand(portIndex));
+    } else if (portIndex < numArgs) {
       // Connect output ports.
-      Value result = oldOp->getResult(ports_idx - numIns);
+      Value result = oldOp->getResult(portIndex - numIns);
       result.replaceAllUsesWith(subfieldOp);
     } else {
       // Connect clock or reset signal.
-      auto signal = *(firstClock + 2 * clockDomain + ports_idx - numArgs);
+      auto signal = *(firstClock + 2 * clockDomain + portIndex - numArgs);
       rewriter.create<ConnectOp>(oldOp->getLoc(), subfieldOp, signal);
     }
-    ports_idx += 1;
+    ++portIndex;
   }
   rewriter.eraseOp(oldOp);
 }
@@ -894,11 +1001,11 @@ static void convertReturnOp(Operation *oldOp, FModuleOp topModuleOp,
 
   // Connect each operand of the old return operation with the corresponding
   // output ports.
-  unsigned args_idx = 0;
+  unsigned argIndex = 0;
   for (auto result : oldOp->getOperands()) {
     rewriter.create<ConnectOp>(
-        oldOp->getLoc(), topModuleOp.getArgument(numIns + args_idx), result);
-    args_idx += 1;
+        oldOp->getLoc(), topModuleOp.getArgument(numIns + argIndex), result);
+    ++argIndex;
   }
 
   rewriter.eraseOp(oldOp);
