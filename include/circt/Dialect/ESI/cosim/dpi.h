@@ -25,10 +25,12 @@ extern int sv2cCosimserverEpRegister(int endpointId, long long sendTypeId,
                                      int recvTypeSize);
 /// Try to get a message from a client.
 extern int sv2cCosimserverEpTryGet(unsigned int endpointId,
+                                   // NOLINTNEXTLINE(misc-misplaced-const)
                                    const svOpenArrayHandle data,
                                    unsigned int *sizeBytes);
 /// Send a message to a client.
 extern int sv2cCosimserverEpTryPut(unsigned int endpointId,
+                                   // NOLINTNEXTLINE(misc-misplaced-const)
                                    const svOpenArrayHandle data, int dataLimit);
 
 /// Start the server. Not required as the first endpoint registration will do

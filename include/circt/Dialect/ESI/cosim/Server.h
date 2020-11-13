@@ -14,7 +14,7 @@
 
 namespace std {
 class thread;
-}
+} // namespace std
 
 namespace circt {
 namespace esi {

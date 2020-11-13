@@ -4,15 +4,15 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_ESI_COSIM_ENDPOINT_H
+#define CIRCT_DIALECT_ESI_COSIM_ENDPOINT_H
+
 #include "circt/Dialect/ESI/cosim/CosimDpi.capnp.h"
 #include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <queue>
-
-#ifndef CIRCT_DIALECT_ESI_COSIM_ENDPOINT_H
-#define CIRCT_DIALECT_ESI_COSIM_ENDPOINT_H
 
 namespace circt {
 namespace esi {
