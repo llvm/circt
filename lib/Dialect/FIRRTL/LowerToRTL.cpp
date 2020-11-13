@@ -60,6 +60,20 @@ static Value castFromFIRRTLType(Value val, Type type,
   return builder.createOrFold<StdIntCast>(type, val);
 }
 
+/// Given a value of standard integer type, convert it to the specified integer
+/// type, inserting a zero extend or truncate as needed.
+static Value zeroExtendOrTruncate(Value val, Type destTy,
+                                  ImplicitLocOpBuilder &builder) {
+  assert(val.getType().isa<IntegerType>() && destTy.isa<IntegerType>() &&
+         "only works with integer values");
+  if (val.getType() == destTy)
+    return val;
+
+  if (val.getType().getIntOrFloatBitWidth() < destTy.getIntOrFloatBitWidth())
+    return builder.create<rtl::ZExtOp>(destTy, val);
+  return builder.create<rtl::ExtractOp>(destTy, val, 0);
+}
+
 //===----------------------------------------------------------------------===//
 // firrtl.module Lowering Pass
 //===----------------------------------------------------------------------===//
@@ -1070,35 +1084,30 @@ LogicalResult FIRRTLLowering::visitExpr(ShrPrimOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(DShlPrimOp op) {
-  // rtl has equal types for these, firrtl doesn't.
-  auto lhs = getLoweredAndExtendedValue(op.lhs(), op.result().getType());
-  if (!lhs)
-    return failure();
-
-  auto rhs = getLoweredAndExtendedValue(op.rhs(), op.result().getType());
-  if (!rhs)
-    return failure();
-
-  return setLoweringTo<rtl::ShlOp>(op, lhs, rhs);
-}
-
-LogicalResult FIRRTLLowering::visitExpr(DShrPrimOp op) {
   // rtl has equal types for these, firrtl doesn't.  The type of the firrtl RHS
-  // may be wider than the LHS.
+  // may be wider than the LHS, and a small shift amount needs to be zero
+  // extended even for signed shifts.
   auto lhs = getLoweredAndExtendedValue(op.lhs(), op.result().getType());
   auto rhs = getLoweredValue(op.rhs());
   if (!lhs || !rhs)
     return failure();
 
-  // If we need to extend or truncate the shift amount, do so.
-  if (lhs.getType() != rhs.getType()) {
-    if (lhs.getType().getIntOrFloatBitWidth() >
-        rhs.getType().getIntOrFloatBitWidth())
-      rhs = builder->create<rtl::ZExtOp>(lhs.getType(), rhs);
-    else
-      rhs = builder->create<rtl::ExtractOp>(lhs.getType(), rhs, 0);
-  }
+  // Zero extend or truncate the shift amount if needed.
+  rhs = zeroExtendOrTruncate(rhs, lhs.getType(), *builder);
+  return setLoweringTo<rtl::ShlOp>(op, lhs, rhs);
+}
 
+LogicalResult FIRRTLLowering::visitExpr(DShrPrimOp op) {
+  // rtl has equal types for these, firrtl doesn't.  The type of the firrtl RHS
+  // may be wider than the LHS, and a small shift amount needs to be zero
+  // extended even for signed shifts.
+  auto lhs = getLoweredAndExtendedValue(op.lhs(), op.result().getType());
+  auto rhs = getLoweredValue(op.rhs());
+  if (!lhs || !rhs)
+    return failure();
+
+  // Zero extend or truncate the shift amount if needed.
+  rhs = zeroExtendOrTruncate(rhs, lhs.getType(), *builder);
   return setLoweringTo<rtl::ShrOp>(op, lhs, rhs);
 }
 

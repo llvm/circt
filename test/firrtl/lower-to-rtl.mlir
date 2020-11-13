@@ -151,6 +151,10 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: = rtl.shr [[XOR]], {{.*}} : i3
     %29 = firrtl.dshr %24, %18 : (!firrtl.uint<3>, !firrtl.uint<12>) -> !firrtl.uint<3>
 
+    // CHECK-NEXT: = rtl.zext %2 : (i3) -> i8
+    // CHECK-NEXT: = rtl.shl %arg2, {{.*}} : i8
+    %30 = firrtl.dshl %in3, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<8>
+
     // CHECK-NEXT: rtl.output %tmp3 : i4
     rtl.output %tmp3 : i4
   }
