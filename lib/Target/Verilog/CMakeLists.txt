@@ -6,4 +6,5 @@ add_mlir_library(MLIRLLHDTargetVerilog
 
   LINK_LIBS PUBLIC
   MLIRLLHD
+  MLIRTranslation
   )

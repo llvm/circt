@@ -755,57 +755,59 @@ bool HandshakeBuilder::visitHandshake(handshake::BranchOp op) {
 /// Two outputs conditional branch operation.
 /// Please refer to test_conditional_branch.mlir test case.
 bool HandshakeBuilder::visitHandshake(ConditionalBranchOp op) {
-  ValueVector controlSubfields = portList[0];
+  ValueVector conditionSubfields = portList[0];
   ValueVector argSubfields = portList[1];
-  ValueVector result0Subfields = portList[2];
-  ValueVector result1Subfields = portList[3];
+  ValueVector trueResultSubfields = portList[2];
+  ValueVector falseResultSubfields = portList[3];
 
-  Value controlValid = controlSubfields[0];
-  Value controlReady = controlSubfields[1];
-  Value controlData = controlSubfields[2];
+  Value conditionValid = conditionSubfields[0];
+  Value conditionReady = conditionSubfields[1];
+  Value conditionData = conditionSubfields[2];
   Value argValid = argSubfields[0];
   Value argReady = argSubfields[1];
-  Value result0Valid = result0Subfields[0];
-  Value result0Ready = result0Subfields[1];
-  Value result1Valid = result1Subfields[0];
-  Value result1Ready = result1Subfields[1];
+  Value trueResultValid = trueResultSubfields[0];
+  Value trueResultReady = trueResultSubfields[1];
+  Value falseResultValid = falseResultSubfields[0];
+  Value falseResultReady = falseResultSubfields[1];
 
-  // ConditionalBranch will work only when the control input is active.
-  auto validWhenOp = rewriter.create<WhenOp>(insertLoc, controlValid,
-                                             /*withElseRegion=*/false);
-  rewriter.setInsertionPointToStart(&validWhenOp.thenRegion().front());
-  auto branchWhenOp = rewriter.create<WhenOp>(insertLoc, controlData,
-                                              /*withElseRegion=*/true);
+  auto conditionArgValid = rewriter.create<AndPrimOp>(
+      insertLoc, conditionValid.getType(), conditionValid, argValid);
 
-  // When control signal is true, the first branch is selected
-  rewriter.setInsertionPointToStart(&branchWhenOp.thenRegion().front());
-  rewriter.create<ConnectOp>(insertLoc, result0Valid, argValid);
-  rewriter.create<ConnectOp>(insertLoc, argReady, result0Ready);
+  auto conditionNot = rewriter.create<NotPrimOp>(
+      insertLoc, conditionData.getType(), conditionData);
 
+  // Connect valid signal of both results.
+  rewriter.create<ConnectOp>(
+      insertLoc, trueResultValid,
+      rewriter.create<AndPrimOp>(insertLoc, conditionData.getType(),
+                                 conditionData, conditionArgValid));
+
+  rewriter.create<ConnectOp>(
+      insertLoc, falseResultValid,
+      rewriter.create<AndPrimOp>(insertLoc, conditionNot.getType(),
+                                 conditionNot, conditionArgValid));
+
+  // Connect data signal of both results if applied.
   if (!op.isControl()) {
     Value argData = argSubfields[2];
-    Value result0Data = result0Subfields[2];
-    rewriter.create<ConnectOp>(insertLoc, result0Data, argData);
+    Value trueResultData = trueResultSubfields[2];
+    Value falseResultData = falseResultSubfields[2];
+    rewriter.create<ConnectOp>(insertLoc, trueResultData, argData);
+    rewriter.create<ConnectOp>(insertLoc, falseResultData, argData);
   }
 
-  auto control0ReadyOp = rewriter.create<AndPrimOp>(
-      insertLoc, argValid.getType(), argValid, result0Ready);
-  rewriter.create<ConnectOp>(insertLoc, controlReady, control0ReadyOp);
+  // Connect ready signal of input and condition.
+  auto selectedResultReady = rewriter.create<MuxPrimOp>(
+      insertLoc, trueResultReady.getType(), conditionData, trueResultReady,
+      falseResultReady);
 
-  // When control signal is false, the second branch is selected
-  rewriter.setInsertionPointToStart(&branchWhenOp.elseRegion().front());
-  rewriter.create<ConnectOp>(insertLoc, result1Valid, argValid);
-  rewriter.create<ConnectOp>(insertLoc, argReady, result1Ready);
+  auto conditionArgReady =
+      rewriter.create<AndPrimOp>(insertLoc, selectedResultReady.getType(),
+                                 selectedResultReady, conditionArgValid);
 
-  if (!op.isControl()) {
-    Value argData = argSubfields[2];
-    Value result1Data = result1Subfields[2];
-    rewriter.create<ConnectOp>(insertLoc, result1Data, argData);
-  }
+  rewriter.create<ConnectOp>(insertLoc, argReady, conditionArgReady);
+  rewriter.create<ConnectOp>(insertLoc, conditionReady, conditionArgReady);
 
-  auto control1ReadyOp = rewriter.create<AndPrimOp>(
-      insertLoc, argValid.getType(), argValid, result1Ready);
-  rewriter.create<ConnectOp>(insertLoc, controlReady, control1ReadyOp);
   return true;
 }
 
