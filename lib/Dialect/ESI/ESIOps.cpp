@@ -52,24 +52,5 @@ void print(OpAsmPrinter &p, ChannelBuffer &op) {
   p << " : " << op.output().getType().cast<ChannelPort>().getInner();
 }
 
-static LogicalResult verifyInstantiatedOp(InstantiatedOp op) {
-  auto moduleIR = op.getParentOfType<SnippetOp>();
-  if (moduleIR == nullptr) {
-    op.emitError("Must be contained within a snippet region");
-    return failure();
-  }
-  auto referencedModule =
-      mlir::SymbolTable::lookupSymbolIn(moduleIR, op.moduleName());
-  if (referencedModule == nullptr) {
-    op.emitError("Cannot find module definition '") << op.moduleName() << "'.";
-    return failure();
-  }
-  if (!isa<circt::rtl::RTLExternModuleOp>(referencedModule)) {
-    op.emitError("Symbol resolved to '")
-        << referencedModule->getName() << "' which is not a RTLExternModuleOp.";
-    return failure();
-  }
-  return success();
-}
 #define GET_OP_CLASSES
 #include "circt/Dialect/ESI/ESI.cpp.inc"

@@ -22,7 +22,6 @@ class ESI_Op<string mnemonic, list<OpTrait> traits = []> :
     Op<ESI_Dialect, mnemonic, traits>;
 
 include "ESIPorts.td"
-include "ESIIntegrationOps.td"
 include "ESIOps.td"
 
 #endif // ESI_TD
