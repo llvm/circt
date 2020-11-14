@@ -83,7 +83,7 @@ DPI int sv2cCosimserverEpRegister(int endpointId, long long sendTypeId,
 
 // Attempt to recieve data from a client.
 //   - Returns negative when call failed (e.g. EP not registered).
-//   - If no message, return 0 with size_bytes == 0.
+//   - If no message, return 0 with dataSize == 0.
 //   - Assumes buffer is large enough to contain entire message. Fails if not
 //     large enough. (In the future, will add support for getting the message
 //     into a fixed-size buffer over multiple calls.)
