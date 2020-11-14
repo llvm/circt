@@ -98,7 +98,7 @@ kj::Promise<void> CosimServer::list(ListContext context) {
     ifaces[ctr].setEndpointID(id);
     ifaces[ctr].setSendTypeID(ep.getSendTypeId());
     ifaces[ctr].setRecvTypeID(ep.getRecvTypeId());
-    ctr++;
+    ++ctr;
   });
   return kj::READY_NOW;
 }

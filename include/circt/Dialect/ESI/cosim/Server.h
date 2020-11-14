@@ -21,9 +21,9 @@ namespace esi {
 namespace cosim {
 
 /// Implements the `EsiDpiEndpoint` interface from the RPC schema. Mostly a
-/// wrapper around an `EndPoint` object. Whereas the `EndPoints` are long-lived
-/// (associate with the RTL endpoint), this class is constructed/destructed when
-/// the client open()s it.
+/// wrapper around an `Endpoint` object. Whereas the `Endpoint`s are long-lived
+/// (associated with the RTL endpoint), this class is constructed/destructed
+/// when the client open()s it.
 class EndpointServer final
     : public EsiDpiEndpoint<capnp::AnyPointer, capnp::AnyPointer>::Server {
   /// The wrapped endpoint.
@@ -63,7 +63,7 @@ public:
 /// The main RpcServer. Does not implement any capnp RPC interfaces but contains
 /// the capnp main RPC server. We run the capnp server in its own thread to be
 /// more responsive to network traffic and so as to not slow down the
-/// simulation and be more responsive to network traffic.
+/// simulation.
 class RpcServer {
 public:
   EndpointRegistry endpoints;

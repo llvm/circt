@@ -1,5 +1,5 @@
-find_package(CapnProto CONFIG PATHS "${CMAKE_SOURCE_DIR}/ext")
 if(ESI_COSIM)
+  find_package(CapnProto CONFIG PATHS "${CMAKE_SOURCE_DIR}/ext")
   add_library(EsiCosimDpiServer SHARED
     DpiEntryPoints.cpp
     Server.cpp
