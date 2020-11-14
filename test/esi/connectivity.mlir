@@ -1,11 +1,19 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
 module {
-  rtl.externmodule @Sender() -> ( !esi.channel<i1> { rtl.name = "x"})
-  rtl.externmodule @Reciever(%a: !esi.channel<i1>)
+  rtl.module @Sender() -> ( !esi.channel<i1> { rtl.name = "x"}) {
+    %0 = constant 0 : i1
+    %1 = esi.wrap %0 : i1 -> !esi.channel<i1>
+    rtl.output %1 : !esi.channel<i1>
+  }
+  rtl.module @Reciever(%a: !esi.channel<i1>) {
+    %0 = esi.unwrap %a : !esi.channel<i1> -> i1
+  }
 
-  // CHECK-LABEL: rtl.externmodule @Sender() -> (!esi.channel<i1> {rtl.name = "x"})
-  // CHECK-LABEL: rtl.externmodule @Reciever(!esi.channel<i1> {rtl.name = "a"})
+  // CHECK-LABEL: rtl.module @Sender() -> (!esi.channel<i1> {rtl.name = "x"}) {
+  // CHECK:         %0 = esi.wrap %false : i1 -> !esi.channel<i1>
+  // CHECK-LABEL: rtl.module @Reciever(%arg0: !esi.channel<i1> {rtl.name = "a"}) {
+  // CHECK:         %0 = esi.unwrap %arg0 : !esi.channel<i1> -> i1
 
   rtl.module @test() {
     %esiChan = rtl.instance "sender" @Sender () : () -> (!esi.channel<i1>)

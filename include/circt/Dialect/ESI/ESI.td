@@ -16,6 +16,9 @@ def ESI_Dialect : Dialect {
   let cppNamespace = "::circt::esi";
 }
 
+class ESI_Op<string mnemonic, list<OpTrait> traits = []> :
+    Op<ESI_Dialect, mnemonic, traits>;
+
 include "ESIPorts.td"
 include "ESIOps.td"
 
