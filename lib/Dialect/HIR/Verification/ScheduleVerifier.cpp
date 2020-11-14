@@ -52,9 +52,7 @@ public:
     assert(t);
     assert(t.getType().isa<TimeType>());
     assert(v);
-    assert(!v.getType().isa<hir::WireType>());
-    assert(!v.getType().isa<hir::MemrefType>());
-    assert(!v.getType().isa<hir::ConstType>());
+    assert(v.getType().isa<IntegerType>() || v.getType().isa<TimeType>());
     if (v != t)
       while (1) {
         auto it = mapValueToTimeInstant.find(t);
@@ -197,6 +195,9 @@ bool ScheduleVerifier::inspectOp(DefOp op) {
   // Indentity map for root level time vars.
   schedule.insert(tstart, tstart, 0);
   for (int i = 0; i < input_delays.size(); i++) {
+    mapValueToDefiningLoc.insert(std::make_pair(args[i], op.getLoc()));
+    if (!args[i].getType().isa<IntegerType>())
+      continue;
     int delay = input_delays[i].dyn_cast<IntegerAttr>().getInt();
     schedule.insert(args[i], tstart, delay);
   }

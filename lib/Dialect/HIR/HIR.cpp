@@ -648,7 +648,7 @@ static void printDefSignature(OpAsmPrinter &printer, DefOp op) {
 
 static void printDefOp(OpAsmPrinter &printer, DefOp op) {
   // Print function name, signature, and control.
-  printer << "hir.def ";
+  printer << op.getOperationName() << " ";
   printer.printSymbolName(op.sym_name());
   Region &body = op.getOperation()->getRegion(0);
   printer << " at "

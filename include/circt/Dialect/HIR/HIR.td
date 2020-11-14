@@ -340,7 +340,7 @@ def CallOp : HIR_Op<"call",[AttrSizedOperandSegments] > {
   //}];
 }
 
-def DefOp : HIR_Op<"def",
+def DefOp : HIR_Op<"func",
     [DeclareOpInterfaceMethods<CallableOpInterface>, FunctionLike, IsolatedFromAbove,Symbol] > {
       let summary = "Function definition";
       let description = [{

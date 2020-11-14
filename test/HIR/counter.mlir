@@ -1,4 +1,4 @@
-hir.def @counter at %t (%rst : !hir.wire<1*i1,r>,
+hir.func @counter at %t (%rst : !hir.wire<1*i1,r>,
 %load : !hir.wire<1*i1,r>,
 %out : !hir.wire<1*i4,w>){
   %0 = hir.constant 0 : !hir.const<i32>
