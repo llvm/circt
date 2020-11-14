@@ -33,3 +33,33 @@ def Channel : ESI_Port<"Channel"> {
 
 def ChannelType :
   Type<CPred<"$_self.isa<::circt::esi::ChannelPort>()">, "">;
+
+
+def Wrap : ESI_Op<"wrap", [NoSideEffect]> {
+  let summary = "Wrap a value into an ESI port";
+  let description = [{
+    Wrapping a value into an ESI port type allows modules to send values
+    down an ESI port.
+  }];
+
+  let arguments = (ins AnyType:$input);
+  let results = (outs ChannelType:$output);
+
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($output)
+  }];
+}
+
+def Unwrap : ESI_Op<"unwrap", [NoSideEffect]> {
+  let summary = "Unwrap a value from an ESI port";
+  let description = [{
+    Unwrapping a value allows operations on the contained value.
+  }];
+
+  let arguments = (ins ChannelType:$input);
+  let results = (outs AnyType:$output);
+
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($output)
+  }];
+}

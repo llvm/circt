@@ -4,10 +4,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-
-class ESI_Op<string mnemonic, list<OpTrait> traits = []> :
-    Op<ESI_Dialect, mnemonic, traits>;
-
 /// Define a struct with all the possible ChannelBuffer options
 def ChannelBufferOptions : StructAttr<"ChannelBufferOptions", ESI_Dialect, [
     // 'Stages' is used to specify a specific number of cycles (pipeline stages)
