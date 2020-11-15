@@ -130,10 +130,6 @@ static LogicalResult applyMLIRPasses(ModuleOp module) {
 
   pm.addPass(llhd::createConvertLLHDToLLVMPass());
 
-  if (optimizationLevel > 1) {
-    pm.addPass(createCSEPass());
-  }
-
   return pm.run(module);
 }
 

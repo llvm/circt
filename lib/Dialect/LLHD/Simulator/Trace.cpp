@@ -33,7 +33,7 @@ Trace::Trace(std::unique_ptr<State> const &state, llvm::raw_ostream &out,
 // Changes gathering methods
 //===----------------------------------------------------------------------===//
 
-void Trace::pushChange(std::string inst, unsigned sigIndex, int elem = -1) {
+void Trace::pushChange(unsigned inst, unsigned sigIndex, int elem = -1) {
   auto &sig = state->signals[sigIndex];
   std::string valueDump;
   std::string path;
@@ -59,7 +59,7 @@ void Trace::pushChange(std::string inst, unsigned sigIndex, int elem = -1) {
   }
 }
 
-void Trace::pushAllChanges(std::string inst, unsigned sigIndex) {
+void Trace::pushAllChanges(unsigned inst, unsigned sigIndex) {
   auto &sig = state->signals[sigIndex];
   if (sig.elements.size() > 0) {
     // Push changes for all signal elements.
@@ -82,7 +82,7 @@ void Trace::addChange(unsigned sigIndex) {
         pushAllChanges(inst, sigIndex);
       }
     } else if (mode == reduced) {
-      pushAllChanges(state->root, sigIndex);
+      pushAllChanges(state->instances.size() - 1, sigIndex);
     } else if (mode == merged || mode == mergedReduce || mode == namedOnly) {
       addChangeMerged(sigIndex);
     }
@@ -151,7 +151,7 @@ void Trace::flushMerged() {
       }
     } else {
       // Add change only for owner instance.
-      pushChange(sig.owner, sigIndex, sigElem);
+      pushChange(state->instances.size() - 1, sigIndex, sigElem);
     }
   }
 

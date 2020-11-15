@@ -29,7 +29,6 @@ Engine::Engine(
     llvm::function_ref<llvm::Error(llvm::Module *)> llvmTransformer,
     std::string root, int mode)
     : out(out), root(root), traceMode(mode) {
-  startTimer(0);
   state = std::make_unique<State>();
   state->root = root + '.' + root;
 
@@ -58,7 +57,7 @@ Engine::Engine(
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
   auto maybeEngine =
-      mlir::ExecutionEngine::create(this->module, llvmTransformer);
+      mlir::ExecutionEngine::create(this->module, nullptr, llvmTransformer);
   assert(maybeEngine && "failed to create JIT");
   engine = std::move(*maybeEngine);
 }
@@ -121,13 +120,13 @@ int Engine::simulate(int n, uint64_t maxTime) {
       trace.flush();
 
     // Process signal changes.
-    startTimer(2);
     for (size_t i = 0, e = pop.changesSize; i < e;) {
       const auto currsig = pop.sigs[i].first;
       const auto &curr = state->signals[currsig];
-      APInt buff(curr.size * 8,
-                 makeArrayRef(reinterpret_cast<uint64_t *>(curr.value),
-                              llvm::divideCeil(curr.size, 8)));
+      APInt buff(
+          curr.size * 8,
+          llvm::makeArrayRef(reinterpret_cast<uint64_t *>(curr.value.get()),
+                             llvm::divideCeil(curr.size, 8)));
       while (i < e && pop.sigs[i].first == currsig) {
         const auto &change = pop.changes[pop.sigs[i].second];
         const auto offset = change.first;
@@ -141,11 +140,11 @@ int Engine::simulate(int n, uint64_t maxTime) {
       }
 
       // Skip if the updated signal value is equal to the initial value.
-      if (std::memcmp(curr.value, buff.getRawData(), curr.size) == 0)
+      if (std::memcmp(curr.value.get(), buff.getRawData(), curr.size) == 0)
         continue;
 
       // Apply the signal update.
-      std::memcpy(curr.value, buff.getRawData(), curr.size);
+      std::memcpy(curr.value.get(), buff.getRawData(), curr.size);
 
       // Add sensitive instances.
       for (auto inst : curr.triggers) {
@@ -233,7 +232,7 @@ void Engine::buildLayout(ModuleOp module) {
   // The root is always an instance.
   rootInst.isEntity = true;
   // Store the root instance.
-  state->instances.push_back(rootInst);
+  state->instances.push_back(std::move(rootInst));
 
   // Add triggers to signals.
   for (size_t i = 0, e = state->instances.size(); i < e; ++i) {
@@ -315,7 +314,7 @@ void Engine::walkEntity(EntityOp entity, Instance &child) {
         }
 
         // Store the created instance.
-        state->instances.push_back(newChild);
+        state->instances.push_back(std::move(newChild));
       }
     }
   });

@@ -50,7 +50,7 @@ void allocEntity(State *state, char *owner, uint8_t *entityState) {
     llvm::errs() << "could not find an instance named " << owner << "\n";
     exit(EXIT_FAILURE);
   }
-  (*it).entityState = entityState;
+  (*it).entityState = std::unique_ptr<uint8_t>(entityState);
 }
 
 void driveSignal(State *state, SignalDetail *detail, uint8_t *value,

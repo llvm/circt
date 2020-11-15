@@ -239,10 +239,6 @@ void UpdateQueue::pop() {
 //===----------------------------------------------------------------------===//
 
 State::~State() {
-  for (int i = 0, e = signals.size(); i < e; ++i)
-    if (signals[i].value)
-      std::free(signals[i].value);
-
   for (auto &inst : instances) {
     if (inst.procState) {
       std::free(inst.procState->senses);
@@ -279,7 +275,7 @@ void State::addProcPtr(std::string name, ProcState *procStatePtr) {
 
   // Store instance index in process state.
   procStatePtr->inst = it - instances.begin();
-  (*it).procState = procStatePtr;
+  (*it).procState = std::unique_ptr<ProcState>(procStatePtr);
 }
 
 int State::addSignalData(int index, std::string owner, uint8_t *value,
@@ -290,8 +286,8 @@ int State::addSignalData(int index, std::string owner, uint8_t *value,
     llvm::errs() << "could not find an instance named " << owner << "\n";
     exit(EXIT_FAILURE);
   }
-  auto inst = (*it);
-  uint64_t globalIdx = inst.sensitivityList[index + inst.nArgs].globalIndex;
+
+  uint64_t globalIdx = (*it).sensitivityList[index + (*it).nArgs].globalIndex;
   auto &sig = signals[globalIdx];
 
   // Add pointer and size to global signal table entry.
