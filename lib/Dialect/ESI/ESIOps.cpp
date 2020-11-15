@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/ESI/ESIOps.h"
-#include "circt/Dialect/RTL/Ops.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
