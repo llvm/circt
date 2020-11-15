@@ -120,7 +120,8 @@ int Engine::simulate(int n, uint64_t maxTime) {
       trace.flush();
 
     // Process signal changes.
-    for (size_t i = 0, e = pop.changesSize; i < e;) {
+    size_t i = 0, e = pop.changesSize;
+    while (i < e) {
       const auto currsig = pop.sigs[i].first;
       const auto &curr = state->signals[currsig];
       APInt buff(
