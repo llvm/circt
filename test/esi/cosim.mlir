@@ -21,6 +21,6 @@ module {
     // CHECK:  %cosimSend = rtl.instance "send" @Sender() : () -> !esi.channel<i1>
 
     %cosimRecv = esi.cosim (%cosimSend) {} : !esi.channel<i1> -> !esi.channel<i1>
-    // CHECK:  %0 = esi.cosim(%cosimSend) {} : !esi.channel<i1> -> !esi.channel<i1>
+    // CHECK:  %0 = esi.cosim(%cosimSend) : !esi.channel<i1> -> !esi.channel<i1>
   }
 }

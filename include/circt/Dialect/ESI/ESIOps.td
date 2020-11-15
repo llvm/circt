@@ -41,10 +41,6 @@ def ChannelBuffer : ESI_Op<"buffer", [NoSideEffect, SameTypeOperands]> {
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
-
-def CosimEpOptions : StructAttr<"CosimEpOptions", ESI_Dialect, [
-]>;
-
 def CosimEndpoint : ESI_Op<"cosim", []> {
   let summary = "Co-simulation endpoint";
   let description = [{
@@ -63,8 +59,8 @@ def CosimEndpoint : ESI_Op<"cosim", []> {
     supported by the specific protocol.
   }];
 
-  let arguments = (ins ChannelType:$input, CosimEpOptions:$options);
+  let arguments = (ins ChannelType:$input);
   let results = (outs ChannelType:$output);
 
-  let assemblyFormat = [{ `(` $input `)` $options attr-dict `:` type($input) `->` type($output) }];
+  let assemblyFormat = [{ `(` $input `)` attr-dict `:` type($input) `->` type($output) }];
 }
