@@ -9,6 +9,7 @@
 
 #include "circt/Conversion/HandshakeToFIRRTL/HandshakeToFIRRTL.h"
 #include "circt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/Types.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/Visitor.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -686,49 +687,41 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
 /// Assume only one input is active.
 /// Please refer to test_cmerge.mlir test case.
 bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
-  unsigned numPorts = portList.size();
+  auto *context = rewriter.getContext();
 
-  ValueVector resultSubfields = portList[numPorts - 2];
+  bool isControl = op.isControl();
+  unsigned numPorts = portList.size();
+  unsigned numInputs = numPorts - 4;
+
+  // The clock and reset signals will be used for registers.
+  Value clock = portList[numPorts - 2][0];
+  Value reset = portList[numPorts - 1][0];
+
+  // The second to last output has the result's ready and valid signals, and
+  // possibly data signal if isControl is not set.
+  ValueVector resultSubfields = portList[numInputs];
   Value resultValid = resultSubfields[0];
   Value resultReady = resultSubfields[1];
 
   // The last output indicates which input is active now.
-  ValueVector controlSubfields = portList[numPorts - 1];
+  ValueVector controlSubfields = portList[numInputs + 1];
   Value controlValid = controlSubfields[0];
   Value controlReady = controlSubfields[1];
   Value controlData = controlSubfields[2];
   auto controlType = FlipType::get(controlData.getType().cast<FIRRTLType>());
 
-  auto argReadyOp = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
-                                               resultReady, controlReady);
-
-  // Walk through each input to create a chain of when operation.
-  for (unsigned i = 0, e = numPorts - 2; i < e; ++i) {
+  // Walk through each arg data to collect the subfields.
+  SmallVector<Value, 4> argValid;
+  SmallVector<Value, 4> argReady;
+  SmallVector<Value, 4> argData;
+  for (unsigned i = 0; i < numInputs; ++i) {
     ValueVector argSubfields = portList[i];
-    Value argValid = argSubfields[0];
-    Value argReady = argSubfields[1];
-
-    // If the current input is not the last one, the new created when operation
-    // will have an else region.
-    auto whenOp = rewriter.create<WhenOp>(insertLoc, argValid,
-                                          /*withElseRegion=*/(i != e - 1));
-    rewriter.setInsertionPointToStart(&whenOp.thenRegion().front());
-    rewriter.create<ConnectOp>(
-        insertLoc, controlData,
-        createConstantOp(controlType, APInt(64, i), insertLoc, rewriter));
-    rewriter.create<ConnectOp>(insertLoc, controlValid, argValid);
-    rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
-    rewriter.create<ConnectOp>(insertLoc, argReady, argReadyOp);
-
-    if (!op.getAttrOfType<BoolAttr>("control").getValue()) {
-      Value argData = argSubfields[2];
-      Value resultData = resultSubfields[2];
-      rewriter.create<ConnectOp>(insertLoc, resultData, argData);
-    }
-
-    if (i != e - 1)
-      rewriter.setInsertionPointToStart(&whenOp.elseRegion().front());
+    argValid.push_back(argSubfields[0]);
+    argReady.push_back(argSubfields[1]);
+    if (!isControl)
+      argData.push_back(argSubfields[2]);
   }
+
   return true;
 }
 
@@ -1061,7 +1054,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       // be instantiated in the top-module.
       else if (op.getDialect()->getNamespace() != "firrtl") {
         FModuleOp subModuleOp = checkSubModuleOp(topModuleOp, &op);
-        bool hasClock = isa<handshake::BufferOp>(op);
+        bool hasClock = isa<handshake::BufferOp, handshake::ControlMergeOp>(op);
 
         // Check if the sub-module already exists.
         if (!subModuleOp) {
