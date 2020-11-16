@@ -2,6 +2,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/Ops.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/FIRRTL/Visitors.h"
@@ -18,9 +19,6 @@ template <typename T = FIRRTLType>
 static T getTypeOf(Value v) {
   return v.getType().cast<T>();
 }
-
-#define GEN_PASS_CLASSES
-#include "circt/Dialect/FIRRTL/FIRRTLPasses.h.inc"
 
 /// Given a FIRRTL type, return the corresponding type for the RTL dialect.
 /// This returns a null type if it cannot be lowered.
