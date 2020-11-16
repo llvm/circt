@@ -722,6 +722,14 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
       argData.push_back(argSubfields[2]);
   }
 
+  // Declare won register for storing arbitration winner.
+  auto regType = UIntType::get(context, numInputs);
+  auto regName = rewriter.getStringAttr("won");
+  auto const0 =
+      createConstantOp(regType, APInt(numInputs, 0), insertLoc, rewriter);
+  auto wonReg = rewriter.create<RegInitOp>(insertLoc, regType, clock, reset,
+                                           const0, regName);
+
   return true;
 }
 
