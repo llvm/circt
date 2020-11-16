@@ -40,3 +40,27 @@ def ChannelBuffer : ESI_Op<"buffer", [NoSideEffect, SameTypeOperands]> {
   let printer = [{ return ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
+
+def CosimEndpoint : ESI_Op<"cosim", []> {
+  let summary = "Co-simulation endpoint";
+  let description = [{
+    A co-simulation endpoint is a connection from the simulation to some
+    outside process, usually a software application responsible for driving
+    the simulation (driver).
+
+    ESI uses a serialization protocol called Cap'n Proto (capnp for short).
+    The advantage of capnp is the decoding overhead: for value types (ints,
+    structs, etc.) there is none! This stands in contrast to Protocol Buffers
+    and Bond as their messages contain metadata for each field which must be
+    interpreted.
+
+    The advantage of using a well-supported serialization protocol is
+    language support -- driver applications can be written in any language
+    supported by the specific protocol.
+  }];
+
+  let arguments = (ins ChannelType:$input);
+  let results = (outs ChannelType:$output);
+
+  let assemblyFormat = [{ `(` $input `)` attr-dict `:` type($input) `->` type($output) }];
+}
