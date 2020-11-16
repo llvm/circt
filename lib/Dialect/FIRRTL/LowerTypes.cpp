@@ -10,6 +10,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/FIRRTL/Types.h"
 #include "circt/Dialect/FIRRTL/Visitors.h"
+#include "circt/Support/ImplicitLocOpBuilder.h"
 using namespace circt;
 using namespace firrtl;
 
@@ -21,12 +22,10 @@ struct FlatBundleFieldEntry {
   std::string suffix;
   // This indicates whether the field was flipped to be an output.
   bool isOutput;
-};
 
-// Helper to determine if a fully flattened type needs to be flipped.
-static FIRRTLType getPortType(FlatBundleFieldEntry field) {
-  return field.isOutput ? FlipType::get(field.type) : field.type;
-}
+  // Helper to determine if a fully flattened type needs to be flipped.
+  FIRRTLType getPortType() { return isOutput ? FlipType::get(type) : type; }
+};
 
 // Convert a nested bundle of fields into a flat list of fields.  This is used
 // when working with instances and mems to flatten them.
@@ -62,25 +61,20 @@ static void flattenBundleTypes(FIRRTLType type, StringRef suffixSoFar,
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct FIRRTLTypesLowering
-    : public LowerFIRRTLTypesBase<FIRRTLTypesLowering>,
-      public FIRRTLVisitor<FIRRTLTypesLowering, LogicalResult> {
+struct FIRRTLTypesLowering : public LowerFIRRTLTypesBase<FIRRTLTypesLowering>,
+                             public FIRRTLVisitor<FIRRTLTypesLowering> {
 
   using ValueIdentifier = std::pair<Value, Identifier>;
-  using FIRRTLVisitor<FIRRTLTypesLowering, LogicalResult>::visitDecl;
-  using FIRRTLVisitor<FIRRTLTypesLowering, LogicalResult>::visitExpr;
-  using FIRRTLVisitor<FIRRTLTypesLowering, LogicalResult>::visitStmt;
+  using FIRRTLVisitor<FIRRTLTypesLowering>::visitDecl;
+  using FIRRTLVisitor<FIRRTLTypesLowering>::visitExpr;
+  using FIRRTLVisitor<FIRRTLTypesLowering>::visitStmt;
 
   void runOnOperation() override;
 
   // Lowering operations.
-  LogicalResult visitDecl(InstanceOp op);
-  LogicalResult visitExpr(SubfieldOp op);
-  LogicalResult visitStmt(ConnectOp op);
-
-  // Skip over any other operations.
-  LogicalResult visitUnhandledOp(Operation *op) { return success(); }
-  LogicalResult visitInvalidOp(Operation *op) { return success(); }
+  void visitDecl(InstanceOp op);
+  void visitExpr(SubfieldOp op);
+  void visitStmt(ConnectOp op);
 
 private:
   // Lowering module block arguments.
@@ -93,12 +87,8 @@ private:
   Value getBundleLowering(Value oldValue, StringRef flatField);
   void getAllBundleLowerings(Value oldValue, SmallVectorImpl<Value> &results);
 
-  void removeArgLater(unsigned argNumber);
-  void removeOpLater(Operation *op);
-  void cleanup();
-
   // The builder is set and maintained in the main loop.
-  OpBuilder *builder;
+  ImplicitLocOpBuilder *builder;
 
   // State to keep track of arguments and operations to clean up at the end.
   SmallVector<unsigned, 8> argsToRemove;
@@ -119,7 +109,7 @@ void FIRRTLTypesLowering::runOnOperation() {
   auto module = getOperation();
   auto *body = module.getBodyBlock();
 
-  OpBuilder theBuilder(&getContext());
+  ImplicitLocOpBuilder theBuilder(module.getLoc(), &getContext());
   builder = &theBuilder;
 
   // Lower the module block arguments.
@@ -131,11 +121,20 @@ void FIRRTLTypesLowering::runOnOperation() {
   // Lower the operations.
   for (auto &op : body->getOperations()) {
     builder->setInsertionPoint(&op);
-    if (failed(dispatchVisitor(&op)))
-      return;
+    builder->setLoc(op.getLoc());
+    dispatchVisitor(&op);
   }
 
-  cleanup();
+  // Remove ops that have been lowered.
+  while (!opsToRemove.empty())
+    opsToRemove.pop_back_val()->erase();
+
+  // Remove args that have been lowered.
+  getOperation().eraseArguments(argsToRemove);
+  argsToRemove.clear();
+
+  // Reset lowered state.
+  loweredBundleValues.clear();
 }
 
 //===----------------------------------------------------------------------===//
@@ -144,14 +143,16 @@ void FIRRTLTypesLowering::runOnOperation() {
 
 // Lower arguments with bundle type by flattening them.
 void FIRRTLTypesLowering::lowerArg(BlockArgument arg, FIRRTLType type) {
+  unsigned argNumber = arg.getArgNumber();
+
   // Flatten any bundle types.
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
   flattenBundleTypes(type, "", false, fieldTypes);
 
   for (auto field : fieldTypes) {
     // Create new block arguments.
-    auto type = getPortType(field);
-    auto newValue = addArg(type, arg.getArgNumber(), field.suffix);
+    auto type = field.getPortType();
+    auto newValue = addArg(type, argNumber, field.suffix);
 
     // If this field was flattened from a bundle.
     if (!field.suffix.empty()) {
@@ -165,6 +166,9 @@ void FIRRTLTypesLowering::lowerArg(BlockArgument arg, FIRRTLType type) {
       arg.replaceAllUsesWith(newValue);
     }
   }
+
+  // Remember to remove the original block argument.
+  argsToRemove.push_back(argNumber);
 }
 
 //===----------------------------------------------------------------------===//
@@ -175,7 +179,7 @@ void FIRRTLTypesLowering::lowerArg(BlockArgument arg, FIRRTLType type) {
 // are flattened, and other arguments are copied to keep the relative order. By
 // ensuring both lowerings are the same, we can process every module in the
 // circuit in parallel, and every instance will have the correct ports.
-LogicalResult FIRRTLTypesLowering::visitDecl(InstanceOp op) {
+void FIRRTLTypesLowering::visitDecl(InstanceOp op) {
   // The instance's ports are represented as one value with a bundle type.
   BundleType originalType = op.result().getType().cast<BundleType>();
 
@@ -189,7 +193,7 @@ LogicalResult FIRRTLTypesLowering::visitDecl(InstanceOp op) {
     for (auto field : fieldTypes) {
       // Store the flat type for the new bundle type.
       auto flatName = builder->getIdentifier(field.suffix);
-      auto flatType = getPortType(field);
+      auto flatType = field.getPortType();
       auto newElement = BundleType::BundleElement(flatName, flatType);
       bundleElements.push_back(newElement);
     }
@@ -198,21 +202,20 @@ LogicalResult FIRRTLTypesLowering::visitDecl(InstanceOp op) {
   // Get the new bundle type and create a new instance.
   auto newType = BundleType::get(bundleElements, &getContext());
 
-  auto newInstance = builder->create<InstanceOp>(
-      op.getLoc(), newType, op.moduleNameAttr(), op.nameAttr());
+  auto newInstance =
+      builder->create<InstanceOp>(newType, op.moduleNameAttr(), op.nameAttr());
 
   // Create new subfield ops for each field of the instance.
   for (auto element : bundleElements) {
-    auto newSubfield = builder->create<SubfieldOp>(op.getLoc(), element.second,
-                                                   newInstance, element.first);
+    auto newSubfield =
+        builder->create<SubfieldOp>(element.second, newInstance, element.first);
 
     // Map the flattened suffix for the original bundle to the new value.
     setBundleLowering(op, element.first, newSubfield);
   }
 
-  removeOpLater(op);
-
-  return success();
+  // Remember to remove the original op.
+  opsToRemove.push_back(op);
 }
 
 // Lowering subfield operations has to deal with three different cases:
@@ -225,7 +228,7 @@ LogicalResult FIRRTLTypesLowering::visitDecl(InstanceOp op) {
 // it replaces all uses with the flattened value. Otherwise, it flattens the
 // rest of the bundle and adds the flattened values to the mapping for each
 // partial suffix.
-LogicalResult FIRRTLTypesLowering::visitExpr(SubfieldOp op) {
+void FIRRTLTypesLowering::visitExpr(SubfieldOp op) {
   Value input = op.input();
   Value result = op.result();
   StringRef fieldname = op.fieldname();
@@ -256,9 +259,8 @@ LogicalResult FIRRTLTypesLowering::visitExpr(SubfieldOp op) {
       setBundleLowering(result, partialSuffix, newValue);
   }
 
-  removeOpLater(op);
-
-  return success();
+  // Remember to remove the original op.
+  opsToRemove.push_back(op);
 }
 
 // Lowering connects only has to deal with one special case: connecting two
@@ -270,13 +272,13 @@ LogicalResult FIRRTLTypesLowering::visitExpr(SubfieldOp op) {
 // When two such bundles are connected, none of the subfield visits have a
 // chance to lower them, so we must ensure they have the same number of
 // flattened values and flatten out this connect into multiple connects.
-LogicalResult FIRRTLTypesLowering::visitStmt(ConnectOp op) {
+void FIRRTLTypesLowering::visitStmt(ConnectOp op) {
   Value dest = op.dest();
   Value src = op.src();
 
   // If we aren't connecting two bundles, there is nothing to do.
   if (!dest.getType().isa<BundleType>() || !src.getType().isa<BundleType>())
-    return success();
+    return;
 
   // Get the lowered values for each side.
   SmallVector<Value, 8> destValues;
@@ -292,12 +294,11 @@ LogicalResult FIRRTLTypesLowering::visitStmt(ConnectOp op) {
   for (auto tuple : llvm::zip_first(destValues, srcValues)) {
     Value newDest = std::get<0>(tuple);
     Value newSrc = std::get<1>(tuple);
-    builder->create<ConnectOp>(op.getLoc(), newDest, newSrc);
+    builder->create<ConnectOp>(newDest, newSrc);
   }
 
-  removeOpLater(op);
-
-  return success();
+  // Remember to remove the original op.
+  opsToRemove.push_back(op);
 }
 
 //===----------------------------------------------------------------------===//
@@ -336,9 +337,6 @@ Value FIRRTLTypesLowering::addArg(Type type, unsigned oldArgNumber,
     module.setArgAttrs(newValue.getArgNumber(), newArgAttrs);
   }
 
-  // Remember to delete the original block argument.
-  removeArgLater(oldArgNumber);
-
   return newValue;
 }
 
@@ -369,26 +367,4 @@ void FIRRTLTypesLowering::getAllBundleLowerings(
   BundleType bundleType = value.getType().cast<BundleType>();
   for (auto element : bundleType.getElements())
     results.push_back(getBundleLowering(value, element.first));
-}
-
-// Remember an argument number to erase during cleanup.
-void FIRRTLTypesLowering::removeArgLater(unsigned argNumber) {
-  argsToRemove.push_back(argNumber);
-}
-
-// Remember an operation to erase during cleanup.
-void FIRRTLTypesLowering::removeOpLater(Operation *op) {
-  opsToRemove.push_back(op);
-}
-
-// Handle deferred removals of operations and block arguments when done. Also
-// clean up state.
-void FIRRTLTypesLowering::cleanup() {
-  while (!opsToRemove.empty())
-    opsToRemove.pop_back_val()->erase();
-
-  getOperation().eraseArguments(argsToRemove);
-  argsToRemove.clear();
-
-  loweredBundleValues.clear();
 }
