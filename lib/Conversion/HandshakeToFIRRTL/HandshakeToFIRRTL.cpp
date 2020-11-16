@@ -722,13 +722,43 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
       argData.push_back(argSubfields[2]);
   }
 
+  // Define some common types that will be used.
+  auto arbiterType = UIntType::get(context, numInputs);
+  auto bitType = UIntType::get(context, 1);
+
   // Declare won register for storing arbitration winner.
-  auto regType = UIntType::get(context, numInputs);
-  auto regName = rewriter.getStringAttr("won");
-  auto const0 =
-      createConstantOp(regType, APInt(numInputs, 0), insertLoc, rewriter);
-  auto wonReg = rewriter.create<RegInitOp>(insertLoc, regType, clock, reset,
-                                           const0, regName);
+  auto wonInitial =
+      createConstantOp(arbiterType, APInt(numInputs, 0), insertLoc, rewriter);
+  auto wonName = rewriter.getStringAttr("won");
+  auto won = rewriter.create<RegInitOp>(insertLoc, arbiterType, clock, reset,
+                                        wonInitial, wonName);
+
+  // Declare win wire for arbitration winner.
+  auto winName = rewriter.getStringAttr("win");
+  auto win = rewriter.create<WireOp>(insertLoc, arbiterType, winName);
+
+  // Declare registers for storing if each output has been emitted.
+  auto resultEmittedInitial =
+      createConstantOp(bitType, APInt(1, 0), insertLoc, rewriter);
+  auto resultEmittedName = rewriter.getStringAttr("resultEmitted");
+  auto resultEmitted =
+      rewriter.create<RegInitOp>(insertLoc, bitType, clock, reset,
+                                 resultEmittedInitial, resultEmittedName);
+
+  auto controlEmittedInitial =
+      createConstantOp(bitType, APInt(1, 0), insertLoc, rewriter);
+  auto controlEmittedName = rewriter.getStringAttr("controlEmitted");
+  auto controlEmitted =
+      rewriter.create<RegInitOp>(insertLoc, bitType, clock, reset,
+                                 controlEmittedInitial, controlEmittedName);
+
+  // Declare wires for if each output is done.
+  auto resultDoneName = rewriter.getStringAttr("resultDone");
+  auto resultDone = rewriter.create<WireOp>(insertLoc, bitType, resultDoneName);
+
+  auto controlDoneName = rewriter.getStringAttr("controlDone");
+  auto controlDone =
+      rewriter.create<WireOp>(insertLoc, bitType, controlDoneName);
 
   return true;
 }

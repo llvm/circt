@@ -12,7 +12,14 @@
 // CHECK:   %7 = firrtl.subfield %arg3("ready") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) -> !firrtl.uint<1>
 // CHECK:   %8 = firrtl.subfield %arg3("data") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) -> !firrtl.flip<uint<64>>
 // CHECK:   %[[WON_INIT:.+]] = firrtl.constant(0 : ui2) : !firrtl.uint<2>
-// CHECK:   %won = firrtl.reginit %[[CLOCK]], %[[RESET]], %[[WON_INIT]] {{.+}} -> !firrtl.uint<2>
+// CHECK:   %[[WON:won]] = firrtl.reginit %[[CLOCK]], %[[RESET]], %[[WON_INIT]] {{.+}} -> !firrtl.uint<2>
+// CHECK:   %[[WIN:win]] = firrtl.wire {{.*}} : !firrtl.uint<2>
+// CHECK:   %[[RESULT_EMITTED_INIT:.+]] = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+// CHECK:   %[[RESULT_EMITTED:resultEmitted]] = firrtl.reginit %[[CLOCK]], %[[RESET]], %[[RESULT_EMITTED_INIT]] {{.+}} -> !firrtl.uint<1>
+// CHECK:   %[[CONTROL_EMITTED_INIT:.+]] = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+// CHECK:   %[[CONTROL_EMITTED:controlEmitted]] = firrtl.reginit %[[CLOCK]], %[[RESET]], %[[CONTROL_EMITTED_INIT]] {{.+}} -> !firrtl.uint<1>
+// CHECK:   %[[RESULT_DONE:resultDone]] = firrtl.wire {{.*}} : !firrtl.uint<1>
+// CHECK:   %[[CONTROL_DONE:controlDone]] = firrtl.wire {{.*}} : !firrtl.uint<1>
 
 // CHECK-LABEL: firrtl.module @test_cmerge(
 // CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg2: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg3: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, %arg4: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, %arg5: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, %clock: !firrtl.clock, %reset: !firrtl.uint<1>) {
