@@ -246,6 +246,13 @@ def BitsPrimOp : PrimOp<"bits"> {
     $input $hi `to` $lo attr-dict `:` functional-type($input, $result)
   }];
 
+  let description = [{
+    The `bits` operation extracts the bits between `hi` (inclusive) and `lo`
+    (inclusive) from `input`.  `hi` must be greater than or equal to `lo`. Both
+    `hi` and `lo` must be non-negative and less than the bit width of `input`.
+    The result is `hi - lo + 1` bits wide.
+  }];
+
   let hasCanonicalizer = 1;
   let hasFolder = 1;
 
@@ -369,10 +376,26 @@ class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic> {
   }];
 }
 
-let hasFolder = 1 in
-def ShlPrimOp : ShiftPrimOp<"shl">;
-let hasFolder = 1, hasCanonicalizer = 1 in
-def ShrPrimOp : ShiftPrimOp<"shr">;
+def ShlPrimOp : ShiftPrimOp<"shl"> {
+  let description = [{
+    The `shl` operation concatenates `amount` zero bits to the least significant
+    end of `input`. `amount` must be non-negative.
+  }];
+
+  let hasFolder = 1;
+}
+
+def ShrPrimOp : ShiftPrimOp<"shr"> {
+  let description = [{
+    The `shr` operation truncates least significant `amount` bits from `input`.
+    If `amount` is greater than of equal to `width(input)`, the value will be
+    zero for unsigned types and the sign bit for signed types. `amount` must be
+    non-negative.
+  }];
+
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
+}
 
 def TailPrimOp : PrimOp<"tail"> {
   let arguments = (ins IntType:$input, I32Attr:$amount);
