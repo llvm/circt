@@ -1,4 +1,4 @@
-//===- Endpoint.h - Cosim endpoint server ----------------------*- C++ -*-===//
+//===- Endpoint.h - Cosim endpoint server -----------------------*- C++ -*-===//
 //
 // Declare the class which is used to model DPI endpoints.
 //
@@ -59,12 +59,11 @@ public:
   /// queue.
   bool getMessageToSim(BlobPtr &msg) {
     Lock g(m);
-    if (toCosim.size() > 0) {
-      msg = toCosim.front();
-      toCosim.pop();
-      return true;
-    }
-    return false;
+    if (toCosim.empty())
+      return false;
+    msg = toCosim.front();
+    toCosim.pop();
+    return true;
   }
 
   /// Queue message to the RPC client.
@@ -77,12 +76,11 @@ public:
   /// the queue.
   bool getMessageToClient(BlobPtr &msg) {
     Lock g(m);
-    if (toClient.size() > 0) {
-      msg = toClient.front();
-      toClient.pop();
-      return true;
-    }
-    return false;
+    if (toClient.empty())
+      return false;
+    msg = toClient.front();
+    toClient.pop();
+    return true;
   }
 
 private:
@@ -115,13 +113,13 @@ public:
   /// Get the specified endpoint, throwing an exception if it doesn't exist.
   /// This method is defined inline so it can be inlined at compile time.
   /// Performance is important here since this method is used in the polling
-  /// call from the simulator.
-  Endpoint &operator[](int epId) {
+  /// call from the simulator. Returns nullptr if the endpoint cannot be found.
+  Endpoint *operator[](int epId) {
     Lock g(m);
     auto it = endpoints.find(epId);
     if (it == endpoints.end())
-      throw std::runtime_error("Could not locate Endpoint");
-    return it->second;
+      return nullptr;
+    return &it->second;
   }
 
   /// Iterate over the list of endpoints, calling the provided function for each

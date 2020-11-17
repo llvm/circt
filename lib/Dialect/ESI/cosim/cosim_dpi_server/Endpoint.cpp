@@ -38,7 +38,12 @@ void EndpointRegistry::registerEndpoint(int epId, uint64_t sendTypeId,
   Lock g(m);
   if (endpoints.find(epId) != endpoints.end())
     throw std::runtime_error("Endpoint ID already exists!");
-  endpoints.emplace(std::piecewise_construct, std::forward_as_tuple(epId),
+  // The following ugliness adds an Endpoint to the map of Endpoints. The
+  // Endpoint class has its copy constructor deleted, thus the metaprogramming.
+  endpoints.emplace(std::piecewise_construct,
+                    // Map key.
+                    std::forward_as_tuple(epId),
+                    // Endpoint constructor args.
                     std::forward_as_tuple(sendTypeId, sendTypeMaxSize,
                                           recvTypeId, recvTypeMaxSize));
 }

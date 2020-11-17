@@ -43,11 +43,14 @@ kj::Promise<void> EndpointServer::recv(RecvContext context) {
                "multiple of 8 bytes.");
     // Copy the blob into a single segment.
     auto segment =
-        kj::ArrayPtr<word>((word *)blob->data(), blob->size() / 8).asConst();
+        kj::ArrayPtr<capnp::word>((word *)blob->data(), blob->size() / 8)
+            .asConst();
     // Create a single-element array of segments.
-    auto segments = kj::heapArray({segment});
+    kj::Array<kj::ArrayPtr<const capnp::word>> segments =
+        kj::heapArray({segment});
     // Create an object which will read the segments into a message on send.
-    auto msgReader = std::make_unique<SegmentArrayMessageReader>(segments);
+    std::unique_ptr<SegmentArrayMessageReader> msgReader =
+        std::make_unique<SegmentArrayMessageReader>(segments);
     // Send.
     context.getResults().getResp().set(msgReader->getRoot<AnyPointer>());
   }

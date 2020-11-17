@@ -1,7 +1,8 @@
-//===- dpi.h - DPI function C++ declarations -------------------*- C++ -*-===//
+//===- dpi.h - DPI function C++ declarations --------------------*- C++ -*-===//
 //
-// Originally generated from 'Cosim_DpiPkg.sv'. All these functions are called
-// from RTL.
+// Originally generated from 'Cosim_DpiPkg.sv' by an RTL simulator. All these
+// functions are called from RTL. Some of the funky types are produced by the
+// RTL simulators when it did the conversion.
 //
 //===----------------------------------------------------------------------===//
 
