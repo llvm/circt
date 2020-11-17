@@ -795,6 +795,25 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
 
   rewriter.create<ConnectOp>(insertLoc, won, wonMux);
 
+  // Create the logic to set the done wires for the result and control. For both
+  // outputs, the done wire is asserted when the output is valid and ready, or
+  // the emitted register for that output is set.
+  auto resultValidAndReady =
+      rewriter.create<AndPrimOp>(insertLoc, bitType, resultValid, resultReady);
+
+  auto resultDoneLogic = rewriter.create<OrPrimOp>(
+      insertLoc, bitType, resultEmitted, resultValidAndReady);
+
+  rewriter.create<ConnectOp>(insertLoc, resultDone, resultDoneLogic);
+
+  auto controlValidAndReady = rewriter.create<AndPrimOp>(
+      insertLoc, bitType, controlValid, controlReady);
+
+  auto controlDoneLogic = rewriter.create<OrPrimOp>(
+      insertLoc, bitType, controlEmitted, controlValidAndReady);
+
+  rewriter.create<ConnectOp>(insertLoc, controlDone, controlDoneLogic);
+
   return true;
 }
 
