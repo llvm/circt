@@ -729,6 +729,7 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   auto noWinner =
       createConstantOp(arbiterType, APInt(indexBits, -1, /*isSigned=*/true),
                        insertLoc, rewriter);
+  auto falseConst = createConstantOp(bitType, APInt(1, 0), insertLoc, rewriter);
 
   // Declare register for storing arbitration winner.
   auto wonName = rewriter.getStringAttr("won");
@@ -744,16 +745,13 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   auto fired = rewriter.create<WireOp>(insertLoc, bitType, firedName);
 
   // Declare registers for storing if each output has been emitted.
-  auto emittedInitial =
-      createConstantOp(bitType, APInt(1, 0), insertLoc, rewriter);
-
   auto resultEmittedName = rewriter.getStringAttr("resultEmitted");
   auto resultEmitted = rewriter.create<RegInitOp>(
-      insertLoc, bitType, clock, reset, emittedInitial, resultEmittedName);
+      insertLoc, bitType, clock, reset, falseConst, resultEmittedName);
 
   auto controlEmittedName = rewriter.getStringAttr("controlEmitted");
   auto controlEmitted = rewriter.create<RegInitOp>(
-      insertLoc, bitType, clock, reset, emittedInitial, controlEmittedName);
+      insertLoc, bitType, clock, reset, falseConst, controlEmittedName);
 
   // Declare wires for if each output is done.
   auto resultDoneName = rewriter.getStringAttr("resultDone");
@@ -762,6 +760,14 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   auto controlDoneName = rewriter.getStringAttr("controlDone");
   auto controlDone =
       rewriter.create<WireOp>(insertLoc, bitType, controlDoneName);
+
+  // Create predicates to assert if the win wire or won register hold a valid
+  // index.
+  auto hasWinnerCondition =
+      rewriter.create<NEQPrimOp>(insertLoc, bitType, win, noWinner);
+
+  auto hadWinnerCondition =
+      rewriter.create<NEQPrimOp>(insertLoc, bitType, won, noWinner);
 
   // Create an arbiter based on a simple priority-encoding scheme to assign an
   // index to the win wire. If the won register is set, just use that. In
@@ -778,13 +784,57 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
         insertLoc, arbiterType, argValid[inputIndex], constIndex, priorityMux);
   }
 
-  auto hadWinnerCondition =
-      rewriter.create<NEQPrimOp>(insertLoc, bitType, won, noWinner);
-
   priorityMux = rewriter.create<MuxPrimOp>(
       insertLoc, arbiterType, hadWinnerCondition, won, priorityMux);
 
   rewriter.create<ConnectOp>(insertLoc, win, priorityMux);
+
+  // Create the logic to assign the result and control outputs. The result valid
+  // output will always be assigned, and if isControl is not set, the result
+  // data output will also be assigned. The control valid and data outputs will
+  // always be assigned. The win wire from the arbiter is used to index into a
+  // tree of muxes to select the chosen input's signal(s), and is fed directly
+  // to the control output.
+  auto winUnsignedType = UIntType::get(context, indexBits - 1);
+
+  Value winUnsigned =
+      rewriter.create<BitsPrimOp>(insertLoc, win, indexBits - 2, 0);
+
+  winUnsigned =
+      rewriter.create<AsUIntPrimOp>(insertLoc, winUnsignedType, winUnsigned);
+
+  auto resultNotEmitted =
+      rewriter.create<NotPrimOp>(insertLoc, bitType, resultEmitted);
+
+  auto resultValidWire =
+      createMuxTree(argValid, winUnsigned, insertLoc, rewriter);
+
+  resultValidWire = rewriter.create<AndPrimOp>(
+      insertLoc, bitType, resultValidWire, hasWinnerCondition);
+
+  resultValidWire = rewriter.create<AndPrimOp>(
+      insertLoc, bitType, resultValidWire, resultNotEmitted);
+
+  rewriter.create<ConnectOp>(insertLoc, resultValid, resultValidWire);
+
+  if (!isControl) {
+    Value resultData = resultSubfields[2];
+
+    auto resultDataMux =
+        createMuxTree(argData, winUnsigned, insertLoc, rewriter);
+
+    rewriter.create<ConnectOp>(insertLoc, resultData, resultDataMux);
+  }
+
+  auto controlNotEmitted =
+      rewriter.create<NotPrimOp>(insertLoc, bitType, controlEmitted);
+
+  auto controlValidWire = rewriter.create<AndPrimOp>(
+      insertLoc, bitType, hasWinnerCondition, controlNotEmitted);
+
+  rewriter.create<ConnectOp>(insertLoc, controlValid, controlValidWire);
+
+  rewriter.create<ConnectOp>(insertLoc, controlData, winUnsigned);
 
   // Create the logic to set the won register. If the fired wire is asserted, we
   // have finished this round and can and reset the register to the sentinel
@@ -798,8 +848,8 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   // Create the logic to set the done wires for the result and control. For both
   // outputs, the done wire is asserted when the output is valid and ready, or
   // the emitted register for that output is set.
-  auto resultValidAndReady =
-      rewriter.create<AndPrimOp>(insertLoc, bitType, resultValid, resultReady);
+  auto resultValidAndReady = rewriter.create<AndPrimOp>(
+      insertLoc, bitType, resultValidWire, resultReady);
 
   auto resultDoneLogic = rewriter.create<OrPrimOp>(
       insertLoc, bitType, resultEmitted, resultValidAndReady);
@@ -807,7 +857,7 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   rewriter.create<ConnectOp>(insertLoc, resultDone, resultDoneLogic);
 
   auto controlValidAndReady = rewriter.create<AndPrimOp>(
-      insertLoc, bitType, controlValid, controlReady);
+      insertLoc, bitType, controlValidWire, controlReady);
 
   auto controlDoneLogic = rewriter.create<OrPrimOp>(
       insertLoc, bitType, controlEmitted, controlValidAndReady);
