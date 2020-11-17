@@ -66,7 +66,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Configure Environment
-        run: echo "::add-path::$GITHUB_WORKSPACE/llvm/install/bin"
+        run: echo "$GITHUB_WORKSPACE/llvm/install/bin" >> $GITHUB_PATH
 
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.

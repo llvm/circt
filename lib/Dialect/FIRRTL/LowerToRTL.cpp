@@ -2,6 +2,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/Ops.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/FIRRTL/Visitors.h"
@@ -18,9 +19,6 @@ template <typename T = FIRRTLType>
 static T getTypeOf(Value v) {
   return v.getType().cast<T>();
 }
-
-#define GEN_PASS_CLASSES
-#include "circt/Dialect/FIRRTL/FIRRTLPasses.h.inc"
 
 /// Given a FIRRTL type, return the corresponding type for the RTL dialect.
 /// This returns a null type if it cannot be lowered.
@@ -72,6 +70,17 @@ static Value zeroExtendOrTruncate(Value val, Type destTy,
   if (val.getType().getIntOrFloatBitWidth() < destTy.getIntOrFloatBitWidth())
     return builder.create<rtl::ZExtOp>(destTy, val);
   return builder.create<rtl::ExtractOp>(destTy, val, 0);
+}
+
+static Value extendOrTruncateFIRRTL(Value val, IntType destTy,
+                                    ImplicitLocOpBuilder &builder) {
+  auto srcTy = val.getType().cast<IntType>();
+  assert(srcTy.hasWidth() && destTy.hasWidth() &&
+         "only works with width-inferred integer values");
+
+  if (srcTy.getWidthOrSentinel() > destTy.getWidthOrSentinel())
+    return builder.create<TailPrimOp>(destTy, val, destTy.getWidthOrSentinel());
+  return builder.create<PadPrimOp>(destTy, val, destTy.getWidthOrSentinel());
 }
 
 //===----------------------------------------------------------------------===//
@@ -271,10 +280,13 @@ static Value tryToFindOutputValue(Value portValue) {
 
   // We know it must be the destination operand due to the types, but the source
   // may not match the destination width.
-  // TODO: Extension/truncation, for now require an exact match.
-  if (portValue.getType().cast<FIRRTLType>().getPassiveType() !=
-      connectSrc.getType())
-    return {};
+  auto destTy = portValue.getType().cast<FIRRTLType>().getPassiveType();
+  if (destTy != connectSrc.getType()) {
+    //  The only type mismatch we can have is due to integer width differences.
+    ImplicitLocOpBuilder builder(connects[0].getLoc(), connects[0]);
+    connectSrc =
+        extendOrTruncateFIRRTL(connectSrc, destTy.cast<IntType>(), builder);
+  }
 
   // Remove the connect and use its source as the value for the output.
   connects[0].erase();

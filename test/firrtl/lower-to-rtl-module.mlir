@@ -168,15 +168,19 @@
   }
 
   // CHECK-LABEL: rtl.module @PortMadness(
-  // CHECK: %arg0: i4 {rtl.name = "inA"}, %arg1: i4 {rtl.name = "inB"}, %arg2: i4 {rtl.name = "inC"})
-  // CHECK: -> (i4 {rtl.name = "outA"}, i4 {rtl.name = "outB"}, i4 {rtl.name = "outC"}, i4 {rtl.name = "outD"}) {
+  // CHECK: %arg0: i4 {rtl.name = "inA"}, %arg1: i4 {rtl.name = "inB"}, %arg2: i4 {rtl.name = "inC"}, %arg3: i3 {rtl.name = "inE"}, %arg4: i5 {rtl.name = "inF"})
+  // CHECK: -> (i4 {rtl.name = "outA"}, i4 {rtl.name = "outB"}, i4 {rtl.name = "outC"}, i4 {rtl.name = "outD"}, i4 {rtl.name = "outE"}, i4 {rtl.name = "outF"}) {
   firrtl.module @PortMadness(%inA: !firrtl.uint<4>,
                              %inB: !firrtl.uint<4>,
                              %inC: !firrtl.uint<4>,
                              %outA: !firrtl.flip<uint<4>>,
                              %outB: !firrtl.flip<uint<4>>,
                              %outC: !firrtl.flip<uint<4>>,
-                             %outD: !firrtl.flip<uint<4>>) {
+                             %outD: !firrtl.flip<uint<4>>,
+                             %inE: !firrtl.uint<3>,
+                             %outE: !firrtl.flip<uint<4>>,
+                             %inF: !firrtl.uint<5>,
+                             %outF: !firrtl.flip<uint<4>>) {
     // CHECK-NEXT: %0 = firrtl.stdIntCast %arg0 : (i4) -> !firrtl.uint<4>
     // CHECK-NEXT: %1 = firrtl.stdIntCast %arg1 : (i4) -> !firrtl.uint<4>
     // CHECK-NEXT: %2 = firrtl.stdIntCast %arg2 : (i4) -> !firrtl.uint<4>
@@ -184,6 +188,9 @@
     // CHECK: [[OUTB:%.+]] = rtl.wire : i4
     // CHECK: [[OUTC:%.+]] = rtl.wire : i4
     // CHECK: [[OUTD:%.+]] = rtl.wire : i4
+
+    // CHECK: [[INE:%.+]] = firrtl.stdIntCast %arg3 : (i3) -> !firrtl.uint<3>
+    // CHECK: [[INF:%.+]] = firrtl.stdIntCast %arg4 : (i5) -> !firrtl.uint<5>
 
     // Normal
     firrtl.connect %outA, %inA : !firrtl.flip<uint<4>>, !firrtl.uint<4>
@@ -202,6 +209,16 @@
 
     // No connections to outD.
 
-    // CHECK: rtl.output %arg0, %3,
+    // Extension for outE
+    // CHECK: [[OUTE:%.+]] = firrtl.pad [[INE]], 4 : (!firrtl.uint<3>) -> !firrtl.uint<4>
+    firrtl.connect %outE, %inE : !firrtl.flip<uint<4>>, !firrtl.uint<3>
+
+    // Truncation for inF
+    // CHECK: [[OUTF:%.+]] = firrtl.tail [[INF]], 4 : (!firrtl.uint<5>) -> !firrtl.uint<4>
+    firrtl.connect %outF, %inF : !firrtl.flip<uint<4>>, !firrtl.uint<5>
+
+    // CHECK: [[OUTE_CAST:%.+]] = firrtl.stdIntCast [[OUTE]]
+    // CHECK: [[OUTF_CAST:%.+]] = firrtl.stdIntCast [[OUTF]]
+    // CHECK: rtl.output %arg0, [[OUTB]], [[OUTC]], [[OUTD]], [[OUTE_CAST]], [[OUTF_CAST]]
   }
 }
