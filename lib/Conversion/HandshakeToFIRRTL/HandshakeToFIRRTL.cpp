@@ -730,14 +730,18 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
       createConstantOp(arbiterType, APInt(indexBits, -1, /*isSigned=*/true),
                        insertLoc, rewriter);
 
-  // Declare won register for storing arbitration winner.
+  // Declare register for storing arbitration winner.
   auto wonName = rewriter.getStringAttr("won");
   auto won = rewriter.create<RegInitOp>(insertLoc, arbiterType, clock, reset,
                                         noWinner, wonName);
 
-  // Declare win wire for arbitration winner.
+  // Declare wire for arbitration winner.
   auto winName = rewriter.getStringAttr("win");
   auto win = rewriter.create<WireOp>(insertLoc, arbiterType, winName);
+
+  // Declare wire for whether the circuit just fired and emitted both outputs.
+  auto firedName = rewriter.getStringAttr("fired");
+  auto fired = rewriter.create<WireOp>(insertLoc, bitType, firedName);
 
   // Declare registers for storing if each output has been emitted.
   auto emittedInitial =
@@ -781,6 +785,15 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
       insertLoc, arbiterType, hadWinnerCondition, won, priorityMux);
 
   rewriter.create<ConnectOp>(insertLoc, win, priorityMux);
+
+  // Create the logic to set the won register. If the fired wire is asserted, we
+  // have finished this round and can and reset the register to the sentinel
+  // value that indicates there is no winner. Otherwise, we need to hold the
+  // value of the win register until we can fire.
+  auto wonMux =
+      rewriter.create<MuxPrimOp>(insertLoc, arbiterType, fired, noWinner, win);
+
+  rewriter.create<ConnectOp>(insertLoc, won, wonMux);
 
   return true;
 }
