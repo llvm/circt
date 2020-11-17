@@ -7,9 +7,9 @@
 // CHECK:   %[[ARG1_VALID:.+]] = firrtl.subfield %arg1("valid") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>) -> !firrtl.uint<1>
 // CHECK:   %3 = firrtl.subfield %arg1("ready") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>) -> !firrtl.flip<uint<1>>
 // CHECK:   %[[ARG2_VALID:.+]] = firrtl.subfield %arg2("valid") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>) -> !firrtl.flip<uint<1>>
-// CHECK:   %5 = firrtl.subfield %arg2("ready") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>) -> !firrtl.uint<1>
+// CHECK:   %[[ARG2_READY:.+]] = firrtl.subfield %arg2("ready") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>) -> !firrtl.uint<1>
 // CHECK:   %[[ARG3_VALID:.+]] = firrtl.subfield %arg3("valid") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) -> !firrtl.flip<uint<1>>
-// CHECK:   %7 = firrtl.subfield %arg3("ready") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) -> !firrtl.uint<1>
+// CHECK:   %[[ARG3_READY:.+]] = firrtl.subfield %arg3("ready") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) -> !firrtl.uint<1>
 // CHECK:   %[[ARG3_DATA:.+]] = firrtl.subfield %arg3("data") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) -> !firrtl.flip<uint<64>>
 
 // Common definitions.
@@ -56,6 +56,20 @@
 // Logic to assign won register.
 // CHECK:   %[[WON_RESULT:.+]] = firrtl.mux(%[[FIRED]], %[[NO_WINNER]], %[[WIN]])
 // CHECK:   firrtl.connect %[[WON]], %[[WON_RESULT]]
+
+// Logic to assign done wires.
+// CHECK:   %[[RESULT_DONE0:.+]] = firrtl.and %[[RESULT_VALID2]], %[[ARG2_READY]]
+// CHECK:   %[[RESULT_DONE1:.+]] = firrtl.or %[[RESULT_EMITTED]], %[[RESULT_DONE0]]
+// CHECK:   firrtl.connect %[[RESULT_DONE]], %[[RESULT_DONE1]]
+// CHECK:   %[[CONTROL_DONE0:.+]] = firrtl.and %[[CONTROL_VALID0]], %[[ARG3_READY]]
+// CHECK:   %[[CONTROL_DONE1:.+]] = firrtl.or %[[CONTROL_EMITTED]], %[[CONTROL_DONE0]]
+// CHECK:   firrtl.connect %[[CONTROL_DONE]], %[[CONTROL_DONE1]]
+
+// Logic to assign emitted registers.
+// CHECK:   %[[RESULT_EMITTED0:.+]] = firrtl.mux(%[[FIRED]], %[[FALSE_CONST]], %[[RESULT_DONE]])
+// CHECK:   firrtl.connect %[[RESULT_EMITTED]], %[[RESULT_EMITTED0]]
+// CHECK:   %[[CONTROL_EMITTED0:.+]] = firrtl.mux(%[[FIRED]], %[[FALSE_CONST]], %[[CONTROL_DONE]])
+// CHECK:   firrtl.connect %[[CONTROL_EMITTED]], %[[CONTROL_EMITTED0]]
 
 // CHECK-LABEL: firrtl.module @test_cmerge(
 // CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg2: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg3: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, %arg4: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, %arg5: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, %clock: !firrtl.clock, %reset: !firrtl.uint<1>) {
