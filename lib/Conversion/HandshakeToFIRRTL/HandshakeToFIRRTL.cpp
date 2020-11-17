@@ -722,35 +722,34 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
       argData.push_back(argSubfields[2]);
   }
 
-  // Define some common types that will be used.
-  auto arbiterType = UIntType::get(context, numInputs);
+  // Define some common types and values that will be used.
   auto bitType = UIntType::get(context, 1);
+  auto indexBits = static_cast<int64_t>(std::ceil(std::log2(numInputs)) + 1);
+  auto arbiterType = SIntType::get(context, indexBits);
+  auto noWinner =
+      createConstantOp(arbiterType, APInt(indexBits, -1, /*isSigned=*/true),
+                       insertLoc, rewriter);
 
   // Declare won register for storing arbitration winner.
-  auto wonInitial =
-      createConstantOp(arbiterType, APInt(numInputs, 0), insertLoc, rewriter);
   auto wonName = rewriter.getStringAttr("won");
   auto won = rewriter.create<RegInitOp>(insertLoc, arbiterType, clock, reset,
-                                        wonInitial, wonName);
+                                        noWinner, wonName);
 
   // Declare win wire for arbitration winner.
   auto winName = rewriter.getStringAttr("win");
   auto win = rewriter.create<WireOp>(insertLoc, arbiterType, winName);
 
   // Declare registers for storing if each output has been emitted.
-  auto resultEmittedInitial =
+  auto emittedInitial =
       createConstantOp(bitType, APInt(1, 0), insertLoc, rewriter);
-  auto resultEmittedName = rewriter.getStringAttr("resultEmitted");
-  auto resultEmitted =
-      rewriter.create<RegInitOp>(insertLoc, bitType, clock, reset,
-                                 resultEmittedInitial, resultEmittedName);
 
-  auto controlEmittedInitial =
-      createConstantOp(bitType, APInt(1, 0), insertLoc, rewriter);
+  auto resultEmittedName = rewriter.getStringAttr("resultEmitted");
+  auto resultEmitted = rewriter.create<RegInitOp>(
+      insertLoc, bitType, clock, reset, emittedInitial, resultEmittedName);
+
   auto controlEmittedName = rewriter.getStringAttr("controlEmitted");
-  auto controlEmitted =
-      rewriter.create<RegInitOp>(insertLoc, bitType, clock, reset,
-                                 controlEmittedInitial, controlEmittedName);
+  auto controlEmitted = rewriter.create<RegInitOp>(
+      insertLoc, bitType, clock, reset, emittedInitial, controlEmittedName);
 
   // Declare wires for if each output is done.
   auto resultDoneName = rewriter.getStringAttr("resultDone");
@@ -759,6 +758,29 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   auto controlDoneName = rewriter.getStringAttr("controlDone");
   auto controlDone =
       rewriter.create<WireOp>(insertLoc, bitType, controlDoneName);
+
+  // Create an arbiter based on a simple priority-encoding scheme to assign an
+  // index to the win wire. If the won register is set, just use that. In
+  // the case that won is not set and no input is valid, set a sentinel value to
+  // indicate no winner was chosen.
+  auto priorityMux = noWinner;
+  for (unsigned i = argValid.size(); i > 0; --i) {
+    unsigned inputIndex = i - 1;
+
+    auto constIndex = createConstantOp(
+        arbiterType, APInt(indexBits, inputIndex), insertLoc, rewriter);
+
+    priorityMux = rewriter.create<MuxPrimOp>(
+        insertLoc, arbiterType, argValid[inputIndex], constIndex, priorityMux);
+  }
+
+  auto hadWinnerCondition =
+      rewriter.create<NEQPrimOp>(insertLoc, bitType, won, noWinner);
+
+  priorityMux = rewriter.create<MuxPrimOp>(
+      insertLoc, arbiterType, hadWinnerCondition, won, priorityMux);
+
+  rewriter.create<ConnectOp>(insertLoc, win, priorityMux);
 
   return true;
 }
