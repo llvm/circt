@@ -12,14 +12,11 @@
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
 #include "mlir/Parser.h"
-#include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Target/LLVMIR.h"
-#include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
 
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/ToolOutputFile.h"
 
@@ -135,7 +132,6 @@ static LogicalResult applyMLIRPasses(ModuleOp module) {
 
 int main(int argc, char **argv) {
   llhd::initLLHDToLLVMPass();
-  initializeLLVMPasses();
 
   InitLLVM y(argc, argv);
 
