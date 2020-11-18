@@ -90,7 +90,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
     }
   }
 
-  int cycles = 0;
+  int cycle = 0;
 
   // Keep track of the instances that need to wakeup.
   llvm::SmallVector<unsigned, 8> wakeupQueue;
@@ -112,7 +112,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
     const auto &pop = state->queue.top();
 
     // Interrupt the simulation if a stop condition is met.
-    if ((n > 0 && cycles >= n) || (maxTime > 0 && pop.time.time > maxTime)) {
+    if ((n > 0 && cycle >= n) || (maxTime > 0 && pop.time.time > maxTime)) {
       break;
     }
 
@@ -125,15 +125,15 @@ int Engine::simulate(int n, uint64_t maxTime) {
     // Process signal changes.
     size_t i = 0, e = pop.changesSize;
     while (i < e) {
-      const auto currsig = pop.sigs[i].first;
-      const auto &curr = state->signals[currsig];
+      const auto sigIndex = pop.sigs[i].first;
+      const auto &curr = state->signals[sigIndex];
       APInt buff(
           curr.size * 8,
           llvm::makeArrayRef(reinterpret_cast<uint64_t *>(curr.value.get()),
                              llvm::divideCeil(curr.size, 8)));
 
       // Apply the changes to the buffer until we reach the next signal.
-      while (i < e && pop.sigs[i].first == currsig) {
+      while (i < e && pop.sigs[i].first == sigIndex) {
         const auto &change = pop.changes[pop.sigs[i].second];
         const auto offset = change.first;
         const auto &drive = change.second;
@@ -158,8 +158,8 @@ int Engine::simulate(int n, uint64_t maxTime) {
         if (!state->instances[inst].isEntity) {
           const auto &sensList = state->instances[inst].sensitivityList;
           auto it = std::find_if(sensList.begin(), sensList.end(),
-                                 [currsig](const SignalDetail &sig) {
-                                   return sig.globalIndex == currsig;
+                                 [sigIndex](const SignalDetail &sig) {
+                                   return sig.globalIndex == sigIndex;
                                  });
           if (sensList.end() != it &&
               state->instances[inst].procState->senses[it - sensList.begin()] ==
@@ -174,7 +174,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
 
       // Dump the updated signal.
       if (traceMode >= 0)
-        trace.addChange(currsig);
+        trace.addChange(sigIndex);
     }
 
     // Add scheduled process resumes to the wakeup queue.
@@ -192,7 +192,6 @@ int Engine::simulate(int n, uint64_t maxTime) {
     // Run the instances present in the wakeup queue.
     for (auto i : wakeupQueue) {
       auto &inst = state->instances[i];
-      auto name = inst.unit;
       auto signalTable = inst.sensitivityList.data();
 
       // Gather the instance arguments for unit invocation.
@@ -208,7 +207,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
 
     // Clear wakeup queue.
     wakeupQueue.clear();
-    cycles++;
+    ++cycle;
   }
 
   if (traceMode >= 0) {
@@ -216,7 +215,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
     trace.flush(/*force=*/true);
   }
 
-  llvm::errs() << "Finished at " << state->time.dump() << " (" << cycles
+  llvm::errs() << "Finished at " << state->time.dump() << " (" << cycle
                << " cycles)\n";
   return 0;
 }
