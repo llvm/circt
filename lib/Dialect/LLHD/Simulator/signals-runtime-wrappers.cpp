@@ -43,13 +43,7 @@ void allocProc(State *state, char *owner, ProcState *procState) {
 
 void allocEntity(State *state, char *owner, uint8_t *entityState) {
   assert(state && "alloc_entity: state not found");
-  std::string sOwner(owner);
-  auto it = std::find_if(state->instances.begin(), state->instances.end(),
-                         [&](auto &inst) { return inst.name == owner; });
-  if (it == state->instances.end()) {
-    llvm::errs() << "could not find an instance named " << owner << "\n";
-    exit(EXIT_FAILURE);
-  }
+  auto it = state->getInstanceIterator(owner);
   (*it).entityState = std::unique_ptr<uint8_t>(entityState);
 }
 

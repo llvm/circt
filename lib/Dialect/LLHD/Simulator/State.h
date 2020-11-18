@@ -197,6 +197,10 @@ struct State {
   /// Push a new scheduled wakeup event in the event queue.
   void pushQueue(Time time, unsigned inst);
 
+  /// Find an instance in the instances list by name and return an
+  /// iterator for it.
+  std::vector<Instance>::iterator getInstanceIterator(std::string instName);
+
   /// Add a new signal to the state. Returns the index of the new signal.
   int addSignal(std::string name, std::string owner);
 
@@ -220,7 +224,7 @@ struct State {
 
   Time time;
   std::string root;
-  llvm::SmallVector<Instance, 8> instances;
+  std::vector<Instance> instances;
   std::vector<Signal> signals;
   UpdateQueue queue;
 };

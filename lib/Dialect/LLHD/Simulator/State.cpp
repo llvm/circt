@@ -268,19 +268,25 @@ void State::pushQueue(Time t, unsigned inst) {
   instances[inst].expectedWakeup = newTime;
 }
 
+std::vector<Instance>::iterator
+State::getInstanceIterator(std::string instName) {
+  auto it =
+      std::find_if(instances.begin(), instances.end(),
+                   [&](const auto &inst) { return instName == inst.name; });
+  if (it == instances.end()) {
+    llvm::errs() << "could not find an instance named " << instName << "\n";
+    exit(EXIT_FAILURE);
+  }
+  return it;
+}
+
 int State::addSignal(std::string name, std::string owner) {
   signals.push_back(Signal(name, owner));
   return signals.size() - 1;
 }
 
 void State::addProcPtr(std::string name, ProcState *procStatePtr) {
-
-  auto it = std::find_if(instances.begin(), instances.end(),
-                         [&](const auto &inst) { return name == inst.name; });
-  if (it == instances.end()) {
-    llvm::errs() << "could not find an instance named " << name << "\n";
-    exit(EXIT_FAILURE);
-  }
+  auto it = getInstanceIterator(name);
 
   // Store instance index in process state.
   procStatePtr->inst = it - instances.begin();
@@ -289,12 +295,7 @@ void State::addProcPtr(std::string name, ProcState *procStatePtr) {
 
 int State::addSignalData(int index, std::string owner, uint8_t *value,
                          uint64_t size) {
-  auto it = std::find_if(instances.begin(), instances.end(),
-                         [&](const auto &inst) { return owner == inst.name; });
-  if (it == instances.end()) {
-    llvm::errs() << "could not find an instance named " << owner << "\n";
-    exit(EXIT_FAILURE);
-  }
+  auto it = getInstanceIterator(owner);
 
   uint64_t globalIdx = (*it).sensitivityList[index + (*it).nArgs].globalIndex;
   auto &sig = signals[globalIdx];
