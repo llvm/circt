@@ -684,8 +684,10 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
   return true;
 }
 
-/// Assume only one input is active.
 /// Please refer to test_cmerge.mlir test case.
+/// Lowers the ControlMergeOp into primitive FIRRTL ops.
+/// See http://www.cs.columbia.edu/~sedwards/papers/edwards2019compositional.pdf
+/// Section 3.4.
 bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   auto *context = rewriter.getContext();
 

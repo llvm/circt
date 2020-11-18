@@ -1,4 +1,6 @@
-// RUN: circt-opt -lower-handshake-to-firrtl %s | FileCheck %s
+// RUN: circt-opt -lower-handshake-to-firrtl -split-input-file %s | FileCheck %s
+
+// Test a control merge that is control only.
 
 // CHECK-LABEL: firrtl.module @handshake_control_merge_2ins_2outs_ctrl(
 // CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg2: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, %arg3: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, %[[CLOCK:.+]]: !firrtl.clock, %[[RESET:.+]]: !firrtl.uint<1>) {
@@ -90,4 +92,28 @@ handshake.func @test_cmerge(%arg0: none, %arg1: none, %arg2: none, ...) -> (none
   // CHECK: %0 = firrtl.instance @handshake_control_merge_2ins_2outs_ctrl {name = ""} : !firrtl.bundle<arg0: bundle<valid: flip<uint<1>>, ready: uint<1>>, arg1: bundle<valid: flip<uint<1>>, ready: uint<1>>, arg2: bundle<valid: uint<1>, ready: flip<uint<1>>>, arg3: bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, arg4: flip<clock>, arg5: flip<uint<1>>>
   %0:2 = "handshake.control_merge"(%arg0, %arg1) {control = true} : (none, none) -> (none, index)
   handshake.return %0#0, %0#1, %arg2 : none, index, none
+}
+
+// -----
+
+// Test a control merge that also outputs the selected input's data.
+
+// CHECK-LABEL: firrtl.module @handshake_control_merge_2ins_2outs
+// CHECK: %[[ARG0_DATA:.+]] = firrtl.subfield %arg0("data") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>) -> !firrtl.uint<64>
+// CHECK: %[[ARG1_DATA:.+]] = firrtl.subfield %arg1("data") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>) -> !firrtl.uint<64>
+// CHECK: %[[ARG2_DATA:.+]] = firrtl.subfield %arg2("data") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) -> !firrtl.flip<uint<64>>
+// ...
+// CHECK:   %[[WIN:win]] = firrtl.wire {{.*}} : !firrtl.sint<2>
+// ...
+// CHECK:   %[[WIN_BITS:.+]] = firrtl.bits %[[WIN]] {{.+}} to 0 {{.+}} -> !firrtl.uint
+// CHECK:   %[[WIN_UNSIGNED:.+]] = firrtl.asUInt %[[WIN_BITS]]
+// CHECK:   %[[BITS0:.+]] = firrtl.bits %[[WIN_UNSIGNED]] 0 to 0
+// ...
+// CHECK:   %[[BITS1:.+]] = firrtl.bits %[[WIN_UNSIGNED]] 0 to 0
+// CHECK:   %[[RESULT_DATA:.+]] = firrtl.mux(%[[BITS1]], %[[ARG1_DATA]], %[[ARG0_DATA]])
+// CHECK:   firrtl.connect %[[ARG2_DATA]], %[[RESULT_DATA]]
+
+handshake.func @test_cmerge_data(%arg0: index, %arg1: index, %arg2: none, ...) -> (index, index, none) {
+  %0:2 = "handshake.control_merge"(%arg0, %arg1) {control = false} : (index, index) -> (index, index)
+  handshake.return %0#0, %0#1, %arg2 : index, index, none
 }
