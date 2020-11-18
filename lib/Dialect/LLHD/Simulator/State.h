@@ -197,9 +197,6 @@ struct State {
   /// Push a new scheduled wakeup event in the event queue.
   void pushQueue(Time time, unsigned inst);
 
-  /// Get the signal at position i in the signal list.
-  Signal getSignal(int index);
-
   /// Add a new signal to the state. Returns the index of the new signal.
   int addSignal(std::string name, std::string owner);
 
