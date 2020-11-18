@@ -726,20 +726,19 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   // Define some common types and values that will be used.
   auto bitType = UIntType::get(context, 1);
   auto indexBits = static_cast<int64_t>(std::ceil(std::log2(numInputs)) + 1);
-  auto arbiterType = SIntType::get(context, indexBits);
-  auto noWinner =
-      createConstantOp(arbiterType, APInt(indexBits, -1, /*isSigned=*/true),
-                       insertLoc, rewriter);
+  auto indexType = SIntType::get(context, indexBits);
+  auto noWinner = createConstantOp(
+      indexType, APInt(indexBits, -1, /*isSigned=*/true), insertLoc, rewriter);
   auto falseConst = createConstantOp(bitType, APInt(1, 0), insertLoc, rewriter);
 
   // Declare register for storing arbitration winner.
   auto wonName = rewriter.getStringAttr("won");
-  auto won = rewriter.create<RegInitOp>(insertLoc, arbiterType, clock, reset,
+  auto won = rewriter.create<RegInitOp>(insertLoc, indexType, clock, reset,
                                         noWinner, wonName);
 
   // Declare wire for arbitration winner.
   auto winName = rewriter.getStringAttr("win");
-  auto win = rewriter.create<WireOp>(insertLoc, arbiterType, winName);
+  auto win = rewriter.create<WireOp>(insertLoc, indexType, winName);
 
   // Declare wire for whether the circuit just fired and emitted both outputs.
   auto firedName = rewriter.getStringAttr("fired");
@@ -774,20 +773,20 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   // index to the win wire. If the won register is set, just use that. In
   // the case that won is not set and no input is valid, set a sentinel value to
   // indicate no winner was chosen. The constant values are remembered in a map
-  // so they can be re-used later for assign the arg ready outputs.
+  // so they can be re-used later to assign the arg ready outputs.
   DenseMap<unsigned, Value> argIndexValues;
   auto priorityMux = noWinner;
   for (unsigned i = argValid.size(); i > 0; --i) {
     unsigned inputIndex = i - 1;
-    auto constIndex = createConstantOp(
-        arbiterType, APInt(indexBits, inputIndex), insertLoc, rewriter);
+    auto constIndex = createConstantOp(indexType, APInt(indexBits, inputIndex),
+                                       insertLoc, rewriter);
     priorityMux = rewriter.create<MuxPrimOp>(
-        insertLoc, arbiterType, argValid[inputIndex], constIndex, priorityMux);
+        insertLoc, indexType, argValid[inputIndex], constIndex, priorityMux);
     argIndexValues[inputIndex] = constIndex;
   }
 
   priorityMux = rewriter.create<MuxPrimOp>(
-      insertLoc, arbiterType, hadWinnerCondition, won, priorityMux);
+      insertLoc, indexType, hadWinnerCondition, won, priorityMux);
   rewriter.create<ConnectOp>(insertLoc, win, priorityMux);
 
   // Create the logic to assign the result and control outputs. The result valid
@@ -837,7 +836,7 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   // value that indicates there is no winner. Otherwise, we need to hold the
   // value of the win register until we can fire.
   auto wonMux =
-      rewriter.create<MuxPrimOp>(insertLoc, arbiterType, fired, noWinner, win);
+      rewriter.create<MuxPrimOp>(insertLoc, indexType, fired, noWinner, win);
   rewriter.create<ConnectOp>(insertLoc, won, wonMux);
 
   // Create the logic to set the done wires for the result and control. For both
