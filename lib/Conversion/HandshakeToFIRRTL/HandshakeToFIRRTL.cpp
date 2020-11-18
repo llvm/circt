@@ -708,7 +708,6 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   Value controlValid = controlSubfields[0];
   Value controlReady = controlSubfields[1];
   Value controlData = controlSubfields[2];
-  auto controlType = FlipType::get(controlData.getType().cast<FIRRTLType>());
 
   // Walk through each arg data to collect the subfields.
   SmallVector<Value, 4> argValid;
@@ -772,7 +771,9 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   // Create an arbiter based on a simple priority-encoding scheme to assign an
   // index to the win wire. If the won register is set, just use that. In
   // the case that won is not set and no input is valid, set a sentinel value to
-  // indicate no winner was chosen.
+  // indicate no winner was chosen. The constant values are remembered in a map
+  // so they can be re-used later for assign the arg ready outputs.
+  DenseMap<unsigned, Value> argIndexValues;
   auto priorityMux = noWinner;
   for (unsigned i = argValid.size(); i > 0; --i) {
     unsigned inputIndex = i - 1;
@@ -780,6 +781,7 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
         arbiterType, APInt(indexBits, inputIndex), insertLoc, rewriter);
     priorityMux = rewriter.create<MuxPrimOp>(
         insertLoc, arbiterType, argValid[inputIndex], constIndex, priorityMux);
+    argIndexValues[inputIndex] = constIndex;
   }
 
   priorityMux = rewriter.create<MuxPrimOp>(
@@ -864,6 +866,18 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   auto controlEmittedWire = rewriter.create<MuxPrimOp>(
       insertLoc, bitType, fired, falseConst, controlDone);
   rewriter.create<ConnectOp>(insertLoc, controlEmitted, controlEmittedWire);
+
+  // Create the logic to assign the arg ready outputs. The logic is identical
+  // for each arg. If the fired wire is asserted, and the win wire holds an
+  // arg's index, that arg is ready.
+  for (unsigned i = 0, e = argReady.size(); i != e; ++i) {
+    auto constIndex = argIndexValues[i];
+    Value argReadyWire =
+        rewriter.create<EQPrimOp>(insertLoc, bitType, win, constIndex);
+    argReadyWire =
+        rewriter.create<AndPrimOp>(insertLoc, bitType, argReadyWire, fired);
+    rewriter.create<ConnectOp>(insertLoc, argReady[i], argReadyWire);
+  }
 
   return true;
 }
