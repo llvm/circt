@@ -305,8 +305,8 @@ int State::addSignalData(int index, std::string owner, uint8_t *value,
 
   // For non-integer signals, set their width equal to the size of the type in
   // memory.
-  if (signals[globalIdx].width == 0)
-    signals[globalIdx].width = size;
+  if (sig.width == 0)
+    sig.width = size;
 
   // Add the value pointer to the signal detail struct for each instance this
   // signal appears in.
