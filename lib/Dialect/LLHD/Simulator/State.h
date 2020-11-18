@@ -177,6 +177,7 @@ struct Instance {
   std::unique_ptr<ProcState> procState;
   std::unique_ptr<uint8_t> entityState;
   Time expectedWakeup;
+  // A pointer to the base unit jitted function.
   void (*unitFPtr)(void **);
 };
 

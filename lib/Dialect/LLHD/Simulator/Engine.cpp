@@ -94,7 +94,9 @@ int Engine::simulate(int n, uint64_t maxTime) {
 
   // Keep track of the instances that need to wakeup.
   llvm::SmallVector<unsigned, 8> wakeupQueue;
-  // All instances are run in the first cycle.
+
+  // Add all instances to the wakeup queue for the first run and add the jitted
+  // function pointers to all of the instances to make them readily available.
   for (size_t i = 0, e = state->instances.size(); i < e; ++i) {
     wakeupQueue.push_back(i);
     auto &inst = state->instances[i];
@@ -109,6 +111,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
   while (state->queue.events > 0) {
     const auto &pop = state->queue.top();
 
+    // Interrupt the simulation if a stop condition is met.
     if ((n > 0 && cycles >= n) || (maxTime > 0 && pop.time.time > maxTime)) {
       break;
     }
@@ -128,6 +131,8 @@ int Engine::simulate(int n, uint64_t maxTime) {
           curr.size * 8,
           llvm::makeArrayRef(reinterpret_cast<uint64_t *>(curr.value.get()),
                              llvm::divideCeil(curr.size, 8)));
+
+      // Apply the changes to the buffer until we reach the next signal.
       while (i < e && pop.sigs[i].first == currsig) {
         const auto &change = pop.changes[pop.sigs[i].second];
         const auto offset = change.first;

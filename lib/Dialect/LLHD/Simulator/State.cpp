@@ -109,15 +109,22 @@ bool Slot::operator>(const Slot &rhs) const { return rhs.time < time; }
 void Slot::insertChange(int index, int bitOffset, uint8_t *bytes,
                         unsigned width) {
   auto size = llvm::divideCeil(width, 64);
+
   if (changesSize >= changes.size()) {
+    // Create a new change buffer if we don't have any unused one available for
+    // reuse.
     changes.push_back(std::make_pair(
         bitOffset,
         APInt(width, makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size))));
   } else {
+    // Reuse the first available buffer.
     changes[changesSize] = std::make_pair(
         bitOffset,
         APInt(width, makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size)));
   }
+
+  // Map the signal index to the change buffer so we can retrieve
+  // it after sorting.
   sigs.push_back(std::make_pair(index, changesSize));
   ++changesSize;
 }
@@ -138,9 +145,9 @@ void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
   }
 
   // We need to search through the queue for an existing slot only if we're
-  // spawning an event later than the top slot. Adding to an existing slot
-  // scheduled earlier than the top slot should never happens, as then it should
-  // be the top.
+  // spawning an event later than the current top slot. Adding to an existing
+  // slot scheduled earlier than the top slot should never happen, as in that
+  // case it should be the top.
   if (events > 0 && s.time < time) {
     for (size_t i = 0, e = size(); i < e; ++i) {
       if (time == begin()[i].time) {
@@ -150,8 +157,9 @@ void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
     }
   }
 
-  // Spawn new event.
+  // Spawn new event and update top.
   if (unused.size() > 0) {
+    // An unused slot available.
     auto u = unused.back();
     unused.pop_back();
     auto &curr = begin()[u];
@@ -161,6 +169,7 @@ void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
     if (s.unused || time < s.time)
       topSlot = u;
   } else {
+    // We need to generate a new slot.
     push_back(Slot(time, index, bitOffset, bytes, width));
     if (s.unused || time < s.time)
       topSlot = size() - 1;
