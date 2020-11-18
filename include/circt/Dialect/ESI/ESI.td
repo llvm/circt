@@ -21,5 +21,6 @@ class ESI_Op<string mnemonic, list<OpTrait> traits = []> :
 
 include "ESIPorts.td"
 include "ESIOps.td"
+include "ESIPasses.td"
 
 #endif // ESI_TD

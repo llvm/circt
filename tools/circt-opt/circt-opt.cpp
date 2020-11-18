@@ -5,6 +5,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Conversion/ESIToRTL/ESIToRTL.h"
 #include "circt/Conversion/FIRRTLToLLHD/FIRRTLToLLHD.h"
 #include "circt/Conversion/HandshakeToFIRRTL/HandshakeToFIRRTL.h"
 #include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
@@ -103,6 +104,8 @@ int main(int argc, char **argv) {
   handshake::registerHandshakeToFIRRTLPasses();
 
   registry.insert<esi::ESIDialect>();
+  esi::registerESIToRTLPasses();
+
   registry.insert<llhd::LLHDDialect>();
   registry.insert<rtl::RTLDialect>();
   registry.insert<sv::SVDialect>();
