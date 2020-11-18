@@ -855,6 +855,12 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
       insertLoc, bitType, controlEmitted, controlValidAndReady);
   rewriter.create<ConnectOp>(insertLoc, controlDone, controlDoneWire);
 
+  // Create the logic to set the fired wire. It is asserted when both result and
+  // control are done.
+  auto firedWire =
+      rewriter.create<AndPrimOp>(insertLoc, bitType, resultDone, controlDone);
+  rewriter.create<ConnectOp>(insertLoc, fired, firedWire);
+
   // Create the logic to assign the emitted registers. If the fired wire is
   // asserted, we have finished this round and can reset the registers to 0.
   // Otherwise, we need to hold the values of the done registers until we can

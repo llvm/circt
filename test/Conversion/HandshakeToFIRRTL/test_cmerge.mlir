@@ -65,6 +65,10 @@
 // CHECK:   %[[CONTROL_DONE1:.+]] = firrtl.or %[[CONTROL_EMITTED]], %[[CONTROL_DONE0]]
 // CHECK:   firrtl.connect %[[CONTROL_DONE]], %[[CONTROL_DONE1]]
 
+// Logic to assign fired wire.
+// CHECK:   %[[FIRED0:.+]] = firrtl.and %[[RESULT_DONE]], %[[CONTROL_DONE]]
+// CHECK:   firrtl.connect %[[FIRED]], %[[FIRED0]]
+
 // Logic to assign emitted registers.
 // CHECK:   %[[RESULT_EMITTED0:.+]] = firrtl.mux(%[[FIRED]], %[[FALSE_CONST]], %[[RESULT_DONE]])
 // CHECK:   firrtl.connect %[[RESULT_EMITTED]], %[[RESULT_EMITTED0]]
