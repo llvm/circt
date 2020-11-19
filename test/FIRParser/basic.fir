@@ -271,6 +271,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     myext.in <= i8
     printf(clock, reset, "Something interesting! %x", myext.out)
 
+    ; CHECK: firrtl.when %reset  {
+    when reset :
+      ; CHECK: [[reset_myext:%.+]] = firrtl.instance @MyExtModule {name = "reset_myext"} : !firrtl.bundle<in: flip<uint>, out: uint<8>>
+      inst reset_myext of MyExtModule
+      reset_myext.in <= i8
+    ; CHECK: }
+
     ; CHECK: firrtl.subaccess %_t[%i8] : (!firrtl.vector<uint<1>, 12>, !firrtl.uint<8>) -> !firrtl.uint<1>
     auto <= _t[i8]
 

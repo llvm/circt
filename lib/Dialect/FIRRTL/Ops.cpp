@@ -502,7 +502,7 @@ Operation *InstanceOp::getReferencedModule() {
 static LogicalResult verifyInstanceOp(InstanceOp &instance) {
 
   // Check that this instance is inside a module.
-  auto module = dyn_cast<FModuleOp>(instance.getParentOp());
+  auto module = instance.getParentOfType<FModuleOp>();
   if (!module) {
     instance.emitOpError("should be embedded in a 'firrtl.module'");
     return failure();
