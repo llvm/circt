@@ -180,15 +180,24 @@ void FIRRTLTypesLowering::lowerArg(BlockArgument arg, FIRRTLType type) {
 // ensuring both lowerings are the same, we can process every module in the
 // circuit in parallel, and every instance will have the correct ports.
 void FIRRTLTypesLowering::visitDecl(InstanceOp op) {
-  // The instance's ports are represented as one value with a bundle type.
-  BundleType originalType = op.result().getType().cast<BundleType>();
+  // The instance's ports are represented as one value with a bundle type. Due
+  // to how bundles with flips are canonicalized, there may be an outer flip
+  // type that wraps the whole bundle.
+  FIRRTLType originalType = op.result().getType().cast<FIRRTLType>();
+  bool isFlip = originalType.isa<FlipType>();
+  BundleType originalBundleType;
+  if (isFlip)
+    originalBundleType =
+        originalType.cast<FlipType>().getElementType().cast<BundleType>();
+  else
+    originalBundleType = originalType.cast<BundleType>();
 
   // Create a new, flat bundle type for the new result
   SmallVector<BundleType::BundleElement, 8> bundleElements;
-  for (auto element : originalType.getElements()) {
+  for (auto element : originalBundleType.getElements()) {
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-    flattenBundleTypes(element.second, element.first, false, fieldTypes);
+    flattenBundleTypes(element.second, element.first, isFlip, fieldTypes);
 
     for (auto field : fieldTypes) {
       // Store the flat type for the new bundle type.
