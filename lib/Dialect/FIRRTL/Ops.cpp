@@ -1278,6 +1278,12 @@ static LogicalResult verifyStdIntCast(StdIntCast cast) {
   return success();
 }
 
+void AsPassivePrimOp::build(OpBuilder &builder, OperationState &result,
+                            Value input) {
+  result.addOperands(input);
+  result.addTypes(input.getType().cast<FIRRTLType>().getPassiveType());
+}
+
 //===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//

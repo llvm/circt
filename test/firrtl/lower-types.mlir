@@ -84,10 +84,10 @@ firrtl.circuit "TopLevel" {
     // CHECK-NEXT: %[[FIELD6:.+]] = firrtl.subfield %[[INSTANCE]]("[[SUB_SINK_DATA_NAME]]") {{.*}} [[SUB_SINK_DATA_TYPE]]
 
     // CHECK-NEXT: firrtl.connect %[[FIELD1]], %[[SOURCE_VALID_NAME]] : !firrtl.[[SUB_SOURCE_VALID_TYPE]], [[SOURCE_VALID_TYPE]]
-    // CHECK-NEXT: firrtl.connect %[[FIELD2]], %[[SOURCE_READY_NAME]] : !firrtl.[[SUB_SOURCE_READY_TYPE]], [[SOURCE_READY_TYPE]]
+    // CHECK-NEXT: firrtl.connect %[[SOURCE_READY_NAME]], %[[FIELD2]] : [[SOURCE_READY_TYPE]], !firrtl.[[SUB_SOURCE_READY_TYPE]]
     // CHECK-NEXT: firrtl.connect %[[FIELD3]], %[[SOURCE_DATA_NAME]] : !firrtl.[[SUB_SOURCE_DATA_TYPE]], [[SOURCE_DATA_TYPE]]
     // CHECK-NEXT: firrtl.connect %[[SINK_VALID_NAME]], %[[FIELD4]] : [[SINK_VALID_TYPE]], !firrtl.[[SUB_SINK_VALID_TYPE]]
-    // CHECK-NEXT: firrtl.connect %[[SINK_READY_NAME]], %[[FIELD5]] : [[SINK_READY_TYPE]], !firrtl.[[SUB_SINK_READY_TYPE]]
+    // CHECK-NEXT: firrtl.connect %[[FIELD5]], %[[SINK_READY_NAME]] : !firrtl.[[SUB_SINK_READY_TYPE]], [[SINK_READY_TYPE]]
     // CHECK-NEXT: firrtl.connect %[[SINK_DATA_NAME]], %[[FIELD6]] : [[SINK_DATA_TYPE]], !firrtl.[[SUB_SINK_DATA_TYPE]]
 
     %1 = firrtl.subfield %0("source") : (!firrtl.bundle<source: bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, sink: bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>>) -> !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>

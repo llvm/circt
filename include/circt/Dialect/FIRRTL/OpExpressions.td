@@ -461,6 +461,10 @@ def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect]> {
   let assemblyFormat = [{
     $input attr-dict `:` functional-type($input, $result)
   }];
+
+  let builders = [
+    OpBuilderDAG<(ins "Value":$input)>
+  ];
 }
 
 // Convert a passive value to a non-passive type.
