@@ -69,6 +69,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input reset_abstract: Reset   ; CHECK: %reset_abstract: !firrtl.reset,
     input clock : Clock           ; CHECK: %clock: !firrtl.clock,
     output auto : UInt<1>         ; CHECK: %auto: !firrtl.flip<uint<1>>,
+    output sauto : SInt<1>        ; CHECK: %sauto: !firrtl.flip<sint<1>>,
     input i8 : UInt<8>            ; CHECK: %i8: !firrtl.uint<8>,
     input s1 : SInt<1>            ; CHECK: %s1: !firrtl.sint<1>,
     input s8 : SInt<8>            ; CHECK: %s8: !firrtl.sint<8>,
@@ -78,13 +79,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %_t = firrtl.wire {name = "_t"} : !firrtl.vector<uint<1>, 12>
     wire _t : UInt<1>[12] @[Nodes.scala 370:76]
 
-    ; CHECK: %_t_2 = firrtl.wire {name = "_t_2"} : !firrtl.vector<uint<1>, 13>
-    wire _t_2 : UInt<1>[13]
+    ; CHECK: %_t_2 = firrtl.wire {name = "_t_2"} : !firrtl.vector<uint<1>, 12>
+    wire _t_2 : UInt<1>[12]
 
     ; CHECK: %out_0 = firrtl.wire {name = "out_0"} : !firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>
     wire out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
 
-    ; CHECK: firrtl.connect %_t, %_t_2 : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 13>
+    ; CHECK: firrtl.connect %_t, %_t_2 : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 12>
     _t <= _t_2
 
     ; CHECK: firrtl.partialconnect %_t, %_t_2
@@ -105,7 +106,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.partialconnect %auto, %2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     auto <- out_0.member.0.reset @[Field 173:49]
 
-    ; CHECK: %3 = firrtl.subindex %_t_2[0] : (!firrtl.vector<uint<1>, 13>) -> !firrtl.uint<1>
+    ; CHECK: %3 = firrtl.subindex %_t_2[0] : (!firrtl.vector<uint<1>, 12>) -> !firrtl.uint<1>
     ; CHECK: %4 = firrtl.subindex %_t[0] : (!firrtl.vector<uint<1>, 12>) -> !firrtl.uint<1>
     ; CHECK: firrtl.connect %3, %4
     _t_2[0] <= _t[0] @[Xbar.scala 21:44]
@@ -178,7 +179,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     auto <= add(UInt<10>(42), UInt<8>("hAB"))
 
     ; CHECK: %c-85_si8 = firrtl.constant(-85 : si8) : !firrtl.sint<8>
-    auto <= add(s8, SInt<8>("hAB"))
+    sauto <= add(s8, SInt<8>("hAB"))
 
     ; CHECK: firrtl.when %reset {
     ; CHECK:   firrtl.connect %_t, %_t_2
@@ -210,7 +211,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     when lt(reset, UInt(4)) :   ;; When with no else.
       _t <= _t_2
 
-    ; CHECK: firrtl.printf %clock, %reset, "Something interesting!\0A %x %x"(%_t, %_t_2) : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 13>
+    ; CHECK: firrtl.printf %clock, %reset, "Something interesting!\0A %x %x"(%_t, %_t_2) : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 12>
     printf(clock, reset, "Something interesting!\n %x %x", _t, _t_2)
 
     ; CHECK: firrtl.stop %clock, %reset, 42
@@ -506,4 +507,4 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       ; CHECK:         %bar = firrtl.mem "Undefined" {depth = 1 : i64, name = "bar", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<MPORT: bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<3>, mask: uint<1>>, io_deq_bits_MPORT: bundle<addr: uint<1>, en: uint<1>, clk: clock, data: flip<uint<3>>>>
 
  
- 
+

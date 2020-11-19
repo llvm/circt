@@ -9,6 +9,7 @@
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/StandardTypes.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/STLExtras.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -698,6 +699,93 @@ FIRRTLType MemOp::getDataTypeOrNull() {
 //===----------------------------------------------------------------------===//
 // Statements
 //===----------------------------------------------------------------------===//
+
+static bool areConnectEquivalent(FIRRTLType destType, FIRRTLType srcType);
+
+/// Helper to implement the equivalence logic for a pair of bundle elements in a
+/// connect.
+static bool areElementsConnectEquivalent(
+    std::tuple<BundleType::BundleElement, BundleType::BundleElement> tuple) {
+  BundleType::BundleElement destElement = std::get<0>(tuple);
+  Identifier destElementName = std::get<0>(destElement);
+  FIRRTLType destElementType = std::get<1>(destElement);
+  bool destIsFlip = destElementType.isa<FlipType>();
+
+  BundleType::BundleElement srcElement = std::get<0>(tuple);
+  Identifier srcElementName = std::get<0>(srcElement);
+  FIRRTLType srcElementType = std::get<1>(srcElement);
+  bool srcIsFlip = srcElementType.isa<FlipType>();
+
+  if (destElementName != srcElementName)
+    return false;
+
+  if (destIsFlip != srcIsFlip)
+    return false;
+
+  // If either destination or source is flipped, strip the outer flip for
+  // recursively equivalance checking.
+  if (destIsFlip)
+    destElementType = destElementType.cast<FlipType>().getElementType();
+
+  if (srcIsFlip)
+    srcElementType = srcElementType.cast<FlipType>().getElementType();
+
+  return areConnectEquivalent(destElementType, srcElementType);
+}
+
+/// Returns whether the two types are equivalent for the purpose of
+/// connections. See Section 4.5 in the FIRRTL spec:
+/// https://github.com/freechipsproject/firrtl/blob/master/spec/spec.pdf.
+static bool areConnectEquivalent(FIRRTLType destType, FIRRTLType srcType) {
+  // Analog types cannot be connected and must be attached.
+  if (destType.isa<AnalogType>() || srcType.isa<AnalogType>())
+    return false;
+
+  // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
+  if (destType.getPassiveType().isa<ResetType>())
+    return srcType.isResetType();
+
+  // Reset types can drive UInt<1>, AsyncReset, or Reset types.
+  if (srcType.isa<ResetType>())
+    return destType.getPassiveType().isResetType();
+
+  // Vector types can be connected if they have the same size and element type.
+  auto destVectorType = destType.dyn_cast<FVectorType>();
+  auto srcVectorType = srcType.dyn_cast<FVectorType>();
+  if (destVectorType && srcVectorType)
+    return destVectorType.getNumElements() == srcVectorType.getNumElements() &&
+           areConnectEquivalent(destVectorType.getElementType(),
+                                srcVectorType.getElementType());
+
+  // Bundle types can be connected if they have the same size, element names,
+  // and element types.
+  auto destBundleType = destType.dyn_cast<BundleType>();
+  auto srcBundleType = srcType.dyn_cast<BundleType>();
+  if (destBundleType && srcBundleType)
+    return destBundleType.getNumElements() == srcBundleType.getNumElements() &&
+           llvm::all_of(llvm::zip(destBundleType.getElements(),
+                                  srcBundleType.getElements()),
+                        areElementsConnectEquivalent);
+
+  // Ground types can be connected if their passive, widthless versions are
+  // equal.
+  return destType.getPassiveType().getWidthlessType() ==
+         srcType.getPassiveType().getWidthlessType();
+}
+
+static LogicalResult verifyConnectOp(ConnectOp connect) {
+  FIRRTLType destType = connect.dest().getType().cast<FIRRTLType>();
+  FIRRTLType srcType = connect.src().getType().cast<FIRRTLType>();
+
+  if (!areConnectEquivalent(destType, srcType))
+    return connect.emitError("type mismatch between destination ")
+           << destType << " and source " << srcType;
+
+  // TODO(mikeurbach): verify source bitwidth is >= destination bitwidth.
+  // TODO(mikeurbach): verify destination flow is sink or duplex.
+  // TODO(mikeurbach): verify source flow is source or duplex.
+  return success();
+}
 
 void WhenOp::createElseRegion() {
   assert(!hasElseRegion() && "already has an else region");
