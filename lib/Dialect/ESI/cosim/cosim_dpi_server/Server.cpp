@@ -189,15 +189,17 @@ void RpcServer::mainLoop(uint16_t port) {
 
 /// Start the server if not already started.
 void RpcServer::run(uint16_t port) {
+  Lock g(m);
   if (mainThread == nullptr) {
     mainThread = new std::thread(&RpcServer::mainLoop, this, port);
   } else {
-    throw std::runtime_error("Cannot Run() RPC server more than once!");
+    fprintf(stderr, "Warning: cannot Run() RPC server more than once!");
   }
 }
 
 /// Signal the RPC server thread to stop. Wait for it to exit.
 void RpcServer::stop() {
+  Lock g(m);
   if (mainThread == nullptr) {
     fprintf(stderr, "RpcServer not Run()\n");
   } else if (!stopSig) {

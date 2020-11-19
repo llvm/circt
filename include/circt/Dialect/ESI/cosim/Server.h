@@ -36,11 +36,14 @@ public:
   void stop();
 
 private:
+  using Lock = std::lock_guard<std::mutex>;
+
   /// The thread's main loop function. Exits on shutdown.
   void mainLoop(uint16_t port);
 
   std::thread *mainThread;
   volatile bool stopSig;
+  std::mutex m;
 };
 
 } // namespace cosim

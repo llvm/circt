@@ -114,7 +114,7 @@ DPI int sv2cCosimserverEpTryGet(unsigned int endpointId,
 
   if (validateSvOpenArray(data, sizeof(int8_t)) != 0) {
     printf("ERROR: DPI-func=%s line=%d event=invalid-sv-array\n", __func__,
-            __LINE__);
+           __LINE__);
     return -2;
   }
 
@@ -122,8 +122,8 @@ DPI int sv2cCosimserverEpTryGet(unsigned int endpointId,
   if (*dataSize == ~0u) {
     *dataSize = svSizeOfArray(data);
   } else if (*dataSize > (unsigned)svSizeOfArray(data)) {
-    printf("ERROR: DPI-func=%s line %d event=invalid-size (max %d)\n",
-            __func__, __LINE__, (unsigned)svSizeOfArray(data));
+    printf("ERROR: DPI-func=%s line %d event=invalid-size (max %d)\n", __func__,
+           __LINE__, (unsigned)svSizeOfArray(data));
     return -3;
   }
   // Verify it'll fit.
