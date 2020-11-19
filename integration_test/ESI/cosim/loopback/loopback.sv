@@ -1,4 +1,4 @@
-// PY: import base_dpi_test as test
+// PY: import loopback as test
 // PY: rpc = test.LoopbackTester(rpcschemapath, simhostport)
 // PY: rpc.test_list()
 // PY: rpc.test_open_close()
