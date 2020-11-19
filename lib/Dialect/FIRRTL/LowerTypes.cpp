@@ -294,7 +294,10 @@ void FIRRTLTypesLowering::visitStmt(ConnectOp op) {
   for (auto tuple : llvm::zip_first(destValues, srcValues)) {
     Value newDest = std::get<0>(tuple);
     Value newSrc = std::get<1>(tuple);
-    builder->create<ConnectOp>(newDest, newSrc);
+    if (newDest.getType().isa<FlipType>())
+      builder->create<ConnectOp>(newDest, newSrc);
+    else
+      builder->create<ConnectOp>(newSrc, newDest);
   }
 
   // Remember to remove the original op.
