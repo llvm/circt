@@ -19,12 +19,13 @@
 using namespace circt::esi::cosim;
 
 static RpcServer *server = nullptr;
+static std::mutex serverMutex;
 
 // ---- Helper functions ----
 
 /// Get the TCP port on which to listen. Defaults to 0xECD (ESI Cosim DPI), 3789
 /// in decimal.
-static int getPort() {
+static int findPort() {
   const char *portEnv = getenv("COSIM_PORT");
   if (portEnv == nullptr) {
     printf("[COSIM] RPC server port not found. Defaulting to 3789.\n");
@@ -74,15 +75,11 @@ DPI int sv2cCosimserverEpRegister(int endpointId, long long sendTypeId,
                                   int recvTypeSize) {
   // Ensure the server has been constructed.
   sv2cCosimserverInit();
-  try {
-    // Then register with it.
-    server->endpoints.registerEndpoint(endpointId, sendTypeId, sendTypeSize,
-                                       recvTypeId, recvTypeSize);
+  // Then register with it.
+  if (server->endpoints.registerEndpoint(endpointId, sendTypeId, sendTypeSize,
+                                         recvTypeId, recvTypeSize))
     return 0;
-  } catch (const std::runtime_error &rt) {
-    fprintf(stderr, "%s\n", rt.what());
-    return -1;
-  }
+  return -1;
 }
 
 // Attempt to recieve data from a client.
@@ -106,55 +103,55 @@ DPI int sv2cCosimserverEpTryGet(unsigned int endpointId,
 
   Endpoint::BlobPtr msg;
   // Poll for a message.
-  if (ep->getMessageToSim(msg)) {
-
-    // Do the validation only if there's a message available. Since the
-    // simulator is going to poll up to every tick and there's not going to be
-    // a message most of the time, this is important for performance.
-
-    if (validateSvOpenArray(data, sizeof(int8_t)) != 0) {
-      printf("ERROR: DPI-func=%s line=%d event=invalid-sv-array\n", __func__,
-             __LINE__);
-      return -2;
-    }
-
-    // Detect or verify size of buffer.
-    if (*dataSize == ~0u) {
-      *dataSize = svSizeOfArray(data);
-    } else if (*dataSize > (unsigned)svSizeOfArray(data)) {
-      printf("ERROR: DPI-func=%s line %d event=invalid-size (max %d)\n",
-             __func__, __LINE__, (unsigned)svSizeOfArray(data));
-      return -3;
-    }
-    // Verify it'll fit.
-    if (msg->size() > *dataSize) {
-      printf("ERROR: Message size too big to fit in RTL buffer\n");
-      return -5;
-    }
-
-    // Copy the message data.
-    size_t i;
-    size_t msgSize = msg->size();
-    for (i = 0; i < msgSize; ++i) {
-      auto b = msg->at(i);
-      *(char *)svGetArrElemPtr1(data, i) = b;
-    }
-    // Zero out the rest of the buffer.
-    for (; i < *dataSize; ++i) {
-      *(char *)svGetArrElemPtr1(data, i) = 0;
-    }
-    // Set the output data size.
-    *dataSize = msg->size();
-    return 0;
-  } else {
+  if (!ep->getMessageToSim(msg)) {
     // No message.
     *dataSize = 0;
     return 0;
   }
+  // Do the validation only if there's a message available. Since the
+  // simulator is going to poll up to every tick and there's not going to be
+  // a message most of the time, this is important for performance.
+
+  if (validateSvOpenArray(data, sizeof(int8_t)) != 0) {
+    printf("ERROR: DPI-func=%s line=%d event=invalid-sv-array\n", __func__,
+            __LINE__);
+    return -2;
+  }
+
+  // Detect or verify size of buffer.
+  if (*dataSize == ~0u) {
+    *dataSize = svSizeOfArray(data);
+  } else if (*dataSize > (unsigned)svSizeOfArray(data)) {
+    printf("ERROR: DPI-func=%s line %d event=invalid-size (max %d)\n",
+            __func__, __LINE__, (unsigned)svSizeOfArray(data));
+    return -3;
+  }
+  // Verify it'll fit.
+  size_t msgSize = msg->size();
+  if (msgSize > *dataSize) {
+    printf("ERROR: Message size too big to fit in RTL buffer\n");
+    return -5;
+  }
+
+  // Copy the message data.
+  size_t i;
+  for (i = 0; i < msgSize; ++i) {
+    auto b = (*msg)[i];
+    *(char *)svGetArrElemPtr1(data, i) = b;
+  }
+  // Zero out the rest of the buffer.
+  for (; i < *dataSize; ++i) {
+    *(char *)svGetArrElemPtr1(data, i) = 0;
+  }
+  // Set the output data size.
+  *dataSize = msg->size();
+  return 0;
 }
 
 // Attempt to send data to a client.
 // - return 0 on success, negative on failure (unregistered EP).
+// - if dataSize is negative, attempt to dynamically determine the size of
+//   'data'.
 DPI int sv2cCosimserverEpTryPut(unsigned int endpointId,
                                 // NOLINTNEXTLINE(misc-misplaced-const)
                                 const svOpenArrayHandle data, int dataSize) {
@@ -178,8 +175,8 @@ DPI int sv2cCosimserverEpTryPut(unsigned int endpointId,
 
   Endpoint::BlobPtr blob = std::make_shared<Endpoint::Blob>(dataSize);
   // Copy the message data into 'blob'.
-  for (long i = 0; i < dataSize; ++i) {
-    blob->at(i) = *(char *)svGetArrElemPtr1(data, i);
+  for (int i = 0; i < dataSize; ++i) {
+    (*blob)[i] = *(char *)svGetArrElemPtr1(data, i);
   }
   // Queue the blob.
   Endpoint *ep = server->endpoints[endpointId];
@@ -193,7 +190,8 @@ DPI int sv2cCosimserverEpTryPut(unsigned int endpointId,
 
 // Teardown cosimserver (disconnects from primary server port, stops connections
 // from active clients).
-DPI void sv2cCosimserverFini() {
+DPI void sv2cCosimserverFinish() {
+  std::lock_guard<std::mutex> g(serverMutex);
   printf("[cosim] Tearing down RPC server.\n");
   if (server != nullptr) {
     server->stop();
@@ -204,10 +202,11 @@ DPI void sv2cCosimserverFini() {
 // Start cosimserver (spawns server for RTL-initiated work, listens for
 // connections from new SW-clients).
 DPI int sv2cCosimserverInit() {
+  std::lock_guard<std::mutex> g(serverMutex);
   if (server == nullptr) {
     printf("[cosim] Starting RPC server.\n");
     server = new RpcServer();
-    server->run(getPort());
+    server->run(findPort());
   }
   return 0;
 }

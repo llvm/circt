@@ -1,3 +1,9 @@
+##===- CMakeLists.txt - Core cosim DPI library ----------------*- cmake -*-===//
+##
+## Define the cosim DPI library if it's enabled.
+##
+##===----------------------------------------------------------------------===//
+
 if(ESI_COSIM)
   find_package(CapnProto CONFIG PATHS "${CMAKE_SOURCE_DIR}/ext")
   add_library(EsiCosimDpiServer SHARED

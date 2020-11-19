@@ -38,7 +38,7 @@ extern int sv2cCosimserverEpTryPut(unsigned int endpointId,
 /// this. Provided if one wants to start the server early.
 extern int sv2cCosimserverInit();
 /// Shutdown the RPC server.
-extern void sv2cCosimserverFini();
+extern void sv2cCosimserverFinish();
 #ifdef __cplusplus
 }
 

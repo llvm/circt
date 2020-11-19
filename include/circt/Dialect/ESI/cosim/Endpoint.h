@@ -40,8 +40,8 @@ public:
   /// so copying is almost always a bug.
   Endpoint(const Endpoint &) = delete;
 
-  uint64_t getSendTypeId() const;
-  uint64_t getRecvTypeId() const;
+  uint64_t getSendTypeId() const { return sendTypeId; }
+  uint64_t getRecvTypeId() const { return recvTypeId; }
 
   /// These two are used to set and unset the inUse flag, to ensure that an open
   /// endpoint is not opened again.
@@ -103,16 +103,15 @@ private:
 /// and they are looked up by RPC clients.
 class EndpointRegistry {
 public:
-  /// Register an Endpoint. Creates the Endpoint object and owns it.
-  void registerEndpoint(int epId, uint64_t sendTypeId, int sendTypeMaxSize,
+  /// Register an Endpoint. Creates the Endpoint object and owns it. Returns
+  /// false if unsuccessful.
+  bool registerEndpoint(int epId, uint64_t sendTypeId, int sendTypeMaxSize,
                         uint64_t recvTypeId, int recvTypeMaxSize);
 
-  /// Get the specified endpoint, if it exists. Return false if it does not.
-  bool get(int epId, Endpoint *&);
-  /// Get the specified endpoint, throwing an exception if it doesn't exist.
-  /// This method is defined inline so it can be inlined at compile time.
-  /// Performance is important here since this method is used in the polling
-  /// call from the simulator. Returns nullptr if the endpoint cannot be found.
+  /// Get the specified endpoint. Return nullptr if it does not exist. This
+  /// method is defined inline so it can be inlined at compile time. Performance
+  /// is important here since this method is used in the polling call from the
+  /// simulator. Returns nullptr if the endpoint cannot be found.
   Endpoint *operator[](int epId) {
     Lock g(m);
     auto it = endpoints.find(epId);

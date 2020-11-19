@@ -49,10 +49,10 @@ public:
 /// Implements the `CosimDpiServer` interface from the RPC schema.
 class CosimServer final : public CosimDpiServer::Server {
   /// The registry of endpoints. The RpcServer class owns this.
-  EndpointRegistry *reg;
+  EndpointRegistry &reg;
 
 public:
-  CosimServer(EndpointRegistry *reg);
+  CosimServer(EndpointRegistry &reg);
 
   /// List all the registered interfaces.
   kj::Promise<void> list(ListContext ctxt);
@@ -135,12 +135,12 @@ kj::Promise<void> EndpointServer::close(CloseContext context) {
 
 /// ----- CosimServer definitions.
 
-CosimServer::CosimServer(EndpointRegistry *reg) : reg(reg) {}
+CosimServer::CosimServer(EndpointRegistry &reg) : reg(reg) {}
 
 kj::Promise<void> CosimServer::list(ListContext context) {
-  auto ifaces = context.getResults().initIfaces((unsigned int)reg->size());
+  auto ifaces = context.getResults().initIfaces((unsigned int)reg.size());
   unsigned int ctr = 0u;
-  reg->iterateEndpoints([&](int id, const Endpoint &ep) {
+  reg.iterateEndpoints([&](int id, const Endpoint &ep) {
     ifaces[ctr].setEndpointID(id);
     ifaces[ctr].setSendTypeID(ep.getSendTypeId());
     ifaces[ctr].setRecvTypeID(ep.getRecvTypeId());
@@ -150,9 +150,8 @@ kj::Promise<void> CosimServer::list(ListContext context) {
 }
 
 kj::Promise<void> CosimServer::open(OpenContext ctxt) {
-  Endpoint *ep;
-  bool found = reg->get(ctxt.getParams().getIface().getEndpointID(), ep);
-  KJ_REQUIRE(found, "Could not find endpoint");
+  Endpoint *ep = reg[ctxt.getParams().getIface().getEndpointID()];
+  KJ_REQUIRE(ep != nullptr, "Could not find endpoint");
 
   auto gotLock = ep->setInUse();
   KJ_REQUIRE(gotLock, "Endpoint in use");
@@ -168,7 +167,7 @@ RpcServer::RpcServer() : mainThread(nullptr), stopSig(false) {}
 RpcServer::~RpcServer() { stop(); }
 
 void RpcServer::mainLoop(uint16_t port) {
-  capnp::EzRpcServer rpcServer(kj::heap<CosimServer>(&endpoints),
+  capnp::EzRpcServer rpcServer(kj::heap<CosimServer>(endpoints),
                                /* bindAddress */ "*", port);
   auto &waitScope = rpcServer.getWaitScope();
 
@@ -200,7 +199,7 @@ void RpcServer::run(uint16_t port) {
 /// Signal the RPC server thread to stop. Wait for it to exit.
 void RpcServer::stop() {
   if (mainThread == nullptr) {
-    throw std::runtime_error("RpcServer not Run()");
+    fprintf(stderr, "RpcServer not Run()\n");
   } else if (!stopSig) {
     stopSig = true;
     mainThread->join();

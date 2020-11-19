@@ -13,9 +13,6 @@ Endpoint::Endpoint(uint64_t sendTypeId, int sendTypeMaxSize,
     : sendTypeId(sendTypeId), recvTypeId(recvTypeId), inUse(false) {}
 Endpoint::~Endpoint() {}
 
-uint64_t Endpoint::getSendTypeId() const { return sendTypeId; }
-uint64_t Endpoint::getRecvTypeId() const { return recvTypeId; }
-
 bool Endpoint::setInUse() {
   Lock g(m);
   if (inUse)
@@ -27,17 +24,19 @@ bool Endpoint::setInUse() {
 void Endpoint::returnForUse() {
   Lock g(m);
   if (!inUse)
-    throw std::runtime_error("Cannot return something not in use!");
+    fprintf(stderr, "Warning: Returning an endpoint which was not in use.\n");
   inUse = false;
 }
 
-void EndpointRegistry::registerEndpoint(int epId, uint64_t sendTypeId,
+bool EndpointRegistry::registerEndpoint(int epId, uint64_t sendTypeId,
                                         int sendTypeMaxSize,
                                         uint64_t recvTypeId,
                                         int recvTypeMaxSize) {
   Lock g(m);
-  if (endpoints.find(epId) != endpoints.end())
-    throw std::runtime_error("Endpoint ID already exists!");
+  if (endpoints.find(epId) != endpoints.end()) {
+    fprintf(stderr, "Endpoint ID already exists!\n");
+    return false;
+  }
   // The following ugliness adds an Endpoint to the map of Endpoints. The
   // Endpoint class has its copy constructor deleted, thus the metaprogramming.
   endpoints.emplace(std::piecewise_construct,
@@ -46,15 +45,7 @@ void EndpointRegistry::registerEndpoint(int epId, uint64_t sendTypeId,
                     // Endpoint constructor args.
                     std::forward_as_tuple(sendTypeId, sendTypeMaxSize,
                                           recvTypeId, recvTypeMaxSize));
-}
-
-bool EndpointRegistry::get(int epId, Endpoint *&ep) {
-  Lock g(m);
-  auto it = endpoints.find(epId);
-  if (it == endpoints.end())
-    return false;
-  ep = &it->second;
-  return true;
+  return false;
 }
 
 void EndpointRegistry::iterateEndpoints(
