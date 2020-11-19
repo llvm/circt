@@ -52,9 +52,8 @@ static Value castToFIRRTLType(Value val, Type type,
 /// Cast from a FIRRTL type (potentially with a flip) to a standard type.
 static Value castFromFIRRTLType(Value val, Type type,
                                 ImplicitLocOpBuilder &builder) {
-  auto passiveType = val.getType().cast<FIRRTLType>().getPassiveType();
-  if (val.getType() != passiveType)
-    val = builder.createOrFold<AsPassivePrimOp>(passiveType, val);
+  // Strip off Flip type if needed.
+  val = builder.createOrFold<AsPassivePrimOp>(val);
   return builder.createOrFold<StdIntCast>(type, val);
 }
 
@@ -729,19 +728,7 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
     return {};
 
   // Cast FIRRTL -> standard type.
-  if (!firType.isPassive()) {
-    auto passiveType = firType.getPassiveType();
-
-    // If the input is an asNonPassive conversion from the right type then just
-    // use its inputs. This is common when dealing with lowered instances.
-    if (auto castVal = dyn_cast<AsNonPassivePrimOp>(value.getDefiningOp()))
-      if (castVal.getOperand().getType() == passiveType)
-        value = castVal.getOperand();
-
-    if (value.getType() != passiveType)
-      value = builder->createOrFold<AsPassivePrimOp>(passiveType, value);
-  }
-
+  value = builder->createOrFold<AsPassivePrimOp>(value);
   return builder->createOrFold<StdIntCast>(resultType, value);
 }
 
