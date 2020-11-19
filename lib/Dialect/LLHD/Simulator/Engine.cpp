@@ -11,13 +11,8 @@
 #include "circt/Dialect/LLHD/Simulator/Engine.h"
 
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
-#include "mlir/IR/Module.h"
-#include "mlir/Pass/Pass.h"
-#include "mlir/Pass/PassManager.h"
-#include "mlir/Transforms/DialectConversion.h"
-#include "mlir/Transforms/Passes.h"
+#include "mlir/IR/Builders.h"
 
-#include "llvm/IR/Module.h"
 #include "llvm/Support/TargetSelect.h"
 
 using namespace mlir;
