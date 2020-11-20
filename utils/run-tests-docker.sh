@@ -10,7 +10,6 @@ UTILS_DIR=$(dirname "$BASH_SOURCE[0]")
 if [ ! -e llvm/build_20.04 ]; then
   echo "=== Building MLIR"
   $UTILS_DIR/build-llvm.sh build_20.04 build_20.04/install
-  cd ../..
 fi
 
 echo "=== Building CIRCT"
