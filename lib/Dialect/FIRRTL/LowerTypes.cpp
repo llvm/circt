@@ -56,6 +56,20 @@ static void flattenBundleTypes(FIRRTLType type, StringRef suffixSoFar,
   }
 }
 
+// Helper to peel off the outer most flip type from a bundle that has all flips
+// canonicalized to the outer level, or just return the bundle directly. For any
+// other type, returns null.
+static BundleType getCanonicalBundleType(Type originalType) {
+  BundleType originalBundleType;
+
+  if (auto flipType = originalType.dyn_cast<FlipType>())
+    originalBundleType = flipType.getElementType().dyn_cast<BundleType>();
+  else
+    originalBundleType = originalType.dyn_cast<BundleType>();
+
+  return originalBundleType;
+}
+
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
@@ -180,15 +194,20 @@ void FIRRTLTypesLowering::lowerArg(BlockArgument arg, FIRRTLType type) {
 // ensuring both lowerings are the same, we can process every module in the
 // circuit in parallel, and every instance will have the correct ports.
 void FIRRTLTypesLowering::visitDecl(InstanceOp op) {
-  // The instance's ports are represented as one value with a bundle type.
-  BundleType originalType = op.result().getType().cast<BundleType>();
+  // The instance's ports are represented as one value with a bundle type. Due
+  // to how bundles with flips are canonicalized, there may be an outer flip
+  // type that wraps the whole bundle.
+  Type originalType = op.result().getType();
+  bool isFlip = originalType.isa<FlipType>();
+  BundleType originalBundleType = getCanonicalBundleType(originalType);
+  assert(originalBundleType && "instance result was not a bundle type");
 
   // Create a new, flat bundle type for the new result
   SmallVector<BundleType::BundleElement, 8> bundleElements;
-  for (auto element : originalType.getElements()) {
+  for (auto element : originalBundleType.getElements()) {
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-    flattenBundleTypes(element.second, element.first, false, fieldTypes);
+    flattenBundleTypes(element.second, element.first, isFlip, fieldTypes);
 
     for (auto field : fieldTypes) {
       // Store the flat type for the new bundle type.
@@ -276,8 +295,13 @@ void FIRRTLTypesLowering::visitStmt(ConnectOp op) {
   Value dest = op.dest();
   Value src = op.src();
 
+  // Attempt to get the bundle types, potentially unwrapping an outer flip type
+  // that wraps the whole bundle.
+  BundleType destType = getCanonicalBundleType(dest.getType());
+  BundleType srcType = getCanonicalBundleType(src.getType());
+
   // If we aren't connecting two bundles, there is nothing to do.
-  if (!dest.getType().isa<BundleType>() || !src.getType().isa<BundleType>())
+  if (!destType || !srcType)
     return;
 
   // Get the lowered values for each side.
@@ -367,7 +391,8 @@ Value FIRRTLTypesLowering::getBundleLowering(Value oldValue,
 // field.
 void FIRRTLTypesLowering::getAllBundleLowerings(
     Value value, SmallVectorImpl<Value> &results) {
-  BundleType bundleType = value.getType().cast<BundleType>();
+  BundleType bundleType = getCanonicalBundleType(value.getType());
+  assert(bundleType && "attempted to get bundle lowerings for non-bundle type");
   for (auto element : bundleType.getElements())
     results.push_back(getBundleLowering(value, element.first));
 }

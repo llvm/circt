@@ -55,6 +55,11 @@ static cl::opt<bool> lowerToRTL("lower-to-rtl",
                                 cl::desc("run the lower-to-rtl pass"));
 
 static cl::opt<bool>
+    enableLowerTypes("enable-lower-types",
+                     cl::desc("run the lower-types pass within lower-to-rtl"),
+                     cl::init(false));
+
+static cl::opt<bool>
     ignoreFIRLocations("ignore-fir-locators",
                        cl::desc("ignore the @info locations in the .fir file"),
                        cl::init(false));
@@ -112,8 +117,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
     // Run the lower-to-rtl pass if requested.
     if (lowerToRTL) {
-      pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-          firrtl::createLowerFIRRTLTypesPass());
+      if (enableLowerTypes)
+        pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+            firrtl::createLowerFIRRTLTypesPass());
       pm.addPass(firrtl::createLowerFIRRTLToRTLModulePass());
       pm.nest<rtl::RTLModuleOp>().addPass(firrtl::createLowerFIRRTLToRTLPass());
     }

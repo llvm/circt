@@ -291,3 +291,31 @@ firrtl.module @X(%a : !firrtl.uint<4>) {
 }
 
 }
+
+// -----
+
+firrtl.circuit "TopModule" {
+
+firrtl.module @SubModule(%a : !firrtl.uint<1>) {
+}
+
+firrtl.module @TopModule() {
+  // expected-error @+1 {{'firrtl.instance' op has invalid result type of '!firrtl.uint<1>'}}
+  %0 = firrtl.instance @SubModule : !firrtl.uint<1>
+}
+
+}
+
+// -----
+
+firrtl.circuit "TopModule" {
+
+firrtl.module @SubModule(%a : !firrtl.uint<1>) {
+}
+
+firrtl.module @TopModule() {
+  // expected-error @+1 {{'firrtl.instance' op has invalid result type of '!firrtl.flip<uint<1>>'}}
+  %0 = firrtl.instance @SubModule : !firrtl.flip<uint<1>>
+}
+
+}

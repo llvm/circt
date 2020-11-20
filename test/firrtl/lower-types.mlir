@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='firrtl.circuit(lower-firrtl-types)' %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='firrtl.circuit(lower-firrtl-types)' -split-input-file %s | FileCheck %s
 
 firrtl.circuit "TopLevel" {
 
@@ -28,32 +28,6 @@ firrtl.circuit "TopLevel" {
       firrtl.connect %3, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
       firrtl.connect %1, %4 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     }
-  }
-
-  // CHECK-LABEL: firrtl.module @Recursive
-  // CHECK-SAME: %[[FLAT_ARG_1_NAME:arg_foo_bar_baz]]: [[FLAT_ARG_1_TYPE:!firrtl.uint<1>]]
-  // CHECK-SAME: %[[FLAT_ARG_2_NAME:arg_foo_qux]]: [[FLAT_ARG_2_TYPE:!firrtl.sint<64>]]
-  // CHECK-SAME: %[[OUT_1_NAME:out1]]: [[OUT_1_TYPE:!firrtl.flip<uint<1>>]]
-  // CHECK-SAME: %[[OUT_2_NAME:out2]]: [[OUT_2_TYPE:!firrtl.flip<sint<64>>]]
-  firrtl.module @Recursive(%arg: !firrtl.bundle<foo: bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>>,
-                           %out1: !firrtl.flip<uint<1>>, %out2: !firrtl.flip<sint<64>>) {
-
-    // CHECK-NEXT: firrtl.connect %[[OUT_1_NAME]], %[[FLAT_ARG_1_NAME]] : [[OUT_1_TYPE]], [[FLAT_ARG_1_TYPE]]
-    // CHECK-NEXT: firrtl.connect %[[OUT_2_NAME]], %[[FLAT_ARG_2_NAME]] : [[OUT_2_TYPE]], [[FLAT_ARG_2_TYPE]]
-
-    %0 = firrtl.subfield %arg("foo") : (!firrtl.bundle<foo: bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>>) -> !firrtl.bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>
-    %1 = firrtl.subfield %0("bar") : (!firrtl.bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>) -> !firrtl.bundle<baz: uint<1>>
-    %2 = firrtl.subfield %1("baz") : (!firrtl.bundle<baz: uint<1>>) -> !firrtl.uint<1>
-    %3 = firrtl.subfield %0("qux") : (!firrtl.bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>) -> !firrtl.sint<64>
-    firrtl.connect %out1, %2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
-    firrtl.connect %out2, %3 : !firrtl.flip<sint<64>>, !firrtl.sint<64>
-  }
-
-  // CHECK-LABEL: firrtl.module @Uniquification
-  // CHECK-SAME: %[[FLATTENED_ARG:a_b]]: [[FLATTENED_TYPE:!firrtl.uint<1>]],
-  // CHECK-NOT: %[[FLATTENED_ARG]]
-  // CHECK-SAME: %[[RENAMED_ARG:a_b.+]]: [[RENAMED_TYPE:!firrtl.uint<1>]] {firrtl.name = "[[FLATTENED_ARG]]"}
-  firrtl.module @Uniquification(%a: !firrtl.bundle<b: uint<1>>, %a_b: !firrtl.uint<1>) {
   }
 
   // CHECK-LABEL: firrtl.module @TopLevel
@@ -96,4 +70,77 @@ firrtl.circuit "TopLevel" {
     %2 = firrtl.subfield %0("sink") : (!firrtl.bundle<source: bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, sink: bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>>) -> !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>
     firrtl.connect %sink, %2 : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>
   }
+}
+
+// -----
+
+firrtl.circuit "Recursive" {
+
+  // CHECK-LABEL: firrtl.module @Recursive
+  // CHECK-SAME: %[[FLAT_ARG_1_NAME:arg_foo_bar_baz]]: [[FLAT_ARG_1_TYPE:!firrtl.uint<1>]]
+  // CHECK-SAME: %[[FLAT_ARG_2_NAME:arg_foo_qux]]: [[FLAT_ARG_2_TYPE:!firrtl.sint<64>]]
+  // CHECK-SAME: %[[OUT_1_NAME:out1]]: [[OUT_1_TYPE:!firrtl.flip<uint<1>>]]
+  // CHECK-SAME: %[[OUT_2_NAME:out2]]: [[OUT_2_TYPE:!firrtl.flip<sint<64>>]]
+  firrtl.module @Recursive(%arg: !firrtl.bundle<foo: bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>>,
+                           %out1: !firrtl.flip<uint<1>>, %out2: !firrtl.flip<sint<64>>) {
+
+    // CHECK-NEXT: firrtl.connect %[[OUT_1_NAME]], %[[FLAT_ARG_1_NAME]] : [[OUT_1_TYPE]], [[FLAT_ARG_1_TYPE]]
+    // CHECK-NEXT: firrtl.connect %[[OUT_2_NAME]], %[[FLAT_ARG_2_NAME]] : [[OUT_2_TYPE]], [[FLAT_ARG_2_TYPE]]
+
+    %0 = firrtl.subfield %arg("foo") : (!firrtl.bundle<foo: bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>>) -> !firrtl.bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>
+    %1 = firrtl.subfield %0("bar") : (!firrtl.bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>) -> !firrtl.bundle<baz: uint<1>>
+    %2 = firrtl.subfield %1("baz") : (!firrtl.bundle<baz: uint<1>>) -> !firrtl.uint<1>
+    %3 = firrtl.subfield %0("qux") : (!firrtl.bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>) -> !firrtl.sint<64>
+    firrtl.connect %out1, %2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    firrtl.connect %out2, %3 : !firrtl.flip<sint<64>>, !firrtl.sint<64>
+  }
+
+}
+
+// -----
+
+firrtl.circuit "Uniquification" {
+
+  // CHECK-LABEL: firrtl.module @Uniquification
+  // CHECK-SAME: %[[FLATTENED_ARG:a_b]]: [[FLATTENED_TYPE:!firrtl.uint<1>]],
+  // CHECK-NOT: %[[FLATTENED_ARG]]
+  // CHECK-SAME: %[[RENAMED_ARG:a_b.+]]: [[RENAMED_TYPE:!firrtl.uint<1>]] {firrtl.name = "[[FLATTENED_ARG]]"}
+  firrtl.module @Uniquification(%a: !firrtl.bundle<b: uint<1>>, %a_b: !firrtl.uint<1>) {
+  }
+
+}
+
+// -----
+
+firrtl.circuit "InstanceFlipped" {
+
+  firrtl.module @SubModule(%clock: !firrtl.clock, %reset: !firrtl.uint<1>) {
+  }
+
+  // CHECK-LABEL: firrtl.module @InstanceFlipped
+  // CHECK: firrtl.instance @SubModule {{.*}} : !firrtl.flip<bundle<clock: clock, reset: uint<1>>>
+  firrtl.module @InstanceFlipped(%clock: !firrtl.clock, %reset: !firrtl.uint<1>) {
+    %int_bus = firrtl.instance @SubModule {name = "int_bus"} : !firrtl.flip<bundle<clock: clock, reset: uint<1>>>
+    // CHECK: firrtl.subfield %int_bus("clock") {{.*}} -> !firrtl.flip<clock>
+    %0 = firrtl.subfield %int_bus("clock") : (!firrtl.flip<bundle<clock: clock, reset: uint<1>>>) -> !firrtl.flip<clock>
+    firrtl.connect %0, %clock : !firrtl.flip<clock>, !firrtl.clock
+    // CHECK: firrtl.subfield %int_bus("reset") {{.*}} -> !firrtl.flip<uint<1>>
+    %1 = firrtl.subfield %int_bus("reset") : (!firrtl.flip<bundle<clock: clock, reset: uint<1>>>) -> !firrtl.flip<uint<1>>
+    firrtl.connect %1, %reset : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  }
+
+}
+
+// -----
+
+firrtl.circuit "Top" {
+
+  // CHECK-LABEL: firrtl.module @Top
+  firrtl.module @Top(%in : !firrtl.bundle<a: uint<1>, b: uint<1>>,
+                     %out : !firrtl.flip<bundle<a: uint<1>, b: uint<1>>>) {
+    // CHECK: firrtl.connect %out_a, %in_a : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %out_b, %in_b : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    firrtl.connect %out, %in : !firrtl.flip<bundle<a: uint<1>, b: uint<1>>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
+  }
+
 }
