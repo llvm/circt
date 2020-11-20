@@ -40,6 +40,7 @@ public:
       : replacer(module_out), out(output) {}
 
   LogicalResult printModule(ModuleOp op);
+  LogicalResult printDefOp(DefOp op, unsigned indentAmount = 0);
 
 private:
   unsigned newValueNumber() { return nextValueNum++; }
@@ -147,7 +148,6 @@ private:
   LogicalResult printOperation(Operation *op, unsigned indentAmount = 0);
 
   // Individual op printers.
-  LogicalResult printDefOp(DefOp op, unsigned indentAmount = 0);
   LogicalResult printConstantOp(hir::ConstantOp op, unsigned indentAmount = 0);
   LogicalResult printForOp(ForOp op, unsigned indentAmount = 0);
   LogicalResult printUnrollForOp(UnrollForOp op, unsigned indentAmount = 0);
@@ -339,6 +339,11 @@ LogicalResult VerilogPrinter::printCallOp(hir::CallOp op,
   module_out << "clk\n";
 
   module_out << ");\n";
+  for (VerilogValue *v_result : v_results) {
+    if (v_result->getType().isa<hir::TimeType>()) {
+      printTimeOffsets(v_result);
+    }
+  }
   return success();
 }
 LogicalResult VerilogPrinter::printDelayOp(hir::DelayOp op,
@@ -550,7 +555,7 @@ LogicalResult VerilogPrinter::printAddOp(hir::AddOp op, unsigned indentAmount) {
   const VerilogValue v_right = verilogMapper.get(op.right());
   Type resultType = result.getType();
   if (resultType.isa<hir::ConstType>()) {
-    module_out << "wire " << v_result.strWireDecl() << " = "
+    module_out << "//wire " << v_result.strWire() << " = "
                << v_left.strConstOrError() << " + " << v_right.strConstOrError()
                << ";\n";
     v_result.setIntegerConst(v_left.getIntegerConst() +
@@ -601,7 +606,9 @@ LogicalResult VerilogPrinter::printSubtractOp(hir::SubtractOp op,
 LogicalResult VerilogPrinter::printReturnOp(hir::ReturnOp op,
                                             unsigned indentAmount) {
   auto outputs = op.operands();
-  assert(outputs.size() == outputVerilogNames.size());
+  if (outputs.size() != outputVerilogNames.size()) {
+    assert(false);
+  }
   for (int i = 0; i < outputs.size(); i++) {
     Value output = outputs[i];
     string &verilogName = outputVerilogNames[i];
@@ -881,10 +888,15 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
     module_out << "\n";
     firstVerilogArg = false;
     Type type = resTypes[i];
-    assert(type.isa<IntegerType>());
+    unsigned width;
+    if (type.isa<IntegerType>())
+      width = type.dyn_cast<IntegerType>().getWidth();
+    else if (type.isa<TimeType>())
+      width = 1;
+    else
+      assert(false);
     std::string verilogName = "out" + std::to_string(i);
     outputVerilogNames.push_back(verilogName);
-    unsigned width = type.dyn_cast<IntegerType>().getWidth();
     module_out << "output wire[" << width - 1 << ":0] " << verilogName;
   }
 
@@ -955,6 +967,8 @@ LogicalResult VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
   module_out << "endmodule\n";
 
   out << module_out.str();
+  module_out = std::stringstream();
+  nextValueNum = 0;
   return success();
 }
 
@@ -1023,8 +1037,13 @@ LogicalResult VerilogPrinter::printModule(ModuleOp module) {
   module_out << "`default_nettype none\n";
   module_out << "`include \"helper.sv\"\n";
   WalkResult result = module.walk([this](DefOp defOp) -> WalkResult {
-    if (!printDefOp(defOp).value)
+    fprintf(stderr, "DefOp found\n");
+    fflush(stderr);
+    if (failed(printDefOp(defOp))) {
+      fprintf(stderr, "DefOp returned failure");
+      fflush(stderr);
       return WalkResult::interrupt();
+    }
     return WalkResult::advance();
   });
   // if printing of a single operation failed, fail the whole translation.
@@ -1034,8 +1053,21 @@ LogicalResult VerilogPrinter::printModule(ModuleOp module) {
 
 LogicalResult hir::printVerilog(ModuleOp module, raw_ostream &os) {
   llvm::formatted_raw_ostream out(os);
-  VerilogPrinter printer(out);
-  return printer.printModule(module);
+  out << "`default_nettype none\n";
+  out << "`include \"helper.sv\"\n";
+  WalkResult result = module.walk([&out](DefOp defOp) -> WalkResult {
+    VerilogPrinter printer(out);
+    fprintf(stderr, "DefOp found\n");
+    fflush(stderr);
+    if (failed(printer.printDefOp(defOp))) {
+      fprintf(stderr, "DefOp returned failure");
+      fflush(stderr);
+      return WalkResult::interrupt();
+    }
+    return WalkResult::advance();
+  });
+  // return printer.printModule(module);
+  return failure(result.wasInterrupted());
 }
 
 void hir::registerHIRToVerilogTranslation() {

@@ -1,5 +1,5 @@
 `default_nettype none
-`include "../../out.sv"
+`include "../../matmul.sv"
 
 module matmul_tb();
 wire [7:0] v0_addr;
@@ -17,18 +17,18 @@ wire[31:0] v2_wr_data;
 reg tstart;
 reg clk = 1'b0;
 
-hirMatmulKernel hirMatmulKernel_inst(
-  v0_addr    ,
-  v0_rd_en   ,
-  v0_rd_data ,
-  v1_addr    ,
-  v1_rd_en   ,
-  v1_rd_data ,
-  v2_addr    ,
-  v2_wr_en   ,
-  v2_wr_data ,
-  tstart     ,
-  clk
+matmul dut_inst(
+  .v0_addr    (v0_addr    ),
+  .v0_rd_en   (v0_rd_en   ),
+  .v0_rd_data (v0_rd_data ),
+  .v1_addr    (v1_addr    ),
+  .v1_rd_en   (v1_rd_en   ),
+  .v1_rd_data (v1_rd_data ),
+  .v2_addr    (v2_addr    ),
+  .v2_wr_en   (v2_wr_en   ),
+  .v2_wr_data (v2_wr_data ),
+  .tstart     (tstart     ),
+  .clk        (clk        )
 );
 
 

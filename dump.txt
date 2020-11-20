@@ -1,0 +1,947 @@
+DefOp found
+`default_nettype none
+`include "helper.sv"
+module readA(
+//Outputs.
+
+//Inputs.
+
+//MemrefType : port = r.
+output reg[7:0] v0_addr,
+output wire v0_rd_en,
+input wire[31:0] v0_rd_data,
+//MemrefType : port = w.
+output reg[3:0] v1_addr[15:0],
+output wire v1_wr_en[15:0],
+output reg[31:0] v1_wr_data[15:0],
+//TimeType.
+input wire tstart,
+//Clock.
+input wire clk
+);
+
+wire v0_addr_valid  [15:0] ;
+wire [7:0] v0_addr_input  [15:0];
+ always@(*) begin
+if(v0_addr_valid[0] )
+v0_addr = v0_addr_input[0];
+else if (v0_addr_valid[1])
+v0_addr = v0_addr_input[1];
+else if (v0_addr_valid[2])
+v0_addr = v0_addr_input[2];
+else if (v0_addr_valid[3])
+v0_addr = v0_addr_input[3];
+else if (v0_addr_valid[4])
+v0_addr = v0_addr_input[4];
+else if (v0_addr_valid[5])
+v0_addr = v0_addr_input[5];
+else if (v0_addr_valid[6])
+v0_addr = v0_addr_input[6];
+else if (v0_addr_valid[7])
+v0_addr = v0_addr_input[7];
+else if (v0_addr_valid[8])
+v0_addr = v0_addr_input[8];
+else if (v0_addr_valid[9])
+v0_addr = v0_addr_input[9];
+else if (v0_addr_valid[10])
+v0_addr = v0_addr_input[10];
+else if (v0_addr_valid[11])
+v0_addr = v0_addr_input[11];
+else if (v0_addr_valid[12])
+v0_addr = v0_addr_input[12];
+else if (v0_addr_valid[13])
+v0_addr = v0_addr_input[13];
+else if (v0_addr_valid[14])
+v0_addr = v0_addr_input[14];
+else if (v0_addr_valid[15])
+v0_addr = v0_addr_input[15];
+else
+ v0_addr = 'x;
+end
+
+wire [15:0] v0_rd_en_input ;
+assign v0_rd_en  =| v0_rd_en_input ;
+
+
+wire v1_addr_valid [15:0] [0:0] ;
+wire [3:0] v1_addr_input [15:0] [0:0];
+ generate
+for(genvar i0 = 0; i0 < 16;i0=i0 + 1) begin
+always@(*) begin
+if(v1_addr_valid[i0][0] )
+v1_addr[i0] = v1_addr_input[i0][0];
+else
+ v1_addr[i0] = 'x;
+end
+end
+endgenerate
+
+wire [0:0] v1_wr_en_input [15:0];
+generate
+for(genvar i0 = 0; i0 < 16;i0=i0 + 1) begin
+assign v1_wr_en [i0] =| v1_wr_en_input [i0];
+end
+endgenerate
+wire v1_wr_data_valid [15:0] [0:0] ;
+wire [31:0] v1_wr_data_input [15:0] [0:0];
+ generate
+for(genvar i0 = 0; i0 < 16;i0=i0 + 1) begin
+always@(*) begin
+if(v1_wr_data_valid[i0][0] )
+v1_wr_data[i0] = v1_wr_data_input[i0][0];
+else
+ v1_wr_data[i0] = 'x;
+end
+end
+endgenerate
+
+
+//printTimeOffset
+reg tstartdelay[0:0] = '{default:0} ;
+always@(*) tstartdelay[0] <= tstart;
+generate
+genvar i3;
+
+for(i3 = 1; i3<= 0; i3= i3 + 1) begin
+always@(posedge clk) begin
+tstartdelay[i3] <= tstartdelay[i3-1];
+end
+end
+endgenerate
+
+
+//ConstantOp at loc("test/HIR/matmul.mlir":5:8)
+//constant v4 = 1'd0;
+
+//ConstantOp at loc("test/HIR/matmul.mlir":6:8)
+//constant v5 = 1'd1;
+
+//ConstantOp at loc("test/HIR/matmul.mlir":7:8)
+//constant [1:0] v6 = 2'd2;
+
+//ConstantOp at loc("test/HIR/matmul.mlir":8:8)
+//constant [1:0] v7 = 2'd3;
+
+//ConstantOp at loc("test/HIR/matmul.mlir":9:8)
+//constant [2:0] v8 = 3'd4;
+
+//ConstantOp at loc("test/HIR/matmul.mlir":10:9)
+//constant [4:0] v9 = 5'd16;
+
+//ForOp at loc("test/HIR/matmul.mlir":13:3)
+
+//{ Loop10
+
+reg[31:0] idx10 ;
+reg[4:0] ub10 ;
+reg[0:0] step10 ;
+wire tloop_in10;
+reg tloop10;
+reg tfinish10;
+always@(posedge clk) begin
+ if(/*tstart=*/ tstartdelay[0]) begin
+   idx10 <= /*v4=*/ 1'd0; //lower bound.
+   step10 <= /*v5=*/ 1'd1;
+   ub10 <= /*v9=*/ 5'd16;
+   tloop10 <= (/*v9=*/ 5'd16 > /*v4=*/ 1'd0);
+   tfinish10 <=!(/*v9=*/ 5'd16 > /*v4=*/ 1'd0);
+ end
+ else if (tloop_in10) begin
+   idx10 <= idx10 + step10; //increment
+   tloop10 <= (idx10 + step10) < ub10;
+   tfinish10 <= !((idx10 + step10) < ub10);
+ end
+ else begin
+   tloop10 <= 1'b0;
+   tfinish10 <= 1'b0;
+ end
+end
+//Loop10 body
+//printTimeOffset
+reg tloop10delay[1:0] = '{default:0} ;
+always@(*) tloop10delay[0] <= tloop10;
+generate
+genvar i11;
+
+for(i11 = 1; i11<= 1; i11= i11 + 1) begin
+always@(posedge clk) begin
+tloop10delay[i11] <= tloop10delay[i11-1];
+end
+end
+endgenerate
+
+
+//UnrollForOp at loc("test/HIR/matmul.mlir":14:13)
+
+//{ Unrolled body 0 of loop12.
+//DEBUG: /*idx12=*/ 1'd0, expected 0
+
+//YieldOp at loc("test/HIR/matmul.mlir":15:7)
+wire tloop13 = tloop10delay[1];
+
+//MemReadOp at loc("test/HIR/matmul.mlir":17:13)
+assign v0_addr_valid[0] = tloop10delay[0];
+assign v0_addr_input[0] = {idx10[3:0], /*idx12=*/ 4'd0};
+wire[31:0] v14 = v0_rd_data;
+assign v0_rd_en_input[0] = tloop10delay[0];
+
+
+//DelayOp at loc("test/HIR/matmul.mlir":18:13)
+reg[31:0]shiftreg16[/*v5=*/ 1:0] = '{default:0};
+always@(*) shiftreg16[0] <= idx10;
+always@(posedge clk) shiftreg16[/*v5=*/ 1:1] <= shiftreg16[/*v5=*/ 0:0];
+wire [31:0] v15 = shiftreg16[/*v5=*/ 1];
+
+//MemWriteOp at loc("test/HIR/matmul.mlir":19:7)
+assign v1_addr_valid[/*idx12=*/ 0][0] = tloop10delay[1];
+assign v1_addr_input[/*idx12=*/ 0][0] = {v15[3:0]};
+assign v1_wr_en_input[/*idx12=*/ 0][0] = tloop10delay[1];
+assign v1_wr_data_valid[/*idx12=*/ 0][0] = tloop10delay[1];
+assign v1_wr_data_input[/*idx12=*/ 0][0] = v14;
+
+
+//TerminatorOp
+
+//} Unrolled body 0 of loop12.
+//DEBUG: /*idx12=*/ 1'd0, expected 0
+
+//{ Unrolled body 1 of loop12.
+//DEBUG: /*idx12=*/ 1'd1, expected 1
+//printTimeOffset
+reg tloop13delay[1:0] = '{default:0} ;
+always@(*) tloop13delay[0] <= tloop13;
+generate
+genvar i18;
+
+for(i18 = 1; i18<= 1; i18= i18 + 1) begin
+always@(posedge clk) begin
+tloop13delay[i18] <= tloop13delay[i18-1];
+end
+end
+endgenerate
+
+
+//YieldOp at loc("test/HIR/matmul.mlir":15:7)
+wire tloop17 = tloop13delay[1];
+
+//MemReadOp at loc("test/HIR/matmul.mlir":17:13)
+assign v0_addr_valid[1] = tloop13delay[0];
+assign v0_addr_input[1] = {idx10[3:0], /*idx12=*/ 4'd1};
+wire[31:0] v19 = v0_rd_data;
+assign v0_rd_en_input[1] = tloop13delay[0];
+
+
+//DelayOp at loc("test/HIR/matmul.mlir":18:13)
+reg[31:0]shiftreg21[/*v5=*/ 1:0] = '{default:0};
+always@(*) shiftreg21[0] <= idx10;
+always@(posedge clk) shiftreg21[/*v5=*/ 1:1] <= shiftreg21[/*v5=*/ 0:0];
+wire [31:0] v20 = shiftreg21[/*v5=*/ 1];
+
+//MemWriteOp at loc("test/HIR/matmul.mlir":19:7)
+assign v1_addr_valid[/*idx12=*/ 1][0] = tloop13delay[1];
+assign v1_addr_input[/*idx12=*/ 1][0] = {v20[3:0]};
+assign v1_wr_en_input[/*idx12=*/ 1][0] = tloop13delay[1];
+assign v1_wr_data_valid[/*idx12=*/ 1][0] = tloop13delay[1];
+assign v1_wr_data_input[/*idx12=*/ 1][0] = v19;
+
+
+//TerminatorOp
+
+//} Unrolled body 1 of loop12.
+//DEBUG: /*idx12=*/ 1'd1, expected 1
+
+//{ Unrolled body 2 of loop12.
+//DEBUG: /*idx12=*/ 2'd2, expected 2
+//printTimeOffset
+reg tloop17delay[1:0] = '{default:0} ;
+always@(*) tloop17delay[0] <= tloop17;
+generate
+genvar i23;
+
+for(i23 = 1; i23<= 1; i23= i23 + 1) begin
+always@(posedge clk) begin
+tloop17delay[i23] <= tloop17delay[i23-1];
+end
+end
+endgenerate
+
+
+//YieldOp at loc("test/HIR/matmul.mlir":15:7)
+wire tloop22 = tloop17delay[1];
+
+//MemReadOp at loc("test/HIR/matmul.mlir":17:13)
+assign v0_addr_valid[2] = tloop17delay[0];
+assign v0_addr_input[2] = {idx10[3:0], /*idx12=*/ 4'd2};
+wire[31:0] v24 = v0_rd_data;
+assign v0_rd_en_input[2] = tloop17delay[0];
+
+
+//DelayOp at loc("test/HIR/matmul.mlir":18:13)
+reg[31:0]shiftreg26[/*v5=*/ 1:0] = '{default:0};
+always@(*) shiftreg26[0] <= idx10;
+always@(posedge clk) shiftreg26[/*v5=*/ 1:1] <= shiftreg26[/*v5=*/ 0:0];
+wire [31:0] v25 = shiftreg26[/*v5=*/ 1];
+
+//MemWriteOp at loc("test/HIR/matmul.mlir":19:7)
+assign v1_addr_valid[/*idx12=*/ 2][0] = tloop17delay[1];
+assign v1_addr_input[/*idx12=*/ 2][0] = {v25[3:0]};
+assign v1_wr_en_input[/*idx12=*/ 2][0] = tloop17delay[1];
+assign v1_wr_data_valid[/*idx12=*/ 2][0] = tloop17delay[1];
+assign v1_wr_data_input[/*idx12=*/ 2][0] = v24;
+
+
+//TerminatorOp
+
+//} Unrolled body 2 of loop12.
+//DEBUG: /*idx12=*/ 2'd2, expected 2
+
+//{ Unrolled body 3 of loop12.
+//DEBUG: /*idx12=*/ 2'd3, expected 3
+//printTimeOffset
+reg tloop22delay[1:0] = '{default:0} ;
+always@(*) tloop22delay[0] <= tloop22;
+generate
+genvar i28;
+
+for(i28 = 1; i28<= 1; i28= i28 + 1) begin
+always@(posedge clk) begin
+tloop22delay[i28] <= tloop22delay[i28-1];
+end
+end
+endgenerate
+
+
+//YieldOp at loc("test/HIR/matmul.mlir":15:7)
+wire tloop27 = tloop22delay[1];
+
+//MemReadOp at loc("test/HIR/matmul.mlir":17:13)
+assign v0_addr_valid[3] = tloop22delay[0];
+assign v0_addr_input[3] = {idx10[3:0], /*idx12=*/ 4'd3};
+wire[31:0] v29 = v0_rd_data;
+assign v0_rd_en_input[3] = tloop22delay[0];
+
+
+//DelayOp at loc("test/HIR/matmul.mlir":18:13)
+reg[31:0]shiftreg31[/*v5=*/ 1:0] = '{default:0};
+always@(*) shiftreg31[0] <= idx10;
+always@(posedge clk) shiftreg31[/*v5=*/ 1:1] <= shiftreg31[/*v5=*/ 0:0];
+wire [31:0] v30 = shiftreg31[/*v5=*/ 1];
+
+//MemWriteOp at loc("test/HIR/matmul.mlir":19:7)
+assign v1_addr_valid[/*idx12=*/ 3][0] = tloop22delay[1];
+assign v1_addr_input[/*idx12=*/ 3][0] = {v30[3:0]};
+assign v1_wr_en_input[/*idx12=*/ 3][0] = tloop22delay[1];
+assign v1_wr_data_valid[/*idx12=*/ 3][0] = tloop22delay[1];
+assign v1_wr_data_input[/*idx12=*/ 3][0] = v29;
+
+
+//TerminatorOp
+
+//} Unrolled body 3 of loop12.
+//DEBUG: /*idx12=*/ 2'd3, expected 3
+
+//{ Unrolled body 4 of loop12.
+//DEBUG: /*idx12=*/ 3'd4, expected 4
+//printTimeOffset
+reg tloop27delay[1:0] = '{default:0} ;
+always@(*) tloop27delay[0] <= tloop27;
+generate
+genvar i33;
+
+for(i33 = 1; i33<= 1; i33= i33 + 1) begin
+always@(posedge clk) begin
+tloop27delay[i33] <= tloop27delay[i33-1];
+end
+end
+endgenerate
+
+
+//YieldOp at loc("test/HIR/matmul.mlir":15:7)
+wire tloop32 = tloop27delay[1];
+
+//MemReadOp at loc("test/HIR/matmul.mlir":17:13)
+assign v0_addr_valid[4] = tloop27delay[0];
+assign v0_addr_input[4] = {idx10[3:0], /*idx12=*/ 4'd4};
+wire[31:0] v34 = v0_rd_data;
+assign v0_rd_en_input[4] = tloop27delay[0];
+
+
+//DelayOp at loc("test/HIR/matmul.mlir":18:13)
+reg[31:0]shiftreg36[/*v5=*/ 1:0] = '{default:0};
+always@(*) shiftreg36[0] <= idx10;
+always@(posedge clk) shiftreg36[/*v5=*/ 1:1] <= shiftreg36[/*v5=*/ 0:0];
+wire [31:0] v35 = shiftreg36[/*v5=*/ 1];
+
+//MemWriteOp at loc("test/HIR/matmul.mlir":19:7)
+assign v1_addr_valid[/*idx12=*/ 4][0] = tloop27delay[1];
+assign v1_addr_input[/*idx12=*/ 4][0] = {v35[3:0]};
+assign v1_wr_en_input[/*idx12=*/ 4][0] = tloop27delay[1];
+assign v1_wr_data_valid[/*idx12=*/ 4][0] = tloop27delay[1];
+assign v1_wr_data_input[/*idx12=*/ 4][0] = v34;
+
+
+//TerminatorOp
+
+//} Unrolled body 4 of loop12.
+//DEBUG: /*idx12=*/ 3'd4, expected 4
+
+//{ Unrolled body 5 of loop12.
+//DEBUG: /*idx12=*/ 3'd5, expected 5
+//printTimeOffset
+reg tloop32delay[1:0] = '{default:0} ;
+always@(*) tloop32delay[0] <= tloop32;
+generate
+genvar i38;
+
+for(i38 = 1; i38<= 1; i38= i38 + 1) begin
+always@(posedge clk) begin
+tloop32delay[i38] <= tloop32delay[i38-1];
+end
+end
+endgenerate
+
+
+//YieldOp at loc("test/HIR/matmul.mlir":15:7)
+wire tloop37 = tloop32delay[1];
+
+//MemReadOp at loc("test/HIR/matmul.mlir":17:13)
+assign v0_addr_valid[5] = tloop32delay[0];
+assign v0_addr_input[5] = {idx10[3:0], /*idx12=*/ 4'd5};
+wire[31:0] v39 = v0_rd_data;
+assign v0_rd_en_input[5] = tloop32delay[0];
+
+
+//DelayOp at loc("test/HIR/matmul.mlir":18:13)
+reg[31:0]shiftreg41[/*v5=*/ 1:0] = '{default:0};
+always@(*) shiftreg41[0] <= idx10;
+always@(posedge clk) shiftreg41[/*v5=*/ 1:1] <= shiftreg41[/*v5=*/ 0:0];
+wire [31:0] v40 = shiftreg41[/*v5=*/ 1];
+
+//MemWriteOp at loc("test/HIR/matmul.mlir":19:7)
+assign v1_addr_valid[/*idx12=*/ 5][0] = tloop32delay[1];
+assign v1_addr_input[/*idx12=*/ 5][0] = {v40[3:0]};
+assign v1_wr_en_input[/*idx12=*/ 5][0] = tloop32delay[1];
+assign v1_wr_data_valid[/*idx12=*/ 5][0] = tloop32delay[1];
+assign v1_wr_data_input[/*idx12=*/ 5][0] = v39;
+
+
+//TerminatorOp
+
+//} Unrolled body 5 of loop12.
+//DEBUG: /*idx12=*/ 3'd5, expected 5
+
+//{ Unrolled body 6 of loop12.
+//DEBUG: /*idx12=*/ 3'd6, expected 6
+//printTimeOffset
+reg tloop37delay[1:0] = '{default:0} ;
+always@(*) tloop37delay[0] <= tloop37;
+generate
+genvar i43;
+
+for(i43 = 1; i43<= 1; i43= i43 + 1) begin
+always@(posedge clk) begin
+tloop37delay[i43] <= tloop37delay[i43-1];
+end
+end
+endgenerate
+
+
+//YieldOp at loc("test/HIR/matmul.mlir":15:7)
+wire tloop42 = tloop37delay[1];
+
+//MemReadOp at loc("test/HIR/matmul.mlir":17:13)
+assign v0_addr_valid[6] = tloop37delay[0];
+assign v0_addr_input[6] = {idx10[3:0], /*idx12=*/ 4'd6};
+wire[31:0] v44 = v0_rd_data;
+assign v0_rd_en_input[6] = tloop37delay[0];
+
+
+//DelayOp at loc("test/HIR/matmul.mlir":18:13)
+reg[31:0]shiftreg46[/*v5=*/ 1:0] = '{default:0};
+always@(*) shiftreg46[0] <= idx10;
+always@(posedge clk) shiftreg46[/*v5=*/ 1:1] <= shiftreg46[/*v5=*/ 0:0];
+wire [31:0] v45 = shiftreg46[/*v5=*/ 1];
+
+//MemWriteOp at loc("test/HIR/matmul.mlir":19:7)
+assign v1_addr_valid[/*idx12=*/ 6][0] = tloop37delay[1];
+assign v1_addr_input[/*idx12=*/ 6][0] = {v45[3:0]};
+assign v1_wr_en_input[/*idx12=*/ 6][0] = tloop37delay[1];
+assign v1_wr_data_valid[/*idx12=*/ 6][0] = tloop37delay[1];
+assign v1_wr_data_input[/*idx12=*/ 6][0] = v44;
+
+
+//TerminatorOp
+
+//} Unrolled body 6 of loop12.
+//DEBUG: /*idx12=*/ 3'd6, expected 6
+
+//{ Unrolled body 7 of loop12.
+//DEBUG: /*idx12=*/ 3'd7, expected 7
+//printTimeOffset
+reg tloop42delay[1:0] = '{default:0} ;
+always@(*) tloop42delay[0] <= tloop42;
+generate
+genvar i48;
+
+for(i48 = 1; i48<= 1; i48= i48 + 1) begin
+always@(posedge clk) begin
+tloop42delay[i48] <= tloop42delay[i48-1];
+end
+end
+endgenerate
+
+
+//YieldOp at loc("test/HIR/matmul.mlir":15:7)
+wire tloop47 = tloop42delay[1];
+
+//MemReadOp at loc("test/HIR/matmul.mlir":17:13)
+assign v0_addr_valid[7] = tloop42delay[0];
+assign v0_addr_input[7] = {idx10[3:0], /*idx12=*/ 4'd7};
+wire[31:0] v49 = v0_rd_data;
+assign v0_rd_en_input[7] = tloop42delay[0];
+
+
+//DelayOp at loc("test/HIR/matmul.mlir":18:13)
+reg[31:0]shiftreg51[/*v5=*/ 1:0] = '{default:0};
+always@(*) shiftreg51[0] <= idx10;
+always@(posedge clk) shiftreg51[/*v5=*/ 1:1] <= shiftreg51[/*v5=*/ 0:0];
+wire [31:0] v50 = shiftreg51[/*v5=*/ 1];
+
+//MemWriteOp at loc("test/HIR/matmul.mlir":19:7)
+assign v1_addr_valid[/*idx12=*/ 7][0] = tloop42delay[1];
+assign v1_addr_input[/*idx12=*/ 7][0] = {v50[3:0]};
+assign v1_wr_en_input[/*idx12=*/ 7][0] = tloop42delay[1];
+assign v1_wr_data_valid[/*idx12=*/ 7][0] = tloop42delay[1];
+assign v1_wr_data_input[/*idx12=*/ 7][0] = v49;
+
+
+//TerminatorOp
+
+//} Unrolled body 7 of loop12.
+//DEBUG: /*idx12=*/ 3'd7, expected 7
+
+//{ Unrolled body 8 of loop12.
+//DEBUG: /*idx12=*/ 4'd8, expected 8
+//printTimeOffset
+reg tloop47delay[1:0] = '{default:0} ;
+always@(*) tloop47delay[0] <= tloop47;
+generate
+genvar i53;
+
+for(i53 = 1; i53<= 1; i53= i53 + 1) begin
+always@(posedge clk) begin
+tloop47delay[i53] <= tloop47delay[i53-1];
+end
+end
+endgenerate
+
+
+//YieldOp at loc("test/HIR/matmul.mlir":15:7)
+wire tloop52 = tloop47delay[1];
+
+//MemReadOp at loc("test/HIR/matmul.mlir":17:13)
+assign v0_addr_valid[8] = tloop47delay[0];
+assign v0_addr_input[8] = {idx10[3:0], /*idx12=*/ 4'd8};
+wire[31:0] v54 = v0_rd_data;
+assign v0_rd_en_input[8] = tloop47delay[0];
+
+
+//DelayOp at loc("test/HIR/matmul.mlir":18:13)
+reg[31:0]shiftreg56[/*v5=*/ 1:0] = '{default:0};
+always@(*) shiftreg56[0] <= idx10;
+always@(posedge clk) shiftreg56[/*v5=*/ 1:1] <= shiftreg56[/*v5=*/ 0:0];
+wire [31:0] v55 = shiftreg56[/*v5=*/ 1];
+
+//MemWriteOp at loc("test/HIR/matmul.mlir":19:7)
+assign v1_addr_valid[/*idx12=*/ 8][0] = tloop47delay[1];
+assign v1_addr_input[/*idx12=*/ 8][0] = {v55[3:0]};
+assign v1_wr_en_input[/*idx12=*/ 8][0] = tloop47delay[1];
+assign v1_wr_data_valid[/*idx12=*/ 8][0] = tloop47delay[1];
+assign v1_wr_data_input[/*idx12=*/ 8][0] = v54;
+
+
+//TerminatorOp
+
+//} Unrolled body 8 of loop12.
+//DEBUG: /*idx12=*/ 4'd8, expected 8
+
+//{ Unrolled body 9 of loop12.
+//DEBUG: /*idx12=*/ 4'd9, expected 9
+//printTimeOffset
+reg tloop52delay[1:0] = '{default:0} ;
+always@(*) tloop52delay[0] <= tloop52;
+generate
+genvar i58;
+
+for(i58 = 1; i58<= 1; i58= i58 + 1) begin
+always@(posedge clk) begin
+tloop52delay[i58] <= tloop52delay[i58-1];
+end
+end
+endgenerate
+
+
+//YieldOp at loc("test/HIR/matmul.mlir":15:7)
+wire tloop57 = tloop52delay[1];
+
+//MemReadOp at loc("test/HIR/matmul.mlir":17:13)
+assign v0_addr_valid[9] = tloop52delay[0];
+assign v0_addr_input[9] = {idx10[3:0], /*idx12=*/ 4'd9};
+wire[31:0] v59 = v0_rd_data;
+assign v0_rd_en_input[9] = tloop52delay[0];
+
+
+//DelayOp at loc("test/HIR/matmul.mlir":18:13)
+reg[31:0]shiftreg61[/*v5=*/ 1:0] = '{default:0};
+always@(*) shiftreg61[0] <= idx10;
+always@(posedge clk) shiftreg61[/*v5=*/ 1:1] <= shiftreg61[/*v5=*/ 0:0];
+wire [31:0] v60 = shiftreg61[/*v5=*/ 1];
+
+//MemWriteOp at loc("test/HIR/matmul.mlir":19:7)
+assign v1_addr_valid[/*idx12=*/ 9][0] = tloop52delay[1];
+assign v1_addr_input[/*idx12=*/ 9][0] = {v60[3:0]};
+assign v1_wr_en_input[/*idx12=*/ 9][0] = tloop52delay[1];
+assign v1_wr_data_valid[/*idx12=*/ 9][0] = tloop52delay[1];
+assign v1_wr_data_input[/*idx12=*/ 9][0] = v59;
+
+
+//TerminatorOp
+
+//} Unrolled body 9 of loop12.
+//DEBUG: /*idx12=*/ 4'd9, expected 9
+
+//{ Unrolled body 10 of loop12.
+//DEBUG: /*idx12=*/ 4'd10, expected 10
+//printTimeOffset
+reg tloop57delay[1:0] = '{default:0} ;
+always@(*) tloop57delay[0] <= tloop57;
+generate
+genvar i63;
+
+for(i63 = 1; i63<= 1; i63= i63 + 1) begin
+always@(posedge clk) begin
+tloop57delay[i63] <= tloop57delay[i63-1];
+end
+end
+endgenerate
+
+
+//YieldOp at loc("test/HIR/matmul.mlir":15:7)
+wire tloop62 = tloop57delay[1];
+
+//MemReadOp at loc("test/HIR/matmul.mlir":17:13)
+assign v0_addr_valid[10] = tloop57delay[0];
+assign v0_addr_input[10] = {idx10[3:0], /*idx12=*/ 4'd10};
+wire[31:0] v64 = v0_rd_data;
+assign v0_rd_en_input[10] = tloop57delay[0];
+
+
+//DelayOp at loc("test/HIR/matmul.mlir":18:13)
+reg[31:0]shiftreg66[/*v5=*/ 1:0] = '{default:0};
+always@(*) shiftreg66[0] <= idx10;
+always@(posedge clk) shiftreg66[/*v5=*/ 1:1] <= shiftreg66[/*v5=*/ 0:0];
+wire [31:0] v65 = shiftreg66[/*v5=*/ 1];
+
+//MemWriteOp at loc("test/HIR/matmul.mlir":19:7)
+assign v1_addr_valid[/*idx12=*/ 10][0] = tloop57delay[1];
+assign v1_addr_input[/*idx12=*/ 10][0] = {v65[3:0]};
+assign v1_wr_en_input[/*idx12=*/ 10][0] = tloop57delay[1];
+assign v1_wr_data_valid[/*idx12=*/ 10][0] = tloop57delay[1];
+assign v1_wr_data_input[/*idx12=*/ 10][0] = v64;
+
+
+//TerminatorOp
+
+//} Unrolled body 10 of loop12.
+//DEBUG: /*idx12=*/ 4'd10, expected 10
+
+//{ Unrolled body 11 of loop12.
+//DEBUG: /*idx12=*/ 4'd11, expected 11
+//printTimeOffset
+reg tloop62delay[1:0] = '{default:0} ;
+always@(*) tloop62delay[0] <= tloop62;
+generate
+genvar i68;
+
+for(i68 = 1; i68<= 1; i68= i68 + 1) begin
+always@(posedge clk) begin
+tloop62delay[i68] <= tloop62delay[i68-1];
+end
+end
+endgenerate
+
+
+//YieldOp at loc("test/HIR/matmul.mlir":15:7)
+wire tloop67 = tloop62delay[1];
+
+//MemReadOp at loc("test/HIR/matmul.mlir":17:13)
+assign v0_addr_valid[11] = tloop62delay[0];
+assign v0_addr_input[11] = {idx10[3:0], /*idx12=*/ 4'd11};
+wire[31:0] v69 = v0_rd_data;
+assign v0_rd_en_input[11] = tloop62delay[0];
+
+
+//DelayOp at loc("test/HIR/matmul.mlir":18:13)
+reg[31:0]shiftreg71[/*v5=*/ 1:0] = '{default:0};
+always@(*) shiftreg71[0] <= idx10;
+always@(posedge clk) shiftreg71[/*v5=*/ 1:1] <= shiftreg71[/*v5=*/ 0:0];
+wire [31:0] v70 = shiftreg71[/*v5=*/ 1];
+
+//MemWriteOp at loc("test/HIR/matmul.mlir":19:7)
+assign v1_addr_valid[/*idx12=*/ 11][0] = tloop62delay[1];
+assign v1_addr_input[/*idx12=*/ 11][0] = {v70[3:0]};
+assign v1_wr_en_input[/*idx12=*/ 11][0] = tloop62delay[1];
+assign v1_wr_data_valid[/*idx12=*/ 11][0] = tloop62delay[1];
+assign v1_wr_data_input[/*idx12=*/ 11][0] = v69;
+
+
+//TerminatorOp
+
+//} Unrolled body 11 of loop12.
+//DEBUG: /*idx12=*/ 4'd11, expected 11
+
+//{ Unrolled body 12 of loop12.
+//DEBUG: /*idx12=*/ 4'd12, expected 12
+//printTimeOffset
+reg tloop67delay[1:0] = '{default:0} ;
+always@(*) tloop67delay[0] <= tloop67;
+generate
+genvar i73;
+
+for(i73 = 1; i73<= 1; i73= i73 + 1) begin
+always@(posedge clk) begin
+tloop67delay[i73] <= tloop67delay[i73-1];
+end
+end
+endgenerate
+
+
+//YieldOp at loc("test/HIR/matmul.mlir":15:7)
+wire tloop72 = tloop67delay[1];
+
+//MemReadOp at loc("test/HIR/matmul.mlir":17:13)
+assign v0_addr_valid[12] = tloop67delay[0];
+assign v0_addr_input[12] = {idx10[3:0], /*idx12=*/ 4'd12};
+wire[31:0] v74 = v0_rd_data;
+assign v0_rd_en_input[12] = tloop67delay[0];
+
+
+//DelayOp at loc("test/HIR/matmul.mlir":18:13)
+reg[31:0]shiftreg76[/*v5=*/ 1:0] = '{default:0};
+always@(*) shiftreg76[0] <= idx10;
+always@(posedge clk) shiftreg76[/*v5=*/ 1:1] <= shiftreg76[/*v5=*/ 0:0];
+wire [31:0] v75 = shiftreg76[/*v5=*/ 1];
+
+//MemWriteOp at loc("test/HIR/matmul.mlir":19:7)
+assign v1_addr_valid[/*idx12=*/ 12][0] = tloop67delay[1];
+assign v1_addr_input[/*idx12=*/ 12][0] = {v75[3:0]};
+assign v1_wr_en_input[/*idx12=*/ 12][0] = tloop67delay[1];
+assign v1_wr_data_valid[/*idx12=*/ 12][0] = tloop67delay[1];
+assign v1_wr_data_input[/*idx12=*/ 12][0] = v74;
+
+
+//TerminatorOp
+
+//} Unrolled body 12 of loop12.
+//DEBUG: /*idx12=*/ 4'd12, expected 12
+
+//{ Unrolled body 13 of loop12.
+//DEBUG: /*idx12=*/ 4'd13, expected 13
+//printTimeOffset
+reg tloop72delay[1:0] = '{default:0} ;
+always@(*) tloop72delay[0] <= tloop72;
+generate
+genvar i78;
+
+for(i78 = 1; i78<= 1; i78= i78 + 1) begin
+always@(posedge clk) begin
+tloop72delay[i78] <= tloop72delay[i78-1];
+end
+end
+endgenerate
+
+
+//YieldOp at loc("test/HIR/matmul.mlir":15:7)
+wire tloop77 = tloop72delay[1];
+
+//MemReadOp at loc("test/HIR/matmul.mlir":17:13)
+assign v0_addr_valid[13] = tloop72delay[0];
+assign v0_addr_input[13] = {idx10[3:0], /*idx12=*/ 4'd13};
+wire[31:0] v79 = v0_rd_data;
+assign v0_rd_en_input[13] = tloop72delay[0];
+
+
+//DelayOp at loc("test/HIR/matmul.mlir":18:13)
+reg[31:0]shiftreg81[/*v5=*/ 1:0] = '{default:0};
+always@(*) shiftreg81[0] <= idx10;
+always@(posedge clk) shiftreg81[/*v5=*/ 1:1] <= shiftreg81[/*v5=*/ 0:0];
+wire [31:0] v80 = shiftreg81[/*v5=*/ 1];
+
+//MemWriteOp at loc("test/HIR/matmul.mlir":19:7)
+assign v1_addr_valid[/*idx12=*/ 13][0] = tloop72delay[1];
+assign v1_addr_input[/*idx12=*/ 13][0] = {v80[3:0]};
+assign v1_wr_en_input[/*idx12=*/ 13][0] = tloop72delay[1];
+assign v1_wr_data_valid[/*idx12=*/ 13][0] = tloop72delay[1];
+assign v1_wr_data_input[/*idx12=*/ 13][0] = v79;
+
+
+//TerminatorOp
+
+//} Unrolled body 13 of loop12.
+//DEBUG: /*idx12=*/ 4'd13, expected 13
+
+//{ Unrolled body 14 of loop12.
+//DEBUG: /*idx12=*/ 4'd14, expected 14
+//printTimeOffset
+reg tloop77delay[1:0] = '{default:0} ;
+always@(*) tloop77delay[0] <= tloop77;
+generate
+genvar i83;
+
+for(i83 = 1; i83<= 1; i83= i83 + 1) begin
+always@(posedge clk) begin
+tloop77delay[i83] <= tloop77delay[i83-1];
+end
+end
+endgenerate
+
+
+//YieldOp at loc("test/HIR/matmul.mlir":15:7)
+wire tloop82 = tloop77delay[1];
+
+//MemReadOp at loc("test/HIR/matmul.mlir":17:13)
+assign v0_addr_valid[14] = tloop77delay[0];
+assign v0_addr_input[14] = {idx10[3:0], /*idx12=*/ 4'd14};
+wire[31:0] v84 = v0_rd_data;
+assign v0_rd_en_input[14] = tloop77delay[0];
+
+
+//DelayOp at loc("test/HIR/matmul.mlir":18:13)
+reg[31:0]shiftreg86[/*v5=*/ 1:0] = '{default:0};
+always@(*) shiftreg86[0] <= idx10;
+always@(posedge clk) shiftreg86[/*v5=*/ 1:1] <= shiftreg86[/*v5=*/ 0:0];
+wire [31:0] v85 = shiftreg86[/*v5=*/ 1];
+
+//MemWriteOp at loc("test/HIR/matmul.mlir":19:7)
+assign v1_addr_valid[/*idx12=*/ 14][0] = tloop77delay[1];
+assign v1_addr_input[/*idx12=*/ 14][0] = {v85[3:0]};
+assign v1_wr_en_input[/*idx12=*/ 14][0] = tloop77delay[1];
+assign v1_wr_data_valid[/*idx12=*/ 14][0] = tloop77delay[1];
+assign v1_wr_data_input[/*idx12=*/ 14][0] = v84;
+
+
+//TerminatorOp
+
+//} Unrolled body 14 of loop12.
+//DEBUG: /*idx12=*/ 4'd14, expected 14
+
+//{ Unrolled body 15 of loop12.
+//DEBUG: /*idx12=*/ 4'd15, expected 15
+//printTimeOffset
+reg tloop82delay[1:0] = '{default:0} ;
+always@(*) tloop82delay[0] <= tloop82;
+generate
+genvar i88;
+
+for(i88 = 1; i88<= 1; i88= i88 + 1) begin
+always@(posedge clk) begin
+tloop82delay[i88] <= tloop82delay[i88-1];
+end
+end
+endgenerate
+
+
+//YieldOp at loc("test/HIR/matmul.mlir":15:7)
+wire tloop87 = tloop82delay[1];
+
+//MemReadOp at loc("test/HIR/matmul.mlir":17:13)
+assign v0_addr_valid[15] = tloop82delay[0];
+assign v0_addr_input[15] = {idx10[3:0], /*idx12=*/ 4'd15};
+wire[31:0] v89 = v0_rd_data;
+assign v0_rd_en_input[15] = tloop82delay[0];
+
+
+//DelayOp at loc("test/HIR/matmul.mlir":18:13)
+reg[31:0]shiftreg91[/*v5=*/ 1:0] = '{default:0};
+always@(*) shiftreg91[0] <= idx10;
+always@(posedge clk) shiftreg91[/*v5=*/ 1:1] <= shiftreg91[/*v5=*/ 0:0];
+wire [31:0] v90 = shiftreg91[/*v5=*/ 1];
+
+//MemWriteOp at loc("test/HIR/matmul.mlir":19:7)
+assign v1_addr_valid[/*idx12=*/ 15][0] = tloop82delay[1];
+assign v1_addr_input[/*idx12=*/ 15][0] = {v90[3:0]};
+assign v1_wr_en_input[/*idx12=*/ 15][0] = tloop82delay[1];
+assign v1_wr_data_valid[/*idx12=*/ 15][0] = tloop82delay[1];
+assign v1_wr_data_input[/*idx12=*/ 15][0] = v89;
+
+
+//TerminatorOp
+
+//} Unrolled body 15 of loop12.
+//DEBUG: /*idx12=*/ 4'd15, expected 15
+
+//{ Assign tlast of prev UnrollForLoop
+wire t92;
+assign t92 = tloop87;
+//printTimeOffset
+reg t92delay[0:0] = '{default:0} ;
+always@(*) t92delay[0] <= t92;
+generate
+genvar i93;
+
+for(i93 = 1; i93<= 0; i93= i93 + 1) begin
+always@(posedge clk) begin
+t92delay[i93] <= t92delay[i93-1];
+end
+end
+endgenerate
+
+
+//} Assign tlast of prev UnrollForLoop
+//YieldOp at loc("test/HIR/matmul.mlir":21:5)
+assign tloop_in10 = t92delay[0];
+
+//TerminatorOp
+
+//} Loop10
+//printTimeOffset
+reg tfinish10delay[0:0] = '{default:0} ;
+always@(*) tfinish10delay[0] <= tfinDefOp found
+PLEASE submit a bug report to https://bugs.llvm.org/ and include the crash backtrace.
+Stack dump:
+0.	Program arguments: ./build/bin/circt-translate --hir-to-verilog test/HIR/matmul.mlir 
+ #0 0x00005652bbf6f335 llvm::sys::PrintStackTrace(llvm::raw_ostream&) /home/kingshuk/Git_Clones/circt-mirror/llvm/llvm/lib/Support/Unix/Signals.inc:564:0
+ #1 0x00005652bbf6f3c8 PrintStackTraceSignalHandler(void*) /home/kingshuk/Git_Clones/circt-mirror/llvm/llvm/lib/Support/Unix/Signals.inc:625:0
+ #2 0x00005652bbf6d165 llvm::sys::RunSignalHandlers() /home/kingshuk/Git_Clones/circt-mirror/llvm/llvm/lib/Support/Signals.cpp:68:0
+ #3 0x00005652bbf6ecb2 SignalHandler(int) /home/kingshuk/Git_Clones/circt-mirror/llvm/llvm/lib/Support/Unix/Signals.inc:406:0
+ #4 0x00007f0467b288a0 __restore_rt (/lib/x86_64-linux-gnu/libpthread.so.0+0x128a0)
+ #5 0x00005652bc03073a mlir::TypeStorage::getSubclassData() const /home/kingshuk/Git_Clones/circt-mirror/llvm/mlir/include/mlir/IR/TypeSupport.h:83:0
+ #6 0x00005652bc069948 mlir::detail::IntegerTypeStorage::getWidth() /home/kingshuk/Git_Clones/circt-mirror/llvm/mlir/lib/IR/TypeDetail.h:92:0
+ #7 0x00005652bc065e26 mlir::IntegerType::getWidth() const /home/kingshuk/Git_Clones/circt-mirror/llvm/mlir/lib/IR/StandardTypes.cpp:133:0
+ #8 0x00005652bc2c316c (anonymous namespace)::VerilogPrinter::printDefOp(mlir::hir::DefOp, unsigned int) /home/kingshuk/Git_Clones/circt-mirror/build/../lib/Target/HIRToVerilog/HIRToVerilog.cpp:887:0
+ #9 0x00005652bc2c4536 operator() /home/kingshuk/Git_Clones/circt-mirror/build/../lib/Target/HIRToVerilog/HIRToVerilog.cpp:1030:0
+#10 0x00005652bc2c4536 (anonymous namespace)::VerilogPrinter::printModule(mlir::ModuleOp)::{lambda(mlir::hir::DefOp)#1}::operator()(mlir::hir::DefOp) const (./build/bin/circt-translate+0x42a536)
+#11 0x00005652bc2c5f51 operator() /home/kingshuk/Git_Clones/circt-mirror/build/../llvm/mlir/include/mlir/IR/Visitors.h:130:0
+#12 0x00005652bc2c5f51 mlir::detail::walkOperations<(anonymous namespace)::VerilogPrinter::printModule(mlir::ModuleOp)::{lambda(mlir::hir::DefOp)#1}, mlir::hir::DefOp, mlir::WalkResult>(mlir::Operation, (anonymous namespace)::VerilogPrinter::printModule(mlir::ModuleOp)::{lambda(mlir::hir::DefOp)#1}&&)::{lambda(mlir::Operation)#1}::operator()(mlir::Operation) const (./build/bin/circt-translate+0x42bf51)
+#13 0x00005652bc2c68cb mlir::WalkResult llvm::function_ref<mlir::WalkResult (mlir::Operation*)>::callback_fn<mlir::detail::walkOperations<(anonymous namespace)::VerilogPrinter::printModule(mlir::ModuleOp)::{lambda(mlir::hir::DefOp)#1}, mlir::hir::DefOp, mlir::WalkResult>(mlir::Operation*, (anonymous namespace)::VerilogPrinter::printModule(mlir::ModuleOp)::{lambda(mlir::hir::DefOp)#1}&&)::{lambda(mlir::Operation*)#1}>(long, mlir::Operation*) /home/kingshuk/Git_Clones/circt-mirror/build/../llvm/llvm/include/llvm/ADT/STLExtras.h:187:0
+#14 0x00005652bc08f62f llvm::function_ref<mlir::WalkResult (mlir::Operation*)>::operator()(mlir::Operation*) const /home/kingshuk/Git_Clones/circt-mirror/llvm/llvm/include/llvm/ADT/STLExtras.h:204:0
+#15 0x00005652bc08f4f0 mlir::detail::walkOperations(mlir::Operation*, llvm::function_ref<mlir::WalkResult (mlir::Operation*)>) /home/kingshuk/Git_Clones/circt-mirror/llvm/mlir/lib/IR/Visitors.cpp:42:0
+#16 0x00005652bc08f488 mlir::detail::walkOperations(mlir::Operation*, llvm::function_ref<mlir::WalkResult (mlir::Operation*)>) /home/kingshuk/Git_Clones/circt-mirror/llvm/mlir/lib/IR/Visitors.cpp:37:0
+#17 0x00005652bc2c5fc4 std::enable_if<(!std::is_same<mlir::hir::DefOp, mlir::Operation*>::value)&&std::enable_if<mlir::WalkResult, (anonymous namespace)::VerilogPrinter::printModule(mlir::ModuleOp)::{lambda(mlir::hir::DefOp)#1}>::value, std::is_same<mlir::hir::DefOp, mlir::Operation*> >::type mlir::detail::walkOperations<(anonymous namespace)::VerilogPrinter::printModule(mlir::ModuleOp)::{lambda(mlir::hir::DefOp)#1}, mlir::hir::DefOp, mlir::WalkResult>(mlir::Operation, (anonymous namespace)::VerilogPrinter::printModule(mlir::ModuleOp)::{lambda(mlir::hir::DefOp)#1}&&) /home/kingshuk/Git_Clones/circt-mirror/build/../llvm/mlir/include/mlir/IR/Visitors.h:134:0
+#18 0x00005652bc2c552c mlir::WalkResult mlir::Operation::walk<(anonymous namespace)::VerilogPrinter::printModule(mlir::ModuleOp)::{lambda(mlir::hir::DefOp)#1}, mlir::WalkResult>((anonymous namespace)::VerilogPrinter::printModule(mlir::ModuleOp)::{lambda(mlir::hir::DefOp)#1}&&) /home/kingshuk/Git_Clones/circt-mirror/build/../llvm/mlir/include/mlir/IR/Operation.h:515:0
+#19 0x00005652bc2c4bb3 mlir::WalkResult mlir::OpState::walk<(anonymous namespace)::VerilogPrinter::printModule(mlir::ModuleOp)::{lambda(mlir::hir::DefOp)#1}, mlir::WalkResult>((anonymous namespace)::VerilogPrinter::printModule(mlir::ModuleOp)::{lambda(mlir::hir::DefOp)#1}&&) /home/kingshuk/Git_Clones/circt-mirror/build/../llvm/mlir/include/mlir/IR/OpDefinition.h:220:0
+#20 0x00005652bc2c45f0 (anonymous namespace)::VerilogPrinter::printModule(mlir::ModuleOp) /home/kingshuk/Git_Clones/circt-mirror/build/../lib/Target/HIRToVerilog/HIRToVerilog.cpp:1036:0
+#21 0x00005652bc2c46f5 mlir::hir::printVerilog(mlir::ModuleOp, llvm::raw_ostream&) /home/kingshuk/Git_Clones/circt-mirror/build/../lib/Target/HIRToVerilog/HIRToVerilog.cpp:1045:0
+#22 0x00005652bc2c475d operator() /home/kingshuk/Git_Clones/circt-mirror/build/../lib/Target/HIRToVerilog/HIRToVerilog.cpp:1052:0
+#23 0x00005652bc2c475d mlir::hir::registerHIRToVerilogTranslation()::{lambda(mlir::ModuleOp, llvm::raw_ostream&)#1}::operator()(mlir::ModuleOp, llvm::raw_ostream&) const (./build/bin/circt-translate+0x42a75d)
+#24 0x00005652bc2c55ee std::_Function_handler<mlir::LogicalResult (mlir::ModuleOp, llvm::raw_ostream&), mlir::hir::registerHIRToVerilogTranslation()::{lambda(mlir::ModuleOp, llvm::raw_ostream&)#1}>::_M_invoke(std::_Any_data const&, mlir::ModuleOp&&, llvm::raw_ostream&) /usr/include/c++/7/bits/std_function.h:303:0
+#25 0x00005652bbfae8c5 std::function<mlir::LogicalResult (mlir::ModuleOp, llvm::raw_ostream&)>::operator()(mlir::ModuleOp, llvm::raw_ostream&) const /usr/include/c++/7/bits/std_function.h:707:0
+#26 0x00005652bbfad30d operator() /home/kingshuk/Git_Clones/circt-mirror/llvm/mlir/lib/Translation/Translation.cpp:98:0
+#27 0x00005652bbfad30d mlir::TranslateFromMLIRRegistration::TranslateFromMLIRRegistration(llvm::StringRef, std::function<mlir::LogicalResult (mlir::ModuleOp, llvm::raw_ostream&)> const&)::{lambda(llvm::SourceMgr&, llvm::raw_ostream&, mlir::MLIRContext*)#1}::operator()(llvm::SourceMgr&, llvm::raw_ostream&, mlir::MLIRContext*) const (./build/bin/circt-translate+0x11330d)
+#28 0x00005652bbfadbb1 std::_Function_handler<mlir::LogicalResult (llvm::SourceMgr&, llvm::raw_ostream&, mlir::MLIRContext*), mlir::TranslateFromMLIRRegistration::TranslateFromMLIRRegistration(llvm::StringRef, std::function<mlir::LogicalResult (mlir::ModuleOp, llvm::raw_ostream&)> const&)::{lambda(llvm::SourceMgr&, llvm::raw_ostream&, mlir::MLIRContext*)#1}>::_M_invoke(std::_Any_data const&, llvm::SourceMgr&, llvm::raw_ostream&, mlir::MLIRContext*&&) /usr/include/c++/7/bits/std_function.h:303:0
+#29 0x00005652bbebb988 std::function<mlir::LogicalResult (llvm::SourceMgr&, llvm::raw_ostream&, mlir::MLIRContext*)>::operator()(llvm::SourceMgr&, llvm::raw_ostream&, mlir::MLIRContext*) const /usr/include/c++/7/bits/std_function.h:707:0
+#30 0x00005652bbeb8be8 operator() /home/kingshuk/Git_Clones/circt-mirror/build/../tools/circt-translate/circt-translate.cpp:106:0
+#31 0x00005652bbeb8be8 main::{lambda(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer> >, llvm::raw_ostream&)#1}::operator()(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer> >, llvm::raw_ostream&) const (./build/bin/circt-translate+0x1ebe8)
+#32 0x00005652bbeb9016 main /home/kingshuk/Git_Clones/circt-mirror/build/../tools/circt-translate/circt-translate.cpp:122:0
+#33 0x00007f0466bddb97 __libc_start_main /build/glibc-2ORdQG/glibc-2.27/csu/../csu/libc-start.c:344:0
+#34 0x00005652bbeb89da _start (./build/bin/circt-translate+0x1e9da)

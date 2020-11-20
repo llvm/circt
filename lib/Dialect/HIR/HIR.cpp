@@ -201,6 +201,11 @@ static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
   if (offset_present)
     parser.resolveOperand(offset, getConstIntType(parser), result.operands);
 
+  result.addAttribute("operand_segment_sizes",
+                      parser.getBuilder().getI32VectorAttr(
+                          {static_cast<int32_t>(operands.size()), 1,
+                           static_cast<int32_t>(offset_present ? 1 : 0)}));
+
   // Return if no output args.
   if (parser.parseOptionalArrow()) {
     // blank output_delays attr
@@ -246,11 +251,6 @@ static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
       parser.getBuilder().getNamedAttr("output_delays", resultDelayAttrs));
 
   result.addTypes(resultTypes);
-
-  result.addAttribute("operand_segment_sizes",
-                      parser.getBuilder().getI32VectorAttr(
-                          {static_cast<int32_t>(operands.size()), 1,
-                           static_cast<int32_t>(offset_present ? 1 : 0)}));
   return success();
 }
 

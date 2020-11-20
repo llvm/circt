@@ -1,4 +1,4 @@
-//=========- BitwidthReductionPass.cpp - Verify schedule of HIR
+//=========- MemrefTrace.cpp - Verify schedule of HIR
 // dialect---------===//
 //
 // This file implements the HIR schedule verifier.
@@ -43,9 +43,35 @@ public:
   Value t;
   unsigned delay;
 };
+
+class Tensor {
+public:
+  Tensor(llvm::ArrayRef<unsigned> dims) {
+    unsigned size = 1;
+    for (auto dim : dims) {
+      size *= dim;
+    }
+    store.resize(size, 0);
+    for (auto dim : dims) {
+      this->dims.push_back(dim);
+    }
+  }
+
+  unsigned &at(llvm::ArrayRef<unsigned> indices) {
+    unsigned lin_idx = indices[indices.size() - 1];
+    for (int i = indices.size() - 2; i >= 0; i++) {
+      lin_idx *= indices[i] * dims[i + 1];
+    }
+    return store[lin_idx];
+  }
+
+private:
+  llvm::SmallVector<unsigned, 4> dims;
+  std::vector<unsigned> store;
+};
+
 /// Checks for out of bound memef access subscripts..
-class BitwidthReductionPass
-    : public PassWrapper<BitwidthReductionPass, OperationPass<hir::DefOp>> {
+class MemrefTrace : public PassWrapper<MemrefTrace, OperationPass<hir::DefOp>> {
 public:
   void runOnOperation() override;
 
@@ -106,22 +132,32 @@ private:
   }
 
 private:
+  llvm::DenseMap<Value, Tensor *> mapMemrefToTensor;
   llvm::DenseMap<Value, int> mapValueToIntConst;
-  std::vector<Operation *> opsToErase;
+  std::list<Tensor> memrefTensors;
 };
 
-bool BitwidthReductionPass::inspectOp(DefOp op) {
+bool MemrefTrace::inspectOp(DefOp op) {
   Block &entryBlock = op.getBody().front();
+  auto args = entryBlock.getArguments();
+  for (auto arg : args) {
+    if (arg.isa<hir::MemrefType>()) {
+      memrefTensors.push_back(
+          Tensor(arg.getType().dyn_cast<MemrefType>().getShape()));
+
+      mapMemrefToTensor[arg] = &memrefTensors.back();
+    }
+  }
   inspectBody(entryBlock);
   return true;
 }
 
-bool BitwidthReductionPass::inspectOp(hir::ConstantOp op) {
+bool MemrefTrace::inspectOp(hir::ConstantOp op) {
   setIntegerConst(op.res(), op.value().getLimitedValue());
   return true;
 }
 
-bool BitwidthReductionPass::inspectOp(ForOp op) {
+bool MemrefTrace::inspectOp(ForOp op) {
   Value lb = op.lb();
   Value ub = op.ub();
   Value step = op.step();
@@ -143,16 +179,16 @@ bool BitwidthReductionPass::inspectOp(ForOp op) {
   return true;
 }
 
-bool BitwidthReductionPass::inspectOp(UnrollForOp op) {
+bool MemrefTrace::inspectOp(UnrollForOp op) {
   inspectBody(op.getLoopBody().front());
   return true;
 }
 
-bool BitwidthReductionPass::inspectOp(MemReadOp op) { return true; }
+bool MemrefTrace::inspectOp(MemReadOp op) { return true; }
 
-bool BitwidthReductionPass::inspectOp(MemWriteOp op) { return true; }
+bool MemrefTrace::inspectOp(MemWriteOp op) { return true; }
 
-bool BitwidthReductionPass::inspectOp(hir::AddOp op) {
+bool MemrefTrace::inspectOp(hir::AddOp op) {
   Value result = op.res();
   Value left = op.left();
   Value right = op.right();
@@ -160,7 +196,7 @@ bool BitwidthReductionPass::inspectOp(hir::AddOp op) {
   return true;
 }
 
-bool BitwidthReductionPass::inspectOp(hir::SubtractOp op) {
+bool MemrefTrace::inspectOp(hir::SubtractOp op) {
   Value result = op.res();
   Value left = op.left();
   Value right = op.right();
@@ -168,21 +204,30 @@ bool BitwidthReductionPass::inspectOp(hir::SubtractOp op) {
   return true;
 }
 
-bool BitwidthReductionPass::inspectOp(hir::ReturnOp op) { return true; }
+bool MemrefTrace::inspectOp(hir::ReturnOp op) { return true; }
 
-bool BitwidthReductionPass::inspectOp(hir::YieldOp op) { return true; }
+bool MemrefTrace::inspectOp(hir::YieldOp op) { return true; }
 
-bool BitwidthReductionPass::inspectOp(hir::WireWriteOp op) { return true; }
+bool MemrefTrace::inspectOp(hir::WireWriteOp op) { return true; }
 
-bool BitwidthReductionPass::inspectOp(hir::WireReadOp op) { return true; }
+bool MemrefTrace::inspectOp(hir::WireReadOp op) { return true; }
 
-bool BitwidthReductionPass::inspectOp(hir::AllocOp op) { return true; }
+bool MemrefTrace::inspectOp(hir::AllocOp op) {
+  auto results = op.res();
+  memrefTensors.push_back(
+      Tensor(results[0].getType().dyn_cast<MemrefType>().getShape()));
+  for (auto result : results) {
+    assert(result.isa<hir::MemrefType>());
+    mapMemrefToTensor[result] = &memrefTensors.back();
+  }
+  return true;
+}
 
-bool BitwidthReductionPass::inspectOp(hir::DelayOp op) { return true; }
+bool MemrefTrace::inspectOp(hir::DelayOp op) { return true; }
 
-bool BitwidthReductionPass::inspectOp(hir::CallOp op) { return true; }
+bool MemrefTrace::inspectOp(hir::CallOp op) { return true; }
 
-bool BitwidthReductionPass::inspectOp(Operation *inst) {
+bool MemrefTrace::inspectOp(Operation *inst) {
   if (auto op = dyn_cast<hir::ConstantOp>(inst)) {
     return inspectOp(op);
   } else if (auto op = dyn_cast<hir::CallOp>(inst)) {
@@ -214,11 +259,12 @@ bool BitwidthReductionPass::inspectOp(Operation *inst) {
   } else if (auto op = dyn_cast<hir::TerminatorOp>(inst)) {
     // Do nothing.
   } else {
-    emitError(inst->getLoc(), "Unsupported Operation for bitwidth reduction!");
+    emitError(inst->getLoc(), "Unsupported Operation for reschedule!");
     return false;
   }
 }
-bool BitwidthReductionPass::inspectBody(Block &block) {
+
+bool MemrefTrace::inspectBody(Block &block) {
 
   // Print the operations within the entity.
   for (auto iter = block.begin(); iter != block.end(); ++iter) {
@@ -226,18 +272,15 @@ bool BitwidthReductionPass::inspectBody(Block &block) {
       return false;
     }
   }
-  for (auto operation : opsToErase) {
-    operation->erase();
-  }
 }
 } // end anonymous namespace
 
-void BitwidthReductionPass::runOnOperation() { inspectOp(getOperation()); }
+void MemrefTrace::runOnOperation() { inspectOp(getOperation()); }
 namespace mlir {
 namespace hir {
-void registerBitwidthReductionPass() {
-  PassRegistration<BitwidthReductionPass>(
-      "hir-reduce-bitwidth", "Reduce bitwidth of integers when safe.");
+void registerMemrefTrace() {
+  PassRegistration<MemrefTrace>("hir-reschedule",
+                                "Reschedule to improve performance.");
 }
 } // namespace hir
 } // namespace mlir
