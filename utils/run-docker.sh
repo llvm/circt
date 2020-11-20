@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Make it easier to run tests in a clean testing environment (the same as the
 # nightly tests) to tease out implicit dependencies on your local environment.
