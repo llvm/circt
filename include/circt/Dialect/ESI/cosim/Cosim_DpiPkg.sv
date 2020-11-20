@@ -16,7 +16,7 @@ import "DPI-C" sv2cCosimserverInit = function int cosim_init();
 
 // Teardown cosimserver (disconnects from primary server port, stops connections
 // from active clients).
-import "DPI-C" sv2cCosimserverFini = function void cosim_fini();
+import "DPI-C" sv2cCosimserverFinish = function void cosim_finish();
 
 // --------------------- Endpoint Management -----------------------------------
 

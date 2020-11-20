@@ -9,6 +9,7 @@
 
 #include "circt/Conversion/HandshakeToFIRRTL/HandshakeToFIRRTL.h"
 #include "circt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/Types.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/Visitor.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -683,52 +684,208 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
   return true;
 }
 
-/// Assume only one input is active.
 /// Please refer to test_cmerge.mlir test case.
+/// Lowers the ControlMergeOp into primitive FIRRTL ops.
+/// See http://www.cs.columbia.edu/~sedwards/papers/edwards2019compositional.pdf
+/// Section 3.4.
 bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
-  unsigned numPorts = portList.size();
+  auto *context = rewriter.getContext();
 
-  ValueVector resultSubfields = portList[numPorts - 2];
+  bool isControl = op.isControl();
+  unsigned numPorts = portList.size();
+  unsigned numInputs = numPorts - 4;
+
+  // The clock and reset signals will be used for registers.
+  Value clock = portList[numPorts - 2][0];
+  Value reset = portList[numPorts - 1][0];
+
+  // The second to last output has the result's ready and valid signals, and
+  // possibly data signal if isControl is not set.
+  ValueVector resultSubfields = portList[numInputs];
   Value resultValid = resultSubfields[0];
   Value resultReady = resultSubfields[1];
 
   // The last output indicates which input is active now.
-  ValueVector controlSubfields = portList[numPorts - 1];
+  ValueVector controlSubfields = portList[numInputs + 1];
   Value controlValid = controlSubfields[0];
   Value controlReady = controlSubfields[1];
   Value controlData = controlSubfields[2];
-  auto controlType = FlipType::get(controlData.getType().cast<FIRRTLType>());
 
-  auto argReadyOp = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
-                                               resultReady, controlReady);
-
-  // Walk through each input to create a chain of when operation.
-  for (unsigned i = 0, e = numPorts - 2; i < e; ++i) {
+  // Walk through each arg data to collect the subfields.
+  SmallVector<Value, 4> argValid;
+  SmallVector<Value, 4> argReady;
+  SmallVector<Value, 4> argData;
+  for (unsigned i = 0; i < numInputs; ++i) {
     ValueVector argSubfields = portList[i];
-    Value argValid = argSubfields[0];
-    Value argReady = argSubfields[1];
-
-    // If the current input is not the last one, the new created when operation
-    // will have an else region.
-    auto whenOp = rewriter.create<WhenOp>(insertLoc, argValid,
-                                          /*withElseRegion=*/(i != e - 1));
-    rewriter.setInsertionPointToStart(&whenOp.thenRegion().front());
-    rewriter.create<ConnectOp>(
-        insertLoc, controlData,
-        createConstantOp(controlType, APInt(64, i), insertLoc, rewriter));
-    rewriter.create<ConnectOp>(insertLoc, controlValid, argValid);
-    rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
-    rewriter.create<ConnectOp>(insertLoc, argReady, argReadyOp);
-
-    if (!op.getAttrOfType<BoolAttr>("control").getValue()) {
-      Value argData = argSubfields[2];
-      Value resultData = resultSubfields[2];
-      rewriter.create<ConnectOp>(insertLoc, resultData, argData);
-    }
-
-    if (i != e - 1)
-      rewriter.setInsertionPointToStart(&whenOp.elseRegion().front());
+    argValid.push_back(argSubfields[0]);
+    argReady.push_back(argSubfields[1]);
+    if (!isControl)
+      argData.push_back(argSubfields[2]);
   }
+
+  // Define some common types and values that will be used.
+  auto bitType = UIntType::get(context, 1);
+  auto indexBits = static_cast<int64_t>(std::ceil(std::log2(numInputs)) + 1);
+  auto indexType = SIntType::get(context, indexBits);
+  auto noWinner = createConstantOp(
+      indexType, APInt(indexBits, -1, /*isSigned=*/true), insertLoc, rewriter);
+  auto falseConst = createConstantOp(bitType, APInt(1, 0), insertLoc, rewriter);
+
+  // Declare register for storing arbitration winner.
+  auto wonName = rewriter.getStringAttr("won");
+  auto won = rewriter.create<RegInitOp>(insertLoc, indexType, clock, reset,
+                                        noWinner, wonName);
+
+  // Declare wire for arbitration winner.
+  auto winName = rewriter.getStringAttr("win");
+  auto win = rewriter.create<WireOp>(insertLoc, indexType, winName);
+
+  // Declare wire for whether the circuit just fired and emitted both outputs.
+  auto firedName = rewriter.getStringAttr("fired");
+  auto fired = rewriter.create<WireOp>(insertLoc, bitType, firedName);
+
+  // Declare registers for storing if each output has been emitted.
+  auto resultEmittedName = rewriter.getStringAttr("resultEmitted");
+  auto resultEmitted = rewriter.create<RegInitOp>(
+      insertLoc, bitType, clock, reset, falseConst, resultEmittedName);
+
+  auto controlEmittedName = rewriter.getStringAttr("controlEmitted");
+  auto controlEmitted = rewriter.create<RegInitOp>(
+      insertLoc, bitType, clock, reset, falseConst, controlEmittedName);
+
+  // Declare wires for if each output is done.
+  auto resultDoneName = rewriter.getStringAttr("resultDone");
+  auto resultDone = rewriter.create<WireOp>(insertLoc, bitType, resultDoneName);
+
+  auto controlDoneName = rewriter.getStringAttr("controlDone");
+  auto controlDone =
+      rewriter.create<WireOp>(insertLoc, bitType, controlDoneName);
+
+  // Create predicates to assert if the win wire or won register hold a valid
+  // index.
+  auto hasWinnerCondition =
+      rewriter.create<NEQPrimOp>(insertLoc, bitType, win, noWinner);
+
+  auto hadWinnerCondition =
+      rewriter.create<NEQPrimOp>(insertLoc, bitType, won, noWinner);
+
+  // Create an arbiter based on a simple priority-encoding scheme to assign an
+  // index to the win wire. If the won register is set, just use that. In
+  // the case that won is not set and no input is valid, set a sentinel value to
+  // indicate no winner was chosen. The constant values are remembered in a map
+  // so they can be re-used later to assign the arg ready outputs.
+  DenseMap<unsigned, Value> argIndexValues;
+  auto priorityMux = noWinner;
+  for (unsigned i = argValid.size(); i > 0; --i) {
+    unsigned inputIndex = i - 1;
+    auto constIndex = createConstantOp(indexType, APInt(indexBits, inputIndex),
+                                       insertLoc, rewriter);
+    priorityMux = rewriter.create<MuxPrimOp>(
+        insertLoc, indexType, argValid[inputIndex], constIndex, priorityMux);
+    argIndexValues[inputIndex] = constIndex;
+  }
+
+  priorityMux = rewriter.create<MuxPrimOp>(
+      insertLoc, indexType, hadWinnerCondition, won, priorityMux);
+  rewriter.create<ConnectOp>(insertLoc, win, priorityMux);
+
+  // Create the logic to assign the result and control outputs. The result valid
+  // output will always be assigned, and if isControl is not set, the result
+  // data output will also be assigned. The control valid and data outputs will
+  // always be assigned. The win wire from the arbiter is reinterpreted as
+  // unsigned. The unsigned wire is used to index into a tree of muxes to select
+  // the chosen input's signal(s), and is fed directly to the control output.
+  // Both the result and control valid outputs are gated on the win wire being
+  // set to something other than the sentinel value.
+  auto winUnsignedType = UIntType::get(context, indexBits - 1);
+
+  Value winUnsigned =
+      rewriter.create<BitsPrimOp>(insertLoc, win, indexBits - 2, 0);
+  winUnsigned =
+      rewriter.create<AsUIntPrimOp>(insertLoc, winUnsignedType, winUnsigned);
+
+  auto resultNotEmitted =
+      rewriter.create<NotPrimOp>(insertLoc, bitType, resultEmitted);
+
+  auto resultValidWire =
+      createMuxTree(argValid, winUnsigned, insertLoc, rewriter);
+  resultValidWire = rewriter.create<AndPrimOp>(
+      insertLoc, bitType, resultValidWire, hasWinnerCondition);
+  resultValidWire = rewriter.create<AndPrimOp>(
+      insertLoc, bitType, resultValidWire, resultNotEmitted);
+  rewriter.create<ConnectOp>(insertLoc, resultValid, resultValidWire);
+
+  if (!isControl) {
+    Value resultData = resultSubfields[2];
+    auto resultDataMux =
+        createMuxTree(argData, winUnsigned, insertLoc, rewriter);
+    rewriter.create<ConnectOp>(insertLoc, resultData, resultDataMux);
+  }
+
+  auto controlNotEmitted =
+      rewriter.create<NotPrimOp>(insertLoc, bitType, controlEmitted);
+
+  auto controlValidWire = rewriter.create<AndPrimOp>(
+      insertLoc, bitType, hasWinnerCondition, controlNotEmitted);
+  rewriter.create<ConnectOp>(insertLoc, controlValid, controlValidWire);
+
+  rewriter.create<ConnectOp>(insertLoc, controlData, winUnsigned);
+
+  // Create the logic to set the won register. If the fired wire is asserted, we
+  // have finished this round and can and reset the register to the sentinel
+  // value that indicates there is no winner. Otherwise, we need to hold the
+  // value of the win register until we can fire.
+  auto wonMux =
+      rewriter.create<MuxPrimOp>(insertLoc, indexType, fired, noWinner, win);
+  rewriter.create<ConnectOp>(insertLoc, won, wonMux);
+
+  // Create the logic to set the done wires for the result and control. For both
+  // outputs, the done wire is asserted when the output is valid and ready, or
+  // the emitted register for that output is set.
+  auto resultValidAndReady = rewriter.create<AndPrimOp>(
+      insertLoc, bitType, resultValidWire, resultReady);
+
+  auto resultDoneWire = rewriter.create<OrPrimOp>(
+      insertLoc, bitType, resultEmitted, resultValidAndReady);
+  rewriter.create<ConnectOp>(insertLoc, resultDone, resultDoneWire);
+
+  auto controlValidAndReady = rewriter.create<AndPrimOp>(
+      insertLoc, bitType, controlValidWire, controlReady);
+
+  auto controlDoneWire = rewriter.create<OrPrimOp>(
+      insertLoc, bitType, controlEmitted, controlValidAndReady);
+  rewriter.create<ConnectOp>(insertLoc, controlDone, controlDoneWire);
+
+  // Create the logic to set the fired wire. It is asserted when both result and
+  // control are done.
+  auto firedWire =
+      rewriter.create<AndPrimOp>(insertLoc, bitType, resultDone, controlDone);
+  rewriter.create<ConnectOp>(insertLoc, fired, firedWire);
+
+  // Create the logic to assign the emitted registers. If the fired wire is
+  // asserted, we have finished this round and can reset the registers to 0.
+  // Otherwise, we need to hold the values of the done registers until we can
+  // fire.
+  auto resultEmittedWire = rewriter.create<MuxPrimOp>(insertLoc, bitType, fired,
+                                                      falseConst, resultDone);
+  rewriter.create<ConnectOp>(insertLoc, resultEmitted, resultEmittedWire);
+
+  auto controlEmittedWire = rewriter.create<MuxPrimOp>(
+      insertLoc, bitType, fired, falseConst, controlDone);
+  rewriter.create<ConnectOp>(insertLoc, controlEmitted, controlEmittedWire);
+
+  // Create the logic to assign the arg ready outputs. The logic is identical
+  // for each arg. If the fired wire is asserted, and the win wire holds an
+  // arg's index, that arg is ready.
+  for (unsigned i = 0, e = argReady.size(); i != e; ++i) {
+    auto constIndex = argIndexValues[i];
+    Value argReadyWire =
+        rewriter.create<EQPrimOp>(insertLoc, bitType, win, constIndex);
+    argReadyWire =
+        rewriter.create<AndPrimOp>(insertLoc, bitType, argReadyWire, fired);
+    rewriter.create<ConnectOp>(insertLoc, argReady[i], argReadyWire);
+  }
+
   return true;
 }
 
@@ -1061,7 +1218,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       // be instantiated in the top-module.
       else if (op.getDialect()->getNamespace() != "firrtl") {
         FModuleOp subModuleOp = checkSubModuleOp(topModuleOp, &op);
-        bool hasClock = isa<handshake::BufferOp>(op);
+        bool hasClock = isa<handshake::BufferOp, handshake::ControlMergeOp>(op);
 
         // Check if the sub-module already exists.
         if (!subModuleOp) {

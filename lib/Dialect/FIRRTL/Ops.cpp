@@ -502,7 +502,7 @@ Operation *InstanceOp::getReferencedModule() {
 static LogicalResult verifyInstanceOp(InstanceOp &instance) {
 
   // Check that this instance is inside a module.
-  auto module = dyn_cast<FModuleOp>(instance.getParentOp());
+  auto module = instance.getParentOfType<FModuleOp>();
   if (!module) {
     instance.emitOpError("should be embedded in a 'firrtl.module'");
     return failure();
@@ -523,13 +523,18 @@ static LogicalResult verifyInstanceOp(InstanceOp &instance) {
     return failure();
   }
 
+  // Check that the result type is either a bundle type or a flip type that
+  // wraps a bundle type.
+  auto resultType = instance.getResult().getType().cast<FIRRTLType>();
+  if (!resultType.isa<BundleType>()) {
+    auto flipType = resultType.dyn_cast<FlipType>();
+    if (!flipType || !flipType.getElementType().isa<BundleType>())
+      return instance.emitOpError("has invalid result type of ") << resultType;
+  }
+
   // Check that the result type is consistent with its module.
   if (auto referencedFModule = dyn_cast<FModuleOp>(referencedModule)) {
-    auto bundle = instance.getResult()
-                      .getType()
-                      .cast<FIRRTLType>()
-                      .getPassiveType()
-                      .cast<BundleType>();
+    auto bundle = resultType.getPassiveType().cast<BundleType>();
     auto bundleElements = bundle.getElements();
     size_t e = bundleElements.size();
 
@@ -1276,6 +1281,12 @@ static LogicalResult verifyStdIntCast(StdIntCast cast) {
     return cast.emitError("source and result width must match");
 
   return success();
+}
+
+void AsPassivePrimOp::build(OpBuilder &builder, OperationState &result,
+                            Value input) {
+  result.addOperands(input);
+  result.addTypes(input.getType().cast<FIRRTLType>().getPassiveType());
 }
 
 //===----------------------------------------------------------------------===//

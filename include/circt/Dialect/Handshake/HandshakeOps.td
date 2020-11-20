@@ -374,6 +374,12 @@ def ControlMergeOp : Handshake_Op<"control_merge",
 
   let skipDefaultBuilders = 1;
   let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$inputs)>];
+
+  let extraClassDeclaration = [{
+    bool isControl() {
+      return getAttrOfType<BoolAttr>("control").getValue();
+    }
+  }];
 }
 
 def BranchOp : Handshake_Op<"branch", [NoSideEffect]> {
