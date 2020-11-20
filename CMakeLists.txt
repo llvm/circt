@@ -85,19 +85,32 @@ include_directories(${MLIR_INCLUDE_DIRS})
 include_directories(${CIRCT_MAIN_SRC_DIR})
 include_directories(${CIRCT_INCLUDE_DIR})
 
-# Detect if Verilator is present
-find_program(VERILATOR_PATH "verilator" PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ext/bin" NO_DEFAULT_PATH)
-find_program(VERILATOR_PATH "verilator")
-if(${VERILATOR_PATH} STREQUAL "VERILATOR_PATH-NOTFOUND")
-  set(VERILATOR_PATH "")
-  message(STATUS "Did not find Verilator.")
+# If Verilator hasn't been explicitly disabled, find it.
+option(VERILATOR_DISABLE "Disable the Verilator tests")
+if (VERILATOR_DISABLE)
+  message(STATUS "Disabling Verilator tests")
 else()
-  message(STATUS "Found Verilator at ${VERILATOR_PATH}.")
-  execute_process(COMMAND ${VERILATOR_PATH} --version OUTPUT_VARIABLE VERILATOR_VERSION)
-  string(REGEX MATCH "Verilator (([0-9]+)\.([0-9]+)) \.*" MATCH ${VERILATOR_VERSION})
-  if (${CMAKE_MATCH_2} LESS 4)
-    message(WARNING "CIRCT only supports Verilator version 4 and up. Found version: ${CMAKE_MATCH_1}")
+  # Detect if Verilator is present.
+  find_program(VERILATOR_PATH "verilator" PATHS
+    "${CMAKE_CURRENT_SOURCE_DIR}/ext/bin" NO_DEFAULT_PATH)
+  find_program(VERILATOR_PATH "verilator")
+  if(${VERILATOR_PATH} STREQUAL "VERILATOR_PATH-NOTFOUND")
     set(VERILATOR_PATH "")
+    message(STATUS "Did not find Verilator.")
+  else()
+    message(STATUS "Found Verilator at ${VERILATOR_PATH}.")
+    # Find Verilator version.
+    execute_process(COMMAND ${VERILATOR_PATH} --version
+      OUTPUT_VARIABLE VERILATOR_VERSION)
+    string(REGEX MATCH "Verilator (([0-9]+)\.([0-9]+)) \.*"
+      MATCH ${VERILATOR_VERSION})
+    # It's gotta be at least v4.
+    if (${CMAKE_MATCH_2} LESS 4)
+      message(FATAL_ERROR "CIRCT only supports Verilator version 4 and up. \
+                           Found version: ${CMAKE_MATCH_1}. You can disable \
+                           the Verilator tests with '-DVERILATOR_DISABLE=ON'.")
+      set(VERILATOR_PATH "")
+    endif()
   endif()
 endif()
 
