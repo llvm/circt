@@ -7,7 +7,7 @@
 module main(
   input logic clk,
   input wire rst_n,
-// CHECK: %Warning-UNUSED: {{.*}}:9:14: Signal is not used: 'rst_n'
+// CHECK: %Warning-UNUSED: {{.*}}:9{{.*}} Signal is not used: 'rst_n'
   output logic [15:0] x
 );
 
@@ -16,6 +16,6 @@ module main(
 
   always@(posedge clk) begin
     x_int = x_int + 1;
-// CHECK: %Warning-BLKSEQ: {{.*}}:18:11: Blocking assignments (=) in sequential (flop or latch) block
+// CHECK: %Warning-BLKSEQ: {{.*}}:18{{.*}} Blocking assignments (=) in sequential (flop or latch) block
   end
 endmodule
