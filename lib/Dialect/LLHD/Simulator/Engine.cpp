@@ -38,10 +38,6 @@ Engine::Engine(
                             llvm::None, root, root, ArrayRef<Value>(),
                             ArrayRef<Value>());
 
-  // Add the 0-time event.
-  state->queue.push_back(Slot(Time()));
-  ++state->queue.events;
-
   if (failed(mlirTransformer(module))) {
     llvm::errs() << "failed to apply the MLIR passes\n";
     exit(EXIT_FAILURE);
@@ -85,7 +81,9 @@ int Engine::simulate(int n, uint64_t maxTime) {
     }
   }
 
-  int cycle = 0;
+  // Add a dummy event to get the simulation started.
+  state->queue.push_back(Slot(Time()));
+  ++state->queue.events;
 
   // Keep track of the instances that need to wakeup.
   llvm::SmallVector<unsigned, 8> wakeupQueue;
@@ -103,6 +101,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
     inst.unitFPtr = *expectedFPtr;
   }
 
+  int cycle = 0;
   while (state->queue.events > 0) {
     const auto &pop = state->queue.top();
 
