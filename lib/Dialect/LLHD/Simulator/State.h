@@ -115,8 +115,12 @@ struct Slot {
   /// Insert a scheduled process wakeup.
   void insertChange(unsigned inst);
 
-  llvm::SmallVector<std::pair<unsigned, unsigned>, 32> sigs;
-  llvm::SmallVector<std::pair<unsigned, llvm::APInt>, 32> changes;
+  // A map from signal indexes to change buffers. Makes it easy to sort the
+  // changes such that we can process one signal at a time.
+  llvm::SmallVector<std::pair<unsigned, unsigned>, 32> changes;
+  // Buffers for the signal changes.
+  llvm::SmallVector<std::pair<unsigned, llvm::APInt>, 32> buffers;
+  // The number of used change buffers in the slot.
   size_t changesSize = 0;
 
   // Processes with scheduled wakeup.

@@ -110,22 +110,22 @@ void Slot::insertChange(int index, int bitOffset, uint8_t *bytes,
                         unsigned width) {
   auto size = llvm::divideCeil(width, 64);
 
-  if (changesSize >= changes.size()) {
+  if (changesSize >= buffers.size()) {
     // Create a new change buffer if we don't have any unused one available for
     // reuse.
-    changes.push_back(std::make_pair(
+    buffers.push_back(std::make_pair(
         bitOffset,
         APInt(width, makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size))));
   } else {
     // Reuse the first available buffer.
-    changes[changesSize] = std::make_pair(
+    buffers[changesSize] = std::make_pair(
         bitOffset,
         APInt(width, makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size)));
   }
 
   // Map the signal index to the change buffer so we can retrieve
   // it after sorting.
-  sigs.push_back(std::make_pair(index, changesSize));
+  changes.push_back(std::make_pair(index, changesSize));
   ++changesSize;
 }
 
@@ -223,7 +223,7 @@ void UpdateQueue::insertOrUpdate(Time time, unsigned inst) {
 const Slot &UpdateQueue::top() {
   assert(topSlot < size() && "top is pointing out of bounds!");
   auto &top = begin()[topSlot];
-  std::sort(top.sigs.begin(), top.sigs.begin() + top.changesSize);
+  std::sort(top.changes.begin(), top.changes.begin() + top.changesSize);
   return top;
 }
 
@@ -232,7 +232,7 @@ void UpdateQueue::pop() {
   curr.unused = true;
   curr.changesSize = 0;
   curr.scheduled.clear();
-  curr.sigs.clear();
+  curr.changes.clear();
   curr.time = Time();
   --events;
 

@@ -120,7 +120,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
     // Process signal changes.
     size_t i = 0, e = pop.changesSize;
     while (i < e) {
-      const auto sigIndex = pop.sigs[i].first;
+      const auto sigIndex = pop.changes[i].first;
       const auto &curr = state->signals[sigIndex];
       APInt buff(
           curr.size * 8,
@@ -128,8 +128,8 @@ int Engine::simulate(int n, uint64_t maxTime) {
                              llvm::divideCeil(curr.size, 8)));
 
       // Apply the changes to the buffer until we reach the next signal.
-      while (i < e && pop.sigs[i].first == sigIndex) {
-        const auto &change = pop.changes[pop.sigs[i].second];
+      while (i < e && pop.changes[i].first == sigIndex) {
+        const auto &change = pop.buffers[pop.changes[i].second];
         const auto offset = change.first;
         const auto &drive = change.second;
         if (drive.getBitWidth() < buff.getBitWidth())
