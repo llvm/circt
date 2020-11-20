@@ -34,25 +34,8 @@ jobs:
       # Build LLVM if we didn't hit in the cache.
       - name: Rebuild and Install LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: |
-          mkdir llvm/build
-          mkdir llvm/install
-          cd llvm/build
-          cmake ../llvm \
-            -DLLVM_BUILD_EXAMPLES=OFF \
-            -DLLVM_TARGETS_TO_BUILD="host" \
-            -DCMAKE_INSTALL_PREFIX=../install \
-            -DLLVM_ENABLE_PROJECTS='mlir' \
-            -DLLVM_OPTIMIZED_TABLEGEN=ON \
-            -DLLVM_ENABLE_OCAMLDOC=OFF \
-            -DLLVM_ENABLE_BINDINGS=OFF \
-            -DLLVM_INSTALL_UTILS=ON \
-            -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_CXX_COMPILER=clang++ \
-            -DLLVM_ENABLE_LLD=ON \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DLLVM_ENABLE_ASSERTIONS=ON
-          cmake --build . --target install -- -j$(nproc)
+        run: utils/build-llvm.sh
+
 
     # Installing the results into the cache is an action which is automatically
     # added by the cache action above.
@@ -106,25 +89,7 @@ jobs:
       # the time we get here.
       - name: Rebuild and Install LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: |
-          mkdir llvm/build
-          mkdir llvm/install
-          cd llvm/build
-          cmake ../llvm \
-            -DLLVM_BUILD_EXAMPLES=OFF \
-            -DLLVM_TARGETS_TO_BUILD="host" \
-            -DCMAKE_INSTALL_PREFIX=../install \
-            -DLLVM_ENABLE_PROJECTS='mlir' \
-            -DLLVM_OPTIMIZED_TABLEGEN=ON \
-            -DLLVM_ENABLE_OCAMLDOC=OFF \
-            -DLLVM_ENABLE_BINDINGS=OFF \
-            -DLLVM_INSTALL_UTILS=ON \
-            -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_CXX_COMPILER=clang++ \
-            -DLLVM_ENABLE_LLD=ON \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DLLVM_ENABLE_ASSERTIONS=ON
-          cmake --build . --target install -- -j$(nproc)
+        run: utils/build-llvm.sh
 
       # --------
       # Build and test CIRCT in both debug and release mode.
