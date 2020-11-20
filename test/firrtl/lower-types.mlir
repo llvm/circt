@@ -130,3 +130,17 @@ firrtl.circuit "InstanceFlipped" {
   }
 
 }
+
+// -----
+
+firrtl.circuit "Top" {
+
+  // CHECK-LABEL: firrtl.module @Top
+  firrtl.module @Top(%in : !firrtl.bundle<a: uint<1>, b: uint<1>>,
+                     %out : !firrtl.flip<bundle<a: uint<1>, b: uint<1>>>) {
+    // CHECK: firrtl.connect %out_a, %in_a : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %out_b, %in_b : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    firrtl.connect %out, %in : !firrtl.flip<bundle<a: uint<1>, b: uint<1>>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
+  }
+
+}
