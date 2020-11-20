@@ -99,8 +99,10 @@ struct Signal {
 
 /// The simulator's internal representation of one queue slot.
 struct Slot {
-  /// Construct a new slot.
+  /// Create a new empty slot.
   Slot(Time time) : time(time) {}
+
+  /// Create a new slot with a signal update.
   Slot(Time time, int index, int bitOffset, uint8_t *bytes, unsigned width);
 
   /// Returns true if the slot's time is smaller than the compared slot's time.
@@ -146,8 +148,12 @@ public:
   /// queue.
   void insertOrUpdate(Time time, unsigned inst);
 
+  /// Get a reference to the current top of the queue (the earliest event
+  /// available).
   const Slot &top();
 
+  /// Pop the current top of the queue. This marks the current top slot as
+  /// unused and resets its internal structures such that they can be reused.
   void pop();
 
   unsigned events = 0;

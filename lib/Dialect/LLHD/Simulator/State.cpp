@@ -108,6 +108,7 @@ bool Slot::operator>(const Slot &rhs) const { return rhs.time < time; }
 
 void Slot::insertChange(int index, int bitOffset, uint8_t *bytes,
                         unsigned width) {
+  // Get the amount of 64 bit words required to store the value in an APInt.
   auto size = llvm::divideCeil(width, 64);
 
   if (changesSize >= buffers.size()) {
@@ -157,7 +158,7 @@ void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
     }
   }
 
-  // Spawn new event and update top.
+  // Spawn a new event and update the top.
   if (unused.size() > 0) {
     // An unused slot available.
     auto u = unused.back();
@@ -191,7 +192,6 @@ void UpdateQueue::insertOrUpdate(Time time, unsigned inst) {
   // earlier than the top slot should never happens, as then it should be the
   // top.
   if (events > 0 && s.time < time) {
-    // int firstUnused = -1;
     for (size_t i = 0, e = size(); i < e; ++i) {
       if (time == begin()[i].time) {
         begin()[i].insertChange(inst);
@@ -222,12 +222,16 @@ void UpdateQueue::insertOrUpdate(Time time, unsigned inst) {
 
 const Slot &UpdateQueue::top() {
   assert(topSlot < size() && "top is pointing out of bounds!");
+
+  // Sort the changes of the top slot such that all changes to the same signal
+  // are in succession.
   auto &top = begin()[topSlot];
   std::sort(top.changes.begin(), top.changes.begin() + top.changesSize);
   return top;
 }
 
 void UpdateQueue::pop() {
+  // Reset internal structures and decrease the event counter.
   auto &curr = begin()[topSlot];
   curr.unused = true;
   curr.changesSize = 0;
@@ -236,9 +240,15 @@ void UpdateQueue::pop() {
   curr.time = Time();
   --events;
 
+  // Add to unused slots list for easy retrieval.
   unused.push_back(topSlot);
+
+  // Update the current top of the queue.
   topSlot = std::distance(
-      begin(), std::min_element(begin(), end(), [](auto &a, auto &b) {
+      begin(),
+      std::min_element(begin(), end(), [](const auto &a, const auto &b) {
+        // a is "smaller" than b if either a's timestamp is earlier than b's, or
+        // b is unused (i.e. b has no actual meaning).
         return !a.unused && (a < b || b.unused);
       }));
 }
