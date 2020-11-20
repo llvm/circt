@@ -5,23 +5,13 @@
 
 set -e
 
-echo "=== Building MLIR"
-mkdir -p llvm/build_20.04
-cd llvm/build_20.04
-cmake ../llvm \
-  -DLLVM_BUILD_EXAMPLES=OFF \
-  -DLLVM_TARGETS_TO_BUILD="host" \
-  -DLLVM_ENABLE_PROJECTS='mlir' \
-  -DLLVM_OPTIMIZED_TABLEGEN=ON \
-  -DLLVM_ENABLE_OCAMLDOC=OFF \
-  -DLLVM_ENABLE_BINDINGS=OFF \
-  -DLLVM_INSTALL_UTILS=ON \
-  -DCMAKE_C_COMPILER=clang \
-  -DCMAKE_CXX_COMPILER=clang++ \
-  -DLLVM_ENABLE_LLD=ON \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DLLVM_ENABLE_ASSERTIONS=ON
-cmake --build . -j$(nproc)
+UTILS_DIR=$(dirname "$BASH_SOURCE[0]")
+
+if [ ! -e llvm/build_20.04 ]; then
+  echo "=== Building MLIR"
+  $UTILS_DIR/build-llvm.sh build_20.04 build_20.04/install
+  cd ../..
+fi
 
 echo "=== Building CIRCT"
 cmake -Bdocker_build \
