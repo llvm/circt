@@ -445,6 +445,10 @@ OpFoldResult StdIntCast::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult AsPassivePrimOp::fold(ArrayRef<Attribute> operands) {
+  // If the input is already passive, then we don't need a conversion.
+  if (getOperand().getType() == getType())
+    return getOperand();
+
   if (auto castInput =
           dyn_cast_or_null<AsNonPassivePrimOp>(getOperand().getDefiningOp()))
     if (castInput.getOperand().getType() == getType())
