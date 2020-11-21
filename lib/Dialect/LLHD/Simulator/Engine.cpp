@@ -249,14 +249,6 @@ void Engine::walkEntity(EntityOp entity, Instance &child) {
     // Add a signal to the signal table.
     if (auto sig = dyn_cast<SigOp>(op)) {
       uint64_t index = state->addSignal(sig.name().str(), child.name);
-
-      // Get the signal width for integer types. For structured types the width
-      // will be set in a later step.
-      auto underlying =
-          sig.result().getType().cast<SigType>().getUnderlyingType();
-      if (underlying.isa<IntegerType>()) {
-        state->signals[index].width = underlying.getIntOrFloatBitWidth();
-      }
       child.sensitivityList.push_back(
           SignalDetail({nullptr, 0, child.sensitivityList.size(), index}));
     }
