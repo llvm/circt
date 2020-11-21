@@ -14,7 +14,6 @@ target_link_libraries(circt-opt
   MLIRHandshakeOps
   MLIRRTL
   MLIRSV
-  CIRCTESIToRTL
   MLIRStandardToHandshake
   MLIRStandardToStaticLogic
   MLIRHandshakeToFIRRTL

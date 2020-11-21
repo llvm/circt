@@ -1,4 +1,3 @@
-add_subdirectory(ESIToRTL)
 add_subdirectory(StandardToHandshake)
 add_subdirectory(HandshakeToFIRRTL)
 add_subdirectory(LLHDToLLVM)

@@ -1,6 +1,7 @@
 add_mlir_dialect_library(MLIRESI
   ESIDialect.cpp
   ESIOps.cpp
+  ESIPasses.cpp
   ESITypes.cpp
 
   ADDITIONAL_HEADER_DIRS

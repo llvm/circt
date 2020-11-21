@@ -13,6 +13,11 @@
 using namespace mlir;
 using namespace circt::esi;
 
+namespace {
+
+// ====
+// ChannelBuffer methods.
+// ====
 ParseResult parseChannelBuffer(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
 
@@ -50,6 +55,42 @@ void print(OpAsmPrinter &p, ChannelBuffer &op) {
   p.printOptionalAttrDict(op.getAttrs(), /*elidedAttrs=*/{"options"});
   p << " : " << op.output().getType().cast<ChannelPort>().getInner();
 }
+
+// ====
+// PipelineStage functions
+// ====
+ParseResult parsePipelineStage(OpAsmParser &parser, OperationState &result) {
+  llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
+
+  OpAsmParser::OperandType inputOperand;
+  if (parser.parseOperand(inputOperand))
+    return failure();
+
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+  if (parser.parseColon())
+    return failure();
+
+  Type innerOutputType;
+  if (parser.parseType(innerOutputType))
+    return failure();
+  auto type =
+      ChannelPort::get(parser.getBuilder().getContext(), innerOutputType);
+  result.addTypes({type});
+
+  if (parser.resolveOperands({inputOperand}, {type}, inputOperandsLoc,
+                             result.operands))
+    return failure();
+  return success();
+}
+
+void print(OpAsmPrinter &p, PipelineStage &op) {
+  p << "esi.stage" << op.input() << " ";
+  p.printOptionalAttrDict(op.getAttrs());
+  p << " : " << op.output().getType().cast<ChannelPort>().getInner();
+}
+
+} // anonymous namespace
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/ESI/ESI.cpp.inc"

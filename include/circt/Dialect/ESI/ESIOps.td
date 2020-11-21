@@ -11,7 +11,7 @@ def ChannelBufferOptions : StructAttr<"ChannelBufferOptions", ESI_Dialect, [
     StructFieldAttr<"stages", OptionalAttr< Confined<AnyI64Attr, [IntMinValue<1>]> >>
   ]>;
 
-def ChannelBuffer : ESI_Op<"buffer", [NoSideEffect, SameTypeOperands]> {
+def ChannelBuffer : ESI_Abstract_Op<"buffer", [NoSideEffect, SameTypeOperands]> {
   let summary = "Control options for an ESI channel.";
   let description = [{
     A channel buffer (`buffer`) is essentially a set of options on a channel.
@@ -35,6 +35,22 @@ def ChannelBuffer : ESI_Op<"buffer", [NoSideEffect, SameTypeOperands]> {
   }];
 
   let arguments = (ins ChannelType:$input, ChannelBufferOptions:$options);
+  let results = (outs ChannelType:$output);
+
+  let printer = [{ return ::print(p, *this); }];
+  let parser = [{ return ::parse$cppClass(parser, result); }];
+}
+
+def PipelineStage : ESI_Op<"stage", [NoSideEffect, SameTypeOperands]> {
+  let summary = "An elastic buffer stage.";
+  let description = [{
+    An individual elastic pipeline register. Generally lowered to from a
+    ChannelBuffer ('buffer'), though can be inserted anywhere to add an
+    additional pipeline stage. Could be useful for late-pass latency
+    balancing.
+  }];
+
+  let arguments = (ins ChannelType:$input);
   let results = (outs ChannelType:$output);
 
   let printer = [{ return ::print(p, *this); }];

@@ -33,6 +33,8 @@ public:
                  mlir::DialectAsmPrinter &printer) const override;
 };
 
+void registerESIPasses();
+
 } // namespace esi
 } // namespace circt
 

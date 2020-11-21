@@ -4,7 +4,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/ESIToRTL/ESIToRTL.h"
+#include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/RTL/Dialect.h"
 #include "circt/Dialect/SV/Dialect.h"
 
@@ -28,27 +28,29 @@ using namespace circt;
 using namespace circt::esi;
 
 namespace {
-struct ESIToRTLLoweringPass : public LowerESIToRTLBase<ESIToRTLLoweringPass> {
+struct ESIToRTLPass : public LowerESIToRTLBase<ESIToRTLPass> {
 
   void runOnOperation() override;
 };
 } // end anonymous namespace.
 
-void ESIToRTLLoweringPass::runOnOperation() { llvm::outs() << "test!\n"; }
+void ESIToRTLPass::runOnOperation() { llvm::outs() << "test!\n"; }
 
 namespace circt {
 namespace esi {
-/// Create a FIRRTL to LLHD conversion pass.
 std::unique_ptr<OperationPass<ModuleOp>> createESILoweringPass() {
-  return std::make_unique<ESIToRTLLoweringPass>();
+  return std::make_unique<ESIToRTLPass>();
+}
+
+std::unique_ptr<OperationPass<ModuleOp>> createESIToRTLPass() {
+  return std::make_unique<ESIToRTLPass>();
 }
 } // namespace esi
 } // namespace circt
 
-/// Register the FIRRTL to LLHD convesion pass.
 namespace {
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/ESI/ESIPasses.h.inc"
 } // namespace
 
-void circt::esi::registerESIToRTLPasses() { registerPasses(); }
+void circt::esi::registerESIPasses() { registerPasses(); }

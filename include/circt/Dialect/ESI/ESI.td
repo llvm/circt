@@ -19,6 +19,9 @@ def ESI_Dialect : Dialect {
 class ESI_Op<string mnemonic, list<OpTrait> traits = []> :
     Op<ESI_Dialect, mnemonic, traits>;
 
+class ESI_Abstract_Op<string mnemonic, list<OpTrait> traits = []> :
+    ESI_Op<mnemonic, traits>;
+
 include "ESIPorts.td"
 include "ESIOps.td"
 include "ESIPasses.td"
