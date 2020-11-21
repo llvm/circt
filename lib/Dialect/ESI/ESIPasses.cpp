@@ -9,8 +9,8 @@
 #include "circt/Dialect/RTL/Dialect.h"
 #include "circt/Dialect/SV/Dialect.h"
 
-#include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/Debug.h"
 
@@ -29,45 +29,60 @@ using namespace mlir;
 using namespace circt::esi;
 
 namespace {
+
+struct ChannelBufferLowering : public ConversionPattern {
+  ChannelBufferLowering(MLIRContext *ctx)
+      : ConversionPattern(ChannelBuffer::getOperationName(), 1, ctx) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto loc = op->getLoc();
+    ChannelBuffer buffer;
+    if (!(buffer = dyn_cast<ChannelBuffer>(op)))
+      return failure();
+
+    ChannelBufferOptions opts = buffer.options();
+    auto type = buffer.getType();
+    Value input = buffer.input();
+
+    // Expand 'abstract' buffer into 'physical' stages.
+    auto stages = opts.stages();
+    size_t numStages = 1;
+    if (stages) {
+      // Guaranteed positive by the parser.
+      numStages = (size_t)stages.getInt();
+    }
+
+    for (size_t i = 0; i < numStages; ++i) {
+      auto stage = rewriter.create<PipelineStage>(loc, type, input);
+      input = stage;
+    }
+
+    rewriter.replaceOp(op, input);
+    return success();
+  }
+};
+
 struct ESIToPhysicalPass : public LowerESIToPhysicalBase<ESIToPhysicalPass> {
-
   void runOnOperation() override;
-
-private:
-  void expandBuffer(ChannelBuffer buffer);
-
-  OpBuilder *builder = nullptr;
 };
 
 void ESIToPhysicalPass::runOnOperation() {
-  OpBuilder theBuilder(&getContext());
-  builder = &theBuilder;
+  ConversionTarget target(getContext());
+  target.addLegalDialect<ESIDialect>();
+  target.addIllegalOp<ChannelBuffer>();
 
-  auto *moduleBody = getOperation().getBody();
-  SmallVector<ChannelBuffer, 4> toExpand;
-  for (auto &op : *moduleBody) {
-    llvm::outs() << "moduleOp: ";
-    llvm::outs() << op << "\n";
-    if (auto buffer = dyn_cast<ChannelBuffer>(op))
-      toExpand.push_back(buffer);
-  }
-  for (auto buffer : toExpand)
-    expandBuffer(buffer);
+  OwningRewritePatternList patterns;
+  patterns.insert<ChannelBufferLowering>(&getContext());
+
+  // With the target and rewrite patterns defined, we can now attempt the
+  // conversion. The conversion will signal failure if any of our `illegal`
+  // operations were not converted successfully.
+  if (failed(
+          applyPartialConversion(getOperation(), target, std::move(patterns))))
+    signalPassFailure();
 };
-
-void ESIToPhysicalPass::expandBuffer(ChannelBuffer buffer) {
-  ChannelBufferOptions opts = buffer.options();
-  auto type = buffer.getType();
-
-  uint64_t numStages = opts.stages().getUInt();
-  Value input = buffer.input();
-  auto loc = buffer.getLoc();
-  for (size_t i = 0; i < numStages; ++i) {
-    auto stage = builder->create<PipelineStage>(loc, type, input);
-    input = stage.output();
-  }
-  buffer.replaceAllUsesWith(input);
-}
 
 struct ESIToRTLPass : public LowerESIToRTLBase<ESIToRTLPass> {
 

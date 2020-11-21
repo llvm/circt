@@ -85,7 +85,7 @@ ParseResult parsePipelineStage(OpAsmParser &parser, OperationState &result) {
 }
 
 void print(OpAsmPrinter &p, PipelineStage &op) {
-  p << "esi.stage" << op.input() << " ";
+  p << "esi.stage " << op.input() << " ";
   p.printOptionalAttrDict(op.getAttrs());
   p << " : " << op.output().getType().cast<ChannelPort>().getInner();
 }
