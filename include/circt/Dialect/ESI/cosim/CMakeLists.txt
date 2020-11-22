@@ -1,4 +1,9 @@
-find_package(CapnProto CONFIG PATHS "${CMAKE_SOURCE_DIR}/ext")
+##===- CMakeLists.txt - Cosim DPI library headers -------------*- cmake -*-===//
+##
+## Generate the Capnp headers if Capnp is found.
+##
+##===----------------------------------------------------------------------===//
+
 if(CapnProto_FOUND)
   option(ESI_COSIM "Enable ESI Cosimulation" ON)
   message("-- Enabling ESI cosim")
