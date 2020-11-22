@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "State.h"
+#include "Trace.h"
 
 #include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
 #include "circt/Dialect/LLHD/Simulator/Engine.h"
@@ -20,9 +21,10 @@ using namespace mlir;
 using namespace circt::llhd::sim;
 
 Engine::Engine(llvm::raw_ostream &out, ModuleOp module, MLIRContext &context,
-               std::string root)
-    : out(out), root(root) {
+               std::string root, int traceMode)
+    : out(out), root(root), traceMode(traceMode) {
   state = std::make_unique<State>();
+  state->root = root + '.' + root;
 
   buildLayout(module);
 
@@ -60,9 +62,12 @@ void Engine::dumpStateLayout() { state->dumpLayout(); }
 
 void Engine::dumpStateSignalTriggers() { state->dumpSignalTriggers(); }
 
-int Engine::simulate(int n) {
+int Engine::simulate(int n, uint64_t maxTime) {
   assert(engine && "engine not found");
   assert(state && "state not found");
+
+  auto tm = static_cast<TraceMode>(traceMode);
+  Trace trace(state, out, tm);
 
   SmallVector<void *, 1> arg({&state});
   // Initialize tbe simulation state.
@@ -72,37 +77,43 @@ int Engine::simulate(int n) {
     return -1;
   }
 
-  // Dump the signals' initial values.
-  for (size_t i = 0, e = state->signals.size(); i < e; ++i) {
-    state->dumpSignal(out, i);
+  if (traceMode >= 0) {
+    // Add changes for all the signals' initial values.
+    for (size_t i = 0, e = state->signals.size(); i < e; ++i) {
+      trace.addChange(i);
+    }
   }
 
   int i = 0;
 
   // Keep track of the instances that need to wakeup.
-  std::vector<std::string> wakeupQueue;
+  llvm::SmallVector<std::string, 8> wakeupQueue;
   // All instances are run in the first cycle.
   for (auto k : state->instances.keys())
     wakeupQueue.push_back(k.str());
 
   while (!state->queue.empty()) {
-    if (n > 0 && i >= n) {
-      break;
-    }
     auto pop = state->popQueue();
 
+    if ((n > 0 && i >= n) || (maxTime > 0 && pop.time.time > maxTime)) {
+      break;
+    }
+
     // Update the simulation time.
-    assert(state->time < pop.time || pop.time.time == 0);
     state->time = pop.time;
+
+    if (traceMode >= 0)
+      trace.flush();
 
     // Apply the signal changes and dump the signals that actually changed
     // value.
     for (auto change : pop.changes) {
       // Get a buffer to apply the changes on.
       Signal *curr = &(state->signals[change.first]);
-      APInt buff(curr->size * 8,
-                 ArrayRef<uint64_t>(reinterpret_cast<uint64_t *>(curr->value),
-                                    curr->size));
+      APInt buff(
+          curr->size * 8,
+          ArrayRef<uint64_t>(reinterpret_cast<uint64_t *>(curr->value.get()),
+                             curr->size));
 
       // Apply all the changes to the buffer, in order of execution.
       for (auto drive : change.second) {
@@ -113,16 +124,13 @@ int Engine::simulate(int n) {
       }
 
       // Skip if the updated signal value is equal to the initial value.
-      if (std::memcmp(curr->value, buff.getRawData(), curr->size) == 0)
+      if (std::memcmp(curr->value.get(), buff.getRawData(), curr->size) == 0)
         continue;
 
       // Apply the signal update.
-      std::memcpy(curr->value, buff.getRawData(),
+      std::memcpy(curr->value.get(), buff.getRawData(),
                   state->signals[change.first].size);
 
-      // Trigger all sensitive instances.
-      // The owner is always triggered.
-      wakeupQueue.push_back(state->signals[change.first].owner);
       // Add sensitive instances.
       for (auto inst : state->signals[change.first].triggers) {
         // Skip if the process is not currently sensible to the signal.
@@ -136,20 +144,27 @@ int Engine::simulate(int n) {
               state->instances[inst].procState->senses[it - sensList.begin()] ==
                   0)
             continue;
+
+          // Invalidate scheduled wakeup
+          state->instances[inst].expectedWakeup = Time();
         }
         wakeupQueue.push_back(inst);
       }
 
       // Dump the updated signal.
-      state->dumpSignal(out, change.first);
+      if (traceMode >= 0)
+        trace.addChange(change.first);
     }
 
-    // TODO: don't wakeup a process instances if already woken up by an observed
-    // signal.
     // Add scheduled process resumes to the wakeup queue.
     for (auto inst : pop.scheduled) {
-      wakeupQueue.push_back(inst);
+      if (state->time == state->instances[inst].expectedWakeup)
+        wakeupQueue.push_back(inst);
     }
+
+    std::sort(wakeupQueue.begin(), wakeupQueue.end());
+    wakeupQueue.erase(std::unique(wakeupQueue.begin(), wakeupQueue.end()),
+                      wakeupQueue.end());
 
     // Run the instances present in the wakeup queue.
     for (auto inst : wakeupQueue) {
@@ -159,14 +174,15 @@ int Engine::simulate(int n) {
       // Gather the instance arguments for unit invocation.
       SmallVector<void *, 3> args;
       if (state->instances[inst].isEntity)
-        args.assign({&state, &signalTable});
+        args.assign(
+            {&state, &state->instances[inst].entityState, &signalTable});
       else {
         args.assign({&state, &state->instances[inst].procState, &signalTable});
       }
       // Run the unit.
       auto invocationResult = engine->invoke(name, args);
       if (invocationResult) {
-        llvm::errs() << "Failed invocation of " << root << ": "
+        llvm::errs() << "Failed invocation of " << name << ": "
                      << invocationResult;
         return -1;
       }
@@ -176,7 +192,14 @@ int Engine::simulate(int n) {
     wakeupQueue.clear();
     i++;
   }
-  llvm::errs() << "Finished after " << i << " steps.\n";
+
+  if (traceMode >= 0) {
+    // Flush any remainign changes
+    trace.flush(/*force=*/true);
+  }
+
+  llvm::errs() << "Finished at " << state->time.dump() << " (" << i
+               << " cycles)\n";
   return 0;
 }
 
@@ -187,8 +210,9 @@ void Engine::buildLayout(ModuleOp module) {
 
   // Build root instance, the parent and instance names are the same for the
   // root.
-  Instance rootInst(root, root);
+  Instance rootInst(state->root, state->root);
   rootInst.unit = root;
+  rootInst.path = root;
 
   // Recursively walk the units starting at root.
   walkEntity(rootEntity, rootInst);
@@ -196,7 +220,7 @@ void Engine::buildLayout(ModuleOp module) {
   // The root is always an instance.
   rootInst.isEntity = true;
   // Store the root instance.
-  state->instances[rootInst.name] = rootInst;
+  state->instances[rootInst.name] = std::move(rootInst);
 
   // Add triggers to signals.
   for (auto &inst : state->instances) {
@@ -225,9 +249,10 @@ void Engine::walkEntity(EntityOp entity, Instance &child) {
         return;
       if (auto e =
               op->getParentOfType<ModuleOp>().lookupSymbol(inst.callee())) {
-        Instance newChild(inst.name().str(), child.name);
+        Instance newChild(child.unit + '.' + inst.name().str(), child.name);
         newChild.unit = inst.callee().str();
         newChild.nArgs = inst.getNumOperands();
+        newChild.path = child.path + "/" + inst.name().str();
 
         // Add instance arguments to sensitivity list. The first nArgs signals
         // in the sensitivity list represent the unit's arguments, while the
@@ -269,7 +294,7 @@ void Engine::walkEntity(EntityOp entity, Instance &child) {
         }
 
         // Store the created instance.
-        state->instances[newChild.name] = newChild;
+        state->instances[newChild.name] = std::move(newChild);
       }
     }
   });

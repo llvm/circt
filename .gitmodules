@@ -1,4 +1,4 @@
 [submodule "llvm"]
 	path = llvm
-	url = git@github.com:circt/llvm.git
+	url = ../../circt/llvm.git
 	shallow = true

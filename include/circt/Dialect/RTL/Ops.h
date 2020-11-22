@@ -9,6 +9,7 @@
 
 #include "circt/Dialect/RTL/Dialect.h"
 #include "mlir/IR/FunctionSupport.h"
+#include "mlir/IR/Module.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/SymbolTable.h"
@@ -26,20 +27,20 @@ enum PortDirection {
 };
 
 /// This holds the name, type, direction of a module's ports
-struct RTLModulePortInfo {
+struct ModulePortInfo {
   StringAttr name;
   PortDirection direction;
   Type type;
   size_t argNum = ~0U; // Either the argument index or the result index
                        // depending on the direction.
 
-  inline StringRef getName() { return name ? name.getValue() : ""; }
+  StringRef getName() const { return name ? name.getValue() : ""; }
+  bool isOutput() const { return direction == OUTPUT; }
 };
 
 FunctionType getModuleType(Operation *op);
 
-void getRTLModulePortInfo(Operation *op,
-                          SmallVectorImpl<RTLModulePortInfo> &results);
+void getModulePortInfo(Operation *op, SmallVectorImpl<ModulePortInfo> &results);
 StringAttr getRTLNameAttr(ArrayRef<NamedAttribute> attrs);
 
 /// Return true if the specified operation is a combinatorial logic op.

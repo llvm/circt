@@ -9,6 +9,7 @@
 #include "circt/Dialect/FIRRTL/Ops.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/RTL/Dialect.h"
+#include "circt/Dialect/RTL/Ops.h"
 #include "circt/Dialect/SV/Dialect.h"
 #include "circt/EmitVerilog.h"
 #include "circt/FIRParser.h"
@@ -52,6 +53,11 @@ static cl::opt<bool> disableOptimization("disable-opt",
 
 static cl::opt<bool> lowerToRTL("lower-to-rtl",
                                 cl::desc("run the lower-to-rtl pass"));
+
+static cl::opt<bool>
+    enableLowerTypes("enable-lower-types",
+                     cl::desc("run the lower-types pass within lower-to-rtl"),
+                     cl::init(false));
 
 static cl::opt<bool>
     ignoreFIRLocations("ignore-fir-locators",
@@ -102,7 +108,8 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // If enabled, run the optimizer.
   if (!disableOptimization) {
     // Apply any pass manager command line options.
-    PassManager pm(&context, /*verifyPasses:*/ true);
+    PassManager pm(&context);
+    pm.enableVerifier(true);
     applyPassManagerCLOptions(pm);
 
     pm.addPass(createCSEPass());
@@ -110,8 +117,11 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
     // Run the lower-to-rtl pass if requested.
     if (lowerToRTL) {
-      OpPassManager &nestedPM = pm.nest<firrtl::CircuitOp>();
-      nestedPM.addPass(firrtl::createLowerFIRRTLToRTLPass());
+      if (enableLowerTypes)
+        pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+            firrtl::createLowerFIRRTLTypesPass());
+      pm.addPass(firrtl::createLowerFIRRTLToRTLModulePass());
+      pm.nest<rtl::RTLModuleOp>().addPass(firrtl::createLowerFIRRTLToRTLPass());
     }
 
     if (failed(pm.run(module.get())))

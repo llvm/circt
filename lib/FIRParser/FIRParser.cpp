@@ -799,7 +799,7 @@ private:
 /// a passive-typed value and return that.
 Value FIRStmtParser::convertToPassive(Value input, Location loc) {
   auto inType = input.getType().cast<FIRRTLType>();
-  if (inType.isPassiveType())
+  if (inType.isPassive())
     return input;
 
   return builder.create<AsPassivePrimOp>(loc, inType.getPassiveType(), input);
@@ -902,7 +902,8 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result,
   // Make sure the field name matches up with the input value's type and
   // compute the result type for the expression.
   auto resultType = result.getType().cast<FIRRTLType>();
-  resultType = SubfieldOp::getResultType(resultType, fieldName);
+  resultType =
+      SubfieldOp::getResultType(resultType, fieldName, translateLocation(loc));
   if (!resultType) {
     // TODO(QoI): This error would be nicer with a .fir pretty print of the
     // type.
@@ -938,7 +939,8 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result,
   // Make sure the index expression is valid and compute the result type for the
   // expression.
   auto resultType = result.getType().cast<FIRRTLType>();
-  resultType = SubindexOp::getResultType(resultType, indexNo);
+  resultType = SubindexOp::getResultType(resultType, indexNo,
+                                         translateLocation(indexLoc));
   if (!resultType) {
     // TODO(QoI): This error would be nicer with a .fir pretty print of the
     // type.
@@ -970,7 +972,7 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result,
 
   // If the index expression is a flip type, strip it off.
   auto indexType = index.getType().cast<FIRRTLType>();
-  if (!indexType.isPassiveType()) {
+  if (!indexType.isPassive()) {
     indexType = indexType.getPassiveType();
     index = builder.create<AsPassivePrimOp>(translateLocation(indexLoc),
                                             indexType, index);
@@ -979,7 +981,8 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result,
   // Make sure the index expression is valid and compute the result type for the
   // expression.
   auto resultType = result.getType().cast<FIRRTLType>();
-  resultType = SubaccessOp::getResultType(resultType, indexType);
+  resultType = SubaccessOp::getResultType(resultType, indexType,
+                                          translateLocation(indexLoc));
   if (!resultType) {
     // TODO(QoI): This error would be nicer with a .fir pretty print of the
     // type.
@@ -1023,7 +1026,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
           return failure();
 
         // If the operand contains a flip, strip it out with an asPassive op.
-        if (!operand.getType().cast<FIRRTLType>().isPassiveType()) {
+        if (!operand.getType().cast<FIRRTLType>().isPassive()) {
           auto passiveType =
               operand.getType().cast<FIRRTLType>().getPassiveType();
           operand = builder.create<AsPassivePrimOp>(translateLocation(loc),
@@ -1086,7 +1089,8 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
 
 #define TOK_LPKEYWORD_PRIM(SPELLING, CLASS)                                    \
   case FIRToken::lp_##SPELLING: {                                              \
-    auto resultTy = CLASS::getResultType(opTypes, integers);                   \
+    auto resultTy =                                                            \
+        CLASS::getResultType(opTypes, integers, translateLocation(loc));       \
     if (!resultTy)                                                             \
       return typeError(#SPELLING);                                             \
     result = builder.create<CLASS>(translateLocation(loc), resultTy,           \
@@ -1730,8 +1734,8 @@ ParseResult FIRStmtParser::parseInstance() {
   results.reserve(modulePorts.size());
 
   for (auto port : modulePorts) {
-    results.push_back({builder.getIdentifier(port.first.getValue()),
-                       FlipType::get(port.second)});
+    results.push_back(
+        {builder.getIdentifier(port.getName()), FlipType::get(port.type)});
   }
   auto resultType = BundleType::get(results, getContext());
   auto result = builder.create<InstanceOp>(info.getLoc(), resultType,
@@ -1898,7 +1902,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     }
   }
 
-  if (!type.isPassiveType()) {
+  if (!type.isPassive()) {
     emitError(info.getFIRLoc(), "'mem' data-type must be a passive type");
     return failure();
   }
@@ -2172,7 +2176,7 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   // for arguments in an external module.  This detects multiple definitions
   // of the same name.
   for (auto &entry : portListAndLoc) {
-    if (addSymbolEntry(entry.first.first.getValue(), Value(), entry.second))
+    if (addSymbolEntry(entry.first.getName(), Value(), entry.second))
       return failure();
   }
 
@@ -2270,7 +2274,7 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
   // block arguments.
   auto argIt = fmodule.args_begin();
   for (auto &entry : portListAndLoc) {
-    if (addSymbolEntry(entry.first.first.getValue(), *argIt, entry.second))
+    if (addSymbolEntry(entry.first.getName(), *argIt, entry.second))
       return failure();
     ++argIt;
   }

@@ -1,6 +1,6 @@
 def RTLModuleOp : RTLOp<"module",
       [IsolatedFromAbove, FunctionLike, Symbol, RegionKindInterface,
-       SingleBlockImplicitTerminator<"OutputOp">]> {
+       SingleBlockImplicitTerminator<"OutputOp">, HasParent<"mlir::ModuleOp">]>{
   let summary = "RTL Module";
   let description = [{
     The "rtl.module" operation represents a Verilog module, including a given
@@ -13,7 +13,7 @@ def RTLModuleOp : RTLOp<"module",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"StringAttr name, ArrayRef<RTLModulePortInfo> ports">
+    OpBuilderDAG<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports)>
   ];
 
   let extraClassDeclaration = [{
@@ -23,8 +23,8 @@ def RTLModuleOp : RTLOp<"module",
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
 
     // Decode information about the input and output ports on this module.
-    void getRTLPortInfo(SmallVectorImpl<RTLModulePortInfo> &results) {
-      getRTLModulePortInfo(*this, results);
+    void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
+      getModulePortInfo(*this, results);
     }
 
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
@@ -59,26 +59,38 @@ def RTLModuleOp : RTLOp<"module",
 }
 
 def RTLExternModuleOp : RTLOp<"externmodule",
-      [IsolatedFromAbove, FunctionLike, Symbol]> {
+      [IsolatedFromAbove, FunctionLike, Symbol, HasParent<"mlir::ModuleOp">]> {
   let summary = "RTL external Module";
   let description = [{
     The "rtl.externmodule" operation represents an external reference to a
     Verilog module, including a given name and a list of ports.
+
+    The 'verilogName' attribute (when present) specifies the spelling of the
+    module name in Verilog we can use.  TODO: This is a hack because we don't
+    have proper parameterization in the rtl.dialect.  We need a way to represent
+    parameterized types instead of just concrete types.
   }];
-  let arguments = (ins OptionalAttr<DictionaryAttr>:$parameters);
+  let arguments = (ins OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"StringAttr name, ArrayRef<RTLModulePortInfo> ports">
+    OpBuilderDAG<(ins "StringAttr":$name,
+                      "ArrayRef<ModulePortInfo>":$ports,
+                      CArg<"StringRef", "StringRef()">:$verilogName)>
   ];
 
   let extraClassDeclaration = [{   
     // Decode information about the input and output ports on this module.
-    void getRTLPortInfo(SmallVectorImpl<RTLModulePortInfo> &results) {
-      getRTLModulePortInfo(*this, results);
+    void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
+      getModulePortInfo(*this, results);
     }
+
+    /// Return the name to use for the Verilog module that we're referencing
+    /// here.  This is typically the symbol, but can be overridden with the
+    /// verilogName attribute.
+    StringRef getVerilogModuleName();
 
   private:
     // This trait needs access to the hooks defined below.
@@ -107,30 +119,35 @@ def RTLExternModuleOp : RTLOp<"externmodule",
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
-
-def RTLInstanceOp : RTLOp<"instance",
-                          [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
+def InstanceOp : RTLOp<"instance",
+                       [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let summary = "Create an instance of a module";
   let description = [{
     This represents an instance of a module. The inputs and results are 
-    the referenced module's inputs and outputs. 
+    the referenced module's inputs and outputs.  Any parameters are stored in
+    the "parameters" dictionary.
   }];
 
   let arguments = (ins StrAttr:$instanceName,
                        FlatSymbolRefAttr:$moduleName,
-                       Variadic<AnyType>:$inputs);
+                       Variadic<AnyType>:$inputs,
+                       OptionalAttr<DictionaryAttr>:$parameters);
   let results = (outs Variadic<AnyType>);
 
   let extraClassDeclaration = [{   
     StringAttr getResultName(size_t i);
+
+    /// Lookup the module or extmodule for the symbol.  This returns null on
+    /// invalid IR.
+    Operation *getReferencedModule();
   }];
   
   let assemblyFormat = [{
-    $instanceName $moduleName `(` $inputs `)` custom<ResultNames>( attr-dict )
+    $instanceName $moduleName `(` $inputs `)` custom<ResultNames>(attr-dict)
       `:` functional-type($inputs, results)
   }];
 
-  let verifier = [{ return ::verifyRTLInstanceOp(*this); }];
+  let verifier = [{ return ::verifyInstanceOp(*this); }];
 }
 
 def OutputOp : RTLOp<"output", [Terminator, HasParent<"RTLModuleOp">,
@@ -143,7 +160,8 @@ def OutputOp : RTLOp<"output", [Terminator, HasParent<"RTLModuleOp">,
 
   let arguments = (ins Variadic<AnyType>:$operands);
 
-  let builders = [OpBuilder<"", [{ build($_builder, $_state, llvm::None); }]>];
+  let builders = [OpBuilderDAG<(ins),
+                               [{ build($_builder, $_state, llvm::None); }]>];
 
   let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
 

@@ -1,9 +1,9 @@
 // RUN: llhd-sim %s | FileCheck %s
 
-// CHECK: 0ns 0d 0e  root/proc/toggle  0x01
-// CHECK-NEXT: 0ns 0d 0e  root/toggle  0x01
-// CHECK-NEXT: 1ns 0d 1e  root/proc/toggle  0x00
-// CHECK-NEXT: 1ns 0d 1e  root/toggle  0x00
+// CHECK: 0ps 0d 0e  root/proc/toggle  0x01
+// CHECK-NEXT: 0ps 0d 0e  root/toggle  0x01
+// CHECK-NEXT: 1000ps 0d 1e  root/proc/toggle  0x00
+// CHECK-NEXT: 1000ps 0d 1e  root/toggle  0x00
 llhd.entity @root () -> () {
   %0 = llhd.const 1 : i1
   %1 = llhd.sig "toggle" %0 : i1

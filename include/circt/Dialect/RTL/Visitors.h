@@ -23,7 +23,7 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<ConstantOp,
                        // Arithmetic and Logical Binary Operations.
-                       AddOp, SubOp, MulOp, DivOp, ModOp, ShlOp,
+                       AddOp, SubOp, MulOp, DivOp, ModOp, ShlOp, ShrOp,
                        // Bitwise operations
                        AndOp, OrOp, XorOp,
                        // Comparison operations
@@ -82,6 +82,7 @@ public:
   HANDLE(DivOp, Binary);
   HANDLE(ModOp, Binary);
   HANDLE(ShlOp, Binary);
+  HANDLE(ShrOp, Binary);
 
   HANDLE(AndOp, Variadic);
   HANDLE(OrOp, Variadic);
@@ -110,7 +111,7 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<ConnectOp, OutputOp, WireOp, RTLInstanceOp>(
+        .template Case<ConnectOp, OutputOp, WireOp, InstanceOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitStmt(expr, args...);
             })
@@ -151,7 +152,7 @@ public:
   HANDLE(ConnectOp, Unhandled);
   HANDLE(OutputOp, Unhandled);
   HANDLE(WireOp, Unhandled);
-  HANDLE(RTLInstanceOp, Unhandled);
+  HANDLE(InstanceOp, Unhandled);
 #undef HANDLE
 };
 

@@ -34,15 +34,15 @@ def ConnectOp : FIRRTLOp<"connect", []> {
   let description = [{
     Connect Operation:
     ```
-      firrtl.connect %lhs, %rhs : t1, t2
+      firrtl.connect %dest, %src : t1, t2
     ```
     }];
 
-  let arguments = (ins FIRRTLType:$lhs, FIRRTLType:$rhs);
+  let arguments = (ins FIRRTLType:$dest, FIRRTLType:$src);
   let results = (outs);
-  
+
   let assemblyFormat = [{
-    $lhs `,` $rhs  attr-dict `:` type($lhs) `,` type($rhs)
+    $dest `,` $src  attr-dict `:` type($dest) `,` type($src)
   }];
 }
 
@@ -51,15 +51,15 @@ def PartialConnectOp : FIRRTLOp<"partialconnect", []> {
   let description = [{
     Connect two values with fewer constraints:
     ```
-      firrtl.partialconnect %lhs, %rhs : t1, t2
+      firrtl.partialconnect %dest, %src : t1, t2
     ```
     }];
 
-  let arguments = (ins FIRRTLType:$lhs, FIRRTLType:$rhs);
+  let arguments = (ins FIRRTLType:$dest, FIRRTLType:$src);
   let results = (outs);
-  
+
   let assemblyFormat = [{
-    $lhs `,` $rhs  attr-dict `:` type($lhs) `,` type($rhs)
+    $dest `,` $src  attr-dict `:` type($dest) `,` type($src)
   }];
 }
 
@@ -76,7 +76,7 @@ def InvalidOp : FIRRTLOp<"invalid", []> {
 
   let arguments = (ins FIRRTLType:$operand);
   let results = (outs);
-  
+
   let assemblyFormat = [{
     $operand attr-dict `:` type($operand)
   }];
@@ -85,10 +85,10 @@ def InvalidOp : FIRRTLOp<"invalid", []> {
 def PrintFOp : FIRRTLOp<"printf", []> {
   let summary = "Formatted Print Statement";
 
-  let arguments = (ins ClockType:$clock, UInt1Type:$cond, StrAttr:$formatString, 
+  let arguments = (ins ClockType:$clock, UInt1Type:$cond, StrAttr:$formatString,
                        Variadic<FIRRTLType>:$operands);
   let results = (outs);
-  
+
   let assemblyFormat = [{
     $clock `,` $cond `,` $formatString attr-dict (`(` $operands^ `)`
     `:` type($operands))?
@@ -108,7 +108,7 @@ def SkipOp : FIRRTLOp<"skip", [NoSideEffect]> {
 
   let arguments = (ins);
   let results = (outs);
-  
+
   let assemblyFormat = [{
     attr-dict
   }];
@@ -119,7 +119,7 @@ def StopOp : FIRRTLOp<"stop", []> {
 
   let arguments = (ins ClockType:$clock, UInt1Type:$cond, I32Attr:$exitCode);
   let results = (outs);
-  
+
   let assemblyFormat = [{
     $clock `,` $cond `,` $exitCode attr-dict
   }];
@@ -175,8 +175,14 @@ def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">]> {
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"Value condition, bool withElseRegion">
+    OpBuilderDAG<(ins "Value":$condition, "bool":$withElseRegion,
+                      CArg<"std::function<void()>", "{}">:$thenCtor,
+                      CArg<"std::function<void()>", "{}">:$elseCtor)>
   ];
+
+  let assemblyFormat = [{
+    $condition $thenRegion (`else` $elseRegion^)? attr-dict-with-keyword
+  }];
 
   let extraClassDeclaration = [{
     OpBuilder getThenBodyBuilder() {
@@ -197,7 +203,4 @@ def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">]> {
       return OpBuilder(&body, std::prev(body.end()));
     }
   }];
-  
-  let printer = [{ return ::print(p, *this); }];
-  let parser = [{ return ::parse$cppClass(parser, result); }];
 }

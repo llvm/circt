@@ -30,7 +30,7 @@ public:
             // Comparisons.
             LEQPrimOp, LTPrimOp, GEQPrimOp, GTPrimOp, EQPrimOp, NEQPrimOp,
             // Misc Binary Primitives.
-            CatPrimOp, DShlPrimOp, DShrPrimOp, ValidIfPrimOp,
+            CatPrimOp, DShlPrimOp, DShlwPrimOp, DShrPrimOp, ValidIfPrimOp,
             // Unary operators.
             AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsClockPrimOp,
             CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
@@ -104,6 +104,7 @@ public:
   // Misc Binary Primitives.
   HANDLE(CatPrimOp, Binary);
   HANDLE(DShlPrimOp, Binary);
+  HANDLE(DShlwPrimOp, Binary);
   HANDLE(DShrPrimOp, Binary);
   HANDLE(ValidIfPrimOp, Binary);
 
@@ -144,7 +145,8 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<AttachOp, ConnectOp, DoneOp, InvalidOp, MemoryPortOp,
-                       PartialConnectOp, PrintFOp, SkipOp, StopOp, WhenOp>(
+                       PartialConnectOp, PrintFOp, SkipOp, StopOp, WhenOp,
+                       AssertOp, AssumeOp, CoverOp>(
             [&](auto opNode) -> ResultType {
               return thisCast->visitStmt(opNode, args...);
             })
@@ -180,6 +182,9 @@ public:
   HANDLE(SkipOp);
   HANDLE(StopOp);
   HANDLE(WhenOp);
+  HANDLE(AssertOp);
+  HANDLE(AssumeOp);
+  HANDLE(CoverOp);
 #undef HANDLE
 };
 

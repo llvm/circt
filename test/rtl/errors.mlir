@@ -58,6 +58,15 @@ rtl.module @A() -> (i1) { }
 
 // -----
 
+rtl.module @A () {}
+
+rtl.module @B() {
+  // expected-error @+1 {{has unknown extmodule parameter value 'width' = @Foo}}
+  rtl.instance "foo" @A() { parameters = { width = @Foo } }: () -> ()
+}
+
+// -----
+
 // expected-error @+2 {{rtl.array only supports one dimension}}
 // expected-error @+1 {{Could not parse rtl.array}}
 func @arrayDims(%a: !rtl.array<3 x 4 x i5>) { }

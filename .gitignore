@@ -1,4 +1,10 @@
 build
+/docker_build
 .vscode
 #*
 *~
+.DS_Store
+__pycache__
+
+# External software
+/ext

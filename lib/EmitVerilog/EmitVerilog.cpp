@@ -277,12 +277,14 @@ void VerilogEmitterBase::emitTypePaddedToWidth(Type type, size_t padToWidth,
 namespace {
 
 class ModuleEmitter : public VerilogEmitterBase {
+
 public:
   explicit ModuleEmitter(VerilogEmitterState &state)
       : VerilogEmitterBase(state) {}
 
   void emitFModule(FModuleOp module);
   void emitRTLModule(rtl::RTLModuleOp module);
+  void emitRTLExternModule(rtl::RTLExternModuleOp module);
   void emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
                       bool forceRootExpr = false);
 
@@ -297,7 +299,7 @@ public:
   void emitStatement(ConnectOp op);
   void emitStatement(rtl::ConnectOp op);
   void emitStatement(rtl::OutputOp op);
-  void emitStatement(rtl::RTLInstanceOp op);
+  void emitStatement(rtl::InstanceOp op);
   void emitStatement(PrintFOp op);
   void emitStatement(StopOp op);
   void emitStatement(sv::IfDefOp op);
@@ -306,6 +308,9 @@ public:
   void emitStatement(sv::FWriteOp op);
   void emitStatement(sv::FatalOp op);
   void emitStatement(sv::FinishOp op);
+  void emitStatement(sv::AssertOp op);
+  void emitStatement(sv::AssumeOp op);
+  void emitStatement(sv::CoverOp op);
   void emitDecl(NodeOp op);
   void emitDecl(InstanceOp op);
   void emitDecl(RegOp op);
@@ -314,7 +319,7 @@ public:
   void emitOperation(Operation *op);
 
   void collectNamesEmitDecls(Block &block);
-  bool collectNamesEmitWires(rtl::RTLInstanceOp &inst);
+  bool collectNamesEmitWires(rtl::InstanceOp &inst);
   StringRef addName(Value value, StringRef name);
   StringRef addName(Value value, StringAttr nameAttr) {
     return addName(value, nameAttr ? nameAttr.getValue() : "");
@@ -790,6 +795,7 @@ private:
   SubExprInfo visitExpr(EQPrimOp op) { return emitBinary(op, Equality, "=="); }
   SubExprInfo visitExpr(NEQPrimOp op) { return emitBinary(op, Equality, "!="); }
   SubExprInfo visitExpr(DShlPrimOp op) { return emitBinary(op, Shift, "<<"); }
+  SubExprInfo visitExpr(DShlwPrimOp op) { return emitBinary(op, Shift, "<<"); }
   SubExprInfo visitExpr(DShrPrimOp op) {
     return emitSignedBinary(op, Shift, ">>>");
   }
@@ -855,6 +861,9 @@ private:
   }
   SubExprInfo visitComb(rtl::ShlOp op) {
     return emitSignedBinary(op, Shift, "<<");
+  }
+  SubExprInfo visitComb(rtl::ShrOp op) {
+    return emitSignedBinary(op, Shift, ">>>");
   }
   SubExprInfo visitComb(rtl::AndOp op) { return emitVariadic(op, And, "&"); }
   SubExprInfo visitComb(rtl::OrOp op) { return emitVariadic(op, Or, "|"); }
@@ -1353,34 +1362,34 @@ void ModuleEmitter::emitStatement(ConnectOp op) {
   ops.insert(op);
 
   // Connect to a register has "special" behavior.
-  auto lhs = op.lhs();
+  auto dest = op.dest();
   auto addRegAssign = [&](const std::string &clockExpr, Value value) {
     std::string action =
-        getName(lhs).str() + " <= " + emitExpressionToString(value, ops) + ";";
+        getName(dest).str() + " <= " + emitExpressionToString(value, ops) + ";";
     auto locStr = getLocationInfoAsString(ops);
     addAtPosEdge(action, locStr, clockExpr);
     return;
   };
 
-  if (auto regOp = dyn_cast_or_null<RegOp>(lhs.getDefiningOp())) {
+  if (auto regOp = dyn_cast_or_null<RegOp>(dest.getDefiningOp())) {
     auto clockExpr = emitExpressionToString(regOp.clockVal(), ops);
-    addRegAssign(clockExpr, op.rhs());
+    addRegAssign(clockExpr, op.src());
     return;
   }
 
-  if (auto regInitOp = dyn_cast_or_null<RegInitOp>(lhs.getDefiningOp())) {
+  if (auto regInitOp = dyn_cast_or_null<RegInitOp>(dest.getDefiningOp())) {
     auto clockExpr = emitExpressionToString(regInitOp.clockVal(), ops);
     clockExpr +=
         " or posedge " + emitExpressionToString(regInitOp.resetSignal(), ops);
 
-    addRegAssign(clockExpr, op.rhs());
+    addRegAssign(clockExpr, op.src());
     return;
   }
 
   indent() << "assign ";
-  emitExpression(lhs, ops);
+  emitExpression(dest, ops);
   os << " = ";
-  emitExpression(op.rhs(), ops);
+  emitExpression(op.src(), ops);
   os << ';';
   emitLocationInfoAndNewLine(ops);
 }
@@ -1403,12 +1412,12 @@ void ModuleEmitter::emitStatement(rtl::OutputOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  SmallVector<rtl::RTLModulePortInfo, 8> ports;
+  SmallVector<rtl::ModulePortInfo, 8> ports;
   rtl::RTLModuleOp parent = op.getParentOfType<rtl::RTLModuleOp>();
-  parent.getRTLPortInfo(ports);
+  parent.getPortInfo(ports);
   size_t operandIndex = 0;
-  for (rtl::RTLModulePortInfo port : ports) {
-    if (port.direction != rtl::PortDirection::OUTPUT)
+  for (rtl::ModulePortInfo port : ports) {
+    if (!port.isOutput())
       continue;
     indent() << "assign " << port.getName() << " = ";
     emitExpression(op.getOperand(operandIndex), ops);
@@ -1489,6 +1498,27 @@ void ModuleEmitter::emitStatement(sv::FinishOp op) {
   emitLocationInfoAndNewLine(ops);
 }
 
+void ModuleEmitter::emitStatement(sv::AssertOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  indent() << "assert(" << emitExpressionToString(op.predicate(), ops) << ");";
+  emitLocationInfoAndNewLine(ops);
+}
+
+void ModuleEmitter::emitStatement(sv::AssumeOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  indent() << "assume(" << emitExpressionToString(op.property(), ops) << ");";
+  emitLocationInfoAndNewLine(ops);
+}
+
+void ModuleEmitter::emitStatement(sv::CoverOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  indent() << "cover(" << emitExpressionToString(op.property(), ops) << ");";
+  emitLocationInfoAndNewLine(ops);
+}
+
 void ModuleEmitter::emitStatement(sv::IfDefOp op) {
   auto cond = op.cond();
 
@@ -1522,7 +1552,8 @@ static void emitBeginEndRegion(Block *block,
     // Verilog statement (for the purposes of if statements).  Just do a simple
     // check here for now.  This can be improved over time.
     return isa<sv::FWriteOp>(op) || isa<sv::FinishOp>(op) ||
-           isa<sv::FatalOp>(op);
+           isa<sv::FatalOp>(op) || isa<sv::AssertOp>(op) ||
+           isa<sv::AssumeOp>(op) || isa<sv::CoverOp>(op);
   };
 
   // Determine if we can omit the begin/end keywords.
@@ -1577,18 +1608,15 @@ void ModuleEmitter::emitDecl(InstanceOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  auto instanceName = getName(op.getResult());
-  StringRef defName = op.moduleName();
+  auto *referencedModule = op.getReferencedModule();
+  FExtModuleOp referencedExtModule;
 
   // If this is referencing an extmodule with a specified defname, then use
   // the defName from it as the actual module name we reference.  This exists
   // because FIRRTL is not parameterized like verilog is - it introduces
   // redundant extmodule instances to encode different parameter
   // configurations.
-  auto moduleIR = op.getParentOfType<CircuitOp>();
-  auto referencedModule = moduleIR.lookupSymbol(defName);
-  FExtModuleOp referencedExtModule;
-
+  StringRef defName = op.moduleName();
   if (!referencedModule)
     emitOpError(op, "could not find mlir node named @" + defName);
   else if ((referencedExtModule = dyn_cast<FExtModuleOp>(referencedModule)))
@@ -1628,6 +1656,7 @@ void ModuleEmitter::emitDecl(InstanceOp op) {
       }
     }
 
+  auto instanceName = getName(op.getResult());
   os << ' ' << instanceName << " (";
   emitLocationInfoAndNewLine(ops);
 
@@ -1643,37 +1672,69 @@ void ModuleEmitter::emitDecl(InstanceOp op) {
   indent() << ");\n";
 }
 
-void ModuleEmitter::emitStatement(rtl::RTLInstanceOp op) {
+void ModuleEmitter::emitStatement(rtl::InstanceOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  auto instanceName = op.instanceName();
-  StringRef defName = op.moduleName();
+  auto *moduleOp = op.getReferencedModule();
+  assert(moduleOp && "Invalid IR");
+
+  // If this is a reference to an external module with a hard coded Verilog
+  // name, then use it here.  This is a hack because we lack proper support for
+  // parameterized modules in the RTL dialect.
+  if (auto extMod = dyn_cast<rtl::RTLExternModuleOp>(moduleOp)) {
+    indent() << extMod.getVerilogModuleName();
+  } else {
+    indent() << op.moduleName();
+  }
+
+  // Helper that prints a parameter constant value in a Verilog compatible way.
+  auto printParmValue = [&](Attribute value) {
+    if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
+      os << intAttr.getValue();
+    } else if (auto strAttr = value.dyn_cast<StringAttr>()) {
+      os << '"';
+      os.write_escaped(strAttr.getValue());
+      os << '"';
+    } else if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
+      // TODO: relying on float printing to be precise is not a good idea.
+      os << fpAttr.getValueAsDouble();
+    } else {
+      os << "<<UNKNOWN MLIRATTR: " << value << ">>";
+      emitOpError(op, "unknown extmodule parameter value");
+    }
+  };
+
+  // If this is a parameterized module, then emit the parameters.
+  if (auto paramDictOpt = op.parameters()) {
+    DictionaryAttr paramDict = paramDictOpt.getValue();
+    if (!paramDict.empty()) {
+      os << " #(";
+      llvm::interleaveComma(paramDict, os, [&](NamedAttribute elt) {
+        os << '.' << elt.first << '(';
+        printParmValue(elt.second);
+        os << ')';
+      });
+      os << ')';
+    }
+  }
+
+  os << ' ' << op.instanceName() << " (";
+  emitLocationInfoAndNewLine(ops);
+
+  SmallVector<rtl::ModulePortInfo, 8> portInfo;
+  getModulePortInfo(moduleOp, portInfo);
 
   auto opArgs = op.inputs();
   auto opResults = op.getResults();
-
-  auto moduleIR = op.getParentOfType<firrtl::CircuitOp>();
-  auto referencedModule =
-      cast<rtl::RTLModuleOp>(moduleIR.lookupSymbol(defName));
-  assert(referencedModule && "invalid rtl.instance op");
-
-  os << ' ' << defName << ' ' << instanceName << " (";
-  emitLocationInfoAndNewLine(ops);
-
-  SmallVector<rtl::RTLModulePortInfo, 8> portInfo;
-  referencedModule.getRTLPortInfo(portInfo);
-
-  for (size_t i = 0, e = portInfo.size(); i != e; ++i) {
-    rtl::RTLModulePortInfo &elt = portInfo[i];
+  for (auto &elt : portInfo) {
     bool isLast = &elt == &portInfo.back();
-    StringRef valueName = elt.direction == rtl::PortDirection::OUTPUT
-                              ? getName(opResults[elt.argNum])
-                              : getName(opArgs[elt.argNum]);
+    StringRef valueName = elt.isOutput() ? getName(opResults[elt.argNum])
+                                         : getName(opArgs[elt.argNum]);
     indent() << "  ." << StringRef(elt.getName()) << " (" << valueName
              << (isLast ? ")\n" : "),\n");
   }
-  indent() << ")\n";
+  indent() << ");\n";
 }
 
 void ModuleEmitter::emitDecl(RegOp op) {
@@ -1952,7 +2013,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
   SmallVector<Operation *, 16> declsToEmit;
   bool rtlInstanceDeclaredWires = false;
   for (auto &op : block) {
-    if (auto rtlInstance = dyn_cast<rtl::RTLInstanceOp>(op)) {
+    if (auto rtlInstance = dyn_cast<rtl::InstanceOp>(op)) {
       rtlInstanceDeclaredWires |= collectNamesEmitWires(rtlInstance);
       continue;
     }
@@ -2069,7 +2130,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     os << '\n';
 }
 
-bool ModuleEmitter::collectNamesEmitWires(rtl::RTLInstanceOp &op) {
+bool ModuleEmitter::collectNamesEmitWires(rtl::InstanceOp &op) {
   for (size_t i = 0, e = op.getNumResults(); i < e; ++i) {
     auto result = op.getResult(i);
     StringRef wireName = addName(result, op.getResultName(i));
@@ -2147,7 +2208,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
       return emitter.emitStatement(op), true;
     }
     bool visitStmt(rtl::OutputOp op) { return emitter.emitStatement(op), true; }
-    bool visitStmt(rtl::RTLInstanceOp op) {
+    bool visitStmt(rtl::InstanceOp op) {
       return emitter.emitStatement(op), true;
     }
     bool visitStmt(rtl::WireOp op) { return true; }
@@ -2175,6 +2236,9 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitSV(sv::FWriteOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::FatalOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::FinishOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::AssertOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::AssumeOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::CoverOp op) { return emitter.emitStatement(op), true; }
 
     bool visitUnhandledSV(Operation *op) { return false; }
     bool visitInvalidSV(Operation *op) { return false; }
@@ -2355,23 +2419,20 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
 
   size_t nextPort = 0;
   for (auto &port : portInfo)
-    addName(module.getArgument(nextPort++), port.first);
+    addName(module.getArgument(nextPort++), port.name);
 
   os << "module " << module.getName() << '(';
   if (!portInfo.empty())
     os << '\n';
-
-  auto isOutput = [](FIRRTLType type) -> bool { return type.isa<FlipType>(); };
 
   // Determine the width of the widest type we have to print so everything
   // lines up nicely.
   bool hasOutputs = false;
   unsigned maxTypeWidth = 0;
   for (auto &port : portInfo) {
-    auto portType = port.second;
-    hasOutputs |= isOutput(portType);
+    hasOutputs |= port.isOutput();
 
-    int bitWidth = getBitWidthOrSentinel(portType);
+    int bitWidth = getBitWidthOrSentinel(port.type);
     if (bitWidth == -1 || bitWidth == 1)
       continue; // The error case is handled below.
 
@@ -2387,8 +2448,8 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
 
     indent();
     // Emit the arguments.
-    auto portType = portInfo[portIdx].second;
-    bool isThisPortOutput = isOutput(portType);
+    auto portType = portInfo[portIdx].type;
+    bool isThisPortOutput = portInfo[portIdx].isOutput();
     if (isThisPortOutput)
       os << "output ";
     else
@@ -2403,9 +2464,8 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
 
     // If we have any more ports with the same types and the same direction,
     // emit them in a list on the same line.
-    while (portIdx != e &&
-           isOutput(portInfo[portIdx].second) == isThisPortOutput &&
-           bitWidth == getBitWidthOrSentinel(portInfo[portIdx].second)) {
+    while (portIdx != e && portInfo[portIdx].isOutput() == isThisPortOutput &&
+           bitWidth == getBitWidthOrSentinel(portInfo[portIdx].type)) {
       // Don't exceed our preferred line length.
       StringRef name = getName(module.getArgument(portIdx));
       if (os.tell() + 2 + name.size() - startOfLinePos >
@@ -2452,10 +2512,14 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
   os << "endmodule\n\n";
 }
 
+void ModuleEmitter::emitRTLExternModule(rtl::RTLExternModuleOp module) {
+  os << "// external module " << module.getName() << "\n\n";
+}
+
 void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
   // Add all the ports to the name table.
-  SmallVector<rtl::RTLModulePortInfo, 8> portInfo;
-  module.getRTLPortInfo(portInfo);
+  SmallVector<rtl::ModulePortInfo, 8> portInfo;
+  module.getPortInfo(portInfo);
 
   for (auto &port : portInfo) {
     StringRef name = port.getName();
@@ -2465,7 +2529,7 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
           "Verilog synthesis.\n");
       name = "<<NO-NAME-FOUND>>";
     }
-    if (port.direction == rtl::PortDirection::OUTPUT)
+    if (port.isOutput())
       usedNames.insert(name);
     else
       addName(module.getArgument(port.argNum), name);
@@ -2481,7 +2545,7 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
   unsigned maxTypeWidth = 0;
   for (auto &port : portInfo) {
     auto portType = port.type;
-    hasOutputs |= port.direction == rtl::PortDirection::OUTPUT;
+    hasOutputs |= port.isOutput();
 
     int bitWidth = getBitWidthOrSentinel(portType);
     if (bitWidth == -1 || bitWidth == 1)
@@ -2653,6 +2717,9 @@ void CircuitEmitter::emitCircuit(CircuitOp circuit) {
     } else if (auto module = dyn_cast<rtl::RTLModuleOp>(op)) {
       ModuleEmitter(state).emitRTLModule(module);
       continue;
+    } else if (auto module = dyn_cast<rtl::RTLExternModuleOp>(op)) {
+      ModuleEmitter(state).emitRTLExternModule(module);
+      continue;
     }
 
     // Ignore the done terminator at the end of the circuit.
@@ -2668,6 +2735,10 @@ void CircuitEmitter::emitMLIRModule(ModuleOp module) {
   for (auto &op : *module.getBody()) {
     if (auto circuit = dyn_cast<CircuitOp>(op))
       emitCircuit(circuit);
+    else if (auto module = dyn_cast<rtl::RTLModuleOp>(op))
+      ModuleEmitter(state).emitRTLModule(module);
+    else if (auto module = dyn_cast<rtl::RTLExternModuleOp>(op))
+      ModuleEmitter(state).emitRTLExternModule(module);
     else if (!isa<ModuleTerminatorOp>(op))
       op.emitError("unknown operation");
   }

@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 def CircuitOp : FIRRTLOp<"circuit",
-      [IsolatedFromAbove, SymbolTable, 
+      [IsolatedFromAbove, SymbolTable,
        SingleBlockImplicitTerminator<"DoneOp">]> {
   let summary = "FIRRTL Circuit";
   let description = [{
@@ -18,7 +18,7 @@ def CircuitOp : FIRRTLOp<"circuit",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"StringAttr name">
+    OpBuilderDAG<(ins "StringAttr":$name)>
   ];
 
   let extraClassDeclaration = [{
@@ -32,7 +32,7 @@ def CircuitOp : FIRRTLOp<"circuit",
     Region &getBodyRegion();
     Block *getBody();
   }];
-  
+
   let printer = [{ return ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
 
@@ -54,15 +54,14 @@ def FModuleOp : FIRRTLOp<"module",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"StringAttr name, "
-              "ArrayRef<std::pair<StringAttr, FIRRTLType>> ports">
+    OpBuilderDAG<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports)>
   ];
 
   let extraClassDeclaration = [{
     using FunctionLike::getBody;
 
     // Implement RegionKindInterface.
-    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
 
     // Decode information about the input and output ports on this module.
     void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
@@ -121,9 +120,9 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"StringAttr name, "
-              "ArrayRef<std::pair<StringAttr, FIRRTLType>> ports, "
-              "StringRef defnameAttr = StringRef()">
+    OpBuilderDAG<(ins "StringAttr":$name,
+                      "ArrayRef<ModulePortInfo>":$ports,
+                      CArg<"StringRef", "StringRef()">:$defnamAttr)>
   ];
 
   let extraClassDeclaration = [{
@@ -157,6 +156,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
 
   let printer = [{ return ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
+  let verifier = [{ return ::verifyFExtModuleOp(*this); }];
 }
 
 def DoneOp : FIRRTLOp<"done", [Terminator]> {

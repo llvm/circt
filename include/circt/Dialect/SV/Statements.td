@@ -4,22 +4,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-class HasCustomParserPrinter {
-  code printer = [{ return ::print$cppClass(p, *this); }];
-  code parser = [{ return ::parse$cppClass(parser, result); }];
-}
-
 def HasRegionTerminator : SingleBlockImplicitTerminator<"YieldOp">;
 
 //===----------------------------------------------------------------------===//
 // Control flow like-operations
 //===----------------------------------------------------------------------===//
 
-// TODO: MLIR Supports parsing/printing regions.  We should give it a try once
-// this patch is merged in our tree:
-// https://github.com/llvm/llvm-project/commit/eaeadce9bd11
-
-def IfDefOp : SVOp<"ifdef", [HasRegionTerminator]>, HasCustomParserPrinter {
+def IfDefOp : SVOp<"ifdef", [HasRegionTerminator]> {
   let summary = "'ifdef MACRO' block";
    
    let description = [{
@@ -31,14 +22,14 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator]>, HasCustomParserPrinter {
   let arguments = (ins StrAttr:$cond);
   let results = (outs);
   
-  // TODO: ODS doesn't support parsing/printing regions yet :-(
-  // let assemblyFormat = [{ $clock attr-dict $body }];*/
+  let assemblyFormat = [{ $cond regions attr-dict }];
 
   // TODO: ODS forces using a custom builder just to get the region terminator
   // implicitly installed.
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"StringRef cond">
+    OpBuilderDAG<(ins "StringRef":$cond,
+                      CArg<"std::function<void()>", "{}">:$bodyCtor)>
   ];
 
   let extraClassDeclaration = [{
@@ -46,22 +37,21 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator]>, HasCustomParserPrinter {
   }];
 }
 
-def IfOp : SVOp<"if", [HasRegionTerminator]>,
-           HasCustomParserPrinter {
+def IfOp : SVOp<"if", [HasRegionTerminator]> {
   let summary = "'if (cond)' block";
   
   let regions = (region SizedRegion<1>:$body);
   let arguments = (ins I1:$cond);
   let results = (outs);
   
-  // TODO: ODS doesn't support parsing/printing regions yet :-(
-  //let assemblyFormat = [{ $cond attr-dict $body }];
+  let assemblyFormat = [{ $cond $body attr-dict }];
 
   // TODO: ODS forces using a custom builder just to get the region terminator
   // implicitly installed.
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"Value cond">
+    OpBuilderDAG<(ins "Value":$cond,
+                      CArg<"std::function<void()>", "{}">:$bodyCtor)>
   ];
 
   let extraClassDeclaration = [{
@@ -71,22 +61,21 @@ def IfOp : SVOp<"if", [HasRegionTerminator]>,
 
 // TODO: This should be generalized, e.g. with an enum to specify the edge
 // trigger behavior.
-def AlwaysAtPosEdgeOp : SVOp<"alwaysat_posedge", [HasRegionTerminator]>,
-                        HasCustomParserPrinter {
+def AlwaysAtPosEdgeOp : SVOp<"alwaysat_posedge", [HasRegionTerminator]> {
   let summary = "'always @(posedge ...)'' block";
   
   let regions = (region SizedRegion<1>:$body);
   let arguments = (ins I1:$clock);
   let results = (outs);
   
-  // TODO: ODS doesn't support parsing/printing regions yet :-(
-  //let assemblyFormat = [{ $clock attr-dict $body }];
+  let assemblyFormat = [{ $clock $body attr-dict }];
 
   // TODO: ODS forces using a custom builder just to get the region terminator
   // implicitly installed.
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"Value cond">
+    OpBuilderDAG<(ins "Value":$cond,
+                      CArg<"std::function<void()>", "{}">:$bodyCtor)>
   ];
 
   let extraClassDeclaration = [{
@@ -142,4 +131,44 @@ def FatalOp : SVOp<"fatal"> {
   let results = (outs);
 
   let assemblyFormat = [{ attr-dict }];
+}
+
+//===----------------------------------------------------------------------===//
+// Verification Statements
+//===----------------------------------------------------------------------===//
+
+def AssertOp : SVOp<"assert"> {
+  let summary = "immediate assertion statement";
+  let description = [{
+    Assert that a specific condition is always true.
+  }];
+
+  let arguments = (ins AnyType:$predicate);
+  let results = (outs);
+
+  let assemblyFormat = [{ attr-dict $predicate `:` type($predicate) }];
+}
+
+def AssumeOp : SVOp<"assume"> {
+  let summary = "assume property statement";
+  let description = [{
+    Assume that a specific property is always true.
+  }];
+
+  let arguments = (ins AnyType:$property);
+  let results = (outs);
+
+  let assemblyFormat = [{ attr-dict $property `:` type($property) }];
+}
+
+def CoverOp : SVOp<"cover"> {
+  let summary = "functional coverage statement";
+  let description = [{
+    Assert that a specific property happens during the course of execution.
+  }];
+
+  let arguments = (ins AnyType:$property);
+  let results = (outs);
+
+  let assemblyFormat = [{ attr-dict $property `:` type($property) }];
 }
