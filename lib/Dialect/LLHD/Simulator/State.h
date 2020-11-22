@@ -92,7 +92,6 @@ struct Signal {
   // The list of instances this signal triggers.
   std::vector<unsigned> triggers;
   uint64_t size;
-  // uint64_t width = 0;
   std::unique_ptr<uint8_t> value;
   std::vector<std::pair<unsigned, unsigned>> elements;
 };
