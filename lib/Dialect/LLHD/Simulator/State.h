@@ -182,7 +182,7 @@ struct Instance {
   bool isEntity;
   size_t nArgs = 0;
   // The arguments and signals of this instance.
-  std::vector<SignalDetail> sensitivityList;
+  llvm::SmallVector<SignalDetail, 0> sensitivityList;
   std::unique_ptr<ProcState> procState;
   std::unique_ptr<uint8_t> entityState;
   Time expectedWakeup;
@@ -208,7 +208,8 @@ struct State {
 
   /// Find an instance in the instances list by name and return an
   /// iterator for it.
-  std::vector<Instance>::iterator getInstanceIterator(std::string instName);
+  llvm::SmallVectorTemplateCommon<Instance>::iterator
+  getInstanceIterator(std::string instName);
 
   /// Add a new signal to the state. Returns the index of the new signal.
   int addSignal(std::string name, std::string owner);
@@ -233,8 +234,8 @@ struct State {
 
   Time time;
   std::string root;
-  std::vector<Instance> instances;
-  std::vector<Signal> signals;
+  llvm::SmallVector<Instance, 0> instances;
+  llvm::SmallVector<Signal, 0> signals;
   UpdateQueue queue;
 };
 

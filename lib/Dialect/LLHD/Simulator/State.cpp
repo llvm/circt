@@ -278,7 +278,7 @@ void State::pushQueue(Time t, unsigned inst) {
   instances[inst].expectedWakeup = newTime;
 }
 
-std::vector<Instance>::iterator
+llvm::SmallVectorTemplateCommon<Instance>::iterator
 State::getInstanceIterator(std::string instName) {
   auto it =
       std::find_if(instances.begin(), instances.end(),
