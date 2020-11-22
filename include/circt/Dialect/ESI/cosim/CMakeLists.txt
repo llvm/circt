@@ -1,4 +1,3 @@
-find_package(CapnProto CONFIG PATHS "${CMAKE_SOURCE_DIR}/ext")
 if(CapnProto_FOUND)
   option(ESI_COSIM "Enable ESI Cosimulation" ON)
   message("-- Enabling ESI cosim")

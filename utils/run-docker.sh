@@ -11,7 +11,7 @@
 #       "Configure Docker to start on boot"
 
 CMD=${1:-"./utils/run-tests-docker.sh"}
-VER=${2:-"v1"}
+VER=${2:-"v2"}
 REPO_ROOT=$(cd "$(dirname "$BASH_SOURCE[0]")/.." && pwd)
 
 cd $REPO_ROOT
