@@ -3,6 +3,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/RTL/Ops.h"
+#include "circt/Dialect/RTL/Types.h"
 #include "circt/Dialect/RTL/Visitors.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
@@ -126,11 +127,17 @@ void rtl::getModulePortInfo(Operation *op,
 
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
-    bool isInout = containsInOutAttr(argAttrs);
+    bool isInOut = containsInOutAttr(argAttrs);
+    auto type = argTypes[i];
+
+    if (auto inout = type.dyn_cast<InOutType>()) {
+      isInOut = true;
+      type = inout.getElementType();
+    }
 
     results.push_back({getRTLNameAttr(argAttrs),
-                       isInout ? PortDirection::INOUT : PortDirection::INPUT,
-                       argTypes[i], i});
+                       isInOut ? PortDirection::INOUT : PortDirection::INPUT,
+                       type, i});
   }
 
   auto resultTypes = getModuleType(op).getResults();

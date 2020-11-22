@@ -7,6 +7,7 @@
 #include "circt/EmitVerilog.h"
 #include "circt/Dialect/FIRRTL/Visitors.h"
 #include "circt/Dialect/RTL/Ops.h"
+#include "circt/Dialect/RTL/Types.h"
 #include "circt/Dialect/RTL/Visitors.h"
 #include "circt/Dialect/SV/Ops.h"
 #include "circt/Dialect/SV/Visitors.h"

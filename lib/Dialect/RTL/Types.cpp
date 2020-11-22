@@ -79,7 +79,7 @@ Type InOutType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
 
 void InOutType::print(DialectAsmPrinter &p) const {
   p << "inout<";
-  p.printType(getInnerType());
+  p.printType(getElementType());
   p << '>';
 }
 

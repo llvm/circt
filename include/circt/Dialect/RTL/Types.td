@@ -31,6 +31,6 @@ def InOutType : RTLType<"InOut"> {
   }];
 
   let mnemonic = "inout";
-  let parameters = (ins "::mlir::Type":$innerType);
+  let parameters = (ins "::mlir::Type":$elementType);
   let genVerifyInvariantsDecl = 1;
 }

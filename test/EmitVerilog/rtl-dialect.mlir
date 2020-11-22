@@ -108,4 +108,13 @@ module {
   // CHECK-EMPTY:
   // CHECK-NEXT:   assign b = a << a;
   // CHECK-NEXT: endmodule
+
+
+  rtl.module @inout(%a: !rtl.inout<i42>) {
+    rtl.output
+  }
+  // CHECK-LABEL:  module inout(
+  // CHECK-NEXT:     inout [41:0] a);
+  // CHECK-EMPTY:
+  // CHECK-NEXT: endmodule
 }
