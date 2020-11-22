@@ -1,16 +1,33 @@
 //===- Types.cpp - RTL types code defs ------------------------------------===//
 //
-// Definitions for RTL data types. Anything which doesn't have to be public
-// should go in here.
+// Implementation logic for RTL data types.
 //
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/RTL/Types.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/StandardTypes.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
 using namespace circt::rtl;
+
+/// Return true if the specified type can be used as an RTL value type, that is
+/// the set of types that can be composed together to represent synthesized,
+/// hardware but not marker types like InOutType.
+bool isRTLValueType(Type type) {
+  if (auto intType = type.dyn_cast<IntegerType>())
+    return intType.isSignless();
+
+  if (type.isa<ArrayType>())
+    return true;
+
+  return false;
+}
+
+//===----------------------------------------------------------------------===//
+// ArrayType
+//===----------------------------------------------------------------------===//
 
 Type ArrayType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
   SmallVector<int64_t, 2> dims;
@@ -22,13 +39,55 @@ Type ArrayType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
     p.emitError(p.getNameLoc(), "rtl.array only supports one dimension");
     return Type();
   }
+
+  auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
+  if (failed(verifyConstructionInvariants(loc, inner, dims[0])))
+    return Type();
+
   return get(ctxt, inner, dims[0]);
 }
 
 void ArrayType::print(DialectAsmPrinter &p) const {
   p << "array<" << getSize() << "x";
   p.printType(getInnerType());
-  p << ">";
+  p << '>';
+}
+
+LogicalResult ArrayType::verifyConstructionInvariants(Location loc,
+                                                      Type innerType,
+                                                      size_t size) {
+  if (!isRTLValueType(innerType))
+    return emitError(loc, "invalid element for rtl.array type");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// InOutType
+//===----------------------------------------------------------------------===//
+
+Type InOutType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+  Type inner;
+  if (p.parseLess() || p.parseType(inner) || p.parseGreater())
+    return Type();
+
+  auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
+  if (failed(verifyConstructionInvariants(loc, inner)))
+    return Type();
+
+  return get(ctxt, inner);
+}
+
+void InOutType::print(DialectAsmPrinter &p) const {
+  p << "inout<";
+  p.printType(getInnerType());
+  p << '>';
+}
+
+LogicalResult InOutType::verifyConstructionInvariants(Location loc,
+                                                      Type innerType) {
+  if (!isRTLValueType(innerType))
+    return emitError(loc, "invalid element for rtl.inout type");
+  return success();
 }
 
 #define GET_TYPEDEF_CLASSES

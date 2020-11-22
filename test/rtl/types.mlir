@@ -6,4 +6,9 @@ module {
   func @i20x5array(%A: !rtl.array<5 x i20>) {
     return
   }
+
+  // CHECK-LABEL: func @inoutType(%arg0: !rtl.inout<i42>) {
+  func @inoutType(%arg0: !rtl.inout<i42>) {
+    return
+  }
 }

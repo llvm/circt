@@ -70,3 +70,9 @@ rtl.module @B() {
 // expected-error @+2 {{rtl.array only supports one dimension}}
 // expected-error @+1 {{Could not parse rtl.array}}
 func @arrayDims(%a: !rtl.array<3 x 4 x i5>) { }
+
+// -----
+
+// expected-error @+2 {{invalid element for rtl.inout type}}
+// expected-error @+1 {{Could not parse rtl.inout}}
+func @invalidInout(%arg0: !rtl.inout<tensor<*xf32>>) { }
