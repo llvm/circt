@@ -8,7 +8,6 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/StandardTypes.h"
-#include "llvm/Support/FormatVariadic.h"
 
 using namespace circt;
 using namespace rtl;

@@ -18,10 +18,5 @@ def ArrayType : RTLType<"Array"> {
   }];
 
   let mnemonic = "array";
-
-  let parameters = (
-    ins
-    "::mlir::Type":$innerType,
-    "size_t":$size
-  );
+  let parameters = (ins "::mlir::Type":$innerType, "size_t":$size);
 }
