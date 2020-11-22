@@ -161,14 +161,14 @@ void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
   // Spawn a new event and update the top.
   if (unused.size() > 0) {
     // An unused slot available.
-    auto u = unused.back();
+    auto firstUnused = unused.back();
     unused.pop_back();
-    auto &curr = begin()[u];
+    auto &curr = begin()[firstUnused];
     curr.insertChange(index, bitOffset, bytes, width);
     curr.unused = false;
     curr.time = time;
     if (s.unused || time < s.time)
-      topSlot = u;
+      topSlot = firstUnused;
   } else {
     // We need to generate a new slot.
     push_back(Slot(time, index, bitOffset, bytes, width));
@@ -202,14 +202,14 @@ void UpdateQueue::insertOrUpdate(Time time, unsigned inst) {
 
   // Spawn new event.
   if (unused.size() > 0) {
-    auto u = unused.back();
+    auto firstUnused = unused.back();
     unused.pop_back();
-    auto &curr = begin()[u];
+    auto &curr = begin()[firstUnused];
     curr.insertChange(inst);
     curr.unused = false;
     curr.time = time;
     if (s.unused || time < s.time)
-      topSlot = u;
+      topSlot = firstUnused;
   } else {
     Slot slot(time);
     slot.insertChange(inst);
