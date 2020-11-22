@@ -19,7 +19,7 @@ class DialectAsmPrinter;
 namespace circt {
 namespace rtl {
 using Location = ::mlir::Location;
-}
+} // namespace rtl
 } // namespace circt
 
 #define GET_TYPEDEF_CLASSES

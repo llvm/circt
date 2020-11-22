@@ -83,12 +83,7 @@ Type RTLDialect::parseType(DialectAsmParser &parser) const {
   llvm::StringRef mnemonic;
   if (parser.parseKeyword(&mnemonic))
     return Type();
-  auto genType = generatedTypeParser(getContext(), parser, mnemonic);
-  if (genType)
-    return genType;
-  parser.emitError(parser.getCurrentLocation(), "Could not parse rtl.")
-      << mnemonic << ".";
-  return Type();
+  return generatedTypeParser(getContext(), parser, mnemonic);
 }
 
 /// Print a type registered to this dialect. Try the tblgen'd type printer
