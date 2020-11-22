@@ -5,6 +5,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Conversion/Passes.h"
 #include "circt/Dialect/FIRRTL/Dialect.h"
 #include "circt/Dialect/FIRRTL/Ops.h"
 #include "circt/Dialect/FIRRTL/Passes.h"

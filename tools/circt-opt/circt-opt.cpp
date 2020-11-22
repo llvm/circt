@@ -8,6 +8,7 @@
 #include "circt/Conversion/FIRRTLToLLHD/FIRRTLToLLHD.h"
 #include "circt/Conversion/HandshakeToFIRRTL/HandshakeToFIRRTL.h"
 #include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
+#include "circt/Conversion/Passes.h"
 #include "circt/Conversion/StandardToHandshake/StandardToHandshake.h"
 #include "circt/Conversion/StandardToStaticLogic/StandardToStaticLogic.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
@@ -110,6 +111,8 @@ int main(int argc, char **argv) {
   llhd::initLLHDTransformationPasses();
   llhd::initLLHDToLLVMPass();
   llhd::registerFIRRTLToLLHDPasses();
+
+  registerConversionPasses();
 
   PassPipelineCLParser passPipeline("", "Compiler passes to run");
 
