@@ -1,3 +1,9 @@
+##===- CMakeLists.txt - CIRCT cmake root ----------------------*- cmake -*-===//
+##
+## Configure the CIRCT build.
+##
+##===----------------------------------------------------------------------===//
+
 cmake_minimum_required(VERSION 3.10)
 
 if(POLICY CMP0068)
@@ -83,9 +89,9 @@ include_directories(${CIRCT_MAIN_SRC_DIR})
 include_directories(${CIRCT_INCLUDE_DIR})
 
 # If Verilator hasn't been explicitly disabled, find it.
-option(VERILATOR_DISABLE "Disable the Verilator tests")
+option(VERILATOR_DISABLE "Disable the Verilator tests.")
 if (VERILATOR_DISABLE)
-  message(STATUS "Disabling Verilator tests")
+  message(STATUS "Disabling Verilator tests.")
 else()
   # Detect if Verilator is present.
   if (NOT DEFINED VERILATOR_PATH)
