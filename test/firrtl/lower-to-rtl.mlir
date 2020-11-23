@@ -155,6 +155,19 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: = rtl.shl %in3, {{.*}} : i8
     %30 = firrtl.dshl %in3c, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<8>
 
+    // CHECK-NEXT: rtl.icmp "ule" {{.*}}, {{.*}} : i4
+    %41 = firrtl.leq %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+    // CHECK-NEXT: rtl.icmp "ult" {{.*}}, {{.*}} : i4
+    %42 = firrtl.lt %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+    // CHECK-NEXT: rtl.icmp "uge" {{.*}}, {{.*}} : i4
+    %43 = firrtl.geq %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+    // CHECK-NEXT: rtl.icmp "ugt" {{.*}}, {{.*}} : i4
+    %44 = firrtl.gt %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+    // CHECK-NEXT: rtl.icmp "eq" {{.*}}, {{.*}} : i4
+    %45 = firrtl.eq %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+    // CHECK-NEXT: rtl.icmp "ne" {{.*}}, {{.*}} : i4
+    %46 = firrtl.neq %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+
     // CHECK-NEXT: rtl.output %tmp3 : i4
     rtl.output %tmp3 : i4
   }
