@@ -711,7 +711,7 @@ static bool areElementsConnectEquivalent(
   FIRRTLType destElementType = std::get<1>(destElement);
   bool destIsFlip = destElementType.isa<FlipType>();
 
-  BundleType::BundleElement srcElement = std::get<0>(tuple);
+  BundleType::BundleElement srcElement = std::get<1>(tuple);
   Identifier srcElementName = std::get<0>(srcElement);
   FIRRTLType srcElementType = std::get<1>(srcElement);
   bool srcIsFlip = srcElementType.isa<FlipType>();
