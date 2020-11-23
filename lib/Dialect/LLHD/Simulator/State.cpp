@@ -137,87 +137,62 @@ void Slot::insertChange(unsigned inst) { scheduled.push_back(inst); }
 //===----------------------------------------------------------------------===//
 void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
                                  uint8_t *bytes, unsigned width) {
-  auto &s = begin()[topSlot];
-
-  // Directly add to top slot.
-  if (!s.unused && time == s.time) {
-    s.insertChange(index, bitOffset, bytes, width);
-    return;
-  }
-
-  // We need to search through the queue for an existing slot only if we're
-  // spawning an event later than the current top slot. Adding to an existing
-  // slot scheduled earlier than the top slot should never happen, as in that
-  // case it should be the top.
-  if (events > 0 && s.time < time) {
-    for (size_t i = 0, e = size(); i < e; ++i) {
-      if (time == begin()[i].time) {
-        begin()[i].insertChange(index, bitOffset, bytes, width);
-        return;
-      }
-    }
-  }
-
-  // Spawn a new event and update the top.
-  if (unused.size() > 0) {
-    // An unused slot available.
-    auto firstUnused = unused.back();
-    unused.pop_back();
-    auto &curr = begin()[firstUnused];
-    curr.insertChange(index, bitOffset, bytes, width);
-    curr.unused = false;
-    curr.time = time;
-    if (s.unused || time < s.time)
-      topSlot = firstUnused;
-  } else {
-    // We need to generate a new slot.
-    push_back(Slot(time, index, bitOffset, bytes, width));
-    if (s.unused || time < s.time)
-      topSlot = size() - 1;
-  }
-  ++events;
+  auto &slot = getOrCreateSlot(time);
+  slot.insertChange(index, bitOffset, bytes, width);
 }
 
 void UpdateQueue::insertOrUpdate(Time time, unsigned inst) {
-  auto &s = begin()[topSlot];
+  auto &slot = getOrCreateSlot(time);
+  slot.insertChange(inst);
+}
+
+Slot &UpdateQueue::getOrCreateSlot(Time time) {
+  auto &top = begin()[topSlot];
 
   // Directly add to top slot.
-  if (!s.unused && time == s.time) {
-    s.insertChange(inst);
-    return;
+  if (!top.unused && time == top.time) {
+    return top;
   }
 
   // We need to search through the queue for an existing slot only if we're
   // spawning an event after the top slot. Adding to an existing slot scheduled
   // earlier than the top slot should never happens, as then it should be the
   // top.
-  if (events > 0 && s.time < time) {
+  if (events > 0 && top.time < time) {
     for (size_t i = 0, e = size(); i < e; ++i) {
       if (time == begin()[i].time) {
-        begin()[i].insertChange(inst);
-        return;
+        return begin()[i];
       }
     }
   }
 
-  // Spawn new event.
+  // Spawn new event using an existing slot.
   if (unused.size() > 0) {
     auto firstUnused = unused.back();
     unused.pop_back();
-    auto &curr = begin()[firstUnused];
-    curr.insertChange(inst);
-    curr.unused = false;
-    curr.time = time;
-    if (s.unused || time < s.time)
+    auto &newSlot = begin()[firstUnused];
+    newSlot.unused = false;
+    newSlot.time = time;
+
+    // Update the top of the queue either if it is currently unused or the new
+    // timestamp is earlier than it.
+    if (top.unused || time < top.time)
       topSlot = firstUnused;
-  } else {
-    Slot slot(time);
-    slot.insertChange(inst);
-    push_back(slot);
-    if (s.unused || time < s.time)
-      topSlot = size() - 1;
+
+    ++events;
+    return newSlot;
   }
+
+  // We do not have pre-allocated slots available, generate a new one.
+  push_back(Slot(time));
+
+  // Update the top of the queue either if it is currently unused or the new
+  // timestamp is earlier than it.
+  if (top.unused || time < top.time)
+    topSlot = size() - 1;
+
   ++events;
+  return back();
 }
 
 const Slot &UpdateQueue::top() {

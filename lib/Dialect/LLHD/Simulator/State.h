@@ -147,6 +147,11 @@ public:
   /// queue.
   void insertOrUpdate(Time time, unsigned inst);
 
+  /// Return a reference to a slot with the given timestamp. If such a slot
+  /// already exists, a reference to it will be returned. Otherwise a reference
+  /// to a fresh slot is returned.
+  Slot &getOrCreateSlot(Time time);
+
   /// Get a reference to the current top of the queue (the earliest event
   /// available).
   const Slot &top();
