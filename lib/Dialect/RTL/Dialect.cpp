@@ -30,7 +30,22 @@ struct RTLOpAsmDialectInterface : public OpAsmDialectInterface {
     // If an operation have an optional 'name' attribute, use it.
     if (isa<WireOp>(op))
       if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
-        setNameFn(op->getResult(0), nameAttr.getValue());
+      setNameFn(op->getResult(0), nameAttr.getValue());
+  }
+
+  /// Get a special name to use when printing the entry block arguments of the
+  /// region contained by an operation in this dialect.
+  void getAsmBlockArgumentNames(Block *block,
+                                OpAsmSetValueNameFn setNameFn) const override {
+    // Check to see if the operation containing the arguments has 'rtl.name'
+    // attributes for them.  If so, use that as the name.
+    auto *parentOp = block->getParentOp();
+
+    for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
+      // Scan for a 'rtl.name' attribute.
+      if (auto str = getRTLNameAttr(impl::getArgAttrs(parentOp, i)))
+        setNameFn(block->getArgument(i), str.getValue());
+    }
   }
 };
 } // end anonymous namespace

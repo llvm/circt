@@ -148,6 +148,71 @@ void rtl::getModulePortInfo(Operation *op,
   }
 }
 
+/// Parse a function result list.
+///
+///   function-result-list ::= function-result-list-parens
+///   function-result-list-parens ::= `(` `)`
+///                                 | `(` function-result-list-no-parens `)`
+///   function-result-list-no-parens ::= function-result (`,` function-result)*
+///   function-result ::= (percent-identifier `:`) type attribute-dict?
+///
+static ParseResult
+parseFunctionResultList(OpAsmParser &parser, SmallVectorImpl<Type> &resultTypes,
+                        SmallVectorImpl<NamedAttrList> &resultAttrs) {
+  if (parser.parseLParen())
+    return failure();
+
+  // Special case for an empty set of parens.
+  if (succeeded(parser.parseOptionalRParen()))
+    return success();
+
+  // Parse individual function results.
+  do {
+    resultTypes.emplace_back();
+    resultAttrs.emplace_back();
+
+    OpAsmParser::OperandType operandName;
+    auto namePresent = parser.parseOptionalOperand(operandName);
+    StringRef implicitName;
+    if (namePresent.hasValue()) {
+      if (namePresent.getValue() || parser.parseColon())
+        return failure();
+
+      // If the name was specified, then we will use it.
+      implicitName = operandName.name.drop_front();
+    }
+
+    if (parser.parseType(resultTypes.back()) ||
+        parser.parseOptionalAttrDict(resultAttrs.back()))
+      return failure();
+
+    // If we have an implicit name and no explicit rtl.name attribute, then use
+    // the implicit name as the rtl.name attribute.
+    if (!implicitName.empty() && !getRTLNameAttr(resultAttrs.back())) {
+      auto nameAttr = parser.getBuilder().getStringAttr(implicitName);
+      resultAttrs.back().append("rtl.name", nameAttr);
+    }
+  } while (succeeded(parser.parseOptionalComma()));
+  return parser.parseRParen();
+}
+
+/// This is a variant of mlor::parseFunctionSignature that allows names on
+/// result arguments.
+static ParseResult parseModuleFunctionSignature(
+    OpAsmParser &parser, bool allowVariadic,
+    SmallVectorImpl<OpAsmParser::OperandType> &argNames,
+    SmallVectorImpl<Type> &argTypes, SmallVectorImpl<NamedAttrList> &argAttrs,
+    bool &isVariadic, SmallVectorImpl<Type> &resultTypes,
+    SmallVectorImpl<NamedAttrList> &resultAttrs) {
+  bool allowArgAttrs = true;
+  if (impl::parseFunctionArgumentList(parser, allowArgAttrs, allowVariadic,
+                                      argNames, argTypes, argAttrs, isVariadic))
+    return failure();
+  if (succeeded(parser.parseOptionalArrow()))
+    return parseFunctionResultList(parser, resultTypes, resultAttrs);
+  return success();
+}
+
 static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
                                     bool isExtModule = false) {
   using namespace mlir::impl;
@@ -168,9 +233,9 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
   // Parse the function signature.
   bool isVariadic = false;
 
-  if (parseFunctionSignature(parser, /*allowVariadic=*/false, entryArgs,
-                             argTypes, argAttrs, isVariadic, resultTypes,
-                             resultAttrs))
+  if (parseModuleFunctionSignature(parser, /*allowVariadic=*/false, entryArgs,
+                                   argTypes, argAttrs, isVariadic, resultTypes,
+                                   resultAttrs))
     return failure();
 
   // Record the argument and result types as an attribute.  This is necessary
@@ -241,6 +306,78 @@ FunctionType getRTLModuleOpType(Operation *op) {
   return typeAttr.getValue().cast<FunctionType>();
 }
 
+static void printModuleSignature(OpAsmPrinter &p, Operation *op,
+                                 ArrayRef<Type> argTypes, bool isVariadic,
+                                 ArrayRef<Type> resultTypes) {
+  Region &body = op->getRegion(0);
+  bool isExternal = body.empty();
+
+  p << '(';
+  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
+    if (i > 0)
+      p << ", ";
+
+    Value argumentValue;
+    if (!isExternal) {
+      argumentValue = body.front().getArgument(i);
+      p.printOperand(argumentValue);
+      p << ": ";
+    }
+
+    p.printType(argTypes[i]);
+
+    auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
+
+    // If the argument has the rtl.name attribute, and if it was used by
+    // the printer exactly (not name mangled with a suffix etc) then we can
+    // omit the rtl.name attribute from the argument attribute dictionary.
+    ArrayRef<StringRef> elidedAttrs;
+    StringRef tmp;
+    if (argumentValue) {
+      if (auto nameAttr = getRTLNameAttr(argAttrs)) {
+
+        // Check to make sure the asmprinter is printing it correctly.
+        SmallString<32> resultNameStr;
+        llvm::raw_svector_ostream tmpStream(resultNameStr);
+        p.printOperand(argumentValue, tmpStream);
+
+        // If the name is the same as we would otherwise use, then we're good!
+        if (tmpStream.str().drop_front() == nameAttr.getValue()) {
+          tmp = "rtl.name";
+          elidedAttrs = tmp;
+        }
+      }
+    }
+    p.printOptionalAttrDict(argAttrs, elidedAttrs);
+  }
+
+  if (isVariadic) {
+    if (!argTypes.empty())
+      p << ", ";
+    p << "...";
+  }
+
+  p << ')';
+
+  // We print result types specially since we support named arguments.
+  if (!resultTypes.empty()) {
+    auto &os = p.getStream();
+    os << " -> (";
+    for (size_t i = 0, e = resultTypes.size(); i < e; ++i) {
+      if (i != 0)
+        os << ", ";
+      auto resultAttrs = ::mlir::impl::getResultAttrs(op, i);
+      StringAttr name = getRTLNameAttr(resultAttrs);
+      if (name)
+        os << '%' << name.getValue() << ": ";
+
+      p.printType(resultTypes[i]);
+      p.printOptionalAttrDict(resultAttrs, {"rtl.name"});
+    }
+    os << ')';
+  }
+}
+
 static void printRTLModuleOp(OpAsmPrinter &p, Operation *op) {
   using namespace mlir::impl;
 
@@ -255,7 +392,7 @@ static void printRTLModuleOp(OpAsmPrinter &p, Operation *op) {
   p << op->getName() << ' ';
   p.printSymbolName(funcName);
 
-  printFunctionSignature(p, op, argTypes, /*isVariadic=*/false, resultTypes);
+  printModuleSignature(p, op, argTypes, /*isVariadic=*/false, resultTypes);
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size());
 }
 

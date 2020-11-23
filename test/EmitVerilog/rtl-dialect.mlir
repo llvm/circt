@@ -7,7 +7,7 @@ module {
 
   // CHECK-LABEL: // external module E
 
-  rtl.module @B(%a: i1 { rtl.inout }) -> (i1 {rtl.name = "b"}, i1 {rtl.name = "c"}) {
+  rtl.module @B(%a: i1 { rtl.inout }) -> (%b: i1, %c: i1) {
     %0 = rtl.or %a, %a : i1
     %1 = rtl.and %a, %a : i1
     rtl.output %0, %1 : i1, i1
@@ -20,7 +20,7 @@ module {
   // CHECK-NEXT:   assign c = a & a;
   // CHECK-NEXT: endmodule
 
-  rtl.module @A(%d: i1, %e: i1) -> (i1 {rtl.name = "f"}) {
+  rtl.module @A(%d: i1, %e: i1) -> (%f: i1) {
     %1 = rtl.mux %d, %d, %e : i1
     rtl.output %1 : i1
   }
@@ -31,7 +31,7 @@ module {
   // CHECK-NEXT:  assign f = d ? d : e;
   // CHECK-NEXT: endmodule
 
-  rtl.module @AAA(%d: i1, %e: i1) -> (i1 {rtl.name = "f"}) {
+  rtl.module @AAA(%d: i1, %e: i1) -> (%f: i1) {
     %z = rtl.constant ( 0 : i1 ) : i1
     rtl.output %z : i1
   }
@@ -44,14 +44,13 @@ module {
 
 
   /// TODO: Specify parameter declarations.
-  rtl.externmodule @EXT_W_PARAMS(%a: i1 {rtl.direction = "in"}) -> (i1 {rtl.name="out"})
+  rtl.externmodule @EXT_W_PARAMS(%a: i1 {rtl.direction = "in"}) -> (%out: i1)
     attributes { verilogName="FooModule" }
 
-  rtl.externmodule @EXT_W_PARAMS2(%a: i2 {rtl.direction = "in"}) -> (i1 {rtl.name="out"})
+  rtl.externmodule @EXT_W_PARAMS2(%a: i2 {rtl.direction = "in"}) -> (%out: i1)
     attributes { verilogName="FooModule" }
 
-  rtl.module @AB(%w: i1, %x: i1, %i2: i2) ->
-       (i1 {rtl.name = "y"}, i1 {rtl.name = "z"}, i1 {rtl.name = "p"}, i1 {rtl.name = "p2"}) {
+  rtl.module @AB(%w: i1, %x: i1, %i2: i2) -> (%y: i1, %z: i1, %p: i1, %p2: i1) {
     %w2 = rtl.instance "a1" @AAA(%w, %w1) : (i1, i1) -> (i1)
     %w1, %y = rtl.instance "b1" @B(%w2) : (i1) -> (i1, i1)
 
@@ -97,8 +96,7 @@ module {
   // CHECK-NEXT: endmodule
 
 
-
-  rtl.module @shl(%a: i1) -> (i1 {rtl.name = "b"}) {
+  rtl.module @shl(%a: i1) -> (%b: i1) {
     %0 = rtl.shl %a, %a : i1
     rtl.output %0 : i1
   }
@@ -110,7 +108,7 @@ module {
   // CHECK-NEXT: endmodule
 
 
-  rtl.module @inout(%a: !rtl.inout<i42>) -> (i42 {rtl.name = "out"}) {
+  rtl.module @inout(%a: !rtl.inout<i42>) -> (%out: i42) {
     %aget = rtl.read_inout %a: (!rtl.inout<i42>) -> i42
     rtl.output %aget : i42
   }

@@ -7,7 +7,7 @@
  firrtl.circuit "Simple" {
 
    // CHECK-LABEL: rtl.externmodule @MyParameterizedExtModule(
-   // CHECK: i1 {rtl.name = "in"}) -> (i8 {rtl.name = "out"})
+   // CHECK: i1 {rtl.name = "in"}) -> (%out: i8)
    // CHECK: attributes {verilogName = "name_thing"}
    firrtl.extmodule @MyParameterizedExtModule(!firrtl.uint<1> {firrtl.name = "in"}, !firrtl.flip<uint<8>> {firrtl.name = "out"})
       attributes {defname = "name_thing",
@@ -16,19 +16,15 @@
                                 FORMAT = "xyz_timeout=%d\0A",
                                 WIDTH = 32 : i8}}
 
-   // CHECK-LABEL: rtl.module @Simple(
-   // CHECK: %arg0: i4 {rtl.name = "in1"},
-   // CHECK: %arg1: i2 {rtl.name = "in2"},
-   // CHECK: %arg2: i8 {rtl.name = "in3"})
-   // CHECK: -> (i4 {rtl.name = "out4"}) {
+   // CHECK-LABEL: rtl.module @Simple(%in1: i4, %in2: i2, %in3: i8) -> (%out4: i4) {
    firrtl.module @Simple(%in1: !firrtl.uint<4>,
                         %in2: !firrtl.uint<2>,
                         %in3: !firrtl.sint<8>,
                         %out4: !firrtl.flip<uint<4>>) {
 
-   // CHECK-NEXT: %0 = firrtl.stdIntCast %arg0 : (i4) -> !firrtl.uint<4>
-   // CHECK-NEXT: %1 = firrtl.stdIntCast %arg1 : (i2) -> !firrtl.uint<2>
-   // CHECK-NEXT: %2 = firrtl.stdIntCast %arg2 : (i8) -> !firrtl.sint<8>
+   // CHECK-NEXT: %0 = firrtl.stdIntCast %in1 : (i4) -> !firrtl.uint<4>
+   // CHECK-NEXT: %1 = firrtl.stdIntCast %in2 : (i2) -> !firrtl.uint<2>
+   // CHECK-NEXT: %2 = firrtl.stdIntCast %in3 : (i8) -> !firrtl.sint<8>
 
     // CHECK-NEXT: firrtl.asUInt %0
     %1 = firrtl.asUInt %in1 : (!firrtl.uint<4>) -> !firrtl.uint<4>
@@ -52,7 +48,7 @@
   firrtl.module @TestInstance(%u2: !firrtl.uint<2>, %s8: !firrtl.sint<8>,
                               %clock: !firrtl.clock,
                               %reset: !firrtl.uint<1>) {
-    // CHECK: [[U2CAST:%.+]] = firrtl.stdIntCast %arg0 : (i2) -> !firrtl.uint<2>
+    // CHECK: [[U2CAST:%.+]] = firrtl.stdIntCast %u2 : (i2) -> !firrtl.uint<2>
 
     // CHECK: %in1.wire = rtl.wire : i4
     // CHECK-NEXT: %in2.wire = rtl.wire : i2
@@ -105,17 +101,13 @@
     firrtl.printf %clock, %reset, "Something interesting! %x"(%10) : !firrtl.uint<8>
   }
 
-  // CHECK-LABEL: rtl.module @Print(
-  // CHECK: %arg0: i1 {rtl.name = "clock"},
-  // CHECK: %arg1: i1 {rtl.name = "reset"},
-  // CHECK: %arg2: i4 {rtl.name = "a"},
-  // CHECK: %arg3: i4 {rtl.name = "b"}) {
+  // CHECK-LABEL: rtl.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
   firrtl.module @Print(%clock: !firrtl.clock, %reset: !firrtl.uint<1>,
                        %a: !firrtl.uint<4>, %b: !firrtl.uint<4>) {
-    // CHECK-NEXT: %0 = firrtl.stdIntCast %arg0 : (i1) -> !firrtl.clock
-    // CHECK-NEXT: %1 = firrtl.stdIntCast %arg1 : (i1) -> !firrtl.uint<1>
-    // CHECK-NEXT: %2 = firrtl.stdIntCast %arg2 : (i4) -> !firrtl.uint<4>
-    // CHECK-NEXT: %3 = firrtl.stdIntCast %arg3 : (i4) -> !firrtl.uint<4>
+    // CHECK-NEXT: %0 = firrtl.stdIntCast %clock : (i1) -> !firrtl.clock
+    // CHECK-NEXT: %1 = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
+    // CHECK-NEXT: %2 = firrtl.stdIntCast %a : (i4) -> !firrtl.uint<4>
+    // CHECK-NEXT: %3 = firrtl.stdIntCast %b : (i4) -> !firrtl.uint<4>
     
     // CHECK-NEXT: firrtl.printf %0, %1, "No operands!\0A"
     firrtl.printf %clock, %reset, "No operands!\0A"
@@ -128,16 +120,13 @@
     // CHECK-NEXT: rtl.output
   }
 
-  // CHECK-LABEL: rtl.module @Stop(
-  // CHECK: %arg0: i1 {rtl.name = "clock1"},
-  // CHECK: %arg1: i1 {rtl.name = "clock2"},
-  // CHECK: %arg2: i1 {rtl.name = "reset"}) {
+  // CHECK-LABEL: rtl.module @Stop(%clock1: i1, %clock2: i1, %reset: i1) {
   firrtl.module @Stop(%clock1: !firrtl.clock,
                       %clock2: !firrtl.clock,
                       %reset: !firrtl.uint<1>) {
-    // CHECK-NEXT: %0 = firrtl.stdIntCast %arg0 : (i1) -> !firrtl.clock
-    // CHECK-NEXT: %1 = firrtl.stdIntCast %arg1 : (i1) -> !firrtl.clock
-    // CHECK-NEXT: %2 = firrtl.stdIntCast %arg2 : (i1) -> !firrtl.uint<1>
+    // CHECK-NEXT: %0 = firrtl.stdIntCast %clock1 : (i1) -> !firrtl.clock
+    // CHECK-NEXT: %1 = firrtl.stdIntCast %clock2 : (i1) -> !firrtl.clock
+    // CHECK-NEXT: %2 = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
 
     // CHECK-NEXT: firrtl.stop %0, %2, 42
     firrtl.stop %clock1, %reset, 42
@@ -155,12 +144,12 @@
   func @UnknownFunction() {
   }
 
-  // CHECK-LABEL: rtl.module @OutputFirst(%arg0: i1 {rtl.name = "in1"}, %arg1: i4 {rtl.name = "in4"}) -> (i4 {rtl.name = "out4"}) {
+  // CHECK-LABEL: rtl.module @OutputFirst(%in1: i1, %in4: i4) -> (%out4: i4) {
   firrtl.module @OutputFirst(%out4: !firrtl.flip<uint<4>>,
                              %in1: !firrtl.uint<1>,
                              %in4: !firrtl.uint<4>) {
-    // CHECK-NEXT: %0 = firrtl.stdIntCast %arg0 : (i1) -> !firrtl.uint<1>
-    // CHECK-NEXT: %1 = firrtl.stdIntCast %arg1 : (i4) -> !firrtl.uint<4>
+    // CHECK-NEXT: %0 = firrtl.stdIntCast %in1 : (i1) -> !firrtl.uint<1>
+    // CHECK-NEXT: %1 = firrtl.stdIntCast %in4 : (i4) -> !firrtl.uint<4>
     // CHECK-NEXT: %2 = firrtl.stdIntCast %1 : (!firrtl.uint<4>) -> i4
     firrtl.connect %out4, %in4 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
@@ -168,8 +157,8 @@
   }
 
   // CHECK-LABEL: rtl.module @PortMadness(
-  // CHECK: %arg0: i4 {rtl.name = "inA"}, %arg1: i4 {rtl.name = "inB"}, %arg2: i4 {rtl.name = "inC"}, %arg3: i3 {rtl.name = "inE"}, %arg4: i5 {rtl.name = "inF"})
-  // CHECK: -> (i4 {rtl.name = "outA"}, i4 {rtl.name = "outB"}, i4 {rtl.name = "outC"}, i4 {rtl.name = "outD"}, i4 {rtl.name = "outE"}, i4 {rtl.name = "outF"}) {
+  // CHECK: %inA: i4, %inB: i4, %inC: i4, %inE: i3, %inF: i5)
+  // CHECK: -> (%outA: i4, %outB: i4, %outC: i4, %outD: i4, %outE: i4, %outF: i4) {
   firrtl.module @PortMadness(%inA: !firrtl.uint<4>,
                              %inB: !firrtl.uint<4>,
                              %inC: !firrtl.uint<4>,
@@ -181,16 +170,16 @@
                              %outE: !firrtl.flip<uint<4>>,
                              %inF: !firrtl.uint<5>,
                              %outF: !firrtl.flip<uint<4>>) {
-    // CHECK-NEXT: %0 = firrtl.stdIntCast %arg0 : (i4) -> !firrtl.uint<4>
-    // CHECK-NEXT: %1 = firrtl.stdIntCast %arg1 : (i4) -> !firrtl.uint<4>
-    // CHECK-NEXT: %2 = firrtl.stdIntCast %arg2 : (i4) -> !firrtl.uint<4>
+    // CHECK-NEXT: %0 = firrtl.stdIntCast %inA : (i4) -> !firrtl.uint<4>
+    // CHECK-NEXT: %1 = firrtl.stdIntCast %inB : (i4) -> !firrtl.uint<4>
+    // CHECK-NEXT: %2 = firrtl.stdIntCast %inC : (i4) -> !firrtl.uint<4>
 
     // CHECK: [[OUTB:%.+]] = rtl.wire : i4
     // CHECK: [[OUTC:%.+]] = rtl.wire : i4
     // CHECK: [[OUTD:%.+]] = rtl.wire : i4
 
-    // CHECK: [[INE:%.+]] = firrtl.stdIntCast %arg3 : (i3) -> !firrtl.uint<3>
-    // CHECK: [[INF:%.+]] = firrtl.stdIntCast %arg4 : (i5) -> !firrtl.uint<5>
+    // CHECK: [[INE:%.+]] = firrtl.stdIntCast %inE : (i3) -> !firrtl.uint<3>
+    // CHECK: [[INF:%.+]] = firrtl.stdIntCast %inF : (i5) -> !firrtl.uint<5>
 
     // Normal
     firrtl.connect %outA, %inA : !firrtl.flip<uint<4>>, !firrtl.uint<4>
@@ -219,6 +208,6 @@
 
     // CHECK: [[OUTE_CAST:%.+]] = firrtl.stdIntCast [[OUTE]]
     // CHECK: [[OUTF_CAST:%.+]] = firrtl.stdIntCast [[OUTF]]
-    // CHECK: rtl.output %arg0, [[OUTB]], [[OUTC]], [[OUTD]], [[OUTE_CAST]], [[OUTF_CAST]]
+    // CHECK: rtl.output %inA, [[OUTB]], [[OUTC]], [[OUTD]], [[OUTE_CAST]], [[OUTF_CAST]]
   }
 }
