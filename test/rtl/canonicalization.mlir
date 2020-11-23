@@ -409,3 +409,23 @@ func @multiply_reduction(%arg0: i11, %arg1: i11) -> i11 {
   %0 = rtl.mul %arg1, %c2_i11 : i11
   return %0 : i11
 }
+
+// CHECK-LABEL: func @zext_constant_folding() -> i5 {
+// CHECK-NEXT:  %c8_i5 = rtl.constant(8 : i5) : i5
+// CHECK-NEXT:  return %c8_i5 : i5
+
+func @zext_constant_folding() -> i5 {
+  %c8_i4 = rtl.constant(8 : i4) : i4
+  %0 = rtl.zext %c8_i4 : (i4) -> i5
+  return %0 : i5
+}
+
+// CHECK-LABEL: func @sext_constant_folding() -> i5 {
+// CHECK-NEXT:  %c-8_i5 = rtl.constant(-8 : i5) : i5
+// CHECK-NEXT:  return %c-8_i5 : i5
+
+func @sext_constant_folding() -> i5 {
+  %c8_i4 = rtl.constant(8 : i4) : i4
+  %0 = rtl.sext %c8_i4 : (i4) -> i5
+  return %0 : i5
+}

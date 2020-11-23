@@ -788,6 +788,32 @@ static LogicalResult verifyExtOp(Operation *op) {
   return success();
 }
 
+OpFoldResult ZExtOp::fold(ArrayRef<Attribute> operands) {
+  auto input = this->input();
+
+  // Constant fold
+  APInt value;
+  if (matchPattern(input, m_RConstant(value))) {
+    auto destWidth = getType().cast<IntegerType>().getWidth();
+    return getIntAttr(value.zext(destWidth), getContext());
+  }
+
+  return {};
+}
+
+OpFoldResult SExtOp::fold(ArrayRef<Attribute> operands) {
+  auto input = this->input();
+
+  // Constant fold
+  APInt value;
+  if (matchPattern(input, m_RConstant(value))) {
+    auto destWidth = getType().cast<IntegerType>().getWidth();
+    return getIntAttr(value.sext(destWidth), getContext());
+  }
+
+  return {};
+}
+
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//

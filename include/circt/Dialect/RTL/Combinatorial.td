@@ -194,6 +194,7 @@ def SExtOp : RTLOp<"sext", [NoSideEffect]> {
     $input attr-dict `:` functional-type($input, $result)
   }];
 
+  let hasFolder = 1;
   let verifier = [{ return ::verifyExtOp(*this); }];
 }
 
@@ -207,6 +208,7 @@ def ZExtOp : RTLOp<"zext", [NoSideEffect]> {
     $input attr-dict `:` functional-type($input, $result)
   }];
 
+  let hasFolder = 1;
   let verifier = [{ return ::verifyExtOp(*this); }];
 }
 
