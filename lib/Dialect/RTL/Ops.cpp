@@ -1154,6 +1154,105 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
   results.insert<Folder>(context);
 }
 
+OpFoldResult AddSignedOp::fold(ArrayRef<Attribute> operands) {
+  auto size = inputs().size();
+
+  // add.s(x) -> x -- noop
+  if (size == 1u)
+    return inputs()[0];
+
+  return {};
+}
+
+void AddSignedOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                              MLIRContext *context) {
+  struct Folder final : public OpRewritePattern<AddSignedOp> {
+    using OpRewritePattern::OpRewritePattern;
+    LogicalResult matchAndRewrite(AddSignedOp op,
+                                  PatternRewriter &rewriter) const override {
+      auto inputs = op.inputs();
+      auto size = inputs.size();
+      assert(size > 1 && "expected 2 or more operands");
+
+      APInt value, value2;
+
+      // add.s(..., 0) -> add.s(...) -- identity
+      if (matchPattern(inputs.back(), m_RConstant(value)) &&
+          value.isNullValue()) {
+        rewriter.replaceOpWithNewOp<AddSignedOp>(op, op.getType(),
+                                           inputs.drop_back());
+        return success();
+      }
+
+      // add.s(..., c1, c2) -> add.s(..., c3) where c3 = c1 + c2 -- constant folding
+      if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
+          matchPattern(inputs[size - 2], m_RConstant(value2))) {
+        auto cst = rewriter.create<ConstantOp>(op.getLoc(), value + value2);
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+        newOperands.push_back(cst);
+        rewriter.replaceOpWithNewOp<AddSignedOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
+      // add.s(..., x, x) -> add.s(..., shl(x, 1))
+      if (inputs[size - 1] == inputs[size - 2]) {
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+
+        auto one = rewriter.create<ConstantOp>(
+            op.getLoc(), 1, op.getType().cast<IntegerType>());
+        auto shiftLeftOp =
+            rewriter.create<rtl::ShlOp>(op.getLoc(), inputs.back(), one);
+
+        newOperands.push_back(shiftLeftOp);
+        rewriter.replaceOpWithNewOp<AddSignedOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
+      auto shlOp = inputs[size - 1].getDefiningOp<rtl::ShlOp>();
+      // add(..., x, shl(x, c)) -> add(..., mul(x, (1 << c) + 1))
+      if (shlOp && shlOp.lhs() == inputs[size - 2] &&
+          matchPattern(shlOp.rhs(), m_RConstant(value))) {
+
+        APInt one(/*numBits=*/value.getBitWidth(), 1, /*isSigned=*/false);
+        auto rhs =
+            rewriter.create<ConstantOp>(op.getLoc(), (one << value) + one);
+
+        std::array<Value, 2> factors = {shlOp.lhs(), rhs};
+        auto mulOp = rewriter.create<rtl::MulSignedOp>(op.getLoc(), factors);
+
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+        newOperands.push_back(mulOp);
+        rewriter.replaceOpWithNewOp<AddSignedOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
+      auto mulOp = inputs[size - 1].getDefiningOp<rtl::MulSignedOp>();
+      // add.s(..., x, mul.s(x, c)) -> add.s(..., mul(x.s, c + 1))
+      if (mulOp && mulOp.inputs().size() == 2 &&
+          mulOp.inputs()[0] == inputs[size - 2] &&
+          matchPattern(mulOp.inputs()[1], m_RConstant(value))) {
+
+        APInt one(/*numBits=*/value.getBitWidth(), 1, /*isSigned=*/false);
+        auto rhs = rewriter.create<ConstantOp>(op.getLoc(), value + one);
+        std::array<Value, 2> factors = {mulOp.inputs()[0], rhs};
+        auto newMulOp = rewriter.create<rtl::MulSignedOp>(op.getLoc(), factors);
+
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+        newOperands.push_back(newMulOp);
+        rewriter.replaceOpWithNewOp<AddSignedOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
+      // add.s(x, add.s(...)) -> add.s(x, ...) -- flatten
+      if (tryFlatteningOperands(op, rewriter))
+        return success();
+
+      return failure();
+    }
+  };
+  results.insert<Folder>(context);
+}
+
 OpFoldResult MulOp::fold(ArrayRef<Attribute> operands) {
   auto size = inputs().size();
 
@@ -1213,6 +1312,75 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       }
 
       // mul(a, mul(...)) -> mul(a, ...) -- flatten
+      if (tryFlatteningOperands(op, rewriter))
+        return success();
+
+      return failure();
+    }
+  };
+  results.insert<Folder>(context);
+}
+
+OpFoldResult MulSignedOp::fold(ArrayRef<Attribute> operands) {
+  auto size = inputs().size();
+
+  // mul.s(x) -> x -- noop
+  if (size == 1u)
+    return inputs()[0];
+
+  APInt value;
+
+  // mul.s(..., 0) -> 0 -- annulment
+  if (matchPattern(inputs().back(), m_RConstant(value)) && value.isNullValue())
+    return inputs().back();
+
+  return {};
+}
+
+void MulSignedOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                              MLIRContext *context) {
+  struct Folder final : public OpRewritePattern<MulSignedOp> {
+    using OpRewritePattern::OpRewritePattern;
+    LogicalResult matchAndRewrite(MulSignedOp op,
+                                  PatternRewriter &rewriter) const override {
+      auto inputs = op.inputs();
+      auto size = inputs.size();
+      assert(size > 1 && "expected 2 or more operands");
+
+      APInt value, value2;
+
+      // mul.s(x, c) -> shl(x, log2(c)), where c is a power of two.
+      if (size == 2 && matchPattern(inputs.back(), m_RConstant(value)) &&
+          value.isPowerOf2()) {
+        auto shift =
+            rewriter.create<ConstantOp>(op.getLoc(), value.exactLogBase2(),
+                                        op.getType().cast<IntegerType>());
+        auto shlOp = rewriter.create<rtl::ShlOp>(op.getLoc(), inputs[0], shift);
+
+        rewriter.replaceOpWithNewOp<MulSignedOp>(op, op.getType(),
+                                           ArrayRef<Value>(shlOp));
+        return success();
+      }
+
+      // mul.s(..., 1) -> mul.s(...) -- identity
+      if (matchPattern(inputs.back(), m_RConstant(value)) && (value == 1u)) {
+        rewriter.replaceOpWithNewOp<MulSignedOp>(op, op.getType(),
+                                           inputs.drop_back());
+        return success();
+      }
+
+      // mul.s(..., c1, c2) -> mul.s(..., c3) 
+      // where c3 = c1 * c2 -- constant folding
+      if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
+          matchPattern(inputs[size - 2], m_RConstant(value2))) {
+        auto cst = rewriter.create<ConstantOp>(op.getLoc(), value * value2);
+        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+        newOperands.push_back(cst);
+        rewriter.replaceOpWithNewOp<MulSignedOp>(op, op.getType(), newOperands);
+        return success();
+      }
+
+      // mul.s(a, mul.s(...)) -> mul.s(a, ...) -- flatten
       if (tryFlatteningOperands(op, rewriter))
         return success();
 

@@ -98,12 +98,18 @@ class UTVariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
 
 // Arithmetic and Logical Binary Operations.
 def AddOp : UTVariadicRTLOp<"add", [Commutative]>;
+def AddSignedOp : UTVariadicRTLOp<"add.s", [Commutative]>;
 def SubOp : UTBinRTLOp<"sub">;
+def SubSignedOp : UTBinRTLOp<"sub.s">;
 def MulOp : UTVariadicRTLOp<"mul", [Commutative]>;
+def MulSignedOp : UTVariadicRTLOp<"mul.s", [Commutative]>;
 def DivOp : UTBinRTLOp<"div">;
+def DivSignedOp : UTBinRTLOp<"div.s">;
 def ModOp : UTBinRTLOp<"mod">;
+def ModSignedOp : UTBinRTLOp<"mod.s">;
 def ShlOp : UTBinRTLOp<"shl">;
 def ShrOp : UTBinRTLOp<"shr">;
+def AShrOp : UTBinRTLOp<"ashr">;
 
 def AndOp : UTVariadicRTLOp<"and", [Commutative]>;
 def OrOp  : UTVariadicRTLOp<"or", [Commutative]>;
