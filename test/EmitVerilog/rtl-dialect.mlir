@@ -110,11 +110,14 @@ module {
   // CHECK-NEXT: endmodule
 
 
-  rtl.module @inout(%a: !rtl.inout<i42>) {
-    rtl.output
+  rtl.module @inout(%a: !rtl.inout<i42>) -> (i42 {rtl.name = "out"}) {
+    %aget = rtl.read_inout %a: (!rtl.inout<i42>) -> i42
+    rtl.output %aget : i42
   }
   // CHECK-LABEL:  module inout(
-  // CHECK-NEXT:     inout [41:0] a);
+  // CHECK-NEXT:     inout  [41:0] a,
+  // CHECK-NEXT:     output [41:0] out);
   // CHECK-EMPTY:
-  // CHECK-NEXT: endmodule
+  // CHECK-NEXT:     assign out = a;
+  // CHECK-NEXT:   endmodule
 }

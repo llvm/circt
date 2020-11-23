@@ -74,3 +74,19 @@ func @arrayDims(%a: !rtl.array<3 x 4 x i5>) { }
 
 // expected-error @+1 {{invalid element for rtl.inout type}}
 func @invalidInout(%arg0: !rtl.inout<tensor<*xf32>>) { }
+
+// -----
+
+rtl.module @inout(%a: !rtl.inout<i42>) {
+  // expected-error @+1 {{'rtl.read_inout' op result type doesn't match input inout element type}}
+  %aget = rtl.read_inout %a: (!rtl.inout<i42>) -> i41
+  rtl.output %aget : i41
+}
+
+// -----
+
+rtl.module @inout(%a: i42) {
+  // expected-error @+1 {{'rtl.read_inout' op input operand should be an rtl.inout<> type}}
+  %aget = rtl.read_inout %a: (i42) -> i42
+  rtl.output %aget : i42
+}
