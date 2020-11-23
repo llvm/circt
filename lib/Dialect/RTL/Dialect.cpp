@@ -30,7 +30,7 @@ struct RTLOpAsmDialectInterface : public OpAsmDialectInterface {
     // If an operation have an optional 'name' attribute, use it.
     if (isa<WireOp>(op))
       if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
-      setNameFn(op->getResult(0), nameAttr.getValue());
+        setNameFn(op->getResult(0), nameAttr.getValue());
   }
 
   /// Get a special name to use when printing the entry block arguments of the
