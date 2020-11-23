@@ -711,7 +711,7 @@ public:
 private:
   /// Emit the specified value as a subexpression to the stream.
   SubExprInfo emitSubExpr(Value exp, VerilogPrecedence parenthesizeIfLooserThan,
-                          bool forceExpectedSign = false);
+                          bool forceExpectedSign = false, bool opForceSign = false);
 
   SubExprInfo visitUnhandledExpr(Operation *op);
   SubExprInfo visitInvalidExpr(Operation *op) {
@@ -738,16 +738,25 @@ private:
   SubExprInfo emitBitSelect(Value operand, unsigned hiBit, unsigned loBit);
 
   SubExprInfo emitBinary(Operation *op, VerilogPrecedence prec,
-                         const char *syntax, bool hasStrictSign = false);
+                         const char *syntax, bool hasStrictSign = false, bool opForceSign = false);
 
   SubExprInfo emitVariadic(Operation *op, VerilogPrecedence prec,
-                           const char *syntax, bool hasStrictSign = false);
+                           const char *syntax, bool hasStrictSign = false, bool opForceSign = false);
+
+  SubExprInfo emitRTLSignedVariadic(Operation *op, VerilogPrecedence prec,
+                                    const char *syntax);
 
   /// Emit the specified subexpression in a context where the sign matters,
   /// e.g. for a less than comparison or divide.
   SubExprInfo emitSignedBinary(Operation *op, VerilogPrecedence prec,
                                const char *syntax) {
     return emitBinary(op, prec, syntax, /*hasStrictSign:*/ true);
+  }
+  /// Emit the specified subexpression in a context where the sign matters,
+  /// e.g. for a less than comparison or divide.
+  SubExprInfo emitRTLSignedBinary(Operation *op, VerilogPrecedence prec,
+                               const char *syntax) {
+    return emitBinary(op, prec, syntax, /*hasStrictSign:*/ true, /*opForceSign*/ true);
   }
   SubExprInfo emitUnary(Operation *op, const char *syntax, bool forceUnsigned) {
     os << syntax;
@@ -853,36 +862,36 @@ private:
     return emitVariadic(op, Addition, "+");
   }
   SubExprInfo visitComb(rtl::AddSignedOp op) {
-    return emitVariadic(op, Addition, "+");
+    return emitRTLSignedVariadic(op, Addition, "+");
   }
   SubExprInfo visitComb(rtl::SubOp op) { return emitBinary(op, Addition, "-"); }
-  SubExprInfo visitComb(rtl::SubSignedOp op) { return emitBinary(op, Addition, "-"); }
+  SubExprInfo visitComb(rtl::SubSignedOp op) { return emitRTLSignedBinary(op, Addition, "-"); }
   SubExprInfo visitComb(rtl::MulOp op) {
     return emitVariadic(op, Multiply, "*");
   }
   SubExprInfo visitComb(rtl::MulSignedOp op) {
-    return emitVariadic(op, Multiply, "*");
+    return emitRTLSignedVariadic(op, Multiply, "*");
   }
   SubExprInfo visitComb(rtl::DivOp op) {
-    return emitSignedBinary(op, Multiply, "/");
+    return emitBinary(op, Multiply, "/");
   }
   SubExprInfo visitComb(rtl::DivSignedOp op) {
-    return emitSignedBinary(op, Multiply, "/");
+    return emitRTLSignedBinary(op, Multiply, "/");
   }
   SubExprInfo visitComb(rtl::ModOp op) {
-    return emitSignedBinary(op, Multiply, "%");
+    return emitBinary(op, Multiply, "%");
   }
   SubExprInfo visitComb(rtl::ModSignedOp op) {
-    return emitSignedBinary(op, Multiply, "%");
+    return emitRTLSignedBinary(op, Multiply, "%");
   }
   SubExprInfo visitComb(rtl::ShlOp op) {
-    return emitSignedBinary(op, Shift, "<<");
+    return emitBinary(op, Shift, "<<");
   }
   SubExprInfo visitComb(rtl::ShrOp op) {
-    return emitSignedBinary(op, Shift, ">>>");
+    return emitBinary(op, Shift, ">>>");
   }
   SubExprInfo visitComb(rtl::AShrOp op) {
-    return emitSignedBinary(op, Shift, ">>>");
+    return emitRTLSignedBinary(op, Shift, ">>>");
   }
   SubExprInfo visitComb(rtl::AndOp op) { return emitVariadic(op, And, "&"); }
   SubExprInfo visitComb(rtl::OrOp op) { return emitVariadic(op, Or, "|"); }
@@ -899,10 +908,14 @@ private:
 
   // RTL Comparison Operations
   SubExprInfo visitComb(rtl::ICmpOp op) {
-    std::array<const char *, 10> symop{"==", "!=", "<",  "<=", "<",
-                                       "<=", ">",  ">=", ">",  ">="};
-    return emitSignedBinary(op, Comparison,
-                            symop[static_cast<uint64_t>(op.predicate())]);
+    std::array<const char *, 10> symop{"==", "!=", "<",  "<=", ">",
+                                       ">=", "<",  "<=", ">",  ">="};
+    std::array<bool, 10> signop{false, false, true, true, true, true, false, false, false, false};
+    auto pred = static_cast<uint64_t>(op.predicate());
+    auto symopstr  =symop[pred];
+                            if (signop[pred])
+                            return emitRTLSignedBinary(op, Comparison,symopstr);
+    return emitBinary(op, Comparison,symopstr);
   }
 
 private:
@@ -934,8 +947,8 @@ std::string ExprEmitter::emitExpressionToString(Value exp,
 }
 
 SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
-                                    const char *syntax, bool hasStrictSign) {
-  auto lhsInfo = emitSubExpr(op->getOperand(0), prec, hasStrictSign);
+                                    const char *syntax, bool hasStrictSign, bool opForceSign) {
+  auto lhsInfo = emitSubExpr(op->getOperand(0), prec, hasStrictSign, opForceSign);
   os << ' ' << syntax << ' ';
 
   // The precedence of the RHS operand must be tighter than this operator if
@@ -948,12 +961,14 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   if (rhsOperandOp && op->getName() == rhsOperandOp->getName())
     rhsPrec = prec;
 
-  auto rhsInfo = emitSubExpr(op->getOperand(1), rhsPrec, hasStrictSign);
+  auto rhsInfo = emitSubExpr(op->getOperand(1), rhsPrec, hasStrictSign, opForceSign);
 
   // If we have a strict sign, then match the firrtl operation sign.
   // Otherwise, the result is signed if both operands are signed.
   SubExprSignedness signedness;
-  if (hasStrictSign)
+  if (opForceSign)
+    signedness = IsSigned;
+  else if (hasStrictSign)
     signedness = getSignednessOf(op->getResult(0).getType());
   else if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
     signedness = IsSigned;
@@ -964,19 +979,24 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
 }
 
 SubExprInfo ExprEmitter::emitVariadic(Operation *op, VerilogPrecedence prec,
-                                      const char *syntax, bool hasStrictSign) {
+                                      const char *syntax, bool hasStrictSign, bool opForceSign) {
   interleave(
       op->getOperands().begin(), op->getOperands().end(),
-      [&](Value v1) { emitSubExpr(v1, prec, hasStrictSign); },
+      [&](Value v1) { emitSubExpr(v1, prec, hasStrictSign, opForceSign); },
       [&] { os << ' ' << syntax << ' '; });
 
   return {prec, IsUnsigned};
 }
 
+SubExprInfo ExprEmitter::emitRTLSignedVariadic(Operation *op, VerilogPrecedence prec,
+                                      const char *syntax) {
+                                        return emitVariadic(op, prec, syntax, true, true);
+                                      }
+
 /// Emit the specified value as a subexpression to the stream.
 SubExprInfo ExprEmitter::emitSubExpr(Value exp,
                                      VerilogPrecedence parenthesizeIfLooserThan,
-                                     bool forceExpectedSign) {
+                                     bool forceExpectedSign, bool opForceSign) {
   auto *op = exp.getDefiningOp();
   bool shouldEmitInlineExpr = op && isVerilogExpression(op);
 
@@ -988,7 +1008,8 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
   // If this is a non-expr or shouldn't be done inline, just refer to its
   // name.
   if (!shouldEmitInlineExpr) {
-    if (forceExpectedSign && getSignednessOf(exp.getType()) != IsUnsigned) {
+    if ((forceExpectedSign && getSignednessOf(exp.getType()) != IsUnsigned)
+    || opForceSign) {
       os << "$signed(" << emitter.getName(exp) << ')';
       return {Unary, IsSigned};
     }
