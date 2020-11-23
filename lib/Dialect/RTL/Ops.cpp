@@ -1180,11 +1180,12 @@ void AddSignedOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       if (matchPattern(inputs.back(), m_RConstant(value)) &&
           value.isNullValue()) {
         rewriter.replaceOpWithNewOp<AddSignedOp>(op, op.getType(),
-                                           inputs.drop_back());
+                                                 inputs.drop_back());
         return success();
       }
 
-      // add.s(..., c1, c2) -> add.s(..., c3) where c3 = c1 + c2 -- constant folding
+      // add.s(..., c1, c2) -> add.s(..., c3) where c3 = c1 + c2 -- constant
+      // folding
       if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
           matchPattern(inputs[size - 2], m_RConstant(value2))) {
         auto cst = rewriter.create<ConstantOp>(op.getLoc(), value + value2);
@@ -1358,18 +1359,18 @@ void MulSignedOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         auto shlOp = rewriter.create<rtl::ShlOp>(op.getLoc(), inputs[0], shift);
 
         rewriter.replaceOpWithNewOp<MulSignedOp>(op, op.getType(),
-                                           ArrayRef<Value>(shlOp));
+                                                 ArrayRef<Value>(shlOp));
         return success();
       }
 
       // mul.s(..., 1) -> mul.s(...) -- identity
       if (matchPattern(inputs.back(), m_RConstant(value)) && (value == 1u)) {
         rewriter.replaceOpWithNewOp<MulSignedOp>(op, op.getType(),
-                                           inputs.drop_back());
+                                                 inputs.drop_back());
         return success();
       }
 
-      // mul.s(..., c1, c2) -> mul.s(..., c3) 
+      // mul.s(..., c1, c2) -> mul.s(..., c3)
       // where c3 = c1 * c2 -- constant folding
       if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
           matchPattern(inputs[size - 2], m_RConstant(value2))) {

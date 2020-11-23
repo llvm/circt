@@ -23,7 +23,9 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<ConstantOp,
                        // Arithmetic and Logical Binary Operations.
-                       AddOp, AddSignedOp, SubOp, SubSignedOp, MulOp, MulSignedOp, DivOp, DivSignedOp, ModOp, ModSignedOp, ShlOp, ShrOp, AShrOp,
+                       AddOp, AddSignedOp, SubOp, SubSignedOp, MulOp,
+                       MulSignedOp, DivOp, DivSignedOp, ModOp, ModSignedOp,
+                       ShlOp, ShrOp, AShrOp,
                        // Bitwise operations
                        AndOp, OrOp, XorOp,
                        // Comparison operations
