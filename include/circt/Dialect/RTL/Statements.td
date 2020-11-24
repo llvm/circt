@@ -21,7 +21,7 @@ def ConnectOp : RTLOp<"connect", [SameTypeOperands]> {
   }];
 }
 
-def WireOp : RTLOp<"wire"> {
+def WireOp : RTLOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let summary = "Define a new wire";
   let description = [{
     Declare a new wire:

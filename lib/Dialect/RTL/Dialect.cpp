@@ -27,10 +27,6 @@ struct RTLOpAsmDialectInterface : public OpAsmDialectInterface {
   /// OpAsmInterface.td#getAsmResultNames for usage details and documentation.
   void getAsmResultNames(Operation *op,
                          OpAsmSetValueNameFn setNameFn) const override {
-    // If an operation have an optional 'name' attribute, use it.
-    if (isa<WireOp>(op))
-      if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
-        setNameFn(op->getResult(0), nameAttr.getValue());
   }
 
   /// Get a special name to use when printing the entry block arguments of the

@@ -3,7 +3,7 @@
 module attributes {firrtl.mainModule = "Simple"} {
 
   // CHECK-LABEL: rtl.module @Simple
-  rtl.module @Simple(%in1: i4, %in2: i2, %in3: i8) -> (i4 {rtl.name = "out4"}) {
+  rtl.module @Simple(%in1: i4, %in2: i2, %in3: i8) -> (%out4: i4) {
     %in1c = firrtl.stdIntCast %in1 : (i4) -> !firrtl.uint<4>
     %in2c = firrtl.stdIntCast %in2 : (i2) -> !firrtl.uint<2>
     %in3c = firrtl.stdIntCast %in3 : (i8) -> !firrtl.sint<8>

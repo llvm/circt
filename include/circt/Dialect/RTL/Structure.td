@@ -135,7 +135,9 @@ def InstanceOp : RTLOp<"instance",
                        OptionalAttr<DictionaryAttr>:$parameters);
   let results = (outs Variadic<AnyType>);
 
-  let extraClassDeclaration = [{   
+  let extraClassDeclaration = [{
+    // Return the name of the specified result or empty string if it cannot be
+    // determined.
     StringAttr getResultName(size_t i);
 
     /// Lookup the module or extmodule for the symbol.  This returns null on
@@ -144,7 +146,7 @@ def InstanceOp : RTLOp<"instance",
   }];
   
   let assemblyFormat = [{
-    $instanceName $moduleName `(` $inputs `)` custom<ResultNames>(attr-dict)
+    $instanceName $moduleName `(` $inputs `)` attr-dict
       `:` functional-type($inputs, results)
   }];
 
