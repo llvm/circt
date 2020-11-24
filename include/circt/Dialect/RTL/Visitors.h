@@ -24,8 +24,8 @@ public:
         .template Case<ConstantOp,
                        // Arithmetic and Logical Binary Operations.
                        AddOp, SubOp, MulOp,
-                       DivOp, DivSignedOp, ModOp, ModSignedOp,
-                       ShlOp, ShrOp, ShrSignedOp,
+                       DivUOp, DivSOp, ModUOp, ModSOp,
+                       ShlOp, ShrUOp, ShrSOp,
                        // Bitwise operations
                        AndOp, OrOp, XorOp,
                        // Comparison operations
@@ -81,13 +81,13 @@ public:
   HANDLE(AddOp, Binary);
   HANDLE(SubOp, Binary);
   HANDLE(MulOp, Binary);
-  HANDLE(DivOp, Binary);
-  HANDLE(DivSignedOp, Binary);
-  HANDLE(ModOp, Binary);
-  HANDLE(ModSignedOp, Binary);
+  HANDLE(DivUOp, Binary);
+  HANDLE(DivSOp, Binary);
+  HANDLE(ModUOp, Binary);
+  HANDLE(ModSOp, Binary);
   HANDLE(ShlOp, Binary);
-  HANDLE(ShrOp, Binary);
-  HANDLE(ShrSignedOp, Binary);
+  HANDLE(ShrUOp, Binary);
+  HANDLE(ShrSOp, Binary);
 
   HANDLE(AndOp, Variadic);
   HANDLE(OrOp, Variadic);

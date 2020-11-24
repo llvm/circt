@@ -100,13 +100,13 @@ class UTVariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
 def AddOp : UTVariadicRTLOp<"add", [Commutative]>;
 def SubOp : UTBinRTLOp<"sub">;
 def MulOp : UTVariadicRTLOp<"mul", [Commutative]>;
-def DivOp : UTBinRTLOp<"divu">;
-def DivSignedOp : UTBinRTLOp<"divs">;
-def ModOp : UTBinRTLOp<"modu">;
-def ModSignedOp : UTBinRTLOp<"mods">;
+def DivUOp : UTBinRTLOp<"divu">;
+def DivSOp : UTBinRTLOp<"divs">;
+def ModUOp : UTBinRTLOp<"modu">;
+def ModSOp : UTBinRTLOp<"mods">;
 def ShlOp : UTBinRTLOp<"shl">;
-def ShrOp : UTBinRTLOp<"shru">;
-def ShrSignedOp : UTBinRTLOp<"shrs">;
+def ShrUOp : UTBinRTLOp<"shru">;
+def ShrSOp : UTBinRTLOp<"shrs">;
 
 def AndOp : UTVariadicRTLOp<"and", [Commutative]>;
 def OrOp  : UTVariadicRTLOp<"or", [Commutative]>;

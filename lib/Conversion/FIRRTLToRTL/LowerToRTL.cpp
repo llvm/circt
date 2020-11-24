@@ -580,7 +580,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(MulPrimOp op) {
     return lowerBinOpToVariadic<rtl::MulOp>(op);
   }
-  LogicalResult visitExpr(DivPrimOp op) { return lowerBinOp<rtl::DivOp, rtl::DivSignedOp>(op); }
+  LogicalResult visitExpr(DivPrimOp op) { return lowerBinOp<rtl::DivUOp, rtl::DivSOp>(op); }
   LogicalResult visitExpr(RemPrimOp op);
 
   // Other Operations
@@ -1024,7 +1024,7 @@ LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
   if (rhs.getType().cast<IntegerType>().getWidth() != destWidth)
     rhs = builder->create<rtl::ExtractOp>(resultType, rhs, 0);
 
-  return setLoweringTo<rtl::ModOp>(op, ValueRange({lhs, rhs}));
+  return setLoweringTo<rtl::ModUOp>(op, ValueRange({lhs, rhs}));
 }
 
 //===----------------------------------------------------------------------===//
@@ -1111,7 +1111,7 @@ LogicalResult FIRRTLLowering::visitExpr(DShrPrimOp op) {
 
   // Zero extend or truncate the shift amount if needed.
   rhs = zeroExtendOrTruncate(rhs, lhs.getType(), *builder);
-  return setLoweringTo<rtl::ShrOp>(op, lhs, rhs);
+  return setLoweringTo<rtl::ShrUOp>(op, lhs, rhs);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(TailPrimOp op) {
