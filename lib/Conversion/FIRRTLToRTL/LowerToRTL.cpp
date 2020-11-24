@@ -282,7 +282,8 @@ static Value tryToFindOutputValue(Value portValue) {
   // We know it must be the destination operand due to the types, but the source
   // may not match the destination width.
   auto destTy = portValue.getType().cast<FIRRTLType>().getPassiveType();
-  if (destTy != connectSrc.getType() && destTy != connectSrc.getType().cast<FIRRTLType>().getPassiveType()) {
+  if (destTy != connectSrc.getType() &&
+      destTy != connectSrc.getType().cast<FIRRTLType>().getPassiveType()) {
     //  The only type mismatch we can have is due to integer width differences.
     ImplicitLocOpBuilder builder(connects[0].getLoc(), connects[0]);
     connectSrc =
@@ -580,7 +581,9 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(MulPrimOp op) {
     return lowerBinOpToVariadic<rtl::MulOp>(op);
   }
-  LogicalResult visitExpr(DivPrimOp op) { return lowerBinOp<rtl::DivUOp, rtl::DivSOp>(op); }
+  LogicalResult visitExpr(DivPrimOp op) {
+    return lowerBinOp<rtl::DivUOp, rtl::DivSOp>(op);
+  }
   LogicalResult visitExpr(RemPrimOp op);
 
   // Other Operations
