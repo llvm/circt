@@ -35,31 +35,31 @@ def ChannelType :
   Type<CPred<"$_self.isa<::circt::esi::ChannelPort>()">, "">;
 
 
-def Wrap : ESI_Op<"wrap", [NoSideEffect]> {
+def WrapValidReady : ESI_Op<"wrapvr", [NoSideEffect]> {
   let summary = "Wrap a value into an ESI port";
   let description = [{
     Wrapping a value into an ESI port type allows modules to send values
-    down an ESI port.
+    down an ESI port. Assumes valid/ready semantics.
   }];
 
-  let arguments = (ins AnyType:$input);
-  let results = (outs ChannelType:$output);
+  let arguments = (ins AnyType:$data, I1:$valid);
+  let results = (outs ChannelType:$output, I1:$ready);
 
   let assemblyFormat = [{
-    $input attr-dict `:` type($input) `->` type($output)
+    $data `,` $valid attr-dict `:` type($data) `->` type($output)
   }];
 }
 
-def Unwrap : ESI_Op<"unwrap", [NoSideEffect]> {
+def UnwrapValidReady : ESI_Op<"unwrapvr", [NoSideEffect]> {
   let summary = "Unwrap a value from an ESI port";
   let description = [{
     Unwrapping a value allows operations on the contained value.
   }];
 
-  let arguments = (ins ChannelType:$input);
-  let results = (outs AnyType:$output);
+  let arguments = (ins ChannelType:$input, I1:$ready);
+  let results = (outs AnyType:$output, I1:$valid);
 
   let assemblyFormat = [{
-    $input attr-dict `:` type($input) `->` type($output)
+    $input `,` $ready attr-dict `:` type($input) `->` type($output)
   }];
 }
