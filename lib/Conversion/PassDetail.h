@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+// NOLINTNEXTLINE(llvm-header-guard)
 #ifndef CONVERSION_PASSDETAIL_H
 #define CONVERSION_PASSDETAIL_H
 
