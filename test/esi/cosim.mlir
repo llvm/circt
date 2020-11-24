@@ -3,11 +3,13 @@
 module {
   rtl.module @Sender() -> ( !esi.channel<i1> { rtl.name = "x"}) {
     %0 = constant 0 : i1
-    %1 = esi.wrap %0 : i1 -> !esi.channel<i1>
+    // Don't transmit.
+    %1, %rcvrRdy = esi.wrap.vr %0, %0 : i1
     rtl.output %1 : !esi.channel<i1>
   }
   rtl.module @Reciever(%a: !esi.channel<i1>) {
-    %0 = esi.unwrap %a : !esi.channel<i1> -> i1
+    %false = constant 0 : i1
+    %0, %valid = esi.unwrap.vr %a, %false : i1
   }
 
   // CHECK-LABEL: rtl.module @Sender() -> (%x: !esi.channel<i1>)
