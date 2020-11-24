@@ -7,6 +7,7 @@
 #include "circt/EmitVerilog.h"
 #include "circt/Dialect/FIRRTL/Visitors.h"
 #include "circt/Dialect/RTL/Ops.h"
+#include "circt/Dialect/RTL/Types.h"
 #include "circt/Dialect/RTL/Visitors.h"
 #include "circt/Dialect/SV/Ops.h"
 #include "circt/Dialect/SV/Visitors.h"
@@ -95,7 +96,8 @@ static bool isNoopCast(Operation *op) {
   // These are always noop casts.
   if (isa<AsAsyncResetPrimOp>(op) || isa<AsClockPrimOp>(op) ||
       isa<AsUIntPrimOp>(op) || isa<AsSIntPrimOp>(op) ||
-      isa<AsPassivePrimOp>(op) || isa<AsNonPassivePrimOp>(op))
+      isa<AsPassivePrimOp>(op) || isa<AsNonPassivePrimOp>(op) ||
+      isa<rtl::ReadInOutOp>(op))
     return true;
 
   // cvt from signed is noop.
@@ -810,6 +812,7 @@ private:
   // Noop cast operators.
   SubExprInfo visitExpr(AsAsyncResetPrimOp op) { return emitNoopCast(op); }
   SubExprInfo visitExpr(AsClockPrimOp op) { return emitNoopCast(op); }
+  SubExprInfo visitComb(rtl::ReadInOutOp op) { return emitNoopCast(op); }
 
   // Signedness tracks the verilog sign, not the FIRRTL sign, so we don't need
   // to emit anything for AsSInt/AsUInt.  Their results will get casted by the

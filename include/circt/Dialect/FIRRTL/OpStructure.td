@@ -58,6 +58,8 @@ def FModuleOp : FIRRTLOp<"module",
   ];
 
   let extraClassDeclaration = [{
+    using FunctionLike::end;
+    using FunctionLike::front;
     using FunctionLike::getBody;
 
     // Implement RegionKindInterface.

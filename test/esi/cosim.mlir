@@ -10,8 +10,8 @@ module {
     %0 = esi.unwrap %a : !esi.channel<i1> -> i1
   }
 
-  // CHECK-LABEL: rtl.module @Sender() -> (!esi.channel<i1> {rtl.name = "x"})
-  // CHECK-LABEL: rtl.module @Reciever(%arg0: !esi.channel<i1> {rtl.name = "a"})
+  // CHECK-LABEL: rtl.module @Sender() -> (%x: !esi.channel<i1>)
+  // CHECK-LABEL: rtl.module @Reciever(%a: !esi.channel<i1>)
 
   rtl.module @Top() -> () {
     rtl.instance "recv" @Reciever (%cosimRecv) : (!esi.channel<i1>) -> ()

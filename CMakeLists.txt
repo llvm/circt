@@ -1,3 +1,9 @@
+##===- CMakeLists.txt - CIRCT cmake root ----------------------*- cmake -*-===//
+##
+## Configure the CIRCT build.
+##
+##===----------------------------------------------------------------------===//
+
 cmake_minimum_required(VERSION 3.10)
 
 if(POLICY CMP0068)
@@ -76,23 +82,59 @@ add_custom_target(circt-headers)
 set_target_properties(circt-headers PROPERTIES FOLDER "Misc")
 add_custom_target(circt-doc)
 
-set(ENV{PKG_CONFIG_PATH}
-  "${CMAKE_CURRENT_SOURCE_DIR}/ext/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
-
 include_directories(${LLVM_INCLUDE_DIRS})
 include_directories(${MLIR_INCLUDE_DIRS})
 #include_directories( ${MLIR_BINARY_INCLUDE_DIR})
 include_directories(${CIRCT_MAIN_SRC_DIR})
 include_directories(${CIRCT_INCLUDE_DIR})
 
-# Detect if Verilator is present
-find_program(VERILATOR_PATH "verilator" PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ext/bin" NO_DEFAULT_PATH)
-find_program(VERILATOR_PATH "verilator")
-if(${VERILATOR_PATH} STREQUAL "VERILATOR_PATH-NOTFOUND")
-  set(VERILATOR_PATH "")
-  message(STATUS "Did not find Verilator.")
+# If Verilator hasn't been explicitly disabled, find it.
+option(VERILATOR_DISABLE "Disable the Verilator tests.")
+if (VERILATOR_DISABLE)
+  message(STATUS "Disabling Verilator tests.")
 else()
-  message(STATUS "Found Verilator at ${VERILATOR_PATH}.")
+  # Detect if Verilator is present.
+  if (NOT DEFINED VERILATOR_PATH)
+    find_program(VERILATOR_PATH "verilator" PATHS
+      "${CMAKE_CURRENT_SOURCE_DIR}/ext/bin" NO_DEFAULT_PATH)
+    find_program(VERILATOR_PATH "verilator")
+  endif()
+
+  if(EXISTS ${VERILATOR_PATH})
+    message(STATUS "Found Verilator at ${VERILATOR_PATH}.")
+
+    # Find Verilator version.
+    execute_process(COMMAND ${VERILATOR_PATH} --version
+      OUTPUT_VARIABLE VERILATOR_VERSION)
+    string(REGEX MATCH "Verilator (([0-9]+)\.([0-9]+)) \.*"
+      MATCH ${VERILATOR_VERSION})
+    # It's gotta be at least v4.034.
+    if (${CMAKE_MATCH_1} LESS 4.034)
+      message(FATAL_ERROR "CIRCT only supports Verilator version 4.034 and up. \
+                           Found version: ${CMAKE_MATCH_1}. You can disable \
+                           the Verilator tests with '-DVERILATOR_DISABLE=ON'.")
+      set(VERILATOR_PATH "")
+    endif()
+  else()
+    set(VERILATOR_PATH "")
+    message(STATUS "Did not find Verilator.")
+  endif()
+endif()
+
+# If capnp hasn't been explicitly disabled, find it.
+option(CAPNP_DISABLE "Disable Cap'nProto (needed for cosimulation).")
+if (CAPNP_DISABLE)
+  message (STATUS "Disabling Cap'nProto.")
+else()
+  if(DEFINED CAPNP_PATH)
+    set(ENV{PKG_CONFIG_PATH}
+      "${CAPNP_PATH}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+    find_package(CapnProto CONFIG PATHS ${CAPNP_PATH})
+  else()
+    set(ENV{PKG_CONFIG_PATH}
+      "${CMAKE_CURRENT_SOURCE_DIR}/ext/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+    find_package(CapnProto CONFIG PATHS "${CMAKE_SOURCE_DIR}/ext")
+  endif()
 endif()
 
 add_subdirectory(include/circt)

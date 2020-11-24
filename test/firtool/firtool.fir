@@ -21,7 +21,7 @@ circuit test_mod :
 ; VERILOG-NEXT : endmodule
 
 ; MLIRLOWER: module attributes {firrtl.mainModule = "test_mod"} {
-; MLIRLOWER:   rtl.module @test_mod(%arg0: i1 {rtl.name = "a"}) -> (i1 {rtl.name = "b"}) {
-; MLIRLOWER:     rtl.output %arg0 : i1
+; MLIRLOWER:   rtl.module @test_mod(%a: i1) -> (%b: i1) {
+; MLIRLOWER:     rtl.output %a : i1
 ; MLIRLOWER:   }
 ; MLIRLOWER: }

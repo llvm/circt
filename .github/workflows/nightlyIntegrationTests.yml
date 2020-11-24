@@ -16,7 +16,7 @@ jobs:
     name: Build and Test
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-integration-test:v1
+      image: ghcr.io/circt/images/circt-integration-test:v2
     steps:
       - name: Configure Environment
         run: echo "$GITHUB_WORKSPACE/llvm/install/bin" >> $GITHUB_PATH

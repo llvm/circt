@@ -45,7 +45,7 @@ bool EndpointRegistry::registerEndpoint(int epId, uint64_t sendTypeId,
                     // Endpoint constructor args.
                     std::forward_as_tuple(sendTypeId, sendTypeMaxSize,
                                           recvTypeId, recvTypeMaxSize));
-  return false;
+  return true;
 }
 
 void EndpointRegistry::iterateEndpoints(

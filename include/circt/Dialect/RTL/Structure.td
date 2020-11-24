@@ -17,6 +17,7 @@ def RTLModuleOp : RTLOp<"module",
   ];
 
   let extraClassDeclaration = [{
+    using FunctionLike::front;
     using FunctionLike::getBody;
 
     // Implement RegionKindInterface.

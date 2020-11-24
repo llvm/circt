@@ -167,7 +167,7 @@ class CosimTestRunner:
             simEnv = os.environ.copy()
             simEnv["COSIM_PORT"] = str(port)
             simProc = subprocess.Popen(
-                [f"./obj_dir/V{self.top}", "--cycles", "-1"],
+                [f"{self.execdir}/obj_dir/V{self.top}", "--cycles", "-1"],
                 stdout=simStdout, stderr=simStderr, cwd=self.execdir,
                 env=simEnv)
             # Wait a set amount of time for the simulation to start accepting
@@ -183,9 +183,15 @@ class CosimTestRunner:
             timeout = None
             if self.litConfig.maxIndividualTestTime > 0:
                 timeout = self.litConfig.maxIndividualTestTime
+
+            # Pycapnp complains if the PWD environment var doesn't match the
+            # actual CWD.
+            testEnv = os.environ.copy()
+            testEnv["PWD"] = self.execdir
             testProc = subprocess.run([sys.executable, "-u", "script.py"],
                                       stdout=testStdout, stderr=testStderr,
-                                      timeout=timeout, cwd=self.execdir)
+                                      timeout=timeout, cwd=self.execdir,
+                                      env=testEnv)
         except subprocess.TimeoutExpired:
             timedout = True
         finally:

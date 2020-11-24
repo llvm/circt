@@ -1,6 +1,6 @@
 // RUN: circt-translate -emit-verilog -verify-diagnostics --split-input-file -mlir-print-op-on-diagnostic=false %s
 
-func @foo() { // expected-error {{unknown operation}}
+func private @foo() { // expected-error {{unknown operation}}
 }
 
 // -----

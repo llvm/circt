@@ -1,7 +1,7 @@
 ; RUN: circt-translate -parse-fir --mlir-print-debuginfo %s | circt-translate -emit-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 ; Some day this should filecheck:
-; RUN: circt-translate -parse-fir --mlir-print-debuginfo %s | circt-opt -pass-pipeline='firrtl.circuit(lower-firrtl-to-rtl)' | circt-translate -emit-verilog -verify-diagnostics
+; RUN: circt-translate -parse-fir --mlir-print-debuginfo %s | circt-opt -pass-pipeline='rtl.module(lower-firrtl-to-rtl)' | circt-translate -emit-verilog -verify-diagnostics
 
 circuit inputs_only :
 

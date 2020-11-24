@@ -12,6 +12,4 @@ firrtl.circuit "Top" {
 // expected-error: @+1 {{cannot lower this port type to RTL}}
 
 // LOWERTYPES-LABEL: module attributes {firrtl.mainModule = "Top"}
-// LOWERTYPES: %[[ARG0:.+]]: i1 {rtl.name = "in_a"}
-// LOWERTYPES: %[[ARG1:.+]]: i1 {rtl.name = "in_b"}
-// LOWERTYPES: rtl.output %[[ARG0]], %[[ARG1]]
+// LOWERTYPES: rtl.output %in_a, %in_b
