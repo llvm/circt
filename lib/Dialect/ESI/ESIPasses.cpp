@@ -16,8 +16,6 @@
 
 #include <memory>
 
-#define DEBUG_TYPE "esi-to-rtl"
-
 namespace circt {
 namespace esi {
 #define GEN_PASS_CLASSES
@@ -56,33 +54,34 @@ struct ChannelBufferLowering : public ConversionPattern {
       // Guaranteed positive by the parser.
       numStages = (size_t)stages.getInt();
     }
-
     for (size_t i = 0; i < numStages; ++i) {
+      // Create the stages, connecting them up as we build.
       auto stage = rewriter.create<PipelineStage>(loc, type, input);
       input = stage;
     }
 
+    // Replace the buffer.
     rewriter.replaceOp(op, input);
     return success();
   }
 };
 
-/// Run all the lowerings
+/// Run all the physical lowerings.
 struct ESIToPhysicalPass : public LowerESIToPhysicalBase<ESIToPhysicalPass> {
   void runOnOperation() override;
 };
 
 void ESIToPhysicalPass::runOnOperation() {
+  // Set up a conversion and give it a set of laws.
   ConversionTarget target(getContext());
   target.addLegalDialect<ESIDialect>();
   target.addIllegalOp<ChannelBuffer>();
 
+  // Add all the conversion patterns.
   OwningRewritePatternList patterns;
   patterns.insert<ChannelBufferLowering>(&getContext());
 
-  // With the target and rewrite patterns defined, we can now attempt the
-  // conversion. The conversion will signal failure if any of our `illegal`
-  // operations were not converted successfully.
+  // Run the conversion.
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
     signalPassFailure();
