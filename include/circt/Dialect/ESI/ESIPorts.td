@@ -41,8 +41,9 @@ def ChannelType :
 def WrapValidReady : ESI_Op<"wrapvr", [NoSideEffect]> {
   let summary = "Wrap a value into an ESI port";
   let description = [{
-    Wrapping a value into an ESI port type allows modules to send values
-    down an ESI port. Assumes valid/ready semantics.
+    Wrapping a value into an ESI port type allows modules to send values down
+    an ESI port. Wrap data with valid bit, result is the ESI channel and the
+    ready signal from the other end of the channel.
   }];
 
   let arguments = (ins AnyType:$data, I1:$valid);
@@ -55,7 +56,9 @@ def WrapValidReady : ESI_Op<"wrapvr", [NoSideEffect]> {
 def UnwrapValidReady : ESI_Op<"unwrapvr", [NoSideEffect]> {
   let summary = "Unwrap a value from an ESI port";
   let description = [{
-    Unwrapping a value allows operations on the contained value.
+    Unwrapping a value allows operations on the contained value. Unwrap the
+    channel along with a ready signal that you generate. Result is the data
+    along with a valid signal.
   }];
 
   let arguments = (ins ChannelType:$input, I1:$ready);
