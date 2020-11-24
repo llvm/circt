@@ -141,7 +141,7 @@
   }   // CHECK-NEXT: }
 
   // expected-error @+1 {{unexpected operation 'func' in a firrtl.circuit}}
-  func @UnknownFunction() attributes {sym_visibility = "private"} {
+  func private @UnknownFunction() {
   }
 
   // CHECK-LABEL: rtl.module @OutputFirst(%in1: i1, %in4: i4) -> (%out4: i4) {
