@@ -21,6 +21,7 @@ target_link_libraries(circt-opt
   MLIRLLHDTransforms
   MLIRLLHDToLLVM
   MLIRFIRRTLToLLHD
+  MLIRFIRRTLToRTL
 
   MLIRParser
   MLIRSupport

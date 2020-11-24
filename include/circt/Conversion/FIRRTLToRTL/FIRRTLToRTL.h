@@ -1,4 +1,4 @@
-//===- Passes.h - FIRRTL pass entry points ----------------------*- C++ -*-===//
+//===- FIRRTLToRTL.h - FIRRTL to RTL conversion pass ------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,12 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This header file defines prototypes that expose pass constructors.
+// This file declares passes which together will lower the FIRRTL dialect to
+// RTL and SV dialects.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_FIRRTL_PASSES_H
-#define CIRCT_DIALECT_FIRRTL_PASSES_H
+#ifndef CIRCT_CONVERSION_FIRRTLTORTL_FIRRTLTORTL_H
+#define CIRCT_CONVERSION_FIRRTLTORTL_FIRRTLTORTL_H
 
 #include <memory>
 
@@ -22,9 +23,10 @@ class Pass;
 namespace circt {
 namespace firrtl {
 
-std::unique_ptr<mlir::Pass> createLowerFIRRTLTypesPass();
+std::unique_ptr<mlir::Pass> createLowerFIRRTLToRTLModulePass();
+std::unique_ptr<mlir::Pass> createLowerFIRRTLToRTLPass();
 
 } // namespace firrtl
 } // namespace circt
 
-#endif // CIRCT_DIALECT_FIRRTL_PASSES_H
+#endif // CIRCT_CONVERSION_FIRRTLTORTL_FIRRTLTORTL_H

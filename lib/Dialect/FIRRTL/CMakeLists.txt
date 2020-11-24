@@ -15,8 +15,6 @@ add_mlir_dialect_library(MLIRFIRRTL
   LINK_LIBS PUBLIC
   MLIRIR
   MLIRPass
-  MLIRRTL
-  MLIRSV
-   )
+  )
 
 add_dependencies(mlir-headers MLIRFIRRTLIncGen MLIRFIRRTLEnumsIncGen)
