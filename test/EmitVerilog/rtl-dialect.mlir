@@ -9,9 +9,7 @@ module {
 
   rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1) -> (
     %r0: i4,
-    %r1: i4,
     %r2: i4,
-    %r3: i4,
     %r4: i4,
     %r5: i4,
     %r6: i4,
@@ -45,18 +43,16 @@ module {
     ) {
     
     %0 = rtl.add %a, %b : i4
-    %1 = rtl.add.s %a, %b : i4
     %2 = rtl.sub %a, %b : i4
-    %3 = rtl.sub.s %a, %b : i4
-    %4 = rtl.mul %a, %b : i4
-    %5 = rtl.mul.s %a, %b : i4
-    %6 = rtl.div %a, %b : i4
-    %7 = rtl.div.s %a, %b : i4
-    %8 = rtl.mod %a, %b : i4
-    %9 = rtl.mod.s %a, %b : i4
+    %4 = rtl.mulu %a, %b : i4
+    %5 = rtl.muls %a, %b : i4
+    %6 = rtl.divu %a, %b : i4
+    %7 = rtl.divs %a, %b : i4
+    %8 = rtl.modu %a, %b : i4
+    %9 = rtl.mods %a, %b : i4
     %10 = rtl.shl %a, %b : i4
-    %11 = rtl.shr %a, %b : i4
-    %12 = rtl.ashr %a, %b : i4
+    %11 = rtl.shru %a, %b : i4
+    %12 = rtl.shrs %a, %b : i4
     %13 = rtl.or %a, %b : i4
     %14 = rtl.and %a, %b : i4
     %15 = rtl.xor %a, %b : i4
@@ -79,8 +75,8 @@ module {
     %32 = rtl.zext %a : (i4) -> i9
     %33 = rtl.mux %cond, %a, %b : i4
 
-    rtl.output %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, %30, %31, %32, %33: 
-     i4,i4,i4,i4,i4,
+    rtl.output %0, %2, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, %30, %31, %32, %33: 
+     i4,i4,i4,
      i4,i4,i4,i4,i4,
      i4,i4,i4,i4,i4,
      i4,i1,i1,i1,i1,
@@ -91,7 +87,7 @@ module {
   // CHECK-LABEL: module TESTSIMPLE(
   // CHECK-NEXT:   input  [3:0]  a, b
   // CHECK-NEXT:   input         cond,
-  // CHECK-NEXT:   output [3:0]  r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15
+  // CHECK-NEXT:   output [3:0]  r0, r2, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15
   // CHECK-NEXT:   output        r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28
   // CHECK-NEXT:   output [11:0] r29,
   // CHECK-NEXT:   output [1:0]  r30,
@@ -99,9 +95,7 @@ module {
   // CHECK-NEXT:   output [3:0]  r33);
   // CHECK-EMPTY:
   // CHECK-NEXT:   assign r0 = a + b;
-  // CHECK-NEXT:   assign r1 = $signed(a) + $signed(b);
   // CHECK-NEXT:   assign r2 = a - b;
-  // CHECK-NEXT:   assign r3 = $signed(a) - $signed(b);
   // CHECK-NEXT:   assign r4 = a * b;
   // CHECK-NEXT:   assign r5 = $signed(a) * $signed(b);
   // CHECK-NEXT:   assign r6 = a / b;

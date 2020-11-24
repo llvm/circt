@@ -865,13 +865,7 @@ private:
   SubExprInfo visitComb(rtl::AddOp op) {
     return emitVariadic(op, Addition, "+");
   }
-  SubExprInfo visitComb(rtl::AddSignedOp op) {
-    return emitRTLSignedVariadic(op, Addition, "+");
-  }
   SubExprInfo visitComb(rtl::SubOp op) { return emitBinary(op, Addition, "-"); }
-  SubExprInfo visitComb(rtl::SubSignedOp op) {
-    return emitRTLSignedBinary(op, Addition, "-");
-  }
   SubExprInfo visitComb(rtl::MulOp op) {
     return emitVariadic(op, Multiply, "*");
   }
@@ -888,7 +882,7 @@ private:
   }
   SubExprInfo visitComb(rtl::ShlOp op) { return emitBinary(op, Shift, "<<"); }
   SubExprInfo visitComb(rtl::ShrOp op) { return emitBinary(op, Shift, ">>>"); }
-  SubExprInfo visitComb(rtl::AShrOp op) {
+  SubExprInfo visitComb(rtl::ShrSignedOp op) {
     return emitRTLSignedBinary(op, Shift, ">>>");
   }
   SubExprInfo visitComb(rtl::AndOp op) { return emitVariadic(op, And, "&"); }
