@@ -3,6 +3,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/Types.h"
 #include "circt/Dialect/FIRRTL/Visitors.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -699,76 +700,17 @@ FIRRTLType MemOp::getDataTypeOrNull() {
 // Statements
 //===----------------------------------------------------------------------===//
 
-static bool areConnectEquivalent(FIRRTLType destType, FIRRTLType srcType);
+static LogicalResult verifyConnectOp(ConnectOp connect) {
+  FIRRTLType destType =
+      connect.dest().getType().cast<FIRRTLType>().getPassiveType();
+  FIRRTLType srcType =
+      connect.src().getType().cast<FIRRTLType>().getPassiveType();
 
-/// Helper to implement the equivalence logic for a pair of bundle elements in a
-/// connect.
-static bool areElementsConnectEquivalent(BundleType::BundleElement destElement,
-                                         BundleType::BundleElement srcElement) {
-  Identifier destElementName = std::get<0>(destElement);
-  Identifier srcElementName = std::get<0>(srcElement);
-  if (destElementName != srcElementName)
-    return false;
-
-  FIRRTLType destElementType = std::get<1>(destElement);
-  FIRRTLType srcElementType = std::get<1>(srcElement);
-  return areConnectEquivalent(destElementType, srcElementType);
-}
-
-/// Returns whether the two types are equivalent for the purpose of
-/// connections. See Section 4.5 in the FIRRTL spec:
-/// https://github.com/freechipsproject/firrtl/blob/master/spec/spec.pdf.
-static bool areConnectEquivalent(FIRRTLType destType, FIRRTLType srcType) {
   // Analog types cannot be connected and must be attached.
   if (destType.isa<AnalogType>() || srcType.isa<AnalogType>())
-    return false;
+    return connect.emitError("analog types may not be connected");
 
-  // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
-  if (destType.isa<ResetType>())
-    return srcType.isResetType();
-
-  // Reset types can drive UInt<1>, AsyncReset, or Reset types.
-  if (srcType.isa<ResetType>())
-    return destType.isResetType();
-
-  // Vector types can be connected if they have the same size and element type.
-  auto destVectorType = destType.dyn_cast<FVectorType>();
-  auto srcVectorType = srcType.dyn_cast<FVectorType>();
-  if (destVectorType && srcVectorType)
-    return destVectorType.getNumElements() == srcVectorType.getNumElements() &&
-           areConnectEquivalent(destVectorType.getElementType(),
-                                srcVectorType.getElementType());
-
-  // Bundle types can be connected if they have the same size, element names,
-  // and element types.
-  auto destBundleType = destType.dyn_cast<BundleType>();
-  auto srcBundleType = srcType.dyn_cast<BundleType>();
-  if (destBundleType && srcBundleType) {
-    auto destElements = destBundleType.getElements();
-    auto srcElements = destBundleType.getElements();
-    size_t numDestElements = destElements.size();
-    if (numDestElements != srcElements.size())
-      return false;
-
-    for (size_t i = 0; i < numDestElements; ++i) {
-      auto destElement = destElements[i];
-      auto srcElement = srcElements[i];
-      if (!areElementsConnectEquivalent(destElement, srcElement))
-        return false;
-    }
-  }
-
-  // Ground types can be connected if their passive, widthless versions
-  // are equal.
-  return destType.getWidthlessType() == srcType.getWidthlessType();
-}
-
-static LogicalResult verifyConnectOp(ConnectOp connect) {
-  FIRRTLType destType = connect.dest().getType().cast<FIRRTLType>();
-  FIRRTLType srcType = connect.src().getType().cast<FIRRTLType>();
-
-  if (!areConnectEquivalent(destType.getPassiveType(),
-                            srcType.getPassiveType()))
+  if (!areTypesEquivalent(destType, srcType))
     return connect.emitError("type mismatch between destination ")
            << destType << " and source " << srcType;
 

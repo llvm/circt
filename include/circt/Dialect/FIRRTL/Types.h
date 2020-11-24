@@ -70,6 +70,10 @@ protected:
   using Type::Type;
 };
 
+/// Returns whether the two types are equivalent. See the FIRRTL spec for the
+/// full definition of type equivalence.
+bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType);
+
 //===----------------------------------------------------------------------===//
 // Ground Types Without Parameters
 //===----------------------------------------------------------------------===//
