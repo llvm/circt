@@ -7,7 +7,6 @@
 #include "circt/Dialect/ESI/ESIOps.h"
 
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/StandardTypes.h"
 
 using namespace mlir;
