@@ -33,6 +33,7 @@ class RTLOp<string mnemonic, list<OpTrait> traits = []> :
     Op<RTLDialect, mnemonic, traits>;
 
 include "Combinatorial.td"
+include "Sequential.td"
 include "Statements.td"
 include "Structure.td"
 
