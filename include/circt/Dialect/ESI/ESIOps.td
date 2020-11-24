@@ -41,13 +41,13 @@ def ChannelBuffer : ESI_Abstract_Op<"buffer", [NoSideEffect, SameTypeOperands]> 
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
-def PipelineStage : ESI_Op<"stage", [NoSideEffect, SameTypeOperands]> {
+def PipelineStage : ESI_Physical_Op<"stage", [NoSideEffect, SameTypeOperands]> {
   let summary = "An elastic buffer stage.";
   let description = [{
     An individual elastic pipeline register. Generally lowered to from a
     ChannelBuffer ('buffer'), though can be inserted anywhere to add an
-    additional pipeline stage. Could be useful for late-pass latency
-    balancing.
+    additional pipeline stage. Adding individually could be useful for
+    late-pass latency balancing.
   }];
 
   let arguments = (ins ChannelType:$input);
@@ -57,7 +57,7 @@ def PipelineStage : ESI_Op<"stage", [NoSideEffect, SameTypeOperands]> {
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
-def CosimEndpoint : ESI_Op<"cosim", []> {
+def CosimEndpoint : ESI_Physical_Op<"cosim", []> {
   let summary = "Co-simulation endpoint";
   let description = [{
     A co-simulation endpoint is a connection from the simulation to some

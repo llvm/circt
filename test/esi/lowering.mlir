@@ -1,10 +1,10 @@
 // RUN: circt-opt %s --lower-esi-to-physical -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
 module {
-  rtl.externmodule @Sender() -> ( !esi.channel<i1> { rtl.name = "x"})
+  rtl.externmodule @Sender() -> ( %x: !esi.channel<i1> )
   rtl.externmodule @Reciever(%a: !esi.channel<i1>)
 
-  // CHECK-LABEL: rtl.externmodule @Sender() -> (!esi.channel<i1> {rtl.name = "x"})
+  // CHECK-LABEL: rtl.externmodule @Sender() -> (%x: !esi.channel<i1>)
   // CHECK-LABEL: rtl.externmodule @Reciever(!esi.channel<i1> {rtl.name = "a"})
 
   rtl.module @test() {

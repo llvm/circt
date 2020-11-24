@@ -15,10 +15,4 @@ def LowerESIToPhysical: Pass<"lower-esi-to-physical", "mlir::ModuleOp"> {
   let dependentDialects = ["circt::esi::ESIDialect"];
 }
 
-def LowerESIToRTL: Pass<"lower-esi-to-rtl", "mlir::ModuleOp"> {
-  let summary = "Lower ESI to RTL where possible and SV elsewhere.";
-  let constructor = "circt::esi::createESIToRTLPass()";
-  let dependentDialects = ["circt::rtl::RTLDialect", "circt::sv::SVDialect"];
-}
-
 #endif // CIRCT_DIALECT_ESI_ESIPASSES_TD

@@ -30,6 +30,9 @@ using namespace circt::esi;
 
 namespace {
 
+/// Lower `ChannelBuffer`s, breaking out the various options. For now, just
+/// replace with the specified number of pipeline stages (since that's the only
+/// option).
 struct ChannelBufferLowering : public ConversionPattern {
   ChannelBufferLowering(MLIRContext *ctx)
       : ConversionPattern(ChannelBuffer::getOperationName(), 1, ctx) {}
@@ -64,6 +67,7 @@ struct ChannelBufferLowering : public ConversionPattern {
   }
 };
 
+/// Run all the lowerings
 struct ESIToPhysicalPass : public LowerESIToPhysicalBase<ESIToPhysicalPass> {
   void runOnOperation() override;
 };
@@ -84,13 +88,6 @@ void ESIToPhysicalPass::runOnOperation() {
     signalPassFailure();
 };
 
-struct ESIToRTLPass : public LowerESIToRTLBase<ESIToRTLPass> {
-
-  void runOnOperation() override;
-};
-
-void ESIToRTLPass::runOnOperation() { llvm::outs() << "test!\n"; }
-
 } // end anonymous namespace.
 
 namespace circt {
@@ -99,9 +96,6 @@ std::unique_ptr<OperationPass<ModuleOp>> createESILoweringPass() {
   return std::make_unique<ESIToPhysicalPass>();
 }
 
-std::unique_ptr<OperationPass<ModuleOp>> createESIToRTLPass() {
-  return std::make_unique<ESIToRTLPass>();
-}
 } // namespace esi
 } // namespace circt
 
