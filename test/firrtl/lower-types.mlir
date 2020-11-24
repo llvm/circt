@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='firrtl.circuit(lower-firrtl-types)' -split-input-file %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl.module(lower-firrtl-types))' -split-input-file %s | FileCheck %s
 
 firrtl.circuit "TopLevel" {
 
