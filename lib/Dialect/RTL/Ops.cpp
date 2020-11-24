@@ -1154,7 +1154,6 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
   results.insert<Folder>(context);
 }
 
-
 OpFoldResult MulOp::fold(ArrayRef<Attribute> operands) {
   auto size = inputs().size();
 

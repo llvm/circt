@@ -869,11 +869,15 @@ private:
   SubExprInfo visitComb(rtl::MulOp op) {
     return emitVariadic(op, Multiply, "*");
   }
-  SubExprInfo visitComb(rtl::DivUOp op) { return emitBinary(op, Multiply, "/"); }
+  SubExprInfo visitComb(rtl::DivUOp op) {
+    return emitBinary(op, Multiply, "/");
+  }
   SubExprInfo visitComb(rtl::DivSOp op) {
     return emitRTLSignedBinary(op, Multiply, "/");
   }
-  SubExprInfo visitComb(rtl::ModUOp op) { return emitBinary(op, Multiply, "%"); }
+  SubExprInfo visitComb(rtl::ModUOp op) {
+    return emitBinary(op, Multiply, "%");
+  }
   SubExprInfo visitComb(rtl::ModSOp op) {
     return emitRTLSignedBinary(op, Multiply, "%");
   }
