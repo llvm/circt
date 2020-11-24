@@ -71,8 +71,7 @@ ParseResult parseWrapValidReady(OpAsmParser &parser, OperationState &result) {
   if (parser.parseType(innerOutputType))
     return failure();
 
-  auto boolType = IntegerType::get(
-      1, IntegerType::SignednessSemantics::Signless, result.getContext());
+  auto boolType = parser.getBuilder().getI1Type();
   auto outputType =
       ChannelPort::get(parser.getBuilder().getContext(), innerOutputType);
   result.addTypes({outputType, boolType});
@@ -107,8 +106,7 @@ ParseResult parseUnwrapValidReady(OpAsmParser &parser, OperationState &result) {
   auto inputType =
       ChannelPort::get(parser.getBuilder().getContext(), outputType);
 
-  auto boolType = IntegerType::get(
-      1, IntegerType::SignednessSemantics::Signless, result.getContext());
+  auto boolType = parser.getBuilder().getI1Type();
 
   result.addTypes({inputType.getInner(), boolType});
   if (parser.resolveOperands(opList, {inputType, boolType}, inputOperandsLoc,
