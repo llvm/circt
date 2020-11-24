@@ -137,11 +137,11 @@
   }
 
   // expected-error @+1 {{cannot lower this port type to RTL}}
-  firrtl.module @CantLowerArgument(%arg: !firrtl.bundle<int_1: flip<uint<1>>, int_out: uint<2>>) {
+  firrtl.module @CantLowerArgument(%arg: !firrtl.bundle<int_1: flip<uint<1>>, int_out: uint<2>>) attributes {sym_visibility = "private"} {
   }   // CHECK-NEXT: }
 
   // expected-error @+1 {{unexpected operation 'func' in a firrtl.circuit}}
-  func @UnknownFunction() {
+  func private @UnknownFunction() {
   }
 
   // CHECK-LABEL: rtl.module @OutputFirst(%in1: i1, %in4: i4) -> (%out4: i4) {
