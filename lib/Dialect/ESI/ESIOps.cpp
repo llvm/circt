@@ -83,7 +83,7 @@ ParseResult parseWrapValidReady(OpAsmParser &parser, OperationState &result) {
 }
 
 void print(OpAsmPrinter &p, WrapValidReady &op) {
-  p << "esi.wrapvr " << op.data() << ", " << op.valid();
+  p << "esi.wrap.vr " << op.data() << ", " << op.valid();
   p.printOptionalAttrDict(op.getAttrs());
   p << " : " << op.output().getType().cast<ChannelPort>().getInner();
 }
@@ -118,7 +118,7 @@ ParseResult parseUnwrapValidReady(OpAsmParser &parser, OperationState &result) {
 }
 
 void print(OpAsmPrinter &p, UnwrapValidReady &op) {
-  p << "esi.unwrapvr " << op.input() << ", " << op.ready();
+  p << "esi.unwrap.vr " << op.input() << ", " << op.ready();
   p.printOptionalAttrDict(op.getAttrs());
   p << " : " << op.output().getType();
 }

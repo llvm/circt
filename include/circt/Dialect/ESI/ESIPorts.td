@@ -38,7 +38,7 @@ def ChannelType :
 //=========
 // Operations on ports.
 
-def WrapValidReady : ESI_Op<"wrapvr", [NoSideEffect]> {
+def WrapValidReady : ESI_Op<"wrap.vr", [NoSideEffect]> {
   let summary = "Wrap a value into an ESI port";
   let description = [{
     Wrapping a value into an ESI port type allows modules to send values down
@@ -53,7 +53,7 @@ def WrapValidReady : ESI_Op<"wrapvr", [NoSideEffect]> {
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
-def UnwrapValidReady : ESI_Op<"unwrapvr", [NoSideEffect]> {
+def UnwrapValidReady : ESI_Op<"unwrap.vr", [NoSideEffect]> {
   let summary = "Unwrap a value from an ESI port";
   let description = [{
     Unwrapping a value allows operations on the contained value. Unwrap the

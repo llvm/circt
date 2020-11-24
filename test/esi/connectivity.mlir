@@ -4,19 +4,19 @@ module {
   rtl.module @Sender() -> (%x: !esi.channel<i1>) {
     %0 = constant 0 : i1
     // Don't transmit any data.
-    %ch, %rcvrRdy = esi.wrapvr %0, %0 : i1
+    %ch, %rcvrRdy = esi.wrap.vr %0, %0 : i1
     rtl.output %ch : !esi.channel<i1>
   }
   rtl.module @Reciever(%a: !esi.channel<i1>) {
     %rdy = constant 1 : i1
     // Recieve bits.
-    %data, %valid = esi.unwrapvr %a, %rdy : i1
+    %data, %valid = esi.unwrap.vr %a, %rdy : i1
   }
 
   // CHECK-LABEL: rtl.module @Sender() -> (%x: !esi.channel<i1>) {
-  // CHECK:        %output, %ready = esi.wrapvr %false, %false : i1
+  // CHECK:        %output, %ready = esi.wrap.vr %false, %false : i1
   // CHECK-LABEL: rtl.module @Reciever(%a: !esi.channel<i1>) {
-  // CHECK:        %output, %valid = esi.unwrapvr %a, %true : i1
+  // CHECK:        %output, %valid = esi.unwrap.vr %a, %true : i1
 
   rtl.module @test() {
     %esiChan = rtl.instance "sender" @Sender () : () -> (!esi.channel<i1>)
