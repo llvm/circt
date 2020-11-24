@@ -13,6 +13,8 @@
 using namespace mlir;
 using namespace circt::esi;
 
+//====== Channel buffer.
+
 ParseResult parseChannelBuffer(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
 
@@ -49,6 +51,76 @@ void print(OpAsmPrinter &p, ChannelBuffer &op) {
   p.printAttributeWithoutType(op.options());
   p.printOptionalAttrDict(op.getAttrs(), /*elidedAttrs=*/{"options"});
   p << " : " << op.output().getType().cast<ChannelPort>().getInner();
+}
+
+// === Wrap / unwrap.
+
+ParseResult parseWrapValidReady(OpAsmParser &parser, OperationState &result) {
+  llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
+
+  llvm::SmallVector<OpAsmParser::OperandType, 2> opList;
+  if (parser.parseOperandList(opList, 2, OpAsmParser::Delimiter::None))
+    return failure();
+
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+  if (parser.parseColon())
+    return failure();
+
+  Type innerOutputType;
+  if (parser.parseType(innerOutputType))
+    return failure();
+
+  auto boolType = IntegerType::get(
+      1, IntegerType::SignednessSemantics::Signless, result.getContext());
+  auto outputType =
+      ChannelPort::get(parser.getBuilder().getContext(), innerOutputType);
+  result.addTypes({outputType, boolType});
+  if (parser.resolveOperands(opList, {innerOutputType, boolType},
+                             inputOperandsLoc, result.operands))
+    return failure();
+  return success();
+}
+
+void print(OpAsmPrinter &p, WrapValidReady &op) {
+  p << "esi.wrapvr " << op.data() << ", " << op.valid();
+  p.printOptionalAttrDict(op.getAttrs());
+  p << " : " << op.output().getType().cast<ChannelPort>().getInner();
+}
+
+ParseResult parseUnwrapValidReady(OpAsmParser &parser, OperationState &result) {
+  llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
+
+  llvm::SmallVector<OpAsmParser::OperandType, 2> opList;
+  if (parser.parseOperandList(opList, 2, OpAsmParser::Delimiter::None))
+    return failure();
+
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+  if (parser.parseColon())
+    return failure();
+
+  Type outputType;
+  if (parser.parseType(outputType))
+    return failure();
+
+  auto inputType =
+      ChannelPort::get(parser.getBuilder().getContext(), outputType);
+
+  auto boolType = IntegerType::get(
+      1, IntegerType::SignednessSemantics::Signless, result.getContext());
+
+  result.addTypes({inputType.getInner(), boolType});
+  if (parser.resolveOperands(opList, {inputType, boolType}, inputOperandsLoc,
+                             result.operands))
+    return failure();
+  return success();
+}
+
+void print(OpAsmPrinter &p, UnwrapValidReady &op) {
+  p << "esi.unwrapvr " << op.input() << ", " << op.ready();
+  p.printOptionalAttrDict(op.getAttrs());
+  p << " : " << op.output().getType();
 }
 
 #define GET_OP_CLASSES

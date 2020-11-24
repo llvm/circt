@@ -35,6 +35,9 @@ def ChannelType :
   Type<CPred<"$_self.isa<::circt::esi::ChannelPort>()">, "">;
 
 
+//=========
+// Operations on ports.
+
 def WrapValidReady : ESI_Op<"wrapvr", [NoSideEffect]> {
   let summary = "Wrap a value into an ESI port";
   let description = [{
@@ -45,9 +48,8 @@ def WrapValidReady : ESI_Op<"wrapvr", [NoSideEffect]> {
   let arguments = (ins AnyType:$data, I1:$valid);
   let results = (outs ChannelType:$output, I1:$ready);
 
-  let assemblyFormat = [{
-    $data `,` $valid attr-dict `:` type($data) `->` type($output)
-  }];
+  let printer = [{ return ::print(p, *this); }];
+  let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
 def UnwrapValidReady : ESI_Op<"unwrapvr", [NoSideEffect]> {
@@ -59,7 +61,6 @@ def UnwrapValidReady : ESI_Op<"unwrapvr", [NoSideEffect]> {
   let arguments = (ins ChannelType:$input, I1:$ready);
   let results = (outs AnyType:$output, I1:$valid);
 
-  let assemblyFormat = [{
-    $input `,` $ready attr-dict `:` type($input) `->` type($output)
-  }];
+  let printer = [{ return ::print(p, *this); }];
+  let parser = [{ return ::parse$cppClass(parser, result); }];
 }
