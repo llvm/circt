@@ -9,7 +9,6 @@
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/StandardTypes.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/STLExtras.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -704,32 +703,15 @@ static bool areConnectEquivalent(FIRRTLType destType, FIRRTLType srcType);
 
 /// Helper to implement the equivalence logic for a pair of bundle elements in a
 /// connect.
-static bool areElementsConnectEquivalent(
-    std::tuple<BundleType::BundleElement, BundleType::BundleElement> tuple) {
-  BundleType::BundleElement destElement = std::get<0>(tuple);
+static bool areElementsConnectEquivalent(BundleType::BundleElement destElement,
+                                         BundleType::BundleElement srcElement) {
   Identifier destElementName = std::get<0>(destElement);
-  FIRRTLType destElementType = std::get<1>(destElement);
-  bool destIsFlip = destElementType.isa<FlipType>();
-
-  BundleType::BundleElement srcElement = std::get<1>(tuple);
   Identifier srcElementName = std::get<0>(srcElement);
-  FIRRTLType srcElementType = std::get<1>(srcElement);
-  bool srcIsFlip = srcElementType.isa<FlipType>();
-
   if (destElementName != srcElementName)
     return false;
 
-  if (destIsFlip != srcIsFlip)
-    return false;
-
-  // If either destination or source is flipped, strip the outer flip for
-  // recursively equivalance checking.
-  if (destIsFlip)
-    destElementType = destElementType.cast<FlipType>().getElementType();
-
-  if (srcIsFlip)
-    srcElementType = srcElementType.cast<FlipType>().getElementType();
-
+  FIRRTLType destElementType = std::get<1>(destElement);
+  FIRRTLType srcElementType = std::get<1>(srcElement);
   return areConnectEquivalent(destElementType, srcElementType);
 }
 
@@ -742,12 +724,12 @@ static bool areConnectEquivalent(FIRRTLType destType, FIRRTLType srcType) {
     return false;
 
   // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
-  if (destType.getPassiveType().isa<ResetType>())
+  if (destType.isa<ResetType>())
     return srcType.isResetType();
 
   // Reset types can drive UInt<1>, AsyncReset, or Reset types.
   if (srcType.isa<ResetType>())
-    return destType.getPassiveType().isResetType();
+    return destType.isResetType();
 
   // Vector types can be connected if they have the same size and element type.
   auto destVectorType = destType.dyn_cast<FVectorType>();
@@ -761,23 +743,32 @@ static bool areConnectEquivalent(FIRRTLType destType, FIRRTLType srcType) {
   // and element types.
   auto destBundleType = destType.dyn_cast<BundleType>();
   auto srcBundleType = srcType.dyn_cast<BundleType>();
-  if (destBundleType && srcBundleType)
-    return destBundleType.getNumElements() == srcBundleType.getNumElements() &&
-           llvm::all_of(llvm::zip(destBundleType.getElements(),
-                                  srcBundleType.getElements()),
-                        areElementsConnectEquivalent);
+  if (destBundleType && srcBundleType) {
+    auto destElements = destBundleType.getElements();
+    auto srcElements = destBundleType.getElements();
+    size_t numDestElements = destElements.size();
+    if (numDestElements != srcElements.size())
+      return false;
 
-  // Ground types can be connected if their passive, widthless versions are
-  // equal.
-  return destType.getPassiveType().getWidthlessType() ==
-         srcType.getPassiveType().getWidthlessType();
+    for (size_t i = 0; i < numDestElements; ++i) {
+      auto destElement = destElements[i];
+      auto srcElement = srcElements[i];
+      if (!areElementsConnectEquivalent(destElement, srcElement))
+        return false;
+    }
+  }
+
+  // Ground types can be connected if their passive, widthless versions
+  // are equal.
+  return destType.getWidthlessType() == srcType.getWidthlessType();
 }
 
 static LogicalResult verifyConnectOp(ConnectOp connect) {
   FIRRTLType destType = connect.dest().getType().cast<FIRRTLType>();
   FIRRTLType srcType = connect.src().getType().cast<FIRRTLType>();
 
-  if (!areConnectEquivalent(destType, srcType))
+  if (!areConnectEquivalent(destType.getPassiveType(),
+                            srcType.getPassiveType()))
     return connect.emitError("type mismatch between destination ")
            << destType << " and source " << srcType;
 

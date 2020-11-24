@@ -159,6 +159,17 @@ firrtl.module @test(%a : !firrtl.uint<1>, %b : !firrtl.flip<uint<1>>) {
 
 firrtl.circuit "test" {
 
+firrtl.module @test(%a : !firrtl.uint<1>, %b : !firrtl.flip<uint<2>>) {
+  // CHECK: firrtl.connect %b, %a
+  firrtl.connect %b, %a : !firrtl.flip<uint<2>>, !firrtl.uint<1>
+}
+
+}
+
+// -----
+
+firrtl.circuit "test" {
+
 firrtl.module @test(%a : !firrtl.uint<1>, %b : !firrtl.flip<sint<1>>) {
   // expected-error @+1 {{type mismatch between destination '!firrtl.flip<sint<1>>' and source '!firrtl.uint<1>'}}
   firrtl.connect %b, %a : !firrtl.flip<sint<1>>, !firrtl.uint<1>
@@ -370,6 +381,17 @@ firrtl.circuit "test" {
 firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>, f2: flip<sint<1>>>, %b : !firrtl.bundle<f1: flip<uint<1>>, f2: sint<1>>) {
   // CHECK: firrtl.connect %b, %a
   firrtl.connect %b, %a : !firrtl.bundle<f1: flip<uint<1>>, f2: sint<1>>, !firrtl.bundle<f1: uint<1>, f2: flip<sint<1>>>
+}
+
+}
+
+// -----
+
+firrtl.circuit "test" {
+
+firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>, f2: flip<sint<2>>>, %b : !firrtl.bundle<f1: flip<uint<2>>, f2: sint<1>>) {
+  // CHECK: firrtl.connect %b, %a
+  firrtl.connect %b, %a : !firrtl.bundle<f1: flip<uint<2>>, f2: sint<1>>, !firrtl.bundle<f1: uint<1>, f2: flip<sint<2>>>
 }
 
 }
