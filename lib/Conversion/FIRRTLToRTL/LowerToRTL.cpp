@@ -1027,7 +1027,9 @@ LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
   if (rhs.getType().cast<IntegerType>().getWidth() != destWidth)
     rhs = builder->create<rtl::ExtractOp>(resultType, rhs, 0);
 
-  return setLoweringTo<rtl::ModUOp>(op, ValueRange({lhs, rhs}));
+  if (resultFirType.isUnsigned())
+    return setLoweringTo<rtl::ModUOp>(op, ValueRange({lhs, rhs}));
+    return setLoweringTo<rtl::ModSOp>(op, ValueRange({lhs, rhs}));
 }
 
 //===----------------------------------------------------------------------===//

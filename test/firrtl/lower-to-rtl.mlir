@@ -112,11 +112,11 @@ module attributes {firrtl.mainModule = "Simple"} {
     %19 = firrtl.div %in3c, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<9>
 
     // CHECK-NEXT: [[IN3TRUNC:%.+]] = rtl.extract %in3 from 0 : (i8) -> i3
-    // CHECK-NEXT: = rtl.modu [[IN3TRUNC]], [[PADRES]] : i3
+    // CHECK-NEXT: = rtl.mods [[IN3TRUNC]], [[PADRES]] : i3
     %20 = firrtl.rem %in3c, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<3>
 
     // CHECK-NEXT: [[IN3TRUNC:%.+]] = rtl.extract %in3 from 0 : (i8) -> i3
-    // CHECK-NEXT: = rtl.modu [[PADRES]], [[IN3TRUNC]] : i3
+    // CHECK-NEXT: = rtl.mods [[PADRES]], [[IN3TRUNC]] : i3
     %21 = firrtl.rem %3, %in3c : (!firrtl.sint<3>, !firrtl.sint<8>) -> !firrtl.sint<3>
 
     // CHECK-NEXT: [[WIRE:%n1]] = rtl.wire : i2
