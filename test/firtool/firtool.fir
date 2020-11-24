@@ -8,22 +8,6 @@ circuit test_mod :
     output b: UInt<1>
     b <= a
 
-  module Queue_1 :
-    input clock : Clock
-    input reset : UInt<1>
-    output io_deq_bits_opcode : UInt<3>
-  
-    mem ram_opcode : @[Decoupled.scala 218:16]
-      data-type => UInt<3>
-      depth => 2
-      read-latency => 0
-      write-latency => 1
-      reader => io_deq_bits_MPORT
-      writer => MPORT
-      read-under-write => undefined
-    io_deq_bits_opcode <= ram_opcode.io_deq_bits_MPORT.data @[Decoupled.scala 242:15]
-
-
 ; MLIR: firrtl.circuit "test_mod" {
 
 ; MLIR-LABEL: firrtl.module @test_mod(%a: !firrtl.uint<1>, %b: !firrtl.flip<uint<1>>) {

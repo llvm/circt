@@ -210,4 +210,19 @@
     // CHECK: [[OUTF_CAST:%.+]] = firrtl.stdIntCast [[OUTF]]
     // CHECK: rtl.output %inA, [[OUTB]], [[OUTC]], [[OUTD]], [[OUTE_CAST]], [[OUTF_CAST]]
   }
+
+  // CHECK: rtl.module @Queue_1
+  firrtl.module @Queue_1(%clock: !firrtl.clock, %bar: !firrtl.flip<uint<3>>) {
+    // CHECK-NEXT: firrtl.stdIntCast
+    // CHECK-NEXT: firrtl.mem
+    %ram_foo = firrtl.mem "Undefined" {depth = 2 : i64, name = "ram_foo", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<MPORT: bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<3>, mask: uint<1>>, io_MPORT: bundle<addr: uint<1>, en: uint<1>, clk: clock, data: flip<uint<3>>>>
+    // CHECK-NEXT: firrtl.subfield
+    %0 = firrtl.subfield %ram_foo("io_MPORT") : (!firrtl.bundle<MPORT: bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<3>, mask: uint<1>>, io_MPORT: bundle<addr: uint<1>, en: uint<1>, clk: clock, data: flip<uint<3>>>>) -> !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: flip<uint<3>>>
+    // CHECK-NEXT: firrtl.subfield
+    %1 = firrtl.subfield %0("data") : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: flip<uint<3>>>) -> !firrtl.flip<uint<3>>
+    // CHECK-NEXT: firrtl.asPassive
+    // CHECK-NEXT: [[OUTG:%.+]] = firrtl.stdIntCast
+    firrtl.connect %bar, %1 : !firrtl.flip<uint<3>>, !firrtl.flip<uint<3>>
+    //CheckNext rtl.output [[OUTG]] : i3
+  }
 }
