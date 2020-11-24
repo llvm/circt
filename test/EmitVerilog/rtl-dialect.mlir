@@ -11,7 +11,6 @@ module {
     %r0: i4,
     %r2: i4,
     %r4: i4,
-    %r5: i4,
     %r6: i4,
     %r7: i4,
     %r8: i4,
@@ -44,8 +43,7 @@ module {
     
     %0 = rtl.add %a, %b : i4
     %2 = rtl.sub %a, %b : i4
-    %4 = rtl.mulu %a, %b : i4
-    %5 = rtl.muls %a, %b : i4
+    %4 = rtl.mul  %a, %b : i4
     %6 = rtl.divu %a, %b : i4
     %7 = rtl.divs %a, %b : i4
     %8 = rtl.modu %a, %b : i4
@@ -75,8 +73,8 @@ module {
     %32 = rtl.zext %a : (i4) -> i9
     %33 = rtl.mux %cond, %a, %b : i4
 
-    rtl.output %0, %2, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, %30, %31, %32, %33: 
-     i4,i4,i4,
+    rtl.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, %30, %31, %32, %33: 
+     i4,i4,
      i4,i4,i4,i4,i4,
      i4,i4,i4,i4,i4,
      i4,i1,i1,i1,i1,
@@ -87,7 +85,7 @@ module {
   // CHECK-LABEL: module TESTSIMPLE(
   // CHECK-NEXT:   input  [3:0]  a, b
   // CHECK-NEXT:   input         cond,
-  // CHECK-NEXT:   output [3:0]  r0, r2, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15
+  // CHECK-NEXT:   output [3:0]  r0, r2, r4, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15
   // CHECK-NEXT:   output        r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28
   // CHECK-NEXT:   output [11:0] r29,
   // CHECK-NEXT:   output [1:0]  r30,
@@ -97,7 +95,6 @@ module {
   // CHECK-NEXT:   assign r0 = a + b;
   // CHECK-NEXT:   assign r2 = a - b;
   // CHECK-NEXT:   assign r4 = a * b;
-  // CHECK-NEXT:   assign r5 = $signed(a) * $signed(b);
   // CHECK-NEXT:   assign r6 = a / b;
   // CHECK-NEXT:   assign r7 = $signed(a) / $signed(b);
   // CHECK-NEXT:   assign r8 = a % b;

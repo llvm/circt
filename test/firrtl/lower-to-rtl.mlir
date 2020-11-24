@@ -103,7 +103,7 @@ module attributes {firrtl.mainModule = "Simple"} {
 
     // CHECK-NEXT: [[ZEXTC1:%.+]] = rtl.zext [[CONCAT1]] : (i8) -> i12
     // CHECK-NEXT: [[ZEXT2:%.+]] = rtl.zext [[SUB]] : (i4) -> i12
-    // CHECK-NEXT: [[VAL18:%.+]] = rtl.mulu [[ZEXTC1]], [[ZEXT2]] : i12
+    // CHECK-NEXT: [[VAL18:%.+]] = rtl.mul  [[ZEXTC1]], [[ZEXT2]] : i12
     %18 = firrtl.mul %6, %2 : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<12>
 
     // CHECK-NEXT: [[IN3SEXT:%.+]] = rtl.sext %in3 : (i8) -> i9

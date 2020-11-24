@@ -869,9 +869,6 @@ private:
   SubExprInfo visitComb(rtl::MulOp op) {
     return emitVariadic(op, Multiply, "*");
   }
-  SubExprInfo visitComb(rtl::MulSignedOp op) {
-    return emitRTLSignedVariadic(op, Multiply, "*");
-  }
   SubExprInfo visitComb(rtl::DivOp op) { return emitBinary(op, Multiply, "/"); }
   SubExprInfo visitComb(rtl::DivSignedOp op) {
     return emitRTLSignedBinary(op, Multiply, "/");

@@ -538,7 +538,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
 
   template <typename ResultOpType, typename ResultSignedOpType = ResultOpType>
   LogicalResult lowerBinOp(Operation *op);
-  template <typename ResultOpType, typename ResultSignedOpType = ResultOpType>
+  template <typename ResultOpType>
   LogicalResult lowerBinOpToVariadic(Operation *op);
   LogicalResult lowerCmpOp(Operation *op, ICmpPredicate signedOp,
                            ICmpPredicate unsignedOp);
@@ -578,7 +578,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
 
   LogicalResult visitExpr(SubPrimOp op) { return lowerBinOp<rtl::SubOp>(op); }
   LogicalResult visitExpr(MulPrimOp op) {
-    return lowerBinOpToVariadic<rtl::MulOp, rtl::MulSignedOp>(op);
+    return lowerBinOpToVariadic<rtl::MulOp>(op);
   }
   LogicalResult visitExpr(DivPrimOp op) { return lowerBinOp<rtl::DivOp, rtl::DivSignedOp>(op); }
   LogicalResult visitExpr(RemPrimOp op);
@@ -942,17 +942,13 @@ LogicalResult FIRRTLLowering::visitExpr(OrRPrimOp op) {
 // Binary Operations
 //===----------------------------------------------------------------------===//
 
-template <typename ResultOpType, typename ResultSignedOpType>
+template <typename ResultOpType>
 LogicalResult FIRRTLLowering::lowerBinOpToVariadic(Operation *op) {
   auto resultType = op->getResult(0).getType();
   auto lhs = getLoweredAndExtendedValue(op->getOperand(0), resultType);
   auto rhs = getLoweredAndExtendedValue(op->getOperand(1), resultType);
   if (!lhs || !rhs)
     return failure();
-
-  if (resultType.cast<IntType>().isSigned())
-    return setLoweringTo<ResultSignedOpType>(op, ValueRange({lhs, rhs}),
-                                       ArrayRef<NamedAttribute>{});
 
   return setLoweringTo<ResultOpType>(op, ValueRange({lhs, rhs}),
                                      ArrayRef<NamedAttribute>{});
