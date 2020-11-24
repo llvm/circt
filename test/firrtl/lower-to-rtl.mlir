@@ -312,5 +312,6 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:  rtl.connect %hits_1_7, %io_cpu_flush.wire : i1
     %1455 = firrtl.asPassive %hits_1_7 : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
   }
+  
 }
 
