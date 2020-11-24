@@ -536,9 +536,9 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
 
   // Binary Ops.
 
-  template <typename ResultOpType>
+  template <typename ResultOpType, typename ResultSignedOpType = ResultOpType>
   LogicalResult lowerBinOp(Operation *op);
-  template <typename ResultOpType>
+  template <typename ResultOpType, typename ResultSignedOpType = ResultOpType>
   LogicalResult lowerBinOpToVariadic(Operation *op);
   LogicalResult lowerCmpOp(Operation *op, ICmpPredicate signedOp,
                            ICmpPredicate unsignedOp);
@@ -578,9 +578,9 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
 
   LogicalResult visitExpr(SubPrimOp op) { return lowerBinOp<rtl::SubOp>(op); }
   LogicalResult visitExpr(MulPrimOp op) {
-    return lowerBinOpToVariadic<rtl::MulOp>(op);
+    return lowerBinOpToVariadic<rtl::MulOp, rtl::MulSignedOp>(op);
   }
-  LogicalResult visitExpr(DivPrimOp op) { return lowerBinOp<rtl::DivOp>(op); }
+  LogicalResult visitExpr(DivPrimOp op) { return lowerBinOp<rtl::DivOp, rtl::DivSignedOp>(op); }
   LogicalResult visitExpr(RemPrimOp op);
 
   // Other Operations
@@ -942,7 +942,7 @@ LogicalResult FIRRTLLowering::visitExpr(OrRPrimOp op) {
 // Binary Operations
 //===----------------------------------------------------------------------===//
 
-template <typename ResultOpType>
+template <typename ResultOpType, typename ResultSignedOpType>
 LogicalResult FIRRTLLowering::lowerBinOpToVariadic(Operation *op) {
   auto resultType = op->getResult(0).getType();
   auto lhs = getLoweredAndExtendedValue(op->getOperand(0), resultType);
@@ -950,13 +950,17 @@ LogicalResult FIRRTLLowering::lowerBinOpToVariadic(Operation *op) {
   if (!lhs || !rhs)
     return failure();
 
+  if (resultType.cast<IntType>().isSigned())
+    return setLoweringTo<ResultSignedOpType>(op, ValueRange({lhs, rhs}),
+                                       ArrayRef<NamedAttribute>{});
+
   return setLoweringTo<ResultOpType>(op, ValueRange({lhs, rhs}),
                                      ArrayRef<NamedAttribute>{});
 }
 
 /// lowerBinOp extends each operand to the destination type, then performs the
 /// specified binary operator.
-template <typename ResultOpType>
+template <typename ResultOpType, typename ResultSignedOpType>
 LogicalResult FIRRTLLowering::lowerBinOp(Operation *op) {
   // Extend the two operands to match the destination type.
   auto resultType = op->getResult(0).getType();
@@ -966,6 +970,8 @@ LogicalResult FIRRTLLowering::lowerBinOp(Operation *op) {
     return failure();
 
   // Emit the result operation.
+  if (resultType.cast<IntType>().isSigned())
+    return setLoweringTo<ResultSignedOpType>(op, lhs, rhs);
   return setLoweringTo<ResultOpType>(op, lhs, rhs);
 }
 
