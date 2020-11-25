@@ -10,18 +10,6 @@
 
 #include "mlir/IR/Types.h"
 
-namespace mlir {
-class DialectAsmParser;
-class DialectAsmPrinter;
-} // namespace mlir
-
-// FIXME: This is a workaround for MLIR bug #48262
-namespace circt {
-namespace rtl {
-using Location = ::mlir::Location;
-} // namespace rtl
-} // namespace circt
-
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/RTL/RTLTypes.h.inc"
 
