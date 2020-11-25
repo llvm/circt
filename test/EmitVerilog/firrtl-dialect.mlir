@@ -7,11 +7,11 @@ firrtl.circuit "M1" {
     %c42 = rtl.constant (42 : i8) : i8
     %c5 = rtl.constant (5 : i8) : i8
     %a = rtl.add %z, %c42 : i8
-    %b = rtl.mul  %a, %c5 : i8
+    %b = rtl.mul %a, %c5 : i8
     %c = firrtl.stdIntCast %b : (i8) -> !firrtl.uint<8>
     firrtl.connect %y, %c : !firrtl.flip<uint<8>>, !firrtl.uint<8>
 
-    %d = rtl.mul  %z, %z, %z : i8
+    %d = rtl.mul %z, %z, %z : i8
     %e = rtl.modu %d, %c5 : i8
     %f = rtl.concat %e, %z, %d : (i8, i8, i8) -> i8
     %g = firrtl.stdIntCast %f : (i8) -> !firrtl.uint<8>
