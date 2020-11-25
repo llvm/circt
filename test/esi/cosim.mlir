@@ -19,10 +19,10 @@ module {
     rtl.instance "recv" @Reciever (%cosimRecv) : (!esi.channel<i1>) -> ()
     // CHECK:  rtl.instance "recv" @Reciever(%0)  : (!esi.channel<i1>) -> ()
 
-    %cosimSend = rtl.instance "send" @Sender () : () -> (!esi.channel<i1>)
-    // CHECK:  %cosimSend = rtl.instance "send" @Sender() : () -> !esi.channel<i1>
+    %send.x = rtl.instance "send" @Sender () : () -> (!esi.channel<i1>)
+    // CHECK:  %send.x = rtl.instance "send" @Sender() : () -> !esi.channel<i1>
 
-    %cosimRecv = esi.cosim (%cosimSend) {} : !esi.channel<i1> -> !esi.channel<i1>
-    // CHECK:  %0 = esi.cosim(%cosimSend) : !esi.channel<i1> -> !esi.channel<i1>
+    %cosimRecv = esi.cosim (%send.x) {} : !esi.channel<i1> -> !esi.channel<i1>
+    // CHECK:  %0 = esi.cosim(%send.x) : !esi.channel<i1> -> !esi.channel<i1>
   }
 }

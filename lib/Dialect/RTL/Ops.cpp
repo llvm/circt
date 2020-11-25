@@ -463,89 +463,38 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
 }
 
 StringAttr InstanceOp::getResultName(size_t idx) {
-  if (auto nameAttrList = getAttrOfType<ArrayAttr>("name"))
-    if (idx < nameAttrList.size())
-      return nameAttrList[idx].dyn_cast<StringAttr>();
+  auto *module = getReferencedModule();
+  if (!module)
+    return {};
+
+  SmallVector<ModulePortInfo, 4> results;
+  getModulePortInfo(module, results);
+
+  for (auto &port : results) {
+    if (!port.isOutput())
+      continue;
+    if (idx == 0)
+      return port.name;
+    --idx;
+  }
+
   return StringAttr();
-}
-
-/// Intercept the `attr-dict` parsing to inject the result names which _may_ be
-/// missing.
-ParseResult parseResultNames(OpAsmParser &p, NamedAttrList &attrDict) {
-  MLIRContext *ctxt = p.getBuilder().getContext();
-  if (p.parseOptionalAttrDict(attrDict))
-    return failure();
-
-  // Assemble the result names from the asm.
-  SmallVector<Attribute, 8> names;
-  for (size_t i = 0, e = p.getNumResults(); i < e; ++i) {
-    names.push_back(StringAttr::get(p.getResultName(i).first, ctxt));
-  }
-
-  // Look for existing result names in the attr-dict and if they exist and are
-  // non-empty, replace them in the 'names' vector.
-  auto resultNamesID = Identifier::get("name", ctxt);
-  if (auto namesAttr = attrDict.getNamed(resultNamesID)) {
-    // It must be an ArrayAttr.
-    if (auto nameAttrList = namesAttr->second.dyn_cast<ArrayAttr>()) {
-      for (size_t i = 0, e = nameAttrList.size(); i < e; ++i) {
-        // List of result names must be no longer than number of results.
-        if (i >= names.size())
-          break;
-        // And it must be a string.
-        if (auto resultNameStringAttr =
-                nameAttrList[i].dyn_cast<StringAttr>()) {
-          // Only replace if non-empty.
-          if (!resultNameStringAttr.getValue().empty())
-            names[i] = resultNameStringAttr;
-        }
-      }
-    }
-  }
-  attrDict.set("name", ArrayAttr::get(names, ctxt));
-  return success();
-}
-
-/// Intercept the `attr-dict` printing to determine whether or not we can elide
-/// the result names attribute.
-void printResultNames(OpAsmPrinter &p, InstanceOp op,
-                      const MutableDictionaryAttr &) {
-  SmallVector<StringRef, 8> elideFields = {"instanceName", "moduleName"};
-
-  // If any names don't match what the printer is going to emit, keep the
-  // attributes.
-  bool nameDisagreement = false;
-  ArrayAttr nameAttrList = op.getAttrOfType<ArrayAttr>("name");
-  // Look for result names to possibly elide.
-  if (nameAttrList && nameAttrList.size() <= op.getNumResults()) {
-    // Check that all the result names have been kept.
-    for (size_t i = 0, e = nameAttrList.size(); i < e; ++i) {
-      // Name must be a string.
-      if (auto expectedName = nameAttrList[i].dyn_cast<StringAttr>()) {
-        // Check for disagreement
-        SmallString<32> resultNameStr;
-        llvm::raw_svector_ostream tmpStream(resultNameStr);
-        p.printOperand(op.getResult(i), tmpStream);
-        if (tmpStream.str().drop_front() != expectedName.getValue()) {
-          nameDisagreement = true;
-        }
-      }
-    }
-  }
-  if (!nameDisagreement)
-    elideFields.push_back("name");
-
-  p.printOptionalAttrDict(op.getAttrs(), elideFields);
 }
 
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  ArrayAttr nameAttrList = getAttrOfType<ArrayAttr>("name");
-  if (nameAttrList && nameAttrList.size() <= getNumResults())
-    for (size_t i = 0, e = nameAttrList.size(); i < e; ++i)
-      if (auto resultName = nameAttrList[i].dyn_cast<StringAttr>())
-        setNameFn(getResult(i), resultName.getValue());
+  // Provide default names for instance results.
+  std::string name;
+  for (size_t i = 0, e = getNumResults(); i != e; ++i) {
+    auto resultName = getResultName(i);
+    name = instanceName().str() + ".";
+    if (resultName)
+      name += resultName.getValue().str();
+    else
+      name += std::to_string(i);
+    setNameFn(getResult(i), name);
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -683,6 +632,14 @@ static ParseResult parseWireOp(OpAsmParser &parser, OperationState &result) {
   }
 
   return success();
+}
+
+/// Suggest a name for each result value based on the saved result names
+/// attribute.
+void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the wire has an optional 'name' attribute, use it.
+  if (auto nameAttr = getAttrOfType<StringAttr>("name"))
+    setNameFn(getResult(), nameAttr.getValue());
 }
 
 //===----------------------------------------------------------------------===//

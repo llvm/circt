@@ -23,16 +23,16 @@ module {
     %bufferedChan = esi.buffer %esiChan { } : i1
     rtl.instance "recv" @Reciever (%bufferedChan) : (!esi.channel<i1>) -> ()
 
-    // CHECK:  %esiChan = rtl.instance "sender" @Sender()  : () -> !esi.channel<i1>
-    // CHECK-NEXT:  %0 = esi.buffer %esiChan {} : i1
+    // CHECK:  %sender.x = rtl.instance "sender" @Sender()  : () -> !esi.channel<i1>
+    // CHECK-NEXT:  %0 = esi.buffer %sender.x {} : i1
     // CHECK-NEXT:  rtl.instance "recv" @Reciever(%0)  : (!esi.channel<i1>) -> ()
 
     %esiChan2 = rtl.instance "sender" @Sender () : () -> (!esi.channel<i1>)
     %bufferedChan2 = esi.buffer %esiChan2 { stages = 4 } : i1
     rtl.instance "recv" @Reciever (%bufferedChan2) : (!esi.channel<i1>) -> ()
 
-    // CHECK-NEXT:  %esiChan2 = rtl.instance "sender" @Sender()  : () -> !esi.channel<i1>
-    // CHECK-NEXT:  %1 = esi.buffer %esiChan2 {stages = 4 : i64} : i1
+    // CHECK-NEXT:  %sender.x_0 = rtl.instance "sender" @Sender()  : () -> !esi.channel<i1>
+    // CHECK-NEXT:  %1 = esi.buffer %sender.x_0 {stages = 4 : i64} : i1
     // CHECK-NEXT:  rtl.instance "recv" @Reciever(%1)  : (!esi.channel<i1>) -> ()
   }
 }

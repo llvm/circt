@@ -35,8 +35,8 @@ module {
     rtl.output %g, %r1 : i1, i1
   }
   // CHECK-LABEL: rtl.module @A(%d: i1, %e: i1 {rtl.inout}) -> (i1, i1)
-  // CHECK-NEXT:  rtl.instance "b1" @B(%d) : (i1) -> (i1, i1)
-  // CHECK-NEXT:  rtl.instance "c1" @C(%d) : (i1) -> (i1, i1)
+  // CHECK-NEXT:  %b1.nameOfPortInSV, %b1.1 = rtl.instance "b1" @B(%d) : (i1) -> (i1, i1)
+  // CHECK-NEXT:  %c1.0, %c1.1 = rtl.instance "c1" @C(%d) : (i1) -> (i1, i1)
 
   rtl.module @AnyType1(%a: vector< 3 x i8 >) { }
   // CHECK-LABEL: rtl.module @AnyType1(%a: vector<3xi8>)
