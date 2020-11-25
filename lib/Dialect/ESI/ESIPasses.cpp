@@ -39,8 +39,8 @@ struct ChannelBufferLowering : public ConversionPattern {
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const final {
     auto loc = op->getLoc();
-    ChannelBuffer buffer;
-    if (!(buffer = dyn_cast<ChannelBuffer>(op)))
+    ChannelBuffer buffer = dyn_cast<ChannelBuffer>(op);
+    if (!buffer)
       return failure();
 
     ChannelBufferOptions opts = buffer.options();
