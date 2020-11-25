@@ -31,17 +31,13 @@ namespace {
 /// Lower `ChannelBuffer`s, breaking out the various options. For now, just
 /// replace with the specified number of pipeline stages (since that's the only
 /// option).
-struct ChannelBufferLowering : public ConversionPattern {
-  ChannelBufferLowering(MLIRContext *ctx)
-      : ConversionPattern(ChannelBuffer::getOperationName(), 1, ctx) {}
+struct ChannelBufferLowering : public OpConversionPattern<ChannelBuffer> {
+  ChannelBufferLowering(MLIRContext *ctx) : OpConversionPattern(ctx, 1) {}
 
   LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+  matchAndRewrite(ChannelBuffer buffer, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const final {
-    auto loc = op->getLoc();
-    ChannelBuffer buffer = dyn_cast<ChannelBuffer>(op);
-    if (!buffer)
-      return failure();
+    auto loc = buffer.getLoc();
 
     ChannelBufferOptions opts = buffer.options();
     auto type = buffer.getType();
@@ -52,7 +48,7 @@ struct ChannelBufferLowering : public ConversionPattern {
     size_t numStages = 1;
     if (stages) {
       // Guaranteed positive by the parser.
-      numStages = (size_t)stages.getInt();
+      numStages = stages.getValue().getLimitedValue();
     }
     for (size_t i = 0; i < numStages; ++i) {
       // Create the stages, connecting them up as we build.
@@ -61,7 +57,7 @@ struct ChannelBufferLowering : public ConversionPattern {
     }
 
     // Replace the buffer.
-    rewriter.replaceOp(op, input);
+    rewriter.replaceOp(buffer, input);
     return success();
   }
 };
