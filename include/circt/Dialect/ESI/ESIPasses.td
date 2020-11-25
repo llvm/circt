@@ -12,7 +12,6 @@ include "mlir/Pass/PassBase.td"
 def LowerESIToPhysical: Pass<"lower-esi-to-physical", "mlir::ModuleOp"> {
   let summary = "Lower ESI abstract Ops to ESI physical ops.";
   let constructor = "circt::esi::createESILoweringPass()";
-  let dependentDialects = ["circt::esi::ESIDialect"];
 }
 
 #endif // CIRCT_DIALECT_ESI_ESIPASSES_TD
