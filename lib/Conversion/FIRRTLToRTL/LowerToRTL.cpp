@@ -536,7 +536,8 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
 
   // Binary Ops.
 
-  template <typename ResultOpType>
+  template <typename ResultUnsignedOpType,
+            typename ResultSignedOpType = ResultUnsignedOpType>
   LogicalResult lowerBinOp(Operation *op);
   template <typename ResultOpType>
   LogicalResult lowerBinOpToVariadic(Operation *op);
@@ -580,7 +581,9 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(MulPrimOp op) {
     return lowerBinOpToVariadic<rtl::MulOp>(op);
   }
-  LogicalResult visitExpr(DivPrimOp op) { return lowerBinOp<rtl::DivOp>(op); }
+  LogicalResult visitExpr(DivPrimOp op) {
+    return lowerBinOp<rtl::DivUOp, rtl::DivSOp>(op);
+  }
   LogicalResult visitExpr(RemPrimOp op);
 
   // Other Operations
@@ -956,7 +959,7 @@ LogicalResult FIRRTLLowering::lowerBinOpToVariadic(Operation *op) {
 
 /// lowerBinOp extends each operand to the destination type, then performs the
 /// specified binary operator.
-template <typename ResultOpType>
+template <typename ResultUnsignedOpType, typename ResultSignedOpType>
 LogicalResult FIRRTLLowering::lowerBinOp(Operation *op) {
   // Extend the two operands to match the destination type.
   auto resultType = op->getResult(0).getType();
@@ -966,7 +969,9 @@ LogicalResult FIRRTLLowering::lowerBinOp(Operation *op) {
     return failure();
 
   // Emit the result operation.
-  return setLoweringTo<ResultOpType>(op, lhs, rhs);
+  if (resultType.cast<IntType>().isSigned())
+    return setLoweringTo<ResultSignedOpType>(op, lhs, rhs);
+  return setLoweringTo<ResultUnsignedOpType>(op, lhs, rhs);
 }
 
 /// lowerCmpOp extends each operand to the longest type, then performs the
@@ -1003,10 +1008,17 @@ LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
-  // FIRRTL has the width of (a % b) = Min(W(a), W(b)) so we need to truncate
-  // operands to the minimum width before doing the mod, not extend them.
-  auto lhs = getLoweredValue(op.lhs());
-  auto rhs = getLoweredValue(op.rhs());
+  // FIRRTL has the width of (a % b) = Min(W(a), W(b)), but the operation is
+  // done at max(W(a), W(b))) so we need to extend one operand, then truncate
+  // the result.
+  auto lhsFirTy = op.lhs().getType().dyn_cast<IntType>();
+  auto rhsFirTy = op.rhs().getType().dyn_cast<IntType>();
+  if (!lhsFirTy || !rhsFirTy || !lhsFirTy.hasWidth() || !rhsFirTy.hasWidth())
+    return failure();
+  auto opType = lhsFirTy.getWidth() > rhsFirTy.getWidth() ? lhsFirTy : rhsFirTy;
+
+  auto lhs = getLoweredAndExtendedValue(op.lhs(), opType);
+  auto rhs = getLoweredAndExtendedValue(op.rhs(), opType);
   if (!lhs || !rhs)
     return failure();
 
@@ -1016,13 +1028,13 @@ LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
   auto destWidth = unsigned(resultFirType.getWidthOrSentinel());
   auto resultType = builder->getIntegerType(destWidth);
 
-  // Truncate either operand if required.
-  if (lhs.getType().cast<IntegerType>().getWidth() != destWidth)
-    lhs = builder->create<rtl::ExtractOp>(resultType, lhs, 0);
-  if (rhs.getType().cast<IntegerType>().getWidth() != destWidth)
-    rhs = builder->create<rtl::ExtractOp>(resultType, rhs, 0);
-
-  return setLoweringTo<rtl::ModOp>(op, ValueRange({lhs, rhs}));
+  Value modInst;
+  if (resultFirType.isUnsigned()) {
+    modInst = builder->create<rtl::ModUOp>(ValueRange({lhs, rhs}));
+  } else {
+    modInst = builder->create<rtl::ModSOp>(ValueRange({lhs, rhs}));
+  }
+  return setLoweringTo<rtl::ExtractOp>(op, resultType, modInst, 0);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1109,7 +1121,7 @@ LogicalResult FIRRTLLowering::visitExpr(DShrPrimOp op) {
 
   // Zero extend or truncate the shift amount if needed.
   rhs = zeroExtendOrTruncate(rhs, lhs.getType(), *builder);
-  return setLoweringTo<rtl::ShrOp>(op, lhs, rhs);
+  return setLoweringTo<rtl::ShrUOp>(op, lhs, rhs);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(TailPrimOp op) {

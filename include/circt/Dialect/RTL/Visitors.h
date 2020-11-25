@@ -23,7 +23,8 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<ConstantOp,
                        // Arithmetic and Logical Binary Operations.
-                       AddOp, SubOp, MulOp, DivOp, ModOp, ShlOp, ShrOp,
+                       AddOp, SubOp, MulOp, DivUOp, DivSOp, ModUOp, ModSOp,
+                       ShlOp, ShrUOp, ShrSOp,
                        // Bitwise operations
                        AndOp, OrOp, XorOp,
                        // Comparison operations
@@ -73,16 +74,19 @@ public:
   }
 
   // Basic nodes.
-  HANDLE(ConstantOp, Unhandled)
+  HANDLE(ConstantOp, Unhandled);
 
   // Arithmetic and Logical Binary Operations.
   HANDLE(AddOp, Binary);
   HANDLE(SubOp, Binary);
   HANDLE(MulOp, Binary);
-  HANDLE(DivOp, Binary);
-  HANDLE(ModOp, Binary);
+  HANDLE(DivUOp, Binary);
+  HANDLE(DivSOp, Binary);
+  HANDLE(ModUOp, Binary);
+  HANDLE(ModSOp, Binary);
   HANDLE(ShlOp, Binary);
-  HANDLE(ShrOp, Binary);
+  HANDLE(ShrUOp, Binary);
+  HANDLE(ShrSOp, Binary);
 
   HANDLE(AndOp, Variadic);
   HANDLE(OrOp, Variadic);
