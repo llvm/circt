@@ -43,7 +43,7 @@ module {
     
     %0 = rtl.add %a, %b : i4
     %2 = rtl.sub %a, %b : i4
-    %4 = rtl.mul  %a, %b : i4
+    %4 = rtl.mul %a, %b : i4
     %6 = rtl.divu %a, %b : i4
     %7 = rtl.divs %a, %b : i4
     %8 = rtl.modu %a, %b : i4
