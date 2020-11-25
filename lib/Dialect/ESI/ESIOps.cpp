@@ -12,9 +12,12 @@
 using namespace mlir;
 using namespace circt::esi;
 
-//====== Channel buffer.
+//===----------------------------------------------------------------------===//
+// ChannelBuffer functions.
+//===----------------------------------------------------------------------===//
 
-ParseResult parseChannelBuffer(OpAsmParser &parser, OperationState &result) {
+static ParseResult parseChannelBuffer(OpAsmParser &parser,
+                                      OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
 
   OpAsmParser::OperandType inputOperand;
@@ -27,13 +30,9 @@ ParseResult parseChannelBuffer(OpAsmParser &parser, OperationState &result) {
                             result.attributes))
     return failure();
 
-  if (parser.parseOptionalAttrDict(result.attributes))
-    return failure();
-  if (parser.parseColon())
-    return failure();
-
   Type innerOutputType;
-  if (parser.parseType(innerOutputType))
+  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(innerOutputType))
     return failure();
   auto outputType =
       ChannelPort::get(parser.getBuilder().getContext(), innerOutputType);
@@ -45,29 +44,56 @@ ParseResult parseChannelBuffer(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-void print(OpAsmPrinter &p, ChannelBuffer &op) {
+static void print(OpAsmPrinter &p, ChannelBuffer &op) {
   p << "esi.buffer " << op.input() << " ";
   p.printAttributeWithoutType(op.options());
   p.printOptionalAttrDict(op.getAttrs(), /*elidedAttrs=*/{"options"});
   p << " : " << op.output().getType().cast<ChannelPort>().getInner();
 }
 
-// === Wrap / unwrap.
+//===----------------------------------------------------------------------===//
+// PipelineStage functions.
+//===----------------------------------------------------------------------===//
 
-ParseResult parseWrapValidReady(OpAsmParser &parser, OperationState &result) {
+static ParseResult parsePipelineStage(OpAsmParser &parser,
+                                      OperationState &result) {
+  llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
+
+  OpAsmParser::OperandType inputOperand;
+  Type innerOutputType;
+  if (parser.parseOperand(inputOperand) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(innerOutputType))
+    return failure();
+  auto type =
+      ChannelPort::get(parser.getBuilder().getContext(), innerOutputType);
+  result.addTypes({type});
+
+  if (parser.resolveOperands({inputOperand}, {type}, inputOperandsLoc,
+                             result.operands))
+    return failure();
+  return success();
+}
+
+static void print(OpAsmPrinter &p, PipelineStage &op) {
+  p << "esi.stage " << op.input() << " ";
+  p.printOptionalAttrDict(op.getAttrs());
+  p << " : " << op.output().getType().cast<ChannelPort>().getInner();
+}
+
+//===----------------------------------------------------------------------===//
+// Wrap / unwrap.
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseWrapValidReady(OpAsmParser &parser,
+                                       OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
 
   llvm::SmallVector<OpAsmParser::OperandType, 2> opList;
-  if (parser.parseOperandList(opList, 2, OpAsmParser::Delimiter::None))
-    return failure();
-
-  if (parser.parseOptionalAttrDict(result.attributes))
-    return failure();
-  if (parser.parseColon())
-    return failure();
-
   Type innerOutputType;
-  if (parser.parseType(innerOutputType))
+  if (parser.parseOperandList(opList, 2, OpAsmParser::Delimiter::None) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(innerOutputType))
     return failure();
 
   auto boolType = parser.getBuilder().getI1Type();
@@ -86,20 +112,15 @@ void print(OpAsmPrinter &p, WrapValidReady &op) {
   p << " : " << op.output().getType().cast<ChannelPort>().getInner();
 }
 
-ParseResult parseUnwrapValidReady(OpAsmParser &parser, OperationState &result) {
+static ParseResult parseUnwrapValidReady(OpAsmParser &parser,
+                                         OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
 
   llvm::SmallVector<OpAsmParser::OperandType, 2> opList;
-  if (parser.parseOperandList(opList, 2, OpAsmParser::Delimiter::None))
-    return failure();
-
-  if (parser.parseOptionalAttrDict(result.attributes))
-    return failure();
-  if (parser.parseColon())
-    return failure();
-
   Type outputType;
-  if (parser.parseType(outputType))
+  if (parser.parseOperandList(opList, 2, OpAsmParser::Delimiter::None) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(outputType))
     return failure();
 
   auto inputType =
@@ -114,7 +135,7 @@ ParseResult parseUnwrapValidReady(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-void print(OpAsmPrinter &p, UnwrapValidReady &op) {
+static void print(OpAsmPrinter &p, UnwrapValidReady &op) {
   p << "esi.unwrap.vr " << op.input() << ", " << op.ready();
   p.printOptionalAttrDict(op.getAttrs());
   p << " : " << op.output().getType();
