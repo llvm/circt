@@ -45,12 +45,12 @@ struct ChannelBufferLowering : public OpConversionPattern<ChannelBuffer> {
 
     // Expand 'abstract' buffer into 'physical' stages.
     auto stages = opts.stages();
-    size_t numStages = 1;
+    uint64_t numStages = 1;
     if (stages) {
       // Guaranteed positive by the parser.
       numStages = stages.getValue().getLimitedValue();
     }
-    for (size_t i = 0; i < numStages; ++i) {
+    for (uint64_t i = 0; i < numStages; ++i) {
       // Create the stages, connecting them up as we build.
       auto stage = rewriter.create<PipelineStage>(loc, type, input);
       input = stage;
