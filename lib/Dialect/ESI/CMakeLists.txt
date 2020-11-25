@@ -18,6 +18,7 @@ add_mlir_dialect_library(MLIRESI
   LINK_LIBS PUBLIC
   MLIREDSC
   MLIRIR
+  MLIRTransforms
   )
 
 
