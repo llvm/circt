@@ -1008,10 +1008,17 @@ LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
-  // FIRRTL has the width of (a % b) = Min(W(a), W(b)) so we need to truncate
-  // operands to the minimum width before doing the mod, not extend them.
-  auto lhs = getLoweredValue(op.lhs());
-  auto rhs = getLoweredValue(op.rhs());
+  // FIRRTL has the width of (a % b) = Min(W(a), W(b)), but the operation is 
+  // done at max(W(a), W(b))) so we need to extend one operand, then truncate
+  // the result.
+  auto lhsFirTy = op.lhs().getType().dyn_cast<IntType>();
+  auto rhsFirTy = op.rhs().getType().dyn_cast<IntType>();
+  if (!lhsFirTy || !rhsFirTy || !lhsFirTy.hasWidth() || !rhsFirTy.hasWidth())
+    return failure();
+  auto opType = lhsFirTy.getWidth() > rhsFirTy.getWidth() ? lhsFirTy : rhsFirTy;
+  
+  auto lhs = getLoweredAndExtendedValue(op.lhs(), opType);
+  auto rhs = getLoweredAndExtendedValue(op.rhs(), opType);
   if (!lhs || !rhs)
     return failure();
 
@@ -1021,15 +1028,13 @@ LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
   auto destWidth = unsigned(resultFirType.getWidthOrSentinel());
   auto resultType = builder->getIntegerType(destWidth);
 
-  // Truncate either operand if required.
-  if (lhs.getType().cast<IntegerType>().getWidth() != destWidth)
-    lhs = builder->create<rtl::ExtractOp>(resultType, lhs, 0);
-  if (rhs.getType().cast<IntegerType>().getWidth() != destWidth)
-    rhs = builder->create<rtl::ExtractOp>(resultType, rhs, 0);
-
-  if (resultFirType.isUnsigned())
-    return setLoweringTo<rtl::ModUOp>(op, ValueRange({lhs, rhs}));
-    return setLoweringTo<rtl::ModSOp>(op, ValueRange({lhs, rhs}));
+  Value modInst;
+  if (resultFirType.isUnsigned()) {
+    modInst = builder->create<rtl::ModUOp>(ValueRange({lhs, rhs}));
+  } else {
+    modInst = builder->create<rtl::ModSOp>(ValueRange({lhs, rhs}));
+  }
+  return setLoweringTo<rtl::ExtractOp>(op, resultType, modInst, 0);
 }
 
 //===----------------------------------------------------------------------===//

@@ -111,12 +111,14 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: = rtl.divs [[IN3SEXT]], [[PADRESSEXT]] : i9
     %19 = firrtl.div %in3c, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<9>
 
-    // CHECK-NEXT: [[IN3TRUNC:%.+]] = rtl.extract %in3 from 0 : (i8) -> i3
-    // CHECK-NEXT: = rtl.mods [[IN3TRUNC]], [[PADRES]] : i3
+    // CHECK-NEXT: [[IN3EX:%.+]] = rtl.sext [[PADRES]] : (i3) -> i8
+    // CHECK-NEXT: [[MOD1:%.+]] = rtl.mods %in3, [[IN3EX]] : i8
+    // CHECK-NEXT: = rtl.extract [[MOD1]] from 0 : (i8) -> i3
     %20 = firrtl.rem %in3c, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<3>
 
-    // CHECK-NEXT: [[IN3TRUNC:%.+]] = rtl.extract %in3 from 0 : (i8) -> i3
-    // CHECK-NEXT: = rtl.mods [[PADRES]], [[IN3TRUNC]] : i3
+    // CHECK-NEXT: [[IN4EX:%.+]] = rtl.sext [[PADRES]] : (i3) -> i8
+    // CHECK-NEXT: [[MOD2:%.+]] = rtl.mods [[IN4EX]], %in3 : i8
+    // CHECK-NEXT: = rtl.extract [[MOD2]] from 0 : (i8) -> i3
     %21 = firrtl.rem %3, %in3c : (!firrtl.sint<3>, !firrtl.sint<8>) -> !firrtl.sint<3>
 
     // CHECK-NEXT: [[WIRE:%n1]] = rtl.wire : i2
