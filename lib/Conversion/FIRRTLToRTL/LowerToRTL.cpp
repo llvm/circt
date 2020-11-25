@@ -536,7 +536,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
 
   // Binary Ops.
 
-  template <typename ResultOpType, typename ResultSignedOpType = ResultOpType>
+  template <typename ResultUnsignedOpType, typename ResultSignedOpType = ResultUnsignedOpType>
   LogicalResult lowerBinOp(Operation *op);
   template <typename ResultOpType>
   LogicalResult lowerBinOpToVariadic(Operation *op);
@@ -958,7 +958,7 @@ LogicalResult FIRRTLLowering::lowerBinOpToVariadic(Operation *op) {
 
 /// lowerBinOp extends each operand to the destination type, then performs the
 /// specified binary operator.
-template <typename ResultOpType, typename ResultSignedOpType>
+template <typename ResultUnsignedOpType, typename ResultSignedOpType>
 LogicalResult FIRRTLLowering::lowerBinOp(Operation *op) {
   // Extend the two operands to match the destination type.
   auto resultType = op->getResult(0).getType();
@@ -970,7 +970,7 @@ LogicalResult FIRRTLLowering::lowerBinOp(Operation *op) {
   // Emit the result operation.
   if (resultType.cast<IntType>().isSigned())
     return setLoweringTo<ResultSignedOpType>(op, lhs, rhs);
-  return setLoweringTo<ResultOpType>(op, lhs, rhs);
+  return setLoweringTo<ResultUnsignedOpType>(op, lhs, rhs);
 }
 
 /// lowerCmpOp extends each operand to the longest type, then performs the

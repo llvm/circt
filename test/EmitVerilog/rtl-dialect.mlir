@@ -8,37 +8,14 @@ module {
   // CHECK-LABEL: // external module E
 
   rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1) -> (
-    %r0: i4,
-    %r2: i4,
-    %r4: i4,
-    %r6: i4,
-    %r7: i4,
-    %r8: i4,
-    %r9: i4,
-    %r10: i4,
-    %r11: i4,
-    %r12: i4,
-    %r13: i4,
-    %r14: i4,
-    %r15: i4,
-    %r16: i1,
-    %r17: i1,
-    %r18: i1,
-    %r19: i1,
-    %r20: i1,
-    %r21: i1,
-    %r22: i1,
-    %r23: i1,
-    %r24: i1,
-    %r25: i1,
-    %r26: i1,
-    %r27: i1,
-    %r28: i1,
-    %r29: i12,
-    %r30: i2,
-    %r31: i9,
-    %r32: i9,
-    %r33: i4
+    %r0: i4, %r2: i4, %r4: i4, %r6: i4,
+    %r7: i4, %r8: i4, %r9: i4, %r10: i4,
+    %r11: i4, %r12: i4, %r13: i4, %r14: i4,
+    %r15: i4, %r16: i1,
+    %r17: i1, %r18: i1, %r19: i1, %r20: i1,
+    %r21: i1, %r22: i1, %r23: i1, %r24: i1,
+    %r25: i1, %r26: i1, %r27: i1, %r28: i1,
+    %r29: i12, %r30: i2, %r31: i9, %r32: i9, %r33: i4
     ) {
     
     %0 = rtl.add %a, %b : i4
@@ -74,13 +51,9 @@ module {
     %33 = rtl.mux %cond, %a, %b : i4
 
     rtl.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, %30, %31, %32, %33: 
-     i4,i4,
-     i4,i4,i4,i4,i4,
-     i4,i4,i4,i4,i4,
-     i4,i1,i1,i1,i1,
-     i1,i1,i1,i1,i1,
-     i1,i1,i1,i1,i12,
-     i2,i9,i9,i4
+     i4,i4, i4,i4,i4,i4,i4, i4,i4,i4,i4,i4,
+     i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,i1,i1,
+     i12, i2,i9,i9,i4
   }
   // CHECK-LABEL: module TESTSIMPLE(
   // CHECK-NEXT:   input  [3:0]  a, b
