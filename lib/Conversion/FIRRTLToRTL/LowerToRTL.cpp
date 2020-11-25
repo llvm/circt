@@ -1008,7 +1008,7 @@ LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
-  // FIRRTL has the width of (a % b) = Min(W(a), W(b)), but the operation is 
+  // FIRRTL has the width of (a % b) = Min(W(a), W(b)), but the operation is
   // done at max(W(a), W(b))) so we need to extend one operand, then truncate
   // the result.
   auto lhsFirTy = op.lhs().getType().dyn_cast<IntType>();
@@ -1016,7 +1016,7 @@ LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
   if (!lhsFirTy || !rhsFirTy || !lhsFirTy.hasWidth() || !rhsFirTy.hasWidth())
     return failure();
   auto opType = lhsFirTy.getWidth() > rhsFirTy.getWidth() ? lhsFirTy : rhsFirTy;
-  
+
   auto lhs = getLoweredAndExtendedValue(op.lhs(), opType);
   auto rhs = getLoweredAndExtendedValue(op.rhs(), opType);
   if (!lhs || !rhs)
