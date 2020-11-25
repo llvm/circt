@@ -321,7 +321,7 @@ public:
   void emitOperation(Operation *op);
 
   void collectNamesEmitDecls(Block &block);
-  bool collectNamesEmitWires(rtl::InstanceOp &inst);
+  bool collectNamesEmitWires(rtl::InstanceOp instance);
   StringRef addName(Value value, StringRef name);
   StringRef addName(Value value, StringAttr nameAttr) {
     return addName(value, nameAttr ? nameAttr.getValue() : "");
@@ -2133,10 +2133,21 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     os << '\n';
 }
 
-bool ModuleEmitter::collectNamesEmitWires(rtl::InstanceOp &op) {
-  for (size_t i = 0, e = op.getNumResults(); i < e; ++i) {
-    auto result = op.getResult(i);
-    StringRef wireName = addName(result, op.getResultName(i));
+bool ModuleEmitter::collectNamesEmitWires(rtl::InstanceOp instance) {
+  SmallString<32> nameTmp;
+
+  for (size_t i = 0, e = instance.getNumResults(); i < e; ++i) {
+    nameTmp = instance.instanceName().str();
+    nameTmp += '_';
+
+    auto resultName = instance.getResultName(i);
+    if (resultName)
+      nameTmp += resultName.getValue().str();
+    else
+      nameTmp += std::to_string(i);
+
+    auto result = instance.getResult(i);
+    StringRef wireName = addName(result, nameTmp);
 
     Type resultType = result.getType();
     if (auto intType = resultType.dyn_cast<IntegerType>()) {
@@ -2149,11 +2160,12 @@ bool ModuleEmitter::collectNamesEmitWires(rtl::InstanceOp &op) {
     } else {
       indent() << "// Type '" << resultType
                << "' not supported in verilog output yet.\n";
-      op.emitOpError("Type of result not supported for verilog output. Type: ")
-          << resultType << ".";
+      instance.emitOpError(
+          "Type of result not supported for verilog output. Type: ")
+          << resultType;
     }
   }
-  return op.getNumResults() != 0;
+  return instance.getNumResults() != 0;
 }
 
 void ModuleEmitter::emitOperation(Operation *op) {

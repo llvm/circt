@@ -148,34 +148,34 @@ module {
   // CHECK-NEXT:   input  [1:0] i2,
   // CHECK-NEXT:   output       y, z, p, p2);
   // CHECK-EMPTY:
-  // CHECK-NEXT:   wire f;
-  // CHECK-NEXT:   wire b;
-  // CHECK-NEXT:   wire c;
-  // CHECK-NEXT:   wire out;
-  // CHECK-NEXT:   wire out_0;
+  // CHECK-NEXT:   wire a1_f;
+  // CHECK-NEXT:   wire b1_b;
+  // CHECK-NEXT:   wire b1_c;
+  // CHECK-NEXT:   wire paramd_out;
+  // CHECK-NEXT:   wire paramd2_out;
   // CHECK-EMPTY:
   // CHECK-NEXT:   A a1 (
   // CHECK-NEXT:     .d (w),
-  // CHECK-NEXT:     .e (b),
-  // CHECK-NEXT:     .f (f)
+  // CHECK-NEXT:     .e (b1_b),
+  // CHECK-NEXT:     .f (a1_f)
   // CHECK-NEXT:   )
   // CHECK-NEXT:   B b1 (
-  // CHECK-NEXT:     .a (f),
-  // CHECK-NEXT:     .b (b),
-  // CHECK-NEXT:     .c (c)
+  // CHECK-NEXT:     .a (a1_f),
+  // CHECK-NEXT:     .b (b1_b),
+  // CHECK-NEXT:     .c (b1_c)
   // CHECK-NEXT:   )
   // CHECK-NEXT:   FooModule #(.DEFAULT(0), .DEPTH(3.242000e+01), .FORMAT("xyz_timeout=%d\n"), .WIDTH(32)) paramd (
   // CHECK-NEXT:     .a (w),
-  // CHECK-NEXT:     .out (out)
+  // CHECK-NEXT:     .out (paramd_out)
   // CHECK-NEXT:   );
   // CHECK-NEXT:   FooModule #(.DEFAULT(1)) paramd2 (
   // CHECK-NEXT:   .a (i2),
-  // CHECK-NEXT:   .out (out_0)
+  // CHECK-NEXT:   .out (paramd2_out)
   // CHECK-NEXT:   );
-  // CHECK-NEXT:   assign y = c;
+  // CHECK-NEXT:   assign y = b1_c;
   // CHECK-NEXT:   assign z = x;
-  // CHECK-NEXT:   assign p = out;
-  // CHECK-NEXT:   assign p2 = out_0;
+  // CHECK-NEXT:   assign p = paramd_out;
+  // CHECK-NEXT:   assign p2 = paramd2_out;
   // CHECK-NEXT: endmodule
 
 
