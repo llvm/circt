@@ -536,7 +536,8 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
 
   // Binary Ops.
 
-  template <typename ResultUnsignedOpType, typename ResultSignedOpType = ResultUnsignedOpType>
+  template <typename ResultUnsignedOpType,
+            typename ResultSignedOpType = ResultUnsignedOpType>
   LogicalResult lowerBinOp(Operation *op);
   template <typename ResultOpType>
   LogicalResult lowerBinOpToVariadic(Operation *op);
