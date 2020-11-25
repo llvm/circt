@@ -70,13 +70,13 @@ func @add_cstfold(%arg0: i7) -> i7 {
 
 // CHECK-LABEL: func @mul_cstfold(%arg0: i7) -> i7 {
 // CHECK-NEXT:    %c15_i7 = rtl.constant(15 : i7)
-// CHECK-NEXT:    %0 = rtl.mul  %arg0, %c15_i7 : i7
+// CHECK-NEXT:    %0 = rtl.mul %arg0, %c15_i7 : i7
 // CHECK-NEXT:    return %0 : i7
 
 func @mul_cstfold(%arg0: i7) -> i7 {
   %c3_i7 = rtl.constant(3 : i7) : i7
   %c5_i7 = rtl.constant(5 : i7) : i7
-  %0 = rtl.mul  %arg0, %c3_i7, %c5_i7 : i7
+  %0 = rtl.mul %arg0, %c3_i7, %c5_i7 : i7
   return %0 : i7
 }
 
@@ -88,7 +88,7 @@ func @variadic_noop(%arg0: i11) -> i11 {
   %1 = rtl.or  %0 : i11
   %2 = rtl.xor %1 : i11
   %3 = rtl.add %2 : i11
-  %4 = rtl.mul  %3 : i11
+  %4 = rtl.mul %3 : i11
   return %4 : i11
 }
 
@@ -118,7 +118,7 @@ func @or_annulment(%arg0: i11) -> i11 {
 
 func @mul_annulment(%arg0: i11, %arg1: i11, %arg2: i11) -> i11 {
   %c0_i11 = rtl.constant(0 : i11) : i11
-  %0 = rtl.mul  %arg0, %c0_i11, %arg1 : i11
+  %0 = rtl.mul %arg0, %c0_i11, %arg1 : i11
   return %0 : i11
 }
 
@@ -241,28 +241,28 @@ func @add_flatten_in_front(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
 }
 
 func @mul_flatten_in_back(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
-  %mul0 = rtl.mul  %arg1, %arg2 : i7
-  %0 = rtl.mul  %arg0, %mul0 : i7
+  %mul0 = rtl.mul %arg1, %arg2 : i7
+  %0 = rtl.mul %arg0, %mul0 : i7
   return %0 : i7
 }
 
 // CHECK-LABEL: func @mul_flatten_in_middle(%arg0: i7, %arg1: i7, %arg2: i7, %arg3: i7) -> i7 {
-// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.mul  %arg0, %arg1, %arg2, %arg3 : i7
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.mul %arg0, %arg1, %arg2, %arg3 : i7
 // CHECK-NEXT:    return [[RES]] : i7
 
 func @mul_flatten_in_middle(%arg0: i7, %arg1: i7, %arg2: i7, %arg3: i7) -> i7 {
-  %mul0 = rtl.mul  %arg1, %arg2 : i7
-  %0 = rtl.mul  %arg0, %mul0, %arg3 : i7
+  %mul0 = rtl.mul %arg1, %arg2 : i7
+  %0 = rtl.mul %arg0, %mul0, %arg3 : i7
   return %0 : i7
 }
 
 // CHECK-LABEL: func @mul_flatten_in_front(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
-// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.mul  %arg0, %arg1, %arg2 : i7
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.mul %arg0, %arg1, %arg2 : i7
 // CHECK-NEXT:    return [[RES]] : i7
 
 func @mul_flatten_in_front(%arg0: i7, %arg1: i7, %arg2: i7) -> i7 {
-  %mul0 = rtl.mul  %arg0, %arg1 : i7
-  %0 = rtl.mul  %mul0, %arg2 : i7
+  %mul0 = rtl.mul %arg0, %arg1 : i7
+  %0 = rtl.mul %mul0, %arg2 : i7
   return %0 : i7
 }
 
@@ -309,12 +309,12 @@ func @add_identity(%arg0: i11, %arg1: i11) -> i11 {
 }
 
 // CHECK-LABEL: func @mul_identity(%arg0: i11, %arg1: i11) -> i11 {
-// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.mul  %arg0, %arg1
+// CHECK-NEXT:    [[RES:%[0-9]+]] = rtl.mul %arg0, %arg1
 // CHECK-NEXT:    return [[RES]]
 
 func @mul_identity(%arg0: i11, %arg1: i11) -> i11 {
   %c1_i11 = rtl.constant(1 : i11) : i11
-  %0 = rtl.mul  %arg0, %c1_i11, %arg1 : i11
+  %0 = rtl.mul %arg0, %c1_i11, %arg1 : i11
   return %0 : i11
 }
 
@@ -374,7 +374,7 @@ func @add_reduction1(%arg0: i11, %arg1: i11) -> i11 {
 
 // CHECK-LABEL: func @add_reduction2(%arg0: i11, %arg1: i11) -> i11 {
 // CHECK-NEXT:    %c3_i11 = rtl.constant(3 : i11) : i11
-// CHECK-NEXT:   [[RES:%[0-9]+]] = rtl.mul  %arg1, %c3_i11
+// CHECK-NEXT:   [[RES:%[0-9]+]] = rtl.mul %arg1, %c3_i11
 // CHECK-NEXT:    return [[RES]]
 
 func @add_reduction2(%arg0: i11, %arg1: i11) -> i11 {
@@ -391,7 +391,7 @@ func @add_reduction2(%arg0: i11, %arg1: i11) -> i11 {
 func @add_reduction3(%arg0: i11, %arg1: i11) -> i11 {
   %c3_i11 = rtl.constant(3 : i11) : i11
   %c7_i11 = rtl.constant(7 : i11) : i11
-  %0 = rtl.mul  %arg1, %c7_i11 : i11
+  %0 = rtl.mul %arg1, %c7_i11 : i11
   %1 = rtl.add %arg1, %0 : i11
   return %1 : i11
 }
@@ -406,7 +406,7 @@ func @add_reduction3(%arg0: i11, %arg1: i11) -> i11 {
 func @multiply_reduction(%arg0: i11, %arg1: i11) -> i11 {
   %c1_i11 = rtl.constant(1 : i11) : i11
   %c2_i11 = rtl.constant(2 : i11) : i11
-  %0 = rtl.mul  %arg1, %c2_i11 : i11
+  %0 = rtl.mul %arg1, %c2_i11 : i11
   return %0 : i11
 }
 
