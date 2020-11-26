@@ -97,11 +97,6 @@ std::string Signal::dump(unsigned elemIndex) {
 // Slot
 //===----------------------------------------------------------------------===//
 
-Slot::Slot(Time time, int index, int bitOffset, uint8_t *bytes, unsigned width)
-    : time(time) {
-  insertChange(index, bitOffset, bytes, width);
-}
-
 bool Slot::operator<(const Slot &rhs) const { return time < rhs.time; }
 
 bool Slot::operator>(const Slot &rhs) const { return rhs.time < time; }

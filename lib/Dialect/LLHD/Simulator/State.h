@@ -101,9 +101,6 @@ struct Slot {
   /// Create a new empty slot.
   Slot(Time time) : time(time) {}
 
-  /// Create a new slot with a signal update.
-  Slot(Time time, int index, int bitOffset, uint8_t *bytes, unsigned width);
-
   /// Returns true if the slot's time is smaller than the compared slot's time.
   bool operator<(const Slot &rhs) const;
 
