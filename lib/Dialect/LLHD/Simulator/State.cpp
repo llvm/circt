@@ -150,9 +150,9 @@ Slot &UpdateQueue::getOrCreateSlot(Time time) {
   }
 
   // We need to search through the queue for an existing slot only if we're
-  // spawning an event after the top slot. Adding to an existing slot scheduled
-  // earlier than the top slot should never happens, as then it should be the
-  // top.
+  // spawning an event later than the top slot. Adding to an existing slot
+  // scheduled earlier than the top slot should never happens, as then it should
+  // be the top.
   if (events > 0 && top.time < time) {
     for (size_t i = 0, e = size(); i < e; ++i) {
       if (time == begin()[i].time) {

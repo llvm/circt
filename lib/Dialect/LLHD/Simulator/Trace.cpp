@@ -82,6 +82,7 @@ void Trace::addChange(unsigned sigIndex) {
         pushAllChanges(inst, sigIndex);
       }
     } else if (mode == reduced) {
+      // The root is always the last instance in the instances list.
       pushAllChanges(state->instances.size() - 1, sigIndex);
     } else if (mode == merged || mode == mergedReduce || mode == namedOnly) {
       addChangeMerged(sigIndex);
@@ -150,7 +151,7 @@ void Trace::flushMerged() {
         pushChange(inst, sigIndex, sigElem);
       }
     } else {
-      // Add change only for owner instance.
+      // The root is always the last instance in the instances list.
       pushChange(state->instances.size() - 1, sigIndex, sigElem);
     }
   }
