@@ -302,6 +302,10 @@ bool FIRRTLType::isResetType() {
 }
 
 /// Helper to implement the equivalence logic for a pair of bundle elements.
+/// Note that the FIRRTL spec requires bundle elements to have the same
+/// orientation, but this only compares their passive types. The FIRRTL dialect
+/// differs from the spec in how it uses flip types for module output ports and
+/// canonicalizes flips in bundles, so only passive types can be compared here.
 static bool areBundleElementsEquivalent(BundleType::BundleElement destElement,
                                         BundleType::BundleElement srcElement) {
   Identifier destElementName = std::get<0>(destElement);
@@ -315,7 +319,10 @@ static bool areBundleElementsEquivalent(BundleType::BundleElement destElement,
 }
 
 /// Returns whether the two types are equivalent. See the FIRRTL spec for the
-/// full definition of type equivalence.
+/// full definition of type equivalence. This predicate differs from the spec in
+/// that it only compares passive types. Because of how the FIRRTL dialect uses
+/// flip types in module ports and aggregates, this definition, unlike the spec,
+/// ignores flips.
 bool firrtl::areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType) {
   // Ensure we are comparing passive types.
   if (!destType.isPassive())
