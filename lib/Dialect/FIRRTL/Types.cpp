@@ -301,6 +301,75 @@ bool FIRRTLType::isResetType() {
       .Default([](Type) { return false; });
 }
 
+/// Helper to implement the equivalence logic for a pair of bundle elements.
+/// Note that the FIRRTL spec requires bundle elements to have the same
+/// orientation, but this only compares their passive types. The FIRRTL dialect
+/// differs from the spec in how it uses flip types for module output ports and
+/// canonicalizes flips in bundles, so only passive types can be compared here.
+static bool areBundleElementsEquivalent(BundleType::BundleElement destElement,
+                                        BundleType::BundleElement srcElement) {
+  Identifier destElementName = std::get<0>(destElement);
+  Identifier srcElementName = std::get<0>(srcElement);
+  if (destElementName != srcElementName)
+    return false;
+
+  FIRRTLType destElementType = std::get<1>(destElement);
+  FIRRTLType srcElementType = std::get<1>(srcElement);
+  return areTypesEquivalent(destElementType, srcElementType);
+}
+
+/// Returns whether the two types are equivalent. See the FIRRTL spec for the
+/// full definition of type equivalence. This predicate differs from the spec in
+/// that it only compares passive types. Because of how the FIRRTL dialect uses
+/// flip types in module ports and aggregates, this definition, unlike the spec,
+/// ignores flips.
+bool firrtl::areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType) {
+  // Ensure we are comparing passive types.
+  if (!destType.isPassive())
+    destType = destType.getPassiveType();
+  if (!srcType.isPassive())
+    srcType = srcType.getPassiveType();
+
+  // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
+  if (destType.isa<ResetType>())
+    return srcType.isResetType();
+
+  // Reset types can drive UInt<1>, AsyncReset, or Reset types.
+  if (srcType.isa<ResetType>())
+    return destType.isResetType();
+
+  // Vector types can be connected if they have the same size and element type.
+  auto destVectorType = destType.dyn_cast<FVectorType>();
+  auto srcVectorType = srcType.dyn_cast<FVectorType>();
+  if (destVectorType && srcVectorType)
+    return destVectorType.getNumElements() == srcVectorType.getNumElements() &&
+           areTypesEquivalent(destVectorType.getElementType(),
+                              srcVectorType.getElementType());
+
+  // Bundle types can be connected if they have the same size, element names,
+  // and element types.
+  auto destBundleType = destType.dyn_cast<BundleType>();
+  auto srcBundleType = srcType.dyn_cast<BundleType>();
+  if (destBundleType && srcBundleType) {
+    auto destElements = destBundleType.getElements();
+    auto srcElements = srcBundleType.getElements();
+    size_t numDestElements = destElements.size();
+    if (numDestElements != srcElements.size())
+      return false;
+
+    for (size_t i = 0; i < numDestElements; ++i) {
+      auto destElement = destElements[i];
+      auto srcElement = srcElements[i];
+      if (!areBundleElementsEquivalent(destElement, srcElement))
+        return false;
+    }
+  }
+
+  // Ground types can be connected if their passive, widthless versions
+  // are equal.
+  return destType.getWidthlessType() == srcType.getWidthlessType();
+}
+
 //===----------------------------------------------------------------------===//
 // IntType
 //===----------------------------------------------------------------------===//

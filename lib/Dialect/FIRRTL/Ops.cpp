@@ -3,6 +3,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/Types.h"
 #include "circt/Dialect/FIRRTL/Visitors.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -698,6 +699,26 @@ FIRRTLType MemOp::getDataTypeOrNull() {
 //===----------------------------------------------------------------------===//
 // Statements
 //===----------------------------------------------------------------------===//
+
+static LogicalResult verifyConnectOp(ConnectOp connect) {
+  FIRRTLType destType =
+      connect.dest().getType().cast<FIRRTLType>().getPassiveType();
+  FIRRTLType srcType =
+      connect.src().getType().cast<FIRRTLType>().getPassiveType();
+
+  // Analog types cannot be connected and must be attached.
+  if (destType.isa<AnalogType>() || srcType.isa<AnalogType>())
+    return connect.emitError("analog types may not be connected");
+
+  if (!areTypesEquivalent(destType, srcType))
+    return connect.emitError("type mismatch between destination ")
+           << destType << " and source " << srcType;
+
+  // TODO(mikeurbach): verify source bitwidth is >= destination bitwidth.
+  // TODO(mikeurbach): verify destination flow is sink or duplex.
+  // TODO(mikeurbach): verify source flow is source or duplex.
+  return success();
+}
 
 void WhenOp::createElseRegion() {
   assert(!hasElseRegion() && "already has an else region");

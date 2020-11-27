@@ -70,6 +70,13 @@ protected:
   using Type::Type;
 };
 
+/// Returns whether the two types are equivalent. See the FIRRTL spec for the
+/// full definition of type equivalence. This predicate differs from the spec in
+/// that it only compares passive types. Because of how the FIRRTL dialect uses
+/// flip types in module ports and aggregates, this definition, unlike the spec,
+/// ignores flips.
+bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType);
+
 //===----------------------------------------------------------------------===//
 // Ground Types Without Parameters
 //===----------------------------------------------------------------------===//

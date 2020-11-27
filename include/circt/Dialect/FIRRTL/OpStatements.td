@@ -44,6 +44,8 @@ def ConnectOp : FIRRTLOp<"connect", []> {
   let assemblyFormat = [{
     $dest `,` $src  attr-dict `:` type($dest) `,` type($src)
   }];
+
+  let verifier = [{ return ::verifyConnectOp(*this); }];
 }
 
 def PartialConnectOp : FIRRTLOp<"partialconnect", []> {
