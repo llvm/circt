@@ -287,7 +287,7 @@ happens through external memory, resulting in significant power
 consumption and a communication bottleneck. While communication between
 cores using on-chip memory is also possible, this must be managed
 explicitly and separately from global memory. Explicit dataflow-based
-programming represents inter-process communication explictly as streams
+programming represents inter-process communication explicitly as streams
 of data, allowing communication intent to be explicitly separated from
 stateful storage. Additionally, since dataflow processes do not share
 state, dataflow-based programming describes memory locality explicitly
