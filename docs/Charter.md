@@ -150,7 +150,7 @@ state of the state machine, certain operations in a datapath are
 enabled. This abstraction facilitates reasoning about resource sharing
 and pipelined behavior, while leaving the specifics of how those
 mechanisms are implemented implicit. Lowering into an RTL-level
-description typically requires explictly representing these mechanisms,
+description typically requires explicitly representing these mechanisms,
 converting both the control finite-state machine and the datapath into
 registers and combinational logic. This lowering also requires
 explicitly representing clocks and clock enables in the circuit in an
