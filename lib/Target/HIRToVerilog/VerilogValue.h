@@ -35,7 +35,9 @@ private:
   Value value;
 
 public:
-  VerilogValue() : value(Value()), type(Type()), name("uninitialized") {}
+  VerilogValue() : value(Value()), type(Type()), name("uninitialized") {
+    maxDelay = 0;
+  }
   VerilogValue(Value value, string name)
       : initialized(true), value(value), type(value.getType()), name(name) {
     string out;
@@ -401,9 +403,10 @@ public:
   }
 
   bool isIntegerType() const { return ::isIntegerType(type); }
+  bool isFloatType() const { return type.isa<FloatType>(); }
   /// Checks if the type is implemented as a verilog wire or an array of wires.
   bool isSimpleType() const {
-    if (isIntegerType())
+    if (isIntegerType() || isFloatType())
       return true;
     else if (type.isa<hir::TimeType>())
       return true;
@@ -525,10 +528,18 @@ public:
   string strStreamData() const { return name + "_data"; }
   string strStreamPush() const { return name + "_push"; }
 
-  unsigned getMaxDelay() const { return maxDelay; }
+  int getMaxDelay() const {
+    if (maxDelay < 0 || maxDelay > 64) {
+      fprintf(stderr, "unexpected maxDelay %d\n", maxDelay);
+    }
+    return maxDelay;
+  }
 
 private:
-  void updateMaxDelay(unsigned delay) {
+  void updateMaxDelay(int delay) {
+    if (delay < 0 || delay > 64) {
+      fprintf(stderr, "unexpected delay %d\n", delay);
+    }
     maxDelay = (maxDelay > delay) ? maxDelay : delay;
   }
   bool isConstValue = false;
@@ -536,7 +547,7 @@ private:
     int val_int;
   } constValue;
 
-  unsigned maxDelay = 0;
+  int maxDelay = 0;
 };
 
 string VerilogValue::strMemrefInstDecl() const {

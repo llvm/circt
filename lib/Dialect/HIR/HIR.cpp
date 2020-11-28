@@ -293,6 +293,34 @@ static void printCallOp(OpAsmPrinter &printer, CallOp op) {
   printer << ")";
 }
 
+/// IfOp
+static void printIfOp(OpAsmPrinter &printer, IfOp op) {
+
+  printer << "hir.if (" << op.cond() << ") at " << op.tstart();
+  printer.printRegion(op.if_region(),
+                      /*printEntryBlockArgs=*/false,
+                      /*printBlockTerminators=*/false);
+}
+static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
+  OpAsmParser::OperandType cond;
+  OpAsmParser::OperandType tstart;
+  if (parser.parseLParen() || parser.parseOperand(cond) || parser.parseRParen())
+    return failure();
+  if (parser.parseKeyword("at") || parser.parseOperand(tstart))
+    return failure();
+
+  if (parser.resolveOperand(cond, getIntegerType(parser, 1), result.operands) ||
+      parser.resolveOperand(tstart, getTimeType(parser), result.operands))
+    return failure();
+
+  Region *if_body = result.addRegion();
+  if (parser.parseRegion(*if_body, {}, {}))
+    return failure();
+  auto &builder = parser.getBuilder();
+  IfOp::ensureTerminator(*if_body, builder, result.location);
+  return success();
+}
+
 /// ForOp.
 /// Example:
 /// hir.for %i = %l to %u step %s iter_time(%ti = %t){...}
@@ -309,7 +337,6 @@ static void printForOp(OpAsmPrinter &printer, ForOp op) {
                       /*printEntryBlockArgs=*/false,
                       /*printBlockTerminators=*/false);
 }
-
 static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
   auto &builder = parser.getBuilder();
 

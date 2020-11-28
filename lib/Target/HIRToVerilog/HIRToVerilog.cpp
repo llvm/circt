@@ -149,9 +149,14 @@ private:
 
   // Individual op printers.
   LogicalResult printConstantOp(hir::ConstantOp op, unsigned indentAmount = 0);
+  LogicalResult printIfOp(IfOp op, unsigned indentAmount = 0);
   LogicalResult printForOp(ForOp op, unsigned indentAmount = 0);
   LogicalResult printUnrollForOp(UnrollForOp op, unsigned indentAmount = 0);
   LogicalResult printMemReadOp(MemReadOp op, unsigned indentAmount = 0);
+  LogicalResult printGTOp(hir::GTOp op, unsigned indentAmount = 0);
+  LogicalResult printLTOp(hir::LTOp op, unsigned indentAmount = 0);
+  LogicalResult printAndOp(hir::AndOp op, unsigned indentAmount = 0);
+  LogicalResult printOrOp(hir::OrOp op, unsigned indentAmount = 0);
   LogicalResult printAddOp(hir::AddOp op, unsigned indentAmount = 0);
   LogicalResult printSubtractOp(hir::SubtractOp op, unsigned indentAmount = 0);
   LogicalResult printMemWriteOp(MemWriteOp op, unsigned indentAmount = 0);
@@ -544,10 +549,128 @@ LogicalResult VerilogPrinter::printMemWriteOp(MemWriteOp op,
   return success();
 }
 
+LogicalResult VerilogPrinter::printGTOp(hir::GTOp op, unsigned indentAmount) {
+  Value result = op.res();
+  Type resType = result.getType();
+  assert(resType.isa<IntegerType>() || resType.isa<hir::ConstType>());
+  unsigned id_result = newValueNumber();
+  VerilogValue v_result(result, "v" + to_string(id_result));
+
+  const VerilogValue v_left = verilogMapper.get(op.left());
+  const VerilogValue v_right = verilogMapper.get(op.right());
+  Type resultType = result.getType();
+  if (resultType.isa<hir::ConstType>()) {
+    module_out << "//wire " << v_result.strWire() << " = "
+               << v_left.strConstOrError() << " > " << v_right.strConstOrError()
+               << ";\n";
+    v_result.setIntegerConst(
+        (v_left.getIntegerConst() > v_right.getIntegerConst()) ? 1 : 0);
+  } else {
+    module_out << "wire " << v_result.strWireDecl() << " = "
+               << v_left.strConstOrWire() << " > " << v_right.strConstOrWire()
+               << ";\n";
+    if (v_left.isIntegerConst() && v_right.isIntegerConst()) {
+      v_result.setIntegerConst(
+          (v_left.getIntegerConst() > v_right.getIntegerConst()) ? 1 : 0);
+    }
+  }
+  verilogMapper.insert(result, v_result);
+  return success();
+}
+
+LogicalResult VerilogPrinter::printLTOp(hir::LTOp op, unsigned indentAmount) {
+  Value result = op.res();
+  Type resType = result.getType();
+  assert(resType.isa<IntegerType>() || resType.isa<hir::ConstType>());
+  unsigned id_result = newValueNumber();
+  VerilogValue v_result(result, "v" + to_string(id_result));
+
+  const VerilogValue v_left = verilogMapper.get(op.left());
+  const VerilogValue v_right = verilogMapper.get(op.right());
+  Type resultType = result.getType();
+  if (resultType.isa<hir::ConstType>()) {
+    module_out << "//wire " << v_result.strWire() << " = "
+               << v_left.strConstOrError() << " < " << v_right.strConstOrError()
+               << ";\n";
+    v_result.setIntegerConst(
+        (v_left.getIntegerConst() < v_right.getIntegerConst()) ? 1 : 0);
+  } else {
+    module_out << "wire " << v_result.strWireDecl() << " = "
+               << v_left.strConstOrWire() << " < " << v_right.strConstOrWire()
+               << ";\n";
+    if (v_left.isIntegerConst() && v_right.isIntegerConst()) {
+      v_result.setIntegerConst(
+          (v_left.getIntegerConst() < v_right.getIntegerConst()) ? 1 : 0);
+    }
+  }
+  verilogMapper.insert(result, v_result);
+  return success();
+}
+
+LogicalResult VerilogPrinter::printAndOp(hir::AndOp op, unsigned indentAmount) {
+  Value result = op.res();
+  Type resType = result.getType();
+  assert(resType.isa<IntegerType>() || resType.isa<hir::ConstType>());
+  unsigned id_result = newValueNumber();
+  VerilogValue v_result(result, "v" + to_string(id_result));
+
+  const VerilogValue v_left = verilogMapper.get(op.left());
+  const VerilogValue v_right = verilogMapper.get(op.right());
+  Type resultType = result.getType();
+  if (resultType.isa<hir::ConstType>()) {
+    module_out << "//wire " << v_result.strWire() << " = "
+               << v_left.strConstOrError() << " && "
+               << v_right.strConstOrError() << ";\n";
+    v_result.setIntegerConst(
+        (v_left.getIntegerConst() && v_right.getIntegerConst()) ? 1 : 0);
+  } else {
+    module_out << "wire " << v_result.strWireDecl() << " = "
+               << v_left.strConstOrWire() << " &&" << v_right.strConstOrWire()
+               << ";\n";
+    if (v_left.isIntegerConst() && v_right.isIntegerConst()) {
+      v_result.setIntegerConst(
+          (v_left.getIntegerConst() && v_right.getIntegerConst()) ? 1 : 0);
+    }
+  }
+  verilogMapper.insert(result, v_result);
+  return success();
+}
+
+LogicalResult VerilogPrinter::printOrOp(hir::OrOp op, unsigned indentAmount) {
+  Value result = op.res();
+  Type resType = result.getType();
+  assert(resType.isa<IntegerType>() || resType.isa<hir::ConstType>());
+  unsigned id_result = newValueNumber();
+  VerilogValue v_result(result, "v" + to_string(id_result));
+
+  const VerilogValue v_left = verilogMapper.get(op.left());
+  const VerilogValue v_right = verilogMapper.get(op.right());
+  Type resultType = result.getType();
+  if (resultType.isa<hir::ConstType>()) {
+    module_out << "//wire " << v_result.strWire() << " = "
+               << v_left.strConstOrError() << " || "
+               << v_right.strConstOrError() << ";\n";
+    v_result.setIntegerConst(
+        (v_left.getIntegerConst() || v_right.getIntegerConst()) ? 1 : 0);
+  } else {
+    module_out << "wire " << v_result.strWireDecl() << " = "
+               << v_left.strConstOrWire() << " || " << v_right.strConstOrWire()
+               << ";\n";
+    if (v_left.isIntegerConst() && v_right.isIntegerConst()) {
+      v_result.setIntegerConst(
+          (v_left.getIntegerConst() || v_right.getIntegerConst()) ? 1 : 0);
+    }
+  }
+  verilogMapper.insert(result, v_result);
+  return success();
+}
+
 LogicalResult VerilogPrinter::printAddOp(hir::AddOp op, unsigned indentAmount) {
   // TODO: Handle signed and unsigned integers of unequal width using sign
   // extension.
   Value result = op.res();
+  Type resType = result.getType();
+  assert(resType.isa<IntegerType>() || resType.isa<hir::ConstType>());
   unsigned id_result = newValueNumber();
   VerilogValue v_result(result, "v" + to_string(id_result));
 
@@ -658,6 +781,26 @@ string loopCounterTemplate_old =
     "\nend"
     "\n"
     "\nwire $v_tloop = tloop_out$n_loop;";
+
+LogicalResult VerilogPrinter::printIfOp(IfOp op, unsigned indentAmount) {
+  Value cond = op.cond();
+  Value tstart = op.tstart();
+  Block &if_body = op.if_region().front();
+  VerilogValue *v_tstart_prev = verilogMapper.get_mut(tstart);
+
+  auto id_if = newValueNumber();
+  VerilogValue v_tstart = VerilogValue(tstart, "v" + to_string(id_if));
+  region_begin();
+  verilogMapper.insert_ptr(tstart, &v_tstart);
+  module_out << "wire " << v_tstart.strWire() << " = "
+             << v_tstart_prev->strConstOrWire() << "&&"
+             << verilogMapper.get(cond).strConstOrWire() << ";\n";
+  printTimeOffsets(&v_tstart);
+  printBody(if_body, indentAmount);
+  region_end();
+  verilogMapper.insert_ptr(tstart, v_tstart_prev);
+  return success();
+}
 
 LogicalResult VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
   Value lb = op.lb();
@@ -835,6 +978,9 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
   } else if (auto op = dyn_cast<hir::DelayOp>(inst)) {
     module_out << "\n//" << formattedOp(inst, "DelayOp");
     return printDelayOp(op, indentAmount);
+  } else if (auto op = dyn_cast<hir::IfOp>(inst)) {
+    module_out << "\n//" << formattedOp(inst, "IfOp");
+    return printIfOp(op, indentAmount);
   } else if (auto op = dyn_cast<hir::ForOp>(inst)) {
     module_out << "\n//" << formattedOp(inst, "ForOp");
     return printForOp(op, indentAmount);
@@ -856,6 +1002,18 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
   } else if (auto op = dyn_cast<hir::WireWriteOp>(inst)) {
     module_out << "\n//" << formattedOp(inst, "WireWriteOp");
     return printWireWriteOp(op, indentAmount);
+  } else if (auto op = dyn_cast<hir::GTOp>(inst)) {
+    module_out << "\n//" << formattedOp(inst, "GTOp");
+    return printGTOp(op, indentAmount);
+  } else if (auto op = dyn_cast<hir::LTOp>(inst)) {
+    module_out << "\n//" << formattedOp(inst, "LTOp");
+    return printLTOp(op, indentAmount);
+  } else if (auto op = dyn_cast<hir::AndOp>(inst)) {
+    module_out << "\n//" << formattedOp(inst, "AndOp");
+    return printAndOp(op, indentAmount);
+  } else if (auto op = dyn_cast<hir::OrOp>(inst)) {
+    module_out << "\n//" << formattedOp(inst, "OrOp");
+    return printOrOp(op, indentAmount);
   } else if (auto op = dyn_cast<hir::AddOp>(inst)) {
     module_out << "\n//" << formattedOp(inst, "AddOp");
     return printAddOp(op, indentAmount);

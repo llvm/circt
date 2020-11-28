@@ -77,7 +77,8 @@ public:
     assert(t);
     assert(t.getType().isa<TimeType>());
     assert(v);
-    if (!(v.getType().isa<IntegerType>() || v.getType().isa<TimeType>())) {
+    if (!(v.getType().isa<IntegerType>() || v.getType().isa<FloatType>() ||
+          v.getType().isa<TimeType>())) {
       assert(false);
     }
     if (v != t)

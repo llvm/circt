@@ -55,6 +55,8 @@ static unsigned getBitWidth(Type type) {
     return 1;
   } else if (auto intTy = type.dyn_cast<IntegerType>()) {
     bitwidth = intTy.getWidth();
+  } else if (auto floatTy = type.dyn_cast<FloatType>()) {
+    bitwidth = floatTy.getWidth();
   } else {
     string typeStr;
     llvm::raw_string_ostream typeOstream(typeStr);

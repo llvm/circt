@@ -231,32 +231,25 @@ Example:
 //      let parser = [{return parse$cppClass(parser,result);}];
 //      let printer = [{return print$cppClass(p,*this);}];
 //  }
-//def IfOp : HIR_Op<"if", 
-//    [ImplicitTerminator, RecursiveSideEffects]> {
-//      let summary = "if-else operation";
-//      let description = [{
-//        This op implements if-else statement.
-//          ```mlir
-//          hir.if (%cond) at %t {
-//            ...
-//          }else{
-//            ...
-//          }
-//        ```
-//      }];
-//
-//      let arguments = (ins AnyType: $cond, TimeType:$tstart);
-//      let regions = (region SizedRegion<1>:$if_body, SizedRegion<1>:$else_body);
-//      let results = (outs );
-//
-//      //let extraClassDeclaration = [{
-//      //  Value getIfBody() { return TODO; }
-//      //  Value getElseBody() { return TODO; }
-//      //}];
-//
-//      let parser = [{return parse$cppClass(parser,result);}];
-//      let printer = [{return print$cppClass(p,*this);}];
-//  }
+
+
+def IfOp : HIR_Op<"if", [ImplicitTerminator, RecursiveSideEffects]> {
+      let summary = "if operation";
+      let description = [{
+        This op implements an if statement.
+          ```mlir
+          hir.if(%b) at %t {...}        ```
+      }];
+
+      let arguments = (ins AnyType : $cond, TimeType : $tstart);
+      let regions = (region SizedRegion<1>:$if_region);
+      let results = (outs );
+
+      let extraClassDeclaration = [{
+      }];
+      let parser = [{return parse$cppClass(parser,result);}];
+      let printer = [{return print$cppClass(p,*this);}];
+    }
 
 def ForOp : HIR_Op<"for", 
     [ImplicitTerminator, RecursiveSideEffects,
@@ -493,6 +486,7 @@ def PopOp :HIR_Op<"pop"> {
 
   let assemblyFormat = "$input `at` $tstart attr-dict `:` type($input) `->` type($res)";
 }
+
 def AllocOp :HIR_Op<"alloc", [NoSideEffect]> {
   let summary = "Instantiate new hardware.";
 
@@ -505,6 +499,66 @@ def AllocOp :HIR_Op<"alloc", [NoSideEffect]> {
   let results = (outs Variadic<AnyType>:$res);
 
   let assemblyFormat = "`(``)`attr-dict `:` type($res)";
+}
+
+def GTOp : HIR_Op<"gt",[NoSideEffect]>{
+  let summary = "returns an i1 to show if one value is greater than or other";
+  let description = [{
+Examples:
+    ```mlir %1 = hir.gt (%x, %y) : (i32, i32) -> (i1)```
+    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.conts) -> (!hir.const)```
+  }];
+
+  let arguments = (ins AnyType: $left, AnyType:$right);
+  let results = (outs AnyType: $res);
+
+  let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(`
+      type($left) `,` type($right) `)` `->` `(` type($res) `)`}];
+}
+
+def LTOp : HIR_Op<"lt",[NoSideEffect]>{
+  let summary = "returns an i1 to show if one value is less than or other";
+  let description = [{
+Examples:
+    ```mlir %1 = hir.gt (%x, %y) : (i32, i32) -> (i1)```
+    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.conts) -> (!hir.const)```
+  }];
+
+  let arguments = (ins AnyType: $left, AnyType:$right);
+  let results = (outs AnyType: $res);
+
+  let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(`
+      type($left) `,` type($right) `)` `->` `(` type($res) `)`}];
+}
+
+def AndOp : HIR_Op<"and",[NoSideEffect]>{
+  let summary = "returns and of two i1 inputs";
+  let description = [{
+Examples:
+    ```mlir %1 = hir.gt (%x, %y) : (i1, i1) -> (i1)```
+    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.conts) -> (!hir.const)```
+  }];
+
+  let arguments = (ins AnyType: $left, AnyType:$right);
+  let results = (outs AnyType: $res);
+
+  let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(`
+      type($left) `,` type($right) `)` `->` `(` type($res) `)`}];
+}
+
+def OrOp : HIR_Op<"or",[NoSideEffect]>{
+  let summary = "returns 'or' of two i1 inputs";
+  let description = [{
+Examples:
+    ```mlir %1 = hir.gt (%x, %y) : (i1, i1) -> (i1)```
+    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.conts) -> (!hir.const)```
+  }];
+
+  let arguments = (ins AnyType: $left, AnyType:$right);
+  let results = (outs AnyType: $res);
+
+  let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(`
+      type($left) `,` type($right) `)` `->` `(` type($res) `)`}];
 }
 
 #endif // HIR_OPS
