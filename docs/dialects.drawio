@@ -1,16 +1,16 @@
-<mxfile host="Electron" modified="2020-10-21T21:23:58.134Z" agent="5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/13.7.9 Chrome/85.0.4183.121 Electron/10.1.3 Safari/537.36" etag="LRFxWZZIeGDvaUgdhdVR" compressed="false" version="13.7.9" type="device">
+<mxfile host="app.diagrams.net" modified="2020-11-30T23:40:50.975Z" agent="5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.149 Safari/537.36" etag="WpJ1qS-TuIhL8j57j4hm" compressed="false" version="13.10.4" type="device">
   <diagram id="MivVnp2VQLZu9SO0e3je" name="Page-1">
-    <mxGraphModel dx="1186" dy="516" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+    <mxGraphModel dx="1822" dy="774" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="NUFGH_hVGk4y_TYJHu7n-14" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;dashed=1;" parent="1" source="NUFGH_hVGk4y_TYJHu7n-1" target="NUFGH_hVGk4y_TYJHu7n-2" edge="1">
+        <mxCell id="NUFGH_hVGk4y_TYJHu7n-14" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="NUFGH_hVGk4y_TYJHu7n-1" target="NUFGH_hVGk4y_TYJHu7n-2" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="NUFGH_hVGk4y_TYJHu7n-1" value="High FIRRTL" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
           <mxGeometry x="150" y="130" width="120" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="NUFGH_hVGk4y_TYJHu7n-10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;dashed=1;" parent="1" source="NUFGH_hVGk4y_TYJHu7n-2" target="NUFGH_hVGk4y_TYJHu7n-3" edge="1">
+        <mxCell id="NUFGH_hVGk4y_TYJHu7n-10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="NUFGH_hVGk4y_TYJHu7n-2" target="NUFGH_hVGk4y_TYJHu7n-3" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="NUFGH_hVGk4y_TYJHu7n-20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.75;entryY=0;entryDx=0;entryDy=0;dashed=1;" parent="1" source="NUFGH_hVGk4y_TYJHu7n-2" target="NUFGH_hVGk4y_TYJHu7n-5" edge="1">
@@ -113,7 +113,7 @@
         <mxCell id="NUFGH_hVGk4y_TYJHu7n-35" value="2." style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" parent="1" vertex="1">
           <mxGeometry x="190" y="280" width="20" height="20" as="geometry" />
         </mxCell>
-        <mxCell id="NUFGH_hVGk4y_TYJHu7n-36" value="1. Handshake to FIRRTL&lt;br&gt;2. Lowering within FIRRTL (hypothetical)&lt;br&gt;3. FIRRTL to LLHD&lt;br&gt;4. FIRRTL to RTL&lt;br&gt;5. Mid FIRRTL to RTL (hypothetical)&lt;br&gt;6. Mid FIRRTL to SV (hypothetical)&lt;br&gt;7. EmitVerilog&lt;br&gt;8. Desequentialization / Process Lowering&lt;br&gt;9. LLHD to LLVM (simulation model)&lt;br&gt;10. LLHD to RTL promotion (hypothetical; fallible)&lt;br&gt;11. RTL to LLHD (hypothetical)&lt;br&gt;12. Likely almost identical; eventually merge?" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;" parent="1" vertex="1">
+        <mxCell id="NUFGH_hVGk4y_TYJHu7n-36" value="1. Handshake to FIRRTL&lt;br&gt;2. Lowering within FIRRTL&lt;br&gt;3. FIRRTL to LLHD&lt;br&gt;4. FIRRTL to RTL&lt;br&gt;5. Mid FIRRTL to RTL (hypothetical)&lt;br&gt;6. Mid FIRRTL to SV (hypothetical)&lt;br&gt;7. EmitVerilog&lt;br&gt;8. Desequentialization / Process Lowering&lt;br&gt;9. LLHD to LLVM (simulation model)&lt;br&gt;10. LLHD to RTL promotion (hypothetical; fallible)&lt;br&gt;11. RTL to LLHD (hypothetical)&lt;br&gt;12. Likely almost identical; eventually merge?" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;" parent="1" vertex="1">
           <mxGeometry x="370" y="30" width="280" height="180" as="geometry" />
         </mxCell>
         <mxCell id="NUFGH_hVGk4y_TYJHu7n-37" value="3." style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" parent="1" vertex="1">
