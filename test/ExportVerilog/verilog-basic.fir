@@ -113,7 +113,7 @@ circuit inputs_only :
     input b: UInt<4>
     input c: UInt<4>
     output out1: UInt<1>
-    output out: UInt<4>
+    output out: UInt<10>
     out <= add(a, add(b, c))
     out <= sub(add(a, b), c)
     out <= sub(a, add(b, c))
@@ -124,14 +124,14 @@ circuit inputs_only :
     out <= mul(add(a, b), add(b, c))
     out1 <= xorr(add(b, c))
     out1 <= or(lt(b, c), gt(b, c))
-    out1 <= and(xor(b, c), or(out1, out1))
-    out1 <= shr(out, 2)
+    out <= and(xor(b, c), or(out1, out1))
+    out <= shr(out, 2)
     out1 <= lt(out, a)
 
 ; CHECK-LABEL: module Precedence(
 ; CHECK-NEXT:     input  [3:0] a, b, c,
 ; CHECK-NEXT:     output       out1,
-; CHECK-NEXT:     output [3:0] out);
+; CHECK-NEXT:     output [9:0] out);
 ; CHECK-EMPTY:
 
 ; CHECK-NEXT:     assign out = a + b + c;
@@ -144,8 +144,8 @@ circuit inputs_only :
 ; CHECK-NEXT:     assign out = (a + b) * (b + c);
 ; CHECK-NEXT:     assign out1 = ^(b + c);
 ; CHECK-NEXT:     assign out1 = b < c | b > c;
-; CHECK-NEXT:     assign out1 = (b ^ c) & (out1 | out1);
-; CHECK-NEXT:     assign out1 = out[3:2];
+; CHECK-NEXT:     assign out = (b ^ c) & (out1 | out1);
+; CHECK-NEXT:     assign out = out[9:2];
 ; CHECK-NEXT:     assign out1 = out < a;
 ; CHECK-NEXT:  endmodule
 

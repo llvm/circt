@@ -152,8 +152,8 @@
   }
 
   // CHECK-LABEL: rtl.module @PortMadness(
-  // CHECK: %inA: i4, %inB: i4, %inC: i4, %inE: i3, %inF: i5)
-  // CHECK: -> (%outA: i4, %outB: i4, %outC: i4, %outD: i4, %outE: i4, %outF: i4) {
+  // CHECK: %inA: i4, %inB: i4, %inC: i4, %inE: i3)
+  // CHECK: -> (%outA: i4, %outB: i4, %outC: i4, %outD: i4, %outE: i4) {
   firrtl.module @PortMadness(%inA: !firrtl.uint<4>,
                              %inB: !firrtl.uint<4>,
                              %inC: !firrtl.uint<4>,
@@ -162,9 +162,7 @@
                              %outC: !firrtl.flip<uint<4>>,
                              %outD: !firrtl.flip<uint<4>>,
                              %inE: !firrtl.uint<3>,
-                             %outE: !firrtl.flip<uint<4>>,
-                             %inF: !firrtl.uint<5>,
-                             %outF: !firrtl.flip<uint<4>>) {
+                             %outE: !firrtl.flip<uint<4>>) {
     // CHECK-NEXT: %0 = firrtl.stdIntCast %inA : (i4) -> !firrtl.uint<4>
     // CHECK-NEXT: %1 = firrtl.stdIntCast %inB : (i4) -> !firrtl.uint<4>
     // CHECK-NEXT: %2 = firrtl.stdIntCast %inC : (i4) -> !firrtl.uint<4>
@@ -173,7 +171,6 @@
     // CHECK: [[OUTD:%.+]] = firrtl.wire : !firrtl.flip<uint<4>>
 
     // CHECK: [[INE:%.+]] = firrtl.stdIntCast %inE : (i3) -> !firrtl.uint<3>
-    // CHECK: [[INF:%.+]] = firrtl.stdIntCast %inF : (i5) -> !firrtl.uint<5>
 
     // Normal
     firrtl.connect %outA, %inA : !firrtl.flip<uint<4>>, !firrtl.uint<4>
@@ -196,10 +193,6 @@
     // CHECK: [[OUTE:%.+]] = firrtl.pad [[INE]], 4 : (!firrtl.uint<3>) -> !firrtl.uint<4>
     firrtl.connect %outE, %inE : !firrtl.flip<uint<4>>, !firrtl.uint<3>
 
-    // Truncation for inF
-    // CHECK: [[OUTF:%.+]] = firrtl.tail [[INF]], 4 : (!firrtl.uint<5>) -> !firrtl.uint<4>
-    firrtl.connect %outF, %inF : !firrtl.flip<uint<4>>, !firrtl.uint<5>
-
     // CHECK: [[OUTBY:%.+]] = rtl.merge %inB, %inA : i4
 
     // CHECK: [[OUTCX:%.+]] = firrtl.asPassive [[OUTC]]
@@ -208,8 +201,7 @@
     // CHECK: [[OUTDY:%.+]] = firrtl.stdIntCast [[OUTDX]]
 
     // CHECK: [[OUTE_CAST:%.+]] = firrtl.stdIntCast [[OUTE]]
-    // CHECK: [[OUTF_CAST:%.+]] = firrtl.stdIntCast [[OUTF]]
-    // CHECK: rtl.output %inA, [[OUTBY]], [[OUTCY]], [[OUTDY]], [[OUTE_CAST]], [[OUTF_CAST]]
+    // CHECK: rtl.output %inA, [[OUTBY]], [[OUTCY]], [[OUTDY]], [[OUTE_CAST]]
   }
 
   // CHECK-LABEL: rtl.module @Analog(%a1: !rtl.inout<i1>) -> (%outClock: i1) {

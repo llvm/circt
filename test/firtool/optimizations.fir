@@ -4,7 +4,7 @@
 circuit test_cse :
   module test_cse :
     input a: UInt<4>
-    output b: UInt<4>
+    output b: UInt<5>
     b <= add(a, a)
     b <= add(a, a)
     b <= and(a, UInt<4>(0))
