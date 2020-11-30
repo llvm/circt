@@ -16,8 +16,11 @@ read_verilog $2
  equiv_make top1 top2 equiv
  hierarchy -top equiv
  clean -purge
- equiv_simple -short -v
+ equiv_simple
  equiv_induct
+ equiv_remove
+ equiv_miter -trigger -assert -cmp failed
+ write_verilog $3.failed.v
  equiv_status -assert
 "
 if [ $? -eq 0 ]
