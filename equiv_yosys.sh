@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-#echo "Comparing $1 and $2 with $3"
-yosys -q -p "
+echo "Comparing $1 and $2 with $3"
+yosys  -p "
  read_verilog $1
  rename $3 top1
  proc
@@ -18,9 +18,6 @@ read_verilog $2
  clean -purge
  equiv_simple
  equiv_induct
- equiv_remove
- equiv_miter -trigger -assert -cmp failed
- write_verilog $3.failed.v
  equiv_status -assert
 "
 if [ $? -eq 0 ]

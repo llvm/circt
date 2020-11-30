@@ -227,6 +227,9 @@ circuit test_fail :
     output out_add_s: SInt<5>
     output out_sub_s: SInt<5>
     output out_mul_s: SInt<8>
+    out_add_s <= add(sina4, sinb4)
+    out_sub_s <= sub(sina4, sinb4)
+    out_mul_s <= mul(sina4, sinb4)
 
 ;--- test_fail.v
 
