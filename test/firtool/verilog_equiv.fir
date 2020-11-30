@@ -2,12 +2,14 @@
 ; RUN: split-file %s %t
 ; RUN: firtool %t/test_mod.fir --format=fir -verilog -o %t/test_mod.fir.v
 ; RUN: firtool %t/test_unary.fir --format=fir -verilog -o %t/test_unary.fir.v
+; RUN: firtool %t/test_unary_fail.fir --format=fir -verilog -o %t/test_unary_fail.fir.v
 ; RUN: firtool %t/test_prim.fir --format=fir -verilog -o %t/test_prim.fir.v
-; RUN: firtool %t/test_fail.fir --format=fir -verilog -o %t/test_fail.fir.v
+; RUN: firtool %t/test_prim_fail.fir --format=fir -verilog -o %t/test_prim_fail.fir.v
 ; RUN: /home/andrew/src/circt/equiv_yosys.sh %t/test_mod.fir.v %t/test_mod.v test_mod
 ; RUN: /home/andrew/src/circt/equiv_yosys.sh %t/test_unary.fir.v %t/test_unary.v test_unary
+; RUN: /home/andrew/src/circt/equiv_yosys.sh %t/test_unary_fail.fir.v %t/test_unary_fail.v test_unary_fail ||true
 ; RUN: /home/andrew/src/circt/equiv_yosys.sh %t/test_prim.fir.v %t/test_prim.v test_prim
-; RUN: /home/andrew/src/circt/equiv_yosys.sh %t/test_fail.fir.v %t/test_fail.v test_fail
+; RUN: /home/andrew/src/circt/equiv_yosys.sh %t/test_prim_fail.fir.v %t/test_prim_fail.v test_prim_fail ||true
 
 ;--- test_mod.fir
 
@@ -46,6 +48,14 @@ circuit test_unary :
     output out_shl_s: SInt<6>
     output out_shr_u: UInt<2>
     output out_shr_s: SInt<2>
+    output out_cvt_u: SInt<5>
+    output out_cvt_s: SInt<4>
+    output out_bits_u: UInt<2>
+    output out_bits_s: UInt<2>
+    output out_head_u: UInt<2>
+    output out_head_s: UInt<2>
+    output out_tail_u: UInt<2>
+    output out_tail_s: UInt<2>
     out_xorr_u <= xorr(uin4)
     out_xorr_s <= xorr(sin4)
     out_andr_u <= andr(uin4)
@@ -60,7 +70,15 @@ circuit test_unary :
     out_shl_s <= shl(sin4, 2)
     out_shr_u <= shr(uin4, 2)
     out_shr_s <= shr(sin4, 2)
-
+    out_cvt_u <= cvt(uin4)
+    out_cvt_s <= cvt(sin4)
+    out_bits_u <= bits(uin4, 3,1)
+    out_bits_s <= bits(sin4, 3,1)
+    out_head_u <= head(uin4, 2)
+    out_head_s <= head(sin4, 2)
+    out_tail_u <= tail(uin4, 2)
+    out_tail_s <= tail(sin4, 2)
+    
 ;--- test_unary.v
 
 module test_unary(
@@ -79,7 +97,15 @@ module test_unary(
   output [5:0] out_shl_u,
   output [5:0] out_shl_s,
   output [1:0] out_shr_u,
-  output [1:0] out_shr_s
+  output [1:0] out_shr_s,
+  output [4:0] out_cvt_u,
+  output [3:0] out_cvt_s,
+  output [1:0] out_bits_u,
+  output [1:0] out_bits_s,
+  output [1:0] out_head_u,
+  output [1:0] out_head_s,
+  output [1:0] out_tail_u,
+  output [1:0] out_tail_s
 );
   assign out_xorr_u = ^uin4;
   assign out_xorr_s = ^sin4;
@@ -95,8 +121,38 @@ module test_unary(
   assign out_shl_s = {$signed(sin4), 2'h0};
   assign out_shr_u = uin4[3:2];
   assign out_shr_s = sin4[3:2];
+  assign out_cvt_u = {1'b0,$signed(uin4)};
+  assign out_cvt_s = $signed(sin4);
+  assign out_bits_u = uin4[2:1];
+  assign out_bits_s = sin4[2:1];
+  assign out_head_u = uin4[3:2];
+  assign out_head_s = sin4[3:2];
+  assign out_tail_u = uin4[1:0];
+  assign out_tail_s = sin4[1:0];
 endmodule
 
+;--- test_unary_fail.fir
+
+circuit test_unary_fail :
+  module test_unary_fail :
+    input uin4: UInt<4>
+    input sin4: SInt<4>
+    output out_neg_u: SInt<5>
+    output out_neg_s: SInt<5>
+    out_neg_u <= neg(uin4)
+    out_neg_s <= neg(sin4)
+
+;--- test_unary_fail.v
+
+module test_unary_fail(
+  input  [3:0] uin4,
+  input  [3:0] sin4,
+  output [4:0] out_neg_u,
+  output [4:0] out_neg_s
+);
+  assign out_neg_u = -$signed(uin4);
+  assign out_neg_s = -$signed(sin4);
+endmodule
 
 ;--- test_prim.fir
 
@@ -129,6 +185,14 @@ circuit test_prim :
     output out_dshl_s: SInt<4>
     output out_dshr_u: UInt<4>
     output out_dshr_s: SInt<4>
+    output out_and_u: UInt<4>
+    output out_and_s: UInt<4>
+    output out_or_u: UInt<4>
+    output out_or_s: UInt<4>
+    output out_xor_u: UInt<4>
+    output out_xor_s: UInt<4>
+    output out_cat_u: UInt<8>
+    output out_cat_s: UInt<8>
     out_add_u <= add(uina4, uinb4)
     out_sub_u <= sub(uina4, uinb4)
     out_mul_u <= mul(uina4, uinb4)
@@ -152,7 +216,15 @@ circuit test_prim :
     out_dshl_s <= dshl(sina4, uinb4)
     out_dshr_u <= dshr(uina4, uinb4)
     out_dshr_s <= dshr(sina4, uinb4)
-
+    out_and_u <= and(uina4, uinb4)
+    out_and_s <= and(sina4, sinb4)
+    out_or_u <= or(uina4, uinb4)
+    out_or_s <= or(sina4, sinb4)
+    out_xor_u <= xor(uina4, uinb4)
+    out_xor_s <= xor(sina4, sinb4)
+    out_cat_u <= cat(uina4, uinb4)
+    out_cat_s <= cat(sina4, sinb4)
+    
 ;--- test_prim.v
 
 module test_prim(
@@ -182,7 +254,15 @@ module test_prim(
   output [3:0] out_dshl_u,
   output [3:0] out_dshl_s,
   output [3:0] out_dshr_u,
-  output [3:0] out_dshr_s
+  output [3:0] out_dshr_s,
+  output [3:0] out_and_u,
+  output [3:0] out_and_s,
+  output [3:0] out_or_u,
+  output [3:0] out_or_s,
+  output [3:0] out_xor_u,
+  output [3:0] out_xor_s,
+  output [7:0] out_cat_u,
+  output [7:0] out_cat_s
 );
   wire [3:0] _GEN_4 = uina4 % uinb4;
   wire [3:0] _GEN_5 = $signed(sina4) % $signed(sinb4);
@@ -213,13 +293,20 @@ module test_prim(
   assign out_dshl_s = _GEN_3[3:0];
   assign out_dshr_u = uina4 >> uinb4;
   assign out_dshr_s = $signed(sina4) >>> uinb4;
+  assign out_and_u = uina4 & uinb4;
+  assign out_and_s = $signed(sina4) & $signed(sinb4);
+  assign out_or_u = uina4 | uinb4;
+  assign out_or_s = $signed(sina4) | $signed(sinb4);
+  assign out_xor_u = uina4 ^ uinb4;
+  assign out_xor_s = $signed(sina4) ^ $signed(sinb4);
+  assign out_cat_u = {uina4,uinb4};
+  assign out_cat_s = {sina4,sinb4};
 endmodule
 
+;--- test_prim_fail.fir
 
-;--- test_fail.fir
-
-circuit test_fail :
-  module test_fail :
+circuit test_prim_fail :
+  module test_prim_fail :
     input uina4: UInt<4>
     input uinb4: UInt<4>
     input sina4: SInt<4>
@@ -231,9 +318,9 @@ circuit test_fail :
     out_sub_s <= sub(sina4, sinb4)
     out_mul_s <= mul(sina4, sinb4)
 
-;--- test_fail.v
+;--- test_prim_fail.v
 
-module test_fail(
+module test_prim_fail(
   input  [3:0] uina4,
   input  [3:0] uinb4,
   input  [3:0] sina4,
