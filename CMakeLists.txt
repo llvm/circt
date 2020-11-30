@@ -121,6 +121,14 @@ else()
   endif()
 endif()
 
+# If Yosys hasn't been explicitly disabled, find it.
+option(YOSYS_DISABLE "Disable the yosys tests.")
+if (YOSYS_DISABLE)
+  message(STATUS "Disabling yosys tests.")
+else()
+  find_program(YOSYS_PATH "yosys")
+endif()
+
 # If capnp hasn't been explicitly disabled, find it.
 option(CAPNP_DISABLE "Disable Cap'nProto (needed for cosimulation).")
 if (CAPNP_DISABLE)

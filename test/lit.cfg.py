@@ -69,4 +69,10 @@ if config.verilator_path != "":
   tools.append('verilator')
   config.available_features.add('verilator')
 
+# Enable yosys if it has been detected.
+if config.yosys_path != "":
+  tool_dirs.append(os.path.dirname(config.yosys_path))
+  tools.append('yosys')
+  config.available_features.add('yosys')
+
 llvm_config.add_tool_substitutions(tools, tool_dirs)
