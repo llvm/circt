@@ -127,6 +127,11 @@ if (YOSYS_DISABLE)
   message(STATUS "Disabling yosys tests.")
 else()
   find_program(YOSYS_PATH "yosys")
+  if(EXISTS ${YOSYS_PATH})
+    message(STATUS "Found yosys at ${YOSYS_PATH}.")
+  else()
+    message(STATUS "Did not find yosys.")
+  endif()
 endif()
 
 # If capnp hasn't been explicitly disabled, find it.
