@@ -7,9 +7,9 @@
 ; RUN: firtool %t/test_unary.fir --format=fir -mlir -o %t/test_unary.fir.mlir
 ; RUN: firtool %t/test_prim.fir --format=fir -verilog -o %t/test_prim.fir.v
 ; RUN: firtool %t/test_prim.fir --format=fir -mlir -o %t/test_prim.fir.mlir
-; RUN: /home/andrew/src/circt/equiv_yosys.sh %t/test_mod.fir.v %t/test_mod.v test_mod
-; RUN: /home/andrew/src/circt/equiv_yosys.sh %t/test_unary.fir.v %t/test_unary.v test_unary
-; RUN: /home/andrew/src/circt/equiv_yosys.sh %t/test_prim.fir.v %t/test_prim.v test_prim
+; RUN: %S/../equiv_yosys.sh %t/test_mod.fir.v %t/test_mod.v test_mod
+; RUN: %S/../equiv_yosys.sh %t/test_unary.fir.v %t/test_unary.v test_unary
+; RUN: %S/../equiv_yosys.sh %t/test_prim.fir.v %t/test_prim.v test_prim
 
 ;--- test_mod.fir
 
