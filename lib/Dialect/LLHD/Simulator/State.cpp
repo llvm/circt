@@ -196,7 +196,7 @@ const Slot &UpdateQueue::top() {
   // Sort the changes of the top slot such that all changes to the same signal
   // are in succession.
   auto &top = begin()[topSlot];
-  std::sort(top.changes.begin(), top.changes.begin() + top.changesSize);
+  llvm::sort(top.changes.begin(), top.changes.begin() + top.changesSize);
   return top;
 }
 
