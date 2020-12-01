@@ -753,7 +753,7 @@ private:
   /// e.g. for a less than comparison or divide.
   SubExprInfo emitSignedBinary(Operation *op, VerilogPrecedence prec,
                                const char *syntax) {
-    return emitBinary(op, prec, syntax, /*hasStrictSign:*/ true);
+    return emitBinary(op, prec, syntax, /*hasStrictSign:*/ false);
   }
   /// Emit the specified subexpression in a context where the sign matters,
   /// e.g. for a less than comparison or divide.
@@ -764,7 +764,34 @@ private:
   }
   SubExprInfo emitUnary(Operation *op, const char *syntax, bool forceUnsigned) {
     os << syntax;
-    auto signedness = emitSubExpr(op->getOperand(0), Unary).signedness;
+    bool isSigned = getSignednessOf(op->getOperand(0).getType()) == IsSigned ||
+getSignednessOf(op->getResult(0).getType()) == IsSigned;
+    auto width = getBitWidthOrSentinel(op->getResult(0).getType());
+    auto opWidth = getBitWidthOrSentinel(op->getOperand(0).getType());
+    SubExprSignedness signedness;
+    if (isSigned)
+      os << "$signed(";
+    if (opWidth >= width) {
+      signedness = emitSubExpr(op->getOperand(0), Unary).signedness;
+    } else {
+      if (IsSigned == getSignednessOf(op->getOperand(0).getType())) {
+        // Otherwise, this is a sign extension of a general expression.
+        // TODO(QoI): Instead of emitting the expression multiple times, we should
+        // emit it to a known name.
+        os << "{{" << (width - opWidth) << '{';
+        emitSubExpr(op->getOperand(0), LowestPrecedence);
+        os << '[' << (opWidth - 1) << "]}}, ";
+        emitSubExpr(op->getOperand(0), LowestPrecedence);
+        os << "}";
+      } else {
+        // A zero extension just fills the top with numbers.
+        os << "{{" << (width - opWidth) << "'d0}, ";
+        emitSubExpr(op->getOperand(0), LowestPrecedence);
+        os << "}";
+      }
+    }
+    if (isSigned)
+      os << ")";
     return {Unary, forceUnsigned ? IsUnsigned : signedness};
   }
   SubExprInfo emitNoopCast(Operation *op) {
@@ -943,8 +970,32 @@ std::string ExprEmitter::emitExpressionToString(Value exp,
 SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
                                     const char *syntax, bool hasStrictSign,
                                     bool opForceSign) {
-  auto lhsInfo =
-      emitSubExpr(op->getOperand(0), prec, hasStrictSign, opForceSign);
+  auto width = getBitWidthOrSentinel(op->getResult(0).getType());
+  auto op0Width = getBitWidthOrSentinel(op->getOperand(0).getType());
+  auto op1Width = getBitWidthOrSentinel(op->getOperand(1).getType());
+  auto op0Signed = IsSigned == getSignednessOf(op->getOperand(0).getType());
+  auto op1Signed = IsSigned == getSignednessOf(op->getOperand(1).getType());
+  
+  if (op0Signed)
+    os << "$signed(";
+  if (op0Width < width) {
+    if (op0Signed)
+      os << "{{" << (width - op0Width) << '{';
+    else 
+      os << "{{" << (width - op0Width) << "'d0}, ";
+  }
+  SubExprInfo lhsInfo = emitSubExpr(op->getOperand(0), (op0Width >= width) ? prec : LowestPrecedence, hasStrictSign, opForceSign);
+  if (op0Width < width) {
+    if (op0Signed) {
+      os << '[' << (op0Width - 1) << "]}}, ";
+      emitSubExpr(op->getOperand(0), LowestPrecedence, hasStrictSign, opForceSign);
+      os << "}";
+    } else {
+      os << "}";
+    }
+  }
+  if (op0Signed)
+    os << ")";
   os << ' ' << syntax << ' ';
 
   // The precedence of the RHS operand must be tighter than this operator if
@@ -957,8 +1008,26 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   if (rhsOperandOp && op->getName() == rhsOperandOp->getName())
     rhsPrec = prec;
 
-  auto rhsInfo =
-      emitSubExpr(op->getOperand(1), rhsPrec, hasStrictSign, opForceSign);
+  if (op1Signed)
+    os << "$signed(";
+  if (op1Width < width) {
+    if (op1Signed)
+        os << "{{" << (width - op1Width) << '{';
+    else
+        os << "{{" << (width - op1Width) << "'d0}, ";
+  }
+  SubExprInfo rhsInfo = emitSubExpr(op->getOperand(1), (op1Width >= width) ? rhsPrec : LowestPrecedence, hasStrictSign, opForceSign);
+  if (op1Width < width) {
+    if (op1Signed) {
+      os << '[' << (op1Width - 1) << "]}}, ";
+      emitSubExpr(op->getOperand(1), LowestPrecedence, hasStrictSign, opForceSign);
+      os << "}";
+    } else {
+      os << "}";
+    }
+  }
+  if (op1Signed)
+    os << ")";
 
   // If we have a strict sign, then match the firrtl operation sign.
   // Otherwise, the result is signed if both operands are signed.
@@ -978,9 +1047,31 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
 SubExprInfo ExprEmitter::emitVariadic(Operation *op, VerilogPrecedence prec,
                                       const char *syntax, bool hasStrictSign,
                                       bool opForceSign) {
+  auto width = getBitWidthOrSentinel(op->getResult(0).getType());
   interleave(
       op->getOperands().begin(), op->getOperands().end(),
-      [&](Value v1) { emitSubExpr(v1, prec, hasStrictSign, opForceSign); },
+      [&](Value v1) { 
+        auto opWidth = getBitWidthOrSentinel(v1.getType());
+        if (width == opWidth) {
+          emitSubExpr(v1, prec, hasStrictSign, opForceSign); 
+        } else {
+          if (IsSigned == getSignednessOf(v1.getType())) {
+            // Otherwise, this is a sign extension of a general expression.
+            // TODO(QoI): Instead of emitting the expression multiple times, we should
+            // emit it to a known name.
+            os << "{{" << (width - opWidth) << '{';
+            emitSubExpr(v1, LowestPrecedence, hasStrictSign, opForceSign);
+            os << '[' << (opWidth - 1) << "]}}, ";
+            emitSubExpr(v1, LowestPrecedence, hasStrictSign, opForceSign);
+            os << "}";
+          } else {
+            // A zero extension just fills the top with numbers.
+            os << "{{" << (width - opWidth) << "'d0}, ";
+            emitSubExpr(v1, LowestPrecedence, hasStrictSign, opForceSign);
+            os << "}";
+          }
+        }
+      },
       [&] { os << ' ' << syntax << ' '; });
 
   return {prec, IsUnsigned};
