@@ -252,10 +252,9 @@ State::getInstanceIterator(std::string instName) {
   auto it =
       std::find_if(instances.begin(), instances.end(),
                    [&](const auto &inst) { return instName == inst.name; });
-  if (it == instances.end()) {
-    llvm::errs() << "could not find an instance named " << instName << "\n";
-    exit(EXIT_FAILURE);
-  }
+
+  assert(it != instances.end() && "instance does not exist!");
+
   return it;
 }
 
