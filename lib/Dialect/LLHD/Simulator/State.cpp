@@ -162,9 +162,8 @@ Slot &UpdateQueue::getOrCreateSlot(Time time) {
   }
 
   // Spawn new event using an existing slot.
-  if (unused.size() > 0) {
-    auto firstUnused = unused.back();
-    unused.pop_back();
+  if (!unused.empty()) {
+    auto firstUnused = unused.pop_back_val();
     auto &newSlot = begin()[firstUnused];
     newSlot.unused = false;
     newSlot.time = time;
