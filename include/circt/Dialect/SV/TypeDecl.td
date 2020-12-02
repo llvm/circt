@@ -117,6 +117,35 @@ def InterfaceModportOp : SVOp<"interface.modport",
 }
 
 //===----------------------------------------------------------------------===//
+// Types for integration in to type-based dialects.
+//===----------------------------------------------------------------------===//
+
+def Interface : SVType<"Interface"> {
+  let summary = "SystemVerilog interface type pointing to an InterfaceOp";
+  let description = [{
+    A MLIR type for the SV dialect's `InterfaceOp` to allow instances in any
+    dialect with an open type system. Points at the InterfaceOp which defines
+    the SystemVerilog interface.
+  }];
+
+  let mnemonic = "interface";
+  let parameters = (ins "SymbolRefAttr":$interface);
+}
+
+
+def InterfaceModport : SVType<"InterfaceModport"> {
+  let summary = "SystemVerilog type pointing to an InterfaceModportOp";
+  let description = [{
+    A MLIR type for the SV dialect's `InterfaceModportOp` to allow
+    interactions with any open type system dialect. Points at the
+    InterfaceModportOp which defines the SystemVerilog interface's modport.
+  }];
+
+  let mnemonic = "interface.modport";
+  let parameters = (ins "SymbolRefAttr":$modport);
+}
+
+//===----------------------------------------------------------------------===//
 // Other operations
 //===----------------------------------------------------------------------===//
 

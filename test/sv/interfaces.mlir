@@ -1,8 +1,8 @@
 // RUN: circt-opt %s | FileCheck %s
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
-// CHECK-LABEL: func @test() {
-func @test() {
+// CHECK-LABEL: module {
+module {
   // Basic interface smoke test
 
   sv.interface @myinterface {
@@ -35,6 +35,11 @@ func @test() {
   // CHECK-NEXT:   sv.interface.modport @dataflow_out ("output" @data, "output" @valid, "input" @ready)
   // CHECK-NEXT: }
 
-  // CHECK-NEXT: return
-  return
+  rtl.externmodule @Rcvr (%m: !sv.interface.modport<@handshakample.dataflow_in>)
+
+  rtl.module @Top () {
+    %iface = rtl.wire : !sv.interface<@handshake_example>
+    %ifaceInPort = sv.dot %iface "dataflow_in" : !sv.interface<@handshake_example> -> !sv.interface.modport<@handshake_example.dataflow_in>
+    rtl.instance "rcvr" @Rcvr(%ifaceInPort) : (!sv.interface.modport<@handshake_example.dataflow_in>) -> ()
+  }
 }

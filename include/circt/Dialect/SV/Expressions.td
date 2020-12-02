@@ -22,3 +22,19 @@ def TextualValueOp : SVOp<"textual_value", [NoSideEffect]> {
      $string attr-dict `:` type($result)
   }];
 }
+
+def DotOp : SVOp<"dot", [NoSideEffect]> {
+  let summary = "SystemVerilog '.' operator";
+  let description = [{
+    The SystemVerilog '.' operator can be used to access
+    fields/members/modports in types (structs or unions) or interfaces. It is
+    not the '.' used in instantiations to connect signals (`.clk(clk)`).
+  }];
+
+  let arguments = (ins AnyType:$value, StrAttr:$field);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+     $value $field attr-dict `:` type($value) `->` type($result)
+  }];
+}
