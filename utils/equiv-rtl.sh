@@ -1,4 +1,17 @@
 #!/bin/bash
+##===- utils/equiv-rtl.sh - Formal Equivalence via yosys------*- Script -*-===##
+#
+# Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+#
+##===----------------------------------------------------------------------===##
+#
+# This script checks two input verilog files for equivalence using yosys.
+#
+# Usage equiv-rtl.sh File1.v File2.v TopLevelModuleName
+#
+##===----------------------------------------------------------------------===##
 
 echo "Comparing $1 and $2 with $3"
 yosys -q -p "
