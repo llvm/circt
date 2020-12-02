@@ -657,30 +657,111 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
 /// the front have higher priority.
 /// Please refer to test_merge.mlir test case.
 bool HandshakeBuilder::visitHandshake(MergeOp op) {
-  ValueVector resultSubfields = portList.back();
+  auto *context = rewriter.getContext();
+
+  unsigned numPorts = portList.size();
+  unsigned numInputs = numPorts - 1;
+
+  // The last output has the result's ready, valid, and data signal.
+  ValueVector resultSubfields = portList[numInputs];
   Value resultValid = resultSubfields[0];
   Value resultReady = resultSubfields[1];
   Value resultData = resultSubfields[2];
 
-  // Walk through each input to create a chain of when operation.
-  for (unsigned i = 0, e = portList.size() - 1; i < e; ++i) {
+  // Walk through each arg data to collect the subfields.
+  SmallVector<Value, 4> argValid;
+  SmallVector<Value, 4> argReady;
+  SmallVector<Value, 4> argData;
+  for (unsigned i = 0; i < numInputs; ++i) {
     ValueVector argSubfields = portList[i];
-    Value argValid = argSubfields[0];
-    Value argReady = argSubfields[1];
-    Value argData = argSubfields[2];
-
-    // If the current input is not the last one, the new created when operation
-    // will have an else region.
-    auto whenOp = rewriter.create<WhenOp>(insertLoc, argValid,
-                                          /*withElseRegion=*/(i != e - 1));
-    rewriter.setInsertionPointToStart(&whenOp.thenRegion().front());
-    rewriter.create<ConnectOp>(insertLoc, resultData, argData);
-    rewriter.create<ConnectOp>(insertLoc, resultValid, argValid);
-    rewriter.create<ConnectOp>(insertLoc, argReady, resultReady);
-
-    if (i != e - 1)
-      rewriter.setInsertionPointToStart(&whenOp.elseRegion().front());
+    argValid.push_back(argSubfields[0]);
+    argReady.push_back(argSubfields[1]);
+    argData.push_back(argSubfields[2]);
   }
+
+  // Define some common types and values that will be used.
+  auto bitType = UIntType::get(context, 1);
+  auto indexBits =
+      static_cast<int64_t>(std::max(std::ceil(std::log2(numInputs)), 1.0) + 1);
+  auto indexType = SIntType::get(context, indexBits);
+  auto noWinner = createConstantOp(
+      indexType, APInt(indexBits, -1, /*isSigned=*/true), insertLoc, rewriter);
+
+  // Declare wire for arbitration winner.
+  auto winName = rewriter.getStringAttr("win");
+  auto win = rewriter.create<WireOp>(insertLoc, indexType, winName);
+
+  // Declare wires for if each output is done.
+  auto resultDoneName = rewriter.getStringAttr("resultDone");
+  auto resultDone = rewriter.create<WireOp>(insertLoc, bitType, resultDoneName);
+
+  // Create predicates to assert if the win wire or won register hold a valid
+  // index.
+  auto hasWinnerCondition =
+      rewriter.create<NEQPrimOp>(insertLoc, bitType, win, noWinner);
+
+  // Create an arbiter based on a simple priority-encoding scheme to assign an
+  // index to the win wire. If the won register is set, just use that. In
+  // the case that won is not set and no input is valid, set a sentinel value to
+  // indicate no winner was chosen. The constant values are remembered in a map
+  // so they can be re-used later to assign the arg ready outputs.
+  DenseMap<unsigned, Value> argIndexValues;
+  auto priorityMux = noWinner;
+  for (unsigned i = argValid.size(); i > 0; --i) {
+    unsigned inputIndex = i - 1;
+    auto constIndex = createConstantOp(indexType, APInt(indexBits, inputIndex),
+                                       insertLoc, rewriter);
+    priorityMux = rewriter.create<MuxPrimOp>(
+        insertLoc, indexType, argValid[inputIndex], constIndex, priorityMux);
+    argIndexValues[inputIndex] = constIndex;
+  }
+
+  rewriter.create<ConnectOp>(insertLoc, win, priorityMux);
+
+  // Create the logic to assign the result and control outputs. The result valid
+  // output will always be assigned, and if isControl is not set, the result
+  // data output will also be assigned. The control valid and data outputs will
+  // always be assigned. The win wire from the arbiter is reinterpreted as
+  // unsigned. The unsigned wire is used to index into a tree of muxes to select
+  // the chosen input's signal(s), and is fed directly to the control output.
+  // Both the result and control valid outputs are gated on the win wire being
+  // set to something other than the sentinel value.
+  auto winUnsignedType = UIntType::get(context, indexBits - 1);
+
+  Value winUnsigned =
+      rewriter.create<BitsPrimOp>(insertLoc, win, indexBits - 2, 0);
+  winUnsigned =
+      rewriter.create<AsUIntPrimOp>(insertLoc, winUnsignedType, winUnsigned);
+
+  auto resultValidWire =
+      createMuxTree(argValid, winUnsigned, insertLoc, rewriter);
+  resultValidWire = rewriter.create<AndPrimOp>(
+      insertLoc, bitType, resultValidWire, hasWinnerCondition);
+  rewriter.create<ConnectOp>(insertLoc, resultValid, resultValidWire);
+
+  auto resultDataMux = createMuxTree(argData, winUnsigned, insertLoc, rewriter);
+  rewriter.create<ConnectOp>(insertLoc, resultData, resultDataMux);
+
+  // Create the logic to set the done wires for the result and control. For both
+  // outputs, the done wire is asserted when the output is valid and ready, or
+  // the emitted register for that output is set.
+  auto resultValidAndReady = rewriter.create<AndPrimOp>(
+      insertLoc, bitType, resultValidWire, resultReady);
+
+  rewriter.create<ConnectOp>(insertLoc, resultDone, resultValidAndReady);
+
+  // Create the logic to assign the arg ready outputs. The logic is identical
+  // for each arg. If the fired wire is asserted, and the win wire holds an
+  // arg's index, that arg is ready.
+  for (unsigned i = 0, e = argReady.size(); i != e; ++i) {
+    auto constIndex = argIndexValues[i];
+    Value argReadyWire =
+        rewriter.create<EQPrimOp>(insertLoc, bitType, win, constIndex);
+    argReadyWire = rewriter.create<AndPrimOp>(insertLoc, bitType, argReadyWire,
+                                              resultDone);
+    rewriter.create<ConnectOp>(insertLoc, argReady[i], argReadyWire);
+  }
+
   return true;
 }
 
@@ -725,7 +806,8 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
 
   // Define some common types and values that will be used.
   auto bitType = UIntType::get(context, 1);
-  auto indexBits = static_cast<int64_t>(std::ceil(std::log2(numInputs)) + 1);
+  auto indexBits =
+      static_cast<int64_t>(std::max(std::ceil(std::log2(numInputs)), 1.0) + 1);
   auto indexType = SIntType::get(context, indexBits);
   auto noWinner = createConstantOp(
       indexType, APInt(indexBits, -1, /*isSigned=*/true), insertLoc, rewriter);

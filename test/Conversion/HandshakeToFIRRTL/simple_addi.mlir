@@ -2,18 +2,31 @@
 
 // CHECK-LABEL: firrtl.module @handshake_merge_1ins_1outs(
 // CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, %arg1: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) {
-// CHECK:   %0 = firrtl.subfield %arg0("valid") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>) -> !firrtl.uint<1>
-// CHECK:   %1 = firrtl.subfield %arg0("ready") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>) -> !firrtl.flip<uint<1>>
-// CHECK:   %2 = firrtl.subfield %arg0("data") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>) -> !firrtl.uint<64>
-// CHECK:   %3 = firrtl.subfield %arg1("valid") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) -> !firrtl.flip<uint<1>>
-// CHECK:   %4 = firrtl.subfield %arg1("ready") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) -> !firrtl.uint<1>
-// CHECK:   %5 = firrtl.subfield %arg1("data") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) -> !firrtl.flip<uint<64>>
-// CHECK:   firrtl.when %0 {
-// CHECK:     firrtl.connect %5, %2 : !firrtl.flip<uint<64>>, !firrtl.uint<64>
-// CHECK:     firrtl.connect %3, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
-// CHECK:     firrtl.connect %1, %4 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
-// CHECK:   }
-// CHECK: }
+// CHECK:   %[[ARG0_VALID:.+]] = firrtl.subfield %arg0("valid") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>) -> !firrtl.uint<1>
+// CHECK:   %[[ARG0_READY:.+]] = firrtl.subfield %arg0("ready") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>) -> !firrtl.flip<uint<1>>
+// CHECK:   %[[ARG0_DATA:.+]] = firrtl.subfield %arg0("data") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>) -> !firrtl.uint<64>
+// CHECK:   %[[ARG1_VALID:.+]] = firrtl.subfield %arg1("valid") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) -> !firrtl.flip<uint<1>>
+// CHECK:   %[[ARG1_READY:.+]] = firrtl.subfield %arg1("ready") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) -> !firrtl.uint<1>
+// CHECK:   %[[ARG1_DATA:.+]] = firrtl.subfield %arg1("data") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) -> !firrtl.flip<uint<64>>
+// CHECK:   %[[NO_WINNER:.+]] = firrtl.constant(-1 : si2) : !firrtl.sint<2>
+// CHECK:   %[[WIN:win]] = firrtl.wire {{.*}} : !firrtl.sint<2>
+// CHECK:   %[[RESULT_DONE:resultDone]] = firrtl.wire {{.*}} : !firrtl.uint<1>
+// CHECK:   %[[HAS_WINNER:.+]] = firrtl.neq %[[WIN]], %[[NO_WINNER]]
+// CHECK:   %[[INDEX0:.+]] = firrtl.constant(0 : si2)
+// CHECK:   %[[ARB0:.+]] = firrtl.mux(%[[ARG0_VALID]], %[[INDEX0]], %[[NO_WINNER]])
+// CHECK:   firrtl.connect %[[WIN]], %[[ARB0]]
+// CHECK:   %[[WIN_BITS:.+]] = firrtl.bits %[[WIN]] {{.+}} to 0 {{.+}} -> !firrtl.uint
+// CHECK:   %[[WIN_UNSIGNED:.+]] = firrtl.asUInt %[[WIN_BITS]]
+// CHECK:   %[[BITS0:.+]] = firrtl.bits %[[WIN_UNSIGNED]] 0 to 0
+// CHECK:   %[[RESULT_VALID:.+]] = firrtl.and %[[ARG0_VALID]], %[[HAS_WINNER]]
+// CHECK:   firrtl.connect %[[ARG1_VALID]], %[[RESULT_VALID]]
+// CHECK:   %[[BITS1:.+]] = firrtl.bits %[[WIN_UNSIGNED]] 0 to 0
+// CHECK:   firrtl.connect %[[ARG1_DATA]], %[[ARG0_DATA]]
+// CHECK:   %[[RESULT_DONE0:.+]] = firrtl.and %[[RESULT_VALID]], %[[ARG1_READY]]
+// CHECK:   firrtl.connect %[[RESULT_DONE]], %[[RESULT_DONE0]]
+// CHECK:   %[[ARG0_READY0:.+]] = firrtl.eq %[[WIN]], %[[INDEX0]]
+// CHECK:   %[[ARG0_READY1:.+]] = firrtl.and %[[ARG0_READY0]], %[[RESULT_DONE]]
+// CHECK:   firrtl.connect %[[ARG0_READY]], %[[ARG0_READY1]]
 
 // CHECK-LABEL: firrtl.module @std_addi_2ins_1outs(
 // CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, %arg2: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) {
