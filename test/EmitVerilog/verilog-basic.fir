@@ -123,17 +123,18 @@ circuit inputs_only :
 ; CHECK-NEXT:     output       out1,
 ; CHECK-NEXT:     output [3:0] out);
 ; CHECK-EMPTY:
-; CHECK-NEXT:     assign out = {{\{\{}}2'd0}, a} + {{\{\{}}1'd0}, {{\{\{}}1'd0}, b} + {{\{\{}}1'd0}, c}};
-; CHECK-NEXT:     assign out = {{\{\{}}1'd0}, {{\{\{}}1'd0}, a} + {{\{\{}}1'd0}, b}} - {{\{\{}}2'd0}, c};
-; CHECK-NEXT:     assign out = {{\{\{}}2'd0}, a} - {{\{\{}}1'd0}, {{\{\{}}1'd0}, b} + {{\{\{}}1'd0}, c}};
-; CHECK-NEXT:     assign out = {{\{\{}}5'd0}, a} + {{\{\{}}1'd0}, {{\{\{}}4'd0}, b} * {{\{\{}}4'd0}, c}};
-; CHECK-NEXT:     assign out = {{\{\{}}1'd0}, {{\{\{}}4'd0}, a} * {{\{\{}}4'd0}, b}} + {{\{\{}}5'd0}, c};
-; CHECK-NEXT:     assign out = {{\{\{}}4'd0}, {{\{\{}}1'd0}, a} + {{\{\{}}1'd0}, b}} * {{\{\{}}5'd0}, c};
-; CHECK-NEXT:     assign out = {{\{\{}}5'd0}, a} * {{\{\{}}4'd0}, {{\{\{}}1'd0}, b} + {{\{\{}}1'd0}, c}};
-; CHECK-NEXT:     assign out = {{\{\{}}5'd0}, {{\{\{}}1'd0}, a} + {{\{\{}}1'd0}, b}} * {{\{\{}}5'd0}, {{\{\{}}1'd0}, b} + {{\{\{}}1'd0}, c}};
-; CHECK-NEXT:     assign out1 = ^({{\{\{}}1'd0}, b} + {{\{\{}}1'd0}, c});
+
+; CHECK-NEXT:     assign out = a + b + c;
+; CHECK-NEXT:     assign out = a + b - c;
+; CHECK-NEXT:     assign out = a - (b + c);
+; CHECK-NEXT:     assign out = a + b * c;
+; CHECK-NEXT:     assign out = a * b + c;
+; CHECK-NEXT:     assign out = (a + b) * c;
+; CHECK-NEXT:     assign out = a * (b + c);
+; CHECK-NEXT:     assign out = (a + b) * (b + c);
+; CHECK-NEXT:     assign out1 = ^(b + c);
 ; CHECK-NEXT:     assign out1 = b < c | b > c;
-; CHECK-NEXT:     assign out1 = (b ^ c) & {{\{\{}}3'd0}, out1 | out1};
+; CHECK-NEXT:     assign out1 = (b ^ c) & (out1 | out1);
 ; CHECK-NEXT:     assign out1 = out[3:2];
 ; CHECK-NEXT:     assign out1 = out < a;
 ; CHECK-NEXT:  endmodule
@@ -182,11 +183,11 @@ circuit inputs_only :
 ; CHECK-NEXT:     assign out = $signed(c) >= $signed(d);
 ; CHECK-NEXT:     assign out = $signed(a) >= $signed(b);
 ; CHECK-NEXT:     assign out = a == b;
-; CHECK-NEXT:     assign out = $signed(c) == $signed(d);
-; CHECK-NEXT:     assign out = $signed(a) == $signed(b);
+; CHECK-NEXT:     assign out = c == d;
+; CHECK-NEXT:     assign out = a == b;
 ; CHECK-NEXT:     assign out = a != b;
-; CHECK-NEXT:     assign out = $signed(c) != $signed(d);
-; CHECK-NEXT:     assign out = $signed(a) != $signed(b)
+; CHECK-NEXT:     assign out = c != d;
+; CHECK-NEXT:     assign out = a != b
 ; CHECK-NEXT:  endmodule
 
 
@@ -226,9 +227,9 @@ circuit inputs_only :
 ; CHECK-NEXT:     assign out = a >= b;
 ; CHECK-NEXT:     assign out = $signed(c) >= $signed(d);
 ; CHECK-NEXT:     assign out = a == b;
-; CHECK-NEXT:     assign out = $signed(c) == $signed(d);
+; CHECK-NEXT:     assign out = c == d;
 ; CHECK-NEXT:     assign out = a != b;
-; CHECK-NEXT:     assign out = $signed(c) != $signed(d);
+; CHECK-NEXT:     assign out = c != d;
 ; CHECK-NEXT:  endmodule
 
 
@@ -243,7 +244,7 @@ circuit inputs_only :
     ;; emitter needs to reintroduce it as an 'assign' to a local.
 
     node _T_42 = andr(xorr(a)) ; CHECK-NEXT:    wire _T = &^a;
-    node _T_99 = add(a, a)     ; CHECK-NEXT:    wire [4:0] _T_0 = {{\{\{}}1'd0}, a} + {{\{\{}}1'd0}, a};
+    node _T_99 = add(a, a)     ; CHECK-NEXT:    wire [4:0] _T_0 = a + a;
 
     b <= andr(_T_42)           ; CHECK-NEXT:    assign b = &_T;
     b <= xorr(_T_42)           ; CHECK-NEXT:    assign b = ^_T;
@@ -377,7 +378,7 @@ circuit inputs_only :
   ; CHECK-EMPTY:
   ; CHECK-NEXT:    always @(posedge clock) begin
   ; CHECK-NEXT:      `ifndef SYNTHESIS
-  ; CHECK-NEXT:        if (`PRINTF_COND_ && reset) $fwrite(32'h80000002, "Hi %x %x\n", {{\{\{}}1'd0}, a} + {{\{\{}}1'd0}, a}, b);
+  ; CHECK-NEXT:        if (`PRINTF_COND_ && reset) $fwrite(32'h80000002, "Hi %x %x\n", a + a, b);
   ; CHECK-NEXT:      `endif
   ; CHECK-NEXT:    end // always @(posedge)
   ; CHECK-NEXT:  endmodule
@@ -647,8 +648,8 @@ circuit inputs_only :
     b <= xor(_T_4, UInt<4>("h10"))        @[A.scala 101:15]
 
 
-; CHECL: assign b = {{\{\{}}1'd0}, {{\{\{}}1'd0}, a} + {{\{\{}}1'd0}, a}} + {{\{\{}}2'd0}, 4'h3} ^ {{\{\{}}2'd0}, 4'h1};
+; CHECK: assign b = a + a + 4'h3 ^ 4'h1;
 ; CHECK: // Other.scala:51:15, Place.scala:101:{13,15}
 
-; CHECL: assign b = {{\{\{}}4'd0}, {{\{\{}}4'd0}, a} * {{\{\{}}4'd0}, a}} * {{\{\{}}8'd0}, 4'h2} ^ {{\{\{}}8'd0}, 4'h0};
+; CHECK: assign b = a * a * 4'h2 ^ 4'h0;
 ; CHECK: // A.scala:11:13, :51:15, :101:15

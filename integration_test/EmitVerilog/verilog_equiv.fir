@@ -1,12 +1,8 @@
 ; REQUIRES: yosys
 ; RUN: split-file %s %t
 ; RUN: firtool %t/test_mod.fir --format=fir -verilog -o %t/test_mod.fir.v
-; RUN: firtool %t/test_mod.fir --format=fir -mlir -o %t/test_mod.fir.mlir
-; RUN: firtool %t/test_mod.fir.mlir --lower-to-rtl -o %t/test_mod.rtl.mlir
 ; RUN: firtool %t/test_unary.fir --format=fir -verilog -o %t/test_unary.fir.v
-; RUN: firtool %t/test_unary.fir --format=fir -mlir -o %t/test_unary.fir.mlir
 ; RUN: firtool %t/test_prim.fir --format=fir -verilog -o %t/test_prim.fir.v
-; RUN: firtool %t/test_prim.fir --format=fir -mlir -o %t/test_prim.fir.mlir
 ; RUN: %S/../equiv_yosys.sh %t/test_mod.fir.v %t/test_mod.v test_mod
 ; RUN: %S/../equiv_yosys.sh %t/test_unary.fir.v %t/test_unary.v test_unary
 ; RUN: %S/../equiv_yosys.sh %t/test_prim.fir.v %t/test_prim.v test_prim

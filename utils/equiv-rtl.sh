@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 echo "Comparing $1 and $2 with $3"
 yosys -q -p "
