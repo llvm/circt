@@ -32,7 +32,7 @@ using ValueVectorList = std::vector<ValueVector>;
 /// type of the data subfield.
 static FIRRTLType buildBundleType(FIRRTLType dataType, bool isFlip,
                                   MLIRContext *context) {
-  using BundleElement = std::pair<Identifier, FIRRTLType>;
+  using BundleElement = BundleType::BundleElement;
   llvm::SmallVector<BundleElement, 3> elements;
 
   // Add valid and ready subfield to the bundle.
@@ -390,8 +390,8 @@ static ValueVectorList extractSubfields(FModuleOp subModuleOp,
     if (auto argType = arg.getType().dyn_cast<BundleType>()) {
       // Extract all subfields of all bundle ports.
       for (auto &element : argType.getElements()) {
-        StringRef elementName = element.first.strref();
-        FIRRTLType elementType = element.second;
+        StringRef elementName = element.name.strref();
+        FIRRTLType elementType = element.type;
         subfields.push_back(rewriter.create<SubfieldOp>(
             insertLoc, elementType, arg, rewriter.getStringAttr(elementName)));
       }
@@ -1092,7 +1092,7 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
                          FModuleOp topModuleOp, unsigned clockDomain,
                          ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPointAfter(oldOp);
-  using BundleElement = std::pair<Identifier, FIRRTLType>;
+  using BundleElement = BundleType::BundleElement;
   llvm::SmallVector<BundleElement, 8> elements;
   MLIRContext *context = subModuleOp.getContext();
 
@@ -1118,11 +1118,9 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
   // the top-module.
   unsigned portIndex = 0;
   for (auto &element : instType.cast<BundleType>().getElements()) {
-    Identifier elementName = element.first;
-    FIRRTLType elementType = element.second;
     auto subfieldOp = rewriter.create<SubfieldOp>(
-        oldOp->getLoc(), elementType, instanceOp,
-        rewriter.getStringAttr(elementName.strref()));
+        oldOp->getLoc(), element.type, instanceOp,
+        rewriter.getStringAttr(element.name.strref()));
 
     unsigned numIns = oldOp->getNumOperands();
     unsigned numArgs = numIns + oldOp->getNumResults();

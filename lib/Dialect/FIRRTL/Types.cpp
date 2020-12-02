@@ -47,8 +47,8 @@ void FIRRTLType::print(raw_ostream &os) const {
         os << "bundle<";
         llvm::interleaveComma(bundleType.getElements(), os,
                               [&](BundleType::BundleElement element) {
-                                os << element.first << ": ";
-                                element.second.print(os);
+                                os << element.name << ": ";
+                                element.type.print(os);
                               });
         os << '>';
       })
@@ -233,7 +233,7 @@ FIRRTLType FIRRTLType::getMaskType() {
         SmallVector<BundleType::BundleElement, 4> newElements;
         newElements.reserve(bundleType.getElements().size());
         for (auto elt : bundleType.getElements())
-          newElements.push_back({elt.first, elt.second.getMaskType()});
+          newElements.push_back({elt.name, elt.type.getMaskType()});
         return BundleType::get(newElements, getContext());
       })
       .Case<FVectorType>([](FVectorType vectorType) {
@@ -260,7 +260,7 @@ FIRRTLType FIRRTLType::getWidthlessType() {
         SmallVector<BundleType::BundleElement, 4> newElements;
         newElements.reserve(a.getElements().size());
         for (auto elt : a.getElements())
-          newElements.push_back({elt.first, elt.second.getWidthlessType()});
+          newElements.push_back({elt.name, elt.type.getWidthlessType()});
         return BundleType::get(newElements, getContext());
       })
       .Case<FVectorType>([](auto a) {
@@ -308,14 +308,10 @@ bool FIRRTLType::isResetType() {
 /// canonicalizes flips in bundles, so only passive types can be compared here.
 static bool areBundleElementsEquivalent(BundleType::BundleElement destElement,
                                         BundleType::BundleElement srcElement) {
-  Identifier destElementName = std::get<0>(destElement);
-  Identifier srcElementName = std::get<0>(srcElement);
-  if (destElementName != srcElementName)
+  if (destElement.name != srcElement.name)
     return false;
 
-  FIRRTLType destElementType = std::get<1>(destElement);
-  FIRRTLType srcElementType = std::get<1>(srcElement);
-  return areTypesEquivalent(destElementType, srcElementType);
+  return areTypesEquivalent(destElement.type, srcElement.type);
 }
 
 /// Returns whether the two types are equivalent. See the FIRRTL spec for the
@@ -481,8 +477,8 @@ getFlippedBundleType(ArrayRef<BundleType::BundleElement> elements) {
   SmallVector<BundleType::BundleElement, 16> flippedelements;
   flippedelements.reserve(elements.size());
   for (auto &elt : elements)
-    flippedelements.push_back({elt.first, FlipType::get(elt.second)});
-  return BundleType::get(flippedelements, elements[0].second.getContext());
+    flippedelements.push_back({elt.name, FlipType::get(elt.type)});
+  return BundleType::get(flippedelements, elements[0].type.getContext());
 }
 
 FIRRTLType FlipType::get(FIRRTLType element) {
@@ -540,22 +536,32 @@ FIRRTLType FlipType::getElementType() { return getImpl()->element; }
 
 namespace circt {
 namespace firrtl {
+llvm::hash_code hash_value(const BundleType::BundleElement &arg) {
+  return llvm::hash_value(arg.name) ^ mlir::hash_value(arg.type);
+}
+} // namespace firrtl
+} // namespace circt
+
+namespace circt {
+namespace firrtl {
 namespace detail {
 struct BundleTypeStorage : mlir::TypeStorage {
   using KeyTy = ArrayRef<BundleType::BundleElement>;
 
   BundleTypeStorage(KeyTy elements)
       : elements(elements.begin(), elements.end()) {
-
-    bool isPassive = llvm::all_of(
-        elements, [](const BundleType::BundleElement &elt) -> bool {
-          auto eltType = elt.second;
-          return eltType.isPassive();
+    bool isPassive =
+        llvm::all_of(elements, [](BundleType::BundleElement elt) -> bool {
+          return elt.type.isPassive();
         });
     passiveTypeInfo.setInt(isPassive);
   }
 
   bool operator==(const KeyTy &key) const { return key == KeyTy(elements); }
+
+  static llvm::hash_code hashKey(const KeyTy &key) {
+    return llvm::hash_combine_range(key.begin(), key.end());
+  }
 
   static BundleTypeStorage *construct(TypeStorageAllocator &allocator,
                                       KeyTy key) {
@@ -579,7 +585,7 @@ FIRRTLType BundleType::get(ArrayRef<BundleElement> elements,
   // the outer level.
   if (!elements.empty() &&
       llvm::all_of(elements, [&](const BundleElement &elt) -> bool {
-        return elt.second.isa<FlipType>();
+        return elt.type.isa<FlipType>();
       })) {
     return FlipType::get(getFlippedBundleType(elements));
   }
@@ -608,7 +614,7 @@ FIRRTLType BundleType::getPassiveType() {
   SmallVector<BundleType::BundleElement, 16> newElements;
   newElements.reserve(impl->elements.size());
   for (auto &elt : impl->elements) {
-    newElements.push_back({elt.first, elt.second.getPassiveType()});
+    newElements.push_back({elt.name, elt.type.getPassiveType()});
   }
 
   auto passiveType = BundleType::get(newElements, getContext());
@@ -619,7 +625,7 @@ FIRRTLType BundleType::getPassiveType() {
 /// Look up an element by name.  This returns a BundleElement with.
 auto BundleType::getElement(StringRef name) -> Optional<BundleElement> {
   for (const auto &element : getElements()) {
-    if (element.first == name)
+    if (element.name == name)
       return element;
   }
   return None;
@@ -627,7 +633,7 @@ auto BundleType::getElement(StringRef name) -> Optional<BundleElement> {
 
 FIRRTLType BundleType::getElementType(StringRef name) {
   auto element = getElement(name);
-  return element.hasValue() ? element.getValue().second : FIRRTLType();
+  return element.hasValue() ? element.getValue().type : FIRRTLType();
 }
 
 //===----------------------------------------------------------------------===//

@@ -553,12 +553,12 @@ static LogicalResult verifyInstanceOp(InstanceOp &instance) {
                               .getType()
                               .cast<FIRRTLType>()
                               .getPassiveType();
-      if (bundleElements[i].second != expectedType) {
+      if (bundleElements[i].type != expectedType) {
         auto diag = instance.emitOpError()
                     << "output bundle type must match module. In "
                        "element "
                     << i << ", expected " << expectedType << ", but got "
-                    << bundleElements[i].second << ".";
+                    << bundleElements[i].type << ".";
 
         diag.attachNote(referencedFModule.getLoc())
             << "original module declared here";
@@ -666,9 +666,9 @@ void MemOp::getPorts(
   // Each entry in the bundle is a port.
   for (auto elt : bundle.getElements()) {
     // Each port is a bundle.
-    auto kind = getMemPortKindFromType(elt.second);
+    auto kind = getMemPortKindFromType(elt.type);
     assert(kind.hasValue() && "unknown port type!");
-    result.push_back({elt.first, kind.getValue()});
+    result.push_back({elt.name, kind.getValue()});
   }
 }
 
@@ -692,7 +692,7 @@ FIRRTLType MemOp::getDataTypeOrNull() {
     return {};
 
   auto firstPort = bundle.getElements()[0];
-  auto firstPortType = firstPort.second.getPassiveType().cast<BundleType>();
+  auto firstPortType = firstPort.type.getPassiveType().cast<BundleType>();
   return firstPortType.getElementType("data");
 }
 
@@ -801,8 +801,8 @@ FIRRTLType SubfieldOp::getResultType(FIRRTLType inType, StringRef fieldName,
                                      Location loc) {
   if (auto bundleType = inType.dyn_cast<BundleType>()) {
     for (auto &elt : bundleType.getElements()) {
-      if (elt.first == fieldName)
-        return elt.second;
+      if (elt.name == fieldName)
+        return elt.type;
     }
   }
 

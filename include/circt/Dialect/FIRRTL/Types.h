@@ -1,6 +1,6 @@
-//===- FIRRTL/IR/Ops.h - FIRRTL dialect -------------------------*- C++ -*-===//
+//===- FIRRTL/IR/Types.h - FIRRTL Type System -------------------*- C++ -*-===//
 //
-// This file defines an MLIR dialect for the FIRRTL IR.
+// This file defines type type system for the FIRRTL Dialect.
 //
 //===----------------------------------------------------------------------===//
 
@@ -218,7 +218,17 @@ public:
   using Base::Base;
 
   // Each element of a bundle, which is a name and type.
-  using BundleElement = std::pair<Identifier, FIRRTLType>;
+  struct BundleElement {
+    Identifier name;
+    FIRRTLType type;
+
+    BundleElement(Identifier name, FIRRTLType type) : name(name), type(type) {}
+
+    bool operator==(const BundleElement &rhs) const {
+      return name == rhs.name && type == rhs.type;
+    }
+    bool operator!=(const BundleElement &rhs) const { return !operator==(rhs); }
+  };
 
   static FIRRTLType get(ArrayRef<BundleElement> elements, MLIRContext *context);
 

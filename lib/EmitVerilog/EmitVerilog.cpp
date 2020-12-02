@@ -145,9 +145,9 @@ static void flattenBundleTypes(Type type, StringRef suffixSoFar, bool isFlipped,
     // Construct the suffix to pass down.
     tmpSuffix.resize(suffixSoFar.size());
     tmpSuffix.push_back('_');
-    tmpSuffix.append(elt.first.strref());
+    tmpSuffix.append(elt.name.strref());
     // Recursively process subelements.
-    flattenBundleTypes(elt.second, tmpSuffix, isFlipped, results);
+    flattenBundleTypes(elt.type, tmpSuffix, isFlipped, results);
   }
 }
 
