@@ -318,6 +318,9 @@ public:
   void emitDecl(RegOp op);
   void emitDecl(MemOp op);
   void emitDecl(RegInitOp op);
+  void emitDecl(sv::InterfaceOp op);
+  void emitDecl(sv::InterfaceSignalOp op);
+  void emitDecl(sv::InterfaceModportOp op);
   void emitOperation(Operation *op);
 
   void collectNamesEmitDecls(Block &block);
@@ -1950,6 +1953,47 @@ void ModuleEmitter::emitDecl(MemOp op) {
   }
 }
 
+void ModuleEmitter::emitDecl(sv::InterfaceOp op) {
+  os << "interface " << op.sym_name() << ";\n";
+
+  addIndent();
+  for (auto &op : op.getBodyBlock()->without_terminator())
+    emitOperation(&op);
+  reduceIndent();
+
+  os << "endinterface\n\n";
+}
+
+void ModuleEmitter::emitDecl(sv::InterfaceSignalOp op) {
+  indent() << "logic ";
+
+  auto type = op.type();
+  if (getBitWidthOrSentinel(type) != 1) {
+    emitTypePaddedToWidth(type, 0, op);
+    os << ' ';
+  }
+
+  os << op.sym_name() << ";\n";
+}
+
+void ModuleEmitter::emitDecl(sv::InterfaceModportOp op) {
+  indent() << "modport " << op.sym_name() << '(';
+  ArrayAttr portsAttr = op.ports();
+
+  for (size_t i = 0, e = portsAttr.size(); i != e; ++i) {
+    auto port = portsAttr[i].cast<sv::ModportStructAttr>();
+
+    os << port.direction().getValue() << ' '
+       << port.signal().getRootReference();
+
+    if (i < e - 1) {
+      os << ", ";
+    }
+  }
+
+  os << ");\n";
+}
+
 //===----------------------------------------------------------------------===//
 // Module Driver
 //===----------------------------------------------------------------------===//
@@ -2290,6 +2334,12 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitSV(sv::AssertOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::AssumeOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::CoverOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::InterfaceSignalOp op) {
+      return emitter.emitDecl(op), true;
+    }
+    bool visitSV(sv::InterfaceModportOp op) {
+      return emitter.emitDecl(op), true;
+    }
 
     bool visitUnhandledSV(Operation *op) { return false; }
     bool visitInvalidSV(Operation *op) { return false; }
@@ -2771,6 +2821,9 @@ void CircuitEmitter::emitCircuit(CircuitOp circuit) {
     } else if (auto module = dyn_cast<rtl::RTLExternModuleOp>(op)) {
       ModuleEmitter(state).emitRTLExternModule(module);
       continue;
+    } else if (auto interface = dyn_cast<sv::InterfaceOp>(op)) {
+      ModuleEmitter(state).emitDecl(interface);
+      continue;
     }
 
     // Ignore the done terminator at the end of the circuit.
@@ -2790,6 +2843,8 @@ void CircuitEmitter::emitMLIRModule(ModuleOp module) {
       ModuleEmitter(state).emitRTLModule(module);
     else if (auto module = dyn_cast<rtl::RTLExternModuleOp>(op))
       ModuleEmitter(state).emitRTLExternModule(module);
+    else if (auto interface = dyn_cast<sv::InterfaceOp>(op))
+      ModuleEmitter(state).emitDecl(interface);
     else if (!isa<ModuleTerminatorOp>(op))
       op.emitError("unknown operation");
   }
