@@ -7,7 +7,8 @@
 #ifndef CIRCT_DIALECT_SV_TYPES_H
 #define CIRCT_DIALECT_SV_TYPES_H
 
-#include "circt/Dialect/SV/Ops.h"
+#include "mlir/IR/Attributes.h"
+#include "mlir/IR/Types.h"
 
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/SV/SVTypes.h.inc"

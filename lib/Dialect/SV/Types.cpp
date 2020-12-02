@@ -9,8 +9,8 @@
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/TypeSwitch.h"
 
-using namespace circt;
-using namespace sv;
+using namespace circt::sv;
+using namespace mlir;
 
 //===----------------------------------------------------------------------===//
 // SV Interface type logic.
