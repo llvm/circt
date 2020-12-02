@@ -5,6 +5,7 @@
 #include "circt/Dialect/SV/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/StandardTypes.h"
+#include "llvm/Support/FormatVariadic.h"
 
 using namespace circt;
 using namespace sv;
@@ -111,6 +112,51 @@ static void printModportStructs(OpAsmPrinter &p, Operation *,
     }
   }
   p << ')';
+}
+
+//===----------------------------------------------------------------------===//
+// Extract operation.
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseExtractOp(OpAsmParser &p, OperationState &result) {
+  MLIRContext *ctxt = result.getContext();
+  FlatSymbolRefAttr field;
+  OpAsmParser::OperandType extractable;
+  Type inputType;
+  if (p.parseAttribute(field) || p.parseOperand(extractable) || p.parseColon())
+    return failure();
+  result.addAttribute("field", field);
+
+  auto typeLoc = p.getCurrentLocation();
+  if (p.parseType(inputType))
+    return failure();
+
+  if (p.resolveOperand(extractable, inputType, result.operands))
+    return failure();
+
+  if (auto ifaceTy = inputType.dyn_cast<InterfaceType>()) {
+    SymbolRefAttr ifaceSym = ifaceTy.getInterface();
+    SmallVector<FlatSymbolRefAttr, 4> refs;
+    auto nested = ifaceSym.getNestedReferences();
+    refs.append(nested.begin(), nested.end());
+    refs.push_back(field);
+
+    SymbolRefAttr modportSym =
+        SymbolRefAttr::get(ifaceSym.getRootReference(), refs, ctxt);
+    auto resultPort = InterfaceModportType::get(ctxt, modportSym);
+    result.addTypes({resultPort});
+    return success();
+  } else {
+    p.emitError(typeLoc, llvm::formatv("Expected extractable type, got '{0}'",
+                                       inputType));
+    return failure();
+  }
+}
+
+static void printExtractOp(OpAsmPrinter &p, ExtractOp &op) {
+  p << "sv.extract " << op.fieldAttr() << " " << op.extractable() << " ";
+  p.printOptionalAttrDict(op.getAttrs(), /* elidedAttrs */ {"field"});
+  p << ": " << op.extractable().getType();
 }
 
 // TableGen generated logic.

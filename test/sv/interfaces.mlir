@@ -17,7 +17,7 @@ module {
   // CHECK-NEXT:   sv.interface.modport @output_port ("output" @data)
   // CHECK-NEXT: }
 
-  // Hanshake-like interface smoke test
+  // Handshake-like interface smoke test
 
   sv.interface @handshake_example {
     sv.interface.signal @data : i32
@@ -35,11 +35,16 @@ module {
   // CHECK-NEXT:   sv.interface.modport @dataflow_out ("output" @data, "output" @valid, "input" @ready)
   // CHECK-NEXT: }
 
-  rtl.externmodule @Rcvr (%m: !sv.interface.modport<@handshakample.dataflow_in>)
+  rtl.externmodule @Rcvr (%m: !sv.interface.modport<@handshake_example::@dataflow_in>)
+  // CHECK-LABEL: rtl.externmodule @Rcvr(!sv.interface.modport<@handshake_example::@dataflow_in> {rtl.name = "m"})
 
   rtl.module @Top () {
     %iface = rtl.wire : !sv.interface<@handshake_example>
-    %ifaceInPort = sv.dot %iface "dataflow_in" : !sv.interface<@handshake_example> -> !sv.interface.modport<@handshake_example.dataflow_in>
-    rtl.instance "rcvr" @Rcvr(%ifaceInPort) : (!sv.interface.modport<@handshake_example.dataflow_in>) -> ()
+    %ifaceInPort = sv.extract @dataflow_in %iface : !sv.interface<@handshake_example>
+    rtl.instance "rcvr" @Rcvr(%ifaceInPort) : (!sv.interface.modport<@handshake_example::@dataflow_in>) -> ()
   }
+  // CHECK-LABEL: rtl.module @Top() {
+  // CHECK-NEXT:    %iface = rtl.wire : !sv.interface<@handshake_example>
+  // CHECK-NEXT:    %0 = sv.extract @dataflow_in %iface : !sv.interface<@handshake_example>
+  // CHECK-NEXT:    rtl.instance "rcvr" @Rcvr(%0) : (!sv.interface.modport<@handshake_example::@dataflow_in>) -> ()
 }

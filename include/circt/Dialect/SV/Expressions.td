@@ -23,7 +23,12 @@ def TextualValueOp : SVOp<"textual_value", [NoSideEffect]> {
   }];
 }
 
-def DotOp : SVOp<"dot", [NoSideEffect]> {
+// A list of things that the extract op knows with how to deal.
+def Extractable : Type<Or<[
+  CPred<"$_self.isa<::circt::sv::InterfaceType>()">
+]>, "Types from which ports or values can be extracted.">;
+
+def ExtractOp : SVOp<"extract", [NoSideEffect]> {
   let summary = "SystemVerilog '.' operator";
   let description = [{
     The SystemVerilog '.' operator can be used to access
@@ -31,10 +36,12 @@ def DotOp : SVOp<"dot", [NoSideEffect]> {
     not the '.' used in instantiations to connect signals (`.clk(clk)`).
   }];
 
-  let arguments = (ins AnyType:$value, StrAttr:$field);
+  let arguments = (ins Extractable:$extractable, FlatSymbolRefAttr:$field);
   let results = (outs AnyType:$result);
 
-  let assemblyFormat = [{
-     $value $field attr-dict `:` type($value) `->` type($result)
-  }];
+  let printer = [{ printExtractOp(p, *this); }];
+  let parser = [{ return parseExtractOp(parser, result); }];
+  // let assemblyFormat = [{
+    //  $value $field attr-dict `:` type($value) `->` type($result)
+  // }];
 }
