@@ -229,6 +229,61 @@ static Value createDecoder(Value input, unsigned width, Location insertLoc,
   return rewriter.create<DShlPrimOp>(insertLoc, resultType, bit, input);
 }
 
+/// Return the number of bits needed to index the given number of values.
+static size_t getNumIndexBits(ArrayRef<Value> values) {
+  return static_cast<size_t>(
+      std::max(std::ceil(std::log2(values.size())), 1.0) + 1);
+}
+
+/// Construct an arbiter based on a simple priority-encoding scheme. In addition
+/// to returning the arbiter result, the index for each input is added the the
+/// mapping for other lowerings to make use of.
+static Value createPriorityArbiter(ArrayRef<Value> inputs, Value defaultValue,
+                                   DenseMap<unsigned, Value> &indexMapping,
+                                   Location insertLoc,
+                                   ConversionPatternRewriter &rewriter) {
+  auto indexBits = getNumIndexBits(inputs);
+  auto indexType = SIntType::get(rewriter.getContext(), indexBits);
+  auto priorityArb = defaultValue;
+
+  for (unsigned i = inputs.size(); i > 0; --i) {
+    unsigned inputIndex = i - 1;
+
+    auto constIndex = createConstantOp(indexType, APInt(indexBits, inputIndex),
+                                       insertLoc, rewriter);
+
+    priorityArb = rewriter.create<MuxPrimOp>(
+        insertLoc, indexType, inputs[inputIndex], constIndex, priorityArb);
+
+    indexMapping[inputIndex] = constIndex;
+  }
+
+  return priorityArb;
+}
+
+/// Construct the logic to assign the ready outputs for ControlMergeOp and
+/// MergeOp. The logic is identical for each output. If the fired value is
+/// asserted, and the win value holds the output's index, that output is ready.
+static void createMergeArgReady(ArrayRef<Value> outputs, Value fired,
+                                Value winner,
+                                DenseMap<unsigned, Value> indexMappings,
+                                Location insertLoc,
+                                ConversionPatternRewriter &rewriter) {
+  auto bitType = fired.getType();
+
+  for (unsigned i = 0, e = outputs.size(); i != e; ++i) {
+    auto constIndex = indexMappings[i];
+
+    Value argReadyWire =
+        rewriter.create<EQPrimOp>(insertLoc, bitType, winner, constIndex);
+
+    argReadyWire =
+        rewriter.create<AndPrimOp>(insertLoc, bitType, argReadyWire, fired);
+
+    rewriter.create<ConnectOp>(insertLoc, outputs[i], argReadyWire);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // FIRRTL Top-module Related Functions
 //===----------------------------------------------------------------------===//
@@ -653,9 +708,10 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
   return true;
 }
 
-/// Assume only one input is active. When multiple inputs are active, inputs in
-/// the front have higher priority.
 /// Please refer to test_merge.mlir test case.
+/// Lowers the ControlMergeOp into primitive FIRRTL ops. This is a
+/// simplification of the ControlMergeOp lowering, since it doesn't need to wait
+/// for more than one input to become ready.
 bool HandshakeBuilder::visitHandshake(MergeOp op) {
   auto *context = rewriter.getContext();
 
@@ -681,8 +737,7 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
 
   // Define some common types and values that will be used.
   auto bitType = UIntType::get(context, 1);
-  auto indexBits =
-      static_cast<int64_t>(std::max(std::ceil(std::log2(numInputs)), 1.0) + 1);
+  auto indexBits = getNumIndexBits(argValid);
   auto indexType = SIntType::get(context, indexBits);
   auto noWinner = createConstantOp(
       indexType, APInt(indexBits, -1, /*isSigned=*/true), insertLoc, rewriter);
@@ -701,22 +756,14 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
       rewriter.create<NEQPrimOp>(insertLoc, bitType, win, noWinner);
 
   // Create an arbiter based on a simple priority-encoding scheme to assign an
-  // index to the win wire. If the won register is set, just use that. In
-  // the case that won is not set and no input is valid, set a sentinel value to
-  // indicate no winner was chosen. The constant values are remembered in a map
-  // so they can be re-used later to assign the arg ready outputs.
+  // index to the win wire. In the case that no input is valid, set a sentinel
+  // value to indicate no winner was chosen. The constant values are remembered
+  // in a map so they can be re-used later to assign the arg ready outputs.
   DenseMap<unsigned, Value> argIndexValues;
-  auto priorityMux = noWinner;
-  for (unsigned i = argValid.size(); i > 0; --i) {
-    unsigned inputIndex = i - 1;
-    auto constIndex = createConstantOp(indexType, APInt(indexBits, inputIndex),
-                                       insertLoc, rewriter);
-    priorityMux = rewriter.create<MuxPrimOp>(
-        insertLoc, indexType, argValid[inputIndex], constIndex, priorityMux);
-    argIndexValues[inputIndex] = constIndex;
-  }
+  auto priorityArb = createPriorityArbiter(argValid, noWinner, argIndexValues,
+                                           insertLoc, rewriter);
 
-  rewriter.create<ConnectOp>(insertLoc, win, priorityMux);
+  rewriter.create<ConnectOp>(insertLoc, win, priorityArb);
 
   // Create the logic to assign the result and control outputs. The result valid
   // output will always be assigned, and if isControl is not set, the result
@@ -753,14 +800,8 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
   // Create the logic to assign the arg ready outputs. The logic is identical
   // for each arg. If the fired wire is asserted, and the win wire holds an
   // arg's index, that arg is ready.
-  for (unsigned i = 0, e = argReady.size(); i != e; ++i) {
-    auto constIndex = argIndexValues[i];
-    Value argReadyWire =
-        rewriter.create<EQPrimOp>(insertLoc, bitType, win, constIndex);
-    argReadyWire = rewriter.create<AndPrimOp>(insertLoc, bitType, argReadyWire,
-                                              resultDone);
-    rewriter.create<ConnectOp>(insertLoc, argReady[i], argReadyWire);
-  }
+  createMergeArgReady(argReady, resultDone, win, argIndexValues, insertLoc,
+                      rewriter);
 
   return true;
 }
@@ -806,8 +847,7 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
 
   // Define some common types and values that will be used.
   auto bitType = UIntType::get(context, 1);
-  auto indexBits =
-      static_cast<int64_t>(std::max(std::ceil(std::log2(numInputs)), 1.0) + 1);
+  auto indexBits = getNumIndexBits(argValid);
   auto indexType = SIntType::get(context, indexBits);
   auto noWinner = createConstantOp(
       indexType, APInt(indexBits, -1, /*isSigned=*/true), insertLoc, rewriter);
@@ -857,19 +897,13 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   // indicate no winner was chosen. The constant values are remembered in a map
   // so they can be re-used later to assign the arg ready outputs.
   DenseMap<unsigned, Value> argIndexValues;
-  auto priorityMux = noWinner;
-  for (unsigned i = argValid.size(); i > 0; --i) {
-    unsigned inputIndex = i - 1;
-    auto constIndex = createConstantOp(indexType, APInt(indexBits, inputIndex),
-                                       insertLoc, rewriter);
-    priorityMux = rewriter.create<MuxPrimOp>(
-        insertLoc, indexType, argValid[inputIndex], constIndex, priorityMux);
-    argIndexValues[inputIndex] = constIndex;
-  }
+  auto priorityArb = createPriorityArbiter(argValid, noWinner, argIndexValues,
+                                           insertLoc, rewriter);
 
-  priorityMux = rewriter.create<MuxPrimOp>(
-      insertLoc, indexType, hadWinnerCondition, won, priorityMux);
-  rewriter.create<ConnectOp>(insertLoc, win, priorityMux);
+  priorityArb = rewriter.create<MuxPrimOp>(
+      insertLoc, indexType, hadWinnerCondition, won, priorityArb);
+
+  rewriter.create<ConnectOp>(insertLoc, win, priorityArb);
 
   // Create the logic to assign the result and control outputs. The result valid
   // output will always be assigned, and if isControl is not set, the result
@@ -959,14 +993,8 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   // Create the logic to assign the arg ready outputs. The logic is identical
   // for each arg. If the fired wire is asserted, and the win wire holds an
   // arg's index, that arg is ready.
-  for (unsigned i = 0, e = argReady.size(); i != e; ++i) {
-    auto constIndex = argIndexValues[i];
-    Value argReadyWire =
-        rewriter.create<EQPrimOp>(insertLoc, bitType, win, constIndex);
-    argReadyWire =
-        rewriter.create<AndPrimOp>(insertLoc, bitType, argReadyWire, fired);
-    rewriter.create<ConnectOp>(insertLoc, argReady[i], argReadyWire);
-  }
+  createMergeArgReady(argReady, fired, win, argIndexValues, insertLoc,
+                      rewriter);
 
   return true;
 }
