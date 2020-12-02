@@ -134,6 +134,9 @@ static ParseResult parseExtractOp(OpAsmParser &p, OperationState &result) {
   if (p.resolveOperand(extractable, inputType, result.operands))
     return failure();
 
+  // The type specified is the extractable type, so the return type can be
+  // inferred based on that. Said resolution is different depending on the
+  // extractable type.
   if (auto ifaceTy = inputType.dyn_cast<InterfaceType>()) {
     SymbolRefAttr ifaceSym = ifaceTy.getInterface();
     SmallVector<FlatSymbolRefAttr, 4> refs;

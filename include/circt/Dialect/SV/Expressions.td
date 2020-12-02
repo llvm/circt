@@ -34,6 +34,11 @@ def ExtractOp : SVOp<"extract", [NoSideEffect]> {
     The SystemVerilog '.' operator can be used to access
     fields/members/modports in types (structs or unions) or interfaces. It is
     not the '.' used in instantiations to connect signals (`.clk(clk)`).
+
+    Get the 'dataflow_in' modport on the 'handshake_example' interface:
+    ```
+    %ifaceModport = sv.extract @dataflow_in %iface : !sv.interface<@handshake_example>
+    ```
   }];
 
   let arguments = (ins Extractable:$extractable, FlatSymbolRefAttr:$field);
@@ -41,7 +46,4 @@ def ExtractOp : SVOp<"extract", [NoSideEffect]> {
 
   let printer = [{ printExtractOp(p, *this); }];
   let parser = [{ return parseExtractOp(parser, result); }];
-  // let assemblyFormat = [{
-    //  $value $field attr-dict `:` type($value) `->` type($result)
-  // }];
 }
