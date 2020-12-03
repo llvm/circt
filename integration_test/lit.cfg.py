@@ -64,7 +64,14 @@ tool_dirs = [config.circt_tools_dir,
 tools = [
     'circt-opt',
     'circt-translate',
+    'firtool'
 ]
+
+# Enable yosys if it has been detected.
+if config.yosys_path != "":
+  tool_dirs.append(os.path.dirname(config.yosys_path))
+  tools.append('yosys')
+  config.available_features.add('yosys')
 
 # Enable Verilator if it has been detected.
 if config.verilator_path != "":

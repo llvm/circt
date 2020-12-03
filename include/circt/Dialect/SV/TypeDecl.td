@@ -40,6 +40,10 @@ def InterfaceOp : SVOp<"interface",
   let assemblyFormat = [{
     attr-dict $sym_name $body
   }];
+
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &body().front(); }
+  }];
 }
 
 // For now, IntegerType is a placeholder for future SV dialect types

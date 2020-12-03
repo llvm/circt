@@ -39,6 +39,7 @@ config.circt_shlib_dir = "@LLVM_LIBRARY_OUTPUT_INTDIR@"
 config.verilator_path = "@VERILATOR_PATH@"
 config.esi_cosim_path = "@ESI_COSIM_PATH@"
 config.timeout = "@CIRCT_INTEGRATION_TIMEOUT@"
+config.yosys_path = "@YOSYS_PATH@"
 
 # Support substitution of the tools_dir with user parameters. This is
 # used when we can't determine the tool dir at configuration time.

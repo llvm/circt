@@ -25,6 +25,8 @@ public:
                        IfDefOp, IfOp, AlwaysAtPosEdgeOp,
                        // Other Statements.
                        YieldOp, FWriteOp, FatalOp, FinishOp,
+                       // Type declarations.
+                       InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
                        // Verification statements.
                        AssertOp, AssumeOp, CoverOp>(
             [&](auto expr) -> ResultType {
@@ -65,6 +67,11 @@ public:
   HANDLE(FWriteOp, Unhandled);
   HANDLE(FatalOp, Unhandled);
   HANDLE(FinishOp, Unhandled);
+
+  // Type declarations.
+  HANDLE(InterfaceOp, Unhandled);
+  HANDLE(InterfaceSignalOp, Unhandled);
+  HANDLE(InterfaceModportOp, Unhandled);
 
   // Verification statements.
   HANDLE(AssertOp, Unhandled);
