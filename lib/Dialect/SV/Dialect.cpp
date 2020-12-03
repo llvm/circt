@@ -37,9 +37,13 @@ SVDialect::~SVDialect() {}
 /// Parses a type registered to this dialect
 Type SVDialect::parseType(DialectAsmParser &parser) const {
   llvm::StringRef mnemonic;
+  auto loc = parser.getCurrentLocation();
   if (parser.parseKeyword(&mnemonic))
     return Type();
-  return generatedTypeParser(getContext(), parser, mnemonic);
+  if (auto type = generatedTypeParser(getContext(), parser, mnemonic))
+    return type;
+  parser.emitError(loc, "Failed to parse type sv.") << mnemonic << "\n";
+  return Type();
 }
 
 /// Print a type registered to this dialect

@@ -35,7 +35,7 @@ Type InterfaceModportType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
 }
 
 void InterfaceModportType::print(DialectAsmPrinter &p) const {
-  p << "interface.modport<" << getModport() << ">";
+  p << "modport<" << getModport() << ">";
 }
 
 //===----------------------------------------------------------------------===//

@@ -22,28 +22,3 @@ def TextualValueOp : SVOp<"textual_value", [NoSideEffect]> {
      $string attr-dict `:` type($result)
   }];
 }
-
-// A list of things that the extract op knows with how to deal.
-def Extractable : Type<Or<[
-  CPred<"$_self.isa<::circt::sv::InterfaceType>()">
-]>, "Types from which ports or values can be extracted.">;
-
-def ExtractOp : SVOp<"extract", [NoSideEffect]> {
-  let summary = "SystemVerilog '.' operator";
-  let description = [{
-    The SystemVerilog '.' operator can be used to access
-    fields/members/modports in types (structs or unions) or interfaces. It is
-    not the '.' used in instantiations to connect signals (`.clk(clk)`).
-
-    Get the 'dataflow_in' modport on the 'handshake_example' interface:
-    ```
-    %ifaceModport = sv.extract @dataflow_in %iface : !sv.interface<@handshake_example>
-    ```
-  }];
-
-  let arguments = (ins Extractable:$extractable, FlatSymbolRefAttr:$field);
-  let results = (outs AnyType:$result);
-
-  let printer = [{ printExtractOp(p, *this); }];
-  let parser = [{ return parseExtractOp(parser, result); }];
-}

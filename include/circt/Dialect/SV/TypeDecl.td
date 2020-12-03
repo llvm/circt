@@ -124,7 +124,7 @@ def InterfaceModportOp : SVOp<"interface.modport",
 // Types for integration in to type-based dialects.
 //===----------------------------------------------------------------------===//
 
-def Interface : SVType<"Interface"> {
+def InterfaceType : SVType<"Interface"> {
   let summary = "SystemVerilog interface type pointing to an InterfaceOp";
   let description = [{
     A MLIR type for the SV dialect's `InterfaceOp` to allow instances in any
@@ -136,8 +136,7 @@ def Interface : SVType<"Interface"> {
   let parameters = (ins "::mlir::SymbolRefAttr":$interface);
 }
 
-
-def InterfaceModport : SVType<"InterfaceModport"> {
+def InterfaceModportType : SVType<"InterfaceModport"> {
   let summary = "SystemVerilog type pointing to an InterfaceModportOp";
   let description = [{
     A MLIR type for the SV dialect's `InterfaceModportOp` to allow
@@ -145,13 +144,36 @@ def InterfaceModport : SVType<"InterfaceModport"> {
     InterfaceModportOp which defines the SystemVerilog interface's modport.
   }];
 
-  let mnemonic = "interface.modport";
+  let mnemonic = "modport";
   let parameters = (ins "::mlir::SymbolRefAttr":$modport);
 }
 
 //===----------------------------------------------------------------------===//
 // Other operations
 //===----------------------------------------------------------------------===//
+
+def GetModportOp: SVOp<"getmodport", [NoSideEffect]> {
+  let summary = "Get a modport out of an interface instance";
+  let description = [{
+    Use this to extract a modport view to an instantiated interface. For
+    example, to get the 'dataflow_in' modport on the 'handshake_example'
+    interface:
+    ```
+    %ifaceModport = sv.extract @dataflow_in %iface : !sv.interface<@handshake_example>
+    ```
+  }];
+
+  let arguments = (ins
+    Type<CPred<"$_self.isa<::circt::sv::InterfaceType>()">, "sv.interface">:$iface,
+    FlatSymbolRefAttr:$field);
+  let results = (outs AnyType:$result);
+
+  // let printer = [{ printExtractOp(p, *this); }];
+  // let parser = [{ return parseExtractOp(parser, result); }];
+  let assemblyFormat = [{
+    $iface $field attr-dict `:` type($iface) `->` type($result)
+  }];
+}
 
 def TypeDeclTerminatorOp : SVOp<"type_decl_terminator",
     [NoSideEffect, Terminator, ParentOneOf<["InterfaceOp"]>]> {
