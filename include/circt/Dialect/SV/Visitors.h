@@ -68,7 +68,7 @@ public:
   HANDLE(FatalOp, Unhandled);
   HANDLE(FinishOp, Unhandled);
 
-  // Verification statements.
+  // Type declarations.
   HANDLE(InterfaceOp, Unhandled);
   HANDLE(InterfaceSignalOp, Unhandled);
   HANDLE(InterfaceModportOp, Unhandled);

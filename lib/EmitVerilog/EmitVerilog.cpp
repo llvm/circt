@@ -15,6 +15,7 @@
 #include "mlir/IR/Module.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Translation.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
@@ -1978,18 +1979,12 @@ void ModuleEmitter::emitDecl(sv::InterfaceSignalOp op) {
 
 void ModuleEmitter::emitDecl(sv::InterfaceModportOp op) {
   indent() << "modport " << op.sym_name() << '(';
-  ArrayAttr portsAttr = op.ports();
 
-  for (size_t i = 0, e = portsAttr.size(); i != e; ++i) {
-    auto port = portsAttr[i].cast<sv::ModportStructAttr>();
-
+  llvm::interleaveComma(op.ports(), os, [&](const Attribute &portAttr) {
+    auto port = portAttr.cast<sv::ModportStructAttr>();
     os << port.direction().getValue() << ' '
        << port.signal().getRootReference();
-
-    if (i < e - 1) {
-      os << ", ";
-    }
-  }
+  });
 
   os << ");\n";
 }
