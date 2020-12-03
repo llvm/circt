@@ -1982,8 +1982,7 @@ void ModuleEmitter::emitDecl(sv::InterfaceModportOp op) {
 
   llvm::interleaveComma(op.ports(), os, [&](const Attribute &portAttr) {
     auto port = portAttr.cast<sv::ModportStructAttr>();
-    os << port.direction().getValue() << ' '
-       << port.signal().getRootReference();
+    os << port.direction().getValue() << ' ' << port.signal().getValue();
   });
 
   os << ");\n";
