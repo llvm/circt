@@ -152,7 +152,7 @@ def InterfaceModportType : SVType<"InterfaceModport"> {
 // Other operations
 //===----------------------------------------------------------------------===//
 
-def InterfaceInstance : SVOp<"interface.instance", [NoSideEffect]> {
+def InterfaceInstanceOp : SVOp<"interface.instance", [NoSideEffect]> {
   let summary = "Instantiate an interface";
   let description = [{
     Use this to declare an instance of an interface:
@@ -168,6 +168,10 @@ def InterfaceInstance : SVOp<"interface.instance", [NoSideEffect]> {
 
   let assemblyFormat = [{
     attr-dict `:` type($result)
+  }];
+
+  let verifier = [{
+    return ::verifyInterfaceInstanceOp(*this);
   }];
 }
 

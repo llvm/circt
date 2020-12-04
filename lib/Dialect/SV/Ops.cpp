@@ -113,6 +113,29 @@ static void printModportStructs(OpAsmPrinter &p, Operation *,
   p << ')';
 }
 
+/// Ensure that the symbol being instantiated exists and is an InterfaceOp.
+static LogicalResult verifyInterfaceInstanceOp(InterfaceInstanceOp &op) {
+  auto symtable = SymbolTable::getNearestSymbolTable(op);
+  if (!symtable) {
+    op.emitError("sv.interface.instance must exist within a region which has a "
+                 "symbol table.");
+    return failure();
+  }
+  auto ifaceTy = op.getType().cast<InterfaceType>();
+  auto referencedOp =
+      SymbolTable::lookupSymbolIn(symtable, ifaceTy.getInterface());
+  if (!referencedOp) {
+    op.emitError("Symbol not found: ") << ifaceTy.getInterface() << ".";
+    return failure();
+  }
+  if (!isa<InterfaceOp>(referencedOp)) {
+    op.emitError("Symbol ")
+        << ifaceTy.getInterface() << " is not an InterfaceOp.";
+    return failure();
+  }
+  return success();
+}
+
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
