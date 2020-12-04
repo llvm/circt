@@ -187,9 +187,12 @@ def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
   }];
 
   let arguments = (ins
-    Type<CPred<"$_self.isa<::circt::sv::InterfaceType>()">, "sv.interface">:$iface,
+    Type<CPred<"$_self.isa<::circt::sv::InterfaceType>()">,
+      "sv.interface">:$iface,
     FlatSymbolRefAttr:$field);
-  let results = (outs AnyType:$result);
+  let results = (outs
+    Type<CPred<"$_self.isa<::circt::sv::InterfaceModportType>()">,
+      "sv.modport">:$result);
 
   let assemblyFormat = [{
     $iface $field attr-dict `:` type($iface) `->` type($result)
