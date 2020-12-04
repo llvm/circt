@@ -133,7 +133,7 @@ def InterfaceType : SVType<"Interface"> {
   }];
 
   let mnemonic = "interface";
-  let parameters = (ins "::mlir::SymbolRefAttr":$interface);
+  let parameters = (ins "::mlir::FlatSymbolRefAttr":$interface);
 }
 
 def InterfaceModportType : SVType<"InterfaceModport"> {

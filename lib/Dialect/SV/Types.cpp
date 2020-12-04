@@ -17,7 +17,7 @@ using namespace mlir;
 //===----------------------------------------------------------------------===//
 
 Type InterfaceType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
-  SymbolRefAttr iface;
+  FlatSymbolRefAttr iface;
   if (p.parseLess() || p.parseAttribute(iface) || p.parseGreater())
     return Type();
   return get(ctxt, iface);

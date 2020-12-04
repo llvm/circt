@@ -42,6 +42,8 @@ module {
     %iface = sv.interface.instance : !sv.interface<@handshake_example>
     %ifaceInPort = sv.modport.get %iface @dataflow_in :
       !sv.interface<@handshake_example> -> !sv.modport<@handshake_example::@dataflow_in>
+    // This next line may or may not make sense depending on how we decide to
+    // model interactions with the RTL dialect.
     rtl.instance "rcvr" @Rcvr(%ifaceInPort) : (!sv.modport<@handshake_example::@dataflow_in>) -> ()
   }
   // CHECK-LABEL: rtl.module @Top() {
