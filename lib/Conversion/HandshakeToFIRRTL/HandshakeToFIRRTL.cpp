@@ -15,6 +15,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Utils.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/MathExtras.h"
 
 using namespace mlir;
 using namespace circt;
@@ -231,23 +232,24 @@ static Value createDecoder(Value input, unsigned width, Location insertLoc,
 
 /// Return the number of bits needed to index the given number of values.
 static size_t getNumIndexBits(ArrayRef<Value> values) {
-  return static_cast<size_t>(
-      std::max(std::ceil(std::log2(values.size())), 1.0) + 1);
+  uint64_t numValues = values.size();
+  size_t numBits = numValues ? llvm::Log2_64_Ceil(numValues) : 1;
+  return numBits + 1;
 }
 
 /// Construct an arbiter based on a simple priority-encoding scheme. In addition
-/// to returning the arbiter result, the index for each input is added the the
+/// to returning the arbiter result, the index for each input is added to a
 /// mapping for other lowerings to make use of.
 static Value createPriorityArbiter(ArrayRef<Value> inputs, Value defaultValue,
-                                   DenseMap<unsigned, Value> &indexMapping,
+                                   DenseMap<size_t, Value> &indexMapping,
                                    Location insertLoc,
                                    ConversionPatternRewriter &rewriter) {
   auto indexBits = getNumIndexBits(inputs);
   auto indexType = SIntType::get(rewriter.getContext(), indexBits);
   auto priorityArb = defaultValue;
 
-  for (unsigned i = inputs.size(); i > 0; --i) {
-    unsigned inputIndex = i - 1;
+  for (size_t i = inputs.size(); i > 0; --i) {
+    size_t inputIndex = i - 1;
 
     auto constIndex = createConstantOp(indexType, APInt(indexBits, inputIndex),
                                        insertLoc, rewriter);
@@ -265,20 +267,21 @@ static Value createPriorityArbiter(ArrayRef<Value> inputs, Value defaultValue,
 /// MergeOp. The logic is identical for each output. If the fired value is
 /// asserted, and the win value holds the output's index, that output is ready.
 static void createMergeArgReady(ArrayRef<Value> outputs, Value fired,
-                                Value winner,
-                                DenseMap<unsigned, Value> indexMappings,
+                                Value winner, Value defaultValue,
+                                DenseMap<size_t, Value> &indexMappings,
                                 Location insertLoc,
                                 ConversionPatternRewriter &rewriter) {
   auto bitType = fired.getType();
 
-  for (unsigned i = 0, e = outputs.size(); i != e; ++i) {
+  Value winnerOrDefault = rewriter.create<MuxPrimOp>(insertLoc, bitType, fired,
+                                                     winner, defaultValue);
+
+  for (size_t i = 0, e = outputs.size(); i != e; ++i) {
     auto constIndex = indexMappings[i];
+    assert(constIndex && "index mapping not found");
 
-    Value argReadyWire =
-        rewriter.create<EQPrimOp>(insertLoc, bitType, winner, constIndex);
-
-    argReadyWire =
-        rewriter.create<AndPrimOp>(insertLoc, bitType, argReadyWire, fired);
+    Value argReadyWire = rewriter.create<EQPrimOp>(insertLoc, bitType,
+                                                   winnerOrDefault, constIndex);
 
     rewriter.create<ConnectOp>(insertLoc, outputs[i], argReadyWire);
   }
@@ -715,8 +718,8 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
 bool HandshakeBuilder::visitHandshake(MergeOp op) {
   auto *context = rewriter.getContext();
 
-  unsigned numPorts = portList.size();
-  unsigned numInputs = numPorts - 1;
+  size_t numPorts = portList.size();
+  size_t numInputs = numPorts - 1;
 
   // The last output has the result's ready, valid, and data signal.
   ValueVector resultSubfields = portList[numInputs];
@@ -728,7 +731,7 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
   SmallVector<Value, 4> argValid;
   SmallVector<Value, 4> argReady;
   SmallVector<Value, 4> argData;
-  for (unsigned i = 0; i < numInputs; ++i) {
+  for (size_t i = 0; i < numInputs; ++i) {
     ValueVector argSubfields = portList[i];
     argValid.push_back(argSubfields[0]);
     argReady.push_back(argSubfields[1]);
@@ -750,8 +753,7 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
   auto resultDoneName = rewriter.getStringAttr("resultDone");
   auto resultDone = rewriter.create<WireOp>(insertLoc, bitType, resultDoneName);
 
-  // Create predicates to assert if the win wire or won register hold a valid
-  // index.
+  // Create predicates to assert if the win wire holds a valid index.
   auto hasWinnerCondition =
       rewriter.create<NEQPrimOp>(insertLoc, bitType, win, noWinner);
 
@@ -759,7 +761,7 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
   // index to the win wire. In the case that no input is valid, set a sentinel
   // value to indicate no winner was chosen. The constant values are remembered
   // in a map so they can be re-used later to assign the arg ready outputs.
-  DenseMap<unsigned, Value> argIndexValues;
+  DenseMap<size_t, Value> argIndexValues;
   auto priorityArb = createPriorityArbiter(argValid, noWinner, argIndexValues,
                                            insertLoc, rewriter);
 
@@ -800,8 +802,8 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
   // Create the logic to assign the arg ready outputs. The logic is identical
   // for each arg. If the fired wire is asserted, and the win wire holds an
   // arg's index, that arg is ready.
-  createMergeArgReady(argReady, resultDone, win, argIndexValues, insertLoc,
-                      rewriter);
+  createMergeArgReady(argReady, resultDone, win, noWinner, argIndexValues,
+                      insertLoc, rewriter);
 
   return true;
 }
@@ -896,7 +898,7 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   // the case that won is not set and no input is valid, set a sentinel value to
   // indicate no winner was chosen. The constant values are remembered in a map
   // so they can be re-used later to assign the arg ready outputs.
-  DenseMap<unsigned, Value> argIndexValues;
+  DenseMap<size_t, Value> argIndexValues;
   auto priorityArb = createPriorityArbiter(argValid, noWinner, argIndexValues,
                                            insertLoc, rewriter);
 
@@ -993,7 +995,7 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   // Create the logic to assign the arg ready outputs. The logic is identical
   // for each arg. If the fired wire is asserted, and the win wire holds an
   // arg's index, that arg is ready.
-  createMergeArgReady(argReady, fired, win, argIndexValues, insertLoc,
+  createMergeArgReady(argReady, fired, win, noWinner, argIndexValues, insertLoc,
                       rewriter);
 
   return true;

@@ -47,12 +47,11 @@
 // CHECK:   firrtl.connect %[[RESULT_DONE]], %[[RESULT_DONE0]]
 
 // Logic to assign arg ready outputs.
-// CHECK:   %[[ARG0_READY0:.+]] = firrtl.eq %[[WIN]], %[[INDEX0]]
-// CHECK:   %[[ARG0_READY1:.+]] = firrtl.and %[[ARG0_READY0]], %[[RESULT_DONE]]
-// CHECK:   firrtl.connect %[[ARG0_READY]], %[[ARG0_READY1]]
-// CHECK:   %[[ARG1_READY0:.+]] = firrtl.eq %[[WIN]], %[[INDEX1]]
-// CHECK:   %[[ARG1_READY1:.+]] = firrtl.and %[[ARG1_READY0]], %[[RESULT_DONE]]
-// CHECK:   firrtl.connect %[[ARG1_READY]], %[[ARG1_READY1]]
+// CHECK:   %[[WIN_OR_DEFAULT:.+]] = firrtl.mux(%[[RESULT_DONE]], %[[WIN]], %[[NO_WINNER]])
+// CHECK:   %[[ARG0_READY0:.+]] = firrtl.eq %[[WIN_OR_DEFAULT]], %[[INDEX0]]
+// CHECK:   firrtl.connect %[[ARG0_READY]], %[[ARG0_READY0]]
+// CHECK:   %[[ARG1_READY0:.+]] = firrtl.eq %[[WIN_OR_DEFAULT]], %[[INDEX1]]
+// CHECK:   firrtl.connect %[[ARG1_READY]], %[[ARG1_READY0]]
 
 // CHECK-LABEL: firrtl.module @test_merge(
 // CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, %arg2: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg3: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, %arg4: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, %clock: !firrtl.clock, %reset: !firrtl.uint<1>) {
