@@ -5,7 +5,6 @@
 #include "circt/Dialect/SV/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/StandardTypes.h"
-#include "llvm/Support/FormatVariadic.h"
 
 using namespace circt;
 using namespace sv;

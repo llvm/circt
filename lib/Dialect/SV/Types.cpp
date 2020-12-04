@@ -5,8 +5,6 @@
 #include "circt/Dialect/SV/Types.h"
 
 #include "mlir/IR/DialectImplementation.h"
-#include "mlir/IR/StandardTypes.h"
-#include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt::sv;
