@@ -152,6 +152,9 @@ def InterfaceModportType : SVType<"InterfaceModport"> {
 // Other operations
 //===----------------------------------------------------------------------===//
 
+def InterfaceTypeCond :
+  Type<CPred<"$_self.isa<::circt::sv::InterfaceType>()">, "sv.interface">;
+
 def InterfaceInstanceOp : SVOp<"interface.instance", [NoSideEffect]> {
   let summary = "Instantiate an interface";
   let description = [{
@@ -162,9 +165,7 @@ def InterfaceInstanceOp : SVOp<"interface.instance", [NoSideEffect]> {
   }];
 
   let arguments = (ins);
-  let results = (outs 
-    Type<CPred<"$_self.isa<::circt::sv::InterfaceType>()">, "sv.interface">:
-      $result);
+  let results = (outs InterfaceTypeCond : $result);
 
   let assemblyFormat = [{
     attr-dict `:` type($result)
@@ -186,16 +187,17 @@ def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
     ```
   }];
 
-  let arguments = (ins
-    Type<CPred<"$_self.isa<::circt::sv::InterfaceType>()">,
-      "sv.interface">:$iface,
-    FlatSymbolRefAttr:$field);
+  let arguments = (ins InterfaceTypeCond:$iface, FlatSymbolRefAttr:$field);
   let results = (outs
     Type<CPred<"$_self.isa<::circt::sv::InterfaceModportType>()">,
       "sv.modport">:$result);
 
   let assemblyFormat = [{
     $iface $field attr-dict `:` type($iface) `->` type($result)
+  }];
+
+  let verifier = [{
+    return ::verifyGetModportOp(*this);
   }];
 }
 
