@@ -152,14 +152,33 @@ def InterfaceModportType : SVType<"InterfaceModport"> {
 // Other operations
 //===----------------------------------------------------------------------===//
 
-def GetModportOp: SVOp<"getmodport", [NoSideEffect]> {
+def InterfaceInstance : SVOp<"interface.instance", [NoSideEffect]> {
+  let summary = "Instantiate an interface";
+  let description = [{
+    Use this to declare an instance of an interface:
+    ```
+    %iface = sv.interface.instance : !sv.interface<@handshake_example>
+    ```
+  }];
+
+  let arguments = (ins);
+  let results = (outs 
+    Type<CPred<"$_self.isa<::circt::sv::InterfaceType>()">, "sv.interface">:
+      $result);
+
+  let assemblyFormat = [{
+    attr-dict `:` type($result)
+  }];
+}
+
+def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
   let summary = "Get a modport out of an interface instance";
   let description = [{
     Use this to extract a modport view to an instantiated interface. For
     example, to get the 'dataflow_in' modport on the 'handshake_example'
     interface:
     ```
-    %ifaceModport = sv.extract @dataflow_in %iface : !sv.interface<@handshake_example>
+    %ifaceModport = sv.modport.get @dataflow_in %iface : !sv.interface<@handshake_example> -> !sv.modport<@handshake_example::@dataflow_in>
     ```
   }];
 
@@ -168,8 +187,6 @@ def GetModportOp: SVOp<"getmodport", [NoSideEffect]> {
     FlatSymbolRefAttr:$field);
   let results = (outs AnyType:$result);
 
-  // let printer = [{ printExtractOp(p, *this); }];
-  // let parser = [{ return parseExtractOp(parser, result); }];
   let assemblyFormat = [{
     $iface $field attr-dict `:` type($iface) `->` type($result)
   }];

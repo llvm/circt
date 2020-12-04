@@ -39,12 +39,13 @@ module {
   // CHECK-LABEL: rtl.externmodule @Rcvr(!sv.modport<@handshake_example::@dataflow_in> {rtl.name = "m"})
 
   rtl.module @Top () {
-    %iface = rtl.wire : !sv.interface<@handshake_example>
-    %ifaceInPort = sv.getmodport %iface @dataflow_in : !sv.interface<@handshake_example> -> !sv.modport<@handshake_example::@dataflow_in>
+    %iface = sv.interface.instance : !sv.interface<@handshake_example>
+    %ifaceInPort = sv.modport.get %iface @dataflow_in :
+      !sv.interface<@handshake_example> -> !sv.modport<@handshake_example::@dataflow_in>
     rtl.instance "rcvr" @Rcvr(%ifaceInPort) : (!sv.modport<@handshake_example::@dataflow_in>) -> ()
   }
   // CHECK-LABEL: rtl.module @Top() {
-  // CHECK-NEXT:    %iface = rtl.wire : !sv.interface<@handshake_example>
-  // CHECK-NEXT:    %0 = sv.getmodport %iface @dataflow_in : !sv.interface<@handshake_example> -> !sv.modport<@handshake_example::@dataflow_in>
-  // CHECK-NEXT:    rtl.instance "rcvr" @Rcvr(%0) : (!sv.modport<@handshake_example::@dataflow_in>) -> ()
+  // CHECK-NEXT:    %0 = sv.interface.instance : !sv.interface<@handshake_example>
+  // CHECK-NEXT:    %1 = sv.modport.get %0 @dataflow_in : !sv.interface<@handshake_example> -> !sv.modport<@handshake_example::@dataflow_in>
+  // CHECK-NEXT:    rtl.instance "rcvr" @Rcvr(%1) : (!sv.modport<@handshake_example::@dataflow_in>) -> ()
 }
