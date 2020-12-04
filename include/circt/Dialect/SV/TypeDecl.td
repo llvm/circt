@@ -121,8 +121,85 @@ def InterfaceModportOp : SVOp<"interface.modport",
 }
 
 //===----------------------------------------------------------------------===//
+// Types for integration in to type-based dialects.
+//===----------------------------------------------------------------------===//
+
+def InterfaceType : SVType<"Interface"> {
+  let summary = "SystemVerilog interface type pointing to an InterfaceOp";
+  let description = [{
+    A MLIR type for the SV dialect's `InterfaceOp` to allow instances in any
+    dialect with an open type system. Points at the InterfaceOp which defines
+    the SystemVerilog interface.
+  }];
+
+  let mnemonic = "interface";
+  let parameters = (ins "::mlir::FlatSymbolRefAttr":$interface);
+}
+
+def InterfaceModportType : SVType<"InterfaceModport"> {
+  let summary = "SystemVerilog type pointing to an InterfaceModportOp";
+  let description = [{
+    A MLIR type for the SV dialect's `InterfaceModportOp` to allow
+    interactions with any open type system dialect. Points at the
+    InterfaceModportOp which defines the SystemVerilog interface's modport.
+  }];
+
+  let mnemonic = "modport";
+  let parameters = (ins "::mlir::SymbolRefAttr":$modport);
+}
+
+//===----------------------------------------------------------------------===//
 // Other operations
 //===----------------------------------------------------------------------===//
+
+def InterfaceTypeCond :
+  Type<CPred<"$_self.isa<::circt::sv::InterfaceType>()">, "sv.interface">;
+
+def InterfaceInstanceOp : SVOp<"interface.instance", [NoSideEffect]> {
+  let summary = "Instantiate an interface";
+  let description = [{
+    Use this to declare an instance of an interface:
+    ```
+    %iface = sv.interface.instance : !sv.interface<@handshake_example>
+    ```
+  }];
+
+  let arguments = (ins);
+  let results = (outs InterfaceTypeCond : $result);
+
+  let assemblyFormat = [{
+    attr-dict `:` type($result)
+  }];
+
+  let verifier = [{
+    return ::verifyInterfaceInstanceOp(*this);
+  }];
+}
+
+def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
+  let summary = "Get a modport out of an interface instance";
+  let description = [{
+    Use this to extract a modport view to an instantiated interface. For
+    example, to get the 'dataflow_in' modport on the 'handshake_example'
+    interface:
+    ```
+    %ifaceModport = sv.modport.get @dataflow_in %iface : !sv.interface<@handshake_example> -> !sv.modport<@handshake_example::@dataflow_in>
+    ```
+  }];
+
+  let arguments = (ins InterfaceTypeCond:$iface, FlatSymbolRefAttr:$field);
+  let results = (outs
+    Type<CPred<"$_self.isa<::circt::sv::InterfaceModportType>()">,
+      "sv.modport">:$result);
+
+  let assemblyFormat = [{
+    $iface $field attr-dict `:` type($iface) `->` type($result)
+  }];
+
+  let verifier = [{
+    return ::verifyGetModportOp(*this);
+  }];
+}
 
 def TypeDeclTerminatorOp : SVOp<"type_decl_terminator",
     [NoSideEffect, Terminator, ParentOneOf<["InterfaceOp"]>]> {
