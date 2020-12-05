@@ -137,7 +137,7 @@ static LogicalResult verifyGetModportOp(GetModportOp &op) {
   if (!symtable)
     return op.emitError("sv.interface.instance must exist within a region "
                         "which has a symbol table.");
-  auto ifaceTy = op.getType().cast<InterfaceModportType>();
+  auto ifaceTy = op.getType().cast<ModportType>();
   auto referencedOp =
       SymbolTable::lookupSymbolIn(symtable, ifaceTy.getModport());
   if (!referencedOp)
