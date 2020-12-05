@@ -187,6 +187,10 @@ def InterfaceInstanceOp : SVOp<"interface.instance", [NoSideEffect]> {
   let verifier = [{
     return ::verifyInterfaceInstanceOp(*this);
   }];
+
+  let extraClassDeclaration = [{
+    InterfaceType getInterfaceType() { return getType().cast<InterfaceType>(); }
+  }];
 }
 
 def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {

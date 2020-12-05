@@ -71,6 +71,10 @@ static int getBitWidthOrSentinel(Type type) {
       .Case<FlipType>([](FlipType flipType) {
         return getBitWidthOrSentinel(flipType.getElementType());
       })
+      .Case<sv::InterfaceType>([](Type) {
+        // Treat interfaces and modports as single-bit.
+        return 1;
+      })
       .Default([](Type) { return -1; });
 }
 
@@ -2181,6 +2185,8 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     // are wires.  The corresponding 'reg' decl is handled specially below.
     if (isa<RegOp>(op) || isa<RegInitOp>(op))
       return "reg";
+    else if (auto interface = dyn_cast<sv::InterfaceInstanceOp>(op))
+      return interface.getInterfaceType().getInterface().getValue();
     else
       return "wire";
   };
@@ -2276,7 +2282,11 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       indent() << word;
       os.indent(maxDeclNameWidth - word.size() + 1);
       emitTypePaddedToWidth(elt.type, maxTypeWidth, decl);
-      os << getName(decl->getResult(0)) << elt.suffix << ';';
+      os << getName(decl->getResult(0)) << elt.suffix;
+      // Interface instantiations have parentheses like a module with no ports.
+      if (isa<sv::InterfaceInstanceOp>(decl))
+        os << "()";
+      os << ';';
 
       if (isFirst)
         emitLocationInfoAndNewLine(ops);
@@ -2428,6 +2438,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitSV(sv::AssertOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::AssumeOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::CoverOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::InterfaceInstanceOp op) { return true; }
     bool visitSV(sv::InterfaceSignalOp op) {
       return emitter.emitDecl(op), true;
     }
