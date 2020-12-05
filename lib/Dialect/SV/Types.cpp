@@ -25,14 +25,14 @@ void InterfaceType::print(DialectAsmPrinter &p) const {
   p << "interface<" << getInterface() << ">";
 }
 
-Type InterfaceModportType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+Type ModportType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
   SymbolRefAttr modPort;
   if (p.parseLess() || p.parseAttribute(modPort) || p.parseGreater())
     return Type();
   return get(ctxt, modPort);
 }
 
-void InterfaceModportType::print(DialectAsmPrinter &p) const {
+void ModportType::print(DialectAsmPrinter &p) const {
   p << "modport<" << getModport() << ">";
 }
 

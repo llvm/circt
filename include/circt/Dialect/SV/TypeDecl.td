@@ -136,7 +136,7 @@ def InterfaceType : SVType<"Interface"> {
   let parameters = (ins "::mlir::FlatSymbolRefAttr":$interface);
 }
 
-def InterfaceModportType : SVType<"InterfaceModport"> {
+def ModportType : SVType<"Modport"> {
   let summary = "SystemVerilog type pointing to an InterfaceModportOp";
   let description = [{
     A MLIR type for the SV dialect's `InterfaceModportOp` to allow
@@ -189,7 +189,7 @@ def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
 
   let arguments = (ins InterfaceTypeCond:$iface, FlatSymbolRefAttr:$field);
   let results = (outs
-    Type<CPred<"$_self.isa<::circt::sv::InterfaceModportType>()">,
+    Type<CPred<"$_self.isa<::circt::sv::ModportType>()">,
       "sv.modport">:$result);
 
   let assemblyFormat = [{
