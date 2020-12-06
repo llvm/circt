@@ -41,10 +41,10 @@ static llvm::ManagedStatic<StringSet<>> reservedWordCache;
 
 static bool isVerilogExpression(Operation *op) {
   // All FIRRTL expressions and RTL combinatorial logic ops are Verilog
-  // expressions.
+  // expressions. An SV interface modport is a Verilog expression.
   return isExpression(op) || rtl::isCombinatorial(op) ||
          isa<sv::TextualValueOp>(op) || isa<AsPassivePrimOp>(op) ||
-         isa<AsNonPassivePrimOp>(op);
+         isa<AsNonPassivePrimOp>(op) || isa<sv::GetModportOp>(op);
 }
 
 /// Return the width of the specified FIRRTL type in bits or -1 if it isn't
@@ -71,7 +71,7 @@ static int getBitWidthOrSentinel(Type type) {
       .Case<FlipType>([](FlipType flipType) {
         return getBitWidthOrSentinel(flipType.getElementType());
       })
-      .Case<sv::InterfaceType>([](Type) {
+      .Case<sv::InterfaceType, sv::ModportType>([](Type) {
         // Treat interfaces and modports as single-bit.
         return 1;
       })
@@ -336,6 +336,7 @@ public:
 
   void collectNamesEmitDecls(Block &block);
   bool collectNamesEmitWires(rtl::InstanceOp instance);
+  StringRef addName(sv::GetModportOp op);
   StringRef addName(Value value, StringRef name);
   StringRef addName(Value value, StringAttr nameAttr) {
     return addName(value, nameAttr ? nameAttr.getValue() : "");
@@ -464,6 +465,15 @@ public:
 
 } // end anonymous namespace
 
+// Add the name of an interface modport to the name table. This uses the name
+// of the interface instance value and the name of the field reference in it.
+StringRef ModuleEmitter::addName(sv::GetModportOp modport) {
+  SmallString<16> tmpName(getName(modport.iface()));
+  tmpName += '.';
+  tmpName +=  modport.field();
+  return addName(modport, tmpName);
+}
+
 /// Add the specified name to the name table, auto-uniquing the name if
 /// required.  If the name is empty, then this creates a unique temp name.
 StringRef ModuleEmitter::addName(Value value, StringRef name) {
@@ -479,7 +489,7 @@ StringRef ModuleEmitter::addName(Value value, StringRef name) {
   }
 
   auto isValidVerilogCharacter = [](char ch) -> bool {
-    return isalpha(ch) || isdigit(ch) || ch == '_';
+    return isalpha(ch) || isdigit(ch) || ch == '_' || ch == '.';
   };
 
   // Check to see if the name consists of all-valid identifiers.  If not, we
@@ -2205,10 +2215,11 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     assert(op.getNumResults() == 1 && "firrtl only has single-op results");
     Value result = op.getResult(0);
 
-    // If this is an expression emitted inline or unused, it doesn't need a
-    // name.
     bool isExpr = isVerilogExpression(&op);
-    if (isExpr) {
+    bool isModport = isa<sv::GetModportOp>(op);
+    // If this is an expression emitted inline or unused, it doesn't need a
+    // name. Modport expressions do need a name, but don't need to be emitted.
+    if (isExpr && !isModport) {
       // If this expression is dead, or can be emitted inline, ignore it.
       if (result.use_empty() || isExpressionEmittedInline(&op))
         continue;
@@ -2217,8 +2228,12 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       outOfLineExpressions.insert(&op);
     }
 
-    // Otherwise, it must be an expression or a declaration like a wire.
-    addName(result, op.getAttrOfType<StringAttr>("name"));
+    // Otherwise, it must be an expression or a declaration like a wire or
+    // interface modport.
+    if (isModport)
+      addName(cast<sv::GetModportOp>(op));
+    else
+      addName(result, op.getAttrOfType<StringAttr>("name"));
 
     // If we are emitting inline wire decls, don't measure or emit this wire.
     if (isExpr && emitInlineWireDecls)
