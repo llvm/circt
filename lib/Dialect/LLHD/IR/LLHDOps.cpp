@@ -424,18 +424,13 @@ OpFoldResult llhd::ExtractElementOp::fold(ArrayRef<Attribute> operands) {
   // llhd.extract_element(llhd.array(a_0, ..., a_n), i) => a_i
   if (auto arrayOp = target().getDefiningOp<llhd::ArrayOp>()) {
     uint64_t index = indexAttr().getValue().getZExtValue();
-    if (index < arrayOp.values().size()) {
-      return arrayOp.values()[index];
-    }
+    return arrayOp.values()[index];
   }
 
   // llhd.extract_element(llhd.array_uniform(arr), i) => arr
   if (auto arrayUniformOp = target().getDefiningOp<llhd::ArrayUniformOp>()) {
     uint64_t index = indexAttr().getValue().getZExtValue();
-    if (index <
-        arrayUniformOp.result().getType().cast<llhd::ArrayType>().getLength()) {
-      return arrayUniformOp.init();
-    }
+    return arrayUniformOp.init();
   }
 
   // llhd.extract_element(llhd.tuple(a_0, ..., a_n), i) => a_i
