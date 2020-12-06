@@ -9,4 +9,5 @@ add_mlir_library(CIRCTEmitVerilog
   MLIRFIRRTL
   MLIRRTL
   MLIRSV
+  MLIRTranslation
   )

@@ -9,9 +9,12 @@
 
 include "mlir/Pass/PassBase.td"
 
-def LowerFIRRTLToRTL : Pass<"lower-firrtl-to-rtl", "firrtl::FModuleOp"> {
-  let summary = "Lower FIRRTL to RTL";
-  let constructor = "circt::firrtl::createLowerFIRRTLToRTLPass()";
+def LowerFIRRTLTypes : Pass<"lower-firrtl-types", "firrtl::FModuleOp"> {
+  let summary = "Lower FIRRTL types to ground types";
+  let description = [{
+    Lower firrtl.module port types to ground types.
+  }];
+  let constructor = "circt::firrtl::createLowerFIRRTLTypesPass()";
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

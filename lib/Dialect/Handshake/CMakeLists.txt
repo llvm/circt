@@ -12,7 +12,7 @@ add_mlir_dialect_library(MLIRHandshakeOps
   ${PROJECT_BINARY_DIR}/include
 
   LINK_LIBS PUBLIC
-  MLIRStandardOps
+  MLIRStandard
   MLIRIR
 
   DEPENDS

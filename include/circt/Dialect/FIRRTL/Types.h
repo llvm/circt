@@ -1,6 +1,6 @@
-//===- FIRRTL/IR/Ops.h - FIRRTL dialect -------------------------*- C++ -*-===//
+//===- FIRRTL/IR/Types.h - FIRRTL Type System -------------------*- C++ -*-===//
 //
-// This file defines an MLIR dialect for the FIRRTL IR.
+// This file defines type type system for the FIRRTL Dialect.
 //
 //===----------------------------------------------------------------------===//
 
@@ -38,7 +38,7 @@ public:
 
   /// Return true if this is a "passive" type - one that contains no "flip"
   /// types recursively within itself.
-  bool isPassiveType();
+  bool isPassive();
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLType getPassiveType();
@@ -46,6 +46,11 @@ public:
   /// Return this type with all ground types replaced with UInt<1>.  This is
   /// used for `mem` operations.
   FIRRTLType getMaskType();
+
+  /// Return this type with widths of all ground types removed. This
+  /// enables two types to be compared by structure and name ignoring
+  /// widths.
+  FIRRTLType getWidthlessType();
 
   /// If this is an IntType, AnalogType, or sugar type for a single bit (Clock,
   /// Reset, etc) then return the bitwidth.  Return -1 if the is one of these
@@ -64,6 +69,13 @@ public:
 protected:
   using Type::Type;
 };
+
+/// Returns whether the two types are equivalent. See the FIRRTL spec for the
+/// full definition of type equivalence. This predicate differs from the spec in
+/// that it only compares passive types. Because of how the FIRRTL dialect uses
+/// flip types in module ports and aggregates, this definition, unlike the spec,
+/// ignores flips.
+bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType);
 
 //===----------------------------------------------------------------------===//
 // Ground Types Without Parameters
@@ -206,7 +218,17 @@ public:
   using Base::Base;
 
   // Each element of a bundle, which is a name and type.
-  using BundleElement = std::pair<Identifier, FIRRTLType>;
+  struct BundleElement {
+    Identifier name;
+    FIRRTLType type;
+
+    BundleElement(Identifier name, FIRRTLType type) : name(name), type(type) {}
+
+    bool operator==(const BundleElement &rhs) const {
+      return name == rhs.name && type == rhs.type;
+    }
+    bool operator!=(const BundleElement &rhs) const { return !operator==(rhs); }
+  };
 
   static FIRRTLType get(ArrayRef<BundleElement> elements, MLIRContext *context);
 
@@ -220,7 +242,7 @@ public:
 
   /// Return true if this is a "passive" type - one that contains no "flip"
   /// types recursively within itself.
-  bool isPassiveType();
+  bool isPassive();
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLType getPassiveType();
@@ -243,7 +265,7 @@ public:
 
   /// Return true if this is a "passive" type - one that contains no "flip"
   /// types recursively within itself.
-  bool isPassiveType();
+  bool isPassive();
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLType getPassiveType();

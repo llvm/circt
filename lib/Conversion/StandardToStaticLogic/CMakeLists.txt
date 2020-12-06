@@ -7,7 +7,7 @@ add_mlir_library(MLIRStandardToStaticLogic
   LINK_LIBS PUBLIC
   MLIRIR
   MLIRPass
-  MLIRStandardOps
+  MLIRStandard
   MLIRSupport
   MLIRTransforms
   MLIRStaticLogicOps

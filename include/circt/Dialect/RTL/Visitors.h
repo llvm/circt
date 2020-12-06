@@ -23,13 +23,16 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<ConstantOp,
                        // Arithmetic and Logical Binary Operations.
-                       AddOp, SubOp, MulOp, DivOp, ModOp, ShlOp,
+                       AddOp, SubOp, MulOp, DivUOp, DivSOp, ModUOp, ModSOp,
+                       ShlOp, ShrUOp, ShrSOp,
                        // Bitwise operations
                        AndOp, OrOp, XorOp,
+                       // Comparison operations
+                       ICmpOp,
                        // Reduction Operators
                        AndROp, OrROp, XorROp,
                        // Other operations.
-                       SExtOp, ZExtOp, ConcatOp, ExtractOp, MuxOp, DoneOp>(
+                       SExtOp, ZExtOp, ConcatOp, ExtractOp, MuxOp, ReadInOutOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitComb(expr, args...);
             })
@@ -71,15 +74,19 @@ public:
   }
 
   // Basic nodes.
-  HANDLE(ConstantOp, Unhandled)
+  HANDLE(ConstantOp, Unhandled);
 
   // Arithmetic and Logical Binary Operations.
   HANDLE(AddOp, Binary);
   HANDLE(SubOp, Binary);
   HANDLE(MulOp, Binary);
-  HANDLE(DivOp, Binary);
-  HANDLE(ModOp, Binary);
+  HANDLE(DivUOp, Binary);
+  HANDLE(DivSOp, Binary);
+  HANDLE(ModUOp, Binary);
+  HANDLE(ModSOp, Binary);
   HANDLE(ShlOp, Binary);
+  HANDLE(ShrUOp, Binary);
+  HANDLE(ShrSOp, Binary);
 
   HANDLE(AndOp, Variadic);
   HANDLE(OrOp, Variadic);
@@ -89,13 +96,15 @@ public:
   HANDLE(OrROp, Unary);
   HANDLE(XorROp, Unary);
 
+  HANDLE(ICmpOp, Binary);
+
   // Other operations.
   HANDLE(SExtOp, Unhandled);
   HANDLE(ZExtOp, Unhandled);
   HANDLE(ConcatOp, Unhandled);
   HANDLE(ExtractOp, Unhandled);
   HANDLE(MuxOp, Unhandled);
-  HANDLE(DoneOp, Unhandled);
+  HANDLE(ReadInOutOp, Unhandled);
 #undef HANDLE
 };
 
@@ -107,7 +116,7 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<ConnectOp, WireOp, RTLInstanceOp>(
+        .template Case<ConnectOp, OutputOp, WireOp, InstanceOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitStmt(expr, args...);
             })
@@ -145,9 +154,10 @@ public:
   }
 
   // Basic nodes.
-  HANDLE(ConnectOp, Unhandled)
+  HANDLE(ConnectOp, Unhandled);
+  HANDLE(OutputOp, Unhandled);
   HANDLE(WireOp, Unhandled);
-  HANDLE(RTLInstanceOp, Unhandled);
+  HANDLE(InstanceOp, Unhandled);
 #undef HANDLE
 };
 

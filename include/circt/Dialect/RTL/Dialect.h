@@ -22,9 +22,18 @@ public:
 
   Operation *materializeConstant(OpBuilder &builder, Attribute value, Type type,
                                  Location loc) override;
+
+  /// Parses a type registered to this dialect
+  Type parseType(DialectAsmParser &parser) const override;
+
+  /// Print a type registered to this dialect
+  void printType(Type type, DialectAsmPrinter &printer) const override;
 };
 
 } // namespace rtl
 } // namespace circt
+
+// Pull in all enum type definitions and utility function declarations.
+#include "circt/Dialect/RTL/RTLEnums.h.inc"
 
 #endif // CIRCT_DIALECT_RTL_DIALECT_H

@@ -10,10 +10,6 @@
 using namespace circt;
 using namespace firrtl;
 
-//===----------------------------------------------------------------------===//
-// Fold Hooks
-//===----------------------------------------------------------------------===//
-
 static Attribute getIntAttr(const APInt &value, MLIRContext *context) {
   return IntegerAttr::get(IntegerType::get(value.getBitWidth(), context),
                           value);
@@ -35,6 +31,15 @@ struct ConstantIntMatcher {
 
 static inline ConstantIntMatcher m_FConstant(APInt &value) {
   return ConstantIntMatcher(value);
+}
+
+//===----------------------------------------------------------------------===//
+// Fold Hooks
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
+  assert(operands.empty() && "constant has no operands");
+  return valueAttr();
 }
 
 // TODO: Move to DRR.
@@ -178,7 +183,7 @@ void CatPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 }
 
 OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
-  auto inputType = input().getType().cast<FIRRTLType>().getPassiveType();
+  auto inputType = input().getType().cast<FIRRTLType>();
   // If we are extracting the entire input, then return it.
   if (inputType == getType() &&
       inputType.cast<IntType>().getWidthOrSentinel() != -1)
@@ -238,12 +243,8 @@ void HeadPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
     LogicalResult matchAndRewrite(HeadPrimOp op,
                                   PatternRewriter &rewriter) const override {
-      auto inputWidth = op.input()
-                            .getType()
-                            .cast<FIRRTLType>()
-                            .getPassiveType()
-                            .cast<IntType>()
-                            .getWidthOrSentinel();
+      auto inputWidth =
+          op.input().getType().cast<IntType>().getWidthOrSentinel();
       if (inputWidth == -1)
         return failure();
 
@@ -302,8 +303,7 @@ OpFoldResult PadPrimOp::fold(ArrayRef<Attribute> operands) {
     return input;
 
   // Need to know the input width.
-  auto inputType =
-      input.getType().cast<FIRRTLType>().getPassiveType().cast<IntType>();
+  auto inputType = input.getType().cast<IntType>();
   int32_t width = inputType.getWidthOrSentinel();
   if (width == -1)
     return {};
@@ -325,8 +325,7 @@ OpFoldResult PadPrimOp::fold(ArrayRef<Attribute> operands) {
 
 OpFoldResult ShlPrimOp::fold(ArrayRef<Attribute> operands) {
   auto input = this->input();
-  auto inputType =
-      input.getType().cast<FIRRTLType>().getPassiveType().cast<IntType>();
+  auto inputType = input.getType().cast<IntType>();
   int shiftAmount = amount();
 
   // shl(x, 0) -> x
@@ -347,8 +346,7 @@ OpFoldResult ShlPrimOp::fold(ArrayRef<Attribute> operands) {
 
 OpFoldResult ShrPrimOp::fold(ArrayRef<Attribute> operands) {
   auto input = this->input();
-  auto inputType =
-      input.getType().cast<FIRRTLType>().getPassiveType().cast<IntType>();
+  auto inputType = input.getType().cast<IntType>();
   int shiftAmount = amount();
 
   // shl(x, 0) -> x
@@ -360,8 +358,8 @@ OpFoldResult ShrPrimOp::fold(ArrayRef<Attribute> operands) {
     return {};
 
   // shr(x, cst) where cst is all of x's bits and x is unsigned is 0.
-  // If it is signed, it is a sign bit.
-  if (shiftAmount == inputWidth && !inputType.isSigned())
+  // If x is signed, it is the sign bit.
+  if (shiftAmount >= inputWidth && inputType.isUnsigned())
     return getIntAttr(APInt(1, 0), getContext());
 
   // Constant fold.
@@ -384,25 +382,22 @@ void ShrPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
     LogicalResult matchAndRewrite(ShrPrimOp op,
                                   PatternRewriter &rewriter) const override {
-      auto inputWidth = op.input()
-                            .getType()
-                            .cast<FIRRTLType>()
-                            .getPassiveType()
-                            .cast<IntType>()
-                            .getWidthOrSentinel();
+      auto inputWidth =
+          op.input().getType().cast<IntType>().getWidthOrSentinel();
       if (inputWidth == -1)
         return failure();
 
       // If we know the input width, we can canonicalize this into a BitsPrimOp.
       unsigned shiftAmount = op.amount();
-      if (int(shiftAmount) == inputWidth) {
+      if (int(shiftAmount) >= inputWidth) {
         // shift(x, 32) => 0 when x has 32 bits.  This is handled by fold().
         if (op.getType().cast<IntType>().isUnsigned())
           return failure();
 
         // Shifting a signed value by the full width is actually taking the sign
-        // bit.
-        --shiftAmount;
+        // bit. If the shift amount is greater than the input width, it is
+        // equivalent to shifting by the input width.
+        shiftAmount = inputWidth - 1;
       }
 
       replaceWithBits(op, op.input(), inputWidth - 1, shiftAmount, rewriter);
@@ -420,12 +415,8 @@ void TailPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
     LogicalResult matchAndRewrite(TailPrimOp op,
                                   PatternRewriter &rewriter) const override {
-      auto inputWidth = op.input()
-                            .getType()
-                            .cast<FIRRTLType>()
-                            .getPassiveType()
-                            .cast<IntType>()
-                            .getWidthOrSentinel();
+      auto inputWidth =
+          op.input().getType().cast<IntType>().getWidthOrSentinel();
       if (inputWidth == -1)
         return failure();
 
@@ -438,4 +429,39 @@ void TailPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
   };
 
   results.insert<Folder>(context);
+}
+
+//===----------------------------------------------------------------------===//
+// Conversions
+//===----------------------------------------------------------------------===//
+
+OpFoldResult StdIntCast::fold(ArrayRef<Attribute> operands) {
+  if (auto castInput =
+          dyn_cast_or_null<StdIntCast>(getOperand().getDefiningOp()))
+    if (castInput.getOperand().getType() == getType())
+      return castInput.getOperand();
+
+  return {};
+}
+
+OpFoldResult AsPassivePrimOp::fold(ArrayRef<Attribute> operands) {
+  // If the input is already passive, then we don't need a conversion.
+  if (getOperand().getType() == getType())
+    return getOperand();
+
+  if (auto castInput =
+          dyn_cast_or_null<AsNonPassivePrimOp>(getOperand().getDefiningOp()))
+    if (castInput.getOperand().getType() == getType())
+      return castInput.getOperand();
+
+  return {};
+}
+
+OpFoldResult AsNonPassivePrimOp::fold(ArrayRef<Attribute> operands) {
+  if (auto castInput =
+          dyn_cast_or_null<AsPassivePrimOp>(getOperand().getDefiningOp()))
+    if (castInput.getOperand().getType() == getType())
+      return castInput.getOperand();
+
+  return {};
 }

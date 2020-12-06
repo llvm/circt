@@ -1,8 +1,8 @@
 // RUN: llhd-sim %s | FileCheck %s
 
-// CHECK: 0ns 0d 0e  root/bool  0x01
-// CHECK-NEXT: 0ns 0d 0e  root/fair  0xff00
-// CHECK-NEXT: 0ns 0d 0e  root/ginormous 0x000000000000000000000008727f6369aaf83ca15026747af8c7f196ce3f0ad2
+// CHECK: 0ps 0d 0e  root/bool  0x01
+// CHECK-NEXT: 0ps 0d 0e  root/fair  0xff00
+// CHECK-NEXT: 0ps 0d 0e  root/ginormous 0x000000000000000000000008727f6369aaf83ca15026747af8c7f196ce3f0ad2
 
 llhd.entity @root () -> () {
   %small = llhd.const 1 : i1

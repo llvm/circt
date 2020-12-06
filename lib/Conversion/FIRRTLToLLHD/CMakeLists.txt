@@ -1,0 +1,14 @@
+add_mlir_conversion_library(MLIRFIRRTLToLLHD
+  FIRRTLToLLHD.cpp
+
+  DEPENDS
+  MLIRFIRRTLToLLHDConversionPassIncGen
+
+  LINK_COMPONENTS
+  Core
+
+  LINK_LIBS PUBLIC
+  MLIRLLHD
+  MLIRFIRRTL
+  MLIRTransforms
+)

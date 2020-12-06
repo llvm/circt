@@ -9,6 +9,7 @@
 
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/RegionKindInterface.td"
@@ -24,6 +25,8 @@ def RTLDialect : Dialect {
 
   let cppNamespace = "::circt::rtl";
 }
+
+include "Types.td"
 
 // Base class for the operation in this dialect.
 class RTLOp<string mnemonic, list<OpTrait> traits = []> :

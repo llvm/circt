@@ -150,7 +150,7 @@ state of the state machine, certain operations in a datapath are
 enabled. This abstraction facilitates reasoning about resource sharing
 and pipelined behavior, while leaving the specifics of how those
 mechanisms are implemented implicit. Lowering into an RTL-level
-description typically requires explictly representing these mechanisms,
+description typically requires explicitly representing these mechanisms,
 converting both the control finite-state machine and the datapath into
 registers and combinational logic. This lowering also requires
 explicitly representing clocks and clock enables in the circuit in an
@@ -287,7 +287,7 @@ happens through external memory, resulting in significant power
 consumption and a communication bottleneck. While communication between
 cores using on-chip memory is also possible, this must be managed
 explicitly and separately from global memory. Explicit dataflow-based
-programming represents inter-process communication explictly as streams
+programming represents inter-process communication explicitly as streams
 of data, allowing communication intent to be explicitly separated from
 stateful storage. Additionally, since dataflow processes do not share
 state, dataflow-based programming describes memory locality explicitly

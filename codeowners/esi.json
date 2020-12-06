@@ -1,0 +1,10 @@
+{
+  "name": "Add code owner for triage",
+  "includes": [
+    "**/Dialect/ESI/**"
+  ],
+  "action": "review",
+  "users": [
+    "teqdruid"
+  ]
+}

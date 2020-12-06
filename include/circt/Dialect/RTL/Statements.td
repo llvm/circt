@@ -21,7 +21,7 @@ def ConnectOp : RTLOp<"connect", [SameTypeOperands]> {
   }];
 }
 
-def WireOp : RTLOp<"wire"> {
+def WireOp : RTLOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let summary = "Define a new wire";
   let description = [{
     Declare a new wire:
@@ -32,8 +32,22 @@ def WireOp : RTLOp<"wire"> {
 
   let arguments = (ins OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$result);
-  
+
+  let printer = [{ printWireOp(p, *this); }];
+  let parser = [{ return parseWireOp(parser, result); }];
+}
+
+def ReadInOutOp : RTLOp<"read_inout", [NoSideEffect]> {
+  let summary = "Get the value of from something of inout type (e.g. a wire or"
+                " inout port) as the value itself.";
+  let arguments = (ins AnyType:$input);
+  let results = (outs AnyType:$result);
+
+  // TODO: This should just need the input type instead of both the input and
+  // result.
   let assemblyFormat = [{
-     attr-dict `:` type($result)
+    $input attr-dict `:` functional-type($input, $result)
   }];
+
+  let verifier = [{ return ::verifyReadInOutOp(*this); }];
 }

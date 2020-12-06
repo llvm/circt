@@ -20,10 +20,8 @@ circuit test_mod :
 ; VERILOG-NEXT :   assign b = a;
 ; VERILOG-NEXT : endmodule
 
-; MLIRLOWER: firrtl.circuit "test_mod" {
-; MLIRLOWER:   firrtl.module @test_mod(%a: !firrtl.uint<1>, %b: !firrtl.flip<uint<1>>) {
-; MLIRLOWER:     %0 = firrtl.stdIntCast %b : (!firrtl.flip<uint<1>>) -> i1
-; MLIRLOWER:     %1 = firrtl.stdIntCast %a : (!firrtl.uint<1>) -> i1
-; MLIRLOWER:     rtl.connect %0, %1 : i1
+; MLIRLOWER: module attributes {firrtl.mainModule = "test_mod"} {
+; MLIRLOWER:   rtl.module @test_mod(%a: i1) -> (%b: i1) {
+; MLIRLOWER:     rtl.output %a : i1
 ; MLIRLOWER:   }
 ; MLIRLOWER: }

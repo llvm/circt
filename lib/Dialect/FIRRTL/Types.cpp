@@ -47,8 +47,8 @@ void FIRRTLType::print(raw_ostream &os) const {
         os << "bundle<";
         llvm::interleaveComma(bundleType.getElements(), os,
                               [&](BundleType::BundleElement element) {
-                                os << element.first << ": ";
-                                element.second.print(os);
+                                os << element.name << ": ";
+                                element.type.print(os);
                               });
         os << '>';
       })
@@ -187,15 +187,15 @@ Type FIRRTLDialect::parseType(DialectAsmParser &parser) const {
 
 /// Return true if this is a "passive" type - one that contains no "flip"
 /// types recursively within itself.
-bool FIRRTLType::isPassiveType() {
+bool FIRRTLType::isPassive() {
   return TypeSwitch<FIRRTLType, bool>(*this)
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
             AnalogType>([](Type) { return true; })
       .Case<FlipType>([](Type) { return false; })
       .Case<BundleType>(
-          [](BundleType bundleType) { return bundleType.isPassiveType(); })
+          [](BundleType bundleType) { return bundleType.isPassive(); })
       .Case<FVectorType>(
-          [](FVectorType vectorType) { return vectorType.isPassiveType(); })
+          [](FVectorType vectorType) { return vectorType.isPassive(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return false;
@@ -233,7 +233,7 @@ FIRRTLType FIRRTLType::getMaskType() {
         SmallVector<BundleType::BundleElement, 4> newElements;
         newElements.reserve(bundleType.getElements().size());
         for (auto elt : bundleType.getElements())
-          newElements.push_back({elt.first, elt.second.getMaskType()});
+          newElements.push_back({elt.name, elt.type.getMaskType()});
         return BundleType::get(newElements, getContext());
       })
       .Case<FVectorType>([](FVectorType vectorType) {
@@ -241,6 +241,33 @@ FIRRTLType FIRRTLType::getMaskType() {
                                 vectorType.getNumElements());
       })
       .Default([](Type) {
+        llvm_unreachable("unknown FIRRTL type");
+        return FIRRTLType();
+      });
+}
+
+/// Remove the widths from this type. All widths are replaced with an
+/// unknown width.
+FIRRTLType FIRRTLType::getWidthlessType() {
+  return TypeSwitch<FIRRTLType, FIRRTLType>(*this)
+      .Case<ClockType, ResetType, AsyncResetType>([](auto a) { return a; })
+      .Case<FlipType>([](FlipType a) {
+        return FlipType::get(a.getElementType().getWidthlessType());
+      })
+      .Case<UIntType, SIntType, AnalogType>(
+          [&](auto a) { return a.get(getContext(), -1); })
+      .Case<BundleType>([&](auto a) {
+        SmallVector<BundleType::BundleElement, 4> newElements;
+        newElements.reserve(a.getElements().size());
+        for (auto elt : a.getElements())
+          newElements.push_back({elt.name, elt.type.getWidthlessType()});
+        return BundleType::get(newElements, getContext());
+      })
+      .Case<FVectorType>([](auto a) {
+        return FVectorType::get(a.getElementType().getWidthlessType(),
+                                a.getNumElements());
+      })
+      .Default([](auto) {
         llvm_unreachable("unknown FIRRTL type");
         return FIRRTLType();
       });
@@ -269,15 +296,74 @@ int32_t FIRRTLType::getBitWidthOrSentinel() {
 /// asynchronous reset.
 bool FIRRTLType::isResetType() {
   return TypeSwitch<FIRRTLType, bool>(*this)
-    .Case<ResetType, AsyncResetType>([](Type) {
-      return true;
-    })
-    .Case<UIntType>([](UIntType a) {
-      return a.getWidth() == 1;
-    })
-    .Default([](Type) {
+      .Case<ResetType, AsyncResetType>([](Type) { return true; })
+      .Case<UIntType>([](UIntType a) { return a.getWidth() == 1; })
+      .Default([](Type) { return false; });
+}
+
+/// Helper to implement the equivalence logic for a pair of bundle elements.
+/// Note that the FIRRTL spec requires bundle elements to have the same
+/// orientation, but this only compares their passive types. The FIRRTL dialect
+/// differs from the spec in how it uses flip types for module output ports and
+/// canonicalizes flips in bundles, so only passive types can be compared here.
+static bool areBundleElementsEquivalent(BundleType::BundleElement destElement,
+                                        BundleType::BundleElement srcElement) {
+  if (destElement.name != srcElement.name)
+    return false;
+
+  return areTypesEquivalent(destElement.type, srcElement.type);
+}
+
+/// Returns whether the two types are equivalent. See the FIRRTL spec for the
+/// full definition of type equivalence. This predicate differs from the spec in
+/// that it only compares passive types. Because of how the FIRRTL dialect uses
+/// flip types in module ports and aggregates, this definition, unlike the spec,
+/// ignores flips.
+bool firrtl::areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType) {
+  // Ensure we are comparing passive types.
+  if (!destType.isPassive())
+    destType = destType.getPassiveType();
+  if (!srcType.isPassive())
+    srcType = srcType.getPassiveType();
+
+  // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
+  if (destType.isa<ResetType>())
+    return srcType.isResetType();
+
+  // Reset types can drive UInt<1>, AsyncReset, or Reset types.
+  if (srcType.isa<ResetType>())
+    return destType.isResetType();
+
+  // Vector types can be connected if they have the same size and element type.
+  auto destVectorType = destType.dyn_cast<FVectorType>();
+  auto srcVectorType = srcType.dyn_cast<FVectorType>();
+  if (destVectorType && srcVectorType)
+    return destVectorType.getNumElements() == srcVectorType.getNumElements() &&
+           areTypesEquivalent(destVectorType.getElementType(),
+                              srcVectorType.getElementType());
+
+  // Bundle types can be connected if they have the same size, element names,
+  // and element types.
+  auto destBundleType = destType.dyn_cast<BundleType>();
+  auto srcBundleType = srcType.dyn_cast<BundleType>();
+  if (destBundleType && srcBundleType) {
+    auto destElements = destBundleType.getElements();
+    auto srcElements = srcBundleType.getElements();
+    size_t numDestElements = destElements.size();
+    if (numDestElements != srcElements.size())
       return false;
-    });
+
+    for (size_t i = 0; i < numDestElements; ++i) {
+      auto destElement = destElements[i];
+      auto srcElement = srcElements[i];
+      if (!areBundleElementsEquivalent(destElement, srcElement))
+        return false;
+    }
+  }
+
+  // Ground types can be connected if their passive, widthless versions
+  // are equal.
+  return destType.getWidthlessType() == srcType.getWidthlessType();
 }
 
 //===----------------------------------------------------------------------===//
@@ -391,8 +477,8 @@ getFlippedBundleType(ArrayRef<BundleType::BundleElement> elements) {
   SmallVector<BundleType::BundleElement, 16> flippedelements;
   flippedelements.reserve(elements.size());
   for (auto &elt : elements)
-    flippedelements.push_back({elt.first, FlipType::get(elt.second)});
-  return BundleType::get(flippedelements, elements[0].second.getContext());
+    flippedelements.push_back({elt.name, FlipType::get(elt.type)});
+  return BundleType::get(flippedelements, elements[0].type.getContext());
 }
 
 FIRRTLType FlipType::get(FIRRTLType element) {
@@ -416,7 +502,7 @@ FIRRTLType FlipType::get(FIRRTLType element) {
         // If the bundle is passive, then we're done because the flip will be at
         // the outer level. Otherwise, it contains flip types recursively within
         // itself that we should canonicalize.
-        if (bundleType.isPassiveType()) {
+        if (bundleType.isPassive()) {
           auto *context = element.getContext();
           return Base::get(context, element).cast<FIRRTLType>();
         }
@@ -427,7 +513,7 @@ FIRRTLType FlipType::get(FIRRTLType element) {
         // If the bundle is passive, then we're done because the flip will be at
         // the outer level. Otherwise, it contains flip types recursively within
         // itself that we should canonicalize.
-        if (vectorType.isPassiveType()) {
+        if (vectorType.isPassive()) {
           auto *context = element.getContext();
           return Base::get(context, element).cast<FIRRTLType>();
         }
@@ -450,22 +536,32 @@ FIRRTLType FlipType::getElementType() { return getImpl()->element; }
 
 namespace circt {
 namespace firrtl {
+llvm::hash_code hash_value(const BundleType::BundleElement &arg) {
+  return llvm::hash_value(arg.name) ^ mlir::hash_value(arg.type);
+}
+} // namespace firrtl
+} // namespace circt
+
+namespace circt {
+namespace firrtl {
 namespace detail {
 struct BundleTypeStorage : mlir::TypeStorage {
   using KeyTy = ArrayRef<BundleType::BundleElement>;
 
   BundleTypeStorage(KeyTy elements)
       : elements(elements.begin(), elements.end()) {
-
-    bool isPassive = llvm::all_of(
-        elements, [](const BundleType::BundleElement &elt) -> bool {
-          auto eltType = elt.second;
-          return eltType.isPassiveType();
+    bool isPassive =
+        llvm::all_of(elements, [](BundleType::BundleElement elt) -> bool {
+          return elt.type.isPassive();
         });
     passiveTypeInfo.setInt(isPassive);
   }
 
   bool operator==(const KeyTy &key) const { return key == KeyTy(elements); }
+
+  static llvm::hash_code hashKey(const KeyTy &key) {
+    return llvm::hash_combine_range(key.begin(), key.end());
+  }
 
   static BundleTypeStorage *construct(TypeStorageAllocator &allocator,
                                       KeyTy key) {
@@ -489,7 +585,7 @@ FIRRTLType BundleType::get(ArrayRef<BundleElement> elements,
   // the outer level.
   if (!elements.empty() &&
       llvm::all_of(elements, [&](const BundleElement &elt) -> bool {
-        return elt.second.isa<FlipType>();
+        return elt.type.isa<FlipType>();
       })) {
     return FlipType::get(getFlippedBundleType(elements));
   }
@@ -501,7 +597,7 @@ auto BundleType::getElements() -> ArrayRef<BundleElement> {
   return getImpl()->elements;
 }
 
-bool BundleType::isPassiveType() { return getImpl()->passiveTypeInfo.getInt(); }
+bool BundleType::isPassive() { return getImpl()->passiveTypeInfo.getInt(); }
 
 /// Return this type with any flip types recursively removed from itself.
 FIRRTLType BundleType::getPassiveType() {
@@ -518,7 +614,7 @@ FIRRTLType BundleType::getPassiveType() {
   SmallVector<BundleType::BundleElement, 16> newElements;
   newElements.reserve(impl->elements.size());
   for (auto &elt : impl->elements) {
-    newElements.push_back({elt.first, elt.second.getPassiveType()});
+    newElements.push_back({elt.name, elt.type.getPassiveType()});
   }
 
   auto passiveType = BundleType::get(newElements, getContext());
@@ -529,7 +625,7 @@ FIRRTLType BundleType::getPassiveType() {
 /// Look up an element by name.  This returns a BundleElement with.
 auto BundleType::getElement(StringRef name) -> Optional<BundleElement> {
   for (const auto &element : getElements()) {
-    if (element.first == name)
+    if (element.name == name)
       return element;
   }
   return None;
@@ -537,7 +633,7 @@ auto BundleType::getElement(StringRef name) -> Optional<BundleElement> {
 
 FIRRTLType BundleType::getElementType(StringRef name) {
   auto element = getElement(name);
-  return element.hasValue() ? element.getValue().second : FIRRTLType();
+  return element.hasValue() ? element.getValue().type : FIRRTLType();
 }
 
 //===----------------------------------------------------------------------===//
@@ -551,7 +647,7 @@ struct VectorTypeStorage : mlir::TypeStorage {
   using KeyTy = std::pair<FIRRTLType, unsigned>;
 
   VectorTypeStorage(KeyTy value) : value(value) {
-    passiveTypeInfo.setInt(value.first.isPassiveType());
+    passiveTypeInfo.setInt(value.first.isPassive());
   }
 
   bool operator==(const KeyTy &key) const { return key == value; }
@@ -585,9 +681,7 @@ FIRRTLType FVectorType::getElementType() { return getImpl()->value.first; }
 
 unsigned FVectorType::getNumElements() { return getImpl()->value.second; }
 
-bool FVectorType::isPassiveType() {
-  return getImpl()->passiveTypeInfo.getInt();
-}
+bool FVectorType::isPassive() { return getImpl()->passiveTypeInfo.getInt(); }
 
 /// Return this type with any flip types recursively removed from itself.
 FIRRTLType FVectorType::getPassiveType() {

@@ -1,4 +1,5 @@
 add_mlir_dialect(HandshakeOps handshake)
+add_mlir_doc(HandshakeOps -gen-op-doc handshake Dialect/)
 
 set(LLVM_TARGET_DEFINITIONS HandshakeOps.td)
 mlir_tablegen(HandshakeOps.inc -gen-rewriters)

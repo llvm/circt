@@ -1,6 +1,7 @@
 <p align="center"><img src="docs/circt-logo.svg"/></p>
 
-[![](https://github.com/circt/circt/workflows/Build%20and%20Test/badge.svg?event=push)](https://github.com/circt/circt/actions)
+[![](https://github.com/circt/circt/workflows/Build%20and%20Test/badge.svg?event=push)](https://github.com/llvm/circt/actions?query=workflow%3A%22Build+and+Test%22)
+[![Nightly integration tests](https://github.com/llvm/circt/workflows/Nightly%20integration%20tests/badge.svg)](https://github.com/llvm/circt/actions?query=workflow%3A%22Nightly+integration+tests%22)
 
 # ⚡️ "CIRCT" / Circuit IR Compilers and Tools
 
@@ -21,6 +22,10 @@ for more information.
 3) Contribute code.  CIRCT follows all of the LLVM Policies: you can create pull
    requests for the CIRCT repository, and gain commit access using the [standard
    LLVM policies](https://llvm.discourse.group/c/Projects-that-want-to-become-official-LLVM-Projects/circt/).
+
+Also take a look at the following diagram, which gives a brief overview of the current [dialects and how they interact](docs/dialects.svg):
+
+<p align="center"><img src="docs/dialects.svg"/></p>
 
 ## Motivation
 
@@ -68,6 +73,13 @@ $ git submodule init
 $ git submodule update
 ```
 
+*Note:* The repository is set up so that `git submodule update` performs a shallow clone, meaning it downloads just enough of the LLVM repository to check out the currently specified commit. If you wish to work with the full history of the LLVM repository, you can manually "unshallow" the the submodule:
+
+```
+$ cd llvm
+$ git fetch --unshallow
+```
+
 3) **Build and test LLVM/MLIR:**
 
 ```
@@ -96,6 +108,7 @@ $ cmake -G Ninja .. \
     -DCMAKE_BUILD_TYPE=DEBUG
 $ ninja
 $ ninja check-circt
+$ ninja check-circt-integration # Run the integration tests.
 ```
 
 The `-DCMAKE_BUILD_TYPE=DEBUG` flag enables debug information, which makes the
@@ -124,6 +137,27 @@ build() {
 
 This allows you to invoke `build check-circt` from any directory and have it do
 the right thing.
+
+6) **Run the Verilator tests:** (optional)
+
+[Verilator](https://github.com/verilator/verilator) is can be used to check
+SystemVerilog code. To run the tests, build or install a **recent** version
+of Verilator (at least v4.034). (Some Linux distributions have *ancient*
+versions.) If Verilator is in your PATH, `build check-circt` should run the
+tests which require Verilator.
+
+We provide a script `utils/get-verilator.sh` to automate the download and
+compilation of Verilator into a known location. The testing script will check
+this location first. This script assumes that all the Verilator package
+dependencies are installed on your system. They are:
+
+- make
+- autoconf
+- g++
+- flex
+- bison
+- libfl2     # Ubuntu only (ignore if gives error)
+- libfl-dev  # Ubuntu only (ignore if gives error)
 
 ## Submitting changes to CIRCT
 

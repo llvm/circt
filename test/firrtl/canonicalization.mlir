@@ -219,21 +219,37 @@ firrtl.module @Shr(%in1u: !firrtl.uint<1>,
   %1 = firrtl.shr %in4u, 4 : (!firrtl.uint<4>) -> !firrtl.uint<1>
   firrtl.connect %out1u, %1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 
+  // CHECK: firrtl.connect %out1u, %c0_ui1
+  %2 = firrtl.shr %in4u, 5 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+  firrtl.connect %out1u, %2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+
+  // CHECK: [[BITS:%.+]] = firrtl.bits %in4s 3 to 3
+  // CHECK-NEXT: [[CAST:%.+]] = firrtl.asSInt [[BITS]]
+  // CHECK-NEXT: firrtl.connect %out1s, [[CAST]]
+  %3 = firrtl.shr %in4s, 3 : (!firrtl.sint<4>) -> !firrtl.sint<1>
+  firrtl.connect %out1s, %3 : !firrtl.flip<sint<1>>, !firrtl.sint<1>
+
   // CHECK: [[BITS:%.+]] = firrtl.bits %in4s 3 to 3
   // CHECK-NEXT: [[CAST:%.+]] = firrtl.asSInt [[BITS]]
   // CHECK-NEXT: firrtl.connect %out1s, [[CAST]]
   %4 = firrtl.shr %in4s, 4 : (!firrtl.sint<4>) -> !firrtl.sint<1>
   firrtl.connect %out1s, %4 : !firrtl.flip<sint<1>>, !firrtl.sint<1>
 
+  // CHECK: [[BITS:%.+]] = firrtl.bits %in4s 3 to 3
+  // CHECK-NEXT: [[CAST:%.+]] = firrtl.asSInt [[BITS]]
+  // CHECK-NEXT: firrtl.connect %out1s, [[CAST]]
+  %5 = firrtl.shr %in4s, 5 : (!firrtl.sint<4>) -> !firrtl.sint<1>
+  firrtl.connect %out1s, %5 : !firrtl.flip<sint<1>>, !firrtl.sint<1>
+
   // CHECK: firrtl.connect %out1u, %c1_ui1
   %c12_ui4 = firrtl.constant(12 : ui4) : !firrtl.uint<4>
-  %2 = firrtl.shr %c12_ui4, 3 : (!firrtl.uint<4>) -> !firrtl.uint<1>
-  firrtl.connect %out1u, %2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  %6 = firrtl.shr %c12_ui4, 3 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+  firrtl.connect %out1u, %6 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 
   // CHECK: [[BITS:%.+]] = firrtl.bits %in4u 3 to 3
   // CHECK-NEXT: firrtl.connect %out1u, [[BITS]]
-  %3 = firrtl.shr %in4u, 3 : (!firrtl.uint<4>) -> !firrtl.uint<1>
-  firrtl.connect %out1u, %3 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  %7 = firrtl.shr %in4u, 3 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+  firrtl.connect %out1u, %7 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 }
 
 // CHECK-LABEL: firrtl.module @Tail

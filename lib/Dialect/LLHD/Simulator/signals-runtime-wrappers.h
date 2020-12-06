@@ -17,22 +17,36 @@ extern "C" {
 
 /// Allocate a new signal. The index of the new signal in the state's list of
 /// signals is returned.
-int alloc_signal(circt::llhd::sim::State *state, int index, char *owner,
-                 uint8_t *value, int64_t size);
+int allocSignal(circt::llhd::sim::State *state, int index, char *owner,
+                uint8_t *value, int64_t size);
+
+/// Add offset and size information for the elements of an array signal.
+void addSigArrayElements(circt::llhd::sim::State *state, unsigned index,
+                         unsigned size, unsigned numElements);
+
+/// Add offset and size information for one element of a struct signal. Elements
+/// are assumed to be added (by calling this function) in sequential order, from
+/// first to last.
+void addSigStructElement(circt::llhd::sim::State *state, unsigned index,
+                         unsigned offset, unsigned size);
 
 /// Add allocated constructs to a process instance.
-void alloc_proc(circt::llhd::sim::State *state, char *owner,
-                circt::llhd::sim::ProcState *procState);
+void allocProc(circt::llhd::sim::State *state, char *owner,
+               circt::llhd::sim::ProcState *procState);
+
+/// Add allocated entity state to the given instance.
+void allocEntity(circt::llhd::sim::State *state, char *owner,
+                 uint8_t *entityState);
 
 /// Drive a value onto a signal.
-void drive_signal(circt::llhd::sim::State *state,
-                  circt::llhd::sim::SignalDetail *index, uint8_t *value,
-                  uint64_t width, int time, int delta, int eps);
+void driveSignal(circt::llhd::sim::State *state,
+                 circt::llhd::sim::SignalDetail *index, uint8_t *value,
+                 uint64_t width, int time, int delta, int eps);
 
 /// Suspend a process.
-void llhd_suspend(circt::llhd::sim::State *state,
-                  circt::llhd::sim::ProcState *procState, int time, int delta,
-                  int eps);
+void llhdSuspend(circt::llhd::sim::State *state,
+                 circt::llhd::sim::ProcState *procState, int time, int delta,
+                 int eps);
 }
 
 #endif // CIRCT_DIALECT_LLHD_SIMULATOR_SIGNALS_RUNTIME_WRAPPERS_H

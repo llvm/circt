@@ -30,13 +30,13 @@ public:
             // Comparisons.
             LEQPrimOp, LTPrimOp, GEQPrimOp, GTPrimOp, EQPrimOp, NEQPrimOp,
             // Misc Binary Primitives.
-            CatPrimOp, DShlPrimOp, DShrPrimOp, ValidIfPrimOp,
+            CatPrimOp, DShlPrimOp, DShlwPrimOp, DShrPrimOp, ValidIfPrimOp,
             // Unary operators.
             AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsClockPrimOp,
             CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
-            TailPrimOp,
+            TailPrimOp, AsPassivePrimOp, AsNonPassivePrimOp,
 
             // Standard Dialect integer conversion.
             StdIntCast>([&](auto expr) -> ResultType {
@@ -104,6 +104,7 @@ public:
   // Misc Binary Primitives.
   HANDLE(CatPrimOp, Binary);
   HANDLE(DShlPrimOp, Binary);
+  HANDLE(DShlwPrimOp, Binary);
   HANDLE(DShrPrimOp, Binary);
   HANDLE(ValidIfPrimOp, Binary);
 
@@ -127,6 +128,8 @@ public:
   HANDLE(ShlPrimOp, Unhandled);
   HANDLE(ShrPrimOp, Unhandled);
   HANDLE(TailPrimOp, Unhandled);
+  HANDLE(AsPassivePrimOp, Unhandled);
+  HANDLE(AsNonPassivePrimOp, Unhandled);
 
   // Standard Dialect integer conversion.
   HANDLE(StdIntCast, Unhandled);
@@ -142,7 +145,8 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<AttachOp, ConnectOp, DoneOp, InvalidOp, MemoryPortOp,
-                       PartialConnectOp, PrintFOp, SkipOp, StopOp, WhenOp>(
+                       PartialConnectOp, PrintFOp, SkipOp, StopOp, WhenOp,
+                       AssertOp, AssumeOp, CoverOp>(
             [&](auto opNode) -> ResultType {
               return thisCast->visitStmt(opNode, args...);
             })
@@ -178,6 +182,9 @@ public:
   HANDLE(SkipOp);
   HANDLE(StopOp);
   HANDLE(WhenOp);
+  HANDLE(AssertOp);
+  HANDLE(AssumeOp);
+  HANDLE(CoverOp);
 #undef HANDLE
 };
 

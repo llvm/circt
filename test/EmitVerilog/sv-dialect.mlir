@@ -1,6 +1,34 @@
 // RUN: circt-translate %s -emit-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
+// CHECK-LABEL: interface myinterface;
+// CHECK:         logic [31:0] data;
+// CHECK:         modport input_port(input data);
+// CHECK:         modport output_port(output data);
+// CHECK:       endinterface
+// CHECK-EMPTY:
+sv.interface @myinterface {
+  sv.interface.signal @data : i32
+  sv.interface.modport @input_port ("input" @data)
+  sv.interface.modport @output_port ("output" @data)
+}
+
 firrtl.circuit "M1" {
+  // CHECK-LABEL: interface handshake_example;
+  // CHECK:         logic [31:0] data;
+  // CHECK:         logic valid;
+  // CHECK:         logic ready;
+  // CHECK:         modport dataflow_in(input data, input valid, output ready);
+  // CHECK:         modport dataflow_out(output data, output valid, input ready);
+  // CHECK:       endinterface
+  // CHECK-EMPTY:
+  sv.interface @handshake_example {
+    sv.interface.signal @data : i32
+    sv.interface.signal @valid : i1
+    sv.interface.signal @ready : i1
+    sv.interface.modport @dataflow_in ("input" @data, "input" @valid, "output" @ready)
+    sv.interface.modport @dataflow_out ("output" @data, "output" @valid, "input" @ready)
+  }
+
   // CHECK-LABEL: module M1(
   firrtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
 
@@ -27,13 +55,20 @@ firrtl.circuit "M1" {
 
       // CHECK-NEXT:     $fwrite(32'h80000002, "Bye %x\n", val + val);
       %tmp = rtl.add %val, %val : i8
-      sv.fwrite "Bye %x\n"(%tmp) : i8 
+      sv.fwrite "Bye %x\n"(%tmp) : i8
+
+      // CHECK-NEXT:     assert(cond);
+      sv.assert %cond : i1
+      // CHECK-NEXT:     assume(cond);
+      sv.assume %cond : i1
+      // CHECK-NEXT:     cover(cond);
+      sv.cover %cond : i1
 
       // CHECK-NEXT:   $fatal
       sv.fatal
       // CHECK-NEXT:   $finish
       sv.finish
-      // CHECK-NEXT:   end
+      // CHECK-NEXT:   {{end$}}
     }
   }
 }
