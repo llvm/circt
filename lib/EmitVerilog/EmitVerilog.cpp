@@ -749,51 +749,24 @@ private:
   SubExprInfo emitBitSelect(Value operand, unsigned hiBit, unsigned loBit);
 
   SubExprInfo emitBinary(Operation *op, VerilogPrecedence prec,
-                         const char *syntax, bool opForceSign = false);
+                         const char *syntax, bool opSigned = false);
+
+  SubExprInfo emitFIRRTLBinary(Operation *op, VerilogPrecedence prec,
+                         const char *syntax);
 
   SubExprInfo emitVariadic(Operation *op, VerilogPrecedence prec,
-                           const char *syntax, bool opForceSign = false);
+                           const char *syntax, bool hasStrictSign = false);
 
-  /// Emit the specified subexpression in a context where the sign matters,
-  /// e.g. for a less than comparison or divide.
-  SubExprInfo emitRTLSignedBinary(Operation *op, VerilogPrecedence prec,
-                                  const char *syntax) {
-    return emitBinary(op, prec, syntax,
-                      /*opForceSign*/ true);
-  }
+  SubExprInfo emitFIRRTLVariadic(Operation *op, VerilogPrecedence prec,
+                           const char *syntax);
+
+  SubExprInfo emitFIRRTLUnary(Operation *op, const char *syntax);
+  
   SubExprInfo emitUnary(Operation *op, const char *syntax, bool forceUnsigned) {
-    bool opSigned = getSignednessOf(op->getOperand(0).getType()) == IsSigned;
-    auto width = getBitWidthOrSentinel(op->getResult(0).getType());
-    auto opWidth = getBitWidthOrSentinel(op->getOperand(0).getType());
-
     os << syntax;
-    if (opSigned)
-      os << "$signed(";
-    if (opWidth < width) {
-      if (opWidth < width) {
-        if (opSigned)
-          os << "{{" << (width - opWidth) << '{';
-        else
-          os << "{{" << (width - opWidth) << "'d0}, ";
-      }
-    }
-
     auto signedness = emitSubExpr(op->getOperand(0),
-                                  opWidth >= width ? Unary : LowestPrecedence)
+                                  Unary)
                           .signedness;
-
-    if (opWidth < width) {
-      if (opSigned) {
-        os << '[' << (opWidth - 1) << "]}}, ";
-        emitSubExpr(op->getOperand(0), LowestPrecedence);
-        os << "}";
-      } else {
-        os << "}";
-      }
-    }
-    if (opSigned)
-      os << ")";
-
     return {Unary, forceUnsigned ? IsUnsigned : signedness};
   }
   SubExprInfo emitNoopCast(Operation *op) {
@@ -803,45 +776,42 @@ private:
   SubExprInfo visitSV(sv::TextualValueOp op);
 
   SubExprInfo visitExpr(AddPrimOp op) {
-    return emitVariadic(op, Addition, "+");
+    return emitFIRRTLVariadic(op, Addition, "+");
   }
-  SubExprInfo visitExpr(SubPrimOp op) { return emitBinary(op, Addition, "-"); }
+  SubExprInfo visitExpr(SubPrimOp op) { return emitFIRRTLBinary(op, Addition, "-"); }
   SubExprInfo visitExpr(MulPrimOp op) {
-    return emitVariadic(op, Multiply, "*");
+    return emitFIRRTLVariadic(op, Multiply, "*");
   }
-  SubExprInfo visitExpr(DivPrimOp op) { return emitBinary(op, Multiply, "/"); }
+  SubExprInfo visitExpr(DivPrimOp op) { return emitFIRRTLBinary(op, Multiply, "/"); }
   SubExprInfo visitExpr(RemPrimOp op) {
-    // FIXME(rtl dialect): Verilog has the width of (a % b) = Max(W(a), W(b))
-    // FIRRTL has the width of (a % b) = Min(W(a), W(b)), which makes more
-    // sense, but nevertheless is a problem when emitting verilog.
-    return emitBinary(op, Multiply, "%");
+    return emitFIRRTLBinary(op, Multiply, "%");
   }
 
-  SubExprInfo visitExpr(AndPrimOp op) { return emitVariadic(op, And, "&"); }
-  SubExprInfo visitExpr(OrPrimOp op) { return emitVariadic(op, Or, "|"); }
-  SubExprInfo visitExpr(XorPrimOp op) { return emitVariadic(op, Xor, "^"); }
+  SubExprInfo visitExpr(AndPrimOp op) { return emitFIRRTLVariadic(op, And, "&"); }
+  SubExprInfo visitExpr(OrPrimOp op) { return emitFIRRTLVariadic(op, Or, "|"); }
+  SubExprInfo visitExpr(XorPrimOp op) { return emitFIRRTLVariadic(op, Xor, "^"); }
 
   // FIRRTL Comparison Operations
   SubExprInfo visitExpr(LEQPrimOp op) {
-    return emitBinary(op, Comparison, "<=");
+    return emitFIRRTLBinary(op, Comparison, "<=");
   }
-  SubExprInfo visitExpr(LTPrimOp op) { return emitBinary(op, Comparison, "<"); }
+  SubExprInfo visitExpr(LTPrimOp op) { return emitFIRRTLBinary(op, Comparison, "<"); }
   SubExprInfo visitExpr(GEQPrimOp op) {
-    return emitBinary(op, Comparison, ">=");
+    return emitFIRRTLBinary(op, Comparison, ">=");
   }
-  SubExprInfo visitExpr(GTPrimOp op) { return emitBinary(op, Comparison, ">"); }
-  SubExprInfo visitExpr(EQPrimOp op) { return emitBinary(op, Equality, "=="); }
-  SubExprInfo visitExpr(NEQPrimOp op) { return emitBinary(op, Equality, "!="); }
-  SubExprInfo visitExpr(DShlPrimOp op) { return emitBinary(op, Shift, "<<"); }
-  SubExprInfo visitExpr(DShlwPrimOp op) { return emitBinary(op, Shift, "<<"); }
-  SubExprInfo visitExpr(DShrPrimOp op) { return emitBinary(op, Shift, ">>>"); }
+  SubExprInfo visitExpr(GTPrimOp op) { return emitFIRRTLBinary(op, Comparison, ">"); }
+  SubExprInfo visitExpr(EQPrimOp op) { return emitFIRRTLBinary(op, Equality, "=="); }
+  SubExprInfo visitExpr(NEQPrimOp op) { return emitFIRRTLBinary(op, Equality, "!="); }
+  SubExprInfo visitExpr(DShlPrimOp op) { return emitFIRRTLBinary(op, Shift, "<<"); }
+  SubExprInfo visitExpr(DShlwPrimOp op) { return emitFIRRTLBinary(op, Shift, "<<"); }
+  SubExprInfo visitExpr(DShrPrimOp op) { return emitFIRRTLBinary(op, Shift, ">>>"); }
 
   // Unary Prefix operators.
-  SubExprInfo visitExpr(AndRPrimOp op) { return emitUnary(op, "&", true); }
-  SubExprInfo visitExpr(XorRPrimOp op) { return emitUnary(op, "^", true); }
-  SubExprInfo visitExpr(OrRPrimOp op) { return emitUnary(op, "|", true); }
-  SubExprInfo visitExpr(NotPrimOp op) { return emitUnary(op, "~", false); }
-  SubExprInfo visitExpr(NegPrimOp op) { return emitUnary(op, "-", false); }
+  SubExprInfo visitExpr(AndRPrimOp op) { return emitFIRRTLUnary(op, "&"); }
+  SubExprInfo visitExpr(XorRPrimOp op) { return emitFIRRTLUnary(op, "^"); }
+  SubExprInfo visitExpr(OrRPrimOp op) { return emitFIRRTLUnary(op, "|"); }
+  SubExprInfo visitExpr(NotPrimOp op) { return emitFIRRTLUnary(op, "~"); }
+  SubExprInfo visitExpr(NegPrimOp op) { return emitFIRRTLUnary(op, "-"); }
 
   // Noop cast operators.
   SubExprInfo visitExpr(AsAsyncResetPrimOp op) { return emitNoopCast(op); }
@@ -894,18 +864,18 @@ private:
     return emitBinary(op, Multiply, "/");
   }
   SubExprInfo visitComb(rtl::DivSOp op) {
-    return emitRTLSignedBinary(op, Multiply, "/");
+    return emitBinary(op, Multiply, "/", true);
   }
   SubExprInfo visitComb(rtl::ModUOp op) {
     return emitBinary(op, Multiply, "%");
   }
   SubExprInfo visitComb(rtl::ModSOp op) {
-    return emitRTLSignedBinary(op, Multiply, "%");
+    return emitBinary(op, Multiply, "%", true);
   }
   SubExprInfo visitComb(rtl::ShlOp op) { return emitBinary(op, Shift, "<<"); }
   SubExprInfo visitComb(rtl::ShrUOp op) { return emitBinary(op, Shift, ">>>"); }
   SubExprInfo visitComb(rtl::ShrSOp op) {
-    return emitRTLSignedBinary(op, Shift, ">>>");
+    return emitBinary(op, Shift, ">>>", true);
   }
   SubExprInfo visitComb(rtl::AndOp op) { return emitVariadic(op, And, "&"); }
   SubExprInfo visitComb(rtl::OrOp op) { return emitVariadic(op, Or, "|"); }
@@ -928,9 +898,7 @@ private:
                                 true,  false, false, false, false};
     auto pred = static_cast<uint64_t>(op.predicate());
     auto symopstr = symop[pred];
-    if (signop[pred])
-      return emitRTLSignedBinary(op, Comparison, symopstr);
-    return emitBinary(op, Comparison, symopstr);
+    return emitBinary(op, Comparison, symopstr, signop[pred]);
   }
 
 private:
@@ -962,33 +930,11 @@ std::string ExprEmitter::emitExpressionToString(Value exp,
 }
 
 SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
-                                    const char *syntax, bool opForceSign) {
-  auto width = getBitWidthOrSentinel(op->getResult(0).getType());
-  auto op0Width = getBitWidthOrSentinel(op->getOperand(0).getType());
-  auto op1Width = getBitWidthOrSentinel(op->getOperand(1).getType());
-  auto op0Signed = IsSigned == getSignednessOf(op->getOperand(0).getType());
-  auto op1Signed = IsSigned == getSignednessOf(op->getOperand(1).getType());
-
-  if (op0Signed || opForceSign)
+                                    const char *syntax, bool opSigned) {
+  if (opSigned)
     os << "$signed(";
-  if (op0Width < width) {
-    if (op0Signed)
-      os << "{{" << (width - op0Width) << '{';
-    else
-      os << "{{" << (width - op0Width) << "'d0}, ";
-  }
-  emitSubExpr(op->getOperand(0), (op0Width >= width) ? prec : LowestPrecedence,
-              opForceSign);
-  if (op0Width < width) {
-    if (op0Signed) {
-      os << '[' << (op0Width - 1) << "]}}, ";
-      emitSubExpr(op->getOperand(0), LowestPrecedence, opForceSign);
-      os << "}";
-    } else {
-      os << "}";
-    }
-  }
-  if (op0Signed || opForceSign)
+  auto lhsInfo = emitSubExpr(op->getOperand(0), prec);
+  if (opSigned)
     os << ")";
   os << ' ' << syntax << ' ';
 
@@ -1002,34 +948,92 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   if (rhsOperandOp && op->getName() == rhsOperandOp->getName())
     rhsPrec = prec;
 
-  if (op1Signed || opForceSign)
+  if (opSigned)
     os << "$signed(";
-  if (op1Width < width) {
-    if (op1Signed)
-      os << "{{" << (width - op1Width) << '{';
-    else
-      os << "{{" << (width - op1Width) << "'d0}, ";
-  }
-  emitSubExpr(op->getOperand(1),
-              (op1Width >= width) ? rhsPrec : LowestPrecedence, opForceSign);
-  if (op1Width < width) {
-    if (op1Signed) {
-      os << '[' << (op1Width - 1) << "]}}, ";
-      emitSubExpr(op->getOperand(1), LowestPrecedence, opForceSign);
-      os << "}";
-    } else {
-      os << "}";
-    }
-  }
-  if (op1Signed || opForceSign)
+  auto rhsInfo = emitSubExpr(op->getOperand(1), rhsPrec);
+  if (opSigned)
     os << ")";
 
   // If we have a strict sign, then match the firrtl operation sign.
   // Otherwise, the result is signed if both operands are signed.
   SubExprSignedness signedness;
-  if (opForceSign)
+  if (opSigned)
     signedness = IsSigned;
-  else if ((op0Signed && op1Signed) ||
+  else if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
+    signedness = IsSigned;
+  else
+    signedness = IsUnsigned;
+
+  return {prec, signedness};
+}
+
+SubExprInfo ExprEmitter::emitFIRRTLBinary(Operation *op, VerilogPrecedence prec,
+                                    const char *syntax) {
+  auto retWidth = getBitWidthOrSentinel(op->getResult(0).getType());
+  auto op0Width = getBitWidthOrSentinel(op->getOperand(0).getType());
+  auto op1Width = getBitWidthOrSentinel(op->getOperand(1).getType());
+  auto retSigned = IsSigned == getSignednessOf(op->getResult(0).getType());
+  auto op0Signed = IsSigned == getSignednessOf(op->getOperand(0).getType());
+  auto op1Signed = IsSigned == getSignednessOf(op->getOperand(1).getType());
+
+  if (op0Signed)
+    os << "$signed(";
+  if (op0Width < retWidth) {
+    if (op0Signed)
+      os << "{{" << (retWidth - op0Width) << '{';
+    else
+      os << "{{" << (retWidth - op0Width) << "'d0}, ";
+  }
+  emitSubExpr(op->getOperand(0), (op0Width >= retWidth) ? prec : LowestPrecedence);
+  if (op0Width < retWidth) {
+    if (!op0Signed && retSigned) {
+      os << '[' << (op0Width - 1) << "]}}, ";
+      emitSubExpr(op->getOperand(0), LowestPrecedence);
+      os << "}";
+    } else {
+      os << "}";
+    }
+  }
+  if (op0Signed)
+    os << ")";
+  os << ' ' << syntax << ' ';
+
+  // The precedence of the RHS operand must be tighter than this operator if
+  // they have a different opcode in order to handle things like "x-(a+b)".
+  // This isn't needed on the LHS, because the relevant Verilog operators are
+  // left-associative.
+  //
+  auto *rhsOperandOp = lookThroughNoopCasts(op->getOperand(1)).getDefiningOp();
+  auto rhsPrec = VerilogPrecedence(prec - 1);
+  if (rhsOperandOp && op->getName() == rhsOperandOp->getName())
+    rhsPrec = prec;
+
+  if (op1Signed)
+    os << "$signed(";
+  if (op1Width < retWidth) {
+    if (op1Signed)
+      os << "{{" << (retWidth - op1Width) << '{';
+    else
+      os << "{{" << (retWidth - op1Width) << "'d0}, ";
+  }
+  emitSubExpr(op->getOperand(1),
+              (op1Width >= retWidth) ? rhsPrec : LowestPrecedence);
+  if (op1Width < retWidth) {
+    if (!op1Signed && retSigned) {
+      os << '[' << (op1Width - 1) << "]}}, ";
+      emitSubExpr(op->getOperand(1), LowestPrecedence);
+      os << "}";
+    } else {
+      os << "}";
+    }
+  }
+  if (op1Signed)
+    os << ")";
+
+  // If we have a strict sign, then match the firrtl operation sign.
+  // Otherwise, the result is signed if both operands are signed.
+  SubExprSignedness signedness;
+ if ((op0Signed && op1Signed) ||
            getSignednessOf(op->getResult(0).getType()) == IsSigned)
     signedness = IsSigned;
   else
@@ -1038,34 +1042,81 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   return {prec, signedness};
 }
 
+  SubExprInfo ExprEmitter::emitFIRRTLUnary(Operation *op, const char *syntax) {
+    bool opSigned = getSignednessOf(op->getOperand(0).getType()) == IsSigned;
+    auto width = getBitWidthOrSentinel(op->getResult(0).getType());
+    auto opWidth = getBitWidthOrSentinel(op->getOperand(0).getType());
+
+    os << syntax;
+    if (opSigned)
+      os << "$signed(";
+    if (opWidth < width) {
+      if (opWidth < width) {
+        if (opSigned)
+          os << "{{" << (width - opWidth) << '{';
+        else
+          os << "{{" << (width - opWidth) << "'d0}, ";
+      }
+    }
+
+    auto signedness = emitSubExpr(op->getOperand(0),
+                                  opWidth >= width ? Unary : LowestPrecedence)
+                          .signedness;
+
+    if (opWidth < width) {
+      if (opSigned) {
+        os << '[' << (opWidth - 1) << "]}}, ";
+        emitSubExpr(op->getOperand(0), LowestPrecedence);
+        os << "}";
+      } else {
+        os << "}";
+      }
+    }
+    if (opSigned)
+      os << ")";
+
+    return {Unary, opSigned ? IsSigned : IsUnsigned};
+  }
+
 SubExprInfo ExprEmitter::emitVariadic(Operation *op, VerilogPrecedence prec,
-                                      const char *syntax, bool opForceSign) {
+                                      const char *syntax, bool hasStrictSign) {
+  interleave(
+      op->getOperands().begin(), op->getOperands().end(),
+      [&](Value v1) { emitSubExpr(v1, prec, hasStrictSign); },
+      [&] { os << ' ' << syntax << ' '; });
+
+  return {prec, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::emitFIRRTLVariadic(Operation *op, VerilogPrecedence prec,
+                                      const char *syntax) {
   auto width = getBitWidthOrSentinel(op->getResult(0).getType());
+  bool opSigned = IsSigned == getSignednessOf(op->getResult(0).getType());
   interleave(
       op->getOperands().begin(), op->getOperands().end(),
       [&](Value v1) {
-        auto opWidth = getBitWidthOrSentinel(v1.getType());
-        auto opSigned = IsSigned == getSignednessOf(v1.getType());
-        if (opSigned || opForceSign)
+        auto op0Width = getBitWidthOrSentinel(v1.getType());
+        auto op0Signed = IsSigned == getSignednessOf(v1.getType());
+        if (!op0Signed && opSigned)
           os << "$signed(";
-        if (opWidth < width) {
-          if (opSigned)
-            os << "{{" << (width - opWidth) << '{';
+        if (op0Width < width) {
+          if (op0Signed)
+            os << "{{" << (width - op0Width) << '{';
           else
-            os << "{{" << (width - opWidth) << "'d0}, ";
+            os << "{{" << (width - op0Width) << "'d0}, ";
         }
-        emitSubExpr(v1, opWidth >= width ? prec : LowestPrecedence,
-                    opForceSign);
-        if (opWidth < width) {
-          if (opSigned) {
-            os << '[' << (opWidth - 1) << "]}}, ";
-            emitSubExpr(v1, LowestPrecedence, opForceSign);
+        emitSubExpr(v1, op0Width >= width ? prec : LowestPrecedence,
+                    opSigned);
+        if (op0Width < width) {
+          if (op0Signed) {
+            os << '[' << (op0Width - 1) << "]}}, ";
+            emitSubExpr(v1, LowestPrecedence, opSigned);
             os << "}";
           } else {
             os << "}";
           }
         }
-        if (opSigned || opForceSign)
+        if (!op0Signed && opSigned)
           os << ")";
       },
       [&] { os << ' ' << syntax << ' '; });
