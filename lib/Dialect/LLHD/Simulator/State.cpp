@@ -101,38 +101,125 @@ bool Slot::operator<(const Slot &rhs) const { return time < rhs.time; }
 
 bool Slot::operator>(const Slot &rhs) const { return rhs.time < time; }
 
-void Slot::insertChange(int index, int bitOffset, APInt &bytes) {
-  changes[index].push_back(std::make_pair(bitOffset, bytes));
+void Slot::insertChange(int index, int bitOffset, uint8_t *bytes,
+                        unsigned width) {
+  // Get the amount of 64 bit words required to store the value in an APInt.
+  auto size = llvm::divideCeil(width, 64);
+
+  if (changesSize >= buffers.size()) {
+    // Create a new change buffer if we don't have any unused one available for
+    // reuse.
+    buffers.push_back(std::make_pair(
+        bitOffset,
+        APInt(width, makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size))));
+  } else {
+    // Reuse the first available buffer.
+    buffers[changesSize] = std::make_pair(
+        bitOffset,
+        APInt(width, makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size)));
+  }
+
+  // Map the signal index to the change buffer so we can retrieve
+  // it after sorting.
+  changes.push_back(std::make_pair(index, changesSize));
+  ++changesSize;
 }
 
-void Slot::insertChange(std::string inst) { scheduled.push_back(inst); }
+void Slot::insertChange(unsigned inst) { scheduled.push_back(inst); }
 
 //===----------------------------------------------------------------------===//
 // UpdateQueue
 //===----------------------------------------------------------------------===//
 void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
-                                 APInt &bytes) {
-  for (size_t i = 0, e = c.size(); i < e; ++i) {
-    if (time == c[i].time) {
-      c[i].insertChange(index, bitOffset, bytes);
-      return;
-    }
-  }
-  Slot newSlot(time);
-  newSlot.insertChange(index, bitOffset, bytes);
-  push(newSlot);
+                                 uint8_t *bytes, unsigned width) {
+  auto &slot = getOrCreateSlot(time);
+  slot.insertChange(index, bitOffset, bytes, width);
 }
 
-void UpdateQueue::insertOrUpdate(Time time, std::string inst) {
-  for (size_t i = 0, e = c.size(); i < e; ++i) {
-    if (time == c[i].time) {
-      c[i].insertChange(inst);
-      return;
+void UpdateQueue::insertOrUpdate(Time time, unsigned inst) {
+  auto &slot = getOrCreateSlot(time);
+  slot.insertChange(inst);
+}
+
+Slot &UpdateQueue::getOrCreateSlot(Time time) {
+  auto &top = begin()[topSlot];
+
+  // Directly add to top slot.
+  if (!top.unused && time == top.time) {
+    return top;
+  }
+
+  // We need to search through the queue for an existing slot only if we're
+  // spawning an event later than the top slot. Adding to an existing slot
+  // scheduled earlier than the top slot should never happens, as then it should
+  // be the top.
+  if (events > 0 && top.time < time) {
+    for (size_t i = 0, e = size(); i < e; ++i) {
+      if (time == begin()[i].time) {
+        return begin()[i];
+      }
     }
   }
-  Slot newSlot(time);
-  newSlot.insertChange(inst);
-  push(newSlot);
+
+  // Spawn new event using an existing slot.
+  if (!unused.empty()) {
+    auto firstUnused = unused.pop_back_val();
+    auto &newSlot = begin()[firstUnused];
+    newSlot.unused = false;
+    newSlot.time = time;
+
+    // Update the top of the queue either if it is currently unused or the new
+    // timestamp is earlier than it.
+    if (top.unused || time < top.time)
+      topSlot = firstUnused;
+
+    ++events;
+    return newSlot;
+  }
+
+  // We do not have pre-allocated slots available, generate a new one.
+  push_back(Slot(time));
+
+  // Update the top of the queue either if it is currently unused or the new
+  // timestamp is earlier than it.
+  if (top.unused || time < top.time)
+    topSlot = size() - 1;
+
+  ++events;
+  return back();
+}
+
+const Slot &UpdateQueue::top() {
+  assert(topSlot < size() && "top is pointing out of bounds!");
+
+  // Sort the changes of the top slot such that all changes to the same signal
+  // are in succession.
+  auto &top = begin()[topSlot];
+  llvm::sort(top.changes.begin(), top.changes.begin() + top.changesSize);
+  return top;
+}
+
+void UpdateQueue::pop() {
+  // Reset internal structures and decrease the event counter.
+  auto &curr = begin()[topSlot];
+  curr.unused = true;
+  curr.changesSize = 0;
+  curr.scheduled.clear();
+  curr.changes.clear();
+  curr.time = Time();
+  --events;
+
+  // Add to unused slots list for easy retrieval.
+  unused.push_back(topSlot);
+
+  // Update the current top of the queue.
+  topSlot = std::distance(
+      begin(),
+      std::min_element(begin(), end(), [](const auto &a, const auto &b) {
+        // a is "smaller" than b if either a's timestamp is earlier than b's, or
+        // b is unused (i.e. b has no actual meaning).
+        return !a.unused && (a < b || b.unused);
+      }));
 }
 
 //===----------------------------------------------------------------------===//
@@ -140,10 +227,8 @@ void UpdateQueue::insertOrUpdate(Time time, std::string inst) {
 //===----------------------------------------------------------------------===//
 
 State::~State() {
-  for (auto &entry : instances) {
-    auto &inst = entry.getValue();
+  for (auto &inst : instances) {
     if (inst.procState) {
-      std::free(inst.procState->inst);
       std::free(inst.procState->senses);
     }
   }
@@ -156,14 +241,21 @@ Slot State::popQueue() {
   return pop;
 }
 
-void State::pushQueue(Time t, int index, int bitOffset, APInt &bytes) {
-  Time newTime = time + t;
-  queue.insertOrUpdate(newTime, index, bitOffset, bytes);
-}
-void State::pushQueue(Time t, std::string inst) {
+void State::pushQueue(Time t, unsigned inst) {
   Time newTime = time + t;
   queue.insertOrUpdate(newTime, inst);
   instances[inst].expectedWakeup = newTime;
+}
+
+llvm::SmallVectorTemplateCommon<Instance>::iterator
+State::getInstanceIterator(std::string instName) {
+  auto it =
+      std::find_if(instances.begin(), instances.end(),
+                   [&](const auto &inst) { return instName == inst.name; });
+
+  assert(it != instances.end() && "instance does not exist!");
+
+  return it;
 }
 
 int State::addSignal(std::string name, std::string owner) {
@@ -172,17 +264,18 @@ int State::addSignal(std::string name, std::string owner) {
 }
 
 void State::addProcPtr(std::string name, ProcState *procStatePtr) {
-  instances[name].procState = std::unique_ptr<ProcState>(procStatePtr);
-  // Copy string to owner name ptr.
-  name.copy(instances[name].procState->inst, name.size());
-  // Ensure the string is null-terminated.
-  instances[name].procState->inst[name.size()] = '\0';
+  auto it = getInstanceIterator(name);
+
+  // Store instance index in process state.
+  procStatePtr->inst = it - instances.begin();
+  (*it).procState = std::unique_ptr<ProcState>(procStatePtr);
 }
 
 int State::addSignalData(int index, std::string owner, uint8_t *value,
                          uint64_t size) {
-  auto &inst = instances[owner];
-  uint64_t globalIdx = inst.sensitivityList[index + inst.nArgs].globalIndex;
+  auto it = getInstanceIterator(owner);
+
+  uint64_t globalIdx = (*it).sensitivityList[index + (*it).nArgs].globalIndex;
   auto &sig = signals[globalIdx];
 
   // Add pointer and size to global signal table entry.
@@ -215,13 +308,12 @@ void State::dumpSignal(llvm::raw_ostream &out, int index) {
 
 void State::dumpLayout() {
   llvm::errs() << "::------------------- Layout -------------------::\n";
-  for (auto &inst : instances) {
-    llvm::errs() << inst.getKey().str() << ":\n";
-    llvm::errs() << "---parent: " << inst.getValue().parent << "\n";
-    llvm::errs() << "---path: " << inst.getValue().path << "\n";
-    llvm::errs() << "---isEntity: " << inst.getValue().isEntity << "\n";
+  for (const auto &inst : instances) {
+    llvm::errs() << inst.name << ":\n";
+    llvm::errs() << "---path: " << inst.path << "\n";
+    llvm::errs() << "---isEntity: " << inst.isEntity << "\n";
     llvm::errs() << "---sensitivity list: ";
-    for (auto in : inst.getValue().sensitivityList) {
+    for (auto in : inst.sensitivityList) {
       llvm::errs() << in.globalIndex << " ";
     }
     llvm::errs() << "\n";

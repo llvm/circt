@@ -15,6 +15,11 @@ namespace mlir {
 class ExecutionEngine;
 } // namespace mlir
 
+namespace llvm {
+class Error;
+class Module;
+} // namespace llvm
+
 namespace circt {
 namespace llhd {
 namespace sim {
@@ -26,8 +31,11 @@ class Engine {
 public:
   /// Initialize an LLHD simulation engine. This initializes the state, as well
   /// as the mlir::ExecutionEngine with the given module.
-  Engine(llvm::raw_ostream &out, ModuleOp module, MLIRContext &context,
-         std::string root, int traceMode);
+  Engine(
+      llvm::raw_ostream &out, ModuleOp module,
+      llvm::function_ref<mlir::LogicalResult(mlir::ModuleOp)> mlirTransformer,
+      llvm::function_ref<llvm::Error(llvm::Module *)> llvmTransformer,
+      std::string root, int mode);
 
   /// Default destructor
   ~Engine();

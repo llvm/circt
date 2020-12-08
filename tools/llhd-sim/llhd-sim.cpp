@@ -10,11 +10,13 @@
 
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/ExecutionEngine/OptUtils.h"
 #include "mlir/Parser.h"
+#include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Target/LLVMIR.h"
+#include "mlir/Transforms/Passes.h"
 
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/ToolOutputFile.h"
 
@@ -56,6 +58,15 @@ static cl::opt<std::string> root(
     cl::desc("Specify the name of the entity to use as root of the design"),
     cl::value_desc("root_name"), cl::init("root"));
 static cl::alias rootA("r", cl::desc("Alias for -root"), cl::aliasopt(root));
+
+enum OptLevel { O0, O1, O2, O3 };
+
+cl::opt<OptLevel> optimizationLevel(
+    cl::desc("Choose optimization level:"), cl::init(O2),
+    cl::values(clEnumVal(O0, "Run passes and codegen at O0"),
+               clEnumVal(O1, "Run passes and codegen at O1"),
+               clEnumVal(O2, "Run passes and codegen at O2"),
+               clEnumVal(O3, "Run passes and codegen at O3")));
 
 enum TraceFormat {
   full,
@@ -99,8 +110,24 @@ static int dumpLLVM(ModuleOp module, MLIRContext &context) {
     return -1;
   }
 
+  auto llvmTransformer =
+      makeOptimizingTransformer(optimizationLevel, 0, nullptr);
+
+  if (auto err = llvmTransformer(llvmModule.get())) {
+    llvm::errs() << "Failed to optimize LLVM IR " << err << "\n";
+    return -1;
+  }
+
   llvm::errs() << *llvmModule << "\n";
   return 0;
+}
+
+static LogicalResult applyMLIRPasses(ModuleOp module) {
+  PassManager pm(module.getContext());
+
+  pm.addPass(llhd::createConvertLLHDToLLVMPass());
+
+  return pm.run(module);
 }
 
 int main(int argc, char **argv) {
@@ -141,7 +168,10 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  llhd::sim::Engine engine(output->os(), *module, context, root, traceMode);
+  llhd::sim::Engine engine(
+      output->os(), *module, &applyMLIRPasses,
+      makeOptimizingTransformer(optimizationLevel, 0, nullptr), root,
+      traceMode);
 
   if (dumpLLVMDialect || dumpLLVMIR) {
     return dumpLLVM(engine.getModule(), context);
