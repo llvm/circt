@@ -132,6 +132,9 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: [[CVT:%.+]] = rtl.concat %false_{{.*}}, %in2 : (i1, i2) -> i3
     %23 = firrtl.cvt %22 : (!firrtl.uint<2>) -> !firrtl.sint<3>
 
+    // Will be dropped, here because this triggered a crash
+    %s23 = firrtl.cvt %in3c : (!firrtl.sint<8>) -> !firrtl.sint<8>
+
     // CHECK-NEXT: %c-1_i3 = rtl.constant(-1 : i3) : i3
     // CHECK-NEXT: [[XOR:%.+]] = rtl.xor [[CVT]], %c-1_i3 : i3
     %24 = firrtl.not %23 : (!firrtl.sint<3>) -> !firrtl.uint<3>

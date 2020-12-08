@@ -26,6 +26,7 @@ def SVDialect : Dialect {
 // Base class for the operation in this dialect.
 class SVOp<string mnemonic, list<OpTrait> traits = []> :
     Op<SVDialect, mnemonic, traits>;
+class SVType<string name> : TypeDef<SVDialect, name> { }
 
 include "Expressions.td"
 include "Statements.td"

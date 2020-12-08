@@ -3,6 +3,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/Types.h"
 #include "circt/Dialect/FIRRTL/Visitors.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -552,12 +553,12 @@ static LogicalResult verifyInstanceOp(InstanceOp &instance) {
                               .getType()
                               .cast<FIRRTLType>()
                               .getPassiveType();
-      if (bundleElements[i].second != expectedType) {
+      if (bundleElements[i].type != expectedType) {
         auto diag = instance.emitOpError()
                     << "output bundle type must match module. In "
                        "element "
                     << i << ", expected " << expectedType << ", but got "
-                    << bundleElements[i].second << ".";
+                    << bundleElements[i].type << ".";
 
         diag.attachNote(referencedFModule.getLoc())
             << "original module declared here";
@@ -665,9 +666,9 @@ void MemOp::getPorts(
   // Each entry in the bundle is a port.
   for (auto elt : bundle.getElements()) {
     // Each port is a bundle.
-    auto kind = getMemPortKindFromType(elt.second);
+    auto kind = getMemPortKindFromType(elt.type);
     assert(kind.hasValue() && "unknown port type!");
-    result.push_back({elt.first, kind.getValue()});
+    result.push_back({elt.name, kind.getValue()});
   }
 }
 
@@ -691,13 +692,33 @@ FIRRTLType MemOp::getDataTypeOrNull() {
     return {};
 
   auto firstPort = bundle.getElements()[0];
-  auto firstPortType = firstPort.second.getPassiveType().cast<BundleType>();
+  auto firstPortType = firstPort.type.getPassiveType().cast<BundleType>();
   return firstPortType.getElementType("data");
 }
 
 //===----------------------------------------------------------------------===//
 // Statements
 //===----------------------------------------------------------------------===//
+
+static LogicalResult verifyConnectOp(ConnectOp connect) {
+  FIRRTLType destType =
+      connect.dest().getType().cast<FIRRTLType>().getPassiveType();
+  FIRRTLType srcType =
+      connect.src().getType().cast<FIRRTLType>().getPassiveType();
+
+  // Analog types cannot be connected and must be attached.
+  if (destType.isa<AnalogType>() || srcType.isa<AnalogType>())
+    return connect.emitError("analog types may not be connected");
+
+  if (!areTypesEquivalent(destType, srcType))
+    return connect.emitError("type mismatch between destination ")
+           << destType << " and source " << srcType;
+
+  // TODO(mikeurbach): verify source bitwidth is >= destination bitwidth.
+  // TODO(mikeurbach): verify destination flow is sink or duplex.
+  // TODO(mikeurbach): verify source flow is source or duplex.
+  return success();
+}
 
 void WhenOp::createElseRegion() {
   assert(!hasElseRegion() && "already has an else region");
@@ -780,8 +801,8 @@ FIRRTLType SubfieldOp::getResultType(FIRRTLType inType, StringRef fieldName,
                                      Location loc) {
   if (auto bundleType = inType.dyn_cast<BundleType>()) {
     for (auto &elt : bundleType.getElements()) {
-      if (elt.first == fieldName)
-        return elt.second;
+      if (elt.name == fieldName)
+        return elt.type;
     }
   }
 

@@ -873,7 +873,7 @@ LogicalResult FIRRTLLowering::visitExpr(CvtPrimOp op) {
 
   // Signed to signed is a noop.
   if (getTypeOf<IntType>(op.getOperand()).isSigned())
-    setLowering(op, operand);
+    return setLowering(op, operand);
 
   // Otherwise prepend a zero bit.
   auto zero = builder->create<rtl::ConstantOp>(APInt(1, 0));

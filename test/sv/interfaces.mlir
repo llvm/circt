@@ -1,8 +1,8 @@
 // RUN: circt-opt %s | FileCheck %s
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
-// CHECK-LABEL: func @test() {
-func @test() {
+// CHECK-LABEL: module {
+module {
   // Basic interface smoke test
 
   sv.interface @myinterface {
@@ -17,7 +17,7 @@ func @test() {
   // CHECK-NEXT:   sv.interface.modport @output_port ("output" @data)
   // CHECK-NEXT: }
 
-  // Hanshake-like interface smoke test
+  // Handshake-like interface smoke test
 
   sv.interface @handshake_example {
     sv.interface.signal @data : i32
@@ -35,6 +35,19 @@ func @test() {
   // CHECK-NEXT:   sv.interface.modport @dataflow_out ("output" @data, "output" @valid, "input" @ready)
   // CHECK-NEXT: }
 
-  // CHECK-NEXT: return
-  return
+  rtl.externmodule @Rcvr (%m: !sv.modport<@handshake_example::@dataflow_in>)
+  // CHECK-LABEL: rtl.externmodule @Rcvr(!sv.modport<@handshake_example::@dataflow_in> {rtl.name = "m"})
+
+  rtl.module @Top () {
+    %iface = sv.interface.instance : !sv.interface<@handshake_example>
+    %ifaceInPort = sv.modport.get %iface @dataflow_in :
+      !sv.interface<@handshake_example> -> !sv.modport<@handshake_example::@dataflow_in>
+    // This next line may or may not make sense depending on how we decide to
+    // model interactions with the RTL dialect.
+    rtl.instance "rcvr" @Rcvr(%ifaceInPort) : (!sv.modport<@handshake_example::@dataflow_in>) -> ()
+  }
+  // CHECK-LABEL: rtl.module @Top() {
+  // CHECK-NEXT:    %0 = sv.interface.instance : !sv.interface<@handshake_example>
+  // CHECK-NEXT:    %1 = sv.modport.get %0 @dataflow_in : !sv.interface<@handshake_example> -> !sv.modport<@handshake_example::@dataflow_in>
+  // CHECK-NEXT:    rtl.instance "rcvr" @Rcvr(%1) : (!sv.modport<@handshake_example::@dataflow_in>) -> ()
 }

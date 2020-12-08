@@ -52,9 +52,9 @@ static void flattenBundleTypes(FIRRTLType type, StringRef suffixSoFar,
     // Construct the suffix to pass down.
     tmpSuffix.resize(suffixSoFar.size());
     tmpSuffix.push_back('_');
-    tmpSuffix.append(elt.first.strref());
+    tmpSuffix.append(elt.name.strref());
     // Recursively process subelements.
-    flattenBundleTypes(elt.second, tmpSuffix, isFlipped, results);
+    flattenBundleTypes(elt.type, tmpSuffix, isFlipped, results);
   }
 }
 
@@ -209,13 +209,13 @@ void FIRRTLTypesLowering::visitDecl(InstanceOp op) {
   for (auto element : originalBundleType.getElements()) {
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-    flattenBundleTypes(element.second, element.first, isFlip, fieldTypes);
+    flattenBundleTypes(element.type, element.name, isFlip, fieldTypes);
 
     for (auto field : fieldTypes) {
       // Store the flat type for the new bundle type.
       auto flatName = builder->getIdentifier(field.suffix);
       auto flatType = field.getPortType();
-      auto newElement = BundleType::BundleElement(flatName, flatType);
+      auto newElement = BundleType::BundleElement{flatName, flatType};
       bundleElements.push_back(newElement);
     }
   }
@@ -229,10 +229,10 @@ void FIRRTLTypesLowering::visitDecl(InstanceOp op) {
   // Create new subfield ops for each field of the instance.
   for (auto element : bundleElements) {
     auto newSubfield =
-        builder->create<SubfieldOp>(element.second, newInstance, element.first);
+        builder->create<SubfieldOp>(element.type, newInstance, element.name);
 
     // Map the flattened suffix for the original bundle to the new value.
-    setBundleLowering(op, element.first, newSubfield);
+    setBundleLowering(op, element.name, newSubfield);
   }
 
   // Remember to remove the original op.
@@ -396,5 +396,5 @@ void FIRRTLTypesLowering::getAllBundleLowerings(
   BundleType bundleType = getCanonicalBundleType(value.getType());
   assert(bundleType && "attempted to get bundle lowerings for non-bundle type");
   for (auto element : bundleType.getElements())
-    results.push_back(getBundleLowering(value, element.first));
+    results.push_back(getBundleLowering(value, element.name));
 }
