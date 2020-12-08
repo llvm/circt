@@ -1,4 +1,4 @@
-add_mlir_conversion_library(MLIRLLHDToLLVM
+add_circt_conversion_library(MLIRLLHDToLLVM
   LLHDToLLVM.cpp
 
   DEPENDS

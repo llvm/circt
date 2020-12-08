@@ -5,25 +5,25 @@ set(LLVM_OPTIONAL_SOURCES
     Trace.cpp
 )
 
-add_mlir_library(CIRCTLLHDSimState
+add_circt_library(CIRCTLLHDSimState
     State.cpp
 )
 
-add_mlir_library(CIRCTLLHDSimTrace
+add_circt_library(CIRCTLLHDSimTrace
     Trace.cpp
 
     LINK_LIBS PUBLIC
     CIRCTLLHDSimState
 )
 
-add_mlir_library(circt-llhd-signals-runtime-wrappers SHARED
+add_circt_library(circt-llhd-signals-runtime-wrappers SHARED
     signals-runtime-wrappers.cpp
 
     LINK_LIBS PUBLIC
     CIRCTLLHDSimState
 )
 
-add_mlir_library(CIRCTLLHDSimEngine
+add_circt_library(CIRCTLLHDSimEngine
     Engine.cpp
 
     LINK_LIBS PUBLIC

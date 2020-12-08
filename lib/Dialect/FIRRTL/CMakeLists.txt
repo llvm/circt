@@ -1,5 +1,5 @@
 file(GLOB globbed *.cpp)
-add_mlir_dialect_library(MLIRFIRRTL
+add_circt_dialect_library(MLIRFIRRTL
   ${globbed}
 
   ADDITIONAL_HEADER_DIRS
@@ -17,4 +17,5 @@ add_mlir_dialect_library(MLIRFIRRTL
   MLIRPass
   )
 
-add_dependencies(mlir-headers MLIRFIRRTLIncGen MLIRFIRRTLEnumsIncGen)
+add_dependencies(circt-headers MLIRFIRRTLIncGen MLIRFIRRTLEnumsIncGen)
+ 
