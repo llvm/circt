@@ -633,7 +633,7 @@ MemOp::getTypeForPortList(uint64_t depth, FIRRTLType dataType,
       break;
     }
 
-    memFields.push_back({port.first, BundleType::get(portFields, context)});
+    memFields.push_back({port.first, FlipType::get(BundleType::get(portFields, context))});
   }
 
   return BundleType::get(memFields, context);
