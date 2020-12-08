@@ -325,9 +325,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: %_M = firrtl.mem "Undefined" {depth = 8 : i64, name = "_M",
     ; CHECK:   readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<
-    ; CHECK:       _T_10: bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: analog<4>>, mask: bundle<id: uint<1>>>,
-    ; CHECK:       _T_11: bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: analog<4>>, mask: bundle<id: uint<1>>>,
-    ; CHECK:       _T_18: bundle<addr: uint<3>, en: uint<1>, clk: clock, data: flip<bundle<id: analog<4>>>>>
+    ; CHECK:       _T_10: flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: analog<4>>, mask: bundle<id: uint<1>>>>,
+    ; CHECK:       _T_11: flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: analog<4>>, mask: bundle<id: uint<1>>>>,
+    ; CHECK:       _T_18: bundle<addr: flip<uint<3>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>>>>
     mem _M : @[Decoupled.scala 209:24]
         data-type => { id : Analog<4> }
         depth => 8
@@ -504,7 +504,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       reader => io_deq_bits_MPORT
       writer => MPORT
       read-under-write => undefined
-      ; CHECK:         %bar = firrtl.mem "Undefined" {depth = 1 : i64, name = "bar", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<MPORT: bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<3>, mask: uint<1>>, io_deq_bits_MPORT: bundle<addr: uint<1>, en: uint<1>, clk: clock, data: flip<uint<3>>>>
+      ; CHECK:         %bar = firrtl.mem "Undefined" {depth = 1 : i64, name = "bar", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<MPORT: flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<3>, mask: uint<1>>>, io_deq_bits_MPORT: bundle<addr: flip<uint<1>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<3>>>
 
  
 
