@@ -643,13 +643,11 @@ MemOp::getTypeForPortList(uint64_t depth, FIRRTLType dataType,
 static Optional<MemOp::PortKind> getMemPortKindFromType(FIRRTLType type) {
   auto portType = type.dyn_cast<BundleType>();
   if (!portType) {
-    auto flipType = type.dyn_cast<FlipType>();
-    if (flipType)
+    if(auto flipType = type.dyn_cast<FlipType>())
       portType = flipType.getElementType().dyn_cast<BundleType>();
+    if (!portType)
+      return None;
   }
-  if (!portType)
-    return None;
-  
   switch (portType.getNumElements()) {
   default:
     return None;
