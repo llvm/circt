@@ -9,6 +9,7 @@
 #define CIRCT_DIALECT_LLHD_SIMULATOR_STATE_H
 
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 
 #include <map>
@@ -89,7 +90,7 @@ struct Signal {
   std::string name;
   std::string owner;
   // The list of instances this signal triggers.
-  std::vector<std::string> triggers;
+  std::vector<unsigned> triggers;
   uint64_t size;
   std::unique_ptr<uint8_t> value;
   std::vector<std::pair<unsigned, unsigned>> elements;
@@ -97,7 +98,7 @@ struct Signal {
 
 /// The simulator's internal representation of one queue slot.
 struct Slot {
-  /// Construct a new slot.
+  /// Create a new empty slot.
   Slot(Time time) : time(time) {}
 
   /// Returns true if the slot's time is smaller than the compared slot's time.
@@ -107,36 +108,61 @@ struct Slot {
   bool operator>(const Slot &rhs) const;
 
   /// Insert a change.
-  void insertChange(int index, int bitOffset, llvm::APInt &bytes);
+  void insertChange(int index, int bitOffset, uint8_t *bytes, unsigned width);
 
   /// Insert a scheduled process wakeup.
-  void insertChange(std::string inst);
+  void insertChange(unsigned inst);
 
-  // Map structure: <signal-index, vec<(offset, new-value)>>.
-  std::map<uint64_t, std::vector<std::pair<int, llvm::APInt>>> changes;
+  // A map from signal indexes to change buffers. Makes it easy to sort the
+  // changes such that we can process one signal at a time.
+  llvm::SmallVector<std::pair<unsigned, unsigned>, 32> changes;
+  // Buffers for the signal changes.
+  llvm::SmallVector<std::pair<unsigned, llvm::APInt>, 32> buffers;
+  // The number of used change buffers in the slot.
+  size_t changesSize = 0;
+
   // Processes with scheduled wakeup.
-  std::vector<std::string> scheduled;
+  llvm::SmallVector<unsigned, 4> scheduled;
   Time time;
+  bool unused = false;
 };
 
 /// This is equivalent to and std::priorityQueue<Slot> ordered using the greater
 /// operator, which adds an insertion method to add changes to a slot.
-class UpdateQueue
-    : public std::priority_queue<Slot, std::vector<Slot>, std::greater<Slot>> {
+class UpdateQueue : public llvm::SmallVector<Slot, 8> {
+  unsigned topSlot = 0;
+  llvm::SmallVector<unsigned, 4> unused;
+
 public:
   /// Check wheter a slot for the given time already exists. If that's the case,
   /// add the new change to it, else create a new slot and push it to the queue.
-  void insertOrUpdate(Time time, int index, int bitOffset, llvm::APInt &bytes);
+  void insertOrUpdate(Time time, int index, int bitOffset, uint8_t *bytes,
+                      unsigned width);
 
   /// Check wheter a slot for the given time already exists. If that's the case,
   /// add the scheduled wakeup to it, else create a new slot and push it to the
   /// queue.
-  void insertOrUpdate(Time time, std::string inst);
+  void insertOrUpdate(Time time, unsigned inst);
+
+  /// Return a reference to a slot with the given timestamp. If such a slot
+  /// already exists, a reference to it will be returned. Otherwise a reference
+  /// to a fresh slot is returned.
+  Slot &getOrCreateSlot(Time time);
+
+  /// Get a reference to the current top of the queue (the earliest event
+  /// available).
+  const Slot &top();
+
+  /// Pop the current top of the queue. This marks the current top slot as
+  /// unused and resets its internal structures such that they can be reused.
+  void pop();
+
+  unsigned events = 0;
 };
 
 /// State structure for process persistence across suspension.
 struct ProcState {
-  char *inst;
+  unsigned inst;
   int resume;
   bool *senses;
   uint8_t *resumeState;
@@ -146,13 +172,11 @@ struct ProcState {
 struct Instance {
   Instance() = default;
 
-  Instance(std::string name, std::string parent)
-      : name(name), parent(parent), procState(nullptr), entityState(nullptr) {}
+  Instance(std::string name)
+      : name(name), procState(nullptr), entityState(nullptr) {}
 
   // The instance name.
   std::string name;
-  // The instance parent's name.
-  std::string parent;
   // The instance's hierarchical path.
   std::string path;
   // The instance's base unit.
@@ -160,10 +184,12 @@ struct Instance {
   bool isEntity;
   size_t nArgs = 0;
   // The arguments and signals of this instance.
-  std::vector<SignalDetail> sensitivityList;
+  llvm::SmallVector<SignalDetail, 0> sensitivityList;
   std::unique_ptr<ProcState> procState;
   std::unique_ptr<uint8_t> entityState;
   Time expectedWakeup;
+  // A pointer to the base unit jitted function.
+  void (*unitFPtr)(void **);
 };
 
 /// The simulator's state. It contains the current simulation time, signal
@@ -179,14 +205,13 @@ struct State {
   /// Pop the head of the queue and update the simulation time.
   Slot popQueue();
 
-  /// Push a new event in the event queue.
-  void pushQueue(Time time, int index, int bitOffset, llvm::APInt &bytes);
-
   /// Push a new scheduled wakeup event in the event queue.
-  void pushQueue(Time time, std::string inst);
+  void pushQueue(Time time, unsigned inst);
 
-  /// Get the signal at position i in the signal list.
-  Signal getSignal(int index);
+  /// Find an instance in the instances list by name and return an
+  /// iterator for it.
+  llvm::SmallVectorTemplateCommon<Instance>::iterator
+  getInstanceIterator(std::string instName);
 
   /// Add a new signal to the state. Returns the index of the new signal.
   int addSignal(std::string name, std::string owner);
@@ -211,8 +236,8 @@ struct State {
 
   Time time;
   std::string root;
-  llvm::StringMap<Instance> instances;
-  std::vector<Signal> signals;
+  llvm::SmallVector<Instance, 0> instances;
+  llvm::SmallVector<Signal, 0> signals;
   UpdateQueue queue;
 };
 
