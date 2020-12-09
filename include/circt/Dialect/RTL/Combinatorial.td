@@ -163,6 +163,32 @@ def XorROp : UnaryI1ReductionRTLOp<"xorr">;
 // Other Operations
 //===----------------------------------------------------------------------===//
 
+// Extract a range of bits from the specified input.
+def StructExtractOp : RTLOp<"struct_extract", [NoSideEffect]> {
+  let summary = "Extract a named field from a struct.";
+
+  let arguments = (ins StrAttr:$field, AnyRTLStructType:$input);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    $field `of` $input attr-dict `:` functional-type($input, $result)
+  }];
+}
+
+// Extract a range of bits from the specified input.
+def StructInjectOp : RTLOp<"struct_inject", [NoSideEffect, AllTypesMatch<["input", "result"]>]> {
+  let summary = "Inject a value into a named field of a struct.";
+
+  let arguments = (ins StrAttr:$field, AnyRTLStructType:$input,
+                   AnyType:$newValue);
+  let results = (outs AnyRTLStructType:$result);
+
+  let assemblyFormat = [{
+    $field `of` $input `is` $newValue attr-dict `:` type($input) `,` type($newValue) `,` type($result)
+  }];
+}
+
+
 // Concatenate a variadic list of operands together.
 def ConcatOp : VariadicRTLOp<"concat"> {
   let builders = [

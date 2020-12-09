@@ -82,6 +82,18 @@ func @test1(%arg0: i3, %arg1: i1) -> i50 {
 
   // CHECK-NEXT: = rtl.mux %arg1, [[RES2]], [[RES3]] : i7
   %mux = rtl.mux %arg1, %d, %e : i7
+  
+  // CHECK-NEXT: = rtl.struct_create(%9, %22) : (i19, i7) -> !rtl.struct<{foo,i19},{bar,i7}>
+  %s0 = rtl.struct_create(%small1, %mux) : (i19, i7) -> !rtl.struct<{foo, i19}, {bar, i7}>
+  
+  // CHECK-NEXT: = rtl.struct_extract "foo" of %23 : (!rtl.struct<{foo,i19},{bar,i7}>) -> i19
+  %sf1 = rtl.struct_extract "foo" of %s0 : (!rtl.struct<{foo, i19}, {bar, i7}>) -> i19
+
+  // CHECK-NEXT: = rtl.struct_inject "foo" of %23 is %24 : !rtl.struct<{foo,i19},{bar,i7}>, i19, !rtl.struct<{foo,i19},{bar,i7}>
+  %s1 = rtl.struct_inject "foo" of %s0 is %sf1 : !rtl.struct<{foo, i19}, {bar, i7}>, i19, !rtl.struct<{foo, i19}, {bar, i7}>
+  
+  // CHECK-NEXT: :2 = rtl.struct_explode %23 : (!rtl.struct<{foo,i19},{bar,i7}>) -> (i19, i7)
+  %se:2 = rtl.struct_explode %s0 : (!rtl.struct<{foo, i19}, {bar, i7}>) -> (i19, i7)
 
   // CHECK-NEXT:    return [[RES8]] : i50
   return %result : i50

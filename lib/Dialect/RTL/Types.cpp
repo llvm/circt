@@ -7,6 +7,7 @@
 #include "circt/Dialect/RTL/Types.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/StandardTypes.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
@@ -24,6 +25,80 @@ bool isRTLValueType(Type type) {
 
   return false;
 }
+
+//===----------------------------------------------------------------------===//
+// Struct Type
+//===----------------------------------------------------------------------===//
+
+namespace circt {
+  namespace rtl {
+    static bool operator==(const FieldInfo& a, const FieldInfo& b) {
+      return a.name == b.name && a.type == b.type;
+    }
+    static llvm::hash_code hash_value(const FieldInfo&fi) {
+      return llvm::hash_combine(fi.name, fi.type);
+    }
+  }
+}
+
+namespace circt {
+namespace rtl {
+// llvm::hash_code hash_value(const StructType::StructElement &arg) {
+//   return llvm::hash_value(arg.name) ^ mlir::hash_value(arg.type);
+// }
+} // namespace firrtl
+} // namespace circt
+
+namespace circt {
+namespace rtl {
+namespace detail {
+// struct StructTypeStorage : mlir::TypeStorage {
+//   using KeyTy = ArrayRef<StructType::StructElement>;
+
+//   StructTypeStorage(KeyTy elements)
+//       : elements(elements.begin(), elements.end()) {
+//   }
+
+//   bool operator==(const KeyTy &key) const { return key == KeyTy(elements); }
+
+//   static llvm::hash_code hashKey(const KeyTy &key) {
+//     return llvm::hash_combine_range(key.begin(), key.end());
+//   }
+
+//   static StructTypeStorage *construct(TypeStorageAllocator &allocator,
+//                                       KeyTy key) {
+//     return new (allocator.allocate<StructTypeStorage>()) StructTypeStorage(key);
+//   }
+
+//   SmallVector<StructType::StructElement, 4> elements;
+// };
+
+} // namespace detail
+} // namespace rtl
+} // namespace circt
+
+// StructType StructType::get(ArrayRef<StructElement> elements,
+//                            MLIRContext *context) {
+//   return Base::get(context, elements);
+// }
+
+// auto StructType::getElements() -> ArrayRef<StructElement> {
+//   return getImpl()->elements;
+// }
+
+// /// Look up an element by name.  This returns a StructElement.
+// Optional<StructType::StructElement> StructType::getElement(StringRef name) {
+//   for (const auto &element : getElements()) {
+//     if (element.name == name)
+//       return element;
+//   }
+//   return None;
+// }
+
+// Type StructType::getElementType(StringRef name) {
+//   auto element = getElement(name);
+//   return element.hasValue() ? element.getValue().type : RTLType();
+// }
 
 //===----------------------------------------------------------------------===//
 // ArrayType

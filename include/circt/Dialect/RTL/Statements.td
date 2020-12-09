@@ -51,3 +51,30 @@ def ReadInOutOp : RTLOp<"read_inout", [NoSideEffect]> {
 
   let verifier = [{ return ::verifyReadInOutOp(*this); }];
 }
+
+
+def StructExplodeOp : RTLOp<"struct_explode", [NoSideEffect]> {
+  let summary = "Expand a struct into its constituant parts.";
+  let arguments = (ins AnyRTLStructType:$input);
+  let results = (outs Variadic<AnyType>:$result);
+
+  // TODO: This should just need the input type instead of both the input and
+  // result.
+  let assemblyFormat = [{
+    $input attr-dict `:` functional-type($input, $result)
+  }];
+}
+
+
+def StructCreateOp : RTLOp<"struct_create", [NoSideEffect]> {
+  let summary = "Get the value of from something of inout type (e.g. a wire or"
+                " inout port) as the value itself.";
+  let arguments = (ins Variadic<AnyType>:$input);
+  let results = (outs AnyRTLStructType:$result);
+
+  // TODO: This should just need the result type instead of both the input and
+  // result.
+  let assemblyFormat = [{
+    `(` $input `)` attr-dict `:` functional-type($input, $result)
+  }];
+}

@@ -34,3 +34,59 @@ def InOutType : RTLType<"InOut"> {
   let parameters = (ins "::mlir::Type":$elementType);
   let genVerifyInvariantsDecl = 1;
 }
+
+
+// Adapted from TestTypeDefs.td
+// A parent type for any type which is just a list of fields (e.g. structs,
+// unions).
+class FieldInfo_Type<string name> : RTLType<name> {
+  let parameters = (
+    ins
+    // An ArrayRef of something which requires allocation in the storage
+    // constructor.
+    ArrayRefOfSelfAllocationParameter<
+      "::circt::rtl::FieldInfo",
+      "Models struct fields">: $fields
+  );
+
+  // Prints the type in this format:
+  //   struct<[{field1Name, field1Type}, {field2Name, field2Type}]>
+  let printer = [{
+    $_printer << "struct" << "<";
+    for (size_t i=0, e = getImpl()->fields.size(); i < e; i++) {
+      const auto& field = getImpl()->fields[i];
+      $_printer << "{" << field.name << "," << field.type << "}";
+      if (i < getImpl()->fields.size() - 1)
+          $_printer << ",";
+    }
+    $_printer << ">";
+  }];
+
+  // Parses the above format
+  let parser = [{
+    llvm::SmallVector<FieldInfo, 4> parameters;
+    if ($_parser.parseLess()) return Type();
+    while (mlir::succeeded($_parser.parseOptionalLBrace())) {
+      StringRef name;
+      if ($_parser.parseKeyword(&name)) return Type();
+      if ($_parser.parseComma()) return Type();
+      Type type;
+      if ($_parser.parseType(type)) return Type();
+      if ($_parser.parseRBrace()) return Type();
+      parameters.push_back(FieldInfo {name, type});
+      if ($_parser.parseOptionalComma()) break;
+    }
+    if ($_parser.parseGreater()) return Type();
+    return get($_ctxt, parameters);
+  }];
+}
+
+def StructType : FieldInfo_Type<"Struct"> {
+  let summary = "struct type for ports and wires";
+  let description = [{
+    Struct type is used...
+  }];
+    let mnemonic = "struct";
+}
+
+def AnyRTLStructType : Type<CPred<"$_self.isa<::circt::rtl::StructType>()">, "rtl structs">;

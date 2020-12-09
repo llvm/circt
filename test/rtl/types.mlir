@@ -11,4 +11,9 @@ module {
   func @inoutType(%arg0: !rtl.inout<i42>) {
     return
   }
+
+  // CHECK-LABEL: func @structType(%arg0: !rtl.struct<>, %arg1: !rtl.struct<{foo,i32},{bar,i4},{baz,!rtl.struct<{foo,i7}>}>) {
+  func @structType(%SE: !rtl.struct<>, %SF: !rtl.struct<{foo, i32}, {bar, i4}, {baz, !rtl.struct<{foo, i7}>}>) {
+    return
+  }
 }
