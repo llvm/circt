@@ -5,9 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/ESI/ESIOps.h"
+#include "circt/Dialect/SV/Ops.h"
+#include "circt/Dialect/SV/Types.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/StandardTypes.h"
+#include "mlir/IR/SymbolTable.h"
 
 using namespace mlir;
 using namespace circt::esi;
@@ -139,6 +142,54 @@ static void print(OpAsmPrinter &p, UnwrapValidReady &op) {
   p << "esi.unwrap.vr " << op.input() << ", " << op.ready();
   p.printOptionalAttrDict(op.getAttrs());
   p << " : " << op.output().getType();
+}
+
+/// If 'iface' looks like an ESI interface, return the inner data type.
+static Type getEsiDataType(circt::sv::InterfaceOp iface) {
+  using namespace circt::sv;
+  if (!iface.lookupSymbol<InterfaceSignalOp>("valid"))
+    return Type();
+  if (!iface.lookupSymbol<InterfaceSignalOp>("ready"))
+    return Type();
+  auto dataSig = iface.lookupSymbol<InterfaceSignalOp>("data");
+  if (!dataSig)
+    return Type();
+  return dataSig.type();
+}
+
+/// Verify that the modport type of 'modportArg' points to an interface which
+/// looks like an ESI interface and the inner data from said interface matches
+/// the chan type's inner data type.
+static LogicalResult verifySVInterface(Operation *op,
+                                       circt::sv::ModportType modportType,
+                                       ChannelPort chanType) {
+  auto modport =
+      SymbolTable::lookupNearestSymbolFrom<circt::sv::InterfaceModportOp>(
+          op, modportType.getModport());
+  if (!modport)
+    return op->emitError("Could not find modport ")
+           << modportType.getModport() << " in symbol table.";
+  auto iface = cast<circt::sv::InterfaceOp>(modport.getParentOp());
+  Type esiDataType = getEsiDataType(iface);
+  if (!esiDataType)
+    return op->emitOpError("Interface is not a valid ESI interface.");
+  if (esiDataType != chanType.getInner())
+    return op->emitOpError("Operation specifies ")
+           << chanType << " but type inside doesn't match interface data type "
+           << esiDataType << ".";
+  return success();
+}
+
+static LogicalResult verifyWrapSVInterface(WrapSVInterface &op) {
+  auto modportType = op.iface().getType().cast<circt::sv::ModportType>();
+  auto chanType = op.output().getType().cast<ChannelPort>();
+  return verifySVInterface(op, modportType, chanType);
+}
+
+static LogicalResult verifyUnwrapSVInterface(UnwrapSVInterface &op) {
+  auto modportType = op.outIface().getType().cast<circt::sv::ModportType>();
+  auto chanType = op.chanInput().getType().cast<ChannelPort>();
+  return verifySVInterface(op, modportType, chanType);
 }
 
 #define GET_OP_CLASSES
