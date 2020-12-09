@@ -67,3 +67,45 @@ def UnwrapValidReady : ESI_Op<"unwrap.vr", [NoSideEffect]> {
   let printer = [{ return ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
+
+def ModportType:
+  Type<CPred<"$_self.isa<::circt::sv::ModportType>()">, "sv.interface">;
+
+def WrapSVInterface: ESI_Op<"wrap.iface", [NoSideEffect]> {
+  let summary = "Wrap an SV interface into an ESI port";
+  let description = [{
+    Wrap a SystemVerilog interface into an ESI channel. Interface MUST look
+    like an interface produced by ESI meaning it MUST contain valid, ready,
+    and data signals. Any other signals will be discarded.
+  }];
+
+  let arguments = (ins ModportType:$iface);
+  let results = (outs ChannelType:$output);
+
+  let assemblyFormat = [{
+    $iface attr-dict `:` type($iface) `->` type($output)
+  }];
+
+  let verifier = [{
+    return ::verify$cppClass(*this);
+  }];
+}
+
+def UnwrapSVInterface : ESI_Op<"unwrap.iface", [NoSideEffect]> {
+  let summary = "Unwrap an SV interface from an ESI port";
+  let description = [{
+    Unwrap an ESI channel into a SystemVerilog interface containing valid,
+    ready, and data signals.
+  }];
+
+  let arguments = (ins ChannelType:$chanInput, ModportType:$outIface);
+  let results = (outs);
+
+  let assemblyFormat = [{
+    $chanInput `into` $outIface attr-dict `:` `(` type($chanInput) `,` type($outIface) `)`
+  }];
+
+  let verifier = [{
+    return ::verify$cppClass(*this);
+  }];
+}

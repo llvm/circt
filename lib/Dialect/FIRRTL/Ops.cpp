@@ -633,7 +633,8 @@ MemOp::getTypeForPortList(uint64_t depth, FIRRTLType dataType,
       break;
     }
 
-    memFields.push_back({port.first, BundleType::get(portFields, context)});
+    memFields.push_back(
+        {port.first, FlipType::get(BundleType::get(portFields, context))});
   }
 
   return BundleType::get(memFields, context);
@@ -642,9 +643,12 @@ MemOp::getTypeForPortList(uint64_t depth, FIRRTLType dataType,
 /// Return the kind of port this is given the port type from a 'mem' decl.
 static Optional<MemOp::PortKind> getMemPortKindFromType(FIRRTLType type) {
   auto portType = type.dyn_cast<BundleType>();
-  if (!portType)
-    return None;
-
+  if (!portType) {
+    if (auto flipType = type.dyn_cast<FlipType>())
+      portType = flipType.getElementType().dyn_cast<BundleType>();
+    if (!portType)
+      return None;
+  }
   switch (portType.getNumElements()) {
   default:
     return None;
