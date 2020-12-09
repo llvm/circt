@@ -31,22 +31,22 @@ bool isRTLValueType(Type type) {
 //===----------------------------------------------------------------------===//
 
 namespace circt {
-  namespace rtl {
-    static bool operator==(const FieldInfo& a, const FieldInfo& b) {
-      return a.name == b.name && a.type == b.type;
-    }
-    static llvm::hash_code hash_value(const FieldInfo&fi) {
-      return llvm::hash_combine(fi.name, fi.type);
-    }
-  }
+namespace rtl {
+static bool operator==(const FieldInfo &a, const FieldInfo &b) {
+  return a.name == b.name && a.type == b.type;
 }
+static llvm::hash_code hash_value(const FieldInfo &fi) {
+  return llvm::hash_combine(fi.name, fi.type);
+}
+} // namespace rtl
+} // namespace circt
 
 namespace circt {
 namespace rtl {
 // llvm::hash_code hash_value(const StructType::StructElement &arg) {
 //   return llvm::hash_value(arg.name) ^ mlir::hash_value(arg.type);
 // }
-} // namespace firrtl
+} // namespace rtl
 } // namespace circt
 
 namespace circt {
@@ -67,7 +67,8 @@ namespace detail {
 
 //   static StructTypeStorage *construct(TypeStorageAllocator &allocator,
 //                                       KeyTy key) {
-//     return new (allocator.allocate<StructTypeStorage>()) StructTypeStorage(key);
+//     return new (allocator.allocate<StructTypeStorage>())
+//     StructTypeStorage(key);
 //   }
 
 //   SmallVector<StructType::StructElement, 4> elements;

@@ -12,17 +12,17 @@
 #include "mlir/IR/Types.h"
 
 namespace circt {
-    namespace rtl {
+namespace rtl {
 
-        struct FieldInfo {
-            StringRef name;
-            Type type;
-            FieldInfo allocateInto(TypeStorageAllocator &alloc) const {
-                return FieldInfo{alloc.copyInto(name), type};
-            }
-        };
-    } //namespace rtl
-} //namespace circt
+struct FieldInfo {
+  StringRef name;
+  Type type;
+  FieldInfo allocateInto(TypeStorageAllocator &alloc) const {
+    return FieldInfo{alloc.copyInto(name), type};
+  }
+};
+} // namespace rtl
+} // namespace circt
 
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/RTL/RTLTypes.h.inc"
