@@ -36,6 +36,7 @@ circuit inputs_only :
     out4 <= rem(in4, UInt<4>("h1"))
     out1 <= asUInt(clock)
     out1 <= asUInt(asClock(UInt<1>("h1")))
+    out1 is invalid
     node x1 = bits(in4, 1, 0)
     node x2 = or(shr(in4, 2), shl(bits(in4, 2, 2), 1))
     node x3 = dshr(in4, in4)
@@ -82,6 +83,7 @@ circuit inputs_only :
 ; CHECK-NEXT:     assign out4 = in4 % 4'h1;
 ; CHECK-NEXT:     assign out1 = clock;
 ; CHECK-NEXT:     assign out1 = 1'h1;
+; CHECK-NEXT:     assign out1 = '0;
 ; CHECK-NEXT:     assign x1 = in4[1:0];
 ; CHECK-NEXT:     assign x2 = in4[3:2] | {in4[2], 1'h0};
 ; CHECK-NEXT:     assign x3 = in4 >>> in4;
