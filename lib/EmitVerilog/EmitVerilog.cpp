@@ -1443,7 +1443,7 @@ void ModuleEmitter::emitStatement(InvalidOp op) {
   ops.insert(op);
 
   auto dest = op.operand();
- 
+
   indent() << "assign ";
   emitExpression(dest, ops);
   os << " = '0;";
