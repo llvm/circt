@@ -1,4 +1,4 @@
-build
+/build*
 /docker_build
 .vscode
 #*
