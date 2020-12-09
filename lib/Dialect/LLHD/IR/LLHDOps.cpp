@@ -424,6 +424,8 @@ OpFoldResult llhd::ExtractElementOp::fold(ArrayRef<Attribute> operands) {
   // llhd.extract_element(llhd.array(a_0, ..., a_n), i) => a_i
   if (auto arrayOp = target().getDefiningOp<llhd::ArrayOp>()) {
     uint64_t index = indexAttr().getValue().getZExtValue();
+    // It is checked during the extract_element verification that the index is
+    // within bounds
     return arrayOp.values()[index];
   }
 
