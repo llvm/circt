@@ -183,7 +183,9 @@ def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
     example, to get the 'dataflow_in' modport on the 'handshake_example'
     interface:
     ```
-    %ifaceModport = sv.modport.get @dataflow_in %iface : !sv.interface<@handshake_example> -> !sv.modport<@handshake_example::@dataflow_in>
+    %ifaceModport = sv.modport.get @dataflow_in %iface :
+      !sv.interface<@handshake_example> ->
+      !sv.modport<@handshake_example::@dataflow_in>
     ```
   }];
 
