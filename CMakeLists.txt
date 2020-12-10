@@ -69,11 +69,13 @@ endif()
 set(LLVM_LIT_ARGS "${LIT_ARGS_DEFAULT}" CACHE STRING "Default options for lit")
 
 # CIRCT project.
-set(CIRCT_MAIN_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include ) # --src-root
-set(CIRCT_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/include ) # --includedir
+set(CIRCT_MAIN_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR} ) # --src-root
+set(CIRCT_MAIN_INCLUDE_DIR ${CIRCT_MAIN_SRC_DIR}/include)
 
 set(CIRCT_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-set(CIRCT_BINARY_DIR ${CMAKE_BINARY_DIR}/bin)
+set(CIRCT_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
+set(CIRCT_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/include )
+
 set(CIRCT_TOOLS_DIR ${CMAKE_BINARY_DIR}/bin)
 
 # Installing the headers and docs needs to depend on generating any public
@@ -82,10 +84,12 @@ add_custom_target(circt-headers)
 set_target_properties(circt-headers PROPERTIES FOLDER "Misc")
 add_custom_target(circt-doc)
 
+# Add MLIR and LLVM headers to the include path
 include_directories(${LLVM_INCLUDE_DIRS})
 include_directories(${MLIR_INCLUDE_DIRS})
-#include_directories( ${MLIR_BINARY_INCLUDE_DIR})
-include_directories(${CIRCT_MAIN_SRC_DIR})
+
+# Add CIRCT files to the include path
+include_directories(${CIRCT_MAIN_INCLUDE_DIR})
 include_directories(${CIRCT_INCLUDE_DIR})
 
 # If Verilator hasn't been explicitly disabled, find it.
