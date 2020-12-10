@@ -1165,8 +1165,8 @@ LogicalResult FIRRTLLowering::visitStmt(InvalidOp op) {
   if (!dest)
     return failure();
 
-  auto zero = builder->create<rtl::ConstantOp>(
-      APInt(dest.getType().cast<IntegerType>().getWidth(), 0));
+  auto zero = builder->create<rtl::ConstantOp>(0, 
+      dest.getType().cast<IntegerType>());
 
   builder->create<rtl::ConnectOp>(dest, zero);
   return success();
