@@ -1,4 +1,4 @@
-add_mlir_dialect_library(MLIRLLHD
+add_circt_dialect_library(MLIRLLHD
   LLHDDialect.cpp
   LLHDOps.cpp
   LLHDCanonicalization.cpp

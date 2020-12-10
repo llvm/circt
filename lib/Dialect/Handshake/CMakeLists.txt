@@ -4,7 +4,7 @@ set(LLVM_OPTIONAL_SOURCES
   mlir_std_runner.cpp
   )
 
-add_mlir_dialect_library(MLIRHandshakeOps
+add_circt_dialect_library(MLIRHandshakeOps
   HandshakeOps.cpp
 
   ADDITIONAL_HEADER_DIRS

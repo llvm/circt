@@ -1,6 +1,6 @@
 file(GLOB globbed *.cpp)
 
-add_mlir_library(CIRCTFIRParser
+add_circt_library(CIRCTFIRParser
   ${globbed}
   
   ADDITIONAL_HEADER_DIRS
