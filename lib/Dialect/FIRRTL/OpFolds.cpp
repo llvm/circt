@@ -78,7 +78,7 @@ OpFoldResult OrPrimOp::fold(ArrayRef<Attribute> operands) {
     return rhs();
 
   /// or(x, x) -> x
-  if (lhs() == rhs())
+  if (lhs() == rhs() && rhs().getType() == getType())
     return rhs();
 
   return constFoldBinaryOp<IntegerAttr>(operands,
