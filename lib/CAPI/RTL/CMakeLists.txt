@@ -1,4 +1,4 @@
-add_mlir_library(MLIRCAPIRTL
+add_circt_library(MLIRCAPIRTL
 
   RTLDialect.cpp
 

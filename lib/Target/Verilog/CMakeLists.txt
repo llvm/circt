@@ -1,4 +1,4 @@
-add_mlir_library(MLIRLLHDTargetVerilog
+add_circt_library(MLIRLLHDTargetVerilog
   TranslateToVerilog.cpp
 
   ADDITIONAL_HEADER_DIRS

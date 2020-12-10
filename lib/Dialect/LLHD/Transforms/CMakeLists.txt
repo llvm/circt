@@ -1,4 +1,4 @@
-add_mlir_dialect_library(MLIRLLHDTransforms
+add_circt_dialect_library(MLIRLLHDTransforms
   TemporalRegions.cpp
   PassRegistration.cpp
   ProcessLoweringPass.cpp

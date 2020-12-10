@@ -4,7 +4,7 @@ set(LLVM_OPTIONAL_SOURCES
   Ops.cpp
   )
 
-add_mlir_dialect_library(MLIRStaticLogicOps
+add_circt_dialect_library(MLIRStaticLogicOps
   Ops.cpp
 
   ADDITIONAL_HEADER_DIRS
