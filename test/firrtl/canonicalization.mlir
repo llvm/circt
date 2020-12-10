@@ -4,6 +4,7 @@ firrtl.circuit "And" {
 
 // CHECK-LABEL: firrtl.module @And
 firrtl.module @And(%in: !firrtl.uint<4>,
+                   %sin: !firrtl.sint<4>,
                    %out: !firrtl.flip<uint<4>>) {
   // CHECK: firrtl.connect %out, %c1_ui4
   %c1_ui4 = firrtl.constant(1 : ui4) : !firrtl.uint<4>
@@ -33,11 +34,24 @@ firrtl.module @And(%in: !firrtl.uint<4>,
   %c3_ui2 = firrtl.constant(3 : ui2) : !firrtl.uint<2>
   %4 = firrtl.and %in, %c3_ui2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<4>
   firrtl.connect %out, %4 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+
+  // Mixed type input and outputs.
+  
+  // CHECK: firrtl.connect %out, %c1_ui4
+  %c1_si4 = firrtl.constant(1 : si4) : !firrtl.sint<4>
+  %5 = firrtl.and %c1_si4, %c1_si4 : (!firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.uint<4>
+  firrtl.connect %out, %5 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+  
+  // CHECK: [[AND:%.+]] = firrtl.and %sin, %sin
+  // CHECK-NEXT: firrtl.connect %out, [[AND]]
+  %6 = firrtl.and %sin, %sin : (!firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.uint<4>
+  firrtl.connect %out, %6 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @Or
 firrtl.module @Or(%in: !firrtl.uint<4>,
-                   %out: !firrtl.flip<uint<4>>) {
+                  %sin: !firrtl.sint<4>,
+                  %out: !firrtl.flip<uint<4>>) {
   // CHECK: firrtl.connect %out, %c7_ui4
   %c4_ui4 = firrtl.constant(4 : ui4) : !firrtl.uint<4>
   %c3_ui4 = firrtl.constant(3 : ui4) : !firrtl.uint<4>
@@ -57,10 +71,23 @@ firrtl.module @Or(%in: !firrtl.uint<4>,
   // CHECK: firrtl.connect %out, %in
   %3 = firrtl.or %in, %in : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %3 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+
+  // Mixed type input and outputs.
+  
+  // CHECK: firrtl.connect %out, %c1_ui4
+  %c1_si4 = firrtl.constant(1 : si4) : !firrtl.sint<4>
+  %5 = firrtl.or %c1_si4, %c1_si4 : (!firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.uint<4>
+  firrtl.connect %out, %5 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+  
+  // CHECK: [[OR:%.+]] = firrtl.or %sin, %sin
+  // CHECK-NEXT: firrtl.connect %out, [[OR]]
+  %6 = firrtl.or %sin, %sin : (!firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.uint<4>
+  firrtl.connect %out, %6 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @Xor
 firrtl.module @Xor(%in: !firrtl.uint<4>,
+                   %sin: !firrtl.sint<4>,
                    %out: !firrtl.flip<uint<4>>) {
   // CHECK: firrtl.connect %out, %c2_ui4
   %c1_ui4 = firrtl.constant(1 : ui4) : !firrtl.uint<4>
@@ -76,6 +103,12 @@ firrtl.module @Xor(%in: !firrtl.uint<4>,
   // CHECK: firrtl.connect %out, %c0_ui4
   %3 = firrtl.xor %in, %in : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %3 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+
+  // Mixed type input and outputs.
+  
+  // CHECK: firrtl.connect %out, %c0_ui4
+  %6 = firrtl.xor %sin, %sin : (!firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.uint<4>
+  firrtl.connect %out, %6 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @EQ
