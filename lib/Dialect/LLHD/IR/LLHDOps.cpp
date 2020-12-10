@@ -431,7 +431,6 @@ OpFoldResult llhd::ExtractElementOp::fold(ArrayRef<Attribute> operands) {
 
   // llhd.extract_element(llhd.array_uniform(arr), i) => arr
   if (auto arrayUniformOp = target().getDefiningOp<llhd::ArrayUniformOp>()) {
-    uint64_t index = indexAttr().getValue().getZExtValue();
     return arrayUniformOp.init();
   }
 
