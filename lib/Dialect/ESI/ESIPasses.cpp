@@ -59,7 +59,31 @@ public:
 
   LogicalResult
   matchAndRewrite(ChannelBuffer buffer, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const final;
+                  ConversionPatternRewriter &rewriter) const final {
+    auto loc = buffer.getLoc();
+
+    ChannelBufferOptions opts = buffer.options();
+    auto type = buffer.getType();
+
+    // Expand 'abstract' buffer into 'physical' stages.
+    auto stages = opts.stages();
+    uint64_t numStages = 1;
+    if (stages) {
+      // Guaranteed positive by the parser.
+      numStages = stages.getValue().getLimitedValue();
+    }
+    Value input = buffer.input();
+    for (uint64_t i = 0; i < numStages; ++i) {
+      // Create the stages, connecting them up as we build.
+      auto stage = rewriter.create<PipelineStage>(loc, type, buffer.clk(),
+                                                  buffer.rstn(), input);
+      input = stage;
+    }
+
+    // Replace the buffer.
+    rewriter.replaceOp(buffer, input);
+    return success();
+  }
 };
 } // anonymous namespace
 
@@ -136,8 +160,7 @@ private:
 } // anonymous namespace
 
 ESIRTLBuilder::ESIRTLBuilder(Operation *top)
-    : OpBuilder(top->getContext()),
-      a(StringAttr::get("a", getContext())),
+    : OpBuilder(top->getContext()), a(StringAttr::get("a", getContext())),
       a_valid(StringAttr::get("a_valid", getContext())),
       a_ready(StringAttr::get("a_ready", getContext())),
       x(StringAttr::get("x", getContext())),
@@ -146,8 +169,7 @@ ESIRTLBuilder::ESIRTLBuilder(Operation *top)
       clk(StringAttr::get("clk", getContext())),
       rstn(StringAttr::get("rstn", getContext())),
       parameters(Identifier::get("parameters", getContext())),
-      WIDTH(Identifier::get("WIDTH", getContext())),
-      declaredStage(nullptr),
+      WIDTH(Identifier::get("WIDTH", getContext())), declaredStage(nullptr),
       loc(UnknownLoc::get(getContext())) {
 
   auto regions = top->getRegions();
