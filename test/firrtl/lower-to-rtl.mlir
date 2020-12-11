@@ -107,7 +107,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %18 = firrtl.mul %6, %2 : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<12>
 
     // CHECK-NEXT: [[IN3SEXT:%.+]] = rtl.sext %in3 : (i8) -> i9
-    // CHECK-NEXT: [[PADRESSEXT:%.+]] = rtl.sext [[PADRES]] : (i3) -> i9
+    // CHECK-NEXT: [[PADRESSEXT:%.+]] = rtl.zext [[PADRES]] : (i3) -> i9
     // CHECK-NEXT: = rtl.divs [[IN3SEXT]], [[PADRESSEXT]] : i9
     %19 = firrtl.div %in3c, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<9>
 
@@ -158,6 +158,10 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: = rtl.extract [[VAL18]] from 0 : (i12) -> i3
     // CHECK-NEXT: = rtl.shru [[XOR]], {{.*}} : i3
     %29 = firrtl.dshr %24, %18 : (!firrtl.uint<3>, !firrtl.uint<12>) -> !firrtl.uint<3>
+
+    // CHECK-NEXT: = rtl.zext %2 : (i3) -> i8
+    // CHECK-NEXT: = rtl.shrs %in3, {{.*}} : i8
+    %a29 = firrtl.dshr %in3c, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<3>
 
     // CHECK-NEXT: = rtl.zext %2 : (i3) -> i8
     // CHECK-NEXT: = rtl.shl %in3, {{.*}} : i8
@@ -316,6 +320,23 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:  %hits_1_7 = rtl.wire : i1
     // CHECK-NEXT:  rtl.connect %hits_1_7, %io_cpu_flush.wire : i1
     %1455 = firrtl.asPassive %hits_1_7 : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
+  }
+
+
+  // https://github.com/llvm/circt/issues/314
+  // CHECK-LABEL: rtl.module @issue314
+  rtl.module @issue314(%inp2: i27, %inpi: i65) {
+    %inp_2 = firrtl.stdIntCast %inp2 : (i27) -> !firrtl.uint<27>
+    %inp_i = firrtl.stdIntCast %inpi : (i65) -> !firrtl.uint<65>
+
+    // CHECK-NEXT: %tmp48 = rtl.wire : i27
+    %tmp48 = firrtl.wire {name = "tmp48"} : !firrtl.uint<27>
+    // CHECK-NEXT: %0 = rtl.extract %inpi from 0 : (i65) -> i27
+    // CHECK-NEXT: %1 = rtl.divu %inp2, %0 : i27
+    %0 = firrtl.div %inp_2, %inp_i : (!firrtl.uint<27>, !firrtl.uint<65>) -> !firrtl.uint<27>
+    // CHECK-NEXT: rtl.connect %tmp48, %1 : i27
+    firrtl.connect %tmp48, %0 : !firrtl.uint<27>, !firrtl.uint<27>
+
   }
 }
 

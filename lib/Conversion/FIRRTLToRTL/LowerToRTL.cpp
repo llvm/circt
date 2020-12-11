@@ -79,6 +79,9 @@ static Value extendOrTruncateFIRRTL(Value val, IntType destTy,
   assert(srcTy.hasWidth() && destTy.hasWidth() &&
          "only works with width-inferred integer values");
 
+  if (srcTy.getWidthOrSentinel() == destTy.getWidthOrSentinel())
+    return val;
+
   if (srcTy.getWidthOrSentinel() > destTy.getWidthOrSentinel())
     return builder.create<TailPrimOp>(destTy, val, destTy.getWidthOrSentinel());
   return builder.create<PadPrimOp>(destTy, val, destTy.getWidthOrSentinel());
@@ -581,9 +584,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(MulPrimOp op) {
     return lowerBinOpToVariadic<rtl::MulOp>(op);
   }
-  LogicalResult visitExpr(DivPrimOp op) {
-    return lowerBinOp<rtl::DivUOp, rtl::DivSOp>(op);
-  }
+  LogicalResult visitExpr(DivPrimOp op);
   LogicalResult visitExpr(RemPrimOp op);
 
   // Other Operations
@@ -1007,6 +1008,25 @@ LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
   return setLoweringTo<rtl::ConcatOp>(op, ValueRange({lhs, rhs}));
 }
 
+LogicalResult FIRRTLLowering::visitExpr(DivPrimOp op) {
+  // FIRRTL has the width of (a/b) == Wa or Wa+1 for Unsigned/signed operations.
+  // Extend or truncate the operands to the result size before performing the
+  // divide so we don't lose precision.
+  auto resultType = op.getType();
+  auto lhs = getLoweredAndExtendedValue(op.getOperand(0), resultType);
+  auto rhs = getLoweredValue(op.getOperand(1));
+  if (!lhs || !rhs)
+    return failure();
+
+  rhs = zeroExtendOrTruncate(rhs, lhs.getType(), *builder);
+  assert(rhs && "lowering failed");
+
+  // Emit the result operation.
+  if (resultType.cast<IntType>().isSigned())
+    return setLoweringTo<rtl::DivSOp>(op, lhs, rhs);
+  return setLoweringTo<rtl::DivUOp>(op, lhs, rhs);
+}
+
 LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
   // FIRRTL has the width of (a % b) = Min(W(a), W(b)), but the operation is
   // done at max(W(a), W(b))) so we need to extend one operand, then truncate
@@ -1114,13 +1134,15 @@ LogicalResult FIRRTLLowering::visitExpr(DShrPrimOp op) {
   // rtl has equal types for these, firrtl doesn't.  The type of the firrtl RHS
   // may be wider than the LHS, and a small shift amount needs to be zero
   // extended even for signed shifts.
-  auto lhs = getLoweredAndExtendedValue(op.lhs(), op.result().getType());
+  auto lhs = getLoweredValue(op.lhs());
   auto rhs = getLoweredValue(op.rhs());
   if (!lhs || !rhs)
     return failure();
 
   // Zero extend or truncate the shift amount if needed.
   rhs = zeroExtendOrTruncate(rhs, lhs.getType(), *builder);
+  if (op.getType().cast<IntType>().isSigned())
+    return setLoweringTo<rtl::ShrSOp>(op, lhs, rhs);
   return setLoweringTo<rtl::ShrUOp>(op, lhs, rhs);
 }
 
