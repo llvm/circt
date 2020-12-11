@@ -34,7 +34,8 @@ def ChannelBuffer : ESI_Abstract_Op<"buffer", [NoSideEffect]> {
     ```
   }];
 
-  let arguments = (ins I1:$clk, I1:$rstn, ChannelType:$input, ChannelBufferOptions:$options);
+  let arguments = (ins I1:$clk, I1:$rstn, ChannelType:$input,
+    ChannelBufferOptions:$options);
   let results = (outs ChannelType:$output);
 
   let printer = [{ return ::print(p, *this); }];
