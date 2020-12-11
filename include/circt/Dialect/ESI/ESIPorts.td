@@ -66,6 +66,10 @@ def UnwrapValidReady : ESI_Op<"unwrap.vr", [NoSideEffect]> {
 
   let printer = [{ return ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
+
+  let builders = [
+    OpBuilderDAG<(ins "mlir::Value":$inChan, "mlir::Value":$ready)>
+  ];
 }
 
 def ModportType:

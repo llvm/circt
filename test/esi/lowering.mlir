@@ -1,4 +1,5 @@
 // RUN: circt-opt %s --lower-esi-to-physical -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s --lower-esi-to-physical --lower-esi-to-rtl -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=RTL %s
 
 module {
   rtl.externmodule @Sender() -> ( %x: !esi.channel<i1> )
@@ -6,6 +7,8 @@ module {
 
   // CHECK-LABEL: rtl.externmodule @Sender() -> (%x: !esi.channel<i1>)
   // CHECK-LABEL: rtl.externmodule @Reciever(!esi.channel<i1> {rtl.name = "a"})
+
+  // RTL-LABEL: rtl.externmodule @Sender() -> (%x: !esi.channel<i1>)
 
   rtl.module @test() {
     %esiChan = rtl.instance "sender" @Sender () : () -> (!esi.channel<i1>)
