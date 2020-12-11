@@ -414,6 +414,14 @@ static void print(OpAsmPrinter &p, RTLModuleOp op) {
 // InstanceOp
 //===----------------------------------------------------------------------===//
 
+void InstanceOp::build(OpBuilder &b, OperationState &state,
+                       StringRef instanceName, RTLExternModuleOp module,
+                       ArrayRef<mlir::Value> operands) {
+  auto resultTypes = module.getType().getResults();
+  build(b, state, resultTypes, instanceName, module.getName(), operands,
+        DictionaryAttr());
+}
+
 /// Lookup the module or extmodule for the symbol.  This returns null on
 /// invalid IR.
 Operation *InstanceOp::getReferencedModule() {

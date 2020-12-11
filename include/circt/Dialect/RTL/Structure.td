@@ -151,6 +151,11 @@ def InstanceOp : RTLOp<"instance",
   }];
 
   let verifier = [{ return ::verifyInstanceOp(*this); }];
+
+  let builders = [
+    OpBuilderDAG<(ins "StringRef":$instanceName, "RTLExternModuleOp":$module,
+                      "ArrayRef<mlir::Value>":$operands)>
+  ];
 }
 
 def OutputOp : RTLOp<"output", [Terminator, HasParent<"RTLModuleOp">,

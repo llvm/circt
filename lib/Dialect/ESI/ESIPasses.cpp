@@ -12,6 +12,7 @@
 #include "circt/Dialect/RTL/Types.h"
 #include "circt/Dialect/SV/Dialect.h"
 
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -59,31 +60,7 @@ public:
 
   LogicalResult
   matchAndRewrite(ChannelBuffer buffer, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const final {
-    auto loc = buffer.getLoc();
-
-    ChannelBufferOptions opts = buffer.options();
-    auto type = buffer.getType();
-
-    // Expand 'abstract' buffer into 'physical' stages.
-    auto stages = opts.stages();
-    uint64_t numStages = 1;
-    if (stages) {
-      // Guaranteed positive by the parser.
-      numStages = stages.getValue().getLimitedValue();
-    }
-    Value input = buffer.input();
-    for (uint64_t i = 0; i < numStages; ++i) {
-      // Create the stages, connecting them up as we build.
-      auto stage = rewriter.create<PipelineStage>(loc, type, buffer.clk(),
-                                                  buffer.rstn(), input);
-      input = stage;
-    }
-
-    // Replace the buffer.
-    rewriter.replaceOp(buffer, input);
-    return success();
-  }
+                  ConversionPatternRewriter &rewriter) const final;
 };
 } // anonymous namespace
 
@@ -94,7 +71,6 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
 
   ChannelBufferOptions opts = buffer.options();
   auto type = buffer.getType();
-  Value input = buffer.input();
 
   // Expand 'abstract' buffer into 'physical' stages.
   auto stages = opts.stages();
@@ -103,9 +79,11 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
     // Guaranteed positive by the parser.
     numStages = stages.getValue().getLimitedValue();
   }
+  Value input = buffer.input();
   for (uint64_t i = 0; i < numStages; ++i) {
     // Create the stages, connecting them up as we build.
-    auto stage = rewriter.create<PipelineStage>(loc, type, input);
+    auto stage = rewriter.create<PipelineStage>(loc, type, buffer.clk(),
+                                                buffer.rstn(), input);
     input = stage;
   }
 
@@ -180,7 +158,7 @@ ESIRTLBuilder::ESIRTLBuilder(Operation *top)
   if (!region.empty())
     setInsertionPoint(&region.front(), region.front().begin());
 
-  addConversion([](ChannelPort ch) -> Type { return ch; });
+  addConversion([](Type t) -> Type { return t; });
 }
 
 circt::rtl::RTLExternModuleOp ESIRTLBuilder::declareStage() {
@@ -227,10 +205,9 @@ private:
 } // anonymous namespace
 
 LogicalResult PipelineStageLowering::matchAndRewrite(
-    PipelineStage stage, ArrayRef<Value> operands,
+    PipelineStage stage, ArrayRef<Value> stageOperands,
     ConversionPatternRewriter &rewriter) const {
   using namespace circt::sv;
-  auto *ctxt = rewriter.getContext();
   auto loc = stage.getLoc();
   auto chPort = stage.input().getType().dyn_cast<ChannelPort>();
   if (!chPort)
@@ -241,10 +218,30 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   size_t width = getNumBits(chPort.getInner());
   stageAttrs.set(builder.WIDTH, rewriter.getUI32IntegerAttr(width));
 
+  // Unwrap the channel. The ready signal is a Value we haven't created yet, so
+  // create a temp value and replace it later. Give this constant an odd-looking
+  // type to make debugging easier.
+  auto tempConstant = rewriter.create<mlir::ConstantIntOp>(loc, 0, 1234);
+  auto unwrap =
+      rewriter.create<UnwrapValidReady>(loc, stage.input(), tempConstant);
+  auto wrap = rewriter.create<WrapValidReady>(loc, chPort, rewriter.getI1Type(),
+                                              tempConstant, tempConstant);
+
+  ArrayRef<Value> operands = {stage.clk(), stage.rstn(), unwrap.rawOutput(),
+                              unwrap.valid(), wrap.ready()};
   auto stageInst = rewriter.create<circt::rtl::InstanceOp>(
-      loc, stage.getType(), "pipelineStage", stageModule.getName(), operands,
-      stageAttrs.getDictionary(ctxt));
-  rewriter.replaceOp(stage, stageInst.getResults());
+      loc, "pipelineStage", stageModule, operands);
+  auto stageInstResults = stageInst.getResults();
+
+  Value a_ready = stageInstResults[0];
+  Value x = stageInstResults[1];
+  Value x_valid = stageInstResults[2];
+  unwrap.readyMutable().assign(a_ready);
+  wrap.rawInputMutable().assign(x);
+  wrap.validMutable().assign(x_valid);
+  rewriter.eraseOp(tempConstant);
+
+  rewriter.replaceOp(stage, wrap.chanOutput());
   return success();
 }
 
@@ -261,7 +258,7 @@ void ESItoRTLPass::runOnOperation() {
   ConversionTarget target(getContext());
   target.addLegalDialect<circt::rtl::RTLDialect>();
   target.addLegalDialect<circt::sv::SVDialect>();
-  target.addLegalOp<WrapSVInterface, UnwrapSVInterface>();
+  target.addLegalOp<WrapValidReady, UnwrapValidReady>();
   // target.addIllegalDialect<circt::esi::ESIDialect>();
   target.addIllegalOp<PipelineStage>();
 
