@@ -600,6 +600,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
 
   // Statements
   LogicalResult visitStmt(ConnectOp op);
+  LogicalResult visitStmt(InvalidOp op);
   LogicalResult visitStmt(PrintFOp op);
   LogicalResult visitStmt(StopOp op);
   LogicalResult visitStmt(AssertOp op);
@@ -1179,6 +1180,19 @@ LogicalResult FIRRTLLowering::visitExpr(ValidIfPrimOp op) {
 //===----------------------------------------------------------------------===//
 // Statements
 //===----------------------------------------------------------------------===//
+
+LogicalResult FIRRTLLowering::visitStmt(InvalidOp op) {
+  auto dest = getLoweredValue(op.operand());
+
+  if (!dest)
+    return failure();
+
+  auto zero =
+      builder->create<rtl::ConstantOp>(0, dest.getType().cast<IntegerType>());
+
+  builder->create<rtl::ConnectOp>(dest, zero);
+  return success();
+}
 
 LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   auto dest = getLoweredValue(op.dest());

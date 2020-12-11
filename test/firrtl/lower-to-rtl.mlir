@@ -3,7 +3,7 @@
 module attributes {firrtl.mainModule = "Simple"} {
 
   // CHECK-LABEL: rtl.module @Simple
-  rtl.module @Simple(%in1: i4, %in2: i2, %in3: i8) -> (%out4: i4) {
+  rtl.module @Simple(%in1: i4, %in2: i2, %in3: i8) -> (%out4: i4, %out5: i4) {
     %in1c = firrtl.stdIntCast %in1 : (i4) -> !firrtl.uint<4>
     %in2c = firrtl.stdIntCast %in2 : (i2) -> !firrtl.uint<2>
     %in3c = firrtl.stdIntCast %in3 : (i8) -> !firrtl.sint<8>
@@ -11,6 +11,11 @@ module attributes {firrtl.mainModule = "Simple"} {
     %tmp3 = rtl.wire : i4
     %tmp4 = firrtl.stdIntCast %tmp3 : (i4) -> !firrtl.uint<4>
     %out4 = firrtl.asNonPassive %tmp4 : (!firrtl.uint<4>) -> !firrtl.flip<uint<4>>
+    %out5 = firrtl.asNonPassive %tmp4 : (!firrtl.uint<4>) -> !firrtl.flip<uint<4>>
+
+    // CHECK: [[ZERO4:%.+]] = rtl.constant(0 : i4) : i4
+    // CHECK: rtl.connect %tmp3, [[ZERO4]] : i4
+    firrtl.invalid %out5 : !firrtl.flip<uint<4>>
 
     // CHECK: rtl.constant(-4 : i4) : i4
     %c12_ui4 = firrtl.constant(12 : ui4) : !firrtl.uint<4>
@@ -142,8 +147,8 @@ module attributes {firrtl.mainModule = "Simple"} {
     %s24 = firrtl.asSInt %24 : (!firrtl.uint<3>) -> !firrtl.sint<3>
 
     // CHECK-NEXT: [[SEXT:%.+]] = rtl.sext [[XOR]] : (i3) -> i4
-    // CHECK-NEXT: %c0_i4 = rtl.constant(0 : i4) : i4
-    // CHECK-NEXT: [[SUB:%.+]] = rtl.sub %c0_i4, [[SEXT]] : i4
+    // CHECK-NEXT: [[ZERO4b:%.+]] = rtl.constant(0 : i4) : i4
+    // CHECK-NEXT: [[SUB:%.+]] = rtl.sub [[ZERO4b]], [[SEXT]] : i4
     %25 = firrtl.neg %s24 : (!firrtl.sint<3>) -> !firrtl.sint<4>
 
     // CHECK-NEXT: [[CVT4:%.+]] = rtl.sext [[CVT]] : (i3) -> i4
@@ -180,8 +185,8 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: rtl.icmp "ne" {{.*}}, {{.*}} : i4
     %46 = firrtl.neq %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: rtl.output %tmp3 : i4
-    rtl.output %tmp3 : i4
+    // CHECK-NEXT: rtl.output %tmp3, %tmp3 : i4, i4
+    rtl.output %tmp3, %tmp3 : i4,i4
   }
 
 //   module Print :
