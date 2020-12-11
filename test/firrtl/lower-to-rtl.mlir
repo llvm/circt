@@ -322,7 +322,6 @@ module attributes {firrtl.mainModule = "Simple"} {
     %1455 = firrtl.asPassive %hits_1_7 : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
   }
 
-
   // https://github.com/llvm/circt/issues/314
   // CHECK-LABEL: rtl.module @issue314
   rtl.module @issue314(%inp2: i27, %inpi: i65) {
@@ -336,7 +335,6 @@ module attributes {firrtl.mainModule = "Simple"} {
     %0 = firrtl.div %inp_2, %inp_i : (!firrtl.uint<27>, !firrtl.uint<65>) -> !firrtl.uint<27>
     // CHECK-NEXT: rtl.connect %tmp48, %1 : i27
     firrtl.connect %tmp48, %0 : !firrtl.uint<27>, !firrtl.uint<27>
-
   }
 }
 
