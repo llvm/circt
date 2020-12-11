@@ -1,4 +1,4 @@
-add_mlir_dialect_library(MLIRESI
+add_circt_dialect_library(MLIRESI
   ESIDialect.cpp
   ESIOps.cpp
   ESIPasses.cpp
@@ -22,6 +22,6 @@ add_mlir_dialect_library(MLIRESI
   )
 
 
-add_dependencies(mlir-headers MLIRESIIncGen)
+add_dependencies(circt-headers MLIRESIIncGen)
 
 add_subdirectory(cosim)

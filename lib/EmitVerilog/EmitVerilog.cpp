@@ -51,8 +51,12 @@ static bool isVerilogExpression(Operation *op) {
 /// supported.
 static int getBitWidthOrSentinel(Type type) {
   return TypeSwitch<Type, int>(type)
-      .Case<IntegerType>(
-          [](IntegerType integerType) { return integerType.getWidth(); })
+      .Case<IntegerType>([](IntegerType integerType) {
+        // Turn zero-bit values into single bit ones for simplicity.  This
+        // generates correct logic, even though it isn't efficient.
+        auto result = integerType.getWidth();
+        return result ? result : 1;
+      })
       .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
       .Case<SIntType, UIntType>([](IntType intType) {
         // Turn zero-bit values into single bit ones for simplicity.  This

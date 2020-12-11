@@ -1,4 +1,4 @@
-add_mlir_library(MLIRStandardToHandshake
+add_circt_library(MLIRStandardToHandshake
   StandardToHandshake.cpp
 
   ADDITIONAL_HEADER_DIRS

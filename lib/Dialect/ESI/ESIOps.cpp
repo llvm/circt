@@ -23,8 +23,9 @@ static ParseResult parseChannelBuffer(OpAsmParser &parser,
                                       OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
 
-  OpAsmParser::OperandType inputOperand;
-  if (parser.parseOperand(inputOperand))
+  llvm::SmallVector<OpAsmParser::OperandType, 4> operands;
+  if (parser.parseOperandList(operands, /*requiredOperandCount=*/3,
+                              /*delimiter=*/OpAsmParser::Delimiter::None))
     return failure();
 
   ChannelBufferOptions optionsAttr;
@@ -41,14 +42,16 @@ static ParseResult parseChannelBuffer(OpAsmParser &parser,
       ChannelPort::get(parser.getBuilder().getContext(), innerOutputType);
   result.addTypes({outputType});
 
-  if (parser.resolveOperands({inputOperand}, {outputType}, inputOperandsLoc,
+  auto i1 = IntegerType::get(1, result.getContext());
+  if (parser.resolveOperands(operands, {i1, i1, outputType}, inputOperandsLoc,
                              result.operands))
     return failure();
   return success();
 }
 
 static void print(OpAsmPrinter &p, ChannelBuffer &op) {
-  p << "esi.buffer " << op.input() << " ";
+  p << "esi.buffer " << op.clk() << ", " << op.rstn() << ", " << op.input()
+    << " ";
   p.printAttributeWithoutType(op.options());
   p.printOptionalAttrDict(op.getAttrs(), /*elidedAttrs=*/{"options"});
   p << " : " << op.output().getType().cast<ChannelPort>().getInner();
@@ -62,9 +65,9 @@ static ParseResult parsePipelineStage(OpAsmParser &parser,
                                       OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
 
-  OpAsmParser::OperandType inputOperand;
+  SmallVector<OpAsmParser::OperandType, 4> operands;
   Type innerOutputType;
-  if (parser.parseOperand(inputOperand) ||
+  if (parser.parseOperandList(operands, /*requiredOperandCount=*/3) ||
       parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
       parser.parseType(innerOutputType))
     return failure();
@@ -72,14 +75,16 @@ static ParseResult parsePipelineStage(OpAsmParser &parser,
       ChannelPort::get(parser.getBuilder().getContext(), innerOutputType);
   result.addTypes({type});
 
-  if (parser.resolveOperands({inputOperand}, {type}, inputOperandsLoc,
+  auto i1 = IntegerType::get(1, result.getContext());
+  if (parser.resolveOperands(operands, {i1, i1, type}, inputOperandsLoc,
                              result.operands))
     return failure();
   return success();
 }
 
 static void print(OpAsmPrinter &p, PipelineStage &op) {
-  p << "esi.stage " << op.input() << " ";
+  p << "esi.stage " << op.clk() << ", " << op.rstn() << ", " << op.input()
+    << " ";
   p.printOptionalAttrDict(op.getAttrs());
   p << " : " << op.output().getType().cast<ChannelPort>().getInner();
 }

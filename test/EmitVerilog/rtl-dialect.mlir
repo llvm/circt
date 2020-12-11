@@ -209,4 +209,12 @@ module {
   // CHECK-EMPTY:
   // CHECK-NEXT:     assign out = a;
   // CHECK-NEXT:   endmodule
+
+  // https://github.com/llvm/circt/issues/316
+  // FIXME: The MLIR parser doesn't accept an i0 even though it is valid IR,
+  // this needs to be fixed upstream.
+  //rtl.module @issue316(%inp_0: i0) {
+  //  rtl.output
+  //}
 }
+

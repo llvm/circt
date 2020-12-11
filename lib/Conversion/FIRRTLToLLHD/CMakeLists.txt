@@ -1,4 +1,4 @@
-add_mlir_conversion_library(MLIRFIRRTLToLLHD
+add_circt_conversion_library(MLIRFIRRTLToLLHD
   FIRRTLToLLHD.cpp
 
   DEPENDS
