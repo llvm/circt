@@ -4,22 +4,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/ESI/ESITypes.h"
-#include "circt/Dialect/RTL/Dialect.h"
 #include "circt/Dialect/RTL/Ops.h"
 #include "circt/Dialect/RTL/Types.h"
-#include "circt/Dialect/SV/Dialect.h"
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "llvm/ADT/Twine.h"
 #include "llvm/ADT/TypeSwitch.h"
-#include "llvm/Support/Debug.h"
-#include "llvm/Support/raw_ostream.h"
 
 #include <memory>
 
@@ -127,6 +121,7 @@ public:
 
   circt::rtl::RTLExternModuleOp declareStage();
 
+  // A bunch of constants for use in various places below.
   const StringAttr a, a_valid, a_ready, x, x_valid, x_ready;
   const StringAttr clk, rstn;
   const Identifier parameters, WIDTH;
@@ -161,6 +156,10 @@ ESIRTLBuilder::ESIRTLBuilder(Operation *top)
   addConversion([](Type t) -> Type { return t; });
 }
 
+/// Write an 'ExternModuleOp' to use a hand-coded SystemVerilog module. Said
+/// module implements pipeline stage, adding 1 cycle latency. This particular
+/// implementation is double-buffered and fully pipelines the reverse-flow ready
+/// signal.
 circt::rtl::RTLExternModuleOp ESIRTLBuilder::declareStage() {
   using namespace circt::rtl;
 
@@ -171,24 +170,24 @@ circt::rtl::RTLExternModuleOp ESIRTLBuilder::declareStage() {
   // Since this module has parameterized widths on the a input and x output,
   // give the extern declation a None type since nothing else makes sense.
   // Will be refining this when we decide how to better handle parameterized
-  // things.
+  // types and ops.
   ArrayRef<ModulePortInfo> ports = {
       {clk, PortDirection::INPUT, getI1Type(), 0},
       {rstn, PortDirection::INPUT, getI1Type(), 1},
       {a, PortDirection::INPUT, getNoneType(), 2},
       {a_valid, PortDirection::INPUT, getI1Type(), 3},
-      {a_ready, PortDirection::OUTPUT, getI1Type(), 2},
-      {x, PortDirection::OUTPUT, getNoneType(), 0},
-      {x_valid, PortDirection::OUTPUT, getI1Type(), 1},
+      {a_ready, PortDirection::OUTPUT, getI1Type(), 0},
+      {x, PortDirection::OUTPUT, getNoneType(), 1},
+      {x_valid, PortDirection::OUTPUT, getI1Type(), 2},
       {x_ready, PortDirection::INPUT, getI1Type(), 4}};
   declaredStage = create<RTLExternModuleOp>(loc, name, ports);
   return declaredStage;
 }
 
 namespace {
-/// Construct RTL/SV to act as pipeline stages. They should be double-buffered
-/// to support pipelined backpressure. Build a pipeline stage module for each
-/// type since not all synthesis engines support modules parameterized by type.
+/// Lower PipelineStage ops to an RTL implementation. Unwrap and re-wrap
+/// appropriately. Another conversion will take care merging the resulting
+/// adjacent wrap/unwrap ops.
 struct PipelineStageLowering : public OpConversionPattern<PipelineStage> {
 public:
   PipelineStageLowering(ESIRTLBuilder &builder, MLIRContext *ctxt)
@@ -207,7 +206,6 @@ private:
 LogicalResult PipelineStageLowering::matchAndRewrite(
     PipelineStage stage, ArrayRef<Value> stageOperands,
     ConversionPatternRewriter &rewriter) const {
-  using namespace circt::sv;
   auto loc = stage.getLoc();
   auto chPort = stage.input().getType().dyn_cast<ChannelPort>();
   if (!chPort)
@@ -224,21 +222,27 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   auto tempConstant = rewriter.create<mlir::ConstantIntOp>(loc, 0, 1234);
   auto unwrap =
       rewriter.create<UnwrapValidReady>(loc, stage.input(), tempConstant);
-  auto wrap = rewriter.create<WrapValidReady>(loc, chPort, rewriter.getI1Type(),
-                                              tempConstant, tempConstant);
 
+  // Instantiate the "ESI_PipelineStage" external module.
   ArrayRef<Value> operands = {stage.clk(), stage.rstn(), unwrap.rawOutput(),
-                              unwrap.valid(), wrap.ready()};
+                              unwrap.valid(), tempConstant};
+  ArrayRef<Type> resultTypes = {
+      rewriter.getI1Type(), unwrap.rawOutput().getType(), rewriter.getI1Type()};
   auto stageInst = rewriter.create<circt::rtl::InstanceOp>(
-      loc, "pipelineStage", stageModule, operands);
+      loc, resultTypes, "pipelineStage", stageModule.getName(), operands,
+      DictionaryAttr::get(stage.getAttrs(), rewriter.getContext()));
   auto stageInstResults = stageInst.getResults();
-
   Value a_ready = stageInstResults[0];
   Value x = stageInstResults[1];
   Value x_valid = stageInstResults[2];
+
+  // Wrap up the output of the RTL stage module.
+  auto wrap = rewriter.create<WrapValidReady>(loc, chPort, rewriter.getI1Type(),
+                                              x, x_valid);
+
+  // Set back edges correctly and erase temp value.
   unwrap.readyMutable().assign(a_ready);
-  wrap.rawInputMutable().assign(x);
-  wrap.validMutable().assign(x_valid);
+  stageInst.setOperand(4, wrap.ready());
   rewriter.eraseOp(tempConstant);
 
   rewriter.replaceOp(stage, wrap.chanOutput());
@@ -257,9 +261,7 @@ void ESItoRTLPass::runOnOperation() {
   // Set up a conversion and give it a set of laws.
   ConversionTarget target(getContext());
   target.addLegalDialect<circt::rtl::RTLDialect>();
-  target.addLegalDialect<circt::sv::SVDialect>();
   target.addLegalOp<WrapValidReady, UnwrapValidReady>();
-  // target.addIllegalDialect<circt::esi::ESIDialect>();
   target.addIllegalOp<PipelineStage>();
 
   // Add all the conversion patterns.
