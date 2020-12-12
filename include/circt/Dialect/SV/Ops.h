@@ -18,4 +18,13 @@
 #include "circt/Dialect/SV/SVEnums.h.inc"
 #include "circt/Dialect/SV/SVStructs.h.inc"
 
+namespace circt {
+namespace sv {
+
+/// Return true if the specified operation is an expression.
+bool isExpression(Operation *op);
+
+} // namespace sv
+} // namespace circt
+
 #endif // CIRCT_DIALECT_SV_OPS_H
