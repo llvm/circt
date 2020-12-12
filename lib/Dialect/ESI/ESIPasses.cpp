@@ -122,9 +122,9 @@ public:
   circt::rtl::RTLExternModuleOp declareStage();
 
   // A bunch of constants for use in various places below.
-  const StringAttr a, a_valid, a_ready, x, x_valid, x_ready;
+  const StringAttr a, aValid, aReady, x, xValid, xReady;
   const StringAttr clk, rstn;
-  const Identifier parameters, WIDTH;
+  const Identifier width;
 
 private:
   circt::rtl::RTLExternModuleOp declaredStage;
@@ -134,15 +134,14 @@ private:
 
 ESIRTLBuilder::ESIRTLBuilder(Operation *top)
     : OpBuilder(top->getContext()), a(StringAttr::get("a", getContext())),
-      a_valid(StringAttr::get("a_valid", getContext())),
-      a_ready(StringAttr::get("a_ready", getContext())),
+      aValid(StringAttr::get("a_valid", getContext())),
+      aReady(StringAttr::get("a_ready", getContext())),
       x(StringAttr::get("x", getContext())),
-      x_valid(StringAttr::get("x_valid", getContext())),
-      x_ready(StringAttr::get("x_ready", getContext())),
+      xValid(StringAttr::get("x_valid", getContext())),
+      xReady(StringAttr::get("x_ready", getContext())),
       clk(StringAttr::get("clk", getContext())),
       rstn(StringAttr::get("rstn", getContext())),
-      parameters(Identifier::get("parameters", getContext())),
-      WIDTH(Identifier::get("WIDTH", getContext())), declaredStage(nullptr),
+      width(Identifier::get("WIDTH", getContext())), declaredStage(nullptr),
       loc(UnknownLoc::get(getContext())) {
 
   auto regions = top->getRegions();
@@ -173,11 +172,11 @@ circt::rtl::RTLExternModuleOp ESIRTLBuilder::declareStage() {
       {clk, PortDirection::INPUT, getI1Type(), 0},
       {rstn, PortDirection::INPUT, getI1Type(), 1},
       {a, PortDirection::INPUT, getNoneType(), 2},
-      {a_valid, PortDirection::INPUT, getI1Type(), 3},
-      {a_ready, PortDirection::OUTPUT, getI1Type(), 0},
+      {aValid, PortDirection::INPUT, getI1Type(), 3},
+      {aReady, PortDirection::OUTPUT, getI1Type(), 0},
       {x, PortDirection::OUTPUT, getNoneType(), 1},
-      {x_valid, PortDirection::OUTPUT, getI1Type(), 2},
-      {x_ready, PortDirection::INPUT, getI1Type(), 4}};
+      {xValid, PortDirection::OUTPUT, getI1Type(), 2},
+      {xReady, PortDirection::INPUT, getI1Type(), 4}};
   declaredStage = create<RTLExternModuleOp>(loc, name, ports);
   return declaredStage;
 }
@@ -212,7 +211,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
 
   MutableDictionaryAttr stageAttrs = stage.getAttrs();
   size_t width = getNumBits(chPort.getInner());
-  stageAttrs.set(builder.WIDTH, rewriter.getUI32IntegerAttr(width));
+  stageAttrs.set(builder.width, rewriter.getUI32IntegerAttr(width));
 
   // Unwrap the channel. The ready signal is a Value we haven't created yet, so
   // create a temp value and replace it later. Give this constant an odd-looking
@@ -231,16 +230,16 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
       loc, resultTypes, "pipelineStage", stageModule.getName(), operands,
       stageAttrs.getDictionary(rewriter.getContext()));
   auto stageInstResults = stageInst.getResults();
-  Value a_ready = stageInstResults[0];
+  Value aReady = stageInstResults[0];
   Value x = stageInstResults[1];
-  Value x_valid = stageInstResults[2];
+  Value xValid = stageInstResults[2];
 
   // Wrap up the output of the RTL stage module.
   auto wrap = rewriter.create<WrapValidReady>(loc, chPort, rewriter.getI1Type(),
-                                              x, x_valid);
+                                              x, xValid);
 
   // Set back edges correctly and erase temp value.
-  unwrap.readyMutable().assign(a_ready);
+  unwrap.readyMutable().assign(aReady);
   stageInst.setOperand(4, wrap.ready());
   rewriter.eraseOp(tempConstant);
 
