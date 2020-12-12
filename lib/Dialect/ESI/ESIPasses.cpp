@@ -115,7 +115,7 @@ void ESIToPhysicalPass::runOnOperation() {
 
 namespace {
 /// Assist the lowering steps for conversions which need to create auxiliary IR.
-class ESIRTLBuilder : public TypeConverter, OpBuilder {
+class ESIRTLBuilder : public OpBuilder {
 public:
   ESIRTLBuilder(Operation *top);
 
@@ -147,13 +147,11 @@ ESIRTLBuilder::ESIRTLBuilder(Operation *top)
 
   auto regions = top->getRegions();
   if (regions.size() == 0) {
-    top->emitError("ESI RTL Builder needs a region to insert RTL");
+    top->emitError("ESI RTL Builder needs a region to insert RTL.");
   }
   auto &region = regions.front();
   if (!region.empty())
     setInsertionPoint(&region.front(), region.front().begin());
-
-  addConversion([](Type t) -> Type { return t; });
 }
 
 /// Write an 'ExternModuleOp' to use a hand-coded SystemVerilog module. Said
@@ -191,7 +189,7 @@ namespace {
 struct PipelineStageLowering : public OpConversionPattern<PipelineStage> {
 public:
   PipelineStageLowering(ESIRTLBuilder &builder, MLIRContext *ctxt)
-      : OpConversionPattern(builder, ctxt), builder(builder) {}
+      : OpConversionPattern(ctxt), builder(builder) {}
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
