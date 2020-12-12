@@ -125,3 +125,25 @@ func @extract_slice_folding(%int : i32, %sig : !llhd.sig<i32>, %array : !llhd.ar
     : i32, !llhd.sig<i32>, !llhd.array<10xi1>, !llhd.sig<!llhd.array<10xi1>>, i8, !llhd.sig<i8>, !llhd.array<2xi1>, !llhd.sig<!llhd.array<2xi1>>,
       i4, !llhd.array<2xi1>, i4, !llhd.array<2xi1>, i4, !llhd.array<2xi1>, i4, !llhd.array<2xi1>, i24, i24, !llhd.array<2xi1>, !llhd.array<1xi1>
 }
+
+// CHECK-LABEL: @extract_element_folding
+// CHECK-SAME: %[[INT1:.*]]: i32, %[[INT2:.*]]: i32, %[[INT3:.*]]: i32, %[[INT4:.*]]: i32, %[[INT5:.*]]: i32, %[[INT6:.*]]: i32
+// CHECK-SAME: %[[SHORT:.*]]: i16
+// CHECK-SAME: %[[BYTE:.*]]: i8
+func @extract_element_folding(%int1 : i32, %int2 : i32, %int3 : i32, %int4 : i32, %int5 : i32, %int6 : i32, %short : i16, %byte : i8) -> (i8, i32, i32, i32, i32) {
+  %amt = llhd.const 1 : i32
+  %tup = llhd.tuple %int1, %short, %byte : tuple<i32, i16, i8>
+  %arr = llhd.array %int1, %int2, %int3 : !llhd.array<3xi32>
+  %hidden = llhd.array %int4, %int5, %int6 : !llhd.array<3xi32>
+  %arruni = llhd.array_uniform %int1 : !llhd.array<3xi32>
+  %shr = llhd.shr %arr, %hidden, %amt : (!llhd.array<3xi32>, !llhd.array<3xi32>, i32) -> !llhd.array<3xi32>
+
+  %0 = llhd.extract_element %tup, 2 : tuple<i32, i16, i8> -> i8
+  %1 = llhd.extract_element %arr, 2 : !llhd.array<3xi32> -> i32
+  %2 = llhd.extract_element %arruni, 2 : !llhd.array<3xi32> -> i32
+  %3 = llhd.extract_element %shr, 1 : !llhd.array<3xi32> -> i32
+  %4 = llhd.extract_element %shr, 2 : !llhd.array<3xi32> -> i32
+
+  // CHECK-NEXT: %[[BYTE]], %[[INT3]], %[[INT1]], %[[INT3]], %[[INT4]] :
+  return %0, %1, %2, %3, %4 : i8, i32, i32, i32, i32
+}

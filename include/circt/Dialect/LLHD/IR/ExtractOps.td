@@ -171,6 +171,8 @@ def LLHD_ExtractElementOp : LLHD_Op<"extract_element", [
       return targetType.cast<TupleType>().getTypes()[index];
     }
   }];
+
+  let hasFolder = 1;
 }
 
 def LLHD_DynExtractElementOp : LLHD_Op<"dyn_extract_element", [
