@@ -123,6 +123,8 @@ def LLHD_DrvOp : LLHD_Op<"drv", [
     $signal `,` $value `after` $time ( `if` $enable^ )? attr-dict `:`
     type($signal)
   }];
+
+  let hasFolder = 1;
 }
 
 def REG_MODE_LOW  : I64EnumAttrCase<"low", 0>;

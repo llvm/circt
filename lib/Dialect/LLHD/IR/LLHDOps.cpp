@@ -389,6 +389,61 @@ OpFoldResult llhd::ShrOp::fold(ArrayRef<Attribute> operands) {
 }
 
 //===----------------------------------------------------------------------===//
+// ExtractElementOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult llhd::ExtractElementOp::fold(ArrayRef<Attribute> operands) {
+  uint64_t index = indexAttr().getInt();
+
+  // llhd.extract_element(llhd.shr(hidden, base, constant amt), index)
+  IntegerAttr intAttr;
+  if (matchPattern(target(),
+                   m_Op<llhd::ShrOp>(matchers::m_Any(), matchers::m_Any(),
+                                     m_Constant<IntegerAttr>(&intAttr)))) {
+    uint64_t amt = intAttr.getValue().getZExtValue();
+    auto shrOp = cast<llhd::ShrOp>(target().getDefiningOp());
+
+    // with amt + index < baseWidth
+    //   => llhd.extract_element(base, amt + index)
+    if (amt + index < shrOp.getBaseWidth()) {
+      targetMutable().assign(shrOp.base());
+      setAttr("index", IntegerAttr::get(indexAttr().getType(), amt + index));
+      return result();
+    }
+
+    // with amt + index >= baseWidth && amt + index < baseWidth + hiddenWidth
+    //   => llhd.extract_element(hidden, amt + index - baseWidth)
+    if (amt + index < shrOp.getBaseWidth() + shrOp.getHiddenWidth()) {
+      targetMutable().assign(shrOp.hidden());
+      setAttr("index", IntegerAttr::get(indexAttr().getType(),
+                                        amt + index - shrOp.getBaseWidth()));
+      return result();
+    }
+  }
+
+  // llhd.extract_element(llhd.array(a_0, ..., a_n), i) => a_i
+  if (auto arrayOp = target().getDefiningOp<llhd::ArrayOp>()) {
+    uint64_t index = indexAttr().getValue().getZExtValue();
+    // It is checked during the extract_element verification that the index is
+    // within bounds
+    return arrayOp.values()[index];
+  }
+
+  // llhd.extract_element(llhd.array_uniform(arr), i) => arr
+  if (auto arrayUniformOp = target().getDefiningOp<llhd::ArrayUniformOp>()) {
+    return arrayUniformOp.init();
+  }
+
+  // llhd.extract_element(llhd.tuple(a_0, ..., a_n), i) => a_i
+  if (auto tupleOp = target().getDefiningOp<llhd::TupleOp>()) {
+    uint64_t index = indexAttr().getValue().getZExtValue();
+    return tupleOp.values()[index];
+  }
+
+  return nullptr;
+}
+
+//===----------------------------------------------------------------------===//
 // ExtractSliceOp
 //===----------------------------------------------------------------------===//
 
@@ -456,6 +511,28 @@ OpFoldResult llhd::ExtractSliceOp::fold(ArrayRef<Attribute> operands) {
                                 getSliceSize(), extractStart));
 
   return nullptr;
+}
+
+//===----------------------------------------------------------------------===//
+// DrvOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult llhd::DrvOp::fold(ArrayRef<Attribute> operands,
+                                SmallVectorImpl<OpFoldResult> &result) {
+  if (!enable())
+    return failure();
+
+  if (matchPattern(enable(), m_Zero())) {
+    erase();
+    return success();
+  }
+
+  if (matchPattern(enable(), m_One())) {
+    enableMutable().clear();
+    return success();
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
