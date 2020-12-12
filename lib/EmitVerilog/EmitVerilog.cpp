@@ -51,8 +51,12 @@ static bool isVerilogExpression(Operation *op) {
 /// supported.
 static int getBitWidthOrSentinel(Type type) {
   return TypeSwitch<Type, int>(type)
-      .Case<IntegerType>(
-          [](IntegerType integerType) { return integerType.getWidth(); })
+      .Case<IntegerType>([](IntegerType integerType) {
+        // Turn zero-bit values into single bit ones for simplicity.  This
+        // generates correct logic, even though it isn't efficient.
+        auto result = integerType.getWidth();
+        return result ? result : 1;
+      })
       .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
       .Case<SIntType, UIntType>([](IntType intType) {
         // Turn zero-bit values into single bit ones for simplicity.  This
@@ -299,6 +303,7 @@ public:
   // Statements.
   void emitStatementExpression(Operation *op);
   void emitStatement(AttachOp op);
+  void emitStatement(InvalidOp op);
   void emitStatement(ConnectOp op);
   void emitStatement(rtl::ConnectOp op);
   void emitStatement(rtl::OutputOp op);
@@ -1437,6 +1442,18 @@ void ModuleEmitter::emitStatement(ConnectOp op) {
   emitLocationInfoAndNewLine(ops);
 }
 
+void ModuleEmitter::emitStatement(InvalidOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  auto dest = op.operand();
+
+  indent() << "assign ";
+  emitExpression(dest, ops);
+  os << " = '0;";
+  emitLocationInfoAndNewLine(ops);
+}
+
 void ModuleEmitter::emitStatement(rtl::ConnectOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -2262,7 +2279,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitStmt(AttachOp op) { return emitter.emitStatement(op), true; }
     bool visitStmt(ConnectOp op) { return emitter.emitStatement(op), true; }
     bool visitStmt(DoneOp op) { return true; }
-    bool visitStmt(InvalidOp op) { return true; }
+    bool visitStmt(InvalidOp op) { return emitter.emitStatement(op), true; }
     bool visitStmt(PrintFOp op) { return emitter.emitStatement(op), true; }
     bool visitStmt(SkipOp op) { return true; }
     bool visitStmt(StopOp op) { return emitter.emitStatement(op), true; }

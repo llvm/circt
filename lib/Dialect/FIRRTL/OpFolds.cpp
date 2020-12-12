@@ -228,7 +228,9 @@ void BitsPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 static void replaceWithBits(Operation *op, Value input, unsigned hiBit,
                             unsigned loBit, PatternRewriter &rewriter) {
   auto resultType = op->getResult(0).getType();
-  if (bool isUnsigned = resultType.cast<IntType>().isUnsigned()) {
+  if (resultType == input.getType()) {
+    rewriter.replaceOp(op, input);
+  } else if (resultType.cast<IntType>().isUnsigned()) {
     rewriter.replaceOpWithNewOp<BitsPrimOp>(op, input, hiBit, loBit);
   } else {
     auto bits = rewriter.create<BitsPrimOp>(op->getLoc(), input, hiBit, loBit);

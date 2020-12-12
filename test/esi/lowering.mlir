@@ -8,6 +8,8 @@ module {
   // CHECK-LABEL: rtl.externmodule @Sender() -> (%x: !esi.channel<i4>)
   // CHECK-LABEL: rtl.externmodule @Reciever(!esi.channel<i4> {rtl.name = "a"})
 
+  // RTL-NOT: esi.stage
+
   rtl.module @test(%clk:i1, %rstn:i1) {
     %esiChan = rtl.instance "sender" @Sender () : () -> (!esi.channel<i4>)
     %bufferedChan = esi.buffer %clk, %rstn, %esiChan { } : i4
