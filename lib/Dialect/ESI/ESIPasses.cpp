@@ -169,7 +169,7 @@ circt::rtl::RTLExternModuleOp ESIRTLBuilder::declareStage() {
   // give the extern declation a None type since nothing else makes sense.
   // Will be refining this when we decide how to better handle parameterized
   // types and ops.
-  ArrayRef<ModulePortInfo> ports = {
+  SmallVector<ModulePortInfo, 8> ports = {
       {clk, PortDirection::INPUT, getI1Type(), 0},
       {rstn, PortDirection::INPUT, getI1Type(), 1},
       {a, PortDirection::INPUT, getNoneType(), 2},
@@ -210,7 +210,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
     return failure();
   auto stageModule = builder.declareStage();
 
-  MutableDictionaryAttr stageAttrs;
+  MutableDictionaryAttr stageAttrs = stage.getAttrs();
   size_t width = getNumBits(chPort.getInner());
   stageAttrs.set(builder.WIDTH, rewriter.getUI32IntegerAttr(width));
 
@@ -222,13 +222,14 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
       rewriter.create<UnwrapValidReady>(loc, stage.input(), tempConstant);
 
   // Instantiate the "ESI_PipelineStage" external module.
-  ArrayRef<Value> operands = {stage.clk(), stage.rstn(), unwrap.rawOutput(),
-                              unwrap.valid(), tempConstant};
-  ArrayRef<Type> resultTypes = {
+  SmallVector<Value, 5> operands = {stage.clk(), stage.rstn(),
+                                    unwrap.rawOutput(), unwrap.valid(),
+                                    tempConstant};
+  SmallVector<Type, 3> resultTypes = {
       rewriter.getI1Type(), unwrap.rawOutput().getType(), rewriter.getI1Type()};
   auto stageInst = rewriter.create<circt::rtl::InstanceOp>(
       loc, resultTypes, "pipelineStage", stageModule.getName(), operands,
-      DictionaryAttr::get(stage.getAttrs(), rewriter.getContext()));
+      stageAttrs.getDictionary(rewriter.getContext()));
   auto stageInstResults = stageInst.getResults();
   Value a_ready = stageInstResults[0];
   Value x = stageInstResults[1];
