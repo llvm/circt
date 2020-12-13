@@ -21,15 +21,15 @@ module {
 
   // CHECK-LABEL: module Top
   rtl.module @Top () {
-    // CHECK: data_vr [[IFACE:.+]]();
+    // CHECK: data_vr [[IFACE:.+]]();{{.*}}//{{.+}}
     %iface = sv.interface.instance : !sv.interface<@data_vr>
 
     // CHECK-EMPTY:
     %ifaceInPort = sv.modport.get %iface @data_in :
       !sv.interface<@data_vr> -> !sv.modport<@data_vr::@data_in>
 
-    // CHECK: Rcvr rcvr (
-    // CHECK:   .m ([[IFACE]].data_in)
+    // CHECK: Rcvr rcvr ({{.*}}//{{.+}}
+    // CHECK:   .m ([[IFACE]].data_in){{.*}}//{{.+}}
     // CHECK: );
     rtl.instance "rcvr" @Rcvr(%ifaceInPort) : (!sv.modport<@data_vr::@data_in>) -> ()
   }
