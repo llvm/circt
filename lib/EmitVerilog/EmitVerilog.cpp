@@ -1161,6 +1161,12 @@ SubExprInfo ExprEmitter::emitBitSelect(Value operand, unsigned hiBit,
   assert(x.precedence == Symbol &&
          "should be handled by isExpressionUnableToInline");
 
+  // If we're extracting the whole input, just return it.  This is valid but
+  // non-canonical IR, and we don't want to generate invalid Verilog.
+  if (loBit == 0 &&
+      unsigned(getBitWidthOrSentinel(operand.getType())) == hiBit + 1)
+    return x;
+
   os << '[' << hiBit;
   if (hiBit != loBit) // Emit x[4] instead of x[4:4].
     os << ':' << loBit;
