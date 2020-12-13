@@ -185,6 +185,10 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: rtl.icmp "ne" {{.*}}, {{.*}} : i4
     %46 = firrtl.neq %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
 
+    // Noop
+    %47 = firrtl.asClock %44 : (!firrtl.uint<1>) -> !firrtl.clock
+    %48 = firrtl.asAsyncReset %44 : (!firrtl.uint<1>) -> !firrtl.asyncreset
+
     // CHECK-NEXT: rtl.output %tmp3, %tmp3 : i4, i4
     rtl.output %tmp3, %tmp3 : i4,i4
   }
@@ -353,5 +357,6 @@ module attributes {firrtl.mainModule = "Simple"} {
     %3 = firrtl.stdIntCast %2 : (!firrtl.uint<1>) -> i1
     rtl.output %3 : i1
   }
+
 }
 
