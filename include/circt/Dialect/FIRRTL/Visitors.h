@@ -39,7 +39,7 @@ public:
             TailPrimOp, AsPassivePrimOp, AsNonPassivePrimOp,
 
             // Standard Dialect integer conversion.
-            StdIntCast>([&](auto expr) -> ResultType {
+            StdIntCastOp>([&](auto expr) -> ResultType {
           return thisCast->visitExpr(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -132,7 +132,7 @@ public:
   HANDLE(AsNonPassivePrimOp, Unhandled);
 
   // Standard Dialect integer conversion.
-  HANDLE(StdIntCast, Unhandled);
+  HANDLE(StdIntCastOp, Unhandled);
 #undef HANDLE
 };
 

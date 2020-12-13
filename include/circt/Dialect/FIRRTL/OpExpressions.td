@@ -438,7 +438,7 @@ def IntCastType : AnyTypeOf<[PassiveType, AnySignlessInteger],
 
 // This operation converts from an SInt/UInt/Clock/etc to a signless integer
 // type, or visa-versa.  FIRRTL source/destination types must be passive.
-def StdIntCast : FIRRTLOp<"stdIntCast", [NoSideEffect]> {
+def StdIntCastOp : FIRRTLOp<"stdIntCast", [NoSideEffect]> {
   let arguments = (ins IntCastType:$input);
   let results = (outs IntCastType:$result);
 
@@ -447,7 +447,7 @@ def StdIntCast : FIRRTLOp<"stdIntCast", [NoSideEffect]> {
   }];
 
   let hasFolder = 1;
-  let verifier = [{ return ::verifyStdIntCast(*this); }];
+  let verifier = [{ return ::verifyStdIntCastOp(*this); }];
 }
 
 // MLIR specific pseudo ops.
