@@ -342,9 +342,10 @@ module attributes {firrtl.mainModule = "Simple"} {
     firrtl.connect %tmp48, %0 : !firrtl.uint<27>, !firrtl.uint<27>
   }
 
+  // https://github.com/llvm/circt/issues/318
   // CHECK-LABEL: rtl.module @test_rem
-  // CHECK-NOT:     firrtl.std
-  // CHECK:       rtl.output
+  // CHECK-NEXT:     %0 = rtl.modu
+  // CHECK-NEXT:     rtl.output %0
   rtl.module @test_rem(%tmp85: i1, %tmp79: i1) -> (%tmp106: i1) {
     %0 = firrtl.stdIntCast %tmp85 : (i1) -> !firrtl.uint<1>
     %1 = firrtl.stdIntCast %tmp79 : (i1) -> !firrtl.uint<1>
