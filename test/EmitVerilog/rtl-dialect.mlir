@@ -223,8 +223,17 @@ module {
     %1 = rtl.extract %tmp85 from 0 : (i1) -> i1
     rtl.output %1 : i1
   }
-
   // CHECK-LABEL: module extract_all
   // CHECK:  assign tmp106 = tmp85;
+
+  // https://github.com/llvm/circt/issues/320
+  rtl.module @literal_extract(%inp_1: i349) -> (%tmp6: i349) {
+    %c-58836_i17 = rtl.constant(-58836 : i17) : i17
+    %0 = rtl.sext %c-58836_i17 : (i17) -> i349
+    rtl.output %0 : i349
+  }
+  // CHECK-LABEL: module literal_extract
+  // CHECK: wire [16:0] _T = 17'h11A2C;
+  // CHECK: assign tmp6 = {{[{][{]}}332{_T[16]}}, _T};
 }
 

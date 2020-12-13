@@ -2038,7 +2038,8 @@ static bool isOkToBitSelectFrom(Value v) {
 }
 
 /// Return true if we are unable to ever inline the specified operation.  This
-/// happens because not all Verilog expressions are composable.
+/// happens because not all Verilog expressions are composable, notably you can
+/// only use bit selects like x[4:6] on simple expressions.
 static bool isExpressionUnableToInline(Operation *op) {
   // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
@@ -2052,10 +2053,20 @@ static bool isExpressionUnableToInline(Operation *op) {
       if (!isOkToBitSelectFrom(op->getResult(0)))
         return true;
 
+    // Signed pad is emits a bit extract since it is a sign extend.
     if (auto pad = dyn_cast<PadPrimOp>(user)) {
       auto inType = getTypeOf<IntType>(pad.getOperand());
       auto inWidth = inType.getWidthOrSentinel();
       if (unsigned(inWidth) > pad.amount() &&
+          !isOkToBitSelectFrom(op->getResult(0)))
+        return true;
+    }
+
+    // Sign extend (when the operand isn't a single bit) requires a bitselect
+    // syntactically.
+    if (auto sext = dyn_cast<rtl::SExtOp>(user)) {
+      auto sextOperandType = sext.getOperand().getType().cast<IntegerType>();
+      if (sextOperandType.getWidth() != 1 &&
           !isOkToBitSelectFrom(op->getResult(0)))
         return true;
     }
