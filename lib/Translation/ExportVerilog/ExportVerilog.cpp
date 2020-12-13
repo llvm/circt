@@ -70,10 +70,6 @@ static int getBitWidthOrSentinel(Type type) {
       .Case<FlipType>([](FlipType flipType) {
         return getBitWidthOrSentinel(flipType.getElementType());
       })
-      .Case<sv::InterfaceType, sv::ModportType>([](Type) {
-        // Treat interfaces and modports as single-bit.
-        return 1;
-      })
       .Default([](Type) { return -1; });
 }
 
@@ -2261,6 +2257,10 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
         flattenBundleTypes(dataType, "", false, fieldTypes);
 
     for (const auto &elt : fieldTypes) {
+      // Skip over SV interface types, which don't have any emitted width.
+      if (elt.type.isa<sv::InterfaceType>())
+        continue;
+
       int bitWidth = getBitWidthOrSentinel(elt.type);
       if (bitWidth == -1) {
         emitError(&op, getName(result))
@@ -2298,13 +2298,19 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     for (const auto &elt : fieldTypes) {
       indent() << word;
       os.indent(maxDeclNameWidth - word.size() + 1);
-      emitTypePaddedToWidth(elt.type, maxTypeWidth, decl);
-      os << getName(decl->getResult(0)) << elt.suffix;
-      // Interface instantiations have parentheses like a module with no ports.
-      if (isa<sv::InterfaceInstanceOp>(decl))
-        os << "()";
-      os << ';';
 
+      // Skip over SV interface types, which don't have any emitted width.
+      bool isInterface = elt.type.isa<sv::InterfaceType>();
+      if (!isInterface)
+        emitTypePaddedToWidth(elt.type, maxTypeWidth, decl);
+
+      os << getName(decl->getResult(0)) << elt.suffix;
+
+      // Interface instantiations have parentheses like a module with no ports.
+      if (isInterface)
+        os << "()";
+
+      os << ';';
       if (isFirst)
         emitLocationInfoAndNewLine(ops);
       else
