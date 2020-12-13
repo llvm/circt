@@ -1,3 +1,8 @@
+;; FIXME: This test should eventually be removed, presumably when the firrtl
+;; dialect support gets removed.  It is testing three different things (parsing
+;; firrtl, emitting verilog, and lower-to-rtl) which should be factored into
+;; those buckets correctly.
+
 ; RUN: circt-translate -parse-fir --mlir-print-debuginfo %s | circt-translate -emit-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 ; Some day this should filecheck:
