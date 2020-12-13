@@ -216,5 +216,15 @@ module {
   //rtl.module @issue316(%inp_0: i0) {
   //  rtl.output
   //}
+
+  // https://github.com/llvm/circt/issues/318
+  // This shouldn't generate invalid Verilog
+  rtl.module @extract_all(%tmp85: i1) -> (%tmp106: i1) {
+    %1 = rtl.extract %tmp85 from 0 : (i1) -> i1
+    rtl.output %1 : i1
+  }
+
+  // CHECK-LABEL: module extract_all
+  // CHECK:  assign tmp106 = tmp85;
 }
 
