@@ -341,5 +341,16 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: rtl.connect %tmp48, %1 : i27
     firrtl.connect %tmp48, %0 : !firrtl.uint<27>, !firrtl.uint<27>
   }
+
+  // CHECK-LABEL: rtl.module @test_rem
+  // CHECK-NOT:     firrtl.std
+  // CHECK:       rtl.output
+  rtl.module @test_rem(%tmp85: i1, %tmp79: i1) -> (%tmp106: i1) {
+    %0 = firrtl.stdIntCast %tmp85 : (i1) -> !firrtl.uint<1>
+    %1 = firrtl.stdIntCast %tmp79 : (i1) -> !firrtl.uint<1>
+    %2 = firrtl.rem %1, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %3 = firrtl.stdIntCast %2 : (!firrtl.uint<1>) -> i1
+    rtl.output %3 : i1
+  }
 }
 
