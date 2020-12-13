@@ -184,6 +184,9 @@ void FIRRTLModuleLowering::runOnOperation() {
   getOperation().setAttr("firrtl.mainModule",
                          StringAttr::get(circuit.name(), circuit.getContext()));
   circuit.erase();
+
+  // Clear out the value mapping for next time, so we don't have dangling keys.
+  valueMapping.clear();
 }
 
 LogicalResult
