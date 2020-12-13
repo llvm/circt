@@ -529,6 +529,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult lowerNoopCast(Operation *op);
   LogicalResult visitExpr(AsSIntPrimOp op) { return lowerNoopCast(op); }
   LogicalResult visitExpr(AsUIntPrimOp op) { return lowerNoopCast(op); }
+  LogicalResult visitExpr(StdIntCast op);
   LogicalResult visitExpr(CvtPrimOp op);
   LogicalResult visitExpr(NotPrimOp op);
   LogicalResult visitExpr(NegPrimOp op);
@@ -538,7 +539,6 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(OrRPrimOp op);
 
   // Binary Ops.
-
   template <typename ResultUnsignedOpType,
             typename ResultSignedOpType = ResultUnsignedOpType>
   LogicalResult lowerBinOp(Operation *op);
@@ -866,6 +866,20 @@ LogicalResult FIRRTLLowering::lowerNoopCast(Operation *op) {
 
   // Noop cast.
   return setLowering(op->getResult(0), operand);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(StdIntCast op) {
+  // We lower firrtl.stdIntCast converting from a firrtl type to a standard type
+  // into the lowered operand.  Coversions the other way aren't touched.
+  if (!op.getType().isa<IntegerType>())
+    return failure();
+
+  auto result = getLoweredValue(op.getOperand());
+  if (!result)
+    return failure();
+
+  op.replaceAllUsesWith(result);
+  return success();
 }
 
 LogicalResult FIRRTLLowering::visitExpr(CvtPrimOp op) {
