@@ -184,9 +184,6 @@ void FIRRTLModuleLowering::runOnOperation() {
   getOperation().setAttr("firrtl.mainModule",
                          StringAttr::get(circuit.name(), circuit.getContext()));
   circuit.erase();
-
-  // Clear out the value mapping for next time, so we don't have dangling keys.
-  valueMapping.clear();
 }
 
 LogicalResult
@@ -682,7 +679,6 @@ void FIRRTLLowering::runOnOperation() {
       // If lowering didn't succeed, then make sure to rewrite operands that
       // refer to lowered values.
       handleUnloweredOp(&op);
-
       // If this was a cast, try to remove it on a best-effort basis.  These are
       // generally from module port lowering and instance lowering.
       if (isa<AsPassivePrimOp>(op) || isa<AsNonPassivePrimOp>(op) ||
@@ -707,6 +703,9 @@ void FIRRTLLowering::runOnOperation() {
     if (cast->use_empty())
       cast->erase();
   }
+
+  // Clear out the value mapping for next time, so we don't have dangling keys.
+  valueMapping.clear();
 }
 
 //===----------------------------------------------------------------------===//
