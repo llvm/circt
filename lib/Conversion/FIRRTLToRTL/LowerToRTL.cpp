@@ -796,7 +796,7 @@ LogicalResult FIRRTLLowering::setLowering(Value orig, Value result) {
 template <typename ResultOpType, typename... CtorArgTypes>
 LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
                                             CtorArgTypes... args) {
-  auto result = builder->create<ResultOpType>(args...);
+  auto result = builder->createOrFold<ResultOpType>(args...);
   return setLowering(orig->getResult(0), result);
 }
 
@@ -1069,6 +1069,7 @@ LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
   } else {
     modInst = builder->create<rtl::ModSOp>(ValueRange({lhs, rhs}));
   }
+
   return setLoweringTo<rtl::ExtractOp>(op, resultType, modInst, 0);
 }
 
