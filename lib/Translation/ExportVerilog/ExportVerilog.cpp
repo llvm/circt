@@ -2194,14 +2194,16 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
   // Return the word (e.g. "wire") in Verilog to declare the specified thing.
   auto getVerilogDeclWord = [](Operation *op) -> StringRef {
-    // Note: MemOp is handled as "wire" here because each of its subcomponents
-    // are wires.  The corresponding 'reg' decl is handled specially below.
     if (isa<RegOp>(op) || isa<RegInitOp>(op))
       return "reg";
-    else if (auto interface = dyn_cast<sv::InterfaceInstanceOp>(op))
+
+    // Interfaces instances use the name of the declared interface.
+    if (auto interface = dyn_cast<sv::InterfaceInstanceOp>(op))
       return interface.getInterfaceType().getInterface().getValue();
-    else
-      return "wire";
+
+    // Note: MemOp is handled as "wire" here because each of its subcomponents
+    // are wires.  The corresponding 'reg' decl is handled specially below.
+    return "wire";
   };
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
