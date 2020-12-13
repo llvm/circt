@@ -21,6 +21,7 @@ add_circt_dialect_library(MLIRESI
   MLIRIR
   MLIRTransforms
   CIRCTSupport
+  CIRCTSV
   )
 
 
