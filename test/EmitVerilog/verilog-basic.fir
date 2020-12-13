@@ -37,7 +37,7 @@ circuit inputs_only :
     out1 <= xorr(in4)
     out1 <= andr(in4)
     out1 <= orr(in4)
-    out1 <= not(in4)
+    out4 <= not(in4)
     out4 <= rem(in4, UInt<4>("h1"))
     out1 <= asUInt(clock)
     out1 <= asUInt(asClock(UInt<1>("h1")))
@@ -84,7 +84,7 @@ circuit inputs_only :
 ; CHECK-NEXT:     assign out1 = ^in4;
 ; CHECK-NEXT:     assign out1 = &in4;
 ; CHECK-NEXT:     assign out1 = |in4;
-; CHECK-NEXT:     assign out1 = ~in4;
+; CHECK-NEXT:     assign out4 = ~in4;
 ; CHECK-NEXT:     assign out4 = in4 % 4'h1;
 ; CHECK-NEXT:     assign out1 = clock;
 ; CHECK-NEXT:     assign out1 = 1'h1;
@@ -242,11 +242,13 @@ circuit inputs_only :
 
 ; CHECK-LABEL: module MultiUseExpr(
 ; CHECK-NEXT:    input  [3:0] a,
-; CHECK-NEXT:    output       b);
+; CHECK-NEXT:    output       b,
+; CHECK-NEXT:    output [1:0] b2);
 ; CHECK-EMPTY:
   module MultiUseExpr :
     input a: UInt<4>
     output b: UInt<1>
+    output b2: UInt<2>
     ;; These node decls disappear in MLIR because of the _T name.  The verilog
     ;; emitter needs to reintroduce it as an 'assign' to a local.
 
@@ -266,8 +268,8 @@ circuit inputs_only :
     ; This expression isn't multiply used but needs to be emitted separately
     ; because Verilog bit select expressions don't compose generally.
     ; CHECK-NEXT: wire [3:0] _T_1 = ~a;
-    ; CHECK-NEXT: assign b = _T_1[3:2];
-    b <= shr(not(a), 2)
+    ; CHECK-NEXT: assign b2 = _T_1[3:2];
+    b2 <= shr(not(a), 2)
 
     ; CHECK-NEXT:  endmodule
 
@@ -645,7 +647,7 @@ circuit inputs_only :
   ; CHECK-LABEL: module Locations(
   module Locations :
     input a: UInt<4>
-    output b: UInt<4>
+    output b: UInt<12>
     node _T_1 = add(a, a)                 @[Place.scala 101:13]
     node _T_2 = add(_T_1, UInt<4>("h3"))  @[Other.scala 51:15]
     b <= xor(_T_2, UInt<4>("h11"))        @[Place.scala 101:15]

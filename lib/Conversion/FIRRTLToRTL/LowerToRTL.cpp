@@ -531,6 +531,9 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(AsUIntPrimOp op) { return lowerNoopCast(op); }
   LogicalResult visitExpr(AsPassivePrimOp op) { return lowerNoopCast(op); }
   LogicalResult visitExpr(AsNonPassivePrimOp op) { return lowerNoopCast(op); }
+  LogicalResult visitExpr(AsClockPrimOp op) { return lowerNoopCast(op); }
+  LogicalResult visitExpr(AsAsyncResetPrimOp op) { return lowerNoopCast(op); }
+
   LogicalResult visitExpr(StdIntCastOp op);
   LogicalResult visitExpr(CvtPrimOp op);
   LogicalResult visitExpr(NotPrimOp op);
@@ -599,6 +602,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(TailPrimOp op);
   LogicalResult visitExpr(MuxPrimOp op);
   LogicalResult visitExpr(ValidIfPrimOp op);
+  LogicalResult visitExpr(AttachOp op);
 
   // Statements
   LogicalResult visitStmt(ConnectOp op);
@@ -1182,6 +1186,9 @@ LogicalResult FIRRTLLowering::visitExpr(ValidIfPrimOp op) {
 
   return setLowering(op, val);
 }
+
+// TODO: Support attach.
+LogicalResult FIRRTLLowering::visitExpr(AttachOp op) { return failure(); }
 
 //===----------------------------------------------------------------------===//
 // Statements
