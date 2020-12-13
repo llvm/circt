@@ -437,9 +437,9 @@ void TailPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 // Conversions
 //===----------------------------------------------------------------------===//
 
-OpFoldResult StdIntCast::fold(ArrayRef<Attribute> operands) {
+OpFoldResult StdIntCastOp::fold(ArrayRef<Attribute> operands) {
   if (auto castInput =
-          dyn_cast_or_null<StdIntCast>(getOperand().getDefiningOp()))
+          dyn_cast_or_null<StdIntCastOp>(getOperand().getDefiningOp()))
     if (castInput.getOperand().getType() == getType())
       return castInput.getOperand();
 

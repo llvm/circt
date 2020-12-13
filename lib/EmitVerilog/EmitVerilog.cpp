@@ -866,7 +866,7 @@ private:
   SubExprInfo visitExpr(ShrPrimOp op);
 
   // Conversion to/from standard integer types is a noop.
-  SubExprInfo visitExpr(StdIntCast op) { return emitNoopCast(op); }
+  SubExprInfo visitExpr(StdIntCastOp op) { return emitNoopCast(op); }
 
   // RTL Dialect Operations
   using CombinatorialVisitor::visitComb;

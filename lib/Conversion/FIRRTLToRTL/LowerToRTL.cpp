@@ -42,7 +42,7 @@ static Type lowerType(Type type) {
 /// Cast from a standard type to a FIRRTL type, potentially with a flip.
 static Value castToFIRRTLType(Value val, Type type,
                               ImplicitLocOpBuilder &builder) {
-  val = builder.createOrFold<StdIntCast>(
+  val = builder.createOrFold<StdIntCastOp>(
       type.cast<FIRRTLType>().getPassiveType(), val);
 
   // Handle the flip type if needed.
@@ -56,7 +56,7 @@ static Value castFromFIRRTLType(Value val, Type type,
                                 ImplicitLocOpBuilder &builder) {
   // Strip off Flip type if needed.
   val = builder.createOrFold<AsPassivePrimOp>(val);
-  return builder.createOrFold<StdIntCast>(type, val);
+  return builder.createOrFold<StdIntCastOp>(type, val);
 }
 
 /// Given a value of standard integer type, convert it to the specified integer
@@ -529,7 +529,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult lowerNoopCast(Operation *op);
   LogicalResult visitExpr(AsSIntPrimOp op) { return lowerNoopCast(op); }
   LogicalResult visitExpr(AsUIntPrimOp op) { return lowerNoopCast(op); }
-  LogicalResult visitExpr(StdIntCast op);
+  LogicalResult visitExpr(StdIntCastOp op);
   LogicalResult visitExpr(CvtPrimOp op);
   LogicalResult visitExpr(NotPrimOp op);
   LogicalResult visitExpr(NegPrimOp op);
@@ -683,7 +683,7 @@ void FIRRTLLowering::runOnOperation() {
       // If this was a cast, try to remove it on a best-effort basis.  These are
       // generally from module port lowering and instance lowering.
       if (isa<AsPassivePrimOp>(op) || isa<AsNonPassivePrimOp>(op) ||
-          isa<StdIntCast>(op))
+          isa<StdIntCastOp>(op))
         castsToTryRemove.push_back(&op);
     }
   }
@@ -736,7 +736,7 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
 
   // Cast FIRRTL -> standard type.
   value = builder->createOrFold<AsPassivePrimOp>(value);
-  return builder->createOrFold<StdIntCast>(resultType, value);
+  return builder->createOrFold<StdIntCastOp>(resultType, value);
 }
 
 /// Return the lowered value corresponding to the specified original value and
@@ -868,7 +868,7 @@ LogicalResult FIRRTLLowering::lowerNoopCast(Operation *op) {
   return setLowering(op->getResult(0), operand);
 }
 
-LogicalResult FIRRTLLowering::visitExpr(StdIntCast op) {
+LogicalResult FIRRTLLowering::visitExpr(StdIntCastOp op) {
   // We lower firrtl.stdIntCast converting from a firrtl type to a standard type
   // into the lowered operand.  Coversions the other way aren't touched.
   if (!op.getType().isa<IntegerType>())

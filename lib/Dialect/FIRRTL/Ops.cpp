@@ -1277,7 +1277,7 @@ FIRRTLType TailPrimOp::getResultType(FIRRTLType input, int32_t amount,
 // Conversions to/from fixed-width signless integer types in standard dialect.
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyStdIntCast(StdIntCast cast) {
+static LogicalResult verifyStdIntCastOp(StdIntCastOp cast) {
   // Either the input or result must have signless standard integer type, the
   // other must be a FIRRTL type that lowers to one, and their widths must
   // match.
