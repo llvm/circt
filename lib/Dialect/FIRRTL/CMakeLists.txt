@@ -13,6 +13,7 @@ add_circt_dialect_library(MLIRFIRRTL
   Support
 
   LINK_LIBS PUBLIC
+  MLIRRTL
   MLIRIR
   MLIRPass
   )
