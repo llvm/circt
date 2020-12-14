@@ -62,7 +62,7 @@ static ParseResult parseCircuitOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-static LogicalResult verifyCircuitOp(CircuitOp &circuit) {
+static LogicalResult verifyCircuitOp(CircuitOp circuit) {
   StringRef main = circuit.name();
 
   // Check that the circuit has a non-empty name.
@@ -455,7 +455,7 @@ static ParseResult parseFExtModuleOp(OpAsmParser &parser,
   return parseFModuleOp(parser, result, /*isExtModule:*/ true);
 }
 
-static LogicalResult verifyFModuleOp(FModuleOp &module) {
+static LogicalResult verifyFModuleOp(FModuleOp module) {
   // The parent op must be a circuit op.
   auto parentOp = dyn_cast_or_null<CircuitOp>(module.getParentOp());
   if (!parentOp) {
@@ -466,7 +466,7 @@ static LogicalResult verifyFModuleOp(FModuleOp &module) {
   return success();
 }
 
-static LogicalResult verifyFExtModuleOp(FExtModuleOp &op) {
+static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
   auto paramDictOpt = op.parameters();
   if (!paramDictOpt)
     return success();
@@ -501,7 +501,7 @@ Operation *InstanceOp::getReferencedModule() {
 }
 
 /// Verify the correctness of an InstanceOp.
-static LogicalResult verifyInstanceOp(InstanceOp &instance) {
+static LogicalResult verifyInstanceOp(InstanceOp instance) {
 
   // Check that this instance is inside a module.
   auto module = instance.getParentOfType<FModuleOp>();

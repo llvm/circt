@@ -306,6 +306,7 @@ public:
   void emitStatement(InvalidOp op);
   void emitStatement(ConnectOp op);
   void emitStatement(rtl::ConnectOp op);
+  void emitStatement(sv::AliasOp op);
   void emitStatement(rtl::OutputOp op);
   void emitStatement(rtl::InstanceOp op);
   void emitStatement(PrintFOp op);
@@ -1472,6 +1473,17 @@ void ModuleEmitter::emitStatement(rtl::ConnectOp op) {
   emitLocationInfoAndNewLine(ops);
 }
 
+void ModuleEmitter::emitStatement(sv::AliasOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent() << "alias ";
+  llvm::interleave(
+      op.getOperands(), os, [&](Value v) { emitExpression(v, ops); }, " = ");
+  os << ';';
+  emitLocationInfoAndNewLine(ops);
+}
+
 /// For OutputOp we put "assign" statements at the end of the Verilog module to
 /// assign the module outputs to intermediate wires.
 void ModuleEmitter::emitStatement(rtl::OutputOp op) {
@@ -2356,6 +2368,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitSV(sv::AlwaysAtPosEdgeOp op) {
       return emitter.emitStatement(op), true;
     }
+    bool visitSV(sv::AliasOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::FWriteOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::FatalOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::FinishOp op) { return emitter.emitStatement(op), true; }
