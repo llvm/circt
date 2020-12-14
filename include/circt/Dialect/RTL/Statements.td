@@ -44,6 +44,10 @@ def ReadInOutOp
   let arguments = (ins InOutType:$input);
   let results = (outs AnyType:$result);
 
+  let builders = [
+    OpBuilderDAG<(ins "Value":$input)>
+  ];
+
   let assemblyFormat = [{
     $input attr-dict `:` type($result)
   }];

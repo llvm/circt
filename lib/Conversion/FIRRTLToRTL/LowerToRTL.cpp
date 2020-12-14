@@ -547,6 +547,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(AsAsyncResetPrimOp op) { return lowerNoopCast(op); }
 
   LogicalResult visitExpr(StdIntCastOp op);
+  LogicalResult visitExpr(AnalogInOutCastOp op);
   LogicalResult visitExpr(CvtPrimOp op);
   LogicalResult visitExpr(NotPrimOp op);
   LogicalResult visitExpr(NegPrimOp op);
@@ -869,6 +870,12 @@ LogicalResult FIRRTLLowering::lowerNoopCast(Operation *op) {
   if (!operand)
     return failure();
 
+  // Various noop casts (e.g. converting to Clock) allow input analog values.
+  // These get lowered as an inout type, so we need to strip this off if we
+  // get it, effectively and lvalue to rvalue conversion.
+  if (operand.getType().isa<rtl::InOutType>())
+    return setLoweringTo<rtl::ReadInOutOp>(op, operand);
+
   // Noop cast.
   return setLowering(op->getResult(0), operand);
 }
@@ -885,6 +892,21 @@ LogicalResult FIRRTLLowering::visitExpr(StdIntCastOp op) {
 
   // We lower firrtl.stdIntCast converting from a firrtl type to a standard type
   // into the lowered operand.
+  op.replaceAllUsesWith(result);
+  return success();
+}
+
+LogicalResult FIRRTLLowering::visitExpr(AnalogInOutCastOp op) {
+  auto result = getLoweredValue(op.getOperand());
+  if (!result)
+    return failure();
+
+  // Conversions from inout types to analog type are lowered as the input.
+  if (op.getType().isa<AnalogType>())
+    return setLowering(op, result);
+
+  // We lower firrtl.analogInOutCast converting from a firrtl type to an InOut
+  // type into the lowered operand.
   op.replaceAllUsesWith(result);
   return success();
 }

@@ -38,8 +38,8 @@ public:
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, AsPassivePrimOp, AsNonPassivePrimOp,
 
-            // Standard Dialect integer conversion.
-            StdIntCastOp>([&](auto expr) -> ResultType {
+            // Conversion from FIRRTL to RTL dialect types.
+            StdIntCastOp, AnalogInOutCastOp>([&](auto expr) -> ResultType {
           return thisCast->visitExpr(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -131,8 +131,9 @@ public:
   HANDLE(AsPassivePrimOp, Unhandled);
   HANDLE(AsNonPassivePrimOp, Unhandled);
 
-  // Standard Dialect integer conversion.
+  // Conversion from FIRRTL to RTL dialect types.
   HANDLE(StdIntCastOp, Unhandled);
+  HANDLE(AnalogInOutCastOp, Unhandled);
 #undef HANDLE
 };
 
