@@ -31,13 +31,13 @@ using namespace circt::esi;
 /// here is probably a giant hack. TODO: Establish a canonical method to get
 /// this information.
 static size_t getNumBits(Type type) {
-  size_t w = 0;
-  llvm::TypeSwitch<::mlir::Type>(type)
-      .Case<IntegerType>([&](IntegerType t) { w = t.getIntOrFloatBitWidth(); })
-      .Case<circt::rtl::ArrayType>([&](circt::rtl::ArrayType a) {
-        w = a.getSize() * getNumBits(a.getInnerType());
-      });
-  return w;
+  return llvm::TypeSwitch<::mlir::Type, size_t>(type)
+      .Case<IntegerType>(
+          [](IntegerType t) { return t.getIntOrFloatBitWidth(); })
+      .Case<circt::rtl::ArrayType>([](circt::rtl::ArrayType a) {
+        return a.getSize() * getNumBits(a.getInnerType());
+      })
+      .Default([](Type) { return 0; });
 }
 
 //===----------------------------------------------------------------------===//
