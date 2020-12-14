@@ -450,6 +450,20 @@ def StdIntCastOp : FIRRTLOp<"stdIntCast", [NoSideEffect]> {
   let verifier = [{ return ::verifyStdIntCastOp(*this); }];
 }
 
+// This operation converts from an Analog type to an InOut type of the
+// corresponding width, or visa-versa.
+def AnalogInOutCastOp : FIRRTLOp<"analogInOutCast", [NoSideEffect]> {
+  let arguments = (ins AnyType:$input);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    $input attr-dict `:` functional-type($input, $result)
+  }];
+
+  let hasFolder = 1;
+  let verifier = [{ return ::verifyAnalogInOutCastOp(*this); }];
+}
+
 // MLIR specific pseudo ops.
 
 // Convert a value with non-passive type to a value with passive type.

@@ -5,6 +5,7 @@
 #include "circt/Dialect/FIRRTL/Ops.h"
 #include "circt/Dialect/FIRRTL/Types.h"
 #include "circt/Dialect/FIRRTL/Visitors.h"
+#include "circt/Dialect/RTL/Types.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
@@ -1303,6 +1304,40 @@ static LogicalResult verifyStdIntCastOp(StdIntCastOp cast) {
   if (!integerType.isSignless())
     return cast.emitError("standard integer type must be signless");
   if (unsigned(intWidth) != integerType.getWidth())
+    return cast.emitError("source and result width must match");
+
+  return success();
+}
+
+static LogicalResult verifyAnalogInOutCastOp(AnalogInOutCastOp cast) {
+  AnalogType firType;
+  rtl::InOutType inoutType;
+
+  if ((firType = cast.getOperand().getType().dyn_cast<AnalogType>())) {
+    inoutType = cast.getType().dyn_cast<rtl::InOutType>();
+    if (!inoutType)
+      return cast.emitError("result type must be an inout type");
+  } else if ((firType = cast.getType().dyn_cast<AnalogType>())) {
+    inoutType = cast.getOperand().getType().dyn_cast<rtl::InOutType>();
+    if (!inoutType)
+      return cast.emitError("operand type must be an inout type");
+  } else {
+    return cast.emitError("either source or result type must be analog type");
+  }
+
+  // The inout type must wrap an integer.
+  auto integerType = inoutType.getElementType().dyn_cast<IntegerType>();
+  if (!integerType)
+    return cast.emitError("inout type must wrap an integer");
+
+  int32_t width = firType.getBitWidthOrSentinel();
+  if (width == -2)
+    return cast.emitError("firrtl type isn't simple bit type");
+  if (width == -1)
+    return cast.emitError("Analog type must have a width");
+  if (!integerType.isSignless())
+    return cast.emitError("standard integer type must be signless");
+  if (unsigned(width) != integerType.getWidth())
     return cast.emitError("source and result width must match");
 
   return success();

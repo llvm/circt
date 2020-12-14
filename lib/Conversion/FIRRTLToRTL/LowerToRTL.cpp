@@ -8,6 +8,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/FIRRTL/Visitors.h"
 #include "circt/Dialect/RTL/Ops.h"
+#include "circt/Dialect/RTL/Types.h"
 #include "circt/Dialect/SV/Ops.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
 #include "mlir/IR/StandardTypes.h"
@@ -42,12 +43,17 @@ static Type lowerType(Type type) {
 /// Cast from a standard type to a FIRRTL type, potentially with a flip.
 static Value castToFIRRTLType(Value val, Type type,
                               ImplicitLocOpBuilder &builder) {
-  val = builder.createOrFold<StdIntCastOp>(
-      type.cast<FIRRTLType>().getPassiveType(), val);
+  auto firType = type.cast<FIRRTLType>();
+
+  // If this was an Analog type, it will be converted to an InOut type.
+  if (type.isa<AnalogType>())
+    return builder.create<AnalogInOutCastOp>(firType, val);
+
+  val = builder.createOrFold<StdIntCastOp>(firType.getPassiveType(), val);
 
   // Handle the flip type if needed.
   if (type != val.getType())
-    val = builder.createOrFold<AsNonPassivePrimOp>(type, val);
+    val = builder.createOrFold<AsNonPassivePrimOp>(firType, val);
   return val;
 }
 
@@ -207,7 +213,13 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
     }
 
     // Figure out the direction of the port.
-    if (firrtlPort.isOutput()) {
+    if (firrtlPort.type.isa<AnalogType>()) {
+      // If the port is analog, then it is implicitly inout.
+      rtlPort.type =
+          rtl::InOutType::get(rtlPort.type.getContext(), rtlPort.type);
+      rtlPort.direction = rtl::PortDirection::INOUT;
+      rtlPort.argNum = numArgs++;
+    } else if (firrtlPort.isOutput()) {
       rtlPort.direction = rtl::PortDirection::OUTPUT;
       rtlPort.argNum = numResults++;
     } else if (firrtlPort.isInput()) {
