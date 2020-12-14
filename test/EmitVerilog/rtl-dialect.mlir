@@ -98,13 +98,13 @@ module {
   // CHECK-NEXT:   assign r33 = cond ? a : b;
   // CHECK-NEXT: endmodule
 
-  rtl.module @B(%a: i1 { rtl.inout }) -> (%b: i1, %c: i1) {
+  rtl.module @B(%a: i1) -> (%b: i1, %c: i1) {
     %0 = rtl.or %a, %a : i1
     %1 = rtl.and %a, %a : i1
     rtl.output %0, %1 : i1, i1
   }
   // CHECK-LABEL: module B(
-  // CHECK-NEXT:   inout  a,
+  // CHECK-NEXT:   input  a,
   // CHECK-NEXT:   output b, c);
   // CHECK-EMPTY:
   // CHECK-NEXT:   assign b = a | a;
