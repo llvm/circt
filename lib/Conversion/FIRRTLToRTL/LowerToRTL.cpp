@@ -615,7 +615,6 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(TailPrimOp op);
   LogicalResult visitExpr(MuxPrimOp op);
   LogicalResult visitExpr(ValidIfPrimOp op);
-  LogicalResult visitExpr(AttachOp op);
 
   // Statements
   LogicalResult visitStmt(ConnectOp op);
@@ -625,6 +624,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitStmt(AssertOp op);
   LogicalResult visitStmt(AssumeOp op);
   LogicalResult visitStmt(CoverOp op);
+  LogicalResult visitStmt(AttachOp op);
 
 private:
   /// This builder is set to the right location for each visit call.
@@ -634,39 +634,8 @@ private:
   /// key should have a FIRRTL type, the result will have an RTL dialect type.
   DenseMap<Value, Value> valueMapping;
 
-  /// Template for lowering verification statements from type A to
-  /// type B.
-  ///
-  /// For example, lowering the "foo" op to the "bar" op would start
-  /// with:
-  ///
-  ///     foo(clock, condition, enable, "message")
-  ///
-  /// This becomes a Verilog clocking block with the "bar" op guarded
-  /// by an if enable:
-  ///
-  ///     always @(posedge clock) begin
-  ///       if (enable) begin
-  ///         bar(condition);
-  ///       end
-  ///     end
   template <typename AOpTy, typename BOpTy>
-  LogicalResult lowerVerificationStatement(AOpTy op) {
-    auto clock = getLoweredValue(op.clock());
-    auto enable = getLoweredValue(op.enable());
-    auto predicate = getLoweredValue(op.predicate());
-    if (!clock || !enable || !predicate)
-      return failure();
-
-    builder->create<sv::AlwaysAtPosEdgeOp>(clock, [&]() {
-      builder->create<sv::IfOp>(enable, [&]() {
-        // Create BOpTy inside the always/if.
-        builder->create<BOpTy>(predicate);
-      });
-    });
-
-    return success();
-  }
+  LogicalResult lowerVerificationStatement(AOpTy op);
 };
 } // end anonymous namespace
 
@@ -1221,9 +1190,6 @@ LogicalResult FIRRTLLowering::visitExpr(ValidIfPrimOp op) {
   return setLowering(op, val);
 }
 
-// TODO: Support attach.
-LogicalResult FIRRTLLowering::visitExpr(AttachOp op) { return failure(); }
-
 //===----------------------------------------------------------------------===//
 // Statements
 //===----------------------------------------------------------------------===//
@@ -1320,6 +1286,40 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
   return success();
 }
 
+/// Template for lowering verification statements from type A to
+/// type B.
+///
+/// For example, lowering the "foo" op to the "bar" op would start
+/// with:
+///
+///     foo(clock, condition, enable, "message")
+///
+/// This becomes a Verilog clocking block with the "bar" op guarded
+/// by an if enable:
+///
+///     always @(posedge clock) begin
+///       if (enable) begin
+///         bar(condition);
+///       end
+///     end
+template <typename AOpTy, typename BOpTy>
+LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
+  auto clock = getLoweredValue(op.clock());
+  auto enable = getLoweredValue(op.enable());
+  auto predicate = getLoweredValue(op.predicate());
+  if (!clock || !enable || !predicate)
+    return failure();
+
+  builder->create<sv::AlwaysAtPosEdgeOp>(clock, [&]() {
+    builder->create<sv::IfOp>(enable, [&]() {
+      // Create BOpTy inside the always/if.
+      builder->create<BOpTy>(predicate);
+    });
+  });
+
+  return success();
+}
+
 // Lower an assert to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(AssertOp op) {
   return lowerVerificationStatement<AssertOp, sv::AssertOp>(op);
@@ -1333,4 +1333,34 @@ LogicalResult FIRRTLLowering::visitStmt(AssumeOp op) {
 // Lower a cover to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(CoverOp op) {
   return lowerVerificationStatement<CoverOp, sv::CoverOp>(op);
+}
+
+LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
+  // Don't emit anything for a zero or one operand attach.
+  if (op.operands().size() < 2)
+    return success();
+
+  SmallVector<Value, 4> inoutValues;
+  for (auto v : op.operands())
+    inoutValues.push_back(getLoweredValue(v));
+
+  // In the non-synthesis case, we emit a SystemVerilog alias statement.
+  builder->create<sv::IfDefOp>(
+      "!SYNTHESIS", [&]() { builder->create<sv::AliasOp>(inoutValues); });
+
+  // If we're doing synthesis, we emit an all-pairs assign complex.
+  builder->create<sv::IfDefOp>("SYNTHESIS", [&]() {
+    // Lower the
+    SmallVector<Value, 4> values;
+    for (size_t i = 0, e = inoutValues.size(); i != e; ++i)
+      values.push_back(builder->createOrFold<rtl::ReadInOutOp>(inoutValues[i]));
+
+    for (size_t i1 = 0, e = inoutValues.size(); i1 != e; ++i1) {
+      for (size_t i2 = 0; i2 != e; ++i2)
+        if (i1 != i2)
+          builder->create<rtl::ConnectOp>(values[i1], values[i2]);
+    }
+  });
+
+  return success();
 }

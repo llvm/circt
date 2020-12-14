@@ -359,11 +359,31 @@ module attributes {firrtl.mainModule = "Simple"} {
   }
 
   // CHECK-LABEL: rtl.module @Analog
+  // CHECK-NEXT:   sv.ifdef "!SYNTHESIS"  {
+  // CHECK-NEXT:     sv.alias %a1, %a1, %a1 : !rtl.inout<i1>
+  // CHECK-NEXT:   }
+  // CHECK-NEXT:   sv.ifdef "SYNTHESIS"  {
+  // CHECK-NEXT:     %1 = rtl.read_inout %a1 : i1
+  // CHECK-NEXT:     %2 = rtl.read_inout %a1 : i1
+  // CHECK-NEXT:     %3 = rtl.read_inout %a1 : i1
+  // CHECK-NEXT:     rtl.connect %1, %2 : i1
+  // CHECK-NEXT:     rtl.connect %1, %3 : i1
+  // CHECK-NEXT:     rtl.connect %2, %1 : i1
+  // CHECK-NEXT:     rtl.connect %2, %3 : i1
+  // CHECK-NEXT:     rtl.connect %3, %1 : i1
+  // CHECK-NEXT:     rtl.connect %3, %2 : i1
+  // CHECK-NEXT:   }
   // CHECK-NEXT:    %0 = rtl.read_inout %a1 : i1
   // CHECK-NEXT:    rtl.output %0 : i1
-  rtl.module @Analog(%a1: !rtl.inout<i1>) -> (%outClock: i1) {
-    %0 = firrtl.analogInOutCast %a1 : (!rtl.inout<i1>) -> !firrtl.analog<1>
-    %1 = firrtl.asClock %0 : (!firrtl.analog<1>) -> !firrtl.clock
+  rtl.module @Analog(%a1: !rtl.inout<i1>, %b1: !rtl.inout<i1>,
+                     %c1: !rtl.inout<i1>) -> (%outClock: i1) {
+    %a = firrtl.analogInOutCast %a1 : (!rtl.inout<i1>) -> !firrtl.analog<1>
+    %b = firrtl.analogInOutCast %a1 : (!rtl.inout<i1>) -> !firrtl.analog<1>
+    %c = firrtl.analogInOutCast %a1 : (!rtl.inout<i1>) -> !firrtl.analog<1>
+
+    firrtl.attach %a, %b, %c : !firrtl.analog<1>, !firrtl.analog<1>, !firrtl.analog<1>
+
+    %1 = firrtl.asClock %a : (!firrtl.analog<1>) -> !firrtl.clock
     %2 = firrtl.stdIntCast %1 : (!firrtl.clock) -> i1
     rtl.output %2 : i1
   }
