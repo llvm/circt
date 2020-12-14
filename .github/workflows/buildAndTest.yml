@@ -128,6 +128,23 @@ jobs:
             -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit
           make check-circt -j$(nproc)
 
+      # Build the CIRCT test target in release mode with shared libs enabled.
+      - name: Build and Test CIRCT (Release + Shared Libs)
+        run: |
+          mkdir build_sharedlib
+          cd build_sharedlib
+          cmake .. \
+            -DBUILD_SHARED_LIBS=ON \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_ENABLE_ASSERTIONS=OFF \
+            -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ \
+            -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ \
+            -DCMAKE_LINKER=lld \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit
+          make check-circt -j$(nproc)
+
       # --------
       # Lint the CIRCT C++ code.
       # -------
