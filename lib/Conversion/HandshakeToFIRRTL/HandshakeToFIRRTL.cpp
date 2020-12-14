@@ -807,9 +807,9 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
   auto resultDataMux = createOneHotMuxTree(argData, win, insertLoc, rewriter);
   rewriter.create<ConnectOp>(insertLoc, resultData, resultDataMux);
 
-  // Create the logic to set the done wires for the result. For both outputs,
-  // the done wire is asserted when the output is valid and ready, or the
-  // emitted register for that output is set.
+  // Create the logic to set the done wires for the result. The done wire is
+  // asserted when the output is valid and ready, or the emitted register is
+  // set.
   auto resultValidAndReady = rewriter.create<AndPrimOp>(
       insertLoc, bitType, hasWinnerCondition, resultReady);
 
