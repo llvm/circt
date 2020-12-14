@@ -99,7 +99,7 @@ circuit inputs_only :
 ; CHECK-NEXT:     assign x8 = clock ? 4'h1 : clock ? 4'h2 : 4'h3;
 ; CHECK-NEXT:     assign x9 = in4[3:2] | in4[1:0];
 ; CHECK-NEXT:     assign x10 = in4;
-; CHECK-NEXT:     assign x11 = {{\{\{}}2'd0}, in4} ^ {{\{\{}}2{in4[3]}}, in4} ^ {6{clock}};
+; CHECK-NEXT:     assign x11 = {{\{\{}}2'd0}, in4} ^ $signed({{\{\{}}2{in4[3]}}, in4}) ^ $signed({6{clock}});
 ; CHECK-NEXT:     assign x12 = in4;
 ; CHECK-NEXT:     assign x13 = in4 << in4;
 ; CHECK-NEXT:  endmodule
@@ -638,6 +638,9 @@ circuit inputs_only :
 
   ; CHECK-LABEL: module IsInvalid(
   ; CHECK-NEXT:    output a);
+  ; CHECK-EMPTY:
+  ; CHECK-NEXT:    assign a = '0;
+  ; CHECK-NEXT:  endmodule
   module IsInvalid :
     output a: Analog<1>
     a is invalid  @[Place.scala 101]

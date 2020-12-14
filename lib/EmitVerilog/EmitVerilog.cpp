@@ -759,16 +759,11 @@ private:
 
   SubExprInfo emitFIRRTLVariadic(Operation *op, VerilogPrecedence prec,
                            const char *syntax);
+  
+  SubExprInfo emitUnary(Operation *op, const char *syntax, bool forceUnsigned);
 
   SubExprInfo emitFIRRTLUnary(Operation *op, const char *syntax);
-  
-  SubExprInfo emitUnary(Operation *op, const char *syntax, bool forceUnsigned) {
-    os << syntax;
-    auto signedness = emitSubExpr(op->getOperand(0),
-                                  Unary)
-                          .signedness;
-    return {Unary, forceUnsigned ? IsUnsigned : signedness};
-  }
+
   SubExprInfo emitNoopCast(Operation *op) {
     return emitSubExpr(op->getOperand(0), LowestPrecedence);
   }
@@ -821,8 +816,8 @@ private:
   // Signedness tracks the verilog sign, not the FIRRTL sign, so we don't need
   // to emit anything for AsSInt/AsUInt.  Their results will get casted by the
   // client as necessary.
-  SubExprInfo visitExpr(AsUIntPrimOp op) { return emitNoopCast(op); }
-  SubExprInfo visitExpr(AsSIntPrimOp op) { return emitNoopCast(op); }
+  SubExprInfo visitExpr(AsUIntPrimOp op) { return emitFIRRTLUnary(op, ""); }
+  SubExprInfo visitExpr(AsSIntPrimOp op) { return emitFIRRTLUnary(op, ""); }
   SubExprInfo visitExpr(AsPassivePrimOp op) { return emitNoopCast(op); }
   SubExprInfo visitExpr(AsNonPassivePrimOp op) { return emitNoopCast(op); }
 
@@ -976,26 +971,22 @@ SubExprInfo ExprEmitter::emitFIRRTLBinary(Operation *op, VerilogPrecedence prec,
   auto op0Signed = IsSigned == getSignednessOf(op->getOperand(0).getType());
   auto op1Signed = IsSigned == getSignednessOf(op->getOperand(1).getType());
 
-  if (op0Signed)
-    os << "$signed(";
   if (op0Width < retWidth) {
     if (op0Signed)
       os << "{{" << (retWidth - op0Width) << '{';
     else
       os << "{{" << (retWidth - op0Width) << "'d0}, ";
   }
-  emitSubExpr(op->getOperand(0), (op0Width >= retWidth) ? prec : LowestPrecedence);
+  emitSubExpr(op->getOperand(0), (op0Width >= retWidth) ? prec : LowestPrecedence, true);
   if (op0Width < retWidth) {
     if (!op0Signed && retSigned) {
       os << '[' << (op0Width - 1) << "]}}, ";
-      emitSubExpr(op->getOperand(0), LowestPrecedence);
+      emitSubExpr(op->getOperand(0), LowestPrecedence, true);
       os << "}";
     } else {
       os << "}";
     }
   }
-  if (op0Signed)
-    os << ")";
   os << ' ' << syntax << ' ';
 
   // The precedence of the RHS operand must be tighter than this operator if
@@ -1008,8 +999,6 @@ SubExprInfo ExprEmitter::emitFIRRTLBinary(Operation *op, VerilogPrecedence prec,
   if (rhsOperandOp && op->getName() == rhsOperandOp->getName())
     rhsPrec = prec;
 
-  if (op1Signed)
-    os << "$signed(";
   if (op1Width < retWidth) {
     if (op1Signed)
       os << "{{" << (retWidth - op1Width) << '{';
@@ -1017,23 +1006,21 @@ SubExprInfo ExprEmitter::emitFIRRTLBinary(Operation *op, VerilogPrecedence prec,
       os << "{{" << (retWidth - op1Width) << "'d0}, ";
   }
   emitSubExpr(op->getOperand(1),
-              (op1Width >= retWidth) ? rhsPrec : LowestPrecedence);
+              (op1Width >= retWidth) ? rhsPrec : LowestPrecedence, true);
   if (op1Width < retWidth) {
     if (!op1Signed && retSigned) {
       os << '[' << (op1Width - 1) << "]}}, ";
-      emitSubExpr(op->getOperand(1), LowestPrecedence);
+      emitSubExpr(op->getOperand(1), LowestPrecedence, true);
       os << "}";
     } else {
       os << "}";
     }
   }
-  if (op1Signed)
-    os << ")";
 
   // If we have a strict sign, then match the firrtl operation sign.
   // Otherwise, the result is signed if both operands are signed.
   SubExprSignedness signedness;
- if ((op0Signed && op1Signed) ||
+  if ((op0Signed && op1Signed) ||
            getSignednessOf(op->getResult(0).getType()) == IsSigned)
     signedness = IsSigned;
   else
@@ -1042,40 +1029,36 @@ SubExprInfo ExprEmitter::emitFIRRTLBinary(Operation *op, VerilogPrecedence prec,
   return {prec, signedness};
 }
 
-  SubExprInfo ExprEmitter::emitFIRRTLUnary(Operation *op, const char *syntax) {
-    bool opSigned = getSignednessOf(op->getOperand(0).getType()) == IsSigned;
+  SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax, bool forceUnsigned) {
+    os << syntax;
+    auto signedness = emitSubExpr(op->getOperand(0),
+                                  Unary)
+                          .signedness;
+    return {Unary, forceUnsigned ? IsUnsigned : signedness};
+  }
+
+SubExprInfo ExprEmitter::emitFIRRTLUnary(Operation *op, const char *syntax) {
     auto width = getBitWidthOrSentinel(op->getResult(0).getType());
     auto opWidth = getBitWidthOrSentinel(op->getOperand(0).getType());
+    auto opSigned = IsSigned == getSignednessOf(op->getOperand(0).getType());
 
-    os << syntax;
+  os << syntax;
+  if (opWidth < width) {
+    emitSubExpr(op->getOperand(0),ForceEmitMultiUse, true);
     if (opSigned)
-      os << "$signed(";
-    if (opWidth < width) {
-      if (opWidth < width) {
-        if (opSigned)
-          os << "{{" << (width - opWidth) << '{';
-        else
-          os << "{{" << (width - opWidth) << "'d0}, ";
-      }
+      os << syntax << "{{" << (width - opWidth) << '{' 
+         << emitter.getName(op->getOperand(0))
+         << '[' << (opWidth - 1) << "]}}, "
+         << emitter.getName(op->getOperand(0))
+         << "})";
+    else
+      os << syntax << "{{" << (width - opWidth) << "'d0}, "
+         << emitter.getName(op->getOperand(0))
+         << "})";
+    } else {
+      emitSubExpr(op->getOperand(0), Unary, true);
     }
-
-    auto signedness = emitSubExpr(op->getOperand(0),
-                                  opWidth >= width ? Unary : LowestPrecedence)
-                          .signedness;
-
-    if (opWidth < width) {
-      if (opSigned) {
-        os << '[' << (opWidth - 1) << "]}}, ";
-        emitSubExpr(op->getOperand(0), LowestPrecedence);
-        os << "}";
-      } else {
-        os << "}";
-      }
-    }
-    if (opSigned)
-      os << ")";
-
-    return {Unary, opSigned ? IsSigned : IsUnsigned};
+  return {Unary, opSigned ? IsSigned : IsUnsigned};
   }
 
 SubExprInfo ExprEmitter::emitVariadic(Operation *op, VerilogPrecedence prec,
