@@ -217,9 +217,10 @@
   // CHECK-NEXT:    %2 = firrtl.stdIntCast %1 : (!firrtl.clock) -> i1
   // CHECK-NEXT:    rtl.output %2 : i1
   firrtl.module @Analog(%a1: !firrtl.analog<1>,
-                             %outClock: !firrtl.flip<clock>) {
+                        %outClock: !firrtl.flip<clock>) {
 
     %clock = firrtl.asClock %a1 : (!firrtl.analog<1>) -> !firrtl.clock
     firrtl.connect %outClock, %clock : !firrtl.flip<clock>, !firrtl.clock
   }
+
 }
