@@ -32,13 +32,7 @@
 // CHECK:   firrtl.connect %[[WIN]], %[[ARB0]]
 
 // Logic to assign result outputs.
-// CHECK:   %[[DEFAULT0:.+]] = firrtl.constant(0 : ui1)
-// CHECK:   %[[BITS0:.+]] = firrtl.bits %[[WIN]] 1 to 1
-// CHECK:   %[[RESULT_VALID0:.+]] = firrtl.mux(%[[BITS0]], %[[ARG1_VALID]], %[[DEFAULT0]])
-// CHECK:   %[[BITS1:.+]] = firrtl.bits %[[WIN]] 0 to 0
-// CHECK:   %[[RESULT_VALID1:.+]] = firrtl.mux(%[[BITS1]], %[[ARG0_VALID]], %[[RESULT_VALID0]])
-// CHECK:   %[[RESULT_VALID2:.+]] = firrtl.and %[[RESULT_VALID1]], %[[HAS_WINNER]]
-// CHECK:   firrtl.connect %[[ARG2_VALID]], %[[RESULT_VALID2]]
+// CHECK:   firrtl.connect %[[ARG2_VALID]], %[[HAS_WINNER]]
 // CHECK:   %[[DEFAULT1:.+]] = firrtl.constant(0 : ui64)
 // CHECK:   %[[BITS2:.+]] = firrtl.bits %[[WIN]] 1 to 1
 // CHECK:   %[[RESULT_DATA0:.+]] = firrtl.mux(%[[BITS2]], %[[ARG1_DATA]], %[[DEFAULT1]])
@@ -47,7 +41,7 @@
 // CHECK:   firrtl.connect %[[ARG2_DATA]], %[[RESULT_DATA]]
 
 // Logic to assign result done wire.
-// CHECK:   %[[RESULT_DONE0:.+]] = firrtl.and %[[RESULT_VALID2]], %[[ARG2_READY]]
+// CHECK:   %[[RESULT_DONE0:.+]] = firrtl.and %[[HAS_WINNER]], %[[ARG2_READY]]
 // CHECK:   firrtl.connect %[[RESULT_DONE]], %[[RESULT_DONE0]]
 
 // Logic to assign arg ready outputs.

@@ -745,9 +745,9 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
 }
 
 /// Please refer to test_merge.mlir test case.
-/// Lowers the ControlMergeOp into primitive FIRRTL ops. This is a
-/// simplification of the ControlMergeOp lowering, since it doesn't need to wait
-/// for more than one input to become ready.
+/// Lowers the MergeOp into primitive FIRRTL ops. This is a simplification of
+/// the ControlMergeOp lowering, since it doesn't need to wait for more than one
+/// output to become ready.
 bool HandshakeBuilder::visitHandshake(MergeOp op) {
   auto *context = rewriter.getContext();
 
@@ -798,24 +798,20 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
 
   rewriter.create<ConnectOp>(insertLoc, win, priorityArb);
 
-  // Create the logic to assign the result and control outputs. The result valid
-  // and data outputs will always be assigned. The win wire from the arbiter is
-  // used to index into a tree of muxes to select the chosen input's signal(s).
-  // The result outputs are gated on the win wire being non-zero.
-  auto resultValidWire =
-      createOneHotMuxTree(argValid, win, insertLoc, rewriter);
-  resultValidWire = rewriter.create<AndPrimOp>(
-      insertLoc, bitType, resultValidWire, hasWinnerCondition);
-  rewriter.create<ConnectOp>(insertLoc, resultValid, resultValidWire);
+  // Create the logic to assign the result outputs. The result valid and data
+  // outputs will always be assigned. The win wire from the arbiter is used to
+  // index into a tree of muxes to select the chosen input's signal(s). The
+  // result outputs are gated on the win wire being non-zero.
+  rewriter.create<ConnectOp>(insertLoc, resultValid, hasWinnerCondition);
 
   auto resultDataMux = createOneHotMuxTree(argData, win, insertLoc, rewriter);
   rewriter.create<ConnectOp>(insertLoc, resultData, resultDataMux);
 
-  // Create the logic to set the done wires for the result and control. For both
-  // outputs, the done wire is asserted when the output is valid and ready, or
-  // the emitted register for that output is set.
+  // Create the logic to set the done wires for the result. For both outputs,
+  // the done wire is asserted when the output is valid and ready, or the
+  // emitted register for that output is set.
   auto resultValidAndReady = rewriter.create<AndPrimOp>(
-      insertLoc, bitType, resultValidWire, resultReady);
+      insertLoc, bitType, hasWinnerCondition, resultReady);
 
   rewriter.create<ConnectOp>(insertLoc, resultDone, resultValidAndReady);
 
@@ -934,12 +930,8 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   auto resultNotEmitted =
       rewriter.create<NotPrimOp>(insertLoc, bitType, resultEmitted);
 
-  auto resultValidWire =
-      createOneHotMuxTree(argValid, win, insertLoc, rewriter);
-  resultValidWire = rewriter.create<AndPrimOp>(
-      insertLoc, bitType, resultValidWire, hasWinnerCondition);
-  resultValidWire = rewriter.create<AndPrimOp>(
-      insertLoc, bitType, resultValidWire, resultNotEmitted);
+  auto resultValidWire = rewriter.create<AndPrimOp>(
+      insertLoc, bitType, hasWinnerCondition, resultNotEmitted);
   rewriter.create<ConnectOp>(insertLoc, resultValid, resultValidWire);
 
   if (!isControl) {

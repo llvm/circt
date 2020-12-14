@@ -43,14 +43,8 @@
 
 // Logic to assign result and control outputs.
 // CHECK:   %[[RESULT_NOT_EMITTED:.+]] = firrtl.not %[[RESULT_EMITTED]]
-// CHECK:   %[[DEFAULT0:.+]] = firrtl.constant(0 : ui1)
-// CHECK:   %[[BITS0:.+]] = firrtl.bits %[[WIN]] 1 to 1
-// CHECK:   %[[RESULT_VALID0:.+]] = firrtl.mux(%[[BITS0]], %[[ARG1_VALID]], %[[DEFAULT0]])
-// CHECK:   %[[BITS1:.+]] = firrtl.bits %[[WIN]] 0 to 0
-// CHECK:   %[[RESULT_VALID1:.+]] = firrtl.mux(%[[BITS1]], %[[ARG0_VALID]], %[[RESULT_VALID0]])
-// CHECK:   %[[RESULT_VALID2:.+]] = firrtl.and %[[RESULT_VALID1]], %[[HAS_WINNER]]
-// CHECK:   %[[RESULT_VALID3:.+]] = firrtl.and %[[RESULT_VALID2]], %[[RESULT_NOT_EMITTED]]
-// CHECK:   firrtl.connect %[[ARG2_VALID]], %[[RESULT_VALID3]]
+// CHECK:   %[[RESULT_VALID0:.+]] = firrtl.and %[[HAS_WINNER]], %[[RESULT_NOT_EMITTED]]
+// CHECK:   firrtl.connect %[[ARG2_VALID]], %[[RESULT_VALID0]]
 // CHECK:   %[[CONTROL_NOT_EMITTED:.+]] = firrtl.not %[[CONTROL_EMITTED]]
 // CHECK:   %[[CONTROL_VALID0:.+]] = firrtl.and %[[HAS_WINNER]], %[[CONTROL_NOT_EMITTED]]
 // CHECK:   firrtl.connect %[[ARG3_VALID]], %[[CONTROL_VALID0]]
@@ -69,7 +63,7 @@
 // CHECK:   firrtl.connect %[[WON]], %[[WON_RESULT]]
 
 // Logic to assign done wires.
-// CHECK:   %[[RESULT_DONE0:.+]] = firrtl.and %[[RESULT_VALID3]], %[[ARG2_READY]]
+// CHECK:   %[[RESULT_DONE0:.+]] = firrtl.and %[[RESULT_VALID0]], %[[ARG2_READY]]
 // CHECK:   %[[RESULT_DONE1:.+]] = firrtl.or %[[RESULT_EMITTED]], %[[RESULT_DONE0]]
 // CHECK:   firrtl.connect %[[RESULT_DONE]], %[[RESULT_DONE1]]
 // CHECK:   %[[CONTROL_DONE0:.+]] = firrtl.and %[[CONTROL_VALID0]], %[[ARG3_READY]]
