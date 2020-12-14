@@ -1,3 +1,9 @@
+// Note: the 'questa' feature is not supported by lit yet, so this is untested.
+// REQUIRES: questa
+// RUN: vlog -sv %INC%/circt/Dialect/ESI/ESIPrimitives.sv
+// RUN: vlog -sv %s
+// RUN: vsim -c 'run -all'
+
 //===- primitive_tb.sv - tests for ESI primitives -----------*- verilog -*-===//
 //
 // Testbenches for ESI primitives. Since these rely on an IEEE SystemVerilog

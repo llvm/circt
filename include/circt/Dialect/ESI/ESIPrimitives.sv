@@ -63,7 +63,7 @@ module ESI_PipelineStage # (
   always_ff @(posedge clk)
     x_ready_reg <= rstn ? x_ready : 1'b0;
 
-  // xmit'ing a token
+  // We are transmitting a token on this cycle.
   wire xmit = x_valid && x_ready;
 
   // Lookaside buffer. If the output register is occupied, put the incoming
