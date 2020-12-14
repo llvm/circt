@@ -28,9 +28,14 @@ module {
     %ifaceInPort = sv.modport.get %iface @data_in :
       !sv.interface<@data_vr> -> !sv.modport<@data_vr::@data_in>
 
-    // CHECK: Rcvr rcvr ({{.*}}//{{.+}}
+    // CHECK: Rcvr rcvr1 ({{.*}}//{{.+}}
     // CHECK:   .m ([[IFACE]].data_in){{.*}}//{{.+}}
     // CHECK: );
-    rtl.instance "rcvr" @Rcvr(%ifaceInPort) : (!sv.modport<@data_vr::@data_in>) -> ()
+    rtl.instance "rcvr1" @Rcvr(%ifaceInPort) : (!sv.modport<@data_vr::@data_in>) -> ()
+
+    // CHECK: Rcvr rcvr2 ({{.*}}//{{.+}}
+    // CHECK:   .m ([[IFACE]].data_in){{.*}}//{{.+}}
+    // CHECK: );
+    rtl.instance "rcvr2" @Rcvr(%ifaceInPort) : (!sv.modport<@data_vr::@data_in>) -> ()
   }
 }
