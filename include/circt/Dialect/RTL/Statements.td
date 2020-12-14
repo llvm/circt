@@ -37,13 +37,8 @@ def WireOp : RTLOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let parser = [{ return parseWireOp(parser, result); }];
 }
 
-def ReadInOutOpConstraint
-  : TypesMatchWith<"result type is inout argument element type",
-                   "result", "input",
-      "(isRTLValueType($_self) ? "
-           "InOutType::get($_self.getContext(), $_self) : InOutType())">;
-
-def ReadInOutOp : RTLOp<"read_inout", [NoSideEffect, ReadInOutOpConstraint]> {
+def ReadInOutOp
+ : RTLOp<"read_inout", [NoSideEffect, InOutTypeConstraint<"result", "input">]> {
   let summary = "Get the value of from something of inout type (e.g. a wire or"
                 " inout port) as the value itself.";
   let arguments = (ins InOutType:$input);

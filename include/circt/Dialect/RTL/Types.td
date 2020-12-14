@@ -35,3 +35,12 @@ def InOutType : RTLType<"InOut">, Type<CPred<"$_self.isa<InOutType>()">, "InOutT
   let genVerifyInvariantsDecl = 1;
 }
 
+// This type constraint is used by operations whose asm strings have a type "T"
+// in the asmstring, which constraints an input or output to type `T`, and then
+// constraints another to `!rtl.inout<T>`.  The "value" and "inoutValue" are the
+// name of the operand or result for the type sides of this.
+class InOutTypeConstraint<string value, string inoutValue>
+  : TypesMatchWith<"type should be element of inout type",
+                   value, inoutValue,
+      "(isRTLValueType($_self) ? "
+           "InOutType::get($_self.getContext(), $_self) : InOutType())">;
