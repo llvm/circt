@@ -168,15 +168,14 @@ circt::rtl::RTLExternModuleOp ESIRTLBuilder::declareStage() {
   // give the extern declation a None type since nothing else makes sense.
   // Will be refining this when we decide how to better handle parameterized
   // types and ops.
-  SmallVector<ModulePortInfo, 8> ports = {
-      {clk, PortDirection::INPUT, getI1Type(), 0},
-      {rstn, PortDirection::INPUT, getI1Type(), 1},
-      {a, PortDirection::INPUT, getNoneType(), 2},
-      {aValid, PortDirection::INPUT, getI1Type(), 3},
-      {aReady, PortDirection::OUTPUT, getI1Type(), 0},
-      {x, PortDirection::OUTPUT, getNoneType(), 1},
-      {xValid, PortDirection::OUTPUT, getI1Type(), 2},
-      {xReady, PortDirection::INPUT, getI1Type(), 4}};
+  ModulePortInfo ports[] = {{clk, PortDirection::INPUT, getI1Type(), 0},
+                            {rstn, PortDirection::INPUT, getI1Type(), 1},
+                            {a, PortDirection::INPUT, getNoneType(), 2},
+                            {aValid, PortDirection::INPUT, getI1Type(), 3},
+                            {aReady, PortDirection::OUTPUT, getI1Type(), 0},
+                            {x, PortDirection::OUTPUT, getNoneType(), 1},
+                            {xValid, PortDirection::OUTPUT, getI1Type(), 2},
+                            {xReady, PortDirection::INPUT, getI1Type(), 4}};
   declaredStage = create<RTLExternModuleOp>(loc, name, ports);
   return declaredStage;
 }
@@ -221,11 +220,10 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
       rewriter.create<UnwrapValidReady>(loc, stage.input(), tempConstant);
 
   // Instantiate the "ESI_PipelineStage" external module.
-  SmallVector<Value, 5> operands = {stage.clk(), stage.rstn(),
-                                    unwrap.rawOutput(), unwrap.valid(),
-                                    tempConstant};
-  SmallVector<Type, 3> resultTypes = {
-      rewriter.getI1Type(), unwrap.rawOutput().getType(), rewriter.getI1Type()};
+  Value operands[] = {stage.clk(), stage.rstn(), unwrap.rawOutput(),
+                      unwrap.valid(), tempConstant};
+  Type resultTypes[] = {rewriter.getI1Type(), unwrap.rawOutput().getType(),
+                        rewriter.getI1Type()};
   auto stageInst = rewriter.create<circt::rtl::InstanceOp>(
       loc, resultTypes, "pipelineStage", stageModule.getName(), operands,
       stageAttrs.getDictionary(rewriter.getContext()));
