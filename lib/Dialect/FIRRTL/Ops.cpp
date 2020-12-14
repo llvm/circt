@@ -206,15 +206,7 @@ void firrtl::getModulePortInfo(Operation *op,
 
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
-    auto type = argTypes[i].dyn_cast<FIRRTLType>();
-
-    // Convert IntegerType ports to IntType ports transparently.
-    if (!type) {
-      auto intType = argTypes[i].cast<IntegerType>();
-      type = IntType::get(op->getContext(), intType.isSigned(),
-                          intType.getWidth());
-    }
-
+    auto type = argTypes[i].cast<FIRRTLType>();
     results.push_back({getFIRRTLNameAttr(argAttrs), type});
   }
 }
@@ -455,21 +447,32 @@ static ParseResult parseFExtModuleOp(OpAsmParser &parser,
   return parseFModuleOp(parser, result, /*isExtModule:*/ true);
 }
 
-static LogicalResult verifyFModuleOp(FModuleOp module) {
-  // The parent op must be a circuit op.
-  auto parentOp = dyn_cast_or_null<CircuitOp>(module.getParentOp());
-  if (!parentOp) {
-    module.emitOpError("should be embedded into a 'firrtl.circuit'");
-    return failure();
-  }
-
+static LogicalResult verifyModuleSignature(Operation *op) {
+  for (auto argType : getModuleType(op).getInputs())
+    if (!argType.isa<FIRRTLType>())
+      return op->emitOpError("all module ports must be firrtl types");
   return success();
 }
 
+static LogicalResult verifyFModuleOp(FModuleOp op) {
+  // The parent op must be a circuit op.
+  auto parentOp = dyn_cast_or_null<CircuitOp>(op.getParentOp());
+  if (!parentOp)
+    return op.emitOpError("should be embedded into a 'firrtl.circuit'");
+
+  // Verify the module signature.
+  return verifyModuleSignature(op);
+}
+
 static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
+  // Verify the module signature.
+  if (failed(verifyModuleSignature(op)))
+    return failure();
+
   auto paramDictOpt = op.parameters();
   if (!paramDictOpt)
     return success();
+
   DictionaryAttr paramDict = paramDictOpt.getValue();
   auto checkParmValue = [&](NamedAttribute elt) -> bool {
     auto value = elt.second;
@@ -483,6 +486,7 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
 
   if (!llvm::all_of(paramDict, checkParmValue))
     return failure();
+
   return success();
 }
 

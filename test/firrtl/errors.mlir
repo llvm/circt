@@ -319,3 +319,12 @@ firrtl.module @TopModule() {
 }
 
 }
+
+// -----
+
+firrtl.circuit "BadPort" {
+  // expected-error @+1 {{'firrtl.module' op all module ports must be firrtl types}}
+  firrtl.module @BadPort(%in1 : i1) {
+  }
+}
+
