@@ -46,7 +46,7 @@ def ReadInOutOpConstraint
 def ReadInOutOp : RTLOp<"read_inout", [NoSideEffect, ReadInOutOpConstraint]> {
   let summary = "Get the value of from something of inout type (e.g. a wire or"
                 " inout port) as the value itself.";
-  let arguments = (ins AnyType:$input);
+  let arguments = (ins InOutType:$input);
   let results = (outs AnyType:$result);
 
   let assemblyFormat = [{
