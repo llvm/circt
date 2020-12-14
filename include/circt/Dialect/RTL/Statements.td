@@ -37,16 +37,20 @@ def WireOp : RTLOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let parser = [{ return parseWireOp(parser, result); }];
 }
 
-def ReadInOutOp : RTLOp<"read_inout", [NoSideEffect]> {
+def ReadInOutOpConstraint
+  : TypesMatchWith<"result type is inout argument element type",
+                   "result", "input",
+      "(isRTLValueType($_self) ? "
+           "InOutType::get($_self.getContext(), $_self) : InOutType())">;
+
+def ReadInOutOp : RTLOp<"read_inout", [NoSideEffect, ReadInOutOpConstraint]> {
   let summary = "Get the value of from something of inout type (e.g. a wire or"
                 " inout port) as the value itself.";
   let arguments = (ins AnyType:$input);
   let results = (outs AnyType:$result);
 
-  // TODO: This should just need the input type instead of both the input and
-  // result.
   let assemblyFormat = [{
-    $input attr-dict `:` functional-type($input, $result)
+    $input attr-dict `:` type($result)
   }];
 
   let verifier = [{ return ::verifyReadInOutOp(*this); }];
