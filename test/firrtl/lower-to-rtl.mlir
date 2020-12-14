@@ -358,5 +358,14 @@ module attributes {firrtl.mainModule = "Simple"} {
     rtl.output %3 : i1
   }
 
+  // CHECK-LABEL: rtl.module @Analog
+  // CHECK-NEXT:    %0 = rtl.read_inout %a1 : i1
+  // CHECK-NEXT:    rtl.output %0 : i1
+  rtl.module @Analog(%a1: !rtl.inout<i1>) -> (%outClock: i1) {
+    %0 = firrtl.analogInOutCast %a1 : (!rtl.inout<i1>) -> !firrtl.analog<1>
+    %1 = firrtl.asClock %0 : (!firrtl.analog<1>) -> !firrtl.clock
+    %2 = firrtl.stdIntCast %1 : (!firrtl.clock) -> i1
+    rtl.output %2 : i1
+  }
 }
 
