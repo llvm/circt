@@ -211,7 +211,7 @@
     // CHECK: rtl.output %inA, [[OUTB]], [[OUTC]], [[OUTD]], [[OUTE_CAST]], [[OUTF_CAST]]
   }
 
-  // CHECK-LABEL: rtl.module @Analog(%a1: !rtl.inout<i1> {rtl.inout}) -> (%outClock: i1) {
+  // CHECK-LABEL: rtl.module @Analog(%a1: !rtl.inout<i1>) -> (%outClock: i1) {
   // CHECK-NEXT:    %0 = firrtl.analogInOutCast %a1 : (!rtl.inout<i1>) -> !firrtl.analog<1>
   // CHECK-NEXT:    %1 = firrtl.asClock %0 : (!firrtl.analog<1>) -> !firrtl.clock
   // CHECK-NEXT:    %2 = firrtl.stdIntCast %1 : (!firrtl.clock) -> i1

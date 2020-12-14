@@ -51,10 +51,6 @@ static void buildModule(OpBuilder &builder, OperationState &result,
       argAttrs.push_back(
           NamedAttribute(builder.getIdentifier("rtl.name"), port.name));
 
-    if (port.direction == PortDirection::INOUT)
-      argAttrs.push_back(NamedAttribute(builder.getIdentifier("rtl.inout"),
-                                        builder.getUnitAttr()));
-
     StringRef attrName = port.isOutput()
                              ? getResultAttrName(port.argNum, attrNameBuf)
                              : getArgAttrName(port.argNum, attrNameBuf);
@@ -113,21 +109,13 @@ StringAttr rtl::getRTLNameAttr(ArrayRef<NamedAttribute> attrs) {
   return StringAttr();
 }
 
-static bool containsInOutAttr(ArrayRef<NamedAttribute> attrs) {
-  for (auto &argAttr : attrs) {
-    if (argAttr.first == "rtl.inout")
-      return true;
-  }
-  return false;
-}
-
 void rtl::getModulePortInfo(Operation *op,
                             SmallVectorImpl<ModulePortInfo> &results) {
   auto argTypes = getModuleType(op).getInputs();
 
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
-    bool isInOut = containsInOutAttr(argAttrs);
+    bool isInOut = false;
     auto type = argTypes[i];
 
     if (auto inout = type.dyn_cast<InOutType>()) {
