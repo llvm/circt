@@ -99,8 +99,8 @@ def YieldOp
 def AliasOp : SVOp<"alias"> {
   let summary = "SystemVerilog 'alias' statement";
   let description = [{
-    An alias statement declares multiple names for the same
-    physical net, or bits within a net.
+    An alias statement declares multiple names for the same physical net, or
+    bits within a net.  Aliases always have at least two operands.
   }];
 
   let arguments = (ins Variadic<InOutType>:$operands);
@@ -108,6 +108,7 @@ def AliasOp : SVOp<"alias"> {
 
   let assemblyFormat = "$operands attr-dict `:` type($operands)";
 
+  // Verify that we have at least two operands.
   let verifier = [{ return ::verifyAliasOp(*this); }];
 }
 

@@ -345,7 +345,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     _M._T_10.data is invalid @[Decoupled.scala 209:24]
     _M._T_10.mask is invalid @[Decoupled.scala 209:24]
 
-    ; CHECK: firrtl.attach(%a8, %a8, %a8) :
+    ; CHECK: firrtl.attach %a8, %a8, %a8 :
     attach (a8, a8, a8)
 
     wire pred: UInt <1>
