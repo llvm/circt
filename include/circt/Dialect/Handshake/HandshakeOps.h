@@ -15,6 +15,7 @@
 #ifndef CIRCT_HANDSHAKEOPS_OPS_H_
 #define CIRCT_HANDSHAKEOPS_OPS_H_
 
+#include "llvm/ADT/Any.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Dialect.h"

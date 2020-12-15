@@ -53,5 +53,39 @@ def MergeLikeOpInterface : OpInterface<"MergeLikeOpInterface"> {
   }];
 }
 
+def GeneralOpInterface : OpInterface<"GeneralOpInterface"> {
+  let description = [{"Simulate the Execution of ops"}];
+
+  let methods = [
+    InterfaceMethod<
+        "Simulate the Execution of the general op with given inputs", "void",
+        "execute",
+        (ins "std::vector<llvm::Any> &" : $ins, 
+           "std::vector<llvm::Any> &" : $outs)>,
+  ];
+}
+
+def ExecutableOpInterface : OpInterface<"ExecutableOpInterface"> {
+  let description = [{"Simulate the Execution of ops"}];
+
+  let methods = [
+    InterfaceMethod<
+        "The execution interface of hpx ops take the following arguments: "
+        "bool = returns whether the op has been executed;"
+        "valueMap = a map of all values in the code;"
+        "memoryMap = a map of memory ops to simualte;"
+        "timeMap = a map of the last arrival time of all values;"
+        "store = The store associates each allocation in the program"
+        "(represented by a int) with a vector of values which can be"
+        "accessed by it."
+        "scheduleList = a list of values to be scheduled.",
+        "bool", "tryExecute",
+        (ins "llvm::DenseMap<mlir::Value, llvm::Any> &" : $valueMap,
+           "llvm::DenseMap<unsigned, unsigned> &" : $memoryMap, 
+           "llvm::DenseMap<mlir::Value, double> &" : $timeMap,
+           "std::vector<std::vector<llvm::Any>> &" : $store,
+           "std::vector<mlir::Value> &" : $scheduleList)>,
+  ];
+}
 
 #endif // HANDSHAKE_INTERFACES

@@ -212,32 +212,6 @@ void executeOp(mlir::StoreOp op, std::vector<Any> &in, std::vector<Any> &out,
   ref[address] = in[0];
 }
 
-void executeOp(handshake::ForkOp op, std::vector<Any> &in,
-               std::vector<Any> &out) {
-  for (unsigned i = 0; i < out.size(); i++) {
-    out[i] = in[0];
-  }
-}
-void executeOp(handshake::JoinOp op, std::vector<Any> &in,
-               std::vector<Any> &out) {
-  out[0] = in[0];
-}
-void executeOp(handshake::ConstantOp op, std::vector<Any> &in,
-               std::vector<Any> &out) {
-  auto attr = op.getAttrOfType<mlir::IntegerAttr>("value");
-  out[0] = attr.getValue();
-}
-void executeOp(handshake::StoreOp op, std::vector<Any> &in,
-               std::vector<Any> &out, std::vector<std::vector<Any>> &store) {
-  // Forward the address and data to the memory op.
-  out[0] = in[0];
-  out[1] = in[1];
-}
-void executeOp(handshake::BranchOp op, std::vector<Any> &in,
-               std::vector<Any> &out) {
-  out[0] = in[0];
-}
-
 void debugArg(const std::string &head, mlir::Value op, const APInt &value,
               double time) {
   LLVM_DEBUG(dbgs() << "  " << head << ":  " << op << " = " << value
@@ -525,10 +499,28 @@ void executeHandshakeFunction(handshake::FuncOp &toplevel,
   mlir::Block::BlockArgListType blockArgs = entryBlock.getArguments();
   // A list of operations which might be ready to execute.
   std::list<mlir::Operation *> readyList;
+  // A map of memory ops
+  llvm::DenseMap<unsigned, unsigned> memoryMap;
 
-  for (unsigned i = 0; i < blockArgs.size(); i++) {
-    scheduleUses(readyList, valueMap, blockArgs[i]);
+  // Pre-allocate memory
+  for (auto &region : toplevel.getOperation()->getRegions()) {
+    for (auto &block : region) {
+      for (auto &nestedOp : block) {
+        if (auto Op = dyn_cast<handshake::MemoryOp>(nestedOp)) {
+          auto memreftype = Op.getMemRefType();
+          std::vector<Any> nothing;
+          std::string x;
+          unsigned buffer =
+              allocateMemRef(memreftype, nothing, store, storeTimes);
+          memoryMap[Op.getID()] = buffer;
+        }
+      }
+    }
   }
+
+  for (unsigned i = 0; i < blockArgs.size(); i++)
+    scheduleUses(readyList, valueMap, blockArgs[i]);
+
 #define EXTRA_DEBUG
   while (true) {
 #ifdef EXTRA_DEBUG
@@ -557,280 +549,14 @@ void executeHandshakeFunction(handshake::FuncOp &toplevel,
       }
       }*/
 
-    // Special handling for non-total functions.
-    if (auto Op = dyn_cast<handshake::ControlMergeOp>(op)) {
-      bool found = false;
-      int i = 0;
-      LLVM_DEBUG(dbgs() << "OP:  " << op << "\n");
-      for (mlir::Value in : op.getOperands()) {
-        if (valueMap.count(in) == 1) {
-          assert(!found && "More than one valid input to CMerge!");
-          auto t = valueMap[in];
-          valueMap[op.getResult(0)] = t;
-          timeMap[op.getResult(0)] = timeMap[in];
-          scheduleUses(readyList, valueMap, op.getResult(0));
-
-          valueMap[op.getResult(1)] = APInt(INDEX_WIDTH, i);
-          timeMap[op.getResult(1)] = timeMap[in];
-          scheduleUses(readyList, valueMap, op.getResult(1));
-
-          // Consume the inputs.
-          valueMap.erase(in);
-
-          found = true;
-          LLVM_DEBUG(debugArg("IN", in, t, timeMap[in]));
-        }
-        i++;
-      }
-      assert(found && "No valid input to CMerge!");
-      continue;
-    }
-
-    if (auto Op = dyn_cast<handshake::MergeOp>(op)) {
-      // Almost the same as CMerge above.
-      bool found = false;
-      int i = 0;
-      LLVM_DEBUG(dbgs() << "OP:  " << op << "\n");
-      for (mlir::Value in : op.getOperands()) {
-        if (valueMap.count(in) == 1) {
-          assert(!found && "More than one valid input to Merge!");
-          auto t = valueMap[in];
-          valueMap[op.getResult(0)] = t;
-          timeMap[op.getResult(0)] = timeMap[in];
-          scheduleUses(readyList, valueMap, op.getResult(0));
-
-          // Consume the inputs.
-          valueMap.erase(in);
-
-          found = true;
-          LLVM_DEBUG(debugArg("IN", in, t, timeMap[in]));
-        }
-        i++;
-      }
-      assert(found && "No valid input to Merge!");
-      continue;
-    }
-
-    // Special handling for non-total functions.
-    if (auto Op = dyn_cast<handshake::MuxOp>(op)) {
-      mlir::Value control = op.getOperand(0);
-      if (valueMap.count(control) == 0) {
-        // it's not ready.  Reschedule it.
-#ifdef EXTRA_DEBUG
-        LLVM_DEBUG(dbgs() << "OP:  " << op << "\n");
-        LLVM_DEBUG(dbgs() << "Rescheduling control...\n");
-#endif
+    // Execute handshake ops through ExecutableOpInterface
+    if (auto Op = dyn_cast<handshake::ExecutableOpInterface>(op)) {
+      std::vector<mlir::Value> scheduleList;
+      if (Op.tryExecute(valueMap, memoryMap, timeMap, store, scheduleList)) {
+      } else
         readyList.push_back(&op);
-        continue;
-      }
-      auto controlValue = valueMap[control];
-      auto controlTime = timeMap[control];
-      mlir::Value in = any_cast<APInt>(controlValue) == 0 ? op.getOperand(1)
-                                                          : op.getOperand(2);
-      if (valueMap.count(in) == 0) {
-        // it's not ready.  Reschedule it.
-#ifdef EXTRA_DEBUG
-        LLVM_DEBUG(dbgs() << "Rescheduling data("
-                          << any_cast<APInt>(controlValue) << ")...\n");
-#endif
-        readyList.push_back(&op);
-        continue;
-      }
-      auto inValue = valueMap[in];
-      auto inTime = timeMap[in];
-      LLVM_DEBUG(dbgs() << "OP:  " << op << "\n");
-      LLVM_DEBUG(debugArg("IN", control, controlValue, controlTime));
-      LLVM_DEBUG(debugArg("IN", in, inValue, inTime));
-      double time = std::max(controlTime, inTime);
-      valueMap[op.getResult(0)] = inValue;
-      timeMap[op.getResult(0)] = time;
-      scheduleUses(readyList, valueMap, op.getResult(0));
-
-      // Consume the inputs.
-      valueMap.erase(control);
-      valueMap.erase(in);
-      continue;
-    }
-
-    // Special handling for non-total functions.
-    if (auto Op = dyn_cast<handshake::LoadOp>(op)) {
-      mlir::Value address = op.getOperand(0);
-      mlir::Value data = op.getOperand(1);
-      mlir::Value nonce = op.getOperand(2);
-      mlir::Value addressOut = op.getResult(1);
-      mlir::Value dataOut = op.getResult(0);
-      if ((valueMap.count(address) && !valueMap.count(nonce)) ||
-          (!valueMap.count(address) && valueMap.count(nonce)) ||
-          (!valueMap.count(address) && !valueMap.count(nonce) &&
-           !valueMap.count(data))) {
-        // it's not ready.  Reschedule it.
-#ifdef EXTRA_DEBUG
-        LLVM_DEBUG(dbgs() << "OP:  " << op << "\n");
-        LLVM_DEBUG(dbgs() << "Rescheduling...\n");
-#endif
-        readyList.push_back(&op);
-        continue;
-      }
-      if (valueMap.count(address) && valueMap.count(nonce)) {
-        auto addressValue = valueMap[address];
-        auto addressTime = timeMap[address];
-        auto nonceValue = valueMap[nonce];
-        auto nonceTime = timeMap[nonce];
-        LLVM_DEBUG(dbgs() << "OP:  " << op << "\n");
-        LLVM_DEBUG(debugArg("Address", address, addressValue, addressTime));
-        LLVM_DEBUG(debugArg("Nonce", nonce, nonceValue, nonceTime));
-        valueMap[addressOut] = addressValue;
-        double time = std::max(addressTime, nonceTime);
-        timeMap[addressOut] = time;
-        scheduleUses(readyList, valueMap, addressOut);
-        // Consume the inputs.
-        valueMap.erase(address);
-        valueMap.erase(nonce);
-      } else if (valueMap.count(data)) {
-        auto dataValue = valueMap[data];
-        auto dataTime = timeMap[data];
-        LLVM_DEBUG(dbgs() << "OP:  " << op << "\n");
-        LLVM_DEBUG(debugArg("Data", data, dataValue, dataTime));
-        valueMap[dataOut] = dataValue;
-        timeMap[dataOut] = dataTime;
-        scheduleUses(readyList, valueMap, dataOut);
-        // Consume the inputs.
-        valueMap.erase(data);
-      } else {
-        llvm_unreachable("why?");
-      }
-      continue;
-    }
-    // Special handling for non-total functions.
-    if (auto Op = dyn_cast<handshake::MemoryOp>(op)) {
-      static llvm::DenseMap<unsigned, unsigned> idToBuffer;
-      int opIndex = 0;
-      bool notReady = false;
-      LLVM_DEBUG(dbgs() << "OP:  " << op << "\n");
-      unsigned id = Op.getID(); // The ID of this memory.
-      if (!idToBuffer.count(id)) {
-        auto memreftype = Op.getMemRefType();
-        std::vector<Any> nothing;
-        std::string x;
-        unsigned buffer =
-            allocateMemRef(memreftype, nothing, store, storeTimes);
-        idToBuffer[id] = buffer;
-      }
-      unsigned buffer = idToBuffer[id];
-
-      for (unsigned i = 0; i < Op.getStCount().getZExtValue(); i++) {
-        mlir::Value data = op.getOperand(opIndex++);
-        mlir::Value address = op.getOperand(opIndex++);
-        mlir::Value nonceOut = op.getResult(Op.getLdCount().getZExtValue() + i);
-        if ((!valueMap.count(data) || !valueMap.count(address))) {
-          notReady = true;
-          continue;
-        }
-        auto addressValue = valueMap[address];
-        auto addressTime = timeMap[address];
-        auto dataValue = valueMap[data];
-        auto dataTime = timeMap[data];
-        LLVM_DEBUG(debugArg("Store", address, addressValue, addressTime));
-        LLVM_DEBUG(debugArg("StoreData", data, dataValue, dataTime));
-
-        assert(buffer < store.size());
-        auto &ref = store[buffer];
-        //  LLVM_DEBUG(dbgs() << "Store " << in[0] << " to " << ptr << "[" <<
-        //  address << "]\n");
-        unsigned offset = any_cast<APInt>(addressValue).getZExtValue();
-        assert(offset < ref.size());
-        ref[offset] = dataValue;
-
-        // Implicit none argument
-        APInt apnonearg(1, 0);
-        valueMap[nonceOut] = apnonearg;
-        double time = std::max(addressTime, dataTime);
-        timeMap[nonceOut] = time;
-        scheduleUses(readyList, valueMap, nonceOut);
-        // Consume the inputs.
-        valueMap.erase(data);
-        valueMap.erase(address);
-      }
-
-      for (unsigned i = 0; i < Op.getLdCount().getZExtValue(); i++) {
-        mlir::Value address = op.getOperand(opIndex++);
-        mlir::Value dataOut = op.getResult(i);
-        mlir::Value nonceOut = op.getResult(Op.getLdCount().getZExtValue() +
-                                            Op.getStCount().getZExtValue() + i);
-        if (!valueMap.count(address)) {
-          notReady = true;
-          continue;
-        }
-        auto addressValue = valueMap[address];
-        auto addressTime = timeMap[address];
-        LLVM_DEBUG(debugArg("Load:", address, addressValue, addressTime));
-        assert(buffer < store.size());
-        auto &ref = store[buffer];
-        //  LLVM_DEBUG(dbgs() << "Store " << in[0] << " to " << ptr << "[" <<
-        //  address << "]\n");
-        unsigned offset = any_cast<APInt>(addressValue).getZExtValue();
-        assert(offset < ref.size());
-
-        valueMap[dataOut] = ref[offset];
-        timeMap[dataOut] = addressTime;
-        // Implicit none argument
-        APInt apnonearg(1, 0);
-        valueMap[nonceOut] = apnonearg;
-        timeMap[nonceOut] = addressTime;
-        scheduleUses(readyList, valueMap, dataOut);
-        scheduleUses(readyList, valueMap, nonceOut);
-        // Consume the inputs.
-        valueMap.erase(address);
-      }
-      if (notReady) {
-        // it's not ready.  Reschedule it.
-#ifdef EXTRA_DEBUG
-        LLVM_DEBUG(dbgs() << "OP:  " << op << "\n");
-        LLVM_DEBUG(dbgs() << "Rescheduling...\n");
-#endif
-        readyList.push_back(&op);
-        continue;
-      }
-      continue;
-    }
-
-    if (auto Op = dyn_cast<handshake::ConditionalBranchOp>(op)) {
-      mlir::Value control = op.getOperand(0);
-      if (valueMap.count(control) == 0) {
-        // it's not ready.  Reschedule it.
-#ifdef EXTRA_DEBUG
-        LLVM_DEBUG(dbgs() << "Rescheduling control...\n");
-#endif
-        readyList.push_back(&op);
-        continue;
-      }
-      auto controlValue = valueMap[control];
-      auto controlTime = timeMap[control];
-      mlir::Value in = op.getOperand(1);
-      if (valueMap.count(in) == 0) {
-        // it's not ready.  Reschedule it.
-#ifdef EXTRA_DEBUG
-        LLVM_DEBUG(dbgs() << "Rescheduling data...\n");
-#endif
-        readyList.push_back(&op);
-        continue;
-      }
-      auto inValue = valueMap[in];
-      auto inTime = timeMap[in];
-      LLVM_DEBUG(dbgs() << "OP:  " << op << "\n");
-      LLVM_DEBUG(debugArg("IN", control, controlValue, controlTime));
-      LLVM_DEBUG(debugArg("IN", in, inValue, inTime));
-      mlir::Value out = any_cast<APInt>(controlValue) != 0 ? op.getResult(0)
-                                                           : op.getResult(1);
-      double time = std::max(controlTime, inTime);
-      valueMap[out] = inValue;
-      timeMap[out] = time;
-      scheduleUses(readyList, valueMap, out);
-
-      // Consume the inputs.
-      valueMap.erase(control);
-      valueMap.erase(in);
-
+      for (mlir::Value out : scheduleList)
+        scheduleUses(readyList, valueMap, out);
       continue;
     }
 
@@ -861,20 +587,7 @@ void executeHandshakeFunction(handshake::FuncOp &toplevel,
       valueMap.erase(in);
     }
     if (executeStdOp(op, inValues, outValues)) {
-    } else if (auto Op = dyn_cast<handshake::StartOp>(op)) {
-    } else if (auto Op = dyn_cast<handshake::EndOp>(op)) {
-    } else if (auto Op = dyn_cast<handshake::SinkOp>(op)) {
-    } else if (auto Op = dyn_cast<handshake::ForkOp>(op))
-      executeOp(Op, inValues, outValues);
-    else if (auto Op = dyn_cast<handshake::JoinOp>(op))
-      executeOp(Op, inValues, outValues);
-    else if (auto Op = dyn_cast<handshake::ConstantOp>(op))
-      executeOp(Op, inValues, outValues);
-    else if (auto Op = dyn_cast<handshake::StoreOp>(op))
-      executeOp(Op, inValues, outValues, store);
-    else if (auto Op = dyn_cast<handshake::BranchOp>(op))
-      executeOp(Op, inValues, outValues);
-    else if (auto Op = dyn_cast<handshake::ReturnOp>(op)) {
+    } else if (auto Op = dyn_cast<handshake::ReturnOp>(op)) {
       for (unsigned i = 0; i < results.size(); i++) {
         results[i] = inValues[i];
         resultTimes[i] = timeMap[Op.getOperand(i)];
