@@ -1219,15 +1219,14 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
   MLIRContext *context = subModuleOp.getContext();
 
   // Bundle all ports of the instance into a new flattened bundle type.
-  unsigned argIndex = 0;
-  for (auto &arg : subModuleOp.getArguments()) {
-    std::string argName = "arg" + std::to_string(argIndex);
-    auto argId = rewriter.getIdentifier(argName);
+  SmallVector<ModulePortInfo, 8> portInfo;
+  getModulePortInfo(subModuleOp, portInfo);
+  for (auto &port : portInfo) {
+    auto argId = rewriter.getIdentifier(port.getName());
 
     // All ports of the instance operation are flipped.
-    auto argType = FlipType::get(arg.getType().cast<FIRRTLType>());
+    auto argType = FlipType::get(port.type);
     elements.push_back(BundleElement(argId, argType));
-    ++argIndex;
   }
 
   // Create a instance operation.
