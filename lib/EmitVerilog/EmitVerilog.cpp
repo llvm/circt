@@ -752,14 +752,14 @@ private:
                          const char *syntax, bool opSigned = false);
 
   SubExprInfo emitFIRRTLBinary(Operation *op, VerilogPrecedence prec,
-                         const char *syntax);
+                               const char *syntax);
 
   SubExprInfo emitVariadic(Operation *op, VerilogPrecedence prec,
                            const char *syntax, bool hasStrictSign = false);
 
   SubExprInfo emitFIRRTLVariadic(Operation *op, VerilogPrecedence prec,
-                           const char *syntax);
-  
+                                 const char *syntax);
+
   SubExprInfo emitUnary(Operation *op, const char *syntax, bool forceUnsigned);
 
   SubExprInfo emitFIRRTLUnary(Operation *op, const char *syntax);
@@ -773,33 +773,55 @@ private:
   SubExprInfo visitExpr(AddPrimOp op) {
     return emitFIRRTLVariadic(op, Addition, "+");
   }
-  SubExprInfo visitExpr(SubPrimOp op) { return emitFIRRTLBinary(op, Addition, "-"); }
+  SubExprInfo visitExpr(SubPrimOp op) {
+    return emitFIRRTLBinary(op, Addition, "-");
+  }
   SubExprInfo visitExpr(MulPrimOp op) {
     return emitFIRRTLVariadic(op, Multiply, "*");
   }
-  SubExprInfo visitExpr(DivPrimOp op) { return emitFIRRTLBinary(op, Multiply, "/"); }
+  SubExprInfo visitExpr(DivPrimOp op) {
+    return emitFIRRTLBinary(op, Multiply, "/");
+  }
   SubExprInfo visitExpr(RemPrimOp op) {
     return emitFIRRTLBinary(op, Multiply, "%");
   }
 
-  SubExprInfo visitExpr(AndPrimOp op) { return emitFIRRTLVariadic(op, And, "&"); }
+  SubExprInfo visitExpr(AndPrimOp op) {
+    return emitFIRRTLVariadic(op, And, "&");
+  }
   SubExprInfo visitExpr(OrPrimOp op) { return emitFIRRTLVariadic(op, Or, "|"); }
-  SubExprInfo visitExpr(XorPrimOp op) { return emitFIRRTLVariadic(op, Xor, "^"); }
+  SubExprInfo visitExpr(XorPrimOp op) {
+    return emitFIRRTLVariadic(op, Xor, "^");
+  }
 
   // FIRRTL Comparison Operations
   SubExprInfo visitExpr(LEQPrimOp op) {
     return emitFIRRTLBinary(op, Comparison, "<=");
   }
-  SubExprInfo visitExpr(LTPrimOp op) { return emitFIRRTLBinary(op, Comparison, "<"); }
+  SubExprInfo visitExpr(LTPrimOp op) {
+    return emitFIRRTLBinary(op, Comparison, "<");
+  }
   SubExprInfo visitExpr(GEQPrimOp op) {
     return emitFIRRTLBinary(op, Comparison, ">=");
   }
-  SubExprInfo visitExpr(GTPrimOp op) { return emitFIRRTLBinary(op, Comparison, ">"); }
-  SubExprInfo visitExpr(EQPrimOp op) { return emitFIRRTLBinary(op, Equality, "=="); }
-  SubExprInfo visitExpr(NEQPrimOp op) { return emitFIRRTLBinary(op, Equality, "!="); }
-  SubExprInfo visitExpr(DShlPrimOp op) { return emitFIRRTLBinary(op, Shift, "<<"); }
-  SubExprInfo visitExpr(DShlwPrimOp op) { return emitFIRRTLBinary(op, Shift, "<<"); }
-  SubExprInfo visitExpr(DShrPrimOp op) { return emitFIRRTLBinary(op, Shift, ">>>"); }
+  SubExprInfo visitExpr(GTPrimOp op) {
+    return emitFIRRTLBinary(op, Comparison, ">");
+  }
+  SubExprInfo visitExpr(EQPrimOp op) {
+    return emitFIRRTLBinary(op, Equality, "==");
+  }
+  SubExprInfo visitExpr(NEQPrimOp op) {
+    return emitFIRRTLBinary(op, Equality, "!=");
+  }
+  SubExprInfo visitExpr(DShlPrimOp op) {
+    return emitFIRRTLBinary(op, Shift, "<<");
+  }
+  SubExprInfo visitExpr(DShlwPrimOp op) {
+    return emitFIRRTLBinary(op, Shift, "<<");
+  }
+  SubExprInfo visitExpr(DShrPrimOp op) {
+    return emitFIRRTLBinary(op, Shift, ">>>");
+  }
 
   // Unary Prefix operators.
   SubExprInfo visitExpr(AndRPrimOp op) { return emitFIRRTLUnary(op, "&"); }
@@ -963,7 +985,7 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
 }
 
 SubExprInfo ExprEmitter::emitFIRRTLBinary(Operation *op, VerilogPrecedence prec,
-                                    const char *syntax) {
+                                          const char *syntax) {
   auto retWidth = getBitWidthOrSentinel(op->getResult(0).getType());
   auto op0Width = getBitWidthOrSentinel(op->getOperand(0).getType());
   auto op1Width = getBitWidthOrSentinel(op->getOperand(1).getType());
@@ -977,7 +999,8 @@ SubExprInfo ExprEmitter::emitFIRRTLBinary(Operation *op, VerilogPrecedence prec,
     else
       os << "{{" << (retWidth - op0Width) << "'d0}, ";
   }
-  emitSubExpr(op->getOperand(0), (op0Width >= retWidth) ? prec : LowestPrecedence, true);
+  emitSubExpr(op->getOperand(0),
+              (op0Width >= retWidth) ? prec : LowestPrecedence, true);
   if (op0Width < retWidth) {
     if (!op0Signed && retSigned) {
       os << '[' << (op0Width - 1) << "]}}, ";
@@ -1021,7 +1044,7 @@ SubExprInfo ExprEmitter::emitFIRRTLBinary(Operation *op, VerilogPrecedence prec,
   // Otherwise, the result is signed if both operands are signed.
   SubExprSignedness signedness;
   if ((op0Signed && op1Signed) ||
-           getSignednessOf(op->getResult(0).getType()) == IsSigned)
+      getSignednessOf(op->getResult(0).getType()) == IsSigned)
     signedness = IsSigned;
   else
     signedness = IsUnsigned;
@@ -1029,37 +1052,33 @@ SubExprInfo ExprEmitter::emitFIRRTLBinary(Operation *op, VerilogPrecedence prec,
   return {prec, signedness};
 }
 
-  SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax, bool forceUnsigned) {
-    os << syntax;
-    auto signedness = emitSubExpr(op->getOperand(0),
-                                  Unary)
-                          .signedness;
-    return {Unary, forceUnsigned ? IsUnsigned : signedness};
-  }
+SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
+                                   bool forceUnsigned) {
+  os << syntax;
+  auto signedness = emitSubExpr(op->getOperand(0), Unary).signedness;
+  return {Unary, forceUnsigned ? IsUnsigned : signedness};
+}
 
 SubExprInfo ExprEmitter::emitFIRRTLUnary(Operation *op, const char *syntax) {
-    auto width = getBitWidthOrSentinel(op->getResult(0).getType());
-    auto opWidth = getBitWidthOrSentinel(op->getOperand(0).getType());
-    auto opSigned = IsSigned == getSignednessOf(op->getOperand(0).getType());
+  auto width = getBitWidthOrSentinel(op->getResult(0).getType());
+  auto opWidth = getBitWidthOrSentinel(op->getOperand(0).getType());
+  auto opSigned = IsSigned == getSignednessOf(op->getOperand(0).getType());
 
   os << syntax;
   if (opWidth < width) {
-    emitSubExpr(op->getOperand(0),ForceEmitMultiUse, true);
+    emitSubExpr(op->getOperand(0), ForceEmitMultiUse, true);
     if (opSigned)
-      os << syntax << "{{" << (width - opWidth) << '{' 
-         << emitter.getName(op->getOperand(0))
-         << '[' << (opWidth - 1) << "]}}, "
-         << emitter.getName(op->getOperand(0))
-         << "})";
+      os << syntax << "{{" << (width - opWidth) << '{'
+         << emitter.getName(op->getOperand(0)) << '[' << (opWidth - 1)
+         << "]}}, " << emitter.getName(op->getOperand(0)) << "})";
     else
       os << syntax << "{{" << (width - opWidth) << "'d0}, "
-         << emitter.getName(op->getOperand(0))
-         << "})";
-    } else {
-      emitSubExpr(op->getOperand(0), Unary, true);
-    }
-  return {Unary, opSigned ? IsSigned : IsUnsigned};
+         << emitter.getName(op->getOperand(0)) << "})";
+  } else {
+    emitSubExpr(op->getOperand(0), Unary, true);
   }
+  return {Unary, opSigned ? IsSigned : IsUnsigned};
+}
 
 SubExprInfo ExprEmitter::emitVariadic(Operation *op, VerilogPrecedence prec,
                                       const char *syntax, bool hasStrictSign) {
@@ -1071,8 +1090,9 @@ SubExprInfo ExprEmitter::emitVariadic(Operation *op, VerilogPrecedence prec,
   return {prec, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::emitFIRRTLVariadic(Operation *op, VerilogPrecedence prec,
-                                      const char *syntax) {
+SubExprInfo ExprEmitter::emitFIRRTLVariadic(Operation *op,
+                                            VerilogPrecedence prec,
+                                            const char *syntax) {
   auto width = getBitWidthOrSentinel(op->getResult(0).getType());
   bool opSigned = IsSigned == getSignednessOf(op->getResult(0).getType());
   interleave(
@@ -1088,8 +1108,7 @@ SubExprInfo ExprEmitter::emitFIRRTLVariadic(Operation *op, VerilogPrecedence pre
           else
             os << "{{" << (width - op0Width) << "'d0}, ";
         }
-        emitSubExpr(v1, op0Width >= width ? prec : LowestPrecedence,
-                    opSigned);
+        emitSubExpr(v1, op0Width >= width ? prec : LowestPrecedence, opSigned);
         if (op0Width < width) {
           if (op0Signed) {
             os << '[' << (op0Width - 1) << "]}}, ";
