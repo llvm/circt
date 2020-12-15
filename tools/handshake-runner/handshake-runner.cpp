@@ -506,13 +506,13 @@ void executeHandshakeFunction(handshake::FuncOp &toplevel,
   for (auto &region : toplevel.getOperation()->getRegions()) {
     for (auto &block : region) {
       for (auto &nestedOp : block) {
-        if (auto Op = dyn_cast<handshake::MemoryOp>(nestedOp)) {
-          auto memreftype = Op.getMemRefType();
+        if (auto op = dyn_cast<handshake::MemoryOp>(nestedOp)) {
+          auto memreftype = op.getMemRefType();
           std::vector<Any> nothing;
           std::string x;
           unsigned buffer =
               allocateMemRef(memreftype, nothing, store, storeTimes);
-          memoryMap[Op.getID()] = buffer;
+          memoryMap[op.getID()] = buffer;
         }
       }
     }
@@ -550,10 +550,10 @@ void executeHandshakeFunction(handshake::FuncOp &toplevel,
       }*/
 
     // Execute handshake ops through ExecutableOpInterface
-    if (auto Op = dyn_cast<handshake::ExecutableOpInterface>(op)) {
+    if (auto handshakeOp = dyn_cast<handshake::ExecutableOpInterface>(op)) {
       std::vector<mlir::Value> scheduleList;
-      if (Op.tryExecute(valueMap, memoryMap, timeMap, store, scheduleList)) {
-      } else
+      if (!handshakeOp.tryExecute(valueMap, memoryMap, timeMap, store,
+                                  scheduleList))
         readyList.push_back(&op);
       for (mlir::Value out : scheduleList)
         scheduleUses(readyList, valueMap, out);
@@ -587,10 +587,10 @@ void executeHandshakeFunction(handshake::FuncOp &toplevel,
       valueMap.erase(in);
     }
     if (executeStdOp(op, inValues, outValues)) {
-    } else if (auto Op = dyn_cast<handshake::ReturnOp>(op)) {
+    } else if (auto returnOp = dyn_cast<handshake::ReturnOp>(op)) {
       for (unsigned i = 0; i < results.size(); i++) {
         results[i] = inValues[i];
-        resultTimes[i] = timeMap[Op.getOperand(i)];
+        resultTimes[i] = timeMap[returnOp.getOperand(i)];
       }
       return;
       //} else {

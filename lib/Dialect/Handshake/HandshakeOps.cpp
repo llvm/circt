@@ -50,18 +50,20 @@ bool isReadyToExecute(std::vector<mlir::Value> &ins,
                       std::vector<mlir::Value> &outs,
                       llvm::DenseMap<mlir::Value, llvm::Any> &valueMap) {
   for (auto in : ins)
-    if (valueMap.count(in) == 0) return false;
+    if (valueMap.count(in) == 0)
+      return false;
 
   for (auto out : outs)
-    if (valueMap.count(out) > 0) return false;
+    if (valueMap.count(out) > 0)
+      return false;
 
   return true;
 }
 
 // Fetch values from the value map and consume them
-std::vector<llvm::Any> fetchValues(
-    std::vector<mlir::Value> &values,
-    llvm::DenseMap<mlir::Value, llvm::Any> &valueMap) {
+std::vector<llvm::Any>
+fetchValues(std::vector<mlir::Value> &values,
+            llvm::DenseMap<mlir::Value, llvm::Any> &valueMap) {
   std::vector<llvm::Any> ins;
   for (auto &value : values) {
     assert(valueMap[value].hasValue());
@@ -75,16 +77,19 @@ std::vector<llvm::Any> fetchValues(
 void storeValues(std::vector<llvm::Any> &values, std::vector<mlir::Value> &outs,
                  llvm::DenseMap<mlir::Value, llvm::Any> &valueMap) {
   assert(values.size() == outs.size());
-  for (unsigned long i = 0; i < outs.size(); ++i) valueMap[outs[i]] = values[i];
+  for (unsigned long i = 0; i < outs.size(); ++i)
+    valueMap[outs[i]] = values[i];
 }
 
 // Update the time map after the execution
 void updateTime(std::vector<mlir::Value> &ins, std::vector<mlir::Value> &outs,
                 llvm::DenseMap<mlir::Value, double> &timeMap, double latency) {
   double time = 0;
-  for (auto &in : ins) time = std::max(time, timeMap[in]);
+  for (auto &in : ins)
+    time = std::max(time, timeMap[in]);
   time += latency;
-  for (auto &out : outs) timeMap[out] = time;
+  for (auto &out : outs)
+    timeMap[out] = time;
 }
 
 bool tryToExecute(Operation *op,
@@ -97,9 +102,9 @@ bool tryToExecute(Operation *op,
   if (isReadyToExecute(ins, outs, valueMap)) {
     auto in = fetchValues(ins, valueMap);
     std::vector<llvm::Any> out(outs.size());
-    auto Op = dyn_cast<handshake::GeneralOpInterface>(op);
-    assert(Op && "Undefined execution for the current op");
-    Op.execute(in, out);
+    auto generalOp = dyn_cast<handshake::GeneralOpInterface>(op);
+    assert(generalOp && "Undefined execution for the current op");
+    generalOp.execute(in, out);
     storeValues(out, outs, valueMap);
     updateTime(ins, outs, timeMap, latency);
     scheduleList = outs;
@@ -147,7 +152,8 @@ void handshake::ForkOp::getCanonicalizationPatterns(
 }
 void handshake::ForkOp::execute(std::vector<llvm::Any> &ins,
                                 std::vector<llvm::Any> &outs) {
-  for (auto &out : outs) out = ins[0];
+  for (auto &out : outs)
+    out = ins[0];
 }
 bool handshake::ForkOp::tryExecute(
     llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
@@ -245,12 +251,14 @@ bool handshake::MuxOp::tryExecute(
     std::vector<mlir::Value> &scheduleList) {
   auto op = getOperation();
   mlir::Value control = op->getOperand(0);
-  if (valueMap.count(control) == 0) return false;
+  if (valueMap.count(control) == 0)
+    return false;
   auto controlValue = valueMap[control];
   auto controlTime = timeMap[control];
   mlir::Value in = llvm::any_cast<APInt>(controlValue) == 0 ? op->getOperand(1)
                                                             : op->getOperand(2);
-  if (valueMap.count(in) == 0) return false;
+  if (valueMap.count(in) == 0)
+    return false;
   auto inValue = valueMap[in];
   auto inTime = timeMap[in];
   double time = std::max(controlTime, inTime);
@@ -365,7 +373,7 @@ void handshake::BranchOp::getCanonicalizationPatterns(
   results.insert<circt::handshake::EliminateSimpleBranchesPattern>(context);
 }
 void handshake::BranchOp::execute(std::vector<llvm::Any> &ins,
-                                std::vector<llvm::Any> &outs) {
+                                  std::vector<llvm::Any> &outs) {
   outs[0] = ins[0];
 }
 bool handshake::BranchOp::tryExecute(
@@ -405,11 +413,13 @@ bool handshake::ConditionalBranchOp::tryExecute(
     std::vector<mlir::Value> &scheduleList) {
   auto op = getOperation();
   mlir::Value control = op->getOperand(0);
-  if (valueMap.count(control) == 0) return false;
+  if (valueMap.count(control) == 0)
+    return false;
   auto controlValue = valueMap[control];
   auto controlTime = timeMap[control];
   mlir::Value in = op->getOperand(1);
-  if (valueMap.count(in) == 0) return false;
+  if (valueMap.count(in) == 0)
+    return false;
   auto inValue = valueMap[in];
   auto inTime = timeMap[in];
   mlir::Value out = llvm::any_cast<APInt>(controlValue) != 0 ? op->getResult(0)
@@ -546,7 +556,7 @@ bool handshake::MemoryOp::tryExecute(
   auto op = getOperation();
   int opIndex = 0;
   bool notReady = false;
-  unsigned id = getID();  // The ID of this memory.
+  unsigned id = getID(); // The ID of this memory.
   unsigned buffer = memoryMap[id];
 
   for (unsigned i = 0; i < getStCount().getZExtValue(); i++) {
