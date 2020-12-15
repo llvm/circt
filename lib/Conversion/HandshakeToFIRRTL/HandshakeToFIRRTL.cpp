@@ -305,9 +305,10 @@ static void createMergeArgReady(ArrayRef<Value> outputs, Value fired,
                                 Location insertLoc,
                                 ConversionPatternRewriter &rewriter) {
   auto bitType = fired.getType();
+  auto indexType = winner.getType();
 
-  Value winnerOrDefault = rewriter.create<MuxPrimOp>(insertLoc, bitType, fired,
-                                                     winner, defaultValue);
+  Value winnerOrDefault = rewriter.create<MuxPrimOp>(
+      insertLoc, indexType, fired, winner, defaultValue);
 
   for (size_t i = 0, e = outputs.size(); i != e; ++i) {
     auto constIndex = indexMappings[i];
