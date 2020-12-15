@@ -340,6 +340,7 @@ OpFoldResult ShlPrimOp::fold(ArrayRef<Attribute> operands) {
     auto inputWidth = inputType.getWidthOrSentinel();
     if (inputWidth != -1) {
       auto resultWidth = inputWidth + shiftAmount;
+      shiftAmount = std::min(shiftAmount, resultWidth);
       return getIntAttr(value.zext(resultWidth).shl(shiftAmount), getContext());
     }
   }
@@ -367,11 +368,11 @@ OpFoldResult ShrPrimOp::fold(ArrayRef<Attribute> operands) {
   // Constant fold.
   APInt value;
   if (matchPattern(input, m_FConstant(value))) {
-    auto resultWidth = std::max(inputWidth - shiftAmount, 1);
     if (!inputType.isSigned())
-      value = value.lshr(shiftAmount);
+      value = value.lshr(std::min(shiftAmount, inputWidth));
     else
-      value = value.ashr(shiftAmount);
+      value = value.ashr(std::min(shiftAmount, inputWidth - 1));
+    auto resultWidth = std::max(inputWidth - shiftAmount, 1);
     return getIntAttr(value.trunc(resultWidth), getContext());
   }
   return {};

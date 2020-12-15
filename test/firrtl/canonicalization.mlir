@@ -310,4 +310,11 @@ firrtl.module @Tail(%in4u: !firrtl.uint<4>,
   firrtl.connect %out3u, %1 : !firrtl.flip<uint<3>>, !firrtl.uint<3>
 }
 
+// CHECK-LABEL: firrtl.module @issue326
+firrtl.module @issue326(%tmp57: !firrtl.flip<sint<1>>) {
+  %c29_si7 = firrtl.constant(29 : si7) : !firrtl.sint<7>
+  %0 = firrtl.shr %c29_si7, 47 : (!firrtl.sint<7>) -> !firrtl.sint<1>
+   // CHECK: c0_si1 = firrtl.constant(false) : !firrtl.sint<1>
+   firrtl.connect %tmp57, %0 : !firrtl.flip<sint<1>>, !firrtl.sint<1>
+}
 }
