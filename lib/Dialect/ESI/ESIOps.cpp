@@ -115,9 +115,15 @@ static ParseResult parseWrapValidReady(OpAsmParser &parser,
 }
 
 void print(OpAsmPrinter &p, WrapValidReady &op) {
-  p << "esi.wrap.vr " << op.data() << ", " << op.valid();
+  p << "esi.wrap.vr " << op.rawInput() << ", " << op.valid();
   p.printOptionalAttrDict(op.getAttrs());
-  p << " : " << op.output().getType().cast<ChannelPort>().getInner();
+  p << " : " << op.chanOutput().getType().cast<ChannelPort>().getInner();
+}
+
+void WrapValidReady::build(OpBuilder &b, OperationState &state, Value data,
+                           Value valid) {
+  build(b, state, ChannelPort::get(state.getContext(), data.getType()),
+        b.getI1Type(), data, valid);
 }
 
 static ParseResult parseUnwrapValidReady(OpAsmParser &parser,
@@ -144,9 +150,15 @@ static ParseResult parseUnwrapValidReady(OpAsmParser &parser,
 }
 
 static void print(OpAsmPrinter &p, UnwrapValidReady &op) {
-  p << "esi.unwrap.vr " << op.input() << ", " << op.ready();
+  p << "esi.unwrap.vr " << op.chanInput() << ", " << op.ready();
   p.printOptionalAttrDict(op.getAttrs());
-  p << " : " << op.output().getType();
+  p << " : " << op.rawOutput().getType();
+}
+
+void UnwrapValidReady::build(OpBuilder &b, OperationState &state, Value inChan,
+                             Value ready) {
+  auto inChanType = inChan.getType().cast<ChannelPort>();
+  build(b, state, inChanType.getInner(), b.getI1Type(), inChan, ready);
 }
 
 /// If 'iface' looks like an ESI interface, return the inner data type.
