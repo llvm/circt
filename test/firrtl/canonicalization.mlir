@@ -317,4 +317,14 @@ firrtl.module @issue326(%tmp57: !firrtl.flip<sint<1>>) {
    // CHECK: c0_si1 = firrtl.constant(false) : !firrtl.sint<1>
    firrtl.connect %tmp57, %0 : !firrtl.flip<sint<1>>, !firrtl.sint<1>
 }
+
+// CHECK-LABEL: firrtl.module @issue331
+firrtl.module @issue331(%tmp81: !firrtl.flip<sint<1>>) {
+  // CHECK: %c-1_si1 = firrtl.constant(true) : !firrtl.sint<1>
+  %c-1_si1 = firrtl.constant(-1 : si1) : !firrtl.sint<1>
+  %0 = firrtl.shr %c-1_si1, 3 : (!firrtl.sint<1>) -> !firrtl.sint<1>
+  firrtl.connect %tmp81, %0 : !firrtl.flip<sint<1>>, !firrtl.sint<1>
+}
+
+
 }
