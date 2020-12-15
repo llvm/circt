@@ -15,7 +15,6 @@
 #ifndef CIRCT_HANDSHAKEOPS_OPS_H_
 #define CIRCT_HANDSHAKEOPS_OPS_H_
 
-#include "llvm/ADT/Any.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Dialect.h"
@@ -29,6 +28,7 @@
 #include "mlir/IR/Types.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/Any.h"
 
 namespace circt {
 namespace handshake {
