@@ -373,7 +373,7 @@ OpFoldResult ShrPrimOp::fold(ArrayRef<Attribute> operands) {
     else
       value = value.ashr(std::min(shiftAmount, inputWidth - 1));
     auto resultWidth = std::max(inputWidth - shiftAmount, 1);
-    return getIntAttr(value.trunc(resultWidth), getContext());
+    return getIntAttr(value.truncOrSelf(resultWidth), getContext());
   }
   return {};
 }
