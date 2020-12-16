@@ -217,29 +217,32 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   // create a temp value and replace it later. Give this constant an odd-looking
   // type to make debugging easier.
   circt::BackedgeBuilder back(rewriter, loc);
-  auto ready = back(rewriter.getI1Type());
-  auto unwrap = rewriter.create<UnwrapValidReady>(loc, stage.input(), ready);
+  circt::Backedge wrapReady = back(rewriter.getI1Type());
+  auto unwrap =
+      rewriter.create<UnwrapValidReady>(loc, stage.input(), wrapReady);
 
   // Instantiate the "ESI_PipelineStage" external module.
+  circt::Backedge stageReady = back(rewriter.getI1Type());
   Value operands[] = {stage.clk(), stage.rstn(), unwrap.rawOutput(),
-                      unwrap.valid(), back(rewriter.getI1Type())};
+                      unwrap.valid(), stageReady};
   Type resultTypes[] = {rewriter.getI1Type(), unwrap.rawOutput().getType(),
                         rewriter.getI1Type()};
   auto stageInst = rewriter.create<circt::rtl::InstanceOp>(
       loc, resultTypes, "pipelineStage", stageModule.getName(), operands,
       stageAttrs.getDictionary(rewriter.getContext()));
   auto stageInstResults = stageInst.getResults();
-  Value aReady = stageInstResults[0];
+
+  // Set a_ready (from the unwrap) back edge correctly to its output from stage.
+  wrapReady = stageInstResults[0];
+
   Value x = stageInstResults[1];
   Value xValid = stageInstResults[2];
 
   // Wrap up the output of the RTL stage module.
   auto wrap = rewriter.create<WrapValidReady>(loc, chPort, rewriter.getI1Type(),
                                               x, xValid);
-
-  // Set back edges correctly and erase temp value.
-  unwrap.readyMutable().assign(aReady);
-  stageInst.setOperand(4, wrap.ready());
+  // Set the stages x_ready backedge correctly.
+  stageReady = wrap.ready();
 
   rewriter.replaceOp(stage, wrap.chanOutput());
   return success();

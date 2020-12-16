@@ -5,30 +5,29 @@
 
 #include "circt/Support/Backedge.h"
 
+#include "mlir/IR/PatternMatch.h"
+
 using namespace circt;
 using namespace mlir;
 
-// StringRef Backedge::getOperationName() { return "TemporaryBackedge"; }
-// void Backedge::build(mlir::OpBuilder &b, mlir::OperationState &state,
-//                      mlir::Type resultType) {
-//   state.addTypes(resultType);
-// }
+Backedge::Backedge(mlir::Operation *op) : value(op->getResult(0)) {}
 
-Backedge::Backedge(BackedgeBuilder &parent, mlir::Operation *op)
-    : parent(parent), op(op) {}
+void Backedge::operator=(mlir::Value newValue) {
+  assert(value.getType() == newValue.getType());
+  for (auto &use : value.getUses())
+    use.set(newValue);
+  value = newValue;
+}
 
 BackedgeBuilder::~BackedgeBuilder() {
   for (Operation *op : edges) {
     auto users = op->getUsers();
-    if (users.empty())
-      rewriter.eraseOp(op);
-    else
-      for (Operation *user : op->getUsers())
-        user->emitOpError("Still using temporary backedge");
+    assert(users.empty() && "Backedge still in use");
+    rewriter.eraseOp(op);
   }
 }
 
-Backedge::operator mlir::Value() { return op->getResult(0); }
+Backedge::operator mlir::Value() { return value; }
 
 BackedgeBuilder::BackedgeBuilder(PatternRewriter &rewriter, Location loc)
     : rewriter(rewriter), loc(loc) {}
@@ -38,5 +37,5 @@ Backedge BackedgeBuilder::operator()(Type t) {
   s.addTypes(t);
   auto op = rewriter.createOperation(s);
   edges.push_back(op);
-  return Backedge(*this, op);
+  return Backedge(op);
 }
