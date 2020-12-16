@@ -704,9 +704,6 @@ public:
 
   /// Emit the specified expression and return it as a string.
   std::string emitExpressionToString(Value exp, VerilogPrecedence precedence);
-  friend class ExprVisitor;
-  friend class CombinatorialVisitor;
-  friend class Visitor;
 
   /// Do a best-effort job of looking through noop cast operations.
   Value lookThroughNoopCasts(Value value) {
@@ -719,6 +716,10 @@ public:
   ModuleEmitter &emitter;
 
 private:
+  friend class ExprVisitor<ExprEmitter, SubExprInfo>;
+  friend class rtl::CombinatorialVisitor<ExprEmitter, SubExprInfo>;
+  friend class sv::Visitor<ExprEmitter, SubExprInfo>;
+
   /// Emit the specified value as a subexpression to the stream.
   SubExprInfo emitSubExpr(Value exp, VerilogPrecedence parenthesizeIfLooserThan,
                           bool forceExpectedSign = false,
