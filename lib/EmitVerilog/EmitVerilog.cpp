@@ -761,9 +761,11 @@ private:
   SubExprInfo emitFIRRTLVariadic(Operation *op, VerilogPrecedence prec,
                                  const char *syntax, bool skipCast = false);
 
-  SubExprInfo emitUnary(Operation *op, const char *syntax, bool forceUnsigned = false);
+  SubExprInfo emitUnary(Operation *op, const char *syntax,
+                        bool forceUnsigned = false);
 
-  SubExprInfo emitFIRRTLUnary(Operation *op, const char *syntax, bool skipCast = false);
+  SubExprInfo emitFIRRTLUnary(Operation *op, const char *syntax,
+                              bool skipCast = false);
 
   SubExprInfo emitNoopCast(Operation *op) {
     return emitSubExpr(op->getOperand(0), LowestPrecedence);
@@ -790,7 +792,9 @@ private:
   SubExprInfo visitExpr(AndPrimOp op) {
     return emitFIRRTLVariadic(op, And, "&");
   }
-  SubExprInfo visitExpr(OrPrimOp op) { return emitFIRRTLVariadic(op, Or, "|", true); }
+  SubExprInfo visitExpr(OrPrimOp op) {
+    return emitFIRRTLVariadic(op, Or, "|", true);
+  }
   SubExprInfo visitExpr(XorPrimOp op) {
     return emitFIRRTLVariadic(op, Xor, "^");
   }
@@ -825,8 +829,12 @@ private:
   }
 
   // Unary Prefix operators.
-  SubExprInfo visitExpr(AndRPrimOp op) { return emitFIRRTLUnary(op, "&", true); }
-  SubExprInfo visitExpr(XorRPrimOp op) { return emitFIRRTLUnary(op, "^", true); }
+  SubExprInfo visitExpr(AndRPrimOp op) {
+    return emitFIRRTLUnary(op, "&", true);
+  }
+  SubExprInfo visitExpr(XorRPrimOp op) {
+    return emitFIRRTLUnary(op, "^", true);
+  }
   SubExprInfo visitExpr(OrRPrimOp op) { return emitFIRRTLUnary(op, "|", true); }
   SubExprInfo visitExpr(NotPrimOp op) { return emitFIRRTLUnary(op, "~", true); }
   SubExprInfo visitExpr(NegPrimOp op) { return emitFIRRTLUnary(op, "-"); }
@@ -975,7 +983,8 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   // If we have a strict sign, then match the firrtl operation sign.
   // Otherwise, the result is signed if both operands are signed.
   SubExprSignedness signedness;
-  if (opSigned || (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned))
+  if (opSigned ||
+      (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned))
     signedness = IsSigned;
   else
     signedness = IsUnsigned;
@@ -984,9 +993,8 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
 }
 
 SubExprInfo ExprEmitter::emitFIRRTLBinary(Operation *op, VerilogPrecedence prec,
-                                    const char *syntax, bool skipCast) {
-  auto lhsInfo =
-      emitSubExpr(op->getOperand(0), prec, !skipCast);
+                                          const char *syntax, bool skipCast) {
+  auto lhsInfo = emitSubExpr(op->getOperand(0), prec, !skipCast);
   os << ' ' << syntax << ' ';
 
   // The precedence of the RHS operand must be tighter than this operator if
@@ -999,8 +1007,7 @@ SubExprInfo ExprEmitter::emitFIRRTLBinary(Operation *op, VerilogPrecedence prec,
   if (rhsOperandOp && op->getName() == rhsOperandOp->getName())
     rhsPrec = prec;
 
-  auto rhsInfo =
-      emitSubExpr(op->getOperand(1), rhsPrec, !skipCast);
+  auto rhsInfo = emitSubExpr(op->getOperand(1), rhsPrec, !skipCast);
 
   // If we have a strict sign, then match the firrtl operation sign.
   // Otherwise, the result is signed if both operands are signed.
@@ -1023,8 +1030,9 @@ SubExprInfo ExprEmitter::emitVariadic(Operation *op, VerilogPrecedence prec,
   return {prec, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::emitFIRRTLVariadic(Operation *op, VerilogPrecedence prec,
-                                      const char *syntax, bool skipCast) {
+SubExprInfo ExprEmitter::emitFIRRTLVariadic(Operation *op,
+                                            VerilogPrecedence prec,
+                                            const char *syntax, bool skipCast) {
   interleave(
       op->getOperands().begin(), op->getOperands().end(),
       [&](Value v1) { emitSubExpr(v1, prec, !skipCast); },
@@ -1033,17 +1041,19 @@ SubExprInfo ExprEmitter::emitFIRRTLVariadic(Operation *op, VerilogPrecedence pre
   return {prec, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax, bool forceUnsigned) {
-    os << syntax;
-    auto signedness = emitSubExpr(op->getOperand(0), Unary).signedness;
-    return {Unary, forceUnsigned ? IsUnsigned : signedness};
-  }
+SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
+                                   bool forceUnsigned) {
+  os << syntax;
+  auto signedness = emitSubExpr(op->getOperand(0), Unary).signedness;
+  return {Unary, forceUnsigned ? IsUnsigned : signedness};
+}
 
-SubExprInfo ExprEmitter::emitFIRRTLUnary(Operation *op, const char *syntax, bool skipCast) {
-    os << syntax;
-    emitSubExpr(op->getOperand(0), Unary, !skipCast);
-    return {Unary, getSignednessOf(op->getResult(0).getType())};
-  }
+SubExprInfo ExprEmitter::emitFIRRTLUnary(Operation *op, const char *syntax,
+                                         bool skipCast) {
+  os << syntax;
+  emitSubExpr(op->getOperand(0), Unary, !skipCast);
+  return {Unary, getSignednessOf(op->getResult(0).getType())};
+}
 
 /// Emit the specified value as a subexpression to the stream.
 SubExprInfo ExprEmitter::emitSubExpr(Value exp,
