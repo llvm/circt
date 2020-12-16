@@ -54,7 +54,10 @@ def MergeLikeOpInterface : OpInterface<"MergeLikeOpInterface"> {
 }
 
 def GeneralOpInterface : OpInterface<"GeneralOpInterface"> {
-  let description = [{"Simulate the Execution of ops"}];
+  let description =
+      [{"Simulate the Execution of ops. The op takes a set of input values and "
+        "returns the corresponding outputs assuming the precondition to "
+        "execute holds."}];
 
   let methods = [
     InterfaceMethod<
@@ -70,7 +73,11 @@ def ExecutableOpInterface : OpInterface<"ExecutableOpInterface"> {
 
   let methods = [
     InterfaceMethod<
-        "The execution interface of hpx ops take the following arguments: "
+        "The op checks its precondition to execute. If the precondition holds, "
+        "the op executes with the given input values and returns zero. "
+        "Otherwise, it returns a false value to suggest the simulator to "
+        "reschedule. The execution interface of hpx ops take the following "
+        "arguments: "
         "bool = returns whether the op has been executed;"
         "valueMap = a map of all values in the code;"
         "memoryMap = a map of memory ops to simualte;"
@@ -80,10 +87,10 @@ def ExecutableOpInterface : OpInterface<"ExecutableOpInterface"> {
         "accessed by it."
         "scheduleList = a list of values to be scheduled.",
         "bool", "tryExecute",
-        (ins "llvm::DenseMap<mlir::Value, llvm::Any> &" : $valueMap,
+        (ins "llvm::DenseMap<mlir::Value, llvm::Any> &" : $valueMap, 
            "llvm::DenseMap<unsigned, unsigned> &" : $memoryMap, 
-           "llvm::DenseMap<mlir::Value, double> &" : $timeMap,
-           "std::vector<std::vector<llvm::Any>> &" : $store,
+           "llvm::DenseMap<mlir::Value, double> &" : $timeMap, 
+           "std::vector<std::vector<llvm::Any>> &" : $store, 
            "std::vector<mlir::Value> &" : $scheduleList)>,
   ];
 }

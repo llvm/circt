@@ -103,7 +103,8 @@ bool tryToExecute(Operation *op,
     auto in = fetchValues(ins, valueMap);
     std::vector<llvm::Any> out(outs.size());
     auto generalOp = dyn_cast<handshake::GeneralOpInterface>(op);
-    assert(generalOp && "Undefined execution for the current op");
+    if (!generalOp)
+      op->emitError("Undefined execution for the current op");
     generalOp.execute(in, out);
     storeValues(out, outs, valueMap);
     updateTime(ins, outs, timeMap, latency);
@@ -214,7 +215,8 @@ bool handshake::MergeOp::tryExecute(
   int i = 0;
   for (mlir::Value in : op->getOperands()) {
     if (valueMap.count(in) == 1) {
-      assert(!found && "More than one valid input to Merge!");
+      if (found)
+        op->emitError("More than one valid input to Merge!");
       auto t = valueMap[in];
       valueMap[op->getResult(0)] = t;
       timeMap[op->getResult(0)] = timeMap[in];
@@ -224,7 +226,8 @@ bool handshake::MergeOp::tryExecute(
     }
     i++;
   }
-  assert(found && "No valid input to Merge!");
+  if (!found)
+    op->emitError("No valid input to Merge!");
   scheduleList.push_back(getResult());
   return true;
 }
@@ -332,7 +335,8 @@ bool handshake::ControlMergeOp::tryExecute(
   int i = 0;
   for (mlir::Value in : op->getOperands()) {
     if (valueMap.count(in) == 1) {
-      assert(!found && "More than one valid input to CMerge!");
+      if (found)
+        op->emitError("More than one valid input to CMerge!");
       auto t = valueMap[in];
       valueMap[op->getResult(0)] = t;
       timeMap[op->getResult(0)] = timeMap[in];
@@ -347,7 +351,8 @@ bool handshake::ControlMergeOp::tryExecute(
     }
     i++;
   }
-  assert(found && "No valid input to CMerge!");
+  if (!found)
+    op->emitError("No valid input to CMerge!");
   scheduleList = toVector(op->getResults());
   return true;
 }
@@ -382,7 +387,7 @@ bool handshake::BranchOp::tryExecute(
     llvm::DenseMap<mlir::Value, double> &timeMap,
     std::vector<std::vector<llvm::Any>> &store,
     std::vector<mlir::Value> &scheduleList) {
-  return tryToExecute(getOperation(), valueMap, timeMap, scheduleList, 1);
+  return tryToExecute(getOperation(), valueMap, timeMap, scheduleList, 0);
 }
 
 void handshake::ConditionalBranchOp::build(OpBuilder &builder,
@@ -504,7 +509,7 @@ bool handshake::ConstantOp::tryExecute(
     llvm::DenseMap<mlir::Value, double> &timeMap,
     std::vector<std::vector<llvm::Any>> &store,
     std::vector<mlir::Value> &scheduleList) {
-  return tryToExecute(getOperation(), valueMap, timeMap, scheduleList, 1);
+  return tryToExecute(getOperation(), valueMap, timeMap, scheduleList, 0);
 }
 
 void handshake::TerminatorOp::build(OpBuilder &builder, OperationState &result,

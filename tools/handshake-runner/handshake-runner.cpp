@@ -503,20 +503,12 @@ void executeHandshakeFunction(handshake::FuncOp &toplevel,
   llvm::DenseMap<unsigned, unsigned> memoryMap;
 
   // Pre-allocate memory
-  for (auto &region : toplevel.getOperation()->getRegions()) {
-    for (auto &block : region) {
-      for (auto &nestedOp : block) {
-        if (auto op = dyn_cast<handshake::MemoryOp>(nestedOp)) {
-          auto memreftype = op.getMemRefType();
-          std::vector<Any> nothing;
-          std::string x;
-          unsigned buffer =
-              allocateMemRef(memreftype, nothing, store, storeTimes);
-          memoryMap[op.getID()] = buffer;
-        }
-      }
-    }
-  }
+  toplevel.walk([&](handshake::MemoryOp op) {
+    auto memreftype = op.getMemRefType();
+    std::vector<Any> nothing;
+    unsigned buffer = allocateMemRef(memreftype, nothing, store, storeTimes);
+    memoryMap[op.getID()] = buffer;
+  });
 
   for (unsigned i = 0; i < blockArgs.size(); i++)
     scheduleUses(readyList, valueMap, blockArgs[i]);

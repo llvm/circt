@@ -299,8 +299,7 @@ def ForkOp : Handshake_Op<"fork", [
   let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$outputs)>];
 
   let extraClassDeclaration = [{
-    bool isControl() { return getAttrOfType<BoolAttr>("control").getValue();
-}
+    bool isControl() { return getAttrOfType<BoolAttr>("control").getValue(); }
   }];
 }
 
