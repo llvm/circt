@@ -23,10 +23,20 @@ namespace circt {
 
 class Backedge;
 
-/// Instantiate one of these and use it to build typed backedges. Backedges which
-/// get used as operands must be assigned to with the actual value before this
-/// class is destructed, usually at the end of a scope. It will check that
+/// Instantiate one of these and use it to build typed backedges. Backedges
+/// which get used as operands must be assigned to with the actual value before
+/// this class is destructed, usually at the end of a scope. It will check that
 /// invariant then erase all the backedge ops during destruction.
+///
+/// Example use:
+/// ```
+///   circt::BackedgeBuilder back(rewriter, loc);
+///   circt::Backedge ready = back(rewriter.getI1Type());
+///   // Use `ready` as a `Value`.
+///   auto addOp = rewriter.create<addOp>(loc, ready);
+///   // When the actual value is available,
+///   ready = anotherOp.getResult(0);
+/// ```
 class BackedgeBuilder {
   friend class Backedge;
 
