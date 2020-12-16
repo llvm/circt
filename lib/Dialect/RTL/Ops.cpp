@@ -797,6 +797,32 @@ OpFoldResult ExtractOp::fold(ArrayRef<Attribute> operands) {
 // Variadic operations
 //===----------------------------------------------------------------------===//
 
+// Reduce all operands to a single value by applying the `calculate` function.
+// This will fail if any of the operands are not constant.
+template <class AttrElementT,
+          class ElementValueT = typename AttrElementT::ValueType,
+          class CalculationT =
+              function_ref<ElementValueT(ElementValueT, ElementValueT)>>
+static Attribute constFoldVariadicOp(ArrayRef<Attribute> operands,
+                                     const CalculationT &calculate) {
+  if (!operands.size())
+    return {};
+
+  if (!operands[0])
+    return {};
+
+  ElementValueT accum = operands[0].cast<AttrElementT>().getValue();
+  for (auto i = operands.begin() + 1, end = operands.end(); i != end; ++i) {
+    auto attr = *i;
+    if (!attr)
+      return {};
+
+    auto typedAttr = attr.cast<AttrElementT>();
+    calculate(accum, typedAttr.getValue());
+  }
+  return AttrElementT::get(operands[0].getType(), accum);
+}
+
 static LogicalResult verifyUTVariadicRTLOp(Operation *op) {
   auto size = op->getOperands().size();
   if (size < 1)
@@ -806,19 +832,25 @@ static LogicalResult verifyUTVariadicRTLOp(Operation *op) {
 }
 
 OpFoldResult AndOp::fold(ArrayRef<Attribute> operands) {
-  auto size = inputs().size();
+  auto width = getType().cast<IntegerType>().getWidth();
+  APInt value(/*numBits=*/width, -1, /*isSigned=*/false);
 
-  // and(x) -> x -- noop
-  if (size == 1u)
+  // and(x, 0, 1) -> 0 -- annulment
+  for (auto operand : operands) {
+    if (!operand)
+      continue;
+    value &= operand.cast<IntegerAttr>().getValue();
+    if (value.isNullValue())
+      return getIntAttr(value, getContext());
+  }
+
+  // and(x, x, x) -> x -- noop
+  if (llvm::all_of(inputs(), [&](auto in) { return in == inputs()[0]; }))
     return inputs()[0];
 
-  APInt value;
-
-  // and(..., 0) -> 0 -- annulment
-  if (matchPattern(inputs().back(), m_RConstant(value)) && value.isNullValue())
-    return inputs().back();
-
-  return {};
+  // Constant fold
+  return constFoldVariadicOp<IntegerAttr>(
+      operands, [](APInt &a, const APInt &b) { a &= b; });
 }
 
 void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
@@ -841,6 +873,7 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
+      // TODO: remove all duplicate arguments
       // and(..., x, x) -> and(..., x) -- idempotent
       if (inputs[size - 1] == inputs[size - 2]) {
         rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(),
@@ -848,6 +881,7 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
+      // TODO: Combine all constants in one shot
       // and(..., c1, c2) -> and(..., c3) where c3 = c1 & c2 -- constant folding
       if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
           matchPattern(inputs[size - 2], m_RConstant(value2))) {
@@ -857,7 +891,6 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
         return success();
       }
-
       // and(x, and(...)) -> and(x, ...) -- flatten
       if (tryFlatteningOperands(op, rewriter))
         return success();
@@ -870,19 +903,25 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 }
 
 OpFoldResult OrOp::fold(ArrayRef<Attribute> operands) {
-  auto size = inputs().size();
+  auto width = getType().cast<IntegerType>().getWidth();
+  APInt value(/*numBits=*/width, 0, /*isSigned=*/false);
 
-  // or(x) -> x -- noop
-  if (size == 1u)
+  // or(x, 1, 0) -> 1
+  for (auto operand : operands) {
+    if (!operand)
+      continue;
+    value |= operand.cast<IntegerAttr>().getValue();
+    if (value.isAllOnesValue())
+      return getIntAttr(value, getContext());
+  }
+
+  // or(x, x, x) -> x
+  if (llvm::all_of(inputs(), [&](auto in) { return in == inputs()[0]; }))
     return inputs()[0];
 
-  APInt value;
-
-  // or(..., '1) -> '1 -- annulment
-  if (matchPattern(inputs().back(), m_RConstant(value)) &&
-      value.isAllOnesValue())
-    return inputs().back();
-  return {};
+  // Constant fold
+  return constFoldVariadicOp<IntegerAttr>(
+      operands, [](APInt &a, const APInt &b) { a |= b; });
 }
 
 void OrOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
@@ -943,7 +982,9 @@ OpFoldResult XorOp::fold(ArrayRef<Attribute> operands) {
   if (size == 2u && inputs()[0] == inputs()[1])
     return IntegerAttr::get(getType(), 0);
 
-  return {};
+  // Constant fold
+  return constFoldVariadicOp<IntegerAttr>(
+      operands, [](APInt &a, const APInt &b) { a ^= b; });
 }
 
 void XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
@@ -1005,7 +1046,9 @@ OpFoldResult AddOp::fold(ArrayRef<Attribute> operands) {
   if (size == 1u)
     return inputs()[0];
 
-  return {};
+  // Constant fold
+  return constFoldVariadicOp<IntegerAttr>(
+      operands, [](APInt &a, const APInt &b) { a += b; });
 }
 
 void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
@@ -1104,13 +1147,21 @@ OpFoldResult MulOp::fold(ArrayRef<Attribute> operands) {
   if (size == 1u)
     return inputs()[0];
 
-  APInt value;
+  auto width = getType().cast<IntegerType>().getWidth();
+  APInt value(/*numBits=*/width, 1, /*isSigned=*/false);
 
-  // mul(..., 0) -> 0 -- annulment
-  if (matchPattern(inputs().back(), m_RConstant(value)) && value.isNullValue())
-    return inputs().back();
+  // mul(x, 0, 1) -> 0 -- annulment
+  for (auto operand : operands) {
+    if (!operand)
+      continue;
+    value *= operand.cast<IntegerAttr>().getValue();
+    if (value.isNullValue())
+      return getIntAttr(value, getContext());
+  }
 
-  return {};
+  // Constant fold
+  return constFoldVariadicOp<IntegerAttr>(
+      operands, [](APInt &a, const APInt &b) { a *= b; });
 }
 
 void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
