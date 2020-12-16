@@ -8,6 +8,7 @@
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/RTL/Ops.h"
 #include "circt/Dialect/RTL/Types.h"
+#include "circt/Support/Backedge.h"
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/StandardTypes.h"
@@ -215,13 +216,13 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   // Unwrap the channel. The ready signal is a Value we haven't created yet, so
   // create a temp value and replace it later. Give this constant an odd-looking
   // type to make debugging easier.
-  auto tempConstant = rewriter.create<mlir::ConstantIntOp>(loc, 0, 1234);
-  auto unwrap =
-      rewriter.create<UnwrapValidReady>(loc, stage.input(), tempConstant);
+  circt::BackedgeBuilder back(rewriter, loc);
+  auto ready = back(rewriter.getI1Type());
+  auto unwrap = rewriter.create<UnwrapValidReady>(loc, stage.input(), ready);
 
   // Instantiate the "ESI_PipelineStage" external module.
   Value operands[] = {stage.clk(), stage.rstn(), unwrap.rawOutput(),
-                      unwrap.valid(), tempConstant};
+                      unwrap.valid(), back(rewriter.getI1Type())};
   Type resultTypes[] = {rewriter.getI1Type(), unwrap.rawOutput().getType(),
                         rewriter.getI1Type()};
   auto stageInst = rewriter.create<circt::rtl::InstanceOp>(
@@ -239,7 +240,6 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   // Set back edges correctly and erase temp value.
   unwrap.readyMutable().assign(aReady);
   stageInst.setOperand(4, wrap.ready());
-  rewriter.eraseOp(tempConstant);
 
   rewriter.replaceOp(stage, wrap.chanOutput());
   return success();
