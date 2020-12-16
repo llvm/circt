@@ -69,4 +69,12 @@ if config.verilator_path != "":
   tools.append('verilator')
   config.available_features.add('verilator')
 
+# Enable Verilator if it has been detected.
+if config.questa_path != "":
+  tool_dirs.append(config.questa_path)
+  tools.extend(['vlog', 'vopt', 'vsim'])
+  config.available_features.add('questa')
+  llvm_config.with_environment(
+      'LM_LICENSE_FILE', os.environ['LM_LICENSE_FILE'])
+
 llvm_config.add_tool_substitutions(tools, tool_dirs)
