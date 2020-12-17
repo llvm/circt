@@ -9,7 +9,7 @@
 
 include "mlir/Pass/PassBase.td"
 
-def LowerFIRRTLTypes : Pass<"lower-firrtl-types", "firrtl::FModuleOp"> {
+def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::FModuleOp"> {
   let summary = "Lower FIRRTL types to ground types";
   let description = [{
     Lower firrtl.module port types to ground types.

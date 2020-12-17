@@ -33,9 +33,6 @@ public:
 /// value.
 StringAttr getFIRRTLNameAttr(ArrayRef<NamedAttribute> attrs);
 
-/// Register all of the FIRRTL transformation passes with the PassManager.
-void registerFIRRTLPasses();
-
 } // namespace firrtl
 } // namespace circt
 
