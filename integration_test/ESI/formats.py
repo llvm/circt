@@ -45,7 +45,7 @@ class CosimTestRunner:
         self.runs = list()
         self.sources = list()
         self.cppSources = list()
-        self.top = "main"
+        self.top = "top"
 
     def parse(self):
         """Parse a test file. Look for comments we recognize anywhere in the

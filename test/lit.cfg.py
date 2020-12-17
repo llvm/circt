@@ -52,7 +52,7 @@ config.test_exec_root = os.path.join(config.circt_obj_root, 'test')
 # Tweak the PATH to include the tools dir.
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 
-tool_dirs = [config.circt_tools_dir,
+tool_dirs = [config.circt_tools_dir, os.path.join(config.circt_src_root, "utils"),
              config.mlir_tools_dir, config.llvm_tools_dir]
 tools = [
     'firtool',
@@ -60,19 +60,22 @@ tools = [
     'circt-opt',
     'circt-translate',
     'circt-capi-ir-test',
-    'llhd-sim'
+    'llhd-sim',
+    'circt-rtl-sim.py'
 ]
 
 # Enable Verilator if it has been detected.
 if config.verilator_path != "":
   tool_dirs.append(os.path.dirname(config.verilator_path))
+  config.substitutions.append(('%VERILATOR%', config.verilator_path))
   tools.append('verilator')
   config.available_features.add('verilator')
 
-# Enable Verilator if it has been detected.
+# Enable Questa if it has been detected.
 if config.questa_path != "":
+  config.substitutions.append(('%QUESTA%', config.questa_path))
   tool_dirs.append(config.questa_path)
-  tools.extend(['vlog', 'vopt', 'vsim'])
+  tools.append('vsim')
   config.available_features.add('questa')
   llvm_config.with_environment(
       'LM_LICENSE_FILE', os.environ['LM_LICENSE_FILE'])
