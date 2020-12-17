@@ -98,13 +98,13 @@ module {
   // CHECK-NEXT:   assign r33 = cond ? a : b;
   // CHECK-NEXT: endmodule
 
-  rtl.module @B(%a: i1 { rtl.inout }) -> (%b: i1, %c: i1) {
+  rtl.module @B(%a: i1) -> (%b: i1, %c: i1) {
     %0 = rtl.or %a, %a : i1
     %1 = rtl.and %a, %a : i1
     rtl.output %0, %1 : i1, i1
   }
   // CHECK-LABEL: module B(
-  // CHECK-NEXT:   inout  a,
+  // CHECK-NEXT:   input  a,
   // CHECK-NEXT:   output b, c);
   // CHECK-EMPTY:
   // CHECK-NEXT:   assign b = a | a;
@@ -200,7 +200,7 @@ module {
 
 
   rtl.module @inout(%a: !rtl.inout<i42>) -> (%out: i42) {
-    %aget = rtl.read_inout %a: (!rtl.inout<i42>) -> i42
+    %aget = rtl.read_inout %a: i42
     rtl.output %aget : i42
   }
   // CHECK-LABEL:  module inout(
@@ -209,4 +209,31 @@ module {
   // CHECK-EMPTY:
   // CHECK-NEXT:     assign out = a;
   // CHECK-NEXT:   endmodule
+
+  // https://github.com/llvm/circt/issues/316
+  // FIXME: The MLIR parser doesn't accept an i0 even though it is valid IR,
+  // this needs to be fixed upstream.
+  //rtl.module @issue316(%inp_0: i0) {
+  //  rtl.output
+  //}
+
+  // https://github.com/llvm/circt/issues/318
+  // This shouldn't generate invalid Verilog
+  rtl.module @extract_all(%tmp85: i1) -> (%tmp106: i1) {
+    %1 = rtl.extract %tmp85 from 0 : (i1) -> i1
+    rtl.output %1 : i1
+  }
+  // CHECK-LABEL: module extract_all
+  // CHECK:  assign tmp106 = tmp85;
+
+  // https://github.com/llvm/circt/issues/320
+  rtl.module @literal_extract(%inp_1: i349) -> (%tmp6: i349) {
+    %c-58836_i17 = rtl.constant(-58836 : i17) : i17
+    %0 = rtl.sext %c-58836_i17 : (i17) -> i349
+    rtl.output %0 : i349
+  }
+  // CHECK-LABEL: module literal_extract
+  // CHECK: wire [16:0] _T = 17'h11A2C;
+  // CHECK: assign tmp6 = {{[{][{]}}332{_T[16]}}, _T};
 }
+

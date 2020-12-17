@@ -1,3 +1,8 @@
+;; FIXME: This test should eventually be removed, presumably when the firrtl
+;; dialect support gets removed.  It is testing three different things (parsing
+;; firrtl, emitting verilog, and lower-to-rtl) which should be factored into
+;; those buckets correctly.
+
 ; RUN: circt-translate -parse-fir --mlir-print-debuginfo %s | circt-translate -emit-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 ; Some day this should filecheck:
@@ -32,10 +37,11 @@ circuit inputs_only :
     out1 <= xorr(in4)
     out1 <= andr(in4)
     out1 <= orr(in4)
-    out1 <= not(in4)
+    out4 <= not(in4)
     out4 <= rem(in4, UInt<4>("h1"))
     out1 <= asUInt(clock)
     out1 <= asUInt(asClock(UInt<1>("h1")))
+    out1 is invalid
     node x1 = bits(in4, 1, 0)
     node x2 = or(shr(in4, 2), shl(bits(in4, 2, 2), 1))
     node x3 = dshr(in4, in4)
@@ -54,6 +60,7 @@ circuit inputs_only :
                    asUInt(pad(asSInt(clock), 6)))
     node x12 = shl(in4, 0)
     node x13 = dshlw(in4, in4)
+    node x14 = neg(in4)
 
 ; CHECK-LABEL: module Expressions(
 ; CHECK-NEXT:     input  [3:0] in4,
@@ -74,14 +81,16 @@ circuit inputs_only :
 ; CHECK-NEXT:     wire [5:0] x11;
 ; CHECK-NEXT:     wire [3:0] x12;
 ; CHECK-NEXT:     wire [3:0] x13;
+; CHECK-NEXT:     wire [4:0] x14;
 ; CHECK-EMPTY:
 ; CHECK-NEXT:     assign out1 = ^in4;
 ; CHECK-NEXT:     assign out1 = &in4;
 ; CHECK-NEXT:     assign out1 = |in4;
-; CHECK-NEXT:     assign out1 = ~in4;
+; CHECK-NEXT:     assign out4 = ~in4;
 ; CHECK-NEXT:     assign out4 = in4 % 4'h1;
 ; CHECK-NEXT:     assign out1 = clock;
 ; CHECK-NEXT:     assign out1 = 1'h1;
+; CHECK-NEXT:     assign out1 = '0;
 ; CHECK-NEXT:     assign x1 = in4[1:0];
 ; CHECK-NEXT:     assign x2 = in4[3:2] | {in4[2], 1'h0};
 ; CHECK-NEXT:     assign x3 = in4 >>> in4;
@@ -95,6 +104,7 @@ circuit inputs_only :
 ; CHECK-NEXT:     assign x11 = {{\{\{}}2'd0}, in4} ^ {{\{\{}}2{in4[3]}}, in4} ^ {6{clock}};
 ; CHECK-NEXT:     assign x12 = in4;
 ; CHECK-NEXT:     assign x13 = in4 << in4;
+; CHECK-NEXT:     assign x14 = -in4;
 ; CHECK-NEXT:  endmodule
 
 
@@ -235,11 +245,13 @@ circuit inputs_only :
 
 ; CHECK-LABEL: module MultiUseExpr(
 ; CHECK-NEXT:    input  [3:0] a,
-; CHECK-NEXT:    output       b);
+; CHECK-NEXT:    output       b,
+; CHECK-NEXT:    output [1:0] b2);
 ; CHECK-EMPTY:
   module MultiUseExpr :
     input a: UInt<4>
     output b: UInt<1>
+    output b2: UInt<2>
     ;; These node decls disappear in MLIR because of the _T name.  The verilog
     ;; emitter needs to reintroduce it as an 'assign' to a local.
 
@@ -259,8 +271,8 @@ circuit inputs_only :
     ; This expression isn't multiply used but needs to be emitted separately
     ; because Verilog bit select expressions don't compose generally.
     ; CHECK-NEXT: wire [3:0] _T_1 = ~a;
-    ; CHECK-NEXT: assign b = _T_1[3:2];
-    b <= shr(not(a), 2)
+    ; CHECK-NEXT: assign b2 = _T_1[3:2];
+    b2 <= shr(not(a), 2)
 
     ; CHECK-NEXT:  endmodule
 
@@ -638,7 +650,7 @@ circuit inputs_only :
   ; CHECK-LABEL: module Locations(
   module Locations :
     input a: UInt<4>
-    output b: UInt<4>
+    output b: UInt<12>
     node _T_1 = add(a, a)                 @[Place.scala 101:13]
     node _T_2 = add(_T_1, UInt<4>("h3"))  @[Other.scala 51:15]
     b <= xor(_T_2, UInt<4>("h11"))        @[Place.scala 101:15]

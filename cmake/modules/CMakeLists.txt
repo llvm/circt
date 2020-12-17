@@ -1,4 +1,4 @@
-set(CIRCT_INSTALL_PACKAGE_DIR lib${LLVM_LIBDIR_SUFFIX}/cmake/llvm)
+set(CIRCT_INSTALL_PACKAGE_DIR lib${LLVM_LIBDIR_SUFFIX}/cmake/circt)
 set(circt_cmake_builddir "${CMAKE_BINARY_DIR}/${CIRCT_INSTALL_PACKAGE_DIR}")
 
 # Keep this in sync with mlir/cmake/CMakeLists.txt!
@@ -14,6 +14,11 @@ set(llvm_cmake_builddir "${LLVM_BINARY_DIR}/${LLVM_INSTALL_PACKAGE_DIR}")
 # the usual CMake convention seems to be ${Project}Targets.cmake.
 get_property(CIRCT_EXPORTS GLOBAL PROPERTY CIRCT_EXPORTS)
 export(TARGETS ${CIRCT_EXPORTS} FILE ${circt_cmake_builddir}/CIRCTTargets.cmake)
+
+get_property(CIRCT_ALL_LIBS GLOBAL PROPERTY CIRCT_ALL_LIBS)
+get_property(CIRCT_DIALECT_LIBS GLOBAL PROPERTY CIRCT_DIALECT_LIBS)
+get_property(CIRCT_CONVERSION_LIBS GLOBAL PROPERTY CIRCT_CONVERSION_LIBS)
+get_property(CIRCT_TRANSLATION_LIBS GLOBAL PROPERTY CIRCT_TRANSLATION_LIBS)
 
 # Generate CIRCTConfig.cmake for the build tree.
 set(CIRCT_CONFIG_CMAKE_DIR "${circt_cmake_builddir}")

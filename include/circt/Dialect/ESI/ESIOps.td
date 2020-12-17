@@ -34,14 +34,15 @@ def ChannelBuffer : ESI_Abstract_Op<"buffer", [NoSideEffect]> {
     ```
   }];
 
-  let arguments = (ins ChannelType:$input, ChannelBufferOptions:$options);
+  let arguments = (ins I1:$clk, I1:$rstn, ChannelType:$input,
+    ChannelBufferOptions:$options);
   let results = (outs ChannelType:$output);
 
   let printer = [{ return ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
-def PipelineStage : ESI_Physical_Op<"stage", [NoSideEffect, SameOperandsAndResultType]> {
+def PipelineStage : ESI_Physical_Op<"stage", [NoSideEffect]> {
   let summary = "An elastic buffer stage.";
   let description = [{
     An individual elastic pipeline register. Generally lowered to from a
@@ -50,7 +51,7 @@ def PipelineStage : ESI_Physical_Op<"stage", [NoSideEffect, SameOperandsAndResul
     late-pass latency balancing.
   }];
 
-  let arguments = (ins ChannelType:$input);
+  let arguments = (ins I1:$clk, I1:$rstn, ChannelType:$input);
   let results = (outs ChannelType:$output);
 
   let printer = [{ return ::print(p, *this); }];
@@ -75,8 +76,8 @@ def CosimEndpoint : ESI_Physical_Op<"cosim", []> {
     supported by the specific protocol.
   }];
 
-  let arguments = (ins ChannelType:$input);
+  let arguments = (ins I1:$clk, I1:$rstn, ChannelType:$input);
   let results = (outs ChannelType:$output);
 
-  let assemblyFormat = [{ `(` $input `)` attr-dict `:` type($input) `->` type($output) }];
+  let assemblyFormat = [{ $clk `,` $rstn `,` $input attr-dict `:` type($input) `->` type($output) }];
 }

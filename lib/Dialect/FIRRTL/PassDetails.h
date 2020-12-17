@@ -9,7 +9,6 @@
 #define DIALECT_FIRRTL_PASSDETAILS_H
 
 #include "circt/Dialect/FIRRTL/Ops.h"
-#include "circt/Dialect/RTL/Ops.h"
 #include "mlir/Pass/Pass.h"
 
 namespace circt {

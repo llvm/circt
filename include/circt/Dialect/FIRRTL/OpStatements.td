@@ -20,13 +20,10 @@ def MemoryPortOp : FIRRTLOp<"memoryport", []> {
 def AttachOp : FIRRTLOp<"attach"> {
   let summary = "Analog Attach Statement";
 
-  let arguments = (ins Variadic<FIRRTLType>:$operands);
+  let arguments = (ins Variadic<AnalogType>:$operands);
   let results = (outs);
 
-  let assemblyFormat = [{
-    `(` $operands `)` attr-dict `:` type($operands)
-  }];
-  // TODO: add verifier that the operands are all Analog
+  let assemblyFormat = "$operands attr-dict `:` type($operands)";
 }
 
 def ConnectOp : FIRRTLOp<"connect", []> {

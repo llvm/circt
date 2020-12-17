@@ -41,10 +41,10 @@ class Trace {
   std::map<std::pair<std::string, int>, std::string> lastValue;
 
   /// Push one change to the changes vector.
-  void pushChange(std::string inst, unsigned sigIndex, int elem);
+  void pushChange(unsigned inst, unsigned sigIndex, int elem);
   /// Push one change for each element of a signal if it is of a structured
   /// type, or the full signal otherwise.
-  void pushAllChanges(std::string inst, unsigned sigIndex);
+  void pushAllChanges(unsigned inst, unsigned sigIndex);
 
   /// Add a merged change to the change buffer.
   void addChangeMerged(unsigned);

@@ -46,11 +46,15 @@ def WrapValidReady : ESI_Op<"wrap.vr", [NoSideEffect]> {
     ready signal from the other end of the channel.
   }];
 
-  let arguments = (ins AnyType:$data, I1:$valid);
-  let results = (outs ChannelType:$output, I1:$ready);
+  let arguments = (ins AnyType:$rawInput, I1:$valid);
+  let results = (outs ChannelType:$chanOutput, I1:$ready);
 
   let printer = [{ return ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
+
+  let builders = [
+    OpBuilderDAG<(ins "mlir::Value":$data, "mlir::Value":$valid)>
+  ];
 }
 
 def UnwrapValidReady : ESI_Op<"unwrap.vr", [NoSideEffect]> {
@@ -61,9 +65,55 @@ def UnwrapValidReady : ESI_Op<"unwrap.vr", [NoSideEffect]> {
     along with a valid signal.
   }];
 
-  let arguments = (ins ChannelType:$input, I1:$ready);
-  let results = (outs AnyType:$output, I1:$valid);
+  let arguments = (ins ChannelType:$chanInput, I1:$ready);
+  let results = (outs AnyType:$rawOutput, I1:$valid);
 
   let printer = [{ return ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
+
+  let builders = [
+    OpBuilderDAG<(ins "mlir::Value":$inChan, "mlir::Value":$ready)>
+  ];
+}
+
+def ModportType:
+  Type<CPred<"$_self.isa<::circt::sv::ModportType>()">, "sv.interface">;
+
+def WrapSVInterface: ESI_Op<"wrap.iface", [NoSideEffect]> {
+  let summary = "Wrap an SV interface into an ESI port";
+  let description = [{
+    Wrap a SystemVerilog interface into an ESI channel. Interface MUST look
+    like an interface produced by ESI meaning it MUST contain valid, ready,
+    and data signals. Any other signals will be discarded.
+  }];
+
+  let arguments = (ins ModportType:$iface);
+  let results = (outs ChannelType:$output);
+
+  let assemblyFormat = [{
+    $iface attr-dict `:` type($iface) `->` type($output)
+  }];
+
+  let verifier = [{
+    return ::verify$cppClass(*this);
+  }];
+}
+
+def UnwrapSVInterface : ESI_Op<"unwrap.iface", [NoSideEffect]> {
+  let summary = "Unwrap an SV interface from an ESI port";
+  let description = [{
+    Unwrap an ESI channel into a SystemVerilog interface containing valid,
+    ready, and data signals.
+  }];
+
+  let arguments = (ins ChannelType:$chanInput, ModportType:$outIface);
+  let results = (outs);
+
+  let assemblyFormat = [{
+    $chanInput `into` $outIface attr-dict `:` `(` type($chanInput) `,` type($outIface) `)`
+  }];
+
+  let verifier = [{
+    return ::verify$cppClass(*this);
+  }];
 }

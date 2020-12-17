@@ -1,4 +1,4 @@
-add_mlir_library(MLIRStandardToStaticLogic
+add_circt_library(MLIRStandardToStaticLogic
   StandardToStaticLogic.cpp
 
   ADDITIONAL_HEADER_DIRS

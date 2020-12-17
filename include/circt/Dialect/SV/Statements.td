@@ -96,6 +96,22 @@ def YieldOp
    let assemblyFormat = [{attr-dict}];
 }
 
+def AliasOp : SVOp<"alias"> {
+  let summary = "SystemVerilog 'alias' statement";
+  let description = [{
+    An alias statement declares multiple names for the same physical net, or
+    bits within a net.  Aliases always have at least two operands.
+  }];
+
+  let arguments = (ins Variadic<InOutType>:$operands);
+  let results = (outs);
+
+  let assemblyFormat = "$operands attr-dict `:` type($operands)";
+
+  // Verify that we have at least two operands.
+  let verifier = [{ return ::verifyAliasOp(*this); }];
+}
+
 // TODO: This needs to model the file descriptor to write on.  This is currently
 // hard coded to 32'h80000002.
 def FWriteOp : SVOp<"fwrite"> {

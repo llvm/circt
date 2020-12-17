@@ -15,14 +15,14 @@ module {
   // CHECK-LABEL: rtl.module @Sender() -> (%x: !esi.channel<i1>)
   // CHECK-LABEL: rtl.module @Reciever(%a: !esi.channel<i1>)
 
-  rtl.module @Top() -> () {
+  rtl.module @Top(%clk:i1, %rstn:i1) -> () {
     rtl.instance "recv" @Reciever (%cosimRecv) : (!esi.channel<i1>) -> ()
     // CHECK:  rtl.instance "recv" @Reciever(%0)  : (!esi.channel<i1>) -> ()
 
     %send.x = rtl.instance "send" @Sender () : () -> (!esi.channel<i1>)
     // CHECK:  %send.x = rtl.instance "send" @Sender() : () -> !esi.channel<i1>
 
-    %cosimRecv = esi.cosim (%send.x) {} : !esi.channel<i1> -> !esi.channel<i1>
-    // CHECK:  %0 = esi.cosim(%send.x) : !esi.channel<i1> -> !esi.channel<i1>
+    %cosimRecv = esi.cosim %clk, %rstn, %send.x {} : !esi.channel<i1> -> !esi.channel<i1>
+    // CHECK:  %0 = esi.cosim %clk, %rstn, %send.x : !esi.channel<i1> -> !esi.channel<i1>
   }
 }

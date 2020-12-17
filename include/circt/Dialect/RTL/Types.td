@@ -22,13 +22,13 @@ def ArrayType : RTLType<"Array"> {
   let genVerifyInvariantsDecl = 1;
 }
 
-def InOutType : RTLType<"InOut"> {
+def InOutType : RTLType<"InOut">, Type<CPred<"$_self.isa<InOutType>()">, "InOutType"> {
   let summary = "bidirectional type for ports and wires";
-  let description = [{
+  /*let description = [{
     InOut type is used for model operations and values that have "connection"
     semantics, instead of typical dataflow behavior.  This is used for wires
     and inout ports in Verilog.
-  }];
+  }];*/
 
   let mnemonic = "inout";
   let parameters = (ins "::mlir::Type":$elementType);
@@ -90,3 +90,13 @@ def StructType : FieldInfo_Type<"Struct"> {
 }
 
 def AnyRTLStructType : Type<CPred<"$_self.isa<::circt::rtl::StructType>()">, "rtl structs">;
+
+// This type constraint is used by operations whose asm strings have a type "T"
+// in the asmstring, which constraints an input or output to type `T`, and then
+// constraints another to `!rtl.inout<T>`.  The "value" and "inoutValue" are the
+// name of the operand or result for the type sides of this.
+class InOutTypeConstraint<string value, string inoutValue>
+  : TypesMatchWith<"type should be element of inout type",
+                   value, inoutValue,
+      "(isRTLValueType($_self) ? "
+           "InOutType::get($_self.getContext(), $_self) : InOutType())">;

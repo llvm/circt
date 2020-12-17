@@ -857,7 +857,7 @@ struct ProcOpConversion : public ConvertToLLVMPattern {
         LLVM::LLVMType::getArrayTy(i1Ty, procOp.getNumArguments())
             .getPointerTo();
     auto stateTy = LLVM::LLVMType::getStructTy(
-        /* current instance  */ i8PtrTy, /* resume index */ i32Ty,
+        /* current instance  */ i32Ty, /* resume index */ i32Ty,
         /* sense flags */ senseTableTy, /* persistent types */
         getProcPersistenceTy(&getDialect(), typeConverter, procOp));
     auto sigTy = getLLVMSigType(&getDialect());
@@ -1359,7 +1359,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
               .getPointerTo();
       auto procStatePtrTy =
           LLVM::LLVMType::getStructTy(
-              i8PtrTy, i32Ty, sensesPtrTy,
+              i32Ty, i32Ty, sensesPtrTy,
               getProcPersistenceTy(&getDialect(), typeConverter, proc))
               .getPointerTo();
 
@@ -1389,22 +1389,6 @@ struct InstOpConversion : public ConvertToLLVMPattern {
       auto procStateBC = initBuilder.create<LLVM::BitcastOp>(
           op->getLoc(), procStatePtrTy, procStateMall);
 
-      // Malloc space for owner name.
-      auto strSizeC = initBuilder.create<LLVM::ConstantOp>(
-          op->getLoc(), i64Ty,
-          rewriter.getI64IntegerAttr(ownerName.size() + 1));
-
-      std::array<Value, 1> strMallArgs({strSizeC});
-      auto strMall = initBuilder
-                         .create<LLVM::CallOp>(
-                             op->getLoc(), i8PtrTy,
-                             rewriter.getSymbolRefAttr(mallFunc), strMallArgs)
-                         .getResult(0);
-      auto procStateOwnerPtr = initBuilder.create<LLVM::GEPOp>(
-          op->getLoc(), i8PtrTy.getPointerTo(), procStateBC,
-          ArrayRef<Value>({zeroC, zeroC}));
-      initBuilder.create<LLVM::StoreOp>(op->getLoc(), strMall,
-                                        procStateOwnerPtr);
 
       // Store the initial resume index.
       auto resumeGep = initBuilder.create<LLVM::GEPOp>(
