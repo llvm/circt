@@ -17,12 +17,7 @@ target_link_libraries(circt-opt
   MLIRHandshakeToFIRRTL
   MLIRLLHD
   MLIRLLHDToLLVM
-  MLIRLLHDTransforms
-  MLIRRTL
-  MLIRStandardToHandshake
-  MLIRStandardToStaticLogic
-  MLIRStaticLogicOps
-  MLIRSV
+  MLIRRTLToLLHD
 
   MLIRParser
   MLIRSupport
