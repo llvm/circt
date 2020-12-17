@@ -167,24 +167,25 @@ def XorROp : UnaryI1ReductionRTLOp<"xorr">;
 def StructExtractOp : RTLOp<"struct_extract", [NoSideEffect]> {
   let summary = "Extract a named field from a struct.";
 
-  let arguments = (ins StrAttr:$field, AnyRTLStructType:$input);
+  let arguments = (ins StructType:$input, StrAttr:$field);
   let results = (outs AnyType:$result);
 
   let assemblyFormat = [{
-    $field `of` $input attr-dict `:` functional-type($input, $result)
+    $input `:` $field attr-dict `:` type($input) `,` type($result)
   }];
+
 }
 
 // Extract a range of bits from the specified input.
 def StructInjectOp : RTLOp<"struct_inject", [NoSideEffect, AllTypesMatch<["input", "result"]>]> {
   let summary = "Inject a value into a named field of a struct.";
 
-  let arguments = (ins StrAttr:$field, AnyRTLStructType:$input,
+  let arguments = (ins StructType:$input, StrAttr:$field,
                    AnyType:$newValue);
-  let results = (outs AnyRTLStructType:$result);
+  let results = (outs StructType:$result);
 
   let assemblyFormat = [{
-    $field `of` $input `is` $newValue attr-dict `:` type($input) `,` type($newValue) `,` type($result)
+    $input `:` $field `is` $newValue attr-dict `:` type($input) `,` type($newValue) `,` type($result)
   }];
 }
 

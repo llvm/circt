@@ -32,4 +32,6 @@ struct FieldInfo {
 /// hardware but not marker types like InOutType.
 bool isRTLValueType(mlir::Type type);
 
+mlir::Type getTypeByField(mlir::Type structVal, mlir::StringRef fieldName);
+
 #endif // CIRCT_DIALECT_RTL_TYPES_H

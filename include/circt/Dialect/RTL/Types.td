@@ -81,7 +81,7 @@ class FieldInfo_Type<string name> : RTLType<name> {
   }];
 }
 
-def StructType : FieldInfo_Type<"Struct"> {
+def StructType : FieldInfo_Type<"Struct">, Type<CPred<"$_self.isa<StructType>()">, "StructType"> {
   let summary = "struct type for ports and wires";
   let description = [{
     Struct type is used...
@@ -89,7 +89,13 @@ def StructType : FieldInfo_Type<"Struct"> {
     let mnemonic = "struct";
 }
 
-def AnyRTLStructType : Type<CPred<"$_self.isa<::circt::rtl::StructType>()">, "rtl structs">;
+// This type constraint is used to constraing the value type to the type of the 
+// named filed of the structValue
+class StructFieldTypeConstraint<string structValue, string value, string fieldName>
+  : TypesMatchWith<"type should be element of struct type",
+                   structValue, value,
+      "getTypeByField($_self, $fieldName)">;
+
 
 // This type constraint is used by operations whose asm strings have a type "T"
 // in the asmstring, which constraints an input or output to type `T`, and then

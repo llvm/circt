@@ -26,6 +26,8 @@ bool isRTLValueType(Type type) {
   return false;
 }
 
+Type getTypeByField(Type structVal, StringRef fieldName) { return structVal; }
+
 //===----------------------------------------------------------------------===//
 // Struct Type
 //===----------------------------------------------------------------------===//
