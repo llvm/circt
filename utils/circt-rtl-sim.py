@@ -44,21 +44,27 @@ class Verilator:
 
 
 def __main__(args):
+  defaultSim = ""
+  if "DEFAULT_SIM" in os.environ:
+    defaultSim = os.environ["DEFAULT_SIM"]
+
   argparser = argparse.ArgumentParser(
       description="RTL simulation runner for CIRCT")
-  argparser.add_argument("simulator", type=str,
+
+  argparser.add_argument("--sim", type=str, default=defaultSim,
                          help="Name of the RTL simulator (if in PATH) to use" +
                          " or path to an executable.")
-  argparser.add_argument("sources", nargs="+",
-                         help="The list of source files to be included.")
   argparser.add_argument("--no-compile", type=bool,
                          help="Don't compile the simulation.")
   argparser.add_argument("--no-run", type=bool,
                          help="Don't run the simulation.")
-  argparser.add_argument(
-      "--top", type=str, default="top", help="Name of top module to run")
-  argparser.add_argument("--simargs", type=str,
-                         default="", help="Simulation arguments string")
+  argparser.add_argument("--top", type=str, default="top",
+                         help="Name of top module to run")
+  argparser.add_argument("--simargs", type=str, default="",
+                         help="Simulation arguments string")
+
+  argparser.add_argument("sources", nargs="+",
+                         help="The list of source files to be included.")
 
   if len(args) <= 1:
     argparser.print_help()
@@ -66,15 +72,15 @@ def __main__(args):
   args = argparser.parse_args(args[1:])
 
   # Break up simulator string 
-  simParts = os.path.split(args.simulator)
+  simParts = os.path.split(args.sim)
   simName = simParts[1]
 
   if simName in ["questa", "vsim", "vlog", "vopt"]:
     sim = Questa(simParts[0])
   elif simName == "verilator":
-    sim = Verilator(args.simulator, args.top)
+    sim = Verilator(args.sim, args.top)
   else:
-    print(f"Could not determine simulator from '{args.simulator}'",
+    print(f"Could not determine simulator from '{args.sim}'",
           file=sys.stderr)
     return 1
   if not args.no_compile:

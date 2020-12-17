@@ -82,7 +82,9 @@ if config.questa_path != "":
 
   # When we add support for other simulators, we'll have to figure out which
   # one should be the default and modify this appropriately.
+  vsim_path = os.path.join(config.questa_path, "vsim")
   config.substitutions.append(
-      ('%defaultSim', os.path.join(config.questa_path, "vsim")))
+      ('%defaultSim', vsim_path))
+  llvm_config.with_environment('DEFAULT_SIM', vsim_path)
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)
