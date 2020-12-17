@@ -73,7 +73,10 @@ def __main__(args):
     sim = Questa(simParts[0])
   elif simName == "verilator":
     sim = Verilator(args.simulator, args.top)
-
+  else:
+    print(f"Could not determine simulator from '{args.simulator}'",
+          file=sys.stderr)
+    return 1
   if not args.no_compile:
     rc = sim.compile(args.sources)
     if rc.returncode != 0:
