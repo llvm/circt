@@ -1,8 +1,5 @@
-// Note: the 'questa' feature is not supported by lit yet, so this is untested.
 // REQUIRES: questa
-// RUN: vlog -sv %INC%/circt/Dialect/ESI/ESIPrimitives.sv
-// RUN: vlog -sv %s
-// RUN: vsim -c 'run -all'
+// RUN: circt-rtl-sim.py %defaultSim %INC%/circt/Dialect/ESI/ESIPrimitives.sv %s
 
 //===- primitive_tb.sv - tests for ESI primitives -----------*- verilog -*-===//
 //
@@ -12,7 +9,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-module ESI_PipelineStage_tb ();
+module top ();
 
   logic clk = 0;
   logic rstn = 0;
