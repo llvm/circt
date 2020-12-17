@@ -8,6 +8,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/FIRRTL/Visitors.h"
 #include "circt/Dialect/RTL/Ops.h"
+#include "circt/Dialect/RTL/Types.h"
 #include "circt/Dialect/SV/Ops.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
 #include "mlir/IR/StandardTypes.h"
@@ -42,12 +43,17 @@ static Type lowerType(Type type) {
 /// Cast from a standard type to a FIRRTL type, potentially with a flip.
 static Value castToFIRRTLType(Value val, Type type,
                               ImplicitLocOpBuilder &builder) {
-  val = builder.createOrFold<StdIntCast>(
-      type.cast<FIRRTLType>().getPassiveType(), val);
+  auto firType = type.cast<FIRRTLType>();
+
+  // If this was an Analog type, it will be converted to an InOut type.
+  if (type.isa<AnalogType>())
+    return builder.create<AnalogInOutCastOp>(firType, val);
+
+  val = builder.createOrFold<StdIntCastOp>(firType.getPassiveType(), val);
 
   // Handle the flip type if needed.
   if (type != val.getType())
-    val = builder.createOrFold<AsNonPassivePrimOp>(type, val);
+    val = builder.createOrFold<AsNonPassivePrimOp>(firType, val);
   return val;
 }
 
@@ -56,7 +62,7 @@ static Value castFromFIRRTLType(Value val, Type type,
                                 ImplicitLocOpBuilder &builder) {
   // Strip off Flip type if needed.
   val = builder.createOrFold<AsPassivePrimOp>(val);
-  return builder.createOrFold<StdIntCast>(type, val);
+  return builder.createOrFold<StdIntCastOp>(type, val);
 }
 
 /// Given a value of standard integer type, convert it to the specified integer
@@ -207,7 +213,13 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
     }
 
     // Figure out the direction of the port.
-    if (firrtlPort.isOutput()) {
+    if (firrtlPort.type.isa<AnalogType>()) {
+      // If the port is analog, then it is implicitly inout.
+      rtlPort.type =
+          rtl::InOutType::get(rtlPort.type.getContext(), rtlPort.type);
+      rtlPort.direction = rtl::PortDirection::INOUT;
+      rtlPort.argNum = numArgs++;
+    } else if (firrtlPort.isOutput()) {
       rtlPort.direction = rtl::PortDirection::OUTPUT;
       rtlPort.argNum = numResults++;
     } else if (firrtlPort.isInput()) {
@@ -529,6 +541,13 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult lowerNoopCast(Operation *op);
   LogicalResult visitExpr(AsSIntPrimOp op) { return lowerNoopCast(op); }
   LogicalResult visitExpr(AsUIntPrimOp op) { return lowerNoopCast(op); }
+  LogicalResult visitExpr(AsPassivePrimOp op) { return lowerNoopCast(op); }
+  LogicalResult visitExpr(AsNonPassivePrimOp op) { return lowerNoopCast(op); }
+  LogicalResult visitExpr(AsClockPrimOp op) { return lowerNoopCast(op); }
+  LogicalResult visitExpr(AsAsyncResetPrimOp op) { return lowerNoopCast(op); }
+
+  LogicalResult visitExpr(StdIntCastOp op);
+  LogicalResult visitExpr(AnalogInOutCastOp op);
   LogicalResult visitExpr(CvtPrimOp op);
   LogicalResult visitExpr(NotPrimOp op);
   LogicalResult visitExpr(NegPrimOp op);
@@ -538,7 +557,6 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(OrRPrimOp op);
 
   // Binary Ops.
-
   template <typename ResultUnsignedOpType,
             typename ResultSignedOpType = ResultUnsignedOpType>
   LogicalResult lowerBinOp(Operation *op);
@@ -606,6 +624,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitStmt(AssertOp op);
   LogicalResult visitStmt(AssumeOp op);
   LogicalResult visitStmt(CoverOp op);
+  LogicalResult visitStmt(AttachOp op);
 
 private:
   /// This builder is set to the right location for each visit call.
@@ -615,39 +634,8 @@ private:
   /// key should have a FIRRTL type, the result will have an RTL dialect type.
   DenseMap<Value, Value> valueMapping;
 
-  /// Template for lowering verification statements from type A to
-  /// type B.
-  ///
-  /// For example, lowering the "foo" op to the "bar" op would start
-  /// with:
-  ///
-  ///     foo(clock, condition, enable, "message")
-  ///
-  /// This becomes a Verilog clocking block with the "bar" op guarded
-  /// by an if enable:
-  ///
-  ///     always @(posedge clock) begin
-  ///       if (enable) begin
-  ///         bar(condition);
-  ///       end
-  ///     end
   template <typename AOpTy, typename BOpTy>
-  LogicalResult lowerVerificationStatement(AOpTy op) {
-    auto clock = getLoweredValue(op.clock());
-    auto enable = getLoweredValue(op.enable());
-    auto predicate = getLoweredValue(op.predicate());
-    if (!clock || !enable || !predicate)
-      return failure();
-
-    builder->create<sv::AlwaysAtPosEdgeOp>(clock, [&]() {
-      builder->create<sv::IfOp>(enable, [&]() {
-        // Create BOpTy inside the always/if.
-        builder->create<BOpTy>(predicate);
-      });
-    });
-
-    return success();
-  }
+  LogicalResult lowerVerificationStatement(AOpTy op);
 };
 } // end anonymous namespace
 
@@ -664,7 +652,6 @@ void FIRRTLLowering::runOnOperation() {
   auto *body = getOperation().getBodyBlock();
 
   SmallVector<Operation *, 16> opsToRemove;
-  SmallVector<Operation *, 16> castsToTryRemove;
 
   // Iterate through each operation in the module body, attempting to lower
   // each of them.  We maintain 'builder' for each invocation.
@@ -679,12 +666,6 @@ void FIRRTLLowering::runOnOperation() {
       // If lowering didn't succeed, then make sure to rewrite operands that
       // refer to lowered values.
       handleUnloweredOp(&op);
-
-      // If this was a cast, try to remove it on a best-effort basis.  These are
-      // generally from module port lowering and instance lowering.
-      if (isa<AsPassivePrimOp>(op) || isa<AsNonPassivePrimOp>(op) ||
-          isa<StdIntCast>(op))
-        castsToTryRemove.push_back(&op);
     }
   }
   builder = nullptr;
@@ -696,14 +677,8 @@ void FIRRTLLowering::runOnOperation() {
   while (!opsToRemove.empty())
     opsToRemove.pop_back_val()->erase();
 
-  // Now try to remove any casts if they are dead.
-  while (!castsToTryRemove.empty()) {
-    auto *cast = castsToTryRemove.pop_back_val();
-    assert(cast->getNumResults() == 1 && cast->getNumOperands() == 1 &&
-           "unexpected cast");
-    if (cast->use_empty())
-      cast->erase();
-  }
+  // Clear out the value mapping for next time, so we don't have dangling keys.
+  valueMapping.clear();
 }
 
 //===----------------------------------------------------------------------===//
@@ -736,7 +711,7 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
 
   // Cast FIRRTL -> standard type.
   value = builder->createOrFold<AsPassivePrimOp>(value);
-  return builder->createOrFold<StdIntCast>(resultType, value);
+  return builder->createOrFold<StdIntCastOp>(resultType, value);
 }
 
 /// Return the lowered value corresponding to the specified original value and
@@ -796,7 +771,7 @@ LogicalResult FIRRTLLowering::setLowering(Value orig, Value result) {
 template <typename ResultOpType, typename... CtorArgTypes>
 LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
                                             CtorArgTypes... args) {
-  auto result = builder->create<ResultOpType>(args...);
+  auto result = builder->createOrFold<ResultOpType>(args...);
   return setLowering(orig->getResult(0), result);
 }
 
@@ -864,8 +839,45 @@ LogicalResult FIRRTLLowering::lowerNoopCast(Operation *op) {
   if (!operand)
     return failure();
 
+  // Various noop casts (e.g. converting to Clock) allow input analog values.
+  // These get lowered as an inout type, so we need to strip this off if we
+  // get it, effectively and lvalue to rvalue conversion.
+  if (operand.getType().isa<rtl::InOutType>())
+    return setLoweringTo<rtl::ReadInOutOp>(op, operand);
+
   // Noop cast.
   return setLowering(op->getResult(0), operand);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(StdIntCastOp op) {
+  auto result = getLoweredValue(op.getOperand());
+  if (!result)
+    return failure();
+
+  // Conversions from standard integer types to FIRRTL types are lowered as the
+  // input operand.
+  if (!op.getType().isa<IntegerType>())
+    return setLowering(op, result);
+
+  // We lower firrtl.stdIntCast converting from a firrtl type to a standard type
+  // into the lowered operand.
+  op.replaceAllUsesWith(result);
+  return success();
+}
+
+LogicalResult FIRRTLLowering::visitExpr(AnalogInOutCastOp op) {
+  auto result = getLoweredValue(op.getOperand());
+  if (!result)
+    return failure();
+
+  // Conversions from inout types to analog type are lowered as the input.
+  if (op.getType().isa<AnalogType>())
+    return setLowering(op, result);
+
+  // We lower firrtl.analogInOutCast converting from a firrtl type to an InOut
+  // type into the lowered operand.
+  op.replaceAllUsesWith(result);
+  return success();
 }
 
 LogicalResult FIRRTLLowering::visitExpr(CvtPrimOp op) {
@@ -1055,6 +1067,7 @@ LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
   } else {
     modInst = builder->create<rtl::ModSOp>(ValueRange({lhs, rhs}));
   }
+
   return setLoweringTo<rtl::ExtractOp>(op, resultType, modInst, 0);
 }
 
@@ -1273,6 +1286,40 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
   return success();
 }
 
+/// Template for lowering verification statements from type A to
+/// type B.
+///
+/// For example, lowering the "foo" op to the "bar" op would start
+/// with:
+///
+///     foo(clock, condition, enable, "message")
+///
+/// This becomes a Verilog clocking block with the "bar" op guarded
+/// by an if enable:
+///
+///     always @(posedge clock) begin
+///       if (enable) begin
+///         bar(condition);
+///       end
+///     end
+template <typename AOpTy, typename BOpTy>
+LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
+  auto clock = getLoweredValue(op.clock());
+  auto enable = getLoweredValue(op.enable());
+  auto predicate = getLoweredValue(op.predicate());
+  if (!clock || !enable || !predicate)
+    return failure();
+
+  builder->create<sv::AlwaysAtPosEdgeOp>(clock, [&]() {
+    builder->create<sv::IfOp>(enable, [&]() {
+      // Create BOpTy inside the always/if.
+      builder->create<BOpTy>(predicate);
+    });
+  });
+
+  return success();
+}
+
 // Lower an assert to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(AssertOp op) {
   return lowerVerificationStatement<AssertOp, sv::AssertOp>(op);
@@ -1286,4 +1333,34 @@ LogicalResult FIRRTLLowering::visitStmt(AssumeOp op) {
 // Lower a cover to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(CoverOp op) {
   return lowerVerificationStatement<CoverOp, sv::CoverOp>(op);
+}
+
+LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
+  // Don't emit anything for a zero or one operand attach.
+  if (op.operands().size() < 2)
+    return success();
+
+  SmallVector<Value, 4> inoutValues;
+  for (auto v : op.operands())
+    inoutValues.push_back(getLoweredValue(v));
+
+  // In the non-synthesis case, we emit a SystemVerilog alias statement.
+  builder->create<sv::IfDefOp>(
+      "!SYNTHESIS", [&]() { builder->create<sv::AliasOp>(inoutValues); });
+
+  // If we're doing synthesis, we emit an all-pairs assign complex.
+  builder->create<sv::IfDefOp>("SYNTHESIS", [&]() {
+    // Lower the
+    SmallVector<Value, 4> values;
+    for (size_t i = 0, e = inoutValues.size(); i != e; ++i)
+      values.push_back(builder->createOrFold<rtl::ReadInOutOp>(inoutValues[i]));
+
+    for (size_t i1 = 0, e = inoutValues.size(); i1 != e; ++i1) {
+      for (size_t i2 = 0; i2 != e; ++i2)
+        if (i1 != i2)
+          builder->create<rtl::ConnectOp>(values[i1], values[i2]);
+    }
+  });
+
+  return success();
 }

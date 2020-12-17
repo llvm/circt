@@ -24,7 +24,7 @@ public:
                        // Control flow.
                        IfDefOp, IfOp, AlwaysAtPosEdgeOp,
                        // Other Statements.
-                       YieldOp, FWriteOp, FatalOp, FinishOp,
+                       YieldOp, AliasOp, FWriteOp, FatalOp, FinishOp,
                        // Type declarations.
                        InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
                        // Verification statements.
@@ -64,6 +64,7 @@ public:
 
   // Other Statements.
   HANDLE(YieldOp, Unhandled);
+  HANDLE(AliasOp, Unhandled);
   HANDLE(FWriteOp, Unhandled);
   HANDLE(FatalOp, Unhandled);
   HANDLE(FinishOp, Unhandled);

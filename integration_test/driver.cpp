@@ -5,7 +5,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "Vmain.h"
+#include "Vtop.h"
 
 #ifdef DEBUG
 #include "verilated_vcd_c.h"
@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
   }
 
   // Construct the simulated module's C++ model.
-  auto &dut = *new Vmain();
+  auto &dut = *new Vtop();
 #ifdef DEBUG
   VerilatedVcdC *tfp = new VerilatedVcdC;
   Verilated::traceEverOn(true);

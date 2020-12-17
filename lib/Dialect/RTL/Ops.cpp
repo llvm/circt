@@ -51,10 +51,6 @@ static void buildModule(OpBuilder &builder, OperationState &result,
       argAttrs.push_back(
           NamedAttribute(builder.getIdentifier("rtl.name"), port.name));
 
-    if (port.direction == PortDirection::INOUT)
-      argAttrs.push_back(NamedAttribute(builder.getIdentifier("rtl.inout"),
-                                        builder.getUnitAttr()));
-
     StringRef attrName = port.isOutput()
                              ? getResultAttrName(port.argNum, attrNameBuf)
                              : getArgAttrName(port.argNum, attrNameBuf);
@@ -63,8 +59,8 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addRegion();
 }
 
-void rtl::RTLModuleOp::build(OpBuilder &builder, OperationState &result,
-                             StringAttr name, ArrayRef<ModulePortInfo> ports) {
+void RTLModuleOp::build(OpBuilder &builder, OperationState &result,
+                        StringAttr name, ArrayRef<ModulePortInfo> ports) {
   buildModule(builder, result, name, ports);
 
   // Create a region and a block for the body.
@@ -77,7 +73,7 @@ void rtl::RTLModuleOp::build(OpBuilder &builder, OperationState &result,
     if (!elt.isOutput())
       body->addArgument(elt.type);
 
-  rtl::RTLModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
+  RTLModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
 
 /// Return the name to use for the Verilog module that we're referencing
@@ -89,10 +85,9 @@ StringRef RTLExternModuleOp::getVerilogModuleName() {
   return getName();
 }
 
-void rtl::RTLExternModuleOp::build(OpBuilder &builder, OperationState &result,
-                                   StringAttr name,
-                                   ArrayRef<ModulePortInfo> ports,
-                                   StringRef verilogName) {
+void RTLExternModuleOp::build(OpBuilder &builder, OperationState &result,
+                              StringAttr name, ArrayRef<ModulePortInfo> ports,
+                              StringRef verilogName) {
   buildModule(builder, result, name, ports);
 
   if (!verilogName.empty())
@@ -113,21 +108,13 @@ StringAttr rtl::getRTLNameAttr(ArrayRef<NamedAttribute> attrs) {
   return StringAttr();
 }
 
-static bool containsInOutAttr(ArrayRef<NamedAttribute> attrs) {
-  for (auto &argAttr : attrs) {
-    if (argAttr.first == "rtl.inout")
-      return true;
-  }
-  return false;
-}
-
 void rtl::getModulePortInfo(Operation *op,
                             SmallVectorImpl<ModulePortInfo> &results) {
   auto argTypes = getModuleType(op).getInputs();
 
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
-    bool isInOut = containsInOutAttr(argAttrs);
+    bool isInOut = false;
     auto type = argTypes[i];
 
     if (auto inout = type.dyn_cast<InOutType>()) {
@@ -301,8 +288,7 @@ static ParseResult parseRTLExternModuleOp(OpAsmParser &parser,
 }
 
 FunctionType getRTLModuleOpType(Operation *op) {
-  auto typeAttr =
-      op->getAttrOfType<TypeAttr>(rtl::RTLModuleOp::getTypeAttrName());
+  auto typeAttr = op->getAttrOfType<TypeAttr>(RTLModuleOp::getTypeAttrName());
   return typeAttr.getValue().cast<FunctionType>();
 }
 
@@ -412,7 +398,7 @@ static void print(OpAsmPrinter &p, RTLModuleOp op) {
 
 //===----------------------------------------------------------------------===//
 // InstanceOp
-//===----------------------------------------------------------------------===/
+//===----------------------------------------------------------------------===//
 
 /// Lookup the module or extmodule for the symbol.  This returns null on
 /// invalid IR.
@@ -437,8 +423,8 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
     return op.emitError("Cannot find module definition '")
            << op.moduleName() << "'";
 
-  if (!isa<rtl::RTLModuleOp>(referencedModule) &&
-      !isa<rtl::RTLExternModuleOp>(referencedModule))
+  if (!isa<RTLModuleOp>(referencedModule) &&
+      !isa<RTLExternModuleOp>(referencedModule))
     return op.emitError("Symbol resolved to '")
            << referencedModule->getName()
            << "' which is not a RTL[Ext]ModuleOp";
@@ -1182,6 +1168,12 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 //===----------------------------------------------------------------------===//
 // ReadInOutOp
 //===----------------------------------------------------------------------===//
+
+void ReadInOutOp::build(OpBuilder &builder, OperationState &result,
+                        Value input) {
+  auto resultType = input.getType().cast<InOutType>().getElementType();
+  build(builder, result, resultType, input);
+}
 
 static LogicalResult verifyReadInOutOp(ReadInOutOp op) {
   // The result type and the input type have to be the same, except the input

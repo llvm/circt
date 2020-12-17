@@ -46,11 +46,15 @@ def WrapValidReady : ESI_Op<"wrap.vr", [NoSideEffect]> {
     ready signal from the other end of the channel.
   }];
 
-  let arguments = (ins AnyType:$data, I1:$valid);
-  let results = (outs ChannelType:$output, I1:$ready);
+  let arguments = (ins AnyType:$rawInput, I1:$valid);
+  let results = (outs ChannelType:$chanOutput, I1:$ready);
 
   let printer = [{ return ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
+
+  let builders = [
+    OpBuilderDAG<(ins "mlir::Value":$data, "mlir::Value":$valid)>
+  ];
 }
 
 def UnwrapValidReady : ESI_Op<"unwrap.vr", [NoSideEffect]> {
@@ -61,11 +65,15 @@ def UnwrapValidReady : ESI_Op<"unwrap.vr", [NoSideEffect]> {
     along with a valid signal.
   }];
 
-  let arguments = (ins ChannelType:$input, I1:$ready);
-  let results = (outs AnyType:$output, I1:$valid);
+  let arguments = (ins ChannelType:$chanInput, I1:$ready);
+  let results = (outs AnyType:$rawOutput, I1:$valid);
 
   let printer = [{ return ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
+
+  let builders = [
+    OpBuilderDAG<(ins "mlir::Value":$inChan, "mlir::Value":$ready)>
+  ];
 }
 
 def ModportType:

@@ -185,6 +185,10 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: rtl.icmp "ne" {{.*}}, {{.*}} : i4
     %46 = firrtl.neq %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
 
+    // Noop
+    %47 = firrtl.asClock %44 : (!firrtl.uint<1>) -> !firrtl.clock
+    %48 = firrtl.asAsyncReset %44 : (!firrtl.uint<1>) -> !firrtl.asyncreset
+
     // CHECK-NEXT: rtl.output %tmp3, %tmp3 : i4, i4
     rtl.output %tmp3, %tmp3 : i4,i4
   }
@@ -340,6 +344,48 @@ module attributes {firrtl.mainModule = "Simple"} {
     %0 = firrtl.div %inp_2, %inp_i : (!firrtl.uint<27>, !firrtl.uint<65>) -> !firrtl.uint<27>
     // CHECK-NEXT: rtl.connect %tmp48, %1 : i27
     firrtl.connect %tmp48, %0 : !firrtl.uint<27>, !firrtl.uint<27>
+  }
+
+  // https://github.com/llvm/circt/issues/318
+  // CHECK-LABEL: rtl.module @test_rem
+  // CHECK-NEXT:     %0 = rtl.modu
+  // CHECK-NEXT:     rtl.output %0
+  rtl.module @test_rem(%tmp85: i1, %tmp79: i1) -> (%tmp106: i1) {
+    %0 = firrtl.stdIntCast %tmp85 : (i1) -> !firrtl.uint<1>
+    %1 = firrtl.stdIntCast %tmp79 : (i1) -> !firrtl.uint<1>
+    %2 = firrtl.rem %1, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %3 = firrtl.stdIntCast %2 : (!firrtl.uint<1>) -> i1
+    rtl.output %3 : i1
+  }
+
+  // CHECK-LABEL: rtl.module @Analog
+  // CHECK-NEXT:   sv.ifdef "!SYNTHESIS"  {
+  // CHECK-NEXT:     sv.alias %a1, %a1, %a1 : !rtl.inout<i1>
+  // CHECK-NEXT:   }
+  // CHECK-NEXT:   sv.ifdef "SYNTHESIS"  {
+  // CHECK-NEXT:     %1 = rtl.read_inout %a1 : i1
+  // CHECK-NEXT:     %2 = rtl.read_inout %a1 : i1
+  // CHECK-NEXT:     %3 = rtl.read_inout %a1 : i1
+  // CHECK-NEXT:     rtl.connect %1, %2 : i1
+  // CHECK-NEXT:     rtl.connect %1, %3 : i1
+  // CHECK-NEXT:     rtl.connect %2, %1 : i1
+  // CHECK-NEXT:     rtl.connect %2, %3 : i1
+  // CHECK-NEXT:     rtl.connect %3, %1 : i1
+  // CHECK-NEXT:     rtl.connect %3, %2 : i1
+  // CHECK-NEXT:   }
+  // CHECK-NEXT:    %0 = rtl.read_inout %a1 : i1
+  // CHECK-NEXT:    rtl.output %0 : i1
+  rtl.module @Analog(%a1: !rtl.inout<i1>, %b1: !rtl.inout<i1>,
+                     %c1: !rtl.inout<i1>) -> (%outClock: i1) {
+    %a = firrtl.analogInOutCast %a1 : (!rtl.inout<i1>) -> !firrtl.analog<1>
+    %b = firrtl.analogInOutCast %a1 : (!rtl.inout<i1>) -> !firrtl.analog<1>
+    %c = firrtl.analogInOutCast %a1 : (!rtl.inout<i1>) -> !firrtl.analog<1>
+
+    firrtl.attach %a, %b, %c : !firrtl.analog<1>, !firrtl.analog<1>, !firrtl.analog<1>
+
+    %1 = firrtl.asClock %a : (!firrtl.analog<1>) -> !firrtl.clock
+    %2 = firrtl.stdIntCast %1 : (!firrtl.clock) -> i1
+    rtl.output %2 : i1
   }
 }
 

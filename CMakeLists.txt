@@ -128,6 +128,27 @@ else()
   endif()
 endif()
 
+# If Questa hasn't been explicitly disabled, find it.
+option(QUESTA_DISABLE "Disable the Questa simulation tests.")
+if (QUESTA_DISABLE)
+  message(STATUS "Disabling Questa tests.")
+else()
+  if (EXISTS ${QUESTA_PATH})
+    message(STATUS "Setting Questa path to ${QUESTA_PATH}.")
+  else()
+    # Search for Questa's `vsim` command.
+    find_program(QUESTA_PATH "vsim")
+    if(EXISTS ${QUESTA_PATH})
+      # Then strip the filename.
+      get_filename_component(QUESTA_PATH ${QUESTA_PATH} DIRECTORY)
+      message(STATUS "Found Questa at ${QUESTA_PATH}.")
+    else()
+      set(QUESTA_PATH "")
+      message(STATUS "Did not find Questa.")
+    endif()
+  endif()
+endif()
+
 # If Yosys hasn't been explicitly disabled, find it.
 option(YOSYS_DISABLE "Disable the yosys tests.")
 if (YOSYS_DISABLE)

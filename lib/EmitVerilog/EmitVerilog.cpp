@@ -306,6 +306,7 @@ public:
   void emitStatement(InvalidOp op);
   void emitStatement(ConnectOp op);
   void emitStatement(rtl::ConnectOp op);
+  void emitStatement(sv::AliasOp op);
   void emitStatement(rtl::OutputOp op);
   void emitStatement(rtl::InstanceOp op);
   void emitStatement(PrintFOp op);
@@ -703,9 +704,6 @@ public:
 
   /// Emit the specified expression and return it as a string.
   std::string emitExpressionToString(Value exp, VerilogPrecedence precedence);
-  friend class ExprVisitor;
-  friend class CombinatorialVisitor;
-  friend class Visitor;
 
   /// Do a best-effort job of looking through noop cast operations.
   Value lookThroughNoopCasts(Value value) {
@@ -718,6 +716,10 @@ public:
   ModuleEmitter &emitter;
 
 private:
+  friend class ExprVisitor<ExprEmitter, SubExprInfo>;
+  friend class rtl::CombinatorialVisitor<ExprEmitter, SubExprInfo>;
+  friend class sv::Visitor<ExprEmitter, SubExprInfo>;
+
   /// Emit the specified value as a subexpression to the stream.
   SubExprInfo emitSubExpr(Value exp, VerilogPrecedence parenthesizeIfLooserThan,
                           bool forceExpectedSign = false,
@@ -866,7 +868,7 @@ private:
   SubExprInfo visitExpr(ShrPrimOp op);
 
   // Conversion to/from standard integer types is a noop.
-  SubExprInfo visitExpr(StdIntCast op) { return emitNoopCast(op); }
+  SubExprInfo visitExpr(StdIntCastOp op) { return emitNoopCast(op); }
 
   // RTL Dialect Operations
   using CombinatorialVisitor::visitComb;
@@ -1160,6 +1162,12 @@ SubExprInfo ExprEmitter::emitBitSelect(Value operand, unsigned hiBit,
   auto x = emitSubExpr(operand, LowestPrecedence);
   assert(x.precedence == Symbol &&
          "should be handled by isExpressionUnableToInline");
+
+  // If we're extracting the whole input, just return it.  This is valid but
+  // non-canonical IR, and we don't want to generate invalid Verilog.
+  if (loBit == 0 &&
+      unsigned(getBitWidthOrSentinel(operand.getType())) == hiBit + 1)
+    return x;
 
   os << '[' << hiBit;
   if (hiBit != loBit) // Emit x[4] instead of x[4:4].
@@ -1462,6 +1470,17 @@ void ModuleEmitter::emitStatement(rtl::ConnectOp op) {
   emitExpression(op.dest(), ops);
   os << " = ";
   emitExpression(op.src(), ops);
+  os << ';';
+  emitLocationInfoAndNewLine(ops);
+}
+
+void ModuleEmitter::emitStatement(sv::AliasOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent() << "alias ";
+  llvm::interleave(
+      op.getOperands(), os, [&](Value v) { emitExpression(v, ops); }, " = ");
   os << ';';
   emitLocationInfoAndNewLine(ops);
 }
@@ -2032,7 +2051,8 @@ static bool isOkToBitSelectFrom(Value v) {
 }
 
 /// Return true if we are unable to ever inline the specified operation.  This
-/// happens because not all Verilog expressions are composable.
+/// happens because not all Verilog expressions are composable, notably you can
+/// only use bit selects like x[4:6] on simple expressions.
 static bool isExpressionUnableToInline(Operation *op) {
   // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
@@ -2046,10 +2066,20 @@ static bool isExpressionUnableToInline(Operation *op) {
       if (!isOkToBitSelectFrom(op->getResult(0)))
         return true;
 
+    // Signed pad is emits a bit extract since it is a sign extend.
     if (auto pad = dyn_cast<PadPrimOp>(user)) {
       auto inType = getTypeOf<IntType>(pad.getOperand());
       auto inWidth = inType.getWidthOrSentinel();
       if (unsigned(inWidth) > pad.amount() &&
+          !isOkToBitSelectFrom(op->getResult(0)))
+        return true;
+    }
+
+    // Sign extend (when the operand isn't a single bit) requires a bitselect
+    // syntactically.
+    if (auto sext = dyn_cast<rtl::SExtOp>(user)) {
+      auto sextOperandType = sext.getOperand().getType().cast<IntegerType>();
+      if (sextOperandType.getWidth() != 1 &&
           !isOkToBitSelectFrom(op->getResult(0)))
         return true;
     }
@@ -2339,6 +2369,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitSV(sv::AlwaysAtPosEdgeOp op) {
       return emitter.emitStatement(op), true;
     }
+    bool visitSV(sv::AliasOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::FWriteOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::FatalOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::FinishOp op) { return emitter.emitStatement(op), true; }

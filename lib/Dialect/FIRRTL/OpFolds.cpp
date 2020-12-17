@@ -340,6 +340,7 @@ OpFoldResult ShlPrimOp::fold(ArrayRef<Attribute> operands) {
     auto inputWidth = inputType.getWidthOrSentinel();
     if (inputWidth != -1) {
       auto resultWidth = inputWidth + shiftAmount;
+      shiftAmount = std::min(shiftAmount, resultWidth);
       return getIntAttr(value.zext(resultWidth).shl(shiftAmount), getContext());
     }
   }
@@ -367,12 +368,12 @@ OpFoldResult ShrPrimOp::fold(ArrayRef<Attribute> operands) {
   // Constant fold.
   APInt value;
   if (matchPattern(input, m_FConstant(value))) {
-    auto resultWidth = std::max(inputWidth - shiftAmount, 1);
     if (!inputType.isSigned())
-      value = value.lshr(shiftAmount);
+      value = value.lshr(std::min(shiftAmount, inputWidth));
     else
-      value = value.ashr(shiftAmount);
-    return getIntAttr(value.trunc(resultWidth), getContext());
+      value = value.ashr(std::min(shiftAmount, inputWidth - 1));
+    auto resultWidth = std::max(inputWidth - shiftAmount, 1);
+    return getIntAttr(value.truncOrSelf(resultWidth), getContext());
   }
   return {};
 }
@@ -437,9 +438,18 @@ void TailPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 // Conversions
 //===----------------------------------------------------------------------===//
 
-OpFoldResult StdIntCast::fold(ArrayRef<Attribute> operands) {
+OpFoldResult StdIntCastOp::fold(ArrayRef<Attribute> operands) {
   if (auto castInput =
-          dyn_cast_or_null<StdIntCast>(getOperand().getDefiningOp()))
+          dyn_cast_or_null<StdIntCastOp>(getOperand().getDefiningOp()))
+    if (castInput.getOperand().getType() == getType())
+      return castInput.getOperand();
+
+  return {};
+}
+
+OpFoldResult AnalogInOutCastOp::fold(ArrayRef<Attribute> operands) {
+  if (auto castInput =
+          dyn_cast_or_null<AnalogInOutCastOp>(getOperand().getDefiningOp()))
     if (castInput.getOperand().getType() == getType())
       return castInput.getOperand();
 

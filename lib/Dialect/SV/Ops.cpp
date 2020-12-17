@@ -3,6 +3,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/SV/Ops.h"
+#include "circt/Dialect/RTL/Types.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/StandardTypes.h"
 
@@ -114,7 +115,7 @@ static void printModportStructs(OpAsmPrinter &p, Operation *,
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
-static LogicalResult verifyInterfaceInstanceOp(InterfaceInstanceOp &op) {
+static LogicalResult verifyInterfaceInstanceOp(InterfaceInstanceOp op) {
   auto symtable = SymbolTable::getNearestSymbolTable(op);
   if (!symtable)
     return op.emitError("sv.interface.instance must exist within a region "
@@ -132,7 +133,7 @@ static LogicalResult verifyInterfaceInstanceOp(InterfaceInstanceOp &op) {
 
 /// Ensure that the symbol being instantiated exists and is an
 /// InterfaceModportOp.
-static LogicalResult verifyGetModportOp(GetModportOp &op) {
+static LogicalResult verifyGetModportOp(GetModportOp op) {
   auto symtable = SymbolTable::getNearestSymbolTable(op);
   if (!symtable)
     return op.emitError("sv.interface.instance must exist within a region "
@@ -148,6 +149,19 @@ static LogicalResult verifyGetModportOp(GetModportOp &op) {
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// Other ops.
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verifyAliasOp(AliasOp op) {
+  // Must have at least two operands.
+  if (op.operands().size() < 2)
+    return op.emitOpError("alias must have at least two operands");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

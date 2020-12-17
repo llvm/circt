@@ -5,6 +5,7 @@
 #include "circt/Dialect/FIRRTL/Ops.h"
 #include "circt/Dialect/FIRRTL/Types.h"
 #include "circt/Dialect/FIRRTL/Visitors.h"
+#include "circt/Dialect/RTL/Types.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
@@ -61,7 +62,7 @@ static ParseResult parseCircuitOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-static LogicalResult verifyCircuitOp(CircuitOp &circuit) {
+static LogicalResult verifyCircuitOp(CircuitOp circuit) {
   StringRef main = circuit.name();
 
   // Check that the circuit has a non-empty name.
@@ -205,15 +206,7 @@ void firrtl::getModulePortInfo(Operation *op,
 
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
-    auto type = argTypes[i].dyn_cast<FIRRTLType>();
-
-    // Convert IntegerType ports to IntType ports transparently.
-    if (!type) {
-      auto intType = argTypes[i].cast<IntegerType>();
-      type = IntType::get(op->getContext(), intType.isSigned(),
-                          intType.getWidth());
-    }
-
+    auto type = argTypes[i].cast<FIRRTLType>();
     results.push_back({getFIRRTLNameAttr(argAttrs), type});
   }
 }
@@ -454,21 +447,32 @@ static ParseResult parseFExtModuleOp(OpAsmParser &parser,
   return parseFModuleOp(parser, result, /*isExtModule:*/ true);
 }
 
-static LogicalResult verifyFModuleOp(FModuleOp &module) {
-  // The parent op must be a circuit op.
-  auto parentOp = dyn_cast_or_null<CircuitOp>(module.getParentOp());
-  if (!parentOp) {
-    module.emitOpError("should be embedded into a 'firrtl.circuit'");
-    return failure();
-  }
-
+static LogicalResult verifyModuleSignature(Operation *op) {
+  for (auto argType : getModuleType(op).getInputs())
+    if (!argType.isa<FIRRTLType>())
+      return op->emitOpError("all module ports must be firrtl types");
   return success();
 }
 
-static LogicalResult verifyFExtModuleOp(FExtModuleOp &op) {
+static LogicalResult verifyFModuleOp(FModuleOp op) {
+  // The parent op must be a circuit op.
+  auto parentOp = dyn_cast_or_null<CircuitOp>(op.getParentOp());
+  if (!parentOp)
+    return op.emitOpError("should be embedded into a 'firrtl.circuit'");
+
+  // Verify the module signature.
+  return verifyModuleSignature(op);
+}
+
+static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
+  // Verify the module signature.
+  if (failed(verifyModuleSignature(op)))
+    return failure();
+
   auto paramDictOpt = op.parameters();
   if (!paramDictOpt)
     return success();
+
   DictionaryAttr paramDict = paramDictOpt.getValue();
   auto checkParmValue = [&](NamedAttribute elt) -> bool {
     auto value = elt.second;
@@ -482,6 +486,7 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp &op) {
 
   if (!llvm::all_of(paramDict, checkParmValue))
     return failure();
+
   return success();
 }
 
@@ -500,7 +505,7 @@ Operation *InstanceOp::getReferencedModule() {
 }
 
 /// Verify the correctness of an InstanceOp.
-static LogicalResult verifyInstanceOp(InstanceOp &instance) {
+static LogicalResult verifyInstanceOp(InstanceOp instance) {
 
   // Check that this instance is inside a module.
   auto module = instance.getParentOfType<FModuleOp>();
@@ -1277,7 +1282,7 @@ FIRRTLType TailPrimOp::getResultType(FIRRTLType input, int32_t amount,
 // Conversions to/from fixed-width signless integer types in standard dialect.
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyStdIntCast(StdIntCast cast) {
+static LogicalResult verifyStdIntCastOp(StdIntCastOp cast) {
   // Either the input or result must have signless standard integer type, the
   // other must be a FIRRTL type that lowers to one, and their widths must
   // match.
@@ -1303,6 +1308,40 @@ static LogicalResult verifyStdIntCast(StdIntCast cast) {
   if (!integerType.isSignless())
     return cast.emitError("standard integer type must be signless");
   if (unsigned(intWidth) != integerType.getWidth())
+    return cast.emitError("source and result width must match");
+
+  return success();
+}
+
+static LogicalResult verifyAnalogInOutCastOp(AnalogInOutCastOp cast) {
+  AnalogType firType;
+  rtl::InOutType inoutType;
+
+  if ((firType = cast.getOperand().getType().dyn_cast<AnalogType>())) {
+    inoutType = cast.getType().dyn_cast<rtl::InOutType>();
+    if (!inoutType)
+      return cast.emitError("result type must be an inout type");
+  } else if ((firType = cast.getType().dyn_cast<AnalogType>())) {
+    inoutType = cast.getOperand().getType().dyn_cast<rtl::InOutType>();
+    if (!inoutType)
+      return cast.emitError("operand type must be an inout type");
+  } else {
+    return cast.emitError("either source or result type must be analog type");
+  }
+
+  // The inout type must wrap an integer.
+  auto integerType = inoutType.getElementType().dyn_cast<IntegerType>();
+  if (!integerType)
+    return cast.emitError("inout type must wrap an integer");
+
+  int32_t width = firType.getBitWidthOrSentinel();
+  if (width == -2)
+    return cast.emitError("firrtl type isn't simple bit type");
+  if (width == -1)
+    return cast.emitError("Analog type must have a width");
+  if (!integerType.isSignless())
+    return cast.emitError("standard integer type must be signless");
+  if (unsigned(width) != integerType.getWidth())
     return cast.emitError("source and result width must match");
 
   return success();

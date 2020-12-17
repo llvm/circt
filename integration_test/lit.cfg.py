@@ -59,12 +59,13 @@ config.test_exec_root = os.path.join(config.circt_obj_root, 'integration_test')
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 # Substitute '%l' with the path to the build lib dir.
 
-tool_dirs = [config.circt_tools_dir,
+tool_dirs = [config.circt_tools_dir, os.path.join(config.circt_src_root, "utils"),
              config.mlir_tools_dir, config.llvm_tools_dir]
 tools = [
     'circt-opt',
     'circt-translate',
-    'firtool'
+    'firtool',
+    'circt-rtl-sim.py'
 ]
 
 # Enable yosys if it has been detected.
@@ -78,6 +79,16 @@ if config.verilator_path != "":
   tool_dirs.append(os.path.dirname(config.verilator_path))
   tools.append('verilator')
   config.available_features.add('verilator')
+
+# Enable Questa if it has been detected.
+if config.questa_path != "":
+  config.available_features.add('questa')
+  llvm_config.with_environment(
+      'LM_LICENSE_FILE', os.environ['LM_LICENSE_FILE'])
+
+  # When we add support for other simulators, we'll have to figure out which
+  # one should be the default and modify this appropriately.
+  config.substitutions.append(('%defaultSim', os.path.join(config.questa_path, "vsim")))
 
 # Enable ESI cosim tests if they have been built.
 if config.esi_cosim_path != "":
