@@ -1138,7 +1138,7 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result,
   }
 
   Type attrType =
-      IntegerType::get(value.getBitWidth(), signedness, type.getContext());
+      IntegerType::get(type.getContext(), value.getBitWidth(), signedness);
   auto attr = builder.getIntegerAttr(attrType, value);
 
   // Check to see if we've already created this constant.  If so, reuse it.

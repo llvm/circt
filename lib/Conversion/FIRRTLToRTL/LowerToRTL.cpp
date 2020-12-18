@@ -41,8 +41,8 @@ static Type lowerType(Type type) {
 }
 
 /// Cast from a standard type to a FIRRTL type, potentially with a flip.
-static Value castToFIRRTLType(Value val, Type type, ImplicitLocOp;
-                              Builder & builder) {
+static Value castToFIRRTLType(Value val, Type type,
+                              ImplicitLocOpBuilder &builder) {
   auto firType = type.cast<FIRRTLType>();
 
   // If this was an Analog type, it will be converted to an InOut type.
