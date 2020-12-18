@@ -4,8 +4,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_FIRPARSER_H
-#define CIRCT_DIALECT_FIRPARSER_H
+#ifndef CIRCT_DIALECT_FIRRTL_FIRPARSER_H
+#define CIRCT_DIALECT_FIRRTL_FIRPARSER_H
 
 namespace llvm {
 class SourceMgr;
@@ -17,6 +17,7 @@ class OwningModuleRef;
 } // namespace mlir
 
 namespace circt {
+namespace firrtl {
 
 struct FIRParserOptions {
   /// If this is set to true, the @info locators are ignored, and the locations
@@ -24,11 +25,13 @@ struct FIRParserOptions {
   bool ignoreInfoLocators = false;
 };
 
-mlir::OwningModuleRef parseFIRFile(llvm::SourceMgr &sourceMgr,
+mlir::OwningModuleRef importFIRRTL(llvm::SourceMgr &sourceMgr,
                                    mlir::MLIRContext *context,
                                    FIRParserOptions options = {});
-void registerFIRParserTranslation();
 
+void registerFromFIRRTLTranslation();
+
+} // namespace firrtl
 } // namespace circt
 
-#endif // CIRCT_DIALECT_FIRPARSER_H
+#endif // CIRCT_DIALECT_FIRRTL_FIRPARSER_H
