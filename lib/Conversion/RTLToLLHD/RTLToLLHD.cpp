@@ -32,6 +32,12 @@ namespace {
 struct RTLToLLHDPass : public ConvertRTLToLLHDBase<RTLToLLHDPass> {
   void runOnOperation() override;
 };
+
+/// A helper type converter class that automatically populates the relevant
+/// materializations and type conversions for converting RTL to LLHD.
+struct RTLToLLHDTypeConverter : public TypeConverter {
+  RTLToLLHDTypeConverter();
+};
 } // namespace
 
 /// Create a RTL to LLHD conversion pass.
@@ -60,15 +66,24 @@ void RTLToLLHDPass::runOnOperation() {
   target.addLegalDialect<LLHDDialect>();
   target.addIllegalOp<RTLModuleOp>();
 
+  RTLToLLHDTypeConverter typeConverter;
   OwningRewritePatternList patterns;
-  patterns.insert<ConvertRTLModule>(&context);
+  patterns.insert<ConvertRTLModule>(typeConverter, &context);
 
   if (failed(applyPartialConversion(module, target, std::move(patterns))))
     signalPassFailure();
 }
 
 //===----------------------------------------------------------------------===//
-// Convert modules.
+// TypeConverter conversions and materializations
+//===----------------------------------------------------------------------===//
+RTLToLLHDTypeConverter::RTLToLLHDTypeConverter() {
+  // Convert IntegerType by just wrapping it in SigType.
+  addConversion([](IntegerType type) { return SigType::get(type); });
+}
+
+//===----------------------------------------------------------------------===//
+// Convert modules
 //===----------------------------------------------------------------------===//
 
 /// This works on each RTL module, creates corresponding entities, moves the
@@ -78,45 +93,42 @@ struct ConvertRTLModule : public OpConversionPattern<RTLModuleOp> {
 
   LogicalResult matchAndRewrite(RTLModuleOp module, ArrayRef<Value> operands,
                                 ConversionPatternRewriter &rewriter) const {
-    // Collect module port info.
-    SmallVector<rtl::ModulePortInfo, 4> modulePorts;
-    rtl::getModulePortInfo(module, modulePorts);
+    // Collect the RTL module's port types in a signature conversion.
+    FunctionType moduleType = module.getType();
+    unsigned numInputs = moduleType.getNumInputs();
+    TypeConverter::SignatureConversion argConversion(module.getNumArguments() +
+                                                     module.getNumResults());
 
-    // Collect the new entity's argument types.
-    SmallVector<Type, 4> entityInputs;
-    SmallVector<Type, 8> entityOutputs;
-    for (auto &port : modulePorts) {
-      if (!port.type.isa<IntegerType>())
-        return module.emitError("ports with type ")
-               << port.type << " are not supported";
-      switch (port.direction) {
+    if (failed(typeConverter->convertSignatureArgs(moduleType.getInputs(),
+                                                   argConversion)) ||
+        failed(typeConverter->convertSignatureArgs(moduleType.getResults(),
+                                                   argConversion, numInputs)))
+      return failure();
 
-      case rtl::PortDirection::INPUT:
-        entityInputs.push_back(SigType::get(port.type));
-        break;
+    // Create the entity.
+    auto entity = rewriter.create<EntityOp>(module.getLoc(), numInputs);
 
-      case rtl::PortDirection::OUTPUT:
-        entityOutputs.push_back(SigType::get(port.type));
-        break;
+    // Inline the RTL module body into the entity body.
+    Region &entityBodyRegion = entity.getBodyRegion();
+    rewriter.inlineRegionBefore(module.getBodyRegion(), entityBodyRegion,
+                                entityBodyRegion.end());
 
-      case rtl::PortDirection::INOUT:
-        return module.emitError("ports with direction inout are not supported");
-      }
-    }
+    // Attempt to convert the entry block's args using the previous conversion.
+    if (failed(rewriter.convertRegionTypes(&entityBodyRegion, *typeConverter,
+                                           &argConversion)))
+      return failure();
 
-    // Create the entity, set its type and name, and create its body
-    // terminator.
-    auto entity =
-        rewriter.create<EntityOp>(module.getLoc(), entityInputs.size());
-    entityInputs.append(entityOutputs.begin(), entityOutputs.end());
-    auto entityType = rewriter.getFunctionType(entityInputs, {});
-    entity.setAttr(entity.getTypeAttrName(), TypeAttr::get(entityType));
-    entity.setName(module.getName());
-    EntityOp::ensureTerminator(entity.body(), rewriter, entity.getLoc());
+    // Add the LLHD terminator op after the RTL module's output ops.
+    rewriter.setInsertionPointToEnd(entity.getBodyBlock());
+    rewriter.create<llhd::TerminatorOp>(entity.getLoc());
 
-    // Add the entity block arguments.
-    // TODO: use the rewriter to actually move the body over.
-    entity.body().addArguments(entityInputs);
+    // Set the entity type and name attributes.
+    auto entityType =
+        rewriter.getFunctionType(argConversion.getConvertedTypes(), {});
+    rewriter.updateRootInPlace(entity, [&] {
+      entity.setAttr(entity.getTypeAttrName(), TypeAttr::get(entityType));
+      entity.setName(module.getName());
+    });
 
     // Erase the RTL module.
     rewriter.eraseOp(module);
