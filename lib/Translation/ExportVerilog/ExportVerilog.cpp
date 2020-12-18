@@ -1,10 +1,10 @@
-//===- EmitVerilog.cpp - Verilog Emitter ----------------------------------===//
+//===- ExportVerilog.cpp - Verilog Emitter --------------------------------===//
 //
 // This is the main Verilog emitter implementation.
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/EmitVerilog.h"
+#include "circt/Translation/ExportVerilog.h"
 #include "circt/Dialect/FIRRTL/Visitors.h"
 #include "circt/Dialect/RTL/Ops.h"
 #include "circt/Dialect/RTL/Types.h"
@@ -12,8 +12,8 @@
 #include "circt/Dialect/SV/Ops.h"
 #include "circt/Dialect/SV/Visitors.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
@@ -2944,12 +2944,16 @@ void CircuitEmitter::emitMLIRModule(ModuleOp module) {
   }
 }
 
-LogicalResult circt::emitVerilog(ModuleOp module, llvm::raw_ostream &os) {
+LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   VerilogEmitterState state(os);
   CircuitEmitter(state).emitMLIRModule(module);
   return failure(state.encounteredError);
 }
 
-void circt::registerVerilogEmitterTranslation() {
-  static TranslateFromMLIRRegistration toVerilog("emit-verilog", emitVerilog);
+void circt::registerToVerilogTranslation() {
+  TranslateFromMLIRRegistration toVerilog(
+      "emit-verilog", exportVerilog, [](DialectRegistry &registry) {
+        registry.insert<mlir::StandardOpsDialect, firrtl::FIRRTLDialect,
+                        rtl::RTLDialect, sv::SVDialect>();
+      });
 }

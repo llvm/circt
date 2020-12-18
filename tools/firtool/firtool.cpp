@@ -7,13 +7,13 @@
 
 #include "circt/Conversion/Passes.h"
 #include "circt/Dialect/FIRRTL/Dialect.h"
+#include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/FIRRTL/Ops.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/RTL/Dialect.h"
 #include "circt/Dialect/RTL/Ops.h"
 #include "circt/Dialect/SV/Dialect.h"
-#include "circt/EmitVerilog.h"
-#include "circt/FIRParser.h"
+#include "circt/Translation/ExportVerilog.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Parser.h"
@@ -93,9 +93,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
   OwningModuleRef module;
   if (inputFormat == InputFIRFile) {
-    FIRParserOptions options;
+    firrtl::FIRParserOptions options;
     options.ignoreInfoLocators = ignoreFIRLocations;
-    module = parseFIRFile(sourceMgr, &context, options);
+    module = importFIRRTL(sourceMgr, &context, options);
   } else {
     assert(inputFormat == InputMLIRFile);
     module = parseSourceFile(sourceMgr, &context);
@@ -137,7 +137,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   case OutputDisabled:
     return success();
   case OutputVerilog:
-    return emitVerilog(module.get(), os);
+    return exportVerilog(module.get(), os);
   }
 };
 

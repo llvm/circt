@@ -4,9 +4,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Target/Verilog/TranslateToVerilog.h"
+#include "circt/Dialect/LLHD/Translation/TranslateToVerilog.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
-
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Visitors.h"
@@ -408,7 +407,7 @@ void VerilogPrinter::addAliasVariable(Value alias, Value existing) {
 
 } // anonymous namespace
 
-LogicalResult circt::llhd::printVerilog(ModuleOp module, raw_ostream &os) {
+LogicalResult circt::llhd::exportVerilog(ModuleOp module, raw_ostream &os) {
   llvm::formatted_raw_ostream out(os);
   VerilogPrinter printer(out);
   return printer.printModule(module);
@@ -416,7 +415,7 @@ LogicalResult circt::llhd::printVerilog(ModuleOp module, raw_ostream &os) {
 
 void circt::llhd::registerToVerilogTranslation() {
   TranslateFromMLIRRegistration registration(
-      "llhd-to-verilog", [](ModuleOp module, raw_ostream &output) {
-        return printVerilog(module, output);
+      "llhd-to-verilog", exportVerilog, [](DialectRegistry &registry) {
+        registry.insert<mlir::StandardOpsDialect, llhd::LLHDDialect>();
       });
 }
