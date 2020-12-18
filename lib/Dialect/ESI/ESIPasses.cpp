@@ -8,6 +8,7 @@
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/RTL/Ops.h"
 #include "circt/Dialect/RTL/Types.h"
+#include "circt/Dialect/SV/Ops.h"
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/StandardTypes.h"
@@ -121,13 +122,18 @@ public:
 
   circt::rtl::RTLExternModuleOp declareStage();
 
+  circt::sv::InterfaceOp getOrConstructInterface(ChannelPort);
+  circt::sv::InterfaceOp constructInterface(ChannelPort);
+
   // A bunch of constants for use in various places below.
   const StringAttr a, aValid, aReady, x, xValid, xReady;
-  const StringAttr clk, rstn;
+  const StringAttr clk, rstn, input, output;
   const Identifier width;
+  const FlatSymbolRefAttr data, valid, ready, source, sink;
 
 private:
   circt::rtl::RTLExternModuleOp declaredStage;
+  llvm::DenseMap<Type, circt::sv::InterfaceOp> portTypeLookup;
   const Location loc;
 };
 } // anonymous namespace
@@ -141,8 +147,15 @@ ESIRTLBuilder::ESIRTLBuilder(Operation *top)
       xReady(StringAttr::get("x_ready", getContext())),
       clk(StringAttr::get("clk", getContext())),
       rstn(StringAttr::get("rstn", getContext())),
-      width(Identifier::get("WIDTH", getContext())), declaredStage(nullptr),
-      loc(UnknownLoc::get(getContext())) {
+      input(StringAttr::get("input", getContext())),
+      output(StringAttr::get("output", getContext())),
+      width(Identifier::get("WIDTH", getContext())),
+      data(FlatSymbolRefAttr::get("data", getContext())),
+      valid(FlatSymbolRefAttr::get("valid", getContext())),
+      ready(FlatSymbolRefAttr::get("ready", getContext())),
+      source(FlatSymbolRefAttr::get("source", getContext())),
+      sink(FlatSymbolRefAttr::get("sink", getContext())),
+      declaredStage(nullptr), loc(UnknownLoc::get(getContext())) {
 
   auto regions = top->getRegions();
   if (regions.size() == 0) {
@@ -178,6 +191,49 @@ circt::rtl::RTLExternModuleOp ESIRTLBuilder::declareStage() {
                             {xReady, PortDirection::INPUT, getI1Type(), 4}};
   declaredStage = create<RTLExternModuleOp>(loc, name, ports);
   return declaredStage;
+}
+
+/// Return the InterfaceType which corresponds to an ESI port type. If it
+/// doesn't exist in the cache, build the InterfaceOp and the corresponding
+/// type.
+circt::sv::InterfaceOp ESIRTLBuilder::getOrConstructInterface(ChannelPort t) {
+  auto ifaceIter = portTypeLookup.find(t);
+  if (ifaceIter != portTypeLookup.end())
+    return ifaceIter->second;
+  auto iface = constructInterface(t);
+  portTypeLookup[t] = iface;
+  return iface;
+}
+
+circt::sv::InterfaceOp ESIRTLBuilder::constructInterface(ChannelPort chan) {
+  using namespace circt::sv;
+  auto ctxt = getContext();
+
+  InterfaceOp iface = create<InterfaceOp>(loc, "IDataVR");
+  OpBuilder ib(iface.getRegion());
+  ib.createBlock(&iface.getRegion());
+
+  InterfaceSignalOp s;
+  ib.create<InterfaceSignalOp>(loc, valid.getRootReference(),
+                               TypeAttr::get(getI1Type()));
+  ib.create<InterfaceSignalOp>(loc, ready.getRootReference(),
+                               TypeAttr::get(getI1Type()));
+  ib.create<InterfaceSignalOp>(loc, data.getRootReference(),
+                               TypeAttr::get(chan.getInner()));
+  ib.create<InterfaceModportOp>(
+      loc, source.getRootReference(),
+      ArrayAttr::get({ModportStructAttr::get(input, ready, ctxt),
+                      ModportStructAttr::get(output, valid, ctxt),
+                      ModportStructAttr::get(output, data, ctxt)},
+                     ctxt));
+  ib.create<InterfaceModportOp>(
+      loc, sink.getRootReference(),
+      ArrayAttr::get({ModportStructAttr::get(output, ready, ctxt),
+                      ModportStructAttr::get(input, valid, ctxt),
+                      ModportStructAttr::get(input, data, ctxt)},
+                     ctxt));
+  ib.create<TypeDeclTerminatorOp>(loc);
+  return iface;
 }
 
 namespace {
@@ -246,10 +302,45 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
 }
 
 namespace {
+///
+struct LowerExternModChannels
+    : public OpConversionPattern<circt::rtl::RTLExternModuleOp> {
+public:
+  LowerExternModChannels(ESIRTLBuilder &builder, MLIRContext *ctxt)
+      : OpConversionPattern(ctxt), builder(builder) {}
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(circt::rtl::RTLExternModuleOp mod, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final;
+
+private:
+  ESIRTLBuilder &builder;
+};
+} // anonymous namespace
+
+LogicalResult LowerExternModChannels::matchAndRewrite(
+    circt::rtl::RTLExternModuleOp, ArrayRef<Value> stageOperands,
+    ConversionPatternRewriter &rewriter) const {
+  return failure();
+}
+
+namespace {
 struct ESItoRTLPass : public LowerESItoRTLBase<ESItoRTLPass> {
   void runOnOperation() override;
 };
 } // anonymous namespace
+
+static bool esiModulePortFree(circt::rtl::RTLExternModuleOp mod) {
+  auto funcType = mod.getType();
+  for (auto arg : funcType.getInputs())
+    if (arg.isa<ChannelPort>())
+      return false;
+  for (auto res : funcType.getResults())
+    if (res.isa<ChannelPort>())
+      return false;
+  return true;
+}
 
 void ESItoRTLPass::runOnOperation() {
   auto top = getOperation();
@@ -257,13 +348,17 @@ void ESItoRTLPass::runOnOperation() {
   // Set up a conversion and give it a set of laws.
   ConversionTarget target(getContext());
   target.addLegalDialect<circt::rtl::RTLDialect>();
+  target.addDynamicallyLegalOp<circt::rtl::RTLExternModuleOp>(
+      esiModulePortFree);
   target.addLegalOp<WrapValidReady, UnwrapValidReady>();
+  target.addLegalOp<WrapSVInterface, UnwrapSVInterface>();
   target.addIllegalOp<PipelineStage>();
 
   // Add all the conversion patterns.
   ESIRTLBuilder esiBuilder(top);
   OwningRewritePatternList patterns;
   patterns.insert<PipelineStageLowering>(esiBuilder, &getContext());
+  patterns.insert<LowerExternModChannels>(esiBuilder, &getContext());
 
   // Run the conversion.
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
