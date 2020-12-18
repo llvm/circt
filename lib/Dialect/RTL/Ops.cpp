@@ -11,9 +11,9 @@
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/Matchers.h"
-#include "mlir/IR/Module.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/PatternMatch.h"
-#include "mlir/IR/StandardTypes.h"
+#include "mlir/IR/BuiltinTypes.h"
 
 using namespace circt;
 using namespace rtl;
@@ -539,7 +539,7 @@ bool rtl::isCombinatorial(Operation *op) {
 }
 
 static Attribute getIntAttr(const APInt &value, MLIRContext *context) {
-  return IntegerAttr::get(IntegerType::get(value.getBitWidth(), context),
+  return IntegerAttr::get(IntegerType::get(context, value.getBitWidth()),
                           value);
 }
 
@@ -652,8 +652,8 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
 void ConstantOp::build(OpBuilder &builder, OperationState &result,
                        const APInt &value) {
 
-  auto type = IntegerType::get(value.getBitWidth(), IntegerType::Signless,
-                               builder.getContext());
+  auto type = IntegerType::get(builder.getContext(), value.getBitWidth(),
+                               IntegerType::Signless);
   auto attr = builder.getIntegerAttr(type, value);
   return build(builder, result, type, attr);
 }
