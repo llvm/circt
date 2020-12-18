@@ -9,7 +9,7 @@
 
 include "mlir/Pass/PassBase.td"
 
-def ConvertRTLToLLHD : Pass<"convert-rtl-to-llhd", "rtl::RTLModuleOp"> {
+def ConvertRTLToLLHD : Pass<"convert-rtl-to-llhd", "mlir::ModuleOp"> {
   let summary = "Convert RTL to LLHD";
   let description = [{
     This pass translates a RTL design into an equivalent structural LLHD
