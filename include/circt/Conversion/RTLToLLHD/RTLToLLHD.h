@@ -8,7 +8,6 @@
 #ifndef CIRCT_CONVERSION_RTLTOLLHD_RTLTOLLHD_H_
 #define CIRCT_CONVERSION_RTLTOLLHD_RTLTOLLHD_H_
 
-#include "circt/Dialect/RTL/Ops.h"
 #include <memory>
 
 namespace mlir {
@@ -19,8 +18,8 @@ class ModuleOp;
 
 namespace circt {
 namespace llhd {
-using namespace mlir;
-std::unique_ptr<OperationPass<ModuleOp>> createConvertRTLToLLHDPass();
+std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
+createConvertRTLToLLHDPass();
 void registerRTLToLLHDPasses();
 } // namespace llhd
 } // namespace circt
