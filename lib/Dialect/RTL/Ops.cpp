@@ -273,8 +273,8 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
 
   // Parse the optional function body.
   auto *body = result.addRegion();
-  if (parser.parseOptionalRegion(
-          *body, entryArgs, entryArgs.empty() ? ArrayRef<Type>() : argTypes))
+  if (parser.parseRegion(*body, entryArgs,
+                         entryArgs.empty() ? ArrayRef<Type>() : argTypes))
     return failure();
 
   if (!isExtModule)

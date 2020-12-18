@@ -10,7 +10,7 @@
 #include "circt/Dialect/RTL/Types.h"
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
-#include "mlir/IR/StandardTypes.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -208,7 +208,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
     return failure();
   auto stageModule = builder.declareStage();
 
-  MutableDictionaryAttr stageAttrs = stage.getAttrs();
+  NamedAttrList stageAttrs = stage.getAttrs();
   size_t width = getNumBits(chPort.getInner());
   stageAttrs.set(builder.width, rewriter.getUI32IntegerAttr(width));
 

@@ -11,7 +11,7 @@
 #include "circt/Dialect/RTL/Types.h"
 #include "circt/Dialect/SV/Ops.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
-#include "mlir/IR/StandardTypes.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 
 using namespace circt;
@@ -35,14 +35,14 @@ static Type lowerType(Type type) {
 
   auto width = firType.getBitWidthOrSentinel();
   if (width >= 0) // IntType, analog with known width, clock, etc.
-    return IntegerType::get(width, type.getContext());
+    return IntegerType::get(type.getContext(), width);
 
   return {};
 }
 
 /// Cast from a standard type to a FIRRTL type, potentially with a flip.
-static Value castToFIRRTLType(Value val, Type type,
-                              ImplicitLocOpBuilder &builder) {
+static Value castToFIRRTLType(Value val, Type type, ImplicitLocOp;
+                              Builder & builder) {
   auto firType = type.cast<FIRRTLType>();
 
   // If this was an Analog type, it will be converted to an InOut type.
