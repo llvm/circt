@@ -11,6 +11,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/IR/SymbolTable.h"
+#include "mlir/Transforms/DialectConversion.h"
 
 using namespace mlir;
 using namespace circt::esi;
@@ -124,6 +125,48 @@ void WrapValidReady::build(OpBuilder &b, OperationState &state, Value data,
                            Value valid) {
   build(b, state, ChannelPort::get(state.getContext(), data.getType()),
         b.getI1Type(), data, valid);
+}
+
+namespace {
+/// Eliminate back-to-back wrap-unwraps to reduce the number of ESI channels.
+struct RemoveWrapUnwrap : public OpConversionPattern<WrapValidReady> {
+public:
+  RemoveWrapUnwrap(MLIRContext *ctxt) : OpConversionPattern(ctxt) {}
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult match(Operation *op) const final {
+    auto wrap = dyn_cast<WrapValidReady>(op);
+    if (!wrap)
+      return failure();
+    if (!wrap.chanOutput().hasOneUse())
+      return failure();
+    if (!isa<UnwrapValidReady>(wrap.chanOutput().use_begin()->getOwner()))
+      return failure();
+    return success();
+  }
+
+  void rewrite(WrapValidReady wrap, ArrayRef<Value> operands,
+               ConversionPatternRewriter &rewriter) const final;
+};
+} // anonymous namespace
+
+void RemoveWrapUnwrap::rewrite(WrapValidReady wrap,
+                               ArrayRef<Value> stageOperands,
+                               ConversionPatternRewriter &rewriter) const {
+  // This pass requires that implicit forks already be lowered by the
+  // abstract-to-physical pass. Meaning exactly one user.
+  UnwrapValidReady unwrap =
+      dyn_cast<UnwrapValidReady>(wrap.chanOutput().use_begin()->getOwner());
+
+  rewriter.replaceOp(unwrap, {wrap.rawInput(), wrap.valid()});
+  rewriter.replaceOp(wrap, {unwrap.ready(), wrap.ready()});
+  rewriter.eraseOp(unwrap);
+  rewriter.eraseOp(wrap);
+}
+
+void WrapValidReady::getCanonicalizationPatterns(
+    OwningRewritePatternList &patterns, MLIRContext *ctxt) {
+  patterns.insert<RemoveWrapUnwrap>(ctxt);
 }
 
 static ParseResult parseUnwrapValidReady(OpAsmParser &parser,

@@ -208,7 +208,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
     return failure();
   auto stageModule = builder.declareStage();
 
-  MutableDictionaryAttr stageAttrs = stage.getAttrs();
+  NamedAttrList stageAttrs = stage.getAttrs();
   size_t width = getNumBits(chPort.getInner());
   stageAttrs.set(builder.width, rewriter.getUI32IntegerAttr(width));
 
@@ -253,6 +253,7 @@ struct ESItoRTLPass : public LowerESItoRTLBase<ESItoRTLPass> {
 
 void ESItoRTLPass::runOnOperation() {
   auto top = getOperation();
+  auto ctxt = &getContext();
 
   // Set up a conversion and give it a set of laws.
   ConversionTarget target(getContext());
@@ -263,7 +264,8 @@ void ESItoRTLPass::runOnOperation() {
   // Add all the conversion patterns.
   ESIRTLBuilder esiBuilder(top);
   OwningRewritePatternList patterns;
-  patterns.insert<PipelineStageLowering>(esiBuilder, &getContext());
+  patterns.insert<PipelineStageLowering>(esiBuilder, ctxt);
+  WrapValidReady::getCanonicalizationPatterns(patterns, ctxt);
 
   // Run the conversion.
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
