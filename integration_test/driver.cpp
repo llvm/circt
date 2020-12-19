@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
   dut.clk = 0;
 
   // Run for a few cycles with reset held.
-  for (timeStamp = 0; timeStamp < 10 && !Verilated::gotFinish(); timeStamp++) {
+  for (timeStamp = 0; timeStamp < 8 && !Verilated::gotFinish(); timeStamp++) {
     dut.eval();
     dut.clk = !dut.clk;
 #ifdef DEBUG
@@ -71,8 +71,8 @@ int main(int argc, char **argv) {
   dut.rstn = 1;
 
   // Run for the specified number of cycles out of reset.
-  for (; timeStamp <= (numCyclesToRun * 2) && !Verilated::gotFinish() &&
-         !stopSimulation;
+  vluint64_t endTime = timeStamp + (numCyclesToRun * 2);
+  for (; timeStamp <= endTime && !Verilated::gotFinish() && !stopSimulation;
        timeStamp++) {
     dut.eval();
     dut.clk = !dut.clk;

@@ -68,6 +68,9 @@ tools = [
     'circt-rtl-sim.py'
 ]
 
+llvm_config.with_environment(
+    'INTEGRATION_PATH', os.path.join(config.circt_src_root, "integration_test"))
+
 # Enable yosys if it has been detected.
 if config.yosys_path != "":
   tool_dirs.append(os.path.dirname(config.yosys_path))
@@ -79,6 +82,8 @@ if config.verilator_path != "":
   tool_dirs.append(os.path.dirname(config.verilator_path))
   tools.append('verilator')
   config.available_features.add('verilator')
+  llvm_config.with_environment(
+      'VERILATOR_PATH', config.verilator_path)
 
 # Enable Questa if it has been detected.
 if config.questa_path != "":
@@ -88,6 +93,8 @@ if config.questa_path != "":
 
   # When we add support for other simulators, we'll have to figure out which
   # one should be the default and modify this appropriately.
+  config.substitutions.append(
+      ('%questa', os.path.join(config.questa_path, "vsim")))
   config.substitutions.append(('%defaultSim', os.path.join(config.questa_path, "vsim")))
 
 # Enable ESI cosim tests if they have been built.
