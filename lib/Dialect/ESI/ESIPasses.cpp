@@ -308,9 +308,7 @@ struct ESIPortsPass : public LowerESIPortsBase<ESIPortsPass> {
 
 private:
   void updateFunc(RTLExternModuleOp mod);
-  void updateInstance(RTLExternModuleOp mod,
-                      SmallVectorImpl<ModportType> &addlOperands,
-                      InstanceOp inst);
+  void updateInstance(RTLExternModuleOp mod, InstanceOp inst);
   ESIRTLBuilder *B;
 };
 } // anonymous namespace
@@ -340,7 +338,7 @@ void ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
 
   // Reconstruct the list of operand types, changing the type whenever an ESI
   // port is found.
-  SmallVector<Type, 8> newArgTypes;
+  SmallVector<Type, 16> newArgTypes;
   for (auto argTy : funcType.getInputs()) {
     auto chanTy = argTy.dyn_cast<ChannelPort>();
     if (!chanTy) {
@@ -355,24 +353,32 @@ void ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
     updated = true;
   }
 
+  SmallVector<MutableDictionaryAttr, 16> argAttrs;
+  mod.getAllArgAttrs(argAttrs);
+  SmallVector<MutableDictionaryAttr, 16> resAttrs;
+  mod.getAllResultAttrs(resAttrs);
+
   // Iterate through the results and append to one of the two below lists. The
   // first for non-ESI-ports. The second, ports which have been re-located to an
   // operand.
   SmallVector<Type, 8> newResultTypes;
-  SmallVector<ModportType, 4> newArgTypesFromResults;
-  for (auto resTy : funcType.getResults()) {
+  SmallVector<MutableDictionaryAttr, 4> newResultAttrs;
+  for (size_t resNum = 0, numRes = funcType.getNumResults(); resNum < numRes;
+       ++resNum) {
+    Type resTy = funcType.getResult(resNum);
     auto chanTy = resTy.dyn_cast<ChannelPort>();
     if (!chanTy) {
       newResultTypes.push_back(resTy);
+      newResultAttrs.push_back(resAttrs[resNum]);
       continue;
     }
 
     // When we find one, construct an interface, and add the 'sink' modport to
     // the type list.
-    auto iface = B->getOrConstructInterface(chanTy);
+    InterfaceOp iface = B->getOrConstructInterface(chanTy);
     ModportType sourcePort = iface.getModportType(B->source);
     newArgTypes.push_back(sourcePort);
-    newArgTypesFromResults.push_back(sourcePort);
+    argAttrs.push_back(resAttrs[resNum]);
     updated = true;
   }
 
@@ -382,25 +388,26 @@ void ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
   // Set the new types.
   auto newFuncType = FunctionType::get(newArgTypes, newResultTypes, ctxt);
   mod.setType(newFuncType);
+  mod.setAllArgAttrs(argAttrs);
+  mod.setAllResultAttrs(newResultAttrs);
 
   // Find all instances and update them.
-  auto scope = SymbolTable::getNearestSymbolTable(mod);
-  auto instances = SymbolTable::getSymbolUses(mod, scope);
+  Operation *scope = SymbolTable::getNearestSymbolTable(mod);
+  llvm::Optional<SymbolTable::UseRange> instances =
+      SymbolTable::getSymbolUses(mod, scope);
   if (!instances)
     return;
   for (auto symUse : *instances) {
     auto instOp = dyn_cast<InstanceOp>(symUse.getUser());
     if (instOp)
-      updateInstance(mod, newArgTypesFromResults, instOp);
+      updateInstance(mod, instOp);
   }
 }
 
 /// Update an instance of an updated module by adding `esi.(un)wrap.iface`
 /// around the instance. Create a new instance at the end from the lists built
 /// up before.
-void ESIPortsPass::updateInstance(RTLExternModuleOp mod,
-                                  SmallVectorImpl<ModportType> &addlOperands,
-                                  InstanceOp inst) {
+void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
   using namespace circt::sv;
   OpBuilder instBuilder(inst);
   FunctionType funcTy = mod.getType();
