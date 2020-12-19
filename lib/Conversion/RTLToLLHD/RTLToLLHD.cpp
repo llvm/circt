@@ -105,7 +105,7 @@ struct ConvertRTLModule : public OpConversionPattern<RTLModuleOp> {
                                                    argConversion)) ||
         failed(typeConverter->convertSignatureArgs(moduleType.getResults(),
                                                    argConversion, numInputs)))
-      return failure();
+      return module.emitError("type converter failed to convert signature");
 
     // Create the entity.
     auto entity = rewriter.create<EntityOp>(module.getLoc(), numInputs);
@@ -118,7 +118,7 @@ struct ConvertRTLModule : public OpConversionPattern<RTLModuleOp> {
     // Attempt to convert the entry block's args using the previous conversion.
     if (failed(rewriter.convertRegionTypes(&entityBodyRegion, *typeConverter,
                                            &argConversion)))
-      return failure();
+      return module.emitError("could not convert region types");
 
     // Add the LLHD terminator op after the RTL module's output ops.
     rewriter.setInsertionPointToEnd(entity.getBodyBlock());
@@ -156,23 +156,17 @@ struct ConvertOutput : public OpConversionPattern<OutputOp> {
 
     // Drive the results from the mapped operands.
     for (size_t i = 0, e = operands.size(); i != e; ++i) {
-      // Get the source signal.
+      // Get the source and destination signals.
       auto src = operands[i];
-      if (!src)
-        return output.emitError("no mapped operand for result ") << i;
-
-      // Get the destination signal.
       auto dest = entity.getArgument(numInputs + i);
-      if (!dest)
-        return output.emitError("no block argument for result ")
-               << i << " at index " << numInputs + i;
+      assert(src && dest && "output operand must map to result block arg");
 
       // If the source has a signal type, probe it.
       if (auto sigTy = src.getType().dyn_cast<SigType>())
         src = rewriter.create<PrbOp>(output.getLoc(), sigTy.getUnderlyingType(),
                                      src);
 
-      // Always drive the destination.
+      // Drive the destination block argument value.
       rewriter.create<DrvOp>(output.getLoc(), dest, src, delta, Value());
     }
 

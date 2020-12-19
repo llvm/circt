@@ -664,7 +664,7 @@ static LogicalResult verify(llhd::EntityOp op) {
            << numArgs << " but got: " << nIns;
   }
 
-  // Check that all block arguments are signal type
+  // Check that all block arguments are of signal type
   for (size_t i = 0; i < numArgs; ++i)
     if (!op.getArgument(i).getType().isa<llhd::SigType>())
       return op.emitError("usage of invalid argument type. Got ")
@@ -681,7 +681,7 @@ LogicalResult circt::llhd::EntityOp::verifyType() {
   if (type.getNumResults() > 0)
     return emitOpError("an entity cannot have return types.");
 
-  // Check that all block arguments are signal type
+  // Check that all operands are of signal type
   for (Type inputType : type.getInputs())
     if (!inputType.isa<llhd::SigType>())
       return emitOpError("usage of invalid argument type. Got ")
