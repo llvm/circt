@@ -275,7 +275,7 @@ void ESItoRTLPass::runOnOperation() {
 
   ConversionTarget target2(getContext());
   target2.addLegalDialect<circt::rtl::RTLDialect>();
-  target.addIllegalOp<WrapValidReady, UnwrapValidReady>();
+  target2.addLegalOp<mlir::ConstantOp>();
   target2.addIllegalOp<PipelineStage>();
 
   OwningRewritePatternList canonPatterns;
