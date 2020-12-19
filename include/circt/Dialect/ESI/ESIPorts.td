@@ -57,7 +57,7 @@ def WrapValidReady : ESI_Op<"wrap.vr", [NoSideEffect]> {
   ];
 }
 
-def UnwrapValidReady : ESI_Op<"unwrap.vr", [NoSideEffect]> {
+def UnwrapValidReady : ESI_Op<"unwrap.vr", []> {
   let summary = "Unwrap a value from an ESI port";
   let description = [{
     Unwrapping a value allows operations on the contained value. Unwrap the
@@ -87,11 +87,11 @@ def WrapSVInterface: ESI_Op<"wrap.iface", [NoSideEffect]> {
     and data signals. Any other signals will be discarded.
   }];
 
-  let arguments = (ins ModportType:$iface);
+  let arguments = (ins ModportType:$ifaceSink);
   let results = (outs ChannelType:$output);
 
   let assemblyFormat = [{
-    $iface attr-dict `:` type($iface) `->` type($output)
+    $ifaceSink attr-dict `:` type($ifaceSink) `->` type($output)
   }];
 
   let verifier = [{
@@ -106,11 +106,11 @@ def UnwrapSVInterface : ESI_Op<"unwrap.iface", [NoSideEffect]> {
     ready, and data signals.
   }];
 
-  let arguments = (ins ChannelType:$chanInput, ModportType:$outIface);
+  let arguments = (ins ChannelType:$chanInput, ModportType:$ifaceSource);
   let results = (outs);
 
   let assemblyFormat = [{
-    $chanInput `into` $outIface attr-dict `:` `(` type($chanInput) `,` type($outIface) `)`
+    $chanInput `into` $ifaceSource attr-dict `:` `(` type($chanInput) `,` type($ifaceSource) `)`
   }];
 
   let verifier = [{

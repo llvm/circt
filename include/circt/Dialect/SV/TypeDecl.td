@@ -43,6 +43,11 @@ def InterfaceOp : SVOp<"interface",
 
   let extraClassDeclaration = [{
     Block *getBodyBlock() { return &body().front(); }
+
+    ModportType getModportType(::mlir::SymbolRefAttr);
+    ::mlir::FlatSymbolRefAttr getSymRef() {
+      return ::mlir::SymbolRefAttr::get(sym_name(), getContext());
+    }
   }];
 }
 
@@ -201,6 +206,10 @@ def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
   let verifier = [{
     return ::verifyGetModportOp(*this);
   }];
+
+  let builders = [
+    OpBuilderDAG<(ins "Value":$value, "::mlir::FlatSymbolRefAttr":$field)>
+  ];
 }
 
 def TypeDeclTerminatorOp : SVOp<"type_decl_terminator",

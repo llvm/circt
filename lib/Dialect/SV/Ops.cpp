@@ -72,6 +72,12 @@ void AlwaysAtPosEdgeOp::build(OpBuilder &odsBuilder, OperationState &result,
 // TypeDecl operations
 //===----------------------------------------------------------------------===//
 
+ModportType InterfaceOp::getModportType(SymbolRefAttr modportName) {
+  InterfaceModportOp modportOp = lookupSymbol<InterfaceModportOp>(modportName);
+  assert(modportOp && "Modport symbol not found.");
+  return ModportType::get(getContext(), modportName);
+}
+
 static ParseResult parseModportStructs(OpAsmParser &parser,
                                        ArrayAttr &portsAttr) {
   if (parser.parseLParen())
@@ -147,6 +153,18 @@ static LogicalResult verifyGetModportOp(GetModportOp op) {
     return op.emitError("Symbol ")
            << ifaceTy.getModport() << " is not an InterfaceModportOp.";
   return success();
+}
+
+void GetModportOp::build(::mlir::OpBuilder &builder,
+                         ::mlir::OperationState &state, Value value,
+                         ::mlir::FlatSymbolRefAttr field) {
+  auto ifaceTy = value.getType().dyn_cast<InterfaceType>();
+  assert(ifaceTy && "GetModportOp expects an InterfaceType.");
+  auto modportSym = SymbolRefAttr::get(
+      ifaceTy.getInterface().getRootReference(), {field}, builder.getContext());
+  state.addTypes({ModportType::get(builder.getContext(), modportSym)});
+  state.addOperands({value});
+  state.addAttribute("field", field);
 }
 
 //===----------------------------------------------------------------------===//

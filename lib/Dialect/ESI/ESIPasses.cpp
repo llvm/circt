@@ -27,6 +27,7 @@ namespace esi {
 
 using namespace mlir;
 using namespace circt::esi;
+using namespace circt::rtl;
 
 /// Figure out the number of bits a type takes on the wire in verilog. Doing it
 /// here is probably a giant hack. TODO: Establish a canonical method to get
@@ -35,7 +36,7 @@ static size_t getNumBits(Type type) {
   return llvm::TypeSwitch<::mlir::Type, size_t>(type)
       .Case<IntegerType>(
           [](IntegerType t) { return t.getIntOrFloatBitWidth(); })
-      .Case<circt::rtl::ArrayType>([](circt::rtl::ArrayType a) {
+      .Case<ArrayType>([](ArrayType a) {
         return a.getSize() * getNumBits(a.getInnerType());
       })
       .Default([](Type) { return 0; });
@@ -120,7 +121,7 @@ class ESIRTLBuilder : public OpBuilder {
 public:
   ESIRTLBuilder(Operation *top);
 
-  circt::rtl::RTLExternModuleOp declareStage();
+  RTLExternModuleOp declareStage();
 
   circt::sv::InterfaceOp getOrConstructInterface(ChannelPort);
   circt::sv::InterfaceOp constructInterface(ChannelPort);
@@ -132,7 +133,7 @@ public:
   const FlatSymbolRefAttr data, valid, ready, source, sink;
 
 private:
-  circt::rtl::RTLExternModuleOp declaredStage;
+  RTLExternModuleOp declaredStage;
   llvm::DenseMap<Type, circt::sv::InterfaceOp> portTypeLookup;
   const Location loc;
 };
@@ -170,9 +171,7 @@ ESIRTLBuilder::ESIRTLBuilder(Operation *top)
 /// module implements pipeline stage, adding 1 cycle latency. This particular
 /// implementation is double-buffered and fully pipelines the reverse-flow ready
 /// signal.
-circt::rtl::RTLExternModuleOp ESIRTLBuilder::declareStage() {
-  using namespace circt::rtl;
-
+RTLExternModuleOp ESIRTLBuilder::declareStage() {
   if (declaredStage)
     return declaredStage;
 
@@ -280,7 +279,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
                       unwrap.valid(), tempConstant};
   Type resultTypes[] = {rewriter.getI1Type(), unwrap.rawOutput().getType(),
                         rewriter.getI1Type()};
-  auto stageInst = rewriter.create<circt::rtl::InstanceOp>(
+  auto stageInst = rewriter.create<InstanceOp>(
       loc, resultTypes, "pipelineStage", stageModule.getName(), operands,
       stageAttrs.getDictionary(rewriter.getContext()));
   auto stageInstResults = stageInst.getResults();
@@ -302,27 +301,93 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
 }
 
 namespace {
-///
-struct LowerExternModChannels
-    : public OpConversionPattern<circt::rtl::RTLExternModuleOp> {
-public:
-  LowerExternModChannels(ESIRTLBuilder &builder, MLIRContext *ctxt)
-      : OpConversionPattern(ctxt), builder(builder) {}
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(circt::rtl::RTLExternModuleOp mod, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const final;
+/// Convert all the ESI ports on modules to some lower construct. SV interfaces
+/// for now. In the future, it may be possible to select a different format.
+struct ESIPortsPass : public LowerESIPortsBase<ESIPortsPass> {
+  void runOnOperation();
 
 private:
-  ESIRTLBuilder &builder;
+  void updateFunc(RTLExternModuleOp mod);
+  void updateInstance(RTLExternModuleOp mod, InstanceOp inst);
+
+  ESIRTLBuilder *B;
 };
 } // anonymous namespace
 
-LogicalResult LowerExternModChannels::matchAndRewrite(
-    circt::rtl::RTLExternModuleOp, ArrayRef<Value> stageOperands,
-    ConversionPatternRewriter &rewriter) const {
-  return failure();
+void ESIPortsPass::runOnOperation() {
+  ModuleOp top = getOperation();
+  ESIRTLBuilder b(top);
+  B = &b;
+
+  for (auto mod : top.getOps<RTLExternModuleOp>()) {
+    updateFunc(mod);
+  }
+
+  B = nullptr;
+}
+
+void ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
+  auto *ctxt = &getContext();
+  auto funcType = mod.getType();
+
+  SmallVector<Type, 16> newArgTypes;
+  for (auto argTy : funcType.getInputs()) {
+    auto chanTy = argTy.dyn_cast<ChannelPort>();
+    if (!chanTy) {
+      newArgTypes.push_back(argTy);
+      continue;
+    }
+
+    auto iface = B->getOrConstructInterface(chanTy);
+    newArgTypes.push_back(iface.getModportType(B->sink));
+  }
+
+  ArrayRef<Type> newResultTypes = funcType.getResults();
+
+  auto newFuncType = FunctionType::get(newArgTypes, newResultTypes, ctxt);
+  mod.setType(newFuncType);
+
+  auto scope = SymbolTable::getNearestSymbolTable(mod);
+  auto instances = SymbolTable::getSymbolUses(mod, scope);
+  if (!instances)
+    return;
+  for (auto symUse : *instances) {
+    auto instOp = dyn_cast<InstanceOp>(symUse.getUser());
+    if (instOp)
+      updateInstance(mod, instOp);
+  }
+}
+
+void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
+  using namespace circt::sv;
+  OpBuilder instBuilder(inst);
+  FunctionType funcTy = mod.getType();
+  auto loc = inst.getLoc();
+  auto *ctxt = &getContext();
+
+  inst.dump();
+  for (size_t i = 0, e = inst.getNumOperands(); i < e; ++i) {
+    Value op = inst.getOperand(i);
+    auto instChanTy = op.getType().dyn_cast<ChannelPort>();
+    if (!instChanTy)
+      continue;
+
+    auto iface = B->getOrConstructInterface(instChanTy);
+    if (iface.getModportType(B->sink) != funcTy.getInput(i)) {
+      inst.emitOpError("ESI ChannelPort (argument #")
+          << i << ") doesn't match module!";
+      continue;
+    }
+
+    auto ifaceInst = instBuilder.create<InterfaceInstanceOp>(
+        loc, InterfaceType::get(ctxt, iface.getSymRef()));
+    auto sourceModport =
+        instBuilder.create<GetModportOp>(loc, ifaceInst, B->source);
+    instBuilder.create<UnwrapSVInterface>(loc, op, sourceModport);
+    auto sinkModport =
+        instBuilder.create<GetModportOp>(loc, ifaceInst, B->sink);
+    inst.setOperand(i, sinkModport);
+  }
 }
 
 namespace {
@@ -331,7 +396,7 @@ struct ESItoRTLPass : public LowerESItoRTLBase<ESItoRTLPass> {
 };
 } // anonymous namespace
 
-static bool esiModulePortFree(circt::rtl::RTLExternModuleOp mod) {
+static bool esiModulePortFree(RTLExternModuleOp mod) {
   auto funcType = mod.getType();
   for (auto arg : funcType.getInputs())
     if (arg.isa<ChannelPort>())
@@ -347,9 +412,8 @@ void ESItoRTLPass::runOnOperation() {
 
   // Set up a conversion and give it a set of laws.
   ConversionTarget target(getContext());
-  target.addLegalDialect<circt::rtl::RTLDialect>();
-  target.addDynamicallyLegalOp<circt::rtl::RTLExternModuleOp>(
-      esiModulePortFree);
+  target.addLegalDialect<RTLDialect>();
+  target.addDynamicallyLegalOp<RTLExternModuleOp>(esiModulePortFree);
   target.addLegalOp<WrapValidReady, UnwrapValidReady>();
   target.addLegalOp<WrapSVInterface, UnwrapSVInterface>();
   target.addIllegalOp<PipelineStage>();
@@ -358,7 +422,6 @@ void ESItoRTLPass::runOnOperation() {
   ESIRTLBuilder esiBuilder(top);
   OwningRewritePatternList patterns;
   patterns.insert<PipelineStageLowering>(esiBuilder, &getContext());
-  patterns.insert<LowerExternModChannels>(esiBuilder, &getContext());
 
   // Run the conversion.
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
@@ -369,6 +432,9 @@ namespace circt {
 namespace esi {
 std::unique_ptr<OperationPass<ModuleOp>> createESIPhysicalLoweringPass() {
   return std::make_unique<ESIToPhysicalPass>();
+}
+std::unique_ptr<OperationPass<ModuleOp>> createESIPortLoweringPass() {
+  return std::make_unique<ESIPortsPass>();
 }
 std::unique_ptr<OperationPass<ModuleOp>> createESItoRTLPass() {
   return std::make_unique<ESItoRTLPass>();
