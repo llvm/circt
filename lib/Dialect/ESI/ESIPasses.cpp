@@ -13,6 +13,7 @@
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 #include <memory>
@@ -251,6 +252,8 @@ struct ESItoRTLPass : public LowerESItoRTLBase<ESItoRTLPass> {
 };
 } // anonymous namespace
 
+bool doesNotContainEsiPorts(Operation *op) { return false; }
+
 void ESItoRTLPass::runOnOperation() {
   auto top = getOperation();
   auto ctxt = &getContext();
@@ -265,11 +268,19 @@ void ESItoRTLPass::runOnOperation() {
   ESIRTLBuilder esiBuilder(top);
   OwningRewritePatternList patterns;
   patterns.insert<PipelineStageLowering>(esiBuilder, ctxt);
-  WrapValidReady::getCanonicalizationPatterns(patterns, ctxt);
 
   // Run the conversion.
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();
+
+  // ConversionTarget target2(getContext());
+  // target2.addLegalDialect<circt::rtl::RTLDialect>();
+  // target.addIllegalOp<WrapValidReady, UnwrapValidReady>();
+  // target2.addIllegalOp<PipelineStage>();
+  // OwningRewritePatternList canonPatterns;
+  // WrapValidReady::getCanonicalizationPatterns(canonPatterns, ctxt);
+  // if (failed(applyPartialConversion(top, target2, std::move(canonPatterns))))
+  //   signalPassFailure();
 }
 
 namespace circt {

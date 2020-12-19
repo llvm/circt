@@ -146,23 +146,16 @@ public:
   }
 
   void rewrite(WrapValidReady wrap, ArrayRef<Value> operands,
-               ConversionPatternRewriter &rewriter) const final;
+               ConversionPatternRewriter &rewriter) const final {
+    UnwrapValidReady unwrap =
+        dyn_cast<UnwrapValidReady>(wrap.chanOutput().use_begin()->getOwner());
+    assert(unwrap && "Must be operating on wrap-unwrap pair");
+
+    rewriter.replaceOp(wrap, {nullptr, unwrap.ready()});
+    rewriter.replaceOp(unwrap, operands);
+  }
 };
 } // anonymous namespace
-
-void RemoveWrapUnwrap::rewrite(WrapValidReady wrap,
-                               ArrayRef<Value> stageOperands,
-                               ConversionPatternRewriter &rewriter) const {
-  // This pass requires that implicit forks already be lowered by the
-  // abstract-to-physical pass. Meaning exactly one user.
-  UnwrapValidReady unwrap =
-      dyn_cast<UnwrapValidReady>(wrap.chanOutput().use_begin()->getOwner());
-
-  rewriter.replaceOp(unwrap, {wrap.rawInput(), wrap.valid()});
-  rewriter.replaceOp(wrap, {unwrap.ready(), wrap.ready()});
-  rewriter.eraseOp(unwrap);
-  rewriter.eraseOp(wrap);
-}
 
 void WrapValidReady::getCanonicalizationPatterns(
     OwningRewritePatternList &patterns, MLIRContext *ctxt) {
