@@ -273,14 +273,19 @@ void ESItoRTLPass::runOnOperation() {
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();
 
-  // ConversionTarget target2(getContext());
-  // target2.addLegalDialect<circt::rtl::RTLDialect>();
-  // target.addIllegalOp<WrapValidReady, UnwrapValidReady>();
-  // target2.addIllegalOp<PipelineStage>();
-  // OwningRewritePatternList canonPatterns;
-  // WrapValidReady::getCanonicalizationPatterns(canonPatterns, ctxt);
-  // if (failed(applyPartialConversion(top, target2, std::move(canonPatterns))))
-  //   signalPassFailure();
+  ConversionTarget target2(getContext());
+  target2.addLegalDialect<circt::rtl::RTLDialect>();
+  target.addIllegalOp<WrapValidReady, UnwrapValidReady>();
+  target2.addIllegalOp<PipelineStage>();
+
+  OwningRewritePatternList canonPatterns;
+  WrapValidReady::getCanonicalizationPatterns(canonPatterns, ctxt);
+
+  // This doesn't work.
+  // applyPatternsAndFoldGreedily(top, std::move(canonPatterns));
+
+  // This one does.
+  applyPartialConversion(top, target2, std::move(canonPatterns));
 }
 
 namespace circt {
