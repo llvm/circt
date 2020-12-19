@@ -314,6 +314,7 @@ private:
 };
 } // anonymous namespace
 
+/// Iterate through the `rtl.externmodule`s and lower their ports.
 void ESIPortsPass::runOnOperation() {
   ModuleOp top = getOperation();
   ESIRTLBuilder b(top);
@@ -326,10 +327,18 @@ void ESIPortsPass::runOnOperation() {
   B = nullptr;
 }
 
+/// Convert all input and output ChannelPorts into SV Interfaces. For inputs,
+/// just switch the type to `ModportType`. For outputs, append a `ModportType`
+/// to the inputs and remove the output channel from the results. Then call the
+/// function which adapts the instances (the hard part).
 void ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
   auto *ctxt = &getContext();
   auto funcType = mod.getType();
 
+  bool updated = false;
+
+  // Reconstruct the list of operand types, changing the type whenever an ESI
+  // port is found.
   SmallVector<Type, 16> newArgTypes;
   for (auto argTy : funcType.getInputs()) {
     auto chanTy = argTy.dyn_cast<ChannelPort>();
@@ -338,15 +347,23 @@ void ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
       continue;
     }
 
+    // When we find one, construct an interface, and add the 'sink' modport to
+    // the type list.
     auto iface = B->getOrConstructInterface(chanTy);
     newArgTypes.push_back(iface.getModportType(B->sink));
+    updated = true;
   }
 
   ArrayRef<Type> newResultTypes = funcType.getResults();
 
+  if (!updated)
+    return;
+
+  // Set the new types.
   auto newFuncType = FunctionType::get(newArgTypes, newResultTypes, ctxt);
   mod.setType(newFuncType);
 
+  // Find all instances and update them.
   auto scope = SymbolTable::getNearestSymbolTable(mod);
   auto instances = SymbolTable::getSymbolUses(mod, scope);
   if (!instances)
@@ -358,6 +375,8 @@ void ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
   }
 }
 
+/// Update an instance of an updated module by adding `esi.(un)wrap.iface`
+/// around the instance.
 void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
   using namespace circt::sv;
   OpBuilder instBuilder(inst);
@@ -365,13 +384,15 @@ void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
   auto loc = inst.getLoc();
   auto *ctxt = &getContext();
 
-  inst.dump();
+  // Fix up the operands.
   for (size_t i = 0, e = inst.getNumOperands(); i < e; ++i) {
     Value op = inst.getOperand(i);
     auto instChanTy = op.getType().dyn_cast<ChannelPort>();
     if (!instChanTy)
       continue;
 
+    // Get the interface from the cache, and make sure it's the same one as
+    // being used in the module.
     auto iface = B->getOrConstructInterface(instChanTy);
     if (iface.getModportType(B->sink) != funcTy.getInput(i)) {
       inst.emitOpError("ESI ChannelPort (argument #")
@@ -379,6 +400,8 @@ void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
       continue;
     }
 
+    // Build a gasket by instantiating an interface, connecting one end to an
+    // `esi.unwrap.iface` and the other end to the instance.
     auto ifaceInst = instBuilder.create<InterfaceInstanceOp>(
         loc, InterfaceType::get(ctxt, iface.getSymRef()));
     auto sourceModport =
@@ -396,16 +419,16 @@ struct ESItoRTLPass : public LowerESItoRTLBase<ESItoRTLPass> {
 };
 } // anonymous namespace
 
-static bool esiModulePortFree(RTLExternModuleOp mod) {
-  auto funcType = mod.getType();
-  for (auto arg : funcType.getInputs())
-    if (arg.isa<ChannelPort>())
-      return false;
-  for (auto res : funcType.getResults())
-    if (res.isa<ChannelPort>())
-      return false;
-  return true;
-}
+// static bool esiModulePortFree(RTLExternModuleOp mod) {
+//   auto funcType = mod.getType();
+//   for (auto arg : funcType.getInputs())
+//     if (arg.isa<ChannelPort>())
+//       return false;
+//   for (auto res : funcType.getResults())
+//     if (res.isa<ChannelPort>())
+//       return false;
+//   return true;
+// }
 
 void ESItoRTLPass::runOnOperation() {
   auto top = getOperation();
@@ -413,7 +436,6 @@ void ESItoRTLPass::runOnOperation() {
   // Set up a conversion and give it a set of laws.
   ConversionTarget target(getContext());
   target.addLegalDialect<RTLDialect>();
-  target.addDynamicallyLegalOp<RTLExternModuleOp>(esiModulePortFree);
   target.addLegalOp<WrapValidReady, UnwrapValidReady>();
   target.addLegalOp<WrapSVInterface, UnwrapSVInterface>();
   target.addIllegalOp<PipelineStage>();
