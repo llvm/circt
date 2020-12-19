@@ -56,6 +56,7 @@ void circt::llhd::registerRTLToLLHDPasses() { registerPasses(); }
 
 /// Forward declare conversion patterns.
 struct ConvertRTLModule;
+struct ConvertOutput;
 
 /// This is the main entrypoint for the RTL to LLHD conversion pass.
 void RTLToLLHDPass::runOnOperation() {
@@ -69,6 +70,7 @@ void RTLToLLHDPass::runOnOperation() {
   RTLToLLHDTypeConverter typeConverter;
   OwningRewritePatternList patterns;
   patterns.insert<ConvertRTLModule>(typeConverter, &context);
+  patterns.insert<ConvertOutput>(typeConverter, &context);
 
   if (failed(applyPartialConversion(module, target, std::move(patterns))))
     signalPassFailure();
@@ -83,7 +85,7 @@ RTLToLLHDTypeConverter::RTLToLLHDTypeConverter() {
 }
 
 //===----------------------------------------------------------------------===//
-// Convert modules
+// Convert structure operations
 //===----------------------------------------------------------------------===//
 
 /// This works on each RTL module, creates corresponding entities, moves the
@@ -132,6 +134,50 @@ struct ConvertRTLModule : public OpConversionPattern<RTLModuleOp> {
 
     // Erase the RTL module.
     rewriter.eraseOp(module);
+
+    return success();
+  }
+};
+
+/// This works on each output op, creating ops to drive the appropriate results.
+struct ConvertOutput : public OpConversionPattern<OutputOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(OutputOp output, ArrayRef<Value> operands,
+                                ConversionPatternRewriter &rewriter) const {
+    // Construct the `1d` time value for the drive.
+    auto timeType = TimeType::get(rewriter.getContext());
+    auto deltaAttr = TimeAttr::get(timeType, {0, 1, 0}, "ns");
+    auto delta = rewriter.create<ConstOp>(output.getLoc(), timeType, deltaAttr);
+
+    // Get the number of inputs in the entity to offset into the block args.
+    auto entity = output.getParentOfType<EntityOp>();
+    size_t numInputs = entity.ins();
+
+    // Drive the results from the mapped operands.
+    for (size_t i = 0, e = operands.size(); i != e; ++i) {
+      // Get the source signal.
+      auto src = operands[i];
+      if (!src)
+        return output.emitError("no mapped operand for result ") << i;
+
+      // Get the destination signal.
+      auto dest = entity.getArgument(numInputs + i);
+      if (!dest)
+        return output.emitError("no block argument for result ")
+               << i << " at index " << numInputs + i;
+
+      // If the source has a signal type, probe it.
+      if (auto sigTy = src.getType().dyn_cast<SigType>())
+        src = rewriter.create<PrbOp>(output.getLoc(), sigTy.getUnderlyingType(),
+                                     src);
+
+      // Always drive the destination.
+      rewriter.create<DrvOp>(output.getLoc(), dest, src, delta, Value());
+    }
+
+    // Erase the original output terminator.
+    rewriter.eraseOp(output);
 
     return success();
   }
