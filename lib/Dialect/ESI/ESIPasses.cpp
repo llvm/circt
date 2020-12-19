@@ -424,6 +424,7 @@ void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
     auto instChanTy = op.getType().dyn_cast<ChannelPort>();
     if (!instChanTy) {
       newOperands.push_back(op);
+      ++opNum;
       continue;
     }
 
@@ -471,7 +472,7 @@ void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
     auto iface = B->getOrConstructInterface(instChanTy);
     if (iface.getModportType(B->source) != funcTy.getInput(opNum)) {
       inst.emitOpError("ESI ChannelPort (result #")
-          << resNum << ") doesn't match module!";
+          << resNum << ", op #" << opNum << ") doesn't match module!";
       ++opNum;
       newResults.push_back(res);
       newResultTypes.push_back(res.getType());
