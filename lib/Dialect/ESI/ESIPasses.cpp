@@ -28,6 +28,7 @@ namespace esi {
 using namespace mlir;
 using namespace circt::esi;
 using namespace circt::rtl;
+using namespace circt::sv;
 
 /// Figure out the number of bits a type takes on the wire in verilog. Doing it
 /// here is probably a giant hack. TODO: Establish a canonical method to get
@@ -123,8 +124,8 @@ public:
 
   RTLExternModuleOp declareStage();
 
-  circt::sv::InterfaceOp getOrConstructInterface(ChannelPort);
-  circt::sv::InterfaceOp constructInterface(ChannelPort);
+  InterfaceOp getOrConstructInterface(ChannelPort);
+  InterfaceOp constructInterface(ChannelPort);
 
   // A bunch of constants for use in various places below.
   const StringAttr a, aValid, aReady, x, xValid, xReady;
@@ -134,7 +135,7 @@ public:
 
 private:
   RTLExternModuleOp declaredStage;
-  llvm::DenseMap<Type, circt::sv::InterfaceOp> portTypeLookup;
+  llvm::DenseMap<Type, InterfaceOp> portTypeLookup;
   const Location loc;
 };
 } // anonymous namespace
@@ -195,7 +196,7 @@ RTLExternModuleOp ESIRTLBuilder::declareStage() {
 /// Return the InterfaceType which corresponds to an ESI port type. If it
 /// doesn't exist in the cache, build the InterfaceOp and the corresponding
 /// type.
-circt::sv::InterfaceOp ESIRTLBuilder::getOrConstructInterface(ChannelPort t) {
+InterfaceOp ESIRTLBuilder::getOrConstructInterface(ChannelPort t) {
   auto ifaceIter = portTypeLookup.find(t);
   if (ifaceIter != portTypeLookup.end())
     return ifaceIter->second;
@@ -204,8 +205,7 @@ circt::sv::InterfaceOp ESIRTLBuilder::getOrConstructInterface(ChannelPort t) {
   return iface;
 }
 
-circt::sv::InterfaceOp ESIRTLBuilder::constructInterface(ChannelPort chan) {
-  using namespace circt::sv;
+InterfaceOp ESIRTLBuilder::constructInterface(ChannelPort chan) {
   auto ctxt = getContext();
 
   InterfaceOp iface = create<InterfaceOp>(loc, "IDataVR");
@@ -308,8 +308,9 @@ struct ESIPortsPass : public LowerESIPortsBase<ESIPortsPass> {
 
 private:
   void updateFunc(RTLExternModuleOp mod);
-  void updateInstance(RTLExternModuleOp mod, InstanceOp inst);
-
+  void updateInstance(RTLExternModuleOp mod,
+                      SmallVectorImpl<ModportType> &addlOperands,
+                      InstanceOp inst);
   ESIRTLBuilder *B;
 };
 } // anonymous namespace
@@ -339,7 +340,7 @@ void ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
 
   // Reconstruct the list of operand types, changing the type whenever an ESI
   // port is found.
-  SmallVector<Type, 16> newArgTypes;
+  SmallVector<Type, 8> newArgTypes;
   for (auto argTy : funcType.getInputs()) {
     auto chanTy = argTy.dyn_cast<ChannelPort>();
     if (!chanTy) {
@@ -354,7 +355,26 @@ void ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
     updated = true;
   }
 
-  ArrayRef<Type> newResultTypes = funcType.getResults();
+  // Iterate through the results and append to one of the two below lists. The
+  // first for non-ESI-ports. The second, ports which have been re-located to an
+  // operand.
+  SmallVector<Type, 8> newResultTypes;
+  SmallVector<ModportType, 4> newArgTypesFromResults;
+  for (auto resTy : funcType.getResults()) {
+    auto chanTy = resTy.dyn_cast<ChannelPort>();
+    if (!chanTy) {
+      newResultTypes.push_back(resTy);
+      continue;
+    }
+
+    // When we find one, construct an interface, and add the 'sink' modport to
+    // the type list.
+    auto iface = B->getOrConstructInterface(chanTy);
+    ModportType sourcePort = iface.getModportType(B->source);
+    newArgTypes.push_back(sourcePort);
+    newArgTypesFromResults.push_back(sourcePort);
+    updated = true;
+  }
 
   if (!updated)
     return;
@@ -371,46 +391,116 @@ void ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
   for (auto symUse : *instances) {
     auto instOp = dyn_cast<InstanceOp>(symUse.getUser());
     if (instOp)
-      updateInstance(mod, instOp);
+      updateInstance(mod, newArgTypesFromResults, instOp);
   }
 }
 
 /// Update an instance of an updated module by adding `esi.(un)wrap.iface`
-/// around the instance.
-void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
+/// around the instance. Create a new instance at the end from the lists built
+/// up before.
+void ESIPortsPass::updateInstance(RTLExternModuleOp mod,
+                                  SmallVectorImpl<ModportType> &addlOperands,
+                                  InstanceOp inst) {
   using namespace circt::sv;
   OpBuilder instBuilder(inst);
   FunctionType funcTy = mod.getType();
   auto loc = inst.getLoc();
   auto *ctxt = &getContext();
 
-  // Fix up the operands.
-  for (size_t i = 0, e = inst.getNumOperands(); i < e; ++i) {
-    Value op = inst.getOperand(i);
+  // op counter for error reporting purposes.
+  size_t opNum = 0;
+  // List of new operands.
+  SmallVector<Value, 16> newOperands;
+
+  // Fill the new operand list with old plain operands and mutated ones.
+  for (auto op : inst.getOperands()) {
     auto instChanTy = op.getType().dyn_cast<ChannelPort>();
-    if (!instChanTy)
+    if (!instChanTy) {
+      newOperands.push_back(op);
       continue;
+    }
 
     // Get the interface from the cache, and make sure it's the same one as
     // being used in the module.
     auto iface = B->getOrConstructInterface(instChanTy);
-    if (iface.getModportType(B->sink) != funcTy.getInput(i)) {
-      inst.emitOpError("ESI ChannelPort (argument #")
-          << i << ") doesn't match module!";
+    if (iface.getModportType(B->sink) != funcTy.getInput(opNum)) {
+      inst.emitOpError("ESI ChannelPort (operand #")
+          << opNum << ") doesn't match module!";
+      ++opNum;
+      newOperands.push_back(op);
       continue;
     }
+    ++opNum;
 
     // Build a gasket by instantiating an interface, connecting one end to an
     // `esi.unwrap.iface` and the other end to the instance.
     auto ifaceInst = instBuilder.create<InterfaceInstanceOp>(
-        loc, InterfaceType::get(ctxt, iface.getSymRef()));
-    auto sourceModport =
+        loc, InterfaceType::get(instBuilder.getContext(), iface.getSymRef()));
+    GetModportOp sourceModport =
         instBuilder.create<GetModportOp>(loc, ifaceInst, B->source);
     instBuilder.create<UnwrapSVInterface>(loc, op, sourceModport);
-    auto sinkModport =
+    GetModportOp sinkModport =
         instBuilder.create<GetModportOp>(loc, ifaceInst, B->sink);
-    inst.setOperand(i, sinkModport);
+    // Finally, add the correct modport to the list of operands.
+    newOperands.push_back(sinkModport);
   }
+
+  // Go through the results and get both a list of the plain old values being
+  // produced and their types.
+  SmallVector<Value, 8> newResults;
+  SmallVector<Type, 8> newResultTypes;
+  for (size_t resNum = 0, numRes = inst.getNumResults(); resNum < numRes;
+       ++resNum) {
+    Value res = inst.getResult(resNum);
+    auto instChanTy = res.getType().dyn_cast<ChannelPort>();
+    if (!instChanTy) {
+      newResults.push_back(res);
+      newResultTypes.push_back(res.getType());
+      continue;
+    }
+
+    // Get the interface from the cache, and make sure it's the same one as
+    // being used in the module.
+    auto iface = B->getOrConstructInterface(instChanTy);
+    if (iface.getModportType(B->source) != funcTy.getInput(opNum)) {
+      inst.emitOpError("ESI ChannelPort (result #")
+          << resNum << ") doesn't match module!";
+      ++opNum;
+      newResults.push_back(res);
+      newResultTypes.push_back(res.getType());
+      continue;
+    }
+    ++opNum;
+
+    // Build a gasket by instantiating an interface, connecting one end to an
+    // `esi.wrap.iface` and the other end to the instance. Append it to the
+    // operand list.
+    auto ifaceInst = instBuilder.create<InterfaceInstanceOp>(
+        loc, InterfaceType::get(ctxt, iface.getSymRef()));
+    GetModportOp sinkModport =
+        instBuilder.create<GetModportOp>(loc, ifaceInst, B->sink);
+    auto newChannel =
+        instBuilder.create<WrapSVInterface>(loc, res.getType(), sinkModport);
+    // Connect all the old users of the output channel with the newly wrapped
+    // replacement channel.
+    res.replaceAllUsesWith(newChannel);
+    GetModportOp sourceModport =
+        instBuilder.create<GetModportOp>(loc, ifaceInst, B->source);
+    // And add the modport on the other side to the new operand list.
+    newOperands.push_back(sourceModport);
+  }
+
+  // Create the new instance!
+  InstanceOp newInst = instBuilder.create<InstanceOp>(
+      loc, newResultTypes, newOperands, inst.getAttrs());
+  // Go through the old list of non-ESI result values, and replace them with the
+  // new non-ESI results.
+  for (size_t resNum = 0, numRes = newResults.size(); resNum < numRes;
+       ++resNum) {
+    newResults[resNum].replaceAllUsesWith(newInst.getResult(resNum));
+  }
+  // Erase the old instance!
+  inst.erase();
 }
 
 namespace {

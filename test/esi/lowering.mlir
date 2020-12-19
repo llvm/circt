@@ -11,9 +11,9 @@ module {
   // RTL-NOT: esi.stage
 
   rtl.module @test(%clk:i1, %rstn:i1) {
-    %esiChan = rtl.instance "sender" @Sender () : () -> (!esi.channel<i4>)
-    %bufferedChan = esi.buffer %clk, %rstn, %esiChan { } : i4
-    rtl.instance "recv" @Reciever (%bufferedChan) : (!esi.channel<i4>) -> ()
+    // %esiChan = rtl.instance "sender" @Sender () : () -> (!esi.channel<i4>)
+    // %bufferedChan = esi.buffer %clk, %rstn, %esiChan { } : i4
+    // rtl.instance "recv" @Reciever (%bufferedChan) : (!esi.channel<i4>) -> ()
 
     // CHECK:  %sender.x = rtl.instance "sender" @Sender()  : () -> !esi.channel<i4>
     // CHECK-NEXT:  %0 = esi.stage %clk, %rstn, %sender.x : i4
