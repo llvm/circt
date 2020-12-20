@@ -8,8 +8,8 @@
 #define CIRCT_DIALECT_RTL_OPS_H
 
 #include "circt/Dialect/RTL/Dialect.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/FunctionSupport.h"
-#include "mlir/IR/Module.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/SymbolTable.h"

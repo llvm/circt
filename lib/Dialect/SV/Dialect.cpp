@@ -33,22 +33,3 @@ SVDialect::SVDialect(MLIRContext *context)
 }
 
 SVDialect::~SVDialect() {}
-
-/// Parses a type registered to this dialect
-Type SVDialect::parseType(DialectAsmParser &parser) const {
-  llvm::StringRef mnemonic;
-  auto loc = parser.getCurrentLocation();
-  if (parser.parseKeyword(&mnemonic))
-    return Type();
-  if (auto type = generatedTypeParser(getContext(), parser, mnemonic))
-    return type;
-  parser.emitError(loc, "Failed to parse type sv.") << mnemonic << "\n";
-  return Type();
-}
-
-/// Print a type registered to this dialect
-void SVDialect::printType(Type type, DialectAsmPrinter &printer) const {
-  if (succeeded(generatedTypePrinter(type, printer)))
-    return;
-  llvm_unreachable("unexpected 'rtl' type kind");
-}
