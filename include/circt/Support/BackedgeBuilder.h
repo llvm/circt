@@ -1,4 +1,4 @@
-//===- Backedge.h - Support classes for building backedges ------*- C++ -*-===//
+//===- BackedgeBuilder.h - Support for building backedges -------*- C++ -*-===//
 //
 // Backedges are temporary operations/values which have to exist as operands
 // before they are produced in a result. Since it isn't clear how to build
@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_SUPPORT_BACKEDGE_H
-#define CIRCT_SUPPORT_BACKEDGE_H
+#ifndef CIRCT_SUPPORT_BACKEDGEBUILDER_H
+#define CIRCT_SUPPORT_BACKEDGEBUILDER_H
 
 #include "mlir/IR/Location.h"
 #include "mlir/IR/Value.h"
@@ -46,7 +46,7 @@ public:
   BackedgeBuilder(mlir::PatternRewriter &rewriter, mlir::Location loc);
   ~BackedgeBuilder();
   /// Create a typed backedge.
-  Backedge operator()(mlir::Type resultType);
+  Backedge get(mlir::Type resultType);
 
 private:
   mlir::PatternRewriter &rewriter;
@@ -65,7 +65,7 @@ class Backedge {
 
 public:
   operator mlir::Value();
-  void operator=(mlir::Value);
+  void setValue(mlir::Value);
 
 private:
   mlir::Value value;
@@ -73,4 +73,4 @@ private:
 
 } // namespace circt
 
-#endif // CIRCT_SUPPORT_BACKEDGE_H
+#endif // CIRCT_SUPPORT_BACKEDGEBUILDER_H

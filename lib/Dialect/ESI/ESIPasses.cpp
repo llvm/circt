@@ -8,7 +8,7 @@
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/RTL/Ops.h"
 #include "circt/Dialect/RTL/Types.h"
-#include "circt/Support/Backedge.h"
+#include "circt/Support/BackedgeBuilder.h"
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -217,12 +217,12 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   // create a temp value and replace it later. Give this constant an odd-looking
   // type to make debugging easier.
   circt::BackedgeBuilder back(rewriter, loc);
-  circt::Backedge wrapReady = back(rewriter.getI1Type());
+  circt::Backedge wrapReady = back.get(rewriter.getI1Type());
   auto unwrap =
       rewriter.create<UnwrapValidReady>(loc, stage.input(), wrapReady);
 
   // Instantiate the "ESI_PipelineStage" external module.
-  circt::Backedge stageReady = back(rewriter.getI1Type());
+  circt::Backedge stageReady = back.get(rewriter.getI1Type());
   Value operands[] = {stage.clk(), stage.rstn(), unwrap.rawOutput(),
                       unwrap.valid(), stageReady};
   Type resultTypes[] = {rewriter.getI1Type(), unwrap.rawOutput().getType(),
@@ -233,7 +233,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   auto stageInstResults = stageInst.getResults();
 
   // Set a_ready (from the unwrap) back edge correctly to its output from stage.
-  wrapReady = stageInstResults[0];
+  wrapReady.setValue(stageInstResults[0]);
 
   Value x = stageInstResults[1];
   Value xValid = stageInstResults[2];
@@ -242,7 +242,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   auto wrap = rewriter.create<WrapValidReady>(loc, chPort, rewriter.getI1Type(),
                                               x, xValid);
   // Set the stages x_ready backedge correctly.
-  stageReady = wrap.ready();
+  stageReady.setValue(wrap.ready());
 
   rewriter.replaceOp(stage, wrap.chanOutput());
   return success();
