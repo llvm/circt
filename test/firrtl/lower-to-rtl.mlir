@@ -23,8 +23,8 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK: rtl.constant(2 : i3) : i3
     %c2_si3 = firrtl.constant(2 : si3) : !firrtl.sint<3>
 
-    // CHECK: %0 = rtl.add %c-4_i4, %c-4_i4 : i4
-    %0 = firrtl.add %c12_ui4, %c12_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+    // CHECK: %0 = rtl.add %c-4_i4, %in1 : i4
+    %0 = firrtl.add %c12_ui4, %in1c : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
     %1 = firrtl.asUInt %in1c : (!firrtl.uint<4>) -> !firrtl.uint<4>
 

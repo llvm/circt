@@ -22,7 +22,7 @@ def ArrayType : RTLType<"Array"> {
   let genVerifyInvariantsDecl = 1;
 }
 
-def InOutType : RTLType<"InOut">, Type<CPred<"$_self.isa<InOutType>()">, "InOutType"> {
+def InOutType : RTLType<"InOut"> {
   let summary = "bidirectional type for ports and wires";
   /*let description = [{
     InOut type is used for model operations and values that have "connection"

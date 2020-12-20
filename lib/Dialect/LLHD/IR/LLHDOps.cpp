@@ -6,12 +6,12 @@
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "mlir/Dialect/CommonFolders.h"
 #include "mlir/IR/Attributes.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Matchers.h"
-#include "mlir/IR/Module.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Region.h"
-#include "mlir/IR/StandardTypes.h"
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Support/LogicalResult.h"
@@ -945,7 +945,7 @@ static LogicalResult verify(llhd::InstOp op) {
 
 FunctionType llhd::InstOp::getCalleeType() {
   SmallVector<Type, 8> argTypes(getOperandTypes());
-  return FunctionType::get(argTypes, ArrayRef<Type>(), getContext());
+  return FunctionType::get(getContext(), argTypes, ArrayRef<Type>());
 }
 
 //===----------------------------------------------------------------------===//

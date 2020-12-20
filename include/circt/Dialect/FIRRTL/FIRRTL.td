@@ -35,6 +35,4 @@ include "OpDeclarations.td"
 include "OpExpressions.td"
 include "OpStatements.td"
 
-include "Passes.td"
-
 #endif // FIRRTL_TD

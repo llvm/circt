@@ -9,7 +9,7 @@
 
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 
-#include "mlir/IR/Module.h"
+#include "mlir/IR/BuiltinOps.h"
 
 namespace mlir {
 class ExecutionEngine;

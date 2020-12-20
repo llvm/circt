@@ -7,8 +7,8 @@
 #ifndef CIRCT_DIALECT_LLHD_IR_LLHDDIALECT_H
 #define CIRCT_DIALECT_LLHD_IR_LLHDDIALECT_H
 
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dialect.h"
-#include "mlir/IR/Function.h"
 
 namespace circt {
 namespace llhd {
