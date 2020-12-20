@@ -1,6 +1,7 @@
 // RUN: circt-translate -emit-verilog -verify-diagnostics --split-input-file -mlir-print-op-on-diagnostic=false %s
 
 func private @foo() { // expected-error {{unknown operation}}
+  return
 }
 
 // -----

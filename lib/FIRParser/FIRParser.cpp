@@ -7,9 +7,9 @@
 #include "circt/FIRParser.h"
 #include "FIRLexer.h"
 #include "circt/Dialect/FIRRTL/Ops.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
-#include "mlir/IR/Module.h"
-#include "mlir/IR/StandardTypes.h"
 #include "mlir/IR/Verifier.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/ScopedHashTable.h"
@@ -1138,7 +1138,7 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result,
   }
 
   Type attrType =
-      IntegerType::get(value.getBitWidth(), signedness, type.getContext());
+      IntegerType::get(type.getContext(), value.getBitWidth(), signedness);
   auto attr = builder.getIntegerAttr(attrType, value);
 
   // Check to see if we've already created this constant.  If so, reuse it.

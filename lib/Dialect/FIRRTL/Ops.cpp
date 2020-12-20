@@ -6,10 +6,10 @@
 #include "circt/Dialect/FIRRTL/Types.h"
 #include "circt/Dialect/FIRRTL/Visitors.h"
 #include "circt/Dialect/RTL/Types.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
-#include "mlir/IR/StandardTypes.h"
 #include "llvm/ADT/DenseMap.h"
 
 using namespace circt;
@@ -433,12 +433,13 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
 
   // Parse the optional function body.
   auto *body = result.addRegion();
-  if (parser.parseOptionalRegion(
-          *body, entryArgs, entryArgs.empty() ? ArrayRef<Type>() : argTypes))
-    return failure();
+  if (!isExtModule) {
+    if (parser.parseRegion(*body, entryArgs,
+                           entryArgs.empty() ? ArrayRef<Type>() : argTypes))
+      return failure();
 
-  if (!isExtModule)
     FModuleOp::ensureTerminator(*body, parser.getBuilder(), result.location);
+  }
   return success();
 }
 
@@ -800,7 +801,7 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
   auto signedness =
       type.isSigned() ? IntegerType::Signed : IntegerType::Unsigned;
   Type attrType =
-      IntegerType::get(value.getBitWidth(), signedness, type.getContext());
+      IntegerType::get(type.getContext(), value.getBitWidth(), signedness);
   auto attr = builder.getIntegerAttr(attrType, value);
   return build(builder, result, type, attr);
 }

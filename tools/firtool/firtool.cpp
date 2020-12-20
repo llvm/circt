@@ -15,7 +15,7 @@
 #include "circt/EmitVerilog.h"
 #include "circt/FIRParser.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
-#include "mlir/IR/Module.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/Parser.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"

@@ -8,7 +8,7 @@
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
-#include "mlir/IR/Module.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Visitors.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Translation.h"

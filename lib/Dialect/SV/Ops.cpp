@@ -5,7 +5,7 @@
 #include "circt/Dialect/SV/Ops.h"
 #include "circt/Dialect/RTL/Types.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/StandardTypes.h"
+#include "mlir/IR/BuiltinTypes.h"
 
 using namespace circt;
 using namespace sv;

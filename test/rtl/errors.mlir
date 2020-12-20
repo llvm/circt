@@ -37,7 +37,9 @@ func private @test_and() {
 
 // -----
 
-func private @notModule () {}
+func private @notModule () {
+  return
+}
 
 rtl.module @A(%arg0: i1) {
   // expected-error @+1 {{Symbol resolved to 'func' which is not a RTL[Ext]ModuleOp}}

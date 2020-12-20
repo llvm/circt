@@ -19,3 +19,4 @@ add_circt_dialect_library(MLIRFIRRTL
 
 add_dependencies(circt-headers MLIRFIRRTLIncGen MLIRFIRRTLEnumsIncGen)
  
+add_subdirectory(Transforms)
