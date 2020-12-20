@@ -5,6 +5,7 @@
 *~
 .DS_Store
 __pycache__
+lit.site.cfg.py
 
 # External software
 /ext
