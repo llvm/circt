@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -inline="disable-simplify" -llhd-function-elimination | FileCheck %s
+// RUN: circt-opt %s -inline="default-pipeline=''" -llhd-function-elimination | FileCheck %s
 
 // This test checks the presence of inlining into entities and processes
 // and their general structure after inlining. It also checks that the functions

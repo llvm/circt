@@ -7,13 +7,13 @@
 #include "circt/Dialect/RTL/Visitors.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/Matchers.h"
-#include "mlir/IR/Module.h"
 #include "mlir/IR/PatternMatch.h"
-#include "mlir/IR/StandardTypes.h"
 
 using namespace circt;
 using namespace rtl;
@@ -273,12 +273,13 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
 
   // Parse the optional function body.
   auto *body = result.addRegion();
-  if (parser.parseOptionalRegion(
-          *body, entryArgs, entryArgs.empty() ? ArrayRef<Type>() : argTypes))
-    return failure();
+  if (!isExtModule) {
+    if (parser.parseRegion(*body, entryArgs,
+                           entryArgs.empty() ? ArrayRef<Type>() : argTypes))
+      return failure();
 
-  if (!isExtModule)
     RTLModuleOp::ensureTerminator(*body, parser.getBuilder(), result.location);
+  }
   return success();
 }
 
@@ -539,7 +540,7 @@ bool rtl::isCombinatorial(Operation *op) {
 }
 
 static Attribute getIntAttr(const APInt &value, MLIRContext *context) {
-  return IntegerAttr::get(IntegerType::get(value.getBitWidth(), context),
+  return IntegerAttr::get(IntegerType::get(context, value.getBitWidth()),
                           value);
 }
 
@@ -652,8 +653,8 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
 void ConstantOp::build(OpBuilder &builder, OperationState &result,
                        const APInt &value) {
 
-  auto type = IntegerType::get(value.getBitWidth(), IntegerType::Signless,
-                               builder.getContext());
+  auto type = IntegerType::get(builder.getContext(), value.getBitWidth(),
+                               IntegerType::Signless);
   auto attr = builder.getIntegerAttr(type, value);
   return build(builder, result, type, attr);
 }

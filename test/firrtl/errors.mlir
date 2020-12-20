@@ -205,7 +205,7 @@ firrtl.circuit "Foo" {
 
 firrtl.circuit "Foo" {
 
-  firrtl.module @Foo()
+  firrtl.extmodule @Foo()
   // expected-error @+1 {{'firrtl.instance' op should be embedded in a 'firrtl.module'}}
   %a = firrtl.instance @Foo : !firrtl.bundle<>
 
