@@ -60,13 +60,12 @@ tools = [
     'circt-opt',
     'circt-translate',
     'circt-capi-ir-test',
-    'llhd-sim',
+    'llhd-sim'
 ]
 
 # Enable Verilator if it has been detected.
 if config.verilator_path != "":
   tool_dirs.append(os.path.dirname(config.verilator_path))
-  config.substitutions.append(('%VERILATOR%', config.verilator_path))
   tools.append('verilator')
   config.available_features.add('verilator')
 
