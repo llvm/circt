@@ -88,6 +88,7 @@ if config.verilator_path != "":
 # Enable Questa if it has been detected.
 if config.questa_path != "":
   config.available_features.add('questa')
+  config.available_features.add('comsim')
   llvm_config.with_environment(
       'LM_LICENSE_FILE', os.environ['LM_LICENSE_FILE'])
 
@@ -95,7 +96,7 @@ if config.questa_path != "":
   # one should be the default and modify this appropriately.
   config.substitutions.append(
       ('%questa', os.path.join(config.questa_path, "vsim")))
-  config.substitutions.append(('%defaultSim', os.path.join(config.questa_path, "vsim")))
+  config.substitutions.append(('%comsim', os.path.join(config.questa_path, "vsim")))
 
 # Enable ESI cosim tests if they have been built.
 if config.esi_cosim_path != "":

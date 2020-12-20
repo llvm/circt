@@ -16,8 +16,8 @@
 //===----------------------------------------------------------------------===//
 
 // Make sure this file compiles.
-// REQUIRES: questa
-// RUN: circt-rtl-sim.py --sim questa --no-run --no-default-driver %s
+// REQUIRES: comsim
+// RUN: circt-rtl-sim.py --sim %comsim --no-run --no-default-driver %s
 
 module driver();
 
