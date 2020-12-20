@@ -17,7 +17,7 @@
 
 // Make sure this file compiles.
 // REQUIRES: questa
-// RUN: vlog -sv %s
+// RUN: circt-rtl-sim.py --sim questa --no-run --no-default-driver %s
 
 module driver();
 

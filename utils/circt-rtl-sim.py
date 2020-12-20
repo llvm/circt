@@ -88,15 +88,15 @@ def __main__(args):
     argparser.add_argument("--sim", type=str, default="verilator",
                            help="Name of the RTL simulator (if in PATH) to use" +
                            " or path to an executable.")
-    argparser.add_argument("--no-compile", type=bool,
+    argparser.add_argument("--no-compile", dest="no_compile", action='store_true',
                            help="Don't compile the simulation.")
-    argparser.add_argument("--no-run", type=bool,
+    argparser.add_argument("--no-run", dest="no_run", action='store_true',
                            help="Don't run the simulation.")
     argparser.add_argument("--top", type=str, default="top",
                            help="Name of top module to run.")
     argparser.add_argument("--simargs", type=str, default="",
                            help="Simulation arguments string.")
-    argparser.add_argument("--no-default-driver", type=bool,
+    argparser.add_argument("--no-default-driver", dest="no_default_driver", action='store_true',
                            help="Do not use the standard top module/drivers.")
     argparser.add_argument("--cycles", type=int, default=-1,
                            help="Number of cycles to run the simulator. " +
