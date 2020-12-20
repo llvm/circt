@@ -133,7 +133,7 @@ class BinaryPrimOp<string mnemonic, string resultTypeFunction,
        `(` type($lhs) `,` type($rhs) `)` `->` type($result)
   }];
 
-  let extraClassDeclaration = !cast<code>(!strconcat(!cast<string>([{
+  let extraClassDeclaration = !cast<string>(!strconcat(!cast<string>([{
     /// Return the result for inputs with the specified type, returning a null
     /// type if the input types are invalid.
     static FIRRTLType getResultType(FIRRTLType lhs, FIRRTLType rhs,
@@ -199,7 +199,7 @@ class UnaryPrimOp<string mnemonic, string resultTypeFunction,
     $input attr-dict `:` functional-type($input, $result)
   }];
 
-  let extraClassDeclaration = !cast<code>(!strconcat(!cast<string>([{
+  let extraClassDeclaration = !cast<string>(!strconcat(!cast<string>([{
     /// Return the result for inputs with the specified type, returning a null
     /// type if the input types are invalid.
     static FIRRTLType getResultType(FIRRTLType input, Location loc) {

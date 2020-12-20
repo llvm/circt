@@ -66,7 +66,7 @@ def FuncOp : Op<Handshake_Dialect, "func", [
   let builders =
        [OpBuilderDAG<(ins "StringRef":$name, "FunctionType":$type,
                       CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs,
-                      CArg<"ArrayRef<MutableDictionaryAttr>", "{}">:$argAttrs),
+                      CArg<"ArrayRef<NamedAttrList>", "{}">:$argAttrs),
                       [{
                      $_state.addAttribute(SymbolTable::getSymbolAttrName(),
                                          $_builder.getStringAttr(name));

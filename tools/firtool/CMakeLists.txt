@@ -10,6 +10,7 @@ target_link_libraries(firtool PRIVATE
   CIRCTEmitVerilog
   CIRCTFIRParser
   MLIRFIRRTLToRTL
+  CIRCTFIRRTLTransforms
 
   MLIRParser
   MLIRSupport

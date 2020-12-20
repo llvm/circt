@@ -9,7 +9,7 @@
 #include "circt/Dialect/SV/Types.h"
 
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/StandardTypes.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/SymbolTable.h"
 
 using namespace mlir;
@@ -42,7 +42,7 @@ static ParseResult parseChannelBuffer(OpAsmParser &parser,
       ChannelPort::get(parser.getBuilder().getContext(), innerOutputType);
   result.addTypes({outputType});
 
-  auto i1 = IntegerType::get(1, result.getContext());
+  auto i1 = IntegerType::get(result.getContext(), 1);
   if (parser.resolveOperands(operands, {i1, i1, outputType}, inputOperandsLoc,
                              result.operands))
     return failure();
@@ -75,7 +75,7 @@ static ParseResult parsePipelineStage(OpAsmParser &parser,
       ChannelPort::get(parser.getBuilder().getContext(), innerOutputType);
   result.addTypes({type});
 
-  auto i1 = IntegerType::get(1, result.getContext());
+  auto i1 = IntegerType::get(result.getContext(), 1);
   if (parser.resolveOperands(operands, {i1, i1, type}, inputOperandsLoc,
                              result.operands))
     return failure();

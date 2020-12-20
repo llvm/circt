@@ -92,24 +92,48 @@ func @variadic_noop(%arg0: i11) -> i11 {
   return %4 : i11
 }
 
-// CHECK-LABEL: func @and_annulment(%arg0: i11, %arg1: i11) -> i11 {
+// CHECK-LABEL: func @and_annulment0(%arg0: i11, %arg1: i11) -> i11 {
 // CHECK-NEXT:    %c0_i11 = rtl.constant(0 : i11)
 // CHECK-NEXT:    return %c0_i11
 
-func @and_annulment(%arg0: i11, %arg1: i11) -> i11 {
+func @and_annulment0(%arg0: i11, %arg1: i11) -> i11 {
   %c0_i11 = rtl.constant(0 : i11) : i11
   %0 = rtl.and %arg0, %arg1, %c0_i11 : i11
   return %0 : i11
 }
 
-// CHECK-LABEL: func @or_annulment(%arg0: i11) -> i11 {
+// CHECK-LABEL: func @and_annulment1(%arg0: i7)
+// CHECK-NEXT:    %c0_i7 = rtl.constant(0 : i7)
+// CHECK-NEXT:    return %c0_i7
+
+func @and_annulment1(%arg0: i7) -> i7 {
+  %c1_i7 = rtl.constant(1 : i7) : i7
+  %c2_i7 = rtl.constant(2 : i7) : i7
+  %c4_i7 = rtl.constant(4 : i7) : i7
+  %0 = rtl.and %arg0, %c1_i7, %c2_i7, %c4_i7: i7
+  return %0 : i7
+}
+
+// CHECK-LABEL: func @or_annulment0(%arg0: i11) -> i11 {
 // CHECK-NEXT:    %c-1_i11 = rtl.constant(-1 : i11)
 // CHECK-NEXT:    return %c-1_i11
 
-func @or_annulment(%arg0: i11) -> i11 {
+func @or_annulment0(%arg0: i11) -> i11 {
   %c-1_i11 = rtl.constant(-1 : i11) : i11
   %0 = rtl.or %arg0, %arg0, %arg0, %c-1_i11 : i11
   return %0 : i11
+}
+
+// CHECK-LABEL: func @or_annulment1(%arg0: i3)
+// CHECK-NEXT:    %c-1_i3 = rtl.constant(-1 : i3)
+// CHECK-NEXT:    return %c-1_i3
+
+func @or_annulment1(%arg0: i3) -> i3 {
+  %c1_i3 = rtl.constant(1 : i3) : i3
+  %c2_i3 = rtl.constant(2 : i3) : i3
+  %c4_i3 = rtl.constant(4 : i3) : i3
+  %0 = rtl.or %arg0, %c1_i3, %c2_i3, %c4_i3: i3
+  return %0 : i3
 }
 
 // CHECK-LABEL: func @mul_annulment(%arg0: i11, %arg1: i11, %arg2: i11) -> i11 {
@@ -120,6 +144,16 @@ func @mul_annulment(%arg0: i11, %arg1: i11, %arg2: i11) -> i11 {
   %c0_i11 = rtl.constant(0 : i11) : i11
   %0 = rtl.mul %arg0, %c0_i11, %arg1 : i11
   return %0 : i11
+}
+
+// CHECK-LABEL: func @mul_overflow(%arg0: i2) -> i2 {
+// CHECK-NEXT:    %c0_i2 = rtl.constant(0 : i2) : i2
+// CHECK-NEXT:    return %c0_i2
+
+func @mul_overflow(%arg0: i2) -> i2 {
+  %c2_i2 = rtl.constant(2 : i2) : i2
+  %0 = rtl.mul %arg0, %c2_i2, %c2_i2 : i2
+  return %0 : i2
 }
 
 // Flattening

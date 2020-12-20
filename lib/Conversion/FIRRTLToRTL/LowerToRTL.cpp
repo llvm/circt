@@ -11,7 +11,7 @@
 #include "circt/Dialect/RTL/Types.h"
 #include "circt/Dialect/SV/Ops.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
-#include "mlir/IR/StandardTypes.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 
 using namespace circt;
@@ -35,7 +35,7 @@ static Type lowerType(Type type) {
 
   auto width = firType.getBitWidthOrSentinel();
   if (width >= 0) // IntType, analog with known width, clock, etc.
-    return IntegerType::get(width, type.getContext());
+    return IntegerType::get(type.getContext(), width);
 
   return {};
 }
