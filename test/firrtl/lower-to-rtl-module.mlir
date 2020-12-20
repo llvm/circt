@@ -142,6 +142,7 @@
 
   // expected-error @+1 {{unexpected operation 'func' in a firrtl.circuit}}
   func private @UnknownFunction() {
+    return
   }
 
   // CHECK-LABEL: rtl.module @OutputFirst(%in1: i1, %in4: i4) -> (%out4: i4) {
