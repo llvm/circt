@@ -433,12 +433,13 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
 
   // Parse the optional function body.
   auto *body = result.addRegion();
-  if (parser.parseRegion(*body, entryArgs,
-                         entryArgs.empty() ? ArrayRef<Type>() : argTypes))
-    return failure();
+  if (!isExtModule) {
+    if (parser.parseRegion(*body, entryArgs,
+                           entryArgs.empty() ? ArrayRef<Type>() : argTypes))
+      return failure();
 
-  if (!isExtModule)
     FModuleOp::ensureTerminator(*body, parser.getBuilder(), result.location);
+  }
   return success();
 }
 
