@@ -167,7 +167,7 @@ class CosimTestRunner:
             simEnv = os.environ.copy()
             simEnv["COSIM_PORT"] = str(port)
             simProc = subprocess.Popen(
-                [f"{self.execdir}/obj_dir/V{self.top}", "--cycles", "-1"],
+                [f"{self.execdir}/obj_dir/V{self.top}"],
                 stdout=simStdout, stderr=simStderr, cwd=self.execdir,
                 env=simEnv)
             # Wait a set amount of time for the simulation to start accepting

@@ -15,7 +15,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-// REQUIRES: magic
+// Make sure this file compiles.
+// REQUIRES: questa
+// RUN: vlog -sv %s
 
 module driver();
 

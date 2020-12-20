@@ -30,11 +30,13 @@ int main(int argc, char **argv) {
   Verilated::commandArgs(argc, argv);
 
   size_t numCyclesToRun = 0;
+  bool runForever = true;
   // Search the command line args for those we are sensitive to.
   for (int i = 1; i < argc; ++i) {
     if (std::string(argv[i]) == "--cycles") {
       if (i + 1 < argc) {
         numCyclesToRun = std::strtoull(argv[++i], nullptr, 10);
+        runForever = false;
       } else {
         std::cerr << "--cycles must be followed by number of cycles."
                   << std::endl;
@@ -72,7 +74,8 @@ int main(int argc, char **argv) {
 
   // Run for the specified number of cycles out of reset.
   vluint64_t endTime = timeStamp + (numCyclesToRun * 2);
-  for (; timeStamp <= endTime && !Verilated::gotFinish() && !stopSimulation;
+  for (; (runForever || timeStamp <= endTime) && !Verilated::gotFinish() &&
+         !stopSimulation;
        timeStamp++) {
     dut.eval();
     dut.clk = !dut.clk;

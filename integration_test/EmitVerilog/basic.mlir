@@ -33,4 +33,8 @@ module {
 // CHECK-NEXT: tick
 // CHECK-NEXT: tick
 // CHECK-NEXT: tick
-// CHECK-NEXT: [driver] Ending simulation at tick #17
+// CHECK-NEXT: tick
+// CHECK-NEXT: tick
+// CHECK-NEXT: tick
+// CHECK-NEXT: tick
+// CHECK-NEXT: [driver] Ending simulation at tick #25
