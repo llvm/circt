@@ -1,8 +1,8 @@
 //===- BackedgeBuilder.h - Support for building backedges -------*- C++ -*-===//
 //
-// Backedges are temporary operations/values which have to exist as operands
-// before they are produced in a result. Since it isn't clear how to build
-// backedges in MLIR, these helper classes set up a canonical way to do so.
+// Backedges are operations/values which have to exist as operands before
+// they are produced in a result. Since it isn't clear how to build backedges
+// in MLIR, these helper classes set up a canonical way to do so.
 //
 //===----------------------------------------------------------------------===//
 
@@ -30,11 +30,11 @@ class Backedge;
 /// Example use:
 /// ```
 ///   circt::BackedgeBuilder back(rewriter, loc);
-///   circt::Backedge ready = back(rewriter.getI1Type());
+///   circt::Backedge ready = back.get(rewriter.getI1Type());
 ///   // Use `ready` as a `Value`.
 ///   auto addOp = rewriter.create<addOp>(loc, ready);
 ///   // When the actual value is available,
-///   ready = anotherOp.getResult(0);
+///   ready.set(anotherOp.getResult(0));
 /// ```
 class BackedgeBuilder {
   friend class Backedge;
