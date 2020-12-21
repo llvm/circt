@@ -19,9 +19,9 @@ add_circt_dialect_library(MLIRESI
   LINK_LIBS PUBLIC
   MLIREDSC
   MLIRIR
+  MLIRSV
   MLIRTransforms
   CIRCTSupport
-  CIRCTSV
   )
 
 
