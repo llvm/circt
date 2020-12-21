@@ -24,11 +24,11 @@ def ArrayType : RTLType<"Array"> {
 
 def InOutType : RTLType<"InOut"> {
   let summary = "bidirectional type for ports and wires";
-  /*let description = [{
+  let description = [{
     InOut type is used for model operations and values that have "connection"
     semantics, instead of typical dataflow behavior.  This is used for wires
     and inout ports in Verilog.
-  }];*/
+  }];
 
   let mnemonic = "inout";
   let parameters = (ins "::mlir::Type":$elementType);
