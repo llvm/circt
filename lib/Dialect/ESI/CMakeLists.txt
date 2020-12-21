@@ -10,6 +10,7 @@ add_circt_dialect_library(MLIRESI
   DEPENDS
   MLIRESIIncGen
   MLIRESIEnumsIncGen
+  CIRCTSupport
 
   LINK_COMPONENTS
   Core
@@ -19,6 +20,7 @@ add_circt_dialect_library(MLIRESI
   MLIREDSC
   MLIRIR
   MLIRTransforms
+  CIRCTSupport
   )
 
 
