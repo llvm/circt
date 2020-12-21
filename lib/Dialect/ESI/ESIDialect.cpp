@@ -29,27 +29,6 @@ ESIDialect::ESIDialect(MLIRContext *context)
 #include "circt/Dialect/ESI/ESI.cpp.inc"
       >();
 }
-
-/// Parses a type registered to this dialect
-Type ESIDialect::parseType(DialectAsmParser &parser) const {
-  llvm::StringRef mnemonic;
-  if (parser.parseKeyword(&mnemonic))
-    return Type();
-  auto genType = generatedTypeParser(getContext(), parser, mnemonic);
-  if (genType != Type())
-    return genType;
-  parser.emitError(parser.getCurrentLocation(),
-                   llvm::formatv("Could not parse esi.{0}!\n", mnemonic));
-  return Type();
-}
-
-/// Print a type registered to this dialect
-void ESIDialect::printType(Type type, DialectAsmPrinter &printer) const {
-  if (succeeded(generatedTypePrinter(type, printer)))
-    return;
-  llvm_unreachable("unexpected 'esi' type kind");
-}
-
 } // namespace esi
 } // namespace circt
 

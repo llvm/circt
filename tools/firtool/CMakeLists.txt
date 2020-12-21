@@ -7,9 +7,10 @@ add_llvm_tool(firtool
 )
 llvm_update_compile_flags(firtool)
 target_link_libraries(firtool PRIVATE
-  CIRCTEmitVerilog
-  CIRCTFIRParser
+  CIRCTExportVerilog
+  CIRCTImportFIRRTL
   MLIRFIRRTLToRTL
+  CIRCTFIRRTLTransforms
 
   MLIRParser
   MLIRSupport
@@ -19,4 +20,3 @@ target_link_libraries(firtool PRIVATE
   MLIRTransforms
   MLIRTranslation
   )
-
