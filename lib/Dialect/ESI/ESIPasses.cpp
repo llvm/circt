@@ -8,9 +8,10 @@
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/RTL/Ops.h"
 #include "circt/Dialect/RTL/Types.h"
+#include "circt/Support/BackedgeBuilder.h"
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
-#include "mlir/IR/StandardTypes.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -35,7 +36,7 @@ static size_t getNumBits(Type type) {
       .Case<IntegerType>(
           [](IntegerType t) { return t.getIntOrFloatBitWidth(); })
       .Case<circt::rtl::ArrayType>([](circt::rtl::ArrayType a) {
-        return a.getSize() * getNumBits(a.getInnerType());
+        return a.getSize() * getNumBits(a.getElementType());
       })
       .Default([](Type) { return 0; });
 }
@@ -208,38 +209,40 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
     return failure();
   auto stageModule = builder.declareStage();
 
-  MutableDictionaryAttr stageAttrs = stage.getAttrs();
+  NamedAttrList stageAttrs = stage.getAttrs();
   size_t width = getNumBits(chPort.getInner());
   stageAttrs.set(builder.width, rewriter.getUI32IntegerAttr(width));
 
   // Unwrap the channel. The ready signal is a Value we haven't created yet, so
   // create a temp value and replace it later. Give this constant an odd-looking
   // type to make debugging easier.
-  auto tempConstant = rewriter.create<mlir::ConstantIntOp>(loc, 0, 1234);
+  circt::BackedgeBuilder back(rewriter, loc);
+  circt::Backedge wrapReady = back.get(rewriter.getI1Type());
   auto unwrap =
-      rewriter.create<UnwrapValidReady>(loc, stage.input(), tempConstant);
+      rewriter.create<UnwrapValidReady>(loc, stage.input(), wrapReady);
 
   // Instantiate the "ESI_PipelineStage" external module.
+  circt::Backedge stageReady = back.get(rewriter.getI1Type());
   Value operands[] = {stage.clk(), stage.rstn(), unwrap.rawOutput(),
-                      unwrap.valid(), tempConstant};
+                      unwrap.valid(), stageReady};
   Type resultTypes[] = {rewriter.getI1Type(), unwrap.rawOutput().getType(),
                         rewriter.getI1Type()};
   auto stageInst = rewriter.create<circt::rtl::InstanceOp>(
       loc, resultTypes, "pipelineStage", stageModule.getName(), operands,
       stageAttrs.getDictionary(rewriter.getContext()));
   auto stageInstResults = stageInst.getResults();
-  Value aReady = stageInstResults[0];
+
+  // Set a_ready (from the unwrap) back edge correctly to its output from stage.
+  wrapReady.setValue(stageInstResults[0]);
+
   Value x = stageInstResults[1];
   Value xValid = stageInstResults[2];
 
   // Wrap up the output of the RTL stage module.
   auto wrap = rewriter.create<WrapValidReady>(loc, chPort, rewriter.getI1Type(),
                                               x, xValid);
-
-  // Set back edges correctly and erase temp value.
-  unwrap.readyMutable().assign(aReady);
-  stageInst.setOperand(4, wrap.ready());
-  rewriter.eraseOp(tempConstant);
+  // Set the stages x_ready backedge correctly.
+  stageReady.setValue(wrap.ready());
 
   rewriter.replaceOp(stage, wrap.chanOutput());
   return success();

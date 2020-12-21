@@ -62,6 +62,8 @@ def LLHD_EntityOp : LLHD_Op<"entity", [
 
     /// Verifies the body of the function.
     LogicalResult verifyBody();
+
+    Block *getBodyBlock() { return &body().front(); }
   }];
 }
 

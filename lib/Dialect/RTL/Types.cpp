@@ -5,6 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/RTL/Types.h"
+#include "circt/Dialect/RTL/Dialect.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/StandardTypes.h"
 #include "llvm/ADT/StringExtras.h"
@@ -127,7 +129,7 @@ Type ArrayType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
 
 void ArrayType::print(DialectAsmPrinter &p) const {
   p << "array<" << getSize() << "x";
-  p.printType(getInnerType());
+  p.printType(getElementType());
   p << '>';
 }
 
@@ -170,3 +172,20 @@ LogicalResult InOutType::verifyConstructionInvariants(Location loc,
 
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/RTL/RTLTypes.cpp.inc"
+
+/// Parses a type registered to this dialect. Parse out the mnemonic then invoke
+/// the tblgen'd type parser dispatcher.
+Type RTLDialect::parseType(DialectAsmParser &parser) const {
+  llvm::StringRef mnemonic;
+  if (parser.parseKeyword(&mnemonic))
+    return Type();
+  return generatedTypeParser(getContext(), parser, mnemonic);
+}
+
+/// Print a type registered to this dialect. Try the tblgen'd type printer
+/// dispatcher then fail since all RTL types are defined via ODS.
+void RTLDialect::printType(Type type, DialectAsmPrinter &printer) const {
+  if (succeeded(generatedTypePrinter(type, printer)))
+    return;
+  llvm_unreachable("unexpected 'rtl' type");
+}
