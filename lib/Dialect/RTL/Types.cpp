@@ -50,7 +50,7 @@ Type ArrayType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
 
 void ArrayType::print(DialectAsmPrinter &p) const {
   p << "array<" << getSize() << "x";
-  p.printType(getInnerType());
+  p.printType(getElementType());
   p << '>';
 }
 

@@ -3,8 +3,8 @@
 // This implements a .fir file parser.
 //
 //===----------------------------------------------------------------------===//
+#include "circt/Dialect/FIRRTL/FIRParser.h"
 
-#include "circt/FIRParser.h"
 #include "FIRLexer.h"
 #include "circt/Dialect/FIRRTL/Ops.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -13,6 +13,8 @@
 #include "mlir/IR/Verifier.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/ScopedHashTable.h"
+#include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -2371,9 +2373,12 @@ ParseResult FIRCircuitParser::parseCircuit() {
 //===----------------------------------------------------------------------===//
 
 // Parse the specified .fir file into the specified MLIR context.
-OwningModuleRef circt::parseFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
-                                    FIRParserOptions options) {
+OwningModuleRef circt::firrtl::importFIRRTL(SourceMgr &sourceMgr,
+                                            MLIRContext *context,
+                                            FIRParserOptions options) {
   auto sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
+
+  context->loadDialect<FIRRTLDialect>();
 
   // This is the result module we are parsing into.
   OwningModuleRef module(ModuleOp::create(
@@ -2392,9 +2397,9 @@ OwningModuleRef circt::parseFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
   return module;
 }
 
-void circt::registerFIRParserTranslation() {
+void circt::firrtl::registerFromFIRRTLTranslation() {
   static TranslateToMLIRRegistration fromFIR(
       "parse-fir", [](llvm::SourceMgr &sourceMgr, MLIRContext *context) {
-        return parseFIRFile(sourceMgr, context);
+        return importFIRRTL(sourceMgr, context);
       });
 }
