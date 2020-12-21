@@ -18,8 +18,14 @@ def ArrayType : RTLType<"Array"> {
   }];
 
   let mnemonic = "array";
-  let parameters = (ins "::mlir::Type":$innerType, "size_t":$size);
+  let parameters = (ins "::mlir::Type":$elementType, "size_t":$size);
   let genVerifyInvariantsDecl = 1;
+
+  let extraClassDeclaration = [{
+    static ArrayType get(Type elementType, size_t size) {
+      return get(elementType.getContext(), elementType, size);
+    }
+  }];
 }
 
 def InOutType : RTLType<"InOut"> {
@@ -33,6 +39,12 @@ def InOutType : RTLType<"InOut"> {
   let mnemonic = "inout";
   let parameters = (ins "::mlir::Type":$elementType);
   let genVerifyInvariantsDecl = 1;
+
+  let extraClassDeclaration = [{
+    static InOutType get(Type elementType) {
+      return get(elementType.getContext(), elementType);
+    }
+  }];
 }
 
 // This type constraint is used by operations whose asm strings have a type "T"

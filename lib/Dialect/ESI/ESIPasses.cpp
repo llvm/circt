@@ -35,7 +35,7 @@ static size_t getNumBits(Type type) {
       .Case<IntegerType>(
           [](IntegerType t) { return t.getIntOrFloatBitWidth(); })
       .Case<circt::rtl::ArrayType>([](circt::rtl::ArrayType a) {
-        return a.getSize() * getNumBits(a.getInnerType());
+        return a.getSize() * getNumBits(a.getElementType());
       })
       .Default([](Type) { return 0; });
 }
