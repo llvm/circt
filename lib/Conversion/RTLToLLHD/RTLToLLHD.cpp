@@ -1,5 +1,11 @@
 //===- RTLToLLHD.cpp - RTL to LLHD Conversion Pass ------------------------===//
 //
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
 // This is the main RTL to LLHD Conversion Pass Implementation.
 //
 //===----------------------------------------------------------------------===//
@@ -9,7 +15,7 @@
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/RTL/Dialect.h"
 #include "circt/Dialect/RTL/Ops.h"
-#include "mlir/IR/StandardTypes.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -93,8 +99,9 @@ RTLToLLHDTypeConverter::RTLToLLHDTypeConverter() {
 struct ConvertRTLModule : public OpConversionPattern<RTLModuleOp> {
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(RTLModuleOp module, ArrayRef<Value> operands,
-                                ConversionPatternRewriter &rewriter) const {
+  LogicalResult
+  matchAndRewrite(RTLModuleOp module, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
     // Collect the RTL module's port types in a signature conversion.
     FunctionType moduleType = module.getType();
     unsigned numInputs = moduleType.getNumInputs();
@@ -143,8 +150,9 @@ struct ConvertRTLModule : public OpConversionPattern<RTLModuleOp> {
 struct ConvertOutput : public OpConversionPattern<OutputOp> {
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(OutputOp output, ArrayRef<Value> operands,
-                                ConversionPatternRewriter &rewriter) const {
+  LogicalResult
+  matchAndRewrite(OutputOp output, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
     // Construct the `1d` time value for the drive.
     auto timeType = TimeType::get(rewriter.getContext());
     auto deltaAttr = TimeAttr::get(timeType, {0, 1, 0}, "ns");
