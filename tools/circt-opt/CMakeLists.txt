@@ -19,6 +19,7 @@ target_link_libraries(circt-opt
   MLIRLLHDToLLVM
   MLIRLLHDTransforms
   MLIRRTL
+  MLIRRTLToLLHD
   MLIRStandardToHandshake
   MLIRStandardToStaticLogic
   MLIRStaticLogicOps
