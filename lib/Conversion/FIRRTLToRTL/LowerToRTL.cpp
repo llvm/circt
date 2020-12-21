@@ -215,8 +215,7 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
     // Figure out the direction of the port.
     if (firrtlPort.type.isa<AnalogType>()) {
       // If the port is analog, then it is implicitly inout.
-      rtlPort.type =
-          rtl::InOutType::get(rtlPort.type.getContext(), rtlPort.type);
+      rtlPort.type = rtl::InOutType::get(rtlPort.type);
       rtlPort.direction = rtl::PortDirection::INOUT;
       rtlPort.argNum = numArgs++;
     } else if (firrtlPort.isOutput()) {
