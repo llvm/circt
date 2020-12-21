@@ -17,6 +17,8 @@ import os
 import subprocess
 import sys
 
+ThisFileDir = os.path.dirname(__file__)
+
 
 class Questa:
     """Run and compile funcs for Questasim."""
@@ -114,12 +116,6 @@ def __main__(args):
     simParts = os.path.split(args.sim)
     simName = simParts[1]
 
-    if "INTEGRATION_PATH" in os.environ:
-      integration_path = os.environ["INTEGRATION_PATH"]
-    else:
-      print("Warning: could not find INTEGRATION_PATH environment variable. " +
-            "Default drivers are not available.")
-
     if simName in ["questa", "vsim", "vlog", "vopt"]:
         sim = Questa(simParts[0], args)
 
@@ -131,7 +127,7 @@ def __main__(args):
         return 1
 
     if not args.no_default_driver:
-      args.sources.append(os.path.join(integration_path, sim.DefaultDriver))
+      args.sources.append(os.path.join(ThisFileDir, sim.DefaultDriver))
 
     if not args.no_compile:
         rc = sim.compile(args.sources)

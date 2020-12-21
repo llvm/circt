@@ -59,7 +59,7 @@ config.test_exec_root = os.path.join(config.circt_obj_root, 'integration_test')
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 # Substitute '%l' with the path to the build lib dir.
 
-tool_dirs = [config.circt_tools_dir, os.path.join(config.circt_src_root, "utils"),
+tool_dirs = [config.circt_tools_dir,
              config.mlir_tools_dir, config.llvm_tools_dir]
 tools = [
     'circt-opt',
@@ -67,9 +67,6 @@ tools = [
     'firtool',
     'circt-rtl-sim.py'
 ]
-
-llvm_config.with_environment(
-    'INTEGRATION_PATH', os.path.join(config.circt_src_root, "integration_test"))
 
 # Enable yosys if it has been detected.
 if config.yosys_path != "":

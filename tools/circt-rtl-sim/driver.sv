@@ -1,4 +1,4 @@
-//===- driver.sv - Standard SystemVerilog testbench driver ------*- C++ -*-===//
+//===- driver.sv - Standard SystemVerilog testbench driver ----------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,18 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Contains the top module driver for most simulations. It makes the following
-// assumptions/demands:
+// Contains the top module driver for our standard simulation tests. It makes
+// the following assumptions/demands:
 //
 // - The testbench module is called 'top'.
 // - It exposes a pin named 'clk' (for the clock).
-// - It exposes a pin named 'rstn' (for the reset signel).
+// - It exposes a pin named 'rstn' (for the reset signal).
 //
 //===----------------------------------------------------------------------===//
-
-// Make sure this file compiles.
-// REQUIRES: comsim
-// RUN: circt-rtl-sim.py --sim %comsim --no-run --no-default-driver %s
 
 module driver();
 

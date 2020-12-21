@@ -77,20 +77,19 @@ class CosimTestRunner:
 
         # Assemble a list of sources (RTL and C++), applying the defaults and
         # path rules.
+        cfg = self.test.config
         if len(self.sources) == 0:
             sources = [self.file]
         else:
             sources = [(src if os.path.isabs(src) else os.path.join(
                 self.srcdir, src)) for src in self.sources]
         if len(self.cppSources) == 0:
-            cppSources = [os.path.join(
-                os.path.dirname(__file__), "..", "driver.cpp")]
+            cppSources = [os.path.join(cfg.circt_tools_dir, "driver.cpp")]
         else:
             cppSources = [(src if os.path.isabs(src) else os.path.join(
                 self.srcdir, src)) for src in self.cppSources]
 
         # Include the cosim DPI SystemVerilog files.
-        cfg = self.test.config
         cosimInclude = os.path.join(
             cfg.circt_include_dir, "circt", "Dialect", "ESI", "cosim")
         sources.insert(0, os.path.join(cosimInclude, "Cosim_DpiPkg.sv"))
