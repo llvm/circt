@@ -1,5 +1,11 @@
 //===- dpi.h - DPI function C++ declarations --------------------*- C++ -*-===//
 //
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
 // Originally generated from 'Cosim_DpiPkg.sv' by an RTL simulator. All these
 // functions are called from RTL. Some of the funky types are produced by the
 // RTL simulators when it did the conversion.

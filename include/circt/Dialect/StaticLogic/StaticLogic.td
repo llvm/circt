@@ -1,10 +1,13 @@
 //===- StaticLogic.td - StaticLogic Definitions ------------*- tablegen -*-===//
 //
-// Copyright 2020 The CIRCT Authors.
-//
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// StaticLogic Ops are defined in tablegen.
+//
 //===----------------------------------------------------------------------===//
 
 #ifdef STATICLOGIC_OPS
