@@ -200,7 +200,7 @@ module {
 
 
   rtl.module @inout(%a: !rtl.inout<i42>) -> (%out: i42) {
-    %aget = rtl.read_inout %a: i42
+    %aget = rtl.read_inout %a: !rtl.inout<i42>
     rtl.output %aget : i42
   }
   // CHECK-LABEL:  module inout(

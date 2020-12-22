@@ -45,7 +45,8 @@ def WireOp : RTLOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
 }
 
 def ReadInOutOp
- : RTLOp<"read_inout", [NoSideEffect, InOutTypeConstraint<"result", "input">]> {
+ : RTLOp<"read_inout",
+         [NoSideEffect, InOutElementConstraint<"result", "input">]> {
   let summary = "Get the value of from something of inout type (e.g. a wire or"
                 " inout port) as the value itself.";
   let arguments = (ins InOutType:$input);
@@ -56,8 +57,6 @@ def ReadInOutOp
   ];
 
   let assemblyFormat = [{
-    $input attr-dict `:` type($result)
+    $input attr-dict `:` type($input)
   }];
-
-  let verifier = [{ return ::verifyReadInOutOp(*this); }];
 }

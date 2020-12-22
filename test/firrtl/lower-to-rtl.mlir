@@ -10,7 +10,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: %tmp3 = rtl.wire : !rtl.inout<i4>
     // CHECK: %0 = rtl.read_inout %tmp3
     %tmp3 = rtl.wire : !rtl.inout<i4>
-    %tmp3v = rtl.read_inout %tmp3 : i4
+    %tmp3v = rtl.read_inout %tmp3 : !rtl.inout<i4>
     %tmp4 = firrtl.stdIntCast %tmp3v : (i4) -> !firrtl.uint<4>
     %out4 = firrtl.asNonPassive %tmp4 : (!firrtl.uint<4>) -> !firrtl.flip<uint<4>>
     %out5 = firrtl.asNonPassive %tmp4 : (!firrtl.uint<4>) -> !firrtl.flip<uint<4>>
@@ -326,7 +326,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:  %io_cpu_flush.wire = rtl.wire : !rtl.inout<i1>
     // CHECK-NEXT:  [[IO:%.+]] = rtl.read_inout %io_cpu_flush.wire
     %io_cpu_flush.wire = rtl.wire : !rtl.inout<i1>
-    %io_cpu_flush.wireV = rtl.read_inout %io_cpu_flush.wire : i1
+    %io_cpu_flush.wireV = rtl.read_inout %io_cpu_flush.wire : !rtl.inout<i1>
     // CHECK-NEXT: rtl.instance "fetch"
     rtl.instance "fetch" @bar(%io_cpu_flush.wireV)  : (i1) -> ()
     %0 = firrtl.stdIntCast %io_cpu_flush.wireV : (i1) -> !firrtl.uint<1>
@@ -372,9 +372,9 @@ module attributes {firrtl.mainModule = "Simple"} {
   // CHECK-NEXT:     sv.alias %a1, %a1, %a1 : !rtl.inout<i1>
   // CHECK-NEXT:   }
   // CHECK-NEXT:   sv.ifdef "SYNTHESIS"  {
-  // CHECK-NEXT:     %1 = rtl.read_inout %a1 : i1
-  // CHECK-NEXT:     %2 = rtl.read_inout %a1 : i1
-  // CHECK-NEXT:     %3 = rtl.read_inout %a1 : i1
+  // CHECK-NEXT:     %1 = rtl.read_inout %a1 : !rtl.inout<i1>
+  // CHECK-NEXT:     %2 = rtl.read_inout %a1 : !rtl.inout<i1>
+  // CHECK-NEXT:     %3 = rtl.read_inout %a1 : !rtl.inout<i1>
   // CHECK-NEXT:     rtl.connect %1, %2 : i1
   // CHECK-NEXT:     rtl.connect %1, %3 : i1
   // CHECK-NEXT:     rtl.connect %2, %1 : i1
@@ -382,7 +382,7 @@ module attributes {firrtl.mainModule = "Simple"} {
   // CHECK-NEXT:     rtl.connect %3, %1 : i1
   // CHECK-NEXT:     rtl.connect %3, %2 : i1
   // CHECK-NEXT:   }
-  // CHECK-NEXT:    %0 = rtl.read_inout %a1 : i1
+  // CHECK-NEXT:    %0 = rtl.read_inout %a1 : !rtl.inout<i1>
   // CHECK-NEXT:    rtl.output %0 : i1
   rtl.module @Analog(%a1: !rtl.inout<i1>, %b1: !rtl.inout<i1>,
                      %c1: !rtl.inout<i1>) -> (%outClock: i1) {
