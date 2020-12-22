@@ -43,6 +43,12 @@ def InterfaceOp : SVOp<"interface",
 
   let extraClassDeclaration = [{
     Block *getBodyBlock() { return &body().front(); }
+
+    ModportType getModportType(::llvm::StringRef);
+    InterfaceType getInterfaceType() {
+      return InterfaceType::get(getContext(),
+        ::mlir::SymbolRefAttr::get(sym_name(), getContext()));
+    }
   }];
 }
 
@@ -72,6 +78,10 @@ def InterfaceSignalOp : SVOp<"interface.signal",
   let assemblyFormat = [{
     attr-dict $sym_name `:` $type
   }];
+
+  let builders = [
+    OpBuilderDAG<(ins "::llvm::StringRef":$name, "::mlir::Type":$type)>
+  ];
 }
 
 def ModportDirectionInput : StrEnumAttrCase<"input">;
@@ -118,6 +128,11 @@ def InterfaceModportOp : SVOp<"interface.modport",
   let assemblyFormat = [{
     attr-dict $sym_name custom<ModportStructs>($ports)
   }];
+
+  let builders = [
+    OpBuilderDAG<(ins "::llvm::StringRef":$name, "ArrayRef<::llvm::StringRef>":$inputs,
+      "ArrayRef<::llvm::StringRef>":$outputs)>
+  ];
 }
 
 //===----------------------------------------------------------------------===//
@@ -201,6 +216,10 @@ def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
   let verifier = [{
     return ::verifyGetModportOp(*this);
   }];
+
+  let builders = [
+    OpBuilderDAG<(ins "Value":$value, "::llvm::StringRef":$field)>
+  ];
 }
 
 def TypeDeclTerminatorOp : SVOp<"type_decl_terminator",

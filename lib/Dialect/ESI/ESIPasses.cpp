@@ -8,7 +8,9 @@
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/RTL/Ops.h"
 #include "circt/Dialect/RTL/Types.h"
+#include "circt/Dialect/SV/Ops.h"
 #include "circt/Support/BackedgeBuilder.h"
+#include "circt/Support/ImplicitLocOpBuilder.h"
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -27,6 +29,8 @@ namespace esi {
 
 using namespace mlir;
 using namespace circt::esi;
+using namespace circt::rtl;
+using namespace circt::sv;
 
 /// Figure out the number of bits a type takes on the wire in verilog. Doing it
 /// here is probably a giant hack. TODO: Establish a canonical method to get
@@ -35,7 +39,7 @@ static size_t getNumBits(Type type) {
   return llvm::TypeSwitch<::mlir::Type, size_t>(type)
       .Case<IntegerType>(
           [](IntegerType t) { return t.getIntOrFloatBitWidth(); })
-      .Case<circt::rtl::ArrayType>([](circt::rtl::ArrayType a) {
+      .Case<ArrayType>([](ArrayType a) {
         return a.getSize() * getNumBits(a.getElementType());
       })
       .Default([](Type) { return 0; });
@@ -116,25 +120,35 @@ void ESIToPhysicalPass::runOnOperation() {
 
 namespace {
 /// Assist the lowering steps for conversions which need to create auxiliary IR.
-class ESIRTLBuilder : public OpBuilder {
+class ESIRTLBuilder : public circt::ImplicitLocOpBuilder {
 public:
   ESIRTLBuilder(Operation *top);
 
-  circt::rtl::RTLExternModuleOp declareStage();
+  RTLExternModuleOp declareStage();
+
+  InterfaceOp getOrConstructInterface(ChannelPort);
+  InterfaceOp constructInterface(ChannelPort);
 
   // A bunch of constants for use in various places below.
   const StringAttr a, aValid, aReady, x, xValid, xReady;
   const StringAttr clk, rstn;
   const Identifier width;
+  const char *data = "data", *valid = "valid", *ready = "ready",
+             *source = "source", *sink = "sink";
 
 private:
-  circt::rtl::RTLExternModuleOp declaredStage;
-  const Location loc;
+  /// Construct a type-appropriate name for the interface, making sure it's not
+  /// taken in the symbol table.
+  StringAttr constructInterfaceName(ChannelPort);
+
+  RTLExternModuleOp declaredStage;
+  llvm::DenseMap<Type, InterfaceOp> portTypeLookup;
 };
 } // anonymous namespace
 
 ESIRTLBuilder::ESIRTLBuilder(Operation *top)
-    : OpBuilder(top->getContext()), a(StringAttr::get("a", getContext())),
+    : ImplicitLocOpBuilder(UnknownLoc::get(top->getContext()), top),
+      a(StringAttr::get("a", getContext())),
       aValid(StringAttr::get("a_valid", getContext())),
       aReady(StringAttr::get("a_ready", getContext())),
       x(StringAttr::get("x", getContext())),
@@ -142,8 +156,7 @@ ESIRTLBuilder::ESIRTLBuilder(Operation *top)
       xReady(StringAttr::get("x_ready", getContext())),
       clk(StringAttr::get("clk", getContext())),
       rstn(StringAttr::get("rstn", getContext())),
-      width(Identifier::get("WIDTH", getContext())), declaredStage(nullptr),
-      loc(UnknownLoc::get(getContext())) {
+      width(Identifier::get("WIDTH", getContext())), declaredStage(nullptr) {
 
   auto regions = top->getRegions();
   if (regions.size() == 0) {
@@ -154,13 +167,40 @@ ESIRTLBuilder::ESIRTLBuilder(Operation *top)
     setInsertionPoint(&region.front(), region.front().begin());
 }
 
+StringAttr ESIRTLBuilder::constructInterfaceName(ChannelPort port) {
+  Operation *tableOp =
+      getInsertionPoint()->getParentWithTrait<OpTrait::SymbolTable>();
+  std::string portTypeName;
+  llvm::raw_string_ostream(portTypeName) << port.getInner();
+
+  // Normalize the type name.
+  for (char &ch : portTypeName) {
+    if (isalpha(ch) || isdigit(ch) || ch == '_')
+      continue;
+    ch = '_';
+  }
+
+  // All stage names start with this.
+  SmallString<64> proposedName("IValidReady_");
+  proposedName.append(portTypeName);
+
+  // Make sure that this symbol isn't taken. If it is, append a number and try
+  // again.
+  size_t baseLength = proposedName.size();
+  size_t tries = 0;
+  while (SymbolTable::lookupSymbolIn(tableOp, proposedName)) {
+    proposedName.resize(baseLength);
+    proposedName.append(llvm::utostr(++tries));
+  }
+
+  return StringAttr::get(proposedName, getContext());
+}
+
 /// Write an 'ExternModuleOp' to use a hand-coded SystemVerilog module. Said
 /// module implements pipeline stage, adding 1 cycle latency. This particular
 /// implementation is double-buffered and fully pipelines the reverse-flow ready
 /// signal.
-circt::rtl::RTLExternModuleOp ESIRTLBuilder::declareStage() {
-  using namespace circt::rtl;
-
+RTLExternModuleOp ESIRTLBuilder::declareStage() {
   if (declaredStage)
     return declaredStage;
 
@@ -177,8 +217,38 @@ circt::rtl::RTLExternModuleOp ESIRTLBuilder::declareStage() {
                             {x, PortDirection::OUTPUT, getNoneType(), 1},
                             {xValid, PortDirection::OUTPUT, getI1Type(), 2},
                             {xReady, PortDirection::INPUT, getI1Type(), 4}};
-  declaredStage = create<RTLExternModuleOp>(loc, name, ports);
+  declaredStage = create<RTLExternModuleOp>(name, ports);
   return declaredStage;
+}
+
+/// Return the InterfaceType which corresponds to an ESI port type. If it
+/// doesn't exist in the cache, build the InterfaceOp and the corresponding
+/// type.
+InterfaceOp ESIRTLBuilder::getOrConstructInterface(ChannelPort t) {
+  auto ifaceIter = portTypeLookup.find(t);
+  if (ifaceIter != portTypeLookup.end())
+    return ifaceIter->second;
+  auto iface = constructInterface(t);
+  portTypeLookup[t] = iface;
+  return iface;
+}
+
+InterfaceOp ESIRTLBuilder::constructInterface(ChannelPort chan) {
+  InterfaceOp iface = create<InterfaceOp>(constructInterfaceName(chan));
+  ImplicitLocOpBuilder ib(getLoc(), iface.getRegion());
+  ib.createBlock(&iface.getRegion());
+
+  InterfaceSignalOp s;
+  ib.create<InterfaceSignalOp>(valid, getI1Type());
+  ib.create<InterfaceSignalOp>(ready, getI1Type());
+  ib.create<InterfaceSignalOp>(data, chan.getInner());
+  ib.create<InterfaceModportOp>(source, /*inputs=*/ArrayRef<StringRef>{ready},
+                                /*outputs=*/ArrayRef<StringRef>{valid, data});
+  ib.create<InterfaceModportOp>(sink,
+                                /*inputs=*/ArrayRef<StringRef>{valid, data},
+                                /*outputs=*/ArrayRef<StringRef>{ready});
+  ib.create<TypeDeclTerminatorOp>();
+  return iface;
 }
 
 namespace {
@@ -227,7 +297,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
                       unwrap.valid(), stageReady};
   Type resultTypes[] = {rewriter.getI1Type(), unwrap.rawOutput().getType(),
                         rewriter.getI1Type()};
-  auto stageInst = rewriter.create<circt::rtl::InstanceOp>(
+  auto stageInst = rewriter.create<InstanceOp>(
       loc, resultTypes, "pipelineStage", stageModule.getName(), operands,
       stageAttrs.getDictionary(rewriter.getContext()));
   auto stageInstResults = stageInst.getResults();
@@ -249,6 +319,214 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
 }
 
 namespace {
+/// Convert all the ESI ports on modules to some lower construct. SV interfaces
+/// for now. In the future, it may be possible to select a different format.
+struct ESIPortsPass : public LowerESIPortsBase<ESIPortsPass> {
+  void runOnOperation();
+
+private:
+  bool updateFunc(RTLExternModuleOp mod);
+  void updateInstance(RTLExternModuleOp mod, InstanceOp inst);
+  ESIRTLBuilder *build;
+};
+} // anonymous namespace
+
+/// Iterate through the `rtl.externmodule`s and lower their ports.
+void ESIPortsPass::runOnOperation() {
+  ModuleOp top = getOperation();
+  ESIRTLBuilder b(top);
+  build = &b;
+
+  // Find all externmodules and try to modify them. Remember the modified ones.
+  DenseMap<StringRef, RTLExternModuleOp> modsMutated;
+  for (auto mod : top.getOps<RTLExternModuleOp>())
+    if (updateFunc(mod))
+      modsMutated[mod.getName()] = mod;
+
+  // Find all instances and update them.
+  top.walk([&modsMutated, this](InstanceOp inst) {
+    auto mapIter = modsMutated.find(inst.moduleName());
+    if (mapIter != modsMutated.end())
+      updateInstance(mapIter->second, inst);
+  });
+
+  build = nullptr;
+}
+
+/// Convert all input and output ChannelPorts into SV Interfaces. For inputs,
+/// just switch the type to `ModportType`. For outputs, append a `ModportType`
+/// to the inputs and remove the output channel from the results. Returns true
+/// if 'mod' was updated. Delay updating the instances to amortize the IR walk
+/// over all the module updates.
+bool ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
+  auto *ctxt = &getContext();
+  auto funcType = mod.getType();
+
+  bool updated = false;
+
+  // Reconstruct the list of operand types, changing the type whenever an ESI
+  // port is found.
+  SmallVector<Type, 16> newArgTypes;
+  for (auto argTy : funcType.getInputs()) {
+    auto chanTy = argTy.dyn_cast<ChannelPort>();
+    if (!chanTy) {
+      newArgTypes.push_back(argTy);
+      continue;
+    }
+
+    // When we find one, construct an interface, and add the 'source' modport to
+    // the type list.
+    auto iface = build->getOrConstructInterface(chanTy);
+    newArgTypes.push_back(iface.getModportType(build->source));
+    updated = true;
+  }
+
+  SmallVector<DictionaryAttr, 16> argAttrs;
+  mod.getAllArgAttrs(argAttrs);
+  SmallVector<DictionaryAttr, 16> resAttrs;
+  mod.getAllResultAttrs(resAttrs);
+
+  // Iterate through the results and append to one of the two below lists. The
+  // first for non-ESI-ports. The second, ports which have been re-located to an
+  // operand.
+  SmallVector<Type, 8> newResultTypes;
+  SmallVector<DictionaryAttr, 4> newResultAttrs;
+  for (size_t resNum = 0, numRes = funcType.getNumResults(); resNum < numRes;
+       ++resNum) {
+    Type resTy = funcType.getResult(resNum);
+    auto chanTy = resTy.dyn_cast<ChannelPort>();
+    if (!chanTy) {
+      newResultTypes.push_back(resTy);
+      newResultAttrs.push_back(resAttrs[resNum]);
+      continue;
+    }
+
+    // When we find one, construct an interface, and add the 'sink' modport to
+    // the type list.
+    InterfaceOp iface = build->getOrConstructInterface(chanTy);
+    ModportType sinkPort = iface.getModportType(build->sink);
+    newArgTypes.push_back(sinkPort);
+    argAttrs.push_back(resAttrs[resNum]);
+    updated = true;
+  }
+
+  if (!updated)
+    return false;
+
+  // Set the new types.
+  auto newFuncType = FunctionType::get(ctxt, newArgTypes, newResultTypes);
+  mod.setType(newFuncType);
+  mod.setAllArgAttrs(argAttrs);
+  mod.setAllResultAttrs(newResultAttrs);
+  return true;
+}
+
+/// Update an instance of an updated module by adding `esi.(un)wrap.iface`
+/// around the instance. Create a new instance at the end from the lists built
+/// up before.
+void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
+  using namespace circt::sv;
+  circt::ImplicitLocOpBuilder instBuilder(inst);
+  FunctionType funcTy = mod.getType();
+
+  // op counter for error reporting purposes.
+  size_t opNum = 0;
+  // List of new operands.
+  SmallVector<Value, 16> newOperands;
+
+  // Fill the new operand list with old plain operands and mutated ones.
+  for (auto op : inst.getOperands()) {
+    auto instChanTy = op.getType().dyn_cast<ChannelPort>();
+    if (!instChanTy) {
+      newOperands.push_back(op);
+      ++opNum;
+      continue;
+    }
+
+    // Get the interface from the cache, and make sure it's the same one as
+    // being used in the module.
+    auto iface = build->getOrConstructInterface(instChanTy);
+    if (iface.getModportType(build->source) != funcTy.getInput(opNum)) {
+      inst.emitOpError("ESI ChannelPort (operand #")
+          << opNum << ") doesn't match module!";
+      ++opNum;
+      newOperands.push_back(op);
+      continue;
+    }
+    ++opNum;
+
+    // Build a gasket by instantiating an interface, connecting one end to an
+    // `esi.unwrap.iface` and the other end to the instance.
+    auto ifaceInst =
+        instBuilder.create<InterfaceInstanceOp>(iface.getInterfaceType());
+    GetModportOp sinkModport =
+        instBuilder.create<GetModportOp>(ifaceInst, build->sink);
+    instBuilder.create<UnwrapSVInterface>(op, sinkModport);
+    GetModportOp sourceModport =
+        instBuilder.create<GetModportOp>(ifaceInst, build->source);
+    // Finally, add the correct modport to the list of operands.
+    newOperands.push_back(sourceModport);
+  }
+
+  // Go through the results and get both a list of the plain old values being
+  // produced and their types.
+  SmallVector<Value, 8> newResults;
+  SmallVector<Type, 8> newResultTypes;
+  for (size_t resNum = 0, numRes = inst.getNumResults(); resNum < numRes;
+       ++resNum) {
+    Value res = inst.getResult(resNum);
+    auto instChanTy = res.getType().dyn_cast<ChannelPort>();
+    if (!instChanTy) {
+      newResults.push_back(res);
+      newResultTypes.push_back(res.getType());
+      continue;
+    }
+
+    // Get the interface from the cache, and make sure it's the same one as
+    // being used in the module.
+    auto iface = build->getOrConstructInterface(instChanTy);
+    if (iface.getModportType(build->sink) != funcTy.getInput(opNum)) {
+      inst.emitOpError("ESI ChannelPort (result #")
+          << resNum << ", operand #" << opNum << ") doesn't match module!";
+      ++opNum;
+      newResults.push_back(res);
+      newResultTypes.push_back(res.getType());
+      continue;
+    }
+    ++opNum;
+
+    // Build a gasket by instantiating an interface, connecting one end to an
+    // `esi.wrap.iface` and the other end to the instance. Append it to the
+    // operand list.
+    auto ifaceInst =
+        instBuilder.create<InterfaceInstanceOp>(iface.getInterfaceType());
+    GetModportOp sourceModport =
+        instBuilder.create<GetModportOp>(ifaceInst, build->source);
+    auto newChannel =
+        instBuilder.create<WrapSVInterface>(res.getType(), sourceModport);
+    // Connect all the old users of the output channel with the newly wrapped
+    // replacement channel.
+    res.replaceAllUsesWith(newChannel);
+    GetModportOp sinkModport =
+        instBuilder.create<GetModportOp>(ifaceInst, build->sink);
+    // And add the modport on the other side to the new operand list.
+    newOperands.push_back(sinkModport);
+  }
+
+  // Create the new instance!
+  InstanceOp newInst = instBuilder.create<InstanceOp>(
+      newResultTypes, newOperands, inst.getAttrs());
+  // Go through the old list of non-ESI result values, and replace them with the
+  // new non-ESI results.
+  for (size_t resNum = 0, numRes = newResults.size(); resNum < numRes;
+       ++resNum) {
+    newResults[resNum].replaceAllUsesWith(newInst.getResult(resNum));
+  }
+  // Erase the old instance!
+  inst.erase();
+}
+
+namespace {
 struct ESItoRTLPass : public LowerESItoRTLBase<ESItoRTLPass> {
   void runOnOperation() override;
 };
@@ -259,8 +537,9 @@ void ESItoRTLPass::runOnOperation() {
 
   // Set up a conversion and give it a set of laws.
   ConversionTarget target(getContext());
-  target.addLegalDialect<circt::rtl::RTLDialect>();
+  target.addLegalDialect<RTLDialect>();
   target.addLegalOp<WrapValidReady, UnwrapValidReady>();
+  target.addLegalOp<WrapSVInterface, UnwrapSVInterface>();
   target.addIllegalOp<PipelineStage>();
 
   // Add all the conversion patterns.
@@ -277,6 +556,9 @@ namespace circt {
 namespace esi {
 std::unique_ptr<OperationPass<ModuleOp>> createESIPhysicalLoweringPass() {
   return std::make_unique<ESIToPhysicalPass>();
+}
+std::unique_ptr<OperationPass<ModuleOp>> createESIPortLoweringPass() {
+  return std::make_unique<ESIPortsPass>();
 }
 std::unique_ptr<OperationPass<ModuleOp>> createESItoRTLPass() {
   return std::make_unique<ESItoRTLPass>();

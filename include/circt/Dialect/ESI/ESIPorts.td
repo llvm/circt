@@ -87,11 +87,11 @@ def WrapSVInterface: ESI_Op<"wrap.iface", [NoSideEffect]> {
     and data signals. Any other signals will be discarded.
   }];
 
-  let arguments = (ins ModportType:$iface);
+  let arguments = (ins ModportType:$interfaceSink);
   let results = (outs ChannelType:$output);
 
   let assemblyFormat = [{
-    $iface attr-dict `:` type($iface) `->` type($output)
+    $interfaceSink attr-dict `:` type($interfaceSink) `->` type($output)
   }];
 
   let verifier = [{
@@ -99,18 +99,18 @@ def WrapSVInterface: ESI_Op<"wrap.iface", [NoSideEffect]> {
   }];
 }
 
-def UnwrapSVInterface : ESI_Op<"unwrap.iface", [NoSideEffect]> {
+def UnwrapSVInterface : ESI_Op<"unwrap.iface", []> {
   let summary = "Unwrap an SV interface from an ESI port";
   let description = [{
     Unwrap an ESI channel into a SystemVerilog interface containing valid,
     ready, and data signals.
   }];
 
-  let arguments = (ins ChannelType:$chanInput, ModportType:$outIface);
+  let arguments = (ins ChannelType:$chanInput, ModportType:$interfaceSource);
   let results = (outs);
 
   let assemblyFormat = [{
-    $chanInput `into` $outIface attr-dict `:` `(` type($chanInput) `,` type($outIface) `)`
+    $chanInput `into` $interfaceSource attr-dict `:` `(` type($chanInput) `,` type($interfaceSource) `)`
   }];
 
   let verifier = [{

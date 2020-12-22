@@ -198,13 +198,15 @@ static LogicalResult verifySVInterface(Operation *op,
 }
 
 static LogicalResult verifyWrapSVInterface(WrapSVInterface &op) {
-  auto modportType = op.iface().getType().cast<circt::sv::ModportType>();
+  auto modportType =
+      op.interfaceSink().getType().cast<circt::sv::ModportType>();
   auto chanType = op.output().getType().cast<ChannelPort>();
   return verifySVInterface(op, modportType, chanType);
 }
 
 static LogicalResult verifyUnwrapSVInterface(UnwrapSVInterface &op) {
-  auto modportType = op.outIface().getType().cast<circt::sv::ModportType>();
+  auto modportType =
+      op.interfaceSource().getType().cast<circt::sv::ModportType>();
   auto chanType = op.chanInput().getType().cast<ChannelPort>();
   return verifySVInterface(op, modportType, chanType);
 }
