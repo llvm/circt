@@ -209,6 +209,28 @@ void ReadInterfaceSignalOp::build(OpBuilder &builder, OperationState &state,
         fieldAttr);
 }
 
+ParseResult parseIfaceTypeAndSignal(OpAsmParser &p, Type &ifaceTy,
+                                    FlatSymbolRefAttr &signalName) {
+  SymbolRefAttr fullSym;
+  if (p.parseAttribute(fullSym) || fullSym.getNestedReferences().size() != 1)
+    return failure();
+
+  auto *ctxt = p.getBuilder().getContext();
+  ifaceTy = InterfaceType::get(
+      ctxt, FlatSymbolRefAttr::get(fullSym.getRootReference(), ctxt));
+  signalName = FlatSymbolRefAttr::get(fullSym.getLeafReference(), ctxt);
+  return success();
+}
+
+void printIfaceTypeAndSignal(OpAsmPrinter &p, Operation *op, Type type,
+                             FlatSymbolRefAttr signalName) {
+  InterfaceType ifaceTy = type.dyn_cast<InterfaceType>();
+  assert(ifaceTy && "Expected an InterfaceType");
+  auto sym = SymbolRefAttr::get(ifaceTy.getInterface().getRootReference(),
+                                {signalName}, op->getContext());
+  p << sym;
+}
+
 //===----------------------------------------------------------------------===//
 // Other ops.
 //===----------------------------------------------------------------------===//

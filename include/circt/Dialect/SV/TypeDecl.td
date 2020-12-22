@@ -225,7 +225,8 @@ def AssignInterfaceSignalOp : SVOp<"interface.signal.assign", []> {
     AnyType:$rhs);
 
   let assemblyFormat = [{
-    $iface `->` $signalName `=` $rhs attr-dict `:` type($iface) `,` type($rhs)
+    $iface `(` custom<IfaceTypeAndSignal>(type($iface), $signalName) `)`
+        `=` $rhs attr-dict `:` type($rhs)
   }];
 }
 
@@ -236,8 +237,8 @@ def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
   let results = (outs AnyType:$signalData);
 
   let assemblyFormat = [{
-    $iface `->` $signalName attr-dict `:`
-      type($iface) `,` type($signalData)
+    $iface `(` custom<IfaceTypeAndSignal>(type($iface), $signalName) `)`
+        attr-dict `:` type($signalData)
   }];
 
   let builders = [
