@@ -323,7 +323,7 @@ struct ESIPortsPass : public LowerESIPortsBase<ESIPortsPass> {
   void runOnOperation();
 
 private:
-  void updateFunc(RTLExternModuleOp mod);
+  bool updateFunc(RTLExternModuleOp mod);
   void updateInstance(RTLExternModuleOp mod, InstanceOp inst);
   ESIRTLBuilder *build;
 };
@@ -335,9 +335,17 @@ void ESIPortsPass::runOnOperation() {
   ESIRTLBuilder b(top);
   build = &b;
 
-  for (auto mod : top.getOps<RTLExternModuleOp>()) {
-    updateFunc(mod);
-  }
+  DenseMap<StringRef, RTLExternModuleOp> modsMutated;
+  for (auto mod : top.getOps<RTLExternModuleOp>())
+    if (updateFunc(mod))
+      modsMutated[mod.getName()] = mod;
+
+  // Find all instances and update them.
+  top.walk([&modsMutated, this](InstanceOp inst) {
+    auto mapIter = modsMutated.find(inst.moduleName());
+    if (mapIter != modsMutated.end())
+      updateInstance(mapIter->second, inst);
+  });
 
   build = nullptr;
 }
@@ -345,8 +353,9 @@ void ESIPortsPass::runOnOperation() {
 /// Convert all input and output ChannelPorts into SV Interfaces. For inputs,
 /// just switch the type to `ModportType`. For outputs, append a `ModportType`
 /// to the inputs and remove the output channel from the results. Then call the
-/// function which adapts the instances (the hard part).
-void ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
+/// function which adapts the instances (the hard part). Returns true if 'mod'
+/// was updated.
+bool ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
   auto *ctxt = &getContext();
   auto funcType = mod.getType();
 
@@ -365,7 +374,7 @@ void ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
     // When we find one, construct an interface, and add the 'sink' modport to
     // the type list.
     auto iface = build->getOrConstructInterface(chanTy);
-    newArgTypes.push_back(iface.getModportType(build->sink));
+    newArgTypes.push_back(iface.getModportType(build->source));
     updated = true;
   }
 
@@ -392,32 +401,21 @@ void ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
     // When we find one, construct an interface, and add the 'sink' modport to
     // the type list.
     InterfaceOp iface = build->getOrConstructInterface(chanTy);
-    ModportType sourcePort = iface.getModportType(build->source);
+    ModportType sourcePort = iface.getModportType(build->sink);
     newArgTypes.push_back(sourcePort);
     argAttrs.push_back(resAttrs[resNum]);
     updated = true;
   }
 
   if (!updated)
-    return;
+    return false;
 
   // Set the new types.
   auto newFuncType = FunctionType::get(ctxt, newArgTypes, newResultTypes);
   mod.setType(newFuncType);
   mod.setAllArgAttrs(argAttrs);
   mod.setAllResultAttrs(newResultAttrs);
-
-  // Find all instances and update them.
-  Operation *scope = SymbolTable::getNearestSymbolTable(mod);
-  llvm::Optional<SymbolTable::UseRange> instances =
-      SymbolTable::getSymbolUses(mod, scope);
-  if (!instances)
-    return;
-  for (auto symUse : *instances) {
-    auto instOp = dyn_cast<InstanceOp>(symUse.getUser());
-    if (instOp)
-      updateInstance(mod, instOp);
-  }
+  return true;
 }
 
 /// Update an instance of an updated module by adding `esi.(un)wrap.iface`
@@ -445,7 +443,7 @@ void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
     // Get the interface from the cache, and make sure it's the same one as
     // being used in the module.
     auto iface = build->getOrConstructInterface(instChanTy);
-    if (iface.getModportType(build->sink) != funcTy.getInput(opNum)) {
+    if (iface.getModportType(build->source) != funcTy.getInput(opNum)) {
       inst.emitOpError("ESI ChannelPort (operand #")
           << opNum << ") doesn't match module!";
       ++opNum;
@@ -458,13 +456,13 @@ void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
     // `esi.unwrap.iface` and the other end to the instance.
     auto ifaceInst =
         instBuilder.create<InterfaceInstanceOp>(iface.getInterfaceType());
-    GetModportOp sourceModport =
-        instBuilder.create<GetModportOp>(ifaceInst, build->source);
-    instBuilder.create<UnwrapSVInterface>(op, sourceModport);
     GetModportOp sinkModport =
         instBuilder.create<GetModportOp>(ifaceInst, build->sink);
+    instBuilder.create<UnwrapSVInterface>(op, sinkModport);
+    GetModportOp sourceModport =
+        instBuilder.create<GetModportOp>(ifaceInst, build->source);
     // Finally, add the correct modport to the list of operands.
-    newOperands.push_back(sinkModport);
+    newOperands.push_back(sourceModport);
   }
 
   // Go through the results and get both a list of the plain old values being
@@ -484,7 +482,7 @@ void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
     // Get the interface from the cache, and make sure it's the same one as
     // being used in the module.
     auto iface = build->getOrConstructInterface(instChanTy);
-    if (iface.getModportType(build->source) != funcTy.getInput(opNum)) {
+    if (iface.getModportType(build->sink) != funcTy.getInput(opNum)) {
       inst.emitOpError("ESI ChannelPort (result #")
           << resNum << ", op #" << opNum << ") doesn't match module!";
       ++opNum;
@@ -499,17 +497,17 @@ void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
     // operand list.
     auto ifaceInst =
         instBuilder.create<InterfaceInstanceOp>(iface.getInterfaceType());
-    GetModportOp sinkModport =
-        instBuilder.create<GetModportOp>(ifaceInst, build->sink);
+    GetModportOp sourceModport =
+        instBuilder.create<GetModportOp>(ifaceInst, build->source);
     auto newChannel =
-        instBuilder.create<WrapSVInterface>(res.getType(), sinkModport);
+        instBuilder.create<WrapSVInterface>(res.getType(), sourceModport);
     // Connect all the old users of the output channel with the newly wrapped
     // replacement channel.
     res.replaceAllUsesWith(newChannel);
-    GetModportOp sourceModport =
-        instBuilder.create<GetModportOp>(ifaceInst, build->source);
+    GetModportOp sinkModport =
+        instBuilder.create<GetModportOp>(ifaceInst, build->sink);
     // And add the modport on the other side to the new operand list.
-    newOperands.push_back(sourceModport);
+    newOperands.push_back(sinkModport);
   }
 
   // Create the new instance!
