@@ -1,5 +1,6 @@
 // REQUIRES: verilator
-// RUN: circt-translate %s -emit-verilog -verify-diagnostics > %t1.sv && verilator --lint-only --top-module AB %t1.sv
+// RUN: circt-translate %s -emit-verilog -verify-diagnostics > %t1.sv
+// RUN: verilator --lint-only --top-module AB %t1.sv
 
 module {
   rtl.module @B(%a: i1 { rtl.inout }) -> (i1 {rtl.name = "b"}, i1 {rtl.name = "c"}) {
