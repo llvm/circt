@@ -49,6 +49,7 @@ def InterfaceOp : SVOp<"interface",
       return InterfaceType::get(getContext(),
         ::mlir::SymbolRefAttr::get(sym_name(), getContext()));
     }
+    Type getSignalType(StringRef signalName);
   }];
 }
 
@@ -167,9 +168,6 @@ def ModportType : SVType<"Modport"> {
 // Other operations
 //===----------------------------------------------------------------------===//
 
-def InterfaceTypeCond :
-  Type<CPred<"$_self.isa<::circt::sv::InterfaceType>()">, "sv.interface">;
-
 def InterfaceInstanceOp : SVOp<"interface.instance", [NoSideEffect]> {
   let summary = "Instantiate an interface";
   let description = [{
@@ -180,7 +178,7 @@ def InterfaceInstanceOp : SVOp<"interface.instance", [NoSideEffect]> {
   }];
 
   let arguments = (ins);
-  let results = (outs InterfaceTypeCond : $result);
+  let results = (outs InterfaceType : $result);
 
   let assemblyFormat = [{
     attr-dict `:` type($result)
@@ -204,10 +202,8 @@ def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
     ```
   }];
 
-  let arguments = (ins InterfaceTypeCond:$iface, FlatSymbolRefAttr:$field);
-  let results = (outs
-    Type<CPred<"$_self.isa<::circt::sv::ModportType>()">,
-      "sv.modport">:$result);
+  let arguments = (ins InterfaceType:$iface, FlatSymbolRefAttr:$field);
+  let results = (outs ModportType:$result);
 
   let assemblyFormat = [{
     $iface $field attr-dict `:` type($iface) `->` type($result)
@@ -219,6 +215,33 @@ def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
 
   let builders = [
     OpBuilderDAG<(ins "Value":$value, "::llvm::StringRef":$field)>
+  ];
+}
+
+def AssignInterfaceSignalOp : SVOp<"interface.signal.assign", []> {
+  let summary = "Assign an interfaces signal to some other signal.";
+
+  let arguments = (ins InterfaceType:$iface, FlatSymbolRefAttr:$signalName,
+    AnyType:$rhs);
+
+  let assemblyFormat = [{
+    $iface `->` $signalName `=` $rhs attr-dict `:` type($iface) `,` type($rhs)
+  }];
+}
+
+def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
+  let summary = "Access the data in an interface's signal.";
+
+  let arguments = (ins InterfaceType:$iface, FlatSymbolRefAttr:$signalName);
+  let results = (outs AnyType:$signalData);
+
+  let assemblyFormat = [{
+    $iface `->` $signalName attr-dict `:`
+      type($iface) `,` type($signalData)
+  }];
+
+  let builders = [
+    OpBuilderDAG<(ins "::mlir::Value":$iface, "::llvm::StringRef":$signalName)>
   ];
 }
 
