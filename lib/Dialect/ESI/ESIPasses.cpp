@@ -529,17 +529,6 @@ struct ESItoRTLPass : public LowerESItoRTLBase<ESItoRTLPass> {
 };
 } // anonymous namespace
 
-// static bool esiModulePortFree(RTLExternModuleOp mod) {
-//   auto funcType = mod.getType();
-//   for (auto arg : funcType.getInputs())
-//     if (arg.isa<ChannelPort>())
-//       return false;
-//   for (auto res : funcType.getResults())
-//     if (res.isa<ChannelPort>())
-//       return false;
-//   return true;
-// }
-
 void ESItoRTLPass::runOnOperation() {
   auto top = getOperation();
 
