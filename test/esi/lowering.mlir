@@ -18,7 +18,6 @@ module {
   // IFACE-LABEL: rtl.externmodule @Sender(i1 {rtl.name = "clk"}, !sv.modport<@sink> {rtl.name = "x"}) -> (%y: i8)
   // IFACE-LABEL: rtl.externmodule @Reciever(!sv.modport<@source> {rtl.name = "a"}, i1 {rtl.name = "clk"})
 
-  // RTL-NOT: esi.stage
 
   rtl.module @test(%clk:i1, %rstn:i1) {
 
@@ -45,5 +44,8 @@ module {
     // IFACE-NEXT:    esi.unwrap.iface %4 into %6 : (!esi.channel<i4>, !sv.modport<@IValidReady_i4::@sink>)
     // IFACE-NEXT:    %7 = sv.modport.get %5 @source : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@source>
     // IFACE-NEXT:    rtl.instance "recv2" @Reciever(%7, %clk) : (!sv.modport<@IValidReady_i4::@source>, i1) -> ()
+
+    // After all 3 ESI lowering passes, there shouldn't be any ESI constructs!
+    // RTL-NOT: esi
   }
 }
