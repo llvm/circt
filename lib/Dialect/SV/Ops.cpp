@@ -79,12 +79,6 @@ ModportType InterfaceOp::getModportType(StringRef modportName) {
                           SymbolRefAttr::get(modportName, getContext()));
 }
 
-Type InterfaceOp::getSignalType(StringRef signalName) {
-  InterfaceSignalOp signal = lookupSymbol<InterfaceSignalOp>(signalName);
-  assert(signal && "Interface signal symbol not found.");
-  return signal.type();
-}
-
 static ParseResult parseModportStructs(OpAsmParser &parser,
                                        ArrayAttr &portsAttr) {
   if (parser.parseLParen())
@@ -192,21 +186,11 @@ void GetModportOp::build(OpBuilder &builder, OperationState &state, Value value,
   auto modportSym =
       SymbolRefAttr::get(ifaceTy.getInterface().getRootReference(), {fieldAttr},
                          builder.getContext());
+  // state.addTypes();
+  // state.addOperands({value});
+  // state.addAttribute("field", fieldAttr);
   build(builder, state, {ModportType::get(builder.getContext(), modportSym)},
         {value}, fieldAttr);
-}
-
-void ReadInterfaceSignalOp::build(OpBuilder &builder, OperationState &state,
-                                  Value iface, StringRef signalName) {
-  auto ifaceTy = iface.getType().dyn_cast<InterfaceType>();
-  assert(ifaceTy && "ReadInterfaceSignalOp expects an InterfaceType.");
-  auto fieldAttr = SymbolRefAttr::get(signalName, builder.getContext());
-  InterfaceOp ifaceDefOp = SymbolTable::lookupNearestSymbolFrom<InterfaceOp>(
-      iface.getDefiningOp(), ifaceTy.getInterface());
-  assert(ifaceDefOp &&
-         "ReadInterfaceSignalOp could not resolve an InterfaceOp.");
-  build(builder, state, {ifaceDefOp.getSignalType(signalName)}, {iface},
-        fieldAttr);
 }
 
 //===----------------------------------------------------------------------===//
