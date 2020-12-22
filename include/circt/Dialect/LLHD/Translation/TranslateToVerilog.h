@@ -4,8 +4,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_TARGET_VERILOG_TRANSLATETOVERILOG_H
-#define CIRCT_TARGET_VERILOG_TRANSLATETOVERILOG_H
+#ifndef CIRCT_DIALECT_LLHD_TRANSLATION_TRANSLATETOVERILOG_H
+#define CIRCT_DIALECT_LLHD_TRANSLATION_TRANSLATETOVERILOG_H
 
 namespace llvm {
 class raw_ostream;
@@ -19,11 +19,11 @@ class ModuleOp;
 namespace circt {
 namespace llhd {
 
-mlir::LogicalResult printVerilog(mlir::ModuleOp module, llvm::raw_ostream &os);
+mlir::LogicalResult exportVerilog(mlir::ModuleOp module, llvm::raw_ostream &os);
 
 void registerToVerilogTranslation();
 
 } // namespace llhd
 } // namespace circt
 
-#endif // CIRCT_TARGET_VERILOG_TRANSLATETOVERILOG_H
+#endif // CIRCT_DIALECT_LLHD_TRANSLATION_TRANSLATETOVERILOG_H

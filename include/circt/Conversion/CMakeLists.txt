@@ -1,5 +1,6 @@
 add_subdirectory(FIRRTLToLLHD)
 add_subdirectory(LLHDToLLVM)
+add_subdirectory(RTLToLLHD)
 
 set(LLVM_TARGET_DEFINITIONS Passes.td)
 mlir_tablegen(Passes.h.inc -gen-pass-decls -name Conversion)
