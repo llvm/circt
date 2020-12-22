@@ -1,5 +1,12 @@
 //===- ESIPorts.td - ESI port specifications ---------------*- tablegen -*-===//
 //
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
 // ESI ports are the primary mechanism on which the ESI dialect operates. These
 // types wrap other types to specify the port as an ESI port. They represent
 // ESI communication flows of various kinds. At first, ESI will only support

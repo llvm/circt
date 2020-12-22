@@ -1,5 +1,11 @@
 //===- RTL/Visitors.h - RTL Dialect Visitors --------------------*- C++ -*-===//
 //
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
 // This file defines visitors that make it easier to work with RTL IR.
 //
 //===----------------------------------------------------------------------===//
