@@ -566,6 +566,15 @@ static inline ConstantIntMatcher m_RConstant(APInt &value) {
 // WireOp
 //===----------------------------------------------------------------------===//
 
+void WireOp::build(::mlir::OpBuilder &odsBuilder,
+                   ::mlir::OperationState &odsState, Type elementType,
+                   StringAttr name) {
+  if (name)
+    odsState.addAttribute("name", name);
+
+  odsState.addTypes(InOutType::get(elementType));
+}
+
 static void printWireOp(OpAsmPrinter &p, WireOp &op) {
   p << op.getOperationName();
   // Note that we only need to print the "name" attribute if the asmprinter
@@ -591,10 +600,11 @@ static void printWireOp(OpAsmPrinter &p, WireOp &op) {
 }
 
 static ParseResult parseWireOp(OpAsmParser &parser, OperationState &result) {
+  llvm::SMLoc typeLoc;
   Type resultType;
 
   if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
-      parser.parseType(resultType))
+      parser.getCurrentLocation(&typeLoc) || parser.parseType(resultType))
     return failure();
 
   result.addTypes(resultType);

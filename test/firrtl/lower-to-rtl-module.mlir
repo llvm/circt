@@ -50,10 +50,13 @@
                               %reset: !firrtl.uint<1>) {
     // CHECK: [[U2CAST:%.+]] = firrtl.stdIntCast %u2 : (i2) -> !firrtl.uint<2>
 
-    // CHECK: %in1.wire = rtl.wire : i4
-    // CHECK-NEXT: %in2.wire = rtl.wire : i2
-    // CHECK-NEXT: %in3.wire = rtl.wire : i8
-    // CHECK-NEXT: [[INSTOUT:%.+]] = rtl.instance "xyz" @Simple(%in1.wire, %in2.wire, %in3.wire) : (i4, i2, i8) -> i4
+    // CHECK: %in1.wire = rtl.wire : !rtl.inout<i4>
+    // CHECK-NEXT: [[W1:%.+]] = rtl.read_inout %in1.wire
+    // CHECK-NEXT: %in2.wire = rtl.wire : !rtl.inout<i2>
+    // CHECK-NEXT: [[W2:%.+]] = rtl.read_inout %in2.wire
+    // CHECK-NEXT: %in3.wire = rtl.wire : !rtl.inout<i8>
+    // CHECK-NEXT: [[W3:%.+]] = rtl.read_inout %in3.wire
+    // CHECK-NEXT: [[INSTOUT:%.+]] = rtl.instance "xyz" @Simple([[W1]], [[W2]], [[W3]]) : (i4, i2, i8) -> i4
     %xyz = firrtl.instance @Simple {name = "xyz"}
      : !firrtl.bundle<in1: flip<uint<4>>, in2: flip<uint<2>>,
                       in3: flip<sint<8>>, out4: uint<4>>
@@ -61,7 +64,7 @@
     // CHECK-NEXT: [[INSTOUTC1:%.+]] = firrtl.stdIntCast [[INSTOUT]] : (i4) -> !firrtl.uint<4>
 
 
-    // CHECK: [[IN1C:%.+]] = firrtl.stdIntCast %in1.wire : (i4) -> !firrtl.uint<4>
+    // CHECK: [[IN1C:%.+]] = firrtl.stdIntCast [[W1]] : (i4) -> !firrtl.uint<4>
     // CHECK: [[IN1C2:%.+]] = firrtl.asNonPassive [[IN1C]] : (!firrtl.uint<4>) -> !firrtl.flip<uint<4>>
     // CHECK:  firrtl.connect [[IN1C2]], [[U2CAST]]
     %0 = firrtl.subfield %xyz("in1") : (!firrtl.bundle<in1: flip<uint<4>>, in2: flip<uint<2>>, in3: flip<sint<8>>, out4: uint<4>>) -> !firrtl.flip<uint<4>>
@@ -82,14 +85,15 @@
     // Parameterized module reference.
     // rtl.instance carries the parameters, unlike at the FIRRTL layer.
 
-    // CHECK-NEXT: %in.wire = rtl.wire : i1
+    // CHECK-NEXT: %in.wire = rtl.wire : !rtl.inout<i1>
+    // CHECK-NEXT: [[IW:%.+]] = rtl.read_inout %in.wire
 
-    // CHECK-NEXT: [[OUT:%.+]] = rtl.instance "myext" @MyParameterizedExtModule(%in.wire)  {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1) -> i8
+    // CHECK-NEXT: [[OUT:%.+]] = rtl.instance "myext" @MyParameterizedExtModule([[IW]])  {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1) -> i8
     %myext = firrtl.instance @MyParameterizedExtModule {name = "myext"}
       : !firrtl.bundle<in: flip<uint<1>>, out: uint<8>>
 
     // CHECK-NEXT: [[OUTC:%.+]] = firrtl.stdIntCast [[OUT]] : (i8) -> !firrtl.uint<8>
-    // CHECK-NEXT: [[INC:%.+]]  = firrtl.stdIntCast %in.wire : (i1) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[INC:%.+]]  = firrtl.stdIntCast [[IW]] : (i1) -> !firrtl.uint<1>
     // CHECK-NEXT: [[INC2:%.+]] = firrtl.asNonPassive [[INC]] : (!firrtl.uint<1>) -> !firrtl.flip<uint<1>>
 
     // CHECK-NEXT: firrtl.connect [[INC2]], {{.*}} : !firrtl.flip<uint<1>>, !firrtl.uint<1>
@@ -175,9 +179,12 @@
     // CHECK-NEXT: %1 = firrtl.stdIntCast %inB : (i4) -> !firrtl.uint<4>
     // CHECK-NEXT: %2 = firrtl.stdIntCast %inC : (i4) -> !firrtl.uint<4>
 
-    // CHECK: [[OUTB:%.+]] = rtl.wire : i4
-    // CHECK: [[OUTC:%.+]] = rtl.wire : i4
-    // CHECK: [[OUTD:%.+]] = rtl.wire : i4
+    // CHECK: [[OUTBX:%.+]] = rtl.wire : !rtl.inout<i4>
+    // CHECK-NEXT: [[OUTB:%.+]] = rtl.read_inout [[OUTBX]]
+    // CHECK: [[OUTCX:%.+]] = rtl.wire : !rtl.inout<i4>
+    // CHECK-NEXT: [[OUTC:%.+]] = rtl.read_inout [[OUTCX]]
+    // CHECK: [[OUTDX:%.+]] = rtl.wire : !rtl.inout<i4>
+    // CHECK-NEXT: [[OUTD:%.+]] = rtl.read_inout [[OUTDX]]
 
     // CHECK: [[INE:%.+]] = firrtl.stdIntCast %inE : (i3) -> !firrtl.uint<3>
     // CHECK: [[INF:%.+]] = firrtl.stdIntCast %inF : (i5) -> !firrtl.uint<5>

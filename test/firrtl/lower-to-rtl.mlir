@@ -7,14 +7,16 @@ module attributes {firrtl.mainModule = "Simple"} {
     %in1c = firrtl.stdIntCast %in1 : (i4) -> !firrtl.uint<4>
     %in2c = firrtl.stdIntCast %in2 : (i2) -> !firrtl.uint<2>
     %in3c = firrtl.stdIntCast %in3 : (i8) -> !firrtl.sint<8>
-    // CHECK-NEXT: %tmp3 = rtl.wire : i4
-    %tmp3 = rtl.wire : i4
-    %tmp4 = firrtl.stdIntCast %tmp3 : (i4) -> !firrtl.uint<4>
+    // CHECK-NEXT: %tmp3 = rtl.wire : !rtl.inout<i4>
+    // CHECK: %0 = rtl.read_inout %tmp3
+    %tmp3 = rtl.wire : !rtl.inout<i4>
+    %tmp3v = rtl.read_inout %tmp3 : i4
+    %tmp4 = firrtl.stdIntCast %tmp3v : (i4) -> !firrtl.uint<4>
     %out4 = firrtl.asNonPassive %tmp4 : (!firrtl.uint<4>) -> !firrtl.flip<uint<4>>
     %out5 = firrtl.asNonPassive %tmp4 : (!firrtl.uint<4>) -> !firrtl.flip<uint<4>>
 
     // CHECK: [[ZERO4:%.+]] = rtl.constant(0 : i4) : i4
-    // CHECK: rtl.connect %tmp3, [[ZERO4]] : i4
+    // CHECK: rtl.connect %0, [[ZERO4]] : i4
     firrtl.invalid %out5 : !firrtl.flip<uint<4>>
 
     // CHECK: rtl.constant(-4 : i4) : i4
@@ -23,12 +25,12 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK: rtl.constant(2 : i3) : i3
     %c2_si3 = firrtl.constant(2 : si3) : !firrtl.sint<3>
 
-    // CHECK: %0 = rtl.add %c-4_i4, %in1 : i4
+    // CHECK: [[ADD:%.+]] = rtl.add %c-4_i4, %in1 : i4
     %0 = firrtl.add %c12_ui4, %in1c : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
     %1 = firrtl.asUInt %in1c : (!firrtl.uint<4>) -> !firrtl.uint<4>
 
-    // CHECK-NEXT: [[SUB:%.+]] = rtl.sub %0, %in1 : i4
+    // CHECK-NEXT: [[SUB:%.+]] = rtl.sub [[ADD]], %in1 : i4
     %2 = firrtl.sub %0, %1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
     // CHECK: [[PADRES:%.+]] = rtl.sext %in2 : (i2) -> i3
@@ -56,17 +58,19 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: rtl.connect [[SUB]], [[PADRES2]] : i4
     firrtl.connect %2, %4 : !firrtl.uint<4>, !firrtl.uint<4>
 
-    // CHECK-NEXT: rtl.connect %tmp3, [[XOR]] : i4
+    // CHECK-NEXT: rtl.connect %0, [[XOR]] : i4
     firrtl.connect %out4, %5 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
     // CHECK-NEXT: [[ZEXT:%.+]] = rtl.zext %in2 : (i2) -> i4
-    // CHECK-NEXT: rtl.connect %tmp3, [[ZEXT]] : i4
+    // CHECK-NEXT: rtl.connect %0, [[ZEXT]] : i4
     firrtl.connect %out4, %in2c : !firrtl.flip<uint<4>>, !firrtl.uint<2>
 
-    // CHECK-NEXT: %test-name = rtl.wire : i4
+    // CHECK-NEXT: %test-name = rtl.wire : !rtl.inout<i4>
+    // CHECK-NEXT: rtl.read_inout
     firrtl.wire {name = "test-name"} : !firrtl.uint<4>
 
-    // CHECK-NEXT: = rtl.wire : i2
+    // CHECK-NEXT: = rtl.wire : !rtl.inout<i2>
+    // CHECK-NEXT: rtl.read_inout
     firrtl.wire : !firrtl.uint<2>
 
     // CHECK-NEXT: = firrtl.wire : !firrtl.vector<uint<1>, 13>
@@ -126,8 +130,9 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: = rtl.extract [[MOD2]] from 0 : (i8) -> i3
     %21 = firrtl.rem %3, %in3c : (!firrtl.sint<3>, !firrtl.sint<8>) -> !firrtl.sint<3>
 
-    // CHECK-NEXT: [[WIRE:%n1]] = rtl.wire : i2
-    // CHECK-NEXT: rtl.connect [[WIRE]], %in2 : i2
+    // CHECK-NEXT: [[WIRE:%n1]] = rtl.wire : !rtl.inout<i2>
+    // CHECK-NEXT: [[WIREX:%.+]] = rtl.read_inout [[WIRE]]
+    // CHECK-NEXT: rtl.connect [[WIREX]], %in2 : i2
     %n1 = firrtl.node %in2c  {name = "n1"} : !firrtl.uint<2>
 
     // Nodes with no names are just dropped.
@@ -164,11 +169,11 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: = rtl.shru [[XOR]], {{.*}} : i3
     %29 = firrtl.dshr %24, %18 : (!firrtl.uint<3>, !firrtl.uint<12>) -> !firrtl.uint<3>
 
-    // CHECK-NEXT: = rtl.zext %2 : (i3) -> i8
+    // CHECK-NEXT: = rtl.zext {{.*}} : (i3) -> i8
     // CHECK-NEXT: = rtl.shrs %in3, {{.*}} : i8
     %a29 = firrtl.dshr %in3c, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<3>
 
-    // CHECK-NEXT: = rtl.zext %2 : (i3) -> i8
+    // CHECK-NEXT: = rtl.zext {{.*}} : (i3) -> i8
     // CHECK-NEXT: = rtl.shl %in3, {{.*}} : i8
     %30 = firrtl.dshl %in3c, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<8>
 
@@ -189,8 +194,8 @@ module attributes {firrtl.mainModule = "Simple"} {
     %47 = firrtl.asClock %44 : (!firrtl.uint<1>) -> !firrtl.clock
     %48 = firrtl.asAsyncReset %44 : (!firrtl.uint<1>) -> !firrtl.asyncreset
 
-    // CHECK-NEXT: rtl.output %tmp3, %tmp3 : i4, i4
-    rtl.output %tmp3, %tmp3 : i4,i4
+    // CHECK-NEXT: rtl.output %0, %0 : i4, i4
+    rtl.output %tmp3v, %tmp3v : i4,i4
   }
 
 //   module Print :
@@ -318,16 +323,19 @@ module attributes {firrtl.mainModule = "Simple"} {
 
   // CHECK-LABEL: rtl.module @foo
   rtl.module @foo() {
-    // CHECK-NEXT:  %io_cpu_flush.wire = rtl.wire : i1
-    %io_cpu_flush.wire = rtl.wire : i1
+    // CHECK-NEXT:  %io_cpu_flush.wire = rtl.wire : !rtl.inout<i1>
+    // CHECK-NEXT:  [[IO:%.+]] = rtl.read_inout %io_cpu_flush.wire
+    %io_cpu_flush.wire = rtl.wire : !rtl.inout<i1>
+    %io_cpu_flush.wireV = rtl.read_inout %io_cpu_flush.wire : i1
     // CHECK-NEXT: rtl.instance "fetch"
-    rtl.instance "fetch" @bar(%io_cpu_flush.wire)  : (i1) -> ()
-    %0 = firrtl.stdIntCast %io_cpu_flush.wire : (i1) -> !firrtl.uint<1>
+    rtl.instance "fetch" @bar(%io_cpu_flush.wireV)  : (i1) -> ()
+    %0 = firrtl.stdIntCast %io_cpu_flush.wireV : (i1) -> !firrtl.uint<1>
     %1454 = firrtl.asNonPassive %0 : (!firrtl.uint<1>) -> !firrtl.flip<uint<1>>
 
     %hits_1_7 = firrtl.node %1454 {name = "hits_1_7"} : !firrtl.flip<uint<1>>
-    // CHECK-NEXT:  %hits_1_7 = rtl.wire : i1
-    // CHECK-NEXT:  rtl.connect %hits_1_7, %io_cpu_flush.wire : i1
+    // CHECK-NEXT:  %hits_1_7 = rtl.wire : !rtl.inout<i1>
+    // CHECK-NEXT:  [[WC:%.+]] = rtl.read_inout %hits_1_7
+    // CHECK-NEXT:  rtl.connect [[WC]], [[IO]] : i1
     %1455 = firrtl.asPassive %hits_1_7 : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
   }
 
@@ -337,12 +345,13 @@ module attributes {firrtl.mainModule = "Simple"} {
     %inp_2 = firrtl.stdIntCast %inp2 : (i27) -> !firrtl.uint<27>
     %inp_i = firrtl.stdIntCast %inpi : (i65) -> !firrtl.uint<65>
 
-    // CHECK-NEXT: %tmp48 = rtl.wire : i27
+    // CHECK-NEXT: %tmp48 = rtl.wire : !rtl.inout<i27>
+    // CHECK-NEXT: [[WC:%.+]] = rtl.read_inout %tmp48
     %tmp48 = firrtl.wire {name = "tmp48"} : !firrtl.uint<27>
-    // CHECK-NEXT: %0 = rtl.extract %inpi from 0 : (i65) -> i27
-    // CHECK-NEXT: %1 = rtl.divu %inp2, %0 : i27
+    // CHECK-NEXT: %1 = rtl.extract %inpi from 0 : (i65) -> i27
+    // CHECK-NEXT: %2 = rtl.divu %inp2, %1 : i27
     %0 = firrtl.div %inp_2, %inp_i : (!firrtl.uint<27>, !firrtl.uint<65>) -> !firrtl.uint<27>
-    // CHECK-NEXT: rtl.connect %tmp48, %1 : i27
+    // CHECK-NEXT: rtl.connect [[WC]], %2 : i27
     firrtl.connect %tmp48, %0 : !firrtl.uint<27>, !firrtl.uint<27>
   }
 

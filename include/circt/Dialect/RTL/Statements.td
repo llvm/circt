@@ -31,8 +31,15 @@ def WireOp : RTLOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
     }];
 
   let arguments = (ins OptionalAttr<StrAttr>:$name);
-  let results = (outs AnyType:$result);
+  let results = (outs InOutType:$result);
 
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilderDAG<(ins "::mlir::Type":$elementType,
+                      CArg<"StringAttr", "StringAttr()">:$name)>
+  ];
+
+  // We handle the name in a custom way, so we use a customer parser/printer.
   let printer = [{ printWireOp(p, *this); }];
   let parser = [{ return parseWireOp(parser, result); }];
 }
