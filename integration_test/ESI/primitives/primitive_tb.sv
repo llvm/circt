@@ -1,5 +1,5 @@
-// REQUIRES: questa
-// RUN: circt-rtl-sim.py %defaultSim %INC%/circt/Dialect/ESI/ESIPrimitives.sv %s
+// REQUIRES: ieee-sim
+// RUN: circt-rtl-sim.py --sim %ieee-sim %INC%/circt/Dialect/ESI/ESIPrimitives.sv %s
 
 //===- primitive_tb.sv - tests for ESI primitives -----------*- verilog -*-===//
 //
@@ -9,10 +9,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-module top ();
-
-  logic clk = 0;
-  logic rstn = 0;
+module top (
+  input logic clk,
+  input logic rstn
+);
 
   logic a_valid = 0;
   logic [7:0] a = 0;
@@ -26,12 +26,6 @@ module top ();
   ESI_PipelineStage s1 (
       .*
   );
-
-  always begin
-    // A clock period is #4.
-    clk = ~clk;
-    #2;
-  end
 
   // Increment the input every cycle.
   always begin
@@ -49,11 +43,10 @@ module top ();
   end
 
   initial begin
-    @(posedge clk) #1;
-    rstn = 1;
-    @(posedge clk) #1;
-    @(posedge clk) #1;
-    @(posedge clk) #1;
+    // Wait until rstn is asserted.
+    while (!rstn) begin
+      @(posedge clk);
+    end
 
     a_valid = 1;
     assert (a_ready);
