@@ -136,6 +136,10 @@ public:
              *source = "source", *sink = "sink";
 
 private:
+  /// Construct a type-appropriate name for the interface, making sure it's not
+  /// taken in the symbol table.
+  StringAttr constructInterfaceName(ChannelPort);
+
   RTLExternModuleOp declaredStage;
   llvm::DenseMap<Type, InterfaceOp> portTypeLookup;
 };
@@ -162,6 +166,34 @@ ESIRTLBuilder::ESIRTLBuilder(Operation *top)
   auto &region = regions.front();
   if (!region.empty())
     setInsertionPoint(&region.front(), region.front().begin());
+}
+
+StringAttr ESIRTLBuilder::constructInterfaceName(ChannelPort port) {
+  Operation *tableOp =
+      getInsertionPoint()->getParentWithTrait<OpTrait::SymbolTable>();
+  std::string portTypeName;
+  llvm::raw_string_ostream(portTypeName) << port.getInner();
+
+  // Normalize the type name.
+  for (char &ch : portTypeName) {
+    if (isalpha(ch) || isdigit(ch) || ch == '_')
+      continue;
+  }
+
+  // All stage names start with this.
+  SmallString<64> proposedName("IValidReady_");
+  proposedName.append(portTypeName);
+
+  // Make sure that this symbol isn't taken. If it is, append a number and try
+  // again.
+  size_t baseLength = proposedName.size();
+  size_t tries = 0;
+  while (SymbolTable::lookupSymbolIn(tableOp, proposedName)) {
+    proposedName.resize(baseLength);
+    proposedName.append(llvm::utostr(++tries));
+  }
+
+  return StringAttr::get(proposedName, getContext());
 }
 
 /// Write an 'ExternModuleOp' to use a hand-coded SystemVerilog module. Said
@@ -202,7 +234,7 @@ InterfaceOp ESIRTLBuilder::getOrConstructInterface(ChannelPort t) {
 }
 
 InterfaceOp ESIRTLBuilder::constructInterface(ChannelPort chan) {
-  InterfaceOp iface = create<InterfaceOp>("IDataVR");
+  InterfaceOp iface = create<InterfaceOp>(constructInterfaceName(chan));
   ImplicitLocOpBuilder ib(getLoc(), iface.getRegion());
   ib.createBlock(&iface.getRegion());
 
