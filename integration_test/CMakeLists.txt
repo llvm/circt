@@ -1,7 +1,9 @@
 set(CIRCT_INTEGRATION_TEST_DEPENDS
   FileCheck count not
   circt-opt
-  circt-translate)
+  circt-translate
+  circt-rtl-sim
+  firtool)
 
 # If ESI Cosim is available to build then enable its tests.
 if (TARGET EsiCosimDpiServer)

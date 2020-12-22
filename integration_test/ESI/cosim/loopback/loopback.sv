@@ -6,7 +6,7 @@
 
 import Cosim_DpiPkg::*;
 
-module main(
+module top(
     `ifdef VERILATOR
     input logic clk,
     input logic rstn
