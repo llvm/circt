@@ -228,6 +228,10 @@ def AssignInterfaceSignalOp : SVOp<"interface.signal.assign", []> {
     $iface `(` custom<IfaceTypeAndSignal>(type($iface), $signalName) `)`
         `=` $rhs attr-dict `:` type($rhs)
   }];
+
+  let verifier = [{
+    return ::verifySignalExists(iface(), signalNameAttr());
+  }];
 }
 
 def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
@@ -244,6 +248,10 @@ def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
   let builders = [
     OpBuilderDAG<(ins "::mlir::Value":$iface, "::llvm::StringRef":$signalName)>
   ];
+
+  let verifier = [{
+    return ::verifySignalExists(iface(), signalNameAttr());
+  }];
 }
 
 def TypeDeclTerminatorOp : SVOp<"type_decl_terminator",

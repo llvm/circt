@@ -231,6 +231,20 @@ void printIfaceTypeAndSignal(OpAsmPrinter &p, Operation *op, Type type,
   p << sym;
 }
 
+LogicalResult verifySignalExists(Value ifaceVal, FlatSymbolRefAttr signalName) {
+  auto ifaceTy = ifaceVal.getType().dyn_cast<InterfaceType>();
+  if (!ifaceTy)
+    return failure();
+  InterfaceOp iface = SymbolTable::lookupNearestSymbolFrom<InterfaceOp>(
+      ifaceVal.getDefiningOp(), ifaceTy.getInterface());
+  if (!iface)
+    return failure();
+  InterfaceSignalOp signal = iface.lookupSymbol<InterfaceSignalOp>(signalName);
+  if (!signal)
+    return failure();
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Other ops.
 //===----------------------------------------------------------------------===//
