@@ -16,7 +16,6 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 #include <memory>
@@ -563,17 +562,14 @@ struct ESItoRTLPass : public LowerESItoRTLBase<ESItoRTLPass> {
 };
 } // anonymous namespace
 
-bool doesNotContainEsiPorts(Operation *op) { return false; }
-
 void ESItoRTLPass::runOnOperation() {
   auto top = getOperation();
   auto ctxt = &getContext();
 
   // Set up a conversion and give it a set of laws.
-  ConversionTarget pass1Target(getContext());
+  ConversionTarget pass1Target(*ctxt);
   pass1Target.addLegalDialect<RTLDialect>();
   pass1Target.addLegalOp<WrapValidReady, UnwrapValidReady>();
-  pass1Target.addLegalOp<WrapSVInterface, UnwrapSVInterface>();
   pass1Target.addIllegalOp<PipelineStage>();
 
   // Add all the conversion patterns.
@@ -585,8 +581,8 @@ void ESItoRTLPass::runOnOperation() {
   if (failed(applyPartialConversion(top, pass1Target, std::move(patterns))))
     signalPassFailure();
 
-  ConversionTarget pass2Target(getContext());
-  pass2Target.addLegalDialect<circt::rtl::RTLDialect>();
+  ConversionTarget pass2Target(*ctxt);
+  pass2Target.addLegalDialect<RTLDialect>();
   pass2Target.addIllegalOp<PipelineStage>();
 
   patterns.clear();
