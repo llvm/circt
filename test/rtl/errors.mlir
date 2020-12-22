@@ -37,7 +37,9 @@ func private @test_and() {
 
 // -----
 
-func private @notModule () {}
+func private @notModule () {
+  return
+}
 
 rtl.module @A(%arg0: i1) {
   // expected-error @+1 {{Symbol resolved to 'func' which is not a RTL[Ext]ModuleOp}}
@@ -77,8 +79,14 @@ func private @invalidInout(%arg0: !rtl.inout<tensor<*xf32>>) { }
 
 // -----
 
-rtl.module @inout(%a: i42) {  // expected-note {{prior use here}}
-  // expected-error @+1 {{use of value '%a' expects different type than prior uses: '<<NULL TYPE>>' vs 'i42'}}
+rtl.module @inout(%a: i42) {
+  // expected-error @+1 {{'result' must be a valid inout element, but got '!rtl.inout<i42>'}}
   %aget = rtl.read_inout %a: !rtl.inout<i42>
-  rtl.output %aget : i42
+}
+
+// -----
+
+rtl.module @wire(%a: i42) {
+  // expected-error @+1 {{'rtl.wire' op result #0 must be inout type for ports and wires, but got 'i42'}}
+  %aget = rtl.wire: i42
 }

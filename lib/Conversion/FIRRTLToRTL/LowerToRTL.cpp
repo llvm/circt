@@ -11,7 +11,7 @@
 #include "circt/Dialect/RTL/Types.h"
 #include "circt/Dialect/SV/Ops.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
-#include "mlir/IR/StandardTypes.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 
 using namespace circt;
@@ -35,7 +35,7 @@ static Type lowerType(Type type) {
 
   auto width = firType.getBitWidthOrSentinel();
   if (width >= 0) // IntType, analog with known width, clock, etc.
-    return IntegerType::get(width, type.getContext());
+    return IntegerType::get(type.getContext(), width);
 
   return {};
 }
@@ -215,8 +215,7 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
     // Figure out the direction of the port.
     if (firrtlPort.type.isa<AnalogType>()) {
       // If the port is analog, then it is implicitly inout.
-      rtlPort.type =
-          rtl::InOutType::get(rtlPort.type.getContext(), rtlPort.type);
+      rtlPort.type = rtl::InOutType::get(rtlPort.type);
       rtlPort.direction = rtl::PortDirection::INOUT;
       rtlPort.argNum = numArgs++;
     } else if (firrtlPort.isOutput()) {
@@ -383,6 +382,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
       // then return.
       newArg = bodyBuilder.create<rtl::WireOp>(lowerType(port.type),
                                                /*name=*/StringAttr());
+      newArg = bodyBuilder.create<rtl::ReadInOutOp>(newArg);
       outputs.push_back(newArg);
     }
 
@@ -452,7 +452,8 @@ void FIRRTLModuleLowering::lowerInstance(
       // Create a wire for each input/inout operand, so there is something to
       // connect to.
       auto name = builder.getStringAttr(port.getName().str() + ".wire");
-      operands.push_back(builder.create<rtl::WireOp>(portType, name));
+      auto wire = builder.create<rtl::WireOp>(portType, name);
+      operands.push_back(builder.create<rtl::ReadInOutOp>(wire));
     }
   }
 
@@ -784,7 +785,9 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   auto resultType = lowerType(resType);
   if (!resultType)
     return failure();
-  return setLoweringTo<rtl::WireOp>(op, resultType, op.nameAttr());
+  auto wire = builder->create<rtl::WireOp>(resultType, op.nameAttr());
+  // Convert the inout to a non-inout type.
+  return setLoweringTo<rtl::ReadInOutOp>(op, wire);
 }
 
 LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
@@ -797,7 +800,8 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   // drop it.
   if (auto name = op.getAttrOfType<StringAttr>("name")) {
     auto wire = builder->create<rtl::WireOp>(operand.getType(), name);
-    builder->create<rtl::ConnectOp>(wire, operand);
+    auto read = builder->create<rtl::ReadInOutOp>(wire);
+    builder->create<rtl::ConnectOp>(read, operand);
   }
 
   // TODO(clattner): This is dropping the location information from unnamed node

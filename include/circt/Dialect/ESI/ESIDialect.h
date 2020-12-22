@@ -13,8 +13,8 @@
 #ifndef CIRCT_DIALECT_ESI_ESIDIALECT_H
 #define CIRCT_DIALECT_ESI_ESIDIALECT_H
 
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
-
 namespace circt {
 namespace esi {
 

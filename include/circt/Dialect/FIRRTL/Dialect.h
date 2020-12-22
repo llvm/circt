@@ -7,6 +7,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_DIALECT_H
 #define CIRCT_DIALECT_FIRRTL_DIALECT_H
 
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
 namespace circt {
@@ -32,9 +33,6 @@ public:
 /// If the specified attribute list has a firrtl.name attribute, return its
 /// value.
 StringAttr getFIRRTLNameAttr(ArrayRef<NamedAttribute> attrs);
-
-/// Register all of the FIRRTL transformation passes with the PassManager.
-void registerFIRRTLPasses();
 
 } // namespace firrtl
 } // namespace circt

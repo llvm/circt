@@ -31,8 +31,15 @@ def WireOp : RTLOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
     }];
 
   let arguments = (ins OptionalAttr<StrAttr>:$name);
-  let results = (outs AnyType:$result);
+  let results = (outs InOutType:$result);
 
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilderDAG<(ins "::mlir::Type":$elementType,
+                      CArg<"StringAttr", "StringAttr()">:$name)>
+  ];
+
+  // We handle the name in a custom way, so we use a customer parser/printer.
   let printer = [{ printWireOp(p, *this); }];
   let parser = [{ return parseWireOp(parser, result); }];
 }
@@ -42,7 +49,7 @@ def ReadInOutOp
   let summary = "Get the value of from something of inout type (e.g. a wire or"
                 " inout port) as the value itself.";
   let arguments = (ins InOutType:$input);
-  let results = (outs AnyType:$result);
+  let results = (outs InOutElementType:$result);
 
   let builders = [
     OpBuilderDAG<(ins "Value":$input)>

@@ -1,6 +1,6 @@
 // REQUIRES: verilator
 // RUN: circt-translate %s -emit-verilog -verify-diagnostics > %t1.sv
-// RUN: circt-rtl-sim.py verilator %t1.sv %S/../driver.cpp --simargs "--cycles 8" 2>&1 | FileCheck %s
+// RUN: circt-rtl-sim.py %t1.sv --cycles 8 2>&1 | FileCheck %s
 
 module {
   // The RTL dialect doesn't have any sequential constructs yet. So don't do
@@ -33,4 +33,8 @@ module {
 // CHECK-NEXT: tick
 // CHECK-NEXT: tick
 // CHECK-NEXT: tick
-// CHECK-NEXT: [driver] Ending simulation at tick #17
+// CHECK-NEXT: tick
+// CHECK-NEXT: tick
+// CHECK-NEXT: tick
+// CHECK-NEXT: tick
+// CHECK-NEXT: [driver] Ending simulation at tick #25

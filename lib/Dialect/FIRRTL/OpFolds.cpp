@@ -11,7 +11,7 @@ using namespace circt;
 using namespace firrtl;
 
 static Attribute getIntAttr(const APInt &value, MLIRContext *context) {
-  return IntegerAttr::get(IntegerType::get(value.getBitWidth(), context),
+  return IntegerAttr::get(IntegerType::get(context, value.getBitWidth()),
                           value);
 }
 
@@ -98,7 +98,7 @@ OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
     auto width = getType().cast<IntType>().getWidthOrSentinel();
     if (width == -1)
       width = 1;
-    auto type = IntegerType::get(width, getContext());
+    auto type = IntegerType::get(getContext(), width);
     return Builder(getContext()).getZeroAttr(type);
   }
 

@@ -32,6 +32,12 @@ def RTLModuleOp : RTLOp<"module",
     // squatting on the name.
     Block *getBodyBlock() { return &body().front(); }
 
+    // Get the module's symbolic name.
+    StringRef getName() {
+      return getAttrOfType<StringAttr>(::mlir::SymbolTable::getSymbolAttrName())
+          .getValue();
+    }
+
   private:
     // This trait needs access to the hooks defined below.
     friend class OpTrait::FunctionLike<RTLModuleOp>;

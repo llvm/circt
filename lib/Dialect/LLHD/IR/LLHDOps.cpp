@@ -6,12 +6,12 @@
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "mlir/Dialect/CommonFolders.h"
 #include "mlir/IR/Attributes.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Matchers.h"
-#include "mlir/IR/Module.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Region.h"
-#include "mlir/IR/StandardTypes.h"
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Support/LogicalResult.h"
@@ -663,22 +663,30 @@ static LogicalResult verify(llhd::EntityOp op) {
                "Cannot have more inputs than arguments, expected at most ")
            << numArgs << " but got: " << nIns;
   }
+
+  // Check that all block arguments are of signal type
+  for (size_t i = 0; i < numArgs; ++i)
+    if (!op.getArgument(i).getType().isa<llhd::SigType>())
+      return op.emitError("usage of invalid argument type. Got ")
+             << op.getArgument(i).getType() << ", expected LLHD signal type";
+
   return success();
 }
 
 LogicalResult circt::llhd::EntityOp::verifyType() {
+  FunctionType type = getType();
+
   // Fail if function returns any values. An entity's outputs are specially
   // marked arguments.
-  if (getNumResults() > 0)
+  if (type.getNumResults() > 0)
     return emitOpError("an entity cannot have return types.");
 
   // Check that all operands are of signal type
-  for (int i = 0, e = getNumFuncArguments(); i < e; ++i) {
-    if (!getArgument(i).getType().isa<llhd::SigType>()) {
+  for (Type inputType : type.getInputs())
+    if (!inputType.isa<llhd::SigType>())
       return emitOpError("usage of invalid argument type. Got ")
-             << getArgument(i).getType() << ", expected LLHD signal type";
-    }
-  }
+             << inputType << ", expected LLHD signal type";
+
   return success();
 }
 
@@ -945,7 +953,7 @@ static LogicalResult verify(llhd::InstOp op) {
 
 FunctionType llhd::InstOp::getCalleeType() {
   SmallVector<Type, 8> argTypes(getOperandTypes());
-  return FunctionType::get(argTypes, ArrayRef<Type>(), getContext());
+  return FunctionType::get(getContext(), argTypes, ArrayRef<Type>());
 }
 
 //===----------------------------------------------------------------------===//
