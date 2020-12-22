@@ -220,6 +220,20 @@ def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
 
 def AssignInterfaceSignalOp : SVOp<"interface.signal.assign", []> {
   let summary = "Assign an interfaces signal to some other signal.";
+  let description = [{
+    Use this to continuously assign a signal inside an interface to a
+    value or other signal.
+  
+    ```
+      sv.interface.signal.assign %iface(@handshake_example::@data) 
+        = %zero32 : i32
+    ```
+
+    Would result in the following SystemVerilog:
+    ```
+      assign iface.data = zero32;
+    ```
+  }];
 
   let arguments = (ins InterfaceType:$iface, FlatSymbolRefAttr:$signalName,
     AnyType:$rhs);
@@ -236,6 +250,19 @@ def AssignInterfaceSignalOp : SVOp<"interface.signal.assign", []> {
 
 def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
   let summary = "Access the data in an interface's signal.";
+  let description = [{
+    This is an expression to access a signal inside of an interface.
+  
+    ```
+      %ifaceData = sv.interface.signal.read %iface
+          (@handshake_example::@data) : i32
+    ```
+
+    Could result in the following SystemVerilog:
+    ```
+      wire [31:0] ifaceData = iface.data;
+    ```
+  }];
 
   let arguments = (ins InterfaceType:$iface, FlatSymbolRefAttr:$signalName);
   let results = (outs AnyType:$signalData);
