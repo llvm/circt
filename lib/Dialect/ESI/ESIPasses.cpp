@@ -533,25 +533,26 @@ public:
   RemoveWrapUnwrap(MLIRContext *ctxt) : OpConversionPattern(ctxt) {}
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult match(Operation *op) const final {
-    auto wrap = dyn_cast<WrapValidReady>(op);
-    if (!wrap)
-      return failure();
-    if (!wrap.chanOutput().hasOneUse())
-      return failure();
-    if (!isa<UnwrapValidReady>(wrap.chanOutput().use_begin()->getOwner()))
-      return failure();
-    return success();
-  }
+  LogicalResult
+  matchAndRewrite(WrapValidReady wrap, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
 
-  void rewrite(WrapValidReady wrap, ArrayRef<Value> operands,
-               ConversionPatternRewriter &rewriter) const final {
+    if (!wrap.chanOutput().hasOneUse())
+      return rewriter.notifyMatchFailure(wrap, [](Diagnostic &d) {
+        d << "This conversion only supports wrap-unwrap back-to-back. "
+             "Wrap didn't have exactly one use.";
+      });
     UnwrapValidReady unwrap =
         dyn_cast<UnwrapValidReady>(wrap.chanOutput().use_begin()->getOwner());
-    assert(unwrap && "Must be operating on wrap-unwrap pair");
+    if (!unwrap)
+      return rewriter.notifyMatchFailure(wrap, [](Diagnostic &d) {
+        d << "This conversion only supports wrap-unwrap back-to-back. "
+             "Could not find 'unwrap'.";
+      });
 
     rewriter.replaceOp(wrap, {nullptr, unwrap.ready()});
     rewriter.replaceOp(unwrap, operands);
+    return success();
   }
 };
 } // anonymous namespace
