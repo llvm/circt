@@ -55,8 +55,6 @@ def WrapValidReady : ESI_Op<"wrap.vr", [NoSideEffect]> {
   let builders = [
     OpBuilderDAG<(ins "mlir::Value":$data, "mlir::Value":$valid)>
   ];
-
-  let hasCanonicalizer = 1;
 }
 
 def UnwrapValidReady : ESI_Op<"unwrap.vr", [NoSideEffect]> {

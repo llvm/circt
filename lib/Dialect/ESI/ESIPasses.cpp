@@ -528,6 +528,36 @@ void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
 }
 
 namespace {
+/// Eliminate back-to-back wrap-unwraps to reduce the number of ESI channels.
+struct RemoveWrapUnwrap : public OpConversionPattern<WrapValidReady> {
+public:
+  RemoveWrapUnwrap(MLIRContext *ctxt) : OpConversionPattern(ctxt) {}
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult match(Operation *op) const final {
+    auto wrap = dyn_cast<WrapValidReady>(op);
+    if (!wrap)
+      return failure();
+    if (!wrap.chanOutput().hasOneUse())
+      return failure();
+    if (!isa<UnwrapValidReady>(wrap.chanOutput().use_begin()->getOwner()))
+      return failure();
+    return success();
+  }
+
+  void rewrite(WrapValidReady wrap, ArrayRef<Value> operands,
+               ConversionPatternRewriter &rewriter) const final {
+    UnwrapValidReady unwrap =
+        dyn_cast<UnwrapValidReady>(wrap.chanOutput().use_begin()->getOwner());
+    assert(unwrap && "Must be operating on wrap-unwrap pair");
+
+    rewriter.replaceOp(wrap, {nullptr, unwrap.ready()});
+    rewriter.replaceOp(unwrap, operands);
+  }
+};
+} // anonymous namespace
+
+namespace {
 struct ESItoRTLPass : public LowerESItoRTLBase<ESItoRTLPass> {
   void runOnOperation() override;
 };
@@ -540,11 +570,11 @@ void ESItoRTLPass::runOnOperation() {
   auto ctxt = &getContext();
 
   // Set up a conversion and give it a set of laws.
-  ConversionTarget target(getContext());
-  target.addLegalDialect<RTLDialect>();
-  target.addLegalOp<WrapValidReady, UnwrapValidReady>();
-  target.addLegalOp<WrapSVInterface, UnwrapSVInterface>();
-  target.addIllegalOp<PipelineStage>();
+  ConversionTarget pass1Target(getContext());
+  pass1Target.addLegalDialect<RTLDialect>();
+  pass1Target.addLegalOp<WrapValidReady, UnwrapValidReady>();
+  pass1Target.addLegalOp<WrapSVInterface, UnwrapSVInterface>();
+  pass1Target.addIllegalOp<PipelineStage>();
 
   // Add all the conversion patterns.
   ESIRTLBuilder esiBuilder(top);
@@ -552,22 +582,17 @@ void ESItoRTLPass::runOnOperation() {
   patterns.insert<PipelineStageLowering>(esiBuilder, ctxt);
 
   // Run the conversion.
-  if (failed(applyPartialConversion(top, target, std::move(patterns))))
+  if (failed(applyPartialConversion(top, pass1Target, std::move(patterns))))
     signalPassFailure();
 
-  ConversionTarget target2(getContext());
-  target2.addLegalDialect<circt::rtl::RTLDialect>();
-  target2.addLegalOp<mlir::ConstantOp>();
-  target2.addIllegalOp<PipelineStage>();
+  ConversionTarget pass2Target(getContext());
+  pass2Target.addLegalDialect<circt::rtl::RTLDialect>();
+  pass2Target.addIllegalOp<PipelineStage>();
 
-  OwningRewritePatternList canonPatterns;
-  WrapValidReady::getCanonicalizationPatterns(canonPatterns, ctxt);
-
-  // This doesn't work.
-  // applyPatternsAndFoldGreedily(top, std::move(canonPatterns));
-
-  // This one does.
-  applyPartialConversion(top, target2, std::move(canonPatterns));
+  patterns.clear();
+  patterns.insert<RemoveWrapUnwrap>(ctxt);
+  if (failed(applyPartialConversion(top, pass2Target, std::move(patterns))))
+    signalPassFailure();
 }
 
 namespace circt {

@@ -128,48 +128,6 @@ void WrapValidReady::build(OpBuilder &b, OperationState &state, Value data,
         b.getI1Type(), data, valid);
 }
 
-namespace {
-/// Eliminate back-to-back wrap-unwraps to reduce the number of ESI channels.
-struct RemoveWrapUnwrap : public OpConversionPattern<WrapValidReady> {
-public:
-  RemoveWrapUnwrap(MLIRContext *ctxt) : OpConversionPattern(ctxt) {}
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult match(Operation *op) const final {
-    auto wrap = dyn_cast<WrapValidReady>(op);
-    if (!wrap)
-      return failure();
-    if (!wrap.chanOutput().hasOneUse())
-      return failure();
-    if (!isa<UnwrapValidReady>(wrap.chanOutput().use_begin()->getOwner()))
-      return failure();
-    return success();
-  }
-
-  void rewrite(WrapValidReady wrap, ArrayRef<Value> operands,
-               ConversionPatternRewriter &rewriter) const final {
-    UnwrapValidReady unwrap =
-        dyn_cast<UnwrapValidReady>(wrap.chanOutput().use_begin()->getOwner());
-    assert(unwrap && "Must be operating on wrap-unwrap pair");
-
-    auto tmpOp = rewriter.create<mlir::ConstantOp>(
-        wrap.getLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
-
-    // Replacing `tmpOp` with nullptr also "works".
-    rewriter.replaceOp(wrap, {tmpOp, unwrap.ready()});
-    rewriter.replaceOp(unwrap, operands);
-
-    // If I comment this in, valgrind emits a warning!
-    // rewriter.eraseOp(tmpOp);
-  }
-};
-} // anonymous namespace
-
-void WrapValidReady::getCanonicalizationPatterns(
-    OwningRewritePatternList &patterns, MLIRContext *ctxt) {
-  patterns.insert<RemoveWrapUnwrap>(ctxt);
-}
-
 static ParseResult parseUnwrapValidReady(OpAsmParser &parser,
                                          OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
