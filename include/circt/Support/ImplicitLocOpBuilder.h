@@ -35,6 +35,8 @@ public:
   ImplicitLocOpBuilder(Location loc, Block *block, Block::iterator insertPoint,
                        Listener *listener = nullptr)
       : OpBuilder(block, insertPoint, listener), curLoc(loc) {}
+  ImplicitLocOpBuilder(mlir::Operation *op)
+      : OpBuilder(op), curLoc(op->getLoc()) {}
 
   /// Accessors for the implied location.
   Location getLoc() const { return curLoc; }

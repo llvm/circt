@@ -14,6 +14,12 @@ def LowerESIToPhysical: Pass<"lower-esi-to-physical", "mlir::ModuleOp"> {
   let constructor = "circt::esi::createESIPhysicalLoweringPass()";
 }
 
+def LowerESIPorts: Pass<"lower-esi-ports", "mlir::ModuleOp"> {
+  let summary = "Lower ESI input and/or output ports.";
+  let constructor = "circt::esi::createESIPortLoweringPass()";
+  let dependentDialects = ["circt::sv::SVDialect"];
+}
+
 def LowerESItoRTL: Pass<"lower-esi-to-rtl", "mlir::ModuleOp"> {
   let summary = "Lower ESI to RTL where possible and SV elsewhere.";
   let constructor = "circt::esi::createESItoRTLPass()";
