@@ -130,7 +130,7 @@ public:
 
   // A bunch of constants for use in various places below.
   const StringAttr a, aValid, aReady, x, xValid, xReady;
-  const StringAttr clk, rstn, input, output;
+  const StringAttr clk, rstn;
   const Identifier width;
   const char *data = "data", *valid = "valid", *ready = "ready",
              *source = "source", *sink = "sink";
@@ -155,8 +155,6 @@ ESIRTLBuilder::ESIRTLBuilder(Operation *top)
       xReady(StringAttr::get("x_ready", getContext())),
       clk(StringAttr::get("clk", getContext())),
       rstn(StringAttr::get("rstn", getContext())),
-      input(StringAttr::get("input", getContext())),
-      output(StringAttr::get("output", getContext())),
       width(Identifier::get("WIDTH", getContext())), declaredStage(nullptr) {
 
   auto regions = top->getRegions();
@@ -178,6 +176,7 @@ StringAttr ESIRTLBuilder::constructInterfaceName(ChannelPort port) {
   for (char &ch : portTypeName) {
     if (isalpha(ch) || isdigit(ch) || ch == '_')
       continue;
+    ch = '_';
   }
 
   // All stage names start with this.
@@ -335,6 +334,7 @@ void ESIPortsPass::runOnOperation() {
   ESIRTLBuilder b(top);
   build = &b;
 
+  // Find all externmodules and try to modify them. Remember the modified ones.
   DenseMap<StringRef, RTLExternModuleOp> modsMutated;
   for (auto mod : top.getOps<RTLExternModuleOp>())
     if (updateFunc(mod))
@@ -352,9 +352,9 @@ void ESIPortsPass::runOnOperation() {
 
 /// Convert all input and output ChannelPorts into SV Interfaces. For inputs,
 /// just switch the type to `ModportType`. For outputs, append a `ModportType`
-/// to the inputs and remove the output channel from the results. Then call the
-/// function which adapts the instances (the hard part). Returns true if 'mod'
-/// was updated.
+/// to the inputs and remove the output channel from the results. Returns true
+/// if 'mod' was updated. Delay updating the instances to amortize the IR walk
+/// over all the module updates.
 bool ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
   auto *ctxt = &getContext();
   auto funcType = mod.getType();
@@ -371,7 +371,7 @@ bool ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
       continue;
     }
 
-    // When we find one, construct an interface, and add the 'sink' modport to
+    // When we find one, construct an interface, and add the 'source' modport to
     // the type list.
     auto iface = build->getOrConstructInterface(chanTy);
     newArgTypes.push_back(iface.getModportType(build->source));
@@ -401,8 +401,8 @@ bool ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
     // When we find one, construct an interface, and add the 'sink' modport to
     // the type list.
     InterfaceOp iface = build->getOrConstructInterface(chanTy);
-    ModportType sourcePort = iface.getModportType(build->sink);
-    newArgTypes.push_back(sourcePort);
+    ModportType sinkPort = iface.getModportType(build->sink);
+    newArgTypes.push_back(sinkPort);
     argAttrs.push_back(resAttrs[resNum]);
     updated = true;
   }
@@ -484,7 +484,7 @@ void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
     auto iface = build->getOrConstructInterface(instChanTy);
     if (iface.getModportType(build->sink) != funcTy.getInput(opNum)) {
       inst.emitOpError("ESI ChannelPort (result #")
-          << resNum << ", op #" << opNum << ") doesn't match module!";
+          << resNum << ", operand #" << opNum << ") doesn't match module!";
       ++opNum;
       newResults.push_back(res);
       newResultTypes.push_back(res.getType());

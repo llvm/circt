@@ -186,9 +186,11 @@ void GetModportOp::build(OpBuilder &builder, OperationState &state, Value value,
   auto modportSym =
       SymbolRefAttr::get(ifaceTy.getInterface().getRootReference(), {fieldAttr},
                          builder.getContext());
-  state.addTypes({ModportType::get(builder.getContext(), modportSym)});
-  state.addOperands({value});
-  state.addAttribute("field", fieldAttr);
+  // state.addTypes();
+  // state.addOperands({value});
+  // state.addAttribute("field", fieldAttr);
+  build(builder, state, {ModportType::get(builder.getContext(), modportSym)},
+        {value}, fieldAttr);
 }
 
 //===----------------------------------------------------------------------===//
