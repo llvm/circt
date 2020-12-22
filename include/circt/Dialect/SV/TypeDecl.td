@@ -45,8 +45,9 @@ def InterfaceOp : SVOp<"interface",
     Block *getBodyBlock() { return &body().front(); }
 
     ModportType getModportType(::mlir::SymbolRefAttr);
-    ::mlir::FlatSymbolRefAttr getSymRef() {
-      return ::mlir::SymbolRefAttr::get(sym_name(), getContext());
+    InterfaceType getInterfaceType() {
+      return InterfaceType::get(getContext(),
+        ::mlir::SymbolRefAttr::get(sym_name(), getContext()));
     }
   }];
 }
