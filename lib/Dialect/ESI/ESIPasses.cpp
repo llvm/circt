@@ -132,7 +132,8 @@ public:
   const StringAttr a, aValid, aReady, x, xValid, xReady;
   const StringAttr clk, rstn, input, output;
   const Identifier width;
-  const FlatSymbolRefAttr data, valid, ready, source, sink;
+  const char *data = "data", *valid = "valid", *ready = "ready",
+             *source = "source", *sink = "sink";
 
 private:
   RTLExternModuleOp declaredStage;
@@ -141,7 +142,7 @@ private:
 } // anonymous namespace
 
 ESIRTLBuilder::ESIRTLBuilder(Operation *top)
-    : ImplicitLocOpBuilder(UnknownLoc::get(getContext()), top),
+    : ImplicitLocOpBuilder(UnknownLoc::get(top->getContext()), top),
       a(StringAttr::get("a", getContext())),
       aValid(StringAttr::get("a_valid", getContext())),
       aReady(StringAttr::get("a_ready", getContext())),
@@ -152,13 +153,7 @@ ESIRTLBuilder::ESIRTLBuilder(Operation *top)
       rstn(StringAttr::get("rstn", getContext())),
       input(StringAttr::get("input", getContext())),
       output(StringAttr::get("output", getContext())),
-      width(Identifier::get("WIDTH", getContext())),
-      data(FlatSymbolRefAttr::get("data", getContext())),
-      valid(FlatSymbolRefAttr::get("valid", getContext())),
-      ready(FlatSymbolRefAttr::get("ready", getContext())),
-      source(FlatSymbolRefAttr::get("source", getContext())),
-      sink(FlatSymbolRefAttr::get("sink", getContext())),
-      declaredStage(nullptr) {
+      width(Identifier::get("WIDTH", getContext())), declaredStage(nullptr) {
 
   auto regions = top->getRegions();
   if (regions.size() == 0) {
@@ -207,31 +202,19 @@ InterfaceOp ESIRTLBuilder::getOrConstructInterface(ChannelPort t) {
 }
 
 InterfaceOp ESIRTLBuilder::constructInterface(ChannelPort chan) {
-  auto *ctxt = getContext();
-
   InterfaceOp iface = create<InterfaceOp>("IDataVR");
   ImplicitLocOpBuilder ib(getLoc(), iface.getRegion());
   ib.createBlock(&iface.getRegion());
 
   InterfaceSignalOp s;
-  ib.create<InterfaceSignalOp>(valid.getRootReference(),
-                               TypeAttr::get(getI1Type()));
-  ib.create<InterfaceSignalOp>(ready.getRootReference(),
-                               TypeAttr::get(getI1Type()));
-  ib.create<InterfaceSignalOp>(data.getRootReference(),
-                               TypeAttr::get(chan.getInner()));
-  ib.create<InterfaceModportOp>(
-      source.getRootReference(),
-      ArrayAttr::get({ModportStructAttr::get(input, ready, ctxt),
-                      ModportStructAttr::get(output, valid, ctxt),
-                      ModportStructAttr::get(output, data, ctxt)},
-                     ctxt));
-  ib.create<InterfaceModportOp>(
-      sink.getRootReference(),
-      ArrayAttr::get({ModportStructAttr::get(output, ready, ctxt),
-                      ModportStructAttr::get(input, valid, ctxt),
-                      ModportStructAttr::get(input, data, ctxt)},
-                     ctxt));
+  ib.create<InterfaceSignalOp>(valid, getI1Type());
+  ib.create<InterfaceSignalOp>(ready, getI1Type());
+  ib.create<InterfaceSignalOp>(data, chan.getInner());
+  ib.create<InterfaceModportOp>(source, /*inputs=*/ArrayRef<StringRef>{ready},
+                                /*outputs=*/ArrayRef<StringRef>{valid, data});
+  ib.create<InterfaceModportOp>(sink,
+                                /*inputs=*/ArrayRef<StringRef>{valid, data},
+                                /*outputs=*/ArrayRef<StringRef>{ready});
   ib.create<TypeDeclTerminatorOp>();
   return iface;
 }

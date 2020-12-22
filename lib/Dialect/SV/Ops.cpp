@@ -72,10 +72,11 @@ void AlwaysAtPosEdgeOp::build(OpBuilder &odsBuilder, OperationState &result,
 // TypeDecl operations
 //===----------------------------------------------------------------------===//
 
-ModportType InterfaceOp::getModportType(SymbolRefAttr modportName) {
+ModportType InterfaceOp::getModportType(StringRef modportName) {
   InterfaceModportOp modportOp = lookupSymbol<InterfaceModportOp>(modportName);
   assert(modportOp && "Modport symbol not found.");
-  return ModportType::get(getContext(), modportName);
+  return ModportType::get(getContext(),
+                          SymbolRefAttr::get(modportName, getContext()));
 }
 
 static ParseResult parseModportStructs(OpAsmParser &parser,
@@ -120,6 +121,28 @@ static void printModportStructs(OpAsmPrinter &p, Operation *,
   p << ')';
 }
 
+void InterfaceSignalOp::build(mlir::OpBuilder &builder,
+                              ::mlir::OperationState &state, StringRef name,
+                              mlir::Type type) {
+  build(builder, state, name, mlir::TypeAttr::get(type));
+}
+
+void InterfaceModportOp::build(OpBuilder &builder, OperationState &state,
+                               StringRef name, ArrayRef<StringRef> inputs,
+                               ArrayRef<StringRef> outputs) {
+  auto *ctxt = builder.getContext();
+  SmallVector<Attribute, 8> directions;
+  StringAttr inputDir = StringAttr::get("input", ctxt);
+  StringAttr outputDir = StringAttr::get("output", ctxt);
+  for (auto input : inputs)
+    directions.push_back(ModportStructAttr::get(
+        inputDir, SymbolRefAttr::get(input, ctxt), ctxt));
+  for (auto output : outputs)
+    directions.push_back(ModportStructAttr::get(
+        outputDir, SymbolRefAttr::get(output, ctxt), ctxt));
+  build(builder, state, name, ArrayAttr::get(directions, ctxt));
+}
+
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
 static LogicalResult verifyInterfaceInstanceOp(InterfaceInstanceOp op) {
   auto symtable = SymbolTable::getNearestSymbolTable(op);
@@ -155,16 +178,17 @@ static LogicalResult verifyGetModportOp(GetModportOp op) {
   return success();
 }
 
-void GetModportOp::build(::mlir::OpBuilder &builder,
-                         ::mlir::OperationState &state, Value value,
-                         ::mlir::FlatSymbolRefAttr field) {
+void GetModportOp::build(OpBuilder &builder, OperationState &state, Value value,
+                         StringRef field) {
   auto ifaceTy = value.getType().dyn_cast<InterfaceType>();
   assert(ifaceTy && "GetModportOp expects an InterfaceType.");
-  auto modportSym = SymbolRefAttr::get(
-      ifaceTy.getInterface().getRootReference(), {field}, builder.getContext());
+  auto fieldAttr = SymbolRefAttr::get(field, builder.getContext());
+  auto modportSym =
+      SymbolRefAttr::get(ifaceTy.getInterface().getRootReference(), {fieldAttr},
+                         builder.getContext());
   state.addTypes({ModportType::get(builder.getContext(), modportSym)});
   state.addOperands({value});
-  state.addAttribute("field", field);
+  state.addAttribute("field", fieldAttr);
 }
 
 //===----------------------------------------------------------------------===//
