@@ -57,9 +57,20 @@ def InOutElementType : Type<CPred<"isRTLValueType($_self)">,
 // constraints another to `!rtl.inout<T>`.  The "value" and "inoutValue" are the
 // name of the operand or result for the type sides of this.
 //
-// Note that the operand must be constrained to being an InOutElementType to
+// Note that the inoutValue must be constrained to being an InOutElementType to
 // ensure that functions and other things aren't passed into this.
 class InOutTypeConstraint<string value, string inoutValue>
   : TypesMatchWith<"type should be element of inout type",
                    value, inoutValue,
                    "InOutType::get($_self.getContext(), $_self)">;
+
+// This type constraint indicates that the specified value matches the element
+// type of the specified inoutValue.  It is the dual to InOutTypeConstraint used
+// when inference needs to "go the other way".
+//
+// Note that the inoutValue must be constrained to being an InOutElementType to
+// ensure that functions and other things aren't passed into this.
+class InOutElementConstraint<string value, string inoutValue>
+  : TypesMatchWith<"type should be element of inout type",
+                   inoutValue, value,
+                   "$_self.cast<InOutType>().getElementType()">;

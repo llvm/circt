@@ -72,8 +72,8 @@ func @test1(%arg0: i3, %arg1: i1) -> i50 {
   // CHECK-NEXT: %after1 = rtl.wire : !rtl.inout<i4>
   %before1 = rtl.wire {name = "after1"} : !rtl.inout<i4>
 
-  // CHECK-NEXT: rtl.read_inout %after1 : i4
-  %read_before1 = rtl.read_inout %before1 : i4
+  // CHECK-NEXT: rtl.read_inout %after1 : !rtl.inout<i4>
+  %read_before1 = rtl.read_inout %before1 : !rtl.inout<i4>
 
   // CHECK-NEXT: %after2_conflict = rtl.wire : !rtl.inout<i4>
   // CHECK-NEXT: %after2_conflict_0 = rtl.wire {name = "after2_conflict"} : !rtl.inout<i4>

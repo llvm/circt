@@ -1237,17 +1237,6 @@ void ReadInOutOp::build(OpBuilder &builder, OperationState &result,
   build(builder, result, resultType, input);
 }
 
-static LogicalResult verifyReadInOutOp(ReadInOutOp op) {
-  // The result type and the input type have to be the same, except the input
-  // is an inout of the result.
-  auto inOutType = op.input().getType().dyn_cast<InOutType>();
-  if (!inOutType)
-    return op.emitOpError("input operand should be an rtl.inout<> type");
-  if (op.getType() != inOutType.getElementType())
-    return op.emitOpError("result type doesn't match input inout element type");
-  return success();
-}
-
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
