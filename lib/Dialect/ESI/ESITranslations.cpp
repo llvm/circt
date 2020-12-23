@@ -58,7 +58,7 @@ struct ExportCosimSchema {
   static bool isTypeSupported(Type type);
 
   /// Emit a schema for a single int.
-  LogicalResult emitSchemaFor(IntegerType type);
+  LogicalResult emitSchemaFor(IntegerType type, uint64_t hash);
 
   /// Emit a struct name.
   llvm::raw_ostream &emitName(Type type) { return os << "ESI_" << type; }
@@ -94,7 +94,8 @@ bool ExportCosimSchema::isTypeSupported(Type type) {
   return false;
 }
 
-LogicalResult ExportCosimSchema::emitSchemaFor(IntegerType type) {
+LogicalResult ExportCosimSchema::emitSchemaFor(IntegerType type,
+                                               uint64_t hash) {
   SmallString<16> typeStr;
   if (type.isSigned())
     typeStr = "Int";
@@ -120,7 +121,7 @@ LogicalResult ExportCosimSchema::emitSchemaFor(IntegerType type) {
   // Since capnp requires messages to be structs, emit a wrapper struct.
   indent() << "struct ";
   emitName(type) << " ";
-  emitId(getCapnpTypeID(type)) << " {\n";
+  emitId(hash) << " {\n";
   addIndent();
 
   // Specify the actual type, followed by the capnp field.
@@ -178,17 +179,21 @@ LogicalResult ExportCosimSchema::emit() {
   });
 
   // Compute and emit the capnp file id.
-  llvm::hash_code fileHash =
-      llvm::hash_combine_range(types.begin(), types.end());
+  llvm::hash_code fileHash;
+  for (ChannelPort chanPort : types)
+    fileHash = llvm::hash_combine(fileHash, getCapnpTypeID(chanPort));
   emitId(fileHash) << ";\n\n";
 
   // Iterate through the various types and emit their schemas.
   auto end = std::unique(types.begin(), types.end());
   for (auto typeIter = types.begin(); typeIter < end; ++typeIter) {
     ChannelPort chanPort = *typeIter;
+    uint64_t typeHash = getCapnpTypeID(chanPort);
     LogicalResult rc =
         TypeSwitch<Type, LogicalResult>(chanPort.getInner())
-            .Case([this](IntegerType it) { return emitSchemaFor(it); })
+            .Case([this, typeHash](IntegerType it) {
+              return emitSchemaFor(it, typeHash);
+            })
             .Default([](Type type) {
               assert(false && "Unsupported type should have been filtered out "
                               "in visitEndpoint().");

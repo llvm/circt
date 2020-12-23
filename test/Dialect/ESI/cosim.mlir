@@ -18,6 +18,8 @@ module {
     %cosimRecv = esi.cosim %clk, %rstn, %send.x, 1 {name="TestEP"} : !esi.channel<si14> -> !esi.channel<i32>
     // CHECK:  %0 = esi.cosim %clk, %rstn, %send.x, 1 {name = "TestEP"} : !esi.channel<si14> -> !esi.channel<i32>
 
+    // Ensure that the file hash is deterministic.
+    // CAPNP: @0x8bb640ebe6388872;
     // CAPNP-LABEL: struct ESI_i32 @0x{{([[:xdigit:]]{16})}}
     // CAPNP:         i @0 :UInt32;
     // CAPNP-LABEL: struct ESI_si14 @0x{{([[:xdigit:]]{16})}}
