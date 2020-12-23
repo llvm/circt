@@ -1,4 +1,5 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
+// RUN: circt-translate %s -emit-esi-capnp -verify-diagnostics | FileCheck --check-prefix=CAPNP %s
 
 module {
   rtl.module @Sender() -> ( !esi.channel<i1> { rtl.name = "x"}) {

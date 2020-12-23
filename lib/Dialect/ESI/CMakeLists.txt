@@ -2,6 +2,7 @@ add_circt_dialect_library(MLIRESI
   ESIDialect.cpp
   ESIOps.cpp
   ESIPasses.cpp
+  ESITranslations.cpp
   ESITypes.cpp
 
   ADDITIONAL_HEADER_DIRS

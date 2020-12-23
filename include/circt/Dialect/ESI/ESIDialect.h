@@ -34,6 +34,7 @@ public:
 };
 
 void registerESIPasses();
+void registerESITranslations();
 
 } // namespace esi
 } // namespace circt
