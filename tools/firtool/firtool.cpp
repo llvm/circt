@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-// 
+//
 // This file implements 'firtool', which composes together a variety of
 // libraries in a way that is convenient to work with as a user.
 //

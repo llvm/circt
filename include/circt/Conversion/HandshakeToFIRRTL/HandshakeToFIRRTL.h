@@ -8,7 +8,7 @@
 //
 // This file declares passes which together will lower the Handshake  dialect to
 // FIRRTL dialect.
-// 
+//
 //===----------------------------------------------------------------------===//
 
 #ifndef CIRCT_CONVERSION_HANDSHAKETOFIRRTL_H_
