@@ -126,7 +126,7 @@ LogicalResult ExportCosimSchema::emitSchemaFor(IntegerType type) {
   addIndent();
 
   // Specify the actual type, followed by the capnp field.
-  indent() << "// Actual type is " << type << ".\n";
+  indent() << "# Actual type is " << type << ".\n";
   indent() << "i @0 :" << typeStr << ";\n";
 
   reduceIndent();
@@ -203,8 +203,6 @@ LogicalResult ExportCosimSchema::emit() {
       return failure();
   }
 
-  // diag.emit(module.getLoc(), DiagnosticSeverity::Error)
-  // << "Incomplete translation";
   return errorCount == 0 ? success() : failure();
 }
 
