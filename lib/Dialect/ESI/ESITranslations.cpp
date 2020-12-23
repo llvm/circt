@@ -148,7 +148,11 @@ LogicalResult ExportCosimSchema::visitEndpoint(CosimEndpoint ep) {
     return ep.emitOpError("Type '") << outputPort << "' not supported.";
   types.push_back(outputPort);
 
-  os << "# Endpoint #" << ep.endpointID() << " at " << ep.getLoc() << ":\n";
+  os << "# Endpoint ";
+  StringAttr epName = ep.getAttrOfType<StringAttr>("name");
+  if (epName)
+    os << epName << " is endpoint ";
+  os << "#" << ep.endpointID() << " at " << ep.getLoc() << ":\n";
   os << "#   Input type: ";
   emitName(inputPort.getInner()) << " ";
   emitId(ep.getInputTypeID()) << "\n";

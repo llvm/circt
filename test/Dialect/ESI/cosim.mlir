@@ -15,8 +15,8 @@ module {
     %send.x = rtl.instance "send" @Sender () : () -> (!esi.channel<si14>)
     // CHECK:  %send.x = rtl.instance "send" @Sender() : () -> !esi.channel<si14>
 
-    %cosimRecv = esi.cosim %clk, %rstn, %send.x, 1 {} : !esi.channel<si14> -> !esi.channel<i32>
-    // CHECK:  %0 = esi.cosim %clk, %rstn, %send.x, 1 : !esi.channel<si14> -> !esi.channel<i32>
+    %cosimRecv = esi.cosim %clk, %rstn, %send.x, 1 {name="TestEP"} : !esi.channel<si14> -> !esi.channel<i32>
+    // CHECK:  %0 = esi.cosim %clk, %rstn, %send.x, 1 {name = "TestEP"} : !esi.channel<si14> -> !esi.channel<i32>
 
     // CAPNP-LABEL: struct ESI_i32 @0x{{([[:xdigit:]]{16})}}
     // CAPNP:         i @0 :UInt32;
