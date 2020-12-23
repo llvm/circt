@@ -79,6 +79,12 @@ ModportType InterfaceOp::getModportType(StringRef modportName) {
                           SymbolRefAttr::get(modportName, getContext()));
 }
 
+Type InterfaceOp::getSignalType(StringRef signalName) {
+  InterfaceSignalOp signal = lookupSymbol<InterfaceSignalOp>(signalName);
+  assert(signal && "Interface signal symbol not found.");
+  return signal.type();
+}
+
 static ParseResult parseModportStructs(OpAsmParser &parser,
                                        ArrayAttr &portsAttr) {
   if (parser.parseLParen())
@@ -186,11 +192,57 @@ void GetModportOp::build(OpBuilder &builder, OperationState &state, Value value,
   auto modportSym =
       SymbolRefAttr::get(ifaceTy.getInterface().getRootReference(), {fieldAttr},
                          builder.getContext());
-  // state.addTypes();
-  // state.addOperands({value});
-  // state.addAttribute("field", fieldAttr);
   build(builder, state, {ModportType::get(builder.getContext(), modportSym)},
         {value}, fieldAttr);
+}
+
+void ReadInterfaceSignalOp::build(OpBuilder &builder, OperationState &state,
+                                  Value iface, StringRef signalName) {
+  auto ifaceTy = iface.getType().dyn_cast<InterfaceType>();
+  assert(ifaceTy && "ReadInterfaceSignalOp expects an InterfaceType.");
+  auto fieldAttr = SymbolRefAttr::get(signalName, builder.getContext());
+  InterfaceOp ifaceDefOp = SymbolTable::lookupNearestSymbolFrom<InterfaceOp>(
+      iface.getDefiningOp(), ifaceTy.getInterface());
+  assert(ifaceDefOp &&
+         "ReadInterfaceSignalOp could not resolve an InterfaceOp.");
+  build(builder, state, {ifaceDefOp.getSignalType(signalName)}, {iface},
+        fieldAttr);
+}
+
+ParseResult parseIfaceTypeAndSignal(OpAsmParser &p, Type &ifaceTy,
+                                    FlatSymbolRefAttr &signalName) {
+  SymbolRefAttr fullSym;
+  if (p.parseAttribute(fullSym) || fullSym.getNestedReferences().size() != 1)
+    return failure();
+
+  auto *ctxt = p.getBuilder().getContext();
+  ifaceTy = InterfaceType::get(
+      ctxt, FlatSymbolRefAttr::get(fullSym.getRootReference(), ctxt));
+  signalName = FlatSymbolRefAttr::get(fullSym.getLeafReference(), ctxt);
+  return success();
+}
+
+void printIfaceTypeAndSignal(OpAsmPrinter &p, Operation *op, Type type,
+                             FlatSymbolRefAttr signalName) {
+  InterfaceType ifaceTy = type.dyn_cast<InterfaceType>();
+  assert(ifaceTy && "Expected an InterfaceType");
+  auto sym = SymbolRefAttr::get(ifaceTy.getInterface().getRootReference(),
+                                {signalName}, op->getContext());
+  p << sym;
+}
+
+LogicalResult verifySignalExists(Value ifaceVal, FlatSymbolRefAttr signalName) {
+  auto ifaceTy = ifaceVal.getType().dyn_cast<InterfaceType>();
+  if (!ifaceTy)
+    return failure();
+  InterfaceOp iface = SymbolTable::lookupNearestSymbolFrom<InterfaceOp>(
+      ifaceVal.getDefiningOp(), ifaceTy.getInterface());
+  if (!iface)
+    return failure();
+  InterfaceSignalOp signal = iface.lookupSymbol<InterfaceSignalOp>(signalName);
+  if (!signal)
+    return failure();
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
