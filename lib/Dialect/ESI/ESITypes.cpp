@@ -15,6 +15,25 @@
 using namespace mlir;
 using namespace circt::esi;
 
+static uint64_t getCapnpTypeIDImpl(Type t) {
+  auto chanPort = t.dyn_cast<ChannelPort>();
+  if (chanPort) {
+    uint64_t innerHash = getCapnpTypeIDImpl(chanPort.getInner());
+    return llvm::hash_combine(chanPort.getTypeID(), innerHash);
+  }
+
+  // This is temporary until I figure a way to access a deterministic hash.
+  // TODO: replace me!
+  IntegerType i = t.dyn_cast<IntegerType>();
+  if (i)
+    return llvm::hash_combine(i.getWidth(), i.getSignedness());
+  return 0;
+}
+
+uint64_t circt::esi::getCapnpTypeID(Type t) {
+  return llvm::hash_combine(esiCosimSchemaVersion, getCapnpTypeIDImpl(t));
+}
+
 Type ChannelPort::parse(mlir::MLIRContext *ctxt, mlir::DialectAsmParser &p) {
   Type inner;
   if (p.parseLess() || p.parseType(inner) || p.parseGreater())
