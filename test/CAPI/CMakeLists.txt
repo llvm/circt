@@ -13,5 +13,5 @@ target_link_libraries(circt-capi-ir-test
   PRIVATE
   MLIRCAPIIR
   MLIRCAPIRegistration
-  MLIRCAPIRTL
+  CIRCTCAPIRTL
   ${dialect_libs})
