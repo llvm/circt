@@ -51,8 +51,9 @@ struct ExportCosimSchema {
   /// Emit the whole schema.
   LogicalResult emit();
 
-  /// Collect the types for which we need to emit a schema.
-  LogicalResult collectTypes(CosimEndpoint);
+  /// Collect the types for which we need to emit a schema. Output some metadata
+  /// comments.
+  LogicalResult visitEndpoint(CosimEndpoint);
 
   /// Do we support emitting a schema for 'type'?
   static bool isTypeSupported(Type type);
@@ -133,7 +134,7 @@ LogicalResult ExportCosimSchema::emitSchemaFor(IntegerType type) {
   return success();
 }
 
-LogicalResult ExportCosimSchema::collectTypes(CosimEndpoint ep) {
+LogicalResult ExportCosimSchema::visitEndpoint(CosimEndpoint ep) {
   ChannelPort inputPort = ep.input().getType().dyn_cast<ChannelPort>();
   if (!inputPort)
     return ep.emitOpError("Expected ChannelPort type for input. Got ")
@@ -152,10 +153,10 @@ LogicalResult ExportCosimSchema::collectTypes(CosimEndpoint ep) {
   os << "# Endpoint #" << ep.endpointID() << " at " << ep.getLoc() << ":\n";
   os << "#   Input type: ";
   emitName(inputPort.getInner()) << " ";
-  emitId(getCapnpTypeID(inputPort)) << "\n";
+  emitId(ep.getInputTypeID()) << "\n";
   os << "#   Output type: ";
   emitName(outputPort.getInner()) << " ";
-  emitId(getCapnpTypeID(outputPort)) << "\n";
+  emitId(ep.getOutputTypeID()) << "\n";
 
   return success();
 }
@@ -166,7 +167,7 @@ LogicalResult ExportCosimSchema::emit() {
      << "#######\n";
 
   // Walk and collect the type data.
-  module.walk([this](CosimEndpoint ep) { collectTypes(ep); });
+  module.walk([this](CosimEndpoint ep) { visitEndpoint(ep); });
   os << "#######\n";
 
   // We need a sorted list to ensure determinism.
