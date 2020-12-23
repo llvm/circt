@@ -42,9 +42,8 @@ static llvm::ManagedStatic<StringSet<>> reservedWordCache;
 static bool isVerilogExpression(Operation *op) {
   // All FIRRTL expressions and RTL combinatorial logic ops are Verilog
   // expressions.
-  return isExpression(op) || rtl::isCombinatorial(op) ||
-         isa<sv::TextualValueOp>(op) || isa<AsPassivePrimOp>(op) ||
-         isa<AsNonPassivePrimOp>(op);
+  return isExpression(op) || rtl::isCombinatorial(op) || sv::isExpression(op) ||
+         isa<AsPassivePrimOp>(op) || isa<AsNonPassivePrimOp>(op);
 }
 
 /// Return the width of the specified FIRRTL type in bits or -1 if it isn't
@@ -771,6 +770,7 @@ private:
     return emitSubExpr(op->getOperand(0), LowestPrecedence);
   }
 
+  SubExprInfo visitSV(sv::GetModportOp op);
   SubExprInfo visitSV(sv::TextualValueOp op);
 
   SubExprInfo visitExpr(AddPrimOp op) {
@@ -1225,6 +1225,11 @@ SubExprInfo ExprEmitter::emitBitSelect(Value operand, unsigned hiBit,
   if (hiBit != loBit) // Emit x[4] instead of x[4:4].
     os << ':' << loBit;
   os << ']';
+  return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitSV(sv::GetModportOp op) {
+  os << emitter.getName(op.iface()) + "." + op.field();
   return {Unary, IsUnsigned};
 }
 
@@ -1856,14 +1861,22 @@ void ModuleEmitter::emitStatement(rtl::InstanceOp op) {
   SmallVector<rtl::ModulePortInfo, 8> portInfo;
   getModulePortInfo(moduleOp, portInfo);
 
+  // Emit the argument and result ports.
   auto opArgs = op.inputs();
   auto opResults = op.getResults();
   for (auto &elt : portInfo) {
+    // Figure out which value we are emitting.
     bool isLast = &elt == &portInfo.back();
-    StringRef valueName = elt.isOutput() ? getName(opResults[elt.argNum])
-                                         : getName(opArgs[elt.argNum]);
-    indent() << "  ." << StringRef(elt.getName()) << " (" << valueName
-             << (isLast ? ")\n" : "),\n");
+    Value portVal = elt.isOutput() ? opResults[elt.argNum] : opArgs[elt.argNum];
+
+    // Emit the port's name.
+    indent() << "  ." << StringRef(elt.getName()) << " (";
+
+    // Emit the value as an expression.
+    ops.clear();
+    emitExpression(portVal, ops);
+    os << (isLast ? ")" : "),");
+    emitLocationInfoAndNewLine(ops);
   }
   indent() << ");\n";
 }
@@ -2145,6 +2158,10 @@ static bool isExpressionAlwaysInline(Operation *op) {
       isa<SubfieldOp>(op))
     return true;
 
+  // An SV interface modport is a symbolic name that is always inlined.
+  if (isa<sv::GetModportOp>(op))
+    return true;
+
   // If this is a noop cast and the operand is always inlined, then the noop
   // cast is always inlined.
   if (isNoopCast(op))
@@ -2177,12 +2194,16 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
   // Return the word (e.g. "wire") in Verilog to declare the specified thing.
   auto getVerilogDeclWord = [](Operation *op) -> StringRef {
-    // Note: MemOp is handled as "wire" here because each of its subcomponents
-    // are wires.  The corresponding 'reg' decl is handled specially below.
     if (isa<RegOp>(op) || isa<RegInitOp>(op))
       return "reg";
-    else
-      return "wire";
+
+    // Interfaces instances use the name of the declared interface.
+    if (auto interface = dyn_cast<sv::InterfaceInstanceOp>(op))
+      return interface.getInterfaceType().getInterface().getValue();
+
+    // Note: MemOp is handled as "wire" here because each of its subcomponents
+    // are wires.  The corresponding 'reg' decl is handled specially below.
+    return "wire";
   };
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
@@ -2238,6 +2259,10 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
         flattenBundleTypes(dataType, "", false, fieldTypes);
 
     for (const auto &elt : fieldTypes) {
+      // Skip over SV interface types, which don't have any emitted width.
+      if (elt.type.isa<sv::InterfaceType>())
+        continue;
+
       int bitWidth = getBitWidthOrSentinel(elt.type);
       if (bitWidth == -1) {
         emitError(&op, getName(result))
@@ -2275,9 +2300,19 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     for (const auto &elt : fieldTypes) {
       indent() << word;
       os.indent(maxDeclNameWidth - word.size() + 1);
-      emitTypePaddedToWidth(elt.type, maxTypeWidth, decl);
-      os << getName(decl->getResult(0)) << elt.suffix << ';';
 
+      // Skip over SV interface types, which don't have any emitted width.
+      bool isInterface = elt.type.isa<sv::InterfaceType>();
+      if (!isInterface)
+        emitTypePaddedToWidth(elt.type, maxTypeWidth, decl);
+
+      os << getName(decl->getResult(0)) << elt.suffix;
+
+      // Interface instantiations have parentheses like a module with no ports.
+      if (isInterface)
+        os << "()";
+
+      os << ';';
       if (isFirst)
         emitLocationInfoAndNewLine(ops);
       else
@@ -2428,6 +2463,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitSV(sv::AssertOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::AssumeOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::CoverOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::InterfaceInstanceOp op) { return true; }
     bool visitSV(sv::InterfaceSignalOp op) {
       return emitter.emitDecl(op), true;
     }
