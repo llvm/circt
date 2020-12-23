@@ -16,7 +16,6 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Translation.h"
 
-#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 #include <algorithm>
@@ -79,15 +78,14 @@ private:
 
   // All the `esi.cosim` input and output types encountered during the IR walk.
   // This is NOT in a deterministic order!
-  llvm::DenseSet<Type> types;
+  llvm::SmallVector<ChannelPort> types;
 };
 } // anonymous namespace
 
 bool ExportCosimSchema::isTypeSupported(Type type) {
   auto chanPort = type.dyn_cast<ChannelPort>();
   if (chanPort) {
-    uint64_t innerHash = isTypeSupported(chanPort.getInner());
-    return llvm::hash_combine(chanPort.getTypeID(), innerHash);
+    return isTypeSupported(chanPort.getInner());
   }
 
   auto i = type.dyn_cast<IntegerType>();
@@ -141,14 +139,14 @@ LogicalResult ExportCosimSchema::visitEndpoint(CosimEndpoint ep) {
            << inputPort;
   if (!isTypeSupported(inputPort))
     return ep.emitOpError("Type '") << inputPort << "' not supported.";
-  types.insert(inputPort);
+  types.push_back(inputPort);
 
   ChannelPort outputPort = ep.output().getType().dyn_cast<ChannelPort>();
   if (!outputPort)
     ep.emitOpError("Expected ChannelPort type for output. Got ") << outputPort;
   if (!isTypeSupported(outputPort))
     return ep.emitOpError("Type '") << outputPort << "' not supported.";
-  types.insert(outputPort);
+  types.push_back(outputPort);
 
   os << "# Endpoint #" << ep.endpointID() << " at " << ep.getLoc() << ":\n";
   os << "#   Input type: ";
@@ -164,38 +162,33 @@ LogicalResult ExportCosimSchema::visitEndpoint(CosimEndpoint ep) {
 LogicalResult ExportCosimSchema::emit() {
   os << "#########################################################\n"
      << "## ESI generated schema. For use with CosimDpi.capnp\n"
-     << "#######\n";
+     << "#########################################################\n";
 
   // Walk and collect the type data.
   module.walk([this](CosimEndpoint ep) { visitEndpoint(ep); });
-  os << "#######\n";
+  os << "#########################################################\n";
 
   // We need a sorted list to ensure determinism.
-  SmallVector<Type> sortedTypes(types.begin(), types.end());
-  std::sort(sortedTypes.begin(), sortedTypes.end(), [](Type a, Type b) {
+  llvm::sort(types.begin(), types.end(), [](ChannelPort a, ChannelPort b) {
     return getCapnpTypeID(a) > getCapnpTypeID(b);
   });
 
   // Compute and emit the capnp file id.
   llvm::hash_code fileHash =
-      llvm::hash_combine_range(sortedTypes.begin(), sortedTypes.end());
+      llvm::hash_combine_range(types.begin(), types.end());
   emitId(fileHash) << ";\n\n";
 
   // Iterate through the various types and emit their schemas.
-  for (auto type : sortedTypes) {
-    auto chanPort = type.dyn_cast<ChannelPort>();
-    if (!chanPort) {
-      diag.emit(unknown, DiagnosticSeverity::Error)
-          << "Only ChannelPort types are supported, not " << type;
-      continue;
-    }
-
+  auto end = std::unique(types.begin(), types.end());
+  for (auto typeIter = types.begin(); typeIter < end; ++typeIter) {
+    ChannelPort chanPort = *typeIter;
     LogicalResult rc =
         TypeSwitch<Type, LogicalResult>(chanPort.getInner())
             .Case([this](IntegerType it) { return emitSchemaFor(it); })
-            .Default([this](Type type) {
-              return diag.emit(unknown, DiagnosticSeverity::Error)
-                     << "Type '" << type << "' not supported.";
+            .Default([](Type type) {
+              assert(false && "Unsupported type should have been filtered out "
+                              "in visitEndpoint().");
+              return failure();
             });
     if (failed(rc))
       // If we fail during an emission, dump out early since the output may be
