@@ -20,9 +20,9 @@ module {
 
     // Ensure that the file hash is deterministic.
     // CAPNP: @0x8bb640ebe6388872;
-    // CAPNP-LABEL: struct ESI_i32 @0x{{([[:xdigit:]]{16})}}
+    // CAPNP-LABEL: struct ESI_i32 @0xa805e789c4c1d78c
     // CAPNP:         i @0 :UInt32;
-    // CAPNP-LABEL: struct ESI_si14 @0x{{([[:xdigit:]]{16})}}
+    // CAPNP-LABEL: struct ESI_si14 @0x01f8421bc3203d9f
     // CAPNP:         i @0 :Int16;
   }
 }
