@@ -64,8 +64,11 @@ public:
   const StringAttr a, aValid, aReady, x, xValid, xReady;
   const StringAttr clk, rstn;
   const Identifier width;
-  const char *data = "data", *valid = "valid", *ready = "ready",
-             *source = "source", *sink = "sink";
+
+  // Various identifier strings. Keep them all here in case we rename them.
+  static constexpr char dataStr[] = "data", validStr[] = "valid",
+                        readyStr[] = "ready", sourceStr[] = "source",
+                        sinkStr[] = "sink";
 
 private:
   /// Construct a type-appropriate name for the interface, making sure it's not
@@ -76,6 +79,12 @@ private:
   llvm::DenseMap<Type, InterfaceOp> portTypeLookup;
 };
 } // anonymous namespace
+
+// C++ requires this for showing it what object file it should store these
+// symbols in. They should be inline but that feature wasn't added until C++17.
+constexpr char ESIRTLBuilder::dataStr[], ESIRTLBuilder::validStr[],
+    ESIRTLBuilder::readyStr[], ESIRTLBuilder::sourceStr[],
+    ESIRTLBuilder::sinkStr[];
 
 ESIRTLBuilder::ESIRTLBuilder(Operation *top)
     : ImplicitLocOpBuilder(UnknownLoc::get(top->getContext()), top),
@@ -170,14 +179,16 @@ InterfaceOp ESIRTLBuilder::constructInterface(ChannelPort chan) {
   ib.createBlock(&iface.getRegion());
 
   InterfaceSignalOp s;
-  ib.create<InterfaceSignalOp>(valid, getI1Type());
-  ib.create<InterfaceSignalOp>(ready, getI1Type());
-  ib.create<InterfaceSignalOp>(data, chan.getInner());
-  ib.create<InterfaceModportOp>(source, /*inputs=*/ArrayRef<StringRef>{ready},
-                                /*outputs=*/ArrayRef<StringRef>{valid, data});
-  ib.create<InterfaceModportOp>(sink,
-                                /*inputs=*/ArrayRef<StringRef>{valid, data},
-                                /*outputs=*/ArrayRef<StringRef>{ready});
+  ib.create<InterfaceSignalOp>(validStr, getI1Type());
+  ib.create<InterfaceSignalOp>(readyStr, getI1Type());
+  ib.create<InterfaceSignalOp>(dataStr, chan.getInner());
+  ib.create<InterfaceModportOp>(
+      sourceStr, /*inputs=*/ArrayRef<StringRef>{readyStr},
+      /*outputs=*/ArrayRef<StringRef>{validStr, dataStr});
+  ib.create<InterfaceModportOp>(
+      sinkStr,
+      /*inputs=*/ArrayRef<StringRef>{validStr, dataStr},
+      /*outputs=*/ArrayRef<StringRef>{readyStr});
   ib.create<TypeDeclTerminatorOp>();
   return iface;
 }
@@ -314,7 +325,7 @@ bool ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
     // When we find one, construct an interface, and add the 'source' modport to
     // the type list.
     auto iface = build->getOrConstructInterface(chanTy);
-    newArgTypes.push_back(iface.getModportType(build->source));
+    newArgTypes.push_back(iface.getModportType(ESIRTLBuilder::sourceStr));
     updated = true;
   }
 
@@ -341,7 +352,7 @@ bool ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
     // When we find one, construct an interface, and add the 'sink' modport to
     // the type list.
     InterfaceOp iface = build->getOrConstructInterface(chanTy);
-    ModportType sinkPort = iface.getModportType(build->sink);
+    ModportType sinkPort = iface.getModportType(ESIRTLBuilder::sinkStr);
     newArgTypes.push_back(sinkPort);
     argAttrs.push_back(resAttrs[resNum]);
     updated = true;
@@ -383,7 +394,8 @@ void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
     // Get the interface from the cache, and make sure it's the same one as
     // being used in the module.
     auto iface = build->getOrConstructInterface(instChanTy);
-    if (iface.getModportType(build->source) != funcTy.getInput(opNum)) {
+    if (iface.getModportType(ESIRTLBuilder::sourceStr) !=
+        funcTy.getInput(opNum)) {
       inst.emitOpError("ESI ChannelPort (operand #")
           << opNum << ") doesn't match module!";
       ++opNum;
@@ -397,10 +409,10 @@ void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
     auto ifaceInst =
         instBuilder.create<InterfaceInstanceOp>(iface.getInterfaceType());
     GetModportOp sinkModport =
-        instBuilder.create<GetModportOp>(ifaceInst, build->sink);
+        instBuilder.create<GetModportOp>(ifaceInst, ESIRTLBuilder::sinkStr);
     instBuilder.create<UnwrapSVInterface>(op, sinkModport);
     GetModportOp sourceModport =
-        instBuilder.create<GetModportOp>(ifaceInst, build->source);
+        instBuilder.create<GetModportOp>(ifaceInst, ESIRTLBuilder::sourceStr);
     // Finally, add the correct modport to the list of operands.
     newOperands.push_back(sourceModport);
   }
@@ -422,7 +434,8 @@ void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
     // Get the interface from the cache, and make sure it's the same one as
     // being used in the module.
     auto iface = build->getOrConstructInterface(instChanTy);
-    if (iface.getModportType(build->sink) != funcTy.getInput(opNum)) {
+    if (iface.getModportType(ESIRTLBuilder::sinkStr) !=
+        funcTy.getInput(opNum)) {
       inst.emitOpError("ESI ChannelPort (result #")
           << resNum << ", operand #" << opNum << ") doesn't match module!";
       ++opNum;
@@ -438,14 +451,14 @@ void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
     auto ifaceInst =
         instBuilder.create<InterfaceInstanceOp>(iface.getInterfaceType());
     GetModportOp sourceModport =
-        instBuilder.create<GetModportOp>(ifaceInst, build->source);
+        instBuilder.create<GetModportOp>(ifaceInst, ESIRTLBuilder::sourceStr);
     auto newChannel =
         instBuilder.create<WrapSVInterface>(res.getType(), sourceModport);
     // Connect all the old users of the output channel with the newly wrapped
     // replacement channel.
     res.replaceAllUsesWith(newChannel);
     GetModportOp sinkModport =
-        instBuilder.create<GetModportOp>(ifaceInst, build->sink);
+        instBuilder.create<GetModportOp>(ifaceInst, ESIRTLBuilder::sinkStr);
     // And add the modport on the other side to the new operand list.
     newOperands.push_back(sinkModport);
   }
@@ -570,6 +583,92 @@ struct ESItoRTLPass : public LowerESItoRTLBase<ESItoRTLPass> {
 };
 } // anonymous namespace
 
+namespace {
+/// Lower a `wrap.iface` to `wrap.vr` by extracting the wires then feeding the
+/// new `wrap.vr`.
+struct WrapInterfaceLower : public OpConversionPattern<WrapSVInterface> {
+public:
+  WrapInterfaceLower(MLIRContext *ctxt) : OpConversionPattern(ctxt) {}
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(WrapSVInterface wrap, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final;
+};
+} // anonymous namespace
+
+LogicalResult
+WrapInterfaceLower::matchAndRewrite(WrapSVInterface wrap,
+                                    ArrayRef<Value> operands,
+                                    ConversionPatternRewriter &rewriter) const {
+  if (operands.size() != 1)
+    return rewriter.notifyMatchFailure(wrap, [&operands](Diagnostic &d) {
+      d << "wrap.iface has 1 argument. Got " << operands.size() << "operands";
+    });
+  auto sinkModport = dyn_cast<GetModportOp>(operands[0].getDefiningOp());
+  if (!sinkModport)
+    return failure();
+  auto ifaceInstance =
+      dyn_cast<InterfaceInstanceOp>(sinkModport.iface().getDefiningOp());
+  if (!ifaceInstance)
+    return failure();
+
+  auto loc = wrap.getLoc();
+  auto validSignal = rewriter.create<ReadInterfaceSignalOp>(
+      loc, ifaceInstance, ESIRTLBuilder::validStr);
+  auto dataSignal = rewriter.create<ReadInterfaceSignalOp>(
+      loc, ifaceInstance, ESIRTLBuilder::dataStr);
+  auto wrapVR = rewriter.create<WrapValidReady>(loc, dataSignal, validSignal);
+  rewriter.create<AssignInterfaceSignalOp>(
+      loc, ifaceInstance, ESIRTLBuilder::readyStr, wrapVR.ready());
+  rewriter.replaceOp(wrap, {wrapVR.chanOutput()});
+  return success();
+}
+
+namespace {
+/// Lower an unwrap interface to just extract the wires and feed them into an
+/// `unwrap.vr`.
+struct UnwrapInterfaceLower : public OpConversionPattern<UnwrapSVInterface> {
+public:
+  UnwrapInterfaceLower(MLIRContext *ctxt) : OpConversionPattern(ctxt) {}
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(UnwrapSVInterface wrap, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final;
+};
+} // anonymous namespace
+
+LogicalResult UnwrapInterfaceLower::matchAndRewrite(
+    UnwrapSVInterface unwrap, ArrayRef<Value> operands,
+    ConversionPatternRewriter &rewriter) const {
+  if (operands.size() != 2)
+    return rewriter.notifyMatchFailure(unwrap, [&operands](Diagnostic &d) {
+      d << "Unwrap.iface has 2 arguments. Got " << operands.size()
+        << "operands";
+    });
+
+  auto sourceModport = dyn_cast<GetModportOp>(operands[1].getDefiningOp());
+  if (!sourceModport)
+    return failure();
+  auto ifaceInstance =
+      dyn_cast<InterfaceInstanceOp>(sourceModport.iface().getDefiningOp());
+  if (!ifaceInstance)
+    return failure();
+
+  auto loc = unwrap.getLoc();
+  auto readySignal = rewriter.create<ReadInterfaceSignalOp>(
+      loc, ifaceInstance, ESIRTLBuilder::readyStr);
+  auto unwrapVR =
+      rewriter.create<UnwrapValidReady>(loc, operands[0], readySignal);
+  rewriter.create<AssignInterfaceSignalOp>(
+      loc, ifaceInstance, ESIRTLBuilder::validStr, unwrapVR.valid());
+  rewriter.create<AssignInterfaceSignalOp>(
+      loc, ifaceInstance, ESIRTLBuilder::dataStr, unwrapVR.rawOutput());
+  rewriter.eraseOp(unwrap);
+  return success();
+}
+
 void ESItoRTLPass::runOnOperation() {
   auto top = getOperation();
   auto ctxt = &getContext();
@@ -577,13 +676,18 @@ void ESItoRTLPass::runOnOperation() {
   // Set up a conversion and give it a set of laws.
   ConversionTarget pass1Target(*ctxt);
   pass1Target.addLegalDialect<RTLDialect>();
+  pass1Target.addLegalDialect<SVDialect>();
   pass1Target.addLegalOp<WrapValidReady, UnwrapValidReady>();
+
+  pass1Target.addIllegalOp<WrapSVInterface, UnwrapSVInterface>();
   pass1Target.addIllegalOp<PipelineStage>();
 
   // Add all the conversion patterns.
   ESIRTLBuilder esiBuilder(top);
   OwningRewritePatternList patterns;
   patterns.insert<PipelineStageLowering>(esiBuilder, ctxt);
+  patterns.insert<WrapInterfaceLower>(ctxt);
+  patterns.insert<UnwrapInterfaceLower>(ctxt);
 
   // Run the conversion.
   if (failed(applyPartialConversion(top, pass1Target, std::move(patterns))))
