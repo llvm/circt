@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implement the folding and canonicalizations for FIRRTL ops. 
+// This file implement the folding and canonicalizations for FIRRTL ops.
 //
 //===----------------------------------------------------------------------===//
 

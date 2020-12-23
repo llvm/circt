@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implement the FIRRTL dialect type system. 
+// This file implement the FIRRTL dialect type system.
 //
 //===----------------------------------------------------------------------===//
 
