@@ -6,7 +6,7 @@
 
 //===----------------------------------------------------------------------===//
 //
-// This is the main Handshake to FIRRTL Conversion Pass Implementation. 
+// This is the main Handshake to FIRRTL Conversion Pass Implementation.
 //
 //===----------------------------------------------------------------------===//
 

@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This is the main Standard to StaticLogic Conversion Pass Implementation. 
+// This is the main Standard to StaticLogic Conversion Pass Implementation.
 //
 //===----------------------------------------------------------------------===//
 

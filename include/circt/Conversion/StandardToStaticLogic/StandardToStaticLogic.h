@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // This file declares passes which together will lower the Standard dialect to
-// StaticLogic dialect. 
+// StaticLogic dialect.
 //
 //===----------------------------------------------------------------------===//
 

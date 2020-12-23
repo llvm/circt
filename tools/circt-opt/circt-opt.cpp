@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-// 
+//
 // This file implements the 'circt-opt' tool, which is the circt analog of
 // mlir-opt, used to drive compiler passes, e.g. for testing.
 //
