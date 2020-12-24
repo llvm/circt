@@ -43,7 +43,7 @@ struct ExportCosimSchema {
   }
 
   /// Emit an ID in capnp format.
-  llvm::raw_ostream &emitId(llvm::hash_code id) {
+  llvm::raw_ostream &emitId(uint64_t id) {
     return os << "@" << llvm::format_hex(id, /*width=*/16 + 2);
   }
 
@@ -179,7 +179,7 @@ LogicalResult ExportCosimSchema::emit() {
   });
 
   // Compute and emit the capnp file id.
-  llvm::hash_code fileHash;
+  uint64_t fileHash = 0;
   for (ChannelPort chanPort : types)
     fileHash = llvm::hashing::detail::hash_16_bytes(fileHash,
                                                     getCapnpTypeID(chanPort));

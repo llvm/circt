@@ -19,7 +19,7 @@ module {
     // CHECK:  %0 = esi.cosim %clk, %rstn, %send.x, 1 {name = "TestEP"} : !esi.channel<si14> -> !esi.channel<i32>
 
     // Ensure that the file hash is deterministic.
-    // CAPNP: @0x30a137adfabf5da2;
+    // CAPNP: @0x26284dc1dd383bdb;
     // CAPNP-LABEL: struct ESI_si14 @0x8ee0bd493e80e8a1
     // CAPNP:         i @0 :Int16;
     // CAPNP-LABEL: struct ESI_i32 @0x424ad8e97bb0ff57
