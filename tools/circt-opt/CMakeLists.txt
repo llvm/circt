@@ -9,7 +9,7 @@ llvm_update_compile_flags(circt-opt)
 target_link_libraries(circt-opt
   PRIVATE
   CIRCTFIRRTLTransforms
-  MLIRESI
+  CIRCTESI
   MLIRFIRRTL
   CIRCTFIRRTLToLLHD
   CIRCTFIRRTLToRTL

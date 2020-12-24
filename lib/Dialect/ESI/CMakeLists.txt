@@ -1,4 +1,4 @@
-add_circt_dialect_library(MLIRESI
+add_circt_dialect_library(CIRCTESI
   ESIDialect.cpp
   ESIOps.cpp
   ESIPasses.cpp
