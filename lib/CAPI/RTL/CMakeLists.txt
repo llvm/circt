@@ -7,5 +7,5 @@ add_circt_library(CIRCTCAPIRTL
 
   LINK_LIBS PUBLIC
   MLIRCAPIIR
-  MLIRRTL
+  CIRCTRTL
   )
