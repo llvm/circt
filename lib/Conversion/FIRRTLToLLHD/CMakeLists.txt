@@ -9,6 +9,6 @@ add_circt_conversion_library(CIRCTFIRRTLToLLHD
 
   LINK_LIBS PUBLIC
   MLIRLLHD
-  MLIRFIRRTL
+  CIRCTFIRRTL
   MLIRTransforms
 )

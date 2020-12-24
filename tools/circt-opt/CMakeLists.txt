@@ -10,7 +10,7 @@ target_link_libraries(circt-opt
   PRIVATE
   CIRCTFIRRTLTransforms
   CIRCTESI
-  MLIRFIRRTL
+  CIRCTFIRRTL
   CIRCTFIRRTLToLLHD
   CIRCTFIRRTLToRTL
   MLIRHandshakeOps

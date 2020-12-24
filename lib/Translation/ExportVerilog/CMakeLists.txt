@@ -6,7 +6,7 @@ add_circt_translation_library(CIRCTExportVerilog
   ADDITIONAL_HEADER_DIRS
 
   LINK_LIBS PUBLIC
-  MLIRFIRRTL
+  CIRCTFIRRTL
   CIRCTRTL
   CIRCTSV
   MLIRTranslation

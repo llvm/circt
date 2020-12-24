@@ -15,5 +15,5 @@ add_circt_library(CIRCTHandshakeToFIRRTL
   MLIRSupport
   MLIRTransforms
   MLIRHandshakeOps
-  MLIRFIRRTL
+  CIRCTFIRRTL
   )
