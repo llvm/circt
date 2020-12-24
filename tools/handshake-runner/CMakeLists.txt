@@ -8,5 +8,5 @@ target_link_libraries(handshake-runner PRIVATE
   ${dialect_libs}
   ${conversion_libs}
   MLIRHandshakeOps
-  MLIRStandardToHandshake
+  CIRCTStandardToHandshake
   )
