@@ -1,4 +1,4 @@
-add_circt_conversion_library(MLIRFIRRTLToRTL
+add_circt_conversion_library(CIRCTFIRRTLToRTL
   LowerToRTL.cpp
 
   DEPENDS
@@ -8,8 +8,8 @@ add_circt_conversion_library(MLIRFIRRTLToRTL
   Core
 
   LINK_LIBS PUBLIC
-  MLIRFIRRTL
-  MLIRRTL
-  MLIRSV
+  CIRCTFIRRTL
+  CIRCTRTL
+  CIRCTSV
   MLIRTransforms
 )
