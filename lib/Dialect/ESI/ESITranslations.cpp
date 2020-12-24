@@ -179,7 +179,7 @@ LogicalResult ExportCosimSchema::emit() {
   });
 
   // Compute and emit the capnp file id.
-  uint64_t fileHash = 0;
+  uint64_t fileHash = 2544816649379317016; // Some random number.
   for (ChannelPort chanPort : types)
     fileHash = llvm::hashing::detail::hash_16_bytes(fileHash,
                                                     getCapnpTypeID(chanPort));
