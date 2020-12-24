@@ -5,11 +5,11 @@ add_circt_library(CIRCTStandardToHandshake
   ${MLIR_MAIN_INCLUDE_DIR}/mlir/Conversion/StandardToHandshake
 
   LINK_LIBS PUBLIC
+  CIRCTHandshakeOps
   MLIRIR
   MLIRPass
   MLIRStandard
   MLIRSupport
   MLIRTransforms
-  CIRCTHandshakeOps
   MLIRAffineToStandard
   )

@@ -10,9 +10,9 @@ add_circt_dialect_library(CIRCTLLHDTransforms
   CIRCTLLHDTransformsIncGen
 
   LINK_LIBS PUBLIC
+  CIRCTLLHD
   MLIREDSC
   MLIRIR
   MLIRStandard
-  CIRCTLLHD
   MLIRTransformUtils
 )

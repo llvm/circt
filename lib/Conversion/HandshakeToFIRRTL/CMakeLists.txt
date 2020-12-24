@@ -9,11 +9,11 @@ add_circt_library(CIRCTHandshakeToFIRRTL
   MLIRHandshakeInterfacesIncGen
 
   LINK_LIBS PUBLIC
+  CIRCTFIRRTL
+  CIRCTHandshakeOps
   MLIRIR
   MLIRPass
   MLIRStandard
   MLIRSupport
   MLIRTransforms
-  CIRCTHandshakeOps
-  CIRCTFIRRTL
   )
