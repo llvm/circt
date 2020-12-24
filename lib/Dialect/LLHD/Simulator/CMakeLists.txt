@@ -28,7 +28,7 @@ add_circt_library(CIRCTLLHDSimEngine
 
     LINK_LIBS PUBLIC
     MLIRLLHD
-    MLIRLLHDToLLVM
+    CIRCTLLHDToLLVM
     CIRCTLLHDSimState
     circt-llhd-signals-runtime-wrappers
     MLIRExecutionEngine
