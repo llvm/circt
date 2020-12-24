@@ -73,7 +73,7 @@ module {
   // CHECK-NEXT:   assign r8 = a % b;
   // CHECK-NEXT:   assign r9 = $signed(a) % $signed(b);
   // CHECK-NEXT:   assign r10 = a << b;
-  // CHECK-NEXT:   assign r11 = a >>> b;
+  // CHECK-NEXT:   assign r11 = a >> b;
   // CHECK-NEXT:   assign r12 = $signed(a) >>> $signed(b);
   // CHECK-NEXT:   assign r13 = a | b;
   // CHECK-NEXT:   assign r14 = a & b;
