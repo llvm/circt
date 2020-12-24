@@ -13,6 +13,6 @@ add_circt_dialect_library(CIRCTLLHDTransforms
   MLIREDSC
   MLIRIR
   MLIRStandard
-  MLIRLLHD
+  CIRCTLLHD
   MLIRTransformUtils
 )

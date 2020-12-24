@@ -27,7 +27,7 @@ add_circt_library(CIRCTLLHDSimEngine
     Engine.cpp
 
     LINK_LIBS PUBLIC
-    MLIRLLHD
+    CIRCTLLHD
     CIRCTLLHDToLLVM
     CIRCTLLHDSimState
     circt-llhd-signals-runtime-wrappers

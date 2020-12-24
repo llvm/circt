@@ -8,7 +8,7 @@ add_circt_conversion_library(CIRCTFIRRTLToLLHD
   Core
 
   LINK_LIBS PUBLIC
-  MLIRLLHD
+  CIRCTLLHD
   CIRCTFIRRTL
   MLIRTransforms
 )

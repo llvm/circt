@@ -15,7 +15,7 @@ target_link_libraries(circt-opt
   CIRCTFIRRTLToRTL
   MLIRHandshakeOps
   CIRCTHandshakeToFIRRTL
-  MLIRLLHD
+  CIRCTLLHD
   CIRCTLLHDToLLVM
   CIRCTLLHDTransforms
   CIRCTRTL

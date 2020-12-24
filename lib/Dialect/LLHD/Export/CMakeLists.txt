@@ -5,6 +5,6 @@ add_circt_translation_library(CIRCTExportLLHD
   ${PROJECT_SOURCE_DIR}/include/circt/Target/Verilog
 
   LINK_LIBS PUBLIC
-  MLIRLLHD
+  CIRCTLLHD
   MLIRTranslation
   )
