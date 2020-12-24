@@ -905,7 +905,7 @@ private:
     return emitBinary(op, Multiply, "%", true);
   }
   SubExprInfo visitComb(rtl::ShlOp op) { return emitBinary(op, Shift, "<<"); }
-  SubExprInfo visitComb(rtl::ShrUOp op) { return emitBinary(op, Shift, ">>>"); }
+  SubExprInfo visitComb(rtl::ShrUOp op) { return emitBinary(op, Shift, ">>"); }
   SubExprInfo visitComb(rtl::ShrSOp op) {
     return emitBinary(op, Shift, ">>>", true);
   }
