@@ -390,6 +390,12 @@ ParseResult FIRParser::parseIntLit(APInt &result, const Twine &message) {
   case FIRToken::integer:
     if (spelling.getAsInteger(10, result))
       return emitError(message), failure();
+
+    // Make sure that the returned APInt has a zero at the top so clients don't
+    // confuse it with a negative number.
+    if (result.isNegative())
+      result = result.zext(result.getBitWidth() + 1);
+
     consumeToken(FIRToken::integer);
     return success();
 
@@ -431,8 +437,16 @@ ParseResult FIRParser::parseIntLit(APInt &result, const Twine &message) {
 
     if (spelling.getAsInteger(base, result))
       return emitError("invalid character in integer literal"), failure();
+
+    // We just parsed the positive version of this number.  Make sure it has
+    // a zero at the top so clients don't confuse it with a negative number and
+    // so the negation (in the case of a negative sign) doesn't overflow.
+    if (result.isNegative())
+      result = result.zext(result.getBitWidth() + 1);
+
     if (isNegative)
       result = -result;
+
     consumeToken(FIRToken::string);
     return success();
   }

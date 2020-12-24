@@ -506,5 +506,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       read-under-write => undefined
       ; CHECK:         %bar = firrtl.mem "Undefined" {depth = 1 : i64, name = "bar", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<MPORT: flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<3>, mask: uint<1>>>, io_deq_bits_MPORT: bundle<addr: flip<uint<1>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<3>>>
 
- 
-
+  ; CHECK-LABEL: firrtl.module @issue354(%tmp5: !firrtl.flip<sint<19>>) {
+  module issue354 :
+    output tmp5: SInt<19>
+    tmp5 <= SInt<19>(8)
+     ; CHECK: %c8_si19 = firrtl.constant(8 : si19) : !firrtl.sint<19>
+     ; CHECK: firrtl.connect %tmp5, %c8_si19 : !firrtl.flip<sint<19>>, !firrtl.sint<19>
