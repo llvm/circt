@@ -17,7 +17,7 @@ target_link_libraries(circt-opt
   MLIRHandshakeToFIRRTL
   MLIRLLHD
   MLIRLLHDToLLVM
-  MLIRLLHDTransforms
+  CIRCTLLHDTransforms
   MLIRRTL
   MLIRRTLToLLHD
   MLIRStandardToHandshake
