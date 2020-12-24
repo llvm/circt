@@ -30,11 +30,12 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: [[SUB:%.+]] = rtl.sub [[ADD]], %in1 : i4
     %2 = firrtl.sub %0, %1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
-    // CHECK: [[PADRES:%.+]] = rtl.sext %in2 : (i2) -> i3
-    %3 = firrtl.pad %in2c, 3 : (!firrtl.uint<2>) -> !firrtl.sint<3>
+    %c0_si2 = firrtl.constant(1 : si2) : !firrtl.sint<2>
+    // CHECK: [[PADRES:%.+]] = rtl.sext %c1_i2 : (i2) -> i3
+    %3 = firrtl.pad %c0_si2, 3 : (!firrtl.sint<2>) -> !firrtl.sint<3>
 
-    // CHECK: [[PADRES2:%.+]] = rtl.zext [[PADRES]] : (i3) -> i4
-    %4 = firrtl.pad %3, 4 : (!firrtl.sint<3>) -> !firrtl.uint<4>
+    // CHECK: [[PADRES2:%.+]] = rtl.zext %in2 : (i2) -> i4
+    %4 = firrtl.pad %in2c, 4 : (!firrtl.uint<2>) -> !firrtl.uint<4>
 
     // CHECK: [[IN2EXT:%.+]] = rtl.zext %in2 : (i2) -> i4
     // CHECK: [[XOR:%.+]] = rtl.xor [[IN2EXT]], [[PADRES2]] : i4
@@ -187,6 +188,11 @@ module attributes {firrtl.mainModule = "Simple"} {
     // Noop
     %47 = firrtl.asClock %44 : (!firrtl.uint<1>) -> !firrtl.clock
     %48 = firrtl.asAsyncReset %44 : (!firrtl.uint<1>) -> !firrtl.asyncreset
+
+    // Issue #353
+    // CHECK: [[PADRES_EXT:%.+]] = rtl.sext [[PADRES]] : (i3) -> i8
+    // CHECK: = rtl.and %in3, [[PADRES_EXT]] : i8
+    %49 = firrtl.and %in3c, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.uint<8>
 
     %out4c = firrtl.asPassive %out4 : (!firrtl.flip<uint<4>>) -> !firrtl.uint<4>
     %out4d = firrtl.stdIntCast %out4c : (!firrtl.uint<4>) -> i4

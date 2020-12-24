@@ -755,14 +755,11 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
 Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
   assert(value.getType().isa<FIRRTLType>() && destType.isa<FIRRTLType>() &&
          "input/output value should be FIRRTL");
+  auto destFIRType = destType.cast<FIRRTLType>();
 
   auto result = getLoweredValue(value);
   if (!result)
     return {};
-
-  auto destFIRType = destType.cast<FIRRTLType>();
-  if (value.getType().cast<FIRRTLType>() == destFIRType)
-    return result;
 
   // We only know how to extend integer types with known width.
   auto destIntType = destFIRType.dyn_cast<IntType>();
@@ -781,7 +778,9 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
 
   auto resultType = builder->getIntegerType(destWidth);
 
-  if (destIntType.isSigned())
+  // Extension follows the sign of the source value, not the destination.
+  auto valueFIRType = value.getType().cast<FIRRTLType>().getPassiveType();
+  if (valueFIRType.cast<IntType>().isSigned())
     return builder->create<rtl::SExtOp>(resultType, result);
 
   return builder->create<rtl::ZExtOp>(resultType, result);
