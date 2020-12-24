@@ -1,5 +1,16 @@
 #!/bin/bash
+##===- utils/get-verilator.sh - Install Verilator ------------*- Script -*-===##
+# 
+# Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+# 
+##===----------------------------------------------------------------------===##
+#
 # Downloads, compiles, and installs Verilator into $/ext
+# Verilator can be used to check SystemVerilog code.
+#
+##===----------------------------------------------------------------------===##
 
 EXT_DIR=$(cd "$(dirname "$BASH_SOURCE[0]")/../ext" && pwd)
 VERILATOR_VER=4.102

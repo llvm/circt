@@ -1,5 +1,11 @@
 //===- Server.cpp - Cosim RPC server ----------------------------*- C++ -*-===//
 //
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
 // Definitions for the RPC server class. Capnp C++ RPC servers are based on
 // 'libkj' and its asyncrony model plus the capnp C++ API, both of which feel
 // very foreign. In general, both RPC arguments and returns are passed as a C++
