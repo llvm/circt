@@ -10,6 +10,6 @@ add_circt_library(CIRCTStandardToHandshake
   MLIRStandard
   MLIRSupport
   MLIRTransforms
-  MLIRHandshakeOps
+  CIRCTHandshakeOps
   MLIRAffineToStandard
   )
