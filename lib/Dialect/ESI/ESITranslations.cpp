@@ -181,7 +181,8 @@ LogicalResult ExportCosimSchema::emit() {
   // Compute and emit the capnp file id.
   llvm::hash_code fileHash;
   for (ChannelPort chanPort : types)
-    fileHash = llvm::hash_combine(fileHash, getCapnpTypeID(chanPort));
+    fileHash = llvm::hashing::detail::hash_16_bytes(fileHash,
+                                                    getCapnpTypeID(chanPort));
   emitId(fileHash) << ";\n\n";
 
   // Iterate through the various types and emit their schemas.
