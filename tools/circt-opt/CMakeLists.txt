@@ -22,7 +22,7 @@ target_link_libraries(circt-opt
   CIRCTRTLToLLHD
   CIRCTStandardToHandshake
   CIRCTStandardToStaticLogic
-  MLIRStaticLogicOps
+  CIRCTStaticLogicOps
   CIRCTSV
 
   MLIRParser
