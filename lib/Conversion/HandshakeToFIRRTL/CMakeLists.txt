@@ -1,4 +1,4 @@
-add_circt_library(MLIRHandshakeToFIRRTL
+add_circt_library(CIRCTHandshakeToFIRRTL
   HandshakeToFIRRTL.cpp
 
   ADDITIONAL_HEADER_DIRS
