@@ -8,6 +8,6 @@ add_circt_translation_library(CIRCTExportVerilog
   LINK_LIBS PUBLIC
   MLIRFIRRTL
   CIRCTRTL
-  MLIRSV
+  CIRCTSV
   MLIRTranslation
   )

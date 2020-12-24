@@ -10,6 +10,6 @@ add_circt_conversion_library(CIRCTFIRRTLToRTL
   LINK_LIBS PUBLIC
   MLIRFIRRTL
   CIRCTRTL
-  MLIRSV
+  CIRCTSV
   MLIRTransforms
 )
