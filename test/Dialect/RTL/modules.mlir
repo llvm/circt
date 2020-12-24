@@ -24,7 +24,7 @@ module {
   // CHECK-LABEL: rtl.externmodule @D_ATTR(i1 {rtl.name = "a"}) -> (i1, i1) attributes {filename = "test.v", parameters = {DEFAULT = 0 : i64}}
   // CHECK-NOT: {
 
-  rtl.module @A(%d: i1, %e: i1 {rtl.inout}) -> (i1, i1) {
+  rtl.module @A(%d: i1, %e: !rtl.inout<i1>) -> (i1, i1) {
     // Instantiate @B as a RTL module with result-as-output sementics
     %r1, %r2 = rtl.instance "b1" @B(%d) : (i1) -> (i1, i1)
     // Instantiate @C
@@ -34,7 +34,7 @@ module {
     // Output values
     rtl.output %g, %r1 : i1, i1
   }
-  // CHECK-LABEL: rtl.module @A(%d: i1, %e: i1 {rtl.inout}) -> (i1, i1)
+  // CHECK-LABEL: rtl.module @A(%d: i1, %e: !rtl.inout<i1>) -> (i1, i1)
   // CHECK-NEXT:  %b1.nameOfPortInSV, %b1.1 = rtl.instance "b1" @B(%d) : (i1) -> (i1, i1)
   // CHECK-NEXT:  %c1.0, %c1.1 = rtl.instance "c1" @C(%d) : (i1) -> (i1, i1)
 
