@@ -4,8 +4,8 @@ get_property(conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
 set(LIBS
         ${dialect_libs}
         ${conversion_libs}
-        MLIRLLHD
-        MLIRLLHDToLLVM
+        CIRCTLLHD
+        CIRCTLLHDToLLVM
         CIRCTLLHDSimEngine
         )
 

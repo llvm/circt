@@ -1,4 +1,4 @@
-add_circt_library(MLIRCAPIRTL
+add_circt_library(CIRCTCAPIRTL
 
   RTLDialect.cpp
 
@@ -6,6 +6,6 @@ add_circt_library(MLIRCAPIRTL
   ${MLIR_MAIN_INCLUDE_DIR}/mlir-c
 
   LINK_LIBS PUBLIC
+  CIRCTRTL
   MLIRCAPIIR
-  MLIRRTL
   )

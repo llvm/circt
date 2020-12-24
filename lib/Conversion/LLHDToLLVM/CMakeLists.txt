@@ -1,14 +1,14 @@
-add_circt_conversion_library(MLIRLLHDToLLVM
+add_circt_conversion_library(CIRCTLLHDToLLVM
   LLHDToLLVM.cpp
 
   DEPENDS
-  MLIRLLHDConversionPassIncGen
+  CIRCTLLHDConversionPassIncGen
 
   LINK_COMPONENTS
   Core
 
   LINK_LIBS PUBLIC
-  MLIRLLHD
+  CIRCTLLHD
   MLIRLLVMIR
   MLIRStandardToLLVM
   MLIRVector

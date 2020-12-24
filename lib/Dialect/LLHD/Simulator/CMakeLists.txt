@@ -27,10 +27,10 @@ add_circt_library(CIRCTLLHDSimEngine
     Engine.cpp
 
     LINK_LIBS PUBLIC
-    MLIRLLHD
-    MLIRLLHDToLLVM
+    CIRCTLLHD
+    CIRCTLLHDToLLVM
     CIRCTLLHDSimState
+    CIRCTLLHDSimTrace
     circt-llhd-signals-runtime-wrappers
     MLIRExecutionEngine
-    CIRCTLLHDSimTrace
     )
