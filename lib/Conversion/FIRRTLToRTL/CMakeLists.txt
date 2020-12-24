@@ -1,4 +1,4 @@
-add_circt_conversion_library(MLIRFIRRTLToRTL
+add_circt_conversion_library(CIRCTFIRRTLToRTL
   LowerToRTL.cpp
 
   DEPENDS

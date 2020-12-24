@@ -12,7 +12,7 @@ target_link_libraries(circt-opt
   MLIRESI
   MLIRFIRRTL
   CIRCTFIRRTLToLLHD
-  MLIRFIRRTLToRTL
+  CIRCTFIRRTLToRTL
   MLIRHandshakeOps
   MLIRHandshakeToFIRRTL
   MLIRLLHD
