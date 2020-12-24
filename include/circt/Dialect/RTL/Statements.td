@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-def ConnectOp : RTLOp<"connect", [SameTypeOperands]> {
+def ConnectOp : RTLOp<"connect", [InOutTypeConstraint<"src", "dest">]> {
   let summary = "Connect two signals";
   let description = [{
     Connect Operation:
@@ -19,11 +19,11 @@ def ConnectOp : RTLOp<"connect", [SameTypeOperands]> {
     ```
     }];
 
-  let arguments = (ins AnyType:$dest, AnyType:$src);
+  let arguments = (ins InOutType:$dest, AnyType:$src);
   let results = (outs);
   
   let assemblyFormat = [{
-    $dest `,` $src  attr-dict `:` type($dest)
+    $dest `,` $src  attr-dict `:` type($src)
   }];
 }
 

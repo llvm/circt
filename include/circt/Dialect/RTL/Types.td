@@ -15,7 +15,7 @@ class RTLType<string name> : TypeDef<RTLDialect, name> { }
 
 // A simple fixed size array.
 def ArrayType : RTLType<"Array"> {
-  let summary = "A fixed-sized array";
+  let summary = "fixed-sized array";
   let description = [{
     Fixed sized RTL arrays are roughly similar to C arrays. On the wire (vs.
     in a memory), arrays are always packed. Memory layout is not defined as
@@ -35,7 +35,7 @@ def ArrayType : RTLType<"Array"> {
 }
 
 def InOutType : RTLType<"InOut"> {
-  let summary = "inout type for ports and wires";
+  let summary = "inout type";
   let description = [{
     InOut type is used for model operations and values that have "connection"
     semantics, instead of typical dataflow behavior.  This is used for wires
