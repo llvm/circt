@@ -2,11 +2,11 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-add_circt_conversion_library(MLIRRTLToLLHD
+add_circt_conversion_library(CIRCTRTLToLLHD
   RTLToLLHD.cpp
 
   DEPENDS
-  MLIRRTLToLLHDConversionPassIncGen
+  CIRCTRTLToLLHDConversionPassIncGen
 
   LINK_COMPONENTS
   Core
