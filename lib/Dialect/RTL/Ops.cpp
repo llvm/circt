@@ -569,6 +569,26 @@ struct ConstantIntMatcher {
 static inline ConstantIntMatcher m_RConstant(APInt &value) {
   return ConstantIntMatcher(value);
 }
+//===----------------------------------------------------------------------===//
+// RegOp
+//===----------------------------------------------------------------------===//
+
+void RegOp::build(::mlir::OpBuilder &odsBuilder,
+                  ::mlir::OperationState &odsState, Type elementType,
+                  StringAttr name) {
+  if (name)
+    odsState.addAttribute("name", name);
+
+  odsState.addTypes(InOutType::get(elementType));
+}
+
+/// Suggest a name for each result value based on the saved result names
+/// attribute.
+void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the wire has an optional 'name' attribute, use it.
+  if (auto nameAttr = getAttrOfType<StringAttr>("name"))
+    setNameFn(getResult(), nameAttr.getValue());
+}
 
 //===----------------------------------------------------------------------===//
 // WireOp
@@ -583,8 +603,8 @@ void WireOp::build(::mlir::OpBuilder &odsBuilder,
   odsState.addTypes(InOutType::get(elementType));
 }
 
-static void printWireOp(OpAsmPrinter &p, WireOp &op) {
-  p << op.getOperationName();
+static void printRegWireOp(OpAsmPrinter &p, Operation *op) {
+  p << op->getName();
   // Note that we only need to print the "name" attribute if the asmprinter
   // result name disagrees with it.  This can happen in strange cases, e.g.
   // when there are conflicts.
@@ -592,22 +612,22 @@ static void printWireOp(OpAsmPrinter &p, WireOp &op) {
 
   SmallString<32> resultNameStr;
   llvm::raw_svector_ostream tmpStream(resultNameStr);
-  p.printOperand(op.getResult(), tmpStream);
-  auto expectedName = op.nameAttr();
+  p.printOperand(op->getResult(0), tmpStream);
+  auto expectedName = op->getAttrOfType<StringAttr>("name");
   if (!expectedName ||
       tmpStream.str().drop_front() != expectedName.getValue()) {
     namesDisagree = true;
   }
 
   if (namesDisagree)
-    p.printOptionalAttrDict(op.getAttrs());
+    p.printOptionalAttrDict(op->getAttrs());
   else
-    p.printOptionalAttrDict(op.getAttrs(), {"name"});
+    p.printOptionalAttrDict(op->getAttrs(), {"name"});
 
-  p << " : " << op.getType();
+  p << " : " << op->getResult(0).getType();
 }
 
-static ParseResult parseWireOp(OpAsmParser &parser, OperationState &result) {
+static ParseResult parseRegWireOp(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc typeLoc;
   Type resultType;
 

@@ -59,13 +59,18 @@ static int getBitWidthOrSentinel(Type type) {
       .Case<IntegerType>([](IntegerType integerType) {
         // Turn zero-bit values into single bit ones for simplicity.  This
         // generates correct logic, even though it isn't efficient.
+        // FIXME: This actually isn't correct at all!
         auto result = integerType.getWidth();
         return result ? result : 1;
+      })
+      .Case<rtl::InOutType>([](rtl::InOutType inoutType) {
+        return getBitWidthOrSentinel(inoutType.getElementType());
       })
       .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
       .Case<SIntType, UIntType>([](IntType intType) {
         // Turn zero-bit values into single bit ones for simplicity.  This
         // occurs in the addr lines of mems with depth=1.
+        // FIXME: This actually isn't correct at all!
         auto result = intType.getWidthOrSentinel();
         return result ? result : 1;
       })
@@ -2231,7 +2236,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
   // Return the word (e.g. "wire") in Verilog to declare the specified thing.
   auto getVerilogDeclWord = [](Operation *op) -> StringRef {
-    if (isa<RegOp>(op) || isa<RegInitOp>(op))
+    if (isa<RegOp>(op) || isa<RegInitOp>(op) || isa<rtl::RegOp>(op))
       return "reg";
 
     // Interfaces instances use the name of the declared interface.
@@ -2269,7 +2274,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       outOfLineExpressions.insert(&op);
     }
 
-    // Otherwise, it must be an expression or a declaration like a wire.
+    // Otherwise, it must be an expression or a declaration like a RegOp/WireOp.
     addName(result, op.getAttrOfType<StringAttr>("name"));
 
     // If we are emitting inline wire decls, don't measure or emit this wire.
@@ -2471,6 +2476,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitStmt(rtl::InstanceOp op) {
       return emitter.emitStatement(op), true;
     }
+    bool visitStmt(rtl::RegOp op) { return true; }
     bool visitStmt(rtl::WireOp op) { return true; }
 
     bool visitUnhandledStmt(Operation *op) { return false; }
