@@ -31,6 +31,7 @@ public:
                        IfDefOp, IfOp, AlwaysAtPosEdgeOp,
                        // Other Statements.
                        YieldOp, AliasOp, FWriteOp, FatalOp, FinishOp,
+                       VerbatimOp,
                        // Type declarations.
                        InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
                        InterfaceInstanceOp, GetModportOp,
@@ -75,6 +76,7 @@ public:
   HANDLE(FWriteOp, Unhandled);
   HANDLE(FatalOp, Unhandled);
   HANDLE(FinishOp, Unhandled);
+  HANDLE(VerbatimOp, Unhandled);
 
   // Type declarations.
   HANDLE(InterfaceOp, Unhandled);
