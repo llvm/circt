@@ -38,6 +38,11 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     sv.fatal
     // CHECK-NEXT:   $finish
     sv.finish
+
+    // CHECK-NEXT: Emit some stuff in verilog
+    // CHECK-NEXT: Great power and responsibility!
+    sv.verbatim "Emit some stuff in verilog\nGreat power and responsibility!"
+
     // CHECK-NEXT:   {{end$}}
   }
 }

@@ -155,6 +155,13 @@ def FatalOp : SVOp<"fatal"> {
   let assemblyFormat = [{ attr-dict }];
 }
 
+def VerbatimOp : SVOp<"verbatim"> {
+  let summary = "verbatim opaque text emitted to SystemVerilog file";
+  let arguments = (ins StrAttr:$string);
+
+  let assemblyFormat = [{$string attr-dict}];
+}
+
 //===----------------------------------------------------------------------===//
 // Verification Statements
 //===----------------------------------------------------------------------===//

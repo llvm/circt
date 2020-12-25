@@ -322,6 +322,7 @@ public:
   void emitStatement(sv::FWriteOp op);
   void emitStatement(sv::FatalOp op);
   void emitStatement(sv::FinishOp op);
+  void emitStatement(sv::VerbatimOp op);
   void emitStatement(sv::AssertOp op);
   void emitStatement(sv::AssumeOp op);
   void emitStatement(sv::CoverOp op);
@@ -1633,6 +1634,36 @@ void ModuleEmitter::emitStatement(sv::FatalOp op) {
   emitLocationInfoAndNewLine(ops);
 }
 
+void ModuleEmitter::emitStatement(sv::VerbatimOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  // Drop extraneous \n's off the end of the string.
+  StringRef string = op.string();
+  while (!string.empty() && string.back() == '\n')
+    string = string.drop_back();
+
+  // Emit each \n separated piece of the string with each piece properly
+  // indented.  The convention is to not emit the \n so
+  // emitLocationInfoAndNewLine can do that for the last line.
+  bool isFirst = true;
+  indent();
+
+  while (!string.empty()) {
+    auto lhsRhs = string.split('\n');
+    if (isFirst)
+      isFirst = false;
+    else {
+      os << '\n';
+      indent();
+    }
+    os << lhsRhs.first;
+    string = lhsRhs.second;
+  }
+
+  emitLocationInfoAndNewLine(ops);
+}
+
 void ModuleEmitter::emitStatement(sv::FinishOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -2466,6 +2497,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitSV(sv::FWriteOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::FatalOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::FinishOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::VerbatimOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::AssertOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::AssumeOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::CoverOp op) { return emitter.emitStatement(op), true; }
