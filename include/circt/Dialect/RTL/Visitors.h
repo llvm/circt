@@ -122,7 +122,7 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<ConnectOp, OutputOp, WireOp, InstanceOp>(
+        .template Case<ConnectOp, OutputOp, RegOp, WireOp, InstanceOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitStmt(expr, args...);
             })
@@ -162,6 +162,7 @@ public:
   // Basic nodes.
   HANDLE(ConnectOp, Unhandled);
   HANDLE(OutputOp, Unhandled);
+  HANDLE(RegOp, Unhandled);
   HANDLE(WireOp, Unhandled);
   HANDLE(InstanceOp, Unhandled);
 #undef HANDLE

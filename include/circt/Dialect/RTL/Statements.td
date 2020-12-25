@@ -19,7 +19,7 @@ def ConnectOp : RTLOp<"connect", [InOutTypeConstraint<"src", "dest">]> {
     ```
     }];
 
-  let arguments = (ins InOutType:$dest, AnyType:$src);
+  let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
   
   let assemblyFormat = [{
@@ -27,12 +27,28 @@ def ConnectOp : RTLOp<"connect", [InOutTypeConstraint<"src", "dest">]> {
   }];
 }
 
+def RegOp : RTLOp<"reg", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
+  let summary = "Define a new reg";
+  let arguments = (ins OptionalAttr<StrAttr>:$name);
+  let results = (outs InOutType:$result);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilderDAG<(ins "::mlir::Type":$elementType,
+                      CArg<"StringAttr", "StringAttr()">:$name)>
+  ];
+
+  // We handle the name in a custom way, so we use a customer parser/printer.
+  let printer = [{ printRegWireOp(p, *this); }];
+  let parser = [{ return parseRegWireOp(parser, result); }];
+}
+
 def WireOp : RTLOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let summary = "Define a new wire";
   let description = [{
     Declare a new wire:
     ```
-      %name = rtl.wire : t1
+      %name = rtl.wire : !rtl.inout<t1>
     ```
     }];
 
@@ -46,8 +62,8 @@ def WireOp : RTLOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   ];
 
   // We handle the name in a custom way, so we use a customer parser/printer.
-  let printer = [{ printWireOp(p, *this); }];
-  let parser = [{ return parseWireOp(parser, result); }];
+  let printer = [{ printRegWireOp(p, *this); }];
+  let parser = [{ return parseRegWireOp(parser, result); }];
 }
 
 def ReadInOutOp
