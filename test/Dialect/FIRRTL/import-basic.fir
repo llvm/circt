@@ -512,3 +512,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     tmp5 <= SInt<19>(8)
      ; CHECK: %c8_si19 = firrtl.constant(8 : si19) : !firrtl.sint<19>
      ; CHECK: firrtl.connect %tmp5, %c8_si19 : !firrtl.flip<sint<19>>, !firrtl.sint<19>
+
+   ; CHECK-LABEL: firrtl.module @issue347
+  module issue347 :
+    output tmp12: SInt<4>
+    tmp12 <= SInt<4>(-4)
+    ; CHECK: %c-4_si4 = firrtl.constant(-4 : si4) : !firrtl.sint<4>
+
+  ; CHECK-LABEL: firrtl.extmodule @issue183() 
+  ; CHECK: attributes {parameters = {A = -1 : i4}}
+  extmodule issue183:
+     parameter A = -1

@@ -399,6 +399,20 @@ ParseResult FIRParser::parseIntLit(APInt &result, const Twine &message) {
     consumeToken(FIRToken::integer);
     return success();
 
+  case FIRToken::signed_integer:
+    assert(spelling[0] == '+' || spelling[0] == '-');
+    if (spelling.drop_front().getAsInteger(10, result))
+      return emitError(message), failure();
+
+    // Make sure that the returned APInt has a zero at the top so clients don't
+    // confuse it with a negative number.
+    if (result.isNegative())
+      result = result.zext(result.getBitWidth() + 1);
+
+    if (spelling[0] == '-')
+      result = -result;
+    consumeToken(FIRToken::signed_integer);
+    return success();
   case FIRToken::string: {
     // Drop the quotes.
     assert(spelling.front() == '"' && spelling.back() == '"');
@@ -1033,7 +1047,8 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
   SmallVector<int32_t, 4> integers;
   if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
         // Handle the integer constant case if present.
-        if (getToken().isAny(FIRToken::integer, FIRToken::string)) {
+        if (getToken().isAny(FIRToken::integer, FIRToken::signed_integer,
+                             FIRToken::string)) {
           integers.push_back(0);
           return parseIntLit(integers.back(), "expected integer");
         }
@@ -2229,12 +2244,13 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
       return emitError("expected parameter value"), failure();
 
     case FIRToken::integer: {
+    case FIRToken::signed_integer:
       APInt result;
-      if (getTokenSpelling().getAsInteger(10, result))
-        return emitError("invalid integer parameter"), failure();
+      if (parseIntLit(result, "invalid integer parameter"))
+        return failure();
+
       value = builder.getIntegerAttr(
           builder.getIntegerType(result.getBitWidth()), result);
-      consumeToken(FIRToken::integer);
       break;
     }
     case FIRToken::string: {

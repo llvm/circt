@@ -234,11 +234,6 @@ FIRToken FIRLexer::lexToken() {
 
     case '+':
     case '-':
-      if (!llvm::isDigit(*curPtr))
-        return emitError(tokStart, "unexpected character");
-      ++curPtr;
-      return lexFloatingPoint(tokStart);
-
     case '0':
     case '1':
     case '2':
@@ -378,36 +373,28 @@ FIRToken FIRLexer::lexString(const char *tokStart) {
 ///
 ///   UnsignedInt ::= '0' | PosInt
 ///   PosInt ::= [1-9] ([0-9])*
+///   DoubleLit ::=
+///       ( '+' | '-' )? Digit+ '.' Digit+ ( 'E' ( '+' | '-' )? Digit+ )?
 ///
 FIRToken FIRLexer::lexNumber(const char *tokStart) {
-  assert(llvm::isDigit(curPtr[-1]));
+  assert(llvm::isDigit(curPtr[-1]) || curPtr[-1] == '+' || curPtr[-1] == '-');
+
+  // There needs to be at least one digit.
+  if (!llvm::isDigit(*curPtr) && !llvm::isDigit(curPtr[-1]))
+    return emitError(tokStart, "unexpected character after sign");
 
   while (llvm::isDigit(*curPtr))
     ++curPtr;
 
-  // If we encounter a '.', then this is a floating point literal.
-  if (*curPtr == '.' && llvm::isDigit(curPtr[1]))
-    return lexFloatingPoint(tokStart);
+  // If we encounter a '.' followed by a digit, then this is a floating point
+  // literal, otherwise this is an integer or negative integer.
+  if (*curPtr != '.' || !llvm::isDigit(curPtr[1])) {
+    if (*tokStart == '-' || *tokStart == '+')
+      return formToken(FIRToken::signed_integer, tokStart);
+    return formToken(FIRToken::integer, tokStart);
+  }
 
-  return formToken(FIRToken::integer, tokStart);
-}
-
-/// Lex a floating point literal.  This is called after lexing the optional
-/// sign, as well as at least one digit.
-///
-/// DoubleLit ::=
-///       ( '+' | '-' )? Digit+ '.' Digit+ ( 'E' ( '+' | '-' )? Digit+ )?
-FIRToken FIRLexer::lexFloatingPoint(const char *tokStart) {
-  assert(llvm::isDigit(curPtr[-1]));
-
-  // Consume any more digits we may encounter.
-  while (llvm::isDigit(*curPtr))
-    ++curPtr;
-
-  if (*curPtr != '.')
-    return emitError(tokStart, "expected '.' in floating point literal");
-  if (!llvm::isDigit(curPtr[1]))
-    return emitError(tokStart, "expected digit in floating point literal");
+  // Lex a floating point literal.
   curPtr += 2;
   while (llvm::isDigit(*curPtr))
     ++curPtr;
