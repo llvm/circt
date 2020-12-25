@@ -1255,6 +1255,38 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
   results.insert<Folder>(context);
 }
 
+OpFoldResult AndROp::fold(ArrayRef<Attribute> operands) {
+  auto input = this->input();
+
+  // Constant fold
+  APInt value;
+  if (matchPattern(input, m_RConstant(value)))
+    return getIntAttr(APInt(1, value.isAllOnesValue()), getContext());
+
+  return {};
+}
+
+OpFoldResult OrROp::fold(ArrayRef<Attribute> operands) {
+  auto input = this->input();
+
+  // Constant fold
+  APInt value;
+  if (matchPattern(input, m_RConstant(value)))
+    return getIntAttr(APInt(1, value != 0), getContext());
+
+  return {};
+}
+
+OpFoldResult XorROp::fold(ArrayRef<Attribute> operands) {
+  auto input = this->input();
+
+  // Constant fold
+  APInt value;
+  if (matchPattern(input, m_RConstant(value)))
+    return getIntAttr(APInt(1, value.countPopulation() & 1), getContext());
+
+  return {};
+}
 //===----------------------------------------------------------------------===//
 // ReadInOutOp
 //===----------------------------------------------------------------------===//
