@@ -83,6 +83,10 @@ if (MSVC_IDE OR XCODE)
 endif()
 set(LLVM_LIT_ARGS "${LIT_ARGS_DEFAULT}" CACHE STRING "Default options for lit")
 
+#-------------------------------------------------------------------------------
+# CIRCT configuration
+#-------------------------------------------------------------------------------
+
 # CIRCT project.
 set(CIRCT_MAIN_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR} ) # --src-root
 set(CIRCT_MAIN_INCLUDE_DIR ${CIRCT_MAIN_SRC_DIR}/include)
@@ -90,12 +94,7 @@ set(CIRCT_MAIN_INCLUDE_DIR ${CIRCT_MAIN_SRC_DIR}/include)
 set(CIRCT_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(CIRCT_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 set(CIRCT_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/include )
-
 set(CIRCT_TOOLS_DIR ${CMAKE_BINARY_DIR}/bin)
-
-#-------------------------------------------------------------------------------
-# CIRCT configuration
-#-------------------------------------------------------------------------------
 
 include(AddCIRCT)
 
