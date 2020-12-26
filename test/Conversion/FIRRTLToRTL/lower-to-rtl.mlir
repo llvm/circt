@@ -112,7 +112,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %18 = firrtl.mul %6, %2 : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<12>
 
     // CHECK-NEXT: [[IN3SEXT:%.+]] = rtl.sext %in3 : (i8) -> i9
-    // CHECK-NEXT: [[PADRESSEXT:%.+]] = rtl.zext [[PADRES]] : (i3) -> i9
+    // CHECK-NEXT: [[PADRESSEXT:%.+]] = rtl.sext [[PADRES]] : (i3) -> i9
     // CHECK-NEXT: = rtl.divs [[IN3SEXT]], [[PADRESSEXT]] : i9
     %19 = firrtl.div %in3c, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<9>
 
@@ -193,6 +193,14 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK: [[PADRES_EXT:%.+]] = rtl.sext [[PADRES]] : (i3) -> i8
     // CHECK: = rtl.and %in3, [[PADRES_EXT]] : i8
     %49 = firrtl.and %in3c, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.uint<8>
+
+    // Issue #355: https://github.com/llvm/circt/issues/355
+    // CHECK: [[DIVLHS:%.+]] = rtl.zext %c104_i8 : (i8) -> i10
+    // CHECK: [[DIV:%.+]] = rtl.divu [[DIVLHS]], %c306_i10 : i10
+    // CHECK: = rtl.extract [[DIV]] from 0 : (i10) -> i8
+    %c104_ui8 = firrtl.constant(104 : ui8) : !firrtl.uint<8>
+    %c306_ui10 = firrtl.constant(306 : ui10) : !firrtl.uint<10>
+    %50 = firrtl.div %c104_ui8, %c306_ui10 : (!firrtl.uint<8>, !firrtl.uint<10>) -> !firrtl.uint<8>
 
     %out4c = firrtl.asPassive %out4 : (!firrtl.flip<uint<4>>) -> !firrtl.uint<4>
     %out4d = firrtl.stdIntCast %out4c : (!firrtl.uint<4>) -> i4
@@ -349,10 +357,11 @@ module attributes {firrtl.mainModule = "Simple"} {
 
     // CHECK-NEXT: %tmp48 = rtl.wire : !rtl.inout<i27>
     %tmp48 = firrtl.wire {name = "tmp48"} : !firrtl.uint<27>
-    // CHECK-NEXT: %0 = rtl.extract %inpi from 0 : (i65) -> i27
-    // CHECK-NEXT: %1 = rtl.divu %inp2, %0 : i27
+    // CHECK-NEXT: %0 = rtl.zext %inp2 : (i27) -> i65
+    // CHECK-NEXT: %1 = rtl.divu %0, %inpi : i65
     %0 = firrtl.div %inp_2, %inp_i : (!firrtl.uint<27>, !firrtl.uint<65>) -> !firrtl.uint<27>
-    // CHECK-NEXT: rtl.connect %tmp48, %1 : i27
+    // CHECK-NEXT: %2 = rtl.extract %1 from 0 : (i65) -> i27
+    // CHECK-NEXT: rtl.connect %tmp48, %2 : i27
     firrtl.connect %tmp48, %0 : !firrtl.uint<27>, !firrtl.uint<27>
   }
 
