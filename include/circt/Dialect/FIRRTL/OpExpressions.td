@@ -181,9 +181,15 @@ def NEQPrimOp : BinaryPrimOp<"neq", "getCompareResult", [Commutative]>;
 
 let hasCanonicalizer = 1 in
 def CatPrimOp  : BinaryPrimOp<"cat", "getCatResult">;
-def DShlPrimOp : BinaryPrimOp<"dshl", "getDShlResult">;
+def DShlPrimOp : BinaryPrimOp<"dshl", "getDShlResult"> {
+  // RHS must be UIntType
+  let arguments = (ins IntType:$lhs, UIntType:$rhs);
+}
 def DShlwPrimOp : BinaryPrimOp<"dshlw", "getDShlwResult">;
-def DShrPrimOp : BinaryPrimOp<"dshr", "getDShrResult">;
+def DShrPrimOp : BinaryPrimOp<"dshr", "getDShrResult"> {
+  // RHS must be UIntType
+  let arguments = (ins IntType:$lhs, UIntType:$rhs);
+}
 
 def ValidIfPrimOp : BinaryPrimOp<"validif", "getValidIfResult"> {
   let arguments = (ins UInt1Type:$lhs, PassiveType:$rhs);

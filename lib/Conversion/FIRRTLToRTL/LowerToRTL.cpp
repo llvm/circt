@@ -48,6 +48,12 @@ static Type lowerType(Type type) {
   return {};
 }
 
+/// Given two FIRRTL integer types, return the widest one.
+static IntType getWidestIntType(Type t1, Type t2) {
+  auto t1c = t1.cast<IntType>(), t2c = t2.cast<IntType>();
+  return t2c.getWidth() > t1c.getWidth() ? t2c : t1c;
+}
+
 /// Cast from a standard type to a FIRRTL type, potentially with a flip.
 static Value castToFIRRTLType(Value val, Type type,
                               ImplicitLocOpBuilder &builder) {
@@ -71,20 +77,6 @@ static Value castFromFIRRTLType(Value val, Type type,
   // Strip off Flip type if needed.
   val = builder.createOrFold<AsPassivePrimOp>(val);
   return builder.createOrFold<StdIntCastOp>(type, val);
-}
-
-/// Given a value of standard integer type, convert it to the specified integer
-/// type, inserting a zero extend or truncate as needed.
-static Value zeroExtendOrTruncate(Value val, Type destTy,
-                                  ImplicitLocOpBuilder &builder) {
-  assert(val.getType().isa<IntegerType>() && destTy.isa<IntegerType>() &&
-         "only works with integer values");
-  if (val.getType() == destTy)
-    return val;
-
-  if (val.getType().getIntOrFloatBitWidth() < destTy.getIntOrFloatBitWidth())
-    return builder.createOrFold<rtl::ZExtOp>(destTy, val);
-  return builder.createOrFold<rtl::ExtractOp>(destTy, val, 0);
 }
 
 static Value extendOrTruncateFIRRTL(Value val, IntType destTy,
@@ -582,6 +574,8 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult lowerBinOpToVariadic(Operation *op);
   LogicalResult lowerCmpOp(Operation *op, ICmpPredicate signedOp,
                            ICmpPredicate unsignedOp);
+  template <typename SignedOp, typename UnsignedOp>
+  LogicalResult lowerDivLikeOp(Operation *op);
 
   LogicalResult visitExpr(CatPrimOp op);
 
@@ -620,7 +614,9 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(MulPrimOp op) {
     return lowerBinOpToVariadic<rtl::MulOp>(op);
   }
-  LogicalResult visitExpr(DivPrimOp op);
+  LogicalResult visitExpr(DivPrimOp op) {
+    return lowerDivLikeOp<rtl::DivSOp, rtl::DivUOp>(op);
+  }
   LogicalResult visitExpr(RemPrimOp op);
 
   // Other Operations
@@ -628,8 +624,12 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(HeadPrimOp op);
   LogicalResult visitExpr(ShlPrimOp op);
   LogicalResult visitExpr(ShrPrimOp op);
-  LogicalResult visitExpr(DShlPrimOp op);
-  LogicalResult visitExpr(DShrPrimOp op);
+  LogicalResult visitExpr(DShlPrimOp op) {
+    return lowerDivLikeOp<rtl::ShlOp, rtl::ShlOp>(op);
+  }
+  LogicalResult visitExpr(DShrPrimOp op) {
+    return lowerDivLikeOp<rtl::ShrSOp, rtl::ShrUOp>(op);
+  }
   LogicalResult visitExpr(TailPrimOp op);
   LogicalResult visitExpr(MuxPrimOp op);
   LogicalResult visitExpr(ValidIfPrimOp op);
@@ -1032,6 +1032,32 @@ LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, ICmpPredicate signedOp,
       op, resultType, lhsIntType.isSigned() ? signedOp : unsignedOp, lhs, rhs);
 }
 
+/// Lower a divide or dynamic shift, where the operation has to be performed in
+/// the widest type of the result and two inputs then truncated down.
+template <typename SignedOp, typename UnsignedOp>
+LogicalResult FIRRTLLowering::lowerDivLikeOp(Operation *op) {
+  // rtl has equal types for these, firrtl doesn't.  The type of the firrtl RHS
+  // may be wider than the LHS, and we cannot truncate off the high bits
+  // (because an overlarge amount is supposed to shift in sign or zero bits).
+  auto opType = op->getResult(0).getType().cast<IntType>();
+  auto resultType = getWidestIntType(opType, op->getOperand(1).getType());
+  resultType = getWidestIntType(resultType, op->getOperand(0).getType());
+  auto lhs = getLoweredAndExtendedValue(op->getOperand(0), resultType);
+  auto rhs = getLoweredAndExtendedValue(op->getOperand(1), resultType);
+  if (!lhs || !rhs)
+    return failure();
+
+  Value result;
+  if (opType.isSigned())
+    result = builder->createOrFold<SignedOp>(lhs, rhs);
+  else
+    result = builder->createOrFold<UnsignedOp>(lhs, rhs);
+
+  if (resultType == opType)
+    return setLowering(op->getResult(0), result);
+  return setLoweringTo<rtl::ExtractOp>(op, lowerType(opType), result, 0);
+}
+
 LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
   auto lhs = getLoweredValue(op.lhs());
   auto rhs = getLoweredValue(op.rhs());
@@ -1039,35 +1065,6 @@ LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
     return failure();
 
   return setLoweringTo<rtl::ConcatOp>(op, ValueRange({lhs, rhs}));
-}
-
-LogicalResult FIRRTLLowering::visitExpr(DivPrimOp op) {
-  // FIRRTL has the width of (a/b) == Wa or Wa+1 for Unsigned/signed operations,
-  // but performs the division in the same width as the widest input, which can
-  // be the divisor, and the result for signed divide is larger than the inputs
-  // in some case.  Extend or truncate the operands to the proper size before
-  // performing the divide so we don't lose precision.
-  auto resultType = op.getType().cast<IntType>();
-  if (op.getOperand(1).getType().cast<IntType>().getWidth() >
-      resultType.cast<IntType>().getWidth())
-    resultType = op.getOperand(1).getType().cast<IntType>();
-
-  auto lhs = getLoweredAndExtendedValue(op.getOperand(0), resultType);
-  auto rhs = getLoweredAndExtendedValue(op.getOperand(1), resultType);
-  if (!lhs || !rhs)
-    return failure();
-
-  // Emit the result operation.
-  Value div;
-  if (resultType.cast<IntType>().isSigned())
-    div = builder->createOrFold<rtl::DivSOp>(lhs, rhs);
-  else
-    div = builder->createOrFold<rtl::DivUOp>(lhs, rhs);
-
-  // Truncate the result down if necessary.
-  if (resultType == op.getType())
-    return setLowering(op, div);
-  return setLoweringTo<rtl::ExtractOp>(op, lowerType(op.getType()), div, 0);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
@@ -1158,36 +1155,6 @@ LogicalResult FIRRTLLowering::visitExpr(ShrPrimOp op) {
 
   Type resultType = builder->getIntegerType(inWidth - shiftAmount);
   return setLoweringTo<rtl::ExtractOp>(op, resultType, input, shiftAmount);
-}
-
-LogicalResult FIRRTLLowering::visitExpr(DShlPrimOp op) {
-  // rtl has equal types for these, firrtl doesn't.  The type of the firrtl RHS
-  // may be wider than the LHS, and a small shift amount needs to be zero
-  // extended even for signed shifts.
-  auto lhs = getLoweredAndExtendedValue(op.lhs(), op.result().getType());
-  auto rhs = getLoweredValue(op.rhs());
-  if (!lhs || !rhs)
-    return failure();
-
-  // Zero extend or truncate the shift amount if needed.
-  rhs = zeroExtendOrTruncate(rhs, lhs.getType(), *builder);
-  return setLoweringTo<rtl::ShlOp>(op, lhs, rhs);
-}
-
-LogicalResult FIRRTLLowering::visitExpr(DShrPrimOp op) {
-  // rtl has equal types for these, firrtl doesn't.  The type of the firrtl RHS
-  // may be wider than the LHS, and a small shift amount needs to be zero
-  // extended even for signed shifts.
-  auto lhs = getLoweredValue(op.lhs());
-  auto rhs = getLoweredValue(op.rhs());
-  if (!lhs || !rhs)
-    return failure();
-
-  // Zero extend or truncate the shift amount if needed.
-  rhs = zeroExtendOrTruncate(rhs, lhs.getType(), *builder);
-  if (op.getType().cast<IntType>().isSigned())
-    return setLoweringTo<rtl::ShrSOp>(op, lhs, rhs);
-  return setLoweringTo<rtl::ShrUOp>(op, lhs, rhs);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(TailPrimOp op) {
