@@ -161,17 +161,25 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: rtl.andr
     %28 = firrtl.andr %27 : (!firrtl.uint<12>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: = rtl.extract [[VAL18]] from 0 : (i12) -> i3
-    // CHECK-NEXT: = rtl.shru [[XOR]], {{.*}} : i3
+    // CHECK-NEXT: [[XOREXT:%.+]] = rtl.zext [[XOR]] : (i3) -> i12
+    // CHECK-NEXT: [[SHIFT:%.+]] = rtl.shru [[XOREXT]], [[VAL18]] : i12
+    // CHECK-NEXT: = rtl.extract [[SHIFT]] from 0 : (i12) -> i3
     %29 = firrtl.dshr %24, %18 : (!firrtl.uint<3>, !firrtl.uint<12>) -> !firrtl.uint<3>
 
     // CHECK-NEXT: = rtl.zext {{.*}} : (i3) -> i8
-    // CHECK-NEXT: = rtl.shrs %in3, {{.*}} : i8
-    %a29 = firrtl.dshr %in3c, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<3>
+    // CHECK-NEXT: [[SHIFT:%.+]] = rtl.shrs %in3, {{.*}} : i8
+    // CHECK-NEXT: = rtl.extract [[SHIFT]] from 0 : (i8) -> i3
+    %a29 = firrtl.dshr %in3c, %9 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<3>
 
     // CHECK-NEXT: = rtl.zext {{.*}} : (i3) -> i8
-    // CHECK-NEXT: = rtl.shl %in3, {{.*}} : i8
-    %30 = firrtl.dshl %in3c, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<8>
+    // CHECK-NEXT: [[SHIFT:%.+]] = rtl.shl %in3, {{.*}} : i8
+    %30 = firrtl.dshl %in3c, %9 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<8>
+
+    // Issue #367: https://github.com/llvm/circt/issues/367
+    // CHECK-NEXT: = rtl.sext %40 : (i4) -> i12
+    // CHECK-NEXT: [[SHIFT:%.+]] = rtl.shrs {{.*}}, {{.*}} : i12
+    // CHECK-NEXT: = rtl.extract [[SHIFT]] from 0 : (i12) -> i4
+    %31 = firrtl.dshr %25, %27 : (!firrtl.sint<4>, !firrtl.uint<12>) -> !firrtl.sint<4>
 
     // CHECK-NEXT: rtl.icmp "ule" {{.*}}, {{.*}} : i4
     %41 = firrtl.leq %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
