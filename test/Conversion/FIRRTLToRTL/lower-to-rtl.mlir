@@ -30,9 +30,10 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: [[SUB:%.+]] = rtl.sub [[ADD]], %in1 : i4
     %2 = firrtl.sub %0, %1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
-    %c0_si2 = firrtl.constant(1 : si2) : !firrtl.sint<2>
-    // CHECK: [[PADRES:%.+]] = rtl.sext %c1_i2 : (i2) -> i3
-    %3 = firrtl.pad %c0_si2, 3 : (!firrtl.sint<2>) -> !firrtl.sint<3>
+    %in2s = firrtl.asSInt %in2c : (!firrtl.uint<2>) -> !firrtl.sint<2>
+
+    // CHECK: [[PADRES:%.+]] = rtl.sext %in2 : (i2) -> i3
+    %3 = firrtl.pad %in2s, 3 : (!firrtl.sint<2>) -> !firrtl.sint<3>
 
     // CHECK: [[PADRES2:%.+]] = rtl.zext %in2 : (i2) -> i4
     %4 = firrtl.pad %in2c, 4 : (!firrtl.uint<2>) -> !firrtl.uint<4>
@@ -195,8 +196,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %49 = firrtl.and %in3c, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.uint<8>
 
     // Issue #355: https://github.com/llvm/circt/issues/355
-    // CHECK: [[DIVLHS:%.+]] = rtl.zext %c104_i8 : (i8) -> i10
-    // CHECK: [[DIV:%.+]] = rtl.divu [[DIVLHS]], %c306_i10 : i10
+    // CHECK: [[DIV:%.+]] = rtl.divu %c104_i10, %c306_i10 : i10
     // CHECK: = rtl.extract [[DIV]] from 0 : (i10) -> i8
     %c104_ui8 = firrtl.constant(104 : ui8) : !firrtl.uint<8>
     %c306_ui10 = firrtl.constant(306 : ui10) : !firrtl.uint<10>

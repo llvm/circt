@@ -55,7 +55,7 @@ static Value castToFIRRTLType(Value val, Type type,
 
   // If this was an Analog type, it will be converted to an InOut type.
   if (type.isa<AnalogType>())
-    return builder.create<AnalogInOutCastOp>(firType, val);
+    return builder.createOrFold<AnalogInOutCastOp>(firType, val);
 
   val = builder.createOrFold<StdIntCastOp>(firType.getPassiveType(), val);
 
@@ -83,8 +83,8 @@ static Value zeroExtendOrTruncate(Value val, Type destTy,
     return val;
 
   if (val.getType().getIntOrFloatBitWidth() < destTy.getIntOrFloatBitWidth())
-    return builder.create<rtl::ZExtOp>(destTy, val);
-  return builder.create<rtl::ExtractOp>(destTy, val, 0);
+    return builder.createOrFold<rtl::ZExtOp>(destTy, val);
+  return builder.createOrFold<rtl::ExtractOp>(destTy, val, 0);
 }
 
 static Value extendOrTruncateFIRRTL(Value val, IntType destTy,
@@ -97,8 +97,10 @@ static Value extendOrTruncateFIRRTL(Value val, IntType destTy,
     return val;
 
   if (srcTy.getWidthOrSentinel() > destTy.getWidthOrSentinel())
-    return builder.create<TailPrimOp>(destTy, val, destTy.getWidthOrSentinel());
-  return builder.create<PadPrimOp>(destTy, val, destTy.getWidthOrSentinel());
+    return builder.createOrFold<TailPrimOp>(destTy, val,
+                                            destTy.getWidthOrSentinel());
+  return builder.createOrFold<PadPrimOp>(destTy, val,
+                                         destTy.getWidthOrSentinel());
 }
 
 //===----------------------------------------------------------------------===//
@@ -304,7 +306,7 @@ static Value tryToFindOutputValue(Value portValue) {
 
   // Convert fliped sources to passive sources.
   if (!connectSrc.getType().cast<FIRRTLType>().isPassive())
-    connectSrc = builder.create<AsPassivePrimOp>(connectSrc);
+    connectSrc = builder.createOrFold<AsPassivePrimOp>(connectSrc);
 
   // We know it must be the destination operand due to the types, but the source
   // may not match the destination width.
@@ -781,9 +783,9 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
   // Extension follows the sign of the source value, not the destination.
   auto valueFIRType = value.getType().cast<FIRRTLType>().getPassiveType();
   if (valueFIRType.cast<IntType>().isSigned())
-    return builder->create<rtl::SExtOp>(resultType, result);
+    return builder->createOrFold<rtl::SExtOp>(resultType, result);
 
-  return builder->create<rtl::ZExtOp>(resultType, result);
+  return builder->createOrFold<rtl::ZExtOp>(resultType, result);
 }
 
 /// Set the lowered value of 'orig' to 'result', remembering this in a map.
@@ -927,18 +929,13 @@ LogicalResult FIRRTLLowering::visitExpr(NotPrimOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(NegPrimOp op) {
-  auto operand = getLoweredValue(op.input());
+  // FIRRTL negate always adds a bit.
+  // -x  ---> 0-sext(x) or 0-zext(x)
+  auto operand = getLoweredAndExtendedValue(op.input(), op.getType());
   if (!operand)
     return failure();
 
-  // FIRRTL negate always adds a bit.
-  // -x  ---> 0-sext(x) or 0-zext(x)
   auto resultType = lowerType(op.getType());
-  if (getTypeOf<IntType>(op.input()).isSigned())
-    operand = builder->create<rtl::SExtOp>(resultType, operand);
-  else
-    operand = builder->create<rtl::ZExtOp>(resultType, operand);
-
   auto zero =
       builder->create<rtl::ConstantOp>(0, resultType.cast<IntegerType>());
   return setLoweringTo<rtl::SubOp>(op, zero, operand);
@@ -1061,9 +1058,9 @@ LogicalResult FIRRTLLowering::visitExpr(DivPrimOp op) {
   // Emit the result operation.
   Value div;
   if (resultType.cast<IntType>().isSigned())
-    div = builder->create<rtl::DivSOp>(lhs, rhs);
+    div = builder->createOrFold<rtl::DivSOp>(lhs, rhs);
   else
-    div = builder->create<rtl::DivUOp>(lhs, rhs);
+    div = builder->createOrFold<rtl::DivUOp>(lhs, rhs);
 
   // Truncate the result down if necessary.
   if (resultType == op.getType())
@@ -1094,9 +1091,9 @@ LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
 
   Value modInst;
   if (resultFirType.isUnsigned()) {
-    modInst = builder->create<rtl::ModUOp>(ValueRange({lhs, rhs}));
+    modInst = builder->createOrFold<rtl::ModUOp>(ValueRange({lhs, rhs}));
   } else {
-    modInst = builder->create<rtl::ModSOp>(ValueRange({lhs, rhs}));
+    modInst = builder->createOrFold<rtl::ModSOp>(ValueRange({lhs, rhs}));
   }
 
   return setLoweringTo<rtl::ExtractOp>(op, resultType, modInst, 0);
@@ -1281,8 +1278,8 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
       // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
       Value ifCond =
           builder->create<sv::TextualValueOp>(cond.getType(), "`PRINTF_COND_");
-      ifCond = builder->create<rtl::AndOp>(ValueRange{ifCond, cond},
-                                           ArrayRef<NamedAttribute>{});
+      ifCond = builder->createOrFold<rtl::AndOp>(ValueRange{ifCond, cond},
+                                                 ArrayRef<NamedAttribute>{});
       builder->create<sv::IfOp>(ifCond, [&]() {
         // Emit the sv.fwrite.
         builder->create<sv::FWriteOp>(op.formatString(), operands);
@@ -1308,8 +1305,8 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
       // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
       Value ifCond =
           builder->create<sv::TextualValueOp>(cond.getType(), "`STOP_COND_");
-      ifCond = builder->create<rtl::AndOp>(ValueRange{ifCond, cond},
-                                           ArrayRef<NamedAttribute>{});
+      ifCond = builder->createOrFold<rtl::AndOp>(ValueRange{ifCond, cond},
+                                                 ArrayRef<NamedAttribute>{});
       builder->create<sv::IfOp>(ifCond, [&]() {
         // Emit the sv.fatal or sv.finish.
         if (op.exitCode())
@@ -1350,7 +1347,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
   builder->create<sv::AlwaysAtPosEdgeOp>(clock, [&]() {
     builder->create<sv::IfOp>(enable, [&]() {
       // Create BOpTy inside the always/if.
-      builder->create<BOpTy>(predicate);
+      builder->createOrFold<BOpTy>(predicate);
     });
   });
 
