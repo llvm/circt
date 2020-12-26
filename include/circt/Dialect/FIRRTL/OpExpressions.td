@@ -129,8 +129,7 @@ class PrimOp<string mnemonic, list<OpTrait> traits = []> :
 //===----------------------------------------------------------------------===//
 
 // Base class for binary primitive operators.
-class BinaryPrimOp<string mnemonic, string resultTypeFunction,
-                   Type lhsType, Type rhsType, Type resultType,
+class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
                    list<OpTrait> traits = []> :
     PrimOp<mnemonic, traits> {
   let arguments = (ins lhsType:$lhs, rhsType:$rhs);
@@ -154,63 +153,44 @@ class BinaryPrimOp<string mnemonic, string resultTypeFunction,
   }];
 }
 
-def AddPrimOp : BinaryPrimOp<"add", "getAddSubResult",
-                             IntType, IntType, IntType, [Commutative]>;
-def SubPrimOp : BinaryPrimOp<"sub", "getAddSubResult",
-                             IntType, IntType, IntType>;
-def MulPrimOp : BinaryPrimOp<"mul", "getMulResult",
-                             IntType, IntType, IntType, [Commutative]>;
-def DivPrimOp : BinaryPrimOp<"div", "getDivResult",
-                             IntType, IntType, IntType>;
-def RemPrimOp : BinaryPrimOp<"rem", "getRemResult",
-                             IntType, IntType, IntType>;
+def AddPrimOp : BinaryPrimOp<"add", IntType, IntType, IntType, [Commutative]>;
+def SubPrimOp : BinaryPrimOp<"sub", IntType, IntType, IntType>;
+def MulPrimOp : BinaryPrimOp<"mul", IntType, IntType, IntType, [Commutative]>;
+def DivPrimOp : BinaryPrimOp<"div", IntType, IntType, IntType>;
+def RemPrimOp : BinaryPrimOp<"rem", IntType, IntType, IntType>;
 
 let hasFolder = 1 in
-def AndPrimOp : BinaryPrimOp<"and", "getBitwiseBinaryResult",
-                             IntType, IntType, UIntType, [Commutative]>;
+def AndPrimOp : BinaryPrimOp<"and", IntType, IntType, UIntType, [Commutative]>;
 let hasFolder = 1 in
-def OrPrimOp  : BinaryPrimOp<"or",  "getBitwiseBinaryResult",
-                             IntType, IntType, UIntType, [Commutative]>;
+def OrPrimOp  : BinaryPrimOp<"or",  IntType, IntType, UIntType, [Commutative]>;
 let hasFolder = 1 in
-def XorPrimOp : BinaryPrimOp<"xor", "getBitwiseBinaryResult",
-                             IntType, IntType, UIntType, [Commutative]>;
+def XorPrimOp : BinaryPrimOp<"xor", IntType, IntType, UIntType, [Commutative]>;
 
 // Comparison Operations
-def LEQPrimOp : BinaryPrimOp<"leq", "getCompareResult",
-                             IntType, IntType, UInt1Type>;
-def LTPrimOp  : BinaryPrimOp<"lt",  "getCompareResult",
-                             IntType, IntType, UInt1Type>;
-def GEQPrimOp : BinaryPrimOp<"geq", "getCompareResult",
-                             IntType, IntType, UInt1Type>;
-def GTPrimOp  : BinaryPrimOp<"gt",  "getCompareResult",
-                             IntType, IntType, UInt1Type>;
+def LEQPrimOp : BinaryPrimOp<"leq", IntType, IntType, UInt1Type>;
+def LTPrimOp  : BinaryPrimOp<"lt",  IntType, IntType, UInt1Type>;
+def GEQPrimOp : BinaryPrimOp<"geq", IntType, IntType, UInt1Type>;
+def GTPrimOp  : BinaryPrimOp<"gt",  IntType, IntType, UInt1Type>;
 let hasFolder = 1 in
-def EQPrimOp  : BinaryPrimOp<"eq",  "getCompareResult",
-                             IntType, IntType, UInt1Type, [Commutative]>;
+def EQPrimOp  : BinaryPrimOp<"eq",  IntType, IntType, UInt1Type, [Commutative]>;
 let hasFolder = 1 in
-def NEQPrimOp : BinaryPrimOp<"neq", "getCompareResult",
-                             IntType, IntType, UInt1Type, [Commutative]>;
+def NEQPrimOp : BinaryPrimOp<"neq", IntType, IntType, UInt1Type, [Commutative]>;
 
 let hasCanonicalizer = 1 in
-def CatPrimOp  : BinaryPrimOp<"cat", "getCatResult",
-                              IntType, IntType, UIntType>;
-def DShlPrimOp : BinaryPrimOp<"dshl", "getDShlResult",
-                              IntType, UIntType, IntType>;
-def DShlwPrimOp : BinaryPrimOp<"dshlw", "getDShlwResult",
-                               IntType, UIntType, IntType>;
-def DShrPrimOp : BinaryPrimOp<"dshr", "getDShrResult",
-                              IntType, UIntType, IntType>;
+def CatPrimOp   : BinaryPrimOp<"cat", IntType, IntType, UIntType>;
+def DShlPrimOp  : BinaryPrimOp<"dshl", IntType, UIntType, IntType>;
+def DShlwPrimOp : BinaryPrimOp<"dshlw", IntType, UIntType, IntType>;
+def DShrPrimOp  : BinaryPrimOp<"dshr", IntType, UIntType, IntType>;
 
-def ValidIfPrimOp : BinaryPrimOp<"validif", "getValidIfResult",
-                                 UInt1Type, PassiveType, PassiveType>;
+def ValidIfPrimOp
+  : BinaryPrimOp<"validif", UInt1Type, PassiveType, PassiveType>;
 
 //===----------------------------------------------------------------------===//
 // Unary Operations
 //===----------------------------------------------------------------------===//
 
 // Base class for binary primitive operators.
-class UnaryPrimOp<string mnemonic, string resultTypeFunction,
-                  Type srcType, Type resultType,
+class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
                   list<OpTrait> traits = []> :
     PrimOp<mnemonic, traits> {
   let arguments = (ins srcType:$input);
@@ -233,25 +213,18 @@ class UnaryPrimOp<string mnemonic, string resultTypeFunction,
   }];
 }
 
-def AsSIntPrimOp
-  : UnaryPrimOp<"asSInt", "getAsSIntResult", FIRRTLType, SIntType>;
-def AsUIntPrimOp
-  : UnaryPrimOp<"asUInt", "getAsUIntResult", FIRRTLType, UIntType>;
+def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLType, SIntType>;
+def AsUIntPrimOp : UnaryPrimOp<"asUInt", FIRRTLType, UIntType>;
 def AsAsyncResetPrimOp
-  : UnaryPrimOp<"asAsyncReset", "getAsAsyncResetResult",
-                OneBitCastableType, AsyncResetType>;
-def AsClockPrimOp
-  : UnaryPrimOp<"asClock", "getAsClockResult", OneBitCastableType, ClockType>;
-def CvtPrimOp : UnaryPrimOp<"cvt", "getCvtResult", IntType, SIntType>;
-def NegPrimOp : UnaryPrimOp<"neg", "getNegResult", IntType, SIntType>;
-def NotPrimOp : UnaryPrimOp<"not", "getNotResult", IntType, UIntType>;
+  : UnaryPrimOp<"asAsyncReset", OneBitCastableType, AsyncResetType>;
+def AsClockPrimOp : UnaryPrimOp<"asClock", OneBitCastableType, ClockType>;
+def CvtPrimOp : UnaryPrimOp<"cvt", IntType, SIntType>;
+def NegPrimOp : UnaryPrimOp<"neg", IntType, SIntType>;
+def NotPrimOp : UnaryPrimOp<"not", IntType, UIntType>;
 
-def AndRPrimOp
-  : UnaryPrimOp<"andr", "getReductionResult", IntType, UIntType>;
-def OrRPrimOp
-  : UnaryPrimOp<"orr", "getReductionResult", IntType, UIntType>;
-def XorRPrimOp
-  : UnaryPrimOp<"xorr", "getReductionResult", IntType, UIntType>;
+def AndRPrimOp : UnaryPrimOp<"andr", IntType, UIntType>;
+def OrRPrimOp : UnaryPrimOp<"orr", IntType, UIntType>;
+def XorRPrimOp : UnaryPrimOp<"xorr", IntType, UIntType>;
 
 //===----------------------------------------------------------------------===//
 // Other Operations
