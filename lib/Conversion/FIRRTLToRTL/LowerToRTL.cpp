@@ -929,13 +929,15 @@ LogicalResult FIRRTLLowering::visitExpr(NotPrimOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(NegPrimOp op) {
-  // FIRRTL negate always adds a bit.
-  // -x  ---> 0-sext(x) or 0-zext(x)
-  auto operand = getLoweredAndExtendedValue(op.input(), op.getType());
+  // FIRRTL negate always adds a bit, and always does a sign extension even if
+  // the input is unsigned.
+  // -x  ---> 0-sext(x)
+  auto operand = getLoweredValue(op.input());
   if (!operand)
     return failure();
-
   auto resultType = lowerType(op.getType());
+  operand = builder->createOrFold<rtl::SExtOp>(resultType, operand);
+
   auto zero =
       builder->create<rtl::ConstantOp>(0, resultType.cast<IntegerType>());
   return setLoweringTo<rtl::SubOp>(op, zero, operand);

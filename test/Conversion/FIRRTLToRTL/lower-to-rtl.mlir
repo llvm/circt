@@ -202,6 +202,13 @@ module attributes {firrtl.mainModule = "Simple"} {
     %c306_ui10 = firrtl.constant(306 : ui10) : !firrtl.uint<10>
     %50 = firrtl.div %c104_ui8, %c306_ui10 : (!firrtl.uint<8>, !firrtl.uint<10>) -> !firrtl.uint<8>
 
+    // Issue #364: https://github.com/llvm/circt/issues/364
+    // CHECK:      %c-873_i12 = rtl.constant(-873 : i12) : i12
+    // CHECK-NEXT: %c0_i12 = rtl.constant(0 : i12) : i12
+    // CHECK-NEXT: = rtl.sub %c0_i12, %c-873_i12 : i12
+    %c1175_ui11 = firrtl.constant(1175 : ui11) : !firrtl.uint<11>
+    %51 = firrtl.neg %c1175_ui11 : (!firrtl.uint<11>) -> !firrtl.sint<12>
+
     %out4c = firrtl.asPassive %out4 : (!firrtl.flip<uint<4>>) -> !firrtl.uint<4>
     %out4d = firrtl.stdIntCast %out4c : (!firrtl.uint<4>) -> i4
     %out5c = firrtl.asPassive %out5 : (!firrtl.flip<uint<4>>) -> !firrtl.uint<4>
