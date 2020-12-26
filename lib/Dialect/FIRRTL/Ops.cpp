@@ -879,7 +879,7 @@ static bool isSameIntegerType(FIRRTLType lhs, FIRRTLType rhs,
   return true;
 }
 
-FIRRTLType firrtl::getAddSubResult(FIRRTLType lhs, FIRRTLType rhs) {
+static FIRRTLType getAddSubResult(FIRRTLType lhs, FIRRTLType rhs) {
   int32_t width;
   if (isSameIntegerType(lhs, rhs, width)) {
     if (width != -1)
@@ -890,7 +890,15 @@ FIRRTLType firrtl::getAddSubResult(FIRRTLType lhs, FIRRTLType rhs) {
   return {};
 }
 
-FIRRTLType firrtl::getMulResult(FIRRTLType lhs, FIRRTLType rhs) {
+FIRRTLType AddPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
+  return getAddSubResult(lhs, rhs);
+}
+
+FIRRTLType SubPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
+  return getAddSubResult(lhs, rhs);
+}
+
+FIRRTLType MulPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
   if (lhs.getTypeID() != rhs.getTypeID())
     return {};
 
@@ -913,7 +921,7 @@ FIRRTLType firrtl::getMulResult(FIRRTLType lhs, FIRRTLType rhs) {
   return {};
 }
 
-FIRRTLType firrtl::getDivResult(FIRRTLType lhs, FIRRTLType rhs) {
+FIRRTLType DivPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
   if (lhs.getTypeID() != rhs.getTypeID())
     return {};
 
@@ -931,7 +939,7 @@ FIRRTLType firrtl::getDivResult(FIRRTLType lhs, FIRRTLType rhs) {
   return {};
 }
 
-FIRRTLType firrtl::getRemResult(FIRRTLType lhs, FIRRTLType rhs) {
+FIRRTLType RemPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
   if (lhs.getTypeID() != rhs.getTypeID())
     return {};
 
@@ -955,21 +963,50 @@ FIRRTLType firrtl::getRemResult(FIRRTLType lhs, FIRRTLType rhs) {
   return {};
 }
 
-FIRRTLType firrtl::getCompareResult(FIRRTLType lhs, FIRRTLType rhs) {
-  if ((lhs.isa<UIntType>() && rhs.isa<UIntType>()) ||
-      (lhs.isa<SIntType>() && rhs.isa<SIntType>()))
-    return UIntType::get(lhs.getContext(), 1);
-  return {};
-}
-
-FIRRTLType firrtl::getBitwiseBinaryResult(FIRRTLType lhs, FIRRTLType rhs) {
+static FIRRTLType getBitwiseBinaryResult(FIRRTLType lhs, FIRRTLType rhs) {
   int32_t width;
   if (isSameIntegerType(lhs, rhs, width))
     return UIntType::get(lhs.getContext(), width);
   return {};
 }
 
-FIRRTLType firrtl::getCatResult(FIRRTLType lhs, FIRRTLType rhs) {
+FIRRTLType AndPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
+  return getBitwiseBinaryResult(lhs, rhs);
+}
+FIRRTLType OrPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
+  return getBitwiseBinaryResult(lhs, rhs);
+}
+FIRRTLType XorPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
+  return getBitwiseBinaryResult(lhs, rhs);
+}
+
+static FIRRTLType getCompareResult(FIRRTLType lhs, FIRRTLType rhs) {
+  if ((lhs.isa<UIntType>() && rhs.isa<UIntType>()) ||
+      (lhs.isa<SIntType>() && rhs.isa<SIntType>()))
+    return UIntType::get(lhs.getContext(), 1);
+  return {};
+}
+
+FIRRTLType LEQPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
+  return getCompareResult(lhs, rhs);
+}
+FIRRTLType LTPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
+  return getCompareResult(lhs, rhs);
+}
+FIRRTLType GEQPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
+  return getCompareResult(lhs, rhs);
+}
+FIRRTLType GTPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
+  return getCompareResult(lhs, rhs);
+}
+FIRRTLType EQPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
+  return getCompareResult(lhs, rhs);
+}
+FIRRTLType NEQPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
+  return getCompareResult(lhs, rhs);
+}
+
+FIRRTLType CatPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
   if (auto lu = lhs.dyn_cast<UIntType>())
     if (auto ru = rhs.dyn_cast<UIntType>()) {
       int32_t width = -1;
@@ -987,7 +1024,7 @@ FIRRTLType firrtl::getCatResult(FIRRTLType lhs, FIRRTLType rhs) {
   return {};
 }
 
-FIRRTLType firrtl::getDShlResult(FIRRTLType lhs, FIRRTLType rhs) {
+FIRRTLType DShlPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
   auto lhsi = lhs.dyn_cast<IntType>();
   auto rhsui = rhs.dyn_cast<UIntType>();
   if (!rhsui || !lhsi)
@@ -1002,19 +1039,19 @@ FIRRTLType firrtl::getDShlResult(FIRRTLType lhs, FIRRTLType rhs) {
   return IntType::get(lhs.getContext(), lhsi.isSigned(), width);
 }
 
-FIRRTLType firrtl::getDShlwResult(FIRRTLType lhs, FIRRTLType rhs) {
+FIRRTLType DShlwPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
   if (!lhs.isa<IntType>() || !rhs.isa<UIntType>())
     return {};
   return lhs;
 }
 
-FIRRTLType firrtl::getDShrResult(FIRRTLType lhs, FIRRTLType rhs) {
+FIRRTLType DShrPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
   if (!lhs.isa<IntType>() || !rhs.isa<UIntType>())
     return {};
   return lhs;
 }
 
-FIRRTLType firrtl::getValidIfResult(FIRRTLType lhs, FIRRTLType rhs) {
+FIRRTLType ValidIfPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
   if (!lhs.isa<UIntType>())
     return {};
   auto lhsWidth = lhs.cast<UIntType>().getWidthOrSentinel();
@@ -1027,15 +1064,7 @@ FIRRTLType firrtl::getValidIfResult(FIRRTLType lhs, FIRRTLType rhs) {
 // Unary Primitives
 //===----------------------------------------------------------------------===//
 
-FIRRTLType firrtl::getAsAsyncResetResult(FIRRTLType input) {
-  return AsyncResetType::get(input.getContext());
-}
-
-FIRRTLType firrtl::getAsClockResult(FIRRTLType input) {
-  return ClockType::get(input.getContext());
-}
-
-FIRRTLType firrtl::getAsSIntResult(FIRRTLType input) {
+FIRRTLType AsSIntPrimOp::getResultType(FIRRTLType input) {
   if (input.isa<ClockType>() || input.isa<ResetType>() ||
       input.isa<AsyncResetType>())
     return SIntType::get(input.getContext(), 1);
@@ -1048,7 +1077,7 @@ FIRRTLType firrtl::getAsSIntResult(FIRRTLType input) {
   return {};
 }
 
-FIRRTLType firrtl::getAsUIntResult(FIRRTLType input) {
+FIRRTLType AsUIntPrimOp::getResultType(FIRRTLType input) {
   if (input.isa<ClockType>() || input.isa<ResetType>() ||
       input.isa<AsyncResetType>())
     return UIntType::get(input.getContext(), 1);
@@ -1061,7 +1090,15 @@ FIRRTLType firrtl::getAsUIntResult(FIRRTLType input) {
   return {};
 }
 
-FIRRTLType firrtl::getCvtResult(FIRRTLType input) {
+FIRRTLType AsAsyncResetPrimOp::getResultType(FIRRTLType input) {
+  return AsyncResetType::get(input.getContext());
+}
+
+FIRRTLType AsClockPrimOp::getResultType(FIRRTLType input) {
+  return ClockType::get(input.getContext());
+}
+
+FIRRTLType CvtPrimOp::getResultType(FIRRTLType input) {
   if (auto uiType = input.dyn_cast<UIntType>()) {
     auto width = uiType.getWidthOrSentinel();
     if (width != -1)
@@ -1075,7 +1112,7 @@ FIRRTLType firrtl::getCvtResult(FIRRTLType input) {
   return {};
 }
 
-FIRRTLType firrtl::getNegResult(FIRRTLType input) {
+FIRRTLType NegPrimOp::getResultType(FIRRTLType input) {
   auto inputi = input.dyn_cast<IntType>();
   if (!inputi)
     return {};
@@ -1085,17 +1122,27 @@ FIRRTLType firrtl::getNegResult(FIRRTLType input) {
   return SIntType::get(input.getContext(), width);
 }
 
-FIRRTLType firrtl::getNotResult(FIRRTLType input) {
+FIRRTLType NotPrimOp::getResultType(FIRRTLType input) {
   auto inputi = input.dyn_cast<IntType>();
   if (!inputi)
     return {};
   return UIntType::get(input.getContext(), inputi.getWidthOrSentinel());
 }
 
-FIRRTLType firrtl::getReductionResult(FIRRTLType input) {
+static FIRRTLType getReductionResult(FIRRTLType input) {
   if (!input.isa<IntType>())
     return {};
   return UIntType::get(input.getContext(), 1);
+}
+
+FIRRTLType AndRPrimOp::getResultType(FIRRTLType input) {
+  return getReductionResult(input);
+}
+FIRRTLType OrRPrimOp::getResultType(FIRRTLType input) {
+  return getReductionResult(input);
+}
+FIRRTLType XorRPrimOp::getResultType(FIRRTLType input) {
+  return getReductionResult(input);
 }
 
 //===----------------------------------------------------------------------===//

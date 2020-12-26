@@ -141,20 +141,17 @@ class BinaryPrimOp<string mnemonic, string resultTypeFunction,
        `(` type($lhs) `,` type($rhs) `)` `->` type($result)
   }];
 
-  let extraClassDeclaration = !strconcat([{
+  let extraClassDeclaration = [{
     /// Return the result for inputs with the specified type, returning a null
     /// type if the input types are invalid.
-    static FIRRTLType getResultType(FIRRTLType lhs, FIRRTLType rhs,
-                                    Location loc) {
-      return }], resultTypeFunction, [{(lhs, rhs);
-    }
+    static FIRRTLType getResultType(FIRRTLType lhs, FIRRTLType rhs);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
                                     ArrayRef<int32_t> integers, Location loc) {
       if (inputs.size() != 2 || !integers.empty())
         return {};
-      return getResultType(inputs[0], inputs[1], loc);
+      return getResultType(inputs[0], inputs[1]);
     }
-  }]);
+  }];
 }
 
 def AddPrimOp : BinaryPrimOp<"add", "getAddSubResult",
@@ -223,19 +220,17 @@ class UnaryPrimOp<string mnemonic, string resultTypeFunction,
     $input attr-dict `:` functional-type($input, $result)
   }];
 
-  let extraClassDeclaration = !strconcat([{
+  let extraClassDeclaration = [{
     /// Return the result for inputs with the specified type, returning a null
-    /// type if the input types are invalid.
-    static FIRRTLType getResultType(FIRRTLType input, Location loc) {
-      return }], resultTypeFunction, [{(input);
-    }
+    /// type if the input type is invalid.
+    static FIRRTLType getResultType(FIRRTLType input);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
                                     ArrayRef<int32_t> integers, Location loc) {
       if (inputs.size() != 1 || !integers.empty())
         return {};
-      return getResultType(inputs[0], loc);
+      return getResultType(inputs[0]);
     }
-  }]);
+  }];
 }
 
 def AsSIntPrimOp
