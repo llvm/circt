@@ -2243,8 +2243,8 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
     default:
       return emitError("expected parameter value"), failure();
 
-    case FIRToken::integer: {
-    case FIRToken::signed_integer:
+    case FIRToken::integer:
+    case FIRToken::signed_integer: {
       APInt result;
       if (parseIntLit(result, "invalid integer parameter"))
         return failure();
