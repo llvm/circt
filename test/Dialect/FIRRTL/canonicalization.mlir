@@ -118,6 +118,13 @@ firrtl.module @EQ(%in: !firrtl.uint<1>,
   %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
   %0 = firrtl.eq %in, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %out, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+
+  // Issue #368: https://github.com/llvm/circt/issues/368
+  %c3_ui2 = firrtl.constant(3 : ui2) : !firrtl.uint<2>
+  %1 = firrtl.eq %in, %c3_ui2 : (!firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<1>
+  firrtl.connect %out, %1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  // CHECK: firrtl.eq %in, %c3_ui2
+  // CHECK: firrtl.connect
 }
 
 // CHECK-LABEL: firrtl.module @NEQ

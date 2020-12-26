@@ -127,7 +127,8 @@ OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
 
     /// eq(x, 1) -> x when x is 1 bit.
     /// TODO: Support SInt<1> on the LHS etc.
-    if (value.isAllOnesValue() && lhs().getType() == getType())
+    if (value.isAllOnesValue() && lhs().getType() == getType() &&
+        rhs().getType() == getType())
       return lhs();
 
     /// TODO: eq(x, 0) -> not(x) when x is 1 bit.
@@ -151,7 +152,8 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
 
     /// neq(x, 0) -> x when x is 1 bit.
     /// TODO: Support SInt<1> on the LHS etc.
-    if (value.isNullValue() && lhs().getType() == getType())
+    if (value.isNullValue() && lhs().getType() == getType() &&
+        rhs().getType() == getType())
       return lhs();
 
     /// TODO: neq(x, 0) -> not(orr(x)) when x is >1 bit
