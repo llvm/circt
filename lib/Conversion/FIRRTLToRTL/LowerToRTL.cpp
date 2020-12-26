@@ -1043,22 +1043,32 @@ LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(DivPrimOp op) {
-  // FIRRTL has the width of (a/b) == Wa or Wa+1 for Unsigned/signed operations.
-  // Extend or truncate the operands to the result size before performing the
-  // divide so we don't lose precision.
-  auto resultType = op.getType();
+  // FIRRTL has the width of (a/b) == Wa or Wa+1 for Unsigned/signed operations,
+  // but performs the division in the same width as the widest input, which can
+  // be the divisor, and the result for signed divide is larger than the inputs
+  // in some case.  Extend or truncate the operands to the proper size before
+  // performing the divide so we don't lose precision.
+  auto resultType = op.getType().cast<IntType>();
+  if (op.getOperand(1).getType().cast<IntType>().getWidth() >
+      resultType.cast<IntType>().getWidth())
+    resultType = op.getOperand(1).getType().cast<IntType>();
+
   auto lhs = getLoweredAndExtendedValue(op.getOperand(0), resultType);
-  auto rhs = getLoweredValue(op.getOperand(1));
+  auto rhs = getLoweredAndExtendedValue(op.getOperand(1), resultType);
   if (!lhs || !rhs)
     return failure();
 
-  rhs = zeroExtendOrTruncate(rhs, lhs.getType(), *builder);
-  assert(rhs && "lowering failed");
-
   // Emit the result operation.
+  Value div;
   if (resultType.cast<IntType>().isSigned())
-    return setLoweringTo<rtl::DivSOp>(op, lhs, rhs);
-  return setLoweringTo<rtl::DivUOp>(op, lhs, rhs);
+    div = builder->create<rtl::DivSOp>(lhs, rhs);
+  else
+    div = builder->create<rtl::DivUOp>(lhs, rhs);
+
+  // Truncate the result down if necessary.
+  if (resultType == op.getType())
+    return setLowering(op, div);
+  return setLoweringTo<rtl::ExtractOp>(op, lowerType(op.getType()), div, 0);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
