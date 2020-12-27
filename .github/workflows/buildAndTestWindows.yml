@@ -10,7 +10,7 @@ jobs:
   # Build CIRCT and run its tests.
   build-circt:
     name: Build and Test
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - name: Configure Environment
         run: echo "$GITHUB_WORKSPACE/llvm/install/bin" >> $GITHUB_PATH
