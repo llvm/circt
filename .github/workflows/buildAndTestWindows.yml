@@ -78,9 +78,6 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug -Thost=x64 -DCMAKE_BUILD_TYPE=Debug
           cmake --build . `
             -j $((Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors)
-          cmake --build . `
-            -j $((Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors) `
-            --target check-circt
 
 
       # Build the CIRCT test target in release mode to build and test.
