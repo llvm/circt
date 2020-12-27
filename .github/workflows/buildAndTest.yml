@@ -67,6 +67,9 @@ jobs:
           fetch-depth: 2
           submodules: false
 
+      # Submodules don't have to be fetched but they should be init'ed.
+      - name: Submodule init
+
       # We'll be running clang-tidy later in this flow.
       - name: Install clang-tidy
         run: |
@@ -99,7 +102,7 @@ jobs:
       - name: Rebuild and Install LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: |
-          git submodule update --init --depth 1
+          git submodule update --depth 1
           utils/build-llvm.sh
 
       # --------
