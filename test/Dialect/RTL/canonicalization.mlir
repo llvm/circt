@@ -56,11 +56,20 @@ func @xor_cstfold(%arg0: i7) -> i7 {
   return %0 : i7
 }
 
+// CHECK-LABEL: func @merge_fold
+// CHECK-NEXT:    %0 = rtl.merge %arg0, %arg0, %arg1 : i7
+// CHECK-NEXT:    return %arg0, %arg0, %0 : i7, i7, i7
+func @merge_fold(%arg0: i7, %arg1: i7) -> (i7, i7, i7) {
+  %a = rtl.merge %arg0 : i7
+  %b = rtl.merge %arg0, %arg0, %arg0 : i7
+  %c = rtl.merge %arg0, %arg0, %arg1 : i7
+  return %a, %b, %c: i7, i7, i7
+}
+
 // CHECK-LABEL: func @add_cstfold(%arg0: i7) -> i7 {
 // CHECK-NEXT:    %c15_i7 = rtl.constant(15 : i7)
 // CHECK-NEXT:    %0 = rtl.add %arg0, %c15_i7 : i7
 // CHECK-NEXT:    return %0 : i7
-
 func @add_cstfold(%arg0: i7) -> i7 {
   %c10_i7 = rtl.constant(10 : i7) : i7
   %c5_i7 = rtl.constant(5 : i7) : i7
@@ -72,7 +81,6 @@ func @add_cstfold(%arg0: i7) -> i7 {
 // CHECK-NEXT:    %c15_i7 = rtl.constant(15 : i7)
 // CHECK-NEXT:    %0 = rtl.mul %arg0, %c15_i7 : i7
 // CHECK-NEXT:    return %0 : i7
-
 func @mul_cstfold(%arg0: i7) -> i7 {
   %c3_i7 = rtl.constant(3 : i7) : i7
   %c5_i7 = rtl.constant(5 : i7) : i7

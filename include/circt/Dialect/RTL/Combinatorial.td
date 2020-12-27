@@ -48,7 +48,7 @@ def ConstantOp
   let extraClassDeclaration = [{
     APInt getValue() { return getAttrOfType<IntegerAttr>("value").getValue(); }
   }];
-  let hasFolder = 1;
+  let hasFolder = true;
   let verifier = [{ return ::verifyConstantOp(*this); }];
 }
 
@@ -84,7 +84,7 @@ class VariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
   let results = (outs AnySignlessInteger:$result);
 
   let assemblyFormat = [{
-    $inputs  attr-dict `:` functional-type($inputs, results)
+    $inputs attr-dict `:` functional-type($inputs, results)
   }];
 }
 
@@ -93,8 +93,8 @@ class UTVariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
                !listconcat(traits,
                            [SameTypeOperands, SameOperandsAndResultType])> {
 
-  let hasCanonicalizer = 1;
-  let hasFolder = 1;
+  let hasCanonicalizer = true;
+  let hasFolder = true;
   let verifier =  [{ return ::verifyUTVariadicRTLOp(*this); }];
 
   let assemblyFormat = [{
@@ -102,7 +102,7 @@ class UTVariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
   }];
 }
 
-// Arithmetic and Logical Binary Operations.
+// Arithmetic and Logical Operations.
 def AddOp : UTVariadicRTLOp<"add", [Commutative]>;
 def SubOp : UTBinRTLOp<"sub">;
 def MulOp : UTVariadicRTLOp<"mul", [Commutative]>;
@@ -117,6 +117,21 @@ def ShrSOp : UTBinRTLOp<"shrs">;
 def AndOp : UTVariadicRTLOp<"and", [Commutative]>;
 def OrOp  : UTVariadicRTLOp<"or", [Commutative]>;
 def XorOp : UTVariadicRTLOp<"xor", [Commutative]>;
+
+def MergeOp : UTVariadicRTLOp<"merge", [Commutative]> {
+  let summary ="Electrically merge signals together as if connected by a wire.";
+  let description = [{
+    This operation merges multiple signals together as if they were connected to
+    a single wire.  Presumably at most one of them should be a Z state at any
+    given time otherwise you'd get a short circuit.
+
+    This operation allows modeling multiconnect semantics in SSA.
+    ```
+      %result = rtl.merge %a, %b, %c : t1
+    ```
+    }];
+  let hasCanonicalizer = false;
+}
 
 def ICmpPredicateEQ  : I64EnumAttrCase<"eq", 0>;
 def ICmpPredicateNE  : I64EnumAttrCase<"ne", 1>;
@@ -189,7 +204,7 @@ def ExtractOp : RTLOp<"extract", [NoSideEffect]> {
     $input `from` $lowBit attr-dict `:` functional-type($input, $result)
   }];
 
-  let hasFolder = 1;
+  let hasFolder = true;
   let verifier = [{ return ::verifyExtractOp(*this); }];
 }
 
@@ -203,7 +218,7 @@ def SExtOp : RTLOp<"sext", [NoSideEffect]> {
     $input attr-dict `:` functional-type($input, $result)
   }];
 
-  let hasFolder = 1;
+  let hasFolder = true;
   let verifier = [{ return ::verifyExtOp(*this); }];
 }
 
@@ -217,7 +232,7 @@ def ZExtOp : RTLOp<"zext", [NoSideEffect]> {
     $input attr-dict `:` functional-type($input, $result)
   }];
 
-  let hasFolder = 1;
+  let hasFolder = true;
   let verifier = [{ return ::verifyExtOp(*this); }];
 }
 
