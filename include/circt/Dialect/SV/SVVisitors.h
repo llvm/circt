@@ -1,4 +1,4 @@
-//===- SV/Visitors.h - SV Dialect Visitors ----------------------*- C++ -*-===//
+//===- SVVisitors.h - SV Dialect Visitors -----------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_SV_VISITORS_H
-#define CIRCT_DIALECT_SV_VISITORS_H
+#ifndef CIRCT_DIALECT_SV_SVVISITORS_H
+#define CIRCT_DIALECT_SV_SVVISITORS_H
 
 #include "circt/Dialect/SV/SVOps.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -95,4 +95,4 @@ public:
 } // namespace sv
 } // namespace circt
 
-#endif // CIRCT_DIALECT_SV_VISITORS_H
+#endif // CIRCT_DIALECT_SV_SVVISITORS_H

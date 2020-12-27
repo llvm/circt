@@ -1,4 +1,4 @@
-//===- RTL/IR/RTLDialect.h - RTL dialect declaration ------------*- C++ -*-===//
+//===- RTLDialect.h - RTL dialect declaration -------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_RTL_DIALECT_H
-#define CIRCT_DIALECT_RTL_DIALECT_H
+#ifndef CIRCT_DIALECT_RTL_RTLDIALECT_H
+#define CIRCT_DIALECT_RTL_RTLDIALECT_H
 
 #include "mlir/IR/Dialect.h"
 
@@ -42,4 +42,4 @@ public:
 // Pull in all enum type definitions and utility function declarations.
 #include "circt/Dialect/RTL/RTLEnums.h.inc"
 
-#endif // CIRCT_DIALECT_RTL_DIALECT_H
+#endif // CIRCT_DIALECT_RTL_RTLDIALECT_H

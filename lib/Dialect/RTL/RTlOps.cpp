@@ -12,7 +12,7 @@
 
 #include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Dialect/RTL/RTLTypes.h"
-#include "circt/Dialect/RTL/Visitors.h"
+#include "circt/Dialect/RTL/RTLVisitors.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"

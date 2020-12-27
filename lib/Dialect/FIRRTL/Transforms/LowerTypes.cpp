@@ -13,8 +13,8 @@
 #include "circt/Conversion/FIRRTLToRTL/FIRRTLToRTL.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "circt/Dialect/FIRRTL/Visitors.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
 
 using namespace circt;

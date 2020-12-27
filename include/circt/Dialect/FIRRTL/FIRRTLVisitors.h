@@ -1,5 +1,4 @@
-//===- FIRRTL/Visitors.h - FIRRTL Dialect Visitors --------------*- C++ -*-===//
-//
+//===- FIRRTLVisitors.h - FIRRTL Dialect Visitors ---------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -11,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_FIRRTL_VISITORS_H
-#define CIRCT_DIALECT_FIRRTL_VISITORS_H
+#ifndef CIRCT_DIALECT_FIRRTL_FIRRTLVISITORS_H
+#define CIRCT_DIALECT_FIRRTL_FIRRTLVISITORS_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -294,4 +293,4 @@ public:
 } // namespace firrtl
 } // namespace circt
 
-#endif // CIRCT_DIALECT_FIRRTL_VISITORS_H
+#endif // CIRCT_DIALECT_FIRRTL_FIRRTLVISITORS_H
