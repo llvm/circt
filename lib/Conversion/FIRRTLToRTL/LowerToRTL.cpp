@@ -278,6 +278,9 @@ rtl::RTLModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
 /// Given an output port, check to see if all of the uses of the output port are
 /// connects.  If so, remove the connect and return the value being used.  If
 /// this isn't a situation we can handle, just return null.
+///
+/// This can happen when there are no connects to an output, or if
+/// firrtl.invalid is used.
 static Value tryToFindOutputValue(Value portValue) {
   SmallVector<ConnectOp, 2> connects;
   for (auto *use : portValue.getUsers()) {
@@ -304,7 +307,9 @@ static Value tryToFindOutputValue(Value portValue) {
   // may not match the destination width.
   auto destTy = portValue.getType().cast<FIRRTLType>().getPassiveType();
   if (destTy != connectSrc.getType()) {
-    //  The only type mismatch we can have is due to integer width differences.
+    // The only type mismatch we can have is due to integer width differences.
+    // FIXME: connects shouldn't allow truncates, so this should just be an
+    // extension.
     connectSrc =
         extendOrTruncateFIRRTL(connectSrc, destTy.cast<IntType>(), builder);
   }

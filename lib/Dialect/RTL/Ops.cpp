@@ -863,8 +863,7 @@ static Attribute constFoldVariadicOp(ArrayRef<Attribute> operands,
 }
 
 static LogicalResult verifyUTVariadicRTLOp(Operation *op) {
-  auto size = op->getOperands().size();
-  if (size < 1)
+  if (op->getOperands().empty())
     return op->emitOpError("requires 1 or more args");
 
   return success();
@@ -1076,6 +1075,14 @@ void XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
     }
   };
   results.insert<Folder>(context);
+}
+
+OpFoldResult MergeOp::fold(ArrayRef<Attribute> operands) {
+  // rtl.merge(x, x, x) -> x.
+  if (llvm::all_of(inputs(), [&](auto in) { return in == inputs()[0]; }))
+    return inputs()[0];
+
+  return {};
 }
 
 OpFoldResult AddOp::fold(ArrayRef<Attribute> operands) {
