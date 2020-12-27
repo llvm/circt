@@ -2,7 +2,6 @@ include(FindDoxygen)
 if(DOXYGEN_FOUND)
   set(abs_top_srcdir ${CMAKE_CURRENT_SOURCE_DIR}/..)
   set(abs_top_builddir ..)
-  set(DOT dot)
 
   configure_file(${CMAKE_CURRENT_SOURCE_DIR}/doxygen.cfg.in
     ${CMAKE_CURRENT_BINARY_DIR}/doxygen.cfg @ONLY)
