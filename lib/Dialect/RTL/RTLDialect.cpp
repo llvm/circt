@@ -10,9 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/RTL/Dialect.h"
-#include "circt/Dialect/RTL/Ops.h"
-#include "circt/Dialect/RTL/Types.h"
+#include "circt/Dialect/RTL/RTLDialect.h"
+#include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/RTL/RTLTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"

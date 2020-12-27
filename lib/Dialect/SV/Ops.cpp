@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/SV/Ops.h"
-#include "circt/Dialect/RTL/Types.h"
+#include "circt/Dialect/RTL/RTLTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 
