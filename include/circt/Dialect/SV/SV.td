@@ -37,8 +37,8 @@ class SVType<string name> : TypeDef<SVDialect, name> { }
 // FIXME: Shouldn't have to duplicate this from the RTL dialect tblgen files.
 def InOutType : Type<CPred<"$_self.isa<rtl::InOutType>()">, "InOutType">;
 
-include "Expressions.td"
-include "Statements.td"
-include "TypeDecl.td"
+include "SVExpressions.td"
+include "SVStatements.td"
+include "SVTypeDecl.td"
 
 #endif // SV_TD

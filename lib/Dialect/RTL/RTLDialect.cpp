@@ -1,4 +1,4 @@
-//===- Dialect.cpp - Implement the RTL dialect ----------------------------===//
+//===- RTLDialect.cpp - Implement the RTL dialect -------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,9 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/RTL/Dialect.h"
-#include "circt/Dialect/RTL/Ops.h"
-#include "circt/Dialect/RTL/Types.h"
+#include "circt/Dialect/RTL/RTLDialect.h"
+#include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/RTL/RTLTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -34,8 +34,7 @@ struct RTLOpAsmDialectInterface : public OpAsmDialectInterface {
   /// Get a special name to use when printing the given operation. See
   /// OpAsmInterface.td#getAsmResultNames for usage details and documentation.
   void getAsmResultNames(Operation *op,
-                         OpAsmSetValueNameFn setNameFn) const override {
-  }
+                         OpAsmSetValueNameFn setNameFn) const override {}
 
   /// Get a special name to use when printing the entry block arguments of the
   /// region contained by an operation in this dialect.

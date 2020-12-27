@@ -1,4 +1,4 @@
-//===- Dialect.cpp - Implement the SV dialect -----------------------------===//
+//===- SVDialect.cpp - Implement the SV dialect ---------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,9 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/SV/Dialect.h"
-#include "circt/Dialect/SV/Ops.h"
-#include "circt/Dialect/SV/Types.h"
+#include "circt/Dialect/SV/SVDialect.h"
+#include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/SV/SVTypes.h"
 
 #include "mlir/IR/DialectImplementation.h"
 
@@ -25,7 +25,7 @@ using namespace mlir;
 
 SVDialect::SVDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context,
-    ::mlir::TypeID::get<SVDialect>()) {
+              ::mlir::TypeID::get<SVDialect>()) {
 
   // Register types.
   addTypes<

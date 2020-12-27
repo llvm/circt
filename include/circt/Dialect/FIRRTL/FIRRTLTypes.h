@@ -1,5 +1,4 @@
-//===- FIRRTL/IR/Types.h - FIRRTL Type System -------------------*- C++ -*-===//
-//
+//===- FIRRTL/IR/FIRRTLTypes.h - FIRRTL Type System -------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -14,7 +13,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_TYPES_H
 #define CIRCT_DIALECT_FIRRTL_TYPES_H
 
-#include "circt/Dialect/FIRRTL/Dialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "mlir/IR/Types.h"
 
 namespace circt {

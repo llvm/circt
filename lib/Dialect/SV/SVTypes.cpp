@@ -1,4 +1,4 @@
-//===- SV/Types.cpp - Implement the SV types ------------------------------===//
+//===- SVTypes.cpp - Implement the SV types -------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/SV/Types.h"
-#include "circt/Dialect/SV/Dialect.h"
+#include "circt/Dialect/SV/SVTypes.h"
+#include "circt/Dialect/SV/SVDialect.h"
 
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"

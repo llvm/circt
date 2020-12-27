@@ -13,7 +13,7 @@
 #ifndef CIRCT_DIALECT_SV_VISITORS_H
 #define CIRCT_DIALECT_SV_VISITORS_H
 
-#include "circt/Dialect/SV/Ops.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {

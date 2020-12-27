@@ -1,4 +1,4 @@
-//===- Ops.cpp - Implement the RTL operations -----------------------------===//
+//===- RTLOps.cpp - Implement the RTL operations --------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/RTL/Ops.h"
-#include "circt/Dialect/RTL/Types.h"
+#include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/RTL/RTLTypes.h"
 #include "circt/Dialect/RTL/Visitors.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"

@@ -1,4 +1,4 @@
-//===- Types.cpp - RTL types code defs ------------------------------------===//
+//===- RTLTypes.cpp - RTL types code defs ---------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/RTL/Types.h"
-#include "circt/Dialect/RTL/Dialect.h"
+#include "circt/Dialect/RTL/RTLTypes.h"
+#include "circt/Dialect/RTL/RTLDialect.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"

@@ -14,7 +14,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_VISITORS_H
 #define CIRCT_DIALECT_FIRRTL_VISITORS_H
 
-#include "circt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {

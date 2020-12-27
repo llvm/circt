@@ -13,7 +13,7 @@
 #ifndef CIRCT_DIALECT_RTL_VISITORS_H
 #define CIRCT_DIALECT_RTL_VISITORS_H
 
-#include "circt/Dialect/RTL/Ops.h"
+#include "circt/Dialect/RTL/RTLOps.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {

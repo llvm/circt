@@ -1,4 +1,4 @@
-//===- Ops.cpp - Implement the FIRRTL operations --------------------------===//
+//===- FIRRTLOps.cpp - Implement the FIRRTL operations --------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,10 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/FIRRTL/Ops.h"
-#include "circt/Dialect/FIRRTL/Types.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/Visitors.h"
-#include "circt/Dialect/RTL/Types.h"
+#include "circt/Dialect/RTL/RTLTypes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"

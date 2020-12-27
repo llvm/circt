@@ -12,13 +12,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/Passes.h"
-#include "circt/Dialect/FIRRTL/Dialect.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
-#include "circt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "circt/Dialect/RTL/Dialect.h"
-#include "circt/Dialect/RTL/Ops.h"
-#include "circt/Dialect/SV/Dialect.h"
+#include "circt/Dialect/RTL/RTLDialect.h"
+#include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Translation/ExportVerilog.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinOps.h"
