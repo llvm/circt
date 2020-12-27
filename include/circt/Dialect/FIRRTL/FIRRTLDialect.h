@@ -1,4 +1,4 @@
-//===- FIRRTL/IR/Dialect.h - FIRRTL dialect declaration ---------*- C++ -*-===//
+//===- FIRRTL/IR/FIRTLDialect.h - FIRRTL dialect declaration ---------*- C++ -*-===//
 //
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.

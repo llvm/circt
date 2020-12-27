@@ -1,4 +1,4 @@
-//===- OpStructure.td - Circuit and Module Definitions -----*- tablegen -*-===//
+//===- FIRRTLOpStructure.td - Circuit and Module Definitions -----*- tablegen -*-===//
 //
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.

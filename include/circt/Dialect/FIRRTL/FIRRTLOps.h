@@ -1,4 +1,4 @@
-//===- FIRRTL/Ops.h - Declare FIRRTL dialect operations ---------*- C++ -*-===//
+//===- FIRRTL/FIRRTLOps.h - Declare FIRRTL dialect operations ---------*- C++ -*-===//
 //
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
