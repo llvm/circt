@@ -13,16 +13,16 @@ open source compiler infrastructure used by the Chisel framework to lower ".fir"
 files to Verilog.  It provides a number of useful compiler passes and
 infrastructure that allows the development of domain specific passes.  The
 FIRRTL project includes a [well documented IR specification](https://github.com/chipsalliance/firrtl/blob/master/spec/spec.pdf)
-that explains the semantics of its IR and the [Antlr 
+that explains the semantics of its IR and [Antlr 
 grammar](https://github.com/chipsalliance/firrtl/blob/master/src/main/antlr4/FIRRTL.g4)
-includes some extensions beyond it.  This document generally assumes that
-you've read and have a basic grasp of the IR spec, and it can be occasionally
-helpful to refer to the grammar.
+includes some extensions beyond it.
 
 The FIRRTL dialect in CIRCT is designed to follow the FIRRTL IR very closely,
 but does diverge for a variety of reasons.  Here we capture some of those
 reasons and why.  They generally boil down to simplifying compiler
-transformations and taking advantages of the properties of SSA form.
+implementation and taking advantages of the properties of MLIR's SSA form.
+This document generally assumes that you've read and have a basic grasp of the
+IR spec, and it can be occasionally helpful to refer to the grammar.
 
 Status
 ------
@@ -48,14 +48,14 @@ Not using standard types
 ------------------------
 
 At one point we tried to use the integer types in the standard dialect, like
-`si42` instead of `!firrtl.sint<42>`, but we backed away from this.  The reason
-is that while it originally seemed appealing to use those types, FIRRTL
+`si42` instead of `!firrtl.sint<42>`, but we backed away from this.  While it
+originally seemed appealing to use those types, FIRRTL
 operations generally need to work with "unknown width" integer types (i.e. 
 `!firrtl.sint`).
 
 Having the known width and unknown width types implemented with two different
-classes was awkward, led to casting bugs, and prevented having a `FIRRTLType`
-class that unified all the FIRRTL dialect types.
+C++ classes was awkward, led to casting bugs, and prevented having a
+`FIRRTLType` class that unified all the FIRRTL dialect types.
 
 Canonicalized Flip Types
 ------------------------
@@ -90,14 +90,16 @@ just represent `output` ports as having a flipped type compared to its
 specification.
 
 **Rationale:**: This simplifies the IR and provides a more canonical
-representation of the same concept.
+representation of the same concept.  This also composes with flip type
+canonicalization nicely.
 
 More things are represented as primitives
 -----------------------------------------
 
-The FIRRTL dialect describes `mux` and `validif` expressions to be "primitives",
-whereas the spec and grammar implement them as special kinds of expressions.
-The only reason we do this is to simplify the implementation.  These expression
+We describe the `mux` and `validif` expressions as "primitives", whereas the IR
+spec and grammar implement them as special kinds of expressions.
+
+We do this to simplify the implementation: These expression
 have the same structure as primitives, and modeling them as such allows reuse
 of the parsing logic instead of duplication of grammar rules.
 
