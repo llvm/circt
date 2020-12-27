@@ -44,36 +44,33 @@
     // CHECK-NEXT: rtl.output [[RESULT]] : i4
   }
 
- // CHECK-LABEL: rtl.module @TestInstance(
+  // CHECK-LABEL: rtl.module @TestInstance(
   firrtl.module @TestInstance(%u2: !firrtl.uint<2>, %s8: !firrtl.sint<8>,
                               %clock: !firrtl.clock,
                               %reset: !firrtl.uint<1>) {
-    // CHECK: [[U2CAST:%.+]] = firrtl.stdIntCast %u2 : (i2) -> !firrtl.uint<2>
-    // CHECK: [[S8CAST:%.+]] = firrtl.stdIntCast %s8 : (i8) -> !firrtl.sint<8>
+    // CHECK-NEXT: [[U2CAST:%.+]] = firrtl.stdIntCast %u2 : (i2) -> !firrtl.uint<2>
+    // CHECK-NEXT: [[S8CAST:%.+]] = firrtl.stdIntCast %s8 : (i8) -> !firrtl.sint<8>
+    // CHECK-NEXT: [[CLOCKCAST:%.+]] = firrtl.stdIntCast %clock : (i1) -> !firrtl.clock
+    // CHECK-NEXT: [[RESETCAST:%.+]] = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
 
-    // CHECK: %in1.wire = firrtl.wire : !firrtl.uint<4>
-    // CHECK-NEXT: [[W1:%.+]] = firrtl.stdIntCast %in1.wire : (!firrtl.uint<4>) -> i4
-    // CHECK-NEXT: %in2.wire = firrtl.wire : !firrtl.uint<2>
-    // CHECK-NEXT: [[W2:%.+]] = firrtl.stdIntCast %in2.wire : (!firrtl.uint<2>) -> i2
-    // CHECK-NEXT: %in3.wire = firrtl.wire : !firrtl.sint<8>
-    // CHECK-NEXT: [[W3:%.+]] = firrtl.stdIntCast %in3.wire : (!firrtl.sint<8>) -> i8
-    // CHECK-NEXT: [[INSTOUT:%.+]] = rtl.instance "xyz" @Simple([[W1]], [[W2]], [[W3]]) : (i4, i2, i8) -> i4
+    // CHECK-NEXT: [[ARG1CAST:%.+]] = firrtl.stdIntCast [[ARG1:%.+]] : (!firrtl.uint<4>) -> i4
+    // CHECK-NEXT: [[U2FCAST:%.+]] = firrtl.stdIntCast [[U2CAST]] : (!firrtl.uint<2>) -> i2
+    // CHECK-NEXT: [[S8FCAST:%.+]] = firrtl.stdIntCast [[S8CAST]] : (!firrtl.sint<8>) -> i8
+    // CHECK-NEXT: %xyz.out4 = rtl.instance "xyz" @Simple([[ARG1CAST]], [[U2FCAST]], [[S8FCAST]]) : (i4, i2, i8) -> i4
     %xyz = firrtl.instance @Simple {name = "xyz"}
      : !firrtl.bundle<in1: flip<uint<4>>, in2: flip<uint<2>>,
                       in3: flip<sint<8>>, out4: uint<4>>
 
-    // CHECK-NEXT: [[INSTOUTC1:%.+]] = firrtl.stdIntCast [[INSTOUT]] : (i4) -> !firrtl.uint<4>
+    // CHECK-NEXT: [[INSTOUTC1:%.+]] = firrtl.stdIntCast %xyz.out4 : (i4) -> !firrtl.uint<4>
 
-
-    // CHECK:  firrtl.connect %in1.wire, [[U2CAST]]
+    // CHECK: [[ARG1]] = firrtl.pad [[U2CAST]], 4
     %0 = firrtl.subfield %xyz("in1") : (!firrtl.bundle<in1: flip<uint<4>>, in2: flip<uint<2>>, in3: flip<sint<8>>, out4: uint<4>>) -> !firrtl.flip<uint<4>>
     firrtl.connect %0, %u2 : !firrtl.flip<uint<4>>, !firrtl.uint<2>
 
-    // CHECK-NEXT:  firrtl.connect %in2.wire, [[U2CAST]]
+    // CHECK-NOT: firrtl.connect
     %1 = firrtl.subfield %xyz("in2") : (!firrtl.bundle<in1: flip<uint<4>>, in2: flip<uint<2>>, in3: flip<sint<8>>, out4: uint<4>>) -> !firrtl.flip<uint<2>>
     firrtl.connect %1, %u2 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
 
-    // CHECK-NEXT:  firrtl.connect %in3.wire, [[S8CAST]]
     %2 = firrtl.subfield %xyz("in3")  : (!firrtl.bundle<in1: flip<uint<4>>, in2: flip<uint<2>>, in3: flip<sint<8>>, out4: uint<4>>) -> !firrtl.flip<sint<8>>
     firrtl.connect %2, %s8 : !firrtl.flip<sint<8>>, !firrtl.sint<8>
 
@@ -86,8 +83,7 @@
     // Parameterized module reference.
     // rtl.instance carries the parameters, unlike at the FIRRTL layer.
 
-    // CHECK-NEXT: %in.wire = firrtl.wire : !firrtl.uint<1>
-    // CHECK-NEXT: [[IW:%.+]] = firrtl.stdIntCast %in.wire : (!firrtl.uint<1>) -> i1
+    // CHECK-NEXT: [[IW:%.+]] = firrtl.stdIntCast [[RESETCAST]] : (!firrtl.uint<1>) -> i1
 
     // CHECK-NEXT: [[OUT:%.+]] = rtl.instance "myext" @MyParameterizedExtModule([[IW]])  {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1) -> i8
     %myext = firrtl.instance @MyParameterizedExtModule {name = "myext"}
@@ -95,7 +91,6 @@
 
     // CHECK-NEXT: [[OUTC:%.+]] = firrtl.stdIntCast [[OUT]] : (i8) -> !firrtl.uint<8>
 
-    // CHECK-NEXT: firrtl.connect %in.wire, {{.*}} : !firrtl.uint<1>, !firrtl.uint<1>
     %9 = firrtl.subfield %myext("in") : (!firrtl.bundle<in: flip<uint<1>>, out: uint<8>>) -> !firrtl.flip<uint<1>>
     firrtl.connect %9, %reset : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 

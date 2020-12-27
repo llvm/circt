@@ -21,6 +21,7 @@
 #include "circt/Support/ImplicitLocOpBuilder.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/TinyPtrVector.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -275,13 +276,14 @@ rtl::RTLModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
   return builder.create<rtl::RTLModuleOp>(oldModule.getLoc(), nameAttr, ports);
 }
 
-/// Given an output port, check to see if all of the uses of the output port are
-/// connects.  If so, remove the connect and return the value being used.  If
-/// this isn't a situation we can handle, just return null.
+/// Given a value of flip type, check to see if all of the uses of it are
+/// connects.  If so, remove the connects and return the value being connected
+/// to it.  If this isn't a situation we can handle, just return null.
 ///
-/// This can happen when there are no connects to an output, or if
-/// firrtl.invalid is used.
-static Value tryToFindOutputValue(Value portValue) {
+/// This can happen when there are no connects to the value, or if
+/// firrtl.invalid is used.  The 'mergePoint' location is where a 'rtl.merge'
+/// operation should be inserted if needed.
+static Value tryToConnectsToFlipValue(Value portValue, Operation *insertPoint) {
   SmallVector<ConnectOp, 2> connects;
   for (auto *use : portValue.getUsers()) {
     // We only know about 'connect' uses.
@@ -296,8 +298,6 @@ static Value tryToFindOutputValue(Value portValue) {
   // case where there are no connects other uses of an output.
   if (connects.empty())
     return {};
-
-  auto *curBlock = connects[0]->getBlock();
 
   // Convert each connect into an extended version of its operand being output.
   SmallVector<Value, 2> results;
@@ -331,8 +331,7 @@ static Value tryToFindOutputValue(Value portValue) {
   if (connects.size() == 1)
     return results.back();
 
-  auto builder = ImplicitLocOpBuilder::atBlockTerminator(
-      curBlock->getTerminator()->getLoc(), curBlock);
+  auto builder = ImplicitLocOpBuilder(insertPoint->getLoc(), insertPoint);
 
   // Annoyingly, we need to convert from FIRRTL type to builtin type to do the
   // merge, then back.
@@ -411,7 +410,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
       // Cast the argument to the old type, reintroducing sign information in
       // the rtl.module body.
       newArg = castToFIRRTLType(newArg, oldArg.getType(), bodyBuilder);
-    } else if (auto value = tryToFindOutputValue(oldArg)) {
+    } else if (auto value = tryToConnectsToFlipValue(oldArg, outputOp)) {
       // If we were able to find the value being connected to the output,
       // directly use it!
       newArg = value;
@@ -472,28 +471,79 @@ void FIRRTLModuleLowering::lowerInstance(
   SmallVector<ModulePortInfo, 8> portInfo;
   getModulePortInfo(oldModule, portInfo);
 
+  // Build an index from the name attribute to an index into portInfo, so we can
+  // do efficient lookups.
+  llvm::SmallDenseMap<Attribute, unsigned> portIndicesByName;
+  for (unsigned portIdx = 0, e = portInfo.size(); portIdx != e; ++portIdx)
+    portIndicesByName[portInfo[portIdx].name] = portIdx;
+
+  // Find all the subfield ops hanging off of this instance, indexed by
+  // portRecord.  Typically there is exactly one subfield for every port, but
+  // there can be more.
+  SmallVector<TinyPtrVector<Operation *>, 8> subfieldsByPortIndex;
+  subfieldsByPortIndex.resize(portInfo.size());
+  for (auto *user : Value(oldInstance).getUsers()) {
+    auto subfield = dyn_cast<SubfieldOp>(user);
+    if (!subfield) {
+      user->emitOpError("unexpected user of firrtl.instance operation");
+      return;
+    }
+
+    // Find the port record for this port.
+    assert(portIndicesByName.count(subfield.fieldnameAttr()) &&
+           "invalid subfield for instance");
+    unsigned portIndex = portIndicesByName[subfield.fieldnameAttr()];
+    subfieldsByPortIndex[portIndex].push_back(subfield);
+  }
+
+  // Ok, get ready to create the new instance operation.  We need to prepare
+  // input operands and results.
   ImplicitLocOpBuilder builder(oldInstance.getLoc(), oldInstance);
   SmallVector<Type, 8> resultTypes;
   SmallVector<Value, 8> operands;
-  SmallVector<WireOp, 8> inputWires;
-  for (auto &port : portInfo) {
+  for (size_t portIndex = 0, e = portInfo.size(); portIndex != e; ++portIndex) {
+    auto &port = portInfo[portIndex];
     auto portType = lowerType(port.type);
     if (!portType)
       return;
 
-    if (port.isOutput())
+    if (port.isOutput()) {
       // outputs become results.
       resultTypes.push_back(portType);
-    else {
-      assert(port.isInput() &&
-             "TODO: Handle inout ports when we can lower mid FIRRTL bundles");
-      // Create a wire for each input/inout operand, so there is something to
-      // connect to.
-      auto name = builder.getStringAttr(port.getName().str() + ".wire");
-      auto wire = builder.create<WireOp>(port.type, name);
-      inputWires.push_back(wire);
-      operands.push_back(castFromFIRRTLType(wire, portType, builder));
+      continue;
     }
+
+    assert(port.isInput() &&
+           "TODO: Handle inout ports when we can lower mid FIRRTL bundles");
+
+    // If there is a single subfield projection for this input, and if we can
+    // find the connects to it, then we can directly materialize it.
+    auto &subfields = subfieldsByPortIndex[portIndex];
+    if (subfields.size() == 1) {
+      if (auto value = tryToConnectsToFlipValue(subfields[0]->getResult(0),
+                                                oldInstance)) {
+        // If we got a value connecting to the input port, then we can cast it
+        // and pass it into the RTL instance without a temporary wire.
+        operands.push_back(castFromFIRRTLType(value, portType, builder));
+        // Remove the subfield itself.
+        subfields.back()->erase();
+        subfields.clear();
+        continue;
+      }
+    }
+
+    // Otherwise, create a wire for each input/inout operand, so there is
+    // something to connect to.
+    auto name = builder.getStringAttr(port.getName().str() + ".wire");
+    auto wire = builder.create<WireOp>(port.type, name);
+    operands.push_back(castFromFIRRTLType(wire, portType, builder));
+
+    // Replace all the uses of the subfields with the wire we just created.
+    for (auto *subfield : subfields) {
+      subfield->getResult(0).replaceAllUsesWith(wire);
+      subfield->erase();
+    }
+    subfields.clear();
   }
 
   // Use the symbol from the module we are referencing.
@@ -508,43 +558,26 @@ void FIRRTLModuleLowering::lowerInstance(
       resultTypes, instanceName, symbolAttr, operands, parameters);
 
   // Now that we have the new rtl.instance, we need to remap all of the users
-  // of the firrtl.instance.  Burn through them connecting them up the right
-  // way to the new world.
-  while (!oldInstance.use_empty()) {
-    // The only operation that can use the instance is a subfield operation.
-    auto *user = *Value(oldInstance).user_begin();
-    auto subfield = dyn_cast<SubfieldOp>(user);
-    if (!subfield) {
-      user->emitOpError("unexpected user of firrtl.instance operation");
-      return;
-    }
+  // of the outputs/results to the values returned by the instance.
+  unsigned resultNo = 0;
+  for (size_t portIndex = 0, e = portInfo.size(); portIndex != e; ++portIndex) {
+    auto &port = portInfo[portIndex];
+    if (!port.isOutput())
+      continue;
 
-    // Figure out which inputNo or resultNo this is.
-    size_t inputNo = 0, resultNo = 0;
-    for (auto &port : portInfo) {
-      if (port.name == subfield.fieldnameAttr())
-        break;
-
-      if (port.isOutput())
-        ++resultNo;
-      else
-        ++inputNo;
-    }
-
-    // If this subfield has flip type, then it is an input.  Otherwise it is a
-    // result.
-    Value val;
-    if (subfield.getType().isa<FlipType>()) {
-      // Use the wire we created as the input.
-      val = inputWires[inputNo];
-    } else {
-      val = newInst.getResult(resultNo);
+    // Replace any subfield uses of this output port with the returned value
+    // directly.
+    auto &subfields = subfieldsByPortIndex[portIndex];
+    for (auto *subfield : subfields) {
+      auto resultVal = newInst.getResult(resultNo);
       // Cast the value to the right signedness and flippedness.
-      val = castToFIRRTLType(val, subfield.getType(), builder);
+      resultVal =
+          castToFIRRTLType(resultVal, FlipType::get(port.type), builder);
+      subfield->getResult(0).replaceAllUsesWith(resultVal);
+      subfield->erase();
     }
-
-    subfield.replaceAllUsesWith(val);
-    subfield.erase();
+    subfields.clear();
+    ++resultNo;
   }
 }
 
