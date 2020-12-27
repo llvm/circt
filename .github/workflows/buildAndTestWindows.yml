@@ -55,7 +55,7 @@ jobs:
             -DLLVM_TARGETS_TO_BUILD="host" -DCMAKE_BUILD_TYPE=Release -Thost=x64 `
             -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=ON `
             -DLLVM_INSTALL_UTILS=ON -DCMAKE_INSTALL_PREFIX="$(pwd)/../install"
-          cmake --build . --target install
+          cmake --build . --target install --config Release
 
       # --------
       # Build and test CIRCT in both debug and release mode.
