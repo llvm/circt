@@ -10,9 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/SV/Dialect.h"
-#include "circt/Dialect/SV/Ops.h"
-#include "circt/Dialect/SV/Types.h"
+#include "circt/Dialect/SV/SVDialect.h"
+#include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/SV/SVTypes.h"
 
 #include "mlir/IR/DialectImplementation.h"
 

@@ -13,8 +13,8 @@
 #ifndef CIRCT_DIALECT_SV_OPS_H
 #define CIRCT_DIALECT_SV_OPS_H
 
-#include "circt/Dialect/SV/Dialect.h"
-#include "circt/Dialect/SV/Types.h"
+#include "circt/Dialect/SV/SVDialect.h"
+#include "circt/Dialect/SV/SVTypes.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"

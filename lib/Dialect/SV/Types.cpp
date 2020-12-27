@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/SV/Types.h"
-#include "circt/Dialect/SV/Dialect.h"
+#include "circt/Dialect/SV/SVTypes.h"
+#include "circt/Dialect/SV/SVDialect.h"
 
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"

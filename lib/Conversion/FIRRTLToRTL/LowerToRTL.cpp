@@ -17,7 +17,7 @@
 #include "circt/Dialect/FIRRTL/Visitors.h"
 #include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Dialect/RTL/RTLTypes.h"
-#include "circt/Dialect/SV/Ops.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
