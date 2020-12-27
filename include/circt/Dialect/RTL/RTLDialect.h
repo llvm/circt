@@ -1,5 +1,4 @@
-//===- RTL/IR/RTLDialect.h - RTL dialect declaration ---------------*- C++
-//-*-===//
+//===- RTL/IR/RTLDialect.h - RTL dialect declaration ------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
