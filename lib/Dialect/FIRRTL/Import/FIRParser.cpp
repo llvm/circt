@@ -13,7 +13,7 @@
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 
 #include "FIRLexer.h"
-#include "circt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"

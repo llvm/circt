@@ -12,9 +12,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/Passes.h"
-#include "circt/Dialect/FIRRTL/Dialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
-#include "circt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/RTL/Dialect.h"
 #include "circt/Dialect/RTL/Ops.h"

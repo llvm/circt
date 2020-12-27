@@ -15,7 +15,7 @@
 #ifndef DIALECT_FIRRTL_TRANSFORMS_PASSDETAILS_H
 #define DIALECT_FIRRTL_TRANSFORMS_PASSDETAILS_H
 
-#include "circt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/Pass/Pass.h"
 
 namespace circt {

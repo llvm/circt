@@ -14,7 +14,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_TYPES_H
 #define CIRCT_DIALECT_FIRRTL_TYPES_H
 
-#include "circt/Dialect/FIRRTL/Dialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "mlir/IR/Types.h"
 
 namespace circt {
