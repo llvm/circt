@@ -1,6 +1,11 @@
 name: Build and Test
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   # Build the LLVM submodule then cache it. Do not rebuild if hit in the
@@ -9,13 +14,13 @@ jobs:
     name: Build LLVM
     runs-on: ubuntu-latest
     steps:
-      # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
-      # time.
+      # Clone the CIRCT repo but not its submodules, since LLVM is quite large.
+      # Fetch it only if necessary. Do shallow clone to save clone time.
       - name: Get CIRCT
         uses: actions/checkout@v2
         with:
           fetch-depth: 2
-          submodules: "true"
+          submodules: false
 
       # Extract the LLVM submodule hash for use in the cache key.
       - name: Get LLVM Hash
@@ -31,10 +36,13 @@ jobs:
           path: llvm
           key: ${{ runner.os }}-llvm-install-${{ steps.get-llvm-hash.outputs.hash }}
 
-      # Build LLVM if we didn't hit in the cache.
+      # Build LLVM if we didn't hit in the cache. We don't have the llvm
+      # submodule so fetch it.
       - name: Rebuild and Install LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: utils/build-llvm.sh
+        run: |
+          git submodule update --init --depth 1
+          utils/build-llvm.sh
 
 
     # Installing the results into the cache is an action which is automatically
@@ -51,13 +59,13 @@ jobs:
       - name: Configure Environment
         run: echo "$GITHUB_WORKSPACE/llvm/install/bin" >> $GITHUB_PATH
 
-      # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
-      # time.
+      # Clone the CIRCT repo but not its submodules, since LLVM is quite large.
+      # Fetch it only if necessary. Do shallow clone to save clone time.
       - name: Get CIRCT
         uses: actions/checkout@v2
         with:
           fetch-depth: 2
-          submodules: "true"
+          submodules: false
 
       # We'll be running clang-tidy later in this flow.
       - name: Install clang-tidy
@@ -86,10 +94,13 @@ jobs:
 
       # Build LLVM if we didn't hit in the cache. Even though we build it in
       # the previous job, there is a low chance that it'll have been evicted by
-      # the time we get here.
+      # the time we get here. Since we don't have the llvm submodule, fetch it
+      # first.
       - name: Rebuild and Install LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: utils/build-llvm.sh
+        run: |
+          git submodule update --init --depth 1
+          utils/build-llvm.sh
 
       # --------
       # Build and test CIRCT in both debug and release mode.
