@@ -48,8 +48,8 @@ jobs:
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
-          mkdir build
-          cd build
+          mkdir llvm/build
+          cd llvm/build
           cmake ..\llvm -G "Visual Studio 16 2019" `
             -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_BUILD_EXAMPLES=OFF `
             -DLLVM_TARGETS_TO_BUILD="host" -DCMAKE_BUILD_TYPE=Release -Thost=x64 `
