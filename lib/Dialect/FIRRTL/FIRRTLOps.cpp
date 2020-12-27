@@ -12,7 +12,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
-#include "circt/Dialect/FIRRTL/Visitors.h"
+#include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/RTL/RTLTypes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"

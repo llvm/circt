@@ -11,12 +11,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Translation/ExportVerilog.h"
-#include "circt/Dialect/FIRRTL/Visitors.h"
+#include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Dialect/RTL/RTLTypes.h"
-#include "circt/Dialect/RTL/Visitors.h"
+#include "circt/Dialect/RTL/RTLVisitors.h"
 #include "circt/Dialect/SV/SVOps.h"
-#include "circt/Dialect/SV/Visitors.h"
+#include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinOps.h"

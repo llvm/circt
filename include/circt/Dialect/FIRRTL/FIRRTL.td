@@ -36,9 +36,9 @@ class FIRRTLOp<string mnemonic, list<OpTrait> traits = []> :
     Op<FIRRTLDialect, mnemonic, traits>;
 
 include "FIRRTLTypes.td"
-include "FIRRTLOpStructure.td"
-include "FIRRTLOpDeclarations.td"
-include "FIRRTLOpExpressions.td"
-include "FIRRTLOpStatements.td"
+include "FIRRTLStructure.td"
+include "FIRRTLDeclarations.td"
+include "FIRRTLExpressions.td"
+include "FIRRTLStatements.td"
 
 #endif // FIRRTL_TD
