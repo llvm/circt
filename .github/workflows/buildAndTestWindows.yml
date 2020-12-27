@@ -55,9 +55,7 @@ jobs:
             -DLLVM_TARGETS_TO_BUILD="host" -DCMAKE_BUILD_TYPE=Release -Thost=x64 `
             -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=ON `
             -DLLVM_INSTALL_UTILS=ON -DCMAKE_INSTALL_PREFIX="$(pwd)/../install"
-          cmake --build . `
-            -j $((Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors) `
-            --target install
+          cmake --build . --target install
 
       # --------
       # Build and test CIRCT in both debug and release mode.
@@ -76,24 +74,6 @@ jobs:
             -DLLVM_EXTERNAL_LIT="$(pwd)/../llvm/build/Debug/bin/llvm-lit.py" `
             -G "Visual Studio 16 2019" `
             -DCMAKE_BUILD_TYPE=Debug -Thost=x64 -DCMAKE_BUILD_TYPE=Debug
-          cmake --build . `
-            -j $((Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors)
-
-
-      # Build the CIRCT test target in release mode to build and test.
-      - name: Build and Test CIRCT (Release)
-        run: |
-          mkdir build_release
-          cd build_release
-          cmake .. \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DLLVM_ENABLE_ASSERTIONS=OFF \
-            -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ \
-            -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ \
-            -DCMAKE_LINKER=lld \
-            -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_CXX_COMPILER=clang++ \
-            -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit
-          make check-circt -j$(nproc)
+          cmake --build .
 
     # --- end of build-circt job.
