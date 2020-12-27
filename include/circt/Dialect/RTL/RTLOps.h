@@ -1,4 +1,4 @@
-//===- RTL/Ops.h - Declare RTL dialect operations ---------------*- C++ -*-===//
+//===- RTL/RTLOps.h - Declare RTL dialect operations ------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -13,7 +13,7 @@
 #ifndef CIRCT_DIALECT_RTL_OPS_H
 #define CIRCT_DIALECT_RTL_OPS_H
 
-#include "circt/Dialect/RTL/Dialect.h"
+#include "circt/Dialect/RTL/RTLDialect.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/OpImplementation.h"

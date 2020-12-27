@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/Dialect/CommonFolders.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"

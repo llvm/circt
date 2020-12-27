@@ -1,4 +1,4 @@
-//===- Dialect.cpp - Implement the FIRRTL dialect -------------------------===//
+//===- FIRRTLDialect.cpp - Implement the FIRRTL dialect -------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/FIRRTL/Dialect.h"
-#include "circt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/DialectImplementation.h"
 
 using namespace circt;
@@ -96,7 +96,7 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
 
 FIRRTLDialect::FIRRTLDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context,
-    ::mlir::TypeID::get<FIRRTLDialect>()) {
+              ::mlir::TypeID::get<FIRRTLDialect>()) {
 
   // Register types.
   addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,

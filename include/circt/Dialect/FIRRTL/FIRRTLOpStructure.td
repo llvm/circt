@@ -1,4 +1,4 @@
-//===- Structure.td - RTL structure ops ------------------*- tablegen -*-===//
+//===- FIRRTLOpStructure.td - Circuit and Module Ops -------*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,16 +6,51 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This describes the MLIR ops for structure.
+// This describes the FIRRTL Circuit and Module MLIR ops.
 //
 //===----------------------------------------------------------------------===//
 
-def RTLModuleOp : RTLOp<"module",
-      [IsolatedFromAbove, FunctionLike, Symbol, RegionKindInterface,
-       SingleBlockImplicitTerminator<"OutputOp">, HasParent<"mlir::ModuleOp">]>{
-  let summary = "RTL Module";
+def CircuitOp : FIRRTLOp<"circuit",
+      [IsolatedFromAbove, SymbolTable,
+       SingleBlockImplicitTerminator<"DoneOp">]> {
+  let summary = "FIRRTL Circuit";
   let description = [{
-    The "rtl.module" operation represents a Verilog module, including a given
+    The "firrtl.circuit" operation represents an overall Verilog circuit,
+    containing a list of modules.
+  }];
+  let arguments = (ins StrAttr:$name);
+  let results = (outs);
+  let regions = (region SizedRegion<1>:$body);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilderDAG<(ins "StringAttr":$name)>
+  ];
+
+  let extraClassDeclaration = [{
+    OpBuilder getBodyBuilder() {
+      assert(!body().empty() && "Unexpected empty 'body' region.");
+      Block &bodyBlock = body().front();
+      return OpBuilder(&bodyBlock, std::prev(bodyBlock.end()));
+    }
+
+    /// Return body of this circuit.
+    Region &getBodyRegion();
+    Block *getBody();
+  }];
+
+  let printer = [{ return ::print(p, *this); }];
+  let parser = [{ return ::parse$cppClass(parser, result); }];
+
+  let verifier = [{ return ::verifyCircuitOp(*this); }];
+}
+
+def FModuleOp : FIRRTLOp<"module",
+      [IsolatedFromAbove, FunctionLike, Symbol, RegionKindInterface,
+       SingleBlockImplicitTerminator<"DoneOp">]> {
+  let summary = "FIRRTL Module";
+  let description = [{
+    The "firrtl.module" operation represents a Verilog module, including a given
     name, a list of ports, and a body that represents the connections within
     the module.
   }];
@@ -29,6 +64,7 @@ def RTLModuleOp : RTLOp<"module",
   ];
 
   let extraClassDeclaration = [{
+    using FunctionLike::end;
     using FunctionLike::front;
     using FunctionLike::getBody;
 
@@ -44,15 +80,15 @@ def RTLModuleOp : RTLOp<"module",
     // squatting on the name.
     Block *getBodyBlock() { return &body().front(); }
 
-    // Get the module's symbolic name.
-    StringRef getName() {
-      return getAttrOfType<StringAttr>(::mlir::SymbolTable::getSymbolAttrName())
-          .getValue();
+    OpBuilder getBodyBuilder() {
+      assert(!body().empty() && "Unexpected empty 'body' region.");
+      Block &bodyBlock = body().front();
+      return OpBuilder(&bodyBlock, std::prev(bodyBlock.end()));
     }
 
   private:
     // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<RTLModuleOp>;
+    friend class OpTrait::FunctionLike<FModuleOp>;
 
     /// Returns the number of arguments, implementing OpTrait::FunctionLike.
     unsigned getNumFuncArguments() { return getType().getInputs().size(); }
@@ -75,21 +111,18 @@ def RTLModuleOp : RTLOp<"module",
 
   let printer = [{ return ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
+  let verifier = [{ return ::verifyFModuleOp(*this); }];
 }
 
-def RTLExternModuleOp : RTLOp<"externmodule",
-      [IsolatedFromAbove, FunctionLike, Symbol, HasParent<"mlir::ModuleOp">]> {
-  let summary = "RTL external Module";
+def FExtModuleOp : FIRRTLOp<"extmodule",
+      [IsolatedFromAbove, FunctionLike, Symbol]> {
+  let summary = "FIRRTL extmodule";
   let description = [{
-    The "rtl.externmodule" operation represents an external reference to a
+    The "firrtl.extmodule" operation represents an external reference to a
     Verilog module, including a given name and a list of ports.
-
-    The 'verilogName' attribute (when present) specifies the spelling of the
-    module name in Verilog we can use.  TODO: This is a hack because we don't
-    have proper parameterization in the rtl.dialect.  We need a way to represent
-    parameterized types instead of just concrete types.
   }];
-  let arguments = (ins OptionalAttr<StrAttr>:$verilogName);
+  let arguments = (ins OptionalAttr<StrAttr>:$defname,
+                       OptionalAttr<DictionaryAttr>:$parameters);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
@@ -97,23 +130,18 @@ def RTLExternModuleOp : RTLOp<"externmodule",
   let builders = [
     OpBuilderDAG<(ins "StringAttr":$name,
                       "ArrayRef<ModulePortInfo>":$ports,
-                      CArg<"StringRef", "StringRef()">:$verilogName)>
+                      CArg<"StringRef", "StringRef()">:$defnamAttr)>
   ];
 
-  let extraClassDeclaration = [{   
-    // Decode information about the input and output ports on this module.
-    void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
-      getModulePortInfo(*this, results);
-    }
-
-    /// Return the name to use for the Verilog module that we're referencing
-    /// here.  This is typically the symbol, but can be overridden with the
-    /// verilogName attribute.
-    StringRef getVerilogModuleName();
+  let extraClassDeclaration = [{
+     // Decode information about the input and output ports on this module.
+     void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
+       getModulePortInfo(*this, results);
+     }
 
   private:
     // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<RTLExternModuleOp>;
+    friend class OpTrait::FunctionLike<FExtModuleOp>;
 
     /// Returns the number of arguments, implementing OpTrait::FunctionLike.
     unsigned getNumFuncArguments() { return getType().getInputs().size(); }
@@ -136,55 +164,14 @@ def RTLExternModuleOp : RTLOp<"externmodule",
 
   let printer = [{ return ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
+  let verifier = [{ return ::verifyFExtModuleOp(*this); }];
 }
 
-def InstanceOp : RTLOp<"instance",
-                       [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
-  let summary = "Create an instance of a module";
+def DoneOp : FIRRTLOp<"done", [Terminator]> {
+  let summary = "FIRRTL termination operation";
   let description = [{
-    This represents an instance of a module. The inputs and results are 
-    the referenced module's inputs and outputs.  Any parameters are stored in
-    the "parameters" dictionary.
+    "firrtl.done" marks the end of a region in the FIRRTL dialect.
   }];
 
-  let arguments = (ins StrAttr:$instanceName,
-                       FlatSymbolRefAttr:$moduleName,
-                       Variadic<AnyType>:$inputs,
-                       OptionalAttr<DictionaryAttr>:$parameters);
-  let results = (outs Variadic<AnyType>);
-
-  let extraClassDeclaration = [{
-    // Return the name of the specified result or empty string if it cannot be
-    // determined.
-    StringAttr getResultName(size_t i);
-
-    /// Lookup the module or extmodule for the symbol.  This returns null on
-    /// invalid IR.
-    Operation *getReferencedModule();
-  }];
-  
-  let assemblyFormat = [{
-    $instanceName $moduleName `(` $inputs `)` attr-dict
-      `:` functional-type($inputs, results)
-  }];
-
-  let verifier = [{ return ::verifyInstanceOp(*this); }];
-}
-
-def OutputOp : RTLOp<"output", [Terminator, HasParent<"RTLModuleOp">,
-                                NoSideEffect, ReturnLike]> {
-  let summary = "RTL termination operation";
-  let description = [{
-    "rtl.output" marks the end of a region in the RTL dialect and the values
-    to put on the output ports.
-  }];
-
-  let arguments = (ins Variadic<AnyType>:$operands);
-
-  let builders = [OpBuilderDAG<(ins),
-                               [{ build($_builder, $_state, llvm::None); }]>];
-
-  let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
-
-  let verifier = [{ return ::verifyOutputOp(this); }];
+  let arguments = (ins);
 }

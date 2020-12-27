@@ -12,7 +12,7 @@
 
 #include "circt/Conversion/FIRRTLToLLHD/FIRRTLToLLHD.h"
 
-#include "circt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Visitors.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"

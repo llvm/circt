@@ -32,14 +32,14 @@ def RTLDialect : Dialect {
   let cppNamespace = "::circt::rtl";
 }
 
-include "Types.td"
+include "RTLTypes.td"
 
 // Base class for the operation in this dialect.
 class RTLOp<string mnemonic, list<OpTrait> traits = []> :
     Op<RTLDialect, mnemonic, traits>;
 
-include "Combinatorial.td"
-include "Statements.td"
-include "Structure.td"
+include "RTLCombinatorial.td"
+include "RTLStatements.td"
+include "RTLStructure.td"
 
 #endif // RTL_TD

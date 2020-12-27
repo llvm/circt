@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/RTLDialect.h"
-#include "circt/Dialect/RTL/Ops.h"
+#include "circt/Dialect/RTL/RTLOps.h"
 #include "mlir-c/IR.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Support.h"

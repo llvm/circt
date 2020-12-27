@@ -1,4 +1,4 @@
-//===- Ops.h - StaticLogic MLIR Operations ----------------------*- C++ -*-===//
+//===- StaticLogicOps.h - StaticLogic MLIR Operations -----------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -22,7 +22,7 @@ using namespace circt::staticlogic;
 
 StaticLogicDialect::StaticLogicDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context,
-    ::mlir::TypeID::get<StaticLogicDialect>()) {
+              ::mlir::TypeID::get<StaticLogicDialect>()) {
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/StaticLogic/StaticLogic.cpp.inc"

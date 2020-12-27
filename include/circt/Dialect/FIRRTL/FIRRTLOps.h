@@ -1,5 +1,4 @@
-//===- FIRRTL/Ops.h - Declare FIRRTL dialect operations ---------*- C++ -*-===//
-//
+//===- FIRRTL/FIRRTLOps.h - Declare FIRRTL dialect operations ---*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -14,8 +13,8 @@
 #ifndef CIRCT_DIALECT_FIRRTL_OPS_H
 #define CIRCT_DIALECT_FIRRTL_OPS_H
 
-#include "circt/Dialect/FIRRTL/Dialect.h"
-#include "circt/Dialect/FIRRTL/Types.h"
+#include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/RegionKindInterface.h"

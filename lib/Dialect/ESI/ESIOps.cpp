@@ -11,8 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/ESI/ESIOps.h"
-#include "circt/Dialect/SV/Ops.h"
-#include "circt/Dialect/SV/Types.h"
+#include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/SV/SVTypes.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"

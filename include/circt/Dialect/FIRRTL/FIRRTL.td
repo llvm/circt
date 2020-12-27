@@ -1,6 +1,5 @@
 //===- FIRRTL.td - FIRRTL dialect definition ---------------*- tablegen -*-===//
 //
-//
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -36,10 +35,10 @@ def FIRRTLDialect : Dialect {
 class FIRRTLOp<string mnemonic, list<OpTrait> traits = []> :
     Op<FIRRTLDialect, mnemonic, traits>;
 
-include "Types.td"
-include "OpStructure.td"
-include "OpDeclarations.td"
-include "OpExpressions.td"
-include "OpStatements.td"
+include "FIRRTLTypes.td"
+include "FIRRTLOpStructure.td"
+include "FIRRTLOpDeclarations.td"
+include "FIRRTLOpExpressions.td"
+include "FIRRTLOpStatements.td"
 
 #endif // FIRRTL_TD
