@@ -76,13 +76,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input a1 : Analog<1>          ; CHECK: %a1: !firrtl.analog<1>,
     input a8 : Analog<8>          ; CHECK: %a8: !firrtl.analog<8>)
 
-    ; CHECK: %_t = firrtl.wire {name = "_t"} : !firrtl.vector<uint<1>, 12>
+    ; CHECK: %_t = firrtl.wire : !firrtl.vector<uint<1>, 12>
     wire _t : UInt<1>[12] @[Nodes.scala 370:76]
 
-    ; CHECK: %_t_2 = firrtl.wire {name = "_t_2"} : !firrtl.vector<uint<1>, 12>
+    ; CHECK: %_t_2 = firrtl.wire : !firrtl.vector<uint<1>, 12>
     wire _t_2 : UInt<1>[12]
 
-    ; CHECK: %out_0 = firrtl.wire {name = "out_0"} : !firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>
+    ; CHECK: %out_0 = firrtl.wire : !firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>
     wire out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
 
     ; CHECK: firrtl.connect %_t, %_t_2 : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 12>
@@ -364,19 +364,19 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     wire _t_6 : { flip b : { bits : { source : UInt<7> } } }
     node _t_8 = bits(_t_6.b.bits.source, 5, 0)
 
-    ; CHECK: %flip1 = firrtl.wire {{.*}} !firrtl.bundle<x: bundle<a: uint>>
+    ; CHECK: %flip1 = firrtl.wire : !firrtl.bundle<x: bundle<a: uint>>
     wire flip1 : { flip x : { flip a : UInt } }
-    ; CHECK: %flip2 = firrtl.wire {{.*}} !firrtl.bundle<x: bundle<a: uint, b: flip<analog>>>
+    ; CHECK: %flip2 = firrtl.wire : !firrtl.bundle<x: bundle<a: uint, b: flip<analog>>>
     wire flip2 : { flip x : { flip a : UInt, b: Analog } }
-    ; CHECK: %flip3 = firrtl.wire {{.*}} !firrtl.bundle<x: bundle<a: uint, b: analog>>
+    ; CHECK: %flip3 = firrtl.wire : !firrtl.bundle<x: bundle<a: uint, b: analog>>
     wire flip3 : { flip x : { flip a : UInt, flip b: Analog } }
-    ; CHECK: %flip4 = firrtl.wire {{.*}} !firrtl.bundle<x: vector<bundle<a: uint>, 4>>
+    ; CHECK: %flip4 = firrtl.wire : !firrtl.bundle<x: vector<bundle<a: uint>, 4>>
     wire flip4 : { flip x : { flip a : UInt }[4] }
 
 
   ; CHECK-LABEL: firrtl.module @expr_stmt_ambiguity(
   module expr_stmt_ambiguity :
-    ; CHECK: %reg = firrtl.wire {name = "reg"} : !firrtl.uint
+    ; CHECK: %reg = firrtl.wire : !firrtl.uint
     wire reg : UInt
     ; CHECK: firrtl.connect %reg,
     reg <= UInt(42)

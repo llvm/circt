@@ -155,8 +155,8 @@ def WireOp : FIRRTLOp<"wire", []> {
   let arguments = (ins OptionalAttr<StrAttr>:$name);
   let results = (outs FIRRTLType:$result);
   
-  let assemblyFormat = [{
-     attr-dict `:` type($result)
-  }];
+  // We handle the name in a custom way, so we use a customer parser/printer.
+  let printer = [{ printWireOp(p, *this); }];
+  let parser = [{ return parseWireOp(parser, result); }];
 }
 
