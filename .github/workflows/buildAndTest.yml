@@ -70,6 +70,7 @@ jobs:
 
       # Submodules don't have to be fetched but they should be init'ed.
       - name: Submodule init
+        run: git submodule init
 
       # We'll be running clang-tidy later in this flow.
       - name: Install clang-tidy
