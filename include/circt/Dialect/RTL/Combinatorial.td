@@ -170,6 +170,7 @@ class UnaryI1ReductionRTLOp<string mnemonic, list<OpTrait> traits = []> :
       RTLOp<mnemonic, !listconcat(traits, [NoSideEffect])> {
   let arguments = (ins AnySignlessInteger:$input);
   let results = (outs I1:$result);
+  let hasFolder = 1;
 
   let assemblyFormat = [{
     $input attr-dict `:` type($input)

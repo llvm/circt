@@ -471,3 +471,63 @@ func @sext_constant_folding() -> i5 {
   %0 = rtl.sext %c8_i4 : (i4) -> i5
   return %0 : i5
 }
+
+// CHECK-LABEL: func @andr_constant_folding1() -> i1 {
+// CHECK-NEXT:  %false = rtl.constant(false) : i1
+// CHECK-NEXT:  return %false : i1
+
+func @andr_constant_folding1() -> i1 {
+  %c8_i4 = rtl.constant(8 : i4) : i4
+  %0 = rtl.andr %c8_i4 : i4
+  return %0 : i1
+}
+
+// CHECK-LABEL: func @andr_constant_folding2() -> i1 {
+// CHECK-NEXT:  %true = rtl.constant(true) : i1
+// CHECK-NEXT:  return %true : i1
+
+func @andr_constant_folding2() -> i1 {
+  %c15_i4 = rtl.constant(15 : i4) : i4
+  %0 = rtl.andr %c15_i4 : i4
+  return %0 : i1
+}
+
+// CHECK-LABEL: func @orr_constant_folding1() -> i1 {
+// CHECK-NEXT:  %false = rtl.constant(false) : i1
+// CHECK-NEXT:  return %false : i1
+
+func @orr_constant_folding1() -> i1 {
+  %c0_i4 = rtl.constant(0 : i4) : i4
+  %0 = rtl.orr %c0_i4 : i4
+  return %0 : i1
+}
+
+// CHECK-LABEL: func @orr_constant_folding2() -> i1 {
+// CHECK-NEXT:  %true = rtl.constant(true) : i1
+// CHECK-NEXT:  return %true : i1
+
+func @orr_constant_folding2() -> i1 {
+  %c8_i4 = rtl.constant(8 : i4) : i4
+  %0 = rtl.orr %c8_i4 : i4
+  return %0 : i1
+}
+
+// CHECK-LABEL: func @xorr_constant_folding1() -> i1 {
+// CHECK-NEXT:  %true = rtl.constant(true) : i1
+// CHECK-NEXT:  return %true : i1
+
+func @xorr_constant_folding1() -> i1 {
+  %c4_i4 = rtl.constant(4 : i4) : i4
+  %0 = rtl.xorr %c4_i4 : i4
+  return %0 : i1
+}
+
+// CHECK-LABEL: func @xorr_constant_folding2() -> i1 {
+// CHECK-NEXT:  %false = rtl.constant(false) : i1
+// CHECK-NEXT:  return %false : i1
+
+func @xorr_constant_folding2() -> i1 {
+  %c15_i4 = rtl.constant(15 : i4) : i4
+  %0 = rtl.xorr %c15_i4 : i4
+  return %0 : i1
+}
