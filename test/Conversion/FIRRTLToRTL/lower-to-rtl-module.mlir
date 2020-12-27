@@ -178,7 +178,6 @@
     // CHECK-NEXT: %1 = firrtl.stdIntCast %inB : (i4) -> !firrtl.uint<4>
     // CHECK-NEXT: %2 = firrtl.stdIntCast %inC : (i4) -> !firrtl.uint<4>
 
-    // CHECK: [[OUTB:%.+]] = firrtl.wire : !firrtl.flip<uint<4>>
     // CHECK: [[OUTC:%.+]] = firrtl.wire : !firrtl.flip<uint<4>>
     // CHECK: [[OUTD:%.+]] = firrtl.wire : !firrtl.flip<uint<4>>
 
@@ -210,8 +209,8 @@
     // CHECK: [[OUTF:%.+]] = firrtl.tail [[INF]], 4 : (!firrtl.uint<5>) -> !firrtl.uint<4>
     firrtl.connect %outF, %inF : !firrtl.flip<uint<4>>, !firrtl.uint<5>
 
-    // CHECK: [[OUTBX:%.+]] = firrtl.asPassive [[OUTB]]
-    // CHECK: [[OUTBY:%.+]] = firrtl.stdIntCast [[OUTBX]]
+    // CHECK: [[OUTBY:%.+]] = rtl.merge %inB, %inA : i4
+
     // CHECK: [[OUTCX:%.+]] = firrtl.asPassive [[OUTC]]
     // CHECK: [[OUTCY:%.+]] = firrtl.stdIntCast [[OUTCX]]
     // CHECK: [[OUTDX:%.+]] = firrtl.asPassive [[OUTD]]

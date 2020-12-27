@@ -292,31 +292,57 @@ static Value tryToFindOutputValue(Value portValue) {
     connects.push_back(connect);
   }
 
-  // For now just handle the case where the output port has a single connect.
-  if (connects.size() != 1)
+  // We don't have an RTL equivalent of "poison" so just don't special case the
+  // case where there are no connects other uses of an output.
+  if (connects.empty())
     return {};
 
-  ImplicitLocOpBuilder builder(connects[0].getLoc(), connects[0]);
-  auto connectSrc = connects[0].src();
+  auto *curBlock = connects[0]->getBlock();
 
-  // Convert fliped sources to passive sources.
-  if (!connectSrc.getType().cast<FIRRTLType>().isPassive())
-    connectSrc = builder.createOrFold<AsPassivePrimOp>(connectSrc);
+  // Convert each connect into an extended version of its operand being output.
+  SmallVector<Value, 2> results;
 
-  // We know it must be the destination operand due to the types, but the source
-  // may not match the destination width.
-  auto destTy = portValue.getType().cast<FIRRTLType>().getPassiveType();
-  if (destTy != connectSrc.getType()) {
-    // The only type mismatch we can have is due to integer width differences.
-    // FIXME: connects shouldn't allow truncates, so this should just be an
-    // extension.
-    connectSrc =
-        extendOrTruncateFIRRTL(connectSrc, destTy.cast<IntType>(), builder);
+  for (auto connect : connects) {
+    ImplicitLocOpBuilder builder(connect.getLoc(), connect);
+    auto connectSrc = connect.src();
+
+    // Convert fliped sources to passive sources.
+    if (!connectSrc.getType().cast<FIRRTLType>().isPassive())
+      connectSrc = builder.createOrFold<AsPassivePrimOp>(connectSrc);
+
+    // We know it must be the destination operand due to the types, but the
+    // source may not match the destination width.
+    auto destTy = portValue.getType().cast<FIRRTLType>().getPassiveType();
+    if (destTy != connectSrc.getType()) {
+      // The only type mismatch we can have is due to integer width differences.
+      // FIXME: connects shouldn't allow truncates, so this should just be an
+      // extension.
+      connectSrc =
+          extendOrTruncateFIRRTL(connectSrc, destTy.cast<IntType>(), builder);
+    }
+
+    // Remove the connect and use its source as the value for the output.
+    connect.erase();
+    results.push_back(connectSrc);
   }
 
-  // Remove the connect and use its source as the value for the output.
-  connects[0].erase();
-  return connectSrc;
+  // If there was only one source, just return it.  Otherwise emit an rtl.merge
+  // right before the output.
+  if (connects.size() == 1)
+    return results.back();
+
+  auto builder = ImplicitLocOpBuilder::atBlockTerminator(
+      curBlock->getTerminator()->getLoc(), curBlock);
+
+  // Annoyingly, we need to convert from FIRRTL type to builtin type to do the
+  // merge, then back.
+  auto loweredType = lowerType(portValue.getType());
+  for (auto &result : results) {
+    result = castFromFIRRTLType(result, loweredType, builder);
+  }
+
+  auto merge = builder.createOrFold<rtl::MergeOp>(results);
+  return castToFIRRTLType(merge, portValue.getType(), builder);
 }
 
 /// Now that we have the operations for the rtl.module's corresponding to the
