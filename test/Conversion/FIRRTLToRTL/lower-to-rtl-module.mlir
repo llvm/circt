@@ -51,11 +51,11 @@
     // CHECK: [[U2CAST:%.+]] = firrtl.stdIntCast %u2 : (i2) -> !firrtl.uint<2>
     // CHECK: [[S8CAST:%.+]] = firrtl.stdIntCast %s8 : (i8) -> !firrtl.sint<8>
 
-    // CHECK: %in1.wire = firrtl.wire {name = "in1.wire"} : !firrtl.uint<4>
+    // CHECK: %in1.wire = firrtl.wire : !firrtl.uint<4>
     // CHECK-NEXT: [[W1:%.+]] = firrtl.stdIntCast %in1.wire : (!firrtl.uint<4>) -> i4
-    // CHECK-NEXT: %in2.wire = firrtl.wire {name = "in2.wire"} : !firrtl.uint<2>
+    // CHECK-NEXT: %in2.wire = firrtl.wire : !firrtl.uint<2>
     // CHECK-NEXT: [[W2:%.+]] = firrtl.stdIntCast %in2.wire : (!firrtl.uint<2>) -> i2
-    // CHECK-NEXT: %in3.wire = firrtl.wire {name = "in3.wire"} : !firrtl.sint<8>
+    // CHECK-NEXT: %in3.wire = firrtl.wire : !firrtl.sint<8>
     // CHECK-NEXT: [[W3:%.+]] = firrtl.stdIntCast %in3.wire : (!firrtl.sint<8>) -> i8
     // CHECK-NEXT: [[INSTOUT:%.+]] = rtl.instance "xyz" @Simple([[W1]], [[W2]], [[W3]]) : (i4, i2, i8) -> i4
     %xyz = firrtl.instance @Simple {name = "xyz"}
@@ -86,7 +86,7 @@
     // Parameterized module reference.
     // rtl.instance carries the parameters, unlike at the FIRRTL layer.
 
-    // CHECK-NEXT: %in.wire = firrtl.wire {name = "in.wire"} : !firrtl.uint<1>
+    // CHECK-NEXT: %in.wire = firrtl.wire : !firrtl.uint<1>
     // CHECK-NEXT: [[IW:%.+]] = firrtl.stdIntCast %in.wire : (!firrtl.uint<1>) -> i1
 
     // CHECK-NEXT: [[OUT:%.+]] = rtl.instance "myext" @MyParameterizedExtModule([[IW]])  {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1) -> i8

@@ -176,7 +176,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %30 = firrtl.dshl %in3c, %9 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<8>
 
     // Issue #367: https://github.com/llvm/circt/issues/367
-    // CHECK-NEXT: = rtl.sext %40 : (i4) -> i12
+    // CHECK-NEXT: = rtl.sext {{.*}} : (i4) -> i12
     // CHECK-NEXT: [[SHIFT:%.+]] = rtl.shrs {{.*}}, {{.*}} : i12
     // CHECK-NEXT: = rtl.extract [[SHIFT]] from 0 : (i12) -> i4
     %31 = firrtl.dshr %25, %27 : (!firrtl.sint<4>, !firrtl.uint<12>) -> !firrtl.sint<4>
@@ -371,7 +371,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %inp_i = firrtl.stdIntCast %inpi : (i65) -> !firrtl.uint<65>
 
     // CHECK-NEXT: %tmp48 = rtl.wire : !rtl.inout<i27>
-    %tmp48 = firrtl.wire {name = "tmp48"} : !firrtl.uint<27>
+    %tmp48 = firrtl.wire : !firrtl.uint<27>
     // CHECK-NEXT: %0 = rtl.zext %inp2 : (i27) -> i65
     // CHECK-NEXT: %1 = rtl.divu %0, %inpi : i65
     %0 = firrtl.div %inp_2, %inp_i : (!firrtl.uint<27>, !firrtl.uint<65>) -> !firrtl.uint<27>
