@@ -61,19 +61,20 @@ jobs:
       # Build and test CIRCT in both debug and release mode.
       # --------
 
-      # Build the CIRCT test target in debug mode to build and test.
-      - name: Build and test CIRCT (Assert)
+      # Build the CIRCT test target in release mode. The cmake scripts on
+      # Windows only support building with the same configuration as MLIR.
+      - name: Build and test CIRCT (release)
         shell: pwsh
         run: |
-          mkdir build_assert
-          cd build_assert
+          mkdir build_release
+          cd build_release
           cmake ../ `
             -DLLVM_ENABLE_ASSERTIONS=ON `
             -DMLIR_DIR="$(pwd)/../llvm/build/lib/cmake/mlir/" `
             -DLLVM_DIR="$(pwd)/../llvm/build/lib/cmake/llvm/" `
-            -DLLVM_EXTERNAL_LIT="$(pwd)/../llvm/build/Debug/bin/llvm-lit.py" `
+            -DLLVM_EXTERNAL_LIT="$(pwd)/../llvm/build/Release/bin/llvm-lit.py" `
             -G "Visual Studio 16 2019" `
-            -DCMAKE_BUILD_TYPE=Debug -Thost=x64 -DCMAKE_BUILD_TYPE=Debug
-          cmake --build .
+            -DCMAKE_BUILD_TYPE=Release -Thost=x64 -DCMAKE_BUILD_TYPE=Release
+          cmake --build . --config Release
 
     # --- end of build-circt job.
