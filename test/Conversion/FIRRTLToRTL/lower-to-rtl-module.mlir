@@ -54,9 +54,7 @@
     // CHECK-NEXT: [[RESETCAST:%.+]] = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[ARG1CAST:%.+]] = firrtl.stdIntCast [[ARG1:%.+]] : (!firrtl.uint<4>) -> i4
-    // CHECK-NEXT: [[U2FCAST:%.+]] = firrtl.stdIntCast [[U2CAST]] : (!firrtl.uint<2>) -> i2
-    // CHECK-NEXT: [[S8FCAST:%.+]] = firrtl.stdIntCast [[S8CAST]] : (!firrtl.sint<8>) -> i8
-    // CHECK-NEXT: %xyz.out4 = rtl.instance "xyz" @Simple([[ARG1CAST]], [[U2FCAST]], [[S8FCAST]]) : (i4, i2, i8) -> i4
+    // CHECK-NEXT: %xyz.out4 = rtl.instance "xyz" @Simple([[ARG1CAST]], %u2, %s8) : (i4, i2, i8) -> i4
     %xyz = firrtl.instance @Simple {name = "xyz"}
      : !firrtl.bundle<in1: flip<uint<4>>, in2: flip<uint<2>>,
                       in3: flip<sint<8>>, out4: uint<4>>
@@ -83,9 +81,7 @@
     // Parameterized module reference.
     // rtl.instance carries the parameters, unlike at the FIRRTL layer.
 
-    // CHECK-NEXT: [[IW:%.+]] = firrtl.stdIntCast [[RESETCAST]] : (!firrtl.uint<1>) -> i1
-
-    // CHECK-NEXT: [[OUT:%.+]] = rtl.instance "myext" @MyParameterizedExtModule([[IW]])  {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1) -> i8
+    // CHECK-NEXT: [[OUT:%.+]] = rtl.instance "myext" @MyParameterizedExtModule(%reset)  {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1) -> i8
     %myext = firrtl.instance @MyParameterizedExtModule {name = "myext"}
       : !firrtl.bundle<in: flip<uint<1>>, out: uint<8>>
 

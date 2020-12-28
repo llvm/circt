@@ -117,7 +117,7 @@ private:
   void lowerModuleBody(FModuleOp oldModule,
                        DenseMap<Operation *, Operation *> &oldToNewModuleMap);
 
-  void lowerInstance(InstanceOp instance,
+  void lowerInstance(InstanceOp instance, CircuitOp circuitOp,
                      DenseMap<Operation *, Operation *> &oldToNewModuleMap);
 };
 } // end anonymous namespace
@@ -284,12 +284,13 @@ rtl::RTLModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
 /// This can happen when there are no connects to the value, or if
 /// firrtl.invalid is used.  The 'mergePoint' location is where a 'rtl.merge'
 /// operation should be inserted if needed.
-static Value tryToConnectsToFlipValue(Value portValue, Operation *insertPoint) {
+static Value tryEliminatingConnectsToValue(Value flipValue,
+                                           Operation *insertPoint) {
   SmallVector<ConnectOp, 2> connects;
-  for (auto *use : portValue.getUsers()) {
+  for (auto *use : flipValue.getUsers()) {
     // We only know about 'connect' uses, where this is the destination.
     auto connect = dyn_cast<ConnectOp>(use);
-    if (!connect || connect.src() == portValue)
+    if (!connect || connect.src() == flipValue)
       return {};
 
     connects.push_back(connect);
@@ -313,7 +314,7 @@ static Value tryToConnectsToFlipValue(Value portValue, Operation *insertPoint) {
 
     // We know it must be the destination operand due to the types, but the
     // source may not match the destination width.
-    auto destTy = portValue.getType().cast<FIRRTLType>().getPassiveType();
+    auto destTy = flipValue.getType().cast<FIRRTLType>().getPassiveType();
     if (destTy != connectSrc.getType()) {
       // The only type mismatch we can have is due to integer width differences.
       // FIXME: connects shouldn't allow truncates, so this should just be an
@@ -329,8 +330,8 @@ static Value tryToConnectsToFlipValue(Value portValue, Operation *insertPoint) {
 
   // If there was only one source, just return it.  Otherwise emit an rtl.merge
   // right before the output.
-  auto builder = ImplicitLocOpBuilder(insertPoint->getLoc(), insertPoint);
-  auto loweredType = lowerType(portValue.getType());
+  ImplicitLocOpBuilder builder(insertPoint->getLoc(), insertPoint);
+  auto loweredType = lowerType(flipValue.getType());
 
   // Convert from FIRRTL type to builtin type to do the merge.
   for (auto &result : results)
@@ -351,26 +352,6 @@ void FIRRTLModuleLowering::lowerModuleBody(
   if (!newModule)
     return;
 
-  // Start by updating all the firrtl.instance's to be rtl.instance's.
-  // Lowering an instance will also delete a bunch of firrtl.subfield
-  // operations, so we have to be careful about iterator invalidation.
-  for (auto opIt = oldModule.getBodyBlock()->begin(),
-            opEnd = oldModule.getBodyBlock()->end();
-       opIt != opEnd;) {
-    auto instance = dyn_cast<InstanceOp>(&*opIt);
-    if (!instance) {
-      ++opIt;
-      continue;
-    }
-
-    // We found an instance - lower it.  On successful return there will be
-    // zero uses and we can remove the operation.
-    lowerInstance(instance, oldToNewModuleMap);
-    ++opIt;
-    if (instance.use_empty())
-      instance.erase();
-  }
-
   ImplicitLocOpBuilder bodyBuilder(oldModule.getLoc(), newModule.body());
 
   // Use a placeholder instruction be a cursor that indicates where we want to
@@ -383,6 +364,8 @@ void FIRRTLModuleLowering::lowerModuleBody(
   // Insert argument casts, and re-vector users in the old body to use them.
   SmallVector<ModulePortInfo, 8> ports;
   oldModule.getPortInfo(ports);
+  assert(oldModule.body().getNumArguments() == ports.size() &&
+         "port count mismatch");
 
   size_t nextNewArg = 0;
   size_t firrtlArg = 0;
@@ -405,7 +388,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
       // Cast the argument to the old type, reintroducing sign information in
       // the rtl.module body.
       newArg = castToFIRRTLType(newArg, oldArg.getType(), bodyBuilder);
-    } else if (auto value = tryToConnectsToFlipValue(oldArg, outputOp)) {
+    } else if (auto value = tryEliminatingConnectsToValue(oldArg, outputOp)) {
       // If we were able to find the value being connected to the output,
       // directly use it!
       outputs.push_back(value);
@@ -435,6 +418,27 @@ void FIRRTLModuleLowering::lowerModuleBody(
                           std::prev(oldBlockInstList.end()));
 
   cursor.erase();
+
+  // Now that we're all over into the new module, update all the
+  // firrtl.instance's to be rtl.instance's.  Lowering an instance will also
+  // delete a bunch of firrtl.subfield and firrtl.connect operations, so we have
+  // to be careful about iterator invalidation.
+  for (auto opIt = newBlockInstList.begin(), opEnd = newBlockInstList.end();
+       opIt != opEnd;) {
+    auto instance = dyn_cast<InstanceOp>(&*opIt);
+    if (!instance) {
+      ++opIt;
+      continue;
+    }
+
+    // We found an instance - lower it.  On successful return there will be
+    // zero uses and we can remove the operation.
+    lowerInstance(instance, oldModule.getParentOfType<CircuitOp>(),
+                  oldToNewModuleMap);
+    ++opIt;
+    if (instance.use_empty())
+      instance.erase();
+  }
 }
 
 /// Lower a firrtl.instance operation to an rtl.instance operation.  This is a
@@ -445,10 +449,10 @@ void FIRRTLModuleLowering::lowerModuleBody(
 /// On success, this returns with the firrtl.instance op having no users,
 /// letting the caller erase it.
 void FIRRTLModuleLowering::lowerInstance(
-    InstanceOp oldInstance,
+    InstanceOp oldInstance, CircuitOp circuitOp,
     DenseMap<Operation *, Operation *> &oldToNewModuleMap) {
 
-  auto *oldModule = oldInstance.getReferencedModule();
+  auto *oldModule = circuitOp.lookupSymbol(oldInstance.moduleName());
   auto newModule = oldToNewModuleMap[oldModule];
   if (!newModule)
     return;
@@ -515,7 +519,7 @@ void FIRRTLModuleLowering::lowerInstance(
     auto &subfields = subfieldsByPortIndex[portIndex];
     if (subfields.size() == 1) {
       auto subfield = cast<SubfieldOp>(subfields[0]);
-      if (auto value = tryToConnectsToFlipValue(subfield, oldInstance)) {
+      if (auto value = tryEliminatingConnectsToValue(subfield, oldInstance)) {
         // If we got a value connecting to the input port, then we can pass it
         // into the RTL instance without a temporary wire.
         operands.push_back(value);
