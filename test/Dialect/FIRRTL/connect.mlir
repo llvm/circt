@@ -452,3 +452,16 @@ firrtl.module @test(%a : !firrtl.uint<2>, %b : !firrtl.flip<uint<1>>) {
 }
 
 }
+
+/// Partial connects may truncate.
+
+// -----
+
+firrtl.circuit "test" {
+
+firrtl.module @test(%a : !firrtl.uint<2>, %b : !firrtl.flip<uint<1>>) {
+  // CHECK: firrtl.partialconnect %b, %a
+  firrtl.partialconnect %b, %a : !firrtl.flip<uint<1>>, !firrtl.uint<2>
+}
+
+}
