@@ -278,7 +278,8 @@ rtl::RTLModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
 
 /// Given a value of flip type, check to see if all of the uses of it are
 /// connects.  If so, remove the connects and return the value being connected
-/// to it.  If this isn't a situation we can handle, just return null.
+/// to it, converted to an RTL type.  If this isn't a situation we can handle,
+/// just return null.
 ///
 /// This can happen when there are no connects to the value, or if
 /// firrtl.invalid is used.  The 'mergePoint' location is where a 'rtl.merge'
@@ -286,9 +287,9 @@ rtl::RTLModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
 static Value tryToConnectsToFlipValue(Value portValue, Operation *insertPoint) {
   SmallVector<ConnectOp, 2> connects;
   for (auto *use : portValue.getUsers()) {
-    // We only know about 'connect' uses.
+    // We only know about 'connect' uses, where this is the destination.
     auto connect = dyn_cast<ConnectOp>(use);
-    if (!connect)
+    if (!connect || connect.src() == portValue)
       return {};
 
     connects.push_back(connect);
@@ -328,20 +329,14 @@ static Value tryToConnectsToFlipValue(Value portValue, Operation *insertPoint) {
 
   // If there was only one source, just return it.  Otherwise emit an rtl.merge
   // right before the output.
-  if (connects.size() == 1)
-    return results.back();
-
   auto builder = ImplicitLocOpBuilder(insertPoint->getLoc(), insertPoint);
-
-  // Annoyingly, we need to convert from FIRRTL type to builtin type to do the
-  // merge, then back.
   auto loweredType = lowerType(portValue.getType());
-  for (auto &result : results) {
-    result = castFromFIRRTLType(result, loweredType, builder);
-  }
 
-  auto merge = builder.createOrFold<rtl::MergeOp>(results);
-  return castToFIRRTLType(merge, portValue.getType(), builder);
+  // Convert from FIRRTL type to builtin type to do the merge.
+  for (auto &result : results)
+    result = castFromFIRRTLType(result, loweredType, builder);
+
+  return builder.createOrFold<rtl::MergeOp>(results);
 }
 
 /// Now that we have the operations for the rtl.module's corresponding to the
@@ -413,9 +408,8 @@ void FIRRTLModuleLowering::lowerModuleBody(
     } else if (auto value = tryToConnectsToFlipValue(oldArg, outputOp)) {
       // If we were able to find the value being connected to the output,
       // directly use it!
-      newArg = value;
-      newArg = castFromFIRRTLType(newArg, lowerType(port.type), outputBuilder);
-      outputs.push_back(newArg);
+      outputs.push_back(value);
+      assert(oldArg.use_empty() && "should have removed all uses of oldArg");
       continue;
     } else {
       // Outputs need a temporary wire so they can be connect'd to, which we
@@ -520,13 +514,13 @@ void FIRRTLModuleLowering::lowerInstance(
     // find the connects to it, then we can directly materialize it.
     auto &subfields = subfieldsByPortIndex[portIndex];
     if (subfields.size() == 1) {
-      if (auto value = tryToConnectsToFlipValue(subfields[0]->getResult(0),
-                                                oldInstance)) {
-        // If we got a value connecting to the input port, then we can cast it
-        // and pass it into the RTL instance without a temporary wire.
-        operands.push_back(castFromFIRRTLType(value, portType, builder));
+      auto subfield = cast<SubfieldOp>(subfields[0]);
+      if (auto value = tryToConnectsToFlipValue(subfield, oldInstance)) {
+        // If we got a value connecting to the input port, then we can pass it
+        // into the RTL instance without a temporary wire.
+        operands.push_back(value);
         // Remove the subfield itself.
-        subfields.back()->erase();
+        subfield.erase();
         subfields.clear();
         continue;
       }
