@@ -428,3 +428,40 @@ firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.bundle<f1: fl
 }
 
 }
+
+/// Destination bitwidth must be greater than or equal to source bitwidth.
+
+// -----
+
+firrtl.circuit "test" {
+
+firrtl.module @test(%a : !firrtl.uint<1>, %b : !firrtl.flip<uint<2>>) {
+  // CHECK: firrtl.connect %b, %a
+  firrtl.connect %b, %a : !firrtl.flip<uint<2>>, !firrtl.uint<1>
+}
+
+}
+
+// -----
+
+firrtl.circuit "test" {
+
+firrtl.module @test(%a : !firrtl.uint<2>, %b : !firrtl.flip<uint<1>>) {
+  // expected-error @+1 {{destination width 1 is not greater than or equal to source width 2}}
+  firrtl.connect %b, %a : !firrtl.flip<uint<1>>, !firrtl.uint<2>
+}
+
+}
+
+/// Partial connects may truncate.
+
+// -----
+
+firrtl.circuit "test" {
+
+firrtl.module @test(%a : !firrtl.uint<2>, %b : !firrtl.flip<uint<1>>) {
+  // CHECK: firrtl.partialconnect %b, %a
+  firrtl.partialconnect %b, %a : !firrtl.flip<uint<1>>, !firrtl.uint<2>
+}
+
+}
