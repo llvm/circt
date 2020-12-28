@@ -784,11 +784,19 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
   if (destType.isa<AnalogType>() || srcType.isa<AnalogType>())
     return connect.emitError("analog types may not be connected");
 
+  // Destination and source types must be equivalent.
   if (!areTypesEquivalent(destType, srcType))
     return connect.emitError("type mismatch between destination ")
            << destType << " and source " << srcType;
 
-  // TODO(mikeurbach): verify source bitwidth is >= destination bitwidth.
+  // Destination bitwidth must be greater than or equal to source bitwidth.
+  int32_t destWidth = destType.getBitWidthOrSentinel();
+  int32_t srcWidth = srcType.getBitWidthOrSentinel();
+  if (destWidth > -1 && srcWidth > -1 && destWidth < srcWidth)
+    return connect.emitError("destination width ")
+           << destWidth << " is not greater than or equal to source width "
+           << srcWidth;
+
   // TODO(mikeurbach): verify destination flow is sink or duplex.
   // TODO(mikeurbach): verify source flow is source or duplex.
   return success();

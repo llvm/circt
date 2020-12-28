@@ -69,7 +69,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input reset_abstract: Reset   ; CHECK: %reset_abstract: !firrtl.reset,
     input clock : Clock           ; CHECK: %clock: !firrtl.clock,
     output auto : UInt<1>         ; CHECK: %auto: !firrtl.flip<uint<1>>,
-    output sauto : SInt<1>        ; CHECK: %sauto: !firrtl.flip<sint<1>>,
+    output auto11 : UInt<11>      ; CHECK: %auto11: !firrtl.flip<uint<11>>,
+    output sauto : SInt<9>        ; CHECK: %sauto: !firrtl.flip<sint<9>>,
     input i8 : UInt<8>            ; CHECK: %i8: !firrtl.uint<8>,
     input s1 : SInt<1>            ; CHECK: %s1: !firrtl.sint<1>,
     input s8 : SInt<8>            ; CHECK: %s8: !firrtl.sint<8>,
@@ -176,7 +177,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %c171_ui8 = firrtl.constant(171 : ui8) : !firrtl.uint<8>
     ; CHECK: firrtl.add %c42_ui10, %c171_ui8
     ; CHECK: firrtl.connect %auto
-    auto <= add(UInt<10>(42), UInt<8>("hAB"))
+    auto11 <= add(UInt<10>(42), UInt<8>("hAB"))
 
     ; CHECK: %c-85_si8 = firrtl.constant(-85 : si8) : !firrtl.sint<8>
     sauto <= add(s8, SInt<8>("hAB"))
@@ -291,7 +292,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: %memValue = firrtl.memoryport "Infer" %myMem, %i8, %clock {name = "memValue"} : (!firrtl.vector<bundle<id: uint<4>, resp: uint<2>>, 8>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.bundle<id: uint<4>, resp: uint<2>>
     infer mport memValue = myMem[i8], clock
-    auto <= memValue.id
+    auto11 <= memValue.id
 
     ; CHECK: %base_table_0 = firrtl.smem "Undefined" {name = "base_table_0"} : !firrtl.vector<vector<uint<1>, 9>, 256>
     smem base_table_0 : UInt<1>[9] [256]

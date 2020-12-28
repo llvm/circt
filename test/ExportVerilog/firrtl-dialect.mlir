@@ -64,14 +64,14 @@ firrtl.circuit "M1" {
   // CHECK-LABEL: module ExtractCrash(
   // CHECK: wire [3:0] _T = ~a;
   // CHECK-NEXT: assign b = _T[3:2];
-  firrtl.module @ExtractCrash(%a: !firrtl.uint<4>, %b: !firrtl.flip<uint<1>>) {
+  firrtl.module @ExtractCrash(%a: !firrtl.uint<4>, %b: !firrtl.flip<uint<2>>) {
     %26 = firrtl.not %a : (!firrtl.uint<4>) -> !firrtl.uint<4>
     %27 = firrtl.stdIntCast %26 : (!firrtl.uint<4>) -> i4
     %28 = rtl.extract %27 from 2 : (i4) -> i2
-    %fb = firrtl.asPassive %b : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
-    %29 = firrtl.stdIntCast %fb : (!firrtl.uint<1>) -> i1
+    %fb = firrtl.asPassive %b : (!firrtl.flip<uint<2>>) -> !firrtl.uint<2>
+    %29 = firrtl.stdIntCast %fb : (!firrtl.uint<2>) -> i2
     %30 = firrtl.stdIntCast %28 : (i2) -> !firrtl.uint<2>
-    firrtl.connect %b, %30 : !firrtl.flip<uint<1>>, !firrtl.uint<2>
+    firrtl.connect %b, %30 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
   }
 
 }
