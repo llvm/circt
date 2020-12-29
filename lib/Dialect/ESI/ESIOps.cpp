@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/ESI/ESIOps.h"
+#include "circt/Dialect/RTL/RTLTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVTypes.h"
 
