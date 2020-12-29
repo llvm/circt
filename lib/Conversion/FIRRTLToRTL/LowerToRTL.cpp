@@ -80,22 +80,6 @@ static Value castFromFIRRTLType(Value val, Type type,
   return builder.createOrFold<StdIntCastOp>(type, val);
 }
 
-static Value extendOrTruncateFIRRTL(Value val, IntType destTy,
-                                    ImplicitLocOpBuilder &builder) {
-  auto srcTy = val.getType().cast<IntType>();
-  assert(srcTy.hasWidth() && destTy.hasWidth() &&
-         "only works with width-inferred integer values");
-
-  if (srcTy.getWidthOrSentinel() == destTy.getWidthOrSentinel())
-    return val;
-
-  if (srcTy.getWidthOrSentinel() > destTy.getWidthOrSentinel())
-    return builder.createOrFold<TailPrimOp>(destTy, val,
-                                            destTy.getWidthOrSentinel());
-  return builder.createOrFold<PadPrimOp>(destTy, val,
-                                         destTy.getWidthOrSentinel());
-}
-
 //===----------------------------------------------------------------------===//
 // firrtl.module Lowering Pass
 //===----------------------------------------------------------------------===//
@@ -396,10 +380,10 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
     auto destTy = flipValue.getType().cast<FIRRTLType>().getPassiveType();
     if (destTy != connectSrc.getType()) {
       // The only type mismatch we can have is due to integer width differences.
-      // FIXME: connects shouldn't allow truncates, so this should just be an
-      // extension.
+      auto destWidth = destTy.getBitWidthOrSentinel();
+      assert(destWidth != -1 && "must know integer widths");
       connectSrc =
-          extendOrTruncateFIRRTL(connectSrc, destTy.cast<IntType>(), builder);
+          builder.createOrFold<PadPrimOp>(destTy, connectSrc, destWidth);
     }
 
     // Remove the connect and use its source as the value for the output.
