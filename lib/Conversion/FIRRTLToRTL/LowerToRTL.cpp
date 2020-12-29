@@ -1408,8 +1408,9 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
     if (!clockVal)
       return failure();
 
-    builder->create<sv::AlwaysAtPosEdgeOp>(
-        clockVal, [&]() { builder->create<sv::PAssignOp>(destVal, srcVal); });
+    builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clockVal, [&]() {
+      builder->create<sv::PAssignOp>(destVal, srcVal);
+    });
 
     return success();
   }
@@ -1434,8 +1435,8 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
       return failure();
   }
 
-  // Emit this into an "sv.alwaysat_posedge" body.
-  builder->create<sv::AlwaysAtPosEdgeOp>(clock, [&]() {
+  // Emit this into an "sv.always posedge" body.
+  builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, [&]() {
     // Emit an "#ifndef SYNTHESIS" guard into the always block.
     builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
       // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
@@ -1456,13 +1457,13 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
 // Stop lowers into a nested series of behavioral statements plus $fatal or
 // $finish.
 LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
-  // Emit this into an "sv.alwaysat_posedge" body.
   auto clock = getLoweredValue(op.clock());
   auto cond = getLoweredValue(op.cond());
   if (!clock || !cond)
     return failure();
 
-  builder->create<sv::AlwaysAtPosEdgeOp>(clock, [&]() {
+  // Emit this into an "sv.always posedge" body.
+  builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, [&]() {
     // Emit an "#ifndef SYNTHESIS" guard into the always block.
     builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
       // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
@@ -1507,7 +1508,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
   if (!clock || !enable || !predicate)
     return failure();
 
-  builder->create<sv::AlwaysAtPosEdgeOp>(clock, [&]() {
+  builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, [&]() {
     builder->create<sv::IfOp>(enable, [&]() {
       // Create BOpTy inside the always/if.
       builder->createOrFold<BOpTy>(predicate);
