@@ -75,6 +75,6 @@ jobs:
             -DLLVM_EXTERNAL_LIT="$(pwd)/../llvm/build/Release/bin/llvm-lit.py" `
             -G "Visual Studio 16 2019" `
             -DCMAKE_BUILD_TYPE=Release -Thost=x64 -DCMAKE_BUILD_TYPE=Release
-          cmake --build . --config Release
+          cmake --build . -j 1 --config Release
 
     # --- end of build-circt job.
