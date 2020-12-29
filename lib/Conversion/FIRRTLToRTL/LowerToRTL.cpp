@@ -679,6 +679,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(ConstantOp op);
   LogicalResult visitDecl(WireOp op);
   LogicalResult visitDecl(NodeOp op);
+  LogicalResult visitDecl(RegOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
   LogicalResult visitInvalidOp(Operation *op) { return failure(); }
 
@@ -979,6 +980,18 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   // about given how Chisel works, but we should reevaluate with more
   // information.
   return setLowering(op, operand);
+}
+
+LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
+  auto resType = op.result().getType().cast<FIRRTLType>();
+  auto resultType = lowerType(resType);
+  if (!resultType)
+    return failure();
+
+  // Convert the inout to a non-inout type.
+  auto regResult = builder->create<rtl::RegOp>(resultType, op.nameAttr());
+  setLowering(op, regResult);
+  return success();
 }
 
 /// Handle the case where an operation wasn't lowered.  When this happens, the
@@ -1346,19 +1359,31 @@ LogicalResult FIRRTLLowering::visitStmt(InvalidOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
-  auto dest = getPossiblyInoutLoweredValue(op.dest());
-
+  auto dest = op.dest();
   // The source can be a smaller integer, extend it as appropriate if so.
-  auto destType = op.dest().getType().cast<FIRRTLType>().getPassiveType();
-  Value src = getLoweredAndExtendedValue(op.src(), destType);
-
-  if (!dest || !src)
+  auto destType = dest.getType().cast<FIRRTLType>().getPassiveType();
+  auto srcVal = getLoweredAndExtendedValue(op.src(), destType);
+  auto destVal = getPossiblyInoutLoweredValue(dest);
+  if (!srcVal || !destVal)
     return failure();
 
-  if (!dest.getType().isa<rtl::InOutType>())
+  if (!destVal.getType().isa<rtl::InOutType>())
     return op.emitError("destination isn't an inout type");
 
-  builder->create<rtl::ConnectOp>(dest, src);
+  // If this is an assignment to a register, then the connect implicitly happens
+  // under the clock that gates the register.
+  if (auto regOp = dyn_cast_or_null<RegOp>(dest.getDefiningOp())) {
+    Value clockVal = getLoweredValue(regOp.clockVal());
+    if (!clockVal)
+      return failure();
+
+    builder->create<sv::AlwaysAtPosEdgeOp>(
+        clockVal, [&]() { builder->create<rtl::ConnectOp>(destVal, srcVal); });
+
+    return success();
+  }
+
+  builder->create<rtl::ConnectOp>(destVal, srcVal);
   return success();
 }
 

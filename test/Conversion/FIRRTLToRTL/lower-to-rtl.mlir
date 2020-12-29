@@ -422,5 +422,44 @@ module attributes {firrtl.mainModule = "Simple"} {
     %2 = firrtl.stdIntCast %1 : (!firrtl.clock) -> i1
     rtl.output %2 : i1
   }
+
+
+ //module UninitReg1 :
+ //   input clock: Clock
+ //   input reset : UInt<1>
+ //   input cond: UInt<1>
+ //   input value: UInt<2>
+ //   reg count : UInt<2>, clock with :
+ //     reset => (UInt<1>("h0"), count)
+ //   node x = count
+ //   node _GEN_0 = mux(cond, value, count)
+ //   count <= mux(reset, UInt<2>("h0"), _GEN_0)
+
+  // CHECK-LABEL: rtl.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
+  rtl.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
+    // CHECK-NEXT: %c0_i2 = rtl.constant(0 : i2) : i2
+    %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
+
+    %0 = firrtl.stdIntCast %clock : (i1) -> !firrtl.clock
+    %1 = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
+    %2 = firrtl.stdIntCast %cond : (i1) -> !firrtl.uint<1>
+    %3 = firrtl.stdIntCast %value : (i2) -> !firrtl.uint<2>
+    // CHECK-NEXT: %count = rtl.reg : !rtl.inout<i2>
+    %count = firrtl.reg %0 {name = "count"} : (!firrtl.clock) -> !firrtl.uint<2>
+
+    // CHECK-NEXT: %0 = rtl.read_inout %count : !rtl.inout<i2>
+    // CHECK-NEXT: %1 = rtl.mux %cond, %value, %0 : i2
+    // CHECK-NEXT: %2 = rtl.mux %reset, %c0_i2, %1 : i2
+    %4 = firrtl.mux(%2, %3, %count) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+    %5 = firrtl.mux(%1, %c0_ui2, %4) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+
+    // CHECK-NEXT: sv.alwaysat_posedge %clock  {
+    // CHECK-NEXT:   rtl.connect %count, %2 : i2
+    // CHECK-NEXT: }
+    firrtl.connect %count, %5 : !firrtl.uint<2>, !firrtl.uint<2>
+
+    // CHECK-NEXT: rtl.output
+    rtl.output
+  }
 }
 
