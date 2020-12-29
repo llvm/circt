@@ -89,13 +89,35 @@ def AlwaysAtPosEdgeOp : SVOp<"alwaysat_posedge", [HasRegionTerminator]> {
   }];
 }
 
+def InitialOp : SVOp<"initial", [HasRegionTerminator]> {
+  let summary = "'initial'' block";
+
+  let regions = (region SizedRegion<1>:$body);
+  let arguments = (ins);
+  let results = (outs);
+
+  let assemblyFormat = [{ $body attr-dict }];
+
+  // TODO: ODS forces using a custom builder just to get the region terminator
+  // implicitly installed.
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilderDAG<(ins CArg<"std::function<void()>", "{}">:$bodyCtor)>
+  ];
+
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &body().front(); }
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Other Statements
 //===----------------------------------------------------------------------===//
 
 def YieldOp
   : SVOp<"yield", [NoSideEffect, Terminator,
-                   ParentOneOf<["IfDefOp, IfOp", "AlwaysAtPosEdgeOp"]>]> {
+                   ParentOneOf<["IfDefOp, IfOp", "AlwaysAtPosEdgeOp",
+                                "InitialOp"]>]> {
   let summary = "terminator for control-flow operation regions";
   let arguments = (ins);
 

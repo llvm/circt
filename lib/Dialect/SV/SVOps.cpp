@@ -82,6 +82,23 @@ void AlwaysAtPosEdgeOp::build(OpBuilder &odsBuilder, OperationState &result,
 }
 
 //===----------------------------------------------------------------------===//
+// InitialOp
+
+void InitialOp::build(OpBuilder &odsBuilder, OperationState &result,
+                      std::function<void()> bodyCtor) {
+  Region *body = result.addRegion();
+  InitialOp::ensureTerminator(*body, odsBuilder, result.location);
+
+  // Fill in the body of the #ifdef.
+  if (bodyCtor) {
+    auto oldIP = &*odsBuilder.getInsertionPoint();
+    odsBuilder.setInsertionPointToStart(&*body->begin());
+    bodyCtor();
+    odsBuilder.setInsertionPoint(oldIP);
+  }
+}
+
+//===----------------------------------------------------------------------===//
 // TypeDecl operations
 //===----------------------------------------------------------------------===//
 
