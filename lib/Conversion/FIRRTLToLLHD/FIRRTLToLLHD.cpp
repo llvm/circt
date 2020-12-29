@@ -1,13 +1,19 @@
 //===- FIRRTLToLLHD.cpp - FIRRTL to LLHD Conversion Pass ------------------===//
 //
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
 // This is the main FIRRTL to LLHD Conversion Pass Implementation.
 //
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/FIRRTLToLLHD/FIRRTLToLLHD.h"
 
-#include "circt/Dialect/FIRRTL/Ops.h"
-#include "circt/Dialect/FIRRTL/Visitors.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "mlir/Pass/Pass.h"

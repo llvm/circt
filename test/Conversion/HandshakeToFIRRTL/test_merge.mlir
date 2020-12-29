@@ -16,36 +16,36 @@
 // CHECK:   %[[NO_WINNER:.+]] = firrtl.constant(0 : ui2) : !firrtl.uint<2>
 
 // Win wire.
-// CHECK:   %[[WIN:win]] = firrtl.wire {{.*}} : !firrtl.uint<2>
+// CHECK:   %win = firrtl.wire : !firrtl.uint<2>
 
 // Result done wire.
-// CHECK:   %[[RESULT_DONE:resultDone]] = firrtl.wire {{.*}} : !firrtl.uint<1>
+// CHECK:   %resultDone = firrtl.wire : !firrtl.uint<1>
 
 // Common conditions.
-// CHECK:   %[[HAS_WINNER:.+]] = firrtl.orr %[[WIN]]
+// CHECK:   %[[HAS_WINNER:.+]] = firrtl.orr %win
 
 // Arbiter logic to assign win wire.
 // CHECK:   %[[INDEX1:.+]] = firrtl.constant(2 : ui2)
 // CHECK:   %[[ARB1:.+]] = firrtl.mux(%[[ARG1_VALID]], %[[INDEX1]], %[[NO_WINNER]])
 // CHECK:   %[[INDEX0:.+]] = firrtl.constant(1 : ui2)
 // CHECK:   %[[ARB0:.+]] = firrtl.mux(%[[ARG0_VALID]], %[[INDEX0]], %[[ARB1]])
-// CHECK:   firrtl.connect %[[WIN]], %[[ARB0]]
+// CHECK:   firrtl.connect %win, %[[ARB0]]
 
 // Logic to assign result outputs.
 // CHECK:   firrtl.connect %[[ARG2_VALID]], %[[HAS_WINNER]]
 // CHECK:   %[[DEFAULT1:.+]] = firrtl.constant(0 : ui64)
-// CHECK:   %[[BITS2:.+]] = firrtl.bits %[[WIN]] 1 to 1
+// CHECK:   %[[BITS2:.+]] = firrtl.bits %win 1 to 1
 // CHECK:   %[[RESULT_DATA0:.+]] = firrtl.mux(%[[BITS2]], %[[ARG1_DATA]], %[[DEFAULT1]])
-// CHECK:   %[[BITS3:.+]] = firrtl.bits %[[WIN]] 0 to 0
+// CHECK:   %[[BITS3:.+]] = firrtl.bits %win 0 to 0
 // CHECK:   %[[RESULT_DATA:.+]] = firrtl.mux(%[[BITS3]], %[[ARG0_DATA]], %[[RESULT_DATA0]])
 // CHECK:   firrtl.connect %[[ARG2_DATA]], %[[RESULT_DATA]]
 
 // Logic to assign result done wire.
 // CHECK:   %[[RESULT_DONE0:.+]] = firrtl.and %[[HAS_WINNER]], %[[ARG2_READY]]
-// CHECK:   firrtl.connect %[[RESULT_DONE]], %[[RESULT_DONE0]]
+// CHECK:   firrtl.connect %resultDone, %[[RESULT_DONE0]]
 
 // Logic to assign arg ready outputs.
-// CHECK:   %[[WIN_OR_DEFAULT:.+]] = firrtl.mux(%[[RESULT_DONE]], %[[WIN]], %[[NO_WINNER]])
+// CHECK:   %[[WIN_OR_DEFAULT:.+]] = firrtl.mux(%resultDone, %win, %[[NO_WINNER]])
 // CHECK:   %[[ARG0_READY0:.+]] = firrtl.eq %[[WIN_OR_DEFAULT]], %[[INDEX0]]
 // CHECK:   firrtl.connect %[[ARG0_READY]], %[[ARG0_READY0]]
 // CHECK:   %[[ARG1_READY0:.+]] = firrtl.eq %[[WIN_OR_DEFAULT]], %[[INDEX1]]

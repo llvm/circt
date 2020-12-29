@@ -1,4 +1,4 @@
-add_circt_dialect_library(MLIRLLHDTransforms
+add_circt_dialect_library(CIRCTLLHDTransforms
   TemporalRegions.cpp
   PassRegistration.cpp
   ProcessLoweringPass.cpp
@@ -7,12 +7,12 @@ add_circt_dialect_library(MLIRLLHDTransforms
   EarlyCodeMotionPass.cpp
 
   DEPENDS
-  MLIRLLHDTransformsIncGen
+  CIRCTLLHDTransformsIncGen
 
   LINK_LIBS PUBLIC
+  CIRCTLLHD
   MLIREDSC
   MLIRIR
   MLIRStandard
-  MLIRLLHD
   MLIRTransformUtils
 )

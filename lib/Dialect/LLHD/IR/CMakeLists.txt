@@ -1,4 +1,4 @@
-add_circt_dialect_library(MLIRLLHD
+add_circt_dialect_library(CIRCTLLHD
   LLHDDialect.cpp
   LLHDOps.cpp
   LLHDCanonicalization.cpp
@@ -7,10 +7,10 @@ add_circt_dialect_library(MLIRLLHD
   ${PROJECT_SOURCE_DIR}/include/Dialect/LLHD
 
   DEPENDS
-  MLIRLLHDEnumsIncGen
+  CIRCTLLHDEnumsIncGen
+  CIRCTLLHDCanonicalizationIncGen
   MLIRLLHDIncGen
-  MLIRLLHDCanonicalizationIncGen
-
+  
   LINK_LIBS PUBLIC
   MLIREDSC
   MLIRIR

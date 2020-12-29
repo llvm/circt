@@ -1,5 +1,5 @@
 file(GLOB globbed *.cpp)
-add_circt_dialect_library(MLIRRTL
+add_circt_dialect_library(CIRCTRTL
   ${globbed}
 
   ADDITIONAL_HEADER_DIRS

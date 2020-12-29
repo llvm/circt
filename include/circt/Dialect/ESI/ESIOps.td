@@ -1,5 +1,11 @@
 //===- ESIOps.td - ESI dialect operation definitions --------- tablegen -*-===//
 //
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
 // This is where any operations for the ESI dialect live.
 //
 //===----------------------------------------------------------------------===//
@@ -76,8 +82,17 @@ def CosimEndpoint : ESI_Physical_Op<"cosim", []> {
     supported by the specific protocol.
   }];
 
-  let arguments = (ins I1:$clk, I1:$rstn, ChannelType:$input);
+  let arguments = (ins I1:$clk, I1:$rstn, ChannelType:$input,
+    I64Attr:$endpointID);
   let results = (outs ChannelType:$output);
 
-  let assemblyFormat = [{ $clk `,` $rstn `,` $input attr-dict `:` type($input) `->` type($output) }];
+  let assemblyFormat = [{
+    $clk `,` $rstn `,` $input `,` $endpointID attr-dict
+      `:` type($input) `->` type($output)
+  }];
+
+  let extraClassDeclaration = [{
+    uint64_t getInputTypeID() { return getCapnpTypeID(input().getType()); }
+    uint64_t getOutputTypeID() { return getCapnpTypeID(output().getType()); }
+  }];
 }

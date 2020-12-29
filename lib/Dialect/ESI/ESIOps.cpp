@@ -1,12 +1,18 @@
 //===- ESIOps.cpp - ESI op code defs ----------------------------*- C++ -*-===//
 //
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
 // This is where op definitions live.
 //
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/ESI/ESIOps.h"
-#include "circt/Dialect/SV/Ops.h"
-#include "circt/Dialect/SV/Types.h"
+#include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/SV/SVTypes.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -198,13 +204,15 @@ static LogicalResult verifySVInterface(Operation *op,
 }
 
 static LogicalResult verifyWrapSVInterface(WrapSVInterface &op) {
-  auto modportType = op.iface().getType().cast<circt::sv::ModportType>();
+  auto modportType =
+      op.interfaceSink().getType().cast<circt::sv::ModportType>();
   auto chanType = op.output().getType().cast<ChannelPort>();
   return verifySVInterface(op, modportType, chanType);
 }
 
 static LogicalResult verifyUnwrapSVInterface(UnwrapSVInterface &op) {
-  auto modportType = op.outIface().getType().cast<circt::sv::ModportType>();
+  auto modportType =
+      op.interfaceSource().getType().cast<circt::sv::ModportType>();
   auto chanType = op.chanInput().getType().cast<ChannelPort>();
   return verifySVInterface(op, modportType, chanType);
 }

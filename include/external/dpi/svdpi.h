@@ -1,14 +1,18 @@
-/* -*- C -*-
- *
- * svdpi.h
- *
- * SystemVerilog Direct Programming Interface (DPI).
- *
- * This file contains the constant definitions, structure definitions,
- * and routine declarations used by SystemVerilog DPI.
- *
- * This file is from the SystemVerilog IEEE 1800-2017 Annex I.
- */
+/*===-- dpi/svdpi.h - SystemVerilog Direct Programming Interface --*- C -*-===*\
+|*                                                                            *|
+|* Part of the LLVM Project, under the Apache License v2.0 with LLVM          *|
+|* Exceptions.                                                                *|
+|* See https://llvm.org/LICENSE.txt for license information.                  *|
+|* SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception                    *|
+|*                                                                            *|
+|*===----------------------------------------------------------------------===*|
+|*                                                                            *|
+|* This file contains the constant definitions, structure definitions,        *|
+|* and routine declarations used by SystemVerilog DPI.                        *|
+|*                                                                            *|
+|* This file is from the SystemVerilog IEEE 1800-2017 Annex I.                *|
+|*                                                                            *|
+\*===----------------------------------------------------------------------===*/
 
 #ifndef EXTERNAL_DPI_SVDPI_H
 #define EXTERNAL_DPI_SVDPI_H

@@ -1,16 +1,22 @@
 //===- ExportVerilog.cpp - Verilog Emitter --------------------------------===//
 //
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
 // This is the main Verilog emitter implementation.
 //
 //===----------------------------------------------------------------------===//
 
 #include "circt/Translation/ExportVerilog.h"
-#include "circt/Dialect/FIRRTL/Visitors.h"
-#include "circt/Dialect/RTL/Ops.h"
-#include "circt/Dialect/RTL/Types.h"
-#include "circt/Dialect/RTL/Visitors.h"
-#include "circt/Dialect/SV/Ops.h"
-#include "circt/Dialect/SV/Visitors.h"
+#include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
+#include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/RTL/RTLTypes.h"
+#include "circt/Dialect/RTL/RTLVisitors.h"
+#include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -42,9 +48,8 @@ static llvm::ManagedStatic<StringSet<>> reservedWordCache;
 static bool isVerilogExpression(Operation *op) {
   // All FIRRTL expressions and RTL combinatorial logic ops are Verilog
   // expressions.
-  return isExpression(op) || rtl::isCombinatorial(op) ||
-         isa<sv::TextualValueOp>(op) || isa<AsPassivePrimOp>(op) ||
-         isa<AsNonPassivePrimOp>(op);
+  return isExpression(op) || rtl::isCombinatorial(op) || sv::isExpression(op) ||
+         isa<AsPassivePrimOp>(op) || isa<AsNonPassivePrimOp>(op);
 }
 
 /// Return the width of the specified FIRRTL type in bits or -1 if it isn't
@@ -54,13 +59,18 @@ static int getBitWidthOrSentinel(Type type) {
       .Case<IntegerType>([](IntegerType integerType) {
         // Turn zero-bit values into single bit ones for simplicity.  This
         // generates correct logic, even though it isn't efficient.
+        // FIXME: This actually isn't correct at all!
         auto result = integerType.getWidth();
         return result ? result : 1;
+      })
+      .Case<rtl::InOutType>([](rtl::InOutType inoutType) {
+        return getBitWidthOrSentinel(inoutType.getElementType());
       })
       .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
       .Case<SIntType, UIntType>([](IntType intType) {
         // Turn zero-bit values into single bit ones for simplicity.  This
         // occurs in the addr lines of mems with depth=1.
+        // FIXME: This actually isn't correct at all!
         auto result = intType.getWidthOrSentinel();
         return result ? result : 1;
       })
@@ -306,6 +316,8 @@ public:
   void emitStatement(InvalidOp op);
   void emitStatement(ConnectOp op);
   void emitStatement(rtl::ConnectOp op);
+  void emitStatement(sv::BPAssignOp op);
+  void emitStatement(sv::PAssignOp op);
   void emitStatement(sv::AliasOp op);
   void emitStatement(rtl::OutputOp op);
   void emitStatement(rtl::InstanceOp op);
@@ -314,9 +326,11 @@ public:
   void emitStatement(sv::IfDefOp op);
   void emitStatement(sv::IfOp op);
   void emitStatement(sv::AlwaysAtPosEdgeOp op);
+  void emitStatement(sv::InitialOp op);
   void emitStatement(sv::FWriteOp op);
   void emitStatement(sv::FatalOp op);
   void emitStatement(sv::FinishOp op);
+  void emitStatement(sv::VerbatimOp op);
   void emitStatement(sv::AssertOp op);
   void emitStatement(sv::AssumeOp op);
   void emitStatement(sv::CoverOp op);
@@ -771,6 +785,7 @@ private:
     return emitSubExpr(op->getOperand(0), LowestPrecedence);
   }
 
+  SubExprInfo visitSV(sv::GetModportOp op);
   SubExprInfo visitSV(sv::TextualValueOp op);
 
   SubExprInfo visitExpr(AddPrimOp op) {
@@ -899,7 +914,7 @@ private:
     return emitBinary(op, Multiply, "%", true);
   }
   SubExprInfo visitComb(rtl::ShlOp op) { return emitBinary(op, Shift, "<<"); }
-  SubExprInfo visitComb(rtl::ShrUOp op) { return emitBinary(op, Shift, ">>>"); }
+  SubExprInfo visitComb(rtl::ShrUOp op) { return emitBinary(op, Shift, ">>"); }
   SubExprInfo visitComb(rtl::ShrSOp op) {
     return emitBinary(op, Shift, ">>>", true);
   }
@@ -1228,6 +1243,11 @@ SubExprInfo ExprEmitter::emitBitSelect(Value operand, unsigned hiBit,
   return {Unary, IsUnsigned};
 }
 
+SubExprInfo ExprEmitter::visitSV(sv::GetModportOp op) {
+  os << emitter.getName(op.iface()) + "." + op.field();
+  return {Unary, IsUnsigned};
+}
+
 SubExprInfo ExprEmitter::visitSV(sv::TextualValueOp op) {
   os << op.string();
   return {Unary, IsUnsigned};
@@ -1526,6 +1546,30 @@ void ModuleEmitter::emitStatement(rtl::ConnectOp op) {
   emitLocationInfoAndNewLine(ops);
 }
 
+void ModuleEmitter::emitStatement(sv::BPAssignOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent();
+  emitExpression(op.dest(), ops);
+  os << " = ";
+  emitExpression(op.src(), ops);
+  os << ';';
+  emitLocationInfoAndNewLine(ops);
+}
+
+void ModuleEmitter::emitStatement(sv::PAssignOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent();
+  emitExpression(op.dest(), ops);
+  os << " <= ";
+  emitExpression(op.src(), ops);
+  os << ';';
+  emitLocationInfoAndNewLine(ops);
+}
+
 void ModuleEmitter::emitStatement(sv::AliasOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -1622,6 +1666,36 @@ void ModuleEmitter::emitStatement(sv::FatalOp op) {
   emitLocationInfoAndNewLine(ops);
 }
 
+void ModuleEmitter::emitStatement(sv::VerbatimOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  // Drop extraneous \n's off the end of the string.
+  StringRef string = op.string();
+  while (!string.empty() && string.back() == '\n')
+    string = string.drop_back();
+
+  // Emit each \n separated piece of the string with each piece properly
+  // indented.  The convention is to not emit the \n so
+  // emitLocationInfoAndNewLine can do that for the last line.
+  bool isFirst = true;
+  indent();
+
+  while (!string.empty()) {
+    auto lhsRhs = string.split('\n');
+    if (isFirst)
+      isFirst = false;
+    else {
+      os << '\n';
+      indent();
+    }
+    os << lhsRhs.first;
+    string = lhsRhs.second;
+  }
+
+  emitLocationInfoAndNewLine(ops);
+}
+
 void ModuleEmitter::emitStatement(sv::FinishOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -1654,9 +1728,9 @@ void ModuleEmitter::emitStatement(sv::IfDefOp op) {
   auto cond = op.cond();
 
   if (cond.startswith("!"))
-    indent() << "#ifndef " << cond.drop_front(1);
+    indent() << "`ifndef " << cond.drop_front(1);
   else
-    indent() << "#ifdef " << cond;
+    indent() << "`ifdef " << cond;
 
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -1667,7 +1741,7 @@ void ModuleEmitter::emitStatement(sv::IfDefOp op) {
     emitOperation(&op);
   reduceIndent();
 
-  indent() << "#endif\n";
+  indent() << "`endif\n";
 }
 
 /// Emit the body of a control flow statement that is surrounded by begin/end
@@ -1722,6 +1796,14 @@ void ModuleEmitter::emitStatement(sv::AlwaysAtPosEdgeOp op) {
   indent() << "always @(posedge " << emitExpressionToString(op.clock(), ops)
            << ")";
   emitBeginEndRegion(op.getBodyBlock(), ops, *this, "always @(posedge)");
+}
+
+void ModuleEmitter::emitStatement(sv::InitialOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent() << "initial";
+  emitBeginEndRegion(op.getBodyBlock(), ops, *this, "initial");
 }
 
 void ModuleEmitter::emitDecl(NodeOp op) {
@@ -1856,14 +1938,22 @@ void ModuleEmitter::emitStatement(rtl::InstanceOp op) {
   SmallVector<rtl::ModulePortInfo, 8> portInfo;
   getModulePortInfo(moduleOp, portInfo);
 
+  // Emit the argument and result ports.
   auto opArgs = op.inputs();
   auto opResults = op.getResults();
   for (auto &elt : portInfo) {
+    // Figure out which value we are emitting.
     bool isLast = &elt == &portInfo.back();
-    StringRef valueName = elt.isOutput() ? getName(opResults[elt.argNum])
-                                         : getName(opArgs[elt.argNum]);
-    indent() << "  ." << StringRef(elt.getName()) << " (" << valueName
-             << (isLast ? ")\n" : "),\n");
+    Value portVal = elt.isOutput() ? opResults[elt.argNum] : opArgs[elt.argNum];
+
+    // Emit the port's name.
+    indent() << "  ." << StringRef(elt.getName()) << " (";
+
+    // Emit the value as an expression.
+    ops.clear();
+    emitExpression(portVal, ops);
+    os << (isLast ? ")" : "),");
+    emitLocationInfoAndNewLine(ops);
   }
   indent() << ");\n";
 }
@@ -2145,6 +2235,10 @@ static bool isExpressionAlwaysInline(Operation *op) {
       isa<SubfieldOp>(op))
     return true;
 
+  // An SV interface modport is a symbolic name that is always inlined.
+  if (isa<sv::GetModportOp>(op))
+    return true;
+
   // If this is a noop cast and the operand is always inlined, then the noop
   // cast is always inlined.
   if (isNoopCast(op))
@@ -2177,12 +2271,16 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
   // Return the word (e.g. "wire") in Verilog to declare the specified thing.
   auto getVerilogDeclWord = [](Operation *op) -> StringRef {
+    if (isa<RegOp>(op) || isa<RegInitOp>(op) || isa<rtl::RegOp>(op))
+      return "reg";
+
+    // Interfaces instances use the name of the declared interface.
+    if (auto interface = dyn_cast<sv::InterfaceInstanceOp>(op))
+      return interface.getInterfaceType().getInterface().getValue();
+
     // Note: MemOp is handled as "wire" here because each of its subcomponents
     // are wires.  The corresponding 'reg' decl is handled specially below.
-    if (isa<RegOp>(op) || isa<RegInitOp>(op))
-      return "reg";
-    else
-      return "wire";
+    return "wire";
   };
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
@@ -2211,7 +2309,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       outOfLineExpressions.insert(&op);
     }
 
-    // Otherwise, it must be an expression or a declaration like a wire.
+    // Otherwise, it must be an expression or a declaration like a RegOp/WireOp.
     addName(result, op.getAttrOfType<StringAttr>("name"));
 
     // If we are emitting inline wire decls, don't measure or emit this wire.
@@ -2238,6 +2336,10 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
         flattenBundleTypes(dataType, "", false, fieldTypes);
 
     for (const auto &elt : fieldTypes) {
+      // Skip over SV interface types, which don't have any emitted width.
+      if (elt.type.isa<sv::InterfaceType>())
+        continue;
+
       int bitWidth = getBitWidthOrSentinel(elt.type);
       if (bitWidth == -1) {
         emitError(&op, getName(result))
@@ -2275,9 +2377,19 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     for (const auto &elt : fieldTypes) {
       indent() << word;
       os.indent(maxDeclNameWidth - word.size() + 1);
-      emitTypePaddedToWidth(elt.type, maxTypeWidth, decl);
-      os << getName(decl->getResult(0)) << elt.suffix << ';';
 
+      // Skip over SV interface types, which don't have any emitted width.
+      bool isInterface = elt.type.isa<sv::InterfaceType>();
+      if (!isInterface)
+        emitTypePaddedToWidth(elt.type, maxTypeWidth, decl);
+
+      os << getName(decl->getResult(0)) << elt.suffix;
+
+      // Interface instantiations have parentheses like a module with no ports.
+      if (isInterface)
+        os << "()";
+
+      os << ';';
       if (isFirst)
         emitLocationInfoAndNewLine(ops);
       else
@@ -2399,6 +2511,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitStmt(rtl::InstanceOp op) {
       return emitter.emitStatement(op), true;
     }
+    bool visitStmt(rtl::RegOp op) { return true; }
     bool visitStmt(rtl::WireOp op) { return true; }
 
     bool visitUnhandledStmt(Operation *op) { return false; }
@@ -2421,13 +2534,18 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitSV(sv::AlwaysAtPosEdgeOp op) {
       return emitter.emitStatement(op), true;
     }
+    bool visitSV(sv::InitialOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::BPAssignOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::PAssignOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::AliasOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::FWriteOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::FatalOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::FinishOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::VerbatimOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::AssertOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::AssumeOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::CoverOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::InterfaceInstanceOp op) { return true; }
     bool visitSV(sv::InterfaceSignalOp op) {
       return emitter.emitDecl(op), true;
     }

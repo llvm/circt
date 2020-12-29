@@ -4,13 +4,17 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
+//
+// This file implements the lowering of FIRRTL types to ground types.
+//
+//===----------------------------------------------------------------------===//
 
 #include "./PassDetails.h"
 #include "circt/Conversion/FIRRTLToRTL/FIRRTLToRTL.h"
-#include "circt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "circt/Dialect/FIRRTL/Types.h"
-#include "circt/Dialect/FIRRTL/Visitors.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
 
 using namespace circt;

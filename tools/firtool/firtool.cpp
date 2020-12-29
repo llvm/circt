@@ -1,18 +1,24 @@
 //===- firtool.cpp - The firtool utility for working with .fir files ------===//
 //
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
 // This file implements 'firtool', which composes together a variety of
 // libraries in a way that is convenient to work with as a user.
 //
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/Passes.h"
-#include "circt/Dialect/FIRRTL/Dialect.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
-#include "circt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "circt/Dialect/RTL/Dialect.h"
-#include "circt/Dialect/RTL/Ops.h"
-#include "circt/Dialect/SV/Dialect.h"
+#include "circt/Dialect/RTL/RTLDialect.h"
+#include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Translation/ExportVerilog.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinOps.h"

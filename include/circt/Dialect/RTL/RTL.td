@@ -1,5 +1,11 @@
 //===- RTL.td - RTL dialect definition ---------------------*- tablegen -*-===//
 //
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
 // This is the top level file for the RTL dialect.
 //
 //===----------------------------------------------------------------------===//
@@ -26,14 +32,14 @@ def RTLDialect : Dialect {
   let cppNamespace = "::circt::rtl";
 }
 
-include "Types.td"
+include "RTLTypes.td"
 
 // Base class for the operation in this dialect.
 class RTLOp<string mnemonic, list<OpTrait> traits = []> :
     Op<RTLDialect, mnemonic, traits>;
 
-include "Combinatorial.td"
-include "Statements.td"
-include "Structure.td"
+include "RTLCombinatorial.td"
+include "RTLStatements.td"
+include "RTLStructure.td"
 
 #endif // RTL_TD

@@ -1,5 +1,11 @@
 //===- BackedgeBuilder.h - Support for building backedges -------*- C++ -*-===//
 //
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
 // Backedges are operations/values which have to exist as operands before
 // they are produced in a result. Since it isn't clear how to build backedges
 // in MLIR, these helper classes set up a canonical way to do so.

@@ -1,12 +1,19 @@
 //===- FIRParser.cpp - .fir to FIRRTL dialect parser ----------------------===//
 //
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
 // This implements a .fir file parser.
 //
 //===----------------------------------------------------------------------===//
+
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 
 #include "FIRLexer.h"
-#include "circt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
@@ -383,9 +390,29 @@ ParseResult FIRParser::parseIntLit(APInt &result, const Twine &message) {
   case FIRToken::integer:
     if (spelling.getAsInteger(10, result))
       return emitError(message), failure();
+
+    // Make sure that the returned APInt has a zero at the top so clients don't
+    // confuse it with a negative number.
+    if (result.isNegative())
+      result = result.zext(result.getBitWidth() + 1);
+
     consumeToken(FIRToken::integer);
     return success();
 
+  case FIRToken::signed_integer:
+    assert(spelling[0] == '+' || spelling[0] == '-');
+    if (spelling.drop_front().getAsInteger(10, result))
+      return emitError(message), failure();
+
+    // Make sure that the returned APInt has a zero at the top so clients don't
+    // confuse it with a negative number.
+    if (result.isNegative())
+      result = result.zext(result.getBitWidth() + 1);
+
+    if (spelling[0] == '-')
+      result = -result;
+    consumeToken(FIRToken::signed_integer);
+    return success();
   case FIRToken::string: {
     // Drop the quotes.
     assert(spelling.front() == '"' && spelling.back() == '"');
@@ -424,8 +451,16 @@ ParseResult FIRParser::parseIntLit(APInt &result, const Twine &message) {
 
     if (spelling.getAsInteger(base, result))
       return emitError("invalid character in integer literal"), failure();
+
+    // We just parsed the positive version of this number.  Make sure it has
+    // a zero at the top so clients don't confuse it with a negative number and
+    // so the negation (in the case of a negative sign) doesn't overflow.
+    if (result.isNegative())
+      result = result.zext(result.getBitWidth() + 1);
+
     if (isNegative)
       result = -result;
+
     consumeToken(FIRToken::string);
     return success();
   }
@@ -1012,7 +1047,8 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
   SmallVector<int32_t, 4> integers;
   if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
         // Handle the integer constant case if present.
-        if (getToken().isAny(FIRToken::integer, FIRToken::string)) {
+        if (getToken().isAny(FIRToken::integer, FIRToken::signed_integer,
+                             FIRToken::string)) {
           integers.push_back(0);
           return parseIntLit(integers.back(), "expected integer");
         }
@@ -2207,13 +2243,14 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
     default:
       return emitError("expected parameter value"), failure();
 
-    case FIRToken::integer: {
+    case FIRToken::integer:
+    case FIRToken::signed_integer: {
       APInt result;
-      if (getTokenSpelling().getAsInteger(10, result))
-        return emitError("invalid integer parameter"), failure();
+      if (parseIntLit(result, "invalid integer parameter"))
+        return failure();
+
       value = builder.getIntegerAttr(
           builder.getIntegerType(result.getBitWidth()), result);
-      consumeToken(FIRToken::integer);
       break;
     }
     case FIRToken::string: {

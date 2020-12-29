@@ -1,26 +1,28 @@
-add_circt_dialect_library(MLIRESI
+add_circt_dialect_library(CIRCTESI
   ESIDialect.cpp
   ESIOps.cpp
   ESIPasses.cpp
+  ESITranslations.cpp
   ESITypes.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/ESI
 
   DEPENDS
+  CIRCTSupport
   MLIRESIIncGen
   MLIRESIEnumsIncGen
-  CIRCTSupport
 
   LINK_COMPONENTS
   Core
   Support
 
   LINK_LIBS PUBLIC
+  CIRCTSupport
+  CIRCTSV
   MLIREDSC
   MLIRIR
   MLIRTransforms
-  CIRCTSupport
   )
 
 
