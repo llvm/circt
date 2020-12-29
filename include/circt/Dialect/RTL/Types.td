@@ -109,7 +109,7 @@ class FieldInfo_Type<string name> : RTLType<name> {
   }];
 }
 
-def StructType : FieldInfo_Type<"Struct">, Type<CPred<"$_self.isa<StructType>()">, "StructType"> {
+def StructType : FieldInfo_Type<"Struct"> {
   let summary = "struct type for ports and wires";
   let description = [{
     Struct type is used...
