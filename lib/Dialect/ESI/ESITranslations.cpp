@@ -8,8 +8,8 @@
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 
-#include "circt/Dialect/RTL/Dialect.h"
-#include "circt/Dialect/SV/Dialect.h"
+#include "circt/Dialect/RTL/RTLDialect.h"
+#include "circt/Dialect/SV/SVDialect.h"
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinDialect.h"
