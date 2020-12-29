@@ -30,8 +30,8 @@ public:
                        // Control flow.
                        IfDefOp, IfOp, AlwaysAtPosEdgeOp, InitialOp,
                        // Other Statements.
-                       YieldOp, AliasOp, FWriteOp, FatalOp, FinishOp,
-                       VerbatimOp,
+                       YieldOp, BPAssignOp, PAssignOp, AliasOp, FWriteOp,
+                       FatalOp, FinishOp, VerbatimOp,
                        // Type declarations.
                        InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
                        InterfaceInstanceOp, GetModportOp,
@@ -73,6 +73,8 @@ public:
 
   // Other Statements.
   HANDLE(YieldOp, Unhandled);
+  HANDLE(BPAssignOp, Unhandled);
+  HANDLE(PAssignOp, Unhandled);
   HANDLE(AliasOp, Unhandled);
   HANDLE(FWriteOp, Unhandled);
   HANDLE(FatalOp, Unhandled);

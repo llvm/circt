@@ -124,6 +124,30 @@ def YieldOp
    let assemblyFormat = [{attr-dict}];
 }
 
+def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">]> {
+  let summary = "Blocking procedural assignment";
+  let description = [{
+    A SystemVerilog blocking procedural assignment statement 'x = y;'.  These
+    occur in initial, always, task, and function blocks.  The statement is
+    executed before any following statements are. See SV Spec 10.4.1.
+  }];
+  let arguments = (ins InOutType:$dest, InOutElementType:$src);
+  let results = (outs);
+  let assemblyFormat = [{ $dest `,` $src  attr-dict `:` type($src) }];
+}
+
+def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">]> {
+  let summary = "Nonblocking procedural assignment";
+  let description = [{
+    A SystemVerilog nonblocking procedural assignment statement 'x <= y;'. 
+    These occur in initial, always, task, and function blocks.  The statement
+    can be scheduled without blocking procedural flow.  See SV Spec 10.4.2.
+  }];
+  let arguments = (ins InOutType:$dest, InOutElementType:$src);
+  let results = (outs);
+  let assemblyFormat = [{ $dest `,` $src  attr-dict `:` type($src) }];
+}
+
 def AliasOp : SVOp<"alias"> {
   let summary = "SystemVerilog 'alias' statement";
   let description = [{

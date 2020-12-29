@@ -50,13 +50,16 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     // CHECK-NEXT: $fatal
     sv.fatal
   }
+  
+  %wire42 = rtl.wire : !rtl.inout<i42>
 
   // CHECK-NEXT: initial begin
   sv.initial {
-    // CHECK-NEXT: $fatal
-    sv.fatal
-    // CHECK-NEXT: $fatal
-    sv.fatal
+    %thing = sv.textual_value "THING" : i42
+    // CHECK-NEXT: wire42 = THING;
+    sv.bpassign %wire42, %thing : i42
+    // CHECK-NEXT: wire42 <= THING;
+    sv.passign %wire42, %thing : i42
   }// CHECK-NEXT:   {{end // initial$}}
 }
 

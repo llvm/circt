@@ -452,7 +452,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:    sv.verbatim "`INIT_RANDOM_PROLOG_"
     // CHECK-NEXT:    sv.ifdef "RANDOMIZE_REG_INIT"  {
     // CHECK-NEXT:       %3 = sv.textual_value "`RANDOM" : i2
-    // CHECK-NEXT:        rtl.connect %count, %3 : i2
+    // CHECK-NEXT:        sv.bpassign %count, %3 : i2
     // CHECK-NEXT:     }
     // CHECK-NEXT:    }
     // CHECK-NEXT:  }
@@ -464,7 +464,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %5 = firrtl.mux(%1, %c0_ui2, %4) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 
     // CHECK-NEXT: sv.alwaysat_posedge %clock  {
-    // CHECK-NEXT:   rtl.connect %count, %2 : i2
+    // CHECK-NEXT:   sv.passign %count, %2 : i2
     // CHECK-NEXT: }
     firrtl.connect %count, %5 : !firrtl.uint<2>, !firrtl.uint<2>
 
