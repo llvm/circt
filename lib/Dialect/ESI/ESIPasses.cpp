@@ -69,6 +69,8 @@ public:
 
   // A bunch of constants for use in various places below.
   const StringAttr a, aValid, aReady, x, xValid, xReady;
+  const StringAttr dataOutValid, dataOutReady, dataOut, dataInValid,
+      dataInReady, dataIn;
   const StringAttr clk, rstn;
   const Identifier width;
 
@@ -102,6 +104,12 @@ ESIRTLBuilder::ESIRTLBuilder(Operation *top)
       x(StringAttr::get("x", getContext())),
       xValid(StringAttr::get("x_valid", getContext())),
       xReady(StringAttr::get("x_ready", getContext())),
+      dataOutValid(StringAttr::get("DataOutValid", getContext())),
+      dataOutReady(StringAttr::get("DataOutReady", getContext())),
+      dataOut(StringAttr::get("DataOut", getContext())),
+      dataInValid(StringAttr::get("DataInValid", getContext())),
+      dataInReady(StringAttr::get("DataInReady", getContext())),
+      dataIn(StringAttr::get("DataIn", getContext())),
       clk(StringAttr::get("clk", getContext())),
       rstn(StringAttr::get("rstn", getContext())),
       width(Identifier::get("WIDTH", getContext())), declaredStage(nullptr) {
@@ -175,7 +183,22 @@ RTLExternModuleOp ESIRTLBuilder::declareStage() {
 RTLExternModuleOp ESIRTLBuilder::declareCosimEndpoint() {
   if (declaredCosimEndpoint)
     return declaredCosimEndpoint;
-  return nullptr;
+  auto name = StringAttr::get("Cosim_Endpoint", getContext());
+  // Since this module has parameterized widths on the a input and x output,
+  // give the extern declation a None type since nothing else makes sense.
+  // Will be refining this when we decide how to better handle parameterized
+  // types and ops.
+  ModulePortInfo ports[] = {
+      {clk, PortDirection::INPUT, getI1Type(), 0},
+      {rstn, PortDirection::INPUT, getI1Type(), 1},
+      {dataOutValid, PortDirection::OUTPUT, getI1Type(), 0},
+      {dataOutReady, PortDirection::INPUT, getI1Type(), 2},
+      {dataOut, PortDirection::OUTPUT, getNoneType(), 1},
+      {dataInValid, PortDirection::INPUT, getI1Type(), 3},
+      {dataInReady, PortDirection::OUTPUT, getI1Type(), 2},
+      {dataIn, PortDirection::INPUT, getNoneType(), 4}};
+  declaredStage = create<RTLExternModuleOp>(name, ports);
+  return declaredStage;
 }
 
 /// Return the InterfaceType which corresponds to an ESI port type. If it
@@ -688,7 +711,7 @@ LogicalResult UnwrapInterfaceLower::matchAndRewrite(
 
 // Compute the expected size of the capnp message field in bits. Return -1 on
 // non-representable type.
-static int64_t getCapnpMsgFieldSize(Type type) {
+static ssize_t getCapnpMsgFieldSize(Type type) {
   return llvm::TypeSwitch<::mlir::Type, int64_t>(type)
       .Case<IntegerType>([](IntegerType t) {
         auto w = t.getWidth();
@@ -709,9 +732,15 @@ static int64_t getCapnpMsgFieldSize(Type type) {
 
 // Compute the expected size of the capnp message in bits. Return -1 on
 // non-representable type.
-static int64_t getCapnpMsgSize(Type type) {
-  int64_t headerSize = 128; // TODO: verify this
-  return headerSize + getCapnpMsgFieldSize(type);
+static ssize_t getCapnpMsgSize(Type type) {
+  ChannelPort chan = type.dyn_cast<ChannelPort>();
+  if (chan)
+    return getCapnpMsgSize(chan.getInner());
+  ssize_t headerSize = 128; // TODO: verify this
+  ssize_t fieldSize = getCapnpMsgFieldSize(type);
+  if (fieldSize < 0)
+    return fieldSize;
+  return headerSize + fieldSize;
 }
 
 namespace {
@@ -740,14 +769,16 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   auto *ctxt = rewriter.getContext();
   circt::BackedgeBuilder bb(rewriter, loc);
   builder.declareCosimEndpoint();
+  Type ui64Type =
+      IntegerType::get(ctxt, 64, IntegerType::SignednessSemantics::Unsigned);
 
   // Set all the parameters.
   NamedAttrList params;
   params.set("ENDPOINT_ID", rewriter.getI32IntegerAttr(ep.endpointID()));
-  params.set("SEND_TYPE_ID", rewriter.getI64IntegerAttr(ep.getSendTypeID()));
+  params.set("SEND_TYPE_ID", IntegerAttr::get(ui64Type, ep.getSendTypeID()));
   params.set("SEND_TYPE_SIZE_BITS",
              rewriter.getI64IntegerAttr(getCapnpMsgSize(ep.send().getType())));
-  params.set("RECV_TYPE_ID", rewriter.getI64IntegerAttr(ep.getRecvTypeID()));
+  params.set("RECV_TYPE_ID", IntegerAttr::get(ui64Type, ep.getRecvTypeID()));
   params.set("RECVTYPE_SIZE_BITS",
              rewriter.getI64IntegerAttr(getCapnpMsgSize(ep.recv().getType())));
 
