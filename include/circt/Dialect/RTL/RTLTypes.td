@@ -84,24 +84,30 @@ class InOutElementConstraint<string value, string inoutValue>
 // Adapted from TestTypeDefs.td
 // A parent type for any type which is just a list of fields (e.g. structs,
 // unions).
-class FieldInfo_Type<string name> : RTLType<name> {
+def StructType : RTLType<"Struct"> {
+  let summary = "struct type for ports and wires";
+  let description = [{
+    Struct type is used...
+  }];
+  let mnemonic = "struct";
+
   let parameters = (
     ins
     // An ArrayRef of something which requires allocation in the storage
     // constructor.
     ArrayRefOfSelfAllocationParameter<
-      "::circt::rtl::FieldInfo",
-      "Models struct fields">: $fields
+      "::circt::rtl::StructType::FieldInfo",
+      "struct fields">: $elements
   );
 
   // Prints the type in this format:
   //   struct<[{field1Name, field1Type}, {field2Name, field2Type}]>
   let printer = [{
     $_printer << "struct" << "<";
-    for (size_t i=0, e = getImpl()->fields.size(); i < e; i++) {
-      const auto& field = getImpl()->fields[i];
+    for (size_t i=0, e = getImpl()->elements.size(); i < e; i++) {
+      const auto& field = getImpl()->elements[i];
       $_printer << "{" << field.name << "," << field.type << "}";
-      if (i < getImpl()->fields.size() - 1)
+      if (i < getImpl()->elements.size() - 1)
           $_printer << ",";
     }
     $_printer << ">";
@@ -124,19 +130,15 @@ class FieldInfo_Type<string name> : RTLType<name> {
     if ($_parser.parseGreater()) return Type();
     return get($_ctxt, parameters);
   }];
-}
 
-def StructType : FieldInfo_Type<"Struct"> {
-  let summary = "struct type for ports and wires";
-  let description = [{
-    Struct type is used...
+  let extraClassDeclaration = [{
+    struct FieldInfo {
+      StringRef name;
+      Type type;
+      FieldInfo allocateInto(TypeStorageAllocator &alloc) const {
+        return FieldInfo{alloc.copyInto(name), type};
+      }
+    };
+
   }];
-    let mnemonic = "struct";
 }
-
-// This type constraint is used to constraing the value type to the type of the 
-// named filed of the structValue
-class StructFieldTypeConstraint<string structValue, string value, string fieldName>
-  : TypesMatchWith<"type should be element of struct type",
-                   structValue, value,
-      "getTypeByField($_self, $fieldName)">;

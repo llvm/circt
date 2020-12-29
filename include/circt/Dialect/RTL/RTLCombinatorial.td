@@ -192,10 +192,8 @@ def StructExtractOp : RTLOp<"struct_extract", [NoSideEffect]> {
   let arguments = (ins StructType:$input, StrAttr:$field);
   let results = (outs AnyType:$result);
 
-  let assemblyFormat = [{
-    $input `:` $field attr-dict `:` type($input) `,` type($result)
-  }];
-
+  let parser = [{ return ::parse$cppClass(parser, result); }];
+  let printer = [{ return ::print(p, *this); }];
 }
 
 // Extract a range of bits from the specified input.
@@ -206,9 +204,8 @@ def StructInjectOp : RTLOp<"struct_inject", [NoSideEffect, AllTypesMatch<["input
                    AnyType:$newValue);
   let results = (outs StructType:$result);
 
-  let assemblyFormat = [{
-    $input `:` $field `is` $newValue attr-dict `:` type($input) `,` type($newValue) `,` type($result)
-  }];
+  let parser = [{ return ::parse$cppClass(parser, result); }];
+  let printer = [{ return ::print(p, *this); }];
 }
 
 

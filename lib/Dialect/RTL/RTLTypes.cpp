@@ -21,10 +21,27 @@
 using namespace mlir;
 using namespace circt::rtl;
 
+
+//===----------------------------------------------------------------------===//
+// Type Helpers
+//===----------------------------------------------------------------------===/
+
+void circt::rtl::getStructInnerTypes(StructType stype, SmallVectorImpl<Type>& types) {
+  for (const auto& field : stype.getElements())
+        types.push_back(field.type);
+    }
+
+Type circt::rtl::getStructFieldType(StructType stype, StringRef fieldName) { 
+  for (const auto& field : stype.getElements())
+    if (field.name == fieldName)
+      return field.type;
+  return Type(); 
+}
+
 /// Return true if the specified type can be used as an RTL value type, that is
 /// the set of types that can be composed together to represent synthesized,
 /// hardware but not marker types like InOutType.
-bool isRTLValueType(Type type) {
+bool circt::rtl::isRTLValueType(Type type) {
   if (auto intType = type.dyn_cast<IntegerType>())
     return intType.isSignless();
 
@@ -34,57 +51,20 @@ bool isRTLValueType(Type type) {
   return false;
 }
 
-Type getTypeByField(Type structVal, StringRef fieldName) { return structVal; }
-
 //===----------------------------------------------------------------------===//
 // Struct Type
 //===----------------------------------------------------------------------===//
-
 namespace circt {
 namespace rtl {
-static bool operator==(const FieldInfo &a, const FieldInfo &b) {
+static bool operator==(const StructType::FieldInfo &a, const StructType::FieldInfo &b) {
   return a.name == b.name && a.type == b.type;
 }
-static llvm::hash_code hash_value(const FieldInfo &fi) {
+static llvm::hash_code hash_value(const StructType::FieldInfo &fi) {
   return llvm::hash_combine(fi.name, fi.type);
 }
-} // namespace rtl
-} // namespace circt
-
-namespace circt {
-namespace rtl {
 // llvm::hash_code hash_value(const StructType::StructElement &arg) {
 //   return llvm::hash_value(arg.name) ^ mlir::hash_value(arg.type);
 // }
-} // namespace rtl
-} // namespace circt
-
-namespace circt {
-namespace rtl {
-namespace detail {
-// struct StructTypeStorage : mlir::TypeStorage {
-//   using KeyTy = ArrayRef<StructType::StructElement>;
-
-//   StructTypeStorage(KeyTy elements)
-//       : elements(elements.begin(), elements.end()) {
-//   }
-
-//   bool operator==(const KeyTy &key) const { return key == KeyTy(elements); }
-
-//   static llvm::hash_code hashKey(const KeyTy &key) {
-//     return llvm::hash_combine_range(key.begin(), key.end());
-//   }
-
-//   static StructTypeStorage *construct(TypeStorageAllocator &allocator,
-//                                       KeyTy key) {
-//     return new (allocator.allocate<StructTypeStorage>())
-//     StructTypeStorage(key);
-//   }
-
-//   SmallVector<StructType::StructElement, 4> elements;
-// };
-
-} // namespace detail
 } // namespace rtl
 } // namespace circt
 

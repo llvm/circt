@@ -17,7 +17,7 @@ def InOutType : Type<CPred<"$_self.isa<rtl::InOutType>()">, "InOutType">;
 
 // Type constraint that indicates that an operand/result may only be a valid
 // inout element type.
-def InOutElementType : Type<CPred<"isRTLValueType($_self)">,
+def InOutElementType : Type<CPred<"rtl::isRTLValueType($_self)">,
                             "a valid inout element">;
 
 // This type constraint is used by operations whose asm strings have a type "T"

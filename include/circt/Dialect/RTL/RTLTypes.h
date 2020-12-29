@@ -14,30 +14,25 @@
 #ifndef CIRCT_DIALECT_RTL_TYPES_H
 #define CIRCT_DIALECT_RTL_TYPES_H
 
-#include "circt/Dialect/RTL/Dialect.h"
+#include "circt/Dialect/RTL/RTLDialect.h"
 #include "mlir/IR/Types.h"
-
-namespace circt {
-namespace rtl {
-
-struct FieldInfo {
-  StringRef name;
-  Type type;
-  FieldInfo allocateInto(TypeStorageAllocator &alloc) const {
-    return FieldInfo{alloc.copyInto(name), type};
-  }
-};
-} // namespace rtl
-} // namespace circt
 
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/RTL/RTLTypes.h.inc"
+
+namespace circt {
+  namespace rtl {
+
 
 /// Return true if the specified type can be used as an RTL value type, that is
 /// the set of types that can be composed together to represent synthesized,
 /// hardware but not marker types like InOutType.
 bool isRTLValueType(mlir::Type type);
 
-mlir::Type getTypeByField(mlir::Type structVal, mlir::StringRef fieldName);
+mlir::Type getStructFieldType(StructType structVal, mlir::StringRef fieldName);
+void getStructInnerTypes(StructType stype, mlir::SmallVectorImpl<mlir::Type>& types);
+
+  } // namespace rtl
+} // namespace circt
 
 #endif // CIRCT_DIALECT_RTL_TYPES_H
