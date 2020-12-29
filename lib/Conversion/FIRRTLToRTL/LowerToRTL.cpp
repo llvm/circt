@@ -1017,8 +1017,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
       builder->create<sv::IfDefOp>("RANDOMIZE_REG_INIT", [&]() {
         auto type = regResult.getType().cast<rtl::InOutType>().getElementType();
         auto randomVal = builder->create<sv::TextualValueOp>(type, "`RANDOM");
-        // TODO: use "x = y" syntax instead of "assign x = y".
-        builder->create<rtl::ConnectOp>(regResult, randomVal);
+        builder->create<sv::BPAssignOp>(regResult, randomVal);
       });
     });
   });
@@ -1410,7 +1409,7 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
       return failure();
 
     builder->create<sv::AlwaysAtPosEdgeOp>(
-        clockVal, [&]() { builder->create<rtl::ConnectOp>(destVal, srcVal); });
+        clockVal, [&]() { builder->create<sv::PAssignOp>(destVal, srcVal); });
 
     return success();
   }

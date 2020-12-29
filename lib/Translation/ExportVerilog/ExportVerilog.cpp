@@ -316,6 +316,8 @@ public:
   void emitStatement(InvalidOp op);
   void emitStatement(ConnectOp op);
   void emitStatement(rtl::ConnectOp op);
+  void emitStatement(sv::BPAssignOp op);
+  void emitStatement(sv::PAssignOp op);
   void emitStatement(sv::AliasOp op);
   void emitStatement(rtl::OutputOp op);
   void emitStatement(rtl::InstanceOp op);
@@ -1544,6 +1546,30 @@ void ModuleEmitter::emitStatement(rtl::ConnectOp op) {
   emitLocationInfoAndNewLine(ops);
 }
 
+void ModuleEmitter::emitStatement(sv::BPAssignOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent();
+  emitExpression(op.dest(), ops);
+  os << " = ";
+  emitExpression(op.src(), ops);
+  os << ';';
+  emitLocationInfoAndNewLine(ops);
+}
+
+void ModuleEmitter::emitStatement(sv::PAssignOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent();
+  emitExpression(op.dest(), ops);
+  os << " <= ";
+  emitExpression(op.src(), ops);
+  os << ';';
+  emitLocationInfoAndNewLine(ops);
+}
+
 void ModuleEmitter::emitStatement(sv::AliasOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -2509,6 +2535,8 @@ void ModuleEmitter::emitOperation(Operation *op) {
       return emitter.emitStatement(op), true;
     }
     bool visitSV(sv::InitialOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::BPAssignOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::PAssignOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::AliasOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::FWriteOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::FatalOp op) { return emitter.emitStatement(op), true; }
