@@ -430,10 +430,6 @@ void FIRRTLModuleLowering::lowerModuleBody(
   if (!newModule)
     return;
 
-  if (oldModule.getName() == "TLFragmenter") {
-    llvm::errs() << "HERE\n";
-  }
-
   ImplicitLocOpBuilder bodyBuilder(oldModule.getLoc(), newModule.body());
 
   // Use a placeholder instruction be a cursor that indicates where we want to
@@ -848,8 +844,7 @@ void FIRRTLLowering::runOnOperation() {
   // reverse order) at this point - any users of them from unremapped operations
   // will be changed to use the newly lowered ops.
   while (!opsToRemove.empty()) {
-    auto *op = opsToRemove.back();
-    assert(op->use_empty() &&
+    assert(opsToRemove.back()->use_empty() &&
            "Should remove ops in reverse order of visitation");
     opsToRemove.pop_back_val()->erase();
   }
