@@ -22,13 +22,29 @@ endif()
 # If we are not building as a part of LLVM, build Circt as an
 # standalone project, using LLVM as an external library:
 if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
+
+#-------------------------------------------------------------------------------
+# Project setup and globals
+#-------------------------------------------------------------------------------
   project(circt LANGUAGES CXX C)
   
   set(CMAKE_CXX_STANDARD 14)
   set(CMAKE_CXX_STANDARD_REQUIRED YES)
   
+  list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
+  
+#-------------------------------------------------------------------------------
+# Options and settings
+#-------------------------------------------------------------------------------
+  
   option(LLVM_INCLUDE_TOOLS "Generate build targets for the LLVM tools." ON)
   option(LLVM_BUILD_TOOLS "Build the LLVM tools. If OFF, just generate build targets." ON)
+  
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions -fno-rtti")
+  
+#-------------------------------------------------------------------------------
+# MLIR/LLVM Configuration
+#-------------------------------------------------------------------------------
   
   find_package(MLIR REQUIRED CONFIG)
   
@@ -67,6 +83,10 @@ if (MSVC_IDE OR XCODE)
 endif()
 set(LLVM_LIT_ARGS "${LIT_ARGS_DEFAULT}" CACHE STRING "Default options for lit")
 
+#-------------------------------------------------------------------------------
+# CIRCT configuration
+#-------------------------------------------------------------------------------
+
 # CIRCT project.
 set(CIRCT_MAIN_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR} ) # --src-root
 set(CIRCT_MAIN_INCLUDE_DIR ${CIRCT_MAIN_SRC_DIR}/include)
@@ -74,10 +94,7 @@ set(CIRCT_MAIN_INCLUDE_DIR ${CIRCT_MAIN_SRC_DIR}/include)
 set(CIRCT_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(CIRCT_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 set(CIRCT_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/include )
-
 set(CIRCT_TOOLS_DIR ${CMAKE_BINARY_DIR}/bin)
-
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 
 include(AddCIRCT)
 
@@ -94,6 +111,10 @@ include_directories(${MLIR_INCLUDE_DIRS})
 # Add CIRCT files to the include path
 include_directories(${CIRCT_MAIN_INCLUDE_DIR})
 include_directories(${CIRCT_INCLUDE_DIR})
+
+#-------------------------------------------------------------------------------
+# Verilator Configuration
+#-------------------------------------------------------------------------------
 
 # If Verilator hasn't been explicitly disabled, find it.
 option(VERILATOR_DISABLE "Disable the Verilator tests.")
@@ -128,6 +149,10 @@ else()
   endif()
 endif()
 
+#-------------------------------------------------------------------------------
+# Questa Configuration
+#-------------------------------------------------------------------------------
+
 # If Questa hasn't been explicitly disabled, find it.
 option(QUESTA_DISABLE "Disable the Questa simulation tests.")
 if (QUESTA_DISABLE)
@@ -149,6 +174,10 @@ else()
   endif()
 endif()
 
+#-------------------------------------------------------------------------------
+# Yosys Configuration
+#-------------------------------------------------------------------------------
+
 # If Yosys hasn't been explicitly disabled, find it.
 option(YOSYS_DISABLE "Disable the yosys tests.")
 if (YOSYS_DISABLE)
@@ -162,6 +191,10 @@ else()
     message(STATUS "Did not find yosys.")
   endif()
 endif()
+
+#-------------------------------------------------------------------------------
+# capnp Configuration
+#-------------------------------------------------------------------------------
 
 # If capnp hasn't been explicitly disabled, find it.
 option(CAPNP_DISABLE "Disable Cap'nProto (needed for cosimulation).")
@@ -178,6 +211,10 @@ else()
     find_package(CapnProto CONFIG PATHS "${CMAKE_SOURCE_DIR}/ext")
   endif()
 endif()
+
+#-------------------------------------------------------------------------------
+# Directory setup
+#-------------------------------------------------------------------------------
 
 add_subdirectory(include/circt)
 add_subdirectory(lib)
