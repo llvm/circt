@@ -71,6 +71,9 @@ flip types, according to the following rules:
 3) `flip(vector(a, n))` == `vector(flip(a), n)` when the vector has non-passive
    type.  This forces the flip into the element type, generally canceling it
    out.
+4) `bundle(flip(a), flip(b), flip(c), flip(d))` == `flip(bundle(a, b, c, d)`.
+   Due to the other rules, the operand to a flip must be a passive type, so the
+   entire bundle will be passive, and rule #2 won't be recursively reinvoked.
 
 The result of this is that FIRRTL types are guaranteed to have a canonical
 representation, and can therefore be tested for pointer equality.
