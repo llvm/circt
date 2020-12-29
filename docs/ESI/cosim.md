@@ -23,6 +23,23 @@ cosim builds and provides a set of SystemVerilog sources and a shared library
 which implement both DPI sides. The shared library (C++) starts a capnp RPC
 server for client(s) to connect to and interface with the simulations.
 
+### Generating a system-specific schema
+
+ESI has the capability to generate a Cap'nProto schema customized to an ESI
+system. Run command below on an MLIR assembly file with `esi.cosim` ops. It
+will find all of the cosim ops and output a capnp schema struct for each
+input and output type.
+
+`circt-translate <esi_system.mlir> -emit-esi-capnp`
+
+Comments in the generated file indicate the type converted from. In cases
+where the ESI type is smaller than the capnp type (e.g. `i5` vs `UInt8`), the
+ESI-generated conversion gasket will simply ignore the extra bits.
+
+The struct IDs (`0x<hexStructID>`) will match the `TypeID`s in the
+`EsiDpiInterfaceDesc` which dynamically describes each endpoint, described
+below.
+
 ### Endpoints
 
 ESI cosim works through a notion of *endpoints* -- typed, bi-directional
@@ -67,8 +84,9 @@ interface CosimDpiServer {
 }
 
 struct EsiDpiInterfaceDesc {
-    typeID @0 :UInt64;
-    endpointID @1 :Int32;
+  sendTypeID @0 :UInt64;
+  recvTypeID @1 :UInt64;
+  endpointID @2 :Int32;
 }
 
 interface EsiDpiEndpoint(SendMsgType, RecvMsgType) {

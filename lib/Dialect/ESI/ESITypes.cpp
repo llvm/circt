@@ -21,6 +21,33 @@
 using namespace mlir;
 using namespace circt::esi;
 
+// We compute a deterministic hash based on the type. Since llvm::hash_value
+// changes from execution to execution, we don't use it. This assumes a closed
+// type system, which is reasonable since we only support some types in the
+// Capnp schema generation anyway.
+uint64_t circt::esi::getCapnpTypeID(Type t) {
+  // We can hash up to 64 bytes with a single function call.
+  char buffer[64];
+  memset(buffer, 0, sizeof(buffer));
+
+  // The first byte is for the outer type.
+  auto chanPort = t.dyn_cast<ChannelPort>();
+  assert(chanPort && "Type not supported as top level");
+  buffer[0] = 1; // Constant for the ChannelPort type.
+
+  TypeSwitch<Type>(chanPort.getInner())
+      .Case([&buffer](IntegerType t) {
+        // The second byte is for the inner type.
+        buffer[1] = 1;
+        // The rest can be defined arbitrarily.
+        buffer[2] = (char)t.getSignedness();
+        *(int64_t *)&buffer[4] = t.getWidth();
+      })
+      .Default([](Type) { assert(false && "Type not yet supported"); });
+
+  return llvm::hashing::detail::hash_short(buffer, 12, esiCosimSchemaVersion);
+}
+
 Type ChannelPort::parse(mlir::MLIRContext *ctxt, mlir::DialectAsmParser &p) {
   Type inner;
   if (p.parseLess() || p.parseType(inner) || p.parseGreater())
