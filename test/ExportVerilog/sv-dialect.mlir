@@ -3,12 +3,12 @@
 // CHECK-LABEL: module M1(
 rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
   // CHECK:      always @(posedge clock) begin
-  // CHECK-NEXT:   #ifndef SYNTHESIS
+  // CHECK-NEXT:   `ifndef SYNTHESIS
   // CHECK-NEXT:     if (PRINTF_COND_ & cond)
   // CHECK-NEXT:       $fwrite(32'h80000002, "Hi\n");
-  // CHECK-NEXT:   #endif
+  // CHECK-NEXT:   `endif
   // CHECK-NEXT: end // always @(posedge)
-  sv.alwaysat_posedge %clock {
+  sv.always "posedge" %clock {
     sv.ifdef "!SYNTHESIS" {
       %tmp = sv.textual_value "PRINTF_COND_" : i1
       %tmp2 = rtl.and %tmp, %cond : i1
@@ -16,6 +16,16 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
         sv.fwrite "Hi\n"
       }
     }
+  }
+
+  // CHECK-NEXT: always @(negedge clock) begin
+  // CHECK-NEXT: end // always @(negedge)
+  sv.always "negedge" %clock {
+  }
+
+  // CHECK-NEXT: always @(edge clock) begin
+  // CHECK-NEXT: end // always @(edge)
+  sv.always "edge" %clock {
   }
 
   // CHECK-NEXT:   if (cond) begin
@@ -42,9 +52,25 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     // CHECK-NEXT: Emit some stuff in verilog
     // CHECK-NEXT: Great power and responsibility!
     sv.verbatim "Emit some stuff in verilog\nGreat power and responsibility!"
+  }// CHECK-NEXT:   {{end$}}
 
-    // CHECK-NEXT:   {{end$}}
+  // CHECK-NEXT: initial
+  // CHECK-NOT: begin
+  sv.initial {
+    // CHECK-NEXT: $fatal
+    sv.fatal
   }
+  
+  %wire42 = rtl.wire : !rtl.inout<i42>
+
+  // CHECK-NEXT: initial begin
+  sv.initial {
+    %thing = sv.textual_value "THING" : i42
+    // CHECK-NEXT: wire42 = THING;
+    sv.bpassign %wire42, %thing : i42
+    // CHECK-NEXT: wire42 <= THING;
+    sv.passign %wire42, %thing : i42
+  }// CHECK-NEXT:   {{end // initial$}}
 }
 
 // CHECK-LABEL: module Aliasing(

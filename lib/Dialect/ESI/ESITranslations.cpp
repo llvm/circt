@@ -61,7 +61,7 @@ struct ExportCosimSchema {
   LogicalResult emitSchemaFor(IntegerType type, uint64_t hash);
 
   /// Emit a struct name.
-  llvm::raw_ostream &emitName(Type type) { return os << "ESI_" << type; }
+  llvm::raw_ostream &emitName(Type type) { return os << "TY" << type; }
 
 private:
   /// Intentation utils.
@@ -183,6 +183,8 @@ LogicalResult ExportCosimSchema::emit() {
   for (ChannelPort chanPort : types)
     fileHash = llvm::hashing::detail::hash_16_bytes(fileHash,
                                                     getCapnpTypeID(chanPort));
+  // Capnp IDs always have a '1' high bit.
+  fileHash |= 0x8000000000000000;
   emitId(fileHash) << ";\n\n";
 
   // Iterate through the various types and emit their schemas.

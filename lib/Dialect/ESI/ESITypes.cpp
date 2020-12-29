@@ -45,7 +45,10 @@ uint64_t circt::esi::getCapnpTypeID(Type t) {
       })
       .Default([](Type) { assert(false && "Type not yet supported"); });
 
-  return llvm::hashing::detail::hash_short(buffer, 12, esiCosimSchemaVersion);
+  uint64_t hash =
+      llvm::hashing::detail::hash_short(buffer, 12, esiCosimSchemaVersion);
+  // Capnp IDs always have a '1' high bit.
+  return hash | 0x8000000000000000;
 }
 
 Type ChannelPort::parse(mlir::MLIRContext *ctxt, mlir::DialectAsmParser &p) {

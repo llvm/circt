@@ -80,22 +80,6 @@ static Value castFromFIRRTLType(Value val, Type type,
   return builder.createOrFold<StdIntCastOp>(type, val);
 }
 
-static Value extendOrTruncateFIRRTL(Value val, IntType destTy,
-                                    ImplicitLocOpBuilder &builder) {
-  auto srcTy = val.getType().cast<IntType>();
-  assert(srcTy.hasWidth() && destTy.hasWidth() &&
-         "only works with width-inferred integer values");
-
-  if (srcTy.getWidthOrSentinel() == destTy.getWidthOrSentinel())
-    return val;
-
-  if (srcTy.getWidthOrSentinel() > destTy.getWidthOrSentinel())
-    return builder.createOrFold<TailPrimOp>(destTy, val,
-                                            destTy.getWidthOrSentinel());
-  return builder.createOrFold<PadPrimOp>(destTy, val,
-                                         destTy.getWidthOrSentinel());
-}
-
 //===----------------------------------------------------------------------===//
 // firrtl.module Lowering Pass
 //===----------------------------------------------------------------------===//
@@ -396,10 +380,10 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
     auto destTy = flipValue.getType().cast<FIRRTLType>().getPassiveType();
     if (destTy != connectSrc.getType()) {
       // The only type mismatch we can have is due to integer width differences.
-      // FIXME: connects shouldn't allow truncates, so this should just be an
-      // extension.
+      auto destWidth = destTy.getBitWidthOrSentinel();
+      assert(destWidth != -1 && "must know integer widths");
       connectSrc =
-          extendOrTruncateFIRRTL(connectSrc, destTy.cast<IntType>(), builder);
+          builder.createOrFold<PadPrimOp>(destTy, connectSrc, destWidth);
     }
 
     // Remove the connect and use its source as the value for the output.
@@ -685,6 +669,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult setLowering(Value orig, Value result);
   template <typename ResultOpType, typename... CtorArgTypes>
   LogicalResult setLoweringTo(Operation *orig, CtorArgTypes... args);
+  void emitRandomizePrologIfNeeded();
 
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitExpr;
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitDecl;
@@ -695,6 +680,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(ConstantOp op);
   LogicalResult visitDecl(WireOp op);
   LogicalResult visitDecl(NodeOp op);
+  LogicalResult visitDecl(RegOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
   LogicalResult visitInvalidOp(Operation *op) { return failure(); }
 
@@ -727,6 +713,8 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
                            ICmpPredicate unsignedOp);
   template <typename SignedOp, typename UnsignedOp>
   LogicalResult lowerDivLikeOp(Operation *op);
+  template <typename AOpTy, typename BOpTy>
+  LogicalResult lowerVerificationStatement(AOpTy op);
 
   LogicalResult visitExpr(CatPrimOp op);
 
@@ -803,8 +791,9 @@ private:
   /// key should have a FIRRTL type, the result will have an RTL dialect type.
   DenseMap<Value, Value> valueMapping;
 
-  template <typename AOpTy, typename BOpTy>
-  LogicalResult lowerVerificationStatement(AOpTy op);
+  /// This is true if we've emitted `INIT_RANDOM_PROLOG_ into an initial block
+  /// in this module already.
+  bool randomizePrologEmitted;
 };
 } // end anonymous namespace
 
@@ -819,6 +808,8 @@ void FIRRTLLowering::runOnOperation() {
   // through each operation, lowering each in turn if we can, introducing casts
   // if we cannot.
   auto *body = getOperation().getBodyBlock();
+
+  randomizePrologEmitted = false;
 
   SmallVector<Operation *, 16> opsToRemove;
 
@@ -997,6 +988,43 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   return setLowering(op, operand);
 }
 
+/// Emit a `INIT_RANDOM_PROLOG_ statement into the current block.  This should
+/// already be within an `ifndef SYNTHESIS + initial block.
+void FIRRTLLowering::emitRandomizePrologIfNeeded() {
+  if (randomizePrologEmitted)
+    return;
+
+  builder->create<sv::VerbatimOp>("`INIT_RANDOM_PROLOG_");
+  randomizePrologEmitted = true;
+}
+
+LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
+  auto resType = op.result().getType().cast<FIRRTLType>();
+  auto resultType = lowerType(resType);
+  if (!resultType)
+    return failure();
+
+  // Convert the inout to a non-inout type.
+  auto regResult = builder->create<rtl::RegOp>(resultType, op.nameAttr());
+  setLowering(op, regResult);
+
+  // Emit the initializer expression for simulation that fills it with random
+  // value.
+  builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
+    builder->create<sv::InitialOp>([&]() {
+      emitRandomizePrologIfNeeded();
+
+      builder->create<sv::IfDefOp>("RANDOMIZE_REG_INIT", [&]() {
+        auto type = regResult.getType().cast<rtl::InOutType>().getElementType();
+        auto randomVal = builder->create<sv::TextualValueOp>(type, "`RANDOM");
+        builder->create<sv::BPAssignOp>(regResult, randomVal);
+      });
+    });
+  });
+
+  return success();
+}
+
 /// Handle the case where an operation wasn't lowered.  When this happens, the
 /// operands may be a mix of lowered and unlowered values.  If the operand was
 /// not lowered then leave it alone, otherwise insert a cast from the lowered
@@ -1038,13 +1066,13 @@ LogicalResult FIRRTLLowering::visitExpr(StdIntCastOp op) {
   if (!result)
     return failure();
 
-  // Conversions from standard integer types to FIRRTL types are lowered as the
-  // input operand.
+  // Conversions from standard integer types to FIRRTL types are lowered as
+  // the input operand.
   if (!op.getType().isa<IntegerType>())
     return setLowering(op, result);
 
-  // We lower firrtl.stdIntCast converting from a firrtl type to a standard type
-  // into the lowered operand.
+  // We lower firrtl.stdIntCast converting from a firrtl type to a standard
+  // type into the lowered operand.
   op.replaceAllUsesWith(result);
   return success();
 }
@@ -1190,8 +1218,8 @@ LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, ICmpPredicate signedOp,
 /// the widest type of the result and two inputs then truncated down.
 template <typename SignedOp, typename UnsignedOp>
 LogicalResult FIRRTLLowering::lowerDivLikeOp(Operation *op) {
-  // rtl has equal types for these, firrtl doesn't.  The type of the firrtl RHS
-  // may be wider than the LHS, and we cannot truncate off the high bits
+  // rtl has equal types for these, firrtl doesn't.  The type of the firrtl
+  // RHS may be wider than the LHS, and we cannot truncate off the high bits
   // (because an overlarge amount is supposed to shift in sign or zero bits).
   auto opType = op->getResult(0).getType().cast<IntType>();
   auto resultType = getWidestIntType(opType, op->getOperand(1).getType());
@@ -1362,19 +1390,32 @@ LogicalResult FIRRTLLowering::visitStmt(InvalidOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
-  auto dest = getPossiblyInoutLoweredValue(op.dest());
-
+  auto dest = op.dest();
   // The source can be a smaller integer, extend it as appropriate if so.
-  auto destType = op.dest().getType().cast<FIRRTLType>().getPassiveType();
-  Value src = getLoweredAndExtendedValue(op.src(), destType);
-
-  if (!dest || !src)
+  auto destType = dest.getType().cast<FIRRTLType>().getPassiveType();
+  auto srcVal = getLoweredAndExtendedValue(op.src(), destType);
+  auto destVal = getPossiblyInoutLoweredValue(dest);
+  if (!srcVal || !destVal)
     return failure();
 
-  if (!dest.getType().isa<rtl::InOutType>())
+  if (!destVal.getType().isa<rtl::InOutType>())
     return op.emitError("destination isn't an inout type");
 
-  builder->create<rtl::ConnectOp>(dest, src);
+  // If this is an assignment to a register, then the connect implicitly
+  // happens under the clock that gates the register.
+  if (auto regOp = dyn_cast_or_null<RegOp>(dest.getDefiningOp())) {
+    Value clockVal = getLoweredValue(regOp.clockVal());
+    if (!clockVal)
+      return failure();
+
+    builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clockVal, [&]() {
+      builder->create<sv::PAssignOp>(destVal, srcVal);
+    });
+
+    return success();
+  }
+
+  builder->create<rtl::ConnectOp>(destVal, srcVal);
   return success();
 }
 
@@ -1394,8 +1435,8 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
       return failure();
   }
 
-  // Emit this into an "sv.alwaysat_posedge" body.
-  builder->create<sv::AlwaysAtPosEdgeOp>(clock, [&]() {
+  // Emit this into an "sv.always posedge" body.
+  builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, [&]() {
     // Emit an "#ifndef SYNTHESIS" guard into the always block.
     builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
       // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
@@ -1416,13 +1457,13 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
 // Stop lowers into a nested series of behavioral statements plus $fatal or
 // $finish.
 LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
-  // Emit this into an "sv.alwaysat_posedge" body.
   auto clock = getLoweredValue(op.clock());
   auto cond = getLoweredValue(op.cond());
   if (!clock || !cond)
     return failure();
 
-  builder->create<sv::AlwaysAtPosEdgeOp>(clock, [&]() {
+  // Emit this into an "sv.always posedge" body.
+  builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, [&]() {
     // Emit an "#ifndef SYNTHESIS" guard into the always block.
     builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
       // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
@@ -1467,7 +1508,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
   if (!clock || !enable || !predicate)
     return failure();
 
-  builder->create<sv::AlwaysAtPosEdgeOp>(clock, [&]() {
+  builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, [&]() {
     builder->create<sv::IfOp>(enable, [&]() {
       // Create BOpTy inside the always/if.
       builder->createOrFold<BOpTy>(predicate);

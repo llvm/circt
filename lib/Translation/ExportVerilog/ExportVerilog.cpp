@@ -316,6 +316,8 @@ public:
   void emitStatement(InvalidOp op);
   void emitStatement(ConnectOp op);
   void emitStatement(rtl::ConnectOp op);
+  void emitStatement(sv::BPAssignOp op);
+  void emitStatement(sv::PAssignOp op);
   void emitStatement(sv::AliasOp op);
   void emitStatement(rtl::OutputOp op);
   void emitStatement(rtl::InstanceOp op);
@@ -323,7 +325,8 @@ public:
   void emitStatement(StopOp op);
   void emitStatement(sv::IfDefOp op);
   void emitStatement(sv::IfOp op);
-  void emitStatement(sv::AlwaysAtPosEdgeOp op);
+  void emitStatement(sv::AlwaysOp op);
+  void emitStatement(sv::InitialOp op);
   void emitStatement(sv::FWriteOp op);
   void emitStatement(sv::FatalOp op);
   void emitStatement(sv::FinishOp op);
@@ -1543,6 +1546,30 @@ void ModuleEmitter::emitStatement(rtl::ConnectOp op) {
   emitLocationInfoAndNewLine(ops);
 }
 
+void ModuleEmitter::emitStatement(sv::BPAssignOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent();
+  emitExpression(op.dest(), ops);
+  os << " = ";
+  emitExpression(op.src(), ops);
+  os << ';';
+  emitLocationInfoAndNewLine(ops);
+}
+
+void ModuleEmitter::emitStatement(sv::PAssignOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent();
+  emitExpression(op.dest(), ops);
+  os << " <= ";
+  emitExpression(op.src(), ops);
+  os << ';';
+  emitLocationInfoAndNewLine(ops);
+}
+
 void ModuleEmitter::emitStatement(sv::AliasOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -1701,9 +1728,9 @@ void ModuleEmitter::emitStatement(sv::IfDefOp op) {
   auto cond = op.cond();
 
   if (cond.startswith("!"))
-    indent() << "#ifndef " << cond.drop_front(1);
+    indent() << "`ifndef " << cond.drop_front(1);
   else
-    indent() << "#ifdef " << cond;
+    indent() << "`ifdef " << cond;
 
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -1714,7 +1741,7 @@ void ModuleEmitter::emitStatement(sv::IfDefOp op) {
     emitOperation(&op);
   reduceIndent();
 
-  indent() << "#endif\n";
+  indent() << "`endif\n";
 }
 
 /// Emit the body of a control flow statement that is surrounded by begin/end
@@ -1724,7 +1751,7 @@ void ModuleEmitter::emitStatement(sv::IfDefOp op) {
 static void emitBeginEndRegion(Block *block,
                                SmallPtrSet<Operation *, 8> &locationOps,
                                ModuleEmitter &emitter,
-                               const char *multiLineComment = nullptr) {
+                               StringRef multiLineComment = StringRef()) {
   auto isSingleVerilogStatement = [&](Operation &op) {
     // Not all expressions and statements are guaranteed to emit a single
     // Verilog statement (for the purposes of if statements).  Just do a simple
@@ -1748,7 +1775,7 @@ static void emitBeginEndRegion(Block *block,
 
   if (!hasOneStmt) {
     emitter.indent() << "end";
-    if (multiLineComment)
+    if (!multiLineComment.empty())
       emitter.os << " // " << multiLineComment;
     emitter.os << '\n';
   }
@@ -1762,13 +1789,24 @@ void ModuleEmitter::emitStatement(sv::IfOp op) {
   emitBeginEndRegion(op.getBodyBlock(), ops, *this);
 }
 
-void ModuleEmitter::emitStatement(sv::AlwaysAtPosEdgeOp op) {
+void ModuleEmitter::emitStatement(sv::AlwaysOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  indent() << "always @(posedge " << emitExpressionToString(op.clock(), ops)
-           << ")";
-  emitBeginEndRegion(op.getBodyBlock(), ops, *this, "always @(posedge)");
+  StringRef eventStr = stringifyEventControl(op.event());
+  indent() << "always @(" << eventStr << ' '
+           << emitExpressionToString(op.clock(), ops) << ')';
+
+  std::string comment = "always @(" + eventStr.str() + ')';
+  emitBeginEndRegion(op.getBodyBlock(), ops, *this, comment);
+}
+
+void ModuleEmitter::emitStatement(sv::InitialOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent() << "initial";
+  emitBeginEndRegion(op.getBodyBlock(), ops, *this, "initial");
 }
 
 void ModuleEmitter::emitDecl(NodeOp op) {
@@ -2496,9 +2534,10 @@ void ModuleEmitter::emitOperation(Operation *op) {
     using Visitor::visitSV;
     bool visitSV(sv::IfDefOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::IfOp op) { return emitter.emitStatement(op), true; }
-    bool visitSV(sv::AlwaysAtPosEdgeOp op) {
-      return emitter.emitStatement(op), true;
-    }
+    bool visitSV(sv::AlwaysOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::InitialOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::BPAssignOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::PAssignOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::AliasOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::FWriteOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::FatalOp op) { return emitter.emitStatement(op), true; }

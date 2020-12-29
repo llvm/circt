@@ -64,13 +64,33 @@ void IfOp::build(OpBuilder &odsBuilder, OperationState &result, Value cond,
 }
 
 //===----------------------------------------------------------------------===//
-// AlwaysAtPosEdgeOp
+// AlwaysOp
 
-void AlwaysAtPosEdgeOp::build(OpBuilder &odsBuilder, OperationState &result,
-                              Value clock, std::function<void()> bodyCtor) {
+void AlwaysOp::build(OpBuilder &odsBuilder, OperationState &result,
+                     EventControl event, Value clock,
+                     std::function<void()> bodyCtor) {
+  result.addAttribute(
+      "event", odsBuilder.getI32IntegerAttr(static_cast<int32_t>(event)));
   result.addOperands(clock);
   Region *body = result.addRegion();
-  AlwaysAtPosEdgeOp::ensureTerminator(*body, odsBuilder, result.location);
+  AlwaysOp::ensureTerminator(*body, odsBuilder, result.location);
+
+  // Fill in the body of the #ifdef.
+  if (bodyCtor) {
+    auto oldIP = &*odsBuilder.getInsertionPoint();
+    odsBuilder.setInsertionPointToStart(&*body->begin());
+    bodyCtor();
+    odsBuilder.setInsertionPoint(oldIP);
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// InitialOp
+
+void InitialOp::build(OpBuilder &odsBuilder, OperationState &result,
+                      std::function<void()> bodyCtor) {
+  Region *body = result.addRegion();
+  InitialOp::ensureTerminator(*body, odsBuilder, result.location);
 
   // Fill in the body of the #ifdef.
   if (bodyCtor) {
