@@ -2,6 +2,7 @@ add_circt_dialect_library(CIRCTESI
   ESIDialect.cpp
   ESIOps.cpp
   ESIPasses.cpp
+  ESITranslations.cpp
   ESITypes.cpp
 
   ADDITIONAL_HEADER_DIRS
