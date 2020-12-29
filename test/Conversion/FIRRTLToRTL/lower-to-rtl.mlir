@@ -447,6 +447,16 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: %count = rtl.reg : !rtl.inout<i2>
     %count = firrtl.reg %0 {name = "count"} : (!firrtl.clock) -> !firrtl.uint<2>
 
+    // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
+    // CHECK-NEXT:    sv.initial  {
+    // CHECK-NEXT:    sv.verbatim "`INIT_RANDOM_PROLOG_"
+    // CHECK-NEXT:    sv.ifdef "RANDOMIZE_REG_INIT"  {
+    // CHECK-NEXT:       %3 = sv.textual_value "`RANDOM" : i2
+    // CHECK-NEXT:        rtl.connect %count, %3 : i2
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:    }
+    // CHECK-NEXT:  }
+
     // CHECK-NEXT: %0 = rtl.read_inout %count : !rtl.inout<i2>
     // CHECK-NEXT: %1 = rtl.mux %cond, %value, %0 : i2
     // CHECK-NEXT: %2 = rtl.mux %reset, %c0_i2, %1 : i2

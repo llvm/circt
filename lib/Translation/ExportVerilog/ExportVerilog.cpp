@@ -324,6 +324,7 @@ public:
   void emitStatement(sv::IfDefOp op);
   void emitStatement(sv::IfOp op);
   void emitStatement(sv::AlwaysAtPosEdgeOp op);
+  void emitStatement(sv::InitialOp op);
   void emitStatement(sv::FWriteOp op);
   void emitStatement(sv::FatalOp op);
   void emitStatement(sv::FinishOp op);
@@ -1701,9 +1702,9 @@ void ModuleEmitter::emitStatement(sv::IfDefOp op) {
   auto cond = op.cond();
 
   if (cond.startswith("!"))
-    indent() << "#ifndef " << cond.drop_front(1);
+    indent() << "`ifndef " << cond.drop_front(1);
   else
-    indent() << "#ifdef " << cond;
+    indent() << "`ifdef " << cond;
 
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -1714,7 +1715,7 @@ void ModuleEmitter::emitStatement(sv::IfDefOp op) {
     emitOperation(&op);
   reduceIndent();
 
-  indent() << "#endif\n";
+  indent() << "`endif\n";
 }
 
 /// Emit the body of a control flow statement that is surrounded by begin/end
@@ -1769,6 +1770,14 @@ void ModuleEmitter::emitStatement(sv::AlwaysAtPosEdgeOp op) {
   indent() << "always @(posedge " << emitExpressionToString(op.clock(), ops)
            << ")";
   emitBeginEndRegion(op.getBodyBlock(), ops, *this, "always @(posedge)");
+}
+
+void ModuleEmitter::emitStatement(sv::InitialOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent() << "initial";
+  emitBeginEndRegion(op.getBodyBlock(), ops, *this, "initial");
 }
 
 void ModuleEmitter::emitDecl(NodeOp op) {
@@ -2499,6 +2508,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitSV(sv::AlwaysAtPosEdgeOp op) {
       return emitter.emitStatement(op), true;
     }
+    bool visitSV(sv::InitialOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::AliasOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::FWriteOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::FatalOp op) { return emitter.emitStatement(op), true; }

@@ -3,10 +3,10 @@
 // CHECK-LABEL: module M1(
 rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
   // CHECK:      always @(posedge clock) begin
-  // CHECK-NEXT:   #ifndef SYNTHESIS
+  // CHECK-NEXT:   `ifndef SYNTHESIS
   // CHECK-NEXT:     if (PRINTF_COND_ & cond)
   // CHECK-NEXT:       $fwrite(32'h80000002, "Hi\n");
-  // CHECK-NEXT:   #endif
+  // CHECK-NEXT:   `endif
   // CHECK-NEXT: end // always @(posedge)
   sv.alwaysat_posedge %clock {
     sv.ifdef "!SYNTHESIS" {
@@ -42,9 +42,22 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     // CHECK-NEXT: Emit some stuff in verilog
     // CHECK-NEXT: Great power and responsibility!
     sv.verbatim "Emit some stuff in verilog\nGreat power and responsibility!"
+  }// CHECK-NEXT:   {{end$}}
 
-    // CHECK-NEXT:   {{end$}}
+  // CHECK-NEXT: initial
+  // CHECK-NOT: begin
+  sv.initial {
+    // CHECK-NEXT: $fatal
+    sv.fatal
   }
+
+  // CHECK-NEXT: initial begin
+  sv.initial {
+    // CHECK-NEXT: $fatal
+    sv.fatal
+    // CHECK-NEXT: $fatal
+    sv.fatal
+  }// CHECK-NEXT:   {{end // initial$}}
 }
 
 // CHECK-LABEL: module Aliasing(
