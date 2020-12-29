@@ -53,7 +53,8 @@
     // CHECK-NEXT: [[CLOCKCAST:%.+]] = firrtl.stdIntCast %clock : (i1) -> !firrtl.clock
     // CHECK-NEXT: [[RESETCAST:%.+]] = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: [[ARG1CAST:%.+]] = firrtl.stdIntCast [[ARG1:%.+]] : (!firrtl.uint<4>) -> i4
+    // CHECK: [[ARG1:%.+]] = firrtl.pad [[U2CAST]], 4
+    // CHECK-NEXT: [[ARG1CAST:%.+]] = firrtl.stdIntCast [[ARG1]] : (!firrtl.uint<4>) -> i4
     // CHECK-NEXT: %xyz.out4 = rtl.instance "xyz" @Simple([[ARG1CAST]], %u2, %s8) : (i4, i2, i8) -> i4
     %xyz = firrtl.instance @Simple {name = "xyz"}
      : !firrtl.bundle<in1: flip<uint<4>>, in2: flip<uint<2>>,
@@ -61,7 +62,6 @@
 
     // CHECK-NEXT: [[INSTOUTC1:%.+]] = firrtl.stdIntCast %xyz.out4 : (i4) -> !firrtl.uint<4>
 
-    // CHECK: [[ARG1]] = firrtl.pad [[U2CAST]], 4
     %0 = firrtl.subfield %xyz("in1") : (!firrtl.bundle<in1: flip<uint<4>>, in2: flip<uint<2>>, in3: flip<sint<8>>, out4: uint<4>>) -> !firrtl.flip<uint<4>>
     firrtl.connect %0, %u2 : !firrtl.flip<uint<4>>, !firrtl.uint<2>
 
@@ -189,8 +189,6 @@
 
     // No connections to outD.
 
-    // Extension for outE
-    // CHECK: [[OUTE:%.+]] = firrtl.pad [[INE]], 4 : (!firrtl.uint<3>) -> !firrtl.uint<4>
     firrtl.connect %outE, %inE : !firrtl.flip<uint<4>>, !firrtl.uint<3>
 
     // CHECK: [[OUTBY:%.+]] = rtl.merge %inB, %inA : i4
@@ -200,6 +198,8 @@
     // CHECK: [[OUTDX:%.+]] = firrtl.asPassive [[OUTD]]
     // CHECK: [[OUTDY:%.+]] = firrtl.stdIntCast [[OUTDX]]
 
+    // Extension for outE
+    // CHECK: [[OUTE:%.+]] = firrtl.pad [[INE]], 4 : (!firrtl.uint<3>) -> !firrtl.uint<4>
     // CHECK: [[OUTE_CAST:%.+]] = firrtl.stdIntCast [[OUTE]]
     // CHECK: rtl.output %inA, [[OUTBY]], [[OUTCY]], [[OUTDY]], [[OUTE_CAST]]
   }
@@ -216,4 +216,52 @@
     firrtl.connect %outClock, %clock : !firrtl.flip<clock>, !firrtl.clock
   }
 
+  // Issue #373: https://github.com/llvm/circt/issues/373
+  // CHECK-LABEL: rtl.module @instance_ooo
+  firrtl.module @instance_ooo(%arg0: !firrtl.uint<2>, %arg1: !firrtl.uint<2>,
+                              %out0: !firrtl.flip<uint<8>>) {
+    // The add and eq get hoisted.
+    // CHECK: firrtl.add
+    // CHECK-NEXT: [[ARG:%.+]] = firrtl.eq
+    // CHECK-NEXT: [[ARGC:%.+]] = firrtl.stdIntCast [[ARG]] : (!firrtl.uint<1>) -> i1
+    // CHECK-NEXT: rtl.instance "myext" @MyParameterizedExtModule([[ARGC]])
+    %myext = firrtl.instance @MyParameterizedExtModule {name = "myext"}
+      : !firrtl.bundle<in: flip<uint<1>>, out: uint<8>>
+
+    // Calculation of input (the firrtl.add + firrtl.eq) happens after the
+    // instance.
+    %0 = firrtl.add %arg0, %arg0 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<3>
+
+    // Multiple uses of the add.
+    %a = firrtl.eq %0, %0 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<1>
+    %9 = firrtl.subfield %myext("in") : (!firrtl.bundle<in: flip<uint<1>>, out: uint<8>>) -> !firrtl.flip<uint<1>>
+    firrtl.connect %9, %a : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+
+    %10 = firrtl.subfield %myext("out") : (!firrtl.bundle<in: flip<uint<1>>, out: uint<8>>) -> !firrtl.uint<8>
+    firrtl.connect %out0, %10 : !firrtl.flip<uint<8>>, !firrtl.uint<8>
+
+    // Casts for the output.
+    // CHECK-NEXT: %5 = firrtl.stdIntCast %myext.out : (i8) -> !firrtl.uint<8>
+    // CHECK-NEXT: %6 = firrtl.stdIntCast %5 : (!firrtl.uint<8>) -> i8
+    // CHECK-NEXT: rtl.output %6
+  }
+
+  // CHECK-LABEL: rtl.module @instance_cyclic
+  firrtl.module @instance_cyclic(%arg0: !firrtl.uint<2>, %arg1: !firrtl.uint<2>) {
+    // This can't be hoisted so we end up with a wire.
+    // CHECK: %in.wire = firrtl.wire : !firrtl.uint<1>
+    // CHECK: rtl.instance
+    %myext = firrtl.instance @MyParameterizedExtModule {name = "myext"}
+      : !firrtl.bundle<in: flip<uint<1>>, out: uint<8>>
+
+    // Output of the instance is fed into the input!
+    %10 = firrtl.subfield %myext("out") : (!firrtl.bundle<in: flip<uint<1>>, out: uint<8>>) -> !firrtl.uint<8>
+    %11 = firrtl.bits %10 2 to 2 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+
+    %9 = firrtl.subfield %myext("in") : (!firrtl.bundle<in: flip<uint<1>>, out: uint<8>>) -> !firrtl.flip<uint<1>>
+    firrtl.connect %9, %11 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+
+    // CHECK: firrtl.bits
+    // CHECK: firrtl.connect
+  }
 }
