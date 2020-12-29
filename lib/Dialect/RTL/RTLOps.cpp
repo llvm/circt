@@ -1309,18 +1309,17 @@ void ReadInOutOp::build(OpBuilder &builder, OperationState &result,
 // StructCreateOp
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseStructCreateOp(OpAsmParser &parser, OperationState &result) {
+static ParseResult parseStructCreateOp(OpAsmParser &parser,
+                                       OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
   llvm::SmallVector<OpAsmParser::OperandType, 4> operands;
   Type declStructType;
 
-  if (parser.parseLParen() ||
-      parser.parseOperandList(operands) ||
-      parser.parseRParen() ||
-      parser.parseOptionalAttrDict(result.attributes) || 
+  if (parser.parseLParen() || parser.parseOperandList(operands) ||
+      parser.parseRParen() || parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declStructType))
     return failure();
-  
+
   auto actStructType = declStructType.dyn_cast<StructType>();
   if (!actStructType)
     return failure();
@@ -1347,15 +1346,16 @@ static void print(OpAsmPrinter &printer, rtl::StructCreateOp op) {
 // StructExplodeOp
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseStructExplodeOp(OpAsmParser &parser, OperationState &result) {
+static ParseResult parseStructExplodeOp(OpAsmParser &parser,
+                                        OperationState &result) {
   OpAsmParser::OperandType operand;
   Type declStructType;
 
   if (parser.parseOperand(operand) ||
-      parser.parseOptionalAttrDict(result.attributes) || 
+      parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declStructType))
     return failure();
-  
+
   auto actStructType = declStructType.dyn_cast<StructType>();
   if (!actStructType)
     return failure();
@@ -1380,19 +1380,19 @@ static void print(OpAsmPrinter &printer, rtl::StructExplodeOp op) {
 // StructExtractOp
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseStructExtractOp(OpAsmParser &parser, OperationState &result) {
+static ParseResult parseStructExtractOp(OpAsmParser &parser,
+                                        OperationState &result) {
   OpAsmParser::OperandType operand;
   StringAttr fieldName;
   Type declStructType;
 
-  if (parser.parseOperand(operand) ||
-      parser.parseLSquare() ||
+  if (parser.parseOperand(operand) || parser.parseLSquare() ||
       parser.parseAttribute(fieldName, "field", result.attributes) ||
       parser.parseRSquare() ||
-      parser.parseOptionalAttrDict(result.attributes) || 
+      parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declStructType))
     return failure();
-  
+
   auto actStructType = declStructType.dyn_cast<StructType>();
   if (!actStructType)
     return failure();
@@ -1419,22 +1419,21 @@ static void print(OpAsmPrinter &printer, rtl::StructExtractOp op) {
 // StructInjectOp
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseStructInjectOp(OpAsmParser &parser, OperationState &result) {
+static ParseResult parseStructInjectOp(OpAsmParser &parser,
+                                       OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
   OpAsmParser::OperandType operand, val;
   StringAttr fieldName;
   Type declStructType;
 
-  if (parser.parseOperand(operand) ||
-      parser.parseLSquare() ||
+  if (parser.parseOperand(operand) || parser.parseLSquare() ||
       parser.parseAttribute(fieldName, "field", result.attributes) ||
-      parser.parseRSquare() ||
-      parser.parseComma() ||
+      parser.parseRSquare() || parser.parseComma() ||
       parser.parseOperand(val) ||
-      parser.parseOptionalAttrDict(result.attributes) || 
+      parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declStructType))
     return failure();
-  
+
   auto actStructType = declStructType.dyn_cast<StructType>();
   if (!actStructType)
     return failure();
@@ -1444,8 +1443,8 @@ static ParseResult parseStructInjectOp(OpAsmParser &parser, OperationState &resu
     return failure();
   result.addTypes(actStructType);
 
-  if (parser.resolveOperands({operand, val}, {actStructType, resultType}, inputOperandsLoc,
-                             result.operands))
+  if (parser.resolveOperands({operand, val}, {actStructType, resultType},
+                             inputOperandsLoc, result.operands))
     return failure();
   return success();
 }

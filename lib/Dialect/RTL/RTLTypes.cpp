@@ -21,21 +21,21 @@
 using namespace mlir;
 using namespace circt::rtl;
 
-
 //===----------------------------------------------------------------------===//
 // Type Helpers
 //===----------------------------------------------------------------------===/
 
-void circt::rtl::getStructInnerTypes(StructType stype, SmallVectorImpl<Type>& types) {
-  for (const auto& field : stype.getElements())
-        types.push_back(field.type);
-    }
+void circt::rtl::getStructInnerTypes(StructType stype,
+                                     SmallVectorImpl<Type> &types) {
+  for (const auto &field : stype.getElements())
+    types.push_back(field.type);
+}
 
-Type circt::rtl::getStructFieldType(StructType stype, StringRef fieldName) { 
-  for (const auto& field : stype.getElements())
+Type circt::rtl::getStructFieldType(StructType stype, StringRef fieldName) {
+  for (const auto &field : stype.getElements())
     if (field.name == fieldName)
       return field.type;
-  return Type(); 
+  return Type();
 }
 
 /// Return true if the specified type can be used as an RTL value type, that is
@@ -56,40 +56,15 @@ bool circt::rtl::isRTLValueType(Type type) {
 //===----------------------------------------------------------------------===//
 namespace circt {
 namespace rtl {
-static bool operator==(const StructType::FieldInfo &a, const StructType::FieldInfo &b) {
+static bool operator==(const StructType::FieldInfo &a,
+                       const StructType::FieldInfo &b) {
   return a.name == b.name && a.type == b.type;
 }
 static llvm::hash_code hash_value(const StructType::FieldInfo &fi) {
   return llvm::hash_combine(fi.name, fi.type);
 }
-// llvm::hash_code hash_value(const StructType::StructElement &arg) {
-//   return llvm::hash_value(arg.name) ^ mlir::hash_value(arg.type);
-// }
 } // namespace rtl
 } // namespace circt
-
-// StructType StructType::get(ArrayRef<StructElement> elements,
-//                            MLIRContext *context) {
-//   return Base::get(context, elements);
-// }
-
-// auto StructType::getElements() -> ArrayRef<StructElement> {
-//   return getImpl()->elements;
-// }
-
-// /// Look up an element by name.  This returns a StructElement.
-// Optional<StructType::StructElement> StructType::getElement(StringRef name) {
-//   for (const auto &element : getElements()) {
-//     if (element.name == name)
-//       return element;
-//   }
-//   return None;
-// }
-
-// Type StructType::getElementType(StringRef name) {
-//   auto element = getElement(name);
-//   return element.hasValue() ? element.getValue().type : RTLType();
-// }
 
 //===----------------------------------------------------------------------===//
 // ArrayType

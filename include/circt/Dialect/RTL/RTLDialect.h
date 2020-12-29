@@ -18,7 +18,6 @@
 namespace circt {
 namespace rtl {
 using namespace mlir;
-class RTLType;
 
 class RTLDialect : public Dialect {
 public:

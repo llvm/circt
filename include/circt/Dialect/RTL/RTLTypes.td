@@ -133,9 +133,9 @@ def StructType : RTLType<"Struct"> {
 
   let extraClassDeclaration = [{
     struct FieldInfo {
-      StringRef name;
+      mlir::StringRef name;
       Type type;
-      FieldInfo allocateInto(TypeStorageAllocator &alloc) const {
+      FieldInfo allocateInto(mlir::TypeStorageAllocator &alloc) const {
         return FieldInfo{alloc.copyInto(name), type};
       }
     };

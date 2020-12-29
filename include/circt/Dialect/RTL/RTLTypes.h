@@ -14,15 +14,13 @@
 #ifndef CIRCT_DIALECT_RTL_TYPES_H
 #define CIRCT_DIALECT_RTL_TYPES_H
 
-#include "circt/Dialect/RTL/RTLDialect.h"
 #include "mlir/IR/Types.h"
 
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/RTL/RTLTypes.h.inc"
 
 namespace circt {
-  namespace rtl {
-
+namespace rtl {
 
 /// Return true if the specified type can be used as an RTL value type, that is
 /// the set of types that can be composed together to represent synthesized,
@@ -30,9 +28,10 @@ namespace circt {
 bool isRTLValueType(mlir::Type type);
 
 mlir::Type getStructFieldType(StructType structVal, mlir::StringRef fieldName);
-void getStructInnerTypes(StructType stype, mlir::SmallVectorImpl<mlir::Type>& types);
+void getStructInnerTypes(StructType stype,
+                         mlir::SmallVectorImpl<mlir::Type> &types);
 
-  } // namespace rtl
+} // namespace rtl
 } // namespace circt
 
 #endif // CIRCT_DIALECT_RTL_TYPES_H
