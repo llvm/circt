@@ -276,6 +276,44 @@ rtl::RTLModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
   return builder.create<rtl::RTLModuleOp>(oldModule.getLoc(), nameAttr, ports);
 }
 
+/// If the value dominates the marker, just return.  Otherwise add it to ops and
+/// recursively process its operands.
+///
+/// Return true if we can't move an operation, false otherwise.
+static bool
+collectOperationTreeBelowMarker(Value value, Operation *marker,
+                                SmallVector<Operation *, 8> &ops,
+                                SmallPtrSet<Operation *, 8> &visited) {
+  // If the value is a BB argument or if the op is in a containing block, then
+  // it must dominate the marker.
+  auto *op = value.getDefiningOp();
+  if (!op || op->getBlock() != marker->getBlock())
+    return false;
+
+  // We can't move the marker itself.
+  if (op == marker)
+    return true;
+
+  // Otherwise if it is an op in the same block as the marker, see if it is
+  // already at or above the marker.
+  if (op->isBeforeInBlock(marker))
+    return false;
+
+  // Pull the computation tree into the set.  If it was already added, then
+  // don't reprocess it.
+  if (!visited.insert(op).second)
+    return false;
+
+  // Otherwise recursively process the operands.
+  for (auto operand : op->getOperands())
+    if (collectOperationTreeBelowMarker(operand, marker, ops, visited))
+      return true;
+
+  // Add ops in post order so we make sure they get moved in a coherent order.
+  ops.push_back(op);
+  return false;
+}
+
 /// Given a value of flip type, check to see if all of the uses of it are
 /// connects.  If so, remove the connects and return the value being connected
 /// to it, converted to an RTL type.  If this isn't a situation we can handle,
@@ -301,11 +339,52 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   if (connects.empty())
     return {};
 
+  // We need to see if we can move all of the computation that feeds the
+  // connects to be "above" the insertion point to avoid introducing cycles that
+  // will break LowerToRTL.  Consider optimizing away a wire for inputs on an
+  // instance like this:
+  //
+  //    %input1, %input2, %output = firrtl.instance (...)
+  //    %value1 = computation1()
+  //    firrtl.connect %input1, %value1
+  //
+  //    %value2 = computation2(%output)
+  //    firrtl.connect %input2, %value2
+  //
+  // We can elide the wire for %input1, but have to move the computation1 ops
+  // above the firrtl.instance.   However, there are cases like the second one
+  // where we *cannot* move the computation.  In these sorts of cases, we just
+  // fall back to inserting a wire conservatively, which breaks the cycle.
+  //
+  // We don't have to do this check for insertion points that are at the
+  // terminator in the module, because we know that everything is above it by
+  // definition.
+  if (!insertPoint->isKnownTerminator()) {
+    // On success, these are the ops that we need to move up above the insertion
+    // point.  We keep track of a visited set because each compute subgraph is
+    // a dag (not a tree), and we want to only want to visit each subnode once.
+    SmallVector<Operation *, 8> opsToMove;
+    SmallPtrSet<Operation *, 8> visited;
+
+    // Collect the computation tree feeding the source operations.  We build the
+    // list of ops to move in post-order to ensure that we provide a valid DAG
+    // ordering of the result.
+    for (auto connect : connects) {
+      if (collectOperationTreeBelowMarker(connect.src(), insertPoint, opsToMove,
+                                          visited))
+        return {};
+    }
+
+    // Since it looks like all the operations can be moved, actually do it.
+    for (auto *op : opsToMove)
+      op->moveBefore(insertPoint);
+  }
+
   // Convert each connect into an extended version of its operand being output.
   SmallVector<Value, 2> results;
+  ImplicitLocOpBuilder builder(insertPoint->getLoc(), insertPoint);
 
   for (auto connect : connects) {
-    ImplicitLocOpBuilder builder(connect.getLoc(), connect);
     auto connectSrc = connect.src();
 
     // Convert fliped sources to passive sources.
@@ -330,7 +409,6 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
 
   // If there was only one source, just return it.  Otherwise emit an rtl.merge
   // right before the output.
-  ImplicitLocOpBuilder builder(insertPoint->getLoc(), insertPoint);
   auto loweredType = lowerType(flipValue.getType());
 
   // Convert from FIRRTL type to builtin type to do the merge.
@@ -351,6 +429,10 @@ void FIRRTLModuleLowering::lowerModuleBody(
   // Don't touch modules if we failed to lower ports.
   if (!newModule)
     return;
+
+  if (oldModule.getName() == "TLFragmenter") {
+    llvm::errs() << "HERE\n";
+  }
 
   ImplicitLocOpBuilder bodyBuilder(oldModule.getLoc(), newModule.body());
 
@@ -417,8 +499,6 @@ void FIRRTLModuleLowering::lowerModuleBody(
                           oldBlockInstList.begin(),
                           std::prev(oldBlockInstList.end()));
 
-  cursor.erase();
-
   // Now that we're all over into the new module, update all the
   // firrtl.instance's to be rtl.instance's.  Lowering an instance will also
   // delete a bunch of firrtl.subfield and firrtl.connect operations, so we have
@@ -431,14 +511,20 @@ void FIRRTLModuleLowering::lowerModuleBody(
       continue;
     }
 
+    // Remember a position above the current op.  New things will get put before
+    // the current op (including other instances!) and we want to make sure to
+    // revisit them.
+    cursor->moveBefore(instance);
+
     // We found an instance - lower it.  On successful return there will be
     // zero uses and we can remove the operation.
     lowerInstance(instance, oldModule.getParentOfType<CircuitOp>(),
                   oldToNewModuleMap);
-    ++opIt;
-    if (instance.use_empty())
-      instance.erase();
+    opIt = Block::iterator(cursor);
   }
+
+  // We are done with our cursor op.
+  cursor.erase();
 }
 
 /// Lower a firrtl.instance operation to an rtl.instance operation.  This is a
@@ -454,8 +540,10 @@ void FIRRTLModuleLowering::lowerInstance(
 
   auto *oldModule = circuitOp.lookupSymbol(oldInstance.moduleName());
   auto newModule = oldToNewModuleMap[oldModule];
-  if (!newModule)
+  if (!newModule) {
+    oldInstance->emitOpError("could not find module referenced by instance");
     return;
+  }
 
   // If this is a referenced to a parameterized extmodule, then bring the
   // parameters over to this instance.
@@ -502,8 +590,10 @@ void FIRRTLModuleLowering::lowerInstance(
   for (size_t portIndex = 0, e = portInfo.size(); portIndex != e; ++portIndex) {
     auto &port = portInfo[portIndex];
     auto portType = lowerType(port.type);
-    if (!portType)
+    if (!portType) {
+      oldInstance->emitOpError("could not lower type of port ") << port.name;
       return;
+    }
 
     if (port.isOutput()) {
       // outputs become results.
@@ -577,6 +667,9 @@ void FIRRTLModuleLowering::lowerInstance(
     subfields.clear();
     ++resultNo;
   }
+
+  // Done with the oldInstance!
+  oldInstance.erase();
 }
 
 //===----------------------------------------------------------------------===//
@@ -727,7 +820,7 @@ std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLToRTLPass() {
 // This is the main entrypoint for the lowering pass.
 void FIRRTLLowering::runOnOperation() {
   // FIRRTL FModule is a single block because FIRRTL ops are a DAG.  Walk
-  // through each operation lowering each in turn if we can, introducing casts
+  // through each operation, lowering each in turn if we can, introducing casts
   // if we cannot.
   auto *body = getOperation().getBodyBlock();
 
@@ -754,8 +847,12 @@ void FIRRTLLowering::runOnOperation() {
   // values.  We know that any lowered operations will be dead (if removed in
   // reverse order) at this point - any users of them from unremapped operations
   // will be changed to use the newly lowered ops.
-  while (!opsToRemove.empty())
+  while (!opsToRemove.empty()) {
+    auto *op = opsToRemove.back();
+    assert(op->use_empty() &&
+           "Should remove ops in reverse order of visitation");
     opsToRemove.pop_back_val()->erase();
+  }
 
   // Clear out the value mapping for next time, so we don't have dangling keys.
   valueMapping.clear();
