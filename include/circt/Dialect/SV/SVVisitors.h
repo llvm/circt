@@ -28,7 +28,7 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<TextualValueOp,
                        // Control flow.
-                       IfDefOp, IfOp, AlwaysAtPosEdgeOp, InitialOp,
+                       IfDefOp, IfOp, AlwaysOp, InitialOp,
                        // Other Statements.
                        YieldOp, BPAssignOp, PAssignOp, AliasOp, FWriteOp,
                        FatalOp, FinishOp, VerbatimOp,
@@ -68,7 +68,7 @@ public:
   // Control flow.
   HANDLE(IfDefOp, Unhandled);
   HANDLE(IfOp, Unhandled);
-  HANDLE(AlwaysAtPosEdgeOp, Unhandled);
+  HANDLE(AlwaysOp, Unhandled);
   HANDLE(InitialOp, Unhandled);
 
   // Other Statements.

@@ -65,22 +65,33 @@ def IfOp : SVOp<"if", [HasRegionTerminator]> {
   }];
 }
 
-// TODO: This should be generalized, e.g. with an enum to specify the edge
-// trigger behavior.
-def AlwaysAtPosEdgeOp : SVOp<"alwaysat_posedge", [HasRegionTerminator]> {
-  let summary = "'always @(posedge ...)'' block";
+// Edge behavior enum for always block.  See SV Spec 9.4.2.
+
+/// AtPosEdge triggers on a rise from 0 to 1/X/Z, or X/Z to 1.
+def AtPosEdge: I32EnumAttrCase<"AtPosEdge", 0, "posedge">;
+/// AtNegEdge triggers on a drop from 1 to 0/X/Z, or X/Z to 0.
+def AtNegEdge: I32EnumAttrCase<"AtNegEdge", 1, "negedge">;
+/// AtEdge(v) is syntactic sugar for "AtPosEdge(v) or AtNegEdge(v)".
+def AtEdge   : I32EnumAttrCase<"AtEdge", 2, "edge">;
+
+def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
+                                   [AtPosEdge, AtNegEdge, AtEdge]>;
+
+
+def AlwaysOp : SVOp<"always", [HasRegionTerminator]> {
+  let summary = "'always @' block";
   
   let regions = (region SizedRegion<1>:$body);
-  let arguments = (ins I1:$clock);
+  let arguments = (ins EventControlAttr:$event, I1:$clock);
   let results = (outs);
   
-  let assemblyFormat = [{ $clock $body attr-dict }];
+  let assemblyFormat = [{ $event $clock $body attr-dict }];
 
   // TODO: ODS forces using a custom builder just to get the region terminator
   // implicitly installed.
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "Value":$cond,
+    OpBuilderDAG<(ins "EventControl":$event, "Value":$cond,
                       CArg<"std::function<void()>", "{}">:$bodyCtor)>
   ];
 
@@ -90,7 +101,8 @@ def AlwaysAtPosEdgeOp : SVOp<"alwaysat_posedge", [HasRegionTerminator]> {
 }
 
 def InitialOp : SVOp<"initial", [HasRegionTerminator]> {
-  let summary = "'initial'' block";
+  let summary = "'initial' block";
+  let description = "See SV Spec 9.2.1.";
 
   let regions = (region SizedRegion<1>:$body);
   let arguments = (ins);
@@ -116,8 +128,7 @@ def InitialOp : SVOp<"initial", [HasRegionTerminator]> {
 
 def YieldOp
   : SVOp<"yield", [NoSideEffect, Terminator,
-                   ParentOneOf<["IfDefOp, IfOp", "AlwaysAtPosEdgeOp",
-                                "InitialOp"]>]> {
+                   ParentOneOf<["IfDefOp, IfOp", "AlwaysOp", "InitialOp"]>]> {
   let summary = "terminator for control-flow operation regions";
   let arguments = (ins);
 
