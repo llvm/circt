@@ -731,15 +731,18 @@ static ssize_t getCapnpMsgFieldSize(Type type) {
 }
 
 // Compute the expected size of the capnp message in bits. Return -1 on
-// non-representable type.
+// non-representable type. TODO: replace this with a call into the Capnp C++
+// library to parse a schema and have it compute sizes and offsets.
 static ssize_t getCapnpMsgSize(Type type) {
   ChannelPort chan = type.dyn_cast<ChannelPort>();
   if (chan)
     return getCapnpMsgSize(chan.getInner());
-  ssize_t headerSize = 128; // TODO: verify this
+  ssize_t headerSize = 128;
   ssize_t fieldSize = getCapnpMsgFieldSize(type);
   if (fieldSize < 0)
     return fieldSize;
+  // Capnp sizes are always multiples of 8 bytes, so round up.
+  fieldSize = (fieldSize & ~0x3f) + (fieldSize & 0x3f ? 0x40 : 0);
   return headerSize + fieldSize;
 }
 
