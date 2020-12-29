@@ -2103,6 +2103,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
       parseType(type, "expected reg type") ||
       parseExp(clock, subOps, "expected expression for register clock"))
     return failure();
+  clock = convertToPassive(clock, clock.getLoc());
 
   // Parse the 'with' specifier if present.
   Value resetSignal, resetValue;

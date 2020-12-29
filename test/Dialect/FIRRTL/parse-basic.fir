@@ -537,3 +537,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input a: { a: UInt<1>, b: Analog<1>}
     ; CHECK: %b = firrtl.node %a {{.+}}: !firrtl.bundle<a: uint<1>, b: analog<1>>
     node b = a
+
+  ; COM: Check that a register clock sink is converted to passive
+  ; CHECK-LABEL: firrtl.module @register_clock_passive
+  module register_clock_passive:
+    input clkIn: Clock
+    output clkOut: Clock
+    clkOut <= clkIn
+    ; CHECK: [[clkOut_passive:%.+]] = firrtl.asPassive %clkOut
+    ; CHECK: firrtl.reg [[clkOut_passive]]
+    reg r: UInt<1>, clkOut
