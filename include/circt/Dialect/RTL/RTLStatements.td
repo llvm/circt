@@ -82,3 +82,25 @@ def ReadInOutOp
     $input attr-dict `:` type($input)
   }];
 }
+
+def StructExplodeOp : RTLOp<"struct_explode", [NoSideEffect]> {
+  let summary = "Expand a struct into its constituant parts.";
+  let arguments = (ins StructType:$input);
+  let results = (outs Variadic<AnyType>:$result);
+
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `,` type($result)
+  }];
+}
+
+
+def StructCreateOp : RTLOp<"struct_create", [NoSideEffect]> {
+  let summary = "Get the value of from something of inout type (e.g. a wire or"
+                " inout port) as the value itself.";
+  let arguments = (ins Variadic<AnyType>:$input);
+  let results = (outs StructType:$result);
+
+  let assemblyFormat = [{
+    `(` $input `)` attr-dict `:` type($input) `,` type($result)
+  }];
+}
