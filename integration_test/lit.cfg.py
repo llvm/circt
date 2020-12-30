@@ -88,8 +88,9 @@ if config.questa_path != "":
   config.available_features.add('questa')
   config.available_features.add('ieee-sim')
   config.available_features.add('rtl-sim')
-  llvm_config.with_environment(
-      'LM_LICENSE_FILE', os.environ['LM_LICENSE_FILE'])
+  if 'LM_LICENSE_FILE' in os.environ:
+    llvm_config.with_environment(
+        'LM_LICENSE_FILE', os.environ['LM_LICENSE_FILE'])
 
   # When we add support for other simulators, we'll have to figure out which
   # one should be the default and modify this appropriately.
