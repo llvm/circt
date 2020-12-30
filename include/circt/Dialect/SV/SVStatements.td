@@ -56,7 +56,8 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments,
   }];
 }
 
-def IfOp : SVOp<"if", [HasRegionTerminator]> {
+def IfOp : SVOp<"if", [HasRegionTerminator, NoRegionArguments,
+                       RecursiveSideEffects]> {
   let summary = "'if (cond)' block";
   
   let regions = (region SizedRegion<1>:$body);
@@ -91,7 +92,8 @@ def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
                                    [AtPosEdge, AtNegEdge, AtEdge]>;
 
 
-def AlwaysOp : SVOp<"always", [HasRegionTerminator]> {
+def AlwaysOp : SVOp<"always", [HasRegionTerminator, NoRegionArguments,
+                               RecursiveSideEffects]> {
   let summary = "'always @' block";
   let description = "See SV Spec 9.2, and 9.4.2.2.";
   
@@ -124,7 +126,8 @@ def AlwaysOp : SVOp<"always", [HasRegionTerminator]> {
   let verifier = [{ return ::verifyAlwaysOp(*this); }];
 }
 
-def InitialOp : SVOp<"initial", [HasRegionTerminator]> {
+def InitialOp : SVOp<"initial", [HasRegionTerminator, NoRegionArguments,
+                                 RecursiveSideEffects]> {
   let summary = "'initial' block";
   let description = "See SV Spec 9.2.1.";
 

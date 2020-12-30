@@ -166,7 +166,8 @@ def CoverOp : FIRRTLOp<"cover", []> {
   }];
 }
 
-def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">]> {
+def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">,
+                               NoRegionArguments, RecursiveSideEffects]> {
   let summary = "When Statement";
   let description = [{
     The "firrtl.when" operation represents a conditional.  Connections within
