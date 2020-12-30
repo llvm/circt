@@ -80,24 +80,35 @@ def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
 
 def AlwaysOp : SVOp<"always", [HasRegionTerminator]> {
   let summary = "'always @' block";
+  let description = "See SV Spec 9.2, and 9.4.2.2.";
   
   let regions = (region SizedRegion<1>:$body);
-  let arguments = (ins EventControlAttr:$event, I1:$clock);
+  let arguments = (ins TypedArrayAttrBase<EventControlAttr, "events">:$events,
+                       Variadic<I1>:$clocks);
   let results = (outs);
   
-  let assemblyFormat = [{ $event $clock $body attr-dict }];
+  let assemblyFormat = "custom<EventList>($events, $clocks) $body attr-dict";
 
-  // TODO: ODS forces using a custom builder just to get the region terminator
-  // implicitly installed.
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "EventControl":$event, "Value":$cond,
+    OpBuilderDAG<(ins "ArrayRef<EventControl>":$event, "ArrayRef<Value>":$cond,
                       CArg<"std::function<void()>", "{}">:$bodyCtor)>
   ];
 
   let extraClassDeclaration = [{
     Block *getBodyBlock() { return &body().front(); }
+
+    struct Condition {
+      EventControl event;
+      Value value;
+    };
+
+    size_t getNumConditions() { return events().size(); }
+    Condition getCondition(size_t idx);
   }];
+
+  // Check that we have the same number of events and conditions.
+  let verifier = [{ return ::verifyAlwaysOp(*this); }];
 }
 
 def InitialOp : SVOp<"initial", [HasRegionTerminator]> {

@@ -66,12 +66,25 @@ void IfOp::build(OpBuilder &odsBuilder, OperationState &result, Value cond,
 //===----------------------------------------------------------------------===//
 // AlwaysOp
 
+AlwaysOp::Condition AlwaysOp::getCondition(size_t idx) {
+  return Condition{EventControl(events()[idx].cast<IntegerAttr>().getInt()),
+                   getOperand(idx)};
+}
+
 void AlwaysOp::build(OpBuilder &odsBuilder, OperationState &result,
-                     EventControl event, Value clock,
+                     ArrayRef<EventControl> events, ArrayRef<Value> clocks,
                      std::function<void()> bodyCtor) {
-  result.addAttribute(
-      "event", odsBuilder.getI32IntegerAttr(static_cast<int32_t>(event)));
-  result.addOperands(clock);
+  assert(events.size() == clocks.size() &&
+         "mismatch between event and clock list");
+
+  SmallVector<Attribute> eventAttrs;
+  for (auto event : events)
+    eventAttrs.push_back(
+        odsBuilder.getI32IntegerAttr(static_cast<int32_t>(event)));
+  result.addAttribute("events", odsBuilder.getArrayAttr(eventAttrs));
+  result.addOperands(clocks);
+
+  // Set up the body.
   Region *body = result.addRegion();
   AlwaysOp::ensureTerminator(*body, odsBuilder, result.location);
 
@@ -81,6 +94,56 @@ void AlwaysOp::build(OpBuilder &odsBuilder, OperationState &result,
     odsBuilder.setInsertionPointToStart(&*body->begin());
     bodyCtor();
     odsBuilder.setInsertionPoint(oldIP);
+  }
+}
+
+/// Ensure that the symbol being instantiated exists and is an InterfaceOp.
+static LogicalResult verifyAlwaysOp(AlwaysOp op) {
+  if (op.events().size() != op.getNumOperands())
+    return op.emitError("different number of operands and events");
+  return success();
+}
+
+static ParseResult
+parseEventList(OpAsmParser &p, Attribute &eventsAttr,
+               SmallVectorImpl<OpAsmParser::OperandType> &clocksOperands) {
+
+  // Parse zero or more conditions intoevents and clocksOperands.
+  SmallVector<Attribute> events;
+
+  auto loc = p.getCurrentLocation();
+  StringRef keyword;
+  if (!p.parseOptionalKeyword(&keyword)) {
+    while (1) {
+      auto kind = symbolizeEventControl(keyword);
+      if (!kind.hasValue())
+        return p.emitError(loc, "expected 'posedge', 'negedge', or 'edge'");
+      auto eventEnum = static_cast<int32_t>(kind.getValue());
+      events.push_back(p.getBuilder().getI32IntegerAttr(eventEnum));
+
+      clocksOperands.push_back({});
+      if (p.parseOperand(clocksOperands.back()))
+        return failure();
+
+      if (failed(p.parseOptionalComma()))
+        break;
+      if (p.parseKeyword(&keyword))
+        return failure();
+    }
+  }
+  eventsAttr = p.getBuilder().getArrayAttr(events);
+  return success();
+}
+
+static void printEventList(OpAsmPrinter &p, AlwaysOp op, ArrayAttr portsAttr,
+                           OperandRange operands) {
+  for (size_t i = 0, e = op.getNumConditions(); i != e; ++i) {
+    if (i != 0)
+      p << ", ";
+    auto cond = op.getCondition(i);
+    p << stringifyEventControl(cond.event);
+    p << ' ';
+    p.printOperand(cond.value);
   }
 }
 
@@ -127,11 +190,9 @@ static ParseResult parseModportStructs(OpAsmParser &parser,
 
   SmallVector<Attribute, 8> ports;
   do {
-    NamedAttrList tmpAttrs;
     StringAttr direction;
     FlatSymbolRefAttr signal;
-    if (parser.parseAttribute(direction, "port", tmpAttrs) ||
-        parser.parseAttribute(signal, "signal", tmpAttrs))
+    if (parser.parseAttribute(direction) || parser.parseAttribute(signal))
       return failure();
 
     ports.push_back(ModportStructAttr::get(direction, signal, context));
@@ -141,22 +202,18 @@ static ParseResult parseModportStructs(OpAsmParser &parser,
     return failure();
 
   portsAttr = ArrayAttr::get(ports, context);
-
   return success();
 }
 
 static void printModportStructs(OpAsmPrinter &p, Operation *,
                                 ArrayAttr portsAttr) {
   p << " (";
-  for (size_t i = 0, e = portsAttr.size(); i != e; ++i) {
-    auto port = portsAttr[i].dyn_cast<ModportStructAttr>();
+  llvm::interleaveComma(portsAttr, p, [&](Attribute attr) {
+    auto port = attr.cast<ModportStructAttr>();
     p << port.direction();
     p << ' ';
     p.printSymbolName(port.signal().getRootReference());
-    if (i < e - 1) {
-      p << ", ";
-    }
-  }
+  });
   p << ')';
 }
 

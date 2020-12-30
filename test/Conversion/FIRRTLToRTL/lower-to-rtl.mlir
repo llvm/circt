@@ -239,7 +239,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %a1 = firrtl.stdIntCast %a : (i4) -> !firrtl.uint<4>
     %b1 = firrtl.stdIntCast %b : (i4) -> !firrtl.uint<4>
  
-    // CHECK-NEXT: sv.always "posedge" %clock {
+    // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
     // CHECK-NEXT:     [[TV:%.+]] = sv.textual_value "`PRINTF_COND_" : i1
     // CHECK-NEXT:     [[AND:%.+]] = rtl.and [[TV]], %reset
@@ -275,7 +275,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %clock2c = firrtl.stdIntCast %clock2 : (i1) -> !firrtl.clock
     %resetc = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: sv.always "posedge" %clock1 {
+    // CHECK-NEXT: sv.always posedge %clock1 {
     // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
     // CHECK-NEXT:     %0 = sv.textual_value "`STOP_COND_" : i1
     // CHECK-NEXT:     %1 = rtl.and %0, %reset : i1
@@ -286,7 +286,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: }
     firrtl.stop %clock1c, %resetc, 42
 
-    // CHECK-NEXT: sv.always "posedge" %clock2 {
+    // CHECK-NEXT: sv.always posedge %clock2 {
     // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
     // CHECK-NEXT:     %0 = sv.textual_value "`STOP_COND_" : i1
     // CHECK-NEXT:     %1 = rtl.and %0, %reset : i1
@@ -321,19 +321,19 @@ module attributes {firrtl.mainModule = "Simple"} {
     %cCondC = firrtl.stdIntCast %cCond : (i1) -> !firrtl.uint<1>
     %cEnC = firrtl.stdIntCast %cEn : (i1) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: sv.always "posedge" %clock {
+    // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.if %aEn {
     // CHECK-NEXT:     sv.assert %aCond : i1
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     firrtl.assert %clockC, %aCondC, %aEnC, "assert0"
-    // CHECK-NEXT: sv.always "posedge" %clock {
+    // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.if %bEn {
     // CHECK-NEXT:     sv.assume %bCond  : i1
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     firrtl.assume %clockC, %bCondC, %bEnC, "assume0"
-    // CHECK-NEXT: sv.always "posedge" %clock {
+    // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.if %cEn {
     // CHECK-NEXT:     sv.cover %cCond : i1
     // CHECK-NEXT:   }
@@ -463,7 +463,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %4 = firrtl.mux(%2, %3, %count) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
     %5 = firrtl.mux(%1, %c0_ui2, %4) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 
-    // CHECK-NEXT: sv.always "posedge" %clock  {
+    // CHECK-NEXT: sv.always posedge %clock  {
     // CHECK-NEXT:   sv.passign %count, %2 : i2
     // CHECK-NEXT: }
     firrtl.connect %count, %5 : !firrtl.uint<2>, !firrtl.uint<2>
