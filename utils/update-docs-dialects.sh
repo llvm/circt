@@ -30,5 +30,5 @@ if DRAWIO=`! which $DRAWIO`; then
 fi
 
 # Update the rendered diagrams in the docs.
-$DRAWIO -x -t -s 2 -o $DOCS_DIR/dialects.png $DOCS_DIR/dialects.drawio
-$DRAWIO -x -t -s 2 -o $DOCS_DIR/dialects.svg $DOCS_DIR/dialects.drawio
+$DRAWIO -x -t -s 2 -o $DOCS_DIR/includes/img/dialects.png $DOCS_DIR/dialects.drawio
+$DRAWIO -x -t -s 2 -o $DOCS_DIR/includes/img/dialects.svg $DOCS_DIR/dialects.drawio

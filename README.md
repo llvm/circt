@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/circt-logo.svg"/></p>
+<p align="center"><img src="docs/includes/img/circt-logo.svg"/></p>
 
 [![](https://github.com/circt/circt/workflows/Build%20and%20Test/badge.svg?event=push)](https://github.com/llvm/circt/actions?query=workflow%3A%22Build+and+Test%22)
 [![Nightly integration tests](https://github.com/llvm/circt/workflows/Nightly%20integration%20tests/badge.svg)](https://github.com/llvm/circt/actions?query=workflow%3A%22Nightly+integration+tests%22)
@@ -23,9 +23,9 @@ for more information.
    requests for the CIRCT repository, and gain commit access using the [standard
    LLVM policies](https://llvm.discourse.group/c/Projects-that-want-to-become-official-LLVM-Projects/circt/).
 
-Also take a look at the following diagram, which gives a brief overview of the current [dialects and how they interact](docs/dialects.svg):
+Also take a look at the following diagram, which gives a brief overview of the current [dialects and how they interact](docs/includes/img/dialects.svg):
 
-<p align="center"><img src="docs/dialects.svg"/></p>
+<p align="center"><img src="docs/includes/img/dialects.svg"/></p>
 
 ## Motivation
 
