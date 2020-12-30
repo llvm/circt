@@ -91,6 +91,7 @@ struct FIRRTLModuleLowering
   void runOnOperation() override;
 
 private:
+  void lowerFileHeader(CircuitOp op);
   LogicalResult lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
                            SmallVectorImpl<rtl::ModulePortInfo> &ports,
                            Operation *moduleOp);
@@ -127,6 +128,9 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   if (!circuit)
     return;
+
+  // Emit all the macros and preprocessor gunk at the start of the file.
+  lowerFileHeader(circuit);
 
   auto *circuitBody = circuit.getBody();
 
@@ -177,6 +181,75 @@ void FIRRTLModuleLowering::runOnOperation() {
   getOperation().setAttr("firrtl.mainModule",
                          StringAttr::get(circuit.name(), circuit.getContext()));
   circuit.erase();
+}
+
+/// Emit the file header that defines a bunch of macros.
+void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op) {
+  // Intentionally pass an UnknownLoc here so we don't get line number comments
+  // on the output of this boilerplate in generated Verilog.
+  ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op);
+
+  // TODO: We could have an operation for macros and uses of them, and
+  // even turn them into symbols so we can DCE unused macro definitions.
+  auto emitString = [&](StringRef verilogString) {
+    b.create<sv::VerbatimOp>(verilogString);
+  };
+
+  // Helper function to emit a "#ifdef guard" with a `define in the then and
+  // optionally in the else branch.
+  auto emitGuardedDefine = [&](const char *guard, const char *defineTrue,
+                               const char *defineFalse = nullptr) {
+    std::string define = "`define ";
+    if (!defineFalse) {
+      b.create<sv::IfDefOp>(guard, [&]() { emitString(define + defineTrue); });
+    } else {
+      b.create<sv::IfDefOp>(
+          guard, [&]() { emitString(define + defineTrue); },
+          [&]() { emitString(define + defineFalse); });
+    }
+  };
+
+  emitString("// Standard header to adapt well known macros to our needs.");
+  emitGuardedDefine("RANDOMIZE_GARBAGE_ASSIGN", "RANDOMIZE");
+  emitGuardedDefine("RANDOMIZE_INVALID_ASSIGN", "RANDOMIZE");
+  emitGuardedDefine("RANDOMIZE_REG_INIT", "RANDOMIZE");
+  emitGuardedDefine("RANDOMIZE_MEM_INIT", "RANDOMIZE");
+  emitGuardedDefine("!RANDOM", "RANDOM $random");
+
+  emitString(
+      "\n// Users can define 'PRINTF_COND' to add an extra gate to prints.");
+
+  emitGuardedDefine("PRINTF_COND", "PRINTF_COND_ (`PRINTF_COND)",
+                    "PRINTF_COND_ 1");
+
+  emitString("\n// Users can define 'STOP_COND' to add an extra gate "
+             "to stop conditions.");
+  emitGuardedDefine("STOP_COND", "STOP_COND_ (`STOP_COND)", "STOP_COND_ 1");
+
+  emitString(
+      "\n// Users can define INIT_RANDOM as general code that gets injected "
+      "into the\n// initializer block for modules with registers.");
+  emitGuardedDefine("!INIT_RANDOM", "INIT_RANDOM");
+
+  emitString("\n// If using random initialization, you can also define "
+             "RANDOMIZE_DELAY to\n// customize the delay used, otherwise 0.002 "
+             "is used.");
+  emitGuardedDefine("!RANDOMIZE_DELAY", "RANDOMIZE_DELAY 0.002");
+
+  emitString("\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
+
+  b.create<sv::IfDefOp>(
+      "RANDOMIZE",
+      [&]() {
+        emitGuardedDefine(
+            "!VERILATOR",
+            "INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end",
+            "INIT_RANDOM_PROLOG_ `INIT_RANDOM");
+      },
+      [&]() { emitString("`define INIT_RANDOM_PROLOG_"); });
+
+  // Blank line to separate the header from the modules.
+  emitString("");
 }
 
 LogicalResult
