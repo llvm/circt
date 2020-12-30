@@ -16,7 +16,8 @@ def HasRegionTerminator : SingleBlockImplicitTerminator<"YieldOp">;
 // Control flow like-operations
 //===----------------------------------------------------------------------===//
 
-def IfDefOp : SVOp<"ifdef", [HasRegionTerminator]> {
+def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments,
+                             RecursiveSideEffects]> {
   let summary = "'ifdef MACRO' block";
    
    let description = [{
@@ -24,22 +25,34 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator]> {
     with a `!` character.
     }];
 
-  let regions = (region SizedRegion<1>:$body);
+  let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
   let arguments = (ins StrAttr:$cond);
   let results = (outs);
   
-  let assemblyFormat = [{ $cond regions attr-dict }];
+  let assemblyFormat = [{ $cond $thenRegion (`else` $elseRegion^)? attr-dict }];
 
   // TODO: ODS forces using a custom builder just to get the region terminator
   // implicitly installed.
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilderDAG<(ins "StringRef":$cond,
-                      CArg<"std::function<void()>", "{}">:$bodyCtor)>
+                      CArg<"std::function<void()>", "{}">:$thenCtor,
+                      CArg<"std::function<void()>", "{}">:$elseCtor)>
   ];
 
   let extraClassDeclaration = [{
-    Block *getBodyBlock() { return &body().front(); }
+    /// Returns true if an else block exists.
+    bool hasElse() { return !elseRegion().empty(); }
+
+    Block *getThenBlock() {
+      assert(!thenRegion().empty() && "Unexpected empty 'then' region.");
+      return &thenRegion().front();
+    }
+
+    Block *getElseBlock() {
+      assert(hasElse() && "Empty 'else' region.");
+      return &elseRegion().front();
+    }
   }];
 }
 

@@ -31,16 +31,26 @@ bool sv::isExpression(Operation *op) {
 // IfDefOp
 
 void IfDefOp::build(OpBuilder &odsBuilder, OperationState &result,
-                    StringRef cond, std::function<void()> bodyCtor) {
+                    StringRef cond, std::function<void()> thenCtor,
+                    std::function<void()> elseCtor) {
   result.addAttribute("cond", odsBuilder.getStringAttr(cond));
-  Region *body = result.addRegion();
-  IfDefOp::ensureTerminator(*body, odsBuilder, result.location);
+  Region *thenRegion = result.addRegion();
+  IfDefOp::ensureTerminator(*thenRegion, odsBuilder, result.location);
 
   // Fill in the body of the #ifdef.
-  if (bodyCtor) {
+  if (thenCtor) {
     auto oldIP = &*odsBuilder.getInsertionPoint();
-    odsBuilder.setInsertionPointToStart(&*body->begin());
-    bodyCtor();
+    odsBuilder.setInsertionPointToStart(&*thenRegion->begin());
+    thenCtor();
+    odsBuilder.setInsertionPoint(oldIP);
+  }
+
+  Region *elseRegion = result.addRegion();
+  if (elseCtor) {
+    IfDefOp::ensureTerminator(*elseRegion, odsBuilder, result.location);
+    auto oldIP = &*odsBuilder.getInsertionPoint();
+    odsBuilder.setInsertionPointToStart(&*elseRegion->begin());
+    elseCtor();
     odsBuilder.setInsertionPoint(oldIP);
   }
 }
