@@ -34,7 +34,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
   }
 
   // CHECK-NEXT: always @(posedge clock or negedge cond) begin
-  // CHECK-NEXT: end // always
+  // CHECK-NEXT: end // always @(posedge, negedge)
   sv.always posedge %clock, negedge %cond {
   }
 
