@@ -38,10 +38,11 @@ public:
                        // Reduction Operators
                        AndROp, OrROp, XorROp,
                        // Other operations.
-                       SExtOp, ZExtOp, ConcatOp, ExtractOp, MuxOp, ReadInOutOp>(
-            [&](auto expr) -> ResultType {
-              return thisCast->visitComb(expr, args...);
-            })
+                       SExtOp, ZExtOp, ConcatOp, ExtractOp, MuxOp,
+                       // InOut Expressions
+                       ReadInOutOp, ArrayIndexOp>([&](auto expr) -> ResultType {
+          return thisCast->visitComb(expr, args...);
+        })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidComb(op, args...);
         });
@@ -111,6 +112,7 @@ public:
   HANDLE(ExtractOp, Unhandled);
   HANDLE(MuxOp, Unhandled);
   HANDLE(ReadInOutOp, Unhandled);
+  HANDLE(ArrayIndexOp, Unhandled);
 #undef HANDLE
 };
 

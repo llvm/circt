@@ -878,6 +878,7 @@ private:
   SubExprInfo visitExpr(AsNonPassivePrimOp op) { return emitNoopCast(op); }
 
   // Other
+  SubExprInfo visitComb(rtl::ArrayIndexOp op);
   SubExprInfo visitExpr(SubfieldOp op);
   SubExprInfo visitExpr(ValidIfPrimOp op);
   SubExprInfo visitExpr(MuxPrimOp op);
@@ -1298,6 +1299,14 @@ SubExprInfo ExprEmitter::visitComb(rtl::ConstantOp op) {
   op.getValue().toStringUnsigned(valueStr, 16);
   os << valueStr;
   return {Unary, resType.isSigned() ? IsSigned : IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitComb(rtl::ArrayIndexOp op) {
+  auto arrayPrec = emitSubExpr(op.input(), Symbol);
+  os << '[';
+  emitSubExpr(op.index(), LowestPrecedence);
+  os << ']';
+  return {Symbol, arrayPrec.signedness};
 }
 
 SubExprInfo ExprEmitter::visitExpr(SubfieldOp op) {
