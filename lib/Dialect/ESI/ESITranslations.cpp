@@ -20,6 +20,10 @@
 
 #include <algorithm>
 
+#ifdef CAPNP
+#include "capnp/ESICapnp.h"
+#endif
+
 using namespace mlir;
 using namespace circt::esi;
 
