@@ -15,18 +15,37 @@
 
 #include "mlir/IR/Types.h"
 
+#include <memory>
+
 namespace circt {
 namespace esi {
 namespace capnp {
+
+/// Every time we implement a breaking change in the schema generation,
+/// increment this number. It is a seed for all the schema hashes.
+constexpr uint64_t esiCosimSchemaVersion = 1;
+
+namespace detail {
+struct TypeSchemaStorage;
+}
 
 class TypeSchema {
 public:
   TypeSchema(mlir::Type);
 
-  ssize_t size();
+  /// Get the Cap'nProto schema ID for a type.
+  uint64_t capnpTypeID() const;
+
+  bool isSupported() const;
+  size_t size() const;
+  llvm::StringRef name() const;
+  mlir::LogicalResult write(llvm::raw_ostream &os);
+  mlir::LogicalResult writeMetadata(llvm::raw_ostream &os);
+
+  bool operator==(const TypeSchema &) const;
 
 private:
-  mlir::Type type;
+  std::shared_ptr<detail::TypeSchemaStorage> s;
 };
 
 } // namespace capnp

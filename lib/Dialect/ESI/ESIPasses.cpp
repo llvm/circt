@@ -751,10 +751,12 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   // Set all the parameters.
   NamedAttrList params;
   params.set("ENDPOINT_ID", rewriter.getI32IntegerAttr(ep.endpointID()));
-  params.set("SEND_TYPE_ID", IntegerAttr::get(ui64Type, ep.getSendTypeID()));
+  params.set("SEND_TYPE_ID",
+             IntegerAttr::get(ui64Type, sendTypeSchema.capnpTypeID()));
   params.set("SEND_TYPE_SIZE_BITS",
              rewriter.getI64IntegerAttr(sendTypeSchema.size()));
-  params.set("RECV_TYPE_ID", IntegerAttr::get(ui64Type, ep.getRecvTypeID()));
+  params.set("RECV_TYPE_ID",
+             IntegerAttr::get(ui64Type, recvTypeSchema.capnpTypeID()));
   params.set("RECVTYPE_SIZE_BITS",
              rewriter.getI64IntegerAttr(recvTypeSchema.size()));
 

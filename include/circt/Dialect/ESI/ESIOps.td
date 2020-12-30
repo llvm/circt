@@ -90,11 +90,6 @@ def CosimEndpoint : ESI_Physical_Op<"cosim", []> {
     $clk `,` $rstn `,` $send `,` $endpointID attr-dict
       `:` type($send) `->` type($recv)
   }];
-
-  let extraClassDeclaration = [{
-    uint64_t getSendTypeID() { return getCapnpTypeID(send().getType()); }
-    uint64_t getRecvTypeID() { return getCapnpTypeID(recv().getType()); }
-  }];
 }
 
 def RtlBitArray : Type<CPred<"$_self.isa<::circt::rtl::ArrayType>()"
