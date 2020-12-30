@@ -681,6 +681,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitDecl(WireOp op);
   LogicalResult visitDecl(NodeOp op);
   LogicalResult visitDecl(RegOp op);
+  LogicalResult visitDecl(RegInitOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
   LogicalResult visitInvalidOp(Operation *op) { return failure(); }
 
@@ -959,8 +960,7 @@ LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
 //===----------------------------------------------------------------------===//
 
 LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
-  auto resType = op.result().getType().cast<FIRRTLType>();
-  auto resultType = lowerType(resType);
+  auto resultType = lowerType(op.result().getType());
   if (!resultType)
     return failure();
 
@@ -999,12 +999,10 @@ void FIRRTLLowering::emitRandomizePrologIfNeeded() {
 }
 
 LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
-  auto resType = op.result().getType().cast<FIRRTLType>();
-  auto resultType = lowerType(resType);
+  auto resultType = lowerType(op.result().getType());
   if (!resultType)
     return failure();
 
-  // Convert the inout to a non-inout type.
   auto regResult = builder->create<rtl::RegOp>(resultType, op.nameAttr());
   setLowering(op, regResult);
 
@@ -1018,6 +1016,45 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
         auto type = regResult.getType().cast<rtl::InOutType>().getElementType();
         auto randomVal = builder->create<sv::TextualValueOp>(type, "`RANDOM");
         builder->create<sv::BPAssignOp>(regResult, randomVal);
+      });
+    });
+  });
+
+  return success();
+}
+
+LogicalResult FIRRTLLowering::visitDecl(RegInitOp op) {
+  auto resultType = lowerType(op.result().getType());
+  Value resetSignal = getLoweredValue(op.resetSignal());
+  Value resetValue = getLoweredValue(op.resetValue());
+  if (!resultType || !resetSignal || !resetValue)
+    return failure();
+
+  auto regResult = builder->create<rtl::RegOp>(resultType, op.nameAttr());
+  setLowering(op, regResult);
+
+  // Emit the initializer expression for simulation that fills it with random
+  // value.
+  builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
+    builder->create<sv::InitialOp>([&]() {
+      emitRandomizePrologIfNeeded();
+
+      builder->create<sv::IfOp>(resetSignal, [&]() {
+        builder->create<sv::BPAssignOp>(regResult, resetValue);
+      });
+
+      // When RANDOMIZE_REG_INIT is enabled, we assign a random value to the reg
+      // if the reset line is low at start.
+      builder->create<sv::IfDefOp>("RANDOMIZE_REG_INIT", [&]() {
+        auto one = builder->create<rtl::ConstantOp>(APInt(1, 1));
+        auto notResetValue = builder->create<rtl::XorOp>(
+            ValueRange{resetSignal, one}, ArrayRef<NamedAttribute>{});
+        builder->create<sv::IfOp>(notResetValue, [&]() {
+          auto type =
+              regResult.getType().cast<rtl::InOutType>().getElementType();
+          auto randomVal = builder->create<sv::TextualValueOp>(type, "`RANDOM");
+          builder->create<sv::BPAssignOp>(regResult, randomVal);
+        });
       });
     });
   });
@@ -1411,6 +1448,23 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
     builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clockVal, [&]() {
       builder->create<sv::PAssignOp>(destVal, srcVal);
     });
+
+    return success();
+  }
+
+  // If this is an assignment to a RegInit, then the connect implicitly
+  // happens under the clock and reset that gate the register.
+  if (auto regInitOp = dyn_cast_or_null<RegInitOp>(dest.getDefiningOp())) {
+    Value clockVal = getLoweredValue(regInitOp.clockVal());
+    Value resetVal = getLoweredValue(regInitOp.resetSignal());
+    if (!clockVal || !resetVal)
+      return failure();
+
+    builder->create<sv::AlwaysOp>(
+        ArrayRef<EventControl>{EventControl::AtPosEdge,
+                               EventControl::AtPosEdge},
+        ArrayRef<Value>{clockVal, resetVal},
+        [&]() { builder->create<sv::PAssignOp>(destVal, srcVal); });
 
     return success();
   }

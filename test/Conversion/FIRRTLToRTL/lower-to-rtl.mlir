@@ -424,7 +424,7 @@ module attributes {firrtl.mainModule = "Simple"} {
   }
 
 
- //module UninitReg1 :
+ // module UninitReg1 :
  //   input clock: Clock
  //   input reset : UInt<1>
  //   input cond: UInt<1>
@@ -448,7 +448,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %count = firrtl.reg %0 {name = "count"} : (!firrtl.clock) -> !firrtl.uint<2>
 
     // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
-    // CHECK-NEXT:    sv.initial  {
+    // CHECK-NEXT:    sv.initial {
     // CHECK-NEXT:    sv.verbatim "`INIT_RANDOM_PROLOG_"
     // CHECK-NEXT:    sv.ifdef "RANDOMIZE_REG_INIT"  {
     // CHECK-NEXT:       %3 = sv.textual_value "`RANDOM" : i2
@@ -470,6 +470,63 @@ module attributes {firrtl.mainModule = "Simple"} {
 
     // CHECK-NEXT: rtl.output
     rtl.output
+  }
+
+  // module InitReg1 :
+  //     input clock : Clock
+  //     input reset : UInt<1>
+  //     input io_d : UInt<32>
+  //     output io_q : UInt<32>
+  //     input io_en : UInt<1>
+  //
+  //     node _T = asAsyncReset(reset)
+  //     reg reg : UInt<32>, clock with :
+  //       reset => (_T, UInt<32>("h0"))
+  //     io_q <= reg
+  //     reg <= mux(io_en, io_d, reg)
+
+  // CHECK-LABEL: rtl.module @InitReg1(
+  rtl.module @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (%io_q: i32) {
+    // CHECK-NEXT: %c0_i32 = rtl.constant(0 : i32) : i32
+    %c0_ui32 = firrtl.constant(0 : ui32) : !firrtl.uint<32>
+
+    %0 = firrtl.stdIntCast %clock : (i1) -> !firrtl.clock
+    %1 = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
+    %2 = firrtl.stdIntCast %io_d : (i32) -> !firrtl.uint<32>
+    %3 = firrtl.stdIntCast %io_en : (i1) -> !firrtl.uint<1>
+    %4 = firrtl.asAsyncReset %1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
+
+    // CHECK-NEXT: %reg = rtl.reg : !rtl.inout<i32>
+    // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
+    // CHECK-NEXT:   sv.initial {
+    // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
+    // CHECK-NEXT:     sv.if %reset {
+    // CHECK-NEXT:       sv.bpassign %reg, %c0_i32 : i32
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     sv.ifdef "RANDOMIZE_REG_INIT"  {
+    // CHECK-NEXT:       %true = rtl.constant(true) : i1
+    // CHECK-NEXT:       %3 = rtl.xor %reset, %true : i1
+    // CHECK-NEXT:       sv.if %3  {
+    // CHECK-NEXT:         %4 = sv.textual_value "`RANDOM" : i32
+    // CHECK-NEXT:         sv.bpassign %reg, %4 : i32
+    // CHECK-NEXT:       }
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    %reg = firrtl.reginit %0, %4, %c0_ui32 {name = "reg"} : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<32>) -> !firrtl.uint<32>
+
+    // CHECK-NEXT: %0 = rtl.read_inout %reg : !rtl.inout<i32>
+    // CHECK-NEXT: %1 = rtl.mux %io_en, %io_d, %0 : i32
+    // CHECK-NEXT: sv.always posedge %clock, posedge %reset  {
+    // CHECK-NEXT:   sv.passign %reg, %1 : i32
+    // CHECK-NEXT: }
+    %5 = firrtl.mux(%3, %2, %reg) : (!firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<32>
+    firrtl.connect %reg, %5 : !firrtl.uint<32>, !firrtl.uint<32>
+    %6 = firrtl.stdIntCast %reg : (!firrtl.uint<32>) -> i32
+
+    // CHECK-NEXT: %2 = rtl.read_inout %reg : !rtl.inout<i32>
+    // CHECK-NEXT: rtl.output %2 : i32
+    rtl.output %6 : i32
   }
 }
 
