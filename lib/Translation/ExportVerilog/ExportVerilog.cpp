@@ -1756,9 +1756,17 @@ void ModuleEmitter::emitStatement(sv::IfDefOp op) {
   emitLocationInfoAndNewLine(ops);
 
   addIndent();
-  for (auto &op : op.getBodyBlock()->without_terminator())
+  for (auto &op : op.getThenBlock()->without_terminator())
     emitOperation(&op);
   reduceIndent();
+
+  if (op.hasElse()) {
+    indent() << "`else\n";
+    addIndent();
+    for (auto &op : op.getElseBlock()->without_terminator())
+      emitOperation(&op);
+    reduceIndent();
+  }
 
   indent() << "`endif\n";
 }
@@ -3049,7 +3057,7 @@ void CircuitEmitter::emitCircuit(CircuitOp circuit) {
   // location info and any other interesting metadata (e.g. comment
   // block) attached to it.
   os << R"XXX(
-// Standard header to adapt well known macros to our needs.\n";
+// Standard header to adapt well known macros to our needs.
 `ifdef RANDOMIZE_GARBAGE_ASSIGN
 `define RANDOMIZE
 `endif
@@ -3136,6 +3144,10 @@ void CircuitEmitter::emitMLIRModule(ModuleOp module) {
       ModuleEmitter(state).emitRTLExternModule(module);
     else if (auto interface = dyn_cast<sv::InterfaceOp>(op))
       ModuleEmitter(state).emitDecl(interface);
+    else if (auto verbatim = dyn_cast<sv::VerbatimOp>(op))
+      ModuleEmitter(state).emitStatement(verbatim);
+    else if (auto verbatim = dyn_cast<sv::IfDefOp>(op))
+      ModuleEmitter(state).emitStatement(verbatim);
     else if (!isa<ModuleTerminatorOp>(op))
       op.emitError("unknown operation");
   }

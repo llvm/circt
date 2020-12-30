@@ -89,6 +89,12 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     // CHECK-NEXT: wire42 <= THING;
     sv.passign %wire42, %thing : i42
   }// CHECK-NEXT:   {{end // initial$}}
+
+  sv.ifdef "!VERILATOR"  {         // CHECK-NEXT: `ifndef VERILATOR
+    sv.verbatim "`define Thing1"   // CHECK-NEXT:   `define Thing1
+  } else  {                        // CHECK-NEXT: `else
+    sv.verbatim "`define Thing2"   // CHECK-NEXT:   `define Thing2
+  }                                // CHECK-NEXT: `endif
 }
 
 // CHECK-LABEL: module Aliasing(
