@@ -8,7 +8,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT:       $fwrite(32'h80000002, "Hi\n");
   // CHECK-NEXT:   `endif
   // CHECK-NEXT: end // always @(posedge)
-  sv.always "posedge" %clock {
+  sv.always posedge %clock {
     sv.ifdef "!SYNTHESIS" {
       %tmp = sv.textual_value "PRINTF_COND_" : i1
       %tmp2 = rtl.and %tmp, %cond : i1
@@ -20,12 +20,22 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
 
   // CHECK-NEXT: always @(negedge clock) begin
   // CHECK-NEXT: end // always @(negedge)
-  sv.always "negedge" %clock {
+  sv.always negedge %clock {
   }
 
   // CHECK-NEXT: always @(edge clock) begin
   // CHECK-NEXT: end // always @(edge)
-  sv.always "edge" %clock {
+  sv.always edge %clock {
+  }
+
+  // CHECK-NEXT: always @* begin
+  // CHECK-NEXT: end // always
+  sv.always {
+  }
+
+  // CHECK-NEXT: always @(posedge clock or negedge cond) begin
+  // CHECK-NEXT: end // always
+  sv.always posedge %clock, negedge %cond {
   }
 
   // CHECK-NEXT:   if (cond) begin

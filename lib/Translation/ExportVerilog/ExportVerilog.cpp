@@ -1793,11 +1793,48 @@ void ModuleEmitter::emitStatement(sv::AlwaysOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  StringRef eventStr = stringifyEventControl(op.event());
-  indent() << "always @(" << eventStr << ' '
-           << emitExpressionToString(op.clock(), ops) << ')';
+  auto printEvent = [&](sv::AlwaysOp::Condition cond) {
+    os << stringifyEventControl(cond.event) << ' '
+       << emitExpressionToString(cond.value, ops);
+  };
 
-  std::string comment = "always @(" + eventStr.str() + ')';
+  switch (op.getNumConditions()) {
+  case 0:
+    indent() << "always @*";
+    break;
+  case 1:
+    indent() << "always @(";
+    printEvent(op.getCondition(0));
+    os << ')';
+    break;
+  default:
+    indent() << "always @(";
+    printEvent(op.getCondition(0));
+    for (size_t i = 1, e = op.getNumConditions(); i != e; ++i) {
+      os << " or ";
+      printEvent(op.getCondition(i));
+    }
+    os << ')';
+    break;
+  }
+
+  // Build the comment string, leave out the signal expressions (since they
+  // can be large).
+  std::string comment;
+  if (op.getNumConditions() == 0) {
+    comment = "always @*";
+  } else {
+    comment = "always @(";
+    llvm::interleave(
+        op.events(),
+        [&](Attribute eventAttr) {
+          auto event = EventControl(eventAttr.cast<IntegerAttr>().getInt());
+          comment += stringifyEventControl(event);
+        },
+        [&]() { comment += ", "; });
+    comment += ')';
+  }
+
   emitBeginEndRegion(op.getBodyBlock(), ops, *this, comment);
 }
 
