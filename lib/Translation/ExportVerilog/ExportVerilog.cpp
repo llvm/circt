@@ -920,7 +920,15 @@ private:
   }
   SubExprInfo visitComb(rtl::AndOp op) { return emitVariadic(op, And, "&"); }
   SubExprInfo visitComb(rtl::OrOp op) { return emitVariadic(op, Or, "|"); }
-  SubExprInfo visitComb(rtl::XorOp op) { return emitVariadic(op, Xor, "^"); }
+  SubExprInfo visitComb(rtl::XorOp op) {
+    if (op.getNumOperands() == 2)
+      if (auto cst = dyn_cast_or_null<rtl::ConstantOp>(
+              op.getOperand(1).getDefiningOp()))
+        if (cst.getValue().isAllOnesValue())
+          return emitUnary(op, "~", true);
+
+    return emitVariadic(op, Xor, "^");
+  }
 
   SubExprInfo visitComb(rtl::AndROp op) { return emitUnary(op, "&", true); }
   SubExprInfo visitComb(rtl::OrROp op) { return emitUnary(op, "|", true); }
@@ -1585,7 +1593,6 @@ void ModuleEmitter::emitStatement(sv::AliasOp op) {
 /// assign the module outputs to intermediate wires.
 void ModuleEmitter::emitStatement(rtl::OutputOp op) {
   SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
 
   SmallVector<rtl::ModulePortInfo, 8> ports;
   rtl::RTLModuleOp parent = op.getParentOfType<rtl::RTLModuleOp>();
@@ -1594,6 +1601,8 @@ void ModuleEmitter::emitStatement(rtl::OutputOp op) {
   for (rtl::ModulePortInfo port : ports) {
     if (!port.isOutput())
       continue;
+    ops.clear();
+    ops.insert(op);
     indent() << "assign " << port.getName() << " = ";
     emitExpression(op.getOperand(operandIndex), ops);
     os << ';';
@@ -1758,7 +1767,9 @@ static void emitBeginEndRegion(Block *block,
     // check here for now.  This can be improved over time.
     return isa<sv::FWriteOp>(op) || isa<sv::FinishOp>(op) ||
            isa<sv::FatalOp>(op) || isa<sv::AssertOp>(op) ||
-           isa<sv::AssumeOp>(op) || isa<sv::CoverOp>(op);
+           isa<sv::AssumeOp>(op) || isa<sv::CoverOp>(op) ||
+           isa<sv::BPAssignOp>(op) || isa<sv::PAssignOp>(op) ||
+           isa<rtl::ConnectOp>(op);
   };
 
   // Determine if we can omit the begin/end keywords.
@@ -1793,11 +1804,48 @@ void ModuleEmitter::emitStatement(sv::AlwaysOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  StringRef eventStr = stringifyEventControl(op.event());
-  indent() << "always @(" << eventStr << ' '
-           << emitExpressionToString(op.clock(), ops) << ')';
+  auto printEvent = [&](sv::AlwaysOp::Condition cond) {
+    os << stringifyEventControl(cond.event) << ' '
+       << emitExpressionToString(cond.value, ops);
+  };
 
-  std::string comment = "always @(" + eventStr.str() + ')';
+  switch (op.getNumConditions()) {
+  case 0:
+    indent() << "always @*";
+    break;
+  case 1:
+    indent() << "always @(";
+    printEvent(op.getCondition(0));
+    os << ')';
+    break;
+  default:
+    indent() << "always @(";
+    printEvent(op.getCondition(0));
+    for (size_t i = 1, e = op.getNumConditions(); i != e; ++i) {
+      os << " or ";
+      printEvent(op.getCondition(i));
+    }
+    os << ')';
+    break;
+  }
+
+  // Build the comment string, leave out the signal expressions (since they
+  // can be large).
+  std::string comment;
+  if (op.getNumConditions() == 0) {
+    comment = "always @*";
+  } else {
+    comment = "always @(";
+    llvm::interleave(
+        op.events(),
+        [&](Attribute eventAttr) {
+          auto event = EventControl(eventAttr.cast<IntegerAttr>().getInt());
+          comment += stringifyEventControl(event);
+        },
+        [&]() { comment += ", "; });
+    comment += ')';
+  }
+
   emitBeginEndRegion(op.getBodyBlock(), ops, *this, comment);
 }
 

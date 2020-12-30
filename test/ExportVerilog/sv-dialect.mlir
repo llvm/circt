@@ -2,13 +2,15 @@
 
 // CHECK-LABEL: module M1(
 rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
+  %wire42 = rtl.wire : !rtl.inout<i42>
+
   // CHECK:      always @(posedge clock) begin
   // CHECK-NEXT:   `ifndef SYNTHESIS
   // CHECK-NEXT:     if (PRINTF_COND_ & cond)
   // CHECK-NEXT:       $fwrite(32'h80000002, "Hi\n");
   // CHECK-NEXT:   `endif
   // CHECK-NEXT: end // always @(posedge)
-  sv.always "posedge" %clock {
+  sv.always posedge %clock {
     sv.ifdef "!SYNTHESIS" {
       %tmp = sv.textual_value "PRINTF_COND_" : i1
       %tmp2 = rtl.and %tmp, %cond : i1
@@ -20,12 +22,30 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
 
   // CHECK-NEXT: always @(negedge clock) begin
   // CHECK-NEXT: end // always @(negedge)
-  sv.always "negedge" %clock {
+  sv.always negedge %clock {
   }
 
   // CHECK-NEXT: always @(edge clock) begin
   // CHECK-NEXT: end // always @(edge)
-  sv.always "edge" %clock {
+  sv.always edge %clock {
+  }
+
+  // CHECK-NEXT: always @* begin
+  // CHECK-NEXT: end // always
+  sv.always {
+  }
+
+  // CHECK-NEXT: always @(posedge clock or negedge cond) begin
+  // CHECK-NEXT: end // always @(posedge, negedge)
+  sv.always posedge %clock, negedge %cond {
+  }
+
+  %c42 = rtl.constant (42 : i42) : i42
+
+  // CHECK-NEXT:   if (cond)
+  sv.if %cond {
+    // CHECK-NEXT: wire42 = 42'h2A;
+    sv.bpassign %wire42, %c42 : i42
   }
 
   // CHECK-NEXT:   if (cond) begin
@@ -60,9 +80,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     // CHECK-NEXT: $fatal
     sv.fatal
   }
-  
-  %wire42 = rtl.wire : !rtl.inout<i42>
-
+ 
   // CHECK-NEXT: initial begin
   sv.initial {
     %thing = sv.textual_value "THING" : i42
