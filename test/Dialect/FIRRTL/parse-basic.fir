@@ -557,3 +557,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: [[rst_passive:%.+]] = firrtl.asPassive %rst
     ; CHECK: firrtl.regreset %clk, [[rst_passive]]
     reg r: UInt<1>, clk with : (reset => (rst, UInt<1>(0)))
+
+  ; COM: Check that a register init sink is converted to passive
+  ; CHECK-LABEL: firrtl.module @register_init_passive
+  module register_init_passive:
+    input clk: Clock
+    input rst: UInt<1>
+    output init: UInt<1>
+    init is invalid
+    ; CHECK: [[init_passive:%.+]] = firrtl.asPassive %init
+    ; CHECK: firrtl.regreset %clk, %rst, [[init_passive]]
+    reg r: UInt<1>, clk with : (reset => (rst, init))
