@@ -547,3 +547,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: [[clkOut_passive:%.+]] = firrtl.asPassive %clkOut
     ; CHECK: firrtl.reg [[clkOut_passive]]
     reg r: UInt<1>, clkOut
+
+  ; COM: Check that a register reset sink is converted to passive
+  ; CHECK-LABEL: firrtl.module @register_reset_passive
+  module register_reset_passive:
+    input clk: Clock
+    output rst: UInt<1>
+    rst is invalid
+    ; CHECK: [[rst_passive:%.+]] = firrtl.asPassive %rst
+    ; CHECK: firrtl.regreset %clk, [[rst_passive]]
+    reg r: UInt<1>, clk with : (reset => (rst, UInt<1>(0)))
