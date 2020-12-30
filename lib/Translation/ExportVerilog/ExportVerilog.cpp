@@ -920,7 +920,15 @@ private:
   }
   SubExprInfo visitComb(rtl::AndOp op) { return emitVariadic(op, And, "&"); }
   SubExprInfo visitComb(rtl::OrOp op) { return emitVariadic(op, Or, "|"); }
-  SubExprInfo visitComb(rtl::XorOp op) { return emitVariadic(op, Xor, "^"); }
+  SubExprInfo visitComb(rtl::XorOp op) {
+    if (op.getNumOperands() == 2)
+      if (auto cst = dyn_cast_or_null<rtl::ConstantOp>(
+              op.getOperand(1).getDefiningOp()))
+        if (cst.getValue().isAllOnesValue())
+          return emitUnary(op, "~", true);
+
+    return emitVariadic(op, Xor, "^");
+  }
 
   SubExprInfo visitComb(rtl::AndROp op) { return emitUnary(op, "&", true); }
   SubExprInfo visitComb(rtl::OrROp op) { return emitUnary(op, "|", true); }
@@ -1585,7 +1593,6 @@ void ModuleEmitter::emitStatement(sv::AliasOp op) {
 /// assign the module outputs to intermediate wires.
 void ModuleEmitter::emitStatement(rtl::OutputOp op) {
   SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
 
   SmallVector<rtl::ModulePortInfo, 8> ports;
   rtl::RTLModuleOp parent = op.getParentOfType<rtl::RTLModuleOp>();
@@ -1594,6 +1601,8 @@ void ModuleEmitter::emitStatement(rtl::OutputOp op) {
   for (rtl::ModulePortInfo port : ports) {
     if (!port.isOutput())
       continue;
+    ops.clear();
+    ops.insert(op);
     indent() << "assign " << port.getName() << " = ";
     emitExpression(op.getOperand(operandIndex), ops);
     os << ';';
