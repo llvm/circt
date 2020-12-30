@@ -197,8 +197,8 @@ RTLExternModuleOp ESIRTLBuilder::declareCosimEndpoint() {
       {dataInValid, PortDirection::INPUT, getI1Type(), 3},
       {dataInReady, PortDirection::OUTPUT, getI1Type(), 2},
       {dataIn, PortDirection::INPUT, getNoneType(), 4}};
-  declaredStage = create<RTLExternModuleOp>(name, ports);
-  return declaredStage;
+  declaredCosimEndpoint = create<RTLExternModuleOp>(name, ports);
+  return declaredCosimEndpoint;
 }
 
 /// Return the InterfaceType which corresponds to an ESI port type. If it
@@ -791,8 +791,8 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   auto sendReady = bb.get(rewriter.getI1Type());
   UnwrapValidReady unwrapSend =
       rewriter.create<UnwrapValidReady>(loc, ep.send(), sendReady);
-  auto egestData = rewriter.create<CapnpEgest>(loc, egestBitArrayType,
-                                               unwrapSend.rawOutput());
+  auto encodeData = rewriter.create<CapnpEncode>(loc, egestBitArrayType,
+                                                 unwrapSend.rawOutput());
 
   // Get information necessary for injest path.
   auto recvReady = bb.get(rewriter.getI1Type());
@@ -807,7 +807,7 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
 
       recvReady,
 
-      unwrapSend.valid(), egestData.capnpBits(),
+      unwrapSend.valid(), encodeData.capnpBits(),
   };
   Type epInstOutputs[] = {rewriter.getI1Type(), ingestBitArrayType,
                           rewriter.getI1Type()};
@@ -819,10 +819,10 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   // Set up the injest path.
   Value recvDataFromCosim = cosimEpModule.getResult(1);
   Value recvValidFromCosim = cosimEpModule.getResult(0);
-  auto ingestData =
-      rewriter.create<CapnpIngest>(loc, ep.recv().getType(), recvDataFromCosim);
+  auto decodeData =
+      rewriter.create<CapnpDecode>(loc, ep.recv().getType(), recvDataFromCosim);
   WrapValidReady wrapRecv = rewriter.create<WrapValidReady>(
-      loc, ingestData.decodedData(), recvValidFromCosim);
+      loc, decodeData.decodedData(), recvValidFromCosim);
   recvReady.setValue(wrapRecv.ready());
 
   // Replace the CosimEndpoint op.
@@ -840,7 +840,7 @@ void ESItoRTLPass::runOnOperation() {
   pass1Target.addLegalDialect<RTLDialect>();
   pass1Target.addLegalDialect<SVDialect>();
   pass1Target.addLegalOp<WrapValidReady, UnwrapValidReady>();
-  pass1Target.addLegalOp<CapnpIngest, CapnpEgest>();
+  pass1Target.addLegalOp<CapnpDecode, CapnpEncode>();
 
   pass1Target.addIllegalOp<WrapSVInterface, UnwrapSVInterface>();
   pass1Target.addIllegalOp<PipelineStage>();

@@ -101,7 +101,7 @@ def RtlBitArray : Type<CPred<"$_self.isa<::circt::rtl::ArrayType>()"
  " && $_self.cast<::circt::rtl::ArrayType>().getElementType() =="
  "   ::mlir::IntegerType::get($_self.getContext(), 1)">, "an RTL bit array">;
 
-def CapnpIngest : ESI_Physical_Op<"ingest.capnp", [NoSideEffect]> {
+def CapnpDecode : ESI_Physical_Op<"decode.capnp", [NoSideEffect]> {
   let summary = "Translate bits in Cap'nProto messages to RTL typed data";
 
   let arguments = (ins RtlBitArray:$capnpBits);
@@ -112,7 +112,7 @@ def CapnpIngest : ESI_Physical_Op<"ingest.capnp", [NoSideEffect]> {
   }];
 }
 
-def CapnpEgest : ESI_Physical_Op<"egest.capnp", [NoSideEffect]> {
+def CapnpEncode : ESI_Physical_Op<"encode.capnp", [NoSideEffect]> {
   let summary = "Translate RTL typed data to Cap'nProto";
 
   let arguments = (ins AnyType:$dataToEncode);
