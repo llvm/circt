@@ -1767,7 +1767,9 @@ static void emitBeginEndRegion(Block *block,
     // check here for now.  This can be improved over time.
     return isa<sv::FWriteOp>(op) || isa<sv::FinishOp>(op) ||
            isa<sv::FatalOp>(op) || isa<sv::AssertOp>(op) ||
-           isa<sv::AssumeOp>(op) || isa<sv::CoverOp>(op);
+           isa<sv::AssumeOp>(op) || isa<sv::CoverOp>(op) ||
+           isa<sv::BPAssignOp>(op) || isa<sv::PAssignOp>(op) ||
+           isa<rtl::ConnectOp>(op);
   };
 
   // Determine if we can omit the begin/end keywords.
