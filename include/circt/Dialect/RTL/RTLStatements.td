@@ -66,6 +66,8 @@ def WireOp : RTLOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let parser = [{ return parseRegWireOp(parser, result); }];
 }
 
+// Expressions used for working with inout types.
+
 def ReadInOutOp
  : RTLOp<"read_inout",
          [NoSideEffect, InOutElementConstraint<"result", "input">]> {
@@ -80,5 +82,28 @@ def ReadInOutOp
 
   let assemblyFormat = [{
     $input attr-dict `:` type($input)
+  }];
+}
+
+class InOutIndexConstraint<string value, string inoutValue>
+  : TypesMatchWith<"type should be element of inout type",
+                   inoutValue, value,
+                   "InOutType::get($_self.cast<InOutType>().getElementType()"
+                                        ".cast<ArrayType>().getElementType())">;
+
+def ArrayIndexOp
+ : RTLOp<"arrayindex",
+         [NoSideEffect, InOutIndexConstraint<"result", "input">]> {
+  let summary = "Index an inout memory to produce an inout element";
+  let description = "See SV Spec 11.5.2.";
+  let arguments = (ins InOutArrayType:$input, AnySignlessInteger:$index);
+  let results = (outs InOutType:$result);
+
+  let builders = [
+    OpBuilderDAG<(ins "Value":$input)>
+  ];
+
+  let assemblyFormat = [{
+    $input`[`$index`]` attr-dict `:` type($input) `,` type($index)
   }];
 }

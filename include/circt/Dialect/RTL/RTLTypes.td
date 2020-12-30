@@ -58,6 +58,12 @@ def InOutType : RTLType<"InOut"> {
 def InOutElementType : Type<CPred<"isRTLValueType($_self)">,
                             "a valid inout element">;
 
+def InOutArrayType
+  : Type<CPred<"$_self.isa<InOutType>() && "
+               "$_self.cast<InOutType>().getElementType().isa<ArrayType>()">,
+               "an inout type with array element">;
+
+
 // This type constraint is used by operations whose asm strings have a type "T"
 // in the asmstring, which constraints an input or output to type `T`, and then
 // constraints another to `!rtl.inout<T>`.  The "value" and "inoutValue" are the
