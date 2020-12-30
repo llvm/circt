@@ -1,10 +1,15 @@
 // RUN: circt-opt -lower-firrtl-to-rtl-module %s -verify-diagnostics  | FileCheck %s
 
- // The firrtl.circuit should be removed, the main module name moved to an
- // attribute on the module.
- // CHECK-LABEL: {{^}}module attributes {firrtl.mainModule = "Simple"} {
- // CHECK-NOT: firrtl.circuit
- firrtl.circuit "Simple" {
+// The firrtl.circuit should be removed, the main module name moved to an
+// attribute on the module.
+// CHECK-LABEL: {{^}}module attributes {firrtl.mainModule = "Simple"} {
+// CHECK-NOT: firrtl.circuit
+
+// We should get a large header boilerplate.
+// CHECK:   sv.ifdef "RANDOMIZE_GARBAGE_ASSIGN"  {
+// CHECK-NEXT:   sv.verbatim "`define RANDOMIZE"
+// CHECK-NEXT:  }
+firrtl.circuit "Simple" {
 
    // CHECK-LABEL: rtl.externmodule @MyParameterizedExtModule(
    // CHECK: i1 {rtl.name = "in"}) -> (%out: i8)
