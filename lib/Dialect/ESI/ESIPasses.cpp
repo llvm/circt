@@ -62,12 +62,15 @@ public:
   ESIRTLBuilder(Operation *top);
 
   RTLExternModuleOp declareStage();
+  RTLExternModuleOp declareCosimEndpoint();
 
   InterfaceOp getOrConstructInterface(ChannelPort);
   InterfaceOp constructInterface(ChannelPort);
 
   // A bunch of constants for use in various places below.
   const StringAttr a, aValid, aReady, x, xValid, xReady;
+  const StringAttr dataOutValid, dataOutReady, dataOut, dataInValid,
+      dataInReady, dataIn;
   const StringAttr clk, rstn;
   const Identifier width;
 
@@ -82,6 +85,7 @@ private:
   StringAttr constructInterfaceName(ChannelPort);
 
   RTLExternModuleOp declaredStage;
+  RTLExternModuleOp declaredCosimEndpoint;
   llvm::DenseMap<Type, InterfaceOp> portTypeLookup;
 };
 } // anonymous namespace
@@ -100,6 +104,12 @@ ESIRTLBuilder::ESIRTLBuilder(Operation *top)
       x(StringAttr::get("x", getContext())),
       xValid(StringAttr::get("x_valid", getContext())),
       xReady(StringAttr::get("x_ready", getContext())),
+      dataOutValid(StringAttr::get("DataOutValid", getContext())),
+      dataOutReady(StringAttr::get("DataOutReady", getContext())),
+      dataOut(StringAttr::get("DataOut", getContext())),
+      dataInValid(StringAttr::get("DataInValid", getContext())),
+      dataInReady(StringAttr::get("DataInReady", getContext())),
+      dataIn(StringAttr::get("DataIn", getContext())),
       clk(StringAttr::get("clk", getContext())),
       rstn(StringAttr::get("rstn", getContext())),
       width(Identifier::get("WIDTH", getContext())), declaredStage(nullptr) {
@@ -165,6 +175,30 @@ RTLExternModuleOp ESIRTLBuilder::declareStage() {
                             {xReady, PortDirection::INPUT, getI1Type(), 4}};
   declaredStage = create<RTLExternModuleOp>(name, ports);
   return declaredStage;
+}
+
+/// Write an 'ExternModuleOp' to use a hand-coded SystemVerilog module. Said
+/// module contains a bi-directional Cosimulation DPI interface with valid/ready
+/// semantics.
+RTLExternModuleOp ESIRTLBuilder::declareCosimEndpoint() {
+  if (declaredCosimEndpoint)
+    return declaredCosimEndpoint;
+  auto name = StringAttr::get("Cosim_Endpoint", getContext());
+  // Since this module has parameterized widths on the a input and x output,
+  // give the extern declation a None type since nothing else makes sense.
+  // Will be refining this when we decide how to better handle parameterized
+  // types and ops.
+  ModulePortInfo ports[] = {
+      {clk, PortDirection::INPUT, getI1Type(), 0},
+      {rstn, PortDirection::INPUT, getI1Type(), 1},
+      {dataOutValid, PortDirection::OUTPUT, getI1Type(), 0},
+      {dataOutReady, PortDirection::INPUT, getI1Type(), 2},
+      {dataOut, PortDirection::OUTPUT, getNoneType(), 1},
+      {dataInValid, PortDirection::INPUT, getI1Type(), 3},
+      {dataInReady, PortDirection::OUTPUT, getI1Type(), 2},
+      {dataIn, PortDirection::INPUT, getNoneType(), 4}};
+  declaredCosimEndpoint = create<RTLExternModuleOp>(name, ports);
+  return declaredCosimEndpoint;
 }
 
 /// Return the InterfaceType which corresponds to an ESI port type. If it
@@ -675,6 +709,128 @@ LogicalResult UnwrapInterfaceLower::matchAndRewrite(
   return success();
 }
 
+// Compute the expected size of the capnp message field in bits. Return -1 on
+// non-representable type.
+static ssize_t getCapnpMsgFieldSize(Type type) {
+  return llvm::TypeSwitch<::mlir::Type, int64_t>(type)
+      .Case<IntegerType>([](IntegerType t) {
+        auto w = t.getWidth();
+        if (w == 1)
+          return 8;
+        else if (w <= 8)
+          return 8;
+        else if (w <= 16)
+          return 16;
+        else if (w <= 32)
+          return 32;
+        else if (w <= 64)
+          return 64;
+        return -1;
+      })
+      .Default([](Type) { return -1; });
+}
+
+// Compute the expected size of the capnp message in bits. Return -1 on
+// non-representable type. TODO: replace this with a call into the Capnp C++
+// library to parse a schema and have it compute sizes and offsets.
+static ssize_t getCapnpMsgSize(Type type) {
+  ChannelPort chan = type.dyn_cast<ChannelPort>();
+  if (chan)
+    return getCapnpMsgSize(chan.getInner());
+  ssize_t headerSize = 128;
+  ssize_t fieldSize = getCapnpMsgFieldSize(type);
+  if (fieldSize < 0)
+    return fieldSize;
+  // Capnp sizes are always multiples of 8 bytes, so round up.
+  fieldSize = (fieldSize & ~0x3f) + (fieldSize & 0x3f ? 0x40 : 0);
+  return headerSize + fieldSize;
+}
+
+namespace {
+/// Lower `CosimEndpoint` ops to a SystemVerilog extern module and a Capnp
+/// gasket op.
+struct CosimLowering : public OpConversionPattern<CosimEndpoint> {
+public:
+  CosimLowering(ESIRTLBuilder &b)
+      : OpConversionPattern(b.getContext(), 1), builder(b) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(CosimEndpoint, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final;
+
+private:
+  ESIRTLBuilder &builder;
+};
+} // anonymous namespace
+
+LogicalResult
+CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
+                               ConversionPatternRewriter &rewriter) const {
+  auto loc = ep.getLoc();
+  auto *ctxt = rewriter.getContext();
+  circt::BackedgeBuilder bb(rewriter, loc);
+  builder.declareCosimEndpoint();
+  Type ui64Type =
+      IntegerType::get(ctxt, 64, IntegerType::SignednessSemantics::Unsigned);
+
+  // Set all the parameters.
+  NamedAttrList params;
+  params.set("ENDPOINT_ID", rewriter.getI32IntegerAttr(ep.endpointID()));
+  params.set("SEND_TYPE_ID", IntegerAttr::get(ui64Type, ep.getSendTypeID()));
+  params.set("SEND_TYPE_SIZE_BITS",
+             rewriter.getI64IntegerAttr(getCapnpMsgSize(ep.send().getType())));
+  params.set("RECV_TYPE_ID", IntegerAttr::get(ui64Type, ep.getRecvTypeID()));
+  params.set("RECVTYPE_SIZE_BITS",
+             rewriter.getI64IntegerAttr(getCapnpMsgSize(ep.recv().getType())));
+
+  // Set up the egest route to drive the EP's send ports.
+  ArrayType egestBitArrayType = ArrayType::get(
+      rewriter.getI1Type(), getCapnpMsgSize(ep.send().getType()));
+  auto sendReady = bb.get(rewriter.getI1Type());
+  UnwrapValidReady unwrapSend =
+      rewriter.create<UnwrapValidReady>(loc, ep.send(), sendReady);
+  auto encodeData = rewriter.create<CapnpEncode>(loc, egestBitArrayType,
+                                                 unwrapSend.rawOutput());
+
+  // Get information necessary for injest path.
+  auto recvReady = bb.get(rewriter.getI1Type());
+  ArrayType ingestBitArrayType = ArrayType::get(
+      rewriter.getI1Type(), getCapnpMsgSize(ep.recv().getType()));
+
+  // Create replacement Cosim_Endpoint instance.
+  StringAttr nameAttr = ep.getAttr("name").dyn_cast_or_null<StringAttr>();
+  StringRef name = nameAttr ? nameAttr.getValue() : "cosimEndpoint";
+  Value epInstInputs[] = {
+      ep.clk(),           ep.rstn(),
+
+      recvReady,
+
+      unwrapSend.valid(), encodeData.capnpBits(),
+  };
+  Type epInstOutputs[] = {rewriter.getI1Type(), ingestBitArrayType,
+                          rewriter.getI1Type()};
+  auto cosimEpModule =
+      rewriter.create<InstanceOp>(loc, epInstOutputs, name, "Cosim_Endpoint",
+                                  epInstInputs, params.getDictionary(ctxt));
+  sendReady.setValue(cosimEpModule.getResult(2));
+
+  // Set up the injest path.
+  Value recvDataFromCosim = cosimEpModule.getResult(1);
+  Value recvValidFromCosim = cosimEpModule.getResult(0);
+  auto decodeData =
+      rewriter.create<CapnpDecode>(loc, ep.recv().getType(), recvDataFromCosim);
+  WrapValidReady wrapRecv = rewriter.create<WrapValidReady>(
+      loc, decodeData.decodedData(), recvValidFromCosim);
+  recvReady.setValue(wrapRecv.ready());
+
+  // Replace the CosimEndpoint op.
+  rewriter.replaceOp(ep, wrapRecv.chanOutput());
+
+  return success();
+}
+
 void ESItoRTLPass::runOnOperation() {
   auto top = getOperation();
   auto ctxt = &getContext();
@@ -684,6 +840,7 @@ void ESItoRTLPass::runOnOperation() {
   pass1Target.addLegalDialect<RTLDialect>();
   pass1Target.addLegalDialect<SVDialect>();
   pass1Target.addLegalOp<WrapValidReady, UnwrapValidReady>();
+  pass1Target.addLegalOp<CapnpDecode, CapnpEncode>();
 
   pass1Target.addIllegalOp<WrapSVInterface, UnwrapSVInterface>();
   pass1Target.addIllegalOp<PipelineStage>();
@@ -694,6 +851,7 @@ void ESItoRTLPass::runOnOperation() {
   patterns.insert<PipelineStageLowering>(esiBuilder, ctxt);
   patterns.insert<WrapInterfaceLower>(ctxt);
   patterns.insert<UnwrapInterfaceLower>(ctxt);
+  patterns.insert<CosimLowering>(esiBuilder);
 
   // Run the conversion.
   if (failed(applyPartialConversion(top, pass1Target, std::move(patterns))))

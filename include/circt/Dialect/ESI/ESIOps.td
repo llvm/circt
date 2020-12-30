@@ -82,17 +82,43 @@ def CosimEndpoint : ESI_Physical_Op<"cosim", []> {
     supported by the specific protocol.
   }];
 
-  let arguments = (ins I1:$clk, I1:$rstn, ChannelType:$input,
+  let arguments = (ins I1:$clk, I1:$rstn, ChannelType:$send,
     I64Attr:$endpointID);
-  let results = (outs ChannelType:$output);
+  let results = (outs ChannelType:$recv);
 
   let assemblyFormat = [{
-    $clk `,` $rstn `,` $input `,` $endpointID attr-dict
-      `:` type($input) `->` type($output)
+    $clk `,` $rstn `,` $send `,` $endpointID attr-dict
+      `:` type($send) `->` type($recv)
   }];
 
   let extraClassDeclaration = [{
-    uint64_t getInputTypeID() { return getCapnpTypeID(input().getType()); }
-    uint64_t getOutputTypeID() { return getCapnpTypeID(output().getType()); }
+    uint64_t getSendTypeID() { return getCapnpTypeID(send().getType()); }
+    uint64_t getRecvTypeID() { return getCapnpTypeID(recv().getType()); }
+  }];
+}
+
+def RtlBitArray : Type<CPred<"$_self.isa<::circt::rtl::ArrayType>()"
+ " && $_self.cast<::circt::rtl::ArrayType>().getElementType() =="
+ "   ::mlir::IntegerType::get($_self.getContext(), 1)">, "an RTL bit array">;
+
+def CapnpDecode : ESI_Physical_Op<"decode.capnp", [NoSideEffect]> {
+  let summary = "Translate bits in Cap'nProto messages to RTL typed data";
+
+  let arguments = (ins RtlBitArray:$capnpBits);
+  let results = (outs AnyType:$decodedData);
+
+  let assemblyFormat = [{
+    $capnpBits attr-dict `:` type($capnpBits) `->` type($decodedData)
+  }];
+}
+
+def CapnpEncode : ESI_Physical_Op<"encode.capnp", [NoSideEffect]> {
+  let summary = "Translate RTL typed data to Cap'nProto";
+
+  let arguments = (ins AnyType:$dataToEncode);
+  let results = (outs RtlBitArray:$capnpBits);
+
+  let assemblyFormat = [{
+    $dataToEncode attr-dict `:` type($dataToEncode) `->` type($capnpBits)
   }];
 }

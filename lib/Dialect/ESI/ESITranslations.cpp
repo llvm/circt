@@ -134,20 +134,20 @@ LogicalResult ExportCosimSchema::emitSchemaFor(IntegerType type,
 }
 
 LogicalResult ExportCosimSchema::visitEndpoint(CosimEndpoint ep) {
-  ChannelPort inputPort = ep.input().getType().dyn_cast<ChannelPort>();
-  if (!inputPort)
+  ChannelPort sendPort = ep.send().getType().dyn_cast<ChannelPort>();
+  if (!sendPort)
     return ep.emitOpError("Expected ChannelPort type for input. Got ")
-           << inputPort;
-  if (!isTypeSupported(inputPort))
-    return ep.emitOpError("Type '") << inputPort << "' not supported.";
-  types.push_back(inputPort);
+           << sendPort;
+  if (!isTypeSupported(sendPort))
+    return ep.emitOpError("Type '") << sendPort << "' not supported.";
+  types.push_back(sendPort);
 
-  ChannelPort outputPort = ep.output().getType().dyn_cast<ChannelPort>();
-  if (!outputPort)
-    ep.emitOpError("Expected ChannelPort type for output. Got ") << outputPort;
-  if (!isTypeSupported(outputPort))
-    return ep.emitOpError("Type '") << outputPort << "' not supported.";
-  types.push_back(outputPort);
+  ChannelPort recvPort = ep.recv().getType().dyn_cast<ChannelPort>();
+  if (!recvPort)
+    ep.emitOpError("Expected ChannelPort type for output. Got ") << recvPort;
+  if (!isTypeSupported(recvPort))
+    return ep.emitOpError("Type '") << recvPort << "' not supported.";
+  types.push_back(recvPort);
 
   os << "# Endpoint ";
   StringAttr epName = ep.getAttrOfType<StringAttr>("name");
@@ -155,11 +155,11 @@ LogicalResult ExportCosimSchema::visitEndpoint(CosimEndpoint ep) {
     os << epName << " is endpoint ";
   os << "#" << ep.endpointID() << " at " << ep.getLoc() << ":\n";
   os << "#   Input type: ";
-  emitName(inputPort.getInner()) << " ";
-  emitId(ep.getInputTypeID()) << "\n";
+  emitName(sendPort.getInner()) << " ";
+  emitId(ep.getSendTypeID()) << "\n";
   os << "#   Output type: ";
-  emitName(outputPort.getInner()) << " ";
-  emitId(ep.getOutputTypeID()) << "\n";
+  emitName(recvPort.getInner()) << " ";
+  emitId(ep.getRecvTypeID()) << "\n";
 
   return success();
 }
