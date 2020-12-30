@@ -11,4 +11,16 @@ module {
   func @inoutType(%arg0: !rtl.inout<i42>) {
     return
   }
+
+  // CHECK-LABEL: nestedType
+  func @nestedType(
+    // CHECK: %arg0: !rtl.inout<array<42xi8>>,
+    %arg0: !rtl.inout<!rtl.array<42xi8>>,
+     // CHECK: %arg1: !rtl.inout<array<42xi8>>,
+    %arg1: !rtl.inout<array<42xi8>>,
+    //CHECK: %arg2: !rtl.inout<array<2xarray<42xi8>>>
+    %arg2: !rtl.inout<array<2xarray<42xi8>>>) {
+    return
+  }
+
 }
