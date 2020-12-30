@@ -84,6 +84,16 @@ static int getBitWidthOrSentinel(Type type) {
       .Default([](Type) { return -1; });
 }
 
+/// Given a type that may be an array or inout, dig through recursive arrays to
+/// find the underlying element type.
+static Type getUnderlyingArrayElementType(Type type) {
+  if (auto array = type.dyn_cast<rtl::ArrayType>())
+    return getUnderlyingArrayElementType(array.getElementType());
+  if (auto inout = type.dyn_cast<rtl::InOutType>())
+    return getUnderlyingArrayElementType(inout.getElementType());
+  return type;
+}
+
 /// Return the type of the specified value, force casting to the subtype.
 template <typename T = FIRRTLType>
 static T getTypeOf(Value v) {
@@ -2315,6 +2325,19 @@ static bool isExpressionEmittedInline(Operation *op) {
   return op->getResult(0).hasOneUse();
 }
 
+// Print out the array subscripts after a wire/port declaration.
+static void printArraySubscripts(Type type, raw_ostream &os) {
+  if (auto inout = type.dyn_cast<rtl::InOutType>())
+    return printArraySubscripts(inout.getElementType(), os);
+
+  auto array = type.dyn_cast<rtl::ArrayType>();
+  if (!array)
+    return;
+
+  printArraySubscripts(array.getElementType(), os);
+  os << '[' << (array.getSize() - 1) << ":0]";
+}
+
 void ModuleEmitter::collectNamesEmitDecls(Block &block) {
   // In the first pass, we fill in the symbol table, calculate the max width
   // of the declaration words and the max type width.
@@ -2391,7 +2414,8 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       if (elt.type.isa<sv::InterfaceType>())
         continue;
 
-      int bitWidth = getBitWidthOrSentinel(elt.type);
+      int bitWidth =
+          getBitWidthOrSentinel(getUnderlyingArrayElementType(elt.type));
       if (bitWidth == -1) {
         emitError(&op, getName(result))
             << elt.suffix << " has an unsupported verilog type " << elt.type;
@@ -2429,16 +2453,22 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       indent() << word;
       os.indent(maxDeclNameWidth - word.size() + 1);
 
+      auto elementType = getUnderlyingArrayElementType(elt.type);
+
       // Skip over SV interface types, which don't have any emitted width.
       bool isInterface = elt.type.isa<sv::InterfaceType>();
       if (!isInterface)
-        emitTypePaddedToWidth(elt.type, maxTypeWidth, decl);
+        emitTypePaddedToWidth(elementType, maxTypeWidth, decl);
 
       os << getName(decl->getResult(0)) << elt.suffix;
 
       // Interface instantiations have parentheses like a module with no ports.
-      if (isInterface)
+      if (isInterface) {
         os << "()";
+      } else {
+        // Print out any array subscripts.
+        printArraySubscripts(elt.type, os);
+      }
 
       os << ';';
       if (isFirst)

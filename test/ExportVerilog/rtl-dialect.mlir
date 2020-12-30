@@ -243,13 +243,18 @@ module {
   rtl.module @reg_wire(%in4: i4, %in8: i8) -> (%a: i4, %b: i8) {
     // CHECK-LABEL: module reg_wire(
     // CHECK-NEXT:   input  [3:0] in4,
-    // CHECK-NEXT:     input  [7:0] in8,
-    // CHECK-NEXT:     output [3:0] a,
-    // CHECK-NEXT:     output [7:0] b);
+    // CHECK-NEXT:   input  [7:0] in8,
+    // CHECK-NEXT:   output [3:0] a,
+    // CHECK-NEXT:   output [7:0] b);
 
     // CHECK-EMPTY:
     %myWire = rtl.wire : !rtl.inout<i4>  // CHECK-NEXT: wire [3:0] myWire;
     %myReg = rtl.reg : !rtl.inout<i8>    // CHECK-NEXT: reg  [7:0] myReg;
+
+    // CHECK-NEXT: reg  [7:0] myRegArray1[41:0];
+    %myRegArray1 = rtl.reg : !rtl.inout<array<42 x i8>>
+    // CHECK-NEXT: wire [3:0] myWireArray2[41:0][2:0];
+    %myWireArray2 = rtl.wire : !rtl.inout<array<3 x array<42 x i4>>>
 
     // CHECK-EMPTY:
     rtl.connect %myWire, %in4 : i4       // CHECK-NEXT: assign myWire = in4;
