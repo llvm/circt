@@ -27,6 +27,8 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<TextualValueOp,
+                       // Declarations.
+                       RegOp,
                        // Control flow.
                        IfDefOp, IfOp, AlwaysOp, InitialOp,
                        // Other Statements.
@@ -61,6 +63,9 @@ public:
   ResultType visitSV(OPTYPE op, ExtraArgs... args) {                           \
     return static_cast<ConcreteType *>(this)->visit##OPKIND##SV(op, args...);  \
   }
+
+  // Declarations
+  HANDLE(RegOp, Unhandled);
 
   // Expressions
   HANDLE(TextualValueOp, Unhandled)
