@@ -95,6 +95,11 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
   } else  {                        // CHECK-NEXT: `else
     sv.verbatim "`define Thing2"   // CHECK-NEXT:   `define Thing2
   }                                // CHECK-NEXT: `endif
+
+  %add = rtl.add %val, %val : i8
+
+  // CHECK-NEXT: `define STUFF "wire42 (val + val)"
+  sv.verbatim "`define STUFF \"{{0}} ({{1}})\"" (%wire42, %add) : !rtl.inout<i42>, i8
 }
 
 // CHECK-LABEL: module Aliasing(
@@ -135,4 +140,3 @@ rtl.module @reg(%in4: i4, %in8: i8) -> (%a: i8, %b: i8) {
     // CHECK-NEXT: assign b = myRegArray1[in4];
     rtl.output %regout, %memout : i8, i8
   }
-  
