@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+// NOLINTNEXTLINE(llvm-header-guard)
 #ifndef CIRCT_DIALECT_ESI_CAPNP_ESICAPNP_H
 #define CIRCT_DIALECT_ESI_CAPNP_ESICAPNP_H
 
