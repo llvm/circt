@@ -109,3 +109,4 @@ def StructCreateOp : RTLOp<"struct_create", [NoSideEffect]> {
 
   let parser = [{ return ::parse$cppClass(parser, result); }];
   let printer = [{ return ::print(p, *this); }];
+}
