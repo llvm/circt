@@ -19,7 +19,7 @@ def ConnectOp : RTLOp<"connect", [InOutTypeConstraint<"src", "dest">]> {
     ```
     }];
 
-  let arguments = (ins InOutType:$dest, InOutElementType:$src);
+  let arguments = (ins InOutType:$dest, RTLValueType:$src);
   let results = (outs);
   
   let assemblyFormat = [{
@@ -72,7 +72,7 @@ def ReadInOutOp
   let summary = "Get the value of from something of inout type (e.g. a wire or"
                 " inout port) as the value itself.";
   let arguments = (ins InOutType:$input);
-  let results = (outs InOutElementType:$result);
+  let results = (outs RTLValueType:$result);
 
   let builders = [
     OpBuilderDAG<(ins "Value":$input)>
@@ -86,7 +86,7 @@ def ReadInOutOp
 def StructExplodeOp : RTLOp<"struct_explode", [NoSideEffect]> {
   let summary = "Expand a struct into its constituant parts.";
   let arguments = (ins StructType:$input);
-  let results = (outs Variadic<AnyType>:$result);
+  let results = (outs Variadic<RTLValueType>:$result);
 
   let parser = [{ return ::parse$cppClass(parser, result); }];
   let printer = [{ return ::print(p, *this); }];
@@ -94,9 +94,8 @@ def StructExplodeOp : RTLOp<"struct_explode", [NoSideEffect]> {
 
 
 def StructCreateOp : RTLOp<"struct_create", [NoSideEffect]> {
-    let summary = "Get the value of from something of inout type (e.g. a wire or"
-                " inout port) as the value itself.";
-  let arguments = (ins Variadic<AnyType>:$input);
+  let summary = "Create a struct from constituant parts.";
+  let arguments = (ins Variadic<RTLValueType>:$input);
   let results = (outs StructType:$result);
 
   let parser = [{ return ::parse$cppClass(parser, result); }];

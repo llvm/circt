@@ -45,8 +45,13 @@ bool circt::rtl::isRTLValueType(Type type) {
   if (auto intType = type.dyn_cast<IntegerType>())
     return intType.isSignless();
 
-  if (type.isa<ArrayType>())
-    return true;
+  if (auto t = type.dyn_cast<ArrayType>())
+    return isRTLValueType(t.getElementType());
+
+  if (auto t = type.dyn_cast<StructType>()) {
+    return std::all_of(t.getElements().begin(), t.getElements().end(),
+                       [](const auto &f) { return isRTLValueType(f.type); });
+  }
 
   return false;
 }
@@ -57,7 +62,7 @@ bool circt::rtl::isRTLValueType(Type type) {
 namespace circt {
 namespace rtl {
 bool operator==(const StructType::FieldInfo &a,
-                       const StructType::FieldInfo &b) {
+                const StructType::FieldInfo &b) {
   return a.name == b.name && a.type == b.type;
 }
 llvm::hash_code hash_value(const StructType::FieldInfo &fi) {

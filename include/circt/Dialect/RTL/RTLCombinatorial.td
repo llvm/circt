@@ -190,18 +190,19 @@ def StructExtractOp : RTLOp<"struct_extract", [NoSideEffect]> {
   let summary = "Extract a named field from a struct.";
 
   let arguments = (ins StructType:$input, StrAttr:$field);
-  let results = (outs AnyType:$result);
+  let results = (outs RTLValueType:$result);
 
   let parser = [{ return ::parse$cppClass(parser, result); }];
   let printer = [{ return ::print(p, *this); }];
 }
 
 // Extract a range of bits from the specified input.
-def StructInjectOp : RTLOp<"struct_inject", [NoSideEffect, AllTypesMatch<["input", "result"]>]> {
+def StructInjectOp : RTLOp<"struct_inject", [NoSideEffect, 
+                           AllTypesMatch<["input", "result"]>]> {
   let summary = "Inject a value into a named field of a struct.";
 
   let arguments = (ins StructType:$input, StrAttr:$field,
-                   AnyType:$newValue);
+                   RTLValueType:$newValue);
   let results = (outs StructType:$result);
 
   let parser = [{ return ::parse$cppClass(parser, result); }];

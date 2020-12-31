@@ -54,8 +54,8 @@ def InOutType : RTLType<"InOut"> {
 }
 
 // Type constraint that indicates that an operand/result may only be a valid
-// inout element type.
-def InOutElementType : Type<CPred<"isRTLValueType($_self)">,
+// non-directional type.
+def RTLValueType : Type<CPred<"isRTLValueType($_self)">,
                             "a valid inout element">;
 
 // This type constraint is used by operations whose asm strings have a type "T"
@@ -85,9 +85,10 @@ class InOutElementConstraint<string value, string inoutValue>
 // A parent type for any type which is just a list of fields (e.g. structs,
 // unions).
 def StructType : RTLType<"Struct"> {
-  let summary = "struct type for ports and wires";
+  let summary = "RTL struct type";
   let description = [{
-    Struct type is used...
+    Struct type has value semantics, updates to the struct are logically by 
+    copy.
   }];
   let mnemonic = "struct";
 
