@@ -22,6 +22,10 @@
 using namespace mlir;
 using namespace circt::esi::capnp::detail;
 
+//===----------------------------------------------------------------------===//
+// Utilities.
+//===----------------------------------------------------------------------===//
+
 namespace {
 /// Intentation utils.
 class IndentingOStream {
@@ -52,13 +56,19 @@ static llvm::raw_ostream &emitId(llvm::raw_ostream &os, int64_t id) {
   return os << "@" << llvm::format_hex(id, /*width=*/16 + 2);
 }
 
+//===----------------------------------------------------------------------===//
+// TypeSchema class implementation.
+//===----------------------------------------------------------------------===//
+
 namespace circt {
 namespace esi {
 namespace capnp {
 namespace detail {
-struct TypeSchemaStorage {
+/// Actual implementation of `TypeSchema` to keep all the details out of the
+/// header.
+struct TypeSchemaImpl {
 public:
-  TypeSchemaStorage(Type type) : type(type) {}
+  TypeSchemaImpl(Type type) : type(type) {}
 
   /// Get the Cap'nProto schema ID for a type.
   uint64_t capnpTypeID() const;
@@ -69,26 +79,33 @@ public:
   mlir::LogicalResult write(llvm::raw_ostream &os) const;
   mlir::LogicalResult writeMetadata(llvm::raw_ostream &os) const;
 
-  bool operator==(const TypeSchemaStorage &) const;
+  bool operator==(const TypeSchemaImpl &) const;
 
 private:
   ::capnp::ParsedSchema getSchema() const;
-  ::capnp::StructSchema getStructSchema() const;
+  ::capnp::StructSchema getTypeSchema() const;
 
   Type type;
   ::capnp::SchemaParser parser;
+  mutable llvm::Optional<uint64_t> cachedID;
   mutable std::string cachedName;
-  mutable ::capnp::ParsedSchema schema;
+  mutable ::capnp::ParsedSchema rootSchema;
+  mutable ::capnp::StructSchema typeSchema;
 };
 } // namespace detail
 } // namespace capnp
 } // namespace esi
 } // namespace circt
 
-::capnp::ParsedSchema TypeSchemaStorage::getSchema() const {
-  if (schema != ::capnp::ParsedSchema())
-    return schema;
+/// Write a valid capnp schema to memory, then parse it out of memory using the
+/// capnp library. Writing and parsing text within a single process is ugly, but
+/// this is by far the easiest way to do this. This isn't the use case for which
+/// Cap'nProto was designed.
+::capnp::ParsedSchema TypeSchemaImpl::getSchema() const {
+  if (rootSchema != ::capnp::ParsedSchema())
+    return rootSchema;
 
+  // Write the schema to `schemaText`.
   std::string schemaText;
   llvm::raw_string_ostream os(schemaText);
   emitId(os, 0xFFFFFFFFFFFFFFFF) << ";\n";
@@ -96,6 +113,8 @@ private:
   assert(succeeded(rc) && "Failed schema text output.");
   os.str();
 
+  // Write `schemaText` to an in-memory filesystem then parse it. Yes, this is
+  // the only way to do this.
   kj::Own<kj::Filesystem> fs = kj::newDiskFilesystem();
   kj::Own<kj::Directory> dir = kj::newInMemoryDirectory(kj::nullClock());
   kj::Path fakePath = kj::Path::parse("schema.capnp");
@@ -103,15 +122,20 @@ private:
     auto fakeFile = dir->openFile(fakePath, kj::WriteMode::CREATE);
     fakeFile->writeAll(schemaText);
   }
-  schema = parser.parseFromDirectory(*dir, std::move(fakePath), nullptr);
-  return schema;
+  rootSchema = parser.parseFromDirectory(*dir, std::move(fakePath), nullptr);
+  return rootSchema;
 }
 
-::capnp::StructSchema TypeSchemaStorage::getStructSchema() const {
+/// Find the schema corresponding to `type` and return it.
+::capnp::StructSchema TypeSchemaImpl::getTypeSchema() const {
+  if (typeSchema != ::capnp::StructSchema())
+    return typeSchema;
   uint64_t id = capnpTypeID();
   for (auto schemaNode : getSchema().getAllNested()) {
-    if (schemaNode.getProto().getId() == id)
-      return schemaNode.asStruct();
+    if (schemaNode.getProto().getId() == id) {
+      typeSchema = schemaNode.asStruct();
+      return typeSchema;
+    }
   }
   assert(false && "A node with a matching ID should always be found.");
 }
@@ -120,7 +144,10 @@ private:
 // changes from execution to execution, we don't use it. This assumes a closed
 // type system, which is reasonable since we only support some types in the
 // Capnp schema generation anyway.
-uint64_t TypeSchemaStorage::capnpTypeID() const {
+uint64_t TypeSchemaImpl::capnpTypeID() const {
+  if (cachedID)
+    return *cachedID;
+
   // We can hash up to 64 bytes with a single function call.
   char buffer[64];
   memset(buffer, 0, sizeof(buffer));
@@ -141,24 +168,29 @@ uint64_t TypeSchemaStorage::capnpTypeID() const {
   uint64_t hash =
       llvm::hashing::detail::hash_short(buffer, 12, esiCosimSchemaVersion);
   // Capnp IDs always have a '1' high bit.
-  return hash | 0x8000000000000000;
+  cachedID = hash | 0x8000000000000000;
+  return *cachedID;
 }
 
-bool TypeSchemaStorage::isSupported() const {
+/// Returns true if the type is currently supported.
+bool TypeSchemaImpl::isSupported() const {
   return llvm::TypeSwitch<::mlir::Type, bool>(type)
       .Case<IntegerType>([](IntegerType t) { return t.getWidth() <= 64; })
       .Default([](Type) { return false; });
 }
 
 // Compute the expected size of the capnp message in bits.
-size_t TypeSchemaStorage::size() const {
-  auto schema = getStructSchema();
+size_t TypeSchemaImpl::size() const {
+  auto schema = getTypeSchema();
   auto structProto = schema.getProto().getStruct();
-  return 64 *
-         (2 + structProto.getDataWordCount() + structProto.getPointerCount());
+  return 64 * // Convert from 64-bit words to bits.
+         (2 + // Headers
+          structProto.getDataWordCount() + structProto.getPointerCount());
 }
 
-StringRef TypeSchemaStorage::name() const {
+/// For now, the name is just the type serialized. This works only because we
+/// only support ints.
+StringRef TypeSchemaImpl::name() const {
   if (cachedName == "") {
     llvm::raw_string_ostream os(cachedName);
     os << "TY" << type;
@@ -167,7 +199,10 @@ StringRef TypeSchemaStorage::name() const {
   return cachedName;
 }
 
-mlir::LogicalResult TypeSchemaStorage::write(llvm::raw_ostream &rawOS) const {
+/// This function is essentially a placeholder which only supports ints. It'll
+/// need to be re-worked when we start supporting structs, arrays, unions,
+/// enums, etc.
+mlir::LogicalResult TypeSchemaImpl::write(llvm::raw_ostream &rawOS) const {
   IndentingOStream os(rawOS);
 
   // Since capnp requires messages to be structs, emit a wrapper struct.
@@ -213,14 +248,13 @@ mlir::LogicalResult TypeSchemaStorage::write(llvm::raw_ostream &rawOS) const {
   return success();
 }
 
-mlir::LogicalResult
-TypeSchemaStorage::writeMetadata(llvm::raw_ostream &os) const {
+mlir::LogicalResult TypeSchemaImpl::writeMetadata(llvm::raw_ostream &os) const {
   os << name() << " ";
   emitId(os, capnpTypeID());
   return success();
 }
 
-bool TypeSchemaStorage::operator==(const TypeSchemaStorage &that) const {
+bool TypeSchemaImpl::operator==(const TypeSchemaImpl &that) const {
   return type == that.type;
 }
 
@@ -230,33 +264,26 @@ bool TypeSchemaStorage::operator==(const TypeSchemaStorage &that) const {
 
 circt::esi::capnp::TypeSchema::TypeSchema(Type type) {
   circt::esi::ChannelPort chan = type.dyn_cast<circt::esi::ChannelPort>();
-  if (chan)
+  if (chan) // Unwrap the channel if it's a channel.
     type = chan.getInner();
-  s = std::make_shared<detail::TypeSchemaStorage>(type);
+  s = std::make_shared<detail::TypeSchemaImpl>(type);
 }
 uint64_t circt::esi::capnp::TypeSchema::capnpTypeID() const {
   return s->capnpTypeID();
 }
-
 bool circt::esi::capnp::TypeSchema::isSupported() const {
   return s->isSupported();
 }
-
-// Compute the expected size of the capnp message in bits.
 size_t circt::esi::capnp::TypeSchema::size() const { return s->size(); }
-
 StringRef circt::esi::capnp::TypeSchema::name() const { return s->name(); }
-
 mlir::LogicalResult
-circt::esi::capnp::TypeSchema::write(llvm::raw_ostream &os) {
+circt::esi::capnp::TypeSchema::write(llvm::raw_ostream &os) const {
   return s->write(os);
 }
-
 mlir::LogicalResult
-circt::esi::capnp::TypeSchema::writeMetadata(llvm::raw_ostream &os) {
+circt::esi::capnp::TypeSchema::writeMetadata(llvm::raw_ostream &os) const {
   return s->writeMetadata(os);
 }
-
 bool circt::esi::capnp::TypeSchema::operator==(const TypeSchema &that) const {
   return *s == *that.s;
 }
