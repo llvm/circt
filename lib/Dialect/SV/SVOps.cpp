@@ -14,6 +14,7 @@
 #include "circt/Dialect/RTL/RTLTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "llvm/ADT/SmallString.h"
 
 using namespace circt;
 using namespace sv;
@@ -24,6 +25,82 @@ bool sv::isExpression(Operation *op) {
 }
 
 //===----------------------------------------------------------------------===//
+// RegOp
+//===----------------------------------------------------------------------===//
+
+void RegOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+                  Type elementType, StringAttr name) {
+  if (name)
+    odsState.addAttribute("name", name);
+
+  odsState.addTypes(rtl::InOutType::get(elementType));
+}
+
+/// Suggest a name for each result value based on the saved result names
+/// attribute.
+void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the wire has an optional 'name' attribute, use it.
+  if (auto nameAttr = getAttrOfType<StringAttr>("name"))
+    setNameFn(getResult(), nameAttr.getValue());
+}
+
+static void printRegOp(OpAsmPrinter &p, Operation *op) {
+  p << op->getName();
+  // Note that we only need to print the "name" attribute if the asmprinter
+  // result name disagrees with it.  This can happen in strange cases, e.g.
+  // when there are conflicts.
+  bool namesDisagree = false;
+
+  SmallString<32> resultNameStr;
+  llvm::raw_svector_ostream tmpStream(resultNameStr);
+  p.printOperand(op->getResult(0), tmpStream);
+  auto expectedName = op->getAttrOfType<StringAttr>("name");
+  if (!expectedName ||
+      tmpStream.str().drop_front() != expectedName.getValue()) {
+    namesDisagree = true;
+  }
+
+  if (namesDisagree)
+    p.printOptionalAttrDict(op->getAttrs());
+  else
+    p.printOptionalAttrDict(op->getAttrs(), {"name"});
+
+  p << " : " << op->getResult(0).getType();
+}
+
+static ParseResult parseRegOp(OpAsmParser &parser, OperationState &result) {
+  llvm::SMLoc typeLoc;
+  Type resultType;
+
+  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.getCurrentLocation(&typeLoc) || parser.parseType(resultType))
+    return failure();
+
+  result.addTypes(resultType);
+
+  // If the attribute dictionary contains no 'name' attribute, infer it from
+  // the SSA name (if specified).
+  bool hadName = llvm::any_of(result.attributes, [](NamedAttribute attr) {
+    return attr.first == "name";
+  });
+
+  // If there was no name specified, check to see if there was a useful name
+  // specified in the asm file.
+  if (hadName)
+    return success();
+
+  auto resultName = parser.getResultName(0);
+  if (!resultName.first.empty() && !isdigit(resultName.first[0])) {
+    StringRef name = resultName.first;
+    auto *context = result.getContext();
+    auto nameAttr = parser.getBuilder().getStringAttr(name);
+    result.attributes.push_back({Identifier::get("name", context), nameAttr});
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Control flow like-operations
 //===----------------------------------------------------------------------===//
 
@@ -31,16 +108,26 @@ bool sv::isExpression(Operation *op) {
 // IfDefOp
 
 void IfDefOp::build(OpBuilder &odsBuilder, OperationState &result,
-                    StringRef cond, std::function<void()> bodyCtor) {
+                    StringRef cond, std::function<void()> thenCtor,
+                    std::function<void()> elseCtor) {
   result.addAttribute("cond", odsBuilder.getStringAttr(cond));
-  Region *body = result.addRegion();
-  IfDefOp::ensureTerminator(*body, odsBuilder, result.location);
+  Region *thenRegion = result.addRegion();
+  IfDefOp::ensureTerminator(*thenRegion, odsBuilder, result.location);
 
   // Fill in the body of the #ifdef.
-  if (bodyCtor) {
+  if (thenCtor) {
     auto oldIP = &*odsBuilder.getInsertionPoint();
-    odsBuilder.setInsertionPointToStart(&*body->begin());
-    bodyCtor();
+    odsBuilder.setInsertionPointToStart(&*thenRegion->begin());
+    thenCtor();
+    odsBuilder.setInsertionPoint(oldIP);
+  }
+
+  Region *elseRegion = result.addRegion();
+  if (elseCtor) {
+    IfDefOp::ensureTerminator(*elseRegion, odsBuilder, result.location);
+    auto oldIP = &*odsBuilder.getInsertionPoint();
+    odsBuilder.setInsertionPointToStart(&*elseRegion->begin());
+    elseCtor();
     odsBuilder.setInsertionPoint(oldIP);
   }
 }
@@ -64,13 +151,29 @@ void IfOp::build(OpBuilder &odsBuilder, OperationState &result, Value cond,
 }
 
 //===----------------------------------------------------------------------===//
-// AlwaysAtPosEdgeOp
+// AlwaysOp
 
-void AlwaysAtPosEdgeOp::build(OpBuilder &odsBuilder, OperationState &result,
-                              Value clock, std::function<void()> bodyCtor) {
-  result.addOperands(clock);
+AlwaysOp::Condition AlwaysOp::getCondition(size_t idx) {
+  return Condition{EventControl(events()[idx].cast<IntegerAttr>().getInt()),
+                   getOperand(idx)};
+}
+
+void AlwaysOp::build(OpBuilder &odsBuilder, OperationState &result,
+                     ArrayRef<EventControl> events, ArrayRef<Value> clocks,
+                     std::function<void()> bodyCtor) {
+  assert(events.size() == clocks.size() &&
+         "mismatch between event and clock list");
+
+  SmallVector<Attribute> eventAttrs;
+  for (auto event : events)
+    eventAttrs.push_back(
+        odsBuilder.getI32IntegerAttr(static_cast<int32_t>(event)));
+  result.addAttribute("events", odsBuilder.getArrayAttr(eventAttrs));
+  result.addOperands(clocks);
+
+  // Set up the body.
   Region *body = result.addRegion();
-  AlwaysAtPosEdgeOp::ensureTerminator(*body, odsBuilder, result.location);
+  AlwaysOp::ensureTerminator(*body, odsBuilder, result.location);
 
   // Fill in the body of the #ifdef.
   if (bodyCtor) {
@@ -78,6 +181,56 @@ void AlwaysAtPosEdgeOp::build(OpBuilder &odsBuilder, OperationState &result,
     odsBuilder.setInsertionPointToStart(&*body->begin());
     bodyCtor();
     odsBuilder.setInsertionPoint(oldIP);
+  }
+}
+
+/// Ensure that the symbol being instantiated exists and is an InterfaceOp.
+static LogicalResult verifyAlwaysOp(AlwaysOp op) {
+  if (op.events().size() != op.getNumOperands())
+    return op.emitError("different number of operands and events");
+  return success();
+}
+
+static ParseResult
+parseEventList(OpAsmParser &p, Attribute &eventsAttr,
+               SmallVectorImpl<OpAsmParser::OperandType> &clocksOperands) {
+
+  // Parse zero or more conditions intoevents and clocksOperands.
+  SmallVector<Attribute> events;
+
+  auto loc = p.getCurrentLocation();
+  StringRef keyword;
+  if (!p.parseOptionalKeyword(&keyword)) {
+    while (1) {
+      auto kind = symbolizeEventControl(keyword);
+      if (!kind.hasValue())
+        return p.emitError(loc, "expected 'posedge', 'negedge', or 'edge'");
+      auto eventEnum = static_cast<int32_t>(kind.getValue());
+      events.push_back(p.getBuilder().getI32IntegerAttr(eventEnum));
+
+      clocksOperands.push_back({});
+      if (p.parseOperand(clocksOperands.back()))
+        return failure();
+
+      if (failed(p.parseOptionalComma()))
+        break;
+      if (p.parseKeyword(&keyword))
+        return failure();
+    }
+  }
+  eventsAttr = p.getBuilder().getArrayAttr(events);
+  return success();
+}
+
+static void printEventList(OpAsmPrinter &p, AlwaysOp op, ArrayAttr portsAttr,
+                           OperandRange operands) {
+  for (size_t i = 0, e = op.getNumConditions(); i != e; ++i) {
+    if (i != 0)
+      p << ", ";
+    auto cond = op.getCondition(i);
+    p << stringifyEventControl(cond.event);
+    p << ' ';
+    p.printOperand(cond.value);
   }
 }
 
@@ -124,11 +277,9 @@ static ParseResult parseModportStructs(OpAsmParser &parser,
 
   SmallVector<Attribute, 8> ports;
   do {
-    NamedAttrList tmpAttrs;
     StringAttr direction;
     FlatSymbolRefAttr signal;
-    if (parser.parseAttribute(direction, "port", tmpAttrs) ||
-        parser.parseAttribute(signal, "signal", tmpAttrs))
+    if (parser.parseAttribute(direction) || parser.parseAttribute(signal))
       return failure();
 
     ports.push_back(ModportStructAttr::get(direction, signal, context));
@@ -138,22 +289,18 @@ static ParseResult parseModportStructs(OpAsmParser &parser,
     return failure();
 
   portsAttr = ArrayAttr::get(ports, context);
-
   return success();
 }
 
 static void printModportStructs(OpAsmPrinter &p, Operation *,
                                 ArrayAttr portsAttr) {
   p << " (";
-  for (size_t i = 0, e = portsAttr.size(); i != e; ++i) {
-    auto port = portsAttr[i].dyn_cast<ModportStructAttr>();
+  llvm::interleaveComma(portsAttr, p, [&](Attribute attr) {
+    auto port = attr.cast<ModportStructAttr>();
     p << port.direction();
     p << ' ';
     p.printSymbolName(port.signal().getRootReference());
-    if (i < e - 1) {
-      p << ", ";
-    }
-  }
+  });
   p << ')';
 }
 

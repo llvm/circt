@@ -27,22 +27,6 @@ def ConnectOp : RTLOp<"connect", [InOutTypeConstraint<"src", "dest">]> {
   }];
 }
 
-def RegOp : RTLOp<"reg", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
-  let summary = "Define a new reg";
-  let arguments = (ins OptionalAttr<StrAttr>:$name);
-  let results = (outs InOutType:$result);
-
-  let skipDefaultBuilders = 1;
-  let builders = [
-    OpBuilderDAG<(ins "::mlir::Type":$elementType,
-                      CArg<"StringAttr", "StringAttr()">:$name)>
-  ];
-
-  // We handle the name in a custom way, so we use a customer parser/printer.
-  let printer = [{ printRegWireOp(p, *this); }];
-  let parser = [{ return parseRegWireOp(parser, result); }];
-}
-
 def WireOp : RTLOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let summary = "Define a new wire";
   let description = [{
@@ -62,9 +46,11 @@ def WireOp : RTLOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   ];
 
   // We handle the name in a custom way, so we use a customer parser/printer.
-  let printer = [{ printRegWireOp(p, *this); }];
-  let parser = [{ return parseRegWireOp(parser, result); }];
+  let printer = [{ printWireOp(p, *this); }];
+  let parser = [{ return parseWireOp(parser, result); }];
 }
+
+// Expressions used for working with inout types.
 
 def ReadInOutOp
  : RTLOp<"read_inout",
@@ -80,6 +66,29 @@ def ReadInOutOp
 
   let assemblyFormat = [{
     $input attr-dict `:` type($input)
+  }];
+}
+
+class InOutIndexConstraint<string value, string inoutValue>
+  : TypesMatchWith<"type should be element of inout type",
+                   inoutValue, value,
+                   "InOutType::get($_self.cast<InOutType>().getElementType()"
+                                        ".cast<ArrayType>().getElementType())">;
+
+def ArrayIndexOp
+ : RTLOp<"arrayindex",
+         [NoSideEffect, InOutIndexConstraint<"result", "input">]> {
+  let summary = "Index an inout memory to produce an inout element";
+  let description = "See SV Spec 11.5.2.";
+  let arguments = (ins InOutArrayType:$input, AnySignlessInteger:$index);
+  let results = (outs InOutType:$result);
+
+  let builders = [
+    OpBuilderDAG<(ins "Value":$input)>
+  ];
+
+  let assemblyFormat = [{
+    $input`[`$index`]` attr-dict `:` type($input) `,` type($index)
   }];
 }
 
@@ -100,5 +109,3 @@ def StructCreateOp : RTLOp<"struct_create", [NoSideEffect]> {
 
   let parser = [{ return ::parse$cppClass(parser, result); }];
   let printer = [{ return ::print(p, *this); }];
-
-}

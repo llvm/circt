@@ -84,6 +84,16 @@ static int getBitWidthOrSentinel(Type type) {
       .Default([](Type) { return -1; });
 }
 
+/// Given a type that may be an array or inout, dig through recursive arrays to
+/// find the underlying element type.
+static Type getUnderlyingArrayElementType(Type type) {
+  if (auto array = type.dyn_cast<rtl::ArrayType>())
+    return getUnderlyingArrayElementType(array.getElementType());
+  if (auto inout = type.dyn_cast<rtl::InOutType>())
+    return getUnderlyingArrayElementType(inout.getElementType());
+  return type;
+}
+
 /// Return the type of the specified value, force casting to the subtype.
 template <typename T = FIRRTLType>
 static T getTypeOf(Value v) {
@@ -325,7 +335,7 @@ public:
   void emitStatement(StopOp op);
   void emitStatement(sv::IfDefOp op);
   void emitStatement(sv::IfOp op);
-  void emitStatement(sv::AlwaysAtPosEdgeOp op);
+  void emitStatement(sv::AlwaysOp op);
   void emitStatement(sv::InitialOp op);
   void emitStatement(sv::FWriteOp op);
   void emitStatement(sv::FatalOp op);
@@ -868,6 +878,7 @@ private:
   SubExprInfo visitExpr(AsNonPassivePrimOp op) { return emitNoopCast(op); }
 
   // Other
+  SubExprInfo visitComb(rtl::ArrayIndexOp op);
   SubExprInfo visitExpr(SubfieldOp op);
   SubExprInfo visitExpr(ValidIfPrimOp op);
   SubExprInfo visitExpr(MuxPrimOp op);
@@ -920,7 +931,15 @@ private:
   }
   SubExprInfo visitComb(rtl::AndOp op) { return emitVariadic(op, And, "&"); }
   SubExprInfo visitComb(rtl::OrOp op) { return emitVariadic(op, Or, "|"); }
-  SubExprInfo visitComb(rtl::XorOp op) { return emitVariadic(op, Xor, "^"); }
+  SubExprInfo visitComb(rtl::XorOp op) {
+    if (op.getNumOperands() == 2)
+      if (auto cst = dyn_cast_or_null<rtl::ConstantOp>(
+              op.getOperand(1).getDefiningOp()))
+        if (cst.getValue().isAllOnesValue())
+          return emitUnary(op, "~", true);
+
+    return emitVariadic(op, Xor, "^");
+  }
 
   SubExprInfo visitComb(rtl::AndROp op) { return emitUnary(op, "&", true); }
   SubExprInfo visitComb(rtl::OrROp op) { return emitUnary(op, "|", true); }
@@ -1282,6 +1301,14 @@ SubExprInfo ExprEmitter::visitComb(rtl::ConstantOp op) {
   return {Unary, resType.isSigned() ? IsSigned : IsUnsigned};
 }
 
+SubExprInfo ExprEmitter::visitComb(rtl::ArrayIndexOp op) {
+  auto arrayPrec = emitSubExpr(op.input(), Symbol);
+  os << '[';
+  emitSubExpr(op.index(), LowestPrecedence);
+  os << ']';
+  return {Symbol, arrayPrec.signedness};
+}
+
 SubExprInfo ExprEmitter::visitExpr(SubfieldOp op) {
   auto prec = emitSubExpr(op.getOperand(), Unary);
   // TODO(verilog dialect): This is a hack, relying on the fact that only
@@ -1585,7 +1612,6 @@ void ModuleEmitter::emitStatement(sv::AliasOp op) {
 /// assign the module outputs to intermediate wires.
 void ModuleEmitter::emitStatement(rtl::OutputOp op) {
   SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
 
   SmallVector<rtl::ModulePortInfo, 8> ports;
   rtl::RTLModuleOp parent = op.getParentOfType<rtl::RTLModuleOp>();
@@ -1594,6 +1620,8 @@ void ModuleEmitter::emitStatement(rtl::OutputOp op) {
   for (rtl::ModulePortInfo port : ports) {
     if (!port.isOutput())
       continue;
+    ops.clear();
+    ops.insert(op);
     indent() << "assign " << port.getName() << " = ";
     emitExpression(op.getOperand(operandIndex), ops);
     os << ';';
@@ -1670,9 +1698,9 @@ void ModuleEmitter::emitStatement(sv::VerbatimOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  // Drop extraneous \n's off the end of the string.
+  // Drop an extraneous \n off the end of the string if present.
   StringRef string = op.string();
-  while (!string.empty() && string.back() == '\n')
+  if (string.endswith("\n"))
     string = string.drop_back();
 
   // Emit each \n separated piece of the string with each piece properly
@@ -1681,6 +1709,7 @@ void ModuleEmitter::emitStatement(sv::VerbatimOp op) {
   bool isFirst = true;
   indent();
 
+  // Emit each line of the string at a time.
   while (!string.empty()) {
     auto lhsRhs = string.split('\n');
     if (isFirst)
@@ -1689,7 +1718,69 @@ void ModuleEmitter::emitStatement(sv::VerbatimOp op) {
       os << '\n';
       indent();
     }
-    os << lhsRhs.first;
+
+    StringRef line = lhsRhs.first;
+
+    // Perform operand substitions as we emit the line string.  We turn {{42}}
+    // into the value of operand 42.
+
+    // Scan 'line' for a substitution, emitting any non-substitution prefix,
+    // then the mentioned operand, chopping the relevant text off 'line' and
+    // returning true.  This returns false if no substitution is found.
+    auto emitUntilSubstitution = [&](size_t next = 0) -> bool {
+      size_t start = 0;
+      while (1) {
+        next = line.find("{{", next);
+        if (next == StringRef::npos)
+          return false;
+
+        // Check to make sure we have a number followed by }}.  If not, we
+        // ignore the {{ sequence as something that could happen in Verilog.
+        next += 2;
+        start = next;
+        while (next < line.size() && isdigit(line[next]))
+          ++next;
+        // We need at least one digit.
+        if (start == next)
+          continue;
+
+        // We must have a }} right after the digits.
+        if (!line.substr(next).startswith("}}"))
+          continue;
+
+        // We must be able to decode the integer into an unsigned.
+        unsigned operandNo = 0;
+        if (line.drop_front(start)
+                .take_front(next - start)
+                .getAsInteger(10, operandNo)) {
+          op.emitError("operand substitution too large");
+          continue;
+        }
+        next += 2;
+
+        if (operandNo >= op.operands().size()) {
+          op.emitError("operand " + llvm::utostr(operandNo) + " isn't valid");
+          continue;
+        }
+
+        // Emit any text before the substitution.
+        os << line.take_front(start - 2);
+
+        // Emit the operand.
+        os << emitExpressionToString(op.operands()[operandNo], ops);
+
+        // Forget about the part we emitted.
+        line = line.drop_front(next);
+        return true;
+      }
+    };
+
+    // Emit all the substitutions.
+    while (emitUntilSubstitution())
+      ;
+
+    // Emit any text after the last substitution.
+    os << line;
     string = lhsRhs.second;
   }
 
@@ -1737,9 +1828,17 @@ void ModuleEmitter::emitStatement(sv::IfDefOp op) {
   emitLocationInfoAndNewLine(ops);
 
   addIndent();
-  for (auto &op : op.getBodyBlock()->without_terminator())
+  for (auto &op : op.getThenBlock()->without_terminator())
     emitOperation(&op);
   reduceIndent();
+
+  if (op.hasElse()) {
+    indent() << "`else\n";
+    addIndent();
+    for (auto &op : op.getElseBlock()->without_terminator())
+      emitOperation(&op);
+    reduceIndent();
+  }
 
   indent() << "`endif\n";
 }
@@ -1751,14 +1850,16 @@ void ModuleEmitter::emitStatement(sv::IfDefOp op) {
 static void emitBeginEndRegion(Block *block,
                                SmallPtrSet<Operation *, 8> &locationOps,
                                ModuleEmitter &emitter,
-                               const char *multiLineComment = nullptr) {
+                               StringRef multiLineComment = StringRef()) {
   auto isSingleVerilogStatement = [&](Operation &op) {
     // Not all expressions and statements are guaranteed to emit a single
     // Verilog statement (for the purposes of if statements).  Just do a simple
     // check here for now.  This can be improved over time.
     return isa<sv::FWriteOp>(op) || isa<sv::FinishOp>(op) ||
            isa<sv::FatalOp>(op) || isa<sv::AssertOp>(op) ||
-           isa<sv::AssumeOp>(op) || isa<sv::CoverOp>(op);
+           isa<sv::AssumeOp>(op) || isa<sv::CoverOp>(op) ||
+           isa<sv::BPAssignOp>(op) || isa<sv::PAssignOp>(op) ||
+           isa<rtl::ConnectOp>(op);
   };
 
   // Determine if we can omit the begin/end keywords.
@@ -1775,7 +1876,7 @@ static void emitBeginEndRegion(Block *block,
 
   if (!hasOneStmt) {
     emitter.indent() << "end";
-    if (multiLineComment)
+    if (!multiLineComment.empty())
       emitter.os << " // " << multiLineComment;
     emitter.os << '\n';
   }
@@ -1789,13 +1890,53 @@ void ModuleEmitter::emitStatement(sv::IfOp op) {
   emitBeginEndRegion(op.getBodyBlock(), ops, *this);
 }
 
-void ModuleEmitter::emitStatement(sv::AlwaysAtPosEdgeOp op) {
+void ModuleEmitter::emitStatement(sv::AlwaysOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  indent() << "always @(posedge " << emitExpressionToString(op.clock(), ops)
-           << ")";
-  emitBeginEndRegion(op.getBodyBlock(), ops, *this, "always @(posedge)");
+  auto printEvent = [&](sv::AlwaysOp::Condition cond) {
+    os << stringifyEventControl(cond.event) << ' '
+       << emitExpressionToString(cond.value, ops);
+  };
+
+  switch (op.getNumConditions()) {
+  case 0:
+    indent() << "always @*";
+    break;
+  case 1:
+    indent() << "always @(";
+    printEvent(op.getCondition(0));
+    os << ')';
+    break;
+  default:
+    indent() << "always @(";
+    printEvent(op.getCondition(0));
+    for (size_t i = 1, e = op.getNumConditions(); i != e; ++i) {
+      os << " or ";
+      printEvent(op.getCondition(i));
+    }
+    os << ')';
+    break;
+  }
+
+  // Build the comment string, leave out the signal expressions (since they
+  // can be large).
+  std::string comment;
+  if (op.getNumConditions() == 0) {
+    comment = "always @*";
+  } else {
+    comment = "always @(";
+    llvm::interleave(
+        op.events(),
+        [&](Attribute eventAttr) {
+          auto event = EventControl(eventAttr.cast<IntegerAttr>().getInt());
+          comment += stringifyEventControl(event);
+        },
+        [&]() { comment += ", "; });
+    comment += ')';
+  }
+
+  emitBeginEndRegion(op.getBodyBlock(), ops, *this, comment);
 }
 
 void ModuleEmitter::emitStatement(sv::InitialOp op) {
@@ -2264,6 +2405,19 @@ static bool isExpressionEmittedInline(Operation *op) {
   return op->getResult(0).hasOneUse();
 }
 
+// Print out the array subscripts after a wire/port declaration.
+static void printArraySubscripts(Type type, raw_ostream &os) {
+  if (auto inout = type.dyn_cast<rtl::InOutType>())
+    return printArraySubscripts(inout.getElementType(), os);
+
+  auto array = type.dyn_cast<rtl::ArrayType>();
+  if (!array)
+    return;
+
+  printArraySubscripts(array.getElementType(), os);
+  os << '[' << (array.getSize() - 1) << ":0]";
+}
+
 void ModuleEmitter::collectNamesEmitDecls(Block &block) {
   // In the first pass, we fill in the symbol table, calculate the max width
   // of the declaration words and the max type width.
@@ -2271,7 +2425,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
   // Return the word (e.g. "wire") in Verilog to declare the specified thing.
   auto getVerilogDeclWord = [](Operation *op) -> StringRef {
-    if (isa<RegOp>(op) || isa<RegInitOp>(op) || isa<rtl::RegOp>(op))
+    if (isa<RegOp>(op) || isa<RegInitOp>(op) || isa<sv::RegOp>(op))
       return "reg";
 
     // Interfaces instances use the name of the declared interface.
@@ -2340,7 +2494,8 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       if (elt.type.isa<sv::InterfaceType>())
         continue;
 
-      int bitWidth = getBitWidthOrSentinel(elt.type);
+      int bitWidth =
+          getBitWidthOrSentinel(getUnderlyingArrayElementType(elt.type));
       if (bitWidth == -1) {
         emitError(&op, getName(result))
             << elt.suffix << " has an unsupported verilog type " << elt.type;
@@ -2378,16 +2533,22 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       indent() << word;
       os.indent(maxDeclNameWidth - word.size() + 1);
 
+      auto elementType = getUnderlyingArrayElementType(elt.type);
+
       // Skip over SV interface types, which don't have any emitted width.
       bool isInterface = elt.type.isa<sv::InterfaceType>();
       if (!isInterface)
-        emitTypePaddedToWidth(elt.type, maxTypeWidth, decl);
+        emitTypePaddedToWidth(elementType, maxTypeWidth, decl);
 
       os << getName(decl->getResult(0)) << elt.suffix;
 
       // Interface instantiations have parentheses like a module with no ports.
-      if (isInterface)
+      if (isInterface) {
         os << "()";
+      } else {
+        // Print out any array subscripts.
+        printArraySubscripts(elt.type, os);
+      }
 
       os << ';';
       if (isFirst)
@@ -2511,7 +2672,6 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitStmt(rtl::InstanceOp op) {
       return emitter.emitStatement(op), true;
     }
-    bool visitStmt(rtl::RegOp op) { return true; }
     bool visitStmt(rtl::WireOp op) { return true; }
 
     bool visitUnhandledStmt(Operation *op) { return false; }
@@ -2531,9 +2691,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
     using Visitor::visitSV;
     bool visitSV(sv::IfDefOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::IfOp op) { return emitter.emitStatement(op), true; }
-    bool visitSV(sv::AlwaysAtPosEdgeOp op) {
-      return emitter.emitStatement(op), true;
-    }
+    bool visitSV(sv::AlwaysOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::InitialOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::BPAssignOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::PAssignOp op) { return emitter.emitStatement(op), true; }
@@ -2545,6 +2703,8 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitSV(sv::AssertOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::AssumeOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::CoverOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::RegOp op) { return true; }
+
     bool visitSV(sv::InterfaceInstanceOp op) { return true; }
     bool visitSV(sv::InterfaceSignalOp op) {
       return emitter.emitDecl(op), true;
@@ -2970,7 +3130,7 @@ void CircuitEmitter::emitCircuit(CircuitOp circuit) {
   // location info and any other interesting metadata (e.g. comment
   // block) attached to it.
   os << R"XXX(
-// Standard header to adapt well known macros to our needs.\n";
+// Standard header to adapt well known macros to our needs.
 `ifdef RANDOMIZE_GARBAGE_ASSIGN
 `define RANDOMIZE
 `endif
@@ -3057,6 +3217,10 @@ void CircuitEmitter::emitMLIRModule(ModuleOp module) {
       ModuleEmitter(state).emitRTLExternModule(module);
     else if (auto interface = dyn_cast<sv::InterfaceOp>(op))
       ModuleEmitter(state).emitDecl(interface);
+    else if (auto verbatim = dyn_cast<sv::VerbatimOp>(op))
+      ModuleEmitter(state).emitStatement(verbatim);
+    else if (auto verbatim = dyn_cast<sv::IfDefOp>(op))
+      ModuleEmitter(state).emitStatement(verbatim);
     else if (!isa<ModuleTerminatorOp>(op))
       op.emitError("unknown operation");
   }

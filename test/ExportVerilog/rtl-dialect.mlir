@@ -15,7 +15,7 @@ module {
     %r17: i1, %r18: i1, %r19: i1, %r20: i1,
     %r21: i1, %r22: i1, %r23: i1, %r24: i1,
     %r25: i1, %r26: i1, %r27: i1, %r28: i1,
-    %r29: i12, %r30: i2, %r31: i9, %r32: i9, %r33: i4
+    %r29: i12, %r30: i2, %r31: i9, %r32: i9, %r33: i4, %r34: i4
     ) {
     
     %0 = rtl.add %a, %b : i4
@@ -50,10 +50,13 @@ module {
     %32 = rtl.zext %a : (i4) -> i9
     %33 = rtl.mux %cond, %a, %b : i4
 
-    rtl.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, %30, %31, %32, %33: 
+    %allone = rtl.constant (15 : i4) : i4
+    %34 = rtl.xor %a, %allone : i4
+
+    rtl.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, %30, %31, %32, %33, %34:
      i4,i4, i4,i4,i4,i4,i4, i4,i4,i4,i4,i4,
      i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,i1,i1,
-     i12, i2,i9,i9,i4
+     i12, i2,i9,i9,i4, i4
   }
   // CHECK-LABEL: module TESTSIMPLE(
   // CHECK-NEXT:   input  [3:0]  a, b
@@ -63,7 +66,7 @@ module {
   // CHECK-NEXT:   output [11:0] r29,
   // CHECK-NEXT:   output [1:0]  r30,
   // CHECK-NEXT:   output [8:0]  r31, r32,
-  // CHECK-NEXT:   output [3:0]  r33);
+  // CHECK-NEXT:   output [3:0]  r33, r34);
   // CHECK-EMPTY:
   // CHECK-NEXT:   assign r0 = a + b;
   // CHECK-NEXT:   assign r2 = a - b;
@@ -96,6 +99,7 @@ module {
   // CHECK-NEXT:   assign r31 = {{[{}][{}]}}5{a[3]}}, a};
   // CHECK-NEXT:   assign r32 = {{[{}][{}]}}5'd0}, a};
   // CHECK-NEXT:   assign r33 = cond ? a : b;
+  // CHECK-NEXT:   assign r34 = ~a;
   // CHECK-NEXT: endmodule
 
   rtl.module @B(%a: i1) -> (%b: i1, %c: i1) {
@@ -236,27 +240,35 @@ module {
   // CHECK: wire [16:0] _T = 17'h11A2C;
   // CHECK: assign tmp6 = {{[{][{]}}332{_T[16]}}, _T};
 
-  rtl.module @reg_wire(%in4: i4, %in8: i8) -> (%a: i4, %b: i8) {
-    // CHECK-LABEL: module reg_wire(
+  rtl.module @wires(%in4: i4, %in8: i8) -> (%a: i4, %b: i8) {
+    // CHECK-LABEL: module wires(
     // CHECK-NEXT:   input  [3:0] in4,
-    // CHECK-NEXT:     input  [7:0] in8,
-    // CHECK-NEXT:     output [3:0] a,
-    // CHECK-NEXT:     output [7:0] b);
+    // CHECK-NEXT:   input  [7:0] in8,
+    // CHECK-NEXT:   output [3:0] a,
+    // CHECK-NEXT:   output [7:0] b);
 
     // CHECK-EMPTY:
     %myWire = rtl.wire : !rtl.inout<i4>  // CHECK-NEXT: wire [3:0] myWire;
-    %myReg = rtl.reg : !rtl.inout<i8>    // CHECK-NEXT: reg  [7:0] myReg;
+
+    // CHECK-NEXT: wire [7:0] myArray1[41:0];
+    %myArray1 = rtl.wire : !rtl.inout<array<42 x i8>>
+    // CHECK-NEXT: wire [3:0] myWireArray2[41:0][2:0];
+    %myWireArray2 = rtl.wire : !rtl.inout<array<3 x array<42 x i4>>>
 
     // CHECK-EMPTY:
     rtl.connect %myWire, %in4 : i4       // CHECK-NEXT: assign myWire = in4;
-    rtl.connect %myReg, %in8 : i8        // CHECK-NEXT: assign myReg = in8;
+
+    %subscript1 = rtl.arrayindex %myArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
+    rtl.connect %subscript1, %in8 : i8   // CHECK-NEXT: assign myArray1[in4] = in8;
 
     %wireout = rtl.read_inout %myWire : !rtl.inout<i4>
-    %regout = rtl.read_inout %myReg : !rtl.inout<i8>
+
+    %subscript2 = rtl.arrayindex %myArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
+    %memout = rtl.read_inout %subscript2 : !rtl.inout<i8>
 
     // CHECK-NEXT: assign a = myWire;
-    // CHECK-NEXT: assign b = myReg;
-    rtl.output %wireout, %regout : i4, i8
+    // CHECK-NEXT: assign b = myArray1[in4];
+    rtl.output %wireout, %memout : i4, i8
   }
 }
 

@@ -20,8 +20,9 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 #define GET_OP_CLASSES
-#include "circt/Dialect/SV/SV.h.inc"
 #include "circt/Dialect/SV/SVEnums.h.inc"
+// Clang format shouldn't reorder these headers.
+#include "circt/Dialect/SV/SV.h.inc"
 #include "circt/Dialect/SV/SVStructs.h.inc"
 
 namespace circt {

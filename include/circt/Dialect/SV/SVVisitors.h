@@ -27,8 +27,10 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<TextualValueOp,
+                       // Declarations.
+                       RegOp,
                        // Control flow.
-                       IfDefOp, IfOp, AlwaysAtPosEdgeOp, InitialOp,
+                       IfDefOp, IfOp, AlwaysOp, InitialOp,
                        // Other Statements.
                        YieldOp, BPAssignOp, PAssignOp, AliasOp, FWriteOp,
                        FatalOp, FinishOp, VerbatimOp,
@@ -62,13 +64,16 @@ public:
     return static_cast<ConcreteType *>(this)->visit##OPKIND##SV(op, args...);  \
   }
 
+  // Declarations
+  HANDLE(RegOp, Unhandled);
+
   // Expressions
   HANDLE(TextualValueOp, Unhandled)
 
   // Control flow.
   HANDLE(IfDefOp, Unhandled);
   HANDLE(IfOp, Unhandled);
-  HANDLE(AlwaysAtPosEdgeOp, Unhandled);
+  HANDLE(AlwaysOp, Unhandled);
   HANDLE(InitialOp, Unhandled);
 
   // Other Statements.

@@ -14,6 +14,7 @@
 #define SV_TD
 
 include "mlir/IR/OpBase.td"
+include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
@@ -34,6 +35,7 @@ class SVOp<string mnemonic, list<OpTrait> traits = []> :
     Op<SVDialect, mnemonic, traits>;
 
 include "SVTypes.td"
+include "SVDeclarations.td"
 include "SVExpressions.td"
 include "SVStatements.td"
 include "SVTypeDecl.td"

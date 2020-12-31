@@ -16,7 +16,8 @@ def HasRegionTerminator : SingleBlockImplicitTerminator<"YieldOp">;
 // Control flow like-operations
 //===----------------------------------------------------------------------===//
 
-def IfDefOp : SVOp<"ifdef", [HasRegionTerminator]> {
+def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments,
+                             RecursiveSideEffects]> {
   let summary = "'ifdef MACRO' block";
    
    let description = [{
@@ -24,26 +25,39 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator]> {
     with a `!` character.
     }];
 
-  let regions = (region SizedRegion<1>:$body);
+  let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
   let arguments = (ins StrAttr:$cond);
   let results = (outs);
   
-  let assemblyFormat = [{ $cond regions attr-dict }];
+  let assemblyFormat = [{ $cond $thenRegion (`else` $elseRegion^)? attr-dict }];
 
   // TODO: ODS forces using a custom builder just to get the region terminator
   // implicitly installed.
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilderDAG<(ins "StringRef":$cond,
-                      CArg<"std::function<void()>", "{}">:$bodyCtor)>
+                      CArg<"std::function<void()>", "{}">:$thenCtor,
+                      CArg<"std::function<void()>", "{}">:$elseCtor)>
   ];
 
   let extraClassDeclaration = [{
-    Block *getBodyBlock() { return &body().front(); }
+    /// Returns true if an else block exists.
+    bool hasElse() { return !elseRegion().empty(); }
+
+    Block *getThenBlock() {
+      assert(!thenRegion().empty() && "Unexpected empty 'then' region.");
+      return &thenRegion().front();
+    }
+
+    Block *getElseBlock() {
+      assert(hasElse() && "Empty 'else' region.");
+      return &elseRegion().front();
+    }
   }];
 }
 
-def IfOp : SVOp<"if", [HasRegionTerminator]> {
+def IfOp : SVOp<"if", [HasRegionTerminator, NoRegionArguments,
+                       RecursiveSideEffects]> {
   let summary = "'if (cond)' block";
   
   let regions = (region SizedRegion<1>:$body);
@@ -65,32 +79,57 @@ def IfOp : SVOp<"if", [HasRegionTerminator]> {
   }];
 }
 
-// TODO: This should be generalized, e.g. with an enum to specify the edge
-// trigger behavior.
-def AlwaysAtPosEdgeOp : SVOp<"alwaysat_posedge", [HasRegionTerminator]> {
-  let summary = "'always @(posedge ...)'' block";
+// Edge behavior enum for always block.  See SV Spec 9.4.2.
+
+/// AtPosEdge triggers on a rise from 0 to 1/X/Z, or X/Z to 1.
+def AtPosEdge: I32EnumAttrCase<"AtPosEdge", 0, "posedge">;
+/// AtNegEdge triggers on a drop from 1 to 0/X/Z, or X/Z to 0.
+def AtNegEdge: I32EnumAttrCase<"AtNegEdge", 1, "negedge">;
+/// AtEdge(v) is syntactic sugar for "AtPosEdge(v) or AtNegEdge(v)".
+def AtEdge   : I32EnumAttrCase<"AtEdge", 2, "edge">;
+
+def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
+                                   [AtPosEdge, AtNegEdge, AtEdge]>;
+
+
+def AlwaysOp : SVOp<"always", [HasRegionTerminator, NoRegionArguments,
+                               RecursiveSideEffects]> {
+  let summary = "'always @' block";
+  let description = "See SV Spec 9.2, and 9.4.2.2.";
   
   let regions = (region SizedRegion<1>:$body);
-  let arguments = (ins I1:$clock);
+  let arguments = (ins TypedArrayAttrBase<EventControlAttr, "events">:$events,
+                       Variadic<I1>:$clocks);
   let results = (outs);
   
-  let assemblyFormat = [{ $clock $body attr-dict }];
+  let assemblyFormat = "custom<EventList>($events, $clocks) $body attr-dict";
 
-  // TODO: ODS forces using a custom builder just to get the region terminator
-  // implicitly installed.
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "Value":$cond,
+    OpBuilderDAG<(ins "ArrayRef<EventControl>":$event, "ArrayRef<Value>":$cond,
                       CArg<"std::function<void()>", "{}">:$bodyCtor)>
   ];
 
   let extraClassDeclaration = [{
     Block *getBodyBlock() { return &body().front(); }
+
+    struct Condition {
+      EventControl event;
+      Value value;
+    };
+
+    size_t getNumConditions() { return events().size(); }
+    Condition getCondition(size_t idx);
   }];
+
+  // Check that we have the same number of events and conditions.
+  let verifier = [{ return ::verifyAlwaysOp(*this); }];
 }
 
-def InitialOp : SVOp<"initial", [HasRegionTerminator]> {
-  let summary = "'initial'' block";
+def InitialOp : SVOp<"initial", [HasRegionTerminator, NoRegionArguments,
+                                 RecursiveSideEffects]> {
+  let summary = "'initial' block";
+  let description = "See SV Spec 9.2.1.";
 
   let regions = (region SizedRegion<1>:$body);
   let arguments = (ins);
@@ -116,8 +155,7 @@ def InitialOp : SVOp<"initial", [HasRegionTerminator]> {
 
 def YieldOp
   : SVOp<"yield", [NoSideEffect, Terminator,
-                   ParentOneOf<["IfDefOp, IfOp", "AlwaysAtPosEdgeOp",
-                                "InitialOp"]>]> {
+                   ParentOneOf<["IfDefOp, IfOp", "AlwaysOp", "InitialOp"]>]> {
   let summary = "terminator for control-flow operation regions";
   let arguments = (ins);
 
@@ -202,10 +240,18 @@ def FatalOp : SVOp<"fatal"> {
 }
 
 def VerbatimOp : SVOp<"verbatim"> {
-  let summary = "verbatim opaque text emitted to SystemVerilog file";
-  let arguments = (ins StrAttr:$string);
+  let summary = "verbatim opaque text emitted to SystemVerilog file.";
+  let summary = "sv.verbatim allows operand substitutions with {{0}} syntax.";
+  let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands);
 
-  let assemblyFormat = [{$string attr-dict}];
+  let assemblyFormat =
+    "$string attr-dict (`(` $operands^ `)` `:` type($operands))?";
+
+  //let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilderDAG<(ins "StringRef":$string),
+                 "build(odsBuilder, odsState, string, ValueRange{});">
+  ];
 }
 
 //===----------------------------------------------------------------------===//

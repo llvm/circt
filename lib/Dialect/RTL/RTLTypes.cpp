@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/RTL/RTLTypes.h"
 #include "circt/Dialect/RTL/RTLDialect.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/Types.h"
@@ -20,6 +21,9 @@
 
 using namespace mlir;
 using namespace circt::rtl;
+
+#define GET_TYPEDEF_CLASSES
+#include "circt/Dialect/RTL/RTLTypes.cpp.inc"
 
 //===----------------------------------------------------------------------===//
 // Type Helpers
@@ -45,8 +49,8 @@ bool circt::rtl::isRTLValueType(Type type) {
   if (auto intType = type.dyn_cast<IntegerType>())
     return intType.isSignless();
 
-  if (auto t = type.dyn_cast<ArrayType>())
-    return isRTLValueType(t.getElementType());
+  if (auto array = type.dyn_cast<ArrayType>())
+    return isRTLValueType(array.getElementType());
 
   if (auto t = type.dyn_cast<StructType>()) {
     return std::all_of(t.getElements().begin(), t.getElements().end(),
@@ -54,6 +58,32 @@ bool circt::rtl::isRTLValueType(Type type) {
   }
 
   return false;
+}
+
+/// Parse and print nested RTL types nicely.
+static ParseResult parseRTLElementType(Type &result, DialectAsmParser &p) {
+  // If this is an RTL dialect type, then we don't need/want the !rtl. prefix
+  // redundantly specified.
+  auto fullString = p.getFullSymbolSpec();
+  auto *curPtr = p.getCurrentLocation().getPointer();
+  auto typeString =
+      StringRef(curPtr, fullString.size() - (curPtr - fullString.data()));
+
+  if (typeString.startswith("array<") || typeString.startswith("inout<")) {
+    llvm::StringRef mnemonic;
+    if (p.parseKeyword(&mnemonic))
+      llvm_unreachable("should have an array or inout keyword here");
+    result = generatedTypeParser(p.getBuilder().getContext(), p, mnemonic);
+    return result ? success() : failure();
+  }
+
+  return p.parseType(result);
+}
+
+static void printRTLElementType(Type element, DialectAsmPrinter &p) {
+  if (succeeded(generatedTypePrinter(element, p)))
+    return;
+  p.printType(element);
 }
 
 //===----------------------------------------------------------------------===//
@@ -79,7 +109,7 @@ Type ArrayType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
   SmallVector<int64_t, 2> dims;
   Type inner;
   if (p.parseLess() || p.parseDimensionList(dims, /* allowDynamic */ false) ||
-      p.parseType(inner) || p.parseGreater())
+      parseRTLElementType(inner, p) || p.parseGreater())
     return Type();
   if (dims.size() != 1) {
     p.emitError(p.getNameLoc(), "rtl.array only supports one dimension");
@@ -95,7 +125,7 @@ Type ArrayType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
 
 void ArrayType::print(DialectAsmPrinter &p) const {
   p << "array<" << getSize() << "x";
-  p.printType(getElementType());
+  printRTLElementType(getElementType(), p);
   p << '>';
 }
 
@@ -113,7 +143,7 @@ LogicalResult ArrayType::verifyConstructionInvariants(Location loc,
 
 Type InOutType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
   Type inner;
-  if (p.parseLess() || p.parseType(inner) || p.parseGreater())
+  if (p.parseLess() || parseRTLElementType(inner, p) || p.parseGreater())
     return Type();
 
   auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
@@ -125,7 +155,7 @@ Type InOutType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
 
 void InOutType::print(DialectAsmPrinter &p) const {
   p << "inout<";
-  p.printType(getElementType());
+  printRTLElementType(getElementType(), p);
   p << '>';
 }
 
@@ -135,9 +165,6 @@ LogicalResult InOutType::verifyConstructionInvariants(Location loc,
     return emitError(loc, "invalid element for rtl.inout type");
   return success();
 }
-
-#define GET_TYPEDEF_CLASSES
-#include "circt/Dialect/RTL/RTLTypes.cpp.inc"
 
 /// Parses a type registered to this dialect. Parse out the mnemonic then invoke
 /// the tblgen'd type parser dispatcher.

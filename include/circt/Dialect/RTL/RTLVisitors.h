@@ -38,10 +38,11 @@ public:
                        // Reduction Operators
                        AndROp, OrROp, XorROp,
                        // Other operations.
-                       SExtOp, ZExtOp, ConcatOp, ExtractOp, MuxOp, ReadInOutOp>(
-            [&](auto expr) -> ResultType {
-              return thisCast->visitComb(expr, args...);
-            })
+                       SExtOp, ZExtOp, ConcatOp, ExtractOp, MuxOp,
+                       // InOut Expressions
+                       ReadInOutOp, ArrayIndexOp>([&](auto expr) -> ResultType {
+          return thisCast->visitComb(expr, args...);
+        })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidComb(op, args...);
         });
@@ -111,6 +112,7 @@ public:
   HANDLE(ExtractOp, Unhandled);
   HANDLE(MuxOp, Unhandled);
   HANDLE(ReadInOutOp, Unhandled);
+  HANDLE(ArrayIndexOp, Unhandled);
 #undef HANDLE
 };
 
@@ -122,7 +124,7 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<ConnectOp, OutputOp, RegOp, WireOp, InstanceOp>(
+        .template Case<ConnectOp, OutputOp, WireOp, InstanceOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitStmt(expr, args...);
             })
@@ -162,7 +164,6 @@ public:
   // Basic nodes.
   HANDLE(ConnectOp, Unhandled);
   HANDLE(OutputOp, Unhandled);
-  HANDLE(RegOp, Unhandled);
   HANDLE(WireOp, Unhandled);
   HANDLE(InstanceOp, Unhandled);
 #undef HANDLE

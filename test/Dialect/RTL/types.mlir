@@ -16,4 +16,15 @@ module {
   func @structType(%SE: !rtl.struct<>, %SF: !rtl.struct<{foo, i32}, {bar, i4}, {baz, !rtl.struct<{foo, i7}>}>) {
     return
   }
+  
+  // CHECK-LABEL: nestedType
+  func @nestedType(
+    // CHECK: %arg0: !rtl.inout<array<42xi8>>,
+    %arg0: !rtl.inout<!rtl.array<42xi8>>,
+     // CHECK: %arg1: !rtl.inout<array<42xi8>>,
+    %arg1: !rtl.inout<array<42xi8>>,
+    // CHECK: %arg2: !rtl.inout<array<2xarray<42xi8>>>
+    %arg2: !rtl.inout<array<2xarray<42xi8>>>) {
+    return
+  }
 }
