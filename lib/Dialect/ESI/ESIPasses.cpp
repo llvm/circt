@@ -604,7 +604,6 @@ namespace {
 /// Eliminate back-to-back wrap-unwraps to reduce the number of ESI channels.
 struct RemoveWrapUnwrap : public OpConversionPattern<WrapValidReady> {
 public:
-  RemoveWrapUnwrap(MLIRContext *ctxt) : OpConversionPattern(ctxt) {}
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
@@ -642,7 +641,6 @@ namespace {
 /// new `wrap.vr`.
 struct WrapInterfaceLower : public OpConversionPattern<WrapSVInterface> {
 public:
-  WrapInterfaceLower(MLIRContext *ctxt) : OpConversionPattern(ctxt) {}
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
@@ -757,7 +755,11 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   Type ui64Type =
       IntegerType::get(ctxt, 64, IntegerType::SignednessSemantics::Unsigned);
   capnp::TypeSchema sendTypeSchema(ep.send().getType());
+  if (!sendTypeSchema.isSupported())
+    return rewriter.notifyMatchFailure(ep, "Send type not supported yet");
   capnp::TypeSchema recvTypeSchema(ep.recv().getType());
+  if (!recvTypeSchema.isSupported())
+    return rewriter.notifyMatchFailure(ep, "Recv type not supported yet");
 
   // Set all the parameters.
   NamedAttrList params;
@@ -818,6 +820,58 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
 #endif // CAPNP
 }
 
+namespace {
+/// Lower the encode gasket to SV/RTL.
+struct EncoderLowering : public OpConversionPattern<CapnpEncode> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(CapnpEncode enc, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+#ifndef CAPNP
+    return rewriter.notifyMatchFailure(enc,
+                                       "encode.capnp lowering requires the ESI "
+                                       "capnp plugin, which was disabled.");
+#else
+    capnp::TypeSchema encodeType(enc.dataToEncode().getType());
+    if (!encodeType.isSupported())
+      return rewriter.notifyMatchFailure(enc, "Type not supported yet");
+    Operation *encoder = encodeType.buildEncoder(rewriter, operands[0]);
+    assert(encoder && "Error in TypeSchema.buildEncoder()");
+    rewriter.replaceOp(enc, encoder->getResults());
+    return success();
+#endif
+  }
+};
+} // anonymous namespace
+
+namespace {
+/// Lower the decode gasket to SV/RTL.
+struct DecoderLowering : public OpConversionPattern<CapnpDecode> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(CapnpDecode dec, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+#ifndef CAPNP
+    return rewriter.notifyMatchFailure(enc,
+                                       "encode.capnp lowering requires the ESI "
+                                       "capnp plugin, which was disabled.");
+#else
+    capnp::TypeSchema decodeType(dec.decodedData().getType());
+    if (!decodeType.isSupported())
+      return rewriter.notifyMatchFailure(dec, "Type not supported yet");
+    Operation *decoder = decodeType.buildDecoder(rewriter, operands[0]);
+    assert(decoder && "Error in TypeSchema.buildDecoder()");
+    rewriter.replaceOp(dec, decoder->getResults());
+    return success();
+#endif
+  }
+};
+} // namespace
+
 void ESItoRTLPass::runOnOperation() {
   auto top = getOperation();
   auto ctxt = &getContext();
@@ -846,10 +900,12 @@ void ESItoRTLPass::runOnOperation() {
 
   ConversionTarget pass2Target(*ctxt);
   pass2Target.addLegalDialect<RTLDialect>();
-  pass2Target.addIllegalOp<PipelineStage>();
+  pass2Target.addIllegalDialect<ESIDialect>();
 
   patterns.clear();
   patterns.insert<RemoveWrapUnwrap>(ctxt);
+  patterns.insert<EncoderLowering>(ctxt);
+  patterns.insert<DecoderLowering>(ctxt);
   if (failed(applyPartialConversion(top, pass2Target, std::move(patterns))))
     signalPassFailure();
 }

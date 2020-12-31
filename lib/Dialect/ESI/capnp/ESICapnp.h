@@ -19,6 +19,9 @@
 namespace mlir {
 class Type;
 struct LogicalResult;
+class Operation;
+class Value;
+class OpBuilder;
 } // namespace mlir
 namespace llvm {
 class raw_ostream;
@@ -60,6 +63,11 @@ public:
 
   /// Write out the schema in its entirety.
   mlir::LogicalResult write(llvm::raw_ostream &os) const;
+
+  /// Build an RTL/SV dialect capnp encoder for this type.
+  mlir::Operation *buildEncoder(mlir::OpBuilder &, mlir::Value);
+  /// Build an RTL/SV dialect capnp decoder for this type.
+  mlir::Operation *buildDecoder(mlir::OpBuilder &, mlir::Value);
 
 private:
   /// The implementation of this. Separate to hide the details and avoid having

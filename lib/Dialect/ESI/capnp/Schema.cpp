@@ -81,6 +81,11 @@ public:
 
   bool operator==(const TypeSchemaImpl &) const;
 
+  /// Build an RTL/SV dialect capnp encoder for this type.
+  mlir::Operation *buildEncoder(mlir::OpBuilder &, mlir::Value);
+  /// Build an RTL/SV dialect capnp decoder for this type.
+  mlir::Operation *buildDecoder(mlir::OpBuilder &, mlir::Value);
+
 private:
   ::capnp::ParsedSchema getSchema() const;
   ::capnp::StructSchema getTypeSchema() const;
