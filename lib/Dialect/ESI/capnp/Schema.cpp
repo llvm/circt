@@ -17,6 +17,8 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Format.h"
 
+#include <string>
+
 using namespace mlir;
 using namespace circt::esi::capnp::detail;
 
@@ -45,6 +47,11 @@ private:
 };
 } // namespace
 
+/// Emit an ID in capnp format.
+static llvm::raw_ostream &emitId(llvm::raw_ostream &os, int64_t id) {
+  return os << "@" << llvm::format_hex(id, /*width=*/16 + 2);
+}
+
 namespace circt {
 namespace esi {
 namespace capnp {
@@ -59,8 +66,8 @@ public:
   bool isSupported() const;
   size_t size() const;
   StringRef name() const;
-  mlir::LogicalResult write(llvm::raw_ostream &os);
-  mlir::LogicalResult writeMetadata(llvm::raw_ostream &os);
+  mlir::LogicalResult write(llvm::raw_ostream &os) const;
+  mlir::LogicalResult writeMetadata(llvm::raw_ostream &os) const;
 
   bool operator==(const TypeSchemaStorage &) const;
 
@@ -69,16 +76,36 @@ private:
   ::capnp::StructSchema getStructSchema() const;
 
   Type type;
+  ::capnp::SchemaParser parser;
   mutable std::string cachedName;
-
-  ::capnp::ParsedSchema schema;
+  mutable ::capnp::ParsedSchema schema;
 };
 } // namespace detail
 } // namespace capnp
 } // namespace esi
 } // namespace circt
 
-// ::capnp::ParsedSchema getSchema();
+::capnp::ParsedSchema TypeSchemaStorage::getSchema() const {
+  if (schema != ::capnp::ParsedSchema())
+    return schema;
+
+  std::string schemaText;
+  llvm::raw_string_ostream os(schemaText);
+  emitId(os, 0xFFFFFFFFFFFFFFFF) << ";\n";
+  auto rc = write(os);
+  assert(succeeded(rc) && "Failed schema text output.");
+  os.str();
+
+  kj::Own<kj::Filesystem> fs = kj::newDiskFilesystem();
+  kj::Own<kj::Directory> dir = kj::newInMemoryDirectory(kj::nullClock());
+  kj::Path fakePath = kj::Path::parse("schema.capnp");
+  { // Ensure that 'fakeFile' has flushed.
+    auto fakeFile = dir->openFile(fakePath, kj::WriteMode::CREATE);
+    fakeFile->writeAll(schemaText);
+  }
+  schema = parser.parseFromDirectory(*dir, std::move(fakePath), nullptr);
+  return schema;
+}
 
 ::capnp::StructSchema TypeSchemaStorage::getStructSchema() const {
   uint64_t id = capnpTypeID();
@@ -127,7 +154,8 @@ bool TypeSchemaStorage::isSupported() const {
 size_t TypeSchemaStorage::size() const {
   auto schema = getStructSchema();
   auto structProto = schema.getProto().getStruct();
-  return 64 * (structProto.getDataWordCount() + structProto.getPointerCount());
+  return 64 *
+         (2 + structProto.getDataWordCount() + structProto.getPointerCount());
 }
 
 StringRef TypeSchemaStorage::name() const {
@@ -139,12 +167,7 @@ StringRef TypeSchemaStorage::name() const {
   return cachedName;
 }
 
-/// Emit an ID in capnp format.
-static llvm::raw_ostream &emitId(llvm::raw_ostream &os, int64_t id) {
-  return os << "@" << llvm::format_hex(id, /*width=*/16 + 2);
-}
-
-mlir::LogicalResult TypeSchemaStorage::write(llvm::raw_ostream &rawOS) {
+mlir::LogicalResult TypeSchemaStorage::write(llvm::raw_ostream &rawOS) const {
   IndentingOStream os(rawOS);
 
   // Since capnp requires messages to be structs, emit a wrapper struct.
@@ -190,7 +213,8 @@ mlir::LogicalResult TypeSchemaStorage::write(llvm::raw_ostream &rawOS) {
   return success();
 }
 
-mlir::LogicalResult TypeSchemaStorage::writeMetadata(llvm::raw_ostream &os) {
+mlir::LogicalResult
+TypeSchemaStorage::writeMetadata(llvm::raw_ostream &os) const {
   os << name() << " ";
   emitId(os, capnpTypeID());
   return success();

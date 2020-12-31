@@ -27,7 +27,7 @@ constexpr uint64_t esiCosimSchemaVersion = 1;
 
 namespace detail {
 struct TypeSchemaStorage;
-}
+} // namespace detail
 
 class TypeSchema {
 public:
