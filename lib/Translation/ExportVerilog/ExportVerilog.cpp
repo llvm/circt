@@ -1698,9 +1698,9 @@ void ModuleEmitter::emitStatement(sv::VerbatimOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  // Drop extraneous \n's off the end of the string.
+  // Drop an extraneous \n off the end of the string if present.
   StringRef string = op.string();
-  while (!string.empty() && string.back() == '\n')
+  if (string.endswith("\n"))
     string = string.drop_back();
 
   // Emit each \n separated piece of the string with each piece properly
@@ -1709,6 +1709,7 @@ void ModuleEmitter::emitStatement(sv::VerbatimOp op) {
   bool isFirst = true;
   indent();
 
+  // Emit each line of the string at a time.
   while (!string.empty()) {
     auto lhsRhs = string.split('\n');
     if (isFirst)
@@ -1717,7 +1718,69 @@ void ModuleEmitter::emitStatement(sv::VerbatimOp op) {
       os << '\n';
       indent();
     }
-    os << lhsRhs.first;
+
+    StringRef line = lhsRhs.first;
+
+    // Perform operand substitions as we emit the line string.  We turn {{42}}
+    // into the value of operand 42.
+
+    // Scan 'line' for a substitution, emitting any non-substitution prefix,
+    // then the mentioned operand, chopping the relevant text off 'line' and
+    // returning true.  This returns false if no substitution is found.
+    auto emitUntilSubstitution = [&](size_t next = 0) -> bool {
+      size_t start = 0;
+      while (1) {
+        next = line.find("{{", next);
+        if (next == StringRef::npos)
+          return false;
+
+        // Check to make sure we have a number followed by }}.  If not, we
+        // ignore the {{ sequence as something that could happen in Verilog.
+        next += 2;
+        start = next;
+        while (next < line.size() && isdigit(line[next]))
+          ++next;
+        // We need at least one digit.
+        if (start == next)
+          continue;
+
+        // We must have a }} right after the digits.
+        if (!line.substr(next).startswith("}}"))
+          continue;
+
+        // We must be able to decode the integer into an unsigned.
+        unsigned operandNo = 0;
+        if (line.drop_front(start)
+                .take_front(next - start)
+                .getAsInteger(10, operandNo)) {
+          op.emitError("operand substitution too large");
+          continue;
+        }
+        next += 2;
+
+        if (operandNo >= op.operands().size()) {
+          op.emitError("operand " + llvm::utostr(operandNo) + " isn't valid");
+          continue;
+        }
+
+        // Emit any text before the substitution.
+        os << line.take_front(start - 2);
+
+        // Emit the operand.
+        os << emitExpressionToString(op.operands()[operandNo], ops);
+
+        // Forget about the part we emitted.
+        line = line.drop_front(next);
+        return true;
+      }
+    };
+
+    // Emit all the substitutions.
+    while (emitUntilSubstitution())
+      ;
+
+    // Emit any text after the last substitution.
+    os << line;
     string = lhsRhs.second;
   }
 

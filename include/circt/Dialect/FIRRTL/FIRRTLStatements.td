@@ -114,9 +114,7 @@ def SkipOp : FIRRTLOp<"skip", [NoSideEffect]> {
   let arguments = (ins);
   let results = (outs);
 
-  let assemblyFormat = [{
-    attr-dict
-  }];
+  let assemblyFormat = "attr-dict";
 }
 
 def StopOp : FIRRTLOp<"stop", []> {
@@ -125,9 +123,7 @@ def StopOp : FIRRTLOp<"stop", []> {
   let arguments = (ins ClockType:$clock, UInt1Type:$cond, I32Attr:$exitCode);
   let results = (outs);
 
-  let assemblyFormat = [{
-    $clock `,` $cond `,` $exitCode attr-dict
-  }];
+  let assemblyFormat = "$clock `,` $cond `,` $exitCode attr-dict";
 }
 
 def AssertOp : FIRRTLOp<"assert", []> {

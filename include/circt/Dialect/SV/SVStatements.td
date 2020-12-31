@@ -240,10 +240,18 @@ def FatalOp : SVOp<"fatal"> {
 }
 
 def VerbatimOp : SVOp<"verbatim"> {
-  let summary = "verbatim opaque text emitted to SystemVerilog file";
-  let arguments = (ins StrAttr:$string);
+  let summary = "verbatim opaque text emitted to SystemVerilog file.";
+  let summary = "sv.verbatim allows operand substitutions with {{0}} syntax.";
+  let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands);
 
-  let assemblyFormat = [{$string attr-dict}];
+  let assemblyFormat =
+    "$string attr-dict (`(` $operands^ `)` `:` type($operands))?";
+
+  //let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilderDAG<(ins "StringRef":$string),
+                 "build(odsBuilder, odsState, string, ValueRange{});">
+  ];
 }
 
 //===----------------------------------------------------------------------===//
