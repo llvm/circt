@@ -247,7 +247,6 @@ def VerbatimOp : SVOp<"verbatim"> {
   let assemblyFormat =
     "$string attr-dict (`(` $operands^ `)` `:` type($operands))?";
 
-  //let skipDefaultBuilders = 1;
   let builders = [
     OpBuilderDAG<(ins "StringRef":$string),
                  "build(odsBuilder, odsState, string, ValueRange{});">

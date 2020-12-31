@@ -62,9 +62,8 @@ class BinRTLOp<string mnemonic, list<OpTrait> traits = []> :
   let arguments = (ins AnySignlessInteger:$lhs, AnySignlessInteger:$rhs);
   let results = (outs AnySignlessInteger:$result);
 
-  let assemblyFormat = [{
-    $lhs `,` $rhs  attr-dict `:` functional-type($args, $results)
-  }];
+  let assemblyFormat =
+    "$lhs `,` $rhs  attr-dict `:` functional-type($args, $results)";
 }
 
 // Binary operator with uniform input/result types.
@@ -72,9 +71,7 @@ class UTBinRTLOp<string mnemonic, list<OpTrait> traits = []> :
       BinRTLOp<mnemonic,
                !listconcat(traits,
                            [SameTypeOperands, SameOperandsAndResultType])> {
-   let assemblyFormat = [{
-    $lhs `,` $rhs  attr-dict `:` type($result)
-  }];
+  let assemblyFormat = "$lhs `,` $rhs  attr-dict `:` type($result)";
 }
 
 // Base class for variadic operators.
@@ -83,9 +80,8 @@ class VariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
   let arguments = (ins Variadic<AnySignlessInteger>:$inputs);
   let results = (outs AnySignlessInteger:$result);
 
-  let assemblyFormat = [{
-    $inputs attr-dict `:` functional-type($inputs, results)
-  }];
+  let assemblyFormat =
+    "$inputs attr-dict `:` functional-type($inputs, results)";
 }
 
 class UTVariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
@@ -97,9 +93,14 @@ class UTVariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
   let hasFolder = true;
   let verifier =  [{ return ::verifyUTVariadicRTLOp(*this); }];
 
-  let assemblyFormat = [{
-    $inputs attr-dict `:` type($result)
-  }];
+  let assemblyFormat = "$inputs attr-dict `:` type($result)";
+
+  let builders = [
+    OpBuilderDAG<(ins "Value":$lhs, "Value":$rhs), [{
+      return build($_builder, $_state, lhs.getType(),
+                   ValueRange{lhs, rhs}, ArrayRef<NamedAttribute>{});
+    }]>
+  ];
 }
 
 // Arithmetic and Logical Operations.
@@ -156,9 +157,13 @@ def ICmpOp : RTLOp<"icmp", [NoSideEffect, SameTypeOperands]> {
                    AnySignlessInteger:$lhs, AnySignlessInteger:$rhs);
   let results = (outs I1:$result);
 
-  let assemblyFormat = [{
-    $predicate $lhs `,` $rhs  attr-dict `:` type($lhs)
-  }];
+  let assemblyFormat = "$predicate $lhs `,` $rhs  attr-dict `:` type($lhs)";
+
+  let builders = [
+    OpBuilderDAG<(ins "ICmpPredicate":$pred, "Value":$lhs, "Value":$rhs), [{
+      return build($_builder, $_state, $_builder.getI1Type(), pred, lhs, rhs);
+    }]>
+  ];
 }
 
 //===----------------------------------------------------------------------===//
@@ -188,7 +193,10 @@ def XorROp : UnaryI1ReductionRTLOp<"xorr">;
 // Concatenate a variadic list of operands together.
 def ConcatOp : VariadicRTLOp<"concat"> {
   let builders = [
-    OpBuilderDAG<(ins "ValueRange":$inputs)>
+    OpBuilderDAG<(ins "ValueRange":$inputs)>,
+    OpBuilderDAG<(ins "Value":$lhs, "Value":$rhs), [{
+      return build($_builder, $_state, ValueRange{lhs, rhs});
+    }]>
   ];
 }
 
@@ -246,7 +254,16 @@ def MuxOp : RTLOp<"mux",
                        AnySignlessInteger:$falseValue);
   let results = (outs AnySignlessInteger:$result);
 
-  let assemblyFormat = [{
-    $cond `,` $trueValue `,` $falseValue attr-dict `:` type($result)
-  }];
+  let assemblyFormat =
+    "$cond `,` $trueValue `,` $falseValue attr-dict `:` type($result)";
+
+  let builders = [
+    OpBuilderDAG<(ins "Value":$cond, "Value":$trueValue, "Value":$falseValue),
+    [{
+      assert(trueValue.getType() == falseValue.getType() &&
+             "mux requires matching true/false value types");
+      return build($_builder, $_state, trueValue.getType(),
+                   cond, trueValue, falseValue);
+    }]>
+  ];
 }

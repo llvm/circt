@@ -1285,6 +1285,17 @@ void ReadInOutOp::build(OpBuilder &builder, OperationState &result,
 }
 
 //===----------------------------------------------------------------------===//
+// ArrayIndexOp
+//===----------------------------------------------------------------------===//
+
+void ArrayIndexOp::build(OpBuilder &builder, OperationState &result,
+                         Value input, Value index) {
+  auto resultType = input.getType().cast<InOutType>().getElementType();
+  resultType = resultType.cast<ArrayType>().getElementType();
+  build(builder, result, InOutType::get(resultType), input, index);
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

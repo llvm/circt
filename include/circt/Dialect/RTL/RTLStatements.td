@@ -21,10 +21,7 @@ def ConnectOp : RTLOp<"connect", [InOutTypeConstraint<"src", "dest">]> {
 
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
-  
-  let assemblyFormat = [{
-    $dest `,` $src  attr-dict `:` type($src)
-  }];
+    let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
 }
 
 def WireOp : RTLOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
@@ -42,7 +39,12 @@ def WireOp : RTLOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilderDAG<(ins "::mlir::Type":$elementType,
-                      CArg<"StringAttr", "StringAttr()">:$name)>
+                      CArg<"StringAttr", "StringAttr()">:$name)>,
+    OpBuilderDAG<(ins "::mlir::Type":$elementType,
+                      CArg<"StringRef", "StringRef()">:$name), [{
+      return build($_builder, $_state, elementType,
+                   $_builder.getStringAttr(name));
+    }]>
   ];
 
   // We handle the name in a custom way, so we use a customer parser/printer.
@@ -64,9 +66,7 @@ def ReadInOutOp
     OpBuilderDAG<(ins "Value":$input)>
   ];
 
-  let assemblyFormat = [{
-    $input attr-dict `:` type($input)
-  }];
+  let assemblyFormat = "$input attr-dict `:` type($input)";
 }
 
 class InOutIndexConstraint<string value, string inoutValue>
@@ -84,10 +84,9 @@ def ArrayIndexOp
   let results = (outs InOutType:$result);
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$input)>
+    OpBuilderDAG<(ins "Value":$input, "Value":$index)>
   ];
 
-  let assemblyFormat = [{
-    $input`[`$index`]` attr-dict `:` type($input) `,` type($index)
-  }];
+  let assemblyFormat =
+    "$input`[`$index`]` attr-dict `:` type($input) `,` type($index)";
 }
