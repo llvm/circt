@@ -444,7 +444,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %1 = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
     %2 = firrtl.stdIntCast %cond : (i1) -> !firrtl.uint<1>
     %3 = firrtl.stdIntCast %value : (i2) -> !firrtl.uint<2>
-    // CHECK-NEXT: %count = rtl.reg : !rtl.inout<i2>
+    // CHECK-NEXT: %count = sv.reg : !rtl.inout<i2>
     %count = firrtl.reg %0 {name = "count"} : (!firrtl.clock) -> !firrtl.uint<2>
 
     // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
@@ -496,7 +496,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %3 = firrtl.stdIntCast %io_en : (i1) -> !firrtl.uint<1>
     %4 = firrtl.asAsyncReset %1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
 
-    // CHECK-NEXT: %reg = rtl.reg : !rtl.inout<i32>
+    // CHECK-NEXT: %reg = sv.reg : !rtl.inout<i32>
     // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
     // CHECK-NEXT:   sv.initial {
     // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"

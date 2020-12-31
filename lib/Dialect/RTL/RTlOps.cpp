@@ -569,41 +569,20 @@ struct ConstantIntMatcher {
 static inline ConstantIntMatcher m_RConstant(APInt &value) {
   return ConstantIntMatcher(value);
 }
-//===----------------------------------------------------------------------===//
-// RegOp
-//===----------------------------------------------------------------------===//
-
-void RegOp::build(::mlir::OpBuilder &odsBuilder,
-                  ::mlir::OperationState &odsState, Type elementType,
-                  StringAttr name) {
-  if (name)
-    odsState.addAttribute("name", name);
-
-  odsState.addTypes(InOutType::get(elementType));
-}
-
-/// Suggest a name for each result value based on the saved result names
-/// attribute.
-void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  // If the wire has an optional 'name' attribute, use it.
-  if (auto nameAttr = getAttrOfType<StringAttr>("name"))
-    setNameFn(getResult(), nameAttr.getValue());
-}
 
 //===----------------------------------------------------------------------===//
 // WireOp
 //===----------------------------------------------------------------------===//
 
-void WireOp::build(::mlir::OpBuilder &odsBuilder,
-                   ::mlir::OperationState &odsState, Type elementType,
-                   StringAttr name) {
+void WireOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+                   Type elementType, StringAttr name) {
   if (name)
     odsState.addAttribute("name", name);
 
   odsState.addTypes(InOutType::get(elementType));
 }
 
-static void printRegWireOp(OpAsmPrinter &p, Operation *op) {
+static void printWireOp(OpAsmPrinter &p, Operation *op) {
   p << op->getName();
   // Note that we only need to print the "name" attribute if the asmprinter
   // result name disagrees with it.  This can happen in strange cases, e.g.
@@ -627,7 +606,7 @@ static void printRegWireOp(OpAsmPrinter &p, Operation *op) {
   p << " : " << op->getResult(0).getType();
 }
 
-static ParseResult parseRegWireOp(OpAsmParser &parser, OperationState &result) {
+static ParseResult parseWireOp(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc typeLoc;
   Type resultType;
 

@@ -240,39 +240,35 @@ module {
   // CHECK: wire [16:0] _T = 17'h11A2C;
   // CHECK: assign tmp6 = {{[{][{]}}332{_T[16]}}, _T};
 
-  rtl.module @reg_wire(%in4: i4, %in8: i8) -> (%a: i4, %b: i8, %c: i8) {
-    // CHECK-LABEL: module reg_wire(
+  rtl.module @wires(%in4: i4, %in8: i8) -> (%a: i4, %b: i8) {
+    // CHECK-LABEL: module wires(
     // CHECK-NEXT:   input  [3:0] in4,
     // CHECK-NEXT:   input  [7:0] in8,
     // CHECK-NEXT:   output [3:0] a,
-    // CHECK-NEXT:   output [7:0] b, c);
+    // CHECK-NEXT:   output [7:0] b);
 
     // CHECK-EMPTY:
     %myWire = rtl.wire : !rtl.inout<i4>  // CHECK-NEXT: wire [3:0] myWire;
-    %myReg = rtl.reg : !rtl.inout<i8>    // CHECK-NEXT: reg  [7:0] myReg;
 
-    // CHECK-NEXT: reg  [7:0] myRegArray1[41:0];
-    %myRegArray1 = rtl.reg : !rtl.inout<array<42 x i8>>
+    // CHECK-NEXT: wire [7:0] myArray1[41:0];
+    %myArray1 = rtl.wire : !rtl.inout<array<42 x i8>>
     // CHECK-NEXT: wire [3:0] myWireArray2[41:0][2:0];
     %myWireArray2 = rtl.wire : !rtl.inout<array<3 x array<42 x i4>>>
 
     // CHECK-EMPTY:
     rtl.connect %myWire, %in4 : i4       // CHECK-NEXT: assign myWire = in4;
-    rtl.connect %myReg, %in8 : i8        // CHECK-NEXT: assign myReg = in8;
 
-    %subscript1 = rtl.arrayindex %myRegArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
-    rtl.connect %subscript1, %in8 : i8   // CHECK-NEXT: assign myRegArray1[in4] = in8;
+    %subscript1 = rtl.arrayindex %myArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
+    rtl.connect %subscript1, %in8 : i8   // CHECK-NEXT: assign myArray1[in4] = in8;
 
     %wireout = rtl.read_inout %myWire : !rtl.inout<i4>
-    %regout = rtl.read_inout %myReg : !rtl.inout<i8>
 
-    %subscript2 = rtl.arrayindex %myRegArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
+    %subscript2 = rtl.arrayindex %myArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
     %memout = rtl.read_inout %subscript2 : !rtl.inout<i8>
 
     // CHECK-NEXT: assign a = myWire;
-    // CHECK-NEXT: assign b = myReg;
-    // CHECK-NEXT: assign c = myRegArray1[in4];
-    rtl.output %wireout, %regout, %memout : i4, i8, i8
+    // CHECK-NEXT: assign b = myArray1[in4];
+    rtl.output %wireout, %memout : i4, i8
   }
 }
 

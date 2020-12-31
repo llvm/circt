@@ -1076,7 +1076,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   if (!resultType)
     return failure();
 
-  auto regResult = builder->create<rtl::RegOp>(resultType, op.nameAttr());
+  auto regResult = builder->create<sv::RegOp>(resultType, op.nameAttr());
   setLowering(op, regResult);
 
   // Emit the initializer expression for simulation that fills it with random
@@ -1103,7 +1103,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegInitOp op) {
   if (!resultType || !resetSignal || !resetValue)
     return failure();
 
-  auto regResult = builder->create<rtl::RegOp>(resultType, op.nameAttr());
+  auto regResult = builder->create<sv::RegOp>(resultType, op.nameAttr());
   setLowering(op, regResult);
 
   // Emit the initializer expression for simulation that fills it with random

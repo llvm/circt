@@ -108,4 +108,31 @@ rtl.module @Aliasing(%a : !rtl.inout<i42>, %b : !rtl.inout<i42>,
   sv.alias %a, %b, %c : !rtl.inout<i42>, !rtl.inout<i42>, !rtl.inout<i42>
 }
 
+rtl.module @reg(%in4: i4, %in8: i8) -> (%a: i8, %b: i8) {
+    // CHECK-LABEL: module reg(
+    // CHECK-NEXT:   input  [3:0] in4,
+    // CHECK-NEXT:   input  [7:0] in8,
+    // CHECK-NEXT:   output [7:0] a, b);
 
+    // CHECK-EMPTY:
+    %myReg = sv.reg : !rtl.inout<i8>    // CHECK-NEXT: reg [7:0] myReg;
+
+    // CHECK-NEXT: reg [7:0] myRegArray1[41:0];
+    %myRegArray1 = sv.reg : !rtl.inout<array<42 x i8>>
+
+    // CHECK-EMPTY:
+    rtl.connect %myReg, %in8 : i8        // CHECK-NEXT: assign myReg = in8;
+
+    %subscript1 = rtl.arrayindex %myRegArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
+    rtl.connect %subscript1, %in8 : i8   // CHECK-NEXT: assign myRegArray1[in4] = in8;
+
+    %regout = rtl.read_inout %myReg : !rtl.inout<i8>
+
+    %subscript2 = rtl.arrayindex %myRegArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
+    %memout = rtl.read_inout %subscript2 : !rtl.inout<i8>
+
+    // CHECK-NEXT: assign a = myReg;
+    // CHECK-NEXT: assign b = myRegArray1[in4];
+    rtl.output %regout, %memout : i8, i8
+  }
+  

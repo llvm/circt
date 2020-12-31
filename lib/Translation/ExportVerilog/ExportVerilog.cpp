@@ -2362,7 +2362,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
   // Return the word (e.g. "wire") in Verilog to declare the specified thing.
   auto getVerilogDeclWord = [](Operation *op) -> StringRef {
-    if (isa<RegOp>(op) || isa<RegInitOp>(op) || isa<rtl::RegOp>(op))
+    if (isa<RegOp>(op) || isa<RegInitOp>(op) || isa<sv::RegOp>(op))
       return "reg";
 
     // Interfaces instances use the name of the declared interface.
@@ -2609,7 +2609,6 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitStmt(rtl::InstanceOp op) {
       return emitter.emitStatement(op), true;
     }
-    bool visitStmt(rtl::RegOp op) { return true; }
     bool visitStmt(rtl::WireOp op) { return true; }
 
     bool visitUnhandledStmt(Operation *op) { return false; }
@@ -2641,6 +2640,8 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitSV(sv::AssertOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::AssumeOp op) { return emitter.emitStatement(op), true; }
     bool visitSV(sv::CoverOp op) { return emitter.emitStatement(op), true; }
+    bool visitSV(sv::RegOp op) { return true; }
+
     bool visitSV(sv::InterfaceInstanceOp op) { return true; }
     bool visitSV(sv::InterfaceSignalOp op) {
       return emitter.emitDecl(op), true;
