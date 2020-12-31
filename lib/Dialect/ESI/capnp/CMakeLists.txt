@@ -11,11 +11,9 @@ if(CapnProto_FOUND)
 
   add_circt_library(ESICapnp
     Schema.cpp
-
-    ADDITIONAL_HEADER_DIRS PRIVATE
-    ${CAPNP_INCLUDE_DIRS}
    
     LINK_LIBS PUBLIC
     CapnProto::capnp CapnProto::capnpc
-    )
+  )
+  target_link_libraries(obj.ESICapnp CapnProto::capnp CapnProto::capnpc)
 endif()
