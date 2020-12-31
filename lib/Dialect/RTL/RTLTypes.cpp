@@ -56,11 +56,11 @@ bool circt::rtl::isRTLValueType(Type type) {
 //===----------------------------------------------------------------------===//
 namespace circt {
 namespace rtl {
-static bool operator==(const StructType::FieldInfo &a,
+bool operator==(const StructType::FieldInfo &a,
                        const StructType::FieldInfo &b) {
   return a.name == b.name && a.type == b.type;
 }
-static llvm::hash_code hash_value(const StructType::FieldInfo &fi) {
+llvm::hash_code hash_value(const StructType::FieldInfo &fi) {
   return llvm::hash_combine(fi.name, fi.type);
 }
 } // namespace rtl
