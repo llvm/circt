@@ -160,7 +160,7 @@ Also see MLIR's [Operation Definition Specification](https://mlir.llvm.org/docs/
 
 MLIR Handshake Dialect-[slides](https://drive.google.com/file/d/1UYQAfHrzcsdXUZ93bHPTPNwrscwx89M-/view?usp=sharing) by Stephen Neuendorffer (Xilinx) + Lana Josipović (EPFL)
 
-## Operations
+## Operation definitions
 
 [include "Dialects/HandshakeOps.md"]
 
