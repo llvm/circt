@@ -84,7 +84,7 @@ def ReadInOutOp
 }
 
 def StructExplodeOp : RTLOp<"struct_explode", [NoSideEffect]> {
-  let summary = "Expand a struct into its constituant parts.";
+  let summary = "Expand a struct into its constituent parts.";
   let arguments = (ins StructType:$input);
   let results = (outs Variadic<RTLValueType>:$result);
 
@@ -94,7 +94,7 @@ def StructExplodeOp : RTLOp<"struct_explode", [NoSideEffect]> {
 
 
 def StructCreateOp : RTLOp<"struct_create", [NoSideEffect]> {
-  let summary = "Create a struct from constituant parts.";
+  let summary = "Create a struct from constituent parts.";
   let arguments = (ins Variadic<RTLValueType>:$input);
   let results = (outs StructType:$result);
 
