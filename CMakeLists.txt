@@ -210,6 +210,11 @@ else()
       "${CMAKE_CURRENT_SOURCE_DIR}/ext/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
     find_package(CapnProto CONFIG PATHS "${CMAKE_SOURCE_DIR}/ext")
   endif()
+
+  if(CapnProto_FOUND)
+    set(CMAKE_INSTALL_RPATH ${capnp_LIBDIR})
+    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+  endif()
 endif()
 
 #-------------------------------------------------------------------------------

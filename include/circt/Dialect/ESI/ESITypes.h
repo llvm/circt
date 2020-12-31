@@ -20,19 +20,6 @@
 
 #include "ESIDialect.h"
 
-namespace circt {
-namespace esi {
-
-/// Every time we implement a breaking change in the schema generation,
-/// increment this number. It is a seed for all the schema hashes.
-constexpr uint64_t esiCosimSchemaVersion = 1;
-
-/// Get the Cap'nProto schema ID for a type.
-uint64_t getCapnpTypeID(mlir::Type);
-
-} // namespace esi
-} // namespace circt
-
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/ESI/ESITypes.h.inc"
 

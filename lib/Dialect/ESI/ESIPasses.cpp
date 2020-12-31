@@ -26,6 +26,10 @@
 
 #include <memory>
 
+#ifdef CAPNP
+#include "capnp/ESICapnp.h"
+#endif
+
 namespace circt {
 namespace esi {
 #define GEN_PASS_CLASSES
@@ -709,43 +713,6 @@ LogicalResult UnwrapInterfaceLower::matchAndRewrite(
   return success();
 }
 
-// Compute the expected size of the capnp message field in bits. Return -1 on
-// non-representable type.
-static ssize_t getCapnpMsgFieldSize(Type type) {
-  return llvm::TypeSwitch<::mlir::Type, int64_t>(type)
-      .Case<IntegerType>([](IntegerType t) {
-        auto w = t.getWidth();
-        if (w == 1)
-          return 8;
-        else if (w <= 8)
-          return 8;
-        else if (w <= 16)
-          return 16;
-        else if (w <= 32)
-          return 32;
-        else if (w <= 64)
-          return 64;
-        return -1;
-      })
-      .Default([](Type) { return -1; });
-}
-
-// Compute the expected size of the capnp message in bits. Return -1 on
-// non-representable type. TODO: replace this with a call into the Capnp C++
-// library to parse a schema and have it compute sizes and offsets.
-static ssize_t getCapnpMsgSize(Type type) {
-  ChannelPort chan = type.dyn_cast<ChannelPort>();
-  if (chan)
-    return getCapnpMsgSize(chan.getInner());
-  ssize_t headerSize = 128;
-  ssize_t fieldSize = getCapnpMsgFieldSize(type);
-  if (fieldSize < 0)
-    return fieldSize;
-  // Capnp sizes are always multiples of 8 bytes, so round up.
-  fieldSize = (fieldSize & ~0x3f) + (fieldSize & 0x3f ? 0x40 : 0);
-  return headerSize + fieldSize;
-}
-
 namespace {
 /// Lower `CosimEndpoint` ops to a SystemVerilog extern module and a Capnp
 /// gasket op.
@@ -768,26 +735,34 @@ private:
 LogicalResult
 CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
                                ConversionPatternRewriter &rewriter) const {
+#ifndef CAPNP
+  return rewriter.notifyMatchFailure(
+      ep, "Cosim lowering requires the ESI capnp plugin, which was disabled.");
+#else
   auto loc = ep.getLoc();
   auto *ctxt = rewriter.getContext();
   circt::BackedgeBuilder bb(rewriter, loc);
   builder.declareCosimEndpoint();
   Type ui64Type =
       IntegerType::get(ctxt, 64, IntegerType::SignednessSemantics::Unsigned);
+  capnp::TypeSchema sendTypeSchema(ep.send().getType());
+  capnp::TypeSchema recvTypeSchema(ep.recv().getType());
 
   // Set all the parameters.
   NamedAttrList params;
   params.set("ENDPOINT_ID", rewriter.getI32IntegerAttr(ep.endpointID()));
-  params.set("SEND_TYPE_ID", IntegerAttr::get(ui64Type, ep.getSendTypeID()));
+  params.set("SEND_TYPE_ID",
+             IntegerAttr::get(ui64Type, sendTypeSchema.capnpTypeID()));
   params.set("SEND_TYPE_SIZE_BITS",
-             rewriter.getI64IntegerAttr(getCapnpMsgSize(ep.send().getType())));
-  params.set("RECV_TYPE_ID", IntegerAttr::get(ui64Type, ep.getRecvTypeID()));
+             rewriter.getI64IntegerAttr(sendTypeSchema.size()));
+  params.set("RECV_TYPE_ID",
+             IntegerAttr::get(ui64Type, recvTypeSchema.capnpTypeID()));
   params.set("RECVTYPE_SIZE_BITS",
-             rewriter.getI64IntegerAttr(getCapnpMsgSize(ep.recv().getType())));
+             rewriter.getI64IntegerAttr(recvTypeSchema.size()));
 
   // Set up the egest route to drive the EP's send ports.
-  ArrayType egestBitArrayType = ArrayType::get(
-      rewriter.getI1Type(), getCapnpMsgSize(ep.send().getType()));
+  ArrayType egestBitArrayType =
+      ArrayType::get(rewriter.getI1Type(), sendTypeSchema.size());
   auto sendReady = bb.get(rewriter.getI1Type());
   UnwrapValidReady unwrapSend =
       rewriter.create<UnwrapValidReady>(loc, ep.send(), sendReady);
@@ -796,8 +771,8 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
 
   // Get information necessary for injest path.
   auto recvReady = bb.get(rewriter.getI1Type());
-  ArrayType ingestBitArrayType = ArrayType::get(
-      rewriter.getI1Type(), getCapnpMsgSize(ep.recv().getType()));
+  ArrayType ingestBitArrayType =
+      ArrayType::get(rewriter.getI1Type(), recvTypeSchema.size());
 
   // Create replacement Cosim_Endpoint instance.
   StringAttr nameAttr = ep.getAttr("name").dyn_cast_or_null<StringAttr>();
@@ -829,6 +804,7 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   rewriter.replaceOp(ep, wrapRecv.chanOutput());
 
   return success();
+#endif // CAPNP
 }
 
 void ESItoRTLPass::runOnOperation() {
