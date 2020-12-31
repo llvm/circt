@@ -138,6 +138,7 @@ static bool isNoopCast(Operation *op) {
   return false;
 }
 
+namespace {
 /// This represents a flattened bundle field element.
 struct FlatBundleFieldEntry {
   /// This is the underlying ground type of the field.
@@ -147,6 +148,7 @@ struct FlatBundleFieldEntry {
   /// This indicates whether the field was flipped to be an output.
   bool isOutput;
 };
+} // end anonymous namespace
 
 /// Convert a nested bundle of fields into a flat list of fields.  This is used
 /// when working with instances and mems to flatten them.
