@@ -736,6 +736,7 @@ LogicalResult
 CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
                                ConversionPatternRewriter &rewriter) const {
 #ifndef CAPNP
+  (void)builder;
   return rewriter.notifyMatchFailure(
       ep, "Cosim lowering requires the ESI capnp plugin, which was disabled.");
 #else
