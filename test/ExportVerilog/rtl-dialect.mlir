@@ -7,7 +7,7 @@ module {
 
   // CHECK-LABEL: // external module E
 
-  rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1) -> (
+  rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !rtl.array<10xi4>) -> (
     %r0: i4, %r2: i4, %r4: i4, %r6: i4,
     %r7: i4, %r8: i4, %r9: i4, %r10: i4,
     %r11: i4, %r12: i4, %r13: i4, %r14: i4,
@@ -59,14 +59,15 @@ module {
      i12, i2,i9,i9,i4, i4
   }
   // CHECK-LABEL: module TESTSIMPLE(
-  // CHECK-NEXT:   input  [3:0]  a, b
-  // CHECK-NEXT:   input         cond,
-  // CHECK-NEXT:   output [3:0]  r0, r2, r4, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15
-  // CHECK-NEXT:   output        r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28
-  // CHECK-NEXT:   output [11:0] r29,
-  // CHECK-NEXT:   output [1:0]  r30,
-  // CHECK-NEXT:   output [8:0]  r31, r32,
-  // CHECK-NEXT:   output [3:0]  r33, r34);
+  // CHECK-NEXT:   input  [3:0]      a, b
+  // CHECK-NEXT:   input             cond,
+  // CHECK-NEXT:   input  [3:0][9:0] array,
+  // CHECK-NEXT:   output [3:0]      r0, r2, r4, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15
+  // CHECK-NEXT:   output            r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28
+  // CHECK-NEXT:   output [11:0]     r29,
+  // CHECK-NEXT:   output [1:0]      r30,
+  // CHECK-NEXT:   output [8:0]      r31, r32,
+  // CHECK-NEXT:   output [3:0]      r33, r34);
   // CHECK-EMPTY:
   // CHECK-NEXT:   assign r0 = a + b;
   // CHECK-NEXT:   assign r2 = a - b;
@@ -313,4 +314,3 @@ module {
     rtl.output %c : i4
   }
 }
-
