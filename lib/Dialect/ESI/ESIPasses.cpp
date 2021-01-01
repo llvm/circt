@@ -631,6 +631,36 @@ public:
 } // anonymous namespace
 
 namespace {
+/// Eliminate back-to-back unwrap-wraps to reduce the number of ESI channels.
+struct RemoveUnwrapWrap : public OpConversionPattern<UnwrapValidReady> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(UnwrapValidReady unwrap, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+
+    if (!unwrap.chanInput().hasOneUse())
+      return rewriter.notifyMatchFailure(unwrap, [](Diagnostic &d) {
+        d << "This conversion only supports wrap-unwrap back-to-back. "
+             "Wrap didn't have exactly one use.";
+      });
+    WrapValidReady wrap =
+        dyn_cast<WrapValidReady>(unwrap.chanInput().getDefiningOp());
+    if (!wrap)
+      return rewriter.notifyMatchFailure(unwrap, [](Diagnostic &d) {
+        d << "This conversion only supports wrap-unwrap back-to-back. "
+             "Could not find 'wrap'.";
+      });
+
+    rewriter.replaceOp(wrap, {nullptr, unwrap.ready()});
+    rewriter.replaceOp(unwrap, operands);
+    return success();
+  }
+};
+} // anonymous namespace
+
+namespace {
 struct ESItoRTLPass : public LowerESItoRTLBase<ESItoRTLPass> {
   void runOnOperation() override;
 };
@@ -807,8 +837,8 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   // Set up the injest path.
   Value recvDataFromCosim = cosimEpModule.getResult(1);
   Value recvValidFromCosim = cosimEpModule.getResult(0);
-  auto decodeData =
-      rewriter.create<CapnpDecode>(loc, ep.recv().getType(), recvDataFromCosim);
+  auto decodeData = rewriter.create<CapnpDecode>(loc, recvTypeSchema.getType(),
+                                                 recvDataFromCosim);
   WrapValidReady wrapRecv = rewriter.create<WrapValidReady>(
       loc, decodeData.decodedData(), recvValidFromCosim);
   recvReady.setValue(wrapRecv.ready());
@@ -837,9 +867,9 @@ public:
     capnp::TypeSchema encodeType(enc.dataToEncode().getType());
     if (!encodeType.isSupported())
       return rewriter.notifyMatchFailure(enc, "Type not supported yet");
-    Operation *encoder = encodeType.buildEncoder(rewriter, operands[0]);
-    assert(encoder && "Error in TypeSchema.buildEncoder()");
-    rewriter.replaceOp(enc, encoder->getResults());
+    Value encoderOutput = encodeType.buildEncoder(rewriter, operands[0]);
+    assert(encoderOutput && "Error in TypeSchema.buildEncoder()");
+    rewriter.replaceOp(enc, encoderOutput);
     return success();
 #endif
   }
@@ -863,9 +893,9 @@ public:
     capnp::TypeSchema decodeType(dec.decodedData().getType());
     if (!decodeType.isSupported())
       return rewriter.notifyMatchFailure(dec, "Type not supported yet");
-    Operation *decoder = decodeType.buildDecoder(rewriter, operands[0]);
-    assert(decoder && "Error in TypeSchema.buildDecoder()");
-    rewriter.replaceOp(dec, decoder->getResults());
+    Value decoderOutput = decodeType.buildDecoder(rewriter, operands[0]);
+    assert(decoderOutput && "Error in TypeSchema.buildDecoder()");
+    rewriter.replaceOp(dec, decoderOutput);
     return success();
 #endif
   }
@@ -900,10 +930,12 @@ void ESItoRTLPass::runOnOperation() {
 
   ConversionTarget pass2Target(*ctxt);
   pass2Target.addLegalDialect<RTLDialect>();
+  pass2Target.addLegalDialect<SVDialect>();
   pass2Target.addIllegalDialect<ESIDialect>();
 
   patterns.clear();
   patterns.insert<RemoveWrapUnwrap>(ctxt);
+  patterns.insert<RemoveUnwrapWrap>(ctxt);
   patterns.insert<EncoderLowering>(ctxt);
   patterns.insert<DecoderLowering>(ctxt);
   if (failed(applyPartialConversion(top, pass2Target, std::move(patterns))))
