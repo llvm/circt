@@ -1,8 +1,4 @@
-% handshake-runner(1) | "handshake-runner" Documentation
-
-## NAME
-
-**handshake-runner** — Run restricted std MLIR and CIRCT handshake IR!
+**handshake-runner** — Run restricted std MLIR and CIRCT handshake IR
 
 ## SYNOPSIS
 
