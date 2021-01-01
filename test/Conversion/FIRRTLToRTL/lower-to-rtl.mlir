@@ -580,11 +580,11 @@ module attributes {firrtl.mainModule = "Simple"} {
 
     // Write port.
 
-    // CHECK:      %_M_write_mask = rtl.wire : !rtl.inout<i1>
-    // CHECK-NEXT: %_M_write_data = rtl.wire : !rtl.inout<i42>
-    // CHECK-NEXT: %_M_write_clk = rtl.wire : !rtl.inout<i1>
+    // CHECK:      %_M_write_addr = rtl.wire : !rtl.inout<i4>
     // CHECK-NEXT: %_M_write_en = rtl.wire : !rtl.inout<i1>
-    // CHECK-NEXT: %_M_write_addr = rtl.wire : !rtl.inout<i4>
+    // CHECK-NEXT: %_M_write_clk = rtl.wire : !rtl.inout<i1>
+    // CHECK-NEXT: %_M_write_data = rtl.wire : !rtl.inout<i42>
+    // CHECK-NEXT: %_M_write_mask = rtl.wire : !rtl.inout<i1>
 
     // CHECK-NEXT: %0 = rtl.read_inout %_M_write_clk
     // CHECK-NEXT: sv.always posedge %0  {
@@ -600,9 +600,9 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:   }
 
     // Read port.
-    // CHECK-NEXT: %_M_read_clk = rtl.wire : !rtl.inout<i1>
-    // CHECK-NEXT: %_M_read_en = rtl.wire : !rtl.inout<i1>
     // CHECK-NEXT: %_M_read_addr = rtl.wire : !rtl.inout<i4>
+    // CHECK-NEXT: %_M_read_en = rtl.wire : !rtl.inout<i1>
+    // CHECK-NEXT: %_M_read_clk = rtl.wire : !rtl.inout<i1>
     // CHECK-NEXT: %_M_read_data = rtl.wire : !rtl.inout<i42>
     // CHECK-NEXT: sv.ifdef "!RANDOMIZE_GARBAGE_ASSIGN"  {
     // CHECK-NEXT:   %2 = rtl.read_inout %_M_read_addr : !rtl.inout<i4>
@@ -739,5 +739,29 @@ module attributes {firrtl.mainModule = "Simple"} {
     rtl.output
   }
 
+  // CHECK-LABEL: rtl.module @IncompleteRead(
+  // The read port has no use of the data field.
+  rtl.module @IncompleteRead(%clock1: i1) {
+    %0 = firrtl.stdIntCast %clock1 : (i1) -> !firrtl.clock
+    %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
+
+    // CHECK:  %_M = sv.reg : !rtl.inout<array<12xi42>>
+    %_M = firrtl.mem "Undefined" {depth = 12 : i64, name = "_M", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<read: bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>>
+    // Read port.
+    // CHECK: %_M_read_addr = rtl.wire : !rtl.inout<i4>
+    // CHECK-NEXT: %_M_read_en = rtl.wire : !rtl.inout<i1>
+    // CHECK-NEXT: %_M_read_clk = rtl.wire : !rtl.inout<i1>
+    // CHECK-NEXT: %_M_read_data = rtl.wire : !rtl.inout<i42>
+    // CHECK-NEXT: sv.ifdef "!RANDOMIZE_GARBAGE_ASSIGN"  {
+    %4 = firrtl.subfield %_M("read") : (!firrtl.bundle<read: bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>>) -> !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>
+    %6 = firrtl.subfield %4("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<4>>
+    firrtl.connect %6, %c0_ui1 : !firrtl.flip<uint<4>>, !firrtl.uint<1>
+    %7 = firrtl.subfield %4("en") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<1>>
+    firrtl.connect %7, %c1_ui1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    %8 = firrtl.subfield %4("clk") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<clock>
+    firrtl.connect %8, %0 : !firrtl.flip<clock>, !firrtl.clock
+    rtl.output
+  }
 }
 
