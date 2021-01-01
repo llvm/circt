@@ -117,14 +117,14 @@ static unsigned getPrintedIntWidth(unsigned value) {
 }
 
 /// Calculated the printed width of the array dims of a type.
-static size_t getPrintedTypeWidth(Type type, Operation *op) {
+static size_t getPrintedTypeDimsWidth(Type type, Operation *op) {
   int bitWidth;
   size_t textWidth = 0;
   if (auto array = type.dyn_cast<rtl::ArrayType>()) {
     bitWidth = array.getSize();
-    textWidth = getPrintedTypeWidth(array.getElementType(), op);
+    textWidth = getPrintedTypeDimsWidth(array.getElementType(), op);
   } else if (auto inout = type.dyn_cast<rtl::InOutType>()) {
-    return getPrintedTypeWidth(getUnderlyingArrayElementType(inout), op);
+    return getPrintedTypeDimsWidth(getUnderlyingArrayElementType(inout), op);
   } else {
     bitWidth = getBitWidthOrSentinel(type);
     if (bitWidth == -1) {
@@ -286,7 +286,7 @@ public:
 
   /// Emit the verilog type for the specified ground type, padding the text to
   /// the specified number of characters.
-  void emitTypePaddedToWidth(Type type, size_t padToWidth, Operation *op);
+  void emitTypeDimsPaddedToWidth(Type type, size_t padToWidth, Operation *op);
 
   // All of the mutable state we are maintaining.
   VerilogEmitterState &state;
@@ -302,11 +302,11 @@ private:
 } // end anonymous namespace
 
 /// Emit a type, returning the number of characters emitted.
-static size_t emitType(Type type, llvm::raw_ostream &os, Operation *op) {
+static size_t emitTypeDims(Type type, llvm::raw_ostream &os, Operation *op) {
   size_t emittedWidth = 0;
   int width;
   if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
-    emittedWidth += emitType(arrayType.getElementType(), os, op);
+    emittedWidth += emitTypeDims(arrayType.getElementType(), os, op);
     width = arrayType.getSize();
   } else {
     width = getBitWidthOrSentinel(type);
@@ -326,9 +326,9 @@ static size_t emitType(Type type, llvm::raw_ostream &os, Operation *op) {
   return emittedWidth;
 }
 
-void VerilogEmitterBase::emitTypePaddedToWidth(Type type, size_t padToWidth,
+void VerilogEmitterBase::emitTypeDimsPaddedToWidth(Type type, size_t padToWidth,
                                                Operation *op) {
-  size_t emittedWidth = emitType(type, os, op);
+  size_t emittedWidth = emitTypeDims(type, os, op);
   if (emittedWidth < padToWidth)
     os.indent(padToWidth - emittedWidth);
   if (padToWidth > 0 || emittedWidth > 0) // Space before name.
@@ -1288,6 +1288,8 @@ SubExprInfo ExprEmitter::visitComb(rtl::ExtractOp op) {
 }
 
 SubExprInfo ExprEmitter::visitComb(rtl::ReinterpretCastOp op) {
+  // SystemVerilog doesn't care about types. Every expression is a reinterpret
+  // cast!
   emitSubExpr(op.arg(), LowestPrecedence);
   return {Unary, IsUnsigned};
 }
@@ -1523,7 +1525,7 @@ void ModuleEmitter::emitStatementExpression(Operation *op) {
     auto type = op->getResult(0).getType();
     indent() << "wire ";
 
-    emitTypePaddedToWidth(type, 0, op);
+    emitTypeDimsPaddedToWidth(type, 0, op);
     os << getName(op->getResult(0)) << " = ";
   } else {
     indent() << "assign " << getName(op->getResult(0)) << " = ";
@@ -2338,7 +2340,7 @@ void ModuleEmitter::emitDecl(sv::InterfaceOp op) {
 void ModuleEmitter::emitDecl(sv::InterfaceSignalOp op) {
   indent() << "logic ";
 
-  emitTypePaddedToWidth(op.type(), 0, op);
+  emitTypeDimsPaddedToWidth(op.type(), 0, op);
 
   os << op.sym_name() << ";\n";
 }
@@ -2540,7 +2542,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       // Skip over SV interface types, which don't have any emitted width.
       if (elt.type.isa<sv::InterfaceType>())
         continue;
-      maxTypeWidth = std::max(getPrintedTypeWidth(elt.type, &op), maxTypeWidth);
+      maxTypeWidth = std::max(getPrintedTypeDimsWidth(elt.type, &op), maxTypeWidth);
     }
 
     // Emit this declaration.
@@ -2571,7 +2573,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       // Skip over SV interface types, which don't have any emitted width.
       bool isInterface = elt.type.isa<sv::InterfaceType>();
       if (!isInterface)
-        emitTypePaddedToWidth(elementType, maxTypeWidth, decl);
+        emitTypeDimsPaddedToWidth(elementType, maxTypeWidth, decl);
 
       os << getName(decl->getResult(0)) << elt.suffix;
 
@@ -2601,7 +2603,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       for (const auto &elt : fieldTypes) {
         indent() << "reg";
         os.indent(maxDeclNameWidth - 3 + 1);
-        emitTypePaddedToWidth(elt.type, maxTypeWidth, decl);
+        emitTypeDimsPaddedToWidth(elt.type, maxTypeWidth, decl);
         os << getName(decl->getResult(0)) << elt.suffix;
         os << '[' << (depth - 1) << ":0];\n";
       }
@@ -2938,7 +2940,7 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
   for (auto &port : portInfo) {
     hasOutputs |= port.isOutput();
     maxTypeWidth =
-        std::max(getPrintedTypeWidth(port.type, module), maxTypeWidth);
+        std::max(getPrintedTypeDimsWidth(port.type, module), maxTypeWidth);
   }
 
   addIndent();
@@ -2956,7 +2958,7 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
       os << (hasOutputs ? "input  " : "input ");
 
     int bitWidth = getBitWidthOrSentinel(portType);
-    emitTypePaddedToWidth(portType, maxTypeWidth, module);
+    emitTypeDimsPaddedToWidth(portType, maxTypeWidth, module);
 
     // Emit the name.
     os << getName(module.getArgument(portIdx));
@@ -3046,7 +3048,7 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
   for (auto &port : portInfo) {
     hasOutputs |= port.isOutput();
     maxTypeWidth =
-        std::max(getPrintedTypeWidth(port.type, module), maxTypeWidth);
+        std::max(getPrintedTypeDimsWidth(port.type, module), maxTypeWidth);
   }
 
   addIndent();
@@ -3070,7 +3072,7 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
       break;
     }
 
-    emitTypePaddedToWidth(portType, maxTypeWidth, module);
+    emitTypeDimsPaddedToWidth(portType, maxTypeWidth, module);
 
     // Emit the name.
     os << portInfo[portIdx].getName();
