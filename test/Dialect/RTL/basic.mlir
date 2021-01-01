@@ -86,6 +86,12 @@ func @test1(%arg0: i3, %arg1: i1) -> i50 {
   // CHECK-NEXT: = rtl.mux %arg1, [[RES2]], [[RES3]] : i7
   %mux = rtl.mux %arg1, %d, %e : i7
 
+  // CHECK-NEXT: [[RES24:%[0-9]+]] = rtl.reinterpret_cast %c42_i12 : (i12) -> !rtl.array<12xi1>
+  %array = rtl.reinterpret_cast %a : (i12) -> !rtl.array<12xi1>
+
+  // CHECK-NEXT: rtl.extract [[RES24]] from 2 : (!rtl.array<12xi1>) -> !rtl.array<4xi1>
+  %arraySlice = rtl.extract %array from 2 : (!rtl.array<12xi1>) -> !rtl.array<4xi1>
+
   // CHECK-NEXT:    return [[RES8]] : i50
   return %result : i50
 }

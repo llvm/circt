@@ -30,6 +30,20 @@ func private @test_extract(%arg0: i4) {
 
 // -----
 
+func private @test_extract(%arg0: i4) {
+  // expected-error @+1 {{'rtl.extract' op argument and result types must match}}
+  %b = rtl.extract %arg0 from 2 : (i4) -> !rtl.array<12xi4>
+}
+
+// -----
+
+func private @test_extract(%arg0: !rtl.array<32xi4>) {
+  // expected-error @+1 {{'rtl.extract' op argument and result array types must have same element type}}
+  %b = rtl.extract %arg0 from 2 : (!rtl.array<32xi4>) -> !rtl.array<12xi1>
+}
+
+// -----
+
 func private @test_and() {
   // expected-error @+1 {{'rtl.and' op expected 1 or more operands}}
   %b = rtl.and : i111

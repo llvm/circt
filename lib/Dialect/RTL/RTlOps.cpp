@@ -821,11 +821,29 @@ void ConcatOp::build(OpBuilder &builder, OperationState &result,
   build(builder, result, builder.getIntegerType(resultWidth), inputs);
 }
 
+/// Determine the 'width' from an extractable type.
+static unsigned getExtractableWidth(Type t) {
+  if (auto intTy = t.dyn_cast<IntegerType>())
+    return intTy.getWidth();
+  else if (auto arrayTy = t.dyn_cast<rtl::ArrayType>())
+    return arrayTy.getSize();
+  else
+    assert(false && "ExtractOp operand must be Integer or Array.");
+}
+
 static LogicalResult verifyExtractOp(ExtractOp op) {
-  unsigned srcWidth = op.input().getType().cast<IntegerType>().getWidth();
-  unsigned dstWidth = op.getType().cast<IntegerType>().getWidth();
+  if (op.input().getType().getTypeID() != op.getType().getTypeID())
+    return op.emitOpError("argument and result types must match");
+  if (auto opArray = op.input().getType().dyn_cast<ArrayType>())
+    if (op.getType().cast<ArrayType>().getElementType() !=
+        opArray.getElementType())
+      return op.emitOpError(
+          "argument and result array types must have same element type");
+
+  unsigned srcWidth = getExtractableWidth(op.input().getType());
+  unsigned dstWidth = getExtractableWidth(op.getType());
   if (op.lowBit() >= srcWidth || srcWidth - op.lowBit() < dstWidth)
-    return op.emitOpError("from bit too large for input"), failure();
+    return op.emitOpError("from bit too large for input");
 
   return success();
 }
@@ -838,7 +856,7 @@ OpFoldResult ExtractOp::fold(ArrayRef<Attribute> operands) {
   // Constant fold.
   APInt value;
   if (mlir::matchPattern(input(), m_RConstant(value))) {
-    unsigned dstWidth = getType().cast<IntegerType>().getWidth();
+    unsigned dstWidth = getExtractableWidth(getType());
     return getIntAttr(value.lshr(lowBit()).trunc(dstWidth), getContext());
   }
   return {};
