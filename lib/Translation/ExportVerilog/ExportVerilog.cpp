@@ -116,6 +116,29 @@ static unsigned getPrintedIntWidth(unsigned value) {
   return stream.str().size();
 }
 
+/// Calculated the printed width of the array dims of a type.
+static size_t getPrintedTypeWidth(Type type, Operation *op) {
+  int bitWidth;
+  size_t textWidth = 0;
+  if (auto array = type.dyn_cast<rtl::ArrayType>()) {
+    bitWidth = array.getSize();
+    textWidth = getPrintedTypeWidth(array.getElementType(), op);
+  } else if (auto inout = type.dyn_cast<rtl::InOutType>()) {
+    return getPrintedTypeWidth(getUnderlyingArrayElementType(inout), op);
+  } else {
+    bitWidth = getBitWidthOrSentinel(type);
+    if (bitWidth == -1) {
+      op->emitError("value has an unsupported verilog type ") << type;
+    } else if (bitWidth == 1) { // Width 1 is implicit.
+      return 0;
+    }
+  }
+
+  // Add 4 to count the width of the "[:0]".
+  textWidth += getPrintedIntWidth(bitWidth - 1) + 4;
+  return textWidth;
+}
+
 /// Return true if this is a noop cast that will emit with no syntax.
 static bool isNoopCast(Operation *op) {
   // These are always noop casts.
@@ -278,25 +301,38 @@ private:
 
 } // end anonymous namespace
 
+/// Emit a type, returning the number of characters emitted.
+static size_t emitType(Type type, llvm::raw_ostream &os, Operation *op) {
+  size_t emittedWidth = 0;
+  int width;
+  if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
+    emittedWidth += emitType(arrayType.getElementType(), os, op);
+    width = arrayType.getSize();
+  } else {
+    width = getBitWidthOrSentinel(type);
+    assert(width != 0 && "Shouldn't emit zero bit declarations");
+  }
+
+  if (width == -1) {
+    op->emitError("value has an unsupported verilog type ") << type;
+    os << "<<invalid type>>";
+    return 16;
+  }
+
+  if (width != 1) {
+    os << '[' << (width - 1) << ":0]";
+    emittedWidth += getPrintedIntWidth(width - 1) + 4;
+  }
+  return emittedWidth;
+}
+
 void VerilogEmitterBase::emitTypePaddedToWidth(Type type, size_t padToWidth,
                                                Operation *op) {
-  int bitWidth = getBitWidthOrSentinel(type);
-  assert(bitWidth != 0 && "Shouldn't emit zero bit declarations");
-
-  if (bitWidth == -1) {
-    emitError(op, "value has an unsupported verilog type ") << type;
-    os << "<<invalid type>>";
-    return;
-  }
-
-  size_t emittedWidth = 0;
-  if (bitWidth != 1) {
-    os << '[' << (bitWidth - 1) << ":0]";
-    emittedWidth = getPrintedIntWidth(bitWidth - 1) + 4;
-  }
-
+  size_t emittedWidth = emitType(type, os, op);
   if (emittedWidth < padToWidth)
     os.indent(padToWidth - emittedWidth);
+  if (padToWidth > 0 || emittedWidth > 0) // Space before name.
+    os << ' ';
 }
 
 //===----------------------------------------------------------------------===//
@@ -951,6 +987,7 @@ private:
   SubExprInfo visitComb(rtl::ZExtOp op);
   SubExprInfo visitComb(rtl::ConcatOp op);
   SubExprInfo visitComb(rtl::ExtractOp op);
+  SubExprInfo visitComb(rtl::ReinterpretCastOp op);
 
   // RTL Comparison Operations
   SubExprInfo visitComb(rtl::ICmpOp op) {
@@ -1235,9 +1272,24 @@ SubExprInfo ExprEmitter::visitComb(rtl::ConcatOp op) {
   return {Unary, IsUnsigned};
 }
 
+/// Determine the 'width' from an extractable type.
+static unsigned getExtractableWidth(Type t) {
+  if (auto intTy = t.dyn_cast<IntegerType>())
+    return intTy.getWidth();
+  else if (auto arrayTy = t.dyn_cast<rtl::ArrayType>())
+    return arrayTy.getSize();
+  else
+    assert(false && "ExtractOp operand must be Integer or Array.");
+}
+
 SubExprInfo ExprEmitter::visitComb(rtl::ExtractOp op) {
-  unsigned dstWidth = op.getType().cast<IntegerType>().getWidth();
+  unsigned dstWidth = getExtractableWidth(op.getType());
   return emitBitSelect(op.input(), op.lowBit() + dstWidth - 1, op.lowBit());
+}
+
+SubExprInfo ExprEmitter::visitComb(rtl::ReinterpretCastOp op) {
+  emitSubExpr(op.arg(), LowestPrecedence);
+  return {Unary, IsUnsigned};
 }
 
 /// Emit a verilog bit selection operation like x[4:0], the bit numbers are
@@ -1471,10 +1523,7 @@ void ModuleEmitter::emitStatementExpression(Operation *op) {
     auto type = op->getResult(0).getType();
     indent() << "wire ";
 
-    if (getBitWidthOrSentinel(type) != 1) {
-      emitTypePaddedToWidth(type, 0, op);
-      os << ' ';
-    }
+    emitTypePaddedToWidth(type, 0, op);
     os << getName(op->getResult(0)) << " = ";
   } else {
     indent() << "assign " << getName(op->getResult(0)) << " = ";
@@ -2289,11 +2338,7 @@ void ModuleEmitter::emitDecl(sv::InterfaceOp op) {
 void ModuleEmitter::emitDecl(sv::InterfaceSignalOp op) {
   indent() << "logic ";
 
-  auto type = op.type();
-  if (getBitWidthOrSentinel(type) != 1) {
-    emitTypePaddedToWidth(type, 0, op);
-    os << ' ';
-  }
+  emitTypePaddedToWidth(op.type(), 0, op);
 
   os << op.sym_name() << ";\n";
 }
@@ -2375,7 +2420,7 @@ static bool isExpressionUnableToInline(Operation *op) {
 /// Return true for operations that are always inlined.
 static bool isExpressionAlwaysInline(Operation *op) {
   if (isa<firrtl::ConstantOp>(op) || isa<rtl::ConstantOp>(op) ||
-      isa<SubfieldOp>(op))
+      isa<rtl::ReinterpretCastOp>(op) || isa<SubfieldOp>(op))
     return true;
 
   // An SV interface modport is a symbolic name that is always inlined.
@@ -2495,21 +2540,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       // Skip over SV interface types, which don't have any emitted width.
       if (elt.type.isa<sv::InterfaceType>())
         continue;
-
-      int bitWidth =
-          getBitWidthOrSentinel(getUnderlyingArrayElementType(elt.type));
-      if (bitWidth == -1) {
-        emitError(&op, getName(result))
-            << elt.suffix << " has an unsupported verilog type " << elt.type;
-        result = Value();
-        break;
-      }
-
-      if (bitWidth != 1) { // Width 1 is implicit.
-        // Add 5 to count the width of the "[:0] ".
-        size_t thisWidth = getPrintedIntWidth(bitWidth - 1) + 5;
-        maxTypeWidth = std::max(thisWidth, maxTypeWidth);
-      }
+      maxTypeWidth = std::max(getPrintedTypeWidth(elt.type, &op), maxTypeWidth);
     }
 
     // Emit this declaration.
@@ -2903,17 +2934,11 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
   // Determine the width of the widest type we have to print so everything
   // lines up nicely.
   bool hasOutputs = false;
-  unsigned maxTypeWidth = 0;
+  size_t maxTypeWidth = 0;
   for (auto &port : portInfo) {
     hasOutputs |= port.isOutput();
-
-    int bitWidth = getBitWidthOrSentinel(port.type);
-    if (bitWidth == -1 || bitWidth == 1)
-      continue; // The error case is handled below.
-
-    // Add 4 to count the width of the "[:0] ".
-    unsigned thisWidth = getPrintedIntWidth(bitWidth - 1) + 5;
-    maxTypeWidth = std::max(thisWidth, maxTypeWidth);
+    maxTypeWidth =
+        std::max(getPrintedTypeWidth(port.type, module), maxTypeWidth);
   }
 
   addIndent();
@@ -3017,18 +3042,11 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
   // Determine the width of the widest type we have to print so everything
   // lines up nicely.
   bool hasOutputs = false;
-  unsigned maxTypeWidth = 0;
+  size_t maxTypeWidth = 0;
   for (auto &port : portInfo) {
-    auto portType = port.type;
     hasOutputs |= port.isOutput();
-
-    int bitWidth = getBitWidthOrSentinel(portType);
-    if (bitWidth == -1 || bitWidth == 1)
-      continue; // The error case is handled below.
-
-    // Add 4 to count the width of the "[:0] ".
-    unsigned thisWidth = getPrintedIntWidth(bitWidth - 1) + 5;
-    maxTypeWidth = std::max(thisWidth, maxTypeWidth);
+    maxTypeWidth =
+        std::max(getPrintedTypeWidth(port.type, module), maxTypeWidth);
   }
 
   addIndent();
@@ -3052,7 +3070,6 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
       break;
     }
 
-    int bitWidth = getBitWidthOrSentinel(portType);
     emitTypePaddedToWidth(portType, maxTypeWidth, module);
 
     // Emit the name.
@@ -3062,7 +3079,7 @@ void ModuleEmitter::emitRTLModule(rtl::RTLModuleOp module) {
     // If we have any more ports with the same types and the same direction,
     // emit them in a list on the same line.
     while (portIdx != e && portInfo[portIdx].direction == thisPortDirection &&
-           bitWidth == getBitWidthOrSentinel(portInfo[portIdx].type)) {
+           portType == portInfo[portIdx].type) {
       // Don't exceed our preferred line length.
       StringRef name = portInfo[portIdx].getName();
       if (os.tell() + 2 + name.size() - startOfLinePos >

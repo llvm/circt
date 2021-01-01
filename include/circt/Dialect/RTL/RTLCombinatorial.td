@@ -273,7 +273,7 @@ def MuxOp : RTLOp<"mux",
   ];
 }
 
-def ReinterpretCast : RTLOp<"reinterpret_cast", [NoSideEffect]> {
+def ReinterpretCastOp : RTLOp<"reinterpret_cast", [NoSideEffect]> {
   let summary = "Change types without any conversion";
 
   let arguments = (ins AnyType:$arg);
