@@ -46,6 +46,11 @@ static llvm::ManagedStatic<StringSet<>> reservedWordCache;
 //===----------------------------------------------------------------------===//
 
 static bool isVerilogExpression(Operation *op) {
+  // Merge is an expression according to the RTL dialect, but we need it emitted
+  // as a statement with its own wire declaration.
+  if (isa<rtl::MergeOp>(op))
+    return false;
+
   // All FIRRTL expressions and RTL combinatorial logic ops are Verilog
   // expressions.
   return isExpression(op) || rtl::isCombinatorial(op) || sv::isExpression(op) ||
@@ -327,6 +332,7 @@ public:
   void emitStatement(AttachOp op);
   void emitStatement(InvalidOp op);
   void emitStatement(ConnectOp op);
+  void emitStatement(rtl::MergeOp op);
   void emitStatement(rtl::ConnectOp op);
   void emitStatement(sv::BPAssignOp op);
   void emitStatement(sv::PAssignOp op);
@@ -1563,6 +1569,23 @@ void ModuleEmitter::emitStatement(InvalidOp op) {
   emitLocationInfoAndNewLine(ops);
 }
 
+void ModuleEmitter::emitStatement(rtl::MergeOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+
+  // Emit "a = rtl.merge x, y, z" as:
+  //   assign a = x;
+  //   assign a = y;
+  //   assign a = z;
+  for (auto operand : op.getOperands()) {
+    ops.insert(op);
+    indent() << "assign " << getName(op) << " = ";
+    emitExpression(operand, ops);
+    os << ';';
+    emitLocationInfoAndNewLine(ops);
+    ops.clear();
+  }
+}
+
 void ModuleEmitter::emitStatement(rtl::ConnectOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -2375,7 +2398,7 @@ static bool isExpressionUnableToInline(Operation *op) {
 /// Return true for operations that are always inlined.
 static bool isExpressionAlwaysInline(Operation *op) {
   if (isa<firrtl::ConstantOp>(op) || isa<rtl::ConstantOp>(op) ||
-      isa<SubfieldOp>(op))
+      isa<SubfieldOp>(op) || isa<rtl::ArrayIndexOp>(op))
     return true;
 
   // An SV interface modport is a symbolic name that is always inlined.
@@ -2685,6 +2708,9 @@ void ModuleEmitter::emitOperation(Operation *op) {
 
   if (RTLStmtEmitter(*this).dispatchStmtVisitor(op))
     return;
+
+  if (auto merge = dyn_cast<rtl::MergeOp>(op))
+    return emitStatement(merge);
 
   class SVEmitter : public sv::Visitor<SVEmitter, bool> {
   public:
