@@ -1297,34 +1297,41 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     auto port = cast<SubfieldOp>(*op->user_begin());
     port->dropAllReferences();
 
+    auto portBundleType =
+        port.getType().cast<FIRRTLType>().getPassiveType().cast<BundleType>();
+
     // A port has a bunch of subfields hanging off of it, which are the various
     // parts of the port.  Emit a wire for each of the pieces so users of the
     // subfield have something to use.
-    SmallVector<std::pair<StringAttr, Value>> portWires;
-    while (!port->use_empty()) {
-      auto portField = cast<SubfieldOp>(*port->user_begin());
-      auto fieldType = lowerType(portField.getType());
+    SmallVector<std::pair<Identifier, Value>> portWires;
+    for (BundleType::BundleElement elt : portBundleType.getElements()) {
+      auto fieldType = lowerType(elt.type);
       if (!fieldType)
-        return op.emitOpError("port " + port.fieldname() +
+        return op.emitOpError("port " + elt.name.str() +
                               " has unexpected field");
-      auto name = (Twine(memName) + "_" + port.fieldname() + "_" +
-                   portField.fieldname())
-                      .str();
+      auto name =
+          (Twine(memName) + "_" + port.fieldname() + "_" + elt.name.str())
+              .str();
       auto fieldWire = builder->create<rtl::WireOp>(fieldType, name);
-
-      portField->dropAllReferences();
-      setLowering(portField, fieldWire);
-      portWires.push_back({portField.fieldnameAttr(), fieldWire});
+      portWires.push_back({elt.name, fieldWire});
     }
 
     // Return the inout wire corresponding to a port field.
     auto getPortFieldWire = [&](StringRef portName) -> Value {
       for (auto entry : portWires) {
-        if (entry.first.getValue() == portName)
+        if (entry.first.strref() == portName)
           return entry.second;
       }
       llvm_unreachable("unknown port wire!");
     };
+
+    // Now that we have the wires for each element, rewrite any subfields to use
+    // them instead of the subfields.
+    while (!port->use_empty()) {
+      auto portField = cast<SubfieldOp>(*port->user_begin());
+      portField->dropAllReferences();
+      setLowering(portField, getPortFieldWire(portField.fieldname()));
+    }
 
     // Return the value corresponding to a port field.
     auto getPortFieldValue = [&](StringRef portName) -> Value {
