@@ -1338,6 +1338,10 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       continue;
     case MemOp::PortKind::Read: {
       auto emitReads = [&](bool masked) {
+        // TODO: not handling bundle elements correctly yet.
+        if (regs.size() > 1)
+          op.emitOpError("don't support bundle elements yet");
+
         // Emit an assign to the read port, using the address.
         // TODO(firrtl-spec): It appears that the clock signal on the read port
         // is ignored, why does it exist?
@@ -1376,6 +1380,10 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     }
 
     case MemOp::PortKind::Write: {
+      // TODO: not handling bundle elements correctly yet.
+      if (regs.size() > 1)
+        op.emitOpError("don't support bundle elements yet");
+
       // Emit something like:
       // always @(posedge _M_write_clk) begin
       //   if (_M_write_en & _M_write_mask)
