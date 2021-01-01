@@ -573,7 +573,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:   sv.initial  {
     // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
     // CHECK-NEXT:     sv.ifdef "RANDOMIZE_MEM_INIT"  {
-    // CHECK-NEXT:       sv.verbatim "integer {{.*}}`RANDOM;"(%_M) : !rtl.inout<array<12xi42>>
+    // CHECK-NEXT:       sv.verbatim "integer {{.*}}_initvar < 12{{.*}}`RANDOM;"(%_M) : !rtl.inout<array<12xi42>>
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }

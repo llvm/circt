@@ -1266,10 +1266,10 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
                                          "mems greater than 2^32");
 
           std::string action = "integer {{0}}_initvar;\n";
-          action += "for ({{0}}initvar = 0; {{0}}_initvar < 8; "
-                    "{{0}}_initvar = {{0}}_initvar+1)";
+          action += "for ({{0}}_initvar = 0; {{0}}_initvar < " +
+                    llvm::utostr(depth) + "; {{0}}_initvar = {{0}}_initvar+1)";
           if (regs.size() != 1)
-            action += " begin\n";
+            action += " begin";
 
           for (size_t i = 0, e = regs.size(); i != e; ++i)
             action +=
