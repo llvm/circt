@@ -1307,9 +1307,10 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       if (!fieldType)
         return op.emitOpError("port " + port.fieldname() +
                               " has unexpected field");
-      auto name =
-          Twine(memName) + "_" + port.fieldname() + "_" + portField.fieldname();
-      auto fieldWire = builder->create<rtl::WireOp>(fieldType, name.str());
+      auto name = (Twine(memName) + "_" + port.fieldname() + "_" +
+                   portField.fieldname())
+                      .str();
+      auto fieldWire = builder->create<rtl::WireOp>(fieldType, name);
 
       portField->dropAllReferences();
       setLowering(portField, fieldWire);
