@@ -258,17 +258,31 @@ module {
     // CHECK-EMPTY:
     rtl.connect %myWire, %in4 : i4       // CHECK-NEXT: assign myWire = in4;
 
-    %subscript1 = rtl.arrayindex %myArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
-    rtl.connect %subscript1, %in8 : i8   // CHECK-NEXT: assign myArray1[in4] = in8;
+    %subscript = rtl.arrayindex %myArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
+    rtl.connect %subscript, %in8 : i8   // CHECK-NEXT: assign myArray1[in4] = in8;
 
     %wireout = rtl.read_inout %myWire : !rtl.inout<i4>
 
-    %subscript2 = rtl.arrayindex %myArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
-    %memout = rtl.read_inout %subscript2 : !rtl.inout<i8>
+    %memout = rtl.read_inout %subscript : !rtl.inout<i8>
 
     // CHECK-NEXT: assign a = myWire;
     // CHECK-NEXT: assign b = myArray1[in4];
     rtl.output %wireout, %memout : i4, i8
+  }
+
+  // CHECK-LABEL: module merge
+  rtl.module @merge(%in1: i4, %in2: i4, %in3: i4, %in4: i4) -> (%x: i4) {
+    // CHECK: wire [3:0] _T;
+    // CHECK: assign _T = in1 + in2;
+    %a = rtl.add %in1, %in2 : i4
+
+    // CHECK-NEXT: assign _T = in2;
+    // CHECK-NEXT: assign _T = in3;
+    %b = rtl.merge %a, %in2, %in3 : i4
+
+    // CHECK: assign x = _T + in4 + in4;
+    %c = rtl.add %b, %in4, %in4 : i4
+    rtl.output %c : i4
   }
 }
 

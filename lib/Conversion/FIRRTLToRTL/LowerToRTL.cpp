@@ -1047,6 +1047,8 @@ void FIRRTLLowering::handleUnloweredOp(Operation *op) {
     if (it == valueMapping.end())
       continue;
 
+    op->emitWarning("LowerToRTL couldn't handle this");
+
     // Otherwise, insert a cast from the lowered value.
     Value mapped = castToFIRRTLType(it->second, origValue.getType(), *builder);
     operand.set(mapped);
