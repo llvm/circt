@@ -647,5 +647,97 @@ module attributes {firrtl.mainModule = "Simple"} {
     %19 = firrtl.stdIntCast %5 : (!firrtl.sint<42>) -> i42
     rtl.output %19 : i42
   }
+
+  // module MemAggregate :
+  //    input clock1 : Clock
+  //    input clock2 : Clock
+  //
+  //    mem _M : @[Decoupled.scala 209:24]
+  //          data-type => { id : Analog<4>, other: SInt<8> }
+  //          depth => 20
+  //          read-latency => 0
+  //          write-latency => 1
+  //          reader => read
+  //          writer => write
+  //          read-under-write => undefined
+  //
+  // CHECK-LABEL: rtl.module @MemAggregate(%clock1: i1, %clock2: i1) {
+  // CHECK-NEXT:  %_M_id = sv.reg : !rtl.inout<array<20xi4>>
+  // CHECK-NEXT:  %_M_other = sv.reg : !rtl.inout<array<20xi8>>
+  // CHECK-NEXT:  sv.ifdef "!SYNTHESIS"  {
+  // CHECK-NEXT:    sv.initial  {
+  // CHECK-NEXT:      sv.verbatim "`INIT_RANDOM_PROLOG_"
+  // CHECK-NEXT:      sv.ifdef "RANDOMIZE_MEM_INIT"  {
+  // CHECK-NEXT:        sv.verbatim "integer {{.*}}_initvar < 20{{.*}}
+  // CHECK-NEXT:      }
+  // CHECK-NEXT:    }
+  // CHECK-NEXT:  }
+  // CHECK-NEXT:  rtl.output
+  // CHECK-NEXT:}
+  rtl.module @MemAggregate(%clock1: i1, %clock2: i1) {
+      %0 = firrtl.stdIntCast %clock1 : (i1) -> !firrtl.clock
+      %1 = firrtl.stdIntCast %clock2 : (i1) -> !firrtl.clock
+      %_M = firrtl.mem "Undefined" {depth = 20 : i64, name = "_M", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<read: bundle<addr: flip<uint<5>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>, other: sint<8>>>, write: flip<bundle<addr: uint<5>, en: uint<1>, clk: clock, data: bundle<id: analog<4>, other: sint<8>>, mask: bundle<id: uint<1>, other: uint<1>>>>>
+      rtl.output
+    }
+
+  // module MemEmpty :
+  //    mem Empty :
+  //      data-type => UInt<32>
+  //      depth => 16
+  //      read-latency => 0
+  //      write-latency => 1
+  //      read-under-write => undefined
+  //
+  // CHECK-LABEL: rtl.module @MemEmpty() {
+  // CHECK-NEXT:   sv.ifdef "!SYNTHESIS"  {
+  // CHECK-NEXT:     sv.initial  {
+  // CHECK-NEXT:       sv.verbatim "`INIT_RANDOM_PROLOG_"
+  // CHECK-NEXT:       sv.ifdef "RANDOMIZE_MEM_INIT"  {
+  // CHECK-NEXT:       }
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:   }
+  // CHECK-NEXT:   rtl.output
+  // CHECK-NEXT: }
+  rtl.module @MemEmpty() {
+    %Empty = firrtl.mem "Undefined" {depth = 16 : i64, name = "Empty", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<>
+    rtl.output
+  }
+
+  // module MemOne :
+  //   mem _M : @[Decoupled.scala 209:24]
+  //         data-type => { id : Analog<4>, other: SInt<8> }
+  //         depth => 1
+  //         read-latency => 0
+  //         write-latency => 1
+  //         reader => read
+  //         writer => write
+  //         read-under-write => undefined
+  //
+  // CHECK-LABEL: rtl.module @MemOne() {
+  // CHECK-NEXT:   %_M_id = sv.reg : !rtl.inout<array<1xi4>>
+  // CHECK-NEXT:   %_M_other = sv.reg : !rtl.inout<array<1xi8>>
+  // CHECK-NEXT:   sv.ifdef "!SYNTHESIS"  {
+  // CHECK-NEXT:     sv.initial  {
+  // CHECK-NEXT:       sv.verbatim "`INIT_RANDOM_PROLOG_"
+  // CHECK-NEXT:       sv.ifdef "RANDOMIZE_MEM_INIT"  {
+  // CHECK-NEXT:         %0 = sv.textual_value "`RANDOM" : i4
+  // CHECK-NEXT:         %false = rtl.constant(false) : i1
+  // CHECK-NEXT:         %1 = rtl.arrayindex %_M_id[%false] : !rtl.inout<array<1xi4>>, i1
+  // CHECK-NEXT:         sv.bpassign %1, %0 : i4
+  // CHECK-NEXT:         %2 = sv.textual_value "`RANDOM" : i8
+  // CHECK-NEXT:         %false_0 = rtl.constant(false) : i1
+  // CHECK-NEXT:         %3 = rtl.arrayindex %_M_other[%false_0] : !rtl.inout<array<1xi8>>, i1
+  // CHECK-NEXT:         sv.bpassign %3, %2 : i8
+  // CHECK-NEXT:       }
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:   }
+  // CHECK-NEXT:   rtl.output
+  // CHECK-NEXT: }
+  rtl.module @MemOne() {
+    %_M = firrtl.mem "Undefined" {depth = 1 : i64, name = "_M", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<read: bundle<addr: flip<uint<1>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>, other: sint<8>>>, write: flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<id: analog<4>, other: sint<8>>, mask: bundle<id: uint<1>, other: uint<1>>>>>
+    rtl.output
+  }
+
 }
 
