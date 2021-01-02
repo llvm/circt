@@ -26,6 +26,14 @@ namespace rtl {
 /// hardware but not marker types like InOutType.
 bool isRTLValueType(mlir::Type type);
 
+/// Return the element type of an InOutType or null if the operand isn't an
+/// InOut type.
+mlir::Type getInOutElementType(mlir::Type type);
+
+/// Return the element type of an ArrayType or UnpackedArrayType, or null if the
+/// operand isn't an array.
+mlir::Type getAnyRTLArrayElementType(mlir::Type type);
+
 } // namespace rtl
 } // namespace circt
 

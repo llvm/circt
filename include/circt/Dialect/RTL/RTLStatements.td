@@ -72,8 +72,8 @@ def ReadInOutOp
 class InOutIndexConstraint<string value, string inoutValue>
   : TypesMatchWith<"type should be element of inout type",
                    inoutValue, value,
-                   "InOutType::get($_self.cast<InOutType>().getElementType()"
-                                        ".cast<ArrayType>().getElementType())">;
+                   "InOutType::get(rtl::getAnyRTLArrayElementType("
+                                            "getInOutElementType($_self)))">;
 
 def ArrayIndexOp
  : RTLOp<"arrayindex",

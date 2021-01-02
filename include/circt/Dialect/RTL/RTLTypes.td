@@ -78,8 +78,8 @@ def InOutElementType : Type<CPred<"isRTLValueType($_self)">,
                             "a valid inout element">;
 
 def InOutArrayType
-  : Type<CPred<"$_self.isa<InOutType>() && "
-               "$_self.cast<InOutType>().getElementType().isa<ArrayType>()">,
+  : Type<CPred<"getAnyRTLArrayElementType(getInOutElementType($_self)) "
+                        "!= Type()">,
                "an inout type with array element">;
 
 
@@ -103,5 +103,4 @@ class InOutTypeConstraint<string value, string inoutValue>
 // ensure that functions and other things aren't passed into this.
 class InOutElementConstraint<string value, string inoutValue>
   : TypesMatchWith<"type should be element of inout type",
-                   inoutValue, value,
-                   "$_self.cast<InOutType>().getElementType()">;
+                   inoutValue, value, "getInOutElementType($_self)">;

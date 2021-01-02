@@ -92,10 +92,10 @@ static int getBitWidthOrSentinel(Type type) {
 /// Given a type that may be an array or inout, dig through recursive arrays to
 /// find the underlying element type.
 static Type getUnderlyingArrayElementType(Type type) {
-  if (auto array = type.dyn_cast<rtl::ArrayType>())
-    return getUnderlyingArrayElementType(array.getElementType());
-  if (auto inout = type.dyn_cast<rtl::InOutType>())
-    return getUnderlyingArrayElementType(inout.getElementType());
+  if (auto arrayElt = rtl::getAnyRTLArrayElementType(type))
+    return getUnderlyingArrayElementType(arrayElt);
+  if (auto inoutElt = rtl::getInOutElementType(type))
+    return getUnderlyingArrayElementType(inoutElt);
   return type;
 }
 
@@ -2435,12 +2435,13 @@ static void printArraySubscripts(Type type, raw_ostream &os) {
   if (auto inout = type.dyn_cast<rtl::InOutType>())
     return printArraySubscripts(inout.getElementType(), os);
 
-  auto array = type.dyn_cast<rtl::ArrayType>();
-  if (!array)
-    return;
-
-  printArraySubscripts(array.getElementType(), os);
-  os << '[' << (array.getSize() - 1) << ":0]";
+  if (auto array = type.dyn_cast<rtl::ArrayType>()) {
+    printArraySubscripts(array.getElementType(), os);
+    os << '[' << (array.getSize() - 1) << ":0]";
+  } else if (auto array = type.dyn_cast<rtl::UnpackedArrayType>()) {
+    printArraySubscripts(array.getElementType(), os);
+    os << '[' << (array.getSize() - 1) << ":0]";
+  }
 }
 
 void ModuleEmitter::collectNamesEmitDecls(Block &block) {
