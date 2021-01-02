@@ -19,9 +19,14 @@
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/RTL/RTLTypes.h.inc"
 
+namespace circt {
+namespace rtl {
 /// Return true if the specified type can be used as an RTL value type, that is
 /// the set of types that can be composed together to represent synthesized,
 /// hardware but not marker types like InOutType.
 bool isRTLValueType(mlir::Type type);
+
+} // namespace rtl
+} // namespace circt
 
 #endif // CIRCT_DIALECT_RTL_TYPES_H

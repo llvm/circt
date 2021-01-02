@@ -34,6 +34,25 @@ def ArrayType : RTLType<"Array"> {
   }];
 }
 
+// An 'unpacked' array of fixed size.
+def UnpackedArrayType : RTLType<"UnpackedArray"> {
+  let summary = "SystemVerilog 'unpacked' fixed-sized array";
+  let description = [{
+    Unpacked arrays are a more flexible array representation than packed arrays,
+    and are typically used to model memories.  See SystemVerilog Spec 7.4.2.
+  }];
+
+  let mnemonic = "uarray";
+  let parameters = (ins "::mlir::Type":$elementType, "size_t":$size);
+  let genVerifyInvariantsDecl = 1;
+
+  let extraClassDeclaration = [{
+    static UnpackedArrayType get(Type elementType, size_t size) {
+      return get(elementType.getContext(), elementType, size);
+    }
+  }];
+}
+
 def InOutType : RTLType<"InOut"> {
   let summary = "inout type";
   let description = [{

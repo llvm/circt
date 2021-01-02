@@ -26,17 +26,22 @@ using namespace circt::rtl;
 /// Return true if the specified type can be used as an RTL value type, that is
 /// the set of types that can be composed together to represent synthesized,
 /// hardware but not marker types like InOutType.
-bool isRTLValueType(Type type) {
+bool circt::rtl::isRTLValueType(Type type) {
   if (auto intType = type.dyn_cast<IntegerType>())
     return intType.isSignless();
 
   if (auto array = type.dyn_cast<ArrayType>())
     return isRTLValueType(array.getElementType());
 
+  if (auto array = type.dyn_cast<UnpackedArrayType>())
+    return isRTLValueType(array.getElementType());
+
   return false;
 }
 
-/// Parse and print nested RTL types nicely.
+/// Parse and print nested RTL types nicely.  These helper methods allow eliding
+/// the "rtl." prefix on array, inout, and other types when in a context that
+/// expects RTL subelement types.
 static ParseResult parseRTLElementType(Type &result, DialectAsmParser &p) {
   // If this is an RTL dialect type, then we don't need/want the !rtl. prefix
   // redundantly specified.
@@ -45,7 +50,8 @@ static ParseResult parseRTLElementType(Type &result, DialectAsmParser &p) {
   auto typeString =
       StringRef(curPtr, fullString.size() - (curPtr - fullString.data()));
 
-  if (typeString.startswith("array<") || typeString.startswith("inout<")) {
+  if (typeString.startswith("array<") || typeString.startswith("inout<") ||
+      typeString.startswith("uarray<")) {
     llvm::StringRef mnemonic;
     if (p.parseKeyword(&mnemonic))
       llvm_unreachable("should have an array or inout keyword here");
@@ -95,6 +101,43 @@ LogicalResult ArrayType::verifyConstructionInvariants(Location loc,
                                                       size_t size) {
   if (!isRTLValueType(innerType))
     return emitError(loc, "invalid element for rtl.array type");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// UnpackedArrayType
+//===----------------------------------------------------------------------===//
+
+Type UnpackedArrayType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+  SmallVector<int64_t, 2> dims;
+  Type inner;
+  if (p.parseLess() || p.parseDimensionList(dims, /* allowDynamic */ false) ||
+      parseRTLElementType(inner, p) || p.parseGreater())
+    return Type();
+
+  if (dims.size() != 1) {
+    p.emitError(p.getNameLoc(), "sv.uarray only supports one dimension");
+    return Type();
+  }
+
+  auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
+  if (failed(verifyConstructionInvariants(loc, inner, dims[0])))
+    return Type();
+
+  return get(ctxt, inner, dims[0]);
+}
+
+void UnpackedArrayType::print(DialectAsmPrinter &p) const {
+  p << "uarray<" << getSize() << "x";
+  printRTLElementType(getElementType(), p);
+  p << '>';
+}
+
+LogicalResult UnpackedArrayType::verifyConstructionInvariants(Location loc,
+                                                              Type innerType,
+                                                              size_t size) {
+  if (!isRTLValueType(innerType))
+    return emitError(loc, "invalid element for sv.uarray type");
   return success();
 }
 
