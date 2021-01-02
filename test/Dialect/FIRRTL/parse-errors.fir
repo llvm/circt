@@ -50,14 +50,16 @@ circuit test :
 circuit test :
   module invalid_name :
    input out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
-   out_0.xx <- out_0.yy  ; expected-error {{invalid subfield 'xx' for type '!firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>'}}
+   ; expected-error @+1 {{unknown field 'xx' in bundle type '!firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>'}}
+   out_0.xx <- out_0.yy
 
 ;// -----
 
 circuit test :
   module invalid_name :
    input out_0 : SInt<8>[5]
-   out_0[4] <- out_0[5]  ; expected-error {{invalid subindex '5' for type '!firrtl.vector<sint<8>, 5>'}}
+   ; expected-error @+1 {{out of range index '5' in vector type '!firrtl.vector<sint<8>, 5>'}}
+   out_0[4] <- out_0[5]
 
 ;// -----
 
@@ -65,7 +67,8 @@ circuit test :
   module invalid_add :
    input in : SInt<8>
    input c : Clock
-   node n = add(in, c)  ; expected-error {{invalid input types for 'add'}}
+   ; expected-error @+1 {{second operand must be an integer type, not '!firrtl.clock'}}
+   node n = add(in, c)
 
 ;// -----
 
@@ -73,7 +76,8 @@ circuit test :
   module invalid_add :
    input in : SInt<8>
    input c : Clock
-   node n = add(in, in, in)  ; expected-error {{invalid input types for 'add': '!firrtl.sint<8>', '!firrtl.sint<8>', '!firrtl.sint<8>'}}
+   ; expected-error @+1 {{operation requires two operands and no constants}}
+   node n = add(in, in, in)
 
 ;// -----
 
@@ -111,7 +115,7 @@ circuit test :
 circuit test :
   module invalid_name :
     input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
-    node n4 = add(bf, bf)  ; expected-error {{invalid input types for 'add'}}
+    node n4 = add(bf, bf)  ; expected-error {{operands must be integer types, not '!firrtl.bundle<int_1: uint<1>, int_out: uint<2>>' and '!firrtl.bundle<int_1: uint<1>, int_out: uint<2>>'}}
 
 ;// -----
 
@@ -119,8 +123,7 @@ circuit test :
   module invalid_bits:
      input a: UInt<8>
      output b: UInt<4>
-     ; expected-error@+2 {{high must be equal or greater than low, but got high = 4, low = 7}};
-     ; expected-error@+1 {{invalid input types for 'bits': '!firrtl.uint<8>'}}
+     ; expected-error@+1 {{high must be equal or greater than low, but got high = 4, low = 7}};
      b <= bits(a, 4, 7)
 
 ;// -----
@@ -129,4 +132,4 @@ circuit test :
   module invalid_add :
    input in1 : SInt
    input in2 : UInt
-   node n = add(in1, in2)  ; expected-error {{invalid input types for 'add'}}
+   node n = add(in1, in2)  ; expected-error {{operand signedness must match}}

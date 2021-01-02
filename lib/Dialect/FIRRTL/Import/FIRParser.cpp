@@ -941,13 +941,8 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result,
   auto resultType = result.getType().cast<FIRRTLType>();
   resultType =
       SubfieldOp::getResultType(resultType, fieldName, translateLocation(loc));
-  if (!resultType) {
-    // TODO(QoI): This error would be nicer with a .fir pretty print of the
-    // type.
-    emitError(loc, "invalid subfield '" + fieldName + "' for type ")
-        << result.getType();
+  if (!resultType)
     return failure();
-  }
 
   // Create the result operation.
   auto op =
@@ -978,13 +973,8 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result,
   auto resultType = result.getType().cast<FIRRTLType>();
   resultType = SubindexOp::getResultType(resultType, indexNo,
                                          translateLocation(indexLoc));
-  if (!resultType) {
-    // TODO(QoI): This error would be nicer with a .fir pretty print of the
-    // type.
-    emitError(indexLoc, "invalid subindex '" + Twine(indexNo))
-        << "' for type " << result.getType();
+  if (!resultType)
     return failure();
-  }
 
   // Create the result operation.
   auto op =
@@ -1020,13 +1010,8 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result,
   auto resultType = result.getType().cast<FIRRTLType>();
   resultType = SubaccessOp::getResultType(resultType, indexType,
                                           translateLocation(indexLoc));
-  if (!resultType) {
-    // TODO(QoI): This error would be nicer with a .fir pretty print of the
-    // type.
-    emitError(indexLoc, "invalid dynamic subaccess into ")
-        << result.getType() << " with index of type " << indexType;
+  if (!resultType)
     return failure();
-  }
 
   // Create the result operation.
   auto op = builder.create<SubaccessOp>(translateLocation(indexLoc), resultType,
@@ -1080,19 +1065,6 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
   for (auto v : operands)
     opTypes.push_back(v.getType().cast<FIRRTLType>());
 
-  auto typeError = [&](StringRef opName) -> ParseResult {
-    auto diag = emitError(loc, "invalid input types for '") << opName << "': ";
-    bool isFirst = true;
-    for (auto t : opTypes) {
-      if (!isFirst)
-        diag << ", ";
-      else
-        isFirst = false;
-      diag << t;
-    }
-    return failure();
-  };
-
   SmallVector<StringRef, 2> attrNames;
   switch (kind) {
   default:
@@ -1130,7 +1102,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
     auto resultTy =                                                            \
         CLASS::getResultType(opTypes, integers, translateLocation(loc));       \
     if (!resultTy)                                                             \
-      return typeError(#SPELLING);                                             \
+      return failure();                                                        \
     result = builder.create<CLASS>(translateLocation(loc), resultTy,           \
                                    ValueRange(operands), attrs);               \
     break;                                                                     \
