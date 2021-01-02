@@ -566,14 +566,14 @@ module attributes {firrtl.mainModule = "Simple"} {
     %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
     %c0_ui3 = firrtl.constant(0 : ui3) : !firrtl.uint<3>
 
-    // CHECK:  %_M = sv.reg : !rtl.inout<array<12xi42>>
+    // CHECK:  %_M = sv.reg : !rtl.inout<uarray<12xi42>>
     %_M = firrtl.mem "Undefined" {depth = 12 : i64, name = "_M", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<read: bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>, write: flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>>
 
     // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
     // CHECK-NEXT:   sv.initial  {
     // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
     // CHECK-NEXT:     sv.ifdef "RANDOMIZE_MEM_INIT"  {
-    // CHECK-NEXT:       sv.verbatim "integer {{.*}}_initvar < 12{{.*}}`RANDOM;"(%_M) : !rtl.inout<array<12xi42>>
+    // CHECK-NEXT:       sv.verbatim "integer {{.*}}_initvar < 12{{.*}}`RANDOM;"(%_M) : !rtl.inout<uarray<12xi42>>
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
@@ -662,8 +662,8 @@ module attributes {firrtl.mainModule = "Simple"} {
   //          read-under-write => undefined
   //
   // CHECK-LABEL: rtl.module @MemAggregate(%clock1: i1, %clock2: i1) {
-  // CHECK-NEXT:  %_M_id = sv.reg : !rtl.inout<array<20xi4>>
-  // CHECK-NEXT:  %_M_other = sv.reg : !rtl.inout<array<20xi8>>
+  // CHECK-NEXT:  %_M_id = sv.reg : !rtl.inout<uarray<20xi4>>
+  // CHECK-NEXT:  %_M_other = sv.reg : !rtl.inout<uarray<20xi8>>
   // CHECK-NEXT:  sv.ifdef "!SYNTHESIS"  {
   // CHECK-NEXT:    sv.initial  {
   // CHECK-NEXT:      sv.verbatim "`INIT_RANDOM_PROLOG_"
@@ -715,19 +715,19 @@ module attributes {firrtl.mainModule = "Simple"} {
   //         read-under-write => undefined
   //
   // CHECK-LABEL: rtl.module @MemOne() {
-  // CHECK-NEXT:   %_M_id = sv.reg : !rtl.inout<array<1xi4>>
-  // CHECK-NEXT:   %_M_other = sv.reg : !rtl.inout<array<1xi8>>
+  // CHECK-NEXT:   %_M_id = sv.reg : !rtl.inout<uarray<1xi4>>
+  // CHECK-NEXT:   %_M_other = sv.reg : !rtl.inout<uarray<1xi8>>
   // CHECK-NEXT:   sv.ifdef "!SYNTHESIS"  {
   // CHECK-NEXT:     sv.initial  {
   // CHECK-NEXT:       sv.verbatim "`INIT_RANDOM_PROLOG_"
   // CHECK-NEXT:       sv.ifdef "RANDOMIZE_MEM_INIT"  {
   // CHECK-NEXT:         %0 = sv.textual_value "`RANDOM" : i4
   // CHECK-NEXT:         %false = rtl.constant(false) : i1
-  // CHECK-NEXT:         %1 = rtl.arrayindex %_M_id[%false] : !rtl.inout<array<1xi4>>, i1
+  // CHECK-NEXT:         %1 = rtl.arrayindex %_M_id[%false] : !rtl.inout<uarray<1xi4>>, i1
   // CHECK-NEXT:         sv.bpassign %1, %0 : i4
   // CHECK-NEXT:         %2 = sv.textual_value "`RANDOM" : i8
   // CHECK-NEXT:         %false_0 = rtl.constant(false) : i1
-  // CHECK-NEXT:         %3 = rtl.arrayindex %_M_other[%false_0] : !rtl.inout<array<1xi8>>, i1
+  // CHECK-NEXT:         %3 = rtl.arrayindex %_M_other[%false_0] : !rtl.inout<uarray<1xi8>>, i1
   // CHECK-NEXT:         sv.bpassign %3, %2 : i8
   // CHECK-NEXT:       }
   // CHECK-NEXT:     }
@@ -746,7 +746,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
 
-    // CHECK:  %_M = sv.reg : !rtl.inout<array<12xi42>>
+    // CHECK:  %_M = sv.reg : !rtl.inout<uarray<12xi42>>
     %_M = firrtl.mem "Undefined" {depth = 12 : i64, name = "_M", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<read: bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>>
     // Read port.
     // CHECK: %_M_read_addr = rtl.wire : !rtl.inout<i4>
