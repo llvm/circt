@@ -1240,7 +1240,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   // Add one reg declaration for each field of the mem.
   SmallVector<Value> regs;
   for (const auto &field : fieldTypes) {
-    auto resultType = rtl::ArrayType::get(field.type, depth);
+    auto resultType = rtl::UnpackedArrayType::get(field.type, depth);
     auto name = builder->getStringAttr(field.name);
     regs.push_back(builder->create<sv::RegOp>(resultType, name));
   }
@@ -1254,8 +1254,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       builder->create<sv::IfDefOp>("RANDOMIZE_MEM_INIT", [&]() {
         if (depth == 1) { // Don't emit a for loop for one element.
           for (Value reg : regs) {
-            auto type = reg.getType().cast<rtl::InOutType>().getElementType();
-            type = type.cast<rtl::ArrayType>().getElementType();
+            auto type = rtl::getInOutElementType(reg.getType());
+            type = rtl::getAnyRTLArrayElementType(type);
             auto randomVal =
                 builder->create<sv::TextualValueOp>(type, "`RANDOM");
             auto zero = builder->create<rtl::ConstantOp>(APInt(1, 0));
