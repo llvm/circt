@@ -925,33 +925,29 @@ FIRRTLType SubaccessOp::getResultType(FIRRTLType inType, FIRRTLType indexType,
 // Binary Primitives
 //===----------------------------------------------------------------------===//
 
-/// If LHS and RHS are both UInt or SInt types, the return true and compute the
-/// max width of them if known.  If unknown, return -1 in maxWidth.
-static bool isSameIntegerType(FIRRTLType lhs, FIRRTLType rhs,
-                              int32_t &maxWidth) {
+/// If LHS and RHS are both UInt or SInt types, the return true and fill in the
+/// width of them if known.  If unknown, return -1 for the widths.
+static bool isSameIntTypeKind(FIRRTLType lhs, FIRRTLType rhs, int32_t &lhsWidth,
+                              int32_t &rhsWidth) {
   // Must have two integer types with the same signedness.
   auto lhsi = lhs.dyn_cast<IntType>();
-  if (!lhsi || lhsi.getTypeID() != rhs.getTypeID())
+  auto rhsi = rhs.dyn_cast<IntType>();
+  if (!lhsi || !rhsi || lhsi.isSigned() != rhsi.isSigned())
     return false;
 
-  auto lhsWidth = lhsi.getWidth();
-  auto rhsWidth = rhs.cast<IntType>().getWidth();
-  if (lhsWidth.hasValue() && rhsWidth.hasValue())
-    maxWidth = std::max(lhsWidth.getValue(), rhsWidth.getValue());
-  else
-    maxWidth = -1;
+  lhsWidth = lhsi.getWidthOrSentinel();
+  rhsWidth = rhs.cast<IntType>().getWidthOrSentinel();
   return true;
 }
 
 static FIRRTLType getAddSubResult(FIRRTLType lhs, FIRRTLType rhs) {
-  int32_t width;
-  if (isSameIntegerType(lhs, rhs, width)) {
-    if (width != -1)
-      ++width;
-    return IntType::get(lhs.getContext(), lhs.isa<SIntType>(), width);
-  }
+  int32_t lhsWidth, rhsWidth, resultWidth = -1;
+  if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth))
+    return {};
 
-  return {};
+  if (lhsWidth != -1 && rhsWidth != -1)
+    resultWidth = std::max(lhsWidth, rhsWidth) + 1;
+  return IntType::get(lhs.getContext(), lhs.isa<SIntType>(), resultWidth);
 }
 
 FIRRTLType AddPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
@@ -963,75 +959,48 @@ FIRRTLType SubPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
 }
 
 FIRRTLType MulPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
-  if (lhs.getTypeID() != rhs.getTypeID())
+  int32_t lhsWidth, rhsWidth, resultWidth = -1;
+  if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth))
     return {};
 
-  int32_t width = -1;
-  if (auto lu = lhs.dyn_cast<UIntType>()) {
-    auto widthV = lu.getWidth();
-    auto ru = rhs.cast<UIntType>();
-    if (widthV.hasValue() && ru.getWidth().getValue())
-      width = widthV.getValue() + ru.getWidth().getValue();
-    return UIntType::get(lhs.getContext(), width);
-  }
+  if (lhsWidth != -1 && rhsWidth != -1)
+    resultWidth = lhsWidth + rhsWidth;
 
-  if (auto ls = lhs.dyn_cast<SIntType>()) {
-    auto widthV = ls.getWidth();
-    auto rs = rhs.cast<SIntType>();
-    if (widthV.hasValue() && rs.getWidth().hasValue())
-      width = ls.getWidthOrSentinel() + rs.getWidthOrSentinel();
-    return SIntType::get(lhs.getContext(), width);
-  }
-  return {};
+  return IntType::get(lhs.getContext(), lhs.isa<SIntType>(), resultWidth);
 }
 
 FIRRTLType DivPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
-  if (lhs.getTypeID() != rhs.getTypeID())
+  int32_t lhsWidth, rhsWidth;
+  if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth))
     return {};
 
   // For unsigned, the width is the width of the numerator on the LHS.
-  if (auto lu = lhs.dyn_cast<UIntType>())
-    return UIntType::get(lhs.getContext(), lu.getWidthOrSentinel());
+  if (lhs.isa<UIntType>())
+    return UIntType::get(lhs.getContext(), lhsWidth);
 
   // For signed, the width is the width of the numerator on the LHS, plus 1.
-  if (auto ls = lhs.dyn_cast<SIntType>()) {
-    int32_t width = -1;
-    if (ls.getWidth().hasValue())
-      width = ls.getWidth().getValue() + 1;
-    return SIntType::get(lhs.getContext(), width);
-  }
-  return {};
+  int32_t resultWidth = lhsWidth != -1 ? lhsWidth + 1 : -1;
+  return SIntType::get(lhs.getContext(), resultWidth);
 }
 
 FIRRTLType RemPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
-  if (lhs.getTypeID() != rhs.getTypeID())
+  int32_t lhsWidth, rhsWidth, resultWidth = -1;
+  if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth))
     return {};
 
-  int32_t width = -1;
-  if (auto lu = lhs.dyn_cast<UIntType>()) {
-    auto widthV = lu.getWidth();
-    auto ru = rhs.cast<UIntType>();
-    if (widthV.hasValue() && ru.getWidth().getValue())
-      width = std::min(widthV.getValue(), ru.getWidth().getValue());
-    return UIntType::get(lhs.getContext(), width);
-  }
-
-  if (auto ls = lhs.dyn_cast<SIntType>()) {
-    auto widthV = ls.getWidth();
-    auto rs = rhs.cast<SIntType>();
-    if (widthV.hasValue() && rs.getWidth().hasValue())
-      width = std::min(ls.getWidthOrSentinel(), rs.getWidthOrSentinel());
-    return SIntType::get(lhs.getContext(), width);
-  }
-
-  return {};
+  if (lhsWidth != -1 && rhsWidth != -1)
+    resultWidth = std::min(lhsWidth, rhsWidth);
+  return IntType::get(lhs.getContext(), lhs.isa<SIntType>(), resultWidth);
 }
 
 static FIRRTLType getBitwiseBinaryResult(FIRRTLType lhs, FIRRTLType rhs) {
-  int32_t width;
-  if (isSameIntegerType(lhs, rhs, width))
-    return UIntType::get(lhs.getContext(), width);
-  return {};
+  int32_t lhsWidth, rhsWidth, resultWidth = -1;
+  if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth))
+    return {};
+
+  if (lhsWidth != -1 && rhsWidth != -1)
+    resultWidth = std::max(lhsWidth, rhsWidth);
+  return UIntType::get(lhs.getContext(), resultWidth);
 }
 
 FIRRTLType AndPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
@@ -1045,10 +1014,11 @@ FIRRTLType XorPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
 }
 
 static FIRRTLType getCompareResult(FIRRTLType lhs, FIRRTLType rhs) {
-  if ((lhs.isa<UIntType>() && rhs.isa<UIntType>()) ||
-      (lhs.isa<SIntType>() && rhs.isa<SIntType>()))
-    return UIntType::get(lhs.getContext(), 1);
-  return {};
+  int32_t lhsWidth, rhsWidth;
+  if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth))
+    return {};
+
+  return UIntType::get(lhs.getContext(), 1);
 }
 
 FIRRTLType LEQPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
@@ -1071,21 +1041,13 @@ FIRRTLType NEQPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
 }
 
 FIRRTLType CatPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
-  if (auto lu = lhs.dyn_cast<UIntType>())
-    if (auto ru = rhs.dyn_cast<UIntType>()) {
-      int32_t width = -1;
-      if (lu.getWidth().hasValue() && ru.getWidth().hasValue())
-        width = lu.getWidthOrSentinel() + ru.getWidthOrSentinel();
-      return UIntType::get(lhs.getContext(), width);
-    }
-  if (auto ls = lhs.dyn_cast<SIntType>())
-    if (auto rs = rhs.dyn_cast<SIntType>()) {
-      int32_t width = -1;
-      if (ls.getWidth().hasValue() && rs.getWidth().hasValue())
-        width = ls.getWidthOrSentinel() + rs.getWidthOrSentinel();
-      return UIntType::get(lhs.getContext(), width);
-    }
-  return {};
+  int32_t lhsWidth, rhsWidth, resultWidth = -1;
+  if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth))
+    return {};
+
+  if (lhsWidth != -1 && rhsWidth != -1)
+    resultWidth = lhsWidth + rhsWidth;
+  return UIntType::get(lhs.getContext(), resultWidth);
 }
 
 FIRRTLType DShlPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
@@ -1116,12 +1078,13 @@ FIRRTLType DShrPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
 }
 
 FIRRTLType ValidIfPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
-  if (!lhs.isa<UIntType>())
-    return {};
-  auto lhsWidth = lhs.cast<UIntType>().getWidthOrSentinel();
-  if (lhsWidth != -1 && lhsWidth != 1)
-    return {};
-  return rhs;
+  if (auto lhsUInt = lhs.dyn_cast<UIntType>()) {
+    auto lhsWidth = lhsUInt.getWidthOrSentinel();
+    if (lhsWidth != -1 && lhsWidth != 1)
+      return {};
+    return rhs;
+  }
+  return {};
 }
 
 //===----------------------------------------------------------------------===//
@@ -1129,29 +1092,19 @@ FIRRTLType ValidIfPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs) {
 //===----------------------------------------------------------------------===//
 
 FIRRTLType AsSIntPrimOp::getResultType(FIRRTLType input) {
-  if (input.isa<ClockType>() || input.isa<ResetType>() ||
-      input.isa<AsyncResetType>())
-    return SIntType::get(input.getContext(), 1);
-  if (input.isa<SIntType>())
-    return input;
-  if (auto ui = input.dyn_cast<UIntType>())
-    return SIntType::get(input.getContext(), ui.getWidthOrSentinel());
-  if (auto a = input.dyn_cast<AnalogType>())
-    return SIntType::get(input.getContext(), a.getWidthOrSentinel());
-  return {};
+  int32_t width = input.getBitWidthOrSentinel();
+  if (width == -2)
+    return {};
+
+  return SIntType::get(input.getContext(), width);
 }
 
 FIRRTLType AsUIntPrimOp::getResultType(FIRRTLType input) {
-  if (input.isa<ClockType>() || input.isa<ResetType>() ||
-      input.isa<AsyncResetType>())
-    return UIntType::get(input.getContext(), 1);
-  if (input.isa<UIntType>())
-    return input;
-  if (auto si = input.dyn_cast<SIntType>())
-    return UIntType::get(input.getContext(), si.getWidthOrSentinel());
-  if (auto a = input.dyn_cast<AnalogType>())
-    return UIntType::get(input.getContext(), a.getWidthOrSentinel());
-  return {};
+  int32_t width = input.getBitWidthOrSentinel();
+  if (width == -2)
+    return {};
+
+  return UIntType::get(input.getContext(), width);
 }
 
 FIRRTLType AsAsyncResetPrimOp::getResultType(FIRRTLType input) {

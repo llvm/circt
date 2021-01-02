@@ -122,3 +122,11 @@ circuit test :
      ; expected-error@+2 {{high must be equal or greater than low, but got high = 4, low = 7}};
      ; expected-error@+1 {{invalid input types for 'bits': '!firrtl.uint<8>'}}
      b <= bits(a, 4, 7)
+
+;// -----
+
+circuit test :
+  module invalid_add :
+   input in1 : SInt
+   input in2 : UInt
+   node n = add(in1, in2)  ; expected-error {{invalid input types for 'add'}}
