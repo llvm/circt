@@ -234,7 +234,9 @@ void VerilogEmitterBase::emitTypePaddedToWidth(Type type, size_t padToWidth,
 
 namespace {
 
-class ModuleEmitter : public VerilogEmitterBase {
+class ModuleEmitter : public VerilogEmitterBase,
+                      public rtl::StmtVisitor<ModuleEmitter, LogicalResult>,
+                      public sv::Visitor<ModuleEmitter, LogicalResult> {
 
 public:
   explicit ModuleEmitter(VerilogEmitterState &state)
@@ -252,27 +254,39 @@ public:
 
   // Statements.
   void emitStatementExpression(Operation *op);
-  void emitStatement(MergeOp op);
-  void emitStatement(ConnectOp op);
-  void emitStatement(BPAssignOp op);
-  void emitStatement(PAssignOp op);
-  void emitStatement(AliasOp op);
-  void emitStatement(OutputOp op);
-  void emitStatement(InstanceOp op);
-  void emitStatement(IfDefOp op);
-  void emitStatement(IfOp op);
-  void emitStatement(AlwaysOp op);
-  void emitStatement(InitialOp op);
-  void emitStatement(FWriteOp op);
-  void emitStatement(FatalOp op);
-  void emitStatement(FinishOp op);
-  void emitStatement(VerbatimOp op);
-  void emitStatement(AssertOp op);
-  void emitStatement(AssumeOp op);
-  void emitStatement(CoverOp op);
-  void emitDecl(InterfaceOp op);
-  void emitDecl(InterfaceSignalOp op);
-  void emitDecl(InterfaceModportOp op);
+
+  // Visitor methods.
+  LogicalResult visitUnhandledStmt(Operation *op) { return failure(); }
+  LogicalResult visitInvalidStmt(Operation *op) { return failure(); }
+  LogicalResult visitUnhandledSV(Operation *op) { return failure(); }
+  LogicalResult visitInvalidSV(Operation *op) { return failure(); }
+  using StmtVisitor::visitStmt;
+  using Visitor::visitSV;
+
+  void visitMerge(MergeOp op);
+  LogicalResult visitStmt(WireOp op) { return success(); }
+  LogicalResult visitSV(RegOp op) { return success(); }
+  LogicalResult visitSV(InterfaceInstanceOp op) { return success(); }
+  LogicalResult visitStmt(ConnectOp op);
+  LogicalResult visitSV(BPAssignOp op);
+  LogicalResult visitSV(PAssignOp op);
+  LogicalResult visitSV(AliasOp op);
+  LogicalResult visitStmt(OutputOp op);
+  LogicalResult visitStmt(InstanceOp op);
+  LogicalResult visitSV(IfDefOp op);
+  LogicalResult visitSV(IfOp op);
+  LogicalResult visitSV(AlwaysOp op);
+  LogicalResult visitSV(InitialOp op);
+  LogicalResult visitSV(FWriteOp op);
+  LogicalResult visitSV(FatalOp op);
+  LogicalResult visitSV(FinishOp op);
+  LogicalResult visitSV(VerbatimOp op);
+  LogicalResult visitSV(AssertOp op);
+  LogicalResult visitSV(AssumeOp op);
+  LogicalResult visitSV(CoverOp op);
+  LogicalResult visitSV(InterfaceOp op);
+  LogicalResult visitSV(InterfaceSignalOp op);
+  LogicalResult visitSV(InterfaceModportOp op);
   void emitOperation(Operation *op);
 
   void collectNamesEmitDecls(Block &block);
@@ -1031,7 +1045,7 @@ void ModuleEmitter::emitStatementExpression(Operation *op) {
   emitLocationInfoAndNewLine(emittedExprs);
 }
 
-void ModuleEmitter::emitStatement(MergeOp op) {
+void ModuleEmitter::visitMerge(MergeOp op) {
   SmallPtrSet<Operation *, 8> ops;
 
   // Emit "a = rtl.merge x, y, z" as:
@@ -1048,7 +1062,7 @@ void ModuleEmitter::emitStatement(MergeOp op) {
   }
 }
 
-void ModuleEmitter::emitStatement(ConnectOp op) {
+LogicalResult ModuleEmitter::visitStmt(ConnectOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1058,9 +1072,10 @@ void ModuleEmitter::emitStatement(ConnectOp op) {
   emitExpression(op.src(), ops);
   os << ';';
   emitLocationInfoAndNewLine(ops);
+  return success();
 }
 
-void ModuleEmitter::emitStatement(BPAssignOp op) {
+LogicalResult ModuleEmitter::visitSV(BPAssignOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1070,9 +1085,10 @@ void ModuleEmitter::emitStatement(BPAssignOp op) {
   emitExpression(op.src(), ops);
   os << ';';
   emitLocationInfoAndNewLine(ops);
+  return success();
 }
 
-void ModuleEmitter::emitStatement(PAssignOp op) {
+LogicalResult ModuleEmitter::visitSV(PAssignOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1082,9 +1098,10 @@ void ModuleEmitter::emitStatement(PAssignOp op) {
   emitExpression(op.src(), ops);
   os << ';';
   emitLocationInfoAndNewLine(ops);
+  return success();
 }
 
-void ModuleEmitter::emitStatement(AliasOp op) {
+LogicalResult ModuleEmitter::visitSV(AliasOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1093,11 +1110,12 @@ void ModuleEmitter::emitStatement(AliasOp op) {
       op.getOperands(), os, [&](Value v) { emitExpression(v, ops); }, " = ");
   os << ';';
   emitLocationInfoAndNewLine(ops);
+  return success();
 }
 
 /// For OutputOp we put "assign" statements at the end of the Verilog module to
 /// assign the module outputs to intermediate wires.
-void ModuleEmitter::emitStatement(OutputOp op) {
+LogicalResult ModuleEmitter::visitStmt(OutputOp op) {
   SmallPtrSet<Operation *, 8> ops;
 
   SmallVector<ModulePortInfo, 8> ports;
@@ -1115,9 +1133,10 @@ void ModuleEmitter::emitStatement(OutputOp op) {
     emitLocationInfoAndNewLine(ops);
     ++operandIndex;
   }
+  return success();
 }
 
-void ModuleEmitter::emitStatement(FWriteOp op) {
+LogicalResult ModuleEmitter::visitSV(FWriteOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1130,16 +1149,18 @@ void ModuleEmitter::emitStatement(FWriteOp op) {
   }
   os << ");";
   emitLocationInfoAndNewLine(ops);
+  return success();
 }
 
-void ModuleEmitter::emitStatement(FatalOp op) {
+LogicalResult ModuleEmitter::visitSV(FatalOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent() << "$fatal;";
   emitLocationInfoAndNewLine(ops);
+  return success();
 }
 
-void ModuleEmitter::emitStatement(VerbatimOp op) {
+LogicalResult ModuleEmitter::visitSV(VerbatimOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1230,37 +1251,42 @@ void ModuleEmitter::emitStatement(VerbatimOp op) {
   }
 
   emitLocationInfoAndNewLine(ops);
+  return success();
 }
 
-void ModuleEmitter::emitStatement(FinishOp op) {
+LogicalResult ModuleEmitter::visitSV(FinishOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent() << "$finish;";
   emitLocationInfoAndNewLine(ops);
+  return success();
 }
 
-void ModuleEmitter::emitStatement(AssertOp op) {
+LogicalResult ModuleEmitter::visitSV(AssertOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent() << "assert(" << emitExpressionToString(op.predicate(), ops) << ");";
   emitLocationInfoAndNewLine(ops);
+  return success();
 }
 
-void ModuleEmitter::emitStatement(AssumeOp op) {
+LogicalResult ModuleEmitter::visitSV(AssumeOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent() << "assume(" << emitExpressionToString(op.property(), ops) << ");";
   emitLocationInfoAndNewLine(ops);
+  return success();
 }
 
-void ModuleEmitter::emitStatement(CoverOp op) {
+LogicalResult ModuleEmitter::visitSV(CoverOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent() << "cover(" << emitExpressionToString(op.property(), ops) << ");";
   emitLocationInfoAndNewLine(ops);
+  return success();
 }
 
-void ModuleEmitter::emitStatement(IfDefOp op) {
+LogicalResult ModuleEmitter::visitSV(IfDefOp op) {
   auto cond = op.cond();
 
   if (cond.startswith("!"))
@@ -1286,6 +1312,7 @@ void ModuleEmitter::emitStatement(IfDefOp op) {
   }
 
   indent() << "`endif\n";
+  return success();
 }
 
 /// Emit the body of a control flow statement that is surrounded by begin/end
@@ -1325,15 +1352,16 @@ static void emitBeginEndRegion(Block *block,
   }
 }
 
-void ModuleEmitter::emitStatement(IfOp op) {
+LogicalResult ModuleEmitter::visitSV(IfOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
   indent() << "if (" << emitExpressionToString(op.cond(), ops) << ')';
   emitBeginEndRegion(op.getBodyBlock(), ops, *this);
+  return success();
 }
 
-void ModuleEmitter::emitStatement(AlwaysOp op) {
+LogicalResult ModuleEmitter::visitSV(AlwaysOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1380,17 +1408,19 @@ void ModuleEmitter::emitStatement(AlwaysOp op) {
   }
 
   emitBeginEndRegion(op.getBodyBlock(), ops, *this, comment);
+  return success();
 }
 
-void ModuleEmitter::emitStatement(InitialOp op) {
+LogicalResult ModuleEmitter::visitSV(InitialOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
   indent() << "initial";
   emitBeginEndRegion(op.getBodyBlock(), ops, *this, "initial");
+  return success();
 }
 
-void ModuleEmitter::emitStatement(InstanceOp op) {
+LogicalResult ModuleEmitter::visitStmt(InstanceOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1461,9 +1491,10 @@ void ModuleEmitter::emitStatement(InstanceOp op) {
     emitLocationInfoAndNewLine(ops);
   }
   indent() << ");\n";
+  return success();
 }
 
-void ModuleEmitter::emitDecl(InterfaceOp op) {
+LogicalResult ModuleEmitter::visitSV(InterfaceOp op) {
   os << "interface " << op.sym_name() << ";\n";
 
   addIndent();
@@ -1472,9 +1503,10 @@ void ModuleEmitter::emitDecl(InterfaceOp op) {
   reduceIndent();
 
   os << "endinterface\n\n";
+  return success();
 }
 
-void ModuleEmitter::emitDecl(InterfaceSignalOp op) {
+LogicalResult ModuleEmitter::visitSV(InterfaceSignalOp op) {
   indent() << "logic ";
 
   auto type = op.type();
@@ -1484,9 +1516,10 @@ void ModuleEmitter::emitDecl(InterfaceSignalOp op) {
   }
 
   os << op.sym_name() << ";\n";
+  return success();
 }
 
-void ModuleEmitter::emitDecl(InterfaceModportOp op) {
+LogicalResult ModuleEmitter::visitSV(InterfaceModportOp op) {
   indent() << "modport " << op.sym_name() << '(';
 
   llvm::interleaveComma(op.ports(), os, [&](const Attribute &portAttr) {
@@ -1495,6 +1528,7 @@ void ModuleEmitter::emitDecl(InterfaceModportOp op) {
   });
 
   os << ");\n";
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1756,65 +1790,16 @@ void ModuleEmitter::emitOperation(Operation *op) {
     return;
   }
 
-  // This visitor dispatches based on the operation kind and returns true if
-  // successfully handled.
-  class RTLStmtEmitter : public StmtVisitor<RTLStmtEmitter, bool> {
-  public:
-    RTLStmtEmitter(ModuleEmitter &emitter) : emitter(emitter) {}
+  // Handle RTL statements.
+  if (succeeded(dispatchStmtVisitor(op)))
+    return;
 
-    using StmtVisitor::visitStmt;
-    bool visitStmt(ConnectOp op) { return emitter.emitStatement(op), true; }
-    bool visitStmt(OutputOp op) { return emitter.emitStatement(op), true; }
-    bool visitStmt(InstanceOp op) { return emitter.emitStatement(op), true; }
-    bool visitStmt(WireOp op) { return true; }
-
-    bool visitUnhandledStmt(Operation *op) { return false; }
-    bool visitInvalidStmt(Operation *op) { return false; }
-
-  private:
-    ModuleEmitter &emitter;
-  };
-
-  if (RTLStmtEmitter(*this).dispatchStmtVisitor(op))
+  // Handle SV Statements.
+  if (succeeded(dispatchSVVisitor(op)))
     return;
 
   if (auto merge = dyn_cast<MergeOp>(op))
-    return emitStatement(merge);
-
-  class SVEmitter : public Visitor<SVEmitter, bool> {
-  public:
-    SVEmitter(ModuleEmitter &emitter) : emitter(emitter) {}
-
-    using Visitor::visitSV;
-    bool visitSV(IfDefOp op) { return emitter.emitStatement(op), true; }
-    bool visitSV(IfOp op) { return emitter.emitStatement(op), true; }
-    bool visitSV(AlwaysOp op) { return emitter.emitStatement(op), true; }
-    bool visitSV(InitialOp op) { return emitter.emitStatement(op), true; }
-    bool visitSV(BPAssignOp op) { return emitter.emitStatement(op), true; }
-    bool visitSV(PAssignOp op) { return emitter.emitStatement(op), true; }
-    bool visitSV(AliasOp op) { return emitter.emitStatement(op), true; }
-    bool visitSV(FWriteOp op) { return emitter.emitStatement(op), true; }
-    bool visitSV(FatalOp op) { return emitter.emitStatement(op), true; }
-    bool visitSV(FinishOp op) { return emitter.emitStatement(op), true; }
-    bool visitSV(VerbatimOp op) { return emitter.emitStatement(op), true; }
-    bool visitSV(AssertOp op) { return emitter.emitStatement(op), true; }
-    bool visitSV(AssumeOp op) { return emitter.emitStatement(op), true; }
-    bool visitSV(CoverOp op) { return emitter.emitStatement(op), true; }
-    bool visitSV(RegOp op) { return true; }
-
-    bool visitSV(InterfaceInstanceOp op) { return true; }
-    bool visitSV(InterfaceSignalOp op) { return emitter.emitDecl(op), true; }
-    bool visitSV(InterfaceModportOp op) { return emitter.emitDecl(op), true; }
-
-    bool visitUnhandledSV(Operation *op) { return false; }
-    bool visitInvalidSV(Operation *op) { return false; }
-
-  private:
-    ModuleEmitter &emitter;
-  };
-
-  if (SVEmitter(*this).dispatchSVVisitor(op))
-    return;
+    return visitMerge(merge);
 
   emitOpError(op, "cannot emit this operation to Verilog");
   indent() << "unknown MLIR operation " << op->getName().getStringRef() << "\n";
@@ -2121,12 +2106,8 @@ void MLIRModuleEmitter::emit(ModuleOp module) {
       ModuleEmitter(state).emitRTLModule(module);
     else if (auto module = dyn_cast<RTLExternModuleOp>(op))
       ModuleEmitter(state).emitRTLExternModule(module);
-    else if (auto interface = dyn_cast<InterfaceOp>(op))
-      ModuleEmitter(state).emitDecl(interface);
-    else if (auto verbatim = dyn_cast<VerbatimOp>(op))
-      ModuleEmitter(state).emitStatement(verbatim);
-    else if (auto verbatim = dyn_cast<IfDefOp>(op))
-      ModuleEmitter(state).emitStatement(verbatim);
+    else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) || isa<IfDefOp>(op))
+      ModuleEmitter(state).emitOperation(&op);
     else if (!isa<ModuleTerminatorOp>(op))
       op.emitError("unknown operation");
   }
