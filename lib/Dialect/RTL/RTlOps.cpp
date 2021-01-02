@@ -1291,7 +1291,8 @@ void ReadInOutOp::build(OpBuilder &builder, OperationState &result,
 void ArrayIndexOp::build(OpBuilder &builder, OperationState &result,
                          Value input, Value index) {
   auto resultType = input.getType().cast<InOutType>().getElementType();
-  resultType = resultType.cast<ArrayType>().getElementType();
+  resultType = getAnyRTLArrayElementType(resultType);
+  assert(resultType && "input shoudl have 'inout of an array' type");
   build(builder, result, InOutType::get(resultType), input, index);
 }
 

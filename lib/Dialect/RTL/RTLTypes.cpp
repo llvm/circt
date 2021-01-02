@@ -39,6 +39,26 @@ bool circt::rtl::isRTLValueType(Type type) {
   return false;
 }
 
+/// Return the element type of an InOutType or null if the operand isn't an
+/// InOut type.
+mlir::Type circt::rtl::getInOutElementType(mlir::Type type) {
+  if (auto inout = type.dyn_cast_or_null<InOutType>())
+    return inout.getElementType();
+  return {};
+}
+
+/// Return the element type of an ArrayType or UnpackedArrayType, or null if the
+/// operand isn't an array.
+Type circt::rtl::getAnyRTLArrayElementType(Type type) {
+  if (!type)
+    return {};
+  if (auto array = type.dyn_cast<ArrayType>())
+    return array.getElementType();
+  if (auto array = type.dyn_cast<UnpackedArrayType>())
+    return array.getElementType();
+  return {};
+}
+
 /// Parse and print nested RTL types nicely.  These helper methods allow eliding
 /// the "rtl." prefix on array, inout, and other types when in a context that
 /// expects RTL subelement types.
