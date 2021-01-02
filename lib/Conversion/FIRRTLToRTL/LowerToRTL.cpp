@@ -26,12 +26,6 @@
 using namespace circt;
 using namespace firrtl;
 
-/// Return the type of the specified value, casted to the template type.
-template <typename T = FIRRTLType>
-static T getTypeOf(Value v) {
-  return v.getType().cast<T>();
-}
-
 /// Given a FIRRTL type, return the corresponding type for the RTL dialect.
 /// This returns a null type if it cannot be lowered.
 static Type lowerType(Type type) {
@@ -847,11 +841,15 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(DShrPrimOp op) {
     return lowerDivLikeOp<rtl::ShrSOp, rtl::ShrUOp>(op);
   }
+  LogicalResult visitExpr(DShlwPrimOp op) {
+    return lowerDivLikeOp<rtl::ShrSOp, rtl::ShrUOp>(op);
+  }
   LogicalResult visitExpr(TailPrimOp op);
   LogicalResult visitExpr(MuxPrimOp op);
   LogicalResult visitExpr(ValidIfPrimOp op);
 
   // Statements
+  LogicalResult visitStmt(SkipOp op);
   LogicalResult visitStmt(ConnectOp op);
   LogicalResult visitStmt(InvalidOp op);
   LogicalResult visitStmt(PrintFOp op);
@@ -1467,7 +1465,7 @@ LogicalResult FIRRTLLowering::visitExpr(CvtPrimOp op) {
     return failure();
 
   // Signed to signed is a noop.
-  if (getTypeOf<IntType>(op.getOperand()).isSigned())
+  if (op.getOperand().getType().cast<IntType>().isSigned())
     return setLowering(op, operand);
 
   // Otherwise prepend a zero bit.
@@ -1760,6 +1758,12 @@ LogicalResult FIRRTLLowering::visitStmt(InvalidOp op) {
       0, inoutTy.getElementType().cast<IntegerType>());
 
   builder->create<rtl::ConnectOp>(dest, zero);
+  return success();
+}
+
+LogicalResult FIRRTLLowering::visitStmt(SkipOp op) {
+  // Nothing!  We could emit an comment as a verbatim op if there were a reason
+  // to.
   return success();
 }
 

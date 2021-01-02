@@ -175,6 +175,9 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: [[SHIFT:%.+]] = rtl.shl %in3, {{.*}} : i8
     %30 = firrtl.dshl %in3c, %9 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<8>
 
+    // CHECK-NEXT: = rtl.shru %13, %13 : i3
+    %dshlw = firrtl.dshlw %9, %9 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
+
     // Issue #367: https://github.com/llvm/circt/issues/367
     // CHECK-NEXT: = rtl.sext {{.*}} : (i4) -> i12
     // CHECK-NEXT: [[SHIFT:%.+]] = rtl.shrs {{.*}}, {{.*}} : i12
@@ -255,6 +258,8 @@ module attributes {firrtl.mainModule = "Simple"} {
 
     // CHECK: sv.fwrite "Hi %x %x\0A"({{.*}}) : i5, i4
     firrtl.printf %clock1, %reset1, "Hi %x %x\0A"(%0, %b1) : !firrtl.uint<5>, !firrtl.uint<4>
+
+    firrtl.skip
 
     // CHECK: rtl.output
     rtl.output
