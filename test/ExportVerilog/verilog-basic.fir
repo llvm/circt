@@ -15,7 +15,8 @@ circuit inputs_only :
     input b: UInt<1>
 
 ; CHECK-LABEL: module inputs_only(
-; CHECK-NEXT:    input a, b);
+; CHECK-NEXT:    input a, b
+; CHECK-NEXT:   );
 ; CHECK-EMPTY:
 ; CHECK-NEXT:  endmodule
 
@@ -66,7 +67,8 @@ circuit inputs_only :
 ; CHECK-NEXT:     input  [3:0] in4,
 ; CHECK-NEXT:     input        clock,
 ; CHECK-NEXT:     output       out1,
-; CHECK-NEXT:     output [3:0] out4);
+; CHECK-NEXT:     output [3:0] out4
+; CHECK-NEXT:   );
 ; CHECK-EMPTY:
 ; CHECK-NEXT:     wire [1:0] x1;
 ; CHECK-NEXT:     wire [1:0] x2;
@@ -131,7 +133,8 @@ circuit inputs_only :
 ; CHECK-LABEL: module Precedence(
 ; CHECK-NEXT:     input  [3:0] a, b, c,
 ; CHECK-NEXT:     output       out1,
-; CHECK-NEXT:     output [9:0] out);
+; CHECK-NEXT:     output [9:0] out
+; CHECK-NEXT:   );
 ; CHECK-EMPTY:
 
 ; CHECK-NEXT:     assign out = a + b + c;
@@ -177,8 +180,10 @@ circuit inputs_only :
 
 
 ; CHECK-LABEL: module CmpSign(
-; CHECK-NEXT:     input  [3:0] a, b, c, d,
-; CHECK-NEXT:     output       out);
+; CHECK-NEXT:     input  [3:0] a, b,
+; CHECK-NEXT:     input  [3:0] c, d,
+; CHECK-NEXT:     output       out
+; CHECK-NEXT:   );
 ; CHECK-EMPTY:
 ; CHECK-NEXT:     assign out = a < b;
 ; CHECK-NEXT:     assign out = $signed(c) < $signed(d);
@@ -226,7 +231,8 @@ circuit inputs_only :
 ; CHECK-NEXT:     input  [5:0] b,
 ; CHECK-NEXT:     input  [2:0] c,
 ; CHECK-NEXT:     input  [4:0] d,
-; CHECK-NEXT:     output       out);
+; CHECK-NEXT:     output       out
+; CHECK-NEXT:   );
 ; CHECK-EMPTY:
 ; CHECK-NEXT:     assign out = a < b;
 ; CHECK-NEXT:     assign out = $signed(c) < $signed(d);
@@ -246,7 +252,8 @@ circuit inputs_only :
 ; CHECK-LABEL: module MultiUseExpr(
 ; CHECK-NEXT:    input  [3:0] a,
 ; CHECK-NEXT:    output       b,
-; CHECK-NEXT:    output [1:0] b2);
+; CHECK-NEXT:    output [1:0] b2
+; CHECK-NEXT:   );
 ; CHECK-EMPTY:
   module MultiUseExpr :
     input a: UInt<4>
@@ -294,7 +301,8 @@ circuit inputs_only :
 
   ; CHECK-LABEL: module UseInstances(
   ; CHECK-NEXT:    input  [7:0] a_in,
-  ; CHECK-NEXT:    output       a_out);
+  ; CHECK-NEXT:    output       a_out
+; CHECK-NEXT:   );
   ; CHECK-EMPTY:
   ; CHECK-NEXT:     wire [7:0] xyz_in;
   ; CHECK-NEXT:     wire       xyz_out;
@@ -328,7 +336,9 @@ circuit inputs_only :
     a_out <= xyz2.out
 
   ; CHECK-LABEL: module Stop(
-  ; CHECK-NEXT:    input clock, reset);
+  ; CHECK-NEXT:    input clock
+  ; CHECK-NEXT:    input reset
+  ; CHECK-NEXT:   );
   ; CHECK-EMPTY:
   ; CHECK-EMPTY:
   ; CHECK-NEXT:    always @(posedge clock) begin
@@ -343,7 +353,9 @@ circuit inputs_only :
     stop(clock, reset, 42)
 
   ; CHECK-LABEL: module Stop2(
-  ; CHECK-NEXT:    input clock, reset);
+  ; CHECK-NEXT:    input clock
+  ; CHECK-NEXT:    input reset
+  ; CHECK-NEXT:   );
   ; CHECK-EMPTY:
   ; CHECK-EMPTY:
   ; CHECK-NEXT:    always @(posedge clock) begin
@@ -362,7 +374,9 @@ circuit inputs_only :
     stop(clock, reset, 0)
 
   ; CHECK-LABEL: module Stop3(
-  ; CHECK-NEXT:    input clock1, clock2, reset);
+  ; CHECK-NEXT:    input clock1, clock2
+  ; CHECK-NEXT:    input reset
+  ; CHECK-NEXT:   );
   ; CHECK-EMPTY:
   ; CHECK-EMPTY:
   ; CHECK-NEXT:    always @(posedge clock1) begin
@@ -384,8 +398,10 @@ circuit inputs_only :
     stop(clock2, reset, 0)
 
   ; CHECK-LABEL: module Print(
-  ; CHECK-NEXT:    input       clock, reset,
-  ; CHECK-NEXT:    input [3:0] a, b);
+  ; CHECK-NEXT:    input       clock,
+  ; CHECK-NEXT:    input       reset,
+  ; CHECK-NEXT:    input [3:0] a, b
+  ; CHECK-NEXT:   );
   ; CHECK-EMPTY:
   ; CHECK-EMPTY:
   ; CHECK-NEXT:    always @(posedge clock) begin
@@ -403,8 +419,10 @@ circuit inputs_only :
     printf(clock, reset, "Hi %x %x\n", add(a, a), b)
 
   ; CHECK-LABEL: module UninitReg1(
-  ; CHECK-NEXT:    input       clock, reset, cond,
-  ; CHECK-NEXT:    input [1:0] value);
+  ; CHECK-NEXT:    input       clock,
+  ; CHECK-NEXT:    input       reset, cond,
+  ; CHECK-NEXT:    input [1:0] value
+  ; CHECK-NEXT:   );
   ; CHECK-EMPTY:
   ; CHECK-NEXT:    reg  [1:0] count;{{.*}}// RationalCrossing.scala:119:22
   ; CHECK-NEXT:    wire [1:0] x;
@@ -437,10 +455,12 @@ circuit inputs_only :
    count <= mux(reset, UInt<2>("h0"), _GEN_0)
 
 ; CHECK-LABEL: module InitReg1(
-; CHECK-NEXT:   input         clock, reset,
+; CHECK-NEXT:   input         clock,
+; CHECK-NEXT:   input         reset,
 ; CHECK-NEXT:   input  [31:0] io_d,
 ; CHECK-NEXT:   output [31:0] io_q,
-; CHECK-NEXT:   input         io_en);
+; CHECK-NEXT:   input         io_en
+; CHECK-NEXT:   );
 ; CHECK-EMPTY:
 ; CHECK-NEXT:   reg [31:0] reg_0;
 ; CHECK-EMPTY:
@@ -475,14 +495,17 @@ circuit inputs_only :
     reg <= mux(io_en, io_d, reg)
 
   ; CHECK-LABEL: module Analog(
-  ; CHECK-NEXT:   output [4:0] io_pins_asrcn3v3);
+  ; CHECK-NEXT:   output [4:0] io_pins_asrcn3v3
+; CHECK-NEXT:   );
   module Analog :
     output io_pins_asrcn3v3 : Analog<5>
 
   ; CHECK-LABEL: module MemSimple(
-  ; CHECK-NEXT:   input         clock1, clock2, inpred,
+  ; CHECK-NEXT:   input         clock1, clock2,
+  ; CHECK-NEXT:   input         inpred,
   ; CHECK-NEXT:   input  [41:0] indata,
-  ; CHECK-NEXT:   output [41:0] result);
+  ; CHECK-NEXT:   output [41:0] result
+; CHECK-NEXT:   );
   module MemSimple :
     input clock1  : Clock
     input clock2  : Clock
@@ -547,7 +570,8 @@ circuit inputs_only :
 
 
   ; CHECK-LABEL: module MemAggregate(
-  ; CHECK-NEXT:   input clock1, clock2);
+  ; CHECK-NEXT:   input clock1, clock2
+; CHECK-NEXT:   );
   module MemAggregate :
     input clock1 : Clock
     input clock2 : Clock
@@ -621,7 +645,8 @@ circuit inputs_only :
 ; CHECK-NEXT:    `endif // SYNTHESIS
 
   ; CHECK-LABEL: module Attach(
-  ; CHECK-NEXT:    input a, b, c);
+  ; CHECK-NEXT:    input a, b, c
+  ; CHECK-NEXT:   );
   module Attach :
     input a: Analog<1>
     input b: Analog<1>
@@ -641,7 +666,8 @@ circuit inputs_only :
 ; CHECK-NEXT:  `endif // SYNTHESIS
 
   ; CHECK-LABEL: module IsInvalid(
-  ; CHECK-NEXT:    output a);
+  ; CHECK-NEXT:    output a
+  ; CHECK-NEXT:   );
   module IsInvalid :
     output a: Analog<1>
     a is invalid  @[Place.scala 101]

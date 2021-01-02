@@ -12,7 +12,8 @@ firrtl.circuit "M1" {
 
   // CHECK-LABEL: module M1(
   // CHECK-NEXT:    input  [7:0] y,
-  // CHECK-NEXT:    output [7:0] y_0);
+  // CHECK-NEXT:    output [7:0] y_0
+  // CHECK-NEXT:  );
   // CHECK-EMPTY:
   // CHECK-NEXT:    assign y_0 = y;
   // CHECK-NEXT:    assign y_0 = ~y_0;
@@ -23,7 +24,8 @@ firrtl.circuit "M1" {
   }
   // CHECK-LABEL: module M2(
   // CHECK-NEXT:    input [7:0] some_name,
-  // CHECK-NEXT:    input [6:0] _885E42);
+  // CHECK-NEXT:    input [6:0] _885E42
+  // CHECK-NEXT:  );
   // CHECK-EMPTY:
   // CHECK-NEXT:  endmodule
 
@@ -44,7 +46,8 @@ firrtl.circuit "M1" {
 
   // CHECK-LABEL: module M3(
   // CHECK-NEXT:    input  [7:0] x,
-  // CHECK-NEXT:    output [7:0] y);
+  // CHECK-NEXT:    output [7:0] y
+  // CHECK-NEXT:  );
   // CHECK-EMPTY:
   // CHECK-NEXT:    assign y = x;
   // CHECK-NEXT:    assign y = 8'h2A;

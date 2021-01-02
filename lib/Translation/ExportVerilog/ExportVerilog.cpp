@@ -72,16 +72,6 @@ static int getBitWidthOrSentinel(Type type) {
       .Default([](Type) { return -1; });
 }
 
-/// Given a type that may be an array or inout, dig through recursive arrays to
-/// find the underlying element type.
-static Type getUnderlyingArrayElementType(Type type) {
-  if (auto arrayElt = getAnyRTLArrayElementType(type))
-    return getUnderlyingArrayElementType(arrayElt);
-  if (auto inoutElt = getInOutElementType(type))
-    return getUnderlyingArrayElementType(inoutElt);
-  return type;
-}
-
 /// Given an integer value, return the number of characters it will take to
 /// print its base-10 value.
 static unsigned getPrintedIntWidth(unsigned value) {
@@ -100,24 +90,28 @@ static unsigned getPrintedIntWidth(unsigned value) {
 
 /// Calculated the printed width of the array dims of a type.
 static size_t getPrintedTypeDimsWidth(Type type, Operation *op) {
-  int bitWidth;
+  if (auto inout = type.dyn_cast<rtl::InOutType>()) {
+    return getPrintedTypeDimsWidth(inout.getElementType(), op);
+  } else if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>()) {
+    return getPrintedTypeDimsWidth(uarray.getElementType(), op);
+  }
+
+  int rangeSize;
   size_t textWidth = 0;
   if (auto array = type.dyn_cast<rtl::ArrayType>()) {
-    bitWidth = array.getSize();
+    rangeSize = array.getSize();
     textWidth = getPrintedTypeDimsWidth(array.getElementType(), op);
-  } else if (auto inout = type.dyn_cast<rtl::InOutType>()) {
-    return getPrintedTypeDimsWidth(getUnderlyingArrayElementType(inout), op);
   } else {
-    bitWidth = getBitWidthOrSentinel(type);
-    if (bitWidth == -1) {
+    rangeSize = getBitWidthOrSentinel(type);
+    if (rangeSize == -1) {
       op->emitError("value has an unsupported verilog type ") << type;
-    } else if (bitWidth == 1) { // Width 1 is implicit.
+    } else if (rangeSize == 1) { // Width 1 is implicit.
       return 0;
     }
   }
 
   // Add 4 to count the width of the "[:0]".
-  textWidth += getPrintedIntWidth(bitWidth - 1) + 4;
+  textWidth += getPrintedIntWidth(rangeSize - 1) + 4;
   return textWidth;
 }
 
@@ -230,8 +224,14 @@ private:
 
 } // end anonymous namespace
 
-/// Emit a type, returning the number of characters emitted.
+/// Emit a type's packed dimensions, returning the number of characters emitted.
 static size_t emitTypeDims(Type type, llvm::raw_ostream &os, Operation *op) {
+  if (auto inout = type.dyn_cast<rtl::InOutType>()) {
+    return emitTypeDims(inout.getElementType(), os, op);
+  } else if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>()) {
+    return emitTypeDims(uarray.getElementType(), os, op);
+  }
+
   size_t emittedWidth = 0;
   int width;
   if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
@@ -1544,10 +1544,7 @@ static void printArraySubscripts(Type type, raw_ostream &os) {
   if (auto inout = type.dyn_cast<InOutType>())
     return printArraySubscripts(inout.getElementType(), os);
 
-  if (auto array = type.dyn_cast<ArrayType>()) {
-    printArraySubscripts(array.getElementType(), os);
-    os << '[' << (array.getSize() - 1) << ":0]";
-  } else if (auto array = type.dyn_cast<UnpackedArrayType>()) {
+  if (auto array = type.dyn_cast<UnpackedArrayType>()) {
     printArraySubscripts(array.getElementType(), os);
     os << '[' << (array.getSize() - 1) << ":0]";
   }
@@ -1778,6 +1775,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
 
     // Emit the name.
     os << portInfo[portIdx].getName();
+    printArraySubscripts(portType, os);
     ++portIdx;
 
     // If we have any more ports with the same types and the same direction,
@@ -1794,14 +1792,15 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
 
       // Append this to the running port decl.
       os << ", " << name;
+      printArraySubscripts(portType, os);
       ++portIdx;
     }
 
     if (portIdx != e)
       os << ',';
-    else
-      os << ");\n";
-    os << '\n';
+    os << "    //" << portType << "\n";
+    if (portIdx == e)
+      os.indent(state.currentIndent - 2) << ");\n\n";
   }
 
   if (portInfo.empty())

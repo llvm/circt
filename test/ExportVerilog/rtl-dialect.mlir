@@ -7,7 +7,8 @@ module {
 
   // CHECK-LABEL: // external module E
 
-  rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !rtl.array<10xi4>) -> (
+  rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !rtl.array<10xi4>,
+                         %uarray: !rtl.uarray<16xi8>) -> (
     %r0: i4, %r2: i4, %r4: i4, %r6: i4,
     %r7: i4, %r8: i4, %r9: i4, %r10: i4,
     %r11: i4, %r12: i4, %r13: i4, %r14: i4,
@@ -62,12 +63,14 @@ module {
   // CHECK-NEXT:   input  [3:0]      a, b
   // CHECK-NEXT:   input             cond,
   // CHECK-NEXT:   input  [3:0][9:0] array,
+  // CHECK-NEXT:   input  [7:0]      uarray[15:0],
   // CHECK-NEXT:   output [3:0]      r0, r2, r4, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15
   // CHECK-NEXT:   output            r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28
   // CHECK-NEXT:   output [11:0]     r29,
   // CHECK-NEXT:   output [1:0]      r30,
   // CHECK-NEXT:   output [8:0]      r31, r32,
-  // CHECK-NEXT:   output [3:0]      r33, r34);
+  // CHECK-NEXT:   output [3:0]      r33, r34
+  // CHECK-NEXT:  );
   // CHECK-EMPTY:
   // CHECK-NEXT:   assign r0 = a + b;
   // CHECK-NEXT:   assign r2 = a - b;
@@ -110,7 +113,8 @@ module {
   }
   // CHECK-LABEL: module B(
   // CHECK-NEXT:   input  a,
-  // CHECK-NEXT:   output b, c);
+  // CHECK-NEXT:   output b, c
+  // CHECK-NEXT:  );
   // CHECK-EMPTY:
   // CHECK-NEXT:   assign b = a | a;
   // CHECK-NEXT:   assign c = a & a;
@@ -122,7 +126,8 @@ module {
   }
   // CHECK-LABEL: module A(
   // CHECK-NEXT:  input  d, e,
-  // CHECK-NEXT:  output f);
+  // CHECK-NEXT:  output f
+  // CHECK-NEXT:  );
   // CHECK-EMPTY:
   // CHECK-NEXT:  assign f = d ? d : e;
   // CHECK-NEXT: endmodule
@@ -133,7 +138,8 @@ module {
   }
   // CHECK-LABEL: module AAA(
   // CHECK-NEXT:  input  d, e,
-  // CHECK-NEXT:  output f);
+  // CHECK-NEXT:  output f
+  // CHECK-NEXT:  );
   // CHECK-EMPTY:
   // CHECK-NEXT:  assign f = 1'h0;
   // CHECK-NEXT: endmodule
@@ -159,7 +165,8 @@ module {
   // CHECK-LABEL: module AB(
   // CHECK-NEXT:   input        w, x,
   // CHECK-NEXT:   input  [1:0] i2,
-  // CHECK-NEXT:   output       y, z, p, p2);
+  // CHECK-NEXT:   output       y, z, p, p2
+  // CHECK-NEXT:  );
   // CHECK-EMPTY:
   // CHECK-NEXT:   wire a1_f;
   // CHECK-NEXT:   wire b1_b;
@@ -198,7 +205,8 @@ module {
   }
   // CHECK-LABEL:  module shl(
   // CHECK-NEXT:   input  a,
-  // CHECK-NEXT:   output b);
+  // CHECK-NEXT:   output b
+  // CHECK-NEXT:  );
   // CHECK-EMPTY:
   // CHECK-NEXT:   assign b = a << a;
   // CHECK-NEXT: endmodule
@@ -210,7 +218,8 @@ module {
   }
   // CHECK-LABEL:  module inout(
   // CHECK-NEXT:     inout  [41:0] a,
-  // CHECK-NEXT:     output [41:0] out);
+  // CHECK-NEXT:     output [41:0] out
+  // CHECK-NEXT:  );
   // CHECK-EMPTY:
   // CHECK-NEXT:     assign out = a;
   // CHECK-NEXT:   endmodule
@@ -246,28 +255,28 @@ module {
     // CHECK-NEXT:   input  [3:0] in4,
     // CHECK-NEXT:   input  [7:0] in8,
     // CHECK-NEXT:   output [3:0] a,
-    // CHECK-NEXT:   output [7:0] b, c);
+    // CHECK-NEXT:   output [7:0] b, c
+    // CHECK-NEXT:  );
 
     // CHECK-EMPTY:
 
     // Wires.
-    %myWire = rtl.wire : !rtl.inout<i4>  // CHECK-NEXT: wire [3:0] myWire;
+    // CHECK-NEXT: wire [3:0]            myWire;
+    %myWire = rtl.wire : !rtl.inout<i4>
  
     // Packed arrays.
 
-    // FIXME: Should be: wire [7:0][41:0] myArray1;
-    // CHECK-NEXT: wire [7:0] myArray1[41:0];
+    // CHECK-NEXT: wire [7:0][41:0]      myArray1;
     %myArray1 = rtl.wire : !rtl.inout<array<42 x i8>>
-    // CHECK-NEXT: wire [3:0] myWireArray2[41:0][2:0];
+    // CHECK-NEXT: wire [3:0][41:0][2:0] myWireArray2;
     %myWireArray2 = rtl.wire : !rtl.inout<array<3 x array<42 x i4>>>
 
     // Unpacked arrays, and unpacked arrays of packed arrays.
 
-    // CHECK-NEXT: wire [7:0] myUArray1[41:0];
+    // CHECK-NEXT: wire [7:0]            myUArray1[41:0];
     %myUArray1 = rtl.wire : !rtl.inout<uarray<42 x i8>>
 
-    // FIXME: Should be: wire [3:0][2:0] myWireUArray2[41:0];
-    // CHECK-NEXT: wire [3:0] myWireUArray2[41:0][2:0];
+    // CHECK-NEXT: wire [3:0][41:0]      myWireUArray2[2:0];
     %myWireUArray2 = rtl.wire : !rtl.inout<uarray<3 x array<42 x i4>>>
 
     // CHECK-EMPTY:
