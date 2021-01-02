@@ -143,7 +143,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   case OutputDisabled:
     return success();
   case OutputVerilog:
-    return exportVerilog(module.get(), os);
+    if (lowerToRTL)
+      return exportVerilog(module.get(), os);
+    return exportFIRRTLToVerilog(module.get(), os);
   }
 };
 
