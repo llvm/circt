@@ -957,6 +957,7 @@ private:
   SubExprInfo visitComb(rtl::ZExtOp op);
   SubExprInfo visitComb(rtl::ConcatOp op);
   SubExprInfo visitComb(rtl::ExtractOp op);
+  SubExprInfo visitComb(rtl::ArraySlice op);
 
   // RTL Comparison Operations
   SubExprInfo visitComb(rtl::ICmpOp op) {
@@ -1244,6 +1245,22 @@ SubExprInfo ExprEmitter::visitComb(rtl::ConcatOp op) {
 SubExprInfo ExprEmitter::visitComb(rtl::ExtractOp op) {
   unsigned dstWidth = op.getType().cast<IntegerType>().getWidth();
   return emitBitSelect(op.input(), op.lowBit() + dstWidth - 1, op.lowBit());
+}
+
+SubExprInfo ExprEmitter::visitComb(rtl::ArraySlice op) {
+  unsigned dstWidth = op.getType().cast<rtl::ArrayType>().getSize();
+
+  auto x = emitSubExpr(op.src(), LowestPrecedence);
+  assert(x.precedence == Symbol &&
+         "should be handled by isExpressionUnableToInline");
+
+  os << '[' << dstWidth - 1 << " + ";
+  emitSubExpr(op.lowIndex(), LowestPrecedence);
+  os << ':';
+  emitSubExpr(op.lowIndex(), LowestPrecedence);
+  os << "]";
+
+  return {Unary, IsUnsigned};
 }
 
 /// Emit a verilog bit selection operation like x[4:0], the bit numbers are
