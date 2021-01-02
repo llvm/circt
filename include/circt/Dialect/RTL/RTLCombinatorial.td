@@ -187,18 +187,8 @@ def OrROp  : UnaryI1ReductionRTLOp<"orr">;
 def XorROp : UnaryI1ReductionRTLOp<"xorr">;
 
 //===----------------------------------------------------------------------===//
-// Other Operations
+// Width-modifying Operations on ints.
 //===----------------------------------------------------------------------===//
-
-// Concatenate a variadic list of operands together.
-def ConcatOp : VariadicRTLOp<"concat"> {
-  let builders = [
-    OpBuilderDAG<(ins "ValueRange":$inputs)>,
-    OpBuilderDAG<(ins "Value":$lhs, "Value":$rhs), [{
-      return build($_builder, $_state, ValueRange{lhs, rhs});
-    }]>
-  ];
-}
 
 // Extract a range of bits from the specified input.
 def ExtractOp : RTLOp<"extract", [NoSideEffect]> {
@@ -243,6 +233,50 @@ def ZExtOp : RTLOp<"zext", [NoSideEffect]> {
 
   let hasFolder = true;
   let verifier = [{ return ::verifyExtOp(*this); }];
+}
+
+//===----------------------------------------------------------------------===//
+// Other Operations
+//===----------------------------------------------------------------------===//
+
+def ArraySlice : RTLOp<"slice", [NoSideEffect]> {
+  let summary = "Get a range of values from an array";
+  let description = [{
+    Extracts a sub-range from an array. The range is from `lowIndex` to
+    `lowIndex` + the number of elements in the return type, non-inclusive on
+    the high end, consistent with common software function calls (e.g.
+    `memcpy`). For instance,
+
+    ```
+    // Slices 16 bytes starting at '%offset'
+    %subArray = rtl.slice %largerArray at %offset :
+        (!rtl.array<1024xi8>) -> !rtl.array<16xi8>
+    ```
+
+    Would translate to the following SystemVerilog:
+
+    ```
+    logic [7:0][15:0] subArray = largerArray[offset + 15 : offset];
+    ```
+  }];
+
+  let arguments = (ins ArrayType:$src, AnySignlessInteger:$lowIndex);
+  let results = (outs ArrayType:$dst);
+
+  let assemblyFormat = [{
+    $src `at` $lowIndex attr-dict `:`
+      `(` custom<SliceTypes>(type($src), type($lowIndex)) `)` `->` type($dst)
+  }];
+}
+
+// Concatenate a variadic list of operands together.
+def ConcatOp : VariadicRTLOp<"concat"> {
+  let builders = [
+    OpBuilderDAG<(ins "ValueRange":$inputs)>,
+    OpBuilderDAG<(ins "Value":$lhs, "Value":$rhs), [{
+      return build($_builder, $_state, ValueRange{lhs, rhs});
+    }]>
+  ];
 }
 
 // Extract a range of bits from the specified input.
