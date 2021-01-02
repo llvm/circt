@@ -6,7 +6,7 @@
 ; RUN: circt-translate -parse-fir --mlir-print-debuginfo %s | circt-translate -emit-firrtl-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 ; Some day this should filecheck:
-; TODO: circt-translate -parse-fir --mlir-print-debuginfo %s | circt-opt -lower-firrtl-to-rtl-module -lower-firrtl-to-rtl | circt-translate -emit-verilog -verify-diagnostics
+; RUN: circt-translate -parse-fir --mlir-print-debuginfo %s | circt-opt -lower-firrtl-to-rtl-module -lower-firrtl-to-rtl | circt-translate -emit-verilog -verify-diagnostics
 
 circuit inputs_only :
 
