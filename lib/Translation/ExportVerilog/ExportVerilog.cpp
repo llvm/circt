@@ -1575,12 +1575,6 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     if (isExpr && emitInlineWireDecls)
       continue;
 
-    // FIXME(verilog dialect): This can cause name collisions, because the
-    // base name may be unique but the suffixed names may not be.  The right
-    // way to solve this is to change the instances and mems in a new Verilog
-    // dialect to use multiple return values, exposing the independent
-    // Value's.
-
     // Determine what kind of thing this is, and how much space it needs.
     maxDeclNameWidth =
         std::max(getVerilogDeclWord(&op).size(), maxDeclNameWidth);
