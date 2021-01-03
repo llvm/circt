@@ -863,7 +863,7 @@ SubExprInfo ExprEmitter::visitComb(SExtOp op) {
   emitSubExpr(op.getOperand(), Unary);
   os << '[' << (inWidth - 1) << "]}}, ";
   emitSubExpr(op.getOperand(), LowestPrecedence);
-  os << "}";
+  os << '}';
   return {Unary, IsUnsigned};
 }
 
@@ -872,9 +872,9 @@ SubExprInfo ExprEmitter::visitComb(ZExtOp op) {
   auto destWidth = op.getType().getIntOrFloatBitWidth();
 
   // A zero extension just fills the top with numbers.
-  os << "{{" << (destWidth - inWidth) << "'d0}, ";
+  os << '{' << (destWidth - inWidth) << "'d0, ";
   emitSubExpr(op.getOperand(), LowestPrecedence);
-  os << "}";
+  os << '}';
   return {Unary, IsUnsigned};
 }
 
