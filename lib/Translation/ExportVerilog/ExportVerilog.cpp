@@ -86,23 +86,22 @@ static unsigned getPrintedIntWidth(unsigned value) {
   return stream.str().size();
 }
 
-/// Calculated the printed width of the array dims of a type.
-static size_t getPrintedTypeDimsWidth(Type type, Operation *op) {
-  if (auto inout = type.dyn_cast<rtl::InOutType>()) {
-    return getPrintedTypeDimsWidth(inout.getElementType(), op);
-  } else if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>()) {
-    return getPrintedTypeDimsWidth(uarray.getElementType(), op);
-  }
+static size_t getPrintedTypeDimsWidthRecursive(Type type, Operation *op) {
+  if (auto inout = type.dyn_cast<rtl::InOutType>())
+    return getPrintedTypeDimsWidthRecursive(inout.getElementType(), op);
+  else if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>())
+    return getPrintedTypeDimsWidthRecursive(uarray.getElementType(), op);
 
   int rangeSize;
   size_t textWidth = 0;
   if (auto array = type.dyn_cast<rtl::ArrayType>()) {
     rangeSize = array.getSize();
-    textWidth = getPrintedTypeDimsWidth(array.getElementType(), op);
+    textWidth = getPrintedTypeDimsWidthRecursive(array.getElementType(), op);
   } else {
     rangeSize = getBitWidthOrSentinel(type);
     if (rangeSize == -1) {
       op->emitError("value has an unsupported verilog type ") << type;
+      return 0;
     } else if (rangeSize == 1) { // Width 1 is implicit.
       return 0;
     }
@@ -111,6 +110,15 @@ static size_t getPrintedTypeDimsWidth(Type type, Operation *op) {
   // Add 4 to count the width of the "[:0]".
   textWidth += getPrintedIntWidth(rangeSize - 1) + 4;
   return textWidth;
+}
+
+/// Calculated the printed width of the array dims of a type.
+static size_t getPrintedTypeDimsWidth(Type type, Operation *op) {
+  size_t dimsWidth = getPrintedTypeDimsWidthRecursive(type, op);
+  if (dimsWidth > 0)
+    // If we have to output a range at all, we need space for the ' '.
+    return dimsWidth + 1;
+  return 0;
 }
 
 /// Return true if this is a noop cast that will emit with no syntax.
@@ -205,8 +213,10 @@ public:
   void addIndent() { state.currentIndent += 2; }
   void reduceIndent() { state.currentIndent -= 2; }
 
-  /// Emit the verilog type for the specified ground type, padding the text to
-  /// the specified number of characters.
+  /// Emit a type's packed dimensions, returning the number of characters
+  /// emitted.
+  size_t emitTypeDims(Type type, Operation *op);
+  /// Pad the text from `emitTypeDims` to the specified number of characters.
   void emitTypeDimsPaddedToWidth(Type type, size_t padToWidth, Operation *op);
 
   // All of the mutable state we are maintaining.
@@ -222,18 +232,16 @@ private:
 
 } // end anonymous namespace
 
-/// Emit a type's packed dimensions, returning the number of characters emitted.
-static size_t emitTypeDims(Type type, llvm::raw_ostream &os, Operation *op) {
-  if (auto inout = type.dyn_cast<rtl::InOutType>()) {
-    return emitTypeDims(inout.getElementType(), os, op);
-  } else if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>()) {
-    return emitTypeDims(uarray.getElementType(), os, op);
-  }
+size_t VerilogEmitterBase::emitTypeDims(Type type, Operation *op) {
+  if (auto inout = type.dyn_cast<rtl::InOutType>())
+    return emitTypeDims(inout.getElementType(), op);
+  else if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>())
+    return emitTypeDims(uarray.getElementType(), op);
 
   size_t emittedWidth = 0;
   int width;
   if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
-    emittedWidth += emitTypeDims(arrayType.getElementType(), os, op);
+    emittedWidth += emitTypeDims(arrayType.getElementType(), op);
     width = arrayType.getSize();
   } else {
     width = getBitWidthOrSentinel(type);
@@ -255,11 +263,9 @@ static size_t emitTypeDims(Type type, llvm::raw_ostream &os, Operation *op) {
 
 void VerilogEmitterBase::emitTypeDimsPaddedToWidth(Type type, size_t padToWidth,
                                                    Operation *op) {
-  size_t emittedWidth = emitTypeDims(type, os, op);
+  size_t emittedWidth = emitTypeDims(type, op);
   if (emittedWidth < padToWidth)
     os.indent(padToWidth - emittedWidth);
-  if (padToWidth > 0 || emittedWidth > 0) // Space before name.
-    os << ' ';
 }
 
 //===----------------------------------------------------------------------===//
@@ -1033,7 +1039,8 @@ void ModuleEmitter::emitStatementExpression(Operation *op) {
     auto type = op->getResult(0).getType();
     indent() << "wire ";
 
-    emitTypeDimsPaddedToWidth(type, 0, op);
+    if (emitTypeDims(type, op) > 0)
+      os << ' ';
     os << getName(op->getResult(0)) << " = ";
   } else {
     indent() << "assign " << getName(op->getResult(0)) << " = ";
@@ -1508,7 +1515,8 @@ LogicalResult ModuleEmitter::visitSV(InterfaceOp op) {
 LogicalResult ModuleEmitter::visitSV(InterfaceSignalOp op) {
   indent() << "logic ";
 
-  emitTypeDimsPaddedToWidth(op.type(), 0, op);
+  if (emitTypeDims(op.type(), op) > 0)
+    os << ' ';
 
   os << op.sym_name() << ";\n";
   return success();
