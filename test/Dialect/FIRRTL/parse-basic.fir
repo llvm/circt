@@ -92,24 +92,30 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.partialconnect %_t, %_t_2
     _t <- _t_2
 
-    ; CHECK: firrtl.invalid %auto : !firrtl.flip<uint<1>>
+    ; CHECK: [[INV:%.+]]  = firrtl.invalidvalue : !firrtl.uint<1>
+    ; CHECK-NEXT: firrtl.connect %auto, [[INV]] : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     auto is invalid
+
+    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue : !firrtl.analog<1>
+    ; CHECK-NEXT: firrtl.attach %a1, [[INV]] : !firrtl.analog<1>, !firrtl.analog<1>
+    a1 is invalid
 
     ; CHECK: firrtl.skip
     skip  @[SKipLoc.scala 42:24]
 
-    ; CHECK: firrtl.invalid %reset : !firrtl.uint<1>
+    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue : !firrtl.uint<1>
+    ; CHECK-NEXT: firrtl.connect %reset, [[INV]] : !firrtl.uint<1>, !firrtl.uint<1>
     reset is invalid
 
-    ; CHECK: %0 = firrtl.subfield %out_0("member") : (!firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>) -> !firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>
-    ; CHECK: %1 = firrtl.subfield %0("0") : (!firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>) -> !firrtl.bundle<clock: clock, reset: uint<1>>
-    ; CHECK: %2 = firrtl.subfield %1("reset") : (!firrtl.bundle<clock: clock, reset: uint<1>>) -> !firrtl.uint<1>
-    ; CHECK: firrtl.partialconnect %auto, %2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    ; CHECK: [[A:%.+]] = firrtl.subfield %out_0("member") : (!firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>) -> !firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>
+    ; CHECK: [[B:%.+]] = firrtl.subfield [[A]]("0") : (!firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>) -> !firrtl.bundle<clock: clock, reset: uint<1>>
+    ; CHECK: [[C:%.+]] = firrtl.subfield [[B]]("reset") : (!firrtl.bundle<clock: clock, reset: uint<1>>) -> !firrtl.uint<1>
+    ; CHECK: firrtl.partialconnect %auto, [[C]] : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     auto <- out_0.member.0.reset @[Field 173:49]
 
-    ; CHECK: %3 = firrtl.subindex %_t_2[0] : (!firrtl.vector<uint<1>, 12>) -> !firrtl.uint<1>
-    ; CHECK: %4 = firrtl.subindex %_t[0] : (!firrtl.vector<uint<1>, 12>) -> !firrtl.uint<1>
-    ; CHECK: firrtl.connect %3, %4
+    ; CHECK: [[A:%.+]] = firrtl.subindex %_t_2[0] : (!firrtl.vector<uint<1>, 12>) -> !firrtl.uint<1>
+    ; CHECK: [[B:%.+]] = firrtl.subindex %_t[0] : (!firrtl.vector<uint<1>, 12>) -> !firrtl.uint<1>
+    ; CHECK: firrtl.connect [[A]], [[B]]
     _t_2[0] <= _t[0] @[Xbar.scala 21:44]
 
     ; CHECK: %n1 = firrtl.node %auto {name = "n1"} : !firrtl.flip<uint<1>>

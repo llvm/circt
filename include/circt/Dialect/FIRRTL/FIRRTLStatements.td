@@ -68,25 +68,6 @@ def PartialConnectOp : FIRRTLOp<"partialconnect", []> {
   }];
 }
 
-def InvalidOp : FIRRTLOp<"invalid", []> {
-  let summary = "Invalid statement";
-  let description = [{
-    Invalidate Operation:
-    ```
-      firrtl.invalid %result : !firrtl.uint<1>
-    ```
-
-    The invalid operation produces a value of unspecified value.
-  }];
-
-  let arguments = (ins FIRRTLType:$operand);
-  let results = (outs);
-
-  let assemblyFormat = [{
-    $operand attr-dict `:` type($operand)
-  }];
-}
-
 def PrintFOp : FIRRTLOp<"printf", []> {
   let summary = "Formatted Print Statement";
 

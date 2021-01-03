@@ -314,4 +314,36 @@ module {
     %c = rtl.add %b, %in4, %in4 : i4
     rtl.output %c : i4
   }
+
+ // CHECK-LABEL: module signs
+  rtl.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
+    %awire = rtl.wire : !rtl.inout<i4>
+    // CHECK: wire [3:0] awire;
+
+    // CHECK: assign awire = $unsigned($signed(in1) / $signed(in2)) /
+    // CHECK:                $unsigned($signed(in3) / $signed(in4));
+    %a1 = rtl.divs %in1, %in2: i4
+    %a2 = rtl.divs %in3, %in4: i4
+    %a3 = rtl.divu %a1, %a2: i4
+    rtl.connect %awire, %a3: i4
+
+    // CHECK: assign awire = $unsigned(
+    %b1a = rtl.divs %in1, %in2: i4
+    %b1b = rtl.divs %in1, %in2: i4
+    %b1c = rtl.divs %in1, %in2: i4
+    %b1d = rtl.divs %in1, %in2: i4
+    %b2 = rtl.add %b1a, %b1b: i4
+    %b3 = rtl.mul %b1c, %b1d: i4
+    %b4 = rtl.divu %b2, %b3: i4
+    rtl.connect %awire, %b4: i4
+
+    // https://github.com/llvm/circt/issues/369
+    // CHECK: assign awire = 4'sh5 / -4'sh3;
+    %c5_i4 = rtl.constant(5 : i4) : i4
+    %c-3_i4 = rtl.constant(-3 : i4) : i4
+    %divs = rtl.divs %c5_i4, %c-3_i4 : i4
+    rtl.connect %awire, %divs: i4
+
+    rtl.output
+  }
 }

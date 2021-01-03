@@ -44,7 +44,13 @@ public:
 
   /// Return true if this is a "passive" type - one that contains no "flip"
   /// types recursively within itself.
-  bool isPassive();
+  bool isPassive() { return getRecursiveTypeProperties().first; }
+
+  /// Return true if this is or contains an Analog type.
+  bool containsAnalog() { return getRecursiveTypeProperties().second; }
+
+  /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
+  std::pair<bool, bool> getRecursiveTypeProperties();
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLType getPassiveType();
@@ -246,9 +252,8 @@ public:
   llvm::Optional<BundleElement> getElement(StringRef name);
   FIRRTLType getElementType(StringRef name);
 
-  /// Return true if this is a "passive" type - one that contains no "flip"
-  /// types recursively within itself.
-  bool isPassive();
+  /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
+  std::pair<bool, bool> getRecursiveTypeProperties();
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLType getPassiveType();
@@ -269,9 +274,8 @@ public:
   FIRRTLType getElementType();
   unsigned getNumElements();
 
-  /// Return true if this is a "passive" type - one that contains no "flip"
-  /// types recursively within itself.
-  bool isPassive();
+  /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
+  std::pair<bool, bool> getRecursiveTypeProperties();
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLType getPassiveType();

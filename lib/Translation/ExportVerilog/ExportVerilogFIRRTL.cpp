@@ -304,7 +304,6 @@ public:
   // Statements.
   void emitStatementExpression(Operation *op);
   void emitStatement(AttachOp op);
-  void emitStatement(InvalidOp op);
   void emitStatement(ConnectOp op);
   void emitStatement(PrintFOp op);
   void emitStatement(StopOp op);
@@ -830,6 +829,7 @@ private:
   SubExprInfo visitExpr(BitsPrimOp op) {
     return emitBitSelect(op.getOperand(), op.hi(), op.lo());
   }
+  SubExprInfo visitExpr(InvalidValuePrimOp op);
   SubExprInfo visitExpr(HeadPrimOp op);
   SubExprInfo visitExpr(TailPrimOp op);
   SubExprInfo visitExpr(PadPrimOp op);
@@ -1148,6 +1148,11 @@ SubExprInfo ExprEmitter::visitExpr(CvtPrimOp op) {
   return emitCat(op.getOperand(), "1'b0");
 }
 
+SubExprInfo ExprEmitter::visitExpr(InvalidValuePrimOp op) {
+  os << "'0";
+  return {Symbol, IsUnsigned};
+}
+
 SubExprInfo ExprEmitter::visitExpr(HeadPrimOp op) {
   auto width = getTypeOf<IntType>(op.getOperand()).getWidthOrSentinel();
   if (width == -1)
@@ -1332,18 +1337,6 @@ void ModuleEmitter::emitStatement(ConnectOp op) {
   os << " = ";
   emitExpression(op.src(), ops);
   os << ';';
-  emitLocationInfoAndNewLine(ops);
-}
-
-void ModuleEmitter::emitStatement(InvalidOp op) {
-  SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
-
-  auto dest = op.operand();
-
-  indent() << "assign ";
-  emitExpression(dest, ops);
-  os << " = '0;";
   emitLocationInfoAndNewLine(ops);
 }
 
@@ -1880,7 +1873,6 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitStmt(AttachOp op) { return emitter.emitStatement(op), true; }
     bool visitStmt(ConnectOp op) { return emitter.emitStatement(op), true; }
     bool visitStmt(DoneOp op) { return true; }
-    bool visitStmt(InvalidOp op) { return emitter.emitStatement(op), true; }
     bool visitStmt(PrintFOp op) { return emitter.emitStatement(op), true; }
     bool visitStmt(SkipOp op) { return true; }
     bool visitStmt(StopOp op) { return emitter.emitStatement(op), true; }

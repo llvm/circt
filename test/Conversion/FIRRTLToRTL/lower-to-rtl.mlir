@@ -14,7 +14,8 @@ module attributes {firrtl.mainModule = "Simple"} {
 
     // CHECK: [[ZERO4:%.+]] = rtl.constant(0 : i4) : i4
     // CHECK: rtl.connect [[OUT5]], [[ZERO4]] : i4
-    firrtl.invalid %out5 : !firrtl.flip<uint<4>>
+    %tmp1 = firrtl.invalidvalue : !firrtl.uint<4>
+    firrtl.connect %out5, %tmp1 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
     // CHECK: rtl.constant(-4 : i4) : i4
     %c12_ui4 = firrtl.constant(12 : ui4) : !firrtl.uint<4>
