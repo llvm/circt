@@ -325,6 +325,13 @@ module {
     %d3 = rtl.divu %d1, %d2: i4
     rtl.connect %awire, %d3: i4
 
+    // https://github.com/llvm/circt/issues/369
+    // CHECK: assign awire = 4'sh5 / 4'shD;
+    %c5_i4 = rtl.constant(5 : i4) : i4
+    %c-3_i4 = rtl.constant(-3 : i4) : i4
+    %divs = rtl.divs %c5_i4, %c-3_i4 : i4
+    rtl.connect %awire, %divs: i4
+
     rtl.output
   }
 }

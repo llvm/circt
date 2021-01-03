@@ -669,6 +669,12 @@ private:
   }
 
 private:
+  /// This is set (before a visit method is called) if emitSubExpr would
+  /// prefer to get an output of a specific sign.  This is a hint to cause the
+  /// visitor to change its emission strategy, but the visit method can ignore
+  /// it without a correctness problem.
+  SubExprSignRequirement signPreference = NoRequirement;
+
   SmallPtrSet<Operation *, 8> &emittedExprs;
   SmallString<128> resultBuffer;
   llvm::raw_svector_ostream os;
@@ -725,6 +731,7 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
 
 SubExprInfo ExprEmitter::emitVariadic(Operation *op, VerilogPrecedence prec,
                                       const char *syntax) {
+  // FIXME: This computes incorrect result signs.
   interleave(
       op->getOperands().begin(), op->getOperands().end(),
       [&](Value v1) { emitSubExpr(v1, prec); },
@@ -743,7 +750,7 @@ SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
 /// Emit the specified value as a subexpression to the stream.
 SubExprInfo ExprEmitter::emitSubExpr(Value exp,
                                      VerilogPrecedence parenthesizeIfLooserThan,
-                                     SubExprSignRequirement signReq) {
+                                     SubExprSignRequirement signRequirement) {
   auto *op = exp.getDefiningOp();
   bool shouldEmitInlineExpr = op && isVerilogExpression(op);
 
@@ -756,7 +763,7 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
   if (!shouldEmitInlineExpr) {
     // All wires are declared as unsigned, so if the client needed it signed,
     // emit a conversion.
-    if (signReq == RequireSigned) {
+    if (signRequirement == RequireSigned) {
       os << "$signed(" << emitter.getName(exp) << ')';
       return {Symbol, IsSigned};
     }
@@ -766,6 +773,11 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
   }
 
   unsigned subExprStartIndex = resultBuffer.size();
+
+  // Inform the visit method about the preferred sign we want from the result.
+  // It may choose to ignore this, but some emitters can change behavior based
+  // on contextual desired sign.
+  signPreference = signRequirement;
 
   // Okay, this is an expression we should emit inline.  Do this through our
   // visitor.
@@ -777,11 +789,12 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     resultBuffer.insert(resultBuffer.begin() + subExprStartIndex,
                         prefix.begin(), prefix.end());
   };
-  if (signReq == RequireSigned && expInfo.signedness == IsUnsigned) {
+  if (signRequirement == RequireSigned && expInfo.signedness == IsUnsigned) {
     addPrefix("$signed(");
     os << ')';
     expInfo.signedness = IsSigned;
-  } else if (signReq == RequireUnsigned && expInfo.signedness == IsSigned) {
+  } else if (signRequirement == RequireUnsigned &&
+             expInfo.signedness == IsSigned) {
     addPrefix("$unsigned(");
     os << ')';
     expInfo.signedness = IsUnsigned;
@@ -885,14 +898,16 @@ SubExprInfo ExprEmitter::visitSV(TextualValueOp op) {
 SubExprInfo ExprEmitter::visitComb(ConstantOp op) {
   auto resType = op.getType().cast<IntegerType>();
   os << resType.getWidth() << '\'';
-  if (resType.isSigned())
+
+  // Emit this as a signed constant if the caller would prefer that.
+  if (signPreference == RequireSigned)
     os << 's';
   os << 'h';
 
   SmallString<32> valueStr;
   op.getValue().toStringUnsigned(valueStr, 16);
   os << valueStr;
-  return {Unary, resType.isSigned() ? IsSigned : IsUnsigned};
+  return {Unary, signPreference == RequireSigned ? IsSigned : IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitComb(ArrayIndexOp op) {
