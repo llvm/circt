@@ -251,7 +251,7 @@ size_t VerilogEmitterBase::emitTypeDims(Type type, Operation *op) {
   if (width == -1) {
     op->emitError("value has an unsupported verilog type ") << type;
     os << "<<invalid type>>";
-    return 16;
+    return 0;
   }
 
   if (width != 1) {
