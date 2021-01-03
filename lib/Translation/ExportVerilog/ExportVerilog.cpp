@@ -70,16 +70,6 @@ static int getBitWidthOrSentinel(Type type) {
       .Default([](Type) { return -1; });
 }
 
-/// Given a type that may be an array or inout, dig through recursive arrays to
-/// find the underlying element type.
-static Type getUnderlyingArrayElementType(Type type) {
-  if (auto arrayElt = getAnyRTLArrayElementType(type))
-    return getUnderlyingArrayElementType(arrayElt);
-  if (auto inoutElt = getInOutElementType(type))
-    return getUnderlyingArrayElementType(inoutElt);
-  return type;
-}
-
 /// Given an integer value, return the number of characters it will take to
 /// print its base-10 value.
 static unsigned getPrintedIntWidth(unsigned value) {
@@ -94,6 +84,41 @@ static unsigned getPrintedIntWidth(unsigned value) {
   llvm::raw_svector_ostream stream(spelling);
   stream << value;
   return stream.str().size();
+}
+
+static size_t getPrintedTypeDimsWidthRecursive(Type type, Operation *op) {
+  if (auto inout = type.dyn_cast<rtl::InOutType>())
+    return getPrintedTypeDimsWidthRecursive(inout.getElementType(), op);
+  else if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>())
+    return getPrintedTypeDimsWidthRecursive(uarray.getElementType(), op);
+
+  int rangeSize;
+  size_t textWidth = 0;
+  if (auto array = type.dyn_cast<rtl::ArrayType>()) {
+    rangeSize = array.getSize();
+    textWidth = getPrintedTypeDimsWidthRecursive(array.getElementType(), op);
+  } else {
+    rangeSize = getBitWidthOrSentinel(type);
+    if (rangeSize == -1) {
+      op->emitError("value has an unsupported verilog type ") << type;
+      return 0;
+    } else if (rangeSize == 1) { // Width 1 is implicit.
+      return 0;
+    }
+  }
+
+  // Add 4 to count the width of the "[:0]".
+  textWidth += getPrintedIntWidth(rangeSize - 1) + 4;
+  return textWidth;
+}
+
+/// Calculated the printed width of the array dims of a type.
+static size_t getPrintedTypeDimsWidth(Type type, Operation *op) {
+  size_t dimsWidth = getPrintedTypeDimsWidthRecursive(type, op);
+  if (dimsWidth > 0)
+    // If we have to output a range at all, we need space for the ' '.
+    return dimsWidth + 1;
+  return 0;
 }
 
 /// Return true if this is a noop cast that will emit with no syntax.
@@ -188,9 +213,11 @@ public:
   void addIndent() { state.currentIndent += 2; }
   void reduceIndent() { state.currentIndent -= 2; }
 
-  /// Emit the verilog type for the specified ground type, padding the text to
-  /// the specified number of characters.
-  void emitTypePaddedToWidth(Type type, size_t padToWidth, Operation *op);
+  /// Emit a type's packed dimensions, returning the number of characters
+  /// emitted.
+  size_t emitTypeDims(Type type, Operation *op);
+  /// Pad the text from `emitTypeDims` to the specified number of characters.
+  void emitTypeDimsPaddedToWidth(Type type, size_t padToWidth, Operation *op);
 
   // All of the mutable state we are maintaining.
   VerilogEmitterState &state;
@@ -205,23 +232,38 @@ private:
 
 } // end anonymous namespace
 
-void VerilogEmitterBase::emitTypePaddedToWidth(Type type, size_t padToWidth,
-                                               Operation *op) {
-  int bitWidth = getBitWidthOrSentinel(type);
-  assert(bitWidth != 0 && "Shouldn't emit zero bit declarations");
-
-  if (bitWidth == -1) {
-    emitError(op, "value has an unsupported verilog type ") << type;
-    os << "<<invalid type>>";
-    return;
-  }
+size_t VerilogEmitterBase::emitTypeDims(Type type, Operation *op) {
+  if (auto inout = type.dyn_cast<rtl::InOutType>())
+    return emitTypeDims(inout.getElementType(), op);
+  else if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>())
+    return emitTypeDims(uarray.getElementType(), op);
 
   size_t emittedWidth = 0;
-  if (bitWidth != 1) {
-    os << '[' << (bitWidth - 1) << ":0]";
-    emittedWidth = getPrintedIntWidth(bitWidth - 1) + 4;
+  int width;
+  if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
+    emittedWidth += emitTypeDims(arrayType.getElementType(), op);
+    width = arrayType.getSize();
+  } else {
+    width = getBitWidthOrSentinel(type);
+    assert(width != 0 && "Shouldn't emit zero bit declarations");
   }
 
+  if (width == -1) {
+    op->emitError("value has an unsupported verilog type ") << type;
+    os << "<<invalid type>>";
+    return 0;
+  }
+
+  if (width != 1) {
+    os << '[' << (width - 1) << ":0]";
+    emittedWidth += getPrintedIntWidth(width - 1) + 4;
+  }
+  return emittedWidth;
+}
+
+void VerilogEmitterBase::emitTypeDimsPaddedToWidth(Type type, size_t padToWidth,
+                                                   Operation *op) {
+  size_t emittedWidth = emitTypeDims(type, op);
   if (emittedWidth < padToWidth)
     os.indent(padToWidth - emittedWidth);
 }
@@ -997,10 +1039,8 @@ void ModuleEmitter::emitStatementExpression(Operation *op) {
     auto type = op->getResult(0).getType();
     indent() << "wire ";
 
-    if (getBitWidthOrSentinel(type) != 1) {
-      emitTypePaddedToWidth(type, 0, op);
+    if (emitTypeDims(type, op) > 0)
       os << ' ';
-    }
     os << getName(op->getResult(0)) << " = ";
   } else {
     indent() << "assign " << getName(op->getResult(0)) << " = ";
@@ -1475,11 +1515,8 @@ LogicalResult ModuleEmitter::visitSV(InterfaceOp op) {
 LogicalResult ModuleEmitter::visitSV(InterfaceSignalOp op) {
   indent() << "logic ";
 
-  auto type = op.type();
-  if (getBitWidthOrSentinel(type) != 1) {
-    emitTypePaddedToWidth(type, 0, op);
+  if (emitTypeDims(op.type(), op) > 0)
     os << ' ';
-  }
 
   os << op.sym_name() << ";\n";
   return success();
@@ -1578,10 +1615,7 @@ static void printArraySubscripts(Type type, raw_ostream &os) {
   if (auto inout = type.dyn_cast<InOutType>())
     return printArraySubscripts(inout.getElementType(), os);
 
-  if (auto array = type.dyn_cast<ArrayType>()) {
-    printArraySubscripts(array.getElementType(), os);
-    os << '[' << (array.getSize() - 1) << ":0]";
-  } else if (auto array = type.dyn_cast<UnpackedArrayType>()) {
+  if (auto array = type.dyn_cast<UnpackedArrayType>()) {
     printArraySubscripts(array.getElementType(), os);
     os << '[' << (array.getSize() - 1) << ":0]";
   }
@@ -1646,20 +1680,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
     // Skip over SV interface types, which don't have any emitted width.
     if (!type.isa<InterfaceType>()) {
-
-      int bitWidth = getBitWidthOrSentinel(getUnderlyingArrayElementType(type));
-      if (bitWidth == -1) {
-        emitError(&op, getName(result))
-            << " has an unsupported verilog type " << type;
-        result = Value();
-        break;
-      }
-
-      if (bitWidth != 1) { // Width 1 is implicit.
-        // Add 5 to count the width of the "[:0] ".
-        size_t thisWidth = getPrintedIntWidth(bitWidth - 1) + 5;
-        maxTypeWidth = std::max(thisWidth, maxTypeWidth);
-      }
+      maxTypeWidth = std::max(getPrintedTypeDimsWidth(type, &op), maxTypeWidth);
     }
 
     // Emit this declaration.
@@ -1682,12 +1703,10 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     indent() << word;
     os.indent(maxDeclNameWidth - word.size() + 1);
 
-    auto elementType = getUnderlyingArrayElementType(type);
-
     // Skip over SV interface types, which don't have any emitted width.
     bool isInterface = type.isa<InterfaceType>();
     if (!isInterface)
-      emitTypePaddedToWidth(elementType, maxTypeWidth, decl);
+      emitTypeDimsPaddedToWidth(type, maxTypeWidth, decl);
 
     os << getName(decl->getResult(0));
 
@@ -1795,18 +1814,11 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
   // Determine the width of the widest type we have to print so everything
   // lines up nicely.
   bool hasOutputs = false;
-  unsigned maxTypeWidth = 0;
+  size_t maxTypeWidth = 0;
   for (auto &port : portInfo) {
-    auto portType = port.type;
     hasOutputs |= port.isOutput();
-
-    int bitWidth = getBitWidthOrSentinel(portType);
-    if (bitWidth == -1 || bitWidth == 1)
-      continue; // The error case is handled below.
-
-    // Add 4 to count the width of the "[:0] ".
-    unsigned thisWidth = getPrintedIntWidth(bitWidth - 1) + 5;
-    maxTypeWidth = std::max(thisWidth, maxTypeWidth);
+    maxTypeWidth =
+        std::max(getPrintedTypeDimsWidth(port.type, module), maxTypeWidth);
   }
 
   addIndent();
@@ -1830,17 +1842,17 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
       break;
     }
 
-    int bitWidth = getBitWidthOrSentinel(portType);
-    emitTypePaddedToWidth(portType, maxTypeWidth, module);
+    emitTypeDimsPaddedToWidth(portType, maxTypeWidth, module);
 
     // Emit the name.
     os << portInfo[portIdx].getName();
+    printArraySubscripts(portType, os);
     ++portIdx;
 
     // If we have any more ports with the same types and the same direction,
     // emit them in a list on the same line.
     while (portIdx != e && portInfo[portIdx].direction == thisPortDirection &&
-           bitWidth == getBitWidthOrSentinel(portInfo[portIdx].type)) {
+           portType == portInfo[portIdx].type) {
       // Don't exceed our preferred line length.
       StringRef name = portInfo[portIdx].getName();
       if (os.tell() + 2 + name.size() - startOfLinePos >
@@ -1851,6 +1863,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
 
       // Append this to the running port decl.
       os << ", " << name;
+      printArraySubscripts(portType, os);
       ++portIdx;
     }
 
