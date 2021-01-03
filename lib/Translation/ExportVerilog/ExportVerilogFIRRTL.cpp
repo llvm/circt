@@ -2103,13 +2103,13 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
     indent();
     // Emit the arguments.
     auto portType = portInfo[portIdx].type;
-    int bitWidth = getBitWidthOrSentinel(portType);
     bool isThisPortOutput = portInfo[portIdx].isOutput();
     if (isThisPortOutput)
       os << "output ";
     else
       os << (hasOutputs ? "input  " : "input ");
 
+    int bitWidth = getBitWidthOrSentinel(portType);
     emitTypePaddedToWidth(portType, maxTypeWidth, module);
 
     // Emit the name.
@@ -2136,7 +2136,7 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
     if (portIdx != e)
       os << ',';
     else
-      os.indent(state.currentIndent - 2) << ");\n";
+      os << ");\n";
     os << '\n';
   }
 

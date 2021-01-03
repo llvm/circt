@@ -1799,7 +1799,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
     if (portIdx != e)
       os << ',';
     else
-      os.indent(state.currentIndent - 2) << ");\n";
+      os << ");\n";
     os << '\n';
   }
 
