@@ -981,9 +981,9 @@ SubExprInfo ExprEmitter::visitComb(ArraySliceOp op) {
   auto arrayPrec = emitSubExpr(op.input(), Symbol);
 
   unsigned dstWidth = op.getType().cast<ArrayType>().getSize();
-  os << '[' << dstWidth - 1 << '+';
+  os << '[';
   emitSubExpr(op.lowIndex(), LowestPrecedence);
-  os << ':';
+  os << '+' << dstWidth - 1 << ':';
   emitSubExpr(op.lowIndex(), LowestPrecedence);
   os << ']';
   return {Symbol, arrayPrec.signedness};
