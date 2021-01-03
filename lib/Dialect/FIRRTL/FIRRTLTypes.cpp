@@ -218,7 +218,8 @@ FIRRTLType FIRRTLType::getPassiveType() {
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
             AnalogType>([&](Type) { return *this; })
       .Case<FlipType>([](FlipType flipType) {
-        return flipType.getElementType().getPassiveType();
+        // The element of a flip type is always passive.
+        return flipType.getElementType();
       })
       .Case<BundleType>(
           [](BundleType bundleType) { return bundleType.getPassiveType(); })
@@ -494,43 +495,49 @@ getFlippedBundleType(ArrayRef<BundleType::BundleElement> elements) {
 FIRRTLType FlipType::get(FIRRTLType element) {
   // We maintain a canonical form for flip types, where we prefer to have the
   // flip as far outward from an otherwise passive type as possible.  If a flip
-  // is being used with an aggregate type that contains non-passive elements,
-  // then it is forced into the elements to get the canonical form.
+  // is being used with an aggregate type that contains non-passive or analog
+  // elements, then it is forced into the elements to get the canonical form.
   return TypeSwitch<FIRRTLType, FIRRTLType>(element)
-      .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
-            AnalogType>([&](Type) {
-        // TODO: This should maintain a canonical form, digging any flips out of
-        // sub-types.
-        auto *context = element.getContext();
-        return Base::get(context, element);
-      })
+      .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType>(
+          [&](Type) {
+            // TODO: This should maintain a canonical form, digging any flips
+            // out of sub-types.
+            auto *context = element.getContext();
+            return Base::get(context, element);
+          })
       .Case<FlipType>([](FlipType flipType) {
         // flip(flip(x)) -> x
         return flipType.getElementType();
       })
+      .Case<AnalogType>([](AnalogType analogType) {
+        // flip(analog) -> analog.
+        return analogType;
+      })
       .Case<BundleType>([&](BundleType bundleType) {
-        // If the bundle is passive, then we're done because the flip will be at
-        // the outer level. Otherwise, it contains flip types recursively within
-        // itself that we should canonicalize.
-        if (bundleType.isPassive()) {
-          auto *context = element.getContext();
-          return Base::get(context, element).cast<FIRRTLType>();
+        // If the bundle is passive and doesn't contain analog elements, then
+        // we're done because the flip will be at the outer level. Otherwise, it
+        // contains flip types recursively within itself that we should
+        // canonicalize.
+        auto properties = bundleType.getRecursiveTypeProperties();
+        if (properties.first && !properties.second) {
+          return Base::get(element.getContext(), element).cast<FIRRTLType>();
         }
 
         return getFlippedBundleType(bundleType.getElements());
       })
       .Case<FVectorType>([&](FVectorType vectorType) {
-        // If the bundle is passive, then we're done because the flip will be at
-        // the outer level. Otherwise, it contains flip types recursively within
-        // itself that we should canonicalize.
-        if (vectorType.isPassive()) {
+        // If the vector is passive and doesn't contain analog elements, then
+        // we're done because the flip will be at the outer level. Otherwise, it
+        // contains flip types recursively within itself that we should
+        // canonicalize.
+        auto properties = vectorType.getRecursiveTypeProperties();
+        if (properties.first && !properties.second) {
           auto *context = element.getContext();
           return Base::get(context, element).cast<FIRRTLType>();
         }
 
         return FVectorType::get(get(vectorType.getElementType()),
-                                vectorType.getNumElements())
-            .cast<FIRRTLType>();
+                                vectorType.getNumElements());
       })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
