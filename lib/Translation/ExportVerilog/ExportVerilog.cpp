@@ -642,13 +642,13 @@ private:
   SubExprInfo visitComb(ReadInOutOp op) { return emitNoopCast(op); }
 
   // Other
+  SubExprInfo visitComb(ArraySliceOp op);
   SubExprInfo visitComb(ArrayIndexOp op);
   SubExprInfo visitComb(MuxOp op);
 
   // RTL Dialect Operations
   using CombinatorialVisitor::visitComb;
   SubExprInfo visitComb(ConstantOp op);
-  SubExprInfo visitComb(ArraySliceOp op);
   SubExprInfo visitComb(AddOp op) { return emitVariadic(op, Addition, "+"); }
   SubExprInfo visitComb(SubOp op) { return emitBinary(op, Addition, "-"); }
   SubExprInfo visitComb(MulOp op) { return emitVariadic(op, Multiply, "*"); }

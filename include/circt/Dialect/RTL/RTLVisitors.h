@@ -27,7 +27,7 @@ public:
   ResultType dispatchCombinatorialVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<ConstantOp, ArraySliceOp,
+        .template Case<ConstantOp,
                        // Arithmetic and Logical Binary Operations.
                        AddOp, SubOp, MulOp, DivUOp, DivSOp, ModUOp, ModSOp,
                        ShlOp, ShrUOp, ShrSOp,
@@ -40,7 +40,9 @@ public:
                        // Other operations.
                        SExtOp, ZExtOp, ConcatOp, ExtractOp, MuxOp,
                        // InOut Expressions
-                       ReadInOutOp, ArrayIndexOp>([&](auto expr) -> ResultType {
+                       ReadInOutOp, ArrayIndexOp,
+                       // Array operations
+                       ArraySliceOp>([&](auto expr) -> ResultType {
           return thisCast->visitComb(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -82,7 +84,6 @@ public:
 
   // Basic nodes.
   HANDLE(ConstantOp, Unhandled);
-  HANDLE(ArraySliceOp, Unhandled);
 
   // Arithmetic and Logical Binary Operations.
   HANDLE(AddOp, Binary);
@@ -114,6 +115,7 @@ public:
   HANDLE(MuxOp, Unhandled);
   HANDLE(ReadInOutOp, Unhandled);
   HANDLE(ArrayIndexOp, Unhandled);
+  HANDLE(ArraySliceOp, Unhandled);
 #undef HANDLE
 };
 
