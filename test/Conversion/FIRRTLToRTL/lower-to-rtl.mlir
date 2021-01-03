@@ -23,13 +23,16 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK: rtl.constant(2 : i3) : i3
     %c2_si3 = firrtl.constant(2 : si3) : !firrtl.sint<3>
 
-    // CHECK: [[ADD:%.+]] = rtl.add %c-4_i4, %in1 : i4
-    %0 = firrtl.add %c12_ui4, %in1c : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+    // CHECK: [[ZEXT:%.+]] = rtl.zext %in1 : (i4) -> i5
+    // CHECK: [[ADD:%.+]] = rtl.add %c12_i5, [[ZEXT]] : i5
+    %0 = firrtl.add %c12_ui4, %in1c : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
     %1 = firrtl.asUInt %in1c : (!firrtl.uint<4>) -> !firrtl.uint<4>
 
-    // CHECK-NEXT: [[SUB:%.+]] = rtl.sub [[ADD]], %in1 : i4
-    %2 = firrtl.sub %0, %1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+    // CHECK: [[ZEXT1:%.+]] = rtl.zext [[ADD]] : (i5) -> i6
+    // CHECK: [[ZEXT2:%.+]] = rtl.zext %in1 : (i4) -> i6
+    // CHECK-NEXT: [[SUB:%.+]] = rtl.sub [[ZEXT1]], [[ZEXT2]] : i6
+    %2 = firrtl.sub %0, %1 : (!firrtl.uint<5>, !firrtl.uint<4>) -> !firrtl.uint<6>
 
     %in2s = firrtl.asSInt %in2c : (!firrtl.uint<2>) -> !firrtl.sint<2>
 
@@ -108,10 +111,10 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: = rtl.orr [[CONCAT1]] : i8
     %17 = firrtl.orr %6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: [[ZEXTC1:%.+]] = rtl.zext [[CONCAT1]] : (i8) -> i12
-    // CHECK-NEXT: [[ZEXT2:%.+]] = rtl.zext [[SUB]] : (i4) -> i12
-    // CHECK-NEXT: [[VAL18:%.+]] = rtl.mul  [[ZEXTC1]], [[ZEXT2]] : i12
-    %18 = firrtl.mul %6, %2 : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<12>
+    // CHECK-NEXT: [[ZEXTC1:%.+]] = rtl.zext [[CONCAT1]] : (i8) -> i14
+    // CHECK-NEXT: [[ZEXT2:%.+]] = rtl.zext [[SUB]] : (i6) -> i14
+    // CHECK-NEXT: [[VAL18:%.+]] = rtl.mul  [[ZEXTC1]], [[ZEXT2]] : i14
+    %18 = firrtl.mul %6, %2 : (!firrtl.uint<8>, !firrtl.uint<6>) -> !firrtl.uint<14>
 
     // CHECK-NEXT: [[IN3SEXT:%.+]] = rtl.sext %in3 : (i8) -> i9
     // CHECK-NEXT: [[PADRESSEXT:%.+]] = rtl.sext [[PADRES]] : (i3) -> i9
@@ -158,32 +161,32 @@ module attributes {firrtl.mainModule = "Simple"} {
     %26 = firrtl.mux(%12, %23, %25) : (!firrtl.uint<1>, !firrtl.sint<3>, !firrtl.sint<4>) -> !firrtl.sint<4>
   
     // Noop
-    %27 = firrtl.validif %12, %18 : (!firrtl.uint<1>, !firrtl.uint<12>) -> !firrtl.uint<12>
+    %27 = firrtl.validif %12, %18 : (!firrtl.uint<1>, !firrtl.uint<14>) -> !firrtl.uint<14>
     // CHECK-NEXT: rtl.andr
-    %28 = firrtl.andr %27 : (!firrtl.uint<12>) -> !firrtl.uint<1>
+    %28 = firrtl.andr %27 : (!firrtl.uint<14>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: [[XOREXT:%.+]] = rtl.zext [[XOR]] : (i3) -> i12
-    // CHECK-NEXT: [[SHIFT:%.+]] = rtl.shru [[XOREXT]], [[VAL18]] : i12
-    // CHECK-NEXT: = rtl.extract [[SHIFT]] from 0 : (i12) -> i3
-    %29 = firrtl.dshr %24, %18 : (!firrtl.uint<3>, !firrtl.uint<12>) -> !firrtl.uint<3>
+    // CHECK-NEXT: [[XOREXT:%.+]] = rtl.zext [[XOR]] : (i3) -> i14
+    // CHECK-NEXT: [[SHIFT:%.+]] = rtl.shru [[XOREXT]], [[VAL18]] : i14
+    // CHECK-NEXT: [[DSHR:%.+]] = rtl.extract [[SHIFT]] from 0 : (i14) -> i3
+    %29 = firrtl.dshr %24, %18 : (!firrtl.uint<3>, !firrtl.uint<14>) -> !firrtl.uint<3>
 
     // CHECK-NEXT: = rtl.zext {{.*}} : (i3) -> i8
     // CHECK-NEXT: [[SHIFT:%.+]] = rtl.shrs %in3, {{.*}} : i8
-    // CHECK-NEXT: = rtl.extract [[SHIFT]] from 0 : (i8) -> i3
-    %a29 = firrtl.dshr %in3c, %9 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<3>
+    %a29 = firrtl.dshr %in3c, %9 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<8>
 
-    // CHECK-NEXT: = rtl.zext {{.*}} : (i3) -> i8
-    // CHECK-NEXT: [[SHIFT:%.+]] = rtl.shl %in3, {{.*}} : i8
-    %30 = firrtl.dshl %in3c, %9 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<8>
+    // CHECK-NEXT: = rtl.sext %in3 : (i8) -> i15
+    // CHECK-NEXT: = rtl.zext [[DSHR]] : (i3) -> i15
+    // CHECK-NEXT: [[SHIFT:%.+]] = rtl.shl {{.*}}, {{.*}} : i15
+    %30 = firrtl.dshl %in3c, %29 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<15>
 
-    // CHECK-NEXT: = rtl.shru %13, %13 : i3
-    %dshlw = firrtl.dshlw %9, %9 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
+    // CHECK-NEXT: = rtl.shru [[DSHR]], [[DSHR]] : i3
+    %dshlw = firrtl.dshlw %29, %29 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
 
     // Issue #367: https://github.com/llvm/circt/issues/367
-    // CHECK-NEXT: = rtl.sext {{.*}} : (i4) -> i12
-    // CHECK-NEXT: [[SHIFT:%.+]] = rtl.shrs {{.*}}, {{.*}} : i12
-    // CHECK-NEXT: = rtl.extract [[SHIFT]] from 0 : (i12) -> i4
-    %31 = firrtl.dshr %25, %27 : (!firrtl.sint<4>, !firrtl.uint<12>) -> !firrtl.sint<4>
+    // CHECK-NEXT: = rtl.sext {{.*}} : (i4) -> i14
+    // CHECK-NEXT: [[SHIFT:%.+]] = rtl.shrs {{.*}}, {{.*}} : i14
+    // CHECK-NEXT: = rtl.extract [[SHIFT]] from 0 : (i14) -> i4
+    %31 = firrtl.dshr %25, %27 : (!firrtl.sint<4>, !firrtl.uint<14>) -> !firrtl.sint<4>
 
     // CHECK-NEXT: rtl.icmp "ule" {{.*}}, {{.*}} : i4
     %41 = firrtl.leq %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
