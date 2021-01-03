@@ -69,8 +69,7 @@ module {
   // CHECK-NEXT:   output [11:0]     r29,
   // CHECK-NEXT:   output [1:0]      r30,
   // CHECK-NEXT:   output [8:0]      r31, r32,
-  // CHECK-NEXT:   output [3:0]      r33, r34
-  // CHECK-NEXT:  );
+  // CHECK-NEXT:   output [3:0]      r33, r34);
   // CHECK-EMPTY:
   // CHECK-NEXT:   assign r0 = a + b;
   // CHECK-NEXT:   assign r2 = a - b;
@@ -113,8 +112,7 @@ module {
   }
   // CHECK-LABEL: module B(
   // CHECK-NEXT:   input  a,
-  // CHECK-NEXT:   output b, c
-  // CHECK-NEXT:  );
+  // CHECK-NEXT:   output b, c);
   // CHECK-EMPTY:
   // CHECK-NEXT:   assign b = a | a;
   // CHECK-NEXT:   assign c = a & a;
@@ -126,8 +124,7 @@ module {
   }
   // CHECK-LABEL: module A(
   // CHECK-NEXT:  input  d, e,
-  // CHECK-NEXT:  output f
-  // CHECK-NEXT:  );
+  // CHECK-NEXT:  output f);
   // CHECK-EMPTY:
   // CHECK-NEXT:  assign f = d ? d : e;
   // CHECK-NEXT: endmodule
@@ -138,8 +135,7 @@ module {
   }
   // CHECK-LABEL: module AAA(
   // CHECK-NEXT:  input  d, e,
-  // CHECK-NEXT:  output f
-  // CHECK-NEXT:  );
+  // CHECK-NEXT:  output f);
   // CHECK-EMPTY:
   // CHECK-NEXT:  assign f = 1'h0;
   // CHECK-NEXT: endmodule
@@ -165,8 +161,7 @@ module {
   // CHECK-LABEL: module AB(
   // CHECK-NEXT:   input        w, x,
   // CHECK-NEXT:   input  [1:0] i2,
-  // CHECK-NEXT:   output       y, z, p, p2
-  // CHECK-NEXT:  );
+  // CHECK-NEXT:   output       y, z, p, p2);
   // CHECK-EMPTY:
   // CHECK-NEXT:   wire a1_f;
   // CHECK-NEXT:   wire b1_b;
@@ -205,8 +200,7 @@ module {
   }
   // CHECK-LABEL:  module shl(
   // CHECK-NEXT:   input  a,
-  // CHECK-NEXT:   output b
-  // CHECK-NEXT:  );
+  // CHECK-NEXT:   output b);
   // CHECK-EMPTY:
   // CHECK-NEXT:   assign b = a << a;
   // CHECK-NEXT: endmodule
@@ -218,8 +212,7 @@ module {
   }
   // CHECK-LABEL:  module inout(
   // CHECK-NEXT:     inout  [41:0] a,
-  // CHECK-NEXT:     output [41:0] out
-  // CHECK-NEXT:  );
+  // CHECK-NEXT:     output [41:0] out);
   // CHECK-EMPTY:
   // CHECK-NEXT:     assign out = a;
   // CHECK-NEXT:   endmodule
@@ -255,8 +248,7 @@ module {
     // CHECK-NEXT:   input  [3:0] in4,
     // CHECK-NEXT:   input  [7:0] in8,
     // CHECK-NEXT:   output [3:0] a,
-    // CHECK-NEXT:   output [7:0] b, c
-    // CHECK-NEXT:  );
+    // CHECK-NEXT:   output [7:0] b, c);
 
     // CHECK-EMPTY:
 

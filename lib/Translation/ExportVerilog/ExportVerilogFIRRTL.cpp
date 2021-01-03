@@ -2103,6 +2103,7 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
     indent();
     // Emit the arguments.
     auto portType = portInfo[portIdx].type;
+    int bitWidth = getBitWidthOrSentinel(portType);
     bool isThisPortOutput = portInfo[portIdx].isOutput();
     if (isThisPortOutput)
       os << "output ";
@@ -2118,7 +2119,7 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
     // If we have any more ports with the same types and the same direction,
     // emit them in a list on the same line.
     while (portIdx != e && portInfo[portIdx].isOutput() == isThisPortOutput &&
-           portType == portInfo[portIdx].type) {
+           bitWidth == getBitWidthOrSentinel(portInfo[portIdx].type)) {
       // Don't exceed our preferred line length.
       StringRef name = getName(module.getArgument(portIdx));
       if (os.tell() + 2 + name.size() - startOfLinePos >
@@ -2134,9 +2135,9 @@ void ModuleEmitter::emitFModule(FModuleOp module) {
 
     if (portIdx != e)
       os << ',';
-    os << "    //" << portType << "\n";
-    if (portIdx == e)
-      os.indent(state.currentIndent - 2) << ");\n\n";
+    else
+      os.indent(state.currentIndent - 2) << ");\n";
+    os << '\n';
   }
 
   if (portInfo.empty())

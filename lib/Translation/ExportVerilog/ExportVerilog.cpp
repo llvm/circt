@@ -1798,9 +1798,9 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
 
     if (portIdx != e)
       os << ',';
-    os << "    //" << portType << "\n";
-    if (portIdx == e)
-      os.indent(state.currentIndent - 2) << ");\n\n";
+    else
+      os.indent(state.currentIndent - 2) << ");\n";
+    os << '\n';
   }
 
   if (portInfo.empty())
