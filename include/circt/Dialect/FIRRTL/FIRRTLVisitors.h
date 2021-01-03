@@ -41,8 +41,9 @@ public:
             AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsClockPrimOp,
             CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
             // Miscellaneous.
-            BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
-            TailPrimOp, AsPassivePrimOp, AsNonPassivePrimOp,
+            BitsPrimOp, HeadPrimOp, InvalidValuePrimOp, MuxPrimOp, PadPrimOp,
+            ShlPrimOp, ShrPrimOp, TailPrimOp, AsPassivePrimOp,
+            AsNonPassivePrimOp,
 
             // Conversion from FIRRTL to RTL dialect types.
             StdIntCastOp, AnalogInOutCastOp>([&](auto expr) -> ResultType {
@@ -129,6 +130,7 @@ public:
   // Miscellaneous.
   HANDLE(BitsPrimOp, Unhandled);
   HANDLE(HeadPrimOp, Unhandled);
+  HANDLE(InvalidValuePrimOp, Unhandled);
   HANDLE(MuxPrimOp, Unhandled);
   HANDLE(PadPrimOp, Unhandled);
   HANDLE(ShlPrimOp, Unhandled);
@@ -151,7 +153,7 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<AttachOp, ConnectOp, DoneOp, InvalidOp, MemoryPortOp,
+        .template Case<AttachOp, ConnectOp, DoneOp, MemoryPortOp,
                        PartialConnectOp, PrintFOp, SkipOp, StopOp, WhenOp,
                        AssertOp, AssumeOp, CoverOp>(
             [&](auto opNode) -> ResultType {
@@ -182,7 +184,6 @@ public:
   HANDLE(AttachOp);
   HANDLE(ConnectOp);
   HANDLE(DoneOp);
-  HANDLE(InvalidOp);
   HANDLE(MemoryPortOp);
   HANDLE(PartialConnectOp);
   HANDLE(PrintFOp);
