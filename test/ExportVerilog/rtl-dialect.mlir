@@ -320,10 +320,20 @@ module {
 
     // CHECK: assign awire = $unsigned($signed(in1) / $signed(in2)) /
     // CHECK:                $unsigned($signed(in3) / $signed(in4));
-    %d1 = rtl.divs %in1, %in2: i4
-    %d2 = rtl.divs %in3, %in4: i4
-    %d3 = rtl.divu %d1, %d2: i4
-    rtl.connect %awire, %d3: i4
+    %a1 = rtl.divs %in1, %in2: i4
+    %a2 = rtl.divs %in3, %in4: i4
+    %a3 = rtl.divu %a1, %a2: i4
+    rtl.connect %awire, %a3: i4
+
+    // CHECK: assign awire = $unsigned(
+    %b1a = rtl.divs %in1, %in2: i4
+    %b1b = rtl.divs %in1, %in2: i4
+    %b1c = rtl.divs %in1, %in2: i4
+    %b1d = rtl.divs %in1, %in2: i4
+    %b2 = rtl.add %b1a, %b1b: i4
+    %b3 = rtl.mul %b1c, %b1d: i4
+    %b4 = rtl.divu %b2, %b3: i4
+    rtl.connect %awire, %b4: i4
 
     // https://github.com/llvm/circt/issues/369
     // CHECK: assign awire = 4'sh5 / -4'sh3;
