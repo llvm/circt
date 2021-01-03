@@ -803,9 +803,8 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
 }
 
 SubExprInfo ExprEmitter::visitComb(SExtOp op) {
-  auto inType = op.getOperand().getType().cast<IntegerType>();
-  auto inWidth = inType.getWidth();
-  auto destWidth = op.getType().cast<IntegerType>().getWidth();
+  auto inWidth = op.getOperand().getType().getIntOrFloatBitWidth();
+  auto destWidth = op.getType().getIntOrFloatBitWidth();
 
   // Handle sign extend from a single bit in a pretty way.
   if (inWidth == 1) {
@@ -827,9 +826,8 @@ SubExprInfo ExprEmitter::visitComb(SExtOp op) {
 }
 
 SubExprInfo ExprEmitter::visitComb(ZExtOp op) {
-  auto inType = op.getOperand().getType().cast<IntegerType>();
-  auto inWidth = inType.getWidth();
-  auto destWidth = op.getType().cast<IntegerType>().getWidth();
+  auto inWidth = op.getOperand().getType().getIntOrFloatBitWidth();
+  auto destWidth = op.getType().getIntOrFloatBitWidth();
 
   // A zero extension just fills the top with numbers.
   os << "{{" << (destWidth - inWidth) << "'d0}, ";
