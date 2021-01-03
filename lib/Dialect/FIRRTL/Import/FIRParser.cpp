@@ -1687,14 +1687,13 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs, SubOpVector &subOps) {
     // implicit connect semantics.  The FIRRTL dialect models it as a primitive
     // that returns an "Invalid Value", followed by an explicit connect to make
     // the representation simpler and more consistent.
-    auto invalidType = lhs.getType().cast<FIRRTLType>().getPassiveType();
+    auto invalidType = lhs.getType().cast<FIRRTLType>();
     if (invalidType.isa<AnalogType>()) {
-      // FIXME: Analog types shouldn't be flippable.
-      lhs = convertToPassive(lhs, info.getLoc());
       auto val = builder.create<InvalidValuePrimOp>(info.getLoc(), invalidType);
       builder.create<AttachOp>(info.getLoc(), ValueRange{lhs, val});
     } else {
-      auto val = builder.create<InvalidValuePrimOp>(info.getLoc(), invalidType);
+      auto val = builder.create<InvalidValuePrimOp>(
+          info.getLoc(), invalidType.getPassiveType());
       builder.create<ConnectOp>(info.getLoc(), lhs, val);
     }
     return success();

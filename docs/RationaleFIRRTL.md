@@ -64,22 +64,30 @@ One significant difference between the CIRCT and Scala implementation of FIRRTL
 is that the CIRCT implementation of the FIRRTL type system always canonicalizes
 flip types, according to the following rules:
 
-1) `flip(flip(x))` == `x`
+1) `flip(flip(x))` == `x`.
+2) `flip(analog(x))` == `analog(x)` since analog types are implicitly
+    bidirectional.
 2) `flip(bundle(a,b,c,d))` == `bundle(flip(a), flip(b), flip(c), flip(d))` when
-   the bundle has non-passive type.  This forces the flip into the subelements,
-   where it recursively merges with the non-passive subelement.
+   the bundle has non-passive type or contains an analog type.  This forces the
+   flip into the subelements, where it recursively merges with the non-passive
+   subelements and analogs.
 3) `flip(vector(a, n))` == `vector(flip(a), n)` when the vector has non-passive
-   type.  This forces the flip into the element type, generally canceling it
-   out.
+   type or analogs.  This forces the flip into the element type, generally
+   canceling it out.
 4) `bundle(flip(a), flip(b), flip(c), flip(d))` == `flip(bundle(a, b, c, d)`.
    Due to the other rules, the operand to a flip must be a passive type, so the
-   entire bundle will be passive, and rule #2 won't be recursively reinvoked.
+   entire bundle will be passive, and rule #3 won't be recursively reinvoked.
 
 The result of this is that FIRRTL types are guaranteed to have a canonical
-representation, and can therefore be tested for pointer equality.
+representation, and can therefore be tested for pointer equality.  The
+canonicalization of analog types means that both input and output ports of
+analog type have the same representation.
 
-As a further consequence of this, the `FlipType::get(x)` method may not return a
-flip type!
+As a further consequence of this, there are a few things to be aware of:
+
+1) the `FlipType::get(x)` method may not return a flip type!
+2) the notion of "flow" in the FIRRTL dialect is different from the notion
+   described in the FIRRTL spec.
 
 Operations
 ==========
