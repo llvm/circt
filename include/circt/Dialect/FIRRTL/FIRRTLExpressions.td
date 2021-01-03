@@ -31,7 +31,7 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
     OpBuilderDAG<(ins "IntType":$type, "const APInt &":$value)>
   ];
   let hasFolder = 1;
-  let verifier = [{ return ::verifyConstantOp(*this); }];
+  let verifier = "return ::verifyConstantOp(*this);";
 }
 
 def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
@@ -48,9 +48,8 @@ def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
   let results = (outs FIRRTLType:$result);
 
   // TODO: Could drop the result type, inferring it from the source.
-  let assemblyFormat = [{
-     $input `(` $fieldname `)` attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input `(` $fieldname `)` attr-dict `:` functional-type($input, $result)";
 
   let extraClassDeclaration = [{
     /// Compute the result of a Subfield operation on a value of the specified
@@ -58,6 +57,10 @@ def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
     /// invalid, then a null type is returned.
     static FIRRTLType getResultType(FIRRTLType inType, StringRef fieldName,
                                     Location loc);
+  }];
+
+  let verifier = [{
+    VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>(), fieldname());
   }];
 }
 
@@ -77,15 +80,18 @@ def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
   let results = (outs FIRRTLType:$result);
 
   // TODO: Could drop the result type, inferring it from the source.
-  let assemblyFormat = [{
-     $input `[` $index `]` attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+     "$input `[` $index `]` attr-dict `:` functional-type($input, $result)";
 
   let extraClassDeclaration = [{
     /// Compute the result of a Subindex operation on a value of the specified
     /// type.  If the request is invalid, then a null type is returned.
     static FIRRTLType getResultType(FIRRTLType inType, unsigned fieldIdx,
                                     Location loc);
+  }];
+
+  let verifier = [{
+    VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>(), index());
   }];
 }
 
@@ -104,15 +110,19 @@ def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect]> {
   let results = (outs FIRRTLType:$result);
 
   // TODO: Could drop the result type, inferring it from the source.
-  let assemblyFormat = [{
-     $input `[` $index `]` attr-dict `:` functional-type(operands, $result)
-  }];
+  let assemblyFormat =
+     "$input `[` $index `]` attr-dict `:` functional-type(operands, $result)";
 
   let extraClassDeclaration = [{
     /// Compute the result of a Subaccess operation on a value of the specified
     /// type.  If the request is invalid, then a null type is returned.
     static FIRRTLType getResultType(FIRRTLType baseType, FIRRTLType indexType,
                                     Location loc);
+  }];
+
+  let verifier = [{
+    VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>(),
+                           index().getType().cast<FIRRTLType>());
   }];
 }
 //===----------------------------------------------------------------------===//
@@ -151,6 +161,11 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
       }
       return getResultType(inputs[0], inputs[1], loc);
     }
+  }];
+
+  let verifier = [{
+    VERIFY_RESULT_TYPE_RET(lhs().getType().cast<FIRRTLType>(),
+                           rhs().getType().cast<FIRRTLType>());
   }];
 }
 
@@ -214,6 +229,10 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
       return getResultType(inputs[0], loc);
     }
   }];
+
+  let verifier = [{
+    VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>());
+  }];
 }
 
 def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLType, SIntType>;
@@ -270,7 +289,9 @@ def BitsPrimOp : PrimOp<"bits"> {
     }
   }];
 
-  let verifier = [{ return ::verifyBitsPrimOp(*this); }];
+  let verifier = [{
+    VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>(), hi(), lo());
+  }];
 }
 
 def HeadPrimOp : PrimOp<"head"> {
@@ -296,6 +317,10 @@ def HeadPrimOp : PrimOp<"head"> {
       }
       return getResultType(inputs[0], integers[0], loc);
     }
+  }];
+
+  let verifier = [{
+    VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>(), amount());
   }];
 }
 
@@ -343,6 +368,12 @@ def MuxPrimOp : PrimOp<"mux"> {
       return getResultType(inputs[0], inputs[1], inputs[2], loc);
     }
   }];
+
+  let verifier = [{
+    VERIFY_RESULT_TYPE_RET(sel().getType().cast<FIRRTLType>(),
+                           high().getType().cast<FIRRTLType>(),
+                           low().getType().cast<FIRRTLType>());
+  }];
 }
 
 def PadPrimOp : PrimOp<"pad"> {
@@ -354,9 +385,9 @@ def PadPrimOp : PrimOp<"pad"> {
   }];
 
   let description = [{
-    The result of the `head` operation are the `amount` most significant bits
-    of `input`. `amount` must be non-negative and less than or equal to the bit
-    width of `input`.  The result width is equal to `amount`.
+    Pad the input out to an `amount` wide integer, sign extending or zero
+    extending according to `input`s type.  If `amount` is less than the existing
+    width of `input`, then input is unmodified.
   }];
 
   let hasFolder = 1;
@@ -375,6 +406,10 @@ def PadPrimOp : PrimOp<"pad"> {
 
       return getResultType(inputs[0], integers[0], loc);
     }
+  }];
+
+  let verifier = [{
+    VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>(), amount());
   }];
 }
 
@@ -399,6 +434,10 @@ class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic> {
       }
       return getResultType(inputs[0], integers[0], loc);
     }
+  }];
+
+  let verifier = [{
+    VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>(), amount());
   }];
 }
 
@@ -452,6 +491,10 @@ def TailPrimOp : PrimOp<"tail"> {
       }
       return getResultType(inputs[0], integers[0], loc);
     }
+  }];
+
+  let verifier = [{
+    VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>(), amount());
   }];
 }
 
