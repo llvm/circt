@@ -8,8 +8,9 @@ other [MLIR Rationale docs](https://mlir.llvm.org/docs/Rationale/).
 Introduction
 ============
 
-SystemVerilog is an industry standard language for hardware design and
-verification, is known by a large number of engineers write it directly, and is
+[SystemVerilog](https://en.wikipedia.org/wiki/SystemVerilog) is an industry
+standard language for hardware design and verification, is known by a large
+number of engineers who write it directly, and is
 an important interchange format between EDA tools.  However, while it is
 ubiquitous, SystemVerilog is not easy to generate or transform.  Furthermore, it
 is non-trivial for compiler tools to generate high quality human readable
@@ -20,14 +21,14 @@ contributions:
 
  1) By providing the RTL dialect, which contains a common set of abstractions
     for combinatorial logic.  This dialect is designed to allow easy analysis
-    and transformation, is expects other dialects to "mix in" with it to provide
+    and transformation, is allows other dialects to "mix in" with it to provide
     higher level functionality.
  2) By providing the SV dialect, which provides direct access to a wide variety
     of SystemVerilog constructs, including behavioral constructs, syntactic
-    sugar constructs, and even idioms like ifdef blocks.
+    sugar constructs, and even idioms like `ifdef` blocks.
  3) By providing a high quality implementation and a number of useful compiler
-    passes for analyzing and transforming these dialects, and ultimately
-    emitting SystemVerilog.
+    passes for analyzing and transforming these dialects, and a SystemVerilog
+    emitter that generates pretty output.
 
 The combination of these capabilities provides a useful suite of functionality
 for compiler tools that want to generate high quality SystemVerilog.
@@ -57,9 +58,8 @@ Operations
 
 TODO: Spotlight on module.  Allows arbitrary types for ports.
 
-TODO: Why variadic?  Why consistent operand types?
-
-
+TODO: Why is add variadic?  Why consistent operand types instead of allowing
+implicit extensions?
 
 Cost Model
 ----------
@@ -78,11 +78,14 @@ transformations should consider, ordered from most important to least important.
 
 **Simple transformations are always profitable**
 
-Constant folding is always a good thing.  Simple strength reduction (e.g. divide
-to shift) is always profitable.
+Many simple transformations are always a good thing, this includes:
 
-Common subexpression elimination reduces IR size, can reduce the area of a
-synthesized design, and makes transformations simpler to reason about.
+1) Constant folding.
+2) Simple strength reduction (e.g. divide to shift).
+3) Common subexpression elimination.
+
+These generally reduce the size of the IR in memory, can reduce the area of a
+synthesized design, and often unblock secondary transformations.
 
 **Reducing widths of non-trivial operations is always profitable**
 
@@ -91,7 +94,11 @@ multiply, shift, divide, and, or (etc) since it produces less hardware and
 enables other simplifications.  This is even true if it grows the IR size by
 increasing the number of truncations and extensions in the IR.
 
-**Don't get overly tricky with divide and remainders**
+That said, it is a bad idea to *duplicate* operations to reduce widths: for
+example, it is better to have one large multiply with many users than to clone
+it because one user only needs some of the output bits.
+
+**Don't get overly tricky with divide and remainder**
 
 Divide operations (particularly those with non-constant divisors) generate a lot
 of hardware, and can have long latencies.  As such, it is a generally bad idea
@@ -110,7 +117,8 @@ but it is ok to introduce more of these to improve on other metrics above.
 The SV Dialect
 ==============
 
-The SV dialect is one dialects that can be mixed into the RTL dialect, providing
+The SV dialect is one of the dialects that can be mixed into the RTL dialect,
+providing
 access to a range of syntactic and behavioral constructs.  The driving focus of
 this dialect is to provide simple and predictable access to SystemVerilog
 features: it is not focused primarily on being easy to analyze and transform.
@@ -170,27 +178,27 @@ if the need arises:
 **First Class Parametric IR**
 
 Many in the CIRCT community are interested in adding first-class support for
-parametric modules, similar but more general to SystemVerilog module parameters.
-It isn't clear yet whether this should be part of the RTL dialect or something
-higher level.
+parametric modules -- similar but more general than SystemVerilog module
+parameters.  It isn't clear yet whether this should be part of the RTL dialect
+or something higher level.
 
 Separate from a "good" representation of parametric modules, the SV dialect
 could grow direct support for representing the SystemVerilog functionality
 in this space, including even things like "generate" blocks.
 
-**Tool Specific Subdialects**
+**EDA Tool-specific Subdialects**
 
 The EDA tool ecosystem is filled with a wide range of tools with different
 capabilities -- for example [see this
 table](https://symbiflow.github.io/sv-tests-results/) for one compilation of
 different systems and their capabilities.  As such, we expect that the day will
 come where a frontend wants to generate fancy features for some modern systems,
-but cannot afford to break compatibility with other ecosystem features.
+but cannot afford to break compatibility with other ecosystem tools.
 
 Given the design of the RTL/SV dialects, there is no need to resort to "lowest
 common denominator" approach here: we can allow frontends to generate "fancy"
 features, then use progressive lowering when dealing with tools that can't
-handle them.  This can also allow IP providers to decide what sort of flavor
+handle them.  This can also allow IP providers to decide what flavor
 of features they want to provide to their customers (or provide multiple
 different choices).
 
