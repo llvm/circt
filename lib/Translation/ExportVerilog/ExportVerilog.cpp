@@ -60,11 +60,9 @@ static bool isVerilogExpression(Operation *op) {
 static int getBitWidthOrSentinel(Type type) {
   return TypeSwitch<Type, int>(type)
       .Case<IntegerType>([](IntegerType integerType) {
-        // Turn zero-bit values into single bit ones for simplicity.  This
-        // generates correct logic, even though it isn't efficient.
-        // FIXME: This actually isn't correct at all!
+        // Verilog doesn't support zero bit integers, and neither do we.
         auto result = integerType.getWidth();
-        return result ? result : 1;
+        return result ? result : -1;
       })
       .Case<InOutType>([](InOutType inoutType) {
         return getBitWidthOrSentinel(inoutType.getElementType());
@@ -511,7 +509,7 @@ namespace {
 
 /// This enum keeps track of whether the emitted subexpression is signed or
 /// unsigned as seen from the Verilog language perspective.
-enum SubExprSignedness { IsSigned, IsUnsigned };
+enum SubExprSignResult { IsSigned, IsUnsigned };
 
 /// This is information precomputed about each subexpression in the tree we
 /// are emitting as a unit.
@@ -520,11 +518,14 @@ struct SubExprInfo {
   VerilogPrecedence precedence;
 
   /// The signedness of the expression.
-  SubExprSignedness signedness;
+  SubExprSignResult signedness;
 
-  SubExprInfo(VerilogPrecedence precedence, SubExprSignedness signedness)
+  SubExprInfo(VerilogPrecedence precedence, SubExprSignResult signedness)
       : precedence(precedence), signedness(signedness) {}
 };
+
+enum SubExprSignRequirement { NoRequirement, RequireSigned, RequireUnsigned };
+
 } // namespace
 
 namespace {
@@ -562,8 +563,8 @@ private:
   friend class Visitor<ExprEmitter, SubExprInfo>;
 
   /// Emit the specified value as a subexpression to the stream.
-  SubExprInfo emitSubExpr(Value exp,
-                          VerilogPrecedence parenthesizeIfLooserThan);
+  SubExprInfo emitSubExpr(Value exp, VerilogPrecedence parenthesizeIfLooserThan,
+                          SubExprSignRequirement signReq = NoRequirement);
 
   SubExprInfo visitUnhandledExpr(Operation *op);
   SubExprInfo visitInvalidComb(Operation *op) { return dispatchSVVisitor(op); }
@@ -579,7 +580,8 @@ private:
   SubExprInfo emitBitSelect(Value operand, unsigned hiBit, unsigned loBit);
 
   SubExprInfo emitBinary(Operation *op, VerilogPrecedence prec,
-                         const char *syntax, bool opSigned = false);
+                         const char *syntax,
+                         SubExprSignRequirement operandSignReq = NoRequirement);
 
   SubExprInfo emitVariadic(Operation *op, VerilogPrecedence prec,
                            const char *syntax);
@@ -607,18 +609,27 @@ private:
   SubExprInfo visitComb(AddOp op) { return emitVariadic(op, Addition, "+"); }
   SubExprInfo visitComb(SubOp op) { return emitBinary(op, Addition, "-"); }
   SubExprInfo visitComb(MulOp op) { return emitVariadic(op, Multiply, "*"); }
-  SubExprInfo visitComb(DivUOp op) { return emitBinary(op, Multiply, "/"); }
-  SubExprInfo visitComb(DivSOp op) {
-    return emitBinary(op, Multiply, "/", true);
+  SubExprInfo visitComb(DivUOp op) {
+    return emitBinary(op, Multiply, "/", RequireUnsigned);
   }
-  SubExprInfo visitComb(ModUOp op) { return emitBinary(op, Multiply, "%"); }
+  SubExprInfo visitComb(DivSOp op) {
+    return emitBinary(op, Multiply, "/", RequireSigned);
+  }
+  SubExprInfo visitComb(ModUOp op) {
+    return emitBinary(op, Multiply, "%", RequireUnsigned);
+  }
   SubExprInfo visitComb(ModSOp op) {
-    return emitBinary(op, Multiply, "%", true);
+    return emitBinary(op, Multiply, "%", RequireSigned);
   }
   SubExprInfo visitComb(ShlOp op) { return emitBinary(op, Shift, "<<"); }
-  SubExprInfo visitComb(ShrUOp op) { return emitBinary(op, Shift, ">>"); }
+  SubExprInfo visitComb(ShrUOp op) {
+    // >> in Verilog is always an unsigned right shift.
+    return emitBinary(op, Shift, ">>");
+  }
   SubExprInfo visitComb(ShrSOp op) {
-    return emitBinary(op, Shift, ">>>", true);
+    // >>> is only an arithmetic shift right when both operands are signed.
+    // Otherwise it does a logical shift.
+    return emitBinary(op, Shift, ">>>", RequireSigned);
   }
   SubExprInfo visitComb(AndOp op) { return emitVariadic(op, And, "&"); }
   SubExprInfo visitComb(OrOp op) { return emitVariadic(op, Or, "|"); }
@@ -645,8 +656,13 @@ private:
   SubExprInfo visitComb(ICmpOp op) {
     std::array<const char *, 10> symop{"==", "!=", "<",  "<=", ">",
                                        ">=", "<",  "<=", ">",  ">="};
-    std::array<bool, 10> signop{false, false, true,  true,  true,
-                                true,  false, false, false, false};
+    SubExprSignRequirement signop[] = {
+        // Equality
+        NoRequirement, NoRequirement,
+        // Signed Comparisons
+        RequireSigned, RequireSigned, RequireSigned, RequireSigned,
+        // Unsigned Comparisons
+        RequireUnsigned, RequireUnsigned, RequireUnsigned, RequireUnsigned};
     auto pred = static_cast<uint64_t>(op.predicate());
     auto symopstr = symop[pred];
     return emitBinary(op, Comparison, symopstr, signop[pred]);
@@ -681,12 +697,9 @@ std::string ExprEmitter::emitExpressionToString(Value exp,
 }
 
 SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
-                                    const char *syntax, bool opSigned) {
-  if (opSigned)
-    os << "$signed(";
-  auto lhsInfo = emitSubExpr(op->getOperand(0), prec);
-  if (opSigned)
-    os << ")";
+                                    const char *syntax,
+                                    SubExprSignRequirement operandSignReq) {
+  auto lhsInfo = emitSubExpr(op->getOperand(0), prec, operandSignReq);
   os << ' ' << syntax << ' ';
 
   // The precedence of the RHS operand must be tighter than this operator if
@@ -699,20 +712,13 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   if (rhsOperandOp && op->getName() == rhsOperandOp->getName())
     rhsPrec = prec;
 
-  if (opSigned)
-    os << "$signed(";
-  auto rhsInfo = emitSubExpr(op->getOperand(1), rhsPrec);
-  if (opSigned)
-    os << ")";
+  auto rhsInfo = emitSubExpr(op->getOperand(1), rhsPrec, operandSignReq);
 
-  // If we have a strict sign, then match the firrtl operation sign.
-  // Otherwise, the result is signed if both operands are signed.
-  SubExprSignedness signedness;
-  if (opSigned ||
-      (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned))
+  // SystemVerilog 11.8.1 says that the result of a binary expression is signed
+  // only if both operands are signed.
+  SubExprSignResult signedness = IsUnsigned;
+  if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
     signedness = IsSigned;
-  else
-    signedness = IsUnsigned;
 
   return {prec, signedness};
 }
@@ -735,9 +741,9 @@ SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
 }
 
 /// Emit the specified value as a subexpression to the stream.
-SubExprInfo
-ExprEmitter::emitSubExpr(Value exp,
-                         VerilogPrecedence parenthesizeIfLooserThan) {
+SubExprInfo ExprEmitter::emitSubExpr(Value exp,
+                                     VerilogPrecedence parenthesizeIfLooserThan,
+                                     SubExprSignRequirement signReq) {
   auto *op = exp.getDefiningOp();
   bool shouldEmitInlineExpr = op && isVerilogExpression(op);
 
@@ -746,9 +752,15 @@ ExprEmitter::emitSubExpr(Value exp,
       emitter.outOfLineExpressions.count(op))
     shouldEmitInlineExpr = false;
 
-  // If this is a non-expr or shouldn't be done inline, just refer to its
-  // name.
+  // If this is a non-expr or shouldn't be done inline, just refer to its name.
   if (!shouldEmitInlineExpr) {
+    // All wires are declared as unsigned, so if the client needed it signed,
+    // emit a conversion.
+    if (signReq == RequireSigned) {
+      os << "$signed(" << emitter.getName(exp) << ')';
+      return {Symbol, IsSigned};
+    }
+
     os << emitter.getName(exp);
     return {Symbol, IsUnsigned};
   }
@@ -761,11 +773,23 @@ ExprEmitter::emitSubExpr(Value exp,
 
   // Check cases where we have to insert things before the expression now that
   // we know things about it.
-  if (expInfo.precedence > parenthesizeIfLooserThan) {
+  auto addPrefix = [&](StringRef prefix) {
+    resultBuffer.insert(resultBuffer.begin() + subExprStartIndex,
+                        prefix.begin(), prefix.end());
+  };
+  if (signReq == RequireSigned && expInfo.signedness == IsUnsigned) {
+    addPrefix("$signed(");
+    os << ')';
+    expInfo.signedness = IsSigned;
+  } else if (signReq == RequireUnsigned && expInfo.signedness == IsSigned) {
+    addPrefix("$unsigned(");
+    os << ')';
+    expInfo.signedness = IsUnsigned;
+  } else if (expInfo.precedence > parenthesizeIfLooserThan) {
     // If this subexpression would bind looser than the expression it is bound
     // into, then we need to parenthesize it.  Insert the parentheses
     // retroactively.
-    resultBuffer.insert(resultBuffer.begin() + subExprStartIndex, '(');
+    addPrefix("(");
     os << ')';
   }
 
@@ -888,7 +912,7 @@ SubExprInfo ExprEmitter::visitComb(MuxOp op) {
   os << " : ";
   auto rhsInfo = emitSubExpr(op.falseValue(), Conditional);
 
-  SubExprSignedness signedness = IsUnsigned;
+  SubExprSignResult signedness = IsUnsigned;
   if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
     signedness = IsSigned;
 

@@ -312,5 +312,20 @@ module {
     %c = rtl.add %b, %in4, %in4 : i4
     rtl.output %c : i4
   }
+
+ // CHECK-LABEL: module signs
+  rtl.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
+    %awire = rtl.wire : !rtl.inout<i4>
+    // CHECK: wire [3:0] awire;
+
+    // CHECK: assign awire = $unsigned($signed(in1) / $signed(in2)) /
+    // CHECK:                $unsigned($signed(in3) / $signed(in4));
+    %d1 = rtl.divs %in1, %in2: i4
+    %d2 = rtl.divs %in3, %in4: i4
+    %d3 = rtl.divu %d1, %d2: i4
+    rtl.connect %awire, %d3: i4
+
+    rtl.output
+  }
 }
 
