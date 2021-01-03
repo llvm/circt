@@ -896,16 +896,30 @@ SubExprInfo ExprEmitter::visitSV(TextualValueOp op) {
 }
 
 SubExprInfo ExprEmitter::visitComb(ConstantOp op) {
-  auto resType = op.getType().cast<IntegerType>();
-  os << resType.getWidth() << '\'';
+  bool isNegated = false;
+  const APInt &value = op.getValue();
+  // If this is a negative signed number and not MININT (e.g. -128), then print
+  // it as a negated positive number.
+  if (signPreference == RequireSigned && value.isNegative() &&
+      !value.isMinSignedValue()) {
+    os << '-';
+    isNegated = true;
+  }
+
+  os << op.getType().cast<IntegerType>().getWidth() << '\'';
 
   // Emit this as a signed constant if the caller would prefer that.
   if (signPreference == RequireSigned)
     os << 's';
   os << 'h';
 
+  // Print negated if required.
   SmallString<32> valueStr;
-  op.getValue().toStringUnsigned(valueStr, 16);
+  if (isNegated) {
+    (-value).toStringUnsigned(valueStr, 16);
+  } else {
+    value.toStringUnsigned(valueStr, 16);
+  }
   os << valueStr;
   return {Unary, signPreference == RequireSigned ? IsSigned : IsUnsigned};
 }
