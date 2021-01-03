@@ -26,12 +26,6 @@
 using namespace circt;
 using namespace firrtl;
 
-/// Return the type of the specified value, casted to the template type.
-template <typename T = FIRRTLType>
-static T getTypeOf(Value v) {
-  return v.getType().cast<T>();
-}
-
 /// Given a FIRRTL type, return the corresponding type for the RTL dialect.
 /// This returns a null type if it cannot be lowered.
 static Type lowerType(Type type) {
@@ -838,6 +832,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
 
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
+  LogicalResult visitExpr(InvalidValuePrimOp op);
   LogicalResult visitExpr(HeadPrimOp op);
   LogicalResult visitExpr(ShlPrimOp op);
   LogicalResult visitExpr(ShrPrimOp op);
@@ -847,13 +842,16 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(DShrPrimOp op) {
     return lowerDivLikeOp<rtl::ShrSOp, rtl::ShrUOp>(op);
   }
+  LogicalResult visitExpr(DShlwPrimOp op) {
+    return lowerDivLikeOp<rtl::ShrSOp, rtl::ShrUOp>(op);
+  }
   LogicalResult visitExpr(TailPrimOp op);
   LogicalResult visitExpr(MuxPrimOp op);
   LogicalResult visitExpr(ValidIfPrimOp op);
 
   // Statements
+  LogicalResult visitStmt(SkipOp op);
   LogicalResult visitStmt(ConnectOp op);
-  LogicalResult visitStmt(InvalidOp op);
   LogicalResult visitStmt(PrintFOp op);
   LogicalResult visitStmt(StopOp op);
   LogicalResult visitStmt(AssertOp op);
@@ -1240,7 +1238,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   // Add one reg declaration for each field of the mem.
   SmallVector<Value> regs;
   for (const auto &field : fieldTypes) {
-    auto resultType = rtl::ArrayType::get(field.type, depth);
+    auto resultType = rtl::UnpackedArrayType::get(field.type, depth);
     auto name = builder->getStringAttr(field.name);
     regs.push_back(builder->create<sv::RegOp>(resultType, name));
   }
@@ -1254,8 +1252,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       builder->create<sv::IfDefOp>("RANDOMIZE_MEM_INIT", [&]() {
         if (depth == 1) { // Don't emit a for loop for one element.
           for (Value reg : regs) {
-            auto type = reg.getType().cast<rtl::InOutType>().getElementType();
-            type = type.cast<rtl::ArrayType>().getElementType();
+            auto type = rtl::getInOutElementType(reg.getType());
+            type = rtl::getAnyRTLArrayElementType(type);
             auto randomVal =
                 builder->create<sv::TextualValueOp>(type, "`RANDOM");
             auto zero = builder->create<rtl::ConstantOp>(APInt(1, 0));
@@ -1429,7 +1427,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
 // Lower a cast that is a noop at the RTL level.
 LogicalResult FIRRTLLowering::lowerNoopCast(Operation *op) {
-  auto operand = getLoweredValue(op->getOperand(0));
+  auto operand = getPossiblyInoutLoweredValue(op->getOperand(0));
   if (!operand)
     return failure();
 
@@ -1467,7 +1465,7 @@ LogicalResult FIRRTLLowering::visitExpr(CvtPrimOp op) {
     return failure();
 
   // Signed to signed is a noop.
-  if (getTypeOf<IntType>(op.getOperand()).isSigned())
+  if (op.getOperand().getType().cast<IntType>().isSigned())
     return setLowering(op, operand);
 
   // Otherwise prepend a zero bit.
@@ -1667,6 +1665,27 @@ LogicalResult FIRRTLLowering::visitExpr(BitsPrimOp op) {
   return setLoweringTo<rtl::ExtractOp>(op, resultType, input, op.lo());
 }
 
+LogicalResult FIRRTLLowering::visitExpr(InvalidValuePrimOp op) {
+  auto resultTy = lowerType(op.getType());
+  if (!resultTy)
+    return failure();
+
+  // We lower invalid to 0.  TODO: the FIRRTL spec mentions something about
+  // lowering it to a random value, we should see if this is what we need to
+  // do.
+  auto value =
+      builder->create<rtl::ConstantOp>(0, resultTy.cast<IntegerType>());
+
+  if (!op.getType().isa<AnalogType>())
+    return setLowering(op, value);
+
+  // Values of analog type always need to be lowered to an inout.  We do that by
+  // lowering to a wire and return that.
+  auto wire = builder->create<rtl::WireOp>(resultTy, /*name=*/StringAttr());
+  builder->create<rtl::ConnectOp>(wire, value);
+  return setLowering(op, wire);
+}
+
 LogicalResult FIRRTLLowering::visitExpr(HeadPrimOp op) {
   auto input = getLoweredValue(op.input());
   if (!input)
@@ -1747,19 +1766,9 @@ LogicalResult FIRRTLLowering::visitExpr(ValidIfPrimOp op) {
 // Statements
 //===----------------------------------------------------------------------===//
 
-LogicalResult FIRRTLLowering::visitStmt(InvalidOp op) {
-  auto dest = getPossiblyInoutLoweredValue(op.operand());
-  if (!dest)
-    return failure();
-
-  auto inoutTy = dest.getType().dyn_cast<rtl::InOutType>();
-  if (!inoutTy)
-    return op.emitError("destination isn't an inout type");
-
-  auto zero = builder->create<rtl::ConstantOp>(
-      0, inoutTy.getElementType().cast<IntegerType>());
-
-  builder->create<rtl::ConnectOp>(dest, zero);
+LogicalResult FIRRTLLowering::visitStmt(SkipOp op) {
+  // Nothing!  We could emit an comment as a verbatim op if there were a reason
+  // to.
   return success();
 }
 

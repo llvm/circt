@@ -19,7 +19,12 @@ module {
      // CHECK: %arg1: !rtl.inout<array<42xi8>>,
     %arg1: !rtl.inout<array<42xi8>>,
     // CHECK: %arg2: !rtl.inout<array<2xarray<42xi8>>>
-    %arg2: !rtl.inout<array<2xarray<42xi8>>>) {
+    %arg2: !rtl.inout<array<2xarray<42xi8>>>,
+
+    // CHECK: %arg3: !rtl.inout<uarray<42xi8>>,
+    %arg3: !rtl.inout<uarray<42xi8>>,
+    // CHECK: %arg4: !rtl.inout<uarray<2xarray<42xi8>>>
+    %arg4: !rtl.inout<uarray<2xarray<42xi8>>>) {
     return
   }
 }

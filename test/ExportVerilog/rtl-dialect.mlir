@@ -240,34 +240,62 @@ module {
   // CHECK: wire [16:0] _T = 17'h11A2C;
   // CHECK: assign tmp6 = {{[{][{]}}332{_T[16]}}, _T};
 
-  rtl.module @wires(%in4: i4, %in8: i8) -> (%a: i4, %b: i8) {
+  rtl.module @wires(%in4: i4, %in8: i8) -> (%a: i4, %b: i8, %c: i8) {
     // CHECK-LABEL: module wires(
     // CHECK-NEXT:   input  [3:0] in4,
     // CHECK-NEXT:   input  [7:0] in8,
     // CHECK-NEXT:   output [3:0] a,
-    // CHECK-NEXT:   output [7:0] b);
+    // CHECK-NEXT:   output [7:0] b, c);
 
     // CHECK-EMPTY:
-    %myWire = rtl.wire : !rtl.inout<i4>  // CHECK-NEXT: wire [3:0] myWire;
 
+    // Wires.
+    %myWire = rtl.wire : !rtl.inout<i4>  // CHECK-NEXT: wire [3:0] myWire;
+ 
+    // Packed arrays.
+
+    // FIXME: Should be: wire [7:0][41:0] myArray1;
     // CHECK-NEXT: wire [7:0] myArray1[41:0];
     %myArray1 = rtl.wire : !rtl.inout<array<42 x i8>>
     // CHECK-NEXT: wire [3:0] myWireArray2[41:0][2:0];
     %myWireArray2 = rtl.wire : !rtl.inout<array<3 x array<42 x i4>>>
 
+    // Unpacked arrays, and unpacked arrays of packed arrays.
+
+    // CHECK-NEXT: wire [7:0] myUArray1[41:0];
+    %myUArray1 = rtl.wire : !rtl.inout<uarray<42 x i8>>
+
+    // FIXME: Should be: wire [3:0][2:0] myWireUArray2[41:0];
+    // CHECK-NEXT: wire [3:0] myWireUArray2[41:0][2:0];
+    %myWireUArray2 = rtl.wire : !rtl.inout<uarray<3 x array<42 x i4>>>
+
     // CHECK-EMPTY:
-    rtl.connect %myWire, %in4 : i4       // CHECK-NEXT: assign myWire = in4;
 
-    %subscript = rtl.arrayindex %myArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
-    rtl.connect %subscript, %in8 : i8   // CHECK-NEXT: assign myArray1[in4] = in8;
+    // Wires.
 
+    // CHECK-NEXT: assign myWire = in4;
+    rtl.connect %myWire, %in4 : i4
     %wireout = rtl.read_inout %myWire : !rtl.inout<i4>
 
-    %memout = rtl.read_inout %subscript : !rtl.inout<i8>
+    // Packed arrays.
+
+    %subscript = rtl.arrayindex %myArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
+    // CHECK-NEXT: assign myArray1[in4] = in8;
+    rtl.connect %subscript, %in8 : i8
+
+    %memout1 = rtl.read_inout %subscript : !rtl.inout<i8>
+
+     // Unpacked arrays, and unpacked arrays of packed arrays.
+    %subscriptu = rtl.arrayindex %myUArray1[%in4] : !rtl.inout<uarray<42 x i8>>, i4
+    // CHECK-NEXT: assign myUArray1[in4] = in8;
+    rtl.connect %subscriptu, %in8 : i8
+
+    %memout2 = rtl.read_inout %subscriptu : !rtl.inout<i8>
 
     // CHECK-NEXT: assign a = myWire;
     // CHECK-NEXT: assign b = myArray1[in4];
-    rtl.output %wireout, %memout : i4, i8
+    // CHECK-NEXT: assign c = myUArray1[in4];
+    rtl.output %wireout, %memout1, %memout2 : i4, i8, i8
   }
 
   // CHECK-LABEL: module merge
@@ -283,6 +311,38 @@ module {
     // CHECK: assign x = _T + in4 + in4;
     %c = rtl.add %b, %in4, %in4 : i4
     rtl.output %c : i4
+  }
+
+ // CHECK-LABEL: module signs
+  rtl.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
+    %awire = rtl.wire : !rtl.inout<i4>
+    // CHECK: wire [3:0] awire;
+
+    // CHECK: assign awire = $unsigned($signed(in1) / $signed(in2)) /
+    // CHECK:                $unsigned($signed(in3) / $signed(in4));
+    %a1 = rtl.divs %in1, %in2: i4
+    %a2 = rtl.divs %in3, %in4: i4
+    %a3 = rtl.divu %a1, %a2: i4
+    rtl.connect %awire, %a3: i4
+
+    // CHECK: assign awire = $unsigned(
+    %b1a = rtl.divs %in1, %in2: i4
+    %b1b = rtl.divs %in1, %in2: i4
+    %b1c = rtl.divs %in1, %in2: i4
+    %b1d = rtl.divs %in1, %in2: i4
+    %b2 = rtl.add %b1a, %b1b: i4
+    %b3 = rtl.mul %b1c, %b1d: i4
+    %b4 = rtl.divu %b2, %b3: i4
+    rtl.connect %awire, %b4: i4
+
+    // https://github.com/llvm/circt/issues/369
+    // CHECK: assign awire = 4'sh5 / -4'sh3;
+    %c5_i4 = rtl.constant(5 : i4) : i4
+    %c-3_i4 = rtl.constant(-3 : i4) : i4
+    %divs = rtl.divs %c5_i4, %c-3_i4 : i4
+    rtl.connect %awire, %divs: i4
+
+    rtl.output
   }
 }
 

@@ -106,3 +106,18 @@ We do this to simplify the implementation: These expression
 have the same structure as primitives, and modeling them as such allows reuse
 of the parsing logic instead of duplication of grammar rules.
 
+`invalid` Invalidate Operation is an expression
+-----------------------------------------------
+
+The FIRRTL spec describes an `x is invalid` statement that logically computes
+an invalid value and connects it to `x` according to flow semantics.  This
+behavior makes analysis and transformation a bit more complicated, because there
+are now two things that perform connections: `firrtl.connect` and the
+`x is invalid` operation.
+
+To make things easier to reason about, we split the `x is invalid` operation
+into two different ops: an `firrtl.invalidvalue` op that takes no operands
+and returns an invalid value, and a standard `firrtl.connect` operation that
+connects the invalid value to the destination (or a `firrtl.attach` for analog
+values).  This has the same expressive power as the standard FIRRTL
+representation but is easier to work with.
