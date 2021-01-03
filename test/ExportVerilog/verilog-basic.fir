@@ -464,7 +464,7 @@ circuit inputs_only :
     reg <= mux(io_en, io_d, reg)
 
   ; CHECK-LABEL: module Analog(
-  ; CHECK-NEXT:   output [4:0] io_pins_asrcn3v3);
+  ; CHECK-NEXT:   input [4:0] io_pins_asrcn3v3);
   module Analog :
     output io_pins_asrcn3v3 : Analog<5>
 
@@ -630,7 +630,7 @@ circuit inputs_only :
 ; CHECK-NEXT:  `endif // SYNTHESIS
 
   ; CHECK-LABEL: module IsInvalid(
-  ; CHECK-NEXT:    output a);
+  ; CHECK-NEXT:    input a);
   module IsInvalid :
     output a: Analog<1>
     a is invalid  @[Place.scala 101]
