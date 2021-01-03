@@ -100,7 +100,7 @@ module {
   // CHECK-NEXT:   assign r29 = {a, a, b};
   // CHECK-NEXT:   assign r30 = a[2:1]; 
   // CHECK-NEXT:   assign r31 = {{[{}][{}]}}5{a[3]}}, a};
-  // CHECK-NEXT:   assign r32 = {{[{}][{}]}}5'd0}, a};
+  // CHECK-NEXT:   assign r32 = {5'd0, a};
   // CHECK-NEXT:   assign r33 = cond ? a : b;
   // CHECK-NEXT:   assign r34 = ~a;
   // CHECK-NEXT: endmodule
