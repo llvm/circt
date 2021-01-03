@@ -587,7 +587,7 @@ private:
                            const char *syntax);
 
   SubExprInfo emitUnary(Operation *op, const char *syntax,
-                        bool forceUnsigned = false);
+                        bool resultAlwaysUnsigned = false);
 
   SubExprInfo emitNoopCast(Operation *op) {
     return emitSubExpr(op->getOperand(0), LowestPrecedence);
@@ -638,11 +638,13 @@ private:
       if (auto cst =
               dyn_cast_or_null<ConstantOp>(op.getOperand(1).getDefiningOp()))
         if (cst.getValue().isAllOnesValue())
-          return emitUnary(op, "~", true);
+          return emitUnary(op, "~");
 
     return emitVariadic(op, Xor, "^");
   }
 
+  // SystemVerilog spec 11.8.1: "Reduction operator results are unsigned,
+  // regardless of the operands."
   SubExprInfo visitComb(AndROp op) { return emitUnary(op, "&", true); }
   SubExprInfo visitComb(OrROp op) { return emitUnary(op, "|", true); }
   SubExprInfo visitComb(XorROp op) { return emitUnary(op, "^", true); }
@@ -651,22 +653,7 @@ private:
   SubExprInfo visitComb(ZExtOp op);
   SubExprInfo visitComb(ConcatOp op);
   SubExprInfo visitComb(ExtractOp op);
-
-  // RTL Comparison Operations
-  SubExprInfo visitComb(ICmpOp op) {
-    std::array<const char *, 10> symop{"==", "!=", "<",  "<=", ">",
-                                       ">=", "<",  "<=", ">",  ">="};
-    SubExprSignRequirement signop[] = {
-        // Equality
-        NoRequirement, NoRequirement,
-        // Signed Comparisons
-        RequireSigned, RequireSigned, RequireSigned, RequireSigned,
-        // Unsigned Comparisons
-        RequireUnsigned, RequireUnsigned, RequireUnsigned, RequireUnsigned};
-    auto pred = static_cast<uint64_t>(op.predicate());
-    auto symopstr = symop[pred];
-    return emitBinary(op, Comparison, symopstr, signop[pred]);
-  }
+  SubExprInfo visitComb(ICmpOp op);
 
 private:
   /// This is set (before a visit method is called) if emitSubExpr would
@@ -731,20 +718,24 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
 
 SubExprInfo ExprEmitter::emitVariadic(Operation *op, VerilogPrecedence prec,
                                       const char *syntax) {
-  // FIXME: This computes incorrect result signs.
+  // The result is signed if all the subexpressions are signed.
+  SubExprSignResult sign = IsSigned;
   interleave(
       op->getOperands().begin(), op->getOperands().end(),
-      [&](Value v1) { emitSubExpr(v1, prec); },
+      [&](Value v1) {
+        if (emitSubExpr(v1, prec).signedness != IsSigned)
+          sign = IsUnsigned;
+      },
       [&] { os << ' ' << syntax << ' '; });
 
-  return {prec, IsUnsigned};
+  return {prec, sign};
 }
 
 SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
-                                   bool forceUnsigned) {
+                                   bool resultAlwaysUnsigned) {
   os << syntax;
   auto signedness = emitSubExpr(op->getOperand(0), Unary).signedness;
-  return {Unary, forceUnsigned ? IsUnsigned : signedness};
+  return {Unary, resultAlwaysUnsigned ? IsUnsigned : signedness};
 }
 
 /// Emit the specified value as a subexpression to the stream.
@@ -859,6 +850,27 @@ SubExprInfo ExprEmitter::visitComb(ConcatOp op) {
 SubExprInfo ExprEmitter::visitComb(ExtractOp op) {
   unsigned dstWidth = op.getType().cast<IntegerType>().getWidth();
   return emitBitSelect(op.input(), op.lowBit() + dstWidth - 1, op.lowBit());
+}
+
+SubExprInfo ExprEmitter::visitComb(ICmpOp op) {
+  const char *symop[] = {"==", "!=", "<",  "<=", ">",
+                         ">=", "<",  "<=", ">",  ">="};
+  SubExprSignRequirement signop[] = {
+      // Equality
+      NoRequirement, NoRequirement,
+      // Signed Comparisons
+      RequireSigned, RequireSigned, RequireSigned, RequireSigned,
+      // Unsigned Comparisons
+      RequireUnsigned, RequireUnsigned, RequireUnsigned, RequireUnsigned};
+
+  auto pred = static_cast<uint64_t>(op.predicate());
+  assert(pred < sizeof(symop) / sizeof(symop[0]));
+  auto result = emitBinary(op, Comparison, symop[pred], signop[pred]);
+
+  // SystemVerilog 11.8.1: "Comparison... operator results are unsigned,
+  // regardless of the operands".
+  result.signedness = IsUnsigned;
+  return result;
 }
 
 /// Emit a verilog bit selection operation like x[4:0], the bit numbers are
