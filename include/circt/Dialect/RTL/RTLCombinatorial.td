@@ -187,7 +187,7 @@ def OrROp  : UnaryI1ReductionRTLOp<"orr">;
 def XorROp : UnaryI1ReductionRTLOp<"xorr">;
 
 //===----------------------------------------------------------------------===//
-// Width-modifying Operations on ints.
+// Width-modifying unary operations on ints.
 //===----------------------------------------------------------------------===//
 
 // Extract a range of bits from the specified input.
@@ -239,7 +239,17 @@ def ZExtOp : RTLOp<"zext", [NoSideEffect]> {
 // Other Operations
 //===----------------------------------------------------------------------===//
 
-def ArraySlice : RTLOp<"slice", [NoSideEffect]> {
+// Concatenate a variadic list of operands together.
+def ConcatOp : VariadicRTLOp<"concat"> {
+  let builders = [
+    OpBuilderDAG<(ins "ValueRange":$inputs)>,
+    OpBuilderDAG<(ins "Value":$lhs, "Value":$rhs), [{
+      return build($_builder, $_state, ValueRange{lhs, rhs});
+    }]>
+  ];
+}
+
+def ArraySliceOp : RTLOp<"slice", [NoSideEffect]> {
   let summary = "Get a range of values from an array";
   let description = [{
     Extracts a sub-range from an array. The range is from `lowIndex` to
@@ -260,23 +270,13 @@ def ArraySlice : RTLOp<"slice", [NoSideEffect]> {
     ```
   }];
 
-  let arguments = (ins ArrayType:$src, AnySignlessInteger:$lowIndex);
+  let arguments = (ins ArrayType:$input, AnySignlessInteger:$lowIndex);
   let results = (outs ArrayType:$dst);
 
   let assemblyFormat = [{
-    $src `at` $lowIndex attr-dict `:`
-      `(` custom<SliceTypes>(type($src), type($lowIndex)) `)` `->` type($dst)
+    $input `at` $lowIndex attr-dict `:`
+      `(` custom<SliceTypes>(type($input), type($lowIndex)) `)` `->` type($dst)
   }];
-}
-
-// Concatenate a variadic list of operands together.
-def ConcatOp : VariadicRTLOp<"concat"> {
-  let builders = [
-    OpBuilderDAG<(ins "ValueRange":$inputs)>,
-    OpBuilderDAG<(ins "Value":$lhs, "Value":$rhs), [{
-      return build($_builder, $_state, ValueRange{lhs, rhs});
-    }]>
-  ];
 }
 
 // Extract a range of bits from the specified input.

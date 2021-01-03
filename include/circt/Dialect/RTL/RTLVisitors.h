@@ -27,7 +27,7 @@ public:
   ResultType dispatchCombinatorialVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<ConstantOp,
+        .template Case<ConstantOp, ArraySliceOp,
                        // Arithmetic and Logical Binary Operations.
                        AddOp, SubOp, MulOp, DivUOp, DivSOp, ModUOp, ModSOp,
                        ShlOp, ShrUOp, ShrSOp,
@@ -82,6 +82,7 @@ public:
 
   // Basic nodes.
   HANDLE(ConstantOp, Unhandled);
+  HANDLE(ArraySliceOp, Unhandled);
 
   // Arithmetic and Logical Binary Operations.
   HANDLE(AddOp, Binary);

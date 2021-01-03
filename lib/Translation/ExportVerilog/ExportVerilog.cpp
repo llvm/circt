@@ -648,6 +648,7 @@ private:
   // RTL Dialect Operations
   using CombinatorialVisitor::visitComb;
   SubExprInfo visitComb(ConstantOp op);
+  SubExprInfo visitComb(ArraySliceOp op);
   SubExprInfo visitComb(AddOp op) { return emitVariadic(op, Addition, "+"); }
   SubExprInfo visitComb(SubOp op) { return emitBinary(op, Addition, "-"); }
   SubExprInfo visitComb(MulOp op) { return emitVariadic(op, Multiply, "*"); }
@@ -974,6 +975,18 @@ SubExprInfo ExprEmitter::visitComb(ConstantOp op) {
   }
   os << valueStr;
   return {Unary, signPreference == RequireSigned ? IsSigned : IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitComb(ArraySliceOp op) {
+  auto arrayPrec = emitSubExpr(op.input(), Symbol);
+
+  unsigned dstWidth = op.getType().cast<ArrayType>().getSize();
+  os << '[' << dstWidth - 1 << '+';
+  emitSubExpr(op.lowIndex(), LowestPrecedence);
+  os << ':';
+  emitSubExpr(op.lowIndex(), LowestPrecedence);
+  os << ']';
+  return {Symbol, arrayPrec.signedness};
 }
 
 SubExprInfo ExprEmitter::visitComb(ArrayIndexOp op) {
