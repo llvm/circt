@@ -34,6 +34,9 @@ circuit inputs_only :
     input clock: Clock
     output out1: UInt<1>
     output out4: UInt<4>
+    output out4s: SInt<4>
+    output out16: UInt<16>
+    output out16s: SInt<16>
     out1 <= xorr(in4)
     out1 <= andr(in4)
     out1 <= orr(in4)
@@ -42,46 +45,32 @@ circuit inputs_only :
     out1 <= asUInt(clock)
     out1 <= asUInt(asClock(UInt<1>("h1")))
     out1 is invalid
-    node x1 = bits(in4, 1, 0)
-    node x2 = or(shr(in4, 2), shl(bits(in4, 2, 2), 1))
-    node x3 = dshr(in4, in4)
-    node x4 = dshr(asSInt(in4), in4)
-    node x5 = cat(cat(in4, asUInt(clock)), cat(asUInt(clock), in4))
-    node x6 = cvt(asUInt(cat(in4, in4)))
-    node x7 = mux(asUInt(clock),
+    out4 <= bits(in4, 1, 0)
+    out4 <= or(shr(in4, 2), shl(bits(in4, 2, 2), 1))
+    out4 <= dshr(in4, in4)
+    out4s <= dshr(asSInt(in4), in4)
+    out16 <= cat(cat(in4, asUInt(clock)), cat(asUInt(clock), in4))
+    out16s <= cvt(asUInt(cat(in4, in4)))
+    out4 <= mux(asUInt(clock),
                   mux(asUInt(clock), UInt<4>("h1"), UInt<4>("h2")),
                   UInt<4>("h3"))
-    node x8 = mux(asUInt(clock),
+    out4 <= mux(asUInt(clock),
                   UInt<4>("h1"),
                   mux(asUInt(clock), UInt<4>("h2"), UInt<4>("h3")))
-    node x9 = or(head(in4, 2), tail(in4, 2))
-    node x10 = validif(asUInt(clock), in4)
-    node x11 = xor(xor(pad(in4, 6), asUInt(pad(asSInt(in4), 6))),
+    out4 <= or(head(in4, 2), tail(in4, 2))
+    out4 <= validif(asUInt(clock), in4)
+    out16 <= xor(xor(pad(in4, 6), asUInt(pad(asSInt(in4), 6))),
                    asUInt(pad(asSInt(clock), 6)))
-    node x12 = shl(in4, 0)
-    node x13 = dshlw(in4, in4)
-    node x14 = neg(in4)
+    out4 <= shl(in4, 0)
+    out4 <= dshlw(in4, in4)
+    out16s <= neg(in4)
 
 ; CHECK-LABEL: module Expressions(
-; CHECK-NEXT:     input  [3:0] in4,
-; CHECK-NEXT:     input        clock,
-; CHECK-NEXT:     output       out1,
-; CHECK-NEXT:     output [3:0] out4);
-; CHECK-EMPTY:
-; CHECK-NEXT:     wire [1:0] x1;
-; CHECK-NEXT:     wire [1:0] x2;
-; CHECK-NEXT:     wire [3:0] x3;
-; CHECK-NEXT:     wire [3:0] x4;
-; CHECK-NEXT:     wire [9:0] x5;
-; CHECK-NEXT:     wire [8:0] x6;
-; CHECK-NEXT:     wire [3:0] x7;
-; CHECK-NEXT:     wire [3:0] x8;
-; CHECK-NEXT:     wire [1:0] x9;
-; CHECK-NEXT:     wire [3:0] x10;
-; CHECK-NEXT:     wire [5:0] x11;
-; CHECK-NEXT:     wire [3:0] x12;
-; CHECK-NEXT:     wire [3:0] x13;
-; CHECK-NEXT:     wire [4:0] x14;
+; CHECK-NEXT:     input  [3:0]  in4,
+; CHECK-NEXT:     input         clock,
+; CHECK-NEXT:     output        out1,
+; CHECK-NEXT:     output [3:0]  out4, out4s,
+; CHECK-NEXT:     output [15:0] out16, out16s);
 ; CHECK-EMPTY:
 ; CHECK-NEXT:     assign out1 = ^in4;
 ; CHECK-NEXT:     assign out1 = &in4;
@@ -91,20 +80,20 @@ circuit inputs_only :
 ; CHECK-NEXT:     assign out1 = clock;
 ; CHECK-NEXT:     assign out1 = 1'h1;
 ; CHECK-NEXT:     assign out1 = '0;
-; CHECK-NEXT:     assign x1 = in4[1:0];
-; CHECK-NEXT:     assign x2 = in4[3:2] | {in4[2], 1'h0};
-; CHECK-NEXT:     assign x3 = in4 >>> in4;
-; CHECK-NEXT:     assign x4 = $signed(in4) >>> in4;
-; CHECK-NEXT:     assign x5 = {in4, clock, clock, in4};
-; CHECK-NEXT:     assign x6 = {1'b0, in4, in4};
-; CHECK-NEXT:     assign x7 = clock ? (clock ? 4'h1 : 4'h2) : 4'h3;
-; CHECK-NEXT:     assign x8 = clock ? 4'h1 : clock ? 4'h2 : 4'h3;
-; CHECK-NEXT:     assign x9 = in4[3:2] | in4[1:0];
-; CHECK-NEXT:     assign x10 = in4;
-; CHECK-NEXT:     assign x11 = {{\{\{}}2'd0}, in4} ^ {{\{\{}}2{in4[3]}}, in4} ^ {6{clock}};
-; CHECK-NEXT:     assign x12 = in4;
-; CHECK-NEXT:     assign x13 = in4 << in4;
-; CHECK-NEXT:     assign x14 = -in4;
+; CHECK-NEXT:     assign out4 = in4[1:0];
+; CHECK-NEXT:     assign out4 = in4[3:2] | {in4[2], 1'h0};
+; CHECK-NEXT:     assign out4 = in4 >>> in4;
+; CHECK-NEXT:     assign out4s = $signed(in4) >>> in4;
+; CHECK-NEXT:     assign out16 = {in4, clock, clock, in4};
+; CHECK-NEXT:     assign out16s = {1'b0, in4, in4};
+; CHECK-NEXT:     assign out4 = clock ? (clock ? 4'h1 : 4'h2) : 4'h3;
+; CHECK-NEXT:     assign out4 = clock ? 4'h1 : clock ? 4'h2 : 4'h3;
+; CHECK-NEXT:     assign out4 = in4[3:2] | in4[1:0];
+; CHECK-NEXT:     assign out4 = in4;
+; CHECK-NEXT:     assign out16 = {{\{\{}}2'd0}, in4} ^ {{\{\{}}2{in4[3]}}, in4} ^ {6{clock}};
+; CHECK-NEXT:     assign out4 = in4;
+; CHECK-NEXT:     assign out4 = in4 << in4;
+; CHECK-NEXT:     assign out16s = -in4;
 ; CHECK-NEXT:  endmodule
 
 
