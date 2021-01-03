@@ -27,7 +27,7 @@ firrtl.circuit "MyModule" {
 // expected-note @+1 {{implies 'firrtl.done'}}
 "firrtl.module"() ( {
 ^bb0(%a: !firrtl.uint<32>):
-  firrtl.invalid %a : !firrtl.uint<32>
+  %0 = firrtl.add %a, %a : (!firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<33>
 
 }) {sym_name = "MyModule", type = (!firrtl.uint<32>) -> ()} : () -> ()
 

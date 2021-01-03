@@ -1683,7 +1683,20 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs, SubOpVector &subOps) {
         parseOptionalInfo(info, subOps))
       return failure();
 
-    builder.create<InvalidOp>(info.getLoc(), lhs);
+    // The FIRRTL specification describes Invalidates as a statement with
+    // implicit connect semantics.  The FIRRTL dialect models it as a primitive
+    // that returns an "Invalid Value", followed by an explicit connect to make
+    // the representation simpler and more consistent.
+    auto invalidType = lhs.getType().cast<FIRRTLType>().getPassiveType();
+    if (invalidType.isa<AnalogType>()) {
+      // FIXME: Analog types shouldn't be flippable.
+      lhs = convertToPassive(lhs, info.getLoc());
+      auto val = builder.create<InvalidValuePrimOp>(info.getLoc(), invalidType);
+      builder.create<AttachOp>(info.getLoc(), ValueRange{lhs, val});
+    } else {
+      auto val = builder.create<InvalidValuePrimOp>(info.getLoc(), invalidType);
+      builder.create<ConnectOp>(info.getLoc(), lhs, val);
+    }
     return success();
   }
 

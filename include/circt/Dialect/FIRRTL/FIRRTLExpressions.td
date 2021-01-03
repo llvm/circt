@@ -299,6 +299,24 @@ def HeadPrimOp : PrimOp<"head"> {
   }];
 }
 
+def InvalidValuePrimOp : PrimOp<"invalidvalue"> {
+  let summary = "InvalidValue primitive";
+  let description = [{
+    The InvalidValue operation returns an invalid value of a specified type:
+    ```
+      %result = firrtl.invalid : !firrtl.uint<1>
+    ```
+
+    This corresponds to the FIRRTL invalidate operation without the implicit
+    connect semantics.
+  }];
+
+  let arguments = (ins);
+  let results = (outs FIRRTLType:$result);
+
+  let assemblyFormat = "attr-dict `:` type($result)";
+}
+
 def MuxPrimOp : PrimOp<"mux"> {
   let arguments = (ins UInt1Type:$sel, PassiveType:$high, PassiveType:$low);
   let results = (outs PassiveType:$result);
