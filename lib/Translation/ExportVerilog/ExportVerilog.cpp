@@ -235,7 +235,7 @@ private:
 size_t VerilogEmitterBase::emitTypeDims(Type type, Operation *op) {
   if (auto inout = type.dyn_cast<rtl::InOutType>())
     return emitTypeDims(inout.getElementType(), op);
-  else if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>())
+  if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>())
     return emitTypeDims(uarray.getElementType(), op);
 
   size_t emittedWidth = 0;
@@ -1036,10 +1036,8 @@ void ModuleEmitter::emitStatementExpression(Operation *op) {
   if (op->getResult(0).use_empty()) {
     indent() << "// Unused: ";
   } else if (emitInlineWireDecls) {
-    auto type = op->getResult(0).getType();
     indent() << "wire ";
-
-    if (emitTypeDims(type, op) > 0)
+    if (emitTypeDims(op->getResult(0).getType(), op) > 0)
       os << ' ';
     os << getName(op->getResult(0)) << " = ";
   } else {
