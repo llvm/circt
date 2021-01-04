@@ -688,13 +688,17 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
 
 /// Flattens a single input in `op` if `hasOneUse` is true and it can be defined
 /// as an Op. Returns true if successful, and false otherwise.
+///
 /// Example: op(1, 2, op(3, 4), 5) -> op(1, 2, 3, 4, 5)  // returns true
+///
+/// If allowDuplicatingOp is true, then the 'hasOneUse' check is skipped.
 template <typename Op>
-static bool tryFlatteningOperands(Op op, PatternRewriter &rewriter) {
+static bool tryFlatteningOperands(Op op, PatternRewriter &rewriter,
+                                  bool allowDuplicatingOp = false) {
   auto inputs = op.inputs();
 
   for (size_t i = 0, size = inputs.size(); i != size; ++i) {
-    if (!inputs[i].hasOneUse())
+    if (!allowDuplicatingOp && !inputs[i].hasOneUse())
       continue;
     auto flattenOp = inputs[i].template getDefiningOp<Op>();
     if (!flattenOp)
@@ -811,15 +815,6 @@ OpFoldResult XorROp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
-
-void ConcatOp::build(OpBuilder &builder, OperationState &result,
-                     ValueRange inputs) {
-  unsigned resultWidth = 0;
-  for (auto input : inputs) {
-    resultWidth += input.getType().cast<IntegerType>().getWidth();
-  }
-  build(builder, result, builder.getIntegerType(resultWidth), inputs);
-}
 
 static LogicalResult verifyExtractOp(ExtractOp op) {
   unsigned srcWidth = op.input().getType().cast<IntegerType>().getWidth();
@@ -1268,6 +1263,42 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       if (tryFlatteningOperands(op, rewriter))
         return success();
 
+      return failure();
+    }
+  };
+  results.insert<Folder>(context);
+}
+
+//===----------------------------------------------------------------------===//
+// ConcatOp
+//===----------------------------------------------------------------------===//
+
+void ConcatOp::build(OpBuilder &builder, OperationState &result,
+                     ValueRange inputs) {
+  unsigned resultWidth = 0;
+  for (auto input : inputs) {
+    resultWidth += input.getType().cast<IntegerType>().getWidth();
+  }
+  build(builder, result, builder.getIntegerType(resultWidth), inputs);
+}
+
+void ConcatOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                           MLIRContext *context) {
+  struct Folder final : public OpRewritePattern<ConcatOp> {
+    using OpRewritePattern::OpRewritePattern;
+    LogicalResult matchAndRewrite(ConcatOp op,
+                                  PatternRewriter &rewriter) const override {
+      auto inputs = op.inputs();
+      auto size = inputs.size();
+      assert(size > 1 && "expected 2 or more operands");
+
+      // concat(x, concat(...)) -> concat(x, ...) -- flatten
+      if (tryFlatteningOperands(op, rewriter, /*allowDuplicatingOp=*/true))
+        return success();
+
+      /// TODO: Sequences of constants: concat(..., c1, c2) -> concat(..., c3).
+      /// TODO: Sequences of neighboring extracts.
+      /// TODO: zext argument into 0 + value.
       return failure();
     }
   };
