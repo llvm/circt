@@ -103,7 +103,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
 }
 
 // CHECK-LABEL: module Aliasing(
-// CHECK-NEXT:             inout [41:0] a, b, c);
+// CHECK-NEXT:             inout [41:0] a, b, c
 rtl.module @Aliasing(%a : !rtl.inout<i42>, %b : !rtl.inout<i42>,
                       %c : !rtl.inout<i42>) {
 
@@ -120,9 +120,10 @@ rtl.module @reg(%in4: i4, %in8: i8) -> (%a: i8, %b: i8) {
     // CHECK-NEXT:   output [7:0] a, b);
 
     // CHECK-EMPTY:
-    %myReg = sv.reg : !rtl.inout<i8>    // CHECK-NEXT: reg [7:0] myReg;
+    // CHECK-NEXT: reg [7:0]       myReg;
+    %myReg = sv.reg : !rtl.inout<i8>
 
-    // CHECK-NEXT: reg [7:0] myRegArray1[41:0];
+    // CHECK-NEXT: reg [7:0][41:0] myRegArray1;
     %myRegArray1 = sv.reg : !rtl.inout<array<42 x i8>>
 
     // CHECK-EMPTY:

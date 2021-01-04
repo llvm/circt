@@ -92,24 +92,30 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.partialconnect %_t, %_t_2
     _t <- _t_2
 
-    ; CHECK: firrtl.invalid %auto : !firrtl.flip<uint<1>>
+    ; CHECK: [[INV:%.+]]  = firrtl.invalidvalue : !firrtl.uint<1>
+    ; CHECK-NEXT: firrtl.connect %auto, [[INV]] : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     auto is invalid
+
+    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue : !firrtl.analog<1>
+    ; CHECK-NEXT: firrtl.attach %a1, [[INV]] : !firrtl.analog<1>, !firrtl.analog<1>
+    a1 is invalid
 
     ; CHECK: firrtl.skip
     skip  @[SKipLoc.scala 42:24]
 
-    ; CHECK: firrtl.invalid %reset : !firrtl.uint<1>
+    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue : !firrtl.uint<1>
+    ; CHECK-NEXT: firrtl.connect %reset, [[INV]] : !firrtl.uint<1>, !firrtl.uint<1>
     reset is invalid
 
-    ; CHECK: %0 = firrtl.subfield %out_0("member") : (!firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>) -> !firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>
-    ; CHECK: %1 = firrtl.subfield %0("0") : (!firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>) -> !firrtl.bundle<clock: clock, reset: uint<1>>
-    ; CHECK: %2 = firrtl.subfield %1("reset") : (!firrtl.bundle<clock: clock, reset: uint<1>>) -> !firrtl.uint<1>
-    ; CHECK: firrtl.partialconnect %auto, %2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    ; CHECK: [[A:%.+]] = firrtl.subfield %out_0("member") : (!firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>) -> !firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>
+    ; CHECK: [[B:%.+]] = firrtl.subfield [[A]]("0") : (!firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>) -> !firrtl.bundle<clock: clock, reset: uint<1>>
+    ; CHECK: [[C:%.+]] = firrtl.subfield [[B]]("reset") : (!firrtl.bundle<clock: clock, reset: uint<1>>) -> !firrtl.uint<1>
+    ; CHECK: firrtl.partialconnect %auto, [[C]] : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     auto <- out_0.member.0.reset @[Field 173:49]
 
-    ; CHECK: %3 = firrtl.subindex %_t_2[0] : (!firrtl.vector<uint<1>, 12>) -> !firrtl.uint<1>
-    ; CHECK: %4 = firrtl.subindex %_t[0] : (!firrtl.vector<uint<1>, 12>) -> !firrtl.uint<1>
-    ; CHECK: firrtl.connect %3, %4
+    ; CHECK: [[A:%.+]] = firrtl.subindex %_t_2[0] : (!firrtl.vector<uint<1>, 12>) -> !firrtl.uint<1>
+    ; CHECK: [[B:%.+]] = firrtl.subindex %_t[0] : (!firrtl.vector<uint<1>, 12>) -> !firrtl.uint<1>
+    ; CHECK: firrtl.connect [[A]], [[B]]
     _t_2[0] <= _t[0] @[Xbar.scala 21:44]
 
     ; CHECK: %n1 = firrtl.node %auto {name = "n1"} : !firrtl.flip<uint<1>>
@@ -326,9 +332,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: %_M = firrtl.mem "Undefined" {depth = 8 : i64, name = "_M",
     ; CHECK:   readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<
-    ; CHECK:       _T_10: flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: analog<4>>, mask: bundle<id: uint<1>>>>,
-    ; CHECK:       _T_11: flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: analog<4>>, mask: bundle<id: uint<1>>>>,
-    ; CHECK:       _T_18: bundle<addr: flip<uint<3>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>>>>
+    ; CHECK:       _T_10: bundle<addr: flip<uint<3>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>>, mask: flip<bundle<id: uint<1>>>>
+    ; CHECK:       _T_11: bundle<addr: flip<uint<3>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>>, mask: flip<bundle<id: uint<1>>>>
+    ; CHECK:       _T_18: bundle<addr: flip<uint<3>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>>>
     mem _M : @[Decoupled.scala 209:24]
         data-type => { id : Analog<4> }
         depth => 8
@@ -367,7 +373,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: %flip1 = firrtl.wire : !firrtl.bundle<x: bundle<a: uint>>
     wire flip1 : { flip x : { flip a : UInt } }
-    ; CHECK: %flip2 = firrtl.wire : !firrtl.bundle<x: bundle<a: uint, b: flip<analog>>>
+    ; CHECK: %flip2 = firrtl.wire : !firrtl.bundle<x: bundle<a: uint, b: analog>>
     wire flip2 : { flip x : { flip a : UInt, b: Analog } }
     ; CHECK: %flip3 = firrtl.wire : !firrtl.bundle<x: bundle<a: uint, b: analog>>
     wire flip3 : { flip x : { flip a : UInt, flip b: Analog } }

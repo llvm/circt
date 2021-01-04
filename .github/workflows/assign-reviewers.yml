@@ -1,7 +1,7 @@
 name: "Request review from code owner"
 on:
   pull_request_target:
-    branches: [ master ]
+    branches: [ main ]
 
 jobs:
   # Automatically request reviews from the code owner identified in a set of

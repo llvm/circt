@@ -26,12 +26,6 @@
 using namespace circt;
 using namespace firrtl;
 
-/// Return the type of the specified value, casted to the template type.
-template <typename T = FIRRTLType>
-static T getTypeOf(Value v) {
-  return v.getType().cast<T>();
-}
-
 /// Given a FIRRTL type, return the corresponding type for the RTL dialect.
 /// This returns a null type if it cannot be lowered.
 static Type lowerType(Type type) {
@@ -273,20 +267,16 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
     }
 
     // Figure out the direction of the port.
-    if (firrtlPort.type.isa<AnalogType>()) {
-      // If the port is analog, then it is implicitly inout.
-      rtlPort.type = rtl::InOutType::get(rtlPort.type);
-      rtlPort.direction = rtl::PortDirection::INOUT;
-      rtlPort.argNum = numArgs++;
-    } else if (firrtlPort.isOutput()) {
+    if (firrtlPort.isOutput()) {
       rtlPort.direction = rtl::PortDirection::OUTPUT;
       rtlPort.argNum = numResults++;
     } else if (firrtlPort.isInput()) {
       rtlPort.direction = rtl::PortDirection::INPUT;
       rtlPort.argNum = numArgs++;
     } else {
-      // This isn't currently expressible in low-firrtl, due to bundle types
-      // being lowered.
+      // If the port is an inout bundle or contains an analog type, then it is
+      // implicitly inout.
+      rtlPort.type = rtl::InOutType::get(rtlPort.type);
       rtlPort.direction = rtl::PortDirection::INOUT;
       rtlPort.argNum = numArgs++;
     }
@@ -751,12 +741,16 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   // Lowering hooks.
   void handleUnloweredOp(Operation *op);
   LogicalResult visitExpr(ConstantOp op);
+  LogicalResult visitExpr(SubfieldOp op);
+  LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
+  LogicalResult visitInvalidOp(Operation *op) { return failure(); }
+
+  // Declarations.
   LogicalResult visitDecl(WireOp op);
   LogicalResult visitDecl(NodeOp op);
   LogicalResult visitDecl(RegOp op);
   LogicalResult visitDecl(RegInitOp op);
-  LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
-  LogicalResult visitInvalidOp(Operation *op) { return failure(); }
+  LogicalResult visitDecl(MemOp op);
 
   // Unary Ops.
   LogicalResult lowerNoopCast(Operation *op);
@@ -834,6 +828,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
 
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
+  LogicalResult visitExpr(InvalidValuePrimOp op);
   LogicalResult visitExpr(HeadPrimOp op);
   LogicalResult visitExpr(ShlPrimOp op);
   LogicalResult visitExpr(ShrPrimOp op);
@@ -843,13 +838,16 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(DShrPrimOp op) {
     return lowerDivLikeOp<rtl::ShrSOp, rtl::ShrUOp>(op);
   }
+  LogicalResult visitExpr(DShlwPrimOp op) {
+    return lowerDivLikeOp<rtl::ShrSOp, rtl::ShrUOp>(op);
+  }
   LogicalResult visitExpr(TailPrimOp op);
   LogicalResult visitExpr(MuxPrimOp op);
   LogicalResult visitExpr(ValidIfPrimOp op);
 
   // Statements
+  LogicalResult visitStmt(SkipOp op);
   LogicalResult visitStmt(ConnectOp op);
-  LogicalResult visitStmt(InvalidOp op);
   LogicalResult visitStmt(PrintFOp op);
   LogicalResult visitStmt(StopOp op);
   LogicalResult visitStmt(AssertOp op);
@@ -983,16 +981,15 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
     return {};
 
   // We only know how to extend integer types with known width.
-  auto destIntType = destFIRType.dyn_cast<IntType>();
-  if (!destIntType || !destIntType.hasWidth())
+  auto destWidth = destFIRType.getBitWidthOrSentinel();
+  if (destWidth == -1)
     return {};
 
-  auto destWidth = unsigned(destIntType.getWidthOrSentinel());
   auto srcWidth = result.getType().cast<IntegerType>().getWidth();
-  if (srcWidth == destWidth)
+  if (srcWidth == unsigned(destWidth))
     return result;
 
-  if (srcWidth > destWidth) {
+  if (srcWidth > unsigned(destWidth)) {
     builder->emitError("operand should not be a truncation");
     return {};
   }
@@ -1030,6 +1027,44 @@ LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
 
 //===----------------------------------------------------------------------===//
 // Special Operations
+//===----------------------------------------------------------------------===//
+
+/// Handle the case where an operation wasn't lowered.  When this happens, the
+/// operands may be a mix of lowered and unlowered values.  If the operand was
+/// not lowered then leave it alone, otherwise insert a cast from the lowered
+/// value.
+void FIRRTLLowering::handleUnloweredOp(Operation *op) {
+  for (auto &operand : op->getOpOperands()) {
+    Value origValue = operand.get();
+    auto it = valueMapping.find(origValue);
+    // If the operand wasn't lowered, then leave it alone.
+    if (it == valueMapping.end())
+      continue;
+
+    op->emitWarning("LowerToRTL couldn't handle this");
+
+    // Otherwise, insert a cast from the lowered value.
+    Value mapped = castToFIRRTLType(it->second, origValue.getType(), *builder);
+    operand.set(mapped);
+  }
+}
+
+LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
+  return setLoweringTo<rtl::ConstantOp>(op, op.value());
+}
+
+LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
+  // Subfield operations should either be dead or have a lowering installed
+  // already.  They only come up with mems.
+  if (op.use_empty() || valueMapping.count(op))
+    return success();
+
+  op.emitOpError(": operand should have lowered its subfields");
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// Declarations
 //===----------------------------------------------------------------------===//
 
 LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
@@ -1120,8 +1155,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegInitOp op) {
       // if the reset line is low at start.
       builder->create<sv::IfDefOp>("RANDOMIZE_REG_INIT", [&]() {
         auto one = builder->create<rtl::ConstantOp>(APInt(1, 1));
-        auto notResetValue = builder->create<rtl::XorOp>(
-            ValueRange{resetSignal, one}, ArrayRef<NamedAttribute>{});
+        auto notResetValue = builder->create<rtl::XorOp>(resetSignal, one);
         builder->create<sv::IfOp>(notResetValue, [&]() {
           auto type =
               regResult.getType().cast<rtl::InOutType>().getElementType();
@@ -1135,26 +1169,252 @@ LogicalResult FIRRTLLowering::visitDecl(RegInitOp op) {
   return success();
 }
 
-/// Handle the case where an operation wasn't lowered.  When this happens, the
-/// operands may be a mix of lowered and unlowered values.  If the operand was
-/// not lowered then leave it alone, otherwise insert a cast from the lowered
-/// value.
-void FIRRTLLowering::handleUnloweredOp(Operation *op) {
-  for (auto &operand : op->getOpOperands()) {
-    Value origValue = operand.get();
-    auto it = valueMapping.find(origValue);
-    // If the operand wasn't lowered, then leave it alone.
-    if (it == valueMapping.end())
-      continue;
+namespace {
+/// This represents a flattened bundle field element.
+struct FlatBundleFieldEntry {
+  /// This is the underlying ground type of the field.
+  Type type;
+  /// This is a field name with any suffixes to make it unique.
+  std::string name;
+};
+} // end anonymous namespace.
 
-    // Otherwise, insert a cast from the lowered value.
-    Value mapped = castToFIRRTLType(it->second, origValue.getType(), *builder);
-    operand.set(mapped);
+/// Convert a nested bundle of fields into a flat list of fields.  This is used
+/// when working with mems to flatten them.  Return true if we fail to lower
+/// any of the element types, or false if successul.
+static bool flattenBundleTypes(Type type, StringRef nameSoFar,
+                               SmallVectorImpl<FlatBundleFieldEntry> &results) {
+  // Ignore flips.
+  if (auto flip = type.dyn_cast<FlipType>())
+    return flattenBundleTypes(flip.getElementType(), nameSoFar, results);
+
+  // In the base case we record this field.
+  auto bundle = type.dyn_cast<BundleType>();
+  if (!bundle) {
+    results.push_back({lowerType(type), nameSoFar.str()});
+    return results.back().type == Type();
   }
+
+  SmallString<16> tmpName(nameSoFar);
+
+  // Otherwise, we have a bundle type.  Break it down.
+  for (auto &elt : bundle.getElements()) {
+    // Construct the suffix to pass down.
+    tmpName.resize(nameSoFar.size());
+    tmpName.push_back('_');
+    tmpName.append(elt.name.strref());
+    // Recursively process subelements.
+    if (flattenBundleTypes(elt.type, tmpName, results))
+      return true;
+  }
+  return false;
 }
 
-LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
-  return setLoweringTo<rtl::ConstantOp>(op, op.value());
+LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
+  // Check that the MemOp has been properly lowered before this.
+  if (op.readLatency() != 0 || op.writeLatency() != 1) {
+    // FIXME: This should be an error.
+    op.emitWarning("FIXME: need to support mem read/write latency correctly");
+  }
+
+  StringRef memName = "mem";
+  if (op.name().hasValue())
+    memName = op.name().getValue();
+
+  // Aggregate mems may declare multiple reg's.  We need to declare and random
+  // initialize them all.
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+  if (auto dataType = op.getDataTypeOrNull()) {
+    if (flattenBundleTypes(dataType, memName, fieldTypes))
+      return op.emitError("could not lower mem element type");
+  }
+
+  uint64_t depth = op.depth();
+
+  // Add one reg declaration for each field of the mem.
+  SmallVector<Value> regs;
+  for (const auto &field : fieldTypes) {
+    auto resultType = rtl::UnpackedArrayType::get(field.type, depth);
+    auto name = builder->getStringAttr(field.name);
+    regs.push_back(builder->create<sv::RegOp>(resultType, name));
+  }
+
+  // Emit the initializer expression for simulation that fills it with random
+  // value.
+  builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
+    builder->create<sv::InitialOp>([&]() {
+      emitRandomizePrologIfNeeded();
+
+      builder->create<sv::IfDefOp>("RANDOMIZE_MEM_INIT", [&]() {
+        if (depth == 1) { // Don't emit a for loop for one element.
+          for (Value reg : regs) {
+            auto type = rtl::getInOutElementType(reg.getType());
+            type = rtl::getAnyRTLArrayElementType(type);
+            auto randomVal =
+                builder->create<sv::TextualValueOp>(type, "`RANDOM");
+            auto zero = builder->create<rtl::ConstantOp>(APInt(1, 0));
+            auto subscript = builder->create<rtl::ArrayIndexOp>(reg, zero);
+            builder->create<sv::BPAssignOp>(subscript, randomVal);
+          }
+        } else if (!regs.empty()) {
+          assert(depth < (1ULL << 31) && "FIXME: Our initialization logic uses "
+                                         "'integer' which doesn't support "
+                                         "mems greater than 2^32");
+
+          std::string action = "integer {{0}}_initvar;\n";
+          action += "for ({{0}}_initvar = 0; {{0}}_initvar < " +
+                    llvm::utostr(depth) + "; {{0}}_initvar = {{0}}_initvar+1)";
+          if (regs.size() != 1)
+            action += " begin";
+
+          for (size_t i = 0, e = regs.size(); i != e; ++i)
+            action +=
+                "\n  {{" + llvm::utostr(i) + "}}[{{0}}_initvar] = `RANDOM;";
+
+          if (regs.size() != 1)
+            action += "\nend";
+          builder->create<sv::VerbatimOp>(action, regs);
+        }
+      });
+    });
+  });
+
+  // Keep track of whether this mem is an even power of two or not.
+  bool isPowerOfTwo = llvm::isPowerOf2_64(depth);
+
+  // Lower all of the read/write ports.  Each read-write port has a subfield.
+  // While it is possible for there to be more than one subfield per port, they
+  // should be CSE'd away, and generating redundant logic for them isn't a
+  // correctness problem, so we just keep things simple.
+  while (!op->use_empty()) {
+    // Work through the users of the mem, dropping their reference to null as we
+    // go.  This allows SubfieldOp lowering to know that the subfields have been
+    // correctly processed.
+    auto port = cast<SubfieldOp>(*op->user_begin());
+    port->dropAllReferences();
+
+    auto portBundleType =
+        port.getType().cast<FIRRTLType>().getPassiveType().cast<BundleType>();
+
+    // A port has a bunch of subfields hanging off of it, which are the various
+    // parts of the port.  Emit a wire for each of the pieces so users of the
+    // subfield have something to use.
+    SmallVector<std::pair<Identifier, Value>> portWires;
+    for (BundleType::BundleElement elt : portBundleType.getElements()) {
+      auto fieldType = lowerType(elt.type);
+      if (!fieldType)
+        return op.emitOpError("port " + elt.name.str() +
+                              " has unexpected field");
+      auto name =
+          (Twine(memName) + "_" + port.fieldname() + "_" + elt.name.str())
+              .str();
+      auto fieldWire = builder->create<rtl::WireOp>(fieldType, name);
+      portWires.push_back({elt.name, fieldWire});
+    }
+
+    // Return the inout wire corresponding to a port field.
+    auto getPortFieldWire = [&](StringRef portName) -> Value {
+      for (auto entry : portWires) {
+        if (entry.first.strref() == portName)
+          return entry.second;
+      }
+      llvm_unreachable("unknown port wire!");
+    };
+
+    // Now that we have the wires for each element, rewrite any subfields to use
+    // them instead of the subfields.
+    while (!port->use_empty()) {
+      auto portField = cast<SubfieldOp>(*port->user_begin());
+      portField->dropAllReferences();
+      setLowering(portField, getPortFieldWire(portField.fieldname()));
+    }
+
+    // Return the value corresponding to a port field.
+    auto getPortFieldValue = [&](StringRef portName) -> Value {
+      return builder->create<rtl::ReadInOutOp>(getPortFieldWire(portName));
+    };
+
+    switch (op.getPortKind(port.fieldname()).getValue()) {
+    case MemOp::PortKind::ReadWrite:
+      op.emitOpError("readwrite ports should be lowered into separate read and "
+                     "write ports by previous passes");
+      continue;
+    case MemOp::PortKind::Read: {
+      auto emitReads = [&](bool masked) {
+        // TODO: not handling bundle elements correctly yet.
+        if (regs.size() > 1)
+          op.emitOpError("don't support bundle elements yet");
+
+        // Emit an assign to the read port, using the address.
+        // TODO(firrtl-spec): It appears that the clock signal on the read port
+        // is ignored, why does it exist?
+        for (auto reg : regs) {
+          auto addr = getPortFieldValue("addr");
+          Value value = builder->create<rtl::ArrayIndexOp>(reg, addr);
+          value = builder->create<rtl::ReadInOutOp>(value);
+
+          // If we're masking, emit "addr < Depth ? mem[addr] : `RANDOM".
+          if (masked) {
+            auto addrWidth = addr.getType().getIntOrFloatBitWidth();
+            auto depthCst =
+                builder->create<rtl::ConstantOp>(APInt(addrWidth, depth));
+            auto cmp = builder->create<rtl::ICmpOp>(ICmpPredicate::ult, addr,
+                                                    depthCst);
+            auto randomVal =
+                builder->create<sv::TextualValueOp>(value.getType(), "`RANDOM");
+            value = builder->create<rtl::MuxOp>(cmp, value, randomVal);
+          }
+
+          // FIXME: This isn't right for multi-slot data's.
+          builder->create<rtl::ConnectOp>(getPortFieldWire("data"), value);
+        }
+      };
+
+      // If the memory size is a power of two, then we can just unconditionally
+      // read from it, otherwise we emit #ifdef'd masking logic.
+      if (isPowerOfTwo) {
+        emitReads(false);
+      } else {
+        builder->create<sv::IfDefOp>(
+            "!RANDOMIZE_GARBAGE_ASSIGN", [&]() { emitReads(false); },
+            [&]() { emitReads(true); });
+      }
+      break;
+    }
+
+    case MemOp::PortKind::Write: {
+      // TODO: not handling bundle elements correctly yet.
+      if (regs.size() > 1)
+        op.emitOpError("don't support bundle elements yet");
+
+      // Emit something like:
+      // always @(posedge _M_write_clk) begin
+      //   if (_M_write_en & _M_write_mask)
+      //     _M[_M_write_addr] <= _M_write_data;
+      // end
+      auto clock = getPortFieldValue("clk");
+      builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, [&]() {
+        auto enable = getPortFieldValue("en");
+        auto mask = getPortFieldValue("mask");
+        auto cond = builder->create<rtl::AndOp>(enable, mask);
+        builder->create<sv::IfOp>(cond, [&]() {
+          // FIXME: This isn't right for multi-slot data mems.
+          auto data = getPortFieldValue("data");
+          auto addr = getPortFieldValue("addr");
+
+          for (auto reg : regs) {
+            auto slot = builder->create<rtl::ArrayIndexOp>(reg, addr);
+            builder->create<sv::PAssignOp>(slot, data);
+          }
+        });
+      });
+
+      break;
+    }
+    }
+  }
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1163,7 +1423,7 @@ LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
 
 // Lower a cast that is a noop at the RTL level.
 LogicalResult FIRRTLLowering::lowerNoopCast(Operation *op) {
-  auto operand = getLoweredValue(op->getOperand(0));
+  auto operand = getPossiblyInoutLoweredValue(op->getOperand(0));
   if (!operand)
     return failure();
 
@@ -1201,12 +1461,12 @@ LogicalResult FIRRTLLowering::visitExpr(CvtPrimOp op) {
     return failure();
 
   // Signed to signed is a noop.
-  if (getTypeOf<IntType>(op.getOperand()).isSigned())
+  if (op.getOperand().getType().cast<IntType>().isSigned())
     return setLowering(op, operand);
 
   // Otherwise prepend a zero bit.
   auto zero = builder->create<rtl::ConstantOp>(APInt(1, 0));
-  return setLoweringTo<rtl::ConcatOp>(op, ValueRange({zero, operand}));
+  return setLoweringTo<rtl::ConcatOp>(op, zero, operand);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(NotPrimOp op) {
@@ -1216,8 +1476,7 @@ LogicalResult FIRRTLLowering::visitExpr(NotPrimOp op) {
   // ~x  ---> x ^ 0xFF
   auto type = operand.getType().cast<IntegerType>();
   auto allOnes = builder->create<rtl::ConstantOp>(-1, type);
-  return setLoweringTo<rtl::XorOp>(op, ValueRange({operand, allOnes}),
-                                   ArrayRef<NamedAttribute>{});
+  return setLoweringTo<rtl::XorOp>(op, operand, allOnes);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(NegPrimOp op) {
@@ -1279,8 +1538,7 @@ LogicalResult FIRRTLLowering::lowerBinOpToVariadic(Operation *op) {
   if (!lhs || !rhs)
     return failure();
 
-  return setLoweringTo<ResultOpType>(op, ValueRange({lhs, rhs}),
-                                     ArrayRef<NamedAttribute>{});
+  return setLoweringTo<ResultOpType>(op, lhs, rhs);
 }
 
 /// lowerBinOp extends each operand to the destination type, then performs the
@@ -1356,7 +1614,7 @@ LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
   if (!lhs || !rhs)
     return failure();
 
-  return setLoweringTo<rtl::ConcatOp>(op, ValueRange({lhs, rhs}));
+  return setLoweringTo<rtl::ConcatOp>(op, lhs, rhs);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
@@ -1382,9 +1640,9 @@ LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
 
   Value modInst;
   if (resultFirType.isUnsigned()) {
-    modInst = builder->createOrFold<rtl::ModUOp>(ValueRange({lhs, rhs}));
+    modInst = builder->createOrFold<rtl::ModUOp>(lhs, rhs);
   } else {
-    modInst = builder->createOrFold<rtl::ModSOp>(ValueRange({lhs, rhs}));
+    modInst = builder->createOrFold<rtl::ModSOp>(lhs, rhs);
   }
 
   return setLoweringTo<rtl::ExtractOp>(op, resultType, modInst, 0);
@@ -1401,6 +1659,27 @@ LogicalResult FIRRTLLowering::visitExpr(BitsPrimOp op) {
 
   Type resultType = builder->getIntegerType(op.hi() - op.lo() + 1);
   return setLoweringTo<rtl::ExtractOp>(op, resultType, input, op.lo());
+}
+
+LogicalResult FIRRTLLowering::visitExpr(InvalidValuePrimOp op) {
+  auto resultTy = lowerType(op.getType());
+  if (!resultTy)
+    return failure();
+
+  // We lower invalid to 0.  TODO: the FIRRTL spec mentions something about
+  // lowering it to a random value, we should see if this is what we need to
+  // do.
+  auto value =
+      builder->create<rtl::ConstantOp>(0, resultTy.cast<IntegerType>());
+
+  if (!op.getType().isa<AnalogType>())
+    return setLowering(op, value);
+
+  // Values of analog type always need to be lowered to an inout.  We do that by
+  // lowering to a wire and return that.
+  auto wire = builder->create<rtl::WireOp>(resultTy, /*name=*/StringAttr());
+  builder->create<rtl::ConnectOp>(wire, value);
+  return setLowering(op, wire);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(HeadPrimOp op) {
@@ -1425,7 +1704,7 @@ LogicalResult FIRRTLLowering::visitExpr(ShlPrimOp op) {
 
   // TODO: We could keep track of zeros and implicitly CSE them.
   auto zero = builder->create<rtl::ConstantOp>(APInt(op.amount(), 0));
-  return setLoweringTo<rtl::ConcatOp>(op, ValueRange({input, zero}));
+  return setLoweringTo<rtl::ConcatOp>(op, input, zero);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(ShrPrimOp op) {
@@ -1483,19 +1762,9 @@ LogicalResult FIRRTLLowering::visitExpr(ValidIfPrimOp op) {
 // Statements
 //===----------------------------------------------------------------------===//
 
-LogicalResult FIRRTLLowering::visitStmt(InvalidOp op) {
-  auto dest = getPossiblyInoutLoweredValue(op.operand());
-  if (!dest)
-    return failure();
-
-  auto inoutTy = dest.getType().dyn_cast<rtl::InOutType>();
-  if (!inoutTy)
-    return op.emitError("destination isn't an inout type");
-
-  auto zero = builder->create<rtl::ConstantOp>(
-      0, inoutTy.getElementType().cast<IntegerType>());
-
-  builder->create<rtl::ConnectOp>(dest, zero);
+LogicalResult FIRRTLLowering::visitStmt(SkipOp op) {
+  // Nothing!  We could emit an comment as a verbatim op if there were a reason
+  // to.
   return success();
 }
 
@@ -1569,8 +1838,8 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
       // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
       Value ifCond =
           builder->create<sv::TextualValueOp>(cond.getType(), "`PRINTF_COND_");
-      ifCond = builder->createOrFold<rtl::AndOp>(ValueRange{ifCond, cond},
-                                                 ArrayRef<NamedAttribute>{});
+      ifCond = builder->createOrFold<rtl::AndOp>(ifCond, cond);
+
       builder->create<sv::IfOp>(ifCond, [&]() {
         // Emit the sv.fwrite.
         builder->create<sv::FWriteOp>(op.formatString(), operands);
@@ -1596,8 +1865,7 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
       // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
       Value ifCond =
           builder->create<sv::TextualValueOp>(cond.getType(), "`STOP_COND_");
-      ifCond = builder->createOrFold<rtl::AndOp>(ValueRange{ifCond, cond},
-                                                 ArrayRef<NamedAttribute>{});
+      ifCond = builder->createOrFold<rtl::AndOp>(ifCond, cond);
       builder->create<sv::IfOp>(ifCond, [&]() {
         // Emit the sv.fatal or sv.finish.
         if (op.exitCode())

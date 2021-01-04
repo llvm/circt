@@ -31,7 +31,7 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
     OpBuilderDAG<(ins "IntType":$type, "const APInt &":$value)>
   ];
   let hasFolder = 1;
-  let verifier = [{ return ::verifyConstantOp(*this); }];
+  let verifier = "return ::verifyConstantOp(*this);";
 }
 
 def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
@@ -48,9 +48,8 @@ def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
   let results = (outs FIRRTLType:$result);
 
   // TODO: Could drop the result type, inferring it from the source.
-  let assemblyFormat = [{
-     $input `(` $fieldname `)` attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input `(` $fieldname `)` attr-dict `:` functional-type($input, $result)";
 
   let extraClassDeclaration = [{
     /// Compute the result of a Subfield operation on a value of the specified
@@ -58,6 +57,10 @@ def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
     /// invalid, then a null type is returned.
     static FIRRTLType getResultType(FIRRTLType inType, StringRef fieldName,
                                     Location loc);
+  }];
+
+  let verifier = [{
+    VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>(), fieldname());
   }];
 }
 
@@ -77,15 +80,18 @@ def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
   let results = (outs FIRRTLType:$result);
 
   // TODO: Could drop the result type, inferring it from the source.
-  let assemblyFormat = [{
-     $input `[` $index `]` attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+     "$input `[` $index `]` attr-dict `:` functional-type($input, $result)";
 
   let extraClassDeclaration = [{
     /// Compute the result of a Subindex operation on a value of the specified
     /// type.  If the request is invalid, then a null type is returned.
     static FIRRTLType getResultType(FIRRTLType inType, unsigned fieldIdx,
                                     Location loc);
+  }];
+
+  let verifier = [{
+    VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>(), index());
   }];
 }
 
@@ -104,15 +110,19 @@ def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect]> {
   let results = (outs FIRRTLType:$result);
 
   // TODO: Could drop the result type, inferring it from the source.
-  let assemblyFormat = [{
-     $input `[` $index `]` attr-dict `:` functional-type(operands, $result)
-  }];
+  let assemblyFormat =
+     "$input `[` $index `]` attr-dict `:` functional-type(operands, $result)";
 
   let extraClassDeclaration = [{
     /// Compute the result of a Subaccess operation on a value of the specified
     /// type.  If the request is invalid, then a null type is returned.
     static FIRRTLType getResultType(FIRRTLType baseType, FIRRTLType indexType,
                                     Location loc);
+  }];
+
+  let verifier = [{
+    VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>(),
+                           index().getType().cast<FIRRTLType>());
   }];
 }
 //===----------------------------------------------------------------------===//
@@ -142,13 +152,20 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
   let extraClassDeclaration = [{
     /// Return the result for inputs with the specified type, returning a null
     /// type if the input types are invalid.
-    static FIRRTLType getResultType(FIRRTLType lhs, FIRRTLType rhs);
+    static FIRRTLType getResultType(FIRRTLType lhs, FIRRTLType rhs, Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
                                     ArrayRef<int32_t> integers, Location loc) {
-      if (inputs.size() != 2 || !integers.empty())
+      if (inputs.size() != 2 || !integers.empty()) {
+        mlir::emitError(loc,"operation requires two operands and no constants");
         return {};
-      return getResultType(inputs[0], inputs[1]);
+      }
+      return getResultType(inputs[0], inputs[1], loc);
     }
+  }];
+
+  let verifier = [{
+    VERIFY_RESULT_TYPE_RET(lhs().getType().cast<FIRRTLType>(),
+                           rhs().getType().cast<FIRRTLType>());
   }];
 }
 
@@ -202,13 +219,19 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
   let extraClassDeclaration = [{
     /// Return the result for inputs with the specified type, returning a null
     /// type if the input type is invalid.
-    static FIRRTLType getResultType(FIRRTLType input);
+    static FIRRTLType getResultType(FIRRTLType input, Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
                                     ArrayRef<int32_t> integers, Location loc) {
-      if (inputs.size() != 1 || !integers.empty())
+      if (inputs.size() != 1 && !integers.empty()) {
+        mlir::emitError(loc, "operation requires one operand and no constants");
         return {};
-      return getResultType(inputs[0]);
+      }
+      return getResultType(inputs[0], loc);
     }
+  }];
+
+  let verifier = [{
+    VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>());
   }];
 }
 
@@ -258,13 +281,17 @@ def BitsPrimOp : PrimOp<"bits"> {
                                     int32_t low, Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
                                     ArrayRef<int32_t> integers, Location loc) {
-      if (inputs.size() != 1 || integers.size() != 2)
+      if (inputs.size() != 1 || integers.size() != 2) {
+        mlir::emitError(loc,"operation requires one operand and two constants");
         return {};
+      }
       return getResultType(inputs[0], integers[0], integers[1], loc);
     }
   }];
 
-  let verifier = [{ return ::verifyBitsPrimOp(*this); }];
+  let verifier = [{
+    VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>(), hi(), lo());
+  }];
 }
 
 def HeadPrimOp : PrimOp<"head"> {
@@ -284,11 +311,35 @@ def HeadPrimOp : PrimOp<"head"> {
                                     Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
                                     ArrayRef<int32_t> integers, Location loc) {
-      if (inputs.size() != 1 || integers.size() != 1)
+      if (inputs.size() != 1 || integers.size() != 1) {
+        mlir::emitError(loc, "operation requires one operand and one constant");
         return {};
+      }
       return getResultType(inputs[0], integers[0], loc);
     }
   }];
+
+  let verifier = [{
+    VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>(), amount());
+  }];
+}
+
+def InvalidValuePrimOp : PrimOp<"invalidvalue"> {
+  let summary = "InvalidValue primitive";
+  let description = [{
+    The InvalidValue operation returns an invalid value of a specified type:
+    ```
+      %result = firrtl.invalid : !firrtl.uint<1>
+    ```
+
+    This corresponds to the FIRRTL invalidate operation without the implicit
+    connect semantics.
+  }];
+
+  let arguments = (ins);
+  let results = (outs FIRRTLType:$result);
+
+  let assemblyFormat = "attr-dict `:` type($result)";
 }
 
 def MuxPrimOp : PrimOp<"mux"> {
@@ -308,10 +359,20 @@ def MuxPrimOp : PrimOp<"mux"> {
                                     FIRRTLType low, Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
                                     ArrayRef<int32_t> integers, Location loc) {
-      if (inputs.size() != 3 || integers.size() != 0)
+      if (inputs.size() != 3 || !integers.empty()) {
+        mlir::emitError(loc,
+                        "operation requires three operands and no constants");
         return {};
+      }
+
       return getResultType(inputs[0], inputs[1], inputs[2], loc);
     }
+  }];
+
+  let verifier = [{
+    VERIFY_RESULT_TYPE_RET(sel().getType().cast<FIRRTLType>(),
+                           high().getType().cast<FIRRTLType>(),
+                           low().getType().cast<FIRRTLType>());
   }];
 }
 
@@ -324,9 +385,9 @@ def PadPrimOp : PrimOp<"pad"> {
   }];
 
   let description = [{
-    The result of the `head` operation are the `amount` most significant bits
-    of `input`. `amount` must be non-negative and less than or equal to the bit
-    width of `input`.  The result width is equal to `amount`.
+    Pad the input out to an `amount` wide integer, sign extending or zero
+    extending according to `input`s type.  If `amount` is less than the existing
+    width of `input`, then input is unmodified.
   }];
 
   let hasFolder = 1;
@@ -338,10 +399,17 @@ def PadPrimOp : PrimOp<"pad"> {
                                     Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
                                     ArrayRef<int32_t> integers, Location loc) {
-      if (inputs.size() != 1 || integers.size() != 1)
+      if (inputs.size() != 1 || integers.size() != 1) {
+        mlir::emitError(loc, "operation requires one operand and one constant");
         return {};
+      }
+
       return getResultType(inputs[0], integers[0], loc);
     }
+  }];
+
+  let verifier = [{
+    VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>(), amount());
   }];
 }
 
@@ -360,10 +428,16 @@ class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic> {
                                     Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
                                     ArrayRef<int32_t> integers, Location loc) {
-      if (inputs.size() != 1 || integers.size() != 1)
+      if (inputs.size() != 1 || integers.size() != 1) {
+        mlir::emitError(loc, "operation requires one operand and one constant");
         return {};
+      }
       return getResultType(inputs[0], integers[0], loc);
     }
+  }];
+
+  let verifier = [{
+    VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>(), amount());
   }];
 }
 
@@ -411,10 +485,16 @@ def TailPrimOp : PrimOp<"tail"> {
                                     Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
                                     ArrayRef<int32_t> integers, Location loc) {
-      if (inputs.size() != 1 || integers.size() != 1)
+      if (inputs.size() != 1 || integers.size() != 1) {
+        mlir::emitError(loc, "operation requires one operand and one constant");
         return {};
+      }
       return getResultType(inputs[0], integers[0], loc);
     }
+  }];
+
+  let verifier = [{
+    VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>(), amount());
   }];
 }
 

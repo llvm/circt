@@ -31,4 +31,3 @@ class InOutTypeConstraint<string value, string inoutValue>
   : TypesMatchWith<"type should be element of inout type",
                    value, inoutValue,
                    "rtl::InOutType::get($_self.getContext(), $_self)">;
-

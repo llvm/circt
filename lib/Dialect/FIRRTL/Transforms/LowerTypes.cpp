@@ -10,7 +10,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "./PassDetails.h"
-#include "circt/Conversion/FIRRTLToRTL/FIRRTLToRTL.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
@@ -20,6 +19,7 @@
 using namespace circt;
 using namespace firrtl;
 
+namespace {
 // This represents a flattened bundle field element.
 struct FlatBundleFieldEntry {
   // This is the underlying ground type of the field.
@@ -32,6 +32,7 @@ struct FlatBundleFieldEntry {
   // Helper to determine if a fully flattened type needs to be flipped.
   FIRRTLType getPortType() { return isOutput ? FlipType::get(type) : type; }
 };
+} // end anonymous namespace
 
 // Convert a nested bundle of fields into a flat list of fields.  This is used
 // when working with instances and mems to flatten them.
