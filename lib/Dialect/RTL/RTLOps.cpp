@@ -1461,14 +1461,13 @@ static ParseResult parseStructInjectOp(OpAsmParser &parser,
     return failure();
   }
 
-
   Type resultType = actStructType.getFieldType(fieldName.getValue());
   if (!resultType)
     return failure();
   result.addTypes(actStructType);
 
-  if (parser.resolveOperands({operand, val}, {actStructType, resultType},
-                             loc, result.operands))
+  if (parser.resolveOperands({operand, val}, {actStructType, resultType}, loc,
+                             result.operands))
     return failure();
   return success();
 }

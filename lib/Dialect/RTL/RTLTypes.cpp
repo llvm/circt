@@ -117,26 +117,31 @@ llvm::hash_code hash_value(const StructType::FieldInfo &fi) {
 Type StructType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
   llvm::SmallVector<FieldInfo, 4> parameters;
   StringRef name;
-    if (p.parseLess()) return Type();
-    while (mlir::succeeded(p.parseOptionalKeyword(&name))) {
-      Type type;
-      if (p.parseColon() || p.parseType(type)) return Type();
-      parameters.push_back(FieldInfo {name, type});
-      if (p.parseOptionalComma()) break;
-    }
-    if (p.parseGreater()) return Type();
-    return get(ctxt, parameters);
+  if (p.parseLess())
+    return Type();
+  while (mlir::succeeded(p.parseOptionalKeyword(&name))) {
+    Type type;
+    if (p.parseColon() || p.parseType(type))
+      return Type();
+    parameters.push_back(FieldInfo{name, type});
+    if (p.parseOptionalComma())
+      break;
+  }
+  if (p.parseGreater())
+    return Type();
+  return get(ctxt, parameters);
 }
 
 void StructType::print(DialectAsmPrinter &p) const {
-  p << "struct" << "<";
-    for (size_t i=0, e = getImpl()->elements.size(); i < e; i++) {
-      const auto& field = getImpl()->elements[i];
-      p << field.name << ": " << field.type;
-      if (i < getImpl()->elements.size() - 1)
-          p << ", ";
-    }
-    p << ">";
+  p << "struct"
+    << "<";
+  for (size_t i = 0, e = getElements().size(); i < e; i++) {
+    const auto &field = getElements()[i];
+    p << field.name << ": " << field.type;
+    if (i < getElements().size() - 1)
+      p << ", ";
+  }
+  p << ">";
 }
 
 Type StructType::getFieldType(mlir::StringRef fieldName) {
