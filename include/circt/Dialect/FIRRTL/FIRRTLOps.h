@@ -38,7 +38,11 @@ struct ModulePortInfo {
   bool isOutput() { return type.isa<FlipType>(); }
 
   /// Return true if this is a simple input-only port.
-  bool isInput() { return type.isPassive(); }
+  bool isInput() {
+    auto flags = type.getRecursiveTypeProperties();
+    // isPassive & !containsAnalog.
+    return flags.first && !flags.second;
+  }
 
   /// Return true if this is an inout port.
   bool isInOut() { return !isOutput() && !isInput(); }

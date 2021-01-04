@@ -97,11 +97,22 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // Nothing in the parser is threaded.  Disable synchronization overhead.
   context.disableMultithreading();
 
+  // Apply any pass manager command line options.
+  PassManager pm(&context);
+  pm.enableVerifier(true);
+  applyPassManagerCLOptions(pm);
+
   OwningModuleRef module;
   if (inputFormat == InputFIRFile) {
     firrtl::FIRParserOptions options;
     options.ignoreInfoLocators = ignoreFIRLocations;
     module = importFIRRTL(sourceMgr, &context, options);
+
+    // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
+    if (!disableOptimization) {
+      pm.addPass(createCSEPass());
+      pm.addPass(createCanonicalizerPass());
+    }
   } else {
     assert(inputFormat == InputMLIRFile);
     module = parseSourceFile(sourceMgr, &context);
@@ -112,28 +123,23 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // Allow optimizations to run multithreaded.
   context.disableMultithreading(false);
 
-  // If enabled, run the optimizer.
-  if (!disableOptimization) {
-    // Apply any pass manager command line options.
-    PassManager pm(&context);
-    pm.enableVerifier(true);
-    applyPassManagerCLOptions(pm);
+  // Run the lower-to-rtl pass if requested.
+  if (lowerToRTL) {
+    if (enableLowerTypes)
+      pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+          firrtl::createLowerFIRRTLTypesPass());
+    pm.addPass(firrtl::createLowerFIRRTLToRTLModulePass());
+    pm.nest<rtl::RTLModuleOp>().addPass(firrtl::createLowerFIRRTLToRTLPass());
 
-    pm.addPass(createCSEPass());
-    pm.addPass(createCanonicalizerPass());
-
-    // Run the lower-to-rtl pass if requested.
-    if (lowerToRTL) {
-      if (enableLowerTypes)
-        pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-            firrtl::createLowerFIRRTLTypesPass());
-      pm.addPass(firrtl::createLowerFIRRTLToRTLModulePass());
-      pm.nest<rtl::RTLModuleOp>().addPass(firrtl::createLowerFIRRTLToRTLPass());
+    // If enabled, run the optimizer.
+    if (!disableOptimization) {
+      pm.addPass(createCSEPass());
+      pm.addPass(createCanonicalizerPass());
     }
-
-    if (failed(pm.run(module.get())))
-      return failure();
   }
+
+  if (failed(pm.run(module.get())))
+    return failure();
 
   // Finally, emit the output.
   switch (outputFormat) {

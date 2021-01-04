@@ -35,12 +35,12 @@ firrtl.circuit "Simple" {
     %1 = firrtl.asUInt %in1 : (!firrtl.uint<4>) -> !firrtl.uint<4>
 
     // CHECK-NEXT: firrtl.sub
-    %2 = firrtl.sub %1, %1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+    %2 = firrtl.sub %1, %1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
     // CHECK-NEXT: firrtl.pad %1, 3
-    %3 = firrtl.pad %in2, 3 : (!firrtl.uint<2>) -> !firrtl.sint<3>
+    %3 = firrtl.pad %in2, 3 : (!firrtl.uint<2>) -> !firrtl.uint<3>
     // CHECK-NEXT: firrtl.pad
-    %4 = firrtl.pad %3, 4 : (!firrtl.sint<3>) -> !firrtl.uint<4>
+    %4 = firrtl.pad %3, 4 : (!firrtl.uint<3>) -> !firrtl.uint<4>
     // CHECK-NEXT: [[XOR:%.+]] = firrtl.xor %1
     %5 = firrtl.xor %in2, %4 : (!firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
@@ -186,7 +186,7 @@ firrtl.circuit "Simple" {
 
     // Use of output as an input.
     %tmp = firrtl.asPassive %outC : (!firrtl.flip<uint<4>>) -> !firrtl.uint<4>
-    %0 = firrtl.sub %inA, %tmp : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+    %0 = firrtl.sub %inA, %tmp : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
     // Use of an input as an output.
     %tmp2 = firrtl.asNonPassive %inC : (!firrtl.uint<4>) -> !firrtl.flip<uint<4>>

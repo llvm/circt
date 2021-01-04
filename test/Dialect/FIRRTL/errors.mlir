@@ -286,7 +286,7 @@ firrtl.module @X(%a : !firrtl.uint<4>) {
 firrtl.circuit "X" {
 
 firrtl.module @X(%a : !firrtl.uint<4>) {
-  // expected-error @+1 {{width of the result type must be equal to (high - low + 1), expected 3 but got 2}}
+  // expected-error @+1 {{'firrtl.bits' op result type should be '!firrtl.uint<3>'}}
   %0 = firrtl.bits %a 3 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<2>
 }
 
@@ -335,5 +335,14 @@ firrtl.circuit "BadPort" {
   firrtl.module @BadPort(%a : !firrtl.uint<1>) {
     // expected-error @+1 {{'firrtl.attach' op operand #0 must be analog type, but got '!firrtl.uint<1>'}}
     firrtl.attach %a, %a : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "BadAdd" {
+  firrtl.module @BadAdd(%a : !firrtl.uint<1>) {
+    // expected-error @+1 {{'firrtl.add' op result type should be '!firrtl.uint<2>'}}
+    firrtl.add %a, %a : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   }
 }

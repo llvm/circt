@@ -235,7 +235,7 @@ private:
 size_t VerilogEmitterBase::emitTypeDims(Type type, Operation *op) {
   if (auto inout = type.dyn_cast<rtl::InOutType>())
     return emitTypeDims(inout.getElementType(), op);
-  else if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>())
+  if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>())
     return emitTypeDims(uarray.getElementType(), op);
 
   size_t emittedWidth = 0;
@@ -864,7 +864,7 @@ SubExprInfo ExprEmitter::visitComb(SExtOp op) {
   emitSubExpr(op.getOperand(), Unary);
   os << '[' << (inWidth - 1) << "]}}, ";
   emitSubExpr(op.getOperand(), LowestPrecedence);
-  os << "}";
+  os << '}';
   return {Unary, IsUnsigned};
 }
 
@@ -873,9 +873,9 @@ SubExprInfo ExprEmitter::visitComb(ZExtOp op) {
   auto destWidth = op.getType().getIntOrFloatBitWidth();
 
   // A zero extension just fills the top with numbers.
-  os << "{{" << (destWidth - inWidth) << "'d0}, ";
+  os << '{' << (destWidth - inWidth) << "'d0, ";
   emitSubExpr(op.getOperand(), LowestPrecedence);
-  os << "}";
+  os << '}';
   return {Unary, IsUnsigned};
 }
 
@@ -1049,10 +1049,8 @@ void ModuleEmitter::emitStatementExpression(Operation *op) {
   if (op->getResult(0).use_empty()) {
     indent() << "// Unused: ";
   } else if (emitInlineWireDecls) {
-    auto type = op->getResult(0).getType();
     indent() << "wire ";
-
-    if (emitTypeDims(type, op) > 0)
+    if (emitTypeDims(op->getResult(0).getType(), op) > 0)
       os << ' ';
     os << getName(op->getResult(0)) << " = ";
   } else {

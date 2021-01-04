@@ -267,20 +267,16 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
     }
 
     // Figure out the direction of the port.
-    if (firrtlPort.type.isa<AnalogType>()) {
-      // If the port is analog, then it is implicitly inout.
-      rtlPort.type = rtl::InOutType::get(rtlPort.type);
-      rtlPort.direction = rtl::PortDirection::INOUT;
-      rtlPort.argNum = numArgs++;
-    } else if (firrtlPort.isOutput()) {
+    if (firrtlPort.isOutput()) {
       rtlPort.direction = rtl::PortDirection::OUTPUT;
       rtlPort.argNum = numResults++;
     } else if (firrtlPort.isInput()) {
       rtlPort.direction = rtl::PortDirection::INPUT;
       rtlPort.argNum = numArgs++;
     } else {
-      // This isn't currently expressible in low-firrtl, due to bundle types
-      // being lowered.
+      // If the port is an inout bundle or contains an analog type, then it is
+      // implicitly inout.
+      rtlPort.type = rtl::InOutType::get(rtlPort.type);
       rtlPort.direction = rtl::PortDirection::INOUT;
       rtlPort.argNum = numArgs++;
     }

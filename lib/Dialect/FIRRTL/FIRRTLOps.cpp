@@ -24,6 +24,29 @@ using namespace circt;
 using namespace firrtl;
 
 //===----------------------------------------------------------------------===//
+// VERIFY_RESULT_TYPE / VERIFY_RESULT_TYPE_RET
+//===----------------------------------------------------------------------===//
+
+// These macros are used to implement verifier hooks that check that the result
+// type of a primitive matches what is returned by the getResultType() static
+// method.  This should go away when/if this bug is implemented:
+//    https://bugs.llvm.org/show_bug.cgi?id=48645
+#define VERIFY_RESULT_TYPE(...)                                                \
+  {                                                                            \
+    auto resType = getResultType(__VA_ARGS__, getLoc());                       \
+    if (!resType)                                                              \
+      return failure(); /*already diagnosed the error*/                        \
+    if (resType != getType())                                                  \
+      return emitOpError("result type should be ") << resType;                 \
+  }
+
+// This is the same as VERIFY_RESULT_TYPE but return success if the result type
+// matches.  This is useful as the last thing in a verify hook.
+#define VERIFY_RESULT_TYPE_RET(...)                                            \
+  VERIFY_RESULT_TYPE(__VA_ARGS__);                                             \
+  return success();
+
+//===----------------------------------------------------------------------===//
 // CircuitOp
 //===----------------------------------------------------------------------===//
 
@@ -1254,28 +1277,6 @@ FIRRTLType XorRPrimOp::getResultType(FIRRTLType input, Location loc) {
 // Other Operations
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyBitsPrimOp(BitsPrimOp bits) {
-  uint32_t hi = bits.hi(), lo = bits.lo();
-
-  auto expectedType =
-      BitsPrimOp::getResultType(bits.input().getType().cast<FIRRTLType>(),
-                                (int32_t)hi, (int32_t)lo, bits.getLoc());
-  if (!expectedType)
-    return failure();
-
-  int32_t resultWidth =
-      bits.result().getType().cast<IntType>().getBitWidthOrSentinel();
-  int32_t expectedWidth = expectedType.cast<IntType>().getBitWidthOrSentinel();
-
-  if (resultWidth != -1 && expectedWidth != resultWidth)
-    return bits.emitError()
-           << "width of the result type must be equal to (high - low "
-              "+ 1), expected "
-           << expectedWidth << " but got " << resultWidth;
-
-  return success();
-}
-
 FIRRTLType BitsPrimOp::getResultType(FIRRTLType input, int32_t high,
                                      int32_t low, Location loc) {
   auto inputi = input.dyn_cast<IntType>();
@@ -1362,8 +1363,8 @@ FIRRTLType MuxPrimOp::getResultType(FIRRTLType sel, FIRRTLType high,
     // Two different Int types can be compatible.  If either has unknown width,
     // then return it.  If both are known but different width, then return the
     // larger one.
-    int32_t highWidth = low.getBitWidthOrSentinel();
-    int32_t lowWidth = high.getBitWidthOrSentinel();
+    int32_t highWidth = high.getBitWidthOrSentinel();
+    int32_t lowWidth = low.getBitWidthOrSentinel();
     if (lowWidth == -1)
       return low;
     if (highWidth == -1)
@@ -1372,6 +1373,7 @@ FIRRTLType MuxPrimOp::getResultType(FIRRTLType sel, FIRRTLType high,
   }
 
   // FIXME: Should handle bundles and other things.
+  mlir::emitError(loc, "unknown types to mux");
   return {};
 }
 

@@ -23,8 +23,5 @@ def TextualValueOp : SVOp<"textual_value", [NoSideEffect]> {
 
   let arguments = (ins StrAttr:$string);
   let results = (outs AnySignlessInteger:$result);
-
-  let assemblyFormat = [{
-     $string attr-dict `:` type($result)
-  }];
+  let assemblyFormat = "$string attr-dict `:` type($result)";
 }

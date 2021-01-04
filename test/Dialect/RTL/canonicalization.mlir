@@ -525,9 +525,16 @@ func @xorr_constant_folding1() -> i1 {
 // CHECK-LABEL: func @xorr_constant_folding2() -> i1 {
 // CHECK-NEXT:  %false = rtl.constant(false) : i1
 // CHECK-NEXT:  return %false : i1
-
 func @xorr_constant_folding2() -> i1 {
   %c15_i4 = rtl.constant(15 : i4) : i4
   %0 = rtl.xorr %c15_i4 : i4
   return %0 : i1
+}
+
+// CHECK-LABEL: func @concat_fold_1
+// CHECK-NEXT:  %0 = rtl.concat %arg0, %arg1, %arg2
+func @concat_fold_1(%arg0: i4, %arg1: i3, %arg2: i1) -> i8 {
+  %a = rtl.concat %arg0, %arg1 : (i4, i3) -> i7
+  %b = rtl.concat %a, %arg2 : (i7, i1) -> i8
+  return %b : i8
 }

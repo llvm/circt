@@ -258,9 +258,6 @@ static Value createDecoder(Value input, unsigned width, Location insertLoc,
                            ConversionPatternRewriter &rewriter) {
   auto *context = rewriter.getContext();
 
-  // Get a type for the result based on the explicitly specified width.
-  auto resultType = UIntType::get(context, width);
-
   // Get a type for a single unsigned bit.
   auto bitType = UIntType::get(context, 1);
 
@@ -268,8 +265,15 @@ static Value createDecoder(Value input, unsigned width, Location insertLoc,
   auto bit =
       rewriter.create<firrtl::ConstantOp>(insertLoc, bitType, APInt(1, 1));
 
+  auto resultType =
+      DShlPrimOp::getResultType(bit.getType().cast<FIRRTLType>(),
+                                input.getType().cast<FIRRTLType>(), insertLoc);
   // Shift the bit dynamically by the input amount.
-  return rewriter.create<DShlPrimOp>(insertLoc, resultType, bit, input);
+  auto shift = rewriter.create<DShlPrimOp>(insertLoc, resultType, bit, input);
+
+  // Get a type for the result based on the explicitly specified width.
+  Type padType = UIntType::get(context, width);
+  return rewriter.create<PadPrimOp>(insertLoc, padType, shift, width);
 }
 
 /// Construct an arbiter based on a simple priority-encoding scheme. In addition
@@ -584,8 +588,23 @@ void StdExprBuilder::buildBinaryLogic() {
   Value resultData = resultSubfields[2];
 
   // Carry out the binary operation.
-  auto resultDataOp = rewriter.create<OpType>(insertLoc, arg0Data.getType(),
-                                              arg0Data, arg1Data);
+  auto resultTy =
+      OpType::getResultType(arg0Data.getType().cast<FIRRTLType>(),
+                            arg1Data.getType().cast<FIRRTLType>(), insertLoc);
+  assert(resultTy && "invalid binary operands");
+  Value resultDataOp =
+      rewriter.create<OpType>(insertLoc, resultTy, arg0Data, arg1Data);
+
+  // Truncate the result type down if needed.
+  auto resultWidth = resultData.getType()
+                         .cast<FIRRTLType>()
+                         .getPassiveType()
+                         .getBitWidthOrSentinel();
+  if (resultWidth < resultTy.getBitWidthOrSentinel()) {
+    resultDataOp = rewriter.create<BitsPrimOp>(insertLoc, resultDataOp,
+                                               resultWidth - 1, 0);
+  }
+
   rewriter.create<ConnectOp>(insertLoc, resultData, resultDataOp);
 
   // Generate valid signal.
