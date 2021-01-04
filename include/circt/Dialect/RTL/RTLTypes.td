@@ -105,14 +105,11 @@ class InOutElementConstraint<string value, string inoutValue>
   : TypesMatchWith<"type should be element of inout type",
                    inoutValue, value, "getInOutElementType($_self)">;
 
-// Adapted from TestTypeDefs.td
-// A parent type for any type which is just a list of fields (e.g. structs,
-// unions).
 def StructType : RTLType<"Struct"> {
   let summary = "RTL struct type";
   let description = [{
-    Struct type has value semantics, updates to the struct are logically by 
-    copy.
+    Represents a structure of name, value pairs.
+    !rtl.struct<fieldName1: Type1, fieldName2: Type2>
   }];
   let mnemonic = "struct";
 
@@ -125,37 +122,6 @@ def StructType : RTLType<"Struct"> {
       "struct fields">: $elements
   );
 
-  // Prints the type in this format:
-  //   struct<[{field1Name, field1Type}, {field2Name, field2Type}]>
-  let printer = [{
-    $_printer << "struct" << "<";
-    for (size_t i=0, e = getImpl()->elements.size(); i < e; i++) {
-      const auto& field = getImpl()->elements[i];
-      $_printer << "{" << field.name << "," << field.type << "}";
-      if (i < getImpl()->elements.size() - 1)
-          $_printer << ",";
-    }
-    $_printer << ">";
-  }];
-
-  // Parses the above format
-  let parser = [{
-    llvm::SmallVector<FieldInfo, 4> parameters;
-    if ($_parser.parseLess()) return Type();
-    while (mlir::succeeded($_parser.parseOptionalLBrace())) {
-      StringRef name;
-      if ($_parser.parseKeyword(&name)) return Type();
-      if ($_parser.parseComma()) return Type();
-      Type type;
-      if ($_parser.parseType(type)) return Type();
-      if ($_parser.parseRBrace()) return Type();
-      parameters.push_back(FieldInfo {name, type});
-      if ($_parser.parseOptionalComma()) break;
-    }
-    if ($_parser.parseGreater()) return Type();
-    return get($_ctxt, parameters);
-  }];
-
   let extraClassDeclaration = [{
     struct FieldInfo {
       mlir::StringRef name;
@@ -164,6 +130,9 @@ def StructType : RTLType<"Struct"> {
         return FieldInfo{alloc.copyInto(name), type};
       }
     };
+
+    mlir::Type getFieldType(mlir::StringRef fieldName);
+    void getInnerTypes(mlir::SmallVectorImpl<mlir::Type>&);
 
   }];
 }

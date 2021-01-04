@@ -26,12 +26,6 @@ namespace rtl {
 /// hardware but not marker types like InOutType.
 bool isRTLValueType(mlir::Type type);
 
-/// Returns the type of field by name, or returns an empty type.
-mlir::Type getStructFieldType(StructType structVal, mlir::StringRef fieldName);
-
-/// Returns the set of field types of a struct.
-void getStructInnerTypes(StructType stype,
-                         mlir::SmallVectorImpl<mlir::Type> &types);
 /// Return the element type of an InOutType or null if the operand isn't an
 /// InOut type.
 mlir::Type getInOutElementType(mlir::Type type);

@@ -90,3 +90,31 @@ rtl.module @wire(%a: i42) {
   // expected-error @+1 {{'rtl.wire' op result #0 must be inout type, but got 'i42'}}
   %aget = rtl.wire: i42
 }
+
+// -----
+
+rtl.module @struct(%a: i42) {
+  // expected-error @+1 {{custom op 'rtl.struct_create' expected struct type}}
+  %aget = rtl.struct_create(%a) : i42
+}
+
+// -----
+
+rtl.module @struct(%a: !rtl.struct<foo: i42>) {
+  // expected-error @+1 {{custom op 'rtl.struct_explode' expected struct type}}
+  %aget = rtl.struct_explode %a : i42
+}
+
+// -----
+
+rtl.module @struct(%a: !rtl.struct<foo: i42>) {
+  // expected-error @+1 {{custom op 'rtl.struct_extract' expected struct type}}
+  %aget = rtl.struct_extract %a["foo"] : i42
+}
+
+// -----
+
+rtl.module @struct(%a: !rtl.struct<foo: i42>, %b: i42) {
+  // expected-error @+1 {{custom op 'rtl.struct_inject' expected struct type}}
+  %aget = rtl.struct_inject %a["foo"], %b : i42
+}

@@ -1321,9 +1321,10 @@ void ReadInOutOp::build(OpBuilder &builder, OperationState &result,
 
 static ParseResult parseStructCreateOp(OpAsmParser &parser,
                                        OperationState &result) {
-  llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
   llvm::SmallVector<OpAsmParser::OperandType, 4> operands;
   Type declStructType;
+
+  llvm::SMLoc loc = parser.getCurrentLocation();
 
   if (parser.parseLParen() || parser.parseOperandList(operands) ||
       parser.parseRParen() || parser.parseOptionalAttrDict(result.attributes) ||
@@ -1331,15 +1332,16 @@ static ParseResult parseStructCreateOp(OpAsmParser &parser,
     return failure();
 
   auto actStructType = declStructType.dyn_cast<StructType>();
-  if (!actStructType)
+  if (!actStructType) {
+    parser.emitError(loc, "expected struct type");
     return failure();
+  }
 
   llvm::SmallVector<Type, 4> structInnerTypes;
-  getStructInnerTypes(actStructType, structInnerTypes);
+  actStructType.getInnerTypes(structInnerTypes);
   result.addTypes(actStructType);
 
-  if (parser.resolveOperands(operands, structInnerTypes, inputOperandsLoc,
-                             result.operands))
+  if (parser.resolveOperands(operands, structInnerTypes, loc, result.operands))
     return failure();
   return success();
 }
@@ -1361,17 +1363,21 @@ static ParseResult parseStructExplodeOp(OpAsmParser &parser,
   OpAsmParser::OperandType operand;
   Type declStructType;
 
+  auto loc = parser.getCurrentLocation();
+
   if (parser.parseOperand(operand) ||
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declStructType))
     return failure();
 
   auto actStructType = declStructType.dyn_cast<StructType>();
-  if (!actStructType)
+  if (!actStructType) {
+    parser.emitError(loc, "expected struct type");
     return failure();
+  }
 
   llvm::SmallVector<Type, 4> structInnerTypes;
-  getStructInnerTypes(actStructType, structInnerTypes);
+  actStructType.getInnerTypes(structInnerTypes);
   result.addTypes(structInnerTypes);
 
   if (parser.resolveOperand(operand, actStructType, result.operands))
@@ -1396,6 +1402,8 @@ static ParseResult parseStructExtractOp(OpAsmParser &parser,
   StringAttr fieldName;
   Type declStructType;
 
+  auto loc = parser.getCurrentLocation();
+
   if (parser.parseOperand(operand) || parser.parseLSquare() ||
       parser.parseAttribute(fieldName, "field", result.attributes) ||
       parser.parseRSquare() ||
@@ -1404,10 +1412,12 @@ static ParseResult parseStructExtractOp(OpAsmParser &parser,
     return failure();
 
   auto actStructType = declStructType.dyn_cast<StructType>();
-  if (!actStructType)
+  if (!actStructType) {
+    parser.emitError(loc, "expected struct type");
     return failure();
+  }
 
-  Type resultType = getStructFieldType(actStructType, fieldName.getValue());
+  Type resultType = actStructType.getFieldType(fieldName.getValue());
   if (!resultType)
     return failure();
   result.addTypes(resultType);
@@ -1431,10 +1441,11 @@ static void print(OpAsmPrinter &printer, rtl::StructExtractOp op) {
 
 static ParseResult parseStructInjectOp(OpAsmParser &parser,
                                        OperationState &result) {
-  llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
   OpAsmParser::OperandType operand, val;
   StringAttr fieldName;
   Type declStructType;
+
+  auto loc = parser.getCurrentLocation();
 
   if (parser.parseOperand(operand) || parser.parseLSquare() ||
       parser.parseAttribute(fieldName, "field", result.attributes) ||
@@ -1445,16 +1456,19 @@ static ParseResult parseStructInjectOp(OpAsmParser &parser,
     return failure();
 
   auto actStructType = declStructType.dyn_cast<StructType>();
-  if (!actStructType)
+  if (!actStructType) {
+    parser.emitError(loc, "expected struct type");
     return failure();
+  }
 
-  Type resultType = getStructFieldType(actStructType, fieldName.getValue());
+
+  Type resultType = actStructType.getFieldType(fieldName.getValue());
   if (!resultType)
     return failure();
   result.addTypes(actStructType);
 
   if (parser.resolveOperands({operand, val}, {actStructType, resultType},
-                             inputOperandsLoc, result.operands))
+                             loc, result.operands))
     return failure();
   return success();
 }
@@ -1466,6 +1480,9 @@ static void print(OpAsmPrinter &printer, rtl::StructInjectOp op) {
   printer.printOperand(op.newValue());
   printer.printOptionalAttrDict(op.getAttrs(), {"field"});
   printer << " : " << op.input().getType();
+}
+
+//===----------------------------------------------------------------------===//
 // ArrayIndexOp
 //===----------------------------------------------------------------------===//
 
@@ -1473,7 +1490,7 @@ void ArrayIndexOp::build(OpBuilder &builder, OperationState &result,
                          Value input, Value index) {
   auto resultType = input.getType().cast<InOutType>().getElementType();
   resultType = getAnyRTLArrayElementType(resultType);
-  assert(resultType && "input shoudl have 'inout of an array' type");
+  assert(resultType && "input should have 'inout of an array' type");
   build(builder, result, InOutType::get(resultType), input, index);
 }
 

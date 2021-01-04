@@ -29,25 +29,15 @@ using namespace circt::rtl;
 // Type Helpers
 //===----------------------------------------------------------------------===/
 
-void circt::rtl::getStructInnerTypes(StructType stype,
-                                     SmallVectorImpl<Type> &types) {
-  for (const auto &field : stype.getElements())
-    types.push_back(field.type);
-}
-
-Type circt::rtl::getStructFieldType(StructType stype, StringRef fieldName) {
-  for (const auto &field : stype.getElements())
-    if (field.name == fieldName)
-      return field.type;
-  return Type();
-}
-
 /// Return true if the specified type can be used as an RTL value type, that is
 /// the set of types that can be composed together to represent synthesized,
 /// hardware but not marker types like InOutType.
 bool circt::rtl::isRTLValueType(Type type) {
   if (auto intType = type.dyn_cast<IntegerType>())
     return intType.isSignless();
+
+  if (auto array = type.dyn_cast<ArrayType>())
+    return isRTLValueType(array.getElementType());
 
   if (auto array = type.dyn_cast<UnpackedArrayType>())
     return isRTLValueType(array.getElementType());
@@ -123,6 +113,43 @@ llvm::hash_code hash_value(const StructType::FieldInfo &fi) {
 }
 } // namespace rtl
 } // namespace circt
+
+Type StructType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+  llvm::SmallVector<FieldInfo, 4> parameters;
+  StringRef name;
+    if (p.parseLess()) return Type();
+    while (mlir::succeeded(p.parseOptionalKeyword(&name))) {
+      Type type;
+      if (p.parseColon() || p.parseType(type)) return Type();
+      parameters.push_back(FieldInfo {name, type});
+      if (p.parseOptionalComma()) break;
+    }
+    if (p.parseGreater()) return Type();
+    return get(ctxt, parameters);
+}
+
+void StructType::print(DialectAsmPrinter &p) const {
+  p << "struct" << "<";
+    for (size_t i=0, e = getImpl()->elements.size(); i < e; i++) {
+      const auto& field = getImpl()->elements[i];
+      p << field.name << ": " << field.type;
+      if (i < getImpl()->elements.size() - 1)
+          p << ", ";
+    }
+    p << ">";
+}
+
+Type StructType::getFieldType(mlir::StringRef fieldName) {
+  for (const auto &field : getElements())
+    if (field.name == fieldName)
+      return field.type;
+  return Type();
+}
+
+void StructType::getInnerTypes(SmallVectorImpl<Type> &types) {
+  for (const auto &field : getElements())
+    types.push_back(field.type);
+}
 
 //===----------------------------------------------------------------------===//
 // ArrayType
