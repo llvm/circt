@@ -8,6 +8,13 @@ circuit test_mod :
     output b: UInt<1>
     b <= a
 
+  module cat :
+    input a: UInt<2>
+    input b: UInt<2>
+    input c: UInt<2>
+    output d: UInt<6>
+    d <= cat(cat(a, b), c)
+
 ; MLIR: firrtl.circuit "test_mod" {
 
 ; MLIR-LABEL: firrtl.module @test_mod(%a: !firrtl.uint<1>, %b: !firrtl.flip<uint<1>>) {
@@ -24,4 +31,12 @@ circuit test_mod :
 ; MLIRLOWER:   rtl.module @test_mod(%a: i1) -> (%b: i1) {
 ; MLIRLOWER:     rtl.output %a : i1
 ; MLIRLOWER:   }
+
+; Check that we canonicalize the RTL output of lowering.
+;
+; MLIRLOWER: rtl.module @cat(%a: i2, %b: i2, %c: i2) -> (%d: i6) {
+; MLIRLOWER:   %0 = rtl.concat %a, %b, %c : (i2, i2, i2) -> i6
+; MLIRLOWER:   rtl.output %0 : i6
+; MLIRLOWER: }
+
 ; MLIRLOWER: }
