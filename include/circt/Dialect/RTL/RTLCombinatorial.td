@@ -192,6 +192,8 @@ def XorROp : UnaryI1ReductionRTLOp<"xorr">;
 
 // Concatenate a variadic list of operands together.
 def ConcatOp : VariadicRTLOp<"concat"> {
+  let hasCanonicalizer = true;
+
   let builders = [
     OpBuilderDAG<(ins "ValueRange":$inputs)>,
     OpBuilderDAG<(ins "Value":$lhs, "Value":$rhs), [{
