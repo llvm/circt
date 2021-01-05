@@ -38,28 +38,27 @@ using ValueVectorList = std::vector<ValueVector>;
 static FIRRTLType getFIRRTLType(Type type) {
   MLIRContext *context = type.getContext();
   return TypeSwitch<Type, FIRRTLType>(type)
-      .Case<IntegerType>([&](IntegerType integerType) {
+      .Case<IntegerType>([&](IntegerType integerType) -> FIRRTLType {
         unsigned width = integerType.getWidth();
 
         switch (integerType.getSignedness()) {
         case IntegerType::Signed:
-          return FIRRTLType(SIntType::get(context, width));
+          return SIntType::get(context, width);
         case IntegerType::Unsigned:
-          return FIRRTLType(UIntType::get(context, width));
+          return UIntType::get(context, width);
         // ISSUE: How to handle signless integers? Should we use the
         // AsSIntPrimOp or AsUIntPrimOp to convert?
         case IntegerType::Signless:
-          return FIRRTLType(UIntType::get(context, width));
+          return UIntType::get(context, width);
         default:
           return FIRRTLType();
         }
       })
-      .Case<IndexType>([&](IndexType indexType) {
+      .Case<IndexType>([&](IndexType indexType) -> FIRRTLType {
         // Currently we consider index type as 64-bits unsigned integer.
         unsigned width = indexType.kInternalStorageBitWidth;
-        return FIRRTLType(UIntType::get(context, width));
+        return UIntType::get(context, width);
       })
-      .Case<NoneType>([&](NoneType) { return FIRRTLType(); })
       .Default([&](Type) { return FIRRTLType(); });
 }
 
