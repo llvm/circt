@@ -269,3 +269,42 @@ def MuxOp : RTLOp<"mux",
     }]>
   ];
 }
+
+def BitArrayType : Type<CPred<[{
+  $_self.isa<ArrayType>() &&
+  $_self.cast<ArrayType>().getElementType().isSignlessInteger(1)
+}]>, "RTL array of bits">;
+def KnownBitWidthType : Type<CPred<[{getBitWidth($_self) != -1}]>,
+  "Type the bitwidth in hardware is known">;
+
+def CastToBitsOp: RTLOp<"cast.tobits", [NoSideEffect]> {
+  let summary = "Cast an arbitrary value to a bit array";
+
+  let arguments = (ins KnownBitWidthType:$arg);
+  let results = (outs BitArrayType:$out);
+  let verifier = [{
+    if (getBitWidth(this->arg().getType()) !=
+        (int)this->out().getType().cast<ArrayType>().getSize())
+      return this->emitOpError("Bitwidth of input must match output "
+        "bit array length.");
+    return success();
+  }];
+  let printer = [{ return ::print(p, *this); }];
+  let parser = [{ return ::parse$cppClass(parser, result); }];
+}
+
+def CastFromBitsOp: RTLOp<"cast.frombits", [NoSideEffect]> {
+  let summary = "Cast a bit array to an arbitrary value";
+
+  let arguments = (ins BitArrayType:$arg);
+  let results = (outs KnownBitWidthType:$out);
+  let verifier = [{
+    if (getBitWidth(this->out().getType()) !=
+        (int)this->arg().getType().cast<ArrayType>().getSize())
+      return this->emitOpError("Bitwidth of output must match input "
+        "bit array length.");
+    return success();
+  }];
+  let printer = [{ return ::print(p, *this); }];
+  let parser = [{ return ::parse$cppClass(parser, result); }];
+}

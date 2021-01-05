@@ -31,3 +31,12 @@ func @shr_op(%a: i7, %b: i7) -> i7 {
 // CHECK-NEXT:    return [[RES]]
   return %0 : i7
 }
+
+// CHECK-LABEL: func @casts(%arg0: i7) -> i7
+func @casts(%in1: i7) -> i7 {
+  // CHECK-NEXT: %0 = rtl.cast.tobits %arg0 : (i7)
+  // CHECK-NEXT: %1 = rtl.cast.frombits %0 : i7
+  %bits = rtl.cast.tobits %in1 : (i7)
+  %backToInt = rtl.cast.frombits %bits : i7
+  return %backToInt : i7
+}

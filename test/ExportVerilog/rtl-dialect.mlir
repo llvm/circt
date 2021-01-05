@@ -315,7 +315,7 @@ module {
     rtl.output %c : i4
   }
 
- // CHECK-LABEL: module signs
+  // CHECK-LABEL: module signs
   rtl.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
     %awire = rtl.wire : !rtl.inout<i4>
     // CHECK: wire [3:0] awire;
@@ -346,4 +346,9 @@ module {
 
     rtl.output
   }
+
+  // rtl.module @casts(%in1: i7) -> (%r1: i7) {
+  //   %bits = rtl.cast.tobits %in1 : (i7)
+  //   rtl.output %in1 : i7
+  // }
 }

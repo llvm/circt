@@ -39,6 +39,21 @@ bool circt::rtl::isRTLValueType(Type type) {
   return false;
 }
 
+/// Return the hardware bit width of a type. Does not reflect any encoding,
+/// padding, or storage scheme, just the bit (and wire width) of a
+/// statically-size type. Reflects the number of wires needed to transmit a
+/// value of this type. Returns -1 if the type is not known or cannot be
+/// statically computed.
+int circt::rtl::getBitWidth(mlir::Type type) {
+  return llvm::TypeSwitch<::mlir::Type, size_t>(type)
+      .Case<IntegerType>(
+          [](IntegerType t) { return t.getIntOrFloatBitWidth(); })
+      .Case<ArrayType>([](ArrayType a) {
+        return a.getSize() * getBitWidth(a.getElementType());
+      })
+      .Default([](Type) { return 0; });
+}
+
 /// Return the element type of an InOutType or null if the operand isn't an
 /// InOut type.
 mlir::Type circt::rtl::getInOutElementType(mlir::Type type) {
