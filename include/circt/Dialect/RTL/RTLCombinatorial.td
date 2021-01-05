@@ -214,18 +214,6 @@ def StructInjectOp : RTLOp<"struct_inject", [NoSideEffect,
 // Integer width modifying operations.
 //===----------------------------------------------------------------------===//
 
-// Concatenate a variadic list of operands together.
-def ConcatOp : VariadicRTLOp<"concat"> {
-  let hasCanonicalizer = true;
-
-  let builders = [
-    OpBuilderDAG<(ins "ValueRange":$inputs)>,
-    OpBuilderDAG<(ins "Value":$lhs, "Value":$rhs), [{
-      return build($_builder, $_state, ValueRange{lhs, rhs});
-    }]>
-  ];
-}
-
 // Extract a range of bits from the specified input.
 def ExtractOp : RTLOp<"extract", [NoSideEffect]> {
   let summary = "Extract a range of bits into a smaller value, lowBit "
