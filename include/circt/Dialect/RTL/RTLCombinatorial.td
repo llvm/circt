@@ -259,7 +259,7 @@ def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
     the high end. For instance,
 
     ```
-    // Slices 16 bytes starting at '%offset'
+    // Slices 16 elements starting at '%offset'.
     %subArray = rtl.slice %largerArray at %offset :
         (!rtl.array<1024xi8>) -> !rtl.array<16xi8>
     ```
@@ -267,7 +267,7 @@ def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
     Would translate to the following SystemVerilog:
 
     ```
-    logic [7:0][15:0] subArray = largerArray[offset + 15 : offset];
+    logic [7:0][15:0] subArray = largerArray[offset +: 16];
     ```
 
     Width of 'idx' is defined to be the precise number of bits required to
