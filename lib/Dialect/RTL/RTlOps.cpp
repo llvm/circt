@@ -841,12 +841,11 @@ OpFoldResult ExtractOp::fold(ArrayRef<Attribute> operands) {
 
 static ParseResult parseSliceTypes(OpAsmParser &p, Type &srcType,
                                    Type &idxType) {
-  if (p.parseType(srcType))
+  ArrayType arrType;
+  if (p.parseType(arrType))
     return failure();
-  auto srcArrayType = srcType.dyn_cast<ArrayType>();
-  if (!srcArrayType)
-    return failure();
-  unsigned idxWidth = llvm::Log2_64_Ceil(srcArrayType.getSize());
+  srcType = arrType;
+  unsigned idxWidth = llvm::Log2_64_Ceil(arrType.getSize());
   idxType = IntegerType::get(p.getBuilder().getContext(), idxWidth);
   return success();
 }
