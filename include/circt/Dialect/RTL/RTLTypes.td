@@ -72,10 +72,15 @@ def InOutType : RTLType<"InOut"> {
   }];
 }
 
+// Type constraint that indicates that an operand/result may only be a valid,
+// known, non-directional type.
+def RTLValueType : Type<CPred<"isRTLValueType($_self)">,
+                            "a known primitive element">;
+
 // Type constraint that indicates that an operand/result may only be a valid
-// inout element type.
-def InOutElementType : Type<CPred<"isRTLValueType($_self)">,
-                            "a valid inout element">;
+// non-directional type.
+def RTLNonInOutType : Type<CPred<"!hasRTLInOutType($_self)">,
+                            "a type without inout">;
 
 def InOutArrayType
   : Type<CPred<"getAnyRTLArrayElementType(getInOutElementType($_self)) "
@@ -104,3 +109,35 @@ class InOutTypeConstraint<string value, string inoutValue>
 class InOutElementConstraint<string value, string inoutValue>
   : TypesMatchWith<"type should be element of inout type",
                    inoutValue, value, "getInOutElementType($_self)">;
+
+def StructType : RTLType<"Struct"> {
+  let summary = "RTL struct type";
+  let description = [{
+    Represents a structure of name, value pairs.
+    !rtl.struct<fieldName1: Type1, fieldName2: Type2>
+  }];
+  let mnemonic = "struct";
+
+  let parameters = (
+    ins
+    // An ArrayRef of something which requires allocation in the storage
+    // constructor.
+    ArrayRefOfSelfAllocationParameter<
+      "::circt::rtl::StructType::FieldInfo",
+      "struct fields">: $elements
+  );
+
+  let extraClassDeclaration = [{
+    struct FieldInfo {
+      mlir::StringRef name;
+      Type type;
+      FieldInfo allocateInto(mlir::TypeStorageAllocator &alloc) const {
+        return FieldInfo{alloc.copyInto(name), type};
+      }
+    };
+
+    mlir::Type getFieldType(mlir::StringRef fieldName);
+    void getInnerTypes(mlir::SmallVectorImpl<mlir::Type>&);
+
+  }];
+}

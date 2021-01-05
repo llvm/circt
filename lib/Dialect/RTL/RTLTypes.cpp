@@ -15,6 +15,8 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/Types.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
@@ -22,6 +24,10 @@ using namespace circt::rtl;
 
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/RTL/RTLTypes.cpp.inc"
+
+//===----------------------------------------------------------------------===//
+// Type Helpers
+//===----------------------------------------------------------------------===/
 
 /// Return true if the specified type can be used as an RTL value type, that is
 /// the set of types that can be composed together to represent synthesized,
@@ -36,7 +42,29 @@ bool circt::rtl::isRTLValueType(Type type) {
   if (auto array = type.dyn_cast<UnpackedArrayType>())
     return isRTLValueType(array.getElementType());
 
+  if (auto t = type.dyn_cast<StructType>()) {
+    return std::all_of(t.getElements().begin(), t.getElements().end(),
+                       [](const auto &f) { return isRTLValueType(f.type); });
+  }
+
   return false;
+}
+
+/// Return true if the specified type contains known marker types like
+/// InOutType.  Unlike isRTLValueType, this is not conservative, it only returns
+/// false on known InOut types, rather than any unknown types.
+bool circt::rtl::hasRTLInOutType(Type type) {
+  if (auto array = type.dyn_cast<ArrayType>())
+    return hasRTLInOutType(array.getElementType());
+
+  if (auto array = type.dyn_cast<UnpackedArrayType>())
+    return hasRTLInOutType(array.getElementType());
+
+  if (auto t = type.dyn_cast<StructType>()) {
+    return std::any_of(t.getElements().begin(), t.getElements().end(),
+                       [](const auto &f) { return hasRTLInOutType(f.type); });
+  }
+  return type.isa<InOutType>();
 }
 
 /// Return the element type of an InOutType or null if the operand isn't an
@@ -86,6 +114,59 @@ static void printRTLElementType(Type element, DialectAsmPrinter &p) {
   if (succeeded(generatedTypePrinter(element, p)))
     return;
   p.printType(element);
+}
+
+//===----------------------------------------------------------------------===//
+// Struct Type
+//===----------------------------------------------------------------------===//
+namespace circt {
+namespace rtl {
+bool operator==(const StructType::FieldInfo &a,
+                const StructType::FieldInfo &b) {
+  return a.name == b.name && a.type == b.type;
+}
+llvm::hash_code hash_value(const StructType::FieldInfo &fi) {
+  return llvm::hash_combine(fi.name, fi.type);
+}
+} // namespace rtl
+} // namespace circt
+
+Type StructType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+  llvm::SmallVector<FieldInfo, 4> parameters;
+  StringRef name;
+  if (p.parseLess())
+    return Type();
+  while (mlir::succeeded(p.parseOptionalKeyword(&name))) {
+    Type type;
+    if (p.parseColon() || p.parseType(type))
+      return Type();
+    parameters.push_back(FieldInfo{name, type});
+    if (p.parseOptionalComma())
+      break;
+  }
+  if (p.parseGreater())
+    return Type();
+  return get(ctxt, parameters);
+}
+
+void StructType::print(DialectAsmPrinter &p) const {
+  p << "struct<";
+  llvm::interleaveComma(getElements(), p, [&](const FieldInfo &field) {
+    p << field.name << ": " << field.type;
+  });
+  p << ">";
+}
+
+Type StructType::getFieldType(mlir::StringRef fieldName) {
+  for (const auto &field : getElements())
+    if (field.name == fieldName)
+      return field.type;
+  return Type();
+}
+
+void StructType::getInnerTypes(SmallVectorImpl<Type> &types) {
+  for (const auto &field : getElements())
+    types.push_back(field.type);
 }
 
 //===----------------------------------------------------------------------===//
