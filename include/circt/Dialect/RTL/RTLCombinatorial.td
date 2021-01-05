@@ -320,11 +320,17 @@ def BitArrayType : Type<CPred<[{
   $_self.isa<ArrayType>() &&
   $_self.cast<ArrayType>().getElementType().isSignlessInteger(1)
 }]>, "RTL array of bits">;
+
 def KnownBitWidthType : Type<CPred<[{getBitWidth($_self) != -1}]>,
-  "Type the bitwidth in hardware is known">;
+  "Type wherein the bitwidth in hardware is known">;
 
 def CastToBitsOp: RTLOp<"cast.tobits", [NoSideEffect]> {
   let summary = "Cast an arbitrary value to a bit array";
+  let description = [{
+    Assign the bits from a value to a bitarray without any sort of
+    conversion. The value's type must be one with a known bit width. The
+    resulting bit array's lenth is equal to that.
+  }];
 
   let arguments = (ins KnownBitWidthType:$arg);
   let results = (outs BitArrayType:$out);
@@ -341,6 +347,11 @@ def CastToBitsOp: RTLOp<"cast.tobits", [NoSideEffect]> {
 
 def CastFromBitsOp: RTLOp<"cast.frombits", [NoSideEffect]> {
   let summary = "Cast a bit array to an arbitrary value";
+  let description = [{
+    Assign the bits from a bit array to a value without any sort of
+    conversion. The value's type must be one with a known bit width. The
+    input bit array's lenth must be equal to that.
+  }];
 
   let arguments = (ins BitArrayType:$arg);
   let results = (outs KnownBitWidthType:$out);
