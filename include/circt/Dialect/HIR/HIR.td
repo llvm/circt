@@ -501,12 +501,42 @@ def AllocOp :HIR_Op<"alloc", [NoSideEffect]> {
   let assemblyFormat = "`(``)`attr-dict `:` type($res)";
 }
 
+def EQOp : HIR_Op<"eq",[NoSideEffect]>{
+  let summary = "returns true if the values are equal";
+  let description = [{
+Examples:
+    ```mlir %1 = hir.eq (%x, %y) : (i32, i32) -> (i1)```
+    ```mlir %1 = hir.eq (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
+  }];
+
+  let arguments = (ins AnyType: $left, AnyType:$right);
+  let results = (outs AnyType: $res);
+
+  let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(`
+      type($left) `,` type($right) `)` `->` `(` type($res) `)`}];
+}
+
+def NEQOp : HIR_Op<"neq",[NoSideEffect]>{
+  let summary = "returns true if the values are not equal";
+  let description = [{
+Examples:
+    ```mlir %1 = hir.neq (%x, %y) : (i32, i32) -> (i1)```
+    ```mlir %1 = hir.neq (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
+  }];
+
+  let arguments = (ins AnyType: $left, AnyType:$right);
+  let results = (outs AnyType: $res);
+
+  let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(`
+      type($left) `,` type($right) `)` `->` `(` type($res) `)`}];
+}
+
 def GTOp : HIR_Op<"gt",[NoSideEffect]>{
   let summary = "returns an i1 to show if one value is greater than or other";
   let description = [{
 Examples:
     ```mlir %1 = hir.gt (%x, %y) : (i32, i32) -> (i1)```
-    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.conts) -> (!hir.const)```
+    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
   }];
 
   let arguments = (ins AnyType: $left, AnyType:$right);
@@ -521,7 +551,7 @@ def LTOp : HIR_Op<"lt",[NoSideEffect]>{
   let description = [{
 Examples:
     ```mlir %1 = hir.gt (%x, %y) : (i32, i32) -> (i1)```
-    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.conts) -> (!hir.const)```
+    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
   }];
 
   let arguments = (ins AnyType: $left, AnyType:$right);
@@ -536,7 +566,7 @@ def AndOp : HIR_Op<"and",[NoSideEffect]>{
   let description = [{
 Examples:
     ```mlir %1 = hir.gt (%x, %y) : (i1, i1) -> (i1)```
-    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.conts) -> (!hir.const)```
+    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
   }];
 
   let arguments = (ins AnyType: $left, AnyType:$right);
@@ -551,7 +581,7 @@ def OrOp : HIR_Op<"or",[NoSideEffect]>{
   let description = [{
 Examples:
     ```mlir %1 = hir.gt (%x, %y) : (i1, i1) -> (i1)```
-    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.conts) -> (!hir.const)```
+    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
   }];
 
   let arguments = (ins AnyType: $left, AnyType:$right);

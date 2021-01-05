@@ -16,3 +16,10 @@
 3. Use 2. to find yield op in region and minimum delay to reach the yield op : 
     map<region, min_II>.
 4. Use 1.0 and 3.0 to check if two ops may-conflict. Fuse them.
+
+#TODO
+0. Update numReads for memref parameters in hir.call.
+1. check - each loop has a yield statement.
+2. check - hir.call signature matches with hir.func.
+3. Check - only the captured time variable is used inside for and if body.
+4. Add support for rw in memrefs.

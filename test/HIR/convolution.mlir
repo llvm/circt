@@ -77,7 +77,7 @@ hir.func @convolution at %t(
       %b2 = hir.gt(%j,%1) : (i32,!hir.const) -> (i1)
       %b3 = hir.and(%b1,%b2) : (i1,i1) -> (i1)
       hir.if(%b3) at %tj{
-        %v = hir.call @weighted_avg(%wndw) at %tj offset %2
+        %v = hir.call @weighted_average(%wndw) at %tj offset %2
           :(!hir.memref<3*3*i32, packing=[], r>) -> (i32 delay 2)
         %i4 = hir.delay %i by %4 at %tj : i32 -> i32
         %j4 = hir.delay %j by %4 at %tj : i32 -> i32

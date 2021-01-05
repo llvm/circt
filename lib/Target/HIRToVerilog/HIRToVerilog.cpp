@@ -153,6 +153,8 @@ private:
   LogicalResult printForOp(ForOp op, unsigned indentAmount = 0);
   LogicalResult printUnrollForOp(UnrollForOp op, unsigned indentAmount = 0);
   LogicalResult printMemReadOp(MemReadOp op, unsigned indentAmount = 0);
+  LogicalResult printEQOp(hir::EQOp op, unsigned indentAmount = 0);
+  LogicalResult printNEQOp(hir::NEQOp op, unsigned indentAmount = 0);
   LogicalResult printGTOp(hir::GTOp op, unsigned indentAmount = 0);
   LogicalResult printLTOp(hir::LTOp op, unsigned indentAmount = 0);
   LogicalResult printAndOp(hir::AndOp op, unsigned indentAmount = 0);
@@ -290,6 +292,8 @@ LogicalResult VerilogPrinter::printCallOp(hir::CallOp op,
   for (VerilogValue *v_result : v_results) {
     module_out << "wire " << v_result->strWireDecl() << ";\n";
   }
+
+  std::string strEpilogue;
   module_out << calleeStr << " " << calleeStr << newValueNumber() << "(";
   bool firstArg = true;
   for (VerilogValue *v_result : v_results) {
@@ -300,6 +304,7 @@ LogicalResult VerilogPrinter::printCallOp(hir::CallOp op,
     firstArg = false;
     module_out << v_result->strConstOrWire();
   }
+
   for (Value operand : operands) {
     if (auto memrefType = operand.getType().dyn_cast<MemrefType>()) {
       Details::PortKind port = memrefType.getPort();
@@ -309,23 +314,60 @@ LogicalResult VerilogPrinter::printCallOp(hir::CallOp op,
           module_out << ",\n";
         }
         firstArg = false;
-        module_out << v_operand->strMemrefAddr();
+        module_out << v_operand->strMemrefAddrInputIf(
+            v_operand->maxNumAccess());
       }
       if (port == Details::PortKind::r || port == Details::PortKind::rw) {
         if (!firstArg) {
           module_out << ",\n";
         }
         firstArg = false;
-        module_out << v_operand->strMemrefRdEn() << ",\n"
-                   << v_operand->strMemrefRdData();
+        if (memrefType.getPacking().size() > 0) {
+          module_out << v_operand->strMemrefRdEnInputIf(
+              v_operand->maxNumReads());
+        } else {
+          module_out << "/*Ignored*/";
+        }
+        module_out << ",\n" << v_operand->strMemrefRdData();
       }
       if (port == Details::PortKind::w || port == Details::PortKind::rw) {
         if (!firstArg) {
           module_out << ",\n";
         }
         firstArg = false;
-        module_out << v_operand->strMemrefWrEn() << ",\n"
-                   << v_operand->strMemrefWrData();
+        module_out << v_operand->strMemrefWrEnInputIf(v_operand->maxNumWrites())
+                   << ",\n"
+                   << v_operand->strMemrefWrDataInputIf(
+                          v_operand->maxNumWrites());
+        strEpilogue +=
+            "assign " +
+            v_operand->strMemrefWrDataValidIf(v_operand->maxNumAccess()) +
+            " = " + v_operand->strMemrefWrEnInputIf(v_operand->maxNumWrites()) +
+            ";\n";
+      }
+
+      if (memrefType.getPacking().size() > 0) {
+        strEpilogue +=
+            "assign " +
+            v_operand->strMemrefAddrValidIf(v_operand->maxNumAccess()) + " = ";
+        if (port == Details::PortKind::rw) {
+          strEpilogue +=
+              v_operand->strMemrefRdEnInputIf(v_operand->maxNumReads()) + "|" +
+              v_operand->strMemrefWrEnInputIf(v_operand->maxNumWrites());
+        } else if (port == Details::PortKind::r) {
+          strEpilogue +=
+              v_operand->strMemrefRdEnInputIf(v_operand->maxNumReads());
+        } else {
+          strEpilogue +=
+              v_operand->strMemrefWrEnInputIf(v_operand->maxNumWrites());
+        }
+        strEpilogue += ";\n";
+      }
+      if (port == Details::PortKind::r || port == Details::PortKind::rw) {
+        v_operand->incMemrefNumReads();
+      }
+      if (port == Details::PortKind::w || port == Details::PortKind::rw) {
+        v_operand->incMemrefNumWrites();
       }
     } else {
       if (!firstArg) {
@@ -343,7 +385,7 @@ LogicalResult VerilogPrinter::printCallOp(hir::CallOp op,
   module_out << ",\n";
   module_out << "clk\n";
 
-  module_out << ");\n";
+  module_out << ");\n" << strEpilogue;
   for (VerilogValue *v_result : v_results) {
     if (v_result->getType().isa<hir::TimeType>()) {
       printTimeOffsets(v_result);
@@ -351,6 +393,7 @@ LogicalResult VerilogPrinter::printCallOp(hir::CallOp op,
   }
   return success();
 }
+
 LogicalResult VerilogPrinter::printDelayOp(hir::DelayOp op,
                                            unsigned indentAmount) {
   // contract:
@@ -546,6 +589,64 @@ LogicalResult VerilogPrinter::printMemWriteOp(MemWriteOp op,
              << " = " << v_value->strConstOrWire() << ";\n\n";
 
   v_mem->incMemrefNumWrites(addr);
+  return success();
+}
+
+LogicalResult VerilogPrinter::printEQOp(hir::EQOp op, unsigned indentAmount) {
+  Value result = op.res();
+  Type resType = result.getType();
+  assert(resType.isa<IntegerType>() || resType.isa<hir::ConstType>());
+  unsigned id_result = newValueNumber();
+  VerilogValue v_result(result, "v" + to_string(id_result));
+
+  const VerilogValue v_left = verilogMapper.get(op.left());
+  const VerilogValue v_right = verilogMapper.get(op.right());
+  Type resultType = result.getType();
+  if (resultType.isa<hir::ConstType>()) {
+    module_out << "//wire " << v_result.strWire() << " = "
+               << v_left.strConstOrError()
+               << " == " << v_right.strConstOrError() << ";\n";
+    v_result.setIntegerConst(
+        (v_left.getIntegerConst() == v_right.getIntegerConst()) ? 1 : 0);
+  } else {
+    module_out << "wire " << v_result.strWireDecl() << " = "
+               << v_left.strConstOrWire() << " == " << v_right.strConstOrWire()
+               << ";\n";
+    if (v_left.isIntegerConst() && v_right.isIntegerConst()) {
+      v_result.setIntegerConst(
+          (v_left.getIntegerConst() == v_right.getIntegerConst()) ? 1 : 0);
+    }
+  }
+  verilogMapper.insert(result, v_result);
+  return success();
+}
+
+LogicalResult VerilogPrinter::printNEQOp(hir::NEQOp op, unsigned indentAmount) {
+  Value result = op.res();
+  Type resType = result.getType();
+  assert(resType.isa<IntegerType>() || resType.isa<hir::ConstType>());
+  unsigned id_result = newValueNumber();
+  VerilogValue v_result(result, "v" + to_string(id_result));
+
+  const VerilogValue v_left = verilogMapper.get(op.left());
+  const VerilogValue v_right = verilogMapper.get(op.right());
+  Type resultType = result.getType();
+  if (resultType.isa<hir::ConstType>()) {
+    module_out << "//wire " << v_result.strWire() << " = "
+               << v_left.strConstOrError()
+               << " != " << v_right.strConstOrError() << ";\n";
+    v_result.setIntegerConst(
+        (v_left.getIntegerConst() != v_right.getIntegerConst()) ? 1 : 0);
+  } else {
+    module_out << "wire " << v_result.strWireDecl() << " = "
+               << v_left.strConstOrWire() << " != " << v_right.strConstOrWire()
+               << ";\n";
+    if (v_left.isIntegerConst() && v_right.isIntegerConst()) {
+      v_result.setIntegerConst(
+          (v_left.getIntegerConst() != v_right.getIntegerConst()) ? 1 : 0);
+    }
+  }
+  verilogMapper.insert(result, v_result);
   return success();
 }
 
@@ -1002,6 +1103,12 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
   } else if (auto op = dyn_cast<hir::WireWriteOp>(inst)) {
     module_out << "\n//" << formattedOp(inst, "WireWriteOp");
     return printWireWriteOp(op, indentAmount);
+  } else if (auto op = dyn_cast<hir::EQOp>(inst)) {
+    module_out << "\n//" << formattedOp(inst, "EQOp");
+    return printEQOp(op, indentAmount);
+  } else if (auto op = dyn_cast<hir::NEQOp>(inst)) {
+    module_out << "\n//" << formattedOp(inst, "NEqOp");
+    return printNEQOp(op, indentAmount);
   } else if (auto op = dyn_cast<hir::GTOp>(inst)) {
     module_out << "\n//" << formattedOp(inst, "GTOp");
     return printGTOp(op, indentAmount);

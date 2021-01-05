@@ -74,10 +74,15 @@ public:
     unsigned pos = posMemrefDistDimAccess(addr);
     return usageInfo.numWrites[pos];
   }
-  unsigned numAccess(ArrayRef<VerilogValue *> addr) {
-    unsigned pos = posMemrefDistDimAccess(addr);
+  unsigned numAccess(unsigned pos) {
     return usageInfo.numReads[pos] + usageInfo.numWrites[pos];
   }
+  unsigned numAccess(ArrayRef<VerilogValue *> addr) {
+    unsigned pos = posMemrefDistDimAccess(addr);
+    return numAccess(pos);
+  }
+
+public:
   unsigned maxNumReads() {
     unsigned out = 0;
     for (int i = 0; i < usageInfo.numReads.size(); i++) {
@@ -97,7 +102,8 @@ public:
     for (int i = 0; i < usageInfo.numReads.size(); i++) {
       unsigned nWrites = usageInfo.numWrites[i];
       // TODO: We don't yet support different number of writes to different
-      // wires in array.
+      // wires in array. See printCallOp in HIRToVerilog. It increments numReads
+      // for all reads.
       if (i != 0 && out != nWrites) {
         emitWarning(this->value.getLoc(),
                     "Number of writes is not same for all elements.");
@@ -186,6 +192,7 @@ private:
 
     // Define en_input signal.
     out += "wire [$numInputsMinus1:0] $str_en_input $distDimsStr;\n";
+    out += "wire  $str_en_input_if [$numInputsMinus1:0] $distDimsStr;\n";
 
     // Print generate loops for distributed dimensions.
     if (!distDims.empty())
@@ -201,7 +208,11 @@ private:
     // Assign the enable signal using en_input.
     out += "assign $str_en $distDimAccessStr =| $str_en_input "
            "$distDimAccessStr;\n";
-
+    for (int i = 0; i < numInputs; i++) {
+      out += "assign $str_en_input_if[" + to_string(i) +
+             "]$distDimAccessStr = $str_en_input $distDimAccessStr [" +
+             to_string(i) + "];\n";
+    }
     // Print end/endgenerate.
     for (int i = 0; i < distDims.size(); i++) {
       out += "end\n";
@@ -210,10 +221,71 @@ private:
       out += "endgenerate\n";
 
     findAndReplaceAll(out, "$numInputsMinus1", to_string(numInputs - 1));
+    findAndReplaceAll(out, "$str_en_input_if", str_en_input + "_if");
     findAndReplaceAll(out, "$str_en_input", str_en_input);
     findAndReplaceAll(out, "$str_en", str_en);
     findAndReplaceAll(out, "$distDimAccessStr", distDimAccessStr);
     findAndReplaceAll(out, "$distDimsStr", distDimsStr);
+    return out;
+  }
+
+  string strDistDimLoopNest(string dist_dim_index_stub, string body) {
+    string prologue;
+    string epilogue;
+    auto distDims = getMemrefDistDims();
+    string distDimAccessStr = "";
+    unsigned numDistDims = distDims.size();
+    // Print generate loops for distributed dimensions.
+    for (int i = 0; i < numDistDims; i++) {
+      string str_i = "i" + to_string(i);
+      string str_dim = to_string(distDims[i]);
+      prologue += "for(genvar " + str_i + " = 0; " + str_i + " < " + str_dim +
+                  ";" + str_i + "=" + str_i + " + 1) begin\n";
+      epilogue += "end\n";
+      distDimAccessStr += "[" + str_i + "]";
+    }
+
+    findAndReplaceAll(body, dist_dim_index_stub, distDimAccessStr);
+    if (numDistDims > 0)
+      return "generate\n" + (prologue + body + epilogue) + "endgenerate\n";
+    else
+      return (prologue + body + epilogue);
+  }
+
+  string strMemrefSelect(string str_v, string str_v_array, unsigned idx,
+                         string str_dataWidth) {
+    string out;
+    auto distDims = getMemrefDistDims();
+    string distDimsStr = strMemrefDistDims();
+    string distDimAccessStr = "";
+
+    // Define the .
+    out = "wire $str_dataWidth $str_v $distDimsStr;\n";
+
+    // Print generate loops for distributed dimensions.
+    out += "generate\n";
+    for (int i = 0; i < distDims.size(); i++) {
+      string str_i = "i" + to_string(i);
+      string str_dim = to_string(distDims[i]);
+      out += "for(genvar " + str_i + " = 0; " + str_i + " < " + str_dim + ";" +
+             str_i + "=" + str_i + " + 1) begin\n";
+      distDimAccessStr += "[" + str_i + "]";
+    }
+    out +=
+        "assign $str_v $distDimAccessStr = $str_v_array $distDimAccessStr [" +
+        to_string(idx) + "]";
+    // Print end/endgenerate.
+    for (int i = 0; i < distDims.size(); i++) {
+      out += "end\n";
+    }
+    if (!distDims.empty())
+      out += "endgenerate\n";
+
+    findAndReplaceAll(out, "$str_v", str_v);
+    findAndReplaceAll(out, "$str_v_array", str_v_array);
+    findAndReplaceAll(out, "$str_dataWidth", str_dataWidth);
+    findAndReplaceAll(out, "$distDimsStr", distDimsStr);
+    findAndReplaceAll(out, "$distDimAccessStr", distDimAccessStr);
     return out;
   }
 
@@ -229,6 +301,11 @@ private:
     out = "wire $v_valid $distDimsStr [$numInputsMinus1:0] ;\n"
           "wire [$dataWidthMinus1:0] $v_input $distDimsStr "
           "[$numInputsMinus1:0];\n ";
+    // Define the corresponding arrays with numInputs as first dimension. Used
+    // by CallOp to select Whole array. "if" stands for "index first"
+    out += "wire $v_valid_if [$numInputsMinus1:0] $distDimsStr  ;\n"
+           "wire [$dataWidthMinus1:0] $v_input_if [$numInputsMinus1:0] "
+           "$distDimsStr ;\n ";
 
     // Print generate loops for distributed dimensions.
     if (!distDims.empty())
@@ -251,7 +328,14 @@ private:
     }
     out += "else\n $v = 'x;\n";
     out += "end\n";
-
+    for (int i = 0; i < numInputs; i++) {
+      out += "assign $v_valid_if[" + to_string(i) +
+             "] $distDimAccessStr = $v_valid $distDimAccessStr [" +
+             to_string(i) + "];\n";
+      out += "assign $v_input_if[" + to_string(i) +
+             "] $distDimAccessStr = $v_input $distDimAccessStr [" +
+             to_string(i) + "];\n";
+    }
     // Print end/endgenerate.
     for (int i = 0; i < distDims.size(); i++) {
       out += "end\n";
@@ -261,6 +345,8 @@ private:
 
     findAndReplaceAll(out, "$v_valid_access", str_v_valid + distDimAccessStr);
     findAndReplaceAll(out, "$v_input_access", str_v_input + distDimAccessStr);
+    findAndReplaceAll(out, "$v_valid_if", str_v_valid + "_if");
+    findAndReplaceAll(out, "$v_input_if", str_v_input + "_if");
     findAndReplaceAll(out, "$v_valid", str_v_valid);
     findAndReplaceAll(out, "$v_input", str_v_input);
     findAndReplaceAll(out, "$v", str_v + distDimAccessStr);
@@ -268,14 +354,8 @@ private:
     findAndReplaceAll(out, "$dataWidth", to_string(dataWidth));
     findAndReplaceAll(out, "$numInputsMinus1", to_string(numInputs - 1));
     findAndReplaceAll(out, "$distDimsStr", distDimsStr);
+    findAndReplaceAll(out, "$distDimAccessStr", distDimAccessStr);
     return out;
-  }
-
-  string strMemrefAddrValid(unsigned idx) {
-    return strMemrefAddrValid() + "[" + to_string(idx) + "]";
-  }
-  string strMemrefAddrInput(unsigned idx) {
-    return strMemrefAddrInput() + "[" + to_string(idx) + "]";
   }
 
   unsigned posMemrefDistDimAccess(ArrayRef<VerilogValue *> addr) const {
@@ -477,9 +557,21 @@ public:
   }
 
   string strMemrefAddr() const { return name + "_addr"; }
+  string strMemrefAddrValidIf(unsigned idx) {
+    return strMemrefAddrValid() + "_if[" + to_string(idx) + "]";
+  }
+  string strMemrefAddrValid(unsigned idx) {
+    return strMemrefAddrValid() + "[" + to_string(idx) + "]";
+  }
   string strMemrefAddrValid(ArrayRef<VerilogValue *> addr, unsigned idx) const {
     string distDimAccessStr = strMemrefDistDimAccess(addr);
     return strMemrefAddrValid() + distDimAccessStr + "[" + to_string(idx) + "]";
+  }
+  string strMemrefAddrInputIf(unsigned idx) {
+    return strMemrefAddrInput() + "_if[" + to_string(idx) + "]";
+  }
+  string strMemrefAddrInput(unsigned idx) {
+    return strMemrefAddrInput() + "[" + to_string(idx) + "]";
   }
   string strMemrefAddrInput(ArrayRef<VerilogValue *> addr, unsigned idx) {
     string distDimAccessStr = strMemrefDistDimAccess(addr);
@@ -493,10 +585,19 @@ public:
   }
 
   string strMemrefWrData() const { return name + "_wr_data"; }
+  string strMemrefWrDataValidIf(unsigned idx) {
+    return strMemrefWrDataValid() + "_if[" + to_string(idx) + "]";
+  }
   string strMemrefWrDataValid(ArrayRef<VerilogValue *> addr, unsigned idx) {
     string distDimAccessStr = strMemrefDistDimAccess(addr);
     return strMemrefWrDataValid() + distDimAccessStr + "[" + to_string(idx) +
            "]";
+  }
+  string strMemrefWrDataInputIf(unsigned idx) {
+    return strMemrefWrDataInput() + "_if[" + to_string(idx) + "]";
+  }
+  string strMemrefWrDataInput(unsigned idx) {
+    return strMemrefWrDataInput() + "[" + to_string(idx) + "]";
   }
   string strMemrefWrDataInput(ArrayRef<VerilogValue *> addr, unsigned idx) {
     string distDimAccessStr = strMemrefDistDimAccess(addr);
@@ -505,15 +606,37 @@ public:
   }
 
   string strMemrefRdEn() const { return name + "_rd_en"; }
+  string strMemrefRdEnInputIf(unsigned idx) {
+    return strMemrefRdEnInput() + "_if[" + to_string(idx) + "]";
+  }
+  string strMemrefRdEnInput(unsigned idx) {
+    return strMemrefRdEnInput() + "[" + to_string(idx) + "]";
+  }
   string strMemrefRdEnInput(ArrayRef<VerilogValue *> addr, unsigned idx) {
     string distDimAccessStr = strMemrefDistDimAccess(addr);
     return strMemrefRdEnInput() + distDimAccessStr + "[" + to_string(idx) + "]";
   }
 
   string strMemrefWrEn() const { return name + "_wr_en"; }
+  string strMemrefWrEnInputIf(unsigned idx) {
+    return strMemrefWrEnInput() + "_if[" + to_string(idx) + "]";
+  }
+  string strMemrefWrEnInput(unsigned idx) {
+    return strMemrefWrEnInput() + "[" + to_string(idx) + "]";
+  }
   string strMemrefWrEnInput(ArrayRef<VerilogValue *> addr, unsigned idx) {
     string distDimAccessStr = strMemrefDistDimAccess(addr);
     return strMemrefWrEnInput() + distDimAccessStr + "[" + to_string(idx) + "]";
+  }
+  void incMemrefNumReads() {
+    for (int pos = 0; pos < usageInfo.numReads.size(); pos++) {
+      usageInfo.numReads[pos]++;
+    }
+  }
+  void incMemrefNumWrites() {
+    for (int pos = 0; pos < usageInfo.numWrites.size(); pos++) {
+      usageInfo.numWrites[pos]++;
+    }
   }
   void incMemrefNumReads(ArrayRef<VerilogValue *> addr) {
     unsigned pos = posMemrefDistDimAccess(addr);
@@ -616,7 +739,7 @@ string VerilogValue::strMemrefArgDecl() {
   string distDimsStr = strMemrefDistDims();
   bool printComma = false;
   unsigned dataWidth = ::getBitWidth(memrefTy.getElementType());
-  if (addrWidth > 0) { // add dims may be distributed.
+  if (addrWidth > 0) { // all dims may be distributed.
     out += "output reg[" + to_string(addrWidth - 1) + ":0] " + strMemrefAddr() +
            distDimsStr;
     printComma = true;
