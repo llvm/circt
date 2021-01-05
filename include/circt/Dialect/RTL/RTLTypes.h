@@ -23,8 +23,14 @@ namespace circt {
 namespace rtl {
 /// Return true if the specified type can be used as an RTL value type, that is
 /// the set of types that can be composed together to represent synthesized,
-/// hardware but not marker types like InOutType.
+/// hardware but not marker types like InOutType or unknown types from other
+/// dialects.
 bool isRTLValueType(mlir::Type type);
+
+/// Return true if the specified type contains known marker types like
+/// InOutType.  Unlike isRTLValueType, this is not conservative, it only returns
+/// false on known InOut types, rather than any unknown types.
+bool hasRTLInOutType(mlir::Type type);
 
 /// Return the element type of an InOutType or null if the operand isn't an
 /// InOut type.
