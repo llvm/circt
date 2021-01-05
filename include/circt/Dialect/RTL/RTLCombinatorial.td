@@ -251,7 +251,7 @@ def ConcatOp : VariadicRTLOp<"concat"> {
   ];
 }
 
-def ArraySliceOp : RTLOp<"slice", [NoSideEffect]> {
+def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
   let summary = "Get a range of values from an array";
   let description = [{
     Extracts a sub-range from an array. The range is from `lowIndex` to
