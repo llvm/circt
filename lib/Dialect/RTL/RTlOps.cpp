@@ -839,6 +839,22 @@ OpFoldResult ExtractOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
+static ParseResult parseSliceTypes(OpAsmParser &p, Type &srcType,
+                                   Type &idxType) {
+  ArrayType arrType;
+  if (p.parseType(arrType))
+    return failure();
+  srcType = arrType;
+  unsigned idxWidth = llvm::Log2_64_Ceil(arrType.getSize());
+  idxType = IntegerType::get(p.getBuilder().getContext(), idxWidth);
+  return success();
+}
+
+static void printSliceTypes(OpAsmPrinter &p, Operation *, Type srcType,
+                            Type idxType) {
+  p.printType(srcType);
+}
+
 //===----------------------------------------------------------------------===//
 // Variadic operations
 //===----------------------------------------------------------------------===//
