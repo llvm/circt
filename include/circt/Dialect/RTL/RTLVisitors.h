@@ -40,9 +40,12 @@ public:
                        // Other operations.
                        SExtOp, ZExtOp, ConcatOp, ExtractOp, MuxOp,
                        // InOut Expressions
-                       ReadInOutOp, ArrayIndexOp>([&](auto expr) -> ResultType {
-          return thisCast->visitComb(expr, args...);
-        })
+                       ReadInOutOp, ArrayIndexOp,
+                       // Cast operations
+                       CastToBitsOp, CastFromBitsOp>(
+            [&](auto expr) -> ResultType {
+              return thisCast->visitComb(expr, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidComb(op, args...);
         });
@@ -113,6 +116,10 @@ public:
   HANDLE(MuxOp, Unhandled);
   HANDLE(ReadInOutOp, Unhandled);
   HANDLE(ArrayIndexOp, Unhandled);
+
+  HANDLE(CastToBitsOp, Unary);
+  HANDLE(CastFromBitsOp, Unary);
+
 #undef HANDLE
 };
 

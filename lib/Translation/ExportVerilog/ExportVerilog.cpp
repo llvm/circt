@@ -697,6 +697,9 @@ private:
   SubExprInfo visitComb(ExtractOp op);
   SubExprInfo visitComb(ICmpOp op);
 
+  SubExprInfo visitComb(CastToBitsOp op) { return emitUnary(op, "", true); }
+  SubExprInfo visitComb(CastFromBitsOp op) { return emitUnary(op, "", false); }
+
 private:
   /// This is set (before a visit method is called) if emitSubExpr would
   /// prefer to get an output of a specific sign.  This is a hint to cause the
