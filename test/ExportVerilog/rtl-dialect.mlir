@@ -16,7 +16,8 @@ module {
     %r17: i1, %r18: i1, %r19: i1, %r20: i1,
     %r21: i1, %r22: i1, %r23: i1, %r24: i1,
     %r25: i1, %r26: i1, %r27: i1, %r28: i1,
-    %r29: i12, %r30: i2, %r31: i9, %r32: i9, %r33: i4, %r34: i4
+    %r29: i12, %r30: i2, %r31: i9, %r32: i9, %r33: i4, %r34: i4,
+    %r35: !rtl.array<3xi4>
     ) {
     
     %0 = rtl.add %a, %b : i4
@@ -54,10 +55,12 @@ module {
     %allone = rtl.constant (15 : i4) : i4
     %34 = rtl.xor %a, %allone : i4
 
-    rtl.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, %30, %31, %32, %33, %34:
+    %35 = rtl.array_slice %array at %a : (!rtl.array<10xi4>) -> !rtl.array<3xi4>
+
+    rtl.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, %30, %31, %32, %33, %34, %35:
      i4,i4, i4,i4,i4,i4,i4, i4,i4,i4,i4,i4,
      i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,i1,i1,
-     i12, i2,i9,i9,i4, i4
+     i12, i2,i9,i9,i4, i4, !rtl.array<3xi4>
   }
   // CHECK-LABEL: module TESTSIMPLE(
   // CHECK-NEXT:   input  [3:0]      a, b
@@ -69,7 +72,8 @@ module {
   // CHECK-NEXT:   output [11:0]     r29,
   // CHECK-NEXT:   output [1:0]      r30,
   // CHECK-NEXT:   output [8:0]      r31, r32,
-  // CHECK-NEXT:   output [3:0]      r33, r34);
+  // CHECK-NEXT:   output [3:0]      r33, r34,
+  // CHECK-NEXT:   output [3:0][2:0] r35);
   // CHECK-EMPTY:
   // CHECK-NEXT:   assign r0 = a + b;
   // CHECK-NEXT:   assign r2 = a - b;
@@ -103,6 +107,7 @@ module {
   // CHECK-NEXT:   assign r32 = {5'd0, a};
   // CHECK-NEXT:   assign r33 = cond ? a : b;
   // CHECK-NEXT:   assign r34 = ~a;
+  // CHECK-NEXT:   assign r35 = array[a+2:a];
   // CHECK-NEXT: endmodule
 
   rtl.module @B(%a: i1) -> (%b: i1, %c: i1) {

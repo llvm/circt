@@ -251,6 +251,48 @@ def ConcatOp : VariadicRTLOp<"concat"> {
   ];
 }
 
+def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
+  let summary = "Get a range of values from an array";
+  let description = [{
+    Extracts a sub-range from an array. The range is from `lowIndex` to
+    `lowIndex` + the number of elements in the return type, non-inclusive on
+    the high end. For instance,
+
+    ```
+    // Slices 16 bytes starting at '%offset'
+    %subArray = rtl.slice %largerArray at %offset :
+        (!rtl.array<1024xi8>) -> !rtl.array<16xi8>
+    ```
+
+    Would translate to the following SystemVerilog:
+
+    ```
+    logic [7:0][15:0] subArray = largerArray[offset + 15 : offset];
+    ```
+
+    Width of 'idx' is defined to be the precise number of bits required to
+    index the 'input' array. More precisely: for an input array of size M,
+    the width of 'idx' is ceil(log2(M)). Lower and upper bound indexes which
+    are larger than the size of the 'input' array results in undefined
+    behavior.
+  }];
+
+  let arguments = (ins ArrayType:$input, AnySignlessInteger:$lowIndex);
+  let results = (outs ArrayType:$dst);
+  let verifier = [{
+    unsigned inputSize = input().getType().cast<ArrayType>().getSize();
+    if (llvm::Log2_64_Ceil(inputSize) !=
+          lowIndex().getType().getIntOrFloatBitWidth())
+      return failure();
+    return success();
+  }];
+
+  let assemblyFormat = [{
+    $input `at` $lowIndex attr-dict `:`
+      `(` custom<SliceTypes>(type($input), type($lowIndex)) `)` `->` type($dst)
+  }];
+}
+
 // Extract a range of bits from the specified input.
 def MuxOp : RTLOp<"mux",
  [NoSideEffect, AllTypesMatch<["trueValue", "falseValue", "result"]>]> {
