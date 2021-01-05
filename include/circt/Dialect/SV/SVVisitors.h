@@ -37,6 +37,7 @@ public:
                        // Type declarations.
                        InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
                        InterfaceInstanceOp, GetModportOp,
+                       AssignInterfaceSignalOp, ReadInterfaceSignalOp,
                        // Verification statements.
                        AssertOp, AssumeOp, CoverOp>(
             [&](auto expr) -> ResultType {
@@ -92,6 +93,8 @@ public:
   HANDLE(InterfaceSignalOp, Unhandled);
   HANDLE(InterfaceModportOp, Unhandled);
   HANDLE(GetModportOp, Unhandled);
+  HANDLE(AssignInterfaceSignalOp, Unhandled);
+  HANDLE(ReadInterfaceSignalOp, Unhandled);
 
   // Verification statements.
   HANDLE(AssertOp, Unhandled);

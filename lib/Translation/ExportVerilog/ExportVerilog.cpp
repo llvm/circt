@@ -327,6 +327,7 @@ public:
   LogicalResult visitSV(InterfaceOp op);
   LogicalResult visitSV(InterfaceSignalOp op);
   LogicalResult visitSV(InterfaceModportOp op);
+  LogicalResult visitSV(AssignInterfaceSignalOp op);
   void emitOperation(Operation *op);
 
   void collectNamesEmitDecls(Block &block);
@@ -636,6 +637,7 @@ private:
   }
 
   SubExprInfo visitSV(GetModportOp op);
+  SubExprInfo visitSV(ReadInterfaceSignalOp op);
   SubExprInfo visitSV(TextualValueOp op);
 
   // Noop cast operators.
@@ -940,6 +942,11 @@ SubExprInfo ExprEmitter::emitBitSelect(Value operand, unsigned hiBit,
 
 SubExprInfo ExprEmitter::visitSV(GetModportOp op) {
   os << emitter.getName(op.iface()) + "." + op.field();
+  return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
+  os << emitter.getName(op.iface()) + "." + op.signalName();
   return {Unary, IsUnsigned};
 }
 
@@ -1545,6 +1552,15 @@ LogicalResult ModuleEmitter::visitSV(InterfaceModportOp op) {
   return success();
 }
 
+LogicalResult ModuleEmitter::visitSV(AssignInterfaceSignalOp op) {
+  SmallPtrSet<Operation *, 8> emitted;
+  indent() << "assign ";
+  emitExpression(op.iface(), emitted, /*forceRootExpr=*/true);
+  os << "." << op.signalName() << " = ";
+  emitExpression(op.rhs(), emitted, /*forceRootExpr=*/true);
+  os << ";\n";
+  return success();
+}
 //===----------------------------------------------------------------------===//
 // Module Driver
 //===----------------------------------------------------------------------===//
