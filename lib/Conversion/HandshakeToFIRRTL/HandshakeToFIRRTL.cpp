@@ -1191,7 +1191,6 @@ bool HandshakeBuilder::visitHandshake(ForkOp op) {
       rewriter.create<NotPrimOp>(insertLoc, bitType, allDoneWire));
 
   // Create logic for each result port.
-  SmallVector<Value, 4> emtdRegs;
   unsigned idx = 0;
   for (auto doneWire : doneWires) {
     // Extract valid and ready from the current result port.
