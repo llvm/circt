@@ -107,7 +107,7 @@ module {
   // CHECK-NEXT:   assign r32 = {5'd0, a};
   // CHECK-NEXT:   assign r33 = cond ? a : b;
   // CHECK-NEXT:   assign r34 = ~a;
-  // CHECK-NEXT:   assign r35 = array[a+2:a];
+  // CHECK-NEXT:   assign r35 = array[a+:3];
   // CHECK-NEXT: endmodule
 
   rtl.module @B(%a: i1) -> (%b: i1, %c: i1) {
