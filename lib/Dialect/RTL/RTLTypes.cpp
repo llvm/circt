@@ -50,6 +50,23 @@ bool circt::rtl::isRTLValueType(Type type) {
   return false;
 }
 
+/// Return true if the specified type contains known marker types like
+/// InOutType.  Unlike isRTLValueType, this is not conservative, it only returns
+/// false on known InOut types, rather than any unknown types.
+bool circt::rtl::hasRTLInOutType(Type type) {
+  if (auto array = type.dyn_cast<ArrayType>())
+    return hasRTLInOutType(array.getElementType());
+
+  if (auto array = type.dyn_cast<UnpackedArrayType>())
+    return hasRTLInOutType(array.getElementType());
+
+  if (auto t = type.dyn_cast<StructType>()) {
+    return std::any_of(t.getElements().begin(), t.getElements().end(),
+                       [](const auto &f) { return hasRTLInOutType(f.type); });
+  }
+  return type.isa<InOutType>();
+}
+
 /// Return the element type of an InOutType or null if the operand isn't an
 /// InOut type.
 mlir::Type circt::rtl::getInOutElementType(mlir::Type type) {
@@ -134,12 +151,9 @@ Type StructType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
 
 void StructType::print(DialectAsmPrinter &p) const {
   p << "struct<";
-  for (size_t i = 0, e = getElements().size(); i < e; i++) {
-    const auto &field = getElements()[i];
+  llvm::interleaveComma(getElements(), p, [&](const FieldInfo &field) {
     p << field.name << ": " << field.type;
-    if (i < getElements().size() - 1)
-      p << ", ";
-  }
+  });
   p << ">";
 }
 

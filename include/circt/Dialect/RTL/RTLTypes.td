@@ -72,10 +72,15 @@ def InOutType : RTLType<"InOut"> {
   }];
 }
 
+// Type constraint that indicates that an operand/result may only be a valid,
+// known, non-directional type.
+def RTLValueType : Type<CPred<"isRTLValueType($_self)">,
+                            "a known primitive element">;
+
 // Type constraint that indicates that an operand/result may only be a valid
 // non-directional type.
-def RTLValueType : Type<CPred<"isRTLValueType($_self)">,
-                            "a valid inout element">;
+def RTLNonInOutType : Type<CPred<"!hasRTLInOutType($_self)">,
+                            "a type without inout">;
 
 def InOutArrayType
   : Type<CPred<"getAnyRTLArrayElementType(getInOutElementType($_self)) "

@@ -1384,7 +1384,6 @@ static void print(OpAsmPrinter &printer, rtl::StructExplodeOp op) {
 
 static ParseResult parseStructExtractOp(OpAsmParser &parser,
                                         OperationState &result) {
-  llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
   OpAsmParser::OperandType operand;
   StringAttr fieldName;
   StructType declType;
@@ -1398,7 +1397,7 @@ static ParseResult parseStructExtractOp(OpAsmParser &parser,
 
   Type resultType = declType.getFieldType(fieldName.getValue());
   if (!resultType) {
-    parser.emitError(inputOperandsLoc, "invalid field name specified");
+    parser.emitError(parser.getNameLoc(), "invalid field name specified");
     return failure();
   }
   result.addTypes(resultType);
