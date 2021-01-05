@@ -187,7 +187,7 @@ def OrROp  : UnaryI1ReductionRTLOp<"orr">;
 def XorROp : UnaryI1ReductionRTLOp<"xorr">;
 
 //===----------------------------------------------------------------------===//
-// Width-modifying unary operations on ints.
+// Integer width modifying operations.
 //===----------------------------------------------------------------------===//
 
 // Extract a range of bits from the specified input.
