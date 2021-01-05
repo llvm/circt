@@ -187,20 +187,8 @@ def OrROp  : UnaryI1ReductionRTLOp<"orr">;
 def XorROp : UnaryI1ReductionRTLOp<"xorr">;
 
 //===----------------------------------------------------------------------===//
-// Other Operations
+// Integer width modifying operations.
 //===----------------------------------------------------------------------===//
-
-// Concatenate a variadic list of operands together.
-def ConcatOp : VariadicRTLOp<"concat"> {
-  let hasCanonicalizer = true;
-
-  let builders = [
-    OpBuilderDAG<(ins "ValueRange":$inputs)>,
-    OpBuilderDAG<(ins "Value":$lhs, "Value":$rhs), [{
-      return build($_builder, $_state, ValueRange{lhs, rhs});
-    }]>
-  ];
-}
 
 // Extract a range of bits from the specified input.
 def ExtractOp : RTLOp<"extract", [NoSideEffect]> {
@@ -245,6 +233,22 @@ def ZExtOp : RTLOp<"zext", [NoSideEffect]> {
 
   let hasFolder = true;
   let verifier = [{ return ::verifyExtOp(*this); }];
+}
+
+//===----------------------------------------------------------------------===//
+// Other Operations
+//===----------------------------------------------------------------------===//
+
+// Concatenate a variadic list of operands together.
+def ConcatOp : VariadicRTLOp<"concat"> {
+  let hasCanonicalizer = true;
+
+  let builders = [
+    OpBuilderDAG<(ins "ValueRange":$inputs)>,
+    OpBuilderDAG<(ins "Value":$lhs, "Value":$rhs), [{
+      return build($_builder, $_state, ValueRange{lhs, rhs});
+    }]>
+  ];
 }
 
 // Extract a range of bits from the specified input.
