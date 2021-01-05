@@ -133,8 +133,7 @@ Type StructType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
 }
 
 void StructType::print(DialectAsmPrinter &p) const {
-  p << "struct"
-    << "<";
+  p << "struct<";
   for (size_t i = 0, e = getElements().size(); i < e; i++) {
     const auto &field = getElements()[i];
     p << field.name << ": " << field.type;
