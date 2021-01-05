@@ -1338,10 +1338,9 @@ static void convertReturnOp(Operation *oldOp, FModuleOp topModuleOp,
 struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
   using OpConversionPattern<handshake::FuncOp>::OpConversionPattern;
 
-  LogicalResult match(Operation *op) const override { return success(); }
-
-  void rewrite(handshake::FuncOp funcOp, ArrayRef<Value> operands,
-               ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(handshake::FuncOp funcOp, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
     // Create FIRRTL circuit and top-module operation.
     auto circuitOp = rewriter.create<CircuitOp>(
         funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()));
@@ -1375,7 +1374,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
           } else if (StdExprBuilder(portList, insertLoc, rewriter)
                          .dispatchStdExprVisitor(&op)) {
           } else
-            op.emitError("Usupported operation type");
+            return op.emitError("unsupported operation type");
         }
 
         // Instantiate the new created sub-module.
@@ -1384,6 +1383,8 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       }
     }
     rewriter.eraseOp(funcOp);
+
+    return success();
   }
 };
 
