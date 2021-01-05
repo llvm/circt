@@ -90,3 +90,45 @@ rtl.module @wire(%a: i42) {
   // expected-error @+1 {{'rtl.wire' op result #0 must be inout type, but got 'i42'}}
   %aget = rtl.wire: i42
 }
+
+// -----
+
+rtl.module @struct(%a: i42) {
+  // expected-error @+1 {{custom op 'rtl.struct_create' invalid kind of type specified}}
+  %aget = rtl.struct_create(%a) : i42
+}
+
+// -----
+
+rtl.module @struct(%a: !rtl.struct<foo: i42>) {
+  // expected-error @+1 {{custom op 'rtl.struct_explode' invalid kind of type specified}}
+  %aget = rtl.struct_explode %a : i42
+}
+
+// -----
+
+rtl.module @struct(%a: !rtl.struct<foo: i42>) {
+  // expected-error @+1 {{custom op 'rtl.struct_extract' invalid kind of type specified}}
+  %aget = rtl.struct_extract %a["foo"] : i42
+}
+
+// -----
+
+rtl.module @struct(%a: !rtl.struct<foo: i42>) {
+  // expected-error @+1 {{custom op 'rtl.struct_extract' invalid field name specified}}
+  %aget = rtl.struct_extract %a["bar"] : !rtl.struct<foo: i42>
+}
+
+// -----
+
+rtl.module @struct(%a: !rtl.struct<foo: i42>, %b: i42) {
+  // expected-error @+1 {{custom op 'rtl.struct_inject' invalid kind of type specified}}
+  %aget = rtl.struct_inject %a["foo"], %b : i42
+}
+
+// -----
+
+rtl.module @struct(%a: !rtl.struct<foo: i42>, %b: i42) {
+  // expected-error @+1 {{custom op 'rtl.struct_inject' invalid field name specified}}
+  %aget = rtl.struct_inject %a["bar"], %b : !rtl.struct<foo: i42>
+}

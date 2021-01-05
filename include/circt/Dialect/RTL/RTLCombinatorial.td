@@ -186,6 +186,30 @@ def AndROp : UnaryI1ReductionRTLOp<"andr">;
 def OrROp  : UnaryI1ReductionRTLOp<"orr">;
 def XorROp : UnaryI1ReductionRTLOp<"xorr">;
 
+// Extract a range of bits from the specified input.
+def StructExtractOp : RTLOp<"struct_extract", [NoSideEffect]> {
+  let summary = "Extract a named field from a struct.";
+
+  let arguments = (ins StructType:$input, StrAttr:$field);
+  let results = (outs RTLNonInOutType:$result);
+
+  let parser = [{ return ::parse$cppClass(parser, result); }];
+  let printer = [{ return ::print(p, *this); }];
+}
+
+// Extract a range of bits from the specified input.
+def StructInjectOp : RTLOp<"struct_inject", [NoSideEffect, 
+                           AllTypesMatch<["input", "result"]>]> {
+  let summary = "Inject a value into a named field of a struct.";
+
+  let arguments = (ins StructType:$input, StrAttr:$field,
+                   RTLNonInOutType:$newValue);
+  let results = (outs StructType:$result);
+
+  let parser = [{ return ::parse$cppClass(parser, result); }];
+  let printer = [{ return ::print(p, *this); }];
+}
+
 //===----------------------------------------------------------------------===//
 // Integer width modifying operations.
 //===----------------------------------------------------------------------===//
@@ -259,7 +283,7 @@ def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
     the high end. For instance,
 
     ```
-    // Slices 16 bytes starting at '%offset'
+    // Slices 16 elements starting at '%offset'.
     %subArray = rtl.slice %largerArray at %offset :
         (!rtl.array<1024xi8>) -> !rtl.array<16xi8>
     ```
@@ -267,7 +291,7 @@ def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
     Would translate to the following SystemVerilog:
 
     ```
-    logic [7:0][15:0] subArray = largerArray[offset + 15 : offset];
+    logic [7:0][15:0] subArray = largerArray[offset +: 16];
     ```
 
     Width of 'idx' is defined to be the precise number of bits required to

@@ -63,13 +63,9 @@ void ForkOp::build(OpBuilder &builder, OperationState &result, Value operand,
   // Single operand
   result.addOperands(operand);
 
-  // Fork is control-only if it is the no-data output of a ControlMerge or a
-  // StartOp
-  auto *op = operand.getDefiningOp();
-  bool isControl = ((dyn_cast<ControlMergeOp>(op) || dyn_cast<StartOp>(op)) &&
-                    operand == op->getResult(0))
-                       ? true
-                       : false;
+  // Fork is control-only if it has NoneType. This includes the no-data output
+  // of a ControlMerge or a StartOp, as well as control values from MemoryOps.
+  bool isControl = operand.getType().isa<NoneType>() ? true : false;
   result.addAttribute("control", builder.getBoolAttr(isControl));
 }
 void handshake::ForkOp::getCanonicalizationPatterns(

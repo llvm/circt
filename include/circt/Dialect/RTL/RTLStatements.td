@@ -19,7 +19,7 @@ def ConnectOp : RTLOp<"connect", [InOutTypeConstraint<"src", "dest">]> {
     ```
     }];
 
-  let arguments = (ins InOutType:$dest, InOutElementType:$src);
+  let arguments = (ins InOutType:$dest, RTLValueType:$src);
   let results = (outs);
     let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
 }
@@ -60,7 +60,7 @@ def ReadInOutOp
   let summary = "Get the value of from something of inout type (e.g. a wire or"
                 " inout port) as the value itself.";
   let arguments = (ins InOutType:$input);
-  let results = (outs InOutElementType:$result);
+  let results = (outs RTLValueType:$result);
 
   let builders = [
     OpBuilderDAG<(ins "Value":$input)>
@@ -89,4 +89,23 @@ def ArrayIndexOp
 
   let assemblyFormat =
     "$input`[`$index`]` attr-dict `:` type($input) `,` type($index)";
+}
+
+def StructExplodeOp : RTLOp<"struct_explode", [NoSideEffect]> {
+  let summary = "Expand a struct into its constituent parts.";
+  let arguments = (ins StructType:$input);
+  let results = (outs Variadic<RTLNonInOutType>:$result);
+
+  let parser = [{ return ::parse$cppClass(parser, result); }];
+  let printer = [{ return ::print(p, *this); }];
+}
+
+
+def StructCreateOp : RTLOp<"struct_create", [NoSideEffect]> {
+  let summary = "Create a struct from constituent parts.";
+  let arguments = (ins Variadic<RTLNonInOutType>:$input);
+  let results = (outs StructType:$result);
+
+  let parser = [{ return ::parse$cppClass(parser, result); }];
+  let printer = [{ return ::print(p, *this); }];
 }
