@@ -4,6 +4,7 @@
 // RUN: verilator --lint-only --top-module AB %t1.sv
 // RUN: verilator --lint-only --top-module shl %t1.sv
 // RUN: verilator --lint-only --top-module TESTSIMPLE %t1.sv
+// RUN: verilator --lint-only --top-module casts %t1.sv
 
 module {
   rtl.module @B(%a: i1 { rtl.inout }) -> (i1 {rtl.name = "b"}, i1 {rtl.name = "c"}) {
@@ -80,9 +81,18 @@ module {
     %allone = rtl.constant (15 : i4) : i4
     %34 = rtl.xor %a, %allone : i4
 
+
     rtl.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, %30, %31, %32, %33, %34:
      i4,i4, i4,i4,i4,i4,i4, i4,i4,i4,i4,i4,
      i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,i1,i1,
      i12, i2,i9,i9,i4, i4
+  }
+
+  rtl.module @casts(%in1: i64) -> (%r1: !rtl.array<5xi8>) {
+    %bits = rtl.cast.tobits %in1 : (i64)
+    %idx = rtl.constant (10 : i6) : i6
+    %midBits = rtl.array_slice %bits at %idx : (!rtl.array<64xi1>) -> !rtl.array<40xi1>
+    %r1 = rtl.cast.frombits %midBits : !rtl.array<5xi8>
+    rtl.output %r1 : !rtl.array<5xi8>
   }
 }

@@ -42,10 +42,11 @@ public:
                        // InOut Expressions
                        ReadInOutOp, ArrayIndexOp,
                        // Cast operations
-                       CastToBitsOp, CastFromBitsOp>(
-            [&](auto expr) -> ResultType {
-              return thisCast->visitComb(expr, args...);
-            })
+                       CastToBitsOp, CastFromBitsOp,
+                       // Array operations
+                       ArraySliceOp>([&](auto expr) -> ResultType {
+          return thisCast->visitComb(expr, args...);
+        })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidComb(op, args...);
         });
@@ -120,6 +121,7 @@ public:
   HANDLE(CastToBitsOp, Unary);
   HANDLE(CastFromBitsOp, Unary);
 
+  HANDLE(ArraySliceOp, Unhandled);
 #undef HANDLE
 };
 
