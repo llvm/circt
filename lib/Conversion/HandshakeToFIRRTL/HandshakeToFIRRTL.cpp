@@ -32,10 +32,45 @@ using ValueVectorList = std::vector<ValueVector>;
 // Utils
 //===----------------------------------------------------------------------===//
 
-/// Build a FIRRTL bundle type (with data, valid, and ready subfields) given the
-/// type of the data subfield.
-static FIRRTLType buildBundleType(FIRRTLType dataType, bool isFlip,
-                                  MLIRContext *context) {
+/// Get the corresponding FIRRTL type given the built-in data type. Current
+/// supported data types are integer (signed, unsigned, and signless), index,
+/// and none.
+static FIRRTLType getFIRRTLType(Type type) {
+  MLIRContext *context = type.getContext();
+  return TypeSwitch<Type, FIRRTLType>(type)
+      .Case<IntegerType>([&](IntegerType integerType) -> FIRRTLType {
+        unsigned width = integerType.getWidth();
+
+        switch (integerType.getSignedness()) {
+        case IntegerType::Signed:
+          return SIntType::get(context, width);
+        case IntegerType::Unsigned:
+          return UIntType::get(context, width);
+        // ISSUE: How to handle signless integers? Should we use the
+        // AsSIntPrimOp or AsUIntPrimOp to convert?
+        case IntegerType::Signless:
+          return UIntType::get(context, width);
+        default:
+          return FIRRTLType();
+        }
+      })
+      .Case<IndexType>([&](IndexType indexType) -> FIRRTLType {
+        // Currently we consider index type as 64-bits unsigned integer.
+        unsigned width = indexType.kInternalStorageBitWidth;
+        return UIntType::get(context, width);
+      })
+      .Default([&](Type) { return FIRRTLType(); });
+}
+
+/// Return a FIRRTL bundle type (with data, valid, and ready subfields) given a
+/// standard data type.
+static FIRRTLType getBundleType(Type type, bool isFlip) {
+  // If the input is already converted to a bundle type elsewhere, itself will
+  // be returned after cast.
+  if (auto bundleType = type.dyn_cast<BundleType>())
+    return bundleType;
+
+  MLIRContext *context = type.getContext();
   using BundleElement = BundleType::BundleElement;
   llvm::SmallVector<BundleElement, 3> elements;
 
@@ -52,6 +87,7 @@ static FIRRTLType buildBundleType(FIRRTLType dataType, bool isFlip,
   }
 
   // Add data subfield to the bundle if dataType is not a null.
+  auto dataType = getFIRRTLType(type);
   if (dataType) {
     auto dataId = Identifier::get("data", context);
     if (isFlip)
@@ -61,45 +97,6 @@ static FIRRTLType buildBundleType(FIRRTLType dataType, bool isFlip,
   }
 
   return BundleType::get(elements, context);
-}
-
-/// Return a FIRRTL bundle type (with data, valid, and ready subfields) given a
-/// standard data type. Current supported data types are integer (signed,
-/// unsigned, and signless), index, and none.
-static FIRRTLType getBundleType(Type type, bool isFlip) {
-  // If the input is already converted to a bundle type elsewhere, itself will
-  // be returned after cast.
-  if (auto bundleType = type.dyn_cast<BundleType>())
-    return bundleType;
-
-  MLIRContext *context = type.getContext();
-  return TypeSwitch<Type, FIRRTLType>(type)
-      .Case<IntegerType>([&](IntegerType integerType) {
-        unsigned width = integerType.getWidth();
-
-        switch (integerType.getSignedness()) {
-        case IntegerType::Signed:
-          return buildBundleType(SIntType::get(context, width), isFlip,
-                                 context);
-        case IntegerType::Unsigned:
-          return buildBundleType(UIntType::get(context, width), isFlip,
-                                 context);
-        // ISSUE: How to handle signless integers? Should we use the
-        // AsSIntPrimOp or AsUIntPrimOp to convert?
-        case IntegerType::Signless:
-          return buildBundleType(UIntType::get(context, width), isFlip,
-                                 context);
-        }
-      })
-      .Case<IndexType>([&](IndexType indexType) {
-        // Currently we consider index type as 64-bits unsigned integer.
-        unsigned width = indexType.kInternalStorageBitWidth;
-        return buildBundleType(UIntType::get(context, width), isFlip, context);
-      })
-      .Case<NoneType>([&](NoneType) {
-        return buildBundleType(/*dataType=*/nullptr, isFlip, context);
-      })
-      .Default([&](Type) { return FIRRTLType(); });
 }
 
 static Value createConstantOp(FIRRTLType opType, APInt value,
