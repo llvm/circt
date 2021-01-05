@@ -62,7 +62,17 @@ int circt::rtl::getBitWidth(mlir::Type type) {
       .Case<ArrayType>([](ArrayType a) {
         return a.getSize() * getBitWidth(a.getElementType());
       })
-      .Default([](Type) { return 0; });
+      .Case<StructType>([](StructType s) {
+        int total = 0;
+        for (auto field : s.getElements()) {
+          int fieldSize = getBitWidth(field.type);
+          if (fieldSize < 0)
+            return fieldSize;
+          total += fieldSize;
+        }
+        return total;
+      })
+      .Default([](Type) { return -1; });
 }
 
 /// Return true if the specified type contains known marker types like
