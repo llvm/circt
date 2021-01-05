@@ -642,6 +642,7 @@ private:
   SubExprInfo visitComb(ReadInOutOp op) { return emitNoopCast(op); }
 
   // Other
+  SubExprInfo visitComb(ArraySliceOp op);
   SubExprInfo visitComb(ArrayIndexOp op);
   SubExprInfo visitComb(MuxOp op);
 
@@ -974,6 +975,18 @@ SubExprInfo ExprEmitter::visitComb(ConstantOp op) {
   }
   os << valueStr;
   return {Unary, signPreference == RequireSigned ? IsSigned : IsUnsigned};
+}
+
+// 11.5.1 "Vector bit-select and part-select addressing" allows a '+:' syntax
+// for slicing operations.
+SubExprInfo ExprEmitter::visitComb(ArraySliceOp op) {
+  auto arrayPrec = emitSubExpr(op.input(), Symbol);
+
+  unsigned dstWidth = op.getType().cast<ArrayType>().getSize();
+  os << '[';
+  emitSubExpr(op.lowIndex(), LowestPrecedence);
+  os << "+:" << dstWidth << ']';
+  return {Unary, arrayPrec.signedness};
 }
 
 SubExprInfo ExprEmitter::visitComb(ArrayIndexOp op) {
@@ -1570,6 +1583,10 @@ static bool isExpressionUnableToInline(Operation *op) {
           !isOkToBitSelectFrom(op->getResult(0)))
         return true;
     }
+    // ArraySliceOp uses its operand twice, so we want to assign it first then
+    // use that variable in the ArraySliceOp expression.
+    if (isa<ArraySliceOp>(user))
+      return true;
   }
   return false;
 }

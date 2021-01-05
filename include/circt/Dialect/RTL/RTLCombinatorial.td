@@ -186,10 +186,6 @@ def AndROp : UnaryI1ReductionRTLOp<"andr">;
 def OrROp  : UnaryI1ReductionRTLOp<"orr">;
 def XorROp : UnaryI1ReductionRTLOp<"xorr">;
 
-//===----------------------------------------------------------------------===//
-// Other Operations
-//===----------------------------------------------------------------------===//
-
 // Extract a range of bits from the specified input.
 def StructExtractOp : RTLOp<"struct_extract", [NoSideEffect]> {
   let summary = "Extract a named field from a struct.";
@@ -214,6 +210,9 @@ def StructInjectOp : RTLOp<"struct_inject", [NoSideEffect,
   let printer = [{ return ::print(p, *this); }];
 }
 
+//===----------------------------------------------------------------------===//
+// Integer width modifying operations.
+//===----------------------------------------------------------------------===//
 
 // Concatenate a variadic list of operands together.
 def ConcatOp : VariadicRTLOp<"concat"> {
@@ -270,6 +269,64 @@ def ZExtOp : RTLOp<"zext", [NoSideEffect]> {
 
   let hasFolder = true;
   let verifier = [{ return ::verifyExtOp(*this); }];
+}
+
+//===----------------------------------------------------------------------===//
+// Other Operations
+//===----------------------------------------------------------------------===//
+
+// Concatenate a variadic list of operands together.
+def ConcatOp : VariadicRTLOp<"concat"> {
+  let hasCanonicalizer = true;
+
+  let builders = [
+    OpBuilderDAG<(ins "ValueRange":$inputs)>,
+    OpBuilderDAG<(ins "Value":$lhs, "Value":$rhs), [{
+      return build($_builder, $_state, ValueRange{lhs, rhs});
+    }]>
+  ];
+}
+
+def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
+  let summary = "Get a range of values from an array";
+  let description = [{
+    Extracts a sub-range from an array. The range is from `lowIndex` to
+    `lowIndex` + the number of elements in the return type, non-inclusive on
+    the high end. For instance,
+
+    ```
+    // Slices 16 elements starting at '%offset'.
+    %subArray = rtl.slice %largerArray at %offset :
+        (!rtl.array<1024xi8>) -> !rtl.array<16xi8>
+    ```
+
+    Would translate to the following SystemVerilog:
+
+    ```
+    logic [7:0][15:0] subArray = largerArray[offset +: 16];
+    ```
+
+    Width of 'idx' is defined to be the precise number of bits required to
+    index the 'input' array. More precisely: for an input array of size M,
+    the width of 'idx' is ceil(log2(M)). Lower and upper bound indexes which
+    are larger than the size of the 'input' array results in undefined
+    behavior.
+  }];
+
+  let arguments = (ins ArrayType:$input, AnySignlessInteger:$lowIndex);
+  let results = (outs ArrayType:$dst);
+  let verifier = [{
+    unsigned inputSize = input().getType().cast<ArrayType>().getSize();
+    if (llvm::Log2_64_Ceil(inputSize) !=
+          lowIndex().getType().getIntOrFloatBitWidth())
+      return failure();
+    return success();
+  }];
+
+  let assemblyFormat = [{
+    $input `at` $lowIndex attr-dict `:`
+      `(` custom<SliceTypes>(type($input), type($lowIndex)) `)` `->` type($dst)
+  }];
 }
 
 // Extract a range of bits from the specified input.

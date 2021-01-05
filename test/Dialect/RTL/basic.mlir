@@ -1,7 +1,7 @@
 // RUN: circt-opt %s | FileCheck %s
 
-// CHECK-LABEL: func @test1(%arg0: i3, %arg1: i1) -> i50 {
-func @test1(%arg0: i3, %arg1: i1) -> i50 {
+// CHECK-LABEL: func @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> i50 {
+func @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> i50 {
   // CHECK-NEXT:    %c42_i12 = rtl.constant(42 : i12) : i12
   // CHECK-NEXT:    [[RES0:%[0-9]+]] = rtl.add %c42_i12, %c42_i12 : i12
   // CHECK-NEXT:    [[RES1:%[0-9]+]] = rtl.mul %c42_i12, [[RES0]] : i12
@@ -97,6 +97,11 @@ func @test1(%arg0: i3, %arg1: i1) -> i50 {
   
   // CHECK-NEXT: :2 = rtl.struct_explode %24 : !rtl.struct<foo: i19, bar: i7>
   %se:2 = rtl.struct_explode %s0 : !rtl.struct<foo: i19, bar: i7>
+
+  // CHECK-NEXT: = constant 13 : i10
+  %idx = constant 13 : i10
+  // CHECK-NEXT: = rtl.array_slice %arg2 at %c13_i10 : (!rtl.array<1000xi8>) -> !rtl.array<24xi8>
+  %subArray = rtl.array_slice %arg2 at %idx : (!rtl.array<1000xi8>) -> !rtl.array<24xi8>
 
   // CHECK-NEXT:    return [[RES8]] : i50
   return %result : i50
