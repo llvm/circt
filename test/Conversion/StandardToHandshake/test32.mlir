@@ -6,7 +6,7 @@
 // CHECK-LABEL:   handshake.func @test(
 // CHECK-SAME:                         %[[VAL_0:.*]]: none, ...) -> none {
 // CHECK:           %[[VAL_1:.*]]:5 = "handshake.memory"(%[[VAL_2:.*]]#0, %[[VAL_2]]#1, %[[VAL_3:.*]], %[[VAL_4:.*]]) {id = 0 : i32, ld_count = 2 : i32, lsq = false, st_count = 1 : i32, type = memref<10xf32>} : (f32, index, index, index) -> (f32, f32, none, none, none)
-// CHECK:           %[[VAL_5:.*]]:2 = "handshake.fork"(%[[VAL_1]]#4) {control = false} : (none) -> (none, none)
+// CHECK:           %[[VAL_5:.*]]:2 = "handshake.fork"(%[[VAL_1]]#4) {control = true} : (none) -> (none, none)
 // CHECK:           %[[VAL_6:.*]]:2 = "handshake.fork"(%[[VAL_0]]) {control = true} : (none) -> (none, none)
 // CHECK:           %[[VAL_7:.*]]:3 = "handshake.fork"(%[[VAL_6]]#1) {control = true} : (none) -> (none, none, none)
 // CHECK:           %[[VAL_8:.*]] = "handshake.join"(%[[VAL_7]]#2, %[[VAL_1]]#3) {control = true} : (none, none) -> none
