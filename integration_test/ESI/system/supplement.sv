@@ -1,3 +1,7 @@
+// Auxiliary file for tests in this directory. Contains hand-coded modules for
+// use in the ESI systems under test.
+
+// Produce a stream of incrementing integers.
 module IntCountProd (
   input clk,
   input rstn,
@@ -15,10 +19,13 @@ module IntCountProd (
   end
 endmodule
 
+// Accumulate a stream of integers. Randomly backpressure. Print status every
+// cycle. Output the total over a raw port.
 module IntAcc (
   input clk,
   input rstn,
-  IValidReady_i32.source ints
+  IValidReady_i32.source ints,
+  output unsigned [31:0] totalOut
 );
   logic unsigned [31:0] total;
 

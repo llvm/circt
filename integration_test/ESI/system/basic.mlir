@@ -5,11 +5,12 @@
 
 module {
   rtl.externmodule @IntCountProd(%clk: i1, %rstn: i1) -> (%ints: !esi.channel<i32>)
-  rtl.externmodule @IntAcc(%clk: i1, %rstn: i1, %ints: !esi.channel<i32>) -> ()
-  rtl.module @top(%clk: i1, %rstn: i1) -> () {
+  rtl.externmodule @IntAcc(%clk: i1, %rstn: i1, %ints: !esi.channel<i32>) -> (%totalOut: i32)
+  rtl.module @top(%clk: i1, %rstn: i1) -> (%totalOut: i32) {
     %intStream = rtl.instance "prod" @IntCountProd(%clk, %rstn) : (i1, i1) -> (!esi.channel<i32>)
     %intStreamBuffered = esi.buffer %clk, %rstn, %intStream {stages=2, name="intChan"} : i32
-    rtl.instance "acc" @IntAcc(%clk, %rstn, %intStreamBuffered) : (i1, i1, !esi.channel<i32>) -> ()
+    %totalOut = rtl.instance "acc" @IntAcc(%clk, %rstn, %intStreamBuffered) : (i1, i1, !esi.channel<i32>) -> (i32)
+    rtl.output %totalOut : i32
   }
   // CHECK:      [driver] Starting simulation
   // CHECK: Total:          0
