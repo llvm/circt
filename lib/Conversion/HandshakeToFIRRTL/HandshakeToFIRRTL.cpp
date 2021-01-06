@@ -50,8 +50,6 @@ static FIRRTLType getFIRRTLType(Type type) {
         // AsSIntPrimOp or AsUIntPrimOp to convert?
         case IntegerType::Signless:
           return UIntType::get(context, width);
-        default:
-          return FIRRTLType();
         }
       })
       .Case<IndexType>([&](IndexType indexType) -> FIRRTLType {
