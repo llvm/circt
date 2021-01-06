@@ -642,6 +642,9 @@ public:
   bool visitHandshake(MuxOp op);
   bool visitHandshake(SinkOp op);
 
+  bool buildForkLogic(ValueVector *input, SmallVector<ValueVector *, 4> outputs,
+                      Value clock, Value reset, bool isControl);
+
 private:
   ValueVectorList portList;
   Location insertLoc;
@@ -1142,39 +1145,136 @@ bool HandshakeBuilder::visitHandshake(LazyForkOp op) {
   return true;
 }
 
-/// Currently Fork is implement as a LazyFork. An eager Fork is supposed to be
-/// a timing component, and contains a register for recording which outputs
-/// have accepted the token. Eager Fork will be supported in the next patch.
-/// Please refer to test_lazy_fork.mlir test case.
-bool HandshakeBuilder::visitHandshake(ForkOp op) {
-  ValueVector argSubfields = portList.front();
+bool HandshakeBuilder::buildForkLogic(ValueVector *input,
+                                      SmallVector<ValueVector *, 4> outputs,
+                                      Value clock, Value reset,
+                                      bool isControl) {
+  if (input == nullptr)
+    return false;
+
+  auto argSubfields = *input;
   Value argValid = argSubfields[0];
   Value argReady = argSubfields[1];
 
-  // The input will be ready to accept new token when all outputs are ready.
-  Value *tmpReady = &portList[1][1];
-  for (unsigned i = 2, e = portList.size(); i < e; ++i) {
-    Value resultReady = portList[i][1];
-    *tmpReady = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
-                                           resultReady, *tmpReady);
+  unsigned resultNum = outputs.size();
+
+  // Values that are useful.
+  auto bitType = UIntType::get(rewriter.getContext(), 1);
+  auto falseConst = createConstantOp(bitType, APInt(1, 0), insertLoc, rewriter);
+
+  // Create done wire for all results.
+  SmallVector<Value, 4> doneWires;
+  for (unsigned i = 0; i < resultNum; ++i) {
+    auto doneName = rewriter.getStringAttr("done" + std::to_string(i));
+    auto doneWire = rewriter.create<WireOp>(insertLoc, bitType, doneName);
+    doneWires.push_back(doneWire);
   }
-  rewriter.create<ConnectOp>(insertLoc, argReady, *tmpReady);
 
-  // All outputs must be ready for the LazyFork to send the token.
-  auto resultValidOp = rewriter.create<AndPrimOp>(insertLoc, argValid.getType(),
-                                                  argValid, *tmpReady);
-  for (unsigned i = 1, e = portList.size(); i < e; ++i) {
-    ValueVector resultfield = portList[i];
-    Value resultValid = resultfield[0];
-    rewriter.create<ConnectOp>(insertLoc, resultValid, resultValidOp);
+  // Create an AndPrimOp chain for generating the ready signal. Only if all
+  // result ports are handshaked (done), the argument port is ready to accept
+  // the next token.
+  Value tmpDone = doneWires[0];
+  for (auto doneWire : llvm::drop_begin(doneWires, 1))
+    tmpDone = rewriter.create<AndPrimOp>(insertLoc, bitType, doneWire, tmpDone);
 
-    if (!op.isControl()) {
+  auto allDoneWire = rewriter.create<WireOp>(insertLoc, bitType,
+                                             rewriter.getStringAttr("allDone"));
+  rewriter.create<ConnectOp>(insertLoc, allDoneWire, tmpDone);
+
+  // Connect the allDoneWire to the input ready.
+  rewriter.create<ConnectOp>(insertLoc, argReady, allDoneWire);
+
+  // Create a notAllDoneWire for later use.
+  auto notAllDoneWire = rewriter.create<WireOp>(
+      insertLoc, bitType, rewriter.getStringAttr("notAllDone"));
+  rewriter.create<ConnectOp>(
+      insertLoc, notAllDoneWire,
+      rewriter.create<NotPrimOp>(insertLoc, bitType, allDoneWire));
+
+  // Create logic for each result port.
+  unsigned idx = 0;
+  for (auto doneWire : doneWires) {
+    if (outputs[idx] == nullptr)
+      return false;
+
+    // Extract valid and ready from the current result port.
+    auto resultSubfields = *outputs[idx];
+    Value resultValid = resultSubfields[0];
+    Value resultReady = resultSubfields[1];
+
+    // If this is not a control component, extract data from the current result
+    // port and connect it with the argument data.
+    if (!isControl) {
       Value argData = argSubfields[2];
-      Value resultData = resultfield[2];
+      Value resultData = resultSubfields[2];
       rewriter.create<ConnectOp>(insertLoc, resultData, argData);
     }
+
+    // Create a emitted register.
+    auto emtdName = rewriter.getStringAttr("emtd" + std::to_string(idx));
+    auto emtdReg = rewriter.create<RegInitOp>(insertLoc, bitType, clock, reset,
+                                              falseConst, emtdName);
+
+    // Connect the emitted register with {doneWire && notallDoneWire}. Only if
+    // notallDone, the emtdReg will be set to the value of doneWire. Otherwise,
+    // all emtdRegs will be cleared to zero.
+    auto emtd = rewriter.create<AndPrimOp>(insertLoc, bitType, doneWire,
+                                           notAllDoneWire);
+    rewriter.create<ConnectOp>(insertLoc, emtdReg, emtd);
+
+    // Create a notEmtdWire for later use.
+    auto notEmtdName = rewriter.getStringAttr("notEmtd" + std::to_string(idx));
+    auto notEmtdWire = rewriter.create<WireOp>(insertLoc, bitType, notEmtdName);
+    rewriter.create<ConnectOp>(
+        insertLoc, notEmtdWire,
+        rewriter.create<NotPrimOp>(insertLoc, bitType, emtdReg));
+
+    // Create valid signal and connect to the result valid. The reason of this
+    // AndPrimOp is each result can only be emitted once.
+    auto valid =
+        rewriter.create<AndPrimOp>(insertLoc, bitType, notEmtdWire, argValid);
+    rewriter.create<ConnectOp>(insertLoc, resultValid, valid);
+
+    // Create validReady wire signal, which indicates a successful handshake in
+    // the current clock cycle.
+    auto validReadyName =
+        rewriter.getStringAttr("validReady" + std::to_string(idx));
+    auto validReadyWire =
+        rewriter.create<WireOp>(insertLoc, bitType, validReadyName);
+    rewriter.create<ConnectOp>(
+        insertLoc, validReadyWire,
+        rewriter.create<AndPrimOp>(insertLoc, bitType, resultReady, valid));
+
+    // Finally, we can drive the doneWire we created in the beginning with
+    // {validReadyWire || emtdReg}, where emtdReg indicates a successful
+    // handshake in a previous clock cycle.
+    rewriter.create<ConnectOp>(
+        insertLoc, doneWire,
+        rewriter.create<OrPrimOp>(insertLoc, bitType, validReadyWire, emtdReg));
+
+    // All done, move to the next result port.
+    ++idx;
   }
   return true;
+}
+
+/// See http://www.cs.columbia.edu/~sedwards/papers/edwards2019compositional.pdf
+/// Fig.10 for reference.
+/// Please refer to test_fork.mlir test case.
+bool HandshakeBuilder::visitHandshake(ForkOp op) {
+  auto input = &portList.front();
+  unsigned portNum = portList.size();
+
+  // Collect all outputs ports.
+  SmallVector<ValueVector *, 4> outputs;
+  for (unsigned i = 1; i < portNum - 2; ++i)
+    outputs.push_back(&portList[i]);
+
+  // The clock and reset signals will be used for registers.
+  auto clock = portList[portNum - 2][0];
+  auto reset = portList[portNum - 1][0];
+
+  return buildForkLogic(input, outputs, clock, reset, op.control());
 }
 
 /// Please refer to test_constant.mlir test case.
@@ -1356,7 +1456,8 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       // be instantiated in the top-module.
       else if (op.getDialect()->getNamespace() != "firrtl") {
         FModuleOp subModuleOp = checkSubModuleOp(topModuleOp, &op);
-        bool hasClock = isa<handshake::BufferOp, handshake::ControlMergeOp>(op);
+        bool hasClock =
+            isa<handshake::BufferOp, handshake::ControlMergeOp, ForkOp>(op);
 
         // Check if the sub-module already exists.
         if (!subModuleOp) {
