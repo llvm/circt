@@ -1,4 +1,4 @@
-; RUN: circt-translate -parse-fir -verify-diagnostics --split-input-file %s 
+; RUN: circt-translate -parse-fir -verify-diagnostics --split-input-file %s
 
 circuit test :
   extmodule MyModule :
@@ -102,7 +102,7 @@ circuit test :
 
     ; expected-error @+1 {{use of undefined module name 'some_module' in instance}}
     inst xyz of some_module
- 
+
 ;// -----
 
 circuit test :
