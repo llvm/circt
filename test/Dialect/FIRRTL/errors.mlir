@@ -259,7 +259,7 @@ firrtl.circuit "Foo" {
   }
 }
 
-// ----- 
+// -----
 
 firrtl.circuit "X" {
 
