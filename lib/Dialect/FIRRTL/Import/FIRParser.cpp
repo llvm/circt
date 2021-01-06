@@ -2140,8 +2140,8 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
 
   Value result;
   if (resetSignal)
-    result = builder.create<RegInitOp>(info.getLoc(), type, clock, resetSignal,
-                                       resetValue, filterUselessName(id));
+    result = builder.create<RegResetOp>(info.getLoc(), type, clock, resetSignal,
+                                        resetValue, filterUselessName(id));
   else
     result = builder.create<RegOp>(info.getLoc(), type, clock,
                                    filterUselessName(id));

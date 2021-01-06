@@ -522,7 +522,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
-    %reg = firrtl.reginit %0, %4, %c0_ui32 {name = "reg"} : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<32>) -> !firrtl.uint<32>
+    %reg = firrtl.regreset %0, %4, %c0_ui32 {name = "reg"} : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<32>) -> !firrtl.uint<32>
 
     // CHECK-NEXT: %0 = rtl.read_inout %reg : !rtl.inout<i32>
     // CHECK-NEXT: %1 = rtl.mux %io_en, %io_d, %0 : i32

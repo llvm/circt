@@ -242,11 +242,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.mux(%reset, %i8, %{{.*}}) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint) -> !firrtl.uint
     node n8 = mux(reset, i8, UInt(4))
 
-    ; CHECK: firrtl.reginit %clock, %reset, %{{.*}} {name = "_t_2621"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>) -> !firrtl.uint<4>
+    ; CHECK: firrtl.regreset %clock, %reset, %{{.*}} {name = "_t_2621"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>) -> !firrtl.uint<4>
     reg _t_2621 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0")) @[Edges.scala 230:27]
 
-    ; CHECK: firrtl.reginit %clock, %reset, %{{.*}} {name = "_t_1601"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<2>
+    ; CHECK: firrtl.regreset %clock, %reset, %{{.*}} {name = "_t_1601"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<2>
     reg _t_1601 : UInt<2>, clock with :
       (reset => (reset, UInt<2>("h00"))) @[Edges.scala 230:27]
 
