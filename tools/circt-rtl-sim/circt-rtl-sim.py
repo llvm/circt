@@ -62,13 +62,18 @@ class Verilator:
         else:
           self.verilator = args.sim
         self.top = args.top
+        if args.objdir != "":
+          self.ObjDir = args.objdir
+        else:
+          self.ObjDir = os.path.basename(args.sources[0]) + ".obj_dir"
 
     def compile(self, sources):
         return subprocess.run([self.verilator, "--cc", "--top-module", self.top,
-                               "-sv", "--build", "--exe"] + sources)
+                               "-sv", "--build", "--exe",
+                               "--Mdir", self.ObjDir] + sources)
 
     def run(self, cycles, args):
-        exe = os.path.join("obj_dir", "V" + self.top)
+        exe = os.path.join(self.ObjDir, "V" + self.top)
         cmd = [exe]
         if cycles >= 0:
           cmd.append(f"--cycles")
@@ -96,6 +101,10 @@ def __main__(args):
                            help="Don't run the simulation.")
     argparser.add_argument("--top", type=str, default="top",
                            help="Name of top module to run.")
+    argparser.add_argument("--objdir", type=str, default="",
+                           help="(Verilator) Select an 'obj_dir' to use. Must" +
+                           " be different from other tests in the same" +
+                           " directory. Defaults to 'sources[0].obj_dir'.")
     argparser.add_argument("--simargs", type=str, default="",
                            help="Simulation arguments string.")
     argparser.add_argument("--no-default-driver", dest="no_default_driver", action='store_true',
