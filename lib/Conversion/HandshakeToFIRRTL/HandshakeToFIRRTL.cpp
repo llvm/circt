@@ -636,6 +636,7 @@ public:
   bool visitHandshake(ForkOp op);
   bool visitHandshake(JoinOp op);
   bool visitHandshake(LazyForkOp op);
+  bool visitHandshake(MemoryOp op);
   bool visitHandshake(MergeOp op);
   bool visitHandshake(MuxOp op);
   bool visitHandshake(SinkOp op);
@@ -1318,6 +1319,134 @@ bool HandshakeBuilder::visitHandshake(BufferOp op) {
   (void)clock;
   (void)inputValid;
   (void)inputReady;
+
+  return true;
+}
+
+bool HandshakeBuilder::visitHandshake(MemoryOp op) {
+  // Get the memory type and element type.
+  MemRefType type = op.type();
+  Type elementType = type.getElementType();
+  if (!elementType.isIntOrFloat()) {
+    op.emitError("only memrefs of ints or floats are supported");
+    return false;
+  }
+
+  // Set up FIRRTL memory attributes.
+  uint32_t readLatency = 0;
+  uint32_t writeLatency = 1;
+  RUWAttr ruw = RUWAttr::Old;
+  uint64_t depth = type.getNumElements();
+  FIRRTLType dataType =
+      IntType::get(rewriter.getContext(), elementType.isSignedInteger(),
+                   elementType.getIntOrFloatBitWidth());
+  StringAttr name = rewriter.getStringAttr("mem" + std::to_string(op.id()));
+
+  // Helpers to get port identifiers.
+  auto loadIdentifier = [&](size_t i) {
+    return rewriter.getIdentifier("load" + std::to_string(i));
+  };
+
+  auto storeIdentifier = [&](size_t i) {
+    return rewriter.getIdentifier("store" + std::to_string(i));
+  };
+
+  // Collect the port info for each port.
+  uint64_t numLoads = op.getLdCount().getLimitedValue();
+  uint64_t numStores = op.getStCount().getLimitedValue();
+  SmallVector<std::pair<Identifier, MemOp::PortKind>, 8> ports;
+  for (size_t i = 0; i < numLoads; ++i) {
+    auto portName = loadIdentifier(i);
+    auto portKind = MemOp::PortKind::Read;
+    ports.push_back({portName, portKind});
+  }
+  for (size_t i = 0; i < numStores; ++i) {
+    auto portName = storeIdentifier(i);
+    auto portKind = MemOp::PortKind::Write;
+    ports.push_back({portName, portKind});
+  }
+
+  // Create the special type to represent this memory.
+  FIRRTLType memType = MemOp::getTypeForPortList(depth, dataType, ports);
+
+  // Create the actual mem op.
+  auto memOp = rewriter.create<MemOp>(insertLoc, memType, readLatency,
+                                      writeLatency, depth, ruw, name);
+
+  // Prepare to create each load and store port logic.
+  BundleType resultType = memOp.getType().cast<BundleType>();
+  auto numPorts = portList.size();
+  auto clock = portList[numPorts - 2][0];
+  auto reset = portList[numPorts - 1][0];
+
+  // Collect load arguments.
+  for (size_t i = 0; i < numLoads; ++i) {
+    // Unpack load address.
+    auto loadAddr = portList[2 * numStores + i];
+    auto loadAddrData = loadAddr[2];
+
+    // Unpack load data.
+    auto loadData = portList[2 * numStores + numLoads + i];
+    auto loadDataData = loadData[2];
+
+    // Unpack load control.
+    auto loadControl = portList[3 * numStores + 2 * numLoads + i];
+
+    assert(loadAddr.size() && loadData.size() && loadControl.size());
+
+    // Create a subfield op to access this port in the memory.
+    auto fieldName = loadIdentifier(i);
+    auto elementType = resultType.getElementType(fieldName).cast<BundleType>();
+    auto memBundle =
+        rewriter.create<SubfieldOp>(insertLoc, elementType, memOp, fieldName);
+
+    // Get the load address out of the bundle.
+    auto memAddrType = elementType.getElementType("addr");
+    auto memAddr =
+        rewriter.create<SubfieldOp>(insertLoc, memAddrType, memBundle, "addr");
+
+    // Since addresses coming from Handshake are IndexType and have a hardcoded
+    // 64-bit width in this pass, we may need to truncate down to the actual
+    // size of the address port used by the FIRRTL memory.
+    auto loadAddrType = loadAddrData.getType().cast<FIRRTLType>();
+    if (memAddrType != loadAddrType) {
+      auto memAddrPassiveType = memAddrType.getPassiveType();
+      auto tailAmount = loadAddrType.getBitWidthOrSentinel() -
+                        memAddrPassiveType.getBitWidthOrSentinel();
+      loadAddrData = rewriter.create<TailPrimOp>(insertLoc, memAddrPassiveType,
+                                                 loadAddrData, tailAmount);
+    }
+
+    // Connect the load address to the memory.
+    rewriter.create<ConnectOp>(insertLoc, memAddr, loadAddrData);
+
+    // Get the load data out of the bundle.
+    auto memDataType = elementType.getElementType("data");
+    auto memData =
+        rewriter.create<SubfieldOp>(insertLoc, memDataType, memBundle, "data");
+
+    // Connect the memory to the load data.
+    rewriter.create<ConnectOp>(insertLoc, loadDataData, memData);
+
+    // Create control-only fork for the load address valid and ready signal.
+    buildForkLogic(&loadAddr, {&loadData, &loadControl}, clock, reset, true);
+  }
+
+  // Collect store arguments.
+  for (size_t i = 0; i < numStores; ++i) {
+    // Unpack store data.
+    auto storeData = portList[i];
+
+    // Unpack store address.
+    auto storeAddr = portList[i + 1];
+
+    // Unpack store control.
+    auto storeControl = portList[2 * numLoads + i];
+
+    assert(storeAddr.size() && storeData.size() && storeControl.size());
+
+    // TODO(mikeurbach): Connect stores to the new mem op.
+  }
 
   return true;
 }

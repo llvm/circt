@@ -517,7 +517,7 @@ def TerminatorOp : Handshake_Op<"terminator", [Terminator]> {
 }
 
 def MemRefTypeAttr : TypeAttrBase<"MemRefType", "memref type attribute">;
-def MemoryOp : Handshake_Op<"memory"> {
+def MemoryOp : Handshake_Op<"memory", [HasClock]> {
   let summary = "memory";
   let description = [{
     Each MemoryOp represents an independent memory or memory region (BRAM or external memory).
