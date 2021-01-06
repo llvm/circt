@@ -21,7 +21,8 @@ using namespace sv;
 
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {
-  return isa<sv::TextualValueOp>(op) || isa<sv::GetModportOp>(op);
+  return isa<sv::TextualValueOp>(op) || isa<sv::GetModportOp>(op) ||
+         isa<sv::ReadInterfaceSignalOp>(op);
 }
 
 //===----------------------------------------------------------------------===//
