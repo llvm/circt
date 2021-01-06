@@ -46,4 +46,8 @@ circuit MyModule :  @[CIRCUIT.scala 127]
 
     ; CHECK: %thing = firrtl.wire{{.*}} loc(fused["XX.scala":123:19, "YY.haskell":309:14, "ZZ.swift":3:4])
     wire thing : SInt<4> @[XX.scala 123:19 YY.haskell 309:14 ZZ.swift 3:4]
+
+    ; CHECK: %other_thing = firrtl.wire{{.*}} loc("File with space.perl":1:23)
+    wire other_thing : SInt<4> @[File with space.perl 1:23]
+
 ; CIRCUIT: CHECK: } loc("CIRCUIT.scala":127:0)
