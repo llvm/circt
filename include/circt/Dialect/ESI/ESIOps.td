@@ -14,7 +14,10 @@
 def ChannelBufferOptions : StructAttr<"ChannelBufferOptions", ESI_Dialect, [
     // 'Stages' is used to specify a specific number of cycles (pipeline stages)
     // to use on this channel. Must be greater than 0.
-    StructFieldAttr<"stages", OptionalAttr< Confined<I64Attr, [IntMinValue<1>]> >>
+    StructFieldAttr<"stages", OptionalAttr< Confined<I64Attr, [IntMinValue<1>]> >>,
+
+    // Name assigned to a buffered connection.
+    StructFieldAttr<"name", OptionalAttr< StrAttr >>
   ]>;
 
 def ChannelBuffer : ESI_Abstract_Op<"buffer", [NoSideEffect]> {
