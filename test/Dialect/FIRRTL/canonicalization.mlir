@@ -2,6 +2,49 @@
 
 firrtl.circuit "And" {
 
+// CHECK-LABEL: firrtl.module @Div
+firrtl.module @Div(%a: !firrtl.uint<4>,
+                  %b: !firrtl.flip<uint<4>>,
+                  %c: !firrtl.sint<4>,
+                  %d: !firrtl.flip<sint<5>>,
+                  %e: !firrtl.uint,
+                  %f: !firrtl.flip<uint>,
+                  %g: !firrtl.sint,
+                  %h: !firrtl.flip<sint>) {
+
+  // CHECK-DAG: [[ONE_i4:%.+]] = firrtl.constant(1 : i4) : !firrtl.uint<4>
+  // CHECK-DAG: [[ONE_s5:%.+]] = firrtl.constant(1 : i5) : !firrtl.sint<5>
+  // CHECK-DAG: [[ONE_i2:%.+]] = firrtl.constant(1 : i2) : !firrtl.uint
+  // CHECK-DAG: [[ONE_s2:%.+]] = firrtl.constant(1 : i2) : !firrtl.sint
+
+  // COM: Check that 'div(a, a) -> 1' works for known UInt widths
+  // CHECK: firrtl.connect %b, [[ONE_i4]]
+  %0 = firrtl.div %a, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.connect %b, %0 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+
+  // COM: Check that 'div(c, c) -> 1' works for known SInt widths
+  // CHECK: firrtl.connect %d, [[ONE_s5]] : !firrtl.flip<sint<5>>, !firrtl.sint<5>
+  %1 = firrtl.div %c, %c : (!firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.sint<5>
+  firrtl.connect %d, %1 : !firrtl.flip<sint<5>>, !firrtl.sint<5>
+
+  // COM: Check that 'div(e, e) -> 1' works for unknown UInt widths
+  // CHECK: firrtl.connect %f, [[ONE_i2]]
+  %2 = firrtl.div %e, %e : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
+  firrtl.connect %f, %2 : !firrtl.flip<uint>, !firrtl.uint
+
+  // COM: Check that 'div(g, g) -> 1' works for unknown SInt widths
+  // CHECK: firrtl.connect %h, [[ONE_s2]]
+  %3 = firrtl.div %g, %g : (!firrtl.sint, !firrtl.sint) -> !firrtl.sint
+  firrtl.connect %h, %3 : !firrtl.flip<sint>, !firrtl.sint
+
+  // COM: Check that 'div(a, 1) -> a' for known UInt widths
+  // CHECK: firrtl.connect %b, %a
+  %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
+  %4 = firrtl.div %a, %c1_ui2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<4>
+  firrtl.connect %b, %4 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+
+}
+
 // CHECK-LABEL: firrtl.module @And
 firrtl.module @And(%in: !firrtl.uint<4>,
                    %sin: !firrtl.sint<4>,
