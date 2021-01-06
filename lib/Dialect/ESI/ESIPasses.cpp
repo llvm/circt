@@ -227,10 +227,10 @@ InterfaceOp ESIRTLBuilder::constructInterface(ChannelPort chan) {
   ib.create<InterfaceSignalOp>(readyStr, getI1Type());
   ib.create<InterfaceSignalOp>(dataStr, chan.getInner());
   ib.create<InterfaceModportOp>(
-      sourceStr, /*inputs=*/ArrayRef<StringRef>{readyStr},
+      sinkStr, /*inputs=*/ArrayRef<StringRef>{readyStr},
       /*outputs=*/ArrayRef<StringRef>{validStr, dataStr});
   ib.create<InterfaceModportOp>(
-      sinkStr,
+      sourceStr,
       /*inputs=*/ArrayRef<StringRef>{validStr, dataStr},
       /*outputs=*/ArrayRef<StringRef>{readyStr});
   ib.create<TypeDeclTerminatorOp>();
@@ -564,6 +564,11 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   auto unwrap =
       rewriter.create<UnwrapValidReady>(loc, stage.input(), wrapReady);
 
+  // TODO: Replace this with something deterministic once we decide on #407.
+  size_t uniqueId = rand();
+  std::string pipeStageName;
+  llvm::raw_string_ostream(pipeStageName) << "pipelineStage" << uniqueId;
+
   // Instantiate the "ESI_PipelineStage" external module.
   circt::Backedge stageReady = back.get(rewriter.getI1Type());
   Value operands[] = {stage.clk(), stage.rstn(), unwrap.rawOutput(),
@@ -571,7 +576,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   Type resultTypes[] = {rewriter.getI1Type(), unwrap.rawOutput().getType(),
                         rewriter.getI1Type()};
   auto stageInst = rewriter.create<InstanceOp>(
-      loc, resultTypes, "pipelineStage", stageModule.getName(), operands,
+      loc, resultTypes, pipeStageName, stageModule.getName(), operands,
       stageAttrs.getDictionary(rewriter.getContext()));
   auto stageInstResults = stageInst.getResults();
 
