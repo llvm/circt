@@ -112,9 +112,9 @@ static Value createConstantOp(FIRRTLType opType, APInt value,
 
 /// Construct a name for creating FIRRTL sub-module. The returned string
 /// contains the following information: 1) standard or handshake operation
-/// name; 2) number of inputs; 3) number of outputs; 4) comparison operation
-/// type (if applied); 5) whether the elastic component is for the control path
-/// (if applied).
+/// name; 2) number of inputs; 3) number of outputs; 4) constant value (if
+/// applied); 5) constant type (if applied); 6) comparison operation type (if
+/// applied); 7) whether the component is for the control path (if applied).
 static std::string getSubModuleName(Operation *oldOp) {
   /// The dialect name is separated from the operation name by '.', which is not
   /// valid in SystemVerilog module names. In case this name is used in
@@ -125,6 +125,33 @@ static std::string getSubModuleName(Operation *oldOp) {
   std::string subModuleName = prefix + "_" +
                               std::to_string(oldOp->getNumOperands()) + "ins_" +
                               std::to_string(oldOp->getNumResults()) + "outs";
+
+  if (auto constOp = dyn_cast<handshake::ConstantOp>(oldOp)) {
+    // Currently we only support integer or index types. Here, the emitted type
+    // aligns with getFIRRTLType() method. Thus all integers except signed
+    // integer will be emitted as unsigned integer.
+    if (auto intAttr = constOp.getValue().dyn_cast<IntegerAttr>()) {
+      if (auto intType = intAttr.getType().dyn_cast<IntegerType>()) {
+        if (intType.isSignedInteger())
+          subModuleName += "_c" + std::to_string(intAttr.getSInt()) + "_si";
+        else if (intType.isUnsignedInteger())
+          subModuleName += "_c" + std::to_string(intAttr.getUInt()) + "_ui";
+        else
+          subModuleName +=
+              "_c" + std::to_string((unsigned long)intAttr.getInt()) + "_ui";
+
+        subModuleName += std::to_string(intType.getWidth());
+
+      } else if (auto indexType = intAttr.getType().dyn_cast<IndexType>()) {
+        subModuleName +=
+            "_c" + std::to_string((unsigned long)intAttr.getInt()) + "_ui";
+        subModuleName += std::to_string(indexType.kInternalStorageBitWidth);
+
+      } else
+        oldOp->emitError("unsupported integer constant value type");
+    } else
+      oldOp->emitError("unsupported constant value type");
+  }
 
   if (auto comOp = dyn_cast<mlir::CmpIOp>(oldOp))
     subModuleName += "_" + stringifyEnum(comOp.getPredicate()).str();
