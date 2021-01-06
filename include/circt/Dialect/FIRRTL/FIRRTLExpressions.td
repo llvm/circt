@@ -172,6 +172,20 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
 def AddPrimOp : BinaryPrimOp<"add", IntType, IntType, IntType, [Commutative]>;
 def SubPrimOp : BinaryPrimOp<"sub", IntType, IntType, IntType>;
 def MulPrimOp : BinaryPrimOp<"mul", IntType, IntType, IntType, [Commutative]>;
+let hasFolder = 1 in
+let description = [{
+
+  Divides the first argument (the numerator) by the second argument
+  (the denominator) truncating the result (rounding towards zero).
+
+  **If the denominator is zero, the result is undefined.**
+
+  The compiler may optimize this undefined behavior in any way it
+  wants. Notably `div(a, a)` will be optimized to `1`. This may cause
+  erroneous formal equivalence mismatches between unoptimized and
+  optimized FIRRTL dialects that are separately converted to Verilog.
+
+}] in
 def DivPrimOp : BinaryPrimOp<"div", IntType, IntType, IntType>;
 def RemPrimOp : BinaryPrimOp<"rem", IntType, IntType, IntType>;
 
