@@ -271,10 +271,17 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
     numStages = stages.getValue().getLimitedValue();
   }
   Value input = buffer.input();
+  StringAttr bufferName = buffer.options().name();
   for (uint64_t i = 0; i < numStages; ++i) {
     // Create the stages, connecting them up as we build.
     auto stage = rewriter.create<PipelineStage>(loc, type, buffer.clk(),
                                                 buffer.rstn(), input);
+    if (bufferName) {
+      std::string stageName;
+      llvm::raw_string_ostream(stageName)
+          << bufferName.getValue() << "_stage" << i;
+      stage.setAttr("name", StringAttr::get(stageName, rewriter.getContext()));
+    }
     input = stage;
   }
 
@@ -552,9 +559,9 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
     return failure();
   auto stageModule = builder.declareStage();
 
-  NamedAttrList stageAttrs = stage.getAttrs();
+  NamedAttrList stageParams;
   size_t width = getNumBits(chPort.getInner());
-  stageAttrs.set(builder.width, rewriter.getUI32IntegerAttr(width));
+  stageParams.set(builder.width, rewriter.getUI32IntegerAttr(width));
 
   // Unwrap the channel. The ready signal is a Value we haven't created yet, so
   // create a temp value and replace it later. Give this constant an odd-looking
@@ -564,10 +571,9 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   auto unwrap =
       rewriter.create<UnwrapValidReady>(loc, stage.input(), wrapReady);
 
-  // TODO: Replace this with something deterministic once we decide on #407.
-  size_t uniqueId = rand();
-  std::string pipeStageName;
-  llvm::raw_string_ostream(pipeStageName) << "pipelineStage" << uniqueId;
+  StringRef pipeStageName = "pipelineStage";
+  if (auto name = stage.getAttrOfType<StringAttr>("name"))
+    pipeStageName = name.getValue();
 
   // Instantiate the "ESI_PipelineStage" external module.
   circt::Backedge stageReady = back.get(rewriter.getI1Type());
@@ -577,7 +583,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
                         rewriter.getI1Type()};
   auto stageInst = rewriter.create<InstanceOp>(
       loc, resultTypes, pipeStageName, stageModule.getName(), operands,
-      stageAttrs.getDictionary(rewriter.getContext()));
+      stageParams.getDictionary(rewriter.getContext()));
   auto stageInstResults = stageInst.getResults();
 
   // Set a_ready (from the unwrap) back edge correctly to its output from stage.

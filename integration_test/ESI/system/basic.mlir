@@ -8,7 +8,7 @@ module {
   rtl.externmodule @IntAcc(%clk: i1, %rstn: i1, %ints: !esi.channel<i32>) -> ()
   rtl.module @top(%clk: i1, %rstn: i1) -> () {
     %intStream = rtl.instance "prod" @IntCountProd(%clk, %rstn) : (i1, i1) -> (!esi.channel<i32>)
-    %intStreamBuffered = esi.buffer %clk, %rstn, %intStream {stages=2} : i32
+    %intStreamBuffered = esi.buffer %clk, %rstn, %intStream {stages=2, name="intChan"} : i32
     rtl.instance "acc" @IntAcc(%clk, %rstn, %intStreamBuffered) : (i1, i1, !esi.channel<i32>) -> ()
   }
   // CHECK:      [driver] Starting simulation
