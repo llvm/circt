@@ -46,6 +46,8 @@ module {
       %validValue = sv.interface.signal.read %iface(@data_vr::@valid) : i1
       // CHECK: $fwrite(32'h80000002, "valid: %d\n", _T.valid);
       sv.fwrite "valid: %d\n" (%validValue) : i1
+      // CHECK: assert(_T.valid);
+      sv.assert %validValue : i1
     }
   }
 }

@@ -1613,7 +1613,7 @@ static bool isExpressionAlwaysInline(Operation *op) {
     return true;
 
   // An SV interface modport is a symbolic name that is always inlined.
-  if (isa<GetModportOp>(op))
+  if (isa<GetModportOp>(op) || isa<ReadInterfaceSignalOp>(op))
     return true;
 
   // If this is a noop cast and the operand is always inlined, then the noop
