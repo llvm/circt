@@ -35,11 +35,15 @@ circuit MyModule :  @[CIRCUIT.scala 127]
     ; CHECK: %out_0 = firrtl.wire
     wire out_0 : { member : { 0 : { reset : UInt<1>}}}
 
-    ; %0 = firrtl.subfield %auto "out_0" : {{.*}} loc("Field":173:49)
-    ; %1 = firrtl.subfield %out_0 "member" : {{.*}} loc("Field":173:49)
-    ; %2 = firrtl.subfield %1 "0" : {{.*}} loc("Field":173:49)
-    ; %3 = firrtl.subfield %2 "reset" : {{.*}} loc("Field":173:49)
-    ; firrtl.partialconnect %0, %3 : {{.*}} loc("Field":173:49)
+    ; CHECK: %0 = firrtl.subfield %auto("out_0") {{.*}} loc("Field":173:49)
+    ; CHECK: %1 = firrtl.subfield %out_0("member") {{.*}} loc("Field":173:49)
+    ; CHECK: %2 = firrtl.subfield %1("0") {{.*}} loc("Field":173:49)
+    ; CHECK: %3 = firrtl.subfield %2("reset") : {{.*}} loc("Field":173:49)
+    ; CHECK: firrtl.partialconnect %0, %3 : {{.*}} loc("Field":173:49)
     auto.out_0 <- out_0.member.0.reset @[Field 173:49]
 
+    ; Fused locators: https://github.com/llvm/circt/issues/224
+
+    ; CHECK: %thing = firrtl.wire{{.*}} loc(fused["XX.scala":123:19, "YY.haskell":309:14, "ZZ.swift":3:4])
+    wire thing : SInt<4> @[XX.scala 123:19 YY.haskell 309:14 ZZ.swift 3:4]
 ; CIRCUIT: CHECK: } loc("CIRCUIT.scala":127:0)

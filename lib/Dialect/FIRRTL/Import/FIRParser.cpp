@@ -332,26 +332,35 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
 
   spelling = spelling.drop_front(2).drop_back(1);
 
-  // Split at the last space.
-  auto spaceLoc = spelling.find_last_of(' ');
-  if (spaceLoc == StringRef::npos)
-    return unknownFormat();
+  // Decode the locator in "spelling", returning the filename and filling in
+  // lineNo and colNo on success.  On failure, this returns an empty filename.
+  auto decodeLocator = [&](StringRef input, unsigned &resultLineNo,
+                           unsigned &resultColNo) -> StringRef {
+    // Split at the last space.
+    auto spaceLoc = input.find_last_of(' ');
+    if (spaceLoc == StringRef::npos)
+      return {};
 
-  auto filename = spelling.take_front(spaceLoc);
-  auto lineAndColumn = spelling.drop_front(spaceLoc + 1);
+    auto filename = input.take_front(spaceLoc);
+    auto lineAndColumn = input.drop_front(spaceLoc + 1);
 
-  // Decode the line/column.  If the colon is missing, then it will be empty
-  // here.
-  StringRef lineStr, colStr;
-  std::tie(lineStr, colStr) = lineAndColumn.split(':');
+    // Decode the line/column.  If the colon is missing, then it will be empty
+    // here.
+    StringRef lineStr, colStr;
+    std::tie(lineStr, colStr) = lineAndColumn.split(':');
 
-  // Zero represents an unknown line/column number.
+    // Decode the line number and the column number if present.
+    if (lineStr.getAsInteger(10, resultLineNo))
+      return {};
+    if (!colStr.empty() && colStr.getAsInteger(10, resultColNo))
+      return {};
+    return filename;
+  };
+
+  // Decode the locator spelling, reporting an error if it is malformed.
   unsigned lineNo = 0, columnNo = 0;
-
-  // Decode the line number and the column number if present.
-  if (lineStr.getAsInteger(10, lineNo))
-    return unknownFormat();
-  if (!colStr.empty() && colStr.getAsInteger(10, columnNo))
+  StringRef filename = decodeLocator(spelling, lineNo, columnNo);
+  if (filename.empty())
     return unknownFormat();
 
   // If info locators are ignored, don't actually apply them.  We still do all
@@ -359,8 +368,45 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
   if (state.options.ignoreInfoLocators)
     return success();
 
-  auto resultLoc =
+  // Compound locators will be combined with spaces, like:
+  //  @[Foo.scala 123:4 Bar.scala 309:14]
+  // and at this point will be parsed as a-long-string-with-two-spaces at
+  // 309:14.   We'd like to parse this into two things and represent it as an
+  // MLIR fused locator, but we want to be conservatively safe for filenames
+  // that have a space in it.  As such, we are careful to make sure we can
+  // decode the filename/loc of the result.  If so, we accumulate results,
+  // backward, in this vector.
+  SmallVector<Location> extraLocs;
+  auto spaceLoc = filename.find_last_of(' ');
+  while (spaceLoc != StringRef::npos) {
+    // Try decoding the thing before the space.  Validates that there is another
+    // space and that the file/line can be decoded in that substring.
+    unsigned nextLineNo = 0, nextColumnNo = 0;
+    auto nextFilename =
+        decodeLocator(filename.take_front(spaceLoc), nextLineNo, nextColumnNo);
+
+    // On failure we didn't have a joined locator.
+    if (nextFilename.empty())
+      break;
+
+    // On success, remember what we already parsed (Bar.Scala / 309:14), and
+    // move on to the next chunk.
+    auto loc = FileLineColLoc::get(filename.drop_front(spaceLoc + 1), lineNo,
+                                   columnNo, getContext());
+    extraLocs.push_back(loc);
+    filename = nextFilename;
+    lineNo = nextLineNo;
+    columnNo = nextColumnNo;
+    spaceLoc = filename.find_last_of(' ');
+  }
+
+  Location resultLoc =
       FileLineColLoc::get(filename, lineNo, columnNo, getContext());
+  if (!extraLocs.empty()) {
+    extraLocs.push_back(resultLoc);
+    std::reverse(extraLocs.begin(), extraLocs.end());
+    resultLoc = FusedLoc::get(extraLocs, getContext());
+  }
   result.setInfoLocation(resultLoc);
 
   // Now that we have a symbolic location, apply it to any subOps specified.
