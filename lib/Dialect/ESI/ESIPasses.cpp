@@ -277,9 +277,8 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
     auto stage = rewriter.create<PipelineStage>(loc, type, buffer.clk(),
                                                 buffer.rstn(), input);
     if (bufferName) {
-      std::string stageName;
-      llvm::raw_string_ostream(stageName)
-          << bufferName.getValue() << "_stage" << i;
+      SmallString<64> stageName(
+          {bufferName.getValue(), "_stage", std::to_string(i)});
       stage.setAttr("name", StringAttr::get(stageName, rewriter.getContext()));
     }
     input = stage;
