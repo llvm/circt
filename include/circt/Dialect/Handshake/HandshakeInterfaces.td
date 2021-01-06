@@ -53,5 +53,6 @@ def MergeLikeOpInterface : OpInterface<"MergeLikeOpInterface"> {
   }];
 }
 
+def HasClock : NativeOpTrait<"HasClock">;
 
 #endif // HANDSHAKE_INTERFACES

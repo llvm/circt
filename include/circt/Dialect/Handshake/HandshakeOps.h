@@ -58,6 +58,13 @@ public:
 } // end namespace handshake
 } // end namespace circt
 
+namespace mlir {
+namespace OpTrait {
+template <typename ConcreteType>
+class HasClock : public TraitBase<ConcreteType, HasClock> {};
+} // namespace OpTrait
+} // namespace mlir
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/Handshake/HandshakeOps.h.inc"
 

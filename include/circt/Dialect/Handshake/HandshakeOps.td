@@ -251,7 +251,7 @@ def ReturnOp : Handshake_Op<"return", [Terminator]> {
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
-def BufferOp : Handshake_Op<"buffer", [NoSideEffect]> {
+def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock]> {
   let summary = "buffer operation";
 
   let description = [{
@@ -278,7 +278,7 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect]> {
   }];
 }
 
-def ForkOp : Handshake_Op<"fork", [NoSideEffect]> {
+def ForkOp : Handshake_Op<"fork", [NoSideEffect, HasClock]> {
   let summary = "fork operation";
 
   let description = [{
@@ -357,7 +357,7 @@ def MuxOp : Handshake_Op<"mux", [NoSideEffect, MergeLikeOpInterface]> {
 }
 
 def ControlMergeOp : Handshake_Op<"control_merge",
-	 [NoSideEffect, MergeLikeOpInterface]> {
+	 [NoSideEffect, MergeLikeOpInterface, HasClock]> {
   let summary = "control merge operation";
   let description = [{
     The "handshake.control_merge" operation represents a
