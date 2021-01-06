@@ -562,6 +562,8 @@ bool StdExprBuilder::visitStdExpr(CmpIOp op) {
   case CmpIPredicate::sge:
   case CmpIPredicate::uge:
     return buildBinaryLogic<GEQPrimOp>(), true;
+  default:
+    return false;
   }
 }
 
