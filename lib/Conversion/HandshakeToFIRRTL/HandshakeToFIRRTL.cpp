@@ -642,6 +642,9 @@ public:
   bool visitHandshake(MuxOp op);
   bool visitHandshake(SinkOp op);
 
+  bool buildForkLogic(ValueVector *input, SmallVector<ValueVector *, 4> outputs,
+                      Value clock, Value reset, bool isControl);
+
 private:
   ValueVectorList portList;
   Location insertLoc;
@@ -1142,20 +1145,18 @@ bool HandshakeBuilder::visitHandshake(LazyForkOp op) {
   return true;
 }
 
-/// See http://www.cs.columbia.edu/~sedwards/papers/edwards2019compositional.pdf
-/// Fig.10 for reference.
-/// Please refer to test_fork.mlir test case.
-bool HandshakeBuilder::visitHandshake(ForkOp op) {
-  ValueVector argSubfields = portList.front();
+bool HandshakeBuilder::buildForkLogic(ValueVector *input,
+                                      SmallVector<ValueVector *, 4> outputs,
+                                      Value clock, Value reset,
+                                      bool isControl) {
+  if (input == nullptr)
+    return false;
+
+  auto argSubfields = *input;
   Value argValid = argSubfields[0];
   Value argReady = argSubfields[1];
 
-  unsigned portNum = portList.size();
-  unsigned resultNum = portNum - 3;
-
-  // The clock and reset signals will be used for registers.
-  Value clock = portList[portNum - 2][0];
-  Value reset = portList[portNum - 1][0];
+  unsigned resultNum = outputs.size();
 
   // Values that are useful.
   auto bitType = UIntType::get(rewriter.getContext(), 1);
@@ -1193,14 +1194,17 @@ bool HandshakeBuilder::visitHandshake(ForkOp op) {
   // Create logic for each result port.
   unsigned idx = 0;
   for (auto doneWire : doneWires) {
+    if (outputs[idx] == nullptr)
+      return false;
+
     // Extract valid and ready from the current result port.
-    ValueVector resultSubfields = portList[idx + 1];
+    auto resultSubfields = *outputs[idx];
     Value resultValid = resultSubfields[0];
     Value resultReady = resultSubfields[1];
 
     // If this is not a control component, extract data from the current result
     // port and connect it with the argument data.
-    if (!op.control()) {
+    if (!isControl) {
       Value argData = argSubfields[2];
       Value resultData = resultSubfields[2];
       rewriter.create<ConnectOp>(insertLoc, resultData, argData);
@@ -1249,9 +1253,28 @@ bool HandshakeBuilder::visitHandshake(ForkOp op) {
         rewriter.create<OrPrimOp>(insertLoc, bitType, validReadyWire, emtdReg));
 
     // All done, move to the next result port.
-    idx++;
+    ++idx;
   }
   return true;
+}
+
+/// See http://www.cs.columbia.edu/~sedwards/papers/edwards2019compositional.pdf
+/// Fig.10 for reference.
+/// Please refer to test_fork.mlir test case.
+bool HandshakeBuilder::visitHandshake(ForkOp op) {
+  auto input = &portList.front();
+  unsigned portNum = portList.size();
+
+  // Collect all outputs ports.
+  SmallVector<ValueVector *, 4> outputs;
+  for (unsigned i = 1; i < portNum - 2; ++i)
+    outputs.push_back(&portList[i]);
+
+  // The clock and reset signals will be used for registers.
+  auto clock = portList[portNum - 2][0];
+  auto reset = portList[portNum - 1][0];
+
+  return buildForkLogic(input, outputs, clock, reset, op.control());
 }
 
 /// Please refer to test_constant.mlir test case.
