@@ -227,10 +227,10 @@ InterfaceOp ESIRTLBuilder::constructInterface(ChannelPort chan) {
   ib.create<InterfaceSignalOp>(readyStr, getI1Type());
   ib.create<InterfaceSignalOp>(dataStr, chan.getInner());
   ib.create<InterfaceModportOp>(
-      sourceStr, /*inputs=*/ArrayRef<StringRef>{readyStr},
+      sinkStr, /*inputs=*/ArrayRef<StringRef>{readyStr},
       /*outputs=*/ArrayRef<StringRef>{validStr, dataStr});
   ib.create<InterfaceModportOp>(
-      sinkStr,
+      sourceStr,
       /*inputs=*/ArrayRef<StringRef>{validStr, dataStr},
       /*outputs=*/ArrayRef<StringRef>{readyStr});
   ib.create<TypeDeclTerminatorOp>();
@@ -271,10 +271,16 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
     numStages = stages.getValue().getLimitedValue();
   }
   Value input = buffer.input();
+  StringAttr bufferName = buffer.options().name();
   for (uint64_t i = 0; i < numStages; ++i) {
     // Create the stages, connecting them up as we build.
     auto stage = rewriter.create<PipelineStage>(loc, type, buffer.clk(),
                                                 buffer.rstn(), input);
+    if (bufferName) {
+      SmallString<64> stageName(
+          {bufferName.getValue(), "_stage", std::to_string(i)});
+      stage.setAttr("name", StringAttr::get(stageName, rewriter.getContext()));
+    }
     input = stage;
   }
 
@@ -552,9 +558,9 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
     return failure();
   auto stageModule = builder.declareStage();
 
-  NamedAttrList stageAttrs = stage.getAttrs();
+  NamedAttrList stageParams;
   size_t width = getNumBits(chPort.getInner());
-  stageAttrs.set(builder.width, rewriter.getUI32IntegerAttr(width));
+  stageParams.set(builder.width, rewriter.getUI32IntegerAttr(width));
 
   // Unwrap the channel. The ready signal is a Value we haven't created yet, so
   // create a temp value and replace it later. Give this constant an odd-looking
@@ -564,6 +570,10 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   auto unwrap =
       rewriter.create<UnwrapValidReady>(loc, stage.input(), wrapReady);
 
+  StringRef pipeStageName = "pipelineStage";
+  if (auto name = stage.getAttrOfType<StringAttr>("name"))
+    pipeStageName = name.getValue();
+
   // Instantiate the "ESI_PipelineStage" external module.
   circt::Backedge stageReady = back.get(rewriter.getI1Type());
   Value operands[] = {stage.clk(), stage.rstn(), unwrap.rawOutput(),
@@ -571,8 +581,8 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   Type resultTypes[] = {rewriter.getI1Type(), unwrap.rawOutput().getType(),
                         rewriter.getI1Type()};
   auto stageInst = rewriter.create<InstanceOp>(
-      loc, resultTypes, "pipelineStage", stageModule.getName(), operands,
-      stageAttrs.getDictionary(rewriter.getContext()));
+      loc, resultTypes, pipeStageName, stageModule.getName(), operands,
+      stageParams.getDictionary(rewriter.getContext()));
   auto stageInstResults = stageInst.getResults();
 
   // Set a_ready (from the unwrap) back edge correctly to its output from stage.
