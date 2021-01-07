@@ -1381,7 +1381,11 @@ LogicalResult ModuleEmitter::visitSV(IfOp op) {
   ops.insert(op);
 
   indent() << "if (" << emitExpressionToString(op.cond(), ops) << ')';
-  emitBeginEndRegion(op.getBodyBlock(), ops, *this);
+  emitBeginEndRegion(op.getThenBlock(), ops, *this);
+  if (op.hasElse()) {
+    indent() << "else";
+    emitBeginEndRegion(op.getElseBlock(), ops, *this);
+  }
   return success();
 }
 

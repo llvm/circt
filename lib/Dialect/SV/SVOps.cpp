@@ -137,16 +137,26 @@ void IfDefOp::build(OpBuilder &odsBuilder, OperationState &result,
 // IfOp
 
 void IfOp::build(OpBuilder &odsBuilder, OperationState &result, Value cond,
-                 std::function<void()> bodyCtor) {
+                 std::function<void()> thenCtor,
+                 std::function<void()> elseCtor) {
   result.addOperands(cond);
   Region *body = result.addRegion();
   IfOp::ensureTerminator(*body, odsBuilder, result.location);
 
   // Fill in the body of the #ifdef.
-  if (bodyCtor) {
+  if (thenCtor) {
     auto oldIP = &*odsBuilder.getInsertionPoint();
     odsBuilder.setInsertionPointToStart(&*body->begin());
-    bodyCtor();
+    thenCtor();
+    odsBuilder.setInsertionPoint(oldIP);
+  }
+
+  Region *elseRegion = result.addRegion();
+  if (elseCtor) {
+    IfDefOp::ensureTerminator(*elseRegion, odsBuilder, result.location);
+    auto oldIP = &*odsBuilder.getInsertionPoint();
+    odsBuilder.setInsertionPointToStart(&*elseRegion->begin());
+    elseCtor();
     odsBuilder.setInsertionPoint(oldIP);
   }
 }
