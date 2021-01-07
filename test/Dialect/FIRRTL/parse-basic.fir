@@ -289,10 +289,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.subaccess %_t[%i8] : (!firrtl.vector<uint<1>, 12>, !firrtl.uint<8>) -> !firrtl.uint<1>
     auto <= _t[i8]
 
-    ; CHECK: [[autoP:%.+]] = firrtl.asPassive %auto : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
-    ; CHECK: firrtl.subaccess %_t{{\[}}[[autoP]]] : (!firrtl.vector<uint<1>, 12>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    auto <= _t[auto]
-
     ; CHECK: %myMem = firrtl.cmem {name = "myMem"} : !firrtl.vector<bundle<id: uint<4>, resp: uint<2>>, 8>
     cmem myMem : { id : UInt<4>, resp : UInt<2>} [8] @[Decoupled.scala 209:24]
 
@@ -324,11 +320,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: firrtl.andr %n12
     node value = andr(_GEN_43)    ;; Uses n12 directly.
-
-    ; CHECK: [[autoP:%.+]] = firrtl.asPassive %auto : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
-    ; CHECK-NEXT: = firrtl.not [[autoP]] : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    node n13 = not(auto)
-
 
     ; CHECK: %_M = firrtl.mem "Undefined" {depth = 8 : i64, name = "_M",
     ; CHECK:   readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<
@@ -488,15 +479,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK:  %f = firrtl.node [[CST15]]
     node f = UInt<4>(15)
     node g = UInt<4>(7)
-
-  ; CHECK-LABEL: firrtl.module @flip_one
-  module flip_one :
-    input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
-    ; CHECK: %0 = firrtl.subfield %bf("int_1")
-    node _T = bf.int_1
-    ; CHECK: %1 = firrtl.asPassive %0 : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
-    when _T :  ; CHECK: firrtl.when %1 {
-      skip
 
   ; CHECK-LABEL: firrtl.module @mem_depth_1
   module mem_depth_1 :

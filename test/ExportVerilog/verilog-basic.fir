@@ -122,20 +122,25 @@ circuit inputs_only :
 ; CHECK-NEXT:     output       out1,
 ; CHECK-NEXT:     output [9:0] out);
 ; CHECK-EMPTY:
-
-; CHECK-NEXT:     assign out = a + b + c;
-; CHECK-NEXT:     assign out = a + b - c;
-; CHECK-NEXT:     assign out = a - (b + c);
-; CHECK-NEXT:     assign out = a + b * c;
-; CHECK-NEXT:     assign out = a * b + c;
-; CHECK-NEXT:     assign out = (a + b) * c;
-; CHECK-NEXT:     assign out = a * (b + c);
-; CHECK-NEXT:     assign out = (a + b) * (b + c);
-; CHECK-NEXT:     assign out1 = ^(b + c);
-; CHECK-NEXT:     assign out1 = b < c | b > c;
-; CHECK-NEXT:     assign out = (b ^ c) & (out1 | out1);
-; CHECK-NEXT:     assign out = out[9:2];
-; CHECK-NEXT:     assign out1 = out < a;
+; CHECK-NEXT:     wire [9:0] [[WIRE_out:.+]];
+; CHECK-NEXT:     wire       [[WIRE_out1:.+]];
+; CHECK-EMPTY:
+; CHECK-NEXT:     assign out = [[WIRE_out]];
+; CHECK-NEXT:     assign out1 = [[WIRE_out1]];
+; CHECK-NEXT:     assign [[WIRE_out]] = a + b + c;
+; CHECK-NEXT:     assign [[WIRE_out]] = a + b - c;
+; CHECK-NEXT:     assign [[WIRE_out]] = a - (b + c);
+; CHECK-NEXT:     assign [[WIRE_out]] = a + b * c;
+; CHECK-NEXT:     assign [[WIRE_out]] = a * b + c;
+; CHECK-NEXT:     assign [[WIRE_out]] = (a + b) * c;
+; CHECK-NEXT:     assign [[WIRE_out]] = a * (b + c);
+; CHECK-NEXT:     assign [[WIRE_out]] = (a + b) * (b + c);
+; CHECK-NEXT:     assign [[WIRE_out1]] = ^(b + c);
+; CHECK-NEXT:     assign [[WIRE_out1]] = b < c | b > c;
+; CHECK-NEXT:     assign [[WIRE_out]] = (b ^ c) & ([[WIRE_out1]] | [[WIRE_out1]]);
+; CHECK-NEXT:     wire [9:0] [[WIRE_out_copy:_.+]] = [[WIRE_out]];
+; CHECK-NEXT:     assign [[WIRE_out]] = [[WIRE_out_copy]][9:2];
+; CHECK-NEXT:     assign [[WIRE_out1]] = [[WIRE_out]] < a;
 ; CHECK-NEXT:  endmodule
 
 
@@ -273,7 +278,7 @@ circuit inputs_only :
     output out: UInt<1>
     defname = FooExtModule
 
-  extmodule MyParameterizedExtModule : 
+  extmodule MyParameterizedExtModule :
     input in: UInt<8>
     output out: UInt<1>
     parameter FORMAT = "xyz_timeout=%d\n"
