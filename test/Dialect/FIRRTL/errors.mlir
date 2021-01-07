@@ -346,3 +346,13 @@ firrtl.circuit "BadAdd" {
     firrtl.add %a, %a : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   }
 }
+
+// -----
+
+firrtl.circuit "NodeMustBePassive" {
+  firrtl.module @NodeMustBePassive() {
+    %a = firrtl.wire : !firrtl.flip<uint<1>>
+    // expected-error @+1 {{'firrtl.node' op operand #0 must be a passive type}}
+    %b = firrtl.node %a : !firrtl.flip<uint<1>>
+  }
+}

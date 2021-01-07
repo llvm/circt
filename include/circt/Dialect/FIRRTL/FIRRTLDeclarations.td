@@ -99,7 +99,7 @@ def NodeOp : FIRRTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
     ```
     }];
 
-  let arguments = (ins FIRRTLType:$input, OptionalAttr<StrAttr>:$name);
+  let arguments = (ins PassiveType:$input, OptionalAttr<StrAttr>:$name);
   let results = (outs FIRRTLType:$result);
 
   let assemblyFormat = [{
