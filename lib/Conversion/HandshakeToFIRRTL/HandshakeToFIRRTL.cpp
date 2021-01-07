@@ -1211,7 +1211,7 @@ bool HandshakeBuilder::buildForkLogic(ValueVector *input,
     // Create a emitted register.
     auto emtdName = rewriter.getStringAttr("emtd" + std::to_string(idx));
     auto emtdReg = rewriter.create<RegResetOp>(insertLoc, bitType, clock, reset,
-                                              falseConst, emtdName);
+                                               falseConst, emtdName);
 
     // Connect the emitted register with {doneWire && notallDoneWire}. Only if
     // notallDone, the emtdReg will be set to the value of doneWire. Otherwise,

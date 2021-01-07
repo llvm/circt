@@ -1417,7 +1417,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
           for (auto reg : regs) {
             auto slot = builder->create<rtl::ArrayIndexOp>(reg, addr);
-            builder->create<sv::PAssignOp>(slot, data);
+            builder->create<sv::BPAssignOp>(slot, data);
           }
         });
       });
@@ -1817,22 +1817,21 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
     auto one = builder->create<rtl::ConstantOp>(APInt(1, 1));
     auto invResetSignal = builder->create<rtl::XorOp>(resetSignal, one);
 
-  auto resetFn = [&]() {
-    builder->create<sv::IfOp>(invResetSignal, [&]() {
-          builder->create<sv::BPAssignOp>(destVal, srcVal);
-    });
-  };
+    auto resetFn = [&]() {
+      builder->create<sv::IfOp>(invResetSignal, [&]() {
+        builder->create<sv::BPAssignOp>(destVal, srcVal);
+      });
+    };
 
-  if (regResetOp.resetSignal().getType().isa<AsyncResetType>()) {
-    builder->create<sv::AlwaysOp>(
-        ArrayRef<EventControl>{EventControl::AtPosEdge,
-                               EventControl::AtPosEdge},
-        ArrayRef<Value>{clockVal, resetSignal},
-        resetFn);
-    return success();
-  } else { // sync reset
-    builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clockVal, resetFn);
-  }
+    if (regResetOp.resetSignal().getType().isa<AsyncResetType>()) {
+      builder->create<sv::AlwaysOp>(
+          ArrayRef<EventControl>{EventControl::AtPosEdge,
+                                 EventControl::AtPosEdge},
+          ArrayRef<Value>{clockVal, resetSignal}, resetFn);
+      return success();
+    } else { // sync reset
+      builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clockVal, resetFn);
+    }
   }
 
   builder->create<rtl::ConnectOp>(destVal, srcVal);
