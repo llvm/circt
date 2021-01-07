@@ -159,7 +159,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: [[CVT4:%.+]] = rtl.sext [[CVT]] : (i3) -> i4
     // CHECK-NEXT: rtl.mux %false, [[CVT4]], [[SUB]] : i4
     %26 = firrtl.mux(%12, %23, %25) : (!firrtl.uint<1>, !firrtl.sint<3>, !firrtl.sint<4>) -> !firrtl.sint<4>
-  
+
     // Noop
     %27 = firrtl.validif %12, %18 : (!firrtl.uint<1>, !firrtl.uint<14>) -> !firrtl.uint<14>
     // CHECK-NEXT: rtl.andr
@@ -245,7 +245,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %reset1 = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
     %a1 = firrtl.stdIntCast %a : (i4) -> !firrtl.uint<4>
     %b1 = firrtl.stdIntCast %b : (i4) -> !firrtl.uint<4>
- 
+
     // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
     // CHECK-NEXT:     [[TV:%.+]] = sv.textual_value "`PRINTF_COND_" : i1
@@ -773,4 +773,3 @@ module attributes {firrtl.mainModule = "Simple"} {
     rtl.output
   }
 }
-
