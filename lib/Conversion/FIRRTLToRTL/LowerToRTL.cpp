@@ -1832,6 +1832,7 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
     } else { // sync reset
       builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clockVal, resetFn);
     }
+    return success();
   }
 
   builder->create<rtl::ConnectOp>(destVal, srcVal);
