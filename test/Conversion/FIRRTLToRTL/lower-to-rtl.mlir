@@ -473,7 +473,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %5 = firrtl.mux(%1, %c0_ui2, %4) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 
     // CHECK-NEXT: sv.always posedge %clock  {
-    // CHECK-NEXT:   sv.bpassign %count, %2 : i2
+    // CHECK-NEXT:   sv.passign %count, %2 : i2
     // CHECK-NEXT: }
     firrtl.connect %count, %5 : !firrtl.uint<2>, !firrtl.uint<2>
 
@@ -508,7 +508,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: %reg = sv.reg : !rtl.inout<i32>
     // CHECK-NEXT: sv.always posedge %clock, posedge %reset  {
     // CHECK-NEXT:   sv.if %reset  {
-    // CHECK-NEXT:     sv.bpassign %reg, %c0_i32 : i32
+    // CHECK-NEXT:     sv.passign %reg, %c0_i32 : i32
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
@@ -527,7 +527,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: %reg2 = sv.reg : !rtl.inout<i32>
     // CHECK-NEXT: sv.always posedge %clock  {
     // CHECK-NEXT:   sv.if %reset  {
-    // CHECK-NEXT:    sv.bpassign %reg2, %c0_i32 : i32
+    // CHECK-NEXT:    sv.passign %reg2, %c0_i32 : i32
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
@@ -560,7 +560,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: %7 = rtl.xor %reset, %true : i1
     // CHECK-NEXT: sv.always posedge %clock, posedge %reset  {
     // CHECK-NEXT:   sv.if %7  {
-    // CHECK-NEXT:     sv.bpassign %reg, %6 : i32
+    // CHECK-NEXT:     sv.passign %reg, %6 : i32
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     firrtl.connect %reg, %5 : !firrtl.uint<32>, !firrtl.uint<32>
@@ -637,7 +637,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:       %5 = rtl.read_inout %_M_write_data : !rtl.inout<i42>
     // CHECK-NEXT:       %6 = rtl.read_inout %_M_write_addr : !rtl.inout<i4>
     // CHECK-NEXT:       %7 = rtl.arrayindex %_M[%6]
-    // CHECK-NEXT:       sv.passign %7, %5 : i42
+    // CHECK-NEXT:       sv.bpassign %7, %5 : i42
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
 

@@ -1145,7 +1145,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
 
   auto resetFn = [&]() {
     builder->create<sv::IfOp>(resetSignal, [&]() {
-      builder->create<sv::BPAssignOp>(regResult, resetValue);
+      builder->create<sv::PAssignOp>(regResult, resetValue);
     });
   };
 
@@ -1801,7 +1801,7 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
       return failure();
 
     builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clockVal, [&]() {
-      builder->create<sv::BPAssignOp>(destVal, srcVal);
+      builder->create<sv::PAssignOp>(destVal, srcVal);
     });
     return success();
   }
@@ -1819,7 +1819,7 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
 
     auto resetFn = [&]() {
       builder->create<sv::IfOp>(invResetSignal, [&]() {
-        builder->create<sv::BPAssignOp>(destVal, srcVal);
+        builder->create<sv::PAssignOp>(destVal, srcVal);
       });
     };
 
