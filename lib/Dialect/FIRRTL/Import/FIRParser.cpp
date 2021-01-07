@@ -20,8 +20,10 @@
 #include "mlir/IR/Verifier.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/ScopedHashTable.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -54,6 +56,170 @@ static bool isUselessName(StringRef name) {
 /// an empty attribute to ignore it.  Otherwise, return the argument unmodified.
 static StringAttr filterUselessName(StringAttr name) {
   return isUselessName(name.getValue()) ? StringAttr() : name;
+}
+
+/// Return a nullable BlockArgument that is, optionally, the port that
+/// this value originates from.
+static BlockArgument getPort(Value value) {
+  // Base case: the value was defined in a block and must be a port.
+  auto blockArg = value.dyn_cast_or_null<BlockArgument>();
+  if (blockArg)
+    return blockArg;
+
+  BlockArgument port = nullptr;
+  TypeSwitch<Operation *>(value.getDefiningOp())
+      // Recurse into subaccess input. Index is handled elsewhere.
+      .Case<SubaccessOp>([&](auto a) { port = getPort(a.input()); })
+      // Recurse across sufield and subindex.
+      .Case<SubfieldOp, SubindexOp>([&](auto a) { port = getPort(a.input()); });
+  return port;
+}
+
+/// Return a nullable OpResult that is, optionally, used to reference
+/// an instance if the input Value points at an instance.
+static OpResult getInstancePorts(Value value) {
+
+  std::function<Value(Value, Value)> rec = [&](Value oldValue,
+                                               Value thisValue) -> Value {
+    // Base case: the value is NOT a port.
+    if (thisValue.isa<BlockArgument>())
+      return nullptr;
+
+    Value subfield = nullptr;
+    TypeSwitch<Operation *>(thisValue.getDefiningOp())
+        // Base case: the defining op is an instance. Return the previous value.
+        .Case<InstanceOp>([&](auto a) { subfield = oldValue; })
+        // Recurse across sufield, subindex, and subaccess.
+        .Case<SubfieldOp, SubindexOp, SubaccessOp>(
+            [&](auto a) { subfield = rec(a, a.input()); });
+    return subfield;
+  };
+
+  return rec(nullptr, value).dyn_cast_or_null<OpResult>();
+}
+
+/// This is a simplification of the Scala FIRRTL Compiler's notion of
+/// "kind". There are only two kinds: InOutKind which has
+/// context-dependent connection semantics and DirectionedKind which
+/// has context-independent connection semantics.
+enum Kind { InOutKind, DirectionedKind };
+
+/// Return the Kind of a Value by recursively walking value
+/// definitions.
+static Kind getKind(Value value) {
+  // Base case: all ports are directioned
+  if (value.isa<BlockArgument>()) {
+    return DirectionedKind;
+  }
+
+  Kind kind;
+  TypeSwitch<Operation *>(value.getDefiningOp())
+      // Recursively explore referenced-lik expressions
+      .Case<SubfieldOp, SubindexOp, SubaccessOp>(
+          [&](auto a) { kind = getKind(a.input()); })
+      // Wires and Registers are InOut
+      .Case<RegResetOp, RegOp, WireOp>([&](auto a) { kind = InOutKind; })
+      // Base case: anything else is directioned
+      .Default([&](auto a) { kind = DirectionedKind; });
+  return kind;
+}
+
+enum Flow { DuplexFlow, SourceFlow, SinkFlow };
+
+static Flow getFlow(FIRRTLType type) {
+  // Strip the outer flip type if one exists.
+  auto stripped = type;
+  {
+    auto underlying = type.dyn_cast_or_null<FlipType>();
+    if (underlying)
+      stripped = underlying.getElementType();
+  }
+
+  // If the stripped type is not passive, then the flow is duplex.
+  if (!stripped.isPassive())
+    return DuplexFlow;
+  // If the outer type is a flip, then it's a sink. (This is the
+  // inverse of the Scala FIRRTL Compiler.)
+  else if (type.isa<FlipType>())
+    return SinkFlow;
+  // If the outer type is unflipped, then it's a source. (This is the
+  // inverse of the Scala FIRRTL Compiler.)
+  else
+    return SourceFlow;
+};
+
+/// Return a FIRRTLType with its fields (if any exist) recursively
+/// sorted by their name. This is useful when needing to compare two
+/// types using weak type equivalence checks, e.g., when dealing with
+/// what fields match in a partial connect.
+static FIRRTLType sortType(FIRRTLType a, MLIRContext *context) {
+  return TypeSwitch<FIRRTLType, FIRRTLType>(a)
+      .Case<BundleType>([&](auto a) {
+        auto sorted = SmallVector<BundleType::BundleElement, 4>();
+        for (auto b : a.getElements()) {
+          sorted.push_back({b.name, sortType(b.type, context)});
+        }
+        llvm::sort(sorted, [](BundleType::BundleElement &a,
+                              BundleType::BundleElement &b) {
+          return a.name.str() < b.name.str();
+        });
+        return BundleType::get(sorted, context);
+      })
+      .Case<FVectorType>([&](auto a) {
+        return FVectorType::get(sortType(a.getElementType(), context),
+                                a.getNumElements());
+      })
+      .Case<FlipType>([&](auto a) {
+        return FlipType::get(sortType(a.getElementType(), context));
+      })
+      .Default([](auto a) { return a; });
+}
+
+/// Return the parts of FIRRTLType a that are also in FIRRTLType b
+static FIRRTLType commonType(FIRRTLType a, FIRRTLType b, MLIRContext *context) {
+
+  if ((a == b) || (a == FlipType::get(b)))
+    return a;
+
+  BundleType aBundle, bBundle;
+  {
+    auto underlying = a.dyn_cast_or_null<FlipType>();
+    if (underlying)
+      aBundle = underlying.getElementType().dyn_cast_or_null<BundleType>();
+    else
+      aBundle = a.dyn_cast_or_null<BundleType>();
+  }
+  {
+    auto underlying = b.dyn_cast_or_null<FlipType>();
+    if (underlying)
+      bBundle = underlying.getElementType().dyn_cast_or_null<BundleType>();
+    else
+      bBundle = b.dyn_cast_or_null<BundleType>();
+  }
+  if (aBundle && bBundle) {
+    auto common = SmallVector<BundleType::BundleElement, 4>();
+    auto aIter = aBundle.getElements().begin();
+    auto bIter = bBundle.getElements().begin();
+    auto aEnd = aBundle.getElements().end();
+    auto bEnd = bBundle.getElements().end();
+    while (aIter != aEnd && bIter != bEnd) {
+      if (aIter->name == bIter->name) {
+        common.push_back(
+            {aIter->name, commonType(aIter->type, bIter->type, context)});
+        aIter++;
+        bIter++;
+        continue;
+      }
+      if (aIter->name.str() < bIter->name.str()) {
+        aIter++;
+        continue;
+      }
+      bIter++;
+    }
+    return BundleType::get(common, context);
+  }
+
+  return nullptr;
 }
 
 //===----------------------------------------------------------------------===//
@@ -806,6 +972,11 @@ struct FIRModuleContext {
   // in the parser, do an implicit CSE to reduce parse time and silliness in the
   // resulting IR.
   llvm::DenseMap<std::pair<Attribute, Type>, Value> constantCache;
+
+  // Track any right-hand-side usages of sinks (or: l-values used as
+  // r-values). This information is used to cleanup the module after
+  // it has been parsed.
+  llvm::SmallSetVector<Value, 4> rhsSinks;
 };
 
 } // end anonymous namespace
@@ -884,6 +1055,14 @@ Value FIRStmtParser::convertToPassive(Value input, Location loc) {
   auto inType = input.getType().cast<FIRRTLType>();
   if (inType.isPassive())
     return input;
+
+  auto port = getPort(input);
+  if (port)
+    moduleContext.rhsSinks.insert(port);
+
+  auto instanceSubField = getInstancePorts(input);
+  if (instanceSubField)
+    moduleContext.rhsSinks.insert(instanceSubField);
 
   return builder.create<AsPassivePrimOp>(loc, inType.getPassiveType(), input);
 }
@@ -1748,12 +1927,55 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs, SubOpVector &subOps) {
       parseOptionalInfo(info, subOps))
     return failure();
 
-  if (kind == FIRToken::less_equal)
+  // Parse connect or partial connect. Record if this was a partial
+  // connect as it changes the logic for RHS sink computation.
+  bool partial = false;
+  if (kind == FIRToken::less_equal) {
     builder.create<ConnectOp>(info.getLoc(), lhs, rhs);
-  else {
+  } else {
     assert(kind == FIRToken::less_minus && "unexpected kind");
     builder.create<PartialConnectOp>(info.getLoc(), lhs, rhs);
+    partial = true;
   }
+
+  // True if this is a RHS sink and we need a synthetic wire
+  bool needsSyntheticWire;
+  {
+    Flow lhsFlow;
+    if (partial) {
+      auto sortedLHS =
+          sortType(lhs.getType().cast<FIRRTLType>(), builder.getContext());
+      auto sortedRHS =
+          sortType(rhs.getType().cast<FIRRTLType>(), builder.getContext());
+      auto common = commonType(sortedLHS, sortedRHS, builder.getContext());
+      lhsFlow = getFlow(common);
+    } else {
+      lhsFlow = getFlow(lhs.getType().cast<FIRRTLType>());
+    }
+
+    auto rhsFlow = getFlow(rhs.getType().cast<FIRRTLType>());
+    auto lhsKind = getKind(lhs);
+    needsSyntheticWire =
+        // The RHS is a pure sink and...
+        (rhsFlow == SinkFlow) &&
+        ( // The LHS is a wire or register that is a source...
+            ((lhsKind == InOutKind) && (lhsFlow == SourceFlow)) ||
+            // Or the LHS is a non-source IO.
+            ((lhsKind == DirectionedKind) && (lhsFlow != SourceFlow)));
+  }
+
+  // Add information to the module context about RHS sinks which need
+  // to be cleaned up later.
+  if (needsSyntheticWire) {
+    auto port = getPort(rhs);
+    if (port)
+      moduleContext.rhsSinks.insert(port);
+
+    auto instanceSubField = getInstancePorts(rhs);
+    if (instanceSubField)
+      moduleContext.rhsSinks.insert(instanceSubField);
+  }
+
   return success();
 }
 
@@ -2374,7 +2596,68 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
   FIRStmtParser stmtParser(fmodule.getBodyBuilder(), *this, moduleContext);
 
   // Parse the moduleBlock.
-  return stmtParser.parseSimpleStmtBlock(indent);
+  auto result = stmtParser.parseSimpleStmtBlock(indent);
+
+  // Fixup any RHS usages of sinks by adding wires.
+  for (auto a : moduleContext.rhsSinks) {
+    builder.setInsertionPointToStart(fmodule.getBodyBlock());
+
+    // Generate a "good" name for the synthetic wire.
+    //   - if a port, then "<port>_synthetic"
+    //   - if an instance port, then "<name>_<port>_synthetic"
+    auto namex = llvm::SmallString<16>();
+    TypeSwitch<Value>(a)
+        .Case<BlockArgument>([&namex](auto port) {
+          namex.append(
+              getFIRRTLNameAttr(
+                  impl::getArgAttrs(port.getParentBlock()->getParentOp(),
+                                    port.getArgNumber()))
+                  .getValue());
+        })
+        .Case<OpResult>([&namex](auto subfield) {
+          auto subfieldOp =
+              dyn_cast_or_null<SubfieldOp>(subfield.getDefiningOp());
+          namex.append(
+              dyn_cast_or_null<InstanceOp>(subfieldOp.input().getDefiningOp())
+                  .name()
+                  .getValue());
+          namex.append("_");
+          namex.append(subfieldOp.fieldname());
+        });
+    namex.append("_synthetic");
+
+    // Add the synthetic wire.
+    LocWithInfo info(getToken().getLoc(), this);
+    Value aWire =
+        builder.create<WireOp>(info.getLoc(), a.getType().cast<FIRRTLType>(),
+                               builder.getStringAttr(namex));
+
+    // Replace all the old uses with the wire.
+    a.replaceAllUsesWith(aWire);
+
+    // Special handling for the subfield. There may be multiple values
+    // referencing the same subfield. Find all of these and replace
+    // them.
+    auto subfieldOption = dyn_cast_or_null<SubfieldOp>(a.getDefiningOp());
+    if (subfieldOption) {
+      for (auto user : subfieldOption.input().getUsers()) {
+        SubfieldOp userx = dyn_cast_or_null<SubfieldOp>(user);
+        if (userx.fieldname() == subfieldOption.fieldname())
+          (*user).getResult(0).replaceAllUsesWith(aWire);
+        // TODO: The operands replaced here that are not
+        // 'subfieldOption' are left around. These will be cleaned up
+        // by later canonicalization, but could be cleaned up here.
+      }
+      builder.setInsertionPointAfterValue(a);
+    }
+
+    // Connect the wire to the RHS sink (now on the LHS).
+    builder.create<ConnectOp>(info.getLoc(), a, aWire);
+
+    builder.setInsertionPointToEnd(fmodule.getBodyBlock());
+  }
+
+  return result;
 }
 
 //===----------------------------------------------------------------------===//
