@@ -30,11 +30,11 @@ firrtl.circuit "Top" {
                      %c: !firrtl.analog<13>,
                      %d: !firrtl.uint<16>) {
     %3 = firrtl.add %b, %d : (!firrtl.uint<32>, !firrtl.uint<16>) -> !firrtl.uint<33>
-    
+
     %4 = firrtl.invalidvalue : !firrtl.analog<13>
     firrtl.attach %c, %4 : !firrtl.analog<13>, !firrtl.analog<13>
     %5 = firrtl.add %3, %d : (!firrtl.uint<33>, !firrtl.uint<16>) -> !firrtl.uint<34>
-    
+
     firrtl.connect %out, %5 : !firrtl.flip<uint>, !firrtl.uint<34>
   }
 }

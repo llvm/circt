@@ -1,5 +1,5 @@
 add_circt_dialect(HandshakeOps handshake)
-add_circt_doc(HandshakeOps -gen-op-doc handshake Dialect/)
+add_circt_doc(HandshakeOps -gen-op-doc HandshakeOps Dialects/)
 
 set(LLVM_TARGET_DEFINITIONS HandshakeOps.td)
 mlir_tablegen(HandshakeOps.inc -gen-rewriters)

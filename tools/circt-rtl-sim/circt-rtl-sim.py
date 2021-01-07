@@ -34,7 +34,10 @@ class Questa:
 
     def compile(self, sources):
         vlog = os.path.join(self.path, "vlog")
-        return subprocess.run([vlog, "-sv"] + sources)
+        args = [vlog, "-sv"] + sources
+        if self.args.gui:
+          args.append('+acc')
+        return subprocess.run(args)
 
     def run(self, cycles, simargs):
         if self.args.no_default_driver:
@@ -45,7 +48,10 @@ class Questa:
         vsim = os.path.join(self.path, "vsim")
         # Note: vsim exit codes say nothing about the test run's pass/fail even if
         # $fatal is encountered in the simulation.
-        cmd = [vsim, top, "-batch", "-do", "run -all"]
+        if self.args.gui:
+          cmd = [vsim, top, "-gui", "-voptargs=\"+acc\""]
+        else:
+          cmd = [vsim, top, "-batch", "-do", "run -all"]
         if cycles >= 0:
           cmd.append(f"+cycles={cycles}")
         return subprocess.run(cmd + simargs.split())
@@ -99,6 +105,8 @@ def __main__(args):
                            help="Don't compile the simulation.")
     argparser.add_argument("--no-run", dest="no_run", action='store_true',
                            help="Don't run the simulation.")
+    argparser.add_argument("--gui", dest="gui", action='store_true',
+                           help="Bring up the GUI to run.")
     argparser.add_argument("--top", type=str, default="top",
                            help="Name of top module to run.")
     argparser.add_argument("--objdir", type=str, default="",

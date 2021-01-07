@@ -20,7 +20,7 @@ The RTL and SV dialects attempt to address these problems with three major
 contributions: 
 
  1) By providing the RTL dialect, which contains a common set of abstractions
-    for combinatorial logic.  This dialect is designed to allow easy analysis
+    for combinational logic.  This dialect is designed to allow easy analysis
     and transformation, is allows other dialects to "mix in" with it to provide
     higher level functionality.
  2) By providing the SV dialect, which provides direct access to a wide variety
@@ -36,7 +36,7 @@ for compiler tools that want to generate high quality SystemVerilog.
 The RTL Dialect
 ===============
 
-The RTL dialect is designed as a mid-level compiler IR for combinatorial logic.
+The RTL dialect is designed as a mid-level compiler IR for combinational logic.
 It is *not* designed to model SystemVerilog or any other hardware design
 language directly.  Instead, it is designed to be easy to analyze and transform,
 and be a flexible and extensible substrate that may be extended with higher
@@ -124,7 +124,7 @@ this dialect is to provide simple and predictable access to SystemVerilog
 features: it is not focused primarily on being easy to analyze and transform.
 
 The SV dialect is designed to build on top of the RTL dialect, so it does not
-have its own operations for combinatorial logic, modules, or other base
+have its own operations for combinational logic, modules, or other base
 functionality defined in the RTL dialect.
 
 Type System

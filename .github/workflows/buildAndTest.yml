@@ -48,6 +48,32 @@ jobs:
 
   # --- end of build-llvm job.
 
+  # Configure CIRCT using LLVM's build system ("Unified" build). We do not actually build this configuration since it isn't as easy to cache LLVM artifacts in this mode.
+  configure-circt-unified:
+    name: Configure Unified Build
+    runs-on: ubuntu-latest
+    steps:
+      # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
+      # time.
+      - name: Get CIRCT
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
+          submodules: "true"
+
+      - name: Configure Unified Build
+        run: |
+          mkdir configure_unified
+          cd configure_unified
+          cmake ../llvm/llvm \
+            -DLLVM_ENABLE_PROJECTS=mlir \
+            -DLLVM_TARGETS_TO_BUILD=host \
+            -DLLVM_ENABLE_ASSERTIONS=ON \
+            -DLLVM_EXTERNAL_PROJECTS=circt \
+            -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=$PWD/.. 
+
+  # --- end of configure-circt-unified job.
+
   # Build CIRCT and run its tests.
   build-circt:
     name: Build and Test
