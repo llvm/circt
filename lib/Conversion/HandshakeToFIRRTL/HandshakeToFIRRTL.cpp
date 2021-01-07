@@ -1454,8 +1454,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       // be instantiated in the top-module.
       else if (op.getDialect()->getNamespace() != "firrtl") {
         FModuleOp subModuleOp = checkSubModuleOp(topModuleOp, &op);
-        bool hasClock =
-            isa<handshake::BufferOp, handshake::ControlMergeOp, ForkOp>(op);
+        bool hasClock = op.hasTrait<OpTrait::HasClock>();
 
         // Check if the sub-module already exists.
         if (!subModuleOp) {
