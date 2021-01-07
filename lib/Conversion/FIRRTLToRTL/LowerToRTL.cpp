@@ -733,9 +733,6 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   template <typename ResultOpType, typename... CtorArgTypes>
   LogicalResult setLoweringTo(Operation *orig, CtorArgTypes... args);
   void emitRandomizePrologIfNeeded();
-  void inAlwaysForClock(Value value, std::function<void()> f);
-  void inBlocksForReg(Value clock, Value reset, std::function<void()> freset,
-                      std::function<void()> fassign);
 
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitExpr;
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitDecl;
@@ -865,14 +862,6 @@ private:
   /// Each value lowered (e.g. operation result) is kept track in this map.  The
   /// key should have a FIRRTL type, the result will have an RTL dialect type.
   DenseMap<Value, Value> valueMapping;
-
-  /// Each register lowered needs to have connects placed in the always block,
-  /// and the else reset block.  This tracks the block for each lowered
-  /// register.
-  DenseMap<std::pair<Value, Value>, std::pair<Block *, Block *>> regBlocks;
-
-  /// Each value used as a clock generates one always block.
-  DenseMap<Value, Block *> clockBlocks;
 
   /// This is true if we've emitted `INIT_RANDOM_PROLOG_ into an initial block
   /// in this module already.
@@ -1036,50 +1025,6 @@ LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
   return setLowering(orig->getResult(0), result);
 }
 
-/// Create, if needed an always block for the given clock value
-void FIRRTLLowering::inAlwaysForClock(Value clock, std::function<void()> f) {
-  if (!clockBlocks.count(clock))
-    clockBlocks[clock] =
-        builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock)
-            .getBodyBlock();
-  auto block = clockBlocks[clock];
-  auto abuilder =
-      ImplicitLocOpBuilder::atBlockTerminator(builder->getLoc(), block);
-  auto oldBuilder = builder;
-  builder = &abuilder;
-  f();
-  builder = oldBuilder;
-}
-
-void FIRRTLLowering::inBlocksForReg(Value clock, Value reset,
-                                    std::function<void()> freset,
-                                    std::function<void()> fassign) {
-  if (!regBlocks.count(std::make_pair(clock, reset))) {
-    auto one = builder->create<rtl::ConstantOp>(APInt(1, 1));
-    auto notReset = builder->create<rtl::XorOp>(reset, one);
-    inAlwaysForClock(clock, [&]() {
-      sv::IfOp resetBlk = builder->create<sv::IfOp>(reset);
-      sv::IfOp assignBlk = builder->create<sv::IfOp>(notReset);
-      regBlocks[std::make_pair(clock, reset)] =
-          std::make_pair(resetBlk.getBodyBlock(), assignBlk.getBodyBlock());
-    });
-  }
-  auto blocks = regBlocks[std::make_pair(clock, reset)];
-  auto oldBuilder = builder;
-
-  auto abuilder =
-      ImplicitLocOpBuilder::atBlockTerminator(builder->getLoc(), blocks.first);
-  builder = &abuilder;
-  freset();
-
-  auto bbuilder =
-      ImplicitLocOpBuilder::atBlockTerminator(builder->getLoc(), blocks.second);
-  builder = &bbuilder;
-  fassign();
-
-  builder = oldBuilder;
-}
-
 //===----------------------------------------------------------------------===//
 // Special Operations
 //===----------------------------------------------------------------------===//
@@ -1163,16 +1108,11 @@ void FIRRTLLowering::emitRandomizePrologIfNeeded() {
 
 LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   auto resultType = lowerType(op.result().getType());
-  Value clockVal = getLoweredValue(op.clockVal());
   if (!resultType)
     return failure();
 
   auto regResult = builder->create<sv::RegOp>(resultType, op.nameAttr());
   setLowering(op, regResult);
-
-  // We are almost always going to write to this register, so unconditionally
-  // pre-generate the always block for this clock if it doesn't exist
-  inAlwaysForClock(clockVal, []() {});
 
   // Emit the initializer expression for simulation that fills it with random
   // value.
@@ -1203,10 +1143,20 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   auto regResult = builder->create<sv::RegOp>(resultType, op.nameAttr());
   setLowering(op, regResult);
 
-  inBlocksForReg(
-      clockVal, resetSignal,
-      [&]() { builder->create<sv::BPAssignOp>(regResult, resetValue); },
-      []() {});
+  auto resetFn = [&]() {
+    builder->create<sv::IfOp>(resetSignal, [&]() {
+      builder->create<sv::BPAssignOp>(regResult, resetValue);
+    });
+  };
+
+  if (op.resetSignal().getType().isa<AsyncResetType>()) {
+    builder->create<sv::AlwaysOp>(
+        ArrayRef<EventControl>{EventControl::AtPosEdge,
+                               EventControl::AtPosEdge},
+        ArrayRef<Value>{clockVal, resetSignal}, resetFn);
+  } else { // sync reset
+    builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clockVal, resetFn);
+  }
 
   // Emit the initializer expression for simulation that fills it with random
   // value.
@@ -1456,7 +1406,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       //     _M[_M_write_addr] <= _M_write_data;
       // end
       auto clock = getPortFieldValue("clk");
-      inAlwaysForClock(clock, [&]() {
+      builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, [&]() {
         auto enable = getPortFieldValue("en");
         auto mask = getPortFieldValue("mask");
         auto cond = builder->create<rtl::AndOp>(enable, mask);
@@ -1850,25 +1800,39 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
     if (!clockVal)
       return failure();
 
-    inAlwaysForClock(
-        clockVal, [&]() { builder->create<sv::PAssignOp>(destVal, srcVal); });
+    builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clockVal, [&]() {
+      builder->create<sv::BPAssignOp>(destVal, srcVal);
+    });
     return success();
   }
 
   // If this is an assignment to a RegInit, then the connect implicitly
   // happens under the clock and reset that gate the register.
-  if (auto regInitOp = dyn_cast_or_null<RegResetOp>(dest.getDefiningOp())) {
-    Value clockVal = getLoweredValue(regInitOp.clockVal());
-    Value resetSignal = getLoweredValue(regInitOp.resetSignal());
-    Value resetVal = getLoweredValue(regInitOp.resetSignal());
-    if (!clockVal || !resetVal)
+  if (auto regResetOp = dyn_cast_or_null<RegResetOp>(dest.getDefiningOp())) {
+    Value clockVal = getLoweredValue(regResetOp.clockVal());
+    Value resetSignal = getLoweredValue(regResetOp.resetSignal());
+    if (!clockVal || !resetSignal)
       return failure();
 
-    inBlocksForReg(
-        clockVal, resetSignal, []() {},
-        [&]() { builder->create<sv::PAssignOp>(destVal, srcVal); });
+    auto one = builder->create<rtl::ConstantOp>(APInt(1, 1));
+    auto invResetSignal = builder->create<rtl::XorOp>(resetSignal, one);
 
+  auto resetFn = [&]() {
+    builder->create<sv::IfOp>(invResetSignal, [&]() {
+          builder->create<sv::BPAssignOp>(destVal, srcVal);
+    });
+  };
+
+  if (regResetOp.resetSignal().getType().isa<AsyncResetType>()) {
+    builder->create<sv::AlwaysOp>(
+        ArrayRef<EventControl>{EventControl::AtPosEdge,
+                               EventControl::AtPosEdge},
+        ArrayRef<Value>{clockVal, resetSignal},
+        resetFn);
     return success();
+  } else { // sync reset
+    builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clockVal, resetFn);
+  }
   }
 
   builder->create<rtl::ConnectOp>(destVal, srcVal);
