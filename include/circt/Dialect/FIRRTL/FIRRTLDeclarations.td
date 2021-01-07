@@ -125,7 +125,7 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
 }
 
 def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
-  let summary = "Define a new register with an initializer";
+  let summary = "Define a new register with a reset";
   let description = [{
     Declare a new register:
     ```
