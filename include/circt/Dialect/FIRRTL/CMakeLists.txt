@@ -1,5 +1,5 @@
 add_circt_dialect(FIRRTL firrtl FIRRTL)
-add_circt_doc(FIRRTL -gen-op-doc firrtl Dialect/)
+add_circt_doc(FIRRTL -gen-op-doc firrtl Dialects/)
 
 set(LLVM_TARGET_DEFINITIONS FIRRTL.td)
 mlir_tablegen(FIRRTLEnums.h.inc -gen-enum-decls)
