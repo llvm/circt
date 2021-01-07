@@ -118,8 +118,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.connect [[A]], [[B]]
     _t_2[0] <= _t[0] @[Xbar.scala 21:44]
 
-    ; CHECK: %n1 = firrtl.node %auto {name = "n1"} : !firrtl.flip<uint<1>>
-    node n1 = auto
+    ; CHECK: %n1 = firrtl.node %i8 {name = "n1"} : !firrtl.uint<8>
+    node n1 = i8
 
     ; CHECK: firrtl.add %reset, %reset : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
     node n2 = add(reset, reset)
