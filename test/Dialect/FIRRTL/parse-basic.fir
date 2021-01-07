@@ -530,3 +530,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   ; CHECK: attributes {parameters = {A = -1 : i4}}
   extmodule issue183:
      parameter A = -1
+
+  ; COM: The Scala FIRRTL Compiler allows this for an aggregate node with an internal analog.
+  ; CHECK-LABEL: firrtl.module @analog_in_aggregate_node
+  module analog_in_aggregate_node:
+    input a: { a: UInt<1>, b: Analog<1>}
+    ; CHECK: %b = firrtl.node %a {{.+}}: !firrtl.bundle<a: uint<1>, b: analog<1>>
+    node b = a
