@@ -137,7 +137,8 @@ void IfDefOp::build(OpBuilder &odsBuilder, OperationState &result,
 // IfOp
 
 void IfOp::build(OpBuilder &odsBuilder, OperationState &result, Value cond,
-                 std::function<void()> thenCtor, std::function<void()> elseCtor) {
+                 std::function<void()> thenCtor,
+                 std::function<void()> elseCtor) {
   result.addOperands(cond);
   Region *body = result.addRegion();
   IfOp::ensureTerminator(*body, odsBuilder, result.location);
