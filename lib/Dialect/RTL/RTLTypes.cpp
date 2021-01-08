@@ -50,9 +50,34 @@ bool circt::rtl::isRTLValueType(Type type) {
   return false;
 }
 
+/// Return the hardware bit width of a type. Does not reflect any encoding,
+/// padding, or storage scheme, just the bit (and wire width) of a
+/// statically-size type. Reflects the number of wires needed to transmit a
+/// value of this type. Returns -1 if the type is not known or cannot be
+/// statically computed.
+int circt::rtl::getBitWidth(mlir::Type type) {
+  return llvm::TypeSwitch<::mlir::Type, size_t>(type)
+      .Case<IntegerType>(
+          [](IntegerType t) { return t.getIntOrFloatBitWidth(); })
+      .Case<ArrayType>([](ArrayType a) {
+        return a.getSize() * getBitWidth(a.getElementType());
+      })
+      .Case<StructType>([](StructType s) {
+        int total = 0;
+        for (auto field : s.getElements()) {
+          int fieldSize = getBitWidth(field.type);
+          if (fieldSize < 0)
+            return fieldSize;
+          total += fieldSize;
+        }
+        return total;
+      })
+      .Default([](Type) { return -1; });
+}
+
 /// Return true if the specified type contains known marker types like
-/// InOutType.  Unlike isRTLValueType, this is not conservative, it only returns
-/// false on known InOut types, rather than any unknown types.
+/// InOutType.  Unlike isRTLValueType, this is not conservative, it only
+/// returns false on known InOut types, rather than any unknown types.
 bool circt::rtl::hasRTLInOutType(Type type) {
   if (auto array = type.dyn_cast<ArrayType>())
     return hasRTLInOutType(array.getElementType());
@@ -75,8 +100,8 @@ mlir::Type circt::rtl::getInOutElementType(mlir::Type type) {
   return {};
 }
 
-/// Return the element type of an ArrayType or UnpackedArrayType, or null if the
-/// operand isn't an array.
+/// Return the element type of an ArrayType or UnpackedArrayType, or null if
+/// the operand isn't an array.
 Type circt::rtl::getAnyRTLArrayElementType(Type type) {
   if (!type)
     return {};
@@ -87,9 +112,9 @@ Type circt::rtl::getAnyRTLArrayElementType(Type type) {
   return {};
 }
 
-/// Parse and print nested RTL types nicely.  These helper methods allow eliding
-/// the "rtl." prefix on array, inout, and other types when in a context that
-/// expects RTL subelement types.
+/// Parse and print nested RTL types nicely.  These helper methods allow
+/// eliding the "rtl." prefix on array, inout, and other types when in a
+/// context that expects RTL subelement types.
 static ParseResult parseRTLElementType(Type &result, DialectAsmParser &p) {
   // If this is an RTL dialect type, then we don't need/want the !rtl. prefix
   // redundantly specified.
@@ -271,8 +296,8 @@ LogicalResult InOutType::verifyConstructionInvariants(Location loc,
   return success();
 }
 
-/// Parses a type registered to this dialect. Parse out the mnemonic then invoke
-/// the tblgen'd type parser dispatcher.
+/// Parses a type registered to this dialect. Parse out the mnemonic then
+/// invoke the tblgen'd type parser dispatcher.
 Type RTLDialect::parseType(DialectAsmParser &parser) const {
   llvm::StringRef mnemonic;
   if (parser.parseKeyword(&mnemonic))

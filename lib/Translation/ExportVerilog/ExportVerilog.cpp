@@ -213,9 +213,6 @@ public:
   void addIndent() { state.currentIndent += 2; }
   void reduceIndent() { state.currentIndent -= 2; }
 
-  /// Emit a type's packed dimensions, returning the number of characters
-  /// emitted.
-  size_t emitTypeDims(Type type, Operation *op);
   /// Pad the text from `emitTypeDims` to the specified number of characters.
   void emitTypeDimsPaddedToWidth(Type type, size_t padToWidth, Operation *op);
 
@@ -232,16 +229,18 @@ private:
 
 } // end anonymous namespace
 
-size_t VerilogEmitterBase::emitTypeDims(Type type, Operation *op) {
+/// Emit a type's packed dimensions, returning the number of characters
+/// emitted.
+static size_t emitTypeDims(Type type, Operation *op, llvm::raw_ostream &os) {
   if (auto inout = type.dyn_cast<rtl::InOutType>())
-    return emitTypeDims(inout.getElementType(), op);
+    return emitTypeDims(inout.getElementType(), op, os);
   if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>())
-    return emitTypeDims(uarray.getElementType(), op);
+    return emitTypeDims(uarray.getElementType(), op, os);
 
   size_t emittedWidth = 0;
   int width;
   if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
-    emittedWidth += emitTypeDims(arrayType.getElementType(), op);
+    emittedWidth += emitTypeDims(arrayType.getElementType(), op, os);
     width = arrayType.getSize();
   } else {
     width = getBitWidthOrSentinel(type);
@@ -263,7 +262,7 @@ size_t VerilogEmitterBase::emitTypeDims(Type type, Operation *op) {
 
 void VerilogEmitterBase::emitTypeDimsPaddedToWidth(Type type, size_t padToWidth,
                                                    Operation *op) {
-  size_t emittedWidth = emitTypeDims(type, op);
+  size_t emittedWidth = emitTypeDims(type, op, os);
   if (emittedWidth < padToWidth)
     os.indent(padToWidth - emittedWidth);
 }
@@ -700,6 +699,9 @@ private:
   SubExprInfo visitComb(ExtractOp op);
   SubExprInfo visitComb(ICmpOp op);
 
+  SubExprInfo visitComb(CastToBitsOp op);
+  SubExprInfo visitComb(CastFromBitsOp op);
+
 private:
   /// This is set (before a visit method is called) if emitSubExpr would
   /// prefer to get an output of a specific sign.  This is a hint to cause the
@@ -890,6 +892,21 @@ SubExprInfo ExprEmitter::visitComb(ConcatOp op) {
   return {Unary, IsUnsigned};
 }
 
+SubExprInfo ExprEmitter::visitComb(CastToBitsOp op) {
+  os << op.out().getType().cast<ArrayType>().getSize() << "'(";
+  auto subPrec = emitSubExpr(op.arg(), LowestPrecedence);
+  os << ")";
+  return {Unary, subPrec.signedness};
+}
+SubExprInfo ExprEmitter::visitComb(CastFromBitsOp op) {
+  Type dstType = op.getType();
+  os << "/*cast(bit";
+  emitTypeDims(dstType, op, os);
+  os << ")*/";
+  auto subPrec = emitSubExpr(op.arg(), LowestPrecedence);
+  return {Unary, subPrec.signedness};
+}
+
 SubExprInfo ExprEmitter::visitComb(ExtractOp op) {
   unsigned dstWidth = op.getType().cast<IntegerType>().getWidth();
   return emitBitSelect(op.input(), op.lowBit() + dstWidth - 1, op.lowBit());
@@ -1057,7 +1074,7 @@ void ModuleEmitter::emitStatementExpression(Operation *op) {
     indent() << "// Unused: ";
   } else if (emitInlineWireDecls) {
     indent() << "wire ";
-    if (emitTypeDims(op->getResult(0).getType(), op) > 0)
+    if (emitTypeDims(op->getResult(0).getType(), op, os) > 0)
       os << ' ';
     os << getName(op->getResult(0)) << " = ";
   } else {
@@ -1537,7 +1554,7 @@ LogicalResult ModuleEmitter::visitSV(InterfaceOp op) {
 LogicalResult ModuleEmitter::visitSV(InterfaceSignalOp op) {
   indent() << "logic ";
 
-  if (emitTypeDims(op.type(), op) > 0)
+  if (emitTypeDims(op.type(), op, os) > 0)
     os << ' ';
 
   os << op.sym_name() << ";\n";
