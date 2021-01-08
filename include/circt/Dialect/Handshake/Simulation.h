@@ -18,10 +18,14 @@
 // Functions used to execute a restricted form of the standard dialect, and
 // the handshake dialect.
 
-#include "mlir/IR/BuiltinOps.h"
+#ifndef CIRCT_DIALECT_HANDSHAKE_SIMULATION_H
+#define CIRCT_DIALECT_HANDSHAKE_SIMULATION_H
+
 #include "mlir/IR/MLIRContext.h"
 #include <string>
 
 bool simulate(llvm::StringRef toplevelFunction,
               llvm::ArrayRef<std::string> inputArgs,
               mlir::OwningModuleRef &module, mlir::MLIRContext &context);
+
+#endif

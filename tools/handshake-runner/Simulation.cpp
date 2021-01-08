@@ -42,66 +42,81 @@ void executeOp(mlir::ConstantIndexOp op, std::vector<Any> &in,
   auto attr = op.getAttrOfType<mlir::IntegerAttr>("value");
   out[0] = attr.getValue().sextOrTrunc(INDEX_WIDTH);
 }
+
 void executeOp(mlir::ConstantIntOp op, std::vector<Any> &in,
                std::vector<Any> &out) {
   auto attr = op.getAttrOfType<mlir::IntegerAttr>("value");
   out[0] = attr.getValue();
 }
+
 void executeOp(mlir::AddIOp op, std::vector<Any> &in, std::vector<Any> &out) {
   out[0] = any_cast<APInt>(in[0]) + any_cast<APInt>(in[1]);
 }
+
 void executeOp(mlir::AddFOp op, std::vector<Any> &in, std::vector<Any> &out) {
   out[0] = any_cast<APFloat>(in[0]) + any_cast<APFloat>(in[1]);
 }
+
 void executeOp(mlir::CmpIOp op, std::vector<Any> &in, std::vector<Any> &out) {
   APInt in0 = any_cast<APInt>(in[0]);
   APInt in1 = any_cast<APInt>(in[1]);
   APInt out0(1, mlir::applyCmpPredicate(op.getPredicate(), in0, in1));
   out[0] = out0;
 }
+
 void executeOp(mlir::CmpFOp op, std::vector<Any> &in, std::vector<Any> &out) {
   APFloat in0 = any_cast<APFloat>(in[0]);
   APFloat in1 = any_cast<APFloat>(in[1]);
   APInt out0(1, mlir::applyCmpPredicate(op.getPredicate(), in0, in1));
   out[0] = out0;
 }
+
 void executeOp(mlir::SubIOp op, std::vector<Any> &in, std::vector<Any> &out) {
   out[0] = any_cast<APInt>(in[0]) - any_cast<APInt>(in[1]);
 }
+
 void executeOp(mlir::SubFOp op, std::vector<Any> &in, std::vector<Any> &out) {
   out[0] = any_cast<APFloat>(in[0]) + any_cast<APFloat>(in[1]);
 }
+
 void executeOp(mlir::MulIOp op, std::vector<Any> &in, std::vector<Any> &out) {
   out[0] = any_cast<APInt>(in[0]) * any_cast<APInt>(in[1]);
 }
+
 void executeOp(mlir::MulFOp op, std::vector<Any> &in, std::vector<Any> &out) {
   out[0] = any_cast<APFloat>(in[0]) * any_cast<APFloat>(in[1]);
 }
+
 void executeOp(mlir::SignedDivIOp op, std::vector<Any> &in,
                std::vector<Any> &out) {
   assert(any_cast<APInt>(in[1]).getZExtValue() && "Division By Zero!");
   out[0] = any_cast<APInt>(in[0]).sdiv(any_cast<APInt>(in[1]));
 }
+
 void executeOp(mlir::UnsignedDivIOp op, std::vector<Any> &in,
                std::vector<Any> &out) {
   assert(any_cast<APInt>(in[1]).getZExtValue() && "Division By Zero!");
   out[0] = any_cast<APInt>(in[0]).udiv(any_cast<APInt>(in[1]));
 }
+
 void executeOp(mlir::DivFOp op, std::vector<Any> &in, std::vector<Any> &out) {
   out[0] = any_cast<APFloat>(in[0]) / any_cast<APFloat>(in[1]);
 }
+
 void executeOp(mlir::IndexCastOp op, std::vector<Any> &in,
                std::vector<Any> &out) {
   out[0] = in[0];
 }
+
 void executeOp(mlir::SignExtendIOp op, std::vector<Any> &in,
                std::vector<Any> &out) {
-  int width = op.getType().getIntOrFloatBitWidth();
+  int64_t width = op.getType().getIntOrFloatBitWidth();
   out[0] = any_cast<APInt>(in[0]).sext(width);
 }
+
 void executeOp(mlir::ZeroExtendIOp op, std::vector<Any> &in,
                std::vector<Any> &out) {
-  int width = op.getType().getIntOrFloatBitWidth();
+  int64_t width = op.getType().getIntOrFloatBitWidth();
   out[0] = any_cast<APInt>(in[0]).zext(width);
 }
 
@@ -112,7 +127,7 @@ unsigned allocateMemRef(mlir::MemRefType type, std::vector<Any> &in,
                         std::vector<std::vector<Any>> &store,
                         std::vector<double> &storeTimes) {
   ArrayRef<int64_t> shape = type.getShape();
-  int allocationSize = 1;
+  int64_t allocationSize = 1;
   unsigned count = 0;
   for (int64_t dim : shape) {
     if (dim > 0)
@@ -128,7 +143,7 @@ unsigned allocateMemRef(mlir::MemRefType type, std::vector<Any> &in,
   store[ptr].resize(allocationSize);
   storeTimes[ptr] = 0.0;
   mlir::Type elementType = type.getElementType();
-  int width = elementType.getIntOrFloatBitWidth();
+  int64_t width = elementType.getIntOrFloatBitWidth();
   for (int i = 0; i < allocationSize; i++) {
     if (elementType.isa<mlir::IntegerType>()) {
       store[ptr][i] = APInt(width, 0);
@@ -203,18 +218,19 @@ void debugArg(const std::string &head, mlir::Value op, const Any &value,
     llvm_unreachable("unknown type");
   }
 }
+
 Any readValueWithType(mlir::Type type, std::string in) {
   std::stringstream arg(in);
   if (type.isIndex()) {
-    int x;
+    int64_t x;
     arg >> x;
-    int width = INDEX_WIDTH;
+    int64_t width = INDEX_WIDTH;
     APInt aparg(width, x);
     return aparg;
   } else if (type.isa<mlir::IntegerType>()) {
-    int x;
+    int64_t x;
     arg >> x;
-    int width = type.getIntOrFloatBitWidth();
+    int64_t width = type.getIntOrFloatBitWidth();
     APInt aparg(width, x);
     return aparg;
     // } else if (type.isF16()) {
@@ -321,7 +337,7 @@ void executeFunction(mlir::FuncOp &toplevel,
   // block.  Fetch and execute instructions until we hit a terminator.
   while (true) {
     mlir::Operation &op = *instIter;
-    int i = 0;
+    int64_t i = 0;
     std::vector<Any> inValues(op.getNumOperands());
     std::vector<Any> outValues(op.getNumResults());
     LLVM_DEBUG(dbgs() << "OP:  " << op.getName() << "\n");
@@ -387,7 +403,7 @@ void executeFunction(mlir::FuncOp &toplevel,
           i++;
         }
       }
-      int arg = 0;
+      int64_t arg = 0;
       for (mlir::Value out : dest->getArguments()) {
         LLVM_DEBUG(debugArg("ARG", out, inArgs[arg], time));
         valueMap[out] = inArgs[arg];
@@ -514,7 +530,7 @@ void executeHandshakeFunction(handshake::FuncOp &toplevel,
       continue;
     }
 
-    int i = 0;
+    int64_t i = 0;
     std::vector<Any> inValues(op.getNumOperands());
     std::vector<Any> outValues(op.getNumResults());
     bool reschedule = false;
@@ -653,7 +669,7 @@ bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
       unsigned buffer = allocateMemRef(memreftype, nothing, store, storeTimes);
       valueMap[blockArgs[i]] = buffer;
       timeMap[blockArgs[i]] = 0.0;
-      int i = 0;
+      int64_t i = 0;
       std::stringstream arg(inputArgs[i]);
       while (!arg.eof()) {
         getline(arg, x, ',');

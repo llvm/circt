@@ -48,8 +48,7 @@ std::vector<mlir::Value> toVector(mlir::ValueRange range) {
 }
 
 // Returns whether the precondition holds for a general op to execute
-bool isReadyToExecute(std::vector<mlir::Value> &ins,
-                      std::vector<mlir::Value> &outs,
+bool isReadyToExecute(ArrayRef<mlir::Value> ins, ArrayRef<mlir::Value> outs,
                       llvm::DenseMap<mlir::Value, llvm::Any> &valueMap) {
   for (auto in : ins)
     if (valueMap.count(in) == 0)
@@ -64,7 +63,7 @@ bool isReadyToExecute(std::vector<mlir::Value> &ins,
 
 // Fetch values from the value map and consume them
 std::vector<llvm::Any>
-fetchValues(std::vector<mlir::Value> &values,
+fetchValues(ArrayRef<mlir::Value> values,
             llvm::DenseMap<mlir::Value, llvm::Any> &valueMap) {
   std::vector<llvm::Any> ins;
   for (auto &value : values) {
@@ -76,7 +75,7 @@ fetchValues(std::vector<mlir::Value> &values,
 }
 
 // Store values to the value map
-void storeValues(std::vector<llvm::Any> &values, std::vector<mlir::Value> &outs,
+void storeValues(std::vector<llvm::Any> &values, ArrayRef<mlir::Value> outs,
                  llvm::DenseMap<mlir::Value, llvm::Any> &valueMap) {
   assert(values.size() == outs.size());
   for (unsigned long i = 0; i < outs.size(); ++i)
@@ -84,7 +83,7 @@ void storeValues(std::vector<llvm::Any> &values, std::vector<mlir::Value> &outs,
 }
 
 // Update the time map after the execution
-void updateTime(std::vector<mlir::Value> &ins, std::vector<mlir::Value> &outs,
+void updateTime(ArrayRef<mlir::Value> ins, ArrayRef<mlir::Value> outs,
                 llvm::DenseMap<mlir::Value, double> &timeMap, double latency) {
   double time = 0;
   for (auto &in : ins)
@@ -145,15 +144,18 @@ void ForkOp::build(OpBuilder &builder, OperationState &result, Value operand,
   bool isControl = operand.getType().isa<NoneType>() ? true : false;
   result.addAttribute("control", builder.getBoolAttr(isControl));
 }
+
 void handshake::ForkOp::getCanonicalizationPatterns(
     OwningRewritePatternList &results, MLIRContext *context) {
   results.insert<circt::handshake::EliminateSimpleForksPattern>(context);
 }
+
 void handshake::ForkOp::execute(std::vector<llvm::Any> &ins,
                                 std::vector<llvm::Any> &outs) {
   for (auto &out : outs)
     out = ins[0];
 }
+
 bool handshake::ForkOp::tryExecute(
     llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
     llvm::DenseMap<unsigned, unsigned> &memoryMap,
@@ -198,10 +200,12 @@ void MergeOp::build(OpBuilder &builder, OperationState &result, Value operand,
   for (int i = 0, e = inputs; i < e; ++i)
     result.addOperands(operand);
 }
+
 void MergeOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                           MLIRContext *context) {
   results.insert<circt::handshake::EliminateSimpleMergesPattern>(context);
 }
+
 bool handshake::MergeOp::tryExecute(
     llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
     llvm::DenseMap<unsigned, unsigned> &memoryMap,
@@ -317,11 +321,13 @@ void ControlMergeOp::build(OpBuilder &builder, OperationState &result,
 
   result.addAttribute("control", builder.getBoolAttr(true));
 }
+
 // void ControlMergeOp::getCanonicalizationPatterns(OwningRewritePatternList
 // &results,
 //                                           MLIRContext *context) {
 //   results.insert<circt::handshake::EliminateSimpleControlMergesPattern>(context);
 // }
+
 bool handshake::ControlMergeOp::tryExecute(
     llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
     llvm::DenseMap<unsigned, unsigned> &memoryMap,
@@ -371,14 +377,17 @@ void handshake::BranchOp::build(OpBuilder &builder, OperationState &result,
                        : false;
   result.addAttribute("control", builder.getBoolAttr(isControl));
 }
+
 void handshake::BranchOp::getCanonicalizationPatterns(
     OwningRewritePatternList &results, MLIRContext *context) {
   results.insert<circt::handshake::EliminateSimpleBranchesPattern>(context);
 }
+
 void handshake::BranchOp::execute(std::vector<llvm::Any> &ins,
                                   std::vector<llvm::Any> &outs) {
   outs[0] = ins[0];
 }
+
 bool handshake::BranchOp::tryExecute(
     llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
     llvm::DenseMap<unsigned, unsigned> &memoryMap,
@@ -444,6 +453,7 @@ void StartOp::build(OpBuilder &builder, OperationState &result) {
   result.types.push_back(type);
   result.addAttribute("control", builder.getBoolAttr(true));
 }
+
 bool handshake::StartOp::tryExecute(
     llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
     llvm::DenseMap<unsigned, unsigned> &memoryMap,
@@ -457,6 +467,7 @@ void EndOp::build(OpBuilder &builder, OperationState &result, Value operand) {
 
   result.addOperands(operand);
 }
+
 bool handshake::EndOp::tryExecute(
     llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
     llvm::DenseMap<unsigned, unsigned> &memoryMap,
@@ -476,6 +487,7 @@ void SinkOp::build(OpBuilder &builder, OperationState &result, Value operand) {
 
   result.addOperands(operand);
 }
+
 bool handshake::SinkOp::tryExecute(
     llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
     llvm::DenseMap<unsigned, unsigned> &memoryMap,
@@ -496,11 +508,13 @@ void handshake::ConstantOp::build(OpBuilder &builder, OperationState &result,
 
   result.addAttribute("value", value);
 }
+
 void handshake::ConstantOp::execute(std::vector<llvm::Any> &ins,
                                     std::vector<llvm::Any> &outs) {
   auto attr = getAttrOfType<mlir::IntegerAttr>("value");
   outs[0] = attr.getValue();
 }
+
 bool handshake::ConstantOp::tryExecute(
     llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
     llvm::DenseMap<unsigned, unsigned> &memoryMap,
@@ -740,12 +754,14 @@ void handshake::StoreOp::build(OpBuilder &builder, OperationState &result,
   // Address outputs (from store to lsq)
   result.types.append(indices.size(), builder.getIndexType());
 }
+
 void handshake::StoreOp::execute(std::vector<llvm::Any> &ins,
                                  std::vector<llvm::Any> &outs) {
   // Forward the address and data to the memory op.
   outs[0] = ins[0];
   outs[1] = ins[1];
 }
+
 bool handshake::StoreOp::tryExecute(
     llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
     llvm::DenseMap<unsigned, unsigned> &memoryMap,
@@ -765,10 +781,12 @@ void JoinOp::build(OpBuilder &builder, OperationState &result,
 
   result.addAttribute("control", builder.getBoolAttr(true));
 }
+
 void handshake::JoinOp::execute(std::vector<llvm::Any> &ins,
                                 std::vector<llvm::Any> &outs) {
   outs[0] = ins[0];
 }
+
 bool handshake::JoinOp::tryExecute(
     llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
     llvm::DenseMap<unsigned, unsigned> &memoryMap,

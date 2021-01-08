@@ -24,17 +24,17 @@
 using namespace llvm;
 using namespace mlir;
 using namespace circt;
-using cl::opt;
 
 static cl::OptionCategory mainCategory("Application options");
 
-static opt<std::string> inputFileName(cl::Positional, cl::desc("<input file>"),
-                                      cl::init("-"), cl::cat(mainCategory));
+static cl::opt<std::string> inputFileName(cl::Positional,
+                                          cl::desc("<input file>"),
+                                          cl::init("-"), cl::cat(mainCategory));
 
 static cl::list<std::string> inputArgs(cl::Positional, cl::desc("<input args>"),
                                        cl::ZeroOrMore, cl::cat(mainCategory));
 
-static opt<std::string>
+static cl::opt<std::string>
     toplevelFunction("toplevelFunction", cl::Optional,
                      cl::desc("The toplevel function to execute"),
                      cl::init("main"), cl::cat(mainCategory));
