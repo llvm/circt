@@ -167,3 +167,28 @@ func @illegal_cyclic_for() {
   }
   return
 }
+
+// -----
+
+func @type_mismatch3(%a : i32) {
+  %zero = llhd.const 0 : i32
+  %one = llhd.const 1 : i32
+  %res = llhd.for (%i = %zero : i32) to %one step %one iter_args(%an = %a) -> (i32) {
+    // expected-error @+1 {{number of results do not match number of parent ForOp results}}
+    llhd.yield %an, %an: i32, i32
+  }
+  return
+}
+
+// -----
+
+func @type_mismatch3(%a : i32) {
+  %zero = llhd.const 0 : i32
+  %one = llhd.const 1 : i32
+  %res = llhd.for (%i = %zero : i32) to %one step %one iter_args(%an = %a) -> (i32) {
+    %0 = llhd.const 0 : i8
+    // expected-error @+1 {{result types do not match parent ForOp result types.}}
+    llhd.yield %0: i8
+  }
+  return
+}

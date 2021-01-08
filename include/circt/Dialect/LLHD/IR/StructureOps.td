@@ -299,7 +299,7 @@ def LLHD_ForOp : LLHD_Op<"for", [
     The range of the for-loop includes the lower bound but does not include the
     upper bound.
 
-    The body region can contain arbitrarily many blocks, but the CGF has to be a
+    The body region can contain arbitrarily many blocks, but the CFG has to be a
     DAG, so no backwards edges are allowed. At least one block has to use the
     "llhd.yield" terminator, but there can also be arbitrarily many of them. The
     branch (`br`) and conditional branch (`cond_br`) from the standard dialect
@@ -350,16 +350,17 @@ def LLHD_ForOp : LLHD_Op<"for", [
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<"OpBuilder &builder, OperationState &result, "
-              "Value lowerBound, Value upperBound, Value step, "
-              "ValueRange iterArgs = llvm::None">
+    OpBuilderDAG<(ins "Value":$lowerBound, "Value":$upperBound, "Value":$step,
+      CArg<"ValueRange", "llvm::None">:$iterArgs)>
   ];
 
   let extraClassDeclaration = [{
     Value getInductionVar() { return getLoopBody().front().getArgument(0); }
+
     Block::BlockArgListType getRegionIterArgs() {
       return getLoopBody().front().getArguments().drop_front();
     }
+
     Operation::operand_range getIterOperands() {
       return getOperands().drop_front(getNumControlOperands());
     }
@@ -368,17 +369,20 @@ def LLHD_ForOp : LLHD_Op<"for", [
     void setUpperBound(Value bound) { getOperation()->setOperand(1, bound); }
     void setStep(Value step) { getOperation()->setOperand(2, step); }
 
-    /// Number of region arguments for loop-carried values
+    // Number of region arguments for loop-carried values
     unsigned getNumRegionIterArgs() {
       return getLoopBody().front().getNumArguments() - 1;
     }
-    /// Number of operands controlling the loop: lb, ub, step
+
+    // Number of operands controlling the loop: lb, ub, step
     unsigned getNumControlOperands() { return 3; }
-    /// Does the operation hold operands for loop-carried values
+
+    // Does the operation hold operands for loop-carried values
     bool hasIterOperands() {
       return getOperation()->getNumOperands() > getNumControlOperands();
     }
-    /// Get Number of loop-carried values
+
+    // Get Number of loop-carried values
     unsigned getNumIterOperands() {
       return getOperation()->getNumOperands() - getNumControlOperands();
     }
@@ -407,10 +411,9 @@ def LLHD_YieldOp : LLHD_Op<"yield", [
   }];
 
   let arguments = (ins Variadic<AnyType>:$results);
-  let builders = [
-    OpBuilder<"OpBuilder &builder, OperationState &result",
-              [{ /* nothing to do */ }]>
-  ];
+  let builders = [OpBuilderDAG<(ins), [{ /* nothing to do */ }]>];
 
   let assemblyFormat = "attr-dict ($results^ `:` type($results))?";
+
+  let verifier = [{ return ::verify(*this); }];
 }

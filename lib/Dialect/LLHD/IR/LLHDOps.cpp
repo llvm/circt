@@ -1159,12 +1159,16 @@ void llhd::ForOp::build(OpBuilder &builder, OperationState &result, Value lb,
                         Value ub, Value step, ValueRange iterArgs) {
   result.addOperands({lb, ub, step});
   result.addOperands(iterArgs);
+
   for (Value v : iterArgs)
     result.addTypes(v.getType());
+
   Region *bodyRegion = result.addRegion();
   bodyRegion->push_back(new Block);
+
   Block &bodyBlock = bodyRegion->front();
   bodyBlock.addArgument(lb.getType());
+
   for (Value v : iterArgs)
     bodyBlock.addArgument(v.getType());
 }
@@ -1186,41 +1190,52 @@ static LogicalResult verifyDAG(DenseMap<Block *, bool> &visited, Block *block) {
 }
 
 static LogicalResult verify(llhd::ForOp op) {
-  // Check that the body defines as single block argument for the induction
+  // Check that the body defines a single block argument for the induction
   // variable.
-  auto &entryBlock = op.getLoopBody().front();
-  if (!entryBlock.getArgument(0).getType().isSignlessInteger())
+  if (!op.getInductionVar().getType().isSignlessInteger())
     return op.emitOpError(
-        "expected body first argument to be an signless integer argument for "
+        "expected body first argument to be a signless integer argument for "
         "the induction variable");
 
   auto opNumResults = op.getNumResults();
+
   // If ForOp defines values, check that the number and types of
   // the defined values match ForOp initial iter operands and backedge
   // basic block arguments.
   if (op.getNumIterOperands() != opNumResults)
     return op.emitOpError(
         "mismatch in number of loop-carried values and defined values");
+
   if (op.getNumRegionIterArgs() != opNumResults)
     return op.emitOpError(
         "mismatch in number of basic block args and defined values");
+
   auto iterOperands = op.getIterOperands();
   auto iterArgs = op.getRegionIterArgs();
   auto opResults = op.getResults();
-  unsigned i = 0;
-  for (auto e : llvm::zip(iterOperands, iterArgs, opResults)) {
-    if (std::get<0>(e).getType() != std::get<2>(e).getType())
-      return op.emitOpError() << "types mismatch between " << i
-                              << "th iter operand and defined value";
-    if (std::get<1>(e).getType() != std::get<2>(e).getType())
-      return op.emitOpError() << "types mismatch between " << i
-                              << "th iter region arg and defined value";
 
-    i++;
+  for (unsigned i = 0; i < opNumResults; ++i) {
+    Type resultType = opResults[i].getType();
+    Type operandType = iterOperands[i].getType();
+    Type argumentType = iterArgs[i].getType();
+
+    if (operandType != resultType)
+      return op.emitOpError("result type does not match the type of the "
+                            "initial loop-carried value at position ")
+             << i << " (expected " << resultType << ", but got " << operandType
+             << ").";
+
+    if (argumentType != resultType)
+      return op.emitOpError("result type does not match the specified argument "
+                            "type for the loop-carried value at position ")
+             << i << " (expected " << resultType << ", but got " << argumentType
+             << ").";
   }
 
   // Verify that the CFG of the loop body is a DAG
+  auto &entryBlock = op.getLoopBody().front();
   DenseMap<Block *, bool> visited;
+
   for (Block &block : op.getLoopBody().getBlocks()) {
     if (block.empty() || block.back().isKnownNonTerminator())
       return op.emitOpError(
@@ -1228,6 +1243,7 @@ static LogicalResult verify(llhd::ForOp op) {
 
     visited.insert(std::make_pair(&block, false));
   }
+
   if (failed(verifyDAG(visited, &entryBlock)))
     return op.emitOpError("CFG of loop body must be a DAG!");
 
@@ -1281,9 +1297,9 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
         parser.parseArrowTypeList(result.types))
       return failure();
     // Resolve input operands.
-    for (auto operand_type : llvm::zip(operands, result.types))
-      if (parser.resolveOperand(std::get<0>(operand_type),
-                                std::get<1>(operand_type), result.operands))
+    for (auto operandType : llvm::zip(operands, result.types))
+      if (parser.resolveOperand(std::get<0>(operandType),
+                                std::get<1>(operandType), result.operands))
         return failure();
   }
   // Induction variable.
@@ -1314,7 +1330,7 @@ bool llhd::ForOp::isDefinedOutsideOfLoop(Value value) {
 }
 
 LogicalResult llhd::ForOp::moveOutOfLoop(ArrayRef<Operation *> ops) {
-  for (auto op : ops)
+  for (auto *op : ops)
     op->moveBefore(*this);
   return success();
 }
@@ -1338,6 +1354,24 @@ void llhd::ForOp::getSuccessorRegions(
   assert(index.getValue() == 0 && "expected loop region");
   regions.push_back(RegionSuccessor(&getLoopBody(), getRegionIterArgs()));
   regions.push_back(RegionSuccessor(getResults()));
+}
+
+static LogicalResult verify(llhd::YieldOp op) {
+  auto forOp = op->getParentOfType<llhd::ForOp>();
+
+  if (op.results().size() != forOp.getNumIterOperands())
+    return op.emitOpError("number of results do not match number of "
+                          "parent ForOp results (expected ")
+           << forOp.getNumIterOperands() << ", but got " << op.results().size()
+           << ").";
+
+  if (!std::equal(op.results().getTypes().begin(),
+                  op.results().getTypes().end(),
+                  forOp.getIterOperands().getTypes().begin()))
+    return op.emitOpError(
+        "result types do not match parent ForOp result types.");
+
+  return success();
 }
 
 #include "circt/Dialect/LLHD/IR/LLHDEnums.cpp.inc"
