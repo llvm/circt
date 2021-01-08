@@ -21,6 +21,7 @@
 #ifndef CIRCT_DIALECT_HANDSHAKE_SIMULATION_H
 #define CIRCT_DIALECT_HANDSHAKE_SIMULATION_H
 
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
 #include <string>
 

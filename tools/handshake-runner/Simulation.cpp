@@ -32,7 +32,6 @@
 using namespace llvm;
 using namespace mlir;
 using namespace circt;
-using cl::opt;
 
 STATISTIC(instructionsExecuted, "Instructions Executed");
 STATISTIC(simulatedTime, "Simulated Time");
