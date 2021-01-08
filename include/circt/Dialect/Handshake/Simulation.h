@@ -18,9 +18,9 @@
 // Functions used to execute a restricted form of the standard dialect, and
 // the handshake dialect.
 
-using namespace llvm;
-using namespace mlir;
-using cl::opt;
+#include "mlir/IR/MLIRContext.h"
+#include <string>
 
-bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
+bool simulate(llvm::StringRef toplevelFunction,
+              llvm::ArrayRef<std::string> inputArgs,
               mlir::OwningModuleRef &module, mlir::MLIRContext &context);
