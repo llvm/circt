@@ -365,12 +365,11 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: rtl.instance "fetch"
     rtl.instance "fetch" @bar(%io_cpu_flush.wireV)  : (i1) -> ()
     %0 = firrtl.stdIntCast %io_cpu_flush.wireV : (i1) -> !firrtl.uint<1>
-    %1454 = firrtl.asNonPassive %0 : (!firrtl.uint<1>) -> !firrtl.flip<uint<1>>
 
-    %hits_1_7 = firrtl.node %1454 {name = "hits_1_7"} : !firrtl.flip<uint<1>>
+    %hits_1_7 = firrtl.node %0 {name = "hits_1_7"} : !firrtl.uint<1>
     // CHECK-NEXT:  %hits_1_7 = rtl.wire : !rtl.inout<i1>
     // CHECK-NEXT:  rtl.connect %hits_1_7, [[IO]] : i1
-    %1455 = firrtl.asPassive %hits_1_7 : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
+    %1455 = firrtl.asPassive %hits_1_7 : (!firrtl.uint<1>) -> !firrtl.uint<1>
   }
 
   // https://github.com/llvm/circt/issues/314
