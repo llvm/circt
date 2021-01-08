@@ -280,7 +280,7 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock]> {
 
 def ForkOp : Handshake_Op<"fork", [
   NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>,
-  DeclareOpInterfaceMethods<GeneralOpInterface>
+  HasClock, DeclareOpInterfaceMethods<GeneralOpInterface>
 ]> {
   let summary = "fork operation";
 
