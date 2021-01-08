@@ -124,12 +124,12 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
   }];
 }
 
-def RegInitOp : FIRRTLOp<"reginit", [/*MemAlloc*/]> {
-  let summary = "Define a new register with an initializer";
+def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
+  let summary = "Define a new register with a reset";
   let description = [{
     Declare a new register:
     ```
-      %name = firrtl.reginit %clockVal, %resetSignal, %resetValue : t1
+      %name = firrtl.regreset %clockVal, %resetSignal, %resetValue : t1
     ```
     }];
 

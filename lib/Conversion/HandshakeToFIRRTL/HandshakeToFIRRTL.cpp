@@ -893,8 +893,8 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
 
   // Declare register for storing arbitration winner.
   auto wonName = rewriter.getStringAttr("won");
-  auto won = rewriter.create<RegInitOp>(insertLoc, indexType, clock, reset,
-                                        noWinner, wonName);
+  auto won = rewriter.create<RegResetOp>(insertLoc, indexType, clock, reset,
+                                         noWinner, wonName);
 
   // Declare wire for arbitration winner.
   auto winName = rewriter.getStringAttr("win");
@@ -906,11 +906,11 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
 
   // Declare registers for storing if each output has been emitted.
   auto resultEmittedName = rewriter.getStringAttr("resultEmitted");
-  auto resultEmitted = rewriter.create<RegInitOp>(
+  auto resultEmitted = rewriter.create<RegResetOp>(
       insertLoc, bitType, clock, reset, falseConst, resultEmittedName);
 
   auto controlEmittedName = rewriter.getStringAttr("controlEmitted");
-  auto controlEmitted = rewriter.create<RegInitOp>(
+  auto controlEmitted = rewriter.create<RegResetOp>(
       insertLoc, bitType, clock, reset, falseConst, controlEmittedName);
 
   // Declare wires for if each output is done.
@@ -1210,8 +1210,8 @@ bool HandshakeBuilder::buildForkLogic(ValueVector *input,
 
     // Create a emitted register.
     auto emtdName = rewriter.getStringAttr("emtd" + std::to_string(idx));
-    auto emtdReg = rewriter.create<RegInitOp>(insertLoc, bitType, clock, reset,
-                                              falseConst, emtdName);
+    auto emtdReg = rewriter.create<RegResetOp>(insertLoc, bitType, clock, reset,
+                                               falseConst, emtdName);
 
     // Connect the emitted register with {doneWire && notallDoneWire}. Only if
     // notallDone, the emtdReg will be set to the value of doneWire. Otherwise,
