@@ -311,7 +311,7 @@ public:
   void emitDecl(InstanceOp op);
   void emitDecl(RegOp op);
   void emitDecl(MemOp op);
-  void emitDecl(RegInitOp op);
+  void emitDecl(RegResetOp op);
   void emitOperation(Operation *op);
 
   void collectNamesEmitDecls(Block &block);
@@ -1323,7 +1323,7 @@ void ModuleEmitter::emitStatement(ConnectOp op) {
     return;
   }
 
-  if (auto regInitOp = dyn_cast_or_null<RegInitOp>(dest.getDefiningOp())) {
+  if (auto regInitOp = dyn_cast_or_null<RegResetOp>(dest.getDefiningOp())) {
     auto clockExpr = emitExpressionToString(regInitOp.clockVal(), ops);
     clockExpr +=
         " or posedge " + emitExpressionToString(regInitOp.resetSignal(), ops);
@@ -1478,7 +1478,7 @@ void ModuleEmitter::emitDecl(RegOp op) {
   addInitial(action, locInfo, /*ppCond*/ "RANDOMIZE_REG_INIT");
 }
 
-void ModuleEmitter::emitDecl(RegInitOp op) {
+void ModuleEmitter::emitDecl(RegResetOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1725,7 +1725,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
   // Return the word (e.g. "wire") in Verilog to declare the specified thing.
   auto getVerilogDeclWord = [](Operation *op) -> StringRef {
-    if (isa<RegOp>(op) || isa<RegInitOp>(op))
+    if (isa<RegOp>(op) || isa<RegResetOp>(op))
       return "reg";
 
     // Note: MemOp is handled as "wire" here because each of its subcomponents
@@ -1882,7 +1882,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
     bool visitDecl(InstanceOp op) { return emitter.emitDecl(op), true; }
     bool visitDecl(NodeOp op) { return emitter.emitDecl(op), true; }
     bool visitDecl(RegOp op) { return emitter.emitDecl(op), true; }
-    bool visitDecl(RegInitOp op) { return emitter.emitDecl(op), true; }
+    bool visitDecl(RegResetOp op) { return emitter.emitDecl(op), true; }
     bool visitDecl(MemOp op) { return emitter.emitDecl(op), true; }
     bool visitDecl(WireOp op) { return true; }
 
