@@ -366,7 +366,7 @@ def MuxOp : Handshake_Op<"mux", [
 }
 
 def ControlMergeOp : Handshake_Op<"control_merge", [
-  NoSideEffect, MergeLikeOpInterface,
+  NoSideEffect, MergeLikeOpInterface, HasClock,
   DeclareOpInterfaceMethods<ExecutableOpInterface>
 ]> {
   let summary = "control merge operation";
