@@ -1,21 +1,27 @@
 //===- firtool.cpp - The firtool utility for working with .fir files ------===//
 //
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
 // This file implements 'firtool', which composes together a variety of
 // libraries in a way that is convenient to work with as a user.
 //
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/Passes.h"
-#include "circt/Dialect/FIRRTL/Dialect.h"
-#include "circt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/FIRParser.h"
+#include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "circt/Dialect/RTL/Dialect.h"
-#include "circt/Dialect/RTL/Ops.h"
-#include "circt/Dialect/SV/Dialect.h"
-#include "circt/EmitVerilog.h"
-#include "circt/FIRParser.h"
+#include "circt/Dialect/RTL/RTLDialect.h"
+#include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/SV/SVDialect.h"
+#include "circt/Translation/ExportVerilog.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
-#include "mlir/IR/Module.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/Parser.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
@@ -91,11 +97,22 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // Nothing in the parser is threaded.  Disable synchronization overhead.
   context.disableMultithreading();
 
+  // Apply any pass manager command line options.
+  PassManager pm(&context);
+  pm.enableVerifier(true);
+  applyPassManagerCLOptions(pm);
+
   OwningModuleRef module;
   if (inputFormat == InputFIRFile) {
-    FIRParserOptions options;
+    firrtl::FIRParserOptions options;
     options.ignoreInfoLocators = ignoreFIRLocations;
-    module = parseFIRFile(sourceMgr, &context, options);
+    module = importFIRRTL(sourceMgr, &context, options);
+
+    // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
+    if (!disableOptimization) {
+      pm.addPass(createCSEPass());
+      pm.addPass(createCanonicalizerPass());
+    }
   } else {
     assert(inputFormat == InputMLIRFile);
     module = parseSourceFile(sourceMgr, &context);
@@ -106,28 +123,23 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // Allow optimizations to run multithreaded.
   context.disableMultithreading(false);
 
-  // If enabled, run the optimizer.
-  if (!disableOptimization) {
-    // Apply any pass manager command line options.
-    PassManager pm(&context);
-    pm.enableVerifier(true);
-    applyPassManagerCLOptions(pm);
+  // Run the lower-to-rtl pass if requested.
+  if (lowerToRTL) {
+    if (enableLowerTypes)
+      pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+          firrtl::createLowerFIRRTLTypesPass());
+    pm.addPass(firrtl::createLowerFIRRTLToRTLModulePass());
+    pm.nest<rtl::RTLModuleOp>().addPass(firrtl::createLowerFIRRTLToRTLPass());
 
-    pm.addPass(createCSEPass());
-    pm.addPass(createCanonicalizerPass());
-
-    // Run the lower-to-rtl pass if requested.
-    if (lowerToRTL) {
-      if (enableLowerTypes)
-        pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-            firrtl::createLowerFIRRTLTypesPass());
-      pm.addPass(firrtl::createLowerFIRRTLToRTLModulePass());
-      pm.nest<rtl::RTLModuleOp>().addPass(firrtl::createLowerFIRRTLToRTLPass());
+    // If enabled, run the optimizer.
+    if (!disableOptimization) {
+      pm.addPass(createCSEPass());
+      pm.addPass(createCanonicalizerPass());
     }
-
-    if (failed(pm.run(module.get())))
-      return failure();
   }
+
+  if (failed(pm.run(module.get())))
+    return failure();
 
   // Finally, emit the output.
   switch (outputFormat) {
@@ -137,7 +149,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   case OutputDisabled:
     return success();
   case OutputVerilog:
-    return emitVerilog(module.get(), os);
+    if (lowerToRTL)
+      return exportVerilog(module.get(), os);
+    return exportFIRRTLToVerilog(module.get(), os);
   }
 };
 

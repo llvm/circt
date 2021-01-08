@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
-
+##===- utils/run-tests-docker.sh - Run tests in docker -------*- Script -*-===##
+#
+# Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+#
+##===----------------------------------------------------------------------===##
+#
 # This script should be run in the docker container started in the
 # 'run-docker.sh' script.
+#
+##===----------------------------------------------------------------------===##
 
 set -e
 

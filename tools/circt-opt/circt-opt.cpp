@@ -1,5 +1,11 @@
 //===- circt-opt.cpp - The circt-opt driver -------------------------------===//
 //
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
 // This file implements the 'circt-opt' tool, which is the circt analog of
 // mlir-opt, used to drive compiler passes, e.g. for testing.
 //
@@ -9,15 +15,17 @@
 #include "circt/Conversion/HandshakeToFIRRTL/HandshakeToFIRRTL.h"
 #include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
 #include "circt/Conversion/Passes.h"
+#include "circt/Conversion/RTLToLLHD/RTLToLLHD.h"
 #include "circt/Conversion/StandardToHandshake/StandardToHandshake.h"
 #include "circt/Conversion/StandardToStaticLogic/StandardToStaticLogic.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
-#include "circt/Dialect/FIRRTL/Dialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
-#include "circt/Dialect/RTL/Dialect.h"
-#include "circt/Dialect/SV/Dialect.h"
+#include "circt/Dialect/RTL/RTLDialect.h"
+#include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -95,7 +103,7 @@ int main(int argc, char **argv) {
 
   // Register our dialects.
   registry.insert<firrtl::FIRRTLDialect>();
-  firrtl::registerFIRRTLPasses();
+  firrtl::registerPasses();
 
   registry.insert<handshake::HandshakeOpsDialect>();
   registry.insert<staticlogic::StaticLogicDialect>();
@@ -113,6 +121,7 @@ int main(int argc, char **argv) {
   llhd::initLLHDTransformationPasses();
   llhd::initLLHDToLLVMPass();
   llhd::registerFIRRTLToLLHDPasses();
+  llhd::registerRTLToLLHDPasses();
 
   registerConversionPasses();
 

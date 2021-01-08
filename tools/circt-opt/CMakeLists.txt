@@ -8,20 +8,22 @@ add_llvm_tool(circt-opt
 llvm_update_compile_flags(circt-opt)
 target_link_libraries(circt-opt
   PRIVATE
-  MLIRESI
-  MLIRFIRRTL
-  MLIRStaticLogicOps
-  MLIRHandshakeOps
-  MLIRRTL
-  MLIRSV
-  MLIRStandardToHandshake
-  MLIRStandardToStaticLogic
-  MLIRHandshakeToFIRRTL
-  MLIRLLHD
-  MLIRLLHDTransforms
-  MLIRLLHDToLLVM
-  MLIRFIRRTLToLLHD
-  MLIRFIRRTLToRTL
+  CIRCTFIRRTLTransforms
+  CIRCTESI
+  CIRCTFIRRTL
+  CIRCTFIRRTLToLLHD
+  CIRCTFIRRTLToRTL
+  CIRCTHandshakeOps
+  CIRCTHandshakeToFIRRTL
+  CIRCTLLHD
+  CIRCTLLHDToLLVM
+  CIRCTLLHDTransforms
+  CIRCTRTL
+  CIRCTRTLToLLHD
+  CIRCTStandardToHandshake
+  CIRCTStandardToStaticLogic
+  CIRCTStaticLogicOps
+  CIRCTSV
 
   MLIRParser
   MLIRSupport

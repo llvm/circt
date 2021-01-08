@@ -24,13 +24,14 @@
 // CHECK:   %17 = firrtl.and %16, %10 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:   firrtl.connect %1, %17 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 // CHECK:   %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
-// CHECK:   %18 = firrtl.dshl %c1_ui1, %2 : (!firrtl.uint<1>, !firrtl.uint<64>) -> !firrtl.uint<2>
-// CHECK:   %19 = firrtl.bits %18 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-// CHECK:   %20 = firrtl.and %19, %17 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   firrtl.connect %4, %20 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
-// CHECK:   %21 = firrtl.bits %18 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-// CHECK:   %22 = firrtl.and %21, %17 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   firrtl.connect %7, %22 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+// CHECK:   %18 = firrtl.dshl %c1_ui1, %2 : (!firrtl.uint<1>, !firrtl.uint<64>) -> !firrtl.uint<1>
+// CHECK:   %19 = firrtl.pad %18, 2 : (!firrtl.uint<1>) -> !firrtl.uint<2>
+// CHECK:   %20 = firrtl.bits %19 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK:   %21 = firrtl.and %20, %17 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   firrtl.connect %4, %21 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+// CHECK:   %22 = firrtl.bits %19 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK:   %23 = firrtl.and %22, %17 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   firrtl.connect %7, %23 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 // CHECK: }
 
 // CHECK: firrtl.module @test_mux(%arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, %arg2: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, %arg3: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg4: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, %arg5: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, %clock: !firrtl.clock, %reset: !firrtl.uint<1>) {

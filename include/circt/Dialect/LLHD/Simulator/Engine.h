@@ -1,5 +1,11 @@
 //===- Engine.h - LLHD simulaton engine -------------------------*- C++ -*-===//
 //
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
 // This file defines the main Engine class of the LLHD simulator.
 //
 //===----------------------------------------------------------------------===//
@@ -9,7 +15,7 @@
 
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 
-#include "mlir/IR/Module.h"
+#include "mlir/IR/BuiltinOps.h"
 
 namespace mlir {
 class ExecutionEngine;

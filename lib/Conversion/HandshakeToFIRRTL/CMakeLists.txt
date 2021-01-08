@@ -1,4 +1,4 @@
-add_circt_library(MLIRHandshakeToFIRRTL
+add_circt_library(CIRCTHandshakeToFIRRTL
   HandshakeToFIRRTL.cpp
 
   ADDITIONAL_HEADER_DIRS
@@ -9,11 +9,11 @@ add_circt_library(MLIRHandshakeToFIRRTL
   MLIRHandshakeInterfacesIncGen
 
   LINK_LIBS PUBLIC
+  CIRCTFIRRTL
+  CIRCTHandshakeOps
   MLIRIR
   MLIRPass
   MLIRStandard
   MLIRSupport
   MLIRTransforms
-  MLIRHandshakeOps
-  MLIRFIRRTL
   )

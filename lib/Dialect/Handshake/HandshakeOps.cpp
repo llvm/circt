@@ -1,23 +1,25 @@
 //===- HandshakeOps.cpp - Handshake MLIR Operations -----------------------===//
 //
-// Copyright 2019 The CIRCT Authors.
-//
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-// =============================================================================
+//
+//===----------------------------------------------------------------------===//
+//
+// This file contains the declaration of the SlotMapping struct.
+//
+//===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/Function.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/Matchers.h"
-#include "mlir/IR/Module.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OpImplementation.h"
-#include "mlir/IR/StandardTypes.h"
 #include "mlir/IR/Value.h"
 
 using namespace mlir;
@@ -138,13 +140,9 @@ void ForkOp::build(OpBuilder &builder, OperationState &result, Value operand,
   // Single operand
   result.addOperands(operand);
 
-  // Fork is control-only if it is the no-data output of a ControlMerge or a
-  // StartOp
-  auto *op = operand.getDefiningOp();
-  bool isControl = ((dyn_cast<ControlMergeOp>(op) || dyn_cast<StartOp>(op)) &&
-                    operand == op->getResult(0))
-                       ? true
-                       : false;
+  // Fork is control-only if it has NoneType. This includes the no-data output
+  // of a ControlMerge or a StartOp, as well as control values from MemoryOps.
+  bool isControl = operand.getType().isa<NoneType>() ? true : false;
   result.addAttribute("control", builder.getBoolAttr(isControl));
 }
 void handshake::ForkOp::getCanonicalizationPatterns(

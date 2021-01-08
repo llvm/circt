@@ -1,15 +1,22 @@
 //===- ESIOps.cpp - ESI op code defs ----------------------------*- C++ -*-===//
 //
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
 // This is where op definitions live.
 //
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/ESI/ESIOps.h"
-#include "circt/Dialect/SV/Ops.h"
-#include "circt/Dialect/SV/Types.h"
+#include "circt/Dialect/RTL/RTLTypes.h"
+#include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/SV/SVTypes.h"
 
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/StandardTypes.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/SymbolTable.h"
 
 using namespace mlir;
@@ -42,7 +49,7 @@ static ParseResult parseChannelBuffer(OpAsmParser &parser,
       ChannelPort::get(parser.getBuilder().getContext(), innerOutputType);
   result.addTypes({outputType});
 
-  auto i1 = IntegerType::get(1, result.getContext());
+  auto i1 = IntegerType::get(result.getContext(), 1);
   if (parser.resolveOperands(operands, {i1, i1, outputType}, inputOperandsLoc,
                              result.operands))
     return failure();
@@ -75,7 +82,7 @@ static ParseResult parsePipelineStage(OpAsmParser &parser,
       ChannelPort::get(parser.getBuilder().getContext(), innerOutputType);
   result.addTypes({type});
 
-  auto i1 = IntegerType::get(1, result.getContext());
+  auto i1 = IntegerType::get(result.getContext(), 1);
   if (parser.resolveOperands(operands, {i1, i1, type}, inputOperandsLoc,
                              result.operands))
     return failure();
@@ -198,13 +205,15 @@ static LogicalResult verifySVInterface(Operation *op,
 }
 
 static LogicalResult verifyWrapSVInterface(WrapSVInterface &op) {
-  auto modportType = op.iface().getType().cast<circt::sv::ModportType>();
+  auto modportType =
+      op.interfaceSink().getType().cast<circt::sv::ModportType>();
   auto chanType = op.output().getType().cast<ChannelPort>();
   return verifySVInterface(op, modportType, chanType);
 }
 
 static LogicalResult verifyUnwrapSVInterface(UnwrapSVInterface &op) {
-  auto modportType = op.outIface().getType().cast<circt::sv::ModportType>();
+  auto modportType =
+      op.interfaceSource().getType().cast<circt::sv::ModportType>();
   auto chanType = op.chanInput().getType().cast<ChannelPort>();
   return verifySVInterface(op, modportType, chanType);
 }

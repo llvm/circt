@@ -11,13 +11,14 @@
 // CHECK:   %6 = firrtl.subfield %arg2("valid") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) -> !firrtl.flip<uint<1>>
 // CHECK:   %7 = firrtl.subfield %arg2("ready") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) -> !firrtl.uint<1>
 // CHECK:   %8 = firrtl.subfield %arg2("data") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) -> !firrtl.flip<uint<64>>
-// CHECK:   %9 = firrtl.add %2, %5 : (!firrtl.uint<64>, !firrtl.uint<64>) -> !firrtl.uint<64>
-// CHECK:   firrtl.connect %8, %9 : !firrtl.flip<uint<64>>, !firrtl.uint<64>
-// CHECK:   %10 = firrtl.and %0, %3 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   firrtl.connect %6, %10 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
-// CHECK:   %11 = firrtl.and %7, %10 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   firrtl.connect %1, %11 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
-// CHECK:   firrtl.connect %4, %11 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+// CHECK:   %9 = firrtl.add %2, %5 : (!firrtl.uint<64>, !firrtl.uint<64>) -> !firrtl.uint<65>
+// CHECK:   %10 = firrtl.bits %9 63 to 0 : (!firrtl.uint<65>) -> !firrtl.uint<64>
+// CHECK:   firrtl.connect %8, %10 : !firrtl.flip<uint<64>>, !firrtl.uint<64>
+// CHECK:   %11 = firrtl.and %0, %3 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   firrtl.connect %6, %11 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+// CHECK:   %12 = firrtl.and %7, %11 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   firrtl.connect %1, %12 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+// CHECK:   firrtl.connect %4, %12 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 // CHECK: }
 
 // CHECK-LABEL: firrtl.module @simple_addi(

@@ -1,5 +1,11 @@
 //===- ESIOps.td - ESI dialect operation definitions --------- tablegen -*-===//
 //
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
 // This is where any operations for the ESI dialect live.
 //
 //===----------------------------------------------------------------------===//
@@ -8,7 +14,10 @@
 def ChannelBufferOptions : StructAttr<"ChannelBufferOptions", ESI_Dialect, [
     // 'Stages' is used to specify a specific number of cycles (pipeline stages)
     // to use on this channel. Must be greater than 0.
-    StructFieldAttr<"stages", OptionalAttr< Confined<I64Attr, [IntMinValue<1>]> >>
+    StructFieldAttr<"stages", OptionalAttr< Confined<I64Attr, [IntMinValue<1>]> >>,
+
+    // Name assigned to a buffered connection.
+    StructFieldAttr<"name", OptionalAttr< StrAttr >>
   ]>;
 
 def ChannelBuffer : ESI_Abstract_Op<"buffer", [NoSideEffect]> {
@@ -76,8 +85,38 @@ def CosimEndpoint : ESI_Physical_Op<"cosim", []> {
     supported by the specific protocol.
   }];
 
-  let arguments = (ins I1:$clk, I1:$rstn, ChannelType:$input);
-  let results = (outs ChannelType:$output);
+  let arguments = (ins I1:$clk, I1:$rstn, ChannelType:$send,
+    I64Attr:$endpointID);
+  let results = (outs ChannelType:$recv);
 
-  let assemblyFormat = [{ $clk `,` $rstn `,` $input attr-dict `:` type($input) `->` type($output) }];
+  let assemblyFormat = [{
+    $clk `,` $rstn `,` $send `,` $endpointID attr-dict
+      `:` type($send) `->` type($recv)
+  }];
+}
+
+def RtlBitArray : Type<CPred<"$_self.isa<::circt::rtl::ArrayType>()"
+ " && $_self.cast<::circt::rtl::ArrayType>().getElementType() =="
+ "   ::mlir::IntegerType::get($_self.getContext(), 1)">, "an RTL bit array">;
+
+def CapnpDecode : ESI_Physical_Op<"decode.capnp", [NoSideEffect]> {
+  let summary = "Translate bits in Cap'nProto messages to RTL typed data";
+
+  let arguments = (ins RtlBitArray:$capnpBits);
+  let results = (outs AnyType:$decodedData);
+
+  let assemblyFormat = [{
+    $capnpBits attr-dict `:` type($capnpBits) `->` type($decodedData)
+  }];
+}
+
+def CapnpEncode : ESI_Physical_Op<"encode.capnp", [NoSideEffect]> {
+  let summary = "Translate RTL typed data to Cap'nProto";
+
+  let arguments = (ins AnyType:$dataToEncode);
+  let results = (outs RtlBitArray:$capnpBits);
+
+  let assemblyFormat = [{
+    $dataToEncode attr-dict `:` type($dataToEncode) `->` type($capnpBits)
+  }];
 }

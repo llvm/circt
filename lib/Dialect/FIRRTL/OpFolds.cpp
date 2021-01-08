@@ -1,8 +1,16 @@
 //===- OpFolds.cpp - Implement folds and canonicalizations for ops --------===//
 //
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file implement the folding and canonicalizations for FIRRTL ops.
+//
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/Dialect/CommonFolders.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
@@ -11,7 +19,7 @@ using namespace circt;
 using namespace firrtl;
 
 static Attribute getIntAttr(const APInt &value, MLIRContext *context) {
-  return IntegerAttr::get(IntegerType::get(value.getBitWidth(), context),
+  return IntegerAttr::get(IntegerType::get(context, value.getBitWidth()),
                           value);
 }
 
@@ -40,6 +48,32 @@ static inline ConstantIntMatcher m_FConstant(APInt &value) {
 OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
   assert(operands.empty() && "constant has no operands");
   return valueAttr();
+}
+
+OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
+  APInt value;
+
+  /// div(x, x) -> 1
+  ///
+  /// Division by zero is undefined in the FIRRTL specification. This
+  /// fold exploits that fact to optimize self division to one.
+  if (lhs() == rhs()) {
+    auto width = getType().cast<IntType>().getWidthOrSentinel();
+    if (width == -1)
+      width = 2;
+    return IntegerAttr::get(IntegerType::get(getContext(), width), 1);
+  }
+
+  /// div(x, 1) -> x : (uint, uint) -> uint
+  ///
+  /// UInt division by one returns the numerator. SInt division can't
+  /// be folded here because it increases the return type bitwidth by
+  /// one and requires sign extension (a new op).
+  if (matchPattern(rhs(), m_FConstant(value)) && value.isOneValue() &&
+      lhs().getType() == getType())
+    return lhs();
+
+  return {};
 }
 
 // TODO: Move to DRR.
@@ -98,7 +132,7 @@ OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
     auto width = getType().cast<IntType>().getWidthOrSentinel();
     if (width == -1)
       width = 1;
-    auto type = IntegerType::get(width, getContext());
+    auto type = IntegerType::get(getContext(), width);
     return Builder(getContext()).getZeroAttr(type);
   }
 
@@ -119,7 +153,8 @@ OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
 
     /// eq(x, 1) -> x when x is 1 bit.
     /// TODO: Support SInt<1> on the LHS etc.
-    if (value.isAllOnesValue() && lhs().getType() == getType())
+    if (value.isAllOnesValue() && lhs().getType() == getType() &&
+        rhs().getType() == getType())
       return lhs();
 
     /// TODO: eq(x, 0) -> not(x) when x is 1 bit.
@@ -143,7 +178,8 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
 
     /// neq(x, 0) -> x when x is 1 bit.
     /// TODO: Support SInt<1> on the LHS etc.
-    if (value.isNullValue() && lhs().getType() == getType())
+    if (value.isNullValue() && lhs().getType() == getType() &&
+        rhs().getType() == getType())
       return lhs();
 
     /// TODO: neq(x, 0) -> not(orr(x)) when x is >1 bit
@@ -340,6 +376,7 @@ OpFoldResult ShlPrimOp::fold(ArrayRef<Attribute> operands) {
     auto inputWidth = inputType.getWidthOrSentinel();
     if (inputWidth != -1) {
       auto resultWidth = inputWidth + shiftAmount;
+      shiftAmount = std::min(shiftAmount, resultWidth);
       return getIntAttr(value.zext(resultWidth).shl(shiftAmount), getContext());
     }
   }
@@ -367,12 +404,12 @@ OpFoldResult ShrPrimOp::fold(ArrayRef<Attribute> operands) {
   // Constant fold.
   APInt value;
   if (matchPattern(input, m_FConstant(value))) {
-    auto resultWidth = std::max(inputWidth - shiftAmount, 1);
     if (!inputType.isSigned())
-      value = value.lshr(shiftAmount);
+      value = value.lshr(std::min(shiftAmount, inputWidth));
     else
-      value = value.ashr(shiftAmount);
-    return getIntAttr(value.trunc(resultWidth), getContext());
+      value = value.ashr(std::min(shiftAmount, inputWidth - 1));
+    auto resultWidth = std::max(inputWidth - shiftAmount, 1);
+    return getIntAttr(value.truncOrSelf(resultWidth), getContext());
   }
   return {};
 }

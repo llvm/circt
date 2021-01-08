@@ -1,0 +1,172 @@
+//===- FIRTokenKinds.def - .fir file Token Descriptions ---------*- C++ -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file is intended to be #include'd multiple times to extract information
+// about tokens for various clients in the lexer.
+//
+//===----------------------------------------------------------------------===//
+
+#if !defined(TOK_MARKER) && !defined(TOK_IDENTIFIER) &&                        \
+    !defined(TOK_LITERAL) && !defined(TOK_PUNCTUATION) &&                      \
+    !defined(TOK_KEYWORD) && !defined(TOK_LPKEYWORD) &&                        \
+    !defined(TOK_LPKEYWORD_PRIM)
+#error Must define one of the TOK_ macros.
+#endif
+
+#ifndef TOK_MARKER
+#define TOK_MARKER(X)
+#endif
+#ifndef TOK_IDENTIFIER
+#define TOK_IDENTIFIER(NAME)
+#endif
+#ifndef TOK_LITERAL
+#define TOK_LITERAL(NAME)
+#endif
+#ifndef TOK_PUNCTUATION
+#define TOK_PUNCTUATION(NAME, SPELLING)
+#endif
+#ifndef TOK_KEYWORD
+#define TOK_KEYWORD(SPELLING)
+#endif
+#ifndef TOK_LPKEYWORD
+#define TOK_LPKEYWORD(SPELLING)
+#endif
+#ifndef TOK_LPKEYWORD_PRIM
+#define TOK_LPKEYWORD_PRIM(SPELLING, CLASS) TOK_LPKEYWORD(SPELLING)
+#endif
+
+// Markers
+TOK_MARKER(eof)
+TOK_MARKER(error)
+
+// Identifiers.
+TOK_IDENTIFIER(identifier)    // foo
+
+// Literals
+TOK_LITERAL(integer)          // 42
+TOK_LITERAL(signed_integer)   // -42 and +42
+TOK_LITERAL(floatingpoint)    // 42.0
+TOK_LITERAL(string)           // "foo"
+// TOK_LITERAL(raw_string)    // 'foo'
+
+TOK_LITERAL(fileinfo)
+
+// Punctuation.
+TOK_PUNCTUATION(period, ".")
+TOK_PUNCTUATION(colon, ":")
+TOK_PUNCTUATION(question, "?")
+TOK_PUNCTUATION(l_paren, "(")
+TOK_PUNCTUATION(r_paren, ")")
+TOK_PUNCTUATION(l_brace, "{")
+TOK_PUNCTUATION(r_brace, "}")
+TOK_PUNCTUATION(l_square, "[")
+TOK_PUNCTUATION(r_square, "]")
+TOK_PUNCTUATION(less, "<")
+TOK_PUNCTUATION(less_equal, "<=")
+TOK_PUNCTUATION(less_minus, "<-")
+TOK_PUNCTUATION(greater, ">")
+TOK_PUNCTUATION(equal, "=")
+TOK_PUNCTUATION(equal_greater, "=>")
+
+// Keywords.  These turn "foo" into FIRToken::kw_foo enums.
+
+// NOTE: Please key these alphabetized to make it easier to find something in
+// this list and to cater to OCD.
+TOK_KEYWORD(Analog)
+TOK_KEYWORD(AsyncReset)
+TOK_KEYWORD(Clock)
+TOK_KEYWORD(Fixed)
+TOK_KEYWORD(Reset)
+TOK_KEYWORD(SInt)
+TOK_KEYWORD(UInt)
+TOK_KEYWORD(attach)
+TOK_KEYWORD(circuit)
+TOK_KEYWORD(cmem)
+TOK_KEYWORD(defname)
+TOK_KEYWORD(else)
+TOK_KEYWORD(extmodule)
+TOK_KEYWORD(flip)
+TOK_KEYWORD(infer)
+TOK_KEYWORD(input)
+TOK_KEYWORD(inst)
+TOK_KEYWORD(invalid)
+TOK_KEYWORD(is)
+TOK_KEYWORD(mem)
+TOK_KEYWORD(module)
+TOK_KEYWORD(mport)
+TOK_KEYWORD(new)
+TOK_KEYWORD(node)
+TOK_KEYWORD(of)
+TOK_KEYWORD(old)
+TOK_KEYWORD(output)
+TOK_KEYWORD(parameter)
+TOK_KEYWORD(rdwr)
+TOK_KEYWORD(read)
+TOK_KEYWORD(reg)
+TOK_KEYWORD(reset)
+TOK_KEYWORD(skip)
+TOK_KEYWORD(smem)
+TOK_KEYWORD(undefined)
+TOK_KEYWORD(when)
+TOK_KEYWORD(wire)
+TOK_KEYWORD(with)
+TOK_KEYWORD(write)
+
+// Keywords when followed by an '('.  These turn "foo" into
+// FIRToken::lp_foo enums.
+TOK_LPKEYWORD(printf)
+TOK_LPKEYWORD(stop)
+TOK_LPKEYWORD(assert)
+TOK_LPKEYWORD(assume)
+TOK_LPKEYWORD(cover)
+
+// These are for LPKEYWORD cases that correspond to a primitive operation.
+TOK_LPKEYWORD_PRIM(add, AddPrimOp)
+TOK_LPKEYWORD_PRIM(and, AndPrimOp)
+TOK_LPKEYWORD_PRIM(andr, AndRPrimOp)
+TOK_LPKEYWORD_PRIM(asAsyncReset, AsAsyncResetPrimOp)
+TOK_LPKEYWORD_PRIM(asClock, AsClockPrimOp)
+TOK_LPKEYWORD_PRIM(asSInt, AsSIntPrimOp)
+TOK_LPKEYWORD_PRIM(asUInt, AsUIntPrimOp)
+TOK_LPKEYWORD_PRIM(bits, BitsPrimOp)
+TOK_LPKEYWORD_PRIM(cat, CatPrimOp)
+TOK_LPKEYWORD_PRIM(cvt, CvtPrimOp)
+TOK_LPKEYWORD_PRIM(div, DivPrimOp)
+TOK_LPKEYWORD_PRIM(dshl, DShlPrimOp)
+TOK_LPKEYWORD_PRIM(dshlw, DShlwPrimOp)
+TOK_LPKEYWORD_PRIM(dshr, DShrPrimOp)
+TOK_LPKEYWORD_PRIM(eq, EQPrimOp)
+TOK_LPKEYWORD_PRIM(geq, GEQPrimOp)
+TOK_LPKEYWORD_PRIM(gt, GTPrimOp)
+TOK_LPKEYWORD_PRIM(head, HeadPrimOp)
+TOK_LPKEYWORD_PRIM(leq, LEQPrimOp)
+TOK_LPKEYWORD_PRIM(lt, LTPrimOp)
+TOK_LPKEYWORD_PRIM(mul, MulPrimOp)
+TOK_LPKEYWORD_PRIM(mux, MuxPrimOp)
+TOK_LPKEYWORD_PRIM(neg, NegPrimOp)
+TOK_LPKEYWORD_PRIM(neq, NEQPrimOp)
+TOK_LPKEYWORD_PRIM(not, NotPrimOp)
+TOK_LPKEYWORD_PRIM(or, OrPrimOp)
+TOK_LPKEYWORD_PRIM(orr, OrRPrimOp)
+TOK_LPKEYWORD_PRIM(pad, PadPrimOp)
+TOK_LPKEYWORD_PRIM(rem, RemPrimOp)
+TOK_LPKEYWORD_PRIM(shl, ShlPrimOp)
+TOK_LPKEYWORD_PRIM(shr, ShrPrimOp)
+TOK_LPKEYWORD_PRIM(sub, SubPrimOp)
+TOK_LPKEYWORD_PRIM(tail, TailPrimOp)
+TOK_LPKEYWORD_PRIM(validif, ValidIfPrimOp)
+TOK_LPKEYWORD_PRIM(xor, XorPrimOp)
+TOK_LPKEYWORD_PRIM(xorr, XorRPrimOp)
+
+#undef TOK_MARKER
+#undef TOK_IDENTIFIER
+#undef TOK_LITERAL
+#undef TOK_PUNCTUATION
+#undef TOK_KEYWORD
+#undef TOK_LPKEYWORD
+#undef TOK_LPKEYWORD_PRIM

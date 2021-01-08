@@ -1,13 +1,12 @@
-//===- Ops.td - Handshake operation definitions ---------------*- tablegen
-//-*-===//
-//
-// Copyright 2019 The CIRCT Authors.
+//===- Ops.td - Handshake operation definitions ------------*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-// =============================================================================
 //
+//============================================================================//
+//
+// This file define Handshake ops in tablegen.
 //
 //===----------------------------------------------------------------------===//
 
@@ -66,7 +65,7 @@ def FuncOp : Op<Handshake_Dialect, "func", [
   let builders =
        [OpBuilderDAG<(ins "StringRef":$name, "FunctionType":$type,
                       CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs,
-                      CArg<"ArrayRef<MutableDictionaryAttr>", "{}">:$argAttrs),
+                      CArg<"ArrayRef<NamedAttrList>", "{}">:$argAttrs),
                       [{
                      $_state.addAttribute(SymbolTable::getSymbolAttrName(),
                                          $_builder.getStringAttr(name));
@@ -252,7 +251,7 @@ def ReturnOp : Handshake_Op<"return", [Terminator]> {
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
-def BufferOp : Handshake_Op<"buffer", [NoSideEffect]> {
+def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock]> {
   let summary = "buffer operation";
 
   let description = [{

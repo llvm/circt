@@ -1,15 +1,18 @@
 //===- HandshakeToFIRRTL.cpp - Translate Handshake into FIRRTL ------------===//
 //
-// Copyright 2019 The CIRCT Authors.
-//
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+//===----------------------------------------------------------------------===//
+//
+// This is the main Handshake to FIRRTL Conversion Pass Implementation.
+//
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/HandshakeToFIRRTL/HandshakeToFIRRTL.h"
-#include "circt/Dialect/FIRRTL/Ops.h"
-#include "circt/Dialect/FIRRTL/Types.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/Visitor.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -29,10 +32,43 @@ using ValueVectorList = std::vector<ValueVector>;
 // Utils
 //===----------------------------------------------------------------------===//
 
-/// Build a FIRRTL bundle type (with data, valid, and ready subfields) given the
-/// type of the data subfield.
-static FIRRTLType buildBundleType(FIRRTLType dataType, bool isFlip,
-                                  MLIRContext *context) {
+/// Get the corresponding FIRRTL type given the built-in data type. Current
+/// supported data types are integer (signed, unsigned, and signless), index,
+/// and none.
+static FIRRTLType getFIRRTLType(Type type) {
+  MLIRContext *context = type.getContext();
+  return TypeSwitch<Type, FIRRTLType>(type)
+      .Case<IntegerType>([&](IntegerType integerType) -> FIRRTLType {
+        unsigned width = integerType.getWidth();
+
+        switch (integerType.getSignedness()) {
+        case IntegerType::Signed:
+          return SIntType::get(context, width);
+        case IntegerType::Unsigned:
+          return UIntType::get(context, width);
+        // ISSUE: How to handle signless integers? Should we use the
+        // AsSIntPrimOp or AsUIntPrimOp to convert?
+        case IntegerType::Signless:
+          return UIntType::get(context, width);
+        }
+      })
+      .Case<IndexType>([&](IndexType indexType) -> FIRRTLType {
+        // Currently we consider index type as 64-bits unsigned integer.
+        unsigned width = indexType.kInternalStorageBitWidth;
+        return UIntType::get(context, width);
+      })
+      .Default([&](Type) { return FIRRTLType(); });
+}
+
+/// Return a FIRRTL bundle type (with data, valid, and ready subfields) given a
+/// standard data type.
+static FIRRTLType getBundleType(Type type, bool isFlip) {
+  // If the input is already converted to a bundle type elsewhere, itself will
+  // be returned after cast.
+  if (auto bundleType = type.dyn_cast<BundleType>())
+    return bundleType;
+
+  MLIRContext *context = type.getContext();
   using BundleElement = BundleType::BundleElement;
   llvm::SmallVector<BundleElement, 3> elements;
 
@@ -49,6 +85,7 @@ static FIRRTLType buildBundleType(FIRRTLType dataType, bool isFlip,
   }
 
   // Add data subfield to the bundle if dataType is not a null.
+  auto dataType = getFIRRTLType(type);
   if (dataType) {
     auto dataId = Identifier::get("data", context);
     if (isFlip)
@@ -58,45 +95,6 @@ static FIRRTLType buildBundleType(FIRRTLType dataType, bool isFlip,
   }
 
   return BundleType::get(elements, context);
-}
-
-/// Return a FIRRTL bundle type (with data, valid, and ready subfields) given a
-/// standard data type. Current supported data types are integer (signed,
-/// unsigned, and signless), index, and none.
-static FIRRTLType getBundleType(Type type, bool isFlip) {
-  // If the input is already converted to a bundle type elsewhere, itself will
-  // be returned after cast.
-  if (auto bundleType = type.dyn_cast<BundleType>())
-    return bundleType;
-
-  MLIRContext *context = type.getContext();
-  return TypeSwitch<Type, FIRRTLType>(type)
-      .Case<IntegerType>([&](IntegerType integerType) {
-        unsigned width = integerType.getWidth();
-
-        switch (integerType.getSignedness()) {
-        case IntegerType::Signed:
-          return buildBundleType(SIntType::get(context, width), isFlip,
-                                 context);
-        case IntegerType::Unsigned:
-          return buildBundleType(UIntType::get(context, width), isFlip,
-                                 context);
-        // ISSUE: How to handle signless integers? Should we use the
-        // AsSIntPrimOp or AsUIntPrimOp to convert?
-        case IntegerType::Signless:
-          return buildBundleType(UIntType::get(context, width), isFlip,
-                                 context);
-        }
-      })
-      .Case<IndexType>([&](IndexType indexType) {
-        // Currently we consider index type as 64-bits unsigned integer.
-        unsigned width = indexType.kInternalStorageBitWidth;
-        return buildBundleType(UIntType::get(context, width), isFlip, context);
-      })
-      .Case<NoneType>([&](NoneType) {
-        return buildBundleType(/*dataType=*/nullptr, isFlip, context);
-      })
-      .Default([&](Type) { return FIRRTLType(); });
 }
 
 static Value createConstantOp(FIRRTLType opType, APInt value,
@@ -255,9 +253,6 @@ static Value createDecoder(Value input, unsigned width, Location insertLoc,
                            ConversionPatternRewriter &rewriter) {
   auto *context = rewriter.getContext();
 
-  // Get a type for the result based on the explicitly specified width.
-  auto resultType = UIntType::get(context, width);
-
   // Get a type for a single unsigned bit.
   auto bitType = UIntType::get(context, 1);
 
@@ -265,8 +260,15 @@ static Value createDecoder(Value input, unsigned width, Location insertLoc,
   auto bit =
       rewriter.create<firrtl::ConstantOp>(insertLoc, bitType, APInt(1, 1));
 
+  auto resultType =
+      DShlPrimOp::getResultType(bit.getType().cast<FIRRTLType>(),
+                                input.getType().cast<FIRRTLType>(), insertLoc);
   // Shift the bit dynamically by the input amount.
-  return rewriter.create<DShlPrimOp>(insertLoc, resultType, bit, input);
+  auto shift = rewriter.create<DShlPrimOp>(insertLoc, resultType, bit, input);
+
+  // Get a type for the result based on the explicitly specified width.
+  Type padType = UIntType::get(context, width);
+  return rewriter.create<PadPrimOp>(insertLoc, padType, shift, width);
 }
 
 /// Construct an arbiter based on a simple priority-encoding scheme. In addition
@@ -305,9 +307,10 @@ static void createMergeArgReady(ArrayRef<Value> outputs, Value fired,
                                 Location insertLoc,
                                 ConversionPatternRewriter &rewriter) {
   auto bitType = fired.getType();
+  auto indexType = winner.getType();
 
-  Value winnerOrDefault = rewriter.create<MuxPrimOp>(insertLoc, bitType, fired,
-                                                     winner, defaultValue);
+  Value winnerOrDefault = rewriter.create<MuxPrimOp>(
+      insertLoc, indexType, fired, winner, defaultValue);
 
   for (size_t i = 0, e = outputs.size(); i != e; ++i) {
     auto constIndex = indexMappings[i];
@@ -580,8 +583,23 @@ void StdExprBuilder::buildBinaryLogic() {
   Value resultData = resultSubfields[2];
 
   // Carry out the binary operation.
-  auto resultDataOp = rewriter.create<OpType>(insertLoc, arg0Data.getType(),
-                                              arg0Data, arg1Data);
+  auto resultTy =
+      OpType::getResultType(arg0Data.getType().cast<FIRRTLType>(),
+                            arg1Data.getType().cast<FIRRTLType>(), insertLoc);
+  assert(resultTy && "invalid binary operands");
+  Value resultDataOp =
+      rewriter.create<OpType>(insertLoc, resultTy, arg0Data, arg1Data);
+
+  // Truncate the result type down if needed.
+  auto resultWidth = resultData.getType()
+                         .cast<FIRRTLType>()
+                         .getPassiveType()
+                         .getBitWidthOrSentinel();
+  if (resultWidth < resultTy.getBitWidthOrSentinel()) {
+    resultDataOp = rewriter.create<BitsPrimOp>(insertLoc, resultDataOp,
+                                               resultWidth - 1, 0);
+  }
+
   rewriter.create<ConnectOp>(insertLoc, resultData, resultDataOp);
 
   // Generate valid signal.
@@ -621,6 +639,9 @@ public:
   bool visitHandshake(MergeOp op);
   bool visitHandshake(MuxOp op);
   bool visitHandshake(SinkOp op);
+
+  bool buildForkLogic(ValueVector *input, SmallVector<ValueVector *, 4> outputs,
+                      Value clock, Value reset, bool isControl);
 
 private:
   ValueVectorList portList;
@@ -1122,39 +1143,136 @@ bool HandshakeBuilder::visitHandshake(LazyForkOp op) {
   return true;
 }
 
-/// Currently Fork is implement as a LazyFork. An eager Fork is supposed to be
-/// a timing component, and contains a register for recording which outputs
-/// have accepted the token. Eager Fork will be supported in the next patch.
-/// Please refer to test_lazy_fork.mlir test case.
-bool HandshakeBuilder::visitHandshake(ForkOp op) {
-  ValueVector argSubfields = portList.front();
+bool HandshakeBuilder::buildForkLogic(ValueVector *input,
+                                      SmallVector<ValueVector *, 4> outputs,
+                                      Value clock, Value reset,
+                                      bool isControl) {
+  if (input == nullptr)
+    return false;
+
+  auto argSubfields = *input;
   Value argValid = argSubfields[0];
   Value argReady = argSubfields[1];
 
-  // The input will be ready to accept new token when all outputs are ready.
-  Value *tmpReady = &portList[1][1];
-  for (unsigned i = 2, e = portList.size(); i < e; ++i) {
-    Value resultReady = portList[i][1];
-    *tmpReady = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
-                                           resultReady, *tmpReady);
+  unsigned resultNum = outputs.size();
+
+  // Values that are useful.
+  auto bitType = UIntType::get(rewriter.getContext(), 1);
+  auto falseConst = createConstantOp(bitType, APInt(1, 0), insertLoc, rewriter);
+
+  // Create done wire for all results.
+  SmallVector<Value, 4> doneWires;
+  for (unsigned i = 0; i < resultNum; ++i) {
+    auto doneName = rewriter.getStringAttr("done" + std::to_string(i));
+    auto doneWire = rewriter.create<WireOp>(insertLoc, bitType, doneName);
+    doneWires.push_back(doneWire);
   }
-  rewriter.create<ConnectOp>(insertLoc, argReady, *tmpReady);
 
-  // All outputs must be ready for the LazyFork to send the token.
-  auto resultValidOp = rewriter.create<AndPrimOp>(insertLoc, argValid.getType(),
-                                                  argValid, *tmpReady);
-  for (unsigned i = 1, e = portList.size(); i < e; ++i) {
-    ValueVector resultfield = portList[i];
-    Value resultValid = resultfield[0];
-    rewriter.create<ConnectOp>(insertLoc, resultValid, resultValidOp);
+  // Create an AndPrimOp chain for generating the ready signal. Only if all
+  // result ports are handshaked (done), the argument port is ready to accept
+  // the next token.
+  Value tmpDone = doneWires[0];
+  for (auto doneWire : llvm::drop_begin(doneWires, 1))
+    tmpDone = rewriter.create<AndPrimOp>(insertLoc, bitType, doneWire, tmpDone);
 
-    if (!op.isControl()) {
+  auto allDoneWire = rewriter.create<WireOp>(insertLoc, bitType,
+                                             rewriter.getStringAttr("allDone"));
+  rewriter.create<ConnectOp>(insertLoc, allDoneWire, tmpDone);
+
+  // Connect the allDoneWire to the input ready.
+  rewriter.create<ConnectOp>(insertLoc, argReady, allDoneWire);
+
+  // Create a notAllDoneWire for later use.
+  auto notAllDoneWire = rewriter.create<WireOp>(
+      insertLoc, bitType, rewriter.getStringAttr("notAllDone"));
+  rewriter.create<ConnectOp>(
+      insertLoc, notAllDoneWire,
+      rewriter.create<NotPrimOp>(insertLoc, bitType, allDoneWire));
+
+  // Create logic for each result port.
+  unsigned idx = 0;
+  for (auto doneWire : doneWires) {
+    if (outputs[idx] == nullptr)
+      return false;
+
+    // Extract valid and ready from the current result port.
+    auto resultSubfields = *outputs[idx];
+    Value resultValid = resultSubfields[0];
+    Value resultReady = resultSubfields[1];
+
+    // If this is not a control component, extract data from the current result
+    // port and connect it with the argument data.
+    if (!isControl) {
       Value argData = argSubfields[2];
-      Value resultData = resultfield[2];
+      Value resultData = resultSubfields[2];
       rewriter.create<ConnectOp>(insertLoc, resultData, argData);
     }
+
+    // Create a emitted register.
+    auto emtdName = rewriter.getStringAttr("emtd" + std::to_string(idx));
+    auto emtdReg = rewriter.create<RegInitOp>(insertLoc, bitType, clock, reset,
+                                              falseConst, emtdName);
+
+    // Connect the emitted register with {doneWire && notallDoneWire}. Only if
+    // notallDone, the emtdReg will be set to the value of doneWire. Otherwise,
+    // all emtdRegs will be cleared to zero.
+    auto emtd = rewriter.create<AndPrimOp>(insertLoc, bitType, doneWire,
+                                           notAllDoneWire);
+    rewriter.create<ConnectOp>(insertLoc, emtdReg, emtd);
+
+    // Create a notEmtdWire for later use.
+    auto notEmtdName = rewriter.getStringAttr("notEmtd" + std::to_string(idx));
+    auto notEmtdWire = rewriter.create<WireOp>(insertLoc, bitType, notEmtdName);
+    rewriter.create<ConnectOp>(
+        insertLoc, notEmtdWire,
+        rewriter.create<NotPrimOp>(insertLoc, bitType, emtdReg));
+
+    // Create valid signal and connect to the result valid. The reason of this
+    // AndPrimOp is each result can only be emitted once.
+    auto valid =
+        rewriter.create<AndPrimOp>(insertLoc, bitType, notEmtdWire, argValid);
+    rewriter.create<ConnectOp>(insertLoc, resultValid, valid);
+
+    // Create validReady wire signal, which indicates a successful handshake in
+    // the current clock cycle.
+    auto validReadyName =
+        rewriter.getStringAttr("validReady" + std::to_string(idx));
+    auto validReadyWire =
+        rewriter.create<WireOp>(insertLoc, bitType, validReadyName);
+    rewriter.create<ConnectOp>(
+        insertLoc, validReadyWire,
+        rewriter.create<AndPrimOp>(insertLoc, bitType, resultReady, valid));
+
+    // Finally, we can drive the doneWire we created in the beginning with
+    // {validReadyWire || emtdReg}, where emtdReg indicates a successful
+    // handshake in a previous clock cycle.
+    rewriter.create<ConnectOp>(
+        insertLoc, doneWire,
+        rewriter.create<OrPrimOp>(insertLoc, bitType, validReadyWire, emtdReg));
+
+    // All done, move to the next result port.
+    ++idx;
   }
   return true;
+}
+
+/// See http://www.cs.columbia.edu/~sedwards/papers/edwards2019compositional.pdf
+/// Fig.10 for reference.
+/// Please refer to test_fork.mlir test case.
+bool HandshakeBuilder::visitHandshake(ForkOp op) {
+  auto input = &portList.front();
+  unsigned portNum = portList.size();
+
+  // Collect all outputs ports.
+  SmallVector<ValueVector *, 4> outputs;
+  for (unsigned i = 1; i < portNum - 2; ++i)
+    outputs.push_back(&portList[i]);
+
+  // The clock and reset signals will be used for registers.
+  auto clock = portList[portNum - 2][0];
+  auto reset = portList[portNum - 1][0];
+
+  return buildForkLogic(input, outputs, clock, reset, op.control());
 }
 
 /// Please refer to test_constant.mlir test case.
@@ -1219,15 +1337,14 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
   MLIRContext *context = subModuleOp.getContext();
 
   // Bundle all ports of the instance into a new flattened bundle type.
-  unsigned argIndex = 0;
-  for (auto &arg : subModuleOp.getArguments()) {
-    std::string argName = "arg" + std::to_string(argIndex);
-    auto argId = rewriter.getIdentifier(argName);
+  SmallVector<ModulePortInfo, 8> portInfo;
+  getModulePortInfo(subModuleOp, portInfo);
+  for (auto &port : portInfo) {
+    auto argId = rewriter.getIdentifier(port.getName());
 
     // All ports of the instance operation are flipped.
-    auto argType = FlipType::get(arg.getType().cast<FIRRTLType>());
+    auto argType = FlipType::get(port.type);
     elements.push_back(BundleElement(argId, argType));
-    ++argIndex;
   }
 
   // Create a instance operation.
@@ -1319,10 +1436,9 @@ static void convertReturnOp(Operation *oldOp, FModuleOp topModuleOp,
 struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
   using OpConversionPattern<handshake::FuncOp>::OpConversionPattern;
 
-  LogicalResult match(Operation *op) const override { return success(); }
-
-  void rewrite(handshake::FuncOp funcOp, ArrayRef<Value> operands,
-               ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(handshake::FuncOp funcOp, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
     // Create FIRRTL circuit and top-module operation.
     auto circuitOp = rewriter.create<CircuitOp>(
         funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()));
@@ -1338,7 +1454,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       // be instantiated in the top-module.
       else if (op.getDialect()->getNamespace() != "firrtl") {
         FModuleOp subModuleOp = checkSubModuleOp(topModuleOp, &op);
-        bool hasClock = isa<handshake::BufferOp, handshake::ControlMergeOp>(op);
+        bool hasClock = op.hasTrait<OpTrait::HasClock>();
 
         // Check if the sub-module already exists.
         if (!subModuleOp) {
@@ -1356,7 +1472,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
           } else if (StdExprBuilder(portList, insertLoc, rewriter)
                          .dispatchStdExprVisitor(&op)) {
           } else
-            op.emitError("Usupported operation type");
+            return op.emitError("unsupported operation type");
         }
 
         // Instantiate the new created sub-module.
@@ -1365,6 +1481,8 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       }
     }
     rewriter.eraseOp(funcOp);
+
+    return success();
   }
 };
 
