@@ -1332,7 +1332,8 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     return false;
   }
 
-  // Set up FIRRTL memory attributes.
+  // Set up FIRRTL memory attributes. This circuit relies on a read latency of 0
+  // and a write latency of 1, but this could be generalized.
   uint32_t readLatency = 0;
   uint32_t writeLatency = 1;
   RUWAttr ruw = RUWAttr::Old;
@@ -1375,6 +1376,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
   // Prepare to create each load and store port logic.
   BundleType resultType = memOp.getType().cast<BundleType>();
+  auto bitType = UIntType::get(rewriter.getContext(), 1);
   auto numPorts = portList.size();
   auto clock = portList[numPorts - 2][0];
   auto reset = portList[numPorts - 1][0];
@@ -1383,6 +1385,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   for (size_t i = 0; i < numLoads; ++i) {
     // Unpack load address.
     auto loadAddr = portList[2 * numStores + i];
+    auto loadAddrValid = loadAddr[0];
     auto loadAddrData = loadAddr[2];
 
     // Unpack load data.
@@ -1396,12 +1399,18 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     // Create a subfield op to access this port in the memory.
     auto fieldName = loadIdentifier(i);
-    auto elementType = resultType.getElementType(fieldName).cast<BundleType>();
+    auto bundleType = resultType.getElementType(fieldName).cast<BundleType>();
     auto memBundle =
-        rewriter.create<SubfieldOp>(insertLoc, elementType, memOp, fieldName);
+        rewriter.create<SubfieldOp>(insertLoc, bundleType, memOp, fieldName);
+
+    // Get the clock out of the bundle and connect it.
+    auto memClockType = bundleType.getElementType("clk");
+    auto memClock =
+        rewriter.create<SubfieldOp>(insertLoc, memClockType, memBundle, "clk");
+    rewriter.create<ConnectOp>(insertLoc, memClock, clock);
 
     // Get the load address out of the bundle.
-    auto memAddrType = elementType.getElementType("addr");
+    auto memAddrType = bundleType.getElementType("addr");
     auto memAddr =
         rewriter.create<SubfieldOp>(insertLoc, memAddrType, memBundle, "addr");
 
@@ -1421,12 +1430,23 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     rewriter.create<ConnectOp>(insertLoc, memAddr, loadAddrData);
 
     // Get the load data out of the bundle.
-    auto memDataType = elementType.getElementType("data");
+    auto memDataType = bundleType.getElementType("data");
     auto memData =
         rewriter.create<SubfieldOp>(insertLoc, memDataType, memBundle, "data");
 
     // Connect the memory to the load data.
     rewriter.create<ConnectOp>(insertLoc, loadDataData, memData);
+
+    // Get the load enable out of the bundle.
+    auto memEnableType = bundleType.getElementType("en");
+    auto memEnable =
+        rewriter.create<SubfieldOp>(insertLoc, memEnableType, memBundle, "en");
+
+    // Connect the address valid signal to the memory enable.
+    rewriter.create<ConnectOp>(insertLoc, memEnable, loadAddrValid);
+
+    // Connect the address valid signal to the memory enable.
+    rewriter.create<ConnectOp>(insertLoc, memClock, clock);
 
     // Create control-only fork for the load address valid and ready signal.
     buildForkLogic(&loadAddr, {&loadData, &loadControl}, clock, reset, true);
@@ -1436,16 +1456,107 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   for (size_t i = 0; i < numStores; ++i) {
     // Unpack store data.
     auto storeData = portList[i];
+    auto storeDataValid = storeData[0];
+    auto storeDataReady = storeData[1];
+    auto storeDataData = storeData[2];
 
     // Unpack store address.
     auto storeAddr = portList[i + 1];
+    auto storeAddrValid = storeAddr[0];
+    auto storeAddrReady = storeAddr[1];
+    auto storeAddrData = storeAddr[2];
 
     // Unpack store control.
-    auto storeControl = portList[2 * numLoads + i];
+    auto storeControl = portList[2 * numStores + 2 * numLoads + i];
+    auto storeControlValid = storeControl[0];
+    auto storeControlReady = storeControl[1];
 
-    assert(storeAddr.size() && storeData.size() && storeControl.size());
+    assert(storeData.size() && storeAddr.size() && storeControl.size());
 
-    // TODO(mikeurbach): Connect stores to the new mem op.
+    // Create a subfield op to access this port in the memory.
+    auto fieldName = storeIdentifier(i);
+    auto subfieldType = resultType.getElementType(fieldName).cast<FlipType>();
+    auto bundleType = subfieldType.getElementType().cast<BundleType>();
+    auto memBundle =
+        rewriter.create<SubfieldOp>(insertLoc, subfieldType, memOp, fieldName);
+
+    // Get the clock out of the bundle and connect it.
+    auto memClockType = FlipType::get(bundleType.getElementType("clk"));
+    auto memClock =
+        rewriter.create<SubfieldOp>(insertLoc, memClockType, memBundle, "clk");
+    rewriter.create<ConnectOp>(insertLoc, memClock, clock);
+
+    // Get the store address out of the bundle.
+    auto memAddrType = FlipType::get(bundleType.getElementType("addr"));
+    auto memAddr =
+        rewriter.create<SubfieldOp>(insertLoc, memAddrType, memBundle, "addr");
+
+    // Since addresses coming from Handshake are IndexType and have a hardcoded
+    // 64-bit width in this pass, we may need to truncate down to the actual
+    // size of the address port used by the FIRRTL memory.
+    auto storeAddrType = storeAddrData.getType().cast<FIRRTLType>();
+    if (memAddrType != storeAddrType) {
+      auto memAddrPassiveType = memAddrType.getPassiveType();
+      auto tailAmount = storeAddrType.getBitWidthOrSentinel() -
+                        memAddrPassiveType.getBitWidthOrSentinel();
+      storeAddrData = rewriter.create<TailPrimOp>(insertLoc, memAddrPassiveType,
+                                                  storeAddrData, tailAmount);
+    }
+
+    // Connect the store address to the memory.
+    rewriter.create<ConnectOp>(insertLoc, memAddr, storeAddrData);
+
+    // Get the store data out of the bundle.
+    auto memDataType = FlipType::get(bundleType.getElementType("data"));
+    auto memData =
+        rewriter.create<SubfieldOp>(insertLoc, memDataType, memBundle, "data");
+
+    // Connect the store data to the memory.
+    rewriter.create<ConnectOp>(insertLoc, memData, storeDataData);
+
+    // Create a register to buffer the valid path by 1 cycle, to match the write
+    // latency of 1.
+    auto falseConst =
+        createConstantOp(bitType, APInt(1, 0), insertLoc, rewriter);
+    auto bufferName = rewriter.getStringAttr("writeValidBuffer");
+    auto writeValidBuffer = rewriter.create<RegInitOp>(
+        insertLoc, bitType, clock, reset, falseConst, bufferName);
+
+    // Create a gate for when both the store address and data are valid.
+    auto writeValid = rewriter.create<AndPrimOp>(
+        insertLoc, bitType, storeAddrValid, storeDataValid);
+
+    // Connect the write valid signal to the write valid buffer.
+    rewriter.create<ConnectOp>(insertLoc, writeValidBuffer, writeValid);
+
+    // Get the store enable out of the bundle.
+    auto memEnableType = FlipType::get(bundleType.getElementType("en"));
+    auto memEnable =
+        rewriter.create<SubfieldOp>(insertLoc, memEnableType, memBundle, "en");
+
+    // Connect the write valid signal to the memory enable.
+    rewriter.create<ConnectOp>(insertLoc, memEnable, writeValid);
+
+    // Get the store mask out of the bundle.
+    auto memMaskType = FlipType::get(bundleType.getElementType("mask"));
+    auto memMask =
+        rewriter.create<SubfieldOp>(insertLoc, memMaskType, memBundle, "mask");
+
+    // Since we are not storing bundles in the memory, we can assume the mask is
+    // a single bit.
+    rewriter.create<ConnectOp>(insertLoc, memMask, writeValid);
+
+    // Connect the write valid buffer to the store control valid.
+    rewriter.create<ConnectOp>(insertLoc, storeControlValid, writeValidBuffer);
+
+    // Create a gate for when both the buffered write valid signal and the store
+    // complete ready signal are asserted.
+    auto storeCompleted = rewriter.create<AndPrimOp>(
+        insertLoc, bitType, writeValidBuffer, storeControlReady);
+
+    // Connect the gate to both the store address ready and store data ready.
+    rewriter.create<ConnectOp>(insertLoc, storeAddrReady, storeCompleted);
+    rewriter.create<ConnectOp>(insertLoc, storeDataReady, storeCompleted);
   }
 
   return true;

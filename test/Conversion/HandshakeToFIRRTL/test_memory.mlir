@@ -24,14 +24,22 @@
 // Get the load0 port.
 // CHECK: %[[MEM_LOAD:.+]] = firrtl.subfield %[[MEM]]("load0") : {{.*}} -> !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>>
 
+// Connect the store clock.
+// CHECK: %[[MEM_LOAD_CLK:.+]] = firrtl.subfield %[[MEM_LOAD]]("clk") : {{.*}} -> !firrtl.flip<clock>
+// CHECK: firrtl.connect %[[MEM_LOAD_CLK]], %clock
+
 // Connect the load address, truncating if necessary.
 // CHECK: %[[MEM_LOAD_ADDR:.+]] = firrtl.subfield %[[MEM_LOAD]]("addr") : {{.*}} -> !firrtl.flip<uint<4>>
 // CHECK: %[[LD_ADDR_DATA_TAIL:.+]] = firrtl.tail %[[LD_ADDR_DATA]], 60 : (!firrtl.uint<64>) -> !firrtl.uint<4>
-// CHECK: firrtl.connect %[[MEM_LOAD_ADDR]], %[[LD_ADDR_DATA_TAIL]] : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+// CHECK: firrtl.connect %[[MEM_LOAD_ADDR]], %[[LD_ADDR_DATA_TAIL]]
 
 // Connect the load data.
 // CHECK: %[[MEM_LOAD_DATA:.+]] = firrtl.subfield %[[MEM_LOAD]]("data") : {{.*}} -> !firrtl.uint<8>
-// CHECK: firrtl.connect %[[LD_DATA_DATA]], %[[MEM_LOAD_DATA]] : !firrtl.flip<uint<8>>, !firrtl.uint<8>
+// CHECK: firrtl.connect %[[LD_DATA_DATA]], %[[MEM_LOAD_DATA]]
+
+// Connect the load address valid to the load enable.
+// CHECK: %[[MEM_LOAD_EN:.+]] = firrtl.subfield %[[MEM_LOAD]]("en") : {{.*}} -> !firrtl.flip<uint<1>>
+// CHECK: firrtl.connect %[[MEM_LOAD_EN]], %[[LD_ADDR_VALID]]
 
 // Create control-only fork for the load address valid and ready signal to the
 // data and control signals. This re-uses the logic tested in test_fork.mlir, so
@@ -42,6 +50,48 @@
 // CHECK-DAG: firrtl.{{.+}} %[[LD_DATA_READY]]
 // CHECK-DAG: firrtl.connect %[[LD_CONTROL_VALID]]
 // CHECK-DAG: firrtl.{{.+}} %[[LD_CONTROL_READY]]
+
+// Get the store0 port.
+// CHECK: %[[MEM_STORE:.+]] = firrtl.subfield %[[MEM]]("store0") : {{.*}} -> !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>
+
+// Connect the store clock.
+// CHECK: %[[MEM_STORE_CLK:.+]] = firrtl.subfield %[[MEM_STORE]]("clk") : {{.*}} -> !firrtl.flip<clock>
+// CHECK: firrtl.connect %[[MEM_STORE_CLK]], %clock
+
+// Connect the store address, truncating if necessary.
+// CHECK: %[[MEM_STORE_ADDR:.+]] = firrtl.subfield %[[MEM_STORE]]("addr") : {{.*}} -> !firrtl.flip<uint<4>>
+// CHECK: %[[ST_ADDR_DATA_TAIL:.+]] = firrtl.tail %[[ST_ADDR_DATA]], 60 : (!firrtl.uint<64>) -> !firrtl.uint<4>
+// CHECK: firrtl.connect %[[MEM_STORE_ADDR]], %[[ST_ADDR_DATA_TAIL]]
+
+// Connect the store data.
+// CHECK: %[[MEM_STORE_DATA:.+]] = firrtl.subfield %[[MEM_STORE]]("data") : {{.*}} -> !firrtl.flip<uint<8>>
+// CHECK: firrtl.connect %[[MEM_STORE_DATA]], %[[ST_DATA_DATA]]
+
+// Create the write valid buffer.
+// CHECK: %[[WRITE_VALID_BUFFER:.+]] = firrtl.reginit {{.+}} -> !firrtl.uint<1>
+
+// Create the write valid signal.
+// CHECK: %[[WRITE_VALID:.+]] = firrtl.and %[[ST_ADDR_VALID]], %[[ST_DATA_VALID]]
+
+// Connect the write valid signal to the buffer.
+// CHECK: firrtl.connect %[[WRITE_VALID_BUFFER]], %[[WRITE_VALID]]
+
+// Connect the write valid signal to the memory enable
+// CHECK: %[[MEM_STORE_EN:.+]] = firrtl.subfield %[[MEM_STORE]]("en") : {{.*}} -> !firrtl.flip<uint<1>>
+// CHECK: firrtl.connect %[[MEM_STORE_EN]], %[[WRITE_VALID]]
+
+// Connect the write valid signal to the memory mask.
+// CHECK: %[[MEM_STORE_MASK:.+]] = firrtl.subfield %[[MEM_STORE]]("mask") : {{.*}} -> !firrtl.flip<uint<1>>
+// CHECK: firrtl.connect %[[MEM_STORE_MASK]], %[[WRITE_VALID]]
+
+// Connect the write valid buffer to the store control valid.
+// CHECK: firrtl.connect %[[ST_CONTROL_VALID]], %[[WRITE_VALID_BUFFER]]
+
+// Create the store completed signal and connect it to the store data and
+// address ports.
+// CHECK: %[[STORE_COMPLETED:.+]] = firrtl.and %[[WRITE_VALID_BUFFER]], %[[ST_CONTROL_READY]]
+// CHECK: firrtl.connect %[[ST_ADDR_READY]], %[[STORE_COMPLETED]]
+// CHECK: firrtl.connect %[[ST_DATA_READY]], %[[STORE_COMPLETED]]
 
 // CHECK-LABEL: firrtl.module @main
 handshake.func @main(%arg0: i8, %arg1: index, %arg2: index, ...) -> (i8, none, none) {
