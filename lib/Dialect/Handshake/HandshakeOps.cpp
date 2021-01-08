@@ -552,6 +552,49 @@ void MemoryOp::build(OpBuilder &builder, OperationState &result,
   }
 }
 
+bool handshake::MemoryOp::allocateMemory(
+    llvm::DenseMap<unsigned, unsigned> &memoryMap,
+    std::vector<std::vector<llvm::Any>> &store,
+    std::vector<double> &storeTimes) {
+    unsigned id = getID();
+    if (memoryMap.count(id))
+      return false;
+
+    auto type = getMemRefType();
+    std::vector<llvm::Any> in;
+
+  ArrayRef<int64_t> shape = type.getShape();
+  int allocationSize = 1;
+  unsigned count = 0;
+  for (int64_t dim : shape) {
+    if (dim > 0)
+      allocationSize *= dim;
+    else {
+      assert(count < in.size());
+      allocationSize *= llvm::any_cast<APInt>(in[count++]).getSExtValue();
+    }
+  }
+  unsigned ptr = store.size();
+  store.resize(ptr + 1);
+  storeTimes.resize(ptr + 1);
+  store[ptr].resize(allocationSize);
+  storeTimes[ptr] = 0.0;
+  mlir::Type elementType = type.getElementType();
+  int width = elementType.getIntOrFloatBitWidth();
+  for (int i = 0; i < allocationSize; i++) {
+    if (elementType.isa<mlir::IntegerType>()) {
+      store[ptr][i] = APInt(width, 0);
+    } else if (elementType.isa<mlir::FloatType>()) {
+      store[ptr][i] = APFloat(0.0);
+    } else {
+      llvm_unreachable("Unknown result type!\n");
+    }
+  }
+
+    memoryMap[id] = ptr;
+  return true;
+}
+
 bool handshake::MemoryOp::tryExecute(
     llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
     llvm::DenseMap<unsigned, unsigned> &memoryMap,

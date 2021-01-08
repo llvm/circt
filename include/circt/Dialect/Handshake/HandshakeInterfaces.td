@@ -95,4 +95,18 @@ def ExecutableOpInterface : OpInterface<"ExecutableOpInterface"> {
   ];
 }
 
+def MemoryOpInterface : OpInterface<"MemoryOpInterface"> {
+  let description =
+      [{"Allocate the memory to the meory map in the simulation. "}];
+
+  let methods = [
+    InterfaceMethod<
+        "Simulate the memory allocation in the memoryMap", "bool",
+        "allocateMemory",
+        (ins "llvm::DenseMap<unsigned, unsigned> &" : $memoryMap,
+    "std::vector<std::vector<llvm::Any>> &" : $store,
+    "std::vector<double> &" : $storeTimes)>,
+  ];
+}
+
 #endif // HANDSHAKE_INTERFACES
