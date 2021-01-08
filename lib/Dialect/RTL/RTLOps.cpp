@@ -817,12 +817,10 @@ OpFoldResult XorROp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 static LogicalResult verifyExtractOp(ExtractOp op) {
-  if (op.input().getType().getTypeID() != op.getType().getTypeID())
-    return op.emitOpError("argument and result types must match");
-  unsigned srcWidth = getExtractableWidth(op.input().getType());
-  unsigned dstWidth = getExtractableWidth(op.getType());
+  unsigned srcWidth = op.input().getType().cast<IntegerType>().getWidth();
+  unsigned dstWidth = op.getType().cast<IntegerType>().getWidth();
   if (op.lowBit() >= srcWidth || srcWidth - op.lowBit() < dstWidth)
-    return op.emitOpError("from bit too large for input");
+    return op.emitOpError("from bit too large for input"), failure();
 
   return success();
 }
@@ -835,7 +833,7 @@ OpFoldResult ExtractOp::fold(ArrayRef<Attribute> operands) {
   // Constant fold.
   APInt value;
   if (mlir::matchPattern(input(), m_RConstant(value))) {
-    unsigned dstWidth = getExtractableWidth(getType());
+    unsigned dstWidth = getType().cast<IntegerType>().getWidth();
     return getIntAttr(value.lshr(lowBit()).trunc(dstWidth), getContext());
   }
   return {};

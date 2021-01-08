@@ -197,11 +197,6 @@ def StructExtractOp : RTLOp<"struct_extract", [NoSideEffect]> {
   let printer = [{ return ::print(p, *this); }];
 }
 
-def Extractable
-  : Type<CPred<"$_self.isa<IntegerType>() ||"
-               "$_self.isa<ArrayType>()">,
-         "a type which can be sliced">;
-
 // Extract a range of bits from the specified input.
 def StructInjectOp : RTLOp<"struct_inject", [NoSideEffect, 
                            AllTypesMatch<["input", "result"]>]> {
@@ -224,9 +219,9 @@ def ExtractOp : RTLOp<"extract", [NoSideEffect]> {
   let summary = "Extract a range of bits into a smaller value, lowBit "
                 "specifies the lowest bit included.";
 
-  let arguments = (ins Extractable:$input,
+  let arguments = (ins AnySignlessInteger:$input,
                    I32Attr:$lowBit);
-  let results = (outs Extractable:$result);
+  let results = (outs AnySignlessInteger:$result);
 
   let assemblyFormat = [{
     $input `from` $lowBit attr-dict `:` functional-type($input, $result)
@@ -343,15 +338,4 @@ def MuxOp : RTLOp<"mux",
                    cond, trueValue, falseValue);
     }]>
   ];
-}
-
-
-def ReinterpretCast : RTLOp<"reinterpret_cast", [NoSideEffect]> {
-  let summary = "Change types without any conversion";
-
-  let arguments = (ins AnyType:$arg);
-  let results = (outs AnyType:$out);
-  let assemblyFormat = [{
-    $arg attr-dict `:` type($arg) `->` type($out)
-  }];
 }
