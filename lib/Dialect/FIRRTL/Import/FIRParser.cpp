@@ -2001,7 +2001,8 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
 
 /// node ::= 'node' id '=' exp info?
 ParseResult FIRStmtParser::parseNode() {
-  LocWithInfo info(getToken().getLoc(), this);
+  auto loc = getToken().getLoc();
+  LocWithInfo info(loc, this);
   consumeToken(FIRToken::kw_node);
 
   // If this was actually the start of a connect or something else handle
@@ -2017,6 +2018,31 @@ ParseResult FIRStmtParser::parseNode() {
       parseExp(initializer, subOps, "expected expression for node") ||
       parseOptionalInfo(info, subOps))
     return failure();
+
+  // Error out in the following conditions:
+  //
+  //   1. Node type is Analog (at the top level)
+  //   2. Node type is not passive under an optional outer flip
+  //      (analog field is okay)
+  //
+  // Note: (1) is more restictive than normal NodeOp verification, but
+  // this is added to align with the SFC. (2) is less restrictive than
+  // the SFC to accomodate for situations where the node is something
+  // weird like a module output or an instance input. This one
+  // situation is cleaned up with 'convertToPassive' following.
+  auto initializerType = initializer.getType().cast<FIRRTLType>();
+  if (initializerType.isa<AnalogType>() ||
+      (!initializerType.isPassive() && !initializerType.isa<FlipType>())) {
+    emitError(
+        loc,
+        "Node cannot be analog and must be passive or passive under a flip")
+        << initializer.getType();
+    return failure();
+  }
+
+  // If the node type isn't passive (it contains an outer flip), then make it
+  // passive.
+  initializer = convertToPassive(initializer, initializer.getLoc());
 
   // Ignore useless names like _T.
   auto actualName = filterUselessName(id);

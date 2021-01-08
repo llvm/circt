@@ -134,3 +134,21 @@ circuit test :
    input in1 : SInt
    input in2 : UInt
    node n = add(in1, in2)  ; expected-error {{operand signedness must match}}
+
+;// -----
+
+circuit invalid_node_not_passive :
+  module invalid_node_not_passive :
+    input a : { a: UInt, flip b: UInt}
+    output b : { a: UInt, flip b: UInt}
+    ; expected-error @+1 {{Node cannot be analog and must be passive or passive under a flip}}
+    node n = a
+
+;// -----
+
+circuit invalid_node_analog :
+  module invalid_node_analog :
+    input a : Analog<1>
+    output b : Analog<1>
+    ; expected-error @+1 {{Node cannot be analog and must be passive or passive under a flip}}
+    node n = a

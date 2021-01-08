@@ -118,8 +118,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.connect [[A]], [[B]]
     _t_2[0] <= _t[0] @[Xbar.scala 21:44]
 
-    ; CHECK: %n1 = firrtl.node %auto {name = "n1"} : !firrtl.flip<uint<1>>
-    node n1 = auto
+    ; CHECK: %n1 = firrtl.node %i8 {name = "n1"} : !firrtl.uint<8>
+    node n1 = i8
 
     ; CHECK: firrtl.add %reset, %reset : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
     node n2 = add(reset, reset)
@@ -530,3 +530,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   ; CHECK: attributes {parameters = {A = -1 : i4}}
   extmodule issue183:
      parameter A = -1
+
+  ; COM: The Scala FIRRTL Compiler allows this for an aggregate node with an internal analog.
+  ; CHECK-LABEL: firrtl.module @analog_in_aggregate_node
+  module analog_in_aggregate_node:
+    input a: { a: UInt<1>, b: Analog<1>}
+    ; CHECK: %b = firrtl.node %a {{.+}}: !firrtl.bundle<a: uint<1>, b: analog<1>>
+    node b = a
