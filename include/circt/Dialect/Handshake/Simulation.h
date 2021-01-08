@@ -18,6 +18,7 @@
 // Functions used to execute a restricted form of the standard dialect, and
 // the handshake dialect.
 
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
 #include <string>
 
