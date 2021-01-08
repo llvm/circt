@@ -17,6 +17,11 @@
 
 // Functions used to execute a restricted form of the standard dialect, and
 // the handshake dialect.
+#include <stdio.h>
+
+using namespace llvm;
+using namespace mlir;
+using cl::opt;
 
 bool simulate(llvm::cl::opt<std::string> &toplevelFunction,
               llvm::cl::list<std::string> &inputArgs,

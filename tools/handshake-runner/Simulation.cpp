@@ -269,38 +269,38 @@ void scheduleUses(std::list<mlir::Operation *> &readyList,
 
 bool executeStdOp(mlir::Operation &op, std::vector<Any> &inValues,
                   std::vector<Any> &outValues) {
-  if (auto Op = dyn_cast<mlir::ConstantIndexOp>(op))
-    executeOp(Op, inValues, outValues);
-  else if (auto Op = dyn_cast<mlir::ConstantIntOp>(op))
-    executeOp(Op, inValues, outValues);
-  else if (auto Op = dyn_cast<mlir::AddIOp>(op))
-    executeOp(Op, inValues, outValues);
-  else if (auto Op = dyn_cast<mlir::AddFOp>(op))
-    executeOp(Op, inValues, outValues);
-  else if (auto Op = dyn_cast<mlir::SubIOp>(op))
-    executeOp(Op, inValues, outValues);
-  else if (auto Op = dyn_cast<mlir::SubFOp>(op))
-    executeOp(Op, inValues, outValues);
-  else if (auto Op = dyn_cast<mlir::CmpIOp>(op))
-    executeOp(Op, inValues, outValues);
-  else if (auto Op = dyn_cast<mlir::CmpFOp>(op))
-    executeOp(Op, inValues, outValues);
-  else if (auto Op = dyn_cast<mlir::MulIOp>(op))
-    executeOp(Op, inValues, outValues);
-  else if (auto Op = dyn_cast<mlir::MulFOp>(op))
-    executeOp(Op, inValues, outValues);
-  else if (auto Op = dyn_cast<mlir::UnsignedDivIOp>(op))
-    executeOp(Op, inValues, outValues);
-  else if (auto Op = dyn_cast<mlir::SignedDivIOp>(op))
-    executeOp(Op, inValues, outValues);
-  else if (auto Op = dyn_cast<mlir::DivFOp>(op))
-    executeOp(Op, inValues, outValues);
-  else if (auto Op = dyn_cast<mlir::IndexCastOp>(op))
-    executeOp(Op, inValues, outValues);
-  else if (auto Op = dyn_cast<mlir::SignExtendIOp>(op))
-    executeOp(Op, inValues, outValues);
-  else if (auto Op = dyn_cast<mlir::ZeroExtendIOp>(op))
-    executeOp(Op, inValues, outValues);
+  if (auto stdOp = dyn_cast<mlir::ConstantIndexOp>(op))
+    executeOp(stdOp, inValues, outValues);
+  else if (auto stdOp = dyn_cast<mlir::ConstantIntOp>(op))
+    executeOp(stdOp, inValues, outValues);
+  else if (auto stdOp = dyn_cast<mlir::AddIOp>(op))
+    executeOp(stdOp, inValues, outValues);
+  else if (auto stdOp = dyn_cast<mlir::AddFOp>(op))
+    executeOp(stdOp, inValues, outValues);
+  else if (auto stdOp = dyn_cast<mlir::SubIOp>(op))
+    executeOp(stdOp, inValues, outValues);
+  else if (auto stdOp = dyn_cast<mlir::SubFOp>(op))
+    executeOp(stdOp, inValues, outValues);
+  else if (auto stdOp = dyn_cast<mlir::CmpIOp>(op))
+    executeOp(stdOp, inValues, outValues);
+  else if (auto stdOp = dyn_cast<mlir::CmpFOp>(op))
+    executeOp(stdOp, inValues, outValues);
+  else if (auto stdOp = dyn_cast<mlir::MulIOp>(op))
+    executeOp(stdOp, inValues, outValues);
+  else if (auto stdOp = dyn_cast<mlir::MulFOp>(op))
+    executeOp(stdOp, inValues, outValues);
+  else if (auto stdOp = dyn_cast<mlir::UnsignedDivIOp>(op))
+    executeOp(stdOp, inValues, outValues);
+  else if (auto stdOp = dyn_cast<mlir::SignedDivIOp>(op))
+    executeOp(stdOp, inValues, outValues);
+  else if (auto stdOp = dyn_cast<mlir::DivFOp>(op))
+    executeOp(stdOp, inValues, outValues);
+  else if (auto stdOp = dyn_cast<mlir::IndexCastOp>(op))
+    executeOp(stdOp, inValues, outValues);
+  else if (auto stdOp = dyn_cast<mlir::SignExtendIOp>(op))
+    executeOp(stdOp, inValues, outValues);
+  else if (auto stdOp = dyn_cast<mlir::ZeroExtendIOp>(op))
+    executeOp(stdOp, inValues, outValues);
   else
     return false;
   return true;
@@ -333,26 +333,26 @@ void executeFunction(mlir::FuncOp &toplevel,
       i++;
     }
     if (executeStdOp(op, inValues, outValues)) {
-    } else if (auto Op = dyn_cast<mlir::AllocOp>(op)) {
-      outValues[0] = allocateMemRef(Op.getType(), inValues, store, storeTimes);
+    } else if (auto allocOp = dyn_cast<mlir::AllocOp>(op)) {
+      outValues[0] = allocateMemRef(allocOp.getType(), inValues, store, storeTimes);
       unsigned ptr = any_cast<unsigned>(outValues[0]);
       storeTimes[ptr] = time;
-    } else if (auto Op = dyn_cast<mlir::LoadOp>(op)) {
-      executeOp(Op, inValues, outValues, store);
+    } else if (auto loadOp = dyn_cast<mlir::LoadOp>(op)) {
+      executeOp(loadOp, inValues, outValues, store);
       unsigned ptr = any_cast<unsigned>(inValues[0]);
       double storeTime = storeTimes[ptr];
       LLVM_DEBUG(dbgs() << "STORE: " << storeTime << "\n");
       time = std::max(time, storeTime);
       storeTimes[ptr] = time;
-    } else if (auto Op = dyn_cast<mlir::StoreOp>(op)) {
-      executeOp(Op, inValues, outValues, store);
+    } else if (auto storeOp = dyn_cast<mlir::StoreOp>(op)) {
+      executeOp(storeOp, inValues, outValues, store);
       unsigned ptr = any_cast<unsigned>(inValues[1]);
       double storeTime = storeTimes[ptr];
       LLVM_DEBUG(dbgs() << "STORE: " << storeTime << "\n");
       time = std::max(time, storeTime);
       storeTimes[ptr] = time;
-    } else if (auto Op = dyn_cast<mlir::BranchOp>(op)) {
-      mlir::Block *dest = Op.getDest();
+    } else if (auto branchOp = dyn_cast<mlir::BranchOp>(op)) {
+      mlir::Block *dest = branchOp.getDest();
       unsigned arg = 0;
       for (mlir::Value out : dest->getArguments()) {
         LLVM_DEBUG(debugArg("ARG", out, inValues[arg], time));
@@ -362,24 +362,24 @@ void executeFunction(mlir::FuncOp &toplevel,
       }
       instIter = dest->begin();
       continue;
-    } else if (auto Op = dyn_cast<mlir::CondBranchOp>(op)) {
+    } else if (auto condBranchOp = dyn_cast<mlir::CondBranchOp>(op)) {
       APInt condition = any_cast<APInt>(inValues[0]);
       mlir::Block *dest;
       std::vector<Any> inArgs;
       double time = 0.0;
       if (condition != 0) {
-        dest = Op.getTrueDest();
-        inArgs.resize(Op.getNumTrueOperands());
-        for (mlir::Value in : Op.getTrueOperands()) {
+        dest = condBranchOp.getTrueDest();
+        inArgs.resize(condBranchOp.getNumTrueOperands());
+        for (mlir::Value in : condBranchOp.getTrueOperands()) {
           inArgs[i] = valueMap[in];
           time = std::max(time, timeMap[in]);
           LLVM_DEBUG(debugArg("IN", in, inArgs[i], timeMap[in]));
           i++;
         }
       } else {
-        dest = Op.getFalseDest();
-        inArgs.resize(Op.getNumFalseOperands());
-        for (mlir::Value in : Op.getFalseOperands()) {
+        dest = condBranchOp.getFalseDest();
+        inArgs.resize(condBranchOp.getNumFalseOperands());
+        for (mlir::Value in : condBranchOp.getFalseOperands()) {
           inArgs[i] = valueMap[in];
           time = std::max(time, timeMap[in]);
           LLVM_DEBUG(debugArg("IN", in, inArgs[i], timeMap[in]));
@@ -395,15 +395,15 @@ void executeFunction(mlir::FuncOp &toplevel,
       }
       instIter = dest->begin();
       continue;
-    } else if (auto Op = dyn_cast<mlir::ReturnOp>(op)) {
+    } else if (auto returnOp = dyn_cast<mlir::ReturnOp>(op)) {
       for (unsigned i = 0; i < results.size(); i++) {
         results[i] = inValues[i];
-        resultTimes[i] = timeMap[Op.getOperand(i)];
+        resultTimes[i] = timeMap[returnOp.getOperand(i)];
       }
       return;
-    } else if (auto Op = dyn_cast<mlir::CallOpInterface>(op)) {
+    } else if (auto callOp = dyn_cast<mlir::CallOpInterface>(op)) {
       // implement function calls.
-      mlir::Operation *calledOp = Op.resolveCallable();
+      mlir::Operation *calledOp = callOp.resolveCallable();
       if (auto funcOp = dyn_cast<mlir::FuncOp>(calledOp)) {
         mlir::FunctionType ftype = funcOp.getType();
         unsigned inputs = ftype.getNumInputs();
