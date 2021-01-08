@@ -203,7 +203,7 @@ void debugArg(const std::string &head, mlir::Value op, const Any &value,
     llvm_unreachable("unknown type");
   }
 }
-Any readValueWithType(mlir::Type type, std::string &in) {
+Any readValueWithType(mlir::Type type, std::string in) {
   std::stringstream arg(in);
   if (type.isIndex()) {
     int x;
@@ -334,7 +334,8 @@ void executeFunction(mlir::FuncOp &toplevel,
     }
     if (executeStdOp(op, inValues, outValues)) {
     } else if (auto allocOp = dyn_cast<mlir::AllocOp>(op)) {
-      outValues[0] = allocateMemRef(allocOp.getType(), inValues, store, storeTimes);
+      outValues[0] =
+          allocateMemRef(allocOp.getType(), inValues, store, storeTimes);
       unsigned ptr = any_cast<unsigned>(outValues[0]);
       storeTimes[ptr] = time;
     } else if (auto loadOp = dyn_cast<mlir::LoadOp>(op)) {
@@ -565,9 +566,8 @@ void executeHandshakeFunction(handshake::FuncOp &toplevel,
   }
 }
 
-bool simulate(opt<std::string> &toplevelFunction,
-              cl::list<std::string> &inputArgs, mlir::OwningModuleRef &module,
-              mlir::MLIRContext &context) {
+bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
+              mlir::OwningModuleRef &module, mlir::MLIRContext &context) {
   // The store associates each allocation in the program
   // (represented by a int) with a vector of values which can be
   // accessed by it.  Currently values are assumed to be an integer.
