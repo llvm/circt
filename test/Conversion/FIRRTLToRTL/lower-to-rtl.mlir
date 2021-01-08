@@ -224,9 +224,9 @@ module attributes {firrtl.mainModule = "Simple"} {
     %c1175_ui11 = firrtl.constant(1175 : ui11) : !firrtl.uint<11>
     %51 = firrtl.neg %c1175_ui11 : (!firrtl.uint<11>) -> !firrtl.sint<12>
 
-    %out4c = firrtl.asPassive %out4 : (!firrtl.flip<uint<4>>) -> !firrtl.uint<4>
+    %out4c = firrtl.asPassive %out4 : !firrtl.flip<uint<4>>
     %out4d = firrtl.stdIntCast %out4c : (!firrtl.uint<4>) -> i4
-    %out5c = firrtl.asPassive %out5 : (!firrtl.flip<uint<4>>) -> !firrtl.uint<4>
+    %out5c = firrtl.asPassive %out5 : !firrtl.flip<uint<4>>
     %out5d = firrtl.stdIntCast %out5c : (!firrtl.uint<4>) -> i4
     rtl.output %out4d, %out5d : i4, i4
   }
@@ -365,12 +365,12 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: rtl.instance "fetch"
     rtl.instance "fetch" @bar(%io_cpu_flush.wireV)  : (i1) -> ()
     %0 = firrtl.stdIntCast %io_cpu_flush.wireV : (i1) -> !firrtl.uint<1>
-    %1454 = firrtl.asNonPassive %0 : (!firrtl.uint<1>) -> !firrtl.flip<uint<1>>
+    %1454 = firrtl.asNonPassive %0 : !firrtl.flip<uint<1>>
 
     %hits_1_7 = firrtl.node %1454 {name = "hits_1_7"} : !firrtl.flip<uint<1>>
     // CHECK-NEXT:  %hits_1_7 = rtl.wire : !rtl.inout<i1>
     // CHECK-NEXT:  rtl.connect %hits_1_7, [[IO]] : i1
-    %1455 = firrtl.asPassive %hits_1_7 : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
+    %1455 = firrtl.asPassive %hits_1_7 : !firrtl.flip<uint<1>>
   }
 
   // https://github.com/llvm/circt/issues/314
