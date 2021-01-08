@@ -170,7 +170,7 @@ func @illegal_cyclic_for() {
 
 // -----
 
-func @type_mismatch3(%a : i32) {
+func @yield_number_of_results_mismatch(%a : i32) {
   %zero = llhd.const 0 : i32
   %one = llhd.const 1 : i32
   %res = llhd.for (%i = %zero : i32) to %one step %one iter_args(%an = %a) -> (i32) {
@@ -182,7 +182,7 @@ func @type_mismatch3(%a : i32) {
 
 // -----
 
-func @type_mismatch3(%a : i32) {
+func @yield_result_type_mismatch(%a : i32) {
   %zero = llhd.const 0 : i32
   %one = llhd.const 1 : i32
   %res = llhd.for (%i = %zero : i32) to %one step %one iter_args(%an = %a) -> (i32) {
