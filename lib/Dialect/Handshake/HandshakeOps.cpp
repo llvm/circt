@@ -554,12 +554,12 @@ bool handshake::MemoryOp::allocateMemory(
     llvm::DenseMap<unsigned, unsigned> &memoryMap,
     std::vector<std::vector<llvm::Any>> &store,
     std::vector<double> &storeTimes) {
-  unsigned id = getID();
-  if (memoryMap.count(id))
-    return false;
+    unsigned id = getID();
+    if (memoryMap.count(id))
+      return false;
 
-  auto type = getMemRefType();
-  std::vector<llvm::Any> in;
+    auto type = getMemRefType();
+    std::vector<llvm::Any> in;
 
   ArrayRef<int64_t> shape = type.getShape();
   int allocationSize = 1;
@@ -589,7 +589,7 @@ bool handshake::MemoryOp::allocateMemory(
     }
   }
 
-  memoryMap[id] = ptr;
+    memoryMap[id] = ptr;
   return true;
 }
 
