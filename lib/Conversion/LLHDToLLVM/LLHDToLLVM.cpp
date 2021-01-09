@@ -947,12 +947,12 @@ struct HaltOpConversion : public ConvertToLLVMPattern {
     auto procState = llvmFunc.getArgument(1);
     auto senseTableTy = procState.getType()
                             .cast<LLVM::LLVMPointerType>()
-
                             .getElementType()
                             .cast<LLVM::LLVMStructType>()
                             .getBody()[2]
                             .cast<LLVM::LLVMPointerType>()
-                            .getElementType();
+                            .getElementType()
+                            .cast<LLVM::LLVMArrayType>();
 
     // Get senses ptr from the process state argument.
     auto zeroC = rewriter.create<LLVM::ConstantOp>(
@@ -967,9 +967,7 @@ struct HaltOpConversion : public ConvertToLLVMPattern {
         op->getLoc(), LLVM::LLVMPointerType::get(senseTableTy), sensePtrGep);
 
     // Zero out all the senses flags.
-    for (size_t i = 0,
-                e = senseTableTy.cast<LLVM::LLVMArrayType>().getNumElements();
-         i < e; ++i) {
+    for (size_t i = 0, e = senseTableTy.getNumElements(); i < e; ++i) {
       auto indC = rewriter.create<LLVM::ConstantOp>(
           op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(i));
       auto zeroB = rewriter.create<LLVM::ConstantOp>(
