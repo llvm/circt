@@ -6,6 +6,7 @@ on:
   schedule:
     - cron: 0 12 * * *
 
+jobs:
   build-llvm:
     name: Build and Test
     runs-on: windows-latest
@@ -37,7 +38,7 @@ on:
         uses: actions/cache@v2
         with:
           path: llvm
-          key: ${{ runner.os }}-llvm-install-${{ steps.get-llvm-hash.outputs.hash }}
+          key: ${{ runner.os }}-llvm-rel-${{ steps.get-llvm-hash.outputs.hash }}
 
       # Build LLVM if we didn't hit in the cache. Even though we build it in
       # the previous job, there is a low chance that it'll have been evicted by
@@ -55,11 +56,11 @@ on:
             -DLLVM_INSTALL_UTILS=ON -DCMAKE_INSTALL_PREFIX="$(pwd)/../install"
           cmake --build . --target install --config Release
 
-jobs:
   # Build CIRCT and run its tests.
   build-circt:
     name: Build and Test
     runs-on: windows-latest
+    needs: build-llvm
     steps:
       - name: Configure Environment
         run: echo "$GITHUB_WORKSPACE/llvm/install/bin" >> $GITHUB_PATH
@@ -88,7 +89,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: llvm
-          key: ${{ runner.os }}-llvm-install-${{ steps.get-llvm-hash.outputs.hash }}
+          key: ${{ runner.os }}-llvm-rel-${{ steps.get-llvm-hash.outputs.hash }}
 
       # Build LLVM if we didn't hit in the cache. Even though we build it in
       # the previous job, there is a low chance that it'll have been evicted by
