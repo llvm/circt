@@ -80,7 +80,7 @@ def ArrayIndexOp
          [NoSideEffect, InOutIndexConstraint<"result", "input">]> {
   let summary = "Index an inout memory to produce an inout element";
   let description = "See SV Spec 11.5.2.";
-  let arguments = (ins InOutArrayType:$input, AnySignlessInteger:$index);
+  let arguments = (ins InOutArrayType:$input, RTLIntegerType:$index);
   let results = (outs InOutType:$result);
 
   let builders = [

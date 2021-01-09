@@ -29,6 +29,16 @@ using namespace circt::rtl;
 // Type Helpers
 //===----------------------------------------------------------------------===/
 
+/// Return true if the specified type is a value RTL Integer type.  This checks
+/// that it is a signless standard dialect type, that it isn't zero bits.
+bool circt::rtl::isRTLIntegerType(mlir::Type type) {
+  auto intType = type.dyn_cast<IntegerType>();
+  if (!intType || !intType.isSignless())
+    return false;
+
+  return intType.getWidth() != 0;
+}
+
 /// Return true if the specified type can be used as an RTL value type, that is
 /// the set of types that can be composed together to represent synthesized,
 /// hardware but not marker types like InOutType.

@@ -19,6 +19,11 @@ class RTLType<string name> : TypeDef<RTLDialect, name> { }
 
 // Type constraint that indicates that an operand/result may only be a valid,
 // known, non-directional type.
+def RTLIntegerType : Type<CPred<"isRTLIntegerType($_self)">,
+                                "an integer bitvector of one or more bits">;
+
+// Type constraint that indicates that an operand/result may only be a valid,
+// known, non-directional type.
 def RTLValueType : Type<CPred<"isRTLValueType($_self)">,
                             "a known primitive element">;
 
