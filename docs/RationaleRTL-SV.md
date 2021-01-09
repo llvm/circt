@@ -84,8 +84,13 @@ lowering passes that generate the RTL dialect (e.g. LowerToRTL from FIRRTL).
 
 Note that this decision only affects the core operations in the RTL dialect
 itself - it is perfectly reasonable to define your operations and mix them into
-other RTL constructs.  Also, the `rtl.module` operation allows ports with an
-open type system, and does explicitly support zero bit ports.
+other RTL constructs.  Also, certain other operations do support zero bit
+declarations in limited ways:
+
+ - The `rtl.module` operation allows zero bit ports, since it supports an open
+   type system.  They are dropped from Verilog emission.
+ - Interface signals are allowed to be zero bits wide.  They are dropped from
+   Verilog emission.
 
 Cost Model
 ----------
