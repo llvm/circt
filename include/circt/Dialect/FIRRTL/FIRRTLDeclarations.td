@@ -99,7 +99,7 @@ def NodeOp : FIRRTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
     ```
     }];
 
-  let arguments = (ins FIRRTLType:$input, OptionalAttr<StrAttr>:$name);
+  let arguments = (ins PassiveType:$input, OptionalAttr<StrAttr>:$name);
   let results = (outs FIRRTLType:$result);
 
   let assemblyFormat = [{
@@ -124,12 +124,12 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
   }];
 }
 
-def RegInitOp : FIRRTLOp<"reginit", [/*MemAlloc*/]> {
-  let summary = "Define a new register with an initializer";
+def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
+  let summary = "Define a new register with a reset";
   let description = [{
     Declare a new register:
     ```
-      %name = firrtl.reginit %clockVal, %resetSignal, %resetValue : t1
+      %name = firrtl.regreset %clockVal, %resetSignal, %resetValue : t1
     ```
     }];
 
