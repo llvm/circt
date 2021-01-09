@@ -8,7 +8,7 @@ on:
 
 jobs:
   build-llvm:
-    name: Build and Test
+    name: Build LLVM
     runs-on: windows-latest
     steps:
       - name: Configure Environment
@@ -125,6 +125,6 @@ jobs:
             -DLLVM_EXTERNAL_LIT="$(pwd)/../llvm/build/Release/bin/llvm-lit.py" `
             -G "Visual Studio 16 2019" `
             -DCMAKE_BUILD_TYPE=Release -Thost=x64 -DCMAKE_BUILD_TYPE=Release
-          cmake --build . -j 1 --config Release
+          cmake --build . --config Release
 
     # --- end of build-circt job.

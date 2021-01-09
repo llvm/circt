@@ -14,7 +14,6 @@
 #include "circt/Conversion/FIRRTLToRTL/FIRRTLToRTL.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
-#include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Dialect/RTL/RTLTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
