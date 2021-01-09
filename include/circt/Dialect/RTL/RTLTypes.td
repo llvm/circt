@@ -13,6 +13,24 @@
 // Base class for other typedefs. Provides dialact-specific defaults.
 class RTLType<string name> : TypeDef<RTLDialect, name> { }
 
+//===----------------------------------------------------------------------===//
+// Type predicates
+//===----------------------------------------------------------------------===//
+
+// Type constraint that indicates that an operand/result may only be a valid,
+// known, non-directional type.
+def RTLValueType : Type<CPred<"isRTLValueType($_self)">,
+                            "a known primitive element">;
+
+// Type constraint that indicates that an operand/result may only be a valid
+// non-directional type.
+def RTLNonInOutType : Type<CPred<"!hasRTLInOutType($_self)">,
+                            "a type without inout">;
+
+//===----------------------------------------------------------------------===//
+// Type declarations
+//===----------------------------------------------------------------------===//
+
 // A simple fixed size array.
 def ArrayType : RTLType<"Array"> {
   let summary = "fixed-sized array";
@@ -72,44 +90,6 @@ def InOutType : RTLType<"InOut"> {
   }];
 }
 
-// Type constraint that indicates that an operand/result may only be a valid,
-// known, non-directional type.
-def RTLValueType : Type<CPred<"isRTLValueType($_self)">,
-                            "a known primitive element">;
-
-// Type constraint that indicates that an operand/result may only be a valid
-// non-directional type.
-def RTLNonInOutType : Type<CPred<"!hasRTLInOutType($_self)">,
-                            "a type without inout">;
-
-def InOutArrayType
-  : Type<CPred<"getAnyRTLArrayElementType(getInOutElementType($_self)) "
-                        "!= Type()">,
-               "an inout type with array element">;
-
-
-// This type constraint is used by operations whose asm strings have a type "T"
-// in the asmstring, which constraints an input or output to type `T`, and then
-// constraints another to `!rtl.inout<T>`.  The "value" and "inoutValue" are the
-// name of the operand or result for the type sides of this.
-//
-// Note that the inoutValue must be constrained to being an InOutElementType to
-// ensure that functions and other things aren't passed into this.
-class InOutTypeConstraint<string value, string inoutValue>
-  : TypesMatchWith<"type should be element of inout type",
-                   value, inoutValue,
-                   "InOutType::get($_self.getContext(), $_self)">;
-
-// This type constraint indicates that the specified value matches the element
-// type of the specified inoutValue.  It is the dual to InOutTypeConstraint used
-// when inference needs to "go the other way".
-//
-// Note that the inoutValue must be constrained to being an InOutElementType to
-// ensure that functions and other things aren't passed into this.
-class InOutElementConstraint<string value, string inoutValue>
-  : TypesMatchWith<"type should be element of inout type",
-                   inoutValue, value, "getInOutElementType($_self)">;
-
 def StructType : RTLType<"Struct"> {
   let summary = "RTL struct type";
   let description = [{
@@ -141,3 +121,34 @@ def StructType : RTLType<"Struct"> {
 
   }];
 }
+
+//===----------------------------------------------------------------------===//
+// Type Constraints / Traits
+//===----------------------------------------------------------------------===//
+
+def InOutArrayType
+  : Type<CPred<"getAnyRTLArrayElementType(getInOutElementType($_self)) "
+                        "!= Type()">,
+               "an inout type with array element">;
+
+// This type constraint is used by operations whose asm strings have a type "T"
+// in the asmstring, which constraints an input or output to type `T`, and then
+// constraints another to `!rtl.inout<T>`.  The "value" and "inoutValue" are the
+// name of the operand or result for the type sides of this.
+//
+// Note that the inoutValue must be constrained to being an InOutElementType to
+// ensure that functions and other things aren't passed into this.
+class InOutTypeConstraint<string value, string inoutValue>
+  : TypesMatchWith<"type should be element of inout type",
+                   value, inoutValue,
+                   "InOutType::get($_self.getContext(), $_self)">;
+
+// This type constraint indicates that the specified value matches the element
+// type of the specified inoutValue.  It is the dual to InOutTypeConstraint used
+// when inference needs to "go the other way".
+//
+// Note that the inoutValue must be constrained to being an InOutElementType to
+// ensure that functions and other things aren't passed into this.
+class InOutElementConstraint<string value, string inoutValue>
+  : TypesMatchWith<"type should be element of inout type",
+                   inoutValue, value, "getInOutElementType($_self)">;
