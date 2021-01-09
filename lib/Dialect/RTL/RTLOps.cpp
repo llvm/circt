@@ -412,7 +412,7 @@ static void print(OpAsmPrinter &p, RTLModuleOp op) {
 /// Lookup the module or extmodule for the symbol.  This returns null on
 /// invalid IR.
 Operation *InstanceOp::getReferencedModule() {
-  auto topLevelModuleOp = getParentOfType<ModuleOp>();
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
   if (!topLevelModuleOp)
     return nullptr;
 
@@ -421,7 +421,7 @@ Operation *InstanceOp::getReferencedModule() {
 
 static LogicalResult verifyInstanceOp(InstanceOp op) {
   // Check that this instance is inside a module.
-  auto module = dyn_cast<RTLModuleOp>(op.getParentOp());
+  auto module = dyn_cast<RTLModuleOp>(op->getParentOp());
   if (!module) {
     op.emitOpError("should be embedded in an 'rtl.module'");
     return failure();
@@ -499,7 +499,7 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 /// Verify that the num of operands and types fit the declared results.
 static LogicalResult verifyOutputOp(OutputOp *op) {
   OperandRange outputValues = op->getOperands();
-  auto opParent = op->getParentOp();
+  auto opParent = (*op)->getParentOp();
 
   // Check that we are in the correct region. OutputOp should be directly
   // contained by an RTLModuleOp region. We'll loosen this restriction if
@@ -642,7 +642,7 @@ static ParseResult parseWireOp(OpAsmParser &parser, OperationState &result) {
 /// attribute.
 void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // If the wire has an optional 'name' attribute, use it.
-  if (auto nameAttr = getAttrOfType<StringAttr>("name"))
+  if (auto nameAttr = (*this)->getAttrOfType<StringAttr>("name"))
     setNameFn(getResult(), nameAttr.getValue());
 }
 

@@ -69,12 +69,12 @@ STATISTIC(simulatedTime, "Simulated Time");
 
 void executeOp(mlir::ConstantIndexOp op, std::vector<Any> &in,
                std::vector<Any> &out) {
-  auto attr = op.getAttrOfType<mlir::IntegerAttr>("value");
+  auto attr = op->getAttrOfType<mlir::IntegerAttr>("value");
   out[0] = attr.getValue().sextOrTrunc(INDEX_WIDTH);
 }
 void executeOp(mlir::ConstantIntOp op, std::vector<Any> &in,
                std::vector<Any> &out) {
-  auto attr = op.getAttrOfType<mlir::IntegerAttr>("value");
+  auto attr = op->getAttrOfType<mlir::IntegerAttr>("value");
   out[0] = attr.getValue();
 }
 void executeOp(mlir::AddIOp op, std::vector<Any> &in, std::vector<Any> &out) {
@@ -216,7 +216,7 @@ void executeOp(handshake::JoinOp op, std::vector<Any> &in,
 }
 void executeOp(handshake::ConstantOp op, std::vector<Any> &in,
                std::vector<Any> &out) {
-  auto attr = op.getAttrOfType<mlir::IntegerAttr>("value");
+  auto attr = op->getAttrOfType<mlir::IntegerAttr>("value");
   out[0] = attr.getValue();
 }
 void executeOp(handshake::StoreOp op, std::vector<Any> &in,

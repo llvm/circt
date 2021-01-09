@@ -2336,8 +2336,8 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
       builder.create<FExtModuleOp>(info.getLoc(), name, portList, defName);
 
   if (!parameters.empty())
-    fmodule.setAttr("parameters",
-                    DictionaryAttr::get(parameters, getContext()));
+    fmodule->setAttr("parameters",
+                     DictionaryAttr::get(parameters, getContext()));
 
   return success();
 }

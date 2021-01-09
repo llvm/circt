@@ -46,7 +46,7 @@ def RTLModuleOp : RTLOp<"module",
 
     // Get the module's symbolic name.
     StringRef getName() {
-      return getAttrOfType<StringAttr>(::mlir::SymbolTable::getSymbolAttrName())
+      return (*this)->getAttrOfType<StringAttr>(::mlir::SymbolTable::getSymbolAttrName())
           .getValue();
     }
 
