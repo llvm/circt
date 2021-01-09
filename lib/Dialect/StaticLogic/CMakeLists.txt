@@ -5,7 +5,7 @@ set(LLVM_OPTIONAL_SOURCES
   )
 
 add_circt_dialect_library(CIRCTStaticLogicOps
-  Ops.cpp
+  StaticLogicOps.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/include

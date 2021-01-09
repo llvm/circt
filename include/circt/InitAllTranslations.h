@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/LLHD/Translation/TranslateToVerilog.h"
 #include "circt/Translation/ExportVerilog.h"
@@ -26,6 +27,8 @@ namespace circt {
 inline void registerAllTranslations() {
   static bool initOnce = []() {
     registerToVerilogTranslation();
+    registerFIRRTLToVerilogTranslation();
+    esi::registerESITranslations();
     firrtl::registerFromFIRRTLTranslation();
     llhd::registerToVerilogTranslation();
     return true;

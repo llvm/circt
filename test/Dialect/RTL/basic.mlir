@@ -1,7 +1,7 @@
 // RUN: circt-opt %s | FileCheck %s
 
-// CHECK-LABEL: func @test1(%arg0: i3, %arg1: i1) -> i50 {
-func @test1(%arg0: i3, %arg1: i1) -> i50 {
+// CHECK-LABEL: func @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> i50 {
+func @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> i50 {
   // CHECK-NEXT:    %c42_i12 = rtl.constant(42 : i12) : i12
   // CHECK-NEXT:    [[RES0:%[0-9]+]] = rtl.add %c42_i12, %c42_i12 : i12
   // CHECK-NEXT:    [[RES1:%[0-9]+]] = rtl.mul %c42_i12, [[RES0]] : i12
@@ -85,6 +85,23 @@ func @test1(%arg0: i3, %arg1: i1) -> i50 {
 
   // CHECK-NEXT: = rtl.mux %arg1, [[RES2]], [[RES3]] : i7
   %mux = rtl.mux %arg1, %d, %e : i7
+  
+  // CHECK-NEXT: = rtl.struct_create (%9, %23) : !rtl.struct<foo: i19, bar: i7>
+  %s0 = rtl.struct_create (%small1, %mux) : !rtl.struct<foo: i19, bar: i7>
+  
+  // CHECK-NEXT: = rtl.struct_extract %24["foo"] : !rtl.struct<foo: i19, bar: i7>
+  %sf1 = rtl.struct_extract %s0["foo"] : !rtl.struct<foo: i19, bar: i7>
+
+  // CHECK-NEXT: = rtl.struct_inject %24["foo"], %25 : !rtl.struct<foo: i19, bar: i7>
+  %s1 = rtl.struct_inject %s0["foo"], %sf1 : !rtl.struct<foo: i19, bar: i7>
+  
+  // CHECK-NEXT: :2 = rtl.struct_explode %24 : !rtl.struct<foo: i19, bar: i7>
+  %se:2 = rtl.struct_explode %s0 : !rtl.struct<foo: i19, bar: i7>
+
+  // CHECK-NEXT: = constant 13 : i10
+  %idx = constant 13 : i10
+  // CHECK-NEXT: = rtl.array_slice %arg2 at %c13_i10 : (!rtl.array<1000xi8>) -> !rtl.array<24xi8>
+  %subArray = rtl.array_slice %arg2 at %idx : (!rtl.array<1000xi8>) -> !rtl.array<24xi8>
 
   // CHECK-NEXT:    return [[RES8]] : i50
   return %result : i50

@@ -14,7 +14,8 @@ module attributes {firrtl.mainModule = "Simple"} {
 
     // CHECK: [[ZERO4:%.+]] = rtl.constant(0 : i4) : i4
     // CHECK: rtl.connect [[OUT5]], [[ZERO4]] : i4
-    firrtl.invalid %out5 : !firrtl.flip<uint<4>>
+    %tmp1 = firrtl.invalidvalue : !firrtl.uint<4>
+    firrtl.connect %out5, %tmp1 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
     // CHECK: rtl.constant(-4 : i4) : i4
     %c12_ui4 = firrtl.constant(12 : ui4) : !firrtl.uint<4>
@@ -22,13 +23,16 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK: rtl.constant(2 : i3) : i3
     %c2_si3 = firrtl.constant(2 : si3) : !firrtl.sint<3>
 
-    // CHECK: [[ADD:%.+]] = rtl.add %c-4_i4, %in1 : i4
-    %0 = firrtl.add %c12_ui4, %in1c : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+    // CHECK: [[ZEXT:%.+]] = rtl.zext %in1 : (i4) -> i5
+    // CHECK: [[ADD:%.+]] = rtl.add %c12_i5, [[ZEXT]] : i5
+    %0 = firrtl.add %c12_ui4, %in1c : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
     %1 = firrtl.asUInt %in1c : (!firrtl.uint<4>) -> !firrtl.uint<4>
 
-    // CHECK-NEXT: [[SUB:%.+]] = rtl.sub [[ADD]], %in1 : i4
-    %2 = firrtl.sub %0, %1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+    // CHECK: [[ZEXT1:%.+]] = rtl.zext [[ADD]] : (i5) -> i6
+    // CHECK: [[ZEXT2:%.+]] = rtl.zext %in1 : (i4) -> i6
+    // CHECK-NEXT: [[SUB:%.+]] = rtl.sub [[ZEXT1]], [[ZEXT2]] : i6
+    %2 = firrtl.sub %0, %1 : (!firrtl.uint<5>, !firrtl.uint<4>) -> !firrtl.uint<6>
 
     %in2s = firrtl.asSInt %in2c : (!firrtl.uint<2>) -> !firrtl.sint<2>
 
@@ -107,10 +111,10 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: = rtl.orr [[CONCAT1]] : i8
     %17 = firrtl.orr %6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: [[ZEXTC1:%.+]] = rtl.zext [[CONCAT1]] : (i8) -> i12
-    // CHECK-NEXT: [[ZEXT2:%.+]] = rtl.zext [[SUB]] : (i4) -> i12
-    // CHECK-NEXT: [[VAL18:%.+]] = rtl.mul  [[ZEXTC1]], [[ZEXT2]] : i12
-    %18 = firrtl.mul %6, %2 : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<12>
+    // CHECK-NEXT: [[ZEXTC1:%.+]] = rtl.zext [[CONCAT1]] : (i8) -> i14
+    // CHECK-NEXT: [[ZEXT2:%.+]] = rtl.zext [[SUB]] : (i6) -> i14
+    // CHECK-NEXT: [[VAL18:%.+]] = rtl.mul  [[ZEXTC1]], [[ZEXT2]] : i14
+    %18 = firrtl.mul %6, %2 : (!firrtl.uint<8>, !firrtl.uint<6>) -> !firrtl.uint<14>
 
     // CHECK-NEXT: [[IN3SEXT:%.+]] = rtl.sext %in3 : (i8) -> i9
     // CHECK-NEXT: [[PADRESSEXT:%.+]] = rtl.sext [[PADRES]] : (i3) -> i9
@@ -155,31 +159,34 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: [[CVT4:%.+]] = rtl.sext [[CVT]] : (i3) -> i4
     // CHECK-NEXT: rtl.mux %false, [[CVT4]], [[SUB]] : i4
     %26 = firrtl.mux(%12, %23, %25) : (!firrtl.uint<1>, !firrtl.sint<3>, !firrtl.sint<4>) -> !firrtl.sint<4>
-  
-    // Noop
-    %27 = firrtl.validif %12, %18 : (!firrtl.uint<1>, !firrtl.uint<12>) -> !firrtl.uint<12>
-    // CHECK-NEXT: rtl.andr
-    %28 = firrtl.andr %27 : (!firrtl.uint<12>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: [[XOREXT:%.+]] = rtl.zext [[XOR]] : (i3) -> i12
-    // CHECK-NEXT: [[SHIFT:%.+]] = rtl.shru [[XOREXT]], [[VAL18]] : i12
-    // CHECK-NEXT: = rtl.extract [[SHIFT]] from 0 : (i12) -> i3
-    %29 = firrtl.dshr %24, %18 : (!firrtl.uint<3>, !firrtl.uint<12>) -> !firrtl.uint<3>
+    // Noop
+    %27 = firrtl.validif %12, %18 : (!firrtl.uint<1>, !firrtl.uint<14>) -> !firrtl.uint<14>
+    // CHECK-NEXT: rtl.andr
+    %28 = firrtl.andr %27 : (!firrtl.uint<14>) -> !firrtl.uint<1>
+
+    // CHECK-NEXT: [[XOREXT:%.+]] = rtl.zext [[XOR]] : (i3) -> i14
+    // CHECK-NEXT: [[SHIFT:%.+]] = rtl.shru [[XOREXT]], [[VAL18]] : i14
+    // CHECK-NEXT: [[DSHR:%.+]] = rtl.extract [[SHIFT]] from 0 : (i14) -> i3
+    %29 = firrtl.dshr %24, %18 : (!firrtl.uint<3>, !firrtl.uint<14>) -> !firrtl.uint<3>
 
     // CHECK-NEXT: = rtl.zext {{.*}} : (i3) -> i8
     // CHECK-NEXT: [[SHIFT:%.+]] = rtl.shrs %in3, {{.*}} : i8
-    // CHECK-NEXT: = rtl.extract [[SHIFT]] from 0 : (i8) -> i3
-    %a29 = firrtl.dshr %in3c, %9 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<3>
+    %a29 = firrtl.dshr %in3c, %9 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<8>
 
-    // CHECK-NEXT: = rtl.zext {{.*}} : (i3) -> i8
-    // CHECK-NEXT: [[SHIFT:%.+]] = rtl.shl %in3, {{.*}} : i8
-    %30 = firrtl.dshl %in3c, %9 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<8>
+    // CHECK-NEXT: = rtl.sext %in3 : (i8) -> i15
+    // CHECK-NEXT: = rtl.zext [[DSHR]] : (i3) -> i15
+    // CHECK-NEXT: [[SHIFT:%.+]] = rtl.shl {{.*}}, {{.*}} : i15
+    %30 = firrtl.dshl %in3c, %29 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<15>
+
+    // CHECK-NEXT: = rtl.shru [[DSHR]], [[DSHR]] : i3
+    %dshlw = firrtl.dshlw %29, %29 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
 
     // Issue #367: https://github.com/llvm/circt/issues/367
-    // CHECK-NEXT: = rtl.sext %40 : (i4) -> i12
-    // CHECK-NEXT: [[SHIFT:%.+]] = rtl.shrs {{.*}}, {{.*}} : i12
-    // CHECK-NEXT: = rtl.extract [[SHIFT]] from 0 : (i12) -> i4
-    %31 = firrtl.dshr %25, %27 : (!firrtl.sint<4>, !firrtl.uint<12>) -> !firrtl.sint<4>
+    // CHECK-NEXT: = rtl.sext {{.*}} : (i4) -> i14
+    // CHECK-NEXT: [[SHIFT:%.+]] = rtl.shrs {{.*}}, {{.*}} : i14
+    // CHECK-NEXT: = rtl.extract [[SHIFT]] from 0 : (i14) -> i4
+    %31 = firrtl.dshr %25, %27 : (!firrtl.sint<4>, !firrtl.uint<14>) -> !firrtl.sint<4>
 
     // CHECK-NEXT: rtl.icmp "ule" {{.*}}, {{.*}} : i4
     %41 = firrtl.leq %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
@@ -238,8 +245,8 @@ module attributes {firrtl.mainModule = "Simple"} {
     %reset1 = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
     %a1 = firrtl.stdIntCast %a : (i4) -> !firrtl.uint<4>
     %b1 = firrtl.stdIntCast %b : (i4) -> !firrtl.uint<4>
- 
-    // CHECK-NEXT: sv.alwaysat_posedge %clock {
+
+    // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
     // CHECK-NEXT:     [[TV:%.+]] = sv.textual_value "`PRINTF_COND_" : i1
     // CHECK-NEXT:     [[AND:%.+]] = rtl.and [[TV]], %reset
@@ -255,6 +262,8 @@ module attributes {firrtl.mainModule = "Simple"} {
 
     // CHECK: sv.fwrite "Hi %x %x\0A"({{.*}}) : i5, i4
     firrtl.printf %clock1, %reset1, "Hi %x %x\0A"(%0, %b1) : !firrtl.uint<5>, !firrtl.uint<4>
+
+    firrtl.skip
 
     // CHECK: rtl.output
     rtl.output
@@ -275,7 +284,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %clock2c = firrtl.stdIntCast %clock2 : (i1) -> !firrtl.clock
     %resetc = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: sv.alwaysat_posedge %clock1 {
+    // CHECK-NEXT: sv.always posedge %clock1 {
     // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
     // CHECK-NEXT:     %0 = sv.textual_value "`STOP_COND_" : i1
     // CHECK-NEXT:     %1 = rtl.and %0, %reset : i1
@@ -286,7 +295,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: }
     firrtl.stop %clock1c, %resetc, 42
 
-    // CHECK-NEXT: sv.alwaysat_posedge %clock2 {
+    // CHECK-NEXT: sv.always posedge %clock2 {
     // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
     // CHECK-NEXT:     %0 = sv.textual_value "`STOP_COND_" : i1
     // CHECK-NEXT:     %1 = rtl.and %0, %reset : i1
@@ -321,19 +330,19 @@ module attributes {firrtl.mainModule = "Simple"} {
     %cCondC = firrtl.stdIntCast %cCond : (i1) -> !firrtl.uint<1>
     %cEnC = firrtl.stdIntCast %cEn : (i1) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: sv.alwaysat_posedge %clock {
+    // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.if %aEn {
     // CHECK-NEXT:     sv.assert %aCond : i1
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     firrtl.assert %clockC, %aCondC, %aEnC, "assert0"
-    // CHECK-NEXT: sv.alwaysat_posedge %clock {
+    // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.if %bEn {
     // CHECK-NEXT:     sv.assume %bCond  : i1
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     firrtl.assume %clockC, %bCondC, %bEnC, "assume0"
-    // CHECK-NEXT: sv.alwaysat_posedge %clock {
+    // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.if %cEn {
     // CHECK-NEXT:     sv.cover %cCond : i1
     // CHECK-NEXT:   }
@@ -356,12 +365,11 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: rtl.instance "fetch"
     rtl.instance "fetch" @bar(%io_cpu_flush.wireV)  : (i1) -> ()
     %0 = firrtl.stdIntCast %io_cpu_flush.wireV : (i1) -> !firrtl.uint<1>
-    %1454 = firrtl.asNonPassive %0 : (!firrtl.uint<1>) -> !firrtl.flip<uint<1>>
 
-    %hits_1_7 = firrtl.node %1454 {name = "hits_1_7"} : !firrtl.flip<uint<1>>
+    %hits_1_7 = firrtl.node %0 {name = "hits_1_7"} : !firrtl.uint<1>
     // CHECK-NEXT:  %hits_1_7 = rtl.wire : !rtl.inout<i1>
     // CHECK-NEXT:  rtl.connect %hits_1_7, [[IO]] : i1
-    %1455 = firrtl.asPassive %hits_1_7 : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
+    %1455 = firrtl.asPassive %hits_1_7 : (!firrtl.uint<1>) -> !firrtl.uint<1>
   }
 
   // https://github.com/llvm/circt/issues/314
@@ -371,7 +379,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %inp_i = firrtl.stdIntCast %inpi : (i65) -> !firrtl.uint<65>
 
     // CHECK-NEXT: %tmp48 = rtl.wire : !rtl.inout<i27>
-    %tmp48 = firrtl.wire {name = "tmp48"} : !firrtl.uint<27>
+    %tmp48 = firrtl.wire : !firrtl.uint<27>
     // CHECK-NEXT: %0 = rtl.zext %inp2 : (i27) -> i65
     // CHECK-NEXT: %1 = rtl.divu %0, %inpi : i65
     %0 = firrtl.div %inp_2, %inp_i : (!firrtl.uint<27>, !firrtl.uint<65>) -> !firrtl.uint<27>
@@ -422,5 +430,378 @@ module attributes {firrtl.mainModule = "Simple"} {
     %2 = firrtl.stdIntCast %1 : (!firrtl.clock) -> i1
     rtl.output %2 : i1
   }
-}
 
+
+ // module UninitReg1 :
+ //   input clock: Clock
+ //   input reset : UInt<1>
+ //   input cond: UInt<1>
+ //   input value: UInt<2>
+ //   reg count : UInt<2>, clock with :
+ //     reset => (UInt<1>("h0"), count)
+ //   node x = count
+ //   node _GEN_0 = mux(cond, value, count)
+ //   count <= mux(reset, UInt<2>("h0"), _GEN_0)
+
+  // CHECK-LABEL: rtl.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
+  rtl.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
+    // CHECK-NEXT: %c0_i2 = rtl.constant(0 : i2) : i2
+    %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
+
+    %0 = firrtl.stdIntCast %clock : (i1) -> !firrtl.clock
+    %1 = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
+    %2 = firrtl.stdIntCast %cond : (i1) -> !firrtl.uint<1>
+    %3 = firrtl.stdIntCast %value : (i2) -> !firrtl.uint<2>
+    // CHECK-NEXT: %count = sv.reg : !rtl.inout<i2>
+    %count = firrtl.reg %0 {name = "count"} : (!firrtl.clock) -> !firrtl.uint<2>
+
+    // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
+    // CHECK-NEXT:    sv.initial {
+    // CHECK-NEXT:    sv.verbatim "`INIT_RANDOM_PROLOG_"
+    // CHECK-NEXT:    sv.ifdef "RANDOMIZE_REG_INIT"  {
+    // CHECK-NEXT:       %3 = sv.textual_value "`RANDOM" : i2
+    // CHECK-NEXT:        sv.bpassign %count, %3 : i2
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:    }
+    // CHECK-NEXT:  }
+
+    // CHECK-NEXT: %0 = rtl.read_inout %count : !rtl.inout<i2>
+    // CHECK-NEXT: %1 = rtl.mux %cond, %value, %0 : i2
+    // CHECK-NEXT: %2 = rtl.mux %reset, %c0_i2, %1 : i2
+    %4 = firrtl.mux(%2, %3, %count) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+    %5 = firrtl.mux(%1, %c0_ui2, %4) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+
+    // CHECK-NEXT: sv.always posedge %clock  {
+    // CHECK-NEXT:   sv.passign %count, %2 : i2
+    // CHECK-NEXT: }
+    firrtl.connect %count, %5 : !firrtl.uint<2>, !firrtl.uint<2>
+
+    // CHECK-NEXT: rtl.output
+    rtl.output
+  }
+
+  // module InitReg1 :
+  //     input clock : Clock
+  //     input reset : UInt<1>
+  //     input io_d : UInt<32>
+  //     output io_q : UInt<32>
+  //     input io_en : UInt<1>
+  //
+  //     node _T = asAsyncReset(reset)
+  //     reg reg : UInt<32>, clock with :
+  //       reset => (_T, UInt<32>("h0"))
+  //     io_q <= reg
+  //     reg <= mux(io_en, io_d, reg)
+
+  // CHECK-LABEL: rtl.module @InitReg1(
+  rtl.module @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (%io_q: i32) {
+    // CHECK-NEXT: %c0_i32 = rtl.constant(0 : i32) : i32
+    %c0_ui32 = firrtl.constant(0 : ui32) : !firrtl.uint<32>
+
+    %0 = firrtl.stdIntCast %clock : (i1) -> !firrtl.clock
+    %1 = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
+    %2 = firrtl.stdIntCast %io_d : (i32) -> !firrtl.uint<32>
+    %3 = firrtl.stdIntCast %io_en : (i1) -> !firrtl.uint<1>
+    %4 = firrtl.asAsyncReset %1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
+
+    // CHECK-NEXT: %reg = sv.reg : !rtl.inout<i32>
+    // CHECK-NEXT: sv.always posedge %clock, posedge %reset  {
+    // CHECK-NEXT:   sv.if %reset  {
+    // CHECK-NEXT:     sv.passign %reg, %c0_i32 : i32
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
+    // CHECK-NEXT:   sv.initial {
+    // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
+    // CHECK-NEXT:     sv.ifdef "RANDOMIZE_REG_INIT"  {
+    // CHECK-NEXT:       %true_0 = rtl.constant(true) : i1
+    // CHECK-NEXT:       %9 = rtl.xor %reset, %true_0 : i1
+    // CHECK-NEXT:       sv.if %9  {
+    // CHECK-NEXT:         %10 = sv.textual_value "`RANDOM" : i32
+    // CHECK-NEXT:         sv.bpassign %reg, %10 : i32
+    // CHECK-NEXT:       }
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    // CHECK-NEXT: %reg2 = sv.reg : !rtl.inout<i32>
+    // CHECK-NEXT: sv.always posedge %clock  {
+    // CHECK-NEXT:   sv.if %reset  {
+    // CHECK-NEXT:    sv.passign %reg2, %c0_i32 : i32
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
+    // CHECK-NEXT:   sv.initial  {
+    // CHECK-NEXT:     sv.ifdef "RANDOMIZE_REG_INIT"  {
+    // CHECK-NEXT:       %true_0 = rtl.constant(true) : i1
+    // CHECK-NEXT:       %9 = rtl.xor %reset, %true_0 : i1
+    // CHECK-NEXT:       sv.if %9  {
+    // CHECK-NEXT:         %10 = sv.textual_value "`RANDOM" : i32
+    // CHECK-NEXT:         sv.bpassign %reg2, %10 : i32
+    // CHECK-NEXT:       }
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    %reg = firrtl.regreset %0, %4, %c0_ui32 {name = "reg"} : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<32>) -> !firrtl.uint<32>
+    %reg2 = firrtl.regreset %0, %1, %c0_ui32 {name = "reg2"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<32>) -> !firrtl.uint<32>
+
+    // CHECK-NEXT: %0 = rtl.read_inout %reg : !rtl.inout<i32>
+    // CHECK-NEXT: %1 = rtl.zext %0 : (i32) -> i33
+    // CHECK-NEXT: %2 = rtl.read_inout %reg2 : !rtl.inout<i32>
+    // CHECK-NEXT: %3 = rtl.zext %2 : (i32) -> i33
+    // CHECK-NEXT: %4 = rtl.add %1, %3 : i33
+    // CHECK-NEXT: %5 = rtl.extract %4 from 1 : (i33) -> i32
+    // CHECK-NEXT: %6 = rtl.mux %io_en, %io_d, %5 : i32
+    %sum = firrtl.add %reg, %reg2 : (!firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<33>
+    %shorten = firrtl.head %sum, 32 : (!firrtl.uint<33>) -> !firrtl.uint<32>
+    %5 = firrtl.mux(%3, %2, %shorten) : (!firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<32>
+
+    // CHECK-NEXT: %true = rtl.constant(true) : i1
+    // CHECK-NEXT: %7 = rtl.xor %reset, %true : i1
+    // CHECK-NEXT: sv.always posedge %clock, posedge %reset  {
+    // CHECK-NEXT:   sv.if %7  {
+    // CHECK-NEXT:     sv.passign %reg, %6 : i32
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    firrtl.connect %reg, %5 : !firrtl.uint<32>, !firrtl.uint<32>
+    %6 = firrtl.stdIntCast %reg : (!firrtl.uint<32>) -> i32
+
+    // CHECK-NEXT: %8 = rtl.read_inout %reg : !rtl.inout<i32>
+    // CHECK-NEXT: rtl.output %8 : i32
+    rtl.output %6 : i32
+  }
+
+  //  module MemSimple :
+  //     input clock1  : Clock
+  //     input clock2  : Clock
+  //     input inpred  : UInt<1>
+  //     input indata  : SInt<42>
+  //     output result : SInt<42>
+  //
+  //     mem _M : @[Decoupled.scala 209:27]
+  //           data-type => SInt<42>
+  //           depth => 12
+  //           read-latency => 0
+  //           write-latency => 1
+  //           reader => read
+  //           writer => write
+  //           read-under-write => undefined
+  //
+  //     result <= _M.read.data
+  //
+  //     _M.read.addr <= UInt<1>("h0")
+  //     _M.read.en <= UInt<1>("h1")
+  //     _M.read.clk <= clock1
+  //     _M.write.addr <= validif(inpred, UInt<3>("h0"))
+  //     _M.write.en <= mux(inpred, UInt<1>("h1"), UInt<1>("h0"))
+  //     _M.write.clk <= validif(inpred, clock2)
+  //     _M.write.data <= validif(inpred, indata)
+  //     _M.write.mask <= validif(inpred, UInt<1>("h1"))
+
+  // CHECK-LABEL: rtl.module @MemSimple(
+  rtl.module @MemSimple(%clock1: i1, %clock2: i1, %inpred: i1, %indata: i42) -> (%result: i42) {
+    %0 = firrtl.stdIntCast %clock1 : (i1) -> !firrtl.clock
+    %1 = firrtl.stdIntCast %clock2 : (i1) -> !firrtl.clock
+    %2 = firrtl.stdIntCast %inpred : (i1) -> !firrtl.uint<1>
+    %3 = firrtl.stdIntCast %indata : (i42) -> !firrtl.sint<42>
+    %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
+    %c0_ui3 = firrtl.constant(0 : ui3) : !firrtl.uint<3>
+
+    // CHECK:  %_M = sv.reg : !rtl.inout<uarray<12xi42>>
+    %_M = firrtl.mem "Undefined" {depth = 12 : i64, name = "_M", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<read: bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>, write: flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>>
+
+    // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
+    // CHECK-NEXT:   sv.initial  {
+    // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
+    // CHECK-NEXT:     sv.ifdef "RANDOMIZE_MEM_INIT"  {
+    // CHECK-NEXT:       sv.verbatim "integer {{.*}}_initvar < 12{{.*}}`RANDOM;"(%_M) : !rtl.inout<uarray<12xi42>>
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+
+    // Write port.
+
+    // CHECK:      %_M_write_addr = rtl.wire : !rtl.inout<i4>
+    // CHECK-NEXT: %_M_write_en = rtl.wire : !rtl.inout<i1>
+    // CHECK-NEXT: %_M_write_clk = rtl.wire : !rtl.inout<i1>
+    // CHECK-NEXT: %_M_write_data = rtl.wire : !rtl.inout<i42>
+    // CHECK-NEXT: %_M_write_mask = rtl.wire : !rtl.inout<i1>
+
+    // CHECK-NEXT: %0 = rtl.read_inout %_M_write_clk
+    // CHECK-NEXT: sv.always posedge %0  {
+    // CHECK-NEXT:     %2 = rtl.read_inout %_M_write_en : !rtl.inout<i1>
+    // CHECK-NEXT:     %3 = rtl.read_inout %_M_write_mask : !rtl.inout<i1>
+    // CHECK-NEXT:     %4 = rtl.and %2, %3 : i1
+    // CHECK-NEXT:     sv.if %4  {
+    // CHECK-NEXT:       %5 = rtl.read_inout %_M_write_data : !rtl.inout<i42>
+    // CHECK-NEXT:       %6 = rtl.read_inout %_M_write_addr : !rtl.inout<i4>
+    // CHECK-NEXT:       %7 = rtl.arrayindex %_M[%6]
+    // CHECK-NEXT:       sv.bpassign %7, %5 : i42
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:   }
+
+    // Read port.
+    // CHECK-NEXT: %_M_read_addr = rtl.wire : !rtl.inout<i4>
+    // CHECK-NEXT: %_M_read_en = rtl.wire : !rtl.inout<i1>
+    // CHECK-NEXT: %_M_read_clk = rtl.wire : !rtl.inout<i1>
+    // CHECK-NEXT: %_M_read_data = rtl.wire : !rtl.inout<i42>
+    // CHECK-NEXT: sv.ifdef "!RANDOMIZE_GARBAGE_ASSIGN"  {
+    // CHECK-NEXT:   %2 = rtl.read_inout %_M_read_addr : !rtl.inout<i4>
+    // CHECK-NEXT:   %3 = rtl.arrayindex %_M[%2]
+    // CHECK-NEXT:   %4 = rtl.read_inout %3 : !rtl.inout<i42>
+    // CHECK-NEXT:   rtl.connect %_M_read_data, %4 : i42
+    // CHECK-NEXT: } else  {
+    // CHECK-NEXT:   %2 = rtl.read_inout %_M_read_addr : !rtl.inout<i4>
+    // CHECK-NEXT:   %3 = rtl.arrayindex %_M[%2]
+    // CHECK-NEXT:   %4 = rtl.read_inout %3 : !rtl.inout<i42>
+    // CHECK-NEXT:   %c-4_i4 = rtl.constant(-4 : i4) : i4
+    // CHECK-NEXT:   %5 = rtl.icmp "ult" %2, %c-4_i4 : i4
+    // CHECK-NEXT:   %6 = sv.textual_value "`RANDOM" : i42
+    // CHECK-NEXT:   %7 = rtl.mux %5, %4, %6 : i42
+    // CHECK-NEXT:   rtl.connect %_M_read_data, %7 : i42
+    // CHECK-NEXT: }
+
+    %4 = firrtl.subfield %_M("read") : (!firrtl.bundle<read: bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>, write: flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>>) -> !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>
+    %5 = firrtl.subfield %4("data") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.sint<42>
+    %6 = firrtl.subfield %4("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<4>>
+    firrtl.connect %6, %c0_ui1 : !firrtl.flip<uint<4>>, !firrtl.uint<1>
+    %7 = firrtl.subfield %4("en") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<1>>
+    firrtl.connect %7, %c1_ui1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    %8 = firrtl.subfield %4("clk") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<clock>
+    firrtl.connect %8, %0 : !firrtl.flip<clock>, !firrtl.clock
+
+    %9 = firrtl.subfield %_M("write") : (!firrtl.bundle<read: bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>, write: flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>>) -> !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>
+    %10 = firrtl.subfield %9("addr") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<uint<4>>
+    %11 = firrtl.validif %2, %c0_ui3 : (!firrtl.uint<1>, !firrtl.uint<3>) -> !firrtl.uint<3>
+    firrtl.connect %10, %11 : !firrtl.flip<uint<4>>, !firrtl.uint<3>
+    %12 = firrtl.subfield %9("en") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
+    firrtl.connect %12, %2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    %13 = firrtl.subfield %9("clk") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<clock>
+    %14 = firrtl.validif %2, %1 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.clock
+    firrtl.connect %13, %14 : !firrtl.flip<clock>, !firrtl.clock
+    %15 = firrtl.subfield %9("data") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<sint<42>>
+    %16 = firrtl.validif %2, %3 : (!firrtl.uint<1>, !firrtl.sint<42>) -> !firrtl.sint<42>
+    firrtl.connect %15, %16 : !firrtl.flip<sint<42>>, !firrtl.sint<42>
+    %17 = firrtl.subfield %9("mask") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
+    %18 = firrtl.validif %2, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %17, %18 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    %19 = firrtl.stdIntCast %5 : (!firrtl.sint<42>) -> i42
+    rtl.output %19 : i42
+  }
+
+  // module MemAggregate :
+  //    input clock1 : Clock
+  //    input clock2 : Clock
+  //
+  //    mem _M : @[Decoupled.scala 209:24]
+  //          data-type => { id : Analog<4>, other: SInt<8> }
+  //          depth => 20
+  //          read-latency => 0
+  //          write-latency => 1
+  //          reader => read
+  //          writer => write
+  //          read-under-write => undefined
+  //
+  // CHECK-LABEL: rtl.module @MemAggregate(%clock1: i1, %clock2: i1) {
+  // CHECK-NEXT:  %_M_id = sv.reg : !rtl.inout<uarray<20xi4>>
+  // CHECK-NEXT:  %_M_other = sv.reg : !rtl.inout<uarray<20xi8>>
+  // CHECK-NEXT:  sv.ifdef "!SYNTHESIS"  {
+  // CHECK-NEXT:    sv.initial  {
+  // CHECK-NEXT:      sv.verbatim "`INIT_RANDOM_PROLOG_"
+  // CHECK-NEXT:      sv.ifdef "RANDOMIZE_MEM_INIT"  {
+  // CHECK-NEXT:        sv.verbatim "integer {{.*}}_initvar < 20{{.*}}
+  // CHECK-NEXT:      }
+  // CHECK-NEXT:    }
+  // CHECK-NEXT:  }
+  // CHECK-NEXT:  rtl.output
+  // CHECK-NEXT:}
+  rtl.module @MemAggregate(%clock1: i1, %clock2: i1) {
+      %0 = firrtl.stdIntCast %clock1 : (i1) -> !firrtl.clock
+      %1 = firrtl.stdIntCast %clock2 : (i1) -> !firrtl.clock
+      %_M = firrtl.mem "Undefined" {depth = 20 : i64, name = "_M", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<read: bundle<addr: flip<uint<5>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>, other: sint<8>>>, write: flip<bundle<addr: uint<5>, en: uint<1>, clk: clock, data: bundle<id: analog<4>, other: sint<8>>, mask: bundle<id: uint<1>, other: uint<1>>>>>
+      rtl.output
+    }
+
+  // module MemEmpty :
+  //    mem Empty :
+  //      data-type => UInt<32>
+  //      depth => 16
+  //      read-latency => 0
+  //      write-latency => 1
+  //      read-under-write => undefined
+  //
+  // CHECK-LABEL: rtl.module @MemEmpty() {
+  // CHECK-NEXT:   sv.ifdef "!SYNTHESIS"  {
+  // CHECK-NEXT:     sv.initial  {
+  // CHECK-NEXT:       sv.verbatim "`INIT_RANDOM_PROLOG_"
+  // CHECK-NEXT:       sv.ifdef "RANDOMIZE_MEM_INIT"  {
+  // CHECK-NEXT:       }
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:   }
+  // CHECK-NEXT:   rtl.output
+  // CHECK-NEXT: }
+  rtl.module @MemEmpty() {
+    %Empty = firrtl.mem "Undefined" {depth = 16 : i64, name = "Empty", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<>
+    rtl.output
+  }
+
+  // module MemOne :
+  //   mem _M : @[Decoupled.scala 209:24]
+  //         data-type => { id : Analog<4>, other: SInt<8> }
+  //         depth => 1
+  //         read-latency => 0
+  //         write-latency => 1
+  //         reader => read
+  //         writer => write
+  //         read-under-write => undefined
+  //
+  // CHECK-LABEL: rtl.module @MemOne() {
+  // CHECK-NEXT:   %_M_id = sv.reg : !rtl.inout<uarray<1xi4>>
+  // CHECK-NEXT:   %_M_other = sv.reg : !rtl.inout<uarray<1xi8>>
+  // CHECK-NEXT:   sv.ifdef "!SYNTHESIS"  {
+  // CHECK-NEXT:     sv.initial  {
+  // CHECK-NEXT:       sv.verbatim "`INIT_RANDOM_PROLOG_"
+  // CHECK-NEXT:       sv.ifdef "RANDOMIZE_MEM_INIT"  {
+  // CHECK-NEXT:         %0 = sv.textual_value "`RANDOM" : i4
+  // CHECK-NEXT:         %false = rtl.constant(false) : i1
+  // CHECK-NEXT:         %1 = rtl.arrayindex %_M_id[%false] : !rtl.inout<uarray<1xi4>>, i1
+  // CHECK-NEXT:         sv.bpassign %1, %0 : i4
+  // CHECK-NEXT:         %2 = sv.textual_value "`RANDOM" : i8
+  // CHECK-NEXT:         %false_0 = rtl.constant(false) : i1
+  // CHECK-NEXT:         %3 = rtl.arrayindex %_M_other[%false_0] : !rtl.inout<uarray<1xi8>>, i1
+  // CHECK-NEXT:         sv.bpassign %3, %2 : i8
+  // CHECK-NEXT:       }
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:   }
+  // CHECK-NEXT:   rtl.output
+  // CHECK-NEXT: }
+  rtl.module @MemOne() {
+    %_M = firrtl.mem "Undefined" {depth = 1 : i64, name = "_M", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<read: bundle<addr: flip<uint<1>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>, other: sint<8>>>, write: flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<id: analog<4>, other: sint<8>>, mask: bundle<id: uint<1>, other: uint<1>>>>>
+    rtl.output
+  }
+
+  // CHECK-LABEL: rtl.module @IncompleteRead(
+  // The read port has no use of the data field.
+  rtl.module @IncompleteRead(%clock1: i1) {
+    %0 = firrtl.stdIntCast %clock1 : (i1) -> !firrtl.clock
+    %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
+
+    // CHECK:  %_M = sv.reg : !rtl.inout<uarray<12xi42>>
+    %_M = firrtl.mem "Undefined" {depth = 12 : i64, name = "_M", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<read: bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>>
+    // Read port.
+    // CHECK: %_M_read_addr = rtl.wire : !rtl.inout<i4>
+    // CHECK-NEXT: %_M_read_en = rtl.wire : !rtl.inout<i1>
+    // CHECK-NEXT: %_M_read_clk = rtl.wire : !rtl.inout<i1>
+    // CHECK-NEXT: %_M_read_data = rtl.wire : !rtl.inout<i42>
+    // CHECK-NEXT: sv.ifdef "!RANDOMIZE_GARBAGE_ASSIGN"  {
+    %4 = firrtl.subfield %_M("read") : (!firrtl.bundle<read: bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>>) -> !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>
+    %6 = firrtl.subfield %4("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<4>>
+    firrtl.connect %6, %c0_ui1 : !firrtl.flip<uint<4>>, !firrtl.uint<1>
+    %7 = firrtl.subfield %4("en") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<1>>
+    firrtl.connect %7, %c1_ui1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    %8 = firrtl.subfield %4("clk") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<clock>
+    firrtl.connect %8, %0 : !firrtl.flip<clock>, !firrtl.clock
+    rtl.output
+  }
+}

@@ -56,11 +56,20 @@ func @xor_cstfold(%arg0: i7) -> i7 {
   return %0 : i7
 }
 
+// CHECK-LABEL: func @merge_fold
+// CHECK-NEXT:    %0 = rtl.merge %arg0, %arg0, %arg1 : i7
+// CHECK-NEXT:    return %arg0, %arg0, %0 : i7, i7, i7
+func @merge_fold(%arg0: i7, %arg1: i7) -> (i7, i7, i7) {
+  %a = rtl.merge %arg0 : i7
+  %b = rtl.merge %arg0, %arg0, %arg0 : i7
+  %c = rtl.merge %arg0, %arg0, %arg1 : i7
+  return %a, %b, %c: i7, i7, i7
+}
+
 // CHECK-LABEL: func @add_cstfold(%arg0: i7) -> i7 {
 // CHECK-NEXT:    %c15_i7 = rtl.constant(15 : i7)
 // CHECK-NEXT:    %0 = rtl.add %arg0, %c15_i7 : i7
 // CHECK-NEXT:    return %0 : i7
-
 func @add_cstfold(%arg0: i7) -> i7 {
   %c10_i7 = rtl.constant(10 : i7) : i7
   %c5_i7 = rtl.constant(5 : i7) : i7
@@ -72,7 +81,6 @@ func @add_cstfold(%arg0: i7) -> i7 {
 // CHECK-NEXT:    %c15_i7 = rtl.constant(15 : i7)
 // CHECK-NEXT:    %0 = rtl.mul %arg0, %c15_i7 : i7
 // CHECK-NEXT:    return %0 : i7
-
 func @mul_cstfold(%arg0: i7) -> i7 {
   %c3_i7 = rtl.constant(3 : i7) : i7
   %c5_i7 = rtl.constant(5 : i7) : i7
@@ -462,4 +470,71 @@ func @sext_constant_folding() -> i5 {
   %c8_i4 = rtl.constant(8 : i4) : i4
   %0 = rtl.sext %c8_i4 : (i4) -> i5
   return %0 : i5
+}
+
+// CHECK-LABEL: func @andr_constant_folding1() -> i1 {
+// CHECK-NEXT:  %false = rtl.constant(false) : i1
+// CHECK-NEXT:  return %false : i1
+
+func @andr_constant_folding1() -> i1 {
+  %c8_i4 = rtl.constant(8 : i4) : i4
+  %0 = rtl.andr %c8_i4 : i4
+  return %0 : i1
+}
+
+// CHECK-LABEL: func @andr_constant_folding2() -> i1 {
+// CHECK-NEXT:  %true = rtl.constant(true) : i1
+// CHECK-NEXT:  return %true : i1
+
+func @andr_constant_folding2() -> i1 {
+  %c15_i4 = rtl.constant(15 : i4) : i4
+  %0 = rtl.andr %c15_i4 : i4
+  return %0 : i1
+}
+
+// CHECK-LABEL: func @orr_constant_folding1() -> i1 {
+// CHECK-NEXT:  %false = rtl.constant(false) : i1
+// CHECK-NEXT:  return %false : i1
+
+func @orr_constant_folding1() -> i1 {
+  %c0_i4 = rtl.constant(0 : i4) : i4
+  %0 = rtl.orr %c0_i4 : i4
+  return %0 : i1
+}
+
+// CHECK-LABEL: func @orr_constant_folding2() -> i1 {
+// CHECK-NEXT:  %true = rtl.constant(true) : i1
+// CHECK-NEXT:  return %true : i1
+
+func @orr_constant_folding2() -> i1 {
+  %c8_i4 = rtl.constant(8 : i4) : i4
+  %0 = rtl.orr %c8_i4 : i4
+  return %0 : i1
+}
+
+// CHECK-LABEL: func @xorr_constant_folding1() -> i1 {
+// CHECK-NEXT:  %true = rtl.constant(true) : i1
+// CHECK-NEXT:  return %true : i1
+
+func @xorr_constant_folding1() -> i1 {
+  %c4_i4 = rtl.constant(4 : i4) : i4
+  %0 = rtl.xorr %c4_i4 : i4
+  return %0 : i1
+}
+
+// CHECK-LABEL: func @xorr_constant_folding2() -> i1 {
+// CHECK-NEXT:  %false = rtl.constant(false) : i1
+// CHECK-NEXT:  return %false : i1
+func @xorr_constant_folding2() -> i1 {
+  %c15_i4 = rtl.constant(15 : i4) : i4
+  %0 = rtl.xorr %c15_i4 : i4
+  return %0 : i1
+}
+
+// CHECK-LABEL: func @concat_fold_1
+// CHECK-NEXT:  %0 = rtl.concat %arg0, %arg1, %arg2
+func @concat_fold_1(%arg0: i4, %arg1: i3, %arg2: i1) -> i8 {
+  %a = rtl.concat %arg0, %arg1 : (i4, i3) -> i7
+  %b = rtl.concat %a, %arg2 : (i7, i1) -> i8
+  return %b : i8
 }

@@ -11,7 +11,16 @@ function(add_circt_interface interface)
 endfunction()
 
 function(add_circt_doc doc_filename command output_file output_directory)
-  add_mlir_doc(${ARGV})
+  set(LLVM_TARGET_DEFINITIONS ${doc_filename}.td)
+  tablegen(MLIR ${output_file}.md ${command})
+  set(GEN_DOC_FILE ${CIRCT_BINARY_DIR}/docs/${output_directory}${output_file}.md)
+  add_custom_command(
+          OUTPUT ${GEN_DOC_FILE}
+          COMMAND ${CMAKE_COMMAND} -E copy
+                  ${CMAKE_CURRENT_BINARY_DIR}/${output_file}.md
+                  ${GEN_DOC_FILE}
+          DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${output_file}.md)
+  add_custom_target(${output_file}DocGen DEPENDS ${GEN_DOC_FILE})
   add_dependencies(circt-doc ${output_file}DocGen)
 endfunction()
 

@@ -27,7 +27,7 @@ firrtl.circuit "MyModule" {
 // expected-note @+1 {{implies 'firrtl.done'}}
 "firrtl.module"() ( {
 ^bb0(%a: !firrtl.uint<32>):
-  firrtl.invalid %a : !firrtl.uint<32>
+  %0 = firrtl.add %a, %a : (!firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<33>
 
 }) {sym_name = "MyModule", type = (!firrtl.uint<32>) -> ()} : () -> ()
 
@@ -79,8 +79,8 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Foo" {
   firrtl.module @Foo(%clk: !firrtl.uint<1>, %reset: !firrtl.uint<1>) {
     %zero = firrtl.constant(0 : ui1) : !firrtl.uint<1>
-    // expected-error @+1 {{'firrtl.reginit' op operand #0 must be clock, but got '!firrtl.uint<1>'}}
-    %a = firrtl.reginit %clk, %reset, %zero {name = "a"} : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // expected-error @+1 {{'firrtl.regreset' op operand #0 must be clock, but got '!firrtl.uint<1>'}}
+    %a = firrtl.regreset %clk, %reset, %zero {name = "a"} : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   }
 }
 
@@ -89,8 +89,8 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Foo" {
   firrtl.module @Foo(%clk: !firrtl.clock, %reset: !firrtl.uint<2>) {
     %zero = firrtl.constant(0 : ui1) : !firrtl.uint<1>
-    // expected-error @+1 {{'firrtl.reginit' op operand #1 must be Reset, AsyncReset, or UInt<1>, but got '!firrtl.uint<2>'}}
-    %a = firrtl.reginit %clk, %reset, %zero {name = "a"} : (!firrtl.clock, !firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // expected-error @+1 {{'firrtl.regreset' op operand #1 must be Reset, AsyncReset, or UInt<1>, but got '!firrtl.uint<2>'}}
+    %a = firrtl.regreset %clk, %reset, %zero {name = "a"} : (!firrtl.clock, !firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<1>
   }
 }
 
@@ -118,8 +118,8 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Foo" {
   firrtl.module @Foo(%clk: !firrtl.clock, %reset: !firrtl.uint<1>) {
     %zero = firrtl.constant(0 : ui1) : !firrtl.uint<1>
-    // expected-error @+1 {{'firrtl.reginit' op result #0 must be a passive type (contain no flips)}}
-    %a = firrtl.reginit %clk, %reset, %zero {name = "a"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.flip<uint<1>>
+    // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive type (contain no flips)}}
+    %a = firrtl.regreset %clk, %reset, %zero {name = "a"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.flip<uint<1>>
   }
 }
 
@@ -259,7 +259,7 @@ firrtl.circuit "Foo" {
   }
 }
 
-// ----- 
+// -----
 
 firrtl.circuit "X" {
 
@@ -286,7 +286,7 @@ firrtl.module @X(%a : !firrtl.uint<4>) {
 firrtl.circuit "X" {
 
 firrtl.module @X(%a : !firrtl.uint<4>) {
-  // expected-error @+1 {{width of the result type must be equal to (high - low + 1), expected 3 but got 2}}
+  // expected-error @+1 {{'firrtl.bits' op result type should be '!firrtl.uint<3>'}}
   %0 = firrtl.bits %a 3 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<2>
 }
 
@@ -335,5 +335,24 @@ firrtl.circuit "BadPort" {
   firrtl.module @BadPort(%a : !firrtl.uint<1>) {
     // expected-error @+1 {{'firrtl.attach' op operand #0 must be analog type, but got '!firrtl.uint<1>'}}
     firrtl.attach %a, %a : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "BadAdd" {
+  firrtl.module @BadAdd(%a : !firrtl.uint<1>) {
+    // expected-error @+1 {{'firrtl.add' op result type should be '!firrtl.uint<2>'}}
+    firrtl.add %a, %a : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "NodeMustBePassive" {
+  firrtl.module @NodeMustBePassive() {
+    %a = firrtl.wire : !firrtl.flip<uint<1>>
+    // expected-error @+1 {{'firrtl.node' op operand #0 must be a passive type}}
+    %b = firrtl.node %a : !firrtl.flip<uint<1>>
   }
 }

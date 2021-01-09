@@ -11,4 +11,25 @@ module {
   func @inoutType(%arg0: !rtl.inout<i42>) {
     return
   }
+
+  // CHECK-LABEL: func @structType(%arg0: !rtl.struct<>, %arg1: !rtl.struct<foo: i32, bar: i4, baz: !rtl.struct<foo: i7>>) {
+  func @structType(%SE: !rtl.struct<>, %SF: !rtl.struct<foo: i32, bar: i4, baz: !rtl.struct<foo: i7>>) {
+    return
+  }
+  
+  // CHECK-LABEL: nestedType
+  func @nestedType(
+    // CHECK: %arg0: !rtl.inout<array<42xi8>>,
+    %arg0: !rtl.inout<!rtl.array<42xi8>>,
+     // CHECK: %arg1: !rtl.inout<array<42xi8>>,
+    %arg1: !rtl.inout<array<42xi8>>,
+    // CHECK: %arg2: !rtl.inout<array<2xarray<42xi8>>>
+    %arg2: !rtl.inout<array<2xarray<42xi8>>>,
+
+    // CHECK: %arg3: !rtl.inout<uarray<42xi8>>,
+    %arg3: !rtl.inout<uarray<42xi8>>,
+    // CHECK: %arg4: !rtl.inout<uarray<2xarray<42xi8>>>
+    %arg4: !rtl.inout<uarray<2xarray<42xi8>>>) {
+    return
+  }
 }

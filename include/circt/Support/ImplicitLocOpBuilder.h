@@ -44,6 +44,30 @@ public:
   ImplicitLocOpBuilder(mlir::Operation *op)
       : OpBuilder(op), curLoc(op->getLoc()) {}
 
+  /// Create a builder and set the insertion point to before the first operation
+  /// in the block but still inside the block.
+  static ImplicitLocOpBuilder atBlockBegin(Location loc, Block *block,
+                                           Listener *listener = nullptr) {
+    return ImplicitLocOpBuilder(loc, block, block->begin(), listener);
+  }
+
+  /// Create a builder and set the insertion point to after the last operation
+  /// in the block but still inside the block.
+  static ImplicitLocOpBuilder atBlockEnd(Location loc, Block *block,
+                                         Listener *listener = nullptr) {
+    return ImplicitLocOpBuilder(loc, block, block->end(), listener);
+  }
+
+  /// Create a builder and set the insertion point to before the block
+  /// terminator.
+  static ImplicitLocOpBuilder atBlockTerminator(Location loc, Block *block,
+                                                Listener *listener = nullptr) {
+    auto *terminator = block->getTerminator();
+    assert(terminator != nullptr && "the block has no terminator");
+    return ImplicitLocOpBuilder(loc, block, Block::iterator(terminator),
+                                listener);
+  }
+
   /// Accessors for the implied location.
   Location getLoc() const { return curLoc; }
   void setLoc(Location loc) { curLoc = loc; }

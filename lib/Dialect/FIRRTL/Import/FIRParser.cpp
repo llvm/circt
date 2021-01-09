@@ -13,7 +13,7 @@
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 
 #include "FIRLexer.h"
-#include "circt/Dialect/FIRRTL/Ops.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
@@ -332,26 +332,35 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
 
   spelling = spelling.drop_front(2).drop_back(1);
 
-  // Split at the last space.
-  auto spaceLoc = spelling.find_last_of(' ');
-  if (spaceLoc == StringRef::npos)
-    return unknownFormat();
+  // Decode the locator in "spelling", returning the filename and filling in
+  // lineNo and colNo on success.  On failure, this returns an empty filename.
+  auto decodeLocator = [&](StringRef input, unsigned &resultLineNo,
+                           unsigned &resultColNo) -> StringRef {
+    // Split at the last space.
+    auto spaceLoc = input.find_last_of(' ');
+    if (spaceLoc == StringRef::npos)
+      return {};
 
-  auto filename = spelling.take_front(spaceLoc);
-  auto lineAndColumn = spelling.drop_front(spaceLoc + 1);
+    auto filename = input.take_front(spaceLoc);
+    auto lineAndColumn = input.drop_front(spaceLoc + 1);
 
-  // Decode the line/column.  If the colon is missing, then it will be empty
-  // here.
-  StringRef lineStr, colStr;
-  std::tie(lineStr, colStr) = lineAndColumn.split(':');
+    // Decode the line/column.  If the colon is missing, then it will be empty
+    // here.
+    StringRef lineStr, colStr;
+    std::tie(lineStr, colStr) = lineAndColumn.split(':');
 
-  // Zero represents an unknown line/column number.
+    // Decode the line number and the column number if present.
+    if (lineStr.getAsInteger(10, resultLineNo))
+      return {};
+    if (!colStr.empty() && colStr.getAsInteger(10, resultColNo))
+      return {};
+    return filename;
+  };
+
+  // Decode the locator spelling, reporting an error if it is malformed.
   unsigned lineNo = 0, columnNo = 0;
-
-  // Decode the line number and the column number if present.
-  if (lineStr.getAsInteger(10, lineNo))
-    return unknownFormat();
-  if (!colStr.empty() && colStr.getAsInteger(10, columnNo))
+  StringRef filename = decodeLocator(spelling, lineNo, columnNo);
+  if (filename.empty())
     return unknownFormat();
 
   // If info locators are ignored, don't actually apply them.  We still do all
@@ -359,8 +368,45 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
   if (state.options.ignoreInfoLocators)
     return success();
 
-  auto resultLoc =
+  // Compound locators will be combined with spaces, like:
+  //  @[Foo.scala 123:4 Bar.scala 309:14]
+  // and at this point will be parsed as a-long-string-with-two-spaces at
+  // 309:14.   We'd like to parse this into two things and represent it as an
+  // MLIR fused locator, but we want to be conservatively safe for filenames
+  // that have a space in it.  As such, we are careful to make sure we can
+  // decode the filename/loc of the result.  If so, we accumulate results,
+  // backward, in this vector.
+  SmallVector<Location> extraLocs;
+  auto spaceLoc = filename.find_last_of(' ');
+  while (spaceLoc != StringRef::npos) {
+    // Try decoding the thing before the space.  Validates that there is another
+    // space and that the file/line can be decoded in that substring.
+    unsigned nextLineNo = 0, nextColumnNo = 0;
+    auto nextFilename =
+        decodeLocator(filename.take_front(spaceLoc), nextLineNo, nextColumnNo);
+
+    // On failure we didn't have a joined locator.
+    if (nextFilename.empty())
+      break;
+
+    // On success, remember what we already parsed (Bar.Scala / 309:14), and
+    // move on to the next chunk.
+    auto loc = FileLineColLoc::get(filename.drop_front(spaceLoc + 1), lineNo,
+                                   columnNo, getContext());
+    extraLocs.push_back(loc);
+    filename = nextFilename;
+    lineNo = nextLineNo;
+    columnNo = nextColumnNo;
+    spaceLoc = filename.find_last_of(' ');
+  }
+
+  Location resultLoc =
       FileLineColLoc::get(filename, lineNo, columnNo, getContext());
+  if (!extraLocs.empty()) {
+    extraLocs.push_back(resultLoc);
+    std::reverse(extraLocs.begin(), extraLocs.end());
+    resultLoc = FusedLoc::get(extraLocs, getContext());
+  }
   result.setInfoLocation(resultLoc);
 
   // Now that we have a symbolic location, apply it to any subOps specified.
@@ -941,13 +987,8 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result,
   auto resultType = result.getType().cast<FIRRTLType>();
   resultType =
       SubfieldOp::getResultType(resultType, fieldName, translateLocation(loc));
-  if (!resultType) {
-    // TODO(QoI): This error would be nicer with a .fir pretty print of the
-    // type.
-    emitError(loc, "invalid subfield '" + fieldName + "' for type ")
-        << result.getType();
+  if (!resultType)
     return failure();
-  }
 
   // Create the result operation.
   auto op =
@@ -978,13 +1019,8 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result,
   auto resultType = result.getType().cast<FIRRTLType>();
   resultType = SubindexOp::getResultType(resultType, indexNo,
                                          translateLocation(indexLoc));
-  if (!resultType) {
-    // TODO(QoI): This error would be nicer with a .fir pretty print of the
-    // type.
-    emitError(indexLoc, "invalid subindex '" + Twine(indexNo))
-        << "' for type " << result.getType();
+  if (!resultType)
     return failure();
-  }
 
   // Create the result operation.
   auto op =
@@ -1020,13 +1056,8 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result,
   auto resultType = result.getType().cast<FIRRTLType>();
   resultType = SubaccessOp::getResultType(resultType, indexType,
                                           translateLocation(indexLoc));
-  if (!resultType) {
-    // TODO(QoI): This error would be nicer with a .fir pretty print of the
-    // type.
-    emitError(indexLoc, "invalid dynamic subaccess into ")
-        << result.getType() << " with index of type " << indexType;
+  if (!resultType)
     return failure();
-  }
 
   // Create the result operation.
   auto op = builder.create<SubaccessOp>(translateLocation(indexLoc), resultType,
@@ -1080,19 +1111,6 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
   for (auto v : operands)
     opTypes.push_back(v.getType().cast<FIRRTLType>());
 
-  auto typeError = [&](StringRef opName) -> ParseResult {
-    auto diag = emitError(loc, "invalid input types for '") << opName << "': ";
-    bool isFirst = true;
-    for (auto t : opTypes) {
-      if (!isFirst)
-        diag << ", ";
-      else
-        isFirst = false;
-      diag << t;
-    }
-    return failure();
-  };
-
   SmallVector<StringRef, 2> attrNames;
   switch (kind) {
   default:
@@ -1130,7 +1148,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
     auto resultTy =                                                            \
         CLASS::getResultType(opTypes, integers, translateLocation(loc));       \
     if (!resultTy)                                                             \
-      return typeError(#SPELLING);                                             \
+      return failure();                                                        \
     result = builder.create<CLASS>(translateLocation(loc), resultTy,           \
                                    ValueRange(operands), attrs);               \
     break;                                                                     \
@@ -1711,7 +1729,19 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs, SubOpVector &subOps) {
         parseOptionalInfo(info, subOps))
       return failure();
 
-    builder.create<InvalidOp>(info.getLoc(), lhs);
+    // The FIRRTL specification describes Invalidates as a statement with
+    // implicit connect semantics.  The FIRRTL dialect models it as a primitive
+    // that returns an "Invalid Value", followed by an explicit connect to make
+    // the representation simpler and more consistent.
+    auto invalidType = lhs.getType().cast<FIRRTLType>();
+    if (invalidType.isa<AnalogType>()) {
+      auto val = builder.create<InvalidValuePrimOp>(info.getLoc(), invalidType);
+      builder.create<AttachOp>(info.getLoc(), ValueRange{lhs, val});
+    } else {
+      auto val = builder.create<InvalidValuePrimOp>(
+          info.getLoc(), invalidType.getPassiveType());
+      builder.create<ConnectOp>(info.getLoc(), lhs, val);
+    }
     return success();
   }
 
@@ -1971,7 +2001,8 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
 
 /// node ::= 'node' id '=' exp info?
 ParseResult FIRStmtParser::parseNode() {
-  LocWithInfo info(getToken().getLoc(), this);
+  auto loc = getToken().getLoc();
+  LocWithInfo info(loc, this);
   consumeToken(FIRToken::kw_node);
 
   // If this was actually the start of a connect or something else handle
@@ -1987,6 +2018,31 @@ ParseResult FIRStmtParser::parseNode() {
       parseExp(initializer, subOps, "expected expression for node") ||
       parseOptionalInfo(info, subOps))
     return failure();
+
+  // Error out in the following conditions:
+  //
+  //   1. Node type is Analog (at the top level)
+  //   2. Node type is not passive under an optional outer flip
+  //      (analog field is okay)
+  //
+  // Note: (1) is more restictive than normal NodeOp verification, but
+  // this is added to align with the SFC. (2) is less restrictive than
+  // the SFC to accomodate for situations where the node is something
+  // weird like a module output or an instance input. This one
+  // situation is cleaned up with 'convertToPassive' following.
+  auto initializerType = initializer.getType().cast<FIRRTLType>();
+  if (initializerType.isa<AnalogType>() ||
+      (!initializerType.isPassive() && !initializerType.isa<FlipType>())) {
+    emitError(
+        loc,
+        "Node cannot be analog and must be passive or passive under a flip")
+        << initializer.getType();
+    return failure();
+  }
+
+  // If the node type isn't passive (it contains an outer flip), then make it
+  // passive.
+  initializer = convertToPassive(initializer, initializer.getLoc());
 
   // Ignore useless names like _T.
   auto actualName = filterUselessName(id);
@@ -2110,8 +2166,8 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
 
   Value result;
   if (resetSignal)
-    result = builder.create<RegInitOp>(info.getLoc(), type, clock, resetSignal,
-                                       resetValue, filterUselessName(id));
+    result = builder.create<RegResetOp>(info.getLoc(), type, clock, resetSignal,
+                                        resetValue, filterUselessName(id));
   else
     result = builder.create<RegOp>(info.getLoc(), type, clock,
                                    filterUselessName(id));

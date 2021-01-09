@@ -8,7 +8,7 @@ module {
   rtl.module @top(%clk: i1, %rstn: i1) {
     %c1 = rtl.instance "aaa" @AAA () : () -> (i1)
     %c1Shl = rtl.instance "shl" @shl (%c1) : (i1) -> (i1)
-    sv.alwaysat_posedge %clk {
+    sv.always posedge %clk {
       sv.fwrite "tick\n"
     }
   }
