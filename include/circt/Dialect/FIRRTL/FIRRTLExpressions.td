@@ -236,7 +236,7 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
     static FIRRTLType getResultType(FIRRTLType input, Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
                                     ArrayRef<int32_t> integers, Location loc) {
-      if (inputs.size() != 1 && !integers.empty()) {
+      if (inputs.size() != 1 || !integers.empty()) {
         mlir::emitError(loc, "operation requires one operand and no constants");
         return {};
       }

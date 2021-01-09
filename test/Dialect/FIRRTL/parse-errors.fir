@@ -152,3 +152,13 @@ circuit invalid_node_analog :
     output b : Analog<1>
     ; expected-error @+1 {{Node cannot be analog and must be passive or passive under a flip}}
     node n = a
+
+;// -----
+
+circuit Issue418:
+  module Issue418:
+    input a: UInt<1>
+    output b: UInt<1>
+
+    ; expected-error @+1 {{operation requires one operand and no constants}}
+    b <= not(a, a)
