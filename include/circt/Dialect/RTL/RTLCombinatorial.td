@@ -317,7 +317,7 @@ def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
   }];
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$arrayType, "size_t":$lowBit, "size_t":$size)>
+    OpBuilderDAG<(ins "Value":$input, "size_t":$lowBit, "size_t":$size)>
   ];
 }
 

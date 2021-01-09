@@ -822,9 +822,7 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   StringRef name = nameAttr ? nameAttr.getValue() : "cosimEndpoint";
   Value epInstInputs[] = {
       ep.clk(),           ep.rstn(),
-
       recvReady,
-
       unwrapSend.valid(), encodeData.capnpBits(),
   };
   Type epInstOutputs[] = {rewriter.getI1Type(), ingestBitArrayType,

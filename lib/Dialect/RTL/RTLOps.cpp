@@ -855,6 +855,16 @@ static void printSliceTypes(OpAsmPrinter &p, Operation *, Type srcType,
   p.printType(srcType);
 }
 
+void ArraySliceOp::build(::mlir::OpBuilder &b, ::mlir::OperationState &state,
+                         Value input, size_t lowBit, size_t size) {
+  auto inputArrayTy = input.getType().cast<ArrayType>();
+  unsigned idxWidth = llvm::Log2_64_Ceil(inputArrayTy.getSize());
+  auto lowBitValue =
+      b.create<ConstantOp>(state.location, lowBit, b.getIntegerType(idxWidth));
+  auto dstType = ArrayType::get(inputArrayTy.getElementType(), size);
+  build(b, state, dstType, input, lowBitValue);
+}
+
 //===----------------------------------------------------------------------===//
 // Variadic operations
 //===----------------------------------------------------------------------===//

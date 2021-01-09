@@ -317,9 +317,6 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value operand) {
   auto u32 = b.getI32Type();
   auto u64 = b.getI64Type();
   // Various useful bit array types.
-  auto b16 = rtl::ArrayType::get(b.getI1Type(), 16);
-  auto b32 = rtl::ArrayType::get(b.getI1Type(), 32);
-  auto b64 = rtl::ArrayType::get(b.getI1Type(), 64);
 
   rtl::ArrayType operandType = operand.getType().dyn_cast<rtl::ArrayType>();
   assert(operandType && operandType.getSize() == size &&
@@ -328,7 +325,7 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value operand) {
   // capnp messages start with the segment table, which for a single segment is
   // just the size of the message minus the 64-bit segment table. Create an
   // assertion that it matches our computed size.
-  auto segSize = b.create<rtl::ReinterpretCast>(
+  auto segSize = b.create<rtl::CastFromBitsOp>(
       loc, u64, b.create<rtl::ArraySliceOp>(loc, operand, size - 64, 64));
   auto expectedSize = b.create<rtl::ConstantOp>(loc, size - 64, u64);
   b.create<sv::AssertOp>(loc, b.create<rtl::ICmpOp>(loc, b.getI1Type(),
@@ -344,7 +341,7 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value operand) {
   // Since this is the root, we _expect_ the offset to be zero but that's only
   // guaranteed to be the case with canonically-encoded messages.
   // TODO: support cases where the pointer offset is non-zero.
-  auto typeAndOffset = b.create<rtl::ReinterpretCast>(
+  auto typeAndOffset = b.create<rtl::CastFromBitsOp>(
       loc, u32, b.create<rtl::ArraySliceOp>(loc, ptr, 32, 32));
   auto b16Zero = b.create<rtl::ConstantOp>(loc, 0, u32);
   b.create<sv::AssertOp>(loc, b.create<rtl::ICmpOp>(loc, b.getI1Type(),
@@ -352,7 +349,7 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value operand) {
                                                     typeAndOffset, b16Zero));
 
   // We expect the data section to be equal to the computed data section size.
-  auto dataSectionSize = b.create<rtl::ReinterpretCast>(
+  auto dataSectionSize = b.create<rtl::CastFromBitsOp>(
       loc, u16, b.create<rtl::ArraySliceOp>(loc, ptr, 16, 16));
   auto expectedDataSectionSize = b.create<rtl::ConstantOp>(
       loc, rootProto.getStruct().getDataWordCount() * 64, u16);
@@ -362,7 +359,7 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value operand) {
 
   // We expect the pointer section to be equal to the computed pointer section
   // size.
-  auto ptrSectionSize = b.create<rtl::ReinterpretCast>(
+  auto ptrSectionSize = b.create<rtl::CastFromBitsOp>(
       loc, u16, b.create<rtl::ArraySliceOp>(loc, ptr, 0, 16));
   auto expectedPtrSectionSize = b.create<rtl::ConstantOp>(
       loc, rootProto.getStruct().getPointerCount() * 64, u16);
@@ -379,8 +376,8 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value operand) {
   currentOffset += (field.getSlot().getOffset() + 1) * capnpFieldBits;
   auto typeBits = type.cast<IntegerType>().getWidth();
   auto fieldBits =
-      b.create<rtl::ArraySliceOp>(loc, operand, size - currentOffset, 1);
-  auto fieldValue = b.create<rtl::ReinterpretCast>(loc, type, fieldBits);
+      b.create<rtl::ArraySliceOp>(loc, operand, size - currentOffset, typeBits);
+  auto fieldValue = b.create<rtl::CastFromBitsOp>(loc, type, fieldBits);
 
   // All that just to decode an int!
   return fieldValue;
