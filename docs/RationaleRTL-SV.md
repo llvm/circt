@@ -61,6 +61,32 @@ TODO: Spotlight on module.  Allows arbitrary types for ports.
 TODO: Why is add variadic?  Why consistent operand types instead of allowing
 implicit extensions?
 
+
+** Zero Bit Integers **
+
+Combinatorial operations like add and multiply work on values of signless
+standard integer types, e.g. `i42`, but they do not allow zero bit inputs.  This
+design point is motivated by a couple of reasons:
+
+1) The semantics of some operations (e.g. `rtl.sext`) do not have an obvious
+   definition with a zero bit input.
+
+1) Zero bit operations are useless for operations that are definable, and their
+   presence makes the compiler more complicated.
+
+On the second point, consider an example like `rtl.mux` which could allow zero
+bit inputs and therefore produce zero bit results.  Allowing that as a design
+point would require us to special case this in our cost models, and we would
+have that optimizes it away.
+
+By rejecting zero bit operations, we choose to put the complexity into the
+lowering passes that generate the RTL dialect (e.g. LowerToRTL from FIRRTL).
+
+Note that this decision only affects the core operations in the RTL dialect
+itself - it is perfectly reasonable to define your operations and mix them into
+other RTL constructs.  Also, the `rtl.module` operation allows ports with an
+open type system, and does explicitly support zero bit ports.
+
 Cost Model
 ----------
 
