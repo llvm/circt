@@ -57,7 +57,9 @@ module {
 
     %35 = rtl.array_slice %array at %a : (!rtl.array<10xi4>) -> !rtl.array<3xi4>
 
-    rtl.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, %30, %31, %32, %33, %34, %35:
+    rtl.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14,
+               %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27,
+               %28, %29, %30, %31, %32, %33, %34, %35 :
      i4,i4, i4,i4,i4,i4,i4, i4,i4,i4,i4,i4,
      i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,i1,i1,
      i12, i2,i9,i9,i4, i4, !rtl.array<3xi4>
@@ -350,5 +352,26 @@ module {
     rtl.connect %awire, %divs: i4
 
     rtl.output
+  }
+
+  // CHECK-LABEL: module TestZero(
+  // CHECK-NEXT:      input  [3:0]               a,
+  // CHECK-NEXT:   // input  /*Zero Width*/      zeroBit,
+  // CHECK-NEXT:   // input  /*Zero Width*/[2:0] arrZero,
+  // CHECK-NEXT:      output [3:0]               r0,
+  // CHECK-NEXT:   // output /*Zero Width*/      rZero,
+  // CHECK-NEXT:   // output /*Zero Width*/[2:0] arrZero
+  // CHECK-NEXT:    );
+  // CHECK-EMPTY:
+  rtl.module @TestZero(%a: i4, %zeroBit: i0, %arrZero: !rtl.array<3xi0>)
+    -> (%r0: i4, %rZero: i0, %arrZero: !rtl.array<3xi0>) {
+
+    %b = rtl.add %a, %a : i4
+    rtl.output %b, %zeroBit, %arrZero : i4, i0, !rtl.array<3xi0>
+
+    // CHECK-NEXT:   assign r0 = a + a;
+    // CHECK-NEXT:   // Zero width: assign rZero = zeroBit;
+    // CHECK-NEXT:   // Zero width: assign arrZero = arrZero;
+    // CHECK-NEXT: endmodule
   }
 }
