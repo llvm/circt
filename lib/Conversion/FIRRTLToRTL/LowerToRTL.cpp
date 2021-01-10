@@ -262,7 +262,6 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
   size_t numResults = 0;
   for (auto firrtlPort : firrtlPorts) {
     rtl::ModulePortInfo rtlPort;
-
     rtlPort.name = firrtlPort.name;
     rtlPort.type = lowerType(firrtlPort.type);
 
@@ -273,7 +272,9 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
     }
 
     // Figure out the direction of the port.
-    if (firrtlPort.isOutput()) {
+    if (firrtlPort.isOutput() && !rtlPort.type.isInteger(0)) {
+      // Zero bit integer values cannot be materialized at the RTL level, so we
+      // turn them into inout ports implicitly.
       rtlPort.direction = rtl::PortDirection::OUTPUT;
       rtlPort.argNum = numResults++;
     } else if (firrtlPort.isInput()) {
@@ -392,6 +393,11 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   if (connects.empty())
     return {};
 
+  // Don't special case zero-bit results.
+  auto loweredType = lowerType(flipValue.getType());
+  if (loweredType.isInteger(0))
+    return {};
+
   // We need to see if we can move all of the computation that feeds the
   // connects to be "above" the insertion point to avoid introducing cycles that
   // will break LowerToRTL.  Consider optimizing away a wire for inputs on an
@@ -460,14 +466,11 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
     results.push_back(connectSrc);
   }
 
-  // If there was only one source, just return it.  Otherwise emit an rtl.merge
-  // right before the output.
-  auto loweredType = lowerType(flipValue.getType());
-
   // Convert from FIRRTL type to builtin type to do the merge.
   for (auto &result : results)
     result = castFromFIRRTLType(result, loweredType, builder);
 
+  // Folding merge of one value just returns the value.
   return builder.createOrFold<rtl::MergeOp>(results);
 }
 
@@ -513,7 +516,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
     Value newArg;
     if (!port.isOutput()) {
       // Inputs and InOuts are modeled as arguments in the result, so we can
-      // just map them over.
+      // just map them over.  We model zero bit outputs as inouts.
       newArg = newModule.body().getArgument(nextNewArg++);
 
       // Cast the argument to the old type, reintroducing sign information in
@@ -529,9 +532,12 @@ void FIRRTLModuleLowering::lowerModuleBody(
       // Outputs need a temporary wire so they can be connect'd to, which we
       // then return.
       newArg = bodyBuilder.create<WireOp>(port.type, /*name=*/StringAttr());
-      auto output =
-          castFromFIRRTLType(newArg, lowerType(port.type), outputBuilder);
-      outputs.push_back(output);
+      auto resultRTLType = lowerType(port.type);
+      // Don't output zero bit results.
+      if (!resultRTLType.isInteger(0)) {
+        auto output = castFromFIRRTLType(newArg, resultRTLType, outputBuilder);
+        outputs.push_back(output);
+      }
     }
 
     // Switch all uses of the old operands to the new ones.
