@@ -74,6 +74,12 @@ static Value castFromFIRRTLType(Value val, Type type,
   return builder.createOrFold<StdIntCastOp>(type, val);
 }
 
+/// Return true if the specified FIRRTL type is a sized type (Int or Analog)
+/// with zero bits.
+static bool isZeroBitFIRRTLType(Type type) {
+  return type.cast<FIRRTLType>().getBitWidthOrSentinel() == 0;
+}
+
 //===----------------------------------------------------------------------===//
 // firrtl.module Lowering Pass
 //===----------------------------------------------------------------------===//
@@ -920,6 +926,18 @@ void FIRRTLLowering::runOnOperation() {
 // Helpers
 //===----------------------------------------------------------------------===//
 
+/// Zero bit operands end up looking like failures from getLoweredValue.  This
+/// helper function invokes the closure specified if the operand was actually
+/// zero bit, or returns failure() to lower if it was something else.
+static LogicalResult handleZeroBit(Value failedOperand,
+                                   std::function<LogicalResult()> fn) {
+  assert(failedOperand && failedOperand.getType().isa<FIRRTLType>() &&
+         "Should be called on the failed FIRRTL operand");
+  if (!isZeroBitFIRRTLType(failedOperand.getType()))
+    return failure();
+  return fn();
+}
+
 /// Return the lowered RTL value corresponding to the specified original value.
 /// This returns a null value for FIRRTL values that cannot be lowered, e.g.
 /// unknown width integers.  This returns rtl::inout type values if present, it
@@ -991,12 +1009,24 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
 
 /// Set the lowered value of 'orig' to 'result', remembering this in a map.
 /// This always returns success() to make it more convenient in lowering code.
+///
+/// Note that result may be null here if we're lowering orig to a zero-bit
+/// value.
+///
 LogicalResult FIRRTLLowering::setLowering(Value orig, Value result) {
   assert(orig.getType().isa<FIRRTLType>() &&
-         !result.getType().isa<FIRRTLType>() &&
+         (!result || !result.getType().isa<FIRRTLType>()) &&
          "Lowering didn't turn a FIRRTL value into a non-FIRRTL value");
-
   assert(!valueMapping.count(orig) && "value lowered multiple times");
+
+#ifndef NDEBUG
+  if (!result) {
+    auto srcWidth = orig.getType().cast<FIRRTLType>().getBitWidthOrSentinel();
+    assert((srcWidth == 0 || srcWidth == -1) &&
+           "Lowering produced null value but source wasn't zero width");
+  }
+#endif
+
   valueMapping[orig] = result;
   return success();
 }
@@ -1434,8 +1464,15 @@ LogicalResult FIRRTLLowering::visitExpr(StdIntCastOp op) {
 
   // Conversions from standard integer types to FIRRTL types are lowered as
   // the input operand.
-  if (!op.getType().isa<IntegerType>())
+  if (!op.getType().isa<IntegerType>()) {
+    // Conversions from i0 values are implicitly dropped, since they aren't
+    // lowered to RTL types.  Clients are expected to be prepared to handle
+    // this.
+    if (result.getType().getIntOrFloatBitWidth() == 0)
+      result = Value();
+
     return setLowering(op, result);
+  }
 
   // We lower firrtl.stdIntCast converting from a firrtl type to a standard
   // type into the lowered operand.
@@ -1500,24 +1537,35 @@ LogicalResult FIRRTLLowering::visitExpr(PadPrimOp op) {
 
 LogicalResult FIRRTLLowering::visitExpr(XorRPrimOp op) {
   auto operand = getLoweredValue(op.input());
-  if (!operand)
+  if (!operand) {
+    return handleZeroBit(op.input(), [&]() {
+      return setLoweringTo<rtl::ConstantOp>(op, APInt(1, 0));
+    });
     return failure();
+  }
 
   return setLoweringTo<rtl::XorROp>(op, builder->getIntegerType(1), operand);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(AndRPrimOp op) {
   auto operand = getLoweredValue(op.input());
-  if (!operand)
-    return failure();
+  if (!operand) {
+    return handleZeroBit(op.input(), [&]() {
+      return setLoweringTo<rtl::ConstantOp>(op, APInt(1, 1));
+    });
+  }
 
   return setLoweringTo<rtl::AndROp>(op, builder->getIntegerType(1), operand);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(OrRPrimOp op) {
   auto operand = getLoweredValue(op.input());
-  if (!operand)
+  if (!operand) {
+    return handleZeroBit(op.input(), [&]() {
+      return setLoweringTo<rtl::ConstantOp>(op, APInt(1, 0));
+    });
     return failure();
+  }
 
   return setLoweringTo<rtl::OrROp>(op, builder->getIntegerType(1), operand);
 }
@@ -1607,8 +1655,18 @@ LogicalResult FIRRTLLowering::lowerDivLikeOp(Operation *op) {
 LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
   auto lhs = getLoweredValue(op.lhs());
   auto rhs = getLoweredValue(op.rhs());
-  if (!lhs || !rhs)
-    return failure();
+  if (!lhs) {
+    return handleZeroBit(op.lhs(), [&]() {
+      if (rhs) // cat(0bit, x) --> x
+        return setLowering(op, rhs);
+      // cat(0bit, 0bit) --> 0bit
+      return handleZeroBit(op.rhs(),
+                           [&]() { return setLowering(op, Value()); });
+    });
+  }
+
+  if (!rhs) // cat(x, 0bit) --> x
+    return handleZeroBit(op.rhs(), [&]() { return setLowering(op, lhs); });
 
   return setLoweringTo<rtl::ConcatOp>(op, lhs, rhs);
 }
