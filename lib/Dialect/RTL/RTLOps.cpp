@@ -1319,7 +1319,10 @@ static LogicalResult tryCanonicalizeConcat(ConcatOp op,
     newOperands.append(inputs.begin(), inputs.begin() + firstOpIndex);
     newOperands.append(replacements.begin(), replacements.end());
     newOperands.append(inputs.begin() + lastOpIndex + 1, inputs.end());
-    rewriter.replaceOpWithNewOp<ConcatOp>(op, op.getType(), newOperands);
+    if (newOperands.size() == 1)
+      rewriter.replaceOp(op, newOperands[0]);
+    else
+      rewriter.replaceOpWithNewOp<ConcatOp>(op, op.getType(), newOperands);
     return success();
   };
 
@@ -1357,6 +1360,7 @@ static LogicalResult tryCanonicalizeConcat(ConcatOp op,
 
     // Check for canonicalization due to neighboring operands.
     if (i != 0) {
+      // Merge neighboring constants.
       if (auto cst = inputs[i].getDefiningOp<ConstantOp>()) {
         if (auto prevCst = inputs[i - 1].getDefiningOp<ConstantOp>()) {
           unsigned prevWidth = prevCst.getValue().getBitWidth();
@@ -1370,20 +1374,44 @@ static LogicalResult tryCanonicalizeConcat(ConcatOp op,
         }
       }
 
-      /// TODO: Sequences of neighboring extracts.  {A[3], A[2]} -> A[3,2]
+      // Merge neighboring extracts of neighboring inputs, e.g.
+      // {A[3], A[2]} -> A[3,2]
+      if (auto extract = inputs[i].getDefiningOp<ExtractOp>()) {
+        if (auto prevExtract = inputs[i - 1].getDefiningOp<ExtractOp>()) {
+          if (extract.input() == prevExtract.input()) {
+            auto thisWidth = extract.getType().getIntOrFloatBitWidth();
+            if (prevExtract.lowBit() == extract.lowBit() + thisWidth) {
+              auto prevWidth = prevExtract.getType().getIntOrFloatBitWidth();
+              auto resType = rewriter.getIntegerType(thisWidth + prevWidth);
+              Value replacement = rewriter.create<ExtractOp>(
+                  op.getLoc(), resType, extract.input());
+              return flattenConcat(i - 1, i, replacement);
+            }
+          }
+        }
+      }
     }
   }
 
+  // Return true if this extract is an extract of the sign bit of its input.
+  auto isSignBitExtract = [](ExtractOp op) -> bool {
+    if (op.getType().getIntOrFloatBitWidth() != 1)
+      return false;
+    return op.lowBit() == op.input().getType().getIntOrFloatBitWidth() - 1;
+  };
+
   // Folds concat back into a sext.
   if (auto extract = inputs[0].getDefiningOp<ExtractOp>()) {
-    if (extract.input() == inputs.back() &&
-        extract.getType().getIntOrFloatBitWidth() == 1) {
+    if (extract.input() == inputs.back() && isSignBitExtract(extract)) {
       // Check intermediate bits.
       bool allMatch = true;
+      // The intermediate bits are allowed to be difference instances of extract
+      // (because canonicalize doesn't do CSE automatically) so long as they are
+      // getting the sign bit.
       for (size_t i = 1, e = inputs.size() - 1; i != e; ++i) {
         auto extractInner = inputs[i].getDefiningOp<ExtractOp>();
         if (!extractInner || extractInner.input() != inputs.back() ||
-            extractInner.getType().getIntOrFloatBitWidth() != 1) {
+            !isSignBitExtract(extractInner)) {
           allMatch = false;
           break;
         }
