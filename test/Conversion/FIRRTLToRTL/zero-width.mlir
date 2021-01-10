@@ -61,4 +61,18 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: rtl.output %uin3, %uin3 : i3, i3
     rtl.output %c3, %c4 : i3, i3
   }
+
+  // CHECK-LABEL: rtl.module @Decls
+  rtl.module @Decls(%sin0: i0, %uin0: i0, %uin3: i3) {
+    %sin0c = firrtl.stdIntCast %sin0 : (i0) -> !firrtl.sint<0>
+    %uin0c = firrtl.stdIntCast %uin0 : (i0) -> !firrtl.uint<0>
+    %uin3c = firrtl.stdIntCast %uin3 : (i3) -> !firrtl.uint<3>
+
+    // Lowers to nothing.
+    %wire = firrtl.wire : !firrtl.flip<sint<0>>
+    firrtl.connect %wire, %sin0c : !firrtl.flip<sint<0>>, !firrtl.sint<0>
+
+    // CHECK-NEXT: rtl.output
+    rtl.output
+  }
 }
