@@ -745,7 +745,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitStmt;
 
   // Lowering hooks.
-  void handleUnloweredOp(Operation *op);
+  LogicalResult handleUnloweredOp(Operation *op);
   LogicalResult visitExpr(ConstantOp op);
   LogicalResult visitExpr(SubfieldOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
@@ -903,7 +903,10 @@ void FIRRTLLowering::runOnOperation() {
     } else {
       // If lowering didn't succeed, then make sure to rewrite operands that
       // refer to lowered values.
-      handleUnloweredOp(&op);
+      if (failed(handleUnloweredOp(&op))) {
+        // If anything failed, don't remove anything.
+        opsToRemove.clear();
+      }
     }
   }
   builder = nullptr;
@@ -945,8 +948,13 @@ static LogicalResult handleZeroBit(Value failedOperand,
 Value FIRRTLLowering::getPossiblyInoutLoweredValue(Value value) {
   // All FIRRTL dialect values have FIRRTL types, so if we see something else
   // mixed in, it must be something we can't lower.  Just return it directly.
-  if (!value.getType().isa<FIRRTLType>())
+  if (!value.getType().isa<FIRRTLType>()) {
+    // Lower zero bit RTL types (e.g. module input ports) to a null Value.
+    if (auto intType = value.getType().dyn_cast<IntegerType>())
+      if (intType.getWidth() == 0)
+        return {};
     return value;
+  }
 
   // If we lowered this value, then return the lowered value, otherwise fail.
   auto it = valueMapping.find(value);
@@ -977,16 +985,24 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
 Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
   assert(value.getType().isa<FIRRTLType>() && destType.isa<FIRRTLType>() &&
          "input/output value should be FIRRTL");
-  auto destFIRType = destType.cast<FIRRTLType>();
-
-  auto result = getLoweredValue(value);
-  if (!result)
-    return {};
 
   // We only know how to extend integer types with known width.
-  auto destWidth = destFIRType.getBitWidthOrSentinel();
+  auto destWidth = destType.cast<FIRRTLType>().getBitWidthOrSentinel();
   if (destWidth == -1)
     return {};
+
+  auto result = getLoweredValue(value);
+  if (!result) {
+    // If this was a zero bit operand being extended, then produce a zero of the
+    // right result type.  If it is just a failure, fail.
+    if (!isZeroBitFIRRTLType(value.getType()))
+      return {};
+    // Zero bit results have to be returned as null.  The caller can handle
+    // this if they want to.
+    if (destWidth == 0)
+      return {};
+    return builder->create<rtl::ConstantOp>(APInt(destWidth, 0));
+  }
 
   auto srcWidth = result.getType().cast<IntegerType>().getWidth();
   if (srcWidth == unsigned(destWidth))
@@ -1047,7 +1063,11 @@ LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
 /// Handle the case where an operation wasn't lowered.  When this happens, the
 /// operands should just be unlowered non-FIRRTL values.  If the operand was
 /// not lowered then leave it alone, otherwise we have a problem with lowering.
-void FIRRTLLowering::handleUnloweredOp(Operation *op) {
+///
+/// Return success if this is an expected unlowered op (e.g. rtl.output) or
+/// failure if an error is emitted.
+LogicalResult FIRRTLLowering::handleUnloweredOp(Operation *op) {
+  LogicalResult result = success();
   for (auto &operand : op->getOpOperands()) {
     Value origValue = operand.get();
     auto it = valueMapping.find(origValue);
@@ -1056,10 +1076,10 @@ void FIRRTLLowering::handleUnloweredOp(Operation *op) {
       continue;
 
     op->emitError("LowerToRTL couldn't handle this operation");
-
-    // Otherwise, insert a cast from the lowered value.
-    operand.set(castToFIRRTLType(it->second, origValue.getType(), *builder));
+    result = failure();
   }
+
+  return result;
 }
 
 LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
@@ -1459,20 +1479,19 @@ LogicalResult FIRRTLLowering::lowerNoopCast(Operation *op) {
 
 LogicalResult FIRRTLLowering::visitExpr(StdIntCastOp op) {
   auto result = getLoweredValue(op.getOperand());
-  if (!result)
+  if (!result) {
+    // If this is a conversion from a zero bit RTL type to firrtl value, then
+    // we want to successfully lower this to a null Value.
+    if (op.getOperand().getType().isSignlessInteger(0)) {
+      return setLowering(op, Value());
+    }
     return failure();
+  }
 
   // Conversions from standard integer types to FIRRTL types are lowered as
   // the input operand.
-  if (!op.getType().isa<IntegerType>()) {
-    // Conversions from i0 values are implicitly dropped, since they aren't
-    // lowered to RTL types.  Clients are expected to be prepared to handle
-    // this.
-    if (result.getType().getIntOrFloatBitWidth() == 0)
-      result = Value();
-
+  if (op.getOperand().getType().isa<IntegerType>())
     return setLowering(op, result);
-  }
 
   // We lower firrtl.stdIntCast converting from a firrtl type to a standard
   // type into the lowered operand.
