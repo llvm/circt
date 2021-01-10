@@ -271,10 +271,13 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
       return failure();
     }
 
+    // If this is a zero bit port, just drop it.  It doesn't matter if it is
+    // input, output, or inout.  We don't want these at the RTL level.
+    if (rtlPort.type.isInteger(0))
+      continue;
+
     // Figure out the direction of the port.
-    if (firrtlPort.isOutput() && !rtlPort.type.isInteger(0)) {
-      // Zero bit integer values cannot be materialized at the RTL level, so we
-      // turn them into inout ports implicitly.
+    if (firrtlPort.isOutput()) {
       rtlPort.direction = rtl::PortDirection::OUTPUT;
       rtlPort.argNum = numResults++;
     } else if (firrtlPort.isInput()) {
@@ -513,35 +516,52 @@ void FIRRTLModuleLowering::lowerModuleBody(
     // Inputs and outputs are both modeled as arguments in the FIRRTL level.
     auto oldArg = oldModule.body().getArgument(firrtlArg++);
 
-    Value newArg;
-    if (!port.isOutput()) {
+    bool isZeroWidth =
+        port.type.cast<FIRRTLType>().getBitWidthOrSentinel() == 0;
+
+    if (!port.isOutput() && !isZeroWidth) {
       // Inputs and InOuts are modeled as arguments in the result, so we can
       // just map them over.  We model zero bit outputs as inouts.
-      newArg = newModule.body().getArgument(nextNewArg++);
+      Value newArg = newModule.body().getArgument(nextNewArg++);
 
       // Cast the argument to the old type, reintroducing sign information in
       // the rtl.module body.
       newArg = castToFIRRTLType(newArg, oldArg.getType(), bodyBuilder);
-    } else if (auto value = tryEliminatingConnectsToValue(oldArg, outputOp)) {
+      // Switch all uses of the old operands to the new ones.
+      oldArg.replaceAllUsesWith(newArg);
+      continue;
+    }
+
+    // We lower zero width inout and outputs to a wire that isn't connected to
+    // anything outside the module.  Inputs are lowered to zero.
+    if (isZeroWidth && port.isInput()) {
+      Value newArg = bodyBuilder.create<WireOp>(FlipType::get(port.type),
+                                                /*name=*/StringAttr());
+      newArg = bodyBuilder.create<AsPassivePrimOp>(newArg);
+      oldArg.replaceAllUsesWith(newArg);
+      continue;
+    }
+
+    if (auto value = tryEliminatingConnectsToValue(oldArg, outputOp)) {
       // If we were able to find the value being connected to the output,
       // directly use it!
       outputs.push_back(value);
       assert(oldArg.use_empty() && "should have removed all uses of oldArg");
       continue;
-    } else {
-      // Outputs need a temporary wire so they can be connect'd to, which we
-      // then return.
-      newArg = bodyBuilder.create<WireOp>(port.type, /*name=*/StringAttr());
-      auto resultRTLType = lowerType(port.type);
-      // Don't output zero bit results.
-      if (!resultRTLType.isInteger(0)) {
-        auto output = castFromFIRRTLType(newArg, resultRTLType, outputBuilder);
-        outputs.push_back(output);
-      }
     }
 
+    // Outputs need a temporary wire so they can be connect'd to, which we
+    // then return.
+    Value newArg = bodyBuilder.create<WireOp>(port.type, /*name=*/StringAttr());
     // Switch all uses of the old operands to the new ones.
     oldArg.replaceAllUsesWith(newArg);
+
+    // Don't output zero bit results or inouts.
+    auto resultRTLType = lowerType(port.type);
+    if (!resultRTLType.isInteger(0)) {
+      auto output = castFromFIRRTLType(newArg, resultRTLType, outputBuilder);
+      outputs.push_back(output);
+    }
   }
 
   // Update the rtl.output terminator with the list of outputs we have.
@@ -651,7 +671,6 @@ void FIRRTLModuleLowering::lowerInstance(
     }
 
     if (port.isOutput()) {
-      // outputs become results.
       resultTypes.push_back(portType);
       continue;
     }
