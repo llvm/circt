@@ -927,27 +927,12 @@ void FIRRTLLowering::runOnOperation() {
 Value FIRRTLLowering::getPossiblyInoutLoweredValue(Value value) {
   // All FIRRTL dialect values have FIRRTL types, so if we see something else
   // mixed in, it must be something we can't lower.  Just return it directly.
-  auto firType = value.getType().dyn_cast<FIRRTLType>();
-  if (!firType)
+  if (!value.getType().isa<FIRRTLType>())
     return value;
 
-  // If we lowered this value, then return the lowered value.
+  // If we lowered this value, then return the lowered value, otherwise fail.
   auto it = valueMapping.find(value);
-  if (it != valueMapping.end())
-    return it->second;
-
-  // Otherwise, we need to introduce (or look through) a cast to the right
-  // FIRRTL type.
-  auto resultType = lowerType(firType);
-  if (!resultType)
-    return value;
-
-  if (!resultType.isa<IntegerType>())
-    return {};
-
-  // Cast FIRRTL -> standard type.
-  value = builder->createOrFold<AsPassivePrimOp>(value);
-  return builder->createOrFold<StdIntCastOp>(resultType, value);
+  return it != valueMapping.end() ? it->second : Value();
 }
 
 /// Return the lowered value corresponding to the specified original value.
@@ -1030,9 +1015,8 @@ LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
 //===----------------------------------------------------------------------===//
 
 /// Handle the case where an operation wasn't lowered.  When this happens, the
-/// operands may be a mix of lowered and unlowered values.  If the operand was
-/// not lowered then leave it alone, otherwise insert a cast from the lowered
-/// value.
+/// operands should just be unlowered non-FIRRTL values.  If the operand was
+/// not lowered then leave it alone, otherwise we have a problem with lowering.
 void FIRRTLLowering::handleUnloweredOp(Operation *op) {
   for (auto &operand : op->getOpOperands()) {
     Value origValue = operand.get();
@@ -1041,11 +1025,10 @@ void FIRRTLLowering::handleUnloweredOp(Operation *op) {
     if (it == valueMapping.end())
       continue;
 
-    op->emitWarning("LowerToRTL couldn't handle this");
+    op->emitError("LowerToRTL couldn't handle this operation");
 
     // Otherwise, insert a cast from the lowered value.
-    Value mapped = castToFIRRTLType(it->second, origValue.getType(), *builder);
-    operand.set(mapped);
+    operand.set(castToFIRRTLType(it->second, origValue.getType(), *builder));
   }
 }
 
@@ -1059,7 +1042,7 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
   if (op.use_empty() || valueMapping.count(op))
     return success();
 
-  op.emitOpError(": operand should have lowered its subfields");
+  op.emitOpError("operand should have lowered its subfields");
   return failure();
 }
 
