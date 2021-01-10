@@ -870,6 +870,23 @@ SubExprInfo ExprEmitter::visitComb(ZExtOp op) {
 }
 
 SubExprInfo ExprEmitter::visitComb(ConcatOp op) {
+  // If all of the operands are the same, we emit this as a SystemVerilog
+  // replicate operation, ala SV Spec 11.4.12.1.
+  auto firstOperand = op.getOperand(0);
+  bool allSame = true;
+  for (size_t i = 1, e = op.getNumOperands(); i != e; ++i) {
+    if (op.getOperand(i) != firstOperand) {
+      allSame = false;
+      break;
+    }
+  }
+  if (allSame) {
+    os << '{' << op.getNumOperands() << '{';
+    emitSubExpr(firstOperand, LowestPrecedence);
+    os << "}}";
+    return {Unary, IsUnsigned};
+  }
+
   os << '{';
   llvm::interleaveComma(op.getOperands(), os,
                         [&](Value v) { emitSubExpr(v, LowestPrecedence); });
@@ -1963,5 +1980,4 @@ void circt::registerToVerilogTranslation() {
       "emit-verilog", exportVerilog, [](DialectRegistry &registry) {
         registry.insert<RTLDialect, SVDialect>();
       });
-
 }

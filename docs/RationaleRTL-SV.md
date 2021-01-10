@@ -61,6 +61,12 @@ TODO: Spotlight on module.  Allows arbitrary types for ports.
 TODO: Why is add variadic?  Why consistent operand types instead of allowing
 implicit extensions?
 
+** No Replication Operator **
+
+System Verilog 11.4.12.1 describes a replication operator, which replicates an
+operand a constant N times.  We decided that this was redundant and just sugar
+for the `rtl.concat` operator, so we just use `rtl.concat` (with the same 
+operand) instead.
 
 ** Zero Bit Integers **
 
