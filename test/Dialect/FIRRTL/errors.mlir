@@ -89,7 +89,7 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Foo" {
   firrtl.module @Foo(%clk: !firrtl.clock, %reset: !firrtl.uint<2>) {
     %zero = firrtl.constant(0 : ui1) : !firrtl.uint<1>
-    // expected-error @+1 {{'firrtl.regreset' op operand #1 must be Reset, AsyncReset, or UInt<1>, but got '!firrtl.uint<2>'}}
+    // expected-error @+1 {{'firrtl.regreset' op operand #1 must be Reset, but got '!firrtl.uint<2>'}}
     %a = firrtl.regreset %clk, %reset, %zero {name = "a"} : (!firrtl.clock, !firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<1>
   }
 }

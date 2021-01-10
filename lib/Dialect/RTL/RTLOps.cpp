@@ -1200,7 +1200,7 @@ OpFoldResult MulOp::fold(ArrayRef<Attribute> constants) {
   if (size == 1u)
     return inputs()[0];
 
-  auto width = getType().cast<IntegerType>().getWidth();
+  auto width = getType().getWidth();
   APInt value(/*numBits=*/width, 1, /*isSigned=*/false);
 
   // mul(x, 0, 1) -> 0 -- annulment
