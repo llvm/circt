@@ -2103,6 +2103,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
       parseType(type, "expected reg type") ||
       parseExp(clock, subOps, "expected expression for register clock"))
     return failure();
+  clock = convertToPassive(clock, clock.getLoc());
 
   // Parse the 'with' specifier if present.
   Value resetSignal, resetValue;
@@ -2128,6 +2129,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
         parseToken(FIRToken::l_paren, "expected '(' in reset specifier") ||
         parseExp(resetSignal, subOps, "expected expression for reset signal"))
       return failure();
+    resetSignal = convertToPassive(resetSignal, resetSignal.getLoc());
 
     // The Scala implementation of FIRRTL represents registers without resets
     // as a self referential register... and the pretty printer doesn't print
@@ -2145,6 +2147,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
           parseToken(FIRToken::r_paren, "expected ')' in reset specifier") ||
           parseOptionalInfo(info, subOps))
         return failure();
+      resetValue = convertToPassive(resetValue, resetValue.getLoc());
     }
 
     if (hasExtraLParen &&
