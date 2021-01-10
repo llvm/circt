@@ -985,6 +985,8 @@ static LogicalResult handleZeroBit(Value failedOperand,
 /// unknown width integers.  This returns rtl::inout type values if present, it
 /// does not implicitly read from them.
 Value FIRRTLLowering::getPossiblyInoutLoweredValue(Value value) {
+  assert(value.getType().isa<FIRRTLType>() &&
+         "Should only lower FIRRTL operands");
   // If we lowered this value, then return the lowered value, otherwise fail.
   auto it = valueMapping.find(value);
   return it != valueMapping.end() ? it->second : Value();
@@ -1030,6 +1032,8 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
     // this if they want to.
     if (destWidth == 0)
       return {};
+    // Otherwise, FIRRTL semantics is that an extension from a zero bit value
+    // always produces a zero value in the destination width.
     return builder->create<rtl::ConstantOp>(APInt(destWidth, 0));
   }
 
@@ -1062,7 +1066,6 @@ LogicalResult FIRRTLLowering::setLowering(Value orig, Value result) {
   assert(orig.getType().isa<FIRRTLType>() &&
          (!result || !result.getType().isa<FIRRTLType>()) &&
          "Lowering didn't turn a FIRRTL value into a non-FIRRTL value");
-  assert(!valueMapping.count(orig) && "value lowered multiple times");
 
 #ifndef NDEBUG
   if (!result) {
@@ -1075,6 +1078,7 @@ LogicalResult FIRRTLLowering::setLowering(Value orig, Value result) {
   }
 #endif
 
+  assert(!valueMapping.count(orig) && "value lowered multiple times");
   valueMapping[orig] = result;
   return success();
 }
@@ -1221,14 +1225,16 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
 
 LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   auto resultType = lowerType(op.result().getType());
-  if (resultType && resultType.isInteger(0))
+  if (!resultType)
+    return failure();
+  if (resultType.isInteger(0))
     return setLowering(op, Value());
 
   Value clockVal = getLoweredValue(op.clockVal());
   Value resetSignal = getLoweredValue(op.resetSignal());
   Value resetValue = getLoweredValue(op.resetValue());
 
-  if (!resultType || !resetSignal || !resetValue)
+  if (!clockVal || !resetSignal || !resetValue)
     return failure();
 
   auto regResult = builder->create<sv::RegOp>(resultType, op.nameAttr());
@@ -1295,8 +1301,10 @@ static bool flattenBundleTypes(Type type, StringRef nameSoFar,
   // In the base case we record this field.
   auto bundle = type.dyn_cast<BundleType>();
   if (!bundle) {
-    results.push_back({lowerType(type), nameSoFar.str()});
-    return results.back().type == Type();
+    auto rtlType = lowerType(type);
+    if (rtlType && !rtlType.isInteger(0))
+      results.push_back({rtlType, nameSoFar.str()});
+    return rtlType == Type();
   }
 
   SmallString<16> tmpName(nameSoFar);
@@ -1409,6 +1417,11 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       if (!fieldType)
         return op.emitOpError("port " + elt.name.str() +
                               " has unexpected field");
+
+      if (fieldType.isInteger(0)) {
+        portWires.push_back({elt.name, Value()});
+        continue;
+      }
       auto name =
           (Twine(memName) + "_" + port.fieldname() + "_" + elt.name.str())
               .str();
@@ -1710,9 +1723,7 @@ LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, ICmpPredicate signedOp,
   if (!lhsIntType.hasWidth() || !rhsIntType.hasWidth())
     return failure();
 
-  Type cmpType =
-      *lhsIntType.getWidth() < *rhsIntType.getWidth() ? rhsIntType : lhsIntType;
-
+  Type cmpType = getWidestIntType(lhsIntType, rhsIntType);
   auto lhs = getLoweredAndExtendedValue(op->getOperand(0), cmpType);
   auto rhs = getLoweredAndExtendedValue(op->getOperand(1), cmpType);
   if (!lhs || !rhs)
@@ -1777,8 +1788,7 @@ LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
   auto rhsFirTy = op.rhs().getType().dyn_cast<IntType>();
   if (!lhsFirTy || !rhsFirTy || !lhsFirTy.hasWidth() || !rhsFirTy.hasWidth())
     return failure();
-  auto opType = lhsFirTy.getWidth() > rhsFirTy.getWidth() ? lhsFirTy : rhsFirTy;
-
+  auto opType = getWidestIntType(lhsFirTy, rhsFirTy);
   auto lhs = getLoweredAndExtendedValue(op.lhs(), opType);
   auto rhs = getLoweredAndExtendedValue(op.rhs(), opType);
   if (!lhs || !rhs)
@@ -1788,7 +1798,8 @@ LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
   if (!resultFirType.hasWidth())
     return failure();
   auto destWidth = unsigned(resultFirType.getWidthOrSentinel());
-  auto resultType = builder->getIntegerType(destWidth);
+  if (destWidth == 0)
+    return setLowering(op, Value());
 
   Value modInst;
   if (resultFirType.isUnsigned()) {
@@ -1797,6 +1808,7 @@ LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
     modInst = builder->createOrFold<rtl::ModSOp>(lhs, rhs);
   }
 
+  auto resultType = builder->getIntegerType(destWidth);
   return setLoweringTo<rtl::ExtractOp>(op, resultType, modInst, 0);
 }
 
@@ -1930,10 +1942,10 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   // The source can be a smaller integer, extend it as appropriate if so.
   auto destType = dest.getType().cast<FIRRTLType>().getPassiveType();
   auto srcVal = getLoweredAndExtendedValue(op.src(), destType);
-  auto destVal = getPossiblyInoutLoweredValue(dest);
   if (!srcVal)
     return handleZeroBit(op.src(), []() { return success(); });
 
+  auto destVal = getPossiblyInoutLoweredValue(dest);
   if (!destVal)
     return failure();
 
