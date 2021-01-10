@@ -535,7 +535,8 @@ void FIRRTLModuleLowering::lowerModuleBody(
     // We lower zero width inout and outputs to a wire that isn't connected to
     // anything outside the module.  Inputs are lowered to zero.
     if (isZeroWidth && port.isInput()) {
-      Value newArg = bodyBuilder.create<WireOp>(FlipType::get(port.type));
+      Value newArg = bodyBuilder.create<WireOp>(FlipType::get(port.type),
+                                                /*name=*/StringAttr());
       newArg = bodyBuilder.create<AsPassivePrimOp>(newArg);
       oldArg.replaceAllUsesWith(newArg);
       continue;
@@ -551,7 +552,8 @@ void FIRRTLModuleLowering::lowerModuleBody(
 
     // Outputs need a temporary wire so they can be connect'd to, which we
     // then return.
-    Value newArg = bodyBuilder.create<WireOp>(port.type);
+    Value newArg = bodyBuilder.create<WireOp>(port.type,
+                                              /*name=*/StringAttr());
     // Switch all uses of the old operands to the new ones.
     oldArg.replaceAllUsesWith(newArg);
 
@@ -736,7 +738,8 @@ void FIRRTLModuleLowering::lowerInstance(
       resultVal = castToFIRRTLType(resultVal, resultType, builder);
     } else {
       // Zero bit results are just replaced with a wire.
-      resultVal = builder.create<WireOp>(resultType);
+      resultVal = builder.create<WireOp>(resultType,
+                                         /*name=*/StringAttr());
     }
 
     // Replace any subfield uses of this output port with the returned value
