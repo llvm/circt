@@ -30,9 +30,7 @@ def ConstantOp
   // just use "rtl.constant 42: i8".  This can be done with a custom printer and
   // parser, but would be better to be autoderived from the
   // FirstAttrDerivedResultType trait.  This should be an MLIR core improvement.
-  let assemblyFormat = [{
-     `(` $value `)` attr-dict `:` type($result)
-  }];
+  let assemblyFormat = "`(` $value `)` attr-dict `:` type($result)";
 
   let builders = [
     /// Build a ConstantOp from an APInt, infering the result type from the
@@ -49,7 +47,7 @@ def ConstantOp
     APInt getValue() { return getAttrOfType<IntegerAttr>("value").getValue(); }
   }];
   let hasFolder = true;
-  let verifier = [{ return ::verifyConstantOp(*this); }];
+  let verifier = "return ::verifyConstantOp(*this);";
 }
 
 //===----------------------------------------------------------------------===//
@@ -58,7 +56,7 @@ def ConstantOp
 
 // Base class for binary operators.
 class BinRTLOp<string mnemonic, list<OpTrait> traits = []> :
-      RTLOp<mnemonic, !listconcat(traits, [NoSideEffect])> {
+      RTLOp<mnemonic, traits # [NoSideEffect]> {
   let arguments = (ins RTLIntegerType:$lhs, RTLIntegerType:$rhs);
   let results = (outs RTLIntegerType:$result);
 
@@ -69,14 +67,13 @@ class BinRTLOp<string mnemonic, list<OpTrait> traits = []> :
 // Binary operator with uniform input/result types.
 class UTBinRTLOp<string mnemonic, list<OpTrait> traits = []> :
       BinRTLOp<mnemonic,
-               !listconcat(traits,
-                           [SameTypeOperands, SameOperandsAndResultType])> {
+               traits # [SameTypeOperands, SameOperandsAndResultType]> {
   let assemblyFormat = "$lhs `,` $rhs  attr-dict `:` type($result)";
 }
 
 // Base class for variadic operators.
 class VariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
-      RTLOp<mnemonic, !listconcat(traits, [NoSideEffect])> {
+      RTLOp<mnemonic, traits # [NoSideEffect]> {
   let arguments = (ins Variadic<RTLIntegerType>:$inputs);
   let results = (outs RTLIntegerType:$result);
 
@@ -86,12 +83,11 @@ class VariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
 
 class UTVariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
       VariadicRTLOp<mnemonic,
-               !listconcat(traits,
-                           [SameTypeOperands, SameOperandsAndResultType])> {
+                    traits # [SameTypeOperands, SameOperandsAndResultType]> {
 
   let hasCanonicalizer = true;
   let hasFolder = true;
-  let verifier =  [{ return ::verifyUTVariadicRTLOp(*this); }];
+  let verifier =  "return ::verifyUTVariadicRTLOp(*this);";
 
   let assemblyFormat = "$inputs attr-dict `:` type($result)";
 
@@ -172,14 +168,12 @@ def ICmpOp : RTLOp<"icmp", [NoSideEffect, SameTypeOperands]> {
 
 // Base class for unary reduction operations that produce an i1.
 class UnaryI1ReductionRTLOp<string mnemonic, list<OpTrait> traits = []> :
-      RTLOp<mnemonic, !listconcat(traits, [NoSideEffect])> {
+      RTLOp<mnemonic, traits # [NoSideEffect]> {
   let arguments = (ins RTLIntegerType:$input);
   let results = (outs I1:$result);
   let hasFolder = 1;
 
-  let assemblyFormat = [{
-    $input attr-dict `:` type($input)
-  }];
+  let assemblyFormat = "$input attr-dict `:` type($input)";
 }
 
 def AndROp : UnaryI1ReductionRTLOp<"andr">;
@@ -193,8 +187,8 @@ def StructExtractOp : RTLOp<"struct_extract", [NoSideEffect]> {
   let arguments = (ins StructType:$input, StrAttr:$field);
   let results = (outs RTLNonInOutType:$result);
 
-  let parser = [{ return ::parse$cppClass(parser, result); }];
-  let printer = [{ return ::print(p, *this); }];
+  let parser = "return ::parse$cppClass(parser, result);";
+  let printer = "return ::print(p, *this);";
 }
 
 // Extract a range of bits from the specified input.
@@ -206,8 +200,8 @@ def StructInjectOp : RTLOp<"struct_inject", [NoSideEffect,
                    RTLNonInOutType:$newValue);
   let results = (outs StructType:$result);
 
-  let parser = [{ return ::parse$cppClass(parser, result); }];
-  let printer = [{ return ::print(p, *this); }];
+  let parser = "return ::parse$cppClass(parser, result);";
+  let printer = "return ::print(p, *this);";
 }
 
 //===----------------------------------------------------------------------===//
@@ -222,12 +216,11 @@ def ExtractOp : RTLOp<"extract", [NoSideEffect]> {
   let arguments = (ins RTLIntegerType:$input, I32Attr:$lowBit);
   let results = (outs RTLIntegerType:$result);
 
-  let assemblyFormat = [{
-    $input `from` $lowBit attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input `from` $lowBit attr-dict `:` functional-type($input, $result)";
 
   let hasFolder = true;
-  let verifier = [{ return ::verifyExtractOp(*this); }];
+  let verifier = "return ::verifyExtractOp(*this);";
 }
 
 def SExtOp : RTLOp<"sext", [NoSideEffect]> {
@@ -236,12 +229,11 @@ def SExtOp : RTLOp<"sext", [NoSideEffect]> {
   let arguments = (ins RTLIntegerType:$input);
   let results = (outs RTLIntegerType:$result);
 
-  let assemblyFormat = [{
-    $input attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input attr-dict `:` functional-type($input, $result)";
 
   let hasFolder = true;
-  let verifier = [{ return ::verifyExtOp(*this); }];
+  let verifier = "return ::verifyExtOp(*this);";
 }
 
 def ZExtOp : RTLOp<"zext", [NoSideEffect]> {
@@ -250,12 +242,11 @@ def ZExtOp : RTLOp<"zext", [NoSideEffect]> {
   let arguments = (ins RTLIntegerType:$input);
   let results = (outs RTLIntegerType:$result);
 
-  let assemblyFormat = [{
-    $input attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input attr-dict `:` functional-type($input, $result)";
 
   let hasFolder = true;
-  let verifier = [{ return ::verifyExtOp(*this); }];
+  let verifier = "return ::verifyExtOp(*this);";
 }
 
 //===----------------------------------------------------------------------===//

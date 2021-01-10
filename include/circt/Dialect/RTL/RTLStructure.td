@@ -73,8 +73,8 @@ def RTLModuleOp : RTLOp<"module",
   public:
   }];
 
-  let printer = [{ return ::print(p, *this); }];
-  let parser = [{ return ::parse$cppClass(parser, result); }];
+  let printer = "return ::print(p, *this);";
+  let parser = "return ::parse$cppClass(parser, result);";
 }
 
 def RTLExternModuleOp : RTLOp<"externmodule",
@@ -134,8 +134,8 @@ def RTLExternModuleOp : RTLOp<"externmodule",
   public:
   }];
 
-  let printer = [{ return ::print(p, *this); }];
-  let parser = [{ return ::parse$cppClass(parser, result); }];
+  let printer = "return ::print(p, *this);";
+  let parser = "return ::parse$cppClass(parser, result);";
 }
 
 def InstanceOp : RTLOp<"instance",
@@ -168,7 +168,7 @@ def InstanceOp : RTLOp<"instance",
       `:` functional-type($inputs, results)
   }];
 
-  let verifier = [{ return ::verifyInstanceOp(*this); }];
+  let verifier = "return ::verifyInstanceOp(*this);";
 }
 
 def OutputOp : RTLOp<"output", [Terminator, HasParent<"RTLModuleOp">,
@@ -181,10 +181,11 @@ def OutputOp : RTLOp<"output", [Terminator, HasParent<"RTLModuleOp">,
 
   let arguments = (ins Variadic<AnyType>:$operands);
 
-  let builders = [OpBuilderDAG<(ins),
-                               [{ build($_builder, $_state, llvm::None); }]>];
+  let builders = [
+    OpBuilderDAG<(ins), "build($_builder, $_state, llvm::None);">
+  ];
 
   let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
 
-  let verifier = [{ return ::verifyOutputOp(this); }];
+  let verifier = "return ::verifyOutputOp(this);";
 }
