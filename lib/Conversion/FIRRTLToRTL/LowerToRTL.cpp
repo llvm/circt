@@ -745,7 +745,8 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitStmt;
 
   // Lowering hooks.
-  LogicalResult handleUnloweredOp(Operation *op);
+  enum UnloweredOpResult { AlreadyLowered, NowLowered, LoweringFailure };
+  UnloweredOpResult handleUnloweredOp(Operation *op);
   LogicalResult visitExpr(ConstantOp op);
   LogicalResult visitExpr(SubfieldOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
@@ -901,10 +902,15 @@ void FIRRTLLowering::runOnOperation() {
     if (succeeded(dispatchVisitor(&op))) {
       opsToRemove.push_back(&op);
     } else {
-      // If lowering didn't succeed, then make sure to rewrite operands that
-      // refer to lowered values.
-      if (failed(handleUnloweredOp(&op))) {
-        // If anything failed, don't remove anything.
+      switch (handleUnloweredOp(&op)) {
+      case AlreadyLowered:
+        break;         // Something like rtl.output, which is already lowered.
+      case NowLowered: // Something handleUnloweredOp removed.
+        opsToRemove.push_back(&op);
+        break;
+      case LoweringFailure:
+        // If lowering failed, don't remove *anything* we've lowered so far,
+        // there may be uses, and the pass will fail anyway.
         opsToRemove.clear();
       }
     }
@@ -1064,22 +1070,38 @@ LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
 /// operands should just be unlowered non-FIRRTL values.  If the operand was
 /// not lowered then leave it alone, otherwise we have a problem with lowering.
 ///
-/// Return success if this is an expected unlowered op (e.g. rtl.output) or
-/// failure if an error is emitted.
-LogicalResult FIRRTLLowering::handleUnloweredOp(Operation *op) {
-  LogicalResult result = success();
-  for (auto &operand : op->getOpOperands()) {
-    Value origValue = operand.get();
-    auto it = valueMapping.find(origValue);
-    // If the operand wasn't lowered, then leave it alone.
-    if (it == valueMapping.end())
-      continue;
-
-    op->emitError("LowerToRTL couldn't handle this operation");
-    result = failure();
+FIRRTLLowering::UnloweredOpResult
+FIRRTLLowering::handleUnloweredOp(Operation *op) {
+  // Scan the operand list for the operation to see if none were lowered.  In
+  // that case the operation must be something lowered to RTL already, e.g. the
+  // rtl.output operation.  This is success for us because it is already
+  // lowered.
+  if (llvm::all_of(op->getOpOperands(), [&](auto &operand) -> bool {
+        return !valueMapping.count(operand.get());
+      })) {
+    return AlreadyLowered;
   }
 
-  return result;
+  // Ok, at least one operand got lowered, so this operation is using a FIRRTL
+  // value, but wasn't itself lowered.  This is because the lowering is
+  // incomplete. This is either a bug or incomplete implementation.
+  //
+  // There is one aspect of incompleteness we intentionally expect: we allow
+  // primitive operations that produce a zero bit result to be ignored by the
+  // lowering logic.  They don't have side effects, and handling this corner
+  // case just complicates each of the lowering hooks. Instead, we just handle
+  // them all right here.
+  if (op->getNumResults() == 1) {
+    auto resultType = op->getResult(0).getType();
+    if (resultType.isa<FIRRTLType>() && isZeroBitFIRRTLType(resultType) &&
+        isExpression(op)) {
+      // Zero bit values lower to the null Value.
+      setLowering(op->getResult(0), Value());
+      return NowLowered;
+    }
+  }
+  op->emitError("LowerToRTL couldn't handle this operation");
+  return LoweringFailure;
 }
 
 LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
