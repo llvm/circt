@@ -1963,4 +1963,5 @@ void circt::registerToVerilogTranslation() {
       "emit-verilog", exportVerilog, [](DialectRegistry &registry) {
         registry.insert<RTLDialect, SVDialect>();
       });
+
 }
