@@ -255,6 +255,7 @@ def ZExtOp : RTLOp<"zext", [NoSideEffect]> {
 
 // Concatenate a variadic list of operands together.
 def ConcatOp : VariadicRTLOp<"concat"> {
+  let hasFolder = true;
   let hasCanonicalizer = true;
 
   let builders = [

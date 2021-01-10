@@ -1297,6 +1297,28 @@ void ConcatOp::build(OpBuilder &builder, OperationState &result,
   build(builder, result, builder.getIntegerType(resultWidth), inputs);
 }
 
+// Constant folding
+OpFoldResult ConcatOp::fold(ArrayRef<Attribute> operands) {
+  // If all the operands are constant, we can fold.
+  for (auto attr : operands)
+    if (!attr || !attr.isa<IntegerAttr>())
+      return {};
+
+  // If we got here, we can constant fold.
+  unsigned resultWidth = getType().getIntOrFloatBitWidth();
+  APInt result(resultWidth, 0);
+
+  unsigned nextInsertion = resultWidth;
+  // Insert each chunk into the result.
+  for (auto attr : operands) {
+    auto chunk = attr.cast<IntegerAttr>().getValue();
+    nextInsertion -= chunk.getBitWidth();
+    result |= chunk.zext(resultWidth) << nextInsertion;
+  }
+
+  return getIntAttr(result, getContext());
+}
+
 static LogicalResult tryCanonicalizeConcat(ConcatOp op,
                                            PatternRewriter &rewriter) {
   auto inputs = op.inputs();
