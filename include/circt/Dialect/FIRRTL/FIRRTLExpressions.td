@@ -170,42 +170,47 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
 def AddPrimOp : BinaryPrimOp<"add", IntType, IntType, IntType, [Commutative]>;
 def SubPrimOp : BinaryPrimOp<"sub", IntType, IntType, IntType>;
 def MulPrimOp : BinaryPrimOp<"mul", IntType, IntType, IntType, [Commutative]>;
-let hasFolder = 1 in
-let description = [{
+def DivPrimOp : BinaryPrimOp<"div", IntType, IntType, IntType> {
+  let hasFolder = 1;
+  let description = [{
+    Divides the first argument (the numerator) by the second argument
+    (the denominator) truncating the result (rounding towards zero).
 
-  Divides the first argument (the numerator) by the second argument
-  (the denominator) truncating the result (rounding towards zero).
+    **If the denominator is zero, the result is undefined.**
 
-  **If the denominator is zero, the result is undefined.**
-
-  The compiler may optimize this undefined behavior in any way it
-  wants. Notably `div(a, a)` will be optimized to `1`. This may cause
-  erroneous formal equivalence mismatches between unoptimized and
-  optimized FIRRTL dialects that are separately converted to Verilog.
-
-}] in
-def DivPrimOp : BinaryPrimOp<"div", IntType, IntType, IntType>;
+    The compiler may optimize this undefined behavior in any way it
+    wants. Notably `div(a, a)` will be optimized to `1`. This may cause
+    erroneous formal equivalence mismatches between unoptimized and
+    optimized FIRRTL dialects that are separately converted to Verilog.
+  }];
+}
 def RemPrimOp : BinaryPrimOp<"rem", IntType, IntType, IntType>;
 
-let hasFolder = 1 in
-def AndPrimOp : BinaryPrimOp<"and", IntType, IntType, UIntType, [Commutative]>;
-let hasFolder = 1 in
-def OrPrimOp  : BinaryPrimOp<"or",  IntType, IntType, UIntType, [Commutative]>;
-let hasFolder = 1 in
-def XorPrimOp : BinaryPrimOp<"xor", IntType, IntType, UIntType, [Commutative]>;
+def AndPrimOp : BinaryPrimOp<"and", IntType, IntType, UIntType, [Commutative]> {
+  let hasFolder = 1;
+}
+def OrPrimOp  : BinaryPrimOp<"or",  IntType, IntType, UIntType, [Commutative]> {
+  let hasFolder = 1;
+}
+def XorPrimOp : BinaryPrimOp<"xor", IntType, IntType, UIntType, [Commutative]> {
+  let hasFolder = 1;
+}
 
 // Comparison Operations
 def LEQPrimOp : BinaryPrimOp<"leq", IntType, IntType, UInt1Type>;
 def LTPrimOp  : BinaryPrimOp<"lt",  IntType, IntType, UInt1Type>;
 def GEQPrimOp : BinaryPrimOp<"geq", IntType, IntType, UInt1Type>;
 def GTPrimOp  : BinaryPrimOp<"gt",  IntType, IntType, UInt1Type>;
-let hasFolder = 1 in
-def EQPrimOp  : BinaryPrimOp<"eq",  IntType, IntType, UInt1Type, [Commutative]>;
-let hasFolder = 1 in
-def NEQPrimOp : BinaryPrimOp<"neq", IntType, IntType, UInt1Type, [Commutative]>;
+def EQPrimOp  : BinaryPrimOp<"eq",  IntType, IntType, UInt1Type, [Commutative]>{
+  let hasFolder = 1;
+}
+def NEQPrimOp : BinaryPrimOp<"neq", IntType, IntType, UInt1Type, [Commutative]>{
+  let hasFolder = 1;
+}
 
-let hasCanonicalizer = 1 in
-def CatPrimOp   : BinaryPrimOp<"cat", IntType, IntType, UIntType>;
+def CatPrimOp   : BinaryPrimOp<"cat", IntType, IntType, UIntType> {
+  let hasCanonicalizer = 1;
+}
 def DShlPrimOp  : BinaryPrimOp<"dshl", IntType, UIntType, IntType>;
 def DShlwPrimOp : BinaryPrimOp<"dshlw", IntType, UIntType, IntType>;
 def DShrPrimOp  : BinaryPrimOp<"dshr", IntType, UIntType, IntType>;
@@ -255,9 +260,27 @@ def CvtPrimOp : UnaryPrimOp<"cvt", IntType, SIntType>;
 def NegPrimOp : UnaryPrimOp<"neg", IntType, SIntType>;
 def NotPrimOp : UnaryPrimOp<"not", IntType, UIntType>;
 
-def AndRPrimOp : UnaryPrimOp<"andr", IntType, UIntType>;
-def OrRPrimOp : UnaryPrimOp<"orr", IntType, UIntType>;
-def XorRPrimOp : UnaryPrimOp<"xorr", IntType, UIntType>;
+def AndRPrimOp : UnaryPrimOp<"andr", IntType, UIntType> {
+  let description = [{
+    Horizontally reduce a value to one bit, using the 'and' operation to merge
+    bits.  `andr(x)` is equivalent to `concat(x, 1b1) == ~0`.  As such, it
+    returns 1 for zero-bit-wide operands.
+  }];
+}
+def OrRPrimOp : UnaryPrimOp<"orr", IntType, UIntType> {
+  let description = [{
+    Horizontally reduce a value to one bit, using the 'or' operation to merge
+    bits.  `orr(x)` is equivalent to `concat(x, 1b0) != 0`.  As such, it returns
+    0 for zero-bit-wide operands.
+  }];
+}
+def XorRPrimOp : UnaryPrimOp<"xorr", IntType, UIntType> {
+  let description = [{
+    Horizontally reduce a value to one bit, using the 'xor' operation to merge
+    bits.  `xorr(x)` is equivalent to `popcount(concat(x, 1b0)) & 1`.  As such,
+    it returns 0 for zero-bit-wide operands.
+  }];
+}
 
 //===----------------------------------------------------------------------===//
 // Other Operations
