@@ -554,9 +554,9 @@ func @concat_fold_2(%arg0: i4, %arg1: i3, %arg2: i1) -> i16 {
   // Zext should get flattened into the concat
   // CHECK-NEXT: %c0_i3 = rtl.constant(0 : i3) : i3
   %a = rtl.zext %arg0 : (i4) -> i7
-  // CHECK-NEXT: %0 = rtl.sext
+  // CHECK-NEXT:  %0 = rtl.extract %arg1 from 2 : (i3) -> i1
   %b = rtl.sext %arg1 : (i3) -> i8
-  // CHECK-NEXT:  = rtl.concat %c0_i3, %arg0, %0, %arg2
+  // CHECK-NEXT:  = rtl.concat %c0_i3, %arg0, %0, %0, %0, %0, %0, %arg1, %arg2 : (i3, i4, i1, i1, i1, i1, i1, i3, i1) -> i16
   %c = rtl.concat %a, %b, %arg2 : (i7, i8, i1) -> i16
   return %c : i16
 }

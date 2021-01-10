@@ -670,8 +670,7 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
 void ConstantOp::build(OpBuilder &builder, OperationState &result,
                        const APInt &value) {
 
-  auto type = IntegerType::get(builder.getContext(), value.getBitWidth(),
-                               IntegerType::Signless);
+  auto type = IntegerType::get(builder.getContext(), value.getBitWidth());
   auto attr = builder.getIntegerAttr(type, value);
   return build(builder, result, type, attr);
 }
@@ -1340,6 +1339,20 @@ static LogicalResult tryCanonicalizeConcat(ConcatOp op,
           zext.input()};
 
       return flattenConcat(i, i, replacement);
+    }
+
+    // We can flatten a sext into the concat, since a sext is an extraction of
+    // a sign bit plus the input value itself.
+    if (auto sext = inputs[i].getDefiningOp<SExtOp>()) {
+      unsigned inputWidth = sext.input().getType().getIntOrFloatBitWidth();
+
+      auto sign = rewriter.create<ExtractOp>(op.getLoc(), rewriter.getI1Type(),
+                                             sext.input(), inputWidth - 1);
+      SmallVector<Value> replacements;
+      unsigned signWidth = sext.getType().getIntOrFloatBitWidth() - inputWidth;
+      replacements.append(signWidth, sign);
+      replacements.push_back(sext.input());
+      return flattenConcat(i, i, replacements);
     }
   }
 
