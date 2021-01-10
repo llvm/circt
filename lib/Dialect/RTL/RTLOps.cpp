@@ -660,8 +660,8 @@ static LogicalResult verifyConstantOp(ConstantOp constant) {
   return success();
 }
 
-OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
-  assert(operands.empty() && "constant has no operands");
+OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
+  assert(constants.empty() && "constant has no operands");
   return valueAttr();
 }
 
@@ -752,61 +752,48 @@ static LogicalResult verifyExtOp(Operation *op) {
   return success();
 }
 
-OpFoldResult ZExtOp::fold(ArrayRef<Attribute> operands) {
-  auto input = this->input();
-
-  // Constant fold
-  APInt value;
-  if (matchPattern(input, m_RConstant(value))) {
+OpFoldResult ZExtOp::fold(ArrayRef<Attribute> constants) {
+  // Constant fold.
+  if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>()) {
     auto destWidth = getType().cast<IntegerType>().getWidth();
-    return getIntAttr(value.zext(destWidth), getContext());
+    return getIntAttr(input.getValue().zext(destWidth), getContext());
   }
 
   return {};
 }
 
-OpFoldResult SExtOp::fold(ArrayRef<Attribute> operands) {
-  auto input = this->input();
-
-  // Constant fold
-  APInt value;
-  if (matchPattern(input, m_RConstant(value))) {
+OpFoldResult SExtOp::fold(ArrayRef<Attribute> constants) {
+  // Constant fold.
+  if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>()) {
     auto destWidth = getType().cast<IntegerType>().getWidth();
-    return getIntAttr(value.sext(destWidth), getContext());
+    return getIntAttr(input.getValue().sext(destWidth), getContext());
   }
 
   return {};
 }
 
-OpFoldResult AndROp::fold(ArrayRef<Attribute> operands) {
-  auto input = this->input();
-
-  // Constant fold
-  APInt value;
-  if (matchPattern(input, m_RConstant(value)))
-    return getIntAttr(APInt(1, value.isAllOnesValue()), getContext());
+OpFoldResult AndROp::fold(ArrayRef<Attribute> constants) {
+  // Constant fold.
+  if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>())
+    return getIntAttr(APInt(1, input.getValue().isAllOnesValue()),
+                      getContext());
 
   return {};
 }
 
-OpFoldResult OrROp::fold(ArrayRef<Attribute> operands) {
-  auto input = this->input();
-
-  // Constant fold
-  APInt value;
-  if (matchPattern(input, m_RConstant(value)))
-    return getIntAttr(APInt(1, value != 0), getContext());
+OpFoldResult OrROp::fold(ArrayRef<Attribute> constants) {
+  // Constant fold.
+  if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>())
+    return getIntAttr(APInt(1, input.getValue() != 0), getContext());
 
   return {};
 }
 
-OpFoldResult XorROp::fold(ArrayRef<Attribute> operands) {
-  auto input = this->input();
-
-  // Constant fold
-  APInt value;
-  if (matchPattern(input, m_RConstant(value)))
-    return getIntAttr(APInt(1, value.countPopulation() & 1), getContext());
+OpFoldResult XorROp::fold(ArrayRef<Attribute> constants) {
+  // Constant fold.
+  if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>())
+    return getIntAttr(APInt(1, input.getValue().countPopulation() & 1),
+                      getContext());
 
   return {};
 }
@@ -824,16 +811,16 @@ static LogicalResult verifyExtractOp(ExtractOp op) {
   return success();
 }
 
-OpFoldResult ExtractOp::fold(ArrayRef<Attribute> operands) {
+OpFoldResult ExtractOp::fold(ArrayRef<Attribute> constants) {
   // If we are extracting the entire input, then return it.
   if (input().getType() == getType())
     return input();
 
   // Constant fold.
-  APInt value;
-  if (mlir::matchPattern(input(), m_RConstant(value))) {
+  if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>()) {
     unsigned dstWidth = getType().cast<IntegerType>().getWidth();
-    return getIntAttr(value.lshr(lowBit()).trunc(dstWidth), getContext());
+    return getIntAttr(input.getValue().lshr(lowBit()).trunc(dstWidth),
+                      getContext());
   }
   return {};
 }
@@ -891,12 +878,12 @@ static LogicalResult verifyUTVariadicRTLOp(Operation *op) {
   return success();
 }
 
-OpFoldResult AndOp::fold(ArrayRef<Attribute> operands) {
+OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
   auto width = getType().cast<IntegerType>().getWidth();
   APInt value(/*numBits=*/width, -1, /*isSigned=*/false);
 
   // and(x, 0, 1) -> 0 -- annulment
-  for (auto operand : operands) {
+  for (auto operand : constants) {
     if (!operand)
       continue;
     value &= operand.cast<IntegerAttr>().getValue();
@@ -910,7 +897,7 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> operands) {
 
   // Constant fold
   return constFoldVariadicOp<IntegerAttr>(
-      operands, [](APInt &a, const APInt &b) { a &= b; });
+      constants, [](APInt &a, const APInt &b) { a &= b; });
 }
 
 void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
@@ -962,12 +949,12 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
   results.insert<Folder>(context);
 }
 
-OpFoldResult OrOp::fold(ArrayRef<Attribute> operands) {
+OpFoldResult OrOp::fold(ArrayRef<Attribute> constants) {
   auto width = getType().cast<IntegerType>().getWidth();
   APInt value(/*numBits=*/width, 0, /*isSigned=*/false);
 
   // or(x, 1, 0) -> 1
-  for (auto operand : operands) {
+  for (auto operand : constants) {
     if (!operand)
       continue;
     value |= operand.cast<IntegerAttr>().getValue();
@@ -981,7 +968,7 @@ OpFoldResult OrOp::fold(ArrayRef<Attribute> operands) {
 
   // Constant fold
   return constFoldVariadicOp<IntegerAttr>(
-      operands, [](APInt &a, const APInt &b) { a |= b; });
+      constants, [](APInt &a, const APInt &b) { a |= b; });
 }
 
 void OrOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
@@ -1031,7 +1018,7 @@ void OrOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
   results.insert<Folder>(context);
 }
 
-OpFoldResult XorOp::fold(ArrayRef<Attribute> operands) {
+OpFoldResult XorOp::fold(ArrayRef<Attribute> constants) {
   auto size = inputs().size();
 
   // xor(x) -> x -- noop
@@ -1044,7 +1031,7 @@ OpFoldResult XorOp::fold(ArrayRef<Attribute> operands) {
 
   // Constant fold
   return constFoldVariadicOp<IntegerAttr>(
-      operands, [](APInt &a, const APInt &b) { a ^= b; });
+      constants, [](APInt &a, const APInt &b) { a ^= b; });
 }
 
 void XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
@@ -1099,7 +1086,7 @@ void XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
   results.insert<Folder>(context);
 }
 
-OpFoldResult MergeOp::fold(ArrayRef<Attribute> operands) {
+OpFoldResult MergeOp::fold(ArrayRef<Attribute> constants) {
   // rtl.merge(x, x, x) -> x.
   if (llvm::all_of(inputs(), [&](auto in) { return in == inputs()[0]; }))
     return inputs()[0];
@@ -1107,7 +1094,7 @@ OpFoldResult MergeOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
-OpFoldResult AddOp::fold(ArrayRef<Attribute> operands) {
+OpFoldResult AddOp::fold(ArrayRef<Attribute> constants) {
   auto size = inputs().size();
 
   // add(x) -> x -- noop
@@ -1116,7 +1103,7 @@ OpFoldResult AddOp::fold(ArrayRef<Attribute> operands) {
 
   // Constant fold
   return constFoldVariadicOp<IntegerAttr>(
-      operands, [](APInt &a, const APInt &b) { a += b; });
+      constants, [](APInt &a, const APInt &b) { a += b; });
 }
 
 void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
@@ -1208,7 +1195,7 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
   results.insert<Folder>(context);
 }
 
-OpFoldResult MulOp::fold(ArrayRef<Attribute> operands) {
+OpFoldResult MulOp::fold(ArrayRef<Attribute> constants) {
   auto size = inputs().size();
 
   // mul(x) -> x -- noop
@@ -1219,7 +1206,7 @@ OpFoldResult MulOp::fold(ArrayRef<Attribute> operands) {
   APInt value(/*numBits=*/width, 1, /*isSigned=*/false);
 
   // mul(x, 0, 1) -> 0 -- annulment
-  for (auto operand : operands) {
+  for (auto operand : constants) {
     if (!operand)
       continue;
     value *= operand.cast<IntegerAttr>().getValue();
@@ -1229,7 +1216,7 @@ OpFoldResult MulOp::fold(ArrayRef<Attribute> operands) {
 
   // Constant fold
   return constFoldVariadicOp<IntegerAttr>(
-      operands, [](APInt &a, const APInt &b) { a *= b; });
+      constants, [](APInt &a, const APInt &b) { a *= b; });
 }
 
 void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
@@ -1298,9 +1285,9 @@ void ConcatOp::build(OpBuilder &builder, OperationState &result,
 }
 
 // Constant folding
-OpFoldResult ConcatOp::fold(ArrayRef<Attribute> operands) {
+OpFoldResult ConcatOp::fold(ArrayRef<Attribute> constants) {
   // If all the operands are constant, we can fold.
-  for (auto attr : operands)
+  for (auto attr : constants)
     if (!attr || !attr.isa<IntegerAttr>())
       return {};
 
@@ -1310,7 +1297,7 @@ OpFoldResult ConcatOp::fold(ArrayRef<Attribute> operands) {
 
   unsigned nextInsertion = resultWidth;
   // Insert each chunk into the result.
-  for (auto attr : operands) {
+  for (auto attr : constants) {
     auto chunk = attr.cast<IntegerAttr>().getValue();
     nextInsertion -= chunk.getBitWidth();
     result |= chunk.zext(resultWidth) << nextInsertion;
