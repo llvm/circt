@@ -1354,10 +1354,28 @@ static LogicalResult tryCanonicalizeConcat(ConcatOp op,
       replacements.push_back(sext.input());
       return flattenConcat(i, i, replacements);
     }
+
+    // Check for canonicalization due to neighboring operands.
+    if (i != 0) {
+      if (auto cst = inputs[i].getDefiningOp<ConstantOp>()) {
+        if (auto prevCst = inputs[i - 1].getDefiningOp<ConstantOp>()) {
+          unsigned prevWidth = prevCst.getValue().getBitWidth();
+          unsigned thisWidth = cst.getValue().getBitWidth();
+          auto resultCst = cst.getValue().zext(prevWidth + thisWidth);
+          resultCst |= prevCst.getValue().zext(prevWidth + thisWidth)
+                       << thisWidth;
+          Value replacement =
+              rewriter.create<ConstantOp>(op.getLoc(), resultCst);
+          return flattenConcat(i - 1, i, replacement);
+        }
+      }
+
+      /// TODO: Sequences of neighboring extracts.  {A[3], A[2]} -> A[3,2]
+    }
   }
 
-  /// TODO: Sequences of constants: concat(..., c1, c2) -> concat(..., c3).
-  /// TODO: Sequences of neighboring extracts.
+  // TODO: {A[top], A[top], A} -> sext.
+
   return failure();
 }
 
