@@ -42,7 +42,8 @@ module {
     %r17: i1, %r18: i1, %r19: i1, %r20: i1,
     %r21: i1, %r22: i1, %r23: i1, %r24: i1,
     %r25: i1, %r26: i1, %r27: i1, %r28: i1,
-    %r29: i12, %r30: i2, %r31: i9, %r32: i9, %r33: i4, %r34: i4
+    %r29: i12, %r30: i2, %r31: i9, %r32: i9, %r33: i4, %r34: i4,
+    %r35: !rtl.array<3xi4>
     ) {
 
     %0 = rtl.add %a, %b : i4
@@ -80,11 +81,13 @@ module {
     %allone = rtl.constant (15 : i4) : i4
     %34 = rtl.xor %a, %allone : i4
 
-    %35 = rtl.array_slice %array at %a : (!rtl.array<10xi4>) -> !rtl.array<3xi4>
+    %one = rtl.constant (1 : i4) : i4
+    %aPlusOne = rtl.add %a, %one : i4
+    %35 = rtl.array_slice %array at %aPlusOne: (!rtl.array<10xi4>) -> !rtl.array<3xi4>
 
-    rtl.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, %30, %31, %32, %33, %34:
+    rtl.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, %30, %31, %32, %33, %34, %35:
      i4,i4, i4,i4,i4,i4,i4, i4,i4,i4,i4,i4,
      i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,i1,i1,
-     i12, i2,i9,i9,i4, i4
+     i12, i2,i9,i9,i4, i4, !rtl.array<3xi4>
   }
 }
