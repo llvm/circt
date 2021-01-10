@@ -2,9 +2,9 @@
 
 module attributes {firrtl.mainModule = "Simple"} {
    // CHECK-LABEL: rtl.module @Arithmetic
-  rtl.module @Arithmetic(%sin0: i0, %uin0: i0, %uin3: i3) -> (i3, i4, i4) {
-    %sin0c = firrtl.stdIntCast %sin0 : (i0) -> !firrtl.sint<0>
-    %uin0c = firrtl.stdIntCast %uin0 : (i0) -> !firrtl.uint<0>
+  rtl.module @Arithmetic(%uin3: i3) -> (i3, i4, i4) {
+    %sin0c = firrtl.wire : !firrtl.sint<0>
+    %uin0c = firrtl.wire : !firrtl.uint<0>
     %uin3c = firrtl.stdIntCast %uin3 : (i3) -> !firrtl.uint<3>
   
     // CHECK-NEXT: rtl.constant(0 : i3) : i3
@@ -33,9 +33,8 @@ module attributes {firrtl.mainModule = "Simple"} {
   }
 
   // CHECK-LABEL: rtl.module @Exotic
-  rtl.module @Exotic(%sin0: i0, %uin0: i0, %uin3: i3) -> (i3, i3) {
-    %sin0c = firrtl.stdIntCast %sin0 : (i0) -> !firrtl.sint<0>
-    %uin0c = firrtl.stdIntCast %uin0 : (i0) -> !firrtl.uint<0>
+  rtl.module @Exotic(%uin3: i3) -> (i3, i3) {
+    %uin0c = firrtl.wire : !firrtl.uint<0>
     %uin3c = firrtl.stdIntCast %uin3 : (i3) -> !firrtl.uint<3>
   
     // CHECK-NEXT: = rtl.constant(true) 
@@ -63,9 +62,9 @@ module attributes {firrtl.mainModule = "Simple"} {
   }
 
   // CHECK-LABEL: rtl.module @Decls
-  rtl.module @Decls(%sin0: i0, %uin0: i0, %uin3: i3) {
-    %sin0c = firrtl.stdIntCast %sin0 : (i0) -> !firrtl.sint<0>
-    %uin0c = firrtl.stdIntCast %uin0 : (i0) -> !firrtl.uint<0>
+  rtl.module @Decls(%uin3: i3) {
+    %sin0c = firrtl.wire : !firrtl.sint<0>
+    %uin0c = firrtl.wire : !firrtl.uint<0>
     %uin3c = firrtl.stdIntCast %uin3 : (i3) -> !firrtl.uint<3>
 
     // Lowers to nothing.
