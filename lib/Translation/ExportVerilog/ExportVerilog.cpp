@@ -1795,20 +1795,9 @@ bool ModuleEmitter::collectNamesEmitWires(InstanceOp instance) {
     StringRef wireName = addName(result, nameTmp);
 
     Type resultType = result.getType();
-    if (auto intType = resultType.dyn_cast<IntegerType>()) {
-      if (intType.getWidth() == 1) {
-        indent() << "wire " << wireName << ";\n";
-      } else {
-        indent() << "wire [" << intType.getWidth() - 1 << ":0] " << wireName
-                 << ";\n";
-      }
-    } else {
-      indent() << "// Type '" << resultType
-               << "' not supported in verilog output yet.\n";
-      instance.emitOpError(
-          "Type of result not supported for verilog output. Type: ")
-          << resultType;
-    }
+    indent() << "wire ";
+    emitTypeDims(resultType, instance, os);
+    os << wireName << ";\n";
   }
   return instance.getNumResults() != 0;
 }
