@@ -41,7 +41,7 @@ def ConstantOp
     /// matching a specified MLIR IntegerType.  This shouldn't be used for
     /// general constant folding because it only works with values that can be
     /// expressed in an int64_t.  Use APInt's instead.
-    OpBuilderDAG<(ins "int64_t":$value, "IntegerType":$type)>
+    OpBuilderDAG<(ins "Type":$type, "int64_t":$value)>
   ];
   let extraClassDeclaration = [{
     APInt getValue() {

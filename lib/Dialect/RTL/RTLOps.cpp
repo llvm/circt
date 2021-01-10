@@ -679,9 +679,9 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
 /// matching a specified MLIR IntegerType.  This shouldn't be used for general
 /// constant folding because it only works with values that can be expressed in
 /// an int64_t.  Use APInt's instead.
-void ConstantOp::build(OpBuilder &builder, OperationState &result,
-                       int64_t value, IntegerType type) {
-  auto numBits = type.getWidth();
+void ConstantOp::build(OpBuilder &builder, OperationState &result, Type type,
+                       int64_t value) {
+  auto numBits = type.cast<IntegerType>().getWidth();
   build(builder, result, APInt(numBits, (uint64_t)value, /*isSigned=*/true));
 }
 
@@ -1139,8 +1139,7 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       if (inputs[size - 1] == inputs[size - 2]) {
         SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
 
-        auto one = rewriter.create<ConstantOp>(
-            op.getLoc(), 1, op.getType().cast<IntegerType>());
+        auto one = rewriter.create<ConstantOp>(op.getLoc(), op.getType(), 1);
         auto shiftLeftOp =
             rewriter.create<rtl::ShlOp>(op.getLoc(), inputs.back(), one);
 
@@ -1233,9 +1232,8 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       // mul(x, c) -> shl(x, log2(c)), where c is a power of two.
       if (size == 2 && matchPattern(inputs.back(), m_RConstant(value)) &&
           value.isPowerOf2()) {
-        auto shift =
-            rewriter.create<ConstantOp>(op.getLoc(), value.exactLogBase2(),
-                                        op.getType().cast<IntegerType>());
+        auto shift = rewriter.create<ConstantOp>(op.getLoc(), op.getType(),
+                                                 value.exactLogBase2());
         auto shlOp = rewriter.create<rtl::ShlOp>(op.getLoc(), inputs[0], shift);
 
         rewriter.replaceOpWithNewOp<MulOp>(op, op.getType(),
