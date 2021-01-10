@@ -77,7 +77,7 @@ static Value castFromFIRRTLType(Value val, Type type,
 /// Return true if the specified FIRRTL type is a sized type (Int or Analog)
 /// with zero bits.
 static bool isZeroBitFIRRTLType(Type type) {
-  return type.cast<FIRRTLType>().getBitWidthOrSentinel() == 0;
+  return type.cast<FIRRTLType>().getPassiveType().getBitWidthOrSentinel() == 0;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1076,7 +1076,10 @@ LogicalResult FIRRTLLowering::setLowering(Value orig, Value result) {
 
 #ifndef NDEBUG
   if (!result) {
-    auto srcWidth = orig.getType().cast<FIRRTLType>().getBitWidthOrSentinel();
+    auto srcWidth = orig.getType()
+                        .cast<FIRRTLType>()
+                        .getPassiveType()
+                        .getBitWidthOrSentinel();
     assert((srcWidth == 0 || srcWidth == -1) &&
            "Lowering produced null value but source wasn't zero width");
   }
@@ -1159,6 +1162,9 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   auto resultType = lowerType(op.result().getType());
   if (!resultType)
     return failure();
+
+  if (resultType.isInteger(0))
+    return setLowering(op, Value());
 
   // Convert the inout to a non-inout type.
   return setLoweringTo<rtl::WireOp>(op, resultType, op.nameAttr());
@@ -1925,7 +1931,10 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   auto destType = dest.getType().cast<FIRRTLType>().getPassiveType();
   auto srcVal = getLoweredAndExtendedValue(op.src(), destType);
   auto destVal = getPossiblyInoutLoweredValue(dest);
-  if (!srcVal || !destVal)
+  if (!srcVal)
+    return handleZeroBit(op.src(), []() { return success(); });
+
+  if (!destVal)
     return failure();
 
   if (!destVal.getType().isa<rtl::InOutType>())
@@ -1989,8 +1998,12 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   operands.reserve(op.operands().size());
   for (auto operand : op.operands()) {
     operands.push_back(getLoweredValue(operand));
-    if (!operands.back())
-      return failure();
+    if (!operands.back()) {
+      // If this is a zero bit operand, just pass a one bit zero.
+      if (!isZeroBitFIRRTLType(operand.getType()))
+        return failure();
+      operands.back() = builder->create<rtl::ConstantOp>(APInt(1, 0));
+    }
   }
 
   // Emit this into an "sv.always posedge" body.
@@ -2098,12 +2111,20 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
   SmallVector<Value, 4> inoutValues;
   for (auto v : op.operands()) {
     inoutValues.push_back(getPossiblyInoutLoweredValue(v));
-    if (!inoutValues.back())
-      return failure();
+    if (!inoutValues.back()) {
+      // Ignore zero bit values.
+      if (!isZeroBitFIRRTLType(v.getType()))
+        return failure();
+      inoutValues.pop_back();
+      continue;
+    }
 
     if (!inoutValues.back().getType().isa<rtl::InOutType>())
       return op.emitError("operand isn't an inout type");
   }
+
+  if (inoutValues.size() < 2)
+    return success();
 
   // In the non-synthesis case, we emit a SystemVerilog alias statement.
   builder->create<sv::IfDefOp>(
