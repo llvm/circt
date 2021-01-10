@@ -1,10 +1,11 @@
-; RUN: circt-translate -parse-fir -verify-diagnostics --split-input-file %s 
+; RUN: circt-translate -parse-fir -verify-diagnostics --split-input-file %s
 
 circuit test :
   extmodule MyModule :
 
     ; expected-error @+1 {{unterminated string}}
     parameter FORMAT = "tilelink_timeou
+    : COM: "
 
 ;// -----
 
@@ -102,7 +103,7 @@ circuit test :
 
     ; expected-error @+1 {{use of undefined module name 'some_module' in instance}}
     inst xyz of some_module
- 
+
 ;// -----
 
 circuit test :
@@ -133,3 +134,31 @@ circuit test :
    input in1 : SInt
    input in2 : UInt
    node n = add(in1, in2)  ; expected-error {{operand signedness must match}}
+
+;// -----
+
+circuit invalid_node_not_passive :
+  module invalid_node_not_passive :
+    input a : { a: UInt, flip b: UInt}
+    output b : { a: UInt, flip b: UInt}
+    ; expected-error @+1 {{Node cannot be analog and must be passive or passive under a flip}}
+    node n = a
+
+;// -----
+
+circuit invalid_node_analog :
+  module invalid_node_analog :
+    input a : Analog<1>
+    output b : Analog<1>
+    ; expected-error @+1 {{Node cannot be analog and must be passive or passive under a flip}}
+    node n = a
+
+;// -----
+
+circuit Issue418:
+  module Issue418:
+    input a: UInt<1>
+    output b: UInt<1>
+
+    ; expected-error @+1 {{operation requires one operand and no constants}}
+    b <= not(a, a)

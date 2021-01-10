@@ -31,8 +31,6 @@ if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
   set(CMAKE_CXX_STANDARD 14)
   set(CMAKE_CXX_STANDARD_REQUIRED YES)
   
-  list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
-  
 #-------------------------------------------------------------------------------
 # Options and settings
 #-------------------------------------------------------------------------------
@@ -96,6 +94,7 @@ set(CIRCT_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 set(CIRCT_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/include )
 set(CIRCT_TOOLS_DIR ${CMAKE_BINARY_DIR}/bin)
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 include(AddCIRCT)
 
 # Installing the headers and docs needs to depend on generating any public

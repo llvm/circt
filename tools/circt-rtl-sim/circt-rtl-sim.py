@@ -34,7 +34,10 @@ class Questa:
 
     def compile(self, sources):
         vlog = os.path.join(self.path, "vlog")
-        return subprocess.run([vlog, "-sv"] + sources)
+        args = [vlog, "-sv"] + sources
+        if self.args.gui:
+          args.append('+acc')
+        return subprocess.run(args)
 
     def run(self, cycles, simargs):
         if self.args.no_default_driver:
@@ -45,7 +48,10 @@ class Questa:
         vsim = os.path.join(self.path, "vsim")
         # Note: vsim exit codes say nothing about the test run's pass/fail even if
         # $fatal is encountered in the simulation.
-        cmd = [vsim, top, "-batch", "-do", "run -all"]
+        if self.args.gui:
+          cmd = [vsim, top, "-gui", "-voptargs=\"+acc\""]
+        else:
+          cmd = [vsim, top, "-batch", "-do", "run -all"]
         if cycles >= 0:
           cmd.append(f"+cycles={cycles}")
         return subprocess.run(cmd + simargs.split())
@@ -62,13 +68,18 @@ class Verilator:
         else:
           self.verilator = args.sim
         self.top = args.top
+        if args.objdir != "":
+          self.ObjDir = args.objdir
+        else:
+          self.ObjDir = os.path.basename(args.sources[0]) + ".obj_dir"
 
     def compile(self, sources):
         return subprocess.run([self.verilator, "--cc", "--top-module", self.top,
-                               "-sv", "--build", "--exe"] + sources)
+                               "-sv", "--build", "--exe",
+                               "--Mdir", self.ObjDir] + sources)
 
     def run(self, cycles, args):
-        exe = os.path.join("obj_dir", "V" + self.top)
+        exe = os.path.join(self.ObjDir, "V" + self.top)
         cmd = [exe]
         if cycles >= 0:
           cmd.append(f"--cycles")
@@ -94,8 +105,14 @@ def __main__(args):
                            help="Don't compile the simulation.")
     argparser.add_argument("--no-run", dest="no_run", action='store_true',
                            help="Don't run the simulation.")
+    argparser.add_argument("--gui", dest="gui", action='store_true',
+                           help="Bring up the GUI to run.")
     argparser.add_argument("--top", type=str, default="top",
                            help="Name of top module to run.")
+    argparser.add_argument("--objdir", type=str, default="",
+                           help="(Verilator) Select an 'obj_dir' to use. Must" +
+                           " be different from other tests in the same" +
+                           " directory. Defaults to 'sources[0].obj_dir'.")
     argparser.add_argument("--simargs", type=str, default="",
                            help="Simulation arguments string.")
     argparser.add_argument("--no-default-driver", dest="no_default_driver", action='store_true',

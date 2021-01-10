@@ -23,7 +23,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   ; CHECK: !firrtl.flip<uint<8>> {firrtl.name = "out"})
   ; CHECK: attributes {defname = "myextmodule"}
   ; CHECK-NOT: {
-  extmodule MyExtModule : 
+  extmodule MyExtModule :
     input in: UInt
     output ,,, out ,,: ,, UInt,<,8,>  ; Commas are whitespace
     defname = myextmodule
@@ -35,7 +35,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   ; CHECK:               FORMAT = "xyz_timeout=%d\0A",
   ; CHECK:               WIDTH = 32 : i8}}
   ; CHECK-NOT: {
-  extmodule MyParameterizedExtModule : 
+  extmodule MyParameterizedExtModule :
     input in: UInt
     output out: UInt<8>
     defname = name_thing
@@ -118,8 +118,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.connect [[A]], [[B]]
     _t_2[0] <= _t[0] @[Xbar.scala 21:44]
 
-    ; CHECK: %n1 = firrtl.node %auto {name = "n1"} : !firrtl.flip<uint<1>>
-    node n1 = auto
+    ; CHECK: %n1 = firrtl.node %i8 {name = "n1"} : !firrtl.uint<8>
+    node n1 = i8
 
     ; CHECK: firrtl.add %reset, %reset : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
     node n2 = add(reset, reset)
@@ -230,7 +230,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.shl %i8, 4 : (!firrtl.uint<8>) -> !firrtl.uint<12>
     ; CHECK: firrtl.shr %i8, 8 : (!firrtl.uint<8>) -> !firrtl.uint<1>
     node n5 = or(shl(i8, 4), shr(i8, 8))
-  
+
     ; CHECK: firrtl.dshl %i8, %{{.*}} : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<23>
     node n6 = dshl(i8, UInt<4>(7))
     ; CHECK: firrtl.dshlw %i8, %{{.*}} : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<8>
@@ -242,11 +242,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.mux(%reset, %i8, %{{.*}}) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint) -> !firrtl.uint
     node n8 = mux(reset, i8, UInt(4))
 
-    ; CHECK: firrtl.reginit %clock, %reset, %{{.*}} {name = "_t_2621"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>) -> !firrtl.uint<4>
+    ; CHECK: firrtl.regreset %clock, %reset, %{{.*}} {name = "_t_2621"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>) -> !firrtl.uint<4>
     reg _t_2621 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0")) @[Edges.scala 230:27]
 
-    ; CHECK: firrtl.reginit %clock, %reset, %{{.*}} {name = "_t_1601"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<2>
+    ; CHECK: firrtl.regreset %clock, %reset, %{{.*}} {name = "_t_1601"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<2>
     reg _t_1601 : UInt<2>, clock with :
       (reset => (reset, UInt<2>("h00"))) @[Edges.scala 230:27]
 
@@ -260,7 +260,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: firrtl.tail %{{.*}}, 3 : (!firrtl.sint<8>) -> !firrtl.uint<5>
     node n10s = tail(asSInt(i8), 3)
-    
+
     ; The Scala implementation of FIRRTL prints registers without a reset value
     ; using the register name as the reset.  Make sure we handle this for
     ; compatibility.
@@ -526,7 +526,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     tmp12 <= SInt<4>(-4)
     ; CHECK: %c-4_si4 = firrtl.constant(-4 : si4) : !firrtl.sint<4>
 
-  ; CHECK-LABEL: firrtl.extmodule @issue183() 
+  ; CHECK-LABEL: firrtl.extmodule @issue183()
   ; CHECK: attributes {parameters = {A = -1 : i4}}
   extmodule issue183:
      parameter A = -1
+
+  ; COM: The Scala FIRRTL Compiler allows this for an aggregate node with an internal analog.
+  ; CHECK-LABEL: firrtl.module @analog_in_aggregate_node
+  module analog_in_aggregate_node:
+    input a: { a: UInt<1>, b: Analog<1>}
+    ; CHECK: %b = firrtl.node %a {{.+}}: !firrtl.bundle<a: uint<1>, b: analog<1>>
+    node b = a

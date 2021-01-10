@@ -24,15 +24,13 @@ def ConstantOp
     }];
 
   let arguments = (ins APIntAttr:$value);
-  let results = (outs AnySignlessInteger:$result);
+  let results = (outs RTLIntegerType:$result);
 
   // FIXME(QoI): Instead of requiring "rtl.constant (42: i8) : i8", we should
   // just use "rtl.constant 42: i8".  This can be done with a custom printer and
   // parser, but would be better to be autoderived from the
   // FirstAttrDerivedResultType trait.  This should be an MLIR core improvement.
-  let assemblyFormat = [{
-     `(` $value `)` attr-dict `:` type($result)
-  }];
+  let assemblyFormat = "`(` $value `)` attr-dict `:` type($result)";
 
   let builders = [
     /// Build a ConstantOp from an APInt, infering the result type from the
@@ -49,7 +47,7 @@ def ConstantOp
     APInt getValue() { return getAttrOfType<IntegerAttr>("value").getValue(); }
   }];
   let hasFolder = true;
-  let verifier = [{ return ::verifyConstantOp(*this); }];
+  let verifier = "return ::verifyConstantOp(*this);";
 }
 
 //===----------------------------------------------------------------------===//
@@ -58,9 +56,9 @@ def ConstantOp
 
 // Base class for binary operators.
 class BinRTLOp<string mnemonic, list<OpTrait> traits = []> :
-      RTLOp<mnemonic, !listconcat(traits, [NoSideEffect])> {
-  let arguments = (ins AnySignlessInteger:$lhs, AnySignlessInteger:$rhs);
-  let results = (outs AnySignlessInteger:$result);
+      RTLOp<mnemonic, traits # [NoSideEffect]> {
+  let arguments = (ins RTLIntegerType:$lhs, RTLIntegerType:$rhs);
+  let results = (outs RTLIntegerType:$result);
 
   let assemblyFormat =
     "$lhs `,` $rhs  attr-dict `:` functional-type($args, $results)";
@@ -69,16 +67,15 @@ class BinRTLOp<string mnemonic, list<OpTrait> traits = []> :
 // Binary operator with uniform input/result types.
 class UTBinRTLOp<string mnemonic, list<OpTrait> traits = []> :
       BinRTLOp<mnemonic,
-               !listconcat(traits,
-                           [SameTypeOperands, SameOperandsAndResultType])> {
+               traits # [SameTypeOperands, SameOperandsAndResultType]> {
   let assemblyFormat = "$lhs `,` $rhs  attr-dict `:` type($result)";
 }
 
 // Base class for variadic operators.
 class VariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
-      RTLOp<mnemonic, !listconcat(traits, [NoSideEffect])> {
-  let arguments = (ins Variadic<AnySignlessInteger>:$inputs);
-  let results = (outs AnySignlessInteger:$result);
+      RTLOp<mnemonic, traits # [NoSideEffect]> {
+  let arguments = (ins Variadic<RTLIntegerType>:$inputs);
+  let results = (outs RTLIntegerType:$result);
 
   let assemblyFormat =
     "$inputs attr-dict `:` functional-type($inputs, results)";
@@ -86,12 +83,11 @@ class VariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
 
 class UTVariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
       VariadicRTLOp<mnemonic,
-               !listconcat(traits,
-                           [SameTypeOperands, SameOperandsAndResultType])> {
+                    traits # [SameTypeOperands, SameOperandsAndResultType]> {
 
   let hasCanonicalizer = true;
   let hasFolder = true;
-  let verifier =  [{ return ::verifyUTVariadicRTLOp(*this); }];
+  let verifier =  "return ::verifyUTVariadicRTLOp(*this);";
 
   let assemblyFormat = "$inputs attr-dict `:` type($result)";
 
@@ -154,7 +150,7 @@ def ICmpPredicate : I64EnumAttr<
 // Other integer operations.
 def ICmpOp : RTLOp<"icmp", [NoSideEffect, SameTypeOperands]> {
   let arguments = (ins ICmpPredicate:$predicate, 
-                   AnySignlessInteger:$lhs, AnySignlessInteger:$rhs);
+                   RTLIntegerType:$lhs, RTLIntegerType:$rhs);
   let results = (outs I1:$result);
 
   let assemblyFormat = "$predicate $lhs `,` $rhs  attr-dict `:` type($lhs)";
@@ -172,14 +168,12 @@ def ICmpOp : RTLOp<"icmp", [NoSideEffect, SameTypeOperands]> {
 
 // Base class for unary reduction operations that produce an i1.
 class UnaryI1ReductionRTLOp<string mnemonic, list<OpTrait> traits = []> :
-      RTLOp<mnemonic, !listconcat(traits, [NoSideEffect])> {
-  let arguments = (ins AnySignlessInteger:$input);
+      RTLOp<mnemonic, traits # [NoSideEffect]> {
+  let arguments = (ins RTLIntegerType:$input);
   let results = (outs I1:$result);
   let hasFolder = 1;
 
-  let assemblyFormat = [{
-    $input attr-dict `:` type($input)
-  }];
+  let assemblyFormat = "$input attr-dict `:` type($input)";
 }
 
 def AndROp : UnaryI1ReductionRTLOp<"andr">;
@@ -193,8 +187,8 @@ def StructExtractOp : RTLOp<"struct_extract", [NoSideEffect]> {
   let arguments = (ins StructType:$input, StrAttr:$field);
   let results = (outs RTLNonInOutType:$result);
 
-  let parser = [{ return ::parse$cppClass(parser, result); }];
-  let printer = [{ return ::print(p, *this); }];
+  let parser = "return ::parse$cppClass(parser, result);";
+  let printer = "return ::print(p, *this);";
 }
 
 // Extract a range of bits from the specified input.
@@ -206,8 +200,8 @@ def StructInjectOp : RTLOp<"struct_inject", [NoSideEffect,
                    RTLNonInOutType:$newValue);
   let results = (outs StructType:$result);
 
-  let parser = [{ return ::parse$cppClass(parser, result); }];
-  let printer = [{ return ::print(p, *this); }];
+  let parser = "return ::parse$cppClass(parser, result);";
+  let printer = "return ::print(p, *this);";
 }
 
 //===----------------------------------------------------------------------===//
@@ -219,52 +213,49 @@ def ExtractOp : RTLOp<"extract", [NoSideEffect]> {
   let summary = "Extract a range of bits into a smaller value, lowBit "
                 "specifies the lowest bit included.";
 
-  let arguments = (ins AnySignlessInteger:$input,
-                   I32Attr:$lowBit);
-  let results = (outs AnySignlessInteger:$result);
+  let arguments = (ins RTLIntegerType:$input, I32Attr:$lowBit);
+  let results = (outs RTLIntegerType:$result);
 
-  let assemblyFormat = [{
-    $input `from` $lowBit attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input `from` $lowBit attr-dict `:` functional-type($input, $result)";
 
   let hasFolder = true;
-  let verifier = [{ return ::verifyExtractOp(*this); }];
+  let verifier = "return ::verifyExtractOp(*this);";
 }
 
 def SExtOp : RTLOp<"sext", [NoSideEffect]> {
   let summary = "Sign extend an integer to a larger integer";
 
-  let arguments = (ins AnySignlessInteger:$input);
-  let results = (outs AnySignlessInteger:$result);
+  let arguments = (ins RTLIntegerType:$input);
+  let results = (outs RTLIntegerType:$result);
 
-  let assemblyFormat = [{
-    $input attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input attr-dict `:` functional-type($input, $result)";
 
   let hasFolder = true;
-  let verifier = [{ return ::verifyExtOp(*this); }];
+  let verifier = "return ::verifyExtOp(*this);";
 }
 
 def ZExtOp : RTLOp<"zext", [NoSideEffect]> {
   let summary = "Zero extend an integer to a larger integer";
 
-  let arguments = (ins AnySignlessInteger:$input);
-  let results = (outs AnySignlessInteger:$result);
+  let arguments = (ins RTLIntegerType:$input);
+  let results = (outs RTLIntegerType:$result);
 
-  let assemblyFormat = [{
-    $input attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input attr-dict `:` functional-type($input, $result)";
 
   let hasFolder = true;
-  let verifier = [{ return ::verifyExtOp(*this); }];
+  let verifier = "return ::verifyExtOp(*this);";
 }
 
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
 
-// Concatenate a variadic list of operands together.
 def ConcatOp : VariadicRTLOp<"concat"> {
+  let summary = "Concatenate a variadic list of operands together.";
+  let hasFolder = true;
   let hasCanonicalizer = true;
 
   let builders = [
@@ -301,7 +292,7 @@ def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
     behavior.
   }];
 
-  let arguments = (ins ArrayType:$input, AnySignlessInteger:$lowIndex);
+  let arguments = (ins ArrayType:$input, RTLIntegerType:$lowIndex);
   let results = (outs ArrayType:$dst);
   let verifier = [{
     unsigned inputSize = input().getType().cast<ArrayType>().getSize();
@@ -322,9 +313,9 @@ def MuxOp : RTLOp<"mux",
  [NoSideEffect, AllTypesMatch<["trueValue", "falseValue", "result"]>]> {
   let summary = "Return one or the other operand depending on a selector bit";
 
-  let arguments = (ins I1:$cond, AnySignlessInteger:$trueValue,
-                       AnySignlessInteger:$falseValue);
-  let results = (outs AnySignlessInteger:$result);
+  let arguments = (ins I1:$cond, RTLIntegerType:$trueValue,
+                       RTLIntegerType:$falseValue);
+  let results = (outs RTLIntegerType:$result);
 
   let assemblyFormat =
     "$cond `,` $trueValue `,` $falseValue attr-dict `:` type($result)";

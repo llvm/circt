@@ -50,6 +50,32 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
   return valueAttr();
 }
 
+OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
+  APInt value;
+
+  /// div(x, x) -> 1
+  ///
+  /// Division by zero is undefined in the FIRRTL specification. This
+  /// fold exploits that fact to optimize self division to one.
+  if (lhs() == rhs()) {
+    auto width = getType().cast<IntType>().getWidthOrSentinel();
+    if (width == -1)
+      width = 2;
+    return IntegerAttr::get(IntegerType::get(getContext(), width), 1);
+  }
+
+  /// div(x, 1) -> x : (uint, uint) -> uint
+  ///
+  /// UInt division by one returns the numerator. SInt division can't
+  /// be folded here because it increases the return type bitwidth by
+  /// one and requires sign extension (a new op).
+  if (matchPattern(rhs(), m_FConstant(value)) && value.isOneValue() &&
+      lhs().getType() == getType())
+    return lhs();
+
+  return {};
+}
+
 // TODO: Move to DRR.
 OpFoldResult AndPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;

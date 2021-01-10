@@ -749,7 +749,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitDecl(WireOp op);
   LogicalResult visitDecl(NodeOp op);
   LogicalResult visitDecl(RegOp op);
-  LogicalResult visitDecl(RegInitOp op);
+  LogicalResult visitDecl(RegResetOp op);
   LogicalResult visitDecl(MemOp op);
 
   // Unary Ops.
@@ -1131,25 +1131,38 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   return success();
 }
 
-LogicalResult FIRRTLLowering::visitDecl(RegInitOp op) {
+LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   auto resultType = lowerType(op.result().getType());
+  Value clockVal = getLoweredValue(op.clockVal());
   Value resetSignal = getLoweredValue(op.resetSignal());
   Value resetValue = getLoweredValue(op.resetValue());
+
   if (!resultType || !resetSignal || !resetValue)
     return failure();
 
   auto regResult = builder->create<sv::RegOp>(resultType, op.nameAttr());
   setLowering(op, regResult);
 
+  auto resetFn = [&]() {
+    builder->create<sv::IfOp>(resetSignal, [&]() {
+      builder->create<sv::PAssignOp>(regResult, resetValue);
+    });
+  };
+
+  if (op.resetSignal().getType().isa<AsyncResetType>()) {
+    builder->create<sv::AlwaysOp>(
+        ArrayRef<EventControl>{EventControl::AtPosEdge,
+                               EventControl::AtPosEdge},
+        ArrayRef<Value>{clockVal, resetSignal}, resetFn);
+  } else { // sync reset
+    builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clockVal, resetFn);
+  }
+
   // Emit the initializer expression for simulation that fills it with random
   // value.
   builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
     builder->create<sv::InitialOp>([&]() {
       emitRandomizePrologIfNeeded();
-
-      builder->create<sv::IfOp>(resetSignal, [&]() {
-        builder->create<sv::BPAssignOp>(regResult, resetValue);
-      });
 
       // When RANDOMIZE_REG_INIT is enabled, we assign a random value to the reg
       // if the reset line is low at start.
@@ -1404,7 +1417,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
           for (auto reg : regs) {
             auto slot = builder->create<rtl::ArrayIndexOp>(reg, addr);
-            builder->create<sv::PAssignOp>(slot, data);
+            builder->create<sv::BPAssignOp>(slot, data);
           }
         });
       });
@@ -1790,24 +1803,35 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
     builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clockVal, [&]() {
       builder->create<sv::PAssignOp>(destVal, srcVal);
     });
-
     return success();
   }
 
   // If this is an assignment to a RegInit, then the connect implicitly
   // happens under the clock and reset that gate the register.
-  if (auto regInitOp = dyn_cast_or_null<RegInitOp>(dest.getDefiningOp())) {
-    Value clockVal = getLoweredValue(regInitOp.clockVal());
-    Value resetVal = getLoweredValue(regInitOp.resetSignal());
-    if (!clockVal || !resetVal)
+  if (auto regResetOp = dyn_cast_or_null<RegResetOp>(dest.getDefiningOp())) {
+    Value clockVal = getLoweredValue(regResetOp.clockVal());
+    Value resetSignal = getLoweredValue(regResetOp.resetSignal());
+    if (!clockVal || !resetSignal)
       return failure();
 
-    builder->create<sv::AlwaysOp>(
-        ArrayRef<EventControl>{EventControl::AtPosEdge,
-                               EventControl::AtPosEdge},
-        ArrayRef<Value>{clockVal, resetVal},
-        [&]() { builder->create<sv::PAssignOp>(destVal, srcVal); });
+    auto one = builder->create<rtl::ConstantOp>(APInt(1, 1));
+    auto invResetSignal = builder->create<rtl::XorOp>(resetSignal, one);
 
+    auto resetFn = [&]() {
+      builder->create<sv::IfOp>(invResetSignal, [&]() {
+        builder->create<sv::PAssignOp>(destVal, srcVal);
+      });
+    };
+
+    if (regResetOp.resetSignal().getType().isa<AsyncResetType>()) {
+      builder->create<sv::AlwaysOp>(
+          ArrayRef<EventControl>{EventControl::AtPosEdge,
+                                 EventControl::AtPosEdge},
+          ArrayRef<Value>{clockVal, resetSignal}, resetFn);
+      return success();
+    } else { // sync reset
+      builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clockVal, resetFn);
+    }
     return success();
   }
 
