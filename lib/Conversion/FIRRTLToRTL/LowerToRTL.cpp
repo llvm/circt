@@ -22,7 +22,6 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/TinyPtrVector.h"
-
 using namespace circt;
 using namespace firrtl;
 
@@ -178,8 +177,9 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   // Now that the modules are moved over, remove the Circuit.  We pop the 'main
   // module' specified in the Circuit into an attribute on the top level module.
-  getOperation().setAttr("firrtl.mainModule",
-                         StringAttr::get(circuit.name(), circuit.getContext()));
+  getOperation()->setAttr(
+      "firrtl.mainModule",
+      StringAttr::get(circuit.name(), circuit.getContext()));
   circuit.erase();
 }
 
@@ -593,7 +593,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
 
     // We found an instance - lower it.  On successful return there will be
     // zero uses and we can remove the operation.
-    lowerInstance(instance, oldModule.getParentOfType<CircuitOp>(),
+    lowerInstance(instance, oldModule->getParentOfType<CircuitOp>(),
                   oldToNewModuleMap);
     opIt = Block::iterator(cursor);
   }
@@ -1174,7 +1174,7 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   // Node operations are logical noops, but can carry a name.  If a name is
   // present then we lower this into a wire and a connect, otherwise we just
   // drop it.
-  if (auto name = op.getAttrOfType<StringAttr>("name")) {
+  if (auto name = op->getAttrOfType<StringAttr>("name")) {
     auto wire = builder->create<rtl::WireOp>(operand.getType(), name);
     builder->create<rtl::ConnectOp>(wire, operand);
   }

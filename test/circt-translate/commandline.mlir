@@ -1,9 +1,9 @@
 // RUN: circt-translate --help | FileCheck %s
 
-// TODO: this should be CIRCT, not MLIR
-// CHECK: OVERVIEW: MLIR translation driver
+// CHECK: OVERVIEW: CIRCT Translation Testing Tool
 
 // CHECK: Translation to perform
-// CEHCK:     --emit-verilog
-// CHECK:     --llhd-to-verilog
-// CHECK:     --parse-fir
+// CHECK-NEXT:     --emit-firrtl-verilog
+// CHECK-NEXT:     --emit-verilog
+// CHECK-NEXT:     --llhd-to-verilog
+// CHECK-NEXT:     --parse-fir

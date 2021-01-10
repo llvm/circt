@@ -41,7 +41,7 @@ void RegOp::build(OpBuilder &odsBuilder, OperationState &odsState,
 /// attribute.
 void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // If the wire has an optional 'name' attribute, use it.
-  if (auto nameAttr = getAttrOfType<StringAttr>("name"))
+  if (auto nameAttr = (*this)->getAttrOfType<StringAttr>("name"))
     setNameFn(getResult(), nameAttr.getValue());
 }
 

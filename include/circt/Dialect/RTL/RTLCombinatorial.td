@@ -44,7 +44,9 @@ def ConstantOp
     OpBuilderDAG<(ins "int64_t":$value, "IntegerType":$type)>
   ];
   let extraClassDeclaration = [{
-    APInt getValue() { return getAttrOfType<IntegerAttr>("value").getValue(); }
+    APInt getValue() {
+      return (*this)->getAttrOfType<IntegerAttr>("value").getValue();
+    }
   }];
   let hasFolder = true;
   let verifier = "return ::verifyConstantOp(*this);";

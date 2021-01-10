@@ -1140,7 +1140,7 @@ LogicalResult ModuleEmitter::visitStmt(OutputOp op) {
   SmallPtrSet<Operation *, 8> ops;
 
   SmallVector<ModulePortInfo, 8> ports;
-  RTLModuleOp parent = op.getParentOfType<RTLModuleOp>();
+  RTLModuleOp parent = op->getParentOfType<RTLModuleOp>();
   parent.getPortInfo(ports);
   size_t operandIndex = 0;
   for (ModulePortInfo port : ports) {

@@ -30,8 +30,8 @@ void FunctionEliminationPass::runOnOperation() {
   ModuleOp module = getOperation();
 
   WalkResult result = module.walk([](CallOp op) -> WalkResult {
-    if (isa<llhd::ProcOp>(op.getParentOp()) ||
-        isa<llhd::EntityOp>(op.getParentOp())) {
+    if (isa<llhd::ProcOp>(op->getParentOp()) ||
+        isa<llhd::EntityOp>(op->getParentOp())) {
       return emitError(
           op.getLoc(),
           "Not all functions are inlined, there is at least "
