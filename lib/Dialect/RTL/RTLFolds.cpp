@@ -85,16 +85,6 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
 // Unary Operations
 //===----------------------------------------------------------------------===//
 
-OpFoldResult ZExtOp::fold(ArrayRef<Attribute> constants) {
-  // Constant fold.
-  if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>()) {
-    auto destWidth = getType().getWidth();
-    return getIntAttr(input.getValue().zext(destWidth), getContext());
-  }
-
-  return {};
-}
-
 OpFoldResult SExtOp::fold(ArrayRef<Attribute> constants) {
   // Constant fold.
   if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>()) {
@@ -622,18 +612,6 @@ static LogicalResult tryCanonicalizeConcat(ConcatOp op,
     // together.
     if (auto subConcat = inputs[i].getDefiningOp<ConcatOp>())
       return flattenConcat(i, i, subConcat->getOperands());
-
-    // We can flatten a zext into the concat, since a zext is a 0 plus the input
-    // value.
-    if (auto zext = inputs[i].getDefiningOp<ZExtOp>()) {
-      unsigned zeroWidth = zext.getType().getIntOrFloatBitWidth() -
-                           zext.input().getType().getIntOrFloatBitWidth();
-      Value replacement[2] = {
-          rewriter.create<ConstantOp>(op.getLoc(), APInt(zeroWidth, 0)),
-          zext.input()};
-
-      return flattenConcat(i, i, replacement);
-    }
 
     // We can flatten a sext into the concat, since a sext is an extraction of
     // a sign bit plus the input value itself.

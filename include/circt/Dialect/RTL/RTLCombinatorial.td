@@ -235,20 +235,7 @@ def SExtOp : RTLOp<"sext", [NoSideEffect]> {
     "$input attr-dict `:` functional-type($input, $result)";
 
   let hasFolder = true;
-  let verifier = "return ::verifyExtOp(*this);";
-}
-
-def ZExtOp : RTLOp<"zext", [NoSideEffect]> {
-  let summary = "Zero extend an integer to a larger integer";
-
-  let arguments = (ins RTLIntegerType:$input);
-  let results = (outs RTLIntegerType:$result);
-
-  let assemblyFormat =
-    "$input attr-dict `:` functional-type($input, $result)";
-
-  let hasFolder = true;
-  let verifier = "return ::verifyExtOp(*this);";
+  let verifier = "return ::verifySExtOp(*this);";
 }
 
 //===----------------------------------------------------------------------===//

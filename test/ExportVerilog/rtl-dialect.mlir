@@ -16,7 +16,7 @@ module {
     %r17: i1, %r18: i1, %r19: i1, %r20: i1,
     %r21: i1, %r22: i1, %r23: i1, %r24: i1,
     %r25: i1, %r26: i1, %r27: i1, %r28: i1,
-    %r29: i12, %r30: i2, %r31: i9, %r32: i9, %r33: i4, %r34: i4,
+    %r29: i12, %r30: i2, %r31: i9, %r33: i4, %r34: i4,
     %r35: !rtl.array<3xi4>, %r36: i12
     ) {
     
@@ -49,7 +49,6 @@ module {
     %29 = rtl.concat %a, %a, %b : (i4, i4, i4) -> i12
     %30 = rtl.extract %a from 1 : (i4) -> i2
     %31 = rtl.sext %a : (i4) -> i9
-    %32 = rtl.zext %a : (i4) -> i9
     %33 = rtl.mux %cond, %a, %b : i4
 
     %allone = rtl.constant (15 : i4) : i4
@@ -61,10 +60,10 @@ module {
 
     rtl.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14,
                %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27,
-               %28, %29, %30, %31, %32, %33, %34, %35, %36 :
+               %28, %29, %30, %31, %33, %34, %35, %36 :
      i4,i4, i4,i4,i4,i4,i4, i4,i4,i4,i4,i4,
      i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,i1,i1,
-     i12, i2,i9,i9,i4, i4, !rtl.array<3xi4>, i12
+     i12, i2,i9,i4, i4, !rtl.array<3xi4>, i12
   }
   // CHECK-LABEL: module TESTSIMPLE(
   // CHECK-NEXT:   input  [3:0]      a, b
@@ -75,7 +74,7 @@ module {
   // CHECK-NEXT:   output            r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28
   // CHECK-NEXT:   output [11:0]     r29,
   // CHECK-NEXT:   output [1:0]      r30,
-  // CHECK-NEXT:   output [8:0]      r31, r32,
+  // CHECK-NEXT:   output [8:0]      r31,
   // CHECK-NEXT:   output [3:0]      r33, r34,
   // CHECK-NEXT:   output [3:0][2:0] r35,
   // CHECK-NEXT:   output [11:0]     r36);
@@ -109,7 +108,6 @@ module {
   // CHECK-NEXT:   assign r29 = {a, a, b};
   // CHECK-NEXT:   assign r30 = a[2:1]; 
   // CHECK-NEXT:   assign r31 = {{[{}][{}]}}5{a[3]}}, a};
-  // CHECK-NEXT:   assign r32 = {5'd0, a};
   // CHECK-NEXT:   assign r33 = cond ? a : b;
   // CHECK-NEXT:   assign r34 = ~a;
   // CHECK-NEXT:   assign r35 = array[a+:3];
