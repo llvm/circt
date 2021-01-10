@@ -1485,63 +1485,6 @@ void ArrayIndexOp::build(OpBuilder &builder, OperationState &result,
 }
 
 //===----------------------------------------------------------------------===//
-// Casts
-//===----------------------------------------------------------------------===//
-
-static void print(OpAsmPrinter &p, CastToBitsOp op) {
-  p << "rtl.cast.tobits " << op.arg() << " ";
-  p.printOptionalAttrDict(op.getAttrs());
-  p << ": (" << op.arg().getType() << ")";
-}
-
-static ParseResult parseCastToBitsOp(OpAsmParser &p, OperationState &result) {
-  OpAsmParser::OperandType op;
-  if (p.parseOperand(op))
-    return failure();
-  if (p.parseOptionalAttrDict(result.attributes) || p.parseColon() ||
-      p.parseLParen())
-    return failure();
-  Type operandType;
-  if (p.parseType(operandType) || p.parseRParen())
-    return failure();
-
-  int bitwidth = getBitWidth(operandType);
-  if (bitwidth == -1)
-    return p.emitError(p.getCurrentLocation(),
-                       "Operand bit width cannot be determined");
-  result.addTypes(ArrayType::get(p.getBuilder().getI1Type(), bitwidth));
-
-  return p.resolveOperand(op, operandType, result.operands);
-}
-
-static void print(OpAsmPrinter &p, CastFromBitsOp op) {
-  p << "rtl.cast.frombits " << op.arg() << " ";
-  p.printOptionalAttrDict(op.getAttrs());
-  p << ": " << op.getType();
-}
-
-static ParseResult parseCastFromBitsOp(OpAsmParser &p, OperationState &result) {
-  auto loc = p.getCurrentLocation();
-  OpAsmParser::OperandType op;
-  if (p.parseOperand(op))
-    return failure();
-  if (p.parseOptionalAttrDict(result.attributes) || p.parseColon())
-    return failure();
-  Type resultType;
-  if (p.parseType(resultType))
-    return failure();
-  result.addTypes({resultType});
-
-  int bitwidth = getBitWidth(resultType);
-  if (bitwidth == -1)
-    return p.emitError(p.getCurrentLocation(),
-                       "Operand bit width cannot be determined");
-  Type operandType = ArrayType::get(p.getBuilder().getI1Type(), bitwidth);
-
-  return p.resolveOperands({op}, {operandType}, loc, result.operands);
-}
-
-//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

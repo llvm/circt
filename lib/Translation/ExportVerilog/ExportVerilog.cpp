@@ -697,8 +697,7 @@ private:
   SubExprInfo visitComb(ExtractOp op);
   SubExprInfo visitComb(ICmpOp op);
 
-  SubExprInfo visitComb(CastToBitsOp op);
-  SubExprInfo visitComb(CastFromBitsOp op);
+  SubExprInfo visitComb(BitcastOp op);
 
 private:
   /// This is set (before a visit method is called) if emitSubExpr would
@@ -890,18 +889,12 @@ SubExprInfo ExprEmitter::visitComb(ConcatOp op) {
   return {Unary, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitComb(CastToBitsOp op) {
-  os << op.out().getType().cast<ArrayType>().getSize() << "'(";
-  auto subPrec = emitSubExpr(op.arg(), LowestPrecedence);
-  os << ")";
-  return {Unary, subPrec.signedness};
-}
-SubExprInfo ExprEmitter::visitComb(CastFromBitsOp op) {
-  Type dstType = op.getType();
+SubExprInfo ExprEmitter::visitComb(BitcastOp op) {
+  Type toType = op.getType();
   os << "/*cast(bit";
-  emitTypeDims(dstType, op, os);
+  emitTypeDims(toType, op, os);
   os << ")*/";
-  auto subPrec = emitSubExpr(op.arg(), LowestPrecedence);
+  auto subPrec = emitSubExpr(op.from(), LowestPrecedence);
   return {Unary, subPrec.signedness};
 }
 
@@ -1582,6 +1575,10 @@ static bool isOkToBitSelectFrom(Value v) {
 /// happens because not all Verilog expressions are composable, notably you can
 /// only use bit selects like x[4:6] on simple expressions.
 static bool isExpressionUnableToInline(Operation *op) {
+  if (isa<BitcastOp>(op))
+    // Bitcasts rely on the type being assigned to, so we cannot inline.
+    return true;
+
   // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
   for (auto user : op->getUsers()) {

@@ -354,18 +354,13 @@ module {
 
  
   // CHECK-LABEL: module casts(
-  // CHECK-NEXT: input  [6:0]  in1,
-  // CHECK-NEXT: input  [14:0] in2,
-  // CHECK-NEXT: output [6:0]  r1,
-  // CHECK-NEXT: output [14:0] r2);
-  rtl.module @casts(%in1: i7, %in2: !rtl.array<15xi1>) ->
-      (%r1: !rtl.array<7xi1>, %r2: i15) {
+  // CHECK-NEXT: input  [6:0] in1,
+  // CHECK-NEXT: output [6:0] r1);
+  rtl.module @casts(%in1: i7) -> (%r1: !rtl.array<7xi1>) {
     // CHECK-EMPTY:
-    %r1 = rtl.cast.tobits %in1 : (i7)
-    // CHECK-NEXT: assign r1 = 7'(in1);
-    %r2 = rtl.cast.frombits %in2 : i15
-    // CHECK-NEXT: assign r2 = /*cast(bit[14:0])*/in2;
-    rtl.output %r1, %r2 : !rtl.array<7xi1>, i15
+    %r1 = rtl.bitcast %in1 : (i7) -> !rtl.array<7xi1>
+    // CHECK-NEXT: wire [6:0] _T = /*cast(bit[6:0])*/in1;
+    rtl.output %r1 : !rtl.array<7xi1>
   }
 
 }

@@ -90,10 +90,10 @@ module {
   }
 
   rtl.module @casts(%in1: i64) -> (%r1: !rtl.array<5xi8>) {
-    %bits = rtl.cast.tobits %in1 : (i64)
+    %bits = rtl.bitcast %in1 : (i64) -> !rtl.array<64xi1>
     %idx = rtl.constant (10 : i6) : i6
     %midBits = rtl.array_slice %bits at %idx : (!rtl.array<64xi1>) -> !rtl.array<40xi1>
-    %r1 = rtl.cast.frombits %midBits : !rtl.array<5xi8>
+    %r1 = rtl.bitcast %midBits : (!rtl.array<40xi1>) -> !rtl.array<5xi8>
     rtl.output %r1 : !rtl.array<5xi8>
   }
 }
