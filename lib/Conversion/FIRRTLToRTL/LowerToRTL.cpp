@@ -671,12 +671,11 @@ void FIRRTLModuleLowering::lowerInstance(
     }
 
     if (port.isOutput()) {
-      resultTypes.push_back(portType);
+      // Drop zero bit results.
+      if (!portType.isInteger(0))
+        resultTypes.push_back(portType);
       continue;
     }
-
-    assert(port.isInput() &&
-           "TODO: Handle inout ports when we can lower mid FIRRTL bundles");
 
     // If there is a single subfield projection for this input, and if we can
     // find the connects to it, then we can directly materialize it.
@@ -698,7 +697,10 @@ void FIRRTLModuleLowering::lowerInstance(
     // something to connect to.
     auto name = builder.getStringAttr(port.getName().str() + ".wire");
     auto wire = builder.create<WireOp>(port.type, name);
-    operands.push_back(castFromFIRRTLType(wire, portType, builder));
+
+    // Drop zero bit input/inout ports.
+    if (!portType.isInteger(0))
+      operands.push_back(castFromFIRRTLType(wire, portType, builder));
 
     // Replace all the uses of the subfields with the wire we just created.
     for (auto *subfield : subfields) {
@@ -727,19 +729,25 @@ void FIRRTLModuleLowering::lowerInstance(
     if (!port.isOutput())
       continue;
 
+    auto resultType = FlipType::get(port.type);
+    Value resultVal;
+    if (port.type.getPassiveType().getBitWidthOrSentinel() != 0) {
+      // Cast the value to the right signedness and flippedness.
+      resultVal = newInst.getResult(resultNo++);
+      resultVal = castToFIRRTLType(resultVal, resultType, builder);
+    } else {
+      // Zero bit results are just replaced with a wire.
+      resultVal = builder.create<WireOp>(resultType, /*name=*/StringAttr());
+    }
+
     // Replace any subfield uses of this output port with the returned value
     // directly.
     auto &subfields = subfieldsByPortIndex[portIndex];
     for (auto *subfield : subfields) {
-      auto resultVal = newInst.getResult(resultNo);
-      // Cast the value to the right signedness and flippedness.
-      resultVal =
-          castToFIRRTLType(resultVal, FlipType::get(port.type), builder);
       subfield->getResult(0).replaceAllUsesWith(resultVal);
       subfield->erase();
     }
     subfields.clear();
-    ++resultNo;
   }
 
   // Done with the oldInstance!
