@@ -41,7 +41,7 @@ def WireOp : RTLOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
     OpBuilderDAG<(ins "::mlir::Type":$elementType,
                       CArg<"StringAttr", "StringAttr()">:$name)>,
     OpBuilderDAG<(ins "::mlir::Type":$elementType,
-                      CArg<"StringRef", "StringRef()">:$name), [{
+                      CArg<"StringRef">:$name), [{
       return build($_builder, $_state, elementType,
                    $_builder.getStringAttr(name));
     }]>
