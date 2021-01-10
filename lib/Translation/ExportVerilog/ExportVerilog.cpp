@@ -324,7 +324,6 @@ public:
   void emitOperation(Operation *op);
 
   void collectNamesEmitDecls(Block &block);
-  bool collectNamesEmitWires(InstanceOp instance);
   StringRef addName(Value value, StringRef name);
   StringRef addName(Value value, StringAttr nameAttr) {
     return addName(value, nameAttr ? nameAttr.getValue() : "");
@@ -1670,71 +1669,80 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
   // This is information we keep track of for each wire/reg/interface
   // declaration we're going to emit.
-  struct DeclToEmitRecord {
-    Operation *decl;
+  struct ValuesToEmitRecord {
+    Value value;
     SmallString<8> typeString;
   };
-  SmallVector<DeclToEmitRecord, 16> declsToEmit;
+  SmallVector<ValuesToEmitRecord, 16> valuesToEmit;
 
-  bool rtlInstanceDeclaredWires = false;
+  SmallString<32> nameTmp;
+
+  // Loop over all of the results of all of the ops.  Anything that defines a
+  // value needs to be noticed.
   for (auto &op : block) {
-    if (auto rtlInstance = dyn_cast<InstanceOp>(op)) {
-      rtlInstanceDeclaredWires |= collectNamesEmitWires(rtlInstance);
-      continue;
-    }
-    if (op.getNumResults() == 0)
-      continue;
-
-    assert(op.getNumResults() == 1 && "rtl/sv only has single-op results");
-    Value result = op.getResult(0);
-
-    // If this is an expression emitted inline or unused, it doesn't need a
-    // name.
     bool isExpr = isVerilogExpression(&op);
-    if (isExpr) {
-      // If this expression is dead, or can be emitted inline, ignore it.
-      if (result.use_empty() || isExpressionEmittedInline(&op))
+
+    for (auto result : op.getResults()) {
+      // If this is an expression emitted inline or unused, it doesn't need a
+      // name.
+      if (isExpr) {
+        // If this expression is dead, or can be emitted inline, ignore it.
+        if (result.use_empty() || isExpressionEmittedInline(&op))
+          continue;
+
+        // Remember that this expression should be emitted out of line.
+        outOfLineExpressions.insert(&op);
+      }
+
+      // Otherwise, it must be an expression or a declaration like a
+      // RegOp/WireOp.  Remember and unique the name for this operation.
+      if (auto instance = dyn_cast<InstanceOp>(&op)) {
+        // The name for an instance result is custom.
+        nameTmp = instance.instanceName().str() + "_";
+        unsigned resultNumber = result.getResultNumber();
+        auto resultName = instance.getResultName(resultNumber);
+        if (resultName)
+          nameTmp += resultName.getValue().str();
+        else
+          nameTmp += std::to_string(resultNumber);
+        addName(result, nameTmp);
+      } else {
+        addName(result, op.getAttrOfType<StringAttr>("name"));
+      }
+
+      // If we are emitting out-of-line expressions using inline wire decls,
+      // don't measure or emit this wire, it will be emitted inline.
+      if (isExpr && emitInlineWireDecls)
         continue;
 
-      // Remember that this expression should be emitted out of line.
-      outOfLineExpressions.insert(&op);
+      // Emit this value.
+      valuesToEmit.push_back(ValuesToEmitRecord{result, {}});
+      auto &typeString = valuesToEmit.back().typeString;
+
+      maxDeclNameWidth =
+          std::max(getVerilogDeclWord(&op).size(), maxDeclNameWidth);
+
+      // Convert the port's type to a string and measure it.
+      {
+        llvm::raw_svector_ostream stringStream(typeString);
+        emitTypeDimWithSpaceIfNeeded(result.getType(), op.getLoc(),
+                                     stringStream);
+      }
+      maxTypeWidth = std::max(typeString.size(), maxTypeWidth);
     }
-
-    // Otherwise, it must be an expression or a declaration like a RegOp/WireOp.
-    addName(result, op.getAttrOfType<StringAttr>("name"));
-
-    // If we are emitting inline wire decls, don't measure or emit this wire.
-    if (isExpr && emitInlineWireDecls)
-      continue;
-
-    // Emit this declaration.
-    declsToEmit.push_back(DeclToEmitRecord{&op, {}});
-    auto &typeString = declsToEmit.back().typeString;
-
-    maxDeclNameWidth =
-        std::max(getVerilogDeclWord(&op).size(), maxDeclNameWidth);
-
-    // Convert the port's type to a string and measure it.
-    {
-      llvm::raw_svector_ostream stringStream(typeString);
-      emitTypeDimWithSpaceIfNeeded(result.getType(), op.getLoc(), stringStream);
-    }
-    maxTypeWidth = std::max(typeString.size(), maxTypeWidth);
   }
 
   SmallPtrSet<Operation *, 8> ops;
 
   // Okay, now that we have measured the things to emit, emit the things.
-  for (const auto &record : declsToEmit) {
-    auto *decl = record.decl;
+  for (const auto &record : valuesToEmit) {
+    auto *decl = record.value.getDefiningOp();
     ops.clear();
     ops.insert(decl);
 
+    // Emit the leading word, like 'wire' or 'reg'.
+    auto type = record.value.getType();
     auto word = getVerilogDeclWord(decl);
-
-    // Flatten the type for processing of each individual element.
-    auto type = decl->getResult(0).getType();
-
     if (!isZeroBitType(type)) {
       indent() << word;
       os.indent(maxDeclNameWidth - word.size() + 1);
@@ -1747,7 +1755,8 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     if (record.typeString.size() < maxTypeWidth)
       os.indent(maxTypeWidth - record.typeString.size());
 
-    os << getName(decl->getResult(0));
+    // Emit the name.
+    os << getName(record.value);
 
     // Interface instantiations have parentheses like a module with no ports.
     if (type.isa<InterfaceType>()) {
@@ -1761,43 +1770,8 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     emitLocationInfoAndNewLine(ops);
   }
 
-  if (!declsToEmit.empty() || rtlInstanceDeclaredWires)
+  if (!valuesToEmit.empty())
     os << '\n';
-}
-
-bool ModuleEmitter::collectNamesEmitWires(InstanceOp instance) {
-  SmallString<32> nameTmp;
-
-  for (size_t i = 0, e = instance.getNumResults(); i < e; ++i) {
-    nameTmp = instance.instanceName().str();
-    nameTmp += '_';
-
-    auto resultName = instance.getResultName(i);
-    if (resultName)
-      nameTmp += resultName.getValue().str();
-    else
-      nameTmp += std::to_string(i);
-
-    auto result = instance.getResult(i);
-    StringRef wireName = addName(result, nameTmp);
-
-    Type resultType = result.getType();
-    if (auto intType = resultType.dyn_cast<IntegerType>()) {
-      if (intType.getWidth() == 1) {
-        indent() << "wire " << wireName << ";\n";
-      } else {
-        indent() << "wire [" << intType.getWidth() - 1 << ":0] " << wireName
-                 << ";\n";
-      }
-    } else {
-      indent() << "// Type '" << resultType
-               << "' not supported in verilog output yet.\n";
-      instance.emitOpError(
-          "Type of result not supported for verilog output. Type: ")
-          << resultType;
-    }
-  }
-  return instance.getNumResults() != 0;
 }
 
 void ModuleEmitter::emitOperation(Operation *op) {
