@@ -33,10 +33,7 @@ def Handshake_Dialect : Dialect {
 // Base class for Handshake dialect ops.
 class Handshake_Op<string mnemonic, list<OpTrait> traits = []>
     : Op<Handshake_Dialect, mnemonic,
-         !listconcat(traits, [HasParent<"handshake::FuncOp">])> {
-  // let printer = [{ return ::print(p, *this); }];
-  // let verifier = [{ return ::verify(p, *this); }];
-  // let parser = [{ return ::parse$cppClass(parser, result); }];
+         traits # [HasParent<"handshake::FuncOp">]> {
 }
 
 // This is almost exactly like a standard FuncOp, except that it has some
@@ -246,9 +243,9 @@ def ReturnOp : Handshake_Op<"return", [Terminator]> {
 
   let builders = [OpBuilderDAG<(ins "ArrayRef<Value>":$operands)>];
 
-  let printer = [{ return ::print(p, *this); }];
-  let verifier = [{ return ::verify(*this); }];
-  let parser = [{ return ::parse$cppClass(parser, result); }];
+  let printer = "return ::print(p, *this);";
+  let verifier = "return ::verify(*this);";
+  let parser = "return ::parse$cppClass(parser, result);";
 }
 
 def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock]> {
@@ -353,7 +350,7 @@ def MuxOp : Handshake_Op<"mux", [NoSideEffect, MergeLikeOpInterface]> {
 
   let skipDefaultBuilders = 1;
   let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$inputs)>];
-  let verifier = [{ return ::verify(*this); }];
+  let verifier = "return ::verify(*this);";
 }
 
 def ControlMergeOp : Handshake_Op<"control_merge",

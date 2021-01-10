@@ -44,11 +44,10 @@ def ConnectOp : FIRRTLOp<"connect", []> {
   let arguments = (ins FIRRTLType:$dest, FIRRTLType:$src);
   let results = (outs);
 
-  let assemblyFormat = [{
-    $dest `,` $src  attr-dict `:` type($dest) `,` type($src)
-  }];
+  let assemblyFormat =
+    "$dest `,` $src  attr-dict `:` type($dest) `,` type($src)";
 
-  let verifier = [{ return ::verifyConnectOp(*this); }];
+  let verifier = "return ::verifyConnectOp(*this);";
 }
 
 def PartialConnectOp : FIRRTLOp<"partialconnect", []> {
@@ -63,9 +62,8 @@ def PartialConnectOp : FIRRTLOp<"partialconnect", []> {
   let arguments = (ins FIRRTLType:$dest, FIRRTLType:$src);
   let results = (outs);
 
-  let assemblyFormat = [{
-    $dest `,` $src  attr-dict `:` type($dest) `,` type($src)
-  }];
+  let assemblyFormat =
+    "$dest `,` $src  attr-dict `:` type($dest) `,` type($src)";
 }
 
 def PrintFOp : FIRRTLOp<"printf", []> {
@@ -114,9 +112,8 @@ def AssertOp : FIRRTLOp<"assert", []> {
     StrAttr:$message);
   let results = (outs);
 
-  let assemblyFormat = [{
-    $clock `,` $predicate `,` $enable `,` $message attr-dict
-  }];
+  let assemblyFormat =
+    "$clock `,` $predicate `,` $enable `,` $message attr-dict";
 }
 
 def AssumeOp : FIRRTLOp<"assume", []> {
@@ -126,9 +123,8 @@ def AssumeOp : FIRRTLOp<"assume", []> {
     StrAttr:$message);
   let results = (outs);
 
-  let assemblyFormat = [{
-    $clock `,` $predicate `,` $enable `,` $message attr-dict
-  }];
+  let assemblyFormat =
+    "$clock `,` $predicate `,` $enable `,` $message attr-dict";
 }
 
 def CoverOp : FIRRTLOp<"cover", []> {
@@ -138,9 +134,8 @@ def CoverOp : FIRRTLOp<"cover", []> {
     StrAttr:$message);
   let results = (outs);
 
-  let assemblyFormat = [{
-    $clock `,` $predicate `,` $enable `,` $message attr-dict
-  }];
+  let assemblyFormat =
+    "$clock `,` $predicate `,` $enable `,` $message attr-dict";
 }
 
 def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">,
@@ -163,9 +158,8 @@ def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>
   ];
 
-  let assemblyFormat = [{
-    $condition $thenRegion (`else` $elseRegion^)? attr-dict-with-keyword
-  }];
+  let assemblyFormat =
+    "$condition $thenRegion (`else` $elseRegion^)? attr-dict-with-keyword";
 
   let extraClassDeclaration = [{
     OpBuilder getThenBodyBuilder() {

@@ -23,9 +23,7 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
   let arguments = (ins APIntAttr:$value);
   let results = (outs IntType:$result);
 
-  let assemblyFormat = [{
-     `(` $value `)` attr-dict `:` type($result)
-  }];
+  let assemblyFormat = "`(` $value `)` attr-dict `:` type($result)";
 
   let builders = [
     OpBuilderDAG<(ins "IntType":$type, "const APInt &":$value)>
@@ -131,7 +129,7 @@ def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect]> {
 
 /// PrimOp is a FIRRTLOp without side effects.
 class PrimOp<string mnemonic, list<OpTrait> traits = []> :
-    FIRRTLOp<mnemonic, !listconcat(traits, [NoSideEffect])>;
+    FIRRTLOp<mnemonic, traits # [NoSideEffect]>;
 
 //===----------------------------------------------------------------------===//
 // Binary Operations
@@ -226,9 +224,8 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
   let arguments = (ins srcType:$input);
   let results = (outs resultType:$result);
 
-  let assemblyFormat = [{
-    $input attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input attr-dict `:` functional-type($input, $result)";
 
   let extraClassDeclaration = [{
     /// Return the result for inputs with the specified type, returning a null
@@ -270,9 +267,8 @@ def BitsPrimOp : PrimOp<"bits"> {
   let arguments = (ins IntType:$input, I32Attr:$hi, I32Attr:$lo);
   let results = (outs UIntType:$result);
 
-  let assemblyFormat = [{
-    $input $hi `to` $lo attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input $hi `to` $lo attr-dict `:` functional-type($input, $result)";
 
   let description = [{
     The `bits` operation extracts the bits between `hi` (inclusive) and `lo`
@@ -312,9 +308,8 @@ def HeadPrimOp : PrimOp<"head"> {
   let arguments = (ins IntType:$input, I32Attr:$amount);
   let results = (outs UIntType:$result);
 
-  let assemblyFormat = [{
-    $input `,` $amount attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input `,` $amount attr-dict `:` functional-type($input, $result)";
 
   let hasCanonicalizer = 1;
 
@@ -360,9 +355,8 @@ def MuxPrimOp : PrimOp<"mux"> {
   let arguments = (ins UInt1Type:$sel, PassiveType:$high, PassiveType:$low);
   let results = (outs PassiveType:$result);
 
-  let assemblyFormat = [{
-    `(` operands `)` attr-dict `:` functional-type(operands, $result)
-  }];
+  let assemblyFormat =
+    "`(` operands `)` attr-dict `:` functional-type(operands, $result)";
 
   let hasFolder = 1;
 
@@ -394,9 +388,8 @@ def PadPrimOp : PrimOp<"pad"> {
   let arguments = (ins IntType:$input, I32Attr:$amount);
   let results = (outs IntType:$result);
 
-  let assemblyFormat = [{
-    $input `,` $amount attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input `,` $amount attr-dict `:` functional-type($input, $result)";
 
   let description = [{
     Pad the input out to an `amount` wide integer, sign extending or zero
@@ -431,9 +424,8 @@ class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic> {
   let arguments = (ins IntType:$input, I32Attr:$amount);
   let results = (outs IntType:$result);
 
-  let assemblyFormat = [{
-    $input `,` $amount attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input `,` $amount attr-dict `:` functional-type($input, $result)";
 
   let extraClassDeclaration = [{
     /// Return the result for inputs with the specified type, returning a null
@@ -480,9 +472,8 @@ def TailPrimOp : PrimOp<"tail"> {
   let arguments = (ins IntType:$input, I32Attr:$amount);
   let results = (outs UIntType:$result);
 
-  let assemblyFormat = [{
-    $input `,` $amount attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input `,` $amount attr-dict `:` functional-type($input, $result)";
 
   let description = [{
     The `tail` operation truncates the `amount` most significant bits from
@@ -527,12 +518,11 @@ def StdIntCastOp : FIRRTLOp<"stdIntCast", [NoSideEffect]> {
   let arguments = (ins IntCastType:$input);
   let results = (outs IntCastType:$result);
 
-  let assemblyFormat = [{
-    $input attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input attr-dict `:` functional-type($input, $result)";
 
   let hasFolder = 1;
-  let verifier = [{ return ::verifyStdIntCastOp(*this); }];
+  let verifier = "return ::verifyStdIntCastOp(*this);";
 }
 
 // This operation converts from an Analog type to an InOut type of the
@@ -541,12 +531,11 @@ def AnalogInOutCastOp : FIRRTLOp<"analogInOutCast", [NoSideEffect]> {
   let arguments = (ins AnyType:$input);
   let results = (outs AnyType:$result);
 
-  let assemblyFormat = [{
-    $input attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input attr-dict `:` functional-type($input, $result)";
 
   let hasFolder = 1;
-  let verifier = [{ return ::verifyAnalogInOutCastOp(*this); }];
+  let verifier = "return ::verifyAnalogInOutCastOp(*this);";
 }
 
 // MLIR specific pseudo ops.
@@ -557,9 +546,8 @@ def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect]> {
   let results = (outs PassiveType:$result);
 
   let hasFolder = 1;
-  let assemblyFormat = [{
-    $input attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input attr-dict `:` functional-type($input, $result)";
 
   let builders = [
     OpBuilderDAG<(ins "Value":$input)>
@@ -572,7 +560,5 @@ def AsNonPassivePrimOp : FIRRTLOp<"asNonPassive", [NoSideEffect]> {
   let results = (outs FIRRTLType:$result);
 
   let hasFolder = 1;
-  let assemblyFormat = [{
-    $input attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat = "$input attr-dict `:` functional-type($input, $result)";
 }
