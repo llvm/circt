@@ -570,3 +570,11 @@ func @concat_fold_3(%arg0: i1) -> i8 {
   %0 = rtl.concat %c7_i4, %c4_i3, %arg0 : (i4, i3, i1) -> i8
   return %0 : i8
 }
+
+// CHECK-LABEL: func @concat_fold_4
+// CHECK-NEXT:   %0 = rtl.sext %arg0 : (i3) -> i5
+func @concat_fold_4(%arg0: i3) -> i5 {
+  %0 = rtl.extract %arg0 from 2 : (i3) -> i1
+  %1 = rtl.concat %0, %0, %arg0 : (i1, i1, i3) -> i5
+  return %1 : i5
+}

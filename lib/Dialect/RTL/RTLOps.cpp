@@ -1374,7 +1374,26 @@ static LogicalResult tryCanonicalizeConcat(ConcatOp op,
     }
   }
 
-  // TODO: {A[top], A[top], A} -> sext.
+  // Folds concat back into a sext.
+  if (auto extract = inputs[0].getDefiningOp<ExtractOp>()) {
+    if (extract.input() == inputs.back() &&
+        extract.getType().getIntOrFloatBitWidth() == 1) {
+      // Check intermediate bits.
+      bool allMatch = true;
+      for (size_t i = 1, e = inputs.size() - 1; i != e; ++i) {
+        auto extractInner = inputs[i].getDefiningOp<ExtractOp>();
+        if (!extractInner || extractInner.input() != inputs.back() ||
+            extractInner.getType().getIntOrFloatBitWidth() != 1) {
+          allMatch = false;
+          break;
+        }
+      }
+      if (allMatch) {
+        rewriter.replaceOpWithNewOp<SExtOp>(op, op.getType(), inputs.back());
+        return success();
+      }
+    }
+  }
 
   return failure();
 }
