@@ -652,8 +652,7 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 static LogicalResult verifyConstantOp(ConstantOp constant) {
   // If the result type has a bitwidth, then the attribute must match its width.
-  auto intType = constant.getType().cast<IntegerType>();
-  if (constant.value().getBitWidth() != intType.getWidth())
+  if (constant.value().getBitWidth() != constant.getType().getWidth())
     return constant.emitError(
         "firrtl.constant attribute bitwidth doesn't match return type");
 
@@ -719,7 +718,7 @@ static bool tryFlatteningOperands(Op op, PatternRewriter &rewriter) {
 
 void ConstantOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
-  auto intTy = getType().cast<IntegerType>();
+  auto intTy = getType();
   auto intCst = getValue();
 
   // Sugar i1 constants with 'true' and 'false'.
@@ -754,7 +753,7 @@ static LogicalResult verifyExtOp(Operation *op) {
 OpFoldResult ZExtOp::fold(ArrayRef<Attribute> constants) {
   // Constant fold.
   if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>()) {
-    auto destWidth = getType().cast<IntegerType>().getWidth();
+    auto destWidth = getType().getWidth();
     return getIntAttr(input.getValue().zext(destWidth), getContext());
   }
 
@@ -764,7 +763,7 @@ OpFoldResult ZExtOp::fold(ArrayRef<Attribute> constants) {
 OpFoldResult SExtOp::fold(ArrayRef<Attribute> constants) {
   // Constant fold.
   if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>()) {
-    auto destWidth = getType().cast<IntegerType>().getWidth();
+    auto destWidth = getType().getWidth();
     return getIntAttr(input.getValue().sext(destWidth), getContext());
   }
 
@@ -803,7 +802,7 @@ OpFoldResult XorROp::fold(ArrayRef<Attribute> constants) {
 
 static LogicalResult verifyExtractOp(ExtractOp op) {
   unsigned srcWidth = op.input().getType().cast<IntegerType>().getWidth();
-  unsigned dstWidth = op.getType().cast<IntegerType>().getWidth();
+  unsigned dstWidth = op.getType().getWidth();
   if (op.lowBit() >= srcWidth || srcWidth - op.lowBit() < dstWidth)
     return op.emitOpError("from bit too large for input"), failure();
 
@@ -817,7 +816,7 @@ OpFoldResult ExtractOp::fold(ArrayRef<Attribute> constants) {
 
   // Constant fold.
   if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>()) {
-    unsigned dstWidth = getType().cast<IntegerType>().getWidth();
+    unsigned dstWidth = getType().getWidth();
     return getIntAttr(input.getValue().lshr(lowBit()).trunc(dstWidth),
                       getContext());
   }
@@ -878,7 +877,7 @@ static LogicalResult verifyUTVariadicRTLOp(Operation *op) {
 }
 
 OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
-  auto width = getType().cast<IntegerType>().getWidth();
+  auto width = getType().getWidth();
   APInt value(/*numBits=*/width, -1, /*isSigned=*/false);
 
   // and(x, 0, 1) -> 0 -- annulment
@@ -949,7 +948,7 @@ void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 }
 
 OpFoldResult OrOp::fold(ArrayRef<Attribute> constants) {
-  auto width = getType().cast<IntegerType>().getWidth();
+  auto width = getType().getWidth();
   APInt value(/*numBits=*/width, 0, /*isSigned=*/false);
 
   // or(x, 1, 0) -> 1

@@ -30,6 +30,9 @@ def UIntType : Type<CPred<"$_self.isa<UIntType>()">, "uint type",
 def AnalogType : Type<CPred<"$_self.isa<AnalogType>()">, "analog type",
                             "::circt::firrtl::AnalogType">;
 
+def BundleType : Type<CPred<"$_self.isa<BundleType>()">, "BundleType",
+                            "::circt::firrtl::BundleType">;
+
 def UInt1Type : Type<CPred<"$_self.isa<UIntType>() && "
                            "$_self.cast<UIntType>().getWidth() == 1">,
                            "UInt<1>", "::circt::firrtl::UIntType">,

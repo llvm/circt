@@ -701,11 +701,8 @@ static Optional<MemOp::PortKind> getMemPortKindFromType(FIRRTLType type) {
 /// Return the name and kind of ports supported by this memory.
 void MemOp::getPorts(
     SmallVectorImpl<std::pair<Identifier, MemOp::PortKind>> &result) {
-  // The type of a mem must be a bundle.
-  auto bundle = getType().cast<BundleType>();
-
   // Each entry in the bundle is a port.
-  for (auto elt : bundle.getElements()) {
+  for (auto elt : getType().getElements()) {
     // Each port is a bundle.
     auto kind = getMemPortKindFromType(elt.type);
     assert(kind.hasValue() && "unknown port type!");
@@ -715,8 +712,7 @@ void MemOp::getPorts(
 
 /// Return the kind of the specified port or None if the name is invalid.
 Optional<MemOp::PortKind> MemOp::getPortKind(StringRef portName) {
-  // The type of a mem must be a bundle.
-  auto eltType = getType().cast<BundleType>().getElementType(portName);
+  auto eltType = getType().getElementType(portName);
   if (!eltType)
     return None;
   return getMemPortKindFromType(eltType);
@@ -724,15 +720,11 @@ Optional<MemOp::PortKind> MemOp::getPortKind(StringRef portName) {
 
 /// Return the data-type field of the memory, the type of each element.
 FIRRTLType MemOp::getDataTypeOrNull() {
-  // The outer level of a mem is a bundle, containing the input and output
-  // ports.
-  auto bundle = getType().cast<BundleType>();
-
   // Mems with no read/write ports are legal.
-  if (bundle.getElements().empty())
+  if (getType().getElements().empty())
     return {};
 
-  auto firstPort = bundle.getElements()[0];
+  auto firstPort = getType().getElements()[0];
   auto firstPortType = firstPort.type.getPassiveType().cast<BundleType>();
   return firstPortType.getElementType("data");
 }

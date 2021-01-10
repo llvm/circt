@@ -1215,7 +1215,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
       emitRandomizePrologIfNeeded();
 
       builder->create<sv::IfDefOp>("RANDOMIZE_REG_INIT", [&]() {
-        auto type = regResult.getType().cast<rtl::InOutType>().getElementType();
+        auto type = regResult.getType().getElementType();
         auto randomVal = builder->create<sv::TextualValueOp>(type, "`RANDOM");
         builder->create<sv::BPAssignOp>(regResult, randomVal);
       });
@@ -1269,8 +1269,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
         auto one = builder->create<rtl::ConstantOp>(APInt(1, 1));
         auto notResetValue = builder->create<rtl::XorOp>(resetSignal, one);
         builder->create<sv::IfOp>(notResetValue, [&]() {
-          auto type =
-              regResult.getType().cast<rtl::InOutType>().getElementType();
+          auto type = regResult.getType().getElementType();
           auto randomVal = builder->create<sv::TextualValueOp>(type, "`RANDOM");
           builder->create<sv::BPAssignOp>(regResult, randomVal);
         });
