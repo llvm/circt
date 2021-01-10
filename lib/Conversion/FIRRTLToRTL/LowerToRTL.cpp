@@ -1614,8 +1614,7 @@ LogicalResult FIRRTLLowering::visitExpr(NotPrimOp op) {
   if (!operand)
     return failure();
   // ~x  ---> x ^ 0xFF
-  auto type = operand.getType().cast<IntegerType>();
-  auto allOnes = builder->create<rtl::ConstantOp>(-1, type);
+  auto allOnes = builder->create<rtl::ConstantOp>(operand.getType(), -1);
   return setLoweringTo<rtl::XorOp>(op, operand, allOnes);
 }
 
@@ -1633,8 +1632,7 @@ LogicalResult FIRRTLLowering::visitExpr(NegPrimOp op) {
   auto resultType = lowerType(op.getType());
   operand = builder->createOrFold<rtl::SExtOp>(resultType, operand);
 
-  auto zero =
-      builder->create<rtl::ConstantOp>(0, resultType.cast<IntegerType>());
+  auto zero = builder->create<rtl::ConstantOp>(resultType, 0);
   return setLoweringTo<rtl::SubOp>(op, zero, operand);
 }
 
@@ -1833,8 +1831,7 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValuePrimOp op) {
   // We lower invalid to 0.  TODO: the FIRRTL spec mentions something about
   // lowering it to a random value, we should see if this is what we need to
   // do.
-  auto value =
-      builder->create<rtl::ConstantOp>(0, resultTy.cast<IntegerType>());
+  auto value = builder->create<rtl::ConstantOp>(resultTy, 0);
 
   if (!op.getType().isa<AnalogType>())
     return setLowering(op, value);
