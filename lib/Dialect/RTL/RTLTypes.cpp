@@ -86,8 +86,8 @@ int circt::rtl::getBitWidth(mlir::Type type) {
 }
 
 /// Return true if the specified type contains known marker types like
-/// InOutType.  Unlike isRTLValueType, this is not conservative, it only
-/// returns false on known InOut types, rather than any unknown types.
+/// InOutType.  Unlike isRTLValueType, this is not conservative, it only returns
+/// false on known InOut types, rather than any unknown types.
 bool circt::rtl::hasRTLInOutType(Type type) {
   if (auto array = type.dyn_cast<ArrayType>())
     return hasRTLInOutType(array.getElementType());
@@ -110,8 +110,8 @@ mlir::Type circt::rtl::getInOutElementType(mlir::Type type) {
   return {};
 }
 
-/// Return the element type of an ArrayType or UnpackedArrayType, or null if
-/// the operand isn't an array.
+/// Return the element type of an ArrayType or UnpackedArrayType, or null if the
+/// operand isn't an array.
 Type circt::rtl::getAnyRTLArrayElementType(Type type) {
   if (!type)
     return {};
@@ -122,9 +122,9 @@ Type circt::rtl::getAnyRTLArrayElementType(Type type) {
   return {};
 }
 
-/// Parse and print nested RTL types nicely.  These helper methods allow
-/// eliding the "rtl." prefix on array, inout, and other types when in a
-/// context that expects RTL subelement types.
+/// Parse and print nested RTL types nicely.  These helper methods allow eliding
+/// the "rtl." prefix on array, inout, and other types when in a context that
+/// expects RTL subelement types.
 static ParseResult parseRTLElementType(Type &result, DialectAsmParser &p) {
   // If this is an RTL dialect type, then we don't need/want the !rtl. prefix
   // redundantly specified.
@@ -306,8 +306,8 @@ LogicalResult InOutType::verifyConstructionInvariants(Location loc,
   return success();
 }
 
-/// Parses a type registered to this dialect. Parse out the mnemonic then
-/// invoke the tblgen'd type parser dispatcher.
+/// Parses a type registered to this dialect. Parse out the mnemonic then invoke
+/// the tblgen'd type parser dispatcher.
 Type RTLDialect::parseType(DialectAsmParser &parser) const {
   llvm::StringRef mnemonic;
   if (parser.parseKeyword(&mnemonic))
