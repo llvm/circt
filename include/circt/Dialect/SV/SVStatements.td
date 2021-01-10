@@ -29,7 +29,7 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments,
   let arguments = (ins StrAttr:$cond);
   let results = (outs);
   
-  let assemblyFormat = [{ $cond $thenRegion (`else` $elseRegion^)? attr-dict }];
+  let assemblyFormat = "$cond $thenRegion (`else` $elseRegion^)? attr-dict";
 
   // TODO: ODS forces using a custom builder just to get the region terminator
   // implicitly installed.
@@ -64,7 +64,7 @@ def IfOp : SVOp<"if", [HasRegionTerminator, NoRegionArguments,
   let arguments = (ins I1:$cond);
   let results = (outs);
   
-  let assemblyFormat = [{ $cond $thenRegion (`else` $elseRegion^)? attr-dict }];
+  let assemblyFormat = "$cond $thenRegion (`else` $elseRegion^)? attr-dict";
 
   // TODO: ODS forces using a custom builder just to get the region terminator
   // implicitly installed.
@@ -135,7 +135,7 @@ def AlwaysOp : SVOp<"always", [HasRegionTerminator, NoRegionArguments,
   }];
 
   // Check that we have the same number of events and conditions.
-  let verifier = [{ return ::verifyAlwaysOp(*this); }];
+  let verifier = "return ::verifyAlwaysOp(*this);";
 }
 
 def InitialOp : SVOp<"initial", [HasRegionTerminator, NoRegionArguments,
@@ -147,7 +147,7 @@ def InitialOp : SVOp<"initial", [HasRegionTerminator, NoRegionArguments,
   let arguments = (ins);
   let results = (outs);
 
-  let assemblyFormat = [{ $body attr-dict }];
+  let assemblyFormat = "$body attr-dict";
 
   // TODO: ODS forces using a custom builder just to get the region terminator
   // implicitly installed.
@@ -171,7 +171,7 @@ def YieldOp
   let summary = "terminator for control-flow operation regions";
   let arguments = (ins);
 
-   let assemblyFormat = [{attr-dict}];
+   let assemblyFormat = "attr-dict";
 }
 
 def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">]> {
@@ -183,7 +183,7 @@ def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">]> {
   }];
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
-  let assemblyFormat = [{ $dest `,` $src  attr-dict `:` type($src) }];
+  let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
 }
 
 def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">]> {
@@ -195,7 +195,7 @@ def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">]> {
   }];
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
-  let assemblyFormat = [{ $dest `,` $src  attr-dict `:` type($src) }];
+  let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
 }
 
 def AliasOp : SVOp<"alias"> {
@@ -211,7 +211,7 @@ def AliasOp : SVOp<"alias"> {
   let assemblyFormat = "$operands attr-dict `:` type($operands)";
 
   // Verify that we have at least two operands.
-  let verifier = [{ return ::verifyAliasOp(*this); }];
+  let verifier = "return ::verifyAliasOp(*this);";
 }
 
 // TODO: This needs to model the file descriptor to write on.  This is currently
@@ -222,9 +222,8 @@ def FWriteOp : SVOp<"fwrite"> {
   let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands);
   let results = (outs);
 
-  let assemblyFormat = [{
-    $string attr-dict (`(` $operands^ `)` `:` type($operands))?
-  }];
+  let assemblyFormat =
+    "$string attr-dict (`(` $operands^ `)` `:` type($operands))?";
 }
 
 def FinishOp : SVOp<"finish"> {
@@ -236,7 +235,7 @@ def FinishOp : SVOp<"finish"> {
   let arguments = (ins);
   let results = (outs);
 
-  let assemblyFormat = [{ attr-dict }];
+  let assemblyFormat = "attr-dict";
 }
 
 def FatalOp : SVOp<"fatal"> {
@@ -248,7 +247,7 @@ def FatalOp : SVOp<"fatal"> {
   let arguments = (ins);
   let results = (outs);
 
-  let assemblyFormat = [{ attr-dict }];
+  let assemblyFormat = "attr-dict";
 }
 
 def VerbatimOp : SVOp<"verbatim"> {

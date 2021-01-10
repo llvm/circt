@@ -1045,11 +1045,8 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result,
 
   // If the index expression is a flip type, strip it off.
   auto indexType = index.getType().cast<FIRRTLType>();
-  if (!indexType.isPassive()) {
-    indexType = indexType.getPassiveType();
-    index = builder.create<AsPassivePrimOp>(translateLocation(indexLoc),
-                                            indexType, index);
-  }
+  indexType = indexType.getPassiveType();
+  index = convertToPassive(index, translateLocation(indexLoc));
 
   // Make sure the index expression is valid and compute the result type for the
   // expression.
@@ -1095,12 +1092,8 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
           return failure();
 
         // If the operand contains a flip, strip it out with an asPassive op.
-        if (!operand.getType().cast<FIRRTLType>().isPassive()) {
-          auto passiveType =
-              operand.getType().cast<FIRRTLType>().getPassiveType();
-          operand = builder.create<AsPassivePrimOp>(translateLocation(loc),
-                                                    passiveType, operand);
-        }
+        if (!operand.getType().cast<FIRRTLType>().isPassive())
+          operand = convertToPassive(operand, translateLocation(loc));
 
         operands.push_back(operand);
         return success();

@@ -48,8 +48,8 @@ def WireOp : RTLOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   ];
 
   // We handle the name in a custom way, so we use a customer parser/printer.
-  let printer = [{ printWireOp(p, *this); }];
-  let parser = [{ return parseWireOp(parser, result); }];
+  let printer = "printWireOp(p, *this);";
+  let parser = "return parseWireOp(parser, result);";
 }
 
 // Expressions used for working with inout types.
@@ -96,8 +96,8 @@ def StructExplodeOp : RTLOp<"struct_explode", [NoSideEffect]> {
   let arguments = (ins StructType:$input);
   let results = (outs Variadic<RTLNonInOutType>:$result);
 
-  let parser = [{ return ::parse$cppClass(parser, result); }];
-  let printer = [{ return ::print(p, *this); }];
+  let parser = "return ::parse$cppClass(parser, result);";
+  let printer = "return ::print(p, *this);";
 }
 
 
@@ -106,6 +106,6 @@ def StructCreateOp : RTLOp<"struct_create", [NoSideEffect]> {
   let arguments = (ins Variadic<RTLNonInOutType>:$input);
   let results = (outs StructType:$result);
 
-  let parser = [{ return ::parse$cppClass(parser, result); }];
-  let printer = [{ return ::print(p, *this); }];
+  let parser = "return ::parse$cppClass(parser, result);";
+  let printer = "return ::print(p, *this);";
 }

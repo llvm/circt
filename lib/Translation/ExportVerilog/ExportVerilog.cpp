@@ -91,49 +91,53 @@ static unsigned getPrintedIntWidth(unsigned value) {
   return size;
 }
 
-/// Return the number of characters that will be used to print the base type
-/// specified.
-static size_t getPrintedTypeDimsWidthRecursive(Type type, Location loc) {
+/// Emit a type's packed dimensions, returning the number of characters
+/// emitted.
+static size_t emitTypeDims(Type type, Location loc, raw_ostream &os) {
   if (auto inout = type.dyn_cast<rtl::InOutType>())
-    return getPrintedTypeDimsWidthRecursive(inout.getElementType(), loc);
+    return emitTypeDims(inout.getElementType(), loc, os);
   if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>())
-    return getPrintedTypeDimsWidthRecursive(uarray.getElementType(), loc);
-
-  // SV interface types don't have any emitted width.
+    return emitTypeDims(uarray.getElementType(), loc, os);
   if (type.isa<InterfaceType>())
     return 0;
 
-  int rangeSize;
-  size_t textWidth = 0;
-  if (auto array = type.dyn_cast<rtl::ArrayType>()) {
-    rangeSize = array.getSize();
-    textWidth = getPrintedTypeDimsWidthRecursive(array.getElementType(), loc);
+  size_t emittedWidth = 0;
+  int width;
+  if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
+    emittedWidth += emitTypeDims(arrayType.getElementType(), loc, os);
+    width = arrayType.getSize();
   } else {
-    rangeSize = getBitWidthOrSentinel(type);
-    if (rangeSize == -1) {
-      mlir::emitError(loc, "value has an unsupported verilog type ") << type;
-      return 0;
-    }
-
-    // Width of 1 is implicit.
-    if (rangeSize == 1)
-      return 0;
-    if (rangeSize == 0) // Zero width has a comment.
-      return 14;
+    width = getBitWidthOrSentinel(type);
   }
 
-  // Add 4 to count the width of the "[:0]".
-  textWidth += getPrintedIntWidth(rangeSize - 1) + 4;
-  return textWidth;
+  switch (width) {
+  case -1: // -1 is an invalid type.
+    mlir::emitError(loc, "value has an unsupported verilog type ") << type;
+    os << "<<invalid type>>";
+    return 16;
+
+  case 1: // Width 1 is implicit.
+    break;
+
+  case 0:
+    os << "/*Zero Width*/";
+    emittedWidth += 14;
+    break;
+  default:
+    os << '[' << (width - 1) << ":0]";
+    emittedWidth += getPrintedIntWidth(width - 1) + 4;
+    break;
+  }
+  return emittedWidth;
 }
 
-/// Calculated the printed width of the array dims of a type.
-static size_t getPrintedTypeDimsWidth(Type type, Location loc) {
-  size_t dimsWidth = getPrintedTypeDimsWidthRecursive(type, loc);
-  if (dimsWidth > 0)
-    // If we have to output a range at all, we need space for the ' '.
-    return dimsWidth + 1;
-  return 0;
+/// Emit the specified type dimensions and print out a trailing space if
+/// anything is printed.
+static void emitTypeDimWithSpaceIfNeeded(Type type, Location loc,
+                                         raw_ostream &os) {
+  auto size = emitTypeDims(type, loc, os);
+  if (size)
+    os << ' ';
 }
 
 /// Return true if this is a zero bit type, e.g. a zero bit integer or array
@@ -244,12 +248,6 @@ public:
   void addIndent() { state.currentIndent += 2; }
   void reduceIndent() { state.currentIndent -= 2; }
 
-  /// Emit a type's packed dimensions, returning the number of characters
-  /// emitted.
-  size_t emitTypeDims(Type type, Location loc);
-  /// Pad the text from `emitTypeDims` to the specified number of characters.
-  void emitTypeDimsPaddedToWidth(Type type, size_t padToWidth, Location loc);
-
   // All of the mutable state we are maintaining.
   VerilogEmitterState &state;
 
@@ -262,51 +260,6 @@ private:
 };
 
 } // end anonymous namespace
-
-size_t VerilogEmitterBase::emitTypeDims(Type type, Location loc) {
-  if (auto inout = type.dyn_cast<rtl::InOutType>())
-    return emitTypeDims(inout.getElementType(), loc);
-  if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>())
-    return emitTypeDims(uarray.getElementType(), loc);
-  if (type.isa<InterfaceType>())
-    return 0;
-
-  size_t emittedWidth = 0;
-  int width;
-  if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
-    emittedWidth += emitTypeDims(arrayType.getElementType(), loc);
-    width = arrayType.getSize();
-  } else {
-    width = getBitWidthOrSentinel(type);
-  }
-
-  switch (width) {
-  case -1: // -1 is an invalid type.
-    mlir::emitError(loc, "value has an unsupported verilog type ") << type;
-    os << "<<invalid type>>";
-    return 0;
-
-  case 1: // Width 1 is implicit.
-    break;
-
-  case 0:
-    os << "/*Zero Width*/";
-    emittedWidth += 14;
-    break;
-  default:
-    os << '[' << (width - 1) << ":0]";
-    emittedWidth += getPrintedIntWidth(width - 1) + 4;
-    break;
-  }
-  return emittedWidth;
-}
-
-void VerilogEmitterBase::emitTypeDimsPaddedToWidth(Type type, size_t padToWidth,
-                                                   Location loc) {
-  size_t emittedWidth = emitTypeDims(type, loc);
-  if (emittedWidth < padToWidth)
-    os.indent(padToWidth - emittedWidth);
-}
 
 //===----------------------------------------------------------------------===//
 // ModuleEmitter
@@ -371,7 +324,6 @@ public:
   void emitOperation(Operation *op);
 
   void collectNamesEmitDecls(Block &block);
-  bool collectNamesEmitWires(InstanceOp instance);
   StringRef addName(Value value, StringRef name);
   StringRef addName(Value value, StringAttr nameAttr) {
     return addName(value, nameAttr ? nameAttr.getValue() : "");
@@ -658,10 +610,6 @@ private:
 
   using Visitor::visitSV;
 
-  /// Emit a verilog bit selection operation like x[4:0], the bit numbers are
-  /// inclusive like verilog.
-  SubExprInfo emitBitSelect(Value operand, unsigned hiBit, unsigned loBit);
-
   SubExprInfo emitBinary(Operation *op, VerilogPrecedence prec,
                          const char *syntax,
                          SubExprSignRequirement operandSignReq = NoRequirement);
@@ -922,17 +870,29 @@ SubExprInfo ExprEmitter::visitComb(ZExtOp op) {
 }
 
 SubExprInfo ExprEmitter::visitComb(ConcatOp op) {
+  // If all of the operands are the same, we emit this as a SystemVerilog
+  // replicate operation, ala SV Spec 11.4.12.1.
+  auto firstOperand = op.getOperand(0);
+  bool allSame = true;
+  for (size_t i = 1, e = op.getNumOperands(); i != e; ++i) {
+    if (op.getOperand(i) != firstOperand) {
+      allSame = false;
+      break;
+    }
+  }
+  if (allSame) {
+    os << '{' << op.getNumOperands() << '{';
+    emitSubExpr(firstOperand, LowestPrecedence);
+    os << "}}";
+    return {Unary, IsUnsigned};
+  }
+
   os << '{';
   llvm::interleaveComma(op.getOperands(), os,
                         [&](Value v) { emitSubExpr(v, LowestPrecedence); });
 
   os << '}';
   return {Unary, IsUnsigned};
-}
-
-SubExprInfo ExprEmitter::visitComb(ExtractOp op) {
-  unsigned dstWidth = op.getType().cast<IntegerType>().getWidth();
-  return emitBitSelect(op.input(), op.lowBit() + dstWidth - 1, op.lowBit());
 }
 
 SubExprInfo ExprEmitter::visitComb(ICmpOp op) {
@@ -956,20 +916,17 @@ SubExprInfo ExprEmitter::visitComb(ICmpOp op) {
   return result;
 }
 
-/// Emit a verilog bit selection operation like x[4:0], the bit numbers are
-/// inclusive like verilog.
-///
-/// Note that anything that emits a BitSelect must be handled in the
-/// isExpressionUnableToInline.
-SubExprInfo ExprEmitter::emitBitSelect(Value operand, unsigned hiBit,
-                                       unsigned loBit) {
-  auto x = emitSubExpr(operand, LowestPrecedence);
+SubExprInfo ExprEmitter::visitComb(ExtractOp op) {
+  unsigned loBit = op.lowBit();
+  unsigned hiBit = loBit + op.getType().cast<IntegerType>().getWidth() - 1;
+
+  auto x = emitSubExpr(op.input(), LowestPrecedence);
   assert(x.precedence == Symbol &&
          "should be handled by isExpressionUnableToInline");
 
   // If we're extracting the whole input, just return it.  This is valid but
   // non-canonical IR, and we don't want to generate invalid Verilog.
-  if (loBit == 0 && operand.getType().getIntOrFloatBitWidth() == hiBit + 1)
+  if (loBit == 0 && op.input().getType().getIntOrFloatBitWidth() == hiBit + 1)
     return x;
 
   os << '[' << hiBit;
@@ -1098,8 +1055,7 @@ void ModuleEmitter::emitStatementExpression(Operation *op) {
     indent() << "// Zero width: ";
   } else if (emitInlineWireDecls) {
     indent() << "wire ";
-    if (emitTypeDims(op->getResult(0).getType(), op->getLoc()) > 0)
-      os << ' ';
+    emitTypeDimWithSpaceIfNeeded(op->getResult(0).getType(), op->getLoc(), os);
     os << getName(op->getResult(0)) << " = ";
   } else {
     indent() << "assign " << getName(op->getResult(0)) << " = ";
@@ -1592,9 +1548,7 @@ LogicalResult ModuleEmitter::visitSV(InterfaceSignalOp op) {
   else
     indent() << "// Zero width: logic ";
 
-  if (emitTypeDims(op.type(), op.getLoc()) > 0)
-    os << ' ';
-
+  emitTypeDimWithSpaceIfNeeded(op.type(), op.getLoc(), os);
   os << op.sym_name() << ";\n";
   return success();
 }
@@ -1730,63 +1684,82 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     return "wire";
   };
 
-  SmallVector<Operation *, 16> declsToEmit;
-  bool rtlInstanceDeclaredWires = false;
+  // This is information we keep track of for each wire/reg/interface
+  // declaration we're going to emit.
+  struct ValuesToEmitRecord {
+    Value value;
+    SmallString<8> typeString;
+  };
+  SmallVector<ValuesToEmitRecord, 16> valuesToEmit;
+
+  SmallString<32> nameTmp;
+
+  // Loop over all of the results of all of the ops.  Anything that defines a
+  // value needs to be noticed.
   for (auto &op : block) {
-    if (auto rtlInstance = dyn_cast<InstanceOp>(op)) {
-      rtlInstanceDeclaredWires |= collectNamesEmitWires(rtlInstance);
-      continue;
-    }
-    if (op.getNumResults() == 0)
-      continue;
-
-    assert(op.getNumResults() == 1 && "rtl/sv only has single-op results");
-    Value result = op.getResult(0);
-
-    // If this is an expression emitted inline or unused, it doesn't need a
-    // name.
     bool isExpr = isVerilogExpression(&op);
-    if (isExpr) {
-      // If this expression is dead, or can be emitted inline, ignore it.
-      if (result.use_empty() || isExpressionEmittedInline(&op))
+
+    for (auto result : op.getResults()) {
+      // If this is an expression emitted inline or unused, it doesn't need a
+      // name.
+      if (isExpr) {
+        // If this expression is dead, or can be emitted inline, ignore it.
+        if (result.use_empty() || isExpressionEmittedInline(&op))
+          continue;
+
+        // Remember that this expression should be emitted out of line.
+        outOfLineExpressions.insert(&op);
+      }
+
+      // Otherwise, it must be an expression or a declaration like a
+      // RegOp/WireOp.  Remember and unique the name for this operation.
+      if (auto instance = dyn_cast<InstanceOp>(&op)) {
+        // The name for an instance result is custom.
+        nameTmp = instance.instanceName().str() + "_";
+        unsigned resultNumber = result.getResultNumber();
+        auto resultName = instance.getResultName(resultNumber);
+        if (resultName)
+          nameTmp += resultName.getValue().str();
+        else
+          nameTmp += std::to_string(resultNumber);
+        addName(result, nameTmp);
+      } else {
+        addName(result, op.getAttrOfType<StringAttr>("name"));
+      }
+
+      // If we are emitting out-of-line expressions using inline wire decls,
+      // don't measure or emit this wire, it will be emitted inline.
+      if (isExpr && emitInlineWireDecls)
         continue;
 
-      // Remember that this expression should be emitted out of line.
-      outOfLineExpressions.insert(&op);
+      // Emit this value.
+      valuesToEmit.push_back(ValuesToEmitRecord{result, {}});
+      auto &typeString = valuesToEmit.back().typeString;
+
+      maxDeclNameWidth =
+          std::max(getVerilogDeclWord(&op).size(), maxDeclNameWidth);
+
+      // Convert the port's type to a string and measure it.
+      {
+        llvm::raw_svector_ostream stringStream(typeString);
+        emitTypeDimWithSpaceIfNeeded(result.getType(), op.getLoc(),
+                                     stringStream);
+      }
+      maxTypeWidth = std::max(typeString.size(), maxTypeWidth);
     }
-
-    // Otherwise, it must be an expression or a declaration like a RegOp/WireOp.
-    addName(result, op.getAttrOfType<StringAttr>("name"));
-
-    // If we are emitting inline wire decls, don't measure or emit this wire.
-    if (isExpr && emitInlineWireDecls)
-      continue;
-
-    // Determine what kind of thing this is, and how much space it needs.
-    maxDeclNameWidth =
-        std::max(getVerilogDeclWord(&op).size(), maxDeclNameWidth);
-
-    auto type = result.getType();
-    maxTypeWidth =
-        std::max(getPrintedTypeDimsWidth(type, op.getLoc()), maxTypeWidth);
-
-    // Emit this declaration.
-    if (result)
-      declsToEmit.push_back(&op);
   }
 
   SmallPtrSet<Operation *, 8> ops;
 
   // Okay, now that we have measured the things to emit, emit the things.
-  for (auto *decl : declsToEmit) {
+  for (const auto &record : valuesToEmit) {
+    auto *decl = record.value.getDefiningOp();
     ops.clear();
     ops.insert(decl);
 
+    // Emit the leading word, like 'wire' or 'reg'.
+    auto type = record.value.getType();
     auto word = getVerilogDeclWord(decl);
-
-    // Flatten the type for processing of each individual element.
-    auto type = decl->getResult(0).getType();
-
     if (!isZeroBitType(type)) {
       indent() << word;
       os.indent(maxDeclNameWidth - word.size() + 1);
@@ -1794,10 +1767,13 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       indent() << "// Zero width: " << word << ' ';
     }
 
-    // Skip over SV interface types, which don't have any emitted width.
-    emitTypeDimsPaddedToWidth(type, maxTypeWidth, decl->getLoc());
+    // Emit the type.
+    os << record.typeString;
+    if (record.typeString.size() < maxTypeWidth)
+      os.indent(maxTypeWidth - record.typeString.size());
 
-    os << getName(decl->getResult(0));
+    // Emit the name.
+    os << getName(record.value);
 
     // Interface instantiations have parentheses like a module with no ports.
     if (type.isa<InterfaceType>()) {
@@ -1811,43 +1787,8 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     emitLocationInfoAndNewLine(ops);
   }
 
-  if (!declsToEmit.empty() || rtlInstanceDeclaredWires)
+  if (!valuesToEmit.empty())
     os << '\n';
-}
-
-bool ModuleEmitter::collectNamesEmitWires(InstanceOp instance) {
-  SmallString<32> nameTmp;
-
-  for (size_t i = 0, e = instance.getNumResults(); i < e; ++i) {
-    nameTmp = instance.instanceName().str();
-    nameTmp += '_';
-
-    auto resultName = instance.getResultName(i);
-    if (resultName)
-      nameTmp += resultName.getValue().str();
-    else
-      nameTmp += std::to_string(i);
-
-    auto result = instance.getResult(i);
-    StringRef wireName = addName(result, nameTmp);
-
-    Type resultType = result.getType();
-    if (auto intType = resultType.dyn_cast<IntegerType>()) {
-      if (intType.getWidth() == 1) {
-        indent() << "wire " << wireName << ";\n";
-      } else {
-        indent() << "wire [" << intType.getWidth() - 1 << ":0] " << wireName
-                 << ";\n";
-      }
-    } else {
-      indent() << "// Type '" << resultType
-               << "' not supported in verilog output yet.\n";
-      instance.emitOpError(
-          "Type of result not supported for verilog output. Type: ")
-          << resultType;
-    }
-  }
-  return instance.getNumResults() != 0;
 }
 
 void ModuleEmitter::emitOperation(Operation *op) {
@@ -1904,11 +1845,20 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
   // lines up nicely.
   bool hasOutputs = false, hasZeroWidth = false;
   size_t maxTypeWidth = 0;
+  SmallVector<SmallString<8>, 16> portTypeStrings;
+
   for (auto &port : portInfo) {
     hasOutputs |= port.isOutput();
     hasZeroWidth |= isZeroBitType(port.type);
-    maxTypeWidth = std::max(getPrintedTypeDimsWidth(port.type, module.getLoc()),
-                            maxTypeWidth);
+
+    // Convert the port's type to a string and measure it.
+    portTypeStrings.push_back({});
+    {
+      llvm::raw_svector_ostream stringStream(portTypeStrings.back());
+      emitTypeDimWithSpaceIfNeeded(port.type, module.getLoc(), stringStream);
+    }
+
+    maxTypeWidth = std::max(portTypeStrings.back().size(), maxTypeWidth);
   }
 
   addIndent();
@@ -1938,7 +1888,10 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
       break;
     }
 
-    emitTypeDimsPaddedToWidth(portType, maxTypeWidth, module.getLoc());
+    // Emit the type.
+    os << portTypeStrings[portIdx];
+    if (portTypeStrings[portIdx].size() < maxTypeWidth)
+      os.indent(maxTypeWidth - portTypeStrings[portIdx].size());
 
     // Emit the name.
     os << portInfo[portIdx].getName();

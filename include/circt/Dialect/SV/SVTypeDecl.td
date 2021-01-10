@@ -43,9 +43,7 @@ def InterfaceOp : SVOp<"interface",
 
   let regions = (region SizedRegion<1>:$body);
 
-  let assemblyFormat = [{
-    attr-dict $sym_name $body
-  }];
+  let assemblyFormat = "attr-dict $sym_name $body";
 
   let extraClassDeclaration = [{
     Block *getBodyBlock() { return &body().front(); }
@@ -82,9 +80,7 @@ def InterfaceSignalOp : SVOp<"interface.signal",
     SignalTypeAttr:$type
   );
 
-  let assemblyFormat = [{
-    attr-dict $sym_name `:` $type
-  }];
+  let assemblyFormat = "attr-dict $sym_name `:` $type";
 
   let builders = [
     OpBuilderDAG<(ins "::llvm::StringRef":$name, "::mlir::Type":$type)>
@@ -132,13 +128,12 @@ def InterfaceModportOp : SVOp<"interface.modport",
     ModportStructArrayAttr:$ports
   );
 
-  let assemblyFormat = [{
-    attr-dict $sym_name custom<ModportStructs>($ports)
-  }];
+  let assemblyFormat = "attr-dict $sym_name custom<ModportStructs>($ports)";
 
   let builders = [
-    OpBuilderDAG<(ins "::llvm::StringRef":$name, "ArrayRef<::llvm::StringRef>":$inputs,
-      "ArrayRef<::llvm::StringRef>":$outputs)>
+    OpBuilderDAG<(ins "::llvm::StringRef":$name,
+                      "ArrayRef<::llvm::StringRef>":$inputs,
+                      "ArrayRef<::llvm::StringRef>":$outputs)>
   ];
 }
 
@@ -186,13 +181,9 @@ def InterfaceInstanceOp : SVOp<"interface.instance", [NoSideEffect]> {
   let arguments = (ins);
   let results = (outs InterfaceType : $result);
 
-  let assemblyFormat = [{
-    attr-dict `:` type($result)
-  }];
+  let assemblyFormat = "attr-dict `:` type($result)";
 
-  let verifier = [{
-    return ::verifyInterfaceInstanceOp(*this);
-  }];
+  let verifier = "return ::verifyInterfaceInstanceOp(*this);";
 
   let extraClassDeclaration = [{
     InterfaceType getInterfaceType() { return getType().cast<InterfaceType>(); }
@@ -215,13 +206,10 @@ def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
   let arguments = (ins InterfaceType:$iface, FlatSymbolRefAttr:$field);
   let results = (outs ModportType:$result);
 
-  let assemblyFormat = [{
-    $iface $field attr-dict `:` type($iface) `->` type($result)
-  }];
+  let assemblyFormat =
+    "$iface $field attr-dict `:` type($iface) `->` type($result)";
 
-  let verifier = [{
-    return ::verifyGetModportOp(*this);
-  }];
+  let verifier = "return ::verifyGetModportOp(*this);";
 
   let builders = [
     OpBuilderDAG<(ins "Value":$value, "::llvm::StringRef":$field)>
@@ -253,9 +241,7 @@ def AssignInterfaceSignalOp : SVOp<"interface.signal.assign", []> {
         `=` $rhs attr-dict `:` type($rhs)
   }];
 
-  let verifier = [{
-    return ::verifySignalExists(iface(), signalNameAttr());
-  }];
+  let verifier = "return ::verifySignalExists(iface(), signalNameAttr());";
 }
 
 def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
@@ -286,9 +272,7 @@ def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
     OpBuilderDAG<(ins "::mlir::Value":$iface, "::llvm::StringRef":$signalName)>
   ];
 
-  let verifier = [{
-    return ::verifySignalExists(iface(), signalNameAttr());
-  }];
+  let verifier = "return ::verifySignalExists(iface(), signalNameAttr());";
 }
 
 def TypeDeclTerminatorOp : SVOp<"type_decl_terminator",
