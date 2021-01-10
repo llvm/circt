@@ -452,16 +452,6 @@ func @multiply_reduction(%arg0: i11, %arg1: i11) -> i11 {
   return %0 : i11
 }
 
-// CHECK-LABEL: func @zext_constant_folding() -> i5 {
-// CHECK-NEXT:  %c8_i5 = rtl.constant(8 : i5) : i5
-// CHECK-NEXT:  return %c8_i5 : i5
-
-func @zext_constant_folding() -> i5 {
-  %c8_i4 = rtl.constant(8 : i4) : i4
-  %0 = rtl.zext %c8_i4 : (i4) -> i5
-  return %0 : i5
-}
-
 // CHECK-LABEL: func @sext_constant_folding() -> i5 {
 // CHECK-NEXT:  %c-8_i5 = rtl.constant(-8 : i5) : i5
 // CHECK-NEXT:  return %c-8_i5 : i5
@@ -550,15 +540,12 @@ func @concat_fold_1(%arg0: i4, %arg1: i3, %arg2: i1) -> i8 {
 }
 
 // CHECK-LABEL: func @concat_fold_2
-func @concat_fold_2(%arg0: i4, %arg1: i3, %arg2: i1) -> i16 {
-  // Zext should get flattened into the concat
-  // CHECK-NEXT: %c0_i3 = rtl.constant(0 : i3) : i3
-  %a = rtl.zext %arg0 : (i4) -> i7
-  // CHECK-NEXT:  %0 = rtl.extract %arg1 from 2 : (i3) -> i1
+func @concat_fold_2(%arg1: i3, %arg2: i1) -> i9 {
+  // CHECK-NEXT:  %0 = rtl.extract %arg0 from 2 : (i3) -> i1
   %b = rtl.sext %arg1 : (i3) -> i8
-  // CHECK-NEXT:  = rtl.concat %c0_i3, %arg0, %0, %0, %0, %0, %0, %arg1, %arg2 : (i3, i4, i1, i1, i1, i1, i1, i3, i1) -> i16
-  %c = rtl.concat %a, %b, %arg2 : (i7, i8, i1) -> i16
-  return %c : i16
+  // CHECK-NEXT:  = rtl.concat %0, %0, %0, %0, %0, %arg0, %arg1 : (i1, i1, i1, i1, i1, i3, i1) -> i9
+  %c = rtl.concat %b, %arg2 : (i8, i1) -> i9
+  return %c : i9
 }
 
 // CHECK-LABEL: func @concat_fold_3

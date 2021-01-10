@@ -683,7 +683,6 @@ private:
   SubExprInfo visitComb(XorROp op) { return emitUnary(op, "^", true); }
 
   SubExprInfo visitComb(SExtOp op);
-  SubExprInfo visitComb(ZExtOp op);
   SubExprInfo visitComb(ConcatOp op);
   SubExprInfo visitComb(ExtractOp op);
   SubExprInfo visitComb(ICmpOp op);
@@ -848,22 +847,9 @@ SubExprInfo ExprEmitter::visitComb(SExtOp op) {
   }
 
   // Otherwise, this is a sign extension of a general expression.
-  // TODO(QoI): Instead of emitting the expression multiple times, we should
-  // emit it to a known name.
   os << "{{" << (destWidth - inWidth) << '{';
   emitSubExpr(op.getOperand(), Unary);
   os << '[' << (inWidth - 1) << "]}}, ";
-  emitSubExpr(op.getOperand(), LowestPrecedence);
-  os << '}';
-  return {Unary, IsUnsigned};
-}
-
-SubExprInfo ExprEmitter::visitComb(ZExtOp op) {
-  auto inWidth = op.getOperand().getType().getIntOrFloatBitWidth();
-  auto destWidth = op.getType().getIntOrFloatBitWidth();
-
-  // A zero extension just fills the top with numbers.
-  os << '{' << (destWidth - inWidth) << "'d0, ";
   emitSubExpr(op.getOperand(), LowestPrecedence);
   os << '}';
   return {Unary, IsUnsigned};

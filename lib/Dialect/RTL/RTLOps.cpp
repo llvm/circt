@@ -668,14 +668,12 @@ void ConstantOp::getAsmResultNames(
 // Unary Operations
 //===----------------------------------------------------------------------===//
 
-// Verify SExtOp and ZExtOp.
-static LogicalResult verifyExtOp(Operation *op) {
+static LogicalResult verifySExtOp(SExtOp op) {
   // The source must be smaller than the dest type.  Both are already known to
   // be signless integers.
-  auto srcType = op->getOperand(0).getType().cast<IntegerType>();
-  auto dstType = op->getResult(0).getType().cast<IntegerType>();
-  if (srcType.getWidth() >= dstType.getWidth()) {
-    op->emitOpError("extension must increase bitwidth of operand");
+  auto srcType = op.getOperand().getType().cast<IntegerType>();
+  if (srcType.getWidth() >= op.getType().getWidth()) {
+    op.emitOpError("extension must increase bitwidth of operand");
     return failure();
   }
 

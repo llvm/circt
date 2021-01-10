@@ -19,7 +19,8 @@ module attributes {firrtl.mainModule = "Simple"} {
     %node = firrtl.node %m0 : !firrtl.uint<0>
 
     // CHECK-NEXT: %c0_i4 = rtl.constant(0 : i4) : i4
-    // CHECK-NEXT: [[UIN3EXT:%.+]] = rtl.zext %uin3 : (i3) -> i4
+    // CHECK-NEXT: %false = rtl.constant(false) : i1
+    // CHECK-NEXT: [[UIN3EXT:%.+]] = rtl.concat %false, %uin3 : (i1, i3) -> i4
     // CHECK-NEXT: [[ADDRES:%.+]] = rtl.add %c0_i4, [[UIN3EXT]] : i4
     %1 = firrtl.add %uin0c, %uin3c : (!firrtl.uint<0>, !firrtl.uint<3>) -> !firrtl.uint<4>
     %c1 = firrtl.stdIntCast %1 : (!firrtl.uint<4>) -> i4

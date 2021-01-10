@@ -1055,7 +1055,8 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
   if (valueFIRType.cast<IntType>().isSigned())
     return builder->createOrFold<rtl::SExtOp>(resultType, result);
 
-  return builder->createOrFold<rtl::ZExtOp>(resultType, result);
+  auto zero = builder->create<rtl::ConstantOp>(APInt(destWidth - srcWidth, 0));
+  return builder->createOrFold<rtl::ConcatOp>(zero, result);
 }
 
 /// Set the lowered value of 'orig' to 'result', remembering this in a map.

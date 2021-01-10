@@ -61,12 +61,20 @@ TODO: Spotlight on module.  Allows arbitrary types for ports.
 TODO: Why is add variadic?  Why consistent operand types instead of allowing
 implicit extensions?
 
-** No Replication Operator **
+** No Replication or ZExt Operators **
 
 System Verilog 11.4.12.1 describes a replication operator, which replicates an
 operand a constant N times.  We decided that this was redundant and just sugar
 for the `rtl.concat` operator, so we just use `rtl.concat` (with the same 
 operand) instead.
+
+We also chose to not have a zero extension operator, since it is strictly
+duplicative with `concat(zero, value)`.  The presence of such an operator adds a
+lot of complexity to canonicalization patterns and doesn't add any expressive
+power.  The `rtl.sext` operator exists because it efficiently models large
+sign extensions which are common, and would require many operands if modeled as
+a concat operator (in contrast, a zero extension always requires exactly one
+zero value).
 
 ** Zero Bit Integers **
 
