@@ -1166,8 +1166,10 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
 
 LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   auto operand = getLoweredValue(op.input());
-  if (!operand)
-    return failure();
+  if (!operand) {
+    return handleZeroBit(op.input(),
+                         [&]() { return setLowering(op, Value()); });
+  }
 
   // Node operations are logical noops, but can carry a name.  If a name is
   // present then we lower this into a wire and a connect, otherwise we just
@@ -1198,6 +1200,8 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   auto resultType = lowerType(op.result().getType());
   if (!resultType)
     return failure();
+  if (resultType.isInteger(0))
+    return setLowering(op, Value());
 
   auto regResult = builder->create<sv::RegOp>(resultType, op.nameAttr());
   setLowering(op, regResult);
@@ -1221,6 +1225,9 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
 
 LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   auto resultType = lowerType(op.result().getType());
+  if (resultType && resultType.isInteger(0))
+    return setLowering(op, Value());
+
   Value clockVal = getLoweredValue(op.clockVal());
   Value resetSignal = getLoweredValue(op.resetSignal());
   Value resetValue = getLoweredValue(op.resetValue());
@@ -1564,8 +1571,15 @@ LogicalResult FIRRTLLowering::visitExpr(AnalogInOutCastOp op) {
 
 LogicalResult FIRRTLLowering::visitExpr(CvtPrimOp op) {
   auto operand = getLoweredValue(op.getOperand());
-  if (!operand)
-    return failure();
+  if (!operand) {
+    return handleZeroBit(op.getOperand(), [&]() {
+      // Unsigned zero bit to Signed is 1b0.
+      if (op.getOperand().getType().cast<IntType>().isUnsigned())
+        return setLoweringTo<rtl::ConstantOp>(op, APInt(1, 0));
+      // Signed->Signed is a zero bit value.
+      return setLowering(op, Value());
+    });
+  }
 
   // Signed to signed is a noop.
   if (op.getOperand().getType().cast<IntType>().isSigned())
@@ -1591,8 +1605,12 @@ LogicalResult FIRRTLLowering::visitExpr(NegPrimOp op) {
   // the input is unsigned.
   // -x  ---> 0-sext(x)
   auto operand = getLoweredValue(op.input());
-  if (!operand)
-    return failure();
+  if (!operand) {
+    return handleZeroBit(op.getOperand(), [&]() {
+      // Negate of a zero bit value is 1b0.
+      return setLoweringTo<rtl::ConstantOp>(op, APInt(1, 0));
+    });
+  }
   auto resultType = lowerType(op.getType());
   operand = builder->createOrFold<rtl::SExtOp>(resultType, operand);
 
@@ -1823,8 +1841,13 @@ LogicalResult FIRRTLLowering::visitExpr(HeadPrimOp op) {
 
 LogicalResult FIRRTLLowering::visitExpr(ShlPrimOp op) {
   auto input = getLoweredValue(op.input());
-  if (!input)
-    return failure();
+  if (!input) {
+    return handleZeroBit(op.input(), [&]() {
+      if (op.amount() == 0)
+        return failure();
+      return setLoweringTo<rtl::ConstantOp>(op, APInt(op.amount(), 0));
+    });
+  }
 
   // Handle the degenerate case.
   if (op.amount() == 0)
