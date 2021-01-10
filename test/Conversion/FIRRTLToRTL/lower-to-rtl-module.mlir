@@ -269,4 +269,25 @@ firrtl.circuit "Simple" {
     // CHECK: firrtl.bits
     // CHECK: firrtl.connect
   }
+
+  // CHECK-LABEL: rtl.module @ZeroWidthPorts(
+  // CHECK: %inA: i4, %inB: i0, %outb: !rtl.inout<i0>) -> (%outa: i4) {
+  firrtl.module @ZeroWidthPorts(%inA: !firrtl.uint<4>,
+                                %inB: !firrtl.uint<0>,
+                                %outa: !firrtl.flip<uint<4>>,
+                                %outb: !firrtl.flip<uint<0>>) {
+    // CHECK-NEXT: %0 = firrtl.stdIntCast %inA : (i4) -> !firrtl.uint<4>
+    // CHECK-NEXT: %1 = firrtl.stdIntCast %inB : (i0) -> !firrtl.uint<0>
+    // CHECK-NEXT: %2 = firrtl.wire : !firrtl.flip<uint<0>>
+
+    // CHECK: [[OUTA:%.+]] = firrtl.mul %0, %1 : (!firrtl.uint<4>, !firrtl.uint<0>) -> !firrtl.uint<4>
+    %0 = firrtl.mul %inA, %inB : (!firrtl.uint<4>, !firrtl.uint<0>) -> !firrtl.uint<4>
+    firrtl.connect %outa, %0 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+
+    %1 = firrtl.mul %inB, %inB : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<0>
+    firrtl.connect %outb, %1 : !firrtl.flip<uint<0>>, !firrtl.uint<0>
+
+    // CHECK: [[OUTAC:%.+]] = firrtl.stdIntCast [[OUTA]] : (!firrtl.uint<4>) -> i4
+    // CHECK-NEXT: rtl.output %5 : i4
+  }
 }
