@@ -488,7 +488,7 @@ static LogicalResult verifyModuleSignature(Operation *op) {
 
 static LogicalResult verifyFModuleOp(FModuleOp op) {
   // The parent op must be a circuit op.
-  auto parentOp = dyn_cast_or_null<CircuitOp>(op.getParentOp());
+  auto parentOp = dyn_cast_or_null<CircuitOp>(op->getParentOp());
   if (!parentOp)
     return op.emitOpError("should be embedded into a 'firrtl.circuit'");
 
@@ -529,7 +529,7 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
 /// Lookup the module or extmodule for the symbol.  This returns null on
 /// invalid IR.
 Operation *InstanceOp::getReferencedModule() {
-  auto circuit = getParentOfType<CircuitOp>();
+  auto circuit = (*this)->getParentOfType<CircuitOp>();
   if (!circuit)
     return nullptr;
 
@@ -540,7 +540,7 @@ Operation *InstanceOp::getReferencedModule() {
 static LogicalResult verifyInstanceOp(InstanceOp instance) {
 
   // Check that this instance is inside a module.
-  auto module = instance.getParentOfType<FModuleOp>();
+  auto module = instance->getParentOfType<FModuleOp>();
   if (!module) {
     instance.emitOpError("should be embedded in a 'firrtl.module'");
     return failure();

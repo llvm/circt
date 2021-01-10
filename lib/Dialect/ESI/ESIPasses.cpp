@@ -279,7 +279,7 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
     if (bufferName) {
       SmallString<64> stageName(
           {bufferName.getValue(), "_stage", std::to_string(i)});
-      stage.setAttr("name", StringAttr::get(stageName, rewriter.getContext()));
+      stage->setAttr("name", StringAttr::get(stageName, rewriter.getContext()));
     }
     input = stage;
   }
@@ -571,7 +571,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
       rewriter.create<UnwrapValidReady>(loc, stage.input(), wrapReady);
 
   StringRef pipeStageName = "pipelineStage";
-  if (auto name = stage.getAttrOfType<StringAttr>("name"))
+  if (auto name = stage->getAttrOfType<StringAttr>("name"))
     pipeStageName = name.getValue();
 
   // Instantiate the "ESI_PipelineStage" external module.
@@ -786,7 +786,7 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
       ArrayType::get(rewriter.getI1Type(), recvTypeSchema.size());
 
   // Create replacement Cosim_Endpoint instance.
-  StringAttr nameAttr = ep.getAttr("name").dyn_cast_or_null<StringAttr>();
+  StringAttr nameAttr = ep->getAttr("name").dyn_cast_or_null<StringAttr>();
   StringRef name = nameAttr ? nameAttr.getValue() : "cosimEndpoint";
   Value epInstInputs[] = {
       ep.clk(),           ep.rstn(),

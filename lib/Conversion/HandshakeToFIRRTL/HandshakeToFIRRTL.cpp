@@ -416,7 +416,7 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
 /// Check whether a submodule with the same name has been created elsewhere.
 /// Return the matched submodule if true, otherwise return nullptr.
 static FModuleOp checkSubModuleOp(FModuleOp topModuleOp, Operation *oldOp) {
-  for (auto &op : topModuleOp.getParentRegion()->front()) {
+  for (auto &op : topModuleOp->getParentRegion()->front()) {
     if (auto subModuleOp = dyn_cast<FModuleOp>(op)) {
       if (getSubModuleName(oldOp) == subModuleOp.getName()) {
         return subModuleOp;
@@ -1289,7 +1289,7 @@ bool HandshakeBuilder::visitHandshake(handshake::ConstantOp op) {
   Value resultData = resultSubfields[2];
 
   auto constantType = FlipType::get(resultData.getType().cast<FIRRTLType>());
-  auto constantValue = op.getAttrOfType<IntegerAttr>("value").getValue();
+  auto constantValue = op->getAttrOfType<IntegerAttr>("value").getValue();
 
   rewriter.create<ConnectOp>(insertLoc, resultValid, controlValid);
   rewriter.create<ConnectOp>(insertLoc, controlReady, resultReady);
