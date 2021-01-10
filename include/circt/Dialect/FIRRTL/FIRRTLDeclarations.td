@@ -54,7 +54,7 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
                        Confined<I32Attr, [IntMinValue<1>]>:$writeLatency,
                        I64Attr:$depth, RUWAttr:$ruw,
                        OptionalAttr<StrAttr>:$name);
-  let results = (outs FIRRTLType:$result);
+  let results = (outs BundleType:$result);
 
   let assemblyFormat = "$ruw attr-dict `:` type($result)";
 

@@ -918,7 +918,7 @@ SubExprInfo ExprEmitter::visitComb(ICmpOp op) {
 
 SubExprInfo ExprEmitter::visitComb(ExtractOp op) {
   unsigned loBit = op.lowBit();
-  unsigned hiBit = loBit + op.getType().cast<IntegerType>().getWidth() - 1;
+  unsigned hiBit = loBit + op.getType().getWidth() - 1;
 
   auto x = emitSubExpr(op.input(), LowestPrecedence);
   assert(x.precedence == Symbol &&
@@ -962,7 +962,7 @@ SubExprInfo ExprEmitter::visitComb(ConstantOp op) {
     isNegated = true;
   }
 
-  os << op.getType().cast<IntegerType>().getWidth() << '\'';
+  os << op.getType().getWidth() << '\'';
 
   // Emit this as a signed constant if the caller would prefer that.
   if (signPreference == RequireSigned)
@@ -985,7 +985,7 @@ SubExprInfo ExprEmitter::visitComb(ConstantOp op) {
 SubExprInfo ExprEmitter::visitComb(ArraySliceOp op) {
   auto arrayPrec = emitSubExpr(op.input(), Symbol);
 
-  unsigned dstWidth = op.getType().cast<ArrayType>().getSize();
+  unsigned dstWidth = op.getType().getSize();
   os << '[';
   emitSubExpr(op.lowIndex(), LowestPrecedence);
   os << "+:" << dstWidth << ']';

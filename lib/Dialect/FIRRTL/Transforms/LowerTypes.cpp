@@ -256,9 +256,8 @@ void FIRRTLTypesLowering::visitDecl(InstanceOp op) {
 // partial suffix.
 void FIRRTLTypesLowering::visitExpr(SubfieldOp op) {
   Value input = op.input();
-  Value result = op.result();
   StringRef fieldname = op.fieldname();
-  FIRRTLType resultType = result.getType().cast<FIRRTLType>();
+  FIRRTLType resultType = op.getType();
 
   // Flatten any nested bundle types the usual way.
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
@@ -279,10 +278,10 @@ void FIRRTLTypesLowering::visitExpr(SubfieldOp op) {
     // If we are at the leaf of a bundle.
     if (partialSuffix.empty())
       // Replace the result with the flattened value.
-      result.replaceAllUsesWith(newValue);
+      op.replaceAllUsesWith(newValue);
     else
       // Map the partial suffix for the result value to the flattened value.
-      setBundleLowering(result, partialSuffix, newValue);
+      setBundleLowering(op, partialSuffix, newValue);
   }
 
   // Remember to remove the original op.
