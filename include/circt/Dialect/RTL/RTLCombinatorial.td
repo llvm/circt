@@ -41,10 +41,12 @@ def ConstantOp
     /// matching a specified MLIR IntegerType.  This shouldn't be used for
     /// general constant folding because it only works with values that can be
     /// expressed in an int64_t.  Use APInt's instead.
-    OpBuilderDAG<(ins "int64_t":$value, "IntegerType":$type)>
+    OpBuilderDAG<(ins "Type":$type, "int64_t":$value)>
   ];
   let extraClassDeclaration = [{
-    APInt getValue() { return getAttrOfType<IntegerAttr>("value").getValue(); }
+    APInt getValue() {
+      return (*this)->getAttrOfType<IntegerAttr>("value").getValue();
+    }
   }];
   let hasFolder = true;
   let verifier = "return ::verifyConstantOp(*this);";
@@ -233,20 +235,7 @@ def SExtOp : RTLOp<"sext", [NoSideEffect]> {
     "$input attr-dict `:` functional-type($input, $result)";
 
   let hasFolder = true;
-  let verifier = "return ::verifyExtOp(*this);";
-}
-
-def ZExtOp : RTLOp<"zext", [NoSideEffect]> {
-  let summary = "Zero extend an integer to a larger integer";
-
-  let arguments = (ins RTLIntegerType:$input);
-  let results = (outs RTLIntegerType:$result);
-
-  let assemblyFormat =
-    "$input attr-dict `:` functional-type($input, $result)";
-
-  let hasFolder = true;
-  let verifier = "return ::verifyExtOp(*this);";
+  let verifier = "return ::verifySExtOp(*this);";
 }
 
 //===----------------------------------------------------------------------===//

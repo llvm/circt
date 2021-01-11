@@ -14,14 +14,15 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
                                        FirstAttrDerivedResultType]> {
   let summary = "Produce a constant value";
   let description = [{
-    The constant operation produces a constant value of SInt or UInt type.
+    The constant operation produces a constant value of SInt or UInt type, it
+    never produces a zero bit wide result.
     ```
       %result = firrtl.constant 42 : t1
     ```
     }];
 
   let arguments = (ins APIntAttr:$value);
-  let results = (outs IntType:$result);
+  let results = (outs NonZeroIntType:$result);
 
   let assemblyFormat = "`(` $value `)` attr-dict `:` type($result)";
 
@@ -62,7 +63,13 @@ def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
   }];
 }
 
-def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
+class IndexConstraint<string value, string resultValue>
+  : TypesMatchWith<"type should be element of array type",
+                   value, resultValue,
+                   "firrtl::getArrayElementType($_self)">;
+
+def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect, 
+                                       IndexConstraint<"input", "result">]> {
   let summary = "Extract an element of a vector value";
   let description = [{
     The subindex expression statically refers, by index, to a subelement
@@ -70,16 +77,16 @@ def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
     integer and cannot be equal to or exceed the length of the vector it
     indexes.
     ```
-      %result = firrtl.subindex %input[index] : t1, t2
+      %result = firrtl.subindex %input[index] : t1
     ```
     }];
 
-  let arguments = (ins FIRRTLType:$input, I32Attr:$index);
+  let arguments = (ins FVectorType:$input, I32Attr:$index);
   let results = (outs FIRRTLType:$result);
 
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat =
-     "$input `[` $index `]` attr-dict `:` functional-type($input, $result)";
+     "$input `[` $index `]` attr-dict `:` type($input)";
 
   let extraClassDeclaration = [{
     /// Compute the result of a Subindex operation on a value of the specified
@@ -93,7 +100,8 @@ def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
   }];
 }
 
-def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect]> {
+def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect, 
+                                         IndexConstraint<"input", "result">]> {
   let summary = "Extract a dynamic element of a vector value";
   let description = [{
     The subaccess expression dynamically refers to a subelement of a
@@ -109,7 +117,7 @@ def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect]> {
 
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat =
-     "$input `[` $index `]` attr-dict `:` functional-type(operands, $result)";
+     "$input `[` $index `]` attr-dict `:` type($input) `,` type($index)";
 
   let extraClassDeclaration = [{
     /// Compute the result of a Subaccess operation on a value of the specified
@@ -170,42 +178,47 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
 def AddPrimOp : BinaryPrimOp<"add", IntType, IntType, IntType, [Commutative]>;
 def SubPrimOp : BinaryPrimOp<"sub", IntType, IntType, IntType>;
 def MulPrimOp : BinaryPrimOp<"mul", IntType, IntType, IntType, [Commutative]>;
-let hasFolder = 1 in
-let description = [{
+def DivPrimOp : BinaryPrimOp<"div", IntType, IntType, IntType> {
+  let hasFolder = 1;
+  let description = [{
+    Divides the first argument (the numerator) by the second argument
+    (the denominator) truncating the result (rounding towards zero).
 
-  Divides the first argument (the numerator) by the second argument
-  (the denominator) truncating the result (rounding towards zero).
+    **If the denominator is zero, the result is undefined.**
 
-  **If the denominator is zero, the result is undefined.**
-
-  The compiler may optimize this undefined behavior in any way it
-  wants. Notably `div(a, a)` will be optimized to `1`. This may cause
-  erroneous formal equivalence mismatches between unoptimized and
-  optimized FIRRTL dialects that are separately converted to Verilog.
-
-}] in
-def DivPrimOp : BinaryPrimOp<"div", IntType, IntType, IntType>;
+    The compiler may optimize this undefined behavior in any way it
+    wants. Notably `div(a, a)` will be optimized to `1`. This may cause
+    erroneous formal equivalence mismatches between unoptimized and
+    optimized FIRRTL dialects that are separately converted to Verilog.
+  }];
+}
 def RemPrimOp : BinaryPrimOp<"rem", IntType, IntType, IntType>;
 
-let hasFolder = 1 in
-def AndPrimOp : BinaryPrimOp<"and", IntType, IntType, UIntType, [Commutative]>;
-let hasFolder = 1 in
-def OrPrimOp  : BinaryPrimOp<"or",  IntType, IntType, UIntType, [Commutative]>;
-let hasFolder = 1 in
-def XorPrimOp : BinaryPrimOp<"xor", IntType, IntType, UIntType, [Commutative]>;
+def AndPrimOp : BinaryPrimOp<"and", IntType, IntType, UIntType, [Commutative]> {
+  let hasFolder = 1;
+}
+def OrPrimOp  : BinaryPrimOp<"or",  IntType, IntType, UIntType, [Commutative]> {
+  let hasFolder = 1;
+}
+def XorPrimOp : BinaryPrimOp<"xor", IntType, IntType, UIntType, [Commutative]> {
+  let hasFolder = 1;
+}
 
 // Comparison Operations
 def LEQPrimOp : BinaryPrimOp<"leq", IntType, IntType, UInt1Type>;
 def LTPrimOp  : BinaryPrimOp<"lt",  IntType, IntType, UInt1Type>;
 def GEQPrimOp : BinaryPrimOp<"geq", IntType, IntType, UInt1Type>;
 def GTPrimOp  : BinaryPrimOp<"gt",  IntType, IntType, UInt1Type>;
-let hasFolder = 1 in
-def EQPrimOp  : BinaryPrimOp<"eq",  IntType, IntType, UInt1Type, [Commutative]>;
-let hasFolder = 1 in
-def NEQPrimOp : BinaryPrimOp<"neq", IntType, IntType, UInt1Type, [Commutative]>;
+def EQPrimOp  : BinaryPrimOp<"eq",  IntType, IntType, UInt1Type, [Commutative]>{
+  let hasFolder = 1;
+}
+def NEQPrimOp : BinaryPrimOp<"neq", IntType, IntType, UInt1Type, [Commutative]>{
+  let hasFolder = 1;
+}
 
-let hasCanonicalizer = 1 in
-def CatPrimOp   : BinaryPrimOp<"cat", IntType, IntType, UIntType>;
+def CatPrimOp   : BinaryPrimOp<"cat", IntType, IntType, UIntType> {
+  let hasCanonicalizer = 1;
+}
 def DShlPrimOp  : BinaryPrimOp<"dshl", IntType, UIntType, IntType>;
 def DShlwPrimOp : BinaryPrimOp<"dshlw", IntType, UIntType, IntType>;
 def DShrPrimOp  : BinaryPrimOp<"dshr", IntType, UIntType, IntType>;
@@ -255,9 +268,27 @@ def CvtPrimOp : UnaryPrimOp<"cvt", IntType, SIntType>;
 def NegPrimOp : UnaryPrimOp<"neg", IntType, SIntType>;
 def NotPrimOp : UnaryPrimOp<"not", IntType, UIntType>;
 
-def AndRPrimOp : UnaryPrimOp<"andr", IntType, UIntType>;
-def OrRPrimOp : UnaryPrimOp<"orr", IntType, UIntType>;
-def XorRPrimOp : UnaryPrimOp<"xorr", IntType, UIntType>;
+def AndRPrimOp : UnaryPrimOp<"andr", IntType, UIntType> {
+  let description = [{
+    Horizontally reduce a value to one bit, using the 'and' operation to merge
+    bits.  `andr(x)` is equivalent to `concat(x, 1b1) == ~0`.  As such, it
+    returns 1 for zero-bit-wide operands.
+  }];
+}
+def OrRPrimOp : UnaryPrimOp<"orr", IntType, UIntType> {
+  let description = [{
+    Horizontally reduce a value to one bit, using the 'or' operation to merge
+    bits.  `orr(x)` is equivalent to `concat(x, 1b0) != 0`.  As such, it returns
+    0 for zero-bit-wide operands.
+  }];
+}
+def XorRPrimOp : UnaryPrimOp<"xorr", IntType, UIntType> {
+  let description = [{
+    Horizontally reduce a value to one bit, using the 'xor' operation to merge
+    bits.  `xorr(x)` is equivalent to `popcount(concat(x, 1b0)) & 1`.  As such,
+    it returns 0 for zero-bit-wide operands.
+  }];
+}
 
 //===----------------------------------------------------------------------===//
 // Other Operations
@@ -540,14 +571,20 @@ def AnalogInOutCastOp : FIRRTLOp<"analogInOutCast", [NoSideEffect]> {
 
 // MLIR specific pseudo ops.
 
+
+class PassiveConstraint<string value, string resultValue>
+  : TypesMatchWith<"type should be a passive type",
+                   value, resultValue,
+                   "firrtl::getPassiveType($_self)">;
+
 // Convert a value with non-passive type to a value with passive type.
-def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect]> {
+def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect, 
+                               PassiveConstraint<"input", "result">]> {
   let arguments = (ins FIRRTLType:$input);
   let results = (outs PassiveType:$result);
 
   let hasFolder = 1;
-  let assemblyFormat =
-    "$input attr-dict `:` functional-type($input, $result)";
+  let assemblyFormat = "$input attr-dict `:` type($input)";
 
   let builders = [
     OpBuilderDAG<(ins "Value":$input)>
@@ -555,10 +592,11 @@ def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect]> {
 }
 
 // Convert a passive value to a non-passive type.
-def AsNonPassivePrimOp : FIRRTLOp<"asNonPassive", [NoSideEffect]> {
+def AsNonPassivePrimOp : FIRRTLOp<"asNonPassive", [NoSideEffect,
+                                  PassiveConstraint<"result", "input">]> {
   let arguments = (ins PassiveType:$input);
   let results = (outs FIRRTLType:$result);
 
   let hasFolder = 1;
-  let assemblyFormat = "$input attr-dict `:` functional-type($input, $result)";
+  let assemblyFormat = "$input attr-dict `:` type($result)";
 }

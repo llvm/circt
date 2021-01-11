@@ -22,7 +22,6 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/TinyPtrVector.h"
-
 using namespace circt;
 using namespace firrtl;
 
@@ -72,6 +71,12 @@ static Value castFromFIRRTLType(Value val, Type type,
   // Strip off Flip type if needed.
   val = builder.createOrFold<AsPassivePrimOp>(val);
   return builder.createOrFold<StdIntCastOp>(type, val);
+}
+
+/// Return true if the specified FIRRTL type is a sized type (Int or Analog)
+/// with zero bits.
+static bool isZeroBitFIRRTLType(Type type) {
+  return type.cast<FIRRTLType>().getPassiveType().getBitWidthOrSentinel() == 0;
 }
 
 //===----------------------------------------------------------------------===//
@@ -172,8 +177,9 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   // Now that the modules are moved over, remove the Circuit.  We pop the 'main
   // module' specified in the Circuit into an attribute on the top level module.
-  getOperation().setAttr("firrtl.mainModule",
-                         StringAttr::get(circuit.name(), circuit.getContext()));
+  getOperation()->setAttr(
+      "firrtl.mainModule",
+      StringAttr::get(circuit.name(), circuit.getContext()));
   circuit.erase();
 }
 
@@ -256,7 +262,6 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
   size_t numResults = 0;
   for (auto firrtlPort : firrtlPorts) {
     rtl::ModulePortInfo rtlPort;
-
     rtlPort.name = firrtlPort.name;
     rtlPort.type = lowerType(firrtlPort.type);
 
@@ -265,6 +270,11 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
       moduleOp->emitError("cannot lower this port type to RTL");
       return failure();
     }
+
+    // If this is a zero bit port, just drop it.  It doesn't matter if it is
+    // input, output, or inout.  We don't want these at the RTL level.
+    if (rtlPort.type.isInteger(0))
+      continue;
 
     // Figure out the direction of the port.
     if (firrtlPort.isOutput()) {
@@ -386,6 +396,11 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   if (connects.empty())
     return {};
 
+  // Don't special case zero-bit results.
+  auto loweredType = lowerType(flipValue.getType());
+  if (loweredType.isInteger(0))
+    return {};
+
   // We need to see if we can move all of the computation that feeds the
   // connects to be "above" the insertion point to avoid introducing cycles that
   // will break LowerToRTL.  Consider optimizing away a wire for inputs on an
@@ -454,14 +469,11 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
     results.push_back(connectSrc);
   }
 
-  // If there was only one source, just return it.  Otherwise emit an rtl.merge
-  // right before the output.
-  auto loweredType = lowerType(flipValue.getType());
-
   // Convert from FIRRTL type to builtin type to do the merge.
   for (auto &result : results)
     result = castFromFIRRTLType(result, loweredType, builder);
 
+  // Folding merge of one value just returns the value.
   return builder.createOrFold<rtl::MergeOp>(results);
 }
 
@@ -504,32 +516,53 @@ void FIRRTLModuleLowering::lowerModuleBody(
     // Inputs and outputs are both modeled as arguments in the FIRRTL level.
     auto oldArg = oldModule.body().getArgument(firrtlArg++);
 
-    Value newArg;
-    if (!port.isOutput()) {
+    bool isZeroWidth =
+        port.type.cast<FIRRTLType>().getBitWidthOrSentinel() == 0;
+
+    if (!port.isOutput() && !isZeroWidth) {
       // Inputs and InOuts are modeled as arguments in the result, so we can
-      // just map them over.
-      newArg = newModule.body().getArgument(nextNewArg++);
+      // just map them over.  We model zero bit outputs as inouts.
+      Value newArg = newModule.body().getArgument(nextNewArg++);
 
       // Cast the argument to the old type, reintroducing sign information in
       // the rtl.module body.
       newArg = castToFIRRTLType(newArg, oldArg.getType(), bodyBuilder);
-    } else if (auto value = tryEliminatingConnectsToValue(oldArg, outputOp)) {
+      // Switch all uses of the old operands to the new ones.
+      oldArg.replaceAllUsesWith(newArg);
+      continue;
+    }
+
+    // We lower zero width inout and outputs to a wire that isn't connected to
+    // anything outside the module.  Inputs are lowered to zero.
+    if (isZeroWidth && port.isInput()) {
+      Value newArg = bodyBuilder.create<WireOp>(FlipType::get(port.type),
+                                                /*name=*/StringAttr());
+      newArg = bodyBuilder.create<AsPassivePrimOp>(newArg);
+      oldArg.replaceAllUsesWith(newArg);
+      continue;
+    }
+
+    if (auto value = tryEliminatingConnectsToValue(oldArg, outputOp)) {
       // If we were able to find the value being connected to the output,
       // directly use it!
       outputs.push_back(value);
       assert(oldArg.use_empty() && "should have removed all uses of oldArg");
       continue;
-    } else {
-      // Outputs need a temporary wire so they can be connect'd to, which we
-      // then return.
-      newArg = bodyBuilder.create<WireOp>(port.type, /*name=*/StringAttr());
-      auto output =
-          castFromFIRRTLType(newArg, lowerType(port.type), outputBuilder);
-      outputs.push_back(output);
     }
 
+    // Outputs need a temporary wire so they can be connect'd to, which we
+    // then return.
+    Value newArg = bodyBuilder.create<WireOp>(port.type,
+                                              /*name=*/StringAttr());
     // Switch all uses of the old operands to the new ones.
     oldArg.replaceAllUsesWith(newArg);
+
+    // Don't output zero bit results or inouts.
+    auto resultRTLType = lowerType(port.type);
+    if (!resultRTLType.isInteger(0)) {
+      auto output = castFromFIRRTLType(newArg, resultRTLType, outputBuilder);
+      outputs.push_back(output);
+    }
   }
 
   // Update the rtl.output terminator with the list of outputs we have.
@@ -561,7 +594,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
 
     // We found an instance - lower it.  On successful return there will be
     // zero uses and we can remove the operation.
-    lowerInstance(instance, oldModule.getParentOfType<CircuitOp>(),
+    lowerInstance(instance, oldModule->getParentOfType<CircuitOp>(),
                   oldToNewModuleMap);
     opIt = Block::iterator(cursor);
   }
@@ -639,13 +672,11 @@ void FIRRTLModuleLowering::lowerInstance(
     }
 
     if (port.isOutput()) {
-      // outputs become results.
-      resultTypes.push_back(portType);
+      // Drop zero bit results.
+      if (!portType.isInteger(0))
+        resultTypes.push_back(portType);
       continue;
     }
-
-    assert(port.isInput() &&
-           "TODO: Handle inout ports when we can lower mid FIRRTL bundles");
 
     // If there is a single subfield projection for this input, and if we can
     // find the connects to it, then we can directly materialize it.
@@ -667,7 +698,10 @@ void FIRRTLModuleLowering::lowerInstance(
     // something to connect to.
     auto name = builder.getStringAttr(port.getName().str() + ".wire");
     auto wire = builder.create<WireOp>(port.type, name);
-    operands.push_back(castFromFIRRTLType(wire, portType, builder));
+
+    // Drop zero bit input/inout ports.
+    if (!portType.isInteger(0))
+      operands.push_back(castFromFIRRTLType(wire, portType, builder));
 
     // Replace all the uses of the subfields with the wire we just created.
     for (auto *subfield : subfields) {
@@ -696,19 +730,26 @@ void FIRRTLModuleLowering::lowerInstance(
     if (!port.isOutput())
       continue;
 
+    auto resultType = FlipType::get(port.type);
+    Value resultVal;
+    if (port.type.getPassiveType().getBitWidthOrSentinel() != 0) {
+      // Cast the value to the right signedness and flippedness.
+      resultVal = newInst.getResult(resultNo++);
+      resultVal = castToFIRRTLType(resultVal, resultType, builder);
+    } else {
+      // Zero bit results are just replaced with a wire.
+      resultVal = builder.create<WireOp>(resultType,
+                                         /*name=*/StringAttr());
+    }
+
     // Replace any subfield uses of this output port with the returned value
     // directly.
     auto &subfields = subfieldsByPortIndex[portIndex];
     for (auto *subfield : subfields) {
-      auto resultVal = newInst.getResult(resultNo);
-      // Cast the value to the right signedness and flippedness.
-      resultVal =
-          castToFIRRTLType(resultVal, FlipType::get(port.type), builder);
       subfield->getResult(0).replaceAllUsesWith(resultVal);
       subfield->erase();
     }
     subfields.clear();
-    ++resultNo;
   }
 
   // Done with the oldInstance!
@@ -739,7 +780,8 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitStmt;
 
   // Lowering hooks.
-  void handleUnloweredOp(Operation *op);
+  enum UnloweredOpResult { AlreadyLowered, NowLowered, LoweringFailure };
+  UnloweredOpResult handleUnloweredOp(Operation *op);
   LogicalResult visitExpr(ConstantOp op);
   LogicalResult visitExpr(SubfieldOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
@@ -895,9 +937,17 @@ void FIRRTLLowering::runOnOperation() {
     if (succeeded(dispatchVisitor(&op))) {
       opsToRemove.push_back(&op);
     } else {
-      // If lowering didn't succeed, then make sure to rewrite operands that
-      // refer to lowered values.
-      handleUnloweredOp(&op);
+      switch (handleUnloweredOp(&op)) {
+      case AlreadyLowered:
+        break;         // Something like rtl.output, which is already lowered.
+      case NowLowered: // Something handleUnloweredOp removed.
+        opsToRemove.push_back(&op);
+        break;
+      case LoweringFailure:
+        // If lowering failed, don't remove *anything* we've lowered so far,
+        // there may be uses, and the pass will fail anyway.
+        opsToRemove.clear();
+      }
     }
   }
   builder = nullptr;
@@ -920,34 +970,28 @@ void FIRRTLLowering::runOnOperation() {
 // Helpers
 //===----------------------------------------------------------------------===//
 
+/// Zero bit operands end up looking like failures from getLoweredValue.  This
+/// helper function invokes the closure specified if the operand was actually
+/// zero bit, or returns failure() if it was some other kind of failure.
+static LogicalResult handleZeroBit(Value failedOperand,
+                                   std::function<LogicalResult()> fn) {
+  assert(failedOperand && failedOperand.getType().isa<FIRRTLType>() &&
+         "Should be called on the failed FIRRTL operand");
+  if (!isZeroBitFIRRTLType(failedOperand.getType()))
+    return failure();
+  return fn();
+}
+
 /// Return the lowered RTL value corresponding to the specified original value.
-/// This returns a null value for FIRRTL values that cannot be lowered, e.g.
+/// This returns a null value for FIRRTL values that haven't be lowered, e.g.
 /// unknown width integers.  This returns rtl::inout type values if present, it
 /// does not implicitly read from them.
 Value FIRRTLLowering::getPossiblyInoutLoweredValue(Value value) {
-  // All FIRRTL dialect values have FIRRTL types, so if we see something else
-  // mixed in, it must be something we can't lower.  Just return it directly.
-  auto firType = value.getType().dyn_cast<FIRRTLType>();
-  if (!firType)
-    return value;
-
-  // If we lowered this value, then return the lowered value.
+  assert(value.getType().isa<FIRRTLType>() &&
+         "Should only lower FIRRTL operands");
+  // If we lowered this value, then return the lowered value, otherwise fail.
   auto it = valueMapping.find(value);
-  if (it != valueMapping.end())
-    return it->second;
-
-  // Otherwise, we need to introduce (or look through) a cast to the right
-  // FIRRTL type.
-  auto resultType = lowerType(firType);
-  if (!resultType)
-    return value;
-
-  if (!resultType.isa<IntegerType>())
-    return {};
-
-  // Cast FIRRTL -> standard type.
-  value = builder->createOrFold<AsPassivePrimOp>(value);
-  return builder->createOrFold<StdIntCastOp>(resultType, value);
+  return it != valueMapping.end() ? it->second : Value();
 }
 
 /// Return the lowered value corresponding to the specified original value.
@@ -974,16 +1018,26 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
 Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
   assert(value.getType().isa<FIRRTLType>() && destType.isa<FIRRTLType>() &&
          "input/output value should be FIRRTL");
-  auto destFIRType = destType.cast<FIRRTLType>();
-
-  auto result = getLoweredValue(value);
-  if (!result)
-    return {};
 
   // We only know how to extend integer types with known width.
-  auto destWidth = destFIRType.getBitWidthOrSentinel();
+  auto destWidth = destType.cast<FIRRTLType>().getBitWidthOrSentinel();
   if (destWidth == -1)
     return {};
+
+  auto result = getLoweredValue(value);
+  if (!result) {
+    // If this was a zero bit operand being extended, then produce a zero of the
+    // right result type.  If it is just a failure, fail.
+    if (!isZeroBitFIRRTLType(value.getType()))
+      return {};
+    // Zero bit results have to be returned as null.  The caller can handle
+    // this if they want to.
+    if (destWidth == 0)
+      return {};
+    // Otherwise, FIRRTL semantics is that an extension from a zero bit value
+    // always produces a zero value in the destination width.
+    return builder->create<rtl::ConstantOp>(APInt(destWidth, 0));
+  }
 
   auto srcWidth = result.getType().cast<IntegerType>().getWidth();
   if (srcWidth == unsigned(destWidth))
@@ -1001,15 +1055,31 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
   if (valueFIRType.cast<IntType>().isSigned())
     return builder->createOrFold<rtl::SExtOp>(resultType, result);
 
-  return builder->createOrFold<rtl::ZExtOp>(resultType, result);
+  auto zero = builder->create<rtl::ConstantOp>(APInt(destWidth - srcWidth, 0));
+  return builder->createOrFold<rtl::ConcatOp>(zero, result);
 }
 
 /// Set the lowered value of 'orig' to 'result', remembering this in a map.
 /// This always returns success() to make it more convenient in lowering code.
+///
+/// Note that result may be null here if we're lowering orig to a zero-bit
+/// value.
+///
 LogicalResult FIRRTLLowering::setLowering(Value orig, Value result) {
   assert(orig.getType().isa<FIRRTLType>() &&
-         !result.getType().isa<FIRRTLType>() &&
+         (!result || !result.getType().isa<FIRRTLType>()) &&
          "Lowering didn't turn a FIRRTL value into a non-FIRRTL value");
+
+#ifndef NDEBUG
+  if (!result) {
+    auto srcWidth = orig.getType()
+                        .cast<FIRRTLType>()
+                        .getPassiveType()
+                        .getBitWidthOrSentinel();
+    assert((srcWidth == 0 || srcWidth == -1) &&
+           "Lowering produced null value but source wasn't zero width");
+  }
+#endif
 
   assert(!valueMapping.count(orig) && "value lowered multiple times");
   valueMapping[orig] = result;
@@ -1030,23 +1100,41 @@ LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
 //===----------------------------------------------------------------------===//
 
 /// Handle the case where an operation wasn't lowered.  When this happens, the
-/// operands may be a mix of lowered and unlowered values.  If the operand was
-/// not lowered then leave it alone, otherwise insert a cast from the lowered
-/// value.
-void FIRRTLLowering::handleUnloweredOp(Operation *op) {
-  for (auto &operand : op->getOpOperands()) {
-    Value origValue = operand.get();
-    auto it = valueMapping.find(origValue);
-    // If the operand wasn't lowered, then leave it alone.
-    if (it == valueMapping.end())
-      continue;
-
-    op->emitWarning("LowerToRTL couldn't handle this");
-
-    // Otherwise, insert a cast from the lowered value.
-    Value mapped = castToFIRRTLType(it->second, origValue.getType(), *builder);
-    operand.set(mapped);
+/// operands should just be unlowered non-FIRRTL values.  If the operand was
+/// not lowered then leave it alone, otherwise we have a problem with lowering.
+///
+FIRRTLLowering::UnloweredOpResult
+FIRRTLLowering::handleUnloweredOp(Operation *op) {
+  // Scan the operand list for the operation to see if none were lowered.  In
+  // that case the operation must be something lowered to RTL already, e.g. the
+  // rtl.output operation.  This is success for us because it is already
+  // lowered.
+  if (llvm::all_of(op->getOpOperands(), [&](auto &operand) -> bool {
+        return !valueMapping.count(operand.get());
+      })) {
+    return AlreadyLowered;
   }
+
+  // Ok, at least one operand got lowered, so this operation is using a FIRRTL
+  // value, but wasn't itself lowered.  This is because the lowering is
+  // incomplete. This is either a bug or incomplete implementation.
+  //
+  // There is one aspect of incompleteness we intentionally expect: we allow
+  // primitive operations that produce a zero bit result to be ignored by the
+  // lowering logic.  They don't have side effects, and handling this corner
+  // case just complicates each of the lowering hooks. Instead, we just handle
+  // them all right here.
+  if (op->getNumResults() == 1) {
+    auto resultType = op->getResult(0).getType();
+    if (resultType.isa<FIRRTLType>() && isZeroBitFIRRTLType(resultType) &&
+        isExpression(op)) {
+      // Zero bit values lower to the null Value.
+      setLowering(op->getResult(0), Value());
+      return NowLowered;
+    }
+  }
+  op->emitError("LowerToRTL couldn't handle this operation");
+  return LoweringFailure;
 }
 
 LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
@@ -1059,7 +1147,7 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
   if (op.use_empty() || valueMapping.count(op))
     return success();
 
-  op.emitOpError(": operand should have lowered its subfields");
+  op.emitOpError("operand should have lowered its subfields");
   return failure();
 }
 
@@ -1072,19 +1160,24 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   if (!resultType)
     return failure();
 
+  if (resultType.isInteger(0))
+    return setLowering(op, Value());
+
   // Convert the inout to a non-inout type.
   return setLoweringTo<rtl::WireOp>(op, resultType, op.nameAttr());
 }
 
 LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   auto operand = getLoweredValue(op.input());
-  if (!operand)
-    return failure();
+  if (!operand) {
+    return handleZeroBit(op.input(),
+                         [&]() { return setLowering(op, Value()); });
+  }
 
   // Node operations are logical noops, but can carry a name.  If a name is
   // present then we lower this into a wire and a connect, otherwise we just
   // drop it.
-  if (auto name = op.getAttrOfType<StringAttr>("name")) {
+  if (auto name = op->getAttrOfType<StringAttr>("name")) {
     auto wire = builder->create<rtl::WireOp>(operand.getType(), name);
     builder->create<rtl::ConnectOp>(wire, operand);
   }
@@ -1110,6 +1203,8 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   auto resultType = lowerType(op.result().getType());
   if (!resultType)
     return failure();
+  if (resultType.isInteger(0))
+    return setLowering(op, Value());
 
   auto regResult = builder->create<sv::RegOp>(resultType, op.nameAttr());
   setLowering(op, regResult);
@@ -1121,7 +1216,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
       emitRandomizePrologIfNeeded();
 
       builder->create<sv::IfDefOp>("RANDOMIZE_REG_INIT", [&]() {
-        auto type = regResult.getType().cast<rtl::InOutType>().getElementType();
+        auto type = regResult.getType().getElementType();
         auto randomVal = builder->create<sv::TextualValueOp>(type, "`RANDOM");
         builder->create<sv::BPAssignOp>(regResult, randomVal);
       });
@@ -1133,11 +1228,16 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
 
 LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   auto resultType = lowerType(op.result().getType());
+  if (!resultType)
+    return failure();
+  if (resultType.isInteger(0))
+    return setLowering(op, Value());
+
   Value clockVal = getLoweredValue(op.clockVal());
   Value resetSignal = getLoweredValue(op.resetSignal());
   Value resetValue = getLoweredValue(op.resetValue());
 
-  if (!resultType || !resetSignal || !resetValue)
+  if (!clockVal || !resetSignal || !resetValue)
     return failure();
 
   auto regResult = builder->create<sv::RegOp>(resultType, op.nameAttr());
@@ -1170,8 +1270,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
         auto one = builder->create<rtl::ConstantOp>(APInt(1, 1));
         auto notResetValue = builder->create<rtl::XorOp>(resetSignal, one);
         builder->create<sv::IfOp>(notResetValue, [&]() {
-          auto type =
-              regResult.getType().cast<rtl::InOutType>().getElementType();
+          auto type = regResult.getType().getElementType();
           auto randomVal = builder->create<sv::TextualValueOp>(type, "`RANDOM");
           builder->create<sv::BPAssignOp>(regResult, randomVal);
         });
@@ -1204,8 +1303,10 @@ static bool flattenBundleTypes(Type type, StringRef nameSoFar,
   // In the base case we record this field.
   auto bundle = type.dyn_cast<BundleType>();
   if (!bundle) {
-    results.push_back({lowerType(type), nameSoFar.str()});
-    return results.back().type == Type();
+    auto rtlType = lowerType(type);
+    if (rtlType && !rtlType.isInteger(0))
+      results.push_back({rtlType, nameSoFar.str()});
+    return rtlType == Type();
   }
 
   SmallString<16> tmpName(nameSoFar);
@@ -1318,6 +1419,11 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       if (!fieldType)
         return op.emitOpError("port " + elt.name.str() +
                               " has unexpected field");
+
+      if (fieldType.isInteger(0)) {
+        portWires.push_back({elt.name, Value()});
+        continue;
+      }
       auto name =
           (Twine(memName) + "_" + port.fieldname() + "_" + elt.name.str())
               .str();
@@ -1445,14 +1551,25 @@ LogicalResult FIRRTLLowering::lowerNoopCast(Operation *op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(StdIntCastOp op) {
-  auto result = getLoweredValue(op.getOperand());
-  if (!result)
-    return failure();
-
   // Conversions from standard integer types to FIRRTL types are lowered as
   // the input operand.
-  if (!op.getType().isa<IntegerType>())
-    return setLowering(op, result);
+  if (auto opIntType = op.getOperand().getType().dyn_cast<IntegerType>()) {
+    if (opIntType.getWidth() != 0)
+      return setLowering(op, op.getOperand());
+    else
+      return setLowering(op, Value());
+  }
+
+  // Otherwise must be a conversion from FIRRTL type to standard int type.
+  auto result = getLoweredValue(op.getOperand());
+  if (!result) {
+    // If this is a conversion from a zero bit RTL type to firrtl value, then
+    // we want to successfully lower this to a null Value.
+    if (op.getOperand().getType().isSignlessInteger(0)) {
+      return setLowering(op, Value());
+    }
+    return failure();
+  }
 
   // We lower firrtl.stdIntCast converting from a firrtl type to a standard
   // type into the lowered operand.
@@ -1461,17 +1578,29 @@ LogicalResult FIRRTLLowering::visitExpr(StdIntCastOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(AnalogInOutCastOp op) {
+  // Standard -> FIRRTL.
+  if (!op.getOperand().getType().isa<FIRRTLType>())
+    return setLowering(op, op.getOperand());
+
+  // FIRRTL -> Standard.
   auto result = getPossiblyInoutLoweredValue(op.getOperand());
   if (!result)
     return failure();
 
-  return setLowering(op->getResult(0), result);
+  return setLowering(op, result);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(CvtPrimOp op) {
   auto operand = getLoweredValue(op.getOperand());
-  if (!operand)
-    return failure();
+  if (!operand) {
+    return handleZeroBit(op.getOperand(), [&]() {
+      // Unsigned zero bit to Signed is 1b0.
+      if (op.getOperand().getType().cast<IntType>().isUnsigned())
+        return setLoweringTo<rtl::ConstantOp>(op, APInt(1, 0));
+      // Signed->Signed is a zero bit value.
+      return setLowering(op, Value());
+    });
+  }
 
   // Signed to signed is a noop.
   if (op.getOperand().getType().cast<IntType>().isSigned())
@@ -1487,8 +1616,7 @@ LogicalResult FIRRTLLowering::visitExpr(NotPrimOp op) {
   if (!operand)
     return failure();
   // ~x  ---> x ^ 0xFF
-  auto type = operand.getType().cast<IntegerType>();
-  auto allOnes = builder->create<rtl::ConstantOp>(-1, type);
+  auto allOnes = builder->create<rtl::ConstantOp>(operand.getType(), -1);
   return setLoweringTo<rtl::XorOp>(op, operand, allOnes);
 }
 
@@ -1497,13 +1625,16 @@ LogicalResult FIRRTLLowering::visitExpr(NegPrimOp op) {
   // the input is unsigned.
   // -x  ---> 0-sext(x)
   auto operand = getLoweredValue(op.input());
-  if (!operand)
-    return failure();
+  if (!operand) {
+    return handleZeroBit(op.getOperand(), [&]() {
+      // Negate of a zero bit value is 1b0.
+      return setLoweringTo<rtl::ConstantOp>(op, APInt(1, 0));
+    });
+  }
   auto resultType = lowerType(op.getType());
   operand = builder->createOrFold<rtl::SExtOp>(resultType, operand);
 
-  auto zero =
-      builder->create<rtl::ConstantOp>(0, resultType.cast<IntegerType>());
+  auto zero = builder->create<rtl::ConstantOp>(resultType, 0);
   return setLoweringTo<rtl::SubOp>(op, zero, operand);
 }
 
@@ -1517,24 +1648,35 @@ LogicalResult FIRRTLLowering::visitExpr(PadPrimOp op) {
 
 LogicalResult FIRRTLLowering::visitExpr(XorRPrimOp op) {
   auto operand = getLoweredValue(op.input());
-  if (!operand)
+  if (!operand) {
+    return handleZeroBit(op.input(), [&]() {
+      return setLoweringTo<rtl::ConstantOp>(op, APInt(1, 0));
+    });
     return failure();
+  }
 
   return setLoweringTo<rtl::XorROp>(op, builder->getIntegerType(1), operand);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(AndRPrimOp op) {
   auto operand = getLoweredValue(op.input());
-  if (!operand)
-    return failure();
+  if (!operand) {
+    return handleZeroBit(op.input(), [&]() {
+      return setLoweringTo<rtl::ConstantOp>(op, APInt(1, 1));
+    });
+  }
 
   return setLoweringTo<rtl::AndROp>(op, builder->getIntegerType(1), operand);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(OrRPrimOp op) {
   auto operand = getLoweredValue(op.input());
-  if (!operand)
+  if (!operand) {
+    return handleZeroBit(op.input(), [&]() {
+      return setLoweringTo<rtl::ConstantOp>(op, APInt(1, 0));
+    });
     return failure();
+  }
 
   return setLoweringTo<rtl::OrROp>(op, builder->getIntegerType(1), operand);
 }
@@ -1581,9 +1723,7 @@ LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, ICmpPredicate signedOp,
   if (!lhsIntType.hasWidth() || !rhsIntType.hasWidth())
     return failure();
 
-  Type cmpType =
-      *lhsIntType.getWidth() < *rhsIntType.getWidth() ? rhsIntType : lhsIntType;
-
+  Type cmpType = getWidestIntType(lhsIntType, rhsIntType);
   auto lhs = getLoweredAndExtendedValue(op->getOperand(0), cmpType);
   auto rhs = getLoweredAndExtendedValue(op->getOperand(1), cmpType);
   if (!lhs || !rhs)
@@ -1624,8 +1764,18 @@ LogicalResult FIRRTLLowering::lowerDivLikeOp(Operation *op) {
 LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
   auto lhs = getLoweredValue(op.lhs());
   auto rhs = getLoweredValue(op.rhs());
-  if (!lhs || !rhs)
-    return failure();
+  if (!lhs) {
+    return handleZeroBit(op.lhs(), [&]() {
+      if (rhs) // cat(0bit, x) --> x
+        return setLowering(op, rhs);
+      // cat(0bit, 0bit) --> 0bit
+      return handleZeroBit(op.rhs(),
+                           [&]() { return setLowering(op, Value()); });
+    });
+  }
+
+  if (!rhs) // cat(x, 0bit) --> x
+    return handleZeroBit(op.rhs(), [&]() { return setLowering(op, lhs); });
 
   return setLoweringTo<rtl::ConcatOp>(op, lhs, rhs);
 }
@@ -1638,8 +1788,7 @@ LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
   auto rhsFirTy = op.rhs().getType().dyn_cast<IntType>();
   if (!lhsFirTy || !rhsFirTy || !lhsFirTy.hasWidth() || !rhsFirTy.hasWidth())
     return failure();
-  auto opType = lhsFirTy.getWidth() > rhsFirTy.getWidth() ? lhsFirTy : rhsFirTy;
-
+  auto opType = getWidestIntType(lhsFirTy, rhsFirTy);
   auto lhs = getLoweredAndExtendedValue(op.lhs(), opType);
   auto rhs = getLoweredAndExtendedValue(op.rhs(), opType);
   if (!lhs || !rhs)
@@ -1649,7 +1798,8 @@ LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
   if (!resultFirType.hasWidth())
     return failure();
   auto destWidth = unsigned(resultFirType.getWidthOrSentinel());
-  auto resultType = builder->getIntegerType(destWidth);
+  if (destWidth == 0)
+    return setLowering(op, Value());
 
   Value modInst;
   if (resultFirType.isUnsigned()) {
@@ -1658,6 +1808,7 @@ LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
     modInst = builder->createOrFold<rtl::ModSOp>(lhs, rhs);
   }
 
+  auto resultType = builder->getIntegerType(destWidth);
   return setLoweringTo<rtl::ExtractOp>(op, resultType, modInst, 0);
 }
 
@@ -1682,15 +1833,14 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValuePrimOp op) {
   // We lower invalid to 0.  TODO: the FIRRTL spec mentions something about
   // lowering it to a random value, we should see if this is what we need to
   // do.
-  auto value =
-      builder->create<rtl::ConstantOp>(0, resultTy.cast<IntegerType>());
+  auto value = builder->create<rtl::ConstantOp>(resultTy, 0);
 
   if (!op.getType().isa<AnalogType>())
     return setLowering(op, value);
 
   // Values of analog type always need to be lowered to an inout.  We do that by
   // lowering to a wire and return that.
-  auto wire = builder->create<rtl::WireOp>(resultTy, /*name=*/StringAttr());
+  auto wire = builder->create<rtl::WireOp>(resultTy);
   builder->create<rtl::ConnectOp>(wire, value);
   return setLowering(op, wire);
 }
@@ -1708,8 +1858,13 @@ LogicalResult FIRRTLLowering::visitExpr(HeadPrimOp op) {
 
 LogicalResult FIRRTLLowering::visitExpr(ShlPrimOp op) {
   auto input = getLoweredValue(op.input());
-  if (!input)
-    return failure();
+  if (!input) {
+    return handleZeroBit(op.input(), [&]() {
+      if (op.amount() == 0)
+        return failure();
+      return setLoweringTo<rtl::ConstantOp>(op, APInt(op.amount(), 0));
+    });
+  }
 
   // Handle the degenerate case.
   if (op.amount() == 0)
@@ -1786,8 +1941,11 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   // The source can be a smaller integer, extend it as appropriate if so.
   auto destType = dest.getType().cast<FIRRTLType>().getPassiveType();
   auto srcVal = getLoweredAndExtendedValue(op.src(), destType);
+  if (!srcVal)
+    return handleZeroBit(op.src(), []() { return success(); });
+
   auto destVal = getPossiblyInoutLoweredValue(dest);
-  if (!srcVal || !destVal)
+  if (!destVal)
     return failure();
 
   if (!destVal.getType().isa<rtl::InOutType>())
@@ -1851,8 +2009,12 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   operands.reserve(op.operands().size());
   for (auto operand : op.operands()) {
     operands.push_back(getLoweredValue(operand));
-    if (!operands.back())
-      return failure();
+    if (!operands.back()) {
+      // If this is a zero bit operand, just pass a one bit zero.
+      if (!isZeroBitFIRRTLType(operand.getType()))
+        return failure();
+      operands.back() = builder->create<rtl::ConstantOp>(APInt(1, 0));
+    }
   }
 
   // Emit this into an "sv.always posedge" body.
@@ -1960,12 +2122,20 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
   SmallVector<Value, 4> inoutValues;
   for (auto v : op.operands()) {
     inoutValues.push_back(getPossiblyInoutLoweredValue(v));
-    if (!inoutValues.back())
-      return failure();
+    if (!inoutValues.back()) {
+      // Ignore zero bit values.
+      if (!isZeroBitFIRRTLType(v.getType()))
+        return failure();
+      inoutValues.pop_back();
+      continue;
+    }
 
     if (!inoutValues.back().getType().isa<rtl::InOutType>())
       return op.emitError("operand isn't an inout type");
   }
+
+  if (inoutValues.size() < 2)
+    return success();
 
   // In the non-synthesis case, we emit a SystemVerilog alias statement.
   builder->create<sv::IfDefOp>(

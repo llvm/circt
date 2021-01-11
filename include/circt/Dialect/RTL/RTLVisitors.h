@@ -38,7 +38,7 @@ public:
                        // Reduction Operators
                        AndROp, OrROp, XorROp,
                        // Other operations.
-                       SExtOp, ZExtOp, ConcatOp, ExtractOp, MuxOp,
+                       SExtOp, ConcatOp, ExtractOp, MuxOp,
                        // InOut Expressions
                        ReadInOutOp, ArrayIndexOp,
                        // Cast operation
@@ -111,7 +111,6 @@ public:
 
   // Other operations.
   HANDLE(SExtOp, Unhandled);
-  HANDLE(ZExtOp, Unhandled);
   HANDLE(ConcatOp, Unhandled);
   HANDLE(ExtractOp, Unhandled);
   HANDLE(MuxOp, Unhandled);
