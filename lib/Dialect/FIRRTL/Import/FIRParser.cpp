@@ -1170,20 +1170,36 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result,
       parseToken(FIRToken::r_paren, "expected ')' in integer expression"))
     return failure();
 
+  if (width == 0)
+    return emitError(loc, "zero bit constants are not allowed"), failure();
+
   // Construct an integer attribute of the right width.
   auto type = IntType::get(builder.getContext(), isSigned, width);
 
-  // TODO: check to see if this extension stuff is necessary.  We should at
-  // least warn for things like UInt<4>(255).
   IntegerType::SignednessSemantics signedness;
   if (type.isSigned()) {
     signedness = IntegerType::Signed;
-    if (width != -1)
+    if (width != -1) {
+      // Check for overlow if we are truncating bits.
+      if (unsigned(width) < value.getBitWidth() &&
+          value.getNumSignBits() <= value.getBitWidth() - width) {
+        return emitError(loc, "initializer too wide for declared width"),
+               failure();
+      }
+
       value = value.sextOrTrunc(width);
+    }
   } else {
     signedness = IntegerType::Unsigned;
-    if (width != -1)
+    if (width != -1) {
+      // Check for overlow if we are truncating bits.
+      if (unsigned(width) < value.getBitWidth() &&
+          value.countLeadingZeros() < value.getBitWidth() - width) {
+        return emitError(loc, "initializer too wide for declared width"),
+               failure();
+      }
       value = value.zextOrTrunc(width);
+    }
   }
 
   Type attrType =

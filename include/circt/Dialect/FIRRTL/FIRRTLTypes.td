@@ -38,6 +38,18 @@ def UInt1Type : Type<CPred<"$_self.isa<UIntType>() && "
                            "UInt<1>", "::circt::firrtl::UIntType">,
                 BuildableType<"UIntType::get($_builder.getContext(), 1)">;
 
+def AsyncResetType : Type<CPred<"$_self.isa<AsyncResetType>()">, "AsyncReset",
+                          "::circt::firrtl::AsyncResetType">;
+
+def PassiveType : Type<CPred<"$_self.isa<FIRRTLType>() && "
+                             "$_self.cast<FIRRTLType>().isPassive()">,
+                       "a passive type (contain no flips)",
+                       "::circt::firrtl::FIRRTLType">;
+
+//===----------------------------------------------------------------------===//
+// FIRRTL Types Predicates
+//===----------------------------------------------------------------------===//
+
 def OneBitType : Type<CPred<"($_self.isa<IntType>() && "
                             "$_self.cast<IntType>().getWidth() == 1) ||"
                             "($_self.isa<AnalogType>() && "
@@ -45,17 +57,13 @@ def OneBitType : Type<CPred<"($_self.isa<IntType>() && "
                             "UInt<1>, SInt<1>, or Analog<1>",
                             "::circt::firrtl::FIRRTLType">;
 
-def AsyncResetType : Type<CPred<"$_self.isa<AsyncResetType>()">, "AsyncReset",
-                          "::circt::firrtl::AsyncResetType">;
+def NonZeroIntType : Type<CPred<"$_self.isa<IntType>() && "
+                          "$_self.cast<IntType>().getWidth() != 0">,
+                          "Int", "::circt::firrtl::IntType">;
 
 def ResetType : Type<CPred<"$_self.isa<FIRRTLType>() && "
                            "$_self.cast<FIRRTLType>().isResetType()">,
                     "Reset", "::circt::firrtl::FIRRTLType">;
-
-def PassiveType : Type<CPred<"$_self.isa<FIRRTLType>() && "
-                             "$_self.cast<FIRRTLType>().isPassive()">,
-                       "a passive type (contain no flips)",
-                       "::circt::firrtl::FIRRTLType">;
 
 def UIntSIntClockType : AnyTypeOf<[SIntType, UIntType, ClockType],
                                   "sint, uint, or clock",

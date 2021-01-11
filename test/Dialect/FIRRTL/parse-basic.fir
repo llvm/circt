@@ -186,7 +186,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     auto11 <= add(UInt<10>(42), UInt<8>("hAB"))
 
     ; CHECK: %c-85_si8 = firrtl.constant(-85 : si8) : !firrtl.sint<8>
-    sauto <= add(s8, SInt<8>("hAB"))
+    sauto <= add(s8, SInt<8>(-85))
 
     ; CHECK: firrtl.when %reset {
     ; CHECK:   firrtl.connect %_t, %_t_2
