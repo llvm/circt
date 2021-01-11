@@ -328,7 +328,6 @@ firrtl.circuit "BadPort" {
   }
 }
 
-
 // -----
 
 firrtl.circuit "BadPort" {
@@ -356,3 +355,4 @@ firrtl.circuit "NodeMustBePassive" {
     %b = firrtl.node %a : !firrtl.flip<uint<1>>
   }
 }
+

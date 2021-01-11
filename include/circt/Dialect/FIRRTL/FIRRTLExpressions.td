@@ -14,14 +14,15 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
                                        FirstAttrDerivedResultType]> {
   let summary = "Produce a constant value";
   let description = [{
-    The constant operation produces a constant value of SInt or UInt type.
+    The constant operation produces a constant value of SInt or UInt type, it
+    never produces a zero bit wide result.
     ```
       %result = firrtl.constant 42 : t1
     ```
     }];
 
   let arguments = (ins APIntAttr:$value);
-  let results = (outs IntType:$result);
+  let results = (outs NonZeroIntType:$result);
 
   let assemblyFormat = "`(` $value `)` attr-dict `:` type($result)";
 

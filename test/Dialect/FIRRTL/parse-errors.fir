@@ -162,3 +162,35 @@ circuit Issue418:
 
     ; expected-error @+1 {{operation requires one operand and no constants}}
     b <= not(a, a)
+
+;// -----
+
+circuit Issue426:
+  module Issue426:
+    ; expected-error @+1 {{zero bit constants are not allowed}}
+    node x = UInt<0>("h0")
+
+;// -----
+
+circuit Issue426:
+  module Issue426:
+    output a: UInt<1>
+    ; expected-error @+1 {{initializer too wide for declared width}}
+    a <= UInt<1>(2)
+
+;// -----
+
+circuit Issue426:
+  module Issue426:
+    output a: SInt<1>
+    a <= SInt<1>(0) ; ok
+    a <= SInt<1>(-1) ; ok
+    ; expected-error @+1 {{initializer too wide for declared width}}
+    a <= SInt<1>(1)
+;// -----
+
+circuit Issue426:
+  module Issue426:
+    output a: SInt<1>
+    ; expected-error @+1 {{initializer too wide for declared width}}
+    a <= SInt<1>(-2)
