@@ -118,8 +118,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.connect [[A]], [[B]]
     _t_2[0] <= _t[0] @[Xbar.scala 21:44]
 
-    ; CHECK: %n1 = firrtl.node %auto {name = "n1"} : !firrtl.flip<uint<1>>
-    node n1 = auto
+    ; CHECK: %n1 = firrtl.node %i8 {name = "n1"} : !firrtl.uint<8>
+    node n1 = i8
 
     ; CHECK: firrtl.add %reset, %reset : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
     node n2 = add(reset, reset)
@@ -186,7 +186,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     auto11 <= add(UInt<10>(42), UInt<8>("hAB"))
 
     ; CHECK: %c-85_si8 = firrtl.constant(-85 : si8) : !firrtl.sint<8>
-    sauto <= add(s8, SInt<8>("hAB"))
+    sauto <= add(s8, SInt<8>(-85))
 
     ; CHECK: firrtl.when %reset {
     ; CHECK:   firrtl.connect %_t, %_t_2
@@ -242,11 +242,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.mux(%reset, %i8, %{{.*}}) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint) -> !firrtl.uint
     node n8 = mux(reset, i8, UInt(4))
 
-    ; CHECK: firrtl.reginit %clock, %reset, %{{.*}} {name = "_t_2621"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>) -> !firrtl.uint<4>
+    ; CHECK: firrtl.regreset %clock, %reset, %{{.*}} {name = "_t_2621"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>) -> !firrtl.uint<4>
     reg _t_2621 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0")) @[Edges.scala 230:27]
 
-    ; CHECK: firrtl.reginit %clock, %reset, %{{.*}} {name = "_t_1601"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<2>
+    ; CHECK: firrtl.regreset %clock, %reset, %{{.*}} {name = "_t_1601"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<2>
     reg _t_1601 : UInt<2>, clock with :
       (reset => (reset, UInt<2>("h00"))) @[Edges.scala 230:27]
 
@@ -530,3 +530,41 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   ; CHECK: attributes {parameters = {A = -1 : i4}}
   extmodule issue183:
      parameter A = -1
+
+  ; COM: The Scala FIRRTL Compiler allows this for an aggregate node with an internal analog.
+  ; CHECK-LABEL: firrtl.module @analog_in_aggregate_node
+  module analog_in_aggregate_node:
+    input a: { a: UInt<1>, b: Analog<1>}
+    ; CHECK: %b = firrtl.node %a {{.+}}: !firrtl.bundle<a: uint<1>, b: analog<1>>
+    node b = a
+
+  ; COM: Check that a register clock sink is converted to passive
+  ; CHECK-LABEL: firrtl.module @register_clock_passive
+  module register_clock_passive:
+    input clkIn: Clock
+    output clkOut: Clock
+    clkOut <= clkIn
+    ; CHECK: [[clkOut_passive:%.+]] = firrtl.asPassive %clkOut
+    ; CHECK: firrtl.reg [[clkOut_passive]]
+    reg r: UInt<1>, clkOut
+
+  ; COM: Check that a register reset sink is converted to passive
+  ; CHECK-LABEL: firrtl.module @register_reset_passive
+  module register_reset_passive:
+    input clk: Clock
+    output rst: UInt<1>
+    rst is invalid
+    ; CHECK: [[rst_passive:%.+]] = firrtl.asPassive %rst
+    ; CHECK: firrtl.regreset %clk, [[rst_passive]]
+    reg r: UInt<1>, clk with : (reset => (rst, UInt<1>(0)))
+
+  ; COM: Check that a register init sink is converted to passive
+  ; CHECK-LABEL: firrtl.module @register_init_passive
+  module register_init_passive:
+    input clk: Clock
+    input rst: UInt<1>
+    output init: UInt<1>
+    init is invalid
+    ; CHECK: [[init_passive:%.+]] = firrtl.asPassive %init
+    ; CHECK: firrtl.regreset %clk, %rst, [[init_passive]]
+    reg r: UInt<1>, clk with : (reset => (rst, init))

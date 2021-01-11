@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_RTL_OPS_H
 
 #include "circt/Dialect/RTL/RTLDialect.h"
+#include "circt/Dialect/RTL/RTLTypes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/OpImplementation.h"

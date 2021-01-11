@@ -39,10 +39,10 @@ def CircuitOp : FIRRTLOp<"circuit",
     Block *getBody();
   }];
 
-  let printer = [{ return ::print(p, *this); }];
-  let parser = [{ return ::parse$cppClass(parser, result); }];
+  let printer = "return ::print(p, *this);";
+  let parser = "return ::parse$cppClass(parser, result);";
 
-  let verifier = [{ return ::verifyCircuitOp(*this); }];
+  let verifier = "return ::verifyCircuitOp(*this);";
 }
 
 def FModuleOp : FIRRTLOp<"module",
@@ -109,9 +109,9 @@ def FModuleOp : FIRRTLOp<"module",
   public:
   }];
 
-  let printer = [{ return ::print(p, *this); }];
-  let parser = [{ return ::parse$cppClass(parser, result); }];
-  let verifier = [{ return ::verifyFModuleOp(*this); }];
+  let printer = "return ::print(p, *this);";
+  let parser = "return ::parse$cppClass(parser, result);";
+  let verifier = "return ::verifyFModuleOp(*this);";
 }
 
 def FExtModuleOp : FIRRTLOp<"extmodule",
@@ -162,9 +162,9 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   public:
   }];
 
-  let printer = [{ return ::print(p, *this); }];
-  let parser = [{ return ::parse$cppClass(parser, result); }];
-  let verifier = [{ return ::verifyFExtModuleOp(*this); }];
+  let printer = "return ::print(p, *this);";
+  let parser = "return ::parse$cppClass(parser, result);";
+  let verifier = "return ::verifyFExtModuleOp(*this);";
 }
 
 def DoneOp : FIRRTLOp<"done", [Terminator]> {

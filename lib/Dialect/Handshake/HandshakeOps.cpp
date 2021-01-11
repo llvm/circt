@@ -375,7 +375,7 @@ static void print(OpAsmPrinter &p, handshake::ReturnOp op) {
 }
 
 static LogicalResult verify(handshake::ReturnOp op) {
-  auto *parent = op.getParentOp();
+  auto *parent = op->getParentOp();
   auto function = dyn_cast<handshake::FuncOp>(parent);
   if (!function)
     return op.emitOpError("must have a handshake.func parent");

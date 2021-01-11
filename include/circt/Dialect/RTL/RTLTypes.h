@@ -21,6 +21,11 @@
 
 namespace circt {
 namespace rtl {
+
+/// Return true if the specified type is a value RTL Integer type.  This checks
+/// that it is a signless standard dialect type and that it isn't zero bits.
+bool isRTLIntegerType(mlir::Type type);
+
 /// Return true if the specified type can be used as an RTL value type, that is
 /// the set of types that can be composed together to represent synthesized,
 /// hardware but not marker types like InOutType or unknown types from other

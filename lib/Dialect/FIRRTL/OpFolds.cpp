@@ -58,7 +58,7 @@ OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
   /// Division by zero is undefined in the FIRRTL specification. This
   /// fold exploits that fact to optimize self division to one.
   if (lhs() == rhs()) {
-    auto width = getType().cast<IntType>().getWidthOrSentinel();
+    auto width = getType().getWidthOrSentinel();
     if (width == -1)
       width = 2;
     return IntegerAttr::get(IntegerType::get(getContext(), width), 1);
@@ -129,7 +129,7 @@ OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
 
   /// xor(x, x) -> 0
   if (lhs() == rhs()) {
-    auto width = getType().cast<IntType>().getWidthOrSentinel();
+    auto width = getType().getWidthOrSentinel();
     if (width == -1)
       width = 1;
     auto type = IntegerType::get(getContext(), width);
@@ -349,7 +349,7 @@ OpFoldResult PadPrimOp::fold(ArrayRef<Attribute> operands) {
   // Constant fold.
   APInt value;
   if (matchPattern(input, m_FConstant(value))) {
-    auto destWidth = getType().cast<IntType>().getWidthOrSentinel();
+    auto destWidth = getType().getWidthOrSentinel();
     if (destWidth == -1)
       return {};
 
@@ -430,7 +430,7 @@ void ShrPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       unsigned shiftAmount = op.amount();
       if (int(shiftAmount) >= inputWidth) {
         // shift(x, 32) => 0 when x has 32 bits.  This is handled by fold().
-        if (op.getType().cast<IntType>().isUnsigned())
+        if (op.getType().isUnsigned())
           return failure();
 
         // Shifting a signed value by the full width is actually taking the sign

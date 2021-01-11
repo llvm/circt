@@ -11,17 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/RTL/RTLOps.h"
-#include "circt/Dialect/RTL/RTLTypes.h"
 #include "circt/Dialect/RTL/RTLVisitors.h"
-#include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/BuiltinTypes.h"
-#include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
-#include "mlir/IR/FunctionSupport.h"
-#include "mlir/IR/Matchers.h"
-#include "mlir/IR/PatternMatch.h"
 
 using namespace circt;
 using namespace rtl;
@@ -412,7 +404,7 @@ static void print(OpAsmPrinter &p, RTLModuleOp op) {
 /// Lookup the module or extmodule for the symbol.  This returns null on
 /// invalid IR.
 Operation *InstanceOp::getReferencedModule() {
-  auto topLevelModuleOp = getParentOfType<ModuleOp>();
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
   if (!topLevelModuleOp)
     return nullptr;
 
@@ -421,7 +413,7 @@ Operation *InstanceOp::getReferencedModule() {
 
 static LogicalResult verifyInstanceOp(InstanceOp op) {
   // Check that this instance is inside a module.
-  auto module = dyn_cast<RTLModuleOp>(op.getParentOp());
+  auto module = dyn_cast<RTLModuleOp>(op->getParentOp());
   if (!module) {
     op.emitOpError("should be embedded in an 'rtl.module'");
     return failure();
@@ -499,7 +491,7 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 /// Verify that the num of operands and types fit the declared results.
 static LogicalResult verifyOutputOp(OutputOp *op) {
   OperandRange outputValues = op->getOperands();
-  auto opParent = op->getParentOp();
+  auto opParent = (*op)->getParentOp();
 
   // Check that we are in the correct region. OutputOp should be directly
   // contained by an RTLModuleOp region. We'll loosen this restriction if
@@ -545,29 +537,6 @@ bool rtl::isCombinatorial(Operation *op) {
   };
 
   return IsCombClassifier().dispatchCombinatorialVisitor(op);
-}
-
-static Attribute getIntAttr(const APInt &value, MLIRContext *context) {
-  return IntegerAttr::get(IntegerType::get(context, value.getBitWidth()),
-                          value);
-}
-
-namespace {
-struct ConstantIntMatcher {
-  APInt &value;
-  ConstantIntMatcher(APInt &value) : value(value) {}
-  bool match(Operation *op) {
-    if (auto cst = dyn_cast<ConstantOp>(op)) {
-      value = cst.value();
-      return true;
-    }
-    return false;
-  }
-};
-} // end anonymous namespace
-
-static inline ConstantIntMatcher m_RConstant(APInt &value) {
-  return ConstantIntMatcher(value);
 }
 
 //===----------------------------------------------------------------------===//
@@ -642,7 +611,7 @@ static ParseResult parseWireOp(OpAsmParser &parser, OperationState &result) {
 /// attribute.
 void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // If the wire has an optional 'name' attribute, use it.
-  if (auto nameAttr = getAttrOfType<StringAttr>("name"))
+  if (auto nameAttr = (*this)->getAttrOfType<StringAttr>("name"))
     setNameFn(getResult(), nameAttr.getValue());
 }
 
@@ -652,17 +621,11 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 static LogicalResult verifyConstantOp(ConstantOp constant) {
   // If the result type has a bitwidth, then the attribute must match its width.
-  auto intType = constant.getType().cast<IntegerType>();
-  if (constant.value().getBitWidth() != intType.getWidth())
+  if (constant.value().getBitWidth() != constant.getType().getWidth())
     return constant.emitError(
         "firrtl.constant attribute bitwidth doesn't match return type");
 
   return success();
-}
-
-OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
-  assert(operands.empty() && "constant has no operands");
-  return valueAttr();
 }
 
 /// Build a ConstantOp from an APInt, infering the result type from the
@@ -670,8 +633,7 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
 void ConstantOp::build(OpBuilder &builder, OperationState &result,
                        const APInt &value) {
 
-  auto type = IntegerType::get(builder.getContext(), value.getBitWidth(),
-                               IntegerType::Signless);
+  auto type = IntegerType::get(builder.getContext(), value.getBitWidth());
   auto attr = builder.getIntegerAttr(type, value);
   return build(builder, result, type, attr);
 }
@@ -680,48 +642,15 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
 /// matching a specified MLIR IntegerType.  This shouldn't be used for general
 /// constant folding because it only works with values that can be expressed in
 /// an int64_t.  Use APInt's instead.
-void ConstantOp::build(OpBuilder &builder, OperationState &result,
-                       int64_t value, IntegerType type) {
-  auto numBits = type.getWidth();
+void ConstantOp::build(OpBuilder &builder, OperationState &result, Type type,
+                       int64_t value) {
+  auto numBits = type.cast<IntegerType>().getWidth();
   build(builder, result, APInt(numBits, (uint64_t)value, /*isSigned=*/true));
-}
-
-/// Flattens a single input in `op` if `hasOneUse` is true and it can be defined
-/// as an Op. Returns true if successful, and false otherwise.
-///
-/// Example: op(1, 2, op(3, 4), 5) -> op(1, 2, 3, 4, 5)  // returns true
-///
-/// If allowDuplicatingOp is true, then the 'hasOneUse' check is skipped.
-template <typename Op>
-static bool tryFlatteningOperands(Op op, PatternRewriter &rewriter,
-                                  bool allowDuplicatingOp = false) {
-  auto inputs = op.inputs();
-
-  for (size_t i = 0, size = inputs.size(); i != size; ++i) {
-    if (!allowDuplicatingOp && !inputs[i].hasOneUse())
-      continue;
-    auto flattenOp = inputs[i].template getDefiningOp<Op>();
-    if (!flattenOp)
-      continue;
-    auto flattenOpInputs = flattenOp.inputs();
-
-    SmallVector<Value, 4> newOperands;
-    newOperands.reserve(size + flattenOpInputs.size());
-
-    auto flattenOpIndex = inputs.begin() + i;
-    newOperands.append(inputs.begin(), flattenOpIndex);
-    newOperands.append(flattenOpInputs.begin(), flattenOpInputs.end());
-    newOperands.append(flattenOpIndex + 1, inputs.end());
-
-    rewriter.replaceOpWithNewOp<Op>(op, op.getType(), newOperands);
-    return true;
-  }
-  return false;
 }
 
 void ConstantOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
-  auto intTy = getType().cast<IntegerType>();
+  auto intTy = getType();
   auto intCst = getValue();
 
   // Sugar i1 constants with 'true' and 'false'.
@@ -739,77 +668,16 @@ void ConstantOp::getAsmResultNames(
 // Unary Operations
 //===----------------------------------------------------------------------===//
 
-// Verify SExtOp and ZExtOp.
-static LogicalResult verifyExtOp(Operation *op) {
+static LogicalResult verifySExtOp(SExtOp op) {
   // The source must be smaller than the dest type.  Both are already known to
   // be signless integers.
-  auto srcType = op->getOperand(0).getType().cast<IntegerType>();
-  auto dstType = op->getResult(0).getType().cast<IntegerType>();
-  if (srcType.getWidth() >= dstType.getWidth()) {
-    op->emitOpError("extension must increase bitwidth of operand");
+  auto srcType = op.getOperand().getType().cast<IntegerType>();
+  if (srcType.getWidth() >= op.getType().getWidth()) {
+    op.emitOpError("extension must increase bitwidth of operand");
     return failure();
   }
 
   return success();
-}
-
-OpFoldResult ZExtOp::fold(ArrayRef<Attribute> operands) {
-  auto input = this->input();
-
-  // Constant fold
-  APInt value;
-  if (matchPattern(input, m_RConstant(value))) {
-    auto destWidth = getType().cast<IntegerType>().getWidth();
-    return getIntAttr(value.zext(destWidth), getContext());
-  }
-
-  return {};
-}
-
-OpFoldResult SExtOp::fold(ArrayRef<Attribute> operands) {
-  auto input = this->input();
-
-  // Constant fold
-  APInt value;
-  if (matchPattern(input, m_RConstant(value))) {
-    auto destWidth = getType().cast<IntegerType>().getWidth();
-    return getIntAttr(value.sext(destWidth), getContext());
-  }
-
-  return {};
-}
-
-OpFoldResult AndROp::fold(ArrayRef<Attribute> operands) {
-  auto input = this->input();
-
-  // Constant fold
-  APInt value;
-  if (matchPattern(input, m_RConstant(value)))
-    return getIntAttr(APInt(1, value.isAllOnesValue()), getContext());
-
-  return {};
-}
-
-OpFoldResult OrROp::fold(ArrayRef<Attribute> operands) {
-  auto input = this->input();
-
-  // Constant fold
-  APInt value;
-  if (matchPattern(input, m_RConstant(value)))
-    return getIntAttr(APInt(1, value != 0), getContext());
-
-  return {};
-}
-
-OpFoldResult XorROp::fold(ArrayRef<Attribute> operands) {
-  auto input = this->input();
-
-  // Constant fold
-  APInt value;
-  if (matchPattern(input, m_RConstant(value)))
-    return getIntAttr(APInt(1, value.countPopulation() & 1), getContext());
-
-  return {};
 }
 
 //===----------------------------------------------------------------------===//
@@ -818,25 +686,11 @@ OpFoldResult XorROp::fold(ArrayRef<Attribute> operands) {
 
 static LogicalResult verifyExtractOp(ExtractOp op) {
   unsigned srcWidth = op.input().getType().cast<IntegerType>().getWidth();
-  unsigned dstWidth = op.getType().cast<IntegerType>().getWidth();
+  unsigned dstWidth = op.getType().getWidth();
   if (op.lowBit() >= srcWidth || srcWidth - op.lowBit() < dstWidth)
     return op.emitOpError("from bit too large for input"), failure();
 
   return success();
-}
-
-OpFoldResult ExtractOp::fold(ArrayRef<Attribute> operands) {
-  // If we are extracting the entire input, then return it.
-  if (input().getType() == getType())
-    return input();
-
-  // Constant fold.
-  APInt value;
-  if (mlir::matchPattern(input(), m_RConstant(value))) {
-    unsigned dstWidth = getType().cast<IntegerType>().getWidth();
-    return getIntAttr(value.lshr(lowBit()).trunc(dstWidth), getContext());
-  }
-  return {};
 }
 
 static ParseResult parseSliceTypes(OpAsmParser &p, Type &srcType,
@@ -859,430 +713,11 @@ static void printSliceTypes(OpAsmPrinter &p, Operation *, Type srcType,
 // Variadic operations
 //===----------------------------------------------------------------------===//
 
-// Reduce all operands to a single value by applying the `calculate` function.
-// This will fail if any of the operands are not constant.
-template <class AttrElementT,
-          class ElementValueT = typename AttrElementT::ValueType,
-          class CalculationT =
-              function_ref<ElementValueT(ElementValueT, ElementValueT)>>
-static Attribute constFoldVariadicOp(ArrayRef<Attribute> operands,
-                                     const CalculationT &calculate) {
-  if (!operands.size())
-    return {};
-
-  if (!operands[0])
-    return {};
-
-  ElementValueT accum = operands[0].cast<AttrElementT>().getValue();
-  for (auto i = operands.begin() + 1, end = operands.end(); i != end; ++i) {
-    auto attr = *i;
-    if (!attr)
-      return {};
-
-    auto typedAttr = attr.cast<AttrElementT>();
-    calculate(accum, typedAttr.getValue());
-  }
-  return AttrElementT::get(operands[0].getType(), accum);
-}
-
 static LogicalResult verifyUTVariadicRTLOp(Operation *op) {
   if (op->getOperands().empty())
     return op->emitOpError("requires 1 or more args");
 
   return success();
-}
-
-OpFoldResult AndOp::fold(ArrayRef<Attribute> operands) {
-  auto width = getType().cast<IntegerType>().getWidth();
-  APInt value(/*numBits=*/width, -1, /*isSigned=*/false);
-
-  // and(x, 0, 1) -> 0 -- annulment
-  for (auto operand : operands) {
-    if (!operand)
-      continue;
-    value &= operand.cast<IntegerAttr>().getValue();
-    if (value.isNullValue())
-      return getIntAttr(value, getContext());
-  }
-
-  // and(x, x, x) -> x -- noop
-  if (llvm::all_of(inputs(), [&](auto in) { return in == inputs()[0]; }))
-    return inputs()[0];
-
-  // Constant fold
-  return constFoldVariadicOp<IntegerAttr>(
-      operands, [](APInt &a, const APInt &b) { a &= b; });
-}
-
-void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
-                                        MLIRContext *context) {
-  struct Folder final : public OpRewritePattern<AndOp> {
-    using OpRewritePattern::OpRewritePattern;
-    LogicalResult matchAndRewrite(AndOp op,
-                                  PatternRewriter &rewriter) const override {
-      auto inputs = op.inputs();
-      auto size = inputs.size();
-      assert(size > 1 && "expected 2 or more operands");
-
-      APInt value, value2;
-
-      // and(..., '1) -> and(...) -- identity
-      if (matchPattern(inputs.back(), m_RConstant(value)) &&
-          value.isAllOnesValue()) {
-        rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(),
-                                           inputs.drop_back());
-        return success();
-      }
-
-      // TODO: remove all duplicate arguments
-      // and(..., x, x) -> and(..., x) -- idempotent
-      if (inputs[size - 1] == inputs[size - 2]) {
-        rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(),
-                                           inputs.drop_back());
-        return success();
-      }
-
-      // TODO: Combine all constants in one shot
-      // and(..., c1, c2) -> and(..., c3) where c3 = c1 & c2 -- constant folding
-      if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
-          matchPattern(inputs[size - 2], m_RConstant(value2))) {
-        auto cst = rewriter.create<ConstantOp>(op.getLoc(), value & value2);
-        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
-        newOperands.push_back(cst);
-        rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
-        return success();
-      }
-      // and(x, and(...)) -> and(x, ...) -- flatten
-      if (tryFlatteningOperands(op, rewriter))
-        return success();
-
-      /// TODO: and(..., x, not(x)) -> and(..., 0) -- complement
-      return failure();
-    }
-  };
-  results.insert<Folder>(context);
-}
-
-OpFoldResult OrOp::fold(ArrayRef<Attribute> operands) {
-  auto width = getType().cast<IntegerType>().getWidth();
-  APInt value(/*numBits=*/width, 0, /*isSigned=*/false);
-
-  // or(x, 1, 0) -> 1
-  for (auto operand : operands) {
-    if (!operand)
-      continue;
-    value |= operand.cast<IntegerAttr>().getValue();
-    if (value.isAllOnesValue())
-      return getIntAttr(value, getContext());
-  }
-
-  // or(x, x, x) -> x
-  if (llvm::all_of(inputs(), [&](auto in) { return in == inputs()[0]; }))
-    return inputs()[0];
-
-  // Constant fold
-  return constFoldVariadicOp<IntegerAttr>(
-      operands, [](APInt &a, const APInt &b) { a |= b; });
-}
-
-void OrOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
-                                       MLIRContext *context) {
-  struct Folder final : public OpRewritePattern<OrOp> {
-    using OpRewritePattern::OpRewritePattern;
-    LogicalResult matchAndRewrite(OrOp op,
-                                  PatternRewriter &rewriter) const override {
-      auto inputs = op.inputs();
-      auto size = inputs.size();
-      assert(size > 1 && "expected 2 or more operands");
-
-      APInt value, value2;
-
-      // or(..., 0) -> or(...) -- identity
-      if (matchPattern(inputs.back(), m_RConstant(value)) &&
-          value.isNullValue()) {
-
-        rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), inputs.drop_back());
-        return success();
-      }
-
-      // or(..., x, x) -> or(..., x) -- idempotent
-      if (inputs[size - 1] == inputs[size - 2]) {
-        rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), inputs.drop_back());
-        return success();
-      }
-
-      // or(..., c1, c2) -> or(..., c3) where c3 = c1 | c2 -- constant folding
-      if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
-          matchPattern(inputs[size - 2], m_RConstant(value2))) {
-        auto cst = rewriter.create<ConstantOp>(op.getLoc(), value | value2);
-        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
-        newOperands.push_back(cst);
-        rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
-        return success();
-      }
-
-      // or(x, or(...)) -> or(x, ...) -- flatten
-      if (tryFlatteningOperands(op, rewriter))
-        return success();
-
-      /// TODO: or(..., x, not(x)) -> or(..., '1) -- complement
-      return failure();
-    }
-  };
-  results.insert<Folder>(context);
-}
-
-OpFoldResult XorOp::fold(ArrayRef<Attribute> operands) {
-  auto size = inputs().size();
-
-  // xor(x) -> x -- noop
-  if (size == 1u)
-    return inputs()[0];
-
-  // xor(x, x) -> 0 -- idempotent
-  if (size == 2u && inputs()[0] == inputs()[1])
-    return IntegerAttr::get(getType(), 0);
-
-  // Constant fold
-  return constFoldVariadicOp<IntegerAttr>(
-      operands, [](APInt &a, const APInt &b) { a ^= b; });
-}
-
-void XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
-                                        MLIRContext *context) {
-  struct Folder final : public OpRewritePattern<XorOp> {
-    using OpRewritePattern::OpRewritePattern;
-    LogicalResult matchAndRewrite(XorOp op,
-                                  PatternRewriter &rewriter) const override {
-      auto inputs = op.inputs();
-      auto size = inputs.size();
-      assert(size > 1 && "expected 2 or more operands");
-
-      APInt value, value2;
-
-      // xor(..., 0) -> xor(...) -- identity
-      if (matchPattern(inputs.back(), m_RConstant(value)) &&
-          value.isNullValue()) {
-
-        rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(),
-                                           inputs.drop_back());
-        return success();
-      }
-
-      if (inputs[size - 1] == inputs[size - 2]) {
-        assert(size > 2 &&
-               "expected idempotent case for 2 elements handled already.");
-        // xor(..., x, x) -> xor (...) -- idempotent
-        rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(),
-                                           inputs.drop_back(/*n=*/2));
-        return success();
-      }
-
-      // xor(..., c1, c2) -> xor(..., c3) where c3 = c1 ^ c2 -- constant folding
-      if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
-          matchPattern(inputs[size - 2], m_RConstant(value2))) {
-        auto cst = rewriter.create<ConstantOp>(op.getLoc(), value ^ value2);
-        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
-        newOperands.push_back(cst);
-        rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(), newOperands);
-        return success();
-      }
-
-      // xor(x, xor(...)) -> xor(x, ...) -- flatten
-      if (tryFlatteningOperands(op, rewriter))
-        return success();
-
-      /// TODO: xor(..., '1) -> not(xor(...))
-      /// TODO: xor(..., x, not(x)) -> xor(..., '1)
-      return failure();
-    }
-  };
-  results.insert<Folder>(context);
-}
-
-OpFoldResult MergeOp::fold(ArrayRef<Attribute> operands) {
-  // rtl.merge(x, x, x) -> x.
-  if (llvm::all_of(inputs(), [&](auto in) { return in == inputs()[0]; }))
-    return inputs()[0];
-
-  return {};
-}
-
-OpFoldResult AddOp::fold(ArrayRef<Attribute> operands) {
-  auto size = inputs().size();
-
-  // add(x) -> x -- noop
-  if (size == 1u)
-    return inputs()[0];
-
-  // Constant fold
-  return constFoldVariadicOp<IntegerAttr>(
-      operands, [](APInt &a, const APInt &b) { a += b; });
-}
-
-void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
-                                        MLIRContext *context) {
-  struct Folder final : public OpRewritePattern<AddOp> {
-    using OpRewritePattern::OpRewritePattern;
-    LogicalResult matchAndRewrite(AddOp op,
-                                  PatternRewriter &rewriter) const override {
-      auto inputs = op.inputs();
-      auto size = inputs.size();
-      assert(size > 1 && "expected 2 or more operands");
-
-      APInt value, value2;
-
-      // add(..., 0) -> add(...) -- identity
-      if (matchPattern(inputs.back(), m_RConstant(value)) &&
-          value.isNullValue()) {
-        rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(),
-                                           inputs.drop_back());
-        return success();
-      }
-
-      // add(..., c1, c2) -> add(..., c3) where c3 = c1 + c2 -- constant folding
-      if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
-          matchPattern(inputs[size - 2], m_RConstant(value2))) {
-        auto cst = rewriter.create<ConstantOp>(op.getLoc(), value + value2);
-        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
-        newOperands.push_back(cst);
-        rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(), newOperands);
-        return success();
-      }
-
-      // add(..., x, x) -> add(..., shl(x, 1))
-      if (inputs[size - 1] == inputs[size - 2]) {
-        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
-
-        auto one = rewriter.create<ConstantOp>(
-            op.getLoc(), 1, op.getType().cast<IntegerType>());
-        auto shiftLeftOp =
-            rewriter.create<rtl::ShlOp>(op.getLoc(), inputs.back(), one);
-
-        newOperands.push_back(shiftLeftOp);
-        rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(), newOperands);
-        return success();
-      }
-
-      auto shlOp = inputs[size - 1].getDefiningOp<rtl::ShlOp>();
-      // add(..., x, shl(x, c)) -> add(..., mul(x, (1 << c) + 1))
-      if (shlOp && shlOp.lhs() == inputs[size - 2] &&
-          matchPattern(shlOp.rhs(), m_RConstant(value))) {
-
-        APInt one(/*numBits=*/value.getBitWidth(), 1, /*isSigned=*/false);
-        auto rhs =
-            rewriter.create<ConstantOp>(op.getLoc(), (one << value) + one);
-
-        std::array<Value, 2> factors = {shlOp.lhs(), rhs};
-        auto mulOp = rewriter.create<rtl::MulOp>(op.getLoc(), factors);
-
-        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
-        newOperands.push_back(mulOp);
-        rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(), newOperands);
-        return success();
-      }
-
-      auto mulOp = inputs[size - 1].getDefiningOp<rtl::MulOp>();
-      // add(..., x, mul(x, c)) -> add(..., mul(x, c + 1))
-      if (mulOp && mulOp.inputs().size() == 2 &&
-          mulOp.inputs()[0] == inputs[size - 2] &&
-          matchPattern(mulOp.inputs()[1], m_RConstant(value))) {
-
-        APInt one(/*numBits=*/value.getBitWidth(), 1, /*isSigned=*/false);
-        auto rhs = rewriter.create<ConstantOp>(op.getLoc(), value + one);
-        std::array<Value, 2> factors = {mulOp.inputs()[0], rhs};
-        auto newMulOp = rewriter.create<rtl::MulOp>(op.getLoc(), factors);
-
-        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
-        newOperands.push_back(newMulOp);
-        rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(), newOperands);
-        return success();
-      }
-
-      // add(x, add(...)) -> add(x, ...) -- flatten
-      if (tryFlatteningOperands(op, rewriter))
-        return success();
-
-      return failure();
-    }
-  };
-  results.insert<Folder>(context);
-}
-
-OpFoldResult MulOp::fold(ArrayRef<Attribute> operands) {
-  auto size = inputs().size();
-
-  // mul(x) -> x -- noop
-  if (size == 1u)
-    return inputs()[0];
-
-  auto width = getType().cast<IntegerType>().getWidth();
-  APInt value(/*numBits=*/width, 1, /*isSigned=*/false);
-
-  // mul(x, 0, 1) -> 0 -- annulment
-  for (auto operand : operands) {
-    if (!operand)
-      continue;
-    value *= operand.cast<IntegerAttr>().getValue();
-    if (value.isNullValue())
-      return getIntAttr(value, getContext());
-  }
-
-  // Constant fold
-  return constFoldVariadicOp<IntegerAttr>(
-      operands, [](APInt &a, const APInt &b) { a *= b; });
-}
-
-void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
-                                        MLIRContext *context) {
-  struct Folder final : public OpRewritePattern<MulOp> {
-    using OpRewritePattern::OpRewritePattern;
-    LogicalResult matchAndRewrite(MulOp op,
-                                  PatternRewriter &rewriter) const override {
-      auto inputs = op.inputs();
-      auto size = inputs.size();
-      assert(size > 1 && "expected 2 or more operands");
-
-      APInt value, value2;
-
-      // mul(x, c) -> shl(x, log2(c)), where c is a power of two.
-      if (size == 2 && matchPattern(inputs.back(), m_RConstant(value)) &&
-          value.isPowerOf2()) {
-        auto shift =
-            rewriter.create<ConstantOp>(op.getLoc(), value.exactLogBase2(),
-                                        op.getType().cast<IntegerType>());
-        auto shlOp = rewriter.create<rtl::ShlOp>(op.getLoc(), inputs[0], shift);
-
-        rewriter.replaceOpWithNewOp<MulOp>(op, op.getType(),
-                                           ArrayRef<Value>(shlOp));
-        return success();
-      }
-
-      // mul(..., 1) -> mul(...) -- identity
-      if (matchPattern(inputs.back(), m_RConstant(value)) && (value == 1u)) {
-        rewriter.replaceOpWithNewOp<MulOp>(op, op.getType(),
-                                           inputs.drop_back());
-        return success();
-      }
-
-      // mul(..., c1, c2) -> mul(..., c3) where c3 = c1 * c2 -- constant folding
-      if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
-          matchPattern(inputs[size - 2], m_RConstant(value2))) {
-        auto cst = rewriter.create<ConstantOp>(op.getLoc(), value * value2);
-        SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
-        newOperands.push_back(cst);
-        rewriter.replaceOpWithNewOp<MulOp>(op, op.getType(), newOperands);
-        return success();
-      }
-
-      // mul(a, mul(...)) -> mul(a, ...) -- flatten
-      if (tryFlatteningOperands(op, rewriter))
-        return success();
-
-      return failure();
-    }
-  };
-  results.insert<Folder>(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1296,29 +731,6 @@ void ConcatOp::build(OpBuilder &builder, OperationState &result,
     resultWidth += input.getType().cast<IntegerType>().getWidth();
   }
   build(builder, result, builder.getIntegerType(resultWidth), inputs);
-}
-
-void ConcatOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
-                                           MLIRContext *context) {
-  struct Folder final : public OpRewritePattern<ConcatOp> {
-    using OpRewritePattern::OpRewritePattern;
-    LogicalResult matchAndRewrite(ConcatOp op,
-                                  PatternRewriter &rewriter) const override {
-      auto inputs = op.inputs();
-      auto size = inputs.size();
-      assert(size > 1 && "expected 2 or more operands");
-
-      // concat(x, concat(...)) -> concat(x, ...) -- flatten
-      if (tryFlatteningOperands(op, rewriter, /*allowDuplicatingOp=*/true))
-        return success();
-
-      /// TODO: Sequences of constants: concat(..., c1, c2) -> concat(..., c3).
-      /// TODO: Sequences of neighboring extracts.
-      /// TODO: zext argument into 0 + value.
-      return failure();
-    }
-  };
-  results.insert<Folder>(context);
 }
 
 //===----------------------------------------------------------------------===//

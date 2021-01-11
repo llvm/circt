@@ -14,18 +14,17 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
                                        FirstAttrDerivedResultType]> {
   let summary = "Produce a constant value";
   let description = [{
-    The constant operation produces a constant value of SInt or UInt type.
+    The constant operation produces a constant value of SInt or UInt type, it
+    never produces a zero bit wide result.
     ```
       %result = firrtl.constant 42 : t1
     ```
     }];
 
   let arguments = (ins APIntAttr:$value);
-  let results = (outs IntType:$result);
+  let results = (outs NonZeroIntType:$result);
 
-  let assemblyFormat = [{
-     `(` $value `)` attr-dict `:` type($result)
-  }];
+  let assemblyFormat = "`(` $value `)` attr-dict `:` type($result)";
 
   let builders = [
     OpBuilderDAG<(ins "IntType":$type, "const APInt &":$value)>
@@ -138,7 +137,7 @@ def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect,
 
 /// PrimOp is a FIRRTLOp without side effects.
 class PrimOp<string mnemonic, list<OpTrait> traits = []> :
-    FIRRTLOp<mnemonic, !listconcat(traits, [NoSideEffect])>;
+    FIRRTLOp<mnemonic, traits # [NoSideEffect]>;
 
 //===----------------------------------------------------------------------===//
 // Binary Operations
@@ -179,42 +178,47 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
 def AddPrimOp : BinaryPrimOp<"add", IntType, IntType, IntType, [Commutative]>;
 def SubPrimOp : BinaryPrimOp<"sub", IntType, IntType, IntType>;
 def MulPrimOp : BinaryPrimOp<"mul", IntType, IntType, IntType, [Commutative]>;
-let hasFolder = 1 in
-let description = [{
+def DivPrimOp : BinaryPrimOp<"div", IntType, IntType, IntType> {
+  let hasFolder = 1;
+  let description = [{
+    Divides the first argument (the numerator) by the second argument
+    (the denominator) truncating the result (rounding towards zero).
 
-  Divides the first argument (the numerator) by the second argument
-  (the denominator) truncating the result (rounding towards zero).
+    **If the denominator is zero, the result is undefined.**
 
-  **If the denominator is zero, the result is undefined.**
-
-  The compiler may optimize this undefined behavior in any way it
-  wants. Notably `div(a, a)` will be optimized to `1`. This may cause
-  erroneous formal equivalence mismatches between unoptimized and
-  optimized FIRRTL dialects that are separately converted to Verilog.
-
-}] in
-def DivPrimOp : BinaryPrimOp<"div", IntType, IntType, IntType>;
+    The compiler may optimize this undefined behavior in any way it
+    wants. Notably `div(a, a)` will be optimized to `1`. This may cause
+    erroneous formal equivalence mismatches between unoptimized and
+    optimized FIRRTL dialects that are separately converted to Verilog.
+  }];
+}
 def RemPrimOp : BinaryPrimOp<"rem", IntType, IntType, IntType>;
 
-let hasFolder = 1 in
-def AndPrimOp : BinaryPrimOp<"and", IntType, IntType, UIntType, [Commutative]>;
-let hasFolder = 1 in
-def OrPrimOp  : BinaryPrimOp<"or",  IntType, IntType, UIntType, [Commutative]>;
-let hasFolder = 1 in
-def XorPrimOp : BinaryPrimOp<"xor", IntType, IntType, UIntType, [Commutative]>;
+def AndPrimOp : BinaryPrimOp<"and", IntType, IntType, UIntType, [Commutative]> {
+  let hasFolder = 1;
+}
+def OrPrimOp  : BinaryPrimOp<"or",  IntType, IntType, UIntType, [Commutative]> {
+  let hasFolder = 1;
+}
+def XorPrimOp : BinaryPrimOp<"xor", IntType, IntType, UIntType, [Commutative]> {
+  let hasFolder = 1;
+}
 
 // Comparison Operations
 def LEQPrimOp : BinaryPrimOp<"leq", IntType, IntType, UInt1Type>;
 def LTPrimOp  : BinaryPrimOp<"lt",  IntType, IntType, UInt1Type>;
 def GEQPrimOp : BinaryPrimOp<"geq", IntType, IntType, UInt1Type>;
 def GTPrimOp  : BinaryPrimOp<"gt",  IntType, IntType, UInt1Type>;
-let hasFolder = 1 in
-def EQPrimOp  : BinaryPrimOp<"eq",  IntType, IntType, UInt1Type, [Commutative]>;
-let hasFolder = 1 in
-def NEQPrimOp : BinaryPrimOp<"neq", IntType, IntType, UInt1Type, [Commutative]>;
+def EQPrimOp  : BinaryPrimOp<"eq",  IntType, IntType, UInt1Type, [Commutative]>{
+  let hasFolder = 1;
+}
+def NEQPrimOp : BinaryPrimOp<"neq", IntType, IntType, UInt1Type, [Commutative]>{
+  let hasFolder = 1;
+}
 
-let hasCanonicalizer = 1 in
-def CatPrimOp   : BinaryPrimOp<"cat", IntType, IntType, UIntType>;
+def CatPrimOp   : BinaryPrimOp<"cat", IntType, IntType, UIntType> {
+  let hasCanonicalizer = 1;
+}
 def DShlPrimOp  : BinaryPrimOp<"dshl", IntType, UIntType, IntType>;
 def DShlwPrimOp : BinaryPrimOp<"dshlw", IntType, UIntType, IntType>;
 def DShrPrimOp  : BinaryPrimOp<"dshr", IntType, UIntType, IntType>;
@@ -233,9 +237,8 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
   let arguments = (ins srcType:$input);
   let results = (outs resultType:$result);
 
-  let assemblyFormat = [{
-    $input attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input attr-dict `:` functional-type($input, $result)";
 
   let extraClassDeclaration = [{
     /// Return the result for inputs with the specified type, returning a null
@@ -243,7 +246,7 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
     static FIRRTLType getResultType(FIRRTLType input, Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
                                     ArrayRef<int32_t> integers, Location loc) {
-      if (inputs.size() != 1 && !integers.empty()) {
+      if (inputs.size() != 1 || !integers.empty()) {
         mlir::emitError(loc, "operation requires one operand and no constants");
         return {};
       }
@@ -265,9 +268,27 @@ def CvtPrimOp : UnaryPrimOp<"cvt", IntType, SIntType>;
 def NegPrimOp : UnaryPrimOp<"neg", IntType, SIntType>;
 def NotPrimOp : UnaryPrimOp<"not", IntType, UIntType>;
 
-def AndRPrimOp : UnaryPrimOp<"andr", IntType, UIntType>;
-def OrRPrimOp : UnaryPrimOp<"orr", IntType, UIntType>;
-def XorRPrimOp : UnaryPrimOp<"xorr", IntType, UIntType>;
+def AndRPrimOp : UnaryPrimOp<"andr", IntType, UIntType> {
+  let description = [{
+    Horizontally reduce a value to one bit, using the 'and' operation to merge
+    bits.  `andr(x)` is equivalent to `concat(x, 1b1) == ~0`.  As such, it
+    returns 1 for zero-bit-wide operands.
+  }];
+}
+def OrRPrimOp : UnaryPrimOp<"orr", IntType, UIntType> {
+  let description = [{
+    Horizontally reduce a value to one bit, using the 'or' operation to merge
+    bits.  `orr(x)` is equivalent to `concat(x, 1b0) != 0`.  As such, it returns
+    0 for zero-bit-wide operands.
+  }];
+}
+def XorRPrimOp : UnaryPrimOp<"xorr", IntType, UIntType> {
+  let description = [{
+    Horizontally reduce a value to one bit, using the 'xor' operation to merge
+    bits.  `xorr(x)` is equivalent to `popcount(concat(x, 1b0)) & 1`.  As such,
+    it returns 0 for zero-bit-wide operands.
+  }];
+}
 
 //===----------------------------------------------------------------------===//
 // Other Operations
@@ -277,9 +298,8 @@ def BitsPrimOp : PrimOp<"bits"> {
   let arguments = (ins IntType:$input, I32Attr:$hi, I32Attr:$lo);
   let results = (outs UIntType:$result);
 
-  let assemblyFormat = [{
-    $input $hi `to` $lo attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input $hi `to` $lo attr-dict `:` functional-type($input, $result)";
 
   let description = [{
     The `bits` operation extracts the bits between `hi` (inclusive) and `lo`
@@ -319,9 +339,8 @@ def HeadPrimOp : PrimOp<"head"> {
   let arguments = (ins IntType:$input, I32Attr:$amount);
   let results = (outs UIntType:$result);
 
-  let assemblyFormat = [{
-    $input `,` $amount attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input `,` $amount attr-dict `:` functional-type($input, $result)";
 
   let hasCanonicalizer = 1;
 
@@ -367,9 +386,8 @@ def MuxPrimOp : PrimOp<"mux"> {
   let arguments = (ins UInt1Type:$sel, PassiveType:$high, PassiveType:$low);
   let results = (outs PassiveType:$result);
 
-  let assemblyFormat = [{
-    `(` operands `)` attr-dict `:` functional-type(operands, $result)
-  }];
+  let assemblyFormat =
+    "`(` operands `)` attr-dict `:` functional-type(operands, $result)";
 
   let hasFolder = 1;
 
@@ -401,9 +419,8 @@ def PadPrimOp : PrimOp<"pad"> {
   let arguments = (ins IntType:$input, I32Attr:$amount);
   let results = (outs IntType:$result);
 
-  let assemblyFormat = [{
-    $input `,` $amount attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input `,` $amount attr-dict `:` functional-type($input, $result)";
 
   let description = [{
     Pad the input out to an `amount` wide integer, sign extending or zero
@@ -438,9 +455,8 @@ class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic> {
   let arguments = (ins IntType:$input, I32Attr:$amount);
   let results = (outs IntType:$result);
 
-  let assemblyFormat = [{
-    $input `,` $amount attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input `,` $amount attr-dict `:` functional-type($input, $result)";
 
   let extraClassDeclaration = [{
     /// Return the result for inputs with the specified type, returning a null
@@ -487,9 +503,8 @@ def TailPrimOp : PrimOp<"tail"> {
   let arguments = (ins IntType:$input, I32Attr:$amount);
   let results = (outs UIntType:$result);
 
-  let assemblyFormat = [{
-    $input `,` $amount attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input `,` $amount attr-dict `:` functional-type($input, $result)";
 
   let description = [{
     The `tail` operation truncates the `amount` most significant bits from
@@ -534,12 +549,11 @@ def StdIntCastOp : FIRRTLOp<"stdIntCast", [NoSideEffect]> {
   let arguments = (ins IntCastType:$input);
   let results = (outs IntCastType:$result);
 
-  let assemblyFormat = [{
-    $input attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input attr-dict `:` functional-type($input, $result)";
 
   let hasFolder = 1;
-  let verifier = [{ return ::verifyStdIntCastOp(*this); }];
+  let verifier = "return ::verifyStdIntCastOp(*this);";
 }
 
 // This operation converts from an Analog type to an InOut type of the
@@ -548,12 +562,11 @@ def AnalogInOutCastOp : FIRRTLOp<"analogInOutCast", [NoSideEffect]> {
   let arguments = (ins AnyType:$input);
   let results = (outs AnyType:$result);
 
-  let assemblyFormat = [{
-    $input attr-dict `:` functional-type($input, $result)
-  }];
+  let assemblyFormat =
+    "$input attr-dict `:` functional-type($input, $result)";
 
   let hasFolder = 1;
-  let verifier = [{ return ::verifyAnalogInOutCastOp(*this); }];
+  let verifier = "return ::verifyAnalogInOutCastOp(*this);";
 }
 
 // MLIR specific pseudo ops.
@@ -571,9 +584,7 @@ def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect,
   let results = (outs PassiveType:$result);
 
   let hasFolder = 1;
-  let assemblyFormat = [{
-    $input attr-dict `:` type($input)
-  }];
+  let assemblyFormat = "$input attr-dict `:` type($input)";
 
   let builders = [
     OpBuilderDAG<(ins "Value":$input)>
@@ -587,7 +598,5 @@ def AsNonPassivePrimOp : FIRRTLOp<"asNonPassive", [NoSideEffect,
   let results = (outs FIRRTLType:$result);
 
   let hasFolder = 1;
-  let assemblyFormat = [{
-    $input attr-dict `:` type($result)
-  }];
+  let assemblyFormat = "$input attr-dict `:` type($result)";
 }
