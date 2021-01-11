@@ -104,7 +104,6 @@ static size_t emitTypeDims(Type type, Location loc, raw_ostream &os) {
   size_t emittedWidth = 0;
   int width;
   if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
-    emittedWidth += emitTypeDims(arrayType.getElementType(), loc, os);
     width = arrayType.getSize();
   } else {
     width = getBitWidthOrSentinel(type);
@@ -127,6 +126,9 @@ static size_t emitTypeDims(Type type, Location loc, raw_ostream &os) {
     os << '[' << (width - 1) << ":0]";
     emittedWidth += getPrintedIntWidth(width - 1) + 4;
     break;
+  }
+  if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
+    emittedWidth += emitTypeDims(arrayType.getElementType(), loc, os);
   }
   return emittedWidth;
 }
