@@ -193,7 +193,7 @@ static LogicalResult verifySVInterface(Operation *op,
   if (!modport)
     return op->emitError("Could not find modport ")
            << modportType.getModport() << " in symbol table.";
-  auto iface = cast<circt::sv::InterfaceOp>(modport.getParentOp());
+  auto iface = cast<circt::sv::InterfaceOp>(modport->getParentOp());
   Type esiDataType = getEsiDataType(iface);
   if (!esiDataType)
     return op->emitOpError("Interface is not a valid ESI interface.");

@@ -1045,11 +1045,8 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result,
 
   // If the index expression is a flip type, strip it off.
   auto indexType = index.getType().cast<FIRRTLType>();
-  if (!indexType.isPassive()) {
-    indexType = indexType.getPassiveType();
-    index = builder.create<AsPassivePrimOp>(translateLocation(indexLoc),
-                                            indexType, index);
-  }
+  indexType = indexType.getPassiveType();
+  index = convertToPassive(index, translateLocation(indexLoc));
 
   // Make sure the index expression is valid and compute the result type for the
   // expression.
@@ -1095,12 +1092,8 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
           return failure();
 
         // If the operand contains a flip, strip it out with an asPassive op.
-        if (!operand.getType().cast<FIRRTLType>().isPassive()) {
-          auto passiveType =
-              operand.getType().cast<FIRRTLType>().getPassiveType();
-          operand = builder.create<AsPassivePrimOp>(translateLocation(loc),
-                                                    passiveType, operand);
-        }
+        if (!operand.getType().cast<FIRRTLType>().isPassive())
+          operand = convertToPassive(operand, translateLocation(loc));
 
         operands.push_back(operand);
         return success();
@@ -1177,20 +1170,36 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result,
       parseToken(FIRToken::r_paren, "expected ')' in integer expression"))
     return failure();
 
+  if (width == 0)
+    return emitError(loc, "zero bit constants are not allowed"), failure();
+
   // Construct an integer attribute of the right width.
   auto type = IntType::get(builder.getContext(), isSigned, width);
 
-  // TODO: check to see if this extension stuff is necessary.  We should at
-  // least warn for things like UInt<4>(255).
   IntegerType::SignednessSemantics signedness;
   if (type.isSigned()) {
     signedness = IntegerType::Signed;
-    if (width != -1)
+    if (width != -1) {
+      // Check for overlow if we are truncating bits.
+      if (unsigned(width) < value.getBitWidth() &&
+          value.getNumSignBits() <= value.getBitWidth() - width) {
+        return emitError(loc, "initializer too wide for declared width"),
+               failure();
+      }
+
       value = value.sextOrTrunc(width);
+    }
   } else {
     signedness = IntegerType::Unsigned;
-    if (width != -1)
+    if (width != -1) {
+      // Check for overlow if we are truncating bits.
+      if (unsigned(width) < value.getBitWidth() &&
+          value.countLeadingZeros() < value.getBitWidth() - width) {
+        return emitError(loc, "initializer too wide for declared width"),
+               failure();
+      }
       value = value.zextOrTrunc(width);
+    }
   }
 
   Type attrType =
@@ -2001,7 +2010,8 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
 
 /// node ::= 'node' id '=' exp info?
 ParseResult FIRStmtParser::parseNode() {
-  LocWithInfo info(getToken().getLoc(), this);
+  auto loc = getToken().getLoc();
+  LocWithInfo info(loc, this);
   consumeToken(FIRToken::kw_node);
 
   // If this was actually the start of a connect or something else handle
@@ -2017,6 +2027,31 @@ ParseResult FIRStmtParser::parseNode() {
       parseExp(initializer, subOps, "expected expression for node") ||
       parseOptionalInfo(info, subOps))
     return failure();
+
+  // Error out in the following conditions:
+  //
+  //   1. Node type is Analog (at the top level)
+  //   2. Node type is not passive under an optional outer flip
+  //      (analog field is okay)
+  //
+  // Note: (1) is more restictive than normal NodeOp verification, but
+  // this is added to align with the SFC. (2) is less restrictive than
+  // the SFC to accomodate for situations where the node is something
+  // weird like a module output or an instance input. This one
+  // situation is cleaned up with 'convertToPassive' following.
+  auto initializerType = initializer.getType().cast<FIRRTLType>();
+  if (initializerType.isa<AnalogType>() ||
+      (!initializerType.isPassive() && !initializerType.isa<FlipType>())) {
+    emitError(
+        loc,
+        "Node cannot be analog and must be passive or passive under a flip")
+        << initializer.getType();
+    return failure();
+  }
+
+  // If the node type isn't passive (it contains an outer flip), then make it
+  // passive.
+  initializer = convertToPassive(initializer, initializer.getLoc());
 
   // Ignore useless names like _T.
   auto actualName = filterUselessName(id);
@@ -2084,6 +2119,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
       parseType(type, "expected reg type") ||
       parseExp(clock, subOps, "expected expression for register clock"))
     return failure();
+  clock = convertToPassive(clock, clock.getLoc());
 
   // Parse the 'with' specifier if present.
   Value resetSignal, resetValue;
@@ -2109,6 +2145,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
         parseToken(FIRToken::l_paren, "expected '(' in reset specifier") ||
         parseExp(resetSignal, subOps, "expected expression for reset signal"))
       return failure();
+    resetSignal = convertToPassive(resetSignal, resetSignal.getLoc());
 
     // The Scala implementation of FIRRTL represents registers without resets
     // as a self referential register... and the pretty printer doesn't print
@@ -2126,6 +2163,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
           parseToken(FIRToken::r_paren, "expected ')' in reset specifier") ||
           parseOptionalInfo(info, subOps))
         return failure();
+      resetValue = convertToPassive(resetValue, resetValue.getLoc());
     }
 
     if (hasExtraLParen &&
@@ -2140,8 +2178,8 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
 
   Value result;
   if (resetSignal)
-    result = builder.create<RegInitOp>(info.getLoc(), type, clock, resetSignal,
-                                       resetValue, filterUselessName(id));
+    result = builder.create<RegResetOp>(info.getLoc(), type, clock, resetSignal,
+                                        resetValue, filterUselessName(id));
   else
     result = builder.create<RegOp>(info.getLoc(), type, clock,
                                    filterUselessName(id));
@@ -2310,8 +2348,8 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
       builder.create<FExtModuleOp>(info.getLoc(), name, portList, defName);
 
   if (!parameters.empty())
-    fmodule.setAttr("parameters",
-                    DictionaryAttr::get(parameters, getContext()));
+    fmodule->setAttr("parameters",
+                     DictionaryAttr::get(parameters, getContext()));
 
   return success();
 }

@@ -134,3 +134,63 @@ circuit test :
    input in1 : SInt
    input in2 : UInt
    node n = add(in1, in2)  ; expected-error {{operand signedness must match}}
+
+;// -----
+
+circuit invalid_node_not_passive :
+  module invalid_node_not_passive :
+    input a : { a: UInt, flip b: UInt}
+    output b : { a: UInt, flip b: UInt}
+    ; expected-error @+1 {{Node cannot be analog and must be passive or passive under a flip}}
+    node n = a
+
+;// -----
+
+circuit invalid_node_analog :
+  module invalid_node_analog :
+    input a : Analog<1>
+    output b : Analog<1>
+    ; expected-error @+1 {{Node cannot be analog and must be passive or passive under a flip}}
+    node n = a
+
+;// -----
+
+circuit Issue418:
+  module Issue418:
+    input a: UInt<1>
+    output b: UInt<1>
+
+    ; expected-error @+1 {{operation requires one operand and no constants}}
+    b <= not(a, a)
+
+;// -----
+
+circuit Issue426:
+  module Issue426:
+    ; expected-error @+1 {{zero bit constants are not allowed}}
+    node x = UInt<0>("h0")
+
+;// -----
+
+circuit Issue426:
+  module Issue426:
+    output a: UInt<1>
+    ; expected-error @+1 {{initializer too wide for declared width}}
+    a <= UInt<1>(2)
+
+;// -----
+
+circuit Issue426:
+  module Issue426:
+    output a: SInt<1>
+    a <= SInt<1>(0) ; ok
+    a <= SInt<1>(-1) ; ok
+    ; expected-error @+1 {{initializer too wide for declared width}}
+    a <= SInt<1>(1)
+;// -----
+
+circuit Issue426:
+  module Issue426:
+    output a: SInt<1>
+    ; expected-error @+1 {{initializer too wide for declared width}}
+    a <= SInt<1>(-2)

@@ -10,9 +10,7 @@ func @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> i50 {
   %c = rtl.mul %a, %b : i12
 
   // CHECK-NEXT:    [[RES2:%[0-9]+]] = rtl.sext %arg0 : (i3) -> i7
-  // CHECK-NEXT:    [[RES3:%[0-9]+]] = rtl.zext %arg0 : (i3) -> i7
   %d = rtl.sext %arg0 : (i3) -> i7
-  %e = rtl.zext %arg0 : (i3) -> i7
 
   // CHECK-NEXT:    [[RES4:%[0-9]+]] = rtl.concat %c42_i12 : (i12) -> i12
   %conc1 = rtl.concat %a : (i12) -> i12
@@ -24,8 +22,8 @@ func @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> i50 {
   %orr1  = rtl.orr  %conc1 : i12
   %xorr1 = rtl.xorr %conc1 : i12
 
-  // CHECK-NEXT:    [[RES8:%[0-9]+]] = rtl.concat [[RES4]], [[RES0]], [[RES1]], [[RES2]], [[RES3]] : (i12, i12, i12, i7, i7) -> i50
-  %result = rtl.concat %conc1, %b, %c, %d, %e : (i12, i12, i12, i7, i7) -> i50
+  // CHECK-NEXT:    [[RES8:%[0-9]+]] = rtl.concat [[RES4]], [[RES0]], [[RES1]], [[RES2]], [[RES2]] : (i12, i12, i12, i7, i7) -> i50
+  %result = rtl.concat %conc1, %b, %c, %d, %d : (i12, i12, i12, i7, i7) -> i50
 
   // CHECK-NEXT: [[RES9:%[0-9]+]] = rtl.extract [[RES8]] from 4 : (i50) -> i19
   %small1 = rtl.extract %result from 4 : (i50) -> i19
@@ -83,19 +81,19 @@ func @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> i50 {
   // CHECK-NEXT: %after3 = rtl.wire {someAttr = "foo"} : !rtl.inout<i4>
   %before3 = rtl.wire {name = "after3", someAttr = "foo"} : !rtl.inout<i4>
 
-  // CHECK-NEXT: = rtl.mux %arg1, [[RES2]], [[RES3]] : i7
-  %mux = rtl.mux %arg1, %d, %e : i7
+  // CHECK-NEXT: = rtl.mux %arg1, [[RES2]], [[RES2]] : i7
+  %mux = rtl.mux %arg1, %d, %d : i7
   
-  // CHECK-NEXT: = rtl.struct_create (%9, %23) : !rtl.struct<foo: i19, bar: i7>
+  // CHECK-NEXT: [[STR:%[0-9]+]] = rtl.struct_create ({{.*}}, {{.*}}) : !rtl.struct<foo: i19, bar: i7>
   %s0 = rtl.struct_create (%small1, %mux) : !rtl.struct<foo: i19, bar: i7>
   
-  // CHECK-NEXT: = rtl.struct_extract %24["foo"] : !rtl.struct<foo: i19, bar: i7>
+  // CHECK-NEXT: = rtl.struct_extract [[STR]]["foo"] : !rtl.struct<foo: i19, bar: i7>
   %sf1 = rtl.struct_extract %s0["foo"] : !rtl.struct<foo: i19, bar: i7>
 
-  // CHECK-NEXT: = rtl.struct_inject %24["foo"], %25 : !rtl.struct<foo: i19, bar: i7>
+  // CHECK-NEXT: = rtl.struct_inject [[STR]]["foo"], {{.*}} : !rtl.struct<foo: i19, bar: i7>
   %s1 = rtl.struct_inject %s0["foo"], %sf1 : !rtl.struct<foo: i19, bar: i7>
   
-  // CHECK-NEXT: :2 = rtl.struct_explode %24 : !rtl.struct<foo: i19, bar: i7>
+  // CHECK-NEXT: :2 = rtl.struct_explode [[STR]] : !rtl.struct<foo: i19, bar: i7>
   %se:2 = rtl.struct_explode %s0 : !rtl.struct<foo: i19, bar: i7>
 
   // CHECK-NEXT: = constant 13 : i10

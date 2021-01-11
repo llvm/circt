@@ -13,7 +13,8 @@
 class SVType<string name> : TypeDef<SVDialect, name> { }
 
 // FIXME: Shouldn't have to duplicate this from the RTL dialect tblgen files.
-def InOutType : Type<CPred<"$_self.isa<rtl::InOutType>()">, "InOutType">;
+def InOutType : Type<CPred<"$_self.isa<rtl::InOutType>()">, "InOutType",
+                           "::circt::rtl::InOutType">;
 
 // Type constraint that indicates that an operand/result may only be a valid
 // inout element type.

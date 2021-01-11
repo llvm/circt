@@ -2,19 +2,19 @@
 // RUN: circt-opt %s --convert-llhd-to-llvm --split-input-file | FileCheck %s
 
 // CHECK-LABEL:   llvm.func @convert_insert_slice(
-// CHECK-SAME:                                    %[[VAL_0:.*]]: !llvm.i32,
-// CHECK-SAME:                                    %[[VAL_1:.*]]: !llvm.i10,
+// CHECK-SAME:                                    %[[VAL_0:.*]]: i32,
+// CHECK-SAME:                                    %[[VAL_1:.*]]: i10,
 // CHECK-SAME:                                    %[[VAL_2:.*]]: !llvm.array<4 x i5>,
 // CHECK-SAME:                                    %[[VAL_3:.*]]: !llvm.array<2 x i5>) {
-// CHECK:           %[[VAL_4:.*]] = llvm.mlir.constant(0 : index) : !llvm.i64
-// CHECK:           %[[VAL_5:.*]] = llvm.trunc %[[VAL_4]] : !llvm.i64 to !llvm.i32
-// CHECK:           %[[VAL_6:.*]] = llvm.mlir.constant(1023 : i32) : !llvm.i32
-// CHECK:           %[[VAL_7:.*]] = llvm.mlir.constant(-1024 : i32) : !llvm.i32
-// CHECK:           %[[VAL_8:.*]] = llvm.zext %[[VAL_1]] : !llvm.i10 to !llvm.i32
-// CHECK:           %[[VAL_9:.*]] = llvm.shl %[[VAL_8]], %[[VAL_5]] : !llvm.i32
-// CHECK:           %[[VAL_10:.*]] = llvm.or %[[VAL_9]], %[[VAL_7]] : !llvm.i32
-// CHECK:           %[[VAL_11:.*]] = llvm.or %[[VAL_0]], %[[VAL_6]] : !llvm.i32
-// CHECK:           %[[VAL_12:.*]] = llvm.and %[[VAL_11]], %[[VAL_10]] : !llvm.i32
+// CHECK:           %[[VAL_4:.*]] = llvm.mlir.constant(0 : index) : i64
+// CHECK:           %[[VAL_5:.*]] = llvm.trunc %[[VAL_4]] : i64 to i32
+// CHECK:           %[[VAL_6:.*]] = llvm.mlir.constant(1023 : i32) : i32
+// CHECK:           %[[VAL_7:.*]] = llvm.mlir.constant(-1024 : i32) : i32
+// CHECK:           %[[VAL_8:.*]] = llvm.zext %[[VAL_1]] : i10 to i32
+// CHECK:           %[[VAL_9:.*]] = llvm.shl %[[VAL_8]], %[[VAL_5]] : i32
+// CHECK:           %[[VAL_10:.*]] = llvm.or %[[VAL_9]], %[[VAL_7]] : i32
+// CHECK:           %[[VAL_11:.*]] = llvm.or %[[VAL_0]], %[[VAL_6]] : i32
+// CHECK:           %[[VAL_12:.*]] = llvm.and %[[VAL_11]], %[[VAL_10]] : i32
 // CHECK:           %[[VAL_13:.*]] = llvm.extractvalue %[[VAL_3]][0 : i32] : !llvm.array<2 x i5>
 // CHECK:           %[[VAL_14:.*]] = llvm.insertvalue %[[VAL_13]], %[[VAL_2]][1 : i32] : !llvm.array<4 x i5>
 // CHECK:           %[[VAL_15:.*]] = llvm.extractvalue %[[VAL_3]][1 : i32] : !llvm.array<2 x i5>
@@ -29,7 +29,7 @@ func @convert_insert_slice(%int : i32, %iSlice : i10, %arr : !llhd.array<4xi5>, 
 }
 
 // CHECK-LABEL:   llvm.func @convert_insert_element(
-// CHECK-SAME:                                      %[[VAL_0:.*]]: !llvm.i5,
+// CHECK-SAME:                                      %[[VAL_0:.*]]: i5,
 // CHECK-SAME:                                      %[[VAL_1:.*]]: !llvm.array<4 x i5>,
 // CHECK-SAME:                                      %[[VAL_2:.*]]: !llvm.struct<(i4, i5, i6)>) {
 // CHECK:           %[[VAL_3:.*]] = llvm.insertvalue %[[VAL_0]], %[[VAL_1]][0 : index] : !llvm.array<4 x i5>

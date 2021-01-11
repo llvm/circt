@@ -21,11 +21,9 @@ def InstanceOp : FIRRTLOp<"instance"> {
                        OptionalAttr<StrAttr>:$name);
   let results = (outs FIRRTLType:$result);
 
-  let assemblyFormat = [{
-     $moduleName attr-dict `:` type($result)
-  }];
+  let assemblyFormat = "$moduleName attr-dict `:` type($result)";
 
-  let verifier = [{ return ::verifyInstanceOp(*this); }];
+  let verifier = "return ::verifyInstanceOp(*this);";
 
   let extraClassDeclaration = [{
     /// Lookup the module or extmodule for the symbol.  This returns null on
@@ -39,9 +37,7 @@ def CMemOp : FIRRTLOp<"cmem", [/*MemAlloc*/]> {
   let arguments = (ins OptionalAttr<StrAttr>:$name);
   let results = (outs FIRRTLType:$result);
 
-  let assemblyFormat = [{
-     attr-dict `:` type($result)
-  }];
+  let assemblyFormat = "attr-dict `:` type($result)";
 }
 
 def SMemOp : FIRRTLOp<"smem", [/*MemAlloc*/]> {
@@ -49,9 +45,7 @@ def SMemOp : FIRRTLOp<"smem", [/*MemAlloc*/]> {
   let arguments = (ins RUWAttr:$ruw, OptionalAttr<StrAttr>:$name);
   let results = (outs FIRRTLType:$result);
 
-  let assemblyFormat = [{
-    $ruw attr-dict `:` type($result)
-  }];
+  let assemblyFormat = "$ruw attr-dict `:` type($result)";
 }
 
 def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
@@ -60,11 +54,9 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
                        Confined<I32Attr, [IntMinValue<1>]>:$writeLatency,
                        I64Attr:$depth, RUWAttr:$ruw,
                        OptionalAttr<StrAttr>:$name);
-  let results = (outs FIRRTLType:$result);
+  let results = (outs BundleType:$result);
 
-  let assemblyFormat = [{
-    $ruw attr-dict `:` type($result)
-  }];
+  let assemblyFormat = "$ruw attr-dict `:` type($result)";
 
   let extraClassDeclaration = [{
     enum class PortKind { Read, Write, ReadWrite };
@@ -99,12 +91,10 @@ def NodeOp : FIRRTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
     ```
     }];
 
-  let arguments = (ins FIRRTLType:$input, OptionalAttr<StrAttr>:$name);
+  let arguments = (ins PassiveType:$input, OptionalAttr<StrAttr>:$name);
   let results = (outs FIRRTLType:$result);
 
-  let assemblyFormat = [{
-     $input attr-dict `:` type($input)
-  }];
+  let assemblyFormat = "$input attr-dict `:` type($input)";
 }
 
 def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
@@ -119,17 +109,16 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
   let arguments = (ins ClockType:$clockVal, OptionalAttr<StrAttr>:$name);
   let results = (outs PassiveType:$result);
 
-  let assemblyFormat = [{
-     operands attr-dict `:` functional-type(operands, $result)
-  }];
+  let assemblyFormat =
+    "operands attr-dict `:` functional-type(operands, $result)";
 }
 
-def RegInitOp : FIRRTLOp<"reginit", [/*MemAlloc*/]> {
-  let summary = "Define a new register with an initializer";
+def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
+  let summary = "Define a new register with a reset";
   let description = [{
     Declare a new register:
     ```
-      %name = firrtl.reginit %clockVal, %resetSignal, %resetValue : t1
+      %name = firrtl.regreset %clockVal, %resetSignal, %resetValue : t1
     ```
     }];
 
@@ -137,9 +126,8 @@ def RegInitOp : FIRRTLOp<"reginit", [/*MemAlloc*/]> {
                        PassiveType:$resetValue, OptionalAttr<StrAttr>:$name);
   let results = (outs PassiveType:$result);
 
-  let assemblyFormat = [{
-     operands attr-dict `:` functional-type(operands, $result)
-  }];
+  let assemblyFormat =
+     "operands attr-dict `:` functional-type(operands, $result)";
 }
 
 def WireOp : FIRRTLOp<"wire", []> {
@@ -155,6 +143,6 @@ def WireOp : FIRRTLOp<"wire", []> {
   let results = (outs FIRRTLType:$result);
 
   // We handle the name in a custom way, so we use a customer parser/printer.
-  let printer = [{ printWireOp(p, *this); }];
-  let parser = [{ return parseWireOp(parser, result); }];
+  let printer = "printWireOp(p, *this);";
+  let parser = "return parseWireOp(parser, result);";
 }

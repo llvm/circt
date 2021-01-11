@@ -22,7 +22,7 @@ def RegOp : SVOp<"reg", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   ];
 
   // We handle the name in a custom way, so we use a customer parser/printer.
-  let printer = [{ printRegOp(p, *this); }];
-  let parser = [{ return parseRegOp(parser, result); }];
+  let printer = "printRegOp(p, *this);";
+  let parser = "return parseRegOp(parser, result);";
 }
 
