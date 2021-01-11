@@ -68,7 +68,7 @@ module {
   // CHECK-LABEL: module TESTSIMPLE(
   // CHECK-NEXT:   input  [3:0]      a, b
   // CHECK-NEXT:   input             cond,
-  // CHECK-NEXT:   input  [3:0][9:0] array,
+  // CHECK-NEXT:   input  [9:0][3:0] array,
   // CHECK-NEXT:   input  [7:0]      uarray[15:0],
   // CHECK-NEXT:   output [3:0]      r0, r2, r4, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15
   // CHECK-NEXT:   output            r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28
@@ -76,7 +76,7 @@ module {
   // CHECK-NEXT:   output [1:0]      r30,
   // CHECK-NEXT:   output [8:0]      r31,
   // CHECK-NEXT:   output [3:0]      r33, r34,
-  // CHECK-NEXT:   output [3:0][2:0] r35,
+  // CHECK-NEXT:   output [2:0][3:0] r35,
   // CHECK-NEXT:   output [11:0]     r36);
   // CHECK-EMPTY:
   // CHECK-NEXT:   assign r0 = a + b;
@@ -267,9 +267,9 @@ module {
  
     // Packed arrays.
 
-    // CHECK-NEXT: wire [7:0][41:0]      myArray1;
+    // CHECK-NEXT: wire [41:0][7:0]      myArray1;
     %myArray1 = rtl.wire : !rtl.inout<array<42 x i8>>
-    // CHECK-NEXT: wire [3:0][41:0][2:0] myWireArray2;
+    // CHECK-NEXT: wire [2:0][41:0][3:0] myWireArray2;
     %myWireArray2 = rtl.wire : !rtl.inout<array<3 x array<42 x i4>>>
 
     // Unpacked arrays, and unpacked arrays of packed arrays.
@@ -277,7 +277,7 @@ module {
     // CHECK-NEXT: wire [7:0]            myUArray1[41:0];
     %myUArray1 = rtl.wire : !rtl.inout<uarray<42 x i8>>
 
-    // CHECK-NEXT: wire [3:0][41:0]      myWireUArray2[2:0];
+    // CHECK-NEXT: wire [41:0][3:0]      myWireUArray2[2:0];
     %myWireUArray2 = rtl.wire : !rtl.inout<uarray<3 x array<42 x i4>>>
 
     // CHECK-EMPTY:
@@ -359,10 +359,10 @@ module {
   // CHECK-LABEL: module TestZero(
   // CHECK-NEXT:      input  [3:0]               a,
   // CHECK-NEXT:   // input  /*Zero Width*/      zeroBit,
-  // CHECK-NEXT:   // input  /*Zero Width*/[2:0] arrZero,
+  // CHECK-NEXT:   // input  [2:0]/*Zero Width*/ arrZero,
   // CHECK-NEXT:      output [3:0]               r0,
   // CHECK-NEXT:   // output /*Zero Width*/      rZero,
-  // CHECK-NEXT:   // output /*Zero Width*/[2:0] arrZero
+  // CHECK-NEXT:   // output [2:0]/*Zero Width*/ arrZero
   // CHECK-NEXT:    );
   // CHECK-EMPTY:
   rtl.module @TestZero(%a: i4, %zeroBit: i0, %arrZero: !rtl.array<3xi0>)
