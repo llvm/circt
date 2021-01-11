@@ -279,7 +279,7 @@ firrtl.circuit "Simple" {
                                 %outb: !firrtl.flip<uint<0>>) {
     // CHECK-NEXT: %0 = firrtl.stdIntCast %inA : (i4) -> !firrtl.uint<4>
     // CHECK-NEXT: %1 = firrtl.wire : !firrtl.flip<uint<0>>
-    // CHECK-NEXT: %2 = firrtl.asPassive %1 : (!firrtl.flip<uint<0>>) -> !firrtl.uint<0>
+    // CHECK-NEXT: %2 = firrtl.asPassive %1 : !firrtl.flip<uint<0>>
     // CHECK-NEXT: %3 = firrtl.wire : !firrtl.analog<0>
     // CHECK-NEXT: %4 = firrtl.wire : !firrtl.flip<uint<0>>
 

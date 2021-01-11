@@ -81,7 +81,7 @@ def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect,
     ```
     }];
 
-  let arguments = (ins FIRRTLType:$input, I32Attr:$index);
+  let arguments = (ins FVectorType:$input, I32Attr:$index);
   let results = (outs FIRRTLType:$result);
 
   // TODO: Could drop the result type, inferring it from the source.
@@ -593,7 +593,7 @@ def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect,
 
 // Convert a passive value to a non-passive type.
 def AsNonPassivePrimOp : FIRRTLOp<"asNonPassive", [NoSideEffect,
-                               PassiveConstraint<"result", "input">]> {
+                                  PassiveConstraint<"result", "input">]> {
   let arguments = (ins PassiveType:$input);
   let results = (outs FIRRTLType:$result);
 

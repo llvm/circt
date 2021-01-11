@@ -375,7 +375,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %hits_1_7 = firrtl.node %0 {name = "hits_1_7"} : !firrtl.uint<1>
     // CHECK-NEXT:  %hits_1_7 = rtl.wire : !rtl.inout<i1>
     // CHECK-NEXT:  rtl.connect %hits_1_7, [[IO]] : i1
-    %1455 = firrtl.asPassive %hits_1_7 : !firrtl.flip<uint<1>>
+    %1455 = firrtl.asPassive %hits_1_7 : !firrtl.uint<1>
   }
 
   // https://github.com/llvm/circt/issues/314
