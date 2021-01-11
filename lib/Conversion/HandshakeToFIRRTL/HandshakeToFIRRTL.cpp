@@ -1327,8 +1327,8 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   // Get the memory type and element type.
   MemRefType type = op.type();
   Type elementType = type.getElementType();
-  if (!elementType.isIntOrFloat()) {
-    op.emitError("only memrefs of ints or floats are supported");
+  if (!elementType.isSignlessInteger()) {
+    op.emitError("only memrefs of signless ints are supported");
     return false;
   }
 
@@ -1338,9 +1338,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   uint32_t writeLatency = 1;
   RUWAttr ruw = RUWAttr::Old;
   uint64_t depth = type.getNumElements();
-  FIRRTLType dataType =
-      IntType::get(rewriter.getContext(), elementType.isSignedInteger(),
-                   elementType.getIntOrFloatBitWidth());
+  FIRRTLType dataType = getFIRRTLType(elementType);
   StringAttr name = rewriter.getStringAttr("mem" + std::to_string(op.id()));
 
   // Helpers to get port identifiers.
@@ -1383,19 +1381,20 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
   // Collect load arguments.
   for (size_t i = 0; i < numLoads; ++i) {
-    // Unpack load address.
+    // Extract load ports from the port list.
     auto loadAddr = portList[2 * numStores + i];
+    auto loadData = portList[2 * numStores + numLoads + i];
+    auto loadControl = portList[3 * numStores + 2 * numLoads + i];
+
+    assert(loadAddr.size() == 3 && loadData.size() == 3 &&
+           loadControl.size() == 2 && "incorrect load port number");
+
+    // Unpack load address.
     auto loadAddrValid = loadAddr[0];
     auto loadAddrData = loadAddr[2];
 
     // Unpack load data.
-    auto loadData = portList[2 * numStores + numLoads + i];
     auto loadDataData = loadData[2];
-
-    // Unpack load control.
-    auto loadControl = portList[3 * numStores + 2 * numLoads + i];
-
-    assert(loadAddr.size() && loadData.size() && loadControl.size());
 
     // Create a subfield op to access this port in the memory.
     auto fieldName = loadIdentifier(i);
@@ -1445,33 +1444,33 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     // Connect the address valid signal to the memory enable.
     rewriter.create<ConnectOp>(insertLoc, memEnable, loadAddrValid);
 
-    // Connect the address valid signal to the memory enable.
-    rewriter.create<ConnectOp>(insertLoc, memClock, clock);
-
     // Create control-only fork for the load address valid and ready signal.
     buildForkLogic(&loadAddr, {&loadData, &loadControl}, clock, reset, true);
   }
 
   // Collect store arguments.
   for (size_t i = 0; i < numStores; ++i) {
-    // Unpack store data.
+    // Extract store ports from the port list.
     auto storeData = portList[i];
+    auto storeAddr = portList[i + 1];
+    auto storeControl = portList[2 * numStores + 2 * numLoads + i];
+
+    assert(storeAddr.size() == 3 && storeData.size() == 3 &&
+           storeControl.size() == 2 && "incorrect store port number");
+
+    // Unpack store data.
     auto storeDataValid = storeData[0];
     auto storeDataReady = storeData[1];
     auto storeDataData = storeData[2];
 
     // Unpack store address.
-    auto storeAddr = portList[i + 1];
     auto storeAddrValid = storeAddr[0];
     auto storeAddrReady = storeAddr[1];
     auto storeAddrData = storeAddr[2];
 
     // Unpack store control.
-    auto storeControl = portList[2 * numStores + 2 * numLoads + i];
     auto storeControlValid = storeControl[0];
     auto storeControlReady = storeControl[1];
-
-    assert(storeData.size() && storeAddr.size() && storeControl.size());
 
     // Create a subfield op to access this port in the memory.
     auto fieldName = storeIdentifier(i);
