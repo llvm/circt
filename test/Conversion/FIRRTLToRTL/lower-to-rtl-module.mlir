@@ -185,11 +185,11 @@ firrtl.circuit "Simple" {
     firrtl.connect %outB, %inB : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
     // Use of output as an input.
-    %tmp = firrtl.asPassive %outC : (!firrtl.flip<uint<4>>) -> !firrtl.uint<4>
+    %tmp = firrtl.asPassive %outC : !firrtl.flip<uint<4>>
     %0 = firrtl.sub %inA, %tmp : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
     // Use of an input as an output.
-    %tmp2 = firrtl.asNonPassive %inC : (!firrtl.uint<4>) -> !firrtl.flip<uint<4>>
+    %tmp2 = firrtl.asNonPassive %inC : !firrtl.flip<uint<4>>
     firrtl.connect %tmp2, %inA : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
     // No connections to outD.
@@ -279,7 +279,7 @@ firrtl.circuit "Simple" {
                                 %outb: !firrtl.flip<uint<0>>) {
     // CHECK-NEXT: %0 = firrtl.stdIntCast %inA : (i4) -> !firrtl.uint<4>
     // CHECK-NEXT: %1 = firrtl.wire : !firrtl.flip<uint<0>>
-    // CHECK-NEXT: %2 = firrtl.asPassive %1 : (!firrtl.flip<uint<0>>) -> !firrtl.uint<0>
+    // CHECK-NEXT: %2 = firrtl.asPassive %1 : !firrtl.flip<uint<0>>
     // CHECK-NEXT: %3 = firrtl.wire : !firrtl.analog<0>
     // CHECK-NEXT: %4 = firrtl.wire : !firrtl.flip<uint<0>>
 
