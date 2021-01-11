@@ -63,7 +63,13 @@ def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
   }];
 }
 
-def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
+class IndexConstraint<string value, string resultValue>
+  : TypesMatchWith<"type should be element of array type",
+                   value, resultValue,
+                   "firrtl::getArrayElementType($_self)">;
+
+def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect, 
+                                       IndexConstraint<"input", "result">]> {
   let summary = "Extract an element of a vector value";
   let description = [{
     The subindex expression statically refers, by index, to a subelement
@@ -71,16 +77,16 @@ def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
     integer and cannot be equal to or exceed the length of the vector it
     indexes.
     ```
-      %result = firrtl.subindex %input[index] : t1, t2
+      %result = firrtl.subindex %input[index] : t1
     ```
     }];
 
-  let arguments = (ins FIRRTLType:$input, I32Attr:$index);
+  let arguments = (ins FVectorType:$input, I32Attr:$index);
   let results = (outs FIRRTLType:$result);
 
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat =
-     "$input `[` $index `]` attr-dict `:` functional-type($input, $result)";
+     "$input `[` $index `]` attr-dict `:` type($input)";
 
   let extraClassDeclaration = [{
     /// Compute the result of a Subindex operation on a value of the specified
@@ -94,7 +100,8 @@ def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect]> {
   }];
 }
 
-def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect]> {
+def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect, 
+                                         IndexConstraint<"input", "result">]> {
   let summary = "Extract a dynamic element of a vector value";
   let description = [{
     The subaccess expression dynamically refers to a subelement of a
@@ -110,7 +117,7 @@ def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect]> {
 
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat =
-     "$input `[` $index `]` attr-dict `:` functional-type(operands, $result)";
+     "$input `[` $index `]` attr-dict `:` type($input) `,` type($index)";
 
   let extraClassDeclaration = [{
     /// Compute the result of a Subaccess operation on a value of the specified
@@ -564,14 +571,20 @@ def AnalogInOutCastOp : FIRRTLOp<"analogInOutCast", [NoSideEffect]> {
 
 // MLIR specific pseudo ops.
 
+
+class PassiveConstraint<string value, string resultValue>
+  : TypesMatchWith<"type should be a passive type",
+                   value, resultValue,
+                   "firrtl::getPassiveType($_self)">;
+
 // Convert a value with non-passive type to a value with passive type.
-def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect]> {
+def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect, 
+                               PassiveConstraint<"input", "result">]> {
   let arguments = (ins FIRRTLType:$input);
   let results = (outs PassiveType:$result);
 
   let hasFolder = 1;
-  let assemblyFormat =
-    "$input attr-dict `:` functional-type($input, $result)";
+  let assemblyFormat = "$input attr-dict `:` type($input)";
 
   let builders = [
     OpBuilderDAG<(ins "Value":$input)>
@@ -579,10 +592,11 @@ def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect]> {
 }
 
 // Convert a passive value to a non-passive type.
-def AsNonPassivePrimOp : FIRRTLOp<"asNonPassive", [NoSideEffect]> {
+def AsNonPassivePrimOp : FIRRTLOp<"asNonPassive", [NoSideEffect,
+                                  PassiveConstraint<"result", "input">]> {
   let arguments = (ins PassiveType:$input);
   let results = (outs FIRRTLType:$result);
 
   let hasFolder = 1;
-  let assemblyFormat = "$input attr-dict `:` functional-type($input, $result)";
+  let assemblyFormat = "$input attr-dict `:` type($result)";
 }

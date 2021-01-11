@@ -113,8 +113,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.partialconnect %auto, [[C]] : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     auto <- out_0.member.0.reset @[Field 173:49]
 
-    ; CHECK: [[A:%.+]] = firrtl.subindex %_t_2[0] : (!firrtl.vector<uint<1>, 12>) -> !firrtl.uint<1>
-    ; CHECK: [[B:%.+]] = firrtl.subindex %_t[0] : (!firrtl.vector<uint<1>, 12>) -> !firrtl.uint<1>
+    ; CHECK: [[A:%.+]] = firrtl.subindex %_t_2[0] : !firrtl.vector<uint<1>, 12>
+    ; CHECK: [[B:%.+]] = firrtl.subindex %_t[0] : !firrtl.vector<uint<1>, 12>
     ; CHECK: firrtl.connect [[A]], [[B]]
     _t_2[0] <= _t[0] @[Xbar.scala 21:44]
 
@@ -286,11 +286,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       reset_myext.in <= i8
     ; CHECK: }
 
-    ; CHECK: firrtl.subaccess %_t[%i8] : (!firrtl.vector<uint<1>, 12>, !firrtl.uint<8>) -> !firrtl.uint<1>
+    ; CHECK: firrtl.subaccess %_t[%i8] : !firrtl.vector<uint<1>, 12>, !firrtl.uint<8>
     auto <= _t[i8]
 
-    ; CHECK: [[autoP:%.+]] = firrtl.asPassive %auto : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
-    ; CHECK: firrtl.subaccess %_t{{\[}}[[autoP]]] : (!firrtl.vector<uint<1>, 12>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    ; CHECK: [[autoP:%.+]] = firrtl.asPassive %auto : !firrtl.flip<uint<1>>
+    ; CHECK: firrtl.subaccess %_t{{\[}}[[autoP]]] : !firrtl.vector<uint<1>, 12>, !firrtl.uint<1>
     auto <= _t[auto]
 
     ; CHECK: %myMem = firrtl.cmem {name = "myMem"} : !firrtl.vector<bundle<id: uint<4>, resp: uint<2>>, 8>
@@ -325,7 +325,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.andr %n12
     node value = andr(_GEN_43)    ;; Uses n12 directly.
 
-    ; CHECK: [[autoP:%.+]] = firrtl.asPassive %auto : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
+    ; CHECK: [[autoP:%.+]] = firrtl.asPassive %auto : !firrtl.flip<uint<1>>
     ; CHECK-NEXT: = firrtl.not [[autoP]] : (!firrtl.uint<1>) -> !firrtl.uint<1>
     node n13 = not(auto)
 
@@ -494,7 +494,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
     ; CHECK: %0 = firrtl.subfield %bf("int_1")
     node _T = bf.int_1
-    ; CHECK: %1 = firrtl.asPassive %0 : (!firrtl.flip<uint<1>>) -> !firrtl.uint<1>
+    ; CHECK: %1 = firrtl.asPassive %0 : !firrtl.flip<uint<1>>
     when _T :  ; CHECK: firrtl.when %1 {
       skip
 
