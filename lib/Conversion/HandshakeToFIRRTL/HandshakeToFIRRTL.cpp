@@ -1521,12 +1521,39 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     auto writeValidBuffer = rewriter.create<RegInitOp>(
         insertLoc, bitType, clock, reset, falseConst, bufferName);
 
+    // Connect the write valid buffer to the store control valid.
+    rewriter.create<ConnectOp>(insertLoc, storeControlValid, writeValidBuffer);
+
+    // Create a gate for when both the buffered write valid signal and the store
+    // complete ready signal are asserted.
+    auto storeCompleted = rewriter.create<AndPrimOp>(
+        insertLoc, bitType, writeValidBuffer, storeControlReady);
+
+    // Connect the gate to both the store address ready and store data ready.
+    rewriter.create<ConnectOp>(insertLoc, storeAddrReady, storeCompleted);
+    rewriter.create<ConnectOp>(insertLoc, storeDataReady, storeCompleted);
+
+    // Create a signal for when the write valid buffer is empty or the output is
+    // ready.
+    auto notWriteValidBuffer =
+        rewriter.create<NotPrimOp>(insertLoc, bitType, writeValidBuffer);
+
+    auto emptyOrComplete = rewriter.create<OrPrimOp>(
+        insertLoc, bitType, notWriteValidBuffer, storeCompleted);
+
     // Create a gate for when both the store address and data are valid.
     auto writeValid = rewriter.create<AndPrimOp>(
         insertLoc, bitType, storeAddrValid, storeDataValid);
 
-    // Connect the write valid signal to the write valid buffer.
-    rewriter.create<ConnectOp>(insertLoc, writeValidBuffer, writeValid);
+    // Create a mux that drives the buffer input. If the emptyOrComplete signal
+    // is asserted, the mux selects the writeValid signal. Otherwise, it selects
+    // the buffer output, keeping the output registered until the
+    // emptyOrComplete signal is asserted.
+    auto writeValidBufferMux = rewriter.create<MuxPrimOp>(
+        insertLoc, bitType, emptyOrComplete, writeValid, writeValidBuffer);
+
+    rewriter.create<ConnectOp>(insertLoc, writeValidBuffer,
+                               writeValidBufferMux);
 
     // Get the store enable out of the bundle.
     auto memEnableType = FlipType::get(bundleType.getElementType("en"));
@@ -1544,18 +1571,6 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     // Since we are not storing bundles in the memory, we can assume the mask is
     // a single bit.
     rewriter.create<ConnectOp>(insertLoc, memMask, writeValid);
-
-    // Connect the write valid buffer to the store control valid.
-    rewriter.create<ConnectOp>(insertLoc, storeControlValid, writeValidBuffer);
-
-    // Create a gate for when both the buffered write valid signal and the store
-    // complete ready signal are asserted.
-    auto storeCompleted = rewriter.create<AndPrimOp>(
-        insertLoc, bitType, writeValidBuffer, storeControlReady);
-
-    // Connect the gate to both the store address ready and store data ready.
-    rewriter.create<ConnectOp>(insertLoc, storeAddrReady, storeCompleted);
-    rewriter.create<ConnectOp>(insertLoc, storeDataReady, storeCompleted);
   }
 
   return true;

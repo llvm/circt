@@ -70,20 +70,6 @@
 // Create the write valid buffer.
 // CHECK: %[[WRITE_VALID_BUFFER:.+]] = firrtl.reginit {{.+}} -> !firrtl.uint<1>
 
-// Create the write valid signal.
-// CHECK: %[[WRITE_VALID:.+]] = firrtl.and %[[ST_ADDR_VALID]], %[[ST_DATA_VALID]]
-
-// Connect the write valid signal to the buffer.
-// CHECK: firrtl.connect %[[WRITE_VALID_BUFFER]], %[[WRITE_VALID]]
-
-// Connect the write valid signal to the memory enable
-// CHECK: %[[MEM_STORE_EN:.+]] = firrtl.subfield %[[MEM_STORE]]("en") : {{.*}} -> !firrtl.flip<uint<1>>
-// CHECK: firrtl.connect %[[MEM_STORE_EN]], %[[WRITE_VALID]]
-
-// Connect the write valid signal to the memory mask.
-// CHECK: %[[MEM_STORE_MASK:.+]] = firrtl.subfield %[[MEM_STORE]]("mask") : {{.*}} -> !firrtl.flip<uint<1>>
-// CHECK: firrtl.connect %[[MEM_STORE_MASK]], %[[WRITE_VALID]]
-
 // Connect the write valid buffer to the store control valid.
 // CHECK: firrtl.connect %[[ST_CONTROL_VALID]], %[[WRITE_VALID_BUFFER]]
 
@@ -92,6 +78,21 @@
 // CHECK: %[[STORE_COMPLETED:.+]] = firrtl.and %[[WRITE_VALID_BUFFER]], %[[ST_CONTROL_READY]]
 // CHECK: firrtl.connect %[[ST_ADDR_READY]], %[[STORE_COMPLETED]]
 // CHECK: firrtl.connect %[[ST_DATA_READY]], %[[STORE_COMPLETED]]
+
+// Create the logic to drive the write valid buffer or keep its output.
+// CHECK: %[[NOT_WRITE_VALID_BUFFER:.+]] = firrtl.not %[[WRITE_VALID_BUFFER]]
+// CHECK: %[[EMPTY_OR_COMPLETE:.+]] = firrtl.or %[[NOT_WRITE_VALID_BUFFER]], %[[STORE_COMPLETED]]
+// CHECK: %[[WRITE_VALID:.+]] = firrtl.and %[[ST_ADDR_VALID]], %[[ST_DATA_VALID]]
+// CHECK: %[[WRITE_VALID_BUFFER_MUX:.+]] = firrtl.mux(%[[EMPTY_OR_COMPLETE]], %[[WRITE_VALID]], %[[WRITE_VALID_BUFFER]])
+// CHECK: firrtl.connect %[[WRITE_VALID_BUFFER]], %[[WRITE_VALID_BUFFER_MUX]]
+
+// Connect the write valid signal to the memory enable
+// CHECK: %[[MEM_STORE_EN:.+]] = firrtl.subfield %[[MEM_STORE]]("en") : {{.*}} -> !firrtl.flip<uint<1>>
+// CHECK: firrtl.connect %[[MEM_STORE_EN]], %[[WRITE_VALID]]
+
+// Connect the write valid signal to the memory mask.
+// CHECK: %[[MEM_STORE_MASK:.+]] = firrtl.subfield %[[MEM_STORE]]("mask") : {{.*}} -> !firrtl.flip<uint<1>>
+// CHECK: firrtl.connect %[[MEM_STORE_MASK]], %[[WRITE_VALID]]
 
 // CHECK-LABEL: firrtl.module @main
 handshake.func @main(%arg0: i8, %arg1: index, %arg2: index, ...) -> (i8, none, none) {
