@@ -653,7 +653,7 @@ static LogicalResult tryCanonicalizeConcat(ConcatOp op,
               auto prevWidth = prevExtract.getType().getIntOrFloatBitWidth();
               auto resType = rewriter.getIntegerType(thisWidth + prevWidth);
               Value replacement = rewriter.create<ExtractOp>(
-                  op.getLoc(), resType, extract.input());
+                  op.getLoc(), resType, extract.input(), extract.lowBit());
               return flattenConcat(i - 1, i, replacement);
             }
           }
