@@ -1,11 +1,84 @@
-// RUN: circt-opt -lower-handshake-to-firrtl %s | FileCheck %s
+// RUN: circt-opt -lower-handshake-to-firrtl -split-input-file %s | FileCheck %s
+
+// CHECK-LABEL: firrtl.module @handshake_buffer_1ins_1outs_3slots_seq_ctrl(
+// CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg1: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, %clock: !firrtl.clock, %reset: !firrtl.uint<1>) {
+// CHECK:   %[[IN_VALID:.+]] = firrtl.subfield %arg0("valid") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>) -> !firrtl.uint<1>
+// CHECK:   %[[IN_READY:.+]] = firrtl.subfield %arg0("ready") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>) -> !firrtl.flip<uint<1>>
+// CHECK:   %[[OUT_VALID:.+]] = firrtl.subfield %arg1("valid") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>) -> !firrtl.flip<uint<1>>
+// CHECK:   %[[OUT_READY:.+]] = firrtl.subfield %arg1("ready") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>) -> !firrtl.uint<1>
+// CHECK:   %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+
+// Stage 0 ready wire and valid register.
+// CHECK:   %readyWire0 = firrtl.wire : !firrtl.uint<1>
+// CHECK:   %validReg0 = firrtl.regreset %clock, %reset, %c0_ui1 {name = "validReg0"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+
+// pred_ready = !reg_valid || succ_ready.
+// CHECK:   %4 = firrtl.not %validReg0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %5 = firrtl.or %4, %readyWire0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   firrtl.connect %[[IN_READY:.+]], %5 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+
+// Drive valid register.
+// CHECK:   %6 = firrtl.mux(%5, %[[IN_VALID:.+]], %validReg0) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   firrtl.connect %validReg0, %6 : !firrtl.uint<1>, !firrtl.uint<1>
+
+// Stage 1 logics.
+// CHECK:   %readyWire1 = firrtl.wire : !firrtl.uint<1>
+// CHECK:   %validReg1 = firrtl.regreset %clock, %reset, %c0_ui1 {name = "validReg1"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+
+// CHECK:   %7 = firrtl.not %validReg1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %8 = firrtl.or %7, %readyWire1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   firrtl.connect %readyWire0, %8 : !firrtl.uint<1>, !firrtl.uint<1>
+
+// CHECK:   %9 = firrtl.mux(%8, %validReg0, %validReg1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   firrtl.connect %validReg1, %9 : !firrtl.uint<1>, !firrtl.uint<1>
+
+// Stage 2 logics.
+// CHECK:   %readyWire2 = firrtl.wire : !firrtl.uint<1>
+// CHECK:   %validReg2 = firrtl.regreset %clock, %reset, %c0_ui1 {name = "validReg2"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+
+// CHECK:   %10 = firrtl.not %validReg2 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %11 = firrtl.or %10, %readyWire2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   firrtl.connect %readyWire1, %11 : !firrtl.uint<1>, !firrtl.uint<1>
+
+// CHECK:   %12 = firrtl.mux(%11, %validReg1, %validReg2) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   firrtl.connect %validReg2, %12 : !firrtl.uint<1>, !firrtl.uint<1>
+
+// Connet to output ports.
+// CHECK:   firrtl.connect %[[OUT_VALID:.+]], %validReg2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+// CHECK:   firrtl.connect %readyWire2, %[[OUT_READY:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK: }
+
+// CHECK-LABEL: firrtl.module @test_buffer(
+// CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg2: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, %arg3: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, %clock: !firrtl.clock, %reset: !firrtl.uint<1>) {
+handshake.func @test_buffer(%arg0: none, %arg1: none, ...) -> (none, none) {
+
+  // CHECK: %inst_arg0, %inst_arg1, %inst_clock, %inst_reset = firrtl.instance @handshake_buffer_1ins_1outs_3slots_seq_ctrl {name = "", portNames = ["arg0", "arg1", "clock", "reset"]} : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, !firrtl.flip<clock>, !firrtl.flip<uint<1>>
+  %0 = "handshake.buffer"(%arg0) {control = true, sequential = true, slots = 3 : i32} : (none) -> none
+  handshake.return %0, %arg1 : none, none
+}
+
+// -----
 
 // CHECK-LABEL: firrtl.module @handshake_buffer_1ins_1outs_ui64_2slots_seq(
 // CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, %arg1: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, %clock: !firrtl.clock, %reset: !firrtl.uint<1>) {
+// CHECK:   %[[IN_DATA:.+]] = firrtl.subfield %arg0("data") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>) -> !firrtl.uint<64>
+// CHECK:   %[[OUT_DATA:.+]] = firrtl.subfield %arg1("data") : (!firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) -> !firrtl.flip<uint<64>>
+// CHECK:   %c0_ui64 = firrtl.constant(0 : ui64) : !firrtl.uint<64>
 
-// CHECK-LABEL: firrtl.module @test_buffer(
+// CHECK:   %dataReg0 = firrtl.regreset %clock, %reset, %c0_ui64 {name = "dataReg0"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<64>) -> !firrtl.uint<64>
+// CHECK:   %9 = firrtl.mux(%7, %[[IN_DATA:.+]], %dataReg0) : (!firrtl.uint<1>, !firrtl.uint<64>, !firrtl.uint<64>) -> !firrtl.uint<64>
+// CHECK:   firrtl.connect %dataReg0, %9 : !firrtl.uint<64>, !firrtl.uint<64>
+
+// CHECK:   %dataReg1 = firrtl.regreset %clock, %reset, %c0_ui64 {name = "dataReg1"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<64>) -> !firrtl.uint<64>
+// CHECK:   %13 = firrtl.mux(%11, %dataReg0, %dataReg1) : (!firrtl.uint<1>, !firrtl.uint<64>, !firrtl.uint<64>) -> !firrtl.uint<64>
+// CHECK:   firrtl.connect %dataReg1, %13 : !firrtl.uint<64>, !firrtl.uint<64>
+
+// CHECK:   firrtl.connect %[[OUT_DATA:.+]], %dataReg1 : !firrtl.flip<uint<64>>, !firrtl.uint<64>
+// CHECK: }
+
+// CHECK-LABEL: firrtl.module @test_buffer_data(
 // CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg2: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, %arg3: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, %clock: !firrtl.clock, %reset: !firrtl.uint<1>) {
-handshake.func @test_buffer(%arg0: index, %arg1: none, ...) -> (index, none) {
+handshake.func @test_buffer_data(%arg0: index, %arg1: none, ...) -> (index, none) {
 
   // CHECK: %inst_arg0, %inst_arg1, %inst_clock, %inst_reset = firrtl.instance @handshake_buffer_1ins_1outs_ui64_2slots_seq {name = "", portNames = ["arg0", "arg1", "clock", "reset"]} : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, !firrtl.flip<clock>, !firrtl.flip<uint<1>>
   // CHECK: firrtl.connect %inst_clock, %clock : !firrtl.flip<clock>, !firrtl.clock
