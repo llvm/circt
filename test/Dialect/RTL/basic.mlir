@@ -98,9 +98,6 @@ func @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> i50 {
   // CHECK-NEXT: :2 = rtl.struct_explode %24 : !rtl.struct<foo: i19, bar: i7>
   %se:2 = rtl.struct_explode %s0 : !rtl.struct<foo: i19, bar: i7>
 
-  // CHECK-NEXT: rtl.cast.tobits %24 : (!rtl.struct<foo: i19, bar: i7>)
-  %structBits = rtl.cast.tobits %s0 : (!rtl.struct<foo: i19, bar: i7>)
-
   // CHECK-NEXT: = constant 13 : i10
   %idx = constant 13 : i10
   // CHECK-NEXT: = rtl.array_slice %arg2 at %c13_i10 : (!rtl.array<1000xi8>) -> !rtl.array<24xi8>

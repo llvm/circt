@@ -41,8 +41,6 @@ public:
                        SExtOp, ZExtOp, ConcatOp, ExtractOp, MuxOp,
                        // InOut Expressions
                        ReadInOutOp, ArrayIndexOp,
-                       // Cast operations
-                       CastToBitsOp, CastFromBitsOp,
                        // Array operations
                        ArraySliceOp>([&](auto expr) -> ResultType {
           return thisCast->visitComb(expr, args...);
@@ -117,10 +115,6 @@ public:
   HANDLE(MuxOp, Unhandled);
   HANDLE(ReadInOutOp, Unhandled);
   HANDLE(ArrayIndexOp, Unhandled);
-
-  HANDLE(CastToBitsOp, Unary);
-  HANDLE(CastFromBitsOp, Unary);
-
   HANDLE(ArraySliceOp, Unhandled);
 #undef HANDLE
 };
