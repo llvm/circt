@@ -1178,10 +1178,9 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
 
 LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   auto operand = getLoweredValue(op.input());
-  if (!operand) {
+  if (!operand)
     return handleZeroBit(op.input(),
                          [&]() { return setLowering(op, Value()); });
-  }
 
   // Node operations are logical noops, but can carry a name.  If a name is
   // present then we lower this into a wire and a connect, otherwise we just
@@ -1862,8 +1861,9 @@ LogicalResult FIRRTLLowering::visitExpr(HeadPrimOp op) {
   auto input = getLoweredValue(op.input());
   if (!input)
     return failure();
-
   auto inWidth = input.getType().cast<IntegerType>().getWidth();
+  if (op.amount() == 0)
+    return setLowering(op, Value());
   Type resultType = builder->getIntegerType(op.amount());
   return setLoweringTo<rtl::ExtractOp>(op, resultType, input,
                                        inWidth - op.amount());
@@ -1915,6 +1915,8 @@ LogicalResult FIRRTLLowering::visitExpr(TailPrimOp op) {
     return failure();
 
   auto inWidth = input.getType().cast<IntegerType>().getWidth();
+  if (inWidth == op.amount())
+    return setLowering(op, Value());
   Type resultType = builder->getIntegerType(inWidth - op.amount());
   return setLoweringTo<rtl::ExtractOp>(op, resultType, input, 0);
 }

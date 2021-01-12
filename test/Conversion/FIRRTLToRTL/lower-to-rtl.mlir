@@ -814,4 +814,19 @@ module attributes {firrtl.mainModule = "Simple"} {
     firrtl.connect %8, %0 : !firrtl.flip<clock>, !firrtl.clock
     rtl.output
   }
-}
+
+  // CHECK-LABEL: rtl.module @top_mod() -> (%tmp27: i23) {
+  // CHECK-NEXT:    %c42_i23 = rtl.constant(42 : i23) : i23
+  // CHECK-NEXT:    %c0_i23 = rtl.constant(0 : i23) : i23
+  // CHECK-NEXT:    rtl.output %c0_i23 : i23
+  // CHECK-NEXT:  }
+  rtl.module @top_mod() -> (%tmp27: i23) {
+    %0 = firrtl.wire : !firrtl.flip<uint<0>>
+    %c42_ui23 = firrtl.constant(42 : ui23) : !firrtl.uint<23>
+    %1 = firrtl.tail %c42_ui23, 23 : (!firrtl.uint<23>) -> !firrtl.uint<0>
+    firrtl.connect %0, %1 : !firrtl.flip<uint<0>>, !firrtl.uint<0>
+    %2 = firrtl.head %c42_ui23, 0 : (!firrtl.uint<23>) -> !firrtl.uint<0>
+    %3 = firrtl.pad %2, 23 : (!firrtl.uint<0>) -> !firrtl.uint<23>
+    %4 = firrtl.stdIntCast %3 : (!firrtl.uint<23>) -> i23
+    rtl.output %4 : i23
+  }}
