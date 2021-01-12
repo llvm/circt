@@ -720,9 +720,9 @@ public:
   void buildAllReadyLogic(SmallVector<ValueVector *, 4> inputs,
                           ValueVector *output, Value condition);
 
-  void buildOneStageSeqBufferLogic(Value predValid, Value succValidReg,
+  void buildOneStageSeqBufferLogic(Value predValid, Value validReg,
                                    Value predReady, Value succReady,
-                                   Value predData, Value succDataReg);
+                                   Value predData, Value dataReg);
   bool buildSeqBufferLogic(int64_t numStage, ValueVector *input,
                            ValueVector *output, Value clock, Value reset,
                            bool isControl);
@@ -1508,11 +1508,12 @@ bool HandshakeBuilder::buildSeqBufferLogic(int64_t numStage, ValueVector *input,
         insertLoc, bitType, clock, reset, falseConst, validRegName);
 
     // Create registers for data signal.
-    auto dataRegName = rewriter.getStringAttr("dataReg" + std::to_string(i));
     Value dataReg = nullptr;
-    if (!isControl)
+    if (!isControl) {
+      auto dataRegName = rewriter.getStringAttr("dataReg" + std::to_string(i));
       dataReg = rewriter.create<RegResetOp>(insertLoc, dataType, clock, reset,
                                             zeroDataConst, dataRegName);
+    }
 
     // Build the current stage of the buffer.
     buildOneStageSeqBufferLogic(currentValid, validReg, currentReady, readyWire,
