@@ -1,5 +1,6 @@
-Abstract
-========
+# CIRCT Charter
+
+## Abstract
 
 Recent trends in computer architecture have resulted in two core problems.
 Firstly, how do we design complex, heterogenous systems-on-chip mixing
@@ -10,8 +11,7 @@ problems.  This projects is focused on using LLVM/MLIR to express
 these abstractions and to build useable open-source flows based on
 those abstractions to solve the design problems of the next decade.
 
-Introduction
-============
+## Introduction
 
 With the slowing rate of scaling in semiconductor process technology,
 there has become a widespread shift to develop more specialized
@@ -56,8 +56,7 @@ to the process of *programming* them. Furthermore, unifying the
 abstractions for accelerator design and accelerator programming is a key
 step towards enabling programming for arbitrary accelerators.
 
-Dialects for Hardware Design
-============================
+## Dialects for Hardware Design
 
 In existing systems, we see the use of a wide variety of abstractions
 commonly in use. These abstractions tend to exist in a hierarchy of
@@ -90,8 +89,7 @@ lowering between dialects. Many existing systems span multiple
 abstractions, but we've tried here to focus on the most significant
 internal representations used in each tool.
 
-Structural Circuit Netlists
----------------------------
+### Structural Circuit Netlists
 
 Netlists are a longstanding abstraction used for circuit design,
 expressing the instantiation and interconnection of primitive
@@ -109,8 +107,7 @@ different times!) drive a signal onto the same wire. Alternatively, a
 single component may sometimes use a wire as an input and at other times
 use the same wire for output.
 
-Register-transfer level (RTL)
------------------------------
+### Register-transfer level (RTL)
 
 The Register-transfer level is has been commonly used to describe logic
 circuits. The process of logic synthesis is commonly used to lower RTL
@@ -135,8 +132,7 @@ combinational aspects. Modern circuit analysis techniques often consider
 the behavior across synchronous boundaries. Retiming is a common
 transformation performed on RTL descriptions.
 
-Finite-State Machine + Datapath (FSMD)
---------------------------------------
+### Finite-State Machine + Datapath (FSMD)
 
 High-Level synthesis(HLS) of RTL designs from C code has become a common
 paradigm for accelerator design.
@@ -165,8 +161,7 @@ internal representation. A recent effort in this area is Futil,
 which implements an intermediate representation leveraged by the Dahlia
 system.
 
-[Dataflow/handshake](Dialects/Handshake.md)
-------------------
+### [Dataflow/handshake](Dialects/Handshake.md)
 
 Dataflow models have long been used to represent parallel computation.
 Typically these models include components representing independent
@@ -197,8 +192,7 @@ hardware design to be inserted where RTL does not yet exist.  By
 mapping the dataflow model back to hardware in a non-cycle accurate
 way, very fast emulation can be built quickly.
 
-IP composition
---------------
+### IP composition
 
 IP composition has become a key methodology for most FPGA and ASIC
 designs, enabling large designs to be constructed out of small
@@ -224,16 +218,14 @@ verbose and difficult for humans to interact with. DUH is a recent
 open-source effort based on JSON formats also focusing on IP
 composition.
 
-Tool Flows
-==========
+## Tool Flows
 
 Although it is important to have appropriate abstractions to build with,
 those abstractions are simply a means to support transformations of
 designs. Although many flows are potentially interested, we highlight
 some of the most interesting flows.
 
-High-Level Synthesis (HLS)
---------------------------
+### High-Level Synthesis (HLS)
 
 A common toolflow is to synthesize circuits from sequential algorithmic
 code. Many tools have implemented this type of tool flow, usually with a
@@ -275,8 +267,7 @@ VHDL, enabling implementation using vendor tools. Alternatively, these
 models could be further lowered to more hardware-specific dialects in
 MLIR.
 
-Dataflow-based Multicore Programming
-------------------------------------
+### Dataflow-based Multicore Programming
 
 Multicore programming is commonly done using Single-Program
 Multiple-Data (SPMD) programming, such as CUDA for GPUs. Typically, each

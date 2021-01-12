@@ -253,7 +253,8 @@ OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
   if (inputType.cast<IntType>().hasWidth() &&
       matchPattern(input(), m_FConstant(value)))
-    return getIntAttr(value.lshr(lo()).trunc(hi() - lo() + 1), getContext());
+    return getIntAttr(value.lshr(lo()).truncOrSelf(hi() - lo() + 1),
+                      getContext());
 
   return {};
 }
@@ -314,8 +315,9 @@ void HeadPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
       // If we know the input width, we can canonicalize this into a BitsPrimOp.
       unsigned keepAmount = op.amount();
-      replaceWithBits(op, op.input(), inputWidth - 1, inputWidth - keepAmount,
-                      rewriter);
+      if (keepAmount)
+        replaceWithBits(op, op.input(), inputWidth - 1, inputWidth - keepAmount,
+                        rewriter);
       return success();
     }
   };
@@ -488,7 +490,9 @@ void TailPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       // If we know the input width, we can canonicalize this into a
       // BitsPrimOp.
       unsigned dropAmount = op.amount();
-      replaceWithBits(op, op.input(), inputWidth - dropAmount - 1, 0, rewriter);
+      if (dropAmount != inputWidth)
+        replaceWithBits(op, op.input(), inputWidth - dropAmount - 1, 0,
+                        rewriter);
       return success();
     }
   };
