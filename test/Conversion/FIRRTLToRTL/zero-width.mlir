@@ -18,6 +18,9 @@ module attributes {firrtl.mainModule = "Simple"} {
     // Lowers to nothing.
     %node = firrtl.node %m0 : !firrtl.uint<0>
 
+    // Lowers to nothing.  Issue #429.
+    %div = firrtl.div %node, %uin3c : (!firrtl.uint<0>, !firrtl.uint<3>) -> !firrtl.uint<0>
+
     // CHECK-NEXT: %c0_i4 = rtl.constant(0 : i4) : i4
     // CHECK-NEXT: %false = rtl.constant(false) : i1
     // CHECK-NEXT: [[UIN3EXT:%.+]] = rtl.concat %false, %uin3 : (i1, i3) -> i4

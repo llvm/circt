@@ -1,4 +1,4 @@
-//===- OpFolds.cpp - Implement folds and canonicalizations for ops --------===//
+//===- FIRRTLFolds.cpp - Implement folds and canonicalizations for ops ----===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -49,6 +49,10 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
   assert(operands.empty() && "constant has no operands");
   return valueAttr();
 }
+
+//===----------------------------------------------------------------------===//
+// Binary Operators
+//===----------------------------------------------------------------------===//
 
 OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
@@ -190,6 +194,26 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
+//===----------------------------------------------------------------------===//
+// Unary Operators
+//===----------------------------------------------------------------------===//
+
+OpFoldResult AsSIntPrimOp::fold(ArrayRef<Attribute> operands) {
+  if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+    return getIntAttr(attr.getValue(), getContext());
+  return {};
+}
+
+OpFoldResult AsUIntPrimOp::fold(ArrayRef<Attribute> operands) {
+  if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+    return getIntAttr(attr.getValue(), getContext());
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// Other Operators
+//===----------------------------------------------------------------------===//
+
 void CatPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                             MLIRContext *context) {
   struct Folder final : public OpRewritePattern<CatPrimOp> {
@@ -261,17 +285,19 @@ void BitsPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 /// Replace the specified operation with a 'bits' op from the specified hi/lo
 /// bits.  Insert a cast to handle the case where the original operation
 /// returned a signed integer.
-static void replaceWithBits(Operation *op, Value input, unsigned hiBit,
+static void replaceWithBits(Operation *op, Value value, unsigned hiBit,
                             unsigned loBit, PatternRewriter &rewriter) {
-  auto resultType = op->getResult(0).getType();
-  if (resultType == input.getType()) {
-    rewriter.replaceOp(op, input);
-  } else if (resultType.cast<IntType>().isUnsigned()) {
-    rewriter.replaceOpWithNewOp<BitsPrimOp>(op, input, hiBit, loBit);
-  } else {
-    auto bits = rewriter.create<BitsPrimOp>(op->getLoc(), input, hiBit, loBit);
-    rewriter.replaceOpWithNewOp<AsSIntPrimOp>(op, resultType, bits);
+  auto resType = op->getResult(0).getType().cast<IntType>();
+  if (value.getType().cast<IntType>().getWidth() != resType.getWidth())
+    value = rewriter.create<BitsPrimOp>(op->getLoc(), value, hiBit, loBit);
+
+  if (resType.isSigned() && !value.getType().cast<IntType>().isSigned()) {
+    value = rewriter.createOrFold<AsSIntPrimOp>(op->getLoc(), resType, value);
+  } else if (resType.isUnsigned() &&
+             !value.getType().cast<IntType>().isUnsigned()) {
+    value = rewriter.createOrFold<AsUIntPrimOp>(op->getLoc(), resType, value);
   }
+  rewriter.replaceOp(op, value);
 }
 
 void HeadPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
