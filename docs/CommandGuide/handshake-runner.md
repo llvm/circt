@@ -1,4 +1,4 @@
-**handshake-runner** — Run restricted std MLIR and CIRCT handshake IR
+# handshake-runner
 
 ## SYNOPSIS
 
