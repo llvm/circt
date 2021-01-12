@@ -28,6 +28,6 @@ module {
     // CAPNP-LABEL: struct TYsi14 @0x8ee0bd493e80e8a1
     // CAPNP:         i @0 :Int16;
 
-    // COSIM: rtl.instance "TestEP" @Cosim_Endpoint(%clk, %rstn, %{{.*}}, %{{.*}}, %{{.*}}) {parameters = {ENDPOINT_ID = 1 : i32, RECVTYPE_SIZE_BITS = 192 : i64, RECV_TYPE_ID = 14000240888948784983 : ui64, SEND_TYPE_ID = 10295436870447851681 : ui64, SEND_TYPE_SIZE_BITS = 192 : i64}} : (i1, i1, i1, i1, !rtl.array<192xi1>) -> (i1, !rtl.array<192xi1>, i1)
+    // COSIM: rtl.instance "TestEP" @Cosim_Endpoint(%clk, %rstn, %{{.*}}, %{{.*}}, %{{.*}}) {parameters = {ENDPOINT_ID = 1 : i32, RECVTYPE_SIZE_BITS = 192 : i64, RECV_TYPE_ID = 10295436870447851681 : ui64, SEND_TYPE_ID = 10295436870447851681 : ui64, SEND_TYPE_SIZE_BITS = 192 : i64}} : (i1, i1, i1, i1, !rtl.array<192xi1>) -> (i1, !rtl.array<192xi1>, i1)
   }
 }

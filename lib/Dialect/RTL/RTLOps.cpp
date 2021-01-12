@@ -714,7 +714,7 @@ void ArraySliceOp::build(::mlir::OpBuilder &b, ::mlir::OperationState &state,
   auto inputArrayTy = input.getType().cast<ArrayType>();
   unsigned idxWidth = llvm::Log2_64_Ceil(inputArrayTy.getSize());
   auto lowBitValue =
-      b.create<ConstantOp>(state.location, lowBit, b.getIntegerType(idxWidth));
+      b.create<ConstantOp>(state.location, b.getIntegerType(idxWidth), lowBit);
   auto dstType = ArrayType::get(inputArrayTy.getElementType(), size);
   build(b, state, dstType, input, lowBitValue);
 }
