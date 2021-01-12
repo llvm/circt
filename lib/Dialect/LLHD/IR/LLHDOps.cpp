@@ -415,7 +415,8 @@ OpFoldResult llhd::ExtractElementOp::fold(ArrayRef<Attribute> operands) {
     //   => llhd.extract_element(base, amt + index)
     if (amt + index < shrOp.getBaseWidth()) {
       targetMutable().assign(shrOp.base());
-      setAttr("index", IntegerAttr::get(indexAttr().getType(), amt + index));
+      (*this)->setAttr("index",
+                       IntegerAttr::get(indexAttr().getType(), amt + index));
       return result();
     }
 
@@ -423,7 +424,8 @@ OpFoldResult llhd::ExtractElementOp::fold(ArrayRef<Attribute> operands) {
     //   => llhd.extract_element(hidden, amt + index - baseWidth)
     if (amt + index < shrOp.getBaseWidth() + shrOp.getHiddenWidth()) {
       targetMutable().assign(shrOp.hidden());
-      setAttr("index", IntegerAttr::get(indexAttr().getType(),
+      (*this)->setAttr("index",
+                       IntegerAttr::get(indexAttr().getType(),
                                         amt + index - shrOp.getBaseWidth()));
       return result();
     }
@@ -472,8 +474,8 @@ OpFoldResult llhd::ExtractSliceOp::fold(ArrayRef<Attribute> operands) {
 
       if (amt + extractStart + getSliceSize() <= shrOp.getBaseWidth()) {
         targetMutable().assign(shrOp.base());
-        setAttr("start",
-                IntegerAttr::get(startAttr().getType(), amt + extractStart));
+        (*this)->setAttr("start", IntegerAttr::get(startAttr().getType(),
+                                                   amt + extractStart));
         return result();
       }
     }
@@ -484,7 +486,8 @@ OpFoldResult llhd::ExtractSliceOp::fold(ArrayRef<Attribute> operands) {
   if (auto extOp = target().getDefiningOp<llhd::ExtractSliceOp>()) {
     targetMutable().assign(extOp.target());
     auto newStart = extractStart + extOp.startAttr().getInt();
-    setAttr("start", IntegerAttr::get(startAttr().getType(), newStart));
+    (*this)->setAttr("start",
+                     IntegerAttr::get(startAttr().getType(), newStart));
     return result();
   }
 
@@ -497,8 +500,8 @@ OpFoldResult llhd::ExtractSliceOp::fold(ArrayRef<Attribute> operands) {
         extractStart + getSliceSize() <=
             insertStart + insertOp.getSliceSize()) {
       targetMutable().assign(insertOp.slice());
-      setAttr("start", IntegerAttr::get(startAttr().getType(),
-                                        extractStart - insertStart));
+      (*this)->setAttr("start", IntegerAttr::get(startAttr().getType(),
+                                                 extractStart - insertStart));
       return result();
     }
     // with b + resultWidth <= a or b >= a + insertedSliceWidth
@@ -648,7 +651,8 @@ static void print(OpAsmPrinter &printer, llhd::EntityOp op) {
     }
   }
   auto entityName =
-      op.getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()).getValue();
+      op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
+          .getValue();
   printer << op.getOperationName() << " ";
   printer.printSymbolName(entityName);
   printer << " ";
@@ -911,13 +915,13 @@ ArrayRef<Type> llhd::ProcOp::getCallableResults() {
 
 static LogicalResult verify(llhd::InstOp op) {
   // Check that the callee attribute was specified.
-  auto calleeAttr = op.getAttrOfType<FlatSymbolRefAttr>("callee");
+  auto calleeAttr = op->getAttrOfType<FlatSymbolRefAttr>("callee");
   if (!calleeAttr)
     return op.emitOpError("requires a 'callee' symbol reference attribute");
 
-  auto proc = op.getParentOfType<ModuleOp>().lookupSymbol<llhd::ProcOp>(
+  auto proc = op->getParentOfType<ModuleOp>().lookupSymbol<llhd::ProcOp>(
       calleeAttr.getValue());
-  auto entity = op.getParentOfType<ModuleOp>().lookupSymbol<llhd::EntityOp>(
+  auto entity = op->getParentOfType<ModuleOp>().lookupSymbol<llhd::EntityOp>(
       calleeAttr.getValue());
 
   // Verify that the input and output types match the callee.

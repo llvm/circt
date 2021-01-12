@@ -33,10 +33,7 @@ def Handshake_Dialect : Dialect {
 // Base class for Handshake dialect ops.
 class Handshake_Op<string mnemonic, list<OpTrait> traits = []>
     : Op<Handshake_Dialect, mnemonic,
-         !listconcat(traits, [HasParent<"handshake::FuncOp">])> {
-  // let printer = [{ return ::print(p, *this); }];
-  // let verifier = [{ return ::verify(p, *this); }];
-  // let parser = [{ return ::parse$cppClass(parser, result); }];
+         traits # [HasParent<"handshake::FuncOp">]> {
 }
 
 // This is almost exactly like a standard FuncOp, except that it has some
@@ -88,7 +85,7 @@ def FuncOp : Op<Handshake_Dialect, "func", [
     Block *addEntryBlock();
 
     FunctionType getType() {
-      return getAttrOfType<TypeAttr>(getTypeAttrName())
+      return (*this)->getAttrOfType<TypeAttr>(getTypeAttrName())
           .getValue()
           .cast<FunctionType>();
     }
@@ -218,7 +215,7 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
 
     /// Return the module of this operation.
     CallInterfaceCallable getCallableForCallee() {
-      return getAttrOfType<SymbolRefAttr>("module");
+      return (*this)->getAttrOfType<SymbolRefAttr>("module");
     }
   }];
 
@@ -246,9 +243,9 @@ def ReturnOp : Handshake_Op<"return", [Terminator]> {
 
   let builders = [OpBuilderDAG<(ins "ArrayRef<Value>":$operands)>];
 
-  let printer = [{ return ::print(p, *this); }];
-  let verifier = [{ return ::verify(*this); }];
-  let parser = [{ return ::parse$cppClass(parser, result); }];
+  let printer = "return ::print(p, *this);";
+  let verifier = "return ::verify(*this);";
+  let parser = "return ::parse$cppClass(parser, result);";
 }
 
 def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock]> {
@@ -267,13 +264,13 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock]> {
 
   let extraClassDeclaration = [{
     bool isSequential() {
-      return getAttrOfType<BoolAttr>("sequential").getValue();
+      return (*this)->getAttrOfType<BoolAttr>("sequential").getValue();
     }
     bool isControl() {
-      return getAttrOfType<BoolAttr>("control").getValue();
+      return (*this)->getAttrOfType<BoolAttr>("control").getValue();
     }
     APInt getNumSlots() {
-      return getAttrOfType<IntegerAttr>("slots").getValue();
+      return (*this)->getAttrOfType<IntegerAttr>("slots").getValue();
     }
   }];
 }
@@ -295,7 +292,7 @@ def ForkOp : Handshake_Op<"fork", [NoSideEffect, HasClock]> {
   let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$outputs)>];
 
   let extraClassDeclaration = [{
-    bool isControl() { return getAttrOfType<BoolAttr>("control").getValue(); }
+    bool isControl() { return (*this)->getAttrOfType<BoolAttr>("control").getValue(); }
   }];
 }
 
@@ -314,7 +311,7 @@ def LazyForkOp : Handshake_Op<"lazy_fork", [NoSideEffect]> {
   let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$outputs)>];
 
   let extraClassDeclaration = [{
-    bool isControl() {  return getAttrOfType<BoolAttr>("control").getValue(); }
+    bool isControl() {  return (*this)->getAttrOfType<BoolAttr>("control").getValue(); }
   }];
 }
 
@@ -353,7 +350,7 @@ def MuxOp : Handshake_Op<"mux", [NoSideEffect, MergeLikeOpInterface]> {
 
   let skipDefaultBuilders = 1;
   let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$inputs)>];
-  let verifier = [{ return ::verify(*this); }];
+  let verifier = "return ::verify(*this);";
 }
 
 def ControlMergeOp : Handshake_Op<"control_merge",
@@ -376,7 +373,7 @@ def ControlMergeOp : Handshake_Op<"control_merge",
 
   let extraClassDeclaration = [{
     bool isControl() {
-      return getAttrOfType<BoolAttr>("control").getValue();
+      return (*this)->getAttrOfType<BoolAttr>("control").getValue();
     }
   }];
 }
@@ -399,7 +396,7 @@ def BranchOp : Handshake_Op<"branch", [NoSideEffect]> {
   let hasCanonicalizer = 1;
   let extraClassDeclaration = [{
     bool isControl() {
-      return getAttrOfType<BoolAttr>("control").getValue();
+      return (*this)->getAttrOfType<BoolAttr>("control").getValue();
     }
   }];
 }
@@ -431,7 +428,7 @@ def ConditionalBranchOp : Handshake_Op<"conditional_branch", [NoSideEffect]> {
 
     Value getDataOperand() { return getOperand(1); }
 
-    bool isControl() { return getAttrOfType<BoolAttr>("control").getValue(); }
+    bool isControl() { return (*this)->getAttrOfType<BoolAttr>("control").getValue(); }
   }];
 }
 
@@ -473,7 +470,7 @@ def ConstantOp : Handshake_Op<"constant", [NoSideEffect]> {
   let builders = [OpBuilderDAG<(ins "Attribute":$value, "Value":$operand)>];
 
   let extraClassDeclaration = [{
-    Attribute getValue() { return getAttr("value"); }
+    Attribute getValue() { return (*this)->getAttr("value"); }
   }];
 }
 
@@ -545,16 +542,16 @@ def MemoryOp : Handshake_Op<"memory"> {
   ];
   let extraClassDeclaration = [{
     APInt getLdCount() {
-      return getAttrOfType<IntegerAttr>("ld_count").getValue();
+      return (*this)->getAttrOfType<IntegerAttr>("ld_count").getValue();
     }
     APInt getStCount() {
-      return getAttrOfType<IntegerAttr>("st_count").getValue();
+      return (*this)->getAttrOfType<IntegerAttr>("st_count").getValue();
     }
     unsigned getID() {
-      return getAttrOfType<IntegerAttr>("id").getValue().getZExtValue();
+      return (*this)->getAttrOfType<IntegerAttr>("id").getValue().getZExtValue();
     }
     MemRefType getMemRefType() {
-      return getAttrOfType<TypeAttr>("type").getValue().cast<MemRefType>();
+      return (*this)->getAttrOfType<TypeAttr>("type").getValue().cast<MemRefType>();
     }
   }];
 }

@@ -194,7 +194,7 @@ def LLHD_InstOp : LLHD_Op<"inst", [
 
     /// Return the callee of this operation.
     CallInterfaceCallable getCallableForCallee() {
-      return getAttrOfType<SymbolRefAttr>("callee");
+      return (*this)->getAttrOfType<SymbolRefAttr>("callee");
     }
   }];
 

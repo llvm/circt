@@ -168,7 +168,7 @@ void FIRRTLToLLHDPass::convertModule(firrtl::FModuleOp &module) {
   // Create an LLHD entity for this module.
   auto entity = builder->create<EntityOp>(module.getLoc(), numIns);
   entity.setName(module.getName());
-  entity.setAttr("type", TypeAttr::get(entityType));
+  entity->setAttr("type", TypeAttr::get(entityType));
   EntityOp::ensureTerminator(entity.body(), *builder, entity.getLoc());
 
   // Populate the arguments for the entity. This includes initializing the value
