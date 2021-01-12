@@ -253,7 +253,8 @@ OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
   if (inputType.cast<IntType>().hasWidth() &&
       matchPattern(input(), m_FConstant(value)))
-    return getIntAttr(value.lshr(lo()).trunc(hi() - lo() + 1), getContext());
+    return getIntAttr(value.lshr(lo()).truncOrSelf(hi() - lo() + 1),
+                      getContext());
 
   return {};
 }
