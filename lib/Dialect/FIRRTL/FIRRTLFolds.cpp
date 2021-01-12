@@ -50,6 +50,10 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
   return valueAttr();
 }
 
+//===----------------------------------------------------------------------===//
+// Binary Operators
+//===----------------------------------------------------------------------===//
+
 OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
 
@@ -189,6 +193,26 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
 
   return {};
 }
+
+//===----------------------------------------------------------------------===//
+// Unary Operators
+//===----------------------------------------------------------------------===//
+
+OpFoldResult AsSIntPrimOp::fold(ArrayRef<Attribute> operands) {
+  if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+    return getIntAttr(attr.getValue(), getContext());
+  return {};
+}
+
+OpFoldResult AsUIntPrimOp::fold(ArrayRef<Attribute> operands) {
+  if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+    return getIntAttr(attr.getValue(), getContext());
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// Other Operators
+//===----------------------------------------------------------------------===//
 
 void CatPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                             MLIRContext *context) {

@@ -259,8 +259,12 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
   }];
 }
 
-def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLType, SIntType>;
-def AsUIntPrimOp : UnaryPrimOp<"asUInt", FIRRTLType, UIntType>;
+def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLType, SIntType> {
+  let hasFolder = 1;
+}
+def AsUIntPrimOp : UnaryPrimOp<"asUInt", FIRRTLType, UIntType> {
+  let hasFolder = 1;
+}
 def AsAsyncResetPrimOp
   : UnaryPrimOp<"asAsyncReset", OneBitCastableType, AsyncResetType>;
 def AsClockPrimOp : UnaryPrimOp<"asClock", OneBitCastableType, ClockType>;
