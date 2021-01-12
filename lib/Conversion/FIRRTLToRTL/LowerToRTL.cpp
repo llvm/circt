@@ -536,7 +536,9 @@ void FIRRTLModuleLowering::lowerModuleBody(
     // anything outside the module.  Inputs are lowered to zero.
     if (isZeroWidth && port.isInput()) {
       Value newArg = bodyBuilder.create<WireOp>(FlipType::get(port.type),
-                                                /*name=*/StringAttr());
+                                                "." + port.getName().str() +
+                                                    ".0width_input");
+
       newArg = bodyBuilder.create<AsPassivePrimOp>(newArg);
       oldArg.replaceAllUsesWith(newArg);
       continue;
@@ -552,8 +554,8 @@ void FIRRTLModuleLowering::lowerModuleBody(
 
     // Outputs need a temporary wire so they can be connect'd to, which we
     // then return.
-    Value newArg = bodyBuilder.create<WireOp>(port.type,
-                                              /*name=*/StringAttr());
+    Value newArg = bodyBuilder.create<WireOp>(
+        port.type, "." + port.getName().str() + ".output");
     // Switch all uses of the old operands to the new ones.
     oldArg.replaceAllUsesWith(newArg);
 
@@ -696,7 +698,7 @@ void FIRRTLModuleLowering::lowerInstance(
 
     // Otherwise, create a wire for each input/inout operand, so there is
     // something to connect to.
-    auto name = builder.getStringAttr(port.getName().str() + ".wire");
+    auto name = builder.getStringAttr("." + port.getName().str() + ".wire");
     auto wire = builder.create<WireOp>(port.type, name);
 
     // Drop zero bit input/inout ports.
@@ -738,8 +740,8 @@ void FIRRTLModuleLowering::lowerInstance(
       resultVal = castToFIRRTLType(resultVal, resultType, builder);
     } else {
       // Zero bit results are just replaced with a wire.
-      resultVal = builder.create<WireOp>(resultType,
-                                         /*name=*/StringAttr());
+      resultVal = builder.create<WireOp>(
+          resultType, "." + port.getName().str() + ".0width_result");
     }
 
     // Replace any subfield uses of this output port with the returned value
@@ -1185,8 +1187,10 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   // present then we lower this into a wire and a connect, otherwise we just
   // drop it.
   if (auto name = op->getAttrOfType<StringAttr>("name")) {
-    auto wire = builder->create<rtl::WireOp>(operand.getType(), name);
-    builder->create<rtl::ConnectOp>(wire, operand);
+    if (!name.getValue().empty()) {
+      auto wire = builder->create<rtl::WireOp>(operand.getType(), name);
+      builder->create<rtl::ConnectOp>(wire, operand);
+    }
   }
 
   // TODO(clattner): This is dropping the location information from unnamed node
@@ -1847,9 +1851,9 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValuePrimOp op) {
   if (!op.getType().isa<AnalogType>())
     return setLowering(op, value);
 
-  // Values of analog type always need to be lowered to an inout.  We do that by
-  // lowering to a wire and return that.
-  auto wire = builder->create<rtl::WireOp>(resultTy);
+  // Values of analog type always need to be lowered to something with inout
+  // type.  We do that by lowering to a wire and return that.
+  auto wire = builder->create<rtl::WireOp>(resultTy, ".invalid_analog");
   builder->create<rtl::ConnectOp>(wire, value);
   return setLowering(op, wire);
 }
