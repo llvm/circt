@@ -6,37 +6,80 @@
 
 import Cosim_DpiPkg::*;
 
-module Top(
-  input clk, rstn);
+module top(
+    `ifdef VERILATOR
+    input logic clk,
+    input logic rstn
+    `endif
+);
+    localparam int TYPE_SIZE_BITS =
+        (1 * 64) + // root message
+        (1 * 64) + // list header
+        (1 * 64);  // list of length 3 bytes, rounded up to multiples of 8 bytes
+    `ifndef VERILATOR
+    logic clk;
+    logic rstn;
+    `endif
 
-  wire         TestEP_DataOutValid;     // <stdin>:6:66
-  wire [191:0] TestEP_DataOut;  // <stdin>:6:66
-  wire         TestEP_DataInReady;      // <stdin>:6:66
+    wire DataOutValid;
+    wire DataOutReady = 1;
+    wire [TYPE_SIZE_BITS-1:0] DataOut;
+    
+    logic DataInValid;
+    logic DataInReady;
+    logic [TYPE_SIZE_BITS-1:0] DataIn;
 
-  wire [191:0] _T = /*cast(bit[191:0])*/192'h0; // <stdin>:4:16, :5:10
-  Cosim_Endpoint #(.ENDPOINT_ID(1), .RECVTYPE_SIZE_BITS(192), .RECV_TYPE_ID(-8151307203261699935), .SEND_TYPE_ID(-8151307203261699935), .SEND_TYPE_SIZE_BITS(192)) TestEP (  // <stdin>:6:66
-    .clk (clk),
-    .rstn (rstn),
-    .DataOutReady (TestEP_DataInReady),
-    .DataInValid (TestEP_DataInReady),
-    .DataIn (_T),
-    .DataOutValid (TestEP_DataOutValid),
-    .DataOut (TestEP_DataOut),
-    .DataInReady (TestEP_DataInReady)
-  );
-  wire [7:0] _T_0 = 8'h80;      // <stdin>:7:17
-  wire [63:0] _T_1 = /*cast(bit[63:0])*/TestEP_DataOut[_T_0+:64];       // <stdin>:8:10, :9:10
-  assert(_T_1 == 64'h80);       // <stdin>:10:17, :11:10, :12:5
-  wire [7:0] _T_2 = 8'h40;      // <stdin>:13:15
-  wire [63:0] _T_3 = TestEP_DataOut[_T_2+:64];  // <stdin>:14:10
-  wire [5:0] _T_4 = 6'h20;      // <stdin>:15:16
-  wire [31:0] _T_5 = /*cast(bit[31:0])*/_T_3[_T_4+:32]; // <stdin>:16:10, :17:10
-  assert(_T_5 == 32'h0);        // <stdin>:18:15, :19:10, :20:5
-  wire [5:0] _T_6 = 6'h10;      // <stdin>:21:15
-  wire [15:0] _T_7 = /*cast(bit[15:0])*/_T_3[_T_6+:16]; // <stdin>:22:10, :23:10
-  assert(_T_7 == 16'h40);       // <stdin>:24:16, :25:11, :26:5
-  wire [5:0] _T_8 = 6'h0;       // <stdin>:27:14
-  wire [15:0] _T_9 = /*cast(bit[15:0])*/_T_3[_T_8+:16]; // <stdin>:28:11, :29:11
-  assert(_T_9 == 16'h0);        // <stdin>:30:15, :31:11, :32:5
-  wire [7:0] _T_10 = 8'h30;     // <stdin>:33:15
+    Cosim_Endpoint #(
+        .ENDPOINT_ID(1),
+        .RECV_TYPE_ID(1),
+        .RECV_TYPE_SIZE_BITS(TYPE_SIZE_BITS),
+        .SEND_TYPE_ID(1),
+        .SEND_TYPE_SIZE_BITS(TYPE_SIZE_BITS)
+    ) ep (
+        .*
+    );
+
+    always@(posedge clk)
+    begin
+        if (rstn)
+        begin
+            if (DataOutValid && DataOutReady)
+            begin
+                $display("[%d] Recv'd: %h", $time(), DataOut);
+                DataIn <= DataOut;
+            end
+            DataInValid <= DataOutValid && DataOutReady;
+
+            if (DataInValid && DataInReady)
+            begin
+                $display("[%d] Sent: %h", $time(), DataIn);
+            end
+        end
+        else
+        begin
+            DataInValid <= 0;
+        end
+    end
+
+`ifndef VERILATOR
+    // Clock
+    initial
+    begin
+        clk = 1'b0;
+        while (1)
+        begin
+            #5;
+            clk = !clk;
+        end
+    end
+
+    initial
+    begin
+        rstn = 0;
+        #17
+        // Run!
+        rstn = 1;
+    end
+`endif
+
 endmodule

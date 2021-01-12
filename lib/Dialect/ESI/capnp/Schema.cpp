@@ -90,9 +90,9 @@ public:
   bool operator==(const TypeSchemaImpl &) const;
 
   /// Build an RTL/SV dialect capnp encoder for this type.
-  Value buildEncoder(OpBuilder &, Value);
+  Value buildEncoder(OpBuilder &, Value clk, Value valid, Value);
   /// Build an RTL/SV dialect capnp decoder for this type.
-  Value buildDecoder(OpBuilder &, Value);
+  Value buildDecoder(OpBuilder &, Value clk, Value valid, Value);
 
 private:
   ::capnp::ParsedSchema getSchema() const;
@@ -197,7 +197,7 @@ size_t TypeSchemaImpl::size() const {
   auto schema = getTypeSchema();
   auto structProto = schema.getProto().getStruct();
   return 64 * // Convert from 64-bit words to bits.
-         (2 + // Headers
+         (1 + // Header
           structProto.getDataWordCount() + structProto.getPointerCount());
 }
 
@@ -301,7 +301,8 @@ static size_t bits(::capnp::schema::Type::Reader type) {
 }
 
 /// Build an RTL/SV dialect capnp encoder for this type.
-Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value operand) {
+Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
+                                   Value operand) {
   auto loc = operand.getDefiningOp()->getLoc();
   auto zeros = b.create<rtl::ConstantOp>(
       loc, IntegerType::get(b.getContext(), size()), 0);
@@ -310,77 +311,85 @@ Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value operand) {
 }
 
 /// Build an RTL/SV dialect capnp decoder for this type.
-Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value operand) {
+Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
+                                   Value operand) {
   MLIRContext *ctxt = b.getContext();
   auto loc = operand.getDefiningOp()->getLoc();
   size_t size = this->size();
 
   // Various useful integer types.
-  auto u16 = IntegerType::get(ctxt, 16);
-  auto u32 = b.getI32Type();
-  auto u64 = b.getI64Type();
-  // Various useful bit array types.
+  auto u16 =
+      IntegerType::get(ctxt, 16, IntegerType::SignednessSemantics::Signless);
+  auto u32 =
+      IntegerType::get(ctxt, 32, IntegerType::SignednessSemantics::Signless);
 
-  rtl::ArrayType operandType = operand.getType().dyn_cast<rtl::ArrayType>();
+          rtl::ArrayType operandType =
+              operand.getType().dyn_cast<rtl::ArrayType>();
   assert(operandType && operandType.getSize() == size &&
          "Operand type and length must match the type's capnp size.");
 
-  // capnp messages start with the segment table, which for a single segment is
-  // just the size of the message minus the 64-bit segment table. Create an
-  // assertion that it matches our computed size.
-  auto segSize = b.create<rtl::BitcastOp>(
-      loc, u64, b.create<rtl::ArraySliceOp>(loc, operand, size - 64, 64));
-  auto expectedSize = b.create<rtl::ConstantOp>(loc, u64, size - 64);
-  b.create<sv::AssertOp>(loc, b.create<rtl::ICmpOp>(loc, b.getI1Type(),
-                                                    ICmpPredicate::eq, segSize,
-                                                    expectedSize));
-  size_t currentOffset = 64;
+  size_t currentOffset = 0;
+
+  auto alwaysAt = b.create<sv::AlwaysOp>(loc, EventControl::AtPosEdge, clk);
+  auto ifValid = OpBuilder(alwaysAt.getBodyRegion()).create<sv::IfOp>(loc, valid);
+  OpBuilder asserts(ifValid.getBodyRegion());
 
   // The next 64-bits of a capnp message is the root struct pointer.
   ::capnp::schema::Node::Reader rootProto = getTypeSchema().getProto();
   auto ptr =
-      b.create<rtl::ArraySliceOp>(loc, operand, size - currentOffset - 64, 64);
+      b.create<rtl::ArraySliceOp>(loc, operand, 0, 64);
+  // All ptr slices should be off the 'ptr' variable, so we skip to the expected data section.
+  currentOffset += 64;
 
   // Since this is the root, we _expect_ the offset to be zero but that's only
   // guaranteed to be the case with canonically-encoded messages.
   // TODO: support cases where the pointer offset is non-zero.
-  auto typeAndOffset = b.create<rtl::BitcastOp>(
-      loc, u32, b.create<rtl::ArraySliceOp>(loc, ptr, 32, 32));
-  auto b16Zero = b.create<rtl::ConstantOp>(loc, u32, 0);
-  b.create<sv::AssertOp>(loc, b.create<rtl::ICmpOp>(loc, b.getI1Type(),
-                                                    ICmpPredicate::eq,
-                                                    typeAndOffset, b16Zero));
+  auto typeAndOffset = asserts.create<rtl::BitcastOp>(
+      loc, u32, asserts.create<rtl::ArraySliceOp>(loc, ptr, 0, 32));
+  typeAndOffset->setAttr("name", StringAttr::get("typeAndOffset", ctxt));
+  auto b16Zero = asserts.create<rtl::ConstantOp>(loc, u32, 0);
+
+  asserts.create<sv::AssertOp>(
+      loc, asserts.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
+                                 typeAndOffset, b16Zero));
 
   // We expect the data section to be equal to the computed data section size.
-  auto dataSectionSize = b.create<rtl::BitcastOp>(
-      loc, u16, b.create<rtl::ArraySliceOp>(loc, ptr, 16, 16));
-  auto expectedDataSectionSize = b.create<rtl::ConstantOp>(
-      loc, u16, rootProto.getStruct().getDataWordCount() * 64);
-  b.create<sv::AssertOp>(
-      loc, b.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
+  auto dataSectionSize = asserts.create<rtl::BitcastOp>(
+      loc, u16, asserts.create<rtl::ArraySliceOp>(loc, ptr, 32, 16));
+  dataSectionSize->setAttr("name", StringAttr::get("dataSectionSize", ctxt));
+  auto expectedDataSectionSize = asserts.create<rtl::ConstantOp>(
+      loc, u16, rootProto.getStruct().getDataWordCount());
+  asserts.create<sv::AssertOp>(
+      loc, asserts.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
                                  dataSectionSize, expectedDataSectionSize));
 
   // We expect the pointer section to be equal to the computed pointer section
   // size.
-  auto ptrSectionSize = b.create<rtl::BitcastOp>(
-      loc, u16, b.create<rtl::ArraySliceOp>(loc, ptr, 0, 16));
-  auto expectedPtrSectionSize = b.create<rtl::ConstantOp>(
+  auto ptrSectionSize = asserts.create<rtl::BitcastOp>(
+      loc, u16, asserts.create<rtl::ArraySliceOp>(loc, ptr, 48, 16));
+  ptrSectionSize->setAttr("name", StringAttr::get("ptrSectionSize", ctxt));
+  auto expectedPtrSectionSize = asserts.create<rtl::ConstantOp>(
       loc, u16, rootProto.getStruct().getPointerCount() * 64);
-  b.create<sv::AssertOp>(
-      loc, b.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
+  asserts.create<sv::AssertOp>(
+      loc, asserts.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
                                  ptrSectionSize, expectedPtrSectionSize));
-  // Done looking at the ptr.
-  currentOffset += 64;
 
   // Now that we're looking at the data section, we can just cast down each
   // type. Since we only support IntegerType, this is easy.
   auto field = rootProto.getStruct().getFields()[0];
-  size_t capnpFieldBits = bits(field.getSlot().getType());
-  currentOffset += (field.getSlot().getOffset() + 1) * capnpFieldBits;
   auto typeBits = type.cast<IntegerType>().getWidth();
   auto fieldBits =
-      b.create<rtl::ArraySliceOp>(loc, operand, size - currentOffset, typeBits);
+      b.create<rtl::ArraySliceOp>(loc, operand, currentOffset, typeBits);
+  fieldBits->setAttr("name", StringAttr::get("fieldBits", ctxt));
   auto fieldValue = b.create<rtl::BitcastOp>(loc, type, fieldBits);
+  fieldValue->setAttr("name", StringAttr::get("decodedValue", ctxt));
+
+  asserts.create<sv::FWriteOp>(loc, "typeAndOffset: %h, dataSize: %h, ptrSize: %h, decodedData: %h\n",
+   ValueRange{typeAndOffset, dataSectionSize, ptrSectionSize, fieldValue});
+
+  // Advance to next field.
+  size_t capnpFieldBits = bits(field.getSlot().getType());
+  currentOffset += (field.getSlot().getOffset() + 1) * capnpFieldBits;
 
   // All that just to decode an int!
   return fieldValue;
@@ -416,11 +425,13 @@ circt::esi::capnp::TypeSchema::writeMetadata(llvm::raw_ostream &os) const {
 bool circt::esi::capnp::TypeSchema::operator==(const TypeSchema &that) const {
   return *s == *that.s;
 }
-Value circt::esi::capnp::TypeSchema::buildEncoder(OpBuilder &builder,
+Value circt::esi::capnp::TypeSchema::buildEncoder(OpBuilder &builder, Value clk,
+                                                  Value valid,
                                                   Value operand) const {
-  return s->buildEncoder(builder, operand);
+  return s->buildEncoder(builder, clk, valid, operand);
 }
-Value circt::esi::capnp::TypeSchema::buildDecoder(OpBuilder &builder,
+Value circt::esi::capnp::TypeSchema::buildDecoder(OpBuilder &builder, Value clk,
+                                                  Value valid,
                                                   Value operand) const {
-  return s->buildDecoder(builder, operand);
+  return s->buildDecoder(builder, clk, valid, operand);
 }

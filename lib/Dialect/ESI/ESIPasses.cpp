@@ -800,7 +800,7 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
              rewriter.getI64IntegerAttr(sendTypeSchema.size()));
   params.set("RECV_TYPE_ID",
              IntegerAttr::get(ui64Type, recvTypeSchema.capnpTypeID()));
-  params.set("RECVTYPE_SIZE_BITS",
+  params.set("RECV_TYPE_SIZE_BITS",
              rewriter.getI64IntegerAttr(recvTypeSchema.size()));
 
   // Set up the egest route to drive the EP's send ports.
@@ -809,8 +809,9 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   auto sendReady = bb.get(rewriter.getI1Type());
   UnwrapValidReady unwrapSend =
       rewriter.create<UnwrapValidReady>(loc, ep.send(), sendReady);
-  auto encodeData = rewriter.create<CapnpEncode>(loc, egestBitArrayType,
-                                                 unwrapSend.rawOutput());
+  auto encodeData =
+      rewriter.create<CapnpEncode>(loc, egestBitArrayType, ep.clk(),
+                                   unwrapSend.valid(), unwrapSend.rawOutput());
 
   // Get information necessary for injest path.
   auto recvReady = bb.get(rewriter.getI1Type());
@@ -835,8 +836,9 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   // Set up the injest path.
   Value recvDataFromCosim = cosimEpModule.getResult(1);
   Value recvValidFromCosim = cosimEpModule.getResult(0);
-  auto decodeData = rewriter.create<CapnpDecode>(loc, recvTypeSchema.getType(),
-                                                 recvDataFromCosim);
+  auto decodeData =
+      rewriter.create<CapnpDecode>(loc, recvTypeSchema.getType(), ep.clk(),
+                                   recvValidFromCosim, recvDataFromCosim);
   WrapValidReady wrapRecv = rewriter.create<WrapValidReady>(
       loc, decodeData.decodedData(), recvValidFromCosim);
   recvReady.setValue(wrapRecv.ready());
@@ -865,7 +867,8 @@ public:
     capnp::TypeSchema encodeType(enc.dataToEncode().getType());
     if (!encodeType.isSupported())
       return rewriter.notifyMatchFailure(enc, "Type not supported yet");
-    Value encoderOutput = encodeType.buildEncoder(rewriter, operands[0]);
+    Value encoderOutput = encodeType.buildEncoder(rewriter, operands[0],
+                                                  operands[1], operands[2]);
     assert(encoderOutput && "Error in TypeSchema.buildEncoder()");
     rewriter.replaceOp(enc, encoderOutput);
     return success();
@@ -891,7 +894,8 @@ public:
     capnp::TypeSchema decodeType(dec.decodedData().getType());
     if (!decodeType.isSupported())
       return rewriter.notifyMatchFailure(dec, "Type not supported yet");
-    Value decoderOutput = decodeType.buildDecoder(rewriter, operands[0]);
+    Value decoderOutput = decodeType.buildDecoder(rewriter, operands[0],
+                                                  operands[1], operands[2]);
     assert(decoderOutput && "Error in TypeSchema.buildDecoder()");
     rewriter.replaceOp(dec, decoderOutput);
     return success();

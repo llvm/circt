@@ -67,9 +67,11 @@ public:
   mlir::LogicalResult write(llvm::raw_ostream &os) const;
 
   /// Build an RTL/SV dialect capnp encoder for this type.
-  mlir::Value buildEncoder(mlir::OpBuilder &, mlir::Value) const;
+  mlir::Value buildEncoder(mlir::OpBuilder &, mlir::Value clk,
+                           mlir::Value valid, mlir::Value rawData) const;
   /// Build an RTL/SV dialect capnp decoder for this type.
-  mlir::Value buildDecoder(mlir::OpBuilder &, mlir::Value) const;
+  mlir::Value buildDecoder(mlir::OpBuilder &, mlir::Value clk,
+                           mlir::Value valid, mlir::Value capnpData) const;
 
 private:
   /// The implementation of this. Separate to hide the details and avoid having
