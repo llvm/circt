@@ -254,7 +254,7 @@ firrtl.circuit "Simple" {
   // CHECK-LABEL: rtl.module @instance_cyclic
   firrtl.module @instance_cyclic(%arg0: !firrtl.uint<2>, %arg1: !firrtl.uint<2>) {
     // This can't be hoisted so we end up with a wire.
-    // CHECK: %in.wire = firrtl.wire : !firrtl.uint<1>
+    // CHECK: %.in.wire = firrtl.wire : !firrtl.uint<1>
     // CHECK: rtl.instance
     %myext = firrtl.instance @MyParameterizedExtModule {name = "myext"}
       : !firrtl.bundle<in: flip<uint<1>>, out: uint<8>>
@@ -278,12 +278,12 @@ firrtl.circuit "Simple" {
                                 %outa: !firrtl.flip<uint<4>>,
                                 %outb: !firrtl.flip<uint<0>>) {
     // CHECK-NEXT: %0 = firrtl.stdIntCast %inA : (i4) -> !firrtl.uint<4>
-    // CHECK-NEXT: %1 = firrtl.wire : !firrtl.flip<uint<0>>
-    // CHECK-NEXT: %2 = firrtl.asPassive %1 : !firrtl.flip<uint<0>>
-    // CHECK-NEXT: %3 = firrtl.wire : !firrtl.analog<0>
-    // CHECK-NEXT: %4 = firrtl.wire : !firrtl.flip<uint<0>>
+    // CHECK-NEXT: %.inB.0width_input = firrtl.wire : !firrtl.flip<uint<0>>
+    // CHECK-NEXT: %1 = firrtl.asPassive %.inB.0width_input : !firrtl.flip<uint<0>>
+    // CHECK-NEXT: %.inC.output = firrtl.wire : !firrtl.analog<0>
+    // CHECK-NEXT: %.outb.output = firrtl.wire : !firrtl.flip<uint<0>>
 
-    // CHECK: [[OUTA:%.+]] = firrtl.mul %0, %2 : (!firrtl.uint<4>, !firrtl.uint<0>) -> !firrtl.uint<4>
+    // CHECK: [[OUTA:%.+]] = firrtl.mul %0, %1 : (!firrtl.uint<4>, !firrtl.uint<0>) -> !firrtl.uint<4>
     %0 = firrtl.mul %inA, %inB : (!firrtl.uint<4>, !firrtl.uint<0>) -> !firrtl.uint<4>
     firrtl.connect %outa, %0 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
