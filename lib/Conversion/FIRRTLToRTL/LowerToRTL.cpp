@@ -1071,13 +1071,19 @@ LogicalResult FIRRTLLowering::setLowering(Value orig, Value result) {
          "Lowering didn't turn a FIRRTL value into a non-FIRRTL value");
 
 #ifndef NDEBUG
-  if (!result) {
-    auto srcWidth = orig.getType()
-                        .cast<FIRRTLType>()
-                        .getPassiveType()
-                        .getBitWidthOrSentinel();
-    assert((srcWidth == 0 || srcWidth == -1) &&
-           "Lowering produced null value but source wasn't zero width");
+  auto srcWidth = orig.getType()
+                      .cast<FIRRTLType>()
+                      .getPassiveType()
+                      .getBitWidthOrSentinel();
+
+  // Caller should pass null value iff this was a zero bit value.
+  if (srcWidth != -1) {
+    if (result)
+      assert((srcWidth != 0) &&
+             "Lowering produced value for zero width source");
+    else
+      assert((srcWidth == 0) &&
+             "Lowering produced null value but source wasn't zero width");
   }
 #endif
 
@@ -1127,13 +1133,14 @@ FIRRTLLowering::handleUnloweredOp(Operation *op) {
   if (op->getNumResults() == 1) {
     auto resultType = op->getResult(0).getType();
     if (resultType.isa<FIRRTLType>() && isZeroBitFIRRTLType(resultType) &&
-        isExpression(op)) {
+        (isExpression(op) || isa<AsPassivePrimOp>(op) ||
+         isa<AsNonPassivePrimOp>(op))) {
       // Zero bit values lower to the null Value.
       setLowering(op->getResult(0), Value());
       return NowLowered;
     }
   }
-  op->emitError("LowerToRTL couldn't handle this operation");
+  op->emitOpError("LowerToRTL couldn't handle this operation");
   return LoweringFailure;
 }
 
@@ -1742,6 +1749,9 @@ LogicalResult FIRRTLLowering::lowerDivLikeOp(Operation *op) {
   // RHS may be wider than the LHS, and we cannot truncate off the high bits
   // (because an overlarge amount is supposed to shift in sign or zero bits).
   auto opType = op->getResult(0).getType().cast<IntType>();
+  if (opType.getWidth() == 0)
+    return setLowering(op->getResult(0), Value());
+
   auto resultType = getWidestIntType(opType, op->getOperand(1).getType());
   resultType = getWidestIntType(resultType, op->getOperand(0).getType());
   auto lhs = getLoweredAndExtendedValue(op->getOperand(0), resultType);
