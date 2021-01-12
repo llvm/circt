@@ -1518,7 +1518,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     auto falseConst =
         createConstantOp(bitType, APInt(1, 0), insertLoc, rewriter);
     auto bufferName = rewriter.getStringAttr("writeValidBuffer");
-    auto writeValidBuffer = rewriter.create<RegInitOp>(
+    auto writeValidBuffer = rewriter.create<RegResetOp>(
         insertLoc, bitType, clock, reset, falseConst, bufferName);
 
     // Connect the write valid buffer to the store control valid.
