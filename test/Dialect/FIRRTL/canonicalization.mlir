@@ -381,7 +381,7 @@ firrtl.module @issue432(%tmp8: !firrtl.flip<uint<10>>) {
     %c130_si10 = firrtl.constant(130 : si10) : !firrtl.sint<10>
     %0 = firrtl.tail %c130_si10, 0 : (!firrtl.sint<10>) -> !firrtl.uint<10>
     firrtl.connect %tmp8, %0 : !firrtl.flip<uint<10>>, !firrtl.uint<10>
-    // CHECK: %0 = firrtl.asUInt %c130_si10 : (!firrtl.sint<10>) -> !firrtl.uint<10>
-    // CHECK: firrtl.connect %tmp8, %0
+    // CHECK-NEXT: %c130_ui10 = firrtl.constant(130 : i10) : !firrtl.uint<10>
+    // CHECK-NEXT: firrtl.connect %tmp8, %c130_ui10
   }
 }
