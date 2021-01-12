@@ -131,7 +131,7 @@ module test_unary(
   assign out_head_s = sin4[3:2];
   assign out_tail_u = uin4[1:0];
   assign out_tail_s = sin4[1:0];
-  assign out_neg_u = -$signed({1'b0,uin4});
+  assign out_neg_u = -$signed(uin4);
   assign out_neg_s = -$signed(sin4);
 endmodule
 
