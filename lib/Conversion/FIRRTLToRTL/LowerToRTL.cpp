@@ -1856,8 +1856,7 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValuePrimOp op) {
 LogicalResult FIRRTLLowering::visitExpr(HeadPrimOp op) {
   auto input = getLoweredValue(op.input());
   if (!input)
-    return handleZeroBit(op.input(), [&]() { return setLowering(op, Value()); });
-
+    return failure();
   auto inWidth = input.getType().cast<IntegerType>().getWidth();
   if (op.amount() == 0)
     return setLowering(op, Value());
@@ -1909,7 +1908,7 @@ LogicalResult FIRRTLLowering::visitExpr(ShrPrimOp op) {
 LogicalResult FIRRTLLowering::visitExpr(TailPrimOp op) {
   auto input = getLoweredValue(op.input());
   if (!input)
-    return handleZeroBit(op.input(), [&]() { return setLowering(op, Value()); });
+    return failure();
 
   auto inWidth = input.getType().cast<IntegerType>().getWidth();
   if (inWidth == op.amount())
