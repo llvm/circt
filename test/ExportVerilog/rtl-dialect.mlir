@@ -324,7 +324,7 @@ module {
     rtl.output %c : i4
   }
 
- // CHECK-LABEL: module signs
+  // CHECK-LABEL: module signs
   rtl.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
     %awire = rtl.wire : !rtl.inout<i4>
     // CHECK: wire [3:0] awire;
@@ -354,6 +354,17 @@ module {
     rtl.connect %awire, %divs: i4
 
     rtl.output
+  }
+
+ 
+  // CHECK-LABEL: module casts(
+  // CHECK-NEXT: input  [6:0] in1,
+  // CHECK-NEXT: output [6:0] r1);
+  rtl.module @casts(%in1: i7) -> (%r1: !rtl.array<7xi1>) {
+    // CHECK-EMPTY:
+    %r1 = rtl.bitcast %in1 : (i7) -> !rtl.array<7xi1>
+    // CHECK-NEXT: wire [6:0] _T = /*cast(bit[6:0])*/in1;
+    rtl.output %r1 : !rtl.array<7xi1>
   }
 
   // CHECK-LABEL: module TestZero(

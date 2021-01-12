@@ -323,3 +323,27 @@ def MuxOp : RTLOp<"mux",
     }]>
   ];
 }
+
+def KnownBitWidthType : Type<CPred<[{getBitWidth($_self) != -1}]>,
+  "Type wherein the bitwidth in hardware is known">;
+
+def BitcastOp: RTLOp<"bitcast", [NoSideEffect]> {
+  let summary = [{
+    Cast one value to to another value of the same size and
+    potentially different type, using a bitwise reinterpretation of the
+    value.
+  }];
+
+  let arguments = (ins KnownBitWidthType:$from);
+  let results = (outs KnownBitWidthType:$to);
+  let verifier = [{
+    if (getBitWidth(from().getType()) !=
+        getBitWidth(to().getType()))
+      return this->emitOpError("Bitwidth of 'to' must match 'from'");
+    return success();
+  }];
+
+  let assemblyFormat = [{
+    $from attr-dict `:` `(` type($from) `)` `->` type($to)
+  }];
+}

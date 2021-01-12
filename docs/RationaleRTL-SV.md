@@ -53,6 +53,59 @@ TODO: Describe inout types.  Analogy to lvalues vs rvalues.  Array indices for
 both forms.  Arrays, structs,
 moving [UnpackedArray](https://github.com/llvm/circt/issues/389) to SV someday.
 
+All types (excepting `UnpackedArray`) are packed, meaning no padding or
+alignment.
+
+### Integrals
+
+MLIR's `IntegerType` with `Signless` semantics are used to represent integral
+types (logic/wire/reg in SystemVerilog).
+
+- **Bit layout**: MSB -> LSB matches between logical and hardware.
+- **Padding**: None
+- **Alignment**: None
+
+### Arrays
+
+The RTL dialect defines a custom `ArrayType`.
+
+- **Bit layout**: High index of array starts at the MSB. Array's 0th
+  element's LSB located at array LSB.
+- **Padding between elements**: None
+- **Alignment of elements**: None
+
+### Structs
+
+The RTL dialect defines a custom `StructType`.
+
+- **Bit layout**: The first listed member's MSB corresponds to the struct's
+  MSB. The last member in the list shares its LSB with the struct.
+- **Padding between elements**: None
+- **Alignment of elements**: None
+
+### Example figure
+
+```
+ 15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0 
+-------------------------------------------------
+| MSB                                       LSB | 16 bit integral
+-------------------------------------------------
+                         | MSB              LSB | 8 bit integral
+-------------------------------------------------
+| MSB      [1]       LSB | MSB     [0]      LSB | 2 element array of 8 bit integrals
+-------------------------------------------------
+
+       13 12 11 10  9  8  7  6  5  4  3  2  1  0 
+                            ---------------------
+                            | MSB           LSB | 7 bit integral
+      -------------------------------------------
+      | MSB     [1]     LSB | MSB    [0]    LSB | 2 element array of 7 bit integrals
+      -------------------------------------------
+      | MSB a LSB | MSB b[1] LSB | MSB b[0] LSB | struct
+      -------------------------------------------  a: 4 bit integral
+                                                   b: 2 element array of 5 bit integrals
+```
+
 Operations
 ----------
 
