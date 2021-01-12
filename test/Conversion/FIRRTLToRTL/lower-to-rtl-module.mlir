@@ -135,15 +135,6 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: rtl.output
   }
 
-  // expected-error @+1 {{cannot lower this port type to RTL}}
-  firrtl.module @CantLowerArgument(%arg: !firrtl.bundle<int_1: flip<uint<1>>, int_out: uint<2>>) attributes {sym_visibility = "private"} {
-  }   // CHECK-NEXT: }
-
-  // expected-error @+1 {{unexpected operation 'func' in a firrtl.circuit}}
-  func private @UnknownFunction() {
-    return
-  }
-
   // CHECK-LABEL: rtl.module @OutputFirst(%in1: i1, %in4: i4) -> (%out4: i4) {
   firrtl.module @OutputFirst(%out4: !firrtl.flip<uint<4>>,
                              %in1: !firrtl.uint<1>,
@@ -189,6 +180,8 @@ firrtl.circuit "Simple" {
     %0 = firrtl.sub %inA, %tmp : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
     // Use of an input as an output.
+    // NOTE: This isn't valid but needs to be accepted until the verifier
+    // rejects it.
     %tmp2 = firrtl.asNonPassive %inC : !firrtl.flip<uint<4>>
     firrtl.connect %tmp2, %inA : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
