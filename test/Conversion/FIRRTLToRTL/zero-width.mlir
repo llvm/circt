@@ -2,7 +2,7 @@
 
 module attributes {firrtl.mainModule = "Simple"} {
    // CHECK-LABEL: rtl.module @Arithmetic
-  rtl.module @Arithmetic(%uin3: i3) -> (i3, i4, i4) {
+  rtl.module @Arithmetic(%uin3: i3) -> (i3, i4, i4, i1) {
     %sin0c = firrtl.wire : !firrtl.sint<0>
     %uin0c = firrtl.wire : !firrtl.uint<0>
     %uin3c = firrtl.stdIntCast %uin3 : (i3) -> !firrtl.uint<3>
@@ -32,8 +32,13 @@ module attributes {firrtl.mainModule = "Simple"} {
     %2 = firrtl.shl %node, 4 : (!firrtl.uint<0>) -> !firrtl.uint<4>
     %c2 = firrtl.stdIntCast %2 : (!firrtl.uint<4>) -> i4
 
-    // CHECK-NEXT: rtl.output [[MULZERO]], [[ADDRES]], [[SHL]] : i3, i4, i4
-    rtl.output %c0, %c1, %c2 : i3, i4, i4
+    // Issue #436
+    // CHECK: [[CMP:%.+]] = rtl.icmp "eq" %false_2, %false_3 : i1
+    %3 = firrtl.eq %uin0c, %uin0c : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<1>
+    %c3 = firrtl.stdIntCast %3 : (!firrtl.uint<1>) -> i1
+
+    // CHECK-NEXT: rtl.output [[MULZERO]], [[ADDRES]], [[SHL]], [[CMP]] : i3, i4, i4, i1
+    rtl.output %c0, %c1, %c2, %c3 : i3, i4, i4, i1
   }
 
   // CHECK-LABEL: rtl.module @Exotic

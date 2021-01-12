@@ -1732,7 +1732,9 @@ LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, ICmpPredicate signedOp,
   if (!lhsIntType.hasWidth() || !rhsIntType.hasWidth())
     return failure();
 
-  Type cmpType = getWidestIntType(lhsIntType, rhsIntType);
+  auto cmpType = getWidestIntType(lhsIntType, rhsIntType);
+  if (cmpType.getWidth() == 0) // Handle 0-width inputs by promoting to 1 bit.
+    cmpType = UIntType::get(&getContext(), 1);
   auto lhs = getLoweredAndExtendedValue(op->getOperand(0), cmpType);
   auto rhs = getLoweredAndExtendedValue(op->getOperand(1), cmpType);
   if (!lhs || !rhs)
