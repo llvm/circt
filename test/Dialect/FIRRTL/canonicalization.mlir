@@ -376,5 +376,12 @@ firrtl.module @issue331(%tmp81: !firrtl.flip<sint<1>>) {
   firrtl.connect %tmp81, %0 : !firrtl.flip<sint<1>>, !firrtl.sint<1>
 }
 
-
+// CHECK-LABEL: firrtl.module @issue432
+firrtl.module @issue432(%tmp8: !firrtl.flip<uint<10>>) {
+    %c130_si10 = firrtl.constant(130 : si10) : !firrtl.sint<10>
+    %0 = firrtl.tail %c130_si10, 0 : (!firrtl.sint<10>) -> !firrtl.uint<10>
+    firrtl.connect %tmp8, %0 : !firrtl.flip<uint<10>>, !firrtl.uint<10>
+    // CHECK: %0 = firrtl.asUInt %c130_si10 : (!firrtl.sint<10>) -> !firrtl.uint<10>
+    // CHECK: firrtl.connect %tmp8, %0
+  }
 }

@@ -1325,7 +1325,6 @@ static bool flattenBundleTypes(Type type, StringRef nameSoFar,
 }
 
 LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
-  // Check that the MemOp has been properly lowered before this.
   if (op.readLatency() != 0 || op.writeLatency() != 1) {
     // FIXME: This should be an error.
     op.emitWarning("FIXME: need to support mem read/write latency correctly");

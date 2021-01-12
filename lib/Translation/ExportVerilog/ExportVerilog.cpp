@@ -1667,8 +1667,6 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     if (auto interface = dyn_cast<InterfaceInstanceOp>(op))
       return interface.getInterfaceType().getInterface().getValue();
 
-    // Note: MemOp is handled as "wire" here because each of its subcomponents
-    // are wires.  The corresponding 'reg' decl is handled specially below.
     return "wire";
   };
 
