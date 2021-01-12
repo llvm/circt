@@ -73,15 +73,17 @@
 // Connect the write valid buffer to the store control valid.
 // CHECK: firrtl.connect %[[ST_CONTROL_VALID]], %[[WRITE_VALID_BUFFER]]
 
-// Create the store completed signal and connect it to the store data and
-// address ports.
+// Create the store completed signal.
 // CHECK: %[[STORE_COMPLETED:.+]] = firrtl.and %[[WRITE_VALID_BUFFER]], %[[ST_CONTROL_READY]]
-// CHECK: firrtl.connect %[[ST_ADDR_READY]], %[[STORE_COMPLETED]]
-// CHECK: firrtl.connect %[[ST_DATA_READY]], %[[STORE_COMPLETED]]
 
 // Create the logic to drive the write valid buffer or keep its output.
 // CHECK: %[[NOT_WRITE_VALID_BUFFER:.+]] = firrtl.not %[[WRITE_VALID_BUFFER]]
 // CHECK: %[[EMPTY_OR_COMPLETE:.+]] = firrtl.or %[[NOT_WRITE_VALID_BUFFER]], %[[STORE_COMPLETED]]
+
+// Connect the store data and address ports.
+// CHECK: firrtl.connect %[[ST_ADDR_READY]], %[[EMPTY_OR_COMPLETE]]
+// CHECK: firrtl.connect %[[ST_DATA_READY]], %[[EMPTY_OR_COMPLETE]]
+
 // CHECK: %[[WRITE_VALID:.+]] = firrtl.and %[[ST_ADDR_VALID]], %[[ST_DATA_VALID]]
 // CHECK: %[[WRITE_VALID_BUFFER_MUX:.+]] = firrtl.mux(%[[EMPTY_OR_COMPLETE]], %[[WRITE_VALID]], %[[WRITE_VALID_BUFFER]])
 // CHECK: firrtl.connect %[[WRITE_VALID_BUFFER]], %[[WRITE_VALID_BUFFER_MUX]]

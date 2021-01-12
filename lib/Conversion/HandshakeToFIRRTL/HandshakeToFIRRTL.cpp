@@ -1529,10 +1529,6 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     auto storeCompleted = rewriter.create<AndPrimOp>(
         insertLoc, bitType, writeValidBuffer, storeControlReady);
 
-    // Connect the gate to both the store address ready and store data ready.
-    rewriter.create<ConnectOp>(insertLoc, storeAddrReady, storeCompleted);
-    rewriter.create<ConnectOp>(insertLoc, storeDataReady, storeCompleted);
-
     // Create a signal for when the write valid buffer is empty or the output is
     // ready.
     auto notWriteValidBuffer =
@@ -1540,6 +1536,10 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     auto emptyOrComplete = rewriter.create<OrPrimOp>(
         insertLoc, bitType, notWriteValidBuffer, storeCompleted);
+
+    // Connect the gate to both the store address ready and store data ready.
+    rewriter.create<ConnectOp>(insertLoc, storeAddrReady, emptyOrComplete);
+    rewriter.create<ConnectOp>(insertLoc, storeDataReady, emptyOrComplete);
 
     // Create a gate for when both the store address and data are valid.
     auto writeValid = rewriter.create<AndPrimOp>(
