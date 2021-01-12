@@ -1455,7 +1455,10 @@ LogicalResult ModuleEmitter::visitStmt(InstanceOp op) {
   // Helper that prints a parameter constant value in a Verilog compatible way.
   auto printParmValue = [&](Attribute value) {
     if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
-      os << intAttr.getValue();
+      IntegerType intTy = intAttr.getType().cast<IntegerType>();
+      SmallString<20> numToPrint;
+      intAttr.getValue().toString(numToPrint, 10, intTy.isSigned());
+      os << intTy.getWidth() << "'d" << numToPrint;
     } else if (auto strAttr = value.dyn_cast<StringAttr>()) {
       os << '"';
       os.write_escaped(strAttr.getValue());

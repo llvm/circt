@@ -161,7 +161,7 @@ module {
     %w2 = rtl.instance "a1" @AAA(%w, %w1) : (i1, i1) -> (i1)
     %w1, %y = rtl.instance "b1" @B(%w2) : (i1) -> (i1, i1)
 
-    %p = rtl.instance "paramd" @EXT_W_PARAMS(%w) {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1) -> i1
+    %p = rtl.instance "paramd" @EXT_W_PARAMS(%w) {parameters = {DEFAULT = 14000240888948784983 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1) -> i1
 
     %p2 = rtl.instance "paramd2" @EXT_W_PARAMS2(%i2) {parameters = {DEFAULT = 1 : i64}} : (i2) -> i1
 
@@ -188,11 +188,11 @@ module {
   // CHECK-NEXT:     .b (b1_b),
   // CHECK-NEXT:     .c (b1_c)
   // CHECK-NEXT:   )
-  // CHECK-NEXT:   FooModule #(.DEFAULT(0), .DEPTH(3.242000e+01), .FORMAT("xyz_timeout=%d\n"), .WIDTH(32)) paramd (
+  // CHECK-NEXT:   FooModule #(.DEFAULT(64'd14000240888948784983), .DEPTH(3.242000e+01), .FORMAT("xyz_timeout=%d\n"), .WIDTH(8'd32)) paramd (
   // CHECK-NEXT:     .a (w),
   // CHECK-NEXT:     .out (paramd_out)
   // CHECK-NEXT:   );
-  // CHECK-NEXT:   FooModule #(.DEFAULT(1)) paramd2 (
+  // CHECK-NEXT:   FooModule #(.DEFAULT(64'd1)) paramd2 (
   // CHECK-NEXT:   .a (i2),
   // CHECK-NEXT:   .out (paramd2_out)
   // CHECK-NEXT:   );
