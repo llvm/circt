@@ -640,21 +640,22 @@ public:
   matchAndRewrite(UnwrapValidReady unwrap, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const final {
 
-    if (!unwrap.chanInput().hasOneUse())
+    Value chanInput = operands[0];
+    Value ready = operands[1];
+    if (!chanInput.hasOneUse())
       return rewriter.notifyMatchFailure(unwrap, [](Diagnostic &d) {
         d << "This conversion only supports wrap-unwrap back-to-back. "
              "Wrap didn't have exactly one use.";
       });
-    WrapValidReady wrap =
-        dyn_cast<WrapValidReady>(unwrap.chanInput().getDefiningOp());
+    WrapValidReady wrap = dyn_cast<WrapValidReady>(chanInput.getDefiningOp());
     if (!wrap)
       return rewriter.notifyMatchFailure(unwrap, [](Diagnostic &d) {
         d << "This conversion only supports wrap-unwrap back-to-back. "
              "Could not find 'wrap'.";
       });
 
-    rewriter.replaceOp(wrap, {nullptr, unwrap.ready()});
-    rewriter.replaceOp(unwrap, operands);
+    rewriter.replaceOp(wrap, {nullptr, ready});
+    rewriter.replaceOp(unwrap, ValueRange{wrap.rawInput(), wrap.valid()});
     return success();
   }
 };
@@ -780,11 +781,15 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
 #else
   auto loc = ep.getLoc();
   auto *ctxt = rewriter.getContext();
+  Value clk = operands[0];
+  Value rstn = operands[1];
+  Value send = operands[2];
+
   circt::BackedgeBuilder bb(rewriter, loc);
   builder.declareCosimEndpoint();
   Type ui64Type =
       IntegerType::get(ctxt, 64, IntegerType::SignednessSemantics::Unsigned);
-  capnp::TypeSchema sendTypeSchema(ep.send().getType());
+  capnp::TypeSchema sendTypeSchema(send.getType());
   if (!sendTypeSchema.isSupported())
     return rewriter.notifyMatchFailure(ep, "Send type not supported yet");
   capnp::TypeSchema recvTypeSchema(ep.recv().getType());
@@ -808,10 +813,9 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
       ArrayType::get(rewriter.getI1Type(), sendTypeSchema.size());
   auto sendReady = bb.get(rewriter.getI1Type());
   UnwrapValidReady unwrapSend =
-      rewriter.create<UnwrapValidReady>(loc, ep.send(), sendReady);
-  auto encodeData =
-      rewriter.create<CapnpEncode>(loc, egestBitArrayType, ep.clk(),
-                                   unwrapSend.valid(), unwrapSend.rawOutput());
+      rewriter.create<UnwrapValidReady>(loc, send, sendReady);
+  auto encodeData = rewriter.create<CapnpEncode>(
+      loc, egestBitArrayType, clk, unwrapSend.valid(), unwrapSend.rawOutput());
 
   // Get information necessary for injest path.
   auto recvReady = bb.get(rewriter.getI1Type());
@@ -822,9 +826,7 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   StringAttr nameAttr = ep->getAttr("name").dyn_cast_or_null<StringAttr>();
   StringRef name = nameAttr ? nameAttr.getValue() : "cosimEndpoint";
   Value epInstInputs[] = {
-      ep.clk(),           ep.rstn(),
-      recvReady,
-      unwrapSend.valid(), encodeData.capnpBits(),
+      clk, rstn, recvReady, unwrapSend.valid(), encodeData.capnpBits(),
   };
   Type epInstOutputs[] = {rewriter.getI1Type(), ingestBitArrayType,
                           rewriter.getI1Type()};
@@ -837,7 +839,7 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   Value recvDataFromCosim = cosimEpModule.getResult(1);
   Value recvValidFromCosim = cosimEpModule.getResult(0);
   auto decodeData =
-      rewriter.create<CapnpDecode>(loc, recvTypeSchema.getType(), ep.clk(),
+      rewriter.create<CapnpDecode>(loc, recvTypeSchema.getType(), clk,
                                    recvValidFromCosim, recvDataFromCosim);
   WrapValidReady wrapRecv = rewriter.create<WrapValidReady>(
       loc, decodeData.decodedData(), recvValidFromCosim);

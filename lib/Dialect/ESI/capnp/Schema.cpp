@@ -303,11 +303,40 @@ static size_t bits(::capnp::schema::Type::Reader type) {
 /// Build an RTL/SV dialect capnp encoder for this type.
 Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
                                    Value operand) {
+  MLIRContext *ctxt = b.getContext();
   auto loc = operand.getDefiningOp()->getLoc();
-  auto zeros = b.create<rtl::ConstantOp>(
-      loc, IntegerType::get(b.getContext(), size()), 0);
-  return b.create<rtl::BitcastOp>(
-      loc, rtl::ArrayType::get(b.getI1Type(), size()), zeros);
+  ::capnp::schema::Node::Reader rootProto = getTypeSchema().getProto();
+
+  auto i16 =
+      IntegerType::get(ctxt, 16, IntegerType::SignednessSemantics::Signless);
+  auto i32 =
+      IntegerType::get(ctxt, 32, IntegerType::SignednessSemantics::Signless);
+
+  auto typeAndOffset = b.create<rtl::ConstantOp>(loc, i32, 0);
+  auto ptrSize = b.create<rtl::ConstantOp>(loc, i16, 0);
+  auto dataSize = b.create<rtl::ConstantOp>(
+      loc, i16, rootProto.getStruct().getDataWordCount());
+  auto structPtr = b.create<rtl::ConcatOp>(
+      loc, ValueRange{ptrSize, dataSize, typeAndOffset});
+
+  auto operandIntTy = operand.getType().cast<IntegerType>();
+  uint16_t paddingBits =
+      rootProto.getStruct().getDataWordCount() * 64 - operandIntTy.getWidth();
+  auto operandCasted = b.create<rtl::BitcastOp>(
+      loc,
+      IntegerType::get(ctxt, operandIntTy.getWidth(), IntegerType::Signless),
+      operand);
+
+  IntegerType iPaddingTy = IntegerType::get(ctxt, paddingBits);
+  auto padding = b.create<rtl::ConstantOp>(loc, iPaddingTy, 0);
+  auto dataSection =
+      b.create<rtl::ConcatOp>(loc, ValueRange{padding, operandCasted});
+
+  return b.create<rtl::ConcatOp>(loc, ValueRange{dataSection, structPtr});
+  // auto zeros = b.create<rtl::ConstantOp>(
+  // loc, IntegerType::get(b.getContext(), size()), 0);
+  // return b.create<rtl::BitcastOp>(
+  // loc, rtl::ArrayType::get(b.getI1Type(), size()), zeros);
 }
 
 /// Build an RTL/SV dialect capnp decoder for this type.
@@ -323,7 +352,7 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
   auto u32 =
       IntegerType::get(ctxt, 32, IntegerType::SignednessSemantics::Signless);
 
-          rtl::ArrayType operandType =
+  rtl::ArrayType operandType =
               operand.getType().dyn_cast<rtl::ArrayType>();
   assert(operandType && operandType.getSize() == size &&
          "Operand type and length must match the type's capnp size.");
