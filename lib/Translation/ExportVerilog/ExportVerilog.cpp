@@ -30,7 +30,7 @@ using namespace rtl;
 using namespace sv;
 
 /// Should we emit wire decls in a block at the top of a module, or inline?
-static constexpr bool emitInlineWireDecls = true;
+static constexpr bool emitInlineWireDecls = false;
 
 /// This is the preferred source width for the generated Verilog.
 static constexpr size_t preferredSourceWidth = 120;
