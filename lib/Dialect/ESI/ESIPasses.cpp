@@ -797,11 +797,11 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   params.set("SEND_TYPE_ID",
              IntegerAttr::get(ui64Type, sendTypeSchema.capnpTypeID()));
   params.set("SEND_TYPE_SIZE_BITS",
-             rewriter.getI64IntegerAttr(sendTypeSchema.size()));
+             rewriter.getI32IntegerAttr(sendTypeSchema.size()));
   params.set("RECV_TYPE_ID",
              IntegerAttr::get(ui64Type, recvTypeSchema.capnpTypeID()));
   params.set("RECV_TYPE_SIZE_BITS",
-             rewriter.getI64IntegerAttr(recvTypeSchema.size()));
+             rewriter.getI32IntegerAttr(recvTypeSchema.size()));
 
   // Set up the egest route to drive the EP's send ports.
   ArrayType egestBitArrayType =

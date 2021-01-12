@@ -328,18 +328,13 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
   assert(operandType && operandType.getSize() == size &&
          "Operand type and length must match the type's capnp size.");
 
-  size_t currentOffset = 0;
-
   auto alwaysAt = b.create<sv::AlwaysOp>(loc, EventControl::AtPosEdge, clk);
   auto ifValid = OpBuilder(alwaysAt.getBodyRegion()).create<sv::IfOp>(loc, valid);
   OpBuilder asserts(ifValid.getBodyRegion());
 
   // The next 64-bits of a capnp message is the root struct pointer.
   ::capnp::schema::Node::Reader rootProto = getTypeSchema().getProto();
-  auto ptr =
-      b.create<rtl::ArraySliceOp>(loc, operand, 0, 64);
-  // All ptr slices should be off the 'ptr' variable, so we skip to the expected data section.
-  currentOffset += 64;
+  auto ptr = b.create<rtl::ArraySliceOp>(loc, operand, 0, 64);
 
   // Since this is the root, we _expect_ the offset to be zero but that's only
   // guaranteed to be the case with canonically-encoded messages.
@@ -374,25 +369,33 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
       loc, asserts.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
                                  ptrSectionSize, expectedPtrSectionSize));
 
+  auto dataSection = b.create<rtl::ArraySliceOp>(
+      loc, operand, 64, rootProto.getStruct().getDataWordCount() * 64);
+
+  Value result;
   // Now that we're looking at the data section, we can just cast down each
   // type. Since we only support IntegerType, this is easy.
-  auto field = rootProto.getStruct().getFields()[0];
-  auto typeBits = type.cast<IntegerType>().getWidth();
-  auto fieldBits =
-      b.create<rtl::ArraySliceOp>(loc, operand, currentOffset, typeBits);
-  fieldBits->setAttr("name", StringAttr::get("fieldBits", ctxt));
-  auto fieldValue = b.create<rtl::BitcastOp>(loc, type, fieldBits);
-  fieldValue->setAttr("name", StringAttr::get("decodedValue", ctxt));
+  assert(rootProto.getStruct().getFields().size() == 1);
+  // Loop through fields. Unnecessary now, but prep for future.
+  for (auto field : rootProto.getStruct().getFields()) {
+    auto typeBits = type.cast<IntegerType>().getWidth();
+    auto fieldBits = b.create<rtl::ArraySliceOp>(
+        loc, dataSection,
+        field.getSlot().getOffset() * bits(field.getSlot().getType()),
+        typeBits);
+    fieldBits->setAttr("name", StringAttr::get("fieldBits", ctxt));
+    auto fieldValue = b.create<rtl::BitcastOp>(loc, type, fieldBits);
+    fieldValue->setAttr("name", StringAttr::get("decodedValue", ctxt));
 
-  asserts.create<sv::FWriteOp>(loc, "typeAndOffset: %h, dataSize: %h, ptrSize: %h, decodedData: %h\n",
-   ValueRange{typeAndOffset, dataSectionSize, ptrSectionSize, fieldValue});
+    result = fieldValue;
+  }
 
-  // Advance to next field.
-  size_t capnpFieldBits = bits(field.getSlot().getType());
-  currentOffset += (field.getSlot().getOffset() + 1) * capnpFieldBits;
+  asserts.create<sv::FWriteOp>(
+      loc, "typeAndOffset: %h, dataSize: %h, ptrSize: %h, decodedData: %h\n",
+      ValueRange{typeAndOffset, dataSectionSize, ptrSectionSize, result});
 
   // All that just to decode an int!
-  return fieldValue;
+  return result;
 }
 
 //===----------------------------------------------------------------------===//
