@@ -490,7 +490,8 @@ void TailPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       // BitsPrimOp.
       unsigned dropAmount = op.amount();
       if (dropAmount != inputWidth)
-        replaceWithBits(op, op.input(), inputWidth - dropAmount - 1, 0, rewriter);
+        replaceWithBits(op, op.input(), inputWidth - dropAmount - 1, 0,
+                        rewriter);
       return success();
     }
   };
