@@ -1,12 +1,10 @@
-RTL and SV Dialect Rationale
-============================
+# RTL and SV Dialect Rationale
 
 This document describes various design points of the RTL and SV dialects, why
 they are the way they are, and current status.  This follows in the spirit of
 other [MLIR Rationale docs](https://mlir.llvm.org/docs/Rationale/).
 
-Introduction
-============
+## Introduction
 
 [SystemVerilog](https://en.wikipedia.org/wiki/SystemVerilog) is an industry
 standard language for hardware design and verification, is known by a large
@@ -33,8 +31,7 @@ contributions:
 The combination of these capabilities provides a useful suite of functionality
 for compiler tools that want to generate high quality SystemVerilog.
 
-The RTL Dialect
-===============
+## The RTL Dialect
 
 The RTL dialect is designed as a mid-level compiler IR for combinational logic.
 It is *not* designed to model SystemVerilog or any other hardware design
@@ -46,15 +43,13 @@ The RTL dialect defines a set of common functionality, such as `rtl.module` for
 representing hardware modules, and operations like `rtl.add` and `rtl.mux` for
 logic.
 
-Type System
------------
+### Type System
 
 TODO: Describe inout types.  Analogy to lvalues vs rvalues.  Array indices for
 both forms.  Arrays, structs,
 moving [UnpackedArray](https://github.com/llvm/circt/issues/389) to SV someday.
 
-Operations
-----------
+### Operations
 
 TODO: Spotlight on module.  Allows arbitrary types for ports.
 
@@ -106,8 +101,7 @@ declarations in limited ways:
  - Interface signals are allowed to be zero bits wide.  They are dropped from
    Verilog emission.
 
-Cost Model
-----------
+### Cost Model
 
 As a very general mid-level IR, it is important to define the principles that
 canonicalizations and other general purpose transformations should optimize for.
@@ -159,8 +153,7 @@ do not synthesize into hardware.  All things being equal it is good to reduce
 the number of instances of these (to reduce IR size and increase canonical form)
 but it is ok to introduce more of these to improve on other metrics above.
 
-The SV Dialect
-==============
+## The SV Dialect
 
 The SV dialect is one of the dialects that can be mixed into the RTL dialect,
 providing
@@ -172,8 +165,7 @@ The SV dialect is designed to build on top of the RTL dialect, so it does not
 have its own operations for combinational logic, modules, or other base
 functionality defined in the RTL dialect.
 
-Type System
------------
+### Type System
 
 Like the RTL dialect, the SV dialect is designed to tolerate unknown types where
 possible, allowing other dialects to mix in with it.  In addition to these
@@ -182,8 +174,7 @@ types for SystemVerilog interfaces.
 
 TODO: Describe interface types, modports, etc.
 
-Operations
-----------
+### Operations
 
 Because the SV dialect aims to align with the textual nature of SystemVerilog,
 many of the constructs in the SV dialect have an "AST" style of representation.
@@ -207,15 +198,13 @@ still many things in SystemVerilog that we cannot currently express in the SV
 dialect, this design makes it easy to incrementally build out new capabilities
 over time.
 
-Cost Model
-----------
+### Cost Model
 
 The SV dialect is primarily designed for human consumption, not machines.  As
 such, transformations should aim to reduce redundancy, eliminate useless
 constructs (e.g. eliminate empty ifdef and if blocks), etc.
 
-Future Directions
-=================
+## Future Directions
 
 There are many possible future directions that we anticipate tackling, when and
 if the need arises:
