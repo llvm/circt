@@ -137,13 +137,6 @@ def FuncOp : Op<Handshake_Dialect, "func", [
                << ") must match the type of the corresponding argument in "
                << "function signature(" << fnInputTypes[i] << ')';
 
-    for (auto &region : this->getOperation()->getRegions())
-      for (auto &block : region)
-        for (auto &nestedOp : block)
-          for (mlir::Value out : nestedOp.getResults())
-            if (!out.hasOneUse())
-              return nestedOp.emitOpError("does not have exactly one use");
-
     return success();
   }];
   let printer = [{
