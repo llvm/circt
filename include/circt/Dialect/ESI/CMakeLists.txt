@@ -1,5 +1,5 @@
 add_circt_dialect(ESI esi)
-add_circt_doc(ESI -gen-op-doc esi Dialects/)
+add_circt_doc(ESI -gen-dialect-doc ESI Dialects/)
 
 set(LLVM_TARGET_DEFINITIONS ESI.td)
 mlir_tablegen(ESIAttrs.h.inc -gen-struct-attr-decls)
