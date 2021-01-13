@@ -1571,10 +1571,13 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     // Connect the write valid buffer to the store control valid.
     rewriter.create<ConnectOp>(insertLoc, storeControlValid, writeValidBuffer);
 
-    // Create a gate for when both the buffered write valid signal and the store
-    // complete ready signal are asserted.
-    auto storeCompleted = rewriter.create<AndPrimOp>(
-        insertLoc, bitType, writeValidBuffer, storeControlReady);
+    // Create the logic for when both the buffered write valid signal and the
+    // store complete ready signal are asserted.
+    Value storeCompleted = rewriter.create<WireOp>(
+        insertLoc, bitType, rewriter.getStringAttr("storeCompleted"));
+    ValueVector storeCompletedVector({Value(), storeCompleted});
+    buildAllReadyLogic({&storeCompletedVector}, &storeControl,
+                       writeValidBuffer);
 
     // Create a signal for when the write valid buffer is empty or the output is
     // ready.
@@ -1588,9 +1591,11 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     rewriter.create<ConnectOp>(insertLoc, storeAddrReady, emptyOrComplete);
     rewriter.create<ConnectOp>(insertLoc, storeDataReady, emptyOrComplete);
 
-    // Create a gate for when both the store address and data are valid.
-    auto writeValid = rewriter.create<AndPrimOp>(
-        insertLoc, bitType, storeAddrValid, storeDataValid);
+    // Create a wire for when both the store address and data are valid.
+    Value writeValid = rewriter.create<WireOp>(
+        insertLoc, bitType, rewriter.getStringAttr("writeValid"));
+    ValueVector writeValidVector({writeValid});
+    buildAllValidLogic({&storeAddr, &storeData}, &writeValidVector);
 
     // Create a mux that drives the buffer input. If the emptyOrComplete signal
     // is asserted, the mux selects the writeValid signal. Otherwise, it selects
