@@ -40,8 +40,14 @@ class Questa:
           self.verilator = os.environ["QUESTA_PATH"]
 
     def compile(self, sources):
+        self.dpiLibs = filter(
+            lambda fn: fn.endswith(".so") or fn.endswith(".dll"),
+            sources)
+        sources = filter(
+            lambda fn: not (fn.endswith(".so") or fn.endswith(".dll")),
+            sources)
         vlog = os.path.join(self.path, "vlog")
-        args = [vlog, "-sv"] + sources
+        args = [vlog, "-sv"] + list(sources)
         if self.args.gui:
           args.append('+acc')
         return subprocess.run(args)
@@ -56,11 +62,15 @@ class Questa:
         # Note: vsim exit codes say nothing about the test run's pass/fail even if
         # $fatal is encountered in the simulation.
         if self.args.gui:
-          cmd = [vsim, top, "-gui", "-voptargs=\"+acc\""]
+            cmd = [vsim, top, "-gui", "-voptargs=\"+acc\""]
         else:
-          cmd = [vsim, top, "-batch", "-do", "run -all"]
+            cmd = [vsim, top, "-batch", "-do", "run -all"]
         if cycles >= 0:
-          cmd.append(f"+cycles={cycles}")
+            cmd.append(f"+cycles={cycles}")
+        for lib in self.dpiLibs:
+            svLib = os.path.splitext(lib)[0]
+            cmd.append("-sv_lib")
+            cmd.append(svLib)
         return subprocess.run(cmd + simargs.split())
 
 
@@ -85,6 +95,9 @@ class Verilator:
           self.ObjDir = os.path.basename(args.sources[0]) + ".obj_dir"
 
     def compile(self, sources):
+        dpiLibs = filter(lambda fn: fn.endswith(
+            ".so") or fn.endswith(".dll"), sources)
+        self.ldPaths = ":".join([os.path.dirname(x) for x in dpiLibs])
         return subprocess.run([self.verilator, "--cc", "--top-module", self.top,
                                "-sv", "--build", "--exe",
                                "--Mdir", self.ObjDir] + sources)
@@ -98,6 +111,7 @@ class Verilator:
         cmd += args.split()
         print(f"Running: {cmd}")
         sys.stdout.flush()
+        os.environ["LD_LIBRARY_PATH"] = self.ldPaths
         return subprocess.run(cmd)
 
 
