@@ -1,5 +1,5 @@
 add_circt_dialect(SV sv)
-add_circt_doc(SV -gen-op-doc sv Dialects/)
+add_circt_doc(SV -gen-dialect-doc SV Dialects/)
 
 set(LLVM_TARGET_DEFINITIONS SV.td)
 
