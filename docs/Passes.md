@@ -16,8 +16,8 @@ This document describes the available CIRCT passes and their contracts.
 
 [include "Passes/LLHDToLLVM.md"]
 
-[include "CIRCTConversionPasses.md"]
+[include "Passes/CIRCTConversionPasses.md"]
 
 ## `firrtl` Dialect Passes
 
-[include "FIRRTLPasses.md"]
+[include "Passes/FIRRTLPasses.md"]
