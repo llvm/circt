@@ -1,5 +1,5 @@
 add_circt_dialect(RTL rtl)
-add_circt_doc(RTL -gen-op-doc rtl Dialects/)
+add_circt_doc(RTL -gen-dialect-doc RTL Dialects/)
 
 set(LLVM_TARGET_DEFINITIONS RTL.td)
 mlir_tablegen(RTLEnums.h.inc -gen-enum-decls)

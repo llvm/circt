@@ -14,10 +14,13 @@ set(CIRCT_TEST_DEPENDS
   circt-translate
   handshake-runner
   firtool
-  llhd-sim
   mlir-opt
   mlir-cpu-runner
   )
+
+if(NOT WIN32)
+  list(APPEND CIRCT_TEST_DEPENDS llhd-sim)
+endif()
 
 add_lit_testsuite(check-circt "Running the CIRCT regression tests"
   ${CMAKE_CURRENT_BINARY_DIR}

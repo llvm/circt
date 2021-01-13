@@ -641,6 +641,9 @@ public:
   bool visitHandshake(MuxOp op);
   bool visitHandshake(SinkOp op);
 
+  bool buildJoinLogic(SmallVector<ValueVector *, 4> inputs,
+                      ValueVector *output);
+
   bool buildForkLogic(ValueVector *input, SmallVector<ValueVector *, 4> outputs,
                       Value clock, Value reset, bool isControl);
 
@@ -669,30 +672,53 @@ bool HandshakeBuilder::visitHandshake(SinkOp op) {
   return true;
 }
 
+bool HandshakeBuilder::buildJoinLogic(SmallVector<ValueVector *, 4> inputs,
+                                      ValueVector *output) {
+  if (output == nullptr)
+    return false;
+
+  for (auto input : inputs)
+    if (input == nullptr)
+      return false;
+
+  // Extract output signals.
+  auto outputSubfields = *output;
+  auto outputValid = outputSubfields[0];
+  auto outputReady = outputSubfields[1];
+
+  // The output is triggered only after all inputs are valid.
+  auto firstInput = *inputs[0];
+  auto tmpValid = firstInput[0];
+  for (unsigned i = 1, e = inputs.size(); i < e; ++i) {
+    auto currentInput = *inputs[i];
+    auto inputValid = currentInput[0];
+    tmpValid = rewriter.create<AndPrimOp>(insertLoc, inputValid.getType(),
+                                          inputValid, tmpValid);
+  }
+  rewriter.create<ConnectOp>(insertLoc, outputValid, tmpValid);
+
+  // The input will be ready to accept new token when old token is sent out.
+  auto validAndReady = rewriter.create<AndPrimOp>(
+      insertLoc, outputReady.getType(), outputReady, tmpValid);
+  for (unsigned i = 0, e = inputs.size(); i < e; ++i) {
+    auto currentInput = *inputs[i];
+    auto inputReady = currentInput[1];
+    rewriter.create<ConnectOp>(insertLoc, inputReady, validAndReady);
+  }
+  return true;
+}
+
 /// Currently only support {control = true}.
 /// Please refer to test_join.mlir test case.
 bool HandshakeBuilder::visitHandshake(JoinOp op) {
-  ValueVector resultSubfields = portList.back();
-  Value resultValid = resultSubfields[0];
-  Value resultReady = resultSubfields[1];
+  auto output = &portList.back();
 
-  // The output is triggered only after all inputs are valid.
-  Value *tmpValid = &portList[0][0];
-  for (unsigned i = 1, e = portList.size() - 1; i < e; ++i) {
-    Value argValid = portList[i][0];
-    *tmpValid = rewriter.create<AndPrimOp>(insertLoc, argValid.getType(),
-                                           argValid, *tmpValid);
-  }
-  rewriter.create<ConnectOp>(insertLoc, resultValid, *tmpValid);
+  // Collect all input ports.
+  SmallVector<ValueVector *, 4> inputs;
+  for (unsigned i = 0, e = portList.size() - 1; i < e; ++i)
+    inputs.push_back(&portList[i]);
 
-  // The input will be ready to accept new token when old token is sent out.
-  auto argReadyOp = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
-                                               resultReady, *tmpValid);
-  for (unsigned i = 0, e = portList.size() - 1; i < e; ++i) {
-    Value argReady = portList[i][1];
-    rewriter.create<ConnectOp>(insertLoc, argReady, argReadyOp);
-  }
-  return true;
+  return buildJoinLogic(inputs, output);
 }
 
 /// Please refer to test_mux.mlir test case.
