@@ -392,4 +392,18 @@ firrtl.module @issue437(%tmp19: !firrtl.flip<uint<1>>) {
   %0 = firrtl.bits %c-1_si1 0 to 0 : (!firrtl.sint<1>) -> !firrtl.uint<1>
   firrtl.connect %tmp19, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 }
+
+// CHECK-LABEL: firrtl.module @issue446
+// CHECK-NEXT: firrtl.xor %inp_1, %inp_1
+firrtl.module @issue446(%inp_1: !firrtl.sint<0>, %tmp10: !firrtl.flip<uint<1>>) {
+  %0 = firrtl.xor %inp_1, %inp_1 : (!firrtl.sint<0>, !firrtl.sint<0>) -> !firrtl.uint<0>
+  firrtl.connect %tmp10, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<0>
+}
+
+// CHECK-LABEL: firrtl.module @xorUnsized
+// CHECK-NEXT: %c0_ui = firrtl.constant(false) : !firrtl.uint
+firrtl.module @xorUnsized(%inp_1: !firrtl.sint, %tmp10: !firrtl.flip<uint>) {
+  %0 = firrtl.xor %inp_1, %inp_1 : (!firrtl.sint, !firrtl.sint) -> !firrtl.uint
+  firrtl.connect %tmp10, %0 : !firrtl.flip<uint>, !firrtl.uint
+}
 }
