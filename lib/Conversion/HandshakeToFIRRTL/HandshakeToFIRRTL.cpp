@@ -323,6 +323,12 @@ static void createMergeArgReady(ArrayRef<Value> outputs, Value fired,
   }
 }
 
+static void extractValues(ArrayRef<ValueVector *> valueVectors, size_t index,
+                          SmallVectorImpl<Value> &result) {
+  for (size_t i = 0; i < valueVectors.size(); ++i)
+    result.push_back((*valueVectors[i])[index]);
+}
+
 //===----------------------------------------------------------------------===//
 // FIRRTL Top-module Related Functions
 //===----------------------------------------------------------------------===//
@@ -647,8 +653,13 @@ public:
   bool buildForkLogic(ValueVector *input, SmallVector<ValueVector *, 4> outputs,
                       Value clock, Value reset, bool isControl);
 
-  Value buildAllValidLogic(SmallVector<ValueVector *, 4> inputs,
-                           ValueVector *output);
+  // Builds a tree by chaining together the inputs with the specified OpType and
+  // connecting the resulting value to the specified output. Also returns the
+  // result value for convenience to the surrounding logic that may want to
+  // re-use it.
+  template <typename OpType>
+  Value buildReductionTree(ArrayRef<Value> inputs, Value output);
+
   void buildAllReadyLogic(SmallVector<ValueVector *, 4> inputs,
                           ValueVector *output, Value condition);
 
@@ -686,8 +697,14 @@ bool HandshakeBuilder::buildJoinLogic(SmallVector<ValueVector *, 4> inputs,
     if (input == nullptr)
       return false;
 
+  // Unpack the output subfields.
+  ValueVector outputSubfields = *output;
+
   // The output is triggered only after all inputs are valid.
-  auto tmpValid = buildAllValidLogic(inputs, output);
+  SmallVector<Value, 4> inputValids;
+  extractValues(inputs, 0, inputValids);
+  auto tmpValid =
+      buildReductionTree<AndPrimOp>(inputValids, outputSubfields[0]);
 
   // The input will be ready to accept new token when old token is sent out.
   buildAllReadyLogic(inputs, output, tmpValid);
@@ -695,22 +712,22 @@ bool HandshakeBuilder::buildJoinLogic(SmallVector<ValueVector *, 4> inputs,
   return true;
 }
 
-Value HandshakeBuilder::buildAllValidLogic(SmallVector<ValueVector *, 4> inputs,
-                                           ValueVector *output) {
-  auto firstInput = *inputs[0];
-  auto tmpValid = firstInput[0];
-  for (unsigned i = 1, e = inputs.size(); i < e; ++i) {
-    auto currentInput = *inputs[i];
-    auto inputValid = currentInput[0];
-    tmpValid = rewriter.create<AndPrimOp>(insertLoc, inputValid.getType(),
-                                          inputValid, tmpValid);
-  }
+template <typename OpType>
+Value HandshakeBuilder::buildReductionTree(ArrayRef<Value> inputs,
+                                           Value output) {
+  size_t inputSize = inputs.size();
+  if (!inputSize)
+    return Value();
 
-  auto outputSubfields = *output;
-  auto outputValid = outputSubfields[0];
-  rewriter.create<ConnectOp>(insertLoc, outputValid, tmpValid);
+  auto tmpValue = inputs[0];
 
-  return tmpValid;
+  for (size_t i = 1; i < inputSize; ++i)
+    tmpValue = rewriter.create<OpType>(insertLoc, tmpValue.getType(), inputs[i],
+                                       tmpValue);
+
+  rewriter.create<ConnectOp>(insertLoc, output, tmpValue);
+
+  return tmpValue;
 }
 
 void HandshakeBuilder::buildAllReadyLogic(SmallVector<ValueVector *, 4> inputs,
@@ -1506,18 +1523,15 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
            storeControl.size() == 2 && "incorrect store port number");
 
     // Unpack store data.
-    auto storeDataValid = storeData[0];
     auto storeDataReady = storeData[1];
     auto storeDataData = storeData[2];
 
     // Unpack store address.
-    auto storeAddrValid = storeAddr[0];
     auto storeAddrReady = storeAddr[1];
     auto storeAddrData = storeAddr[2];
 
     // Unpack store control.
     auto storeControlValid = storeControl[0];
-    auto storeControlReady = storeControl[1];
 
     // Create a subfield op to access this port in the memory.
     auto fieldName = storeIdentifier(i);
@@ -1592,10 +1606,11 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     rewriter.create<ConnectOp>(insertLoc, storeDataReady, emptyOrComplete);
 
     // Create a wire for when both the store address and data are valid.
+    SmallVector<Value, 2> storeValids;
+    extractValues({&storeAddr, &storeData}, 0, storeValids);
     Value writeValid = rewriter.create<WireOp>(
         insertLoc, bitType, rewriter.getStringAttr("writeValid"));
-    ValueVector writeValidVector({writeValid});
-    buildAllValidLogic({&storeAddr, &storeData}, &writeValidVector);
+    buildReductionTree<AndPrimOp>(storeValids, writeValid);
 
     // Create a mux that drives the buffer input. If the emptyOrComplete signal
     // is asserted, the mux selects the writeValid signal. Otherwise, it selects
