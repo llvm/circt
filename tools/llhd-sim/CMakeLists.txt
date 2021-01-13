@@ -9,8 +9,11 @@ set(LIBS
         CIRCTLLHDSimEngine
         )
 
-add_llvm_executable(llhd-sim
- llhd-sim.cpp)
- 
-llvm_update_compile_flags(llhd-sim)
-target_link_libraries(llhd-sim PRIVATE ${LIBS})
+# llhd-sim fails to link on Windows with MSVC.
+IF(NOT WIN32)
+  add_llvm_executable(llhd-sim
+    llhd-sim.cpp)
+  
+  llvm_update_compile_flags(llhd-sim)
+  target_link_libraries(llhd-sim PRIVATE ${LIBS})
+endif()
