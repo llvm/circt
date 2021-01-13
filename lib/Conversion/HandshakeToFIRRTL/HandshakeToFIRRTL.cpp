@@ -647,6 +647,11 @@ public:
   bool buildForkLogic(ValueVector *input, SmallVector<ValueVector *, 4> outputs,
                       Value clock, Value reset, bool isControl);
 
+  Value buildAllValidLogic(SmallVector<ValueVector *, 4> inputs,
+                           ValueVector *output);
+  void buildAllReadyLogic(SmallVector<ValueVector *, 4> inputs,
+                          ValueVector *output, Value condition);
+
 private:
   ValueVectorList portList;
   Location insertLoc;
@@ -677,16 +682,21 @@ bool HandshakeBuilder::buildJoinLogic(SmallVector<ValueVector *, 4> inputs,
   if (output == nullptr)
     return false;
 
-  for (auto input : inputs)
+  for (auto *input : inputs)
     if (input == nullptr)
       return false;
 
-  // Extract output signals.
-  auto outputSubfields = *output;
-  auto outputValid = outputSubfields[0];
-  auto outputReady = outputSubfields[1];
-
   // The output is triggered only after all inputs are valid.
+  auto tmpValid = buildAllValidLogic(inputs, output);
+
+  // The input will be ready to accept new token when old token is sent out.
+  buildAllReadyLogic(inputs, output, tmpValid);
+
+  return true;
+}
+
+Value HandshakeBuilder::buildAllValidLogic(SmallVector<ValueVector *, 4> inputs,
+                                           ValueVector *output) {
   auto firstInput = *inputs[0];
   auto tmpValid = firstInput[0];
   for (unsigned i = 1, e = inputs.size(); i < e; ++i) {
@@ -695,17 +705,28 @@ bool HandshakeBuilder::buildJoinLogic(SmallVector<ValueVector *, 4> inputs,
     tmpValid = rewriter.create<AndPrimOp>(insertLoc, inputValid.getType(),
                                           inputValid, tmpValid);
   }
+
+  auto outputSubfields = *output;
+  auto outputValid = outputSubfields[0];
   rewriter.create<ConnectOp>(insertLoc, outputValid, tmpValid);
 
-  // The input will be ready to accept new token when old token is sent out.
+  return tmpValid;
+}
+
+void HandshakeBuilder::buildAllReadyLogic(SmallVector<ValueVector *, 4> inputs,
+                                          ValueVector *output,
+                                          Value condition) {
+  auto outputSubfields = *output;
+  auto outputReady = outputSubfields[1];
+
   auto validAndReady = rewriter.create<AndPrimOp>(
-      insertLoc, outputReady.getType(), outputReady, tmpValid);
+      insertLoc, outputReady.getType(), outputReady, condition);
+
   for (unsigned i = 0, e = inputs.size(); i < e; ++i) {
     auto currentInput = *inputs[i];
     auto inputReady = currentInput[1];
     rewriter.create<ConnectOp>(insertLoc, inputReady, validAndReady);
   }
-  return true;
 }
 
 /// Currently only support {control = true}.
