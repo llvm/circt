@@ -26,11 +26,18 @@ class Questa:
     DefaultDriver = "driver.sv"
 
     def __init__(self, path, args):
-        if os.path.exists(path) and os.path.isfile(path):
-            self.path = os.path.dirname(path)
-        else:
-            self.path = path
         self.args = args
+
+        # Find Questa
+        if os.path.exists(path):
+            if os.path.isfile(path):
+                self.path = os.path.dirname(path)
+            else:
+                self.path = path
+        elif "@QUESTA_PATH@" != "":
+            self.path = "@QUESTA_PATH@"
+        elif "QUESTA_PATH" in os.environ:
+          self.verilator = os.environ["QUESTA_PATH"]
 
     def compile(self, sources):
         vlog = os.path.join(self.path, "vlog")
@@ -63,10 +70,14 @@ class Verilator:
     DefaultDriver = "driver.cpp"
 
     def __init__(self, args):
-        if "VERILATOR_PATH" in os.environ:
-          self.verilator = os.environ["VERILATOR_PATH"]
-        else:
+        # Find Verilator.
+        if os.path.exists(args.sim):
           self.verilator = args.sim
+        elif "@VERILATOR_PATH@" != "":
+          self.verilator = "@VERILATOR_PATH@"
+        elif "VERILATOR_PATH" in os.environ:
+          self.verilator = os.environ["VERILATOR_PATH"]
+
         self.top = args.top
         if args.objdir != "":
           self.ObjDir = args.objdir
@@ -91,10 +102,6 @@ class Verilator:
 
 
 def __main__(args):
-    defaultSim = ""
-    if "DEFAULT_SIM" in os.environ:
-        defaultSim = os.environ["DEFAULT_SIM"]
-
     argparser = argparse.ArgumentParser(
         description="RTL simulation runner for CIRCT")
 
