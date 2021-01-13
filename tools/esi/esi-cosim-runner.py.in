@@ -152,10 +152,18 @@ class CosimTestRunner:
                 stdout=simStdout, stderr=simStderr, env=simEnv, preexec_fn=os.setsid)
             simStderr.close()
             simStdout.close()
-            # Wait a set amount of time for the simulation to start accepting
-            # RPC connections.
-            # TODO: Check if the server is up by polling.
-            time.sleep(0.25)
+
+            # Wait for the simulation to start accepting RPC connections.
+            checkCount = 0
+            while not isPortOpen(port):
+              checkCount += 1
+              if checkCount > 200:
+                print("Cosim RPC port never opened")
+                return 1
+              if simProc.poll() != None:
+                print("Simulation exited early")
+                return 1
+              time.sleep(0.05)
 
             # Run the test script.
             testStdout = open("test_stdout.log", "w")
@@ -215,6 +223,11 @@ class CosimTestRunner:
       return (foundErr, ret)
 
 
+def isPortOpen(port):
+  sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+  result = sock.connect_ex(('127.0.0.1', port))
+  sock.close()
+  return True if result == 0 else False
 
 def __main__(args):
     argparser = argparse.ArgumentParser(
