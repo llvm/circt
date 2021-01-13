@@ -6,18 +6,18 @@ This document describes the available CIRCT passes and their contracts.
 
 ## Transformations Passes
 
-[include "Passes/Transformations.md"]
+[include "Transformations.md"]
 
 ## Conversion Passes
 
-[include "Passes/FIRRTLToLLHD.md"]
+[include "FIRRTLToLLHD.md"]
 
-[include "Passes/RTLToLLHD.md"]
+[include "RTLToLLHD.md"]
 
-[include "Passes/LLHDToLLVM.md"]
+[include "LLHDToLLVM.md"]
 
-[include "Passes/CIRCTConversionPasses.md"]
+[include "CIRCTConversionPasses.md"]
 
 ## `firrtl` Dialect Passes
 
-[include "Passes/FIRRTLPasses.md"]
+[include "FIRRTLPasses.md"]
