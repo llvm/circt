@@ -147,16 +147,15 @@ class CosimTestRunner:
             simStderr = open("sim_stderr.log", "w")
             simEnv = os.environ.copy()
             simEnv["COSIM_PORT"] = str(port)
-            simEnv["LD_LIBRARY_PATH"] = os.path.dirname("@ESI_COSIM_PATH@")
             simProc = subprocess.Popen(
-                [self.simRunScript, "--no-compile"] + self.args + self.sources,
+                [self.simRunScript] + self.args + self.sources,
                 stdout=simStdout, stderr=simStderr, env=simEnv, preexec_fn=os.setsid)
             simStderr.close()
             simStdout.close()
             # Wait a set amount of time for the simulation to start accepting
             # RPC connections.
             # TODO: Check if the server is up by polling.
-            time.sleep(0.05)
+            time.sleep(0.25)
 
             # Run the test script.
             testStdout = open("test_stdout.log", "w")
@@ -181,6 +180,8 @@ class CosimTestRunner:
         err, logs = self.readLogs()
         logs += f"---- Test process exit code: {testProc.returncode}\n"
         passed = testProc.returncode == 0 and not err
+        if not passed:
+          print(logs)
         return 0 if passed else 1
 
     def readLogs(self):
