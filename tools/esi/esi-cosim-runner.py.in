@@ -147,6 +147,7 @@ class CosimTestRunner:
             simStderr = open("sim_stderr.log", "w")
             simEnv = os.environ.copy()
             simEnv["COSIM_PORT"] = str(port)
+            simEnv["LD_LIBRARY_PATH"] = os.path.dirname("@ESI_COSIM_PATH@")
             simProc = subprocess.Popen(
                 [self.simRunScript, "--no-compile"] + self.args + self.sources,
                 stdout=simStdout, stderr=simStderr, env=simEnv, preexec_fn=os.setsid)
