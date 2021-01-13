@@ -11,6 +11,6 @@
 
 set(SOURCES circt-rtl-sim.py driver.cpp driver.sv)
 foreach(file IN ITEMS ${SOURCES})
-  configure_file(${file} ${CIRCT_TOOLS_DIR}/${file})
+  configure_file(${file}.in ${CIRCT_TOOLS_DIR}/${file})
 endforeach()
 add_custom_target(circt-rtl-sim SOURCES ${SOURCES})
