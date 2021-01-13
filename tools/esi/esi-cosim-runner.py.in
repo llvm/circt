@@ -1,0 +1,241 @@
+#!/usr/bin/env python3
+
+# ===- circt-rtl-sim.py - CIRCT simulation driver -------------*- python -*-===//
+#
+# Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+#
+# ===-----------------------------------------------------------------------===//
+#
+# Script to drive CIRCT cosimulation tests.
+#
+# ===-----------------------------------------------------------------------===//
+
+import argparse
+import os
+import re
+import signal
+import socket
+import subprocess
+import sys
+import time
+
+ThisFileDir = os.path.dirname(__file__)
+
+
+class CosimTestRunner:
+    """The main class responsible for running a cosim test. We use a separate
+    class to allow for per-test mutable state variables."""
+
+    def __init__(self, testFile, addlArgs):
+        """Parse a test file. Look for comments we recognize anywhere in the
+        file. Assemble a list of sources."""
+
+        self.args = addlArgs
+        self.file = testFile
+        self.runs = list()
+        self.srcdir = os.path.dirname(self.file)
+        self.sources = list()
+        self.top = "top"
+
+        if "@ESI_COSIM_PATH@" == "" or not os.path.exists("@ESI_COSIM_PATH@"):
+          raise Exception("The ESI cosimulation DPI library must be enabled " +
+                          "to run cosim tests.")
+
+        self.simRunScript = os.path.join(
+            "@CIRCT_TOOLS_DIR@", "circt-rtl-sim.py")
+
+
+        fileReader = open(self.file, "r")
+        sources = []
+        for line in fileReader:
+            # Arguments to circt-rtl-sim, except for source files list
+            if m := re.match(r"^//\s*ARGS:(.*)$", line):
+                self.args.extend(m.group(1).split())
+            # SOURCES are the additional source files (if any). If specified,
+            # must include the current file. These files are either absolute or
+            # relative to the current file.
+            if m := re.match(r"^//\s*SOURCES:(.*)$", line):
+                sources.extend(m.group(1).split())
+            # Run this Python line.
+            if m := re.match(r"^//\s*PY:(.*)$", line):
+                self.runs.append(m.group(1).strip())
+        fileReader.close()
+
+        if len(sources) == 0:
+            self.sources = [self.file]
+        else:
+            self.sources = [(src if os.path.isabs(src) else os.path.join(
+                self.srcdir, src)) for src in self.sources]
+
+        # Include the cosim DPI SystemVerilog files.
+        cosimInclude = os.path.join(
+            "@CIRCT_MAIN_INCLUDE_DIR@", "circt", "Dialect", "ESI", "cosim")
+        self.sources.insert(0, os.path.join(cosimInclude, "Cosim_DpiPkg.sv"))
+        self.sources.insert(1, os.path.join(cosimInclude, "Cosim_Endpoint.sv"))
+        self.sources.append("@ESI_COSIM_PATH@")
+
+    def compile(self):
+        """Compile with circt-rtl-sim.py"""
+
+        # Run the simulation compilation step. Requires a simulator to be
+        # installed and working.
+        # os.makedirs(self.execdir, exist_ok=True)
+        cmd = [self.simRunScript, "--no-run"] + self.args + self.sources
+        print("Running: " + " ".join(cmd))
+        vrun = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True)
+        # cwd=self.execdir)
+        output = vrun.stdout + "\n----- STDERR ------\n" + vrun.stderr
+        if vrun.returncode != 0:
+            print("====== Compilation failure:")
+            print(output)
+        return vrun.returncode
+
+    def run(self):
+        """Run the test by creating a Python script, starting the simulation,
+        running the Python script, then stopping the simulation. Use
+        circt-rtl-sim.py to run the sim.
+
+        Not perfect since we don't know when the cosim RPC server in the
+        simulation has started accepting connections."""
+
+        # Find available port.
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(('', 0))
+        port = sock.getsockname()[1]
+        sock.close()
+
+        with open("script.py", "w") as script:
+            # Include a bunch of config variables at the beginning of the
+            # script for use by the test code.
+            vars = {
+                "srcdir": self.srcdir,
+                "srcfile": self.file,
+                # 'rpcSchemaPath' points to the CapnProto schema for RPC and is
+                # the one that nearly all scripts are going to need.
+                "rpcschemapath": os.path.join(
+                    "@CIRCT_MAIN_INCLUDE_DIR@", "circt", "Dialect", "ESI",
+                    "cosim", "CosimDpi.capnp")
+            }
+            script.writelines(f"{name} = \"{value}\"\n" for (
+                name, value) in vars.items())
+            script.write("\n\n")
+
+            # Add the test files directory and this files directory to the
+            # pythonpath.
+            script.write(f"import os\n")
+            script.write(f"import sys\n")
+            script.write(
+                f"sys.path.append(\"{os.path.dirname(self.file)}\")\n")
+            script.write(
+                f"sys.path.append(\"{os.path.dirname(__file__)}\")\n")
+            script.write("\n\n")
+            script.write(
+                "simhostport = f'{os.uname()[1]}:" + str(port) + "'\n")
+
+            # Run the lines specified in the test file.
+            script.writelines(
+                f"{x}\n" for x in self.runs)
+
+        try:
+            # Run the simulation.
+            simStdout = open("sim_stdout.log", "w")
+            simStderr = open("sim_stderr.log", "w")
+            simEnv = os.environ.copy()
+            simEnv["COSIM_PORT"] = str(port)
+            simProc = subprocess.Popen(
+                [self.simRunScript] + self.args + self.sources,
+                stdout=simStdout, stderr=simStderr, env=simEnv, preexec_fn=os.setsid)
+            simStderr.close()
+            simStdout.close()
+            # Wait a set amount of time for the simulation to start accepting
+            # RPC connections.
+            # TODO: Check if the server is up by polling.
+            time.sleep(0.25)
+
+            # Run the test script.
+            testStdout = open("test_stdout.log", "w")
+            testStderr = open("test_stderr.log", "w")
+
+            testProc = subprocess.run([sys.executable, "-u", "script.py"],
+                                      stdout=testStdout, stderr=testStderr)
+            testStdout.close()
+            testStderr.close()
+        finally:
+            # Make sure to stop the simulation no matter what.
+            if simProc:
+                os.killpg(os.getpgid(simProc.pid), signal.SIGINT)
+                # simProc.send_signal(signal.SIGINT)
+                # Allow the simulation time to flush its outputs.
+                try:
+                    simProc.wait(timeout=1.0)
+                except subprocess.TimeoutExpired:
+                    simProc.kill()
+
+        # Read the output log files and return the proper result.
+        err, logs = self.readLogs()
+        logs += f"---- Test process exit code: {testProc.returncode}\n"
+        passed = testProc.returncode == 0 and not err
+        if not passed:
+          print(logs)
+        return 0 if passed else 1
+
+    def readLogs(self):
+      """Read the log files from the simulation and the test script. Only add
+      the stderr logs if they contain something. Also return a flag
+      indicating that one of the stderr logs has content."""
+
+      foundErr = False
+      ret = "----- Simulation stdout -----\n"
+      with open("sim_stdout.log") as f:
+          ret += f.read()
+
+      with open("sim_stderr.log") as f:
+          stderr = f.read()
+          if stderr != "":
+              ret += "\n----- Simulation stderr -----\n"
+              ret += stderr
+              foundErr = True
+
+          ret += "\n----- Test stdout -----\n"
+      with open("test_stdout.log") as f:
+          ret += f.read()
+
+      with open("test_stderr.log") as f:
+          stderr = f.read()
+          if stderr != "":
+              ret += "\n----- Test stderr -----\n"
+              ret += stderr
+              foundErr = True
+
+      return (foundErr, ret)
+
+
+
+def __main__(args):
+    argparser = argparse.ArgumentParser(
+        description="RTL cosimulation runner for ESI")
+    argparser.add_argument("source",
+                           help="The source run spec file")
+    argparser.add_argument("addlArgs", nargs=argparse.REMAINDER,
+                           help="Additional arguments to pass through to " +
+                           "'circt-rtl-sim.py'")
+
+    if len(args) <= 1:
+        argparser.print_help()
+        return
+    args = argparser.parse_args(args[1:])
+
+    runner = CosimTestRunner(args.source, args.addlArgs)
+    rc = runner.compile()
+    if rc != 0:
+        return rc
+    return runner.run()
+
+
+if __name__ == '__main__':
+    sys.exit(__main__(sys.argv))

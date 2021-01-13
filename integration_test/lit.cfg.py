@@ -65,7 +65,8 @@ tools = [
     'circt-opt',
     'circt-translate',
     'firtool',
-    'circt-rtl-sim.py'
+    'circt-rtl-sim.py',
+    'esi-cosim-runner.py'
 ]
 
 # Enable yosys if it has been detected.
