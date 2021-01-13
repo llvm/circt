@@ -19,6 +19,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -37,23 +38,16 @@ using namespace circt::llhd;
 // Helpers
 //===----------------------------------------------------------------------===//
 
-/// Returns the bit width of the given integer type for both the standard
-/// integer type and the llvm dialect integer type.
-static unsigned getStdOrLLVMIntegerWidth(Type type) {
-  if (auto llvmTy = type.dyn_cast<LLVM::LLVMType>())
-    return llvmTy.getIntegerBitWidth();
-  return type.getIntOrFloatBitWidth();
-}
-
 /// Get an existing global string.
 static Value getGlobalString(Location loc, OpBuilder &builder,
                              TypeConverter *typeConverter,
                              LLVM::GlobalOp &str) {
-  auto i8PtrTy = LLVM::LLVMType::getInt8PtrTy(builder.getContext());
-  auto i32Ty = LLVM::LLVMType::getInt32Ty(builder.getContext());
+  auto i8PtrTy =
+      LLVM::LLVMPointerType::get(IntegerType::get(builder.getContext(), 8));
+  auto i32Ty = IntegerType::get(builder.getContext(), 32);
 
   auto addr = builder.create<LLVM::AddressOfOp>(
-      loc, str.getType().getPointerTo(), str.getName());
+      loc, LLVM::LLVMPointerType::get(str.getType()), str.getName());
   auto idx = builder.create<LLVM::ConstantOp>(loc, i32Ty,
                                               builder.getI32IntegerAttr(0));
   std::array<Value, 2> idxs({idx, idx});
@@ -66,7 +60,7 @@ static Value getGlobalString(Location loc, OpBuilder &builder,
 /// terminator.
 static LLVM::LLVMFuncOp
 getOrInsertFunction(ModuleOp &module, ConversionPatternRewriter &rewriter,
-                    Location loc, std::string name, LLVM::LLVMType signature,
+                    Location loc, std::string name, Type signature,
                     bool insertBodyAndTerminator = false) {
   auto func = module.lookupSymbol<LLVM::LLVMFuncOp>(name);
   if (!func) {
@@ -83,10 +77,12 @@ getOrInsertFunction(ModuleOp &module, ConversionPatternRewriter &rewriter,
 
 /// Return the LLVM type used to represent a signal. It corresponds to a struct
 /// with the format: {valuePtr, bitOffset, instanceIndex, globalIndex}.
-static LLVM::LLVMType getLLVMSigType(LLVM::LLVMDialect *dialect) {
-  auto i8PtrTy = LLVM::LLVMType::getInt8PtrTy(dialect->getContext());
-  auto i64Ty = LLVM::LLVMType::getInt64Ty(dialect->getContext());
-  return LLVM::LLVMType::getStructTy(i8PtrTy, i64Ty, i64Ty, i64Ty);
+static Type getLLVMSigType(LLVM::LLVMDialect *dialect) {
+  auto i8PtrTy =
+      LLVM::LLVMPointerType::get(IntegerType::get(dialect->getContext(), 8));
+  auto i64Ty = IntegerType::get(dialect->getContext(), 64);
+  return LLVM::LLVMStructType::getLiteral(dialect->getContext(),
+                                          {i8PtrTy, i64Ty, i64Ty, i64Ty});
 }
 
 /// Extract the details from the given signal struct. The details are returned
@@ -96,9 +92,10 @@ static std::vector<Value> getSignalDetail(ConversionPatternRewriter &rewriter,
                                           Location loc, Value signal,
                                           bool extractIndices = false) {
 
-  auto i8PtrTy = LLVM::LLVMType::getInt8PtrTy(dialect->getContext());
-  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect->getContext());
-  auto i64Ty = LLVM::LLVMType::getInt64Ty(dialect->getContext());
+  auto i8PtrTy =
+      LLVM::LLVMPointerType::get(IntegerType::get(dialect->getContext(), 8));
+  auto i32Ty = IntegerType::get(dialect->getContext(), 32);
+  auto i64Ty = IntegerType::get(dialect->getContext(), 64);
 
   std::vector<Value> result;
 
@@ -108,12 +105,14 @@ static std::vector<Value> getSignalDetail(ConversionPatternRewriter &rewriter,
   auto oneC = rewriter.create<LLVM::ConstantOp>(loc, i32Ty,
                                                 rewriter.getI32IntegerAttr(1));
 
-  auto sigPtrPtr = rewriter.create<LLVM::GEPOp>(
-      loc, i8PtrTy.getPointerTo(), signal, ArrayRef<Value>({zeroC, zeroC}));
+  auto sigPtrPtr =
+      rewriter.create<LLVM::GEPOp>(loc, LLVM::LLVMPointerType::get(i8PtrTy),
+                                   signal, ArrayRef<Value>({zeroC, zeroC}));
   result.push_back(rewriter.create<LLVM::LoadOp>(loc, i8PtrTy, sigPtrPtr));
 
-  auto offsetPtr = rewriter.create<LLVM::GEPOp>(
-      loc, i64Ty.getPointerTo(), signal, ArrayRef<Value>({zeroC, oneC}));
+  auto offsetPtr =
+      rewriter.create<LLVM::GEPOp>(loc, LLVM::LLVMPointerType::get(i64Ty),
+                                   signal, ArrayRef<Value>({zeroC, oneC}));
   result.push_back(rewriter.create<LLVM::LoadOp>(loc, i64Ty, offsetPtr));
 
   // Extract the instance and global indices.
@@ -123,12 +122,14 @@ static std::vector<Value> getSignalDetail(ConversionPatternRewriter &rewriter,
     auto threeC = rewriter.create<LLVM::ConstantOp>(
         loc, i32Ty, rewriter.getI32IntegerAttr(3));
 
-    auto instIndexPtr = rewriter.create<LLVM::GEPOp>(
-        loc, i64Ty.getPointerTo(), signal, ArrayRef<Value>({zeroC, twoC}));
+    auto instIndexPtr =
+        rewriter.create<LLVM::GEPOp>(loc, LLVM::LLVMPointerType::get(i64Ty),
+                                     signal, ArrayRef<Value>({zeroC, twoC}));
     result.push_back(rewriter.create<LLVM::LoadOp>(loc, i64Ty, instIndexPtr));
 
-    auto globalIndexPtr = rewriter.create<LLVM::GEPOp>(
-        loc, i64Ty.getPointerTo(), signal, ArrayRef<Value>({zeroC, threeC}));
+    auto globalIndexPtr =
+        rewriter.create<LLVM::GEPOp>(loc, LLVM::LLVMPointerType::get(i64Ty),
+                                     signal, ArrayRef<Value>({zeroC, threeC}));
     result.push_back(rewriter.create<LLVM::LoadOp>(loc, i64Ty, globalIndexPtr));
   }
 
@@ -140,7 +141,7 @@ static Value createSubSig(LLVM::LLVMDialect *dialect,
                           ConversionPatternRewriter &rewriter, Location loc,
                           std::vector<Value> originDetail, Value newPtr,
                           Value newOffset) {
-  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect->getContext());
+  auto i32Ty = IntegerType::get(dialect->getContext(), 32);
   auto sigTy = getLLVMSigType(dialect);
 
   // Create signal struct.
@@ -157,8 +158,8 @@ static Value createSubSig(LLVM::LLVMDialect *dialect,
   // Allocate and store the subsignal.
   auto oneC = rewriter.create<LLVM::ConstantOp>(loc, i32Ty,
                                                 rewriter.getI32IntegerAttr(1));
-  auto allocaSubSig =
-      rewriter.create<LLVM::AllocaOp>(loc, sigTy.getPointerTo(), oneC, 4);
+  auto allocaSubSig = rewriter.create<LLVM::AllocaOp>(
+      loc, LLVM::LLVMPointerType::get(sigTy), oneC, 4);
   rewriter.create<LLVM::StoreOp>(loc, storeSubGlobalIndex, allocaSubSig);
 
   return allocaSubSig;
@@ -185,19 +186,17 @@ static bool isWaitDestArg(Operation *op) {
 }
 
 /// Unwrap the given LLVM pointer type, returning its element value.
-static LLVM::LLVMType unwrapLLVMPtr(Type ty) {
-  auto castTy = ty.cast<LLVM::LLVMType>();
-  assert(castTy.isPointerTy() && "type is not an LLVM pointer");
-  return castTy.getPointerElementTy();
+static Type unwrapLLVMPtr(Type ty) {
+  auto castTy = ty.cast<LLVM::LLVMPointerType>();
+  return castTy.getElementType();
 }
 
 /// Gather the types of values that are used outside of the block they're
 /// defined in. An LLVMType structure containing those types, in order of
 /// appearance, is returned.
-static LLVM::LLVMType getProcPersistenceTy(LLVM::LLVMDialect *dialect,
-                                           TypeConverter *converter,
-                                           ProcOp &proc) {
-  SmallVector<LLVM::LLVMType, 3> types = SmallVector<LLVM::LLVMType, 3>();
+static Type getProcPersistenceTy(LLVM::LLVMDialect *dialect,
+                                 TypeConverter *converter, ProcOp &proc) {
+  SmallVector<Type, 3> types = SmallVector<Type, 3>();
   proc.walk([&](Operation *op) -> void {
     if (op->isUsedOutsideOfBlock(op->getBlock()) || isWaitDestArg(op)) {
       auto ty = op->getResult(0).getType();
@@ -207,7 +206,7 @@ static LLVM::LLVMType getProcPersistenceTy(LLVM::LLVMDialect *dialect,
         types.push_back(unwrapLLVMPtr(convertedTy));
       } else {
         // Persist the value as is.
-        types.push_back(convertedTy.cast<LLVM::LLVMType>());
+        types.push_back(convertedTy);
       }
     }
   });
@@ -220,13 +219,12 @@ static LLVM::LLVMType getProcPersistenceTy(LLVM::LLVMDialect *dialect,
 
     for (auto arg : block.getArguments()) {
       if (arg.isUsedOutsideOfBlock(&block)) {
-        types.push_back(
-            converter->convertType(arg.getType()).cast<LLVM::LLVMType>());
+        types.push_back(converter->convertType(arg.getType()));
       }
     }
   }
 
-  return LLVM::LLVMType::getStructTy(dialect->getContext(), types);
+  return LLVM::LLVMStructType::getLiteral(dialect->getContext(), types);
 }
 
 /// Insert a comparison block that either jumps to the trueDest block, if the
@@ -237,7 +235,7 @@ static void insertComparisonBlock(ConversionPatternRewriter &rewriter,
                                   Region *body, Value resumeIdx, int currIdx,
                                   Block *trueDest, ValueRange trueDestArgs,
                                   Block *falseDest = nullptr) {
-  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect->getContext());
+  auto i32Ty = IntegerType::get(dialect->getContext(), 32);
   auto secondBlock = ++body->begin();
   auto newBlock = rewriter.createBlock(body, secondBlock);
   auto cmpIdx = rewriter.create<LLVM::ConstantOp>(
@@ -262,17 +260,17 @@ static void insertComparisonBlock(ConversionPatternRewriter &rewriter,
 /// persistence table.
 static Value gepPersistenceState(LLVM::LLVMDialect *dialect, Location loc,
                                  ConversionPatternRewriter &rewriter,
-                                 LLVM::LLVMType elementTy, int index,
-                                 Value state) {
-  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect->getContext());
+                                 Type elementTy, int index, Value state) {
+  auto i32Ty = IntegerType::get(dialect->getContext(), 32);
   auto zeroC = rewriter.create<LLVM::ConstantOp>(loc, i32Ty,
                                                  rewriter.getI32IntegerAttr(0));
   auto threeC = rewriter.create<LLVM::ConstantOp>(
       loc, i32Ty, rewriter.getI32IntegerAttr(3));
   auto indC = rewriter.create<LLVM::ConstantOp>(
       loc, i32Ty, rewriter.getI32IntegerAttr(index));
-  return rewriter.create<LLVM::GEPOp>(loc, elementTy.getPointerTo(), state,
-                                      ArrayRef<Value>({zeroC, threeC, indC}));
+  return rewriter.create<LLVM::GEPOp>(
+      loc, LLVM::LLVMPointerType::get(elementTy), state,
+      ArrayRef<Value>({zeroC, threeC, indC}));
 }
 
 /// Persist a `Value` by storing it into the process persistence table, and
@@ -280,10 +278,12 @@ static Value gepPersistenceState(LLVM::LLVMDialect *dialect, Location loc,
 /// a load from the persistence table.
 static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
                          TypeConverter *converter,
-                         ConversionPatternRewriter &rewriter,
-                         LLVM::LLVMType stateTy, int &i, Value state,
-                         Value persist) {
-  auto elemTy = stateTy.getStructElementType(3).getStructElementType(i);
+                         ConversionPatternRewriter &rewriter, Type stateTy,
+                         int &i, Value state, Value persist) {
+  auto elemTy = stateTy.cast<LLVM::LLVMStructType>()
+                    .getBody()[3]
+                    .cast<LLVM::LLVMStructType>()
+                    .getBody()[i];
 
   if (auto arg = persist.dyn_cast<BlockArgument>()) {
     rewriter.setInsertionPointToStart(arg.getParentBlock());
@@ -351,10 +351,10 @@ static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
 static void insertPersistence(TypeConverter *converter,
                               ConversionPatternRewriter &rewriter,
                               LLVM::LLVMDialect *dialect, Location loc,
-                              ProcOp &proc, LLVM::LLVMType &stateTy,
+                              ProcOp &proc, Type &stateTy,
                               LLVM::LLVMFuncOp &converted,
                               Operation *splitEntryBefore) {
-  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect->getContext());
+  auto i32Ty = IntegerType::get(dialect->getContext(), 32);
 
   auto &firstBB = converted.getBody().front();
 
@@ -374,9 +374,9 @@ static void insertPersistence(TypeConverter *converter,
                                                  rewriter.getI32IntegerAttr(0));
   auto oneC = rewriter.create<LLVM::ConstantOp>(loc, i32Ty,
                                                 rewriter.getI32IntegerAttr(1));
-  auto gep = rewriter.create<LLVM::GEPOp>(loc, i32Ty.getPointerTo(),
-                                          converted.getArgument(1),
-                                          ArrayRef<Value>({zeroC, oneC}));
+  auto gep = rewriter.create<LLVM::GEPOp>(
+      loc, LLVM::LLVMPointerType::get(i32Ty), converted.getArgument(1),
+      ArrayRef<Value>({zeroC, oneC}));
 
   auto larg = rewriter.create<LLVM::LoadOp>(loc, i32Ty, gep);
 
@@ -417,7 +417,8 @@ static void insertPersistence(TypeConverter *converter,
       auto resumeIdxC = rewriter.create<LLVM::ConstantOp>(
           loc, i32Ty, rewriter.getI32IntegerAttr(waitInd));
       auto resumeIdxPtr = rewriter.create<LLVM::GEPOp>(
-          loc, i32Ty.getPointerTo(), procState, ArrayRef<Value>({zeroC, oneC}));
+          loc, LLVM::LLVMPointerType::get(i32Ty), procState,
+          ArrayRef<Value>({zeroC, oneC}));
       rewriter.create<LLVM::StoreOp>(op->getLoc(), resumeIdxC, resumeIdxPtr);
     }
   });
@@ -440,9 +441,9 @@ static void insertPersistence(TypeConverter *converter,
 /// Return a struct type of arrays containing one entry for each RegOp condition
 /// that require more than one state of the trigger to infer it (i.e. `both`,
 /// `rise` and `fall`).
-static LLVM::LLVMType getRegStateTy(LLVM::LLVMDialect *dialect,
-                                    Operation *entity) {
-  SmallVector<LLVM::LLVMType, 4> types;
+static LLVM::LLVMStructType getRegStateTy(LLVM::LLVMDialect *dialect,
+                                          Operation *entity) {
+  SmallVector<Type, 4> types;
   entity->walk([&](RegOp op) {
     size_t count = 0;
     for (size_t i = 0; i < op.modes().size(); ++i) {
@@ -452,10 +453,10 @@ static LLVM::LLVMType getRegStateTy(LLVM::LLVMDialect *dialect,
         ++count;
     }
     if (count > 0)
-      types.push_back(LLVM::LLVMType::getArrayTy(
-          LLVM::LLVMType::getInt1Ty(dialect->getContext()), count));
+      types.push_back(LLVM::LLVMArrayType::get(
+          IntegerType::get(dialect->getContext(), 1), count));
   });
-  return LLVM::LLVMType::getStructTy(dialect->getContext(), types);
+  return LLVM::LLVMStructType::getLiteral(dialect->getContext(), types);
 }
 
 /// Create a zext operation by one bit on the given value. This is useful when
@@ -463,17 +464,17 @@ static LLVM::LLVMType getRegStateTy(LLVM::LLVMDialect *dialect,
 /// signed values, to avoid unexpected "sign overflows".
 static Value zextByOne(Location loc, ConversionPatternRewriter &rewriter,
                        Value value) {
-  auto valueTy = value.getType().cast<LLVM::LLVMType>();
-  auto zextTy = LLVM::LLVMType::getIntNTy(valueTy.getContext(),
-                                          valueTy.getIntegerBitWidth() + 1);
+  auto valueTy = value.getType();
+  auto zextTy = IntegerType::get(valueTy.getContext(),
+                                 valueTy.getIntOrFloatBitWidth() + 1);
   return rewriter.create<LLVM::ZExtOp>(loc, zextTy, value);
 }
 
 /// Adjust the bithwidth of value to be the same as targetTy's bitwidth.
 static Value adjustBitWidth(Location loc, ConversionPatternRewriter &rewriter,
                             Type targetTy, Value value) {
-  auto valueWidth = getStdOrLLVMIntegerWidth(value.getType());
-  auto targetWidth = getStdOrLLVMIntegerWidth(targetTy);
+  auto valueWidth = value.getType().getIntOrFloatBitWidth();
+  auto targetWidth = targetTy.getIntOrFloatBitWidth();
 
   if (valueWidth < targetWidth)
     return rewriter.create<LLVM::ZExtOp>(loc, targetTy, value);
@@ -528,15 +529,13 @@ static Operation *recursiveCloneInit(OpBuilder &initBuilder, Operation *op) {
 /// Check if the given type is either of LLHD's ArrayType, TupleType, or LLVM
 /// array or struct type.
 static bool isArrayOrTuple(Type type) {
-  if (auto llvmTy = type.dyn_cast<LLVM::LLVMType>()) {
-    return llvmTy.isArrayTy() || llvmTy.isStructTy();
-  }
-  return type.isa<ArrayType, TupleType>();
+  return type
+      .isa<LLVM::LLVMArrayType, LLVM::LLVMStructType, ArrayType, TupleType>();
 }
 
 /// Extract a slice from an integer value.
 static Value extractInt(Location loc, ConversionPatternRewriter &rewriter,
-                        LLVM::LLVMType resultTy, Value value, Value start) {
+                        Type resultTy, Value value, Value start) {
   auto adjustedStart = adjustBitWidth(loc, rewriter, value.getType(), start);
   auto shiftValue =
       rewriter.create<LLVM::LShrOp>(loc, value.getType(), value, adjustedStart);
@@ -549,8 +548,9 @@ static std::pair<Value, Value>
 shiftIntegerSigPointer(Location loc, LLVM::LLVMDialect *dialect,
                        ConversionPatternRewriter &rewriter, Value pointer,
                        Value index) {
-  auto i8PtrTy = LLVM::LLVMType::getInt8PtrTy(dialect->getContext());
-  auto i64Ty = LLVM::LLVMType::getInt64Ty(dialect->getContext());
+  auto i8PtrTy =
+      LLVM::LLVMPointerType::get(IntegerType::get(dialect->getContext(), 8));
+  auto i64Ty = IntegerType::get(dialect->getContext(), 64);
 
   auto ptrToInt = rewriter.create<LLVM::PtrToIntOp>(loc, i64Ty, pointer);
   auto const8 = rewriter.create<LLVM::ConstantOp>(
@@ -569,17 +569,17 @@ shiftIntegerSigPointer(Location loc, LLVM::LLVMDialect *dialect,
 /// its view as if the desired slice/element was extracted.
 static Value shiftStructuredSigPointer(Location loc,
                                        ConversionPatternRewriter &rewriter,
-                                       LLVM::LLVMType structTy,
-                                       LLVM::LLVMType elemPtrTy, Value pointer,
-                                       Value index) {
+                                       Type structTy, Type elemPtrTy,
+                                       Value pointer, Value index) {
   auto dialect = &structTy.getDialect();
-  auto i8PtrTy = LLVM::LLVMType::getInt8PtrTy(dialect->getContext());
-  auto i32Ty = LLVM::LLVMType::getInt32Ty(dialect->getContext());
+  auto i8PtrTy =
+      LLVM::LLVMPointerType::get(IntegerType::get(dialect->getContext(), 8));
+  auto i32Ty = IntegerType::get(dialect->getContext(), 32);
 
   auto zeroC = rewriter.create<LLVM::ConstantOp>(loc, i32Ty,
                                                  rewriter.getI32IntegerAttr(0));
-  auto bitcastToArr =
-      rewriter.create<LLVM::BitcastOp>(loc, structTy.getPointerTo(), pointer);
+  auto bitcastToArr = rewriter.create<LLVM::BitcastOp>(
+      loc, LLVM::LLVMPointerType::get(structTy), pointer);
   auto gep = rewriter.create<LLVM::GEPOp>(loc, elemPtrTy, bitcastToArr,
                                           ArrayRef<Value>({zeroC, index}));
   return rewriter.create<LLVM::BitcastOp>(loc, i8PtrTy, gep);
@@ -589,9 +589,9 @@ static Value shiftStructuredSigPointer(Location loc,
 /// desired slice/element was extracted.
 static Value shiftArraySigPointer(Location loc,
                                   ConversionPatternRewriter &rewriter,
-                                  LLVM::LLVMType arrTy, Value pointer,
-                                  Value index) {
-  auto elemPtrTy = arrTy.getArrayElementType().getPointerTo();
+                                  Type arrTy, Value pointer, Value index) {
+  auto elemPtrTy = LLVM::LLVMPointerType::get(
+      arrTy.cast<LLVM::LLVMArrayType>().getElementType());
   auto zextIndex = zextByOne(loc, rewriter, index);
   return shiftStructuredSigPointer(loc, rewriter, arrTy, elemPtrTy, pointer,
                                    zextIndex);
@@ -600,24 +600,23 @@ static Value shiftArraySigPointer(Location loc,
 // Get the base value of the given type as a new value. E.g., for an integer
 // array, it would be a 0-inizialized array.
 static Value getBaseValue(Location loc, ConversionPatternRewriter &rewriter,
-                          LLVM::LLVMType elemTy) {
+                          Type elemTy) {
 
-  if (elemTy.isStructTy()) {
-    Value struc = rewriter.create<LLVM::UndefOp>(loc, elemTy);
-    for (size_t i = 0, e = elemTy.getStructNumElements(); i < e; ++i) {
-      auto toInsert =
-          getBaseValue(loc, rewriter, elemTy.getStructElementType(i));
-      struc = rewriter.create<LLVM::InsertValueOp>(loc, elemTy, struc, toInsert,
-                                                   rewriter.getI32ArrayAttr(i));
+  if (auto strucTy = elemTy.dyn_cast<LLVM::LLVMStructType>()) {
+    Value struc = rewriter.create<LLVM::UndefOp>(loc, strucTy);
+    for (size_t i = 0, e = strucTy.getBody().size(); i < e; ++i) {
+      auto toInsert = getBaseValue(loc, rewriter, strucTy.getBody()[i]);
+      struc = rewriter.create<LLVM::InsertValueOp>(
+          loc, strucTy, struc, toInsert, rewriter.getI32ArrayAttr(i));
     }
     return struc;
   }
 
-  if (elemTy.isArrayTy()) {
-    Value arr = rewriter.create<LLVM::UndefOp>(loc, elemTy);
-    auto toInsert = getBaseValue(loc, rewriter, elemTy.getArrayElementType());
-    for (size_t i = 0, e = elemTy.getArrayNumElements(); i < e; ++i) {
-      arr = rewriter.create<LLVM::InsertValueOp>(loc, elemTy, arr, toInsert,
+  if (auto arrayTy = elemTy.dyn_cast<LLVM::LLVMArrayType>()) {
+    Value arr = rewriter.create<LLVM::UndefOp>(loc, arrayTy);
+    auto toInsert = getBaseValue(loc, rewriter, arrayTy.getElementType());
+    for (size_t i = 0, e = arrayTy.getNumElements(); i < e; ++i) {
+      arr = rewriter.create<LLVM::InsertValueOp>(loc, arrayTy, arr, toInsert,
                                                  rewriter.getI32ArrayAttr(i));
     }
     return arr;
@@ -632,10 +631,10 @@ static Value getBaseValue(Location loc, ConversionPatternRewriter &rewriter,
 /// value would be returned, (e.g., 0 for integers) instead of throwing an
 /// error.
 static Value arrayBoundaryCheck(Location loc,
-                                ConversionPatternRewriter &rewriter,
-                                LLVM::LLVMType arrTy, Value ptr, Value gepd) {
-  auto i64Ty = LLVM::LLVMType::getInt64Ty(arrTy.getContext());
-  auto elemTy = arrTy.getArrayElementType();
+                                ConversionPatternRewriter &rewriter, Type arrTy,
+                                Value ptr, Value gepd) {
+  auto i64Ty = IntegerType::get(arrTy.getContext(), 64);
+  auto elemTy = arrTy.cast<LLVM::LLVMArrayType>().getElementType();
 
   auto block = rewriter.getInsertionBlock();
   auto compBlock = rewriter.splitBlock(block, rewriter.getInsertionPoint());
@@ -662,10 +661,11 @@ static Value arrayBoundaryCheck(Location loc,
   // Check upper bound, if in legal lower bound.
   rewriter.setInsertionPointToEnd(compBlock);
   auto last = rewriter.create<LLVM::ConstantOp>(
-      loc, i64Ty, rewriter.getI64IntegerAttr(arrTy.getArrayNumElements() - 1));
+      loc, i64Ty,
+      rewriter.getI64IntegerAttr(
+          arrTy.cast<LLVM::LLVMArrayType>().getNumElements() - 1));
   auto gepLast = rewriter.create<LLVM::GEPOp>(
-      loc, arrTy.getArrayElementType().getPointerTo(), ptr,
-      ArrayRef<Value>(last));
+      loc, LLVM::LLVMPointerType::get(elemTy), ptr, ArrayRef<Value>(last));
   auto upper = rewriter.create<LLVM::PtrToIntOp>(loc, i64Ty, gepLast);
   auto cmpUpper = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::ugt,
                                                 gepInt, upper);
@@ -690,40 +690,34 @@ static Value arrayBoundaryCheck(Location loc,
 // Type conversions
 //===----------------------------------------------------------------------===//
 
-static LLVM::LLVMType convertSigType(SigType type,
-                                     LLVMTypeConverter &converter) {
-  auto i64Ty = LLVM::LLVMType::getInt64Ty(&converter.getContext());
-  auto i8PtrTy = LLVM::LLVMType::getInt8PtrTy(&converter.getContext());
-  return LLVM::LLVMType::getStructTy(i8PtrTy, i64Ty, i64Ty, i64Ty)
-      .getPointerTo();
+static Type convertSigType(SigType type, LLVMTypeConverter &converter) {
+  auto &context = converter.getContext();
+  auto i64Ty = IntegerType::get(&context, 64);
+  auto i8PtrTy = LLVM::LLVMPointerType::get(IntegerType::get(&context, 8));
+  return LLVM::LLVMPointerType::get(LLVM::LLVMStructType::getLiteral(
+      &context, {i8PtrTy, i64Ty, i64Ty, i64Ty}));
 }
 
-static LLVM::LLVMType convertTimeType(TimeType type,
-                                      LLVMTypeConverter &converter) {
-  auto i64Ty = LLVM::LLVMType::getInt64Ty(&converter.getContext());
-  return LLVM::LLVMType::getArrayTy(i64Ty, 3);
+static Type convertTimeType(TimeType type, LLVMTypeConverter &converter) {
+  auto i64Ty = IntegerType::get(&converter.getContext(), 64);
+  return LLVM::LLVMArrayType::get(i64Ty, 3);
 }
 
-static LLVM::LLVMType convertPtrType(PtrType type,
-                                     LLVMTypeConverter &converter) {
-  return converter.convertType(type.getUnderlyingType())
-      .cast<LLVM::LLVMType>()
-      .getPointerTo();
+static Type convertPtrType(PtrType type, LLVMTypeConverter &converter) {
+  return LLVM::LLVMPointerType::get(
+      converter.convertType(type.getUnderlyingType()));
 }
 
-static LLVM::LLVMType convertArrayType(ArrayType type,
-                                       LLVMTypeConverter &converter) {
-  auto elementTy =
-      converter.convertType(type.getElementType()).cast<LLVM::LLVMType>();
-  return LLVM::LLVMType::getArrayTy(elementTy, type.getLength());
+static Type convertArrayType(ArrayType type, LLVMTypeConverter &converter) {
+  auto elementTy = converter.convertType(type.getElementType());
+  return LLVM::LLVMArrayType::get(elementTy, type.getLength());
 }
 
-static LLVM::LLVMType convertTupleType(TupleType type,
-                                       LLVMTypeConverter &converter) {
-  llvm::SmallVector<LLVM::LLVMType, 8> elements;
+static Type convertTupleType(TupleType type, LLVMTypeConverter &converter) {
+  llvm::SmallVector<Type, 8> elements;
   for (auto elemTy : type.getTypes())
-    elements.push_back(converter.convertType(elemTy).cast<LLVM::LLVMType>());
-  return LLVM::LLVMType::getStructTy(&converter.getContext(), elements);
+    elements.push_back(converter.convertType(elemTy));
+  return LLVM::LLVMStructType::getLiteral(&converter.getContext(), elements);
 }
 //===----------------------------------------------------------------------===//
 // Unit conversions
@@ -753,9 +747,10 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
     // Collect used llvm types.
     auto voidTy = getVoidType();
     auto i8PtrTy = getVoidPtrType();
-    auto i32Ty = LLVM::LLVMType::getInt32Ty(rewriter.getContext());
+    auto i32Ty = IntegerType::get(rewriter.getContext(), 32);
     auto sigTy = getLLVMSigType(&getDialect());
-    auto entityStatePtrTy = getRegStateTy(&getDialect(), op).getPointerTo();
+    auto entityStatePtrTy =
+        LLVM::LLVMPointerType::get(getRegStateTy(&getDialect(), op));
 
     regCounter = 0;
 
@@ -764,8 +759,8 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
     LLVMTypeConverter::SignatureConversion intermediate(
         entityOp.getNumArguments());
     // Add state and signal table arguments.
-    intermediate.addInputs(
-        std::array<Type, 3>({i8PtrTy, entityStatePtrTy, sigTy.getPointerTo()}));
+    intermediate.addInputs(std::array<Type, 3>(
+        {i8PtrTy, entityStatePtrTy, LLVM::LLVMPointerType::get(sigTy)}));
     for (size_t i = 0, e = entityOp.getNumArguments(); i < e; ++i)
       intermediate.addInputs(i, voidTy);
     rewriter.applySignatureConversion(&entityOp.getBody(), intermediate);
@@ -776,7 +771,7 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
         intermediate.getConvertedTypes().size());
     final.addInputs(0, i8PtrTy);
     final.addInputs(1, entityStatePtrTy);
-    final.addInputs(2, sigTy.getPointerTo());
+    final.addInputs(2, LLVM::LLVMPointerType::get(sigTy));
 
     // The first n elements of the signal table represent the entity arguments,
     // while the remaining elements represent the entity's owned signals.
@@ -786,8 +781,8 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
       auto index = bodyBuilder.create<LLVM::ConstantOp>(
           op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(i));
       auto gep = bodyBuilder.create<LLVM::GEPOp>(
-          op->getLoc(), sigTy.getPointerTo(), entityOp.getArgument(2),
-          ArrayRef<Value>(index));
+          op->getLoc(), LLVM::LLVMPointerType::get(sigTy),
+          entityOp.getArgument(2), ArrayRef<Value>(index));
       // Remap i-th original argument to the gep'd signal pointer.
       final.remapInput(i + 3, gep.getResult());
     }
@@ -795,9 +790,8 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
     rewriter.applySignatureConversion(&entityOp.getBody(), final);
 
     // Get the converted entity signature.
-    auto funcTy = LLVM::LLVMType::getFunctionTy(
-        voidTy, {i8PtrTy, entityStatePtrTy, sigTy.getPointerTo()},
-        /*isVarArg=*/false);
+    auto funcTy = LLVM::LLVMFunctionType::get(
+        voidTy, {i8PtrTy, entityStatePtrTy, LLVM::LLVMPointerType::get(sigTy)});
 
     // Create the a new llvm function to house the lowered entity.
     auto llvmFunc = rewriter.create<LLVM::LLVMFuncOp>(
@@ -857,15 +851,15 @@ struct ProcOpConversion : public ConvertToLLVMPattern {
     // Collect used llvm types.
     auto voidTy = getVoidType();
     auto i8PtrTy = getVoidPtrType();
-    auto i1Ty = LLVM::LLVMType::getInt1Ty(rewriter.getContext());
-    auto i32Ty = LLVM::LLVMType::getInt32Ty(rewriter.getContext());
-    auto senseTableTy =
-        LLVM::LLVMType::getArrayTy(i1Ty, procOp.getNumArguments())
-            .getPointerTo();
-    auto stateTy = LLVM::LLVMType::getStructTy(
-        /* current instance  */ i32Ty, /* resume index */ i32Ty,
-        /* sense flags */ senseTableTy, /* persistent types */
-        getProcPersistenceTy(&getDialect(), typeConverter, procOp));
+    auto i1Ty = IntegerType::get(rewriter.getContext(), 1);
+    auto i32Ty = IntegerType::get(rewriter.getContext(), 32);
+    auto senseTableTy = LLVM::LLVMPointerType::get(
+        LLVM::LLVMArrayType::get(i1Ty, procOp.getNumArguments()));
+    auto stateTy = LLVM::LLVMStructType::getLiteral(
+        rewriter.getContext(),
+        {/* current instance  */ i32Ty, /* resume index */ i32Ty,
+         /* sense flags */ senseTableTy, /* persistent types */
+         getProcPersistenceTy(&getDialect(), typeConverter, procOp)});
     auto sigTy = getLLVMSigType(&getDialect());
 
     // Keep track of the original first operation of the process, to know where
@@ -877,8 +871,9 @@ struct ProcOpConversion : public ConvertToLLVMPattern {
     LLVMTypeConverter::SignatureConversion intermediate(
         procOp.getNumArguments());
     // Add state, process state table and signal table arguments.
-    std::array<Type, 3> procArgTys(
-        {i8PtrTy, stateTy.getPointerTo(), sigTy.getPointerTo()});
+    std::array<Type, 3> procArgTys({i8PtrTy,
+                                    LLVM::LLVMPointerType::get(stateTy),
+                                    LLVM::LLVMPointerType::get(sigTy)});
     intermediate.addInputs(procArgTys);
     for (size_t i = 0, e = procOp.getNumArguments(); i < e; ++i)
       intermediate.addInputs(i, voidTy);
@@ -890,25 +885,25 @@ struct ProcOpConversion : public ConvertToLLVMPattern {
     LLVMTypeConverter::SignatureConversion final(
         intermediate.getConvertedTypes().size());
     final.addInputs(0, i8PtrTy);
-    final.addInputs(1, stateTy.getPointerTo());
-    final.addInputs(2, sigTy.getPointerTo());
+    final.addInputs(1, LLVM::LLVMPointerType::get(stateTy));
+    final.addInputs(2, LLVM::LLVMPointerType::get(sigTy));
 
     for (size_t i = 0, e = procOp.getNumArguments(); i < e; ++i) {
       // Create gep operations from the signal table for each original argument.
       auto index = bodyBuilder.create<LLVM::ConstantOp>(
           op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(i));
       auto gep = bodyBuilder.create<LLVM::GEPOp>(
-          op->getLoc(), sigTy.getPointerTo(), procOp.getArgument(2),
-          ArrayRef<Value>({index}));
+          op->getLoc(), LLVM::LLVMPointerType::get(sigTy),
+          procOp.getArgument(2), ArrayRef<Value>({index}));
 
       // Remap the i-th original argument to the gep'd value.
       final.remapInput(i + 3, gep.getResult());
     }
 
     // Get the converted process signature.
-    auto funcTy = LLVM::LLVMType::getFunctionTy(
-        voidTy, {i8PtrTy, stateTy.getPointerTo(), sigTy.getPointerTo()},
-        /*isVarArg=*/false);
+    auto funcTy = LLVM::LLVMFunctionType::get(
+        voidTy, {i8PtrTy, LLVM::LLVMPointerType::get(stateTy),
+                 LLVM::LLVMPointerType::get(sigTy)});
     // Create a new llvm function to house the lowered process.
     auto llvmFunc = rewriter.create<LLVM::LLVMFuncOp>(op->getLoc(),
                                                       procOp.getName(), funcTy);
@@ -945,16 +940,19 @@ struct HaltOpConversion : public ConvertToLLVMPattern {
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
-    auto i1Ty = LLVM::LLVMType::getInt1Ty(rewriter.getContext());
-    auto i32Ty = LLVM::LLVMType::getInt32Ty(rewriter.getContext());
+    auto i1Ty = IntegerType::get(rewriter.getContext(), 1);
+    auto i32Ty = IntegerType::get(rewriter.getContext(), 32);
 
     auto llvmFunc = op->getParentOfType<LLVM::LLVMFuncOp>();
     auto procState = llvmFunc.getArgument(1);
     auto senseTableTy = procState.getType()
-                            .cast<LLVM::LLVMType>()
-                            .getPointerElementTy()
-                            .getStructElementType(2)
-                            .getPointerElementTy();
+                            .cast<LLVM::LLVMPointerType>()
+                            .getElementType()
+                            .cast<LLVM::LLVMStructType>()
+                            .getBody()[2]
+                            .cast<LLVM::LLVMPointerType>()
+                            .getElementType()
+                            .cast<LLVM::LLVMArrayType>();
 
     // Get senses ptr from the process state argument.
     auto zeroC = rewriter.create<LLVM::ConstantOp>(
@@ -962,19 +960,20 @@ struct HaltOpConversion : public ConvertToLLVMPattern {
     auto twoC = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(2));
     auto sensePtrGep = rewriter.create<LLVM::GEPOp>(
-        op->getLoc(), senseTableTy.getPointerTo().getPointerTo(), procState,
-        ArrayRef<Value>({zeroC, twoC}));
+        op->getLoc(),
+        LLVM::LLVMPointerType::get(LLVM::LLVMPointerType::get(senseTableTy)),
+        procState, ArrayRef<Value>({zeroC, twoC}));
     auto sensePtr = rewriter.create<LLVM::LoadOp>(
-        op->getLoc(), senseTableTy.getPointerTo(), sensePtrGep);
+        op->getLoc(), LLVM::LLVMPointerType::get(senseTableTy), sensePtrGep);
 
     // Zero out all the senses flags.
-    for (size_t i = 0, e = senseTableTy.getArrayNumElements(); i < e; ++i) {
+    for (size_t i = 0, e = senseTableTy.getNumElements(); i < e; ++i) {
       auto indC = rewriter.create<LLVM::ConstantOp>(
           op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(i));
       auto zeroB = rewriter.create<LLVM::ConstantOp>(
           op->getLoc(), i1Ty, rewriter.getI32IntegerAttr(0));
       auto senseElemPtr = rewriter.create<LLVM::GEPOp>(
-          op->getLoc(), i1Ty.getPointerTo(), sensePtr,
+          op->getLoc(), LLVM::LLVMPointerType::get(i1Ty), sensePtr,
           ArrayRef<Value>({zeroC, indC}));
       rewriter.create<LLVM::StoreOp>(op->getLoc(), zeroB, senseElemPtr);
     }
@@ -1002,23 +1001,26 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
 
     auto voidTy = getVoidType();
     auto i8PtrTy = getVoidPtrType();
-    auto i1Ty = LLVM::LLVMType::getInt1Ty(rewriter.getContext());
-    auto i32Ty = LLVM::LLVMType::getInt32Ty(rewriter.getContext());
-    auto i64Ty = LLVM::LLVMType::getInt64Ty(rewriter.getContext());
+    auto i1Ty = IntegerType::get(rewriter.getContext(), 1);
+    auto i32Ty = IntegerType::get(rewriter.getContext(), 32);
+    auto i64Ty = IntegerType::get(rewriter.getContext(), 64);
 
     // Get the llhdSuspend runtime function.
-    auto llhdSuspendTy = LLVM::LLVMType::getFunctionTy(
-        voidTy, {i8PtrTy, i8PtrTy, i64Ty, i64Ty, i64Ty}, /*isVarArg=*/false);
+    auto llhdSuspendTy = LLVM::LLVMFunctionType::get(
+        voidTy, {i8PtrTy, i8PtrTy, i64Ty, i64Ty, i64Ty});
     auto module = op->getParentOfType<ModuleOp>();
     auto llhdSuspendFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
                                                "llhdSuspend", llhdSuspendTy);
 
     auto statePtr = llvmFunc.getArgument(0);
     auto procState = llvmFunc.getArgument(1);
-    auto procStateTy = procState.getType().dyn_cast<LLVM::LLVMType>();
-    auto senseTableTy = procStateTy.getPointerElementTy()
-                            .getStructElementType(2)
-                            .getPointerElementTy();
+    auto procStateTy = procState.getType();
+    auto senseTableTy = procStateTy.cast<LLVM::LLVMPointerType>()
+                            .getElementType()
+                            .cast<LLVM::LLVMStructType>()
+                            .getBody()[2]
+                            .cast<LLVM::LLVMPointerType>()
+                            .getElementType();
 
     // Get senses ptr.
     auto zeroC = rewriter.create<LLVM::ConstantOp>(
@@ -1026,20 +1028,24 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
     auto twoC = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(2));
     auto sensePtrGep = rewriter.create<LLVM::GEPOp>(
-        op->getLoc(), senseTableTy.getPointerTo().getPointerTo(), procState,
-        ArrayRef<Value>({zeroC, twoC}));
+        op->getLoc(),
+        LLVM::LLVMPointerType::get(LLVM::LLVMPointerType::get(senseTableTy)),
+        procState, ArrayRef<Value>({zeroC, twoC}));
     auto sensePtr = rewriter.create<LLVM::LoadOp>(
-        op->getLoc(), senseTableTy.getPointerTo(), sensePtrGep);
+        op->getLoc(), LLVM::LLVMPointerType::get(senseTableTy), sensePtrGep);
 
     // Reset sense table, if not all signals are observed.
-    if (waitOp.obs().size() < senseTableTy.getArrayNumElements()) {
+    if (waitOp.obs().size() <
+        senseTableTy.cast<LLVM::LLVMArrayType>().getNumElements()) {
       auto zeroB = rewriter.create<LLVM::ConstantOp>(
           op->getLoc(), i1Ty, rewriter.getBoolAttr(false));
-      for (size_t i = 0, e = senseTableTy.getArrayNumElements(); i < e; ++i) {
+      for (size_t i = 0,
+                  e = senseTableTy.cast<LLVM::LLVMArrayType>().getNumElements();
+           i < e; ++i) {
         auto indC = rewriter.create<LLVM::ConstantOp>(
             op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(i));
         auto senseElemPtr = rewriter.create<LLVM::GEPOp>(
-            op->getLoc(), i1Ty.getPointerTo(), sensePtr,
+            op->getLoc(), LLVM::LLVMPointerType::get(i1Ty), sensePtr,
             ArrayRef<Value>({zeroC, indC}));
         rewriter.create<LLVM::StoreOp>(op->getLoc(), zeroB, senseElemPtr);
       }
@@ -1048,14 +1054,14 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
     // Set sense flags for observed signals.
     for (auto observed : transformed.obs()) {
       auto instIndexPtr = rewriter.create<LLVM::GEPOp>(
-          op->getLoc(), i64Ty.getPointerTo(), observed,
+          op->getLoc(), LLVM::LLVMPointerType::get(i64Ty), observed,
           ArrayRef<Value>({zeroC, twoC}));
       auto instIndex =
           rewriter.create<LLVM::LoadOp>(op->getLoc(), i64Ty, instIndexPtr);
       auto oneB = rewriter.create<LLVM::ConstantOp>(op->getLoc(), i1Ty,
                                                     rewriter.getBoolAttr(true));
       auto senseElementPtr = rewriter.create<LLVM::GEPOp>(
-          op->getLoc(), i1Ty.getPointerTo(), sensePtr,
+          op->getLoc(), LLVM::LLVMPointerType::get(i1Ty), sensePtr,
           ArrayRef<Value>({zeroC, instIndex}));
       rewriter.create<LLVM::StoreOp>(op->getLoc(), oneB, senseElementPtr);
     }
@@ -1104,58 +1110,56 @@ struct InstOpConversion : public ConvertToLLVMPattern {
 
     auto voidTy = getVoidType();
     auto i8PtrTy = getVoidPtrType();
-    auto i1Ty = LLVM::LLVMType::getInt1Ty(rewriter.getContext());
-    auto i32Ty = LLVM::LLVMType::getInt32Ty(rewriter.getContext());
-    auto i64Ty = LLVM::LLVMType::getInt64Ty(rewriter.getContext());
+    auto i1Ty = IntegerType::get(rewriter.getContext(), 1);
+    auto i32Ty = IntegerType::get(rewriter.getContext(), 32);
+    auto i64Ty = IntegerType::get(rewriter.getContext(), 64);
 
     // Init function signature: (i8* %state) -> void.
-    auto initFuncTy =
-        LLVM::LLVMType::getFunctionTy(voidTy, {i8PtrTy}, /*isVarArg=*/false);
+    auto initFuncTy = LLVM::LLVMFunctionType::get(voidTy, {i8PtrTy});
     auto initFunc =
         getOrInsertFunction(module, rewriter, op->getLoc(), "llhd_init",
                             initFuncTy, /*insertBodyAndTerminator=*/true);
 
     // Get or insert the malloc function definition.
     // Malloc function signature: (i64 %size) -> i8* %pointer.
-    auto mallocSigFuncTy =
-        LLVM::LLVMType::getFunctionTy(i8PtrTy, {i64Ty}, /*isVarArg=*/false);
+    auto mallocSigFuncTy = LLVM::LLVMFunctionType::get(i8PtrTy, {i64Ty});
     auto mallFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
                                         "malloc", mallocSigFuncTy);
 
     // Get or insert the allocSignal library call definition.
     // allocSignal function signature: (i8* %state, i8* %sig_name, i8*
     // %sig_owner, i32 %value) -> i32 %sig_index.
-    auto allocSigFuncTy = LLVM::LLVMType::getFunctionTy(
-        i32Ty, {i8PtrTy, i32Ty, i8PtrTy, i8PtrTy, i64Ty}, /*isVarArg=*/false);
+    auto allocSigFuncTy = LLVM::LLVMFunctionType::get(
+        i32Ty, {i8PtrTy, i32Ty, i8PtrTy, i8PtrTy, i64Ty});
     auto sigFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
                                        "allocSignal", allocSigFuncTy);
 
     // Add information about the elements of an array signal to the state.
     // Signature: (i8* state, i32 signalIndex, i32 size, i32 numElements) ->
     // void
-    auto addSigArrElemFuncTy = LLVM::LLVMType::getFunctionTy(
-        voidTy, {i8PtrTy, i32Ty, i32Ty, i32Ty}, /*isVarArg=*/false);
+    auto addSigArrElemFuncTy =
+        LLVM::LLVMFunctionType::get(voidTy, {i8PtrTy, i32Ty, i32Ty, i32Ty});
     auto addSigElemFunc =
         getOrInsertFunction(module, rewriter, op->getLoc(),
                             "addSigArrayElements", addSigArrElemFuncTy);
 
     // Add information about one element of a struct signal to the state.
     // Signature: (i8* state, i32 signalIndex, i32 offset, i32 size) -> void
-    auto addSigStructElemFuncTy = LLVM::LLVMType::getFunctionTy(
-        voidTy, {i8PtrTy, i32Ty, i32Ty, i32Ty}, /*isVarArg=*/false);
+    auto addSigStructElemFuncTy =
+        LLVM::LLVMFunctionType::get(voidTy, {i8PtrTy, i32Ty, i32Ty, i32Ty});
     auto addSigStructFunc =
         getOrInsertFunction(module, rewriter, op->getLoc(),
                             "addSigStructElement", addSigStructElemFuncTy);
 
     // Get or insert allocProc library call definition.
-    auto allocProcFuncTy = LLVM::LLVMType::getFunctionTy(
-        voidTy, {i8PtrTy, i8PtrTy, i8PtrTy}, /*isVarArg=*/false);
+    auto allocProcFuncTy =
+        LLVM::LLVMFunctionType::get(voidTy, {i8PtrTy, i8PtrTy, i8PtrTy});
     auto allocProcFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
                                              "allocProc", allocProcFuncTy);
 
     // Get or insert allocEntity library call definition.
-    auto allocEntityFuncTy = LLVM::LLVMType::getFunctionTy(
-        voidTy, {i8PtrTy, i8PtrTy, i8PtrTy}, /*isVarArg=*/false);
+    auto allocEntityFuncTy =
+        LLVM::LLVMFunctionType::get(voidTy, {i8PtrTy, i8PtrTy, i8PtrTy});
     auto allocEntityFunc = getOrInsertFunction(
         module, rewriter, op->getLoc(), "allocEntity", allocEntityFuncTy);
 
@@ -1185,7 +1189,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
     // Handle entity instantiation.
     if (auto child = module.lookupSymbol<EntityOp>(instOp.callee())) {
       auto regStateTy = getRegStateTy(&getDialect(), child.getOperation());
-      auto regStatePtrTy = regStateTy.getPointerTo();
+      auto regStatePtrTy = LLVM::LLVMPointerType::get(regStateTy);
 
       // Get reg state size.
       auto oneC = initBuilder.create<LLVM::ConstantOp>(
@@ -1210,15 +1214,20 @@ struct InstOpConversion : public ConvertToLLVMPattern {
           op->getLoc(), i1Ty, rewriter.getBoolAttr(false));
 
       // Zero-initialize reg state entries.
-      for (size_t i = 0, e = regStateTy.getStructNumElements(); i < e; ++i) {
-        size_t f = regStateTy.getStructElementType(i).getArrayNumElements();
+      for (size_t i = 0,
+                  e = regStateTy.cast<LLVM::LLVMStructType>().getBody().size();
+           i < e; ++i) {
+        size_t f = regStateTy.cast<LLVM::LLVMStructType>()
+                       .getBody()[i]
+                       .cast<LLVM::LLVMArrayType>()
+                       .getNumElements();
         for (size_t j = 0; j < f; ++j) {
           auto regIndexC = initBuilder.create<LLVM::ConstantOp>(
               op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(i));
           auto triggerIndexC = initBuilder.create<LLVM::ConstantOp>(
               op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(j));
           auto regGep = initBuilder.create<LLVM::GEPOp>(
-              op->getLoc(), i1Ty.getPointerTo(), regMallBC,
+              op->getLoc(), LLVM::LLVMPointerType::get(i1Ty), regMallBC,
               ArrayRef<Value>({zeroB, regIndexC, triggerIndexC}));
           initBuilder.create<LLVM::StoreOp>(op->getLoc(), zeroB, regGep);
         }
@@ -1234,8 +1243,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
       // Walk over the entity and generate mallocs for each one of its signals.
       child.walk([&](SigOp op) -> void {
         // if (auto sigOp = dyn_cast<SigOp>(op)) {
-        auto underlyingTy = typeConverter->convertType(op.init().getType())
-                                .cast<LLVM::LLVMType>();
+        auto underlyingTy = typeConverter->convertType(op.init().getType());
         // Get index constant of the signal in the entity's signal table.
         auto indexConst = initBuilder.create<LLVM::ConstantOp>(
             op.getLoc(), i32Ty, rewriter.getI32IntegerAttr(initCounter));
@@ -1252,9 +1260,9 @@ struct InstOpConversion : public ConvertToLLVMPattern {
         auto twoC = initBuilder.create<LLVM::ConstantOp>(
             op.getLoc(), i64Ty, rewriter.getI32IntegerAttr(2));
         auto nullPtr = initBuilder.create<LLVM::NullOp>(
-            op.getLoc(), underlyingTy.getPointerTo());
+            op.getLoc(), LLVM::LLVMPointerType::get(underlyingTy));
         auto sizeGep = initBuilder.create<LLVM::GEPOp>(
-            op.getLoc(), underlyingTy.getPointerTo(), nullPtr,
+            op.getLoc(), LLVM::LLVMPointerType::get(underlyingTy), nullPtr,
             ArrayRef<Value>(oneC));
         auto size =
             initBuilder.create<LLVM::PtrToIntOp>(op.getLoc(), i64Ty, sizeGep);
@@ -1271,15 +1279,14 @@ struct InstOpConversion : public ConvertToLLVMPattern {
 
         // Store the initial value.
         auto bitcast = initBuilder.create<LLVM::BitcastOp>(
-            op.getLoc(), underlyingTy.getPointerTo(), mall);
+            op.getLoc(), LLVM::LLVMPointerType::get(underlyingTy), mall);
         initBuilder.create<LLVM::StoreOp>(op.getLoc(), initDef, bitcast);
 
         // Get the amount of bytes required to represent an integer underlying
         // type. Use the whole size of the type if not an integer.
         Value passSize;
-        if (underlyingTy.isIntegerTy()) {
-          auto byteWidth =
-              llvm::divideCeil(underlyingTy.getIntegerBitWidth(), 8);
+        if (auto intTy = underlyingTy.dyn_cast<IntegerType>()) {
+          auto byteWidth = llvm::divideCeil(intTy.getWidth(), 8);
           passSize = initBuilder.create<LLVM::ConstantOp>(
               op.getLoc(), i64Ty, rewriter.getI64IntegerAttr(byteWidth));
         } else {
@@ -1295,19 +1302,19 @@ struct InstOpConversion : public ConvertToLLVMPattern {
                 .getResult(0);
 
         // Add structured underlying type information.
-        if (underlyingTy.isArrayTy()) {
+        if (auto arrayTy = underlyingTy.dyn_cast<LLVM::LLVMArrayType>()) {
           auto zeroC = initBuilder.create<LLVM::ConstantOp>(
               op.getLoc(), i32Ty, rewriter.getI32IntegerAttr(0));
 
           auto numElements = initBuilder.create<LLVM::ConstantOp>(
               op.getLoc(), i32Ty,
-              rewriter.getI32IntegerAttr(underlyingTy.getArrayNumElements()));
+              rewriter.getI32IntegerAttr(arrayTy.getNumElements()));
 
           // Get element size.
           auto null = initBuilder.create<LLVM::NullOp>(
-              op.getLoc(), underlyingTy.getPointerTo());
+              op.getLoc(), LLVM::LLVMPointerType::get(arrayTy));
           auto gepFirst = initBuilder.create<LLVM::GEPOp>(
-              op.getLoc(), underlyingTy.getArrayElementType().getPointerTo(),
+              op.getLoc(), LLVM::LLVMPointerType::get(arrayTy.getElementType()),
               null, ArrayRef<Value>({zeroC, oneC}));
           auto toInt = initBuilder.create<LLVM::PtrToIntOp>(op.getLoc(), i32Ty,
                                                             gepFirst);
@@ -1317,14 +1324,14 @@ struct InstOpConversion : public ConvertToLLVMPattern {
               op.getLoc(), llvm::None,
               rewriter.getSymbolRefAttr(addSigElemFunc),
               ArrayRef<Value>({initStatePtr, sigIndex, toInt, numElements}));
-        } else if (underlyingTy.isStructTy()) {
+        } else if (auto structTy =
+                       underlyingTy.dyn_cast<LLVM::LLVMStructType>()) {
           auto zeroC = initBuilder.create<LLVM::ConstantOp>(
               op.getLoc(), i32Ty, rewriter.getI32IntegerAttr(0));
 
           auto null = initBuilder.create<LLVM::NullOp>(
-              op.getLoc(), underlyingTy.getPointerTo());
-          for (size_t i = 0, e = underlyingTy.getStructNumElements(); i < e;
-               ++i) {
+              op.getLoc(), LLVM::LLVMPointerType::get(structTy));
+          for (size_t i = 0, e = structTy.getBody().size(); i < e; ++i) {
             auto oneC = initBuilder.create<LLVM::ConstantOp>(
                 op.getLoc(), i32Ty, rewriter.getI32IntegerAttr(1));
             auto indexC = initBuilder.create<LLVM::ConstantOp>(
@@ -1332,20 +1339,17 @@ struct InstOpConversion : public ConvertToLLVMPattern {
 
             // Get pointer offset.
             auto gepElem = initBuilder.create<LLVM::GEPOp>(
-                op.getLoc(),
-                underlyingTy.getStructElementType(i).getPointerTo(), null,
-                ArrayRef<Value>({zeroC, indexC}));
+                op.getLoc(), LLVM::LLVMPointerType::get(structTy.getBody()[i]),
+                null, ArrayRef<Value>({zeroC, indexC}));
             auto elemToInt = initBuilder.create<LLVM::PtrToIntOp>(
                 op.getLoc(), i32Ty, gepElem);
 
             // Get element size.
             auto elemNull = initBuilder.create<LLVM::NullOp>(
-                op.getLoc(),
-                underlyingTy.getStructElementType(i).getPointerTo());
+                op.getLoc(), LLVM::LLVMPointerType::get(structTy.getBody()[i]));
             auto gepElemSize = initBuilder.create<LLVM::GEPOp>(
-                op.getLoc(),
-                underlyingTy.getStructElementType(i).getPointerTo(), elemNull,
-                ArrayRef<Value>({oneC}));
+                op.getLoc(), LLVM::LLVMPointerType::get(structTy.getBody()[i]),
+                elemNull, ArrayRef<Value>({oneC}));
             auto elemSizeToInt = initBuilder.create<LLVM::PtrToIntOp>(
                 op.getLoc(), i32Ty, gepElemSize);
 
@@ -1360,14 +1364,13 @@ struct InstOpConversion : public ConvertToLLVMPattern {
       });
     } else if (auto proc = module.lookupSymbol<ProcOp>(instOp.callee())) {
       // Handle process instantiation.
-      auto sensesPtrTy =
-          LLVM::LLVMType::getArrayTy(i1Ty, proc.getNumArguments())
-              .getPointerTo();
+      auto sensesPtrTy = LLVM::LLVMPointerType::get(
+          LLVM::LLVMArrayType::get(i1Ty, proc.getNumArguments()));
       auto procStatePtrTy =
-          LLVM::LLVMType::getStructTy(
-              i32Ty, i32Ty, sensesPtrTy,
-              getProcPersistenceTy(&getDialect(), typeConverter, proc))
-              .getPointerTo();
+          LLVM::LLVMPointerType::get(LLVM::LLVMStructType::getLiteral(
+              rewriter.getContext(),
+              {i32Ty, i32Ty, sensesPtrTy,
+               getProcPersistenceTy(&getDialect(), typeConverter, proc)}));
 
       auto zeroC = initBuilder.create<LLVM::ConstantOp>(
           op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(0));
@@ -1397,7 +1400,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
 
       // Store the initial resume index.
       auto resumeGep = initBuilder.create<LLVM::GEPOp>(
-          op->getLoc(), i32Ty.getPointerTo(), procStateBC,
+          op->getLoc(), LLVM::LLVMPointerType::get(i32Ty), procStateBC,
           ArrayRef<Value>({zeroC, oneC}));
       initBuilder.create<LLVM::StoreOp>(op->getLoc(), zeroC, resumeGep);
 
@@ -1419,22 +1422,24 @@ struct InstOpConversion : public ConvertToLLVMPattern {
           op->getLoc(), sensesPtrTy, sensesMall);
 
       // Set all initial senses to 1.
-      for (size_t i = 0,
-                  e = sensesPtrTy.getPointerElementTy().getArrayNumElements();
+      for (size_t i = 0, e = sensesPtrTy.cast<LLVM::LLVMPointerType>()
+                                 .getElementType()
+                                 .cast<LLVM::LLVMArrayType>()
+                                 .getNumElements();
            i < e; ++i) {
         auto oneB = initBuilder.create<LLVM::ConstantOp>(
             op->getLoc(), i1Ty, rewriter.getBoolAttr(true));
         auto gepInd = initBuilder.create<LLVM::ConstantOp>(
             op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(i));
         auto senseGep = initBuilder.create<LLVM::GEPOp>(
-            op->getLoc(), i1Ty.getPointerTo(), sensesBC,
+            op->getLoc(), LLVM::LLVMPointerType::get(i1Ty), sensesBC,
             ArrayRef<Value>({zeroC, gepInd}));
         initBuilder.create<LLVM::StoreOp>(op->getLoc(), oneB, senseGep);
       }
 
       // Store the senses pointer in the process state.
       auto procStateSensesPtr = initBuilder.create<LLVM::GEPOp>(
-          op->getLoc(), sensesPtrTy.getPointerTo(), procStateBC,
+          op->getLoc(), LLVM::LLVMPointerType::get(sensesPtrTy), procStateBC,
           ArrayRef<Value>({zeroC, twoC}));
       initBuilder.create<LLVM::StoreOp>(op->getLoc(), sensesBC,
                                         procStateSensesPtr);
@@ -1473,7 +1478,7 @@ struct SigOpConversion : public ConvertToLLVMPattern {
     SigOpAdaptor transformed(operands);
 
     // Collect the used llvm types.
-    auto i32Ty = LLVM::LLVMType::getInt32Ty(rewriter.getContext());
+    auto i32Ty = IntegerType::get(rewriter.getContext(), 32);
     auto sigTy = getLLVMSigType(&getDialect());
 
     // Get the signal table pointer from the arguments.
@@ -1486,7 +1491,8 @@ struct SigOpConversion : public ConvertToLLVMPattern {
 
     // Insert a gep to the signal index in the signal table argument.
     rewriter.replaceOpWithNewOp<LLVM::GEPOp>(
-        op, sigTy.getPointerTo(), sigTablePtr, ArrayRef<Value>(indexConst));
+        op, LLVM::LLVMPointerType::get(sigTy), sigTablePtr,
+        ArrayRef<Value>(indexConst));
 
     return success();
   }
@@ -1516,7 +1522,7 @@ struct PrbOpConversion : public ConvertToLLVMPattern {
 
     // Collect the used llvm types.
     auto resTy = prbOp.getType();
-    auto finalTy = typeConverter->convertType(resTy).cast<LLVM::LLVMType>();
+    auto finalTy = typeConverter->convertType(resTy);
 
     // Get the signal details from the signal struct.
     auto sigDetail = getSignalDetail(rewriter, &getDialect(), op->getLoc(),
@@ -1525,12 +1531,12 @@ struct PrbOpConversion : public ConvertToLLVMPattern {
     if (resTy.isa<IntegerType>()) {
       // Get the amount of bytes to load. An extra byte is always loaded to
       // cover the case where a subsignal spans halfway in the last byte.
-      int resWidth = getStdOrLLVMIntegerWidth(resTy);
+      int resWidth = resTy.getIntOrFloatBitWidth();
       int loadWidth = (llvm::divideCeil(resWidth, 8) + 1) * 8;
-      auto loadTy = LLVM::LLVMType::getIntNTy(rewriter.getContext(), loadWidth);
+      auto loadTy = IntegerType::get(rewriter.getContext(), loadWidth);
 
       auto bitcast = rewriter.create<LLVM::BitcastOp>(
-          op->getLoc(), loadTy.getPointerTo(), sigDetail[0]);
+          op->getLoc(), LLVM::LLVMPointerType::get(loadTy), sigDetail[0]);
       auto loadSig =
           rewriter.create<LLVM::LoadOp>(op->getLoc(), loadTy, bitcast);
 
@@ -1545,7 +1551,7 @@ struct PrbOpConversion : public ConvertToLLVMPattern {
 
     if (resTy.isa<ArrayType, TupleType>()) {
       auto bitcast = rewriter.create<LLVM::BitcastOp>(
-          op->getLoc(), finalTy.getPointerTo(), sigDetail[0]);
+          op->getLoc(), LLVM::LLVMPointerType::get(finalTy), sigDetail[0]);
       rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, finalTy, bitcast);
 
       return success();
@@ -1580,16 +1586,15 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
     // Collect used llvm types.
     auto voidTy = getVoidType();
     auto i8PtrTy = getVoidPtrType();
-    auto i1Ty = LLVM::LLVMType::getInt1Ty(rewriter.getContext());
-    auto i32Ty = LLVM::LLVMType::getInt32Ty(rewriter.getContext());
-    auto i64Ty = LLVM::LLVMType::getInt64Ty(rewriter.getContext());
+    auto i1Ty = IntegerType::get(rewriter.getContext(), 1);
+    auto i32Ty = IntegerType::get(rewriter.getContext(), 32);
+    auto i64Ty = IntegerType::get(rewriter.getContext(), 64);
     auto sigTy = getLLVMSigType(&getDialect());
 
     // Get or insert the drive library call.
-    auto drvFuncTy = LLVM::LLVMType::getFunctionTy(
-        voidTy,
-        {i8PtrTy, sigTy.getPointerTo(), i8PtrTy, i64Ty, i64Ty, i64Ty, i64Ty},
-        /*isVarArg=*/false);
+    auto drvFuncTy = LLVM::LLVMFunctionType::get(
+        voidTy, {i8PtrTy, LLVM::LLVMPointerType::get(sigTy), i8PtrTy, i64Ty,
+                 i64Ty, i64Ty, i64Ty});
     auto drvFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
                                        "driveSignal", drvFuncTy);
 
@@ -1600,9 +1605,8 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
     Value sigWidth;
     auto underlyingTy = drvOp.value().getType();
     if (isArrayOrTuple(underlyingTy)) {
-      auto llvmPtrTy = typeConverter->convertType(underlyingTy)
-                           .cast<LLVM::LLVMType>()
-                           .getPointerTo();
+      auto llvmPtrTy =
+          LLVM::LLVMPointerType::get(typeConverter->convertType(underlyingTy));
       auto oneC = rewriter.create<LLVM::ConstantOp>(
           op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(1));
       auto eightC = rewriter.create<LLVM::ConstantOp>(
@@ -1616,7 +1620,7 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
     } else {
       sigWidth = rewriter.create<LLVM::ConstantOp>(
           op->getLoc(), i64Ty,
-          rewriter.getI64IntegerAttr(getStdOrLLVMIntegerWidth(underlyingTy)));
+          rewriter.getI64IntegerAttr(underlyingTy.getIntOrFloatBitWidth()));
     }
 
     // Insert enable comparison. Skip if the enable operand is 0.
@@ -1642,8 +1646,7 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
     auto oneConst = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(1));
     auto alloca = rewriter.create<LLVM::AllocaOp>(
-        op->getLoc(),
-        transformed.value().getType().cast<LLVM::LLVMType>().getPointerTo(),
+        op->getLoc(), LLVM::LLVMPointerType::get(transformed.value().getType()),
         oneConst, 4);
     rewriter.create<LLVM::StoreOp>(op->getLoc(), transformed.value(), alloca);
     auto bc = rewriter.create<LLVM::BitcastOp>(op->getLoc(), i8PtrTy, alloca);
@@ -1685,8 +1688,8 @@ struct RegOpConversion : public ConvertToLLVMPattern {
     auto regOp = cast<RegOp>(op);
     RegOpAdaptor transformed(operands, op->getAttrDictionary());
 
-    auto i1Ty = LLVM::LLVMType::getInt1Ty(rewriter.getContext());
-    auto i32Ty = LLVM::LLVMType::getInt32Ty(rewriter.getContext());
+    auto i1Ty = IntegerType::get(rewriter.getContext(), 1);
+    auto i32Ty = IntegerType::get(rewriter.getContext(), 32);
 
     auto func = op->getParentOfType<LLVM::LLVMFuncOp>();
 
@@ -1705,7 +1708,7 @@ struct RegOpConversion : public ConvertToLLVMPattern {
         auto triggerIndexC = rewriter.create<LLVM::ConstantOp>(
             op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(triggerIndex++));
         auto gep = rewriter.create<LLVM::GEPOp>(
-            op->getLoc(), i1Ty.getPointerTo(), func.getArgument(1),
+            op->getLoc(), LLVM::LLVMPointerType::get(i1Ty), func.getArgument(1),
             ArrayRef<Value>({zeroC, regIndexC, triggerIndexC}));
         prevTriggers.push_back(
             rewriter.create<LLVM::LoadOp>(op->getLoc(), gep));
@@ -1829,9 +1832,9 @@ struct NotOpConversion : public ConvertToLLVMPattern {
     // Get the `llhd.not` operation.
     auto notOp = cast<NotOp>(op);
     // Get integer width.
-    unsigned width = getStdOrLLVMIntegerWidth(notOp.getType());
+    unsigned width = notOp.getType().getIntOrFloatBitWidth();
     // Get the used llvm types.
-    auto iTy = LLVM::LLVMType::getIntNTy(rewriter.getContext(), width);
+    auto iTy = IntegerType::get(rewriter.getContext(), width);
 
     // Get the all-ones mask operand
     APInt mask(width, 0);
@@ -1867,11 +1870,11 @@ struct ShrOpConversion : public ConvertToLLVMPattern {
 
     if (auto resTy = shrOp.result().getType().dyn_cast<IntegerType>()) {
       // Get width of the base and hidden values combined.
-      auto baseWidth = getStdOrLLVMIntegerWidth(shrOp.getType());
-      auto hdnWidth = getStdOrLLVMIntegerWidth(shrOp.hidden().getType());
+      auto baseWidth = shrOp.getType().getIntOrFloatBitWidth();
+      auto hdnWidth = shrOp.hidden().getType().getIntOrFloatBitWidth();
       auto full = baseWidth + hdnWidth;
 
-      auto tmpTy = LLVM::LLVMType::getIntNTy(rewriter.getContext(), full);
+      auto tmpTy = IntegerType::get(rewriter.getContext(), full);
 
       // Extend all operands the combined width.
       auto baseZext =
@@ -1911,13 +1914,12 @@ struct ShrOpConversion : public ConvertToLLVMPattern {
       return success();
     }
     if (auto arrTy = shrOp.result().getType().dyn_cast<ArrayType>()) {
-      auto baseTy = typeConverter->convertType(shrOp.base().getType())
-                        .cast<LLVM::LLVMType>();
-      auto hiddenTy = typeConverter->convertType(shrOp.hidden().getType())
-                          .cast<LLVM::LLVMType>();
-      auto combinedTy = llhd::ArrayType::get(baseTy.getArrayNumElements() +
-                                                 hiddenTy.getArrayNumElements(),
-                                             arrTy.getElementType());
+      auto baseTy = typeConverter->convertType(shrOp.base().getType());
+      auto hiddenTy = typeConverter->convertType(shrOp.hidden().getType());
+      auto combinedTy = llhd::ArrayType::get(
+          baseTy.cast<LLVM::LLVMArrayType>().getNumElements() +
+              hiddenTy.cast<LLVM::LLVMArrayType>().getNumElements(),
+          arrTy.getElementType());
 
       auto combinedArrayInit = rewriter.create<LLVM::UndefOp>(
           op->getLoc(), typeConverter->convertType(combinedTy));
@@ -1926,7 +1928,8 @@ struct ShrOpConversion : public ConvertToLLVMPattern {
           rewriter.getIndexAttr(0));
       auto insertHidden = rewriter.create<InsertSliceOp>(
           op->getLoc(), combinedTy, insertBase, shrOp.hidden(),
-          rewriter.getIndexAttr(baseTy.getArrayNumElements()));
+          rewriter.getIndexAttr(
+              baseTy.cast<LLVM::LLVMArrayType>().getNumElements()));
       rewriter.replaceOpWithNewOp<DynExtractSliceOp>(op, arrTy, insertHidden,
                                                      transformed.amount());
 
@@ -1957,11 +1960,11 @@ struct ShlOpConversion : public ConvertToLLVMPattern {
     assert(!shlOp.getType().isa<llhd::SigType>() && "sig not yet supported");
 
     // Get the width of the base and hidden operands combined.
-    auto baseWidth = getStdOrLLVMIntegerWidth(shlOp.getType());
-    auto hdnWidth = getStdOrLLVMIntegerWidth(shlOp.hidden().getType());
+    auto baseWidth = shlOp.getType().getIntOrFloatBitWidth();
+    auto hdnWidth = shlOp.hidden().getType().getIntOrFloatBitWidth();
     auto full = baseWidth + hdnWidth;
 
-    auto tmpTy = LLVM::LLVMType::getIntNTy(rewriter.getContext(), full);
+    auto tmpTy = IntegerType::get(rewriter.getContext(), full);
 
     // Extend all operands to the combined width.
     auto baseZext =
@@ -2044,7 +2047,7 @@ struct EqOpConversion : public ConvertToLLVMPattern {
                   ConversionPatternRewriter &rewriter) const override {
     EqOpAdaptor transformed(operands);
 
-    if (transformed.rhs().getType().cast<LLVM::LLVMType>().isIntegerTy()) {
+    if (transformed.rhs().getType().isa<IntegerType>()) {
       rewriter.replaceOpWithNewOp<LLVM::ICmpOp>(
           op, LLVM::ICmpPredicate::eq, transformed.lhs(), transformed.rhs());
 
@@ -2067,7 +2070,7 @@ struct NeqOpConversion : public ConvertToLLVMPattern {
                   ConversionPatternRewriter &rewriter) const override {
     NeqOpAdaptor transformed(operands);
 
-    if (transformed.rhs().getType().cast<LLVM::LLVMType>().isIntegerTy()) {
+    if (transformed.rhs().getType().isa<IntegerType>()) {
       rewriter.replaceOpWithNewOp<LLVM::ICmpOp>(
           op, LLVM::ICmpPredicate::ne, transformed.lhs(), transformed.rhs());
 
@@ -2172,11 +2175,11 @@ struct ArrayUniformOpConversion : public ConvertToLLVMPattern {
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     ArrayUniformOpAdaptor transformed(operands);
-    auto arrayTy = typeConverter->convertType(op->getResult(0).getType())
-                       .cast<LLVM::LLVMType>();
+    auto arrayTy = typeConverter->convertType(op->getResult(0).getType());
 
     Value arr = rewriter.create<LLVM::UndefOp>(op->getLoc(), arrayTy);
-    for (size_t i = 0, e = arrayTy.getArrayNumElements(); i < e; ++i) {
+    for (size_t i = 0, e = arrayTy.cast<LLVM::LLVMArrayType>().getNumElements();
+         i < e; ++i) {
       arr = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), arrayTy, arr,
                                                  transformed.init(),
                                                  rewriter.getI32ArrayAttr(i));
@@ -2200,11 +2203,11 @@ struct TupleOpConversion : public ConvertToLLVMPattern {
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     TupleOpAdaptor transformed(operands);
-    auto resTy = typeConverter->convertType(op->getResult(0).getType())
-                     .cast<LLVM::LLVMType>();
+    auto resTy = typeConverter->convertType(op->getResult(0).getType());
 
     Value tup = rewriter.create<LLVM::UndefOp>(op->getLoc(), resTy);
-    for (size_t i = 0, e = resTy.getStructNumElements(); i < e; ++i) {
+    for (size_t i = 0, e = resTy.cast<LLVM::LLVMStructType>().getBody().size();
+         i < e; ++i) {
       tup = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), resTy, tup,
                                                  transformed.values()[i],
                                                  rewriter.getI32ArrayAttr(i));
@@ -2246,8 +2249,7 @@ struct ExtractSliceOpConversion : public ConvertToLLVMPattern {
                                                         extsOp.startAttr());
 
     if (auto retTy = extsOp.result().getType().dyn_cast<IntegerType>()) {
-      auto resTy = typeConverter->convertType(extsOp.result().getType())
-                       .cast<LLVM::LLVMType>();
+      auto resTy = typeConverter->convertType(extsOp.result().getType());
       rewriter.replaceOp(op, extractInt(op->getLoc(), rewriter, resTy,
                                         transformed.target(), startConst));
 
@@ -2272,8 +2274,7 @@ struct ExtractSliceOpConversion : public ConvertToLLVMPattern {
                                             op->getLoc(), sigDetail,
                                             adjusted.first, adjusted.second));
       } else if (auto arrTy = resTy.getUnderlyingType().dyn_cast<ArrayType>()) {
-        auto llvmArrTy =
-            typeConverter->convertType(arrTy).cast<LLVM::LLVMType>();
+        auto llvmArrTy = typeConverter->convertType(arrTy);
         auto adjustedPtr = shiftArraySigPointer(
             op->getLoc(), rewriter, llvmArrTy, sigDetail[0], startConst);
         rewriter.replaceOp(op,
@@ -2323,11 +2324,10 @@ struct DynExtractSliceOpConversion : public ConvertToLLVMPattern {
 
     DynExtractSliceOpAdaptor transformed(operands);
 
-    auto i64Ty = LLVM::LLVMType::getInt64Ty(rewriter.getContext());
+    auto i64Ty = IntegerType::get(rewriter.getContext(), 64);
 
     if (auto retTy = extsOp.result().getType().dyn_cast<IntegerType>()) {
-      auto resTy = typeConverter->convertType(extsOp.result().getType())
-                       .cast<LLVM::LLVMType>();
+      auto resTy = typeConverter->convertType(extsOp.result().getType());
       rewriter.replaceOp(op,
                          extractInt(op->getLoc(), rewriter, resTy,
                                     transformed.target(), transformed.start()));
@@ -2355,8 +2355,7 @@ struct DynExtractSliceOpConversion : public ConvertToLLVMPattern {
                                             op->getLoc(), sigDetail,
                                             adjusted.first, adjusted.second));
       } else if (auto arrTy = resTy.getUnderlyingType().dyn_cast<ArrayType>()) {
-        auto llvmArrTy =
-            typeConverter->convertType(arrTy).cast<LLVM::LLVMType>();
+        auto llvmArrTy = typeConverter->convertType(arrTy);
 
         auto adjustedPtr =
             shiftArraySigPointer(op->getLoc(), rewriter, llvmArrTy,
@@ -2369,10 +2368,9 @@ struct DynExtractSliceOpConversion : public ConvertToLLVMPattern {
     }
 
     if (auto arrTy = extsOp.result().getType().dyn_cast<ArrayType>()) {
-      auto elemTy = typeConverter->convertType(arrTy.getElementType())
-                        .cast<LLVM::LLVMType>();
-      auto llvmArrTy = typeConverter->convertType(arrTy).cast<LLVM::LLVMType>();
-      auto targetTy = transformed.target().getType().cast<LLVM::LLVMType>();
+      auto elemTy = typeConverter->convertType(arrTy.getElementType());
+      auto llvmArrTy = typeConverter->convertType(arrTy);
+      auto targetTy = transformed.target().getType();
 
       auto zeroC = rewriter.create<LLVM::ConstantOp>(
           op->getLoc(), i64Ty, rewriter.getI64IntegerAttr(0));
@@ -2384,7 +2382,8 @@ struct DynExtractSliceOpConversion : public ConvertToLLVMPattern {
       // we need to store the array into the stack and use gep+load to get the
       // elements dynamically.
       auto targetPtr = rewriter.create<LLVM::AllocaOp>(
-          op->getLoc(), targetTy.getPointerTo(), ArrayRef<Value>(oneC));
+          op->getLoc(), LLVM::LLVMPointerType::get(targetTy),
+          ArrayRef<Value>(oneC));
       rewriter.create<LLVM::StoreOp>(op->getLoc(), transformed.target(),
                                      targetPtr);
       Value slice = rewriter.create<LLVM::UndefOp>(op->getLoc(), llvmArrTy);
@@ -2394,7 +2393,7 @@ struct DynExtractSliceOpConversion : public ConvertToLLVMPattern {
         auto adjustedIndex =
             rewriter.create<LLVM::AddOp>(op->getLoc(), indexC, zextStart);
         auto gep = rewriter.create<LLVM::GEPOp>(
-            op->getLoc(), elemTy.getPointerTo(), targetPtr,
+            op->getLoc(), LLVM::LLVMPointerType::get(elemTy), targetPtr,
             ArrayRef<Value>({zeroC, adjustedIndex}));
         auto extract = arrayBoundaryCheck(op->getLoc(), rewriter, llvmArrTy,
                                           targetPtr, gep);
@@ -2434,7 +2433,7 @@ struct ExtractElementOpConversion : public ConvertToLLVMPattern {
     }
 
     if (auto sigTy = extOp.target().getType().dyn_cast<SigType>()) {
-      auto i32Ty = LLVM::LLVMType::getInt32Ty(rewriter.getContext());
+      auto i32Ty = IntegerType::get(rewriter.getContext(), 32);
 
       auto sigDetail =
           getSignalDetail(rewriter, &getDialect(), op->getLoc(),
@@ -2445,17 +2444,15 @@ struct ExtractElementOpConversion : public ConvertToLLVMPattern {
 
       Value adjusted;
       if (auto arrTy = sigTy.getUnderlyingType().dyn_cast<ArrayType>()) {
-        auto llvmArrTy =
-            typeConverter->convertType(arrTy).cast<LLVM::LLVMType>();
+        auto llvmArrTy = typeConverter->convertType(arrTy);
         adjusted = shiftArraySigPointer(op->getLoc(), rewriter, llvmArrTy,
                                         sigDetail[0], indexC);
       } else {
         auto llvmStructTy =
-            typeConverter->convertType(sigTy.getUnderlyingType())
-                .cast<LLVM::LLVMType>();
+            typeConverter->convertType(sigTy.getUnderlyingType());
         auto index = extOp.indexAttr().getInt();
-        auto elemPtrTy =
-            llvmStructTy.getStructElementType(index).getPointerTo();
+        auto elemPtrTy = LLVM::LLVMPointerType::get(
+            llvmStructTy.cast<LLVM::LLVMStructType>().getBody()[index]);
         adjusted =
             shiftStructuredSigPointer(op->getLoc(), rewriter, llvmStructTy,
                                       elemPtrTy, sigDetail[0], indexC);
@@ -2487,24 +2484,22 @@ struct DynExtractElementOpConversion : public ConvertToLLVMPattern {
     DynExtractElementOpAdaptor transformed(operands);
 
     if (extOp.target().getType().isa<ArrayType, TupleType>()) {
-      auto elemTy = typeConverter->convertType(extOp.getResult().getType())
-                        .cast<LLVM::LLVMType>();
+      auto elemTy = typeConverter->convertType(extOp.getResult().getType());
 
       auto zeroC = rewriter.create<LLVM::ConstantOp>(
-          op->getLoc(), LLVM::LLVMType::getInt32Ty(rewriter.getContext()),
+          op->getLoc(), IntegerType::get(rewriter.getContext(), 32),
           rewriter.getI32IntegerAttr(0));
       auto oneC = rewriter.create<LLVM::ConstantOp>(
-          op->getLoc(), LLVM::LLVMType::getInt32Ty(rewriter.getContext()),
+          op->getLoc(), IntegerType::get(rewriter.getContext(), 32),
           rewriter.getI32IntegerAttr(1));
       auto arrPtr = rewriter.create<LLVM::AllocaOp>(
           op->getLoc(),
-          transformed.target().getType().cast<LLVM::LLVMType>().getPointerTo(),
-          oneC, 4);
+          LLVM::LLVMPointerType::get(transformed.target().getType()), oneC, 4);
       rewriter.create<LLVM::StoreOp>(op->getLoc(), transformed.target(),
                                      arrPtr);
       auto zextIndex = zextByOne(op->getLoc(), rewriter, transformed.index());
       auto gep = rewriter.create<LLVM::GEPOp>(
-          op->getLoc(), elemTy.getPointerTo(), arrPtr,
+          op->getLoc(), LLVM::LLVMPointerType::get(elemTy), arrPtr,
           ArrayRef<Value>({zeroC, zextIndex}));
       rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, elemTy, gep);
 
@@ -2512,8 +2507,7 @@ struct DynExtractElementOpConversion : public ConvertToLLVMPattern {
     }
     if (auto sigTy = extOp.target().getType().dyn_cast<SigType>()) {
       if (auto arrTy = sigTy.getUnderlyingType().dyn_cast<ArrayType>()) {
-        auto llvmArrTy =
-            typeConverter->convertType(arrTy).cast<LLVM::LLVMType>();
+        auto llvmArrTy = typeConverter->convertType(arrTy);
 
         auto sigDetail =
             getSignalDetail(rewriter, &getDialect(), op->getLoc(),
@@ -2563,8 +2557,8 @@ struct InsertSliceOpConversion : public ConvertToLLVMPattern {
           op->getLoc(), rewriter, transformed.target().getType(), startConst);
 
       // Generate a mask to set the affected bits.
-      auto width = getStdOrLLVMIntegerWidth(inssOp.target().getType());
-      auto sliceWidth = getStdOrLLVMIntegerWidth(inssOp.slice().getType());
+      auto width = inssOp.target().getType().getIntOrFloatBitWidth();
+      auto sliceWidth = inssOp.slice().getType().getIntOrFloatBitWidth();
       unsigned start = inssOp.startAttr().getInt();
       unsigned end = start + sliceWidth;
       APInt mask(width, 0);
@@ -2602,11 +2596,13 @@ struct InsertSliceOpConversion : public ConvertToLLVMPattern {
     if (auto arrTy = inssOp.result().getType().dyn_cast<ArrayType>()) {
       auto elemTy = typeConverter->convertType(arrTy.getElementType());
       auto llvmArrTy = typeConverter->convertType(arrTy);
-      auto llvmSliceTy = transformed.slice().getType().cast<LLVM::LLVMType>();
+      auto llvmSliceTy = transformed.slice().getType();
       size_t startIndex = inssOp.startAttr().getInt();
 
       Value insert = transformed.target();
-      for (size_t i = 0, e = llvmSliceTy.getArrayNumElements(); i < e; ++i) {
+      for (size_t i = 0,
+                  e = llvmSliceTy.cast<LLVM::LLVMArrayType>().getNumElements();
+           i < e; ++i) {
         auto extract = rewriter.create<LLVM::ExtractValueOp>(
             op->getLoc(), elemTy, transformed.slice(),
             rewriter.getI32ArrayAttr(i));
@@ -2662,13 +2658,12 @@ struct VarOpConversion : ConvertToLLVMPattern {
                   ConversionPatternRewriter &rewriter) const override {
     VarOpAdaptor transformed(operands);
 
-    auto i32Ty = LLVM::LLVMType::getInt32Ty(rewriter.getContext());
+    auto i32Ty = IntegerType::get(rewriter.getContext(), 32);
 
     auto oneC = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(1));
     auto alloca = rewriter.create<LLVM::AllocaOp>(
-        op->getLoc(),
-        transformed.init().getType().cast<LLVM::LLVMType>().getPointerTo(),
+        op->getLoc(), LLVM::LLVMPointerType::get(transformed.init().getType()),
         oneC, 4);
     rewriter.create<LLVM::StoreOp>(op->getLoc(), transformed.init(), alloca);
     rewriter.replaceOp(op, alloca.getResult());

@@ -1170,20 +1170,36 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result,
       parseToken(FIRToken::r_paren, "expected ')' in integer expression"))
     return failure();
 
+  if (width == 0)
+    return emitError(loc, "zero bit constants are not allowed"), failure();
+
   // Construct an integer attribute of the right width.
   auto type = IntType::get(builder.getContext(), isSigned, width);
 
-  // TODO: check to see if this extension stuff is necessary.  We should at
-  // least warn for things like UInt<4>(255).
   IntegerType::SignednessSemantics signedness;
   if (type.isSigned()) {
     signedness = IntegerType::Signed;
-    if (width != -1)
+    if (width != -1) {
+      // Check for overlow if we are truncating bits.
+      if (unsigned(width) < value.getBitWidth() &&
+          value.getNumSignBits() <= value.getBitWidth() - width) {
+        return emitError(loc, "initializer too wide for declared width"),
+               failure();
+      }
+
       value = value.sextOrTrunc(width);
+    }
   } else {
     signedness = IntegerType::Unsigned;
-    if (width != -1)
+    if (width != -1) {
+      // Check for overlow if we are truncating bits.
+      if (unsigned(width) < value.getBitWidth() &&
+          value.countLeadingZeros() < value.getBitWidth() - width) {
+        return emitError(loc, "initializer too wide for declared width"),
+               failure();
+      }
       value = value.zextOrTrunc(width);
+    }
   }
 
   Type attrType =
@@ -2103,6 +2119,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
       parseType(type, "expected reg type") ||
       parseExp(clock, subOps, "expected expression for register clock"))
     return failure();
+  clock = convertToPassive(clock, clock.getLoc());
 
   // Parse the 'with' specifier if present.
   Value resetSignal, resetValue;
@@ -2128,6 +2145,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
         parseToken(FIRToken::l_paren, "expected '(' in reset specifier") ||
         parseExp(resetSignal, subOps, "expected expression for reset signal"))
       return failure();
+    resetSignal = convertToPassive(resetSignal, resetSignal.getLoc());
 
     // The Scala implementation of FIRRTL represents registers without resets
     // as a self referential register... and the pretty printer doesn't print
@@ -2145,6 +2163,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
           parseToken(FIRToken::r_paren, "expected ')' in reset specifier") ||
           parseOptionalInfo(info, subOps))
         return failure();
+      resetValue = convertToPassive(resetValue, resetValue.getLoc());
     }
 
     if (hasExtraLParen &&
@@ -2329,8 +2348,8 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
       builder.create<FExtModuleOp>(info.getLoc(), name, portList, defName);
 
   if (!parameters.empty())
-    fmodule.setAttr("parameters",
-                    DictionaryAttr::get(parameters, getContext()));
+    fmodule->setAttr("parameters",
+                     DictionaryAttr::get(parameters, getContext()));
 
   return success();
 }

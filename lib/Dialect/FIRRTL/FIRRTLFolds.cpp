@@ -1,4 +1,4 @@
-//===- OpFolds.cpp - Implement folds and canonicalizations for ops --------===//
+//===- FIRRTLFolds.cpp - Implement folds and canonicalizations for ops ----===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -50,6 +50,10 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
   return valueAttr();
 }
 
+//===----------------------------------------------------------------------===//
+// Binary Operators
+//===----------------------------------------------------------------------===//
+
 OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
 
@@ -58,7 +62,7 @@ OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
   /// Division by zero is undefined in the FIRRTL specification. This
   /// fold exploits that fact to optimize self division to one.
   if (lhs() == rhs()) {
-    auto width = getType().cast<IntType>().getWidthOrSentinel();
+    auto width = getType().getWidthOrSentinel();
     if (width == -1)
       width = 2;
     return IntegerAttr::get(IntegerType::get(getContext(), width), 1);
@@ -129,7 +133,7 @@ OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
 
   /// xor(x, x) -> 0
   if (lhs() == rhs()) {
-    auto width = getType().cast<IntType>().getWidthOrSentinel();
+    auto width = getType().getWidthOrSentinel();
     if (width == -1)
       width = 1;
     auto type = IntegerType::get(getContext(), width);
@@ -190,6 +194,26 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
+//===----------------------------------------------------------------------===//
+// Unary Operators
+//===----------------------------------------------------------------------===//
+
+OpFoldResult AsSIntPrimOp::fold(ArrayRef<Attribute> operands) {
+  if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+    return getIntAttr(attr.getValue(), getContext());
+  return {};
+}
+
+OpFoldResult AsUIntPrimOp::fold(ArrayRef<Attribute> operands) {
+  if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+    return getIntAttr(attr.getValue(), getContext());
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// Other Operators
+//===----------------------------------------------------------------------===//
+
 void CatPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                             MLIRContext *context) {
   struct Folder final : public OpRewritePattern<CatPrimOp> {
@@ -229,7 +253,8 @@ OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
   if (inputType.cast<IntType>().hasWidth() &&
       matchPattern(input(), m_FConstant(value)))
-    return getIntAttr(value.lshr(lo()).trunc(hi() - lo() + 1), getContext());
+    return getIntAttr(value.lshr(lo()).truncOrSelf(hi() - lo() + 1),
+                      getContext());
 
   return {};
 }
@@ -261,17 +286,19 @@ void BitsPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 /// Replace the specified operation with a 'bits' op from the specified hi/lo
 /// bits.  Insert a cast to handle the case where the original operation
 /// returned a signed integer.
-static void replaceWithBits(Operation *op, Value input, unsigned hiBit,
+static void replaceWithBits(Operation *op, Value value, unsigned hiBit,
                             unsigned loBit, PatternRewriter &rewriter) {
-  auto resultType = op->getResult(0).getType();
-  if (resultType == input.getType()) {
-    rewriter.replaceOp(op, input);
-  } else if (resultType.cast<IntType>().isUnsigned()) {
-    rewriter.replaceOpWithNewOp<BitsPrimOp>(op, input, hiBit, loBit);
-  } else {
-    auto bits = rewriter.create<BitsPrimOp>(op->getLoc(), input, hiBit, loBit);
-    rewriter.replaceOpWithNewOp<AsSIntPrimOp>(op, resultType, bits);
+  auto resType = op->getResult(0).getType().cast<IntType>();
+  if (value.getType().cast<IntType>().getWidth() != resType.getWidth())
+    value = rewriter.create<BitsPrimOp>(op->getLoc(), value, hiBit, loBit);
+
+  if (resType.isSigned() && !value.getType().cast<IntType>().isSigned()) {
+    value = rewriter.createOrFold<AsSIntPrimOp>(op->getLoc(), resType, value);
+  } else if (resType.isUnsigned() &&
+             !value.getType().cast<IntType>().isUnsigned()) {
+    value = rewriter.createOrFold<AsUIntPrimOp>(op->getLoc(), resType, value);
   }
+  rewriter.replaceOp(op, value);
 }
 
 void HeadPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
@@ -288,8 +315,9 @@ void HeadPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
       // If we know the input width, we can canonicalize this into a BitsPrimOp.
       unsigned keepAmount = op.amount();
-      replaceWithBits(op, op.input(), inputWidth - 1, inputWidth - keepAmount,
-                      rewriter);
+      if (keepAmount)
+        replaceWithBits(op, op.input(), inputWidth - 1, inputWidth - keepAmount,
+                        rewriter);
       return success();
     }
   };
@@ -349,7 +377,7 @@ OpFoldResult PadPrimOp::fold(ArrayRef<Attribute> operands) {
   // Constant fold.
   APInt value;
   if (matchPattern(input, m_FConstant(value))) {
-    auto destWidth = getType().cast<IntType>().getWidthOrSentinel();
+    auto destWidth = getType().getWidthOrSentinel();
     if (destWidth == -1)
       return {};
 
@@ -430,7 +458,7 @@ void ShrPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       unsigned shiftAmount = op.amount();
       if (int(shiftAmount) >= inputWidth) {
         // shift(x, 32) => 0 when x has 32 bits.  This is handled by fold().
-        if (op.getType().cast<IntType>().isUnsigned())
+        if (op.getType().isUnsigned())
           return failure();
 
         // Shifting a signed value by the full width is actually taking the sign
@@ -462,7 +490,9 @@ void TailPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       // If we know the input width, we can canonicalize this into a
       // BitsPrimOp.
       unsigned dropAmount = op.amount();
-      replaceWithBits(op, op.input(), inputWidth - dropAmount - 1, 0, rewriter);
+      if (dropAmount != inputWidth)
+        replaceWithBits(op, op.input(), inputWidth - dropAmount - 1, 0,
+                        rewriter);
       return success();
     }
   };

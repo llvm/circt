@@ -14,43 +14,68 @@
 // FIRRTL Types Definitions
 //===----------------------------------------------------------------------===//
 
-def FIRRTLType : Type<CPred<"$_self.isa<FIRRTLType>()">, "FIRRTLType">;
+def FIRRTLType : Type<CPred<"$_self.isa<FIRRTLType>()">, "FIRRTLType",
+                            "::circt::firrtl::FIRRTLType">;
 
-def ClockType : Type<CPred<"$_self.isa<ClockType>()">, "clock">,
+def ClockType : Type<CPred<"$_self.isa<ClockType>()">, "clock",
+                           "::circt::firrtl::ClockType">,
                 BuildableType<"ClockType::get($_builder.getContext())">;
 
-def IntType : Type<CPred<"$_self.isa<IntType>()">, "sint or uint type">;
-def SIntType : Type<CPred<"$_self.isa<SIntType>()">, "sint type">;
-def UIntType : Type<CPred<"$_self.isa<UIntType>()">, "uint type">;
-def AnalogType : Type<CPred<"$_self.isa<AnalogType>()">, "analog type">;
+def IntType : Type<CPred<"$_self.isa<IntType>()">, "sint or uint type",
+                         "::circt::firrtl::IntType">;
+def SIntType : Type<CPred<"$_self.isa<SIntType>()">, "sint type",
+                          "::circt::firrtl::SIntType">;
+def UIntType : Type<CPred<"$_self.isa<UIntType>()">, "uint type",
+                          "::circt::firrtl::UIntType">;
+def AnalogType : Type<CPred<"$_self.isa<AnalogType>()">, "analog type",
+                            "::circt::firrtl::AnalogType">;
+
+def BundleType : Type<CPred<"$_self.isa<BundleType>()">, "BundleType",
+                            "::circt::firrtl::BundleType">;
+
+def FVectorType : Type<CPred<"$_self.isa<FVectorType>()">, "FVectorType",
+                                 "::circt::firrtl::FVectorType">;
 
 def UInt1Type : Type<CPred<"$_self.isa<UIntType>() && "
                            "$_self.cast<UIntType>().getWidth() == 1">,
-                           "UInt<1>">,
+                           "UInt<1>", "::circt::firrtl::UIntType">,
                 BuildableType<"UIntType::get($_builder.getContext(), 1)">;
+
+def AsyncResetType : Type<CPred<"$_self.isa<AsyncResetType>()">, "AsyncReset",
+                          "::circt::firrtl::AsyncResetType">;
+
+def PassiveType : Type<CPred<"$_self.isa<FIRRTLType>() && "
+                             "$_self.cast<FIRRTLType>().isPassive()">,
+                       "a passive type (contain no flips)",
+                       "::circt::firrtl::FIRRTLType">;
+
+//===----------------------------------------------------------------------===//
+// FIRRTL Types Predicates
+//===----------------------------------------------------------------------===//
 
 def OneBitType : Type<CPred<"($_self.isa<IntType>() && "
                             "$_self.cast<IntType>().getWidth() == 1) ||"
                             "($_self.isa<AnalogType>() && "
                             "$_self.cast<AnalogType>().getWidth() == 1)">,
-                            "UInt<1>, SInt<1>, or Analog<1>">;
+                            "UInt<1>, SInt<1>, or Analog<1>",
+                            "::circt::firrtl::FIRRTLType">;
 
-def AsyncResetType : Type<CPred<"$_self.isa<AsyncResetType>()">, "AsyncReset">;
+def NonZeroIntType : Type<CPred<"$_self.isa<IntType>() && "
+                          "$_self.cast<IntType>().getWidth() != 0">,
+                          "Int", "::circt::firrtl::IntType">;
 
 def ResetType : Type<CPred<"$_self.isa<FIRRTLType>() && "
                            "$_self.cast<FIRRTLType>().isResetType()">,
-                    "Reset, AsyncReset, or UInt<1>">;
-
-def PassiveType : Type<CPred<"$_self.isa<FIRRTLType>() && "
-                             "$_self.cast<FIRRTLType>().isPassive()">,
-                       "a passive type (contain no flips)">;
+                    "Reset", "::circt::firrtl::FIRRTLType">;
 
 def UIntSIntClockType : AnyTypeOf<[SIntType, UIntType, ClockType],
-                                  "sint, uint, or clock">;
+                                  "sint, uint, or clock",
+                                  "::circt::firrtl::FIRRTLType">;
 
 def OneBitCastableType : AnyTypeOf<
   [OneBitType, ResetType, AsyncResetType, ClockType],
-  "1-bit uint/sint/analog, reset, asyncreset, or clock">;
+  "1-bit uint/sint/analog, reset, asyncreset, or clock",
+                                  "::circt::firrtl::FIRRTLType">;
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Enum Definitions

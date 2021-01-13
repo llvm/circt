@@ -20,7 +20,8 @@ class RTLType<string name> : TypeDef<RTLDialect, name> { }
 // Type constraint that indicates that an operand/result may only be a valid,
 // known, non-directional type.
 def RTLIntegerType : Type<CPred<"isRTLIntegerType($_self)">,
-                                "an integer bitvector of one or more bits">;
+                          "an integer bitvector of one or more bits",
+                          "::mlir::IntegerType">;
 
 // Type constraint that indicates that an operand/result may only be a valid,
 // known, non-directional type.
@@ -134,7 +135,7 @@ def StructType : RTLType<"Struct"> {
 def InOutArrayType
   : Type<CPred<"getAnyRTLArrayElementType(getInOutElementType($_self)) "
                         "!= Type()">,
-               "an inout type with array element">;
+         "an inout type with array element", "::circt::rtl::InOutType">;
 
 // This type constraint is used by operations whose asm strings have a type "T"
 // in the asmstring, which constraints an input or output to type `T`, and then

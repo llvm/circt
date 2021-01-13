@@ -16,7 +16,7 @@ module {
     %r17: i1, %r18: i1, %r19: i1, %r20: i1,
     %r21: i1, %r22: i1, %r23: i1, %r24: i1,
     %r25: i1, %r26: i1, %r27: i1, %r28: i1,
-    %r29: i12, %r30: i2, %r31: i9, %r32: i9, %r33: i4, %r34: i4,
+    %r29: i12, %r30: i2, %r31: i9, %r33: i4, %r34: i4,
     %r35: !rtl.array<3xi4>, %r36: i12
     ) {
     
@@ -49,7 +49,6 @@ module {
     %29 = rtl.concat %a, %a, %b : (i4, i4, i4) -> i12
     %30 = rtl.extract %a from 1 : (i4) -> i2
     %31 = rtl.sext %a : (i4) -> i9
-    %32 = rtl.zext %a : (i4) -> i9
     %33 = rtl.mux %cond, %a, %b : i4
 
     %allone = rtl.constant (15 : i4) : i4
@@ -61,23 +60,23 @@ module {
 
     rtl.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14,
                %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27,
-               %28, %29, %30, %31, %32, %33, %34, %35, %36 :
+               %28, %29, %30, %31, %33, %34, %35, %36 :
      i4,i4, i4,i4,i4,i4,i4, i4,i4,i4,i4,i4,
      i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,i1,i1,
-     i12, i2,i9,i9,i4, i4, !rtl.array<3xi4>, i12
+     i12, i2,i9,i4, i4, !rtl.array<3xi4>, i12
   }
   // CHECK-LABEL: module TESTSIMPLE(
   // CHECK-NEXT:   input  [3:0]      a, b
   // CHECK-NEXT:   input             cond,
-  // CHECK-NEXT:   input  [3:0][9:0] array,
+  // CHECK-NEXT:   input  [9:0][3:0] array,
   // CHECK-NEXT:   input  [7:0]      uarray[15:0],
   // CHECK-NEXT:   output [3:0]      r0, r2, r4, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15
   // CHECK-NEXT:   output            r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28
   // CHECK-NEXT:   output [11:0]     r29,
   // CHECK-NEXT:   output [1:0]      r30,
-  // CHECK-NEXT:   output [8:0]      r31, r32,
+  // CHECK-NEXT:   output [8:0]      r31,
   // CHECK-NEXT:   output [3:0]      r33, r34,
-  // CHECK-NEXT:   output [3:0][2:0] r35,
+  // CHECK-NEXT:   output [2:0][3:0] r35,
   // CHECK-NEXT:   output [11:0]     r36);
   // CHECK-EMPTY:
   // CHECK-NEXT:   assign r0 = a + b;
@@ -109,7 +108,6 @@ module {
   // CHECK-NEXT:   assign r29 = {a, a, b};
   // CHECK-NEXT:   assign r30 = a[2:1]; 
   // CHECK-NEXT:   assign r31 = {{[{}][{}]}}5{a[3]}}, a};
-  // CHECK-NEXT:   assign r32 = {5'd0, a};
   // CHECK-NEXT:   assign r33 = cond ? a : b;
   // CHECK-NEXT:   assign r34 = ~a;
   // CHECK-NEXT:   assign r35 = array[a+:3];
@@ -163,7 +161,7 @@ module {
     %w2 = rtl.instance "a1" @AAA(%w, %w1) : (i1, i1) -> (i1)
     %w1, %y = rtl.instance "b1" @B(%w2) : (i1) -> (i1, i1)
 
-    %p = rtl.instance "paramd" @EXT_W_PARAMS(%w) {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1) -> i1
+    %p = rtl.instance "paramd" @EXT_W_PARAMS(%w) {parameters = {DEFAULT = 14000240888948784983 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1) -> i1
 
     %p2 = rtl.instance "paramd2" @EXT_W_PARAMS2(%i2) {parameters = {DEFAULT = 1 : i64}} : (i2) -> i1
 
@@ -190,11 +188,11 @@ module {
   // CHECK-NEXT:     .b (b1_b),
   // CHECK-NEXT:     .c (b1_c)
   // CHECK-NEXT:   )
-  // CHECK-NEXT:   FooModule #(.DEFAULT(0), .DEPTH(3.242000e+01), .FORMAT("xyz_timeout=%d\n"), .WIDTH(32)) paramd (
+  // CHECK-NEXT:   FooModule #(.DEFAULT(64'd14000240888948784983), .DEPTH(3.242000e+01), .FORMAT("xyz_timeout=%d\n"), .WIDTH(8'd32)) paramd (
   // CHECK-NEXT:     .a (w),
   // CHECK-NEXT:     .out (paramd_out)
   // CHECK-NEXT:   );
-  // CHECK-NEXT:   FooModule #(.DEFAULT(1)) paramd2 (
+  // CHECK-NEXT:   FooModule #(.DEFAULT(64'd1)) paramd2 (
   // CHECK-NEXT:   .a (i2),
   // CHECK-NEXT:   .out (paramd2_out)
   // CHECK-NEXT:   );
@@ -269,9 +267,9 @@ module {
  
     // Packed arrays.
 
-    // CHECK-NEXT: wire [7:0][41:0]      myArray1;
+    // CHECK-NEXT: wire [41:0][7:0]      myArray1;
     %myArray1 = rtl.wire : !rtl.inout<array<42 x i8>>
-    // CHECK-NEXT: wire [3:0][41:0][2:0] myWireArray2;
+    // CHECK-NEXT: wire [2:0][41:0][3:0] myWireArray2;
     %myWireArray2 = rtl.wire : !rtl.inout<array<3 x array<42 x i4>>>
 
     // Unpacked arrays, and unpacked arrays of packed arrays.
@@ -279,7 +277,7 @@ module {
     // CHECK-NEXT: wire [7:0]            myUArray1[41:0];
     %myUArray1 = rtl.wire : !rtl.inout<uarray<42 x i8>>
 
-    // CHECK-NEXT: wire [3:0][41:0]      myWireUArray2[2:0];
+    // CHECK-NEXT: wire [41:0][3:0]      myWireUArray2[2:0];
     %myWireUArray2 = rtl.wire : !rtl.inout<uarray<3 x array<42 x i4>>>
 
     // CHECK-EMPTY:
@@ -361,10 +359,10 @@ module {
   // CHECK-LABEL: module TestZero(
   // CHECK-NEXT:      input  [3:0]               a,
   // CHECK-NEXT:   // input  /*Zero Width*/      zeroBit,
-  // CHECK-NEXT:   // input  /*Zero Width*/[2:0] arrZero,
+  // CHECK-NEXT:   // input  [2:0]/*Zero Width*/ arrZero,
   // CHECK-NEXT:      output [3:0]               r0,
   // CHECK-NEXT:   // output /*Zero Width*/      rZero,
-  // CHECK-NEXT:   // output /*Zero Width*/[2:0] arrZero
+  // CHECK-NEXT:   // output [2:0]/*Zero Width*/ arrZero
   // CHECK-NEXT:    );
   // CHECK-EMPTY:
   rtl.module @TestZero(%a: i4, %zeroBit: i0, %arrZero: !rtl.array<3xi0>)

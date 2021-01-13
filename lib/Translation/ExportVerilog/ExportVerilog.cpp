@@ -104,7 +104,6 @@ static size_t emitTypeDims(Type type, Location loc, raw_ostream &os) {
   size_t emittedWidth = 0;
   int width;
   if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
-    emittedWidth += emitTypeDims(arrayType.getElementType(), loc, os);
     width = arrayType.getSize();
   } else {
     width = getBitWidthOrSentinel(type);
@@ -127,6 +126,9 @@ static size_t emitTypeDims(Type type, Location loc, raw_ostream &os) {
     os << '[' << (width - 1) << ":0]";
     emittedWidth += getPrintedIntWidth(width - 1) + 4;
     break;
+  }
+  if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
+    emittedWidth += emitTypeDims(arrayType.getElementType(), loc, os);
   }
   return emittedWidth;
 }
@@ -683,7 +685,6 @@ private:
   SubExprInfo visitComb(XorROp op) { return emitUnary(op, "^", true); }
 
   SubExprInfo visitComb(SExtOp op);
-  SubExprInfo visitComb(ZExtOp op);
   SubExprInfo visitComb(ConcatOp op);
   SubExprInfo visitComb(ExtractOp op);
   SubExprInfo visitComb(ICmpOp op);
@@ -848,22 +849,9 @@ SubExprInfo ExprEmitter::visitComb(SExtOp op) {
   }
 
   // Otherwise, this is a sign extension of a general expression.
-  // TODO(QoI): Instead of emitting the expression multiple times, we should
-  // emit it to a known name.
   os << "{{" << (destWidth - inWidth) << '{';
   emitSubExpr(op.getOperand(), Unary);
   os << '[' << (inWidth - 1) << "]}}, ";
-  emitSubExpr(op.getOperand(), LowestPrecedence);
-  os << '}';
-  return {Unary, IsUnsigned};
-}
-
-SubExprInfo ExprEmitter::visitComb(ZExtOp op) {
-  auto inWidth = op.getOperand().getType().getIntOrFloatBitWidth();
-  auto destWidth = op.getType().getIntOrFloatBitWidth();
-
-  // A zero extension just fills the top with numbers.
-  os << '{' << (destWidth - inWidth) << "'d0, ";
   emitSubExpr(op.getOperand(), LowestPrecedence);
   os << '}';
   return {Unary, IsUnsigned};
@@ -918,7 +906,7 @@ SubExprInfo ExprEmitter::visitComb(ICmpOp op) {
 
 SubExprInfo ExprEmitter::visitComb(ExtractOp op) {
   unsigned loBit = op.lowBit();
-  unsigned hiBit = loBit + op.getType().cast<IntegerType>().getWidth() - 1;
+  unsigned hiBit = loBit + op.getType().getWidth() - 1;
 
   auto x = emitSubExpr(op.input(), LowestPrecedence);
   assert(x.precedence == Symbol &&
@@ -962,7 +950,7 @@ SubExprInfo ExprEmitter::visitComb(ConstantOp op) {
     isNegated = true;
   }
 
-  os << op.getType().cast<IntegerType>().getWidth() << '\'';
+  os << op.getType().getWidth() << '\'';
 
   // Emit this as a signed constant if the caller would prefer that.
   if (signPreference == RequireSigned)
@@ -985,7 +973,7 @@ SubExprInfo ExprEmitter::visitComb(ConstantOp op) {
 SubExprInfo ExprEmitter::visitComb(ArraySliceOp op) {
   auto arrayPrec = emitSubExpr(op.input(), Symbol);
 
-  unsigned dstWidth = op.getType().cast<ArrayType>().getSize();
+  unsigned dstWidth = op.getType().getSize();
   os << '[';
   emitSubExpr(op.lowIndex(), LowestPrecedence);
   os << "+:" << dstWidth << ']';
@@ -1140,7 +1128,7 @@ LogicalResult ModuleEmitter::visitStmt(OutputOp op) {
   SmallPtrSet<Operation *, 8> ops;
 
   SmallVector<ModulePortInfo, 8> ports;
-  RTLModuleOp parent = op.getParentOfType<RTLModuleOp>();
+  RTLModuleOp parent = op->getParentOfType<RTLModuleOp>();
   parent.getPortInfo(ports);
   size_t operandIndex = 0;
   for (ModulePortInfo port : ports) {
@@ -1467,7 +1455,10 @@ LogicalResult ModuleEmitter::visitStmt(InstanceOp op) {
   // Helper that prints a parameter constant value in a Verilog compatible way.
   auto printParmValue = [&](Attribute value) {
     if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
-      os << intAttr.getValue();
+      IntegerType intTy = intAttr.getType().cast<IntegerType>();
+      SmallString<20> numToPrint;
+      intAttr.getValue().toString(numToPrint, 10, intTy.isSigned());
+      os << intTy.getWidth() << "'d" << numToPrint;
     } else if (auto strAttr = value.dyn_cast<StringAttr>()) {
       os << '"';
       os.write_escaped(strAttr.getValue());
@@ -1679,8 +1670,6 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     if (auto interface = dyn_cast<InterfaceInstanceOp>(op))
       return interface.getInterfaceType().getInterface().getValue();
 
-    // Note: MemOp is handled as "wire" here because each of its subcomponents
-    // are wires.  The corresponding 'reg' decl is handled specially below.
     return "wire";
   };
 

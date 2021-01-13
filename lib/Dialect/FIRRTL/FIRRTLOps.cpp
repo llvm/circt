@@ -488,7 +488,7 @@ static LogicalResult verifyModuleSignature(Operation *op) {
 
 static LogicalResult verifyFModuleOp(FModuleOp op) {
   // The parent op must be a circuit op.
-  auto parentOp = dyn_cast_or_null<CircuitOp>(op.getParentOp());
+  auto parentOp = dyn_cast_or_null<CircuitOp>(op->getParentOp());
   if (!parentOp)
     return op.emitOpError("should be embedded into a 'firrtl.circuit'");
 
@@ -529,7 +529,7 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
 /// Lookup the module or extmodule for the symbol.  This returns null on
 /// invalid IR.
 Operation *InstanceOp::getReferencedModule() {
-  auto circuit = getParentOfType<CircuitOp>();
+  auto circuit = (*this)->getParentOfType<CircuitOp>();
   if (!circuit)
     return nullptr;
 
@@ -540,7 +540,7 @@ Operation *InstanceOp::getReferencedModule() {
 static LogicalResult verifyInstanceOp(InstanceOp instance) {
 
   // Check that this instance is inside a module.
-  auto module = instance.getParentOfType<FModuleOp>();
+  auto module = instance->getParentOfType<FModuleOp>();
   if (!module) {
     instance.emitOpError("should be embedded in a 'firrtl.module'");
     return failure();
@@ -701,11 +701,8 @@ static Optional<MemOp::PortKind> getMemPortKindFromType(FIRRTLType type) {
 /// Return the name and kind of ports supported by this memory.
 void MemOp::getPorts(
     SmallVectorImpl<std::pair<Identifier, MemOp::PortKind>> &result) {
-  // The type of a mem must be a bundle.
-  auto bundle = getType().cast<BundleType>();
-
   // Each entry in the bundle is a port.
-  for (auto elt : bundle.getElements()) {
+  for (auto elt : getType().getElements()) {
     // Each port is a bundle.
     auto kind = getMemPortKindFromType(elt.type);
     assert(kind.hasValue() && "unknown port type!");
@@ -715,8 +712,7 @@ void MemOp::getPorts(
 
 /// Return the kind of the specified port or None if the name is invalid.
 Optional<MemOp::PortKind> MemOp::getPortKind(StringRef portName) {
-  // The type of a mem must be a bundle.
-  auto eltType = getType().cast<BundleType>().getElementType(portName);
+  auto eltType = getType().getElementType(portName);
   if (!eltType)
     return None;
   return getMemPortKindFromType(eltType);
@@ -724,15 +720,11 @@ Optional<MemOp::PortKind> MemOp::getPortKind(StringRef portName) {
 
 /// Return the data-type field of the memory, the type of each element.
 FIRRTLType MemOp::getDataTypeOrNull() {
-  // The outer level of a mem is a bundle, containing the input and output
-  // ports.
-  auto bundle = getType().cast<BundleType>();
-
   // Mems with no read/write ports are legal.
-  if (bundle.getElements().empty())
+  if (getType().getElements().empty())
     return {};
 
-  auto firstPort = bundle.getElements()[0];
+  auto firstPort = getType().getElements()[0];
   auto firstPortType = firstPort.type.getPassiveType().cast<BundleType>();
   return firstPortType.getElementType("data");
 }
@@ -1323,9 +1315,9 @@ void BitsPrimOp::build(OpBuilder &builder, OperationState &result, Value input,
 FIRRTLType HeadPrimOp::getResultType(FIRRTLType input, int32_t amount,
                                      Location loc) {
   auto inputi = input.dyn_cast<IntType>();
-  if (amount <= 0 || !inputi) {
+  if (amount < 0 || !inputi) {
     mlir::emitError(loc,
-                    "operand must have integer type and amount must be >= 1");
+                    "operand must have integer type and amount must be >= 0");
     return {};
   }
 
@@ -1433,10 +1425,8 @@ FIRRTLType TailPrimOp::getResultType(FIRRTLType input, int32_t amount,
 
   int32_t width = inputi.getWidthOrSentinel();
   if (width != -1) {
-    // TODO(firrtl-spec): zero bit integers are not allowed, so the amount
-    // cannot equal the width.
-    if (width <= amount) {
-      mlir::emitError(loc, "amount must be less than operand width");
+    if (width < amount) {
+      mlir::emitError(loc, "amount must be less than or equal operand width");
       return {};
     }
     width -= amount;

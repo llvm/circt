@@ -135,7 +135,7 @@ struct ConvertRTLModule : public OpConversionPattern<RTLModuleOp> {
     auto entityType =
         rewriter.getFunctionType(argConversion.getConvertedTypes(), {});
     rewriter.updateRootInPlace(entity, [&] {
-      entity.setAttr(entity.getTypeAttrName(), TypeAttr::get(entityType));
+      entity->setAttr(entity.getTypeAttrName(), TypeAttr::get(entityType));
       entity.setName(module.getName());
     });
 
@@ -159,7 +159,7 @@ struct ConvertOutput : public OpConversionPattern<OutputOp> {
     auto delta = rewriter.create<ConstOp>(output.getLoc(), timeType, deltaAttr);
 
     // Get the number of inputs in the entity to offset into the block args.
-    auto entity = output.getParentOfType<EntityOp>();
+    auto entity = output->getParentOfType<EntityOp>();
     size_t numInputs = entity.ins();
 
     // Drive the results from the mapped operands.

@@ -642,11 +642,11 @@ circuit inputs_only :
     output b: UInt<12>
     node _T_1 = add(a, a)                 @[Place.scala 101:13]
     node _T_2 = add(_T_1, UInt<4>("h3"))  @[Other.scala 51:15]
-    b <= xor(_T_2, UInt<4>("h11"))        @[Place.scala 101:15]
+    b <= xor(_T_2, UInt<4>("h1"))        @[Place.scala 101:15]
 
     node _T_3 = mul(a, a)                 @[A.scala 11:13]
     node _T_4 = mul(_T_3, UInt<4>("h2"))  @[A.scala 51:15]
-    b <= xor(_T_4, UInt<4>("h10"))        @[A.scala 101:15]
+    b <= xor(_T_4, UInt<4>("h0"))        @[A.scala 101:15]
 
 
 ; CHECK: assign b = a + a + 4'h3 ^ 4'h1;

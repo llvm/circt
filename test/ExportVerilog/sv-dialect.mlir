@@ -123,7 +123,7 @@ rtl.module @reg(%in4: i4, %in8: i8) -> (%a: i8, %b: i8) {
     // CHECK-NEXT: reg [7:0]       myReg;
     %myReg = sv.reg : !rtl.inout<i8>
 
-    // CHECK-NEXT: reg [7:0][41:0] myRegArray1;
+    // CHECK-NEXT: reg [41:0][7:0] myRegArray1;
     %myRegArray1 = sv.reg : !rtl.inout<array<42 x i8>>
 
     // CHECK-EMPTY:
