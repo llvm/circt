@@ -221,7 +221,8 @@ def __main__(args):
     argparser.add_argument("source",
                            help="The source run spec file")
     argparser.add_argument("addlArgs", nargs=argparse.REMAINDER,
-                           help="The source run spec file")
+                           help="Additional arguments to pass through to " +
+                           "'circt-rtl-sim.py'")
 
     if len(args) <= 1:
         argparser.print_help()
