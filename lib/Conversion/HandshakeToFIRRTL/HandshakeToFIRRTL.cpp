@@ -325,8 +325,8 @@ static void createMergeArgReady(ArrayRef<Value> outputs, Value fired,
 
 static void extractValues(ArrayRef<ValueVector *> valueVectors, size_t index,
                           SmallVectorImpl<Value> &result) {
-  for (size_t i = 0; i < valueVectors.size(); ++i)
-    result.push_back((*valueVectors[i])[index]);
+  for (auto *elt : valueVectors)
+    result.push_back((*elt)[index]);
 }
 
 //===----------------------------------------------------------------------===//
@@ -716,8 +716,7 @@ template <typename OpType>
 Value HandshakeBuilder::buildReductionTree(ArrayRef<Value> inputs,
                                            Value output) {
   size_t inputSize = inputs.size();
-  if (!inputSize)
-    return Value();
+  assert(inputSize && "must pass inputs to reduce");
 
   auto tmpValue = inputs[0];
 
