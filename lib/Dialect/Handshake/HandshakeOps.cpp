@@ -29,15 +29,91 @@ using namespace circt::handshake;
 #include "mlir/IR/IntegerSet.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Transforms/InliningUtils.h"
+#include "llvm/ADT/Any.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/Support/Debug.h"
+
+#define INDEX_WIDTH 32
 
 namespace circt {
 namespace handshake {
 #include "circt/Dialect/Handshake/HandshakeOps.inc"
 }
 } // namespace circt
+
+// Convert ValueRange to vectors
+std::vector<mlir::Value> toVector(mlir::ValueRange range) {
+  return std::vector<mlir::Value>(range.begin(), range.end());
+}
+
+// Returns whether the precondition holds for a general op to execute
+bool isReadyToExecute(ArrayRef<mlir::Value> ins, ArrayRef<mlir::Value> outs,
+                      llvm::DenseMap<mlir::Value, llvm::Any> &valueMap) {
+  for (auto in : ins)
+    if (valueMap.count(in) == 0)
+      return false;
+
+  for (auto out : outs)
+    if (valueMap.count(out) > 0)
+      return false;
+
+  return true;
+}
+
+// Fetch values from the value map and consume them
+std::vector<llvm::Any>
+fetchValues(ArrayRef<mlir::Value> values,
+            llvm::DenseMap<mlir::Value, llvm::Any> &valueMap) {
+  std::vector<llvm::Any> ins;
+  for (auto &value : values) {
+    assert(valueMap[value].hasValue());
+    ins.push_back(valueMap[value]);
+    valueMap.erase(value);
+  }
+  return ins;
+}
+
+// Store values to the value map
+void storeValues(std::vector<llvm::Any> &values, ArrayRef<mlir::Value> outs,
+                 llvm::DenseMap<mlir::Value, llvm::Any> &valueMap) {
+  assert(values.size() == outs.size());
+  for (unsigned long i = 0; i < outs.size(); ++i)
+    valueMap[outs[i]] = values[i];
+}
+
+// Update the time map after the execution
+void updateTime(ArrayRef<mlir::Value> ins, ArrayRef<mlir::Value> outs,
+                llvm::DenseMap<mlir::Value, double> &timeMap, double latency) {
+  double time = 0;
+  for (auto &in : ins)
+    time = std::max(time, timeMap[in]);
+  time += latency;
+  for (auto &out : outs)
+    timeMap[out] = time;
+}
+
+bool tryToExecute(Operation *op,
+                  llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+                  llvm::DenseMap<mlir::Value, double> &timeMap,
+                  std::vector<mlir::Value> &scheduleList, double latency) {
+  auto ins = toVector(op->getOperands());
+  auto outs = toVector(op->getResults());
+
+  if (isReadyToExecute(ins, outs, valueMap)) {
+    auto in = fetchValues(ins, valueMap);
+    std::vector<llvm::Any> out(outs.size());
+    auto generalOp = dyn_cast<handshake::GeneralOpInterface>(op);
+    if (!generalOp)
+      op->emitError("Undefined execution for the current op");
+    generalOp.execute(in, out);
+    storeValues(out, outs, valueMap);
+    updateTime(ins, outs, timeMap, latency);
+    scheduleList = outs;
+    return true;
+  } else
+    return false;
+}
 
 //===----------------------------------------------------------------------===//
 // HandshakeOpsDialect
@@ -68,9 +144,25 @@ void ForkOp::build(OpBuilder &builder, OperationState &result, Value operand,
   bool isControl = operand.getType().isa<NoneType>() ? true : false;
   result.addAttribute("control", builder.getBoolAttr(isControl));
 }
+
 void handshake::ForkOp::getCanonicalizationPatterns(
     OwningRewritePatternList &results, MLIRContext *context) {
   results.insert<circt::handshake::EliminateSimpleForksPattern>(context);
+}
+
+void handshake::ForkOp::execute(std::vector<llvm::Any> &ins,
+                                std::vector<llvm::Any> &outs) {
+  for (auto &out : outs)
+    out = ins[0];
+}
+
+bool handshake::ForkOp::tryExecute(
+    llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+    llvm::DenseMap<unsigned, unsigned> &memoryMap,
+    llvm::DenseMap<mlir::Value, double> &timeMap,
+    std::vector<std::vector<llvm::Any>> &store,
+    std::vector<mlir::Value> &scheduleList) {
+  return tryToExecute(getOperation(), valueMap, timeMap, scheduleList, 1);
 }
 
 void LazyForkOp::build(OpBuilder &builder, OperationState &result,
@@ -114,6 +206,34 @@ void MergeOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
   results.insert<circt::handshake::EliminateSimpleMergesPattern>(context);
 }
 
+bool handshake::MergeOp::tryExecute(
+    llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+    llvm::DenseMap<unsigned, unsigned> &memoryMap,
+    llvm::DenseMap<mlir::Value, double> &timeMap,
+    std::vector<std::vector<llvm::Any>> &store,
+    std::vector<mlir::Value> &scheduleList) {
+  auto op = getOperation();
+  bool found = false;
+  int i = 0;
+  for (mlir::Value in : op->getOperands()) {
+    if (valueMap.count(in) == 1) {
+      if (found)
+        op->emitError("More than one valid input to Merge!");
+      auto t = valueMap[in];
+      valueMap[op->getResult(0)] = t;
+      timeMap[op->getResult(0)] = timeMap[in];
+      // Consume the inputs.
+      valueMap.erase(in);
+      found = true;
+    }
+    i++;
+  }
+  if (!found)
+    op->emitError("No valid input to Merge!");
+  scheduleList.push_back(getResult());
+  return true;
+}
+
 void MuxOp::build(OpBuilder &builder, OperationState &result, Value operand,
                   int inputs) {
 
@@ -126,6 +246,35 @@ void MuxOp::build(OpBuilder &builder, OperationState &result, Value operand,
   // Operands from predecessor blocks
   for (int i = 0, e = inputs; i < e; ++i)
     result.addOperands(operand);
+}
+
+bool handshake::MuxOp::tryExecute(
+    llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+    llvm::DenseMap<unsigned, unsigned> &memoryMap,
+    llvm::DenseMap<mlir::Value, double> &timeMap,
+    std::vector<std::vector<llvm::Any>> &store,
+    std::vector<mlir::Value> &scheduleList) {
+  auto op = getOperation();
+  mlir::Value control = op->getOperand(0);
+  if (valueMap.count(control) == 0)
+    return false;
+  auto controlValue = valueMap[control];
+  auto controlTime = timeMap[control];
+  mlir::Value in = llvm::any_cast<APInt>(controlValue) == 0 ? op->getOperand(1)
+                                                            : op->getOperand(2);
+  if (valueMap.count(in) == 0)
+    return false;
+  auto inValue = valueMap[in];
+  auto inTime = timeMap[in];
+  double time = std::max(controlTime, inTime);
+  valueMap[op->getResult(0)] = inValue;
+  timeMap[op->getResult(0)] = time;
+
+  // Consume the inputs.
+  valueMap.erase(control);
+  valueMap.erase(in);
+  scheduleList.push_back(getResult());
+  return true;
 }
 
 static LogicalResult verify(MuxOp op) {
@@ -172,11 +321,45 @@ void ControlMergeOp::build(OpBuilder &builder, OperationState &result,
 
   result.addAttribute("control", builder.getBoolAttr(true));
 }
+
 // void ControlMergeOp::getCanonicalizationPatterns(OwningRewritePatternList
 // &results,
 //                                           MLIRContext *context) {
 //   results.insert<circt::handshake::EliminateSimpleControlMergesPattern>(context);
 // }
+
+bool handshake::ControlMergeOp::tryExecute(
+    llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+    llvm::DenseMap<unsigned, unsigned> &memoryMap,
+    llvm::DenseMap<mlir::Value, double> &timeMap,
+    std::vector<std::vector<llvm::Any>> &store,
+    std::vector<mlir::Value> &scheduleList) {
+  auto op = getOperation();
+  bool found = false;
+  int i = 0;
+  for (mlir::Value in : op->getOperands()) {
+    if (valueMap.count(in) == 1) {
+      if (found)
+        op->emitError("More than one valid input to CMerge!");
+      auto t = valueMap[in];
+      valueMap[op->getResult(0)] = t;
+      timeMap[op->getResult(0)] = timeMap[in];
+
+      valueMap[op->getResult(1)] = APInt(INDEX_WIDTH, i);
+      timeMap[op->getResult(1)] = timeMap[in];
+
+      // Consume the inputs.
+      valueMap.erase(in);
+
+      found = true;
+    }
+    i++;
+  }
+  if (!found)
+    op->emitError("No valid input to CMerge!");
+  scheduleList = toVector(op->getResults());
+  return true;
+}
 
 void handshake::BranchOp::build(OpBuilder &builder, OperationState &result,
                                 Value dataOperand) {
@@ -194,9 +377,24 @@ void handshake::BranchOp::build(OpBuilder &builder, OperationState &result,
                        : false;
   result.addAttribute("control", builder.getBoolAttr(isControl));
 }
+
 void handshake::BranchOp::getCanonicalizationPatterns(
     OwningRewritePatternList &results, MLIRContext *context) {
   results.insert<circt::handshake::EliminateSimpleBranchesPattern>(context);
+}
+
+void handshake::BranchOp::execute(std::vector<llvm::Any> &ins,
+                                  std::vector<llvm::Any> &outs) {
+  outs[0] = ins[0];
+}
+
+bool handshake::BranchOp::tryExecute(
+    llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+    llvm::DenseMap<unsigned, unsigned> &memoryMap,
+    llvm::DenseMap<mlir::Value, double> &timeMap,
+    std::vector<std::vector<llvm::Any>> &store,
+    std::vector<mlir::Value> &scheduleList) {
+  return tryToExecute(getOperation(), valueMap, timeMap, scheduleList, 0);
 }
 
 void handshake::ConditionalBranchOp::build(OpBuilder &builder,
@@ -219,6 +417,36 @@ void handshake::ConditionalBranchOp::build(OpBuilder &builder,
   result.addAttribute("control", builder.getBoolAttr(isControl));
 }
 
+bool handshake::ConditionalBranchOp::tryExecute(
+    llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+    llvm::DenseMap<unsigned, unsigned> &memoryMap,
+    llvm::DenseMap<mlir::Value, double> &timeMap,
+    std::vector<std::vector<llvm::Any>> &store,
+    std::vector<mlir::Value> &scheduleList) {
+  auto op = getOperation();
+  mlir::Value control = op->getOperand(0);
+  if (valueMap.count(control) == 0)
+    return false;
+  auto controlValue = valueMap[control];
+  auto controlTime = timeMap[control];
+  mlir::Value in = op->getOperand(1);
+  if (valueMap.count(in) == 0)
+    return false;
+  auto inValue = valueMap[in];
+  auto inTime = timeMap[in];
+  mlir::Value out = llvm::any_cast<APInt>(controlValue) != 0 ? op->getResult(0)
+                                                             : op->getResult(1);
+  double time = std::max(controlTime, inTime);
+  valueMap[out] = inValue;
+  timeMap[out] = time;
+  scheduleList.push_back(out);
+
+  // Consume the inputs.
+  valueMap.erase(control);
+  valueMap.erase(in);
+  return true;
+}
+
 void StartOp::build(OpBuilder &builder, OperationState &result) {
   // Control-only output, has no type
   auto type = builder.getNoneType();
@@ -226,9 +454,27 @@ void StartOp::build(OpBuilder &builder, OperationState &result) {
   result.addAttribute("control", builder.getBoolAttr(true));
 }
 
+bool handshake::StartOp::tryExecute(
+    llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+    llvm::DenseMap<unsigned, unsigned> &memoryMap,
+    llvm::DenseMap<mlir::Value, double> &timeMap,
+    std::vector<std::vector<llvm::Any>> &store,
+    std::vector<mlir::Value> &scheduleList) {
+  return true;
+}
+
 void EndOp::build(OpBuilder &builder, OperationState &result, Value operand) {
 
   result.addOperands(operand);
+}
+
+bool handshake::EndOp::tryExecute(
+    llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+    llvm::DenseMap<unsigned, unsigned> &memoryMap,
+    llvm::DenseMap<mlir::Value, double> &timeMap,
+    std::vector<std::vector<llvm::Any>> &store,
+    std::vector<mlir::Value> &scheduleList) {
+  return true;
 }
 
 void handshake::ReturnOp::build(OpBuilder &builder, OperationState &result,
@@ -242,6 +488,16 @@ void SinkOp::build(OpBuilder &builder, OperationState &result, Value operand) {
   result.addOperands(operand);
 }
 
+bool handshake::SinkOp::tryExecute(
+    llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+    llvm::DenseMap<unsigned, unsigned> &memoryMap,
+    llvm::DenseMap<mlir::Value, double> &timeMap,
+    std::vector<std::vector<llvm::Any>> &store,
+    std::vector<mlir::Value> &scheduleList) {
+  valueMap.erase(getOperand());
+  return true;
+}
+
 void handshake::ConstantOp::build(OpBuilder &builder, OperationState &result,
                                   Attribute value, Value operand) {
 
@@ -251,6 +507,21 @@ void handshake::ConstantOp::build(OpBuilder &builder, OperationState &result,
   result.types.push_back(type);
 
   result.addAttribute("value", value);
+}
+
+void handshake::ConstantOp::execute(std::vector<llvm::Any> &ins,
+                                    std::vector<llvm::Any> &outs) {
+  auto attr = getAttrOfType<mlir::IntegerAttr>("value");
+  outs[0] = attr.getValue();
+}
+
+bool handshake::ConstantOp::tryExecute(
+    llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+    llvm::DenseMap<unsigned, unsigned> &memoryMap,
+    llvm::DenseMap<mlir::Value, double> &timeMap,
+    std::vector<std::vector<llvm::Any>> &store,
+    std::vector<mlir::Value> &scheduleList) {
+  return tryToExecute(getOperation(), valueMap, timeMap, scheduleList, 0);
 }
 
 void handshake::TerminatorOp::build(OpBuilder &builder, OperationState &result,
@@ -293,6 +564,121 @@ void MemoryOp::build(OpBuilder &builder, OperationState &result,
   }
 }
 
+bool handshake::MemoryOp::allocateMemory(
+    llvm::DenseMap<unsigned, unsigned> &memoryMap,
+    std::vector<std::vector<llvm::Any>> &store,
+    std::vector<double> &storeTimes) {
+  unsigned id = getID();
+  if (memoryMap.count(id))
+    return false;
+
+  auto type = getMemRefType();
+  std::vector<llvm::Any> in;
+
+  ArrayRef<int64_t> shape = type.getShape();
+  int allocationSize = 1;
+  unsigned count = 0;
+  for (int64_t dim : shape) {
+    if (dim > 0)
+      allocationSize *= dim;
+    else {
+      assert(count < in.size());
+      allocationSize *= llvm::any_cast<APInt>(in[count++]).getSExtValue();
+    }
+  }
+  unsigned ptr = store.size();
+  store.resize(ptr + 1);
+  storeTimes.resize(ptr + 1);
+  store[ptr].resize(allocationSize);
+  storeTimes[ptr] = 0.0;
+  mlir::Type elementType = type.getElementType();
+  int width = elementType.getIntOrFloatBitWidth();
+  for (int i = 0; i < allocationSize; i++) {
+    if (elementType.isa<mlir::IntegerType>()) {
+      store[ptr][i] = APInt(width, 0);
+    } else if (elementType.isa<mlir::FloatType>()) {
+      store[ptr][i] = APFloat(0.0);
+    } else {
+      llvm_unreachable("Unknown result type!\n");
+    }
+  }
+
+  memoryMap[id] = ptr;
+  return true;
+}
+
+bool handshake::MemoryOp::tryExecute(
+    llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+    llvm::DenseMap<unsigned, unsigned> &memoryMap,
+    llvm::DenseMap<mlir::Value, double> &timeMap,
+    std::vector<std::vector<llvm::Any>> &store,
+    std::vector<mlir::Value> &scheduleList) {
+  auto op = getOperation();
+  int opIndex = 0;
+  bool notReady = false;
+  unsigned id = getID(); // The ID of this memory.
+  unsigned buffer = memoryMap[id];
+
+  for (unsigned i = 0; i < getStCount().getZExtValue(); i++) {
+    mlir::Value data = op->getOperand(opIndex++);
+    mlir::Value address = op->getOperand(opIndex++);
+    mlir::Value nonceOut = op->getResult(getLdCount().getZExtValue() + i);
+    if ((!valueMap.count(data) || !valueMap.count(address))) {
+      notReady = true;
+      continue;
+    }
+    auto addressValue = valueMap[address];
+    auto addressTime = timeMap[address];
+    auto dataValue = valueMap[data];
+    auto dataTime = timeMap[data];
+
+    assert(buffer < store.size());
+    auto &ref = store[buffer];
+    unsigned offset = llvm::any_cast<APInt>(addressValue).getZExtValue();
+    assert(offset < ref.size());
+    ref[offset] = dataValue;
+
+    // Implicit none argument
+    APInt apnonearg(1, 0);
+    valueMap[nonceOut] = apnonearg;
+    double time = std::max(addressTime, dataTime);
+    timeMap[nonceOut] = time;
+    scheduleList.push_back(nonceOut);
+    // Consume the inputs.
+    valueMap.erase(data);
+    valueMap.erase(address);
+  }
+
+  for (unsigned i = 0; i < getLdCount().getZExtValue(); i++) {
+    mlir::Value address = op->getOperand(opIndex++);
+    mlir::Value dataOut = op->getResult(i);
+    mlir::Value nonceOut = op->getResult(getLdCount().getZExtValue() +
+                                         getStCount().getZExtValue() + i);
+    if (!valueMap.count(address)) {
+      notReady = true;
+      continue;
+    }
+    auto addressValue = valueMap[address];
+    auto addressTime = timeMap[address];
+    assert(buffer < store.size());
+    auto &ref = store[buffer];
+    unsigned offset = llvm::any_cast<APInt>(addressValue).getZExtValue();
+    assert(offset < ref.size());
+
+    valueMap[dataOut] = ref[offset];
+    timeMap[dataOut] = addressTime;
+    // Implicit none argument
+    APInt apnonearg(1, 0);
+    valueMap[nonceOut] = apnonearg;
+    timeMap[nonceOut] = addressTime;
+    scheduleList.push_back(dataOut);
+    scheduleList.push_back(nonceOut);
+    // Consume the inputs.
+    valueMap.erase(address);
+  }
+  return (notReady) ? false : true;
+}
+
 void handshake::LoadOp::build(OpBuilder &builder, OperationState &result,
                               Value memref, ArrayRef<Value> indices) {
 
@@ -308,6 +694,49 @@ void handshake::LoadOp::build(OpBuilder &builder, OperationState &result,
 
   // Address outputs (to lsq)
   result.types.append(indices.size(), builder.getIndexType());
+}
+
+bool handshake::LoadOp::tryExecute(
+    llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+    llvm::DenseMap<unsigned, unsigned> &memoryMap,
+    llvm::DenseMap<mlir::Value, double> &timeMap,
+    std::vector<std::vector<llvm::Any>> &store,
+    std::vector<mlir::Value> &scheduleList) {
+  auto op = getOperation();
+  mlir::Value address = op->getOperand(0);
+  mlir::Value data = op->getOperand(1);
+  mlir::Value nonce = op->getOperand(2);
+  mlir::Value addressOut = op->getResult(1);
+  mlir::Value dataOut = op->getResult(0);
+  if ((valueMap.count(address) && !valueMap.count(nonce)) ||
+      (!valueMap.count(address) && valueMap.count(nonce)) ||
+      (!valueMap.count(address) && !valueMap.count(nonce) &&
+       !valueMap.count(data)))
+    return false;
+  if (valueMap.count(address) && valueMap.count(nonce)) {
+    auto addressValue = valueMap[address];
+    auto addressTime = timeMap[address];
+    auto nonceValue = valueMap[nonce];
+    auto nonceTime = timeMap[nonce];
+    valueMap[addressOut] = addressValue;
+    double time = std::max(addressTime, nonceTime);
+    timeMap[addressOut] = time;
+    scheduleList.push_back(addressOut);
+    // Consume the inputs.
+    valueMap.erase(address);
+    valueMap.erase(nonce);
+  } else if (valueMap.count(data)) {
+    auto dataValue = valueMap[data];
+    auto dataTime = timeMap[data];
+    valueMap[dataOut] = dataValue;
+    timeMap[dataOut] = dataTime;
+    scheduleList.push_back(dataOut);
+    // Consume the inputs.
+    valueMap.erase(data);
+  } else {
+    llvm_unreachable("why?");
+  }
+  return true;
 }
 
 void handshake::StoreOp::build(OpBuilder &builder, OperationState &result,
@@ -326,6 +755,22 @@ void handshake::StoreOp::build(OpBuilder &builder, OperationState &result,
   result.types.append(indices.size(), builder.getIndexType());
 }
 
+void handshake::StoreOp::execute(std::vector<llvm::Any> &ins,
+                                 std::vector<llvm::Any> &outs) {
+  // Forward the address and data to the memory op.
+  outs[0] = ins[0];
+  outs[1] = ins[1];
+}
+
+bool handshake::StoreOp::tryExecute(
+    llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+    llvm::DenseMap<unsigned, unsigned> &memoryMap,
+    llvm::DenseMap<mlir::Value, double> &timeMap,
+    std::vector<std::vector<llvm::Any>> &store,
+    std::vector<mlir::Value> &scheduleList) {
+  return tryToExecute(getOperation(), valueMap, timeMap, scheduleList, 1);
+}
+
 void JoinOp::build(OpBuilder &builder, OperationState &result,
                    ArrayRef<Value> operands) {
 
@@ -335,6 +780,20 @@ void JoinOp::build(OpBuilder &builder, OperationState &result,
   result.addOperands(operands);
 
   result.addAttribute("control", builder.getBoolAttr(true));
+}
+
+void handshake::JoinOp::execute(std::vector<llvm::Any> &ins,
+                                std::vector<llvm::Any> &outs) {
+  outs[0] = ins[0];
+}
+
+bool handshake::JoinOp::tryExecute(
+    llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+    llvm::DenseMap<unsigned, unsigned> &memoryMap,
+    llvm::DenseMap<mlir::Value, double> &timeMap,
+    std::vector<std::vector<llvm::Any>> &store,
+    std::vector<mlir::Value> &scheduleList) {
+  return tryToExecute(getOperation(), valueMap, timeMap, scheduleList, 1);
 }
 
 // for let printer/parser/verifier in Handshake_Op class
