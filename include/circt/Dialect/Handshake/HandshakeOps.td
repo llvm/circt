@@ -268,7 +268,10 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock]> {
   }];
 }
 
-def ForkOp : Handshake_Op<"fork", [NoSideEffect, HasClock]> {
+def ForkOp : Handshake_Op<"fork", [
+  NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  HasClock, DeclareOpInterfaceMethods<GeneralOpInterface>
+]> {
   let summary = "fork operation";
 
   let description = [{
@@ -308,7 +311,10 @@ def LazyForkOp : Handshake_Op<"lazy_fork", [NoSideEffect]> {
   }];
 }
 
-def MergeOp : Handshake_Op<"merge", [NoSideEffect, MergeLikeOpInterface]> {
+def MergeOp : Handshake_Op<"merge", [
+  NoSideEffect, MergeLikeOpInterface,
+  DeclareOpInterfaceMethods<ExecutableOpInterface>
+]> {
   let summary = "merge operation";
   let description = [{
     The "handshake.merge" operation represents a (nondeterministic)
@@ -325,7 +331,10 @@ def MergeOp : Handshake_Op<"merge", [NoSideEffect, MergeLikeOpInterface]> {
   let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$inputs)>];
 }
 
-def MuxOp : Handshake_Op<"mux", [NoSideEffect, MergeLikeOpInterface]> {
+def MuxOp : Handshake_Op<"mux", [
+  NoSideEffect, MergeLikeOpInterface,
+  DeclareOpInterfaceMethods<ExecutableOpInterface>
+]> {
   let summary = "mux operation";
   let description = [{
     The "handshake.mux" operation represents a(deterministic)
@@ -346,8 +355,10 @@ def MuxOp : Handshake_Op<"mux", [NoSideEffect, MergeLikeOpInterface]> {
   let verifier = "return ::verify(*this);";
 }
 
-def ControlMergeOp : Handshake_Op<"control_merge",
-	 [NoSideEffect, MergeLikeOpInterface, HasClock]> {
+def ControlMergeOp : Handshake_Op<"control_merge", [
+  NoSideEffect, MergeLikeOpInterface, HasClock,
+  DeclareOpInterfaceMethods<ExecutableOpInterface>
+]> {
   let summary = "control merge operation";
   let description = [{
     The "handshake.control_merge" operation represents a
@@ -371,7 +382,10 @@ def ControlMergeOp : Handshake_Op<"control_merge",
   }];
 }
 
-def BranchOp : Handshake_Op<"branch", [NoSideEffect]> {
+def BranchOp : Handshake_Op<"branch", [
+  NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<GeneralOpInterface>
+]> {
   let summary = "branch operation";
   let description = [{
       The "handshake.branch" operation represents an unconditional
@@ -394,7 +408,9 @@ def BranchOp : Handshake_Op<"branch", [NoSideEffect]> {
   }];
 }
 
-def ConditionalBranchOp : Handshake_Op<"conditional_branch", [NoSideEffect]> {
+def ConditionalBranchOp : Handshake_Op<"conditional_branch", [
+  NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>
+]> {
   let summary = "conditional branch operation";
   let description = [{
      The "handshake.cbranch" operation represents a conditional
@@ -425,7 +441,8 @@ def ConditionalBranchOp : Handshake_Op<"conditional_branch", [NoSideEffect]> {
   }];
 }
 
-def SinkOp : Handshake_Op<"sink", []> {
+def SinkOp
+    : Handshake_Op<"sink", [DeclareOpInterfaceMethods<ExecutableOpInterface>]> {
   let summary = "sink operation";
   let description = [{
     The "handshake.sink" operation discards any data that arrives at its
@@ -448,7 +465,10 @@ def SourceOp : Handshake_Op<"source", [NoSideEffect]> {
   let results = (outs AnyType);
 }
 
-def ConstantOp : Handshake_Op<"constant", [NoSideEffect]> {
+def ConstantOp : Handshake_Op<"constant", [
+  NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<GeneralOpInterface>
+]> {
   let summary = "constant operation";
   let description = [{
     The "handshake.const" has a constant value.When triggered by its
@@ -467,7 +487,8 @@ def ConstantOp : Handshake_Op<"constant", [NoSideEffect]> {
   }];
 }
 
-def EndOp : Handshake_Op<"end"> {
+def EndOp
+    : Handshake_Op<"end", [DeclareOpInterfaceMethods<ExecutableOpInterface>]> {
   let summary = "end operation";
   let description = [{
     The "handshake.end" propagates the result of the appropriate
@@ -481,7 +502,9 @@ def EndOp : Handshake_Op<"end"> {
   let builders = [OpBuilderDAG<(ins "Value":$operand)>];
 }
 
-def StartOp : Handshake_Op<"start", [NoSideEffect]> {
+def StartOp : Handshake_Op<"start", [
+  NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>
+]> {
   let summary = "start operation";
   let description = [{
        Triggers execution of the control - only network.  Placed in entry
@@ -510,7 +533,10 @@ def TerminatorOp : Handshake_Op<"terminator", [Terminator]> {
 }
 
 def MemRefTypeAttr : TypeAttrBase<"MemRefType", "memref type attribute">;
-def MemoryOp : Handshake_Op<"memory", [HasClock]> {
+def MemoryOp : Handshake_Op<"memory", [
+  DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<MemoryOpInterface>, HasClock
+]> {
   let summary = "memory";
   let description = [{
     Each MemoryOp represents an independent memory or memory region (BRAM or external memory).
@@ -549,7 +575,8 @@ def MemoryOp : Handshake_Op<"memory", [HasClock]> {
   }];
 }
 
-def LoadOp : Handshake_Op<"load"> {
+def LoadOp
+    : Handshake_Op<"load", [DeclareOpInterfaceMethods<ExecutableOpInterface>]> {
   let summary = "load operation";
   let description = [{
      Load memory port, sends load requests to MemoryOp. From dataflow
@@ -567,10 +594,12 @@ def LoadOp : Handshake_Op<"load"> {
   let results = (outs AnyType, Variadic<Index>:$addressResults);
 
   let builders = [OpBuilderDAG<(ins "Value":$memref, "ArrayRef<Value>":$indices)>];
-
 }
 
-def StoreOp : Handshake_Op<"store"> {
+def StoreOp : Handshake_Op<"store", [
+  DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<GeneralOpInterface>
+]> {
   let summary = "store operation";
   let description = [{
     Store memory port, sends store requests to MemoryOp. From dataflow
@@ -590,7 +619,10 @@ def StoreOp : Handshake_Op<"store"> {
       [OpBuilderDAG<(ins "Value":$valueToStore, "ArrayRef<Value>":$indices)>];
 }
 
-def JoinOp : Handshake_Op<"join"> {
+def JoinOp : Handshake_Op<"join", [
+  DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<GeneralOpInterface>
+]> {
   let summary = "join operation";
   let description = [{
     A control-only synchronizer.  Produces a valid output when all
