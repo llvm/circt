@@ -1,8 +1,8 @@
 ; REQUIRES: yosys
 ; RUN: split-file %s %t
-; RUN: firtool %t/test_mod.fir --format=fir -verilog -o %t/test_mod.fir.v
-; RUN: firtool %t/test_unary.fir --format=fir -verilog -o %t/test_unary.fir.v
-; RUN: firtool %t/test_prim.fir --format=fir -verilog -o %t/test_prim.fir.v
+; RUN: firtool %t/test_mod.fir --format=fir --lower-to-rtl -verilog -o %t/test_mod.fir.v
+; RUN: firtool %t/test_unary.fir --format=fir --lower-to-rtl -verilog -o %t/test_unary.fir.v
+; RUN: firtool %t/test_prim.fir --format=fir --lower-to-rtl -verilog -o %t/test_prim.fir.v
 ; RUN: %S/../../utils/equiv-rtl.sh %t/test_mod.fir.v %t/test_mod.v test_mod
 ; RUN: %S/../../utils/equiv-rtl.sh %t/test_unary.fir.v %t/test_unary.v test_unary
 ; RUN: %S/../../utils/equiv-rtl.sh %t/test_prim.fir.v %t/test_prim.v test_prim
@@ -131,7 +131,7 @@ module test_unary(
   assign out_head_s = sin4[3:2];
   assign out_tail_u = uin4[1:0];
   assign out_tail_s = sin4[1:0];
-  assign out_neg_u = -$signed({1'b0,uin4});
+  assign out_neg_u = -$signed(uin4);
   assign out_neg_s = -$signed(sin4);
 endmodule
 

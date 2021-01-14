@@ -230,9 +230,9 @@ module attributes {firrtl.mainModule = "Simple"} {
     %c1175_ui11 = firrtl.constant(1175 : ui11) : !firrtl.uint<11>
     %51 = firrtl.neg %c1175_ui11 : (!firrtl.uint<11>) -> !firrtl.sint<12>
 
-    %out4c = firrtl.asPassive %out4 : (!firrtl.flip<uint<4>>) -> !firrtl.uint<4>
+    %out4c = firrtl.asPassive %out4 : !firrtl.flip<uint<4>>
     %out4d = firrtl.stdIntCast %out4c : (!firrtl.uint<4>) -> i4
-    %out5c = firrtl.asPassive %out5 : (!firrtl.flip<uint<4>>) -> !firrtl.uint<4>
+    %out5c = firrtl.asPassive %out5 : !firrtl.flip<uint<4>>
     %out5d = firrtl.stdIntCast %out5c : (!firrtl.uint<4>) -> i4
     rtl.output %out4d, %out5d : i4, i4
   }
@@ -375,7 +375,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %hits_1_7 = firrtl.node %0 {name = "hits_1_7"} : !firrtl.uint<1>
     // CHECK-NEXT:  %hits_1_7 = rtl.wire : !rtl.inout<i1>
     // CHECK-NEXT:  rtl.connect %hits_1_7, [[IO]] : i1
-    %1455 = firrtl.asPassive %hits_1_7 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    %1455 = firrtl.asPassive %hits_1_7 : !firrtl.uint<1>
   }
 
   // https://github.com/llvm/circt/issues/314
@@ -814,4 +814,19 @@ module attributes {firrtl.mainModule = "Simple"} {
     firrtl.connect %8, %0 : !firrtl.flip<clock>, !firrtl.clock
     rtl.output
   }
-}
+
+  // CHECK-LABEL: rtl.module @top_mod() -> (%tmp27: i23) {
+  // CHECK-NEXT:    %c42_i23 = rtl.constant(42 : i23) : i23
+  // CHECK-NEXT:    %c0_i23 = rtl.constant(0 : i23) : i23
+  // CHECK-NEXT:    rtl.output %c0_i23 : i23
+  // CHECK-NEXT:  }
+  rtl.module @top_mod() -> (%tmp27: i23) {
+    %0 = firrtl.wire : !firrtl.flip<uint<0>>
+    %c42_ui23 = firrtl.constant(42 : ui23) : !firrtl.uint<23>
+    %1 = firrtl.tail %c42_ui23, 23 : (!firrtl.uint<23>) -> !firrtl.uint<0>
+    firrtl.connect %0, %1 : !firrtl.flip<uint<0>>, !firrtl.uint<0>
+    %2 = firrtl.head %c42_ui23, 0 : (!firrtl.uint<23>) -> !firrtl.uint<0>
+    %3 = firrtl.pad %2, 23 : (!firrtl.uint<0>) -> !firrtl.uint<23>
+    %4 = firrtl.stdIntCast %3 : (!firrtl.uint<23>) -> i23
+    rtl.output %4 : i23
+  }}

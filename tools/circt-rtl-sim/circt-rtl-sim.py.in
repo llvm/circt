@@ -26,15 +26,28 @@ class Questa:
     DefaultDriver = "driver.sv"
 
     def __init__(self, path, args):
-        if os.path.exists(path) and os.path.isfile(path):
-            self.path = os.path.dirname(path)
-        else:
-            self.path = path
         self.args = args
 
+        # Find Questa
+        if os.path.exists(path):
+            if os.path.isfile(path):
+                self.path = os.path.dirname(path)
+            else:
+                self.path = path
+        elif "@QUESTA_PATH@" != "":
+            self.path = "@QUESTA_PATH@"
+        elif "QUESTA_PATH" in os.environ:
+          self.verilator = os.environ["QUESTA_PATH"]
+
     def compile(self, sources):
+        self.dpiLibs = filter(
+            lambda fn: fn.endswith(".so") or fn.endswith(".dll"),
+            sources)
+        sources = filter(
+            lambda fn: not (fn.endswith(".so") or fn.endswith(".dll")),
+            sources)
         vlog = os.path.join(self.path, "vlog")
-        args = [vlog, "-sv"] + sources
+        args = [vlog, "-sv"] + list(sources)
         if self.args.gui:
           args.append('+acc')
         return subprocess.run(args)
@@ -49,11 +62,15 @@ class Questa:
         # Note: vsim exit codes say nothing about the test run's pass/fail even if
         # $fatal is encountered in the simulation.
         if self.args.gui:
-          cmd = [vsim, top, "-gui", "-voptargs=\"+acc\""]
+            cmd = [vsim, top, "-gui", "-voptargs=\"+acc\""]
         else:
-          cmd = [vsim, top, "-batch", "-do", "run -all"]
+            cmd = [vsim, top, "-batch", "-do", "run -all"]
         if cycles >= 0:
-          cmd.append(f"+cycles={cycles}")
+            cmd.append(f"+cycles={cycles}")
+        for lib in self.dpiLibs:
+            svLib = os.path.splitext(lib)[0]
+            cmd.append("-sv_lib")
+            cmd.append(svLib)
         return subprocess.run(cmd + simargs.split())
 
 
@@ -63,10 +80,14 @@ class Verilator:
     DefaultDriver = "driver.cpp"
 
     def __init__(self, args):
-        if "VERILATOR_PATH" in os.environ:
-          self.verilator = os.environ["VERILATOR_PATH"]
-        else:
+        # Find Verilator.
+        if os.path.exists(args.sim):
           self.verilator = args.sim
+        elif "@VERILATOR_PATH@" != "":
+          self.verilator = "@VERILATOR_PATH@"
+        elif "VERILATOR_PATH" in os.environ:
+          self.verilator = os.environ["VERILATOR_PATH"]
+
         self.top = args.top
         if args.objdir != "":
           self.ObjDir = args.objdir
@@ -74,6 +95,9 @@ class Verilator:
           self.ObjDir = os.path.basename(args.sources[0]) + ".obj_dir"
 
     def compile(self, sources):
+        dpiLibs = filter(lambda fn: fn.endswith(
+            ".so") or fn.endswith(".dll"), sources)
+        self.ldPaths = ":".join([os.path.dirname(x) for x in dpiLibs])
         return subprocess.run([self.verilator, "--cc", "--top-module", self.top,
                                "-sv", "--build", "--exe",
                                "--Mdir", self.ObjDir] + sources)
@@ -87,14 +111,11 @@ class Verilator:
         cmd += args.split()
         print(f"Running: {cmd}")
         sys.stdout.flush()
+        os.environ["LD_LIBRARY_PATH"] = self.ldPaths
         return subprocess.run(cmd)
 
 
 def __main__(args):
-    defaultSim = ""
-    if "DEFAULT_SIM" in os.environ:
-        defaultSim = os.environ["DEFAULT_SIM"]
-
     argparser = argparse.ArgumentParser(
         description="RTL simulation runner for CIRCT")
 

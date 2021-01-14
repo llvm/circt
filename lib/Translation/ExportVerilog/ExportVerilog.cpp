@@ -104,7 +104,6 @@ static size_t emitTypeDims(Type type, Location loc, raw_ostream &os) {
   size_t emittedWidth = 0;
   int width;
   if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
-    emittedWidth += emitTypeDims(arrayType.getElementType(), loc, os);
     width = arrayType.getSize();
   } else {
     width = getBitWidthOrSentinel(type);
@@ -127,6 +126,9 @@ static size_t emitTypeDims(Type type, Location loc, raw_ostream &os) {
     os << '[' << (width - 1) << ":0]";
     emittedWidth += getPrintedIntWidth(width - 1) + 4;
     break;
+  }
+  if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
+    emittedWidth += emitTypeDims(arrayType.getElementType(), loc, os);
   }
   return emittedWidth;
 }
@@ -1453,7 +1455,10 @@ LogicalResult ModuleEmitter::visitStmt(InstanceOp op) {
   // Helper that prints a parameter constant value in a Verilog compatible way.
   auto printParmValue = [&](Attribute value) {
     if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
-      os << intAttr.getValue();
+      IntegerType intTy = intAttr.getType().cast<IntegerType>();
+      SmallString<20> numToPrint;
+      intAttr.getValue().toString(numToPrint, 10, intTy.isSigned());
+      os << intTy.getWidth() << "'d" << numToPrint;
     } else if (auto strAttr = value.dyn_cast<StringAttr>()) {
       os << '"';
       os.write_escaped(strAttr.getValue());
@@ -1665,8 +1670,6 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     if (auto interface = dyn_cast<InterfaceInstanceOp>(op))
       return interface.getInterfaceType().getInterface().getValue();
 
-    // Note: MemOp is handled as "wire" here because each of its subcomponents
-    // are wires.  The corresponding 'reg' decl is handled specially below.
     return "wire";
   };
 

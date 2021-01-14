@@ -6,11 +6,18 @@
 #
 # ===-----------------------------------------------------------------------===//
 #
+# Configure and copy a script to run ESI cosimulation tests.
 #
 # ===-----------------------------------------------------------------------===//
 
-set(SOURCES circt-rtl-sim.py driver.cpp driver.sv)
+if (TARGET EsiCosimDpiServer)
+  list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS EsiCosimDpiServer)
+  get_property(ESI_COSIM_LIB_DIR TARGET EsiCosimDpiServer PROPERTY LIBRARY_OUTPUT_DIRECTORY)
+  set(ESI_COSIM_PATH ${ESI_COSIM_LIB_DIR}/libEsiCosimDpiServer.so)
+endif()
+
+set(SOURCES esi-cosim-runner.py)
 foreach(file IN ITEMS ${SOURCES})
   configure_file(${file}.in ${CIRCT_TOOLS_DIR}/${file})
 endforeach()
-add_custom_target(circt-rtl-sim SOURCES ${SOURCES})
+add_custom_target(esi-cosim-runner SOURCES ${SOURCES})

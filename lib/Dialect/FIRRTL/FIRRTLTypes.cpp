@@ -377,6 +377,21 @@ bool firrtl::areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType) {
   return destType.getWidthlessType() == srcType.getWidthlessType();
 }
 
+/// Return the element of an array type or null
+/// top level for ODS constraint usage
+Type firrtl::getArrayElementType(Type array) {
+  auto vectorType = array.dyn_cast<FVectorType>();
+  if (vectorType)
+    return vectorType.getElementType();
+  return Type();
+}
+
+/// Return the passiver version of a firrtl type
+/// top level for ODS constraint usage
+Type firrtl::getPassiveType(Type anyFIRRTLType) {
+  return anyFIRRTLType.cast<FIRRTLType>().getPassiveType();
+}
+
 //===----------------------------------------------------------------------===//
 // IntType
 //===----------------------------------------------------------------------===//

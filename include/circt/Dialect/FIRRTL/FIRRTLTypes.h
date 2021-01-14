@@ -89,6 +89,9 @@ protected:
 /// ignores flips.
 bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType);
 
+mlir::Type getArrayElementType(mlir::Type array);
+mlir::Type getPassiveType(mlir::Type anyFIRRTLType);
+
 //===----------------------------------------------------------------------===//
 // Ground Types Without Parameters
 //===----------------------------------------------------------------------===//

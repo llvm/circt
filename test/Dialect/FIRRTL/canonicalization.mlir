@@ -376,5 +376,34 @@ firrtl.module @issue331(%tmp81: !firrtl.flip<sint<1>>) {
   firrtl.connect %tmp81, %0 : !firrtl.flip<sint<1>>, !firrtl.sint<1>
 }
 
+// CHECK-LABEL: firrtl.module @issue432
+firrtl.module @issue432(%tmp8: !firrtl.flip<uint<10>>) {
+  %c130_si10 = firrtl.constant(130 : si10) : !firrtl.sint<10>
+  %0 = firrtl.tail %c130_si10, 0 : (!firrtl.sint<10>) -> !firrtl.uint<10>
+  firrtl.connect %tmp8, %0 : !firrtl.flip<uint<10>>, !firrtl.uint<10>
+  // CHECK-NEXT: %c130_ui10 = firrtl.constant(130 : i10) : !firrtl.uint<10>
+  // CHECK-NEXT: firrtl.connect %tmp8, %c130_ui10
+}
 
+// CHECK-LABEL: firrtl.module @issue437
+firrtl.module @issue437(%tmp19: !firrtl.flip<uint<1>>) {
+  // CHECK-NEXT: %c1_ui1 = firrtl.constant(true) : !firrtl.uint<1>
+  %c-1_si1 = firrtl.constant(-1 : si1) : !firrtl.sint<1>
+  %0 = firrtl.bits %c-1_si1 0 to 0 : (!firrtl.sint<1>) -> !firrtl.uint<1>
+  firrtl.connect %tmp19, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+}
+
+// CHECK-LABEL: firrtl.module @issue446
+// CHECK-NEXT: firrtl.xor %inp_1, %inp_1
+firrtl.module @issue446(%inp_1: !firrtl.sint<0>, %tmp10: !firrtl.flip<uint<1>>) {
+  %0 = firrtl.xor %inp_1, %inp_1 : (!firrtl.sint<0>, !firrtl.sint<0>) -> !firrtl.uint<0>
+  firrtl.connect %tmp10, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<0>
+}
+
+// CHECK-LABEL: firrtl.module @xorUnsized
+// CHECK-NEXT: %c0_ui = firrtl.constant(false) : !firrtl.uint
+firrtl.module @xorUnsized(%inp_1: !firrtl.sint, %tmp10: !firrtl.flip<uint>) {
+  %0 = firrtl.xor %inp_1, %inp_1 : (!firrtl.sint, !firrtl.sint) -> !firrtl.uint
+  firrtl.connect %tmp10, %0 : !firrtl.flip<uint>, !firrtl.uint
+}
 }

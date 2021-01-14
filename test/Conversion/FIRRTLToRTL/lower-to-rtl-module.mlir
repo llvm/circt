@@ -135,15 +135,6 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: rtl.output
   }
 
-  // expected-error @+1 {{cannot lower this port type to RTL}}
-  firrtl.module @CantLowerArgument(%arg: !firrtl.bundle<int_1: flip<uint<1>>, int_out: uint<2>>) attributes {sym_visibility = "private"} {
-  }   // CHECK-NEXT: }
-
-  // expected-error @+1 {{unexpected operation 'func' in a firrtl.circuit}}
-  func private @UnknownFunction() {
-    return
-  }
-
   // CHECK-LABEL: rtl.module @OutputFirst(%in1: i1, %in4: i4) -> (%out4: i4) {
   firrtl.module @OutputFirst(%out4: !firrtl.flip<uint<4>>,
                              %in1: !firrtl.uint<1>,
@@ -185,11 +176,13 @@ firrtl.circuit "Simple" {
     firrtl.connect %outB, %inB : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
     // Use of output as an input.
-    %tmp = firrtl.asPassive %outC : (!firrtl.flip<uint<4>>) -> !firrtl.uint<4>
+    %tmp = firrtl.asPassive %outC : !firrtl.flip<uint<4>>
     %0 = firrtl.sub %inA, %tmp : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
     // Use of an input as an output.
-    %tmp2 = firrtl.asNonPassive %inC : (!firrtl.uint<4>) -> !firrtl.flip<uint<4>>
+    // NOTE: This isn't valid but needs to be accepted until the verifier
+    // rejects it.
+    %tmp2 = firrtl.asNonPassive %inC : !firrtl.flip<uint<4>>
     firrtl.connect %tmp2, %inA : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
     // No connections to outD.
@@ -254,7 +247,7 @@ firrtl.circuit "Simple" {
   // CHECK-LABEL: rtl.module @instance_cyclic
   firrtl.module @instance_cyclic(%arg0: !firrtl.uint<2>, %arg1: !firrtl.uint<2>) {
     // This can't be hoisted so we end up with a wire.
-    // CHECK: %in.wire = firrtl.wire : !firrtl.uint<1>
+    // CHECK: %.in.wire = firrtl.wire : !firrtl.uint<1>
     // CHECK: rtl.instance
     %myext = firrtl.instance @MyParameterizedExtModule {name = "myext"}
       : !firrtl.bundle<in: flip<uint<1>>, out: uint<8>>
@@ -278,12 +271,12 @@ firrtl.circuit "Simple" {
                                 %outa: !firrtl.flip<uint<4>>,
                                 %outb: !firrtl.flip<uint<0>>) {
     // CHECK-NEXT: %0 = firrtl.stdIntCast %inA : (i4) -> !firrtl.uint<4>
-    // CHECK-NEXT: %1 = firrtl.wire : !firrtl.flip<uint<0>>
-    // CHECK-NEXT: %2 = firrtl.asPassive %1 : (!firrtl.flip<uint<0>>) -> !firrtl.uint<0>
-    // CHECK-NEXT: %3 = firrtl.wire : !firrtl.analog<0>
-    // CHECK-NEXT: %4 = firrtl.wire : !firrtl.flip<uint<0>>
+    // CHECK-NEXT: %.inB.0width_input = firrtl.wire : !firrtl.flip<uint<0>>
+    // CHECK-NEXT: %1 = firrtl.asPassive %.inB.0width_input : !firrtl.flip<uint<0>>
+    // CHECK-NEXT: %.inC.output = firrtl.wire : !firrtl.analog<0>
+    // CHECK-NEXT: %.outb.output = firrtl.wire : !firrtl.flip<uint<0>>
 
-    // CHECK: [[OUTA:%.+]] = firrtl.mul %0, %2 : (!firrtl.uint<4>, !firrtl.uint<0>) -> !firrtl.uint<4>
+    // CHECK: [[OUTA:%.+]] = firrtl.mul %0, %1 : (!firrtl.uint<4>, !firrtl.uint<0>) -> !firrtl.uint<4>
     %0 = firrtl.mul %inA, %inB : (!firrtl.uint<4>, !firrtl.uint<0>) -> !firrtl.uint<4>
     firrtl.connect %outa, %0 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
