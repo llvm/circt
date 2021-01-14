@@ -94,7 +94,7 @@ def NodeOp : FIRRTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
   let arguments = (ins PassiveType:$input, OptionalAttr<StrAttr>:$name);
   let results = (outs FIRRTLType:$result);
 
-  let assemblyFormat = "$input attr-dict `:` type($input)";
+  let assemblyFormat = "$input custom<Fancy>(attr-dict) `:` type($input)";
 }
 
 def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
@@ -150,7 +150,5 @@ def WireOp : FIRRTLOp<"wire", []> {
     }]>
   ];
 
-  // We handle the name in a custom way, so we use a customer parser/printer.
-  let printer = "printWireOp(p, *this);";
-  let parser = "return parseWireOp(parser, result);";
+  let assemblyFormat = "custom<Fancy>(attr-dict) `:` type($result)";
 }
