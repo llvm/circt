@@ -511,7 +511,7 @@ void handshake::ConstantOp::build(OpBuilder &builder, OperationState &result,
 
 void handshake::ConstantOp::execute(std::vector<llvm::Any> &ins,
                                     std::vector<llvm::Any> &outs) {
-  auto attr = getAttrOfType<mlir::IntegerAttr>("value");
+  auto attr = (*this)->getAttrOfType<mlir::IntegerAttr>("value");
   outs[0] = attr.getValue();
 }
 
