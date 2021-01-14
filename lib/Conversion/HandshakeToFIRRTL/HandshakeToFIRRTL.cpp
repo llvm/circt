@@ -1235,13 +1235,9 @@ bool HandshakeBuilder::buildForkLogic(ValueVector *input,
   // Create an AndPrimOp chain for generating the ready signal. Only if all
   // result ports are handshaked (done), the argument port is ready to accept
   // the next token.
-  Value tmpDone = doneWires[0];
-  for (auto doneWire : llvm::drop_begin(doneWires, 1))
-    tmpDone = rewriter.create<AndPrimOp>(insertLoc, bitType, doneWire, tmpDone);
-
-  auto allDoneWire = rewriter.create<WireOp>(insertLoc, bitType,
-                                             rewriter.getStringAttr("allDone"));
-  rewriter.create<ConnectOp>(insertLoc, allDoneWire, tmpDone);
+  Value allDoneWire = rewriter.create<WireOp>(
+      insertLoc, bitType, rewriter.getStringAttr("allDone"));
+  buildReductionTree<AndPrimOp>(doneWires, allDoneWire);
 
   // Connect the allDoneWire to the input ready.
   rewriter.create<ConnectOp>(insertLoc, argReady, allDoneWire);

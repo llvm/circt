@@ -14,8 +14,8 @@
 // CHECK:   %done0 = firrtl.wire : !firrtl.uint<1>
 // CHECK:   %done1 = firrtl.wire : !firrtl.uint<1>
 
-// CHECK:   %6 = firrtl.and %done1, %done0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:   %allDone = firrtl.wire : !firrtl.uint<1>
+// CHECK:   %6 = firrtl.and %done1, %done0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:   firrtl.connect %allDone, %6 : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:   firrtl.connect %[[ARG_READY:.+]], %allDone : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 
