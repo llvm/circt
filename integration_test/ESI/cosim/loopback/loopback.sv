@@ -9,19 +9,13 @@
 import Cosim_DpiPkg::*;
 
 module top(
-    `ifdef VERILATOR
     input logic clk,
     input logic rstn
-    `endif
 );
     localparam int TYPE_SIZE_BITS =
         (1 * 64) + // root message
         (1 * 64) + // list header
         (1 * 64);  // list of length 3 bytes, rounded up to multiples of 8 bytes
-    `ifndef VERILATOR
-    logic clk;
-    logic rstn;
-    `endif
 
     wire DataOutValid;
     wire DataOutReady = 1;
@@ -62,26 +56,4 @@ module top(
             DataInValid <= 0;
         end
     end
-
-`ifndef VERILATOR
-    // Clock
-    initial
-    begin
-        clk = 1'b0;
-        while (1)
-        begin
-            #5;
-            clk = !clk;
-        end
-    end
-
-    initial
-    begin
-        rstn = 0;
-        #17
-        // Run!
-        rstn = 1;
-    end
-`endif
-
 endmodule
