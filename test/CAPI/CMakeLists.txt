@@ -1,8 +1,3 @@
-set(LLVM_LINK_COMPONENTS
-  Core
-  Support
-  )
-
 add_llvm_executable(circt-capi-ir-test
   ir.c
   )
@@ -14,7 +9,5 @@ target_link_libraries(circt-capi-ir-test
   CIRCTCAPIRTL
   ${dialect_libs}
 
-  MLIRCAPIIR
   MLIRCAPIRegistration
-  MLIRPublicAPI
   )
