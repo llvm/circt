@@ -1764,9 +1764,27 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs, SubOpVector &subOps) {
       parseOptionalInfo(info, subOps))
     return failure();
 
-  if (kind == FIRToken::less_equal)
+  if (kind == FIRToken::less_equal) {
+    // Some operations, dshl for example, have implicit truncations, even in lo
+    // firrtl.  Handle truncations in a connect here.
+    if (lhs.getType() != rhs.getType()) {
+      auto lhsType =
+          lhs.getType().cast<FIRRTLType>().getPassiveType().dyn_cast<IntType>();
+      auto rhsType =
+          rhs.getType().cast<FIRRTLType>().getPassiveType().dyn_cast<IntType>();
+      if (lhsType && rhsType && lhsType.hasWidth() && rhsType.hasWidth() &&
+          lhsType.getWidthOrSentinel() < rhsType.getWidthOrSentinel()) {
+        rhs = builder.create<TailPrimOp>(
+            info.getLoc(),
+            IntType::get(builder.getContext(), false,
+                         lhsType.getWidthOrSentinel()),
+            rhs, lhsType.getWidthOrSentinel());
+        if (lhsType.isSigned()) // rhs is unsigned
+          rhs = builder.create<AsSIntPrimOp>(info.getLoc(), lhsType, rhs);
+      }
+    }
     builder.create<ConnectOp>(info.getLoc(), lhs, rhs);
-  else {
+  } else {
     assert(kind == FIRToken::less_minus && "unexpected kind");
     builder.create<PartialConnectOp>(info.getLoc(), lhs, rhs);
   }

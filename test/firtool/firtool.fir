@@ -40,3 +40,17 @@ circuit test_mod :
 ; MLIRLOWER: }
 
 ; MLIRLOWER: }
+
+  module implicitTrunc :
+    input inp_1: UInt<1>
+    input inp_2: SInt<5>
+    output tmp9: SInt<3>
+    tmp9 <= dshl(inp_2, inp_1)
+
+; VERILOG-LABEL:   module implicitTrunc(
+; VERILOG-NEXT :   input        inp_1,
+; VERILOG-NEXT :   input  [4:0] inp_2,
+; VERILOG-NEXT :   output [2:0] tmp9);
+; VERILOG-NEXT :   wire [5:0] _T = {{1{inp_2[4]}}, inp_2} << {5'h0, inp_1};      // bar.fir:6:13
+; VERILOG-NEXT :   assign tmp9 = _T[2:0];        // bar.fir:2:3, :6:10
+; VERILOG-NEXT : endmodule
