@@ -325,21 +325,76 @@ def KnownBitWidthType : Type<CPred<[{getBitWidth($_self) != -1}]>,
 
 def BitcastOp: RTLOp<"bitcast", [NoSideEffect]> {
   let summary = [{
-    Cast one value to to another value of the same size and
-    potentially different type, using a bitwise reinterpretation of the
-    value.
+    Reinterpret one value to another value of the same size and
+    potentially different type.
   }];
 
-  let arguments = (ins KnownBitWidthType:$from);
-  let results = (outs KnownBitWidthType:$to);
+  let description = [{
+    The bitcast operation represents a bitwise reinerpretation (cast) of a
+    value. This always synthesizes away in hardware, though if may or may not
+    be syntactically represented in lowering or export language.
+
+    Since bitcasting requires information on the bitwise layout of the types
+    on which it operates, we discuss that here.
+
+    ### Integer bit vectors
+
+    MLIR's `IntegerType` with `Signless` semantics are used to represent bit
+    vectors. They are never padded or aligned.
+
+    ### Arrays
+
+    The RTL dialect defines a custom `ArrayType`.
+
+    - **Bit layout**: High index of array starts at the MSB. Array's 0th
+      element's LSB located at array LSB.
+    - **Padding between elements**: None
+    - **Alignment of elements**: None
+
+    ### Structs
+
+    The RTL dialect defines a custom `StructType`.
+
+    - **Bit layout**: The first listed member's MSB corresponds to the
+      struct's MSB. The last member in the list shares its LSB with the
+      struct.
+    - **Padding between elements**: None
+    - **Alignment of elements**: None
+
+    ### Example figure
+
+    ```
+    15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0 
+    -------------------------------------------------
+    | MSB                                       LSB | 16 bit integer vector
+    -------------------------------------------------
+                             | MSB              LSB | 8 bit integer vector
+    -------------------------------------------------
+    | MSB      [1]       LSB | MSB     [0]      LSB | 2 element array of 8 bit integer vectors
+    -------------------------------------------------
+
+          13 12 11 10  9  8  7  6  5  4  3  2  1  0 
+                                ---------------------
+                                | MSB           LSB | 7 bit integer vector
+          -------------------------------------------
+          | MSB     [1]     LSB | MSB    [0]    LSB | 2 element array of 7 bit integer vectors
+          -------------------------------------------
+          | MSB a LSB | MSB b[1] LSB | MSB b[0] LSB | struct
+          -------------------------------------------  a: 4 bit integral
+                                                       b: 2 element array of 5 bit integer vectors
+    ```
+  }];
+
+  let arguments = (ins KnownBitWidthType:$input);
+  let results = (outs KnownBitWidthType:$result);
   let verifier = [{
-    if (getBitWidth(from().getType()) !=
-        getBitWidth(to().getType()))
-      return this->emitOpError("Bitwidth of 'to' must match 'from'");
+    if (getBitWidth(input().getType()) !=
+        getBitWidth(result().getType()))
+      return this->emitOpError("Bitwidth of input must match result");
     return success();
   }];
 
   let assemblyFormat = [{
-    $from attr-dict `:` `(` type($from) `)` `->` type($to)
+    $input attr-dict `:` functional-type($input, $result)
   }];
 }

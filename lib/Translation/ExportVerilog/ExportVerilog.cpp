@@ -886,12 +886,14 @@ SubExprInfo ExprEmitter::visitComb(ConcatOp op) {
 }
 
 SubExprInfo ExprEmitter::visitComb(BitcastOp op) {
+  // NOTE: Bitcasts are always emitted out-of-line with their own wire
+  // declaration. SystemVerilog uses the wire declaration to know what type this
+  // value is being casted to.
   Type toType = op.getType();
   os << "/*cast(bit";
   emitTypeDims(toType, op.getLoc(), os);
   os << ")*/";
-  auto subPrec = emitSubExpr(op.from(), LowestPrecedence);
-  return {Unary, subPrec.signedness};
+  return emitSubExpr(op.input(), LowestPrecedence);
 }
 
 SubExprInfo ExprEmitter::visitComb(ICmpOp op) {
