@@ -65,17 +65,20 @@ bool circt::rtl::isRTLValueType(Type type) {
 /// statically-size type. Reflects the number of wires needed to transmit a
 /// value of this type. Returns -1 if the type is not known or cannot be
 /// statically computed.
-int circt::rtl::getBitWidth(mlir::Type type) {
+int64_t circt::rtl::getBitWidth(mlir::Type type) {
   return llvm::TypeSwitch<::mlir::Type, size_t>(type)
       .Case<IntegerType>(
           [](IntegerType t) { return t.getIntOrFloatBitWidth(); })
       .Case<ArrayType>([](ArrayType a) {
-        return a.getSize() * getBitWidth(a.getElementType());
+        int64_t elementBitWidth = getBitWidth(a.getElementType());
+        if (elementBitWidth < 0)
+          return elementBitWidth;
+        return (int64_t)a.getSize() * elementBitWidth;
       })
       .Case<StructType>([](StructType s) {
-        int total = 0;
+        int64_t total = 0;
         for (auto field : s.getElements()) {
-          int fieldSize = getBitWidth(field.type);
+          int64_t fieldSize = getBitWidth(field.type);
           if (fieldSize < 0)
             return fieldSize;
           total += fieldSize;

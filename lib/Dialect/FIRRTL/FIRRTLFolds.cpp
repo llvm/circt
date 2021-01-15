@@ -133,11 +133,9 @@ OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
 
   /// xor(x, x) -> 0
   if (lhs() == rhs()) {
-    auto width = getType().getWidthOrSentinel();
-    if (width == -1)
-      width = 1;
-    auto type = IntegerType::get(getContext(), width);
-    return Builder(getContext()).getZeroAttr(type);
+    auto width = abs(getType().getWidthOrSentinel());
+    if (width != 0) // We cannot create a zero bit APInt.
+      return getIntAttr(APInt(width, 0), getContext());
   }
 
   return constFoldBinaryOp<IntegerAttr>(operands,
@@ -490,7 +488,7 @@ void TailPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       // If we know the input width, we can canonicalize this into a
       // BitsPrimOp.
       unsigned dropAmount = op.amount();
-      if (dropAmount != inputWidth)
+      if (dropAmount != unsigned(inputWidth))
         replaceWithBits(op, op.input(), inputWidth - dropAmount - 1, 0,
                         rewriter);
       return success();

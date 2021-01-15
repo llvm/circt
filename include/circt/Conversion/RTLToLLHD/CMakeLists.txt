@@ -2,4 +2,4 @@ set(LLVM_TARGET_DEFINITIONS Passes.td)
 mlir_tablegen(Passes.h.inc -gen-pass-decls)
 add_public_tablegen_target(CIRCTRTLToLLHDConversionPassIncGen)
 
-add_circt_doc(Passes -gen-pass-doc RTLToLLHD Passes/)
+add_circt_doc(Passes -gen-pass-doc RTLToLLHD ./)

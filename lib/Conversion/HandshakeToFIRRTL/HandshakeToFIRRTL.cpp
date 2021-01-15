@@ -323,6 +323,12 @@ static void createMergeArgReady(ArrayRef<Value> outputs, Value fired,
   }
 }
 
+static void extractValues(ArrayRef<ValueVector *> valueVectors, size_t index,
+                          SmallVectorImpl<Value> &result) {
+  for (auto *elt : valueVectors)
+    result.push_back((*elt)[index]);
+}
+
 //===----------------------------------------------------------------------===//
 // FIRRTL Top-module Related Functions
 //===----------------------------------------------------------------------===//
@@ -641,8 +647,21 @@ public:
   bool visitHandshake(MuxOp op);
   bool visitHandshake(SinkOp op);
 
+  bool buildJoinLogic(SmallVector<ValueVector *, 4> inputs,
+                      ValueVector *output);
+
   bool buildForkLogic(ValueVector *input, SmallVector<ValueVector *, 4> outputs,
                       Value clock, Value reset, bool isControl);
+
+  // Builds a tree by chaining together the inputs with the specified OpType and
+  // connecting the resulting value to the specified output. Also returns the
+  // result value for convenience to the surrounding logic that may want to
+  // re-use it.
+  template <typename OpType>
+  Value buildReductionTree(ArrayRef<Value> inputs, Value output);
+
+  void buildAllReadyLogic(SmallVector<ValueVector *, 4> inputs,
+                          ValueVector *output, Value condition);
 
 private:
   ValueVectorList portList;
@@ -669,30 +688,74 @@ bool HandshakeBuilder::visitHandshake(SinkOp op) {
   return true;
 }
 
+bool HandshakeBuilder::buildJoinLogic(SmallVector<ValueVector *, 4> inputs,
+                                      ValueVector *output) {
+  if (output == nullptr)
+    return false;
+
+  for (auto *input : inputs)
+    if (input == nullptr)
+      return false;
+
+  // Unpack the output subfields.
+  ValueVector outputSubfields = *output;
+
+  // The output is triggered only after all inputs are valid.
+  SmallVector<Value, 4> inputValids;
+  extractValues(inputs, 0, inputValids);
+  auto tmpValid =
+      buildReductionTree<AndPrimOp>(inputValids, outputSubfields[0]);
+
+  // The input will be ready to accept new token when old token is sent out.
+  buildAllReadyLogic(inputs, output, tmpValid);
+
+  return true;
+}
+
+template <typename OpType>
+Value HandshakeBuilder::buildReductionTree(ArrayRef<Value> inputs,
+                                           Value output) {
+  size_t inputSize = inputs.size();
+  assert(inputSize && "must pass inputs to reduce");
+
+  auto tmpValue = inputs[0];
+
+  for (size_t i = 1; i < inputSize; ++i)
+    tmpValue = rewriter.create<OpType>(insertLoc, tmpValue.getType(), inputs[i],
+                                       tmpValue);
+
+  rewriter.create<ConnectOp>(insertLoc, output, tmpValue);
+
+  return tmpValue;
+}
+
+void HandshakeBuilder::buildAllReadyLogic(SmallVector<ValueVector *, 4> inputs,
+                                          ValueVector *output,
+                                          Value condition) {
+  auto outputSubfields = *output;
+  auto outputReady = outputSubfields[1];
+
+  auto validAndReady = rewriter.create<AndPrimOp>(
+      insertLoc, outputReady.getType(), outputReady, condition);
+
+  for (unsigned i = 0, e = inputs.size(); i < e; ++i) {
+    auto currentInput = *inputs[i];
+    auto inputReady = currentInput[1];
+    rewriter.create<ConnectOp>(insertLoc, inputReady, validAndReady);
+  }
+}
+
 /// Currently only support {control = true}.
 /// Please refer to test_join.mlir test case.
 bool HandshakeBuilder::visitHandshake(JoinOp op) {
-  ValueVector resultSubfields = portList.back();
-  Value resultValid = resultSubfields[0];
-  Value resultReady = resultSubfields[1];
+  auto output = &portList.back();
 
-  // The output is triggered only after all inputs are valid.
-  Value *tmpValid = &portList[0][0];
-  for (unsigned i = 1, e = portList.size() - 1; i < e; ++i) {
-    Value argValid = portList[i][0];
-    *tmpValid = rewriter.create<AndPrimOp>(insertLoc, argValid.getType(),
-                                           argValid, *tmpValid);
-  }
-  rewriter.create<ConnectOp>(insertLoc, resultValid, *tmpValid);
+  // Collect all input ports.
+  SmallVector<ValueVector *, 4> inputs;
+  for (unsigned i = 0, e = portList.size() - 1; i < e; ++i)
+    inputs.push_back(&portList[i]);
 
-  // The input will be ready to accept new token when old token is sent out.
-  auto argReadyOp = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
-                                               resultReady, *tmpValid);
-  for (unsigned i = 0, e = portList.size() - 1; i < e; ++i) {
-    Value argReady = portList[i][1];
-    rewriter.create<ConnectOp>(insertLoc, argReady, argReadyOp);
-  }
-  return true;
+  return buildJoinLogic(inputs, output);
 }
 
 /// Please refer to test_mux.mlir test case.
@@ -1172,13 +1235,9 @@ bool HandshakeBuilder::buildForkLogic(ValueVector *input,
   // Create an AndPrimOp chain for generating the ready signal. Only if all
   // result ports are handshaked (done), the argument port is ready to accept
   // the next token.
-  Value tmpDone = doneWires[0];
-  for (auto doneWire : llvm::drop_begin(doneWires, 1))
-    tmpDone = rewriter.create<AndPrimOp>(insertLoc, bitType, doneWire, tmpDone);
-
-  auto allDoneWire = rewriter.create<WireOp>(insertLoc, bitType,
-                                             rewriter.getStringAttr("allDone"));
-  rewriter.create<ConnectOp>(insertLoc, allDoneWire, tmpDone);
+  Value allDoneWire = rewriter.create<WireOp>(
+      insertLoc, bitType, rewriter.getStringAttr("allDone"));
+  buildReductionTree<AndPrimOp>(doneWires, allDoneWire);
 
   // Connect the allDoneWire to the input ready.
   rewriter.create<ConnectOp>(insertLoc, argReady, allDoneWire);
@@ -1459,18 +1518,15 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
            storeControl.size() == 2 && "incorrect store port number");
 
     // Unpack store data.
-    auto storeDataValid = storeData[0];
     auto storeDataReady = storeData[1];
     auto storeDataData = storeData[2];
 
     // Unpack store address.
-    auto storeAddrValid = storeAddr[0];
     auto storeAddrReady = storeAddr[1];
     auto storeAddrData = storeAddr[2];
 
     // Unpack store control.
     auto storeControlValid = storeControl[0];
-    auto storeControlReady = storeControl[1];
 
     // Create a subfield op to access this port in the memory.
     auto fieldName = storeIdentifier(i);
@@ -1524,10 +1580,13 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     // Connect the write valid buffer to the store control valid.
     rewriter.create<ConnectOp>(insertLoc, storeControlValid, writeValidBuffer);
 
-    // Create a gate for when both the buffered write valid signal and the store
-    // complete ready signal are asserted.
-    auto storeCompleted = rewriter.create<AndPrimOp>(
-        insertLoc, bitType, writeValidBuffer, storeControlReady);
+    // Create the logic for when both the buffered write valid signal and the
+    // store complete ready signal are asserted.
+    Value storeCompleted = rewriter.create<WireOp>(
+        insertLoc, bitType, rewriter.getStringAttr("storeCompleted"));
+    ValueVector storeCompletedVector({Value(), storeCompleted});
+    buildAllReadyLogic({&storeCompletedVector}, &storeControl,
+                       writeValidBuffer);
 
     // Create a signal for when the write valid buffer is empty or the output is
     // ready.
@@ -1541,9 +1600,12 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     rewriter.create<ConnectOp>(insertLoc, storeAddrReady, emptyOrComplete);
     rewriter.create<ConnectOp>(insertLoc, storeDataReady, emptyOrComplete);
 
-    // Create a gate for when both the store address and data are valid.
-    auto writeValid = rewriter.create<AndPrimOp>(
-        insertLoc, bitType, storeAddrValid, storeDataValid);
+    // Create a wire for when both the store address and data are valid.
+    SmallVector<Value, 2> storeValids;
+    extractValues({&storeAddr, &storeData}, 0, storeValids);
+    Value writeValid = rewriter.create<WireOp>(
+        insertLoc, bitType, rewriter.getStringAttr("writeValid"));
+    buildReductionTree<AndPrimOp>(storeValids, writeValid);
 
     // Create a mux that drives the buffer input. If the emptyOrComplete signal
     // is asserted, the mux selects the writeValid signal. Otherwise, it selects

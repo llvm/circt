@@ -53,6 +53,62 @@ def MergeLikeOpInterface : OpInterface<"MergeLikeOpInterface"> {
   }];
 }
 
+def GeneralOpInterface : OpInterface<"GeneralOpInterface"> {
+  let description =
+      [{"Simulate the Execution of ops. The op takes a set of input values and "
+        "returns the corresponding outputs assuming the precondition to "
+        "execute holds."}];
+
+  let methods = [
+    InterfaceMethod<
+        "Simulate the Execution of the general op with given inputs", "void",
+        "execute",
+        (ins "std::vector<llvm::Any> &" : $ins, 
+           "std::vector<llvm::Any> &" : $outs)>,
+  ];
+}
+
+def ExecutableOpInterface : OpInterface<"ExecutableOpInterface"> {
+  let description = [{"Simulate the Execution of ops"}];
+
+  let methods = [
+    InterfaceMethod<
+        "The op checks its precondition to execute. If the precondition holds, "
+        "the op executes with the given input values and returns zero. "
+        "Otherwise, it returns a false value to suggest the simulator to "
+        "reschedule. The execution interface of hpx ops take the following "
+        "arguments: "
+        "bool = returns whether the op has been executed;"
+        "valueMap = a map of all values in the code;"
+        "memoryMap = a map of memory ops to simualte;"
+        "timeMap = a map of the last arrival time of all values;"
+        "store = The store associates each allocation in the program"
+        "(represented by a int) with a vector of values which can be"
+        "accessed by it."
+        "scheduleList = a list of values to be scheduled.",
+        "bool", "tryExecute",
+        (ins "llvm::DenseMap<mlir::Value, llvm::Any> &" : $valueMap, 
+           "llvm::DenseMap<unsigned, unsigned> &" : $memoryMap, 
+           "llvm::DenseMap<mlir::Value, double> &" : $timeMap, 
+           "std::vector<std::vector<llvm::Any>> &" : $store, 
+           "std::vector<mlir::Value> &" : $scheduleList)>,
+  ];
+}
+
+def MemoryOpInterface : OpInterface<"MemoryOpInterface"> {
+  let description =
+      [{"Allocate the memory to the meory map in the simulation. "}];
+
+  let methods = [
+    InterfaceMethod<
+        "Simulate the memory allocation in the memoryMap", "bool",
+        "allocateMemory",
+        (ins "llvm::DenseMap<unsigned, unsigned> &" : $memoryMap,
+    "std::vector<std::vector<llvm::Any>> &" : $store,
+    "std::vector<double> &" : $storeTimes)>,
+  ];
+}
+
 def HasClock : NativeOpTrait<"HasClock">;
 
 #endif // HANDSHAKE_INTERFACES

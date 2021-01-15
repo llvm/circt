@@ -37,7 +37,7 @@ bool isRTLValueType(mlir::Type type);
 /// statically-size type. Reflects the number of wires needed to transmit a
 /// value of this type. Returns -1 if the type is not known or cannot be
 /// statically computed.
-int getBitWidth(mlir::Type type);
+int64_t getBitWidth(mlir::Type type);
 
 /// Return true if the specified type contains known marker types like
 /// InOutType.  Unlike isRTLValueType, this is not conservative, it only returns
