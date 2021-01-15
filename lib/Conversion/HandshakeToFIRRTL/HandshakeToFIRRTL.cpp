@@ -323,6 +323,12 @@ static void createMergeArgReady(ArrayRef<Value> outputs, Value fired,
   }
 }
 
+static void extractValues(ArrayRef<ValueVector *> valueVectors, size_t index,
+                          SmallVectorImpl<Value> &result) {
+  for (auto *elt : valueVectors)
+    result.push_back((*elt)[index]);
+}
+
 //===----------------------------------------------------------------------===//
 // FIRRTL Top-module Related Functions
 //===----------------------------------------------------------------------===//
@@ -636,12 +642,26 @@ public:
   bool visitHandshake(ForkOp op);
   bool visitHandshake(JoinOp op);
   bool visitHandshake(LazyForkOp op);
+  bool visitHandshake(MemoryOp op);
   bool visitHandshake(MergeOp op);
   bool visitHandshake(MuxOp op);
   bool visitHandshake(SinkOp op);
 
+  bool buildJoinLogic(SmallVector<ValueVector *, 4> inputs,
+                      ValueVector *output);
+
   bool buildForkLogic(ValueVector *input, SmallVector<ValueVector *, 4> outputs,
                       Value clock, Value reset, bool isControl);
+
+  // Builds a tree by chaining together the inputs with the specified OpType and
+  // connecting the resulting value to the specified output. Also returns the
+  // result value for convenience to the surrounding logic that may want to
+  // re-use it.
+  template <typename OpType>
+  Value buildReductionTree(ArrayRef<Value> inputs, Value output);
+
+  void buildAllReadyLogic(SmallVector<ValueVector *, 4> inputs,
+                          ValueVector *output, Value condition);
 
 private:
   ValueVectorList portList;
@@ -668,30 +688,74 @@ bool HandshakeBuilder::visitHandshake(SinkOp op) {
   return true;
 }
 
+bool HandshakeBuilder::buildJoinLogic(SmallVector<ValueVector *, 4> inputs,
+                                      ValueVector *output) {
+  if (output == nullptr)
+    return false;
+
+  for (auto *input : inputs)
+    if (input == nullptr)
+      return false;
+
+  // Unpack the output subfields.
+  ValueVector outputSubfields = *output;
+
+  // The output is triggered only after all inputs are valid.
+  SmallVector<Value, 4> inputValids;
+  extractValues(inputs, 0, inputValids);
+  auto tmpValid =
+      buildReductionTree<AndPrimOp>(inputValids, outputSubfields[0]);
+
+  // The input will be ready to accept new token when old token is sent out.
+  buildAllReadyLogic(inputs, output, tmpValid);
+
+  return true;
+}
+
+template <typename OpType>
+Value HandshakeBuilder::buildReductionTree(ArrayRef<Value> inputs,
+                                           Value output) {
+  size_t inputSize = inputs.size();
+  assert(inputSize && "must pass inputs to reduce");
+
+  auto tmpValue = inputs[0];
+
+  for (size_t i = 1; i < inputSize; ++i)
+    tmpValue = rewriter.create<OpType>(insertLoc, tmpValue.getType(), inputs[i],
+                                       tmpValue);
+
+  rewriter.create<ConnectOp>(insertLoc, output, tmpValue);
+
+  return tmpValue;
+}
+
+void HandshakeBuilder::buildAllReadyLogic(SmallVector<ValueVector *, 4> inputs,
+                                          ValueVector *output,
+                                          Value condition) {
+  auto outputSubfields = *output;
+  auto outputReady = outputSubfields[1];
+
+  auto validAndReady = rewriter.create<AndPrimOp>(
+      insertLoc, outputReady.getType(), outputReady, condition);
+
+  for (unsigned i = 0, e = inputs.size(); i < e; ++i) {
+    auto currentInput = *inputs[i];
+    auto inputReady = currentInput[1];
+    rewriter.create<ConnectOp>(insertLoc, inputReady, validAndReady);
+  }
+}
+
 /// Currently only support {control = true}.
 /// Please refer to test_join.mlir test case.
 bool HandshakeBuilder::visitHandshake(JoinOp op) {
-  ValueVector resultSubfields = portList.back();
-  Value resultValid = resultSubfields[0];
-  Value resultReady = resultSubfields[1];
+  auto output = &portList.back();
 
-  // The output is triggered only after all inputs are valid.
-  Value *tmpValid = &portList[0][0];
-  for (unsigned i = 1, e = portList.size() - 1; i < e; ++i) {
-    Value argValid = portList[i][0];
-    *tmpValid = rewriter.create<AndPrimOp>(insertLoc, argValid.getType(),
-                                           argValid, *tmpValid);
-  }
-  rewriter.create<ConnectOp>(insertLoc, resultValid, *tmpValid);
+  // Collect all input ports.
+  SmallVector<ValueVector *, 4> inputs;
+  for (unsigned i = 0, e = portList.size() - 1; i < e; ++i)
+    inputs.push_back(&portList[i]);
 
-  // The input will be ready to accept new token when old token is sent out.
-  auto argReadyOp = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
-                                               resultReady, *tmpValid);
-  for (unsigned i = 0, e = portList.size() - 1; i < e; ++i) {
-    Value argReady = portList[i][1];
-    rewriter.create<ConnectOp>(insertLoc, argReady, argReadyOp);
-  }
-  return true;
+  return buildJoinLogic(inputs, output);
 }
 
 /// Please refer to test_mux.mlir test case.
@@ -1171,13 +1235,9 @@ bool HandshakeBuilder::buildForkLogic(ValueVector *input,
   // Create an AndPrimOp chain for generating the ready signal. Only if all
   // result ports are handshaked (done), the argument port is ready to accept
   // the next token.
-  Value tmpDone = doneWires[0];
-  for (auto doneWire : llvm::drop_begin(doneWires, 1))
-    tmpDone = rewriter.create<AndPrimOp>(insertLoc, bitType, doneWire, tmpDone);
-
-  auto allDoneWire = rewriter.create<WireOp>(insertLoc, bitType,
-                                             rewriter.getStringAttr("allDone"));
-  rewriter.create<ConnectOp>(insertLoc, allDoneWire, tmpDone);
+  Value allDoneWire = rewriter.create<WireOp>(
+      insertLoc, bitType, rewriter.getStringAttr("allDone"));
+  buildReductionTree<AndPrimOp>(doneWires, allDoneWire);
 
   // Connect the allDoneWire to the input ready.
   rewriter.create<ConnectOp>(insertLoc, argReady, allDoneWire);
@@ -1318,6 +1378,262 @@ bool HandshakeBuilder::visitHandshake(BufferOp op) {
   (void)clock;
   (void)inputValid;
   (void)inputReady;
+
+  return true;
+}
+
+bool HandshakeBuilder::visitHandshake(MemoryOp op) {
+  // Get the memory type and element type.
+  MemRefType type = op.type();
+  Type elementType = type.getElementType();
+  if (!elementType.isSignlessInteger()) {
+    op.emitError("only memrefs of signless ints are supported");
+    return false;
+  }
+
+  // Set up FIRRTL memory attributes. This circuit relies on a read latency of 0
+  // and a write latency of 1, but this could be generalized.
+  uint32_t readLatency = 0;
+  uint32_t writeLatency = 1;
+  RUWAttr ruw = RUWAttr::Old;
+  uint64_t depth = type.getNumElements();
+  FIRRTLType dataType = getFIRRTLType(elementType);
+  StringAttr name = rewriter.getStringAttr("mem" + std::to_string(op.id()));
+
+  // Helpers to get port identifiers.
+  auto loadIdentifier = [&](size_t i) {
+    return rewriter.getIdentifier("load" + std::to_string(i));
+  };
+
+  auto storeIdentifier = [&](size_t i) {
+    return rewriter.getIdentifier("store" + std::to_string(i));
+  };
+
+  // Collect the port info for each port.
+  uint64_t numLoads = op.getLdCount().getLimitedValue();
+  uint64_t numStores = op.getStCount().getLimitedValue();
+  SmallVector<std::pair<Identifier, MemOp::PortKind>, 8> ports;
+  for (size_t i = 0; i < numLoads; ++i) {
+    auto portName = loadIdentifier(i);
+    auto portKind = MemOp::PortKind::Read;
+    ports.push_back({portName, portKind});
+  }
+  for (size_t i = 0; i < numStores; ++i) {
+    auto portName = storeIdentifier(i);
+    auto portKind = MemOp::PortKind::Write;
+    ports.push_back({portName, portKind});
+  }
+
+  // Create the special type to represent this memory.
+  FIRRTLType memType = MemOp::getTypeForPortList(depth, dataType, ports);
+
+  // Create the actual mem op.
+  auto memOp = rewriter.create<MemOp>(insertLoc, memType, readLatency,
+                                      writeLatency, depth, ruw, name);
+
+  // Prepare to create each load and store port logic.
+  BundleType resultType = memOp.getType().cast<BundleType>();
+  auto bitType = UIntType::get(rewriter.getContext(), 1);
+  auto numPorts = portList.size();
+  auto clock = portList[numPorts - 2][0];
+  auto reset = portList[numPorts - 1][0];
+
+  // Collect load arguments.
+  for (size_t i = 0; i < numLoads; ++i) {
+    // Extract load ports from the port list.
+    auto loadAddr = portList[2 * numStores + i];
+    auto loadData = portList[2 * numStores + numLoads + i];
+    auto loadControl = portList[3 * numStores + 2 * numLoads + i];
+
+    assert(loadAddr.size() == 3 && loadData.size() == 3 &&
+           loadControl.size() == 2 && "incorrect load port number");
+
+    // Unpack load address.
+    auto loadAddrValid = loadAddr[0];
+    auto loadAddrData = loadAddr[2];
+
+    // Unpack load data.
+    auto loadDataData = loadData[2];
+
+    // Create a subfield op to access this port in the memory.
+    auto fieldName = loadIdentifier(i);
+    auto bundleType = resultType.getElementType(fieldName).cast<BundleType>();
+    auto memBundle =
+        rewriter.create<SubfieldOp>(insertLoc, bundleType, memOp, fieldName);
+
+    // Get the clock out of the bundle and connect it.
+    auto memClockType = bundleType.getElementType("clk");
+    auto memClock =
+        rewriter.create<SubfieldOp>(insertLoc, memClockType, memBundle, "clk");
+    rewriter.create<ConnectOp>(insertLoc, memClock, clock);
+
+    // Get the load address out of the bundle.
+    auto memAddrType = bundleType.getElementType("addr");
+    auto memAddr =
+        rewriter.create<SubfieldOp>(insertLoc, memAddrType, memBundle, "addr");
+
+    // Since addresses coming from Handshake are IndexType and have a hardcoded
+    // 64-bit width in this pass, we may need to truncate down to the actual
+    // size of the address port used by the FIRRTL memory.
+    auto loadAddrType = loadAddrData.getType().cast<FIRRTLType>();
+    if (memAddrType != loadAddrType) {
+      auto memAddrPassiveType = memAddrType.getPassiveType();
+      auto tailAmount = loadAddrType.getBitWidthOrSentinel() -
+                        memAddrPassiveType.getBitWidthOrSentinel();
+      loadAddrData = rewriter.create<TailPrimOp>(insertLoc, memAddrPassiveType,
+                                                 loadAddrData, tailAmount);
+    }
+
+    // Connect the load address to the memory.
+    rewriter.create<ConnectOp>(insertLoc, memAddr, loadAddrData);
+
+    // Get the load data out of the bundle.
+    auto memDataType = bundleType.getElementType("data");
+    auto memData =
+        rewriter.create<SubfieldOp>(insertLoc, memDataType, memBundle, "data");
+
+    // Connect the memory to the load data.
+    rewriter.create<ConnectOp>(insertLoc, loadDataData, memData);
+
+    // Get the load enable out of the bundle.
+    auto memEnableType = bundleType.getElementType("en");
+    auto memEnable =
+        rewriter.create<SubfieldOp>(insertLoc, memEnableType, memBundle, "en");
+
+    // Connect the address valid signal to the memory enable.
+    rewriter.create<ConnectOp>(insertLoc, memEnable, loadAddrValid);
+
+    // Create control-only fork for the load address valid and ready signal.
+    buildForkLogic(&loadAddr, {&loadData, &loadControl}, clock, reset, true);
+  }
+
+  // Collect store arguments.
+  for (size_t i = 0; i < numStores; ++i) {
+    // Extract store ports from the port list.
+    auto storeData = portList[i];
+    auto storeAddr = portList[i + 1];
+    auto storeControl = portList[2 * numStores + 2 * numLoads + i];
+
+    assert(storeAddr.size() == 3 && storeData.size() == 3 &&
+           storeControl.size() == 2 && "incorrect store port number");
+
+    // Unpack store data.
+    auto storeDataReady = storeData[1];
+    auto storeDataData = storeData[2];
+
+    // Unpack store address.
+    auto storeAddrReady = storeAddr[1];
+    auto storeAddrData = storeAddr[2];
+
+    // Unpack store control.
+    auto storeControlValid = storeControl[0];
+
+    // Create a subfield op to access this port in the memory.
+    auto fieldName = storeIdentifier(i);
+    auto subfieldType = resultType.getElementType(fieldName).cast<FlipType>();
+    auto bundleType = subfieldType.getElementType().cast<BundleType>();
+    auto memBundle =
+        rewriter.create<SubfieldOp>(insertLoc, subfieldType, memOp, fieldName);
+
+    // Get the clock out of the bundle and connect it.
+    auto memClockType = FlipType::get(bundleType.getElementType("clk"));
+    auto memClock =
+        rewriter.create<SubfieldOp>(insertLoc, memClockType, memBundle, "clk");
+    rewriter.create<ConnectOp>(insertLoc, memClock, clock);
+
+    // Get the store address out of the bundle.
+    auto memAddrType = FlipType::get(bundleType.getElementType("addr"));
+    auto memAddr =
+        rewriter.create<SubfieldOp>(insertLoc, memAddrType, memBundle, "addr");
+
+    // Since addresses coming from Handshake are IndexType and have a hardcoded
+    // 64-bit width in this pass, we may need to truncate down to the actual
+    // size of the address port used by the FIRRTL memory.
+    auto storeAddrType = storeAddrData.getType().cast<FIRRTLType>();
+    if (memAddrType != storeAddrType) {
+      auto memAddrPassiveType = memAddrType.getPassiveType();
+      auto tailAmount = storeAddrType.getBitWidthOrSentinel() -
+                        memAddrPassiveType.getBitWidthOrSentinel();
+      storeAddrData = rewriter.create<TailPrimOp>(insertLoc, memAddrPassiveType,
+                                                  storeAddrData, tailAmount);
+    }
+
+    // Connect the store address to the memory.
+    rewriter.create<ConnectOp>(insertLoc, memAddr, storeAddrData);
+
+    // Get the store data out of the bundle.
+    auto memDataType = FlipType::get(bundleType.getElementType("data"));
+    auto memData =
+        rewriter.create<SubfieldOp>(insertLoc, memDataType, memBundle, "data");
+
+    // Connect the store data to the memory.
+    rewriter.create<ConnectOp>(insertLoc, memData, storeDataData);
+
+    // Create a register to buffer the valid path by 1 cycle, to match the write
+    // latency of 1.
+    auto falseConst =
+        createConstantOp(bitType, APInt(1, 0), insertLoc, rewriter);
+    auto bufferName = rewriter.getStringAttr("writeValidBuffer");
+    auto writeValidBuffer = rewriter.create<RegResetOp>(
+        insertLoc, bitType, clock, reset, falseConst, bufferName);
+
+    // Connect the write valid buffer to the store control valid.
+    rewriter.create<ConnectOp>(insertLoc, storeControlValid, writeValidBuffer);
+
+    // Create the logic for when both the buffered write valid signal and the
+    // store complete ready signal are asserted.
+    Value storeCompleted = rewriter.create<WireOp>(
+        insertLoc, bitType, rewriter.getStringAttr("storeCompleted"));
+    ValueVector storeCompletedVector({Value(), storeCompleted});
+    buildAllReadyLogic({&storeCompletedVector}, &storeControl,
+                       writeValidBuffer);
+
+    // Create a signal for when the write valid buffer is empty or the output is
+    // ready.
+    auto notWriteValidBuffer =
+        rewriter.create<NotPrimOp>(insertLoc, bitType, writeValidBuffer);
+
+    auto emptyOrComplete = rewriter.create<OrPrimOp>(
+        insertLoc, bitType, notWriteValidBuffer, storeCompleted);
+
+    // Connect the gate to both the store address ready and store data ready.
+    rewriter.create<ConnectOp>(insertLoc, storeAddrReady, emptyOrComplete);
+    rewriter.create<ConnectOp>(insertLoc, storeDataReady, emptyOrComplete);
+
+    // Create a wire for when both the store address and data are valid.
+    SmallVector<Value, 2> storeValids;
+    extractValues({&storeAddr, &storeData}, 0, storeValids);
+    Value writeValid = rewriter.create<WireOp>(
+        insertLoc, bitType, rewriter.getStringAttr("writeValid"));
+    buildReductionTree<AndPrimOp>(storeValids, writeValid);
+
+    // Create a mux that drives the buffer input. If the emptyOrComplete signal
+    // is asserted, the mux selects the writeValid signal. Otherwise, it selects
+    // the buffer output, keeping the output registered until the
+    // emptyOrComplete signal is asserted.
+    auto writeValidBufferMux = rewriter.create<MuxPrimOp>(
+        insertLoc, bitType, emptyOrComplete, writeValid, writeValidBuffer);
+
+    rewriter.create<ConnectOp>(insertLoc, writeValidBuffer,
+                               writeValidBufferMux);
+
+    // Get the store enable out of the bundle.
+    auto memEnableType = FlipType::get(bundleType.getElementType("en"));
+    auto memEnable =
+        rewriter.create<SubfieldOp>(insertLoc, memEnableType, memBundle, "en");
+
+    // Connect the write valid signal to the memory enable.
+    rewriter.create<ConnectOp>(insertLoc, memEnable, writeValid);
+
+    // Get the store mask out of the bundle.
+    auto memMaskType = FlipType::get(bundleType.getElementType("mask"));
+    auto memMask =
+        rewriter.create<SubfieldOp>(insertLoc, memMaskType, memBundle, "mask");
+
+    // Since we are not storing bundles in the memory, we can assume the mask is
+    // a single bit.
+    rewriter.create<ConnectOp>(insertLoc, memMask, writeValid);
+  }
 
   return true;
 }

@@ -26,6 +26,7 @@
 #include "mlir/IR/Types.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/Any.h"
 
 namespace circt {
 namespace handshake {

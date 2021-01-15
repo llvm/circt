@@ -1315,9 +1315,9 @@ void BitsPrimOp::build(OpBuilder &builder, OperationState &result, Value input,
 FIRRTLType HeadPrimOp::getResultType(FIRRTLType input, int32_t amount,
                                      Location loc) {
   auto inputi = input.dyn_cast<IntType>();
-  if (amount <= 0 || !inputi) {
+  if (amount < 0 || !inputi) {
     mlir::emitError(loc,
-                    "operand must have integer type and amount must be >= 1");
+                    "operand must have integer type and amount must be >= 0");
     return {};
   }
 
@@ -1425,10 +1425,8 @@ FIRRTLType TailPrimOp::getResultType(FIRRTLType input, int32_t amount,
 
   int32_t width = inputi.getWidthOrSentinel();
   if (width != -1) {
-    // TODO(firrtl-spec): zero bit integers are not allowed, so the amount
-    // cannot equal the width.
-    if (width <= amount) {
-      mlir::emitError(loc, "amount must be less than operand width");
+    if (width < amount) {
+      mlir::emitError(loc, "amount must be less than or equal operand width");
       return {};
     }
     width -= amount;

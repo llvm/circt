@@ -142,6 +142,14 @@ def WireOp : FIRRTLOp<"wire", []> {
   let arguments = (ins OptionalAttr<StrAttr>:$name);
   let results = (outs FIRRTLType:$result);
 
+  let builders = [
+    OpBuilderDAG<(ins "::mlir::Type":$elementType,
+                      CArg<"StringRef", "{}">:$name), [{
+      return build($_builder, $_state, elementType,
+                   $_builder.getStringAttr(name));
+    }]>
+  ];
+
   // We handle the name in a custom way, so we use a customer parser/printer.
   let printer = "printWireOp(p, *this);";
   let parser = "return parseWireOp(parser, result);";

@@ -3,6 +3,7 @@ set(CIRCT_INTEGRATION_TEST_DEPENDS
   circt-opt
   circt-translate
   circt-rtl-sim
+  esi-cosim-runner
   firtool)
 
 # If ESI Cosim is available to build then enable its tests.
