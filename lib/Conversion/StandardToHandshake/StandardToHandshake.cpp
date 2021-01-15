@@ -956,7 +956,9 @@ SmallVector<Value, 8> getResultsToMemory(Operation *op) {
   if (handshake::LoadOp loadOp = dyn_cast<handshake::LoadOp>(op)) {
     // For load, get all address outputs/indices
     // (load also has one data output which goes to successor operation)
-    SmallVector<Value, 8> results(loadOp.addressResults());
+    // TODO: pass loadOp.addressResults() when variadic addresses are supported.
+    auto addressArray = {loadOp.addressResults()};
+    SmallVector<Value, 8> results(addressArray);
     return results;
 
   } else {
