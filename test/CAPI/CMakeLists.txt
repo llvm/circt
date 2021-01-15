@@ -10,4 +10,5 @@ target_link_libraries(circt-capi-ir-test
   ${dialect_libs}
 
   MLIRCAPIRegistration
+  MLIRPublicAPI
   )
