@@ -689,6 +689,8 @@ private:
   SubExprInfo visitComb(ExtractOp op);
   SubExprInfo visitComb(ICmpOp op);
 
+  SubExprInfo visitComb(BitcastOp op);
+
 private:
   /// This is set (before a visit method is called) if emitSubExpr would
   /// prefer to get an output of a specific sign.  This is a hint to cause the
@@ -881,6 +883,17 @@ SubExprInfo ExprEmitter::visitComb(ConcatOp op) {
 
   os << '}';
   return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitComb(BitcastOp op) {
+  // NOTE: Bitcasts are always emitted out-of-line with their own wire
+  // declaration. SystemVerilog uses the wire declaration to know what type this
+  // value is being casted to.
+  Type toType = op.getType();
+  os << "/*cast(bit";
+  emitTypeDims(toType, op.getLoc(), os);
+  os << ")*/";
+  return emitSubExpr(op.input(), LowestPrecedence);
 }
 
 SubExprInfo ExprEmitter::visitComb(ICmpOp op) {
@@ -1585,6 +1598,10 @@ static bool isOkToBitSelectFrom(Value v) {
 /// happens because not all Verilog expressions are composable, notably you can
 /// only use bit selects like x[4:6] on simple expressions.
 static bool isExpressionUnableToInline(Operation *op) {
+  if (isa<BitcastOp>(op))
+    // Bitcasts rely on the type being assigned to, so we cannot inline.
+    return true;
+
   // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
   for (auto user : op->getUsers()) {

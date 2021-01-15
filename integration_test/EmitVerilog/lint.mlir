@@ -4,6 +4,7 @@
 // RUN: verilator --lint-only --top-module AB %t1.sv
 // RUN: verilator --lint-only --top-module shl %t1.sv
 // RUN: verilator --lint-only --top-module TESTSIMPLE %t1.sv
+// RUN: verilator --lint-only --top-module casts %t1.sv
 
 module {
   rtl.module @B(%a: i1 { rtl.inout }) -> (i1 {rtl.name = "b"}, i1 {rtl.name = "c"}) {
@@ -88,5 +89,13 @@ module {
      i4,i4, i4,i4,i4,i4,i4, i4,i4,i4,i4,i4,
      i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,i1,i1,
      i12, i2,i9,i4, i4, !rtl.array<3xi4>
+  }
+
+  rtl.module @casts(%in1: i64) -> (%r1: !rtl.array<5xi8>) {
+    %bits = rtl.bitcast %in1 : (i64) -> !rtl.array<64xi1>
+    %idx = rtl.constant (10 : i6) : i6
+    %midBits = rtl.array_slice %bits at %idx : (!rtl.array<64xi1>) -> !rtl.array<40xi1>
+    %r1 = rtl.bitcast %midBits : (!rtl.array<40xi1>) -> !rtl.array<5xi8>
+    rtl.output %r1 : !rtl.array<5xi8>
   }
 }
