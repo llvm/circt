@@ -94,7 +94,7 @@ def NodeOp : FIRRTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
   let arguments = (ins PassiveType:$input, OptionalAttr<StrAttr>:$name);
   let results = (outs FIRRTLType:$result);
 
-  let assemblyFormat = "$input custom<Fancy>(attr-dict) `:` type($input)";
+  let assemblyFormat = "$input custom<ImplicitSSAName>(attr-dict) `:` type($input)";
 }
 
 def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
@@ -150,5 +150,5 @@ def WireOp : FIRRTLOp<"wire", []> {
     }]>
   ];
 
-  let assemblyFormat = "custom<Fancy>(attr-dict) `:` type($result)";
+  let assemblyFormat = "custom<ImplicitSSAName>(attr-dict) `:` type($result)";
 }

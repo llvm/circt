@@ -1457,10 +1457,11 @@ void AsPassivePrimOp::build(OpBuilder &builder, OperationState &result,
 }
 
 //===----------------------------------------------------------------------===//
-// Fancy Custom Directive
+// ImplicitSSAName Custom Directive
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseFancy(OpAsmParser &parser, NamedAttrList &resultAttrs) {
+static ParseResult parseImplicitSSAName(OpAsmParser &parser,
+                                        NamedAttrList &resultAttrs) {
 
   if (parser.parseOptionalAttrDict(resultAttrs))
     return failure();
@@ -1486,7 +1487,8 @@ static ParseResult parseFancy(OpAsmParser &parser, NamedAttrList &resultAttrs) {
   return success();
 }
 
-static void printFancy(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
+static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
+                                 DictionaryAttr attr) {
   // Note that we only need to print the "name" attribute if the asmprinter
   // result name disagrees with it.  This can happen in strange cases, e.g.
   // when there are conflicts.
