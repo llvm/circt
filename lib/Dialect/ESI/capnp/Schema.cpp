@@ -348,13 +348,13 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
   auto u32 =
       IntegerType::get(ctxt, 32, IntegerType::SignednessSemantics::Signless);
 
-  rtl::ArrayType operandType =
-              operand.getType().dyn_cast<rtl::ArrayType>();
+  rtl::ArrayType operandType = operand.getType().dyn_cast<rtl::ArrayType>();
   assert(operandType && operandType.getSize() == size &&
          "Operand type and length must match the type's capnp size.");
 
   auto alwaysAt = b.create<sv::AlwaysOp>(loc, EventControl::AtPosEdge, clk);
-  auto ifValid = OpBuilder(alwaysAt.getBodyRegion()).create<sv::IfOp>(loc, valid);
+  auto ifValid =
+      OpBuilder(alwaysAt.getBodyRegion()).create<sv::IfOp>(loc, valid);
   OpBuilder asserts(ifValid.getBodyRegion());
 
   // The next 64-bits of a capnp message is the root struct pointer.
@@ -372,7 +372,7 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
 
   asserts.create<sv::AssertOp>(
       loc, asserts.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
-                                 typeAndOffset, b16Zero));
+                                       typeAndOffset, b16Zero));
 
   // We expect the data section to be equal to the computed data section size.
   auto dataSectionSize = asserts.create<rtl::BitcastOp>(
@@ -381,8 +381,9 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
   auto expectedDataSectionSize = asserts.create<rtl::ConstantOp>(
       loc, u16, rootProto.getStruct().getDataWordCount());
   asserts.create<sv::AssertOp>(
-      loc, asserts.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
-                                 dataSectionSize, expectedDataSectionSize));
+      loc,
+      asserts.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
+                                  dataSectionSize, expectedDataSectionSize));
 
   // We expect the pointer section to be equal to the computed pointer section
   // size.
@@ -393,7 +394,7 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
       loc, u16, rootProto.getStruct().getPointerCount() * 64);
   asserts.create<sv::AssertOp>(
       loc, asserts.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
-                                 ptrSectionSize, expectedPtrSectionSize));
+                                       ptrSectionSize, expectedPtrSectionSize));
 
   auto dataSection = b.create<rtl::ArraySliceOp>(
       loc, operand, 64, rootProto.getStruct().getDataWordCount() * 64);
