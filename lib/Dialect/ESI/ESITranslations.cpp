@@ -4,8 +4,6 @@
 // - Cap'nProto schema generation
 //
 //===----------------------------------------------------------------------===//
-
-#include "circt/Dialect/ESI/CosimSchema.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 
@@ -21,6 +19,7 @@
 
 #ifdef CAPNP
 #include "capnp/ESICapnp.h"
+#include "circt/Dialect/ESI/CosimSchema.h"
 #endif
 
 using namespace mlir;
