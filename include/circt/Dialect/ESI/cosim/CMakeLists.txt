@@ -19,9 +19,4 @@ if(CapnProto_FOUND)
     ${COSIM_CAPNP_SRCS}
     CosimSchema.h)
   target_link_libraries(EsiCosimCapnp PRIVATE CapnProto::capnp)
-
-
-  # set(content "R\"${include}(\n${content})${include}\"")
-      # file(WRITE ${output_file} "${content}")
-  # create_include( )
 endif()

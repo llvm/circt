@@ -15,7 +15,7 @@ func @ops(f32, f32, i32, i32) -> (f32, i32) {
 // CHECK:           %[[VAL_12:.*]]:9 = "handshake.fork"(%[[VAL_11]]) {control = false} : (i32) -> (i32, i32, i32, i32, i32, i32, i32, i32, i32)
 // CHECK:           %[[VAL_13:.*]] = subf %[[VAL_6]]#2, %[[VAL_8]]#2 : f32
 // CHECK:           %[[VAL_14:.*]] = subi %[[VAL_10]]#9, %[[VAL_12]]#8 : i32
-// CHECK:           %[[VAL_15:.*]] = cmpi "slt", %[[VAL_10]]#8, %[[VAL_14]] : i32
+// CHECK:           %[[VAL_15:.*]] = cmpi slt, %[[VAL_10]]#8, %[[VAL_14]] : i32
 // CHECK:           %[[VAL_16:.*]] = divi_signed %[[VAL_10]]#7, %[[VAL_12]]#7 : i32
 // CHECK:           %[[VAL_17:.*]] = divi_unsigned %[[VAL_10]]#6, %[[VAL_12]]#6 : i32
 // CHECK:           "handshake.sink"(%[[VAL_17]]) : (i32) -> ()
@@ -42,7 +42,7 @@ func @ops(f32, f32, i32, i32) -> (f32, i32) {
 ^bb0(%arg0: f32, %arg1: f32, %arg2: i32, %arg3: i32):
   %0 = subf %arg0, %arg1: f32
   %1 = subi %arg2, %arg3: i32
-  %2 = cmpi "slt", %arg2, %1 : i32
+  %2 = cmpi slt, %arg2, %1 : i32
   %4 = divi_signed %arg2, %arg3 : i32
   %5 = divi_unsigned %arg2, %arg3 : i32
   %6 = remi_signed %arg2, %arg3 : i32

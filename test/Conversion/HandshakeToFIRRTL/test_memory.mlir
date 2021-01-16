@@ -19,7 +19,7 @@
 // CHECK: %[[LD_CONTROL_READY:.+]] = firrtl.subfield %arg5("ready")
 
 // Construct the memory.
-// CHECK: %[[MEM:.+]] = firrtl.mem "Old" {depth = 10 : i64, name = "mem0", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<load0: bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>>, store0: flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>>
+// CHECK: %[[MEM:.+]] = firrtl.mem Old {depth = 10 : i64, name = "mem0", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<load0: bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>>, store0: flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>>
 
 // Get the load0 port.
 // CHECK: %[[MEM_LOAD:.+]] = firrtl.subfield %[[MEM]]("load0") : {{.*}} -> !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>>

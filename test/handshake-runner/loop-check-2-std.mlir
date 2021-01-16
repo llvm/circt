@@ -13,7 +13,7 @@ module {
     %1 = alloc() : memref<64xi32>
     br ^bb1(%c0 : index)
   ^bb1(%2: index):  // 2 preds: ^bb0, ^bb2
-    %3 = cmpi "slt", %2, %c4 : index
+    %3 = cmpi slt, %2, %c4 : index
     cond_br %3, ^bb2, ^bb3
   ^bb2: // pred: ^bb1
     store %c5_i32, %0[%2] : memref<64xi32>
@@ -22,7 +22,7 @@ module {
   ^bb3: // pred: ^bb1
     br ^bb4(%c0 : index)
   ^bb4(%5: index):  // 2 preds: ^bb3, ^bb5
-    %6 = cmpi "slt", %5, %c4 : index
+    %6 = cmpi slt, %5, %c4 : index
     cond_br %6, ^bb5, ^bb6
   ^bb5: // pred: ^bb4
     %7 = load %0[%5] : memref<64xi32>

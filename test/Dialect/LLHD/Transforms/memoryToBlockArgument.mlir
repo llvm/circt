@@ -242,7 +242,7 @@ llhd.proc @multiple_store_one_block() -> () {
 // CHECK:           br ^bb2(%[[VAL_1]] : i32)
 // CHECK:         ^bb2(%[[VAL_2:.*]]: i32):
 // CHECK:           %[[VAL_3:.*]] = llhd.const 2 : i32
-// CHECK:           %[[VAL_4:.*]] = cmpi "ult", %[[VAL_2]], %[[VAL_3]] : i32
+// CHECK:           %[[VAL_4:.*]] = cmpi ult, %[[VAL_2]], %[[VAL_3]] : i32
 // CHECK:           cond_br %[[VAL_4]], ^bb4, ^bb3
 // CHECK:         ^bb3:
 // CHECK:           llhd.wait (%[[VAL_0]] : !llhd.sig<i2>), ^bb1
@@ -261,7 +261,7 @@ llhd.proc @loop(%in_i : !llhd.sig<i2>) -> () {
 ^loop_body:
   %i_ld = llhd.load %i : !llhd.ptr<i32>
   %1 = llhd.const 2 : i32
-  %2 = cmpi "ult", %i_ld, %1 : i32
+  %2 = cmpi ult, %i_ld, %1 : i32
   cond_br %2, ^loop_continue, ^check
 ^check:
   llhd.wait (%in_i : !llhd.sig<i2>), ^body

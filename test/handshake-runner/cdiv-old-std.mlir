@@ -17,7 +17,7 @@ module {
     %c4 = constant 4 : index
     br ^bb1(%c0 : index)
   ^bb1(%11: index):	// 2 preds: ^bb0, ^bb5
-    %12 = cmpi "slt", %11, %c4 : index
+    %12 = cmpi slt, %11, %c4 : index
     cond_br %12, ^bb2, ^bb6
   ^bb2:	// pred: ^bb1
     %13 = load %0[%11] : memref<4xi32>
