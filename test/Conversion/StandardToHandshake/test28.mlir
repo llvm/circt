@@ -26,7 +26,7 @@
 // CHECK:           %[[VAL_19]]:4 = "handshake.fork"(%[[VAL_26]]#1) {control = false} : (index) -> (index, index, index, index)
 // CHECK:           %[[VAL_28:.*]] = "handshake.mux"(%[[VAL_19]]#0, %[[VAL_29:.*]], %[[VAL_15]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_30:.*]]:2 = "handshake.fork"(%[[VAL_28]]) {control = false} : (index) -> (index, index)
-// CHECK:           %[[VAL_31:.*]] = cmpi "slt", %[[VAL_30]]#1, %[[VAL_21]]#1 : index
+// CHECK:           %[[VAL_31:.*]] = cmpi slt, %[[VAL_30]]#1, %[[VAL_21]]#1 : index
 // CHECK:           %[[VAL_32:.*]]:5 = "handshake.fork"(%[[VAL_31]]) {control = false} : (i1) -> (i1, i1, i1, i1, i1)
 // CHECK:           %[[VAL_33:.*]], %[[VAL_34:.*]] = "handshake.conditional_branch"(%[[VAL_32]]#4, %[[VAL_21]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_34]]) : (index) -> ()
@@ -78,7 +78,7 @@
     %c1 = constant 1 : index
     br ^bb1(%c0 : index)
   ^bb1(%1: index):      // 2 preds: ^bb0, ^bb2
-    %2 = cmpi "slt", %1, %c10 : index
+    %2 = cmpi slt, %1, %c10 : index
     cond_br %2, ^bb2, ^bb3
   ^bb2: // pred: ^bb1
     %3 = addi %1, %arg0 : index

@@ -23,7 +23,7 @@ func @loop_min_max(%arg0: index) {
 // CHECK:           %[[VAL_13]]:4 = "handshake.fork"(%[[VAL_20]]#1) {control = false} : (index) -> (index, index, index, index)
 // CHECK:           %[[VAL_22:.*]] = "handshake.mux"(%[[VAL_13]]#0, %[[VAL_23:.*]], %[[VAL_9]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_24:.*]]:2 = "handshake.fork"(%[[VAL_22]]) {control = false} : (index) -> (index, index)
-// CHECK:           %[[VAL_25:.*]] = cmpi "slt", %[[VAL_24]]#1, %[[VAL_15]]#1 : index
+// CHECK:           %[[VAL_25:.*]] = cmpi slt, %[[VAL_24]]#1, %[[VAL_15]]#1 : index
 // CHECK:           %[[VAL_26:.*]]:5 = "handshake.fork"(%[[VAL_25]]) {control = false} : (i1) -> (i1, i1, i1, i1, i1)
 // CHECK:           %[[VAL_27:.*]], %[[VAL_28:.*]] = "handshake.conditional_branch"(%[[VAL_26]]#4, %[[VAL_15]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_28]]) : (index) -> ()
@@ -47,12 +47,12 @@ func @loop_min_max(%arg0: index) {
 // CHECK:           %[[VAL_46:.*]] = muli %[[VAL_38]]#4, %[[VAL_45]] : index
 // CHECK:           %[[VAL_47:.*]] = addi %[[VAL_46]], %[[VAL_40]]#3 : index
 // CHECK:           %[[VAL_48:.*]]:2 = "handshake.fork"(%[[VAL_47]]) {control = false} : (index) -> (index, index)
-// CHECK:           %[[VAL_49:.*]] = cmpi "sgt", %[[VAL_38]]#3, %[[VAL_48]]#1 : index
+// CHECK:           %[[VAL_49:.*]] = cmpi sgt, %[[VAL_38]]#3, %[[VAL_48]]#1 : index
 // CHECK:           %[[VAL_50:.*]] = select %[[VAL_49]], %[[VAL_38]]#2, %[[VAL_48]]#0 : index
 // CHECK:           %[[VAL_51:.*]] = "handshake.constant"(%[[VAL_44]]#1) {value = 10 : index} : (none) -> index
 // CHECK:           %[[VAL_52:.*]] = addi %[[VAL_38]]#1, %[[VAL_51]] : index
 // CHECK:           %[[VAL_53:.*]]:2 = "handshake.fork"(%[[VAL_52]]) {control = false} : (index) -> (index, index)
-// CHECK:           %[[VAL_54:.*]] = cmpi "slt", %[[VAL_40]]#2, %[[VAL_53]]#1 : index
+// CHECK:           %[[VAL_54:.*]] = cmpi slt, %[[VAL_40]]#2, %[[VAL_53]]#1 : index
 // CHECK:           %[[VAL_55:.*]] = select %[[VAL_54]], %[[VAL_40]]#1, %[[VAL_53]]#0 : index
 // CHECK:           %[[VAL_56:.*]] = "handshake.constant"(%[[VAL_44]]#0) {value = 1 : index} : (none) -> index
 // CHECK:           %[[VAL_57:.*]] = "handshake.branch"(%[[VAL_38]]#0) {control = false} : (index) -> index
@@ -74,7 +74,7 @@ func @loop_min_max(%arg0: index) {
 // CHECK:           %[[VAL_66]]:7 = "handshake.fork"(%[[VAL_79]]#1) {control = false} : (index) -> (index, index, index, index, index, index, index)
 // CHECK:           %[[VAL_81:.*]] = "handshake.mux"(%[[VAL_66]]#0, %[[VAL_82:.*]], %[[VAL_62]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_83:.*]]:2 = "handshake.fork"(%[[VAL_81]]) {control = false} : (index) -> (index, index)
-// CHECK:           %[[VAL_84:.*]] = cmpi "slt", %[[VAL_83]]#1, %[[VAL_68]]#1 : index
+// CHECK:           %[[VAL_84:.*]] = cmpi slt, %[[VAL_83]]#1, %[[VAL_68]]#1 : index
 // CHECK:           %[[VAL_85:.*]]:8 = "handshake.fork"(%[[VAL_84]]) {control = false} : (i1) -> (i1, i1, i1, i1, i1, i1, i1, i1)
 // CHECK:           %[[VAL_86:.*]], %[[VAL_87:.*]] = "handshake.conditional_branch"(%[[VAL_85]]#7, %[[VAL_68]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_87]]) : (index) -> ()
@@ -130,22 +130,22 @@ func @loop_min_max(%arg0: index) {
     %c1 = constant 1 : index
     br ^bb1(%c0 : index)
   ^bb1(%0: index):      // 2 preds: ^bb0, ^bb5
-    %1 = cmpi "slt", %0, %c42 : index
+    %1 = cmpi slt, %0, %c42 : index
     cond_br %1, ^bb2, ^bb6
   ^bb2: // pred: ^bb1
     %c-1 = constant -1 : index
     %2 = muli %0, %c-1 : index
     %3 = addi %2, %arg0 : index
-    %4 = cmpi "sgt", %0, %3 : index
+    %4 = cmpi sgt, %0, %3 : index
     %5 = select %4, %0, %3 : index
     %c10 = constant 10 : index
     %6 = addi %0, %c10 : index
-    %7 = cmpi "slt", %arg0, %6 : index
+    %7 = cmpi slt, %arg0, %6 : index
     %8 = select %7, %arg0, %6 : index
     %c1_0 = constant 1 : index
     br ^bb3(%5 : index)
   ^bb3(%9: index):      // 2 preds: ^bb2, ^bb4
-    %10 = cmpi "slt", %9, %8 : index
+    %10 = cmpi slt, %9, %8 : index
     cond_br %10, ^bb4, ^bb5
   ^bb4: // pred: ^bb3
     %11 = addi %9, %c1_0 : index

@@ -33,7 +33,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %c2 = firrtl.stdIntCast %2 : (!firrtl.uint<4>) -> i4
 
     // Issue #436
-    // CHECK: [[CMP:%.+]] = rtl.icmp "eq" %false_2, %false_3 : i1
+    // CHECK: [[CMP:%.+]] = rtl.icmp eq %false_2, %false_3 : i1
     %3 = firrtl.eq %uin0c, %uin0c : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<1>
     %c3 = firrtl.stdIntCast %3 : (!firrtl.uint<1>) -> i1
 

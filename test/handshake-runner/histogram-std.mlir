@@ -12,7 +12,7 @@ module {
     %2 = alloc() : memref<100xi32>
     br ^bb1(%c0 : index)
   ^bb1(%3: index):	// 2 preds: ^bb0, ^bb2
-    %4 = cmpi "slt", %3, %c10 : index
+    %4 = cmpi slt, %3, %c10 : index
     cond_br %4, ^bb2, ^bb3
   ^bb2:	// pred: ^bb1
     %5 = load %0[%3] : memref<100xi32>

@@ -13,7 +13,7 @@
 // CHECK:         ^bb2(%[[VAL_1:.*]]: index):  // 2 preds: ^bb1, ^bb3
 // CHECK:           %[[VAL_2:.*]] = "staticlogic.pipeline"(%[[VAL_1:.*]], %[[VAL_0:.*]]#1) ( {
 // CHECK:           ^bb0(%[[ARG_0:.*]]: index, %[[ARG_1:.*]]: index):  // no predecessors
-// CHECK:             %[[TMP_0:.*]] = cmpi "slt", %[[ARG_0:.*]], %[[ARG_1:.*]] : index
+// CHECK:             %[[TMP_0:.*]] = cmpi slt, %[[ARG_0:.*]], %[[ARG_1:.*]] : index
 // CHECK:             "staticlogic.return"(%[[TMP_0:.*]]) : (i1) -> ()
 // CHECK:           }) : (index, index) -> i1
 // CHECK:           cond_br %[[VAL_2:.*]], ^bb3, ^bb4
@@ -38,7 +38,7 @@ func @simple_loop() {
   %c42 = constant 42 : index
   br ^bb2(%c1 : index)
 ^bb2(%0: index):	// 2 preds: ^bb1, ^bb3
-  %1 = cmpi "slt", %0, %c42 : index
+  %1 = cmpi slt, %0, %c42 : index
   cond_br %1, ^bb3, ^bb4
 ^bb3:	// pred: ^bb2
   %c1_0 = constant 1 : index
