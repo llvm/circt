@@ -20,7 +20,7 @@ func @imperfectly_nested_loops() {
 // CHECK:           %[[VAL_10]]:2 = "handshake.fork"(%[[VAL_13]]#1) {control = false} : (index) -> (index, index)
 // CHECK:           %[[VAL_15:.*]] = "handshake.mux"(%[[VAL_10]]#0, %[[VAL_16:.*]], %[[VAL_7]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_17:.*]]:2 = "handshake.fork"(%[[VAL_15]]) {control = false} : (index) -> (index, index)
-// CHECK:           %[[VAL_18:.*]] = cmpi "slt", %[[VAL_17]]#1, %[[VAL_12]]#1 : index
+// CHECK:           %[[VAL_18:.*]] = cmpi slt, %[[VAL_17]]#1, %[[VAL_12]]#1 : index
 // CHECK:           %[[VAL_19:.*]]:3 = "handshake.fork"(%[[VAL_18]]) {control = false} : (i1) -> (i1, i1, i1)
 // CHECK:           %[[VAL_20:.*]], %[[VAL_21:.*]] = "handshake.conditional_branch"(%[[VAL_19]]#2, %[[VAL_12]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_21]]) : (index) -> ()
@@ -54,7 +54,7 @@ func @imperfectly_nested_loops() {
 // CHECK:           %[[VAL_44]]:4 = "handshake.fork"(%[[VAL_51]]#1) {control = false} : (index) -> (index, index, index, index)
 // CHECK:           %[[VAL_53:.*]] = "handshake.mux"(%[[VAL_44]]#0, %[[VAL_54:.*]], %[[VAL_41]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_55:.*]]:2 = "handshake.fork"(%[[VAL_53]]) {control = false} : (index) -> (index, index)
-// CHECK:           %[[VAL_56:.*]] = cmpi "slt", %[[VAL_55]]#1, %[[VAL_46]]#1 : index
+// CHECK:           %[[VAL_56:.*]] = cmpi slt, %[[VAL_55]]#1, %[[VAL_46]]#1 : index
 // CHECK:           %[[VAL_57:.*]]:5 = "handshake.fork"(%[[VAL_56]]) {control = false} : (i1) -> (i1, i1, i1, i1, i1)
 // CHECK:           %[[VAL_58:.*]], %[[VAL_59:.*]] = "handshake.conditional_branch"(%[[VAL_57]]#4, %[[VAL_46]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_59]]) : (index) -> ()
@@ -101,7 +101,7 @@ func @imperfectly_nested_loops() {
   %c42 = constant 42 : index
   br ^bb2(%c0 : index)
 ^bb2(%0: index):	// 2 preds: ^bb1, ^bb7
-  %1 = cmpi "slt", %0, %c42 : index
+  %1 = cmpi slt, %0, %c42 : index
   cond_br %1, ^bb3, ^bb8
 ^bb3:	// pred: ^bb2
   br ^bb4
@@ -110,7 +110,7 @@ func @imperfectly_nested_loops() {
   %c56 = constant 56 : index
   br ^bb5(%c7 : index)
 ^bb5(%2: index):	// 2 preds: ^bb4, ^bb6
-  %3 = cmpi "slt", %2, %c56 : index
+  %3 = cmpi slt, %2, %c56 : index
   cond_br %3, ^bb6, ^bb7
 ^bb6:	// pred: ^bb5
   %c2 = constant 2 : index

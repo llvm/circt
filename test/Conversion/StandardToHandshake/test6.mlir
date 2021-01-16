@@ -16,7 +16,7 @@ func @ops(f32, f32, i32, i32) -> (f32, i32) {
 // CHECK:           %[[VAL_13:.*]]:3 = "handshake.fork"(%[[VAL_12]]) {control = false} : (f32) -> (f32, f32, f32)
 // CHECK:           %[[VAL_14:.*]] = subi %[[VAL_9]]#8, %[[VAL_11]]#7 : i32
 // CHECK:           %[[VAL_15:.*]]:2 = "handshake.fork"(%[[VAL_14]]) {control = false} : (i32) -> (i32, i32)
-// CHECK:           %[[VAL_16:.*]] = cmpi "slt", %[[VAL_9]]#7, %[[VAL_15]]#1 : i32
+// CHECK:           %[[VAL_16:.*]] = cmpi slt, %[[VAL_9]]#7, %[[VAL_15]]#1 : i32
 // CHECK:           %[[VAL_17:.*]] = subi %[[VAL_9]]#6, %[[VAL_11]]#6 : i32
 // CHECK:           %[[VAL_18:.*]]:2 = "handshake.fork"(%[[VAL_17]]) {control = false} : (i32) -> (i32, i32)
 // CHECK:           %[[VAL_19:.*]] = addi %[[VAL_15]]#0, %[[VAL_18]]#1 : i32
@@ -44,7 +44,7 @@ func @ops(f32, f32, i32, i32) -> (f32, i32) {
 ^bb0(%arg0: f32, %arg1: f32, %arg2: i32, %arg3: i32):
   %0 = subf %arg0, %arg1: f32
   %1 = subi %arg2, %arg3: i32
-  %2 = cmpi "slt", %arg2, %1 : i32
+  %2 = cmpi slt, %arg2, %1 : i32
   %4 = subi %arg2, %arg3 : i32
   %5 = addi %1, %4 : i32
   %6 = addi %arg2, %arg3 : i32
