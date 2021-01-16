@@ -20,7 +20,7 @@ func @simple_loop() {
 // CHECK:           %[[VAL_10]]:2 = "handshake.fork"(%[[VAL_13]]#1) {control = false} : (index) -> (index, index)
 // CHECK:           %[[VAL_15:.*]] = "handshake.mux"(%[[VAL_10]]#0, %[[VAL_16:.*]], %[[VAL_7]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_17:.*]]:2 = "handshake.fork"(%[[VAL_15]]) {control = false} : (index) -> (index, index)
-// CHECK:           %[[VAL_18:.*]] = cmpi "slt", %[[VAL_17]]#1, %[[VAL_12]]#1 : index
+// CHECK:           %[[VAL_18:.*]] = cmpi slt, %[[VAL_17]]#1, %[[VAL_12]]#1 : index
 // CHECK:           %[[VAL_19:.*]]:3 = "handshake.fork"(%[[VAL_18]]) {control = false} : (i1) -> (i1, i1, i1)
 // CHECK:           %[[VAL_20:.*]], %[[VAL_21:.*]] = "handshake.conditional_branch"(%[[VAL_19]]#2, %[[VAL_12]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_21]]) : (index) -> ()
@@ -49,7 +49,7 @@ func @simple_loop() {
   %c1 = constant 1 : index
   br ^bb2(%c1 : index)
 ^bb2(%0: index):	// 2 preds: ^bb1, ^bb3
-  %1 = cmpi "slt", %0, %c1 : index
+  %1 = cmpi slt, %0, %c1 : index
   cond_br %1, ^bb3, ^bb4
 ^bb3:	// pred: ^bb2
   %c1_0 = constant 1 : index

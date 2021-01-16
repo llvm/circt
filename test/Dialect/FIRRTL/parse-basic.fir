@@ -296,16 +296,16 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %myMem = firrtl.cmem {name = "myMem"} : !firrtl.vector<bundle<id: uint<4>, resp: uint<2>>, 8>
     cmem myMem : { id : UInt<4>, resp : UInt<2>} [8] @[Decoupled.scala 209:24]
 
-    ; CHECK: %memValue = firrtl.memoryport "Infer" %myMem, %i8, %clock {name = "memValue"} : (!firrtl.vector<bundle<id: uint<4>, resp: uint<2>>, 8>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.bundle<id: uint<4>, resp: uint<2>>
+    ; CHECK: %memValue = firrtl.memoryport Infer %myMem, %i8, %clock {name = "memValue"} : (!firrtl.vector<bundle<id: uint<4>, resp: uint<2>>, 8>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.bundle<id: uint<4>, resp: uint<2>>
     infer mport memValue = myMem[i8], clock
     auto11 <= memValue.id
 
-    ; CHECK: %base_table_0 = firrtl.smem "Undefined" {name = "base_table_0"} : !firrtl.vector<vector<uint<1>, 9>, 256>
+    ; CHECK: %base_table_0 = firrtl.smem Undefined {name = "base_table_0"} : !firrtl.vector<vector<uint<1>, 9>, 256>
     smem base_table_0 : UInt<1>[9] [256]
-    ; CHECK: %base_table_1 = firrtl.smem "Old" {name = "base_table_1"} : !firrtl.vector<vector<uint<1>, 9>, 256>
+    ; CHECK: %base_table_1 = firrtl.smem Old {name = "base_table_1"} : !firrtl.vector<vector<uint<1>, 9>, 256>
     smem base_table_1 : UInt<1>[9] [256] old
 
-    ; CHECK: %tableValue = firrtl.memoryport "Read" %base_table_0, %i8, %clock {name = "tableValue"} : (!firrtl.vector<vector<uint<1>, 9>, 256>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.vector<uint<1>, 9>
+    ; CHECK: %tableValue = firrtl.memoryport Read %base_table_0, %i8, %clock {name = "tableValue"} : (!firrtl.vector<vector<uint<1>, 9>, 256>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.vector<uint<1>, 9>
     read mport tableValue = base_table_0[i8], clock
 
     ; CHECK: firrtl.pad %i8, 10 : (!firrtl.uint<8>) -> !firrtl.uint<10>
@@ -330,7 +330,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     node n13 = not(auto)
 
 
-    ; CHECK: %_M = firrtl.mem "Undefined" {depth = 8 : i64, name = "_M",
+    ; CHECK: %_M = firrtl.mem Undefined {depth = 8 : i64, name = "_M",
     ; CHECK:   readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<
     ; CHECK:       _T_10: bundle<addr: flip<uint<3>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>>, mask: flip<bundle<id: uint<1>>>>
     ; CHECK:       _T_11: bundle<addr: flip<uint<3>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>>, mask: flip<bundle<id: uint<1>>>>
@@ -429,13 +429,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: [[HACKWIRE:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
     ; CHECK: [[HACKWIRE2:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
-    ; CHECK: %memory = firrtl.smem "Undefined" {name = "memory"} : !firrtl.vector<vector<uint<1>, 9>, 256>
+    ; CHECK: %memory = firrtl.smem Undefined {name = "memory"} : !firrtl.vector<vector<uint<1>, 9>, 256>
     smem memory : UInt<1>[9] [256]
 
     ; CHECK: firrtl.when %cond {
     when cond :
       node idx = foo
-      ; CHECK: %xyz = firrtl.memoryport "Read" %memory, %idx
+      ; CHECK: %xyz = firrtl.memoryport Read %memory, %idx
       ; CHECK: firrtl.connect [[HACKWIRE]], %xyz
       read mport xyz = memory[idx], clock
     ; CHECK: }
@@ -444,7 +444,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.when %cond {
     when cond :
       node idx = foo
-      ; CHECK: %xyz2 = firrtl.memoryport "Read" %memory, %idx
+      ; CHECK: %xyz2 = firrtl.memoryport Read %memory, %idx
       ; CHECK: firrtl.skip
       ; CHECK: firrtl.connect [[HACKWIRE2]], %xyz2
       read mport xyz2 = memory[idx], clock
@@ -511,7 +511,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       reader => io_deq_bits_MPORT
       writer => MPORT
       read-under-write => undefined
-      ; CHECK:         %bar = firrtl.mem "Undefined" {depth = 1 : i64, name = "bar", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<MPORT: flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<3>, mask: uint<1>>>, io_deq_bits_MPORT: bundle<addr: flip<uint<1>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<3>>>
+      ; CHECK:         %bar = firrtl.mem Undefined {depth = 1 : i64, name = "bar", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<MPORT: flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<3>, mask: uint<1>>>, io_deq_bits_MPORT: bundle<addr: flip<uint<1>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<3>>>
 
   ; CHECK-LABEL: firrtl.module @issue354(%tmp5: !firrtl.flip<sint<19>>) {
   module issue354 :

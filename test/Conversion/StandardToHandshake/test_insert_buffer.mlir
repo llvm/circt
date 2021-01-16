@@ -24,7 +24,7 @@ module {
     // CHECK-NEXT:  %16 = "handshake.buffer"(%15#1) {control = false, sequential = true, slots = 2 : i32} : (index) -> index
     // CHECK-NEXT:  %17 = "handshake.buffer"(%15#0) {control = false, sequential = true, slots = 2 : i32} : (index) -> index
     %13:2 = "handshake.fork"(%12) {control = false} : (index) -> (index, index)
-    %14 = cmpi "slt", %13#1, %9#1 : index
+    %14 = cmpi slt, %13#1, %9#1 : index
     %15:3 = "handshake.fork"(%14) {control = false} : (i1) -> (i1, i1, i1)
     %trueResult, %falseResult = "handshake.conditional_branch"(%15#2, %9#0) {control = false} : (i1, index) -> (index, index)
     "handshake.sink"(%falseResult) : (index) -> ()
