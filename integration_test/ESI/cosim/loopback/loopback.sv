@@ -1,10 +1,10 @@
 // REQUIRES: esi-cosim
-// RUN: esi-cosim-runner.py %s
+// RUN: esi-cosim-runner.py %s %s
 // PY: import loopback as test
 // PY: rpc = test.LoopbackTester(rpcschemapath, simhostport)
 // PY: rpc.test_list()
 // PY: rpc.test_open_close()
-// PY: rpc.write_read_many(5)
+// PY: rpc.test_3bytes(5)
 
 import Cosim_DpiPkg::*;
 
