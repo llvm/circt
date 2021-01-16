@@ -364,6 +364,7 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
   // The next 64-bits of a capnp message is the root struct pointer.
   ::capnp::schema::Node::Reader rootProto = getTypeSchema().getProto();
   auto ptr = b.create<rtl::ArraySliceOp>(loc, operand, 0, 64);
+  ptr->setAttr("name", StringAttr::get("rootPointer", ctxt));
 
   // Since this is the root, we _expect_ the offset to be zero but that's only
   // guaranteed to be the case with canonically-encoded messages.
@@ -400,6 +401,7 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
 
   auto dataSection = b.create<rtl::ArraySliceOp>(
       loc, operand, 64, rootProto.getStruct().getDataWordCount() * 64);
+  dataSection->setAttr("name", StringAttr::get("dataSection", ctxt));
 
   Value result;
   // Now that we're looking at the data section, we can just cast down each
@@ -423,7 +425,7 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
       loc, "typeAndOffset: %h, dataSize: %h, ptrSize: %h, decodedData: %h\n",
       ValueRange{typeAndOffset, dataSectionSize, ptrSectionSize, result});
 
-  // All that just to decode an int!
+  // All that just to decode an int! (But it'll pay off as we progress.)
   return result;
 }
 
