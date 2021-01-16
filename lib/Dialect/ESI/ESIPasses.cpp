@@ -889,7 +889,7 @@ public:
   matchAndRewrite(CapnpDecode dec, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const final {
 #ifndef CAPNP
-    return rewriter.notifyMatchFailure(enc,
+    return rewriter.notifyMatchFailure(dec,
                                        "encode.capnp lowering requires the ESI "
                                        "capnp plugin, which was disabled.");
 #else

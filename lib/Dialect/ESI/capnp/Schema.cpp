@@ -333,10 +333,6 @@ Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
       b.create<rtl::ConcatOp>(loc, ValueRange{padding, operandCasted});
 
   return b.create<rtl::ConcatOp>(loc, ValueRange{dataSection, structPtr});
-  // auto zeros = b.create<rtl::ConstantOp>(
-  // loc, IntegerType::get(b.getContext(), size()), 0);
-  // return b.create<rtl::BitcastOp>(
-  // loc, rtl::ArrayType::get(b.getI1Type(), size()), zeros);
 }
 
 /// Build an RTL/SV dialect capnp decoder for this type.
