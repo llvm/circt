@@ -26,6 +26,10 @@ module {
     // CAPNP:         i @0 :UInt32;
     // CAPNP-LABEL: struct TYsi14 @0x8ee0bd493e80e8a1
     // CAPNP:         i @0 :Int16;
+    // Ensure the standard RPC interface is tacked on.
+    // CAPNP: interface CosimDpiServer
+    // CAPNP: list @0 () -> (ifaces :List(EsiDpiInterfaceDesc));
+    // CAPNP: open @1 [S, T] (iface :EsiDpiInterfaceDesc) -> (iface :EsiDpiEndpoint(S, T));
 
     // COSIM: %rawOutput, %valid = esi.unwrap.vr %send.x, %TestEP.DataInReady : si14
     // COSIM: %0 = esi.encode.capnp %rawOutput : si14 -> !rtl.array<192xi1>
