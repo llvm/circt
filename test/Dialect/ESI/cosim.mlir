@@ -33,7 +33,7 @@ module {
     // SV: Reciever recv (
     // SV:   .a ({{.*}}.source)
     // SV: );
-    // SV: assign _T_0.ready = TestEP_DataInReady;
+    // SV: {{.*}}.ready = TestEP_DataInReady;
     // SV: Sender send (
     // SV:   .x ({{.*}}.sink)
     // SV: );
@@ -47,13 +47,8 @@ module {
     // SV:   .DataOut (TestEP_DataOut),
     // SV:   .DataInReady (TestEP_DataInReady)
     // SV: );
-    // SV: always @(posedge clk) begin
-    // SV:   if (TestEP_DataOutValid) begin
-    // SV:     assert(/*cast(bit[31:0])*/rootPointer[6'h0+:32] == 32'h0);
-    // SV:     assert(/*cast(bit[15:0])*/rootPointer[6'h20+:16] == 16'h1);
-    // SV:     assert(/*cast(bit[15:0])*/rootPointer[6'h30+:16] == 16'h0);
-    // SV: assign rootPointer = TestEP_DataOut[_T_2+:64];
-    // SV: assign dataSection = TestEP_DataOut[_T_3+:64];
-    // SV: assign decodedValue = /*cast(bit[31:0])*/dataSection[_T_4+:32];
+    // SV: rootPointer = TestEP_DataOut[_T_2+:64];
+    // SV: dataSection = TestEP_DataOut[_T_3+:64];
+    // SV: decodedValue = /*cast(bit[31:0])*/dataSection[_T_4+:32];
   }
 }
