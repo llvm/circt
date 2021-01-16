@@ -27,6 +27,10 @@ module {
     // CAPNP:         i @0 :UInt32;
     // CAPNP-LABEL: struct TYsi14 @0x8ee0bd493e80e8a1
     // CAPNP:         i @0 :Int16;
+    // Ensure the standard RPC interface is tacked on.
+    // CAPNP: interface CosimDpiServer
+    // CAPNP: list @0 () -> (ifaces :List(EsiDpiInterfaceDesc));
+    // CAPNP: open @1 [S, T] (iface :EsiDpiInterfaceDesc) -> (iface :EsiDpiEndpoint(S, T));
 
     // COSIM: rtl.instance "TestEP" @Cosim_Endpoint(%clk, %rstn, %{{.*}}, %{{.*}}, %{{.*}}) {parameters = {ENDPOINT_ID = 1 : i32, RECV_TYPE_ID = 14000240888948784983 : ui64, RECV_TYPE_SIZE_BITS = 128 : i32, SEND_TYPE_ID = 10295436870447851681 : ui64, SEND_TYPE_SIZE_BITS = 128 : i32}} : (i1, i1, i1, i1, i128) -> (i1, !rtl.array<128xi1>, i1)
 

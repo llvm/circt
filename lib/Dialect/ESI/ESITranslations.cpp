@@ -5,6 +5,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/ESI/CosimSchema.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 
@@ -34,6 +35,7 @@ using namespace circt::esi;
 //===----------------------------------------------------------------------===//
 
 #ifdef CAPNP
+
 namespace {
 struct ExportCosimSchema {
   ExportCosimSchema(ModuleOp module, llvm::raw_ostream &os)
@@ -99,9 +101,21 @@ LogicalResult ExportCosimSchema::visitEndpoint(CosimEndpoint ep) {
   return success();
 }
 
+static void emitCosimSchemaBody(llvm::raw_ostream &os) {
+  StringRef entireSchemaFile = circt::esi::cosim::CosimSchema;
+  size_t idLocation = entireSchemaFile.find("@0x");
+  size_t newlineAfter = entireSchemaFile.find('\n', idLocation);
+
+  os << "\n\n"
+     << "#########################################################\n"
+     << "## Standard RPC interfaces.\n"
+     << "#########################################################\n";
+  os << entireSchemaFile.substr(newlineAfter) << "\n";
+}
+
 LogicalResult ExportCosimSchema::emit() {
   os << "#########################################################\n"
-     << "## ESI generated schema. For use with CosimDpi.capnp\n"
+     << "## ESI generated schema.\n"
      << "#########################################################\n";
 
   // Walk and collect the type data.
@@ -123,6 +137,9 @@ LogicalResult ExportCosimSchema::emit() {
   fileHash |= 0x8000000000000000;
   emitId(fileHash) << ";\n\n";
 
+  os << "#########################################################\n"
+     << "## Types for your design.\n"
+     << "#########################################################\n\n";
   // Iterate through the various types and emit their schemas.
   auto end = std::unique(types.begin(), types.end());
   for (auto typeIter = types.begin(); typeIter < end; ++typeIter) {
@@ -131,6 +148,9 @@ LogicalResult ExportCosimSchema::emit() {
       // corrupted.
       return failure();
   }
+
+  // Include the RPC schema in each generated file.
+  emitCosimSchemaBody(os);
 
   return errorCount == 0 ? success() : failure();
 }
