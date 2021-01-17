@@ -77,7 +77,7 @@ struct TypeSchemaImpl {
 public:
   TypeSchemaImpl(Type type) : type(type) {}
 
-  mlir::Type getType() const { return type; }
+  Type getType() const { return type; }
 
   uint64_t capnpTypeID() const;
 
@@ -300,17 +300,16 @@ static size_t bits(::capnp::schema::Type::Reader type) {
   }
 }
 
-/// Build an RTL/SV dialect capnp encoder for this type.
+/// Build an RTL/SV dialect capnp encoder for this type. Inputs need to be
+/// packed on unpadded.
 Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
                                    Value operand) {
   MLIRContext *ctxt = b.getContext();
   auto loc = operand.getDefiningOp()->getLoc();
   ::capnp::schema::Node::Reader rootProto = getTypeSchema().getProto();
 
-  auto i16 =
-      IntegerType::get(ctxt, 16, IntegerType::SignednessSemantics::Signless);
-  auto i32 =
-      IntegerType::get(ctxt, 32, IntegerType::SignednessSemantics::Signless);
+  auto i16 = b.getIntegerType(16);
+  auto i32 = b.getIntegerType(32);
 
   auto typeAndOffset = b.create<rtl::ConstantOp>(loc, i32, 0);
   auto ptrSize = b.create<rtl::ConstantOp>(loc, i16, 0);
@@ -335,7 +334,8 @@ Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
   return b.create<rtl::ConcatOp>(loc, ValueRange{dataSection, structPtr});
 }
 
-/// Build an RTL/SV dialect capnp decoder for this type.
+/// Build an RTL/SV dialect capnp decoder for this type. Outputs packed and
+/// unpadded data.
 Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
                                    Value operand) {
   MLIRContext *ctxt = b.getContext();
@@ -343,10 +343,8 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
   size_t size = this->size();
 
   // Various useful integer types.
-  auto u16 =
-      IntegerType::get(ctxt, 16, IntegerType::SignednessSemantics::Signless);
-  auto u32 =
-      IntegerType::get(ctxt, 32, IntegerType::SignednessSemantics::Signless);
+  auto i16 = b.getIntegerType(16);
+  auto i32 = b.getIntegerType(32);
 
   rtl::ArrayType operandType = operand.getType().dyn_cast<rtl::ArrayType>();
   assert(operandType && operandType.getSize() == size &&
@@ -366,9 +364,9 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
   // guaranteed to be the case with canonically-encoded messages.
   // TODO: support cases where the pointer offset is non-zero.
   auto typeAndOffset = asserts.create<rtl::BitcastOp>(
-      loc, u32, asserts.create<rtl::ArraySliceOp>(loc, ptr, 0, 32));
+      loc, i32, asserts.create<rtl::ArraySliceOp>(loc, ptr, 0, 32));
   typeAndOffset->setAttr("name", StringAttr::get("typeAndOffset", ctxt));
-  auto b16Zero = asserts.create<rtl::ConstantOp>(loc, u32, 0);
+  auto b16Zero = asserts.create<rtl::ConstantOp>(loc, i32, 0);
 
   asserts.create<sv::AssertOp>(
       loc, asserts.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
@@ -376,10 +374,10 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
 
   // We expect the data section to be equal to the computed data section size.
   auto dataSectionSize = asserts.create<rtl::BitcastOp>(
-      loc, u16, asserts.create<rtl::ArraySliceOp>(loc, ptr, 32, 16));
+      loc, i16, asserts.create<rtl::ArraySliceOp>(loc, ptr, 32, 16));
   dataSectionSize->setAttr("name", StringAttr::get("dataSectionSize", ctxt));
   auto expectedDataSectionSize = asserts.create<rtl::ConstantOp>(
-      loc, u16, rootProto.getStruct().getDataWordCount());
+      loc, i16, rootProto.getStruct().getDataWordCount());
   asserts.create<sv::AssertOp>(
       loc,
       asserts.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
@@ -388,10 +386,10 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
   // We expect the pointer section to be equal to the computed pointer section
   // size.
   auto ptrSectionSize = asserts.create<rtl::BitcastOp>(
-      loc, u16, asserts.create<rtl::ArraySliceOp>(loc, ptr, 48, 16));
+      loc, i16, asserts.create<rtl::ArraySliceOp>(loc, ptr, 48, 16));
   ptrSectionSize->setAttr("name", StringAttr::get("ptrSectionSize", ctxt));
   auto expectedPtrSectionSize = asserts.create<rtl::ConstantOp>(
-      loc, u16, rootProto.getStruct().getPointerCount() * 64);
+      loc, i16, rootProto.getStruct().getPointerCount() * 64);
   asserts.create<sv::AssertOp>(
       loc, asserts.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
                                        ptrSectionSize, expectedPtrSectionSize));

@@ -320,7 +320,7 @@ namespace {
 /// Convert all the ESI ports on modules to some lower construct. SV interfaces
 /// for now. In the future, it may be possible to select a different format.
 struct ESIPortsPass : public LowerESIPortsBase<ESIPortsPass> {
-  void runOnOperation();
+  void runOnOperation() override;
 
 private:
   bool updateFunc(RTLExternModuleOp mod);
@@ -602,60 +602,48 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
 }
 namespace {
 /// Eliminate back-to-back wrap-unwraps to reduce the number of ESI channels.
-struct RemoveWrapUnwrap : public OpConversionPattern<WrapValidReady> {
+struct RemoveWrapUnwrap : public ConversionPattern {
 public:
-  using OpConversionPattern::OpConversionPattern;
+  RemoveWrapUnwrap() : ConversionPattern(/*benefit=*/1, MatchAnyOpTypeTag()) {}
 
-  LogicalResult
-  matchAndRewrite(WrapValidReady wrap, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const final {
+  virtual LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    Value valid, ready, data;
+    WrapValidReady wrap = dyn_cast<WrapValidReady>(op);
+    UnwrapValidReady unwrap = dyn_cast<UnwrapValidReady>(op);
+    if (wrap) {
+      unwrap =
+          dyn_cast<UnwrapValidReady>(wrap.chanOutput().use_begin()->getOwner());
+      if (!unwrap)
+        return rewriter.notifyMatchFailure(wrap, [](Diagnostic &d) {
+          d << "This conversion only supports wrap-unwrap back-to-back. "
+               "Could not find 'unwrap'.";
+        });
+      data = operands[0];
+      valid = operands[1];
+      ready = unwrap.ready();
+    } else if (unwrap) {
+      wrap = dyn_cast<WrapValidReady>(operands[0].getDefiningOp());
+      if (!wrap)
+        return rewriter.notifyMatchFailure(wrap, [](Diagnostic &d) {
+          d << "This conversion only supports wrap-unwrap back-to-back. "
+               "Could not find 'wrap'.";
+        });
+      valid = wrap.valid();
+      data = wrap.rawInput();
+      ready = operands[1];
+    } else {
+      return failure();
+    }
 
     if (!wrap.chanOutput().hasOneUse())
       return rewriter.notifyMatchFailure(wrap, [](Diagnostic &d) {
         d << "This conversion only supports wrap-unwrap back-to-back. "
              "Wrap didn't have exactly one use.";
       });
-    UnwrapValidReady unwrap =
-        dyn_cast<UnwrapValidReady>(wrap.chanOutput().use_begin()->getOwner());
-    if (!unwrap)
-      return rewriter.notifyMatchFailure(wrap, [](Diagnostic &d) {
-        d << "This conversion only supports wrap-unwrap back-to-back. "
-             "Could not find 'unwrap'.";
-      });
-
-    rewriter.replaceOp(wrap, {nullptr, unwrap.ready()});
-    rewriter.replaceOp(unwrap, operands);
-    return success();
-  }
-};
-} // anonymous namespace
-
-namespace {
-/// Eliminate back-to-back unwrap-wraps to reduce the number of ESI channels.
-struct RemoveUnwrapWrap : public OpConversionPattern<UnwrapValidReady> {
-public:
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(UnwrapValidReady unwrap, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const final {
-
-    Value chanInput = operands[0];
-    Value ready = operands[1];
-    if (!chanInput.hasOneUse())
-      return rewriter.notifyMatchFailure(unwrap, [](Diagnostic &d) {
-        d << "This conversion only supports wrap-unwrap back-to-back. "
-             "Wrap didn't have exactly one use.";
-      });
-    WrapValidReady wrap = dyn_cast<WrapValidReady>(chanInput.getDefiningOp());
-    if (!wrap)
-      return rewriter.notifyMatchFailure(unwrap, [](Diagnostic &d) {
-        d << "This conversion only supports wrap-unwrap back-to-back. "
-             "Could not find 'wrap'.";
-      });
-
     rewriter.replaceOp(wrap, {nullptr, ready});
-    rewriter.replaceOp(unwrap, ValueRange{wrap.rawInput(), wrap.valid()});
+    rewriter.replaceOp(unwrap, {data, valid});
     return success();
   }
 };
@@ -890,7 +878,7 @@ public:
                   ConversionPatternRewriter &rewriter) const final {
 #ifndef CAPNP
     return rewriter.notifyMatchFailure(dec,
-                                       "encode.capnp lowering requires the ESI "
+                                       "decode.capnp lowering requires the ESI "
                                        "capnp plugin, which was disabled.");
 #else
     capnp::TypeSchema decodeType(dec.decodedData().getType());
@@ -922,14 +910,15 @@ void ESItoRTLPass::runOnOperation() {
 
   // Add all the conversion patterns.
   ESIRTLBuilder esiBuilder(top);
-  OwningRewritePatternList patterns;
-  patterns.insert<PipelineStageLowering>(esiBuilder, ctxt);
-  patterns.insert<WrapInterfaceLower>(ctxt);
-  patterns.insert<UnwrapInterfaceLower>(ctxt);
-  patterns.insert<CosimLowering>(esiBuilder);
+  OwningRewritePatternList pass1Patterns;
+  pass1Patterns.insert<PipelineStageLowering>(esiBuilder, ctxt);
+  pass1Patterns.insert<WrapInterfaceLower>(ctxt);
+  pass1Patterns.insert<UnwrapInterfaceLower>(ctxt);
+  pass1Patterns.insert<CosimLowering>(esiBuilder);
 
   // Run the conversion.
-  if (failed(applyPartialConversion(top, pass1Target, std::move(patterns))))
+  if (failed(
+          applyPartialConversion(top, pass1Target, std::move(pass1Patterns))))
     signalPassFailure();
 
   ConversionTarget pass2Target(*ctxt);
@@ -937,12 +926,12 @@ void ESItoRTLPass::runOnOperation() {
   pass2Target.addLegalDialect<SVDialect>();
   pass2Target.addIllegalDialect<ESIDialect>();
 
-  patterns.clear();
-  patterns.insert<RemoveWrapUnwrap>(ctxt);
-  patterns.insert<RemoveUnwrapWrap>(ctxt);
-  patterns.insert<EncoderLowering>(ctxt);
-  patterns.insert<DecoderLowering>(ctxt);
-  if (failed(applyPartialConversion(top, pass2Target, std::move(patterns))))
+  OwningRewritePatternList pass2Patterns;
+  pass2Patterns.insert<RemoveWrapUnwrap>();
+  pass2Patterns.insert<EncoderLowering>(ctxt);
+  pass2Patterns.insert<DecoderLowering>(ctxt);
+  if (failed(
+          applyPartialConversion(top, pass2Target, std::move(pass2Patterns))))
     signalPassFailure();
 }
 
