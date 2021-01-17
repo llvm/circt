@@ -46,9 +46,8 @@ class LoopbackTester:
 
     def test_i32(self, num_msgs):
         ep = self.openEP()
-        data = 0
-        for i in range(num_msgs):
-            data += i * 333
+        for _ in range(num_msgs):
+            data = random.randint(0, 2**32)
             print(f"Sending {data}")
             ep.send(self.dpi.TYi32.new_message(i=data))
             result = self.readMsg(ep, self.dpi.TYi32)
