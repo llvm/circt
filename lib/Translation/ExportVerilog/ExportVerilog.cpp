@@ -1482,6 +1482,18 @@ LogicalResult ModuleEmitter::visitStmt(InstanceOp op) {
   SmallVector<ModulePortInfo, 8> portInfo;
   getModulePortInfo(moduleOp, portInfo);
 
+  // Get the max port name length so we can align the '('.
+  size_t maxNameLength = 0;
+  for (auto &elt : portInfo) {
+    size_t nameLength = elt.getName().size();
+    // Account for "/*" before name.
+    bool isZeroWidth = isZeroBitType(elt.type);
+    if (isZeroWidth)
+      nameLength += 2;
+
+    maxNameLength = std::max(maxNameLength, nameLength);
+  }
+
   // Emit the argument and result ports.
   auto opArgs = op.inputs();
   auto opResults = op.getResults();
@@ -1496,15 +1508,22 @@ LogicalResult ModuleEmitter::visitStmt(InstanceOp op) {
     if (isZeroWidth)
       os << "/*";
 
-    os << '.' << StringRef(elt.getName()) << " (";
+    os << '.' << elt.getName();
+
+    size_t nameLength = elt.getName().size();
+    if (isZeroWidth)
+      nameLength += 2;
+    os.indent(maxNameLength - nameLength) << " (";
 
     // Emit the value as an expression.
     ops.clear();
     emitExpression(portVal, ops);
+    // TODO: If the last port as zero width, the previous port will end with a
+    // comma, which is a syntax error.
+    os << (isLast ? ")" : "),");
     if (isZeroWidth)
       os << "*/";
 
-    os << (isLast ? ")" : "),");
     emitLocationInfoAndNewLine(ops);
   }
   indent() << ");\n";
