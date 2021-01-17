@@ -32,20 +32,20 @@ module {
     // CAPNP: list @0 () -> (ifaces :List(EsiDpiInterfaceDesc));
     // CAPNP: open @1 [S, T] (iface :EsiDpiInterfaceDesc) -> (iface :EsiDpiEndpoint(S, T));
 
-    // COSIM: rtl.instance "TestEP" @Cosim_Endpoint(%clk, %rstn, %{{.*}}, %{{.*}}, %{{.*}}) {parameters = {ENDPOINT_ID = 1 : i32, RECV_TYPE_ID = 14000240888948784983 : ui64, RECV_TYPE_SIZE_BITS = 128 : i32, SEND_TYPE_ID = 10295436870447851681 : ui64, SEND_TYPE_SIZE_BITS = 128 : i32}} : (i1, i1, i1, i1, i128) -> (i1, !rtl.array<128xi1>, i1)
+    // COSIM: rtl.instance "TestEP" @Cosim_Endpoint(%clk, %rstn, %{{.+}}, %{{.+}}, %{{.+}}) {parameters = {ENDPOINT_ID = 1 : i32, RECV_TYPE_ID = 14000240888948784983 : ui64, RECV_TYPE_SIZE_BITS = 128 : i32, SEND_TYPE_ID = 10295436870447851681 : ui64, SEND_TYPE_SIZE_BITS = 128 : i32}} : (i1, i1, i1, i1, i128) -> (i1, !rtl.array<128xi1>, i1)
 
     // SV: Reciever recv (
-    // SV:   .a ({{.*}}.source)
+    // SV:   .a ({{.+}}.source)
     // SV: );
-    // SV: {{.*}}.ready = TestEP_DataInReady;
+    // SV: {{.+}}.ready = TestEP_DataInReady;
     // SV: Sender send (
-    // SV:   .x ({{.*}}.sink)
+    // SV:   .x ({{.+}}.sink)
     // SV: );
     // SV: Cosim_Endpoint #(.ENDPOINT_ID(32'd1), .RECV_TYPE_ID(64'd14000240888948784983), .RECV_TYPE_SIZE_BITS(32'd128), .SEND_TYPE_ID(64'd10295436870447851681), .SEND_TYPE_SIZE_BITS(32'd128)) TestEP (        // <stdin>:42:66
     // SV:   .clk (clk),
     // SV:   .rstn (rstn),
-    // SV:   .DataOutReady ({{.*}}.ready),
-    // SV:   .DataInValid ({{.*}}.valid),
+    // SV:   .DataOutReady ({{.+}}.ready),
+    // SV:   .DataInValid ({{.+}}.valid),
     // SV:   .DataIn ({{[{]}}{50'h0, _T_1}, {16'h0, 16'h1, 32'h0}}),
     // SV:   .DataOutValid (TestEP_DataOutValid),
     // SV:   .DataOut (TestEP_DataOut),
