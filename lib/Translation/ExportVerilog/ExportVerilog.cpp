@@ -70,30 +70,8 @@ static int getBitWidthOrSentinel(Type type) {
       .Default([](Type) { return -1; });
 }
 
-/// Given an integer value, return the number of characters it will take to
-/// print its base-10 value.
-static unsigned getPrintedIntWidth(unsigned value) {
-  // Fast path the common case.
-  if (value < 10)
-    return 1;
-  if (value < 100)
-    return 2;
-  if (value < 1000)
-    return 3;
-
-  // Compute the size in the general case.
-  unsigned size = 4;
-  value /= 1000;
-  while (value >= 10) {
-    ++size;
-    value /= 10;
-  }
-  return size;
-}
-
-/// Emit a type's packed dimensions, returning the number of characters
-/// emitted.
-static size_t emitTypeDims(Type type, Location loc, raw_ostream &os) {
+/// Emit a type's packed dimensions, returning whether or not text was emitted.
+static bool emitTypeDims(Type type, Location loc, raw_ostream &os) {
   if (auto inout = type.dyn_cast<rtl::InOutType>())
     return emitTypeDims(inout.getElementType(), loc, os);
   if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>())
@@ -101,7 +79,6 @@ static size_t emitTypeDims(Type type, Location loc, raw_ostream &os) {
   if (type.isa<InterfaceType>())
     return 0;
 
-  size_t emittedWidth = 0;
   int width;
   if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
     width = arrayType.getSize();
@@ -109,36 +86,36 @@ static size_t emitTypeDims(Type type, Location loc, raw_ostream &os) {
     width = getBitWidthOrSentinel(type);
   }
 
+  bool emitted = false;
   switch (width) {
   case -1: // -1 is an invalid type.
     mlir::emitError(loc, "value has an unsupported verilog type ") << type;
     os << "<<invalid type>>";
-    return 16;
+    return true;
 
   case 1: // Width 1 is implicit.
     break;
 
   case 0:
     os << "/*Zero Width*/";
-    emittedWidth += 14;
+    emitted = true;
     break;
   default:
     os << '[' << (width - 1) << ":0]";
-    emittedWidth += getPrintedIntWidth(width - 1) + 4;
+    emitted = true;
     break;
   }
   if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
-    emittedWidth += emitTypeDims(arrayType.getElementType(), loc, os);
+    emitted |= emitTypeDims(arrayType.getElementType(), loc, os);
   }
-  return emittedWidth;
+  return emitted;
 }
 
 /// Emit the specified type dimensions and print out a trailing space if
 /// anything is printed.
 static void emitTypeDimWithSpaceIfNeeded(Type type, Location loc,
                                          raw_ostream &os) {
-  auto size = emitTypeDims(type, loc, os);
-  if (size)
+  if (emitTypeDims(type, loc, os))
     os << ' ';
 }
 
