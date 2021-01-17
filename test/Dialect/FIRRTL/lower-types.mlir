@@ -31,44 +31,29 @@ firrtl.circuit "TopLevel" {
   }
 
   // CHECK-LABEL: firrtl.module @TopLevel
-  // CHECK-SAME: %[[SOURCE_VALID_NAME:source_valid]]: [[SOURCE_VALID_TYPE:!firrtl.uint<1>]]
-  // CHECK-SAME: %[[SOURCE_READY_NAME:source_ready]]: [[SOURCE_READY_TYPE:!firrtl.flip<uint<1>>]]
-  // CHECK-SAME: %[[SOURCE_DATA_NAME:source_data]]: [[SOURCE_DATA_TYPE:!firrtl.uint<64>]]
-  // CHECK-SAME: %[[SINK_VALID_NAME:sink_valid]]: [[SINK_VALID_TYPE:!firrtl.flip<uint<1>>]]
-  // CHECK-SAME: %[[SINK_READY_NAME:sink_ready]]: [[SINK_READY_TYPE:!firrtl.uint<1>]]
-  // CHECK-SAME: %[[SINK_DATA_NAME:sink_data]]: [[SINK_DATA_TYPE:!firrtl.flip<uint<64>>]]
+  // CHECK-SAME: %source_valid: [[SOURCE_VALID_TYPE:!firrtl.uint<1>]]
+  // CHECK-SAME: %source_ready: [[SOURCE_READY_TYPE:!firrtl.flip<uint<1>>]]
+  // CHECK-SAME: %source_data: [[SOURCE_DATA_TYPE:!firrtl.uint<64>]]
+  // CHECK-SAME: %sink_valid: [[SINK_VALID_TYPE:!firrtl.flip<uint<1>>]]
+  // CHECK-SAME: %sink_ready: [[SINK_READY_TYPE:!firrtl.uint<1>]]
+  // CHECK-SAME: %sink_data: [[SINK_DATA_TYPE:!firrtl.flip<uint<64>>]]
   firrtl.module @TopLevel(%source: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>,
                           %sink: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) {
 
-    // CHECK-NEXT: %[[INSTANCE:.+]] = firrtl.instance @Simple
-    // CHECK-SAME: !firrtl.bundle
-    // CHECK-SAME: [[SUB_SOURCE_VALID_NAME:source_valid]]: [[SUB_SOURCE_VALID_TYPE:flip<uint<1>>]]
-    // CHECK-SAME: [[SUB_SOURCE_READY_NAME:source_ready]]: [[SUB_SOURCE_READY_TYPE:uint<1>]]
-    // CHECK-SAME: [[SUB_SOURCE_DATA_NAME:source_data]]: [[SUB_SOURCE_DATA_TYPE:flip<uint<64>>]]
-    // CHECK-SAME: [[SUB_SINK_VALID_NAME:sink_valid]]: [[SUB_SINK_VALID_TYPE:uint<1>]]
-    // CHECK-SAME: [[SUB_SINK_READY_NAME:sink_ready]]: [[SUB_SINK_READY_TYPE:flip<uint<1>>]]
-    // CHECK-SAME: [[SUB_SINK_DATA_NAME:sink_data]]: [[SUB_SINK_DATA_TYPE:uint<64>]]
-    %0 = firrtl.instance @Simple {name = ""} : !firrtl.bundle<source: bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, sink: bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>>
+    // CHECK-NEXT: %[[INSTANCE:.+]]:6 = firrtl.instance @Simple {name = "", portNames = ["source_valid", "source_ready", "source_data", "sink_valid", "sink_ready", "sink_data"]} :
+    // CHECK-SAME: !firrtl.flip<uint<1>>, !firrtl.uint<1>, !firrtl.flip<uint<64>>, !firrtl.uint<1>, !firrtl.flip<uint<1>>, !firrtl.uint<64>
+    %sourceV, %sinkV = firrtl.instance @Simple {name = "", portNames = ["source", "sink"]} : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>
 
-    // CHECK-NEXT: %[[FIELD1:.+]] = firrtl.subfield %[[INSTANCE]]("[[SUB_SOURCE_VALID_NAME]]") {{.*}} [[SUB_SOURCE_VALID_TYPE]]
-    // CHECK-NEXT: %[[FIELD2:.+]] = firrtl.subfield %[[INSTANCE]]("[[SUB_SOURCE_READY_NAME]]") {{.*}} [[SUB_SOURCE_READY_TYPE]]
-    // CHECK-NEXT: %[[FIELD3:.+]] = firrtl.subfield %[[INSTANCE]]("[[SUB_SOURCE_DATA_NAME]]") {{.*}} [[SUB_SOURCE_DATA_TYPE]]
-    // CHECK-NEXT: %[[FIELD4:.+]] = firrtl.subfield %[[INSTANCE]]("[[SUB_SINK_VALID_NAME]]") {{.*}} [[SUB_SINK_VALID_TYPE]]
-    // CHECK-NEXT: %[[FIELD5:.+]] = firrtl.subfield %[[INSTANCE]]("[[SUB_SINK_READY_NAME]]") {{.*}} [[SUB_SINK_READY_TYPE]]
-    // CHECK-NEXT: %[[FIELD6:.+]] = firrtl.subfield %[[INSTANCE]]("[[SUB_SINK_DATA_NAME]]") {{.*}} [[SUB_SINK_DATA_TYPE]]
+    // CHECK-NEXT: firrtl.connect %[[INSTANCE]]#0, %source_valid
+    // CHECK-NEXT: firrtl.connect %source_ready, %[[INSTANCE]]#1 
+    // CHECK-NEXT: firrtl.connect %[[INSTANCE]]#2, %source_data
+    // CHECK-NEXT: firrtl.connect %sink_valid, %[[INSTANCE]]#3
+    // CHECK-NEXT: firrtl.connect %[[INSTANCE]]#4, %sink_ready
+    // CHECK-NEXT: firrtl.connect %sink_data, %[[INSTANCE]]#5 
 
-    // CHECK-NEXT: firrtl.connect %[[FIELD1]], %[[SOURCE_VALID_NAME]] : !firrtl.[[SUB_SOURCE_VALID_TYPE]], [[SOURCE_VALID_TYPE]]
-    // CHECK-NEXT: firrtl.connect %[[SOURCE_READY_NAME]], %[[FIELD2]] : [[SOURCE_READY_TYPE]], !firrtl.[[SUB_SOURCE_READY_TYPE]]
-    // CHECK-NEXT: firrtl.connect %[[FIELD3]], %[[SOURCE_DATA_NAME]] : !firrtl.[[SUB_SOURCE_DATA_TYPE]], [[SOURCE_DATA_TYPE]]
-    // CHECK-NEXT: firrtl.connect %[[SINK_VALID_NAME]], %[[FIELD4]] : [[SINK_VALID_TYPE]], !firrtl.[[SUB_SINK_VALID_TYPE]]
-    // CHECK-NEXT: firrtl.connect %[[FIELD5]], %[[SINK_READY_NAME]] : !firrtl.[[SUB_SINK_READY_TYPE]], [[SINK_READY_TYPE]]
-    // CHECK-NEXT: firrtl.connect %[[SINK_DATA_NAME]], %[[FIELD6]] : [[SINK_DATA_TYPE]], !firrtl.[[SUB_SINK_DATA_TYPE]]
+    firrtl.connect %sourceV, %source : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>
 
-    %1 = firrtl.subfield %0("source") : (!firrtl.bundle<source: bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, sink: bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>>) -> !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>
-    firrtl.connect %1, %source : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>
-
-    %2 = firrtl.subfield %0("sink") : (!firrtl.bundle<source: bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, sink: bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>>) -> !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>
-    firrtl.connect %sink, %2 : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>
+    firrtl.connect %sink, %sinkV : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>
   }
 }
 
@@ -106,27 +91,6 @@ firrtl.circuit "Uniquification" {
   // CHECK-NOT: %[[FLATTENED_ARG]]
   // CHECK-SAME: %[[RENAMED_ARG:a_b.+]]: [[RENAMED_TYPE:!firrtl.uint<1>]] {firrtl.name = "[[FLATTENED_ARG]]"}
   firrtl.module @Uniquification(%a: !firrtl.bundle<b: uint<1>>, %a_b: !firrtl.uint<1>) {
-  }
-
-}
-
-// -----
-
-firrtl.circuit "InstanceFlipped" {
-
-  firrtl.module @SubModule(%clock: !firrtl.clock, %reset: !firrtl.uint<1>) {
-  }
-
-  // CHECK-LABEL: firrtl.module @InstanceFlipped
-  // CHECK: firrtl.instance @SubModule {{.*}} : !firrtl.flip<bundle<clock: clock, reset: uint<1>>>
-  firrtl.module @InstanceFlipped(%clock: !firrtl.clock, %reset: !firrtl.uint<1>) {
-    %int_bus = firrtl.instance @SubModule {name = "int_bus"} : !firrtl.flip<bundle<clock: clock, reset: uint<1>>>
-    // CHECK: firrtl.subfield %int_bus("clock") {{.*}} -> !firrtl.flip<clock>
-    %0 = firrtl.subfield %int_bus("clock") : (!firrtl.flip<bundle<clock: clock, reset: uint<1>>>) -> !firrtl.flip<clock>
-    firrtl.connect %0, %clock : !firrtl.flip<clock>, !firrtl.clock
-    // CHECK: firrtl.subfield %int_bus("reset") {{.*}} -> !firrtl.flip<uint<1>>
-    %1 = firrtl.subfield %int_bus("reset") : (!firrtl.flip<bundle<clock: clock, reset: uint<1>>>) -> !firrtl.flip<uint<1>>
-    firrtl.connect %1, %reset : !firrtl.flip<uint<1>>, !firrtl.uint<1>
   }
 
 }

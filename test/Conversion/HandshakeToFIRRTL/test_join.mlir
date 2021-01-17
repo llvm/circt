@@ -19,7 +19,7 @@
 // CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg2: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg3: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, %arg4: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, %clock: !firrtl.clock, %reset: !firrtl.uint<1>) {
 handshake.func @test_join(%arg0: none, %arg1: none, %arg2: none, ...) -> (none, none) {
 
-  // CHECK: %0 = firrtl.instance @handshake_join_2ins_1outs_ctrl {name = ""} : !firrtl.bundle<arg0: bundle<valid: flip<uint<1>>, ready: uint<1>>, arg1: bundle<valid: flip<uint<1>>, ready: uint<1>>, arg2: bundle<valid: uint<1>, ready: flip<uint<1>>>>
+  // CHECK: %0:3 = firrtl.instance @handshake_join_2ins_1outs_ctrl {name = "", portNames = ["arg0", "arg1", "arg2"]} : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>
   %0 = "handshake.join"(%arg0, %arg1) {control = true}: (none, none) -> none
   handshake.return %0, %arg2 : none, none
 }

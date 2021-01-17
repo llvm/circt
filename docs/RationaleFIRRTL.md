@@ -134,6 +134,17 @@ representation.
 
 ## Operations
 
+#### Multiple result `firrtl.instance` operation
+
+The FIRRTL spec describes instances as returning a bundle type, where each
+element of the bundle corresponds to one of the ports of the module being
+instanced.  This makes sense in the Scala FIRRTL implementation, given that it
+does not support multiple ports.
+
+The MLIR FIRRTL dialect takes a different approach, having each element of the
+bundle result turn into its own distinct result on the `firrtl.instance`
+operation.  This is made possible by MLIR's robust support for multiple value
+operands, and makes the IR much easier to analyze and work with.
 
 #### `input` and `output` Module Ports
 

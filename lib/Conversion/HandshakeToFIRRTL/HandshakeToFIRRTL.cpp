@@ -1648,35 +1648,28 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
                          FModuleOp topModuleOp, unsigned clockDomain,
                          ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPointAfter(oldOp);
-  using BundleElement = BundleType::BundleElement;
-  llvm::SmallVector<BundleElement, 8> elements;
-  MLIRContext *context = subModuleOp.getContext();
+
+  llvm::SmallVector<Type> resultTypes;
+  llvm::SmallVector<Attribute> resultNames;
 
   // Bundle all ports of the instance into a new flattened bundle type.
   SmallVector<ModulePortInfo, 8> portInfo;
   getModulePortInfo(subModuleOp, portInfo);
   for (auto &port : portInfo) {
-    auto argId = rewriter.getIdentifier(port.getName());
-
     // All ports of the instance operation are flipped.
-    auto argType = FlipType::get(port.type);
-    elements.push_back(BundleElement(argId, argType));
+    resultTypes.push_back(FlipType::get(port.type));
+    resultNames.push_back(rewriter.getStringAttr(port.getName()));
   }
 
   // Create a instance operation.
-  auto instType = BundleType::get(elements, context);
   auto instanceOp = rewriter.create<firrtl::InstanceOp>(
-      oldOp->getLoc(), instType, subModuleOp.getName(),
-      rewriter.getStringAttr(""));
+      oldOp->getLoc(), resultTypes, subModuleOp.getName(),
+      rewriter.getArrayAttr(resultNames), rewriter.getStringAttr(""));
 
   // Connect the new created instance with its predecessors and successors in
   // the top-module.
   unsigned portIndex = 0;
-  for (auto &element : instType.cast<BundleType>().getElements()) {
-    auto subfieldOp = rewriter.create<SubfieldOp>(
-        oldOp->getLoc(), element.type, instanceOp,
-        rewriter.getStringAttr(element.name.strref()));
-
+  for (auto result : instanceOp.getResults()) {
     unsigned numIns = oldOp->getNumOperands();
     unsigned numArgs = numIns + oldOp->getNumResults();
 
@@ -1687,16 +1680,16 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
                                    });
     if (portIndex < numIns) {
       // Connect input ports.
-      rewriter.create<ConnectOp>(oldOp->getLoc(), subfieldOp,
+      rewriter.create<ConnectOp>(oldOp->getLoc(), result,
                                  oldOp->getOperand(portIndex));
     } else if (portIndex < numArgs) {
       // Connect output ports.
-      Value result = oldOp->getResult(portIndex - numIns);
-      result.replaceAllUsesWith(subfieldOp);
+      Value newResult = oldOp->getResult(portIndex - numIns);
+      newResult.replaceAllUsesWith(result);
     } else {
       // Connect clock or reset signal.
       auto signal = *(firstClock + 2 * clockDomain + portIndex - numArgs);
-      rewriter.create<ConnectOp>(oldOp->getLoc(), subfieldOp, signal);
+      rewriter.create<ConnectOp>(oldOp->getLoc(), result, signal);
     }
     ++portIndex;
   }

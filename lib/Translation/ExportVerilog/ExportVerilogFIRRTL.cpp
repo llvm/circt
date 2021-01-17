@@ -1445,18 +1445,20 @@ void ModuleEmitter::emitDecl(InstanceOp op) {
       }
     }
 
-  auto instanceName = getName(op.getResult());
+  auto instanceName = op.name();
   os << ' ' << instanceName << " (";
   emitLocationInfoAndNewLine(ops);
 
-  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenBundleTypes(op.getResult().getType().cast<FIRRTLType>(), "", false,
-                     fieldTypes);
-  for (auto &elt : fieldTypes) {
-    assert(!elt.suffix.empty() && "instance should always return a BundleType");
-    bool isLast = &elt == &fieldTypes.back();
-    indent() << "  ." << StringRef(elt.suffix).drop_front() << '('
-             << instanceName << elt.suffix << (isLast ? ")\n" : "),\n");
+  for (size_t resultIdx = 0, e = op.getNumResults(); resultIdx != e;
+       ++resultIdx) {
+    SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+    flattenBundleTypes(op.getResult(resultIdx).getType().cast<FIRRTLType>(),
+                       op.getPortNameStr(resultIdx), false, fieldTypes);
+    for (auto &elt : fieldTypes) {
+      bool isLast = resultIdx == e - 1 && &elt == &fieldTypes.back();
+      indent() << "  ." << StringRef(elt.suffix) << '(' << instanceName << '_'
+               << elt.suffix << (isLast ? ")\n" : "),\n");
+    }
   }
   indent() << ");\n";
 }
@@ -1734,97 +1736,105 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
   };
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  SmallVector<Operation *, 16> declsToEmit;
-  bool rtlInstanceDeclaredWires = false;
+  SmallVector<Value, 16> valuesToEmit;
   for (auto &op : block) {
-    if (op.getNumResults() == 0)
-      continue;
+    for (auto result : op.getResults()) {
+      // If this is an expression emitted inline or unused, it doesn't need a
+      // name.
+      bool isExpr = isVerilogExpression(&op);
+      if (isExpr) {
+        // If this expression is dead, or can be emitted inline, ignore it.
+        if (result.use_empty() || isExpressionEmittedInline(&op))
+          continue;
 
-    assert(op.getNumResults() == 1 && "firrtl only has single-op results");
-    Value result = op.getResult(0);
+        // Remember that this expression should be emitted out of line.
+        outOfLineExpressions.insert(&op);
+      }
 
-    // If this is an expression emitted inline or unused, it doesn't need a
-    // name.
-    bool isExpr = isVerilogExpression(&op);
-    if (isExpr) {
-      // If this expression is dead, or can be emitted inline, ignore it.
-      if (result.use_empty() || isExpressionEmittedInline(&op))
+      // Otherwise, it must be an expression or a declaration like a
+      // RegOp/WireOp.
+      auto nameAttr = op.getAttrOfType<StringAttr>("name");
+      if (auto instance = dyn_cast<InstanceOp>(&op)) {
+        if (nameAttr) {
+          auto name = (nameAttr.getValue() + "_" +
+                       instance.getPortNameStr(result.getResultNumber()))
+                          .str();
+          addName(result, name);
+        }
+      } else {
+        addName(result, nameAttr);
+      }
+
+      // If we are emitting inline wire decls, don't measure or emit this wire.
+      if (isExpr && emitInlineWireDecls)
         continue;
 
-      // Remember that this expression should be emitted out of line.
-      outOfLineExpressions.insert(&op);
-    }
+      // FIXME(verilog dialect): This can cause name collisions, because the
+      // base name may be unique but the suffixed names may not be.  The right
+      // way to solve this is to change the instances and mems in a new Verilog
+      // dialect to use multiple return values, exposing the independent
+      // Value's.
 
-    // Otherwise, it must be an expression or a declaration like a RegOp/WireOp.
-    addName(result, op.getAttrOfType<StringAttr>("name"));
+      // Determine what kind of thing this is, and how much space it needs.
+      maxDeclNameWidth =
+          std::max(getVerilogDeclWord(&op).size(), maxDeclNameWidth);
 
-    // If we are emitting inline wire decls, don't measure or emit this wire.
-    if (isExpr && emitInlineWireDecls)
-      continue;
+      // Flatten the type for processing of each individual element.
+      fieldTypes.clear();
+      flattenBundleTypes(result.getType(), "", false, fieldTypes);
 
-    // FIXME(verilog dialect): This can cause name collisions, because the
-    // base name may be unique but the suffixed names may not be.  The right
-    // way to solve this is to change the instances and mems in a new Verilog
-    // dialect to use multiple return values, exposing the independent
-    // Value's.
+      // Handle the reg declaration for a memory specially.
+      if (auto memOp = dyn_cast<MemOp>(&op))
+        if (auto dataType = memOp.getDataTypeOrNull())
+          flattenBundleTypes(dataType, "", false, fieldTypes);
 
-    // Determine what kind of thing this is, and how much space it needs.
-    maxDeclNameWidth =
-        std::max(getVerilogDeclWord(&op).size(), maxDeclNameWidth);
+      bool hadError = false;
+      for (const auto &elt : fieldTypes) {
+        int bitWidth = getBitWidthOrSentinel(elt.type);
+        if (bitWidth == -1) {
+          emitError(&op, getName(result))
+              << elt.suffix << " has an unsupported verilog type " << elt.type;
+          hadError = true;
+          break;
+        }
 
-    // Flatten the type for processing of each individual element.
-    fieldTypes.clear();
-    flattenBundleTypes(result.getType(), "", false, fieldTypes);
-
-    // Handle the reg declaration for a memory specially.
-    if (auto memOp = dyn_cast<MemOp>(&op))
-      if (auto dataType = memOp.getDataTypeOrNull())
-        flattenBundleTypes(dataType, "", false, fieldTypes);
-
-    for (const auto &elt : fieldTypes) {
-
-      int bitWidth = getBitWidthOrSentinel(elt.type);
-      if (bitWidth == -1) {
-        emitError(&op, getName(result))
-            << elt.suffix << " has an unsupported verilog type " << elt.type;
-        result = Value();
-        break;
+        if (bitWidth != 1) { // Width 1 is implicit.
+          // Add 5 to count the width of the "[:0] ".
+          size_t thisWidth = getPrintedIntWidth(bitWidth - 1) + 5;
+          maxTypeWidth = std::max(thisWidth, maxTypeWidth);
+        }
       }
 
-      if (bitWidth != 1) { // Width 1 is implicit.
-        // Add 5 to count the width of the "[:0] ".
-        size_t thisWidth = getPrintedIntWidth(bitWidth - 1) + 5;
-        maxTypeWidth = std::max(thisWidth, maxTypeWidth);
-      }
+      if (!hadError)
+        valuesToEmit.push_back(result);
     }
-
-    // Emit this declaration.
-    if (result)
-      declsToEmit.push_back(&op);
   }
 
   SmallPtrSet<Operation *, 8> ops;
 
   // Okay, now that we have measured the things to emit, emit the things.
-  for (auto *decl : declsToEmit) {
+  for (auto value : valuesToEmit) {
     ops.clear();
+
+    auto *decl = value.getDefiningOp();
     ops.insert(decl);
 
     auto word = getVerilogDeclWord(decl);
 
     // Flatten the type for processing of each individual element.
     fieldTypes.clear();
-    flattenBundleTypes(decl->getResult(0).getType(), "", false, fieldTypes);
+    flattenBundleTypes(value.getType(), "", false, fieldTypes);
 
     bool isFirst = true;
     for (const auto &elt : fieldTypes) {
       indent() << word;
+      assert(maxDeclNameWidth);
       os.indent(maxDeclNameWidth - word.size() + 1);
 
       auto elementType = elt.type;
       emitTypePaddedToWidth(elementType, maxTypeWidth, decl);
 
-      os << getName(decl->getResult(0)) << elt.suffix << ';';
+      os << getName(value) << elt.suffix << ';';
       if (isFirst)
         emitLocationInfoAndNewLine(ops);
       else
@@ -1849,7 +1859,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     }
   }
 
-  if (!declsToEmit.empty() || rtlInstanceDeclaredWires)
+  if (!valuesToEmit.empty())
     os << '\n';
 }
 

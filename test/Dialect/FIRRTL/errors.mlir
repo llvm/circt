@@ -207,7 +207,7 @@ firrtl.circuit "Foo" {
 
   firrtl.extmodule @Foo()
   // expected-error @+1 {{'firrtl.instance' op should be embedded in a 'firrtl.module'}}
-  %a = firrtl.instance @Foo : !firrtl.bundle<>
+  firrtl.instance @Foo {portNames = []}
 
 }
 
@@ -218,7 +218,7 @@ firrtl.circuit "Foo" {
   // expected-note @+1 {{containing module declared here}}
   firrtl.module @Foo() {
     // expected-error @+1 {{'firrtl.instance' op is a recursive instantiation of its containing module}}
-    %a = firrtl.instance @Foo : !firrtl.bundle<>
+    firrtl.instance @Foo {portNames = []} 
   }
 
 }
@@ -230,8 +230,8 @@ firrtl.circuit "Foo" {
   // expected-note @+1 {{original module declared here}}
   firrtl.module @Callee(%arg0: !firrtl.uint<1>) { }
   firrtl.module @Foo() {
-    // expected-error @+1 {{'firrtl.instance' op output bundle type must match module. In element 0, expected '!firrtl.uint<1>', but got '!firrtl.uint<2>'.}}
-    %a = firrtl.instance @Callee : !firrtl.bundle<arg0: uint<2>>
+    // expected-error @+1 {{'firrtl.instance' op result type for "arg0" must be '!firrtl.flip<uint<1>>', but got '!firrtl.uint<2>'}}
+    %a = firrtl.instance @Callee {portNames = ["arg0"]} : !firrtl.uint<2>
   }
 }
 
@@ -242,8 +242,8 @@ firrtl.circuit "Foo" {
   // expected-note @+1 {{original module declared here}}
   firrtl.module @Callee(%arg0: !firrtl.uint<1> ) { }
   firrtl.module @Foo() {
-    // expected-error @+1 {{'firrtl.instance' op has a wrong size of bundle type, expected size is 1 but got 0}}
-    %a = firrtl.instance @Callee : !firrtl.bundle<>
+    // expected-error @+1 {{'firrtl.instance' op has a wrong number of results; expected 1 but got 0}}
+    firrtl.instance @Callee {portNames = []}
   }
 }
 
@@ -254,8 +254,9 @@ firrtl.circuit "Foo" {
   // expected-note @+1 {{original module declared here}}
   firrtl.module @Callee(%arg0: !firrtl.uint<1>, %arg1: !firrtl.bundle<valid: uint<1>>) { }
   firrtl.module @Foo() {
-    // expected-error @+1 {{'firrtl.instance' op output bundle type must match module. In element 1, expected '!firrtl.bundle<valid: uint<1>>', but got '!firrtl.bundle<valid: uint<2>>'.}}
-    %a = firrtl.instance @Callee : !firrtl.bundle<arg0: uint<1>, arg1: bundle<valid: uint<2>>>
+    // expected-error @+1 {{'firrtl.instance' op result type for "arg0" must be '!firrtl.flip<uint<1>>', but got '!firrtl.uint<1>'}}
+    %a:2 = firrtl.instance @Callee {portNames = ["arg0", "arg1"]} 
+    : !firrtl.uint<1>, !firrtl.bundle<valid: uint<2>>
   }
 }
 
@@ -296,26 +297,13 @@ firrtl.module @X(%a : !firrtl.uint<4>) {
 
 firrtl.circuit "TopModule" {
 
+// expected-note @+1 {{declared here}}
 firrtl.module @SubModule(%a : !firrtl.uint<1>) {
 }
 
 firrtl.module @TopModule() {
-  // expected-error @+1 {{'firrtl.instance' op has invalid result type of '!firrtl.uint<1>'}}
-  %0 = firrtl.instance @SubModule : !firrtl.uint<1>
-}
-
-}
-
-// -----
-
-firrtl.circuit "TopModule" {
-
-firrtl.module @SubModule(%a : !firrtl.uint<1>) {
-}
-
-firrtl.module @TopModule() {
-  // expected-error @+1 {{'firrtl.instance' op has invalid result type of '!firrtl.flip<uint<1>>'}}
-  %0 = firrtl.instance @SubModule : !firrtl.flip<uint<1>>
+  // expected-error @+1 {{'firrtl.instance' op is missing a port named '"a"' expected by referenced module}}
+  %0 = firrtl.instance @SubModule {portNames = ["arg0"]}: !firrtl.sint<1>
 }
 
 }

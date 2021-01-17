@@ -268,20 +268,23 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     reg _t_2622 : UInt<4>, clock with :
       reset => (UInt<1>("h0"), _t_2622)
 
-    ; CHECK: [[xyz:%.+]] = firrtl.instance @circuit {name = "xyz"} : !firrtl.flip<bundle<in: uint<80>>>
+    ; CHECK: %xyz = firrtl.instance @circuit {name = "xyz", portNames = ["in"]} : !firrtl.flip<uint<80>>
     inst xyz of circuit
-    ; CHECK: [[xyz_in:%.+]] = firrtl.subfield [[xyz]]("in") : (!firrtl.flip<bundle<in: uint<80>>>) -> !firrtl.flip<uint<80>>
-    ; CHECK: firrtl.connect [[xyz_in]], %i8 : !firrtl.flip<uint<80>>, !firrtl.uint<8>
+    ; CHECK: firrtl.connect %xyz, %i8 : !firrtl.flip<uint<80>>, !firrtl.uint<8>
     xyz.in <= i8
 
-    ; CHECK: [[myext:%.+]] = firrtl.instance @MyExtModule {name = "myext"} : !firrtl.bundle<in: flip<uint>, out: uint<8>>
+    ; CHECK: %myext:2 = firrtl.instance @MyExtModule
+    ; CHECK: {name = "myext", portNames = ["in", "out"]} :
+    ; CHECK: !firrtl.flip<uint>, !firrtl.uint<8>
     inst myext of MyExtModule
     myext.in <= i8
     printf(clock, reset, "Something interesting! %x", myext.out)
 
     ; CHECK: firrtl.when %reset  {
     when reset :
-      ; CHECK: [[reset_myext:%.+]] = firrtl.instance @MyExtModule {name = "reset_myext"} : !firrtl.bundle<in: flip<uint>, out: uint<8>>
+      ; CHECK: %reset_myext:2 = firrtl.instance @MyExtModule
+      ; CHECK: {name = "reset_myext", portNames = ["in", "out"]} :
+      ; CHECK: !firrtl.flip<uint>, !firrtl.uint<8>
       inst reset_myext of MyExtModule
       reset_myext.in <= i8
     ; CHECK: }

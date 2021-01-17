@@ -64,7 +64,7 @@
 // CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg2: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, %arg3: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, %arg4: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, %clock: !firrtl.clock, %reset: !firrtl.uint<1>) {
 handshake.func @test_fork(%arg0: none, %arg1: none, ...) -> (none, none, none) {
 
-  // CHECK: %0 = firrtl.instance @handshake_fork_1ins_2outs_ctrl {name = ""} : !firrtl.bundle<arg0: bundle<valid: flip<uint<1>>, ready: uint<1>>, arg1: bundle<valid: uint<1>, ready: flip<uint<1>>>, arg2: bundle<valid: uint<1>, ready: flip<uint<1>>>, clock: flip<clock>, reset: flip<uint<1>>>
+  // CHECK:  %0:5 = firrtl.instance @handshake_fork_1ins_2outs_ctrl {name = "", portNames = ["arg0", "arg1", "arg2", "clock", "reset"]} : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, !firrtl.flip<clock>, !firrtl.flip<uint<1>>
   %0:2 = "handshake.fork"(%arg0) {control = true} : (none) -> (none, none)
   handshake.return %0#0, %0#1, %arg1 : none, none, none
 }
@@ -84,7 +84,7 @@ handshake.func @test_fork(%arg0: none, %arg1: none, ...) -> (none, none, none) {
 // CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg2: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, %arg3: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, %arg4: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>>, %clock: !firrtl.clock, %reset: !firrtl.uint<1>) {
 handshake.func @test_fork_data(%arg0: index, %arg1: none, ...) -> (index, index, none) {
 
-  // CHECK: %0 = firrtl.instance @handshake_fork_1ins_2outs {name = ""} : !firrtl.bundle<arg0: bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, arg1: bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, arg2: bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, clock: flip<clock>, reset: flip<uint<1>>>
+  // CHECK: %0:5 = firrtl.instance @handshake_fork_1ins_2outs {name = "", portNames = ["arg0", "arg1", "arg2", "clock", "reset"]} : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, !firrtl.flip<clock>, !firrtl.flip<uint<1>>
   %0:2 = "handshake.fork"(%arg0) {control = false} : (index) -> (index, index)
   handshake.return %0#0, %0#1, %arg1 : index, index, none
 }
