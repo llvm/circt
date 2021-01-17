@@ -194,17 +194,17 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: = rtl.extract [[SHIFT]] from 0 : (i14) -> i4
     %31 = firrtl.dshr %25, %27 : (!firrtl.sint<4>, !firrtl.uint<14>) -> !firrtl.sint<4>
 
-    // CHECK-NEXT: rtl.icmp "ule" {{.*}}, {{.*}} : i4
+    // CHECK-NEXT: rtl.icmp ule {{.*}}, {{.*}} : i4
     %41 = firrtl.leq %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
-    // CHECK-NEXT: rtl.icmp "ult" {{.*}}, {{.*}} : i4
+    // CHECK-NEXT: rtl.icmp ult {{.*}}, {{.*}} : i4
     %42 = firrtl.lt %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
-    // CHECK-NEXT: rtl.icmp "uge" {{.*}}, {{.*}} : i4
+    // CHECK-NEXT: rtl.icmp uge {{.*}}, {{.*}} : i4
     %43 = firrtl.geq %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
-    // CHECK-NEXT: rtl.icmp "ugt" {{.*}}, {{.*}} : i4
+    // CHECK-NEXT: rtl.icmp ugt {{.*}}, {{.*}} : i4
     %44 = firrtl.gt %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
-    // CHECK-NEXT: rtl.icmp "eq" {{.*}}, {{.*}} : i4
+    // CHECK-NEXT: rtl.icmp eq {{.*}}, {{.*}} : i4
     %45 = firrtl.eq %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
-    // CHECK-NEXT: rtl.icmp "ne" {{.*}}, {{.*}} : i4
+    // CHECK-NEXT: rtl.icmp ne {{.*}}, {{.*}} : i4
     %46 = firrtl.neq %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
 
     // Noop
@@ -618,7 +618,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %c0_ui3 = firrtl.constant(0 : ui3) : !firrtl.uint<3>
 
     // CHECK:  %_M = sv.reg : !rtl.inout<uarray<12xi42>>
-    %_M = firrtl.mem "Undefined" {depth = 12 : i64, name = "_M", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<read: bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>, write: flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>>
+    %_M = firrtl.mem Undefined {depth = 12 : i64, name = "_M", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<read: bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>, write: flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>>
 
     // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
     // CHECK-NEXT:   sv.initial  {
@@ -665,7 +665,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:   %3 = rtl.arrayindex %_M[%2]
     // CHECK-NEXT:   %4 = rtl.read_inout %3 : !rtl.inout<i42>
     // CHECK-NEXT:   %c-4_i4 = rtl.constant(-4 : i4) : i4
-    // CHECK-NEXT:   %5 = rtl.icmp "ult" %2, %c-4_i4 : i4
+    // CHECK-NEXT:   %5 = rtl.icmp ult %2, %c-4_i4 : i4
     // CHECK-NEXT:   %6 = sv.textual_value "`RANDOM" : i42
     // CHECK-NEXT:   %7 = rtl.mux %5, %4, %6 : i42
     // CHECK-NEXT:   rtl.connect %_M_read_data, %7 : i42
@@ -728,7 +728,7 @@ module attributes {firrtl.mainModule = "Simple"} {
   rtl.module @MemAggregate(%clock1: i1, %clock2: i1) {
       %0 = firrtl.stdIntCast %clock1 : (i1) -> !firrtl.clock
       %1 = firrtl.stdIntCast %clock2 : (i1) -> !firrtl.clock
-      %_M = firrtl.mem "Undefined" {depth = 20 : i64, name = "_M", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<read: bundle<addr: flip<uint<5>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>, other: sint<8>>>, write: flip<bundle<addr: uint<5>, en: uint<1>, clk: clock, data: bundle<id: analog<4>, other: sint<8>>, mask: bundle<id: uint<1>, other: uint<1>>>>>
+      %_M = firrtl.mem Undefined {depth = 20 : i64, name = "_M", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<read: bundle<addr: flip<uint<5>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>, other: sint<8>>>, write: flip<bundle<addr: uint<5>, en: uint<1>, clk: clock, data: bundle<id: analog<4>, other: sint<8>>, mask: bundle<id: uint<1>, other: uint<1>>>>>
       rtl.output
     }
 
@@ -751,7 +751,7 @@ module attributes {firrtl.mainModule = "Simple"} {
   // CHECK-NEXT:   rtl.output
   // CHECK-NEXT: }
   rtl.module @MemEmpty() {
-    %Empty = firrtl.mem "Undefined" {depth = 16 : i64, name = "Empty", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<>
+    %Empty = firrtl.mem Undefined {depth = 16 : i64, name = "Empty", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<>
     rtl.output
   }
 
@@ -786,7 +786,7 @@ module attributes {firrtl.mainModule = "Simple"} {
   // CHECK-NEXT:   rtl.output
   // CHECK-NEXT: }
   rtl.module @MemOne() {
-    %_M = firrtl.mem "Undefined" {depth = 1 : i64, name = "_M", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<read: bundle<addr: flip<uint<1>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>, other: sint<8>>>, write: flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<id: analog<4>, other: sint<8>>, mask: bundle<id: uint<1>, other: uint<1>>>>>
+    %_M = firrtl.mem Undefined {depth = 1 : i64, name = "_M", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<read: bundle<addr: flip<uint<1>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>, other: sint<8>>>, write: flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<id: analog<4>, other: sint<8>>, mask: bundle<id: uint<1>, other: uint<1>>>>>
     rtl.output
   }
 
@@ -798,7 +798,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
 
     // CHECK:  %_M = sv.reg : !rtl.inout<uarray<12xi42>>
-    %_M = firrtl.mem "Undefined" {depth = 12 : i64, name = "_M", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<read: bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>>
+    %_M = firrtl.mem Undefined {depth = 12 : i64, name = "_M", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<read: bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>>
     // Read port.
     // CHECK: %_M_read_addr = rtl.wire : !rtl.inout<i4>
     // CHECK-NEXT: %_M_read_en = rtl.wire : !rtl.inout<i1>

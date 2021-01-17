@@ -17,7 +17,7 @@ func @simple_loop() {
 // CHECK:           %[[VAL_10:.*]] = "handshake.mux"(%[[VAL_7]]#1, %[[VAL_11:.*]], %[[VAL_6]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_12:.*]]:2 = "handshake.fork"(%[[VAL_10]]) {control = false} : (index) -> (index, index)
 // CHECK:           %[[VAL_13:.*]] = "handshake.constant"(%[[VAL_9]]#0) {value = 42 : index} : (none) -> index
-// CHECK:           %[[VAL_14:.*]] = cmpi "slt", %[[VAL_12]]#1, %[[VAL_13]] : index
+// CHECK:           %[[VAL_14:.*]] = cmpi slt, %[[VAL_12]]#1, %[[VAL_13]] : index
 // CHECK:           %[[VAL_15:.*]]:2 = "handshake.fork"(%[[VAL_14]]) {control = false} : (i1) -> (i1, i1)
 // CHECK:           %[[VAL_16:.*]], %[[VAL_17:.*]] = "handshake.conditional_branch"(%[[VAL_15]]#1, %[[VAL_9]]#1) {control = true} : (i1, none) -> (none, none)
 // CHECK:           %[[VAL_18:.*]], %[[VAL_19:.*]] = "handshake.conditional_branch"(%[[VAL_15]]#0, %[[VAL_12]]#0) {control = false} : (i1, index) -> (index, index)
@@ -43,7 +43,7 @@ func @simple_loop() {
   br ^bb2(%c1 : index)
 ^bb2(%0: index):	// 2 preds: ^bb1, ^bb3
   %c42 = constant 42 : index
-  %1 = cmpi "slt", %0, %c42 : index
+  %1 = cmpi slt, %0, %c42 : index
   cond_br %1, ^bb3, ^bb4
 ^bb3:	// pred: ^bb2
   %c1_0 = constant 1 : index

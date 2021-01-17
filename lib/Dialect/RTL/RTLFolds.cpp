@@ -706,3 +706,29 @@ void ConcatOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
   };
   results.insert<Folder>(context);
 }
+
+void WireOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                         MLIRContext *context) {
+  // If this wire is only written to, delete the wire and all writers.
+  struct DropDeadConnect final : public OpRewritePattern<WireOp> {
+    using OpRewritePattern::OpRewritePattern;
+    LogicalResult matchAndRewrite(WireOp op,
+                                  PatternRewriter &rewriter) const override {
+
+      // Check that all operations on the wire are rtl.connects. All other wire
+      // operations will have been handled by other canonicalization.
+      for (auto &use : op.getResult().getUses())
+        if (!isa<ConnectOp>(use.getOwner()))
+          return failure();
+
+      // Remove all uses of the wire.
+      for (auto &use : op.getResult().getUses())
+        rewriter.eraseOp(use.getOwner());
+
+      // Remove the wire.
+      rewriter.eraseOp(op);
+      return success();
+    }
+  };
+  results.insert<DropDeadConnect>(context);
+}
