@@ -189,14 +189,21 @@ module {
   // CHECK-NEXT:      .b (b1_b),
   // CHECK-NEXT:      .c (b1_c)
   // CHECK-NEXT:    )
-  // CHECK-NEXT:    FooModule #(.DEFAULT(64'd14000240888948784983), .DEPTH(3.242000e+01), .FORMAT("xyz_timeout=%d\n"), .WIDTH(8'd32)) paramd (
+  // CHECK-NEXT:    FooModule #(
+  // CHECK-NEXT:      .DEFAULT(64'd14000240888948784983),
+  // CHECK-NEXT:      .DEPTH(3.242000e+01),
+  // CHECK-NEXT:      .FORMAT("xyz_timeout=%d\n"),
+  // CHECK-NEXT:      .WIDTH(8'd32)
+  // CHECK-NEXT:    ) paramd (
   // CHECK-NEXT:      .a   (w),
   // CHECK-NEXT:      /*.b (i3),*/
   // CHECK-NEXT:      .out (paramd_out)
   // CHECK-NEXT:    );
-  // CHECK-NEXT:    FooModule #(.DEFAULT(64'd1)) paramd2 (
-  // CHECK-NEXT:    .a   (i2),
-  // CHECK-NEXT:    .out (paramd2_out)
+  // CHECK-NEXT:    FooModule #(
+  // CHECK-NEXT:      .DEFAULT(64'd1)
+  // CHECK-NEXT:    ) paramd2 (
+  // CHECK-NEXT:      .a   (i2),
+  // CHECK-NEXT:      .out (paramd2_out)
   // CHECK-NEXT:    );
   // CHECK-NEXT:    assign y = b1_c;
   // CHECK-NEXT:    assign z = x;

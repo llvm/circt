@@ -1466,13 +1466,17 @@ LogicalResult ModuleEmitter::visitStmt(InstanceOp op) {
   if (auto paramDictOpt = op.parameters()) {
     DictionaryAttr paramDict = paramDictOpt.getValue();
     if (!paramDict.empty()) {
-      os << " #(";
-      llvm::interleaveComma(paramDict, os, [&](NamedAttribute elt) {
-        os << '.' << elt.first << '(';
-        printParmValue(elt.second);
-        os << ')';
-      });
-      os << ')';
+      os << " #(\n";
+      llvm::interleave(
+          paramDict, os,
+          [&](NamedAttribute elt) {
+            os.indent(state.currentIndent + 2) << '.' << elt.first << '(';
+            printParmValue(elt.second);
+            os << ')';
+          },
+          ",\n");
+      os << '\n';
+      indent() << ')';
     }
   }
 
