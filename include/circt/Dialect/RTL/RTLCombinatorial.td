@@ -295,6 +295,10 @@ def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
     $input `at` $lowIndex attr-dict `:`
       `(` custom<SliceTypes>(type($input), type($lowIndex)) `)` `->` type($dst)
   }];
+
+  let builders = [
+    OpBuilderDAG<(ins "Value":$input, "size_t":$lowBit, "size_t":$size)>
+  ];
 }
 
 // Extract a range of bits from the specified input.

@@ -11,8 +11,14 @@
 
 #include "ESICapnp.h"
 #include "circt/Dialect/ESI/ESITypes.h"
+#include "circt/Dialect/RTL/RTLDialect.h"
+#include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/RTL/RTLTypes.h"
+#include "circt/Dialect/SV/SVOps.h"
 
 #include "capnp/schema-parser.h"
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Format.h"
@@ -21,6 +27,7 @@
 
 using namespace mlir;
 using namespace circt::esi::capnp::detail;
+using namespace circt;
 
 //===----------------------------------------------------------------------===//
 // Utilities.
@@ -70,16 +77,22 @@ struct TypeSchemaImpl {
 public:
   TypeSchemaImpl(Type type) : type(type) {}
 
-  /// Get the Cap'nProto schema ID for a type.
+  Type getType() const { return type; }
+
   uint64_t capnpTypeID() const;
 
   bool isSupported() const;
   size_t size() const;
   StringRef name() const;
-  mlir::LogicalResult write(llvm::raw_ostream &os) const;
-  mlir::LogicalResult writeMetadata(llvm::raw_ostream &os) const;
+  LogicalResult write(llvm::raw_ostream &os) const;
+  LogicalResult writeMetadata(llvm::raw_ostream &os) const;
 
   bool operator==(const TypeSchemaImpl &) const;
+
+  /// Build an RTL/SV dialect capnp encoder for this type.
+  Value buildEncoder(OpBuilder &, Value clk, Value valid, Value);
+  /// Build an RTL/SV dialect capnp decoder for this type.
+  Value buildDecoder(OpBuilder &, Value clk, Value valid, Value);
 
 private:
   ::capnp::ParsedSchema getSchema() const;
@@ -184,7 +197,7 @@ size_t TypeSchemaImpl::size() const {
   auto schema = getTypeSchema();
   auto structProto = schema.getProto().getStruct();
   return 64 * // Convert from 64-bit words to bits.
-         (2 + // Headers
+         (1 + // Header
           structProto.getDataWordCount() + structProto.getPointerCount());
 }
 
@@ -202,7 +215,7 @@ StringRef TypeSchemaImpl::name() const {
 /// This function is essentially a placeholder which only supports ints. It'll
 /// need to be re-worked when we start supporting structs, arrays, unions,
 /// enums, etc.
-mlir::LogicalResult TypeSchemaImpl::write(llvm::raw_ostream &rawOS) const {
+LogicalResult TypeSchemaImpl::write(llvm::raw_ostream &rawOS) const {
   IndentingOStream os(rawOS);
 
   // Since capnp requires messages to be structs, emit a wrapper struct.
@@ -248,7 +261,7 @@ mlir::LogicalResult TypeSchemaImpl::write(llvm::raw_ostream &rawOS) const {
   return success();
 }
 
-mlir::LogicalResult TypeSchemaImpl::writeMetadata(llvm::raw_ostream &os) const {
+LogicalResult TypeSchemaImpl::writeMetadata(llvm::raw_ostream &os) const {
   os << name() << " ";
   emitId(os, capnpTypeID());
   return success();
@@ -256,6 +269,159 @@ mlir::LogicalResult TypeSchemaImpl::writeMetadata(llvm::raw_ostream &os) const {
 
 bool TypeSchemaImpl::operator==(const TypeSchemaImpl &that) const {
   return type == that.type;
+}
+
+//===----------------------------------------------------------------------===//
+// Capnp encode / decode RTL builders.
+//
+// These have the potential to get large and complex as we add more types. The
+// encoding spec is here: https://capnproto.org/encoding.html
+//===----------------------------------------------------------------------===//
+
+static size_t bits(::capnp::schema::Type::Reader type) {
+  using ty = ::capnp::schema::Type;
+  switch (type.which()) {
+  case ty::VOID:
+    return 0;
+  case ty::UINT8:
+  case ty::INT8:
+    return 8;
+  case ty::UINT16:
+  case ty::INT16:
+    return 16;
+  case ty::UINT32:
+  case ty::INT32:
+    return 32;
+  case ty::UINT64:
+  case ty::INT64:
+    return 64;
+  default:
+    assert(false && "Type not yet supported");
+  }
+}
+
+/// Build an RTL/SV dialect capnp encoder for this type. Inputs need to be
+/// packed on unpadded.
+Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
+                                   Value operand) {
+  MLIRContext *ctxt = b.getContext();
+  auto loc = operand.getDefiningOp()->getLoc();
+  ::capnp::schema::Node::Reader rootProto = getTypeSchema().getProto();
+
+  auto i16 = b.getIntegerType(16);
+  auto i32 = b.getIntegerType(32);
+
+  auto typeAndOffset = b.create<rtl::ConstantOp>(loc, i32, 0);
+  auto ptrSize = b.create<rtl::ConstantOp>(loc, i16, 0);
+  auto dataSize = b.create<rtl::ConstantOp>(
+      loc, i16, rootProto.getStruct().getDataWordCount());
+  auto structPtr = b.create<rtl::ConcatOp>(
+      loc, ValueRange{ptrSize, dataSize, typeAndOffset});
+
+  auto operandIntTy = operand.getType().cast<IntegerType>();
+  uint16_t paddingBits =
+      rootProto.getStruct().getDataWordCount() * 64 - operandIntTy.getWidth();
+  auto operandCasted = b.create<rtl::BitcastOp>(
+      loc,
+      IntegerType::get(ctxt, operandIntTy.getWidth(), IntegerType::Signless),
+      operand);
+
+  IntegerType iPaddingTy = IntegerType::get(ctxt, paddingBits);
+  auto padding = b.create<rtl::ConstantOp>(loc, iPaddingTy, 0);
+  auto dataSection =
+      b.create<rtl::ConcatOp>(loc, ValueRange{padding, operandCasted});
+
+  return b.create<rtl::ConcatOp>(loc, ValueRange{dataSection, structPtr});
+}
+
+/// Build an RTL/SV dialect capnp decoder for this type. Outputs packed and
+/// unpadded data.
+Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
+                                   Value operand) {
+  MLIRContext *ctxt = b.getContext();
+  auto loc = operand.getDefiningOp()->getLoc();
+  size_t size = this->size();
+
+  // Various useful integer types.
+  auto i16 = b.getIntegerType(16);
+  auto i32 = b.getIntegerType(32);
+
+  rtl::ArrayType operandType = operand.getType().dyn_cast<rtl::ArrayType>();
+  assert(operandType && operandType.getSize() == size &&
+         "Operand type and length must match the type's capnp size.");
+
+  auto alwaysAt = b.create<sv::AlwaysOp>(loc, EventControl::AtPosEdge, clk);
+  auto ifValid =
+      OpBuilder(alwaysAt.getBodyRegion()).create<sv::IfOp>(loc, valid);
+  OpBuilder asserts(ifValid.getBodyRegion());
+
+  // The next 64-bits of a capnp message is the root struct pointer.
+  ::capnp::schema::Node::Reader rootProto = getTypeSchema().getProto();
+  auto ptr = b.create<rtl::ArraySliceOp>(loc, operand, 0, 64);
+  ptr->setAttr("name", StringAttr::get("rootPointer", ctxt));
+
+  // Since this is the root, we _expect_ the offset to be zero but that's only
+  // guaranteed to be the case with canonically-encoded messages.
+  // TODO: support cases where the pointer offset is non-zero.
+  auto typeAndOffset = asserts.create<rtl::BitcastOp>(
+      loc, i32, asserts.create<rtl::ArraySliceOp>(loc, ptr, 0, 32));
+  typeAndOffset->setAttr("name", StringAttr::get("typeAndOffset", ctxt));
+  auto b16Zero = asserts.create<rtl::ConstantOp>(loc, i32, 0);
+
+  asserts.create<sv::AssertOp>(
+      loc, asserts.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
+                                       typeAndOffset, b16Zero));
+
+  // We expect the data section to be equal to the computed data section size.
+  auto dataSectionSize = asserts.create<rtl::BitcastOp>(
+      loc, i16, asserts.create<rtl::ArraySliceOp>(loc, ptr, 32, 16));
+  dataSectionSize->setAttr("name", StringAttr::get("dataSectionSize", ctxt));
+  auto expectedDataSectionSize = asserts.create<rtl::ConstantOp>(
+      loc, i16, rootProto.getStruct().getDataWordCount());
+  asserts.create<sv::AssertOp>(
+      loc,
+      asserts.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
+                                  dataSectionSize, expectedDataSectionSize));
+
+  // We expect the pointer section to be equal to the computed pointer section
+  // size.
+  auto ptrSectionSize = asserts.create<rtl::BitcastOp>(
+      loc, i16, asserts.create<rtl::ArraySliceOp>(loc, ptr, 48, 16));
+  ptrSectionSize->setAttr("name", StringAttr::get("ptrSectionSize", ctxt));
+  auto expectedPtrSectionSize = asserts.create<rtl::ConstantOp>(
+      loc, i16, rootProto.getStruct().getPointerCount() * 64);
+  asserts.create<sv::AssertOp>(
+      loc, asserts.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
+                                       ptrSectionSize, expectedPtrSectionSize));
+
+  auto dataSection = b.create<rtl::ArraySliceOp>(
+      loc, operand, 64, rootProto.getStruct().getDataWordCount() * 64);
+  dataSection->setAttr("name", StringAttr::get("dataSection", ctxt));
+
+  Value result;
+  // Now that we're looking at the data section, we can just cast down each
+  // type. Since we only support IntegerType, this is easy.
+  assert(rootProto.getStruct().getFields().size() == 1);
+  // Loop through fields. Unnecessary now, but prep for future.
+  for (auto field : rootProto.getStruct().getFields()) {
+    auto typeBits = type.cast<IntegerType>().getWidth();
+    auto fieldBits = b.create<rtl::ArraySliceOp>(
+        loc, dataSection,
+        field.getSlot().getOffset() * bits(field.getSlot().getType()),
+        typeBits);
+    fieldBits->setAttr("name", StringAttr::get("fieldBits", ctxt));
+    auto fieldValue = b.create<rtl::BitcastOp>(loc, type, fieldBits);
+    fieldValue->setAttr("name", StringAttr::get("decodedValue", ctxt));
+
+    result = fieldValue;
+  }
+
+  asserts.create<sv::FWriteOp>(
+      loc, "typeAndOffset: %h, dataSize: %h, ptrSize: %h, decodedData: %h\n",
+      ValueRange{typeAndOffset, dataSectionSize, ptrSectionSize, result});
+
+  // All that just to decode an int! (But it'll pay off as we progress.)
+  return result;
 }
 
 //===----------------------------------------------------------------------===//
@@ -268,6 +434,7 @@ circt::esi::capnp::TypeSchema::TypeSchema(Type type) {
     type = chan.getInner();
   s = std::make_shared<detail::TypeSchemaImpl>(type);
 }
+Type circt::esi::capnp::TypeSchema::getType() const { return s->getType(); }
 uint64_t circt::esi::capnp::TypeSchema::capnpTypeID() const {
   return s->capnpTypeID();
 }
@@ -276,14 +443,24 @@ bool circt::esi::capnp::TypeSchema::isSupported() const {
 }
 size_t circt::esi::capnp::TypeSchema::size() const { return s->size(); }
 StringRef circt::esi::capnp::TypeSchema::name() const { return s->name(); }
-mlir::LogicalResult
+LogicalResult
 circt::esi::capnp::TypeSchema::write(llvm::raw_ostream &os) const {
   return s->write(os);
 }
-mlir::LogicalResult
+LogicalResult
 circt::esi::capnp::TypeSchema::writeMetadata(llvm::raw_ostream &os) const {
   return s->writeMetadata(os);
 }
 bool circt::esi::capnp::TypeSchema::operator==(const TypeSchema &that) const {
   return *s == *that.s;
+}
+Value circt::esi::capnp::TypeSchema::buildEncoder(OpBuilder &builder, Value clk,
+                                                  Value valid,
+                                                  Value operand) const {
+  return s->buildEncoder(builder, clk, valid, operand);
+}
+Value circt::esi::capnp::TypeSchema::buildDecoder(OpBuilder &builder, Value clk,
+                                                  Value valid,
+                                                  Value operand) const {
+  return s->buildDecoder(builder, clk, valid, operand);
 }
