@@ -194,3 +194,21 @@ circuit Issue426:
     output a: SInt<1>
     ; expected-error @+1 {{initializer too wide for declared width}}
     a <= SInt<1>(-2)
+
+
+;// -----
+
+circuit circuit:
+  module circuit :
+    input in: UInt<80>
+    inst xyz of circuit
+    node n = xyz
+    node m = n     ; expected-error {{expected '.' in field reference}}
+
+;// -----
+
+circuit circuit:
+  module circuit :
+    input in: UInt<80>
+    inst xyz of circuit
+    node n = xyz.foo   ; expected-error {{use of invalid field name 'foo' on bundle value}}

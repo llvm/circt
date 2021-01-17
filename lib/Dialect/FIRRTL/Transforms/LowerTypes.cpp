@@ -201,43 +201,51 @@ void FIRRTLTypesLowering::lowerArg(BlockArgument arg, FIRRTLType type) {
 // ensuring both lowerings are the same, we can process every module in the
 // circuit in parallel, and every instance will have the correct ports.
 void FIRRTLTypesLowering::visitDecl(InstanceOp op) {
-  // The instance's ports are represented as one value with a bundle type. Due
-  // to how bundles with flips are canonicalized, there may be an outer flip
-  // type that wraps the whole bundle.
-  Type originalType = op.result().getType();
-  bool isFlip = originalType.isa<FlipType>();
-  BundleType originalBundleType = getCanonicalBundleType(originalType);
-  assert(originalBundleType && "instance result was not a bundle type");
-
   // Create a new, flat bundle type for the new result
-  SmallVector<BundleType::BundleElement, 8> bundleElements;
-  for (auto element : originalBundleType.getElements()) {
+  SmallVector<Type, 8> resultTypes;
+  SmallVector<Attribute, 8> resultNames;
+  SmallVector<size_t, 8> numFieldsPerResult;
+  for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-    flattenBundleTypes(element.type, element.name, isFlip, fieldTypes);
+    flattenBundleTypes(op.getType(i).cast<FIRRTLType>(), op.getPortNameStr(i),
+                       /*isFlip*/ false, fieldTypes);
 
     for (auto field : fieldTypes) {
       // Store the flat type for the new bundle type.
-      auto flatName = builder->getIdentifier(field.suffix);
-      auto flatType = field.getPortType();
-      auto newElement = BundleType::BundleElement{flatName, flatType};
-      bundleElements.push_back(newElement);
+      resultNames.push_back(builder->getStringAttr(field.suffix));
+      resultTypes.push_back(field.getPortType());
     }
+    numFieldsPerResult.push_back(fieldTypes.size());
   }
 
-  // Get the new bundle type and create a new instance.
-  auto newType = BundleType::get(bundleElements, &getContext());
+  auto newInstance = builder->create<InstanceOp>(
+      resultTypes, op.moduleNameAttr(), builder->getArrayAttr(resultNames),
+      op.nameAttr());
 
-  auto newInstance =
-      builder->create<InstanceOp>(newType, op.moduleNameAttr(), op.nameAttr());
+  // Record the mapping of each old result to each new result.
+  size_t nextResult = 0;
+  for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
+    // If this result was a non-bundle value, just RAUW it.
+    auto origPortName = op.getPortNameStr(i);
+    if (numFieldsPerResult[i] == 1 &&
+        newInstance.getPortNameStr(nextResult) == origPortName) {
+      op.getResult(i).replaceAllUsesWith(newInstance.getResult(nextResult));
+      ++nextResult;
+      continue;
+    }
 
-  // Create new subfield ops for each field of the instance.
-  for (auto element : bundleElements) {
-    auto newSubfield =
-        builder->create<SubfieldOp>(element.type, newInstance, element.name);
+    // Otherwise lower bundles.
+    for (size_t j = 0, e = numFieldsPerResult[i]; j != e; ++j) {
+      auto newPortName = newInstance.getPortNameStr(nextResult);
+      // Drop the original port name and the underscore.
+      newPortName = newPortName.drop_front(origPortName.size() + 1);
 
-    // Map the flattened suffix for the original bundle to the new value.
-    setBundleLowering(op, element.name, newSubfield);
+      // Map the flattened suffix for the original bundle to the new value.
+      setBundleLowering(op.getResult(i), newPortName,
+                        newInstance.getResult(nextResult));
+      ++nextResult;
+    }
   }
 
   // Remember to remove the original op.
