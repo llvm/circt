@@ -52,13 +52,13 @@ module {
     // SV:   .rstn (rstn),
     // SV:   .DataOutReady ({{.+}}.ready),
     // SV:   .DataInValid ({{.+}}.valid),
-    // SV:   .DataIn ({{[{]}}{50'h0, _T_1}, {16'h0, 16'h1, 32'h0}}),
+    // SV:   .DataIn ({{[{]}}{50'h0, {{.+}}}, {16'h0, 16'h1, 32'h0}}),
     // SV:   .DataOutValid (TestEP_DataOutValid),
     // SV:   .DataOut (TestEP_DataOut),
     // SV:   .DataInReady (TestEP_DataInReady)
     // SV: );
-    // SV: rootPointer = TestEP_DataOut[_T_2+:64];
-    // SV: dataSection = TestEP_DataOut[_T_3+:64];
-    // SV: decodedValue = /*cast(bit[31:0])*/dataSection[_T_4+:32];
+    // SV: rootPointer = TestEP_DataOut[{{.+}}+:64];
+    // SV: dataSection = TestEP_DataOut[{{.*}}+:64];
+    // SV: decodedValue = dataSection[{{.+}}+:32];
   }
 }
