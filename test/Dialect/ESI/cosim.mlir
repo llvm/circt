@@ -41,7 +41,13 @@ module {
     // SV: Sender send (
     // SV:   .x ({{.+}}.sink)
     // SV: );
-    // SV: Cosim_Endpoint #(.ENDPOINT_ID(32'd1), .RECV_TYPE_ID(64'd14000240888948784983), .RECV_TYPE_SIZE_BITS(32'd128), .SEND_TYPE_ID(64'd10295436870447851681), .SEND_TYPE_SIZE_BITS(32'd128)) TestEP (        // <stdin>:42:66
+    // SV: Cosim_Endpoint #(
+    // SV:   .ENDPOINT_ID(32'd1),
+    // SV:   .RECV_TYPE_ID(64'd14000240888948784983),
+    // SV:   .RECV_TYPE_SIZE_BITS(32'd128),
+    // SV:   .SEND_TYPE_ID(64'd10295436870447851681),
+    // SV:   .SEND_TYPE_SIZE_BITS(32'd128)
+    // SV: ) TestEP (
     // SV:   .clk (clk),
     // SV:   .rstn (rstn),
     // SV:   .DataOutReady ({{.+}}.ready),
