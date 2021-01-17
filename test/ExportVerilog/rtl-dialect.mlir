@@ -151,56 +151,58 @@ module {
 
 
   /// TODO: Specify parameter declarations.
-  rtl.externmodule @EXT_W_PARAMS(%a: i1 {rtl.direction = "in"}) -> (%out: i1)
+  rtl.externmodule @EXT_W_PARAMS(%a: i1 {rtl.direction = "in"}, %b: i0) -> (%out: i1)
     attributes { verilogName="FooModule" }
 
   rtl.externmodule @EXT_W_PARAMS2(%a: i2 {rtl.direction = "in"}) -> (%out: i1)
     attributes { verilogName="FooModule" }
 
-  rtl.module @AB(%w: i1, %x: i1, %i2: i2) -> (%y: i1, %z: i1, %p: i1, %p2: i1) {
+  rtl.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2: i1) {
     %w2 = rtl.instance "a1" @AAA(%w, %w1) : (i1, i1) -> (i1)
     %w1, %y = rtl.instance "b1" @B(%w2) : (i1) -> (i1, i1)
 
-    %p = rtl.instance "paramd" @EXT_W_PARAMS(%w) {parameters = {DEFAULT = 14000240888948784983 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1) -> i1
+    %p = rtl.instance "paramd" @EXT_W_PARAMS(%w, %i3) {parameters = {DEFAULT = 14000240888948784983 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1, i0) -> i1
 
     %p2 = rtl.instance "paramd2" @EXT_W_PARAMS2(%i2) {parameters = {DEFAULT = 1 : i64}} : (i2) -> i1
 
     rtl.output %y, %x, %p, %p2 : i1, i1, i1, i1
   }
-  // CHECK-LABEL: module AB(
-  // CHECK-NEXT:   input        w, x,
-  // CHECK-NEXT:   input  [1:0] i2,
-  // CHECK-NEXT:   output       y, z, p, p2);
+  // CHECK-LABEL:  module AB(
+  // CHECK-NEXT:    input                 w, x,
+  // CHECK-NEXT:    input  [1:0]          i2,
+  // CHECK-NEXT: // input  /*Zero Width*/ i3,
+  // CHECK-NEXT:    output                y, z, p, p2);
   // CHECK-EMPTY:
-  // CHECK-NEXT:   wire a1_f;
-  // CHECK-NEXT:   wire b1_b;
-  // CHECK-NEXT:   wire b1_c;
-  // CHECK-NEXT:   wire paramd_out;
-  // CHECK-NEXT:   wire paramd2_out;
+  // CHECK-NEXT:    wire a1_f;
+  // CHECK-NEXT:    wire b1_b;
+  // CHECK-NEXT:    wire b1_c;
+  // CHECK-NEXT:    wire paramd_out;
+  // CHECK-NEXT:    wire paramd2_out;
   // CHECK-EMPTY:
-  // CHECK-NEXT:   A a1 (
-  // CHECK-NEXT:     .d (w),
-  // CHECK-NEXT:     .e (b1_b),
-  // CHECK-NEXT:     .f (a1_f)
-  // CHECK-NEXT:   )
-  // CHECK-NEXT:   B b1 (
-  // CHECK-NEXT:     .a (a1_f),
-  // CHECK-NEXT:     .b (b1_b),
-  // CHECK-NEXT:     .c (b1_c)
-  // CHECK-NEXT:   )
-  // CHECK-NEXT:   FooModule #(.DEFAULT(64'd14000240888948784983), .DEPTH(3.242000e+01), .FORMAT("xyz_timeout=%d\n"), .WIDTH(8'd32)) paramd (
-  // CHECK-NEXT:     .a (w),
-  // CHECK-NEXT:     .out (paramd_out)
-  // CHECK-NEXT:   );
-  // CHECK-NEXT:   FooModule #(.DEFAULT(64'd1)) paramd2 (
-  // CHECK-NEXT:   .a (i2),
-  // CHECK-NEXT:   .out (paramd2_out)
-  // CHECK-NEXT:   );
-  // CHECK-NEXT:   assign y = b1_c;
-  // CHECK-NEXT:   assign z = x;
-  // CHECK-NEXT:   assign p = paramd_out;
-  // CHECK-NEXT:   assign p2 = paramd2_out;
-  // CHECK-NEXT: endmodule
+  // CHECK-NEXT:    A a1 (
+  // CHECK-NEXT:      .d (w),
+  // CHECK-NEXT:      .e (b1_b),
+  // CHECK-NEXT:      .f (a1_f)
+  // CHECK-NEXT:    )
+  // CHECK-NEXT:    B b1 (
+  // CHECK-NEXT:      .a (a1_f),
+  // CHECK-NEXT:      .b (b1_b),
+  // CHECK-NEXT:      .c (b1_c)
+  // CHECK-NEXT:    )
+  // CHECK-NEXT:    FooModule #(.DEFAULT(64'd14000240888948784983), .DEPTH(3.242000e+01), .FORMAT("xyz_timeout=%d\n"), .WIDTH(8'd32)) paramd (
+  // CHECK-NEXT:      .a   (w),
+  // CHECK-NEXT:      /*.b (i3),*/
+  // CHECK-NEXT:      .out (paramd_out)
+  // CHECK-NEXT:    );
+  // CHECK-NEXT:    FooModule #(.DEFAULT(64'd1)) paramd2 (
+  // CHECK-NEXT:    .a   (i2),
+  // CHECK-NEXT:    .out (paramd2_out)
+  // CHECK-NEXT:    );
+  // CHECK-NEXT:    assign y = b1_c;
+  // CHECK-NEXT:    assign z = x;
+  // CHECK-NEXT:    assign p = paramd_out;
+  // CHECK-NEXT:    assign p2 = paramd2_out;
+  // CHECK-NEXT:  endmodule
 
 
   rtl.module @shl(%a: i1) -> (%b: i1) {
