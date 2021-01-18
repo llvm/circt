@@ -1766,24 +1766,19 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs, SubOpVector &subOps) {
 
   if (kind == FIRToken::less_equal) {
     // Some operations, dshl for example, have implicit truncations, even in lo
-    // firrtl.  Handle truncations in a connect here.
-    if (lhs.getType() != rhs.getType()) {
-      auto lhsType =
-          lhs.getType().cast<FIRRTLType>().getPassiveType().dyn_cast<IntType>();
-      auto rhsType =
-          rhs.getType().cast<FIRRTLType>().getPassiveType().dyn_cast<IntType>();
-      if (lhsType && rhsType && lhsType.hasWidth() && rhsType.hasWidth() &&
-          lhsType.getWidthOrSentinel() < rhsType.getWidthOrSentinel()) {
-        rhs = builder.create<TailPrimOp>(
-            info.getLoc(),
-            IntType::get(builder.getContext(), false,
-                         lhsType.getWidthOrSentinel()),
-            rhs, lhsType.getWidthOrSentinel());
-        if (lhsType.isSigned()) // rhs is unsigned
-          rhs = builder.create<AsSIntPrimOp>(info.getLoc(), lhsType, rhs);
-      }
+    // firrtl.  Chisel will also use connects as partial connects to do
+    // truncation.  Handle truncations as partial connects, which allow
+    // truncation.
+    auto lhsPType = lhs.getType().cast<FIRRTLType>().getPassiveType();
+    auto rhsPType = rhs.getType().cast<FIRRTLType>().getPassiveType();
+    if (lhsPType != rhsPType && lhsPType.getBitWidthOrSentinel() >= 0 &&
+        lhsPType.getBitWidthOrSentinel() < rhsPType.getBitWidthOrSentinel()) {
+      lhs.dump();
+      rhs.dump();
+      builder.create<PartialConnectOp>(info.getLoc(), lhs, rhs);
+    } else {
+      builder.create<ConnectOp>(info.getLoc(), lhs, rhs);
     }
-    builder.create<ConnectOp>(info.getLoc(), lhs, rhs);
   } else {
     assert(kind == FIRToken::less_minus && "unexpected kind");
     builder.create<PartialConnectOp>(info.getLoc(), lhs, rhs);

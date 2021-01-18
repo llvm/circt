@@ -44,8 +44,10 @@ circuit test_mod :
   module implicitTrunc :
     input inp_1: UInt<1>
     input inp_2: SInt<5>
-    output tmp9: SInt<3>
-    tmp9 <= dshl(inp_2, inp_1)
+    output out1: SInt<3>
+    output out2: SInt<3>
+    out1 <= dshl(inp_2, inp_1)
+    out2 <= inp_2
 
 ; VERILOG-LABEL:   module implicitTrunc(
 ; VERILOG-NEXT :   input        inp_1,
