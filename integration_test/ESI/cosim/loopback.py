@@ -20,13 +20,13 @@ class LoopbackTester(cosim.CosimBase):
         ep.close().wait()
 
     def test_i32(self, num_msgs):
-        ep = self.openEP(sendType=self.schema.TYi32,
-                         recvType=self.schema.TYi32)
+        ep = self.openEP(sendType=self.schema.I32,
+                         recvType=self.schema.I32)
         for _ in range(num_msgs):
             data = random.randint(0, 2**32)
             print(f"Sending {data}")
-            ep.send(self.schema.TYi32.new_message(i=data))
-            result = self.readMsg(ep, self.schema.TYi32)
+            ep.send(self.schema.I32.new_message(i=data))
+            result = self.readMsg(ep, self.schema.I32)
             print(f"Got {result}")
             assert (result.i == data)
 

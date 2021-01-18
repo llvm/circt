@@ -22,9 +22,9 @@ rtl.module @top(%clk:i1, %rstn:i1) -> () {
 
   // Ensure that the file hash is deterministic.
   // CAPNP: 0xc6085f4b7a4688f8;
-  // CAPNP-LABEL: struct TYsi14 @0x9bd5e507cce05cc1
+  // CAPNP-LABEL: struct Si14 @0x9bd5e507cce05cc1
   // CAPNP:         i @0 :Int16;
-  // CAPNP-LABEL: struct TYi32 @0x92cd59dfefaacbdb
+  // CAPNP-LABEL: struct I32 @0x92cd59dfefaacbdb
   // CAPNP:         i @0 :UInt32;
   // Ensure the standard RPC interface is tacked on.
   // CAPNP: interface CosimDpiServer
