@@ -642,6 +642,7 @@ public:
   bool visitHandshake(ForkOp op);
   bool visitHandshake(JoinOp op);
   bool visitHandshake(LazyForkOp op);
+  bool visitHandshake(handshake::LoadOp op);
   bool visitHandshake(MemoryOp op);
   bool visitHandshake(MergeOp op);
   bool visitHandshake(MuxOp op);
@@ -1685,6 +1686,61 @@ bool HandshakeBuilder::visitHandshake(handshake::StoreOp op) {
   // Output valid signals are connected from the inputsValid wire.
   rewriter.create<ConnectOp>(insertLoc, outputDataValid, inputsValid);
   rewriter.create<ConnectOp>(insertLoc, outputAddrValid, inputsValid);
+
+  return true;
+}
+
+bool HandshakeBuilder::visitHandshake(handshake::LoadOp op) {
+  // Input address accepted from the predecessor.
+  ValueVector inputAddr = portList[0];
+  Value inputAddrValid = inputAddr[0];
+  Value inputAddrReady = inputAddr[1];
+  Value inputAddrData = inputAddr[2];
+
+  // Data accepted from the MemoryOp.
+  ValueVector memoryData = portList[1];
+  Value memoryDataValid = memoryData[0];
+  Value memoryDataReady = memoryData[1];
+  Value memoryDataData = memoryData[2];
+
+  // Control channel.
+  ValueVector control = portList[2];
+  Value controlValid = control[0];
+  Value controlReady = control[1];
+
+  // Output data sending to the successor.
+  ValueVector outputData = portList[3];
+  Value outputDataValid = outputData[0];
+  Value outputDataReady = outputData[1];
+  Value outputDataData = outputData[2];
+
+  // Address sending to the MemoryOp.
+  ValueVector memoryAddr = portList[4];
+  Value memoryAddrValid = memoryAddr[0];
+  Value memoryAddrReady = memoryAddr[1];
+  Value memoryAddrData = memoryAddr[2];
+
+  auto bitType = UIntType::get(rewriter.getContext(), 1);
+
+  // Address and data are connected accordingly.
+  rewriter.create<ConnectOp>(insertLoc, memoryAddrData, inputAddrData);
+  rewriter.create<ConnectOp>(insertLoc, outputDataData, memoryDataData);
+
+  // The valid/ready logic between inputAddr, control, and memoryAddr is similar
+  // to a JoinOp logic.
+  auto addrValid = rewriter.create<AndPrimOp>(insertLoc, bitType,
+                                              inputAddrValid, controlValid);
+  rewriter.create<ConnectOp>(insertLoc, memoryAddrValid, addrValid);
+
+  auto addrCompleted = rewriter.create<AndPrimOp>(insertLoc, bitType, addrValid,
+                                                  memoryAddrReady);
+  rewriter.create<ConnectOp>(insertLoc, inputAddrReady, addrCompleted);
+  rewriter.create<ConnectOp>(insertLoc, controlReady, addrCompleted);
+
+  // The valid/ready logic between memoryData and outputData is a direct
+  // connection.
+  rewriter.create<ConnectOp>(insertLoc, outputDataValid, memoryDataValid);
+  rewriter.create<ConnectOp>(insertLoc, memoryDataReady, outputDataReady);
 
   return true;
 }
