@@ -45,3 +45,34 @@ module IntAcc (
     end
   end
 endmodule
+
+// Accumulate a stream of integers. Print status every cycle. Output the total
+// over an ESI channel.
+module IntAccNoBP (
+  input clk,
+  input rstn,
+  IValidReady_i32.source ints,
+  IValidReady_i32.sink totalOut
+);
+  logic unsigned [31:0] total;
+  assign totalOut.data = total;
+
+  always@(posedge clk) begin
+    if (~rstn) begin
+      total <= 32'h0;
+      ints.ready <= 1;
+      totalOut.valid <= 0;
+    end else begin
+      if (ints.valid && ints.ready) begin
+        total <= total + ints.data;
+        totalOut.valid <= 1;
+        ints.ready <= totalOut.ready;
+        $display("Total: %10d", total);
+        $display("Data: %5d", ints.data);
+      end else if (totalOut.valid && totalOut.ready) begin
+        totalOut.valid <= 0;
+        ints.ready <= 1;
+      end
+    end
+  end
+endmodule

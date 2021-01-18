@@ -82,14 +82,14 @@ class CosimTestRunner:
 
     def compile(self):
         """Compile with circt-rtl-sim.py"""
+        start = time.time()
 
         # Run the simulation compilation step. Requires a simulator to be
         # installed and working.
-        # os.makedirs(self.execdir, exist_ok=True)
         cmd = [self.simRunScript, "--no-run",
-               "--objdir", os.path.basename(self.file)] \
+               "--objdir", "o"] \
             + self.sources + self.args
-        print("Running: " + " ".join(cmd))
+        print("[INFO] Compile command: " + " ".join(cmd))
         vrun = subprocess.run(
             cmd,
             capture_output=True,
@@ -99,6 +99,7 @@ class CosimTestRunner:
         if vrun.returncode != 0:
             print("====== Compilation failure:")
             print(output)
+        print(f"[INFO] Compile time: {time.time()-start}")
         return vrun.returncode
 
     def run(self):
@@ -146,13 +147,15 @@ class CosimTestRunner:
                 f"{x}\n" for x in self.runs)
 
         try:
+            start = time.time()
+
             # Run the simulation.
             simStdout = open("sim_stdout.log", "w")
             simStderr = open("sim_stderr.log", "w")
             simEnv = os.environ.copy()
             simEnv["COSIM_PORT"] = str(port)
             simProc = subprocess.Popen(
-                [self.simRunScript, "--objdir", os.path.basename(self.file)]
+                [self.simRunScript, "--objdir", "o"]
                 + self.sources + self.args,
                 stdout=simStdout, stderr=simStderr, env=simEnv,
                 preexec_fn=os.setsid)
@@ -189,6 +192,8 @@ class CosimTestRunner:
                     simProc.wait(timeout=1.0)
                 except subprocess.TimeoutExpired:
                     simProc.kill()
+
+        print(f"[INFO] Run time: {time.time()-start}")
 
         # Read the output log files and return the proper result.
         err, logs = self.readLogs()
@@ -251,6 +256,13 @@ def __main__(args):
         argparser.print_help()
         return
     args = argparser.parse_args(args[1:])
+
+    # Create and cd into a test directory before running
+    sourceName = os.path.basename(args.source)
+    testDir = f"{sourceName}.d"
+    if not os.path.exists(testDir):
+      os.mkdir(testDir)
+    os.chdir(testDir)
 
     runner = CosimTestRunner(args.source, args.schema, args.addlArgs)
     rc = runner.compile()
