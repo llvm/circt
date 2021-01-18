@@ -1773,8 +1773,6 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs, SubOpVector &subOps) {
     auto rhsPType = rhs.getType().cast<FIRRTLType>().getPassiveType();
     if (lhsPType != rhsPType && lhsPType.getBitWidthOrSentinel() >= 0 &&
         lhsPType.getBitWidthOrSentinel() < rhsPType.getBitWidthOrSentinel()) {
-      lhs.dump();
-      rhs.dump();
       builder.create<PartialConnectOp>(info.getLoc(), lhs, rhs);
     } else {
       builder.create<ConnectOp>(info.getLoc(), lhs, rhs);
