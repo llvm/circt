@@ -40,17 +40,17 @@ firrtl.circuit "TopLevel" {
   firrtl.module @TopLevel(%source: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>,
                           %sink: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) {
 
-    // CHECK-NEXT: %[[INSTANCE:.+]]:6 = firrtl.instance @Simple {name = "", portNames = ["source_valid", "source_ready", "source_data", "sink_valid", "sink_ready", "sink_data"]} :
+    // CHECK-NEXT: %inst_source_valid, %inst_source_ready, %inst_source_data, %inst_sink_valid, %inst_sink_ready, %inst_sink_data
+    // CHECK-SAME: = firrtl.instance @Simple {name = "", portNames = ["source_valid", "source_ready", "source_data", "sink_valid", "sink_ready", "sink_data"]} :
     // CHECK-SAME: !firrtl.flip<uint<1>>, !firrtl.uint<1>, !firrtl.flip<uint<64>>, !firrtl.uint<1>, !firrtl.flip<uint<1>>, !firrtl.uint<64>
     %sourceV, %sinkV = firrtl.instance @Simple {name = "", portNames = ["source", "sink"]} : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>
 
-    // CHECK-NEXT: firrtl.connect %[[INSTANCE]]#0, %source_valid
-    // CHECK-NEXT: firrtl.connect %source_ready, %[[INSTANCE]]#1 
-    // CHECK-NEXT: firrtl.connect %[[INSTANCE]]#2, %source_data
-    // CHECK-NEXT: firrtl.connect %sink_valid, %[[INSTANCE]]#3
-    // CHECK-NEXT: firrtl.connect %[[INSTANCE]]#4, %sink_ready
-    // CHECK-NEXT: firrtl.connect %sink_data, %[[INSTANCE]]#5 
-
+    // CHECK-NEXT: firrtl.connect %inst_source_valid, %source_valid
+    // CHECK-NEXT: firrtl.connect %source_ready, %inst_source_ready 
+    // CHECK-NEXT: firrtl.connect %inst_source_data, %source_data
+    // CHECK-NEXT: firrtl.connect %sink_valid, %inst_sink_valid
+    // CHECK-NEXT: firrtl.connect %inst_sink_ready, %sink_ready
+    // CHECK-NEXT: firrtl.connect %sink_data, %inst_sink_data
     firrtl.connect %sourceV, %source : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>
 
     firrtl.connect %sink, %sinkV : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>
