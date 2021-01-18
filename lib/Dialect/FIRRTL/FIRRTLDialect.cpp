@@ -48,9 +48,23 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
   /// OpAsmInterface.td#getAsmResultNames for usage details and documentation.
   void getAsmResultNames(Operation *op,
                          OpAsmSetValueNameFn setNameFn) const override {
+    if (auto instance = dyn_cast<InstanceOp>(op)) {
+      StringRef base;
+      if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
+        base = nameAttr.getValue();
+      if (base.empty())
+        base = "inst";
+
+      for (size_t i = 0, e = op->getNumResults(); i != e; ++i) {
+        setNameFn(instance.getResult(i),
+                  (base + "_" + instance.getPortNameStr(i)).str());
+      }
+      return;
+    }
+
     // Many firrtl dialect operations have an optional 'name' attribute.  If
     // present, use it.
-    if (op->getNumResults() > 0)
+    if (op->getNumResults() == 1)
       if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
         setNameFn(op->getResult(0), nameAttr.getValue());
 
