@@ -525,6 +525,36 @@ static LogicalResult verifyOutputOp(OutputOp *op) {
 }
 
 //===----------------------------------------------------------------------===//
+// ICmpOp
+//===----------------------------------------------------------------------===//
+
+ICmpPredicate ICmpOp::getFlippedPredicate(ICmpPredicate predicate) {
+  switch (predicate) {
+  case ICmpPredicate::eq:
+    return ICmpPredicate::eq;
+  case ICmpPredicate::ne:
+    return ICmpPredicate::ne;
+  case ICmpPredicate::slt:
+    return ICmpPredicate::sgt;
+  case ICmpPredicate::sle:
+    return ICmpPredicate::sge;
+  case ICmpPredicate::sgt:
+    return ICmpPredicate::slt;
+  case ICmpPredicate::sge:
+    return ICmpPredicate::sle;
+  case ICmpPredicate::ult:
+    return ICmpPredicate::ugt;
+  case ICmpPredicate::ule:
+    return ICmpPredicate::uge;
+  case ICmpPredicate::ugt:
+    return ICmpPredicate::ult;
+  case ICmpPredicate::uge:
+    return ICmpPredicate::ule;
+  }
+  llvm_unreachable("unknown comparison predicate");
+}
+
+//===----------------------------------------------------------------------===//
 // RTL combinational ops
 //===----------------------------------------------------------------------===//
 
