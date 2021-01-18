@@ -70,30 +70,8 @@ static int getBitWidthOrSentinel(Type type) {
       .Default([](Type) { return -1; });
 }
 
-/// Given an integer value, return the number of characters it will take to
-/// print its base-10 value.
-static unsigned getPrintedIntWidth(unsigned value) {
-  // Fast path the common case.
-  if (value < 10)
-    return 1;
-  if (value < 100)
-    return 2;
-  if (value < 1000)
-    return 3;
-
-  // Compute the size in the general case.
-  unsigned size = 4;
-  value /= 1000;
-  while (value >= 10) {
-    ++size;
-    value /= 10;
-  }
-  return size;
-}
-
-/// Emit a type's packed dimensions, returning the number of characters
-/// emitted.
-static size_t emitTypeDims(Type type, Location loc, raw_ostream &os) {
+/// Emit a type's packed dimensions, returning whether or not text was emitted.
+static bool emitTypeDims(Type type, Location loc, raw_ostream &os) {
   if (auto inout = type.dyn_cast<rtl::InOutType>())
     return emitTypeDims(inout.getElementType(), loc, os);
   if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>())
@@ -101,7 +79,6 @@ static size_t emitTypeDims(Type type, Location loc, raw_ostream &os) {
   if (type.isa<InterfaceType>())
     return 0;
 
-  size_t emittedWidth = 0;
   int width;
   if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
     width = arrayType.getSize();
@@ -109,36 +86,36 @@ static size_t emitTypeDims(Type type, Location loc, raw_ostream &os) {
     width = getBitWidthOrSentinel(type);
   }
 
+  bool emitted = false;
   switch (width) {
   case -1: // -1 is an invalid type.
     mlir::emitError(loc, "value has an unsupported verilog type ") << type;
     os << "<<invalid type>>";
-    return 16;
+    return true;
 
   case 1: // Width 1 is implicit.
     break;
 
   case 0:
     os << "/*Zero Width*/";
-    emittedWidth += 14;
+    emitted = true;
     break;
   default:
     os << '[' << (width - 1) << ":0]";
-    emittedWidth += getPrintedIntWidth(width - 1) + 4;
+    emitted = true;
     break;
   }
   if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
-    emittedWidth += emitTypeDims(arrayType.getElementType(), loc, os);
+    emitted |= emitTypeDims(arrayType.getElementType(), loc, os);
   }
-  return emittedWidth;
+  return emitted;
 }
 
 /// Emit the specified type dimensions and print out a trailing space if
 /// anything is printed.
 static void emitTypeDimWithSpaceIfNeeded(Type type, Location loc,
                                          raw_ostream &os) {
-  auto size = emitTypeDims(type, loc, os);
-  if (size)
+  if (emitTypeDims(type, loc, os))
     os << ' ';
 }
 
@@ -1489,48 +1466,87 @@ LogicalResult ModuleEmitter::visitStmt(InstanceOp op) {
   if (auto paramDictOpt = op.parameters()) {
     DictionaryAttr paramDict = paramDictOpt.getValue();
     if (!paramDict.empty()) {
-      os << " #(";
-      llvm::interleaveComma(paramDict, os, [&](NamedAttribute elt) {
-        os << '.' << elt.first << '(';
-        printParmValue(elt.second);
-        os << ')';
-      });
-      os << ')';
+      os << " #(\n";
+      llvm::interleave(
+          paramDict, os,
+          [&](NamedAttribute elt) {
+            os.indent(state.currentIndent + 2) << '.' << elt.first << '(';
+            printParmValue(elt.second);
+            os << ')';
+          },
+          ",\n");
+      os << '\n';
+      indent() << ')';
     }
   }
 
   os << ' ' << op.instanceName() << " (";
-  emitLocationInfoAndNewLine(ops);
 
   SmallVector<ModulePortInfo, 8> portInfo;
   getModulePortInfo(moduleOp, portInfo);
 
+  // Get the max port name length so we can align the '('.
+  size_t maxNameLength = 0;
+  for (auto &elt : portInfo) {
+    maxNameLength = std::max(maxNameLength, elt.getName().size());
+  }
+
   // Emit the argument and result ports.
   auto opArgs = op.inputs();
   auto opResults = op.getResults();
+  bool isFirst = true; // True until we print a port.
   for (auto &elt : portInfo) {
     // Figure out which value we are emitting.
-    bool isLast = &elt == &portInfo.back();
     Value portVal = elt.isOutput() ? opResults[elt.argNum] : opArgs[elt.argNum];
+    bool isZeroWidth = isZeroBitType(elt.type);
+
+    // Decide if we should print a comma.  We can't do this if we're the first
+    // port or if all the subsequent ports are zero width.
+    if (!isFirst) {
+      bool shouldPrintComma = true;
+      if (isZeroWidth) {
+        shouldPrintComma = false;
+        for (size_t i = (&elt - portInfo.data()) + 1, e = portInfo.size();
+             i != e; ++i)
+          if (!isZeroBitType(portInfo[i].type)) {
+            shouldPrintComma = true;
+            break;
+          }
+      }
+
+      if (shouldPrintComma)
+        os << ',';
+    }
+    emitLocationInfoAndNewLine(ops);
 
     // Emit the port's name.
-    indent() << "  ";
-    bool isZeroWidth = isZeroBitType(elt.type);
-    if (isZeroWidth)
-      os << "/*";
+    indent();
+    if (!isZeroWidth) {
+      // If this is a real port we're printing, then it isn't the first one. Any
+      // subsequent ones will need a comma.
+      isFirst = false;
+      os << "  ";
+    } else {
+      // We comment out zero width ports, so their presence and initializer
+      // expressions are still emitted textually.
+      os << "//";
+    }
 
-    os << '.' << StringRef(elt.getName()) << " (";
+    os << '.' << elt.getName();
+    os.indent(maxNameLength - elt.getName().size()) << " (";
 
     // Emit the value as an expression.
     ops.clear();
     emitExpression(portVal, ops);
-    if (isZeroWidth)
-      os << "*/";
-
-    os << (isLast ? ")" : "),");
-    emitLocationInfoAndNewLine(ops);
+    os << ')';
   }
-  indent() << ");\n";
+  if (!isFirst) {
+    emitLocationInfoAndNewLine(ops);
+    ops.clear();
+    indent();
+  }
+  os << ");";
+  emitLocationInfoAndNewLine(ops);
   return success();
 }
 

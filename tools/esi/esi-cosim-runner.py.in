@@ -88,7 +88,7 @@ class CosimTestRunner:
         # Run the simulation compilation step. Requires a simulator to be
         # installed and working.
         cmd = [self.simRunScript, "--no-run",
-               "--objdir", os.path.basename(self.file)] \
+               "--objdir", "o"] \
             + self.sources + self.args
         print("[INFO] Compile command: " + " ".join(cmd))
         vrun = subprocess.run(
@@ -157,7 +157,7 @@ class CosimTestRunner:
             simEnv["COSIM_PORT"] = str(port)
             simProc = subprocess.Popen(
                 [self.simRunScript, "--objdir", "o"]
-                  + self.sources + self.args,
+                + self.sources + self.args,
                 stdout=simStdout, stderr=simStderr, env=simEnv,
                 preexec_fn=os.setsid)
             simStderr.close()

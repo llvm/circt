@@ -8,6 +8,7 @@ set(ESI_Deps
 set(ESI_LinkLibs
   CIRCTSupport
   CIRCTSV
+  CIRCTRTL
   MLIREDSC
   MLIRIR
   MLIRTransforms
@@ -24,9 +25,6 @@ add_circt_dialect_library(CIRCTESI
   ESIPasses.cpp
   ESITranslations.cpp
   ESITypes.cpp
-
-  ADDITIONAL_HEADER_DIRS
-  ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/ESI
 
   DEPENDS
   ${ESI_Deps}
