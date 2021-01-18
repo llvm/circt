@@ -178,8 +178,14 @@ class CosimTestRunner:
             testStdout = open("test_stdout.log", "w")
             testStderr = open("test_stderr.log", "w")
 
+            # Pycapnp complains if the PWD environment var doesn't match the
+            # actual CWD.
+            testEnv = os.environ.copy()
+            testEnv["PWD"] = os.getcwd()
             testProc = subprocess.run([sys.executable, "-u", "script.py"],
-                                      stdout=testStdout, stderr=testStderr)
+                                      stdout=testStdout, stderr=testStderr,
+                                      cwd=os.getcwd(), env=testEnv)
+
             testStdout.close()
             testStderr.close()
         finally:
