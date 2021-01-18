@@ -1,5 +1,5 @@
 ; RUN: firtool %s --format=fir -mlir    | circt-opt | FileCheck %s --check-prefix=MLIR
-; RUN: firtool %s --format=fir -verilog |           FileCheck %s --check-prefix=VERILOG
+; RUN: firtool %s --format=fir -verilog |             FileCheck %s --check-prefix=VERILOG
 ; RUN: firtool %s --format=fir -mlir -lower-to-rtl | circt-opt | FileCheck %s --check-prefix=MLIRLOWER
 
 circuit test_mod :
@@ -53,6 +53,6 @@ circuit test_mod :
 ; VERILOG-NEXT :   input        inp_1,
 ; VERILOG-NEXT :   input  [4:0] inp_2,
 ; VERILOG-NEXT :   output [2:0] tmp9);
-; VERILOG-NEXT :   wire [5:0] _T = {{1{inp_2[4]}}, inp_2} << {5'h0, inp_1};      // bar.fir:6:13
-; VERILOG-NEXT :   assign tmp9 = _T[2:0];        // bar.fir:2:3, :6:10
+; VERILOG-NEXT :   assign out1 = $signed(inp_2) << inp_1;
+; VERILOG-NEXT :   assign out2 = inp_2;
 ; VERILOG-NEXT : endmodule
