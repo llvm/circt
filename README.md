@@ -140,7 +140,7 @@ the right thing.
 
 6) **Run the Verilator tests:** (optional)
 
-[Verilator](https://github.com/verilator/verilator) is can be used to check
+[Verilator](https://github.com/verilator/verilator) can be used to check
 SystemVerilog code. To run the tests, build or install a **recent** version
 of Verilator (at least v4.034). (Some Linux distributions have *ancient*
 versions.) If Verilator is in your PATH, `build check-circt` should run the
