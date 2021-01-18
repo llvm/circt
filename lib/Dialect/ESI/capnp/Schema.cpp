@@ -154,32 +154,26 @@ private:
 }
 
 // We compute a deterministic hash based on the type. Since llvm::hash_value
-// changes from execution to execution, we don't use it. This assumes a closed
-// type system, which is reasonable since we only support some types in the
-// Capnp schema generation anyway.
+// changes from execution to execution, we don't use it.
 uint64_t TypeSchemaImpl::capnpTypeID() const {
   if (cachedID)
     return *cachedID;
 
-  // We can hash up to 64 bytes with a single function call.
-  char buffer[64];
-  memset(buffer, 0, sizeof(buffer));
+  // Get the MLIR asm type, padded to a multiple of 64 bytes.
+  std::string typeName;
+  llvm::raw_string_ostream osName(typeName);
+  osName << type;
+  size_t overhang = osName.tell() % 64;
+  if (overhang != 0)
+    osName.indent(64 - overhang);
+  osName.flush();
+  const char *typeNameC = typeName.c_str();
 
-  // The first byte is for the outer type.
-  buffer[0] = 1; // Constant for the ChannelPort type.
+  uint64_t hash = esiCosimSchemaVersion;
+  for (size_t i = 0, e = typeName.length() / 64; i < e; ++i)
+    hash =
+        llvm::hashing::detail::hash_33to64_bytes(&typeNameC[i * 64], 64, hash);
 
-  TypeSwitch<Type>(type)
-      .Case([&buffer](IntegerType t) {
-        // The second byte is for the inner type.
-        buffer[1] = 1;
-        // The rest can be defined arbitrarily.
-        buffer[2] = (char)t.getSignedness();
-        *(int64_t *)&buffer[4] = t.getWidth();
-      })
-      .Default([](Type) { assert(false && "Type not yet supported"); });
-
-  uint64_t hash =
-      llvm::hashing::detail::hash_short(buffer, 12, esiCosimSchemaVersion);
   // Capnp IDs always have a '1' high bit.
   cachedID = hash | 0x8000000000000000;
   return *cachedID;
