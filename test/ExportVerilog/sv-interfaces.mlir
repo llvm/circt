@@ -13,6 +13,7 @@ module {
     sv.interface.signal @data : i32
     sv.interface.signal @valid : i1
     sv.interface.signal @ready : i1
+    sv.interface.signal @arrayData : !rtl.array<8xi8>
     sv.interface.modport @data_in ("input" @data, "input" @valid, "output" @ready)
     sv.interface.modport @data_out ("output" @data, "output" @valid, "input" @ready)
   }

@@ -57,8 +57,13 @@ def InterfaceOp : SVOp<"interface",
   }];
 }
 
-// For now, IntegerType is a placeholder for future SV dialect types
-def SignalTypeAttr : TypeAttrBase<"IntegerType", "Integer type attribute">;
+def SignalTypeAttr : TypeAttrBase<"::mlir::Type", "Any SV/RTL type"> {
+  let predicate = And<[
+      CPred<"$_self.isa<::mlir::TypeAttr>()">,
+      CPred<"::circt::rtl::getBitWidth(" #
+              "$_self.cast<::mlir::TypeAttr>().getValue()) != -1">
+  ]>;
+}
 
 def InterfaceSignalOp : SVOp<"interface.signal",
     [Symbol, HasParent<"InterfaceOp">]> {
