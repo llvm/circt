@@ -196,7 +196,7 @@ module {
   // CHECK-NEXT:      .WIDTH(8'd32)
   // CHECK-NEXT:    ) paramd (
   // CHECK-NEXT:      .a   (w),
-  // CHECK-NEXT:      /*.b (i3),*/
+  // CHECK-NEXT:    //.b   (i3),
   // CHECK-NEXT:      .out (paramd_out)
   // CHECK-NEXT:    );
   // CHECK-NEXT:    FooModule #(
@@ -395,5 +395,27 @@ module {
     // CHECK-NEXT:   // Zero width: assign rZero = zeroBit;
     // CHECK-NEXT:   // Zero width: assign arrZero = arrZero;
     // CHECK-NEXT: endmodule
+  }
+
+ // CHECK-LABEL: TestZeroInstance
+ rtl.module @TestZeroInstance(%aa: i4, %azeroBit: i0, %aarrZero: !rtl.array<3xi0>)
+    -> (%r0: i4, %rZero: i0, %arrZero: !rtl.array<3xi0>) {
+
+    // CHECK: TestZero iii (	// {{.*}}rtl-dialect.mlir:{{.*}}:21
+    // CHECK:   .a       (aa),
+    // CHECK: //.zeroBit (azeroBit),
+    // CHECK: //.arrZero (aarrZero),
+    // CHECK:   .r0      (iii_r0)
+    // CHECK: //.rZero   (iii_rZero)
+    // CHECK: //.arrZero (iii_arrZero)
+    // CHECK: );
+
+    %o1, %o2, %o3 = rtl.instance "iii" @TestZero(%aa, %azeroBit, %aarrZero)
+     : (i4, i0, !rtl.array<3xi0>) -> (i4, i0, !rtl.array<3xi0>)
+
+    // CHECK: assign r0 = iii_r0;
+    // CHECK: // Zero width: assign rZero = iii_rZero;
+    // CHECK: // Zero width: assign arrZero = iii_arrZero;
+    rtl.output %o1, %o2, %o3 : i4, i0, !rtl.array<3xi0>
   }
 }
