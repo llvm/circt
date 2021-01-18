@@ -28,7 +28,7 @@ class CosimTestRunner:
     """The main class responsible for running a cosim test. We use a separate
     class to allow for per-test mutable state variables."""
 
-    def __init__(self, testFile, addlArgs):
+    def __init__(self, testFile, schema, addlArgs):
         """Parse a test file. Look for comments we recognize anywhere in the
         file. Assemble a list of sources."""
 
@@ -40,12 +40,17 @@ class CosimTestRunner:
         self.top = "top"
 
         if "@ESI_COSIM_PATH@" == "" or not os.path.exists("@ESI_COSIM_PATH@"):
-          raise Exception("The ESI cosimulation DPI library must be enabled " +
-                          "to run cosim tests.")
+            raise Exception("The ESI cosimulation DPI library must be enabled " +
+                            "to run cosim tests.")
 
         self.simRunScript = os.path.join(
             "@CIRCT_TOOLS_DIR@", "circt-rtl-sim.py")
 
+        if schema == "":
+            schema = os.path.join(
+                "@CIRCT_MAIN_INCLUDE_DIR@", "circt", "Dialect", "ESI",
+                "cosim", "CosimDpi.capnp")
+        self.schema = schema
 
         fileReader = open(self.file, "r")
         sources = []
@@ -63,17 +68,16 @@ class CosimTestRunner:
                 self.runs.append(m.group(1).strip())
         fileReader.close()
 
-        if len(sources) == 0:
-            self.sources = [self.file]
-        else:
-            self.sources = [(src if os.path.isabs(src) else os.path.join(
-                self.srcdir, src)) for src in self.sources]
+        self.sources = [(src if os.path.isabs(src) else os.path.join(
+            self.srcdir, src)) for src in self.sources]
 
         # Include the cosim DPI SystemVerilog files.
-        cosimInclude = os.path.join(
-            "@CIRCT_MAIN_INCLUDE_DIR@", "circt", "Dialect", "ESI", "cosim")
+        esiInclude = os.path.join(
+            "@CIRCT_MAIN_INCLUDE_DIR@", "circt", "Dialect", "ESI")
+        cosimInclude = os.path.join(esiInclude, "cosim")
         self.sources.insert(0, os.path.join(cosimInclude, "Cosim_DpiPkg.sv"))
         self.sources.insert(1, os.path.join(cosimInclude, "Cosim_Endpoint.sv"))
+        self.sources.insert(2, os.path.join(esiInclude, "ESIPrimitives.sv"))
         self.sources.append("@ESI_COSIM_PATH@")
 
     def compile(self):
@@ -82,7 +86,9 @@ class CosimTestRunner:
         # Run the simulation compilation step. Requires a simulator to be
         # installed and working.
         # os.makedirs(self.execdir, exist_ok=True)
-        cmd = [self.simRunScript, "--no-run"] + self.args + self.sources
+        cmd = [self.simRunScript, "--no-run",
+               "--objdir", os.path.basename(self.file)] \
+            + self.sources + self.args
         print("Running: " + " ".join(cmd))
         vrun = subprocess.run(
             cmd,
@@ -117,9 +123,7 @@ class CosimTestRunner:
                 "srcfile": self.file,
                 # 'rpcSchemaPath' points to the CapnProto schema for RPC and is
                 # the one that nearly all scripts are going to need.
-                "rpcschemapath": os.path.join(
-                    "@CIRCT_MAIN_INCLUDE_DIR@", "circt", "Dialect", "ESI",
-                    "cosim", "CosimDpi.capnp")
+                "rpcschemapath": self.schema
             }
             script.writelines(f"{name} = \"{value}\"\n" for (
                 name, value) in vars.items())
@@ -148,22 +152,24 @@ class CosimTestRunner:
             simEnv = os.environ.copy()
             simEnv["COSIM_PORT"] = str(port)
             simProc = subprocess.Popen(
-                [self.simRunScript] + self.args + self.sources,
-                stdout=simStdout, stderr=simStderr, env=simEnv, preexec_fn=os.setsid)
+                [self.simRunScript, "--objdir", os.path.basename(self.file)]
+                + self.sources + self.args,
+                stdout=simStdout, stderr=simStderr, env=simEnv,
+                preexec_fn=os.setsid)
             simStderr.close()
             simStdout.close()
 
             # Wait for the simulation to start accepting RPC connections.
             checkCount = 0
             while not isPortOpen(port):
-              checkCount += 1
-              if checkCount > 200:
-                print("Cosim RPC port never opened")
-                return 1
-              if simProc.poll() != None:
-                print("Simulation exited early")
-                return 1
-              time.sleep(0.05)
+                checkCount += 1
+                if checkCount > 200:
+                    print("Cosim RPC port never opened")
+                    return 1
+                if simProc.poll() != None:
+                    print("Simulation exited early")
+                    return 1
+                time.sleep(0.05)
 
             # Run the test script.
             testStdout = open("test_stdout.log", "w")
@@ -189,49 +195,52 @@ class CosimTestRunner:
         logs += f"---- Test process exit code: {testProc.returncode}\n"
         passed = testProc.returncode == 0 and not err
         if not passed:
-          print(logs)
+            print(logs)
         return 0 if passed else 1
 
     def readLogs(self):
-      """Read the log files from the simulation and the test script. Only add
-      the stderr logs if they contain something. Also return a flag
-      indicating that one of the stderr logs has content."""
+        """Read the log files from the simulation and the test script. Only add
+        the stderr logs if they contain something. Also return a flag
+        indicating that one of the stderr logs has content."""
 
-      foundErr = False
-      ret = "----- Simulation stdout -----\n"
-      with open("sim_stdout.log") as f:
-          ret += f.read()
+        foundErr = False
+        ret = "----- Simulation stdout -----\n"
+        with open("sim_stdout.log") as f:
+            ret += f.read()
 
-      with open("sim_stderr.log") as f:
-          stderr = f.read()
-          if stderr != "":
-              ret += "\n----- Simulation stderr -----\n"
-              ret += stderr
-              foundErr = True
+        with open("sim_stderr.log") as f:
+            stderr = f.read()
+            if stderr != "":
+                ret += "\n----- Simulation stderr -----\n"
+                ret += stderr
+                foundErr = True
 
-          ret += "\n----- Test stdout -----\n"
-      with open("test_stdout.log") as f:
-          ret += f.read()
+            ret += "\n----- Test stdout -----\n"
+        with open("test_stdout.log") as f:
+            ret += f.read()
 
-      with open("test_stderr.log") as f:
-          stderr = f.read()
-          if stderr != "":
-              ret += "\n----- Test stderr -----\n"
-              ret += stderr
-              foundErr = True
+        with open("test_stderr.log") as f:
+            stderr = f.read()
+            if stderr != "":
+                ret += "\n----- Test stderr -----\n"
+                ret += stderr
+                foundErr = True
 
-      return (foundErr, ret)
+        return (foundErr, ret)
 
 
 def isPortOpen(port):
-  sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-  result = sock.connect_ex(('127.0.0.1', port))
-  sock.close()
-  return True if result == 0 else False
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    result = sock.connect_ex(('127.0.0.1', port))
+    sock.close()
+    return True if result == 0 else False
+
 
 def __main__(args):
     argparser = argparse.ArgumentParser(
         description="RTL cosimulation runner for ESI")
+    argparser.add_argument("--schema", default="",
+                           help="The schema file to use.")
     argparser.add_argument("source",
                            help="The source run spec file")
     argparser.add_argument("addlArgs", nargs=argparse.REMAINDER,
@@ -243,7 +252,7 @@ def __main__(args):
         return
     args = argparser.parse_args(args[1:])
 
-    runner = CosimTestRunner(args.source, args.addlArgs)
+    runner = CosimTestRunner(args.source, args.schema, args.addlArgs)
     rc = runner.compile()
     if rc != 0:
         return rc
