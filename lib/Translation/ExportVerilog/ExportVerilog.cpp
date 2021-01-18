@@ -1481,7 +1481,6 @@ LogicalResult ModuleEmitter::visitStmt(InstanceOp op) {
   }
 
   os << ' ' << op.instanceName() << " (";
-  emitLocationInfoAndNewLine(ops);
 
   SmallVector<ModulePortInfo, 8> portInfo;
   getModulePortInfo(moduleOp, portInfo);
@@ -1489,48 +1488,65 @@ LogicalResult ModuleEmitter::visitStmt(InstanceOp op) {
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
   for (auto &elt : portInfo) {
-    size_t nameLength = elt.getName().size();
-    // Account for "/*" before name.
-    bool isZeroWidth = isZeroBitType(elt.type);
-    if (isZeroWidth)
-      nameLength += 2;
-
-    maxNameLength = std::max(maxNameLength, nameLength);
+    maxNameLength = std::max(maxNameLength, elt.getName().size());
   }
 
   // Emit the argument and result ports.
   auto opArgs = op.inputs();
   auto opResults = op.getResults();
+  bool isFirst = true; // True until we print a port.
   for (auto &elt : portInfo) {
     // Figure out which value we are emitting.
-    bool isLast = &elt == &portInfo.back();
     Value portVal = elt.isOutput() ? opResults[elt.argNum] : opArgs[elt.argNum];
+    bool isZeroWidth = isZeroBitType(elt.type);
+
+    // Decide if we should print a comma.  We can't do this if we're the first
+    // port or if all the subsequent ports are zero width.
+    if (!isFirst) {
+      bool shouldPrintComma = true;
+      if (isZeroWidth) {
+        shouldPrintComma = false;
+        for (size_t i = (&elt - portInfo.data()) + 1, e = portInfo.size();
+             i != e; ++i)
+          if (!isZeroBitType(portInfo[i].type)) {
+            shouldPrintComma = true;
+            break;
+          }
+      }
+
+      if (shouldPrintComma)
+        os << ',';
+    }
+    emitLocationInfoAndNewLine(ops);
 
     // Emit the port's name.
-    indent() << "  ";
-    bool isZeroWidth = isZeroBitType(elt.type);
-    if (isZeroWidth)
-      os << "/*";
+    indent();
+    if (!isZeroWidth) {
+      // If this is a real port we're printing, then it isn't the first one. Any
+      // subsequent ones will need a comma.
+      isFirst = false;
+      os << "  ";
+    } else {
+      // We comment out zero width ports, so their presence and initializer
+      // expressions are still emitted textually.
+      os << "//";
+    }
 
     os << '.' << elt.getName();
-
-    size_t nameLength = elt.getName().size();
-    if (isZeroWidth)
-      nameLength += 2;
-    os.indent(maxNameLength - nameLength) << " (";
+    os.indent(maxNameLength - elt.getName().size()) << " (";
 
     // Emit the value as an expression.
     ops.clear();
     emitExpression(portVal, ops);
-    // TODO: If the last port as zero width, the previous port will end with a
-    // comma, which is a syntax error.
-    os << (isLast ? ")" : "),");
-    if (isZeroWidth)
-      os << "*/";
-
-    emitLocationInfoAndNewLine(ops);
+    os << ')';
   }
-  indent() << ");\n";
+  if (!isFirst) {
+    emitLocationInfoAndNewLine(ops);
+    ops.clear();
+    indent();
+  }
+  os << ");";
+  emitLocationInfoAndNewLine(ops);
   return success();
 }
 
