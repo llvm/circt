@@ -17,7 +17,7 @@ class CosimBase:
             self.schema.CosimDpiServer)
 
     def openEP(self, epNum=1, sendType=None, recvType=None):
-        """Open the endpoint"""
+        """Open the endpoint, optionally checking the send and recieve types"""
         ifaces = self.cosim.list().wait().ifaces
         for iface in ifaces:
             if iface.endpointID == epNum:
