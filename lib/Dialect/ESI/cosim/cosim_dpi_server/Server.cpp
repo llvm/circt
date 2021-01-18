@@ -47,9 +47,9 @@ public:
   EndpointServer(const EndpointServer &) = delete;
 
   /// Implement the EsiDpiEndpoint RPC interface.
-  kj::Promise<void> send(SendContext);
-  kj::Promise<void> recv(RecvContext);
-  kj::Promise<void> close(CloseContext);
+  kj::Promise<void> send(SendContext) override;
+  kj::Promise<void> recv(RecvContext) override;
+  kj::Promise<void> close(CloseContext) override;
 };
 
 /// Implements the `CosimDpiServer` interface from the RPC schema.
@@ -61,9 +61,9 @@ public:
   CosimServer(EndpointRegistry &reg);
 
   /// List all the registered interfaces.
-  kj::Promise<void> list(ListContext ctxt);
+  kj::Promise<void> list(ListContext ctxt) override;
   /// Open a specific interface, locking it in the process.
-  kj::Promise<void> open(OpenContext ctxt);
+  kj::Promise<void> open(OpenContext ctxt) override;
 };
 } // anonymous namespace
 
