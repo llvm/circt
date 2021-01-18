@@ -416,10 +416,6 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
     result = fieldValue;
   }
 
-  asserts.create<sv::FWriteOp>(
-      loc, "typeAndOffset: %h, dataSize: %h, ptrSize: %h, decodedData: %h\n",
-      ValueRange{typeAndOffset, dataSectionSize, ptrSectionSize, result});
-
   // All that just to decode an int! (But it'll pay off as we progress.)
   return result;
 }
