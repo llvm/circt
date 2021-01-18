@@ -102,19 +102,8 @@ class CosimTestRunner:
         print(f"[INFO] Compile time: {time.time()-start}")
         return vrun.returncode
 
-    def run(self):
-        """Run the test by creating a Python script, starting the simulation,
-        running the Python script, then stopping the simulation. Use
-        circt-rtl-sim.py to run the sim.
-
-        Not perfect since we don't know when the cosim RPC server in the
-        simulation has started accepting connections."""
-
-        # Find available port.
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.bind(('', 0))
-        port = sock.getsockname()[1]
-        sock.close()
+    def writeScript(self, port):
+        """Write out the test script."""
 
         with open("script.py", "w") as script:
             # Include a bunch of config variables at the beginning of the
@@ -146,14 +135,32 @@ class CosimTestRunner:
             script.writelines(
                 f"{x}\n" for x in self.runs)
 
+    def run(self):
+        """Run the test by creating a Python script, starting the simulation,
+        running the Python script, then stopping the simulation. Use
+        circt-rtl-sim.py to run the sim."""
+
+        # These two variables are accessed in the finally block. Declare them
+        # here to avoid syntax errors in that block.
+        testProc = None
+        simProc = None
         try:
             start = time.time()
 
-            # Run the simulation.
+            # Open log files
             simStdout = open("sim_stdout.log", "w")
             simStderr = open("sim_stderr.log", "w")
+            testStdout = open("test_stdout.log", "w")
+            testStderr = open("test_stderr.log", "w")
+
+            # Erase the config file if it exists. We don't want to read
+            # an old config.
+            portFileName = f"cosim.cfg"
+            if os.path.exists(portFileName):
+                os.remove(portFileName)
+
+            # Run the simulation.
             simEnv = os.environ.copy()
-            simEnv["COSIM_PORT"] = str(port)
             simProc = subprocess.Popen(
                 [self.simRunScript, "--objdir", "o"]
                 + self.sources + self.args,
@@ -162,30 +169,43 @@ class CosimTestRunner:
             simStderr.close()
             simStdout.close()
 
+            # Get the port which the simulation RPC selected.
+            checkCount = 0
+            while (not os.path.exists(portFileName)) and simProc.poll() is None:
+                time.sleep(0.05)
+                checkCount += 1
+                if checkCount > 200:
+                    raise Exception(
+                        f"Cosim never wrote cfg file: {portFileName}")
+            portFile = open(portFileName, "r")
+            for line in portFile.readlines():
+                m = re.match("port: (\d+)", line)
+                if m != None:
+                    port = int(m.group(1))
+            portFile.close()
+
             # Wait for the simulation to start accepting RPC connections.
             checkCount = 0
             while not isPortOpen(port):
                 checkCount += 1
                 if checkCount > 200:
-                    print("Cosim RPC port never opened")
-                    return 1
+                    raise Exception(f"Cosim RPC port ({port}) never opened")
                 if simProc.poll() != None:
-                    print("Simulation exited early")
-                    return 1
+                    raise Exception("Simulation exited early")
                 time.sleep(0.05)
 
-            # Run the test script.
-            testStdout = open("test_stdout.log", "w")
-            testStderr = open("test_stderr.log", "w")
+            # Write the test script.
+            self.writeScript(port)
 
             # Pycapnp complains if the PWD environment var doesn't match the
             # actual CWD.
             testEnv = os.environ.copy()
             testEnv["PWD"] = os.getcwd()
+
+            # Run the test script.
             testProc = subprocess.run([sys.executable, "-u", "script.py"],
                                       stdout=testStdout, stderr=testStderr,
                                       cwd=os.getcwd(), env=testEnv)
-
             testStdout.close()
             testStderr.close()
         finally:
@@ -199,14 +219,18 @@ class CosimTestRunner:
                 except subprocess.TimeoutExpired:
                     simProc.kill()
 
-        print(f"[INFO] Run time: {time.time()-start}")
+            print(f"[INFO] Run time: {time.time()-start}")
 
-        # Read the output log files and return the proper result.
-        err, logs = self.readLogs()
-        logs += f"---- Test process exit code: {testProc.returncode}\n"
-        passed = testProc.returncode == 0 and not err
-        if not passed:
-            print(logs)
+            # Read the output log files and return the proper result.
+            err, logs = self.readLogs()
+            if testProc != None:
+                logs += f"---- Test process exit code: {testProc.returncode}\n"
+                passed = testProc.returncode == 0 and not err
+            else:
+                passed = False
+            if not passed:
+                print(logs)
+
         return 0 if passed else 1
 
     def readLogs(self):
@@ -267,7 +291,7 @@ def __main__(args):
     sourceName = os.path.basename(args.source)
     testDir = f"{sourceName}.d"
     if not os.path.exists(testDir):
-      os.mkdir(testDir)
+        os.mkdir(testDir)
     os.chdir(testDir)
 
     runner = CosimTestRunner(args.source, args.schema, args.addlArgs)
