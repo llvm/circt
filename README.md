@@ -159,6 +159,15 @@ dependencies are installed on your system. They are:
 - libfl2     # Ubuntu only (ignore if gives error)
 - libfl-dev  # Ubuntu only (ignore if gives error)
 
+7) **Install Cap'nProto** (optional, affects ESI dialect only)
+
+Some of the ESI dialect code requires [libcapnp](https://capnproto.org/).
+(Specifically, the [cosimulation](docs/ESI/cosim.md) component.) That code
+requires a version of libcapnp which is not yet part of a release. The
+`utils/get-capnp.sh` script downloads, compiles, and installs a known good
+version to a directory within the circt source code. Alternatively, you can
+use a docker image we provide via `utils/run-docker.sh`.
+
 ## Submitting changes to CIRCT
 
 The project is small so there are few formal process yet.  We generally follow
