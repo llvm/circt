@@ -1642,20 +1642,14 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 bool HandshakeBuilder::visitHandshake(handshake::StoreOp op) {
   // Input data accepted from the predecessor.
   ValueVector inputData = portList[0];
-  Value inputDataValid = inputData[0];
-  Value inputDataReady = inputData[1];
   Value inputDataData = inputData[2];
 
   // Input address accepted from the predecessor.
   ValueVector inputAddr = portList[1];
-  Value inputAddrValid = inputAddr[0];
-  Value inputAddrReady = inputAddr[1];
   Value inputAddrData = inputAddr[2];
 
   // Control channel.
   ValueVector control = portList[2];
-  Value controlValid = control[0];
-  Value controlReady = control[1];
 
   // Data sending to the MemoryOp.
   ValueVector outputData = portList[3];
@@ -1671,26 +1665,26 @@ bool HandshakeBuilder::visitHandshake(handshake::StoreOp op) {
 
   auto bitType = UIntType::get(rewriter.getContext(), 1);
 
-  // Address and data are connected accordingly.
+  // Create a wire that will be asserted when all inputs are valid.
+  auto inputsValid = rewriter.create<WireOp>(
+      insertLoc, bitType, rewriter.getStringAttr("inputsValid"));
+
+  // Create a gate that will be asserted when all outputs are ready.
+  auto outputsReady = rewriter.create<AndPrimOp>(
+      insertLoc, bitType, outputDataReady, outputAddrReady);
+
+  // Build the standard join logic from the inputs to the inputsValid and
+  // outputsReady signals.
+  ValueVector joinLogicOutput({inputsValid, outputsReady});
+  buildJoinLogic({&inputData, &inputAddr, &control}, &joinLogicOutput);
+
+  // Output address and data signals are connected directly.
   rewriter.create<ConnectOp>(insertLoc, outputAddrData, inputAddrData);
   rewriter.create<ConnectOp>(insertLoc, outputDataData, inputDataData);
 
-  // The outputs will be valid when all inputs are valid.
-  auto allValid = rewriter.create<AndPrimOp>(insertLoc, bitType, inputDataValid,
-                                             inputAddrValid);
-  allValid =
-      rewriter.create<AndPrimOp>(insertLoc, bitType, allValid, controlValid);
-
-  rewriter.create<ConnectOp>(insertLoc, outputDataValid, allValid);
-  rewriter.create<ConnectOp>(insertLoc, outputAddrValid, allValid);
-
-  // The inputs will be ready when all outputs are ready.
-  auto allReady = rewriter.create<AndPrimOp>(insertLoc, bitType,
-                                             outputDataReady, outputAddrReady);
-
-  rewriter.create<ConnectOp>(insertLoc, inputDataReady, allReady);
-  rewriter.create<ConnectOp>(insertLoc, inputAddrReady, allReady);
-  rewriter.create<ConnectOp>(insertLoc, controlReady, allReady);
+  // Output valid signals are connected from the inputsValid wire.
+  rewriter.create<ConnectOp>(insertLoc, outputDataValid, inputsValid);
+  rewriter.create<ConnectOp>(insertLoc, outputAddrValid, inputsValid);
 
   return true;
 }
