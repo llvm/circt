@@ -536,6 +536,32 @@ Operation *InstanceOp::getReferencedModule() {
   return circuit.lookupSymbol(moduleName());
 }
 
+StringAttr InstanceOp::getPortName(size_t resultNo) {
+  return portNames()[resultNo].cast<StringAttr>();
+}
+
+Value InstanceOp::getPortNamed(StringRef name) {
+  auto namesArray = portNames();
+  for (size_t i = 0, e = namesArray.size(); i != e; ++i) {
+    if (namesArray[i].cast<StringAttr>().getValue() == name) {
+      assert(i < getNumResults() && " names array out of sync with results");
+      return getResult(i);
+    }
+  }
+  return Value();
+}
+
+Value InstanceOp::getPortNamed(StringAttr name) {
+  auto namesArray = portNames();
+  for (size_t i = 0, e = namesArray.size(); i != e; ++i) {
+    if (namesArray[i] == name) {
+      assert(i < getNumResults() && " names array out of sync with results");
+      return getResult(i);
+    }
+  }
+  return Value();
+}
+
 /// Verify the correctness of an InstanceOp.
 static LogicalResult verifyInstanceOp(InstanceOp instance) {
 
@@ -561,50 +587,65 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
     return failure();
   }
 
-  // Check that the result type is either a bundle type or a flip type that
-  // wraps a bundle type.
-  auto resultType = instance.getResult().getType().cast<FIRRTLType>();
-  if (!resultType.isa<BundleType>()) {
-    auto flipType = resultType.dyn_cast<FlipType>();
-    if (!flipType || !flipType.getElementType().isa<BundleType>())
-      return instance.emitOpError("has invalid result type of ") << resultType;
+  SmallVector<ModulePortInfo> modulePorts;
+  getModulePortInfo(referencedModule, modulePorts);
+
+  // Check that result types are consistent with the referenced module's ports.
+  size_t numResults = instance.getNumResults();
+  if (numResults != modulePorts.size()) {
+    auto diag = instance.emitOpError()
+                << "has a wrong number of results; expected "
+                << modulePorts.size() << " but got " << numResults;
+    diag.attachNote(referencedModule->getLoc())
+        << "original module declared here";
+    return failure();
   }
 
-  // Check that the result type is consistent with its module.
-  if (auto referencedFModule = dyn_cast<FModuleOp>(referencedModule)) {
-    auto bundle = resultType.getPassiveType().cast<BundleType>();
-    auto bundleElements = bundle.getElements();
-    size_t e = bundleElements.size();
+  // Check that the names array is the right length.
+  if (instance.portNames().size() != instance.getNumResults()) {
+    instance.emitOpError("incorrect number of port names");
+    return failure();
+  }
 
-    if (e != referencedFModule.getNumArguments()) {
+  for (size_t i = 0; i != numResults; i++) {
+    auto result = instance.getPortNamed(modulePorts[i].name);
+    if (!result) {
       auto diag = instance.emitOpError()
-                  << "has a wrong size of bundle type, expected size is "
-                  << referencedFModule.getNumArguments() << " but got " << e;
-      diag.attachNote(referencedFModule.getLoc())
+                  << "is missing a port named '" << modulePorts[i].name
+                  << "' expected by referenced module";
+      diag.attachNote(referencedModule->getLoc())
           << "original module declared here";
       return failure();
     }
 
-    for (size_t i = 0; i != e; i++) {
-      auto expectedType = referencedFModule.getArgument(i)
-                              .getType()
-                              .cast<FIRRTLType>()
-                              .getPassiveType();
-      if (bundleElements[i].type != expectedType) {
-        auto diag = instance.emitOpError()
-                    << "output bundle type must match module. In "
-                       "element "
-                    << i << ", expected " << expectedType << ", but got "
-                    << bundleElements[i].type << ".";
+    auto resultType = result.getType();
+    auto expectedType = FlipType::get(modulePorts[i].type);
+    if (resultType != expectedType) {
+      auto diag = instance.emitOpError()
+                  << "result type for " << modulePorts[i].name << " must be "
+                  << expectedType << ", but got " << resultType;
 
-        diag.attachNote(referencedFModule.getLoc())
-            << "original module declared here";
-        return failure();
-      }
+      diag.attachNote(referencedModule->getLoc())
+          << "original module declared here";
+      return failure();
     }
   }
 
   return success();
+}
+
+static ParseResult parseInstanceResults(OpAsmParser &p,
+                                        SmallVectorImpl<Type> &resultTypes) {
+  if (p.parseOptionalColon())
+    return success();
+  return p.parseTypeList(resultTypes);
+}
+
+static void printInstanceResults(OpAsmPrinter &p, InstanceOp op,
+                                 ArrayRef<Type> resultTypes) {
+  if (resultTypes.empty())
+    return;
+  p << ": " << resultTypes;
 }
 
 /// Return the type of a mem given a list of named ports and their kind.

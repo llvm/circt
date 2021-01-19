@@ -88,8 +88,9 @@ module Cosim_Endpoint
           else if (data_limit == 0)
             begin end // No message.
           else
-            $error("cosim_ep_tryget(%d, *, %d -> %d) did not load entire",
-                   "buffer!", ENDPOINT_ID, SEND_TYPE_SIZE_BYTES, data_limit);
+            $error(
+              "cosim_ep_tryget(%d, *, %d -> %d) did not load entire buffer!",
+              ENDPOINT_ID, SEND_TYPE_SIZE_BYTES, data_limit);
         end
       end
     end else begin

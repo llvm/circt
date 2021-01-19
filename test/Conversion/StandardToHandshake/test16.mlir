@@ -13,7 +13,7 @@ func @affine_apply_ceildiv(%arg0: index) -> index {
 // CHECK:           %[[VAL_7:.*]]:3 = "handshake.fork"(%[[VAL_6]]) {control = false} : (index) -> (index, index, index)
 // CHECK:           %[[VAL_8:.*]] = "handshake.constant"(%[[VAL_4]]#0) {value = 1 : index} : (none) -> index
 // CHECK:           %[[VAL_9:.*]]:2 = "handshake.fork"(%[[VAL_8]]) {control = false} : (index) -> (index, index)
-// CHECK:           %[[VAL_10:.*]] = cmpi "sle", %[[VAL_3]]#2, %[[VAL_7]]#0 : index
+// CHECK:           %[[VAL_10:.*]] = cmpi sle, %[[VAL_3]]#2, %[[VAL_7]]#0 : index
 // CHECK:           %[[VAL_11:.*]]:2 = "handshake.fork"(%[[VAL_10]]) {control = false} : (i1) -> (i1, i1)
 // CHECK:           %[[VAL_12:.*]] = subi %[[VAL_7]]#1, %[[VAL_3]]#1 : index
 // CHECK:           %[[VAL_13:.*]] = subi %[[VAL_3]]#0, %[[VAL_9]]#0 : index
@@ -30,7 +30,7 @@ func @affine_apply_ceildiv(%arg0: index) -> index {
     %c42 = constant 42 : index
     %c0 = constant 0 : index
     %c1 = constant 1 : index
-    %0 = cmpi "sle", %arg0, %c0 : index
+    %0 = cmpi sle, %arg0, %c0 : index
     %1 = subi %c0, %arg0 : index
     %2 = subi %arg0, %c1 : index
     %3 = select %0, %1, %2 : index

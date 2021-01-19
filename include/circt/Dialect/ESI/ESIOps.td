@@ -102,21 +102,21 @@ def RtlBitArray : Type<CPred<"$_self.isa<::circt::rtl::ArrayType>()"
 def CapnpDecode : ESI_Physical_Op<"decode.capnp", [NoSideEffect]> {
   let summary = "Translate bits in Cap'nProto messages to RTL typed data";
 
-  let arguments = (ins RtlBitArray:$capnpBits);
+  let arguments = (ins I1:$clk, I1:$valid, RtlBitArray:$capnpBits);
   let results = (outs AnyType:$decodedData);
 
   let assemblyFormat = [{
-    $capnpBits attr-dict `:` type($capnpBits) `->` type($decodedData)
+    $clk $valid $capnpBits attr-dict `:` type($capnpBits) `->` type($decodedData)
   }];
 }
 
 def CapnpEncode : ESI_Physical_Op<"encode.capnp", [NoSideEffect]> {
   let summary = "Translate RTL typed data to Cap'nProto";
 
-  let arguments = (ins AnyType:$dataToEncode);
+  let arguments = (ins I1:$clk, I1:$valid, AnyType:$dataToEncode);
   let results = (outs RtlBitArray:$capnpBits);
 
   let assemblyFormat = [{
-    $dataToEncode attr-dict `:` type($dataToEncode) `->` type($capnpBits)
+    $clk $valid $dataToEncode attr-dict `:` type($dataToEncode) `->` type($capnpBits)
   }];
 }

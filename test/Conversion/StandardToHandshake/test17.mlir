@@ -12,7 +12,7 @@ func @affine_apply_floordiv(%arg0: index) -> index {
 // CHECK:           %[[VAL_6:.*]] = "handshake.constant"(%[[VAL_4]]#1) {value = 0 : index} : (none) -> index
 // CHECK:           %[[VAL_7:.*]] = "handshake.constant"(%[[VAL_4]]#0) {value = -1 : index} : (none) -> index
 // CHECK:           %[[VAL_8:.*]]:2 = "handshake.fork"(%[[VAL_7]]) {control = false} : (index) -> (index, index)
-// CHECK:           %[[VAL_9:.*]] = cmpi "slt", %[[VAL_3]]#2, %[[VAL_6]] : index
+// CHECK:           %[[VAL_9:.*]] = cmpi slt, %[[VAL_3]]#2, %[[VAL_6]] : index
 // CHECK:           %[[VAL_10:.*]]:2 = "handshake.fork"(%[[VAL_9]]) {control = false} : (i1) -> (i1, i1)
 // CHECK:           %[[VAL_11:.*]] = subi %[[VAL_8]]#0, %[[VAL_3]]#1 : index
 // CHECK:           %[[VAL_12:.*]] = select %[[VAL_10]]#1, %[[VAL_11]], %[[VAL_3]]#0 : index
@@ -27,7 +27,7 @@ func @affine_apply_floordiv(%arg0: index) -> index {
     %c42 = constant 42 : index
     %c0 = constant 0 : index
     %c-1 = constant -1 : index
-    %0 = cmpi "slt", %arg0, %c0 : index
+    %0 = cmpi slt, %arg0, %c0 : index
     %1 = subi %c-1, %arg0 : index
     %2 = select %0, %1, %arg0 : index
     %3 = divi_signed %2, %c42 : index

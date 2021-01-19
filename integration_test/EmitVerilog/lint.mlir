@@ -4,6 +4,7 @@
 // RUN: verilator --lint-only --top-module AB %t1.sv
 // RUN: verilator --lint-only --top-module shl %t1.sv
 // RUN: verilator --lint-only --top-module TESTSIMPLE %t1.sv
+// RUN: verilator --lint-only --top-module casts %t1.sv
 
 module {
   rtl.module @B(%a: i1 { rtl.inout }) -> (i1 {rtl.name = "b"}, i1 {rtl.name = "c"}) {
@@ -59,16 +60,16 @@ module {
     %13 = rtl.or %a, %b : i4
     %14 = rtl.and %a, %b : i4
     %15 = rtl.xor %a, %b : i4
-    %16 = rtl.icmp "eq" %a, %b : i4
-    %17 = rtl.icmp "ne" %a, %b : i4
-    %18 = rtl.icmp "slt" %a, %b : i4
-    %19 = rtl.icmp "sle" %a, %b : i4
-    %20 = rtl.icmp "sgt" %a, %b : i4
-    %21 = rtl.icmp "sge" %a, %b : i4
-    %22 = rtl.icmp "ult" %a, %b : i4
-    %23 = rtl.icmp "ule" %a, %b : i4
-    %24 = rtl.icmp "ugt" %a, %b : i4
-    %25 = rtl.icmp "uge" %a, %b : i4
+    %16 = rtl.icmp eq %a, %b : i4
+    %17 = rtl.icmp ne %a, %b : i4
+    %18 = rtl.icmp slt %a, %b : i4
+    %19 = rtl.icmp sle %a, %b : i4
+    %20 = rtl.icmp sgt %a, %b : i4
+    %21 = rtl.icmp sge %a, %b : i4
+    %22 = rtl.icmp ult %a, %b : i4
+    %23 = rtl.icmp ule %a, %b : i4
+    %24 = rtl.icmp ugt %a, %b : i4
+    %25 = rtl.icmp uge %a, %b : i4
     %26 = rtl.andr %a : i4
     %27 = rtl.orr %a : i4
     %28 = rtl.xorr %a : i4
@@ -88,5 +89,13 @@ module {
      i4,i4, i4,i4,i4,i4,i4, i4,i4,i4,i4,i4,
      i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,i1,i1,
      i12, i2,i9,i4, i4, !rtl.array<3xi4>
+  }
+
+  rtl.module @casts(%in1: i64) -> (%r1: !rtl.array<5xi8>) {
+    %bits = rtl.bitcast %in1 : (i64) -> !rtl.array<64xi1>
+    %idx = rtl.constant (10 : i6) : i6
+    %midBits = rtl.array_slice %bits at %idx : (!rtl.array<64xi1>) -> !rtl.array<40xi1>
+    %r1 = rtl.bitcast %midBits : (!rtl.array<40xi1>) -> !rtl.array<5xi8>
+    rtl.output %r1 : !rtl.array<5xi8>
   }
 }

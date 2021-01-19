@@ -61,43 +61,35 @@ firrtl.circuit "Simple" {
     // CHECK: [[ARG1:%.+]] = firrtl.pad [[U2CAST]], 4
     // CHECK-NEXT: [[ARG1CAST:%.+]] = firrtl.stdIntCast [[ARG1]] : (!firrtl.uint<4>) -> i4
     // CHECK-NEXT: %xyz.out4 = rtl.instance "xyz" @Simple([[ARG1CAST]], %u2, %s8) : (i4, i2, i8) -> i4
-    %xyz = firrtl.instance @Simple {name = "xyz"}
-     : !firrtl.bundle<in1: flip<uint<4>>, in2: flip<uint<2>>,
-                      in3: flip<sint<8>>, out4: uint<4>>
+    %xyz:4 = firrtl.instance @Simple {name = "xyz", portNames=["in1", "in2", "in3", "out4"]}
+     : !firrtl.flip<uint<4>>, !firrtl.flip<uint<2>>, !firrtl.flip<sint<8>>, !firrtl.uint<4>
 
     // CHECK-NEXT: [[INSTOUTC1:%.+]] = firrtl.stdIntCast %xyz.out4 : (i4) -> !firrtl.uint<4>
 
-    %0 = firrtl.subfield %xyz("in1") : (!firrtl.bundle<in1: flip<uint<4>>, in2: flip<uint<2>>, in3: flip<sint<8>>, out4: uint<4>>) -> !firrtl.flip<uint<4>>
-    firrtl.connect %0, %u2 : !firrtl.flip<uint<4>>, !firrtl.uint<2>
+    firrtl.connect %xyz#0, %u2 : !firrtl.flip<uint<4>>, !firrtl.uint<2>
 
     // CHECK-NOT: firrtl.connect
-    %1 = firrtl.subfield %xyz("in2") : (!firrtl.bundle<in1: flip<uint<4>>, in2: flip<uint<2>>, in3: flip<sint<8>>, out4: uint<4>>) -> !firrtl.flip<uint<2>>
-    firrtl.connect %1, %u2 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
+    firrtl.connect %xyz#1, %u2 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
 
-    %2 = firrtl.subfield %xyz("in3")  : (!firrtl.bundle<in1: flip<uint<4>>, in2: flip<uint<2>>, in3: flip<sint<8>>, out4: uint<4>>) -> !firrtl.flip<sint<8>>
-    firrtl.connect %2, %s8 : !firrtl.flip<sint<8>>, !firrtl.sint<8>
-
-    %3 = firrtl.subfield %xyz("out4")  : (!firrtl.bundle<in1: flip<uint<4>>, in2: flip<uint<2>>, in3: flip<sint<8>>, out4: uint<4>>) -> !firrtl.uint<4>
+    firrtl.connect %xyz#2, %s8 : !firrtl.flip<sint<8>>, !firrtl.sint<8>
 
     // CHECK: firrtl.printf {{.*}}"%x"([[INSTOUTC1]])
-    firrtl.printf %clock, %reset, "%x"(%3) : !firrtl.uint<4>
+    firrtl.printf %clock, %reset, "%x"(%xyz#3) : !firrtl.uint<4>
  
 
     // Parameterized module reference.
     // rtl.instance carries the parameters, unlike at the FIRRTL layer.
 
     // CHECK-NEXT: [[OUT:%.+]] = rtl.instance "myext" @MyParameterizedExtModule(%reset)  {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1) -> i8
-    %myext = firrtl.instance @MyParameterizedExtModule {name = "myext"}
-      : !firrtl.bundle<in: flip<uint<1>>, out: uint<8>>
+    %myext:2 = firrtl.instance @MyParameterizedExtModule {name = "myext", portNames=["in", "out"]}
+      : !firrtl.flip<uint<1>>, !firrtl.uint<8>
 
     // CHECK-NEXT: [[OUTC:%.+]] = firrtl.stdIntCast [[OUT]] : (i8) -> !firrtl.uint<8>
 
-    %9 = firrtl.subfield %myext("in") : (!firrtl.bundle<in: flip<uint<1>>, out: uint<8>>) -> !firrtl.flip<uint<1>>
-    firrtl.connect %9, %reset : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    firrtl.connect %myext#0, %reset : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 
     // CHECK-NEXT: firrtl.printf {{.*}}, {{.*}}, "Something interesting! %x"([[OUTC]]) : !firrtl.uint<8>
-    %10 = firrtl.subfield %myext("out") : (!firrtl.bundle<in: flip<uint<1>>, out: uint<8>>) -> !firrtl.uint<8>
-    firrtl.printf %clock, %reset, "Something interesting! %x"(%10) : !firrtl.uint<8>
+    firrtl.printf %clock, %reset, "Something interesting! %x"(%myext#1) : !firrtl.uint<8>
   }
 
   // CHECK-LABEL: rtl.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
@@ -223,8 +215,8 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: [[ARG:%.+]] = firrtl.eq
     // CHECK-NEXT: [[ARGC:%.+]] = firrtl.stdIntCast [[ARG]] : (!firrtl.uint<1>) -> i1
     // CHECK-NEXT: rtl.instance "myext" @MyParameterizedExtModule([[ARGC]])
-    %myext = firrtl.instance @MyParameterizedExtModule {name = "myext"}
-      : !firrtl.bundle<in: flip<uint<1>>, out: uint<8>>
+    %myext:2 = firrtl.instance @MyParameterizedExtModule {name = "myext", portNames=["in", "out"]}
+      : !firrtl.flip<uint<1>>, !firrtl.uint<8>
 
     // Calculation of input (the firrtl.add + firrtl.eq) happens after the
     // instance.
@@ -232,11 +224,9 @@ firrtl.circuit "Simple" {
 
     // Multiple uses of the add.
     %a = firrtl.eq %0, %0 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<1>
-    %9 = firrtl.subfield %myext("in") : (!firrtl.bundle<in: flip<uint<1>>, out: uint<8>>) -> !firrtl.flip<uint<1>>
-    firrtl.connect %9, %a : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    firrtl.connect %myext#0, %a : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 
-    %10 = firrtl.subfield %myext("out") : (!firrtl.bundle<in: flip<uint<1>>, out: uint<8>>) -> !firrtl.uint<8>
-    firrtl.connect %out0, %10 : !firrtl.flip<uint<8>>, !firrtl.uint<8>
+    firrtl.connect %out0, %myext#1 : !firrtl.flip<uint<8>>, !firrtl.uint<8>
 
     // Casts for the output.
     // CHECK-NEXT: %5 = firrtl.stdIntCast %myext.out : (i8) -> !firrtl.uint<8>
@@ -249,15 +239,13 @@ firrtl.circuit "Simple" {
     // This can't be hoisted so we end up with a wire.
     // CHECK: %.in.wire = firrtl.wire : !firrtl.uint<1>
     // CHECK: rtl.instance
-    %myext = firrtl.instance @MyParameterizedExtModule {name = "myext"}
-      : !firrtl.bundle<in: flip<uint<1>>, out: uint<8>>
+    %myext:2 = firrtl.instance @MyParameterizedExtModule {name = "myext", portNames=["in", "out"]}
+      : !firrtl.flip<uint<1>>, !firrtl.uint<8>
 
     // Output of the instance is fed into the input!
-    %10 = firrtl.subfield %myext("out") : (!firrtl.bundle<in: flip<uint<1>>, out: uint<8>>) -> !firrtl.uint<8>
-    %11 = firrtl.bits %10 2 to 2 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+    %11 = firrtl.bits %myext#1 2 to 2 : (!firrtl.uint<8>) -> !firrtl.uint<1>
 
-    %9 = firrtl.subfield %myext("in") : (!firrtl.bundle<in: flip<uint<1>>, out: uint<8>>) -> !firrtl.flip<uint<1>>
-    firrtl.connect %9, %11 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    firrtl.connect %myext#0, %11 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 
     // CHECK: firrtl.bits
     // CHECK: firrtl.connect
@@ -298,21 +286,15 @@ firrtl.circuit "Simple" {
 
     // CHECK: %myinst.outa = rtl.instance "myinst" @ZeroWidthPorts(%iA) : (i4) -> i4
     // CHECK: [[OUTA:%.+]] = firrtl.stdIntCast %myinst.outa : (i4) -> !firrtl.uint<4>
-    %myinst = firrtl.instance @ZeroWidthPorts {name = "myinst"}
-      : !firrtl.bundle<inA: flip<uint<4>>, inB: flip<uint<0>>, inC: analog<0>,
-                       outa: uint<4>, outb: uint<0>>
+    %myinst:5 = firrtl.instance @ZeroWidthPorts {name = "myinst", portNames=["inA", "inB", "inC", "outa", "outb"]}
+      : !firrtl.flip<uint<4>>, !firrtl.flip<uint<0>>, !firrtl.analog<0>, !firrtl.uint<4>, !firrtl.uint<0>
 
     // Output of the instance is fed into the input!
-    %0 = firrtl.subfield %myinst("inA") : (!firrtl.bundle<inA: flip<uint<4>>, inB: flip<uint<0>>, inC: analog<0>, outa: uint<4>, outb: uint<0>>) -> !firrtl.flip<uint<4>>
-    %1 = firrtl.subfield %myinst("inB") : (!firrtl.bundle<inA: flip<uint<4>>, inB: flip<uint<0>>, inC: analog<0>, outa: uint<4>, outb: uint<0>>) -> !firrtl.flip<uint<0>>
-    %2 = firrtl.subfield %myinst("inC") : (!firrtl.bundle<inA: flip<uint<4>>, inB: flip<uint<0>>, inC: analog<0>, outa: uint<4>, outb: uint<0>>) -> !firrtl.analog<0>
-    %3 = firrtl.subfield %myinst("outa") : (!firrtl.bundle<inA: flip<uint<4>>, inB: flip<uint<0>>, inC: analog<0>, outa: uint<4>, outb: uint<0>>) -> !firrtl.uint<4>
-    %4 = firrtl.subfield %myinst("outb") : (!firrtl.bundle<inA: flip<uint<4>>, inB: flip<uint<0>>, inC: analog<0>, outa: uint<4>, outb: uint<0>>) -> !firrtl.uint<0>
-    firrtl.connect %0, %iA : !firrtl.flip<uint<4>>, !firrtl.uint<4>
-    firrtl.connect %1, %iB : !firrtl.flip<uint<0>>, !firrtl.uint<0>
-    firrtl.attach %2, %iC : !firrtl.analog<0>, !firrtl.analog<0>
-    firrtl.connect %oA, %3 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
-    firrtl.connect %oB, %4 : !firrtl.flip<uint<0>>, !firrtl.uint<0>
+    firrtl.connect %myinst#0, %iA : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+    firrtl.connect %myinst#1, %iB : !firrtl.flip<uint<0>>, !firrtl.uint<0>
+    firrtl.attach %myinst#2, %iC : !firrtl.analog<0>, !firrtl.analog<0>
+    firrtl.connect %oA, %myinst#3 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+    firrtl.connect %oB, %myinst#4 : !firrtl.flip<uint<0>>, !firrtl.uint<0>
 
     // CHECK: [[OUTAC:%.+]] = firrtl.stdIntCast [[OUTA]] : (!firrtl.uint<4>) -> i4
     // CHECK: rtl.output [[OUTAC]] : i4

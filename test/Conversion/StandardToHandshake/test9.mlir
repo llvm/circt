@@ -29,7 +29,7 @@ func @affine_dma_wait(%arg0: index) {
 // CHECK:           %[[VAL_17]]:6 = "handshake.fork"(%[[VAL_28]]#1) {control = false} : (index) -> (index, index, index, index, index, index)
 // CHECK:           %[[VAL_30:.*]] = "handshake.mux"(%[[VAL_17]]#0, %[[VAL_31:.*]], %[[VAL_13]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_32:.*]]:2 = "handshake.fork"(%[[VAL_30]]) {control = false} : (index) -> (index, index)
-// CHECK:           %[[VAL_33:.*]] = cmpi "slt", %[[VAL_32]]#1, %[[VAL_19]]#1 : index
+// CHECK:           %[[VAL_33:.*]] = cmpi slt, %[[VAL_32]]#1, %[[VAL_19]]#1 : index
 // CHECK:           %[[VAL_34:.*]]:7 = "handshake.fork"(%[[VAL_33]]) {control = false} : (i1) -> (i1, i1, i1, i1, i1, i1, i1)
 // CHECK:           %[[VAL_35:.*]], %[[VAL_36:.*]] = "handshake.conditional_branch"(%[[VAL_34]]#6, %[[VAL_19]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_36]]) : (index) -> ()
@@ -83,7 +83,7 @@ func @affine_dma_wait(%arg0: index) {
     %c1 = constant 1 : index
     br ^bb1(%c0 : index)
   ^bb1(%1: index):      // 2 preds: ^bb0, ^bb2
-    %2 = cmpi "slt", %1, %c10 : index
+    %2 = cmpi slt, %1, %c10 : index
     cond_br %2, ^bb2, ^bb3
   ^bb2: // pred: ^bb1
     %3 = addi %1, %arg0 : index

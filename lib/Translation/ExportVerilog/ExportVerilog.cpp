@@ -70,75 +70,76 @@ static int getBitWidthOrSentinel(Type type) {
       .Default([](Type) { return -1; });
 }
 
-/// Given an integer value, return the number of characters it will take to
-/// print its base-10 value.
-static unsigned getPrintedIntWidth(unsigned value) {
-  // Fast path the common case.
-  if (value < 10)
-    return 1;
-  if (value < 100)
-    return 2;
-  if (value < 1000)
-    return 3;
-
-  // Compute the size in the general case.
-  unsigned size = 4;
-  value /= 1000;
-  while (value >= 10) {
-    ++size;
-    value /= 10;
-  }
-  return size;
-}
-
-/// Emit a type's packed dimensions, returning the number of characters
-/// emitted.
-static size_t emitTypeDims(Type type, Location loc, raw_ostream &os) {
+/// Push this type's dimension into a vector.
+static void getTypeDims(SmallVectorImpl<int64_t> &dims, Type type,
+                        Location loc) {
   if (auto inout = type.dyn_cast<rtl::InOutType>())
-    return emitTypeDims(inout.getElementType(), loc, os);
+    return getTypeDims(dims, inout.getElementType(), loc);
   if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>())
-    return emitTypeDims(uarray.getElementType(), loc, os);
+    return getTypeDims(dims, uarray.getElementType(), loc);
   if (type.isa<InterfaceType>())
-    return 0;
+    return;
 
-  size_t emittedWidth = 0;
   int width;
   if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
     width = arrayType.getSize();
   } else {
     width = getBitWidthOrSentinel(type);
   }
-
-  switch (width) {
-  case -1: // -1 is an invalid type.
+  if (width == -1)
     mlir::emitError(loc, "value has an unsupported verilog type ") << type;
-    os << "<<invalid type>>";
-    return 16;
 
-  case 1: // Width 1 is implicit.
-    break;
+  if (width != 1) // Width 1 is implicit.
+    dims.push_back(width);
 
-  case 0:
-    os << "/*Zero Width*/";
-    emittedWidth += 14;
-    break;
-  default:
-    os << '[' << (width - 1) << ":0]";
-    emittedWidth += getPrintedIntWidth(width - 1) + 4;
-    break;
-  }
   if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
-    emittedWidth += emitTypeDims(arrayType.getElementType(), loc, os);
+    getTypeDims(dims, arrayType.getElementType(), loc);
   }
-  return emittedWidth;
+}
+
+/// Emit a type's packed dimensions, returning whether or not text was emitted.
+static bool emitTypeDims(Type type, Location loc, raw_ostream &os) {
+  SmallVector<int64_t, 4> dims;
+  getTypeDims(dims, type, loc);
+
+  bool emitted = false;
+  for (int64_t width : dims)
+    switch (width) {
+    case -1: // -1 is an invalid type.
+      os << "<<invalid type>>";
+      emitted = true;
+      return true;
+    case 1: // Width 1 is implicit.
+      assert(false && "Width 1 shouldn't be in the dim vector");
+      break;
+    case 0:
+      os << "/*Zero Width*/";
+      emitted = true;
+      break;
+    default:
+      os << '[' << (width - 1) << ":0]";
+      emitted = true;
+      break;
+    }
+  return emitted;
+}
+
+/// True iff 'a' and 'b' have the same wire dims.
+static bool haveMatchingDims(Type a, Type b, Location loc) {
+  SmallVector<int64_t, 4> aDims;
+  getTypeDims(aDims, a, loc);
+
+  SmallVector<int64_t, 4> bDims;
+  getTypeDims(bDims, b, loc);
+
+  return aDims == bDims;
 }
 
 /// Emit the specified type dimensions and print out a trailing space if
 /// anything is printed.
 static void emitTypeDimWithSpaceIfNeeded(Type type, Location loc,
                                          raw_ostream &os) {
-  auto size = emitTypeDims(type, loc, os);
-  if (size)
+  if (emitTypeDims(type, loc, os))
     os << ' ';
 }
 
@@ -689,6 +690,8 @@ private:
   SubExprInfo visitComb(ExtractOp op);
   SubExprInfo visitComb(ICmpOp op);
 
+  SubExprInfo visitComb(BitcastOp op);
+
 private:
   /// This is set (before a visit method is called) if emitSubExpr would
   /// prefer to get an output of a specific sign.  This is a hint to cause the
@@ -881,6 +884,19 @@ SubExprInfo ExprEmitter::visitComb(ConcatOp op) {
 
   os << '}';
   return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitComb(BitcastOp op) {
+  // NOTE: Bitcasts are always emitted out-of-line with their own wire
+  // declaration. SystemVerilog uses the wire declaration to know what type this
+  // value is being casted to.
+  Type toType = op.getType();
+  if (!haveMatchingDims(toType, op.input().getType(), op.getLoc())) {
+    os << "/*cast(bit";
+    emitTypeDims(toType, op.getLoc(), os);
+    os << ")*/";
+  }
+  return emitSubExpr(op.input(), LowestPrecedence);
 }
 
 SubExprInfo ExprEmitter::visitComb(ICmpOp op) {
@@ -1476,48 +1492,87 @@ LogicalResult ModuleEmitter::visitStmt(InstanceOp op) {
   if (auto paramDictOpt = op.parameters()) {
     DictionaryAttr paramDict = paramDictOpt.getValue();
     if (!paramDict.empty()) {
-      os << " #(";
-      llvm::interleaveComma(paramDict, os, [&](NamedAttribute elt) {
-        os << '.' << elt.first << '(';
-        printParmValue(elt.second);
-        os << ')';
-      });
-      os << ')';
+      os << " #(\n";
+      llvm::interleave(
+          paramDict, os,
+          [&](NamedAttribute elt) {
+            os.indent(state.currentIndent + 2) << '.' << elt.first << '(';
+            printParmValue(elt.second);
+            os << ')';
+          },
+          ",\n");
+      os << '\n';
+      indent() << ')';
     }
   }
 
   os << ' ' << op.instanceName() << " (";
-  emitLocationInfoAndNewLine(ops);
 
   SmallVector<ModulePortInfo, 8> portInfo;
   getModulePortInfo(moduleOp, portInfo);
 
+  // Get the max port name length so we can align the '('.
+  size_t maxNameLength = 0;
+  for (auto &elt : portInfo) {
+    maxNameLength = std::max(maxNameLength, elt.getName().size());
+  }
+
   // Emit the argument and result ports.
   auto opArgs = op.inputs();
   auto opResults = op.getResults();
+  bool isFirst = true; // True until we print a port.
   for (auto &elt : portInfo) {
     // Figure out which value we are emitting.
-    bool isLast = &elt == &portInfo.back();
     Value portVal = elt.isOutput() ? opResults[elt.argNum] : opArgs[elt.argNum];
+    bool isZeroWidth = isZeroBitType(elt.type);
+
+    // Decide if we should print a comma.  We can't do this if we're the first
+    // port or if all the subsequent ports are zero width.
+    if (!isFirst) {
+      bool shouldPrintComma = true;
+      if (isZeroWidth) {
+        shouldPrintComma = false;
+        for (size_t i = (&elt - portInfo.data()) + 1, e = portInfo.size();
+             i != e; ++i)
+          if (!isZeroBitType(portInfo[i].type)) {
+            shouldPrintComma = true;
+            break;
+          }
+      }
+
+      if (shouldPrintComma)
+        os << ',';
+    }
+    emitLocationInfoAndNewLine(ops);
 
     // Emit the port's name.
-    indent() << "  ";
-    bool isZeroWidth = isZeroBitType(elt.type);
-    if (isZeroWidth)
-      os << "/*";
+    indent();
+    if (!isZeroWidth) {
+      // If this is a real port we're printing, then it isn't the first one. Any
+      // subsequent ones will need a comma.
+      isFirst = false;
+      os << "  ";
+    } else {
+      // We comment out zero width ports, so their presence and initializer
+      // expressions are still emitted textually.
+      os << "//";
+    }
 
-    os << '.' << StringRef(elt.getName()) << " (";
+    os << '.' << elt.getName();
+    os.indent(maxNameLength - elt.getName().size()) << " (";
 
     // Emit the value as an expression.
     ops.clear();
     emitExpression(portVal, ops);
-    if (isZeroWidth)
-      os << "*/";
-
-    os << (isLast ? ")" : "),");
-    emitLocationInfoAndNewLine(ops);
+    os << ')';
   }
-  indent() << ");\n";
+  if (!isFirst) {
+    emitLocationInfoAndNewLine(ops);
+    ops.clear();
+    indent();
+  }
+  os << ");";
+  emitLocationInfoAndNewLine(ops);
   return success();
 }
 
@@ -1585,6 +1640,12 @@ static bool isOkToBitSelectFrom(Value v) {
 /// happens because not all Verilog expressions are composable, notably you can
 /// only use bit selects like x[4:6] on simple expressions.
 static bool isExpressionUnableToInline(Operation *op) {
+  if (auto cast = dyn_cast<BitcastOp>(op))
+    if (!haveMatchingDims(cast.input().getType(), cast.result().getType(),
+                          op->getLoc()))
+      // Bitcasts rely on the type being assigned to, so we cannot inline.
+      return true;
+
   // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
   for (auto user : op->getUsers()) {
@@ -1605,7 +1666,7 @@ static bool isExpressionUnableToInline(Operation *op) {
     }
     // ArraySliceOp uses its operand twice, so we want to assign it first then
     // use that variable in the ArraySliceOp expression.
-    if (isa<ArraySliceOp>(user))
+    if (isa<ArraySliceOp>(user) && !isa<ConstantOp>(op))
       return true;
   }
   return false;

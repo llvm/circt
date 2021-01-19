@@ -642,10 +642,12 @@ public:
   bool visitHandshake(ForkOp op);
   bool visitHandshake(JoinOp op);
   bool visitHandshake(LazyForkOp op);
+  bool visitHandshake(handshake::LoadOp op);
   bool visitHandshake(MemoryOp op);
   bool visitHandshake(MergeOp op);
   bool visitHandshake(MuxOp op);
   bool visitHandshake(SinkOp op);
+  bool visitHandshake(handshake::StoreOp op);
 
   bool buildJoinLogic(SmallVector<ValueVector *, 4> inputs,
                       ValueVector *output);
@@ -1638,6 +1640,111 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   return true;
 }
 
+bool HandshakeBuilder::visitHandshake(handshake::StoreOp op) {
+  // Input data accepted from the predecessor.
+  ValueVector inputData = portList[0];
+  Value inputDataData = inputData[2];
+
+  // Input address accepted from the predecessor.
+  ValueVector inputAddr = portList[1];
+  Value inputAddrData = inputAddr[2];
+
+  // Control channel.
+  ValueVector control = portList[2];
+
+  // Data sending to the MemoryOp.
+  ValueVector outputData = portList[3];
+  Value outputDataValid = outputData[0];
+  Value outputDataReady = outputData[1];
+  Value outputDataData = outputData[2];
+
+  // Address sending to the MemoryOp.
+  ValueVector outputAddr = portList[4];
+  Value outputAddrValid = outputAddr[0];
+  Value outputAddrReady = outputAddr[1];
+  Value outputAddrData = outputAddr[2];
+
+  auto bitType = UIntType::get(rewriter.getContext(), 1);
+
+  // Create a wire that will be asserted when all inputs are valid.
+  auto inputsValid = rewriter.create<WireOp>(
+      insertLoc, bitType, rewriter.getStringAttr("inputsValid"));
+
+  // Create a gate that will be asserted when all outputs are ready.
+  auto outputsReady = rewriter.create<AndPrimOp>(
+      insertLoc, bitType, outputDataReady, outputAddrReady);
+
+  // Build the standard join logic from the inputs to the inputsValid and
+  // outputsReady signals.
+  ValueVector joinLogicOutput({inputsValid, outputsReady});
+  buildJoinLogic({&inputData, &inputAddr, &control}, &joinLogicOutput);
+
+  // Output address and data signals are connected directly.
+  rewriter.create<ConnectOp>(insertLoc, outputAddrData, inputAddrData);
+  rewriter.create<ConnectOp>(insertLoc, outputDataData, inputDataData);
+
+  // Output valid signals are connected from the inputsValid wire.
+  rewriter.create<ConnectOp>(insertLoc, outputDataValid, inputsValid);
+  rewriter.create<ConnectOp>(insertLoc, outputAddrValid, inputsValid);
+
+  return true;
+}
+
+bool HandshakeBuilder::visitHandshake(handshake::LoadOp op) {
+  // Input address accepted from the predecessor.
+  ValueVector inputAddr = portList[0];
+  Value inputAddrValid = inputAddr[0];
+  Value inputAddrReady = inputAddr[1];
+  Value inputAddrData = inputAddr[2];
+
+  // Data accepted from the MemoryOp.
+  ValueVector memoryData = portList[1];
+  Value memoryDataValid = memoryData[0];
+  Value memoryDataReady = memoryData[1];
+  Value memoryDataData = memoryData[2];
+
+  // Control channel.
+  ValueVector control = portList[2];
+  Value controlValid = control[0];
+  Value controlReady = control[1];
+
+  // Output data sending to the successor.
+  ValueVector outputData = portList[3];
+  Value outputDataValid = outputData[0];
+  Value outputDataReady = outputData[1];
+  Value outputDataData = outputData[2];
+
+  // Address sending to the MemoryOp.
+  ValueVector memoryAddr = portList[4];
+  Value memoryAddrValid = memoryAddr[0];
+  Value memoryAddrReady = memoryAddr[1];
+  Value memoryAddrData = memoryAddr[2];
+
+  auto bitType = UIntType::get(rewriter.getContext(), 1);
+
+  // Address and data are connected accordingly.
+  rewriter.create<ConnectOp>(insertLoc, memoryAddrData, inputAddrData);
+  rewriter.create<ConnectOp>(insertLoc, outputDataData, memoryDataData);
+
+  // The valid/ready logic between inputAddr, control, and memoryAddr is similar
+  // to a JoinOp logic.
+  auto addrValid = rewriter.create<AndPrimOp>(insertLoc, bitType,
+                                              inputAddrValid, controlValid);
+  rewriter.create<ConnectOp>(insertLoc, memoryAddrValid, addrValid);
+
+  auto addrCompleted = rewriter.create<AndPrimOp>(insertLoc, bitType, addrValid,
+                                                  memoryAddrReady);
+  rewriter.create<ConnectOp>(insertLoc, inputAddrReady, addrCompleted);
+  rewriter.create<ConnectOp>(insertLoc, controlReady, addrCompleted);
+
+  // The valid/ready logic between memoryData and outputData is a direct
+  // connection.
+  rewriter.create<ConnectOp>(insertLoc, outputDataValid, memoryDataValid);
+  rewriter.create<ConnectOp>(insertLoc, memoryDataReady, outputDataReady);
+
+  return true;
+}
+
 //===----------------------------------------------------------------------===//
 // Old Operation Conversion Functions
 //===----------------------------------------------------------------------===//
@@ -1648,35 +1755,28 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
                          FModuleOp topModuleOp, unsigned clockDomain,
                          ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPointAfter(oldOp);
-  using BundleElement = BundleType::BundleElement;
-  llvm::SmallVector<BundleElement, 8> elements;
-  MLIRContext *context = subModuleOp.getContext();
+
+  llvm::SmallVector<Type> resultTypes;
+  llvm::SmallVector<Attribute> resultNames;
 
   // Bundle all ports of the instance into a new flattened bundle type.
   SmallVector<ModulePortInfo, 8> portInfo;
   getModulePortInfo(subModuleOp, portInfo);
   for (auto &port : portInfo) {
-    auto argId = rewriter.getIdentifier(port.getName());
-
     // All ports of the instance operation are flipped.
-    auto argType = FlipType::get(port.type);
-    elements.push_back(BundleElement(argId, argType));
+    resultTypes.push_back(FlipType::get(port.type));
+    resultNames.push_back(rewriter.getStringAttr(port.getName()));
   }
 
   // Create a instance operation.
-  auto instType = BundleType::get(elements, context);
   auto instanceOp = rewriter.create<firrtl::InstanceOp>(
-      oldOp->getLoc(), instType, subModuleOp.getName(),
-      rewriter.getStringAttr(""));
+      oldOp->getLoc(), resultTypes, subModuleOp.getName(),
+      rewriter.getArrayAttr(resultNames), rewriter.getStringAttr(""));
 
   // Connect the new created instance with its predecessors and successors in
   // the top-module.
   unsigned portIndex = 0;
-  for (auto &element : instType.cast<BundleType>().getElements()) {
-    auto subfieldOp = rewriter.create<SubfieldOp>(
-        oldOp->getLoc(), element.type, instanceOp,
-        rewriter.getStringAttr(element.name.strref()));
-
+  for (auto result : instanceOp.getResults()) {
     unsigned numIns = oldOp->getNumOperands();
     unsigned numArgs = numIns + oldOp->getNumResults();
 
@@ -1687,16 +1787,16 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
                                    });
     if (portIndex < numIns) {
       // Connect input ports.
-      rewriter.create<ConnectOp>(oldOp->getLoc(), subfieldOp,
+      rewriter.create<ConnectOp>(oldOp->getLoc(), result,
                                  oldOp->getOperand(portIndex));
     } else if (portIndex < numArgs) {
       // Connect output ports.
-      Value result = oldOp->getResult(portIndex - numIns);
-      result.replaceAllUsesWith(subfieldOp);
+      Value newResult = oldOp->getResult(portIndex - numIns);
+      newResult.replaceAllUsesWith(result);
     } else {
       // Connect clock or reset signal.
       auto signal = *(firstClock + 2 * clockDomain + portIndex - numArgs);
-      rewriter.create<ConnectOp>(oldOp->getLoc(), subfieldOp, signal);
+      rewriter.create<ConnectOp>(oldOp->getLoc(), result, signal);
     }
     ++portIndex;
   }

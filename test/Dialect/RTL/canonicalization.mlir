@@ -588,3 +588,51 @@ func @concat_fold6(%arg0: i5, %arg1: i3) -> (i4) {
   %2 = rtl.concat %0, %1 : (i2, i2) -> i4
   return %2 : i4
 }
+
+// CHECK-LABEL: func @wire0()
+// CHECK-NEXT:    return
+func @wire0() {
+  %w = rtl.wire : !rtl.inout<i1>
+  return
+}
+
+// CHECK-LABEL: func @wire1()
+// CHECK-NEXT:    return
+func @wire1() {
+  %w = rtl.wire : !rtl.inout<i1>
+  %0 = rtl.read_inout %w : !rtl.inout<i1>
+  return
+}
+
+// CHECK-LABEL: func @wire2()
+// CHECK-NEXT:    return
+func @wire2() {
+  %c = rtl.constant(1 : i1) : i1
+  %w = rtl.wire : !rtl.inout<i1>
+  rtl.connect %w, %c : i1
+  return
+}
+
+// CHECK-LABEL: func @wire3()
+// CHECK-NEXT:    return
+func @wire3() {
+  %c = rtl.constant(1 : i1) : i1
+  %w = rtl.wire : !rtl.inout<i1>
+  %0 = rtl.read_inout %w : !rtl.inout<i1>
+  rtl.connect %w, %c :i1
+  return
+}
+
+// CHECK-LABEL: func @wire4() -> i1
+// CHECK-NEXT:    %true = rtl.constant(true) : i1
+// CHECK-NEXT:    %w = rtl.wire : !rtl.inout<i1>
+// CHECK-NEXT:    %0 = rtl.read_inout %w : !rtl.inout<i1>
+// CHECK-NEXT:    rtl.connect %w, %true : i1
+// CHECK-NEXT:    return %0
+func @wire4() -> i1 {
+  %true = rtl.constant(true) : i1
+  %w = rtl.wire : !rtl.inout<i1>
+  %0 = rtl.read_inout %w : !rtl.inout<i1>
+  rtl.connect %w, %true : i1
+  return %0 : i1
+}

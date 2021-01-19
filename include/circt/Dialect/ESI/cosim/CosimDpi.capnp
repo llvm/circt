@@ -16,7 +16,7 @@
 @0xe642127a31681ef6;
 
 # The primary interface exposed by an ESI cosim simulation.
-interface CosimDpiServer {
+interface CosimDpiServer @0x85e029b5352bcdb5 {
   # List all the registered endpoints.
   list @0 () -> (ifaces :List(EsiDpiInterfaceDesc));
   # Open one of them. Specify both the send and recv data types if want type
@@ -25,7 +25,7 @@ interface CosimDpiServer {
 }
 
 # Description of a registered endpoint.
-struct EsiDpiInterfaceDesc {
+struct EsiDpiInterfaceDesc @0xd2584d2506f01c8c {
   # Capn'Proto ID of the struct type being sent _to_ the simulator.
   sendTypeID @0 :UInt64;
   # Capn'Proto ID of the struct type being sent _from_ the simulator.
@@ -35,7 +35,7 @@ struct EsiDpiInterfaceDesc {
 }
 
 # Interactions with an open endpoint. Optionally typed.
-interface EsiDpiEndpoint(SendMsgType, RecvMsgType) {
+interface EsiDpiEndpoint @0xfb0a36bf859be47b (SendMsgType, RecvMsgType) {
   # Send a message to the endpoint.
   send @0 (msg :SendMsgType);
   # Recieve a message from the endpoint. Non-blocking.

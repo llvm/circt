@@ -121,7 +121,7 @@ llhd.proc @check_blockarg(%sig : !llhd.sig<i32>) -> () {
 // CHECK:           br ^bb2
 // CHECK:         ^bb2:
 // CHECK:           %[[VAL_6:.*]] = llhd.load %[[VAL_5]] : !llhd.ptr<i32>
-// CHECK:           %[[VAL_7:.*]] = cmpi "ult", %[[VAL_6]], %[[VAL_2]] : i32
+// CHECK:           %[[VAL_7:.*]] = cmpi ult, %[[VAL_6]], %[[VAL_2]] : i32
 // CHECK:           %[[VAL_8:.*]] = llhd.prb %[[VAL_0]] : !llhd.sig<i2>
 // CHECK:           cond_br %[[VAL_7]], ^bb4, ^bb3
 // CHECK:         ^bb3:
@@ -144,7 +144,7 @@ llhd.proc @loop(%in_i : !llhd.sig<i2>) -> () {
   // TR: 1
   %i_ld = llhd.load %i : !llhd.ptr<i32>
   %1 = llhd.const 2 : i32
-  %2 = cmpi "ult", %i_ld, %1 : i32
+  %2 = cmpi ult, %i_ld, %1 : i32
   cond_br %2, ^loop_continue, ^check
 ^check:
   // TR: 1
