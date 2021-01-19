@@ -56,7 +56,7 @@ rtl.module @top(%clk:i1, %rstn:i1) -> () {
   // SV:   .DataOut (TestEP_DataOut),
   // SV:   .DataInReady (TestEP_DataInReady)
   // SV: );
-  // SV: rootPointer = TestEP_DataOut[_T_2+:64];
-  // SV: dataSection = TestEP_DataOut[_T_3+:64];
-  // SV: decodedValue = /*cast(bit[31:0])*/dataSection[_T_4+:32];
+  // SV: rootPointer = TestEP_DataOut[{{.+}}+:64];
+  // SV: dataSection = TestEP_DataOut[{{.+}}+:64];
+  // SV: iValue = /*cast(bit[31:0])*/dataSection[{{.+}}+:32];
 }
