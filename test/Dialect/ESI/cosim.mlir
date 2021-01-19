@@ -33,6 +33,8 @@ rtl.module @top(%clk:i1, %rstn:i1) -> () {
 
   // COSIM: rtl.instance "TestEP" @Cosim_Endpoint(%clk, %rstn, %{{.+}}, %{{.+}}, %{{.+}}) {parameters = {ENDPOINT_ID = 1 : i32, RECV_TYPE_ID = 10578209918096690139 : ui64, RECV_TYPE_SIZE_BITS = 128 : i32, SEND_TYPE_ID = 11229133067582987457 : ui64, SEND_TYPE_SIZE_BITS = 128 : i32}} : (i1, i1, i1, i1, i128) -> (i1, !rtl.array<128xi1>, i1)
 
+  // SV: assign _T.valid = TestEP_DataOutValid;
+  // SV: assign _T.data = dataSection[_T_3+:32];
   // SV: Reciever recv (
   // SV:   .a ({{.+}}.source)
   // SV: );
@@ -51,12 +53,11 @@ rtl.module @top(%clk:i1, %rstn:i1) -> () {
   // SV:   .rstn (rstn),
   // SV:   .DataOutReady ({{.+}}.ready),
   // SV:   .DataInValid ({{.+}}.valid),
-  // SV:   .DataIn ({{[{]}}{50'h0, _T_1}, {16'h0, 16'h1, 32'h0}}),
+  // SV:   .DataIn ({{[{]}}{50'h0, {{.+}}}, {16'h0, 16'h1, 32'h0}}),
   // SV:   .DataOutValid (TestEP_DataOutValid),
   // SV:   .DataOut (TestEP_DataOut),
   // SV:   .DataInReady (TestEP_DataInReady)
   // SV: );
-  // SV: rootPointer = TestEP_DataOut[_T_2+:64];
-  // SV: dataSection = TestEP_DataOut[_T_3+:64];
-  // SV: decodedValue = /*cast(bit[31:0])*/dataSection[_T_4+:32];
+  // SV: rootPointer = TestEP_DataOut[{{.+}}+:64];
+  // SV: dataSection = TestEP_DataOut[{{.+}}+:64];
 }
