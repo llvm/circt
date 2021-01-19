@@ -21,6 +21,7 @@
 #include "circt/Dialect/ESI/cosim/CosimDpi.capnp.h"
 #include <capnp/ez-rpc.h>
 #include <thread>
+#include <unistd.h>
 
 using namespace capnp;
 using namespace circt::esi::cosim;
@@ -172,10 +173,27 @@ kj::Promise<void> CosimServer::open(OpenContext ctxt) {
 RpcServer::RpcServer() : mainThread(nullptr), stopSig(false) {}
 RpcServer::~RpcServer() { stop(); }
 
+/// Write the port number to a file. Necessary when we allow 'EzRpcServer' to
+/// select its own port. We can't use stdout/stderr because the flushing
+/// semantics are undefined (as in `flush()` doesn't work on all simulators).
+static void writePort(uint16_t port) {
+  // "cosim.cfg" since we may want to include other info in the future.
+  FILE *fd = fopen("cosim.cfg", "w");
+  fprintf(fd, "port: %u\n", (unsigned int)port);
+  fclose(fd);
+}
+
 void RpcServer::mainLoop(uint16_t port) {
   capnp::EzRpcServer rpcServer(kj::heap<CosimServer>(endpoints),
                                /* bindAddress */ "*", port);
   auto &waitScope = rpcServer.getWaitScope();
+  // If port is 0, ExRpcSever selects one and we have to wait to get the port.
+  if (port == 0) {
+    auto portPromise = rpcServer.getPort();
+    port = portPromise.wait(waitScope);
+  }
+  writePort(port);
+  printf("[COSIM] Listening on port: %u\n", (unsigned int)port);
 
   // OK, this is uber hacky, but it unblocks me and isn't _too_ inefficient. The
   // problem is that I can't figure out how read the stop signal from libkj
