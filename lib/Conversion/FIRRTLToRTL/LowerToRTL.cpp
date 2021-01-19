@@ -640,25 +640,6 @@ void FIRRTLModuleLowering::lowerInstance(
   for (unsigned portIdx = 0, e = portInfo.size(); portIdx != e; ++portIdx)
     portIndicesByName[portInfo[portIdx].name] = portIdx;
 
-  // Find all the subfield ops hanging off of this instance, indexed by
-  // portRecord.  Typically there is exactly one subfield for every port, but
-  // there can be more.
-  SmallVector<TinyPtrVector<Operation *>, 8> subfieldsByPortIndex;
-  subfieldsByPortIndex.resize(portInfo.size());
-  for (auto *user : Value(oldInstance).getUsers()) {
-    auto subfield = dyn_cast<SubfieldOp>(user);
-    if (!subfield) {
-      user->emitOpError("unexpected user of firrtl.instance operation");
-      return;
-    }
-
-    // Find the port record for this port.
-    assert(portIndicesByName.count(subfield.fieldnameAttr()) &&
-           "invalid subfield for instance");
-    unsigned portIndex = portIndicesByName[subfield.fieldnameAttr()];
-    subfieldsByPortIndex[portIndex].push_back(subfield);
-  }
-
   // Ok, get ready to create the new instance operation.  We need to prepare
   // input operands and results.
   ImplicitLocOpBuilder builder(oldInstance.getLoc(), oldInstance);
@@ -679,20 +660,15 @@ void FIRRTLModuleLowering::lowerInstance(
       continue;
     }
 
-    // If there is a single subfield projection for this input, and if we can
-    // find the connects to it, then we can directly materialize it.
-    auto &subfields = subfieldsByPortIndex[portIndex];
-    if (subfields.size() == 1) {
-      auto subfield = cast<SubfieldOp>(subfields[0]);
-      if (auto value = tryEliminatingConnectsToValue(subfield, oldInstance)) {
-        // If we got a value connecting to the input port, then we can pass it
-        // into the RTL instance without a temporary wire.
-        operands.push_back(value);
-        // Remove the subfield itself.
-        subfield.erase();
-        subfields.clear();
-        continue;
-      }
+    // If we can find the connects to this port, then we can directly
+    // materialize it.
+    auto portResult = oldInstance.getPortNamed(port.name);
+    assert(portResult && "invalid IR, couldn't find port");
+    if (auto value = tryEliminatingConnectsToValue(portResult, oldInstance)) {
+      // If we got a value connecting to the input port, then we can pass it
+      // into the RTL instance without a temporary wire.
+      operands.push_back(value);
+      continue;
     }
 
     // Otherwise, create a wire for each input/inout operand, so there is
@@ -704,12 +680,7 @@ void FIRRTLModuleLowering::lowerInstance(
     if (!portType.isInteger(0))
       operands.push_back(castFromFIRRTLType(wire, portType, builder));
 
-    // Replace all the uses of the subfields with the wire we just created.
-    for (auto *subfield : subfields) {
-      subfield->getResult(0).replaceAllUsesWith(wire);
-      subfield->erase();
-    }
-    subfields.clear();
+    portResult.replaceAllUsesWith(wire);
   }
 
   // Use the symbol from the module we are referencing.
@@ -743,14 +714,10 @@ void FIRRTLModuleLowering::lowerInstance(
           resultType, "." + port.getName().str() + ".0width_result");
     }
 
-    // Replace any subfield uses of this output port with the returned value
-    // directly.
-    auto &subfields = subfieldsByPortIndex[portIndex];
-    for (auto *subfield : subfields) {
-      subfield->getResult(0).replaceAllUsesWith(resultVal);
-      subfield->erase();
-    }
-    subfields.clear();
+    // Replace uses of the old output port with the returned value directly.
+    auto portResult = oldInstance.getPortNamed(port.name);
+    assert(portResult && "invalid IR, couldn't find port");
+    portResult.replaceAllUsesWith(resultVal);
   }
 
   // Done with the oldInstance!

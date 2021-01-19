@@ -42,19 +42,6 @@ using namespace circt::esi;
 using namespace circt::rtl;
 using namespace circt::sv;
 
-/// Figure out the number of bits a type takes on the wire in verilog. Doing it
-/// here is probably a giant hack. TODO: Establish a canonical method to get
-/// this information.
-static size_t getNumBits(Type type) {
-  return llvm::TypeSwitch<::mlir::Type, size_t>(type)
-      .Case<IntegerType>(
-          [](IntegerType t) { return t.getIntOrFloatBitWidth(); })
-      .Case<ArrayType>([](ArrayType a) {
-        return a.getSize() * getNumBits(a.getElementType());
-      })
-      .Default([](Type) { return 0; });
-}
-
 //===----------------------------------------------------------------------===//
 // ESI custom op builder.
 //===----------------------------------------------------------------------===//
@@ -559,7 +546,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   auto stageModule = builder.declareStage();
 
   NamedAttrList stageParams;
-  size_t width = getNumBits(chPort.getInner());
+  size_t width = circt::rtl::getBitWidth(chPort.getInner());
   stageParams.set(builder.width, rewriter.getUI32IntegerAttr(width));
 
   // Unwrap the channel. The ready signal is a Value we haven't created yet, so

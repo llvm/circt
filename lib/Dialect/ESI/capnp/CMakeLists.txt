@@ -11,8 +11,20 @@ if(CapnProto_FOUND)
 
   add_circt_library(ESICapnp
     Schema.cpp
-   
+
+    DEPENDS
+    CIRCTSupport
+    MLIRESIEnumsIncGen
+
+    LINK_COMPONENTS
+    Core
+    Support
+
     LINK_LIBS PUBLIC
+    CIRCTSupport
+    CIRCTSV
+    CIRCTRTL
+    MLIRIR
     CapnProto::capnp CapnProto::capnpc
   )
   target_link_libraries(obj.ESICapnp CapnProto::capnp CapnProto::capnpc)

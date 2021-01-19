@@ -154,43 +154,42 @@ private:
 }
 
 // We compute a deterministic hash based on the type. Since llvm::hash_value
-// changes from execution to execution, we don't use it. This assumes a closed
-// type system, which is reasonable since we only support some types in the
-// Capnp schema generation anyway.
+// changes from execution to execution, we don't use it.
 uint64_t TypeSchemaImpl::capnpTypeID() const {
   if (cachedID)
     return *cachedID;
 
-  // We can hash up to 64 bytes with a single function call.
-  char buffer[64];
-  memset(buffer, 0, sizeof(buffer));
+  // Get the MLIR asm type, padded to a multiple of 64 bytes.
+  std::string typeName;
+  llvm::raw_string_ostream osName(typeName);
+  osName << type;
+  size_t overhang = osName.tell() % 64;
+  if (overhang != 0)
+    osName.indent(64 - overhang);
+  osName.flush();
+  const char *typeNameC = typeName.c_str();
 
-  // The first byte is for the outer type.
-  buffer[0] = 1; // Constant for the ChannelPort type.
+  uint64_t hash = esiCosimSchemaVersion;
+  for (size_t i = 0, e = typeName.length() / 64; i < e; ++i)
+    hash =
+        llvm::hashing::detail::hash_33to64_bytes(&typeNameC[i * 64], 64, hash);
 
-  TypeSwitch<Type>(type)
-      .Case([&buffer](IntegerType t) {
-        // The second byte is for the inner type.
-        buffer[1] = 1;
-        // The rest can be defined arbitrarily.
-        buffer[2] = (char)t.getSignedness();
-        *(int64_t *)&buffer[4] = t.getWidth();
-      })
-      .Default([](Type) { assert(false && "Type not yet supported"); });
-
-  uint64_t hash =
-      llvm::hashing::detail::hash_short(buffer, 12, esiCosimSchemaVersion);
   // Capnp IDs always have a '1' high bit.
   cachedID = hash | 0x8000000000000000;
   return *cachedID;
 }
 
 /// Returns true if the type is currently supported.
-bool TypeSchemaImpl::isSupported() const {
+static bool isSupported(Type type) {
   return llvm::TypeSwitch<::mlir::Type, bool>(type)
       .Case<IntegerType>([](IntegerType t) { return t.getWidth() <= 64; })
+      .Case<rtl::ArrayType>(
+          [](rtl::ArrayType t) { return isSupported(t.getElementType()); })
       .Default([](Type) { return false; });
 }
+
+/// Returns true if the type is currently supported.
+bool TypeSchemaImpl::isSupported() const { return ::isSupported(type); }
 
 // Compute the expected size of the capnp message in bits.
 size_t TypeSchemaImpl::size() const {
@@ -201,15 +200,73 @@ size_t TypeSchemaImpl::size() const {
           structProto.getDataWordCount() + structProto.getPointerCount());
 }
 
+/// Write a valid Capnp name for 'type'.
+static void emitName(Type type, llvm::raw_ostream &os) {
+  llvm::TypeSwitch<Type>(type)
+      .Case([&os](IntegerType intTy) {
+        std::string intName;
+        llvm::raw_string_ostream(intName) << intTy;
+        // Capnp struct names must start with an uppercase character.
+        intName[0] = toupper(intName[0]);
+        os << intName;
+      })
+      .Case([&os](rtl::ArrayType arrTy) {
+        os << "ArrayOf";
+        emitName(arrTy.getElementType(), os);
+      })
+      .Default([](Type) {
+        assert(false && "Type not supported. Please check support first with "
+                        "isSupported()");
+      });
+}
+
 /// For now, the name is just the type serialized. This works only because we
 /// only support ints.
 StringRef TypeSchemaImpl::name() const {
   if (cachedName == "") {
     llvm::raw_string_ostream os(cachedName);
-    os << "TY" << type;
+    emitName(type, os);
     cachedName = os.str();
   }
   return cachedName;
+}
+
+/// Write a valid Capnp type.
+static void emitCapnpType(Type type, IndentingOStream &os) {
+  llvm::TypeSwitch<Type>(type)
+      .Case([&os](IntegerType intTy) {
+        auto w = intTy.getWidth();
+        if (w == 1) {
+          os.indent() << "Bool";
+        } else {
+          if (intTy.isSigned())
+            os << "Int";
+          else
+            os << "UInt";
+
+          // Round up.
+          if (w <= 8)
+            os << "8";
+          else if (w <= 16)
+            os << "16";
+          else if (w <= 32)
+            os << "32";
+          else if (w <= 64)
+            os << "64";
+          else
+            assert(false && "Type not supported. Integer too wide. Please "
+                            "check support first with isSupported()");
+        }
+      })
+      .Case([&os](rtl::ArrayType arrTy) {
+        os << "List(";
+        emitCapnpType(arrTy.getElementType(), os);
+        os << ')';
+      })
+      .Default([](Type) {
+        assert(false && "Type not supported. Please check support first with "
+                        "isSupported()");
+      });
 }
 
 /// This function is essentially a placeholder which only supports ints. It'll
@@ -224,36 +281,10 @@ LogicalResult TypeSchemaImpl::write(llvm::raw_ostream &rawOS) const {
   os << " {\n";
   os.addIndent();
 
-  auto intTy = type.dyn_cast<IntegerType>();
-  assert(intTy &&
-         "Type not supported. Please check support first with isSupported()");
-
   // Specify the actual type, followed by the capnp field.
   os.indent() << "# Actual type is " << type << ".\n";
   os.indent() << "i @0 :";
-
-  auto w = intTy.getWidth();
-  if (w == 1) {
-    os.indent() << "Bool";
-  } else {
-    if (intTy.isSigned())
-      os << "Int";
-    else
-      os << "UInt";
-
-    // Round up.
-    if (w <= 8)
-      os << "8";
-    else if (w <= 16)
-      os << "16";
-    else if (w <= 32)
-      os << "32";
-    else if (w <= 64)
-      os << "64";
-    else
-      assert(false && "Type not supported. Please check support first with "
-                      "isSupported()");
-  }
+  emitCapnpType(type, os);
   os << ";\n";
 
   os.reduceIndent();
@@ -415,10 +446,6 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
 
     result = fieldValue;
   }
-
-  asserts.create<sv::FWriteOp>(
-      loc, "typeAndOffset: %h, dataSize: %h, ptrSize: %h, decodedData: %h\n",
-      ValueRange{typeAndOffset, dataSectionSize, ptrSectionSize, result});
 
   // All that just to decode an int! (But it'll pay off as we progress.)
   return result;

@@ -19,6 +19,7 @@
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Verifier.h"
 #include "mlir/Translation.h"
+#include "llvm/ADT/PointerEmbeddedInt.h"
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
@@ -727,30 +728,55 @@ namespace {
 /// manipulation helpers.
 class FIRScopedParser : public FIRParser {
 public:
+  // Entries in a symbol table are either an mlir::Value for the operation that
+  // defines the value or an unbundled ID tracking the index in the
+  // UnbundledValues list.
+  using UnbundledID = llvm::PointerEmbeddedInt<unsigned, 31>;
+  using SymbolValueEntry = llvm::PointerUnion<Value, UnbundledID>;
+
   using SymbolTable =
-      llvm::ScopedHashTable<Identifier, std::pair<SMLoc, Value>,
+      llvm::ScopedHashTable<Identifier, std::pair<SMLoc, SymbolValueEntry>,
                             DenseMapInfo<Identifier>, llvm::BumpPtrAllocator>;
+
+  using UnbundledValueEntry = SmallVector<std::pair<Attribute, Value>>;
+  using UnbundledValuesList = std::vector<UnbundledValueEntry>;
+
   using MemoryScopeTable =
       llvm::ScopedHashTable<Identifier,
                             std::pair<SymbolTable::ScopeTy *, Operation *>,
                             DenseMapInfo<Identifier>, llvm::BumpPtrAllocator>;
 
   FIRScopedParser(GlobalFIRParserState &state, SymbolTable &symbolTable,
+                  UnbundledValuesList &unbundledValues,
                   MemoryScopeTable &memoryScopeTable)
       : FIRParser(state), symbolTable(symbolTable),
-        memoryScopeTable(memoryScopeTable) {}
+        unbundledValues(unbundledValues), memoryScopeTable(memoryScopeTable) {}
 
   /// Add a symbol entry with the specified name, returning failure if the name
   /// is already defined.
-  ParseResult addSymbolEntry(StringRef name, Value value, SMLoc loc);
+  ParseResult addSymbolEntry(StringRef name, SymbolValueEntry entry, SMLoc loc);
+  ParseResult addSymbolEntry(StringRef name, Value value, SMLoc loc) {
+    return addSymbolEntry(name, SymbolValueEntry(value), loc);
+  }
+
+  /// Look up the specified name, emitting an error and returning failure if the
+  /// name is unknown.  This is specialized for clients that know they are not
+  /// looking up a subfield result.
+  ParseResult lookupSymbolEntry(Value &result, StringRef name, SMLoc loc);
 
   /// Look up the specified name, emitting an error and returning failure if the
   /// name is unknown.
-  ParseResult lookupSymbolEntry(Value &result, StringRef name, SMLoc loc);
+  ParseResult lookupSymbolEntry(SymbolValueEntry &result, StringRef name,
+                                SMLoc loc);
 
   /// This symbol table holds the names of ports, wires, and other local decls.
   /// This is scoped because conditional statements introduce subscopes.
   SymbolTable &symbolTable;
+
+  /// This contains one entry for each value in FIRRTL that is represented as a
+  /// bundle type in the FIRRTL spec but for which we represent as an exploded
+  /// set of elements in the FIRRTL dialect.
+  UnbundledValuesList &unbundledValues;
 
   /// Chisel is producing mports with invalid scopes.  To work around the bug,
   /// we need to keep track of the scope (in the `symbolTable`) of each memory.
@@ -761,8 +787,8 @@ public:
 
 /// Add a symbol entry with the specified name, returning failure if the name
 /// is already defined.
-ParseResult FIRScopedParser::addSymbolEntry(StringRef name, Value value,
-                                            SMLoc loc) {
+ParseResult FIRScopedParser::addSymbolEntry(StringRef name,
+                                            SymbolValueEntry entry, SMLoc loc) {
   // TODO(firrtl spec): Should we support name shadowing?  This will reject
   // cases where we try to define a new wire in a conditional where an outer
   // name defined the same name.
@@ -775,21 +801,35 @@ ParseResult FIRScopedParser::addSymbolEntry(StringRef name, Value value,
     return failure();
   }
 
-  symbolTable.insert(nameId, {loc, value});
+  symbolTable.insert(nameId, {loc, entry});
   return success();
 }
 
 /// Look up the specified name, emitting an error and returning null if the
 /// name is unknown.
-ParseResult FIRScopedParser::lookupSymbolEntry(Value &result, StringRef name,
-                                               SMLoc loc) {
+ParseResult FIRScopedParser::lookupSymbolEntry(SymbolValueEntry &result,
+                                               StringRef name, SMLoc loc) {
   auto prev = symbolTable.lookup(Identifier::get(name, getContext()));
   if (!prev.first.isValid())
     return emitError(loc, "use of unknown declaration '" + name.str() + "'"),
            failure();
-
-  assert(prev.second && "name in symbol table without definition");
   result = prev.second;
+  assert(result && "name in symbol table without definition");
+  return success();
+}
+
+ParseResult FIRScopedParser::lookupSymbolEntry(Value &result, StringRef name,
+                                               SMLoc loc) {
+  SymbolValueEntry entry;
+  if (failed(lookupSymbolEntry(entry, name, loc)))
+    return failure();
+
+  if (!entry.is<Value>())
+    return emitError(loc, "bundle value '" + name.str() +
+                              "' should only be used from subfield"),
+           failure();
+
+  result = entry.get<Value>();
   return success();
 }
 
@@ -821,6 +861,7 @@ struct FIRStmtParser : public FIRScopedParser {
   explicit FIRStmtParser(OpBuilder builder, FIRScopedParser &parentParser,
                          FIRModuleContext &moduleContext)
       : FIRScopedParser(parentParser.getState(), parentParser.symbolTable,
+                        parentParser.unbundledValues,
                         parentParser.memoryScopeTable),
         builder(builder), moduleContext(moduleContext) {}
 
@@ -925,8 +966,41 @@ ParseResult FIRStmtParser::parseExp(Value &result, SubOpVector &subOps,
   default: {
     StringRef name;
     auto loc = getToken().getLoc();
-    if (parseId(name, message) || lookupSymbolEntry(result, name, loc))
+    SymbolValueEntry symtabEntry;
+    if (parseId(name, message) || lookupSymbolEntry(symtabEntry, name, loc))
       return failure();
+
+    // If we looked up a normal value, then we're done.
+    if (auto val = symtabEntry.dyn_cast<Value>()) {
+      result = val;
+      break;
+    }
+
+    // Otherwise we referred to an implicitly bundled value.  We *must* be in
+    // the midst of processing a field ID reference.  If not, this is an error.
+    StringRef fieldName;
+    if (parseToken(FIRToken::period, "expected '.' in field reference") ||
+        parseFieldId(fieldName, "expected field name"))
+      return failure();
+
+    result = Value();
+
+    // Look up the fieldName in the unbundled info record.  Indices are biased
+    // by one intentially to avoid using index #0.
+    unsigned unbundledId = symtabEntry.get<UnbundledID>() - 1;
+    assert(unbundledId < unbundledValues.size());
+    UnbundledValueEntry &entry = unbundledValues[unbundledId];
+    for (auto elt : entry) {
+      if (elt.first.cast<StringAttr>().getValue() == fieldName) {
+        result = elt.second;
+        break;
+      }
+    }
+    if (!result) {
+      emitError(loc, "use of invalid field name '")
+          << fieldName << "' on bundle value";
+      return failure();
+    }
     break;
   }
   }
@@ -1490,7 +1564,7 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
       symbolTable.insertIntoScope(
           scopeAndOperation.first,
           Identifier::get(resultValue.getValue(), getContext()),
-          {info.getFIRLoc(), wireHack});
+          {info.getFIRLoc(), SymbolValueEntry(wireHack)});
       return success();
     }
   }
@@ -1669,7 +1743,19 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
     SymbolTable::ScopeTy suiteScope(symbolTable);
     MemoryScopeTable::ScopeTy suiteMemoryScope(memoryScopeTable);
 
-    // We parse the substatements into their own parser, so they get insert
+    // After parsing the when region, we can release any new entries in
+    // unbundledValues since the symbol table entries that refer to them will be
+    // gone.
+    struct UnbundledValueRestorer {
+      UnbundledValuesList &list;
+      size_t startingSize;
+      UnbundledValueRestorer(UnbundledValuesList &list) : list(list) {
+        startingSize = list.size();
+      }
+      ~UnbundledValueRestorer() { list.resize(startingSize); }
+    } x(unbundledValues);
+
+    // We parse the substatements into their own parser, so they get inserted
     // into the specified 'when' region.
     FIRStmtParser subParser(builder, *this, moduleContext);
 
@@ -1807,19 +1893,32 @@ ParseResult FIRStmtParser::parseInstance() {
   getModulePortInfo(referencedModule, modulePorts);
 
   // Make a bundle of the inputs and outputs of the specified module.
-  SmallVector<BundleType::BundleElement, 4> results;
-  results.reserve(modulePorts.size());
+  SmallVector<Type, 4> resultTypes;
+  SmallVector<Attribute, 4> resultNames;
+  resultTypes.reserve(modulePorts.size());
+  resultNames.reserve(modulePorts.size());
 
   for (auto port : modulePorts) {
-    results.push_back(
-        {builder.getIdentifier(port.getName()), FlipType::get(port.type)});
+    resultTypes.push_back(FlipType::get(port.type));
+    resultNames.push_back(port.name);
   }
-  auto resultType = BundleType::get(results, getContext());
-  auto result = builder.create<InstanceOp>(info.getLoc(), resultType,
-                                           builder.getSymbolRefAttr(moduleName),
-                                           filterUselessName(id));
+  auto result = builder.create<InstanceOp>(
+      info.getLoc(), resultTypes, builder.getSymbolRefAttr(moduleName),
+      builder.getArrayAttr(resultNames), filterUselessName(id));
 
-  return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
+  // Since we are implicitly unbundling the instance results, we need to keep
+  // track of the mapping from bundle fields to results in the unbundledValues
+  // data structure.  Build our entry now.
+  UnbundledValueEntry unbundledValueEntry;
+  unbundledValueEntry.reserve(modulePorts.size());
+  for (size_t i = 0, e = modulePorts.size(); i != e; ++i)
+    unbundledValueEntry.push_back({resultNames[i], result.getResult(i)});
+
+  // Add it to unbundledValues and add an entry to the symbol table to remember
+  // it.
+  unbundledValues.push_back(std::move(unbundledValueEntry));
+  auto entryId = UnbundledID(unbundledValues.size());
+  return addSymbolEntry(id.getValue(), entryId, info.getFIRLoc());
 }
 
 /// cmem ::= 'cmem' id ':' type info?
@@ -2195,8 +2294,10 @@ namespace {
 /// This class implements logic and state for parsing module bodies.
 struct FIRModuleParser : public FIRScopedParser {
   explicit FIRModuleParser(GlobalFIRParserState &state, CircuitOp circuit)
-      : FIRScopedParser(state, symbolTable, memoryScopeTable), circuit(circuit),
-        firstScope(symbolTable), firstMemoryScope(memoryScopeTable) {}
+      : FIRScopedParser(state, symbolTable, unbundledValueList,
+                        memoryScopeTable),
+        circuit(circuit), firstScope(symbolTable),
+        firstMemoryScope(memoryScopeTable) {}
 
   ParseResult parseExtModule(unsigned indent);
   ParseResult parseModule(unsigned indent);
@@ -2209,6 +2310,8 @@ private:
   CircuitOp circuit;
   SymbolTable symbolTable;
   SymbolTable::ScopeTy firstScope;
+
+  UnbundledValuesList unbundledValueList;
 
   MemoryScopeTable memoryScopeTable;
   MemoryScopeTable::ScopeTy firstMemoryScope;
