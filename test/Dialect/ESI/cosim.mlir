@@ -34,7 +34,7 @@ rtl.module @top(%clk:i1, %rstn:i1) -> () {
   // COSIM: rtl.instance "TestEP" @Cosim_Endpoint(%clk, %rstn, %{{.+}}, %{{.+}}, %{{.+}}) {parameters = {ENDPOINT_ID = 1 : i32, RECV_TYPE_ID = 10578209918096690139 : ui64, RECV_TYPE_SIZE_BITS = 128 : i32, SEND_TYPE_ID = 11229133067582987457 : ui64, SEND_TYPE_SIZE_BITS = 128 : i32}} : (i1, i1, i1, i1, i128) -> (i1, !rtl.array<128xi1>, i1)
 
   // SV: assign _T.valid = TestEP_DataOutValid;
-  // SV: assign _T.data = dataSection[_T_3+:32];
+  // SV: assign _T.data = dataSection[6'h0+:32];
   // SV: Reciever recv (
   // SV:   .a ({{.+}}.source)
   // SV: );

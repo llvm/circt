@@ -1666,7 +1666,7 @@ static bool isExpressionUnableToInline(Operation *op) {
     }
     // ArraySliceOp uses its operand twice, so we want to assign it first then
     // use that variable in the ArraySliceOp expression.
-    if (isa<ArraySliceOp>(user))
+    if (isa<ArraySliceOp>(user) && !isa<ConstantOp>(op))
       return true;
   }
   return false;
