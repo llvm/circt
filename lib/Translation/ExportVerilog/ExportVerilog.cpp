@@ -70,14 +70,15 @@ static int getBitWidthOrSentinel(Type type) {
       .Default([](Type) { return -1; });
 }
 
-/// Emit a type's packed dimensions, returning whether or not text was emitted.
-static bool emitTypeDims(Type type, Location loc, raw_ostream &os) {
+/// Push this type's dimension into a vector.
+static void getTypeDims(SmallVectorImpl<int64_t> &dims, Type type,
+                        Location loc) {
   if (auto inout = type.dyn_cast<rtl::InOutType>())
-    return emitTypeDims(inout.getElementType(), loc, os);
+    return getTypeDims(dims, inout.getElementType(), loc);
   if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>())
-    return emitTypeDims(uarray.getElementType(), loc, os);
+    return getTypeDims(dims, uarray.getElementType(), loc);
   if (type.isa<InterfaceType>())
-    return 0;
+    return;
 
   int width;
   if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
@@ -85,30 +86,53 @@ static bool emitTypeDims(Type type, Location loc, raw_ostream &os) {
   } else {
     width = getBitWidthOrSentinel(type);
   }
+  if (width == -1)
+    mlir::emitError(loc, "value has an unsupported verilog type ") << type;
+
+  if (width != 1) // Width 1 is implicit.
+    dims.push_back(width);
+
+  if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
+    getTypeDims(dims, arrayType.getElementType(), loc);
+  }
+}
+
+/// Emit a type's packed dimensions, returning whether or not text was emitted.
+static bool emitTypeDims(Type type, Location loc, raw_ostream &os) {
+  SmallVector<int64_t, 4> dims;
+  getTypeDims(dims, type, loc);
 
   bool emitted = false;
-  switch (width) {
-  case -1: // -1 is an invalid type.
-    mlir::emitError(loc, "value has an unsupported verilog type ") << type;
-    os << "<<invalid type>>";
-    return true;
-
-  case 1: // Width 1 is implicit.
-    break;
-
-  case 0:
-    os << "/*Zero Width*/";
-    emitted = true;
-    break;
-  default:
-    os << '[' << (width - 1) << ":0]";
-    emitted = true;
-    break;
-  }
-  if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
-    emitted |= emitTypeDims(arrayType.getElementType(), loc, os);
-  }
+  for (int64_t width : dims)
+    switch (width) {
+    case -1: // -1 is an invalid type.
+      os << "<<invalid type>>";
+      emitted = true;
+      return true;
+    case 1: // Width 1 is implicit.
+      assert(false && "Width 1 shouldn't be in the dim vector");
+      break;
+    case 0:
+      os << "/*Zero Width*/";
+      emitted = true;
+      break;
+    default:
+      os << '[' << (width - 1) << ":0]";
+      emitted = true;
+      break;
+    }
   return emitted;
+}
+
+/// True iff 'a' and 'b' have the same wire dims.
+static bool haveMatchingDims(Type a, Type b, Location loc) {
+  SmallVector<int64_t, 4> aDims;
+  getTypeDims(aDims, a, loc);
+
+  SmallVector<int64_t, 4> bDims;
+  getTypeDims(bDims, b, loc);
+
+  return aDims == bDims;
 }
 
 /// Emit the specified type dimensions and print out a trailing space if
@@ -867,9 +891,11 @@ SubExprInfo ExprEmitter::visitComb(BitcastOp op) {
   // declaration. SystemVerilog uses the wire declaration to know what type this
   // value is being casted to.
   Type toType = op.getType();
-  os << "/*cast(bit";
-  emitTypeDims(toType, op.getLoc(), os);
-  os << ")*/";
+  if (!haveMatchingDims(toType, op.input().getType(), op.getLoc())) {
+    os << "/*cast(bit";
+    emitTypeDims(toType, op.getLoc(), os);
+    os << ")*/";
+  }
   return emitSubExpr(op.input(), LowestPrecedence);
 }
 
@@ -1614,9 +1640,11 @@ static bool isOkToBitSelectFrom(Value v) {
 /// happens because not all Verilog expressions are composable, notably you can
 /// only use bit selects like x[4:6] on simple expressions.
 static bool isExpressionUnableToInline(Operation *op) {
-  if (isa<BitcastOp>(op))
-    // Bitcasts rely on the type being assigned to, so we cannot inline.
-    return true;
+  if (auto cast = dyn_cast<BitcastOp>(op))
+    if (!haveMatchingDims(cast.input().getType(), cast.result().getType(),
+                          op->getLoc()))
+      // Bitcasts rely on the type being assigned to, so we cannot inline.
+      return true;
 
   // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
