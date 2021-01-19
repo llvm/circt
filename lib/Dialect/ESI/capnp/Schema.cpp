@@ -75,7 +75,8 @@ namespace detail {
 /// header.
 struct TypeSchemaImpl {
 public:
-  TypeSchemaImpl(Type type) : type(type) {}
+  TypeSchemaImpl(Type type);
+  TypeSchemaImpl(const TypeSchemaImpl &) = delete;
 
   Type getType() const { return type; }
 
@@ -99,6 +100,12 @@ private:
   ::capnp::StructSchema getTypeSchema() const;
 
   Type type;
+  /// Capnp requires that everything be contained in a struct. ESI doesn't so we
+  /// wrap non-struct types in a capnp struct. During decoder/encoder
+  /// construction, it's convenient to use the capnp model so assemble the
+  /// virtual list of `Type`s here.
+  ArrayRef<Type> fieldTypes;
+
   ::capnp::SchemaParser parser;
   mutable llvm::Optional<uint64_t> cachedID;
   mutable std::string cachedName;
@@ -109,6 +116,13 @@ private:
 } // namespace capnp
 } // namespace esi
 } // namespace circt
+
+TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
+  fieldTypes =
+      TypeSwitch<Type, ArrayRef<Type>>(type)
+          .Case([this](IntegerType it) { return ArrayRef<Type>(&type, 1); })
+          .Default([](Type) { return ArrayRef<Type>(); });
+}
 
 /// Write a valid capnp schema to memory, then parse it out of memory using the
 /// capnp library. Writing and parsing text within a single process is ugly, but
@@ -365,6 +379,27 @@ Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
   return b.create<rtl::ConcatOp>(loc, ValueRange{dataSection, structPtr});
 }
 
+static Value decodeField(OpBuilder &b, Type type,
+                         capnp::schema::Field::Reader field, Value dataSection,
+                         Value ptrSection) {
+  auto loc = dataSection.getLoc();
+  MLIRContext *ctxt = b.getContext();
+
+  Value fieldBits = TypeSwitch<Type, Value>(type).Case([&](IntegerType it) {
+    auto typeBits = type.cast<IntegerType>().getWidth();
+    return b.create<rtl::ArraySliceOp>(loc, dataSection,
+                                       field.getSlot().getOffset() *
+                                           bits(field.getSlot().getType()),
+                                       typeBits);
+  });
+
+  fieldBits.getDefiningOp()->setAttr("name",
+                                     StringAttr::get("fieldBits", ctxt));
+  auto fieldValue = b.create<rtl::BitcastOp>(loc, type, fieldBits);
+  fieldValue->setAttr("name", StringAttr::get("decodedValue", ctxt));
+  return fieldValue;
+}
+
 /// Build an RTL/SV dialect capnp decoder for this type. Outputs packed and
 /// unpadded data.
 Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
@@ -425,30 +460,29 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
       loc, asserts.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
                                        ptrSectionSize, expectedPtrSectionSize));
 
-  auto dataSection = b.create<rtl::ArraySliceOp>(
-      loc, operand, 64, rootProto.getStruct().getDataWordCount() * 64);
+  // Get pointers to the data and pointer sections.
+  auto st = rootProto.getStruct();
+  auto dataSection =
+      b.create<rtl::ArraySliceOp>(loc, operand, 64, st.getDataWordCount() * 64);
   dataSection->setAttr("name", StringAttr::get("dataSection", ctxt));
+  auto ptrSection = b.create<rtl::ArraySliceOp>(
+      loc, operand, 64 + (st.getDataWordCount() * 64),
+      rootProto.getStruct().getPointerCount() * 64);
+  ptrSection->setAttr("name", StringAttr::get("ptrSection", ctxt));
 
-  Value result;
-  // Now that we're looking at the data section, we can just cast down each
-  // type. Since we only support IntegerType, this is easy.
-  assert(rootProto.getStruct().getFields().size() == 1);
-  // Loop through fields. Unnecessary now, but prep for future.
-  for (auto field : rootProto.getStruct().getFields()) {
-    auto typeBits = type.cast<IntegerType>().getWidth();
-    auto fieldBits = b.create<rtl::ArraySliceOp>(
-        loc, dataSection,
-        field.getSlot().getOffset() * bits(field.getSlot().getType()),
-        typeBits);
-    fieldBits->setAttr("name", StringAttr::get("fieldBits", ctxt));
-    auto fieldValue = b.create<rtl::BitcastOp>(loc, type, fieldBits);
-    fieldValue->setAttr("name", StringAttr::get("decodedValue", ctxt));
-
-    result = fieldValue;
+  // Loop through fields.
+  Value fieldValues[st.getFields().size()];
+  for (auto field : st.getFields()) {
+    uint16_t idx = field.getCodeOrder();
+    assert(idx < fieldTypes.size() && "Capnp struct longer than fieldTypes.");
+    fieldValues[idx] =
+        decodeField(b, fieldTypes[idx], field, dataSection, ptrSection);
   }
 
-  // All that just to decode an int! (But it'll pay off as we progress.)
-  return result;
+  // What to return depends on the type. (e.g. structs have to be constructed
+  // from the field values.)
+  return TypeSwitch<Type, Value>(type).Case(
+      [&fieldValues](IntegerType) { return fieldValues[0]; });
 }
 
 //===----------------------------------------------------------------------===//
