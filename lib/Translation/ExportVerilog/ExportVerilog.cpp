@@ -1422,13 +1422,11 @@ LogicalResult ModuleEmitter::visitSV(AlwaysFFOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  indent() << "always_ff @("
-  << stringifyEventControl(op.clockEdge()) << " "
-  << emitExpressionToString(op.clock(), ops);
-  if (op.resetStyle() == ResetType::AsyncReset ) {
-    os << " or "
-    << stringifyEventControl(*op.resetEdge()) << " "
-    << emitExpressionToString(op.reset(), ops);
+  indent() << "always_ff @(" << stringifyEventControl(op.clockEdge()) << " "
+           << emitExpressionToString(op.clock(), ops);
+  if (op.resetStyle() == ResetType::AsyncReset) {
+    os << " or " << stringifyEventControl(*op.resetEdge()) << " "
+       << emitExpressionToString(op.reset(), ops);
   }
   os << ')';
 
@@ -1437,7 +1435,7 @@ LogicalResult ModuleEmitter::visitSV(AlwaysFFOp op) {
   std::string comment;
   comment = "always_ff @(";
   comment += stringifyEventControl(op.clockEdge());
-  if (op.resetStyle() == ResetType::AsyncReset ) {
+  if (op.resetStyle() == ResetType::AsyncReset) {
     comment += " or ";
     comment += stringifyEventControl(*op.resetEdge());
   }
@@ -1451,9 +1449,11 @@ LogicalResult ModuleEmitter::visitSV(AlwaysFFOp op) {
     addIndent();
 
     indent() << "if (";
-    //Negative edge async resets need to invert the reset condition.  This is noted in the op description.
-    if (op.resetStyle() == ResetType::AsyncReset && *op.resetEdge() == EventControl::AtNegEdge)
-      os <<"!";
+    // Negative edge async resets need to invert the reset condition.  This is
+    // noted in the op description.
+    if (op.resetStyle() == ResetType::AsyncReset &&
+        *op.resetEdge() == EventControl::AtNegEdge)
+      os << "!";
     os << emitExpressionToString(op.reset(), ops) << ')';
     emitBeginEndRegion(op.getResetBlock(), ops, *this);
     indent() << "else";
@@ -1464,7 +1464,6 @@ LogicalResult ModuleEmitter::visitSV(AlwaysFFOp op) {
     indent() << "end";
     os << " // " << comment;
     os << '\n';
-
   }
   return success();
 }

@@ -251,9 +251,12 @@ static void printEventList(OpAsmPrinter &p, AlwaysOp op, ArrayAttr portsAttr,
 void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
                        EventControl clockEdge, Value clock,
                        std::function<void()> bodyCtor) {
-  result.addAttribute("clockEdge", odsBuilder.getI32IntegerAttr(static_cast<int32_t>(clockEdge)));
+  result.addAttribute("clockEdge", odsBuilder.getI32IntegerAttr(
+                                       static_cast<int32_t>(clockEdge)));
   result.addOperands(clock);
-  result.addAttribute("resetStyle", odsBuilder.getI32IntegerAttr(static_cast<int32_t>(ResetType::NoReset)));
+  result.addAttribute(
+      "resetStyle",
+      odsBuilder.getI32IntegerAttr(static_cast<int32_t>(ResetType::NoReset)));
 
   // Set up the body.
   Region *bodyBlk = result.addRegion();
@@ -272,14 +275,16 @@ void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
 
 void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
                        EventControl clockEdge, Value clock,
-                       ResetType resetStyle,
-                       EventControl resetEdge, Value reset,
-                       std::function<void()> resetCtor,
+                       ResetType resetStyle, EventControl resetEdge,
+                       Value reset, std::function<void()> resetCtor,
                        std::function<void()> bodyCtor) {
-  result.addAttribute("clockEdge", odsBuilder.getI32IntegerAttr(static_cast<int32_t>(clockEdge)));
+  result.addAttribute("clockEdge", odsBuilder.getI32IntegerAttr(
+                                       static_cast<int32_t>(clockEdge)));
   result.addOperands(clock);
-  result.addAttribute("resetStyle", odsBuilder.getI32IntegerAttr(static_cast<int32_t>(resetStyle)));
-  result.addAttribute("resetEdge", odsBuilder.getI32IntegerAttr(static_cast<int32_t>(resetEdge)));
+  result.addAttribute("resetStyle", odsBuilder.getI32IntegerAttr(
+                                        static_cast<int32_t>(resetStyle)));
+  result.addAttribute("resetEdge", odsBuilder.getI32IntegerAttr(
+                                       static_cast<int32_t>(resetEdge)));
   result.addOperands(reset);
 
   // Set up the body.
