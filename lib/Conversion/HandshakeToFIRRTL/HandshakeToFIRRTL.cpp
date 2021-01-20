@@ -128,27 +128,29 @@ static std::string getSubModuleName(Operation *oldOp) {
 
   if (auto constOp = dyn_cast<handshake::ConstantOp>(oldOp)) {
     // Currently we only support integer or index types. Here, the emitted type
-    // aligns with getFIRRTLType() method. Thus all integers except signed
-    // integer will be emitted as unsigned integer.
+    // aligns with getFIRRTLType() method. Thus all integers other than signed
+    // integers will be emitted as unsigned.
     if (auto intAttr = constOp.getValue().dyn_cast<IntegerAttr>()) {
-      if (auto intType = intAttr.getType().dyn_cast<IntegerType>()) {
+      auto intType = intAttr.getType();
+
+      if (auto indexType = intType.dyn_cast<IndexType>()) {
+        // Handle index type.
+        subModuleName +=
+            "_c" + std::to_string((uint64_t)intAttr.getInt()) + "_ui";
+        subModuleName += std::to_string(indexType.kInternalStorageBitWidth);
+
+      } else {
+        // Handle integer types.
         if (intType.isSignedInteger())
           subModuleName += "_c" + std::to_string(intAttr.getSInt()) + "_si";
         else if (intType.isUnsignedInteger())
           subModuleName += "_c" + std::to_string(intAttr.getUInt()) + "_ui";
         else
           subModuleName +=
-              "_c" + std::to_string((unsigned long)intAttr.getInt()) + "_ui";
+              "_c" + std::to_string((uint64_t)intAttr.getInt()) + "_ui";
 
-        subModuleName += std::to_string(intType.getWidth());
-
-      } else if (auto indexType = intAttr.getType().dyn_cast<IndexType>()) {
-        subModuleName +=
-            "_c" + std::to_string((unsigned long)intAttr.getInt()) + "_ui";
-        subModuleName += std::to_string(indexType.kInternalStorageBitWidth);
-
-      } else
-        oldOp->emitError("unsupported integer constant value type");
+        subModuleName += std::to_string(intType.getIntOrFloatBitWidth());
+      }
     } else
       oldOp->emitError("unsupported constant value type");
   }
