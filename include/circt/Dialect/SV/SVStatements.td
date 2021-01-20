@@ -149,14 +149,25 @@ def ResetTypeAttr : I32EnumAttr<"ResetType", "reset type",
 def AlwaysFFOp : SVOp<"alwaysff", [HasRegionTerminator, NoRegionArguments,
                                RecursiveSideEffects]> {
   let summary = "'alwaysff @' block with optional reset";
-  let description = "alwaysff blocks represent always_ff verilog nodes, which enforce inference of registers.  This block takes a clock signal and edge sensitivity and reset type.  If the reset type is anything but 'noreset', the block takes a reset signal, reset sensitivity, and reset block.  Appropriate if conditions are generated in the output code based on the reset type.  A negative-edge, asynchronous reset will check the inverse of the reset condition (if (!reset) begin resetblock end) to match the sensitivity.";
+  let description = [{ 
+    alwaysff blocks represent always_ff verilog nodes, which enforce inference 
+    of registers.  This block takes a clock signal and edge sensitivity and 
+    reset type.  If the reset type is anything but 'noreset', the block takes a
+    reset signal, reset sensitivity, and reset block.  Appropriate if conditions
+    are generated in the output code based on the reset type.  A negative-edge, 
+    asynchronous reset will check the inverse of the reset condition 
+    (if (!reset) begin resetblock end) to match the sensitivity.
+  }];
   
   let regions = (region SizedRegion<1>:$bodyBlk, AnyRegion:$resetBlk);
   let arguments = (ins EventControlAttr:$clockEdge, I1:$clock, 
-                       ResetTypeAttr:$resetStyle, OptionalAttr<EventControlAttr>:$resetEdge, Optional<I1>:$reset);
+                       ResetTypeAttr:$resetStyle, 
+                       OptionalAttr<EventControlAttr>:$resetEdge, 
+                       Optional<I1>:$reset);
   let results = (outs);
   
-  let assemblyFormat = "$clockEdge `,` $clock `,` $resetStyle ( `,` $resetEdge^ `,` $reset $resetBlk )? $bodyBlk attr-dict";
+  let assemblyFormat = "$clockEdge `,` $clock `,` $resetStyle 
+    ( `,` $resetEdge^ `,` $reset $resetBlk )? $bodyBlk attr-dict";
 
   let skipDefaultBuilders = 1;
   let builders = [
