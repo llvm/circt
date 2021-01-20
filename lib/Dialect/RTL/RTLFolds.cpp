@@ -815,15 +815,13 @@ OpFoldResult ICmpOp::fold(ArrayRef<Attribute> constants) {
     return IntegerAttr::get(getType(), val);
   }
 
-  auto lhs = constants[0].dyn_cast_or_null<IntegerAttr>();
-  auto rhs = constants[1].dyn_cast_or_null<IntegerAttr>();
-
   // gt 1, 2 -> false
-  if (lhs && rhs) {
-    auto val = applyCmpPredicate(predicate(), lhs.getValue(), rhs.getValue());
-    return IntegerAttr::get(getType(), val);
+  if (auto lhs = constants[0].dyn_cast_or_null<IntegerAttr>()) {
+    if (auto rhs = constants[1].dyn_cast_or_null<IntegerAttr>()) {
+      auto val = applyCmpPredicate(predicate(), lhs.getValue(), rhs.getValue());
+      return IntegerAttr::get(getType(), val);
+    }
   }
-
   return {};
 }
 
@@ -848,18 +846,17 @@ struct ICmpCanonicalizeConstant final : public OpRewritePattern<ICmpOp> {
     if (matchPattern(op.rhs(), m_RConstant(rhs))) {
       ConstantOp constant;
 
-      auto getConstant = [&rewriter, &op](APInt &&constant) -> Value {
-        return rewriter.create<ConstantOp>(op.getLoc(), constant);
+      auto getConstant = [&](APInt constant) -> Value {
+        return rewriter.create<ConstantOp>(op.getLoc(), std::move(constant));
       };
 
-      auto replaceWith = [&rewriter, &op](ICmpPredicate predicate, Value lhs,
-                                          Value rhs) -> LogicalResult {
+      auto replaceWith = [&](ICmpPredicate predicate, Value lhs,
+                             Value rhs) -> LogicalResult {
         rewriter.replaceOpWithNewOp<ICmpOp>(op, predicate, lhs, rhs);
         return success();
       };
 
-      auto replaceWithConstant = [&rewriter,
-                                  &op](bool constant) -> LogicalResult {
+      auto replaceWithConstantI1 = [&](bool constant) -> LogicalResult {
         rewriter.replaceOpWithNewOp<ConstantOp>(op, APInt(1, constant));
         return success();
       };
@@ -871,7 +868,7 @@ struct ICmpCanonicalizeConstant final : public OpRewritePattern<ICmpOp> {
           return replaceWith(ICmpPredicate::ne, op.lhs(), op.rhs());
         // x < min -> false
         if (rhs.isMinSignedValue())
-          return replaceWithConstant(0);
+          return replaceWithConstantI1(0);
         // x < min+1 -> x == min
         if ((rhs - 1).isMinSignedValue())
           return replaceWith(ICmpPredicate::eq, op.lhs(), getConstant(rhs - 1));
@@ -882,7 +879,7 @@ struct ICmpCanonicalizeConstant final : public OpRewritePattern<ICmpOp> {
           return replaceWith(ICmpPredicate::ne, op.lhs(), op.rhs());
         // x > max -> false
         if (rhs.isMaxSignedValue())
-          return replaceWithConstant(0);
+          return replaceWithConstantI1(0);
         // x > max-1 -> x == max
         if ((rhs + 1).isMaxSignedValue())
           return replaceWith(ICmpPredicate::eq, op.lhs(), getConstant(rhs + 1));
@@ -893,7 +890,7 @@ struct ICmpCanonicalizeConstant final : public OpRewritePattern<ICmpOp> {
           return replaceWith(ICmpPredicate::ne, op.lhs(), op.rhs());
         // x < min -> false
         if (rhs.isMinValue())
-          return replaceWithConstant(0);
+          return replaceWithConstantI1(0);
         // x < min+1 -> x == min
         if ((rhs - 1).isMinValue())
           return replaceWith(ICmpPredicate::eq, op.lhs(), getConstant(rhs - 1));
@@ -901,10 +898,10 @@ struct ICmpCanonicalizeConstant final : public OpRewritePattern<ICmpOp> {
       case ICmpPredicate::ugt:
         // x > min -> x != min
         if (rhs.isMinValue())
-          replaceWith(ICmpPredicate::ne, op.lhs(), op.rhs());
+          return replaceWith(ICmpPredicate::ne, op.lhs(), op.rhs());
         // x > max -> false
         if (rhs.isMaxValue())
-          return replaceWithConstant(0);
+          return replaceWithConstantI1(0);
         // x > max-1 -> x == max
         if ((rhs + 1).isMaxValue())
           return replaceWith(ICmpPredicate::eq, op.lhs(), getConstant(rhs + 1));
@@ -912,25 +909,25 @@ struct ICmpCanonicalizeConstant final : public OpRewritePattern<ICmpOp> {
       case ICmpPredicate::sle:
         // x <= max -> true
         if (rhs.isMaxSignedValue())
-          return replaceWithConstant(1);
+          return replaceWithConstantI1(1);
         // x <= c -> x < (c+1)
         return replaceWith(ICmpPredicate::slt, op.lhs(), getConstant(rhs + 1));
       case ICmpPredicate::sge:
         // x >= min -> true
         if (rhs.isMinSignedValue())
-          return replaceWithConstant(1);
+          return replaceWithConstantI1(1);
         // x >= c -> x > (c-1)
         return replaceWith(ICmpPredicate::sgt, op.lhs(), getConstant(rhs - 1));
       case ICmpPredicate::ule:
         // x <= max -> true
         if (rhs.isMaxValue())
-          return replaceWithConstant(1);
+          return replaceWithConstantI1(1);
         // x <= c -> x < (c+1)
         return replaceWith(ICmpPredicate::ult, op.lhs(), getConstant(rhs + 1));
       case ICmpPredicate::uge:
         // x >= min -> true
         if (rhs.isMinValue())
-          return replaceWithConstant(1);
+          return replaceWithConstantI1(1);
         // x >= c -> x > (c-1)
         return replaceWith(ICmpPredicate::ugt, op.lhs(), getConstant(rhs - 1));
       default:
