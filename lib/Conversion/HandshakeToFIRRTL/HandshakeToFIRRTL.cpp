@@ -1512,8 +1512,8 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   // Collect store arguments.
   for (size_t i = 0; i < numStores; ++i) {
     // Extract store ports from the port list.
-    auto storeData = portList[i];
-    auto storeAddr = portList[i + 1];
+    auto storeData = portList[2 * i];
+    auto storeAddr = portList[2 * i + 1];
     auto storeControl = portList[2 * numStores + 2 * numLoads + i];
 
     assert(storeAddr.size() == 3 && storeData.size() == 3 &&
