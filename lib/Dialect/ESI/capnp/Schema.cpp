@@ -75,7 +75,8 @@ namespace detail {
 /// header.
 struct TypeSchemaImpl {
 public:
-  TypeSchemaImpl(Type type) : type(type) {}
+  TypeSchemaImpl(Type type);
+  TypeSchemaImpl(const TypeSchemaImpl &) = delete;
 
   Type getType() const { return type; }
 
@@ -99,6 +100,12 @@ private:
   ::capnp::StructSchema getTypeSchema() const;
 
   Type type;
+  /// Capnp requires that everything be contained in a struct. ESI doesn't so we
+  /// wrap non-struct types in a capnp struct. During decoder/encoder
+  /// construction, it's convenient to use the capnp model so assemble the
+  /// virtual list of `Type`s here.
+  ArrayRef<Type> fieldTypes;
+
   ::capnp::SchemaParser parser;
   mutable llvm::Optional<uint64_t> cachedID;
   mutable std::string cachedName;
@@ -109,6 +116,13 @@ private:
 } // namespace capnp
 } // namespace esi
 } // namespace circt
+
+TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
+  fieldTypes =
+      TypeSwitch<Type, ArrayRef<Type>>(type)
+          .Case([this](IntegerType) { return ArrayRef<Type>(&type, 1); })
+          .Default([](Type) { return ArrayRef<Type>(); });
+}
 
 /// Write a valid capnp schema to memory, then parse it out of memory using the
 /// capnp library. Writing and parsing text within a single process is ugly, but
@@ -365,21 +379,85 @@ Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
   return b.create<rtl::ConcatOp>(loc, ValueRange{dataSection, structPtr});
 }
 
+namespace {
+/// Holds a 'slice' of an array and is able to construct more slice ops, then
+/// cast to a type.
+struct Slice {
+public:
+  Slice(OpBuilder &b, Value init) : builder(&b), s(init) {
+    assert(init.getType().isa<rtl::ArrayType>());
+  }
+
+  /// Create an op to slice the array from lsb to lsb + size. Return a new slice
+  /// with that op.
+  Slice slice(int64_t lsb, int64_t size) {
+    Value newSlice = builder->create<rtl::ArraySliceOp>(loc(), s, lsb, size);
+    return Slice(*builder, newSlice);
+  }
+
+  /// Set the "name" attribute of a slice's op.
+  Slice name(const Twine &name) const {
+    SmallString<32> nameStr;
+    s.getDefiningOp()->setAttr(
+        "name", StringAttr::get(name.toStringRef(nameStr), ctxt()));
+    return *this;
+  }
+  Slice name(capnp::Text::Reader fieldName, const Twine &nameSuffix) const {
+    return name(StringRef(fieldName.cStr()) + nameSuffix);
+  }
+
+  /// Construct a bitcast.
+  Value cast(Type t, StringRef name = StringRef(), Twine nameSuffix = Twine()) {
+    auto dst = builder->create<rtl::BitcastOp>(loc(), t, s);
+
+    SmallString<32> nameBuffer;
+    StringRef wholeName = (name + nameSuffix).toStringRef(nameBuffer);
+    if (wholeName.size())
+      dst->setAttr("name", StringAttr::get(wholeName, ctxt()));
+    return dst;
+  }
+
+  Operation *operator->() const { return s.getDefiningOp(); }
+  Value getValue() const { return s; }
+  Location loc() const { return s.getLoc(); }
+  OpBuilder &b() const { return *builder; }
+  MLIRContext *ctxt() const { return builder->getContext(); }
+
+private:
+  OpBuilder *builder;
+  Value s;
+};
+} // namespace
+
+/// Construct the proper operations to convert a capnp field to 'type'.
+static Value decodeField(Type type, capnp::schema::Field::Reader field,
+                         Slice dataSection, Slice ptrSection,
+                         OpBuilder &asserts) {
+  Slice fieldSlice = TypeSwitch<Type, Slice>(type).Case([&](IntegerType it) {
+    return dataSection.slice(field.getSlot().getOffset() *
+                                 bits(field.getSlot().getType()),
+                             it.getWidth());
+  });
+
+  fieldSlice.name(field.getName(), "_bits");
+  return fieldSlice.cast(type, field.getName().cStr(), "Value");
+}
+
 /// Build an RTL/SV dialect capnp decoder for this type. Outputs packed and
 /// unpadded data.
 Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
-                                   Value operand) {
-  MLIRContext *ctxt = b.getContext();
-  auto loc = operand.getDefiningOp()->getLoc();
-  size_t size = this->size();
-
+                                   Value operandVal) {
   // Various useful integer types.
   auto i16 = b.getIntegerType(16);
   auto i32 = b.getIntegerType(32);
 
-  rtl::ArrayType operandType = operand.getType().dyn_cast<rtl::ArrayType>();
+  size_t size = this->size();
+  rtl::ArrayType operandType = operandVal.getType().dyn_cast<rtl::ArrayType>();
   assert(operandType && operandType.getSize() == size &&
          "Operand type and length must match the type's capnp size.");
+
+  Slice operand(b, operandVal);
+  auto loc = operand.loc();
 
   auto alwaysAt = b.create<sv::AlwaysOp>(loc, EventControl::AtPosEdge, clk);
   auto ifValid =
@@ -388,15 +466,13 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
 
   // The next 64-bits of a capnp message is the root struct pointer.
   ::capnp::schema::Node::Reader rootProto = getTypeSchema().getProto();
-  auto ptr = b.create<rtl::ArraySliceOp>(loc, operand, 0, 64);
-  ptr->setAttr("name", StringAttr::get("rootPointer", ctxt));
+  auto ptr = operand.slice(0, 64).name("rootPointer");
 
   // Since this is the root, we _expect_ the offset to be zero but that's only
   // guaranteed to be the case with canonically-encoded messages.
   // TODO: support cases where the pointer offset is non-zero.
-  auto typeAndOffset = asserts.create<rtl::BitcastOp>(
-      loc, i32, asserts.create<rtl::ArraySliceOp>(loc, ptr, 0, 32));
-  typeAndOffset->setAttr("name", StringAttr::get("typeAndOffset", ctxt));
+  Slice assertPtr(ptr);
+  auto typeAndOffset = assertPtr.slice(0, 32).cast(i32, "typeAndOffset");
   auto b16Zero = asserts.create<rtl::ConstantOp>(loc, i32, 0);
 
   asserts.create<sv::AssertOp>(
@@ -404,9 +480,7 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
                                        typeAndOffset, b16Zero));
 
   // We expect the data section to be equal to the computed data section size.
-  auto dataSectionSize = asserts.create<rtl::BitcastOp>(
-      loc, i16, asserts.create<rtl::ArraySliceOp>(loc, ptr, 32, 16));
-  dataSectionSize->setAttr("name", StringAttr::get("dataSectionSize", ctxt));
+  auto dataSectionSize = assertPtr.slice(32, 16).cast(i16, "dataSectionSize");
   auto expectedDataSectionSize = asserts.create<rtl::ConstantOp>(
       loc, i16, rootProto.getStruct().getDataWordCount());
   asserts.create<sv::AssertOp>(
@@ -416,39 +490,35 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
 
   // We expect the pointer section to be equal to the computed pointer section
   // size.
-  auto ptrSectionSize = asserts.create<rtl::BitcastOp>(
-      loc, i16, asserts.create<rtl::ArraySliceOp>(loc, ptr, 48, 16));
-  ptrSectionSize->setAttr("name", StringAttr::get("ptrSectionSize", ctxt));
+  auto ptrSectionSize = assertPtr.slice(48, 16).cast(i16, "ptrSectionSize");
   auto expectedPtrSectionSize = asserts.create<rtl::ConstantOp>(
       loc, i16, rootProto.getStruct().getPointerCount() * 64);
   asserts.create<sv::AssertOp>(
       loc, asserts.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
                                        ptrSectionSize, expectedPtrSectionSize));
 
-  auto dataSection = b.create<rtl::ArraySliceOp>(
-      loc, operand, 64, rootProto.getStruct().getDataWordCount() * 64);
-  dataSection->setAttr("name", StringAttr::get("dataSection", ctxt));
+  // Get pointers to the data and pointer sections.
+  auto st = rootProto.getStruct();
+  auto dataSection =
+      operand.slice(64, st.getDataWordCount() * 64).name("dataSection");
+  auto ptrSection = operand
+                        .slice(64 + (st.getDataWordCount() * 64),
+                               rootProto.getStruct().getPointerCount() * 64)
+                        .name("ptrSection");
 
-  Value result;
-  // Now that we're looking at the data section, we can just cast down each
-  // type. Since we only support IntegerType, this is easy.
-  assert(rootProto.getStruct().getFields().size() == 1);
-  // Loop through fields. Unnecessary now, but prep for future.
-  for (auto field : rootProto.getStruct().getFields()) {
-    auto typeBits = type.cast<IntegerType>().getWidth();
-    auto fieldBits = b.create<rtl::ArraySliceOp>(
-        loc, dataSection,
-        field.getSlot().getOffset() * bits(field.getSlot().getType()),
-        typeBits);
-    fieldBits->setAttr("name", StringAttr::get("fieldBits", ctxt));
-    auto fieldValue = b.create<rtl::BitcastOp>(loc, type, fieldBits);
-    fieldValue->setAttr("name", StringAttr::get("decodedValue", ctxt));
-
-    result = fieldValue;
+  // Loop through fields.
+  Value fieldValues[st.getFields().size()];
+  for (auto field : st.getFields()) {
+    uint16_t idx = field.getCodeOrder();
+    assert(idx < fieldTypes.size() && "Capnp struct longer than fieldTypes.");
+    fieldValues[idx] =
+        decodeField(fieldTypes[idx], field, dataSection, ptrSection, asserts);
   }
 
-  // All that just to decode an int! (But it'll pay off as we progress.)
-  return result;
+  // What to return depends on the type. (e.g. structs have to be constructed
+  // from the field values.)
+  return TypeSwitch<Type, Value>(type).Case(
+      [&fieldValues](IntegerType) { return fieldValues[0]; });
 }
 
 //===----------------------------------------------------------------------===//
