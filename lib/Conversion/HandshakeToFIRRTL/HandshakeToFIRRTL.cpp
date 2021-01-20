@@ -145,7 +145,7 @@ static std::string getSubModuleName(Operation *oldOp) {
 
 /// Return the number of bits needed to index the given number of values.
 static size_t getNumIndexBits(uint64_t numValues) {
-  return numValues ? llvm::Log2_64_Ceil(numValues) : 1;
+  return numValues > 1 ? llvm::Log2_64_Ceil(numValues) : 1;
 }
 
 /// Construct a tree of 1-bit muxes to multiplex arbitrary numbers of signals
