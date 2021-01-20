@@ -166,8 +166,10 @@ def AlwaysFFOp : SVOp<"alwaysff", [HasRegionTerminator, NoRegionArguments,
                        Optional<I1>:$reset);
   let results = (outs);
   
-  let assemblyFormat = "$clockEdge `,` $clock `,` $resetStyle 
-    ( `,` $resetEdge^ `,` $reset $resetBlk )? $bodyBlk attr-dict";
+  let assemblyFormat = [{ 
+    $clockEdge `,` $clock `,` $resetStyle 
+    ( `,` $resetEdge^ `,` $reset $resetBlk )? $bodyBlk attr-dict
+  }];
 
   let skipDefaultBuilders = 1;
   let builders = [
