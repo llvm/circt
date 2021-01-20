@@ -864,13 +864,10 @@ SubExprInfo ExprEmitter::visitComb(ConcatOp op) {
   // If all of the operands are the same, we emit this as a SystemVerilog
   // replicate operation, ala SV Spec 11.4.12.1.
   auto firstOperand = op.getOperand(0);
-  bool allSame = true;
-  for (size_t i = 1, e = op.getNumOperands(); i != e; ++i) {
-    if (op.getOperand(i) != firstOperand) {
-      allSame = false;
-      break;
-    }
-  }
+  bool allSame = llvm::all_of(op.getOperands(), [&firstOperand](auto operand) {
+    return operand == firstOperand;
+  });
+
   if (allSame) {
     os << '{' << op.getNumOperands() << '{';
     emitSubExpr(firstOperand, LowestPrecedence);
