@@ -30,7 +30,7 @@ public:
                        // Declarations.
                        RegOp,
                        // Control flow.
-                       IfDefOp, IfOp, AlwaysOp, InitialOp,
+                       IfDefOp, IfOp, AlwaysOp, AlwaysFFOp, InitialOp,
                        // Other Statements.
                        YieldOp, BPAssignOp, PAssignOp, AliasOp, FWriteOp,
                        FatalOp, FinishOp, VerbatimOp,
@@ -75,6 +75,7 @@ public:
   HANDLE(IfDefOp, Unhandled);
   HANDLE(IfOp, Unhandled);
   HANDLE(AlwaysOp, Unhandled);
+  HANDLE(AlwaysFFOp, Unhandled);
   HANDLE(InitialOp, Unhandled);
 
   // Other Statements.
