@@ -46,9 +46,7 @@ def WireOp : RTLOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
     }]>
   ];
 
-  // We handle the name in a custom way, so we use a customer parser/printer.
-  let printer = "printWireOp(p, *this);";
-  let parser = "return parseWireOp(parser, result);";
+  let assemblyFormat = "custom<ImplicitSSAName>(attr-dict) `:` type($result)";
   let hasCanonicalizer = true;
 }
 

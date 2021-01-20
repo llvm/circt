@@ -770,61 +770,7 @@ FIRRTLType MemOp::getDataTypeOrNull() {
   return firstPortType.getElementType("data");
 }
 
-static void printWireOp(OpAsmPrinter &p, Operation *op) {
-  p << op->getName();
-  // Note that we only need to print the "name" attribute if the asmprinter
-  // result name disagrees with it.  This can happen in strange cases, e.g.
-  // when there are conflicts.
-  bool namesDisagree = false;
 
-  SmallString<32> resultNameStr;
-  llvm::raw_svector_ostream tmpStream(resultNameStr);
-  p.printOperand(op->getResult(0), tmpStream);
-  auto expectedName = op->getAttrOfType<StringAttr>("name");
-  if (!expectedName ||
-      tmpStream.str().drop_front() != expectedName.getValue()) {
-    namesDisagree = true;
-  }
-
-  if (namesDisagree)
-    p.printOptionalAttrDict(op->getAttrs());
-  else
-    p.printOptionalAttrDict(op->getAttrs(), {"name"});
-
-  p << " : " << op->getResult(0).getType();
-}
-
-static ParseResult parseWireOp(OpAsmParser &parser, OperationState &result) {
-  llvm::SMLoc typeLoc;
-  Type resultType;
-
-  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
-      parser.getCurrentLocation(&typeLoc) || parser.parseType(resultType))
-    return failure();
-
-  result.addTypes(resultType);
-
-  // If the attribute dictionary contains no 'name' attribute, infer it from
-  // the SSA name (if specified).
-  bool hadName = llvm::any_of(result.attributes, [](NamedAttribute attr) {
-    return attr.first == "name";
-  });
-
-  // If there was no name specified, check to see if there was a useful name
-  // specified in the asm file.
-  if (hadName)
-    return success();
-
-  auto resultName = parser.getResultName(0);
-  if (!resultName.first.empty() && !isdigit(resultName.first[0])) {
-    StringRef name = resultName.first;
-    auto *context = result.getContext();
-    auto nameAttr = parser.getBuilder().getStringAttr(name);
-    result.attributes.push_back({Identifier::get("name", context), nameAttr});
-  }
-
-  return success();
-}
 
 //===----------------------------------------------------------------------===//
 // Statements
@@ -1549,6 +1495,59 @@ void AsPassivePrimOp::build(OpBuilder &builder, OperationState &result,
                             Value input) {
   result.addOperands(input);
   result.addTypes(input.getType().cast<FIRRTLType>().getPassiveType());
+}
+
+//===----------------------------------------------------------------------===//
+// ImplicitSSAName Custom Directive
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseImplicitSSAName(OpAsmParser &parser,
+                                        NamedAttrList &resultAttrs) {
+
+  if (parser.parseOptionalAttrDict(resultAttrs))
+    return failure();
+
+  // If the attribute dictionary contains no 'name' attribute, infer it from
+  // the SSA name (if specified).
+  bool hadName = llvm::any_of(
+      resultAttrs, [](NamedAttribute attr) { return attr.first == "name"; });
+
+  // If there was no name specified, check to see if there was a useful name
+  // specified in the asm file.
+  if (hadName)
+    return success();
+
+  auto resultName = parser.getResultName(0);
+  if (!resultName.first.empty() && !isdigit(resultName.first[0])) {
+    StringRef name = resultName.first;
+    auto nameAttr = parser.getBuilder().getStringAttr(name);
+    auto *context = parser.getBuilder().getContext();
+    resultAttrs.push_back({Identifier::get("name", context), nameAttr});
+  }
+
+  return success();
+}
+
+static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
+                                 DictionaryAttr attr) {
+  // Note that we only need to print the "name" attribute if the asmprinter
+  // result name disagrees with it.  This can happen in strange cases, e.g.
+  // when there are conflicts.
+  bool namesDisagree = false;
+
+  SmallString<32> resultNameStr;
+  llvm::raw_svector_ostream tmpStream(resultNameStr);
+  p.printOperand(op->getResult(0), tmpStream);
+  auto expectedName = op->getAttrOfType<StringAttr>("name");
+  if (!expectedName ||
+      tmpStream.str().drop_front() != expectedName.getValue()) {
+    namesDisagree = true;
+  }
+
+  if (namesDisagree)
+    p.printOptionalAttrDict(op->getAttrs());
+  else
+    p.printOptionalAttrDict(op->getAttrs(), {"name"});
 }
 
 //===----------------------------------------------------------------------===//
