@@ -2277,7 +2277,7 @@ LogicalResult circt::exportFIRRTLToVerilog(ModuleOp module,
 
 void circt::registerFIRRTLToVerilogTranslation() {
   TranslateFromMLIRRegistration toVerilog(
-      "emit-firrtl-verilog", exportFIRRTLToVerilog,
+      "export-firrtl-verilog", exportFIRRTLToVerilog,
       [](DialectRegistry &registry) {
         registry.insert<firrtl::FIRRTLDialect>();
       });

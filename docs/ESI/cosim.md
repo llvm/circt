@@ -30,7 +30,7 @@ system. Run command below on an MLIR assembly file with `esi.cosim` ops. It
 will find all of the cosim ops and output a capnp schema struct for each
 input and output type.
 
-`circt-translate <esi_system.mlir> -emit-esi-capnp`
+`circt-translate <esi_system.mlir> -export-esi-capnp`
 
 Comments in the generated file indicate the type converted from. In cases
 where the ESI type is smaller than the capnp type (e.g. `i5` vs `UInt8`), the

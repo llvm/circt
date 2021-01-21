@@ -1,8 +1,8 @@
 // REQUIRES: capnp
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 // RUN: circt-opt %s --lower-esi-ports --lower-esi-to-rtl -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=COSIM %s
-// RUN: circt-opt %s --lower-esi-ports --lower-esi-to-rtl | circt-translate --emit-verilog | FileCheck --check-prefix=SV %s
-// RUN: circt-translate %s -emit-esi-capnp -verify-diagnostics | FileCheck --check-prefix=CAPNP %s
+// RUN: circt-opt %s --lower-esi-ports --lower-esi-to-rtl | circt-translate --export-verilog | FileCheck --check-prefix=SV %s
+// RUN: circt-translate %s -export-esi-capnp -verify-diagnostics | FileCheck --check-prefix=CAPNP %s
 
 rtl.externmodule @Sender() -> ( !esi.channel<si14> { rtl.name = "x"})
 rtl.externmodule @Reciever(%a: !esi.channel<i32>)

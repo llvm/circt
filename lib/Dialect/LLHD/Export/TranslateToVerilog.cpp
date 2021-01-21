@@ -421,7 +421,7 @@ LogicalResult circt::llhd::exportVerilog(ModuleOp module, raw_ostream &os) {
 
 void circt::llhd::registerToVerilogTranslation() {
   TranslateFromMLIRRegistration registration(
-      "llhd-to-verilog", exportVerilog, [](DialectRegistry &registry) {
+      "export-llhd-verilog", exportVerilog, [](DialectRegistry &registry) {
         registry.insert<mlir::StandardOpsDialect, llhd::LLHDDialect>();
       });
 }
