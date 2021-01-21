@@ -1,6 +1,6 @@
 // RUN: circt-opt -lower-handshake-to-firrtl -split-input-file -verify-diagnostics %s
 
-// CHECK-LABEL: firrtl.module @handshake_load_3ins_2outs(
+// CHECK-LABEL: firrtl.module @handshake_load_3ins_2outs_ui8(
 // CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<8>>, %arg2: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg3: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<8>>>, %arg4: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) {
 // CHECK:   %[[IADDR_VALID:.+]] = firrtl.subfield %arg0("valid") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>) -> !firrtl.uint<1>
 // CHECK:   %[[IADDR_READY:.+]] = firrtl.subfield %arg0("ready") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>) -> !firrtl.flip<uint<1>>
@@ -37,7 +37,7 @@ handshake.func @main(%arg0: index, %arg1: none, ...) -> none {
   %1:2 = "handshake.fork"(%arg1) {control = true} : (none) -> (none, none)
   %2 = "handshake.join"(%1#1, %0#1) {control = true} : (none, none) -> none
 
-  // CHECK: %16 = firrtl.instance @handshake_load_3ins_2outs {name = ""} : !firrtl.bundle<arg0: bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, arg1: bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<8>>>, arg2: bundle<valid: flip<uint<1>>, ready: uint<1>>, arg3: bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<8>>, arg4: bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>>
+  // CHECK: %16 = firrtl.instance @handshake_load_3ins_2outs_ui8 {name = ""} : !firrtl.bundle<arg0: bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, arg1: bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<8>>>, arg2: bundle<valid: flip<uint<1>>, ready: uint<1>>, arg3: bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<8>>, arg4: bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>>
   %3, %addressResults = "handshake.load"(%arg0, %0#0, %1#0) : (index, i8, none) -> (i8, index)
   "handshake.sink"(%3) : (i8) -> ()
   handshake.return %2 : none
