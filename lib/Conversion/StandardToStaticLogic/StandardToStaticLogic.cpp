@@ -110,6 +110,9 @@ namespace {
 
 struct CreatePipelinePass
     : public PassWrapper<CreatePipelinePass, OperationPass<mlir::FuncOp>> {
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<staticlogic::StaticLogicDialect>();
+  }
   void runOnOperation() override {
     mlir::FuncOp f = getOperation();
     auto builder = OpBuilder(f.getContext());
