@@ -408,10 +408,13 @@ public:
   }
 
   /// Construct a bitcast.
-  Value cast(Type t, StringRef name = StringRef()) {
+  Value cast(Type t, StringRef name = StringRef(), Twine nameSuffix = Twine()) {
     auto dst = builder->create<rtl::BitcastOp>(loc(), t, s);
-    if (name.size())
-      s.getDefiningOp()->setAttr("name", StringAttr::get(name, ctxt()));
+
+    SmallString<32> nameBuffer;
+    StringRef wholeName = (name + nameSuffix).toStringRef(nameBuffer);
+    if (wholeName.size())
+      dst->setAttr("name", StringAttr::get(wholeName, ctxt()));
     return dst;
   }
 
@@ -452,7 +455,7 @@ static Value decodeField(Type type, capnp::schema::Field::Reader field,
           });
 
   fieldSlice.name(field.getName(), "_bits");
-  return fieldSlice.cast(type, field.getName().cStr());
+  return fieldSlice.cast(type, field.getName().cStr(), "Value");
 }
 
 /// Build an RTL/SV dialect capnp decoder for this type. Outputs packed and
