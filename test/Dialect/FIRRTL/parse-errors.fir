@@ -1,4 +1,4 @@
-; RUN: circt-translate -parse-fir -verify-diagnostics --split-input-file %s
+; RUN: circt-translate -import-firrtl -verify-diagnostics --split-input-file %s
 
 circuit test :
   extmodule MyModule :

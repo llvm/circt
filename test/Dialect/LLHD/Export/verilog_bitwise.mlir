@@ -1,4 +1,4 @@
-//RUN: circt-translate --llhd-to-verilog %s | FileCheck %s
+//RUN: circt-translate --export-llhd-verilog %s | FileCheck %s
 
 // CHECK-LABEL: _check_bitwise
 llhd.entity @check_bitwise() -> () {

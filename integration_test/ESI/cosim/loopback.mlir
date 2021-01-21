@@ -1,6 +1,6 @@
 // REQUIRES: esi-cosim
-// RUN: circt-opt %s --lower-esi-to-physical --lower-esi-ports --lower-esi-to-rtl | circt-translate --emit-verilog > %t1.sv
-// RUN: circt-translate %s -emit-esi-capnp -verify-diagnostics > %t2.capnp
+// RUN: circt-opt %s --lower-esi-to-physical --lower-esi-ports --lower-esi-to-rtl | circt-translate --export-verilog > %t1.sv
+// RUN: circt-translate %s -export-esi-capnp -verify-diagnostics > %t2.capnp
 // RUN: esi-cosim-runner.py --schema %t2.capnp %s %t1.sv
 // PY: import loopback as test
 // PY: rpc = test.LoopbackTester(rpcschemapath, simhostport)

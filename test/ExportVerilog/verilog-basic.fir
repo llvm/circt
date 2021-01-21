@@ -3,10 +3,10 @@
 ;; firrtl, emitting verilog, and lower-to-rtl) which should be factored into
 ;; those buckets correctly.
 
-; RUN: circt-translate -parse-fir --mlir-print-debuginfo %s | circt-translate -emit-firrtl-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
+; RUN: circt-translate -import-firrtl --mlir-print-debuginfo %s | circt-translate -export-firrtl-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 ; Some day this should filecheck:
-; RUN: circt-translate -parse-fir --mlir-print-debuginfo %s | circt-opt -lower-firrtl-to-rtl-module -lower-firrtl-to-rtl | circt-translate -emit-verilog -verify-diagnostics
+; RUN: circt-translate -import-firrtl --mlir-print-debuginfo %s | circt-opt -lower-firrtl-to-rtl-module -lower-firrtl-to-rtl | circt-translate -export-verilog -verify-diagnostics
 
 circuit inputs_only :
 
