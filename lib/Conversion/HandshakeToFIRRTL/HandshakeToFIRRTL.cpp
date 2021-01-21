@@ -110,15 +110,32 @@ static Value createConstantOp(FIRRTLType opType, APInt value,
   return Value();
 }
 
-/// Construct a name for creating FIRRTL sub-module. The returned string
-/// contains the following information: 1) standard or handshake operation
-/// name; 2) number of inputs; 3) number of outputs; 4) comparison operation
-/// type (if applied); 5) whether the elastic component is for the control path
-/// (if applied).
+static Type getHandshakeDataType(Operation *op) {
+  if (auto memOp = dyn_cast<MemoryOp>(op))
+    return memOp.getMemRefType().getElementType();
+
+  else if (auto sinkOp = dyn_cast<SinkOp>(op)) {
+    // As SinkOp only has one argument, which at this stage is already converted
+    // to a bundled FIRRTLType, here we convert it back to a normal data type.
+    // Is there a better way to do this?
+    auto type = sinkOp.getOperand().getType().cast<BundleType>();
+
+    if (auto dataType = type.getElementType("data")) {
+      auto intType = dataType.cast<firrtl::IntType>();
+      return IntegerType::get(type.getContext(), intType.getWidthOrSentinel(),
+                              intType.isSigned() ? IntegerType::Signed
+                                                 : IntegerType::Unsigned);
+    } else
+      return NoneType::get(type.getContext());
+  } else
+    return op->getResult(0).getType();
+}
+
+/// Construct a name for creating FIRRTL sub-module.
 static std::string getSubModuleName(Operation *oldOp) {
-  /// The dialect name is separated from the operation name by '.', which is not
-  /// valid in SystemVerilog module names. In case this name is used in
-  /// SystemVerilog output, replace '.' with '_'.
+  // The dialect name is separated from the operation name by '.', which is not
+  // valid in SystemVerilog module names. In case this name is used in
+  // SystemVerilog output, replace '.' with '_'.
   std::string prefix = oldOp->getName().getStringRef().str();
   std::replace(prefix.begin(), prefix.end(), '.', '_');
 
@@ -126,18 +143,56 @@ static std::string getSubModuleName(Operation *oldOp) {
                               std::to_string(oldOp->getNumOperands()) + "ins_" +
                               std::to_string(oldOp->getNumResults()) + "outs";
 
+  // Add value of the constant operation.
+  if (auto constOp = dyn_cast<handshake::ConstantOp>(oldOp)) {
+    if (auto intAttr = constOp.getValue().dyn_cast<IntegerAttr>()) {
+      auto intType = intAttr.getType();
+
+      if (intType.isSignedInteger())
+        subModuleName += "_c" + std::to_string(intAttr.getSInt());
+      else if (intType.isUnsignedInteger())
+        subModuleName += "_c" + std::to_string(intAttr.getUInt());
+      else
+        subModuleName += "_c" + std::to_string((uint64_t)intAttr.getInt());
+    } else
+      oldOp->emitError("unsupported constant type");
+  }
+
+  // Add operation data type. Currently we only support integer or index types.
+  // The emitted type aligns with the getFIRRTLType() method. Thus all integers
+  // other than signed integers will be emitted as unsigned.
+  auto type = getHandshakeDataType(oldOp);
+  if (type.isIntOrIndex()) {
+    if (auto indexType = type.dyn_cast<IndexType>())
+      subModuleName +=
+          "_ui" + std::to_string(indexType.kInternalStorageBitWidth);
+    else if (type.isSignedInteger())
+      subModuleName += "_si" + std::to_string(type.getIntOrFloatBitWidth());
+    else
+      subModuleName += "_ui" + std::to_string(type.getIntOrFloatBitWidth());
+
+  } else if (type.isa<NoneType>()) {
+    auto ctrlAttr = oldOp->getAttrOfType<BoolAttr>("control");
+    if (ctrlAttr.getValue())
+      subModuleName += "_ctrl";
+    else
+      oldOp->emitError("non-control component has invalid data type");
+  } else
+    oldOp->emitError("unsupported data type");
+
+  // Add memory ID.
+  if (auto memOp = dyn_cast<handshake::MemoryOp>(oldOp))
+    subModuleName += "_id" + std::to_string(memOp.id());
+
+  // Add compare kind.
   if (auto comOp = dyn_cast<mlir::CmpIOp>(oldOp))
     subModuleName += "_" + stringifyEnum(comOp.getPredicate()).str();
 
+  // Add buffer information.
   if (auto bufferOp = dyn_cast<handshake::BufferOp>(oldOp)) {
     subModuleName += "_" + bufferOp.getNumSlots().toString(10, false) + "slots";
     if (bufferOp.isSequential())
       subModuleName += "_seq";
-  }
-
-  if (auto ctrlAttr = oldOp->getAttr("control")) {
-    if (ctrlAttr.cast<BoolAttr>().getValue())
-      subModuleName += "_ctrl";
   }
 
   return subModuleName;
