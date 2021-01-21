@@ -1962,6 +1962,10 @@ class HandshakeToFIRRTLPass
     : public mlir::PassWrapper<HandshakeToFIRRTLPass,
                                OperationPass<handshake::FuncOp>> {
 public:
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<firrtl::FIRRTLDialect>();
+  }
+
   void runOnOperation() override {
     auto op = getOperation();
 
