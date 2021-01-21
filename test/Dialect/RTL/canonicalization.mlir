@@ -636,3 +636,112 @@ func @wire4() -> i1 {
   rtl.connect %w, %true : i1
   return %0 : i1
 }
+
+// CHECK-LABEL: func @mux_fold0(%arg0: i3, %arg1: i3)
+// CHECK-NEXT:    return %arg0 : i3
+func @mux_fold0(%arg0: i3, %arg1: i3) -> (i3) {
+  %c1_i1 = rtl.constant(1 : i1) : i1
+  %0 = rtl.mux %c1_i1, %arg0, %arg1 : i3
+  return %0 : i3
+}
+
+// CHECK-LABEL: func @mux_fold1(%arg0: i1, %arg1: i3)
+// CHECK-NEXT:    return %arg1 : i3
+func @mux_fold1(%arg0: i1, %arg1: i3) -> (i3) {
+  %0 = rtl.mux %arg0, %arg1, %arg1 : i3
+  return %0 : i3
+}
+
+// CHECK-LABEL: func @icmp_fold_constants() -> i1 {
+// CHECK-NEXT:    %false = rtl.constant(false) : i1
+// CHECK-NEXT:    return %false : i1
+func @icmp_fold_constants() -> (i1) {
+  %c2_i2 = rtl.constant(2 : i2) : i2
+  %c3_i2 = rtl.constant(3 : i2) : i2
+  %0 = rtl.icmp uge %c2_i2, %c3_i2 : i2
+  return %0 : i1
+}
+
+// CHECK-LABEL: func @icmp_fold_same_operands(%arg0: i2) -> i1 {
+// CHECK-NEXT:    %false = rtl.constant(false) : i1
+// CHECK-NEXT:    return %false : i1
+func @icmp_fold_same_operands(%arg0: i2) -> (i1) {
+  %0 = rtl.icmp ugt %arg0, %arg0 : i2
+  return %0 : i1
+}
+
+// CHECK-LABEL: func @icmp_fold_constant_rhs0(%arg0: i2) -> i1 {
+// CHECK-NEXT:    %false = rtl.constant(false) : i1
+// CHECK-NEXT:    return %false : i1
+func @icmp_fold_constant_rhs0(%arg0: i2) -> (i1) {
+  %c3_i2 = rtl.constant(3 : i2) : i2
+  %0 = rtl.icmp ugt %arg0, %c3_i2 : i2
+  return %0 : i1
+}
+
+// CHECK-LABEL: func @icmp_fold_constant_rhs1(%arg0: i2) -> i1 {
+// CHECK-NEXT:    %false = rtl.constant(false) : i1
+// CHECK-NEXT:    return %false : i1
+func @icmp_fold_constant_rhs1(%arg0: i2) -> (i1) {
+  %c-2_i2 = rtl.constant(-2 : i2) : i2
+  %0 = rtl.icmp slt %arg0, %c-2_i2 : i2
+  return %0 : i1
+}
+
+// CHECK-LABEL: func @icmp_fold_constant_lhs0(%arg0: i2) -> i1 {
+// CHECK-NEXT:    %true = rtl.constant(true) : i1
+// CHECK-NEXT:    return %true : i1
+func @icmp_fold_constant_lhs0(%arg0: i2) -> (i1) {
+  %c3_i2 = rtl.constant(3 : i2) : i2
+  %0 = rtl.icmp uge %c3_i2, %arg0 : i2
+  return %0 : i1
+}
+
+// CHECK-LABEL: func @icmp_fold_constant_lhs1(%arg0: i2) -> i1 {
+// CHECK-NEXT:    %true = rtl.constant(true) : i1
+// CHECK-NEXT:    return %true : i1
+func @icmp_fold_constant_lhs1(%arg0: i2) -> (i1) {
+  %c-2_i2 = rtl.constant(-2 : i2) : i2
+  %0 = rtl.icmp sle %c-2_i2, %arg0 : i2
+  return %0 : i1
+}
+
+// CHECK-LABEL: func @icmp_canonicalize0(%arg0: i2) -> i1 {
+// CHECK-NEXT:    %c-1_i2 = rtl.constant(-1 : i2) : i2
+// CHECK-NEXT:    %0 = rtl.icmp sgt %arg0, %c-1_i2 : i2
+// CHECK-NEXT:    return %0 : i1
+func @icmp_canonicalize0(%arg0: i2) -> (i1) {
+  %c-1_i2 = rtl.constant(-1 : i2) : i2
+  %0 = rtl.icmp slt %c-1_i2, %arg0 : i2
+  return %0 : i1
+}
+
+// CHECK-LABEL: func @icmp_canonicalize_ne(%arg0: i2) -> i1 {
+// CHECK-NEXT:    %c-2_i2 = rtl.constant(-2 : i2) : i2
+// CHECK-NEXT:    %0 = rtl.icmp ne %arg0, %c-2_i2 : i2
+// CHECK-NEXT:    return %0 : i1
+func @icmp_canonicalize_ne(%arg0: i2) -> (i1) {
+  %c-2_i2 = rtl.constant(-2 : i2) : i2
+  %0 = rtl.icmp slt %c-2_i2, %arg0 : i2
+  return %0 : i1
+}
+
+// CHECK-LABEL: func @icmp_canonicalize_eq(%arg0: i2) -> i1 {
+// CHECK-NEXT:    %c-2_i2 = rtl.constant(-2 : i2) : i2
+// CHECK-NEXT:    %0 = rtl.icmp eq %arg0, %c-2_i2 : i2
+// CHECK-NEXT:    return %0 : i1
+func @icmp_canonicalize_eq(%arg0: i2) -> (i1) {
+  %c-1_i2 = rtl.constant(-1 : i2) : i2
+  %0 = rtl.icmp slt %arg0, %c-1_i2: i2
+  return %0 : i1
+}
+
+// CHECK-LABEL: func @icmp_canonicalize_sgt(%arg0: i2) -> i1 {
+// CHECK-NEXT:    %c-1_i2 = rtl.constant(-1 : i2) : i2
+// CHECK-NEXT:    %0 = rtl.icmp sgt %arg0, %c-1_i2 : i2
+// CHECK-NEXT:    return %0 : i1
+func @icmp_canonicalize_sgt(%arg0: i2) -> (i1) {
+  %c0_i2 = rtl.constant(0 : i2) : i2
+  %0 = rtl.icmp sle %c0_i2, %arg0 : i2
+  return %0 : i1
+}

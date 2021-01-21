@@ -132,6 +132,10 @@ def MergeOp : UTVariadicRTLOp<"merge", [Commutative]> {
   let hasCanonicalizer = false;
 }
 
+//===----------------------------------------------------------------------===//
+// Comparisons
+//===----------------------------------------------------------------------===//
+
 def ICmpPredicateEQ  : I64EnumAttrCase<"eq", 0>;
 def ICmpPredicateNE  : I64EnumAttrCase<"ne", 1>;
 def ICmpPredicateSLT : I64EnumAttrCase<"slt", 2>;
@@ -149,19 +153,37 @@ def ICmpPredicate : I64EnumAttr<
      ICmpPredicateSGT, ICmpPredicateSGE, ICmpPredicateULT, ICmpPredicateULE,
      ICmpPredicateUGT, ICmpPredicateUGE]>;
 
-// Other integer operations.
 def ICmpOp : RTLOp<"icmp", [NoSideEffect, SameTypeOperands]> {
+  let summary = "Compare two integer values";
+  let description = [{
+    This operation compares two integers using a predicate.  If the predicate is
+    true, returns 1, otherwise returns 0. This operation always returns a one
+    bit wide result.
+
+    ```
+        %r = rtl.icmp eq %a, %b : i4
+    ```
+  }];
+
   let arguments = (ins ICmpPredicate:$predicate, 
                    RTLIntegerType:$lhs, RTLIntegerType:$rhs);
   let results = (outs I1:$result);
 
   let assemblyFormat = "$predicate $lhs `,` $rhs  attr-dict `:` type($lhs)";
+  
+  let hasFolder = true;
+  let hasCanonicalizer = true;
 
   let builders = [
     OpBuilderDAG<(ins "ICmpPredicate":$pred, "Value":$lhs, "Value":$rhs), [{
       return build($_builder, $_state, $_builder.getI1Type(), pred, lhs, rhs);
     }]>
   ];
+  let extraClassDeclaration = [{
+    /// Returns the flipped predicate, reversing the LHS and RHS operands.  The
+    /// lhs and rhs operands should be flipped to match the new predicate.
+    static ICmpPredicate getFlippedPredicate(ICmpPredicate predicate);
+  }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -305,6 +327,11 @@ def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
 def MuxOp : RTLOp<"mux",
  [NoSideEffect, AllTypesMatch<["trueValue", "falseValue", "result"]>]> {
   let summary = "Return one or the other operand depending on a selector bit";
+  let description = [{
+    ```
+      %0 = mux %pred, %tvalue, %fvalue : i4
+    ```
+  }];
 
   let arguments = (ins I1:$cond, RTLIntegerType:$trueValue,
                        RTLIntegerType:$falseValue);
@@ -312,6 +339,8 @@ def MuxOp : RTLOp<"mux",
 
   let assemblyFormat =
     "$cond `,` $trueValue `,` $falseValue attr-dict `:` type($result)";
+  
+  let hasFolder = true;
 
   let builders = [
     OpBuilderDAG<(ins "Value":$cond, "Value":$trueValue, "Value":$falseValue),

@@ -732,3 +732,216 @@ void WireOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
   };
   results.insert<DropDeadConnect>(context);
 }
+
+//===----------------------------------------------------------------------===//
+// MuxOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult MuxOp::fold(ArrayRef<Attribute> constants) {
+  // mux (c, b, b) -> b
+  if (trueValue() == falseValue())
+    return trueValue();
+
+  // mux(0, a, b) -> b
+  // mux(1, a, b) -> a
+  if (auto pred = constants[0].dyn_cast_or_null<IntegerAttr>()) {
+    if (pred.getValue().isNullValue())
+      return falseValue();
+    return trueValue();
+  }
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// ICmpOp
+//===----------------------------------------------------------------------===//
+
+// Calculate the result of a comparison when the LHS and RHS are both
+// constants.
+static bool applyCmpPredicate(ICmpPredicate predicate, const APInt &lhs,
+                              const APInt &rhs) {
+  switch (predicate) {
+  case ICmpPredicate::eq:
+    return lhs.eq(rhs);
+  case ICmpPredicate::ne:
+    return lhs.ne(rhs);
+  case ICmpPredicate::slt:
+    return lhs.slt(rhs);
+  case ICmpPredicate::sle:
+    return lhs.sle(rhs);
+  case ICmpPredicate::sgt:
+    return lhs.sgt(rhs);
+  case ICmpPredicate::sge:
+    return lhs.sge(rhs);
+  case ICmpPredicate::ult:
+    return lhs.ult(rhs);
+  case ICmpPredicate::ule:
+    return lhs.ule(rhs);
+  case ICmpPredicate::ugt:
+    return lhs.ugt(rhs);
+  case ICmpPredicate::uge:
+    return lhs.uge(rhs);
+  }
+  llvm_unreachable("unknown comparison predicate");
+}
+
+// Returns the result of applying the predicate when the LHS and RHS are the
+// exact same value.
+static bool applyCmpPredicateToEqualOperands(ICmpPredicate predicate) {
+  switch (predicate) {
+  case ICmpPredicate::eq:
+  case ICmpPredicate::sle:
+  case ICmpPredicate::sge:
+  case ICmpPredicate::ule:
+  case ICmpPredicate::uge:
+    return true;
+  case ICmpPredicate::ne:
+  case ICmpPredicate::slt:
+  case ICmpPredicate::sgt:
+  case ICmpPredicate::ult:
+  case ICmpPredicate::ugt:
+    return false;
+  }
+  llvm_unreachable("unknown comparison predicate");
+}
+
+OpFoldResult ICmpOp::fold(ArrayRef<Attribute> constants) {
+
+  // gt a, a -> false
+  // gte a, a -> true
+  if (lhs() == rhs()) {
+    auto val = applyCmpPredicateToEqualOperands(predicate());
+    return IntegerAttr::get(getType(), val);
+  }
+
+  // gt 1, 2 -> false
+  if (auto lhs = constants[0].dyn_cast_or_null<IntegerAttr>()) {
+    if (auto rhs = constants[1].dyn_cast_or_null<IntegerAttr>()) {
+      auto val = applyCmpPredicate(predicate(), lhs.getValue(), rhs.getValue());
+      return IntegerAttr::get(getType(), val);
+    }
+  }
+  return {};
+}
+
+namespace {
+// Canonicalizes a ICmp with a single constant
+struct ICmpCanonicalizeConstant final : public OpRewritePattern<ICmpOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(ICmpOp op,
+                                PatternRewriter &rewriter) const override {
+
+    APInt lhs, rhs;
+
+    // icmp 1, x -> icmp x, 1
+    if (matchPattern(op.lhs(), m_RConstant(lhs))) {
+      assert(!matchPattern(op.rhs(), m_RConstant(rhs)) && "Should be folded");
+      rewriter.replaceOpWithNewOp<ICmpOp>(
+          op, ICmpOp::getFlippedPredicate(op.predicate()), op.rhs(), op.lhs());
+      return success();
+    }
+
+    // Canonicalize with RHS constant
+    if (matchPattern(op.rhs(), m_RConstant(rhs))) {
+      ConstantOp constant;
+
+      auto getConstant = [&](APInt constant) -> Value {
+        return rewriter.create<ConstantOp>(op.getLoc(), std::move(constant));
+      };
+
+      auto replaceWith = [&](ICmpPredicate predicate, Value lhs,
+                             Value rhs) -> LogicalResult {
+        rewriter.replaceOpWithNewOp<ICmpOp>(op, predicate, lhs, rhs);
+        return success();
+      };
+
+      auto replaceWithConstantI1 = [&](bool constant) -> LogicalResult {
+        rewriter.replaceOpWithNewOp<ConstantOp>(op, APInt(1, constant));
+        return success();
+      };
+
+      switch (op.predicate()) {
+      case ICmpPredicate::slt:
+        // x < max -> x != max
+        if (rhs.isMaxSignedValue())
+          return replaceWith(ICmpPredicate::ne, op.lhs(), op.rhs());
+        // x < min -> false
+        if (rhs.isMinSignedValue())
+          return replaceWithConstantI1(0);
+        // x < min+1 -> x == min
+        if ((rhs - 1).isMinSignedValue())
+          return replaceWith(ICmpPredicate::eq, op.lhs(), getConstant(rhs - 1));
+        break;
+      case ICmpPredicate::sgt:
+        // x > min -> x != min
+        if (rhs.isMinSignedValue())
+          return replaceWith(ICmpPredicate::ne, op.lhs(), op.rhs());
+        // x > max -> false
+        if (rhs.isMaxSignedValue())
+          return replaceWithConstantI1(0);
+        // x > max-1 -> x == max
+        if ((rhs + 1).isMaxSignedValue())
+          return replaceWith(ICmpPredicate::eq, op.lhs(), getConstant(rhs + 1));
+        break;
+      case ICmpPredicate::ult:
+        // x < max -> x != max
+        if (rhs.isMaxValue())
+          return replaceWith(ICmpPredicate::ne, op.lhs(), op.rhs());
+        // x < min -> false
+        if (rhs.isMinValue())
+          return replaceWithConstantI1(0);
+        // x < min+1 -> x == min
+        if ((rhs - 1).isMinValue())
+          return replaceWith(ICmpPredicate::eq, op.lhs(), getConstant(rhs - 1));
+        break;
+      case ICmpPredicate::ugt:
+        // x > min -> x != min
+        if (rhs.isMinValue())
+          return replaceWith(ICmpPredicate::ne, op.lhs(), op.rhs());
+        // x > max -> false
+        if (rhs.isMaxValue())
+          return replaceWithConstantI1(0);
+        // x > max-1 -> x == max
+        if ((rhs + 1).isMaxValue())
+          return replaceWith(ICmpPredicate::eq, op.lhs(), getConstant(rhs + 1));
+        break;
+      case ICmpPredicate::sle:
+        // x <= max -> true
+        if (rhs.isMaxSignedValue())
+          return replaceWithConstantI1(1);
+        // x <= c -> x < (c+1)
+        return replaceWith(ICmpPredicate::slt, op.lhs(), getConstant(rhs + 1));
+      case ICmpPredicate::sge:
+        // x >= min -> true
+        if (rhs.isMinSignedValue())
+          return replaceWithConstantI1(1);
+        // x >= c -> x > (c-1)
+        return replaceWith(ICmpPredicate::sgt, op.lhs(), getConstant(rhs - 1));
+      case ICmpPredicate::ule:
+        // x <= max -> true
+        if (rhs.isMaxValue())
+          return replaceWithConstantI1(1);
+        // x <= c -> x < (c+1)
+        return replaceWith(ICmpPredicate::ult, op.lhs(), getConstant(rhs + 1));
+      case ICmpPredicate::uge:
+        // x >= min -> true
+        if (rhs.isMinValue())
+          return replaceWithConstantI1(1);
+        // x >= c -> x > (c-1)
+        return replaceWith(ICmpPredicate::ugt, op.lhs(), getConstant(rhs - 1));
+      default:
+        break;
+      }
+    }
+
+    return failure();
+  }
+};
+
+} // namespace
+
+void ICmpOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                         MLIRContext *context) {
+  results.insert<ICmpCanonicalizeConstant>(context);
+}

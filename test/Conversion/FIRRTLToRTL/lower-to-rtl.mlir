@@ -160,8 +160,8 @@ module attributes {firrtl.mainModule = "Simple"} {
     %25 = firrtl.neg %s24 : (!firrtl.sint<3>) -> !firrtl.sint<4>
 
     // CHECK-NEXT: [[CVT4:%.+]] = rtl.sext [[CVT]] : (i3) -> i4
-    // CHECK-NEXT: rtl.mux %false{{.*}}, [[CVT4]], [[SUB]] : i4
-    %26 = firrtl.mux(%12, %23, %25) : (!firrtl.uint<1>, !firrtl.sint<3>, !firrtl.sint<4>) -> !firrtl.sint<4>
+    // CHECK-NEXT: rtl.mux {{.*}}, [[CVT4]], [[SUB]] : i4
+    %26 = firrtl.mux(%17, %23, %25) : (!firrtl.uint<1>, !firrtl.sint<3>, !firrtl.sint<4>) -> !firrtl.sint<4>
 
     // Noop
     %27 = firrtl.validif %12, %18 : (!firrtl.uint<1>, !firrtl.uint<14>) -> !firrtl.uint<14>
