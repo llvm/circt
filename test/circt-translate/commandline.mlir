@@ -3,7 +3,7 @@
 // CHECK: OVERVIEW: CIRCT Translation Testing Tool
 
 // CHECK: Translation to perform
-// CHECK:     --emit-firrtl-verilog
-// CHECK-NEXT:     --emit-verilog
-// CHECK-NEXT:     --llhd-to-verilog
-// CHECK-NEXT:     --parse-fir
+// CHECK-NEXT: --export-firrtl-verilog
+// CHECK-NEXT: --export-llhd-verilog
+// CHECK-NEXT: --export-verilog
+// CHECK-NEXT: --import-firrtl

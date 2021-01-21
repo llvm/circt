@@ -168,7 +168,7 @@ static LogicalResult exportCosimSchema(ModuleOp module, llvm::raw_ostream &os) {
 void circt::esi::registerESITranslations() {
 #ifdef CAPNP
   TranslateFromMLIRRegistration cosimToCapnp(
-      "emit-esi-capnp", exportCosimSchema, [](DialectRegistry &registry) {
+      "export-esi-capnp", exportCosimSchema, [](DialectRegistry &registry) {
         registry
             .insert<ESIDialect, circt::rtl::RTLDialect, circt::sv::SVDialect,
                     mlir::StandardOpsDialect, mlir::BuiltinDialect>();

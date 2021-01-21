@@ -1,4 +1,4 @@
-//RUN: circt-translate --llhd-to-verilog -split-input-file -verify-diagnostics %s | FileCheck %s
+//RUN: circt-translate --export-llhd-verilog -split-input-file -verify-diagnostics %s | FileCheck %s
 
 // CHECK-LABEL: _check_sig
 llhd.entity @check_sig () -> () {

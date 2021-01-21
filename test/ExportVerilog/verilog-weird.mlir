@@ -1,4 +1,4 @@
-// RUN: circt-translate %s -emit-firrtl-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
+// RUN: circt-translate %s -export-firrtl-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 firrtl.circuit "M1" {
   firrtl.module @M1(%x : !firrtl.uint<8> { firrtl.name = "y"},
