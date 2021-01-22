@@ -42,6 +42,37 @@ func @test1(%arg0: i1, %arg1: i1) {
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
 
+  sv.alwaysff "posedge", %arg0 {
+    sv.fwrite "Yo\n"
+  }
+
+  // CHECK-NEXT: sv.alwaysff posedge, %arg0  {
+  // CHECK-NEXT:   sv.fwrite "Yo\0A"
+  // CHECK-NEXT: }
+
+  sv.alwaysff "posedge", %arg0, syncreset, "posedge", %arg1 {
+    sv.fwrite "Sync Reset Block\n"
+  } {
+    sv.fwrite "Sync Main Block\n"
+  }
+
+  // CHECK-NEXT: sv.alwaysff posedge, %arg0, syncreset, posedge, %arg1  {
+  // CHECK-NEXT:   sv.fwrite "Sync Reset Block\0A"
+  // CHECK-NEXT: }  {
+  // CHECK-NEXT:   sv.fwrite "Sync Main Block\0A"
+  // CHECK-NEXT:  }
+
+  sv.alwaysff "posedge", %arg0, asyncreset, "negedge", %arg1 {
+    sv.fwrite "Async Reset Block\n"
+  } {
+    sv.fwrite "Async Main Block\n"
+  }
+
+  // CHECK-NEXT: sv.alwaysff posedge, %arg0, asyncreset, negedge, %arg1  {
+  // CHECK-NEXT:   sv.fwrite "Async Reset Block\0A"
+  // CHECK-NEXT: }  {
+  // CHECK-NEXT:   sv.fwrite "Async Main Block\0A"
+  // CHECK-NEXT:  }
 
 // Smoke test generic syntax.
    "sv.if"(%arg0) ( {

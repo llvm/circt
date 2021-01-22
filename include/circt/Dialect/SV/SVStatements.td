@@ -138,6 +138,60 @@ def AlwaysOp : SVOp<"always", [HasRegionTerminator, NoRegionArguments,
   let verifier = "return ::verifyAlwaysOp(*this);";
 }
 
+def NoReset: I32EnumAttrCase<"NoReset", 0, "noreset">;
+def SyncReset: I32EnumAttrCase<"SyncReset", 1, "syncreset">;
+def AsyncReset: I32EnumAttrCase<"AsyncReset", 2, "asyncreset">;
+
+def ResetTypeAttr : I32EnumAttr<"ResetType", "reset type",
+                                   [NoReset, SyncReset, AsyncReset]>;
+
+
+def AlwaysFFOp : SVOp<"alwaysff", [HasRegionTerminator, NoRegionArguments,
+                               RecursiveSideEffects]> {
+  let summary = "'alwaysff @' block with optional reset";
+  let description = [{ 
+    alwaysff blocks represent always_ff verilog nodes, which enforce inference 
+    of registers.  This block takes a clock signal and edge sensitivity and 
+    reset type.  If the reset type is anything but 'noreset', the block takes a
+    reset signal, reset sensitivity, and reset block.  Appropriate if conditions
+    are generated in the output code based on the reset type.  A negative-edge, 
+    asynchronous reset will check the inverse of the reset condition 
+    (if (!reset) begin resetblock end) to match the sensitivity.
+  }];
+  
+  let regions = (region SizedRegion<1>:$bodyBlk, AnyRegion:$resetBlk);
+  let arguments = (ins EventControlAttr:$clockEdge, I1:$clock, 
+                       DefaultValuedAttr<ResetTypeAttr, "0">:$resetStyle, 
+                       OptionalAttr<EventControlAttr>:$resetEdge, 
+                       Optional<I1>:$reset);
+  let results = (outs);
+  
+  let assemblyFormat = [{ 
+    $clockEdge `,` $clock 
+    ( `,` $resetStyle `,` $resetEdge^ `,` $reset $resetBlk )? $bodyBlk attr-dict
+  }];
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilderDAG<(ins "EventControl":$clockEdge, "Value":$clock,
+                      CArg<"std::function<void()>", "{}">:$bodyCtor)>,
+    OpBuilderDAG<(ins "EventControl":$clockEdge, "Value":$clock, 
+                      "ResetType":$resetStyle, 
+                      "EventControl":$resetEdge, "Value":$reset,
+                      CArg<"std::function<void()>", "{}">:$resetCtor,
+                      CArg<"std::function<void()>", "{}">:$bodyCtor)>
+  ];
+
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &bodyBlk().front(); }
+    Block *getResetBlock() { return &resetBlk().front(); }
+  }];
+
+  // Check that we have the same number of events and conditions.
+  //let verifier = "return ::verifyAlwaysOp(*this);";
+}
+
+
 def InitialOp : SVOp<"initial", [HasRegionTerminator, NoRegionArguments,
                                  RecursiveSideEffects]> {
   let summary = "'initial' block";
@@ -167,7 +221,8 @@ def InitialOp : SVOp<"initial", [HasRegionTerminator, NoRegionArguments,
 
 def YieldOp
   : SVOp<"yield", [NoSideEffect, Terminator,
-                   ParentOneOf<["IfDefOp, IfOp", "AlwaysOp", "InitialOp"]>]> {
+                   ParentOneOf<["IfDefOp, IfOp", "AlwaysOp", "InitialOp", 
+                                "AlwaysFFOp"]>]> {
   let summary = "terminator for control-flow operation regions";
   let arguments = (ins);
 

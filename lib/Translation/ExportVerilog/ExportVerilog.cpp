@@ -312,6 +312,7 @@ public:
   LogicalResult visitSV(IfDefOp op);
   LogicalResult visitSV(IfOp op);
   LogicalResult visitSV(AlwaysOp op);
+  LogicalResult visitSV(AlwaysFFOp op);
   LogicalResult visitSV(InitialOp op);
   LogicalResult visitSV(FWriteOp op);
   LogicalResult visitSV(FatalOp op);
@@ -1440,6 +1441,56 @@ LogicalResult ModuleEmitter::visitSV(AlwaysOp op) {
   }
 
   emitBeginEndRegion(op.getBodyBlock(), ops, *this, comment);
+  return success();
+}
+
+LogicalResult ModuleEmitter::visitSV(AlwaysFFOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent() << "always_ff @(" << stringifyEventControl(op.clockEdge()) << " "
+           << emitExpressionToString(op.clock(), ops);
+  if (op.resetStyle() == ResetType::AsyncReset) {
+    os << " or " << stringifyEventControl(*op.resetEdge()) << " "
+       << emitExpressionToString(op.reset(), ops);
+  }
+  os << ')';
+
+  // Build the comment string, leave out the signal expressions (since they
+  // can be large).
+  std::string comment;
+  comment = "always_ff @(";
+  comment += stringifyEventControl(op.clockEdge());
+  if (op.resetStyle() == ResetType::AsyncReset) {
+    comment += " or ";
+    comment += stringifyEventControl(*op.resetEdge());
+  }
+  comment += ')';
+
+  if (op.resetStyle() == ResetType::NoReset)
+    emitBeginEndRegion(op.getBodyBlock(), ops, *this, comment);
+  else {
+    os << " begin";
+    emitLocationInfoAndNewLine(ops);
+    addIndent();
+
+    indent() << "if (";
+    // Negative edge async resets need to invert the reset condition.  This is
+    // noted in the op description.
+    if (op.resetStyle() == ResetType::AsyncReset &&
+        *op.resetEdge() == EventControl::AtNegEdge)
+      os << "!";
+    os << emitExpressionToString(op.reset(), ops) << ')';
+    emitBeginEndRegion(op.getResetBlock(), ops, *this);
+    indent() << "else";
+    emitBeginEndRegion(op.getBodyBlock(), ops, *this);
+
+    reduceIndent();
+
+    indent() << "end";
+    os << " // " << comment;
+    os << '\n';
+  }
   return success();
 }
 
