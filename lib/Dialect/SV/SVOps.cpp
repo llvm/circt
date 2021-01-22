@@ -246,7 +246,73 @@ static void printEventList(OpAsmPrinter &p, AlwaysOp op, ArrayAttr portsAttr,
 }
 
 //===----------------------------------------------------------------------===//
+// AlwaysFFOp
+
+void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
+                       EventControl clockEdge, Value clock,
+                       std::function<void()> bodyCtor) {
+  result.addAttribute("clockEdge", odsBuilder.getI32IntegerAttr(
+                                       static_cast<int32_t>(clockEdge)));
+  result.addOperands(clock);
+  result.addAttribute(
+      "resetStyle",
+      odsBuilder.getI32IntegerAttr(static_cast<int32_t>(ResetType::NoReset)));
+
+  // Set up the body.
+  Region *bodyBlk = result.addRegion();
+  AlwaysFFOp::ensureTerminator(*bodyBlk, odsBuilder, result.location);
+
+  if (bodyCtor) {
+    auto oldIP = &*odsBuilder.getInsertionPoint();
+    odsBuilder.setInsertionPointToStart(&*bodyBlk->begin());
+    bodyCtor();
+    odsBuilder.setInsertionPoint(oldIP);
+  }
+
+  // Set up the reset
+  Region *resetBlk = result.addRegion();
+}
+
+void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
+                       EventControl clockEdge, Value clock,
+                       ResetType resetStyle, EventControl resetEdge,
+                       Value reset, std::function<void()> resetCtor,
+                       std::function<void()> bodyCtor) {
+  result.addAttribute("clockEdge", odsBuilder.getI32IntegerAttr(
+                                       static_cast<int32_t>(clockEdge)));
+  result.addOperands(clock);
+  result.addAttribute("resetStyle", odsBuilder.getI32IntegerAttr(
+                                        static_cast<int32_t>(resetStyle)));
+  result.addAttribute("resetEdge", odsBuilder.getI32IntegerAttr(
+                                       static_cast<int32_t>(resetEdge)));
+  result.addOperands(reset);
+
+  // Set up the body.
+  Region *bodyRegion = result.addRegion();
+
+  if (bodyCtor) {
+    AlwaysFFOp::ensureTerminator(*bodyRegion, odsBuilder, result.location);
+    auto oldIP = &*odsBuilder.getInsertionPoint();
+    odsBuilder.setInsertionPointToStart(&*bodyRegion->begin());
+    bodyCtor();
+    odsBuilder.setInsertionPoint(oldIP);
+  }
+
+  // Set up the reset.
+  Region *resetRegion = result.addRegion();
+
+  if (resetCtor) {
+    AlwaysFFOp::ensureTerminator(*resetRegion, odsBuilder, result.location);
+    auto oldIP = &*odsBuilder.getInsertionPoint();
+    odsBuilder.setInsertionPointToStart(&*resetRegion->begin());
+    resetCtor();
+    odsBuilder.setInsertionPoint(oldIP);
+  }
+}
+
+//===----------------------------------------------------------------------===//
 // InitialOp
+//===----------------------------------------------------------------------===//
 
 void InitialOp::build(OpBuilder &odsBuilder, OperationState &result,
                       std::function<void()> bodyCtor) {
@@ -261,7 +327,6 @@ void InitialOp::build(OpBuilder &odsBuilder, OperationState &result,
     odsBuilder.setInsertionPoint(oldIP);
   }
 }
-
 //===----------------------------------------------------------------------===//
 // TypeDecl operations
 //===----------------------------------------------------------------------===//
