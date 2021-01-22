@@ -161,14 +161,14 @@ def AlwaysFFOp : SVOp<"alwaysff", [HasRegionTerminator, NoRegionArguments,
   
   let regions = (region SizedRegion<1>:$bodyBlk, AnyRegion:$resetBlk);
   let arguments = (ins EventControlAttr:$clockEdge, I1:$clock, 
-                       ResetTypeAttr:$resetStyle, 
+                       DefaultValuedAttr<ResetTypeAttr, "0">:$resetStyle, 
                        OptionalAttr<EventControlAttr>:$resetEdge, 
                        Optional<I1>:$reset);
   let results = (outs);
   
   let assemblyFormat = [{ 
-    $clockEdge `,` $clock `,` $resetStyle 
-    ( `,` $resetEdge^ `,` $reset $resetBlk )? $bodyBlk attr-dict
+    $clockEdge `,` $clock 
+    ( `,` $resetStyle `,` $resetEdge^ `,` $reset $resetBlk )? $bodyBlk attr-dict
   }];
 
   let skipDefaultBuilders = 1;

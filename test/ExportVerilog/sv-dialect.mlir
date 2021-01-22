@@ -42,7 +42,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
 
   // CHECK-NEXT: always_ff @(posedge clock)
   // CHECK-NEXT:   $fwrite(32'h80000002, "Yo\n");
-  sv.alwaysff "posedge", %clock, noreset {
+  sv.alwaysff "posedge", %clock {
     sv.fwrite "Yo\n"
   }
   

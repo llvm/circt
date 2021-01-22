@@ -42,11 +42,11 @@ func @test1(%arg0: i1, %arg1: i1) {
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
 
-  sv.alwaysff "posedge", %arg0, noreset {
+  sv.alwaysff "posedge", %arg0 {
     sv.fwrite "Yo\n"
   }
 
-  // CHECK-NEXT: sv.alwaysff posedge, %arg0, noreset  {
+  // CHECK-NEXT: sv.alwaysff posedge, %arg0  {
   // CHECK-NEXT:   sv.fwrite "Yo\0A"
   // CHECK-NEXT: }
 
