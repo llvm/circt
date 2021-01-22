@@ -423,4 +423,31 @@ module {
     // CHECK: // Zero width: assign arrZero = iii_arrZero;
     rtl.output %o1, %o2, %o3 : i4, i0, !rtl.array<3xi0>
   }
+
+  // CHECK-LABEL: TestDupInstanceName
+  rtl.module @TestDupInstanceName(%a: i1) {
+    // CHECK: B name (
+    %w1, %y1 = rtl.instance "name" @B(%a) : (i1) -> (i1, i1)
+
+    // CHECK: B name_0 (
+    %w2, %y2 = rtl.instance "name" @B(%a) : (i1) -> (i1, i1)
+  }
+
+  // CHECK-LABEL: TestEmptyInstanceName
+  rtl.module @TestEmptyInstanceName(%a: i1) {
+    // CHECK: B _T (
+    %w1, %y1 = rtl.instance "" @B(%a) : (i1) -> (i1, i1)
+
+    // CHECK: B _T_0 (
+    %w2, %y2 = rtl.instance "" @B(%a) : (i1) -> (i1, i1)
+  }
+
+  // CHECK-LABEL: TestInstanceNameValueConflict
+  rtl.module @TestInstanceNameValueConflict(%a: i1) {
+    // CHECK: wire name
+    %name = rtl.wire : !rtl.inout<i1>
+
+    // CHECK: B name_0 (
+    %w, %y = rtl.instance "name" @B(%a) : (i1) -> (i1, i1)
+  }
 }
