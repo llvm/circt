@@ -829,4 +829,14 @@ module attributes {firrtl.mainModule = "Simple"} {
     %3 = firrtl.pad %2, 23 : (!firrtl.uint<0>) -> !firrtl.uint<23>
     %4 = firrtl.stdIntCast %3 : (!firrtl.uint<23>) -> i23
     rtl.output %4 : i23
-  }}
+  }
+  
+  module implicitTrunc :
+    input inp_1: UInt<1>
+    input inp_2: SInt<5>
+    output out1: SInt<3>
+    output out2: SInt<3>
+    out1 <= dshl(inp_2, inp_1)
+    out2 <= inp_2
+  
+}
