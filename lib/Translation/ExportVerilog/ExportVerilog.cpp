@@ -334,6 +334,7 @@ public:
     return addName(valueOrOp, nameAttr ? nameAttr.getValue() : "");
   }
 
+  StringRef getName(Value value) { return getName(ValueOrOp(value)); }
   StringRef getName(ValueOrOp valueOrOp) {
     auto *entry = nameTable[valueOrOp];
     assert(entry && "value expected a name but doesn't have one");
@@ -1078,7 +1079,7 @@ void ModuleEmitter::visitMerge(MergeOp op) {
   //   assign a = z;
   for (auto operand : op.getOperands()) {
     ops.insert(op);
-    indent() << "assign " << getName(ValueOrOp(op)) << " = ";
+    indent() << "assign " << getName(op) << " = ";
     emitExpression(operand, ops);
     os << ';';
     emitLocationInfoAndNewLine(ops);
