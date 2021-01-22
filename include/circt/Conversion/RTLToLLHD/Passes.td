@@ -22,6 +22,7 @@ def ConvertRTLToLLHD : Pass<"convert-rtl-to-llhd", "mlir::ModuleOp"> {
     description.
   }];
   let constructor = "circt::llhd::createConvertRTLToLLHDPass()";
+  let dependentDialects = ["llhd::LLHDDialect"];
 }
 
 #endif // CIRCT_CONVERSION_RTLTOLLHD_PASSES

@@ -132,6 +132,10 @@ def MergeOp : UTVariadicRTLOp<"merge", [Commutative]> {
   let hasCanonicalizer = false;
 }
 
+//===----------------------------------------------------------------------===//
+// Comparisons
+//===----------------------------------------------------------------------===//
+
 def ICmpPredicateEQ  : I64EnumAttrCase<"eq", 0>;
 def ICmpPredicateNE  : I64EnumAttrCase<"ne", 1>;
 def ICmpPredicateSLT : I64EnumAttrCase<"slt", 2>;
@@ -149,19 +153,37 @@ def ICmpPredicate : I64EnumAttr<
      ICmpPredicateSGT, ICmpPredicateSGE, ICmpPredicateULT, ICmpPredicateULE,
      ICmpPredicateUGT, ICmpPredicateUGE]>;
 
-// Other integer operations.
 def ICmpOp : RTLOp<"icmp", [NoSideEffect, SameTypeOperands]> {
+  let summary = "Compare two integer values";
+  let description = [{
+    This operation compares two integers using a predicate.  If the predicate is
+    true, returns 1, otherwise returns 0. This operation always returns a one
+    bit wide result.
+
+    ```
+        %r = rtl.icmp eq %a, %b : i4
+    ```
+  }];
+
   let arguments = (ins ICmpPredicate:$predicate, 
                    RTLIntegerType:$lhs, RTLIntegerType:$rhs);
   let results = (outs I1:$result);
 
   let assemblyFormat = "$predicate $lhs `,` $rhs  attr-dict `:` type($lhs)";
+  
+  let hasFolder = true;
+  let hasCanonicalizer = true;
 
   let builders = [
     OpBuilderDAG<(ins "ICmpPredicate":$pred, "Value":$lhs, "Value":$rhs), [{
       return build($_builder, $_state, $_builder.getI1Type(), pred, lhs, rhs);
     }]>
   ];
+  let extraClassDeclaration = [{
+    /// Returns the flipped predicate, reversing the LHS and RHS operands.  The
+    /// lhs and rhs operands should be flipped to match the new predicate.
+    static ICmpPredicate getFlippedPredicate(ICmpPredicate predicate);
+  }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -295,12 +317,21 @@ def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
     $input `at` $lowIndex attr-dict `:`
       `(` custom<SliceTypes>(type($input), type($lowIndex)) `)` `->` type($dst)
   }];
+
+  let builders = [
+    OpBuilderDAG<(ins "Value":$input, "size_t":$lowBit, "size_t":$size)>
+  ];
 }
 
 // Extract a range of bits from the specified input.
 def MuxOp : RTLOp<"mux",
  [NoSideEffect, AllTypesMatch<["trueValue", "falseValue", "result"]>]> {
   let summary = "Return one or the other operand depending on a selector bit";
+  let description = [{
+    ```
+      %0 = mux %pred, %tvalue, %fvalue : i4
+    ```
+  }];
 
   let arguments = (ins I1:$cond, RTLIntegerType:$trueValue,
                        RTLIntegerType:$falseValue);
@@ -308,6 +339,8 @@ def MuxOp : RTLOp<"mux",
 
   let assemblyFormat =
     "$cond `,` $trueValue `,` $falseValue attr-dict `:` type($result)";
+  
+  let hasFolder = true;
 
   let builders = [
     OpBuilderDAG<(ins "Value":$cond, "Value":$trueValue, "Value":$falseValue),
@@ -318,4 +351,83 @@ def MuxOp : RTLOp<"mux",
                    cond, trueValue, falseValue);
     }]>
   ];
+}
+
+def KnownBitWidthType : Type<CPred<[{getBitWidth($_self) != -1}]>,
+  "Type wherein the bitwidth in hardware is known">;
+
+def BitcastOp: RTLOp<"bitcast", [NoSideEffect]> {
+  let summary = [{
+    Reinterpret one value to another value of the same size and
+    potentially different type.
+  }];
+
+  let description = [{
+    The bitcast operation represents a bitwise reinerpretation (cast) of a
+    value. This always synthesizes away in hardware, though if may or may not
+    be syntactically represented in lowering or export language.
+
+    Since bitcasting requires information on the bitwise layout of the types
+    on which it operates, we discuss that here.
+
+    ### Integer bit vectors
+
+    MLIR's `IntegerType` with `Signless` semantics are used to represent bit
+    vectors. They are never padded or aligned.
+
+    ### Arrays
+
+    The RTL dialect defines a custom `ArrayType`.
+
+    - **Bit layout**: High index of array starts at the MSB. Array's 0th
+      element's LSB located at array LSB.
+    - **Padding between elements**: None
+    - **Alignment of elements**: None
+
+    ### Structs
+
+    The RTL dialect defines a custom `StructType`.
+
+    - **Bit layout**: The first listed member's MSB corresponds to the
+      struct's MSB. The last member in the list shares its LSB with the
+      struct.
+    - **Padding between elements**: None
+    - **Alignment of elements**: None
+
+    ### Example figure
+
+    ```
+    15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0 
+    -------------------------------------------------
+    | MSB                                       LSB | 16 bit integer vector
+    -------------------------------------------------
+                             | MSB              LSB | 8 bit integer vector
+    -------------------------------------------------
+    | MSB      [1]       LSB | MSB     [0]      LSB | 2 element array of 8 bit integer vectors
+    -------------------------------------------------
+
+          13 12 11 10  9  8  7  6  5  4  3  2  1  0 
+                                ---------------------
+                                | MSB           LSB | 7 bit integer vector
+          -------------------------------------------
+          | MSB     [1]     LSB | MSB    [0]    LSB | 2 element array of 7 bit integer vectors
+          -------------------------------------------
+          | MSB a LSB | MSB b[1] LSB | MSB b[0] LSB | struct
+          -------------------------------------------  a: 4 bit integral
+                                                       b: 2 element array of 5 bit integer vectors
+    ```
+  }];
+
+  let arguments = (ins KnownBitWidthType:$input);
+  let results = (outs KnownBitWidthType:$result);
+  let verifier = [{
+    if (getBitWidth(input().getType()) !=
+        getBitWidth(result().getType()))
+      return this->emitOpError("Bitwidth of input must match result");
+    return success();
+  }];
+
+  let assemblyFormat = [{
+    $input attr-dict `:` functional-type($input, $result)
+  }];
 }

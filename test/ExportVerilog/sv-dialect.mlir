@@ -1,4 +1,4 @@
-// RUN: circt-translate %s -emit-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
+// RUN: circt-translate %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: module M1(
 rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
@@ -38,6 +38,36 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT: always @(posedge clock or negedge cond) begin
   // CHECK-NEXT: end // always @(posedge, negedge)
   sv.always posedge %clock, negedge %cond {
+  }
+
+  // CHECK-NEXT: always_ff @(posedge clock)
+  // CHECK-NEXT:   $fwrite(32'h80000002, "Yo\n");
+  sv.alwaysff "posedge", %clock {
+    sv.fwrite "Yo\n"
+  }
+  
+  // CHECK-NEXT: always_ff @(posedge clock) begin
+  // CHECK-NEXT:   if (cond)
+  // CHECK-NEXT:     $fwrite(32'h80000002, "Sync Reset Block\n")
+  // CHECK-NEXT:   else
+  // CHECK-NEXT:     $fwrite(32'h80000002, "Sync Main Block\n");
+  // CHECK-NEXT: end // always_ff @(posedge)
+  sv.alwaysff "posedge", %clock, syncreset, "posedge", %cond {
+    sv.fwrite "Sync Reset Block\n"
+  } {
+    sv.fwrite "Sync Main Block\n"
+  }
+
+  // CHECK-NEXT: always_ff @(posedge clock or negedge cond) begin
+  // CHECK-NEXT:   if (!cond)
+  // CHECK-NEXT:     $fwrite(32'h80000002, "Async Reset Block\n");
+  // CHECK-NEXT:   else
+  // CHECK-NEXT:     $fwrite(32'h80000002, "Async Main Block\n");
+  // CHECK-NEXT: end // always_ff @(posedge or negedge)
+  sv.alwaysff "posedge", %clock, asyncreset, "negedge", %cond {
+    sv.fwrite "Async Reset Block\n"
+  } {
+    sv.fwrite "Async Main Block\n"
   }
 
   %c42 = rtl.constant (42 : i42) : i42

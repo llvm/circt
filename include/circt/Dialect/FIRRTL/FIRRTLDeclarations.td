@@ -13,15 +13,16 @@
 def InstanceOp : FIRRTLOp<"instance"> {
   let summary = "Instantiate an instance of a module";
   let description = [{
-    This represents an instance of a module.  The result is always a bundle
-    that is a flattened form of the referenced modules inputs and outputs.
+    This represents an instance of a module.  The results are the modules inputs
+    and outputs.  The inputs have flip type, the outputs do not.
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$moduleName,
-                       OptionalAttr<StrAttr>:$name);
-  let results = (outs FIRRTLType:$result);
+                       StrArrayAttr:$portNames, OptionalAttr<StrAttr>:$name);
+  let results = (outs Variadic<FIRRTLType>:$results);
 
-  let assemblyFormat = "$moduleName attr-dict `:` type($result)";
+  let assemblyFormat =
+    "$moduleName attr-dict custom<InstanceResults>(type($results))";
 
   let verifier = "return ::verifyInstanceOp(*this);";
 
@@ -29,6 +30,17 @@ def InstanceOp : FIRRTLOp<"instance"> {
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
     Operation *getReferencedModule();
+
+    /// Return the port name for the specified result number.
+    StringAttr getPortName(size_t resultNo);
+    StringRef getPortNameStr(size_t resultNo) {
+      return getPortName(resultNo).getValue();
+    }
+
+    // Return the result for this instance that corresponds to the specified
+    // port name.
+    Value getPortNamed(StringRef name);
+    Value getPortNamed(StringAttr name);
   }];
 }
 
@@ -94,7 +106,7 @@ def NodeOp : FIRRTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
   let arguments = (ins PassiveType:$input, OptionalAttr<StrAttr>:$name);
   let results = (outs FIRRTLType:$result);
 
-  let assemblyFormat = "$input attr-dict `:` type($input)";
+  let assemblyFormat = "$input custom<ImplicitSSAName>(attr-dict) `:` type($input)";
 }
 
 def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
@@ -150,7 +162,5 @@ def WireOp : FIRRTLOp<"wire", []> {
     }]>
   ];
 
-  // We handle the name in a custom way, so we use a customer parser/printer.
-  let printer = "printWireOp(p, *this);";
-  let parser = "return parseWireOp(parser, result);";
+  let assemblyFormat = "custom<ImplicitSSAName>(attr-dict) `:` type($result)";
 }

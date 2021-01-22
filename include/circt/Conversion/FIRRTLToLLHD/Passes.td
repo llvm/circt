@@ -22,6 +22,7 @@ def ConvertFIRRTLToLLHD : Pass<"convert-firrtl-to-llhd", "ModuleOp"> {
     description.
   }];
   let constructor = "circt::llhd::createConvertFIRRTLToLLHDPass()";
+  let dependentDialects = ["llhd::LLHDDialect"];
 }
 
 #endif // CIRCT_CONVERSION_FIRRTLTOLLHD_PASSES

@@ -29,13 +29,13 @@ static std::mutex serverMutex;
 
 // ---- Helper functions ----
 
-/// Get the TCP port on which to listen. Defaults to 0xECD (ESI Cosim DPI), 3789
-/// in decimal.
+/// Get the TCP port on which to listen. If the port isn't specified via an
+/// environment variable, return 0 to allow automatic selection.
 static int findPort() {
   const char *portEnv = getenv("COSIM_PORT");
   if (portEnv == nullptr) {
-    printf("[COSIM] RPC server port not found. Defaulting to 3789.\n");
-    return 0xECD;
+    printf("[COSIM] RPC server port not found. Letting CapnpRPC select one\n");
+    return 0;
   }
   printf("[COSIM] Opening RPC server on port %s\n", portEnv);
   return std::strtoull(portEnv, nullptr, 10);

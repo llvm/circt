@@ -91,5 +91,12 @@ firrtl.module @TestDshRL(%in1 : !firrtl.uint<2>, %in2: !firrtl.uint<3>) {
   %2 = firrtl.dshlw %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<2>
 }
 
+// CHECK-LABEL: @TestNodeName
+firrtl.module @TestNodeName(%in1 : !firrtl.uint<8>) {
+  // CHECK: %n1 = firrtl.node %in1 : !firrtl.uint<8>
+  %n1 = firrtl.node %in1 : !firrtl.uint<8>
 
+  // CHECK: %n1_0 = firrtl.node %in1 {name = "n1"} : !firrtl.uint<8>
+  %n2 = firrtl.node %in1 {name = "n1"} : !firrtl.uint<8>
+}
 }

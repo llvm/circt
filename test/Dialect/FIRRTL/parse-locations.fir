@@ -1,4 +1,4 @@
-; RUN: circt-translate -parse-fir --mlir-print-debuginfo -verify-diagnostics -mlir-print-local-scope %s | FileCheck %s
+; RUN: circt-translate -import-firrtl --mlir-print-debuginfo -verify-diagnostics -mlir-print-local-scope %s | FileCheck %s
 
 circuit MyModule :  @[CIRCUIT.scala 127]
 

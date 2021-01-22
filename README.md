@@ -140,7 +140,7 @@ the right thing.
 
 6) **Run the Verilator tests:** (optional)
 
-[Verilator](https://github.com/verilator/verilator) is can be used to check
+[Verilator](https://github.com/verilator/verilator) can be used to check
 SystemVerilog code. To run the tests, build or install a **recent** version
 of Verilator (at least v4.034). (Some Linux distributions have *ancient*
 versions.) If Verilator is in your PATH, `build check-circt` should run the
@@ -158,6 +158,15 @@ dependencies are installed on your system. They are:
 - bison
 - libfl2     # Ubuntu only (ignore if gives error)
 - libfl-dev  # Ubuntu only (ignore if gives error)
+
+7) **Install Cap'nProto** (optional, affects ESI dialect only)
+
+Some of the ESI dialect code requires [libcapnp](https://capnproto.org/).
+(Specifically, the [cosimulation](docs/ESI/cosim.md) component.) That code
+requires a version of libcapnp which is not yet part of a release. The
+`utils/get-capnp.sh` script downloads, compiles, and installs a known good
+version to a directory within the circt source code. Alternatively, you can
+use a docker image we provide via `utils/run-docker.sh`.
 
 ## Submitting changes to CIRCT
 

@@ -23,6 +23,7 @@ def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "ModuleOp"> {
     }];
 
     let constructor = "circt::llhd::createConvertLLHDToLLVMPass()";
+    let dependentDialects = ["mlir::LLVM::LLVMDialect"];
 }
 
 #endif // CIRCT_CONVERSION_LLHDTOLLVM_PASSES

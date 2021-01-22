@@ -19,6 +19,8 @@
 namespace mlir {
 class Type;
 struct LogicalResult;
+class Value;
+class OpBuilder;
 } // namespace mlir
 namespace llvm {
 class raw_ostream;
@@ -43,6 +45,9 @@ public:
   TypeSchema(mlir::Type);
   bool operator==(const TypeSchema &) const;
 
+  /// Get the type back.
+  mlir::Type getType() const;
+
   /// Get the Cap'nProto schema ID for a type.
   uint64_t capnpTypeID() const;
 
@@ -60,6 +65,13 @@ public:
 
   /// Write out the schema in its entirety.
   mlir::LogicalResult write(llvm::raw_ostream &os) const;
+
+  /// Build an RTL/SV dialect capnp encoder for this type.
+  mlir::Value buildEncoder(mlir::OpBuilder &, mlir::Value clk,
+                           mlir::Value valid, mlir::Value rawData) const;
+  /// Build an RTL/SV dialect capnp decoder for this type.
+  mlir::Value buildDecoder(mlir::OpBuilder &, mlir::Value clk,
+                           mlir::Value valid, mlir::Value capnpData) const;
 
 private:
   /// The implementation of this. Separate to hide the details and avoid having

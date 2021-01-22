@@ -1,6 +1,6 @@
 // RUN: circt-opt -lower-handshake-to-firrtl -split-input-file %s | FileCheck %s
 
-// CHECK-LABEL: firrtl.module @handshake_memory_3ins_3outs
+// CHECK-LABEL: firrtl.module @handshake_memory_3ins_3outs_ui8
 // CHECK: %[[ST_DATA_VALID:.+]] = firrtl.subfield %arg0("valid")
 // CHECK: %[[ST_DATA_READY:.+]] = firrtl.subfield %arg0("ready")
 // CHECK: %[[ST_DATA_DATA:.+]] = firrtl.subfield %arg0("data")
@@ -19,7 +19,7 @@
 // CHECK: %[[LD_CONTROL_READY:.+]] = firrtl.subfield %arg5("ready")
 
 // Construct the memory.
-// CHECK: %[[MEM:.+]] = firrtl.mem "Old" {depth = 10 : i64, name = "mem0", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<load0: bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>>, store0: flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>>
+// CHECK: %[[MEM:.+]] = firrtl.mem Old {depth = 10 : i64, name = "mem0", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<load0: bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>>, store0: flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>>
 
 // Get the load0 port.
 // CHECK: %[[MEM_LOAD:.+]] = firrtl.subfield %[[MEM]]("load0") : {{.*}} -> !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>>
@@ -102,7 +102,8 @@
 
 // CHECK-LABEL: firrtl.module @main
 handshake.func @main(%arg0: i8, %arg1: index, %arg2: index, ...) -> (i8, none, none) {
-  // CHECK: %0 = firrtl.instance @handshake_memory_3ins_3outs
+  // CHECK: %inst_arg0, %inst_arg1, %inst_arg2, %inst_arg3, %inst_arg4, %inst_arg5, %inst_clock, %inst_reset
+  // CHECK: = firrtl.instance @handshake_memory_3ins_3outs_ui8
   %0:3 = "handshake.memory"(%arg0, %arg1, %arg2) {id = 0 : i32, ld_count = 1 : i32, lsq = false, st_count = 1 : i32, type = memref<10xi8>} : (i8, index, index) -> (i8, none, none)
 
   handshake.return %0#0, %0#1, %0#2: i8, none, none

@@ -110,15 +110,32 @@ static Value createConstantOp(FIRRTLType opType, APInt value,
   return Value();
 }
 
-/// Construct a name for creating FIRRTL sub-module. The returned string
-/// contains the following information: 1) standard or handshake operation
-/// name; 2) number of inputs; 3) number of outputs; 4) comparison operation
-/// type (if applied); 5) whether the elastic component is for the control path
-/// (if applied).
+static Type getHandshakeDataType(Operation *op) {
+  if (auto memOp = dyn_cast<MemoryOp>(op))
+    return memOp.getMemRefType().getElementType();
+
+  else if (auto sinkOp = dyn_cast<SinkOp>(op)) {
+    // As SinkOp only has one argument, which at this stage is already converted
+    // to a bundled FIRRTLType, here we convert it back to a normal data type.
+    // Is there a better way to do this?
+    auto type = sinkOp.getOperand().getType().cast<BundleType>();
+
+    if (auto dataType = type.getElementType("data")) {
+      auto intType = dataType.cast<firrtl::IntType>();
+      return IntegerType::get(type.getContext(), intType.getWidthOrSentinel(),
+                              intType.isSigned() ? IntegerType::Signed
+                                                 : IntegerType::Unsigned);
+    } else
+      return NoneType::get(type.getContext());
+  } else
+    return op->getResult(0).getType();
+}
+
+/// Construct a name for creating FIRRTL sub-module.
 static std::string getSubModuleName(Operation *oldOp) {
-  /// The dialect name is separated from the operation name by '.', which is not
-  /// valid in SystemVerilog module names. In case this name is used in
-  /// SystemVerilog output, replace '.' with '_'.
+  // The dialect name is separated from the operation name by '.', which is not
+  // valid in SystemVerilog module names. In case this name is used in
+  // SystemVerilog output, replace '.' with '_'.
   std::string prefix = oldOp->getName().getStringRef().str();
   std::replace(prefix.begin(), prefix.end(), '.', '_');
 
@@ -126,18 +143,56 @@ static std::string getSubModuleName(Operation *oldOp) {
                               std::to_string(oldOp->getNumOperands()) + "ins_" +
                               std::to_string(oldOp->getNumResults()) + "outs";
 
+  // Add value of the constant operation.
+  if (auto constOp = dyn_cast<handshake::ConstantOp>(oldOp)) {
+    if (auto intAttr = constOp.getValue().dyn_cast<IntegerAttr>()) {
+      auto intType = intAttr.getType();
+
+      if (intType.isSignedInteger())
+        subModuleName += "_c" + std::to_string(intAttr.getSInt());
+      else if (intType.isUnsignedInteger())
+        subModuleName += "_c" + std::to_string(intAttr.getUInt());
+      else
+        subModuleName += "_c" + std::to_string((uint64_t)intAttr.getInt());
+    } else
+      oldOp->emitError("unsupported constant type");
+  }
+
+  // Add operation data type. Currently we only support integer or index types.
+  // The emitted type aligns with the getFIRRTLType() method. Thus all integers
+  // other than signed integers will be emitted as unsigned.
+  auto type = getHandshakeDataType(oldOp);
+  if (type.isIntOrIndex()) {
+    if (auto indexType = type.dyn_cast<IndexType>())
+      subModuleName +=
+          "_ui" + std::to_string(indexType.kInternalStorageBitWidth);
+    else if (type.isSignedInteger())
+      subModuleName += "_si" + std::to_string(type.getIntOrFloatBitWidth());
+    else
+      subModuleName += "_ui" + std::to_string(type.getIntOrFloatBitWidth());
+
+  } else if (type.isa<NoneType>()) {
+    auto ctrlAttr = oldOp->getAttrOfType<BoolAttr>("control");
+    if (ctrlAttr.getValue())
+      subModuleName += "_ctrl";
+    else
+      oldOp->emitError("non-control component has invalid data type");
+  } else
+    oldOp->emitError("unsupported data type");
+
+  // Add memory ID.
+  if (auto memOp = dyn_cast<handshake::MemoryOp>(oldOp))
+    subModuleName += "_id" + std::to_string(memOp.id());
+
+  // Add compare kind.
   if (auto comOp = dyn_cast<mlir::CmpIOp>(oldOp))
     subModuleName += "_" + stringifyEnum(comOp.getPredicate()).str();
 
+  // Add buffer information.
   if (auto bufferOp = dyn_cast<handshake::BufferOp>(oldOp)) {
     subModuleName += "_" + bufferOp.getNumSlots().toString(10, false) + "slots";
     if (bufferOp.isSequential())
       subModuleName += "_seq";
-  }
-
-  if (auto ctrlAttr = oldOp->getAttr("control")) {
-    if (ctrlAttr.cast<BoolAttr>().getValue())
-      subModuleName += "_ctrl";
   }
 
   return subModuleName;
@@ -145,7 +200,7 @@ static std::string getSubModuleName(Operation *oldOp) {
 
 /// Return the number of bits needed to index the given number of values.
 static size_t getNumIndexBits(uint64_t numValues) {
-  return numValues ? llvm::Log2_64_Ceil(numValues) : 1;
+  return numValues > 1 ? llvm::Log2_64_Ceil(numValues) : 1;
 }
 
 /// Construct a tree of 1-bit muxes to multiplex arbitrary numbers of signals
@@ -642,10 +697,12 @@ public:
   bool visitHandshake(ForkOp op);
   bool visitHandshake(JoinOp op);
   bool visitHandshake(LazyForkOp op);
+  bool visitHandshake(handshake::LoadOp op);
   bool visitHandshake(MemoryOp op);
   bool visitHandshake(MergeOp op);
   bool visitHandshake(MuxOp op);
   bool visitHandshake(SinkOp op);
+  bool visitHandshake(handshake::StoreOp op);
 
   bool buildJoinLogic(SmallVector<ValueVector *, 4> inputs,
                       ValueVector *output);
@@ -1510,8 +1567,8 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   // Collect store arguments.
   for (size_t i = 0; i < numStores; ++i) {
     // Extract store ports from the port list.
-    auto storeData = portList[i];
-    auto storeAddr = portList[i + 1];
+    auto storeData = portList[2 * i];
+    auto storeAddr = portList[2 * i + 1];
     auto storeControl = portList[2 * numStores + 2 * numLoads + i];
 
     assert(storeAddr.size() == 3 && storeData.size() == 3 &&
@@ -1638,6 +1695,111 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   return true;
 }
 
+bool HandshakeBuilder::visitHandshake(handshake::StoreOp op) {
+  // Input data accepted from the predecessor.
+  ValueVector inputData = portList[0];
+  Value inputDataData = inputData[2];
+
+  // Input address accepted from the predecessor.
+  ValueVector inputAddr = portList[1];
+  Value inputAddrData = inputAddr[2];
+
+  // Control channel.
+  ValueVector control = portList[2];
+
+  // Data sending to the MemoryOp.
+  ValueVector outputData = portList[3];
+  Value outputDataValid = outputData[0];
+  Value outputDataReady = outputData[1];
+  Value outputDataData = outputData[2];
+
+  // Address sending to the MemoryOp.
+  ValueVector outputAddr = portList[4];
+  Value outputAddrValid = outputAddr[0];
+  Value outputAddrReady = outputAddr[1];
+  Value outputAddrData = outputAddr[2];
+
+  auto bitType = UIntType::get(rewriter.getContext(), 1);
+
+  // Create a wire that will be asserted when all inputs are valid.
+  auto inputsValid = rewriter.create<WireOp>(
+      insertLoc, bitType, rewriter.getStringAttr("inputsValid"));
+
+  // Create a gate that will be asserted when all outputs are ready.
+  auto outputsReady = rewriter.create<AndPrimOp>(
+      insertLoc, bitType, outputDataReady, outputAddrReady);
+
+  // Build the standard join logic from the inputs to the inputsValid and
+  // outputsReady signals.
+  ValueVector joinLogicOutput({inputsValid, outputsReady});
+  buildJoinLogic({&inputData, &inputAddr, &control}, &joinLogicOutput);
+
+  // Output address and data signals are connected directly.
+  rewriter.create<ConnectOp>(insertLoc, outputAddrData, inputAddrData);
+  rewriter.create<ConnectOp>(insertLoc, outputDataData, inputDataData);
+
+  // Output valid signals are connected from the inputsValid wire.
+  rewriter.create<ConnectOp>(insertLoc, outputDataValid, inputsValid);
+  rewriter.create<ConnectOp>(insertLoc, outputAddrValid, inputsValid);
+
+  return true;
+}
+
+bool HandshakeBuilder::visitHandshake(handshake::LoadOp op) {
+  // Input address accepted from the predecessor.
+  ValueVector inputAddr = portList[0];
+  Value inputAddrValid = inputAddr[0];
+  Value inputAddrReady = inputAddr[1];
+  Value inputAddrData = inputAddr[2];
+
+  // Data accepted from the MemoryOp.
+  ValueVector memoryData = portList[1];
+  Value memoryDataValid = memoryData[0];
+  Value memoryDataReady = memoryData[1];
+  Value memoryDataData = memoryData[2];
+
+  // Control channel.
+  ValueVector control = portList[2];
+  Value controlValid = control[0];
+  Value controlReady = control[1];
+
+  // Output data sending to the successor.
+  ValueVector outputData = portList[3];
+  Value outputDataValid = outputData[0];
+  Value outputDataReady = outputData[1];
+  Value outputDataData = outputData[2];
+
+  // Address sending to the MemoryOp.
+  ValueVector memoryAddr = portList[4];
+  Value memoryAddrValid = memoryAddr[0];
+  Value memoryAddrReady = memoryAddr[1];
+  Value memoryAddrData = memoryAddr[2];
+
+  auto bitType = UIntType::get(rewriter.getContext(), 1);
+
+  // Address and data are connected accordingly.
+  rewriter.create<ConnectOp>(insertLoc, memoryAddrData, inputAddrData);
+  rewriter.create<ConnectOp>(insertLoc, outputDataData, memoryDataData);
+
+  // The valid/ready logic between inputAddr, control, and memoryAddr is similar
+  // to a JoinOp logic.
+  auto addrValid = rewriter.create<AndPrimOp>(insertLoc, bitType,
+                                              inputAddrValid, controlValid);
+  rewriter.create<ConnectOp>(insertLoc, memoryAddrValid, addrValid);
+
+  auto addrCompleted = rewriter.create<AndPrimOp>(insertLoc, bitType, addrValid,
+                                                  memoryAddrReady);
+  rewriter.create<ConnectOp>(insertLoc, inputAddrReady, addrCompleted);
+  rewriter.create<ConnectOp>(insertLoc, controlReady, addrCompleted);
+
+  // The valid/ready logic between memoryData and outputData is a direct
+  // connection.
+  rewriter.create<ConnectOp>(insertLoc, outputDataValid, memoryDataValid);
+  rewriter.create<ConnectOp>(insertLoc, memoryDataReady, outputDataReady);
+
+  return true;
+}
+
 //===----------------------------------------------------------------------===//
 // Old Operation Conversion Functions
 //===----------------------------------------------------------------------===//
@@ -1648,35 +1810,28 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
                          FModuleOp topModuleOp, unsigned clockDomain,
                          ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPointAfter(oldOp);
-  using BundleElement = BundleType::BundleElement;
-  llvm::SmallVector<BundleElement, 8> elements;
-  MLIRContext *context = subModuleOp.getContext();
+
+  llvm::SmallVector<Type> resultTypes;
+  llvm::SmallVector<Attribute> resultNames;
 
   // Bundle all ports of the instance into a new flattened bundle type.
   SmallVector<ModulePortInfo, 8> portInfo;
   getModulePortInfo(subModuleOp, portInfo);
   for (auto &port : portInfo) {
-    auto argId = rewriter.getIdentifier(port.getName());
-
     // All ports of the instance operation are flipped.
-    auto argType = FlipType::get(port.type);
-    elements.push_back(BundleElement(argId, argType));
+    resultTypes.push_back(FlipType::get(port.type));
+    resultNames.push_back(rewriter.getStringAttr(port.getName()));
   }
 
   // Create a instance operation.
-  auto instType = BundleType::get(elements, context);
   auto instanceOp = rewriter.create<firrtl::InstanceOp>(
-      oldOp->getLoc(), instType, subModuleOp.getName(),
-      rewriter.getStringAttr(""));
+      oldOp->getLoc(), resultTypes, subModuleOp.getName(),
+      rewriter.getArrayAttr(resultNames), rewriter.getStringAttr(""));
 
   // Connect the new created instance with its predecessors and successors in
   // the top-module.
   unsigned portIndex = 0;
-  for (auto &element : instType.cast<BundleType>().getElements()) {
-    auto subfieldOp = rewriter.create<SubfieldOp>(
-        oldOp->getLoc(), element.type, instanceOp,
-        rewriter.getStringAttr(element.name.strref()));
-
+  for (auto result : instanceOp.getResults()) {
     unsigned numIns = oldOp->getNumOperands();
     unsigned numArgs = numIns + oldOp->getNumResults();
 
@@ -1687,16 +1842,16 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
                                    });
     if (portIndex < numIns) {
       // Connect input ports.
-      rewriter.create<ConnectOp>(oldOp->getLoc(), subfieldOp,
+      rewriter.create<ConnectOp>(oldOp->getLoc(), result,
                                  oldOp->getOperand(portIndex));
     } else if (portIndex < numArgs) {
       // Connect output ports.
-      Value result = oldOp->getResult(portIndex - numIns);
-      result.replaceAllUsesWith(subfieldOp);
+      Value newResult = oldOp->getResult(portIndex - numIns);
+      newResult.replaceAllUsesWith(result);
     } else {
       // Connect clock or reset signal.
       auto signal = *(firstClock + 2 * clockDomain + portIndex - numArgs);
-      rewriter.create<ConnectOp>(oldOp->getLoc(), subfieldOp, signal);
+      rewriter.create<ConnectOp>(oldOp->getLoc(), result, signal);
     }
     ++portIndex;
   }
@@ -1807,6 +1962,10 @@ class HandshakeToFIRRTLPass
     : public mlir::PassWrapper<HandshakeToFIRRTLPass,
                                OperationPass<handshake::FuncOp>> {
 public:
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<firrtl::FIRRTLDialect>();
+  }
+
   void runOnOperation() override {
     auto op = getOperation();
 

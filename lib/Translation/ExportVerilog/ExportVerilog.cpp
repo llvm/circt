@@ -70,75 +70,76 @@ static int getBitWidthOrSentinel(Type type) {
       .Default([](Type) { return -1; });
 }
 
-/// Given an integer value, return the number of characters it will take to
-/// print its base-10 value.
-static unsigned getPrintedIntWidth(unsigned value) {
-  // Fast path the common case.
-  if (value < 10)
-    return 1;
-  if (value < 100)
-    return 2;
-  if (value < 1000)
-    return 3;
-
-  // Compute the size in the general case.
-  unsigned size = 4;
-  value /= 1000;
-  while (value >= 10) {
-    ++size;
-    value /= 10;
-  }
-  return size;
-}
-
-/// Emit a type's packed dimensions, returning the number of characters
-/// emitted.
-static size_t emitTypeDims(Type type, Location loc, raw_ostream &os) {
+/// Push this type's dimension into a vector.
+static void getTypeDims(SmallVectorImpl<int64_t> &dims, Type type,
+                        Location loc) {
   if (auto inout = type.dyn_cast<rtl::InOutType>())
-    return emitTypeDims(inout.getElementType(), loc, os);
+    return getTypeDims(dims, inout.getElementType(), loc);
   if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>())
-    return emitTypeDims(uarray.getElementType(), loc, os);
+    return getTypeDims(dims, uarray.getElementType(), loc);
   if (type.isa<InterfaceType>())
-    return 0;
+    return;
 
-  size_t emittedWidth = 0;
   int width;
   if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
     width = arrayType.getSize();
   } else {
     width = getBitWidthOrSentinel(type);
   }
-
-  switch (width) {
-  case -1: // -1 is an invalid type.
+  if (width == -1)
     mlir::emitError(loc, "value has an unsupported verilog type ") << type;
-    os << "<<invalid type>>";
-    return 16;
 
-  case 1: // Width 1 is implicit.
-    break;
+  if (width != 1) // Width 1 is implicit.
+    dims.push_back(width);
 
-  case 0:
-    os << "/*Zero Width*/";
-    emittedWidth += 14;
-    break;
-  default:
-    os << '[' << (width - 1) << ":0]";
-    emittedWidth += getPrintedIntWidth(width - 1) + 4;
-    break;
-  }
   if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
-    emittedWidth += emitTypeDims(arrayType.getElementType(), loc, os);
+    getTypeDims(dims, arrayType.getElementType(), loc);
   }
-  return emittedWidth;
+}
+
+/// Emit a type's packed dimensions, returning whether or not text was emitted.
+static bool emitTypeDims(Type type, Location loc, raw_ostream &os) {
+  SmallVector<int64_t, 4> dims;
+  getTypeDims(dims, type, loc);
+
+  bool emitted = false;
+  for (int64_t width : dims)
+    switch (width) {
+    case -1: // -1 is an invalid type.
+      os << "<<invalid type>>";
+      emitted = true;
+      return true;
+    case 1: // Width 1 is implicit.
+      assert(false && "Width 1 shouldn't be in the dim vector");
+      break;
+    case 0:
+      os << "/*Zero Width*/";
+      emitted = true;
+      break;
+    default:
+      os << '[' << (width - 1) << ":0]";
+      emitted = true;
+      break;
+    }
+  return emitted;
+}
+
+/// True iff 'a' and 'b' have the same wire dims.
+static bool haveMatchingDims(Type a, Type b, Location loc) {
+  SmallVector<int64_t, 4> aDims;
+  getTypeDims(aDims, a, loc);
+
+  SmallVector<int64_t, 4> bDims;
+  getTypeDims(bDims, b, loc);
+
+  return aDims == bDims;
 }
 
 /// Emit the specified type dimensions and print out a trailing space if
 /// anything is printed.
 static void emitTypeDimWithSpaceIfNeeded(Type type, Location loc,
                                          raw_ostream &os) {
-  auto size = emitTypeDims(type, loc, os);
-  if (size)
+  if (emitTypeDims(type, loc, os))
     os << ' ';
 }
 
@@ -311,6 +312,7 @@ public:
   LogicalResult visitSV(IfDefOp op);
   LogicalResult visitSV(IfOp op);
   LogicalResult visitSV(AlwaysOp op);
+  LogicalResult visitSV(AlwaysFFOp op);
   LogicalResult visitSV(InitialOp op);
   LogicalResult visitSV(FWriteOp op);
   LogicalResult visitSV(FatalOp op);
@@ -325,14 +327,17 @@ public:
   LogicalResult visitSV(AssignInterfaceSignalOp op);
   void emitOperation(Operation *op);
 
+  using ValueOrOp = PointerUnion<Value, Operation *>;
+
   void collectNamesEmitDecls(Block &block);
-  StringRef addName(Value value, StringRef name);
-  StringRef addName(Value value, StringAttr nameAttr) {
-    return addName(value, nameAttr ? nameAttr.getValue() : "");
+  StringRef addName(ValueOrOp valueOrOp, StringRef name);
+  StringRef addName(ValueOrOp valueOrOp, StringAttr nameAttr) {
+    return addName(valueOrOp, nameAttr ? nameAttr.getValue() : "");
   }
 
-  StringRef getName(Value value) {
-    auto *entry = nameTable[value];
+  StringRef getName(Value value) { return getName(ValueOrOp(value)); }
+  StringRef getName(ValueOrOp valueOrOp) {
+    auto *entry = nameTable[valueOrOp];
     assert(entry && "value expected a name but doesn't have one");
     return entry->getKey();
   }
@@ -346,7 +351,7 @@ public:
   void emitLocationInfoAndNewLine(const SmallPtrSet<Operation *, 8> &ops);
 
   llvm::StringSet<> usedNames;
-  llvm::DenseMap<Value, llvm::StringMapEntry<llvm::NoneType> *> nameTable;
+  llvm::DenseMap<ValueOrOp, llvm::StringMapEntry<llvm::NoneType> *> nameTable;
   size_t nextGeneratedNameID = 0;
 
   /// This set keeps track of all of the expression nodes that need to be
@@ -359,7 +364,7 @@ public:
 
 /// Add the specified name to the name table, auto-uniquing the name if
 /// required.  If the name is empty, then this creates a unique temp name.
-StringRef ModuleEmitter::addName(Value value, StringRef name) {
+StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
   if (name.empty())
     name = "_T";
 
@@ -368,7 +373,7 @@ StringRef ModuleEmitter::addName(Value value, StringRef name) {
   if (!isalpha(name.front()) && name.front() != '_') {
     SmallString<16> tmpName("_");
     tmpName += name;
-    return addName(value, tmpName);
+    return addName(valueOrOp, tmpName);
   }
 
   auto isValidVerilogCharacter = [](char ch) -> bool {
@@ -392,7 +397,7 @@ StringRef ModuleEmitter::addName(Value value, StringRef name) {
         tmpName += llvm::utohexstr((unsigned char)ch);
       }
     }
-    return addName(value, tmpName);
+    return addName(valueOrOp, tmpName);
   }
 
   // Get the list of reserved words we need to avoid.  We could prepopulate this
@@ -404,7 +409,7 @@ StringRef ModuleEmitter::addName(Value value, StringRef name) {
   if (!reservedWords.count(name)) {
     auto insertResult = usedNames.insert(name);
     if (insertResult.second) {
-      nameTable[value] = &*insertResult.first;
+      nameTable[valueOrOp] = &*insertResult.first;
       return insertResult.first->getKey();
     }
   }
@@ -423,7 +428,7 @@ StringRef ModuleEmitter::addName(Value value, StringRef name) {
     if (!reservedWords.count(name)) {
       auto insertResult = usedNames.insert(name);
       if (insertResult.second) {
-        nameTable[value] = &*insertResult.first;
+        nameTable[valueOrOp] = &*insertResult.first;
         return insertResult.first->getKey();
       }
     }
@@ -689,6 +694,8 @@ private:
   SubExprInfo visitComb(ExtractOp op);
   SubExprInfo visitComb(ICmpOp op);
 
+  SubExprInfo visitComb(BitcastOp op);
+
 private:
   /// This is set (before a visit method is called) if emitSubExpr would
   /// prefer to get an output of a specific sign.  This is a hint to cause the
@@ -861,13 +868,10 @@ SubExprInfo ExprEmitter::visitComb(ConcatOp op) {
   // If all of the operands are the same, we emit this as a SystemVerilog
   // replicate operation, ala SV Spec 11.4.12.1.
   auto firstOperand = op.getOperand(0);
-  bool allSame = true;
-  for (size_t i = 1, e = op.getNumOperands(); i != e; ++i) {
-    if (op.getOperand(i) != firstOperand) {
-      allSame = false;
-      break;
-    }
-  }
+  bool allSame = llvm::all_of(op.getOperands(), [&firstOperand](auto operand) {
+    return operand == firstOperand;
+  });
+
   if (allSame) {
     os << '{' << op.getNumOperands() << '{';
     emitSubExpr(firstOperand, LowestPrecedence);
@@ -881,6 +885,19 @@ SubExprInfo ExprEmitter::visitComb(ConcatOp op) {
 
   os << '}';
   return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitComb(BitcastOp op) {
+  // NOTE: Bitcasts are always emitted out-of-line with their own wire
+  // declaration. SystemVerilog uses the wire declaration to know what type this
+  // value is being casted to.
+  Type toType = op.getType();
+  if (!haveMatchingDims(toType, op.input().getType(), op.getLoc())) {
+    os << "/*cast(bit";
+    emitTypeDims(toType, op.getLoc(), os);
+    os << ")*/";
+  }
+  return emitSubExpr(op.input(), LowestPrecedence);
 }
 
 SubExprInfo ExprEmitter::visitComb(ICmpOp op) {
@@ -1427,6 +1444,56 @@ LogicalResult ModuleEmitter::visitSV(AlwaysOp op) {
   return success();
 }
 
+LogicalResult ModuleEmitter::visitSV(AlwaysFFOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent() << "always_ff @(" << stringifyEventControl(op.clockEdge()) << " "
+           << emitExpressionToString(op.clock(), ops);
+  if (op.resetStyle() == ResetType::AsyncReset) {
+    os << " or " << stringifyEventControl(*op.resetEdge()) << " "
+       << emitExpressionToString(op.reset(), ops);
+  }
+  os << ')';
+
+  // Build the comment string, leave out the signal expressions (since they
+  // can be large).
+  std::string comment;
+  comment = "always_ff @(";
+  comment += stringifyEventControl(op.clockEdge());
+  if (op.resetStyle() == ResetType::AsyncReset) {
+    comment += " or ";
+    comment += stringifyEventControl(*op.resetEdge());
+  }
+  comment += ')';
+
+  if (op.resetStyle() == ResetType::NoReset)
+    emitBeginEndRegion(op.getBodyBlock(), ops, *this, comment);
+  else {
+    os << " begin";
+    emitLocationInfoAndNewLine(ops);
+    addIndent();
+
+    indent() << "if (";
+    // Negative edge async resets need to invert the reset condition.  This is
+    // noted in the op description.
+    if (op.resetStyle() == ResetType::AsyncReset &&
+        *op.resetEdge() == EventControl::AtNegEdge)
+      os << "!";
+    os << emitExpressionToString(op.reset(), ops) << ')';
+    emitBeginEndRegion(op.getResetBlock(), ops, *this);
+    indent() << "else";
+    emitBeginEndRegion(op.getBodyBlock(), ops, *this);
+
+    reduceIndent();
+
+    indent() << "end";
+    os << " // " << comment;
+    os << '\n';
+  }
+  return success();
+}
+
 LogicalResult ModuleEmitter::visitSV(InitialOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -1476,48 +1543,87 @@ LogicalResult ModuleEmitter::visitStmt(InstanceOp op) {
   if (auto paramDictOpt = op.parameters()) {
     DictionaryAttr paramDict = paramDictOpt.getValue();
     if (!paramDict.empty()) {
-      os << " #(";
-      llvm::interleaveComma(paramDict, os, [&](NamedAttribute elt) {
-        os << '.' << elt.first << '(';
-        printParmValue(elt.second);
-        os << ')';
-      });
-      os << ')';
+      os << " #(\n";
+      llvm::interleave(
+          paramDict, os,
+          [&](NamedAttribute elt) {
+            os.indent(state.currentIndent + 2) << '.' << elt.first << '(';
+            printParmValue(elt.second);
+            os << ')';
+          },
+          ",\n");
+      os << '\n';
+      indent() << ')';
     }
   }
 
-  os << ' ' << op.instanceName() << " (";
-  emitLocationInfoAndNewLine(ops);
+  os << ' ' << getName(ValueOrOp(op)) << " (";
 
   SmallVector<ModulePortInfo, 8> portInfo;
   getModulePortInfo(moduleOp, portInfo);
 
+  // Get the max port name length so we can align the '('.
+  size_t maxNameLength = 0;
+  for (auto &elt : portInfo) {
+    maxNameLength = std::max(maxNameLength, elt.getName().size());
+  }
+
   // Emit the argument and result ports.
   auto opArgs = op.inputs();
   auto opResults = op.getResults();
+  bool isFirst = true; // True until we print a port.
   for (auto &elt : portInfo) {
     // Figure out which value we are emitting.
-    bool isLast = &elt == &portInfo.back();
     Value portVal = elt.isOutput() ? opResults[elt.argNum] : opArgs[elt.argNum];
+    bool isZeroWidth = isZeroBitType(elt.type);
+
+    // Decide if we should print a comma.  We can't do this if we're the first
+    // port or if all the subsequent ports are zero width.
+    if (!isFirst) {
+      bool shouldPrintComma = true;
+      if (isZeroWidth) {
+        shouldPrintComma = false;
+        for (size_t i = (&elt - portInfo.data()) + 1, e = portInfo.size();
+             i != e; ++i)
+          if (!isZeroBitType(portInfo[i].type)) {
+            shouldPrintComma = true;
+            break;
+          }
+      }
+
+      if (shouldPrintComma)
+        os << ',';
+    }
+    emitLocationInfoAndNewLine(ops);
 
     // Emit the port's name.
-    indent() << "  ";
-    bool isZeroWidth = isZeroBitType(elt.type);
-    if (isZeroWidth)
-      os << "/*";
+    indent();
+    if (!isZeroWidth) {
+      // If this is a real port we're printing, then it isn't the first one. Any
+      // subsequent ones will need a comma.
+      isFirst = false;
+      os << "  ";
+    } else {
+      // We comment out zero width ports, so their presence and initializer
+      // expressions are still emitted textually.
+      os << "//";
+    }
 
-    os << '.' << StringRef(elt.getName()) << " (";
+    os << '.' << elt.getName();
+    os.indent(maxNameLength - elt.getName().size()) << " (";
 
     // Emit the value as an expression.
     ops.clear();
     emitExpression(portVal, ops);
-    if (isZeroWidth)
-      os << "*/";
-
-    os << (isLast ? ")" : "),");
-    emitLocationInfoAndNewLine(ops);
+    os << ')';
   }
-  indent() << ");\n";
+  if (!isFirst) {
+    emitLocationInfoAndNewLine(ops);
+    ops.clear();
+    indent();
+  }
+  os << ");";
+  emitLocationInfoAndNewLine(ops);
   return success();
 }
 
@@ -1585,6 +1691,12 @@ static bool isOkToBitSelectFrom(Value v) {
 /// happens because not all Verilog expressions are composable, notably you can
 /// only use bit selects like x[4:6] on simple expressions.
 static bool isExpressionUnableToInline(Operation *op) {
+  if (auto cast = dyn_cast<BitcastOp>(op))
+    if (!haveMatchingDims(cast.input().getType(), cast.result().getType(),
+                          op->getLoc()))
+      // Bitcasts rely on the type being assigned to, so we cannot inline.
+      return true;
+
   // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
   for (auto user : op->getUsers()) {
@@ -1605,7 +1717,7 @@ static bool isExpressionUnableToInline(Operation *op) {
     }
     // ArraySliceOp uses its operand twice, so we want to assign it first then
     // use that variable in the ArraySliceOp expression.
-    if (isa<ArraySliceOp>(user))
+    if (isa<ArraySliceOp>(user) && !isa<ConstantOp>(op))
       return true;
   }
   return false;
@@ -1688,6 +1800,11 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
   for (auto &op : block) {
     bool isExpr = isVerilogExpression(&op);
 
+    // If the op is an instance, add its name to the name table.
+    auto instance = dyn_cast<InstanceOp>(&op);
+    if (instance)
+      addName(ValueOrOp(instance), instance.instanceName());
+
     for (auto result : op.getResults()) {
       // If this is an expression emitted inline or unused, it doesn't need a
       // name.
@@ -1701,10 +1818,10 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       }
 
       // Otherwise, it must be an expression or a declaration like a
-      // RegOp/WireOp.  Remember and unique the name for this operation.
-      if (auto instance = dyn_cast<InstanceOp>(&op)) {
+      // RegOp/WireOp.  Remember and unique the name for this result.
+      if (instance) {
         // The name for an instance result is custom.
-        nameTmp = instance.instanceName().str() + "_";
+        nameTmp = getName(ValueOrOp(instance)).str() + "_";
         unsigned resultNumber = result.getResultNumber();
         auto resultName = instance.getResultName(resultNumber);
         if (resultName)
@@ -1966,7 +2083,7 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
 
 void circt::registerToVerilogTranslation() {
   TranslateFromMLIRRegistration toVerilog(
-      "emit-verilog", exportVerilog, [](DialectRegistry &registry) {
+      "export-verilog", exportVerilog, [](DialectRegistry &registry) {
         registry.insert<RTLDialect, SVDialect>();
       });
 }
