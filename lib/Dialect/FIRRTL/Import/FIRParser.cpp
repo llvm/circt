@@ -1850,9 +1850,20 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs, SubOpVector &subOps) {
       parseOptionalInfo(info, subOps))
     return failure();
 
-  if (kind == FIRToken::less_equal)
-    builder.create<ConnectOp>(info.getLoc(), lhs, rhs);
-  else {
+  if (kind == FIRToken::less_equal) {
+    // Some operations, dshl for example, have implicit truncations, even in lo
+    // firrtl.  Chisel will also use connects as partial connects to do
+    // truncation.  Handle truncations as partial connects, which allow
+    // truncation.
+    auto lhsPType = lhs.getType().cast<FIRRTLType>().getPassiveType();
+    auto rhsPType = rhs.getType().cast<FIRRTLType>().getPassiveType();
+    if (lhsPType != rhsPType && lhsPType.getBitWidthOrSentinel() >= 0 &&
+        lhsPType.getBitWidthOrSentinel() < rhsPType.getBitWidthOrSentinel()) {
+      builder.create<PartialConnectOp>(info.getLoc(), lhs, rhs);
+    } else {
+      builder.create<ConnectOp>(info.getLoc(), lhs, rhs);
+    }
+  } else {
     assert(kind == FIRToken::less_minus && "unexpected kind");
     builder.create<PartialConnectOp>(info.getLoc(), lhs, rhs);
   }

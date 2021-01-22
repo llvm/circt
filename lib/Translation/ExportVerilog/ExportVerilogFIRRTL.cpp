@@ -305,6 +305,7 @@ public:
   void emitStatementExpression(Operation *op);
   void emitStatement(AttachOp op);
   void emitStatement(ConnectOp op);
+  void emitStatement(PartialConnectOp op);
   void emitStatement(PrintFOp op);
   void emitStatement(StopOp op);
   void emitDecl(NodeOp op);
@@ -1340,6 +1341,43 @@ void ModuleEmitter::emitStatement(ConnectOp op) {
   emitLocationInfoAndNewLine(ops);
 }
 
+void ModuleEmitter::emitStatement(PartialConnectOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  // Connect to a register has "special" behavior.
+  auto dest = op.dest();
+  auto addRegAssign = [&](const std::string &clockExpr, Value value) {
+    std::string action =
+        getName(dest).str() + " <= " + emitExpressionToString(value, ops) + ";";
+    auto locStr = getLocationInfoAsString(ops);
+    addAtPosEdge(action, locStr, clockExpr);
+    return;
+  };
+
+  if (auto regOp = dyn_cast_or_null<RegOp>(dest.getDefiningOp())) {
+    auto clockExpr = emitExpressionToString(regOp.clockVal(), ops);
+    addRegAssign(clockExpr, op.src());
+    return;
+  }
+
+  if (auto regInitOp = dyn_cast_or_null<RegResetOp>(dest.getDefiningOp())) {
+    auto clockExpr = emitExpressionToString(regInitOp.clockVal(), ops);
+    clockExpr +=
+        " or posedge " + emitExpressionToString(regInitOp.resetSignal(), ops);
+
+    addRegAssign(clockExpr, op.src());
+    return;
+  }
+
+  indent() << "assign ";
+  emitExpression(dest, ops);
+  os << " = ";
+  emitExpression(op.src(), ops);
+  os << ';';
+  emitLocationInfoAndNewLine(ops);
+}
+
 void ModuleEmitter::emitStatement(PrintFOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -1882,6 +1920,9 @@ void ModuleEmitter::emitOperation(Operation *op) {
     using StmtVisitor::visitStmt;
     bool visitStmt(AttachOp op) { return emitter.emitStatement(op), true; }
     bool visitStmt(ConnectOp op) { return emitter.emitStatement(op), true; }
+    bool visitStmt(PartialConnectOp op) {
+      return emitter.emitStatement(op), true;
+    }
     bool visitStmt(DoneOp op) { return true; }
     bool visitStmt(PrintFOp op) { return emitter.emitStatement(op), true; }
     bool visitStmt(SkipOp op) { return true; }
