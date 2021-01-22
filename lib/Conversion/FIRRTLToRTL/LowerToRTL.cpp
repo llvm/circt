@@ -738,6 +738,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   Value getPossiblyInoutLoweredValue(Value value);
   Value getLoweredValue(Value value);
   Value getLoweredAndExtendedValue(Value value, Type destType);
+  Value getLoweredAndExtOrTruncValue(Value value, Type destType);
   LogicalResult setLowering(Value orig, Value result);
   template <typename ResultOpType, typename... CtorArgTypes>
   LogicalResult setLoweringTo(Operation *orig, CtorArgTypes... args);
@@ -858,6 +859,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   // Statements
   LogicalResult visitStmt(SkipOp op);
   LogicalResult visitStmt(ConnectOp op);
+  LogicalResult visitStmt(PartialConnectOp op);
   LogicalResult visitStmt(PrintFOp op);
   LogicalResult visitStmt(StopOp op);
   LogicalResult visitStmt(AssertOp op);
@@ -1025,6 +1027,56 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
 
   auto zero = builder->create<rtl::ConstantOp>(APInt(destWidth - srcWidth, 0));
   return builder->createOrFold<rtl::ConcatOp>(zero, result);
+}
+
+/// Return the lowered value corresponding to the specified original value and
+/// then extended or truncated to match the width of destType if needed.
+///
+/// This returns a null value for FIRRTL values that cannot be lowered, e.g.
+/// unknown width integers.
+Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
+  assert(value.getType().isa<FIRRTLType>() && destType.isa<FIRRTLType>() &&
+         "input/output value should be FIRRTL");
+
+  // We only know how to adjust integer types with known width.
+  auto destWidth = destType.cast<FIRRTLType>().getBitWidthOrSentinel();
+  if (destWidth == -1)
+    return {};
+
+  auto result = getLoweredValue(value);
+  if (!result) {
+    // If this was a zero bit operand being extended, then produce a zero of the
+    // right result type.  If it is just a failure, fail.
+    if (!isZeroBitFIRRTLType(value.getType()))
+      return {};
+    // Zero bit results have to be returned as null.  The caller can handle
+    // this if they want to.
+    if (destWidth == 0)
+      return {};
+    // Otherwise, FIRRTL semantics is that an extension from a zero bit value
+    // always produces a zero value in the destination width.
+    return builder->create<rtl::ConstantOp>(APInt(destWidth, 0));
+  }
+
+  auto srcWidth = result.getType().cast<IntegerType>().getWidth();
+  if (srcWidth == unsigned(destWidth))
+    return result;
+
+  if (srcWidth > unsigned(destWidth)) {
+    auto resultType = builder->getIntegerType(destWidth);
+    return builder->createOrFold<rtl::ExtractOp>(resultType, result, 0);
+  } else {
+    auto resultType = builder->getIntegerType(destWidth);
+
+    // Extension follows the sign of the source value, not the destination.
+    auto valueFIRType = value.getType().cast<FIRRTLType>().getPassiveType();
+    if (valueFIRType.cast<IntType>().isSigned())
+      return builder->createOrFold<rtl::SExtOp>(resultType, result);
+
+    auto zero =
+        builder->create<rtl::ConstantOp>(APInt(destWidth - srcWidth, 0));
+    return builder->createOrFold<rtl::ConcatOp>(zero, result);
+  }
 }
 
 /// Set the lowered value of 'orig' to 'result', remembering this in a map.
@@ -1965,6 +2017,68 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
             : ::ResetType::SyncReset,
         EventControl::AtPosEdge, resetSignal, std::function<void()>(),
         [&]() { builder->create<sv::PAssignOp>(destVal, srcVal); });
+    return success();
+  }
+
+  builder->create<rtl::ConnectOp>(destVal, srcVal);
+  return success();
+}
+
+// This will have to handle struct connects at some point.
+LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
+  auto dest = op.dest();
+  // The source can be a different size integer, adjust it as appropriate if so.
+  auto destType = dest.getType().cast<FIRRTLType>().getPassiveType();
+  auto srcVal = getLoweredAndExtOrTruncValue(op.src(), destType);
+  if (!srcVal)
+    return handleZeroBit(op.src(), []() { return success(); });
+
+  auto destVal = getPossiblyInoutLoweredValue(dest);
+  if (!destVal)
+    return failure();
+
+  if (!destVal.getType().isa<rtl::InOutType>())
+    return op.emitError("destination isn't an inout type");
+
+  // If this is an assignment to a register, then the connect implicitly
+  // happens under the clock that gates the register.
+  if (auto regOp = dyn_cast_or_null<RegOp>(dest.getDefiningOp())) {
+    Value clockVal = getLoweredValue(regOp.clockVal());
+    if (!clockVal)
+      return failure();
+
+    builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clockVal, [&]() {
+      builder->create<sv::PAssignOp>(destVal, srcVal);
+    });
+    return success();
+  }
+
+  // If this is an assignment to a RegInit, then the connect implicitly
+  // happens under the clock and reset that gate the register.
+  if (auto regResetOp = dyn_cast_or_null<RegResetOp>(dest.getDefiningOp())) {
+    Value clockVal = getLoweredValue(regResetOp.clockVal());
+    Value resetSignal = getLoweredValue(regResetOp.resetSignal());
+    if (!clockVal || !resetSignal)
+      return failure();
+
+    auto one = builder->create<rtl::ConstantOp>(APInt(1, 1));
+    auto invResetSignal = builder->create<rtl::XorOp>(resetSignal, one);
+
+    auto resetFn = [&]() {
+      builder->create<sv::IfOp>(invResetSignal, [&]() {
+        builder->create<sv::PAssignOp>(destVal, srcVal);
+      });
+    };
+
+    if (regResetOp.resetSignal().getType().isa<AsyncResetType>()) {
+      builder->create<sv::AlwaysOp>(
+          ArrayRef<EventControl>{EventControl::AtPosEdge,
+                                 EventControl::AtPosEdge},
+          ArrayRef<Value>{clockVal, resetSignal}, resetFn);
+      return success();
+    } else { // sync reset
+      builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clockVal, resetFn);
+    }
     return success();
   }
 

@@ -1,5 +1,5 @@
 ; RUN: firtool %s --format=fir -mlir    | circt-opt | FileCheck %s --check-prefix=MLIR
-; RUN: firtool %s --format=fir -verilog |           FileCheck %s --check-prefix=VERILOG
+; RUN: firtool %s --format=fir -verilog |             FileCheck %s --check-prefix=VERILOG
 ; RUN: firtool %s --format=fir -mlir -lower-to-rtl | circt-opt | FileCheck %s --check-prefix=MLIRLOWER
 
 circuit test_mod :
@@ -38,5 +38,37 @@ circuit test_mod :
 ; MLIRLOWER:   %0 = rtl.concat %a, %b, %c : (i2, i2, i2) -> i6
 ; MLIRLOWER:   rtl.output %0 : i6
 ; MLIRLOWER: }
+
+  module implicitTrunc :
+    input inp_1: UInt<1>
+    input inp_2: SInt<5>
+    output out1: SInt<3>
+    output out2: SInt<3>
+    out1 <= dshl(inp_2, inp_1)
+    out2 <= inp_2
+
+; VERILOG-LABEL:   module implicitTrunc(
+; VERILOG-NEXT :   input        inp_1,
+; VERILOG-NEXT :   input  [4:0] inp_2,
+; VERILOG-NEXT :   output [2:0] tmp9);
+; VERILOG-NEXT :   assign out1 = $signed(inp_2) << inp_1;
+; VERILOG-NEXT :   assign out2 = inp_2;
+; VERILOG-NEXT : endmodule
+
+; MLIRLOWER-LABEL:   rtl.module @implicitTrunc(%inp_1: i1, %inp_2: i5) -> (%out1: i3, %out2: i3) {
+; MLIRLOWER-NEXT :     %c0_i5 = rtl.constant(0 : i5) : i5
+; MLIRLOWER-NEXT :     %.out1.output = rtl.wire  : !rtl.inout<i3>
+; MLIRLOWER-NEXT :     %.out2.output = rtl.wire  : !rtl.inout<i3>
+; MLIRLOWER-NEXT :     %0 = rtl.sext %inp_2 : (i5) -> i6
+; MLIRLOWER-NEXT :     %1 = rtl.concat %c0_i5, %inp_1 : (i5, i1) -> i6
+; MLIRLOWER-NEXT :     %2 = rtl.shl %0, %1 : i6
+; MLIRLOWER-NEXT :     %3 = rtl.extract %2 from 0 : (i6) -> i3
+; MLIRLOWER-NEXT :     rtl.connect %.out1.output, %3 : i3
+; MLIRLOWER-NEXT :     %4 = rtl.extract %inp_2 from 0 : (i5) -> i3
+; MLIRLOWER-NEXT :     rtl.connect %.out2.output, %4 : i3
+; MLIRLOWER-NEXT :     %5 = rtl.read_inout %.out1.output : !rtl.inout<i3>
+; MLIRLOWER-NEXT :     %6 = rtl.read_inout %.out2.output : !rtl.inout<i3>
+; MLIRLOWER-NEXT :     rtl.output %5, %6 : i3, i3
+; MLIRLOWER-NEXT :   }
 
 ; MLIRLOWER: }

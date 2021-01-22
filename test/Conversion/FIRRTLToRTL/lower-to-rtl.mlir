@@ -826,4 +826,5 @@ module attributes {firrtl.mainModule = "Simple"} {
     %3 = firrtl.pad %2, 23 : (!firrtl.uint<0>) -> !firrtl.uint<23>
     %4 = firrtl.stdIntCast %3 : (!firrtl.uint<23>) -> i23
     rtl.output %4 : i23
-  }}
+  }
+}
