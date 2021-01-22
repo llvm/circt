@@ -26,7 +26,7 @@ def LowerFIRRTLToRTLModule
     Lower firrtl.module's to rtl.module.
   }];
   let constructor = "circt::firrtl::createLowerFIRRTLToRTLModulePass()";
-  let dependentDialects = ["rtl::RTLDialect"];
+  let dependentDialects = ["rtl::RTLDialect", "sv::SVDialect"];
 }
 
 def LowerFIRRTLToRTL : Pass<"lower-firrtl-to-rtl", "rtl::RTLModuleOp"> {

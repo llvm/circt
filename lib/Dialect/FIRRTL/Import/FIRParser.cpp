@@ -2607,7 +2607,7 @@ OwningModuleRef circt::firrtl::importFIRRTL(SourceMgr &sourceMgr,
 
 void circt::firrtl::registerFromFIRRTLTranslation() {
   static TranslateToMLIRRegistration fromFIR(
-      "parse-fir", [](llvm::SourceMgr &sourceMgr, MLIRContext *context) {
+      "import-firrtl", [](llvm::SourceMgr &sourceMgr, MLIRContext *context) {
         return importFIRRTL(sourceMgr, context);
       });
 }

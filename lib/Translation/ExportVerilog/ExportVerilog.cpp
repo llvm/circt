@@ -2024,7 +2024,7 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
 
 void circt::registerToVerilogTranslation() {
   TranslateFromMLIRRegistration toVerilog(
-      "emit-verilog", exportVerilog, [](DialectRegistry &registry) {
+      "export-verilog", exportVerilog, [](DialectRegistry &registry) {
         registry.insert<RTLDialect, SVDialect>();
       });
 }

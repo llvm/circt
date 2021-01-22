@@ -1,4 +1,4 @@
-; RUN: circt-translate -parse-fir -verify-diagnostics %s | circt-opt | FileCheck %s
+; RUN: circt-translate -import-firrtl -verify-diagnostics %s | circt-opt | FileCheck %s
 
 circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 

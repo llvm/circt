@@ -1,5 +1,5 @@
 // REQUIRES: rtl-sim
-// RUN: circt-translate %s -emit-verilog -verify-diagnostics > %t1.sv
+// RUN: circt-translate %s -export-verilog -verify-diagnostics > %t1.sv
 // RUN: verilator --lint-only --top-module top %t1.sv
 // RUN: circt-rtl-sim.py %t1.sv --cycles 2 2>&1 | FileCheck %s
 
