@@ -998,6 +998,7 @@ SubExprInfo ExprEmitter::visitComb(ArraySliceOp op) {
   return {Unary, arrayPrec.signedness};
 }
 
+// Syntax from: section 5.11 "Array literals".
 SubExprInfo ExprEmitter::visitComb(ArrayCreateOp op) {
   os << '{';
   SubExprInfo exprInfo =
