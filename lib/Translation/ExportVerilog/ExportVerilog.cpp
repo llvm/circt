@@ -640,6 +640,7 @@ private:
 
   // Other
   SubExprInfo visitComb(ArraySliceOp op);
+  SubExprInfo visitComb(ArrayCreateOp op);
   SubExprInfo visitComb(ArrayIndexOp op);
   SubExprInfo visitComb(MuxOp op);
 
@@ -995,6 +996,19 @@ SubExprInfo ExprEmitter::visitComb(ArraySliceOp op) {
   emitSubExpr(op.lowIndex(), LowestPrecedence);
   os << "+:" << dstWidth << ']';
   return {Unary, arrayPrec.signedness};
+}
+
+SubExprInfo ExprEmitter::visitComb(ArrayCreateOp op) {
+  os << '{';
+  SubExprInfo exprInfo =
+      /* dummy init value. */ {Symbol, SubExprSignResult::IsUnsigned};
+  llvm::interleaveComma(op.inputs(), os, [&](Value operand) {
+    os << "'{";
+    exprInfo = emitSubExpr(operand, LowestPrecedence);
+    os << "}";
+  });
+  os << '}';
+  return {Unary, exprInfo.signedness};
 }
 
 SubExprInfo ExprEmitter::visitComb(ArrayIndexOp op) {

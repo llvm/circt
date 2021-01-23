@@ -323,6 +323,34 @@ def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
   ];
 }
 
+def ArrayCreateOp : RTLOp<"array_create", [NoSideEffect, SameTypeOperands]> {
+  let summary = "Create an array from values";
+  let description = [{
+    Creates an array from a variable set of values.
+
+    ```
+    // %a, %b, %c are all i4
+    %array = rtl.array_create %a, %b, %c : (i4)
+    ```
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs ArrayType:$result);
+  // let verifier = [{
+  //   unsigned inputSize = input().getType().cast<ArrayType>().getSize();
+  //   if (llvm::Log2_64_Ceil(inputSize) !=
+  //         lowIndex().getType().getIntOrFloatBitWidth())
+  //     return failure();
+  //   return success();
+  // }];
+
+  let printer = "return ::print(p, *this);";
+  let parser = "return ::parse$cppClass(parser, result);";
+  let builders = [
+    OpBuilderDAG<(ins "ArrayRef<::mlir::Value>":$input)>
+  ];
+}
+
 // Extract a range of bits from the specified input.
 def MuxOp : RTLOp<"mux",
  [NoSideEffect, AllTypesMatch<["trueValue", "falseValue", "result"]>]> {
