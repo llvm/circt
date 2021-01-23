@@ -323,6 +323,22 @@ def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
   ];
 }
 
+def ArrayGetOp
+ : RTLOp<"array_get", [NoSideEffect]> {
+  let summary = "Get the value in an array at the specified index";
+  let arguments = (ins ArrayType:$input, RTLIntegerType:$index);
+  let results = (outs AnyType:$result);
+
+  let builders = [
+    OpBuilderDAG<(ins "Value":$input, "Value":$index)>
+  ];
+
+  let assemblyFormat = [{
+    $input`[`$index`]` attr-dict `:`
+      `(` custom<ArrayGetTypes>(type($input), type($result), type($index)) `)`
+  }];
+}
+
 // Extract a range of bits from the specified input.
 def MuxOp : RTLOp<"mux",
  [NoSideEffect, AllTypesMatch<["trueValue", "falseValue", "result"]>]> {

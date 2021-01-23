@@ -694,6 +694,23 @@ void ArraySliceOp::build(::mlir::OpBuilder &b, ::mlir::OperationState &state,
   build(b, state, dstType, input, lowBitValue);
 }
 
+static ParseResult parseArrayGetTypes(OpAsmParser &p, Type &srcType,
+                                      Type &idxType, Type &resultType) {
+  ArrayType arrType;
+  if (p.parseType(arrType))
+    return failure();
+  srcType = arrType;
+  unsigned idxWidth = llvm::Log2_64_Ceil(arrType.getSize());
+  idxType = IntegerType::get(p.getBuilder().getContext(), idxWidth);
+  resultType = arrType.getElementType();
+  return success();
+}
+
+static void printArrayGetTypes(OpAsmPrinter &p, Operation *, Type srcType,
+                               Type idxType, Type resultTy) {
+  p.printType(srcType);
+}
+
 //===----------------------------------------------------------------------===//
 // Variadic operations
 //===----------------------------------------------------------------------===//
