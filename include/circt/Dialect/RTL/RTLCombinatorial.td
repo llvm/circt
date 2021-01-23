@@ -336,13 +336,13 @@ def ArrayCreateOp : RTLOp<"array_create", [NoSideEffect, SameTypeOperands]> {
 
   let arguments = (ins Variadic<AnyType>:$inputs);
   let results = (outs ArrayType:$result);
-  // let verifier = [{
-  //   unsigned inputSize = input().getType().cast<ArrayType>().getSize();
-  //   if (llvm::Log2_64_Ceil(inputSize) !=
-  //         lowIndex().getType().getIntOrFloatBitWidth())
-  //     return failure();
-  //   return success();
-  // }];
+
+  let verifier = [{
+    unsigned returnSize = getType().cast<ArrayType>().getSize();
+    if (inputs().size() != returnSize)
+      return failure();
+    return success();
+  }];
 
   let printer = "return ::print(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
