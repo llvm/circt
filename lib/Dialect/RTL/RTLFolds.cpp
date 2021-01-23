@@ -11,9 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/RTL/RTLOps.h"
+#include "mlir/Dialect/CommonFolders.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
-#include "mlir/Dialect/CommonFolders.h"
 
 using namespace circt;
 using namespace rtl;
