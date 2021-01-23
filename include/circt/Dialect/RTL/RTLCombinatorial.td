@@ -329,13 +329,20 @@ def ArrayGetOp
   let arguments = (ins ArrayType:$input, RTLIntegerType:$index);
   let results = (outs AnyType:$result);
 
-  let builders = [
-    OpBuilderDAG<(ins "Value":$input, "Value":$index)>
-  ];
-
   let assemblyFormat = [{
     $input`[`$index`]` attr-dict `:`
       `(` custom<ArrayGetTypes>(type($input), type($result), type($index)) `)`
+  }];
+
+  let verifier = [{
+    ArrayType arrTy = input().getType().dyn_cast<ArrayType>();
+    unsigned inputSize = arrTy.getSize();
+    if (llvm::Log2_64_Ceil(inputSize) !=
+          index().getType().getIntOrFloatBitWidth())
+      return failure();
+    if (result().getType() != arrTy.getElementType())
+      return failure();
+    return success();
   }];
 }
 
