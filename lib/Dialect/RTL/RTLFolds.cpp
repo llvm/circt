@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/RTL/RTLOps.h"
+#include "mlir/Dialect/CommonFolders.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 
@@ -119,6 +120,25 @@ OpFoldResult XorROp::fold(ArrayRef<Attribute> constants) {
                       getContext());
 
   return {};
+}
+
+//===----------------------------------------------------------------------===//
+// Binary Operations
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ShlOp::fold(ArrayRef<Attribute> operands) {
+  return constFoldBinaryOp<IntegerAttr>(
+      operands, [](APInt a, APInt b) { return a.shl(b); });
+}
+
+OpFoldResult ShrUOp::fold(ArrayRef<Attribute> operands) {
+  return constFoldBinaryOp<IntegerAttr>(
+      operands, [](APInt a, APInt b) { return a.lshr(b); });
+}
+
+OpFoldResult ShrSOp::fold(ArrayRef<Attribute> operands) {
+  return constFoldBinaryOp<IntegerAttr>(
+      operands, [](APInt a, APInt b) { return a.ashr(b); });
 }
 
 //===----------------------------------------------------------------------===//

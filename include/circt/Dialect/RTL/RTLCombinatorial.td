@@ -109,9 +109,11 @@ def DivUOp : UTBinRTLOp<"divu">;
 def DivSOp : UTBinRTLOp<"divs">;
 def ModUOp : UTBinRTLOp<"modu">;
 def ModSOp : UTBinRTLOp<"mods">;
-def ShlOp : UTBinRTLOp<"shl">;
-def ShrUOp : UTBinRTLOp<"shru">;
-def ShrSOp : UTBinRTLOp<"shrs">;
+let hasFolder = true in {
+  def ShlOp : UTBinRTLOp<"shl">;
+  def ShrUOp : UTBinRTLOp<"shru">;
+  def ShrSOp : UTBinRTLOp<"shrs">;
+}
 
 def AndOp : UTVariadicRTLOp<"and", [Commutative]>;
 def OrOp  : UTVariadicRTLOp<"or", [Commutative]>;
