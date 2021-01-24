@@ -98,6 +98,26 @@ def StructExplodeOp : RTLOp<"struct_explode", [NoSideEffect]> {
   let printer = "return ::print(p, *this);";
 }
 
+def StructGetOp : RTLOp<"struct_get", [NoSideEffect]> {
+  let summary = "Get the value of a field out of a struct";
+  let description = [{
+    Syntax:
+    ```
+      rtl.struct_get %inputStruct -> <field> : ( <inputStructType> )
+
+      // e.g.:
+      %exampleStruct = ... : !rtl.struct<foo: i4, bar: i8>
+      %foo = rtl.struct_get %exampleStruct -> foo : (!rtl.struct<foo: i4, bar: i8>)
+      // "%foo" is type i4
+    ```
+  }];
+  let arguments = (ins StructType:$input, StrAttr:$field);
+  let results = (outs RTLNonInOutType:$result);
+
+  let parser = "return ::parse$cppClass(parser, result);";
+  let printer = "return ::print(p, *this);";
+}
+
 
 def StructCreateOp : RTLOp<"struct_create", [NoSideEffect]> {
   let summary = "Create a struct from constituent parts.";

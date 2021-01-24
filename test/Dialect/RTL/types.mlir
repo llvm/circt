@@ -12,9 +12,11 @@ module {
     return
   }
 
-  // CHECK-LABEL: func @structType(%arg0: !rtl.struct<>, %arg1: !rtl.struct<foo: i32, bar: i4, baz: !rtl.struct<foo: i7>>) {
-  func @structType(%SE: !rtl.struct<>, %SF: !rtl.struct<foo: i32, bar: i4, baz: !rtl.struct<foo: i7>>) {
-    return
+  // CHECK-LABEL: func @structType(%arg0: !rtl.struct<>, %arg1: !rtl.struct<foo: i32, bar: i4, baz: !rtl.struct<foo: i7>>) -> i32 {
+  func @structType(%SE: !rtl.struct<>, %SF: !rtl.struct<foo: i32, bar: i4, baz: !rtl.struct<foo: i7>>) -> i32 {
+    // CHECK-NEXT: rtl.struct_get %arg1 -> foo : (!rtl.struct<foo: i32, bar: i4, baz: !rtl.struct<foo: i7>>)
+    %foo = rtl.struct_get %SF -> foo : ( !rtl.struct<foo: i32, bar: i4, baz: !rtl.struct<foo: i7>> )
+    return %foo : i32
   }
   
   // CHECK-LABEL: nestedType

@@ -762,6 +762,38 @@ static void print(OpAsmPrinter &printer, rtl::StructCreateOp op) {
 }
 
 //===----------------------------------------------------------------------===//
+// StructGetOp
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseStructGetOp(OpAsmParser &p, OperationState &result) {
+  OpAsmParser::OperandType input;
+
+  StringRef field;
+  StructType inputType;
+
+  if (p.parseOperand(input) || p.parseArrow() || p.parseKeyword(&field) ||
+      p.parseOptionalAttrDict(result.attributes) || p.parseColon() ||
+      p.parseLParen() || p.parseType(inputType) || p.parseRParen())
+    return failure();
+
+  result.addAttribute("field", StringAttr::get(field, result.getContext()));
+  result.addTypes({inputType.getFieldType(field)});
+  if (p.resolveOperand(input, inputType, result.operands))
+    return failure();
+  return success();
+}
+
+static void print(OpAsmPrinter &p, StructGetOp op) {
+  p << op.getOperationName() << " ";
+  p.printOperand(op.input());
+  p << " -> " << op.field() << ' ';
+  p.printOptionalAttrDict(op.getAttrs(), /*elidedAttrs=*/{"field"});
+  p << " : (";
+  p.printType(op.input().getType());
+  p << ')';
+}
+
+//===----------------------------------------------------------------------===//
 // StructExplodeOp
 //===----------------------------------------------------------------------===//
 
