@@ -993,9 +993,20 @@ SubExprInfo ExprEmitter::visitComb(ConstantOp op) {
 SubExprInfo ExprEmitter::visitComb(ArraySliceOp op) {
   auto arrayPrec = emitSubExpr(op.input(), Selection);
 
+  auto *idxOp = op.lowIndex().getDefiningOp();
+  // We can emit without padding if the position is a constant or emitted
+  // out-of-line. There may be other exceptions.
+  bool noPadding = op.lowIndex().isa<BlockArgument>() ||
+                   isa<ConstantOp>(idxOp) ||
+                   emitter.outOfLineExpressions.count(idxOp) > 0;
+
   unsigned dstWidth = op.getType().getSize();
   os << '[';
+  if (!noPadding)
+    os << "{1'b0, ";
   emitSubExpr(op.lowIndex(), LowestPrecedence);
+  if (!noPadding)
+    os << "}";
   os << "+:" << dstWidth << ']';
   return {Selection, arrayPrec.signedness};
 }
@@ -1718,9 +1729,9 @@ static bool isExpressionUnableToInline(Operation *op) {
           !isOkToBitSelectFrom(op->getResult(0)))
         return true;
     }
-    // ArraySliceOp uses its operand twice, so we want to assign it first then
-    // use that variable in the ArraySliceOp expression.
-    if (isa<ArraySliceOp>(user) && !isa<ConstantOp>(op))
+
+    // A `[]` operation followed by another `[]` is interpreted unintuitively.
+    if (isa<ArraySliceOp>(op) && isa<ArraySliceOp>(user))
       return true;
   }
   return false;

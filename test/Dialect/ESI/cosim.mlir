@@ -58,6 +58,7 @@ rtl.module @top(%clk:i1, %rstn:i1) -> () {
   // SV:   .DataOut (TestEP_DataOut),
   // SV:   .DataInReady (TestEP_DataInReady)
   // SV: );
-  // SV: rootPointer = TestEP_DataOut[{{.+}}+:64];
-  // SV: dataSection = TestEP_DataOut[{{.+}}+:64];
+  // SV: rootPointer = TestEP_DataOut[7'h0+:64];
+  // SV: dataSection = TestEP_DataOut[7'h40+:64];
+
 }
