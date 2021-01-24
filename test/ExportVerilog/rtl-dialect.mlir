@@ -7,7 +7,8 @@ module {
 
   // CHECK-LABEL: // external module E
 
-  rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !rtl.array<10xi4>,
+  rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1,
+                         %array2d: !rtl.array<12 x array<10xi4>>,
                          %uarray: !rtl.uarray<16xi8>) -> (
     %r0: i4, %r2: i4, %r4: i4, %r6: i4,
     %r7: i4, %r8: i4, %r9: i4, %r10: i4,
@@ -54,8 +55,11 @@ module {
     %allone = rtl.constant (15 : i4) : i4
     %34 = rtl.xor %a, %allone : i4
 
+    %array = rtl.array_get %array2d[%a] : (!rtl.array<12 x array<10xi4>>)
     %35 = rtl.array_slice %array at %a : (!rtl.array<10xi4>) -> !rtl.array<3xi4>
-    %37 = rtl.array_get %array[%a] : (!rtl.array<10xi4>)
+
+    %elem2d = rtl.array_get %array2d[%a] : (!rtl.array<12 x array<10xi4>>)
+    %37 = rtl.array_get %elem2d[%b] : (!rtl.array<10xi4>)
 
     %36 = rtl.concat %a, %a, %a : (i4, i4, i4) -> i12
 
@@ -67,20 +71,21 @@ module {
      i12, i2,i9,i4, i4, !rtl.array<3xi4>, i12, i4
   }
   // CHECK-LABEL: module TESTSIMPLE(
-  // CHECK-NEXT:   input  [3:0]      a, b
-  // CHECK-NEXT:   input             cond,
-  // CHECK-NEXT:   input  [9:0][3:0] array,
-  // CHECK-NEXT:   input  [7:0]      uarray[15:0],
-  // CHECK-NEXT:   output [3:0]      r0, r2, r4, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15
-  // CHECK-NEXT:   output            r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28
-  // CHECK-NEXT:   output [11:0]     r29,
-  // CHECK-NEXT:   output [1:0]      r30,
-  // CHECK-NEXT:   output [8:0]      r31,
-  // CHECK-NEXT:   output [3:0]      r33, r34,
-  // CHECK-NEXT:   output [2:0][3:0] r35,
-  // CHECK-NEXT:   output [11:0]     r36,
-  // CHECK-NEXT:   output [3:0]      r37);
+  // CHECK-NEXT:   input  [3:0]            a, b
+  // CHECK-NEXT:   input                   cond,
+  // CHECK-NEXT:   input  [11:0][9:0][3:0] array2d,
+  // CHECK-NEXT:   input  [7:0]            uarray[15:0],
+  // CHECK-NEXT:   output [3:0]            r0, r2, r4, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15
+  // CHECK-NEXT:   output                  r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28
+  // CHECK-NEXT:   output [11:0]           r29,
+  // CHECK-NEXT:   output [1:0]            r30,
+  // CHECK-NEXT:   output [8:0]            r31,
+  // CHECK-NEXT:   output [3:0]            r33, r34,
+  // CHECK-NEXT:   output [2:0][3:0]       r35,
+  // CHECK-NEXT:   output [11:0]           r36,
+  // CHECK-NEXT:   output [3:0]            r37);
   // CHECK-EMPTY:
+  // CHECK-NEXT:   wire [9:0][3:0] _T = array2d[a];
   // CHECK-NEXT:   assign r0 = a + b;
   // CHECK-NEXT:   assign r2 = a - b;
   // CHECK-NEXT:   assign r4 = a * b;
@@ -112,9 +117,9 @@ module {
   // CHECK-NEXT:   assign r31 = {{[{}][{}]}}5{a[3]}}, a};
   // CHECK-NEXT:   assign r33 = cond ? a : b;
   // CHECK-NEXT:   assign r34 = ~a;
-  // CHECK-NEXT:   assign r35 = array[a+:3];
+  // CHECK-NEXT:   assign r35 = _T[a+:3];
   // CHECK-NEXT:   assign r36 = {3{a}};
-  // CHECK-NEXT:   assign r37 = array[a];
+  // CHECK-NEXT:   assign r37 = array2d[a][b];
   // CHECK-NEXT: endmodule
 
   rtl.module @B(%a: i1) -> (%b: i1, %c: i1) {

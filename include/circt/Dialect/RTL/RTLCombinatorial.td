@@ -325,26 +325,28 @@ def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
   ];
 }
 
-def ArrayGetOp
- : RTLOp<"array_get", [NoSideEffect]> {
+class IndexBitWidthConstraint<string index, string input>
+  : TypesMatchWith<"Index width should be exactly clog2 (size of array)",
+                   input, index,
+                   [{
+    IntegerType::get($_self.getContext(),
+                     llvm::Log2_64_Ceil($_self.cast<ArrayType>().getSize()))
+                   }]>;
+
+class ArrayElementTypeConstraint<string result, string input>
+  : TypesMatchWith<"Result must be arrays element type",
+                   input, result,
+                   [{ $_self.cast<ArrayType>().getElementType() }]>;
+
+def ArrayGetOp : RTLOp<"array_get",
+    [NoSideEffect, IndexBitWidthConstraint<"index", "input">,
+     ArrayElementTypeConstraint<"result", "input">]> {
   let summary = "Get the value in an array at the specified index";
   let arguments = (ins ArrayType:$input, RTLIntegerType:$index);
   let results = (outs AnyType:$result);
 
   let assemblyFormat = [{
-    $input`[`$index`]` attr-dict `:`
-      `(` custom<ArrayGetTypes>(type($input), type($result), type($index)) `)`
-  }];
-
-  let verifier = [{
-    ArrayType arrTy = input().getType().dyn_cast<ArrayType>();
-    unsigned inputSize = arrTy.getSize();
-    if (llvm::Log2_64_Ceil(inputSize) !=
-          index().getType().getIntOrFloatBitWidth())
-      return failure();
-    if (result().getType() != arrTy.getElementType())
-      return failure();
-    return success();
+    $input`[`$index`]` attr-dict `:` `(` type($input) `)`
   }];
 }
 

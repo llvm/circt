@@ -1002,11 +1002,11 @@ SubExprInfo ExprEmitter::visitComb(ArraySliceOp op) {
 }
 
 SubExprInfo ExprEmitter::visitComb(ArrayGetOp op) {
-  auto arrayPrec = emitSubExpr(op.input(), Symbol);
+  auto arrayPrec = emitSubExpr(op.input(), Selection);
   os << '[';
   emitSubExpr(op.index(), LowestPrecedence);
   os << ']';
-  return {Unary, arrayPrec.signedness};
+  return {Selection, arrayPrec.signedness};
 }
 
 SubExprInfo ExprEmitter::visitComb(ArrayIndexOp op) {
