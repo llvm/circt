@@ -269,8 +269,8 @@ void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
     odsBuilder.setInsertionPoint(oldIP);
   }
 
-  // Set up the reset
-  Region *resetBlk = result.addRegion();
+  // Set up the reset region.
+  result.addRegion();
 }
 
 void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
