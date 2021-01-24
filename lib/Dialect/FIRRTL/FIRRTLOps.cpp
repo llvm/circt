@@ -650,7 +650,7 @@ static void printInstanceResults(OpAsmPrinter &p, InstanceOp op,
 
 /// Return the type of a mem given a list of named ports and their kind.
 /// This returns a null type if there are duplicate port names.
-FIRRTLType
+BundleType
 MemOp::getTypeForPortList(uint64_t depth, FIRRTLType dataType,
                           ArrayRef<std::pair<Identifier, PortKind>> portList) {
   assert(dataType.isPassive() && "mem can only have passive datatype");
@@ -715,7 +715,7 @@ MemOp::getTypeForPortList(uint64_t depth, FIRRTLType dataType,
         {port.first, FlipType::get(BundleType::get(portFields, context))});
   }
 
-  return BundleType::get(memFields, context);
+  return BundleType::get(memFields, context).cast<BundleType>();
 }
 
 /// Return the kind of port this is given the port type from a 'mem' decl.
@@ -769,8 +769,6 @@ FIRRTLType MemOp::getDataTypeOrNull() {
   auto firstPortType = firstPort.type.getPassiveType().cast<BundleType>();
   return firstPortType.getElementType("data");
 }
-
-
 
 //===----------------------------------------------------------------------===//
 // Statements
