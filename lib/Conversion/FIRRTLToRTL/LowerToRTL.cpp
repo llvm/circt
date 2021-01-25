@@ -1423,23 +1423,16 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   // Keep track of whether this mem is an even power of two or not.
   bool isPowerOfTwo = llvm::isPowerOf2_64(depth);
 
-  // Lower all of the read/write ports.  Each read-write port has a subfield.
-  // While it is possible for there to be more than one subfield per port, they
-  // should be CSE'd away, and generating redundant logic for them isn't a
-  // correctness problem, so we just keep things simple.
-  while (!op->use_empty()) {
-    // Work through the users of the mem, dropping their reference to null as we
-    // go.  This allows SubfieldOp lowering to know that the subfields have been
-    // correctly processed.
-    auto port = cast<SubfieldOp>(*op->user_begin());
-    port->dropAllReferences();
+  // Lower all of the read/write ports.  Each port is a separate
+  // return value of the memory.
+  auto namesArray = op.portNames();
+  for (size_t i = 0, e = namesArray.size(); i != e; ++i) {
 
+    auto portName = namesArray[i].cast<StringAttr>().getValue();
+    auto port = op.getPortNamed(portName);
     auto portBundleType =
         port.getType().cast<FIRRTLType>().getPassiveType().cast<BundleType>();
 
-    // A port has a bunch of subfields hanging off of it, which are the various
-    // parts of the port.  Emit a wire for each of the pieces so users of the
-    // subfield have something to use.
     SmallVector<std::pair<Identifier, Value>> portWires;
     for (BundleType::BundleElement elt : portBundleType.getElements()) {
       auto fieldType = lowerType(elt.type);
@@ -1452,8 +1445,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         continue;
       }
       auto name =
-          (Twine(memName) + "_" + port.fieldname() + "_" + elt.name.str())
-              .str();
+          (Twine(memName) + "_" + portName + "_" + elt.name.str()).str();
       auto fieldWire = builder->create<rtl::WireOp>(fieldType, name);
       portWires.push_back({elt.name, fieldWire});
     }
@@ -1469,8 +1461,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
     // Now that we have the wires for each element, rewrite any subfields to use
     // them instead of the subfields.
-    while (!port->use_empty()) {
-      auto portField = cast<SubfieldOp>(*port->user_begin());
+    while (!port.use_empty()) {
+      auto portField = cast<SubfieldOp>(*port.user_begin());
       portField->dropAllReferences();
       setLowering(portField, getPortFieldWire(portField.fieldname()));
     }
@@ -1480,7 +1472,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       return builder->create<rtl::ReadInOutOp>(getPortFieldWire(portName));
     };
 
-    switch (op.getPortKind(port.fieldname()).getValue()) {
+    switch (op.getPortKind(portName).getValue()) {
     case MemOp::PortKind::ReadWrite:
       op.emitOpError("readwrite ports should be lowered into separate read and "
                      "write ports by previous passes");

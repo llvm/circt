@@ -64,10 +64,11 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
   let arguments = (ins I32Attr:$readLatency,
                        Confined<I32Attr, [IntMinValue<1>]>:$writeLatency,
                        I64Attr:$depth, RUWAttr:$ruw,
+                       StrArrayAttr:$portNames,
                        OptionalAttr<StrAttr>:$name);
-  let results = (outs BundleType:$result);
+  let results = (outs Variadic<FIRRTLType>:$results);
 
-  let assemblyFormat = "$ruw attr-dict `:` type($result)";
+  let assemblyFormat = "$ruw attr-dict (`:` type($results)^ )?";
 
   let extraClassDeclaration = [{
     enum class PortKind { Read, Write, ReadWrite };
@@ -86,6 +87,17 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
     /// Return the data-type field of the memory, the type of each element.  If
     /// the Mem has no read/write ports, this will return null.
     FIRRTLType getDataTypeOrNull();
+
+    /// Return the port name for the specified result number.
+    StringAttr getPortName(size_t resultNo);
+    StringRef getPortNameStr(size_t resultNo) {
+      return getPortName(resultNo).getValue();
+    }
+
+    // Return the result for this instance that corresponds to the specified
+    // port name.
+    Value getPortNamed(StringRef name);
+    Value getPortNamed(StringAttr name);
   }];
 }
 

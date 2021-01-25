@@ -1482,14 +1482,22 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   }
 
   // Create the special type to represent this memory.
-  FIRRTLType memType = MemOp::getTypeForPortList(depth, dataType, ports);
+  BundleType memType = MemOp::getTypeForPortList(depth, dataType, ports);
+
+  llvm::SmallVector<Type> resultTypes;
+  llvm::SmallVector<Attribute> resultNames;
+  for (auto element : memType.getElements()) {
+    resultTypes.push_back(element.type);
+    resultNames.push_back(
+        StringAttr::get(element.name.str(), rewriter.getContext()));
+  }
 
   // Create the actual mem op.
-  auto memOp = rewriter.create<MemOp>(insertLoc, memType, readLatency,
-                                      writeLatency, depth, ruw, name);
+  auto memOp = rewriter.create<MemOp>(insertLoc, resultTypes, readLatency,
+                                      writeLatency, depth, ruw,
+                                      rewriter.getArrayAttr(resultNames), name);
 
   // Prepare to create each load and store port logic.
-  BundleType resultType = memOp.getType().cast<BundleType>();
   auto bitType = UIntType::get(rewriter.getContext(), 1);
   auto numPorts = portList.size();
   auto clock = portList[numPorts - 2][0];
@@ -1514,9 +1522,8 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     // Create a subfield op to access this port in the memory.
     auto fieldName = loadIdentifier(i);
-    auto bundleType = resultType.getElementType(fieldName).cast<BundleType>();
-    auto memBundle =
-        rewriter.create<SubfieldOp>(insertLoc, bundleType, memOp, fieldName);
+    auto memBundle = memOp.getPortNamed(fieldName);
+    auto bundleType = memBundle.getType().cast<BundleType>();
 
     // Get the clock out of the bundle and connect it.
     auto memClockType = bundleType.getElementType("clk");
@@ -1587,10 +1594,14 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     // Create a subfield op to access this port in the memory.
     auto fieldName = storeIdentifier(i);
-    auto subfieldType = resultType.getElementType(fieldName).cast<FlipType>();
-    auto bundleType = subfieldType.getElementType().cast<BundleType>();
-    auto memBundle =
-        rewriter.create<SubfieldOp>(insertLoc, subfieldType, memOp, fieldName);
+    auto memBundle = memOp.getPortNamed(fieldName);
+    // If this is a write port, then it will be flipped. Strip that.
+    BundleType bundleType = memBundle.getType().dyn_cast_or_null<BundleType>();
+    if (!bundleType)
+      bundleType = memBundle.getType()
+                       .cast<FlipType>()
+                       .getElementType()
+                       .cast<BundleType>();
 
     // Get the clock out of the bundle and connect it.
     auto memClockType = FlipType::get(bundleType.getElementType("clk"));

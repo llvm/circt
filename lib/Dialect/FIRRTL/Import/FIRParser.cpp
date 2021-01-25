@@ -2106,16 +2106,31 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     return failure();
   }
 
-  auto result =
-      builder.create<MemOp>(info.getLoc(), memType, readLatency, writeLatency,
-                            depth, ruw, filterUselessName(id));
+  SmallVector<Type, 4> resultTypes;
+  SmallVector<Attribute, 4> resultNames;
+  for (auto element : memType.getElements()) {
+    resultTypes.push_back(element.type);
+    resultNames.push_back(StringAttr::get(element.name.str(), getContext()));
+  }
+
+  auto result = builder.create<MemOp>(
+      info.getLoc(), resultTypes, readLatency, writeLatency, depth, ruw,
+      builder.getArrayAttr(resultNames), filterUselessName(id));
+
+  UnbundledValueEntry unbundledValueEntry;
+  unbundledValueEntry.reserve(memType.getNumElements());
+  for (size_t i = 0, e = memType.getNumElements(); i != e; ++i) {
+    unbundledValueEntry.push_back({resultNames[i], result.getResult(i)});
+  }
+  unbundledValues.push_back(std::move(unbundledValueEntry));
+  auto entryID = UnbundledID(unbundledValues.size());
 
   // Remember that this memory is in this symbol table scope.
   // TODO(chisel bug): This should be removed along with memoryScopeTable.
   memoryScopeTable.insert(Identifier::get(id.getValue(), getContext()),
                           {symbolTable.getCurScope(), result.getOperation()});
 
-  return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
+  return addSymbolEntry(id.getValue(), entryID, info.getFIRLoc());
 }
 
 /// node ::= 'node' id '=' exp info?

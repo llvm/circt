@@ -6,7 +6,7 @@
 ; RUN: circt-translate -import-firrtl --mlir-print-debuginfo %s | circt-translate -export-firrtl-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 ; Some day this should filecheck:
-; RUN: circt-translate -import-firrtl --mlir-print-debuginfo %s | circt-opt -lower-firrtl-to-rtl-module -lower-firrtl-to-rtl | circt-translate -export-verilog -verify-diagnostics
+; RUN: circt-translate -import-firrtl --mlir-print-debuginfo %s | circt-opt -pass-pipeline='firrtl.circuit(firrtl.module(firrtl-lower-types))' -lower-firrtl-to-rtl-module -lower-firrtl-to-rtl | circt-translate -export-verilog -verify-diagnostics
 
 circuit inputs_only :
 
@@ -273,7 +273,7 @@ circuit inputs_only :
     output out: UInt<1>
     defname = FooExtModule
 
-  extmodule MyParameterizedExtModule : 
+  extmodule MyParameterizedExtModule :
     input in: UInt<8>
     output out: UInt<1>
     parameter FORMAT = "xyz_timeout=%d\n"
@@ -483,12 +483,12 @@ circuit inputs_only :
     ; CHECK:  wire        _M_read_en;
     ; CHECK:  wire        _M_read_clk;
     ; CHECK:  wire [41:0] _M_read_data;
+    ; CHECK:  reg  [41:0] _M[7:0];
     ; CHECK:  wire [2:0]  _M_write_addr;
     ; CHECK:  wire        _M_write_en;
     ; CHECK:  wire        _M_write_clk;
     ; CHECK:  wire [41:0] _M_write_data;
     ; CHECK:  wire        _M_write_mask;
-    ; CHECK:  reg  [41:0] _M[7:0];
     mem _M : @[Decoupled.scala 209:27]
           data-type => SInt<42>
           depth => 8
@@ -524,8 +524,8 @@ circuit inputs_only :
 ; CHECK-NEXT:    `INIT_RANDOM_PROLOG_
 ; CHECK-NEXT:    `ifdef RANDOMIZE_MEM_INIT
 ; CHECK-NEXT:      integer initvar;
-; CHECK-NEXT:      for (initvar = 0; initvar < 8; initvar = initvar+1)
-; CHECK-NEXT:        _M[initvar] = `RANDOM;{{.*}}// Decoupled.scala:209:27
+; CHECK-NEXT:      for (_M_initvar = 0; _M_initvar < 8; _M_initvar = _M_initvar+1)
+; CHECK-NEXT:        _M[_M_initvar] = `RANDOM;{{.*}}// Decoupled.scala:209:27
 ; CHECK-NEXT:    `endif // RANDOMIZE_MEM_INIT
 ; CHECK-NEXT:  end // initial
 ; CHECK-NEXT:  `endif // SYNTHESIS
@@ -565,9 +565,9 @@ circuit inputs_only :
 ; CHECK-NEXT:      `INIT_RANDOM_PROLOG_
 ; CHECK-NEXT:      `ifdef RANDOMIZE_MEM_INIT
 ; CHECK-NEXT:        integer initvar;
-; CHECK-NEXT:        for (initvar = 0; initvar < 20; initvar = initvar+1) begin
-; CHECK-NEXT:          _M_id[initvar] = `RANDOM;
-; CHECK-NEXT:          _M_other[initvar] = `RANDOM;
+; CHECK-NEXT:        for (_M_initvar = 0; _M_initvar < 20; _M_initvar = _M_initvar+1) begin
+; CHECK-NEXT:          _M_id[_M_initvar] = `RANDOM;
+; CHECK-NEXT:          _M_other[_M_initvar] = `RANDOM;
 ; CHECK-NEXT:        end	// Decoupled.scala:209:24
 ; CHECK-NEXT:      `endif // RANDOMIZE_MEM_INIT
 ; CHECK-NEXT:    end // initial

@@ -1546,7 +1546,7 @@ void ModuleEmitter::emitDecl(MemOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  auto memName = getName(op.getResult());
+  auto memName = op.name().getValue().str();
   uint64_t depth = op.depth();
   auto locInfo = getLocationInfoAsString(ops);
 
@@ -1571,20 +1571,22 @@ void ModuleEmitter::emitDecl(MemOp op) {
   // is set.
   if (depth == 1) { // Don't emit a for loop for one element.
     for (const auto &elt : fieldTypes) {
-      std::string action = memName.str() + elt.suffix + "[0] = `RANDOM;";
+      std::string action = memName + elt.suffix + "[0] = `RANDOM;";
       addInitial(action, locInfo, /*ppCond*/ "RANDOMIZE_MEM_INIT",
                  /*cond*/ "", /*partialOrder: After initVar decl*/ 11);
     }
 
   } else if (!fieldTypes.empty()) {
-    std::string action = "for (initvar = 0; initvar < " + llvm::utostr(depth) +
-                         "; initvar = initvar+1)";
+    auto initvar = memName + "_initvar";
+    std::string action = "for (" + initvar + " = 0; " + initvar + " < " +
+                         llvm::utostr(depth) + "; " + initvar + " = " +
+                         initvar + "+1)";
 
     if (fieldTypes.size() > 1)
       action += " begin";
 
     for (const auto &elt : fieldTypes)
-      action += "\n  " + memName.str() + elt.suffix + "[initvar] = `RANDOM;";
+      action += "\n  " + memName + elt.suffix + "[" + initvar + "] = `RANDOM;";
 
     if (fieldTypes.size() > 1)
       action += "\nend";
@@ -1608,7 +1610,7 @@ void ModuleEmitter::emitDecl(MemOp op) {
     // of subfield's.
     // TODO(verilog dialect): eliminate subfields.
     auto getPortName = [&](StringRef fieldName) -> std::string {
-      return getName(op).str() + "_" + portName.str() + "_" + fieldName.str();
+      return memName + "_" + portName.str() + "_" + fieldName.str();
     };
 
     switch (port.second) {
@@ -1628,8 +1630,7 @@ void ModuleEmitter::emitDecl(MemOp op) {
 
       for (const auto &elt : fieldTypes) {
         indent() << "assign " << getPortName("data") << elt.suffix << " = "
-                 << getName(op) << elt.suffix << '[' << getPortName("addr")
-                 << "];";
+                 << memName << elt.suffix << '[' << getPortName("addr") << "];";
         emitLocationInfoAndNewLine(ops);
       }
 
@@ -1641,7 +1642,7 @@ void ModuleEmitter::emitDecl(MemOp op) {
         for (const auto &elt : fieldTypes) {
           indent() << "assign " << getPortName("data") << elt.suffix << " = ";
           os << getPortName("addr") << " < " << depth << " ? ";
-          os << getName(op) << elt.suffix << '[' << getPortName("addr") << "]";
+          os << memName << elt.suffix << '[' << getPortName("addr") << "]";
           os << " : `RANDOM;";
           emitLocationInfoAndNewLine(ops);
         }
@@ -1663,8 +1664,7 @@ void ModuleEmitter::emitDecl(MemOp op) {
       auto condition = getPortName("en") + " & " + getPortName("mask");
 
       for (const auto &elt : fieldTypes) {
-        std::string action = getName(op).str() + elt.suffix + '[' +
-                             getPortName("addr") +
+        std::string action = memName + elt.suffix + '[' + getPortName("addr") +
                              "] <= " + getPortName("data") + elt.suffix + ";";
 
         addAtPosEdge(action, locStr, clockExpr,
@@ -1799,6 +1799,13 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
                           .str();
           addName(result, name);
         }
+      } else if (auto memory = dyn_cast<MemOp>(&op)) {
+        if (nameAttr) {
+          auto name = (nameAttr.getValue() + "_" +
+                       memory.getPortNameStr(result.getResultNumber()))
+                          .str();
+          addName(result, name);
+        }
       } else {
         addName(result, nameAttr);
       }
@@ -1852,10 +1859,11 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
   // Okay, now that we have measured the things to emit, emit the things.
   for (auto value : valuesToEmit) {
-    ops.clear();
 
     auto *decl = value.getDefiningOp();
-    ops.insert(decl);
+
+    // True if this is an op we haven't seen before
+    auto unvisitedOp = std::get<1>(ops.insert(decl));
 
     auto word = getVerilogDeclWord(decl);
 
@@ -1882,17 +1890,20 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     // Handle the reg declaration for a memory specially because we need to
     // handle aggregate types and depths.
     if (auto memOp = dyn_cast<MemOp>(decl)) {
+      auto memName = memOp.name().getValue().str();
       fieldTypes.clear();
       if (auto dataType = memOp.getDataTypeOrNull())
         flattenBundleTypes(dataType, "", false, fieldTypes);
 
-      uint64_t depth = memOp.depth();
-      for (const auto &elt : fieldTypes) {
-        indent() << "reg";
-        os.indent(maxDeclNameWidth - 3 + 1);
-        emitTypePaddedToWidth(elt.type, maxTypeWidth, decl);
-        os << getName(decl->getResult(0)) << elt.suffix;
-        os << '[' << (depth - 1) << ":0];\n";
+      if (unvisitedOp) {
+        for (auto fieldType : fieldTypes) {
+          uint64_t depth = memOp.depth();
+          indent() << "reg";
+          os.indent(maxDeclNameWidth - 3 + 1);
+          emitTypePaddedToWidth(fieldType.type, maxTypeWidth, decl);
+          os << memName + fieldType.suffix;
+          os << '[' << (depth - 1) << ":0];\n";
+        }
       }
     }
   }

@@ -729,31 +729,62 @@ static Optional<MemOp::PortKind> getMemPortKindFromType(FIRRTLType type) {
 void MemOp::getPorts(
     SmallVectorImpl<std::pair<Identifier, MemOp::PortKind>> &result) {
   // Each entry in the bundle is a port.
-  for (auto elt : getType().getElements()) {
+  for (size_t i = 0, e = getNumResults(); i != e; ++i) {
+    auto elt = getResult(i);
     // Each port is a bundle.
-    auto kind = getMemPortKindFromType(elt.type);
+    auto kind = getMemPortKindFromType(elt.getType().cast<FIRRTLType>());
     assert(kind.hasValue() && "unknown port type!");
-    result.push_back({elt.name, kind.getValue()});
+    result.push_back({Identifier::get(getPortNameStr(i), elt.getContext()),
+                      kind.getValue()});
   }
 }
 
 /// Return the kind of the specified port or None if the name is invalid.
 Optional<MemOp::PortKind> MemOp::getPortKind(StringRef portName) {
-  auto eltType = getType().getElementType(portName);
-  if (!eltType)
+  auto elt = getPortNamed(portName);
+  if (!elt)
     return None;
-  return getMemPortKindFromType(eltType);
+  return getMemPortKindFromType(elt.getType().cast<FIRRTLType>());
 }
 
 /// Return the data-type field of the memory, the type of each element.
 FIRRTLType MemOp::getDataTypeOrNull() {
   // Mems with no read/write ports are legal.
-  if (getType().getElements().empty())
+  if (getNumResults() == 0)
     return {};
 
-  auto firstPort = getType().getElements()[0];
-  auto firstPortType = firstPort.type.getPassiveType().cast<BundleType>();
-  return firstPortType.getElementType("data");
+  return getResult(0)
+      .getType()
+      .cast<FIRRTLType>()
+      .getPassiveType()
+      .cast<BundleType>()
+      .getElementType("data");
+}
+
+StringAttr MemOp::getPortName(size_t resultNo) {
+  return portNames()[resultNo].cast<StringAttr>();
+}
+
+Value MemOp::getPortNamed(StringRef name) {
+  auto namesArray = portNames();
+  for (size_t i = 0, e = namesArray.size(); i != e; ++i) {
+    if (namesArray[i].cast<StringAttr>().getValue() == name) {
+      assert(i < getNumResults() && " names array out of sync with results");
+      return getResult(i);
+    }
+  }
+  return Value();
+}
+
+Value MemOp::getPortNamed(StringAttr name) {
+  auto namesArray = portNames();
+  for (size_t i = 0, e = namesArray.size(); i != e; ++i) {
+    if (namesArray[i] == name) {
+      assert(i < getNumResults() && " names array out of sync with results");
+      return getResult(i);
+    }
+  }
+  return Value();
 }
 
 //===----------------------------------------------------------------------===//
