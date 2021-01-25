@@ -694,6 +694,46 @@ void ArraySliceOp::build(::mlir::OpBuilder &b, ::mlir::OperationState &state,
   build(b, state, dstType, input, lowBitValue);
 }
 
+static ParseResult parseArrayCreateOp(OpAsmParser &parser,
+                                      OperationState &result) {
+  llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
+  llvm::SmallVector<OpAsmParser::OperandType, 16> operands;
+  Type elemType;
+
+  if (parser.parseOperandList(operands) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseLParen() || parser.parseType(elemType) ||
+      parser.parseRParen())
+    return failure();
+
+  if (operands.size() == 0)
+    return parser.emitError(inputOperandsLoc,
+                            "Cannot construct an array of length 0");
+  result.addTypes({ArrayType::get(elemType, operands.size())});
+
+  for (auto operand : operands)
+    if (parser.resolveOperand(operand, elemType, result.operands))
+      return failure();
+  return success();
+}
+
+static void print(OpAsmPrinter &p, ArrayCreateOp op) {
+  p << "array_create ";
+  p.printOperands(op.inputs());
+  p << " : ( " << op.inputs()[0].getType() << ")";
+}
+
+void ArrayCreateOp::build(OpBuilder &b, OperationState &state,
+                          ArrayRef<Value> values) {
+  assert(values.size() > 0 && "Cannot build array of zero elements");
+  Type elemType = values[0].getType();
+  assert(llvm::all_of(
+             values,
+             [elemType](Value v) -> bool { return v.getType() == elemType; }) &&
+         "All values must have same type.");
+  build(b, state, ArrayType::get(elemType, values.size()), values);
+}
+
 //===----------------------------------------------------------------------===//
 // Variadic operations
 //===----------------------------------------------------------------------===//

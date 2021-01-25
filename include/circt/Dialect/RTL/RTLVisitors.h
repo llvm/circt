@@ -44,9 +44,10 @@ public:
                        // Cast operation
                        BitcastOp,
                        // Array operations
-                       ArraySliceOp, ArrayGetOp>([&](auto expr) -> ResultType {
-          return thisCast->visitComb(expr, args...);
-        })
+                       ArraySliceOp, ArrayCreateOp, ArrayGetOp>(
+            [&](auto expr) -> ResultType {
+              return thisCast->visitComb(expr, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidComb(op, args...);
         });
@@ -119,6 +120,7 @@ public:
   HANDLE(BitcastOp, Unary);
   HANDLE(ArraySliceOp, Unhandled);
   HANDLE(ArrayGetOp, Unhandled);
+  HANDLE(ArrayCreateOp, Unhandled);
 #undef HANDLE
 };
 
