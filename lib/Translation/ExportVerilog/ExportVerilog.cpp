@@ -1004,15 +1004,13 @@ SubExprInfo ExprEmitter::visitComb(ArraySliceOp op) {
 // Syntax from: section 5.11 "Array literals".
 SubExprInfo ExprEmitter::visitComb(ArrayCreateOp op) {
   os << '{';
-  SubExprInfo exprInfo =
-      /* dummy init value. */ {Symbol, SubExprSignResult::IsUnsigned};
   llvm::interleaveComma(op.inputs(), os, [&](Value operand) {
     os << "'{";
-    exprInfo = emitSubExpr(operand, LowestPrecedence);
+    emitSubExpr(operand, LowestPrecedence);
     os << "}";
   });
   os << '}';
-  return {Unary, exprInfo.signedness};
+  return {Unary, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitComb(ArrayIndexOp op) {

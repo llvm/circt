@@ -328,7 +328,8 @@ def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
 def ArrayCreateOp : RTLOp<"array_create", [NoSideEffect, SameTypeOperands]> {
   let summary = "Create an array from values";
   let description = [{
-    Creates an array from a variable set of values.
+    Creates an array from a variable set of values. One or more values must be
+    listed.
 
     ```
     // %a, %b, %c are all i4
@@ -336,7 +337,7 @@ def ArrayCreateOp : RTLOp<"array_create", [NoSideEffect, SameTypeOperands]> {
     ```
   }];
 
-  let arguments = (ins Variadic<AnyType>:$inputs);
+  let arguments = (ins Variadic<RTLNonInOutType>:$inputs);
   let results = (outs ArrayType:$result);
 
   let verifier = [{
@@ -349,6 +350,7 @@ def ArrayCreateOp : RTLOp<"array_create", [NoSideEffect, SameTypeOperands]> {
   let printer = "return ::print(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
   let builders = [
+    // ArrayRef needs to contain at least one element.
     OpBuilderDAG<(ins "ArrayRef<::mlir::Value>":$input)>
   ];
 }
