@@ -109,9 +109,11 @@ def DivUOp : UTBinRTLOp<"divu">;
 def DivSOp : UTBinRTLOp<"divs">;
 def ModUOp : UTBinRTLOp<"modu">;
 def ModSOp : UTBinRTLOp<"mods">;
-def ShlOp : UTBinRTLOp<"shl">;
-def ShrUOp : UTBinRTLOp<"shru">;
-def ShrSOp : UTBinRTLOp<"shrs">;
+let hasFolder = true in {
+  def ShlOp : UTBinRTLOp<"shl">;
+  def ShrUOp : UTBinRTLOp<"shru">;
+  def ShrSOp : UTBinRTLOp<"shrs">;
+}
 
 def AndOp : UTVariadicRTLOp<"and", [Commutative]>;
 def OrOp  : UTVariadicRTLOp<"or", [Commutative]>;
@@ -320,6 +322,36 @@ def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
 
   let builders = [
     OpBuilderDAG<(ins "Value":$input, "size_t":$lowBit, "size_t":$size)>
+  ];
+}
+
+def ArrayCreateOp : RTLOp<"array_create", [NoSideEffect, SameTypeOperands]> {
+  let summary = "Create an array from values";
+  let description = [{
+    Creates an array from a variable set of values. One or more values must be
+    listed.
+
+    ```
+    // %a, %b, %c are all i4
+    %array = rtl.array_create %a, %b, %c : (i4)
+    ```
+  }];
+
+  let arguments = (ins Variadic<RTLNonInOutType>:$inputs);
+  let results = (outs ArrayType:$result);
+
+  let verifier = [{
+    unsigned returnSize = getType().cast<ArrayType>().getSize();
+    if (inputs().size() != returnSize)
+      return failure();
+    return success();
+  }];
+
+  let printer = "return ::print(p, *this);";
+  let parser = "return ::parse$cppClass(parser, result);";
+  let builders = [
+    // ArrayRef needs to contain at least one element.
+    OpBuilderDAG<(ins "ArrayRef<::mlir::Value>":$input)>
   ];
 }
 

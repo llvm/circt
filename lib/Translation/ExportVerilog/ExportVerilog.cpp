@@ -174,6 +174,7 @@ namespace {
 enum VerilogPrecedence {
   // Normal precedence levels.
   Symbol,          // Atomic symbol like "foo"
+  Selection,       // () , [] , :: , .
   Unary,           // Unary operators like ~foo
   Multiply,        // * , / , %
   Addition,        // + , -
@@ -312,6 +313,7 @@ public:
   LogicalResult visitSV(IfDefOp op);
   LogicalResult visitSV(IfOp op);
   LogicalResult visitSV(AlwaysOp op);
+  LogicalResult visitSV(AlwaysFFOp op);
   LogicalResult visitSV(InitialOp op);
   LogicalResult visitSV(FWriteOp op);
   LogicalResult visitSV(FatalOp op);
@@ -326,14 +328,17 @@ public:
   LogicalResult visitSV(AssignInterfaceSignalOp op);
   void emitOperation(Operation *op);
 
+  using ValueOrOp = PointerUnion<Value, Operation *>;
+
   void collectNamesEmitDecls(Block &block);
-  StringRef addName(Value value, StringRef name);
-  StringRef addName(Value value, StringAttr nameAttr) {
-    return addName(value, nameAttr ? nameAttr.getValue() : "");
+  StringRef addName(ValueOrOp valueOrOp, StringRef name);
+  StringRef addName(ValueOrOp valueOrOp, StringAttr nameAttr) {
+    return addName(valueOrOp, nameAttr ? nameAttr.getValue() : "");
   }
 
-  StringRef getName(Value value) {
-    auto *entry = nameTable[value];
+  StringRef getName(Value value) { return getName(ValueOrOp(value)); }
+  StringRef getName(ValueOrOp valueOrOp) {
+    auto *entry = nameTable[valueOrOp];
     assert(entry && "value expected a name but doesn't have one");
     return entry->getKey();
   }
@@ -347,7 +352,7 @@ public:
   void emitLocationInfoAndNewLine(const SmallPtrSet<Operation *, 8> &ops);
 
   llvm::StringSet<> usedNames;
-  llvm::DenseMap<Value, llvm::StringMapEntry<llvm::NoneType> *> nameTable;
+  llvm::DenseMap<ValueOrOp, llvm::StringMapEntry<llvm::NoneType> *> nameTable;
   size_t nextGeneratedNameID = 0;
 
   /// This set keeps track of all of the expression nodes that need to be
@@ -360,7 +365,7 @@ public:
 
 /// Add the specified name to the name table, auto-uniquing the name if
 /// required.  If the name is empty, then this creates a unique temp name.
-StringRef ModuleEmitter::addName(Value value, StringRef name) {
+StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
   if (name.empty())
     name = "_T";
 
@@ -369,7 +374,7 @@ StringRef ModuleEmitter::addName(Value value, StringRef name) {
   if (!isalpha(name.front()) && name.front() != '_') {
     SmallString<16> tmpName("_");
     tmpName += name;
-    return addName(value, tmpName);
+    return addName(valueOrOp, tmpName);
   }
 
   auto isValidVerilogCharacter = [](char ch) -> bool {
@@ -393,7 +398,7 @@ StringRef ModuleEmitter::addName(Value value, StringRef name) {
         tmpName += llvm::utohexstr((unsigned char)ch);
       }
     }
-    return addName(value, tmpName);
+    return addName(valueOrOp, tmpName);
   }
 
   // Get the list of reserved words we need to avoid.  We could prepopulate this
@@ -405,7 +410,7 @@ StringRef ModuleEmitter::addName(Value value, StringRef name) {
   if (!reservedWords.count(name)) {
     auto insertResult = usedNames.insert(name);
     if (insertResult.second) {
-      nameTable[value] = &*insertResult.first;
+      nameTable[valueOrOp] = &*insertResult.first;
       return insertResult.first->getKey();
     }
   }
@@ -424,7 +429,7 @@ StringRef ModuleEmitter::addName(Value value, StringRef name) {
     if (!reservedWords.count(name)) {
       auto insertResult = usedNames.insert(name);
       if (insertResult.second) {
-        nameTable[value] = &*insertResult.first;
+        nameTable[valueOrOp] = &*insertResult.first;
         return insertResult.first->getKey();
       }
     }
@@ -636,6 +641,7 @@ private:
 
   // Other
   SubExprInfo visitComb(ArraySliceOp op);
+  SubExprInfo visitComb(ArrayCreateOp op);
   SubExprInfo visitComb(ArrayIndexOp op);
   SubExprInfo visitComb(MuxOp op);
 
@@ -832,6 +838,8 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     // retroactively.
     addPrefix("(");
     os << ')';
+    // Reset the precedence to the () level.
+    expInfo.precedence = Selection;
   }
 
   // Remember that we emitted this.
@@ -984,21 +992,33 @@ SubExprInfo ExprEmitter::visitComb(ConstantOp op) {
 // 11.5.1 "Vector bit-select and part-select addressing" allows a '+:' syntax
 // for slicing operations.
 SubExprInfo ExprEmitter::visitComb(ArraySliceOp op) {
-  auto arrayPrec = emitSubExpr(op.input(), Symbol);
+  auto arrayPrec = emitSubExpr(op.input(), Selection);
 
   unsigned dstWidth = op.getType().getSize();
   os << '[';
   emitSubExpr(op.lowIndex(), LowestPrecedence);
   os << "+:" << dstWidth << ']';
-  return {Unary, arrayPrec.signedness};
+  return {Selection, arrayPrec.signedness};
+}
+
+// Syntax from: section 5.11 "Array literals".
+SubExprInfo ExprEmitter::visitComb(ArrayCreateOp op) {
+  os << '{';
+  llvm::interleaveComma(op.inputs(), os, [&](Value operand) {
+    os << "{";
+    emitSubExpr(operand, LowestPrecedence);
+    os << "}";
+  });
+  os << '}';
+  return {Unary, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitComb(ArrayIndexOp op) {
-  auto arrayPrec = emitSubExpr(op.input(), Symbol);
+  auto arrayPrec = emitSubExpr(op.input(), Selection);
   os << '[';
   emitSubExpr(op.index(), LowestPrecedence);
   os << ']';
-  return {Symbol, arrayPrec.signedness};
+  return {Selection, arrayPrec.signedness};
 }
 
 SubExprInfo ExprEmitter::visitComb(MuxOp op) {
@@ -1440,6 +1460,56 @@ LogicalResult ModuleEmitter::visitSV(AlwaysOp op) {
   return success();
 }
 
+LogicalResult ModuleEmitter::visitSV(AlwaysFFOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent() << "always_ff @(" << stringifyEventControl(op.clockEdge()) << " "
+           << emitExpressionToString(op.clock(), ops);
+  if (op.resetStyle() == ResetType::AsyncReset) {
+    os << " or " << stringifyEventControl(*op.resetEdge()) << " "
+       << emitExpressionToString(op.reset(), ops);
+  }
+  os << ')';
+
+  // Build the comment string, leave out the signal expressions (since they
+  // can be large).
+  std::string comment;
+  comment = "always_ff @(";
+  comment += stringifyEventControl(op.clockEdge());
+  if (op.resetStyle() == ResetType::AsyncReset) {
+    comment += " or ";
+    comment += stringifyEventControl(*op.resetEdge());
+  }
+  comment += ')';
+
+  if (op.resetStyle() == ResetType::NoReset)
+    emitBeginEndRegion(op.getBodyBlock(), ops, *this, comment);
+  else {
+    os << " begin";
+    emitLocationInfoAndNewLine(ops);
+    addIndent();
+
+    indent() << "if (";
+    // Negative edge async resets need to invert the reset condition.  This is
+    // noted in the op description.
+    if (op.resetStyle() == ResetType::AsyncReset &&
+        *op.resetEdge() == EventControl::AtNegEdge)
+      os << "!";
+    os << emitExpressionToString(op.reset(), ops) << ')';
+    emitBeginEndRegion(op.getResetBlock(), ops, *this);
+    indent() << "else";
+    emitBeginEndRegion(op.getBodyBlock(), ops, *this);
+
+    reduceIndent();
+
+    indent() << "end";
+    os << " // " << comment;
+    os << '\n';
+  }
+  return success();
+}
+
 LogicalResult ModuleEmitter::visitSV(InitialOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -1503,7 +1573,7 @@ LogicalResult ModuleEmitter::visitStmt(InstanceOp op) {
     }
   }
 
-  os << ' ' << op.instanceName() << " (";
+  os << ' ' << getName(ValueOrOp(op)) << " (";
 
   SmallVector<ModulePortInfo, 8> portInfo;
   getModulePortInfo(moduleOp, portInfo);
@@ -1746,6 +1816,11 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
   for (auto &op : block) {
     bool isExpr = isVerilogExpression(&op);
 
+    // If the op is an instance, add its name to the name table.
+    auto instance = dyn_cast<InstanceOp>(&op);
+    if (instance)
+      addName(ValueOrOp(instance), instance.instanceName());
+
     for (auto result : op.getResults()) {
       // If this is an expression emitted inline or unused, it doesn't need a
       // name.
@@ -1759,10 +1834,10 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       }
 
       // Otherwise, it must be an expression or a declaration like a
-      // RegOp/WireOp.  Remember and unique the name for this operation.
-      if (auto instance = dyn_cast<InstanceOp>(&op)) {
+      // RegOp/WireOp.  Remember and unique the name for this result.
+      if (instance) {
         // The name for an instance result is custom.
-        nameTmp = instance.instanceName().str() + "_";
+        nameTmp = getName(ValueOrOp(instance)).str() + "_";
         unsigned resultNumber = result.getResultNumber();
         auto resultName = instance.getResultName(resultNumber);
         if (resultName)

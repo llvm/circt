@@ -21,8 +21,7 @@ def InstanceOp : FIRRTLOp<"instance"> {
                        StrArrayAttr:$portNames, OptionalAttr<StrAttr>:$name);
   let results = (outs Variadic<FIRRTLType>:$results);
 
-  let assemblyFormat =
-    "$moduleName attr-dict custom<InstanceResults>(type($results))";
+  let assemblyFormat = "$moduleName attr-dict (`:` type($results)^ )?";
 
   let verifier = "return ::verifyInstanceOp(*this);";
 
@@ -75,7 +74,7 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
 
     /// Return the type of a mem given a list of named ports and their kind.
     /// This returns a null type if there are duplicate port names.
-    static FIRRTLType getTypeForPortList(uint64_t depth, FIRRTLType dataType,
+    static BundleType getTypeForPortList(uint64_t depth, FIRRTLType dataType,
                               ArrayRef<std::pair<Identifier, PortKind>> ports);
 
     /// Return the name and kind of ports supported by this memory.

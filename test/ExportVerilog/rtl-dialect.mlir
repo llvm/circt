@@ -54,7 +54,8 @@ module {
     %allone = rtl.constant (15 : i4) : i4
     %34 = rtl.xor %a, %allone : i4
 
-    %35 = rtl.array_slice %array at %a : (!rtl.array<10xi4>) -> !rtl.array<3xi4>
+    %arrCreated = rtl.array_create %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone : (i4)
+    %35 = rtl.array_slice %arrCreated at %a : (!rtl.array<9xi4>) -> !rtl.array<3xi4>
 
     %36 = rtl.concat %a, %a, %a : (i4, i4, i4) -> i12
 
@@ -79,6 +80,7 @@ module {
   // CHECK-NEXT:   output [2:0][3:0] r35,
   // CHECK-NEXT:   output [11:0]     r36);
   // CHECK-EMPTY:
+  // CHECK-NEXT:   wire [8:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
   // CHECK-NEXT:   assign r0 = a + b;
   // CHECK-NEXT:   assign r2 = a - b;
   // CHECK-NEXT:   assign r4 = a * b;
@@ -110,7 +112,7 @@ module {
   // CHECK-NEXT:   assign r31 = {{[{}][{}]}}5{a[3]}}, a};
   // CHECK-NEXT:   assign r33 = cond ? a : b;
   // CHECK-NEXT:   assign r34 = ~a;
-  // CHECK-NEXT:   assign r35 = array[a+:3];
+  // CHECK-NEXT:   assign r35 = [[WIRE0]][a+:3];
   // CHECK-NEXT:   assign r36 = {3{a}};
   // CHECK-NEXT: endmodule
 
@@ -422,5 +424,32 @@ module {
     // CHECK: // Zero width: assign rZero = iii_rZero;
     // CHECK: // Zero width: assign arrZero = iii_arrZero;
     rtl.output %o1, %o2, %o3 : i4, i0, !rtl.array<3xi0>
+  }
+
+  // CHECK-LABEL: TestDupInstanceName
+  rtl.module @TestDupInstanceName(%a: i1) {
+    // CHECK: B name (
+    %w1, %y1 = rtl.instance "name" @B(%a) : (i1) -> (i1, i1)
+
+    // CHECK: B name_0 (
+    %w2, %y2 = rtl.instance "name" @B(%a) : (i1) -> (i1, i1)
+  }
+
+  // CHECK-LABEL: TestEmptyInstanceName
+  rtl.module @TestEmptyInstanceName(%a: i1) {
+    // CHECK: B _T (
+    %w1, %y1 = rtl.instance "" @B(%a) : (i1) -> (i1, i1)
+
+    // CHECK: B _T_0 (
+    %w2, %y2 = rtl.instance "" @B(%a) : (i1) -> (i1, i1)
+  }
+
+  // CHECK-LABEL: TestInstanceNameValueConflict
+  rtl.module @TestInstanceNameValueConflict(%a: i1) {
+    // CHECK: wire name
+    %name = rtl.wire : !rtl.inout<i1>
+
+    // CHECK: B name_0 (
+    %w, %y = rtl.instance "name" @B(%a) : (i1) -> (i1, i1)
   }
 }

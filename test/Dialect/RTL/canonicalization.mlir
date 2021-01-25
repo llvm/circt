@@ -745,3 +745,63 @@ func @icmp_canonicalize_sgt(%arg0: i2) -> (i1) {
   %0 = rtl.icmp sle %c0_i2, %arg0 : i2
   return %0 : i1
 }
+
+// CHECK-LABEL: func @shl_fold1() -> i12 {
+// CHECK-NEXT:   %c84_i12 = rtl.constant(84 : i12) : i12
+// CHECK-NEXT: return %c84_i12 : i12
+func @shl_fold1() -> (i12) {
+  %c42_i12 = rtl.constant(42 : i12) : i12
+  %c1_i12 = rtl.constant(1 : i12) : i12
+  %0 = rtl.shl %c42_i12, %c1_i12 : i12
+  return %0 : i12
+}
+
+// CHECK-LABEL: func @shl_fold2() -> i12 {
+// CHECK-NEXT:   %c0_i12 = rtl.constant(0 : i12) : i12
+// CHECK-NEXT: return %c0_i12 : i12
+func @shl_fold2() -> (i12) {
+  %c1_i12 = rtl.constant(1 : i12) : i12
+  %c10_i12 = rtl.constant(12 : i12) : i12
+  %0 = rtl.shl %c1_i12, %c10_i12 : i12
+  return %0 : i12
+}
+
+// CHECK-LABEL: func @shru_fold1() -> i12 {
+// CHECK-NEXT:   %c21_i12 = rtl.constant(21 : i12) : i12
+// CHECK-NEXT: return %c21_i12 : i12
+func @shru_fold1() -> (i12) {
+  %c42_i12 = rtl.constant(42 : i12) : i12
+  %c1_i12 = rtl.constant(1 : i12) : i12
+  %0 = rtl.shru %c42_i12, %c1_i12 : i12
+  return %0 : i12
+}
+
+// CHECK-LABEL: func @shru_fold2() -> i12 {
+// CHECK-NEXT:   %c2047_i12 = rtl.constant(2047 : i12) : i12
+// CHECK-NEXT: return %c2047_i12 : i12
+func @shru_fold2() -> (i12) {
+  %c-1_i12 = rtl.constant(-1 : i12) : i12
+  %c1_i12 = rtl.constant(1 : i12) : i12
+  %0 = rtl.shru %c-1_i12, %c1_i12 : i12
+  return %0 : i12
+}
+
+// CHECK-LABEL: func @shrs_fold1() -> i12 {
+// CHECK-NEXT:   %c21_i12 = rtl.constant(21 : i12) : i12
+// CHECK-NEXT: return %c21_i12 : i12
+func @shrs_fold1() -> (i12) {
+  %c42_i12 = rtl.constant(42 : i12) : i12
+  %c1_i12 = rtl.constant(1 : i12) : i12
+  %0 = rtl.shrs %c42_i12, %c1_i12 : i12
+  return %0 : i12
+}
+
+// CHECK-LABEL: func @shrs_fold2() -> i12 {
+// CHECK-NEXT:   %c-3_i12 = rtl.constant(-3 : i12) : i12
+// CHECK-NEXT: return %c-3_i12 : i12
+func @shrs_fold2() -> (i12) {
+  %c-5_i12 = rtl.constant(-5 : i12) : i12
+  %c10_i12 = rtl.constant(1 : i12) : i12
+  %0 = rtl.shrs %c-5_i12, %c10_i12 : i12
+  return %0 : i12
+}
