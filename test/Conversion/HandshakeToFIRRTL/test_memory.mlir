@@ -19,10 +19,7 @@
 // CHECK: %[[LD_CONTROL_READY:.+]] = firrtl.subfield %arg5("ready")
 
 // Construct the memory.
-// CHECK: %[[MEM:.+]] = firrtl.mem Old {depth = 10 : i64, name = "mem0", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<load0: bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>>, store0: flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>>
-
-// Get the load0 port.
-// CHECK: %[[MEM_LOAD:.+]] = firrtl.subfield %[[MEM]]("load0") : {{.*}} -> !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>>
+// CHECK: %[[MEM_LOAD:.+]], %[[MEM_STORE:.+]] = firrtl.mem Old {depth = 10 : i64, name = "mem0", portNames = ["load0", "store0"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>
 
 // Connect the store clock.
 // CHECK: %[[MEM_LOAD_CLK:.+]] = firrtl.subfield %[[MEM_LOAD]]("clk") : {{.*}} -> !firrtl.flip<clock>
@@ -50,9 +47,6 @@
 // CHECK-DAG: firrtl.{{.+}} %[[LD_DATA_READY]]
 // CHECK-DAG: firrtl.connect %[[LD_CONTROL_VALID]]
 // CHECK-DAG: firrtl.{{.+}} %[[LD_CONTROL_READY]]
-
-// Get the store0 port.
-// CHECK: %[[MEM_STORE:.+]] = firrtl.subfield %[[MEM]]("store0") : {{.*}} -> !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>
 
 // Connect the store clock.
 // CHECK: %[[MEM_STORE_CLK:.+]] = firrtl.subfield %[[MEM_STORE]]("clk") : {{.*}} -> !firrtl.flip<clock>

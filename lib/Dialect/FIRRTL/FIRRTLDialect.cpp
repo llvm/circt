@@ -62,6 +62,20 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
       return;
     }
 
+    if (auto memory = dyn_cast<MemOp>(op)) {
+      StringRef base;
+      if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
+        base = nameAttr.getValue();
+      if (base.empty())
+        base = "mem";
+
+      for (size_t i = 0, e = op->getNumResults(); i != e; ++i) {
+        setNameFn(memory.getResult(i),
+                  (base + "_" + memory.getPortNameStr(i)).str());
+      }
+      return;
+    }
+
     // Many firrtl dialect operations have an optional 'name' attribute.  If
     // present, use it.
     if (op->getNumResults() == 1)
