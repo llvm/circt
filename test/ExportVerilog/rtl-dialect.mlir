@@ -54,7 +54,8 @@ module {
     %allone = rtl.constant (15 : i4) : i4
     %34 = rtl.xor %a, %allone : i4
 
-    %35 = rtl.array_slice %array at %a : (!rtl.array<10xi4>) -> !rtl.array<3xi4>
+    %arrCreated = rtl.array_create %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone : (i4)
+    %35 = rtl.array_slice %arrCreated at %a : (!rtl.array<9xi4>) -> !rtl.array<3xi4>
 
     %36 = rtl.concat %a, %a, %a : (i4, i4, i4) -> i12
 
@@ -79,6 +80,7 @@ module {
   // CHECK-NEXT:   output [2:0][3:0] r35,
   // CHECK-NEXT:   output [11:0]     r36);
   // CHECK-EMPTY:
+  // CHECK-NEXT:   wire [8:0][3:0] [[WIRE0:.+]] = {'{4'hF}, '{4'hF}, '{4'hF}, '{4'hF}, '{4'hF}, '{4'hF}, '{4'hF}, '{4'hF}, '{4'hF}};
   // CHECK-NEXT:   assign r0 = a + b;
   // CHECK-NEXT:   assign r2 = a - b;
   // CHECK-NEXT:   assign r4 = a * b;
@@ -110,7 +112,7 @@ module {
   // CHECK-NEXT:   assign r31 = {{[{}][{}]}}5{a[3]}}, a};
   // CHECK-NEXT:   assign r33 = cond ? a : b;
   // CHECK-NEXT:   assign r34 = ~a;
-  // CHECK-NEXT:   assign r35 = array[a+:3];
+  // CHECK-NEXT:   assign r35 = [[WIRE0]][a+:3];
   // CHECK-NEXT:   assign r36 = {3{a}};
   // CHECK-NEXT: endmodule
 
