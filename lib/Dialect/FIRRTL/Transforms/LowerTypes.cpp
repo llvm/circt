@@ -368,6 +368,82 @@ void FIRRTLTypesLowering::visitDecl(MemOp op) {
     }
   }
 
+  // llvm::errs() << "Memory will be size: " << width << "\n";
+
+  // auto newName = op.name().getValue().str() + "_flattened";
+
+  // auto flatDataType = UIntType::get(builder->getContext(), width);
+
+  // SmallVector<Type, 8> resultTypes;
+  // for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
+  //   SmallVector<BundleType::BundleElement, 5> resultFields;
+  //   for (auto elt :
+  //        op.getResult(i).getType().cast<BundleType>().getElements()) {
+  //     if (elt.name == "data") {
+  //       resultFields.push_back({elt.name, flatDataType});
+  //       continue;
+  //     }
+  //     resultFields.push_back(elt);
+  //   }
+  //   resultTypes.push_back(BundleType::get(resultFields,
+  //   builder->getContext()));
+  // }
+
+  // auto newMem = builder->create<MemOp>(
+  //     resultTypes, op.readLatency(), op.writeLatency(), op.depth(), op.ruw(),
+  //     op.portNames(), builder->getStringAttr(newName));
+
+  // llvm::errs() << newMem << "\n";
+
+  // // Create bit accessors for each bit.
+  // for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
+  //   auto port = newMem.getResult(i);
+  //   for (auto a : fieldTypes) {
+  //     auto b = a.type.getBitWidthOrSentinel();
+  //     llvm::errs() << "  - suffix: " << a.suffix << "\n    type: " << a.type
+  //                  << "\n  - position: " << width << "\n    width: " << b
+  //                  << "\n";
+  //     auto subfield = builder->create<SubfieldOp>(flatDataType, port,
+  //     "data"); auto bitExtract =
+  //         builder->create<BitsPrimOp>(subfield, width - 1, width - b);
+  //     setBundleLowering(op.getResult(i), "data" + a.suffix, bitExtract);
+  //     width -= b;
+  //   }
+  //   for (auto a : port.getType().cast<BundleType>().getElements()) {
+  //     if (a.name == "data")
+  //       continue;
+  //     auto subfield = builder->create<SubfieldOp>(a.type, port, a.name);
+  //     setBundleLowering(op.getResult(i), a.name, subfield);
+  //   }
+  // }
+
+  // for (auto a : fieldTypes) {
+  //   llvm::errs() << "  - suffix: " << a.suffix << "\n";
+  //   llvm::errs() << "    type: " << a.type << "\n";
+
+  //   auto newName = op.name().getValue().str() + a.suffix;
+
+  //   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
+  //     for (size_t j = 0, e = newMem.getNumResults(); j != e; ++j) {
+  //       // llvm::errs() << "i: " << i << ", j: " << j << "\n";
+  //       // llvm::errs() << "setBundleLowering:\n"
+  //       //              << "  old: " << op.getResult(i) << "\n"
+  //       //              << "  new: " << newMem.getResult(j) << "\n"
+  //       //              << "  name: " << newMem.getPortNameStr(j) << "\n";
+  //       addMemoryLowering(op.getResult(i), newMem.getResult(j));
+  //     }
+  //   }
+  // }
+
+  // for (auto a : op.getResults()) {
+  //   for (auto b : a.getUsers()) {
+  //     llvm::errs() << "  - user: " << *b << "\n";
+  //   }
+  // }
+  // for (auto mem: newMems) {
+  //   llvm::errs() << "  - new mem: " << cast<MemOp>(mem).nameAttr() << "\n";
+  // }
+
   opsToRemove.push_back(op);
 }
 
