@@ -325,7 +325,7 @@ def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
   ];
 }
 
-// Extract a range of bits from the specified input.
+// Select one of two values based on a condition.
 def MuxOp : RTLOp<"mux",
  [NoSideEffect, AllTypesMatch<["trueValue", "falseValue", "result"]>]> {
   let summary = "Return one or the other operand depending on a selector bit";
@@ -335,9 +335,9 @@ def MuxOp : RTLOp<"mux",
     ```
   }];
 
-  let arguments = (ins I1:$cond, RTLIntegerType:$trueValue,
-                       RTLIntegerType:$falseValue);
-  let results = (outs RTLIntegerType:$result);
+  let arguments = (ins I1:$cond, RTLNonInOutType:$trueValue,
+                       RTLNonInOutType:$falseValue);
+  let results = (outs RTLNonInOutType:$result);
 
   let assemblyFormat =
     "$cond `,` $trueValue `,` $falseValue attr-dict `:` type($result)";
