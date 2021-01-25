@@ -21,8 +21,7 @@ def InstanceOp : FIRRTLOp<"instance"> {
                        StrArrayAttr:$portNames, OptionalAttr<StrAttr>:$name);
   let results = (outs Variadic<FIRRTLType>:$results);
 
-  let assemblyFormat =
-    "$moduleName attr-dict custom<InstanceResults>(type($results))";
+  let assemblyFormat = "$moduleName attr-dict (`:` type($results)^ )?";
 
   let verifier = "return ::verifyInstanceOp(*this);";
 
