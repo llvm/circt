@@ -75,6 +75,8 @@ void RTLToLLHDPass::runOnOperation() {
 
   RTLToLLHDTypeConverter typeConverter;
   OwningRewritePatternList patterns;
+  populateFunctionLikeTypeConversionPattern<RTLModuleOp>(patterns, &context,
+                                                         typeConverter);
   patterns.insert<ConvertRTLModule>(typeConverter, &context);
   patterns.insert<ConvertOutput>(typeConverter, &context);
 
@@ -102,17 +104,22 @@ struct ConvertRTLModule : public OpConversionPattern<RTLModuleOp> {
   LogicalResult
   matchAndRewrite(RTLModuleOp module, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
-    // Collect the RTL module's port types in a signature conversion.
+    // Collect the RTL module's port types.
     FunctionType moduleType = module.getType();
     unsigned numInputs = moduleType.getNumInputs();
-    TypeConverter::SignatureConversion argConversion(module.getNumArguments() +
-                                                     module.getNumResults());
+    TypeRange moduleInputs = moduleType.getInputs();
+    TypeRange moduleOutputs = moduleType.getResults();
 
-    if (failed(typeConverter->convertSignatureArgs(moduleType.getInputs(),
-                                                   argConversion)) ||
-        failed(typeConverter->convertSignatureArgs(moduleType.getResults(),
-                                                   argConversion, numInputs)))
-      return module.emitError("type converter failed to convert signature");
+    // LLHD entities port types are all expressed as block arguments to the op,
+    // so collect all of the types in the expected order (inputs then outputs).
+    SmallVector<Type, 4> entityTypes(moduleInputs);
+    entityTypes.append(moduleOutputs.begin(), moduleOutputs.end());
+
+    // Ensure the input and output types have all been converted already. This
+    // is handled separately by the upstream FunctionLikeTypeConversionPattern.
+    if (!llvm::all_of(entityTypes,
+                      [](Type type) { return type.isa<SigType>(); }))
+      return rewriter.notifyMatchFailure(module, "Not all ports had SigType");
 
     // Create the entity.
     auto entity = rewriter.create<EntityOp>(module.getLoc(), numInputs);
@@ -122,21 +129,17 @@ struct ConvertRTLModule : public OpConversionPattern<RTLModuleOp> {
     rewriter.inlineRegionBefore(module.getBodyRegion(), entityBodyRegion,
                                 entityBodyRegion.end());
 
-    // Attempt to convert the entry block's args using the previous conversion.
-    if (failed(rewriter.convertRegionTypes(&entityBodyRegion, *typeConverter,
-                                           &argConversion)))
-      return module.emitError("could not convert region types");
-
     // Add the LLHD terminator op after the RTL module's output ops.
     rewriter.setInsertionPointToEnd(entity.getBodyBlock());
     rewriter.create<llhd::TerminatorOp>(entity.getLoc());
 
-    // Set the entity type and name attributes.
-    auto entityType =
-        rewriter.getFunctionType(argConversion.getConvertedTypes(), {});
+    // Set the entity type and name attributes. Add block arguments for each
+    // output, since LLHD entity outputs are still block arguments to the op.
+    auto entityType = rewriter.getFunctionType(entityTypes, {});
     rewriter.updateRootInPlace(entity, [&] {
       entity->setAttr(entity.getTypeAttrName(), TypeAttr::get(entityType));
       entity.setName(module.getName());
+      entityBodyRegion.addArguments(moduleOutputs);
     });
 
     // Erase the RTL module.
