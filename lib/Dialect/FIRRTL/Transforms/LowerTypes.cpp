@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/StringSwitch.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -94,6 +95,7 @@ struct FIRRTLTypesLowering : public LowerFIRRTLTypesBase<FIRRTLTypesLowering>,
 
   // Lowering operations.
   void visitDecl(InstanceOp op);
+  void visitDecl(MemOp op);
   void visitExpr(SubfieldOp op);
   void visitStmt(ConnectOp op);
 
@@ -249,6 +251,123 @@ void FIRRTLTypesLowering::visitDecl(InstanceOp op) {
   }
 
   // Remember to remove the original op.
+  opsToRemove.push_back(op);
+}
+
+void FIRRTLTypesLowering::visitDecl(MemOp op) {
+
+  auto type = op.getDataTypeOrNull();
+  // Bail out if the memory is empty
+  if (!type)
+    return;
+
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+  flattenBundleTypes(op.getDataTypeOrNull(), "", false, fieldTypes);
+
+  auto maybeFlip = [](Type a) -> std::pair<BundleType, bool> {
+    return TypeSwitch<Type, std::pair<BundleType, bool>>(a)
+        .Case<FlipType>([](FlipType b) {
+          return std::make_tuple(b.getElementType().cast<BundleType>(), true);
+        })
+        .Default([](Type b) {
+          return std::make_tuple(b.cast<BundleType>(), false);
+        });
+  };
+
+  DenseMap<StringRef, Value> newWires;
+  for (auto a : fieldTypes) {
+    // Create the new type for the memory. Copy every field, but
+    // update the "data" field to be the groundn type and the "mask"
+    // field to be a uint<1> type.
+    SmallVector<Type, 8> resultTypes;
+    for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
+      SmallVector<BundleType::BundleElement, 5> resultFields;
+
+      BundleType portType;
+      bool isFlipped;
+      std::tie(portType, isFlipped) = maybeFlip(op.getResult(i).getType());
+
+      for (auto elt : portType.getElements())
+        resultFields.push_back(
+            StringSwitch<BundleType::BundleElement>(elt.name)
+                .Cases("data", "rdata", "wdata", {elt.name, a.type})
+                .Cases("mask", "wmask",
+                       {elt.name, UIntType::get(builder->getContext(), 1)})
+                .Default(elt));
+
+      if (isFlipped) {
+        resultTypes.push_back(FlipType::get(
+            BundleType::get(resultFields, builder->getContext())));
+        continue;
+      }
+
+      resultTypes.push_back(
+          BundleType::get(resultFields, builder->getContext()));
+    }
+
+    // Construct the new memory for this flattened field
+    auto newName = op.name().getValue().str() + a.suffix;
+    auto newMem = builder->create<MemOp>(
+        resultTypes, op.readLatency(), op.writeLatency(), op.depth(), op.ruw(),
+        op.portNames(), builder->getStringAttr(newName));
+
+    for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
+
+      BundleType portType;
+      bool isFlipped = false;
+      std::tie(portType, isFlipped) = maybeFlip(op.getResult(i).getType());
+
+      for (auto elt : portType.getElements()) {
+        switch (StringSwitch<int>(elt.name)
+                    .Cases("clk", "en", "addr", "wmode", 0)
+                    .Cases("mask", "wmask", 1)
+                    .Default(/* "data", "rdata", "wdata", */ 2)) {
+        case 0: {
+          Type theType = elt.type;
+          if (isFlipped)
+            theType = FlipType::get(elt.type);
+          auto wire =
+              newWires[op.getPortName(i).getValue().str() + elt.name.str()];
+          if (!wire) {
+            wire = builder->create<WireOp>(
+                theType, op.name().getValue().str() + "_" +
+                             op.getPortName(i).getValue().str() + "_" +
+                             elt.name.str());
+            newWires[op.getPortName(i).getValue().str() + elt.name.str()] =
+                wire;
+            setBundleLowering(op.getResult(i), elt.name.str(), wire);
+          }
+          builder->create<ConnectOp>(
+              builder->create<SubfieldOp>(theType, newMem.getResult(i),
+                                          elt.name),
+              wire);
+          break;
+        }
+        case 1: {
+          FIRRTLType theType = UIntType::get(builder->getContext(), 1);
+          if (isFlipped)
+            theType = FlipType::get(theType);
+
+          setBundleLowering(op.getResult(i), elt.name.str() + a.suffix,
+                            builder->create<SubfieldOp>(
+                                theType, newMem.getResult(i), elt.name));
+          break;
+        }
+        case 2: {
+          FIRRTLType theType = a.type.cast<FIRRTLType>();
+          if (isFlipped)
+            theType = FlipType::get(theType);
+
+          setBundleLowering(op.getResult(i), elt.name.str() + a.suffix,
+                            builder->create<SubfieldOp>(
+                                theType, newMem.getResult(i), elt.name));
+          break;
+        }
+        }
+      }
+    }
+  }
+
   opsToRemove.push_back(op);
 }
 
