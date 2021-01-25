@@ -1005,7 +1005,7 @@ SubExprInfo ExprEmitter::visitComb(ArraySliceOp op) {
 SubExprInfo ExprEmitter::visitComb(ArrayCreateOp op) {
   os << '{';
   llvm::interleaveComma(op.inputs(), os, [&](Value operand) {
-    os << "'{";
+    os << "{";
     emitSubExpr(operand, LowestPrecedence);
     os << "}";
   });
