@@ -174,6 +174,7 @@ namespace {
 enum VerilogPrecedence {
   // Normal precedence levels.
   Symbol,          // Atomic symbol like "foo"
+  Selection,       // () , [] , :: , .
   Unary,           // Unary operators like ~foo
   Multiply,        // * , / , %
   Addition,        // + , -
@@ -837,6 +838,8 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     // retroactively.
     addPrefix("(");
     os << ')';
+    // Reset the precedence to the () level.
+    expInfo.precedence = Selection;
   }
 
   // Remember that we emitted this.
@@ -989,13 +992,13 @@ SubExprInfo ExprEmitter::visitComb(ConstantOp op) {
 // 11.5.1 "Vector bit-select and part-select addressing" allows a '+:' syntax
 // for slicing operations.
 SubExprInfo ExprEmitter::visitComb(ArraySliceOp op) {
-  auto arrayPrec = emitSubExpr(op.input(), Symbol);
+  auto arrayPrec = emitSubExpr(op.input(), Selection);
 
   unsigned dstWidth = op.getType().getSize();
   os << '[';
   emitSubExpr(op.lowIndex(), LowestPrecedence);
   os << "+:" << dstWidth << ']';
-  return {Unary, arrayPrec.signedness};
+  return {Selection, arrayPrec.signedness};
 }
 
 // Syntax from: section 5.11 "Array literals".
@@ -1013,11 +1016,11 @@ SubExprInfo ExprEmitter::visitComb(ArrayCreateOp op) {
 }
 
 SubExprInfo ExprEmitter::visitComb(ArrayIndexOp op) {
-  auto arrayPrec = emitSubExpr(op.input(), Symbol);
+  auto arrayPrec = emitSubExpr(op.input(), Selection);
   os << '[';
   emitSubExpr(op.index(), LowestPrecedence);
   os << ']';
-  return {Symbol, arrayPrec.signedness};
+  return {Selection, arrayPrec.signedness};
 }
 
 SubExprInfo ExprEmitter::visitComb(MuxOp op) {
