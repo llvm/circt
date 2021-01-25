@@ -55,7 +55,9 @@ module {
     %34 = rtl.xor %a, %allone : i4
 
     %arrCreated = rtl.array_create %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone : (i4)
-    %35 = rtl.array_slice %arrCreated at %a : (!rtl.array<9xi4>) -> !rtl.array<3xi4>
+    %slice1 = rtl.array_slice %arrCreated at %a : (!rtl.array<9xi4>) -> !rtl.array<3xi4>
+    %slice2 = rtl.array_slice %arrCreated at %b : (!rtl.array<9xi4>) -> !rtl.array<3xi4>
+    %35 = rtl.mux %cond, %slice1, %slice2 : !rtl.array<3xi4>
 
     %36 = rtl.concat %a, %a, %a : (i4, i4, i4) -> i12
 
@@ -112,7 +114,7 @@ module {
   // CHECK-NEXT:   assign r31 = {{[{}][{}]}}5{a[3]}}, a};
   // CHECK-NEXT:   assign r33 = cond ? a : b;
   // CHECK-NEXT:   assign r34 = ~a;
-  // CHECK-NEXT:   assign r35 = [[WIRE0]][a+:3];
+  // CHECK-NEXT:   assign r35 = cond ? [[WIRE0]][a+:3] : [[WIRE0]][b+:3];
   // CHECK-NEXT:   assign r36 = {3{a}};
   // CHECK-NEXT: endmodule
 
