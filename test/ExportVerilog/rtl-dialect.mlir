@@ -80,7 +80,7 @@ module {
   // CHECK-NEXT:   output [2:0][3:0] r35,
   // CHECK-NEXT:   output [11:0]     r36);
   // CHECK-EMPTY:
-  // CHECK-NEXT:   wire [8:0][3:0] [[WIRE0:.+]] = {'{4'hF}, '{4'hF}, '{4'hF}, '{4'hF}, '{4'hF}, '{4'hF}, '{4'hF}, '{4'hF}, '{4'hF}};
+  // CHECK-NEXT:   wire [8:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
   // CHECK-NEXT:   assign r0 = a + b;
   // CHECK-NEXT:   assign r2 = a - b;
   // CHECK-NEXT:   assign r4 = a * b;
