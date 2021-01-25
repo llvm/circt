@@ -634,20 +634,6 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
   return success();
 }
 
-static ParseResult parseInstanceResults(OpAsmParser &p,
-                                        SmallVectorImpl<Type> &resultTypes) {
-  if (p.parseOptionalColon())
-    return success();
-  return p.parseTypeList(resultTypes);
-}
-
-static void printInstanceResults(OpAsmPrinter &p, InstanceOp op,
-                                 ArrayRef<Type> resultTypes) {
-  if (resultTypes.empty())
-    return;
-  p << ": " << resultTypes;
-}
-
 /// Return the type of a mem given a list of named ports and their kind.
 /// This returns a null type if there are duplicate port names.
 BundleType
