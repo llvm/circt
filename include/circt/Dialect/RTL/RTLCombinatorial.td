@@ -311,7 +311,8 @@ def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
     unsigned inputSize = input().getType().cast<ArrayType>().getSize();
     if (llvm::Log2_64_Ceil(inputSize) !=
           lowIndex().getType().getIntOrFloatBitWidth())
-      return failure();
+      return emitOpError(
+        "ArraySlice: index width must match clog2 of array size");
     return success();
   }];
 

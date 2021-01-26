@@ -276,8 +276,8 @@ void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
 void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
                        EventControl clockEdge, Value clock,
                        ResetType resetStyle, EventControl resetEdge,
-                       Value reset, std::function<void()> resetCtor,
-                       std::function<void()> bodyCtor) {
+                       Value reset, std::function<void()> bodyCtor,
+                       std::function<void()> resetCtor) {
   result.addAttribute("clockEdge", odsBuilder.getI32IntegerAttr(
                                        static_cast<int32_t>(clockEdge)));
   result.addOperands(clock);
@@ -290,8 +290,8 @@ void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
   // Set up the body.
   Region *bodyRegion = result.addRegion();
 
+  AlwaysFFOp::ensureTerminator(*bodyRegion, odsBuilder, result.location);
   if (bodyCtor) {
-    AlwaysFFOp::ensureTerminator(*bodyRegion, odsBuilder, result.location);
     auto oldIP = &*odsBuilder.getInsertionPoint();
     odsBuilder.setInsertionPointToStart(&*bodyRegion->begin());
     bodyCtor();
@@ -301,8 +301,8 @@ void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
   // Set up the reset.
   Region *resetRegion = result.addRegion();
 
+  AlwaysFFOp::ensureTerminator(*resetRegion, odsBuilder, result.location);
   if (resetCtor) {
-    AlwaysFFOp::ensureTerminator(*resetRegion, odsBuilder, result.location);
     auto oldIP = &*odsBuilder.getInsertionPoint();
     odsBuilder.setInsertionPointToStart(&*resetRegion->begin());
     resetCtor();
