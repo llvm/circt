@@ -161,14 +161,14 @@ def AlwaysFFOp : SVOp<"alwaysff", [HasRegionTerminator, NoRegionArguments,
   
   let regions = (region SizedRegion<1>:$bodyBlk, AnyRegion:$resetBlk);
   let arguments = (ins EventControlAttr:$clockEdge, I1:$clock, 
-                       DefaultValuedAttr<ResetTypeAttr, "0">:$resetStyle, 
+                       DefaultValuedAttr<ResetTypeAttr, "0">:$resetStyle,
                        OptionalAttr<EventControlAttr>:$resetEdge, 
                        Optional<I1>:$reset);
   let results = (outs);
   
   let assemblyFormat = [{ 
-    $clockEdge `,` $clock 
-    ( `,` $resetStyle `,` $resetEdge^ `,` $reset $resetBlk )? $bodyBlk attr-dict
+    `(` $clockEdge $clock `)` $bodyBlk
+    ( `(` $resetStyle `:` $resetEdge^ $reset `)` $resetBlk )? attr-dict
   }];
 
   let skipDefaultBuilders = 1;
@@ -176,19 +176,16 @@ def AlwaysFFOp : SVOp<"alwaysff", [HasRegionTerminator, NoRegionArguments,
     OpBuilderDAG<(ins "EventControl":$clockEdge, "Value":$clock,
                       CArg<"std::function<void()>", "{}">:$bodyCtor)>,
     OpBuilderDAG<(ins "EventControl":$clockEdge, "Value":$clock, 
-                      "ResetType":$resetStyle, 
+                      "ResetType":$resetStyle,
                       "EventControl":$resetEdge, "Value":$reset,
-                      CArg<"std::function<void()>", "{}">:$resetCtor,
-                      CArg<"std::function<void()>", "{}">:$bodyCtor)>
+                      CArg<"std::function<void()>", "{}">:$bodyCtor,
+                      CArg<"std::function<void()>", "{}">:$resetCtor)>
   ];
 
   let extraClassDeclaration = [{
     Block *getBodyBlock() { return &bodyBlk().front(); }
     Block *getResetBlock() { return &resetBlk().front(); }
   }];
-
-  // Check that we have the same number of events and conditions.
-  //let verifier = "return ::verifyAlwaysOp(*this);";
 }
 
 

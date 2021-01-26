@@ -479,7 +479,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %4 = firrtl.mux(%2, %3, %count) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
     %5 = firrtl.mux(%1, %c0_ui2, %4) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 
-    // CHECK-NEXT: sv.alwaysff posedge, %clock  {
+    // CHECK-NEXT: sv.alwaysff(posedge %clock)  {
     // CHECK-NEXT:   sv.passign %count, %2 : i2
     // CHECK-NEXT: }
     firrtl.connect %count, %5 : !firrtl.uint<2>, !firrtl.uint<2>
@@ -565,9 +565,9 @@ module attributes {firrtl.mainModule = "Simple"} {
     %shorten = firrtl.head %sum, 32 : (!firrtl.uint<33>) -> !firrtl.uint<32>
     %5 = firrtl.mux(%3, %2, %shorten) : (!firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<32>
 
-    // CHECK-NEXT: sv.alwaysff posedge, %clock, asyncreset, posedge, %reset {
-    // CHECK-NEXT: }  {
+    // CHECK-NEXT: sv.alwaysff(posedge %clock) {
     // CHECK-NEXT:   sv.passign %reg, %6 : i32
+    // CHECK-NEXT: }(asyncreset : posedge %reset) {
     // CHECK-NEXT: }
     firrtl.connect %reg, %5 : !firrtl.uint<32>, !firrtl.uint<32>
     %6 = firrtl.stdIntCast %reg : (!firrtl.uint<32>) -> i32
