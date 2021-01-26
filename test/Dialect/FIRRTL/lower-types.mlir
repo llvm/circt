@@ -108,3 +108,15 @@ firrtl.circuit "Top" {
   }
 
 }
+
+// -----
+
+firrtl.circuit "Foo" {
+  // CHECK-LABEL: firrtl.module @Foo
+  // CHECK-SAME: %[[FLAT_ARG_INPUT_NAME:a_b_c]]: [[FLAT_ARG_INPUT_TYPE:!firrtl.uint<1>]]
+  // CHECK-SAME: %[[FLAT_ARG_OUTPUT_NAME:b_b_c]]: [[FLAT_ARG_OUTPUT_TYPE:!firrtl.flip<uint<1>>]]
+  firrtl.module @Foo(%a: !firrtl.bundle<b: bundle<c: uint<1>>>, %b: !firrtl.flip<bundle<b: bundle<c: uint<1>>>>) {
+    // CHECK: firrtl.connect %[[FLAT_ARG_OUTPUT_NAME]], %[[FLAT_ARG_INPUT_NAME]] : [[FLAT_ARG_OUTPUT_TYPE]], [[FLAT_ARG_INPUT_TYPE]]
+    firrtl.connect %b, %a : !firrtl.flip<bundle<b: bundle<c: uint<1>>>>, !firrtl.bundle<b: bundle<c: uint<1>>>
+  }
+}
