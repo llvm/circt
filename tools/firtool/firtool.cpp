@@ -69,6 +69,11 @@ static cl::opt<bool>
                      cl::init(false));
 
 static cl::opt<bool>
+    blackboxMemory("blackbox-memory",
+                   cl::desc("Create a blackbox for all memory operations"),
+                   cl::init(false));
+
+static cl::opt<bool>
     ignoreFIRLocations("ignore-fir-locators",
                        cl::desc("ignore the @info locations in the .fir file"),
                        cl::init(false));
@@ -130,6 +135,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
   // Allow optimizations to run multithreaded.
   context.disableMultithreading(false);
+
+  if (blackboxMemory)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
 
   // Run the lower-to-rtl pass if requested.
   if (lowerToRTL) {
