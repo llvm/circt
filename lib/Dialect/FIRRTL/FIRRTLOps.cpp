@@ -865,6 +865,10 @@ StringAttr MemOp::getPortName(size_t resultNo) {
   return portNames()[resultNo].cast<StringAttr>();
 }
 
+FIRRTLType MemOp::getPortType(size_t resultNo) {
+  return results()[resultNo].getType().cast<FIRRTLType>();
+}
+
 Value MemOp::getPortNamed(StringAttr name) {
   auto namesArray = portNames();
   for (size_t i = 0, e = namesArray.size(); i != e; ++i) {

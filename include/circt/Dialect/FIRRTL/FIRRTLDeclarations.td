@@ -94,6 +94,9 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
       return getPortName(resultNo).getValue();
     }
 
+    /// Return the port type for the specified result number.
+    FIRRTLType getPortType(size_t resultNo);
+
     // Return the result for this instance that corresponds to the specified
     // port name.
     Value getPortNamed(StringRef name) {
