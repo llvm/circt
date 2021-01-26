@@ -24,6 +24,8 @@ namespace firrtl {
 
 std::unique_ptr<mlir::Pass> createLowerFIRRTLTypesPass();
 
+std::unique_ptr<mlir::Pass> createBlackBoxMemoryPass();
+
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/FIRRTL/Passes.h.inc"
