@@ -1272,18 +1272,17 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   setLowering(op, regResult);
 
   auto resetFn = [&]() {
-    builder->create<sv::IfOp>(resetSignal, [&]() {
-      builder->create<sv::PAssignOp>(regResult, resetValue);
-    });
+    builder->create<sv::PAssignOp>(regResult, resetValue);
   };
 
   if (op.resetSignal().getType().isa<AsyncResetType>()) {
-    builder->create<sv::AlwaysOp>(
-        ArrayRef<EventControl>{EventControl::AtPosEdge,
-                               EventControl::AtPosEdge},
-        ArrayRef<Value>{clockVal, resetSignal}, resetFn);
+    builder->create<sv::AlwaysFFOp>(
+        EventControl::AtPosEdge, clockVal, ::ResetType::AsyncReset,
+        EventControl::AtPosEdge, resetSignal, std::function<void()>(), resetFn);
   } else { // sync reset
-    builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clockVal, resetFn);
+    builder->create<sv::AlwaysFFOp>(
+        EventControl::AtPosEdge, clockVal, ::ResetType::SyncReset,
+        EventControl::AtPosEdge, resetSignal, std::function<void()>(), resetFn);
   }
 
   // Emit the initializer expression for simulation that fills it with random
@@ -2015,7 +2014,7 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
         regResetOp.resetSignal().getType().isa<AsyncResetType>()
             ? ::ResetType::AsyncReset
             : ::ResetType::SyncReset,
-        EventControl::AtPosEdge, resetSignal, std::function<void()>(),
+        EventControl::AtPosEdge, resetSignal,
         [&]() { builder->create<sv::PAssignOp>(destVal, srcVal); });
     return success();
   }
