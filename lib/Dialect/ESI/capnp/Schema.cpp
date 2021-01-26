@@ -438,7 +438,7 @@ namespace {
 /// children slices.
 struct Slice : public Vegetable {
 private:
-  Slice(Slice *s, int64_t offset, Value val)
+  Slice(Slice *s, llvm::Optional<int64_t> offset, Value val)
       : Vegetable(*s->builder, val), parent(s), offsetIntoParent(offset) {
     assert(val.getType().isa<rtl::ArrayType>());
   }
@@ -454,6 +454,26 @@ public:
   Slice slice(int64_t lsb, int64_t size) {
     Value newSlice = builder->create<rtl::ArraySliceOp>(loc(), s, lsb, size);
     return Slice(this, lsb, newSlice);
+  }
+
+  /// Create an op to slice the array from lsb to lsb + size. Return a new slice
+  /// with that op. If lsb is greater width thn necessary, lop off the high
+  /// bits.
+  Slice slice(Value lsb, int64_t size) {
+    assert(lsb.getType().isa<IntegerType>());
+
+    unsigned expIdxWidth =
+        llvm::Log2_64_Ceil(s.getType().cast<rtl::ArrayType>().getSize());
+    int64_t lsbWidth = lsb.getType().getIntOrFloatBitWidth();
+    if (lsbWidth > expIdxWidth)
+      lsb = builder->create<rtl::ExtractOp>(
+          loc(), builder->getIntegerType(expIdxWidth), lsb, 0);
+    else if (lsbWidth < expIdxWidth)
+      assert(false && "LSB Value must not be smaller than expected.");
+    auto dstTy = rtl::ArrayType::get(
+        s.getType().cast<rtl::ArrayType>().getElementType(), size);
+    Value newSlice = builder->create<rtl::ArraySliceOp>(loc(), dstTy, s, lsb);
+    return Slice(this, llvm::Optional<int64_t>(), newSlice);
   }
 
   Slice &name(const Twine &name) {
@@ -474,15 +494,18 @@ public:
     return parent->getRootSlice();
   }
 
-  int64_t getOffsetFromRoot() {
+  llvm::Optional<int64_t> getOffsetFromRoot() {
     if (parent == nullptr)
       return 0;
-    return offsetIntoParent + parent->getOffsetFromRoot();
+    auto parentOffset = parent->getOffsetFromRoot();
+    if (!offsetIntoParent || !parentOffset)
+      return llvm::Optional<int64_t>();
+    return *offsetIntoParent + *parentOffset;
   }
 
 private:
   Slice *parent;
-  int64_t offsetIntoParent;
+  llvm::Optional<int64_t> offsetIntoParent;
 };
 } // anonymous namespace
 
@@ -579,14 +602,13 @@ static Vegetable decodeList(rtl::ArrayType type,
   // Get the entire message slice, compute the offset into the list, then get
   // the list data in an ArrayType.
   auto msg = ptr.getRootSlice();
-  int64_t ptrOffset = ptr.getOffsetFromRoot();
+  auto ptrOffset = ptr.getOffsetFromRoot();
+  assert(ptrOffset);
   auto listOffset = b.create<rtl::AddOp>(
       loc, offset,
-      b.create<rtl::ConstantOp>(loc, b.getIntegerType(30), ptrOffset + 64));
-  rtl::ArrayType listBitArray =
-      rtl::ArrayType::get(b.getI1Type(), type.getSize() * expectedElemSizeBits);
+      b.create<rtl::ConstantOp>(loc, b.getIntegerType(30), *ptrOffset + 64));
   auto listSlice =
-      b.create<rtl::ArraySliceOp>(loc, listBitArray, msg, listOffset);
+      msg.slice(listOffset.getResult(), type.getSize() * expectedElemSizeBits);
   Type capnpElemTy = b.getIntegerType(expectedElemSizeBits);
 
   // Cast to an array of capnp int elements.
