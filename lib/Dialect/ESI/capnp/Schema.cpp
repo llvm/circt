@@ -251,7 +251,9 @@ static void emitCapnpType(Type type, IndentingOStream &os) {
   llvm::TypeSwitch<Type>(type)
       .Case([&os](IntegerType intTy) {
         auto w = intTy.getWidth();
-        if (w == 1) {
+        if (w == 0) {
+          os.indent() << "Void";
+        } else if (w == 1) {
           os.indent() << "Bool";
         } else {
           if (intTy.isSigned())
@@ -329,6 +331,8 @@ static size_t bits(::capnp::schema::Type::Reader type) {
   switch (type.which()) {
   case ty::VOID:
     return 0;
+  case ty::BOOL:
+    return 1;
   case ty::UINT8:
   case ty::INT8:
     return 8;
@@ -381,41 +385,34 @@ Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
 }
 
 namespace {
-/// Holds a 'slice' of an array and is able to construct more slice ops, then
-/// cast to a type.
-struct Slice {
+/// Utility class for convenience operations on slice'n'dice operations and
+/// types.
+struct Vegetable {
 public:
-  Slice(OpBuilder &b, Value init) : builder(&b), s(init) {
-    assert(init.getType().isa<rtl::ArrayType>());
-  }
+  Vegetable(OpBuilder &b, Value init) : builder(&b), s(init) {}
 
-  /// Create an op to slice the array from lsb to lsb + size. Return a new slice
-  /// with that op.
-  Slice slice(int64_t lsb, int64_t size) {
-    Value newSlice = builder->create<rtl::ArraySliceOp>(loc(), s, lsb, size);
-    return Slice(*builder, newSlice);
-  }
-
-  /// Set the "name" attribute of a slice's op.
-  Slice name(const Twine &name) const {
+  /// Set the "name" attribute of a value's op.
+  Vegetable &name(const Twine &name) {
     SmallString<32> nameStr;
-    s.getDefiningOp()->setAttr(
-        "name", StringAttr::get(name.toStringRef(nameStr), ctxt()));
+    name.toStringRef(nameStr);
+    auto nameAttr = StringAttr::get(nameStr, ctxt());
+    s.getDefiningOp()->setAttr("name", nameAttr);
     return *this;
   }
-  Slice name(capnp::Text::Reader fieldName, const Twine &nameSuffix) const {
+  Vegetable &name(capnp::Text::Reader fieldName, const Twine &nameSuffix) {
     return name(StringRef(fieldName.cStr()) + nameSuffix);
   }
 
   /// Construct a bitcast.
-  Value cast(Type t, StringRef name = StringRef(), Twine nameSuffix = Twine()) {
+  Vegetable cast(Type t, StringRef name = StringRef(),
+                 Twine nameSuffix = Twine()) {
     auto dst = builder->create<rtl::BitcastOp>(loc(), t, s);
 
     SmallString<32> nameBuffer;
     StringRef wholeName = (name + nameSuffix).toStringRef(nameBuffer);
     if (wholeName.size())
       dst->setAttr("name", StringAttr::get(wholeName, ctxt()));
-    return dst;
+    return Vegetable(*builder, dst);
   }
 
   Operation *operator->() const { return s.getDefiningOp(); }
@@ -423,39 +420,210 @@ public:
   Location loc() const { return s.getLoc(); }
   OpBuilder &b() const { return *builder; }
   MLIRContext *ctxt() const { return builder->getContext(); }
+  operator Value() { return s; }
 
-private:
+protected:
   OpBuilder *builder;
   Value s;
 };
-} // namespace
+} // anonymous namespace
+
+namespace {
+/// Holds a 'slice' of an array and is able to construct more slice ops, then
+/// cast to a type. A sub-slice holds a pointer to the slice which created it,
+/// so it forms a hierarchy. This is so we can easily track offsets from the
+/// root message for pointer resolution.
+///
+/// Requirement: any slice which has sub-slices must not be free'd before its
+/// children slices.
+struct Slice : public Vegetable {
+private:
+  Slice(Slice *s, int64_t offset, Value val)
+      : Vegetable(*s->builder, val), parent(s), offsetIntoParent(offset) {
+    assert(val.getType().isa<rtl::ArrayType>());
+  }
+
+public:
+  Slice(OpBuilder &b, Value init)
+      : Vegetable(b, init), parent(nullptr), offsetIntoParent(0) {
+    assert(init.getType().isa<rtl::ArrayType>());
+  }
+
+  /// Create an op to slice the array from lsb to lsb + size. Return a new slice
+  /// with that op.
+  Slice slice(int64_t lsb, int64_t size) {
+    Value newSlice = builder->create<rtl::ArraySliceOp>(loc(), s, lsb, size);
+    return Slice(this, lsb, newSlice);
+  }
+
+  Slice &name(const Twine &name) {
+    SmallString<32> nameStr;
+    name.toStringRef(nameStr);
+    auto nameAttr = StringAttr::get(nameStr, ctxt());
+    s.getDefiningOp()->setAttr("name", nameAttr);
+    return *this;
+  }
+  Slice &name(capnp::Text::Reader fieldName, const Twine &nameSuffix) {
+    return name(StringRef(fieldName.cStr()) + nameSuffix);
+  }
+
+  /// Return the root of this slice hierarchy.
+  const Slice &getRootSlice() {
+    if (parent == nullptr)
+      return *this;
+    return parent->getRootSlice();
+  }
+
+  int64_t getOffsetFromRoot() {
+    if (parent == nullptr)
+      return 0;
+    return offsetIntoParent + parent->getOffsetFromRoot();
+  }
+
+private:
+  Slice *parent;
+  int64_t offsetIntoParent;
+};
+} // anonymous namespace
+
+namespace {
+/// Utility class for building sv::AssertOps.
+class AssertBuilder : public OpBuilder {
+public:
+  AssertBuilder(Location loc, Region &r) : OpBuilder(r), loc(loc) {}
+
+  void assertPred(Vegetable veg, ICmpPredicate pred, int64_t expected) {
+    if (veg.getValue().getType().isa<IntegerType>())
+      assertEqual(veg.getValue(), expected);
+
+    auto valTy = veg.getValue().getType().dyn_cast<rtl::ArrayType>();
+    assert(valTy && valTy.getElementType() == veg.b().getIntegerType(1) &&
+           "Can only compare ints and bit arrays");
+    assertPred(veg.cast(veg.b().getIntegerType(valTy.getSize())).getValue(),
+               pred, expected);
+  }
+
+  void assertEqual(Vegetable s, int64_t expected) {
+    assertPred(s, ICmpPredicate::eq, expected);
+  }
+
+private:
+  void assertPred(Value val, ICmpPredicate pred, int64_t expected) {
+    auto expectedVal = create<rtl::ConstantOp>(loc, val.getType(), expected);
+    create<sv::AssertOp>(
+        loc, create<rtl::ICmpOp>(loc, getI1Type(), pred, val, expectedVal));
+  }
+  void assertEqual(Value val, int64_t expected) {
+    assertPred(val, ICmpPredicate::eq, expected);
+  }
+  Location loc;
+};
+} // anonymous namespace
 
 /// Construct the proper operations to decode a capnp list.
-static Slice decodeList(rtl::ArrayType type, capnp::schema::Field::Reader field,
-                        Slice ptrSection, OpBuilder &asserts) {
+static Vegetable decodeList(rtl::ArrayType type,
+                            capnp::schema::Field::Reader field,
+                            Slice ptrSection, AssertBuilder &asserts) {
+  capnp::schema::Type::Reader capnpType = field.getSlot().getType();
+  assert(capnpType.isList());
+  assert(capnpType.getList().hasElementType());
+
+  auto loc = ptrSection.loc();
+  OpBuilder &b = ptrSection.b();
+
+  // Get the list pointer and break out its parts.
   auto ptr = ptrSection.slice(field.getSlot().getOffset() * 64, 64)
                  .name(field.getName(), "_ptr");
-  auto offset = ptr.slice(32, 30);
-  return offset;
+  auto ptrType = ptr.slice(0, 2);
+  auto offset = ptr.slice(2, 30)
+                    .cast(b.getIntegerType(30))
+                    .name(field.getName(), "_offset");
+  auto elemSize = ptr.slice(31, 3);
+  auto length = ptr.slice(34, 29);
+
+  // Assert that ptr type == list type;
+  asserts.assertEqual(ptrType, 0);
+
+  // Assert that the element size in the message matches our expectation.
+  auto expectedElemSizeBits = bits(capnpType.getList().getElementType());
+  unsigned expectedElemSizeField;
+  switch (expectedElemSizeBits) {
+  case 0:
+    expectedElemSizeField = 0;
+    break;
+  case 1:
+    expectedElemSizeField = 1;
+    break;
+  case 8:
+    expectedElemSizeField = 2;
+    break;
+  case 16:
+    expectedElemSizeField = 3;
+    break;
+  case 32:
+    expectedElemSizeField = 4;
+    break;
+  case 64:
+    expectedElemSizeField = 5;
+    break;
+  default:
+    assert(false && "bits() returned unexpected value");
+  }
+  asserts.assertEqual(elemSize, expectedElemSizeField);
+
+  // Assert that the length of the list (array) is at most the length of the
+  // array.
+  auto maxWords = (type.getSize() * expectedElemSizeBits) / (8 * 64);
+  asserts.assertPred(length, ICmpPredicate::sle, maxWords);
+
+  // Get the entire message slice, compute the offset into the list, then get
+  // the list data in an ArrayType.
+  auto msg = ptr.getRootSlice();
+  int64_t ptrOffset = ptr.getOffsetFromRoot();
+  auto listOffset = b.create<rtl::AddOp>(
+      loc, offset,
+      b.create<rtl::ConstantOp>(loc, b.getIntegerType(30), ptrOffset + 64));
+  rtl::ArrayType listBitArray =
+      rtl::ArrayType::get(b.getI1Type(), type.getSize() * expectedElemSizeBits);
+  auto listSlice =
+      b.create<rtl::ArraySliceOp>(loc, listBitArray, msg, listOffset);
+  Type capnpElemTy = b.getIntegerType(expectedElemSizeBits);
+
+  // Cast to an array of capnp int elements.
+  auto arrayOfElements = b.create<rtl::BitcastOp>(
+      loc, rtl::ArrayType::get(capnpElemTy, type.getSize()), listSlice);
+
+  SmallVector<Value, 64> arrayValues;
+  IntegerType idxTy = b.getIntegerType(llvm::Log2_32_Ceil(type.getSize()));
+  for (size_t i = 0, e = type.getSize(); i < e; ++i) {
+    auto idx = b.create<rtl::ConstantOp>(loc, idxTy, i);
+    auto capnpElem =
+        b.create<rtl::ArrayGetOp>(loc, capnpElemTy, arrayOfElements, idx);
+    auto esiElem =
+        b.create<rtl::BitcastOp>(loc, type.getElementType(), capnpElem);
+    arrayValues.push_back(esiElem);
+  }
+  auto array = b.create<rtl::ArrayCreateOp>(loc, arrayValues);
+  return Vegetable(b, array);
 }
 
 /// Construct the proper operations to convert a capnp field to 'type'.
-static Value decodeField(Type type, capnp::schema::Field::Reader field,
-                         Slice dataSection, Slice ptrSection,
-                         OpBuilder &asserts) {
-  Slice fieldSlice =
-      TypeSwitch<Type, Slice>(type)
+static Vegetable decodeField(Type type, capnp::schema::Field::Reader field,
+                             Slice dataSection, Slice ptrSection,
+                             AssertBuilder &asserts) {
+  Vegetable esiValue =
+      TypeSwitch<Type, Vegetable>(type)
           .Case([&](IntegerType it) {
-            return dataSection.slice(field.getSlot().getOffset() *
-                                         bits(field.getSlot().getType()),
-                                     it.getWidth());
+            auto slice = dataSection.slice(field.getSlot().getOffset() *
+                                               bits(field.getSlot().getType()),
+                                           it.getWidth());
+            return slice.name(field.getName(), "_bits").cast(type);
           })
           .Case([&](rtl::ArrayType at) {
             return decodeList(at, field, ptrSection, asserts);
           });
-
-  fieldSlice.name(field.getName(), "_bits");
-  return fieldSlice.cast(type, field.getName().cStr(), "Value");
+  esiValue.name(field.getName().cStr(), "Value");
+  return esiValue;
 }
 
 /// Build an RTL/SV dialect capnp decoder for this type. Outputs packed and
@@ -464,7 +632,6 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
                                    Value operandVal) {
   // Various useful integer types.
   auto i16 = b.getIntegerType(16);
-  auto i32 = b.getIntegerType(32);
 
   size_t size = this->size();
   rtl::ArrayType operandType = operandVal.getType().dyn_cast<rtl::ArrayType>();
@@ -477,7 +644,7 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
   auto alwaysAt = b.create<sv::AlwaysOp>(loc, EventControl::AtPosEdge, clk);
   auto ifValid =
       OpBuilder(alwaysAt.getBodyRegion()).create<sv::IfOp>(loc, valid);
-  OpBuilder asserts(ifValid.getBodyRegion());
+  AssertBuilder asserts(loc, ifValid.getBodyRegion());
 
   // The next 64-bits of a capnp message is the root struct pointer.
   ::capnp::schema::Node::Reader rootProto = getTypeSchema().getProto();
@@ -487,12 +654,8 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
   // guaranteed to be the case with canonically-encoded messages.
   // TODO: support cases where the pointer offset is non-zero.
   Slice assertPtr(ptr);
-  auto typeAndOffset = assertPtr.slice(0, 32).cast(i32, "typeAndOffset");
-  auto b16Zero = asserts.create<rtl::ConstantOp>(loc, i32, 0);
-
-  asserts.create<sv::AssertOp>(
-      loc, asserts.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
-                                       typeAndOffset, b16Zero));
+  auto typeAndOffset = assertPtr.slice(0, 32).name("typeAndOffset");
+  asserts.assertEqual(typeAndOffset, 0);
 
   // We expect the data section to be equal to the computed data section size.
   auto dataSectionSize = assertPtr.slice(32, 16).cast(i16, "dataSectionSize");
@@ -522,19 +685,21 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
                         .name("ptrSection");
 
   // Loop through fields.
-  Value fieldValues[st.getFields().size()];
+  SmallVector<Vegetable, 16> fieldValues;
   for (auto field : st.getFields()) {
     uint16_t idx = field.getCodeOrder();
     assert(idx < fieldTypes.size() && "Capnp struct longer than fieldTypes.");
-    fieldValues[idx] =
-        decodeField(fieldTypes[idx], field, dataSection, ptrSection, asserts);
+    fieldValues.push_back(
+        decodeField(fieldTypes[idx], field, dataSection, ptrSection, asserts));
   }
 
   // What to return depends on the type. (e.g. structs have to be constructed
   // from the field values.)
-  return TypeSwitch<Type, Value>(type)
-      .Case([&fieldValues](IntegerType) { return fieldValues[0]; })
-      .Case([&fieldValues](rtl::ArrayType) { return fieldValues[0]; });
+  Vegetable ret =
+      TypeSwitch<Type, Vegetable>(type)
+          .Case([&fieldValues](IntegerType) { return fieldValues[0]; })
+          .Case([&fieldValues](rtl::ArrayType) { return fieldValues[0]; });
+  return ret;
 }
 
 //===----------------------------------------------------------------------===//
