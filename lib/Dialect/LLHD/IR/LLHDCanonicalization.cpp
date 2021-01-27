@@ -53,3 +53,8 @@ void llhd::DynExtractElementOp::getCanonicalizationPatterns(
   results.insert<DynExtractElementWithConstantOpIndex,
                  DynExtractElementWithLLHDConstOpIndex>(context);
 }
+
+void llhd::SigOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                              MLIRContext *context) {
+  results.insert<SigOpProbingSigOp>(context);
+}

@@ -82,4 +82,12 @@ def DynExtractElementWithConstantOpIndex : Pat<
   (LLHD_DynExtractElementOp $target, (ConstantOp $index)),
   (LLHD_ExtractElementOp $target, (IndexAttrFromSignlessInteger $index))>;
 
+//===----------------------------------------------------------------------===//
+// SigOp(PrbOp(SigOp)) -> SigOp
+//===----------------------------------------------------------------------===//
+
+def SigOpProbingSigOp : Pat<
+  (LLHD_SigOp StrAttr, (LLHD_PrbOp (LLHD_SigOp:$result StrAttr, AnyType))),
+  (replaceWithValue $result)>;
+
 #endif // CIRCT_DIALECT_LLHD_IR_CANONICALIZATION_TD

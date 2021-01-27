@@ -20,3 +20,13 @@ func @drv_folding(%sig: !llhd.sig<i32>, %val: i32, %time: !llhd.time, %cond: i1)
   // CHECK-NEXT: return
   return
 }
+
+// CHECK-LABEL: @sig_folding
+llhd.entity @sig_folding() -> () {
+  %false = llhd.const 0 : i1
+  // CHECK: llhd.sig "sig1"
+  // CHECK-NOT: llhd.sig
+  %0 = llhd.sig "sig1" %false : i1
+  %1 = llhd.prb %0 : !llhd.sig<i1>
+  %2 = llhd.sig "sig2" %1 : i1
+}

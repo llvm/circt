@@ -49,6 +49,8 @@ def LLHD_SigOp : LLHD_Op<"sig", [
   let results = (outs LLHD_AnySigType: $result);
 
   let assemblyFormat = "$name $init attr-dict `:` type($init)";
+
+  let hasCanonicalizer = 1;
 }
 
 def LLHD_PrbOp : LLHD_Op<"prb", [
