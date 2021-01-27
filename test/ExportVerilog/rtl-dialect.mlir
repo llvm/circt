@@ -7,8 +7,11 @@ module {
 
   // CHECK-LABEL: // external module E
 
-  rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !rtl.array<10xi4>,
-                         %uarray: !rtl.uarray<16xi8>) -> (
+  rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1,
+                         %array1: !rtl.array<10xi4>,
+                         %uarray1: !rtl.uarray<16xi8>,
+                         %uarray2: !rtl.uarray<16xi8>,
+                         %structA: !rtl.struct<foo: i2, bar:i3>) -> (
     %r0: i4, %r2: i4, %r4: i4, %r6: i4,
     %r7: i4, %r8: i4, %r9: i4, %r10: i4,
     %r11: i4, %r12: i4, %r13: i4, %r14: i4,
@@ -17,7 +20,7 @@ module {
     %r21: i1, %r22: i1, %r23: i1, %r24: i1,
     %r25: i1, %r26: i1, %r27: i1, %r28: i1,
     %r29: i12, %r30: i2, %r31: i9, %r33: i4, %r34: i4,
-    %r35: !rtl.array<3xi4>, %r36: i12
+    %r35: !rtl.array<3xi4>, %r36: i12, %r37: !rtl.struct<foo: i2, bar:i3>
     ) {
     
     %0 = rtl.add %a, %b : i4
@@ -59,12 +62,16 @@ module {
 
     %36 = rtl.concat %a, %a, %a : (i4, i4, i4) -> i12
 
+    %37 = rtl.struct_extract %structA["bar"] : !rtl.struct<foo: i2, bar: i3>
+    %38 = rtl.struct_inject %structA["bar"], %37 : !rtl.struct<foo: i2, bar: i3>
+
+
     rtl.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14,
                %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27,
-               %28, %29, %30, %31, %33, %34, %35, %36 :
+               %28, %29, %30, %31, %33, %34, %35, %36, %38 :
      i4,i4, i4,i4,i4,i4,i4, i4,i4,i4,i4,i4,
      i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,i1,i1,
-     i12, i2,i9,i4, i4, !rtl.array<3xi4>, i12
+     i12, i2,i9,i4, i4, !rtl.array<3xi4>, i12, !rtl.struct<foo: i2, bar: i3>
   }
   // CHECK-LABEL: module TESTSIMPLE(
   // CHECK-NEXT:   input  [3:0]      a, b
@@ -212,7 +219,6 @@ module {
   // CHECK-NEXT:    assign p = paramd_out;
   // CHECK-NEXT:    assign p2 = paramd2_out;
   // CHECK-NEXT:  endmodule
-
 
   rtl.module @shl(%a: i1) -> (%b: i1) {
     %0 = rtl.shl %a, %a : i1

@@ -79,6 +79,8 @@ static void getTypeDims(SmallVectorImpl<int64_t> &dims, Type type,
     return getTypeDims(dims, uarray.getElementType(), loc);
   if (type.isa<InterfaceType>())
     return;
+  if (type.isa<StructType>())
+    return;
 
   int width;
   if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
@@ -157,6 +159,79 @@ static bool isZeroBitType(Type type) {
 
   // We have an open type system, so assume it is ok.
   return false;
+}
+
+
+// structs and logic/reg/wire are base types that arrays are built up from
+// and they are printed independently of their context.  Integers and arrays and
+// unpacked arrays build up non-trivial array bound definitions on each side of
+// the name.
+
+// Print out the array subscripts after a wire/port declaration.
+static void printArraySubscriptsPre(Type type, raw_ostream &os) {
+  TypeSwitch<Type, void>(type)
+    .Case<InOutType>([&](InOutType inout) {
+      printArraySubscriptsPre(inout.getElementType(), os);
+    })
+    .Case<ArrayType>([&](ArrayType array) {
+    os << '[' << (array.getSize() - 1) << ":0]";
+    printArraySubscriptsPre(array.getElementType(), os);
+    })
+    .Case<UnpackedArrayType>([&](UnpackedArrayType array) {
+    printArraySubscriptsPre(array.getElementType(), os);
+    })
+    .Case<IntegerType>([&](IntegerType integer) {
+    if (integer.getWidth() != 1)
+      os << '[' << (integer.getWidth() - 1) << ":0]";
+  });
+}
+
+// Print out the array subscripts after a wire/port declaration.
+static void printArraySubscriptsPost(Type type, raw_ostream &os) {
+  if (auto inout = type.dyn_cast<InOutType>())
+    printArraySubscriptsPost(inout.getElementType(), os);
+  else if (auto array = type.dyn_cast<UnpackedArrayType>()) {
+    printArraySubscriptsPost(array.getElementType(), os);
+    os << '[' << (array.getSize() - 1) << ":0]";
+  }
+}
+
+// Output the basic type that is to the left of any dimensions
+// returns whether a base type was emitted
+static bool baseType(Type type, StringRef baseIntType, raw_ostream & os) {
+  return TypeSwitch<Type, bool>(type)
+    .Case<IntegerType>([&](IntegerType integerType) {
+      if (baseIntType.empty())
+        return false;
+      os << baseIntType;
+      return true;
+    })
+    .Case<InOutType>([&](InOutType inoutType) {
+      return baseType(inoutType.getElementType(), baseIntType, os);
+    })
+    .Case<StructType>([&](StructType structType) {
+      os << "struct packed {";
+      llvm::interleave(structType.getElements(), os, [&](auto& element) {
+        baseType(element.type, "logic", os);
+        os << ' ';
+        printArraySubscriptsPre(element.type, os);
+        os << ' ' << element.name;
+        printArraySubscriptsPost(element.type, os);
+        os << ';';
+      }, " ");
+      os << '}';
+      return true;
+    })
+    .Case<ArrayType>([&](ArrayType arrayType) {
+      return baseType(arrayType.getElementType(), baseIntType, os);
+    })
+    .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
+      return baseType(arrayType.getElementType(), baseIntType, os);
+    })
+    .Default([&](Type) {
+      os << "<<invalid type>>";
+      return true; 
+    });
 }
 
 /// Return true if this is a noop cast that will emit with no syntax.
@@ -698,6 +773,9 @@ private:
 
   SubExprInfo visitComb(BitcastOp op);
 
+  SubExprInfo visitComb(StructExtractOp op); 
+  SubExprInfo visitComb(StructInjectOp op); 
+
 private:
   /// This is set (before a visit method is called) if emitSubExpr would
   /// prefer to get an output of a specific sign.  This is a hint to cause the
@@ -1036,6 +1114,30 @@ SubExprInfo ExprEmitter::visitComb(MuxOp op) {
 
   return {Conditional, signedness};
 }
+
+SubExprInfo ExprEmitter::visitComb(StructExtractOp op) {
+  auto structPrec = emitSubExpr(op.input(), Selection);
+  os << '.' << op.field();
+  return {Selection, structPrec.signedness};
+}
+
+SubExprInfo ExprEmitter::visitComb(StructInjectOp op) {
+  StructType stype = op.getType().cast<StructType>();
+  os << "'{";
+  llvm::interleaveComma(stype.getElements(), os,
+  [&] (const StructType::FieldInfo& field) {
+    os << field.name << ": ";
+    if (field.name == op.field()) {
+      emitSubExpr(op.newValue(), Selection);
+    } else {
+      emitSubExpr(op.input(), Selection);
+      os << '.' << field.name;
+    }
+  });  
+  os << '}';
+  return {Selection, IsUnsigned};
+}
+
 
 SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
   emitter.emitOpError(op, "cannot emit this expression to Verilog");
@@ -1773,17 +1875,6 @@ static bool isExpressionEmittedInline(Operation *op) {
   return op->getResult(0).hasOneUse();
 }
 
-// Print out the array subscripts after a wire/port declaration.
-static void printArraySubscripts(Type type, raw_ostream &os) {
-  if (auto inout = type.dyn_cast<InOutType>())
-    return printArraySubscripts(inout.getElementType(), os);
-
-  if (auto array = type.dyn_cast<UnpackedArrayType>()) {
-    printArraySubscripts(array.getElementType(), os);
-    os << '[' << (array.getSize() - 1) << ":0]";
-  }
-}
-
 void ModuleEmitter::collectNamesEmitDecls(Block &block) {
   // In the first pass, we fill in the symbol table, calculate the max width
   // of the declaration words and the max type width.
@@ -1902,7 +1993,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       os << "()";
     } else {
       // Print out any array subscripts.
-      printArraySubscripts(type, os);
+      printArraySubscriptsPost(type, os);
     }
 
     os << ';';
@@ -1977,7 +2068,9 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
     portTypeStrings.push_back({});
     {
       llvm::raw_svector_ostream stringStream(portTypeStrings.back());
-      emitTypeDimWithSpaceIfNeeded(port.type, module.getLoc(), stringStream);
+      if (baseType(port.type, {}, stringStream)) // No type for ints in ports
+        stringStream << " ";
+      printArraySubscriptsPre(port.type, stringStream);
     }
 
     maxTypeWidth = std::max(portTypeStrings.back().size(), maxTypeWidth);
@@ -2017,7 +2110,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
 
     // Emit the name.
     os << portInfo[portIdx].getName();
-    printArraySubscripts(portType, os);
+    printArraySubscriptsPost(portType, os);
     ++portIdx;
 
     // If we have any more ports with the same types and the same direction,
@@ -2034,7 +2127,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
 
       // Append this to the running port decl.
       os << ", " << name;
-      printArraySubscripts(portType, os);
+      printArraySubscriptsPost(portType, os);
       ++portIdx;
     }
 
