@@ -641,7 +641,6 @@ private:
 
   // Other
   SubExprInfo visitComb(ArraySliceOp op);
-  SubExprInfo visitComb(ArrayGetOp op);
   SubExprInfo visitComb(ArrayCreateOp op);
   SubExprInfo visitComb(ArrayIndexOp op);
   SubExprInfo visitComb(MuxOp op);
@@ -999,14 +998,6 @@ SubExprInfo ExprEmitter::visitComb(ArraySliceOp op) {
   os << '[';
   emitSubExpr(op.lowIndex(), LowestPrecedence);
   os << "+:" << dstWidth << ']';
-  return {Selection, arrayPrec.signedness};
-}
-
-SubExprInfo ExprEmitter::visitComb(ArrayGetOp op) {
-  auto arrayPrec = emitSubExpr(op.input(), Selection);
-  os << '[';
-  emitSubExpr(op.index(), LowestPrecedence);
-  os << ']';
   return {Selection, arrayPrec.signedness};
 }
 
