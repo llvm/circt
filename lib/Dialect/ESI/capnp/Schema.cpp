@@ -416,21 +416,23 @@ Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
 }
 
 namespace {
-/// Utility class for convenience operations on slice'n'dice operations and
-/// types.
+/// Something which is appropriate for slicing and dicing. Contains helper
+/// methods to assist with naming and casting.
 struct Vegetable {
 public:
   Vegetable(OpBuilder &b, Value init) : builder(&b), s(init) {}
 
   /// Set the "name" attribute of a value's op.
-  Vegetable &name(const Twine &name) {
+  template <typename T = Vegetable>
+  T &name(const Twine &name) {
     SmallString<32> nameStr;
     auto nameAttr = StringAttr::get(name.toStringRef(nameStr), ctxt());
     s.getDefiningOp()->setAttr("name", nameAttr);
-    return *this;
+    return *(T *)this;
   }
-  Vegetable &name(capnp::Text::Reader fieldName, const Twine &nameSuffix) {
-    return name(StringRef(fieldName.cStr()) + nameSuffix);
+  template <typename T = Vegetable>
+  T &name(capnp::Text::Reader fieldName, const Twine &nameSuffix) {
+    return name<T>(StringRef(fieldName.cStr()) + nameSuffix);
   }
 
   /// Construct a bitcast.
@@ -505,15 +507,9 @@ public:
     Value newSlice = builder->create<rtl::ArraySliceOp>(loc(), dstTy, s, lsb);
     return Slice(this, llvm::Optional<int64_t>(), newSlice);
   }
-
-  Slice &name(const Twine &name) {
-    SmallString<32> nameStr;
-    auto nameAttr = StringAttr::get(name.toStringRef(nameStr), ctxt());
-    s.getDefiningOp()->setAttr("name", nameAttr);
-    return *this;
-  }
+  Slice &name(const Twine &name) { return Vegetable::name<Slice>(name); }
   Slice &name(capnp::Text::Reader fieldName, const Twine &nameSuffix) {
-    return name(StringRef(fieldName.cStr()) + nameSuffix);
+    return Vegetable::name<Slice>(fieldName.cStr(), nameSuffix);
   }
 
   /// Return the root of this slice hierarchy.
