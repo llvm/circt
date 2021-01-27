@@ -65,7 +65,8 @@ OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
     auto width = getType().getWidthOrSentinel();
     if (width == -1)
       width = 2;
-    return IntegerAttr::get(IntegerType::get(getContext(), width), 1);
+    if (width != 0)
+      return IntegerAttr::get(IntegerType::get(getContext(), width), 1);
   }
 
   /// div(x, 1) -> x : (uint, uint) -> uint
