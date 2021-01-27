@@ -425,8 +425,7 @@ public:
   /// Set the "name" attribute of a value's op.
   Vegetable &name(const Twine &name) {
     SmallString<32> nameStr;
-    name.toStringRef(nameStr);
-    auto nameAttr = StringAttr::get(nameStr, ctxt());
+    auto nameAttr = StringAttr::get(name.toStringRef(nameStr), ctxt());
     s.getDefiningOp()->setAttr("name", nameAttr);
     return *this;
   }
@@ -509,8 +508,7 @@ public:
 
   Slice &name(const Twine &name) {
     SmallString<32> nameStr;
-    name.toStringRef(nameStr);
-    auto nameAttr = StringAttr::get(nameStr, ctxt());
+    auto nameAttr = StringAttr::get(name.toStringRef(nameStr), ctxt());
     s.getDefiningOp()->setAttr("name", nameAttr);
     return *this;
   }

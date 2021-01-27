@@ -15,9 +15,8 @@
 using namespace circt::esi::cosim;
 
 Endpoint::Endpoint(uint64_t sendTypeId, int sendTypeMaxSize,
-                   uint64_t recvTypeId, int recvTypeMaxSize, unsigned epId)
-    : sendTypeId(sendTypeId), recvTypeId(recvTypeId), epId(epId), inUse(false) {
-}
+                   uint64_t recvTypeId, int recvTypeMaxSize)
+    : sendTypeId(sendTypeId), recvTypeId(recvTypeId), inUse(false) {}
 Endpoint::~Endpoint() {}
 
 bool Endpoint::setInUse() {
@@ -51,7 +50,7 @@ bool EndpointRegistry::registerEndpoint(int epId, uint64_t sendTypeId,
                     std::forward_as_tuple(epId),
                     // Endpoint constructor args.
                     std::forward_as_tuple(sendTypeId, sendTypeMaxSize,
-                                          recvTypeId, recvTypeMaxSize, epId));
+                                          recvTypeId, recvTypeMaxSize));
   return true;
 }
 
