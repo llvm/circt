@@ -326,6 +326,31 @@ def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
   ];
 }
 
+class IndexBitWidthConstraint<string index, string input>
+  : TypesMatchWith<"Index width should be exactly clog2 (size of array)",
+                   input, index,
+                   [{
+    IntegerType::get($_self.getContext(),
+                     llvm::Log2_64_Ceil($_self.cast<ArrayType>().getSize()))
+                   }]>;
+
+class ArrayElementTypeConstraint<string result, string input>
+  : TypesMatchWith<"Result must be arrays element type",
+                   input, result,
+                   [{ $_self.cast<ArrayType>().getElementType() }]>;
+
+def ArrayGetOp : RTLOp<"array_get",
+    [NoSideEffect, IndexBitWidthConstraint<"index", "input">,
+     ArrayElementTypeConstraint<"result", "input">]> {
+  let summary = "Get the value in an array at the specified index";
+  let arguments = (ins ArrayType:$input, RTLIntegerType:$index);
+  let results = (outs RTLNonInOutType:$result);
+
+  let assemblyFormat = [{
+    $input`[`$index`]` attr-dict `:` type($input)
+  }];
+}
+
 def ArrayCreateOp : RTLOp<"array_create", [NoSideEffect, SameTypeOperands]> {
   let summary = "Create an array from values";
   let description = [{
