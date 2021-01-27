@@ -163,8 +163,10 @@ static bool isZeroBitType(Type type) {
 
 // structs and logic/reg/wire are base types that arrays are built up from
 // and they are printed independently of their context.  Integers and arrays and
-// unpacked arrays build up non-trivial array bound definitions on each side of
-// the name.
+// unpacked arrays create non-trivial array bound definitions on each side of
+// the name.  So we break printing up into those three parts: baseType
+// (struct,logic,reg,wire), packed dimensions (integer bitwidth, packed array
+// width), name (left to caller), and unpacked dimensions.
 
 // Print out the array subscripts after a wire/port declaration.
 static void printArraySubscriptsPre(Type type, Location loc, raw_ostream &os) {
