@@ -76,3 +76,15 @@ module IntAccNoBP (
     end
   end
 endmodule
+
+module IntArrSum (
+  input clk,
+  input rstn,
+  IValidReady_array_i16_s2.source arr,
+  IValidReady_i32.sink totalOut
+);
+
+  assign totalOut.valid = arr.valid;
+  assign arr.ready = totalOut.ready;
+  assign totalOut.data = 32'(arr.data[0]) + 32'(arr.data[1]);
+endmodule

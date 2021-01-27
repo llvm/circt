@@ -117,6 +117,31 @@ private:
 } // namespace esi
 } // namespace circt
 
+/// Return the number of bits used by a Capnp primitive type.
+static size_t bits(::capnp::schema::Type::Reader type) {
+  using ty = ::capnp::schema::Type;
+  switch (type.which()) {
+  case ty::VOID:
+    return 0;
+  case ty::BOOL:
+    return 1;
+  case ty::UINT8:
+  case ty::INT8:
+    return 8;
+  case ty::UINT16:
+  case ty::INT16:
+    return 16;
+  case ty::UINT32:
+  case ty::INT32:
+    return 32;
+  case ty::UINT64:
+  case ty::INT64:
+    return 64;
+  default:
+    assert(false && "Type not yet supported");
+  }
+}
+
 TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
   fieldTypes =
       TypeSwitch<Type, ArrayRef<Type>>(type)
@@ -206,13 +231,43 @@ static bool isSupported(Type type) {
 /// Returns true if the type is currently supported.
 bool TypeSchemaImpl::isSupported() const { return ::isSupported(type); }
 
+/// Returns the expected size of an array (capnp list) in 64-bit words.
+static int64_t size(rtl::ArrayType mType, capnp::schema::Field::Reader cField) {
+  assert(cField.isSlot());
+  auto cType = cField.getSlot().getType();
+  assert(cType.isList());
+  size_t elementBits = bits(cType.getList().getElementType());
+  int64_t listBits = mType.getSize() * elementBits;
+  return llvm::divideCeil(listBits, 64);
+}
+
+/// Compute the size of a capnp struct, in 64-bit words.
+static int64_t size(capnp::schema::Node::Struct::Reader cStruct,
+                    ArrayRef<Type> mFields) {
+  using namespace capnp::schema;
+  int64_t size = (1 + // Header
+                  cStruct.getDataWordCount() + cStruct.getPointerCount());
+  auto cFields = cStruct.getFields();
+  for (Field::Reader cField : cFields) {
+    assert(!cField.isGroup() && "Capnp groups are not supported");
+    assert(cField.getCodeOrder() < mFields.size());
+
+    int64_t pointedToSize =
+        TypeSwitch<mlir::Type, int64_t>(mFields[cField.getCodeOrder()])
+            .Case([](IntegerType) { return 0; })
+            .Case([cField](rtl::ArrayType mType) {
+              return ::size(mType, cField);
+            });
+    size += pointedToSize;
+  }
+  return size; // Convert from 64-bit words to bits.
+}
+
 // Compute the expected size of the capnp message in bits.
 size_t TypeSchemaImpl::size() const {
   auto schema = getTypeSchema();
   auto structProto = schema.getProto().getStruct();
-  return 64 * // Convert from 64-bit words to bits.
-         (1 + // Header
-          structProto.getDataWordCount() + structProto.getPointerCount());
+  return ::size(structProto, fieldTypes) * 64;
 }
 
 /// Write a valid Capnp name for 'type'.
@@ -325,30 +380,6 @@ bool TypeSchemaImpl::operator==(const TypeSchemaImpl &that) const {
 // These have the potential to get large and complex as we add more types. The
 // encoding spec is here: https://capnproto.org/encoding.html
 //===----------------------------------------------------------------------===//
-
-static size_t bits(::capnp::schema::Type::Reader type) {
-  using ty = ::capnp::schema::Type;
-  switch (type.which()) {
-  case ty::VOID:
-    return 0;
-  case ty::BOOL:
-    return 1;
-  case ty::UINT8:
-  case ty::INT8:
-    return 8;
-  case ty::UINT16:
-  case ty::INT16:
-    return 16;
-  case ty::UINT32:
-  case ty::INT32:
-    return 32;
-  case ty::UINT64:
-  case ty::INT64:
-    return 64;
-  default:
-    assert(false && "Type not yet supported");
-  }
-}
 
 /// Build an RTL/SV dialect capnp encoder for this type. Inputs need to be
 /// packed on unpadded.

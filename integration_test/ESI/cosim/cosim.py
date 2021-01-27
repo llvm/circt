@@ -22,6 +22,8 @@ class CosimBase:
         for iface in ifaces:
             if iface.endpointID == epNum:
                 # Optionally check that the type IDs match.
+                print(f"SendTypeId: {iface.sendTypeID:x}")
+                print(f"RecvTypeId: {iface.recvTypeID:x}")
                 if sendType != None:
                     assert (iface.sendTypeID ==
                             sendType.schema.node.id)
@@ -29,7 +31,7 @@ class CosimBase:
                     assert (iface.recvTypeID ==
                             recvType.schema.node.id)
 
-                openResp = self.cosim.open(ifaces[0]).wait()
+                openResp = self.cosim.open(iface).wait()
                 assert openResp.iface is not None
                 return openResp.iface
         assert False, "Could not find specified EndpointID"

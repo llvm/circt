@@ -5,9 +5,10 @@
 // PY: import basic
 // PY: rpc = basic.BasicSystemTester(rpcschemapath, simhostport)
 // PY: rpc.testIntAcc(25)
+// PY: rpc.testVectorSum(25)
 
 rtl.externmodule @IntAccNoBP(%clk: i1, %rstn: i1, %ints: !esi.channel<i32>) -> (%totalOut: !esi.channel<i32>)
-rtl.externmodule @IntArrSum(%clk: i1, %rstn: i1, %ints: !esi.channel<!rtl.array<2xi16>>) -> (%totalOut: !esi.channel<i32>)
+rtl.externmodule @IntArrSum(%clk: i1, %rstn: i1, %arr: !esi.channel<!rtl.array<2xi16>>) -> (%totalOut: !esi.channel<i32>)
 
 rtl.module @ints(%clk: i1, %rstn: i1) {
   %intsIn = esi.cosim %clk, %rstn, %intsTotalBuffered, 1 {name="TestEP"} : !esi.channel<i32> -> !esi.channel<i32>
@@ -17,7 +18,7 @@ rtl.module @ints(%clk: i1, %rstn: i1) {
 }
 
 rtl.module @array(%clk: i1, %rstn: i1) {
-  %arrIn = esi.cosim %clk, %rstn, %arrTotalBuffered, 1 {name="TestEP"} : !esi.channel<i32> -> !esi.channel<!rtl.array<2xi16>>
+  %arrIn = esi.cosim %clk, %rstn, %arrTotalBuffered, 2 {name="TestEP"} : !esi.channel<i32> -> !esi.channel<!rtl.array<2xi16>>
   %arrInBuffered = esi.buffer %clk, %rstn, %arrIn {stages=2, name="arrChan"} : !rtl.array<2xi16>
   %arrTotal = rtl.instance "acc" @IntArrSum(%clk, %rstn, %arrInBuffered) : (i1, i1, !esi.channel<!rtl.array<2xi16>>) -> (!esi.channel<i32>)
   %arrTotalBuffered = esi.buffer %clk, %rstn, %arrTotal {stages=2, name="totalChan"} : i32

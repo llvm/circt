@@ -40,7 +40,7 @@ public:
 
   /// Construct an endpoint which knows and the type IDs in both directions.
   Endpoint(uint64_t sendTypeId, int sendTypeMaxSize, uint64_t recvTypeId,
-           int recvTypeMaxSize);
+           int recvTypeMaxSize, unsigned epId);
   ~Endpoint();
   /// Disallow copying. There is only ONE endpoint object per logical endpoint
   /// so copying is almost always a bug.
@@ -91,6 +91,7 @@ public:
 private:
   const uint64_t sendTypeId;
   const uint64_t recvTypeId;
+  const unsigned epId;
   bool inUse;
 
   using Lock = std::lock_guard<std::mutex>;
