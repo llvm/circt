@@ -168,7 +168,8 @@ static bool isZeroBitType(Type type) {
 // (struct,logic,reg,wire), packed dimensions (integer bitwidth, packed array
 // width), name (left to caller), and unpacked dimensions.
 
-// Print out the array subscripts after a wire/port declaration.
+// Print out the packed array subscripts and integer bitwidth after a wire/port
+// declaration.
 static void printArraySubscriptsPre(Type type, Location loc, raw_ostream &os) {
   TypeSwitch<Type, void>(type)
       .Case<InOutType>([&](InOutType inout) {
@@ -193,6 +194,7 @@ static void printArraySubscriptsPre(Type type, Location loc, raw_ostream &os) {
       });
 }
 
+// Print out the unpacked array subscripts after a variable/port/field name.
 static bool hasArraySubscriptsPre(Type type) {
   return TypeSwitch<Type, bool>(type)
       .Case<InOutType>([&](InOutType inout) {
