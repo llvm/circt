@@ -14,6 +14,7 @@
 
 BUILD_DIR=${1:-"build"}
 INSTALL_DIR=${2:-"install"}
+BUILD_TYPE=${3:-"Release"}
 
 mkdir -p llvm/$BUILD_DIR
 mkdir -p llvm/$INSTALL_DIR
@@ -30,7 +31,7 @@ cmake ../llvm \
   -DCMAKE_C_COMPILER=clang \
   -DCMAKE_CXX_COMPILER=clang++ \
   -DLLVM_ENABLE_LLD=ON \
-  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
   -DLLVM_ENABLE_ASSERTIONS=ON
 
 cmake --build . --target install -- -j$(nproc)

@@ -405,8 +405,19 @@ Value FIRRTLTypesLowering::getBundleLowering(Value oldValue,
 // field.
 void FIRRTLTypesLowering::getAllBundleLowerings(
     Value value, SmallVectorImpl<Value> &results) {
+  // Get the original value's bundle type.
   BundleType bundleType = getCanonicalBundleType(value.getType());
   assert(bundleType && "attempted to get bundle lowerings for non-bundle type");
-  for (auto element : bundleType.getElements())
-    results.push_back(getBundleLowering(value, element.name));
+
+  // Flatten the original value's bundle type.
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+  flattenBundleTypes(bundleType, "", false, fieldTypes);
+
+  for (auto element : fieldTypes) {
+    // Remove the field separator prefix.
+    auto name = StringRef(element.suffix).drop_front(1);
+
+    // Store the resulting lowering for this flat value.
+    results.push_back(getBundleLowering(value, name));
+  }
 }

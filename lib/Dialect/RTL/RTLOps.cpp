@@ -718,9 +718,9 @@ static ParseResult parseArrayCreateOp(OpAsmParser &parser,
 }
 
 static void print(OpAsmPrinter &p, ArrayCreateOp op) {
-  p << "array_create ";
+  p << "rtl.array_create ";
   p.printOperands(op.inputs());
-  p << " : ( " << op.inputs()[0].getType() << ")";
+  p << " : (" << op.inputs()[0].getType() << ")";
 }
 
 void ArrayCreateOp::build(OpBuilder &b, OperationState &state,

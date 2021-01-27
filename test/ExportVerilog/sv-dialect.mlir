@@ -42,7 +42,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
 
   // CHECK-NEXT: always_ff @(posedge clock)
   // CHECK-NEXT:   $fwrite(32'h80000002, "Yo\n");
-  sv.alwaysff "posedge", %clock {
+  sv.alwaysff(posedge %clock) {
     sv.fwrite "Yo\n"
   }
   
@@ -52,10 +52,10 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT:   else
   // CHECK-NEXT:     $fwrite(32'h80000002, "Sync Main Block\n");
   // CHECK-NEXT: end // always_ff @(posedge)
-  sv.alwaysff "posedge", %clock, syncreset, "posedge", %cond {
-    sv.fwrite "Sync Reset Block\n"
-  } {
+  sv.alwaysff(posedge %clock) {
     sv.fwrite "Sync Main Block\n"
+  } ( syncreset : posedge %cond) {
+    sv.fwrite "Sync Reset Block\n"
   }
 
   // CHECK-NEXT: always_ff @(posedge clock or negedge cond) begin
@@ -64,11 +64,11 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT:   else
   // CHECK-NEXT:     $fwrite(32'h80000002, "Async Main Block\n");
   // CHECK-NEXT: end // always_ff @(posedge or negedge)
-  sv.alwaysff "posedge", %clock, asyncreset, "negedge", %cond {
-    sv.fwrite "Async Reset Block\n"
-  } {
+  sv.alwaysff(posedge %clock) {
     sv.fwrite "Async Main Block\n"
-  }
+  } ( asyncreset : negedge %cond) {
+    sv.fwrite "Async Reset Block\n"
+  } 
 
   %c42 = rtl.constant (42 : i42) : i42
 
