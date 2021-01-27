@@ -250,8 +250,11 @@ static int64_t size(capnp::schema::Node::Struct::Reader cStruct,
   auto cFields = cStruct.getFields();
   for (Field::Reader cField : cFields) {
     assert(!cField.isGroup() && "Capnp groups are not supported");
+    // Capnp code order is the index in the the MLIR fields array.
     assert(cField.getCodeOrder() < mFields.size());
 
+    // The size of the thing to which the pointer is pointing, not the size of
+    // the pointer itself.
     int64_t pointedToSize =
         TypeSwitch<mlir::Type, int64_t>(mFields[cField.getCodeOrder()])
             .Case([](IntegerType) { return 0; })
@@ -375,45 +378,8 @@ bool TypeSchemaImpl::operator==(const TypeSchemaImpl &that) const {
 }
 
 //===----------------------------------------------------------------------===//
-// Capnp encode / decode RTL builders.
-//
-// These have the potential to get large and complex as we add more types. The
-// encoding spec is here: https://capnproto.org/encoding.html
+// Helper classes for common operations in the encode / decoders
 //===----------------------------------------------------------------------===//
-
-/// Build an RTL/SV dialect capnp encoder for this type. Inputs need to be
-/// packed on unpadded.
-Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
-                                   Value operand) {
-  MLIRContext *ctxt = b.getContext();
-  auto loc = operand.getDefiningOp()->getLoc();
-  ::capnp::schema::Node::Reader rootProto = getTypeSchema().getProto();
-
-  auto i16 = b.getIntegerType(16);
-  auto i32 = b.getIntegerType(32);
-
-  auto typeAndOffset = b.create<rtl::ConstantOp>(loc, i32, 0);
-  auto ptrSize = b.create<rtl::ConstantOp>(loc, i16, 0);
-  auto dataSize = b.create<rtl::ConstantOp>(
-      loc, i16, rootProto.getStruct().getDataWordCount());
-  auto structPtr = b.create<rtl::ConcatOp>(
-      loc, ValueRange{ptrSize, dataSize, typeAndOffset});
-
-  auto operandIntTy = operand.getType().cast<IntegerType>();
-  uint16_t paddingBits =
-      rootProto.getStruct().getDataWordCount() * 64 - operandIntTy.getWidth();
-  auto operandCasted = b.create<rtl::BitcastOp>(
-      loc,
-      IntegerType::get(ctxt, operandIntTy.getWidth(), IntegerType::Signless),
-      operand);
-
-  IntegerType iPaddingTy = IntegerType::get(ctxt, paddingBits);
-  auto padding = b.create<rtl::ConstantOp>(loc, iPaddingTy, 0);
-  auto dataSection =
-      b.create<rtl::ConcatOp>(loc, ValueRange{padding, operandCasted});
-
-  return b.create<rtl::ConcatOp>(loc, ValueRange{dataSection, structPtr});
-}
 
 namespace {
 /// Something which is appropriate for slicing and dicing. Contains helper
@@ -535,14 +501,18 @@ private:
 } // anonymous namespace
 
 namespace {
-/// Utility class for building sv::AssertOps.
+/// Utility class for building sv::AssertOps. Since SV assertions need to be in
+/// an `always` block (so the simulator knows when to check the assertion), we
+/// build them all in a region intended for assertions.
 class AssertBuilder : public OpBuilder {
 public:
   AssertBuilder(Location loc, Region &r) : OpBuilder(r), loc(loc) {}
 
   void assertPred(Vegetable veg, ICmpPredicate pred, int64_t expected) {
-    if (veg.getValue().getType().isa<IntegerType>())
-      assertEqual(veg.getValue(), expected);
+    if (veg.getValue().getType().isa<IntegerType>()) {
+      assertPred(veg.getValue(), pred, expected);
+      return;
+    }
 
     auto valTy = veg.getValue().getType().dyn_cast<rtl::ArrayType>();
     assert(valTy && valTy.getElementType() == veg.b().getIntegerType(1) &&
@@ -561,12 +531,50 @@ private:
     create<sv::AssertOp>(
         loc, create<rtl::ICmpOp>(loc, getI1Type(), pred, val, expectedVal));
   }
-  void assertEqual(Value val, int64_t expected) {
-    assertPred(val, ICmpPredicate::eq, expected);
-  }
   Location loc;
 };
 } // anonymous namespace
+
+//===----------------------------------------------------------------------===//
+// Capnp encode / decode RTL builders.
+//
+// These have the potential to get large and complex as we add more types. The
+// encoding spec is here: https://capnproto.org/encoding.html
+//===----------------------------------------------------------------------===//
+
+/// Build an RTL/SV dialect capnp encoder for this type. Inputs need to be
+/// packed on unpadded.
+Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
+                                   Value operand) {
+  MLIRContext *ctxt = b.getContext();
+  auto loc = operand.getDefiningOp()->getLoc();
+  ::capnp::schema::Node::Reader rootProto = getTypeSchema().getProto();
+
+  auto i16 = b.getIntegerType(16);
+  auto i32 = b.getIntegerType(32);
+
+  auto typeAndOffset = b.create<rtl::ConstantOp>(loc, i32, 0);
+  auto ptrSize = b.create<rtl::ConstantOp>(loc, i16, 0);
+  auto dataSize = b.create<rtl::ConstantOp>(
+      loc, i16, rootProto.getStruct().getDataWordCount());
+  auto structPtr = b.create<rtl::ConcatOp>(
+      loc, ValueRange{ptrSize, dataSize, typeAndOffset});
+
+  auto operandIntTy = operand.getType().cast<IntegerType>();
+  uint16_t paddingBits =
+      rootProto.getStruct().getDataWordCount() * 64 - operandIntTy.getWidth();
+  auto operandCasted = b.create<rtl::BitcastOp>(
+      loc,
+      IntegerType::get(ctxt, operandIntTy.getWidth(), IntegerType::Signless),
+      operand);
+
+  IntegerType iPaddingTy = IntegerType::get(ctxt, paddingBits);
+  auto padding = b.create<rtl::ConstantOp>(loc, iPaddingTy, 0);
+  auto dataSection =
+      b.create<rtl::ConcatOp>(loc, ValueRange{padding, operandCasted});
+
+  return b.create<rtl::ConcatOp>(loc, ValueRange{dataSection, structPtr});
+}
 
 /// Construct the proper operations to decode a capnp list.
 static Vegetable decodeList(rtl::ArrayType type,
@@ -640,12 +648,14 @@ static Vegetable decodeList(rtl::ArrayType type,
   auto arrayOfElements = b.create<rtl::BitcastOp>(
       loc, rtl::ArrayType::get(capnpElemTy, type.getSize()), listSlice);
 
+  // Collect the reduced elements.
   SmallVector<Value, 64> arrayValues;
   IntegerType idxTy = b.getIntegerType(llvm::Log2_32_Ceil(type.getSize()));
   for (size_t i = 0, e = type.getSize(); i < e; ++i) {
     auto idx = b.create<rtl::ConstantOp>(loc, idxTy, i);
     auto capnpElem =
         b.create<rtl::ArrayGetOp>(loc, capnpElemTy, arrayOfElements, idx);
+    // TODO: Reduce width, accounting for signedness.
     auto esiElem =
         b.create<rtl::BitcastOp>(loc, type.getElementType(), capnpElem);
     arrayValues.push_back(esiElem);
@@ -706,21 +716,13 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
 
   // We expect the data section to be equal to the computed data section size.
   auto dataSectionSize = assertPtr.slice(32, 16).cast(i16, "dataSectionSize");
-  auto expectedDataSectionSize = asserts.create<rtl::ConstantOp>(
-      loc, i16, rootProto.getStruct().getDataWordCount());
-  asserts.create<sv::AssertOp>(
-      loc,
-      asserts.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
-                                  dataSectionSize, expectedDataSectionSize));
+  asserts.assertEqual(dataSectionSize,
+                      rootProto.getStruct().getDataWordCount());
 
   // We expect the pointer section to be equal to the computed pointer section
   // size.
   auto ptrSectionSize = assertPtr.slice(48, 16).cast(i16, "ptrSectionSize");
-  auto expectedPtrSectionSize = asserts.create<rtl::ConstantOp>(
-      loc, i16, rootProto.getStruct().getPointerCount() * 64);
-  asserts.create<sv::AssertOp>(
-      loc, asserts.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
-                                       ptrSectionSize, expectedPtrSectionSize));
+  asserts.assertEqual(ptrSectionSize, rootProto.getStruct().getPointerCount());
 
   // Get pointers to the data and pointer sections.
   auto st = rootProto.getStruct();
