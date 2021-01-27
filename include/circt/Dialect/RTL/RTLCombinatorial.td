@@ -343,10 +343,10 @@ def ArrayGetOp : RTLOp<"array_get",
      ArrayElementTypeConstraint<"result", "input">]> {
   let summary = "Get the value in an array at the specified index";
   let arguments = (ins ArrayType:$input, RTLIntegerType:$index);
-  let results = (outs AnyType:$result);
+  let results = (outs RTLNonInOutType:$result);
 
   let assemblyFormat = [{
-    $input`[`$index`]` attr-dict `:` `(` type($input) `)`
+    $input`[`$index`]` attr-dict `:` type($input)
   }];
 }
 

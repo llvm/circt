@@ -58,8 +58,8 @@ module {
     %arrCreated = rtl.array_create %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone : (i4)
     %35 = rtl.array_slice %arrCreated at %a : (!rtl.array<9xi4>) -> !rtl.array<3xi4>
 
-    %elem2d = rtl.array_get %array2d[%a] : (!rtl.array<12 x array<10xi4>>)
-    %37 = rtl.array_get %elem2d[%b] : (!rtl.array<10xi4>)
+    %elem2d = rtl.array_get %array2d[%a] : !rtl.array<12 x array<10xi4>>
+    %37 = rtl.array_get %elem2d[%b] : !rtl.array<10xi4>
 
     %36 = rtl.concat %a, %a, %a : (i4, i4, i4) -> i12
 
