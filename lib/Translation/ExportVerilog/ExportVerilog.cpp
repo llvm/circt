@@ -161,29 +161,48 @@ static bool isZeroBitType(Type type) {
   return false;
 }
 
-
 // structs and logic/reg/wire are base types that arrays are built up from
 // and they are printed independently of their context.  Integers and arrays and
 // unpacked arrays build up non-trivial array bound definitions on each side of
 // the name.
 
 // Print out the array subscripts after a wire/port declaration.
-static void printArraySubscriptsPre(Type type, raw_ostream &os) {
+static void printArraySubscriptsPre(Type type, Location loc, raw_ostream &os) {
   TypeSwitch<Type, void>(type)
-    .Case<InOutType>([&](InOutType inout) {
-      printArraySubscriptsPre(inout.getElementType(), os);
-    })
-    .Case<ArrayType>([&](ArrayType array) {
-    os << '[' << (array.getSize() - 1) << ":0]";
-    printArraySubscriptsPre(array.getElementType(), os);
-    })
-    .Case<UnpackedArrayType>([&](UnpackedArrayType array) {
-    printArraySubscriptsPre(array.getElementType(), os);
-    })
-    .Case<IntegerType>([&](IntegerType integer) {
-    if (integer.getWidth() != 1)
-      os << '[' << (integer.getWidth() - 1) << ":0]";
-  });
+      .Case<InOutType>([&](InOutType inout) {
+        printArraySubscriptsPre(inout.getElementType(), loc, os);
+      })
+      .Case<ArrayType>([&](ArrayType array) {
+        os << '[' << (array.getSize() - 1) << ":0]";
+        printArraySubscriptsPre(array.getElementType(), loc, os);
+      })
+      .Case<UnpackedArrayType>([&](UnpackedArrayType array) {
+        printArraySubscriptsPre(array.getElementType(), loc, os);
+      })
+      .Case<IntegerType>([&](IntegerType integer) {
+        if (integer.getWidth() == 0)
+          os << "/*Zero Width*/";
+        else if (integer.getWidth() != 1)
+          os << '[' << (integer.getWidth() - 1) << ":0]";
+      })
+      .Case<StructType>([&](StructType) {})
+      .Default([&](Type t) {
+        mlir::emitError(loc, "value has an unsupported verilog type ") << t;
+      });
+}
+
+static bool hasArraySubscriptsPre(Type type) {
+  return TypeSwitch<Type, bool>(type)
+      .Case<InOutType>([&](InOutType inout) {
+        return hasArraySubscriptsPre(inout.getElementType());
+      })
+      .Case<ArrayType>([&](ArrayType array) { return true; })
+      .Case<UnpackedArrayType>([&](UnpackedArrayType array) {
+        return hasArraySubscriptsPre(array.getElementType());
+      })
+      .Case<IntegerType>(
+          [&](IntegerType integer) { return integer.getWidth() != 1; })
+      .Default([&](Type) { return false; });
 }
 
 // Print out the array subscripts after a wire/port declaration.
@@ -198,40 +217,44 @@ static void printArraySubscriptsPost(Type type, raw_ostream &os) {
 
 // Output the basic type that is to the left of any dimensions
 // returns whether a base type was emitted
-static bool baseType(Type type, StringRef baseIntType, raw_ostream & os) {
+static bool baseType(Type type, StringRef baseIntType, Location loc,
+                     raw_ostream &os) {
   return TypeSwitch<Type, bool>(type)
-    .Case<IntegerType>([&](IntegerType integerType) {
-      if (baseIntType.empty())
-        return false;
-      os << baseIntType;
-      return true;
-    })
-    .Case<InOutType>([&](InOutType inoutType) {
-      return baseType(inoutType.getElementType(), baseIntType, os);
-    })
-    .Case<StructType>([&](StructType structType) {
-      os << "struct packed {";
-      llvm::interleave(structType.getElements(), os, [&](auto& element) {
-        baseType(element.type, "logic", os);
-        os << ' ';
-        printArraySubscriptsPre(element.type, os);
-        os << ' ' << element.name;
-        printArraySubscriptsPost(element.type, os);
-        os << ';';
-      }, " ");
-      os << '}';
-      return true;
-    })
-    .Case<ArrayType>([&](ArrayType arrayType) {
-      return baseType(arrayType.getElementType(), baseIntType, os);
-    })
-    .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
-      return baseType(arrayType.getElementType(), baseIntType, os);
-    })
-    .Default([&](Type) {
-      os << "<<invalid type>>";
-      return true; 
-    });
+      .Case<IntegerType>([&](IntegerType integerType) {
+        if (baseIntType.empty())
+          return false;
+        os << baseIntType;
+        return true;
+      })
+      .Case<InOutType>([&](InOutType inoutType) {
+        return baseType(inoutType.getElementType(), baseIntType, loc, os);
+      })
+      .Case<StructType>([&](StructType structType) {
+        os << "struct packed {";
+        llvm::interleave(
+            structType.getElements(), os,
+            [&](auto &element) {
+              baseType(element.type, "logic", loc, os);
+              os << ' ';
+              printArraySubscriptsPre(element.type, loc, os);
+              os << ' ' << element.name;
+              printArraySubscriptsPost(element.type, os);
+              os << ';';
+            },
+            " ");
+        os << '}';
+        return true;
+      })
+      .Case<ArrayType>([&](ArrayType arrayType) {
+        return baseType(arrayType.getElementType(), baseIntType, loc, os);
+      })
+      .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
+        return baseType(arrayType.getElementType(), baseIntType, loc, os);
+      })
+      .Default([&](Type) {
+        os << "<<invalid type>>";
+        return true;
+      });
 }
 
 /// Return true if this is a noop cast that will emit with no syntax.
@@ -774,8 +797,8 @@ private:
 
   SubExprInfo visitComb(BitcastOp op);
 
-  SubExprInfo visitComb(StructExtractOp op); 
-  SubExprInfo visitComb(StructInjectOp op); 
+  SubExprInfo visitComb(StructExtractOp op);
+  SubExprInfo visitComb(StructInjectOp op);
 
 private:
   /// This is set (before a visit method is called) if emitSubExpr would
@@ -1134,19 +1157,18 @@ SubExprInfo ExprEmitter::visitComb(StructInjectOp op) {
   StructType stype = op.getType().cast<StructType>();
   os << "'{";
   llvm::interleaveComma(stype.getElements(), os,
-  [&] (const StructType::FieldInfo& field) {
-    os << field.name << ": ";
-    if (field.name == op.field()) {
-      emitSubExpr(op.newValue(), Selection);
-    } else {
-      emitSubExpr(op.input(), Selection);
-      os << '.' << field.name;
-    }
-  });  
+                        [&](const StructType::FieldInfo &field) {
+                          os << field.name << ": ";
+                          if (field.name == op.field()) {
+                            emitSubExpr(op.newValue(), Selection);
+                          } else {
+                            emitSubExpr(op.input(), Selection);
+                            os << '.' << field.name;
+                          }
+                        });
   os << '}';
   return {Selection, IsUnsigned};
 }
-
 
 SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
   emitter.emitOpError(op, "cannot emit this expression to Verilog");
@@ -2077,9 +2099,11 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
     portTypeStrings.push_back({});
     {
       llvm::raw_svector_ostream stringStream(portTypeStrings.back());
-      if (baseType(port.type, {}, stringStream)) // No type for ints in ports
-        stringStream << " ";
-      printArraySubscriptsPre(port.type, stringStream);
+      if (baseType(port.type, {}, module.getLoc(),
+                   stringStream) // No type for ints in ports
+          && hasArraySubscriptsPre(port.type))
+        stringStream << ' ';
+      printArraySubscriptsPre(port.type, module.getLoc(), stringStream);
     }
 
     maxTypeWidth = std::max(portTypeStrings.back().size(), maxTypeWidth);
@@ -2114,8 +2138,8 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
 
     // Emit the type.
     os << portTypeStrings[portIdx];
-    if (portTypeStrings[portIdx].size() < maxTypeWidth)
-      os.indent(maxTypeWidth - portTypeStrings[portIdx].size());
+    if (maxTypeWidth > 0 && portTypeStrings[portIdx].size() < maxTypeWidth + 1)
+      os.indent(1 + maxTypeWidth - portTypeStrings[portIdx].size());
 
     // Emit the name.
     os << portInfo[portIdx].getName();
