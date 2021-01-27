@@ -103,6 +103,8 @@ func @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> i50 {
   %idx = constant 13 : i10
   // CHECK-NEXT: = rtl.array_slice %arg2 at %c13_i10 : (!rtl.array<1000xi8>) -> !rtl.array<24xi8>
   %subArray = rtl.array_slice %arg2 at %idx : (!rtl.array<1000xi8>) -> !rtl.array<24xi8>
+  // CHECK-NEXT: = rtl.array_create [[RES9]], [[RES10]] : (i19)
+  %arrCreated = rtl.array_create %small1, %small2 : (i19)
 
   // CHECK-NEXT:    return [[RES8]] : i50
   return %result : i50
