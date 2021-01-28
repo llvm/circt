@@ -22,11 +22,13 @@ class BasicSystemTester(cosim.CosimBase):
 
     def testVectorSum(self, num_msgs):
         ep = self.openEP(2, sendType=self.schema.I32,
-                         recvType=self.schema.ArrayOfI16)
+                         recvType=self.schema.ArrayOfSi13)
         for _ in range(num_msgs):
-            arr = [random.randint(0, 77), random.randint(0, 77)]
+            # Since the result is unsigned, we need to make sure the sum is
+            # never negative.
+            arr = [random.randint(-468, 777), random.randint(500, 1250)]
             print(f"Sending {arr}")
-            ep.send(self.schema.ArrayOfI16.new_message(i=arr))
+            ep.send(self.schema.ArrayOfSi13.new_message(i=arr))
             result = self.readMsg(ep, self.schema.I32)
             print(f"Got {result}")
             assert (result.i == arr[0] + arr[1])

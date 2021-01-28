@@ -142,6 +142,29 @@ static size_t bits(::capnp::schema::Type::Reader type) {
   }
 }
 
+/// Returned the signedness semantics of a Capnp type.
+static IntegerType::SignednessSemantics
+signedness(::capnp::schema::Type::Reader type) {
+  using ty = ::capnp::schema::Type;
+  switch (type.which()) {
+  case ty::VOID:
+  case ty::BOOL:
+    return IntegerType::Signless;
+  case ty::UINT8:
+  case ty::UINT16:
+  case ty::UINT32:
+  case ty::UINT64:
+    return IntegerType::Unsigned;
+  case ty::INT8:
+  case ty::INT16:
+  case ty::INT32:
+  case ty::INT64:
+    return IntegerType::Signed;
+  default:
+    assert(false && "Cannot compute signedness for type");
+  }
+}
+
 TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
   fieldTypes =
       TypeSwitch<Type, ArrayRef<Type>>(type)
@@ -391,8 +414,10 @@ public:
   /// Set the "name" attribute of a value's op.
   template <typename T = Vegetable>
   T &name(const Twine &name) {
-    SmallString<32> nameStr;
-    auto nameAttr = StringAttr::get(name.toStringRef(nameStr), ctxt());
+    std::string nameStr = name.str();
+    if (nameStr.empty())
+      return *(T *)this;
+    auto nameAttr = StringAttr::get(nameStr, ctxt());
     s.getDefiningOp()->setAttr("name", nameAttr);
     return *(T *)this;
   }
@@ -402,15 +427,35 @@ public:
   }
 
   /// Construct a bitcast.
-  Vegetable cast(Type t, StringRef name = StringRef(),
-                 Twine nameSuffix = Twine()) {
+  Vegetable cast(Type t) {
     auto dst = builder->create<rtl::BitcastOp>(loc(), t, s);
-
-    SmallString<32> nameBuffer;
-    StringRef wholeName = (name + nameSuffix).toStringRef(nameBuffer);
-    if (wholeName.size())
-      dst->setAttr("name", StringAttr::get(wholeName, ctxt()));
     return Vegetable(*builder, dst);
+  }
+
+  /// Downcast an int, accounting for signedness.
+  Vegetable downcast(IntegerType t) {
+    // Since the RTL dialect operators only operate on signless integers, we
+    // have to cast to signless first, then cast the sign back.
+    assert(s.getType().isa<IntegerType>());
+    Value signlessVal = s;
+    if (!signlessVal.getType().isSignlessInteger())
+      signlessVal = builder->create<rtl::BitcastOp>(
+          loc(), builder->getIntegerType(s.getType().getIntOrFloatBitWidth()),
+          s);
+
+    if (!t.isSigned()) {
+      auto extracted =
+          builder->create<rtl::ExtractOp>(loc(), t, signlessVal, 0);
+      return Vegetable(*builder, extracted).cast(t);
+    }
+    auto magnitude = builder->create<rtl::ExtractOp>(
+        loc(), builder->getIntegerType(t.getWidth() - 1), signlessVal, 0);
+    auto sign = builder->create<rtl::ExtractOp>(
+        loc(), builder->getIntegerType(1), signlessVal, t.getWidth() - 1);
+    auto result = builder->create<rtl::ConcatOp>(loc(), sign, magnitude);
+
+    // We still have to cast to handle signedness.
+    return Vegetable(*builder, result).cast(t);
   }
 
   Operation *operator->() const { return s.getDefiningOp(); }
@@ -436,15 +481,18 @@ namespace {
 /// children slices.
 struct Slice : public Vegetable {
 private:
-  Slice(Slice *s, llvm::Optional<int64_t> offset, Value val)
-      : Vegetable(*s->builder, val), parent(s), offsetIntoParent(offset) {
-    assert(val.getType().isa<rtl::ArrayType>());
+  Slice(Slice *parent, llvm::Optional<int64_t> offset, Value val)
+      : Vegetable(*parent->builder, val), parent(parent),
+        offsetIntoParent(offset) {
+    type = val.getType().dyn_cast<rtl::ArrayType>();
+    assert(type && "Value must be array type");
   }
 
 public:
-  Slice(OpBuilder &b, Value init)
-      : Vegetable(b, init), parent(nullptr), offsetIntoParent(0) {
-    assert(init.getType().isa<rtl::ArrayType>());
+  Slice(OpBuilder &b, Value val)
+      : Vegetable(b, val), parent(nullptr), offsetIntoParent(0) {
+    type = val.getType().dyn_cast<rtl::ArrayType>();
+    assert(type && "Value must be array type");
   }
 
   /// Create an op to slice the array from lsb to lsb + size. Return a new slice
@@ -460,22 +508,39 @@ public:
   Slice slice(Value lsb, int64_t size) {
     assert(lsb.getType().isa<IntegerType>());
 
-    unsigned expIdxWidth =
-        llvm::Log2_64_Ceil(s.getType().cast<rtl::ArrayType>().getSize());
+    unsigned expIdxWidth = llvm::Log2_64_Ceil(type.getSize());
     int64_t lsbWidth = lsb.getType().getIntOrFloatBitWidth();
     if (lsbWidth > expIdxWidth)
       lsb = builder->create<rtl::ExtractOp>(
           loc(), builder->getIntegerType(expIdxWidth), lsb, 0);
     else if (lsbWidth < expIdxWidth)
       assert(false && "LSB Value must not be smaller than expected.");
-    auto dstTy = rtl::ArrayType::get(
-        s.getType().cast<rtl::ArrayType>().getElementType(), size);
+    auto dstTy = rtl::ArrayType::get(type.getElementType(), size);
     Value newSlice = builder->create<rtl::ArraySliceOp>(loc(), dstTy, s, lsb);
     return Slice(this, llvm::Optional<int64_t>(), newSlice);
   }
   Slice &name(const Twine &name) { return Vegetable::name<Slice>(name); }
   Slice &name(capnp::Text::Reader fieldName, const Twine &nameSuffix) {
     return Vegetable::name<Slice>(fieldName.cStr(), nameSuffix);
+  }
+  Slice castToSlice(Type elemTy, size_t size, StringRef name = StringRef(),
+                    Twine nameSuffix = Twine()) {
+    auto arrTy = rtl::ArrayType::get(elemTy, size);
+    Vegetable rawCast = Vegetable::cast(arrTy).name(name + nameSuffix);
+    return Slice(*builder, rawCast);
+  }
+
+  Vegetable operator[](Value idx) {
+    return Vegetable(*builder, builder->create<rtl::ArrayGetOp>(
+                                   loc(), type.getElementType(), s, idx));
+  }
+
+  Vegetable operator[](size_t idx) {
+    IntegerType idxTy =
+        builder->getIntegerType(llvm::Log2_32_Ceil(type.getSize()));
+    auto idxVal = builder->create<rtl::ConstantOp>(loc(), idxTy, idx);
+    return Vegetable(*builder, builder->create<rtl::ArrayGetOp>(
+                                   loc(), type.getElementType(), s, idxVal));
   }
 
   /// Return the root of this slice hierarchy.
@@ -495,6 +560,7 @@ public:
   }
 
 private:
+  rtl::ArrayType type;
   Slice *parent;
   llvm::Optional<int64_t> offsetIntoParent;
 };
@@ -576,7 +642,9 @@ Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
   return b.create<rtl::ConcatOp>(loc, ValueRange{dataSection, structPtr});
 }
 
-/// Construct the proper operations to decode a capnp list.
+/// Construct the proper operations to decode a capnp list. This only works for
+/// arrays of ints or bools. Will need to be updated for structs and lists of
+/// lists.
 static Vegetable decodeList(rtl::ArrayType type,
                             capnp::schema::Field::Reader field,
                             Slice ptrSection, AssertBuilder &asserts) {
@@ -642,22 +710,22 @@ static Vegetable decodeList(rtl::ArrayType type,
       b.create<rtl::ConstantOp>(loc, b.getIntegerType(30), *ptrOffset + 64));
   auto listSlice =
       msg.slice(listOffset.getResult(), type.getSize() * expectedElemSizeBits);
-  Type capnpElemTy = b.getIntegerType(expectedElemSizeBits);
 
   // Cast to an array of capnp int elements.
-  auto arrayOfElements = b.create<rtl::BitcastOp>(
-      loc, rtl::ArrayType::get(capnpElemTy, type.getSize()), listSlice);
+  assert(type.getElementType().isa<IntegerType>() &&
+         "DecodeList() only works on arrays of ints currently");
+  Type capnpElemTy =
+      b.getIntegerType(expectedElemSizeBits, IntegerType::Signless);
+  auto arrayOfElements = listSlice.castToSlice(capnpElemTy, type.getSize());
+  if (arrayOfElements.getValue().getType() == type)
+    return arrayOfElements;
 
   // Collect the reduced elements.
   SmallVector<Value, 64> arrayValues;
-  IntegerType idxTy = b.getIntegerType(llvm::Log2_32_Ceil(type.getSize()));
   for (size_t i = 0, e = type.getSize(); i < e; ++i) {
-    auto idx = b.create<rtl::ConstantOp>(loc, idxTy, i);
-    auto capnpElem =
-        b.create<rtl::ArrayGetOp>(loc, capnpElemTy, arrayOfElements, idx);
-    // TODO: Reduce width, accounting for signedness.
+    auto capnpElem = arrayOfElements[i];
     auto esiElem =
-        b.create<rtl::BitcastOp>(loc, type.getElementType(), capnpElem);
+        capnpElem.downcast(type.getElementType().cast<IntegerType>());
     arrayValues.push_back(esiElem);
   }
   auto array = b.create<rtl::ArrayCreateOp>(loc, arrayValues);
@@ -715,13 +783,15 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
   asserts.assertEqual(typeAndOffset, 0);
 
   // We expect the data section to be equal to the computed data section size.
-  auto dataSectionSize = assertPtr.slice(32, 16).cast(i16, "dataSectionSize");
+  auto dataSectionSize =
+      assertPtr.slice(32, 16).cast(i16).name("dataSectionSize");
   asserts.assertEqual(dataSectionSize,
                       rootProto.getStruct().getDataWordCount());
 
   // We expect the pointer section to be equal to the computed pointer section
   // size.
-  auto ptrSectionSize = assertPtr.slice(48, 16).cast(i16, "ptrSectionSize");
+  auto ptrSectionSize =
+      assertPtr.slice(48, 16).cast(i16).name("ptrSectionSize");
   asserts.assertEqual(ptrSectionSize, rootProto.getStruct().getPointerCount());
 
   // Get pointers to the data and pointer sections.
