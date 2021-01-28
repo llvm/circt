@@ -142,29 +142,6 @@ static size_t bits(::capnp::schema::Type::Reader type) {
   }
 }
 
-/// Returned the signedness semantics of a Capnp type.
-static IntegerType::SignednessSemantics
-signedness(::capnp::schema::Type::Reader type) {
-  using ty = ::capnp::schema::Type;
-  switch (type.which()) {
-  case ty::VOID:
-  case ty::BOOL:
-    return IntegerType::Signless;
-  case ty::UINT8:
-  case ty::UINT16:
-  case ty::UINT32:
-  case ty::UINT64:
-    return IntegerType::Unsigned;
-  case ty::INT8:
-  case ty::INT16:
-  case ty::INT32:
-  case ty::INT64:
-    return IntegerType::Signed;
-  default:
-    assert(false && "Cannot compute signedness for type");
-  }
-}
-
 TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
   fieldTypes =
       TypeSwitch<Type, ArrayRef<Type>>(type)
@@ -723,9 +700,9 @@ static Vegetable decodeList(rtl::ArrayType type,
   // Collect the reduced elements.
   SmallVector<Value, 64> arrayValues;
   for (size_t i = 0, e = type.getSize(); i < e; ++i) {
-    auto capnpElem = arrayOfElements[i];
-    auto esiElem =
-        capnpElem.downcast(type.getElementType().cast<IntegerType>());
+    auto capnpElem = arrayOfElements[i].name(field.getName(), "_capnp_elem");
+    auto esiElem = capnpElem.downcast(type.getElementType().cast<IntegerType>())
+                       .name(field.getName(), "_elem");
     arrayValues.push_back(esiElem);
   }
   auto array = b.create<rtl::ArrayCreateOp>(loc, arrayValues);
