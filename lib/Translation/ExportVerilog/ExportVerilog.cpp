@@ -168,8 +168,8 @@ static bool isZeroBitType(Type type) {
 // (struct,logic,reg,wire), packed dimensions (integer bitwidth, packed array
 // width), name (left to caller), and unpacked dimensions.
 
-// Print out the packed array subscripts and integer bitwidth after a wire/port
-// declaration.
+/// Print out the packed array subscripts and integer bitwidth after a wire/port
+/// declaration.
 static void printArraySubscriptsPre(Type type, Location loc, raw_ostream &os) {
   TypeSwitch<Type, void>(type)
       .Case<InOutType>([&](InOutType inout) {
@@ -194,7 +194,7 @@ static void printArraySubscriptsPre(Type type, Location loc, raw_ostream &os) {
       });
 }
 
-// Print out the unpacked array subscripts after a variable/port/field name.
+/// Print out the unpacked array subscripts after a variable/port/field name.
 static bool hasArraySubscriptsPre(Type type) {
   return TypeSwitch<Type, bool>(type)
       .Case<InOutType>([&](InOutType inout) {
@@ -209,18 +209,18 @@ static bool hasArraySubscriptsPre(Type type) {
       .Default([&](Type) { return false; });
 }
 
-// Print out the array subscripts after a wire/port declaration.
+/// Print out the array subscripts after a wire/port declaration.
 static void printArraySubscriptsPost(Type type, raw_ostream &os) {
-  if (auto inout = type.dyn_cast<InOutType>())
+  if (auto inout = type.dyn_cast<InOutType>()) {
     printArraySubscriptsPost(inout.getElementType(), os);
-  else if (auto array = type.dyn_cast<UnpackedArrayType>()) {
+  } else if (auto array = type.dyn_cast<UnpackedArrayType>()) {
     printArraySubscriptsPost(array.getElementType(), os);
     os << '[' << (array.getSize() - 1) << ":0]";
   }
 }
 
-// Output the basic type that is to the left of any dimensions
-// returns whether a base type was emitted
+/// Output the basic type that is to the left of any dimensions
+/// returns whether a base type was emitted
 static bool baseType(Type type, StringRef baseIntType, Location loc,
                      raw_ostream &os) {
   return TypeSwitch<Type, bool>(type)
@@ -1916,13 +1916,21 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
   size_t maxDeclNameWidth = 0, maxTypeWidth = 0;
 
   // Return the word (e.g. "wire") in Verilog to declare the specified thing.
-  auto getVerilogDeclWord = [](Operation *op) -> StringRef {
+  // Structs are computed, so we can't use StringRef
+  auto getVerilogDeclWord = [](Operation *op) -> std::string {
     if (isa<RegOp>(op))
       return "reg";
 
     // Interfaces instances use the name of the declared interface.
     if (auto interface = dyn_cast<InterfaceInstanceOp>(op))
-      return interface.getInterfaceType().getInterface().getValue();
+      return interface.getInterfaceType().getInterface().getValue().str();
+
+    if (auto wire = dyn_cast<WireOp>(op)) {
+      std::string str;
+      llvm::raw_string_ostream stringStream(str);
+      baseType(wire.getElementType(), "wire", op->getLoc(), stringStream);
+      return str;
+    }
 
     return "wire";
   };

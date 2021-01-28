@@ -48,6 +48,13 @@ def WireOp : RTLOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
 
   let assemblyFormat = "custom<ImplicitSSAName>(attr-dict) `:` type($result)";
   let hasCanonicalizer = true;
+
+  let extraClassDeclaration = [{
+    Type getElementType() {
+      return result().getType().cast<InOutType>().getElementType();
+    }
+  }];
+
 }
 
 // Expressions used for working with inout types.
