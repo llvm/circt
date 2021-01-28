@@ -34,6 +34,17 @@ static Type lowerType(Type type) {
   // Ignore flip types.
   firType = firType.getPassiveType();
 
+  if (BundleType bundle = firType.dyn_cast<BundleType>()) {
+    mlir::SmallVector<rtl::StructType::FieldInfo, 8> rtlfields;
+    for (auto element : bundle.getElements()) {
+      Type etype = lowerType(element.type);
+      if (!etype)
+        return {};
+      rtlfields.push_back(rtl::StructType::FieldInfo{element.name, etype});
+    }
+    return rtl::StructType::get(type.getContext(), rtlfields);
+  }
+
   auto width = firType.getBitWidthOrSentinel();
   if (width >= 0) // IntType, analog with known width, clock, etc.
     return IntegerType::get(type.getContext(), width);
