@@ -238,8 +238,8 @@ void ArrayType::print(DialectAsmPrinter &p) const {
 LogicalResult ArrayType::verifyConstructionInvariants(Location loc,
                                                       Type innerType,
                                                       size_t size) {
-  if (!isRTLValueType(innerType))
-    return emitError(loc, "invalid element for rtl.array type");
+  if (hasRTLInOutType(innerType))
+    return emitError(loc, "rtl.array cannot contain InOut types");
   return success();
 }
 
