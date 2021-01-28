@@ -1593,13 +1593,10 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     auto fieldName = storeIdentifier(i);
     auto memBundle = memOp.getPortNamed(fieldName);
-    // If this is a write port, then it will be flipped. Strip that.
-    BundleType bundleType = memBundle.getType().dyn_cast<BundleType>();
-    if (!bundleType)
-      bundleType = memBundle.getType()
-                       .cast<FlipType>()
-                       .getElementType()
-                       .cast<BundleType>();
+    BundleType bundleType = memBundle.getType()
+                                .cast<FIRRTLType>()
+                                .getPassiveType()
+                                .cast<BundleType>();
 
     // Get the clock out of the bundle and connect it.
     auto memClockType = FlipType::get(bundleType.getElementType("clk"));
