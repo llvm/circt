@@ -103,6 +103,9 @@ RTLToLLHDTypeConverter::RTLToLLHDTypeConverter(MLIRContext *context) {
   // Convert IntegerType by just wrapping it in SigType.
   addConversion([](IntegerType type) { return SigType::get(type); });
 
+  // Convert SigType back to IntegerType by unwrapping it..
+  addConversion([](SigType type) { return type.getUnderlyingType(); });
+
   // Materialize SigType from IntegerType by wrapping with a SigOp.
   addTargetMaterialization([this](OpBuilder &builder, SigType type,
                                   ValueRange inputs,
@@ -111,6 +114,16 @@ RTLToLLHDTypeConverter::RTLToLLHDTypeConverter(MLIRContext *context) {
       return llvm::None;
 
     return builder.createOrFold<SigOp>(loc, type, getTmpName(), inputs[0]);
+  });
+
+  // Materialize IntegerType from SigType with a PrbOp.
+  addTargetMaterialization([](OpBuilder &builder, IntegerType type,
+                              ValueRange inputs,
+                              Location loc) -> Optional<Value> {
+    if (inputs.size() != 1 || !inputs[0].getType().isa<SigType>())
+      return llvm::None;
+
+    return builder.createOrFold<PrbOp>(loc, type, inputs[0]);
   });
 }
 
@@ -250,12 +263,9 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
       auto sig = rewriter.createOrFold<SigOp>(loc, SigType::get(resultType),
                                               sigName, init);
 
-      // Probe the signal, and replace the original result's uses with the
-      // probed value.
-      auto prb = rewriter.createOrFold<PrbOp>(loc, resultType, sig);
-
+      // Replace all uses of this result with the signal.
       for (auto &use : result.getUses())
-        rewriter.updateRootInPlace(use.getOwner(), [&]() { use.set(prb); });
+        rewriter.updateRootInPlace(use.getOwner(), [&]() { use.set(sig); });
 
       results.push_back(sig);
     }
