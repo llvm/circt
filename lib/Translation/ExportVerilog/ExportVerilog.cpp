@@ -16,7 +16,6 @@
 #include "circt/Dialect/RTL/RTLVisitors.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVVisitors.h"
-#include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/STLExtras.h"

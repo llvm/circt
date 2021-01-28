@@ -23,6 +23,15 @@
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
+// TODO: Remove this when OpAsmInterface qualfies this type. (To check, just
+// delete this and see if it still compiles.)
+namespace circt {
+namespace rtl {
+using mlir::OpAsmOpInterface;
+using mlir::OpAsmSetValueNameFn;
+} // namespace rtl
+} // namespace circt
+
 namespace circt {
 namespace rtl {
 
@@ -35,23 +44,24 @@ enum PortDirection {
 
 /// This holds the name, type, direction of a module's ports
 struct ModulePortInfo {
-  StringAttr name;
+  mlir::StringAttr name;
   PortDirection direction;
-  Type type;
+  mlir::Type type;
   size_t argNum = ~0U; // Either the argument index or the result index
                        // depending on the direction.
 
-  StringRef getName() const { return name ? name.getValue() : ""; }
+  llvm::StringRef getName() const { return name ? name.getValue() : ""; }
   bool isOutput() const { return direction == OUTPUT; }
 };
 
-FunctionType getModuleType(Operation *op);
+mlir::FunctionType getModuleType(mlir::Operation *op);
 
-void getModulePortInfo(Operation *op, SmallVectorImpl<ModulePortInfo> &results);
-StringAttr getRTLNameAttr(ArrayRef<NamedAttribute> attrs);
+void getModulePortInfo(mlir::Operation *op,
+                       llvm::SmallVectorImpl<ModulePortInfo> &results);
+mlir::StringAttr getRTLNameAttr(llvm::ArrayRef<mlir::NamedAttribute> attrs);
 
 /// Return true if the specified operation is a combinatorial logic op.
-bool isCombinatorial(Operation *op);
+bool isCombinatorial(mlir::Operation *op);
 
 } // namespace rtl
 } // namespace circt

@@ -25,7 +25,8 @@ def RTLModuleOp : RTLOp<"module",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports)>
+    OpBuilderDAG<(ins "mlir::StringAttr":$name,
+                      "llvm::ArrayRef<ModulePortInfo>":$ports)>
   ];
 
   let extraClassDeclaration = [{
@@ -33,26 +34,28 @@ def RTLModuleOp : RTLOp<"module",
     using FunctionLike::getBody;
 
     // Implement RegionKindInterface.
-    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
+    static mlir::RegionKind getRegionKind(unsigned index) {
+      return mlir::RegionKind::Graph;
+    }
 
     // Decode information about the input and output ports on this module.
-    void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
+    void getPortInfo(llvm::SmallVectorImpl<ModulePortInfo> &results) {
       getModulePortInfo(*this, results);
     }
 
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
     // squatting on the name.
-    Block *getBodyBlock() { return &body().front(); }
+    mlir::Block *getBodyBlock() { return &body().front(); }
 
     // Get the module's symbolic name.
-    StringRef getName() {
-      return (*this)->getAttrOfType<StringAttr>(
+    llvm::StringRef getName() {
+      return (*this)->getAttrOfType<mlir::StringAttr>(
         ::mlir::SymbolTable::getSymbolAttrName()).getValue();
     }
 
   private:
     // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<RTLModuleOp>;
+    friend class mlir::OpTrait::FunctionLike<RTLModuleOp>;
 
     /// Returns the number of arguments, implementing OpTrait::FunctionLike.
     unsigned getNumFuncArguments() { return getType().getInputs().size(); }
@@ -63,12 +66,12 @@ def RTLModuleOp : RTLOp<"module",
     /// attribute is present and checks if it holds a function type.  Ensures
     /// getType, getNumFuncArguments, and getNumFuncResults can be called
     ///  safely.
-    LogicalResult verifyType() {
+    mlir::LogicalResult verifyType() {
       auto type = getTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
+      if (!type.isa<mlir::FunctionType>())
         return emitOpError("requires '" + getTypeAttrName() +
                            "' attribute of function type");
-      return success();
+      return mlir::success();
     }
   public:
   }];
@@ -95,25 +98,26 @@ def RTLExternModuleOp : RTLOp<"externmodule",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringAttr":$name,
-                      "ArrayRef<ModulePortInfo>":$ports,
-                      CArg<"StringRef", "StringRef()">:$verilogName)>
+    OpBuilderDAG<
+      (ins "mlir::StringAttr":$name,
+            "llvm::ArrayRef<ModulePortInfo>":$ports,
+            CArg<"llvm::StringRef", "llvm::StringRef()">:$verilogName)>
   ];
 
   let extraClassDeclaration = [{   
     // Decode information about the input and output ports on this module.
-    void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
+    void getPortInfo(llvm::SmallVectorImpl<ModulePortInfo> &results) {
       getModulePortInfo(*this, results);
     }
 
     /// Return the name to use for the Verilog module that we're referencing
     /// here.  This is typically the symbol, but can be overridden with the
     /// verilogName attribute.
-    StringRef getVerilogModuleName();
+    llvm::StringRef getVerilogModuleName();
 
   private:
     // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<RTLExternModuleOp>;
+    friend class mlir::OpTrait::FunctionLike<RTLExternModuleOp>;
 
     /// Returns the number of arguments, implementing OpTrait::FunctionLike.
     unsigned getNumFuncArguments() { return getType().getInputs().size(); }
@@ -124,12 +128,12 @@ def RTLExternModuleOp : RTLOp<"externmodule",
     /// attribute is present and checks if it holds a function type.  Ensures
     /// getType, getNumFuncArguments, and getNumFuncResults can be called
     ///  safely.
-    LogicalResult verifyType() {
+    mlir::LogicalResult verifyType() {
       auto type = getTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
+      if (!type.isa<mlir::FunctionType>())
         return emitOpError("requires '" + getTypeAttrName() +
                            "' attribute of function type");
-      return success();
+      return mlir::success();
     }
   public:
   }];
@@ -156,11 +160,11 @@ def InstanceOp : RTLOp<"instance",
   let extraClassDeclaration = [{
     // Return the name of the specified result or empty string if it cannot be
     // determined.
-    StringAttr getResultName(size_t i);
+    mlir::StringAttr getResultName(size_t i);
 
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
-    Operation *getReferencedModule();
+    mlir::Operation *getReferencedModule();
   }];
   
   let assemblyFormat = [{

@@ -30,26 +30,26 @@ def MergeLikeOpInterface : OpInterface<"MergeLikeOpInterface"> {
     InterfaceMethod<[{
         Returns an operand range over the data signals being merged.
       }],
-      "OperandRange", "dataOperands", (ins)
+      "mlir::OperandRange", "dataOperands", (ins)
     >,
   ];
 
   let verify = [{
-    auto concreteOp = cast<ConcreteOpType>($_op);
+    auto concreteOp = llvm::cast<ConcreteOpType>($_op);
 
     auto operands = concreteOp.dataOperands();
 
     if (!operands.size())
       return concreteOp.emitOpError("must have at least one data operand");
 
-    Type resultType = $_op->getResult(0).getType();
+    mlir::Type resultType = $_op->getResult(0).getType();
 
     for (auto operand : operands)
       if (operand.getType() != resultType)
         return concreteOp.emitOpError("operand has type ") << operand.getType()
             << ", but result has type " << resultType;
 
-    return success();
+    return mlir::success();
   }];
 }
 

@@ -28,6 +28,7 @@ namespace llhd {
 
 using namespace circt;
 using namespace llhd;
+using namespace mlir;
 using namespace rtl;
 
 //===----------------------------------------------------------------------===//

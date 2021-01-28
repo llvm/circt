@@ -24,19 +24,19 @@ def CircuitOp : FIRRTLOp<"circuit",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringAttr":$name)>
+    OpBuilderDAG<(ins "mlir::StringAttr":$name)>
   ];
 
   let extraClassDeclaration = [{
-    OpBuilder getBodyBuilder() {
+    mlir::OpBuilder getBodyBuilder() {
       assert(!body().empty() && "Unexpected empty 'body' region.");
-      Block &bodyBlock = body().front();
-      return OpBuilder(&bodyBlock, std::prev(bodyBlock.end()));
+      mlir::Block &bodyBlock = body().front();
+      return mlir::OpBuilder(&bodyBlock, std::prev(bodyBlock.end()));
     }
 
     /// Return body of this circuit.
-    Region &getBodyRegion();
-    Block *getBody();
+    mlir::Region &getBodyRegion();
+    mlir::Block *getBody();
   }];
 
   let printer = "return ::print(p, *this);";
@@ -60,7 +60,8 @@ def FModuleOp : FIRRTLOp<"module",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports)>
+    OpBuilderDAG<(ins "mlir::StringAttr":$name,
+                      "llvm::ArrayRef<ModulePortInfo>":$ports)>
   ];
 
   let extraClassDeclaration = [{
@@ -69,26 +70,28 @@ def FModuleOp : FIRRTLOp<"module",
     using FunctionLike::getBody;
 
     // Implement RegionKindInterface.
-    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
+    static mlir::RegionKind getRegionKind(unsigned index) {
+      return mlir::RegionKind::Graph;
+    }
 
     // Decode information about the input and output ports on this module.
-    void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
+    void getPortInfo(llvm::SmallVectorImpl<ModulePortInfo> &results) {
       getModulePortInfo(*this, results);
     }
 
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
     // squatting on the name.
-    Block *getBodyBlock() { return &body().front(); }
+    mlir::Block *getBodyBlock() { return &body().front(); }
 
-    OpBuilder getBodyBuilder() {
+    mlir::OpBuilder getBodyBuilder() {
       assert(!body().empty() && "Unexpected empty 'body' region.");
-      Block &bodyBlock = body().front();
-      return OpBuilder(&bodyBlock, std::prev(bodyBlock.end()));
+      mlir::Block &bodyBlock = body().front();
+      return mlir::OpBuilder(&bodyBlock, std::prev(bodyBlock.end()));
     }
 
   private:
     // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<FModuleOp>;
+    friend class mlir::OpTrait::FunctionLike<FModuleOp>;
 
     /// Returns the number of arguments, implementing OpTrait::FunctionLike.
     unsigned getNumFuncArguments() { return getType().getInputs().size(); }
@@ -99,12 +102,12 @@ def FModuleOp : FIRRTLOp<"module",
     /// attribute is present and checks if it holds a function type.  Ensures
     /// getType, getNumFuncArguments, and getNumFuncResults can be called
     ///  safely.
-    LogicalResult verifyType() {
+    mlir::LogicalResult verifyType() {
       auto type = getTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
+      if (!type.isa<mlir::FunctionType>())
         return emitOpError("requires '" + getTypeAttrName() +
                            "' attribute of function type");
-      return success();
+      return mlir::success();
     }
   public:
   }];
@@ -128,20 +131,20 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringAttr":$name,
-                      "ArrayRef<ModulePortInfo>":$ports,
-                      CArg<"StringRef", "StringRef()">:$defnamAttr)>
+    OpBuilderDAG<(ins "mlir::StringAttr":$name,
+                      "llvm::ArrayRef<ModulePortInfo>":$ports,
+                      CArg<"llvm::StringRef", "mlir::StringRef()">:$defnamAttr)>
   ];
 
   let extraClassDeclaration = [{
      // Decode information about the input and output ports on this module.
-     void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
+     void getPortInfo(llvm::SmallVectorImpl<ModulePortInfo> &results) {
        getModulePortInfo(*this, results);
      }
 
   private:
     // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<FExtModuleOp>;
+    friend class mlir::OpTrait::FunctionLike<FExtModuleOp>;
 
     /// Returns the number of arguments, implementing OpTrait::FunctionLike.
     unsigned getNumFuncArguments() { return getType().getInputs().size(); }
@@ -152,12 +155,12 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
     /// attribute is present and checks if it holds a function type.  Ensures
     /// getType, getNumFuncArguments, and getNumFuncResults can be called
     ///  safely.
-    LogicalResult verifyType() {
+    mlir::LogicalResult verifyType() {
       auto type = getTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
+      if (!type.isa<mlir::FunctionType>())
         return emitOpError("requires '" + getTypeAttrName() +
                            "' attribute of function type");
-      return success();
+      return mlir::success();
     }
   public:
   }];

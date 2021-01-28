@@ -21,8 +21,10 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/TinyPtrVector.h"
+
 using namespace circt;
 using namespace firrtl;
+using namespace mlir;
 
 /// Given a FIRRTL type, return the corresponding type for the RTL dialect.
 /// This returns a null type if it cannot be lowered.

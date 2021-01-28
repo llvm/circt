@@ -19,10 +19,23 @@
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
+// TODO: Remove this when BranchOpInterface qualfies this type. (To check, just
+// delete this and see if it still compiles.)
+namespace circt {
+namespace llhd {
+using mlir::ArrayRef;
+using mlir::Region;
+using mlir::Type;
+template <typename T>
+using Optional = llvm::Optional<T>;
+using mlir::MutableOperandRange;
+} // namespace llhd
+} // namespace circt
+
 namespace circt {
 namespace llhd {
 
-unsigned getLLHDTypeWidth(Type type);
+unsigned getLLHDTypeWidth(mlir::Type type);
 
 } // namespace llhd
 } // namespace circt

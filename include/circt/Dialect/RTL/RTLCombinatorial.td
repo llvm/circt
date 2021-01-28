@@ -35,17 +35,17 @@ def ConstantOp
   let builders = [
     /// Build a ConstantOp from an APInt, infering the result type from the
     /// width of the APInt.
-    OpBuilderDAG<(ins "const APInt &":$value)>,
+    OpBuilderDAG<(ins "const llvm::APInt &":$value)>,
 
     /// This builder allows construction of small signed integers like 0, 1, -1
     /// matching a specified MLIR IntegerType.  This shouldn't be used for
     /// general constant folding because it only works with values that can be
     /// expressed in an int64_t.  Use APInt's instead.
-    OpBuilderDAG<(ins "Type":$type, "int64_t":$value)>
+    OpBuilderDAG<(ins "mlir::Type":$type, "int64_t":$value)>
   ];
   let extraClassDeclaration = [{
-    APInt getValue() {
-      return (*this)->getAttrOfType<IntegerAttr>("value").getValue();
+    llvm::APInt getValue() {
+      return (*this)->getAttrOfType<mlir::IntegerAttr>("value").getValue();
     }
   }];
   let hasFolder = true;
@@ -94,7 +94,7 @@ class UTVariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
   let assemblyFormat = "$inputs attr-dict `:` type($result)";
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$lhs, "Value":$rhs), [{
+    OpBuilderDAG<(ins "mlir::Value":$lhs, "mlir::Value":$rhs), [{
       return build($_builder, $_state, lhs.getType(),
                    ValueRange{lhs, rhs}, ArrayRef<NamedAttribute>{});
     }]>
@@ -177,9 +177,10 @@ def ICmpOp : RTLOp<"icmp", [NoSideEffect, SameTypeOperands]> {
   let hasCanonicalizer = true;
 
   let builders = [
-    OpBuilderDAG<(ins "ICmpPredicate":$pred, "Value":$lhs, "Value":$rhs), [{
-      return build($_builder, $_state, $_builder.getI1Type(), pred, lhs, rhs);
-    }]>
+    OpBuilderDAG<
+      (ins "ICmpPredicate":$pred, "mlir::Value":$lhs, "mlir::Value":$rhs), [{
+        return build($_builder, $_state, $_builder.getI1Type(), pred, lhs, rhs);
+      }]>
   ];
   let extraClassDeclaration = [{
     /// Returns the flipped predicate, reversing the LHS and RHS operands.  The
@@ -272,8 +273,8 @@ def ConcatOp : VariadicRTLOp<"concat"> {
   let hasCanonicalizer = true;
 
   let builders = [
-    OpBuilderDAG<(ins "ValueRange":$inputs)>,
-    OpBuilderDAG<(ins "Value":$lhs, "Value":$rhs), [{
+    OpBuilderDAG<(ins "mlir::ValueRange":$inputs)>,
+    OpBuilderDAG<(ins "mlir::Value":$lhs, "mlir::Value":$rhs), [{
       return build($_builder, $_state, ValueRange{lhs, rhs});
     }]>
   ];
@@ -313,7 +314,7 @@ def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
           lowIndex().getType().getIntOrFloatBitWidth())
       return emitOpError(
         "ArraySlice: index width must match clog2 of array size");
-    return success();
+    return mlir::success();
   }];
 
   let assemblyFormat = [{
@@ -322,7 +323,7 @@ def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
   }];
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$input, "size_t":$lowBit, "size_t":$size)>
+    OpBuilderDAG<(ins "mlir::Value":$input, "size_t":$lowBit, "size_t":$size)>
   ];
 }
 
@@ -370,14 +371,14 @@ def ArrayCreateOp : RTLOp<"array_create", [NoSideEffect, SameTypeOperands]> {
     unsigned returnSize = getType().cast<ArrayType>().getSize();
     if (inputs().size() != returnSize)
       return failure();
-    return success();
+    return mlir::success();
   }];
 
   let printer = "return ::print(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
   let builders = [
     // ArrayRef needs to contain at least one element.
-    OpBuilderDAG<(ins "ArrayRef<::mlir::Value>":$input)>
+    OpBuilderDAG<(ins "llvm::ArrayRef<::mlir::Value>":$input)>
   ];
 }
 
@@ -401,7 +402,8 @@ def MuxOp : RTLOp<"mux",
   let hasFolder = true;
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$cond, "Value":$trueValue, "Value":$falseValue),
+    OpBuilderDAG<(ins "mlir::Value":$cond, "mlir::Value":$trueValue,
+                      "mlir::Value":$falseValue),
     [{
       assert(trueValue.getType() == falseValue.getType() &&
              "mux requires matching true/false value types");
@@ -482,7 +484,7 @@ def BitcastOp: RTLOp<"bitcast", [NoSideEffect]> {
     if (getBitWidth(input().getType()) !=
         getBitWidth(result().getType()))
       return this->emitOpError("Bitwidth of input must match result");
-    return success();
+    return mlir::success();
   }];
 
   let assemblyFormat = [{

@@ -22,6 +22,7 @@
 
 using namespace circt;
 using namespace firrtl;
+using namespace mlir;
 
 //===----------------------------------------------------------------------===//
 // VERIFY_RESULT_TYPE / VERIFY_RESULT_TYPE_RET

@@ -24,9 +24,9 @@ template <typename ConcreteType, typename ResultType = void,
           typename... ExtraArgs>
 class ExprVisitor {
 public:
-  ResultType dispatchExprVisitor(Operation *op, ExtraArgs... args) {
+  ResultType dispatchExprVisitor(mlir::Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
-    return TypeSwitch<Operation *, ResultType>(op)
+    return llvm::TypeSwitch<mlir::Operation *, ResultType>(op)
         // Basic Expressions
         .template Case<
             ConstantOp, SubfieldOp, SubindexOp, SubaccessOp,
@@ -55,26 +55,26 @@ public:
   }
 
   /// This callback is invoked on any non-expression operations.
-  ResultType visitInvalidExpr(Operation *op, ExtraArgs... args) {
+  ResultType visitInvalidExpr(mlir::Operation *op, ExtraArgs... args) {
     op->emitOpError("unknown FIRRTL expression");
     abort();
   }
 
   /// This callback is invoked on any expression operations that are not handled
   /// by the concrete visitor.
-  ResultType visitUnhandledExpr(Operation *op, ExtraArgs... args) {
+  ResultType visitUnhandledExpr(mlir::Operation *op, ExtraArgs... args) {
     return ResultType();
   }
 
   /// This fallback is invoked on any unary expr that isn't explicitly handled.
   /// The default implementation delegates to the unhandled expression fallback.
-  ResultType visitUnaryExpr(Operation *op, ExtraArgs... args) {
+  ResultType visitUnaryExpr(mlir::Operation *op, ExtraArgs... args) {
     return static_cast<ConcreteType *>(this)->visitUnhandledExpr(op, args...);
   }
 
   /// This fallback is invoked on any binary expr that isn't explicitly handled.
   /// The default implementation delegates to the unhandled expression fallback.
-  ResultType visitBinaryExpr(Operation *op, ExtraArgs... args) {
+  ResultType visitBinaryExpr(mlir::Operation *op, ExtraArgs... args) {
     return static_cast<ConcreteType *>(this)->visitUnhandledExpr(op, args...);
   }
 
@@ -150,9 +150,9 @@ template <typename ConcreteType, typename ResultType = void,
           typename... ExtraArgs>
 class StmtVisitor {
 public:
-  ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
+  ResultType dispatchStmtVisitor(mlir::Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
-    return TypeSwitch<Operation *, ResultType>(op)
+    return llvm::TypeSwitch<mlir::Operation *, ResultType>(op)
         .template Case<AttachOp, ConnectOp, DoneOp, MemoryPortOp,
                        PartialConnectOp, PrintFOp, SkipOp, StopOp, WhenOp,
                        AssertOp, AssumeOp, CoverOp>(
@@ -165,14 +165,14 @@ public:
   }
 
   /// This callback is invoked on any non-Stmt operations.
-  ResultType visitInvalidStmt(Operation *op, ExtraArgs... args) {
+  ResultType visitInvalidStmt(mlir::Operation *op, ExtraArgs... args) {
     op->emitOpError("unknown firrtl stmt");
     abort();
   }
 
   /// This callback is invoked on any Stmt operations that are not handled
   /// by the concrete visitor.
-  ResultType visitUnhandledStmt(Operation *op, ExtraArgs... args) {
+  ResultType visitUnhandledStmt(mlir::Operation *op, ExtraArgs... args) {
     return ResultType();
   }
 
@@ -201,9 +201,9 @@ template <typename ConcreteType, typename ResultType = void,
           typename... ExtraArgs>
 class DeclVisitor {
 public:
-  ResultType dispatchDeclVisitor(Operation *op, ExtraArgs... args) {
+  ResultType dispatchDeclVisitor(mlir::Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
-    return TypeSwitch<Operation *, ResultType>(op)
+    return llvm::TypeSwitch<mlir::Operation *, ResultType>(op)
         .template Case<CMemOp, InstanceOp, MemOp, NodeOp, RegOp, SMemOp,
                        RegResetOp, WireOp>([&](auto opNode) -> ResultType {
           return thisCast->visitDecl(opNode, args...);
@@ -214,14 +214,14 @@ public:
   }
 
   /// This callback is invoked on any non-Decl operations.
-  ResultType visitInvalidDecl(Operation *op, ExtraArgs... args) {
+  ResultType visitInvalidDecl(mlir::Operation *op, ExtraArgs... args) {
     op->emitOpError("unknown firrtl decl");
     abort();
   }
 
   /// This callback is invoked on any Decl operations that are not handled
   /// by the concrete visitor.
-  ResultType visitUnhandledDecl(Operation *op, ExtraArgs... args) {
+  ResultType visitUnhandledDecl(mlir::Operation *op, ExtraArgs... args) {
     return ResultType();
   }
 
@@ -256,40 +256,40 @@ class FIRRTLVisitor
       public DeclVisitor<ConcreteType, ResultType, ExtraArgs...> {
 public:
   /// This is the main entrypoint for the FIRRTLVisitor.
-  ResultType dispatchVisitor(Operation *op, ExtraArgs... args) {
+  ResultType dispatchVisitor(mlir::Operation *op, ExtraArgs... args) {
     return this->dispatchExprVisitor(op, args...);
   }
 
   // Chain from each visitor onto the next one.
-  ResultType visitInvalidExpr(Operation *op, ExtraArgs... args) {
+  ResultType visitInvalidExpr(mlir::Operation *op, ExtraArgs... args) {
     return this->dispatchStmtVisitor(op, args...);
   }
-  ResultType visitInvalidStmt(Operation *op, ExtraArgs... args) {
+  ResultType visitInvalidStmt(mlir::Operation *op, ExtraArgs... args) {
     return this->dispatchDeclVisitor(op, args...);
   }
-  ResultType visitInvalidDecl(Operation *op, ExtraArgs... args) {
+  ResultType visitInvalidDecl(mlir::Operation *op, ExtraArgs... args) {
     return static_cast<ConcreteType *>(this)->visitInvalidOp(op, args...);
   }
 
   // Default to chaining visitUnhandledXXX to visitUnhandledOp.
-  ResultType visitUnhandledExpr(Operation *op, ExtraArgs... args) {
+  ResultType visitUnhandledExpr(mlir::Operation *op, ExtraArgs... args) {
     return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);
   }
-  ResultType visitUnhandledStmt(Operation *op, ExtraArgs... args) {
+  ResultType visitUnhandledStmt(mlir::Operation *op, ExtraArgs... args) {
     return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);
   }
-  ResultType visitUnhandledDecl(Operation *op, ExtraArgs... args) {
+  ResultType visitUnhandledDecl(mlir::Operation *op, ExtraArgs... args) {
     return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);
   }
 
   /// visitInvalidOp is an override point for non-FIRRTL dialect operations.
-  ResultType visitInvalidOp(Operation *op, ExtraArgs... args) {
+  ResultType visitInvalidOp(mlir::Operation *op, ExtraArgs... args) {
     return ResultType();
   }
 
   /// visitUnhandledOp is an override point for FIRRTL dialect ops that the
   /// concrete visitor didn't bother to implement.
-  ResultType visitUnhandledOp(Operation *op) { return ResultType(); }
+  ResultType visitUnhandledOp(mlir::Operation *op) { return ResultType(); }
 };
 } // namespace firrtl
 } // namespace circt

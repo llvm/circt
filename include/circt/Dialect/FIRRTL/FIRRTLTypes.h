@@ -25,8 +25,6 @@ struct BundleTypeStorage;
 struct VectorTypeStorage;
 } // namespace detail.
 
-using namespace mlir;
-
 class ClockType;
 class ResetType;
 class AsyncResetType;
@@ -38,9 +36,9 @@ class BundleType;
 class FVectorType;
 
 // This is a common base class for all FIRRTL types.
-class FIRRTLType : public Type {
+class FIRRTLType : public mlir::Type {
 public:
-  void print(raw_ostream &os) const;
+  void print(llvm::raw_ostream &os) const;
 
   /// Return true if this is a "passive" type - one that contains no "flip"
   /// types recursively within itself.
@@ -71,7 +69,7 @@ public:
   int32_t getBitWidthOrSentinel();
 
   /// Support method to enable LLVM-style type casting.
-  static bool classof(Type type) {
+  static bool classof(mlir::Type type) {
     return llvm::isa<FIRRTLDialect>(type.getDialect());
   }
 
@@ -97,28 +95,34 @@ mlir::Type getPassiveType(mlir::Type anyFIRRTLType);
 //===----------------------------------------------------------------------===//
 
 /// `firrtl.Clock` describe wires and ports meant for carrying clock signals.
-class ClockType
-    : public FIRRTLType::TypeBase<ClockType, FIRRTLType, DefaultTypeStorage> {
+class ClockType : public FIRRTLType::TypeBase<ClockType, FIRRTLType,
+                                              mlir::DefaultTypeStorage> {
 public:
   using Base::Base;
-  static ClockType get(MLIRContext *context) { return Base::get(context); }
+  static ClockType get(mlir::MLIRContext *context) {
+    return Base::get(context);
+  }
 };
 
 /// `firrtl.Reset`.
 /// TODO(firrtl spec): This is not described in the FIRRTL spec.
-class ResetType
-    : public FIRRTLType::TypeBase<ResetType, FIRRTLType, DefaultTypeStorage> {
+class ResetType : public FIRRTLType::TypeBase<ResetType, FIRRTLType,
+                                              mlir::DefaultTypeStorage> {
 public:
   using Base::Base;
-  static ResetType get(MLIRContext *context) { return Base::get(context); }
+  static ResetType get(mlir::MLIRContext *context) {
+    return Base::get(context);
+  }
 };
 /// `firrtl.AsyncReset`.
 /// TODO(firrtl spec): This is not described in the FIRRTL spec.
 class AsyncResetType : public FIRRTLType::TypeBase<AsyncResetType, FIRRTLType,
-                                                   DefaultTypeStorage> {
+                                                   mlir::DefaultTypeStorage> {
 public:
   using Base::Base;
-  static AsyncResetType get(MLIRContext *context) { return Base::get(context); }
+  static AsyncResetType get(mlir::MLIRContext *context) {
+    return Base::get(context);
+  }
 };
 
 //===----------------------------------------------------------------------===//
@@ -149,7 +153,8 @@ public:
   using FIRRTLType::FIRRTLType;
 
   /// Return a SIntType or UInt type with the specified signedness and width.
-  static IntType get(MLIRContext *context, bool isSigned, int32_t width = -1);
+  static IntType get(mlir::MLIRContext *context, bool isSigned,
+                     int32_t width = -1);
 
   bool isSigned() { return isa<SIntType>(); }
   bool isUnsigned() { return isa<UIntType>(); }
@@ -158,7 +163,7 @@ public:
   bool hasWidth() { return getWidth().hasValue(); }
 
   /// Return the bitwidth of this type or None if unknown.
-  Optional<int32_t> getWidth();
+  llvm::Optional<int32_t> getWidth();
 
   /// Return the width of this type, or -1 if it has none specified.
   int32_t getWidthOrSentinel() {
@@ -177,10 +182,10 @@ public:
   using WidthQualifiedType::WidthQualifiedType;
 
   /// Get an with a known width, or -1 for unknown.
-  static SIntType get(MLIRContext *context, int32_t width = -1);
+  static SIntType get(mlir::MLIRContext *context, int32_t width = -1);
 
   /// Return the bitwidth of this type or None if unknown.
-  Optional<int32_t> getWidth();
+  llvm::Optional<int32_t> getWidth();
 };
 
 /// An unsigned integer type, whose width may not be known.
@@ -189,10 +194,10 @@ public:
   using WidthQualifiedType::WidthQualifiedType;
 
   /// Get an with a known width, or -1 for unknown.
-  static UIntType get(MLIRContext *context, int32_t width = -1);
+  static UIntType get(mlir::MLIRContext *context, int32_t width = -1);
 
   /// Return the bitwidth of this type or None if unknown.
-  Optional<int32_t> getWidth();
+  llvm::Optional<int32_t> getWidth();
 };
 
 // `firrtl.Analog` can be attached to multiple drivers.
@@ -201,10 +206,10 @@ public:
   using WidthQualifiedType::WidthQualifiedType;
 
   /// Get an with a known width, or -1 for unknown.
-  static AnalogType get(MLIRContext *context, int32_t width = -1);
+  static AnalogType get(mlir::MLIRContext *context, int32_t width = -1);
 
   /// Return the bitwidth of this type or None if unknown.
-  Optional<int32_t> getWidth();
+  llvm::Optional<int32_t> getWidth();
 };
 
 //===----------------------------------------------------------------------===//
@@ -234,10 +239,11 @@ public:
 
   // Each element of a bundle, which is a name and type.
   struct BundleElement {
-    Identifier name;
+    mlir::Identifier name;
     FIRRTLType type;
 
-    BundleElement(Identifier name, FIRRTLType type) : name(name), type(type) {}
+    BundleElement(mlir::Identifier name, FIRRTLType type)
+        : name(name), type(type) {}
 
     bool operator==(const BundleElement &rhs) const {
       return name == rhs.name && type == rhs.type;
@@ -245,15 +251,16 @@ public:
     bool operator!=(const BundleElement &rhs) const { return !operator==(rhs); }
   };
 
-  static FIRRTLType get(ArrayRef<BundleElement> elements, MLIRContext *context);
+  static FIRRTLType get(llvm::ArrayRef<BundleElement> elements,
+                        mlir::MLIRContext *context);
 
-  ArrayRef<BundleElement> getElements();
+  llvm::ArrayRef<BundleElement> getElements();
 
   size_t getNumElements() { return getElements().size(); }
 
   /// Look up an element by name.  This returns None on failure.
-  llvm::Optional<BundleElement> getElement(StringRef name);
-  FIRRTLType getElementType(StringRef name);
+  llvm::Optional<BundleElement> getElement(llvm::StringRef name);
+  FIRRTLType getElementType(llvm::StringRef name);
 
   /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
   std::pair<bool, bool> getRecursiveTypeProperties();

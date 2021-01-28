@@ -235,8 +235,8 @@ def LLHD_RegOp : LLHD_Op<"reg", [
     I64ArrayAttr: $gateMask);
 
   let extraClassDeclaration = [{
-    static StringRef getModeAttrName() { return "modes"; }
-    static RegMode getRegModeByName(StringRef name) {
+    static llvm::StringRef getModeAttrName() { return "modes"; }
+    static RegMode getRegModeByName(llvm::StringRef name) {
       llvm::Optional<RegMode> optional =  symbolizeRegMode(name);
       assert(optional && "Invalid RegMode string.");
       return optional.getValue();
@@ -244,19 +244,19 @@ def LLHD_RegOp : LLHD_Op<"reg", [
 
     bool hasGate(unsigned index) {
       assert(index < gateMask().getValue().size() && "Index out of range.");
-      return gateMask().getValue()[index].cast<IntegerAttr>().getInt() != 0;
+      return gateMask().getValue()[index].cast<mlir::IntegerAttr>().getInt() != 0;
     }
 
-    Value getGateAt(unsigned index) {
+    mlir::Value getGateAt(unsigned index) {
       assert(index < gateMask().getValue().size() && "Index out of range.");
-      if (!hasGate(index)) return Value();
+      if (!hasGate(index)) return mlir::Value();
       return
-        gates()[gateMask().getValue()[index].cast<IntegerAttr>().getInt()-1];
+        gates()[gateMask().getValue()[index].cast<mlir::IntegerAttr>().getInt()-1];
     }
 
     RegMode getRegModeAt(unsigned index) {
       assert(index < modes().getValue().size() && "Index out of range.");
-      return (RegMode)modes().getValue()[index].cast<IntegerAttr>().getInt();
+      return (RegMode)modes().getValue()[index].cast<mlir::IntegerAttr>().getInt();
     }
   }];
 

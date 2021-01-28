@@ -46,14 +46,14 @@ def InterfaceOp : SVOp<"interface",
   let assemblyFormat = "attr-dict $sym_name $body";
 
   let extraClassDeclaration = [{
-    Block *getBodyBlock() { return &body().front(); }
+    mlir::Block *getBodyBlock() { return &body().front(); }
 
     ModportType getModportType(::llvm::StringRef);
     InterfaceType getInterfaceType() {
       return InterfaceType::get(getContext(),
         ::mlir::SymbolRefAttr::get(sym_name(), getContext()));
     }
-    Type getSignalType(StringRef signalName);
+    mlir::Type getSignalType(llvm::StringRef signalName);
   }];
 }
 
@@ -137,8 +137,8 @@ def InterfaceModportOp : SVOp<"interface.modport",
 
   let builders = [
     OpBuilderDAG<(ins "::llvm::StringRef":$name,
-                      "ArrayRef<::llvm::StringRef>":$inputs,
-                      "ArrayRef<::llvm::StringRef>":$outputs)>
+                      "llvm::ArrayRef<::llvm::StringRef>":$inputs,
+                      "llvm::ArrayRef<::llvm::StringRef>":$outputs)>
   ];
 }
 
@@ -217,7 +217,7 @@ def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
   let verifier = "return ::verifyGetModportOp(*this);";
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$value, "::llvm::StringRef":$field)>
+    OpBuilderDAG<(ins "mlir::Value":$value, "::llvm::StringRef":$field)>
   ];
 }
 

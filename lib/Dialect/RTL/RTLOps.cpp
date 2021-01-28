@@ -16,6 +16,7 @@
 #include "mlir/IR/FunctionImplementation.h"
 
 using namespace circt;
+using namespace mlir;
 using namespace rtl;
 
 //===----------------------------------------------------------------------===//

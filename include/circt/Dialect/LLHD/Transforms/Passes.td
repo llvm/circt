@@ -15,7 +15,7 @@
 
 include "mlir/Pass/PassBase.td"
 
-def ProcessLowering : Pass<"llhd-process-lowering", "ModuleOp"> {
+def ProcessLowering : Pass<"llhd-process-lowering", "mlir::ModuleOp"> {
   let summary = "Lowers LLHD Processes to Entities.";
   let description = [{
     TODO
@@ -75,7 +75,7 @@ def MemoryToBlockArgument : Pass<"llhd-memory-to-block-argument",
   let constructor = "circt::llhd::createMemoryToBlockArgumentPass()";
 }
 
-def FunctionElimination : Pass<"llhd-function-elimination", "ModuleOp"> {
+def FunctionElimination : Pass<"llhd-function-elimination", "mlir::ModuleOp"> {
   let summary = "Deletes all functions.";
   let description = [{
     Deletes all functions in the module. In case there is still a function

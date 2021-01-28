@@ -38,7 +38,7 @@ public:
   /// Initialize an LLHD simulation engine. This initializes the state, as well
   /// as the mlir::ExecutionEngine with the given module.
   Engine(
-      llvm::raw_ostream &out, ModuleOp module,
+      llvm::raw_ostream &out, mlir::ModuleOp module,
       llvm::function_ref<mlir::LogicalResult(mlir::ModuleOp)> mlirTransformer,
       llvm::function_ref<llvm::Error(llvm::Module *)> llvmTransformer,
       std::string root, int mode);
@@ -51,10 +51,10 @@ public:
   int simulate(int n, uint64_t maxTime);
 
   /// Build the instance layout of the design.
-  void buildLayout(ModuleOp module);
+  void buildLayout(mlir::ModuleOp module);
 
   /// Get the MLIR module.
-  const ModuleOp getModule() const { return module; }
+  const mlir::ModuleOp getModule() const { return module; }
 
   /// Get the simulation state.
   const State *getState() const { return state.get(); }
@@ -71,8 +71,8 @@ private:
   llvm::raw_ostream &out;
   std::string root;
   std::unique_ptr<State> state;
-  std::unique_ptr<ExecutionEngine> engine;
-  ModuleOp module;
+  std::unique_ptr<mlir::ExecutionEngine> engine;
+  mlir::ModuleOp module;
   int traceMode;
 };
 

@@ -18,6 +18,7 @@
 
 using namespace circt;
 using namespace firrtl;
+using namespace mlir;
 
 namespace {
 // This represents a flattened bundle field element.

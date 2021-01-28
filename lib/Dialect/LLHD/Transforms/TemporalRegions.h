@@ -18,23 +18,22 @@
 
 namespace circt {
 namespace llhd {
-using namespace mlir;
 
 struct TemporalRegionAnalysis {
-  using BlockMapT = DenseMap<Block *, int>;
-  using TRMapT = DenseMap<int, SmallVector<Block *, 8>>;
+  using BlockMapT = llvm::DenseMap<mlir::Block *, int>;
+  using TRMapT = llvm::DenseMap<int, llvm::SmallVector<mlir::Block *, 8>>;
 
-  explicit TemporalRegionAnalysis(Operation *op) { recalculate(op); }
+  explicit TemporalRegionAnalysis(mlir::Operation *op) { recalculate(op); }
 
-  void recalculate(Operation *);
+  void recalculate(mlir::Operation *);
 
   unsigned getNumTemporalRegions() { return numTRs; }
 
-  int getBlockTR(Block *);
-  SmallVector<Block *, 8> getBlocksInTR(int);
+  int getBlockTR(mlir::Block *);
+  llvm::SmallVector<mlir::Block *, 8> getBlocksInTR(int);
 
-  SmallVector<Block *, 8> getExitingBlocksInTR(int);
-  Block *getTREntryBlock(int);
+  llvm::SmallVector<mlir::Block *, 8> getExitingBlocksInTR(int);
+  mlir::Block *getTREntryBlock(int);
   bool hasSingleExitBlock(int tr) {
     return getExitingBlocksInTR(tr).size() == 1;
   }
@@ -43,7 +42,7 @@ struct TemporalRegionAnalysis {
     return std::find(succs.begin(), succs.end(), tr) != succs.end();
   }
 
-  SmallVector<int, 8> getTRSuccessors(int);
+  llvm::SmallVector<int, 8> getTRSuccessors(int);
   unsigned getNumTRSuccessors(int tr) { return getTRSuccessors(tr).size(); }
   unsigned numBlocksInTR(int tr) { return getBlocksInTR(tr).size(); }
 

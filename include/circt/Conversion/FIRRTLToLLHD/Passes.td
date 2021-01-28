@@ -15,7 +15,7 @@
 
 include "mlir/Pass/PassBase.td"
 
-def ConvertFIRRTLToLLHD : Pass<"convert-firrtl-to-llhd", "ModuleOp"> {
+def ConvertFIRRTLToLLHD : Pass<"convert-firrtl-to-llhd", "mlir::ModuleOp"> {
   let summary = "Convert FIRRTL to LLHD";
   let description = [{
     This pass translates a FIRRTL design into an equivalent structural LLHD

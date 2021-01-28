@@ -25,9 +25,9 @@ template <typename ConcreteType, typename ResultType = void,
           typename... ExtraArgs>
 class HandshakeVisitor {
 public:
-  ResultType dispatchHandshakeVisitor(Operation *op, ExtraArgs... args) {
+  ResultType dispatchHandshakeVisitor(mlir::Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
-    return TypeSwitch<Operation *, ResultType>(op)
+    return llvm::TypeSwitch<mlir::Operation *, ResultType>(op)
         .template Case<
             // Handshake nodes.
             BranchOp, BufferOp, ConditionalBranchOp, ConstantOp, ControlMergeOp,
@@ -42,14 +42,14 @@ public:
   }
 
   /// This callback is invoked on any invalid operations.
-  ResultType visitInvalidOp(Operation *op, ExtraArgs... args) {
+  ResultType visitInvalidOp(mlir::Operation *op, ExtraArgs... args) {
     op->emitOpError("is unsupported operation");
     abort();
   }
 
   /// This callback is invoked on any operations that are not handled by the
   /// concrete visitor.
-  ResultType visitUnhandledOp(Operation *op, ExtraArgs... args) {
+  ResultType visitUnhandledOp(mlir::Operation *op, ExtraArgs... args) {
     return ResultType();
   }
 
@@ -93,9 +93,9 @@ template <typename ConcreteType, typename ResultType = void,
           typename... ExtraArgs>
 class StdExprVisitor {
 public:
-  ResultType dispatchStdExprVisitor(Operation *op, ExtraArgs... args) {
+  ResultType dispatchStdExprVisitor(mlir::Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
-    return TypeSwitch<Operation *, ResultType>(op)
+    return llvm::TypeSwitch<mlir::Operation *, ResultType>(op)
         .template Case<
             // Integer binary expressions.
             CmpIOp, AddIOp, SubIOp, MulIOp, SignedDivIOp, SignedRemIOp,
@@ -110,14 +110,14 @@ public:
   }
 
   /// This callback is invoked on any invalid operations.
-  ResultType visitInvalidOp(Operation *op, ExtraArgs... args) {
+  ResultType visitInvalidOp(mlir::Operation *op, ExtraArgs... args) {
     op->emitOpError("is unsupported operation");
     abort();
   }
 
   /// This callback is invoked on any operations that are not handled by the
   /// concrete visitor.
-  ResultType visitUnhandledOp(Operation *op, ExtraArgs... args) {
+  ResultType visitUnhandledOp(mlir::Operation *op, ExtraArgs... args) {
     return ResultType();
   }
 

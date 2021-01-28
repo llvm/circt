@@ -17,6 +17,7 @@
 
 using namespace circt;
 using namespace firrtl;
+using namespace mlir;
 
 static Attribute getIntAttr(const APInt &value, MLIRContext *context) {
   return IntegerAttr::get(IntegerType::get(context, value.getBitWidth()),

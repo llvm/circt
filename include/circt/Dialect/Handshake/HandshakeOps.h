@@ -31,13 +31,12 @@
 namespace circt {
 namespace handshake {
 
-using namespace mlir;
 class TerminatorOp;
 
-class HandshakeOpsDialect : public Dialect {
+class HandshakeOpsDialect : public mlir::Dialect {
 public:
-  HandshakeOpsDialect(MLIRContext *context);
-  static StringRef getDialectNamespace() { return "handshake"; }
+  HandshakeOpsDialect(mlir::MLIRContext *context);
+  static llvm::StringRef getDialectNamespace() { return "handshake"; }
 };
 
 #include "circt/Dialect/Handshake/HandshakeInterfaces.h.inc"

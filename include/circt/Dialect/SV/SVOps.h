@@ -19,6 +19,15 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
+// TODO: Remove this when OpAsmInterface qualfies this type. (To check, just
+// delete this and see if it still compiles.)
+namespace circt {
+namespace sv {
+using mlir::OpAsmOpInterface;
+using mlir::OpAsmSetValueNameFn;
+} // namespace sv
+} // namespace circt
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/SV/SVEnums.h.inc"
 // Clang format shouldn't reorder these headers.
@@ -29,7 +38,7 @@ namespace circt {
 namespace sv {
 
 /// Return true if the specified operation is an expression.
-bool isExpression(Operation *op);
+bool isExpression(mlir::Operation *op);
 
 } // namespace sv
 } // namespace circt

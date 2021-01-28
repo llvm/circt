@@ -39,8 +39,9 @@ def WireOp : RTLOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilderDAG<(ins "::mlir::Type":$elementType,
-                      CArg<"StringAttr", "StringAttr()">:$name)>,
-    OpBuilderDAG<(ins "::mlir::Type":$elementType, CArg<"StringRef">:$name), [{
+                      CArg<"mlir::StringAttr", "mlir::StringAttr()">:$name)>,
+    OpBuilderDAG<(ins "::mlir::Type":$elementType,
+                      CArg<"llvm::StringRef">:$name), [{
       return build($_builder, $_state, elementType,
                    $_builder.getStringAttr(name));
     }]>
@@ -61,7 +62,7 @@ def ReadInOutOp
   let results = (outs RTLValueType:$result);
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$input)>
+    OpBuilderDAG<(ins "mlir::Value":$input)>
   ];
 
   let assemblyFormat = "$input attr-dict `:` type($input)";
@@ -82,7 +83,7 @@ def ArrayIndexOp
   let results = (outs InOutType:$result);
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$input, "Value":$index)>
+    OpBuilderDAG<(ins "mlir::Value":$input, "mlir::Value":$index)>
   ];
 
   let assemblyFormat =

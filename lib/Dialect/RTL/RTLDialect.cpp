@@ -18,6 +18,7 @@
 #include "mlir/IR/DialectImplementation.h"
 
 using namespace circt;
+using namespace mlir;
 using namespace rtl;
 
 //===----------------------------------------------------------------------===//

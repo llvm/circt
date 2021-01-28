@@ -13,7 +13,6 @@
 #include "circt/Translation/ExportVerilog.h"
 // clang-format don't reorder #includes!
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
-#include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/STLExtras.h"

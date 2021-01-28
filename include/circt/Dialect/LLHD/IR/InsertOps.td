@@ -21,7 +21,7 @@ def LLHD_InsertSliceOp : LLHD_Op<"insert_slice", [
       "'start' + size of the 'slice' have to be smaller or equal to the "
       "'target' size",
       CPred<
-        "$start.cast<IntegerAttr>().getInt() + this->getSliceSize() <= "
+        "$start.cast<mlir::IntegerAttr>().getInt() + this->getSliceSize() <= "
         "this->getTargetSize()">>
   ]> {
   let summary = "Insert a slice of consecutive elements.";
@@ -68,10 +68,10 @@ def LLHD_InsertElementOp : LLHD_Op<"insert_element", [
     NoSideEffect,
     AllTypesMatch<["target", "result"]>,
     PredOpTrait<"'index' has to be smaller than the 'target' size",
-      CPred<"$index.cast<IntegerAttr>().getInt() < this->getTargetSize()">>,
+      CPred<"$index.cast<mlir::IntegerAttr>().getInt() < this->getTargetSize()">>,
     TypesMatchWith<"'element' type has to match type at 'index' of 'target'",
       "target", "element",
-      "this->getElementTypeAtIndex($index.cast<IntegerAttr>().getInt())">
+      "this->getElementTypeAtIndex($index.cast<mlir::IntegerAttr>().getInt())">
   ]> {
   let summary = "Insert an element into an array or tuple.";
   let description = [{
@@ -110,11 +110,11 @@ def LLHD_InsertElementOp : LLHD_Op<"insert_element", [
   let extraClassDeclaration = [{
     unsigned getTargetSize() { return getLLHDTypeWidth(target().getType()); }
 
-    Type getElementTypeAtIndex(int64_t index) {
-      Type targetType = target().getType();
+    mlir::Type getElementTypeAtIndex(int64_t index) {
+      mlir::Type targetType = target().getType();
       if (auto array = targetType.dyn_cast<llhd::ArrayType>())
         return array.getElementType();
-      return targetType.cast<TupleType>().getTypes()[index];
+      return targetType.cast<mlir::TupleType>().getTypes()[index];
     }
   }];
 }

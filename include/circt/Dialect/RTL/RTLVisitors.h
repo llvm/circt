@@ -24,9 +24,10 @@ template <typename ConcreteType, typename ResultType = void,
           typename... ExtraArgs>
 class CombinatorialVisitor {
 public:
-  ResultType dispatchCombinatorialVisitor(Operation *op, ExtraArgs... args) {
+  ResultType dispatchCombinatorialVisitor(mlir::Operation *op,
+                                          ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
-    return TypeSwitch<Operation *, ResultType>(op)
+    return llvm::TypeSwitch<mlir::Operation *, ResultType>(op)
         .template Case<ConstantOp,
                        // Arithmetic and Logical Binary Operations.
                        AddOp, SubOp, MulOp, DivUOp, DivSOp, ModUOp, ModSOp,
@@ -54,28 +55,28 @@ public:
   }
 
   /// This callback is invoked on any non-expression operations.
-  ResultType visitInvalidComb(Operation *op, ExtraArgs... args) {
+  ResultType visitInvalidComb(mlir::Operation *op, ExtraArgs... args) {
     op->emitOpError("unknown RTL combinatorial node");
     abort();
   }
 
   /// This callback is invoked on any combinatorial operations that are not
   /// handled by the concrete visitor.
-  ResultType visitUnhandledComb(Operation *op, ExtraArgs... args) {
+  ResultType visitUnhandledComb(mlir::Operation *op, ExtraArgs... args) {
     return ResultType();
   }
 
   /// This fallback is invoked on any binary node that isn't explicitly handled.
   /// The default implementation delegates to the 'unhandled' fallback.
-  ResultType visitBinaryComb(Operation *op, ExtraArgs... args) {
+  ResultType visitBinaryComb(mlir::Operation *op, ExtraArgs... args) {
     return static_cast<ConcreteType *>(this)->visitUnhandledComb(op, args...);
   }
 
-  ResultType visitUnaryComb(Operation *op, ExtraArgs... args) {
+  ResultType visitUnaryComb(mlir::Operation *op, ExtraArgs... args) {
     return static_cast<ConcreteType *>(this)->visitUnhandledComb(op, args...);
   }
 
-  ResultType visitVariadicComb(Operation *op, ExtraArgs... args) {
+  ResultType visitVariadicComb(mlir::Operation *op, ExtraArgs... args) {
     return static_cast<ConcreteType *>(this)->visitUnhandledComb(op, args...);
   }
 
@@ -129,9 +130,9 @@ template <typename ConcreteType, typename ResultType = void,
           typename... ExtraArgs>
 class StmtVisitor {
 public:
-  ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
+  ResultType dispatchStmtVisitor(mlir::Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
-    return TypeSwitch<Operation *, ResultType>(op)
+    return llvm::TypeSwitch<mlir::Operation *, ResultType>(op)
         .template Case<ConnectOp, OutputOp, WireOp, InstanceOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitStmt(expr, args...);
@@ -142,24 +143,24 @@ public:
   }
 
   /// This callback is invoked on any non-expression operations.
-  ResultType visitInvalidStmt(Operation *op, ExtraArgs... args) {
+  ResultType visitInvalidStmt(mlir::Operation *op, ExtraArgs... args) {
     op->emitOpError("unknown RTL combinatorial node");
     abort();
   }
 
   /// This callback is invoked on any combinatorial operations that are not
   /// handled by the concrete visitor.
-  ResultType visitUnhandledComb(Operation *op, ExtraArgs... args) {
+  ResultType visitUnhandledComb(mlir::Operation *op, ExtraArgs... args) {
     return ResultType();
   }
 
   /// This fallback is invoked on any binary node that isn't explicitly handled.
   /// The default implementation delegates to the 'unhandled' fallback.
-  ResultType visitBinaryComb(Operation *op, ExtraArgs... args) {
+  ResultType visitBinaryComb(mlir::Operation *op, ExtraArgs... args) {
     return static_cast<ConcreteType *>(this)->visitUnhandledComb(op, args...);
   }
 
-  ResultType visitUnaryComb(Operation *op, ExtraArgs... args) {
+  ResultType visitUnaryComb(mlir::Operation *op, ExtraArgs... args) {
     return static_cast<ConcreteType *>(this)->visitUnhandledComb(op, args...);
   }
 

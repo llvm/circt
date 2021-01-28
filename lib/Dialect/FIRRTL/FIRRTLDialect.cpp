@@ -16,6 +16,7 @@
 
 using namespace circt;
 using namespace firrtl;
+using namespace mlir;
 
 //===----------------------------------------------------------------------===//
 // Dialect specification.

@@ -59,45 +59,47 @@ def FuncOp : Op<Handshake_Dialect, "func", [
 
   let skipDefaultBuilders = 1;
 
-  let builders =
-       [OpBuilderDAG<(ins "StringRef":$name, "FunctionType":$type,
-                      CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs,
-                      CArg<"ArrayRef<NamedAttrList>", "{}">:$argAttrs),
-                      [{
-                     $_state.addAttribute(SymbolTable::getSymbolAttrName(),
-                                         $_builder.getStringAttr(name));
-                     $_state.addAttribute(getTypeAttrName(), TypeAttr::get(type));
-                     $_state.attributes.append(attrs.begin(), attrs.end());
-                     $_state.addRegion();
+  let builders = [OpBuilderDAG<
+    (ins "llvm::StringRef":$name, "mlir::FunctionType":$type,
+      CArg<"llvm::ArrayRef<mlir::NamedAttribute>", "{}">:$attrs,
+      CArg<"llvm::ArrayRef<mlir::NamedAttrList>", "{}">:$argAttrs),
+    [{
+      $_state.addAttribute(SymbolTable::getSymbolAttrName(),
+      $_builder.getStringAttr(name));
+      $_state.addAttribute(getTypeAttrName(), TypeAttr::get(type));
+      $_state.attributes.append(attrs.begin(), attrs.end());
+      $_state.addRegion();
 
-                     // Not needed?? Arguments are already included in attrs
-                     /* assert(type.getNumInputs() == argAttrs.size());
-                      SmallString<8> argAttrName;
-                      for (unsigned i = 0, e = type.getNumInputs(); i != e; ++i)
-                        if (auto argDict = argAttrs[i].getDictionary())
-                          $_state.addAttribute(getArgAttrName(i, argAttrName),
-                      argDict);*/
-                   }]>];
+      // Not needed?? Arguments are already included in attrs
+      /* assert(type.getNumInputs() == argAttrs.size());
+       SmallString<8> argAttrName;
+       for (unsigned i = 0, e = type.getNumInputs(); i != e; ++i)
+         if (auto argDict = argAttrs[i].getDictionary())
+           $_state.addAttribute(getArgAttrName(i, argAttrName),
+       argDict);*/
+     }]>];
 
   let extraClassDeclaration = [{
     // Add an entry block to an empty function, and set up the block arguments
     // to match the signature of the function.
-    Block *addEntryBlock();
+    mlir::Block *addEntryBlock();
 
-    FunctionType getType() {
-      return (*this)->getAttrOfType<TypeAttr>(getTypeAttrName())
+    mlir::FunctionType getType() {
+      return (*this)->getAttrOfType<mlir::TypeAttr>(getTypeAttrName())
           .getValue()
-          .cast<FunctionType>();
+          .cast<mlir::FunctionType>();
     }
     // bool isVarArg() {
     //   return getType().getUnderlyingType()->isFunctionVarArg();
     // }
 
     // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<handshake::FuncOp>;
+    friend class mlir::OpTrait::FunctionLike<handshake::FuncOp>;
 
     /// Implement RegionKindInterface.
-    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+    static mlir::RegionKind getRegionKind(unsigned index) {
+      return mlir::RegionKind::Graph;
+    }
 
     /// Returns the number of arguments. This is a hook for
     /// OpTrait::FunctionLike.
@@ -110,25 +112,25 @@ def FuncOp : Op<Handshake_Dialect, "func", [
     /// attribute is present and checks if it holds a function type.  Ensures
     /// getType, getNumFuncArguments, and getNumFuncResults can be called
     /// safely.
-    LogicalResult verifyType() {
+    mlir::LogicalResult verifyType() {
       auto type = getTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
+      if (!type.isa<mlir::FunctionType>())
         return emitOpError("requires '" + getTypeAttrName() +
                            "' attribute of function type");
-      return success();
+      return mlir::success();
     }
   }];
 
   let verifier = [{
     // If this function is external there is nothing to do.
     if (isExternal())
-      return success();
+      return mlir::success();
 
     // Verify that the argument list of the function and the arg list of the
     // entry block line up.  The trait already verified that the number of
     // arguments is the same between the signature and the block.
     auto fnInputTypes = getType().getInputs();
-    Block &entryBlock = front();
+    mlir::Block &entryBlock = front();
 
     for (unsigned i = 0, e = entryBlock.getNumArguments(); i != e; ++i)
       if (fnInputTypes[i] != entryBlock.getArgument(i).getType())
@@ -137,16 +139,17 @@ def FuncOp : Op<Handshake_Dialect, "func", [
                << ") must match the type of the corresponding argument in "
                << "function signature(" << fnInputTypes[i] << ')';
 
-    return success();
+    return mlir::success();
   }];
   let printer = [{
-    FunctionType fnType = getType();
+    mlir::FunctionType fnType = getType();
     impl::printFunctionLikeOp(p, *this, fnType.getInputs(), /*isVariadic=*/true,
                               fnType.getResults());
   }];
   let parser = [{
     auto buildFuncType =
-        [](Builder & builder, ArrayRef<Type> argTypes, ArrayRef<Type> results,
+        [](Builder & builder, llvm::ArrayRef<mlir::Type> argTypes,
+            llvm::ArrayRef<mlir::Type> results,
            impl::VariadicFlag, std::string &) {
       return builder.getFunctionType(argTypes, results);
     };
@@ -161,10 +164,9 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
   let summary = "module instantiate operation";
   let description = [{
     The `instance` operation represents the instantiation of a module.  This
-	 is similar to a function call, except that different instances of the
-	 same module are guaranteed to have their own distinct state.
-    The instantiated module is encoded as a
-    symbol reference attribute named "module".
+	  is similar to a function call, except that different instances of the same
+    module are guaranteed to have their own distinct state. The instantiated
+    module is encoded as a symbol reference attribute named "module".
 
     Example:
 
@@ -177,26 +179,26 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
   let results = (outs Variadic<AnyType>);
 
   let builders = [OpBuilderDAG<
-    (ins "FuncOp":$module, CArg<"ValueRange", "{}">:$operands), [{
+    (ins "mlir::FuncOp":$module, CArg<"mlir::ValueRange", "{}">:$operands), [{
       $_state.addOperands(operands);
       $_state.addAttribute("module", $_builder.getSymbolRefAttr(module));
       $_state.addTypes(module.getType().getResults());
   }]>, OpBuilderDAG<
-    (ins "SymbolRefAttr":$module, "ArrayRef<Type>":$results,
-     CArg<"ValueRange", "{}">:$operands), [{
+    (ins "mlir::SymbolRefAttr":$module, "llvm::ArrayRef<mlir::Type>":$results,
+     CArg<"mlir::ValueRange", "{}">:$operands), [{
       $_state.addOperands(operands);
       $_state.addAttribute("module", module);
       $_state.addTypes(results);
   }]>, OpBuilderDAG<
-    (ins "StringRef":$module, "ArrayRef<Type>":$results,
-     CArg<"ValueRange", "{}">:$operands), [{
+    (ins "llvm::StringRef":$module, "llvm::ArrayRef<mlir::Type>":$results,
+     CArg<"mlir::ValueRange", "{}">:$operands), [{
       build($_builder, $_state, $_builder.getSymbolRefAttr(module), results,
             operands);
   }]>];
 
   let extraClassDeclaration = [{
-    StringRef getModule() { return module(); }
-    FunctionType getModuleType();
+    llvm::StringRef getModule() { return module(); }
+    mlir::FunctionType getModuleType();
 
     /// Get the argument operands to the called function.
     operand_range getArgOperands() {
@@ -207,8 +209,8 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
     operand_iterator arg_operand_end() { return operand_end(); }
 
     /// Return the module of this operation.
-    CallInterfaceCallable getCallableForCallee() {
-      return (*this)->getAttrOfType<SymbolRefAttr>("module");
+    mlir::CallInterfaceCallable getCallableForCallee() {
+      return (*this)->getAttrOfType<mlir::SymbolRefAttr>("module");
     }
   }];
 
@@ -234,7 +236,7 @@ def ReturnOp : Handshake_Op<"return", [Terminator]> {
 
   let skipDefaultBuilders = 1;
 
-  let builders = [OpBuilderDAG<(ins "ArrayRef<Value>":$operands)>];
+  let builders = [OpBuilderDAG<(ins "llvm::ArrayRef<mlir::Value>":$operands)>];
 
   let printer = "return ::print(p, *this);";
   let verifier = "return ::verify(*this);";
@@ -257,13 +259,13 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock]> {
 
   let extraClassDeclaration = [{
     bool isSequential() {
-      return (*this)->getAttrOfType<BoolAttr>("sequential").getValue();
+      return (*this)->getAttrOfType<mlir::BoolAttr>("sequential").getValue();
     }
     bool isControl() {
-      return (*this)->getAttrOfType<BoolAttr>("control").getValue();
+      return (*this)->getAttrOfType<mlir::BoolAttr>("control").getValue();
     }
-    APInt getNumSlots() {
-      return (*this)->getAttrOfType<IntegerAttr>("slots").getValue();
+    llvm::APInt getNumSlots() {
+      return (*this)->getAttrOfType<mlir::IntegerAttr>("slots").getValue();
     }
   }];
 }
@@ -285,10 +287,12 @@ def ForkOp : Handshake_Op<"fork", [
 
   let hasCanonicalizer = 1;
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$outputs)>];
+  let builders = [OpBuilderDAG<(ins "mlir::Value":$operand, "int":$outputs)>];
 
   let extraClassDeclaration = [{
-    bool isControl() { return (*this)->getAttrOfType<BoolAttr>("control").getValue(); }
+    bool isControl() {
+      return (*this)->getAttrOfType<mlir::BoolAttr>("control").getValue();
+    }
   }];
 }
 
@@ -304,10 +308,12 @@ def LazyForkOp : Handshake_Op<"lazy_fork", [NoSideEffect]> {
   let results = (outs Variadic<AnyType>);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$outputs)>];
+  let builders = [OpBuilderDAG<(ins "mlir::Value":$operand, "int":$outputs)>];
 
   let extraClassDeclaration = [{
-    bool isControl() {  return (*this)->getAttrOfType<BoolAttr>("control").getValue(); }
+    bool isControl() {
+      return (*this)->getAttrOfType<mlir::BoolAttr>("control").getValue();
+    }
   }];
 }
 
@@ -328,7 +334,7 @@ def MergeOp : Handshake_Op<"merge", [
 
   let hasCanonicalizer = 1;
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$inputs)>];
+  let builders = [OpBuilderDAG<(ins "mlir::Value":$operand, "int":$inputs)>];
 }
 
 def MuxOp : Handshake_Op<"mux", [
@@ -351,7 +357,7 @@ def MuxOp : Handshake_Op<"mux", [
   let results = (outs AnyType);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$inputs)>];
+  let builders = [OpBuilderDAG<(ins "mlir::Value":$operand, "int":$inputs)>];
   let verifier = "return ::verify(*this);";
 }
 
@@ -373,11 +379,11 @@ def ControlMergeOp : Handshake_Op<"control_merge", [
   let results = (outs Variadic<AnyType>);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$inputs)>];
+  let builders = [OpBuilderDAG<(ins "mlir::Value":$operand, "int":$inputs)>];
 
   let extraClassDeclaration = [{
     bool isControl() {
-      return (*this)->getAttrOfType<BoolAttr>("control").getValue();
+      return (*this)->getAttrOfType<mlir::BoolAttr>("control").getValue();
     }
   }];
 }
@@ -398,12 +404,12 @@ def BranchOp : Handshake_Op<"branch", [
   let results = (outs AnyType : $dataResult);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilderDAG<(ins "Value":$dataOperand)>];
+  let builders = [OpBuilderDAG<(ins "mlir::Value":$dataOperand)>];
 
   let hasCanonicalizer = 1;
   let extraClassDeclaration = [{
     bool isControl() {
-      return (*this)->getAttrOfType<BoolAttr>("control").getValue();
+      return (*this)->getAttrOfType<mlir::BoolAttr>("control").getValue();
     }
   }];
 }
@@ -425,19 +431,22 @@ def ConditionalBranchOp : Handshake_Op<"conditional_branch", [
                       AnyType : $falseResult);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilderDAG<(ins "Value":$condOperand, "Value":$dataOperand)>];
+  let builders = [OpBuilderDAG<(ins "mlir::Value":$condOperand,
+                                    "mlir::Value":$dataOperand)>];
 
   let extraClassDeclaration = [{
     // These are the indices into the dests list.
     enum { trueIndex = 0, falseIndex = 1 };
 
-    Value getFalseResult() { return getResult(falseIndex); }
+    mlir::Value getFalseResult() { return getResult(falseIndex); }
 
-    Value getTrueResult() { return getResult(trueIndex); }
+    mlir::Value getTrueResult() { return getResult(trueIndex); }
 
-    Value getDataOperand() { return getOperand(1); }
+    mlir::Value getDataOperand() { return getOperand(1); }
 
-    bool isControl() { return (*this)->getAttrOfType<BoolAttr>("control").getValue(); }
+    bool isControl() {
+      return (*this)->getAttrOfType<mlir::BoolAttr>("control").getValue();
+    }
   }];
 }
 
@@ -451,7 +460,7 @@ def SinkOp
   let arguments = (ins AnyType);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilderDAG<(ins "Value":$operand)>];
+  let builders = [OpBuilderDAG<(ins "mlir::Value":$operand)>];
 }
 
 def SourceOp : Handshake_Op<"source", [NoSideEffect]> {
@@ -480,10 +489,11 @@ def ConstantOp : Handshake_Op<"constant", [
   let results = (outs AnyType);
 
   // let skipDefaultBuilders = 1;
-  let builders = [OpBuilderDAG<(ins "Attribute":$value, "Value":$operand)>];
+  let builders = [OpBuilderDAG<(ins "mlir::Attribute":$value,
+                                    "mlir::Value":$operand)>];
 
   let extraClassDeclaration = [{
-    Attribute getValue() { return (*this)->getAttr("value"); }
+    mlir::Attribute getValue() { return (*this)->getAttr("value"); }
   }];
 }
 
@@ -499,7 +509,7 @@ def EndOp
   let arguments = (ins AnyType : $control, Variadic<AnyType>);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilderDAG<(ins "Value":$operand)>];
+  let builders = [OpBuilderDAG<(ins "mlir::Value":$operand)>];
 }
 
 def StartOp : Handshake_Op<"start", [
@@ -529,23 +539,29 @@ def TerminatorOp : Handshake_Op<"terminator", [Terminator]> {
 
   let successors = (successor VariadicSuccessor<AnySuccessor>:$dests);
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilderDAG<(ins "ArrayRef<Block *>":$successors)>];
+  let builders = [
+    OpBuilderDAG<(ins "llvm::ArrayRef<mlir::Block *>":$successors)>
+  ];
 }
 
-def MemRefTypeAttr : TypeAttrBase<"MemRefType", "memref type attribute">;
+def MemRefTypeAttr : TypeAttrBase<"mlir::MemRefType", "memref type attribute">;
 def MemoryOp : Handshake_Op<"memory", [
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<MemoryOpInterface>, HasClock
 ]> {
   let summary = "memory";
   let description = [{
-    Each MemoryOp represents an independent memory or memory region (BRAM or external memory).
-    It receives memory access requests from load and store operations. For every request,
-    it returns data (for load) and a data-less token indicating completion.
-    Operands: all stores (stdata1, staddr1, stdata2, staddr2, ...), then all loads (ldaddr1, ldaddr2,...)
-    Outputs: all load outputs, ordered the same as
-    load addresses (lddata1, lddata2, ...), followed by all none outputs,
-    ordered as operands (stnone1, stnone2,...ldnone1, ldnone2,...)
+    Each MemoryOp represents an independent memory or memory region (BRAM or
+    external memory). It receives memory access requests from load and store
+    operations. For every request, it returns data (for load) and a data-less
+    token indicating completion.
+    
+    Operands: all stores (stdata1, staddr1, stdata2, staddr2, ...), then all
+     loads (ldaddr1, ldaddr2,...)
+    
+    Outputs: all load outputs, ordered the same as load addresses (lddata1,
+      lddata2, ...), followed by all none outputs, ordered as operands (stnone1,
+      stnone2,...ldnone1, ldnone2,...)
   }];
   let arguments = (ins Variadic<AnyType>,
                           I32Attr : $ld_count,
@@ -555,22 +571,24 @@ def MemoryOp : Handshake_Op<"memory", [
   let results = (outs Variadic<AnyType>);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilderDAG<(
-      ins "ArrayRef<Value>":$operands, "int":$outputs, "int":$control_outputs, "bool":$lsq,
-      "int":$id, "Value":$memref)>
+  let builders = [OpBuilderDAG<
+    (ins "llvm::ArrayRef<mlir::Value>":$operands, "int":$outputs,
+      "int":$control_outputs, "bool":$lsq, "int":$id, "mlir::Value":$memref)>
   ];
   let extraClassDeclaration = [{
-    APInt getLdCount() {
-      return (*this)->getAttrOfType<IntegerAttr>("ld_count").getValue();
+    llvm::APInt getLdCount() {
+      return (*this)->getAttrOfType<mlir::IntegerAttr>("ld_count").getValue();
     }
-    APInt getStCount() {
-      return (*this)->getAttrOfType<IntegerAttr>("st_count").getValue();
+    llvm::APInt getStCount() {
+      return (*this)->getAttrOfType<mlir::IntegerAttr>("st_count").getValue();
     }
     unsigned getID() {
-      return (*this)->getAttrOfType<IntegerAttr>("id").getValue().getZExtValue();
+      return (*this)->getAttrOfType<mlir::IntegerAttr>("id").getValue()
+        .getZExtValue();
     }
-    MemRefType getMemRefType() {
-      return (*this)->getAttrOfType<TypeAttr>("type").getValue().cast<MemRefType>();
+    mlir::MemRefType getMemRefType() {
+      return (*this)->getAttrOfType<mlir::TypeAttr>("type").getValue()
+        .cast<mlir::MemRefType>();
     }
   }];
 }
@@ -586,14 +604,16 @@ def LoadOp
      sends the address indices to MemoryOp. When the MemoryOp returns
      a piece of data, the load sends it to its dataflow successor.
 
-     Operands: address indices (from predecessor), data (from MemoryOp), control-only input.
+     Operands: address indices (from predecessor), data (from MemoryOp),
+      control-only input.
      Results: data (to successor), address indices (to MemoryOp).
   }];
 
   let arguments = (ins Variadic<Index>, AnyType, NoneType);
   let results = (outs AnyType, Variadic<Index>:$addressResults);
 
-  let builders = [OpBuilderDAG<(ins "Value":$memref, "ArrayRef<Value>":$indices)>];
+  let builders = [OpBuilderDAG<(ins "mlir::Value":$memref, 
+                                    "llvm::ArrayRef<mlir::Value>":$indices)>];
 }
 
 def StoreOp : Handshake_Op<"store", [
@@ -616,7 +636,8 @@ def StoreOp : Handshake_Op<"store", [
   let results = (outs AnyType, Variadic<Index>);
 
   let builders =
-      [OpBuilderDAG<(ins "Value":$valueToStore, "ArrayRef<Value>":$indices)>];
+      [OpBuilderDAG<(ins "mlir::Value":$valueToStore,
+                         "llvm::ArrayRef<mlir::Value>":$indices)>];
 }
 
 def JoinOp : Handshake_Op<"join", [
@@ -632,7 +653,7 @@ def JoinOp : Handshake_Op<"join", [
   let results = (outs NoneType);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilderDAG<(ins "ArrayRef<Value>":$operands)>];
+  let builders = [OpBuilderDAG<(ins "llvm::ArrayRef<mlir::Value>":$operands)>];
 }
 
 def I4 : I<4>;

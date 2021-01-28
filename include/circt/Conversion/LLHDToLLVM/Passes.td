@@ -15,7 +15,7 @@
 
 include "mlir/Pass/PassBase.td"
 
-def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "ModuleOp"> {
+def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "mlir::ModuleOp"> {
     let summary = "Convert LLHD to LLVM";
     // TODO: add description
     let description = [{

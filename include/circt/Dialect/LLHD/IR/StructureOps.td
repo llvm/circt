@@ -54,22 +54,22 @@ def LLHD_EntityOp : LLHD_Op<"entity", [
   let verifier = [{ return ::verify(*this); }];
 
   let extraClassDeclaration = [{
-    friend class OpTrait::FunctionLike<EntityOp>;
+    friend class mlir::OpTrait::FunctionLike<EntityOp>;
 
     // use FunctionLike traits's getBody method
-    using OpTrait::FunctionLike<EntityOp>::getBody;
+    using mlir::OpTrait::FunctionLike<EntityOp>::getBody;
 
     /// Hooks for the input/output type enumeration in FunctionLike.
     unsigned getNumFuncArguments() { return getType().getNumInputs(); }
     unsigned getNumFuncResults() { return getType().getNumResults(); }
 
     /// Hook for FunctionLike verifier.
-    LogicalResult verifyType();
+    mlir::LogicalResult verifyType();
 
     /// Verifies the body of the function.
-    LogicalResult verifyBody();
+    mlir::LogicalResult verifyBody();
 
-    Block *getBodyBlock() { return &body().front(); }
+    mlir::Block *getBodyBlock() { return &body().front(); }
   }];
 }
 
@@ -121,17 +121,17 @@ def LLHD_ProcOp : LLHD_Op<"proc", [
   let regions = (region AnyRegion: $body);
 
   let extraClassDeclaration = [{
-    friend class OpTrait::FunctionLike<ProcOp>;
+    friend class mlir::OpTrait::FunctionLike<ProcOp>;
 
     /// Hooks for the input/output type enumeration in FunctionLike.
     unsigned getNumFuncArguments() { return getType().getNumInputs(); }
     unsigned getNumFuncResults() { return getType().getNumResults(); }
 
     /// Hook for FunctionLike verifier.
-    LogicalResult verifyType();
+    mlir::LogicalResult verifyType();
 
     /// Verifies the body of the function.
-    LogicalResult verifyBody();
+    mlir::LogicalResult verifyBody();
   }];
 
   let verifier = [{ return ::verify(*this); }];
@@ -181,8 +181,8 @@ def LLHD_InstOp : LLHD_Op<"inst", [
   }];
 
   let extraClassDeclaration = [{
-    StringRef getCallee() { return callee(); }
-    FunctionType getCalleeType();
+    llvm::StringRef getCallee() { return callee(); }
+    mlir::FunctionType getCalleeType();
 
     /// Get the argument operands to the called function.
     operand_range getArgOperands() {
@@ -193,8 +193,8 @@ def LLHD_InstOp : LLHD_Op<"inst", [
     operand_iterator arg_operand_end() { return operand_end(); }
 
     /// Return the callee of this operation.
-    CallInterfaceCallable getCallableForCallee() {
-      return (*this)->getAttrOfType<SymbolRefAttr>("callee");
+    mlir::CallInterfaceCallable getCallableForCallee() {
+      return (*this)->getAttrOfType<mlir::SymbolRefAttr>("callee");
     }
   }];
 

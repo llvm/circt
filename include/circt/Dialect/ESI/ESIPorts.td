@@ -35,7 +35,7 @@ def Channel : ESI_Port<"Channel"> {
   }];
 
   let mnemonic = "channel";
-  let parameters = (ins "Type":$inner);
+  let parameters = (ins "mlir::Type":$inner);
 }
 
 def ChannelType :

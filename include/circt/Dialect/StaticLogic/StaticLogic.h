@@ -30,12 +30,10 @@
 namespace circt {
 namespace staticlogic {
 
-using namespace mlir;
-
-class StaticLogicDialect : public Dialect {
+class StaticLogicDialect : public mlir::Dialect {
 public:
-  StaticLogicDialect(MLIRContext *context);
-  static StringRef getDialectNamespace() { return "staticlogic"; }
+  StaticLogicDialect(mlir::MLIRContext *context);
+  static llvm::StringRef getDialectNamespace() { return "staticlogic"; }
 };
 
 } // namespace staticlogic

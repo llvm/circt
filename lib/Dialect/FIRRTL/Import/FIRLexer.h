@@ -13,7 +13,6 @@
 #ifndef FIRTOMLIR_FIRLEXER_H
 #define FIRTOMLIR_FIRLEXER_H
 
-#include "circt/Support/LLVM.h"
 #include "llvm/Support/SourceMgr.h"
 
 namespace mlir {
@@ -37,10 +36,11 @@ public:
 #include "FIRTokenKinds.def"
   };
 
-  FIRToken(Kind kind, StringRef spelling) : kind(kind), spelling(spelling) {}
+  FIRToken(Kind kind, llvm::StringRef spelling)
+      : kind(kind), spelling(spelling) {}
 
   // Return the bytes that make up this token.
-  StringRef getSpelling() const { return spelling; }
+  llvm::StringRef getSpelling() const { return spelling; }
 
   // Token classification.
   Kind getKind() const { return kind; }
@@ -71,7 +71,7 @@ public:
   /// removing the quote characters and unescaping the contents of the string.
   /// The lexer has already verified that this token is valid.
   std::string getStringValue() const;
-  static std::string getStringValue(StringRef spelling);
+  static std::string getStringValue(llvm::StringRef spelling);
 
   // Location processing.
   llvm::SMLoc getLoc() const;
@@ -84,7 +84,7 @@ private:
 
   /// A reference to the entire token contents; this is always a pointer into
   /// a memory buffer owned by the source manager.
-  StringRef spelling;
+  llvm::StringRef spelling;
 };
 
 /// This implements a lexer for .fir files.
@@ -100,15 +100,15 @@ public:
 
   /// Return the indentation level of the specified token or None if this token
   /// is preceded by another token on the same line.
-  Optional<unsigned> getIndentation(const FIRToken &tok) const;
+  llvm::Optional<unsigned> getIndentation(const FIRToken &tok) const;
 
 private:
   // Helpers.
   FIRToken formToken(FIRToken::Kind kind, const char *tokStart) {
-    return FIRToken(kind, StringRef(tokStart, curPtr - tokStart));
+    return FIRToken(kind, llvm::StringRef(tokStart, curPtr - tokStart));
   }
 
-  FIRToken emitError(const char *loc, const Twine &message);
+  FIRToken emitError(const char *loc, const llvm::Twine &message);
 
   // Lexer implementation methods.
   FIRToken lexFileInfo(const char *tokStart);
@@ -121,7 +121,7 @@ private:
   const llvm::SourceMgr &sourceMgr;
   mlir::MLIRContext *context;
 
-  StringRef curBuffer;
+  llvm::StringRef curBuffer;
   const char *curPtr;
 
   FIRLexer(const FIRLexer &) = delete;

@@ -35,7 +35,7 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments,
   // implicitly installed.
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringRef":$cond,
+    OpBuilderDAG<(ins "llvm::StringRef":$cond,
                       CArg<"std::function<void()>", "{}">:$thenCtor,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>
   ];
@@ -44,12 +44,12 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments,
     /// Returns true if an else block exists.
     bool hasElse() { return !elseRegion().empty(); }
 
-    Block *getThenBlock() {
+    mlir::Block *getThenBlock() {
       assert(!thenRegion().empty() && "Unexpected empty 'then' region.");
       return &thenRegion().front();
     }
 
-    Block *getElseBlock() {
+    mlir::Block *getElseBlock() {
       assert(hasElse() && "Empty 'else' region.");
       return &elseRegion().front();
     }
@@ -70,7 +70,7 @@ def IfOp : SVOp<"if", [HasRegionTerminator, NoRegionArguments,
   // implicitly installed.
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "Value":$cond,
+    OpBuilderDAG<(ins "mlir::Value":$cond,
                       CArg<"std::function<void()>", "{}">:$thenCtor,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>
   ];
@@ -79,12 +79,12 @@ def IfOp : SVOp<"if", [HasRegionTerminator, NoRegionArguments,
     /// Returns true if an else block exists.
     bool hasElse() { return !elseRegion().empty(); }
 
-    Block *getThenBlock() {
+    mlir::Block *getThenBlock() {
       assert(!thenRegion().empty() && "Unexpected empty 'then' region.");
       return &thenRegion().front();
     }
 
-    Block *getElseBlock() {
+    mlir::Block *getElseBlock() {
       assert(hasElse() && "Empty 'else' region.");
       return &elseRegion().front();
     }
@@ -118,16 +118,17 @@ def AlwaysOp : SVOp<"always", [HasRegionTerminator, NoRegionArguments,
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "ArrayRef<EventControl>":$event, "ArrayRef<Value>":$cond,
+    OpBuilderDAG<(ins "llvm::ArrayRef<EventControl>":$event,
+                      "llvm::ArrayRef<mlir::Value>":$cond,
                       CArg<"std::function<void()>", "{}">:$bodyCtor)>
   ];
 
   let extraClassDeclaration = [{
-    Block *getBodyBlock() { return &body().front(); }
+    mlir::Block *getBodyBlock() { return &body().front(); }
 
     struct Condition {
       EventControl event;
-      Value value;
+      mlir::Value value;
     };
 
     size_t getNumConditions() { return events().size(); }
@@ -173,18 +174,18 @@ def AlwaysFFOp : SVOp<"alwaysff", [HasRegionTerminator, NoRegionArguments,
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "EventControl":$clockEdge, "Value":$clock,
+    OpBuilderDAG<(ins "EventControl":$clockEdge, "mlir::Value":$clock,
                       CArg<"std::function<void()>", "{}">:$bodyCtor)>,
-    OpBuilderDAG<(ins "EventControl":$clockEdge, "Value":$clock, 
+    OpBuilderDAG<(ins "EventControl":$clockEdge, "mlir::Value":$clock, 
                       "ResetType":$resetStyle,
-                      "EventControl":$resetEdge, "Value":$reset,
+                      "EventControl":$resetEdge, "mlir::Value":$reset,
                       CArg<"std::function<void()>", "{}">:$bodyCtor,
                       CArg<"std::function<void()>", "{}">:$resetCtor)>
   ];
 
   let extraClassDeclaration = [{
-    Block *getBodyBlock() { return &bodyBlk().front(); }
-    Block *getResetBlock() { return &resetBlk().front(); }
+    mlir::Block *getBodyBlock() { return &bodyBlk().front(); }
+    mlir::Block *getResetBlock() { return &resetBlk().front(); }
   }];
 }
 
@@ -208,7 +209,7 @@ def InitialOp : SVOp<"initial", [HasRegionTerminator, NoRegionArguments,
   ];
 
   let extraClassDeclaration = [{
-    Block *getBodyBlock() { return &body().front(); }
+    mlir::Block *getBodyBlock() { return &body().front(); }
   }];
 }
 
@@ -311,7 +312,7 @@ def VerbatimOp : SVOp<"verbatim"> {
     "$string attr-dict (`(` $operands^ `)` `:` type($operands))?";
 
   let builders = [
-    OpBuilderDAG<(ins "StringRef":$string),
+    OpBuilderDAG<(ins "llvm::StringRef":$string),
                  "build(odsBuilder, odsState, string, ValueRange{});">
   ];
 }

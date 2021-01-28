@@ -103,7 +103,7 @@ def LLHD_TupleOp : LLHD_Op<"tuple", [
       "types of 'values' have to match the type of the corresponding 'result' "
       "tuple element",
       "result", "values",
-      "$_self.cast<TupleType>().getTypes()">
+      "$_self.cast<mlir::TupleType>().getTypes()">
   ]> {
   let summary = "Create a tuple from a list of values.";
   let description = [{

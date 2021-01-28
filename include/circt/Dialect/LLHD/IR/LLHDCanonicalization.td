@@ -17,7 +17,7 @@ include "circt/Dialect/LLHD/IR/LLHD.td"
 include "mlir/Dialect/StandardOps/IR/Ops.td"
 
 def IndexAttrFromSignlessInteger : NativeCodeCall<
-  "$_builder.getIndexAttr($0.cast<IntegerAttr>().getValue().getZExtValue())">;
+  "$_builder.getIndexAttr($0.cast<mlir::IntegerAttr>().getValue().getZExtValue())">;
 
 //===----------------------------------------------------------------------===//
 // XorOp
@@ -25,8 +25,8 @@ def IndexAttrFromSignlessInteger : NativeCodeCall<
 
 def XorAllBitsSet : Pat<
   (LLHD_XorOp $lhs, (LLHD_ConstOp AttrConstraint<
-    CPred<"$_self.isa<IntegerAttr>() && "
-      "$_self.cast<IntegerAttr>().getValue().isAllOnesValue()">,
+    CPred<"$_self.isa<mlir::IntegerAttr>() && "
+      "$_self.cast<mlir::IntegerAttr>().getValue().isAllOnesValue()">,
     "signless integer -1">)),
   (LLHD_NotOp $lhs)>;
 

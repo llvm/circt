@@ -28,18 +28,18 @@ def InstanceOp : FIRRTLOp<"instance"> {
   let extraClassDeclaration = [{
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
-    Operation *getReferencedModule();
+    mlir::Operation *getReferencedModule();
 
     /// Return the port name for the specified result number.
-    StringAttr getPortName(size_t resultNo);
-    StringRef getPortNameStr(size_t resultNo) {
+    mlir::StringAttr getPortName(size_t resultNo);
+    llvm::StringRef getPortNameStr(size_t resultNo) {
       return getPortName(resultNo).getValue();
     }
 
     // Return the result for this instance that corresponds to the specified
     // port name.
-    Value getPortNamed(StringRef name);
-    Value getPortNamed(StringAttr name);
+    mlir::Value getPortNamed(llvm::StringRef name);
+    mlir::Value getPortNamed(mlir::StringAttr name);
   }];
 }
 
@@ -75,13 +75,14 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
     /// Return the type of a mem given a list of named ports and their kind.
     /// This returns a null type if there are duplicate port names.
     static BundleType getTypeForPortList(uint64_t depth, FIRRTLType dataType,
-                              ArrayRef<std::pair<Identifier, PortKind>> ports);
+                  llvm::ArrayRef<std::pair<mlir::Identifier, PortKind>> ports);
 
     /// Return the name and kind of ports supported by this memory.
-    void getPorts(SmallVectorImpl<std::pair<Identifier, PortKind>> &result);
+    void getPorts(
+      llvm::SmallVectorImpl<std::pair<mlir::Identifier, PortKind>> &result);
 
     /// Return the kind of the specified port or None if the name is invalid.
-    Optional<PortKind> getPortKind(StringRef portName);
+    llvm::Optional<PortKind> getPortKind(llvm::StringRef portName);
 
     /// Return the data-type field of the memory, the type of each element.  If
     /// the Mem has no read/write ports, this will return null.
@@ -155,7 +156,7 @@ def WireOp : FIRRTLOp<"wire", []> {
 
   let builders = [
     OpBuilderDAG<(ins "::mlir::Type":$elementType,
-                      CArg<"StringRef", "{}">:$name), [{
+                      CArg<"llvm::StringRef", "{}">:$name), [{
       return build($_builder, $_state, elementType,
                    $_builder.getStringAttr(name));
     }]>

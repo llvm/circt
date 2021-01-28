@@ -17,14 +17,13 @@
 
 namespace circt {
 namespace sv {
-using namespace mlir;
 
-class SVDialect : public Dialect {
+class SVDialect : public mlir::Dialect {
 public:
-  explicit SVDialect(MLIRContext *context);
+  explicit SVDialect(mlir::MLIRContext *context);
   ~SVDialect();
 
-  static StringRef getDialectNamespace() { return "sv"; }
+  static llvm::StringRef getDialectNamespace() { return "sv"; }
 
   /// Parses a type registered to this dialect
   mlir::Type parseType(mlir::DialectAsmParser &parser) const override;

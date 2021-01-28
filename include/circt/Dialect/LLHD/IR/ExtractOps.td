@@ -15,7 +15,7 @@ def LLHD_ExtractSliceOp : LLHD_Op<"extract_slice", [
     PredOpTrait<
       "'start' + size of the slice have to be smaller or equal to the 'target' "
       "size",
-      CPred<"$start.cast<IntegerAttr>().getInt() + this->getSliceSize() <= "
+      CPred<"$start.cast<mlir::IntegerAttr>().getInt() + this->getSliceSize() <= "
             "this->getTargetSize()">>,
     SameTypeArbitraryWidth<
       "'target' and 'result' have to be both either signless integers, signals "
@@ -115,7 +115,7 @@ def LLHD_DynExtractSliceOp : LLHD_Op<"dyn_extract_slice", [
 def LLHD_ExtractElementOp : LLHD_Op<"extract_element", [
     NoSideEffect,
     PredOpTrait<"'index' has to be smaller than the width of the 'target' type",
-      CPred<"$index.cast<IntegerAttr>().getInt() < getTargetWidth()">>,
+      CPred<"$index.cast<mlir::IntegerAttr>().getInt() < getTargetWidth()">>,
     TypesMatchWith<
       "'result' type must match the type of 'target' at position 'index', or "
       "in case 'target' is a signal, it must be a signal of the underlying type"
@@ -123,8 +123,8 @@ def LLHD_ExtractElementOp : LLHD_Op<"extract_element", [
       "target", "result",
       "($_self.isa<llhd::SigType>() "
         "? llhd::SigType::get("
-          "getElementTypeAtIndex($index.cast<IntegerAttr>().getInt())) "
-        ": getElementTypeAtIndex($index.cast<IntegerAttr>().getInt()))">
+          "getElementTypeAtIndex($index.cast<mlir::IntegerAttr>().getInt())) "
+        ": getElementTypeAtIndex($index.cast<mlir::IntegerAttr>().getInt()))">
   ]> {
   let summary = [{
     Extract an element from an array, tuple, or signal of an array or tuple.
@@ -168,13 +168,13 @@ def LLHD_ExtractElementOp : LLHD_Op<"extract_element", [
   let extraClassDeclaration = [{
     unsigned getTargetWidth() { return getLLHDTypeWidth(target().getType()); };
 
-    Type getElementTypeAtIndex(unsigned index) {
-      Type targetType = target().getType();
+    mlir::Type getElementTypeAtIndex(unsigned index) {
+      mlir::Type targetType = target().getType();
       if (auto sig = targetType.dyn_cast<llhd::SigType>())
         targetType = sig.getUnderlyingType();
       if (auto array = targetType.dyn_cast<llhd::ArrayType>())
         return array.getElementType();
-      return targetType.cast<TupleType>().getTypes()[index];
+      return targetType.cast<mlir::TupleType>().getTypes()[index];
     }
   }];
 
@@ -227,8 +227,8 @@ def LLHD_DynExtractElementOp : LLHD_Op<"dyn_extract_element", [
   let extraClassDeclaration = [{
     unsigned getTargetWidth() { return getLLHDTypeWidth(target().getType()); }
 
-    Type getElementType() {
-      Type targetType = target().getType();
+    mlir::Type getElementType() {
+      mlir::Type targetType = target().getType();
       if (auto sig = targetType.dyn_cast<llhd::SigType>())
         targetType = sig.getUnderlyingType();
       return targetType.cast<llhd::ArrayType>().getElementType();

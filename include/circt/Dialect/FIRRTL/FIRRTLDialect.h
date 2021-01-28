@@ -18,27 +18,27 @@
 
 namespace circt {
 namespace firrtl {
-using namespace mlir;
 class FIRRTLType;
 
-class FIRRTLDialect : public Dialect {
+class FIRRTLDialect : public mlir::Dialect {
 public:
   /// Create the dialect in the given `context`.
-  explicit FIRRTLDialect(MLIRContext *context);
+  explicit FIRRTLDialect(mlir::MLIRContext *context);
   ~FIRRTLDialect();
 
-  Type parseType(DialectAsmParser &parser) const override;
-  void printType(Type, DialectAsmPrinter &) const override;
+  mlir::Type parseType(mlir::DialectAsmParser &parser) const override;
+  void printType(mlir::Type, mlir::DialectAsmPrinter &) const override;
 
-  Operation *materializeConstant(OpBuilder &builder, Attribute value, Type type,
-                                 Location loc) override;
+  mlir::Operation *materializeConstant(mlir::OpBuilder &builder,
+                                       mlir::Attribute value, mlir::Type type,
+                                       mlir::Location loc) override;
 
-  static StringRef getDialectNamespace() { return "firrtl"; }
+  static llvm::StringRef getDialectNamespace() { return "firrtl"; }
 };
 
 /// If the specified attribute list has a firrtl.name attribute, return its
 /// value.
-StringAttr getFIRRTLNameAttr(ArrayRef<NamedAttribute> attrs);
+mlir::StringAttr getFIRRTLNameAttr(llvm::ArrayRef<mlir::NamedAttribute> attrs);
 
 } // namespace firrtl
 } // namespace circt

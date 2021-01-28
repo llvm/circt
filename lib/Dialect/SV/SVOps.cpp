@@ -17,6 +17,7 @@
 #include "llvm/ADT/SmallString.h"
 
 using namespace circt;
+using namespace mlir;
 using namespace sv;
 
 /// Return true if the specified operation is an expression.

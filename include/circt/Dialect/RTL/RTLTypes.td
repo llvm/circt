@@ -52,7 +52,7 @@ def ArrayType : RTLType<"Array"> {
   let genVerifyInvariantsDecl = 1;
 
   let extraClassDeclaration = [{
-    static ArrayType get(Type elementType, size_t size) {
+    static ArrayType get(mlir::Type elementType, size_t size) {
       return get(elementType.getContext(), elementType, size);
     }
   }];
@@ -71,7 +71,7 @@ def UnpackedArrayType : RTLType<"UnpackedArray"> {
   let genVerifyInvariantsDecl = 1;
 
   let extraClassDeclaration = [{
-    static UnpackedArrayType get(Type elementType, size_t size) {
+    static UnpackedArrayType get(mlir::Type elementType, size_t size) {
       return get(elementType.getContext(), elementType, size);
     }
   }];
@@ -90,7 +90,7 @@ def InOutType : RTLType<"InOut"> {
   let genVerifyInvariantsDecl = 1;
 
   let extraClassDeclaration = [{
-    static InOutType get(Type elementType) {
+    static InOutType get(mlir::Type elementType) {
       return get(elementType.getContext(), elementType);
     }
   }];
@@ -115,15 +115,15 @@ def StructType : RTLType<"Struct"> {
 
   let extraClassDeclaration = [{
     struct FieldInfo {
-      mlir::StringRef name;
-      Type type;
+      llvm::StringRef name;
+      mlir::Type type;
       FieldInfo allocateInto(mlir::TypeStorageAllocator &alloc) const {
         return FieldInfo{alloc.copyInto(name), type};
       }
     };
 
-    mlir::Type getFieldType(mlir::StringRef fieldName);
-    void getInnerTypes(mlir::SmallVectorImpl<mlir::Type>&);
+    mlir::Type getFieldType(llvm::StringRef fieldName);
+    void getInnerTypes(llvm::SmallVectorImpl<mlir::Type>&);
 
   }];
 }

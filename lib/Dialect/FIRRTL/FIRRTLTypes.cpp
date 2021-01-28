@@ -19,6 +19,7 @@
 
 using namespace circt;
 using namespace firrtl;
+using namespace mlir;
 
 //===----------------------------------------------------------------------===//
 // Type Printing

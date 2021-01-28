@@ -26,16 +26,16 @@ class OperationPass;
 
 namespace circt {
 namespace llhd {
-using namespace mlir;
 
 /// Get the LLHD to LLVM conversion patterns.
-void populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
-                                          OwningRewritePatternList &patterns,
-                                          size_t &sigCounter,
-                                          size_t &regCounter);
+void populateLLHDToLLVMConversionPatterns(
+    mlir::LLVMTypeConverter &converter,
+    mlir::OwningRewritePatternList &patterns, size_t &sigCounter,
+    size_t &regCounter);
 
 /// Create an LLHD to LLVM conversion pass.
-std::unique_ptr<OperationPass<ModuleOp>> createConvertLLHDToLLVMPass();
+std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
+createConvertLLHDToLLVMPass();
 
 void initLLHDToLLVMPass();
 } // namespace llhd

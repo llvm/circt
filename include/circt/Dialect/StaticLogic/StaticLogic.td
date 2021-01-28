@@ -43,17 +43,18 @@ def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [NoSideEffect]> {
 
   let skipDefaultBuilders = 1;
 
-  let builders = [OpBuilderDAG<(ins "ValueRange":$operands, "ValueRange":$results), [{
-    SmallVector<Type, 4> argTypes;
+  let builders = [OpBuilderDAG<(ins "mlir::ValueRange":$operands,
+                                    "mlir::ValueRange":$results), [{
+    llvm::SmallVector<Type, 4> argTypes;
     for (auto value : operands)
       argTypes.push_back(value.getType());
 
-    SmallVector<Type, 4> resultTypes;
+    llvm::SmallVector<Type, 4> resultTypes;
     for (auto value : results)
       resultTypes.push_back(value.getType());
 
-    Region *bodyRegion = odsState.addRegion();
-    Block *body = new Block();
+    mlir::Region *bodyRegion = odsState.addRegion();
+    mlir::Block *body = new mlir::Block();
     bodyRegion->push_back(body);
     body->addArguments(argTypes);
 

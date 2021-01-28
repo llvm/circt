@@ -16,6 +16,7 @@
 #include "mlir/IR/PatternMatch.h"
 
 using namespace circt;
+using namespace mlir;
 using namespace rtl;
 
 static Attribute getIntAttr(const APInt &value, MLIRContext *context) {

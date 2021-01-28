@@ -17,23 +17,24 @@
 
 namespace circt {
 namespace rtl {
-using namespace mlir;
 
-class RTLDialect : public Dialect {
+class RTLDialect : public mlir::Dialect {
 public:
-  explicit RTLDialect(MLIRContext *context);
+  explicit RTLDialect(mlir::MLIRContext *context);
   ~RTLDialect();
 
-  static StringRef getDialectNamespace() { return "rtl"; }
+  static llvm::StringRef getDialectNamespace() { return "rtl"; }
 
-  Operation *materializeConstant(OpBuilder &builder, Attribute value, Type type,
-                                 Location loc) override;
+  mlir::Operation *materializeConstant(mlir::OpBuilder &builder,
+                                       mlir::Attribute value, mlir::Type type,
+                                       mlir::Location loc) override;
 
   /// Parses a type registered to this dialect
-  Type parseType(DialectAsmParser &parser) const override;
+  mlir::Type parseType(mlir::DialectAsmParser &parser) const override;
 
   /// Print a type registered to this dialect
-  void printType(Type type, DialectAsmPrinter &printer) const override;
+  void printType(mlir::Type type,
+                 mlir::DialectAsmPrinter &printer) const override;
 };
 
 } // namespace rtl

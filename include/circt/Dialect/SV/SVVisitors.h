@@ -23,9 +23,9 @@ template <typename ConcreteType, typename ResultType = void,
           typename... ExtraArgs>
 class Visitor {
 public:
-  ResultType dispatchSVVisitor(Operation *op, ExtraArgs... args) {
+  ResultType dispatchSVVisitor(mlir::Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
-    return TypeSwitch<Operation *, ResultType>(op)
+    return llvm::TypeSwitch<mlir::Operation *, ResultType>(op)
         .template Case<TextualValueOp,
                        // Declarations.
                        RegOp,
@@ -49,14 +49,14 @@ public:
   }
 
   /// This callback is invoked on any invalid operations.
-  ResultType visitInvalidSV(Operation *op, ExtraArgs... args) {
+  ResultType visitInvalidSV(mlir::Operation *op, ExtraArgs... args) {
     op->emitOpError("unknown SV node");
     abort();
   }
 
   /// This callback is invoked on any SV operations that are not handled by the
   /// concrete visitor.
-  ResultType visitUnhandledSV(Operation *op, ExtraArgs... args) {
+  ResultType visitUnhandledSV(mlir::Operation *op, ExtraArgs... args) {
     return ResultType();
   }
 

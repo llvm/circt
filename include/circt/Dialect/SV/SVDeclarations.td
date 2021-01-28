@@ -18,7 +18,7 @@ def RegOp : SVOp<"reg", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilderDAG<(ins "::mlir::Type":$elementType,
-                      CArg<"StringAttr", "StringAttr()">:$name)>
+                      CArg<"mlir::StringAttr", "mlir::StringAttr()">:$name)>
   ];
 
   // We handle the name in a custom way, so we use a customer parser/printer.

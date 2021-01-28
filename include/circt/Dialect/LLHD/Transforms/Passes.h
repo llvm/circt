@@ -23,17 +23,18 @@ class OperationPass;
 
 namespace circt {
 namespace llhd {
-using namespace mlir;
 
 class ProcOp;
 
-std::unique_ptr<OperationPass<ModuleOp>> createProcessLoweringPass();
+std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
+createProcessLoweringPass();
 
-std::unique_ptr<OperationPass<ModuleOp>> createFunctionEliminationPass();
+std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
+createFunctionEliminationPass();
 
-std::unique_ptr<OperationPass<ProcOp>> createMemoryToBlockArgumentPass();
+std::unique_ptr<mlir::OperationPass<ProcOp>> createMemoryToBlockArgumentPass();
 
-std::unique_ptr<OperationPass<ProcOp>> createEarlyCodeMotionPass();
+std::unique_ptr<mlir::OperationPass<ProcOp>> createEarlyCodeMotionPass();
 
 /// Register the LLHD Transformation passes.
 void initLLHDTransformationPasses();

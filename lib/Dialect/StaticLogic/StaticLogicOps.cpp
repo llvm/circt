@@ -13,9 +13,9 @@
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/IR/FunctionImplementation.h"
 
-using namespace mlir;
 using namespace circt;
 using namespace circt::staticlogic;
+using namespace mlir;
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/StaticLogic/StaticLogic.cpp.inc"

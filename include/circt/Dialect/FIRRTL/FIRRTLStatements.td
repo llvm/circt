@@ -153,7 +153,7 @@ def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">,
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "Value":$condition, "bool":$withElseRegion,
+    OpBuilderDAG<(ins "mlir::Value":$condition, "bool":$withElseRegion,
                       CArg<"std::function<void()>", "{}">:$thenCtor,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>
   ];
@@ -162,10 +162,10 @@ def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">,
     "$condition $thenRegion (`else` $elseRegion^)? attr-dict-with-keyword";
 
   let extraClassDeclaration = [{
-    OpBuilder getThenBodyBuilder() {
+    mlir::OpBuilder getThenBodyBuilder() {
       assert(!thenRegion().empty() && "Unexpected empty 'then' region.");
-      Block &body = thenRegion().front();
-      return OpBuilder(&body, std::prev(body.end()));
+      mlir::Block &body = thenRegion().front();
+      return mlir::OpBuilder(&body, std::prev(body.end()));
     }
 
     bool hasElseRegion() {
@@ -174,10 +174,10 @@ def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">,
 
     void createElseRegion();
 
-    OpBuilder getElseBodyBuilder() {
+    mlir::OpBuilder getElseBodyBuilder() {
       assert(hasElseRegion() && "Unexpected empty 'else' region.");
-      Block &body = elseRegion().front();
-      return OpBuilder(&body, std::prev(body.end()));
+      mlir::Block &body = elseRegion().front();
+      return mlir::OpBuilder(&body, std::prev(body.end()));
     }
   }];
 }
