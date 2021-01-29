@@ -575,14 +575,14 @@ def AnalogInOutCastOp : FIRRTLOp<"analogInOutCast", [NoSideEffect]> {
 
 // This operation converts from a struct to a bundle
 // type, or visa-versa.  FIRRTL source/destination types must be passive.
-def StdStructCastOp : FIRRTLOp<"stdStructCast", [NoSideEffect]> {
+def RTLStructCastOp : FIRRTLOp<"rtlStructCast", [NoSideEffect]> {
   let arguments = (ins AnyType:$input);
   let results = (outs AnyType:$result);
 
   let assemblyFormat =
     "$input attr-dict `:` functional-type($input, $result)";
 
-  let verifier = "return ::verifyStdStructCastOp(*this);";
+  let verifier = "return ::verifyRTLStructCastOp(*this);";
 }
 
 // MLIR specific pseudo ops.

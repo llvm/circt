@@ -68,7 +68,7 @@ static Value castToFIRRTLType(Value val, Type type,
     return builder.createOrFold<AnalogInOutCastOp>(firType, val);
 
   if (BundleType bundle = type.dyn_cast<BundleType>()) {
-    val = builder.createOrFold<StdStructCastOp>(firType.getPassiveType(), val);
+    val = builder.createOrFold<RTLStructCastOp>(firType.getPassiveType(), val);
   } else {
     val = builder.createOrFold<StdIntCastOp>(firType.getPassiveType(), val);
   }
@@ -85,7 +85,7 @@ static Value castFromFIRRTLType(Value val, Type type,
   // Strip off Flip type if needed.
   val = builder.createOrFold<AsPassivePrimOp>(val);
   if (rtl::StructType structTy = type.dyn_cast<rtl::StructType>())
-    return builder.createOrFold<StdStructCastOp>(type, val);
+    return builder.createOrFold<RTLStructCastOp>(type, val);
   return builder.createOrFold<StdIntCastOp>(type, val);
 }
 
