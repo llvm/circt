@@ -2094,9 +2094,6 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     return failure();
   }
 
-  if (depth < 1)
-    return emitError(info.getFIRLoc(), "invalid depth");
-
   if (readLatency < 0 || writeLatency < 0)
     return emitError(info.getFIRLoc(), "invalid latency");
 
