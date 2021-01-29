@@ -78,8 +78,9 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
     static BundleType getTypeForPortList(uint64_t depth, FIRRTLType dataType,
                               ArrayRef<std::pair<Identifier, PortKind>> ports);
 
+    /// Return the type of a port given the memory depth, type, and kind
     static BundleType getTypeForPort(uint64_t depth, FIRRTLType dataType,
-                              PortKind portKind);
+                                     PortKind portKind);
 
     /// Return the name and kind of ports supported by this memory.
     void getPorts(SmallVectorImpl<std::pair<Identifier, PortKind>> &result);
