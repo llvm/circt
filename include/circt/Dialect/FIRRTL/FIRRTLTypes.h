@@ -68,7 +68,7 @@ public:
   /// Reset, etc) then return the bitwidth.  Return -1 if the is one of these
   /// types but without a specified bitwidth.  Return -2 if this isn't a simple
   /// type.
-  int32_t getBitWidthOrSentinel();
+  int32_t getBitWidthOrSentinel() const;
 
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
