@@ -382,8 +382,7 @@ bool TypeSchemaImpl::operator==(const TypeSchemaImpl &that) const {
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Something which is appropriate for slicing and dicing. Contains helper
-/// methods to assist with naming and casting.
+/// Contains helper methods to assist with naming and casting.
 struct GasketComponent {
 public:
   GasketComponent(OpBuilder &b, Value init) : builder(&b), s(init) {}
@@ -784,7 +783,7 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
                         .name("ptrSection");
 
   // Loop through fields.
-  SmallVector<GasketComponent, 16> fieldValues;
+  SmallVector<GasketComponent, 64> fieldValues;
   for (auto field : st.getFields()) {
     uint16_t idx = field.getCodeOrder();
     assert(idx < fieldTypes.size() && "Capnp struct longer than fieldTypes.");
