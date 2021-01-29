@@ -117,6 +117,31 @@ private:
 } // namespace esi
 } // namespace circt
 
+/// Return the number of bits used by a Capnp primitive type.
+static size_t bits(::capnp::schema::Type::Reader type) {
+  using ty = ::capnp::schema::Type;
+  switch (type.which()) {
+  case ty::VOID:
+    return 0;
+  case ty::BOOL:
+    return 1;
+  case ty::UINT8:
+  case ty::INT8:
+    return 8;
+  case ty::UINT16:
+  case ty::INT16:
+    return 16;
+  case ty::UINT32:
+  case ty::INT32:
+    return 32;
+  case ty::UINT64:
+  case ty::INT64:
+    return 64;
+  default:
+    assert(false && "Type not yet supported");
+  }
+}
+
 TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
   fieldTypes =
       TypeSwitch<Type, ArrayRef<Type>>(type)
@@ -317,33 +342,213 @@ bool TypeSchemaImpl::operator==(const TypeSchemaImpl &that) const {
 }
 
 //===----------------------------------------------------------------------===//
+// Helper classes for common operations in the encode / decoders
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Contains helper methods to assist with naming and casting.
+struct GasketComponent {
+public:
+  GasketComponent(OpBuilder &b, Value init) : builder(&b), s(init) {}
+
+  /// Set the "name" attribute of a value's op.
+  template <typename T = GasketComponent>
+  T &name(const Twine &name) {
+    std::string nameStr = name.str();
+    if (nameStr.empty())
+      return *(T *)this;
+    auto nameAttr = StringAttr::get(nameStr, ctxt());
+    s.getDefiningOp()->setAttr("name", nameAttr);
+    return *(T *)this;
+  }
+  template <typename T = GasketComponent>
+  T &name(capnp::Text::Reader fieldName, const Twine &nameSuffix) {
+    return name<T>(StringRef(fieldName.cStr()) + nameSuffix);
+  }
+
+  /// Construct a bitcast.
+  GasketComponent cast(Type t) {
+    auto dst = builder->create<rtl::BitcastOp>(loc(), t, s);
+    return GasketComponent(*builder, dst);
+  }
+
+  /// Downcast an int, accounting for signedness.
+  GasketComponent downcast(IntegerType t) {
+    // Since the RTL dialect operators only operate on signless integers, we
+    // have to cast to signless first, then cast the sign back.
+    assert(s.getType().isa<IntegerType>());
+    Value signlessVal = s;
+    if (!signlessVal.getType().isSignlessInteger())
+      signlessVal = builder->create<rtl::BitcastOp>(
+          loc(), builder->getIntegerType(s.getType().getIntOrFloatBitWidth()),
+          s);
+
+    if (!t.isSigned()) {
+      auto extracted =
+          builder->create<rtl::ExtractOp>(loc(), t, signlessVal, 0);
+      return GasketComponent(*builder, extracted).cast(t);
+    }
+    auto magnitude = builder->create<rtl::ExtractOp>(
+        loc(), builder->getIntegerType(t.getWidth() - 1), signlessVal, 0);
+    auto sign = builder->create<rtl::ExtractOp>(
+        loc(), builder->getIntegerType(1), signlessVal, t.getWidth() - 1);
+    auto result = builder->create<rtl::ConcatOp>(loc(), sign, magnitude);
+
+    // We still have to cast to handle signedness.
+    return GasketComponent(*builder, result).cast(t);
+  }
+
+  Operation *operator->() const { return s.getDefiningOp(); }
+  Value getValue() const { return s; }
+  Location loc() const { return s.getLoc(); }
+  OpBuilder &b() const { return *builder; }
+  MLIRContext *ctxt() const { return builder->getContext(); }
+  operator Value() { return s; }
+
+protected:
+  OpBuilder *builder;
+  Value s;
+};
+} // anonymous namespace
+
+namespace {
+/// Holds a 'slice' of an array and is able to construct more slice ops, then
+/// cast to a type. A sub-slice holds a pointer to the slice which created it,
+/// so it forms a hierarchy. This is so we can easily track offsets from the
+/// root message for pointer resolution.
+///
+/// Requirement: any slice which has sub-slices must not be free'd before its
+/// children slices.
+struct Slice : public GasketComponent {
+private:
+  Slice(Slice *parent, llvm::Optional<int64_t> offset, Value val)
+      : GasketComponent(*parent->builder, val), parent(parent),
+        offsetIntoParent(offset) {
+    type = val.getType().dyn_cast<rtl::ArrayType>();
+    assert(type && "Value must be array type");
+  }
+
+public:
+  Slice(OpBuilder &b, Value val)
+      : GasketComponent(b, val), parent(nullptr), offsetIntoParent(0) {
+    type = val.getType().dyn_cast<rtl::ArrayType>();
+    assert(type && "Value must be array type");
+  }
+
+  /// Create an op to slice the array from lsb to lsb + size. Return a new slice
+  /// with that op.
+  Slice slice(int64_t lsb, int64_t size) {
+    Value newSlice = builder->create<rtl::ArraySliceOp>(loc(), s, lsb, size);
+    return Slice(this, lsb, newSlice);
+  }
+
+  /// Create an op to slice the array from lsb to lsb + size. Return a new slice
+  /// with that op. If lsb is greater width thn necessary, lop off the high
+  /// bits.
+  Slice slice(Value lsb, int64_t size) {
+    assert(lsb.getType().isa<IntegerType>());
+
+    unsigned expIdxWidth = llvm::Log2_64_Ceil(type.getSize());
+    int64_t lsbWidth = lsb.getType().getIntOrFloatBitWidth();
+    if (lsbWidth > expIdxWidth)
+      lsb = builder->create<rtl::ExtractOp>(
+          loc(), builder->getIntegerType(expIdxWidth), lsb, 0);
+    else if (lsbWidth < expIdxWidth)
+      assert(false && "LSB Value must not be smaller than expected.");
+    auto dstTy = rtl::ArrayType::get(type.getElementType(), size);
+    Value newSlice = builder->create<rtl::ArraySliceOp>(loc(), dstTy, s, lsb);
+    return Slice(this, llvm::Optional<int64_t>(), newSlice);
+  }
+  Slice &name(const Twine &name) { return GasketComponent::name<Slice>(name); }
+  Slice &name(capnp::Text::Reader fieldName, const Twine &nameSuffix) {
+    return GasketComponent::name<Slice>(fieldName.cStr(), nameSuffix);
+  }
+  Slice castToSlice(Type elemTy, size_t size, StringRef name = StringRef(),
+                    Twine nameSuffix = Twine()) {
+    auto arrTy = rtl::ArrayType::get(elemTy, size);
+    GasketComponent rawCast =
+        GasketComponent::cast(arrTy).name(name + nameSuffix);
+    return Slice(*builder, rawCast);
+  }
+
+  GasketComponent operator[](Value idx) {
+    return GasketComponent(*builder, builder->create<rtl::ArrayGetOp>(
+                                         loc(), type.getElementType(), s, idx));
+  }
+
+  GasketComponent operator[](size_t idx) {
+    IntegerType idxTy =
+        builder->getIntegerType(llvm::Log2_32_Ceil(type.getSize()));
+    auto idxVal = builder->create<rtl::ConstantOp>(loc(), idxTy, idx);
+    return GasketComponent(
+        *builder, builder->create<rtl::ArrayGetOp>(loc(), type.getElementType(),
+                                                   s, idxVal));
+  }
+
+  /// Return the root of this slice hierarchy.
+  const Slice &getRootSlice() {
+    if (parent == nullptr)
+      return *this;
+    return parent->getRootSlice();
+  }
+
+  llvm::Optional<int64_t> getOffsetFromRoot() {
+    if (parent == nullptr)
+      return 0;
+    auto parentOffset = parent->getOffsetFromRoot();
+    if (!offsetIntoParent || !parentOffset)
+      return llvm::Optional<int64_t>();
+    return *offsetIntoParent + *parentOffset;
+  }
+
+private:
+  rtl::ArrayType type;
+  Slice *parent;
+  llvm::Optional<int64_t> offsetIntoParent;
+};
+} // anonymous namespace
+
+namespace {
+/// Utility class for building sv::AssertOps. Since SV assertions need to be in
+/// an `always` block (so the simulator knows when to check the assertion), we
+/// build them all in a region intended for assertions.
+class AssertBuilder : public OpBuilder {
+public:
+  AssertBuilder(Location loc, Region &r) : OpBuilder(r), loc(loc) {}
+
+  void assertPred(GasketComponent veg, ICmpPredicate pred, int64_t expected) {
+    if (veg.getValue().getType().isa<IntegerType>()) {
+      assertPred(veg.getValue(), pred, expected);
+      return;
+    }
+
+    auto valTy = veg.getValue().getType().dyn_cast<rtl::ArrayType>();
+    assert(valTy && valTy.getElementType() == veg.b().getIntegerType(1) &&
+           "Can only compare ints and bit arrays");
+    assertPred(veg.cast(veg.b().getIntegerType(valTy.getSize())).getValue(),
+               pred, expected);
+  }
+
+  void assertEqual(GasketComponent s, int64_t expected) {
+    assertPred(s, ICmpPredicate::eq, expected);
+  }
+
+private:
+  void assertPred(Value val, ICmpPredicate pred, int64_t expected) {
+    auto expectedVal = create<rtl::ConstantOp>(loc, val.getType(), expected);
+    create<sv::AssertOp>(
+        loc, create<rtl::ICmpOp>(loc, getI1Type(), pred, val, expectedVal));
+  }
+  Location loc;
+};
+} // anonymous namespace
+
+//===----------------------------------------------------------------------===//
 // Capnp encode / decode RTL builders.
 //
 // These have the potential to get large and complex as we add more types. The
 // encoding spec is here: https://capnproto.org/encoding.html
 //===----------------------------------------------------------------------===//
-
-static size_t bits(::capnp::schema::Type::Reader type) {
-  using ty = ::capnp::schema::Type;
-  switch (type.which()) {
-  case ty::VOID:
-    return 0;
-  case ty::UINT8:
-  case ty::INT8:
-    return 8;
-  case ty::UINT16:
-  case ty::INT16:
-    return 16;
-  case ty::UINT32:
-  case ty::INT32:
-    return 32;
-  case ty::UINT64:
-  case ty::INT64:
-    return 64;
-  default:
-    assert(false && "Type not yet supported");
-  }
-}
 
 /// Build an RTL/SV dialect capnp encoder for this type. Inputs need to be
 /// packed on unpadded.
@@ -379,60 +584,11 @@ Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
   return b.create<rtl::ConcatOp>(loc, ValueRange{dataSection, structPtr});
 }
 
-namespace {
-/// Holds a 'slice' of an array and is able to construct more slice ops, then
-/// cast to a type.
-struct Slice {
-public:
-  Slice(OpBuilder &b, Value init) : builder(&b), s(init) {
-    assert(init.getType().isa<rtl::ArrayType>());
-  }
-
-  /// Create an op to slice the array from lsb to lsb + size. Return a new slice
-  /// with that op.
-  Slice slice(int64_t lsb, int64_t size) {
-    Value newSlice = builder->create<rtl::ArraySliceOp>(loc(), s, lsb, size);
-    return Slice(*builder, newSlice);
-  }
-
-  /// Set the "name" attribute of a slice's op.
-  Slice name(const Twine &name) const {
-    SmallString<32> nameStr;
-    s.getDefiningOp()->setAttr(
-        "name", StringAttr::get(name.toStringRef(nameStr), ctxt()));
-    return *this;
-  }
-  Slice name(capnp::Text::Reader fieldName, const Twine &nameSuffix) const {
-    return name(StringRef(fieldName.cStr()) + nameSuffix);
-  }
-
-  /// Construct a bitcast.
-  Value cast(Type t, StringRef name = StringRef(), Twine nameSuffix = Twine()) {
-    auto dst = builder->create<rtl::BitcastOp>(loc(), t, s);
-
-    SmallString<32> nameBuffer;
-    StringRef wholeName = (name + nameSuffix).toStringRef(nameBuffer);
-    if (wholeName.size())
-      dst->setAttr("name", StringAttr::get(wholeName, ctxt()));
-    return dst;
-  }
-
-  Operation *operator->() const { return s.getDefiningOp(); }
-  Value getValue() const { return s; }
-  Location loc() const { return s.getLoc(); }
-  OpBuilder &b() const { return *builder; }
-  MLIRContext *ctxt() const { return builder->getContext(); }
-
-private:
-  OpBuilder *builder;
-  Value s;
-};
-} // namespace
-
 /// Construct the proper operations to convert a capnp field to 'type'.
-static Value decodeField(Type type, capnp::schema::Field::Reader field,
-                         Slice dataSection, Slice ptrSection,
-                         OpBuilder &asserts) {
+static GasketComponent decodeField(Type type,
+                                   capnp::schema::Field::Reader field,
+                                   Slice dataSection, Slice ptrSection,
+                                   OpBuilder &asserts) {
   Slice fieldSlice = TypeSwitch<Type, Slice>(type).Case([&](IntegerType it) {
     return dataSection.slice(field.getSlot().getOffset() *
                                  bits(field.getSlot().getType()),
@@ -440,7 +596,7 @@ static Value decodeField(Type type, capnp::schema::Field::Reader field,
   });
 
   fieldSlice.name(field.getName(), "_bits");
-  return fieldSlice.cast(type, field.getName().cStr(), "Value");
+  return fieldSlice.cast(type).name(field.getName().cStr(), "Value");
 }
 
 /// Build an RTL/SV dialect capnp decoder for this type. Outputs packed and
@@ -449,7 +605,6 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
                                    Value operandVal) {
   // Various useful integer types.
   auto i16 = b.getIntegerType(16);
-  auto i32 = b.getIntegerType(32);
 
   size_t size = this->size();
   rtl::ArrayType operandType = operandVal.getType().dyn_cast<rtl::ArrayType>();
@@ -462,7 +617,7 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
   auto alwaysAt = b.create<sv::AlwaysOp>(loc, EventControl::AtPosEdge, clk);
   auto ifValid =
       OpBuilder(alwaysAt.getBodyRegion()).create<sv::IfOp>(loc, valid);
-  OpBuilder asserts(ifValid.getBodyRegion());
+  AssertBuilder asserts(loc, ifValid.getBodyRegion());
 
   // The next 64-bits of a capnp message is the root struct pointer.
   ::capnp::schema::Node::Reader rootProto = getTypeSchema().getProto();
@@ -472,30 +627,20 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
   // guaranteed to be the case with canonically-encoded messages.
   // TODO: support cases where the pointer offset is non-zero.
   Slice assertPtr(ptr);
-  auto typeAndOffset = assertPtr.slice(0, 32).cast(i32, "typeAndOffset");
-  auto b16Zero = asserts.create<rtl::ConstantOp>(loc, i32, 0);
-
-  asserts.create<sv::AssertOp>(
-      loc, asserts.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
-                                       typeAndOffset, b16Zero));
+  auto typeAndOffset = assertPtr.slice(0, 32).name("typeAndOffset");
+  asserts.assertEqual(typeAndOffset, 0);
 
   // We expect the data section to be equal to the computed data section size.
-  auto dataSectionSize = assertPtr.slice(32, 16).cast(i16, "dataSectionSize");
-  auto expectedDataSectionSize = asserts.create<rtl::ConstantOp>(
-      loc, i16, rootProto.getStruct().getDataWordCount());
-  asserts.create<sv::AssertOp>(
-      loc,
-      asserts.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
-                                  dataSectionSize, expectedDataSectionSize));
+  auto dataSectionSize =
+      assertPtr.slice(32, 16).cast(i16).name("dataSectionSize");
+  asserts.assertEqual(dataSectionSize,
+                      rootProto.getStruct().getDataWordCount());
 
   // We expect the pointer section to be equal to the computed pointer section
   // size.
-  auto ptrSectionSize = assertPtr.slice(48, 16).cast(i16, "ptrSectionSize");
-  auto expectedPtrSectionSize = asserts.create<rtl::ConstantOp>(
-      loc, i16, rootProto.getStruct().getPointerCount() * 64);
-  asserts.create<sv::AssertOp>(
-      loc, asserts.create<rtl::ICmpOp>(loc, b.getI1Type(), ICmpPredicate::eq,
-                                       ptrSectionSize, expectedPtrSectionSize));
+  auto ptrSectionSize =
+      assertPtr.slice(48, 16).cast(i16).name("ptrSectionSize");
+  asserts.assertEqual(ptrSectionSize, rootProto.getStruct().getPointerCount());
 
   // Get pointers to the data and pointer sections.
   auto st = rootProto.getStruct();
@@ -507,18 +652,19 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
                         .name("ptrSection");
 
   // Loop through fields.
-  Value fieldValues[st.getFields().size()];
+  SmallVector<GasketComponent, 64> fieldValues;
   for (auto field : st.getFields()) {
     uint16_t idx = field.getCodeOrder();
     assert(idx < fieldTypes.size() && "Capnp struct longer than fieldTypes.");
-    fieldValues[idx] =
-        decodeField(fieldTypes[idx], field, dataSection, ptrSection, asserts);
+    fieldValues.push_back(
+        decodeField(fieldTypes[idx], field, dataSection, ptrSection, asserts));
   }
 
   // What to return depends on the type. (e.g. structs have to be constructed
   // from the field values.)
-  return TypeSwitch<Type, Value>(type).Case(
+  GasketComponent result = TypeSwitch<Type, GasketComponent>(type).Case(
       [&fieldValues](IntegerType) { return fieldValues[0]; });
+  return result.getValue();
 }
 
 //===----------------------------------------------------------------------===//
