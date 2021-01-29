@@ -120,3 +120,23 @@ firrtl.circuit "Foo" {
     firrtl.connect %b, %a : !firrtl.flip<bundle<b: bundle<c: uint<1>>>>, !firrtl.bundle<b: bundle<c: uint<1>>>
   }
 }
+
+// -----
+
+firrtl.circuit "Top" {
+  firrtl.module @Sub1(%in: !firrtl.bundle<a: uint<1>>, %out: !firrtl.flip<bundle<a: uint<1>>>) {
+    firrtl.connect %out, %in : !firrtl.flip<bundle<a: uint<1>>>, !firrtl.bundle<a: uint<1>>
+  }
+  firrtl.module @Sub2(%in: !firrtl.bundle<a: uint<1>>, %out: !firrtl.flip<bundle<a: uint<1>>>) {
+    firrtl.connect %out, %in : !firrtl.flip<bundle<a: uint<1>>>, !firrtl.bundle<a: uint<1>>
+  }
+  // CHECK-LABEL: firrtl.module @Top
+  firrtl.module @Top() {
+    // CHECK: %[[SUB1_IN:.+]], %[[SUB1_OUT:.+]] = firrtl.instance @Sub1
+    // CHECK: %[[SUB2_IN:.+]], %[[SUB2_OUT:.+]] = firrtl.instance @Sub2
+    // CHECK: firrtl.connect %[[SUB2_IN]], %[[SUB1_OUT]]
+    %Sub1_in, %Sub1_out = firrtl.instance @Sub1 { name = "", portNames = ["in", "out"] } : !firrtl.flip<bundle<a: uint<1>>>, !firrtl.bundle<a: uint<1>>
+    firrtl.connect %Sub2_in, %Sub1_out : !firrtl.flip<bundle<a: uint<1>>>, !firrtl.bundle<a: uint<1>>
+    %Sub2_in, %Sub2_out = firrtl.instance @Sub2 { name = "", portNames = ["in", "out"] } : !firrtl.flip<bundle<a: uint<1>>>, !firrtl.bundle<a: uint<1>>
+  }
+}

@@ -101,6 +101,9 @@ private:
   // Lowering module block arguments.
   void lowerArg(BlockArgument arg, FIRRTLType type);
 
+  // Lowering connects after visiting them.
+  void lowerConnect(ConnectOp op);
+
   // Helpers to manage state.
   Value addArg(Type type, unsigned oldArgNumber, StringRef nameSuffix = "");
 
@@ -117,6 +120,9 @@ private:
 
   // State to keep a mapping from (Value, Identifier) pairs to flattened values.
   DenseMap<ValueIdentifier, Value> loweredBundleValues;
+
+  // State to keep track of connects that need to be lowered.
+  SmallVector<ConnectOp, 16> connectsToLower;
 };
 } // end anonymous namespace
 
@@ -146,6 +152,10 @@ void FIRRTLTypesLowering::runOnOperation() {
     dispatchVisitor(&op);
   }
 
+  // Lower any connects we visited.
+  for (auto op : connectsToLower)
+    lowerConnect(op);
+
   // Remove ops that have been lowered.
   while (!opsToRemove.empty())
     opsToRemove.pop_back_val()->erase();
@@ -156,6 +166,7 @@ void FIRRTLTypesLowering::runOnOperation() {
 
   // Reset lowered state.
   loweredBundleValues.clear();
+  connectsToLower.clear();
 }
 
 //===----------------------------------------------------------------------===//
@@ -296,6 +307,12 @@ void FIRRTLTypesLowering::visitExpr(SubfieldOp op) {
   opsToRemove.push_back(op);
 }
 
+// Connects may be visited before the source or destination have been visited.
+// We simply track the ops and visit them all at the end.
+void FIRRTLTypesLowering::visitStmt(ConnectOp op) {
+  connectsToLower.push_back(op);
+}
+
 // Lowering connects only has to deal with one special case: connecting two
 // bundles. This situation should only arise when both of the arguments are a
 // bundle that was:
@@ -305,7 +322,7 @@ void FIRRTLTypesLowering::visitExpr(SubfieldOp op) {
 // When two such bundles are connected, none of the subfield visits have a
 // chance to lower them, so we must ensure they have the same number of
 // flattened values and flatten out this connect into multiple connects.
-void FIRRTLTypesLowering::visitStmt(ConnectOp op) {
+void FIRRTLTypesLowering::lowerConnect(ConnectOp op) {
   Value dest = op.dest();
   Value src = op.src();
 
