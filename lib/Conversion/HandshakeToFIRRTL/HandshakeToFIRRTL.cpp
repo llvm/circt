@@ -1481,17 +1481,13 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     ports.push_back({portName, portKind});
   }
 
-  // Create the special type to represent this memory.
-  BundleType memType = MemOp::getTypeForPortList(depth, dataType, ports);
-
   llvm::SmallVector<Type> resultTypes;
   llvm::SmallVector<Attribute> resultNames;
-  for (auto element : memType.getElements()) {
-    resultTypes.push_back(element.type);
-    resultNames.push_back(rewriter.getStringAttr(element.name.str()));
+  for (auto p : ports) {
+    resultTypes.push_back(FlipType::get(MemOp::getTypeForPort(depth, dataType, p.second)));
+    resultNames.push_back(rewriter.getStringAttr(p.first));
   }
 
-  // Create the actual mem op.
   auto memOp = rewriter.create<MemOp>(insertLoc, resultTypes, readLatency,
                                       writeLatency, depth, ruw,
                                       rewriter.getArrayAttr(resultNames), name);

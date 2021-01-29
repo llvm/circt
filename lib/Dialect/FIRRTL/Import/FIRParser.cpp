@@ -23,6 +23,7 @@
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -2021,7 +2022,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
   int32_t depth = -1, readLatency = -1, writeLatency = -1;
   RUWAttr ruw = RUWAttr::Undefined;
 
-  SmallVector<std::pair<Identifier, MemOp::PortKind>, 4> ports;
+  SmallVector<std::pair<StringAttr, BundleType>, 4> ports;
 
   // Parse all the memfield records, which are indented more than the mem.
   while (1) {
@@ -2080,12 +2081,12 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     StringRef portName;
     if (parseId(portName, "expected port name"))
       return failure();
-    ports.push_back({builder.getIdentifier(portName), portKind});
+    ports.push_back({builder.getStringAttr(portName), MemOp::getTypeForPort(depth, type, portKind)});
 
     while (!getIndentation().hasValue()) {
       if (parseId(portName, "expected port name"))
         return failure();
-      ports.push_back({builder.getIdentifier(portName), portKind});
+      ports.push_back({builder.getStringAttr(portName), MemOp::getTypeForPort(depth, type, portKind)});
     }
   }
 
@@ -2097,17 +2098,26 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
   if (readLatency < 0 || writeLatency < 0)
     return emitError(info.getFIRLoc(), "invalid latency");
 
-  auto memType = MemOp::getTypeForPortList(depth, type, ports);
-  if (!memType) {
-    emitError(info.getFIRLoc(), "duplicate port name in mem");
-    return failure();
-  }
+  // Canonicalize the ports into alphabetical order.
+  // TODO: Move this into MemOp construction/canonicalization.
+  llvm::array_pod_sort(
+      ports.begin(), ports.end(),
+      [](const std::pair<StringAttr, BundleType> *lhs,
+         const std::pair<StringAttr, BundleType> *rhs) -> int {
+        return lhs->first.getValue().compare(rhs->first.getValue());
+      });
 
-  SmallVector<Type, 4> resultTypes;
+  // Require that all port names are unique.
+  // TODO: Move this into MemOp verification.
+  for (size_t i = 1, e = ports.size(); i < e; ++i)
+    if (ports[i - 1].first == ports[i].first)
+      return {};
+
   SmallVector<Attribute, 4> resultNames;
-  for (auto element : memType.getElements()) {
-    resultTypes.push_back(element.type);
-    resultNames.push_back(StringAttr::get(element.name.str(), getContext()));
+  SmallVector<Type, 4> resultTypes;
+  for (auto p : ports) {
+    resultNames.push_back(p.first);
+    resultTypes.push_back(FlipType::get(p.second));
   }
 
   auto result = builder.create<MemOp>(
@@ -2115,8 +2125,8 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
       builder.getArrayAttr(resultNames), filterUselessName(id));
 
   UnbundledValueEntry unbundledValueEntry;
-  unbundledValueEntry.reserve(memType.getNumElements());
-  for (size_t i = 0, e = memType.getNumElements(); i != e; ++i) {
+  unbundledValueEntry.reserve(result.getNumResults());
+  for (size_t i = 0, e = result.getNumResults(); i != e; ++i) {
     unbundledValueEntry.push_back({resultNames[i], result.getResult(i)});
   }
   unbundledValues.push_back(std::move(unbundledValueEntry));
