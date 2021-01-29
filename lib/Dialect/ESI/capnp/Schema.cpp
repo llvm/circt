@@ -384,12 +384,12 @@ bool TypeSchemaImpl::operator==(const TypeSchemaImpl &that) const {
 namespace {
 /// Something which is appropriate for slicing and dicing. Contains helper
 /// methods to assist with naming and casting.
-struct Vegetable {
+struct GasketComponent {
 public:
-  Vegetable(OpBuilder &b, Value init) : builder(&b), s(init) {}
+  GasketComponent(OpBuilder &b, Value init) : builder(&b), s(init) {}
 
   /// Set the "name" attribute of a value's op.
-  template <typename T = Vegetable>
+  template <typename T = GasketComponent>
   T &name(const Twine &name) {
     std::string nameStr = name.str();
     if (nameStr.empty())
@@ -398,19 +398,19 @@ public:
     s.getDefiningOp()->setAttr("name", nameAttr);
     return *(T *)this;
   }
-  template <typename T = Vegetable>
+  template <typename T = GasketComponent>
   T &name(capnp::Text::Reader fieldName, const Twine &nameSuffix) {
     return name<T>(StringRef(fieldName.cStr()) + nameSuffix);
   }
 
   /// Construct a bitcast.
-  Vegetable cast(Type t) {
+  GasketComponent cast(Type t) {
     auto dst = builder->create<rtl::BitcastOp>(loc(), t, s);
-    return Vegetable(*builder, dst);
+    return GasketComponent(*builder, dst);
   }
 
   /// Downcast an int, accounting for signedness.
-  Vegetable downcast(IntegerType t) {
+  GasketComponent downcast(IntegerType t) {
     // Since the RTL dialect operators only operate on signless integers, we
     // have to cast to signless first, then cast the sign back.
     assert(s.getType().isa<IntegerType>());
@@ -423,7 +423,7 @@ public:
     if (!t.isSigned()) {
       auto extracted =
           builder->create<rtl::ExtractOp>(loc(), t, signlessVal, 0);
-      return Vegetable(*builder, extracted).cast(t);
+      return GasketComponent(*builder, extracted).cast(t);
     }
     auto magnitude = builder->create<rtl::ExtractOp>(
         loc(), builder->getIntegerType(t.getWidth() - 1), signlessVal, 0);
@@ -432,7 +432,7 @@ public:
     auto result = builder->create<rtl::ConcatOp>(loc(), sign, magnitude);
 
     // We still have to cast to handle signedness.
-    return Vegetable(*builder, result).cast(t);
+    return GasketComponent(*builder, result).cast(t);
   }
 
   Operation *operator->() const { return s.getDefiningOp(); }
@@ -456,10 +456,10 @@ namespace {
 ///
 /// Requirement: any slice which has sub-slices must not be free'd before its
 /// children slices.
-struct Slice : public Vegetable {
+struct Slice : public GasketComponent {
 private:
   Slice(Slice *parent, llvm::Optional<int64_t> offset, Value val)
-      : Vegetable(*parent->builder, val), parent(parent),
+      : GasketComponent(*parent->builder, val), parent(parent),
         offsetIntoParent(offset) {
     type = val.getType().dyn_cast<rtl::ArrayType>();
     assert(type && "Value must be array type");
@@ -467,7 +467,7 @@ private:
 
 public:
   Slice(OpBuilder &b, Value val)
-      : Vegetable(b, val), parent(nullptr), offsetIntoParent(0) {
+      : GasketComponent(b, val), parent(nullptr), offsetIntoParent(0) {
     type = val.getType().dyn_cast<rtl::ArrayType>();
     assert(type && "Value must be array type");
   }
@@ -496,28 +496,30 @@ public:
     Value newSlice = builder->create<rtl::ArraySliceOp>(loc(), dstTy, s, lsb);
     return Slice(this, llvm::Optional<int64_t>(), newSlice);
   }
-  Slice &name(const Twine &name) { return Vegetable::name<Slice>(name); }
+  Slice &name(const Twine &name) { return GasketComponent::name<Slice>(name); }
   Slice &name(capnp::Text::Reader fieldName, const Twine &nameSuffix) {
-    return Vegetable::name<Slice>(fieldName.cStr(), nameSuffix);
+    return GasketComponent::name<Slice>(fieldName.cStr(), nameSuffix);
   }
   Slice castToSlice(Type elemTy, size_t size, StringRef name = StringRef(),
                     Twine nameSuffix = Twine()) {
     auto arrTy = rtl::ArrayType::get(elemTy, size);
-    Vegetable rawCast = Vegetable::cast(arrTy).name(name + nameSuffix);
+    GasketComponent rawCast =
+        GasketComponent::cast(arrTy).name(name + nameSuffix);
     return Slice(*builder, rawCast);
   }
 
-  Vegetable operator[](Value idx) {
-    return Vegetable(*builder, builder->create<rtl::ArrayGetOp>(
-                                   loc(), type.getElementType(), s, idx));
+  GasketComponent operator[](Value idx) {
+    return GasketComponent(*builder, builder->create<rtl::ArrayGetOp>(
+                                         loc(), type.getElementType(), s, idx));
   }
 
-  Vegetable operator[](size_t idx) {
+  GasketComponent operator[](size_t idx) {
     IntegerType idxTy =
         builder->getIntegerType(llvm::Log2_32_Ceil(type.getSize()));
     auto idxVal = builder->create<rtl::ConstantOp>(loc(), idxTy, idx);
-    return Vegetable(*builder, builder->create<rtl::ArrayGetOp>(
-                                   loc(), type.getElementType(), s, idxVal));
+    return GasketComponent(
+        *builder, builder->create<rtl::ArrayGetOp>(loc(), type.getElementType(),
+                                                   s, idxVal));
   }
 
   /// Return the root of this slice hierarchy.
@@ -551,7 +553,7 @@ class AssertBuilder : public OpBuilder {
 public:
   AssertBuilder(Location loc, Region &r) : OpBuilder(r), loc(loc) {}
 
-  void assertPred(Vegetable veg, ICmpPredicate pred, int64_t expected) {
+  void assertPred(GasketComponent veg, ICmpPredicate pred, int64_t expected) {
     if (veg.getValue().getType().isa<IntegerType>()) {
       assertPred(veg.getValue(), pred, expected);
       return;
@@ -564,7 +566,7 @@ public:
                pred, expected);
   }
 
-  void assertEqual(Vegetable s, int64_t expected) {
+  void assertEqual(GasketComponent s, int64_t expected) {
     assertPred(s, ICmpPredicate::eq, expected);
   }
 
@@ -622,9 +624,9 @@ Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
 /// Construct the proper operations to decode a capnp list. This only works for
 /// arrays of ints or bools. Will need to be updated for structs and lists of
 /// lists.
-static Vegetable decodeList(rtl::ArrayType type,
-                            capnp::schema::Field::Reader field,
-                            Slice ptrSection, AssertBuilder &asserts) {
+static GasketComponent decodeList(rtl::ArrayType type,
+                                  capnp::schema::Field::Reader field,
+                                  Slice ptrSection, AssertBuilder &asserts) {
   capnp::schema::Type::Reader capnpType = field.getSlot().getType();
   assert(capnpType.isList());
   assert(capnpType.getList().hasElementType());
@@ -706,15 +708,16 @@ static Vegetable decodeList(rtl::ArrayType type,
     arrayValues.push_back(esiElem);
   }
   auto array = b.create<rtl::ArrayCreateOp>(loc, arrayValues);
-  return Vegetable(b, array);
+  return GasketComponent(b, array);
 }
 
 /// Construct the proper operations to convert a capnp field to 'type'.
-static Vegetable decodeField(Type type, capnp::schema::Field::Reader field,
-                             Slice dataSection, Slice ptrSection,
-                             AssertBuilder &asserts) {
-  Vegetable esiValue =
-      TypeSwitch<Type, Vegetable>(type)
+static GasketComponent decodeField(Type type,
+                                   capnp::schema::Field::Reader field,
+                                   Slice dataSection, Slice ptrSection,
+                                   AssertBuilder &asserts) {
+  GasketComponent esiValue =
+      TypeSwitch<Type, GasketComponent>(type)
           .Case([&](IntegerType it) {
             auto slice = dataSection.slice(field.getSlot().getOffset() *
                                                bits(field.getSlot().getType()),
@@ -781,7 +784,7 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
                         .name("ptrSection");
 
   // Loop through fields.
-  SmallVector<Vegetable, 16> fieldValues;
+  SmallVector<GasketComponent, 16> fieldValues;
   for (auto field : st.getFields()) {
     uint16_t idx = field.getCodeOrder();
     assert(idx < fieldTypes.size() && "Capnp struct longer than fieldTypes.");
@@ -791,8 +794,8 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
 
   // What to return depends on the type. (e.g. structs have to be constructed
   // from the field values.)
-  Vegetable ret =
-      TypeSwitch<Type, Vegetable>(type)
+  GasketComponent ret =
+      TypeSwitch<Type, GasketComponent>(type)
           .Case([&fieldValues](IntegerType) { return fieldValues[0]; })
           .Case([&fieldValues](rtl::ArrayType) { return fieldValues[0]; });
   return ret;
