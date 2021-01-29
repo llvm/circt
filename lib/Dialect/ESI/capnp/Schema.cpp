@@ -250,7 +250,7 @@ static void emitName(Type type, llvm::raw_ostream &os) {
         os << intName;
       })
       .Case([&os](rtl::ArrayType arrTy) {
-        os << "ArrayOf";
+        os << "ArrayOf" << arrTy.getSize() << 'x';
         emitName(arrTy.getElementType(), os);
       })
       .Default([](Type) {

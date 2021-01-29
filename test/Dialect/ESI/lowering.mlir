@@ -3,6 +3,7 @@
 // RUN: circt-opt %s --lower-esi-to-physical --lower-esi-ports --lower-esi-to-rtl -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=RTL %s
 
 rtl.externmodule @Sender(%clk: i1) -> ( %x: !esi.channel<i4>, %y: i8 )
+rtl.externmodule @ArrSender() -> (%x: !esi.channel<!rtl.array<4xi64>>)
 rtl.externmodule @Reciever(%a: !esi.channel<i4>, %clk: i1)
 
 // CHECK-LABEL: rtl.externmodule @Sender(i1 {rtl.name = "clk"}) -> (%x: !esi.channel<i4>, %y: i8)
@@ -14,6 +15,12 @@ rtl.externmodule @Reciever(%a: !esi.channel<i4>, %clk: i1)
 // IFACE-NEXT:    sv.interface.signal @data : i4
 // IFACE-NEXT:    sv.interface.modport @sink ("input" @ready, "output" @valid, "output" @data)
 // IFACE-NEXT:    sv.interface.modport @source ("input" @valid, "input" @data, "output" @ready)
+// IFACE-LABEL: sv.interface @IValidReady_ArrayOf4xi64 {
+// IFACE-NEXT:    sv.interface.signal @valid : i1
+// IFACE-NEXT:    sv.interface.signal @ready : i1
+// IFACE-NEXT:    sv.interface.signal @data : !rtl.array<4xi64>
+// IFACE-NEXT:    sv.interface.modport @sink  ("input" @ready, "output" @valid, "output" @data)
+// IFACE-NEXT:    sv.interface.modport @source  ("input" @valid, "input" @data, "output" @ready)
 // IFACE-LABEL: rtl.externmodule @Sender(i1 {rtl.name = "clk"}, !sv.modport<@sink> {rtl.name = "x"}) -> (%y: i8)
 // IFACE-LABEL: rtl.externmodule @Reciever(!sv.modport<@source> {rtl.name = "a"}, i1 {rtl.name = "clk"})
 

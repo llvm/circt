@@ -117,8 +117,15 @@ ESIRTLBuilder::ESIRTLBuilder(Operation *top)
 StringAttr ESIRTLBuilder::constructInterfaceName(ChannelPort port) {
   Operation *tableOp =
       getInsertionPoint()->getParentWithTrait<OpTrait::SymbolTable>();
+
+  // Get a name based on the type.
   std::string portTypeName;
-  llvm::raw_string_ostream(portTypeName) << port.getInner();
+  llvm::raw_string_ostream nameOS(portTypeName);
+  TypeSwitch<Type>(port.getInner())
+      .Case([&](ArrayType arr) {
+        nameOS << "ArrayOf" << arr.getSize() << 'x' << arr.getElementType();
+      })
+      .Default([&](Type t) { nameOS << port.getInner(); });
 
   // Normalize the type name.
   for (char &ch : portTypeName) {
@@ -126,6 +133,13 @@ StringAttr ESIRTLBuilder::constructInterfaceName(ChannelPort port) {
       continue;
     ch = '_';
   }
+
+  // Don't allow the name to end with '_'.
+  ssize_t i = portTypeName.size() - 1;
+  while (i >= 0 && portTypeName[i] == '_') {
+    --i;
+  }
+  portTypeName = portTypeName.substr(0, i + 1);
 
   // All stage names start with this.
   SmallString<64> proposedName("IValidReady_");
