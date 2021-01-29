@@ -704,45 +704,6 @@ MemOp::getTypeForPortList(uint64_t depth, FIRRTLType dataType,
   return BundleType::get(memFields, context).cast<BundleType>();
 }
 
-BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLType dataType,
-                                 PortKind portKind) {
-
-  auto *context = dataType.getContext();
-
-  auto getId = [&](StringRef name) -> Identifier {
-    return Identifier::get(name, context);
-  };
-
-  SmallVector<BundleType::BundleElement, 7> portFields;
-
-  auto addressType =
-      UIntType::get(context, std::max(1U, llvm::Log2_64_Ceil(depth)));
-
-  portFields.push_back({getId("addr"), addressType});
-  portFields.push_back({getId("en"), UIntType::get(context, 1)});
-  portFields.push_back({getId("clk"), ClockType::get(context)});
-
-  switch (portKind) {
-  case PortKind::Read:
-    portFields.push_back({getId("data"), FlipType::get(dataType)});
-    break;
-
-  case PortKind::Write:
-    portFields.push_back({getId("data"), dataType});
-    portFields.push_back({getId("mask"), dataType.getMaskType()});
-    break;
-
-  case PortKind::ReadWrite:
-    portFields.push_back({getId("wmode"), UIntType::get(context, 1)});
-    portFields.push_back({getId("rdata"), FlipType::get(dataType)});
-    portFields.push_back({getId("wdata"), dataType});
-    portFields.push_back({getId("wmask"), dataType.getMaskType()});
-    break;
-  }
-
-  return BundleType::get(portFields, context).cast<BundleType>();
-}
-
 /// Return the kind of port this is given the port type from a 'mem' decl.
 static Optional<MemOp::PortKind> getMemPortKindFromType(FIRRTLType type) {
   auto portType = type.dyn_cast<BundleType>();
@@ -768,53 +729,31 @@ static Optional<MemOp::PortKind> getMemPortKindFromType(FIRRTLType type) {
 void MemOp::getPorts(
     SmallVectorImpl<std::pair<Identifier, MemOp::PortKind>> &result) {
   // Each entry in the bundle is a port.
-  for (size_t i = 0, e = getNumResults(); i != e; ++i) {
-    auto elt = getResult(i);
+  for (auto elt : getType().getElements()) {
     // Each port is a bundle.
-    auto kind = getMemPortKindFromType(elt.getType().cast<FIRRTLType>());
+    auto kind = getMemPortKindFromType(elt.type);
     assert(kind.hasValue() && "unknown port type!");
-    result.push_back({Identifier::get(getPortNameStr(i), elt.getContext()),
-                      kind.getValue()});
+    result.push_back({elt.name, kind.getValue()});
   }
 }
 
 /// Return the kind of the specified port or None if the name is invalid.
 Optional<MemOp::PortKind> MemOp::getPortKind(StringRef portName) {
-  auto elt = getPortNamed(portName);
-  if (!elt)
+  auto eltType = getType().getElementType(portName);
+  if (!eltType)
     return None;
-  return getMemPortKindFromType(elt.getType().cast<FIRRTLType>());
+  return getMemPortKindFromType(eltType);
 }
 
 /// Return the data-type field of the memory, the type of each element.
 FIRRTLType MemOp::getDataTypeOrNull() {
   // Mems with no read/write ports are legal.
-  if (getNumResults() == 0)
+  if (getType().getElements().empty())
     return {};
 
-  auto firstPortType = getResult(0).getType().cast<FIRRTLType>();
-
-  StringRef dataFieldName = "data";
-  if (getMemPortKindFromType(firstPortType).getValue() == PortKind::ReadWrite)
-    dataFieldName = "rdata";
-
-  return firstPortType.getPassiveType().cast<BundleType>().getElementType(
-      dataFieldName);
-}
-
-StringAttr MemOp::getPortName(size_t resultNo) {
-  return portNames()[resultNo].cast<StringAttr>();
-}
-
-Value MemOp::getPortNamed(StringAttr name) {
-  auto namesArray = portNames();
-  for (size_t i = 0, e = namesArray.size(); i != e; ++i) {
-    if (namesArray[i] == name) {
-      assert(i < getNumResults() && " names array out of sync with results");
-      return getResult(i);
-    }
-  }
-  return Value();
+  auto firstPort = getType().getElements()[0];
+  auto firstPortType = firstPort.type.getPassiveType().cast<BundleType>();
+  return firstPortType.getElementType("data");
 }
 
 //===----------------------------------------------------------------------===//

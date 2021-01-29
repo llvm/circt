@@ -15,7 +15,6 @@
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
-#include "llvm/ADT/StringSwitch.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -95,7 +94,6 @@ struct FIRRTLTypesLowering : public LowerFIRRTLTypesBase<FIRRTLTypesLowering>,
 
   // Lowering operations.
   void visitDecl(InstanceOp op);
-  void visitDecl(MemOp op);
   void visitExpr(SubfieldOp op);
   void visitStmt(ConnectOp op);
 
@@ -251,109 +249,6 @@ void FIRRTLTypesLowering::visitDecl(InstanceOp op) {
   }
 
   // Remember to remove the original op.
-  opsToRemove.push_back(op);
-}
-
-/// Lower memory operations. A new memory is created for every leaf
-/// element in a memory's data type.
-void FIRRTLTypesLowering::visitDecl(MemOp op) {
-
-  auto type = op.getDataTypeOrNull();
-
-  // Bail out if the memory is empty
-  if (!type)
-    return;
-
-  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenBundleTypes(type, "", false, fieldTypes);
-
-  // Mutable store of the types of the ports of a new memory. This is
-  // cleared and re-used.
-  SmallVector<Type, 4> resultPortTypes;
-
-  // Store any new wires created during lowering. This ensures that
-  // wires are re-used if they already exist.
-  DenseMap<StringRef, Value> newWires;
-
-  // Loop over the leaf aggregates.
-  for (auto field : fieldTypes) {
-
-    // Determine the new port type for this memory. New ports are
-    // constructed by checking the kind of the memory.
-    resultPortTypes.clear();
-    for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
-      auto kind = op.getPortKind(op.getPortName(i).getValue()).getValue();
-      auto flattenedPortType =
-          FlipType::get(op.getTypeForPort(op.depth(), field.type, kind));
-
-      resultPortTypes.push_back(flattenedPortType);
-    }
-
-    // Construct the new memory for this flattened field.
-    auto newName = op.name().getValue().str() + field.suffix;
-    auto newMem = builder->create<MemOp>(
-        resultPortTypes, op.readLatency(), op.writeLatency(), op.depth(),
-        op.ruw(), op.portNames(), builder->getStringAttr(newName));
-
-    // Setup the lowering to the new memory.
-    for (size_t i = 0, e = newMem.getNumResults(); i != e; ++i) {
-
-      BundleType underlying = newMem.getResult(i)
-                                  .getType()
-                                  .cast<FIRRTLType>()
-                                  .getPassiveType()
-                                  .cast<BundleType>();
-
-      auto kind =
-          newMem.getPortKind(newMem.getPortName(i).getValue()).getValue();
-
-      for (auto elt : underlying.getElements()) {
-
-        // These ports require special handling. When these are
-        // lowered, they result in multiple new connections. E.g., an
-        // assignment to a clock needs to be split into an assignment
-        // to all clocks. This is handled by creating a dummy wire,
-        // setting the dummy wire as the lowering target, and then
-        // connecting every new port subfield to that.
-        if (elt.name == "clk" | elt.name == "en" | elt.name == "addr" |
-            elt.name == "wmode") {
-          Type theType = FlipType::get(elt.type);
-
-          // Construct a new wire if needed.
-          auto wire =
-              newWires[op.getPortName(i).getValue().str() + elt.name.str()];
-          if (!wire) {
-            wire = builder->create<WireOp>(
-                theType, op.name().getValue().str() + "_" +
-                             op.getPortName(i).getValue().str() + "_" +
-                             elt.name.str());
-            newWires[op.getPortName(i).getValue().str() + elt.name.str()] =
-                wire;
-            setBundleLowering(op.getResult(i), elt.name.str(), wire);
-          }
-
-          builder->create<ConnectOp>(
-              builder->create<SubfieldOp>(theType, newMem.getResult(i),
-                                          elt.name),
-              wire);
-          continue;
-        }
-
-        // Data ports ("data", "rdata", "wdata", "mask", "wmask") are
-        // trivially lowered because each data leaf winds up in a new,
-        // separate memory. No wire creation is needed.
-        FIRRTLType theType = elt.type;
-        if (kind == MemOp::PortKind::Write || elt.name == "wdata" ||
-            elt.name == "wmask")
-          theType = FlipType::get(theType);
-
-        setBundleLowering(op.getResult(i), elt.name.str() + field.suffix,
-                          builder->create<SubfieldOp>(
-                              theType, newMem.getResult(i), elt.name));
-      }
-    }
-  }
-
   opsToRemove.push_back(op);
 }
 

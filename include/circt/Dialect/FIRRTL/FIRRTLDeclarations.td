@@ -64,11 +64,10 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
   let arguments = (ins I32Attr:$readLatency,
                        Confined<I32Attr, [IntMinValue<1>]>:$writeLatency,
                        Confined<I64Attr, [IntMinValue<1>]>:$depth, RUWAttr:$ruw,
-                       StrArrayAttr:$portNames,
                        OptionalAttr<StrAttr>:$name);
-  let results = (outs Variadic<FIRRTLType>:$results);
+  let results = (outs BundleType:$result);
 
-  let assemblyFormat = "$ruw attr-dict (`:` type($results)^ )?";
+  let assemblyFormat = "$ruw attr-dict `:` type($result)";
 
   let extraClassDeclaration = [{
     enum class PortKind { Read, Write, ReadWrite };
@@ -77,10 +76,6 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
     /// This returns a null type if there are duplicate port names.
     static BundleType getTypeForPortList(uint64_t depth, FIRRTLType dataType,
                               ArrayRef<std::pair<Identifier, PortKind>> ports);
-
-    /// Return the type of a port given the memory depth, type, and kind
-    static BundleType getTypeForPort(uint64_t depth, FIRRTLType dataType,
-                                     PortKind portKind);
 
     /// Return the name and kind of ports supported by this memory.
     void getPorts(SmallVectorImpl<std::pair<Identifier, PortKind>> &result);
@@ -91,19 +86,6 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
     /// Return the data-type field of the memory, the type of each element.  If
     /// the Mem has no read/write ports, this will return null.
     FIRRTLType getDataTypeOrNull();
-
-    /// Return the port name for the specified result number.
-    StringAttr getPortName(size_t resultNo);
-    StringRef getPortNameStr(size_t resultNo) {
-      return getPortName(resultNo).getValue();
-    }
-
-    // Return the result for this instance that corresponds to the specified
-    // port name.
-    Value getPortNamed(StringRef name) {
-      return getPortNamed(StringAttr::get(name, getContext()));
-    }
-    Value getPortNamed(StringAttr name);
   }];
 }
 
