@@ -73,11 +73,6 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
   let extraClassDeclaration = [{
     enum class PortKind { Read, Write, ReadWrite };
 
-    /// Return the type of a mem given a list of named ports and their kind.
-    /// This returns a null type if there are duplicate port names.
-    static BundleType getTypeForPortList(uint64_t depth, FIRRTLType dataType,
-                              ArrayRef<std::pair<Identifier, PortKind>> ports);
-
     /// Return the type of a port given the memory depth, type, and kind
     static BundleType getTypeForPort(uint64_t depth, FIRRTLType dataType,
                                      PortKind portKind);
