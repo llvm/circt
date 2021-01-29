@@ -67,7 +67,11 @@ static Value castToFIRRTLType(Value val, Type type,
   if (type.isa<AnalogType>())
     return builder.createOrFold<AnalogInOutCastOp>(firType, val);
 
-  val = builder.createOrFold<StdIntCastOp>(firType.getPassiveType(), val);
+  if (BundleType bundle = type.dyn_cast<BundleType>()) {
+    val = builder.createOrFold<StdStructCastOp>(firType.getPassiveType(), val);
+  } else {
+    val = builder.createOrFold<StdIntCastOp>(firType.getPassiveType(), val);
+  }
 
   // Handle the flip type if needed.
   if (type != val.getType())
@@ -80,7 +84,10 @@ static Value castFromFIRRTLType(Value val, Type type,
                                 ImplicitLocOpBuilder &builder) {
   // Strip off Flip type if needed.
   val = builder.createOrFold<AsPassivePrimOp>(val);
-  return builder.createOrFold<StdIntCastOp>(type, val);
+  if (rtl::StructType structTy = type.dyn_cast<rtl::StructType>())
+    return builder.createOrFold<StdStructCastOp>(type, val);
+  else
+    return builder.createOrFold<StdIntCastOp>(type, val);
 }
 
 /// Return true if the specified FIRRTL type is a sized type (Int or Analog)
