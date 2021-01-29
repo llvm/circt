@@ -21,8 +21,9 @@ rtl.externmodule @Reciever(%a: !esi.channel<i4>, %clk: i1)
 // IFACE-NEXT:    sv.interface.signal @data : !rtl.array<4xi64>
 // IFACE-NEXT:    sv.interface.modport @sink  ("input" @ready, "output" @valid, "output" @data)
 // IFACE-NEXT:    sv.interface.modport @source  ("input" @valid, "input" @data, "output" @ready)
-// IFACE-LABEL: rtl.externmodule @Sender(i1 {rtl.name = "clk"}, !sv.modport<@sink> {rtl.name = "x"}) -> (%y: i8)
-// IFACE-LABEL: rtl.externmodule @Reciever(!sv.modport<@source> {rtl.name = "a"}, i1 {rtl.name = "clk"})
+// IFACE-LABEL: rtl.externmodule @Sender(i1 {rtl.name = "clk"}, !sv.modport<@IValidReady_i4::@sink> {rtl.name = "x"}) -> (%y: i8)
+// IFACE-LABEL: rtl.externmodule @ArrSender(!sv.modport<@IValidReady_ArrayOf4xi64::@sink> {rtl.name = "x"})
+// IFACE-LABEL: rtl.externmodule @Reciever(!sv.modport<@IValidReady_i4::@source> {rtl.name = "a"}, i1 {rtl.name = "clk"})
 
 
 rtl.module @test(%clk:i1, %rstn:i1) {
