@@ -80,7 +80,7 @@ endmodule
 module IntArrSum (
   input clk,
   input rstn,
-  IValidReady_array_si13_s2.source arr,
+  IValidReady_ArrayOf2xsi13.source arr,
   IValidReady_i32.sink totalOut
 );
 

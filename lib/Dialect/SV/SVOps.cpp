@@ -334,8 +334,11 @@ void InitialOp::build(OpBuilder &odsBuilder, OperationState &result,
 ModportType InterfaceOp::getModportType(StringRef modportName) {
   InterfaceModportOp modportOp = lookupSymbol<InterfaceModportOp>(modportName);
   assert(modportOp && "Modport symbol not found.");
-  return ModportType::get(getContext(),
-                          SymbolRefAttr::get(modportName, getContext()));
+  auto *ctxt = getContext();
+  return ModportType::get(
+      getContext(),
+      SymbolRefAttr::get(sym_name(), {SymbolRefAttr::get(modportName, ctxt)},
+                         ctxt));
 }
 
 Type InterfaceOp::getSignalType(StringRef signalName) {

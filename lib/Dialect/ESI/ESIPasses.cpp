@@ -123,7 +123,7 @@ StringAttr ESIRTLBuilder::constructInterfaceName(ChannelPort port) {
   llvm::raw_string_ostream nameOS(portTypeName);
   TypeSwitch<Type>(port.getInner())
       .Case([&](ArrayType arr) {
-        nameOS << "array_" << arr.getElementType() << "_s" << arr.getSize();
+        nameOS << "ArrayOf" << arr.getSize() << 'x' << arr.getElementType();
       })
       .Default([&](Type t) { nameOS << port.getInner(); });
 
