@@ -20,7 +20,6 @@
 #include "mlir/IR/Verifier.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/PointerEmbeddedInt.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
@@ -2022,7 +2021,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
   int32_t depth = -1, readLatency = -1, writeLatency = -1;
   RUWAttr ruw = RUWAttr::Undefined;
 
-  SmallVector<std::pair<StringAttr, BundleType>, 4> ports;
+  SmallVector<std::pair<Identifier, MemOp::PortKind>, 4> ports;
 
   // Parse all the memfield records, which are indented more than the mem.
   while (1) {
@@ -2081,14 +2080,12 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     StringRef portName;
     if (parseId(portName, "expected port name"))
       return failure();
-    ports.push_back({builder.getStringAttr(portName),
-                     MemOp::getTypeForPort(depth, type, portKind)});
+    ports.push_back({builder.getIdentifier(portName), portKind});
 
     while (!getIndentation().hasValue()) {
       if (parseId(portName, "expected port name"))
         return failure();
-      ports.push_back({builder.getStringAttr(portName),
-                       MemOp::getTypeForPort(depth, type, portKind)});
+      ports.push_back({builder.getIdentifier(portName), portKind});
     }
   }
 
@@ -2100,46 +2097,22 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
   if (readLatency < 0 || writeLatency < 0)
     return emitError(info.getFIRLoc(), "invalid latency");
 
-  // Canonicalize the ports into alphabetical order.
-  // TODO: Move this into MemOp construction/canonicalization.
-  llvm::array_pod_sort(ports.begin(), ports.end(),
-                       [](const std::pair<StringAttr, BundleType> *lhs,
-                          const std::pair<StringAttr, BundleType> *rhs) -> int {
-                         return lhs->first.getValue().compare(
-                             rhs->first.getValue());
-                       });
-
-  // Require that all port names are unique.
-  // TODO: Move this into MemOp verification.
-  for (size_t i = 1, e = ports.size(); i < e; ++i)
-    if (ports[i - 1].first == ports[i].first)
-      return {};
-
-  SmallVector<Attribute, 4> resultNames;
-  SmallVector<Type, 4> resultTypes;
-  for (auto p : ports) {
-    resultNames.push_back(p.first);
-    resultTypes.push_back(FlipType::get(p.second));
+  auto memType = MemOp::getTypeForPortList(depth, type, ports);
+  if (!memType) {
+    emitError(info.getFIRLoc(), "duplicate port name in mem");
+    return failure();
   }
 
-  auto result = builder.create<MemOp>(
-      info.getLoc(), resultTypes, readLatency, writeLatency, depth, ruw,
-      builder.getArrayAttr(resultNames), filterUselessName(id));
-
-  UnbundledValueEntry unbundledValueEntry;
-  unbundledValueEntry.reserve(result.getNumResults());
-  for (size_t i = 0, e = result.getNumResults(); i != e; ++i) {
-    unbundledValueEntry.push_back({resultNames[i], result.getResult(i)});
-  }
-  unbundledValues.push_back(std::move(unbundledValueEntry));
-  auto entryID = UnbundledID(unbundledValues.size());
+  auto result =
+      builder.create<MemOp>(info.getLoc(), memType, readLatency, writeLatency,
+                            depth, ruw, filterUselessName(id));
 
   // Remember that this memory is in this symbol table scope.
   // TODO(chisel bug): This should be removed along with memoryScopeTable.
   memoryScopeTable.insert(Identifier::get(id.getValue(), getContext()),
                           {symbolTable.getCurScope(), result.getOperation()});
 
-  return addSymbolEntry(id.getValue(), entryID, info.getFIRLoc());
+  return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
 }
 
 /// node ::= 'node' id '=' exp info?
