@@ -299,4 +299,15 @@ firrtl.circuit "Simple" {
     // CHECK: [[OUTAC:%.+]] = firrtl.stdIntCast [[OUTA]] : (!firrtl.uint<4>) -> i4
     // CHECK: rtl.output [[OUTAC]] : i4
   }
+
+  // CHECK-LABEL: rtl.module @SimpleStruct(%source: !rtl.struct<valid: i1, ready: i1, data: i64>) -> (%sink: !rtl.struct<valid: i1, ready: i1, data: i64>) {
+  // CHECK-NEXT:  [[st1:%.+]] = firrtl.stdStructCast %source : (!rtl.struct<valid: i1, ready: i1, data: i64>) -> !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
+  // CHECK-NEXT:  [[st2:%.+]] = firrtl.stdStructCast [[st1]] : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>) -> !rtl.struct<valid: i1, ready: i1, data: i64>
+  // CHECK-NEXT:  rtl.output [[st2]] : !rtl.struct<valid: i1, ready: i1, data: i64>
+  // CHECK-NEXT: }
+  firrtl.module @SimpleStruct(%source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>,
+                              %sink: !firrtl.flip<bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>>) {
+    firrtl.connect %sink, %source : !firrtl.flip<bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>>, !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
+  }
+
 }

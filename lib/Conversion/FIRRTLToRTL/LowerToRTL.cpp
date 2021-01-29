@@ -34,6 +34,17 @@ static Type lowerType(Type type) {
   // Ignore flip types.
   firType = firType.getPassiveType();
 
+  if (BundleType bundle = firType.dyn_cast<BundleType>()) {
+    mlir::SmallVector<rtl::StructType::FieldInfo, 8> rtlfields;
+    for (auto element : bundle.getElements()) {
+      Type etype = lowerType(element.type);
+      if (!etype)
+        return {};
+      rtlfields.push_back(rtl::StructType::FieldInfo{element.name, etype});
+    }
+    return rtl::StructType::get(type.getContext(), rtlfields);
+  }
+
   auto width = firType.getBitWidthOrSentinel();
   if (width >= 0) // IntType, analog with known width, clock, etc.
     return IntegerType::get(type.getContext(), width);
@@ -56,7 +67,11 @@ static Value castToFIRRTLType(Value val, Type type,
   if (type.isa<AnalogType>())
     return builder.createOrFold<AnalogInOutCastOp>(firType, val);
 
-  val = builder.createOrFold<StdIntCastOp>(firType.getPassiveType(), val);
+  if (BundleType bundle = type.dyn_cast<BundleType>()) {
+    val = builder.createOrFold<StdStructCastOp>(firType.getPassiveType(), val);
+  } else {
+    val = builder.createOrFold<StdIntCastOp>(firType.getPassiveType(), val);
+  }
 
   // Handle the flip type if needed.
   if (type != val.getType())
@@ -69,6 +84,8 @@ static Value castFromFIRRTLType(Value val, Type type,
                                 ImplicitLocOpBuilder &builder) {
   // Strip off Flip type if needed.
   val = builder.createOrFold<AsPassivePrimOp>(val);
+  if (rtl::StructType structTy = type.dyn_cast<rtl::StructType>())
+    return builder.createOrFold<StdStructCastOp>(type, val);
   return builder.createOrFold<StdIntCastOp>(type, val);
 }
 
