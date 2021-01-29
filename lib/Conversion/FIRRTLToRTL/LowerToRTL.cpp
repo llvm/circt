@@ -86,8 +86,7 @@ static Value castFromFIRRTLType(Value val, Type type,
   val = builder.createOrFold<AsPassivePrimOp>(val);
   if (rtl::StructType structTy = type.dyn_cast<rtl::StructType>())
     return builder.createOrFold<StdStructCastOp>(type, val);
-  else
-    return builder.createOrFold<StdIntCastOp>(type, val);
+  return builder.createOrFold<StdIntCastOp>(type, val);
 }
 
 /// Return true if the specified FIRRTL type is a sized type (Int or Analog)

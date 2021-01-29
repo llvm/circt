@@ -1502,16 +1502,19 @@ static LogicalResult verifyStdStructCastOp(StdStructCastOp cast) {
 
   for (size_t findex = 0, fend = firFields.size(); findex < fend; ++findex) {
     if (firFields[findex].name != rtlFields[findex].name)
-      return cast.emitError("field names don't match '") << firFields[findex].name << "', '" << rtlFields[findex].name << "'";
+      return cast.emitError("field names don't match '")
+             << firFields[findex].name << "', '" << rtlFields[findex].name
+             << "'";
     int64_t firWidth = firFields[findex].type.getBitWidthOrSentinel();
     int64_t rtlWidth = rtl::getBitWidth(rtlFields[findex].type);
     if (firWidth > 0 && rtlWidth > 0 && firWidth != rtlWidth)
-      return cast.emitError("size of field '") << rtlFields[findex].name << "' don't match " << firWidth << ", " << rtlWidth;
+      return cast.emitError("size of field '")
+             << rtlFields[findex].name << "' don't match " << firWidth << ", "
+             << rtlWidth;
   }
 
   return success();
 }
-
 
 void AsPassivePrimOp::build(OpBuilder &builder, OperationState &result,
                             Value input) {
