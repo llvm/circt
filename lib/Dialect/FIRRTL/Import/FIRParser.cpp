@@ -20,10 +20,10 @@
 #include "mlir/IR/Verifier.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/PointerEmbeddedInt.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -2081,12 +2081,14 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     StringRef portName;
     if (parseId(portName, "expected port name"))
       return failure();
-    ports.push_back({builder.getStringAttr(portName), MemOp::getTypeForPort(depth, type, portKind)});
+    ports.push_back({builder.getStringAttr(portName),
+                     MemOp::getTypeForPort(depth, type, portKind)});
 
     while (!getIndentation().hasValue()) {
       if (parseId(portName, "expected port name"))
         return failure();
-      ports.push_back({builder.getStringAttr(portName), MemOp::getTypeForPort(depth, type, portKind)});
+      ports.push_back({builder.getStringAttr(portName),
+                       MemOp::getTypeForPort(depth, type, portKind)});
     }
   }
 
@@ -2100,12 +2102,12 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
 
   // Canonicalize the ports into alphabetical order.
   // TODO: Move this into MemOp construction/canonicalization.
-  llvm::array_pod_sort(
-      ports.begin(), ports.end(),
-      [](const std::pair<StringAttr, BundleType> *lhs,
-         const std::pair<StringAttr, BundleType> *rhs) -> int {
-        return lhs->first.getValue().compare(rhs->first.getValue());
-      });
+  llvm::array_pod_sort(ports.begin(), ports.end(),
+                       [](const std::pair<StringAttr, BundleType> *lhs,
+                          const std::pair<StringAttr, BundleType> *rhs) -> int {
+                         return lhs->first.getValue().compare(
+                             rhs->first.getValue());
+                       });
 
   // Require that all port names are unique.
   // TODO: Move this into MemOp verification.
