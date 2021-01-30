@@ -67,14 +67,19 @@ def ReadInOutOp
   let assemblyFormat = "$input attr-dict `:` type($input)";
 }
 
+def InOutArrayType
+  : Type<CPred<"getAnyRTLArrayElementType(getInOutElementType($_self)) "
+                        "!= Type()">,
+         "an inout type with array element", "::circt::rtl::InOutType">;
+
 class InOutIndexConstraint<string value, string inoutValue>
   : TypesMatchWith<"type should be element of inout type",
                    inoutValue, value,
                    "InOutType::get(rtl::getAnyRTLArrayElementType("
                                             "getInOutElementType($_self)))">;
 
-def ArrayIndexOp
- : RTLOp<"arrayindex",
+def ArrayIndexInOutOp
+ : RTLOp<"array_index_inout",
          [NoSideEffect, InOutIndexConstraint<"result", "input">]> {
   let summary = "Index an inout memory to produce an inout element";
   let description = "See SV Spec 11.5.2.";
@@ -87,23 +92,4 @@ def ArrayIndexOp
 
   let assemblyFormat =
     "$input`[`$index`]` attr-dict `:` type($input) `,` type($index)";
-}
-
-def StructExplodeOp : RTLOp<"struct_explode", [NoSideEffect]> {
-  let summary = "Expand a struct into its constituent parts.";
-  let arguments = (ins StructType:$input);
-  let results = (outs Variadic<RTLNonInOutType>:$result);
-
-  let parser = "return ::parse$cppClass(parser, result);";
-  let printer = "return ::print(p, *this);";
-}
-
-
-def StructCreateOp : RTLOp<"struct_create", [NoSideEffect]> {
-  let summary = "Create a struct from constituent parts.";
-  let arguments = (ins Variadic<RTLNonInOutType>:$input);
-  let results = (outs StructType:$result);
-
-  let parser = "return ::parse$cppClass(parser, result);";
-  let printer = "return ::print(p, *this);";
 }

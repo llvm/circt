@@ -41,7 +41,6 @@ firrtl.circuit "M1" {
     %d = firrtl.stdIntCast %b : (i8) -> !firrtl.uint<8>
     firrtl.connect %y, %d : !firrtl.flip<uint<8>>, !firrtl.uint<8>
   }
-
   // CHECK-LABEL: module M3(
   // CHECK-NEXT:    input  [7:0] x,
   // CHECK-NEXT:    output [7:0] y);

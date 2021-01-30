@@ -7,6 +7,11 @@ module {
     return
   }
 
+  // CHECK-LABEL: func @si20x5array(%{{.*}}: !rtl.array<5xsi20>)
+  func @si20x5array(%A: !rtl.array<5 x si20>) {
+    return
+  }
+
   // CHECK-LABEL: func @inoutType(%arg0: !rtl.inout<i42>) {
   func @inoutType(%arg0: !rtl.inout<i42>) {
     return
