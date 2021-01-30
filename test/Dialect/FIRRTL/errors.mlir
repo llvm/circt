@@ -373,3 +373,14 @@ firrtl.circuit "StructCast3" {
     %b = firrtl.rtlStructCast %a : (!firrtl.bundle<valid: uint<1>>) -> (!rtl.struct<valid: i2>)
   }
 }
+
+// -----
+
+firrtl.circuit "OutOfOrder" {
+  firrtl.module @OutOfOrder(%a: !firrtl.uint<32>) {
+    // expected-error @+1 {{operand #0 does not dominate this use}}
+    %0 = firrtl.add %1, %1 : (!firrtl.uint<33>, !firrtl.uint<33>) -> !firrtl.uint<34>
+    // expected-note @+1 {{operand defined here}}
+    %1 = firrtl.add %a, %a : (!firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<33>
+  }
+}

@@ -46,7 +46,7 @@ def CircuitOp : FIRRTLOp<"circuit",
 }
 
 def FModuleOp : FIRRTLOp<"module",
-      [IsolatedFromAbove, FunctionLike, Symbol, RegionKindInterface,
+      [IsolatedFromAbove, FunctionLike, Symbol,
        SingleBlockImplicitTerminator<"DoneOp">]> {
   let summary = "FIRRTL Module";
   let description = [{
@@ -67,9 +67,6 @@ def FModuleOp : FIRRTLOp<"module",
     using FunctionLike::end;
     using FunctionLike::front;
     using FunctionLike::getBody;
-
-    // Implement RegionKindInterface.
-    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
 
     // Decode information about the input and output ports on this module.
     void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
