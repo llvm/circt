@@ -720,6 +720,13 @@ public:
   void buildAllReadyLogic(SmallVector<ValueVector *, 4> inputs,
                           ValueVector *output, Value condition);
 
+  void buildOneStageSeqBufferLogic(Value predValid, Value validReg,
+                                   Value predReady, Value succReady,
+                                   Value predData, Value dataReg);
+  bool buildSeqBufferLogic(int64_t numStage, ValueVector *input,
+                           ValueVector *output, Value clock, Value reset,
+                           bool isControl);
+
 private:
   ValueVectorList portList;
   Location insertLoc;
@@ -1416,27 +1423,132 @@ bool HandshakeBuilder::visitHandshake(handshake::ConstantOp op) {
   return true;
 }
 
-bool HandshakeBuilder::visitHandshake(BufferOp op) {
-  ValueVector inputSubfields = portList[0];
-  Value inputValid = inputSubfields[0];
-  Value inputReady = inputSubfields[1];
+void HandshakeBuilder::buildOneStageSeqBufferLogic(
+    Value predValid, Value validReg, Value predReady, Value succReady,
+    Value predData = nullptr, Value dataReg = nullptr) {
+  auto bitType = UIntType::get(rewriter.getContext(), 1);
 
-  ValueVector outputSubfields = portList[1];
-  Value outputValid = outputSubfields[0];
-  Value outputReady = outputSubfields[1];
+  // Create a signal for when the valid register is empty or the successor is
+  // ready to accept new token.
+  auto notValidReg = rewriter.create<NotPrimOp>(insertLoc, bitType, validReg);
+  auto emptyOrReady =
+      rewriter.create<OrPrimOp>(insertLoc, bitType, notValidReg, succReady);
+
+  rewriter.create<ConnectOp>(insertLoc, predReady, emptyOrReady);
+
+  // Create a mux that drives the register input. If the emptyOrReady signal
+  // is asserted, the mux selects the predValid signal. Otherwise, it selects
+  // the register output, keeping the output registered unchanged.
+  auto validRegMux = rewriter.create<MuxPrimOp>(
+      insertLoc, bitType, emptyOrReady, predValid, validReg);
+
+  // Now we can drive the valid register.
+  rewriter.create<ConnectOp>(insertLoc, validReg, validRegMux);
+
+  // If data is not nullptr, create data logic.
+  if (predData && dataReg) {
+    auto dataType = predData.getType().cast<FIRRTLType>();
+
+    // Create a mux that drives the date register.
+    auto dataRegMux = rewriter.create<MuxPrimOp>(
+        insertLoc, dataType, emptyOrReady, predData, dataReg);
+    rewriter.create<ConnectOp>(insertLoc, dataReg, dataRegMux);
+  }
+}
+
+bool HandshakeBuilder::buildSeqBufferLogic(int64_t numStage, ValueVector *input,
+                                           ValueVector *output, Value clock,
+                                           Value reset, bool isControl) {
+  if (input == nullptr || output == nullptr)
+    return false;
+
+  auto inputSubfields = *input;
+  auto inputValid = inputSubfields[0];
+  auto inputReady = inputSubfields[1];
+
+  auto outputSubfields = *output;
+  auto outputValid = outputSubfields[0];
+  auto outputReady = outputSubfields[1];
+
+  // Create useful value and type for valid/ready signal.
+  auto bitType = UIntType::get(rewriter.getContext(), 1);
+  auto falseConst = createConstantOp(bitType, APInt(1, 0), insertLoc, rewriter);
+
+  // Create useful value and type for data signal.
+  FIRRTLType dataType = nullptr;
+  Value zeroDataConst = nullptr;
+
+  // Temporary values for storing the valid, ready, and data signals in the
+  // procedure of constructing the multi-stages buffer.
+  Value currentValid = inputValid;
+  Value currentReady = inputReady;
+  Value currentData = nullptr;
+
+  // If is not a control buffer, fill in corresponding values and type.
+  if (!isControl) {
+    auto inputData = inputSubfields[2];
+
+    dataType = inputData.getType().cast<FIRRTLType>();
+    zeroDataConst =
+        createConstantOp(dataType, APInt(dataType.getBitWidthOrSentinel(), 0),
+                         insertLoc, rewriter);
+    currentData = inputData;
+  }
+
+  // Create multiple stages buffer logic.
+  for (unsigned i = 0; i < numStage; ++i) {
+    // Create wires for ready signal from the success buffer stage.
+    auto readyWireName =
+        rewriter.getStringAttr("readyWire" + std::to_string(i));
+    auto readyWire = rewriter.create<WireOp>(insertLoc, bitType, readyWireName);
+
+    // Create a register for valid signal.
+    auto validRegName = rewriter.getStringAttr("validReg" + std::to_string(i));
+    auto validReg = rewriter.create<RegResetOp>(
+        insertLoc, bitType, clock, reset, falseConst, validRegName);
+
+    // Create registers for data signal.
+    Value dataReg = nullptr;
+    if (!isControl) {
+      auto dataRegName = rewriter.getStringAttr("dataReg" + std::to_string(i));
+      dataReg = rewriter.create<RegResetOp>(insertLoc, dataType, clock, reset,
+                                            zeroDataConst, dataRegName);
+    }
+
+    // Build the current stage of the buffer.
+    buildOneStageSeqBufferLogic(currentValid, validReg, currentReady, readyWire,
+                                currentData, dataReg);
+
+    // Update the current valid, ready, and data.
+    currentValid = validReg;
+    currentReady = readyWire;
+    currentData = dataReg;
+  }
+
+  // Connect to the output ports.
+  rewriter.create<ConnectOp>(insertLoc, outputValid, currentValid);
+  rewriter.create<ConnectOp>(insertLoc, currentReady, outputReady);
+  if (!isControl) {
+    auto outputData = outputSubfields[2];
+    rewriter.create<ConnectOp>(insertLoc, outputData, currentData);
+  }
+
+  return true;
+}
+
+bool HandshakeBuilder::visitHandshake(BufferOp op) {
+  ValueVector input = portList[0];
+  ValueVector output = portList[1];
 
   Value clock = portList[2][0];
   Value reset = portList[3][0];
 
-  // FIXME: This looks unimplemented?
-  (void)outputReady;
-  (void)outputValid;
-  (void)reset;
-  (void)clock;
-  (void)inputValid;
-  (void)inputReady;
-
-  return true;
+  // For now, we only support sequential buffers.
+  if (op.sequential())
+    return buildSeqBufferLogic(op.slots(), &input, &output, clock, reset,
+                               op.control());
+  else
+    return false;
 }
 
 bool HandshakeBuilder::visitHandshake(MemoryOp op) {
