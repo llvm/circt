@@ -351,8 +351,15 @@ public:
   /// operations came from.  In any case, print a newline.
   void emitLocationInfoAndNewLine(const SmallPtrSet<Operation *, 8> &ops);
 
-  llvm::StringSet<> usedNames;
+  /// nameTable keeps track of mappings from Value's and operations (for
+  /// instances) to their string table entry.
   llvm::DenseMap<ValueOrOp, llvm::StringMapEntry<llvm::NoneType> *> nameTable;
+
+  /// outputNames tracks the uniquified names for output ports, which don't have
+  /// a Value or Op representation.
+  SmallVector<StringRef> outputNames;
+
+  llvm::StringSet<> usedNames;
   size_t nextGeneratedNameID = 0;
 
   /// This set keeps track of all of the expression nodes that need to be
@@ -365,6 +372,11 @@ public:
 
 /// Add the specified name to the name table, auto-uniquing the name if
 /// required.  If the name is empty, then this creates a unique temp name.
+///
+/// "valueOrOp" is typically the Value for an intermediate wire etc, but it can
+/// also be an op for an instance, since we want the instances op uniqued and
+/// tracked.  It can also be null for things like outputs which are not tracked
+/// in the nameTable.
 StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
   if (name.empty())
     name = "_T";
@@ -410,7 +422,8 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
   if (!reservedWords.count(name)) {
     auto insertResult = usedNames.insert(name);
     if (insertResult.second) {
-      nameTable[valueOrOp] = &*insertResult.first;
+      if (valueOrOp)
+        nameTable[valueOrOp] = &*insertResult.first;
       return insertResult.first->getKey();
     }
   }
@@ -429,7 +442,8 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
     if (!reservedWords.count(name)) {
       auto insertResult = usedNames.insert(name);
       if (insertResult.second) {
-        nameTable[valueOrOp] = &*insertResult.first;
+        if (valueOrOp)
+          nameTable[valueOrOp] = &*insertResult.first;
         return insertResult.first->getKey();
       }
     }
@@ -1181,7 +1195,7 @@ LogicalResult ModuleEmitter::visitStmt(OutputOp op) {
     indent();
     if (isZeroBitType(port.type))
       os << "// Zero width: ";
-    os << "assign " << port.getName() << " = ";
+    os << "assign " << outputNames[port.argNum] << " = ";
     emitExpression(op.getOperand(operandIndex), ops);
     os << ';';
     emitLocationInfoAndNewLine(ops);
@@ -1963,7 +1977,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
       name = "<<NO-NAME-FOUND>>";
     }
     if (port.isOutput())
-      usedNames.insert(name);
+      outputNames.push_back(addName(ValueOrOp(), name));
     else
       addName(module.getArgument(port.argNum), name);
   }
@@ -2024,8 +2038,15 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
     if (portTypeStrings[portIdx].size() < maxTypeWidth)
       os.indent(maxTypeWidth - portTypeStrings[portIdx].size());
 
+    auto getPortName = [&](size_t portIdx) -> StringRef {
+      if (portInfo[portIdx].isOutput())
+        return outputNames[portInfo[portIdx].argNum];
+      else
+        return getName(module.getArgument(portInfo[portIdx].argNum));
+    };
+
     // Emit the name.
-    os << portInfo[portIdx].getName();
+    os << getPortName(portIdx);
     printArraySubscripts(portType, os);
     ++portIdx;
 
@@ -2034,7 +2055,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
     while (portIdx != e && portInfo[portIdx].direction == thisPortDirection &&
            portType == portInfo[portIdx].type) {
       // Don't exceed our preferred line length.
-      StringRef name = portInfo[portIdx].getName();
+      StringRef name = getPortName(portIdx);
       if (os.tell() + 2 + name.size() - startOfLinePos >
           // We use "-2" here because we need a trailing comma or ); for the
           // decl.
