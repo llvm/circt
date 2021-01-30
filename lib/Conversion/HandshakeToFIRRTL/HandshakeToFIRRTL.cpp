@@ -33,7 +33,7 @@ using ValueVectorList = std::vector<ValueVector>;
 //===----------------------------------------------------------------------===//
 
 static void legalizeFModule(FModuleOp moduleOp) {
-  std::vector<Operation *> connectOps;
+  SmallVector<Operation *, 8> connectOps;
   moduleOp.walk([&](ConnectOp op) { connectOps.push_back(op); });
   for (auto op : connectOps)
     op->moveBefore(&moduleOp.front().back());
