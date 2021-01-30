@@ -13,35 +13,35 @@
 // CHECK:   %validReg0 = firrtl.regreset %clock, %reset, %c0_ui1 {name = "validReg0"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 
 // pred_ready = !reg_valid || succ_ready.
-// CHECK:   %4 = firrtl.not %validReg0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   %5 = firrtl.or %4, %readyWire0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   firrtl.connect %[[IN_READY:.+]], %5 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+// CHECK:   %[[VAL_4:.+]] = firrtl.not %validReg0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %[[VAL_5:.+]] = firrtl.or %[[VAL_4:.+]], %readyWire0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   firrtl.connect %[[IN_READY:.+]], %[[VAL_5:.+]] : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 
 // Drive valid register.
-// CHECK:   %6 = firrtl.mux(%5, %[[IN_VALID:.+]], %validReg0) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   firrtl.connect %validReg0, %6 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:   %[[VAL_6:.+]] = firrtl.mux(%[[VAL_5:.+]], %[[IN_VALID:.+]], %validReg0) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   firrtl.connect %validReg0, %[[VAL_6:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
 
 // Stage 1 logics.
 // CHECK:   %readyWire1 = firrtl.wire : !firrtl.uint<1>
 // CHECK:   %validReg1 = firrtl.regreset %clock, %reset, %c0_ui1 {name = "validReg1"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 
-// CHECK:   %7 = firrtl.not %validReg1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   %8 = firrtl.or %7, %readyWire1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   firrtl.connect %readyWire0, %8 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:   %[[VAL_7:.+]] = firrtl.not %validReg1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %[[VAL_8:.+]] = firrtl.or %[[VAL_7:.+]], %readyWire1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   firrtl.connect %readyWire0, %[[VAL_8:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
 
-// CHECK:   %9 = firrtl.mux(%8, %validReg0, %validReg1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   firrtl.connect %validReg1, %9 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:   %[[VAL_9:.+]] = firrtl.mux(%[[VAL_8:.+]], %validReg0, %validReg1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   firrtl.connect %validReg1, %[[VAL_9:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
 
 // Stage 2 logics.
 // CHECK:   %readyWire2 = firrtl.wire : !firrtl.uint<1>
 // CHECK:   %validReg2 = firrtl.regreset %clock, %reset, %c0_ui1 {name = "validReg2"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 
-// CHECK:   %10 = firrtl.not %validReg2 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   %11 = firrtl.or %10, %readyWire2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   firrtl.connect %readyWire1, %11 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:   %[[VAL_10:.+]] = firrtl.not %validReg2 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %[[VAL_11:.+]] = firrtl.or %[[VAL_10:.+]], %readyWire2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   firrtl.connect %readyWire1, %[[VAL_11:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
 
-// CHECK:   %12 = firrtl.mux(%11, %validReg1, %validReg2) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   firrtl.connect %validReg2, %12 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:   %[[VAL_12:.+]] = firrtl.mux(%[[VAL_11:.+]], %validReg1, %validReg2) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   firrtl.connect %validReg2, %[[VAL_12:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
 
 // Connet to output ports.
 // CHECK:   firrtl.connect %[[OUT_VALID:.+]], %validReg2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
@@ -66,12 +66,12 @@ handshake.func @test_buffer(%arg0: none, %arg1: none, ...) -> (none, none) {
 // CHECK:   %c0_ui64 = firrtl.constant(0 : ui64) : !firrtl.uint<64>
 
 // CHECK:   %dataReg0 = firrtl.regreset %clock, %reset, %c0_ui64 {name = "dataReg0"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<64>) -> !firrtl.uint<64>
-// CHECK:   %9 = firrtl.mux(%7, %[[IN_DATA:.+]], %dataReg0) : (!firrtl.uint<1>, !firrtl.uint<64>, !firrtl.uint<64>) -> !firrtl.uint<64>
-// CHECK:   firrtl.connect %dataReg0, %9 : !firrtl.uint<64>, !firrtl.uint<64>
+// CHECK:   %[[VAL_9:.+]] = firrtl.mux(%[[VAL_7:.+]], %[[IN_DATA:.+]], %dataReg0) : (!firrtl.uint<1>, !firrtl.uint<64>, !firrtl.uint<64>) -> !firrtl.uint<64>
+// CHECK:   firrtl.connect %dataReg0, %[[VAL_9:.+]] : !firrtl.uint<64>, !firrtl.uint<64>
 
 // CHECK:   %dataReg1 = firrtl.regreset %clock, %reset, %c0_ui64 {name = "dataReg1"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<64>) -> !firrtl.uint<64>
-// CHECK:   %13 = firrtl.mux(%11, %dataReg0, %dataReg1) : (!firrtl.uint<1>, !firrtl.uint<64>, !firrtl.uint<64>) -> !firrtl.uint<64>
-// CHECK:   firrtl.connect %dataReg1, %13 : !firrtl.uint<64>, !firrtl.uint<64>
+// CHECK:   %[[VAL_13:.+]] = firrtl.mux(%[[VAL_11:.+]], %dataReg0, %dataReg1) : (!firrtl.uint<1>, !firrtl.uint<64>, !firrtl.uint<64>) -> !firrtl.uint<64>
+// CHECK:   firrtl.connect %dataReg1, %[[VAL_13:.+]] : !firrtl.uint<64>, !firrtl.uint<64>
 
 // CHECK:   firrtl.connect %[[OUT_DATA:.+]], %dataReg1 : !firrtl.flip<uint<64>>, !firrtl.uint<64>
 // CHECK: }
