@@ -309,14 +309,14 @@ module {
 
     // Packed arrays.
 
-    %subscript = rtl.arrayindex %myArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
+    %subscript = rtl.array_index_inout %myArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
     // CHECK-NEXT: assign myArray1[in4] = in8;
     rtl.connect %subscript, %in8 : i8
 
     %memout1 = rtl.read_inout %subscript : !rtl.inout<i8>
 
      // Unpacked arrays, and unpacked arrays of packed arrays.
-    %subscriptu = rtl.arrayindex %myUArray1[%in4] : !rtl.inout<uarray<42 x i8>>, i4
+    %subscriptu = rtl.array_index_inout %myUArray1[%in4] : !rtl.inout<uarray<42 x i8>>, i4
     // CHECK-NEXT: assign myUArray1[in4] = in8;
     rtl.connect %subscriptu, %in8 : i8
 

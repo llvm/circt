@@ -40,7 +40,7 @@ public:
                        // Other operations.
                        SExtOp, ConcatOp, ExtractOp, MuxOp,
                        // InOut Expressions
-                       ReadInOutOp, ArrayIndexOp,
+                       ReadInOutOp, ArrayIndexInOutOp,
                        // Cast operation
                        BitcastOp,
                        // Array operations
@@ -116,7 +116,7 @@ public:
   HANDLE(ExtractOp, Unhandled);
   HANDLE(MuxOp, Unhandled);
   HANDLE(ReadInOutOp, Unhandled);
-  HANDLE(ArrayIndexOp, Unhandled);
+  HANDLE(ArrayIndexInOutOp, Unhandled);
   HANDLE(BitcastOp, Unary);
   HANDLE(ArraySliceOp, Unhandled);
   HANDLE(ArrayGetOp, Unhandled);

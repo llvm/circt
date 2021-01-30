@@ -1410,7 +1410,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
             auto randomVal =
                 builder->create<sv::TextualValueOp>(type, "`RANDOM");
             auto zero = builder->create<rtl::ConstantOp>(APInt(1, 0));
-            auto subscript = builder->create<rtl::ArrayIndexOp>(reg, zero);
+            auto subscript = builder->create<rtl::ArrayIndexInOutOp>(reg, zero);
             builder->create<sv::BPAssignOp>(subscript, randomVal);
           }
         } else if (!regs.empty()) {
@@ -1512,7 +1512,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         // is ignored, why does it exist?
         for (auto reg : regs) {
           auto addr = getPortFieldValue("addr");
-          Value value = builder->create<rtl::ArrayIndexOp>(reg, addr);
+          Value value = builder->create<rtl::ArrayIndexInOutOp>(reg, addr);
           value = builder->create<rtl::ReadInOutOp>(value);
 
           // If we're masking, emit "addr < Depth ? mem[addr] : `RANDOM".
@@ -1565,7 +1565,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
           auto addr = getPortFieldValue("addr");
 
           for (auto reg : regs) {
-            auto slot = builder->create<rtl::ArrayIndexOp>(reg, addr);
+            auto slot = builder->create<rtl::ArrayIndexInOutOp>(reg, addr);
             builder->create<sv::BPAssignOp>(slot, data);
           }
         });

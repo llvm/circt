@@ -337,8 +337,9 @@ class IndexBitWidthConstraint<string index, string input>
 class ArrayElementTypeConstraint<string result, string input>
   : TypesMatchWith<"Result must be arrays element type",
                    input, result,
-                   [{ $_self.cast<ArrayType>().getElementType() }]>;
+                   "$_self.cast<ArrayType>().getElementType()">;
 
+// rtl.array_get does not work with unpacked arrays.
 def ArrayGetOp : RTLOp<"array_get",
     [NoSideEffect, IndexBitWidthConstraint<"index", "input">,
      ArrayElementTypeConstraint<"result", "input">]> {
@@ -349,6 +350,10 @@ def ArrayGetOp : RTLOp<"array_get",
   let assemblyFormat = [{
     $input`[`$index`]` attr-dict `:` type($input)
   }];
+
+  let builders = [
+    OpBuilderDAG<(ins "Value":$input, "Value":$index)>
+  ];
 }
 
 def ArrayCreateOp : RTLOp<"array_create", [NoSideEffect, SameTypeOperands]> {
