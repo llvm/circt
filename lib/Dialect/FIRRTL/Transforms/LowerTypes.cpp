@@ -257,12 +257,7 @@ void FIRRTLTypesLowering::visitDecl(InstanceOp op) {
 /// Lower memory operations. A new memory is created for every leaf
 /// element in a memory's data type.
 void FIRRTLTypesLowering::visitDecl(MemOp op) {
-
-  auto type = op.getDataTypeOrNull();
-
-  // Bail out if the memory is empty
-  if (!type)
-    return;
+  auto type = op.getDataType();
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
   flattenBundleTypes(type, "", false, fieldTypes);

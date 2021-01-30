@@ -134,7 +134,7 @@ representation.
 
 ## Operations
 
-#### Multiple result `firrtl.instance` operation
+### Multiple result `firrtl.instance` operation
 
 The FIRRTL spec describes instances as returning a bundle type, where each
 element of the bundle corresponds to one of the ports of the module being
@@ -146,7 +146,7 @@ bundle result turn into its own distinct result on the `firrtl.instance`
 operation.  This is made possible by MLIR's robust support for multiple value
 operands, and makes the IR much easier to analyze and work with.
 
-#### Module bodies require def-before-use dominance instead of allowing graphs
+### Module bodies require def-before-use dominance instead of allowing graphs
 
 MLIR allows regions with arbitrary graphs in their bodies, and this is used by
 the RTL dialect to allow direct expression of cyclic graphs etc.  While this
@@ -157,7 +157,7 @@ it isn't intended to be a "generally useful IR for hardware".
 We recommend that non-Chisel frontends target the RTL dialect, or a higher level
 dialect of their own creation that lowers to RTL as appropriate.
 
-#### `input` and `output` Module Ports
+### `input` and `output` Module Ports
 
 The FIRRTL specification describes two kinds of ports: `input` and `output`.
 In the `firrtl.module` declaration we don't track this distinction, instead we
@@ -204,6 +204,13 @@ firrtl.circuit "Foo" {
 [`firrtl.Utils.module_type`](https://www.chisel-lang.org/api/firrtl/latest/firrtl/Utils$.html#module_type(m:firrtl.ir.DefModule):firrtl.ir.BundleType),
 that returns a bundle representing a `firrtl.module`.  However, this uses the
 inverse convention where `input` is flipped and `output` is unflipped.
+
+### `firrtl.mem`
+
+Unlike the SFC, the FIRRTL dialect represents each memory port as a distinct
+result value of the `firrtl.mem` operation.  Also, the `firrtl.mem` node does
+not allow zero port memories for simplicity.  Zero port memories are dropped
+by the .fir file parser.
 
 ### More things are represented as primitives
 

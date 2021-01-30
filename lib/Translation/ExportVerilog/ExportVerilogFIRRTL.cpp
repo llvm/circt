@@ -1562,8 +1562,7 @@ void ModuleEmitter::emitDecl(MemOp op) {
   // Aggregate mems may declare multiple reg's.  We need to random initialize
   // them all.
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  if (auto dataType = op.getDataTypeOrNull())
-    flattenBundleTypes(dataType, "", false, fieldTypes);
+  flattenBundleTypes(op.getDataType(), "", false, fieldTypes);
 
   emitRandomizeProlog();
 
@@ -1830,8 +1829,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
       // Handle the reg declaration for a memory specially.
       if (auto memOp = dyn_cast<MemOp>(&op))
-        if (auto dataType = memOp.getDataTypeOrNull())
-          flattenBundleTypes(dataType, "", false, fieldTypes);
+        flattenBundleTypes(memOp.getDataType(), "", false, fieldTypes);
 
       bool hadError = false;
       for (const auto &elt : fieldTypes) {
@@ -1895,8 +1893,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     if (auto memOp = dyn_cast<MemOp>(decl)) {
       auto memName = memOp.name().getValue().str();
       fieldTypes.clear();
-      if (auto dataType = memOp.getDataTypeOrNull())
-        flattenBundleTypes(dataType, "", false, fieldTypes);
+      flattenBundleTypes(memOp.getDataType(), "", false, fieldTypes);
 
       if (unvisitedOp) {
         uint64_t depth = memOp.depth();

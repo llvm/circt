@@ -724,29 +724,6 @@ module attributes {firrtl.mainModule = "Simple"} {
       rtl.output
     }
 
-  // module MemEmpty :
-  //    mem Empty :
-  //      data-type => UInt<32>
-  //      depth => 16
-  //      read-latency => 0
-  //      write-latency => 1
-  //      read-under-write => undefined
-  //
-  // CHECK-LABEL: rtl.module @MemEmpty() {
-  // CHECK-NEXT:   sv.ifdef "!SYNTHESIS"  {
-  // CHECK-NEXT:     sv.initial  {
-  // CHECK-NEXT:       sv.verbatim "`INIT_RANDOM_PROLOG_"
-  // CHECK-NEXT:       sv.ifdef "RANDOMIZE_MEM_INIT"  {
-  // CHECK-NEXT:       }
-  // CHECK-NEXT:     }
-  // CHECK-NEXT:   }
-  // CHECK-NEXT:   rtl.output
-  // CHECK-NEXT: }
-  rtl.module @MemEmpty() {
-    firrtl.mem Undefined {depth = 16 : i64, name = "Empty", portNames = [], readLatency = 0 : i32, writeLatency = 1 : i32}
-    rtl.output
-  }
-
   // module MemOne :
   //   mem _M : @[Decoupled.scala 209:24]
   //         data-type => { id : Analog<4>, other: SInt<8> }

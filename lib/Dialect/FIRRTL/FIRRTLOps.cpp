@@ -717,10 +717,8 @@ Optional<MemOp::PortKind> MemOp::getPortKind(StringRef portName) {
 }
 
 /// Return the data-type field of the memory, the type of each element.
-FIRRTLType MemOp::getDataTypeOrNull() {
-  // Mems with no read/write ports are legal.
-  if (getNumResults() == 0)
-    return {};
+FIRRTLType MemOp::getDataType() {
+  assert(getNumResults() != 0 && "Mems with no read/write ports are illegal");
 
   auto firstPortType = getResult(0).getType().cast<FIRRTLType>();
 
