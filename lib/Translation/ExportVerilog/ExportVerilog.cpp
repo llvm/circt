@@ -1728,7 +1728,8 @@ static bool isOkToBitSelectFrom(Value v) {
 
 /// Return true if we are unable to ever inline the specified operation.  This
 /// happens because not all Verilog expressions are composable, notably you can
-/// only use bit selects like x[4:6] on simple expressions.
+/// only use bit selects like x[4:6] on simple expressions, you cannot use
+/// expressions in the sensitivity list of always blocks, etc.
 static bool isExpressionUnableToInline(Operation *op) {
   if (auto cast = dyn_cast<BitcastOp>(op))
     if (!haveMatchingDims(cast.input().getType(), cast.result().getType(),
@@ -1757,6 +1758,10 @@ static bool isExpressionUnableToInline(Operation *op) {
     // ArraySliceOp uses its operand twice, so we want to assign it first then
     // use that variable in the ArraySliceOp expression.
     if (isa<ArraySliceOp>(user) && !isa<ConstantOp>(op))
+      return true;
+
+    // Always blocks must have a name in their sensitivity list, not an expr.
+    if (isa<AlwaysOp>(user) || isa<AlwaysFFOp>(user))
       return true;
   }
   return false;
@@ -1839,7 +1844,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
   for (auto &op : block) {
     bool isExpr = isVerilogExpression(&op);
 
-    // If the op is an instance, add its name to the name table.
+    // If the op is an instance, add its name to the name table as an op.
     auto instance = dyn_cast<InstanceOp>(&op);
     if (instance)
       addName(ValueOrOp(instance), instance.instanceName());
