@@ -144,30 +144,41 @@ rtl.module @Aliasing(%a : !rtl.inout<i42>, %b : !rtl.inout<i42>,
 }
 
 rtl.module @reg(%in4: i4, %in8: i8) -> (%a: i8, %b: i8) {
-    // CHECK-LABEL: module reg(
-    // CHECK-NEXT:   input  [3:0] in4,
-    // CHECK-NEXT:   input  [7:0] in8,
-    // CHECK-NEXT:   output [7:0] a, b);
+  // CHECK-LABEL: module reg(
+  // CHECK-NEXT:   input  [3:0] in4,
+  // CHECK-NEXT:   input  [7:0] in8,
+  // CHECK-NEXT:   output [7:0] a, b);
 
-    // CHECK-EMPTY:
-    // CHECK-NEXT: reg [7:0]       myReg;
-    %myReg = sv.reg : !rtl.inout<i8>
+  // CHECK-EMPTY:
+  // CHECK-NEXT: reg [7:0]       myReg;
+  %myReg = sv.reg : !rtl.inout<i8>
 
-    // CHECK-NEXT: reg [41:0][7:0] myRegArray1;
-    %myRegArray1 = sv.reg : !rtl.inout<array<42 x i8>>
+  // CHECK-NEXT: reg [41:0][7:0] myRegArray1;
+  %myRegArray1 = sv.reg : !rtl.inout<array<42 x i8>>
 
-    // CHECK-EMPTY:
-    rtl.connect %myReg, %in8 : i8        // CHECK-NEXT: assign myReg = in8;
+  // CHECK-EMPTY:
+  rtl.connect %myReg, %in8 : i8        // CHECK-NEXT: assign myReg = in8;
 
-    %subscript1 = rtl.arrayindex %myRegArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
-    rtl.connect %subscript1, %in8 : i8   // CHECK-NEXT: assign myRegArray1[in4] = in8;
+  %subscript1 = rtl.arrayindex %myRegArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
+  rtl.connect %subscript1, %in8 : i8   // CHECK-NEXT: assign myRegArray1[in4] = in8;
 
-    %regout = rtl.read_inout %myReg : !rtl.inout<i8>
+  %regout = rtl.read_inout %myReg : !rtl.inout<i8>
 
-    %subscript2 = rtl.arrayindex %myRegArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
-    %memout = rtl.read_inout %subscript2 : !rtl.inout<i8>
+  %subscript2 = rtl.arrayindex %myRegArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
+  %memout = rtl.read_inout %subscript2 : !rtl.inout<i8>
 
-    // CHECK-NEXT: assign a = myReg;
-    // CHECK-NEXT: assign b = myRegArray1[in4];
-    rtl.output %regout, %memout : i8, i8
+  // CHECK-NEXT: assign a = myReg;
+  // CHECK-NEXT: assign b = myRegArray1[in4];
+  rtl.output %regout, %memout : i8, i8
+}
+
+// CHECK-LABEL: issue508
+// https://github.com/llvm/circt/issues/508
+rtl.module @issue508(%in1: i1, %in2: i1) {
+  // CHECK: wire _T = in1 | in2;
+  %clock = rtl.or %in1, %in2 : i1 
+
+  // CHECK-NEXT: always @(posedge _T)
+  sv.always posedge %clock {
   }
+}
