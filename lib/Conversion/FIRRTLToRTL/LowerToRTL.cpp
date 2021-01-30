@@ -1447,6 +1447,10 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     auto portName = namesArray[i].cast<StringAttr>().getValue();
     auto port = op.getPortNamed(portName);
 
+    // Do not lower ports if they aren't used.
+    if (port.use_empty())
+      continue;
+
     auto portBundleType =
         port.getType().cast<FIRRTLType>().getPassiveType().cast<BundleType>();
 
