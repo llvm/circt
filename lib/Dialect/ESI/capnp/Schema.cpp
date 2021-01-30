@@ -472,17 +472,16 @@ public:
   }
 
   GasketComponent operator[](Value idx) {
-    return GasketComponent(*builder, builder->create<rtl::ArrayGetOp>(
-                                         loc(), type.getElementType(), s, idx));
+    return GasketComponent(*builder,
+                           builder->create<rtl::ArrayGetOp>(loc(), s, idx));
   }
 
   GasketComponent operator[](size_t idx) {
     IntegerType idxTy =
         builder->getIntegerType(llvm::Log2_32_Ceil(type.getSize()));
     auto idxVal = builder->create<rtl::ConstantOp>(loc(), idxTy, idx);
-    return GasketComponent(
-        *builder, builder->create<rtl::ArrayGetOp>(loc(), type.getElementType(),
-                                                   s, idxVal));
+    return GasketComponent(*builder,
+                           builder->create<rtl::ArrayGetOp>(loc(), s, idxVal));
   }
 
   /// Return the root of this slice hierarchy.

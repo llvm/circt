@@ -159,12 +159,12 @@ rtl.module @reg(%in4: i4, %in8: i8) -> (%a: i8, %b: i8) {
   // CHECK-EMPTY:
   rtl.connect %myReg, %in8 : i8        // CHECK-NEXT: assign myReg = in8;
 
-  %subscript1 = rtl.arrayindex %myRegArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
+  %subscript1 = rtl.array_index_inout %myRegArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
   rtl.connect %subscript1, %in8 : i8   // CHECK-NEXT: assign myRegArray1[in4] = in8;
 
   %regout = rtl.read_inout %myReg : !rtl.inout<i8>
 
-  %subscript2 = rtl.arrayindex %myRegArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
+  %subscript2 = rtl.array_index_inout %myRegArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
   %memout = rtl.read_inout %subscript2 : !rtl.inout<i8>
 
   // CHECK-NEXT: assign a = myReg;

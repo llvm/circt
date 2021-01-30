@@ -132,11 +132,6 @@ def StructType : RTLType<"Struct"> {
 // Type Constraints / Traits
 //===----------------------------------------------------------------------===//
 
-def InOutArrayType
-  : Type<CPred<"getAnyRTLArrayElementType(getInOutElementType($_self)) "
-                        "!= Type()">,
-         "an inout type with array element", "::circt::rtl::InOutType">;
-
 // This type constraint is used by operations whose asm strings have a type "T"
 // in the asmstring, which constraints an input or output to type `T`, and then
 // constraints another to `!rtl.inout<T>`.  The "value" and "inoutValue" are the

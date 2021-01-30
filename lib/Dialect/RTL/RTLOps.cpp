@@ -581,7 +581,6 @@ void WireOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   odsState.addTypes(InOutType::get(elementType));
 }
 
-
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
 void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -910,11 +909,21 @@ static void print(OpAsmPrinter &printer, rtl::StructInjectOp op) {
 }
 
 //===----------------------------------------------------------------------===//
-// ArrayIndexOp
+// ArrayGetOp
 //===----------------------------------------------------------------------===//
 
-void ArrayIndexOp::build(OpBuilder &builder, OperationState &result,
-                         Value input, Value index) {
+void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
+                       Value index) {
+  auto resultType = input.getType().cast<ArrayType>().getElementType();
+  build(builder, result, resultType, input, index);
+}
+
+//===----------------------------------------------------------------------===//
+// ArrayIndexInOutOp
+//===----------------------------------------------------------------------===//
+
+void ArrayIndexInOutOp::build(OpBuilder &builder, OperationState &result,
+                              Value input, Value index) {
   auto resultType = input.getType().cast<InOutType>().getElementType();
   resultType = getAnyRTLArrayElementType(resultType);
   assert(resultType && "input should have 'inout of an array' type");

@@ -640,7 +640,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:     sv.if %4  {
     // CHECK-NEXT:       %5 = rtl.read_inout %_M_write_data : !rtl.inout<i42>
     // CHECK-NEXT:       %6 = rtl.read_inout %_M_write_addr : !rtl.inout<i4>
-    // CHECK-NEXT:       %7 = rtl.arrayindex %_M[%6]
+    // CHECK-NEXT:       %7 = rtl.array_index_inout %_M[%6]
     // CHECK-NEXT:       sv.bpassign %7, %5 : i42
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
@@ -652,12 +652,12 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: %_M_read_data = rtl.wire : !rtl.inout<i42>
     // CHECK-NEXT: sv.ifdef "!RANDOMIZE_GARBAGE_ASSIGN"  {
     // CHECK-NEXT:   %2 = rtl.read_inout %_M_read_addr : !rtl.inout<i4>
-    // CHECK-NEXT:   %3 = rtl.arrayindex %_M[%2]
-    // CHECK-NEXT:   %4 = rtl.read_inout %3 : !rtl.inout<i42>
+    // CHECK-NEXT:   %3 = rtl.array_index_inout %_M[%2] : !rtl.inout<uarray<12xi42>>, i4
+    // CHECK-NEXT:   %4 = rtl.read_inout %3 
     // CHECK-NEXT:   rtl.connect %_M_read_data, %4 : i42
     // CHECK-NEXT: } else  {
     // CHECK-NEXT:   %2 = rtl.read_inout %_M_read_addr : !rtl.inout<i4>
-    // CHECK-NEXT:   %3 = rtl.arrayindex %_M[%2]
+    // CHECK-NEXT:   %3 = rtl.array_index_inout %_M[%2]
     // CHECK-NEXT:   %4 = rtl.read_inout %3 : !rtl.inout<i42>
     // CHECK-NEXT:   %c-4_i4 = rtl.constant(-4 : i4) : i4
     // CHECK-NEXT:   %5 = rtl.icmp ult %2, %c-4_i4 : i4
@@ -769,11 +769,11 @@ module attributes {firrtl.mainModule = "Simple"} {
   // CHECK-NEXT:       sv.ifdef "RANDOMIZE_MEM_INIT"  {
   // CHECK-NEXT:         %0 = sv.textual_value "`RANDOM" : i4
   // CHECK-NEXT:         %false = rtl.constant(false) : i1
-  // CHECK-NEXT:         %1 = rtl.arrayindex %_M_id[%false] : !rtl.inout<uarray<1xi4>>, i1
+  // CHECK-NEXT:         %1 = rtl.array_index_inout %_M_id[%false] : !rtl.inout<uarray<1xi4>>, i1
   // CHECK-NEXT:         sv.bpassign %1, %0 : i4
   // CHECK-NEXT:         %2 = sv.textual_value "`RANDOM" : i8
   // CHECK-NEXT:         %false_0 = rtl.constant(false) : i1
-  // CHECK-NEXT:         %3 = rtl.arrayindex %_M_other[%false_0] : !rtl.inout<uarray<1xi8>>, i1
+  // CHECK-NEXT:         %3 = rtl.array_index_inout %_M_other[%false_0] : !rtl.inout<uarray<1xi8>>, i1
   // CHECK-NEXT:         sv.bpassign %3, %2 : i8
   // CHECK-NEXT:       }
   // CHECK-NEXT:     }

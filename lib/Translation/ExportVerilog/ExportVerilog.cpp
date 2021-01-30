@@ -657,7 +657,7 @@ private:
   SubExprInfo visitComb(ArraySliceOp op);
   SubExprInfo visitComb(ArrayGetOp op);
   SubExprInfo visitComb(ArrayCreateOp op);
-  SubExprInfo visitComb(ArrayIndexOp op);
+  SubExprInfo visitComb(ArrayIndexInOutOp op);
   SubExprInfo visitComb(MuxOp op);
 
   // RTL Dialect Operations
@@ -1036,7 +1036,7 @@ SubExprInfo ExprEmitter::visitComb(ArrayCreateOp op) {
   return {Unary, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitComb(ArrayIndexOp op) {
+SubExprInfo ExprEmitter::visitComb(ArrayIndexInOutOp op) {
   auto arrayPrec = emitSubExpr(op.input(), Selection);
   os << '[';
   emitSubExpr(op.index(), LowestPrecedence);
@@ -1769,7 +1769,7 @@ static bool isExpressionUnableToInline(Operation *op) {
 
 /// Return true for operations that are always inlined.
 static bool isExpressionAlwaysInline(Operation *op) {
-  if (isa<ConstantOp>(op) || isa<ArrayIndexOp>(op))
+  if (isa<ConstantOp>(op) || isa<ArrayIndexInOutOp>(op))
     return true;
 
   // An SV interface modport is a symbolic name that is always inlined.
