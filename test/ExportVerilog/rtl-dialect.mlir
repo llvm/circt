@@ -397,7 +397,7 @@ module {
   // CHECK-NEXT:   // input  [2:0]/*Zero Width*/ arrZero,
   // CHECK-NEXT:      output [3:0]               r0,
   // CHECK-NEXT:   // output /*Zero Width*/      rZero,
-  // CHECK-NEXT:   // output [2:0]/*Zero Width*/ arrZero
+  // CHECK-NEXT:   // output [2:0]/*Zero Width*/ arrZero_0
   // CHECK-NEXT:    );
   // CHECK-EMPTY:
   rtl.module @TestZero(%a: i4, %zeroBit: i0, %arrZero: !rtl.array<3xi0>)
@@ -408,7 +408,7 @@ module {
 
     // CHECK-NEXT:   assign r0 = a + a;
     // CHECK-NEXT:   // Zero width: assign rZero = zeroBit;
-    // CHECK-NEXT:   // Zero width: assign arrZero = arrZero;
+    // CHECK-NEXT:   // Zero width: assign arrZero_0 = arrZero;
     // CHECK-NEXT: endmodule
   }
 
@@ -460,4 +460,14 @@ module {
     // CHECK: B name_0 (
     %w, %y = rtl.instance "name" @B(%a) : (i1) -> (i1, i1)
   }
+
+  // https://github.com/llvm/circt/issues/525
+  rtl.module @issue525(%struct: i2, %else: i2) -> (%casex: i2) {
+    %2 = rtl.add %struct, %else : i2
+    rtl.output %2 : i2
+  }
+ // CHECK-LABEL: module issue525(
+ // CHECK-NEXT: input  [1:0] struct_0, else_1,
+ // CHECK-NEXT: output [1:0] casex_2);
+ // CHECK: assign casex_2 = struct_0 + else_1;
 }
