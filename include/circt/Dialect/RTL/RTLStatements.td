@@ -93,22 +93,3 @@ def ArrayIndexInOutOp
   let assemblyFormat =
     "$input`[`$index`]` attr-dict `:` type($input) `,` type($index)";
 }
-
-def StructExplodeOp : RTLOp<"struct_explode", [NoSideEffect]> {
-  let summary = "Expand a struct into its constituent parts.";
-  let arguments = (ins StructType:$input);
-  let results = (outs Variadic<RTLNonInOutType>:$result);
-
-  let parser = "return ::parse$cppClass(parser, result);";
-  let printer = "return ::print(p, *this);";
-}
-
-
-def StructCreateOp : RTLOp<"struct_create", [NoSideEffect]> {
-  let summary = "Create a struct from constituent parts.";
-  let arguments = (ins Variadic<RTLNonInOutType>:$input);
-  let results = (outs StructType:$result);
-
-  let parser = "return ::parse$cppClass(parser, result);";
-  let printer = "return ::print(p, *this);";
-}

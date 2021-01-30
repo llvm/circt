@@ -38,6 +38,7 @@ include "RTLTypes.td"
 class RTLOp<string mnemonic, list<OpTrait> traits = []> :
     Op<RTLDialect, mnemonic, traits>;
 
+include "RTLAggregates.td"
 include "RTLCombinatorial.td"
 include "RTLStatements.td"
 include "RTLStructure.td"
