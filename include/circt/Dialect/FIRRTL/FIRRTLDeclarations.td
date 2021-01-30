@@ -68,7 +68,7 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
                        OptionalAttr<StrAttr>:$name);
   let results = (outs Variadic<FIRRTLType>:$results);
 
-  let assemblyFormat = "$ruw attr-dict (`:` type($results)^ )?";
+  let assemblyFormat = "$ruw attr-dict `:` type($results)";
 
   let extraClassDeclaration = [{
     enum class PortKind { Read, Write, ReadWrite };
@@ -83,9 +83,8 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
     /// Return the kind of the specified port or None if the name is invalid.
     Optional<PortKind> getPortKind(StringRef portName);
 
-    /// Return the data-type field of the memory, the type of each element.  If
-    /// the Mem has no read/write ports, this will return null.
-    FIRRTLType getDataTypeOrNull();
+    /// Return the data-type field of the memory, the type of each element.
+    FIRRTLType getDataType();
 
     /// Return the port name for the specified result number.
     StringAttr getPortName(size_t resultNo);

@@ -518,6 +518,17 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       ; CHECK: !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<3>, mask: uint<1>>>,
       ; CHECK: !firrtl.bundle<addr: flip<uint<1>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<3>>
 
+  ; CHECK-LABEL: firrtl.module @mem_no_ports() {
+  ; CHECK-NEXT: }
+  ; https://github.com/llvm/circt/issues/531
+  module mem_no_ports :
+    mem bar : @[Decoupled.scala 218:16]
+      data-type => UInt<3>
+      depth => 1
+      read-latency => 0
+      write-latency => 1
+      read-under-write => undefined
+
   ; CHECK-LABEL: firrtl.module @issue354(%tmp5: !firrtl.flip<sint<19>>) {
   module issue354 :
     output tmp5: SInt<19>

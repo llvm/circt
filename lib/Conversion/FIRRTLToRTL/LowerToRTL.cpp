@@ -1381,10 +1381,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   // Aggregate mems may declare multiple reg's.  We need to declare and random
   // initialize them all.
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  if (auto dataType = op.getDataTypeOrNull()) {
-    if (flattenBundleTypes(dataType, memName, fieldTypes))
-      return op.emitError("could not lower mem element type");
-  }
+  if (flattenBundleTypes(op.getDataType(), memName, fieldTypes))
+    return op.emitError("could not lower mem element type");
 
   uint64_t depth = op.depth();
 

@@ -2100,6 +2100,11 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
   if (readLatency < 0 || writeLatency < 0)
     return emitError(info.getFIRLoc(), "invalid latency");
 
+  // The FIRRTL dialect requires mems to have at least one port.  Since portless
+  // mems can never be referenced, it is always safe to drop them.
+  if (ports.empty())
+    return success();
+
   // Canonicalize the ports into alphabetical order.
   // TODO: Move this into MemOp construction/canonicalization.
   llvm::array_pod_sort(ports.begin(), ports.end(),
