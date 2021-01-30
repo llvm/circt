@@ -36,7 +36,7 @@ static void legalizeFModule(FModuleOp moduleOp) {
   SmallVector<Operation *, 8> connectOps;
   moduleOp.walk([&](ConnectOp op) { connectOps.push_back(op); });
   for (auto op : connectOps)
-    op->moveBefore(&moduleOp.front().back());
+    op->moveBefore(&moduleOp.getBodyBlock()->back());
 }
 
 /// Get the corresponding FIRRTL type given the built-in data type. Current
