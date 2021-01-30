@@ -1,4 +1,5 @@
 // RUN: circt-opt -lower-handshake-to-firrtl -split-input-file -verify-diagnostics %s
+// XFAIL: *
 
 // CHECK-LABEL: firrtl.module @handshake_load_3ins_2outs_ui8(
 // CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<8>>, %arg2: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg3: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<8>>>, %arg4: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) {
