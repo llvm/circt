@@ -32,6 +32,13 @@ using ValueVectorList = std::vector<ValueVector>;
 // Utils
 //===----------------------------------------------------------------------===//
 
+static void legalizeFModule(FModuleOp moduleOp) {
+  std::vector<Operation *> connectOps;
+  moduleOp.walk([&](ConnectOp op) { connectOps.push_back(op); });
+  for (auto op : connectOps)
+    op->moveBefore(&moduleOp.front().back());
+}
+
 /// Get the corresponding FIRRTL type given the built-in data type. Current
 /// supported data types are integer (signed, unsigned, and signless), index,
 /// and none.
@@ -1952,6 +1959,8 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       }
     }
     rewriter.eraseOp(funcOp);
+
+    legalizeFModule(topModuleOp);
 
     return success();
   }
