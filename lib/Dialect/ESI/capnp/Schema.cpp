@@ -146,6 +146,7 @@ TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
   fieldTypes =
       TypeSwitch<Type, ArrayRef<Type>>(type)
           .Case([this](IntegerType) { return ArrayRef<Type>(&type, 1); })
+          .Case([this](rtl::ArrayType) { return ArrayRef<Type>(&type, 1); })
           .Default([](Type) { return ArrayRef<Type>(); });
 }
 
@@ -230,13 +231,46 @@ static bool isSupported(Type type) {
 /// Returns true if the type is currently supported.
 bool TypeSchemaImpl::isSupported() const { return ::isSupported(type); }
 
+/// Returns the expected size of an array (capnp list) in 64-bit words.
+static int64_t size(rtl::ArrayType mType, capnp::schema::Field::Reader cField) {
+  assert(cField.isSlot());
+  auto cType = cField.getSlot().getType();
+  assert(cType.isList());
+  size_t elementBits = bits(cType.getList().getElementType());
+  int64_t listBits = mType.getSize() * elementBits;
+  return llvm::divideCeil(listBits, 64);
+}
+
+/// Compute the size of a capnp struct, in 64-bit words.
+static int64_t size(capnp::schema::Node::Struct::Reader cStruct,
+                    ArrayRef<Type> mFields) {
+  using namespace capnp::schema;
+  int64_t size = (1 + // Header
+                  cStruct.getDataWordCount() + cStruct.getPointerCount());
+  auto cFields = cStruct.getFields();
+  for (Field::Reader cField : cFields) {
+    assert(!cField.isGroup() && "Capnp groups are not supported");
+    // Capnp code order is the index in the the MLIR fields array.
+    assert(cField.getCodeOrder() < mFields.size());
+
+    // The size of the thing to which the pointer is pointing, not the size of
+    // the pointer itself.
+    int64_t pointedToSize =
+        TypeSwitch<mlir::Type, int64_t>(mFields[cField.getCodeOrder()])
+            .Case([](IntegerType) { return 0; })
+            .Case([cField](rtl::ArrayType mType) {
+              return ::size(mType, cField);
+            });
+    size += pointedToSize;
+  }
+  return size; // Convert from 64-bit words to bits.
+}
+
 // Compute the expected size of the capnp message in bits.
 size_t TypeSchemaImpl::size() const {
   auto schema = getTypeSchema();
   auto structProto = schema.getProto().getStruct();
-  return 64 * // Convert from 64-bit words to bits.
-         (1 + // Header
-          structProto.getDataWordCount() + structProto.getPointerCount());
+  return ::size(structProto, fieldTypes) * 64;
 }
 
 /// Write a valid Capnp name for 'type'.
@@ -275,7 +309,9 @@ static void emitCapnpType(Type type, IndentingOStream &os) {
   llvm::TypeSwitch<Type>(type)
       .Case([&os](IntegerType intTy) {
         auto w = intTy.getWidth();
-        if (w == 1) {
+        if (w == 0) {
+          os.indent() << "Void";
+        } else if (w == 1) {
           os.indent() << "Bool";
         } else {
           if (intTy.isSigned())
@@ -583,19 +619,114 @@ Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
   return b.create<rtl::ConcatOp>(loc, ValueRange{dataSection, structPtr});
 }
 
+/// Construct the proper operations to decode a capnp list. This only works for
+/// arrays of ints or bools. Will need to be updated for structs and lists of
+/// lists.
+static GasketComponent decodeList(rtl::ArrayType type,
+                                  capnp::schema::Field::Reader field,
+                                  Slice ptrSection, AssertBuilder &asserts) {
+  capnp::schema::Type::Reader capnpType = field.getSlot().getType();
+  assert(capnpType.isList());
+  assert(capnpType.getList().hasElementType());
+
+  auto loc = ptrSection.loc();
+  OpBuilder &b = ptrSection.b();
+
+  // Get the list pointer and break out its parts.
+  auto ptr = ptrSection.slice(field.getSlot().getOffset() * 64, 64)
+                 .name(field.getName(), "_ptr");
+  auto ptrType = ptr.slice(0, 2);
+  auto offset = ptr.slice(2, 30)
+                    .cast(b.getIntegerType(30))
+                    .name(field.getName(), "_offset");
+  auto elemSize = ptr.slice(31, 3);
+  auto length = ptr.slice(34, 29);
+
+  // Assert that ptr type == list type;
+  asserts.assertEqual(ptrType, 0);
+
+  // Assert that the element size in the message matches our expectation.
+  auto expectedElemSizeBits = bits(capnpType.getList().getElementType());
+  unsigned expectedElemSizeField;
+  switch (expectedElemSizeBits) {
+  case 0:
+    expectedElemSizeField = 0;
+    break;
+  case 1:
+    expectedElemSizeField = 1;
+    break;
+  case 8:
+    expectedElemSizeField = 2;
+    break;
+  case 16:
+    expectedElemSizeField = 3;
+    break;
+  case 32:
+    expectedElemSizeField = 4;
+    break;
+  case 64:
+    expectedElemSizeField = 5;
+    break;
+  default:
+    assert(false && "bits() returned unexpected value");
+  }
+  asserts.assertEqual(elemSize, expectedElemSizeField);
+
+  // Assert that the length of the list (array) is at most the length of the
+  // array.
+  auto maxWords = (type.getSize() * expectedElemSizeBits) / (8 * 64);
+  asserts.assertPred(length, ICmpPredicate::sle, maxWords);
+
+  // Get the entire message slice, compute the offset into the list, then get
+  // the list data in an ArrayType.
+  auto msg = ptr.getRootSlice();
+  auto ptrOffset = ptr.getOffsetFromRoot();
+  assert(ptrOffset);
+  auto listOffset = b.create<rtl::AddOp>(
+      loc, offset,
+      b.create<rtl::ConstantOp>(loc, b.getIntegerType(30), *ptrOffset + 64));
+  auto listSlice =
+      msg.slice(listOffset.getResult(), type.getSize() * expectedElemSizeBits);
+
+  // Cast to an array of capnp int elements.
+  assert(type.getElementType().isa<IntegerType>() &&
+         "DecodeList() only works on arrays of ints currently");
+  Type capnpElemTy =
+      b.getIntegerType(expectedElemSizeBits, IntegerType::Signless);
+  auto arrayOfElements = listSlice.castToSlice(capnpElemTy, type.getSize());
+  if (arrayOfElements.getValue().getType() == type)
+    return arrayOfElements;
+
+  // Collect the reduced elements.
+  SmallVector<Value, 64> arrayValues;
+  for (size_t i = 0, e = type.getSize(); i < e; ++i) {
+    auto capnpElem = arrayOfElements[i].name(field.getName(), "_capnp_elem");
+    auto esiElem = capnpElem.downcast(type.getElementType().cast<IntegerType>())
+                       .name(field.getName(), "_elem");
+    arrayValues.push_back(esiElem);
+  }
+  auto array = b.create<rtl::ArrayCreateOp>(loc, arrayValues);
+  return GasketComponent(b, array);
+}
+
 /// Construct the proper operations to convert a capnp field to 'type'.
 static GasketComponent decodeField(Type type,
                                    capnp::schema::Field::Reader field,
                                    Slice dataSection, Slice ptrSection,
-                                   OpBuilder &asserts) {
-  Slice fieldSlice = TypeSwitch<Type, Slice>(type).Case([&](IntegerType it) {
-    return dataSection.slice(field.getSlot().getOffset() *
-                                 bits(field.getSlot().getType()),
-                             it.getWidth());
-  });
-
-  fieldSlice.name(field.getName(), "_bits");
-  return fieldSlice.cast(type).name(field.getName().cStr(), "Value");
+                                   AssertBuilder &asserts) {
+  GasketComponent esiValue =
+      TypeSwitch<Type, GasketComponent>(type)
+          .Case([&](IntegerType it) {
+            auto slice = dataSection.slice(field.getSlot().getOffset() *
+                                               bits(field.getSlot().getType()),
+                                           it.getWidth());
+            return slice.name(field.getName(), "_bits").cast(type);
+          })
+          .Case([&](rtl::ArrayType at) {
+            return decodeList(at, field, ptrSection, asserts);
+          });
+  esiValue.name(field.getName().cStr(), "Value");
+  return esiValue;
 }
 
 /// Build an RTL/SV dialect capnp decoder for this type. Outputs packed and
@@ -661,9 +792,11 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
 
   // What to return depends on the type. (e.g. structs have to be constructed
   // from the field values.)
-  GasketComponent result = TypeSwitch<Type, GasketComponent>(type).Case(
-      [&fieldValues](IntegerType) { return fieldValues[0]; });
-  return result.getValue();
+  GasketComponent ret =
+      TypeSwitch<Type, GasketComponent>(type)
+          .Case([&fieldValues](IntegerType) { return fieldValues[0]; })
+          .Case([&fieldValues](rtl::ArrayType) { return fieldValues[0]; });
+  return ret;
 }
 
 //===----------------------------------------------------------------------===//
