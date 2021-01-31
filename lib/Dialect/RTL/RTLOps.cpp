@@ -570,26 +570,6 @@ bool rtl::isCombinatorial(Operation *op) {
 }
 
 //===----------------------------------------------------------------------===//
-// WireOp
-//===----------------------------------------------------------------------===//
-
-void WireOp::build(OpBuilder &odsBuilder, OperationState &odsState,
-                   Type elementType, StringAttr name) {
-  if (name)
-    odsState.addAttribute("name", name);
-
-  odsState.addTypes(InOutType::get(elementType));
-}
-
-/// Suggest a name for each result value based on the saved result names
-/// attribute.
-void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  // If the wire has an optional 'name' attribute, use it.
-  if (auto nameAttr = (*this)->getAttrOfType<StringAttr>("name"))
-    setNameFn(getResult(), nameAttr.getValue());
-}
-
-//===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
 
@@ -758,16 +738,6 @@ void ConcatOp::build(OpBuilder &builder, OperationState &result,
 }
 
 //===----------------------------------------------------------------------===//
-// ReadInOutOp
-//===----------------------------------------------------------------------===//
-
-void ReadInOutOp::build(OpBuilder &builder, OperationState &result,
-                        Value input) {
-  auto resultType = input.getType().cast<InOutType>().getElementType();
-  build(builder, result, resultType, input);
-}
-
-//===----------------------------------------------------------------------===//
 // StructCreateOp
 //===----------------------------------------------------------------------===//
 
@@ -916,18 +886,6 @@ void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
                        Value index) {
   auto resultType = input.getType().cast<ArrayType>().getElementType();
   build(builder, result, resultType, input, index);
-}
-
-//===----------------------------------------------------------------------===//
-// ArrayIndexInOutOp
-//===----------------------------------------------------------------------===//
-
-void ArrayIndexInOutOp::build(OpBuilder &builder, OperationState &result,
-                              Value input, Value index) {
-  auto resultType = input.getType().cast<InOutType>().getElementType();
-  resultType = getAnyRTLArrayElementType(resultType);
-  assert(resultType && "input should have 'inout of an array' type");
-  build(builder, result, InOutType::get(resultType), input, index);
 }
 
 //===----------------------------------------------------------------------===//

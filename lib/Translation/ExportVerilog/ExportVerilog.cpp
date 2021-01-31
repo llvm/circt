@@ -50,6 +50,10 @@ static bool isVerilogExpression(Operation *op) {
   if (isa<MergeOp>(op))
     return false;
 
+  // These are SV dialect expressions.
+  if (isa<ReadInOutOp>(op) || isa<ArrayIndexInOutOp>(op))
+    return true;
+
   // All RTL combinatorial logic ops and SV expression ops are Verilog
   // expressions.
   return isCombinatorial(op) || isExpression(op);
@@ -301,10 +305,10 @@ public:
   using Visitor::visitSV;
 
   void visitMerge(MergeOp op);
-  LogicalResult visitStmt(WireOp op) { return success(); }
+  LogicalResult visitSV(WireOp op) { return success(); }
   LogicalResult visitSV(RegOp op) { return success(); }
   LogicalResult visitSV(InterfaceInstanceOp op) { return success(); }
-  LogicalResult visitStmt(ConnectOp op);
+  LogicalResult visitSV(ConnectOp op);
   LogicalResult visitSV(BPAssignOp op);
   LogicalResult visitSV(PAssignOp op);
   LogicalResult visitSV(AliasOp op);
@@ -651,13 +655,13 @@ private:
   SubExprInfo visitSV(TextualValueOp op);
 
   // Noop cast operators.
-  SubExprInfo visitComb(ReadInOutOp op) { return emitNoopCast(op); }
+  SubExprInfo visitSV(ReadInOutOp op) { return emitNoopCast(op); }
 
   // Other
   SubExprInfo visitComb(ArraySliceOp op);
   SubExprInfo visitComb(ArrayGetOp op);
   SubExprInfo visitComb(ArrayCreateOp op);
-  SubExprInfo visitComb(ArrayIndexInOutOp op);
+  SubExprInfo visitSV(ArrayIndexInOutOp op);
   SubExprInfo visitComb(MuxOp op);
 
   // RTL Dialect Operations
@@ -1036,7 +1040,7 @@ SubExprInfo ExprEmitter::visitComb(ArrayCreateOp op) {
   return {Unary, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitComb(ArrayIndexInOutOp op) {
+SubExprInfo ExprEmitter::visitSV(ArrayIndexInOutOp op) {
   auto arrayPrec = emitSubExpr(op.input(), Selection);
   os << '[';
   emitSubExpr(op.index(), LowestPrecedence);
@@ -1127,7 +1131,7 @@ void ModuleEmitter::visitMerge(MergeOp op) {
   }
 }
 
-LogicalResult ModuleEmitter::visitStmt(ConnectOp op) {
+LogicalResult ModuleEmitter::visitSV(ConnectOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 

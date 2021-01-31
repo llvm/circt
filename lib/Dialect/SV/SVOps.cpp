@@ -14,6 +14,7 @@
 #include "circt/Dialect/RTL/RTLTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/SmallString.h"
 
 using namespace circt;
@@ -23,6 +24,59 @@ using namespace sv;
 bool sv::isExpression(Operation *op) {
   return isa<sv::TextualValueOp>(op) || isa<sv::GetModportOp>(op) ||
          isa<sv::ReadInterfaceSignalOp>(op);
+}
+
+//===----------------------------------------------------------------------===//
+// ImplicitSSAName Custom Directive
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseImplicitSSAName(OpAsmParser &parser,
+                                        NamedAttrList &resultAttrs) {
+
+  if (parser.parseOptionalAttrDict(resultAttrs))
+    return failure();
+
+  // If the attribute dictionary contains no 'name' attribute, infer it from
+  // the SSA name (if specified).
+  bool hadName = llvm::any_of(
+      resultAttrs, [](NamedAttribute attr) { return attr.first == "name"; });
+
+  // If there was no name specified, check to see if there was a useful name
+  // specified in the asm file.
+  if (hadName)
+    return success();
+
+  auto resultName = parser.getResultName(0);
+  if (!resultName.first.empty() && !isdigit(resultName.first[0])) {
+    StringRef name = resultName.first;
+    auto nameAttr = parser.getBuilder().getStringAttr(name);
+    auto *context = parser.getBuilder().getContext();
+    resultAttrs.push_back({Identifier::get("name", context), nameAttr});
+  }
+
+  return success();
+}
+
+static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
+                                 DictionaryAttr attr) {
+  // Note that we only need to print the "name" attribute if the asmprinter
+  // result name disagrees with it.  This can happen in strange cases, e.g.
+  // when there are conflicts.
+  bool namesDisagree = false;
+
+  SmallString<32> resultNameStr;
+  llvm::raw_svector_ostream tmpStream(resultNameStr);
+  p.printOperand(op->getResult(0), tmpStream);
+  auto expectedName = op->getAttrOfType<StringAttr>("name");
+  if (!expectedName ||
+      tmpStream.str().drop_front() != expectedName.getValue()) {
+    namesDisagree = true;
+  }
+
+  if (namesDisagree)
+    p.printOptionalAttrDict(op->getAttrs());
+  else
+    p.printOptionalAttrDict(op->getAttrs(), {"name"});
 }
 
 //===----------------------------------------------------------------------===//
@@ -499,6 +553,74 @@ LogicalResult verifySignalExists(Value ifaceVal, FlatSymbolRefAttr signalName) {
   if (!signal)
     return failure();
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// WireOp
+//===----------------------------------------------------------------------===//
+
+void WireOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+                   Type elementType, StringAttr name) {
+  if (name)
+    odsState.addAttribute("name", name);
+
+  odsState.addTypes(InOutType::get(elementType));
+}
+
+/// Suggest a name for each result value based on the saved result names
+/// attribute.
+void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the wire has an optional 'name' attribute, use it.
+  if (auto nameAttr = (*this)->getAttrOfType<StringAttr>("name"))
+    setNameFn(getResult(), nameAttr.getValue());
+}
+
+void WireOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                         MLIRContext *context) {
+  // If this wire is only written to, delete the wire and all writers.
+  struct DropDeadConnect final : public OpRewritePattern<WireOp> {
+    using OpRewritePattern::OpRewritePattern;
+    LogicalResult matchAndRewrite(WireOp op,
+                                  PatternRewriter &rewriter) const override {
+
+      // Check that all operations on the wire are sv.connects. All other wire
+      // operations will have been handled by other canonicalization.
+      for (auto &use : op.getResult().getUses())
+        if (!isa<ConnectOp>(use.getOwner()))
+          return failure();
+
+      // Remove all uses of the wire.
+      for (auto &use : op.getResult().getUses())
+        rewriter.eraseOp(use.getOwner());
+
+      // Remove the wire.
+      rewriter.eraseOp(op);
+      return success();
+    }
+  };
+  results.insert<DropDeadConnect>(context);
+}
+
+//===----------------------------------------------------------------------===//
+// ReadInOutOp
+//===----------------------------------------------------------------------===//
+
+void ReadInOutOp::build(OpBuilder &builder, OperationState &result,
+                        Value input) {
+  auto resultType = input.getType().cast<InOutType>().getElementType();
+  build(builder, result, resultType, input);
+}
+
+//===----------------------------------------------------------------------===//
+// ArrayIndexInOutOp
+//===----------------------------------------------------------------------===//
+
+void ArrayIndexInOutOp::build(OpBuilder &builder, OperationState &result,
+                              Value input, Value index) {
+  auto resultType = input.getType().cast<InOutType>().getElementType();
+  resultType = getAnyRTLArrayElementType(resultType);
+  assert(resultType && "input should have 'inout of an array' type");
+  build(builder, result, InOutType::get(resultType), input, index);
 }
 
 //===----------------------------------------------------------------------===//

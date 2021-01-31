@@ -26,23 +26,24 @@ public:
   ResultType dispatchSVVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<TextualValueOp,
-                       // Declarations.
-                       RegOp,
-                       // Control flow.
-                       IfDefOp, IfOp, AlwaysOp, AlwaysFFOp, InitialOp,
-                       // Other Statements.
-                       YieldOp, BPAssignOp, PAssignOp, AliasOp, FWriteOp,
-                       FatalOp, FinishOp, VerbatimOp,
-                       // Type declarations.
-                       InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
-                       InterfaceInstanceOp, GetModportOp,
-                       AssignInterfaceSignalOp, ReadInterfaceSignalOp,
-                       // Verification statements.
-                       AssertOp, AssumeOp, CoverOp>(
-            [&](auto expr) -> ResultType {
-              return thisCast->visitSV(expr, args...);
-            })
+        .template Case<
+            // Expressions
+            ReadInOutOp, ArrayIndexInOutOp, TextualValueOp,
+            // Declarations.
+            RegOp, WireOp,
+            // Control flow.
+            IfDefOp, IfOp, AlwaysOp, AlwaysFFOp, InitialOp,
+            // Other Statements.
+            ConnectOp, YieldOp, BPAssignOp, PAssignOp, AliasOp, FWriteOp,
+            FatalOp, FinishOp, VerbatimOp,
+            // Type declarations.
+            InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
+            InterfaceInstanceOp, GetModportOp, AssignInterfaceSignalOp,
+            ReadInterfaceSignalOp,
+            // Verification statements.
+            AssertOp, AssumeOp, CoverOp>([&](auto expr) -> ResultType {
+          return thisCast->visitSV(expr, args...);
+        })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidSV(op, args...);
         });
@@ -67,9 +68,12 @@ public:
 
   // Declarations
   HANDLE(RegOp, Unhandled);
+  HANDLE(WireOp, Unhandled);
 
   // Expressions
   HANDLE(TextualValueOp, Unhandled)
+  HANDLE(ReadInOutOp, Unhandled);
+  HANDLE(ArrayIndexInOutOp, Unhandled);
 
   // Control flow.
   HANDLE(IfDefOp, Unhandled);
@@ -79,6 +83,7 @@ public:
   HANDLE(InitialOp, Unhandled);
 
   // Other Statements.
+  HANDLE(ConnectOp, Unhandled);
   HANDLE(YieldOp, Unhandled);
   HANDLE(BPAssignOp, Unhandled);
   HANDLE(PAssignOp, Unhandled);
