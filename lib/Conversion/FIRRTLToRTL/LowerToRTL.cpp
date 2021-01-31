@@ -992,7 +992,7 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
   // If we got an inout value, implicitly read it.  FIRRTL allows direct use
   // of wires and other things that lower to inout type.
   if (result.getType().isa<rtl::InOutType>())
-    return builder->createOrFold<rtl::ReadInOutOp>(result);
+    return builder->createOrFold<sv::ReadInOutOp>(result);
 
   return result;
 }
@@ -1208,7 +1208,7 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
     return setLowering(op, Value());
 
   // Convert the inout to a non-inout type.
-  return setLoweringTo<rtl::WireOp>(op, resultType, op.nameAttr());
+  return setLoweringTo<sv::WireOp>(op, resultType, op.nameAttr());
 }
 
 LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
@@ -1222,8 +1222,8 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   // drop it.
   if (auto name = op->getAttrOfType<StringAttr>("name")) {
     if (!name.getValue().empty()) {
-      auto wire = builder->create<rtl::WireOp>(operand.getType(), name);
-      builder->create<rtl::ConnectOp>(wire, operand);
+      auto wire = builder->create<sv::WireOp>(operand.getType(), name);
+      builder->create<sv::ConnectOp>(wire, operand);
     }
   }
 
@@ -1403,12 +1403,12 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       builder->create<sv::IfDefOp>("RANDOMIZE_MEM_INIT", [&]() {
         if (depth == 1) { // Don't emit a for loop for one element.
           for (Value reg : regs) {
-            auto type = rtl::getInOutElementType(reg.getType());
-            type = rtl::getAnyRTLArrayElementType(type);
+            auto type = sv::getInOutElementType(reg.getType());
+            type = sv::getAnyRTLArrayElementType(type);
             auto randomVal =
                 builder->create<sv::TextualValueOp>(type, "`RANDOM");
             auto zero = builder->create<rtl::ConstantOp>(APInt(1, 0));
-            auto subscript = builder->create<rtl::ArrayIndexInOutOp>(reg, zero);
+            auto subscript = builder->create<sv::ArrayIndexInOutOp>(reg, zero);
             builder->create<sv::BPAssignOp>(subscript, randomVal);
           }
         } else if (!regs.empty()) {
@@ -1465,7 +1465,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       }
       auto name =
           (Twine(memName) + "_" + portName + "_" + elt.name.str()).str();
-      auto fieldWire = builder->create<rtl::WireOp>(fieldType, name);
+      auto fieldWire = builder->create<sv::WireOp>(fieldType, name);
       portWires.push_back({elt.name, fieldWire});
     }
 
@@ -1488,7 +1488,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
     // Return the value corresponding to a port field.
     auto getPortFieldValue = [&](StringRef portName) -> Value {
-      return builder->create<rtl::ReadInOutOp>(getPortFieldWire(portName));
+      return builder->create<sv::ReadInOutOp>(getPortFieldWire(portName));
     };
 
     switch (op.getPortKind(portName).getValue()) {
@@ -1507,8 +1507,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         // is ignored, why does it exist?
         for (auto reg : regs) {
           auto addr = getPortFieldValue("addr");
-          Value value = builder->create<rtl::ArrayIndexInOutOp>(reg, addr);
-          value = builder->create<rtl::ReadInOutOp>(value);
+          Value value = builder->create<sv::ArrayIndexInOutOp>(reg, addr);
+          value = builder->create<sv::ReadInOutOp>(value);
 
           // If we're masking, emit "addr < Depth ? mem[addr] : `RANDOM".
           if (masked) {
@@ -1523,7 +1523,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
           }
 
           // FIXME: This isn't right for multi-slot data's.
-          builder->create<rtl::ConnectOp>(getPortFieldWire("data"), value);
+          builder->create<sv::ConnectOp>(getPortFieldWire("data"), value);
         }
       };
 
@@ -1560,7 +1560,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
           auto addr = getPortFieldValue("addr");
 
           for (auto reg : regs) {
-            auto slot = builder->create<rtl::ArrayIndexInOutOp>(reg, addr);
+            auto slot = builder->create<sv::ArrayIndexInOutOp>(reg, addr);
             builder->create<sv::BPAssignOp>(slot, data);
           }
         });
@@ -1883,8 +1883,8 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValuePrimOp op) {
 
   // Values of analog type always need to be lowered to something with inout
   // type.  We do that by lowering to a wire and return that.
-  auto wire = builder->create<rtl::WireOp>(resultTy, ".invalid_analog");
-  builder->create<rtl::ConnectOp>(wire, value);
+  auto wire = builder->create<sv::WireOp>(resultTy, ".invalid_analog");
+  builder->create<sv::ConnectOp>(wire, value);
   return setLowering(op, wire);
 }
 
@@ -2031,7 +2031,7 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
     return success();
   }
 
-  builder->create<rtl::ConnectOp>(destVal, srcVal);
+  builder->create<sv::ConnectOp>(destVal, srcVal);
   return success();
 }
 
@@ -2093,7 +2093,7 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
     return success();
   }
 
-  builder->create<rtl::ConnectOp>(destVal, srcVal);
+  builder->create<sv::ConnectOp>(destVal, srcVal);
   return success();
 }
 
@@ -2246,12 +2246,12 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
     // Lower the
     SmallVector<Value, 4> values;
     for (size_t i = 0, e = inoutValues.size(); i != e; ++i)
-      values.push_back(builder->createOrFold<rtl::ReadInOutOp>(inoutValues[i]));
+      values.push_back(builder->createOrFold<sv::ReadInOutOp>(inoutValues[i]));
 
     for (size_t i1 = 0, e = inoutValues.size(); i1 != e; ++i1) {
       for (size_t i2 = 0; i2 != e; ++i2)
         if (i1 != i2)
-          builder->create<rtl::ConnectOp>(inoutValues[i1], values[i2]);
+          builder->create<sv::ConnectOp>(inoutValues[i1], values[i2]);
     }
   });
 

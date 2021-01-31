@@ -80,15 +80,15 @@ func private @invalidInout(%arg0: !rtl.inout<tensor<*xf32>>) { }
 // -----
 
 rtl.module @inout(%a: i42) {
-  // expected-error @+1 {{'input' must be inout type, but got 'i42'}}
-  %aget = rtl.read_inout %a: i42
+  // expected-error @+1 {{'input' must be InOutType, but got 'i42'}}
+  %aget = sv.read_inout %a: i42
 }
 
 // -----
 
 rtl.module @wire(%a: i42) {
-  // expected-error @+1 {{'rtl.wire' op result #0 must be inout type, but got 'i42'}}
-  %aget = rtl.wire: i42
+  // expected-error @+1 {{'sv.wire' op result #0 must be InOutType, but got 'i42'}}
+  %aget = sv.wire: i42
 }
 
 // -----

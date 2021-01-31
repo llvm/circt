@@ -44,14 +44,6 @@ int64_t getBitWidth(mlir::Type type);
 /// false on known InOut types, rather than any unknown types.
 bool hasRTLInOutType(mlir::Type type);
 
-/// Return the element type of an InOutType or null if the operand isn't an
-/// InOut type.
-mlir::Type getInOutElementType(mlir::Type type);
-
-/// Return the element type of an ArrayType or UnpackedArrayType, or null if the
-/// operand isn't an array.
-mlir::Type getAnyRTLArrayElementType(mlir::Type type);
-
 } // namespace rtl
 } // namespace circt
 

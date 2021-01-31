@@ -2,7 +2,7 @@
 
 // CHECK-LABEL: module M1(
 rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
-  %wire42 = rtl.wire : !rtl.inout<i42>
+  %wire42 = sv.wire : !rtl.inout<i42>
 
   // CHECK:      always @(posedge clock) begin
   // CHECK-NEXT:   `ifndef SYNTHESIS
@@ -157,15 +157,15 @@ rtl.module @reg(%in4: i4, %in8: i8) -> (%a: i8, %b: i8) {
   %myRegArray1 = sv.reg : !rtl.inout<array<42 x i8>>
 
   // CHECK-EMPTY:
-  rtl.connect %myReg, %in8 : i8        // CHECK-NEXT: assign myReg = in8;
+  sv.connect %myReg, %in8 : i8        // CHECK-NEXT: assign myReg = in8;
 
-  %subscript1 = rtl.array_index_inout %myRegArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
-  rtl.connect %subscript1, %in8 : i8   // CHECK-NEXT: assign myRegArray1[in4] = in8;
+  %subscript1 = sv.array_index_inout %myRegArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
+  sv.connect %subscript1, %in8 : i8   // CHECK-NEXT: assign myRegArray1[in4] = in8;
 
-  %regout = rtl.read_inout %myReg : !rtl.inout<i8>
+  %regout = sv.read_inout %myReg : !rtl.inout<i8>
 
-  %subscript2 = rtl.array_index_inout %myRegArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
-  %memout = rtl.read_inout %subscript2 : !rtl.inout<i8>
+  %subscript2 = sv.array_index_inout %myRegArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
+  %memout = sv.read_inout %subscript2 : !rtl.inout<i8>
 
   // CHECK-NEXT: assign a = myReg;
   // CHECK-NEXT: assign b = myRegArray1[in4];

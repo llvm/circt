@@ -57,17 +57,17 @@ circuit test_mod :
 
 ; MLIRLOWER-LABEL:   rtl.module @implicitTrunc(%inp_1: i1, %inp_2: i5) -> (%out1: i3, %out2: i3) {
 ; MLIRLOWER-NEXT :     %c0_i5 = rtl.constant(0 : i5) : i5
-; MLIRLOWER-NEXT :     %.out1.output = rtl.wire  : !rtl.inout<i3>
-; MLIRLOWER-NEXT :     %.out2.output = rtl.wire  : !rtl.inout<i3>
+; MLIRLOWER-NEXT :     %.out1.output = sv.wire  : !rtl.inout<i3>
+; MLIRLOWER-NEXT :     %.out2.output = sv.wire  : !rtl.inout<i3>
 ; MLIRLOWER-NEXT :     %0 = rtl.sext %inp_2 : (i5) -> i6
 ; MLIRLOWER-NEXT :     %1 = rtl.concat %c0_i5, %inp_1 : (i5, i1) -> i6
 ; MLIRLOWER-NEXT :     %2 = rtl.shl %0, %1 : i6
 ; MLIRLOWER-NEXT :     %3 = rtl.extract %2 from 0 : (i6) -> i3
-; MLIRLOWER-NEXT :     rtl.connect %.out1.output, %3 : i3
+; MLIRLOWER-NEXT :     sv.connect %.out1.output, %3 : i3
 ; MLIRLOWER-NEXT :     %4 = rtl.extract %inp_2 from 0 : (i5) -> i3
-; MLIRLOWER-NEXT :     rtl.connect %.out2.output, %4 : i3
-; MLIRLOWER-NEXT :     %5 = rtl.read_inout %.out1.output : !rtl.inout<i3>
-; MLIRLOWER-NEXT :     %6 = rtl.read_inout %.out2.output : !rtl.inout<i3>
+; MLIRLOWER-NEXT :     sv.connect %.out2.output, %4 : i3
+; MLIRLOWER-NEXT :     %5 = sv.read_inout %.out1.output : !rtl.inout<i3>
+; MLIRLOWER-NEXT :     %6 = sv.read_inout %.out2.output : !rtl.inout<i3>
 ; MLIRLOWER-NEXT :     rtl.output %5, %6 : i3, i3
 ; MLIRLOWER-NEXT :   }
 

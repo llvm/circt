@@ -64,22 +64,22 @@ func @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> i50 {
   // CHECK-NEXT: rtl.icmp uge [[RES9]], [[RES10]] : i19
   %ugeq = rtl.icmp uge %small1, %small2 : i19
 
-  // CHECK-NEXT: %w = rtl.wire : !rtl.inout<i4>
-  %w = rtl.wire : !rtl.inout<i4>
+  // CHECK-NEXT: %w = sv.wire : !rtl.inout<i4>
+  %w = sv.wire : !rtl.inout<i4>
 
-  // CHECK-NEXT: %after1 = rtl.wire : !rtl.inout<i4>
-  %before1 = rtl.wire {name = "after1"} : !rtl.inout<i4>
+  // CHECK-NEXT: %after1 = sv.wire : !rtl.inout<i4>
+  %before1 = sv.wire {name = "after1"} : !rtl.inout<i4>
 
-  // CHECK-NEXT: rtl.read_inout %after1 : !rtl.inout<i4>
-  %read_before1 = rtl.read_inout %before1 : !rtl.inout<i4>
+  // CHECK-NEXT: sv.read_inout %after1 : !rtl.inout<i4>
+  %read_before1 = sv.read_inout %before1 : !rtl.inout<i4>
 
-  // CHECK-NEXT: %after2_conflict = rtl.wire : !rtl.inout<i4>
-  // CHECK-NEXT: %after2_conflict_0 = rtl.wire {name = "after2_conflict"} : !rtl.inout<i4>
-  %before2_0 = rtl.wire {name = "after2_conflict"} : !rtl.inout<i4>
-  %before2_1 = rtl.wire {name = "after2_conflict"} : !rtl.inout<i4>
+  // CHECK-NEXT: %after2_conflict = sv.wire : !rtl.inout<i4>
+  // CHECK-NEXT: %after2_conflict_0 = sv.wire {name = "after2_conflict"} : !rtl.inout<i4>
+  %before2_0 = sv.wire {name = "after2_conflict"} : !rtl.inout<i4>
+  %before2_1 = sv.wire {name = "after2_conflict"} : !rtl.inout<i4>
 
-  // CHECK-NEXT: %after3 = rtl.wire {someAttr = "foo"} : !rtl.inout<i4>
-  %before3 = rtl.wire {name = "after3", someAttr = "foo"} : !rtl.inout<i4>
+  // CHECK-NEXT: %after3 = sv.wire {someAttr = "foo"} : !rtl.inout<i4>
+  %before3 = sv.wire {name = "after3", someAttr = "foo"} : !rtl.inout<i4>
 
   // CHECK-NEXT: = rtl.mux %arg1, [[RES2]], [[RES2]] : i7
   %mux = rtl.mux %arg1, %d, %d : i7
