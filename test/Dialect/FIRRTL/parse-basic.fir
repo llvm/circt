@@ -584,3 +584,27 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: [[init_passive:%.+]] = firrtl.asPassive %init
     ; CHECK: firrtl.regreset %clk, %rst, [[init_passive]]
     reg r: UInt<1>, clk with : (reset => (rst, init))
+
+  ; https://github.com/llvm/circt/issues/492
+  ; CHECK-LABEL: firrtl.module @WriteOnlyMemIssue492
+  module WriteOnlyMemIssue492 :
+    input clock: Clock
+    input wAddr: UInt<4>
+    input wEn: UInt<1>
+    input wMask: UInt<1>
+    input wData: UInt<8>
+
+    mem memory:
+      data-type => UInt<8>
+      depth => 16
+      writer => w
+      read-latency => 0
+      write-latency => 1
+      read-under-write => undefined
+
+    memory.w.clk <= clock
+    memory.w.en <= wEn
+    memory.w.addr <= wAddr
+    memory.w.mask <= wMask
+    memory.w.data <= wData
+
