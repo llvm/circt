@@ -1021,11 +1021,11 @@ SubExprInfo ExprEmitter::visitComb(ArraySliceOp op) {
 }
 
 SubExprInfo ExprEmitter::visitComb(ArrayGetOp op) {
-  auto arrayPrec = emitSubExpr(op.input(), Selection);
+  emitSubExpr(op.input(), Selection);
   os << '[';
   emitSubExpr(op.index(), LowestPrecedence);
   os << ']';
-  return {Selection, arrayPrec.signedness};
+  return {Selection, IsUnsigned};
 }
 
 // Syntax from: section 5.11 "Array literals".
