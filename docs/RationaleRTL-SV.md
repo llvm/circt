@@ -49,6 +49,10 @@ TODO: Describe inout types.  Analogy to lvalues vs rvalues.  Array indices for
 both forms.  Arrays, structs,
 moving [UnpackedArray](https://github.com/llvm/circt/issues/389) to SV someday.
 
+InOut types live at the SV dialect level and not the RTL dialect level.  This
+allows connects, wires and other syntactic constructs that aren't necessary for
+combinational logic, but are nonetheless pretty useful when generating Verilog.
+
 ### Operations
 
 TODO: Spotlight on module.  Allows arbitrary types for ports.
