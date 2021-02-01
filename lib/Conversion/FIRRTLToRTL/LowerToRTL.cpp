@@ -1620,20 +1620,18 @@ LogicalResult FIRRTLLowering::visitExpr(StdIntCastOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(RTLStructCastOp op) {
-  // Conversions from standard integer types to FIRRTL types are lowered as
-  // the input operand.
-  op.dump();
-  op.getOperand().dump();
+  // Conversions from rtl struct types to FIRRTL types are lowered as the input
+  // operand.
   if (auto opStructType = op.getOperand().getType().dyn_cast<rtl::StructType>())
     return setLowering(op, op.getOperand());
 
-  // Otherwise must be a conversion from FIRRTL type to standard int type.
+  // Otherwise must be a conversion from FIRRTL bundle type to rtl struct type.
   auto result = getLoweredValue(op.getOperand());
   if (!result)
     return failure();
 
-  // We lower firrtl.stdIntCast converting from a firrtl type to a standard
-  // type into the lowered operand.
+  // We lower firrtl.stdStructCast converting from a firrtl bundle to an rtl 
+  // struct type into the lowered operand.
   op.replaceAllUsesWith(result);
   return success();
 }
