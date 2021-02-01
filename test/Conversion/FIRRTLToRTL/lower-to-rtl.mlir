@@ -798,4 +798,15 @@ module attributes {firrtl.mainModule = "Simple"} {
     %4 = firrtl.stdIntCast %3 : (!firrtl.uint<23>) -> i23
     rtl.output %4 : i23
   }
+
+  // CHECK-LABEL: rtl.module @SimpleStruct(%source: !rtl.struct<valid: i1, ready: i1, data: i64>) -> (%fldout: i64) {
+  // CHECK-NEXT:    %0 = rtl.struct_extract %source["data"] : !rtl.struct<valid: i1, ready: i1, data: i64>
+  // CHECK-NEXT:    rtl.output %0 : i64
+  // CHECK-NEXT:  }
+  rtl.module @SimpleStruct(%source: !rtl.struct<valid: i1, ready: i1, data: i64>) -> (%fldout: i64) {
+    %1 = firrtl.rtlStructCast %source : (!rtl.struct<valid: i1, ready: i1, data: i64>) -> !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
+    %2 = firrtl.subfield %1 ("data") : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
+    %3 = firrtl.stdIntCast %2 : (!firrtl.uint<64>) -> i64
+    rtl.output %3 : i64
+  }
 }
