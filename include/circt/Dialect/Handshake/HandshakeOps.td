@@ -349,7 +349,6 @@ def MuxOp : Handshake_Op<"mux", [
 							  Variadic<AnyType> : $dataOperands);
   let results = (outs AnyType);
 
-  let skipDefaultBuilders = 1;
   let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$inputs)>];
   let verifier = "return ::verify(*this);";
 }
