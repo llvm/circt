@@ -1630,7 +1630,7 @@ LogicalResult FIRRTLLowering::visitExpr(RTLStructCastOp op) {
   if (!result)
     return failure();
 
-  // We lower firrtl.stdStructCast converting from a firrtl bundle to an rtl 
+  // We lower firrtl.stdStructCast converting from a firrtl bundle to an rtl
   // struct type into the lowered operand.
   op.replaceAllUsesWith(result);
   return success();
