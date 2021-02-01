@@ -790,6 +790,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   LogicalResult visitExpr(AsAsyncResetPrimOp op) { return lowerNoopCast(op); }
 
   LogicalResult visitExpr(StdIntCastOp op);
+  LogicalResult visitExpr(RTLStructCastOp op);
   LogicalResult visitExpr(AnalogInOutCastOp op);
   LogicalResult visitExpr(CvtPrimOp op);
   LogicalResult visitExpr(NotPrimOp op);
@@ -1186,13 +1187,12 @@ LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
-  // Subfield operations should either be dead or have a lowering installed
-  // already.  They only come up with mems.
-  if (op.use_empty() || valueMapping.count(op))
+  // firrtl.mem lowering leaves invalid SubfieldOps.  Ignore these invalid ops.
+  if (!op.input())
     return success();
-
-  op.emitOpError("operand should have lowered its subfields");
-  return failure();
+  Value value = getLoweredValue(op.input());
+  return setLoweringTo<rtl::StructExtractOp>(
+      op, lowerType(op->getResult(0).getType()), value, op.fieldname());
 }
 
 //===----------------------------------------------------------------------===//
@@ -1575,7 +1575,6 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     }
     }
   }
-
   return success();
 }
 
@@ -1613,6 +1612,25 @@ LogicalResult FIRRTLLowering::visitExpr(StdIntCastOp op) {
     }
     return failure();
   }
+
+  // We lower firrtl.stdIntCast converting from a firrtl type to a standard
+  // type into the lowered operand.
+  op.replaceAllUsesWith(result);
+  return success();
+}
+
+LogicalResult FIRRTLLowering::visitExpr(RTLStructCastOp op) {
+  // Conversions from standard integer types to FIRRTL types are lowered as
+  // the input operand.
+  op.dump();
+  op.getOperand().dump();
+  if (auto opStructType = op.getOperand().getType().dyn_cast<rtl::StructType>())
+    return setLowering(op, op.getOperand());
+
+  // Otherwise must be a conversion from FIRRTL type to standard int type.
+  auto result = getLoweredValue(op.getOperand());
+  if (!result)
+    return failure();
 
   // We lower firrtl.stdIntCast converting from a firrtl type to a standard
   // type into the lowered operand.

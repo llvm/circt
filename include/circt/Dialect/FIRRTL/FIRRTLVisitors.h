@@ -46,9 +46,10 @@ public:
             AsNonPassivePrimOp,
 
             // Conversion from FIRRTL to RTL dialect types.
-            StdIntCastOp, AnalogInOutCastOp>([&](auto expr) -> ResultType {
-          return thisCast->visitExpr(expr, args...);
-        })
+            StdIntCastOp, RTLStructCastOp, AnalogInOutCastOp>(
+            [&](auto expr) -> ResultType {
+              return thisCast->visitExpr(expr, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidExpr(op, args...);
         });
@@ -141,6 +142,7 @@ public:
 
   // Conversion from FIRRTL to RTL dialect types.
   HANDLE(StdIntCastOp, Unhandled);
+  HANDLE(RTLStructCastOp, Unhandled);
   HANDLE(AnalogInOutCastOp, Unhandled);
 #undef HANDLE
 };
