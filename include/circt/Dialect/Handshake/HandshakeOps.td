@@ -327,7 +327,6 @@ def MergeOp : Handshake_Op<"merge", [
   let results = (outs AnyType);
 
   let hasCanonicalizer = 1;
-  let skipDefaultBuilders = 1;
   let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$inputs)>];
 }
 
@@ -350,7 +349,6 @@ def MuxOp : Handshake_Op<"mux", [
 							  Variadic<AnyType> : $dataOperands);
   let results = (outs AnyType);
 
-  let skipDefaultBuilders = 1;
   let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$inputs)>];
   let verifier = "return ::verify(*this);";
 }
@@ -372,7 +370,6 @@ def ControlMergeOp : Handshake_Op<"control_merge", [
   let arguments = (ins Variadic<AnyType>:$dataOperands, BoolAttr : $control);
   let results = (outs Variadic<AnyType>);
 
-  let skipDefaultBuilders = 1;
   let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$inputs)>];
 
   let extraClassDeclaration = [{
@@ -424,7 +421,6 @@ def ConditionalBranchOp : Handshake_Op<"conditional_branch", [
   let results = (outs AnyType : $trueResult,
                       AnyType : $falseResult);
 
-  let skipDefaultBuilders = 1;
   let builders = [OpBuilderDAG<(ins "Value":$condOperand, "Value":$dataOperand)>];
 
   let extraClassDeclaration = [{
@@ -460,6 +456,17 @@ def SourceOp : Handshake_Op<"source", [NoSideEffect]> {
     The "handshake.source" operation represents continuous data
     source.  The source continously sets a 'valid' signal which the
     successor can consume at any point in time.
+  }];
+
+  let results = (outs AnyType);
+}
+
+def NeverOp : Handshake_Op<"never", [NoSideEffect]> {
+  let summary = "never operation";
+  let description = [{
+    The "handshake.never" operation represents disconnected data
+    source. The source never sets any 'valid' signal which will
+    never trigger the successor at any point in time.
   }];
 
   let results = (outs AnyType);
