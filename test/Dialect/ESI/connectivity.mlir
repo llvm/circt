@@ -35,8 +35,8 @@ rtl.module @test(%clk: i1, %rstn: i1) {
   // CHECK-NEXT:  rtl.instance "recv" @Reciever(%1)  : (!esi.channel<i1>) -> ()
 }
 
-rtl.externmodule @IFaceSender(!sv.modport<@IData::@Source>) -> ()
-rtl.externmodule @IFaceRcvr(!sv.modport<@IData::@Sink>) -> ()
+rtl.module.extern @IFaceSender(!sv.modport<@IData::@Source>) -> ()
+rtl.module.extern @IFaceRcvr(!sv.modport<@IData::@Sink>) -> ()
 sv.interface @IData {
   sv.interface.signal @data : i32
   sv.interface.signal @valid : i1

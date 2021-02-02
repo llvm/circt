@@ -3,8 +3,8 @@
 // RUN: circt-translate %t1.mlir -export-verilog -verify-diagnostics > %t2.sv
 // RUN: circt-rtl-sim.py %t2.sv %INC%/circt/Dialect/ESI/ESIPrimitives.sv %S/../supplements/integers.sv --cycles 150 | FileCheck %s
 
-rtl.externmodule @IntCountProd(%clk: i1, %rstn: i1) -> (%ints: !esi.channel<i32>)
-rtl.externmodule @IntAcc(%clk: i1, %rstn: i1, %ints: !esi.channel<i32>) -> (%totalOut: i32)
+rtl.module.extern @IntCountProd(%clk: i1, %rstn: i1) -> (%ints: !esi.channel<i32>)
+rtl.module.extern @IntAcc(%clk: i1, %rstn: i1, %ints: !esi.channel<i32>) -> (%totalOut: i32)
 rtl.module @top(%clk: i1, %rstn: i1) -> (%totalOut: i32) {
   %intStream = rtl.instance "prod" @IntCountProd(%clk, %rstn) : (i1, i1) -> (!esi.channel<i32>)
   %intStreamBuffered = esi.buffer %clk, %rstn, %intStream {stages=2, name="intChan"} : i32
