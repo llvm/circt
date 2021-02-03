@@ -20,14 +20,21 @@
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "llvm/ADT/IntervalMap.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Format.h"
 
+#include <deque>
 #include <string>
 
 using namespace mlir;
 using namespace circt::esi::capnp::detail;
 using namespace circt;
+
+namespace {
+struct GasketComponent;
+struct Slice;
+} // anonymous namespace
 
 //===----------------------------------------------------------------------===//
 // Utilities.
@@ -91,7 +98,7 @@ public:
   bool operator==(const TypeSchemaImpl &) const;
 
   /// Build an RTL/SV dialect capnp encoder for this type.
-  Value buildEncoder(OpBuilder &, Value clk, Value valid, Value);
+  Value buildEncoder(OpBuilder &, Value clk, Value valid, GasketComponent);
   /// Build an RTL/SV dialect capnp decoder for this type.
   Value buildDecoder(OpBuilder &, Value clk, Value valid, Value);
 
@@ -382,10 +389,26 @@ bool TypeSchemaImpl::operator==(const TypeSchemaImpl &that) const {
 //===----------------------------------------------------------------------===//
 
 namespace {
+struct Slice;
+
 /// Contains helper methods to assist with naming and casting.
 struct GasketComponent {
 public:
+  GasketComponent() {} // To satisfy containers.
   GasketComponent(OpBuilder &b, Value init) : builder(&b), s(init) {}
+
+  /// Get a zero constant of 'width' bit width.
+  GasketComponent zero(uint64_t width) {
+    return GasketComponent(*builder,
+                           builder->create<rtl::ConstantOp>(
+                               loc(), builder->getIntegerType(width), 0));
+  }
+
+  /// Get 'p' bits of i1 padding.
+  GasketComponent padding(uint64_t p) {
+    auto zero = GasketComponent::zero(p);
+    return zero.castBitArray();
+  }
 
   /// Set the "name" attribute of a value's op.
   template <typename T = GasketComponent>
@@ -405,6 +428,16 @@ public:
   /// Construct a bitcast.
   GasketComponent cast(Type t) {
     auto dst = builder->create<rtl::BitcastOp>(loc(), t, s);
+    return GasketComponent(*builder, dst);
+  }
+
+  /// Construct a bitcast.
+  GasketComponent castBitArray() {
+    auto dstTy = rtl::ArrayType::get(builder->getI1Type(),
+                                     rtl::getBitWidth(s.getType()));
+    if (s.getType() == dstTy)
+      return *this;
+    auto dst = builder->create<rtl::BitcastOp>(loc(), dstTy, s);
     return GasketComponent(*builder, dst);
   }
 
@@ -434,6 +467,22 @@ public:
     return GasketComponent(*builder, result).cast(t);
   }
 
+  GasketComponent padTo(uint64_t finalBits) {
+    auto casted = castBitArray();
+    int64_t padBits = finalBits - casted.size();
+    assert(padBits > 0);
+    if (padBits == 0)
+      return *this;
+
+    return GasketComponent(*builder,
+                           builder->create<rtl::ConcatOp>(
+                               loc(), ValueRange{padding(padBits), casted}));
+  }
+
+  uint64_t size() { return rtl::getBitWidth(s.getType()); }
+
+  bool operator==(const GasketComponent &that) { return this->s == that.s; }
+  bool operator!=(const GasketComponent &that) { return this->s != that.s; }
   Operation *operator->() const { return s.getDefiningOp(); }
   Value getValue() const { return s; }
   Location loc() const { return s.getLoc(); }
@@ -536,6 +585,8 @@ public:
     return *offsetIntoParent + *parentOffset;
   }
 
+  uint64_t size() { return type.getSize(); }
+
 private:
   rtl::ArrayType type;
   Slice *parent;
@@ -579,45 +630,149 @@ private:
 } // anonymous namespace
 
 //===----------------------------------------------------------------------===//
-// Capnp encode / decode RTL builders.
+// Capnp encode "gasket" RTL builders.
 //
 // These have the potential to get large and complex as we add more types. The
 // encoding spec is here: https://capnproto.org/encoding.html
 //===----------------------------------------------------------------------===//
 
-/// Build an RTL/SV dialect capnp encoder for this type. Inputs need to be
-/// packed on unpadded.
-Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
-                                   Value operand) {
-  MLIRContext *ctxt = b.getContext();
-  auto loc = operand.getDefiningOp()->getLoc();
-  ::capnp::schema::Node::Reader rootProto = getTypeSchema().getProto();
+namespace {
+class CapnpSegmentBuilder {
+public:
+  /// Capnp encoded pointer.
+  struct Ptr {
+    enum { Struct = 0, List = 1 } type;
 
+    // For struct pointers.
+    Value dataSection;               // Data in the data section.
+    SmallVector<Ptr *, 16> pointers; // Pointers in the pointer section.
+  };
+
+  CapnpSegmentBuilder(OpBuilder &b, Location loc)
+      : b(b), loc(loc), totalSize(0) {}
+  CapnpSegmentBuilder(const CapnpSegmentBuilder &) = delete;
+
+  // uint64_t size() const { return totalSize; }
+
+  Ptr &createStructPointer(::capnp::schema::Node::Struct::Reader cStruct,
+                           Value dataSection);
+
+  Value compile(Ptr &rootPtr);
+
+private:
+  OpBuilder &b;
+  Location loc;
+  std::deque<Ptr> ptrs;
+  uint64_t totalSize;
+
+  SmallVector<Value, 32> entireMessage;
+};
+} // anonymous namespace
+
+CapnpSegmentBuilder::Ptr &CapnpSegmentBuilder::createStructPointer(
+    ::capnp::schema::Node::Struct::Reader cStruct, Value data) {
+  auto it =
+      ptrs.insert(ptrs.end(), Ptr{.type = Ptr::Struct, .dataSection = data});
+  return *it;
+}
+
+Value CapnpSegmentBuilder::compile(Ptr &rootPtr) {
   auto i16 = b.getIntegerType(16);
   auto i32 = b.getIntegerType(32);
 
   auto typeAndOffset = b.create<rtl::ConstantOp>(loc, i32, 0);
-  auto ptrSize = b.create<rtl::ConstantOp>(loc, i16, 0);
+  auto ptrSize = b.create<rtl::ConstantOp>(loc, i16, rootPtr.pointers.size());
   auto dataSize = b.create<rtl::ConstantOp>(
-      loc, i16, rootProto.getStruct().getDataWordCount());
+      loc, i16, rtl::getBitWidth(rootPtr.dataSection.getType()) / 64);
   auto structPtr = b.create<rtl::ConcatOp>(
       loc, ValueRange{ptrSize, dataSize, typeAndOffset});
+  entireMessage.push_back(structPtr);
+  entireMessage.push_back(rootPtr.dataSection);
 
-  auto operandIntTy = operand.getType().cast<IntegerType>();
-  uint16_t paddingBits =
-      rootProto.getStruct().getDataWordCount() * 64 - operandIntTy.getWidth();
-  auto operandCasted = b.create<rtl::BitcastOp>(
-      loc,
-      IntegerType::get(ctxt, operandIntTy.getWidth(), IntegerType::Signless),
-      operand);
-
-  IntegerType iPaddingTy = IntegerType::get(ctxt, paddingBits);
-  auto padding = b.create<rtl::ConstantOp>(loc, iPaddingTy, 0);
-  auto dataSection =
-      b.create<rtl::ConcatOp>(loc, ValueRange{padding, operandCasted});
-
-  return b.create<rtl::ConcatOp>(loc, ValueRange{dataSection, structPtr});
+  return b.create<rtl::ConcatOp>(loc, entireMessage);
 }
+
+static bool isPointer(::capnp::schema::Type::Reader type) {
+  switch (type.which()) {
+  case ::capnp::schema::Type::Which::ANY_POINTER:
+  case ::capnp::schema::Type::Which::DATA:
+  case ::capnp::schema::Type::Which::INTERFACE:
+  case ::capnp::schema::Type::Which::LIST:
+  case ::capnp::schema::Type::Which::STRUCT:
+  case ::capnp::schema::Type::Which::TEXT:
+    return true;
+  default:
+    return false;
+  }
+}
+
+/// Build an RTL/SV dialect capnp encoder for this type. Inputs need to be
+/// packed on unpadded.
+Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
+                                   GasketComponent operand) {
+  ::capnp::schema::Node::Reader rootProto = getTypeSchema().getProto();
+  auto st = rootProto.getStruct();
+  Location loc = operand.loc();
+
+  // The values in the struct we are encoding.
+  SmallVector<GasketComponent, 16> fieldValues;
+  assert(operand.getValue().getType() == type);
+  if (auto structTy = type.dyn_cast<rtl::StructType>()) {
+    assert(false && "Struct support is coming soon");
+  } else {
+    fieldValues.push_back(GasketComponent(b, operand));
+  }
+
+  // Store fields indexed by their offsets into the datasection, in bits.
+  llvm::IntervalMap<uint64_t, GasketComponent, 16>::Allocator allocator;
+  llvm::IntervalMap<uint64_t, GasketComponent, 16> dataValues(allocator);
+  // Loop through data fields.
+  for (auto field : st.getFields()) {
+    if (isPointer(field.getSlot().getType()))
+      continue;
+    uint16_t idx = field.getCodeOrder();
+    assert(idx < fieldTypes.size() && "Capnp struct longer than fieldTypes.");
+    assert(idx < fieldValues.size() && "Capnp struct longer than fieldValues.");
+    GasketComponent fieldValue = fieldValues[idx];
+    GasketComponent encodedField =
+        TypeSwitch<Type, GasketComponent>(fieldTypes[idx])
+            .Case([&](IntegerType it) {
+              return fieldValue.padTo(bits(field.getSlot().getType()));
+            });
+    uint64_t beginOffset = field.getSlot().getOffset() * encodedField.size();
+    uint64_t endOffset = beginOffset + encodedField.size();
+    assert(!dataValues.overlaps(beginOffset, endOffset));
+    dataValues.insert(beginOffset, endOffset, encodedField);
+  }
+
+  // Fill in missing bits.
+  SmallVector<Value, 16> dataValuesPlusPadding;
+  uint64_t lastStop = 0;
+  for (auto it = dataValues.begin(), e = dataValues.end(); it != e; ++it) {
+    auto value = it.value();
+    int64_t padding = it.start() - lastStop;
+    assert(padding >= 0 && "Overlap not allowed");
+    if (padding)
+      dataValuesPlusPadding.push_back(value.padding(padding));
+    dataValuesPlusPadding.push_back(value);
+  }
+  uint64_t expectedSize = st.getDataWordCount() * 64;
+  assert(expectedSize >= lastStop);
+  if (lastStop != expectedSize)
+    dataValuesPlusPadding.push_back(operand.padding(expectedSize - lastStop));
+  Value dataSection = b.create<rtl::ConcatOp>(loc, dataValuesPlusPadding);
+
+  CapnpSegmentBuilder seg(b, loc);
+  auto root = seg.createStructPointer(st, dataSection);
+  return seg.compile(root);
+}
+
+//===----------------------------------------------------------------------===//
+// Capnp decode "gasket" RTL builders.
+//
+// These have the potential to get large and complex as we add more types. The
+// encoding spec is here: https://capnproto.org/encoding.html
+//===----------------------------------------------------------------------===//
 
 /// Construct the proper operations to decode a capnp list. This only works for
 /// arrays of ints or bools. Will need to be updated for structs and lists of
@@ -832,7 +987,8 @@ bool circt::esi::capnp::TypeSchema::operator==(const TypeSchema &that) const {
 Value circt::esi::capnp::TypeSchema::buildEncoder(OpBuilder &builder, Value clk,
                                                   Value valid,
                                                   Value operand) const {
-  return s->buildEncoder(builder, clk, valid, operand);
+  return s->buildEncoder(builder, clk, valid,
+                         GasketComponent(builder, operand));
 }
 Value circt::esi::capnp::TypeSchema::buildDecoder(OpBuilder &builder, Value clk,
                                                   Value valid,
