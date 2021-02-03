@@ -1346,13 +1346,33 @@ FIRStmtParser::parseExpWithLeadingKeyword(StringRef keyword,
     break;
   }
 
-  Value lhs;
+  SymbolValueEntry lhs;
+  Value actLhs;
   SmallVector<Operation *, 8> subOps;
-  if (lookupSymbolEntry(lhs, keyword, info.getFIRLoc()) ||
-      parseOptionalExpPostscript(lhs, subOps))
-    return ParseResult(failure());
+  if (lookupSymbolEntry(lhs, keyword, info.getFIRLoc())) {
+      if (parseOptionalExpPostscript(actLhs, subOps))
+        return ParseResult(failure());
+  } else {
+    if (lhs.is<Value>()) {
+      actLhs = lhs.get<Value>();
+    } else {
+      consumeIf(FIRToken::period);
+      StringRef fieldName;
+      parseFieldId(fieldName, "expected field name");
+      unsigned unbundledId = lhs.get<UnbundledID>() - 1;
+      assert(unbundledId < unbundledValues.size());
+      UnbundledValueEntry &entry = unbundledValues[unbundledId];
+      for (auto elt : entry) {
+        if (elt.first.cast<StringAttr>().getValue() == fieldName) {
+          actLhs = elt.second;
+          break;
+        }
+      }
 
-  return parseLeadingExpStmt(lhs, subOps);
+    }
+  }
+
+  return parseLeadingExpStmt(actLhs, subOps);
 }
 //===-----------------------------
 // FIRStmtParser Statement Parsing
