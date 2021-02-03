@@ -390,25 +390,40 @@ bool TypeSchemaImpl::operator==(const TypeSchemaImpl &that) const {
 
 namespace {
 struct Slice;
+struct GasketComponent;
+} // anonymous namespace
 
-/// Contains helper methods to assist with naming and casting.
-struct GasketComponent {
+namespace {
+struct GasketBuilder {
 public:
-  GasketComponent() {} // To satisfy containers.
-  GasketComponent(OpBuilder &b, Value init) : builder(&b), s(init) {}
+  GasketBuilder() {} // To satisfy containers.
+  GasketBuilder(OpBuilder &b, Location loc) : builder(&b), location(loc) {}
 
   /// Get a zero constant of 'width' bit width.
-  GasketComponent zero(uint64_t width) {
-    return GasketComponent(*builder,
-                           builder->create<rtl::ConstantOp>(
-                               loc(), builder->getIntegerType(width), 0));
-  }
+  GasketComponent zero(uint64_t width);
+  /// Get a constant 'value' of a certain bit width.
+  GasketComponent constant(uint64_t width, uint64_t value);
 
   /// Get 'p' bits of i1 padding.
-  GasketComponent padding(uint64_t p) {
-    auto zero = GasketComponent::zero(p);
-    return zero.castBitArray();
-  }
+  Slice padding(uint64_t p);
+
+  Location loc() const { return *location; }
+  OpBuilder &b() const { return *builder; }
+  MLIRContext *ctxt() const { return builder->getContext(); }
+
+protected:
+  OpBuilder *builder;
+  Optional<Location> location;
+};
+} // anonymous namespace
+
+namespace {
+/// Contains helper methods to assist with naming and casting.
+struct GasketComponent : GasketBuilder {
+public:
+  GasketComponent() {} // To satisfy containers.
+  GasketComponent(OpBuilder &b, Value init)
+      : GasketBuilder(b, init.getLoc()), s(init) {}
 
   /// Set the "name" attribute of a value's op.
   template <typename T = GasketComponent>
@@ -432,14 +447,7 @@ public:
   }
 
   /// Construct a bitcast.
-  GasketComponent castBitArray() {
-    auto dstTy = rtl::ArrayType::get(builder->getI1Type(),
-                                     rtl::getBitWidth(s.getType()));
-    if (s.getType() == dstTy)
-      return *this;
-    auto dst = builder->create<rtl::BitcastOp>(loc(), dstTy, s);
-    return GasketComponent(*builder, dst);
-  }
+  Slice castBitArray();
 
   /// Downcast an int, accounting for signedness.
   GasketComponent downcast(IntegerType t) {
@@ -467,31 +475,25 @@ public:
     return GasketComponent(*builder, result).cast(t);
   }
 
-  GasketComponent padTo(uint64_t finalBits) {
-    auto casted = castBitArray();
-    int64_t padBits = finalBits - casted.size();
-    assert(padBits > 0);
-    if (padBits == 0)
-      return *this;
+  /// Pad this value with zeros up to `finalBits`.
+  GasketComponent padTo(uint64_t finalBits);
 
-    return GasketComponent(*builder,
-                           builder->create<rtl::ConcatOp>(
-                               loc(), ValueRange{padding(padBits), casted}));
-  }
-
+  /// Returns the bit width of this value.
   uint64_t size() { return rtl::getBitWidth(s.getType()); }
 
   bool operator==(const GasketComponent &that) { return this->s == that.s; }
   bool operator!=(const GasketComponent &that) { return this->s != that.s; }
   Operation *operator->() const { return s.getDefiningOp(); }
+  GasketComponent operator+(const GasketComponent &that) {
+    assert(s.getType().isa<IntegerType>());
+    assert(that.s.getType().isa<IntegerType>());
+    return GasketComponent(
+        *builder, builder->create<rtl::ConcatOp>(loc(), ValueRange{s, that.s}));
+  }
   Value getValue() const { return s; }
-  Location loc() const { return s.getLoc(); }
-  OpBuilder &b() const { return *builder; }
-  MLIRContext *ctxt() const { return builder->getContext(); }
   operator Value() { return s; }
 
 protected:
-  OpBuilder *builder;
   Value s;
 };
 } // anonymous namespace
@@ -594,6 +596,44 @@ private:
 };
 } // anonymous namespace
 
+/// Get a zero constant of 'width' bit width.
+GasketComponent GasketBuilder::zero(uint64_t width) {
+  return GasketComponent(*builder,
+                         builder->create<rtl::ConstantOp>(
+                             loc(), builder->getIntegerType(width), 0));
+}
+GasketComponent GasketBuilder::constant(uint64_t width, uint64_t value) {
+  return GasketComponent(*builder,
+                         builder->create<rtl::ConstantOp>(
+                             loc(), builder->getIntegerType(width), value));
+}
+
+/// Get 'p' bits of i1 padding.
+Slice GasketBuilder::padding(uint64_t p) {
+  auto zero = GasketBuilder::zero(p);
+  return zero.castBitArray();
+}
+
+Slice GasketComponent::castBitArray() {
+  auto dstTy =
+      rtl::ArrayType::get(builder->getI1Type(), rtl::getBitWidth(s.getType()));
+  if (s.getType() == dstTy)
+    return Slice(*builder, s);
+  auto dst = builder->create<rtl::BitcastOp>(loc(), dstTy, s);
+  return Slice(*builder, dst);
+}
+
+GasketComponent GasketComponent::padTo(uint64_t finalBits) {
+  auto casted = castBitArray();
+  int64_t padBits = finalBits - casted.size();
+  assert(padBits >= 0);
+  if (padBits == 0)
+    return *this;
+
+  return GasketComponent(*builder,
+                         builder->create<rtl::ArrayConcatOp>(
+                             loc(), ArrayRef<Value>{padding(padBits), casted}));
+}
 namespace {
 /// Utility class for building sv::AssertOps. Since SV assertions need to be in
 /// an `always` block (so the simulator knows when to check the assertion), we
@@ -637,7 +677,7 @@ private:
 //===----------------------------------------------------------------------===//
 
 namespace {
-class CapnpSegmentBuilder {
+class CapnpSegmentBuilder : public GasketBuilder {
 public:
   /// Capnp encoded pointer.
   struct Ptr {
@@ -649,7 +689,7 @@ public:
   };
 
   CapnpSegmentBuilder(OpBuilder &b, Location loc)
-      : b(b), loc(loc), totalSize(0) {}
+      : GasketBuilder(b, loc), totalSize(0) {}
   CapnpSegmentBuilder(const CapnpSegmentBuilder &) = delete;
 
   // uint64_t size() const { return totalSize; }
@@ -660,11 +700,10 @@ public:
   Value compile(Ptr &rootPtr);
 
 private:
-  OpBuilder &b;
-  Location loc;
   std::deque<Ptr> ptrs;
   uint64_t totalSize;
 
+  // Endianness: entireMessage[0] -> LSB of message.
   SmallVector<Value, 32> entireMessage;
 };
 } // anonymous namespace
@@ -677,19 +716,18 @@ CapnpSegmentBuilder::Ptr &CapnpSegmentBuilder::createStructPointer(
 }
 
 Value CapnpSegmentBuilder::compile(Ptr &rootPtr) {
-  auto i16 = b.getIntegerType(16);
-  auto i32 = b.getIntegerType(32);
-
-  auto typeAndOffset = b.create<rtl::ConstantOp>(loc, i32, 0);
-  auto ptrSize = b.create<rtl::ConstantOp>(loc, i16, rootPtr.pointers.size());
-  auto dataSize = b.create<rtl::ConstantOp>(
-      loc, i16, rtl::getBitWidth(rootPtr.dataSection.getType()) / 64);
-  auto structPtr = b.create<rtl::ConcatOp>(
-      loc, ValueRange{ptrSize, dataSize, typeAndOffset});
-  entireMessage.push_back(structPtr);
+  auto typeAndOffset = zero(32);
+  auto ptrSize = constant(16, rootPtr.pointers.size());
+  auto dataSize =
+      constant(16, rtl::getBitWidth(rootPtr.dataSection.getType()) / 64);
+  auto structPtr = (ptrSize + dataSize) + typeAndOffset;
+  entireMessage.push_back(structPtr.castBitArray());
   entireMessage.push_back(rootPtr.dataSection);
 
-  return b.create<rtl::ConcatOp>(loc, entireMessage);
+  // Since the "endianness" of `entireMessage` is the reverse of ArrayConcat, we
+  // must reverse ourselves.
+  std::reverse(entireMessage.begin(), entireMessage.end());
+  return builder->create<rtl::ArrayConcatOp>(loc(), entireMessage);
 }
 
 static bool isPointer(::capnp::schema::Type::Reader type) {
@@ -713,6 +751,7 @@ Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
   ::capnp::schema::Node::Reader rootProto = getTypeSchema().getProto();
   auto st = rootProto.getStruct();
   Location loc = operand.loc();
+  CapnpSegmentBuilder seg(b, loc);
 
   // The values in the struct we are encoding.
   SmallVector<GasketComponent, 16> fieldValues;
@@ -753,16 +792,20 @@ Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
     int64_t padding = it.start() - lastStop;
     assert(padding >= 0 && "Overlap not allowed");
     if (padding)
-      dataValuesPlusPadding.push_back(value.padding(padding));
-    dataValuesPlusPadding.push_back(value);
+      dataValuesPlusPadding.push_back(seg.padding(padding));
+    dataValuesPlusPadding.push_back(value.castBitArray());
+    lastStop = it.stop();
   }
   uint64_t expectedSize = st.getDataWordCount() * 64;
   assert(expectedSize >= lastStop);
   if (lastStop != expectedSize)
     dataValuesPlusPadding.push_back(operand.padding(expectedSize - lastStop));
-  Value dataSection = b.create<rtl::ConcatOp>(loc, dataValuesPlusPadding);
 
-  CapnpSegmentBuilder seg(b, loc);
+  // Since the "endianness" of `dataValuesPlusPadding` is the reverse of
+  // ArrayConcat, we must reverse ourselves.
+  std::reverse(dataValuesPlusPadding.begin(), dataValuesPlusPadding.end());
+  Value dataSection = b.create<rtl::ArrayConcatOp>(loc, dataValuesPlusPadding);
+
   auto root = seg.createStructPointer(st, dataSection);
   return seg.compile(root);
 }
