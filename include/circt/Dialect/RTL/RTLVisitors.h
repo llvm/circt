@@ -37,6 +37,8 @@ public:
                        ICmpOp,
                        // Reduction Operators
                        AndROp, OrROp, XorROp,
+                       // Non-reduction unary ops
+                       BitNegOp, LogNegOp,
                        // Other operations.
                        SExtOp, ConcatOp, ExtractOp, MuxOp,
                        // Cast operation
@@ -105,6 +107,10 @@ public:
   HANDLE(AndROp, Unary);
   HANDLE(OrROp, Unary);
   HANDLE(XorROp, Unary);
+
+  // Unary but not reductions
+  HANDLE(BitNegOp, Unary);
+  HANDLE(LogNegOp, Unary);
 
   HANDLE(ICmpOp, Binary);
 

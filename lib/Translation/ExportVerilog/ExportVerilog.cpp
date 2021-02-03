@@ -709,6 +709,8 @@ private:
   SubExprInfo visitComb(AndROp op) { return emitUnary(op, "&", true); }
   SubExprInfo visitComb(OrROp op) { return emitUnary(op, "|", true); }
   SubExprInfo visitComb(XorROp op) { return emitUnary(op, "^", true); }
+  SubExprInfo visitComb(BitNegOp op) { return emitUnary(op, "~"); }
+  SubExprInfo visitComb(LogNegOp op) { return emitUnary(op, "!"); }
 
   SubExprInfo visitComb(SExtOp op);
   SubExprInfo visitComb(ConcatOp op);

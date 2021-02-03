@@ -206,6 +206,18 @@ def AndROp : UnaryI1ReductionRTLOp<"andr">;
 def OrROp  : UnaryI1ReductionRTLOp<"orr">;
 def XorROp : UnaryI1ReductionRTLOp<"xorr">;
 
+// Base class for non-reduction unary operations.
+class UnaryRTLOp<string mnemonic, list<OpTrait> traits = []> :
+      RTLOp<mnemonic, traits # [SameOperandsAndResultType]> {
+  let arguments = (ins RTLIntegerType:$input);
+  let results = (outs RTLIntegerType:$result);
+
+  let assemblyFormat = "$input attr-dict `:` type($result)";
+}
+
+def BitNegOp : UnaryRTLOp<"neg">;
+def LogNegOp : UnaryRTLOp<"not">;
+
 //===----------------------------------------------------------------------===//
 // Integer width modifying operations.
 //===----------------------------------------------------------------------===//
