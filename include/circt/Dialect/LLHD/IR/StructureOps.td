@@ -217,6 +217,8 @@ def LLHD_ConnectOp : LLHD_Op<"con", [
   let assemblyFormat = [{
     operands attr-dict `:` type($lhs)
   }];
+
+  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
