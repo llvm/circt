@@ -763,12 +763,14 @@ public:
   /// Look up the specified name, emitting an error and returning failure if the
   /// name is unknown.  This is specialized for clients that know they are not
   /// looking up a subfield result.
-  ParseResult resolveSymbolEntry(Value &result, SymbolValueEntry& entry, SMLoc loc, bool fatal = true);
+  ParseResult resolveSymbolEntry(Value &result, SymbolValueEntry &entry,
+                                 SMLoc loc, bool fatal = true);
 
   /// Look up the specified name, emitting an error and returning failure if the
-  /// name is unknown.  This is specialized for clients that know they are 
+  /// name is unknown.  This is specialized for clients that know they are
   /// looking up a subfield result.
-  ParseResult resolveSymbolEntry(Value &result, SymbolValueEntry& entry, StringRef field, SMLoc loc, bool fatal = true);
+  ParseResult resolveSymbolEntry(Value &result, SymbolValueEntry &entry,
+                                 StringRef field, SMLoc loc, bool fatal = true);
 
   /// Look up the specified name, emitting an error and returning failure if the
   /// name is unknown.
@@ -824,17 +826,22 @@ ParseResult FIRScopedParser::lookupSymbolEntry(SymbolValueEntry &result,
   return success();
 }
 
-ParseResult FIRScopedParser::resolveSymbolEntry(Value &result, SymbolValueEntry& entry, SMLoc loc, bool fatal) {
+ParseResult FIRScopedParser::resolveSymbolEntry(Value &result,
+                                                SymbolValueEntry &entry,
+                                                SMLoc loc, bool fatal) {
   if (!entry.is<Value>()) {
     if (fatal)
-       emitError(loc, "bundle value should only be used from subfield");
+      emitError(loc, "bundle value should only be used from subfield");
     return failure();
   }
   result = entry.get<Value>();
   return success();
 }
 
-ParseResult FIRScopedParser::resolveSymbolEntry(Value &result, SymbolValueEntry& entry, StringRef fieldName, SMLoc loc, bool fatal) {
+ParseResult FIRScopedParser::resolveSymbolEntry(Value &result,
+                                                SymbolValueEntry &entry,
+                                                StringRef fieldName, SMLoc loc,
+                                                bool fatal) {
   if (!entry.is<UnbundledID>()) {
     if (fatal)
       emitError(loc, "value should not be used from subfield");
@@ -1005,7 +1012,7 @@ ParseResult FIRStmtParser::parseExp(Value &result, SubOpVector &subOps,
     // the midst of processing a field ID reference.  If not, this is an error.
     StringRef fieldName;
     if (parseToken(FIRToken::period, "expected '.' in field reference") ||
-        parseFieldId(fieldName, "expected field name") || 
+        parseFieldId(fieldName, "expected field name") ||
         resolveSymbolEntry(result, symtabEntry, fieldName, loc))
       return failure();
     break;
@@ -1357,17 +1364,19 @@ FIRStmtParser::parseExpWithLeadingKeyword(StringRef keyword,
 
   if (lookupSymbolEntry(symtabEntry, keyword, info.getFIRLoc()))
     return ParseResult(failure());
-  
-  //If we have a '.', we might have a symbol or an expanded port.  If we resolve to a symbol, use that, otherwise check for expanded bundles of other ops
+
+  // If we have a '.', we might have a symbol or an expanded port.  If we
+  // resolve to a symbol, use that, otherwise check for expanded bundles of other
+  // ops
   if (resolveSymbolEntry(lhs, symtabEntry, info.getFIRLoc(), false)) {
     StringRef fieldName;
     consumeToken(); // token is FIRToken::period
     if (parseFieldId(fieldName, "expected field name") ||
-      resolveSymbolEntry(lhs, symtabEntry, fieldName, info.getFIRLoc()))
+        resolveSymbolEntry(lhs, symtabEntry, fieldName, info.getFIRLoc()))
       return ParseResult(failure());
   } else {
-    //plain symbol
-     if (parseOptionalExpPostscript(lhs, subOps))
+    // plain symbol
+    if (parseOptionalExpPostscript(lhs, subOps))
       return ParseResult(failure());
   }
 
