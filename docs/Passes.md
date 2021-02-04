@@ -21,3 +21,7 @@ This document describes the available CIRCT passes and their contracts.
 ## `firrtl` Dialect Passes
 
 [include "FIRRTLPasses.md"]
+
+## `sv` Dialect Passes
+
+[include "SVPasses.md"] 
