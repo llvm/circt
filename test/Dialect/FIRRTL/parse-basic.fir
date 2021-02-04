@@ -397,6 +397,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.subfield %write("id")
     write.id <= UInt(1)
 
+  ; CHECK-LABEL: firrtl.module @expr_stmt_ambiguity2(
+  module expr_stmt_ambiguity2 :
+    ; CHECK: firrtl.instance @circuit
+    inst write of circuit
+    ; CHECK: firrtl.connect %write_in
+    write.in <= UInt(1)
+
   ; CHECK-LABEL: firrtl.module @oversize_shift(
   module oversize_shift :
     wire value : UInt<2>
