@@ -143,6 +143,7 @@ jobs:
             -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
           make check-circt -j$(nproc)
+          make circt-doc
 
       # Build the CIRCT test target in release mode to build and test.
       - name: Build and Test CIRCT (Release)
@@ -159,6 +160,7 @@ jobs:
             -DCMAKE_CXX_COMPILER=clang++ \
             -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit
           make check-circt -j$(nproc)
+          make circt-doc
 
       # --------
       # Lint the CIRCT C++ code.
