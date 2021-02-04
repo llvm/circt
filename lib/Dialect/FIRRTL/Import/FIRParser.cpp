@@ -760,15 +760,12 @@ public:
     return addSymbolEntry(name, SymbolValueEntry(value), loc);
   }
 
-  /// Look up the specified name, emitting an error and returning failure if the
-  /// name is unknown.  This is specialized for clients that know they are not
-  /// looking up a subfield result.
+  /// Resolved a symbol table entry to a value.  Emission of error is optional.
   ParseResult resolveSymbolEntry(Value &result, SymbolValueEntry &entry,
                                  SMLoc loc, bool fatal = true);
 
-  /// Look up the specified name, emitting an error and returning failure if the
-  /// name is unknown.  This is specialized for clients that know they are
-  /// looking up a subfield result.
+  /// Resolved a symbol table entry if it is an expanded bundle e.g. from an
+  /// instance.  Emission of error is optional.
   ParseResult resolveSymbolEntry(Value &result, SymbolValueEntry &entry,
                                  StringRef field, SMLoc loc, bool fatal = true);
 
@@ -1366,8 +1363,8 @@ FIRStmtParser::parseExpWithLeadingKeyword(StringRef keyword,
     return ParseResult(failure());
 
   // If we have a '.', we might have a symbol or an expanded port.  If we
-  // resolve to a symbol, use that, otherwise check for expanded bundles of other
-  // ops
+  // resolve to a symbol, use that, otherwise check for expanded bundles of
+  // other ops
   if (resolveSymbolEntry(lhs, symtabEntry, info.getFIRLoc(), false)) {
     StringRef fieldName;
     consumeToken(); // token is FIRToken::period
