@@ -11,4 +11,5 @@ add_circt_library(CIRCTSupport
   ADDITIONAL_HEADER_DIRS
 
   LINK_LIBS PUBLIC
+  MLIRIR
   )

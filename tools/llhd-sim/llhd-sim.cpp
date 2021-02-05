@@ -131,14 +131,12 @@ static int dumpLLVM(ModuleOp module, MLIRContext &context) {
 static LogicalResult applyMLIRPasses(ModuleOp module) {
   PassManager pm(module.getContext());
 
-  pm.addPass(llhd::createConvertLLHDToLLVMPass());
+  pm.addPass(createConvertLLHDToLLVMPass());
 
   return pm.run(module);
 }
 
 int main(int argc, char **argv) {
-  llhd::initLLHDToLLVMPass();
-
   InitLLVM y(argc, argv);
 
   cl::ParseCommandLineOptions(argc, argv, "LLHD simulator\n");

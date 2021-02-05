@@ -129,8 +129,8 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     if (enableLowerTypes)
       pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
           firrtl::createLowerFIRRTLTypesPass());
-    pm.addPass(firrtl::createLowerFIRRTLToRTLModulePass());
-    pm.nest<rtl::RTLModuleOp>().addPass(firrtl::createLowerFIRRTLToRTLPass());
+    pm.addPass(createLowerFIRRTLToRTLModulePass());
+    pm.nest<rtl::RTLModuleOp>().addPass(createLowerFIRRTLToRTLPass());
 
     // If enabled, run the optimizer.
     if (!disableOptimization) {
