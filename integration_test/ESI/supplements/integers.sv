@@ -76,3 +76,15 @@ module IntAccNoBP (
     end
   end
 endmodule
+
+module IntArrSum (
+  input clk,
+  input rstn,
+  IValidReady_ArrayOf2xsi13.source arr,
+  IValidReady_i32.sink totalOut
+);
+
+  assign totalOut.valid = arr.valid;
+  assign arr.ready = totalOut.ready;
+  assign totalOut.data = 32'($signed(arr.data[0])) + 32'($signed(arr.data[1]));
+endmodule

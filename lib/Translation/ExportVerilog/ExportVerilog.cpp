@@ -50,6 +50,10 @@ static bool isVerilogExpression(Operation *op) {
   if (isa<MergeOp>(op))
     return false;
 
+  // These are SV dialect expressions.
+  if (isa<ReadInOutOp>(op) || isa<ArrayIndexInOutOp>(op))
+    return true;
+
   // All RTL combinatorial logic ops and SV expression ops are Verilog
   // expressions.
   return isCombinatorial(op) || isExpression(op);
@@ -403,10 +407,10 @@ public:
   using Visitor::visitSV;
 
   void visitMerge(MergeOp op);
-  LogicalResult visitStmt(WireOp op) { return success(); }
+  LogicalResult visitSV(WireOp op) { return success(); }
   LogicalResult visitSV(RegOp op) { return success(); }
   LogicalResult visitSV(InterfaceInstanceOp op) { return success(); }
-  LogicalResult visitStmt(ConnectOp op);
+  LogicalResult visitSV(ConnectOp op);
   LogicalResult visitSV(BPAssignOp op);
   LogicalResult visitSV(PAssignOp op);
   LogicalResult visitSV(AliasOp op);
@@ -453,8 +457,15 @@ public:
   /// operations came from.  In any case, print a newline.
   void emitLocationInfoAndNewLine(const SmallPtrSet<Operation *, 8> &ops);
 
-  llvm::StringSet<> usedNames;
+  /// nameTable keeps track of mappings from Value's and operations (for
+  /// instances) to their string table entry.
   llvm::DenseMap<ValueOrOp, llvm::StringMapEntry<llvm::NoneType> *> nameTable;
+
+  /// outputNames tracks the uniquified names for output ports, which don't have
+  /// a Value or Op representation.
+  SmallVector<StringRef> outputNames;
+
+  llvm::StringSet<> usedNames;
   size_t nextGeneratedNameID = 0;
 
   /// This set keeps track of all of the expression nodes that need to be
@@ -467,6 +478,11 @@ public:
 
 /// Add the specified name to the name table, auto-uniquing the name if
 /// required.  If the name is empty, then this creates a unique temp name.
+///
+/// "valueOrOp" is typically the Value for an intermediate wire etc, but it can
+/// also be an op for an instance, since we want the instances op uniqued and
+/// tracked.  It can also be null for things like outputs which are not tracked
+/// in the nameTable.
 StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
   if (name.empty())
     name = "_T";
@@ -512,7 +528,8 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
   if (!reservedWords.count(name)) {
     auto insertResult = usedNames.insert(name);
     if (insertResult.second) {
-      nameTable[valueOrOp] = &*insertResult.first;
+      if (valueOrOp)
+        nameTable[valueOrOp] = &*insertResult.first;
       return insertResult.first->getKey();
     }
   }
@@ -531,7 +548,8 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
     if (!reservedWords.count(name)) {
       auto insertResult = usedNames.insert(name);
       if (insertResult.second) {
-        nameTable[valueOrOp] = &*insertResult.first;
+        if (valueOrOp)
+          nameTable[valueOrOp] = &*insertResult.first;
         return insertResult.first->getKey();
       }
     }
@@ -739,13 +757,13 @@ private:
   SubExprInfo visitSV(TextualValueOp op);
 
   // Noop cast operators.
-  SubExprInfo visitComb(ReadInOutOp op) { return emitNoopCast(op); }
+  SubExprInfo visitSV(ReadInOutOp op) { return emitNoopCast(op); }
 
   // Other
   SubExprInfo visitComb(ArraySliceOp op);
   SubExprInfo visitComb(ArrayGetOp op);
   SubExprInfo visitComb(ArrayCreateOp op);
-  SubExprInfo visitComb(ArrayIndexOp op);
+  SubExprInfo visitSV(ArrayIndexInOutOp op);
   SubExprInfo visitComb(MuxOp op);
 
   // RTL Dialect Operations
@@ -1108,11 +1126,11 @@ SubExprInfo ExprEmitter::visitComb(ArraySliceOp op) {
 }
 
 SubExprInfo ExprEmitter::visitComb(ArrayGetOp op) {
-  auto arrayPrec = emitSubExpr(op.input(), Selection);
+  emitSubExpr(op.input(), Selection);
   os << '[';
   emitSubExpr(op.index(), LowestPrecedence);
   os << ']';
-  return {Selection, arrayPrec.signedness};
+  return {Selection, IsUnsigned};
 }
 
 // Syntax from: section 5.11 "Array literals".
@@ -1127,7 +1145,7 @@ SubExprInfo ExprEmitter::visitComb(ArrayCreateOp op) {
   return {Unary, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitComb(ArrayIndexOp op) {
+SubExprInfo ExprEmitter::visitSV(ArrayIndexInOutOp op) {
   auto arrayPrec = emitSubExpr(op.input(), Selection);
   os << '[';
   emitSubExpr(op.index(), LowestPrecedence);
@@ -1241,7 +1259,7 @@ void ModuleEmitter::visitMerge(MergeOp op) {
   }
 }
 
-LogicalResult ModuleEmitter::visitStmt(ConnectOp op) {
+LogicalResult ModuleEmitter::visitSV(ConnectOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1309,7 +1327,7 @@ LogicalResult ModuleEmitter::visitStmt(OutputOp op) {
     indent();
     if (isZeroBitType(port.type))
       os << "// Zero width: ";
-    os << "assign " << port.getName() << " = ";
+    os << "assign " << outputNames[port.argNum] << " = ";
     emitExpression(op.getOperand(operandIndex), ops);
     os << ';';
     emitLocationInfoAndNewLine(ops);
@@ -1842,7 +1860,8 @@ static bool isOkToBitSelectFrom(Value v) {
 
 /// Return true if we are unable to ever inline the specified operation.  This
 /// happens because not all Verilog expressions are composable, notably you can
-/// only use bit selects like x[4:6] on simple expressions.
+/// only use bit selects like x[4:6] on simple expressions, you cannot use
+/// expressions in the sensitivity list of always blocks, etc.
 static bool isExpressionUnableToInline(Operation *op) {
   if (auto cast = dyn_cast<BitcastOp>(op))
     if (!haveMatchingDims(cast.input().getType(), cast.result().getType(),
@@ -1872,13 +1891,17 @@ static bool isExpressionUnableToInline(Operation *op) {
     // use that variable in the ArraySliceOp expression.
     if (isa<ArraySliceOp>(user) && !isa<ConstantOp>(op))
       return true;
+
+    // Always blocks must have a name in their sensitivity list, not an expr.
+    if (isa<AlwaysOp>(user) || isa<AlwaysFFOp>(user))
+      return true;
   }
   return false;
 }
 
 /// Return true for operations that are always inlined.
 static bool isExpressionAlwaysInline(Operation *op) {
-  if (isa<ConstantOp>(op) || isa<ArrayIndexOp>(op))
+  if (isa<ConstantOp>(op) || isa<ArrayIndexInOutOp>(op))
     return true;
 
   // An SV interface modport is a symbolic name that is always inlined.
@@ -1950,7 +1973,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
   for (auto &op : block) {
     bool isExpr = isVerilogExpression(&op);
 
-    // If the op is an instance, add its name to the name table.
+    // If the op is an instance, add its name to the name table as an op.
     auto instance = dyn_cast<InstanceOp>(&op);
     if (instance)
       addName(ValueOrOp(instance), instance.instanceName());
@@ -2088,7 +2111,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
       name = "<<NO-NAME-FOUND>>";
     }
     if (port.isOutput())
-      usedNames.insert(name);
+      outputNames.push_back(addName(ValueOrOp(), name));
     else
       addName(module.getArgument(port.argNum), name);
   }
@@ -2153,9 +2176,16 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
     if (maxTypeWidth > 0 && portTypeStrings[portIdx].size() < maxTypeWidth + 1)
       os.indent(1 + maxTypeWidth - portTypeStrings[portIdx].size());
 
+    auto getPortName = [&](size_t portIdx) -> StringRef {
+      if (portInfo[portIdx].isOutput())
+        return outputNames[portInfo[portIdx].argNum];
+      else
+        return getName(module.getArgument(portInfo[portIdx].argNum));
+    };
+
     // Emit the name.
-    os << portInfo[portIdx].getName();
-    printArraySubscriptsPost(portType, os);
+    os << getPortName(portIdx);
+    printArraySubscripts(portType, os);
     ++portIdx;
 
     // If we have any more ports with the same types and the same direction,
@@ -2163,7 +2193,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
     while (portIdx != e && portInfo[portIdx].direction == thisPortDirection &&
            portType == portInfo[portIdx].type) {
       // Don't exceed our preferred line length.
-      StringRef name = portInfo[portIdx].getName();
+      StringRef name = getPortName(portIdx);
       if (os.tell() + 2 + name.size() - startOfLinePos >
           // We use "-2" here because we need a trailing comma or ); for the
           // decl.

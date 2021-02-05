@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 
-# ===- circt-rtl-sim.py - CIRCT simulation driver -------------*- python -*-===//
+# ===- circt-rtl-sim.py - CIRCT simulation driver -----------*- python -*-===//
 #
 # Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 #
-# ===-----------------------------------------------------------------------===//
+# ===---------------------------------------------------------------------===//
 #
 # Script to drive CIRCT cosimulation tests.
 #
-# ===-----------------------------------------------------------------------===//
+# ===---------------------------------------------------------------------===//
 
 import argparse
 import os
@@ -40,8 +40,8 @@ class CosimTestRunner:
         self.top = "top"
 
         if "@ESI_COSIM_PATH@" == "" or not os.path.exists("@ESI_COSIM_PATH@"):
-            raise Exception("The ESI cosimulation DPI library must be enabled " +
-                            "to run cosim tests.")
+            raise Exception("The ESI cosimulation DPI library must be " +
+                            "enabled to run cosim tests.")
 
         self.simRunScript = os.path.join(
             "@CIRCT_TOOLS_DIR@", "circt-rtl-sim.py")
@@ -121,8 +121,8 @@ class CosimTestRunner:
 
             # Add the test files directory and this files directory to the
             # pythonpath.
-            script.write(f"import os\n")
-            script.write(f"import sys\n")
+            script.write("import os\n")
+            script.write("import sys\n")
             script.write(
                 f"sys.path.append(\"{os.path.dirname(self.file)}\")\n")
             script.write(
@@ -155,7 +155,7 @@ class CosimTestRunner:
 
             # Erase the config file if it exists. We don't want to read
             # an old config.
-            portFileName = f"cosim.cfg"
+            portFileName = "cosim.cfg"
             if os.path.exists(portFileName):
                 os.remove(portFileName)
 
@@ -171,7 +171,8 @@ class CosimTestRunner:
 
             # Get the port which the simulation RPC selected.
             checkCount = 0
-            while (not os.path.exists(portFileName)) and simProc.poll() is None:
+            while (not os.path.exists(portFileName)) and \
+                    simProc.poll() is None:
                 time.sleep(0.05)
                 checkCount += 1
                 if checkCount > 200:
@@ -179,8 +180,8 @@ class CosimTestRunner:
                         f"Cosim never wrote cfg file: {portFileName}")
             portFile = open(portFileName, "r")
             for line in portFile.readlines():
-                m = re.match("port: (\d+)", line)
-                if m != None:
+                m = re.match("port: (\\d+)", line)
+                if m is not None:
                     port = int(m.group(1))
             portFile.close()
 
@@ -190,7 +191,7 @@ class CosimTestRunner:
                 checkCount += 1
                 if checkCount > 200:
                     raise Exception(f"Cosim RPC port ({port}) never opened")
-                if simProc.poll() != None:
+                if simProc.poll() is not None:
                     raise Exception("Simulation exited early")
                 time.sleep(0.05)
 
@@ -223,7 +224,7 @@ class CosimTestRunner:
 
             # Read the output log files and return the proper result.
             err, logs = self.readLogs()
-            if testProc != None:
+            if testProc is not None:
                 logs += f"---- Test process exit code: {testProc.returncode}\n"
                 passed = testProc.returncode == 0 and not err
             else:

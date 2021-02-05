@@ -30,7 +30,7 @@ module {
     // Instantiate @C
     %f, %g = rtl.instance "c1" @C(%d) : (i1) -> (i1, i1)
     // Connect the inout port with %f
-    rtl.connect %e, %f : i1
+    sv.connect %e, %f : i1
     // Output values
     rtl.output %g, %r1 : i1, i1
   }

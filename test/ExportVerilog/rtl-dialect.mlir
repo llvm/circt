@@ -250,7 +250,7 @@ module {
 
 
   rtl.module @inout(%a: !rtl.inout<i42>) -> (%out: i42) {
-    %aget = rtl.read_inout %a: !rtl.inout<i42>
+    %aget = sv.read_inout %a: !rtl.inout<i42>
     rtl.output %aget : i42
   }
   // CHECK-LABEL:  module inout(
@@ -297,45 +297,45 @@ module {
 
     // Wires.
     // CHECK-NEXT: wire [3:0]            myWire;
-    %myWire = rtl.wire : !rtl.inout<i4>
+    %myWire = sv.wire : !rtl.inout<i4>
  
     // Packed arrays.
 
     // CHECK-NEXT: wire [41:0][7:0]      myArray1;
-    %myArray1 = rtl.wire : !rtl.inout<array<42 x i8>>
+    %myArray1 = sv.wire : !rtl.inout<array<42 x i8>>
     // CHECK-NEXT: wire [2:0][41:0][3:0] myWireArray2;
-    %myWireArray2 = rtl.wire : !rtl.inout<array<3 x array<42 x i4>>>
+    %myWireArray2 = sv.wire : !rtl.inout<array<3 x array<42 x i4>>>
 
     // Unpacked arrays, and unpacked arrays of packed arrays.
 
     // CHECK-NEXT: wire [7:0]            myUArray1[41:0];
-    %myUArray1 = rtl.wire : !rtl.inout<uarray<42 x i8>>
+    %myUArray1 = sv.wire : !rtl.inout<uarray<42 x i8>>
 
     // CHECK-NEXT: wire [41:0][3:0]      myWireUArray2[2:0];
-    %myWireUArray2 = rtl.wire : !rtl.inout<uarray<3 x array<42 x i4>>>
+    %myWireUArray2 = sv.wire : !rtl.inout<uarray<3 x array<42 x i4>>>
 
     // CHECK-EMPTY:
 
     // Wires.
 
     // CHECK-NEXT: assign myWire = in4;
-    rtl.connect %myWire, %in4 : i4
-    %wireout = rtl.read_inout %myWire : !rtl.inout<i4>
+    sv.connect %myWire, %in4 : i4
+    %wireout = sv.read_inout %myWire : !rtl.inout<i4>
 
     // Packed arrays.
 
-    %subscript = rtl.arrayindex %myArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
+    %subscript = sv.array_index_inout %myArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
     // CHECK-NEXT: assign myArray1[in4] = in8;
-    rtl.connect %subscript, %in8 : i8
+    sv.connect %subscript, %in8 : i8
 
-    %memout1 = rtl.read_inout %subscript : !rtl.inout<i8>
+    %memout1 = sv.read_inout %subscript : !rtl.inout<i8>
 
      // Unpacked arrays, and unpacked arrays of packed arrays.
-    %subscriptu = rtl.arrayindex %myUArray1[%in4] : !rtl.inout<uarray<42 x i8>>, i4
+    %subscriptu = sv.array_index_inout %myUArray1[%in4] : !rtl.inout<uarray<42 x i8>>, i4
     // CHECK-NEXT: assign myUArray1[in4] = in8;
-    rtl.connect %subscriptu, %in8 : i8
+    sv.connect %subscriptu, %in8 : i8
 
-    %memout2 = rtl.read_inout %subscriptu : !rtl.inout<i8>
+    %memout2 = sv.read_inout %subscriptu : !rtl.inout<i8>
 
     // CHECK-NEXT: assign a = myWire;
     // CHECK-NEXT: assign b = myArray1[in4];
@@ -360,7 +360,7 @@ module {
 
   // CHECK-LABEL: module signs
   rtl.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
-    %awire = rtl.wire : !rtl.inout<i4>
+    %awire = sv.wire : !rtl.inout<i4>
     // CHECK: wire [3:0] awire;
 
     // CHECK: assign awire = $unsigned($signed(in1) / $signed(in2)) /
@@ -368,7 +368,7 @@ module {
     %a1 = rtl.divs %in1, %in2: i4
     %a2 = rtl.divs %in3, %in4: i4
     %a3 = rtl.divu %a1, %a2: i4
-    rtl.connect %awire, %a3: i4
+    sv.connect %awire, %a3: i4
 
     // CHECK: assign awire = $unsigned(
     %b1a = rtl.divs %in1, %in2: i4
@@ -378,14 +378,14 @@ module {
     %b2 = rtl.add %b1a, %b1b: i4
     %b3 = rtl.mul %b1c, %b1d: i4
     %b4 = rtl.divu %b2, %b3: i4
-    rtl.connect %awire, %b4: i4
+    sv.connect %awire, %b4: i4
 
     // https://github.com/llvm/circt/issues/369
     // CHECK: assign awire = 4'sh5 / -4'sh3;
     %c5_i4 = rtl.constant(5 : i4) : i4
     %c-3_i4 = rtl.constant(-3 : i4) : i4
     %divs = rtl.divs %c5_i4, %c-3_i4 : i4
-    rtl.connect %awire, %divs: i4
+    sv.connect %awire, %divs: i4
 
     rtl.output
   }
@@ -412,7 +412,7 @@ module {
   // CHECK-NEXT:   // input  [2:0]/*Zero Width*/ arrZero,
   // CHECK-NEXT:      output [3:0]               r0,
   // CHECK-NEXT:   // output /*Zero Width*/      rZero,
-  // CHECK-NEXT:   // output [2:0]/*Zero Width*/ arrZero
+  // CHECK-NEXT:   // output [2:0]/*Zero Width*/ arrZero_0
   // CHECK-NEXT:    );
   // CHECK-EMPTY:
   rtl.module @TestZero(%a: i4, %zeroBit: i0, %arrZero: !rtl.array<3xi0>)
@@ -423,7 +423,7 @@ module {
 
     // CHECK-NEXT:   assign r0 = a + a;
     // CHECK-NEXT:   // Zero width: assign rZero = zeroBit;
-    // CHECK-NEXT:   // Zero width: assign arrZero = arrZero;
+    // CHECK-NEXT:   // Zero width: assign arrZero_0 = arrZero;
     // CHECK-NEXT: endmodule
   }
 
@@ -470,9 +470,19 @@ module {
   // CHECK-LABEL: TestInstanceNameValueConflict
   rtl.module @TestInstanceNameValueConflict(%a: i1) {
     // CHECK: wire name
-    %name = rtl.wire : !rtl.inout<i1>
+    %name = sv.wire : !rtl.inout<i1>
 
     // CHECK: B name_0 (
     %w, %y = rtl.instance "name" @B(%a) : (i1) -> (i1, i1)
   }
+
+  // https://github.com/llvm/circt/issues/525
+  rtl.module @issue525(%struct: i2, %else: i2) -> (%casex: i2) {
+    %2 = rtl.add %struct, %else : i2
+    rtl.output %2 : i2
+  }
+ // CHECK-LABEL: module issue525(
+ // CHECK-NEXT: input  [1:0] struct_0, else_1,
+ // CHECK-NEXT: output [1:0] casex_2);
+ // CHECK: assign casex_2 = struct_0 + else_1;
 }
