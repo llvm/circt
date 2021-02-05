@@ -1160,6 +1160,7 @@ FIRRTLType XorPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs,
                                     Location loc) {
   return getBitwiseBinaryResult(lhs, rhs, loc);
 }
+
 static FIRRTLType getCompareResult(FIRRTLType lhs, FIRRTLType rhs,
                                    Location loc) {
   int32_t lhsWidth, rhsWidth;
