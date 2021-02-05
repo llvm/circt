@@ -760,10 +760,14 @@ public:
     return addSymbolEntry(name, SymbolValueEntry(value), loc);
   }
 
-  /// Look up the specified name, emitting an error and returning failure if the
-  /// name is unknown.  This is specialized for clients that know they are not
-  /// looking up a subfield result.
-  ParseResult lookupSymbolEntry(Value &result, StringRef name, SMLoc loc);
+  /// Resolved a symbol table entry to a value.  Emission of error is optional.
+  ParseResult resolveSymbolEntry(Value &result, SymbolValueEntry &entry,
+                                 SMLoc loc, bool fatal = true);
+
+  /// Resolved a symbol table entry if it is an expanded bundle e.g. from an
+  /// instance.  Emission of error is optional.
+  ParseResult resolveSymbolEntry(Value &result, SymbolValueEntry &entry,
+                                 StringRef field, SMLoc loc);
 
   /// Look up the specified name, emitting an error and returning failure if the
   /// name is unknown.
@@ -819,18 +823,42 @@ ParseResult FIRScopedParser::lookupSymbolEntry(SymbolValueEntry &result,
   return success();
 }
 
-ParseResult FIRScopedParser::lookupSymbolEntry(Value &result, StringRef name,
-                                               SMLoc loc) {
-  SymbolValueEntry entry;
-  if (failed(lookupSymbolEntry(entry, name, loc)))
+ParseResult FIRScopedParser::resolveSymbolEntry(Value &result,
+                                                SymbolValueEntry &entry,
+                                                SMLoc loc, bool fatal) {
+  if (!entry.is<Value>()) {
+    if (fatal)
+      emitError(loc, "bundle value should only be used from subfield");
     return failure();
-
-  if (!entry.is<Value>())
-    return emitError(loc, "bundle value '" + name.str() +
-                              "' should only be used from subfield"),
-           failure();
-
+  }
   result = entry.get<Value>();
+  return success();
+}
+
+ParseResult FIRScopedParser::resolveSymbolEntry(Value &result,
+                                                SymbolValueEntry &entry,
+                                                StringRef fieldName,
+                                                SMLoc loc) {
+  if (!entry.is<UnbundledID>()) {
+    emitError(loc, "value should not be used from subfield");
+    return failure();
+  }
+
+  unsigned unbundledId = entry.get<UnbundledID>() - 1;
+  assert(unbundledId < unbundledValues.size());
+  UnbundledValueEntry &ubEntry = unbundledValues[unbundledId];
+  for (auto elt : ubEntry) {
+    if (elt.first.cast<StringAttr>().getValue() == fieldName) {
+      result = elt.second;
+      break;
+    }
+  }
+  if (!result) {
+    emitError(loc, "use of invalid field name '")
+        << fieldName << "' on bundle value";
+    return failure();
+  }
+
   return success();
 }
 
@@ -972,36 +1000,16 @@ ParseResult FIRStmtParser::parseExp(Value &result, SubOpVector &subOps,
       return failure();
 
     // If we looked up a normal value, then we're done.
-    if (auto val = symtabEntry.dyn_cast<Value>()) {
-      result = val;
+    if (!resolveSymbolEntry(result, symtabEntry, loc, false))
       break;
-    }
 
     // Otherwise we referred to an implicitly bundled value.  We *must* be in
     // the midst of processing a field ID reference.  If not, this is an error.
     StringRef fieldName;
     if (parseToken(FIRToken::period, "expected '.' in field reference") ||
-        parseFieldId(fieldName, "expected field name"))
+        parseFieldId(fieldName, "expected field name") ||
+        resolveSymbolEntry(result, symtabEntry, fieldName, loc))
       return failure();
-
-    result = Value();
-
-    // Look up the fieldName in the unbundled info record.  Indices are biased
-    // by one intentially to avoid using index #0.
-    unsigned unbundledId = symtabEntry.get<UnbundledID>() - 1;
-    assert(unbundledId < unbundledValues.size());
-    UnbundledValueEntry &entry = unbundledValues[unbundledId];
-    for (auto elt : entry) {
-      if (elt.first.cast<StringAttr>().getValue() == fieldName) {
-        result = elt.second;
-        break;
-      }
-    }
-    if (!result) {
-      emitError(loc, "use of invalid field name '")
-          << fieldName << "' on bundle value";
-      return failure();
-    }
     break;
   }
   }
@@ -1332,7 +1340,6 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result,
 Optional<ParseResult>
 FIRStmtParser::parseExpWithLeadingKeyword(StringRef keyword,
                                           const LocWithInfo &info) {
-
   switch (getToken().getKind()) {
   default:
     // This isn't part of an expression, and isn't part of a statement.
@@ -1348,9 +1355,26 @@ FIRStmtParser::parseExpWithLeadingKeyword(StringRef keyword,
 
   Value lhs;
   SmallVector<Operation *, 8> subOps;
-  if (lookupSymbolEntry(lhs, keyword, info.getFIRLoc()) ||
-      parseOptionalExpPostscript(lhs, subOps))
+  SymbolValueEntry symtabEntry;
+
+  if (lookupSymbolEntry(symtabEntry, keyword, info.getFIRLoc()))
     return ParseResult(failure());
+
+  // If we have a '.', we might have a symbol or an expanded port.  If we
+  // resolve to a symbol, use that, otherwise check for expanded bundles of
+  // other ops.
+  // Non '.' ops take the plain symbole path.
+  if (resolveSymbolEntry(lhs, symtabEntry, info.getFIRLoc(), false)) {
+    StringRef fieldName;
+    consumeToken(FIRToken::period);
+    if (parseFieldId(fieldName, "expected field name") ||
+        resolveSymbolEntry(lhs, symtabEntry, fieldName, info.getFIRLoc()))
+      return ParseResult(failure());
+  } else {
+    // plain symbol
+    if (parseOptionalExpPostscript(lhs, subOps))
+      return ParseResult(failure());
+  }
 
   return parseLeadingExpStmt(lhs, subOps);
 }
@@ -1491,13 +1515,15 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
 
   StringAttr resultValue;
   StringRef memName;
+  SymbolValueEntry memorySym;
   Value memory, indexExp, clock;
   SmallVector<Operation *, 8> subOps;
   if (parseToken(FIRToken::kw_mport, "expected 'mport' in memory port") ||
       parseId(resultValue, "expected result name") ||
       parseToken(FIRToken::equal, "expected '=' in memory port") ||
       parseId(memName, "expected memory name") ||
-      lookupSymbolEntry(memory, memName, info.getFIRLoc()) ||
+      lookupSymbolEntry(memorySym, memName, info.getFIRLoc()) ||
+      resolveSymbolEntry(memory, memorySym, info.getFIRLoc()) ||
       parseToken(FIRToken::l_square, "expected '[' in memory port") ||
       parseExp(indexExp, subOps, "expected index expression") ||
       parseToken(FIRToken::r_square, "expected ']' in memory port") ||
