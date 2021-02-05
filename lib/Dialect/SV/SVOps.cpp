@@ -99,60 +99,30 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), nameAttr.getValue());
 }
 
-static void printRegOp(OpAsmPrinter &p, Operation *op) {
-  p << op->getName();
-  // Note that we only need to print the "name" attribute if the asmprinter
-  // result name disagrees with it.  This can happen in strange cases, e.g.
-  // when there are conflicts.
-  bool namesDisagree = false;
+void RegOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                        MLIRContext *context) {
+  // If this wire is only written to, delete the wire and all writers.
+  struct DropDeadConnect final : public OpRewritePattern<RegOp> {
+    using OpRewritePattern::OpRewritePattern;
+    LogicalResult matchAndRewrite(RegOp op,
+                                  PatternRewriter &rewriter) const override {
 
-  SmallString<32> resultNameStr;
-  llvm::raw_svector_ostream tmpStream(resultNameStr);
-  p.printOperand(op->getResult(0), tmpStream);
-  auto expectedName = op->getAttrOfType<StringAttr>("name");
-  if (!expectedName ||
-      tmpStream.str().drop_front() != expectedName.getValue()) {
-    namesDisagree = true;
-  }
+      // Check that all operations on the wire are sv.connects. All other wire
+      // operations will have been handled by other canonicalization.
+      for (auto &use : op.getResult().getUses())
+        if (!isa<ConnectOp>(use.getOwner()))
+          return failure();
 
-  if (namesDisagree)
-    p.printOptionalAttrDict(op->getAttrs());
-  else
-    p.printOptionalAttrDict(op->getAttrs(), {"name"});
+      // Remove all uses of the wire.
+      for (auto &use : op.getResult().getUses())
+        rewriter.eraseOp(use.getOwner());
 
-  p << " : " << op->getResult(0).getType();
-}
-
-static ParseResult parseRegOp(OpAsmParser &parser, OperationState &result) {
-  llvm::SMLoc typeLoc;
-  Type resultType;
-
-  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
-      parser.getCurrentLocation(&typeLoc) || parser.parseType(resultType))
-    return failure();
-
-  result.addTypes(resultType);
-
-  // If the attribute dictionary contains no 'name' attribute, infer it from
-  // the SSA name (if specified).
-  bool hadName = llvm::any_of(result.attributes, [](NamedAttribute attr) {
-    return attr.first == "name";
-  });
-
-  // If there was no name specified, check to see if there was a useful name
-  // specified in the asm file.
-  if (hadName)
-    return success();
-
-  auto resultName = parser.getResultName(0);
-  if (!resultName.first.empty() && !isdigit(resultName.first[0])) {
-    StringRef name = resultName.first;
-    auto *context = result.getContext();
-    auto nameAttr = parser.getBuilder().getStringAttr(name);
-    result.attributes.push_back({Identifier::get("name", context), nameAttr});
-  }
-
-  return success();
+      // Remove the wire.
+      rewriter.eraseOp(op);
+      return success();
+    }
+  };
+  results.insert<DropDeadConnect>(context);
 }
 
 //===----------------------------------------------------------------------===//
