@@ -25,6 +25,7 @@
 #include "llvm/Support/Format.h"
 
 #include <deque>
+#include <initializer_list>
 #include <string>
 
 using namespace mlir;
@@ -425,6 +426,18 @@ public:
   GasketComponent(OpBuilder &b, Value init)
       : GasketBuilder(b, init.getLoc()), s(init) {}
 
+  GasketComponent(std::initializer_list<GasketComponent> concatValues) {
+    assert(concatValues.size() > 0);
+    builder = concatValues.begin()->builder;
+    location = concatValues.begin()->location;
+    SmallVector<Value, 8> values;
+    for (auto gc : concatValues) {
+      assert(gc.s.getType().isa<IntegerType>());
+      values.push_back(gc.s);
+    }
+    s = builder->create<rtl::ConcatOp>(loc(), values);
+  }
+
   /// Set the "name" attribute of a value's op.
   template <typename T = GasketComponent>
   T &name(const Twine &name) {
@@ -484,12 +497,6 @@ public:
   bool operator==(const GasketComponent &that) { return this->s == that.s; }
   bool operator!=(const GasketComponent &that) { return this->s != that.s; }
   Operation *operator->() const { return s.getDefiningOp(); }
-  GasketComponent operator+(const GasketComponent &that) {
-    assert(s.getType().isa<IntegerType>());
-    assert(that.s.getType().isa<IntegerType>());
-    return GasketComponent(
-        *builder, builder->create<rtl::ConcatOp>(loc(), ValueRange{s, that.s}));
-  }
   Value getValue() const { return s; }
   operator Value() { return s; }
 
@@ -720,7 +727,7 @@ Value CapnpSegmentBuilder::compile(Ptr &rootPtr) {
   auto ptrSize = constant(16, rootPtr.pointers.size());
   auto dataSize =
       constant(16, rtl::getBitWidth(rootPtr.dataSection.getType()) / 64);
-  auto structPtr = (ptrSize + dataSize) + typeAndOffset;
+  GasketComponent structPtr = {ptrSize, dataSize, typeAndOffset};
   entireMessage.push_back(structPtr.castBitArray());
   entireMessage.push_back(rootPtr.dataSection);
 
@@ -744,37 +751,24 @@ static bool isPointer(::capnp::schema::Type::Reader type) {
   }
 }
 
-/// Build an RTL/SV dialect capnp encoder for this type. Inputs need to be
-/// packed on unpadded.
-Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
-                                   GasketComponent operand) {
-  ::capnp::schema::Node::Reader rootProto = getTypeSchema().getProto();
-  auto st = rootProto.getStruct();
-  Location loc = operand.loc();
-  CapnpSegmentBuilder seg(b, loc);
-
-  // The values in the struct we are encoding.
-  SmallVector<GasketComponent, 16> fieldValues;
-  assert(operand.getValue().getType() == type);
-  if (auto structTy = type.dyn_cast<rtl::StructType>()) {
-    assert(false && "Struct support is coming soon");
-  } else {
-    fieldValues.push_back(GasketComponent(b, operand));
-  }
-
+static Value buildDataSection(CapnpSegmentBuilder &seg,
+                              ArrayRef<Type> mFieldTypes,
+                              ArrayRef<GasketComponent> mFieldValues,
+                              ::capnp::schema::Node::Struct::Reader cStruct) {
   // Store fields indexed by their offsets into the datasection, in bits.
   llvm::IntervalMap<uint64_t, GasketComponent, 16>::Allocator allocator;
   llvm::IntervalMap<uint64_t, GasketComponent, 16> dataValues(allocator);
   // Loop through data fields.
-  for (auto field : st.getFields()) {
+  for (auto field : cStruct.getFields()) {
     if (isPointer(field.getSlot().getType()))
       continue;
     uint16_t idx = field.getCodeOrder();
-    assert(idx < fieldTypes.size() && "Capnp struct longer than fieldTypes.");
-    assert(idx < fieldValues.size() && "Capnp struct longer than fieldValues.");
-    GasketComponent fieldValue = fieldValues[idx];
+    assert(idx < mFieldTypes.size() && "Capnp struct longer than fieldTypes.");
+    assert(idx < mFieldValues.size() &&
+           "Capnp struct longer than fieldValues.");
+    GasketComponent fieldValue = mFieldValues[idx];
     GasketComponent encodedField =
-        TypeSwitch<Type, GasketComponent>(fieldTypes[idx])
+        TypeSwitch<Type, GasketComponent>(mFieldTypes[idx])
             .Case([&](IntegerType it) {
               return fieldValue.padTo(bits(field.getSlot().getType()));
             });
@@ -796,16 +790,36 @@ Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
     dataValuesPlusPadding.push_back(value.castBitArray());
     lastStop = it.stop();
   }
-  uint64_t expectedSize = st.getDataWordCount() * 64;
+  uint64_t expectedSize = cStruct.getDataWordCount() * 64;
   assert(expectedSize >= lastStop);
   if (lastStop != expectedSize)
-    dataValuesPlusPadding.push_back(operand.padding(expectedSize - lastStop));
+    dataValuesPlusPadding.push_back(seg.padding(expectedSize - lastStop));
 
   // Since the "endianness" of `dataValuesPlusPadding` is the reverse of
   // ArrayConcat, we must reverse ourselves.
   std::reverse(dataValuesPlusPadding.begin(), dataValuesPlusPadding.end());
-  Value dataSection = b.create<rtl::ArrayConcatOp>(loc, dataValuesPlusPadding);
+  return seg.b().create<rtl::ArrayConcatOp>(seg.loc(), dataValuesPlusPadding);
+}
 
+/// Build an RTL/SV dialect capnp encoder for this type. Inputs need to be
+/// packed on unpadded.
+Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
+                                   GasketComponent operand) {
+  ::capnp::schema::Node::Reader rootProto = getTypeSchema().getProto();
+  auto st = rootProto.getStruct();
+  Location loc = operand.loc();
+  CapnpSegmentBuilder seg(b, loc);
+
+  // The values in the struct we are encoding.
+  SmallVector<GasketComponent, 16> fieldValues;
+  assert(operand.getValue().getType() == type);
+  if (auto structTy = type.dyn_cast<rtl::StructType>()) {
+    assert(false && "Struct support is coming soon");
+  } else {
+    fieldValues.push_back(GasketComponent(b, operand));
+  }
+
+  auto dataSection = buildDataSection(seg, fieldTypes, fieldValues, st);
   auto root = seg.createStructPointer(st, dataSection);
   return seg.compile(root);
 }
