@@ -1,3 +1,2 @@
 add_subdirectory(ExportVerilog)
-add_subdirectory(RTL)
-add_subdirectory(SV)
+add_subdirectory(Dialect)
