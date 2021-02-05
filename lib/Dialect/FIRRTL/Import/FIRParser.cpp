@@ -767,7 +767,7 @@ public:
   /// Resolved a symbol table entry if it is an expanded bundle e.g. from an
   /// instance.  Emission of error is optional.
   ParseResult resolveSymbolEntry(Value &result, SymbolValueEntry &entry,
-                                 StringRef field, SMLoc loc, bool fatal = true);
+                                 StringRef field, SMLoc loc);
 
   /// Look up the specified name, emitting an error and returning failure if the
   /// name is unknown.
@@ -837,11 +837,10 @@ ParseResult FIRScopedParser::resolveSymbolEntry(Value &result,
 
 ParseResult FIRScopedParser::resolveSymbolEntry(Value &result,
                                                 SymbolValueEntry &entry,
-                                                StringRef fieldName, SMLoc loc,
-                                                bool fatal) {
+                                                StringRef fieldName,
+                                                SMLoc loc) {
   if (!entry.is<UnbundledID>()) {
-    if (fatal)
-      emitError(loc, "value should not be used from subfield");
+    emitError(loc, "value should not be used from subfield");
     return failure();
   }
 
@@ -855,9 +854,8 @@ ParseResult FIRScopedParser::resolveSymbolEntry(Value &result,
     }
   }
   if (!result) {
-    if (fatal)
-      emitError(loc, "use of invalid field name '")
-          << fieldName << "' on bundle value";
+    emitError(loc, "use of invalid field name '")
+        << fieldName << "' on bundle value";
     return failure();
   }
 
@@ -1364,10 +1362,11 @@ FIRStmtParser::parseExpWithLeadingKeyword(StringRef keyword,
 
   // If we have a '.', we might have a symbol or an expanded port.  If we
   // resolve to a symbol, use that, otherwise check for expanded bundles of
-  // other ops
+  // other ops.
+  // Non '.' ops take the plain symbole path.
   if (resolveSymbolEntry(lhs, symtabEntry, info.getFIRLoc(), false)) {
     StringRef fieldName;
-    consumeToken(); // token is FIRToken::period
+    consumeToken(FIRToken::period);
     if (parseFieldId(fieldName, "expected field name") ||
         resolveSymbolEntry(lhs, symtabEntry, fieldName, info.getFIRLoc()))
       return ParseResult(failure());
