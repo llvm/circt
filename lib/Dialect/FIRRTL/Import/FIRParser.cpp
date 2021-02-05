@@ -2118,14 +2118,6 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     }
   }
 
-  if (!type.isPassive()) {
-    emitError(info.getFIRLoc(), "'mem' data-type must be a passive type");
-    return failure();
-  }
-
-  if (readLatency < 0 || writeLatency < 0)
-    return emitError(info.getFIRLoc(), "invalid latency");
-
   // The FIRRTL dialect requires mems to have at least one port.  Since portless
   // mems can never be referenced, it is always safe to drop them.
   if (ports.empty())
@@ -2139,12 +2131,6 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
                          return lhs->first.getValue().compare(
                              rhs->first.getValue());
                        });
-
-  // Require that all port names are unique.
-  // TODO: Move this into MemOp verification.
-  for (size_t i = 1, e = ports.size(); i < e; ++i)
-    if (ports[i - 1].first == ports[i].first)
-      return {};
 
   SmallVector<Attribute, 4> resultNames;
   SmallVector<Type, 4> resultTypes;

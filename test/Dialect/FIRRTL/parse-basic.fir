@@ -335,11 +335,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: %_M__T_10, %_M__T_11, %_M__T_18 = firrtl.mem Undefined {depth = 8 : i64, name = "_M", portNames = ["_T_10", "_T_11", "_T_18"]
     ; CHECK:   readLatency = 0 : i32, writeLatency = 1 : i32} :
-    ; CHECK:       !firrtl.bundle<addr: flip<uint<3>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>>, mask: flip<bundle<id: uint<1>>>>,
-    ; CHECK:       !firrtl.bundle<addr: flip<uint<3>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>>, mask: flip<bundle<id: uint<1>>>>,
-    ; CHECK:       !firrtl.bundle<addr: flip<uint<3>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>>
+    ; CHECK:       !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>,
+    ; CHECK:       !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>,
+    ; CHECK:       !firrtl.bundle<addr: flip<uint<3>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: uint<4>>
     mem _M : @[Decoupled.scala 209:24]
-        data-type => { id : Analog<4> }
+        data-type => { id : UInt<4> }
         depth => 8
         read-latency => 0
         write-latency => 1
@@ -614,4 +614,3 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     memory.w.addr <= wAddr
     memory.w.mask <= wMask
     memory.w.data <= wData
-
