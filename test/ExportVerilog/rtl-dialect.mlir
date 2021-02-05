@@ -63,7 +63,7 @@ module {
 
     %ab = rtl.add %a, %b : i4
     %subArr = rtl.array_create %allone, %ab, %allone : (i4)
-    %38 = rtl.array_concat %subArr, %subArr : (3, 3 x i4)
+    %38 = rtl.array_concat %subArr, %subArr : !rtl.array<3 x i4>, !rtl.array<3 x i4>
 
     %elem2d = rtl.array_get %array2d[%a] : !rtl.array<12 x array<10xi4>>
     %37 = rtl.array_get %elem2d[%b] : !rtl.array<10xi4>

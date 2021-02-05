@@ -62,8 +62,7 @@ def ArrayConcatOp : RTLOp<"array_concat", [NoSideEffect]> {
   let results = (outs ArrayType:$result);
 
   let assemblyFormat = [{
-    $inputs attr-dict `:`
-      `(` custom<ArrayConcatTypes>(type($inputs), type($result)) `)`
+    $inputs attr-dict `:` custom<ArrayConcatTypes>(type($inputs), type($result))
   }];
 
   let builders = [

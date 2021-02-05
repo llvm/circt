@@ -716,38 +716,34 @@ void ArrayCreateOp::build(OpBuilder &b, OperationState &state,
 static ParseResult parseArrayConcatTypes(OpAsmParser &p,
                                          SmallVectorImpl<Type> &inputTypes,
                                          Type &resultType) {
-  SmallVector<uint64_t> sizes;
+  Type elemType;
   uint64_t resultSize = 0;
   do {
-    uint64_t size;
-    if (p.parseInteger(size))
-      return p.emitError(p.getCurrentLocation(), "Expected array size");
-    sizes.push_back(size);
-    resultSize += size;
-  } while (!p.parseOptionalComma());
-  Type elemTy;
-  if (p.parseKeyword("x") || p.parseType(elemTy))
-    return failure();
+    ArrayType ty;
+    if (p.parseType(ty))
+      return p.emitError(p.getCurrentLocation(), "Expected !rtl.array type");
+    if (elemType && elemType != ty.getElementType())
+      return p.emitError(p.getCurrentLocation(), "Expected array element type ")
+             << elemType;
 
-  for (uint64_t size : sizes)
-    inputTypes.push_back(ArrayType::get(elemTy, size));
-  resultType = ArrayType::get(elemTy, resultSize);
+    elemType = ty.getElementType();
+    inputTypes.push_back(ty);
+    resultSize += ty.getSize();
+  } while (!p.parseOptionalComma());
+
+  resultType = ArrayType::get(elemType, resultSize);
   return success();
 }
 
 static void printArrayConcatTypes(OpAsmPrinter &p, Operation *,
                                   TypeRange inputTypes, Type resultType) {
-  llvm::interleaveComma(inputTypes, p,
-                        [&p](Type t) { p << t.cast<ArrayType>().getSize(); });
-  p << " x ";
-  p.printType(resultType.cast<ArrayType>().getElementType());
+  llvm::interleaveComma(inputTypes, p, [&p](Type t) { p << t; });
 }
 
 void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
                           ArrayRef<Value> values) {
-  assert(values.size() > 0 && "Cannot build array of zero elements");
-  auto arrayTy = values[0].getType().dyn_cast<ArrayType>();
-  assert(arrayTy);
+  assert(!values.empty() && "Cannot build array of zero elements");
+  ArrayType arrayTy = values[0].getType().cast<ArrayType>();
   Type elemTy = arrayTy.getElementType();
   assert(llvm::all_of(values,
                       [elemTy](Value v) -> bool {

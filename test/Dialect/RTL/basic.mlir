@@ -107,8 +107,8 @@ func @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> i50 {
   %arrCreated = rtl.array_create %small1, %small2 : (i19)
   // CHECK-NEXT: [[ARR2:%.+]] = rtl.array_create [[RES9]], [[RES10]], {{.+}} : (i19)
   %arr2 = rtl.array_create %small1, %small2, %add : (i19)
-  // CHECK-NEXT: = rtl.array_concat [[ARR1]], [[ARR2]] : (2, 3 x i19)
-  %bigArray = rtl.array_concat %arrCreated, %arr2 : (2, 3 x i19)
+  // CHECK-NEXT: = rtl.array_concat [[ARR1]], [[ARR2]] : !rtl.array<2xi19>, !rtl.array<3xi19>
+  %bigArray = rtl.array_concat %arrCreated, %arr2 : !rtl.array<2 x i19>, !rtl.array<3 x i19>
 
   // CHECK-NEXT:    return [[RES8]] : i50
   return %result : i50
