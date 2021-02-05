@@ -4,10 +4,6 @@ This document describes the available CIRCT passes and their contracts.
 
 [TOC]
 
-## Transformations Passes
-
-[include "Transformations.md"]
-
 ## Conversion Passes
 
 [include "FIRRTLToLLHD.md"]
@@ -18,10 +14,18 @@ This document describes the available CIRCT passes and their contracts.
 
 [include "CIRCTConversionPasses.md"]
 
-## `firrtl` Dialect Passes
+## ESI Dialect Passes
+
+[include "ESIPasses.md"]
+
+## FIRRTL Dialect Passes
 
 [include "FIRRTLPasses.md"]
 
-## `sv` Dialect Passes
+## LLHD Dialect Passes
 
-[include "SVPasses.md"] 
+[include "LLHDPasses.md"]
+
+## SV Dialect Passes
+
+[include "SVPasses.md"]
