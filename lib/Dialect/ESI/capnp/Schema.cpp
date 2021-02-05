@@ -427,15 +427,12 @@ public:
       : GasketBuilder(b, init.getLoc()), s(init) {}
 
   GasketComponent(std::initializer_list<GasketComponent> concatValues) {
-    assert(concatValues.size() > 0);
-    builder = concatValues.begin()->builder;
-    location = concatValues.begin()->location;
-    SmallVector<Value, 8> values;
-    for (auto gc : concatValues) {
-      assert(gc.s.getType().isa<IntegerType>());
-      values.push_back(gc.s);
-    }
-    s = builder->create<rtl::ConcatOp>(loc(), values);
+    initArrayLike(concatValues);
+  }
+  static GasketComponent concat(ArrayRef<GasketComponent> concatValues) {
+    GasketComponent comp;
+    comp.initArrayLike(concatValues);
+    return comp;
   }
 
   /// Set the "name" attribute of a value's op.
@@ -502,6 +499,22 @@ public:
 
 protected:
   Value s;
+
+private:
+  template <typename Array>
+  void initArrayLike(Array concatValues) {
+    assert(concatValues.size() > 0);
+    builder = concatValues.begin()->builder;
+    location = concatValues.begin()->location;
+    SmallVector<Value, 8> values;
+    for (auto gc : concatValues) {
+      values.push_back(gc.castBitArray());
+    }
+    // Since the "endianness" of `values` is the reverse of ArrayConcat, we must
+    // reverse ourselves.
+    std::reverse(values.begin(), values.end());
+    s = builder->create<rtl::ArrayConcatOp>(loc(), values);
+  }
 };
 } // anonymous namespace
 
@@ -684,59 +697,25 @@ private:
 //===----------------------------------------------------------------------===//
 
 namespace {
+/// Helps build capnp message DAGs, which are stored in 'segments'.
+/// This class isn't terribly useful now, but when we introduce struct support,
+/// we'll need some shared structure to track 'memory allocations'.
 class CapnpSegmentBuilder : public GasketBuilder {
 public:
-  /// Capnp encoded pointer.
-  struct Ptr {
-    enum { Struct = 0, List = 1 } type;
-
-    // For struct pointers.
-    Value dataSection;               // Data in the data section.
-    SmallVector<Ptr *, 16> pointers; // Pointers in the pointer section.
-  };
-
-  CapnpSegmentBuilder(OpBuilder &b, Location loc)
-      : GasketBuilder(b, loc), totalSize(0) {}
+  CapnpSegmentBuilder(OpBuilder &b, Location loc) : GasketBuilder(b, loc) {}
   CapnpSegmentBuilder(const CapnpSegmentBuilder &) = delete;
 
-  // uint64_t size() const { return totalSize; }
-
-  Ptr &createStructPointer(::capnp::schema::Node::Struct::Reader cStruct,
-                           Value dataSection);
-
-  Value compile(Ptr &rootPtr);
+  GasketComponent createStruct(::capnp::schema::Node::Struct::Reader cStruct,
+                               ArrayRef<GasketComponent> mFieldValues);
 
 private:
-  std::deque<Ptr> ptrs;
-  uint64_t totalSize;
-
-  // Endianness: entireMessage[0] -> LSB of message.
-  SmallVector<Value, 32> entireMessage;
+  GasketComponent
+  buildDataSection(ArrayRef<GasketComponent> mFieldValues,
+                   ::capnp::schema::Node::Struct::Reader cStruct);
 };
 } // anonymous namespace
 
-CapnpSegmentBuilder::Ptr &CapnpSegmentBuilder::createStructPointer(
-    ::capnp::schema::Node::Struct::Reader cStruct, Value data) {
-  auto it =
-      ptrs.insert(ptrs.end(), Ptr{.type = Ptr::Struct, .dataSection = data});
-  return *it;
-}
-
-Value CapnpSegmentBuilder::compile(Ptr &rootPtr) {
-  auto typeAndOffset = zero(32);
-  auto ptrSize = constant(16, rootPtr.pointers.size());
-  auto dataSize =
-      constant(16, rtl::getBitWidth(rootPtr.dataSection.getType()) / 64);
-  GasketComponent structPtr = {ptrSize, dataSize, typeAndOffset};
-  entireMessage.push_back(structPtr.castBitArray());
-  entireMessage.push_back(rootPtr.dataSection);
-
-  // Since the "endianness" of `entireMessage` is the reverse of ArrayConcat, we
-  // must reverse ourselves.
-  std::reverse(entireMessage.begin(), entireMessage.end());
-  return builder->create<rtl::ArrayConcatOp>(loc(), entireMessage);
-}
-
+/// Determine whether a capnp type is a pointer type or value type.
 static bool isPointer(::capnp::schema::Type::Reader type) {
   switch (type.which()) {
   case ::capnp::schema::Type::Which::ANY_POINTER:
@@ -751,10 +730,9 @@ static bool isPointer(::capnp::schema::Type::Reader type) {
   }
 }
 
-static Value buildDataSection(CapnpSegmentBuilder &seg,
-                              ArrayRef<Type> mFieldTypes,
-                              ArrayRef<GasketComponent> mFieldValues,
-                              ::capnp::schema::Node::Struct::Reader cStruct) {
+GasketComponent CapnpSegmentBuilder::buildDataSection(
+    ArrayRef<GasketComponent> mFieldValues,
+    ::capnp::schema::Node::Struct::Reader cStruct) {
   // Store fields indexed by their offsets into the datasection, in bits.
   llvm::IntervalMap<uint64_t, GasketComponent, 16>::Allocator allocator;
   llvm::IntervalMap<uint64_t, GasketComponent, 16> dataValues(allocator);
@@ -763,12 +741,11 @@ static Value buildDataSection(CapnpSegmentBuilder &seg,
     if (isPointer(field.getSlot().getType()))
       continue;
     uint16_t idx = field.getCodeOrder();
-    assert(idx < mFieldTypes.size() && "Capnp struct longer than fieldTypes.");
     assert(idx < mFieldValues.size() &&
            "Capnp struct longer than fieldValues.");
     GasketComponent fieldValue = mFieldValues[idx];
     GasketComponent encodedField =
-        TypeSwitch<Type, GasketComponent>(mFieldTypes[idx])
+        TypeSwitch<Type, GasketComponent>(fieldValue.getValue().getType())
             .Case([&](IntegerType it) {
               return fieldValue.padTo(bits(field.getSlot().getType()));
             });
@@ -779,26 +756,35 @@ static Value buildDataSection(CapnpSegmentBuilder &seg,
   }
 
   // Fill in missing bits.
-  SmallVector<Value, 16> dataValuesPlusPadding;
+  SmallVector<GasketComponent, 16> dataValuesPlusPadding;
   uint64_t lastStop = 0;
   for (auto it = dataValues.begin(), e = dataValues.end(); it != e; ++it) {
     auto value = it.value();
-    int64_t padding = it.start() - lastStop;
-    assert(padding >= 0 && "Overlap not allowed");
-    if (padding)
-      dataValuesPlusPadding.push_back(seg.padding(padding));
+    int64_t padBits = it.start() - lastStop;
+    assert(padBits >= 0 && "Overlap not allowed");
+    if (padBits)
+      dataValuesPlusPadding.push_back(padding(padBits));
     dataValuesPlusPadding.push_back(value.castBitArray());
     lastStop = it.stop();
   }
   uint64_t expectedSize = cStruct.getDataWordCount() * 64;
   assert(expectedSize >= lastStop);
   if (lastStop != expectedSize)
-    dataValuesPlusPadding.push_back(seg.padding(expectedSize - lastStop));
+    dataValuesPlusPadding.push_back(padding(expectedSize - lastStop));
 
-  // Since the "endianness" of `dataValuesPlusPadding` is the reverse of
-  // ArrayConcat, we must reverse ourselves.
-  std::reverse(dataValuesPlusPadding.begin(), dataValuesPlusPadding.end());
-  return seg.b().create<rtl::ArrayConcatOp>(seg.loc(), dataValuesPlusPadding);
+  return GasketComponent::concat(dataValuesPlusPadding);
+}
+
+GasketComponent
+CapnpSegmentBuilder::createStruct(::capnp::schema::Node::Struct::Reader cStruct,
+                                  ArrayRef<GasketComponent> mFieldValues) {
+  GasketComponent dataSection = buildDataSection(mFieldValues, cStruct);
+  // TODO: change this to the actual offset when we do struct support.
+  auto typeAndOffset = zero(32);
+  auto ptrSize = constant(16, 0);
+  auto dataSize = constant(16, dataSection.size() / 64);
+  GasketComponent structPtr = {typeAndOffset, dataSize, ptrSize, dataSection};
+  return structPtr;
 }
 
 /// Build an RTL/SV dialect capnp encoder for this type. Inputs need to be
@@ -819,9 +805,7 @@ Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
     fieldValues.push_back(GasketComponent(b, operand));
   }
 
-  auto dataSection = buildDataSection(seg, fieldTypes, fieldValues, st);
-  auto root = seg.createStructPointer(st, dataSection);
-  return seg.compile(root);
+  return seg.createStruct(st, fieldValues);
 }
 
 //===----------------------------------------------------------------------===//
