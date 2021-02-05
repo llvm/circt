@@ -125,8 +125,10 @@ private:
 } // namespace esi
 } // namespace circt
 
-/// Return the number of bits used by a Capnp primitive type.
-static size_t bits(::capnp::schema::Type::Reader type) {
+/// Return the encoding value for the size of this type (from the encoding
+/// spec): 0 = 0 bits, 1 = 1 bit, 2 = 1 byte, 3 = 2 bytes, 4 = 4 bytes, 5 = 8
+/// bytes (non-pointer), 6 = 8 bytes (pointer).
+static size_t bitsEncoding(::capnp::schema::Type::Reader type) {
   using ty = ::capnp::schema::Type;
   switch (type.which()) {
   case ty::VOID:
@@ -135,19 +137,36 @@ static size_t bits(::capnp::schema::Type::Reader type) {
     return 1;
   case ty::UINT8:
   case ty::INT8:
-    return 8;
+    return 2;
   case ty::UINT16:
   case ty::INT16:
-    return 16;
+    return 3;
   case ty::UINT32:
   case ty::INT32:
-    return 32;
+    return 4;
   case ty::UINT64:
   case ty::INT64:
-    return 64;
+    return 5;
+  case ty::ANY_POINTER:
+  case ty::DATA:
+  case ty::INTERFACE:
+  case ty::LIST:
+  case ty::STRUCT:
+  case ty::TEXT:
+    return 6;
   default:
     assert(false && "Type not yet supported");
   }
+}
+
+/// Return the number of bits used by a Capnp type.
+static size_t bits(::capnp::schema::Type::Reader type) {
+  size_t enc = bitsEncoding(type);
+  if (enc <= 1)
+    return enc;
+  if (enc == 6)
+    return 64;
+  return 1 << (enc + 1);
 }
 
 TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
@@ -541,6 +560,11 @@ public:
     type = val.getType().dyn_cast<rtl::ArrayType>();
     assert(type && "Value must be array type");
   }
+  Slice(GasketComponent gc)
+      : GasketComponent(gc), parent(nullptr), offsetIntoParent(0) {
+    type = gc.getValue().getType().dyn_cast<rtl::ArrayType>();
+    assert(type && "Value must be array type");
+  }
 
   /// Create an op to slice the array from lsb to lsb + size. Return a new slice
   /// with that op.
@@ -698,82 +722,64 @@ private:
 
 namespace {
 /// Helps build capnp message DAGs, which are stored in 'segments'.
-/// This class isn't terribly useful now, but when we introduce struct support,
-/// we'll need some shared structure to track 'memory allocations'.
 class CapnpSegmentBuilder : public GasketBuilder {
 public:
-  CapnpSegmentBuilder(OpBuilder &b, Location loc)
-      : GasketBuilder(b, loc), segmentValues(allocator) {}
+  CapnpSegmentBuilder(OpBuilder &b, Location loc, uint64_t expectedSize)
+      : GasketBuilder(b, loc), segmentValues(allocator),
+        expectedSize(expectedSize) {}
   CapnpSegmentBuilder(const CapnpSegmentBuilder &) = delete;
 
   uint64_t createStruct(::capnp::schema::Node::Struct::Reader cStruct,
                         ArrayRef<GasketComponent> mFieldValues);
-  GasketComponent compile(uint64_t expectedSize);
+  GasketComponent compile();
 
 private:
-  // Store fields indexed by their offsets into the datasection, in bits.
-  void buildDataSection(uint64_t offset, ArrayRef<GasketComponent> mFieldValues,
-                        ::capnp::schema::Node::Struct::Reader cStruct);
-  void buildPointerSection(uint64_t offset,
-                           ArrayRef<GasketComponent> mFieldValues,
-                           ::capnp::schema::Node::Struct::Reader cStruct);
-  //  uint64_t buildList(Slice array, )
+  void encodeFieldAt(uint64_t offset, GasketComponent val,
+                     ::capnp::schema::Type::Reader type);
+  uint64_t buildList(Slice val, ::capnp::schema::Type::Reader type);
+
+  void insert(uint64_t offset, GasketComponent val) {
+    uint64_t valSize = val.size();
+    assert(!segmentValues.overlaps(offset, offset + valSize - 1));
+    assert(offset + valSize < expectedSize &&
+           "Tried to insert above the max expected size of the message.");
+    segmentValues.insert(offset, offset + valSize - 1, val);
+  }
 
   llvm::IntervalMap<uint64_t, GasketComponent, 16>::Allocator allocator;
   llvm::IntervalMap<uint64_t, GasketComponent, 16> segmentValues;
+  uint64_t expectedSize;
 };
 } // anonymous namespace
 
-/// Determine whether a capnp type is a pointer type or value type.
-static bool isPointer(::capnp::schema::Type::Reader type) {
-  switch (type.which()) {
-  case ::capnp::schema::Type::Which::ANY_POINTER:
-  case ::capnp::schema::Type::Which::DATA:
-  case ::capnp::schema::Type::Which::INTERFACE:
-  case ::capnp::schema::Type::Which::LIST:
-  case ::capnp::schema::Type::Which::STRUCT:
-  case ::capnp::schema::Type::Which::TEXT:
-    return true;
-  default:
-    return false;
-  }
+void CapnpSegmentBuilder::encodeFieldAt(uint64_t offset, GasketComponent val,
+                                        ::capnp::schema::Type::Reader type) {
+  TypeSwitch<Type>(val.getValue().getType())
+      .Case([&](IntegerType it) { insert(offset, val); })
+      .Case([&](rtl::ArrayType arrTy) {
+        uint64_t listOffset = buildList(Slice(val), type);
+        int32_t relativeOffset = (listOffset - offset - 64) / 64;
+        insert(offset,
+               GasketComponent::concat(
+                   {constant(2, 1), constant(30, relativeOffset),
+                    constant(3, bitsEncoding(type.getList().getElementType())),
+                    constant(29, arrTy.getSize())}));
+      });
 }
 
-void CapnpSegmentBuilder::buildDataSection(
-    uint64_t offset, ArrayRef<GasketComponent> mFieldValues,
-    ::capnp::schema::Node::Struct::Reader cStruct) {
-  // Loop through data fields.
-  for (auto field : cStruct.getFields()) {
-    if (isPointer(field.getSlot().getType()))
-      continue;
-    uint16_t idx = field.getCodeOrder();
-    assert(idx < mFieldValues.size() &&
-           "Capnp struct longer than fieldValues.");
-    GasketComponent fieldValue = mFieldValues[idx];
-    GasketComponent encodedField =
-        TypeSwitch<Type, GasketComponent>(fieldValue.getValue().getType())
-            .Case([&](IntegerType it) {
-              return fieldValue.padTo(bits(field.getSlot().getType()));
-            });
-    uint64_t beginOffset =
-        offset + field.getSlot().getOffset() * encodedField.size();
-    uint64_t endOffset = offset + beginOffset + encodedField.size();
-    assert(!segmentValues.overlaps(beginOffset, endOffset));
-    segmentValues.insert(beginOffset, endOffset, encodedField);
+uint64_t CapnpSegmentBuilder::buildList(Slice val,
+                                        ::capnp::schema::Type::Reader type) {
+  // TODO: we need proper allocation for this once we support more than one
+  // type.
+  uint64_t listOffset = 128;
+  rtl::ArrayType arrTy = val.getValue().getType().cast<rtl::ArrayType>();
+  auto elemType = type.getList().getElementType();
+  size_t elemWidth = bits(elemType);
+  for (size_t i = 0, e = arrTy.getSize(); i < e; ++i) {
+    size_t elemNum = e - i - 1;
+    encodeFieldAt(listOffset + (elemNum * elemWidth), val[i], elemType);
   }
-}
-
-void CapnpSegmentBuilder::buildPointerSection(
-    uint64_t offset, ArrayRef<GasketComponent> mFieldValues,
-    ::capnp::schema::Node::Struct::Reader cStruct) {
-  for (auto field : cStruct.getFields()) {
-    if (isPointer(field.getSlot().getType()))
-      continue;
-    uint16_t idx = field.getCodeOrder();
-    assert(idx < mFieldValues.size() &&
-           "Capnp struct longer than fieldValues.");
-    GasketComponent fieldValue = mFieldValues[idx];
-  }
+  return listOffset;
 }
 
 uint64_t
@@ -783,28 +789,28 @@ CapnpSegmentBuilder::createStruct(::capnp::schema::Node::Struct::Reader cStruct,
   // TODO: change this to the actual offset when we do struct support.
   uint64_t structPointerOffset = 0;
 
-  auto typeAndOffset = GasketComponent::concat(
-      {constant(2, 0), constant(30, structPointerOffset)});
+  GasketComponent structPtr = {constant(2, 0),
+                               constant(30, structPointerOffset),
+                               constant(16, cStruct.getDataWordCount()),
+                               constant(16, cStruct.getPointerCount())};
+  insert(structPointerOffset, structPtr);
 
-  // we only support arrays and ints, not structs so there's only one field.
-  assert(mFieldValues.size() == 1);
-  if (mFieldValues[0].getValue().getType().isa<IntegerType>())
-    buildDataSection(64, mFieldValues, cStruct);
-  else if (mFieldValues[0].getValue().getType().isa<rtl::ArrayType>())
-    buildPointerSection(64, mFieldValues, cStruct);
-  else
-    assert(false && "Unsupported type");
+  uint64_t dataSectionOffset = 64;
+  // Loop through data fields.
+  for (auto field : cStruct.getFields()) {
+    uint16_t idx = field.getCodeOrder();
+    assert(idx < mFieldValues.size() &&
+           "Capnp struct longer than fieldValues.");
+    uint64_t fieldOffset =
+        dataSectionOffset +
+        field.getSlot().getOffset() * bits(field.getSlot().getType());
+    encodeFieldAt(fieldOffset, mFieldValues[idx], field.getSlot().getType());
+  }
 
-  auto dataSize = constant(16, cStruct.getDataWordCount());
-  auto ptrSize = constant(16, cStruct.getPointerCount());
-
-  GasketComponent structPtr = {typeAndOffset, dataSize, ptrSize};
-  segmentValues.insert(structPointerOffset, structPointerOffset + 64,
-                       structPtr);
   return structPointerOffset;
 }
 
-GasketComponent CapnpSegmentBuilder::compile(uint64_t expectedSize) {
+GasketComponent CapnpSegmentBuilder::compile() {
   // Fill in missing bits.
   SmallVector<GasketComponent, 16> segmentValuesPlusPadding;
   uint64_t lastStop = 0;
@@ -816,7 +822,9 @@ GasketComponent CapnpSegmentBuilder::compile(uint64_t expectedSize) {
     if (padBits)
       segmentValuesPlusPadding.push_back(padding(padBits));
     segmentValuesPlusPadding.push_back(value.castBitArray());
-    lastStop = it.stop();
+    // IntervalMap has inclusive ranges, but we want to reason about [,) regions
+    // to make the math work.
+    lastStop = it.stop() + 1;
   }
   assert(expectedSize >= lastStop);
   if (lastStop != expectedSize)
@@ -832,7 +840,7 @@ Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
   ::capnp::schema::Node::Reader rootProto = getTypeSchema().getProto();
   auto st = rootProto.getStruct();
   Location loc = operand.loc();
-  CapnpSegmentBuilder seg(b, loc);
+  CapnpSegmentBuilder seg(b, loc, size());
 
   // The values in the struct we are encoding.
   SmallVector<GasketComponent, 16> fieldValues;
@@ -844,7 +852,7 @@ Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
   }
 
   seg.createStruct(st, fieldValues);
-  return seg.compile(size());
+  return seg.compile();
 }
 
 //===----------------------------------------------------------------------===//

@@ -63,7 +63,7 @@ rtl.module @top(%clk:i1, %rstn:i1) -> () {
   // SV:   .rstn (rstn),
   // SV:   .DataOutReady ({{.+}}.ready),
   // SV:   .DataInValid ({{.+}}.valid),
-  // SV:   .DataIn ({{[{]}}{48'h0, {2'h0, {{.+}}.data}}, {{[{]}}{16'h0, 16'h1}, 32'h0}})
+  // SV:   .DataIn ({50'h0, {{.+}}.data, {16'h0, 16'h1, 30'h0, 2'h0}})
   // SV:   .DataOutValid (TestEP_DataOutValid),
   // SV:   .DataOut (TestEP_DataOut),
   // SV:   .DataInReady (TestEP_DataInReady)
@@ -86,7 +86,7 @@ rtl.module @top(%clk:i1, %rstn:i1) -> () {
   // SV:    .rstn         (rstn),
   // SV:    .DataOutReady ({{.+}}.ready),
   // SV:    .DataInValid  ([[IF1]].valid),
-  // SV:    .DataIn       ({{[{]}}{48'h0, {2'h0, [[IF1]].data}}, {{[{]}}{16'h0, 16'h1}, 32'h0}}),
+  // SV:    .DataIn       ({50'h0, [[IF1]].data, {16'h0, 16'h1, 30'h0, 2'h0}}),
   // SV:    .DataOutValid (ArrTestEP_DataOutValid),
   // SV:    .DataOut      (ArrTestEP_DataOut),
   // SV:    .DataInReady  (ArrTestEP_DataInReady)
