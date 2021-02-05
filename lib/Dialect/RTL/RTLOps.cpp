@@ -713,6 +713,52 @@ void ArrayCreateOp::build(OpBuilder &b, OperationState &state,
   build(b, state, ArrayType::get(elemType, values.size()), values);
 }
 
+static ParseResult parseArrayConcatTypes(OpAsmParser &p,
+                                         SmallVectorImpl<Type> &inputTypes,
+                                         Type &resultType) {
+  Type elemType;
+  uint64_t resultSize = 0;
+  do {
+    ArrayType ty;
+    if (p.parseType(ty))
+      return p.emitError(p.getCurrentLocation(), "Expected !rtl.array type");
+    if (elemType && elemType != ty.getElementType())
+      return p.emitError(p.getCurrentLocation(), "Expected array element type ")
+             << elemType;
+
+    elemType = ty.getElementType();
+    inputTypes.push_back(ty);
+    resultSize += ty.getSize();
+  } while (!p.parseOptionalComma());
+
+  resultType = ArrayType::get(elemType, resultSize);
+  return success();
+}
+
+static void printArrayConcatTypes(OpAsmPrinter &p, Operation *,
+                                  TypeRange inputTypes, Type resultType) {
+  llvm::interleaveComma(inputTypes, p, [&p](Type t) { p << t; });
+}
+
+void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
+                          ArrayRef<Value> values) {
+  assert(!values.empty() && "Cannot build array of zero elements");
+  ArrayType arrayTy = values[0].getType().cast<ArrayType>();
+  Type elemTy = arrayTy.getElementType();
+  assert(llvm::all_of(values,
+                      [elemTy](Value v) -> bool {
+                        return v.getType().isa<ArrayType>() &&
+                               v.getType().cast<ArrayType>().getElementType() ==
+                                   elemTy;
+                      }) &&
+         "All values must be of ArrayType with the same element type.");
+
+  uint64_t resultSize = 0;
+  for (Value val : values)
+    resultSize += val.getType().cast<ArrayType>().getSize();
+  build(b, state, ArrayType::get(elemTy, resultSize), values);
+}
+
 //===----------------------------------------------------------------------===//
 // Variadic operations
 //===----------------------------------------------------------------------===//
