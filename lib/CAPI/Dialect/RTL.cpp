@@ -12,8 +12,8 @@
 
 #include "circt-c/Dialect/RTL.h"
 #include "circt/Dialect/RTL/RTLOps.h"
-#include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/IR.h"
+#include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Support.h"
 
 MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(RTL, rtl, circt::rtl::RTLDialect)
