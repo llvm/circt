@@ -23,11 +23,8 @@ class ModuleOp;
 } // namespace mlir
 
 namespace circt {
-namespace llhd {
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 createConvertRTLToLLHDPass();
-void registerRTLToLLHDPasses();
-} // namespace llhd
 } // namespace circt
 
 #endif // CIRCT_CONVERSION_RTLTOLLHD_RTLTOLLHD_H_

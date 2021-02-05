@@ -10,6 +10,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/StandardToHandshake/StandardToHandshake.h"
+#include "../PassDetail.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/Analysis/AffineAnalysis.h"
@@ -1492,8 +1493,7 @@ struct FuncOpLowering : public OpConversionPattern<mlir::FuncOp> {
 
 namespace {
 struct HandshakeInsertBufferPass
-    : public PassWrapper<HandshakeInsertBufferPass,
-                         OperationPass<handshake::FuncOp>> {
+    : public HandshakeInsertBufferBase<HandshakeInsertBufferPass> {
 
   DenseMap<Operation *, bool> opVisited;
   DenseMap<Operation *, bool> opOnStack;
@@ -1553,13 +1553,12 @@ struct HandshakeInsertBufferPass
 };
 
 struct HandshakeRemoveBlockPass
-    : public PassWrapper<HandshakeRemoveBlockPass,
-                         OperationPass<handshake::FuncOp>> {
+    : HandshakeRemoveBlockBase<HandshakeRemoveBlockPass> {
   void runOnOperation() override { removeBasicBlocks(getOperation()); }
 };
 
-struct HandshakePass
-    : public PassWrapper<HandshakePass, OperationPass<ModuleOp>> {
+struct HandshakeDataflowPass
+    : public HandshakeDataflowBase<HandshakeDataflowPass> {
   void runOnOperation() override {
     ModuleOp m = getOperation();
 
@@ -1576,15 +1575,10 @@ struct HandshakePass
     for (auto func : m.getOps<handshake::FuncOp>())
       removeBasicBlocks(func);
   }
-  /// Return the dialect that must be loaded in the context before this pass.
-  void getDependentDialects(::mlir::DialectRegistry &registry) const override {
-    registry.insert<HandshakeOpsDialect>();
-  }
 };
 
 struct HandshakeCanonicalizePass
-    : public PassWrapper<HandshakeCanonicalizePass,
-                         OperationPass<handshake::FuncOp>> {
+    : public HandshakeCanonicalizeBase<HandshakeCanonicalizePass> {
   void runOnOperation() override {
     auto Op = getOperation();
     OpBuilder builder(Op);
@@ -1619,7 +1613,7 @@ struct HandshakeCanonicalizePass
 namespace {
 
 struct HandshakeAnalysisPass
-    : public PassWrapper<HandshakeAnalysisPass, OperationPass<ModuleOp>> {
+    : public HandshakeAnalysisBase<HandshakeAnalysisPass> {
   void runOnOperation() override {
     ModuleOp m = getOperation();
 
@@ -1660,15 +1654,27 @@ struct HandshakeAnalysisPass
 };
 } // namespace
 
-void handshake::registerStandardToHandshakePasses() {
-  PassRegistration<HandshakeAnalysisPass>(
-      "analyze-dataflow", "Print resource (operation) statistics");
-  PassRegistration<HandshakePass>("create-dataflow",
-                                  "Convert standard MLIR into dataflow IR");
-  PassRegistration<HandshakeCanonicalizePass>("canonicalize-dataflow",
-                                              "Canonicalize handshake IR");
-  PassRegistration<HandshakeRemoveBlockPass>(
-      "remove-block-structure", "Remove block structure in handshake IR");
-  PassRegistration<HandshakeInsertBufferPass>(
-      "handshake-insert-buffer", "Insert buffers to break graph cycles.");
+std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
+circt::createHandshakeAnalysisPass() {
+  return std::make_unique<HandshakeAnalysisPass>();
+}
+
+std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
+circt::createHandshakeDataflowPass() {
+  return std::make_unique<HandshakeDataflowPass>();
+}
+
+std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
+circt::createHandshakeCanonicalizePass() {
+  return std::make_unique<HandshakeCanonicalizePass>();
+}
+
+std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
+circt::createHandshakeRemoveBlockPass() {
+  return std::make_unique<HandshakeRemoveBlockPass>();
+}
+
+std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
+circt::createHandshakeInsertBufferPass() {
+  return std::make_unique<HandshakeInsertBufferPass>();
 }

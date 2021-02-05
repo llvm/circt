@@ -2,7 +2,7 @@ add_circt_conversion_library(CIRCTLLHDToLLVM
   LLHDToLLVM.cpp
 
   DEPENDS
-  CIRCTLLHDConversionPassIncGen
+  CIRCTConversionPassIncGen
 
   LINK_COMPONENTS
   Core

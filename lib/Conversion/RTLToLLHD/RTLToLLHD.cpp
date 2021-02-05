@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/RTLToLLHD/RTLToLLHD.h"
+#include "../PassDetail.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/RTL/RTLDialect.h"
@@ -18,13 +19,6 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
-
-namespace circt {
-namespace llhd {
-#define GEN_PASS_CLASSES
-#include "circt/Conversion/RTLToLLHD/Passes.h.inc"
-} // namespace llhd
-} // namespace circt
 
 using namespace circt;
 using namespace llhd;
@@ -48,17 +42,9 @@ struct RTLToLLHDTypeConverter : public TypeConverter {
 
 /// Create a RTL to LLHD conversion pass.
 std::unique_ptr<OperationPass<mlir::ModuleOp>>
-llhd::createConvertRTLToLLHDPass() {
+circt::createConvertRTLToLLHDPass() {
   return std::make_unique<RTLToLLHDPass>();
 }
-
-/// Register the RTL to LLHD conversion pass.
-namespace {
-#define GEN_PASS_REGISTRATION
-#include "circt/Conversion/RTLToLLHD/Passes.h.inc"
-} // namespace
-
-void circt::llhd::registerRTLToLLHDPasses() { registerPasses(); }
 
 /// Forward declare conversion patterns.
 struct ConvertRTLModule;
