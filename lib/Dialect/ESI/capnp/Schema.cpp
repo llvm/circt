@@ -409,11 +409,7 @@ bool TypeSchemaImpl::operator==(const TypeSchemaImpl &that) const {
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct Slice;
-struct GasketComponent;
-} // anonymous namespace
-
-namespace {
+/// Provides easy methods to build common operations.
 struct GasketBuilder {
 public:
   GasketBuilder() {} // To satisfy containers.
@@ -444,14 +440,8 @@ public:
   GasketComponent() {} // To satisfy containers.
   GasketComponent(OpBuilder &b, Value init)
       : GasketBuilder(b, init.getLoc()), s(init) {}
-
-  GasketComponent(std::initializer_list<GasketComponent> concatValues) {
-    initArrayLike(concatValues);
-  }
-  static GasketComponent concat(ArrayRef<GasketComponent> concatValues) {
-    GasketComponent comp;
-    comp.initArrayLike(concatValues);
-    return comp;
+  GasketComponent(std::initializer_list<GasketComponent> values) {
+    *this = GasketComponent::concat(values);
   }
 
   /// Set the "name" attribute of a value's op.
@@ -510,10 +500,14 @@ public:
   /// Returns the bit width of this value.
   uint64_t size() { return rtl::getBitWidth(s.getType()); }
 
+  /// Build a component by concatenating some values.
+  static GasketComponent concat(ArrayRef<GasketComponent> concatValues);
+
   bool operator==(const GasketComponent &that) { return this->s == that.s; }
   bool operator!=(const GasketComponent &that) { return this->s != that.s; }
   Operation *operator->() const { return s.getDefiningOp(); }
   Value getValue() const { return s; }
+  Type getType() const { return s.getType(); }
   operator Value() { return s; }
 
 protected:
@@ -640,7 +634,9 @@ private:
 };
 } // anonymous namespace
 
-/// Get a zero constant of 'width' bit width.
+// The following methods have to be defined out-of-line because they use types
+// which aren't yet defined when they are declared.
+
 GasketComponent GasketBuilder::zero(uint64_t width) {
   return GasketComponent(*builder,
                          builder->create<rtl::ConstantOp>(
@@ -652,7 +648,6 @@ GasketComponent GasketBuilder::constant(uint64_t width, uint64_t value) {
                              loc(), builder->getIntegerType(width), value));
 }
 
-/// Get 'p' bits of i1 padding.
 Slice GasketBuilder::padding(uint64_t p) {
   auto zero = GasketBuilder::zero(p);
   return zero.castBitArray();
@@ -677,6 +672,22 @@ GasketComponent GasketComponent::padTo(uint64_t finalBits) {
   return GasketComponent(*builder,
                          builder->create<rtl::ArrayConcatOp>(
                              loc(), ArrayRef<Value>{padding(padBits), casted}));
+}
+
+GasketComponent
+GasketComponent::concat(ArrayRef<GasketComponent> concatValues) {
+  assert(concatValues.size() > 0);
+  auto builder = concatValues[0].builder;
+  auto loc = concatValues[0].loc();
+  SmallVector<Value, 8> values;
+  for (auto gc : concatValues) {
+    values.push_back(gc.castBitArray());
+  }
+  // Since the "endianness" of `values` is the reverse of ArrayConcat, we must
+  // reverse ourselves.
+  std::reverse(values.begin(), values.end());
+  return GasketComponent(*builder,
+                         builder->create<rtl::ArrayConcatOp>(loc, values));
 }
 namespace {
 /// Utility class for building sv::AssertOps. Since SV assertions need to be in
