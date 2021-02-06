@@ -12,6 +12,12 @@
 
 #include "mlir/Pass/Pass.h"
 
+namespace mlir {
+namespace LLVM {
+class LLVMDialect;
+} // namespace LLVM
+} // namespace mlir
+
 namespace circt {
 
 namespace firrtl {
@@ -19,10 +25,23 @@ class FIRRTLDialect;
 class FModuleOp;
 } // namespace firrtl
 
+namespace handshake {
+class HandshakeOpsDialect;
+class FuncOp;
+} // namespace handshake
+
+namespace llhd {
+class LLHDDialect;
+} // namespace llhd
+
 namespace rtl {
 class RTLDialect;
 class RTLModuleOp;
 } // namespace rtl
+
+namespace staticlogic {
+class StaticLogicDialect;
+} // namespace staticlogic
 
 namespace sv {
 class SVDialect;

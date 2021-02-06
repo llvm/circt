@@ -45,6 +45,32 @@ def ArrayCreateOp : RTLOp<"array_create", [NoSideEffect, SameTypeOperands]> {
   ];
 }
 
+def ArrayConcatOp : RTLOp<"array_concat", [NoSideEffect]> {
+  let summary = "Concatenate some arrays";
+  let description = [{
+    Creates an array by concatenating a variable set of arrays. One or more
+    values must be listed.
+
+    ```
+    // %a, %b, %c are rtl arrays of i4 with sizes 2, 5, and 4 respectively.
+    %array = rtl.array_concat %a, %b, %c : (2, 5, 4 x i4)
+    // %array is !rtl.array<11 x i4>
+    ```
+  }];
+
+  let arguments = (ins Variadic<ArrayType>:$inputs);
+  let results = (outs ArrayType:$result);
+
+  let assemblyFormat = [{
+    $inputs attr-dict `:` custom<ArrayConcatTypes>(type($inputs), type($result))
+  }];
+
+  let builders = [
+    // ArrayRef needs to contain at least one element.
+    OpBuilderDAG<(ins "ArrayRef<::mlir::Value>":$inputs)>
+  ];
+}
+
 def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
   let summary = "Get a range of values from an array";
   let description = [{

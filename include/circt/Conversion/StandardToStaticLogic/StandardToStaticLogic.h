@@ -14,10 +14,14 @@
 #ifndef CIRCT_CONVERSION_STANDARDTOSTATICLOGIC_H_
 #define CIRCT_CONVERSION_STANDARDTOSTATICLOGIC_H_
 
+#include <memory>
+
+namespace mlir {
+class Pass;
+} // namespace mlir
+
 namespace circt {
-namespace staticlogic {
-void registerStandardToStaticLogicPasses();
-} // namespace staticlogic
+std::unique_ptr<mlir::Pass> createCreatePipelinePass();
 } // namespace circt
 
 #endif // CIRCT_CONVERSION_STANDARDTOSTATICLOGIC_H_

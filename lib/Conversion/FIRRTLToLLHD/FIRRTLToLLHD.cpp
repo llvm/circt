@@ -12,6 +12,7 @@
 
 #include "circt/Conversion/FIRRTLToLLHD/FIRRTLToLLHD.h"
 
+#include "../PassDetail.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
@@ -21,13 +22,6 @@
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-to-llhd"
-
-namespace circt {
-namespace llhd {
-#define GEN_PASS_CLASSES
-#include "circt/Conversion/FIRRTLToLLHD/Passes.h.inc"
-} // namespace llhd
-} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -65,7 +59,7 @@ private:
 
 /// Create a FIRRTL to LLHD conversion pass.
 std::unique_ptr<OperationPass<ModuleOp>>
-circt::llhd::createConvertFIRRTLToLLHDPass() {
+circt::createConvertFIRRTLToLLHDPass() {
   return std::make_unique<FIRRTLToLLHDPass>();
 }
 
@@ -266,11 +260,3 @@ LogicalResult FIRRTLToLLHDPass::visitStmt(firrtl::ConnectOp op) {
   builder->create<DrvOp>(op.getLoc(), dst, src, delta, constOne);
   return success();
 }
-
-/// Register the FIRRTL to LLHD convesion pass.
-namespace {
-#define GEN_PASS_REGISTRATION
-#include "circt/Conversion/FIRRTLToLLHD/Passes.h.inc"
-} // namespace
-
-void circt::llhd::registerFIRRTLToLLHDPasses() { registerPasses(); }

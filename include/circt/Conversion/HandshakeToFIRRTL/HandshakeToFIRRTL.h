@@ -14,10 +14,14 @@
 #ifndef CIRCT_CONVERSION_HANDSHAKETOFIRRTL_H_
 #define CIRCT_CONVERSION_HANDSHAKETOFIRRTL_H_
 
+#include <memory>
+
+namespace mlir {
+class Pass;
+} // namespace mlir
+
 namespace circt {
-namespace handshake {
-void registerHandshakeToFIRRTLPasses();
-} // namespace handshake
+std::unique_ptr<mlir::Pass> createHandshakeToFIRRTLPass();
 } // namespace circt
 
 #endif // MLIR_CONVERSION_HANDSHAKETOFIRRTL_H_
