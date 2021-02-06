@@ -29,6 +29,11 @@ using namespace mlir;
 using namespace circt::esi::capnp::detail;
 using namespace circt;
 
+namespace {
+struct Slice;
+struct GasketComponent;
+} // anonymous namespace
+
 //===----------------------------------------------------------------------===//
 // Utilities.
 //===----------------------------------------------------------------------===//
@@ -91,7 +96,7 @@ public:
   bool operator==(const TypeSchemaImpl &) const;
 
   /// Build an RTL/SV dialect capnp encoder for this type.
-  Value buildEncoder(OpBuilder &, Value clk, Value valid, Value);
+  Value buildEncoder(OpBuilder &, Value clk, Value valid, GasketComponent);
   /// Build an RTL/SV dialect capnp decoder for this type.
   Value buildDecoder(OpBuilder &, Value clk, Value valid, Value);
 
@@ -117,8 +122,10 @@ private:
 } // namespace esi
 } // namespace circt
 
-/// Return the number of bits used by a Capnp primitive type.
-static size_t bits(::capnp::schema::Type::Reader type) {
+/// Return the encoding value for the size of this type (from the encoding
+/// spec): 0 = 0 bits, 1 = 1 bit, 2 = 1 byte, 3 = 2 bytes, 4 = 4 bytes, 5 = 8
+/// bytes (non-pointer), 6 = 8 bytes (pointer).
+static size_t bitsEncoding(::capnp::schema::Type::Reader type) {
   using ty = ::capnp::schema::Type;
   switch (type.which()) {
   case ty::VOID:
@@ -127,19 +134,36 @@ static size_t bits(::capnp::schema::Type::Reader type) {
     return 1;
   case ty::UINT8:
   case ty::INT8:
-    return 8;
+    return 2;
   case ty::UINT16:
   case ty::INT16:
-    return 16;
+    return 3;
   case ty::UINT32:
   case ty::INT32:
-    return 32;
+    return 4;
   case ty::UINT64:
   case ty::INT64:
-    return 64;
+    return 5;
+  case ty::ANY_POINTER:
+  case ty::DATA:
+  case ty::INTERFACE:
+  case ty::LIST:
+  case ty::STRUCT:
+  case ty::TEXT:
+    return 6;
   default:
     assert(false && "Type not yet supported");
   }
+}
+
+/// Return the number of bits used by a Capnp type.
+static size_t bits(::capnp::schema::Type::Reader type) {
+  size_t enc = bitsEncoding(type);
+  if (enc <= 1)
+    return enc;
+  if (enc == 6)
+    return 64;
+  return 1 << (enc + 1);
 }
 
 TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
@@ -382,10 +406,37 @@ bool TypeSchemaImpl::operator==(const TypeSchemaImpl &that) const {
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Contains helper methods to assist with naming and casting.
-struct GasketComponent {
+/// Provides easy methods to build common operations.
+struct GasketBuilder {
 public:
-  GasketComponent(OpBuilder &b, Value init) : builder(&b), s(init) {}
+  GasketBuilder() {} // To satisfy containers.
+  GasketBuilder(OpBuilder &b, Location loc) : builder(&b), location(loc) {}
+
+  /// Get a zero constant of 'width' bit width.
+  GasketComponent zero(uint64_t width);
+  /// Get a constant 'value' of a certain bit width.
+  GasketComponent constant(uint64_t width, uint64_t value);
+
+  /// Get 'p' bits of i1 padding.
+  Slice padding(uint64_t p);
+
+  Location loc() const { return *location; }
+  OpBuilder &b() const { return *builder; }
+  MLIRContext *ctxt() const { return builder->getContext(); }
+
+protected:
+  OpBuilder *builder;
+  Optional<Location> location;
+};
+} // anonymous namespace
+
+namespace {
+/// Contains helper methods to assist with naming and casting.
+struct GasketComponent : GasketBuilder {
+public:
+  GasketComponent() {} // To satisfy containers.
+  GasketComponent(OpBuilder &b, Value init)
+      : GasketBuilder(b, init.getLoc()), s(init) {}
 
   /// Set the "name" attribute of a value's op.
   template <typename T = GasketComponent>
@@ -407,6 +458,9 @@ public:
     auto dst = builder->create<rtl::BitcastOp>(loc(), t, s);
     return GasketComponent(*builder, dst);
   }
+
+  /// Construct a bitcast.
+  Slice castBitArray();
 
   /// Downcast an int, accounting for signedness.
   GasketComponent downcast(IntegerType t) {
@@ -434,15 +488,23 @@ public:
     return GasketComponent(*builder, result).cast(t);
   }
 
+  /// Pad this value with zeros up to `finalBits`.
+  GasketComponent padTo(uint64_t finalBits);
+
+  /// Returns the bit width of this value.
+  uint64_t size() { return rtl::getBitWidth(s.getType()); }
+
+  /// Build a component by concatenating some values.
+  static GasketComponent concat(ArrayRef<GasketComponent> concatValues);
+
+  bool operator==(const GasketComponent &that) { return this->s == that.s; }
+  bool operator!=(const GasketComponent &that) { return this->s != that.s; }
   Operation *operator->() const { return s.getDefiningOp(); }
   Value getValue() const { return s; }
-  Location loc() const { return s.getLoc(); }
-  OpBuilder &b() const { return *builder; }
-  MLIRContext *ctxt() const { return builder->getContext(); }
+  Type getType() const { return s.getType(); }
   operator Value() { return s; }
 
 protected:
-  OpBuilder *builder;
   Value s;
 };
 } // anonymous namespace
@@ -468,6 +530,11 @@ public:
   Slice(OpBuilder &b, Value val)
       : GasketComponent(b, val), parent(nullptr), offsetIntoParent(0) {
     type = val.getType().dyn_cast<rtl::ArrayType>();
+    assert(type && "Value must be array type");
+  }
+  Slice(GasketComponent gc)
+      : GasketComponent(gc), parent(nullptr), offsetIntoParent(0) {
+    type = gc.getValue().getType().dyn_cast<rtl::ArrayType>();
     assert(type && "Value must be array type");
   }
 
@@ -536,6 +603,8 @@ public:
     return *offsetIntoParent + *parentOffset;
   }
 
+  uint64_t size() { return type.getSize(); }
+
 private:
   rtl::ArrayType type;
   Slice *parent;
@@ -543,6 +612,61 @@ private:
 };
 } // anonymous namespace
 
+// The following methods have to be defined out-of-line because they use types
+// which aren't yet defined when they are declared.
+
+GasketComponent GasketBuilder::zero(uint64_t width) {
+  return GasketComponent(*builder,
+                         builder->create<rtl::ConstantOp>(
+                             loc(), builder->getIntegerType(width), 0));
+}
+GasketComponent GasketBuilder::constant(uint64_t width, uint64_t value) {
+  return GasketComponent(*builder,
+                         builder->create<rtl::ConstantOp>(
+                             loc(), builder->getIntegerType(width), value));
+}
+
+Slice GasketBuilder::padding(uint64_t p) {
+  auto zero = GasketBuilder::zero(p);
+  return zero.castBitArray();
+}
+
+Slice GasketComponent::castBitArray() {
+  auto dstTy =
+      rtl::ArrayType::get(builder->getI1Type(), rtl::getBitWidth(s.getType()));
+  if (s.getType() == dstTy)
+    return Slice(*builder, s);
+  auto dst = builder->create<rtl::BitcastOp>(loc(), dstTy, s);
+  return Slice(*builder, dst);
+}
+
+GasketComponent GasketComponent::padTo(uint64_t finalBits) {
+  auto casted = castBitArray();
+  int64_t padBits = finalBits - casted.size();
+  assert(padBits >= 0);
+  if (padBits == 0)
+    return *this;
+
+  return GasketComponent(*builder,
+                         builder->create<rtl::ArrayConcatOp>(
+                             loc(), ArrayRef<Value>{padding(padBits), casted}));
+}
+
+GasketComponent
+GasketComponent::concat(ArrayRef<GasketComponent> concatValues) {
+  assert(concatValues.size() > 0);
+  auto builder = concatValues[0].builder;
+  auto loc = concatValues[0].loc();
+  SmallVector<Value, 8> values;
+  for (auto gc : concatValues) {
+    values.push_back(gc.castBitArray());
+  }
+  // Since the "endianness" of `values` is the reverse of ArrayConcat, we must
+  // reverse ourselves.
+  std::reverse(values.begin(), values.end());
+  return GasketComponent(*builder,
+                         builder->create<rtl::ArrayConcatOp>(loc, values));
+}
 namespace {
 /// Utility class for building sv::AssertOps. Since SV assertions need to be in
 /// an `always` block (so the simulator knows when to check the assertion), we
@@ -579,7 +703,7 @@ private:
 } // anonymous namespace
 
 //===----------------------------------------------------------------------===//
-// Capnp encode / decode RTL builders.
+// Capnp encode "gasket" RTL builders.
 //
 // These have the potential to get large and complex as we add more types. The
 // encoding spec is here: https://capnproto.org/encoding.html
@@ -588,9 +712,9 @@ private:
 /// Build an RTL/SV dialect capnp encoder for this type. Inputs need to be
 /// packed on unpadded.
 Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
-                                   Value operand) {
+                                   GasketComponent operand) {
   MLIRContext *ctxt = b.getContext();
-  auto loc = operand.getDefiningOp()->getLoc();
+  auto loc = operand->getLoc();
   ::capnp::schema::Node::Reader rootProto = getTypeSchema().getProto();
 
   auto i16 = b.getIntegerType(16);
@@ -618,6 +742,13 @@ Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
 
   return b.create<rtl::ConcatOp>(loc, ValueRange{dataSection, structPtr});
 }
+
+//===----------------------------------------------------------------------===//
+// Capnp decode "gasket" RTL builders.
+//
+// These have the potential to get large and complex as we add more types. The
+// encoding spec is here: https://capnproto.org/encoding.html
+//===----------------------------------------------------------------------===//
 
 /// Construct the proper operations to decode a capnp list. This only works for
 /// arrays of ints or bools. Will need to be updated for structs and lists of
@@ -832,7 +963,8 @@ bool circt::esi::capnp::TypeSchema::operator==(const TypeSchema &that) const {
 Value circt::esi::capnp::TypeSchema::buildEncoder(OpBuilder &builder, Value clk,
                                                   Value valid,
                                                   Value operand) const {
-  return s->buildEncoder(builder, clk, valid, operand);
+  return s->buildEncoder(builder, clk, valid,
+                         GasketComponent(builder, operand));
 }
 Value circt::esi::capnp::TypeSchema::buildDecoder(OpBuilder &builder, Value clk,
                                                   Value valid,
