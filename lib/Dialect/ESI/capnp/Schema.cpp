@@ -24,7 +24,6 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Format.h"
 
-#include <deque>
 #include <initializer_list>
 #include <string>
 
@@ -416,12 +415,12 @@ public:
   GasketBuilder(OpBuilder &b, Location loc) : builder(&b), location(loc) {}
 
   /// Get a zero constant of 'width' bit width.
-  GasketComponent zero(uint64_t width);
+  GasketComponent zero(uint64_t width) const;
   /// Get a constant 'value' of a certain bit width.
-  GasketComponent constant(uint64_t width, uint64_t value);
+  GasketComponent constant(uint64_t width, uint64_t value) const;
 
   /// Get 'p' bits of i1 padding.
-  Slice padding(uint64_t p);
+  Slice padding(uint64_t p) const;
 
   Location loc() const { return *location; }
   OpBuilder &b() const { return *builder; }
@@ -460,16 +459,16 @@ public:
   }
 
   /// Construct a bitcast.
-  GasketComponent cast(Type t) {
+  GasketComponent cast(Type t) const {
     auto dst = builder->create<rtl::BitcastOp>(loc(), t, s);
     return GasketComponent(*builder, dst);
   }
 
   /// Construct a bitcast.
-  Slice castBitArray();
+  Slice castBitArray() const;
 
   /// Downcast an int, accounting for signedness.
-  GasketComponent downcast(IntegerType t) {
+  GasketComponent downcast(IntegerType t) const {
     // Since the RTL dialect operators only operate on signless integers, we
     // have to cast to signless first, then cast the sign back.
     assert(s.getType().isa<IntegerType>());
@@ -495,10 +494,10 @@ public:
   }
 
   /// Pad this value with zeros up to `finalBits`.
-  GasketComponent padTo(uint64_t finalBits);
+  GasketComponent padTo(uint64_t finalBits) const;
 
   /// Returns the bit width of this value.
-  uint64_t size() { return rtl::getBitWidth(s.getType()); }
+  uint64_t size() const { return rtl::getBitWidth(s.getType()); }
 
   /// Build a component by concatenating some values.
   static GasketComponent concat(ArrayRef<GasketComponent> concatValues);
@@ -512,22 +511,6 @@ public:
 
 protected:
   Value s;
-
-private:
-  template <typename Array>
-  void initArrayLike(Array concatValues) {
-    assert(concatValues.size() > 0);
-    builder = concatValues.begin()->builder;
-    location = concatValues.begin()->location;
-    SmallVector<Value, 8> values;
-    for (auto gc : concatValues) {
-      values.push_back(gc.castBitArray());
-    }
-    // Since the "endianness" of `values` is the reverse of ArrayConcat, we must
-    // reverse ourselves.
-    std::reverse(values.begin(), values.end());
-    s = builder->create<rtl::ArrayConcatOp>(loc(), values);
-  }
 };
 } // anonymous namespace
 
@@ -541,7 +524,7 @@ namespace {
 /// children slices.
 struct Slice : public GasketComponent {
 private:
-  Slice(Slice *parent, llvm::Optional<int64_t> offset, Value val)
+  Slice(const Slice *parent, llvm::Optional<int64_t> offset, Value val)
       : GasketComponent(*parent->builder, val), parent(parent),
         offsetIntoParent(offset) {
     type = val.getType().dyn_cast<rtl::ArrayType>();
@@ -562,7 +545,7 @@ public:
 
   /// Create an op to slice the array from lsb to lsb + size. Return a new slice
   /// with that op.
-  Slice slice(int64_t lsb, int64_t size) {
+  Slice slice(int64_t lsb, int64_t size) const {
     Value newSlice = builder->create<rtl::ArraySliceOp>(loc(), s, lsb, size);
     return Slice(this, lsb, newSlice);
   }
@@ -570,7 +553,7 @@ public:
   /// Create an op to slice the array from lsb to lsb + size. Return a new slice
   /// with that op. If lsb is greater width thn necessary, lop off the high
   /// bits.
-  Slice slice(Value lsb, int64_t size) {
+  Slice slice(Value lsb, int64_t size) const {
     assert(lsb.getType().isa<IntegerType>());
 
     unsigned expIdxWidth = llvm::Log2_64_Ceil(type.getSize());
@@ -589,19 +572,19 @@ public:
     return GasketComponent::name<Slice>(fieldName.cStr(), nameSuffix);
   }
   Slice castToSlice(Type elemTy, size_t size, StringRef name = StringRef(),
-                    Twine nameSuffix = Twine()) {
+                    Twine nameSuffix = Twine()) const {
     auto arrTy = rtl::ArrayType::get(elemTy, size);
     GasketComponent rawCast =
         GasketComponent::cast(arrTy).name(name + nameSuffix);
     return Slice(*builder, rawCast);
   }
 
-  GasketComponent operator[](Value idx) {
+  GasketComponent operator[](Value idx) const {
     return GasketComponent(*builder,
                            builder->create<rtl::ArrayGetOp>(loc(), s, idx));
   }
 
-  GasketComponent operator[](size_t idx) {
+  GasketComponent operator[](size_t idx) const {
     IntegerType idxTy =
         builder->getIntegerType(llvm::Log2_32_Ceil(type.getSize()));
     auto idxVal = builder->create<rtl::ConstantOp>(loc(), idxTy, idx);
@@ -610,13 +593,13 @@ public:
   }
 
   /// Return the root of this slice hierarchy.
-  const Slice &getRootSlice() {
+  const Slice &getRootSlice() const {
     if (parent == nullptr)
       return *this;
     return parent->getRootSlice();
   }
 
-  llvm::Optional<int64_t> getOffsetFromRoot() {
+  llvm::Optional<int64_t> getOffsetFromRoot() const {
     if (parent == nullptr)
       return 0;
     auto parentOffset = parent->getOffsetFromRoot();
@@ -625,11 +608,11 @@ public:
     return *offsetIntoParent + *parentOffset;
   }
 
-  uint64_t size() { return type.getSize(); }
+  uint64_t size() const { return type.getSize(); }
 
 private:
   rtl::ArrayType type;
-  Slice *parent;
+  const Slice *parent;
   llvm::Optional<int64_t> offsetIntoParent;
 };
 } // anonymous namespace
@@ -637,23 +620,23 @@ private:
 // The following methods have to be defined out-of-line because they use types
 // which aren't yet defined when they are declared.
 
-GasketComponent GasketBuilder::zero(uint64_t width) {
+GasketComponent GasketBuilder::zero(uint64_t width) const {
   return GasketComponent(*builder,
                          builder->create<rtl::ConstantOp>(
                              loc(), builder->getIntegerType(width), 0));
 }
-GasketComponent GasketBuilder::constant(uint64_t width, uint64_t value) {
+GasketComponent GasketBuilder::constant(uint64_t width, uint64_t value) const {
   return GasketComponent(*builder,
                          builder->create<rtl::ConstantOp>(
                              loc(), builder->getIntegerType(width), value));
 }
 
-Slice GasketBuilder::padding(uint64_t p) {
+Slice GasketBuilder::padding(uint64_t p) const {
   auto zero = GasketBuilder::zero(p);
   return zero.castBitArray();
 }
 
-Slice GasketComponent::castBitArray() {
+Slice GasketComponent::castBitArray() const {
   auto dstTy =
       rtl::ArrayType::get(builder->getI1Type(), rtl::getBitWidth(s.getType()));
   if (s.getType() == dstTy)
@@ -662,7 +645,7 @@ Slice GasketComponent::castBitArray() {
   return Slice(*builder, dst);
 }
 
-GasketComponent GasketComponent::padTo(uint64_t finalBits) {
+GasketComponent GasketComponent::padTo(uint64_t finalBits) const {
   auto casted = castBitArray();
   int64_t padBits = finalBits - casted.size();
   assert(padBits >= 0);
@@ -732,7 +715,10 @@ private:
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Helps build capnp message DAGs, which are stored in 'segments'.
+/// Helps build capnp message DAGs, which are stored in 'segments'. To better
+/// reason about something which is more memory-like than wire-like, this class
+/// contains a data structure to efficiently model memory and map it to Values
+/// (wires).
 class CapnpSegmentBuilder : public GasketBuilder {
 public:
   CapnpSegmentBuilder(OpBuilder &b, Location loc, uint64_t expectedSize)
@@ -740,15 +726,22 @@ public:
         expectedSize(expectedSize) {}
   CapnpSegmentBuilder(const CapnpSegmentBuilder &) = delete;
 
+  /// Allocate and build a struct. Return the address of the data section as an
+  /// offset into the 'memory' map.
   uint64_t createStruct(::capnp::schema::Node::Struct::Reader cStruct,
                         ArrayRef<GasketComponent> mFieldValues);
-  GasketComponent compile();
+  /// Build a value from the 'memory' map. Concatenates all the values in the
+  /// 'memory' map, filling in the blank addresses with padding.
+  GasketComponent compile() const;
 
 private:
+  /// Encode 'val' and place the value at the specified 'memory' offset.
   void encodeFieldAt(uint64_t offset, GasketComponent val,
                      ::capnp::schema::Type::Reader type);
+  /// Allocate and build a list, returning the address which was allocated.
   uint64_t buildList(Slice val, ::capnp::schema::Type::Reader type);
 
+  /// Insert 'val' into the 'memory' map.
   void insert(uint64_t offset, GasketComponent val) {
     uint64_t valSize = val.size();
     assert(!segmentValues.overlaps(offset, offset + valSize - 1));
@@ -757,8 +750,15 @@ private:
     segmentValues.insert(offset, offset + valSize - 1, val);
   }
 
-  llvm::IntervalMap<uint64_t, GasketComponent, 16>::Allocator allocator;
+  /// This is where the magic lives. An IntervalMap allows us to efficiently
+  /// model segment 'memory' and to place Values at any address. We can then
+  /// manage 'memory allocations' (figuring out where to place pointed to
+  /// objects) separately from the data contained in those values, some of which
+  /// are pointers themselves.
   llvm::IntervalMap<uint64_t, GasketComponent, 16> segmentValues;
+  llvm::IntervalMap<uint64_t, GasketComponent, 16>::Allocator allocator;
+
+  /// The expected maximum size of the message.
   uint64_t expectedSize;
 };
 } // anonymous namespace
@@ -797,7 +797,8 @@ uint64_t
 CapnpSegmentBuilder::createStruct(::capnp::schema::Node::Struct::Reader cStruct,
                                   ArrayRef<GasketComponent> mFieldValues) {
 
-  // TODO: change this to the actual offset when we do struct support.
+  // TODO: change this to the actual offset when we do struct support. We don't
+  // need allocation before then.
   uint64_t structPointerOffset = 0;
 
   GasketComponent structPtr = {constant(2, 0),
@@ -821,7 +822,7 @@ CapnpSegmentBuilder::createStruct(::capnp::schema::Node::Struct::Reader cStruct,
   return structPointerOffset;
 }
 
-GasketComponent CapnpSegmentBuilder::compile() {
+GasketComponent CapnpSegmentBuilder::compile() const {
   // Fill in missing bits.
   SmallVector<GasketComponent, 16> segmentValuesPlusPadding;
   uint64_t lastStop = 0;
