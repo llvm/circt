@@ -161,6 +161,8 @@ class CosimTestRunner:
 
             # Run the simulation.
             simEnv = os.environ.copy()
+            if "@CMAKE_BUILD_TYPE@" == "Debug":
+              simEnv["COSIM_DEBUG_FILE"] = "cosim_debug.log"
             simProc = subprocess.Popen(
                 [self.simRunScript, "--objdir", "o"]
                 + self.sources + self.args,
