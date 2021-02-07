@@ -597,8 +597,8 @@ def LoadOp
      Results: data (to successor), address indices (to MemoryOp).
   }];
 
-  let arguments = (ins Variadic<Index>, AnyType, NoneType);
-  let results = (outs AnyType, Variadic<Index>:$addressResults);
+  let arguments = (ins Variadic<AnyType>, AnyType, NoneType);
+  let results = (outs AnyType, Variadic<AnyType>:$addressResults);
 
   let builders = [OpBuilderDAG<(ins "Value":$memref, "ArrayRef<Value>":$indices)>];
 }
@@ -619,8 +619,8 @@ def StoreOp : Handshake_Op<"store", [
     Results: data and address indices (sent to MemoryOp).
   }];
 
-  let arguments = (ins AnyType, Variadic<Index>, NoneType);
-  let results = (outs AnyType, Variadic<Index>);
+  let arguments = (ins AnyType, Variadic<AnyType>, NoneType);
+  let results = (outs AnyType, Variadic<AnyType>);
 
   let builders =
       [OpBuilderDAG<(ins "Value":$valueToStore, "ArrayRef<Value>":$indices)>];
