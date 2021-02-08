@@ -8,7 +8,7 @@
 // PY: rpc.testVectorSum(25)
 
 rtl.externmodule @IntAccNoBP(%clk: i1, %rstn: i1, %ints: !esi.channel<i32>) -> (%totalOut: !esi.channel<i32>)
-rtl.externmodule @IntArrSum(%clk: i1, %rstn: i1, %arr: !esi.channel<!rtl.array<2xsi13>>) -> (%totalOut: !esi.channel<i32>)
+rtl.externmodule @IntArrSum(%clk: i1, %rstn: i1, %arr: !esi.channel<!rtl.array<4 x si13>>) -> (%totalOut: !esi.channel<!rtl.array<2 x ui24>>)
 
 rtl.module @ints(%clk: i1, %rstn: i1) {
   %intsIn = esi.cosim %clk, %rstn, %intsTotalBuffered, 1 {name="TestEP"} : !esi.channel<i32> -> !esi.channel<i32>
@@ -18,10 +18,10 @@ rtl.module @ints(%clk: i1, %rstn: i1) {
 }
 
 rtl.module @array(%clk: i1, %rstn: i1) {
-  %arrIn = esi.cosim %clk, %rstn, %arrTotalBuffered, 2 {name="TestEP"} : !esi.channel<i32> -> !esi.channel<!rtl.array<2xsi13>>
-  %arrInBuffered = esi.buffer %clk, %rstn, %arrIn {stages=2, name="arrChan"} : !rtl.array<2xsi13>
-  %arrTotal = rtl.instance "acc" @IntArrSum(%clk, %rstn, %arrInBuffered) : (i1, i1, !esi.channel<!rtl.array<2xsi13>>) -> (!esi.channel<i32>)
-  %arrTotalBuffered = esi.buffer %clk, %rstn, %arrTotal {stages=2, name="totalChan"} : i32
+  %arrIn = esi.cosim %clk, %rstn, %arrTotalBuffered, 2 {name="TestEP"} : !esi.channel<!rtl.array<2 x ui24>> -> !esi.channel<!rtl.array<4 x si13>>
+  %arrInBuffered = esi.buffer %clk, %rstn, %arrIn {stages=2, name="arrChan"} : !rtl.array<4 x si13>
+  %arrTotal = rtl.instance "acc" @IntArrSum(%clk, %rstn, %arrInBuffered) : (i1, i1, !esi.channel<!rtl.array<4 x si13>>) -> (!esi.channel<!rtl.array<2 x ui24>>)
+  %arrTotalBuffered = esi.buffer %clk, %rstn, %arrTotal {stages=2, name="totalChan"} : !rtl.array<2 x ui24>
 }
 
 rtl.module @top(%clk: i1, %rstn: i1) {
