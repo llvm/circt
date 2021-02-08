@@ -17,7 +17,7 @@
 extern "C" {
 #endif
 
-MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(SV, sv);
+MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(SystemVerilog, sv);
 
 #ifdef __cplusplus
 }
