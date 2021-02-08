@@ -20,3 +20,9 @@ func @drv_folding(%sig: !llhd.sig<i32>, %val: i32, %time: !llhd.time, %cond: i1)
   // CHECK-NEXT: return
   return
 }
+
+// CHECK-LABEL: @con_folding
+// CHECK-NOT: llhd.con
+llhd.entity @con_folding(%sig: !llhd.sig<i32>) {
+  llhd.con %sig, %sig : !llhd.sig<i32>
+}
