@@ -89,20 +89,20 @@ constexpr char ESIRTLBuilder::dataStr[], ESIRTLBuilder::validStr[],
 
 ESIRTLBuilder::ESIRTLBuilder(Operation *top)
     : ImplicitLocOpBuilder(UnknownLoc::get(top->getContext()), top),
-      a(StringAttr::get("a", getContext())),
-      aValid(StringAttr::get("a_valid", getContext())),
-      aReady(StringAttr::get("a_ready", getContext())),
-      x(StringAttr::get("x", getContext())),
-      xValid(StringAttr::get("x_valid", getContext())),
-      xReady(StringAttr::get("x_ready", getContext())),
-      dataOutValid(StringAttr::get("DataOutValid", getContext())),
-      dataOutReady(StringAttr::get("DataOutReady", getContext())),
-      dataOut(StringAttr::get("DataOut", getContext())),
-      dataInValid(StringAttr::get("DataInValid", getContext())),
-      dataInReady(StringAttr::get("DataInReady", getContext())),
-      dataIn(StringAttr::get("DataIn", getContext())),
-      clk(StringAttr::get("clk", getContext())),
-      rstn(StringAttr::get("rstn", getContext())),
+      a(StringAttr::get(getContext(), "a")),
+      aValid(StringAttr::get(getContext(), "a_valid")),
+      aReady(StringAttr::get(getContext(), "a_ready")),
+      x(StringAttr::get(getContext(), "x")),
+      xValid(StringAttr::get(getContext(), "x_valid")),
+      xReady(StringAttr::get(getContext(), "x_ready")),
+      dataOutValid(StringAttr::get(getContext(), "DataOutValid")),
+      dataOutReady(StringAttr::get(getContext(), "DataOutReady")),
+      dataOut(StringAttr::get(getContext(), "DataOut")),
+      dataInValid(StringAttr::get(getContext(), "DataInValid")),
+      dataInReady(StringAttr::get(getContext(), "DataInReady")),
+      dataIn(StringAttr::get(getContext(), "DataIn")),
+      clk(StringAttr::get(getContext(), "clk")),
+      rstn(StringAttr::get(getContext(), "rstn")),
       width(Identifier::get("WIDTH", getContext())), declaredStage(nullptr) {
 
   auto regions = top->getRegions();
@@ -154,7 +154,7 @@ StringAttr ESIRTLBuilder::constructInterfaceName(ChannelPort port) {
     proposedName.append(llvm::utostr(++tries));
   }
 
-  return StringAttr::get(proposedName, getContext());
+  return StringAttr::get(getContext(), proposedName);
 }
 
 /// Write an 'ExternModuleOp' to use a hand-coded SystemVerilog module. Said
@@ -165,7 +165,7 @@ RTLExternModuleOp ESIRTLBuilder::declareStage() {
   if (declaredStage)
     return declaredStage;
 
-  auto name = StringAttr::get("ESI_PipelineStage", getContext());
+  auto name = StringAttr::get(getContext(), "ESI_PipelineStage");
   // Since this module has parameterized widths on the a input and x output,
   // give the extern declation a None type since nothing else makes sense.
   // Will be refining this when we decide how to better handle parameterized
@@ -188,7 +188,7 @@ RTLExternModuleOp ESIRTLBuilder::declareStage() {
 RTLExternModuleOp ESIRTLBuilder::declareCosimEndpoint() {
   if (declaredCosimEndpoint)
     return declaredCosimEndpoint;
-  auto name = StringAttr::get("Cosim_Endpoint", getContext());
+  auto name = StringAttr::get(getContext(), "Cosim_Endpoint");
   // Since this module has parameterized widths on the a input and x output,
   // give the extern declation a None type since nothing else makes sense.
   // Will be refining this when we decide how to better handle parameterized
@@ -280,7 +280,7 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
     if (bufferName) {
       SmallString<64> stageName(
           {bufferName.getValue(), "_stage", std::to_string(i)});
-      stage->setAttr("name", StringAttr::get(stageName, rewriter.getContext()));
+      stage->setAttr("name", StringAttr::get(rewriter.getContext(), stageName));
     }
     input = stage;
   }
