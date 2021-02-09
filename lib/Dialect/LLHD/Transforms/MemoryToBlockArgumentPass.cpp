@@ -86,7 +86,8 @@ void MemoryToBlockArgumentPass::runOnOperation() {
   // No operations that have their own region and are not isolated from above
   // are allowed for now.
   WalkResult result = operation->walk([](Operation *op) -> WalkResult {
-    if (op->getNumRegions() > 0 && !op->isKnownIsolatedFromAbove())
+    if (op->getNumRegions() > 0 &&
+        !op->hasTrait<OpTrait::IsIsolatedFromAbove>())
       return WalkResult::interrupt();
     return WalkResult::advance();
   });

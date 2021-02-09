@@ -459,7 +459,7 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
     if (isdigit(arg.name[1]))
       continue;
 
-    auto nameAttr = StringAttr::get(arg.name.drop_front(), context);
+    auto nameAttr = StringAttr::get(context, arg.name.drop_front());
     attrs.push_back({Identifier::get("firrtl.name", context), nameAttr});
   }
 
