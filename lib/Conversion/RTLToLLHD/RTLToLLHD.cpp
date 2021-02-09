@@ -36,12 +36,7 @@ struct RTLToLLHDPass : public ConvertRTLToLLHDBase<RTLToLLHDPass> {
 /// A helper type converter class that automatically populates the relevant
 /// materializations and type conversions for converting RTL to LLHD.
 struct RTLToLLHDTypeConverter : public TypeConverter {
-  RTLToLLHDTypeConverter(MLIRContext *context);
-
-private:
-  MLIRContext *context;
-  size_t tmpCounter;
-  StringAttr getTmpName();
+  RTLToLLHDTypeConverter();
 };
 } // namespace
 
@@ -65,7 +60,7 @@ void RTLToLLHDPass::runOnOperation() {
   target.addLegalDialect<LLHDDialect>();
   target.addIllegalOp<RTLModuleOp>();
 
-  RTLToLLHDTypeConverter typeConverter(&context);
+  RTLToLLHDTypeConverter typeConverter;
   OwningRewritePatternList patterns;
   populateFunctionLikeTypeConversionPattern<RTLModuleOp>(patterns, &context,
                                                          typeConverter);
@@ -81,42 +76,12 @@ void RTLToLLHDPass::runOnOperation() {
 // TypeConverter conversions and materializations
 //===----------------------------------------------------------------------===//
 
-RTLToLLHDTypeConverter::RTLToLLHDTypeConverter(MLIRContext *context) {
-  // Set instance variables.
-  this->context = context;
-  this->tmpCounter = 0;
-
+RTLToLLHDTypeConverter::RTLToLLHDTypeConverter() {
   // Convert IntegerType by just wrapping it in SigType.
   addConversion([](IntegerType type) { return SigType::get(type); });
 
-  // Convert SigType back to IntegerType by unwrapping it..
-  addConversion([](SigType type) { return type.getUnderlyingType(); });
-
-  // Materialize SigType from IntegerType by wrapping with a SigOp.
-  addTargetMaterialization([this](OpBuilder &builder, SigType type,
-                                  ValueRange inputs,
-                                  Location loc) -> Optional<Value> {
-    if (inputs.size() != 1 || !inputs[0].getType().isa<IntegerType>())
-      return llvm::None;
-
-    return builder.createOrFold<SigOp>(loc, type, getTmpName(), inputs[0]);
-  });
-
-  // Materialize IntegerType from SigType with a PrbOp.
-  addTargetMaterialization([](OpBuilder &builder, IntegerType type,
-                              ValueRange inputs,
-                              Location loc) -> Optional<Value> {
-    if (inputs.size() != 1 || !inputs[0].getType().isa<SigType>())
-      return llvm::None;
-
-    return builder.createOrFold<PrbOp>(loc, type, inputs[0]);
-  });
-}
-
-StringAttr RTLToLLHDTypeConverter::getTmpName() {
-  SmallString<4> tmpName("tmp");
-  tmpName += std::to_string(++tmpCounter);
-  return StringAttr::get(tmpName, context);
+  // Mark SigType legal by converting it to itself.
+  addConversion([](SigType type) { return type; });
 }
 
 //===----------------------------------------------------------------------===//
@@ -230,8 +195,9 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
   matchAndRewrite(InstanceOp instance, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     // RTL instances model output ports as SSA results produced by the op. LLHD
-    // instances model output ports as arguments to the op, so we need to create
-    // SSA values. For each output port in the RTL instance create a new signal.
+    // instances model output ports as arguments to the op, so we need to find
+    // or create SSA values. For each output port in the RTL instance, try to
+    // find a signal that can be used directly, or else create a new signal.
     SmallVector<Value, 4> results;
     for (auto result : instance.getResults()) {
       auto resultType = result.getType();
@@ -242,30 +208,35 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
 
       Location loc = result.getLoc();
 
-      // Create a constant for the signal's initial value.
-      auto init = rewriter.create<ConstOp>(
-          loc, resultType, rewriter.getIntegerAttr(resultType, 0));
+      Value init;
+      for (auto &use : result.getUses()) {
+        Value sig;
 
-      // Create the signal itself.
-      SmallString<8> sigName(instance.instanceName());
-      sigName += "_result_";
-      sigName += std::to_string(result.getResultNumber());
-      auto sig = rewriter.createOrFold<SigOp>(loc, SigType::get(resultType),
-                                              sigName, init);
+        if (isa<OutputOp>(use.getOwner())) {
+          // If the result is an entity output, use that signal.
+          auto entity = instance->getParentOfType<EntityOp>();
+          sig = entity.getArgument(entity.ins() + use.getOperandNumber());
+        } else {
+          // Otherwise, materialize a signal.
+          if (!init)
+            init = rewriter.create<ConstOp>(
+                loc, resultType, rewriter.getIntegerAttr(resultType, 0));
 
-      // Replace all uses of this result with the signal.
-      for (auto &use : result.getUses())
+          SmallString<8> sigName(instance.instanceName());
+          sigName += "_result_";
+          sigName += std::to_string(result.getResultNumber());
+          sig = rewriter.createOrFold<SigOp>(loc, SigType::get(resultType),
+                                             sigName, init);
+        }
+
+        // Replace all uses of this result with the signal.
         rewriter.updateRootInPlace(use.getOwner(), [&]() { use.set(sig); });
 
-      results.push_back(sig);
+        results.push_back(sig);
+      }
     }
 
-    // Create the LLHD instance from the RTL instance. An RTL instance inputs
-    // and outputs are SSA inputs and outputs, but an LLHD instance inputs and
-    // outputs are all SSA inputs. We initially leave the outputs empty, and
-    // fill them in after they have been converted. Note that LLHD does not
-    // support parameterized entities, so this conversion does not support
-    // parameterized instances.
+    // Create the LLHD instance from the operands and results.
     rewriter.create<InstOp>(instance.getLoc(), instance.instanceName(),
                             instance.moduleName(), operands, results);
 

@@ -24,11 +24,8 @@ module {
   // CHECK-SAME: (%[[IN:.+]] : !llhd.sig<i1>) ->
   // CHECK-SAME: (%[[OUT:.+]] : !llhd.sig<i1>)
   rtl.module @top(%in: i1) -> (%out: i1) {
-    // CHECK: %[[TMP_SIGNAL:.+]] = llhd.sig "{{.+}}" {{.+}} : i1
-    // CHECK: llhd.inst "sub1" @sub(%[[IN]]) -> (%[[TMP_SIGNAL]]) : (!llhd.sig<i1>) -> !llhd.sig<i1>
+    // CHECK: llhd.inst "sub1" @sub(%[[IN]]) -> (%[[OUT]]) : (!llhd.sig<i1>) -> !llhd.sig<i1>
     %0 = rtl.instance "sub1" @sub (%in) : (i1) -> i1
-    // CHECK: %[[TMP_PROBED:.+]] = llhd.prb %[[TMP_SIGNAL]]
-    // CHECK: llhd.drv %[[OUT]], %[[TMP_PROBED]]
     rtl.output %0 : i1
   }
 }
