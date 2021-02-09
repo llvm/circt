@@ -570,27 +570,6 @@ bool rtl::isCombinatorial(Operation *op) {
 }
 
 //===----------------------------------------------------------------------===//
-// WireOp
-//===----------------------------------------------------------------------===//
-
-void WireOp::build(OpBuilder &odsBuilder, OperationState &odsState,
-                   Type elementType, StringAttr name) {
-  if (name)
-    odsState.addAttribute("name", name);
-
-  odsState.addTypes(InOutType::get(elementType));
-}
-
-
-/// Suggest a name for each result value based on the saved result names
-/// attribute.
-void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  // If the wire has an optional 'name' attribute, use it.
-  if (auto nameAttr = (*this)->getAttrOfType<StringAttr>("name"))
-    setNameFn(getResult(), nameAttr.getValue());
-}
-
-//===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
 
@@ -718,9 +697,9 @@ static ParseResult parseArrayCreateOp(OpAsmParser &parser,
 }
 
 static void print(OpAsmPrinter &p, ArrayCreateOp op) {
-  p << "array_create ";
+  p << "rtl.array_create ";
   p.printOperands(op.inputs());
-  p << " : ( " << op.inputs()[0].getType() << ")";
+  p << " : (" << op.inputs()[0].getType() << ")";
 }
 
 void ArrayCreateOp::build(OpBuilder &b, OperationState &state,
@@ -732,6 +711,52 @@ void ArrayCreateOp::build(OpBuilder &b, OperationState &state,
              [elemType](Value v) -> bool { return v.getType() == elemType; }) &&
          "All values must have same type.");
   build(b, state, ArrayType::get(elemType, values.size()), values);
+}
+
+static ParseResult parseArrayConcatTypes(OpAsmParser &p,
+                                         SmallVectorImpl<Type> &inputTypes,
+                                         Type &resultType) {
+  Type elemType;
+  uint64_t resultSize = 0;
+  do {
+    ArrayType ty;
+    if (p.parseType(ty))
+      return p.emitError(p.getCurrentLocation(), "Expected !rtl.array type");
+    if (elemType && elemType != ty.getElementType())
+      return p.emitError(p.getCurrentLocation(), "Expected array element type ")
+             << elemType;
+
+    elemType = ty.getElementType();
+    inputTypes.push_back(ty);
+    resultSize += ty.getSize();
+  } while (!p.parseOptionalComma());
+
+  resultType = ArrayType::get(elemType, resultSize);
+  return success();
+}
+
+static void printArrayConcatTypes(OpAsmPrinter &p, Operation *,
+                                  TypeRange inputTypes, Type resultType) {
+  llvm::interleaveComma(inputTypes, p, [&p](Type t) { p << t; });
+}
+
+void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
+                          ArrayRef<Value> values) {
+  assert(!values.empty() && "Cannot build array of zero elements");
+  ArrayType arrayTy = values[0].getType().cast<ArrayType>();
+  Type elemTy = arrayTy.getElementType();
+  assert(llvm::all_of(values,
+                      [elemTy](Value v) -> bool {
+                        return v.getType().isa<ArrayType>() &&
+                               v.getType().cast<ArrayType>().getElementType() ==
+                                   elemTy;
+                      }) &&
+         "All values must be of ArrayType with the same element type.");
+
+  uint64_t resultSize = 0;
+  for (Value val : values)
+    resultSize += val.getType().cast<ArrayType>().getSize();
+  build(b, state, ArrayType::get(elemTy, resultSize), values);
 }
 
 //===----------------------------------------------------------------------===//
@@ -756,16 +781,6 @@ void ConcatOp::build(OpBuilder &builder, OperationState &result,
     resultWidth += input.getType().cast<IntegerType>().getWidth();
   }
   build(builder, result, builder.getIntegerType(resultWidth), inputs);
-}
-
-//===----------------------------------------------------------------------===//
-// ReadInOutOp
-//===----------------------------------------------------------------------===//
-
-void ReadInOutOp::build(OpBuilder &builder, OperationState &result,
-                        Value input) {
-  auto resultType = input.getType().cast<InOutType>().getElementType();
-  build(builder, result, resultType, input);
 }
 
 //===----------------------------------------------------------------------===//
@@ -910,15 +925,13 @@ static void print(OpAsmPrinter &printer, rtl::StructInjectOp op) {
 }
 
 //===----------------------------------------------------------------------===//
-// ArrayIndexOp
+// ArrayGetOp
 //===----------------------------------------------------------------------===//
 
-void ArrayIndexOp::build(OpBuilder &builder, OperationState &result,
-                         Value input, Value index) {
-  auto resultType = input.getType().cast<InOutType>().getElementType();
-  resultType = getAnyRTLArrayElementType(resultType);
-  assert(resultType && "input should have 'inout of an array' type");
-  build(builder, result, InOutType::get(resultType), input, index);
+void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
+                       Value index) {
+  auto resultType = input.getType().cast<ArrayType>().getElementType();
+  build(builder, result, resultType, input, index);
 }
 
 //===----------------------------------------------------------------------===//

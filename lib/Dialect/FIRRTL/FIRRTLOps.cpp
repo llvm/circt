@@ -19,6 +19,10 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/StringSet.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -634,74 +638,172 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
   return success();
 }
 
-/// Return the type of a mem given a list of named ports and their kind.
-/// This returns a null type if there are duplicate port names.
-BundleType
-MemOp::getTypeForPortList(uint64_t depth, FIRRTLType dataType,
-                          ArrayRef<std::pair<Identifier, PortKind>> portList) {
-  assert(dataType.isPassive() && "mem can only have passive datatype");
+/// Verify the correctness of a MemOp.
+static LogicalResult verifyMemOp(MemOp mem) {
+
+  // Store the port names as we find them. This lets us check quickly
+  // for uniqueneess.
+  StringSet<> portNamesSet;
+
+  // Store the previous data type. This lets us check that the data
+  // type is consistent across all ports.
+  FIRRTLType oldDataType;
+
+  for (size_t i = 0, e = mem.getNumResults(); i != e; ++i) {
+    auto portName = mem.getPortName(i);
+
+    // Get a bundle type representing this port, stripping an outer
+    // flip if it exists.  If this is not a bundle<> or
+    // flip<bundle<>>, then this is an error.
+    BundleType portBundleType =
+        TypeSwitch<FIRRTLType, BundleType>(
+            mem.getResult(i).getType().cast<FIRRTLType>())
+            .Case<BundleType>([](BundleType a) { return a; })
+            .Case<FlipType>([](FlipType a) {
+              return a.getElementType().dyn_cast<BundleType>();
+            })
+            .Default([](auto) { return nullptr; });
+    if (!portBundleType) {
+      mem.emitOpError() << "has an invalid type on port " << portName
+                        << " (expected either '!firrtl.bundle<...>' or "
+                           "'!firrtl.flip<bundle<...>>')";
+      return failure();
+    }
+
+    // Require that all port names are unique.
+    if (!std::get<1>(portNamesSet.insert(portName.getValue()))) {
+      mem.emitOpError() << "has non-unique port name " << portName;
+      return failure();
+    }
+
+    // Determine the kind of the memory.  If the kind cannot be
+    // determined, then it's indicative of the wrong number of fields
+    // in the type (but we don't know any more just yet).
+    MemOp::PortKind portKind;
+    {
+      auto portKindOption =
+          mem.getPortKind(mem.getPortName(i).getValue().str());
+      if (!portKindOption.hasValue()) {
+        mem.emitOpError()
+            << "has an invalid number of fields on port " << portName
+            << " (expected 4 for read, 5 for write, or 7 for read/write)";
+        return failure();
+      }
+      portKind = portKindOption.getValue();
+    }
+
+    // Safely search for the "data" field, erroring if it can't be
+    // found.
+    FIRRTLType dataType;
+    {
+      auto dataTypeOption = portBundleType.getElement("data");
+      if (!dataTypeOption && portKind == MemOp::PortKind::ReadWrite)
+        dataTypeOption = portBundleType.getElement("rdata");
+      if (!dataTypeOption) {
+        mem.emitOpError() << "has no data field on port " << portName
+                          << " (expected to see \"data\" for a read or write "
+                             "port or \"rdata\" for a read/write port)";
+        return failure();
+      }
+      dataType = dataTypeOption.getValue().type;
+    }
+
+    // Error if the data type isn't passive.
+    if (!dataType.isPassive()) {
+      mem.emitOpError() << "has non-passive data type on port " << portName
+                        << " (memory types must be passive)";
+      return failure();
+    }
+
+    // Error if the data type contains analog types.
+    if (dataType.containsAnalog()) {
+      mem.emitOpError()
+          << "has a data type that contains an analog type on port " << portName
+          << " (memory types cannot contain analog types)";
+      return failure();
+    }
+
+    // Check that the port type matches the kind that we determined
+    // for this port.  This catches situations of extraneous port
+    // fields beind included or the fields being named incorrectly.
+    FIRRTLType expectedType =
+        FlipType::get(mem.getTypeForPort(mem.depth(), dataType, portKind));
+    // Compute the original port type as portBundleType may have
+    // stripped outer flip information.
+    auto originalType = mem.getResult(i).getType();
+    if (originalType != expectedType) {
+      StringRef portKindName;
+      switch (portKind) {
+      case MemOp::PortKind::Read:
+        portKindName = "read";
+        break;
+      case MemOp::PortKind::Write:
+        portKindName = "write";
+        break;
+      case MemOp::PortKind::ReadWrite:
+        portKindName = "readwrite";
+        break;
+      }
+      mem.emitOpError() << "has an invalid type for port " << portName
+                        << " of determined kind \"" << portKindName
+                        << "\" (expected " << expectedType << ", but got "
+                        << originalType << ")";
+      return failure();
+    }
+
+    // Error if the type of the current port was not the same as the
+    // last port, but skip checking the first port.
+    if (oldDataType && (oldDataType != dataType)) {
+      mem.emitOpError() << "port " << mem.getPortName(i)
+                        << " has a different type than port "
+                        << mem.getPortName(i - 1) << " (expected "
+                        << oldDataType << ", but got " << dataType << ")";
+      return failure();
+    }
+
+    oldDataType = dataType;
+  }
+
+  return success();
+}
+
+BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLType dataType,
+                                 PortKind portKind) {
 
   auto *context = dataType.getContext();
-
-  SmallVector<std::pair<Identifier, PortKind>, 4> ports(portList.begin(),
-                                                        portList.end());
-
-  // Canonicalize the port names into alphabetic order and check for duplicates.
-  llvm::array_pod_sort(
-      ports.begin(), ports.end(),
-      [](const std::pair<Identifier, MemOp::PortKind> *lhs,
-         const std::pair<Identifier, MemOp::PortKind> *rhs) -> int {
-        return lhs->first.strref().compare(rhs->first.strref());
-      });
-
-  // Reject duplicate ports.
-  for (size_t i = 1, e = ports.size(); i < e; ++i)
-    if (ports[i - 1].first == ports[i].first)
-      return {};
-
-  // Figure out the number of bits needed for the address, and thus the address
-  // type to use.
-  auto addressType =
-      UIntType::get(context, std::max(1U, llvm::Log2_64_Ceil(depth)));
 
   auto getId = [&](StringRef name) -> Identifier {
     return Identifier::get(name, context);
   };
 
-  // Okay, we've validated the data, construct the result type.
-  SmallVector<BundleType::BundleElement, 4> memFields;
-  SmallVector<BundleType::BundleElement, 5> portFields;
-  // Common fields for all port types.
+  SmallVector<BundleType::BundleElement, 7> portFields;
+
+  auto addressType =
+      UIntType::get(context, std::max(1U, llvm::Log2_64_Ceil(depth)));
+
   portFields.push_back({getId("addr"), addressType});
   portFields.push_back({getId("en"), UIntType::get(context, 1)});
   portFields.push_back({getId("clk"), ClockType::get(context)});
 
-  for (auto port : ports) {
-    // Reuse the first three fields, but drop the rest.
-    portFields.erase(portFields.begin() + 3, portFields.end());
-    switch (port.second) {
-    case PortKind::Read:
-      portFields.push_back({getId("data"), FlipType::get(dataType)});
-      break;
+  switch (portKind) {
+  case PortKind::Read:
+    portFields.push_back({getId("data"), FlipType::get(dataType)});
+    break;
 
-    case PortKind::Write:
-      portFields.push_back({getId("data"), dataType});
-      portFields.push_back({getId("mask"), dataType.getMaskType()});
-      break;
+  case PortKind::Write:
+    portFields.push_back({getId("data"), dataType});
+    portFields.push_back({getId("mask"), dataType.getMaskType()});
+    break;
 
-    case PortKind::ReadWrite:
-      portFields.push_back({getId("wmode"), UIntType::get(context, 1)});
-      portFields.push_back({getId("rdata"), FlipType::get(dataType)});
-      portFields.push_back({getId("wdata"), dataType});
-      portFields.push_back({getId("wmask"), dataType.getMaskType()});
-      break;
-    }
-
-    memFields.push_back(
-        {port.first, FlipType::get(BundleType::get(portFields, context))});
+  case PortKind::ReadWrite:
+    portFields.push_back({getId("wmode"), UIntType::get(context, 1)});
+    portFields.push_back({getId("rdata"), FlipType::get(dataType)});
+    portFields.push_back({getId("wdata"), dataType});
+    portFields.push_back({getId("wmask"), dataType.getMaskType()});
+    break;
   }
 
-  return BundleType::get(memFields, context).cast<BundleType>();
+  return BundleType::get(portFields, context).cast<BundleType>();
 }
 
 /// Return the kind of port this is given the port type from a 'mem' decl.
@@ -729,31 +831,51 @@ static Optional<MemOp::PortKind> getMemPortKindFromType(FIRRTLType type) {
 void MemOp::getPorts(
     SmallVectorImpl<std::pair<Identifier, MemOp::PortKind>> &result) {
   // Each entry in the bundle is a port.
-  for (auto elt : getType().getElements()) {
+  for (size_t i = 0, e = getNumResults(); i != e; ++i) {
+    auto elt = getResult(i);
     // Each port is a bundle.
-    auto kind = getMemPortKindFromType(elt.type);
+    auto kind = getMemPortKindFromType(elt.getType().cast<FIRRTLType>());
     assert(kind.hasValue() && "unknown port type!");
-    result.push_back({elt.name, kind.getValue()});
+    result.push_back({Identifier::get(getPortNameStr(i), elt.getContext()),
+                      kind.getValue()});
   }
 }
 
 /// Return the kind of the specified port or None if the name is invalid.
 Optional<MemOp::PortKind> MemOp::getPortKind(StringRef portName) {
-  auto eltType = getType().getElementType(portName);
-  if (!eltType)
+  auto elt = getPortNamed(portName);
+  if (!elt)
     return None;
-  return getMemPortKindFromType(eltType);
+  return getMemPortKindFromType(elt.getType().cast<FIRRTLType>());
 }
 
 /// Return the data-type field of the memory, the type of each element.
-FIRRTLType MemOp::getDataTypeOrNull() {
-  // Mems with no read/write ports are legal.
-  if (getType().getElements().empty())
-    return {};
+FIRRTLType MemOp::getDataType() {
+  assert(getNumResults() != 0 && "Mems with no read/write ports are illegal");
 
-  auto firstPort = getType().getElements()[0];
-  auto firstPortType = firstPort.type.getPassiveType().cast<BundleType>();
-  return firstPortType.getElementType("data");
+  auto firstPortType = getResult(0).getType().cast<FIRRTLType>();
+
+  StringRef dataFieldName = "data";
+  if (getMemPortKindFromType(firstPortType).getValue() == PortKind::ReadWrite)
+    dataFieldName = "rdata";
+
+  return firstPortType.getPassiveType().cast<BundleType>().getElementType(
+      dataFieldName);
+}
+
+StringAttr MemOp::getPortName(size_t resultNo) {
+  return portNames()[resultNo].cast<StringAttr>();
+}
+
+Value MemOp::getPortNamed(StringAttr name) {
+  auto namesArray = portNames();
+  for (size_t i = 0, e = namesArray.size(); i != e; ++i) {
+    if (namesArray[i] == name) {
+      assert(i < getNumResults() && " names array out of sync with results");
+      return getResult(i);
+    }
+  }
+  return Value();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1094,7 +1216,8 @@ FIRRTLType DShlPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs,
     return {};
   }
 
-  // If the left or right has unknown result type, then the operation does too.
+  // If the left or right has unknown result type, then the operation does
+  // too.
   auto width = lhsi.getWidthOrSentinel();
   if (width == -1 || !rhsui.getWidth().hasValue())
     width = -1;
@@ -1323,9 +1446,9 @@ FIRRTLType MuxPrimOp::getResultType(FIRRTLType sel, FIRRTLType high,
   }
 
   if (low.isa<IntType>()) {
-    // Two different Int types can be compatible.  If either has unknown width,
-    // then return it.  If both are known but different width, then return the
-    // larger one.
+    // Two different Int types can be compatible.  If either has unknown
+    // width, then return it.  If both are known but different width, then
+    // return the larger one.
     int32_t highWidth = high.getBitWidthOrSentinel();
     int32_t lowWidth = low.getBitWidthOrSentinel();
     if (lowWidth == -1)
@@ -1471,6 +1594,47 @@ static LogicalResult verifyAnalogInOutCastOp(AnalogInOutCastOp cast) {
     return cast.emitError("standard integer type must be signless");
   if (unsigned(width) != integerType.getWidth())
     return cast.emitError("source and result width must match");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Conversions to/from structs in the standard dialect.
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verifyRTLStructCastOp(RTLStructCastOp cast) {
+  // We must have a bundle and a struct, with matching pairwise fields
+  BundleType bundleType;
+  rtl::StructType structType;
+  if ((bundleType = cast.getOperand().getType().dyn_cast<BundleType>())) {
+    structType = cast.getType().dyn_cast<rtl::StructType>();
+    if (!structType)
+      return cast.emitError("result type must be a struct");
+  } else if ((bundleType = cast.getType().dyn_cast<BundleType>())) {
+    structType = cast.getOperand().getType().dyn_cast<rtl::StructType>();
+    if (!structType)
+      return cast.emitError("operand type must be a struct");
+  } else {
+    return cast.emitError("either source or result type must be a bundle type");
+  }
+
+  auto firFields = bundleType.getElements();
+  auto rtlFields = structType.getElements();
+  if (firFields.size() != rtlFields.size())
+    return cast.emitError("bundle and struct have different number of fields");
+
+  for (size_t findex = 0, fend = firFields.size(); findex < fend; ++findex) {
+    if (firFields[findex].name != rtlFields[findex].name)
+      return cast.emitError("field names don't match '")
+             << firFields[findex].name << "', '" << rtlFields[findex].name
+             << "'";
+    int64_t firWidth = firFields[findex].type.getBitWidthOrSentinel();
+    int64_t rtlWidth = rtl::getBitWidth(rtlFields[findex].type);
+    if (firWidth > 0 && rtlWidth > 0 && firWidth != rtlWidth)
+      return cast.emitError("size of field '")
+             << rtlFields[findex].name << "' don't match " << firWidth << ", "
+             << rtlWidth;
+  }
 
   return success();
 }

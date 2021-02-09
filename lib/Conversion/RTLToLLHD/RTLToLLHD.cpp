@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/RTLToLLHD/RTLToLLHD.h"
+#include "../PassDetail.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/RTL/RTLDialect.h"
@@ -18,13 +19,6 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
-
-namespace circt {
-namespace llhd {
-#define GEN_PASS_CLASSES
-#include "circt/Conversion/RTLToLLHD/Passes.h.inc"
-} // namespace llhd
-} // namespace circt
 
 using namespace circt;
 using namespace llhd;
@@ -53,17 +47,9 @@ private:
 
 /// Create a RTL to LLHD conversion pass.
 std::unique_ptr<OperationPass<mlir::ModuleOp>>
-llhd::createConvertRTLToLLHDPass() {
+circt::createConvertRTLToLLHDPass() {
   return std::make_unique<RTLToLLHDPass>();
 }
-
-/// Register the RTL to LLHD conversion pass.
-namespace {
-#define GEN_PASS_REGISTRATION
-#include "circt/Conversion/RTLToLLHD/Passes.h.inc"
-} // namespace
-
-void circt::llhd::registerRTLToLLHDPasses() { registerPasses(); }
 
 /// Forward declare conversion patterns.
 struct ConvertRTLModule;
@@ -198,28 +184,32 @@ struct ConvertOutput : public OpConversionPattern<OutputOp> {
   LogicalResult
   matchAndRewrite(OutputOp output, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
-    // Construct the `1d` time value for the drive.
-    auto timeType = TimeType::get(rewriter.getContext());
-    auto deltaAttr = TimeAttr::get(timeType, {0, 1, 0}, "ns");
-    auto delta = rewriter.create<ConstOp>(output.getLoc(), timeType, deltaAttr);
-
     // Get the number of inputs in the entity to offset into the block args.
     auto entity = output->getParentOfType<EntityOp>();
     size_t numInputs = entity.ins();
 
     // Drive the results from the mapped operands.
+    Value delta;
     for (size_t i = 0, e = operands.size(); i != e; ++i) {
       // Get the source and destination signals.
       auto src = operands[i];
       auto dest = entity.getArgument(numInputs + i);
-      assert(src && dest && "output operand must map to result block arg");
+      if (!src || !dest)
+        return rewriter.notifyMatchFailure(
+            output, "output operand must map to result block arg");
 
-      // If the source has a signal type, probe it.
-      if (auto sigTy = src.getType().dyn_cast<SigType>())
-        src = rewriter.createOrFold<PrbOp>(output.getLoc(),
-                                           sigTy.getUnderlyingType(), src);
+      // If the source has a signal type, connect it.
+      if (auto sigTy = src.getType().dyn_cast<SigType>()) {
+        rewriter.create<llhd::ConnectOp>(output.getLoc(), dest, src);
+        continue;
+      }
 
-      // Drive the destination block argument value.
+      // Otherwise, drive the destination block argument value.
+      if (!delta) {
+        auto timeType = TimeType::get(rewriter.getContext());
+        auto deltaAttr = TimeAttr::get(timeType, {0, 1, 0}, "ns");
+        delta = rewriter.create<ConstOp>(output.getLoc(), timeType, deltaAttr);
+      }
       rewriter.create<DrvOp>(output.getLoc(), dest, src, delta, Value());
     }
 

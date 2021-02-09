@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/HandshakeToFIRRTL/HandshakeToFIRRTL.h"
+#include "../PassDetail.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
@@ -31,6 +32,13 @@ using ValueVectorList = std::vector<ValueVector>;
 //===----------------------------------------------------------------------===//
 // Utils
 //===----------------------------------------------------------------------===//
+
+static void legalizeFModule(FModuleOp moduleOp) {
+  SmallVector<Operation *, 8> connectOps;
+  moduleOp.walk([&](ConnectOp op) { connectOps.push_back(op); });
+  for (auto op : connectOps)
+    op->moveBefore(&moduleOp.getBodyBlock()->back());
+}
 
 /// Get the corresponding FIRRTL type given the built-in data type. Current
 /// supported data types are integer (signed, unsigned, and signless), index,
@@ -719,6 +727,13 @@ public:
 
   void buildAllReadyLogic(SmallVector<ValueVector *, 4> inputs,
                           ValueVector *output, Value condition);
+
+  void buildOneStageSeqBufferLogic(Value predValid, Value validReg,
+                                   Value predReady, Value succReady,
+                                   Value predData, Value dataReg);
+  bool buildSeqBufferLogic(int64_t numStage, ValueVector *input,
+                           ValueVector *output, Value clock, Value reset,
+                           bool isControl);
 
 private:
   ValueVectorList portList;
@@ -1416,27 +1431,132 @@ bool HandshakeBuilder::visitHandshake(handshake::ConstantOp op) {
   return true;
 }
 
-bool HandshakeBuilder::visitHandshake(BufferOp op) {
-  ValueVector inputSubfields = portList[0];
-  Value inputValid = inputSubfields[0];
-  Value inputReady = inputSubfields[1];
+void HandshakeBuilder::buildOneStageSeqBufferLogic(
+    Value predValid, Value validReg, Value predReady, Value succReady,
+    Value predData = nullptr, Value dataReg = nullptr) {
+  auto bitType = UIntType::get(rewriter.getContext(), 1);
 
-  ValueVector outputSubfields = portList[1];
-  Value outputValid = outputSubfields[0];
-  Value outputReady = outputSubfields[1];
+  // Create a signal for when the valid register is empty or the successor is
+  // ready to accept new token.
+  auto notValidReg = rewriter.create<NotPrimOp>(insertLoc, bitType, validReg);
+  auto emptyOrReady =
+      rewriter.create<OrPrimOp>(insertLoc, bitType, notValidReg, succReady);
+
+  rewriter.create<ConnectOp>(insertLoc, predReady, emptyOrReady);
+
+  // Create a mux that drives the register input. If the emptyOrReady signal
+  // is asserted, the mux selects the predValid signal. Otherwise, it selects
+  // the register output, keeping the output registered unchanged.
+  auto validRegMux = rewriter.create<MuxPrimOp>(
+      insertLoc, bitType, emptyOrReady, predValid, validReg);
+
+  // Now we can drive the valid register.
+  rewriter.create<ConnectOp>(insertLoc, validReg, validRegMux);
+
+  // If data is not nullptr, create data logic.
+  if (predData && dataReg) {
+    auto dataType = predData.getType().cast<FIRRTLType>();
+
+    // Create a mux that drives the date register.
+    auto dataRegMux = rewriter.create<MuxPrimOp>(
+        insertLoc, dataType, emptyOrReady, predData, dataReg);
+    rewriter.create<ConnectOp>(insertLoc, dataReg, dataRegMux);
+  }
+}
+
+bool HandshakeBuilder::buildSeqBufferLogic(int64_t numStage, ValueVector *input,
+                                           ValueVector *output, Value clock,
+                                           Value reset, bool isControl) {
+  if (input == nullptr || output == nullptr)
+    return false;
+
+  auto inputSubfields = *input;
+  auto inputValid = inputSubfields[0];
+  auto inputReady = inputSubfields[1];
+
+  auto outputSubfields = *output;
+  auto outputValid = outputSubfields[0];
+  auto outputReady = outputSubfields[1];
+
+  // Create useful value and type for valid/ready signal.
+  auto bitType = UIntType::get(rewriter.getContext(), 1);
+  auto falseConst = createConstantOp(bitType, APInt(1, 0), insertLoc, rewriter);
+
+  // Create useful value and type for data signal.
+  FIRRTLType dataType = nullptr;
+  Value zeroDataConst = nullptr;
+
+  // Temporary values for storing the valid, ready, and data signals in the
+  // procedure of constructing the multi-stages buffer.
+  Value currentValid = inputValid;
+  Value currentReady = inputReady;
+  Value currentData = nullptr;
+
+  // If is not a control buffer, fill in corresponding values and type.
+  if (!isControl) {
+    auto inputData = inputSubfields[2];
+
+    dataType = inputData.getType().cast<FIRRTLType>();
+    zeroDataConst =
+        createConstantOp(dataType, APInt(dataType.getBitWidthOrSentinel(), 0),
+                         insertLoc, rewriter);
+    currentData = inputData;
+  }
+
+  // Create multiple stages buffer logic.
+  for (unsigned i = 0; i < numStage; ++i) {
+    // Create wires for ready signal from the success buffer stage.
+    auto readyWireName =
+        rewriter.getStringAttr("readyWire" + std::to_string(i));
+    auto readyWire = rewriter.create<WireOp>(insertLoc, bitType, readyWireName);
+
+    // Create a register for valid signal.
+    auto validRegName = rewriter.getStringAttr("validReg" + std::to_string(i));
+    auto validReg = rewriter.create<RegResetOp>(
+        insertLoc, bitType, clock, reset, falseConst, validRegName);
+
+    // Create registers for data signal.
+    Value dataReg = nullptr;
+    if (!isControl) {
+      auto dataRegName = rewriter.getStringAttr("dataReg" + std::to_string(i));
+      dataReg = rewriter.create<RegResetOp>(insertLoc, dataType, clock, reset,
+                                            zeroDataConst, dataRegName);
+    }
+
+    // Build the current stage of the buffer.
+    buildOneStageSeqBufferLogic(currentValid, validReg, currentReady, readyWire,
+                                currentData, dataReg);
+
+    // Update the current valid, ready, and data.
+    currentValid = validReg;
+    currentReady = readyWire;
+    currentData = dataReg;
+  }
+
+  // Connect to the output ports.
+  rewriter.create<ConnectOp>(insertLoc, outputValid, currentValid);
+  rewriter.create<ConnectOp>(insertLoc, currentReady, outputReady);
+  if (!isControl) {
+    auto outputData = outputSubfields[2];
+    rewriter.create<ConnectOp>(insertLoc, outputData, currentData);
+  }
+
+  return true;
+}
+
+bool HandshakeBuilder::visitHandshake(BufferOp op) {
+  ValueVector input = portList[0];
+  ValueVector output = portList[1];
 
   Value clock = portList[2][0];
   Value reset = portList[3][0];
 
-  // FIXME: This looks unimplemented?
-  (void)outputReady;
-  (void)outputValid;
-  (void)reset;
-  (void)clock;
-  (void)inputValid;
-  (void)inputReady;
-
-  return true;
+  // For now, we only support sequential buffers.
+  if (op.sequential())
+    return buildSeqBufferLogic(op.slots(), &input, &output, clock, reset,
+                               op.control());
+  else
+    return false;
 }
 
 bool HandshakeBuilder::visitHandshake(MemoryOp op) {
@@ -1481,15 +1601,19 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     ports.push_back({portName, portKind});
   }
 
-  // Create the special type to represent this memory.
-  FIRRTLType memType = MemOp::getTypeForPortList(depth, dataType, ports);
+  llvm::SmallVector<Type> resultTypes;
+  llvm::SmallVector<Attribute> resultNames;
+  for (auto p : ports) {
+    resultTypes.push_back(
+        FlipType::get(MemOp::getTypeForPort(depth, dataType, p.second)));
+    resultNames.push_back(rewriter.getStringAttr(p.first));
+  }
 
-  // Create the actual mem op.
-  auto memOp = rewriter.create<MemOp>(insertLoc, memType, readLatency,
-                                      writeLatency, depth, ruw, name);
+  auto memOp = rewriter.create<MemOp>(insertLoc, resultTypes, readLatency,
+                                      writeLatency, depth, ruw,
+                                      rewriter.getArrayAttr(resultNames), name);
 
   // Prepare to create each load and store port logic.
-  BundleType resultType = memOp.getType().cast<BundleType>();
   auto bitType = UIntType::get(rewriter.getContext(), 1);
   auto numPorts = portList.size();
   auto clock = portList[numPorts - 2][0];
@@ -1514,9 +1638,8 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     // Create a subfield op to access this port in the memory.
     auto fieldName = loadIdentifier(i);
-    auto bundleType = resultType.getElementType(fieldName).cast<BundleType>();
-    auto memBundle =
-        rewriter.create<SubfieldOp>(insertLoc, bundleType, memOp, fieldName);
+    auto memBundle = memOp.getPortNamed(fieldName);
+    auto bundleType = memBundle.getType().cast<BundleType>();
 
     // Get the clock out of the bundle and connect it.
     auto memClockType = bundleType.getElementType("clk");
@@ -1585,12 +1708,12 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     // Unpack store control.
     auto storeControlValid = storeControl[0];
 
-    // Create a subfield op to access this port in the memory.
     auto fieldName = storeIdentifier(i);
-    auto subfieldType = resultType.getElementType(fieldName).cast<FlipType>();
-    auto bundleType = subfieldType.getElementType().cast<BundleType>();
-    auto memBundle =
-        rewriter.create<SubfieldOp>(insertLoc, subfieldType, memOp, fieldName);
+    auto memBundle = memOp.getPortNamed(fieldName);
+    BundleType bundleType = memBundle.getType()
+                                .cast<FIRRTLType>()
+                                .getPassiveType()
+                                .cast<BundleType>();
 
     // Get the clock out of the bundle and connect it.
     auto memClockType = FlipType::get(bundleType.getElementType("clk"));
@@ -1953,19 +2076,16 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     }
     rewriter.eraseOp(funcOp);
 
+    legalizeFModule(topModuleOp);
+
     return success();
   }
 };
 
 namespace {
 class HandshakeToFIRRTLPass
-    : public mlir::PassWrapper<HandshakeToFIRRTLPass,
-                               OperationPass<handshake::FuncOp>> {
+    : public HandshakeToFIRRTLBase<HandshakeToFIRRTLPass> {
 public:
-  void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<firrtl::FIRRTLDialect>();
-  }
-
   void runOnOperation() override {
     auto op = getOperation();
 
@@ -1982,7 +2102,6 @@ public:
 };
 } // end anonymous namespace
 
-void handshake::registerHandshakeToFIRRTLPasses() {
-  PassRegistration<HandshakeToFIRRTLPass>("lower-handshake-to-firrtl",
-                                          "Lowering to FIRRTL Dialect");
+std::unique_ptr<mlir::Pass> circt::createHandshakeToFIRRTLPass() {
+  return std::make_unique<HandshakeToFIRRTLPass>();
 }

@@ -76,3 +76,16 @@ module IntAccNoBP (
     end
   end
 endmodule
+
+module IntArrSum (
+  input clk,
+  input rstn,
+  IValidReady_ArrayOf4xsi13.source arr,
+  IValidReady_ArrayOf2xui24.sink totalOut
+);
+
+  assign totalOut.valid = arr.valid;
+  assign arr.ready = totalOut.ready;
+  assign totalOut.data[0] = 24'($signed(arr.data[0])) + 24'($signed(arr.data[1]));
+  assign totalOut.data[1] = 24'($signed(arr.data[2])) + 24'($signed(arr.data[3]));
+endmodule

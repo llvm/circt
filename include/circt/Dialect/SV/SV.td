@@ -35,8 +35,8 @@ class SVOp<string mnemonic, list<OpTrait> traits = []> :
     Op<SVDialect, mnemonic, traits>;
 
 include "SVTypes.td"
-include "SVDeclarations.td"
 include "SVExpressions.td"
+include "SVInOutOps.td"
 include "SVStatements.td"
 include "SVTypeDecl.td"
 

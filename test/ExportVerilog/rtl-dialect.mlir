@@ -7,7 +7,8 @@ module {
 
   // CHECK-LABEL: // external module E
 
-  rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !rtl.array<10xi4>,
+  rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1,
+                         %array2d: !rtl.array<12 x array<10xi4>>,
                          %uarray: !rtl.uarray<16xi8>) -> (
     %r0: i4, %r2: i4, %r4: i4, %r6: i4,
     %r7: i4, %r8: i4, %r9: i4, %r10: i4,
@@ -17,7 +18,8 @@ module {
     %r21: i1, %r22: i1, %r23: i1, %r24: i1,
     %r25: i1, %r26: i1, %r27: i1, %r28: i1,
     %r29: i12, %r30: i2, %r31: i9, %r33: i4, %r34: i4,
-    %r35: !rtl.array<3xi4>, %r36: i12
+    %r35: !rtl.array<3xi4>, %r36: i12, %r37: i4,
+    %r38: !rtl.array<6xi4>
     ) {
     
     %0 = rtl.add %a, %b : i4
@@ -55,32 +57,44 @@ module {
     %34 = rtl.xor %a, %allone : i4
 
     %arrCreated = rtl.array_create %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone : (i4)
-    %35 = rtl.array_slice %arrCreated at %a : (!rtl.array<9xi4>) -> !rtl.array<3xi4>
+    %slice1 = rtl.array_slice %arrCreated at %a : (!rtl.array<9xi4>) -> !rtl.array<3xi4>
+    %slice2 = rtl.array_slice %arrCreated at %b : (!rtl.array<9xi4>) -> !rtl.array<3xi4>
+    %35 = rtl.mux %cond, %slice1, %slice2 : !rtl.array<3xi4>
+
+    %ab = rtl.add %a, %b : i4
+    %subArr = rtl.array_create %allone, %ab, %allone : (i4)
+    %38 = rtl.array_concat %subArr, %subArr : !rtl.array<3 x i4>, !rtl.array<3 x i4>
+
+    %elem2d = rtl.array_get %array2d[%a] : !rtl.array<12 x array<10xi4>>
+    %37 = rtl.array_get %elem2d[%b] : !rtl.array<10xi4>
 
     %36 = rtl.concat %a, %a, %a : (i4, i4, i4) -> i12
 
     rtl.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14,
                %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27,
-               %28, %29, %30, %31, %33, %34, %35, %36 :
+               %28, %29, %30, %31, %33, %34, %35, %36, %37, %38 :
      i4,i4, i4,i4,i4,i4,i4, i4,i4,i4,i4,i4,
      i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,i1,i1,
-     i12, i2,i9,i4, i4, !rtl.array<3xi4>, i12
+     i12, i2,i9,i4, i4, !rtl.array<3xi4>, i12, i4, !rtl.array<6xi4>
   }
   // CHECK-LABEL: module TESTSIMPLE(
-  // CHECK-NEXT:   input  [3:0]      a, b
-  // CHECK-NEXT:   input             cond,
-  // CHECK-NEXT:   input  [9:0][3:0] array,
-  // CHECK-NEXT:   input  [7:0]      uarray[15:0],
-  // CHECK-NEXT:   output [3:0]      r0, r2, r4, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15
-  // CHECK-NEXT:   output            r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28
-  // CHECK-NEXT:   output [11:0]     r29,
-  // CHECK-NEXT:   output [1:0]      r30,
-  // CHECK-NEXT:   output [8:0]      r31,
-  // CHECK-NEXT:   output [3:0]      r33, r34,
-  // CHECK-NEXT:   output [2:0][3:0] r35,
-  // CHECK-NEXT:   output [11:0]     r36);
+  // CHECK-NEXT:   input  [3:0]            a, b
+  // CHECK-NEXT:   input                   cond,
+  // CHECK-NEXT:   input  [11:0][9:0][3:0] array2d,
+  // CHECK-NEXT:   input  [7:0]            uarray[15:0],
+  // CHECK-NEXT:   output [3:0]            r0, r2, r4, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15
+  // CHECK-NEXT:   output                  r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28
+  // CHECK-NEXT:   output [11:0]           r29,
+  // CHECK-NEXT:   output [1:0]            r30,
+  // CHECK-NEXT:   output [8:0]            r31,
+  // CHECK-NEXT:   output [3:0]            r33, r34,
+  // CHECK-NEXT:   output [2:0][3:0]       r35,
+  // CHECK-NEXT:   output [11:0]           r36,
+  // CHECK-NEXT:   output [3:0]            r37,
+  // CHECK-NEXT:   output [5:0][3:0]       r38);
   // CHECK-EMPTY:
   // CHECK-NEXT:   wire [8:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
+  // CHECK-NEXT:   wire [2:0][3:0] [[WIRE1:.+]] = {{[{}][{}]}}4'hF}, {a + b}, {4'hF}};
   // CHECK-NEXT:   assign r0 = a + b;
   // CHECK-NEXT:   assign r2 = a - b;
   // CHECK-NEXT:   assign r4 = a * b;
@@ -112,8 +126,10 @@ module {
   // CHECK-NEXT:   assign r31 = {{[{}][{}]}}5{a[3]}}, a};
   // CHECK-NEXT:   assign r33 = cond ? a : b;
   // CHECK-NEXT:   assign r34 = ~a;
-  // CHECK-NEXT:   assign r35 = [[WIRE0]][a+:3];
+  // CHECK-NEXT:   assign r35 = cond ? [[WIRE0]][a+:3] : [[WIRE0]][b+:3];
   // CHECK-NEXT:   assign r36 = {3{a}};
+  // CHECK-NEXT:   assign r37 = array2d[a][b];
+  // CHECK-NEXT:   assign r38 = {[[WIRE1]], [[WIRE1]]};
   // CHECK-NEXT: endmodule
 
   rtl.module @B(%a: i1) -> (%b: i1, %c: i1) {
@@ -227,7 +243,7 @@ module {
 
 
   rtl.module @inout(%a: !rtl.inout<i42>) -> (%out: i42) {
-    %aget = rtl.read_inout %a: !rtl.inout<i42>
+    %aget = sv.read_inout %a: !rtl.inout<i42>
     rtl.output %aget : i42
   }
   // CHECK-LABEL:  module inout(
@@ -274,45 +290,45 @@ module {
 
     // Wires.
     // CHECK-NEXT: wire [3:0]            myWire;
-    %myWire = rtl.wire : !rtl.inout<i4>
+    %myWire = sv.wire : !rtl.inout<i4>
  
     // Packed arrays.
 
     // CHECK-NEXT: wire [41:0][7:0]      myArray1;
-    %myArray1 = rtl.wire : !rtl.inout<array<42 x i8>>
+    %myArray1 = sv.wire : !rtl.inout<array<42 x i8>>
     // CHECK-NEXT: wire [2:0][41:0][3:0] myWireArray2;
-    %myWireArray2 = rtl.wire : !rtl.inout<array<3 x array<42 x i4>>>
+    %myWireArray2 = sv.wire : !rtl.inout<array<3 x array<42 x i4>>>
 
     // Unpacked arrays, and unpacked arrays of packed arrays.
 
     // CHECK-NEXT: wire [7:0]            myUArray1[41:0];
-    %myUArray1 = rtl.wire : !rtl.inout<uarray<42 x i8>>
+    %myUArray1 = sv.wire : !rtl.inout<uarray<42 x i8>>
 
     // CHECK-NEXT: wire [41:0][3:0]      myWireUArray2[2:0];
-    %myWireUArray2 = rtl.wire : !rtl.inout<uarray<3 x array<42 x i4>>>
+    %myWireUArray2 = sv.wire : !rtl.inout<uarray<3 x array<42 x i4>>>
 
     // CHECK-EMPTY:
 
     // Wires.
 
     // CHECK-NEXT: assign myWire = in4;
-    rtl.connect %myWire, %in4 : i4
-    %wireout = rtl.read_inout %myWire : !rtl.inout<i4>
+    sv.connect %myWire, %in4 : i4
+    %wireout = sv.read_inout %myWire : !rtl.inout<i4>
 
     // Packed arrays.
 
-    %subscript = rtl.arrayindex %myArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
+    %subscript = sv.array_index_inout %myArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
     // CHECK-NEXT: assign myArray1[in4] = in8;
-    rtl.connect %subscript, %in8 : i8
+    sv.connect %subscript, %in8 : i8
 
-    %memout1 = rtl.read_inout %subscript : !rtl.inout<i8>
+    %memout1 = sv.read_inout %subscript : !rtl.inout<i8>
 
      // Unpacked arrays, and unpacked arrays of packed arrays.
-    %subscriptu = rtl.arrayindex %myUArray1[%in4] : !rtl.inout<uarray<42 x i8>>, i4
+    %subscriptu = sv.array_index_inout %myUArray1[%in4] : !rtl.inout<uarray<42 x i8>>, i4
     // CHECK-NEXT: assign myUArray1[in4] = in8;
-    rtl.connect %subscriptu, %in8 : i8
+    sv.connect %subscriptu, %in8 : i8
 
-    %memout2 = rtl.read_inout %subscriptu : !rtl.inout<i8>
+    %memout2 = sv.read_inout %subscriptu : !rtl.inout<i8>
 
     // CHECK-NEXT: assign a = myWire;
     // CHECK-NEXT: assign b = myArray1[in4];
@@ -337,7 +353,7 @@ module {
 
   // CHECK-LABEL: module signs
   rtl.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
-    %awire = rtl.wire : !rtl.inout<i4>
+    %awire = sv.wire : !rtl.inout<i4>
     // CHECK: wire [3:0] awire;
 
     // CHECK: assign awire = $unsigned($signed(in1) / $signed(in2)) /
@@ -345,7 +361,7 @@ module {
     %a1 = rtl.divs %in1, %in2: i4
     %a2 = rtl.divs %in3, %in4: i4
     %a3 = rtl.divu %a1, %a2: i4
-    rtl.connect %awire, %a3: i4
+    sv.connect %awire, %a3: i4
 
     // CHECK: assign awire = $unsigned(
     %b1a = rtl.divs %in1, %in2: i4
@@ -355,14 +371,14 @@ module {
     %b2 = rtl.add %b1a, %b1b: i4
     %b3 = rtl.mul %b1c, %b1d: i4
     %b4 = rtl.divu %b2, %b3: i4
-    rtl.connect %awire, %b4: i4
+    sv.connect %awire, %b4: i4
 
     // https://github.com/llvm/circt/issues/369
     // CHECK: assign awire = 4'sh5 / -4'sh3;
     %c5_i4 = rtl.constant(5 : i4) : i4
     %c-3_i4 = rtl.constant(-3 : i4) : i4
     %divs = rtl.divs %c5_i4, %c-3_i4 : i4
-    rtl.connect %awire, %divs: i4
+    sv.connect %awire, %divs: i4
 
     rtl.output
   }
@@ -389,7 +405,7 @@ module {
   // CHECK-NEXT:   // input  [2:0]/*Zero Width*/ arrZero,
   // CHECK-NEXT:      output [3:0]               r0,
   // CHECK-NEXT:   // output /*Zero Width*/      rZero,
-  // CHECK-NEXT:   // output [2:0]/*Zero Width*/ arrZero
+  // CHECK-NEXT:   // output [2:0]/*Zero Width*/ arrZero_0
   // CHECK-NEXT:    );
   // CHECK-EMPTY:
   rtl.module @TestZero(%a: i4, %zeroBit: i0, %arrZero: !rtl.array<3xi0>)
@@ -400,7 +416,7 @@ module {
 
     // CHECK-NEXT:   assign r0 = a + a;
     // CHECK-NEXT:   // Zero width: assign rZero = zeroBit;
-    // CHECK-NEXT:   // Zero width: assign arrZero = arrZero;
+    // CHECK-NEXT:   // Zero width: assign arrZero_0 = arrZero;
     // CHECK-NEXT: endmodule
   }
 
@@ -447,9 +463,19 @@ module {
   // CHECK-LABEL: TestInstanceNameValueConflict
   rtl.module @TestInstanceNameValueConflict(%a: i1) {
     // CHECK: wire name
-    %name = rtl.wire : !rtl.inout<i1>
+    %name = sv.wire : !rtl.inout<i1>
 
     // CHECK: B name_0 (
     %w, %y = rtl.instance "name" @B(%a) : (i1) -> (i1, i1)
   }
+
+  // https://github.com/llvm/circt/issues/525
+  rtl.module @issue525(%struct: i2, %else: i2) -> (%casex: i2) {
+    %2 = rtl.add %struct, %else : i2
+    rtl.output %2 : i2
+  }
+ // CHECK-LABEL: module issue525(
+ // CHECK-NEXT: input  [1:0] struct_0, else_1,
+ // CHECK-NEXT: output [1:0] casex_2);
+ // CHECK: assign casex_2 = struct_0 + else_1;
 }

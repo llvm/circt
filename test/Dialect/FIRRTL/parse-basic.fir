@@ -333,13 +333,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     node n13 = not(auto)
 
 
-    ; CHECK: %_M = firrtl.mem Undefined {depth = 8 : i64, name = "_M",
-    ; CHECK:   readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<
-    ; CHECK:       _T_10: bundle<addr: flip<uint<3>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>>, mask: flip<bundle<id: uint<1>>>>
-    ; CHECK:       _T_11: bundle<addr: flip<uint<3>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>>, mask: flip<bundle<id: uint<1>>>>
-    ; CHECK:       _T_18: bundle<addr: flip<uint<3>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>>>
+    ; CHECK: %_M__T_10, %_M__T_11, %_M__T_18 = firrtl.mem Undefined {depth = 8 : i64, name = "_M", portNames = ["_T_10", "_T_11", "_T_18"]
+    ; CHECK:   readLatency = 0 : i32, writeLatency = 1 : i32} :
+    ; CHECK:       !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>,
+    ; CHECK:       !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>,
+    ; CHECK:       !firrtl.bundle<addr: flip<uint<3>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: uint<4>>
     mem _M : @[Decoupled.scala 209:24]
-        data-type => { id : Analog<4> }
+        data-type => { id : UInt<4> }
         depth => 8
         read-latency => 0
         write-latency => 1
@@ -396,6 +396,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: firrtl.subfield %write("id")
     write.id <= UInt(1)
+
+  ; CHECK-LABEL: firrtl.module @expr_stmt_ambiguity2(
+  module expr_stmt_ambiguity2 :
+    ; CHECK: firrtl.instance @circuit
+    inst write of circuit
+    ; CHECK: firrtl.connect %write_in
+    write.in <= UInt(1)
 
   ; CHECK-LABEL: firrtl.module @oversize_shift(
   module oversize_shift :
@@ -514,7 +521,20 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       reader => io_deq_bits_MPORT
       writer => MPORT
       read-under-write => undefined
-      ; CHECK:         %bar = firrtl.mem Undefined {depth = 1 : i64, name = "bar", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<MPORT: flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<3>, mask: uint<1>>>, io_deq_bits_MPORT: bundle<addr: flip<uint<1>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<3>>>
+      ; CHECK: %bar_MPORT, %bar_io_deq_bits_MPORT = firrtl.mem Undefined {depth = 1 : i64, name = "bar", portNames = ["MPORT", "io_deq_bits_MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} :
+      ; CHECK: !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<3>, mask: uint<1>>>,
+      ; CHECK: !firrtl.bundle<addr: flip<uint<1>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<3>>
+
+  ; CHECK-LABEL: firrtl.module @mem_no_ports() {
+  ; CHECK-NEXT: }
+  ; https://github.com/llvm/circt/issues/531
+  module mem_no_ports :
+    mem bar : @[Decoupled.scala 218:16]
+      data-type => UInt<3>
+      depth => 1
+      read-latency => 0
+      write-latency => 1
+      read-under-write => undefined
 
   ; CHECK-LABEL: firrtl.module @issue354(%tmp5: !firrtl.flip<sint<19>>) {
   module issue354 :
@@ -571,3 +591,26 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: [[init_passive:%.+]] = firrtl.asPassive %init
     ; CHECK: firrtl.regreset %clk, %rst, [[init_passive]]
     reg r: UInt<1>, clk with : (reset => (rst, init))
+
+  ; https://github.com/llvm/circt/issues/492
+  ; CHECK-LABEL: firrtl.module @WriteOnlyMemIssue492
+  module WriteOnlyMemIssue492 :
+    input clock: Clock
+    input wAddr: UInt<4>
+    input wEn: UInt<1>
+    input wMask: UInt<1>
+    input wData: UInt<8>
+
+    mem memory:
+      data-type => UInt<8>
+      depth => 16
+      writer => w
+      read-latency => 0
+      write-latency => 1
+      read-under-write => undefined
+
+    memory.w.clk <= clock
+    memory.w.en <= wEn
+    memory.w.addr <= wAddr
+    memory.w.mask <= wMask
+    memory.w.data <= wData

@@ -206,30 +206,6 @@ def AndROp : UnaryI1ReductionRTLOp<"andr">;
 def OrROp  : UnaryI1ReductionRTLOp<"orr">;
 def XorROp : UnaryI1ReductionRTLOp<"xorr">;
 
-// Extract a range of bits from the specified input.
-def StructExtractOp : RTLOp<"struct_extract", [NoSideEffect]> {
-  let summary = "Extract a named field from a struct.";
-
-  let arguments = (ins StructType:$input, StrAttr:$field);
-  let results = (outs RTLNonInOutType:$result);
-
-  let parser = "return ::parse$cppClass(parser, result);";
-  let printer = "return ::print(p, *this);";
-}
-
-// Extract a range of bits from the specified input.
-def StructInjectOp : RTLOp<"struct_inject", [NoSideEffect, 
-                           AllTypesMatch<["input", "result"]>]> {
-  let summary = "Inject a value into a named field of a struct.";
-
-  let arguments = (ins StructType:$input, StrAttr:$field,
-                   RTLNonInOutType:$newValue);
-  let results = (outs StructType:$result);
-
-  let parser = "return ::parse$cppClass(parser, result);";
-  let printer = "return ::print(p, *this);";
-}
-
 //===----------------------------------------------------------------------===//
 // Integer width modifying operations.
 //===----------------------------------------------------------------------===//
@@ -279,83 +255,7 @@ def ConcatOp : VariadicRTLOp<"concat"> {
   ];
 }
 
-def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
-  let summary = "Get a range of values from an array";
-  let description = [{
-    Extracts a sub-range from an array. The range is from `lowIndex` to
-    `lowIndex` + the number of elements in the return type, non-inclusive on
-    the high end. For instance,
-
-    ```
-    // Slices 16 elements starting at '%offset'.
-    %subArray = rtl.slice %largerArray at %offset :
-        (!rtl.array<1024xi8>) -> !rtl.array<16xi8>
-    ```
-
-    Would translate to the following SystemVerilog:
-
-    ```
-    logic [7:0][15:0] subArray = largerArray[offset +: 16];
-    ```
-
-    Width of 'idx' is defined to be the precise number of bits required to
-    index the 'input' array. More precisely: for an input array of size M,
-    the width of 'idx' is ceil(log2(M)). Lower and upper bound indexes which
-    are larger than the size of the 'input' array results in undefined
-    behavior.
-  }];
-
-  let arguments = (ins ArrayType:$input, RTLIntegerType:$lowIndex);
-  let results = (outs ArrayType:$dst);
-  let verifier = [{
-    unsigned inputSize = input().getType().cast<ArrayType>().getSize();
-    if (llvm::Log2_64_Ceil(inputSize) !=
-          lowIndex().getType().getIntOrFloatBitWidth())
-      return failure();
-    return success();
-  }];
-
-  let assemblyFormat = [{
-    $input `at` $lowIndex attr-dict `:`
-      `(` custom<SliceTypes>(type($input), type($lowIndex)) `)` `->` type($dst)
-  }];
-
-  let builders = [
-    OpBuilderDAG<(ins "Value":$input, "size_t":$lowBit, "size_t":$size)>
-  ];
-}
-
-def ArrayCreateOp : RTLOp<"array_create", [NoSideEffect, SameTypeOperands]> {
-  let summary = "Create an array from values";
-  let description = [{
-    Creates an array from a variable set of values. One or more values must be
-    listed.
-
-    ```
-    // %a, %b, %c are all i4
-    %array = rtl.array_create %a, %b, %c : (i4)
-    ```
-  }];
-
-  let arguments = (ins Variadic<RTLNonInOutType>:$inputs);
-  let results = (outs ArrayType:$result);
-
-  let verifier = [{
-    unsigned returnSize = getType().cast<ArrayType>().getSize();
-    if (inputs().size() != returnSize)
-      return failure();
-    return success();
-  }];
-
-  let printer = "return ::print(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
-  let builders = [
-    // ArrayRef needs to contain at least one element.
-    OpBuilderDAG<(ins "ArrayRef<::mlir::Value>":$input)>
-  ];
-}
-
-// Extract a range of bits from the specified input.
+// Select one of two values based on a condition.
 def MuxOp : RTLOp<"mux",
  [NoSideEffect, AllTypesMatch<["trueValue", "falseValue", "result"]>]> {
   let summary = "Return one or the other operand depending on a selector bit";
@@ -365,9 +265,9 @@ def MuxOp : RTLOp<"mux",
     ```
   }];
 
-  let arguments = (ins I1:$cond, RTLIntegerType:$trueValue,
-                       RTLIntegerType:$falseValue);
-  let results = (outs RTLIntegerType:$result);
+  let arguments = (ins I1:$cond, RTLNonInOutType:$trueValue,
+                       RTLNonInOutType:$falseValue);
+  let results = (outs RTLNonInOutType:$result);
 
   let assemblyFormat =
     "$cond `,` $trueValue `,` $falseValue attr-dict `:` type($result)";

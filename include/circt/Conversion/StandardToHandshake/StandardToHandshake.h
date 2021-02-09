@@ -14,10 +14,35 @@
 #ifndef CIRCT_CONVERSION_STANDARDTOHANDSHAKE_H_
 #define CIRCT_CONVERSION_STANDARDTOHANDSHAKE_H_
 
+#include <memory>
+
+namespace mlir {
+class ModuleOp;
+template <typename T>
+class OperationPass;
+} // namespace mlir
+
 namespace circt {
+
 namespace handshake {
-void registerStandardToHandshakePasses();
-}
+class FuncOp;
+} // namespace handshake
+
+std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
+createHandshakeAnalysisPass();
+
+std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
+createHandshakeDataflowPass();
+
+std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
+createHandshakeCanonicalizePass();
+
+std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
+createHandshakeRemoveBlockPass();
+
+std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
+createHandshakeInsertBufferPass();
+
 } // namespace circt
 
 #endif // MLIR_CONVERSION_STANDARDTOHANDSHAKE_H_

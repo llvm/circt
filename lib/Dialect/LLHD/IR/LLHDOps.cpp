@@ -969,6 +969,20 @@ FunctionType llhd::InstOp::getCalleeType() {
 }
 
 //===----------------------------------------------------------------------===//
+// ConnectOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult llhd::ConnectOp::fold(ArrayRef<Attribute> operands,
+                                    SmallVectorImpl<OpFoldResult> &results) {
+  if (lhs() == rhs()) {
+    erase();
+    return success();
+  }
+
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
 // RegOp
 //===----------------------------------------------------------------------===//
 

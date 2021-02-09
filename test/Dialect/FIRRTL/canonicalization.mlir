@@ -406,4 +406,12 @@ firrtl.module @xorUnsized(%inp_1: !firrtl.sint, %tmp10: !firrtl.flip<uint>) {
   %0 = firrtl.xor %inp_1, %inp_1 : (!firrtl.sint, !firrtl.sint) -> !firrtl.uint
   firrtl.connect %tmp10, %0 : !firrtl.flip<uint>, !firrtl.uint
 }
+
+// https://github.com/llvm/circt/issues/516
+// CHECK-LABEL: @issue516
+// CHECK-NEXT: firrtl.div
+firrtl.module @issue516(%inp_0: !firrtl.uint<0>, %tmp3: !firrtl.flip<uint<0>>) {
+  %0 = firrtl.div %inp_0, %inp_0 : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<0>
+  firrtl.connect %tmp3, %0 : !firrtl.flip<uint<0>>, !firrtl.uint<0>
+}
 }

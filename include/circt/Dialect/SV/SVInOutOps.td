@@ -1,4 +1,4 @@
-//===- RTLStatements.td - RTL statements ops ---------------*- tablegen -*-===//
+//===- SVInOutOps.td - SV ops pertaining to inout type -----*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,11 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This describes the MLIR ops for statements.
+// This describes the SystemVerilog dialect ops for working with inout types.
+// These are wires, connect statements, etc.
 //
 //===----------------------------------------------------------------------===//
 
-def ConnectOp : RTLOp<"connect", [InOutTypeConstraint<"src", "dest">]> {
+def ConnectOp : SVOp<"connect", [InOutTypeConstraint<"src", "dest">]> {
   let summary = "Connect two signals";
   let description = [{
     Connect Operation:
@@ -24,7 +25,7 @@ def ConnectOp : RTLOp<"connect", [InOutTypeConstraint<"src", "dest">]> {
   let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
 }
 
-def WireOp : RTLOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
+def WireOp : SVOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let summary = "Define a new wire";
   let description = [{
     Declare a new wire:
@@ -50,11 +51,25 @@ def WireOp : RTLOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let hasCanonicalizer = true;
 }
 
-// Expressions used for working with inout types.
+def RegOp : SVOp<"reg", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
+  let summary = "Define a new `reg` in SystemVerilog";
+  let arguments = (ins OptionalAttr<StrAttr>:$name);
+  let results = (outs InOutType:$result);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilderDAG<(ins "::mlir::Type":$elementType,
+                      CArg<"StringAttr", "StringAttr()">:$name)>
+  ];
+
+  // We handle the name in a custom way, so we use a customer parser/printer.
+  let assemblyFormat = "custom<ImplicitSSAName>(attr-dict) `:` type($result)";
+  let hasCanonicalizer = true;
+}
 
 def ReadInOutOp
- : RTLOp<"read_inout",
-         [NoSideEffect, InOutElementConstraint<"result", "input">]> {
+ : SVOp<"read_inout",
+        [NoSideEffect, InOutElementConstraint<"result", "input">]> {
   let summary = "Get the value of from something of inout type (e.g. a wire or"
                 " inout port) as the value itself.";
   let arguments = (ins InOutType:$input);
@@ -75,12 +90,12 @@ def InOutArrayType
 class InOutIndexConstraint<string value, string inoutValue>
   : TypesMatchWith<"type should be element of inout type",
                    inoutValue, value,
-                   "InOutType::get(rtl::getAnyRTLArrayElementType("
+                   "InOutType::get(getAnyRTLArrayElementType("
                                             "getInOutElementType($_self)))">;
 
 def ArrayIndexInOutOp
- : RTLOp<"array_index_inout",
-         [NoSideEffect, InOutIndexConstraint<"result", "input">]> {
+ : SVOp<"array_index_inout",
+        [NoSideEffect, InOutIndexConstraint<"result", "input">]> {
   let summary = "Index an inout memory to produce an inout element";
   let description = "See SV Spec 11.5.2.";
   let arguments = (ins InOutArrayType:$input, RTLIntegerType:$index);
