@@ -4,6 +4,8 @@
 rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
   %wire42 = sv.wire : !rtl.inout<i42>
 
+  sv.typedef i127 @Foo127
+
   // CHECK:      always @(posedge clock) begin
   // CHECK-NEXT:   `ifndef SYNTHESIS
   // CHECK-NEXT:     if (PRINTF_COND_ & cond)

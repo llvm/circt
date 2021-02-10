@@ -30,7 +30,7 @@ public:
             // Expressions
             ReadInOutOp, ArrayIndexInOutOp, TextualValueOp,
             // Declarations.
-            RegOp, WireOp,
+            RegOp, WireOp, TypeDefOp,
             // Control flow.
             IfDefOp, IfOp, AlwaysOp, AlwaysFFOp, InitialOp,
             // Other Statements.
@@ -69,6 +69,7 @@ public:
   // Declarations
   HANDLE(RegOp, Unhandled);
   HANDLE(WireOp, Unhandled);
+  HANDLE(TypeDefOp, Unhandled);
 
   // Expressions
   HANDLE(TextualValueOp, Unhandled)

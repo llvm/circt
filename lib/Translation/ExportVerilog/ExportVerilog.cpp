@@ -333,6 +333,7 @@ public:
   void visitMerge(MergeOp op);
   LogicalResult visitSV(WireOp op) { return success(); }
   LogicalResult visitSV(RegOp op) { return success(); }
+  LogicalResult visitSV(TypeDefOp op);
   LogicalResult visitSV(InterfaceInstanceOp op) { return success(); }
   LogicalResult visitSV(ConnectOp op);
   LogicalResult visitSV(BPAssignOp op);
@@ -1181,6 +1182,8 @@ void ModuleEmitter::visitMerge(MergeOp op) {
     ops.clear();
   }
 }
+
+LogicalResult ModuleEmitter::visitSV(TypeDefOp op) {}
 
 LogicalResult ModuleEmitter::visitSV(ConnectOp op) {
   SmallPtrSet<Operation *, 8> ops;

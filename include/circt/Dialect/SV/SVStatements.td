@@ -266,6 +266,15 @@ def AliasOp : SVOp<"alias"> {
   let verifier = "return ::verifyAliasOp(*this);";
 }
 
+def TypeDefOp : SVOp<"typedef", [Symbol]> {
+  let summary = "Assign an alternative name to a type";
+
+  let arguments = (ins SymbolNameAttr:$sym_name, TypeAttr:$type);
+  let results = (outs);
+
+  let assemblyFormat = "$type $sym_name attr-dict";
+}
+
 // TODO: This needs to model the file descriptor to write on.  This is currently
 // hard coded to 32'h80000002.
 def FWriteOp : SVOp<"fwrite"> {
