@@ -124,13 +124,13 @@ In MLIR assembly, operands are always listed MSB to LSB (big endian style):
 %1 = rtl.constant (0x1 : i4) : i4
 %2 = rtl.constant (0x2 : i4) : i4
 %3 = rtl.constant (0x3 : i4) : i4
-%arr123 = rtl.array_create %1, %2, %3 : (i4, i4, i4) -> !rtl.array<3 x i4>
+%arr123 = rtl.array_create %1, %2, %3 : i4
 // %arr123[0] = 0x3
 // %arr123[1] = 0x2
 // %arr123[2] = 0x1
 
 %arr456 = ... // {0x4, 0x5, 0x6}, in C-style.
-%arr = rtl.array_concat %arr123, %arr456 : (!rtl.array<3 x i4>, !rtl.array<3 x i4>)
+%arr = rtl.array_concat %arr123, %arr456 : !rtl.array<3 x i4>, !rtl.array<3 x i4>
 // %arr[0] = 0x6
 // %arr[1] = 0x5
 // %arr[2] = 0x4
