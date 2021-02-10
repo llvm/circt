@@ -105,6 +105,50 @@ declarations in limited ways:
  - Interface signals are allowed to be zero bits wide.  They are dropped from
    Verilog emission.
 
+### Endianness: operand ordering and internal representation
+
+Certain operations require ordering to be defined (i.e. `rtl.concat`,
+`rtl.array_concat`, and `rtl.array_create`). There are two places where this
+is relevant: in the MLIR assembly and in the MLIR C++ model.
+
+In MLIR assembly, operands are always listed MSB to LSB (big endian style):
+
+```mlir
+%msb = rtl.constant (0xEF : i8) : i8
+%lsb = rtl.constant (0xA018 : i16) : i16
+%result = rtl.concat %msb, %lsb : (i8, i16) -> i24
+// %result is 0xEFA018
+```
+
+```mlir
+%1 = rtl.constant (0x1 : i4) : i4
+%2 = rtl.constant (0x2 : i4) : i4
+%3 = rtl.constant (0x3 : i4) : i4
+%arr123 = rtl.array_create %1, %2, %3 : (i4, i4, i4) -> !rtl.array<3 x i4>
+// %arr123[0] = 0x3
+// %arr123[1] = 0x2
+// %arr123[2] = 0x1
+
+%arr456 = ... // {0x4, 0x5, 0x6}, in C-style.
+%arr = rtl.array_concat %arr123, %arr456 : (!rtl.array<3 x i4>, !rtl.array<3 x i4>)
+// %arr[0] = 0x6
+// %arr[1] = 0x5
+// %arr[2] = 0x4
+// %arr[3] = 0x3
+// %arr[4] = 0x2
+// %arr[5] = 0x1
+```
+
+In C++, lists of values are in lexical order. That is, index zero of a list
+is the leftmost operand in assembly, which is the most significant value.
+
+```cpp
+ConcatOp result = builder.create<ConcatOp>(..., {msb, lsb});
+// Is equivalent to the above integer concatenation example.
+ArrayConcatOp arr = builder.create<ArrayConcatOp>(..., {arr123, arr456});
+// Is equivalent to the above array example.
+```
+
 ### Cost Model
 
 As a very general mid-level IR, it is important to define the principles that
