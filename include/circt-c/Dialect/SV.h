@@ -8,28 +8,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_C_SVDIALECT_H
-#define CIRCT_C_SVDIALECT_H
+#ifndef CIRCT_C_DIALECT_SV_H
+#define CIRCT_C_DIALECT_SV_H
 
-#include "mlir-c/IR.h"
+#include "mlir-c/Registration.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/// Registers the SV dialect with the given context. This allows the dialect to
-/// be loaded dynamically if needed when parsing.
-void mlirContextRegisterSVDialect(MlirContext context);
-
-/// Loads the SV dialect into the given context. The dialect does _not_ have to
-/// be registered in advance.
-MlirDialect mlirContextLoadSVDialect(MlirContext context);
-
-/// Returns the namespace of the SV dialect, suitable for loading it.
-MlirStringRef mlirSVDialectGetNamespace();
+MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(SystemVerilog, sv);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // CIRCT_C_SVDIALECT_H
+#endif // CIRCT_C_DIALECT_SV_H
