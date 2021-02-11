@@ -1380,15 +1380,15 @@ LogicalResult ModuleEmitter::visitSV(IfDefOp op) {
   emitLocationInfoAndNewLine(ops);
 
   addIndent();
-  for (auto &op : op.getThenBlock()->without_terminator())
-    emitOperation(&op);
+  for (auto &o : op.getThenBlock()->without_terminator())
+    emitOperation(&o);
   reduceIndent();
 
   if (op.hasElse()) {
     indent() << "`else\n";
     addIndent();
-    for (auto &op : op.getElseBlock()->without_terminator())
-      emitOperation(&op);
+    for (auto &o : op.getElseBlock()->without_terminator())
+      emitOperation(&o);
     reduceIndent();
   }
 
@@ -1683,8 +1683,8 @@ LogicalResult ModuleEmitter::visitSV(InterfaceOp op) {
   os << "interface " << op.sym_name() << ";\n";
 
   addIndent();
-  for (auto &op : op.getBodyBlock()->without_terminator())
-    emitOperation(&op);
+  for (auto &o : op.getBodyBlock()->without_terminator())
+    emitOperation(&o);
   reduceIndent();
 
   os << "endinterface\n\n";
