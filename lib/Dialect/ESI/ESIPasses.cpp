@@ -52,8 +52,8 @@ class ESIRTLBuilder : public circt::ImplicitLocOpBuilder {
 public:
   ESIRTLBuilder(Operation *top);
 
-  RTLExternModuleOp declareStage();
-  RTLExternModuleOp declareCosimEndpoint();
+  RTLModuleExternOp declareStage();
+  RTLModuleExternOp declareCosimEndpoint();
 
   InterfaceOp getOrConstructInterface(ChannelPort);
   InterfaceOp constructInterface(ChannelPort);
@@ -75,8 +75,8 @@ private:
   /// taken in the symbol table.
   StringAttr constructInterfaceName(ChannelPort);
 
-  RTLExternModuleOp declaredStage;
-  RTLExternModuleOp declaredCosimEndpoint;
+  RTLModuleExternOp declaredStage;
+  RTLModuleExternOp declaredCosimEndpoint;
   llvm::DenseMap<Type, InterfaceOp> portTypeLookup;
 };
 } // anonymous namespace
@@ -161,7 +161,7 @@ StringAttr ESIRTLBuilder::constructInterfaceName(ChannelPort port) {
 /// module implements pipeline stage, adding 1 cycle latency. This particular
 /// implementation is double-buffered and fully pipelines the reverse-flow ready
 /// signal.
-RTLExternModuleOp ESIRTLBuilder::declareStage() {
+RTLModuleExternOp ESIRTLBuilder::declareStage() {
   if (declaredStage)
     return declaredStage;
 
@@ -178,14 +178,14 @@ RTLExternModuleOp ESIRTLBuilder::declareStage() {
                             {x, PortDirection::OUTPUT, getNoneType(), 1},
                             {xValid, PortDirection::OUTPUT, getI1Type(), 2},
                             {xReady, PortDirection::INPUT, getI1Type(), 4}};
-  declaredStage = create<RTLExternModuleOp>(name, ports);
+  declaredStage = create<RTLModuleExternOp>(name, ports);
   return declaredStage;
 }
 
 /// Write an 'ExternModuleOp' to use a hand-coded SystemVerilog module. Said
 /// module contains a bi-directional Cosimulation DPI interface with valid/ready
 /// semantics.
-RTLExternModuleOp ESIRTLBuilder::declareCosimEndpoint() {
+RTLModuleExternOp ESIRTLBuilder::declareCosimEndpoint() {
   if (declaredCosimEndpoint)
     return declaredCosimEndpoint;
   auto name = StringAttr::get(getContext(), "Cosim_Endpoint");
@@ -202,7 +202,7 @@ RTLExternModuleOp ESIRTLBuilder::declareCosimEndpoint() {
       {dataInValid, PortDirection::INPUT, getI1Type(), 3},
       {dataInReady, PortDirection::OUTPUT, getI1Type(), 2},
       {dataIn, PortDirection::INPUT, getNoneType(), 4}};
-  declaredCosimEndpoint = create<RTLExternModuleOp>(name, ports);
+  declaredCosimEndpoint = create<RTLModuleExternOp>(name, ports);
   return declaredCosimEndpoint;
 }
 
@@ -324,8 +324,8 @@ struct ESIPortsPass : public LowerESIPortsBase<ESIPortsPass> {
   void runOnOperation() override;
 
 private:
-  bool updateFunc(RTLExternModuleOp mod);
-  void updateInstance(RTLExternModuleOp mod, InstanceOp inst);
+  bool updateFunc(RTLModuleExternOp mod);
+  void updateInstance(RTLModuleExternOp mod, InstanceOp inst);
   ESIRTLBuilder *build;
 };
 } // anonymous namespace
@@ -337,8 +337,8 @@ void ESIPortsPass::runOnOperation() {
   build = &b;
 
   // Find all externmodules and try to modify them. Remember the modified ones.
-  DenseMap<StringRef, RTLExternModuleOp> modsMutated;
-  for (auto mod : top.getOps<RTLExternModuleOp>())
+  DenseMap<StringRef, RTLModuleExternOp> modsMutated;
+  for (auto mod : top.getOps<RTLModuleExternOp>())
     if (updateFunc(mod))
       modsMutated[mod.getName()] = mod;
 
@@ -357,7 +357,7 @@ void ESIPortsPass::runOnOperation() {
 /// to the inputs and remove the output channel from the results. Returns true
 /// if 'mod' was updated. Delay updating the instances to amortize the IR walk
 /// over all the module updates.
-bool ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
+bool ESIPortsPass::updateFunc(RTLModuleExternOp mod) {
   auto *ctxt = &getContext();
   auto funcType = mod.getType();
 
@@ -423,7 +423,7 @@ bool ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
 /// Update an instance of an updated module by adding `esi.(un)wrap.iface`
 /// around the instance. Create a new instance at the end from the lists built
 /// up before.
-void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
+void ESIPortsPass::updateInstance(RTLModuleExternOp mod, InstanceOp inst) {
   using namespace circt::sv;
   circt::ImplicitLocOpBuilder instBuilder(inst);
   FunctionType funcTy = mod.getType();

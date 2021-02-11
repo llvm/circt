@@ -18,7 +18,7 @@ module {
     sv.interface.modport @data_out ("output" @data, "output" @valid, "input" @ready)
   }
 
-  rtl.externmodule @Rcvr (%m: !sv.modport<@data_vr::@data_in>)
+  rtl.module.extern @Rcvr (%m: !sv.modport<@data_vr::@data_in>)
 
   // CHECK-LABEL: module Top
   rtl.module @Top (%clk: i1) {
