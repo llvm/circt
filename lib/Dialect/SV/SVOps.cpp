@@ -472,7 +472,7 @@ void GetModportOp::build(OpBuilder &builder, OperationState &state, Value value,
   auto modportSym =
       SymbolRefAttr::get(builder.getContext(),
                          ifaceTy.getInterface().getRootReference(), fieldAttr);
-  build(builder, state, {ModportType::get(builder.getContext(), modportSym)},
+  build(builder, state, ModportType::get(builder.getContext(), modportSym),
         value, fieldAttr);
 }
 
