@@ -60,7 +60,7 @@ void EarlyCodeMotionPass::runOnOperation() {
       Operation &op = *iter;
       if (!isa<llhd::PrbOp>(op) &&
           (!MemoryEffectOpInterface::hasNoEffect(&op) ||
-           op.isKnownTerminator()))
+           op.hasTrait<OpTrait::IsTerminator>()))
         continue;
 
       SmallVector<Block *, 8> validPlacements;
