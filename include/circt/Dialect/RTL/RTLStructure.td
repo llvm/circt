@@ -138,7 +138,8 @@ def RTLModuleExternOp : RTLOp<"module.extern",
   let parser = "return ::parse$cppClass(parser, result);";
 }
 
-def RTLGeneratorTypeOp : RTLOp<"generator.type", [IsolatedFromAbove, Symbol, HasParent<"mlir::ModuleOp">]> {
+def RTLGeneratorTypeOp : RTLOp<"generator.type", 
+      [Symbol, HasParent<"mlir::ModuleOp">]> {
   let summary = "RTL Generator Type";
   let description = [{
     the "rtl.generator.type" operation declares a type of generated module.  The
