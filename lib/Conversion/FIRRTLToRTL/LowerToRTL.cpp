@@ -761,7 +761,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   template <typename ResultOpType, typename... CtorArgTypes>
   LogicalResult setLoweringTo(Operation *orig, CtorArgTypes... args);
   void emitRandomizePrologIfNeeded();
-  void initializeRegister(Value reg, Value resetSignal);
+  void initializeRegister(Value reg, Value resetSignal, Value resetValue);
 
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitExpr;
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitDecl;
@@ -1246,28 +1246,43 @@ void FIRRTLLowering::emitRandomizePrologIfNeeded() {
   randomizePrologEmitted = true;
 }
 
-void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
+void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal,
+                                        Value resetValue) {
   // Emit the initializer expression for simulation that fills it with random
   // value.
   builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
     builder->create<sv::InitialOp>([&]() {
-      emitRandomizePrologIfNeeded();
+      if (!RegInitFixed)
+        emitRandomizePrologIfNeeded();
       auto type = reg.getType().dyn_cast<rtl::InOutType>().getElementType();
 
-      builder->create<sv::IfDefOp>("RANDOMIZE_REG_INIT", [&]() {
-        if (resetSignal) {
-          auto one = builder->create<rtl::ConstantOp>(APInt(1, 1));
-          auto notResetValue = builder->create<rtl::XorOp>(resetSignal, one);
-          builder->create<sv::IfOp>(notResetValue, [&]() {
+      if (resetSignal) {
+        if (RegInitFixed) {
+          builder->create<sv::BPAssignOp>(reg, resetValue);
+        } else {
+          builder->create<sv::IfDefOp>("RANDOMIZE_REG_INIT", [&]() {
+            auto one = builder->create<rtl::ConstantOp>(APInt(1, 1));
+            auto notResetValue = builder->create<rtl::XorOp>(resetSignal, one);
+            builder->create<sv::IfOp>(notResetValue, [&]() {
+              auto randomVal =
+                  builder->create<sv::TextualValueOp>(type, "`RANDOM");
+              builder->create<sv::BPAssignOp>(reg, randomVal);
+            });
+          });
+        }
+      } else {
+        if (RegInitFixed) {
+          auto zero = builder->create<rtl::ConstantOp>(
+              APInt(rtl::getBitWidth(type), 0));
+          builder->create<sv::BPAssignOp>(reg, zero);
+        } else {
+          builder->create<sv::IfDefOp>("RANDOMIZE_REG_INIT", [&]() {
             auto randomVal =
                 builder->create<sv::TextualValueOp>(type, "`RANDOM");
             builder->create<sv::BPAssignOp>(reg, randomVal);
           });
-        } else {
-          auto randomVal = builder->create<sv::TextualValueOp>(type, "`RANDOM");
-          builder->create<sv::BPAssignOp>(reg, randomVal);
         }
-      });
+      }
     });
   });
 }
@@ -1282,7 +1297,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   auto regResult = builder->create<sv::RegOp>(resultType, op.nameAttr());
   setLowering(op, regResult);
 
-  initializeRegister(regResult, Value());
+  initializeRegister(regResult, Value(), Value());
 
   return success();
 }
@@ -1318,7 +1333,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
         EventControl::AtPosEdge, resetSignal, std::function<void()>(), resetFn);
   }
 
-  initializeRegister(regResult, resetSignal);
+  initializeRegister(regResult, resetSignal, resetValue);
   return success();
 }
 
@@ -1405,6 +1420,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
             auto randomVal =
                 builder->create<sv::TextualValueOp>(type, "`RANDOM");
             auto zero = builder->create<rtl::ConstantOp>(APInt(1, 0));
+
             auto subscript = builder->create<sv::ArrayIndexInOutOp>(reg, zero);
             builder->create<sv::BPAssignOp>(subscript, randomVal);
           }

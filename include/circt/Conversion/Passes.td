@@ -50,6 +50,9 @@ def LowerFIRRTLToRTL : Pass<"lower-firrtl-to-rtl", "rtl::RTLModuleOp"> {
   }];
   let constructor = "circt::createLowerFIRRTLToRTLPass()";
   let dependentDialects = ["rtl::RTLDialect", "sv::SVDialect"];
+  let options = [
+    Option<"RegInitFixed", "reginit-fixed", "bool", /*default=*/"false", "Initialize Registers with fixed value: either reset value if it exists or zero." >,
+  ];
 }
 
 //===----------------------------------------------------------------------===//
