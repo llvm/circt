@@ -51,7 +51,7 @@ def InterfaceOp : SVOp<"interface",
     ModportType getModportType(::llvm::StringRef);
     InterfaceType getInterfaceType() {
       return InterfaceType::get(getContext(),
-        ::mlir::SymbolRefAttr::get(sym_name(), getContext()));
+        ::mlir::SymbolRefAttr::get(getContext(), sym_name()));
     }
     Type getSignalType(StringRef signalName);
   }];
