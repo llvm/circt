@@ -275,7 +275,7 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
     if (isdigit(arg.name[1]))
       continue;
 
-    auto nameAttr = StringAttr::get(context, arg.name.drop_front());
+    auto nameAttr = StringAttr::get(arg.name.drop_front(), context);
     attrs.push_back({Identifier::get("rtl.name", context), nameAttr});
   }
 
