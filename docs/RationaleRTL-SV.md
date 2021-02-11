@@ -115,10 +115,15 @@ In MLIR assembly, operands are always listed MSB to LSB (big endian style):
 
 ```mlir
 %msb = rtl.constant (0xEF : i8) : i8
+%mid = rtl.constant (0x7 : i4) : i4
 %lsb = rtl.constant (0xA018 : i16) : i16
-%result = rtl.concat %msb, %lsb : (i8, i16) -> i24
-// %result is 0xEFA018
+%result = rtl.concat %msb, %mid, %lsb : (i8, i4, i16) -> i28
+// %result is 0xEF7A018
 ```
+
+**Note**: Integers are always big endian in both bit and byte ordering.
+Operand ordering for `rtl.concat` was chosen to be consistent with simply
+abutting them in lexical order.
 
 ```mlir
 %1 = rtl.constant (0x1 : i4) : i4
@@ -130,7 +135,8 @@ In MLIR assembly, operands are always listed MSB to LSB (big endian style):
 // %arr123[2] = 0x1
 
 %arr456 = ... // {0x4, 0x5, 0x6}, in C-style.
-%arr = rtl.array_concat %arr123, %arr456 : !rtl.array<3 x i4>, !rtl.array<3 x i4>
+%arr78  = ... // {0x7, 0x8}, in C-style.
+%arr = rtl.array_concat %arr123, %arr456, %arr78 : !rtl.array<3 x i4>, !rtl.array<3 x i4>, !rtl.array<2 x i4>
 // %arr[0] = 0x6
 // %arr[1] = 0x5
 // %arr[2] = 0x4
@@ -139,14 +145,66 @@ In MLIR assembly, operands are always listed MSB to LSB (big endian style):
 // %arr[5] = 0x1
 ```
 
-In C++, lists of values are in lexical order. That is, index zero of a list
-is the leftmost operand in assembly, which is the most significant value.
+In the CIRCT C++ model, lists of values are in lexical order. That is, index
+zero of a list is the leftmost operand in assembly, which is the most
+significant value.
 
 ```cpp
 ConcatOp result = builder.create<ConcatOp>(..., {msb, lsb});
 // Is equivalent to the above integer concatenation example.
 ArrayConcatOp arr = builder.create<ArrayConcatOp>(..., {arr123, arr456});
 // Is equivalent to the above array example.
+```
+
+**Note**: This ordering scheme is unintuitive for anyone expecting C
+array-like ordering. In a C, arrays are laid out with index 0 as the least
+significant value. In the CIRCT _model_ (assembly and C++), it is the
+opposite -- the most significant value is located at the zero index. The
+produced hardware, however, _is_ in C-style order as operands are printed (in
+SystemVerilog) in the same lexical order as the assembly. Since SystemVerilog
+array concatenation and array creation are listed in MSB to LSB
+left-to-right, the ordering is reversed again.
+
+### Bitcasts
+
+The bitcast operation represents a bitwise reinerpretation (cast) of a value.
+This always synthesizes away in hardware, though it may or may not be
+syntactically represented in lowering or export language.
+
+Since bitcasting requires information on the bitwise layout of the types on
+which it operates, we discuss that here. All of the types are _packed_,
+meaning there is never padding or alignment.
+
+- **Integer bit vectors**: MLIR's `IntegerType` with `Signless` semantics are
+used to represent bit vectors. They are never padded or aligned.
+- **Arrays**: The RTL dialect defines a custom `ArrayType`. The in-hardware
+layout matches C -- the high index of array starts at the MSB. Array's 0th
+element's LSB located at array LSB.
+- **Structs**: The RTL dialect defines a custom `StructType`. The in-hardware
+layout matchss C -- the first listed member's MSB corresponds to the struct's
+MSB. The last member in the list shares its LSB with the struct.
+
+#### Example figure
+
+```
+15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0 
+-------------------------------------------------
+| MSB                                       LSB | 16 bit integer vector
+-------------------------------------------------
+                         | MSB              LSB | 8 bit integer vector
+-------------------------------------------------
+| MSB      [1]       LSB | MSB     [0]      LSB | 2 element array of 8 bit integer vectors
+-------------------------------------------------
+
+      13 12 11 10  9  8  7  6  5  4  3  2  1  0 
+                            ---------------------
+                            | MSB           LSB | 7 bit integer vector
+      -------------------------------------------
+      | MSB     [1]     LSB | MSB    [0]    LSB | 2 element array of 7 bit integer vectors
+      -------------------------------------------
+      | MSB a LSB | MSB b[1] LSB | MSB b[0] LSB | struct
+      -------------------------------------------  a: 4 bit integral
+                                                    b: 2 element array of 5 bit integer vectors
 ```
 
 ### Cost Model
