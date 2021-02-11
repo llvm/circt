@@ -134,8 +134,8 @@ abutting them in lexical order.
 // %arr123[1] = 0x2
 // %arr123[2] = 0x1
 
-%arr456 = ... // {0x4, 0x5, 0x6}, in C-style.
-%arr78  = ... // {0x7, 0x8}, in C-style.
+%arr456 = ... // {0x4, 0x5, 0x6}
+%arr78  = ... // {0x7, 0x8}
 %arr = rtl.array_concat %arr123, %arr456, %arr78 : !rtl.array<3 x i4>, !rtl.array<3 x i4>, !rtl.array<2 x i4>
 // %arr[0] = 0x6
 // %arr[1] = 0x5
@@ -144,6 +144,15 @@ abutting them in lexical order.
 // %arr[4] = 0x2
 // %arr[5] = 0x1
 ```
+
+**Note**: This ordering scheme is unintuitive for anyone expecting C
+array-like ordering. In a C, arrays are laid out with index 0 as the least
+significant value. In the CIRCT _model_ (assembly and C++), it is the
+opposite -- the most significant value is located at the zero index. The
+produced hardware, however, _is_ in C-style order as operands are printed (in
+SystemVerilog) in the same lexical order as the assembly. Since SystemVerilog
+array concatenation and array creation are listed in MSB to LSB
+left-to-right, the ordering is reversed again.
 
 In the CIRCT C++ model, lists of values are in lexical order. That is, index
 zero of a list is the leftmost operand in assembly, which is the most
@@ -156,24 +165,21 @@ ArrayConcatOp arr = builder.create<ArrayConcatOp>(..., {arr123, arr456});
 // Is equivalent to the above array example.
 ```
 
-**Note**: This ordering scheme is unintuitive for anyone expecting C
-array-like ordering. In a C, arrays are laid out with index 0 as the least
-significant value. In the CIRCT _model_ (assembly and C++), it is the
-opposite -- the most significant value is located at the zero index. The
-produced hardware, however, _is_ in C-style order as operands are printed (in
-SystemVerilog) in the same lexical order as the assembly. Since SystemVerilog
-array concatenation and array creation are listed in MSB to LSB
-left-to-right, the ordering is reversed again.
+### Array slicing and indexing
+
+Should `array_get %arr123[%1]` (wherein `%1` is dynamically zero) result in
+`0x3` or `0x1`? It is currently `0x3` in SystemVerilog. I think we need to
+define this consistently to ensure sound transformations (e.g. constant
+folding).
 
 ### Bitcasts
 
 The bitcast operation represents a bitwise reinerpretation (cast) of a value.
 This always synthesizes away in hardware, though it may or may not be
-syntactically represented in lowering or export language.
-
-Since bitcasting requires information on the bitwise layout of the types on
-which it operates, we discuss that here. All of the types are _packed_,
-meaning there is never padding or alignment.
+syntactically represented in lowering or export language. Since bitcasting
+requires information on the bitwise layout of the types on which it operates,
+we discuss that here. All of the types are _packed_, meaning there is never
+padding or alignment.
 
 - **Integer bit vectors**: MLIR's `IntegerType` with `Signless` semantics are
 used to represent bit vectors. They are never padded or aligned.
@@ -204,7 +210,7 @@ MSB. The last member in the list shares its LSB with the struct.
       -------------------------------------------
       | MSB a LSB | MSB b[1] LSB | MSB b[0] LSB | struct
       -------------------------------------------  a: 4 bit integral
-                                                    b: 2 element array of 5 bit integer vectors
+                                                   b: 2 element array of 5 bit integer vectors
 ```
 
 ### Cost Model
