@@ -1,7 +1,7 @@
 // RUN: circt-translate %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 module {
-  rtl.externmodule @E(%a: i1 {rtl.direction = "in"}, 
+  rtl.module.extern @E(%a: i1 {rtl.direction = "in"}, 
                 %b: i1 {rtl.direction = "out"}, 
                 %c: i1 {rtl.direction = "out"})
 
@@ -169,10 +169,10 @@ module {
 
 
   /// TODO: Specify parameter declarations.
-  rtl.externmodule @EXT_W_PARAMS(%a: i1 {rtl.direction = "in"}, %b: i0) -> (%out: i1)
+  rtl.module.extern @EXT_W_PARAMS(%a: i1 {rtl.direction = "in"}, %b: i0) -> (%out: i1)
     attributes { verilogName="FooModule" }
 
-  rtl.externmodule @EXT_W_PARAMS2(%a: i2 {rtl.direction = "in"}) -> (%out: i1)
+  rtl.module.extern @EXT_W_PARAMS2(%a: i2 {rtl.direction = "in"}) -> (%out: i1)
     attributes { verilogName="FooModule" }
 
   rtl.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2: i1) {

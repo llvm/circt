@@ -79,13 +79,13 @@ void RTLModuleOp::build(OpBuilder &builder, OperationState &result,
 /// Return the name to use for the Verilog module that we're referencing
 /// here.  This is typically the symbol, but can be overridden with the
 /// verilogName attribute.
-StringRef RTLExternModuleOp::getVerilogModuleName() {
+StringRef RTLModuleExternOp::getVerilogModuleName() {
   if (auto vname = verilogName())
     return vname.getValue();
   return getName();
 }
 
-void RTLExternModuleOp::build(OpBuilder &builder, OperationState &result,
+void RTLModuleExternOp::build(OpBuilder &builder, OperationState &result,
                               StringAttr name, ArrayRef<ModulePortInfo> ports,
                               StringRef verilogName) {
   buildModule(builder, result, name, ports);
@@ -283,7 +283,7 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
   return success();
 }
 
-static ParseResult parseRTLExternModuleOp(OpAsmParser &parser,
+static ParseResult parseRTLModuleExternOp(OpAsmParser &parser,
                                           OperationState &result) {
   return parseRTLModuleOp(parser, result, /*isExtModule:*/ true);
 }
@@ -383,7 +383,7 @@ static void printRTLModuleOp(OpAsmPrinter &p, Operation *op) {
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size());
 }
 
-static void print(OpAsmPrinter &p, RTLExternModuleOp op) {
+static void print(OpAsmPrinter &p, RTLModuleExternOp op) {
   printRTLModuleOp(p, op);
 }
 
@@ -425,7 +425,7 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
            << op.moduleName() << "'";
 
   if (!isa<RTLModuleOp>(referencedModule) &&
-      !isa<RTLExternModuleOp>(referencedModule))
+      !isa<RTLModuleExternOp>(referencedModule))
     return op.emitError("Symbol resolved to '")
            << referencedModule->getName()
            << "' which is not a RTL[Ext]ModuleOp";
