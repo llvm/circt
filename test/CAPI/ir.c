@@ -31,8 +31,8 @@ int registerOnlyRTL() {
 
   MlirDialectHandle rtlHandle = mlirGetDialectHandle__rtl__();
 
-  MlirDialect rtl =
-      mlirContextGetOrLoadDialect(ctx, mlirDialectHandleGetNamespace(rtlHandle));
+  MlirDialect rtl = mlirContextGetOrLoadDialect(
+      ctx, mlirDialectHandleGetNamespace(rtlHandle));
   if (!mlirDialectIsNull(rtl))
     return 2;
 
@@ -42,7 +42,8 @@ int registerOnlyRTL() {
   if (mlirContextGetNumLoadedDialects(ctx) != 1)
     return 4;
 
-  rtl = mlirContextGetOrLoadDialect(ctx, mlirDialectHandleGetNamespace(rtlHandle));
+  rtl = mlirContextGetOrLoadDialect(ctx,
+                                    mlirDialectHandleGetNamespace(rtlHandle));
   if (mlirDialectIsNull(rtl))
     return 5;
   if (mlirContextGetNumLoadedDialects(ctx) != 2)

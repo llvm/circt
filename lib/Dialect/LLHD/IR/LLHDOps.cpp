@@ -178,8 +178,7 @@ static ParseResult parseConstOp(OpAsmParser &parser, OperationState &result) {
       parser.parseOptionalAttrDict(result.attributes))
     return failure();
   // parse the type for attributes that do not print the type by default
-  if (parser.parseOptionalColon() ||
-      !parser.parseOptionalType(type).hasValue())
+  if (parser.parseOptionalColon() || !parser.parseOptionalType(type).hasValue())
     type = val.getType();
   return parser.addTypeToList(val.getType(), result.types);
 }
