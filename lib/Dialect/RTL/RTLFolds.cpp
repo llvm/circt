@@ -859,24 +859,15 @@ struct ICmpCanonicalizeConstant final : public OpRewritePattern<ICmpOp> {
       case ICmpPredicate::eq:
         // eq(x, 0) -> not(x) when x is 1 bit.
         if (rhs.isNullValue() && rhs.getBitWidth() == 1) {
-          SmallVector<Value, 4> notOperands;
-          notOperands.push_back(op.lhs());
-          APInt one = APInt(1, 1);
-          auto constOne = rewriter.create<ConstantOp>(op.getLoc(), one);
-          notOperands.push_back(constOne);
-          rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(), notOperands);
+          rewriter.replaceOpWithNewOp<XorOp>(op, op.lhs(),
+                                             getConstant(APInt(1, 1)));
           return success();
         }
         // eq(x, 0) -> not(orr(x)) when x is >1 bit
         if (rhs.isNullValue() && rhs.getBitWidth() > 1) {
-          auto orR =
+          Value orR =
               rewriter.create<OrROp>(op.getLoc(), op.getType(), op.lhs());
-          SmallVector<Value, 4> notOperands;
-          notOperands.push_back(orR);
-          APInt one = APInt(1, 1);
-          auto constOne = rewriter.create<ConstantOp>(op.getLoc(), one);
-          notOperands.push_back(constOne);
-          rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(), notOperands);
+          rewriter.replaceOpWithNewOp<XorOp>(op, orR, getConstant(APInt(1, 1)));
           return success();
         }
         break;
