@@ -61,7 +61,7 @@ def SMemOp : FIRRTLOp<"smem", [/*MemAlloc*/]> {
 
 def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
   let summary = "Define a new mem";
-  let arguments = (ins I32Attr:$readLatency,
+  let arguments = (ins Confined<I32Attr, [IntMinValue<0>]>:$readLatency,
                        Confined<I32Attr, [IntMinValue<1>]>:$writeLatency,
                        Confined<I64Attr, [IntMinValue<1>]>:$depth, RUWAttr:$ruw,
                        StrArrayAttr:$portNames,
@@ -69,6 +69,8 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat = "$ruw attr-dict `:` type($results)";
+
+  let verifier = "return ::verifyMemOp(*this);";
 
   let extraClassDeclaration = [{
     enum class PortKind { Read, Write, ReadWrite };

@@ -10,20 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt-c/RTLDialect.h"
+#include "circt-c/Dialect/RTL.h"
 #include "circt/Dialect/RTL/RTLOps.h"
-#include "mlir-c/IR.h"
 #include "mlir/CAPI/IR.h"
+#include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Support.h"
 
-void mlirContextRegisterRTLDialect(MlirContext context) {
-  unwrap(context)->getDialectRegistry().insert<circt::rtl::RTLDialect>();
-}
-
-MlirDialect mlirContextLoadRTLDialect(MlirContext context) {
-  return wrap(unwrap(context)->getOrLoadDialect<circt::rtl::RTLDialect>());
-}
-
-MlirStringRef mlirRTLDialectGetNamespace() {
-  return wrap(circt::rtl::RTLDialect::getDialectNamespace());
-}
+MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(RTL, rtl, circt::rtl::RTLDialect)

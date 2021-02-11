@@ -24,6 +24,7 @@ target_link_libraries(circt-opt
   CIRCTStandardToStaticLogic
   CIRCTStaticLogicOps
   CIRCTSV
+  CIRCTSVTransforms
 
   MLIRParser
   MLIRSupport
