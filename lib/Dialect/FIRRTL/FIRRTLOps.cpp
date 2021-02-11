@@ -19,6 +19,10 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/StringSet.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -634,6 +638,135 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
   return success();
 }
 
+/// Verify the correctness of a MemOp.
+static LogicalResult verifyMemOp(MemOp mem) {
+
+  // Store the port names as we find them. This lets us check quickly
+  // for uniqueneess.
+  StringSet<> portNamesSet;
+
+  // Store the previous data type. This lets us check that the data
+  // type is consistent across all ports.
+  FIRRTLType oldDataType;
+
+  for (size_t i = 0, e = mem.getNumResults(); i != e; ++i) {
+    auto portName = mem.getPortName(i);
+
+    // Get a bundle type representing this port, stripping an outer
+    // flip if it exists.  If this is not a bundle<> or
+    // flip<bundle<>>, then this is an error.
+    BundleType portBundleType =
+        TypeSwitch<FIRRTLType, BundleType>(
+            mem.getResult(i).getType().cast<FIRRTLType>())
+            .Case<BundleType>([](BundleType a) { return a; })
+            .Case<FlipType>([](FlipType a) {
+              return a.getElementType().dyn_cast<BundleType>();
+            })
+            .Default([](auto) { return nullptr; });
+    if (!portBundleType) {
+      mem.emitOpError() << "has an invalid type on port " << portName
+                        << " (expected either '!firrtl.bundle<...>' or "
+                           "'!firrtl.flip<bundle<...>>')";
+      return failure();
+    }
+
+    // Require that all port names are unique.
+    if (!std::get<1>(portNamesSet.insert(portName.getValue()))) {
+      mem.emitOpError() << "has non-unique port name " << portName;
+      return failure();
+    }
+
+    // Determine the kind of the memory.  If the kind cannot be
+    // determined, then it's indicative of the wrong number of fields
+    // in the type (but we don't know any more just yet).
+    MemOp::PortKind portKind;
+    {
+      auto portKindOption =
+          mem.getPortKind(mem.getPortName(i).getValue().str());
+      if (!portKindOption.hasValue()) {
+        mem.emitOpError()
+            << "has an invalid number of fields on port " << portName
+            << " (expected 4 for read, 5 for write, or 7 for read/write)";
+        return failure();
+      }
+      portKind = portKindOption.getValue();
+    }
+
+    // Safely search for the "data" field, erroring if it can't be
+    // found.
+    FIRRTLType dataType;
+    {
+      auto dataTypeOption = portBundleType.getElement("data");
+      if (!dataTypeOption && portKind == MemOp::PortKind::ReadWrite)
+        dataTypeOption = portBundleType.getElement("rdata");
+      if (!dataTypeOption) {
+        mem.emitOpError() << "has no data field on port " << portName
+                          << " (expected to see \"data\" for a read or write "
+                             "port or \"rdata\" for a read/write port)";
+        return failure();
+      }
+      dataType = dataTypeOption.getValue().type;
+    }
+
+    // Error if the data type isn't passive.
+    if (!dataType.isPassive()) {
+      mem.emitOpError() << "has non-passive data type on port " << portName
+                        << " (memory types must be passive)";
+      return failure();
+    }
+
+    // Error if the data type contains analog types.
+    if (dataType.containsAnalog()) {
+      mem.emitOpError()
+          << "has a data type that contains an analog type on port " << portName
+          << " (memory types cannot contain analog types)";
+      return failure();
+    }
+
+    // Check that the port type matches the kind that we determined
+    // for this port.  This catches situations of extraneous port
+    // fields beind included or the fields being named incorrectly.
+    FIRRTLType expectedType =
+        FlipType::get(mem.getTypeForPort(mem.depth(), dataType, portKind));
+    // Compute the original port type as portBundleType may have
+    // stripped outer flip information.
+    auto originalType = mem.getResult(i).getType();
+    if (originalType != expectedType) {
+      StringRef portKindName;
+      switch (portKind) {
+      case MemOp::PortKind::Read:
+        portKindName = "read";
+        break;
+      case MemOp::PortKind::Write:
+        portKindName = "write";
+        break;
+      case MemOp::PortKind::ReadWrite:
+        portKindName = "readwrite";
+        break;
+      }
+      mem.emitOpError() << "has an invalid type for port " << portName
+                        << " of determined kind \"" << portKindName
+                        << "\" (expected " << expectedType << ", but got "
+                        << originalType << ")";
+      return failure();
+    }
+
+    // Error if the type of the current port was not the same as the
+    // last port, but skip checking the first port.
+    if (oldDataType && (oldDataType != dataType)) {
+      mem.emitOpError() << "port " << mem.getPortName(i)
+                        << " has a different type than port "
+                        << mem.getPortName(i - 1) << " (expected "
+                        << oldDataType << ", but got " << dataType << ")";
+      return failure();
+    }
+
+    oldDataType = dataType;
+  }
+
+  return success();
+}
+
 BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLType dataType,
                                  PortKind portKind) {
 
@@ -1083,7 +1216,8 @@ FIRRTLType DShlPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs,
     return {};
   }
 
-  // If the left or right has unknown result type, then the operation does too.
+  // If the left or right has unknown result type, then the operation does
+  // too.
   auto width = lhsi.getWidthOrSentinel();
   if (width == -1 || !rhsui.getWidth().hasValue())
     width = -1;
@@ -1312,9 +1446,9 @@ FIRRTLType MuxPrimOp::getResultType(FIRRTLType sel, FIRRTLType high,
   }
 
   if (low.isa<IntType>()) {
-    // Two different Int types can be compatible.  If either has unknown width,
-    // then return it.  If both are known but different width, then return the
-    // larger one.
+    // Two different Int types can be compatible.  If either has unknown
+    // width, then return it.  If both are known but different width, then
+    // return the larger one.
     int32_t highWidth = high.getBitWidthOrSentinel();
     int32_t lowWidth = low.getBitWidthOrSentinel();
     if (lowWidth == -1)

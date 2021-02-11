@@ -1,4 +1,4 @@
-// RUN: circt-opt %s | FileCheck %s
+// RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
 // CHECK-LABEL: func @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> i50 {
 func @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> i50 {
@@ -86,7 +86,7 @@ func @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> i50 {
   
   // CHECK-NEXT: [[STR:%[0-9]+]] = rtl.struct_create ({{.*}}, {{.*}}) : !rtl.struct<foo: i19, bar: i7>
   %s0 = rtl.struct_create (%small1, %mux) : !rtl.struct<foo: i19, bar: i7>
-  
+
   // CHECK-NEXT: = rtl.struct_extract [[STR]]["foo"] : !rtl.struct<foo: i19, bar: i7>
   %sf1 = rtl.struct_extract %s0["foo"] : !rtl.struct<foo: i19, bar: i7>
 
@@ -103,8 +103,12 @@ func @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> i50 {
   %idx = constant 13 : i10
   // CHECK-NEXT: = rtl.array_slice %arg2 at %c13_i10 : (!rtl.array<1000xi8>) -> !rtl.array<24xi8>
   %subArray = rtl.array_slice %arg2 at %idx : (!rtl.array<1000xi8>) -> !rtl.array<24xi8>
-  // CHECK-NEXT: = rtl.array_create [[RES9]], [[RES10]] : (i19)
+  // CHECK-NEXT: [[ARR1:%.+]] = rtl.array_create [[RES9]], [[RES10]] : (i19)
   %arrCreated = rtl.array_create %small1, %small2 : (i19)
+  // CHECK-NEXT: [[ARR2:%.+]] = rtl.array_create [[RES9]], [[RES10]], {{.+}} : (i19)
+  %arr2 = rtl.array_create %small1, %small2, %add : (i19)
+  // CHECK-NEXT: = rtl.array_concat [[ARR1]], [[ARR2]] : !rtl.array<2xi19>, !rtl.array<3xi19>
+  %bigArray = rtl.array_concat %arrCreated, %arr2 : !rtl.array<2 x i19>, !rtl.array<3 x i19>
 
   // CHECK-NEXT:    return [[RES8]] : i50
   return %result : i50

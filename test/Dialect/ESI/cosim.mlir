@@ -41,7 +41,7 @@ rtl.module @top(%clk:i1, %rstn:i1) -> () {
   // CAPNP: list @0 () -> (ifaces :List(EsiDpiInterfaceDesc));
   // CAPNP: open @1 [S, T] (iface :EsiDpiInterfaceDesc) -> (iface :EsiDpiEndpoint(S, T));
 
-  // COSIM: rtl.instance "TestEP" @Cosim_Endpoint(%clk, %rstn, %{{.+}}, %{{.+}}, %{{.+}}) {parameters = {ENDPOINT_ID = 1 : i32, RECV_TYPE_ID = 10578209918096690139 : ui64, RECV_TYPE_SIZE_BITS = 128 : i32, SEND_TYPE_ID = 11229133067582987457 : ui64, SEND_TYPE_SIZE_BITS = 128 : i32}} : (i1, i1, i1, i1, i128) -> (i1, !rtl.array<128xi1>, i1)
+  // COSIM: rtl.instance "TestEP" @Cosim_Endpoint(%clk, %rstn, %{{.+}}, %{{.+}}, %{{.+}}) {parameters = {ENDPOINT_ID = 1 : i32, RECV_TYPE_ID = 10578209918096690139 : ui64, RECV_TYPE_SIZE_BITS = 128 : i32, SEND_TYPE_ID = 11229133067582987457 : ui64, SEND_TYPE_SIZE_BITS = 128 : i32}} : (i1, i1, i1, i1, !rtl.array<128xi1>) -> (i1, !rtl.array<128xi1>, i1)
 
   // SV: assign _T.valid = TestEP_DataOutValid;
   // SV: assign _T.data = dataSection[6'h0+:32];
@@ -63,7 +63,7 @@ rtl.module @top(%clk:i1, %rstn:i1) -> () {
   // SV:   .rstn (rstn),
   // SV:   .DataOutReady ({{.+}}.ready),
   // SV:   .DataInValid ({{.+}}.valid),
-  // SV:   .DataIn ({{[{]}}{50'h0, {{.+}}}, {16'h0, 16'h1, 32'h0}}),
+  // SV:   .DataIn ({50'h0, {{.+}}.data, {16'h0, 16'h1, 30'h0, 2'h0}})
   // SV:   .DataOutValid (TestEP_DataOutValid),
   // SV:   .DataOut (TestEP_DataOut),
   // SV:   .DataInReady (TestEP_DataInReady)
@@ -81,12 +81,12 @@ rtl.module @top(%clk:i1, %rstn:i1) -> () {
   // SV:    .RECV_TYPE_SIZE_BITS(32'd384),
   // SV:    .SEND_TYPE_ID(64'd11229133067582987457),
   // SV:    .SEND_TYPE_SIZE_BITS(32'd128)
-  // SV:  ) ArrTestEP ( // <stdin>:97:75
+  // SV:  ) ArrTestEP (
   // SV:    .clk          (clk),
   // SV:    .rstn         (rstn),
   // SV:    .DataOutReady ({{.+}}.ready),
   // SV:    .DataInValid  ([[IF1]].valid),
-  // SV:    .DataIn       ({{[{]}}{50'h0, [[IF1]].data}, {16'h0, 16'h1, 32'h0}}),
+  // SV:    .DataIn       ({50'h0, [[IF1]].data, {16'h0, 16'h1, 30'h0, 2'h0}}),
   // SV:    .DataOutValid (ArrTestEP_DataOutValid),
   // SV:    .DataOut      (ArrTestEP_DataOut),
   // SV:    .DataInReady  (ArrTestEP_DataInReady)

@@ -2,7 +2,7 @@ add_circt_conversion_library(CIRCTRTLToLLHD
   RTLToLLHD.cpp
 
   DEPENDS
-  CIRCTRTLToLLHDConversionPassIncGen
+  CIRCTConversionPassIncGen
 
   LINK_COMPONENTS
   Core

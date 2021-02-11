@@ -42,7 +42,7 @@ public:
                        // Cast operation
                        BitcastOp,
                        // Array operations
-                       ArraySliceOp, ArrayCreateOp, ArrayGetOp>(
+                       ArraySliceOp, ArrayCreateOp, ArrayConcatOp, ArrayGetOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitComb(expr, args...);
             })
@@ -117,6 +117,7 @@ public:
   HANDLE(ArraySliceOp, Unhandled);
   HANDLE(ArrayGetOp, Unhandled);
   HANDLE(ArrayCreateOp, Unhandled);
+  HANDLE(ArrayConcatOp, Unhandled);
 #undef HANDLE
 };
 

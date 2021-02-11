@@ -696,7 +696,7 @@ module attributes {firrtl.mainModule = "Simple"} {
   //    input clock2 : Clock
   //
   //    mem _M : @[Decoupled.scala 209:24]
-  //          data-type => { id : Analog<4>, other: SInt<8> }
+  //          data-type => { id : UInt<4>, other: SInt<8> }
   //          depth => 20
   //          read-latency => 0
   //          write-latency => 1
@@ -720,13 +720,13 @@ module attributes {firrtl.mainModule = "Simple"} {
   rtl.module @MemAggregate(%clock1: i1, %clock2: i1) {
       %0 = firrtl.stdIntCast %clock1 : (i1) -> !firrtl.clock
       %1 = firrtl.stdIntCast %clock2 : (i1) -> !firrtl.clock
-      %_M_read, %_M_write = firrtl.mem Undefined {depth = 20 : i64, name = "_M", portNames = ["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<5>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>, other: sint<8>>>, !firrtl.flip<bundle<addr: uint<5>, en: uint<1>, clk: clock, data: bundle<id: analog<4>, other: sint<8>>, mask: bundle<id: uint<1>, other: uint<1>>>>
+      %_M_read, %_M_write = firrtl.mem Undefined {depth = 20 : i64, name = "_M", portNames = ["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<5>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: uint<4>, other: sint<8>>>, !firrtl.flip<bundle<addr: uint<5>, en: uint<1>, clk: clock, data: bundle<id: uint<4>, other: sint<8>>, mask: bundle<id: uint<1>, other: uint<1>>>>
       rtl.output
     }
 
   // module MemOne :
   //   mem _M : @[Decoupled.scala 209:24]
-  //         data-type => { id : Analog<4>, other: SInt<8> }
+  //         data-type => { id : UInt<4>, other: SInt<8> }
   //         depth => 1
   //         read-latency => 0
   //         write-latency => 1
@@ -755,7 +755,7 @@ module attributes {firrtl.mainModule = "Simple"} {
   // CHECK:   rtl.output
   // CHECK-NEXT: }
   rtl.module @MemOne() {
-    %_M_read, %_M_write = firrtl.mem Undefined {depth = 1 : i64, name = "_M", portNames=["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<1>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: analog<4>, other: sint<8>>>, !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<id: analog<4>, other: sint<8>>, mask: bundle<id: uint<1>, other: uint<1>>>>
+    %_M_read, %_M_write = firrtl.mem Undefined {depth = 1 : i64, name = "_M", portNames=["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<1>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: uint<4>, other: sint<8>>>, !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<id: uint<4>, other: sint<8>>, mask: bundle<id: uint<1>, other: uint<1>>>>
     rtl.output
   }
 

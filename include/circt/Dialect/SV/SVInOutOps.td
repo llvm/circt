@@ -51,6 +51,22 @@ def WireOp : SVOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let hasCanonicalizer = true;
 }
 
+def RegOp : SVOp<"reg", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
+  let summary = "Define a new `reg` in SystemVerilog";
+  let arguments = (ins OptionalAttr<StrAttr>:$name);
+  let results = (outs InOutType:$result);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilderDAG<(ins "::mlir::Type":$elementType,
+                      CArg<"StringAttr", "StringAttr()">:$name)>
+  ];
+
+  // We handle the name in a custom way, so we use a customer parser/printer.
+  let assemblyFormat = "custom<ImplicitSSAName>(attr-dict) `:` type($result)";
+  let hasCanonicalizer = true;
+}
+
 def ReadInOutOp
  : SVOp<"read_inout",
         [NoSideEffect, InOutElementConstraint<"result", "input">]> {
