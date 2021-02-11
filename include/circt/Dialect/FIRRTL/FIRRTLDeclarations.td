@@ -97,7 +97,7 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
     // Return the result for this instance that corresponds to the specified
     // port name.
     Value getPortNamed(StringRef name) {
-      return getPortNamed(StringAttr::get(name, getContext()));
+      return getPortNamed(StringAttr::get(getContext(), name));
     }
     Value getPortNamed(StringAttr name);
   }];

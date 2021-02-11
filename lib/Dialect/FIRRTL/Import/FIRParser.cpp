@@ -577,7 +577,7 @@ ParseResult FIRParser::parseId(StringAttr &result, const Twine &message) {
   if (parseId(name, message))
     return failure();
 
-  result = StringAttr::get(name, getContext());
+  result = StringAttr::get(getContext(), name);
   return success();
 }
 
@@ -2504,7 +2504,7 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
 
   if (!parameters.empty())
     fmodule->setAttr("parameters",
-                     DictionaryAttr::get(parameters, getContext()));
+                     DictionaryAttr::get(getContext(), parameters));
 
   return success();
 }

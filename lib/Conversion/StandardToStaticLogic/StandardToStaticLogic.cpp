@@ -25,7 +25,7 @@ using valueVector = SmallVector<Value, 4>;
 valueVector getPipelineArgs(Block &block) {
   valueVector arguments;
   for (auto &op : block) {
-    if (op.isKnownNonTerminator()) {
+    if (!op.mightHaveTrait<OpTrait::IsTerminator>()) {
       for (auto operand : op.getOperands()) {
         if (operand.getKind() == Value::Kind::BlockArgument) {
           // Add only unique uses
@@ -50,7 +50,8 @@ valueVector getPipelineResults(Block &block) {
     for (auto result : op.getResults()) {
       bool isResult = false;
       for (auto user : result.getUsers()) {
-        if (user->getBlock() != &block || user->isKnownTerminator()) {
+        if (user->getBlock() != &block ||
+            user->hasTrait<OpTrait::IsTerminator>()) {
           isResult = true;
           break;
         }
@@ -64,7 +65,7 @@ valueVector getPipelineResults(Block &block) {
 
 static void createPipeline(mlir::FuncOp f, OpBuilder &builder) {
   for (Block &block : f) {
-    if (block.front().isKnownNonTerminator()) {
+    if (!block.front().mightHaveTrait<OpTrait::IsTerminator>()) {
 
       auto arguments = getPipelineArgs(block);
       auto results = getPipelineResults(block);
