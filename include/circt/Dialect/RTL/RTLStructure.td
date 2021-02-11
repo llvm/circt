@@ -207,7 +207,7 @@ def RTLModuleGeneratedOp : RTLOp<"module.generated",
 
   private:
     // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<RTLGeneratedModuleOp>;
+    friend class OpTrait::FunctionLike<RTLModuleGeneratedOp>;
 
     /// Returns the number of arguments, implementing OpTrait::FunctionLike.
     unsigned getNumFuncArguments() { return getType().getInputs().size(); }

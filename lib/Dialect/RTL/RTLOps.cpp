@@ -299,7 +299,7 @@ static ParseResult parseRTLModuleExternOp(OpAsmParser &parser,
   return parseRTLModuleOp(parser, result, ExternMod);
 }
 
-static ParseResult parseRTLGeneratedModuleOp(OpAsmParser &parser,
+static ParseResult parseRTLModuleGeneratedOp(OpAsmParser &parser,
                                              OperationState &result) {
   return parseRTLModuleOp(parser, result, GenMod);
 }
@@ -397,7 +397,7 @@ static void printRTLModuleOp(OpAsmPrinter &p, Operation *op,
   p.printSymbolName(funcName);
   if (modKind == GenMod) {
     p << ", ";
-    p.printSymbolName(dyn_cast<RTLGeneratedModuleOp>(op).generatorKind());
+    p.printSymbolName(dyn_cast<RTLModuleGeneratedOp>(op).generatorKind());
   }
   printModuleSignature(p, op, argTypes, /*isVariadic=*/false, resultTypes);
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
@@ -425,7 +425,7 @@ static void print(OpAsmPrinter &p, RTLModuleOp op) {
 
 /// Lookup the generator for the symbol.  This returns null on
 /// invalid IR.
-Operation *RTLGeneratedModuleOp::getGeneratorKindOp() {
+Operation *RTLModuleGeneratedOp::getGeneratorKindOp() {
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
   if (!topLevelModuleOp)
     return nullptr;
@@ -433,7 +433,7 @@ Operation *RTLGeneratedModuleOp::getGeneratorKindOp() {
   return topLevelModuleOp.lookupSymbol(generatorKind());
 }
 
-static LogicalResult verifyRTLGeneratedModuleOp(RTLGeneratedModuleOp op) {
+static LogicalResult verifyRTLModuleGeneratedOp(RTLModuleGeneratedOp op) {
   // Check that this instance is inside a module.
   auto module = dyn_cast<mlir::ModuleOp>(op->getParentOp());
   if (!module) {
