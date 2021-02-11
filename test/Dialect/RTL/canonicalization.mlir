@@ -805,3 +805,27 @@ func @shrs_fold2() -> (i12) {
   %0 = rtl.shrs %c-5_i12, %c10_i12 : i12
   return %0 : i12
 }
+
+// CHECK-LABEL:  rtl.module @equality_false1(%a: i1) -> (%b: i1) {
+// CHECK-NEXT:    %true = rtl.constant(true) : i1
+// CHECK-NEXT:    %0 = rtl.xor %a, %true : i1
+// CHECK-NEXT:    rtl.output %0 : i1
+
+rtl.module @equality_false1(%a: i1) -> (%b: i1) {
+  %false = rtl.constant(false) : i1
+  %0 = rtl.icmp eq %a, %false : i1
+  rtl.output %0 : i1
+}
+
+
+// CHECK-LABEL:  rtl.module @equality_false2(%a: i2) -> (%b: i1) {
+// CHECK-NEXT:    %true = rtl.constant(true) : i1
+// CHECK-NEXT:    %0 = rtl.orr %a : i2
+// CHECK-NEXT:    %1 = rtl.xor %0, %true : i1
+// CHECK-NEXT:    rtl.output %1 : i1
+
+rtl.module @equality_false2(%a: i2) -> (%b: i1) {
+  %c0_i2 = rtl.constant(0 : i2) : i2
+  %0 = rtl.icmp eq %a, %c0_i2 : i2
+  rtl.output %0 : i1
+}
