@@ -146,13 +146,13 @@ abutting them in lexical order.
 ```
 
 **Note**: This ordering scheme is unintuitive for anyone expecting C
-array-like ordering. In a C, arrays are laid out with index 0 as the least
-significant value. In the CIRCT _model_ (assembly and C++), it is the
-opposite -- the most significant value is located at the zero index. The
-produced hardware, however, _is_ in C-style order as operands are printed (in
-SystemVerilog) in the same lexical order as the assembly. Since SystemVerilog
-array concatenation and array creation are listed in MSB to LSB
-left-to-right, the ordering is reversed again.
+array-like ordering. In C, arrays are laid out with index 0 as the least
+significant value and the first element (lexically) in the array literal. In
+the CIRCT _model_ (assembly and C++ of the operation creating the array), it
+is the opposite -- the most significant value is on the left (e.g. the first
+operand is the most significant). The indexing semantics at runtime, however,
+differ in that the element zero is the least significant (which is lexically
+on the right).
 
 In the CIRCT C++ model, lists of values are in lexical order. That is, index
 zero of a list is the leftmost operand in assembly, which is the most
@@ -165,12 +165,9 @@ ArrayConcatOp arr = builder.create<ArrayConcatOp>(..., {arr123, arr456});
 // Is equivalent to the above array example.
 ```
 
-### Array slicing and indexing
-
-Should `array_get %arr123[%1]` (wherein `%1` is dynamically zero) result in
-`0x3` or `0x1`? It is currently `0x3` in SystemVerilog. I think we need to
-define this consistently to ensure sound transformations (e.g. constant
-folding).
+**Array slicing and indexing** (`array_get`) operations both have indexes as
+operands. These indexes are the _runtime_ index, **not** the index in the
+operand list which created the array upon which the op is running.
 
 ### Bitcasts
 
