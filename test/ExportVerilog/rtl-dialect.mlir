@@ -1,7 +1,7 @@
 // RUN: circt-translate %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 module {
-  rtl.externmodule @E(%a: i1 {rtl.direction = "in"}, 
+  rtl.module.extern @E(%a: i1 {rtl.direction = "in"}, 
                 %b: i1 {rtl.direction = "out"}, 
                 %c: i1 {rtl.direction = "out"})
 
@@ -22,7 +22,8 @@ module {
     %r21: i1, %r22: i1, %r23: i1, %r24: i1,
     %r25: i1, %r26: i1, %r27: i1, %r28: i1,
     %r29: i12, %r30: i2, %r31: i9, %r33: i4, %r34: i4,
-    %r35: !rtl.array<3xi4>, %r36: i12, %r37: i4, %r38: !rtl.struct<foo: i2, bar:i4>
+    %r35: !rtl.array<3xi4>, %r36: i12, %r37: i4, 
+    %r38: !rtl.struct<foo: i2, bar:i4>, %r38: !rtl.array<6xi4>
     ) {
     
     %0 = rtl.add %a, %b : i4
@@ -64,6 +65,10 @@ module {
     %slice2 = rtl.array_slice %arrCreated at %b : (!rtl.array<9xi4>) -> !rtl.array<3xi4>
     %35 = rtl.mux %cond, %slice1, %slice2 : !rtl.array<3xi4>
 
+    %ab = rtl.add %a, %b : i4
+    %subArr = rtl.array_create %allone, %ab, %allone : (i4)
+    %38 = rtl.array_concat %subArr, %subArr : !rtl.array<3 x i4>, !rtl.array<3 x i4>
+
     %elem2d = rtl.array_get %array2d[%a] : !rtl.array<12 x array<10xi4>>
     %37 = rtl.array_get %elem2d[%b] : !rtl.array<10xi4>
 
@@ -78,7 +83,7 @@ module {
                %28, %29, %30, %31, %33, %34, %35, %36, %37, %39 :
      i4,i4, i4,i4,i4,i4,i4, i4,i4,i4,i4,i4,
      i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,i1,i1,
-     i12, i2,i9,i4, i4, !rtl.array<3xi4>, i12, i4, !rtl.struct<foo: i2, bar: i4>
+     i12, i2,i9,i4, i4, !rtl.array<3xi4>, i12, i4, !rtl.struct<foo: i2, bar: i4>, !rtl.array<6xi4>
   }
   // CHECK-LABEL: module TESTSIMPLE(
   // CHECK-NEXT:   input  [3:0]                                             a, b,
@@ -103,6 +108,7 @@ module {
   // CHECK-NEXT:   struct packed {logic [1:0] foo; logic [3:0] bar;} svar;
   // CHECK-EMPTY:
   // CHECK-NEXT:   wire [8:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
+  // CHECK-NEXT:   wire [2:0][3:0] [[WIRE1:.+]] = {{[{}][{}]}}4'hF}, {a + b}, {4'hF}};
   // CHECK-NEXT:   assign r0 = a + b;
   // CHECK-NEXT:   assign r2 = a - b;
   // CHECK-NEXT:   assign r4 = a * b;
@@ -138,6 +144,7 @@ module {
   // CHECK-NEXT:   assign r36 = {3{a}};
   // CHECK-NEXT:   assign r37 = array2d[a][b];
   // CHECK-NEXT:   assign r38 = '{foo: structA.foo, bar: a};
+  // CHECK-NEXT:   assign r39 = {[[WIRE1]], [[WIRE1]]};
   // CHECK-NEXT: endmodule
 
   rtl.module @B(%a: i1) -> (%b: i1, %c: i1) {
@@ -177,10 +184,10 @@ module {
 
 
   /// TODO: Specify parameter declarations.
-  rtl.externmodule @EXT_W_PARAMS(%a: i1 {rtl.direction = "in"}, %b: i0) -> (%out: i1)
+  rtl.module.extern @EXT_W_PARAMS(%a: i1 {rtl.direction = "in"}, %b: i0) -> (%out: i1)
     attributes { verilogName="FooModule" }
 
-  rtl.externmodule @EXT_W_PARAMS2(%a: i2 {rtl.direction = "in"}) -> (%out: i1)
+  rtl.module.extern @EXT_W_PARAMS2(%a: i2 {rtl.direction = "in"}) -> (%out: i1)
     attributes { verilogName="FooModule" }
 
   rtl.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2: i1) {

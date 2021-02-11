@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/HandshakeToFIRRTL/HandshakeToFIRRTL.h"
+#include "../PassDetail.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
@@ -2083,13 +2084,8 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
 
 namespace {
 class HandshakeToFIRRTLPass
-    : public mlir::PassWrapper<HandshakeToFIRRTLPass,
-                               OperationPass<handshake::FuncOp>> {
+    : public HandshakeToFIRRTLBase<HandshakeToFIRRTLPass> {
 public:
-  void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<firrtl::FIRRTLDialect>();
-  }
-
   void runOnOperation() override {
     auto op = getOperation();
 
@@ -2106,7 +2102,6 @@ public:
 };
 } // end anonymous namespace
 
-void handshake::registerHandshakeToFIRRTLPasses() {
-  PassRegistration<HandshakeToFIRRTLPass>("lower-handshake-to-firrtl",
-                                          "Lowering to FIRRTL Dialect");
+std::unique_ptr<mlir::Pass> circt::createHandshakeToFIRRTLPass() {
+  return std::make_unique<HandshakeToFIRRTLPass>();
 }

@@ -547,7 +547,7 @@ circuit inputs_only :
     ; CHECK-NOT:    reg  [3:0] _M_id[19:0];
     ; CHECK-NOT:    reg  [3:0] _M_other[19:0];
     mem _M : @[Decoupled.scala 209:24]
-          data-type => { id : Analog<4>, other: SInt<8> }
+          data-type => { id : UInt<4>, other: SInt<8> }
           depth => 20
           read-latency => 0
           write-latency => 1
@@ -595,7 +595,7 @@ circuit inputs_only :
  ; CHECK-LABEL: module MemOne();
   module MemOne :
     mem _M : @[Decoupled.scala 209:24]
-          data-type => { id : Analog<4>, other: SInt<8> }
+          data-type => { id : UInt<4>, other: SInt<8> }
           depth => 1
           read-latency => 0
           write-latency => 1

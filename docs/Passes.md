@@ -6,12 +6,6 @@ This document describes the available CIRCT passes and their contracts.
 
 ## Conversion Passes
 
-[include "FIRRTLToLLHD.md"]
-
-[include "RTLToLLHD.md"]
-
-[include "LLHDToLLVM.md"]
-
 [include "CIRCTConversionPasses.md"]
 
 ## ESI Dialect Passes

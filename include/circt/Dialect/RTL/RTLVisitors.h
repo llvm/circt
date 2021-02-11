@@ -42,7 +42,7 @@ public:
                        // Cast operation
                        BitcastOp,
                        // Array operations
-                       ArraySliceOp, ArrayCreateOp, ArrayGetOp,
+                       ArraySliceOp, ArrayCreateOp, ArrayConcatOp, ArrayGetOp,
                        // Struct operations
                        StructExtractOp, StructInjectOp>(
             [&](auto expr) -> ResultType {
@@ -121,6 +121,7 @@ public:
   HANDLE(ArraySliceOp, Unhandled);
   HANDLE(ArrayGetOp, Unhandled);
   HANDLE(ArrayCreateOp, Unhandled);
+  HANDLE(ArrayConcatOp, Unhandled);
 #undef HANDLE
 };
 

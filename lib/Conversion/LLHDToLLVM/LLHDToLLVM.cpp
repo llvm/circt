@@ -11,9 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
+#include "../PassDetail.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
-
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -22,13 +22,6 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
-
-namespace circt {
-namespace llhd {
-#define GEN_PASS_CLASSES
-#include "circt/Conversion/LLHDToLLVM/Passes.h.inc"
-} // namespace llhd
-} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -2707,7 +2700,7 @@ struct LLHDToLLVMLoweringPass
 };
 } // namespace
 
-void llhd::populateLLHDToLLVMConversionPatterns(
+void circt::populateLLHDToLLVMConversionPatterns(
     LLVMTypeConverter &converter, OwningRewritePatternList &patterns,
     size_t &sigCounter, size_t &regCounter) {
   MLIRContext *ctx = converter.getDialect()->getContext();
@@ -2797,15 +2790,6 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
 }
 
 /// Create an LLHD to LLVM conversion pass.
-std::unique_ptr<OperationPass<ModuleOp>>
-circt::llhd::createConvertLLHDToLLVMPass() {
+std::unique_ptr<OperationPass<ModuleOp>> circt::createConvertLLHDToLLVMPass() {
   return std::make_unique<LLHDToLLVMLoweringPass>();
 }
-
-/// Register the LLHD to LLVM convesion pass.
-namespace {
-#define GEN_PASS_REGISTRATION
-#include "circt/Conversion/LLHDToLLVM/Passes.h.inc"
-} // namespace
-
-void llhd::initLLHDToLLVMPass() { registerPasses(); }

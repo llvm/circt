@@ -1,0 +1,53 @@
+Statistical information for the repository 'circt' was gathered on 2020/12/02.
+The following historical commit information, by author, was found in the
+repository:
+
+Author                     Commits    Insertions      Deletions    % of changes
+Andrew Lenharth                 17          1318            267            7.11
+Andrew Young                     5           285             37            1.44
+Chris Gyurgyik                   7           530            109            2.87
+Chris Lattner                   58          2740           1644           19.67
+Fabian Schuiki                   5           707             53            3.41
+George Lyon                     10           314             46            1.62
+Hanchen Ye                       2            54             58            0.50
+Hideto Ueno                      8           431             82            2.30
+Hollow Man                       1             2              2            0.02
+John Demme                      42          4874            453           23.90
+Martin Erhart                    1            11              2            0.06
+Ruizhe Zhao                      1           245              2            1.11
+Schuyler Eldridge                8           737             67            3.61
+Simon Rodoni                     3          3953            850           21.55
+mikeurbach                      13          2119            216           10.48
+stephenneuendorffer              2            76              3            0.35
+
+The following history timeline has been gathered from the repository:
+
+Author                  2020W40    2020W41    2020W42    2020W43    2020W44 
+Andrew Lenharth                                   +++          .            
+Chris Gyurgyik             ++++     -+++++          .          .            
+Chris Lattner               -++              --++++++          .   ---+++++ 
+Fabian Schuiki                .   ++++++++                     .            
+George Lyon                                                    .            
+Hideto Ueno                                         +                       
+John Demme                             +++       -+++          .     ++++++ 
+Martin Erhart                 .                                             
+Ruizhe Zhao           +++++++++                                             
+Schuyler Eldridge                        .                     .        +++ 
+Simon Rodoni                           +++              -+++++++            
+mikeurbach                                         ++          .          . 
+Modified Rows:              476       1345       1886       5678       1911 
+
+Author                  2020W45    2020W46    2020W47    2020W48    2020W49 
+Andrew Lenharth               .          .               --+++++  +++++++++ 
+Andrew Young                                        .        +++            
+Chris Lattner         ----+++++        -++       -+++        --+         -+ 
+Fabian Schuiki                .                                             
+George Lyon                   +          .                     .            
+Hanchen Ye                               .                                  
+Hideto Ueno                  ++          .                                  
+Hollow Man                                                     .            
+John Demme                   ++  +++++++++   ++++++++    -++++++            
+Simon Rodoni                          ++++                                  
+mikeurbach                              ++     ++++++  +++++++++          . 
+stephenneuendorffer                      .          .                       
+Modified Rows:             1890       3309       3413       1867        512 

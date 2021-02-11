@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/StandardToStaticLogic/StandardToStaticLogic.h"
+#include "../PassDetail.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 
@@ -24,7 +25,7 @@ using valueVector = SmallVector<Value, 4>;
 valueVector getPipelineArgs(Block &block) {
   valueVector arguments;
   for (auto &op : block) {
-    if (op.isKnownNonTerminator()) {
+    if (!op.mightHaveTrait<OpTrait::IsTerminator>()) {
       for (auto operand : op.getOperands()) {
         if (operand.getKind() == Value::Kind::BlockArgument) {
           // Add only unique uses
@@ -49,7 +50,8 @@ valueVector getPipelineResults(Block &block) {
     for (auto result : op.getResults()) {
       bool isResult = false;
       for (auto user : result.getUsers()) {
-        if (user->getBlock() != &block || user->isKnownTerminator()) {
+        if (user->getBlock() != &block ||
+            user->hasTrait<OpTrait::IsTerminator>()) {
           isResult = true;
           break;
         }
@@ -63,7 +65,7 @@ valueVector getPipelineResults(Block &block) {
 
 static void createPipeline(mlir::FuncOp f, OpBuilder &builder) {
   for (Block &block : f) {
-    if (block.front().isKnownNonTerminator()) {
+    if (!block.front().mightHaveTrait<OpTrait::IsTerminator>()) {
 
       auto arguments = getPipelineArgs(block);
       auto results = getPipelineResults(block);
@@ -108,11 +110,7 @@ static void createPipeline(mlir::FuncOp f, OpBuilder &builder) {
 
 namespace {
 
-struct CreatePipelinePass
-    : public PassWrapper<CreatePipelinePass, OperationPass<mlir::FuncOp>> {
-  void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<staticlogic::StaticLogicDialect>();
-  }
+struct CreatePipelinePass : public CreatePipelineBase<CreatePipelinePass> {
   void runOnOperation() override {
     mlir::FuncOp f = getOperation();
     auto builder = OpBuilder(f.getContext());
@@ -122,7 +120,6 @@ struct CreatePipelinePass
 
 } // namespace
 
-void staticlogic::registerStandardToStaticLogicPasses() {
-  PassRegistration<CreatePipelinePass>(
-      "create-pipeline", "Create StaticLogic pipeline operations.");
+std::unique_ptr<mlir::Pass> circt::createCreatePipelinePass() {
+  return std::make_unique<CreatePipelinePass>();
 }

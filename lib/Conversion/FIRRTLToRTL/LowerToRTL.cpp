@@ -21,6 +21,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/TinyPtrVector.h"
+
 using namespace circt;
 using namespace firrtl;
 
@@ -111,7 +112,7 @@ private:
                            SmallVectorImpl<rtl::ModulePortInfo> &ports,
                            Operation *moduleOp);
   rtl::RTLModuleOp lowerModule(FModuleOp oldModule, Block *topLevelModule);
-  rtl::RTLExternModuleOp lowerExtModule(FExtModuleOp oldModule,
+  rtl::RTLModuleExternOp lowerExtModule(FExtModuleOp oldModule,
                                         Block *topLevelModule);
 
   void lowerModuleBody(FModuleOp oldModule,
@@ -123,7 +124,7 @@ private:
 } // end anonymous namespace
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLToRTLModulePass() {
+std::unique_ptr<mlir::Pass> circt::createLowerFIRRTLToRTLModulePass() {
   return std::make_unique<FIRRTLModuleLowering>();
 }
 
@@ -195,7 +196,7 @@ void FIRRTLModuleLowering::runOnOperation() {
   // module' specified in the Circuit into an attribute on the top level module.
   getOperation()->setAttr(
       "firrtl.mainModule",
-      StringAttr::get(circuit.name(), circuit.getContext()));
+      StringAttr::get(circuit.getContext(), circuit.name()));
   circuit.erase();
 }
 
@@ -311,7 +312,7 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
   return success();
 }
 
-rtl::RTLExternModuleOp
+rtl::RTLModuleExternOp
 FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
                                      Block *topLevelModule) {
   // Map the ports over, lowering their types as we go.
@@ -328,7 +329,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   // Build the new rtl.module op.
   OpBuilder builder(topLevelModule->getTerminator());
   auto nameAttr = builder.getStringAttr(oldModule.getName());
-  return builder.create<rtl::RTLExternModuleOp>(oldModule.getLoc(), nameAttr,
+  return builder.create<rtl::RTLModuleExternOp>(oldModule.getLoc(), nameAttr,
                                                 ports, verilogName);
 }
 
@@ -437,7 +438,7 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   // We don't have to do this check for insertion points that are at the
   // terminator in the module, because we know that everything is above it by
   // definition.
-  if (!insertPoint->isKnownTerminator()) {
+  if (!insertPoint->hasTrait<OpTrait::IsTerminator>()) {
     // On success, these are the ops that we need to move up above the insertion
     // point.  We keep track of a visited set because each compute subgraph is
     // a dag (not a tree), and we want to only want to visit each subnode once.
@@ -760,6 +761,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   template <typename ResultOpType, typename... CtorArgTypes>
   LogicalResult setLoweringTo(Operation *orig, CtorArgTypes... args);
   void emitRandomizePrologIfNeeded();
+  void initializeRegister(Value reg, Value resetSignal);
 
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitExpr;
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitDecl;
@@ -900,7 +902,7 @@ private:
 } // end anonymous namespace
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLToRTLPass() {
+std::unique_ptr<mlir::Pass> circt::createLowerFIRRTLToRTLPass() {
   return std::make_unique<FIRRTLLowering>();
 }
 
@@ -1244,6 +1246,32 @@ void FIRRTLLowering::emitRandomizePrologIfNeeded() {
   randomizePrologEmitted = true;
 }
 
+void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
+  // Emit the initializer expression for simulation that fills it with random
+  // value.
+  builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
+    builder->create<sv::InitialOp>([&]() {
+      emitRandomizePrologIfNeeded();
+      auto type = reg.getType().dyn_cast<rtl::InOutType>().getElementType();
+
+      builder->create<sv::IfDefOp>("RANDOMIZE_REG_INIT", [&]() {
+        if (resetSignal) {
+          auto one = builder->create<rtl::ConstantOp>(APInt(1, 1));
+          auto notResetValue = builder->create<rtl::XorOp>(resetSignal, one);
+          builder->create<sv::IfOp>(notResetValue, [&]() {
+            auto randomVal =
+                builder->create<sv::TextualValueOp>(type, "`RANDOM");
+            builder->create<sv::BPAssignOp>(reg, randomVal);
+          });
+        } else {
+          auto randomVal = builder->create<sv::TextualValueOp>(type, "`RANDOM");
+          builder->create<sv::BPAssignOp>(reg, randomVal);
+        }
+      });
+    });
+  });
+}
+
 LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   auto resultType = lowerType(op.result().getType());
   if (!resultType)
@@ -1254,19 +1282,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   auto regResult = builder->create<sv::RegOp>(resultType, op.nameAttr());
   setLowering(op, regResult);
 
-  // Emit the initializer expression for simulation that fills it with random
-  // value.
-  builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
-    builder->create<sv::InitialOp>([&]() {
-      emitRandomizePrologIfNeeded();
-
-      builder->create<sv::IfDefOp>("RANDOMIZE_REG_INIT", [&]() {
-        auto type = regResult.getType().getElementType();
-        auto randomVal = builder->create<sv::TextualValueOp>(type, "`RANDOM");
-        builder->create<sv::BPAssignOp>(regResult, randomVal);
-      });
-    });
-  });
+  initializeRegister(regResult, Value());
 
   return success();
 }
@@ -1302,26 +1318,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
         EventControl::AtPosEdge, resetSignal, std::function<void()>(), resetFn);
   }
 
-  // Emit the initializer expression for simulation that fills it with random
-  // value.
-  builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
-    builder->create<sv::InitialOp>([&]() {
-      emitRandomizePrologIfNeeded();
-
-      // When RANDOMIZE_REG_INIT is enabled, we assign a random value to the reg
-      // if the reset line is low at start.
-      builder->create<sv::IfDefOp>("RANDOMIZE_REG_INIT", [&]() {
-        auto one = builder->create<rtl::ConstantOp>(APInt(1, 1));
-        auto notResetValue = builder->create<rtl::XorOp>(resetSignal, one);
-        builder->create<sv::IfOp>(notResetValue, [&]() {
-          auto type = regResult.getType().getElementType();
-          auto randomVal = builder->create<sv::TextualValueOp>(type, "`RANDOM");
-          builder->create<sv::BPAssignOp>(regResult, randomVal);
-        });
-      });
-    });
-  });
-
+  initializeRegister(regResult, resetSignal);
   return success();
 }
 

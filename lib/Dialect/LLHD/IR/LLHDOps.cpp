@@ -178,8 +178,7 @@ static ParseResult parseConstOp(OpAsmParser &parser, OperationState &result) {
       parser.parseOptionalAttrDict(result.attributes))
     return failure();
   // parse the type for attributes that do not print the type by default
-  if (parser.parseOptionalColon().value ||
-      !parser.parseOptionalType(type).hasValue())
+  if (parser.parseOptionalColon() || !parser.parseOptionalType(type).hasValue())
     type = val.getType();
   return parser.addTypeToList(val.getType(), result.types);
 }
@@ -245,12 +244,12 @@ OpFoldResult llhd::EqOp::fold(ArrayRef<Attribute> operands) {
 
   /// llhs.eq(x,x) -> 1
   if (lhs() == rhs())
-    return BoolAttr::get(true, getContext());
+    return BoolAttr::get(getContext(), true);
 
   if (!operands[0] || !operands[1])
     return {};
 
-  return BoolAttr::get(operands[0] == operands[1], getContext());
+  return BoolAttr::get(getContext(), operands[0] == operands[1]);
 }
 
 //===----------------------------------------------------------------------===//
@@ -264,12 +263,12 @@ OpFoldResult llhd::NeqOp::fold(ArrayRef<Attribute> operands) {
 
   /// llhs.neq(x,x) -> 0
   if (lhs() == rhs())
-    return BoolAttr::get(false, getContext());
+    return BoolAttr::get(getContext(), false);
 
   if (!operands[0] || !operands[1])
     return {};
 
-  return BoolAttr::get(operands[0] != operands[1], getContext());
+  return BoolAttr::get(getContext(), operands[0] != operands[1]);
 }
 
 //===----------------------------------------------------------------------===//
@@ -966,6 +965,20 @@ static LogicalResult verify(llhd::InstOp op) {
 FunctionType llhd::InstOp::getCalleeType() {
   SmallVector<Type, 8> argTypes(getOperandTypes());
   return FunctionType::get(getContext(), argTypes, ArrayRef<Type>());
+}
+
+//===----------------------------------------------------------------------===//
+// ConnectOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult llhd::ConnectOp::fold(ArrayRef<Attribute> operands,
+                                    SmallVectorImpl<OpFoldResult> &results) {
+  if (lhs() == rhs()) {
+    erase();
+    return success();
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//

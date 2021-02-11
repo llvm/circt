@@ -361,8 +361,8 @@ ModportType InterfaceOp::getModportType(StringRef modportName) {
   auto *ctxt = getContext();
   return ModportType::get(
       getContext(),
-      SymbolRefAttr::get(sym_name(), {SymbolRefAttr::get(modportName, ctxt)},
-                         ctxt));
+      SymbolRefAttr::get(ctxt, sym_name(),
+                         {SymbolRefAttr::get(ctxt, modportName)}));
 }
 
 Type InterfaceOp::getSignalType(StringRef signalName) {
@@ -391,7 +391,7 @@ static ParseResult parseModportStructs(OpAsmParser &parser,
   if (parser.parseRParen())
     return failure();
 
-  portsAttr = ArrayAttr::get(ports, context);
+  portsAttr = ArrayAttr::get(context, ports);
   return success();
 }
 
@@ -418,15 +418,15 @@ void InterfaceModportOp::build(OpBuilder &builder, OperationState &state,
                                ArrayRef<StringRef> outputs) {
   auto *ctxt = builder.getContext();
   SmallVector<Attribute, 8> directions;
-  StringAttr inputDir = StringAttr::get("input", ctxt);
-  StringAttr outputDir = StringAttr::get("output", ctxt);
+  StringAttr inputDir = StringAttr::get(ctxt, "input");
+  StringAttr outputDir = StringAttr::get(ctxt, "output");
   for (auto input : inputs)
     directions.push_back(ModportStructAttr::get(
-        inputDir, SymbolRefAttr::get(input, ctxt), ctxt));
+        inputDir, SymbolRefAttr::get(ctxt, input), ctxt));
   for (auto output : outputs)
     directions.push_back(ModportStructAttr::get(
-        outputDir, SymbolRefAttr::get(output, ctxt), ctxt));
-  build(builder, state, name, ArrayAttr::get(directions, ctxt));
+        outputDir, SymbolRefAttr::get(ctxt, output), ctxt));
+  build(builder, state, name, ArrayAttr::get(ctxt, directions));
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
@@ -468,10 +468,10 @@ void GetModportOp::build(OpBuilder &builder, OperationState &state, Value value,
                          StringRef field) {
   auto ifaceTy = value.getType().dyn_cast<InterfaceType>();
   assert(ifaceTy && "GetModportOp expects an InterfaceType.");
-  auto fieldAttr = SymbolRefAttr::get(field, builder.getContext());
-  auto modportSym =
-      SymbolRefAttr::get(ifaceTy.getInterface().getRootReference(), {fieldAttr},
-                         builder.getContext());
+  auto fieldAttr = SymbolRefAttr::get(builder.getContext(), field);
+  auto modportSym = SymbolRefAttr::get(
+      builder.getContext(), ifaceTy.getInterface().getRootReference(),
+      {fieldAttr});
   build(builder, state, {ModportType::get(builder.getContext(), modportSym)},
         {value}, fieldAttr);
 }
@@ -480,7 +480,7 @@ void ReadInterfaceSignalOp::build(OpBuilder &builder, OperationState &state,
                                   Value iface, StringRef signalName) {
   auto ifaceTy = iface.getType().dyn_cast<InterfaceType>();
   assert(ifaceTy && "ReadInterfaceSignalOp expects an InterfaceType.");
-  auto fieldAttr = SymbolRefAttr::get(signalName, builder.getContext());
+  auto fieldAttr = SymbolRefAttr::get(builder.getContext(), signalName);
   InterfaceOp ifaceDefOp = SymbolTable::lookupNearestSymbolFrom<InterfaceOp>(
       iface.getDefiningOp(), ifaceTy.getInterface());
   assert(ifaceDefOp &&
@@ -497,8 +497,8 @@ ParseResult parseIfaceTypeAndSignal(OpAsmParser &p, Type &ifaceTy,
 
   auto *ctxt = p.getBuilder().getContext();
   ifaceTy = InterfaceType::get(
-      ctxt, FlatSymbolRefAttr::get(fullSym.getRootReference(), ctxt));
-  signalName = FlatSymbolRefAttr::get(fullSym.getLeafReference(), ctxt);
+      ctxt, FlatSymbolRefAttr::get(ctxt, fullSym.getRootReference()));
+  signalName = FlatSymbolRefAttr::get(ctxt, fullSym.getLeafReference());
   return success();
 }
 
@@ -506,8 +506,9 @@ void printIfaceTypeAndSignal(OpAsmPrinter &p, Operation *op, Type type,
                              FlatSymbolRefAttr signalName) {
   InterfaceType ifaceTy = type.dyn_cast<InterfaceType>();
   assert(ifaceTy && "Expected an InterfaceType");
-  auto sym = SymbolRefAttr::get(ifaceTy.getInterface().getRootReference(),
-                                {signalName}, op->getContext());
+  auto sym = SymbolRefAttr::get(op->getContext(),
+                                ifaceTy.getInterface().getRootReference(),
+                                {signalName});
   p << sym;
 }
 

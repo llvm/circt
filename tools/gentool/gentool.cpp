@@ -19,7 +19,6 @@
 #include "circt/Dialect/RTL/RTLDialect.h"
 #include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Dialect/SV/SVDialect.h"
-#include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Translation/ExportVerilog.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -129,12 +128,11 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     if (enableLowerTypes)
       pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
           firrtl::createLowerFIRRTLTypesPass());
-    pm.addPass(createLowerFIRRTLToRTLModulePass());
-    pm.nest<rtl::RTLModuleOp>().addPass(createLowerFIRRTLToRTLPass());
+    pm.addPass(firrtl::createLowerFIRRTLToRTLModulePass());
+    pm.nest<rtl::RTLModuleOp>().addPass(firrtl::createLowerFIRRTLToRTLPass());
 
     // If enabled, run the optimizer.
     if (!disableOptimization) {
-      pm.addNestedPass<rtl::RTLModuleOp>(sv::createAlwaysFusionPass());
       pm.addPass(createCSEPass());
       pm.addPass(createCanonicalizerPass());
     }

@@ -79,13 +79,13 @@ void RTLModuleOp::build(OpBuilder &builder, OperationState &result,
 /// Return the name to use for the Verilog module that we're referencing
 /// here.  This is typically the symbol, but can be overridden with the
 /// verilogName attribute.
-StringRef RTLExternModuleOp::getVerilogModuleName() {
+StringRef RTLModuleExternOp::getVerilogModuleName() {
   if (auto vname = verilogName())
     return vname.getValue();
   return getName();
 }
 
-void RTLExternModuleOp::build(OpBuilder &builder, OperationState &result,
+void RTLModuleExternOp::build(OpBuilder &builder, OperationState &result,
                               StringAttr name, ArrayRef<ModulePortInfo> ports,
                               StringRef verilogName) {
   buildModule(builder, result, name, ports);
@@ -264,7 +264,7 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
     if (isdigit(arg.name[1]))
       continue;
 
-    auto nameAttr = StringAttr::get(arg.name.drop_front(), context);
+    auto nameAttr = StringAttr::get(context, arg.name.drop_front());
     attrs.push_back({Identifier::get("rtl.name", context), nameAttr});
   }
 
@@ -283,7 +283,7 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
   return success();
 }
 
-static ParseResult parseRTLExternModuleOp(OpAsmParser &parser,
+static ParseResult parseRTLModuleExternOp(OpAsmParser &parser,
                                           OperationState &result) {
   return parseRTLModuleOp(parser, result, /*isExtModule:*/ true);
 }
@@ -383,7 +383,7 @@ static void printRTLModuleOp(OpAsmPrinter &p, Operation *op) {
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size());
 }
 
-static void print(OpAsmPrinter &p, RTLExternModuleOp op) {
+static void print(OpAsmPrinter &p, RTLModuleExternOp op) {
   printRTLModuleOp(p, op);
 }
 
@@ -425,7 +425,7 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
            << op.moduleName() << "'";
 
   if (!isa<RTLModuleOp>(referencedModule) &&
-      !isa<RTLExternModuleOp>(referencedModule))
+      !isa<RTLModuleExternOp>(referencedModule))
     return op.emitError("Symbol resolved to '")
            << referencedModule->getName()
            << "' which is not a RTL[Ext]ModuleOp";
@@ -711,6 +711,52 @@ void ArrayCreateOp::build(OpBuilder &b, OperationState &state,
              [elemType](Value v) -> bool { return v.getType() == elemType; }) &&
          "All values must have same type.");
   build(b, state, ArrayType::get(elemType, values.size()), values);
+}
+
+static ParseResult parseArrayConcatTypes(OpAsmParser &p,
+                                         SmallVectorImpl<Type> &inputTypes,
+                                         Type &resultType) {
+  Type elemType;
+  uint64_t resultSize = 0;
+  do {
+    ArrayType ty;
+    if (p.parseType(ty))
+      return p.emitError(p.getCurrentLocation(), "Expected !rtl.array type");
+    if (elemType && elemType != ty.getElementType())
+      return p.emitError(p.getCurrentLocation(), "Expected array element type ")
+             << elemType;
+
+    elemType = ty.getElementType();
+    inputTypes.push_back(ty);
+    resultSize += ty.getSize();
+  } while (!p.parseOptionalComma());
+
+  resultType = ArrayType::get(elemType, resultSize);
+  return success();
+}
+
+static void printArrayConcatTypes(OpAsmPrinter &p, Operation *,
+                                  TypeRange inputTypes, Type resultType) {
+  llvm::interleaveComma(inputTypes, p, [&p](Type t) { p << t; });
+}
+
+void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
+                          ArrayRef<Value> values) {
+  assert(!values.empty() && "Cannot build array of zero elements");
+  ArrayType arrayTy = values[0].getType().cast<ArrayType>();
+  Type elemTy = arrayTy.getElementType();
+  assert(llvm::all_of(values,
+                      [elemTy](Value v) -> bool {
+                        return v.getType().isa<ArrayType>() &&
+                               v.getType().cast<ArrayType>().getElementType() ==
+                                   elemTy;
+                      }) &&
+         "All values must be of ArrayType with the same element type.");
+
+  uint64_t resultSize = 0;
+  for (Value val : values)
+    resultSize += val.getType().cast<ArrayType>().getSize();
+  build(b, state, ArrayType::get(elemTy, resultSize), values);
 }
 
 //===----------------------------------------------------------------------===//
