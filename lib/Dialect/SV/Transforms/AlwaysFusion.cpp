@@ -16,7 +16,6 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "mlir/IR/Visitors.h"
-#include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
 using namespace circt;
