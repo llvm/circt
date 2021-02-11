@@ -469,11 +469,11 @@ void GetModportOp::build(OpBuilder &builder, OperationState &state, Value value,
   auto ifaceTy = value.getType().dyn_cast<InterfaceType>();
   assert(ifaceTy && "GetModportOp expects an InterfaceType.");
   auto fieldAttr = SymbolRefAttr::get(builder.getContext(), field);
-  auto modportSym = SymbolRefAttr::get(
-      builder.getContext(), ifaceTy.getInterface().getRootReference(),
-      {fieldAttr});
+  auto modportSym =
+      SymbolRefAttr::get(builder.getContext(),
+                         ifaceTy.getInterface().getRootReference(), fieldAttr);
   build(builder, state, {ModportType::get(builder.getContext(), modportSym)},
-        {value}, fieldAttr);
+        value, fieldAttr);
 }
 
 void ReadInterfaceSignalOp::build(OpBuilder &builder, OperationState &state,
@@ -485,8 +485,7 @@ void ReadInterfaceSignalOp::build(OpBuilder &builder, OperationState &state,
       iface.getDefiningOp(), ifaceTy.getInterface());
   assert(ifaceDefOp &&
          "ReadInterfaceSignalOp could not resolve an InterfaceOp.");
-  build(builder, state, {ifaceDefOp.getSignalType(signalName)}, {iface},
-        fieldAttr);
+  build(builder, state, ifaceDefOp.getSignalType(signalName), iface, fieldAttr);
 }
 
 ParseResult parseIfaceTypeAndSignal(OpAsmParser &p, Type &ifaceTy,
