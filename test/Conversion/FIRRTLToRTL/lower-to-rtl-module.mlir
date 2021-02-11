@@ -11,7 +11,7 @@
 // CHECK-NEXT:  }
 firrtl.circuit "Simple" {
 
-   // CHECK-LABEL: rtl.externmodule @MyParameterizedExtModule(
+   // CHECK-LABEL: rtl.module.extern @MyParameterizedExtModule(
    // CHECK: i1 {rtl.name = "in"}) -> (%out: i8)
    // CHECK: attributes {verilogName = "name_thing"}
    firrtl.extmodule @MyParameterizedExtModule(!firrtl.uint<1> {firrtl.name = "in"}, !firrtl.flip<uint<8>> {firrtl.name = "out"})
