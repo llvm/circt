@@ -109,6 +109,7 @@ OpFoldResult OrROp::fold(ArrayRef<Attribute> constants) {
   // if 1 bit then, OrR(x) -> x
   if (input().getType().getIntOrFloatBitWidth() == 1)
     return input();
+
   // Constant fold.
   if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>())
     return getIntAttr(APInt(1, input.getValue() != 0), getContext());
