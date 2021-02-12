@@ -2202,7 +2202,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
   builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, [&]() {
     builder->create<sv::IfOp>(enable, [&]() {
       // Create BOpTy inside the always/if.
-      builder->createOrFold<BOpTy>(predicate);
+      builder->create<BOpTy>(predicate);
     });
   });
 
