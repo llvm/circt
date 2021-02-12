@@ -1558,7 +1558,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
           for (auto reg : regs) {
             auto slot = builder->create<sv::ArrayIndexInOutOp>(reg, addr);
-            builder->create<sv::BPAssignOp>(slot, data);
+            builder->create<sv::PAssignOp>(slot, data);
           }
         });
       });
