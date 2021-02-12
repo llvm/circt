@@ -1889,16 +1889,13 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValuePrimOp op) {
   // We lower invalid to 0.  TODO: the FIRRTL spec mentions something about
   // lowering it to a random value, we should see if this is what we need to
   // do.
-  auto value = builder->create<rtl::ConstantOp>(resultTy, 0);
-
   if (!op.getType().isa<AnalogType>())
-    return setLowering(op, value);
+    return setLoweringTo<rtl::ConstantOp>(op, resultTy, 0);
 
   // Values of analog type always need to be lowered to something with inout
-  // type.  We do that by lowering to a wire and return that.
-  auto wire = builder->create<sv::WireOp>(resultTy, ".invalid_analog");
-  builder->create<sv::ConnectOp>(wire, value);
-  return setLowering(op, wire);
+  // type.  We do that by lowering to a wire and return that.  As with the SFC,
+  // we do not connect anything to this, because it is bidirectional.
+  return setLoweringTo<sv::WireOp>(op, resultTy, ".invalid_analog");
 }
 
 LogicalResult FIRRTLLowering::visitExpr(HeadPrimOp op) {

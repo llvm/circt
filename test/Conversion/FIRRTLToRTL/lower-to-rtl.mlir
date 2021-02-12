@@ -809,4 +809,24 @@ module attributes {firrtl.mainModule = "Simple"} {
     %3 = firrtl.stdIntCast %2 : (!firrtl.uint<64>) -> i64
     rtl.output %3 : i64
   }
+
+  // CHECK-LABEL: IsInvalidIssue572
+  // https://github.com/llvm/circt/issues/572
+  rtl.module @IsInvalidIssue572(%a: !rtl.inout<i1>) {
+    %a1 = firrtl.analogInOutCast %a : (!rtl.inout<i1>) -> !firrtl.analog<1>
+
+    // CHECK-NEXT: %.invalid_analog = sv.wire : !rtl.inout<i1>
+    %0 = firrtl.invalidvalue : !firrtl.analog<1>
+
+    // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
+    // CHECK-NEXT:   sv.alias %a, %.invalid_analog : !rtl.inout<i1>, !rtl.inout<i1>
+    // CHECK-NEXT: }
+    // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
+    // CHECK-NEXT:   %0 = sv.read_inout %a : !rtl.inout<i1>
+    // CHECK-NEXT:   %1 = sv.read_inout %.invalid_analog : !rtl.inout<i1>
+    // CHECK-NEXT:   sv.connect %a, %1 : i1
+    // CHECK-NEXT:   sv.connect %.invalid_analog, %0 : i1
+    // CHECK-NEXT: }
+    firrtl.attach %a1, %0 : !firrtl.analog<1>, !firrtl.analog<1>
+  }
 }
