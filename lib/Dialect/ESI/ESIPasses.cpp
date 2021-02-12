@@ -329,7 +329,7 @@ private:
 };
 } // anonymous namespace
 
-/// Iterate through the `rtl.externmodule`s and lower their ports.
+/// Iterate through the `rtl.module.extern`s and lower their ports.
 void ESIPortsPass::runOnOperation() {
   ModuleOp top = getOperation();
   ESIRTLBuilder b(top);
