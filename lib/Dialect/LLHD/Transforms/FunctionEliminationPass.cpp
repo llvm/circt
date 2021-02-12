@@ -16,7 +16,6 @@
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Visitors.h"
 
-using namespace mlir;
 using namespace circt;
 
 namespace {
@@ -29,7 +28,7 @@ struct FunctionEliminationPass
 void FunctionEliminationPass::runOnOperation() {
   ModuleOp module = getOperation();
 
-  WalkResult result = module.walk([](CallOp op) -> WalkResult {
+  WalkResult result = module.walk([](mlir::CallOp op) -> WalkResult {
     if (isa<llhd::ProcOp>(op->getParentOp()) ||
         isa<llhd::EntityOp>(op->getParentOp())) {
       return emitError(
@@ -45,7 +44,7 @@ void FunctionEliminationPass::runOnOperation() {
     return;
   }
 
-  module.walk([](FuncOp op) { op.erase(); });
+  module.walk([](mlir::FuncOp op) { op.erase(); });
 }
 } // namespace
 

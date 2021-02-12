@@ -14,21 +14,17 @@
 #ifndef CIRCT_CONVERSION_LLHDTOLLVM_LLHDTOLLVM_H
 #define CIRCT_CONVERSION_LLHDTOLLVM_LLHDTOLLVM_H
 
+#include "circt/Support/LLVM.h"
 #include <memory>
 
 namespace mlir {
-class ModuleOp;
 class LLVMTypeConverter;
-class OwningRewritePatternList;
-template <typename T>
-class OperationPass;
 } // namespace mlir
 
 namespace circt {
-using namespace mlir;
 
 /// Get the LLHD to LLVM conversion patterns.
-void populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
+void populateLLHDToLLVMConversionPatterns(mlir::LLVMTypeConverter &converter,
                                           OwningRewritePatternList &patterns,
                                           size_t &sigCounter,
                                           size_t &regCounter);

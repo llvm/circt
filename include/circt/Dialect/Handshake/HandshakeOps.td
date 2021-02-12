@@ -141,18 +141,18 @@ def FuncOp : Op<Handshake_Dialect, "func", [
   }];
   let printer = [{
     FunctionType fnType = getType();
-    impl::printFunctionLikeOp(p, *this, fnType.getInputs(), /*isVariadic=*/true,
-                              fnType.getResults());
+    mlir::impl::printFunctionLikeOp(p, *this, fnType.getInputs(),
+        /*isVariadic=*/true, fnType.getResults());
   }];
   let parser = [{
     auto buildFuncType =
         [](Builder & builder, ArrayRef<Type> argTypes, ArrayRef<Type> results,
-           impl::VariadicFlag, std::string &) {
+           mlir::impl::VariadicFlag, std::string &) {
       return builder.getFunctionType(argTypes, results);
     };
 
-    return impl::parseFunctionLikeOp(parser, result, /*allowVariadic=*/true,
-                                     buildFuncType);
+    return mlir::impl::parseFunctionLikeOp(parser, result,
+        /*allowVariadic=*/true, buildFuncType);
   }];
 }
 

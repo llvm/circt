@@ -22,7 +22,6 @@
 #include "circt/Dialect/ESI/CosimSchema.h"
 #endif
 
-using namespace mlir;
 using namespace circt::esi;
 
 //===----------------------------------------------------------------------===//
@@ -167,8 +166,9 @@ static LogicalResult exportCosimSchema(ModuleOp module, llvm::raw_ostream &os) {
 
 void circt::esi::registerESITranslations() {
 #ifdef CAPNP
-  TranslateFromMLIRRegistration cosimToCapnp(
-      "export-esi-capnp", exportCosimSchema, [](DialectRegistry &registry) {
+  mlir::TranslateFromMLIRRegistration cosimToCapnp(
+      "export-esi-capnp", exportCosimSchema,
+      [](mlir::DialectRegistry &registry) {
         registry
             .insert<ESIDialect, circt::rtl::RTLDialect, circt::sv::SVDialect,
                     mlir::StandardOpsDialect, mlir::BuiltinDialect>();

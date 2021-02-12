@@ -21,7 +21,6 @@
 
 #include "llvm/Support/TargetSelect.h"
 
-using namespace mlir;
 using namespace circt::llhd::sim;
 
 Engine::Engine(
