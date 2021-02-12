@@ -449,7 +449,7 @@ public:
     std::string nameStr = name.str();
     if (nameStr.empty())
       return *(T *)this;
-    auto nameAttr = StringAttr::get(nameStr, ctxt());
+    auto nameAttr = StringAttr::get(ctxt(), nameStr);
     s.getDefiningOp()->setAttr("name", nameAttr);
     return *(T *)this;
   }

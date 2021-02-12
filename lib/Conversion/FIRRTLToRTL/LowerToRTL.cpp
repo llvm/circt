@@ -112,7 +112,7 @@ private:
                            SmallVectorImpl<rtl::ModulePortInfo> &ports,
                            Operation *moduleOp);
   rtl::RTLModuleOp lowerModule(FModuleOp oldModule, Block *topLevelModule);
-  rtl::RTLExternModuleOp lowerExtModule(FExtModuleOp oldModule,
+  rtl::RTLModuleExternOp lowerExtModule(FExtModuleOp oldModule,
                                         Block *topLevelModule);
 
   void lowerModuleBody(FModuleOp oldModule,
@@ -196,7 +196,7 @@ void FIRRTLModuleLowering::runOnOperation() {
   // module' specified in the Circuit into an attribute on the top level module.
   getOperation()->setAttr(
       "firrtl.mainModule",
-      StringAttr::get(circuit.name(), circuit.getContext()));
+      StringAttr::get(circuit.getContext(), circuit.name()));
   circuit.erase();
 }
 
@@ -312,7 +312,7 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
   return success();
 }
 
-rtl::RTLExternModuleOp
+rtl::RTLModuleExternOp
 FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
                                      Block *topLevelModule) {
   // Map the ports over, lowering their types as we go.
@@ -329,7 +329,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   // Build the new rtl.module op.
   OpBuilder builder(topLevelModule->getTerminator());
   auto nameAttr = builder.getStringAttr(oldModule.getName());
-  return builder.create<rtl::RTLExternModuleOp>(oldModule.getLoc(), nameAttr,
+  return builder.create<rtl::RTLModuleExternOp>(oldModule.getLoc(), nameAttr,
                                                 ports, verilogName);
 }
 
@@ -438,7 +438,7 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   // We don't have to do this check for insertion points that are at the
   // terminator in the module, because we know that everything is above it by
   // definition.
-  if (!insertPoint->isKnownTerminator()) {
+  if (!insertPoint->hasTrait<OpTrait::IsTerminator>()) {
     // On success, these are the ops that we need to move up above the insertion
     // point.  We keep track of a visited set because each compute subgraph is
     // a dag (not a tree), and we want to only want to visit each subnode once.

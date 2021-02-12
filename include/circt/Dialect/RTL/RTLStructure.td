@@ -77,8 +77,8 @@ def RTLModuleOp : RTLOp<"module",
   let parser = "return ::parse$cppClass(parser, result);";
 }
 
-def RTLExternModuleOp : RTLOp<"module.extern",
-      [IsolatedFromAbove, FunctionLike, Symbol, HasParent<"mlir::ModuleOp">]> {
+def RTLModuleExternOp : RTLOp<"module.extern",
+      [FunctionLike, Symbol, HasParent<"mlir::ModuleOp">]> {
   let summary = "RTL external Module";
   let description = [{
     The "rtl.module.extern" operation represents an external reference to a
@@ -113,7 +113,7 @@ def RTLExternModuleOp : RTLOp<"module.extern",
 
   private:
     // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<RTLExternModuleOp>;
+    friend class OpTrait::FunctionLike<RTLModuleExternOp>;
 
     /// Returns the number of arguments, implementing OpTrait::FunctionLike.
     unsigned getNumFuncArguments() { return getType().getInputs().size(); }
@@ -138,7 +138,8 @@ def RTLExternModuleOp : RTLOp<"module.extern",
   let parser = "return ::parse$cppClass(parser, result);";
 }
 
-def RTLGeneratorTypeOp : RTLOp<"generator.type", [IsolatedFromAbove, Symbol, HasParent<"mlir::ModuleOp">]> {
+def RTLGeneratorTypeOp : RTLOp<"generator.type", 
+      [Symbol, HasParent<"mlir::ModuleOp">]> {
   let summary = "RTL Generator Type";
   let description = [{
     the "rtl.generator.type" operation declares a type of generated module.  The
@@ -166,7 +167,7 @@ def RTLGeneratorTypeOp : RTLOp<"generator.type", [IsolatedFromAbove, Symbol, Has
   }];
 }
 
-def RTLGeneratedModuleOp : RTLOp<"module.generated",
+def RTLModuleGeneratedOp : RTLOp<"module.generated",
       [IsolatedFromAbove, FunctionLike, Symbol, HasParent<"mlir::ModuleOp">]> {
   let summary = "RTL Generated Module";
   let description = [{
@@ -207,7 +208,7 @@ def RTLGeneratedModuleOp : RTLOp<"module.generated",
 
   private:
     // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<RTLGeneratedModuleOp>;
+    friend class OpTrait::FunctionLike<RTLModuleGeneratedOp>;
 
     /// Returns the number of arguments, implementing OpTrait::FunctionLike.
     unsigned getNumFuncArguments() { return getType().getInputs().size(); }

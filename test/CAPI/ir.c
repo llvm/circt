@@ -29,32 +29,29 @@ int registerOnlyRTL() {
   if (mlirContextGetNumLoadedDialects(ctx) != 1)
     return 1;
 
-  MlirDialect std =
-      mlirContextGetOrLoadDialect(ctx, mlirRTLDialectGetNamespace());
-  if (!mlirDialectIsNull(std))
+  MlirDialectHandle rtlHandle = mlirGetDialectHandle__rtl__();
+
+  MlirDialect rtl = mlirContextGetOrLoadDialect(
+      ctx, mlirDialectHandleGetNamespace(rtlHandle));
+  if (!mlirDialectIsNull(rtl))
     return 2;
 
-  mlirContextRegisterRTLDialect(ctx);
+  mlirDialectHandleRegisterDialect(rtlHandle, ctx);
   if (mlirContextGetNumRegisteredDialects(ctx) != 1)
     return 3;
   if (mlirContextGetNumLoadedDialects(ctx) != 1)
     return 4;
 
-  std = mlirContextGetOrLoadDialect(ctx, mlirRTLDialectGetNamespace());
-  if (mlirDialectIsNull(std))
+  rtl = mlirContextGetOrLoadDialect(ctx,
+                                    mlirDialectHandleGetNamespace(rtlHandle));
+  if (mlirDialectIsNull(rtl))
     return 5;
   if (mlirContextGetNumLoadedDialects(ctx) != 2)
     return 6;
 
-  MlirDialect alsoStd = mlirContextLoadRTLDialect(ctx);
-  if (!mlirDialectEqual(std, alsoStd))
+  MlirDialect alsoRtl = mlirDialectHandleLoadDialect(rtlHandle, ctx);
+  if (!mlirDialectEqual(rtl, alsoRtl))
     return 7;
-
-  MlirStringRef stdNs = mlirDialectGetNamespace(std);
-  MlirStringRef alsoStdNs = mlirRTLDialectGetNamespace();
-  if (stdNs.length != alsoStdNs.length ||
-      strncmp(stdNs.data, alsoStdNs.data, stdNs.length))
-    return 8;
 
   return 0;
 }

@@ -284,7 +284,7 @@ public:
       : VerilogEmitterBase(state) {}
 
   void emitRTLModule(RTLModuleOp module);
-  void emitRTLExternModule(RTLExternModuleOp module);
+  void emitRTLExternModule(RTLModuleExternOp module);
   void emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
                       bool forceRootExpr = false);
 
@@ -1565,7 +1565,7 @@ LogicalResult ModuleEmitter::visitStmt(InstanceOp op) {
   // If this is a reference to an external module with a hard coded Verilog
   // name, then use it here.  This is a hack because we lack proper support for
   // parameterized modules in the RTL dialect.
-  if (auto extMod = dyn_cast<RTLExternModuleOp>(moduleOp)) {
+  if (auto extMod = dyn_cast<RTLModuleExternOp>(moduleOp)) {
     indent() << extMod.getVerilogModuleName();
   } else {
     indent() << op.moduleName();
@@ -1977,7 +1977,7 @@ void ModuleEmitter::emitOperation(Operation *op) {
   indent() << "unknown MLIR operation " << op->getName().getStringRef() << "\n";
 }
 
-void ModuleEmitter::emitRTLExternModule(RTLExternModuleOp module) {
+void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
   os << "// external module " << module.getName() << "\n\n";
 }
 
@@ -2130,7 +2130,7 @@ void MLIRModuleEmitter::emit(ModuleOp module) {
   for (auto &op : *module.getBody()) {
     if (auto module = dyn_cast<RTLModuleOp>(op))
       ModuleEmitter(state).emitRTLModule(module);
-    else if (auto module = dyn_cast<RTLExternModuleOp>(op))
+    else if (auto module = dyn_cast<RTLModuleExternOp>(op))
       ModuleEmitter(state).emitRTLExternModule(module);
     else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) || isa<IfDefOp>(op))
       ModuleEmitter(state).emitOperation(&op);

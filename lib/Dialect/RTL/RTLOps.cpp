@@ -82,13 +82,13 @@ void RTLModuleOp::build(OpBuilder &builder, OperationState &result,
 /// Return the name to use for the Verilog module that we're referencing
 /// here.  This is typically the symbol, but can be overridden with the
 /// verilogName attribute.
-StringRef RTLExternModuleOp::getVerilogModuleName() {
+StringRef RTLModuleExternOp::getVerilogModuleName() {
   if (auto vname = verilogName())
     return vname.getValue();
   return getName();
 }
 
-void RTLExternModuleOp::build(OpBuilder &builder, OperationState &result,
+void RTLModuleExternOp::build(OpBuilder &builder, OperationState &result,
                               StringAttr name, ArrayRef<ModulePortInfo> ports,
                               StringRef verilogName) {
   buildModule(builder, result, name, ports);
@@ -275,7 +275,7 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
     if (isdigit(arg.name[1]))
       continue;
 
-    auto nameAttr = StringAttr::get(arg.name.drop_front(), context);
+    auto nameAttr = StringAttr::get(context, arg.name.drop_front());
     attrs.push_back({Identifier::get("rtl.name", context), nameAttr});
   }
 
@@ -294,12 +294,12 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
   return success();
 }
 
-static ParseResult parseRTLExternModuleOp(OpAsmParser &parser,
+static ParseResult parseRTLModuleExternOp(OpAsmParser &parser,
                                           OperationState &result) {
   return parseRTLModuleOp(parser, result, ExternMod);
 }
 
-static ParseResult parseRTLGeneratedModuleOp(OpAsmParser &parser,
+static ParseResult parseRTLModuleGeneratedOp(OpAsmParser &parser,
                                              OperationState &result) {
   return parseRTLModuleOp(parser, result, GenMod);
 }
@@ -397,7 +397,7 @@ static void printRTLModuleOp(OpAsmPrinter &p, Operation *op,
   p.printSymbolName(funcName);
   if (modKind == GenMod) {
     p << ", ";
-    p.printSymbolName(dyn_cast<RTLGeneratedModuleOp>(op).generatorKind());
+    p.printSymbolName(dyn_cast<RTLModuleGeneratedOp>(op).generatorKind());
   }
   printModuleSignature(p, op, argTypes, /*isVariadic=*/false, resultTypes);
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
@@ -406,10 +406,10 @@ static void printRTLModuleOp(OpAsmPrinter &p, Operation *op,
                               : ArrayRef<StringRef>());
 }
 
-static void print(OpAsmPrinter &p, RTLExternModuleOp op) {
+static void print(OpAsmPrinter &p, RTLModuleExternOp op) {
   printRTLModuleOp(p, op, ExternMod);
 }
-static void print(OpAsmPrinter &p, RTLGeneratedModuleOp op) {
+static void print(OpAsmPrinter &p, RTLModuleGeneratedOp op) {
   printRTLModuleOp(p, op, GenMod);
 }
 
@@ -425,7 +425,7 @@ static void print(OpAsmPrinter &p, RTLModuleOp op) {
 
 /// Lookup the generator for the symbol.  This returns null on
 /// invalid IR.
-Operation *RTLGeneratedModuleOp::getGeneratorKindOp() {
+Operation *RTLModuleGeneratedOp::getGeneratorKindOp() {
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
   if (!topLevelModuleOp)
     return nullptr;
@@ -433,7 +433,7 @@ Operation *RTLGeneratedModuleOp::getGeneratorKindOp() {
   return topLevelModuleOp.lookupSymbol(generatorKind());
 }
 
-static LogicalResult verifyRTLGeneratedModuleOp(RTLGeneratedModuleOp op) {
+static LogicalResult verifyRTLModuleGeneratedOp(RTLModuleGeneratedOp op) {
   // Check that this instance is inside a module.
   auto module = dyn_cast<mlir::ModuleOp>(op->getParentOp());
   if (!module) {
@@ -507,7 +507,7 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
            << op.moduleName() << "'";
 
   if (!isa<RTLModuleOp>(referencedModule) &&
-      !isa<RTLExternModuleOp>(referencedModule))
+      !isa<RTLModuleExternOp>(referencedModule))
     return op.emitError("Symbol resolved to '")
            << referencedModule->getName()
            << "' which is not a RTL[Ext]ModuleOp";
