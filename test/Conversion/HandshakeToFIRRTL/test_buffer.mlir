@@ -11,6 +11,8 @@
 // Stage 0 ready wire and valid register.
 // CHECK:   %readyWire0 = firrtl.wire : !firrtl.uint<1>
 // CHECK:   %validReg0 = firrtl.regreset %clock, %reset, %c0_ui1 {name = "validReg0"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %ctrlValidWire0 = firrtl.wire : !firrtl.uint<1>
+// CHECK:   %ctrlReadyWire0 = firrtl.wire : !firrtl.uint<1>
 
 // pred_ready = !reg_valid || succ_ready.
 // CHECK:   %[[VAL_4:.+]] = firrtl.not %validReg0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -24,12 +26,14 @@
 // Stage 1 logics.
 // CHECK:   %readyWire1 = firrtl.wire : !firrtl.uint<1>
 // CHECK:   %validReg1 = firrtl.regreset %clock, %reset, %c0_ui1 {name = "validReg1"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %ctrlValidWire1 = firrtl.wire : !firrtl.uint<1>
+// CHECK:   %ctrlReadyWire1 = firrtl.wire : !firrtl.uint<1>
 
 // CHECK:   %[[VAL_7:.+]] = firrtl.not %validReg1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:   %[[VAL_8:.+]] = firrtl.or %[[VAL_7:.+]], %readyWire1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   firrtl.connect %readyWire0, %[[VAL_8:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:   firrtl.connect %ctrlReadyWire0, %[[VAL_8:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
 
-// CHECK:   %[[VAL_9:.+]] = firrtl.mux(%[[VAL_8:.+]], %validReg0, %validReg1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %[[VAL_9:.+]] = firrtl.mux(%[[VAL_8:.+]], %ctrlValidWire0, %validReg1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:   firrtl.connect %validReg1, %[[VAL_9:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
 
 // Stage 2 logics.
@@ -38,14 +42,14 @@
 
 // CHECK:   %[[VAL_10:.+]] = firrtl.not %validReg2 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:   %[[VAL_11:.+]] = firrtl.or %[[VAL_10:.+]], %readyWire2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   firrtl.connect %readyWire1, %[[VAL_11:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:   firrtl.connect %ctrlReadyWire1, %[[VAL_11:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
 
-// CHECK:   %[[VAL_12:.+]] = firrtl.mux(%[[VAL_11:.+]], %validReg1, %validReg2) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %[[VAL_12:.+]] = firrtl.mux(%[[VAL_11:.+]], %ctrlValidWire1, %validReg2) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:   firrtl.connect %validReg2, %[[VAL_12:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
 
 // Connet to output ports.
-// CHECK:   firrtl.connect %[[OUT_VALID:.+]], %validReg2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
-// CHECK:   firrtl.connect %readyWire2, %[[OUT_READY:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:   firrtl.connect %[[OUT_VALID:.+]], %ctrlValidWire2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+// CHECK:   firrtl.connect %ctrlReadyWire2, %[[OUT_READY:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK: }
 
 // CHECK-LABEL: firrtl.module @test_buffer(
@@ -70,10 +74,10 @@ handshake.func @test_buffer(%arg0: none, %arg1: none, ...) -> (none, none) {
 // CHECK:   firrtl.connect %dataReg0, %[[VAL_9:.+]] : !firrtl.uint<64>, !firrtl.uint<64>
 
 // CHECK:   %dataReg1 = firrtl.regreset %clock, %reset, %c0_ui64 {name = "dataReg1"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<64>) -> !firrtl.uint<64>
-// CHECK:   %[[VAL_13:.+]] = firrtl.mux(%[[VAL_11:.+]], %dataReg0, %dataReg1) : (!firrtl.uint<1>, !firrtl.uint<64>, !firrtl.uint<64>) -> !firrtl.uint<64>
-// CHECK:   firrtl.connect %dataReg1, %[[VAL_13:.+]] : !firrtl.uint<64>, !firrtl.uint<64>
+// CHECK:   %[[VAL_13:.+]] = firrtl.mux(%[[VAL_11:.+]], %dataReg1, %ctrlDataReg_7) : (!firrtl.uint<1>, !firrtl.uint<64>, !firrtl.uint<64>) -> !firrtl.uint<64>
+// CHECK:   firrtl.connect %ctrlDataRegWire_5, %[[VAL_13:.+]] : !firrtl.uint<64>, !firrtl.uint<64>
 
-// CHECK:   firrtl.connect %[[OUT_DATA:.+]], %dataReg1 : !firrtl.flip<uint<64>>, !firrtl.uint<64>
+// CHECK:   firrtl.connect %[[OUT_DATA:.+]], %ctrlDataWire1 : !firrtl.flip<uint<64>>, !firrtl.uint<64>
 // CHECK: }
 
 // CHECK-LABEL: firrtl.module @test_buffer_data(
