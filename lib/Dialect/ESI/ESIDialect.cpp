@@ -15,7 +15,6 @@
 #include "circt/Dialect/ESI/ESITypes.h"
 
 #include "mlir/IR/DialectImplementation.h"
-#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/FormatVariadic.h"
 
 using namespace mlir;

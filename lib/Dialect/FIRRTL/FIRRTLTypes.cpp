@@ -236,7 +236,8 @@ FIRRTLType FIRRTLType::getPassiveType() {
 FIRRTLType FIRRTLType::getMaskType() {
   return TypeSwitch<FIRRTLType, FIRRTLType>(*this)
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
-            AnalogType>([&](Type) { return UIntType::get(getContext(), 1); })
+            AnalogType>(
+          [&](Type) { return UIntType::get(this->getContext(), 1); })
       .Case<FlipType>([](FlipType flipType) {
         return FlipType::get(flipType.getElementType().getMaskType());
       })
@@ -245,7 +246,7 @@ FIRRTLType FIRRTLType::getMaskType() {
         newElements.reserve(bundleType.getElements().size());
         for (auto elt : bundleType.getElements())
           newElements.push_back({elt.name, elt.type.getMaskType()});
-        return BundleType::get(newElements, getContext());
+        return BundleType::get(newElements, this->getContext());
       })
       .Case<FVectorType>([](FVectorType vectorType) {
         return FVectorType::get(vectorType.getElementType().getMaskType(),
@@ -266,13 +267,13 @@ FIRRTLType FIRRTLType::getWidthlessType() {
         return FlipType::get(a.getElementType().getWidthlessType());
       })
       .Case<UIntType, SIntType, AnalogType>(
-          [&](auto a) { return a.get(getContext(), -1); })
+          [&](auto a) { return a.get(this->getContext(), -1); })
       .Case<BundleType>([&](auto a) {
         SmallVector<BundleType::BundleElement, 4> newElements;
         newElements.reserve(a.getElements().size());
         for (auto elt : a.getElements())
           newElements.push_back({elt.name, elt.type.getWidthlessType()});
-        return BundleType::get(newElements, getContext());
+        return BundleType::get(newElements, this->getContext());
       })
       .Case<FVectorType>([](auto a) {
         return FVectorType::get(a.getElementType().getWidthlessType(),

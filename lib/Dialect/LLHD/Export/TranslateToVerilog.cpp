@@ -71,7 +71,7 @@ LogicalResult VerilogPrinter::printModule(ModuleOp module) {
       out << "(";
       for (unsigned int i = 0, e = entryBlock.getNumArguments(); i < e; ++i) {
         out << (i > 0 ? ", " : "") << (i < entity.ins() ? "input " : "output ");
-        printType(entryBlock.getArgument(i).getType());
+        (void)printType(entryBlock.getArgument(i).getType());
         out << " " << getVariableName(entryBlock.getArgument(i));
       }
       out << ")";
