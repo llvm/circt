@@ -13,9 +13,9 @@
 #include "PassDetails.h"
 #include "TemporalRegions.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Dominance.h"
 
-using namespace mlir;
 using namespace circt;
 
 namespace {
@@ -40,7 +40,7 @@ static SmallVector<Block *, 8> intersection(SmallVectorImpl<Block *> &v1,
 void EarlyCodeMotionPass::runOnOperation() {
   llhd::ProcOp proc = getOperation();
   llhd::TemporalRegionAnalysis trAnalysis = llhd::TemporalRegionAnalysis(proc);
-  DominanceInfo dom(proc);
+  mlir::DominanceInfo dom(proc);
 
   DenseMap<Block *, unsigned> entryDistance;
   SmallPtrSet<Block *, 32> workDone;
@@ -59,7 +59,7 @@ void EarlyCodeMotionPass::runOnOperation() {
          iter != block->getOperations().end(); ++iter) {
       Operation &op = *iter;
       if (!isa<llhd::PrbOp>(op) &&
-          (!MemoryEffectOpInterface::hasNoEffect(&op) ||
+          (!mlir::MemoryEffectOpInterface::hasNoEffect(&op) ||
            op.hasTrait<OpTrait::IsTerminator>()))
         continue;
 

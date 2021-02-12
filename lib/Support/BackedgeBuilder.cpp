@@ -11,11 +11,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Support/BackedgeBuilder.h"
-
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/PatternMatch.h"
 
 using namespace circt;
-using namespace mlir;
 
 Backedge::Backedge(mlir::Operation *op) : value(op->getResult(0)) {}
 

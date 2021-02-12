@@ -13,6 +13,7 @@
 #ifndef CIRCT_STATICLOGIC_OPS_H_
 #define CIRCT_STATICLOGIC_OPS_H_
 
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -29,8 +30,6 @@
 
 namespace circt {
 namespace staticlogic {
-
-using namespace mlir;
 
 class StaticLogicDialect : public Dialect {
 public:

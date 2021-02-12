@@ -23,7 +23,7 @@
 #define INDEX_WIDTH 32
 
 using namespace llvm;
-using namespace mlir;
+
 using namespace circt;
 
 STATISTIC(instructionsExecuted, "Instructions Executed");

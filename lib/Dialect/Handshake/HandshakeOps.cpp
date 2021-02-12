@@ -11,28 +11,26 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Handshake/HandshakeOps.h"
-
+#include "circt/Support/LLVM.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/FunctionImplementation.h"
+#include "mlir/IR/IntegerSet.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OpImplementation.h"
-#include "mlir/IR/Value.h"
-
-using namespace mlir;
-using namespace circt;
-using namespace circt::handshake;
-
-#include "mlir/IR/IntegerSet.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/Value.h"
 #include "mlir/Transforms/InliningUtils.h"
 #include "llvm/ADT/Any.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/Support/Debug.h"
+
+using namespace circt;
+using namespace circt::handshake;
 
 #define INDEX_WIDTH 32
 

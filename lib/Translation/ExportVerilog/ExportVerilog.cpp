@@ -25,7 +25,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
-using namespace mlir;
+
 using namespace rtl;
 using namespace sv;
 
@@ -2213,8 +2213,8 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
 }
 
 void circt::registerToVerilogTranslation() {
-  TranslateFromMLIRRegistration toVerilog(
-      "export-verilog", exportVerilog, [](DialectRegistry &registry) {
+  mlir::TranslateFromMLIRRegistration toVerilog(
+      "export-verilog", exportVerilog, [](mlir::DialectRegistry &registry) {
         registry.insert<RTLDialect, SVDialect>();
       });
 }

@@ -17,7 +17,6 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "mlir/IR/Visitors.h"
 
-using namespace mlir;
 using namespace circt;
 using namespace sv;
 
@@ -28,7 +27,8 @@ namespace {
 /// each op.
 struct SimpleOperationInfo : public llvm::DenseMapInfo<Operation *> {
   static unsigned getHashValue(const Operation *opC) {
-    return OperationEquivalence::computeHash(const_cast<Operation *>(opC));
+    return mlir::OperationEquivalence::computeHash(
+        const_cast<Operation *>(opC));
   }
   static bool isEqual(const Operation *lhsC, const Operation *rhsC) {
     auto *lhs = const_cast<Operation *>(lhsC);
@@ -38,7 +38,7 @@ struct SimpleOperationInfo : public llvm::DenseMapInfo<Operation *> {
     if (lhs == getTombstoneKey() || lhs == getEmptyKey() ||
         rhs == getTombstoneKey() || rhs == getEmptyKey())
       return false;
-    return OperationEquivalence::isEquivalentTo(lhs, rhs);
+    return mlir::OperationEquivalence::isEquivalentTo(lhs, rhs);
   }
 };
 

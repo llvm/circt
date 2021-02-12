@@ -15,7 +15,6 @@
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 
-using namespace mlir;
 using namespace circt;
 using namespace staticlogic;
 using namespace std;
