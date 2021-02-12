@@ -661,7 +661,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:       %5 = sv.read_inout %_M_write_data : !rtl.inout<i42>
     // CHECK-NEXT:       %6 = sv.read_inout %_M_write_addr : !rtl.inout<i4>
     // CHECK-NEXT:       %7 = sv.array_index_inout %_M[%6]
-    // CHECK-NEXT:       sv.bpassign %7, %5 : i42
+    // CHECK-NEXT:       sv.passign %7, %5 : i42
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
 
