@@ -1176,7 +1176,7 @@ FIRRTLLowering::handleUnloweredOp(Operation *op) {
         (isExpression(op) || isa<AsPassivePrimOp>(op) ||
          isa<AsNonPassivePrimOp>(op))) {
       // Zero bit values lower to the null Value.
-      setLowering(op->getResult(0), Value());
+      (void)setLowering(op->getResult(0), Value());
       return NowLowered;
     }
   }
@@ -1280,7 +1280,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
     return setLowering(op, Value());
 
   auto regResult = builder->create<sv::RegOp>(resultType, op.nameAttr());
-  setLowering(op, regResult);
+  (void)setLowering(op, regResult);
 
   initializeRegister(regResult, Value());
 
@@ -1302,7 +1302,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
     return failure();
 
   auto regResult = builder->create<sv::RegOp>(resultType, op.nameAttr());
-  setLowering(op, regResult);
+  (void)setLowering(op, regResult);
 
   auto resetFn = [&]() {
     builder->create<sv::PAssignOp>(regResult, resetValue);
@@ -1480,7 +1480,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     while (!port.use_empty()) {
       auto portField = cast<SubfieldOp>(*port.user_begin());
       portField->dropAllReferences();
-      setLowering(portField, getPortFieldWire(portField.fieldname()));
+      (void)setLowering(portField, getPortFieldWire(portField.fieldname()));
     }
 
     // Return the value corresponding to a port field.
