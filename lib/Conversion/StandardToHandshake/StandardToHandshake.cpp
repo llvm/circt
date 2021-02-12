@@ -1451,7 +1451,8 @@ struct FuncOpLowering : public OpConversionPattern<mlir::FuncOp> {
                                 newFuncOp.end());
 
     // Rewrite affine.for operations.
-    rewriteAffineFor(newFuncOp, rewriter);
+    if (failed(rewriteAffineFor(newFuncOp, rewriter)))
+      newFuncOp.emitOpError("failed to rewrite Affine loops");
 
     // Perform dataflow conversion
     MemRefToMemoryAccessOp MemOps = replaceMemoryOps(newFuncOp, rewriter);
