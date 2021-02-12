@@ -106,6 +106,9 @@ OpFoldResult AndROp::fold(ArrayRef<Attribute> constants) {
 }
 
 OpFoldResult OrROp::fold(ArrayRef<Attribute> constants) {
+  // if 1 bit then, OrR(x) -> x
+  if (input().getType().getIntOrFloatBitWidth() == 1)
+    return input();
   // Constant fold.
   if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>())
     return getIntAttr(APInt(1, input.getValue() != 0), getContext());
@@ -857,14 +860,8 @@ struct ICmpCanonicalizeConstant final : public OpRewritePattern<ICmpOp> {
 
       switch (op.predicate()) {
       case ICmpPredicate::eq:
-        // eq(x, 0) -> not(x) when x is 1 bit.
-        if (rhs.isNullValue() && rhs.getBitWidth() == 1) {
-          rewriter.replaceOpWithNewOp<XorOp>(op, op.lhs(),
-                                             getConstant(APInt(1, 1)));
-          return success();
-        }
-        // eq(x, 0) -> not(orr(x)) when x is >1 bit
-        if (rhs.isNullValue() && rhs.getBitWidth() > 1) {
+        // eq(x, 0) -> not(orr(x))
+        if (rhs.isNullValue()) {
           Value orR =
               rewriter.create<OrROp>(op.getLoc(), op.getType(), op.lhs());
           rewriter.replaceOpWithNewOp<XorOp>(op, orR, getConstant(APInt(1, 1)));
