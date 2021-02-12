@@ -203,7 +203,7 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
   }
 
   // and(x, x, x) -> x -- noop
-  if (llvm::all_of(inputs(), [&](auto in) { return in == inputs()[0]; }))
+  if (llvm::all_of(inputs(), [&](auto in) { return in == this->inputs()[0]; }))
     return inputs()[0];
 
   // Constant fold
@@ -274,7 +274,7 @@ OpFoldResult OrOp::fold(ArrayRef<Attribute> constants) {
   }
 
   // or(x, x, x) -> x
-  if (llvm::all_of(inputs(), [&](auto in) { return in == inputs()[0]; }))
+  if (llvm::all_of(inputs(), [&](auto in) { return in == this->inputs()[0]; }))
     return inputs()[0];
 
   // Constant fold
@@ -399,7 +399,7 @@ void XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
 OpFoldResult MergeOp::fold(ArrayRef<Attribute> constants) {
   // rtl.merge(x, x, x) -> x.
-  if (llvm::all_of(inputs(), [&](auto in) { return in == inputs()[0]; }))
+  if (llvm::all_of(inputs(), [&](auto in) { return in == this->inputs()[0]; }))
     return inputs()[0];
 
   return {};

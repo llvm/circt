@@ -1405,10 +1405,9 @@ struct HandshakeCanonicalizePattern : public ConversionPattern {
 
 struct FuncOpLowering : public OpConversionPattern<mlir::FuncOp> {
   using OpConversionPattern<mlir::FuncOp>::OpConversionPattern;
-  LogicalResult match(Operation *op) const override { return success(); }
-
-  void rewrite(mlir::FuncOp funcOp, ArrayRef<Value> operands,
-               ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(mlir::FuncOp funcOp, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
 
     // Only retain those attributes that are not constructed by build.
     SmallVector<NamedAttribute, 4> attributes;
@@ -1451,7 +1450,8 @@ struct FuncOpLowering : public OpConversionPattern<mlir::FuncOp> {
                                 newFuncOp.end());
 
     // Rewrite affine.for operations.
-    rewriteAffineFor(newFuncOp, rewriter);
+    if (failed(rewriteAffineFor(newFuncOp, rewriter)))
+      return newFuncOp.emitOpError("failed to rewrite Affine loops");
 
     // Perform dataflow conversion
     MemRefToMemoryAccessOp MemOps = replaceMemoryOps(newFuncOp, rewriter);
@@ -1488,6 +1488,8 @@ struct FuncOpLowering : public OpConversionPattern<mlir::FuncOp> {
     rewriter.eraseOp(cntrlMg);
 
     rewriter.eraseOp(funcOp);
+
+    return success();
   }
 };
 

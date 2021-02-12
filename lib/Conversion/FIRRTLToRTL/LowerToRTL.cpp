@@ -1176,7 +1176,7 @@ FIRRTLLowering::handleUnloweredOp(Operation *op) {
         (isExpression(op) || isa<AsPassivePrimOp>(op) ||
          isa<AsNonPassivePrimOp>(op))) {
       // Zero bit values lower to the null Value.
-      setLowering(op->getResult(0), Value());
+      (void)setLowering(op->getResult(0), Value());
       return NowLowered;
     }
   }
@@ -1280,7 +1280,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
     return setLowering(op, Value());
 
   auto regResult = builder->create<sv::RegOp>(resultType, op.nameAttr());
-  setLowering(op, regResult);
+  (void)setLowering(op, regResult);
 
   initializeRegister(regResult, Value());
 
@@ -1302,7 +1302,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
     return failure();
 
   auto regResult = builder->create<sv::RegOp>(resultType, op.nameAttr());
-  setLowering(op, regResult);
+  (void)setLowering(op, regResult);
 
   auto resetFn = [&]() {
     builder->create<sv::PAssignOp>(regResult, resetValue);
@@ -1480,7 +1480,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     while (!port.use_empty()) {
       auto portField = cast<SubfieldOp>(*port.user_begin());
       portField->dropAllReferences();
-      setLowering(portField, getPortFieldWire(portField.fieldname()));
+      (void)setLowering(portField, getPortFieldWire(portField.fieldname()));
     }
 
     // Return the value corresponding to a port field.
@@ -1558,7 +1558,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
           for (auto reg : regs) {
             auto slot = builder->create<sv::ArrayIndexInOutOp>(reg, addr);
-            builder->create<sv::BPAssignOp>(slot, data);
+            builder->create<sv::PAssignOp>(slot, data);
           }
         });
       });
@@ -1889,16 +1889,13 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValuePrimOp op) {
   // We lower invalid to 0.  TODO: the FIRRTL spec mentions something about
   // lowering it to a random value, we should see if this is what we need to
   // do.
-  auto value = builder->create<rtl::ConstantOp>(resultTy, 0);
-
   if (!op.getType().isa<AnalogType>())
-    return setLowering(op, value);
+    return setLoweringTo<rtl::ConstantOp>(op, resultTy, 0);
 
   // Values of analog type always need to be lowered to something with inout
-  // type.  We do that by lowering to a wire and return that.
-  auto wire = builder->create<sv::WireOp>(resultTy, ".invalid_analog");
-  builder->create<sv::ConnectOp>(wire, value);
-  return setLowering(op, wire);
+  // type.  We do that by lowering to a wire and return that.  As with the SFC,
+  // we do not connect anything to this, because it is bidirectional.
+  return setLoweringTo<sv::WireOp>(op, resultTy, ".invalid_analog");
 }
 
 LogicalResult FIRRTLLowering::visitExpr(HeadPrimOp op) {
@@ -2205,7 +2202,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
   builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, [&]() {
     builder->create<sv::IfOp>(enable, [&]() {
       // Create BOpTy inside the always/if.
-      builder->createOrFold<BOpTy>(predicate);
+      builder->create<BOpTy>(predicate);
     });
   });
 

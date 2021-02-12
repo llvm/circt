@@ -17,7 +17,6 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
-
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
@@ -330,7 +329,7 @@ private:
 };
 } // anonymous namespace
 
-/// Iterate through the `rtl.externmodule`s and lower their ports.
+/// Iterate through the `rtl.module.extern`s and lower their ports.
 void ESIPortsPass::runOnOperation() {
   ModuleOp top = getOperation();
   ESIRTLBuilder b(top);
