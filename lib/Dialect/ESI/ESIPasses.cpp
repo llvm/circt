@@ -17,6 +17,7 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
@@ -36,7 +37,7 @@ namespace esi {
 } // namespace esi
 } // namespace circt
 
-using namespace mlir;
+using namespace circt;
 using namespace circt::esi;
 using namespace circt::rtl;
 using namespace circt::sv;

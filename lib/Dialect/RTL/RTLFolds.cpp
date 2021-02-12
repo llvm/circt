@@ -18,6 +18,8 @@
 using namespace circt;
 using namespace rtl;
 
+using mlir::constFoldBinaryOp;
+
 static Attribute getIntAttr(const APInt &value, MLIRContext *context) {
   return IntegerAttr::get(IntegerType::get(context, value.getBitWidth()),
                           value);

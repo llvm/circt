@@ -13,12 +13,12 @@
 #ifndef CIRCT_DIALECT_LLHD_IR_LLHDDIALECT_H
 #define CIRCT_DIALECT_LLHD_IR_LLHDDIALECT_H
 
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dialect.h"
 
 namespace circt {
 namespace llhd {
-using namespace mlir;
 
 namespace detail {
 struct SigTypeStorage;

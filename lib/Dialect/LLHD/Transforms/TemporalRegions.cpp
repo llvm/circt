@@ -15,7 +15,6 @@
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "llvm/ADT/SmallPtrSet.h"
 
-using namespace mlir;
 using namespace circt;
 
 static void addBlockToTR(Block *block, int tr, DenseMap<Block *, int> &blockMap,

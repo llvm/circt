@@ -102,11 +102,11 @@ class LLHD_ArithmeticOrBitwiseOp<string mnemonic, list<OpTrait> traits = []>
   let results = (outs AnySignlessInteger);
 
   let parser = [{
-      return impl::parseOneResultSameOperandTypeOp(parser, result);
+      return mlir::impl::parseOneResultSameOperandTypeOp(parser, result);
   }];
 
   let printer = [{
-      impl::printOneResultOp(this->getOperation(), p);
+      mlir::impl::printOneResultOp(this->getOperation(), p);
   }];
 }
 

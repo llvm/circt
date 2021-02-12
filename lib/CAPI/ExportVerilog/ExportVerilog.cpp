@@ -12,12 +12,11 @@
 #include "mlir/CAPI/Utils.h"
 #include "llvm/Support/raw_ostream.h"
 
-using namespace mlir;
 using namespace circt;
 
 MlirLogicalResult mlirExportVerilog(MlirModule module,
                                     MlirStringCallback callback,
                                     void *userData) {
-  detail::CallbackOstream stream(callback, userData);
+  mlir::detail::CallbackOstream stream(callback, userData);
   return wrap(exportVerilog(unwrap(module), stream));
 }

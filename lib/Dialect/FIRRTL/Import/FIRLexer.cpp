@@ -18,7 +18,6 @@
 
 using namespace circt;
 using namespace firrtl;
-using namespace mlir;
 using llvm::SMLoc;
 using llvm::SMRange;
 using llvm::SourceMgr;

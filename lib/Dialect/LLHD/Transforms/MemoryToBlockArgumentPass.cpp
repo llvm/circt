@@ -16,7 +16,6 @@
 #include "mlir/IR/Dominance.h"
 #include <set>
 
-using namespace mlir;
 using namespace circt;
 
 namespace {
@@ -31,7 +30,7 @@ struct MemoryToBlockArgumentPass
 /// Add the dominance fontier blocks of 'frontierOf' to the 'df' set
 static void getDominanceFrontier(Block *frontierOf, Operation *op,
                                  std::set<Block *> &df) {
-  DominanceInfo dom(op);
+  mlir::DominanceInfo dom(op);
   for (Block &block : op->getRegion(0).getBlocks()) {
     for (Block *pred : block.getPredecessors()) {
       if (dom.dominates(frontierOf, pred) &&
@@ -66,9 +65,9 @@ static void addBlockOperandToTerminator(Operation *terminator,
                                         Block *successsor, Value toAppend) {
   if (auto wait = dyn_cast<llhd::WaitOp>(terminator)) {
     wait.destOpsMutable().append(toAppend);
-  } else if (auto br = dyn_cast<BranchOp>(terminator)) {
+  } else if (auto br = dyn_cast<mlir::BranchOp>(terminator)) {
     br.destOperandsMutable().append(toAppend);
-  } else if (auto condBr = dyn_cast<CondBranchOp>(terminator)) {
+  } else if (auto condBr = dyn_cast<mlir::CondBranchOp>(terminator)) {
     if (condBr.falseDest() == successsor) {
       condBr.falseDestOperandsMutable().append(toAppend);
     } else {

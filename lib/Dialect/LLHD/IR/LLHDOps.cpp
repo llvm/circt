@@ -27,8 +27,8 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 
-using namespace mlir;
 using namespace circt;
+using namespace mlir;
 
 template <class AttrElementT,
           class ElementValueT = typename AttrElementT::ValueType,

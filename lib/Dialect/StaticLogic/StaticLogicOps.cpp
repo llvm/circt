@@ -13,7 +13,6 @@
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/IR/FunctionImplementation.h"
 
-using namespace mlir;
 using namespace circt;
 using namespace circt::staticlogic;
 

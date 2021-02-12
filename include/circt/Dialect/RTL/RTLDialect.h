@@ -13,11 +13,11 @@
 #ifndef CIRCT_DIALECT_RTL_RTLDIALECT_H
 #define CIRCT_DIALECT_RTL_RTLDIALECT_H
 
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Dialect.h"
 
 namespace circt {
 namespace rtl {
-using namespace mlir;
 
 class RTLDialect : public Dialect {
 public:

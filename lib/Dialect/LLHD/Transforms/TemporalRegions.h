@@ -14,11 +14,11 @@
 #ifndef DIALECT_LLHD_TRANSFORMS_TEMPORALREGIONS_H
 #define DIALECT_LLHD_TRANSFORMS_TEMPORALREGIONS_H
 
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Operation.h"
 
 namespace circt {
 namespace llhd {
-using namespace mlir;
 
 struct TemporalRegionAnalysis {
   using BlockMapT = DenseMap<Block *, int>;

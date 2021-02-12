@@ -23,7 +23,6 @@
 
 using namespace circt;
 using namespace firrtl;
-using namespace mlir;
 
 /// Should we emit wire decls in a block at the top of a module, or inline?
 static constexpr bool emitInlineWireDecls = true;
@@ -2329,9 +2328,9 @@ LogicalResult circt::exportFIRRTLToVerilog(ModuleOp module,
 }
 
 void circt::registerFIRRTLToVerilogTranslation() {
-  TranslateFromMLIRRegistration toVerilog(
+  mlir::TranslateFromMLIRRegistration toVerilog(
       "export-firrtl-verilog", exportFIRRTLToVerilog,
-      [](DialectRegistry &registry) {
+      [](mlir::DialectRegistry &registry) {
         registry.insert<firrtl::FIRRTLDialect>();
       });
 }

@@ -191,9 +191,10 @@ static ParseResult parseModuleFunctionSignature(
     SmallVectorImpl<Type> &argTypes, SmallVectorImpl<NamedAttrList> &argAttrs,
     bool &isVariadic, SmallVectorImpl<Type> &resultTypes,
     SmallVectorImpl<NamedAttrList> &resultAttrs) {
+  using namespace mlir::impl;
   bool allowArgAttrs = true;
-  if (impl::parseFunctionArgumentList(parser, allowArgAttrs, allowVariadic,
-                                      argNames, argTypes, argAttrs, isVariadic))
+  if (parseFunctionArgumentList(parser, allowArgAttrs, allowVariadic, argNames,
+                                argTypes, argAttrs, isVariadic))
     return failure();
   if (succeeded(parser.parseOptionalArrow()))
     return parseFunctionResultList(parser, resultTypes, resultAttrs);

@@ -13,12 +13,13 @@
 #ifndef CIRCT_DIALECT_FIRRTL_DIALECT_H
 #define CIRCT_DIALECT_FIRRTL_DIALECT_H
 
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
 namespace circt {
 namespace firrtl {
-using namespace mlir;
+
 class FIRRTLType;
 
 class FIRRTLDialect : public Dialect {

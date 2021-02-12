@@ -14,7 +14,6 @@
 #define CIRCT_DIALECT_LLHD_SIMULATOR_ENGINE_H
 
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
-
 #include "mlir/IR/BuiltinOps.h"
 
 namespace mlir {
@@ -71,7 +70,7 @@ private:
   llvm::raw_ostream &out;
   std::string root;
   std::unique_ptr<State> state;
-  std::unique_ptr<ExecutionEngine> engine;
+  std::unique_ptr<mlir::ExecutionEngine> engine;
   ModuleOp module;
   int traceMode;
 };

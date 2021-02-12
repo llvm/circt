@@ -17,8 +17,8 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
 
+using namespace circt;
 using namespace circt::sv;
-using namespace mlir;
 
 /// Return the element type of an ArrayType or UnpackedArrayType, or null if the
 /// operand isn't an array.

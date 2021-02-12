@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_TYPES_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Types.h"
 
 namespace circt {
@@ -24,8 +25,6 @@ struct FlipTypeStorage;
 struct BundleTypeStorage;
 struct VectorTypeStorage;
 } // namespace detail.
-
-using namespace mlir;
 
 class ClockType;
 class ResetType;

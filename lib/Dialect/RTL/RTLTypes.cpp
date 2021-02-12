@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/RTL/RTLTypes.h"
 #include "circt/Dialect/RTL/RTLDialect.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -19,7 +20,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
-using namespace mlir;
+using namespace circt;
 using namespace circt::rtl;
 
 #define GET_TYPEDEF_CLASSES
