@@ -614,3 +614,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     memory.w.addr <= wAddr
     memory.w.mask <= wMask
     memory.w.data <= wData
+
+  ; https://github.com/llvm/circt/issues/559
+  ; CHECK-LABEL: firrtl.module @TrickyIssue559
+  module TrickyIssue559:
+    input input: UInt<1>
+    output output: UInt<1>
+    ; CHECK: firrtl.connect %output, %input
+    output <= input
