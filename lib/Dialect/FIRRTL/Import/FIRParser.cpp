@@ -84,6 +84,25 @@ struct GlobalFIRParserState {
   /// This is the next token that hasn't been consumed yet.
   FIRToken curToken;
 
+  class BacktraceState {
+  public:
+    explicit BacktraceState(GlobalFIRParserState &state)
+        : state(state), curToken(state.curToken),
+          cursor(state.lex.getCursor()) {}
+
+    void backtrack() {
+      state.curToken = curToken;
+      cursor.restore(state.lex);
+    }
+
+  private:
+    GlobalFIRParserState &state;
+    FIRToken curToken;
+    FIRLexerCursor cursor;
+  };
+
+  BacktraceState getBacktrackState() { return BacktraceState(*this); }
+
 private:
   GlobalFIRParserState(const GlobalFIRParserState &) = delete;
   void operator=(const GlobalFIRParserState &) = delete;
@@ -2382,9 +2401,23 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
   while (getToken().isAny(FIRToken::kw_input, FIRToken::kw_output) &&
          // Must be nested under the module.
          getIndentation() > indent) {
-    bool isOutput = getToken().is(FIRToken::kw_output);
 
+    // We need one token lookahead to resolve the ambiguity between:
+    // output foo             ; port
+    // output <= input        ; identifier expression
+    // output.thing <= input  ; identifier expression
+    auto backtrackState = getState().getBacktrackState();
+
+    bool isOutput = getToken().is(FIRToken::kw_output);
     consumeToken();
+
+    // If we have something that isn't a keyword then this must be an
+    // identifier, not an input/output marker.
+    if (!getToken().is(FIRToken::identifier) && !getToken().isKeyword()) {
+      backtrackState.backtrack();
+      break;
+    }
+
     StringAttr name;
     FIRRTLType type;
     LocWithInfo info(getToken().getLoc(), this);
