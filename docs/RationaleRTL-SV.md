@@ -121,9 +121,9 @@ In MLIR assembly, operands are always listed MSB to LSB (big endian style):
 // %result is 0xEF7A018
 ```
 
-**Note**: Integers are always big endian in both bit and byte ordering.
-Operand ordering for `rtl.concat` was chosen to be consistent with simply
-abutting them in lexical order.
+**Note**: Integers are always written in left-to-right lexical order. Operand
+ordering for `rtl.concat` was chosen to be consistent with simply abutting
+them in lexical order.
 
 ```mlir
 %1 = rtl.constant (0x1 : i4) : i4
