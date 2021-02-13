@@ -113,10 +113,11 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
  
   // CHECK-NEXT: initial begin
   sv.initial {
+    // CHECK-NEXT: wire [41:0] _T = THING;
     %thing = sv.textual_value "THING" : i42
-    // CHECK-NEXT: wire42 = THING;
+    // CHECK-NEXT: wire42 = _T;
     sv.bpassign %wire42, %thing : i42
-    // CHECK-NEXT: wire42 <= THING;
+    // CHECK-NEXT: wire42 <= _T;
     sv.passign %wire42, %thing : i42
   }// CHECK-NEXT:   {{end // initial$}}
 
@@ -180,5 +181,22 @@ rtl.module @issue508(%in1: i1, %in2: i1) {
 
   // CHECK-NEXT: always @(posedge _T)
   sv.always posedge %clock {
+  }
+}
+
+// CHECK-LABEL: exprInlineTestIssue439
+// https://github.com/llvm/circt/issues/439
+rtl.module @exprInlineTestIssue439(%clk: i1) {
+  // CHECK: wire [31:0] _T = 32'h0;
+  %c = rtl.constant (0:i32) : i32
+
+  // CHECK: always @(posedge clk) begin
+  sv.always posedge %clk {
+    // CHECK: wire [15:0] _T_0 = _T[15:0];
+    %e = rtl.extract %c from 0 : (i32) -> i16
+    %f = rtl.add %e, %e : i16
+    sv.fwrite "%d"(%f) : i16
+    // CHECK: $fwrite(32'h80000002, "%d", _T_0 + _T_0);
+    // CHECK: end // always @(posedge)
   }
 }

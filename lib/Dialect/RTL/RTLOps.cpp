@@ -79,13 +79,13 @@ void RTLModuleOp::build(OpBuilder &builder, OperationState &result,
 /// Return the name to use for the Verilog module that we're referencing
 /// here.  This is typically the symbol, but can be overridden with the
 /// verilogName attribute.
-StringRef RTLExternModuleOp::getVerilogModuleName() {
+StringRef RTLModuleExternOp::getVerilogModuleName() {
   if (auto vname = verilogName())
     return vname.getValue();
   return getName();
 }
 
-void RTLExternModuleOp::build(OpBuilder &builder, OperationState &result,
+void RTLModuleExternOp::build(OpBuilder &builder, OperationState &result,
                               StringAttr name, ArrayRef<ModulePortInfo> ports,
                               StringRef verilogName) {
   buildModule(builder, result, name, ports);
@@ -264,7 +264,7 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
     if (isdigit(arg.name[1]))
       continue;
 
-    auto nameAttr = StringAttr::get(arg.name.drop_front(), context);
+    auto nameAttr = StringAttr::get(context, arg.name.drop_front());
     attrs.push_back({Identifier::get("rtl.name", context), nameAttr});
   }
 
@@ -283,7 +283,7 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
   return success();
 }
 
-static ParseResult parseRTLExternModuleOp(OpAsmParser &parser,
+static ParseResult parseRTLModuleExternOp(OpAsmParser &parser,
                                           OperationState &result) {
   return parseRTLModuleOp(parser, result, /*isExtModule:*/ true);
 }
@@ -383,7 +383,7 @@ static void printRTLModuleOp(OpAsmPrinter &p, Operation *op) {
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size());
 }
 
-static void print(OpAsmPrinter &p, RTLExternModuleOp op) {
+static void print(OpAsmPrinter &p, RTLModuleExternOp op) {
   printRTLModuleOp(p, op);
 }
 
@@ -425,7 +425,7 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
            << op.moduleName() << "'";
 
   if (!isa<RTLModuleOp>(referencedModule) &&
-      !isa<RTLExternModuleOp>(referencedModule))
+      !isa<RTLModuleExternOp>(referencedModule))
     return op.emitError("Symbol resolved to '")
            << referencedModule->getName()
            << "' which is not a RTL[Ext]ModuleOp";
@@ -932,59 +932,6 @@ void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
                        Value index) {
   auto resultType = input.getType().cast<ArrayType>().getElementType();
   build(builder, result, resultType, input, index);
-}
-
-//===----------------------------------------------------------------------===//
-// ImplicitSSAName Custom Directive
-//===----------------------------------------------------------------------===//
-
-static ParseResult parseImplicitSSAName(OpAsmParser &parser,
-                                        NamedAttrList &resultAttrs) {
-
-  if (parser.parseOptionalAttrDict(resultAttrs))
-    return failure();
-
-  // If the attribute dictionary contains no 'name' attribute, infer it from
-  // the SSA name (if specified).
-  bool hadName = llvm::any_of(
-      resultAttrs, [](NamedAttribute attr) { return attr.first == "name"; });
-
-  // If there was no name specified, check to see if there was a useful name
-  // specified in the asm file.
-  if (hadName)
-    return success();
-
-  auto resultName = parser.getResultName(0);
-  if (!resultName.first.empty() && !isdigit(resultName.first[0])) {
-    StringRef name = resultName.first;
-    auto nameAttr = parser.getBuilder().getStringAttr(name);
-    auto *context = parser.getBuilder().getContext();
-    resultAttrs.push_back({Identifier::get("name", context), nameAttr});
-  }
-
-  return success();
-}
-
-static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
-                                 DictionaryAttr attr) {
-  // Note that we only need to print the "name" attribute if the asmprinter
-  // result name disagrees with it.  This can happen in strange cases, e.g.
-  // when there are conflicts.
-  bool namesDisagree = false;
-
-  SmallString<32> resultNameStr;
-  llvm::raw_svector_ostream tmpStream(resultNameStr);
-  p.printOperand(op->getResult(0), tmpStream);
-  auto expectedName = op->getAttrOfType<StringAttr>("name");
-  if (!expectedName ||
-      tmpStream.str().drop_front() != expectedName.getValue()) {
-    namesDisagree = true;
-  }
-
-  if (namesDisagree)
-    p.printOptionalAttrDict(op->getAttrs());
-  else
-    p.printOptionalAttrDict(op->getAttrs(), {"name"});
 }
 
 //===----------------------------------------------------------------------===//

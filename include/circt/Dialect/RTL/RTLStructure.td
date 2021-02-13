@@ -77,11 +77,11 @@ def RTLModuleOp : RTLOp<"module",
   let parser = "return ::parse$cppClass(parser, result);";
 }
 
-def RTLExternModuleOp : RTLOp<"externmodule",
+def RTLModuleExternOp : RTLOp<"module.extern",
       [IsolatedFromAbove, FunctionLike, Symbol, HasParent<"mlir::ModuleOp">]> {
   let summary = "RTL external Module";
   let description = [{
-    The "rtl.externmodule" operation represents an external reference to a
+    The "rtl.module.extern" operation represents an external reference to a
     Verilog module, including a given name and a list of ports.
 
     The 'verilogName' attribute (when present) specifies the spelling of the
@@ -113,7 +113,7 @@ def RTLExternModuleOp : RTLOp<"externmodule",
 
   private:
     // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<RTLExternModuleOp>;
+    friend class OpTrait::FunctionLike<RTLModuleExternOp>;
 
     /// Returns the number of arguments, implementing OpTrait::FunctionLike.
     unsigned getNumFuncArguments() { return getType().getInputs().size(); }

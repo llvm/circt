@@ -14,7 +14,7 @@ module {
 
   // TODO: This ugly bit is because we don't yet have ExportVerilog support
   // for modports as module port declarations.
-  rtl.externmodule @Rcvr (%m: !sv.modport<@data_vr::@data_in>)
+  rtl.module.extern @Rcvr (%m: !sv.modport<@data_vr::@data_in>)
   sv.verbatim "module Rcvr (data_vr.data_in m);\nendmodule"
 
   rtl.module @top (%clk: i1, %rstn: i1) {

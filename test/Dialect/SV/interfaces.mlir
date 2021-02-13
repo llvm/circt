@@ -35,8 +35,8 @@ module {
   // CHECK-NEXT:   sv.interface.modport @dataflow_out ("output" @data, "output" @valid, "input" @ready)
   // CHECK-NEXT: }
 
-  rtl.externmodule @Rcvr (%m: !sv.modport<@handshake_example::@dataflow_in>)
-  // CHECK-LABEL: rtl.externmodule @Rcvr(!sv.modport<@handshake_example::@dataflow_in> {rtl.name = "m"})
+  rtl.module.extern @Rcvr (%m: !sv.modport<@handshake_example::@dataflow_in>)
+  // CHECK-LABEL: rtl.module.extern @Rcvr(!sv.modport<@handshake_example::@dataflow_in> {rtl.name = "m"})
 
   rtl.module @Top () {
     %iface = sv.interface.instance : !sv.interface<@handshake_example>

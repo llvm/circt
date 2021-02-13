@@ -112,7 +112,7 @@ private:
                            SmallVectorImpl<rtl::ModulePortInfo> &ports,
                            Operation *moduleOp);
   rtl::RTLModuleOp lowerModule(FModuleOp oldModule, Block *topLevelModule);
-  rtl::RTLExternModuleOp lowerExtModule(FExtModuleOp oldModule,
+  rtl::RTLModuleExternOp lowerExtModule(FExtModuleOp oldModule,
                                         Block *topLevelModule);
 
   void lowerModuleBody(FModuleOp oldModule,
@@ -196,7 +196,7 @@ void FIRRTLModuleLowering::runOnOperation() {
   // module' specified in the Circuit into an attribute on the top level module.
   getOperation()->setAttr(
       "firrtl.mainModule",
-      StringAttr::get(circuit.name(), circuit.getContext()));
+      StringAttr::get(circuit.getContext(), circuit.name()));
   circuit.erase();
 }
 
@@ -312,7 +312,7 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
   return success();
 }
 
-rtl::RTLExternModuleOp
+rtl::RTLModuleExternOp
 FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
                                      Block *topLevelModule) {
   // Map the ports over, lowering their types as we go.
@@ -329,7 +329,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   // Build the new rtl.module op.
   OpBuilder builder(topLevelModule->getTerminator());
   auto nameAttr = builder.getStringAttr(oldModule.getName());
-  return builder.create<rtl::RTLExternModuleOp>(oldModule.getLoc(), nameAttr,
+  return builder.create<rtl::RTLModuleExternOp>(oldModule.getLoc(), nameAttr,
                                                 ports, verilogName);
 }
 
@@ -438,7 +438,7 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   // We don't have to do this check for insertion points that are at the
   // terminator in the module, because we know that everything is above it by
   // definition.
-  if (!insertPoint->isKnownTerminator()) {
+  if (!insertPoint->hasTrait<OpTrait::IsTerminator>()) {
     // On success, these are the ops that we need to move up above the insertion
     // point.  We keep track of a visited set because each compute subgraph is
     // a dag (not a tree), and we want to only want to visit each subnode once.
@@ -1176,7 +1176,7 @@ FIRRTLLowering::handleUnloweredOp(Operation *op) {
         (isExpression(op) || isa<AsPassivePrimOp>(op) ||
          isa<AsNonPassivePrimOp>(op))) {
       // Zero bit values lower to the null Value.
-      setLowering(op->getResult(0), Value());
+      (void)setLowering(op->getResult(0), Value());
       return NowLowered;
     }
   }
@@ -1280,7 +1280,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
     return setLowering(op, Value());
 
   auto regResult = builder->create<sv::RegOp>(resultType, op.nameAttr());
-  setLowering(op, regResult);
+  (void)setLowering(op, regResult);
 
   initializeRegister(regResult, Value());
 
@@ -1302,7 +1302,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
     return failure();
 
   auto regResult = builder->create<sv::RegOp>(resultType, op.nameAttr());
-  setLowering(op, regResult);
+  (void)setLowering(op, regResult);
 
   auto resetFn = [&]() {
     builder->create<sv::PAssignOp>(regResult, resetValue);
@@ -1480,7 +1480,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     while (!port.use_empty()) {
       auto portField = cast<SubfieldOp>(*port.user_begin());
       portField->dropAllReferences();
-      setLowering(portField, getPortFieldWire(portField.fieldname()));
+      (void)setLowering(portField, getPortFieldWire(portField.fieldname()));
     }
 
     // Return the value corresponding to a port field.
@@ -1558,7 +1558,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
           for (auto reg : regs) {
             auto slot = builder->create<sv::ArrayIndexInOutOp>(reg, addr);
-            builder->create<sv::BPAssignOp>(slot, data);
+            builder->create<sv::PAssignOp>(slot, data);
           }
         });
       });
@@ -1889,16 +1889,13 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValuePrimOp op) {
   // We lower invalid to 0.  TODO: the FIRRTL spec mentions something about
   // lowering it to a random value, we should see if this is what we need to
   // do.
-  auto value = builder->create<rtl::ConstantOp>(resultTy, 0);
-
   if (!op.getType().isa<AnalogType>())
-    return setLowering(op, value);
+    return setLoweringTo<rtl::ConstantOp>(op, resultTy, 0);
 
   // Values of analog type always need to be lowered to something with inout
-  // type.  We do that by lowering to a wire and return that.
-  auto wire = builder->create<sv::WireOp>(resultTy, ".invalid_analog");
-  builder->create<sv::ConnectOp>(wire, value);
-  return setLowering(op, wire);
+  // type.  We do that by lowering to a wire and return that.  As with the SFC,
+  // we do not connect anything to this, because it is bidirectional.
+  return setLoweringTo<sv::WireOp>(op, resultTy, ".invalid_analog");
 }
 
 LogicalResult FIRRTLLowering::visitExpr(HeadPrimOp op) {
@@ -2205,7 +2202,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
   builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, [&]() {
     builder->create<sv::IfOp>(enable, [&]() {
       // Create BOpTy inside the always/if.
-      builder->createOrFold<BOpTy>(predicate);
+      builder->create<BOpTy>(predicate);
     });
   });
 

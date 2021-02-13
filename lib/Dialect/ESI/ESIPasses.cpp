@@ -17,7 +17,6 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
-
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
@@ -52,8 +51,8 @@ class ESIRTLBuilder : public circt::ImplicitLocOpBuilder {
 public:
   ESIRTLBuilder(Operation *top);
 
-  RTLExternModuleOp declareStage();
-  RTLExternModuleOp declareCosimEndpoint();
+  RTLModuleExternOp declareStage();
+  RTLModuleExternOp declareCosimEndpoint();
 
   InterfaceOp getOrConstructInterface(ChannelPort);
   InterfaceOp constructInterface(ChannelPort);
@@ -75,8 +74,8 @@ private:
   /// taken in the symbol table.
   StringAttr constructInterfaceName(ChannelPort);
 
-  RTLExternModuleOp declaredStage;
-  RTLExternModuleOp declaredCosimEndpoint;
+  RTLModuleExternOp declaredStage;
+  RTLModuleExternOp declaredCosimEndpoint;
   llvm::DenseMap<Type, InterfaceOp> portTypeLookup;
 };
 } // anonymous namespace
@@ -89,20 +88,20 @@ constexpr char ESIRTLBuilder::dataStr[], ESIRTLBuilder::validStr[],
 
 ESIRTLBuilder::ESIRTLBuilder(Operation *top)
     : ImplicitLocOpBuilder(UnknownLoc::get(top->getContext()), top),
-      a(StringAttr::get("a", getContext())),
-      aValid(StringAttr::get("a_valid", getContext())),
-      aReady(StringAttr::get("a_ready", getContext())),
-      x(StringAttr::get("x", getContext())),
-      xValid(StringAttr::get("x_valid", getContext())),
-      xReady(StringAttr::get("x_ready", getContext())),
-      dataOutValid(StringAttr::get("DataOutValid", getContext())),
-      dataOutReady(StringAttr::get("DataOutReady", getContext())),
-      dataOut(StringAttr::get("DataOut", getContext())),
-      dataInValid(StringAttr::get("DataInValid", getContext())),
-      dataInReady(StringAttr::get("DataInReady", getContext())),
-      dataIn(StringAttr::get("DataIn", getContext())),
-      clk(StringAttr::get("clk", getContext())),
-      rstn(StringAttr::get("rstn", getContext())),
+      a(StringAttr::get(getContext(), "a")),
+      aValid(StringAttr::get(getContext(), "a_valid")),
+      aReady(StringAttr::get(getContext(), "a_ready")),
+      x(StringAttr::get(getContext(), "x")),
+      xValid(StringAttr::get(getContext(), "x_valid")),
+      xReady(StringAttr::get(getContext(), "x_ready")),
+      dataOutValid(StringAttr::get(getContext(), "DataOutValid")),
+      dataOutReady(StringAttr::get(getContext(), "DataOutReady")),
+      dataOut(StringAttr::get(getContext(), "DataOut")),
+      dataInValid(StringAttr::get(getContext(), "DataInValid")),
+      dataInReady(StringAttr::get(getContext(), "DataInReady")),
+      dataIn(StringAttr::get(getContext(), "DataIn")),
+      clk(StringAttr::get(getContext(), "clk")),
+      rstn(StringAttr::get(getContext(), "rstn")),
       width(Identifier::get("WIDTH", getContext())), declaredStage(nullptr) {
 
   auto regions = top->getRegions();
@@ -154,18 +153,18 @@ StringAttr ESIRTLBuilder::constructInterfaceName(ChannelPort port) {
     proposedName.append(llvm::utostr(++tries));
   }
 
-  return StringAttr::get(proposedName, getContext());
+  return StringAttr::get(getContext(), proposedName);
 }
 
 /// Write an 'ExternModuleOp' to use a hand-coded SystemVerilog module. Said
 /// module implements pipeline stage, adding 1 cycle latency. This particular
 /// implementation is double-buffered and fully pipelines the reverse-flow ready
 /// signal.
-RTLExternModuleOp ESIRTLBuilder::declareStage() {
+RTLModuleExternOp ESIRTLBuilder::declareStage() {
   if (declaredStage)
     return declaredStage;
 
-  auto name = StringAttr::get("ESI_PipelineStage", getContext());
+  auto name = StringAttr::get(getContext(), "ESI_PipelineStage");
   // Since this module has parameterized widths on the a input and x output,
   // give the extern declation a None type since nothing else makes sense.
   // Will be refining this when we decide how to better handle parameterized
@@ -178,17 +177,17 @@ RTLExternModuleOp ESIRTLBuilder::declareStage() {
                             {x, PortDirection::OUTPUT, getNoneType(), 1},
                             {xValid, PortDirection::OUTPUT, getI1Type(), 2},
                             {xReady, PortDirection::INPUT, getI1Type(), 4}};
-  declaredStage = create<RTLExternModuleOp>(name, ports);
+  declaredStage = create<RTLModuleExternOp>(name, ports);
   return declaredStage;
 }
 
 /// Write an 'ExternModuleOp' to use a hand-coded SystemVerilog module. Said
 /// module contains a bi-directional Cosimulation DPI interface with valid/ready
 /// semantics.
-RTLExternModuleOp ESIRTLBuilder::declareCosimEndpoint() {
+RTLModuleExternOp ESIRTLBuilder::declareCosimEndpoint() {
   if (declaredCosimEndpoint)
     return declaredCosimEndpoint;
-  auto name = StringAttr::get("Cosim_Endpoint", getContext());
+  auto name = StringAttr::get(getContext(), "Cosim_Endpoint");
   // Since this module has parameterized widths on the a input and x output,
   // give the extern declation a None type since nothing else makes sense.
   // Will be refining this when we decide how to better handle parameterized
@@ -202,7 +201,7 @@ RTLExternModuleOp ESIRTLBuilder::declareCosimEndpoint() {
       {dataInValid, PortDirection::INPUT, getI1Type(), 3},
       {dataInReady, PortDirection::OUTPUT, getI1Type(), 2},
       {dataIn, PortDirection::INPUT, getNoneType(), 4}};
-  declaredCosimEndpoint = create<RTLExternModuleOp>(name, ports);
+  declaredCosimEndpoint = create<RTLModuleExternOp>(name, ports);
   return declaredCosimEndpoint;
 }
 
@@ -280,7 +279,7 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
     if (bufferName) {
       SmallString<64> stageName(
           {bufferName.getValue(), "_stage", std::to_string(i)});
-      stage->setAttr("name", StringAttr::get(stageName, rewriter.getContext()));
+      stage->setAttr("name", StringAttr::get(rewriter.getContext(), stageName));
     }
     input = stage;
   }
@@ -324,21 +323,21 @@ struct ESIPortsPass : public LowerESIPortsBase<ESIPortsPass> {
   void runOnOperation() override;
 
 private:
-  bool updateFunc(RTLExternModuleOp mod);
-  void updateInstance(RTLExternModuleOp mod, InstanceOp inst);
+  bool updateFunc(RTLModuleExternOp mod);
+  void updateInstance(RTLModuleExternOp mod, InstanceOp inst);
   ESIRTLBuilder *build;
 };
 } // anonymous namespace
 
-/// Iterate through the `rtl.externmodule`s and lower their ports.
+/// Iterate through the `rtl.module.extern`s and lower their ports.
 void ESIPortsPass::runOnOperation() {
   ModuleOp top = getOperation();
   ESIRTLBuilder b(top);
   build = &b;
 
   // Find all externmodules and try to modify them. Remember the modified ones.
-  DenseMap<StringRef, RTLExternModuleOp> modsMutated;
-  for (auto mod : top.getOps<RTLExternModuleOp>())
+  DenseMap<StringRef, RTLModuleExternOp> modsMutated;
+  for (auto mod : top.getOps<RTLModuleExternOp>())
     if (updateFunc(mod))
       modsMutated[mod.getName()] = mod;
 
@@ -357,7 +356,7 @@ void ESIPortsPass::runOnOperation() {
 /// to the inputs and remove the output channel from the results. Returns true
 /// if 'mod' was updated. Delay updating the instances to amortize the IR walk
 /// over all the module updates.
-bool ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
+bool ESIPortsPass::updateFunc(RTLModuleExternOp mod) {
   auto *ctxt = &getContext();
   auto funcType = mod.getType();
 
@@ -423,7 +422,7 @@ bool ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
 /// Update an instance of an updated module by adding `esi.(un)wrap.iface`
 /// around the instance. Create a new instance at the end from the lists built
 /// up before.
-void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
+void ESIPortsPass::updateInstance(RTLModuleExternOp mod, InstanceOp inst) {
   using namespace circt::sv;
   circt::ImplicitLocOpBuilder instBuilder(inst);
   FunctionType funcTy = mod.getType();

@@ -74,7 +74,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
 
   SmallVector<void *, 1> arg({&state});
   // Initialize tbe simulation state.
-  auto invocationResult = engine->invoke("llhd_init", arg);
+  auto invocationResult = engine->invokePacked("llhd_init", arg);
   if (invocationResult) {
     llvm::errs() << "Failed invocation of llhd_init: " << invocationResult;
     return -1;
