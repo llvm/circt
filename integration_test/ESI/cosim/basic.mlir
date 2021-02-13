@@ -7,8 +7,8 @@
 // PY: rpc.testIntAcc(25)
 // PY: rpc.testVectorSum(25)
 
-rtl.externmodule @IntAccNoBP(%clk: i1, %rstn: i1, %ints: !esi.channel<i32>) -> (%totalOut: !esi.channel<i32>)
-rtl.externmodule @IntArrSum(%clk: i1, %rstn: i1, %arr: !esi.channel<!rtl.array<4 x si13>>) -> (%totalOut: !esi.channel<!rtl.array<2 x ui24>>)
+rtl.module.extern @IntAccNoBP(%clk: i1, %rstn: i1, %ints: !esi.channel<i32>) -> (%totalOut: !esi.channel<i32>)
+rtl.module.extern @IntArrSum(%clk: i1, %rstn: i1, %arr: !esi.channel<!rtl.array<4 x si13>>) -> (%totalOut: !esi.channel<!rtl.array<2 x ui24>>)
 
 rtl.module @ints(%clk: i1, %rstn: i1) {
   %intsIn = esi.cosim %clk, %rstn, %intsTotalBuffered, 1 {name="TestEP"} : !esi.channel<i32> -> !esi.channel<i32>
