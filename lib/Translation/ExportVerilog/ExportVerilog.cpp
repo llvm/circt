@@ -1825,13 +1825,30 @@ static void printArraySubscripts(Type type, raw_ostream &os) {
   }
 }
 
-void ModuleEmitter::collectNamesEmitDecls(Block &block) {
-  // In the first pass, we fill in the symbol table, calculate the max width
-  // of the declaration words and the max type width.
-  size_t maxDeclNameWidth = 0, maxTypeWidth = 0;
+namespace {
+class NameCollector {
+public:
+  // This is information we keep track of for each wire/reg/interface
+  // declaration we're going to emit.
+  struct ValuesToEmitRecord {
+    Value value;
+    SmallString<8> typeString;
+  };
+
+  NameCollector(ModuleEmitter &moduleEmitter) : moduleEmitter(moduleEmitter) {}
+
+  // Scan operations in the specified block, collecting information about those
+  // that need to be emitted out of line.
+  void collectNames(Block &block);
+
+  size_t getMaxDeclNameWidth() const { return maxDeclNameWidth; }
+  size_t getMaxTypeWidth() const { return maxTypeWidth; }
+  const SmallVectorImpl<ValuesToEmitRecord> &getValuesToEmit() const {
+    return valuesToEmit;
+  }
 
   // Return the word (e.g. "wire") in Verilog to declare the specified thing.
-  auto getVerilogDeclWord = [](Operation *op) -> StringRef {
+  static StringRef getVerilogDeclWord(Operation *op) {
     if (isa<RegOp>(op))
       return "reg";
 
@@ -1842,15 +1859,17 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     return "wire";
   };
 
-  // This is information we keep track of for each wire/reg/interface
-  // declaration we're going to emit.
-  struct ValuesToEmitRecord {
-    Value value;
-    SmallString<8> typeString;
-  };
+private:
+  size_t maxDeclNameWidth = 0, maxTypeWidth = 0;
   SmallVector<ValuesToEmitRecord, 16> valuesToEmit;
+  ModuleEmitter &moduleEmitter;
+};
+} // namespace
 
+void NameCollector::collectNames(Block &block) {
   SmallString<32> nameTmp;
+
+  using ValueOrOp = ModuleEmitter::ValueOrOp;
 
   // Loop over all of the results of all of the ops.  Anything that defines a
   // value needs to be noticed.
@@ -1860,7 +1879,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     // If the op is an instance, add its name to the name table as an op.
     auto instance = dyn_cast<InstanceOp>(&op);
     if (instance)
-      addName(ValueOrOp(instance), instance.instanceName());
+      moduleEmitter.addName(ValueOrOp(instance), instance.instanceName());
 
     for (auto result : op.getResults()) {
       // If this is an expression emitted inline or unused, it doesn't need a
@@ -1871,23 +1890,23 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
           continue;
 
         // Remember that this expression should be emitted out of line.
-        outOfLineExpressions.insert(&op);
+        moduleEmitter.outOfLineExpressions.insert(&op);
       }
 
       // Otherwise, it must be an expression or a declaration like a
       // RegOp/WireOp.  Remember and unique the name for this result.
       if (instance) {
         // The name for an instance result is custom.
-        nameTmp = getName(ValueOrOp(instance)).str() + "_";
+        nameTmp = moduleEmitter.getName(ValueOrOp(instance)).str() + "_";
         unsigned resultNumber = result.getResultNumber();
         auto resultName = instance.getResultName(resultNumber);
         if (resultName)
           nameTmp += resultName.getValue().str();
         else
           nameTmp += std::to_string(resultNumber);
-        addName(result, nameTmp);
+        moduleEmitter.addName(result, nameTmp);
       } else {
-        addName(result, op.getAttrOfType<StringAttr>("name"));
+        moduleEmitter.addName(result, op.getAttrOfType<StringAttr>("name"));
       }
 
       // If we are emitting out-of-line expressions using inline wire decls,
@@ -1910,7 +1929,24 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       }
       maxTypeWidth = std::max(typeString.size(), maxTypeWidth);
     }
+
+    // Recursively process any regions under the op.
+    for (auto &region : op.getRegions()) {
+      if (!region.empty())
+        collectNames(region.front());
+    }
   }
+}
+
+void ModuleEmitter::collectNamesEmitDecls(Block &block) {
+  // In the first pass, we fill in the symbol table, calculate the max width
+  // of the declaration words and the max type width.
+  NameCollector collector(*this);
+  collector.collectNames(block);
+
+  auto &valuesToEmit = collector.getValuesToEmit();
+  size_t maxDeclNameWidth = collector.getMaxDeclNameWidth();
+  size_t maxTypeWidth = collector.getMaxTypeWidth();
 
   SmallPtrSet<Operation *, 8> ops;
 
@@ -1922,7 +1958,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
     // Emit the leading word, like 'wire' or 'reg'.
     auto type = record.value.getType();
-    auto word = getVerilogDeclWord(decl);
+    auto word = NameCollector::getVerilogDeclWord(decl);
     if (!isZeroBitType(type)) {
       indent() << word;
       os.indent(maxDeclNameWidth - word.size() + 1);
