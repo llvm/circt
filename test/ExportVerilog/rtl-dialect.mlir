@@ -191,11 +191,11 @@ module {
   // CHECK-NEXT: // input  /*Zero Width*/ i3,
   // CHECK-NEXT:    output                y, z, p, p2);
   // CHECK-EMPTY:
-  // CHECK-NEXT:    wire a1_f;
-  // CHECK-NEXT:    wire b1_b;
-  // CHECK-NEXT:    wire b1_c;
-  // CHECK-NEXT:    wire paramd_out;
-  // CHECK-NEXT:    wire paramd2_out;
+  // CHECK-NEXT:    logic a1_f;
+  // CHECK-NEXT:    logic b1_b;
+  // CHECK-NEXT:    logic b1_c;
+  // CHECK-NEXT:    logic paramd_out;
+  // CHECK-NEXT:    logic paramd2_out;
   // CHECK-EMPTY:
   // CHECK-NEXT:    A a1 (
   // CHECK-NEXT:      .d (w),
@@ -462,7 +462,7 @@ module {
 
   // CHECK-LABEL: TestInstanceNameValueConflict
   rtl.module @TestInstanceNameValueConflict(%a: i1) {
-    // CHECK: wire name
+    // CHECK: wire  name
     %name = sv.wire : !rtl.inout<i1>
 
     // CHECK: B name_0 (
