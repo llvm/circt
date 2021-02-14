@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Dialect/RTL/RTLTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -569,6 +570,13 @@ void WireOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
     }
   };
   results.insert<DropDeadConnect>(context);
+}
+
+/// Ensure that the symbol being instantiated exists and is an InterfaceOp.
+static LogicalResult verifyWireOp(WireOp op) {
+  if (!isa<rtl::RTLModuleOp>(op->getParentOp()))
+    return op.emitError("sv.wire must not be in an always or initial block");
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
