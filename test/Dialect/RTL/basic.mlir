@@ -1,7 +1,7 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
-// CHECK-LABEL: func @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> i50 {
-func @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> i50 {
+// CHECK-LABEL: rtl.module @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> (i50) {
+rtl.module @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> (i50) {
   // CHECK-NEXT:    %c42_i12 = rtl.constant(42 : i12) : i12
   // CHECK-NEXT:    [[RES0:%[0-9]+]] = rtl.add %c42_i12, %c42_i12 : i12
   // CHECK-NEXT:    [[RES1:%[0-9]+]] = rtl.mul %c42_i12, [[RES0]] : i12
@@ -110,7 +110,7 @@ func @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> i50 {
   // CHECK-NEXT: = rtl.array_concat [[ARR1]], [[ARR2]] : !rtl.array<2xi19>, !rtl.array<3xi19>
   %bigArray = rtl.array_concat %arrCreated, %arr2 : !rtl.array<2 x i19>, !rtl.array<3 x i19>
 
-  // CHECK-NEXT:    return [[RES8]] : i50
-  return %result : i50
+  // CHECK-NEXT:    rtl.output [[RES8]] : i50
+  rtl.output %result : i50
 }
 // CHECK-NEXT:  }
