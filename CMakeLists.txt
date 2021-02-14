@@ -37,8 +37,12 @@ if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
   
   option(LLVM_INCLUDE_TOOLS "Generate build targets for the LLVM tools." ON)
   option(LLVM_BUILD_TOOLS "Build the LLVM tools. If OFF, just generate build targets." ON)
-  
+
+if (MSVC)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHs-c- /GR-")
+else ()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions -fno-rtti")
+endif ()
   
 #-------------------------------------------------------------------------------
 # MLIR/LLVM Configuration
