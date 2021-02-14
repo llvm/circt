@@ -93,8 +93,8 @@ module {
   // CHECK-NEXT:   output [3:0]            r37,
   // CHECK-NEXT:   output [5:0][3:0]       r38);
   // CHECK-EMPTY:
-  // CHECK-NEXT:   wire [8:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
-  // CHECK-NEXT:   wire [2:0][3:0] [[WIRE1:.+]] = {{[{}][{}]}}4'hF}, {a + b}, {4'hF}};
+  // CHECK-NEXT:   logic [8:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
+  // CHECK-NEXT:   logic [2:0][3:0] [[WIRE1:.+]] = {{[{}][{}]}}4'hF}, {a + b}, {4'hF}};
   // CHECK-NEXT:   assign r0 = a + b;
   // CHECK-NEXT:   assign r2 = a - b;
   // CHECK-NEXT:   assign r4 = a * b;
@@ -276,7 +276,7 @@ module {
     rtl.output %0 : i349
   }
   // CHECK-LABEL: module literal_extract
-  // CHECK: wire [16:0] _T = 17'h11A2C;
+  // CHECK: logic [16:0] _T = 17'h11A2C;
   // CHECK: assign tmp6 = {{[{][{]}}332{_T[16]}}, _T};
 
   rtl.module @wires(%in4: i4, %in8: i8) -> (%a: i4, %b: i8, %c: i8) {
@@ -394,7 +394,7 @@ module {
     %r1 = rtl.bitcast %in1 : (i7) -> !rtl.array<7xi1>
     %r2 = rtl.bitcast %in2 : (!rtl.array<8xi4>) -> i32
 
-    // CHECK-NEXT: wire [31:0] {{.+}} = /*cast(bit[31:0])*/in2;
+    // CHECK-NEXT: logic [31:0] {{.+}} = /*cast(bit[31:0])*/in2;
     // CHECK-NEXT: assign r1 = in1;
     rtl.output %r1, %r2 : !rtl.array<7xi1>, i32
   }

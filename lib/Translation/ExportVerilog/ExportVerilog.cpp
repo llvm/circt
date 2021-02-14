@@ -1111,7 +1111,7 @@ void ModuleEmitter::emitStatementExpression(Operation *op) {
   } else if (isZeroBitType(op->getResult(0).getType())) {
     indent() << "// Zero width: ";
   } else if (emitInlineWireDecls) {
-    indent() << "wire ";
+    indent() << "logic ";
     emitTypeDimWithSpaceIfNeeded(op->getResult(0).getType(), op->getLoc(), os);
     os << getName(op->getResult(0)) << " = ";
   } else {
