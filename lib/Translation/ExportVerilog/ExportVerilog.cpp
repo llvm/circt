@@ -1847,16 +1847,18 @@ public:
     return valuesToEmit;
   }
 
-  // Return the word (e.g. "wire") in Verilog to declare the specified thing.
+  // Return the word (e.g. "reg") in Verilog to declare the specified thing.
   static StringRef getVerilogDeclWord(Operation *op) {
     if (isa<RegOp>(op))
       return "reg";
+    if (isa<WireOp>(op) || isa<MergeOp>(op))
+      return "wire";
 
     // Interfaces instances use the name of the declared interface.
     if (auto interface = dyn_cast<InterfaceInstanceOp>(op))
       return interface.getInterfaceType().getInterface().getValue();
 
-    return "wire";
+    return "logic";
   };
 
 private:
