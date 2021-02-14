@@ -113,7 +113,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
  
   // CHECK-NEXT: initial begin
   sv.initial {
-    // CHECK-NEXT: wire [41:0] _T = THING;
+    // CHECK-NEXT: logic [41:0] _T = THING;
     %thing = sv.textual_value "THING" : i42
     // CHECK-NEXT: wire42 = _T;
     sv.bpassign %wire42, %thing : i42
@@ -176,7 +176,7 @@ rtl.module @reg(%in4: i4, %in8: i8) -> (%a: i8, %b: i8) {
 // CHECK-LABEL: issue508
 // https://github.com/llvm/circt/issues/508
 rtl.module @issue508(%in1: i1, %in2: i1) {
-  // CHECK: wire _T = in1 | in2;
+  // CHECK: logic _T = in1 | in2;
   %clock = rtl.or %in1, %in2 : i1 
 
   // CHECK-NEXT: always @(posedge _T)
@@ -187,12 +187,12 @@ rtl.module @issue508(%in1: i1, %in2: i1) {
 // CHECK-LABEL: exprInlineTestIssue439
 // https://github.com/llvm/circt/issues/439
 rtl.module @exprInlineTestIssue439(%clk: i1) {
-  // CHECK: wire [31:0] _T = 32'h0;
+  // CHECK: logic [31:0] _T = 32'h0;
   %c = rtl.constant (0:i32) : i32
 
   // CHECK: always @(posedge clk) begin
   sv.always posedge %clk {
-    // CHECK: wire [15:0] _T_0 = _T[15:0];
+    // CHECK: logic [15:0] _T_0 = _T[15:0];
     %e = rtl.extract %c from 0 : (i32) -> i16
     %f = rtl.add %e, %e : i16
     sv.fwrite "%d"(%f) : i16
@@ -200,3 +200,21 @@ rtl.module @exprInlineTestIssue439(%clk: i1) {
     // CHECK: end // always @(posedge)
   }
 }
+
+// CHECK-LABEL: module issue439(
+// https://github.com/llvm/circt/issues/439
+rtl.module @issue439(%in1: i1, %in2: i1) {
+  // CHECK: wire _T_0;
+  // CHECK: logic _T = in1 | in2;
+  %clock = rtl.or %in1, %in2 : i1
+
+  // CHECK-NEXT: always @(posedge _T)
+  sv.always posedge %clock {
+    // CHECK-NEXT: assign _T_0 = in1;
+    // CHECK-NEXT: assign _T_0 = in2;
+    %merged = rtl.merge %in1, %in2 : i1
+    // CHECK-NEXT: $fwrite(32'h80000002, "Bye %x\n", _T_0);
+    sv.fwrite "Bye %x\n"(%merged) : i1
+  }
+}
+
