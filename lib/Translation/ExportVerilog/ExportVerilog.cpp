@@ -29,8 +29,8 @@ using namespace mlir;
 using namespace rtl;
 using namespace sv;
 
-/// Should we emit wire decls in a block at the top of a module, or inline?
-static constexpr bool emitInlineWireDecls = true;
+/// Should we emit 'logic' decls in a block at the top of a module, or inline?
+static constexpr bool emitInlineLogicDecls = true;
 
 /// This is the preferred source width for the generated Verilog.
 static constexpr size_t preferredSourceWidth = 120;
@@ -370,6 +370,11 @@ public:
   /// emitted as standalone wire declarations.  This can happen because they are
   /// multiply-used or because the user requires a name to reference.
   SmallPtrSet<Operation *, 16> outOfLineExpressions;
+
+  /// This set keeps track of expressions that need an explicit logic decl at
+  /// the top of the module to avoid "use before def" issues in the generated
+  /// verilog.  This can happen for cyclic modules.
+  SmallPtrSet<Operation *, 16> outOfLineExpresssionDecls;
 };
 
 } // end anonymous namespace
@@ -1110,7 +1115,7 @@ void ModuleEmitter::emitStatementExpression(Operation *op) {
     indent() << "// Unused: ";
   } else if (isZeroBitType(op->getResult(0).getType())) {
     indent() << "// Zero width: ";
-  } else if (emitInlineWireDecls) {
+  } else if (emitInlineLogicDecls && !outOfLineExpresssionDecls.count(op)) {
     indent() << "logic ";
     emitTypeDimWithSpaceIfNeeded(op->getResult(0).getType(), op->getLoc(), os);
     os << getName(op->getResult(0)) << " = ";
@@ -1913,8 +1918,32 @@ void NameCollector::collectNames(Block &block) {
 
       // If we are emitting out-of-line expressions using inline wire decls,
       // don't measure or emit this wire, it will be emitted inline.
-      if (isExpr && emitInlineWireDecls)
-        continue;
+      if (isExpr && emitInlineLogicDecls) {
+        // We can only emit inline logic decls if the generated Verilog will
+        // see the declaration before all the uses.  However, rtl.module allows
+        // cyclic graphs in its body.  We check to make sure that no uses of
+        // this expression are lexically above this expression.  If they are,
+        // we have to emit the declaration at the top of the block.
+        bool haveAnyOutOfOrderUses = false;
+        for (auto *userOp : result.getUsers()) {
+          // If the user is in a suboperation like an always block, then zip up
+          // to the operation that uses it.
+          while (&block != &userOp->getParentRegion()->front())
+            userOp = userOp->getParentOp();
+
+          // Check to see if this is lexically before its users.
+          if (!op.isBeforeInBlock(userOp)) {
+            haveAnyOutOfOrderUses = true;
+            break;
+          }
+        }
+
+        // If we have no out of order uses, we can emit an inline declaration.
+        if (!haveAnyOutOfOrderUses)
+          continue;
+        // Otherwise keep track of this unusual case and declare it like normal.
+        moduleEmitter.outOfLineExpresssionDecls.insert(&op);
+      }
 
       // Emit this value.
       valuesToEmit.push_back(ValuesToEmitRecord{result, {}});

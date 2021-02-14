@@ -477,3 +477,18 @@ rtl.module @issue525(%struct: i2, %else: i2) -> (%casex: i2) {
 // CHECK-NEXT: input  [1:0] struct_0, else_1,
 // CHECK-NEXT: output [1:0] casex_2);
 // CHECK: assign casex_2 = struct_0 + else_1;
+
+
+// https://github.com/llvm/circt/issues/438
+// CHECK-LABEL: module cyclic
+rtl.module @cyclic(%a: i1) -> (i1 {rtl.name = "b"}) {
+  // CHECK: logic _T_0;
+
+  // CHECK: logic _T = _T_0 + _T_0;
+  %1 = rtl.add %0, %0 : i1
+  // CHECK: assign _T_0 = a << a;
+  %0 = rtl.shl %a, %a : i1
+  // CHECK: assign b = _T - _T;
+  %2 = rtl.sub %1, %1 : i1
+  rtl.output %2 : i1
+}
