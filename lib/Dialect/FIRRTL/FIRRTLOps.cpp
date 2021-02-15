@@ -1626,7 +1626,8 @@ static LogicalResult verifyRTLStructCastOp(RTLStructCastOp cast) {
       return cast.emitError("field names don't match '")
              << firFields[findex].name << "', '" << rtlFields[findex].name
              << "'";
-    int64_t firWidth = firFields[findex].type.getBitWidthOrSentinel();
+    int64_t firWidth =
+        FIRRTLType(firFields[findex].type).getBitWidthOrSentinel();
     int64_t rtlWidth = rtl::getBitWidth(rtlFields[findex].type);
     if (firWidth > 0 && rtlWidth > 0 && firWidth != rtlWidth)
       return cast.emitError("size of field '")
