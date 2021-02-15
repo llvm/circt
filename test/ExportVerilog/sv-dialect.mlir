@@ -176,7 +176,7 @@ rtl.module @reg(%in4: i4, %in8: i8) -> (%a: i8, %b: i8) {
 // CHECK-LABEL: issue508
 // https://github.com/llvm/circt/issues/508
 rtl.module @issue508(%in1: i1, %in2: i1) {
-  // CHECK: logic _T = in1 | in2;
+  // CHECK: wire _T = in1 | in2;
   %clock = rtl.or %in1, %in2 : i1 
 
   // CHECK-NEXT: always @(posedge _T)
@@ -187,7 +187,7 @@ rtl.module @issue508(%in1: i1, %in2: i1) {
 // CHECK-LABEL: exprInlineTestIssue439
 // https://github.com/llvm/circt/issues/439
 rtl.module @exprInlineTestIssue439(%clk: i1) {
-  // CHECK: logic [31:0] _T = 32'h0;
+  // CHECK: wire [31:0] _T = 32'h0;
   %c = rtl.constant (0:i32) : i32
 
   // CHECK: always @(posedge clk) begin
@@ -205,7 +205,7 @@ rtl.module @exprInlineTestIssue439(%clk: i1) {
 // https://github.com/llvm/circt/issues/439
 rtl.module @issue439(%in1: i1, %in2: i1) {
   // CHECK: wire _T_0;
-  // CHECK: logic _T = in1 | in2;
+  // CHECK: wire _T = in1 | in2;
   %clock = rtl.or %in1, %in2 : i1
 
   // CHECK-NEXT: always @(posedge _T)
@@ -217,4 +217,3 @@ rtl.module @issue439(%in1: i1, %in2: i1) {
     sv.fwrite "Bye %x\n"(%merged) : i1
   }
 }
-

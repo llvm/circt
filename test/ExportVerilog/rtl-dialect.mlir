@@ -92,8 +92,8 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1,
 // CHECK-NEXT:   output [3:0]            r37,
 // CHECK-NEXT:   output [5:0][3:0]       r38);
 // CHECK-EMPTY:
-// CHECK-NEXT:   logic [8:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
-// CHECK-NEXT:   logic [2:0][3:0] [[WIRE1:.+]] = {{[{}][{}]}}4'hF}, {a + b}, {4'hF}};
+// CHECK-NEXT:   wire [8:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
+// CHECK-NEXT:   wire [2:0][3:0] [[WIRE1:.+]] = {{[{}][{}]}}4'hF}, {a + b}, {4'hF}};
 // CHECK-NEXT:   assign r0 = a + b;
 // CHECK-NEXT:   assign r2 = a - b;
 // CHECK-NEXT:   assign r4 = a * b;
@@ -190,11 +190,11 @@ rtl.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2
 // CHECK-NEXT: // input  /*Zero Width*/ i3,
 // CHECK-NEXT:    output                y, z, p, p2);
 // CHECK-EMPTY:
-// CHECK-NEXT:    logic a1_f;
-// CHECK-NEXT:    logic b1_b;
-// CHECK-NEXT:    logic b1_c;
-// CHECK-NEXT:    logic paramd_out;
-// CHECK-NEXT:    logic paramd2_out;
+// CHECK-NEXT:    wire a1_f;
+// CHECK-NEXT:    wire b1_b;
+// CHECK-NEXT:    wire b1_c;
+// CHECK-NEXT:    wire paramd_out;
+// CHECK-NEXT:    wire paramd2_out;
 // CHECK-EMPTY:
 // CHECK-NEXT:    A a1 (
 // CHECK-NEXT:      .d (w),
@@ -275,7 +275,7 @@ rtl.module @literal_extract(%inp_1: i349) -> (%tmp6: i349) {
   rtl.output %0 : i349
 }
 // CHECK-LABEL: module literal_extract
-// CHECK: logic [16:0] _T = 17'h11A2C;
+// CHECK: wire [16:0] _T = 17'h11A2C;
 // CHECK: assign tmp6 = {{[{][{]}}332{_T[16]}}, _T};
 
 rtl.module @wires(%in4: i4, %in8: i8) -> (%a: i4, %b: i8, %c: i8) {
@@ -393,7 +393,7 @@ rtl.module @casts(%in1: i7, %in2: !rtl.array<8xi4>) -> (%r1: !rtl.array<7xi1>, %
   %r1 = rtl.bitcast %in1 : (i7) -> !rtl.array<7xi1>
   %r2 = rtl.bitcast %in2 : (!rtl.array<8xi4>) -> i32
 
-  // CHECK-NEXT: logic [31:0] {{.+}} = /*cast(bit[31:0])*/in2;
+  // CHECK-NEXT: wire [31:0] {{.+}} = /*cast(bit[31:0])*/in2;
   // CHECK-NEXT: assign r1 = in1;
   rtl.output %r1, %r2 : !rtl.array<7xi1>, i32
 }
@@ -461,7 +461,7 @@ rtl.module @TestEmptyInstanceName(%a: i1) {
 
 // CHECK-LABEL: TestInstanceNameValueConflict
 rtl.module @TestInstanceNameValueConflict(%a: i1) {
-  // CHECK: wire  name
+  // CHECK: wire name
   %name = sv.wire : !rtl.inout<i1>
 
   // CHECK: B name_0 (
@@ -482,9 +482,9 @@ rtl.module @issue525(%struct: i2, %else: i2) -> (%casex: i2) {
 // https://github.com/llvm/circt/issues/438
 // CHECK-LABEL: module cyclic
 rtl.module @cyclic(%a: i1) -> (i1 {rtl.name = "b"}) {
-  // CHECK: logic _T_0;
+  // CHECK: wire _T_0;
 
-  // CHECK: logic _T = _T_0 + _T_0;
+  // CHECK: wire _T = _T_0 + _T_0;
   %1 = rtl.add %0, %0 : i1
   // CHECK: assign _T_0 = a << a;
   %0 = rtl.shl %a, %a : i1
