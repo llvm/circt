@@ -289,7 +289,7 @@ FIRRTLType FIRRTLType::getWidthlessType() {
 /// Reset, etc) then return the bitwidth.  Return -1 if the is one of these
 /// types but without a specified bitwidth.  Return -2 if this isn't a simple
 /// type.
-int32_t FIRRTLType::getBitWidthOrSentinel() const {
+int32_t FIRRTLType::getBitWidthOrSentinel() {
   return TypeSwitch<FIRRTLType, int32_t>(*this)
       .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
       .Case<SIntType, UIntType>(
