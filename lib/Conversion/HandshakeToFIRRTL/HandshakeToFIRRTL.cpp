@@ -329,9 +329,7 @@ static Value createDecoder(Value input, unsigned width, Location insertLoc,
   // Shift the bit dynamically by the input amount.
   auto shift = rewriter.create<DShlPrimOp>(insertLoc, resultType, bit, input);
 
-  // Get a type for the result based on the explicitly specified width.
-  Type padType = UIntType::get(context, width);
-  return rewriter.create<PadPrimOp>(insertLoc, padType, shift, width);
+  return shift;
 }
 
 /// Construct an arbiter based on a simple priority-encoding scheme. In addition
@@ -880,9 +878,24 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
   // Connect that to the select ready.
   rewriter.create<ConnectOp>(insertLoc, selectReady, resultValidAndReady);
 
+  // Since addresses coming from Handshake are IndexType and have a hardcoded
+  // 64-bit width in this pass, we may need to truncate down to the actual
+  // width used to index into the decoder.
+  uint64_t decodeWidth = argData.size();
+  size_t bitsNeeded = getNumIndexBits(decodeWidth);
+  size_t selectBits =
+      selectData.getType().cast<FIRRTLType>().getBitWidthOrSentinel();
+
+  if (selectBits > bitsNeeded) {
+    auto tailAmount = selectBits - bitsNeeded;
+    auto tailType = UIntType::get(op.getContext(), bitsNeeded);
+    selectData = rewriter.create<TailPrimOp>(insertLoc, tailType, selectData,
+                                             tailAmount);
+  }
+
   // Create a decoder for the select data.
   auto decodedSelect =
-      createDecoder(selectData, argData.size(), insertLoc, rewriter);
+      createDecoder(selectData, decodeWidth, insertLoc, rewriter);
 
   // Walk through each arg data.
   for (unsigned i = 0, e = argData.size(); i != e; ++i) {
