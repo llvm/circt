@@ -38,10 +38,11 @@ struct SimpleOperationInfo : public llvm::DenseMapInfo<Operation *> {
     if (lhs == getTombstoneKey() || lhs == getEmptyKey() ||
         rhs == getTombstoneKey() || rhs == getEmptyKey())
       return false;
-    return OperationEquivalence::isEquivalentTo(const_cast<Operation *>(lhsC),
-                                                const_cast<Operation *>(rhsC));
+    return OperationEquivalence::isEquivalentTo(lhs, rhs);
   }
 };
+
+} // end anonymous namespace
 
 // Merge two regions together. These regions must only have a one block.
 static void mergeRegions(Region *region1, Region *region2) {
@@ -71,62 +72,68 @@ static void mergeRegions(Region *region1, Region *region2) {
 /// Inline all regions from the second operation into the first.
 static void mergeOperations(Operation *op1, Operation *op2) {
   assert(op1 != op2 && "Cannot merge an op into itself");
-  for (unsigned i = 0; i < op1->getNumRegions(); ++i)
+  assert(op1->getNumRegions() == 2 &&
+         "alwaysff should always have two regions");
+  for (unsigned i = 0; i != 2; ++i)
     mergeRegions(&op1->getRegion(i), &op2->getRegion(i));
 }
 
+//===----------------------------------------------------------------------===//
+// AlwaysFusionPass
+//===----------------------------------------------------------------------===//
+
+namespace {
+
 struct AlwaysFusionPass : public AlwaysFusionBase<AlwaysFusionPass> {
-  void runOnOperation() override {
-    auto *op = getOperation();
-
-    // Keeps track if anything changed during this pass, used to determine if
-    // the analyses were preserved.
-    bool graphChanged = false;
-
-    auto kindInterface = dyn_cast<mlir::RegionKindInterface>(op);
-    for (unsigned i = 0; i < op->getNumRegions(); ++i) {
-      // If the operation does not implement the region kind interface, all of
-      // its regions are implicitly regular SSACFG region. Since we are blindly
-      // combining alwaysff blocks, make sure they are in a graph region.
-      if (!kindInterface ||
-          kindInterface.getRegionKind(i) == RegionKind::SSACFG)
-        continue;
-
-      if (op->getRegion(i).empty())
-        continue;
-
-      // Graph regions only have 1 block.
-      auto &block = op->getRegion(i).front();
-
-      // A set of operations in the current block which are mergable. Any
-      // operation in this set is a candidate for another similar operation to
-      // merge in to.
-      DenseSet<Operation *, SimpleOperationInfo> foundOps;
-      for (sv::AlwaysFFOp alwaysOp :
-           llvm::make_early_inc_range(block.getOps<sv::AlwaysFFOp>())) {
-        // check if we have encountered an equivalent operation already.  If we
-        // have, merge them together and delete the old operation.
-        auto it = foundOps.find(alwaysOp);
-        if (it == foundOps.end()) {
-          // Record new mergable ops as a candidate for merging
-          foundOps.insert(alwaysOp);
-        } else {
-          // Merge with a similar alwaysff
-          mergeOperations(*it, alwaysOp);
-          alwaysOp.erase();
-          graphChanged = true;
-        }
-      }
-    }
-
-    // If we did not change anything in the graph mark all analysis as
-    // preserved.
-    if (!graphChanged)
-      markAllAnalysesPreserved();
-  }
+  void runOnOperation() override;
 };
 
 } // end anonymous namespace
+
+void AlwaysFusionPass::runOnOperation() {
+  auto *op = getOperation();
+
+  // Keeps track if anything changed during this pass, used to determine if
+  // the analyses were preserved.
+  bool graphChanged = false;
+
+  auto kindInterface = dyn_cast<mlir::RegionKindInterface>(op);
+  for (unsigned i = 0; i < op->getNumRegions(); ++i) {
+    // If the operation does not implement the region kind interface, all of
+    // its regions are implicitly regular SSACFG region. Since we are blindly
+    // combining alwaysff blocks, make sure they are in a graph region.
+    if (!kindInterface || kindInterface.getRegionKind(i) == RegionKind::SSACFG)
+      continue;
+
+    if (op->getRegion(i).empty())
+      continue;
+
+    // Graph regions only have 1 block.
+    auto &block = op->getRegion(i).front();
+
+    // A set of operations in the current block which are mergable. Any
+    // operation in this set is a candidate for another similar operation to
+    // merge in to.
+    DenseSet<Operation *, SimpleOperationInfo> foundOps;
+    for (sv::AlwaysFFOp alwaysOp :
+         llvm::make_early_inc_range(block.getOps<sv::AlwaysFFOp>())) {
+      // check if we have encountered an equivalent operation already.  If we
+      // have, merge them together and delete the old operation.
+      auto itAndInserted = foundOps.insert(alwaysOp);
+      if (!itAndInserted.second) {
+        // Merge with a similar alwaysff
+        mergeOperations(*itAndInserted.first, alwaysOp);
+        alwaysOp.erase();
+        graphChanged = true;
+      }
+    }
+  }
+
+  // If we did not change anything in the graph mark all analysis as
+  // preserved.
+  if (!graphChanged)
+    markAllAnalysesPreserved();
+}
 
 std::unique_ptr<Pass> circt::sv::createAlwaysFusionPass() {
   return std::make_unique<AlwaysFusionPass>();
