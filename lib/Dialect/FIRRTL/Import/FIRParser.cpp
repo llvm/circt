@@ -923,9 +923,31 @@ private:
   /// a passive-typed value and return that.
   Value convertToPassive(Value input, Location loc);
 
+  // The FIRRTL specification describes Invalidates as a statement with
+  // implicit connect semantics.  The FIRRTL dialect models it as a primitive
+  // that returns an "Invalid Value", followed by an explicit connect to make
+  // the representation simpler and more consistent.
+  void emitInvalidate(Value val, Location loc) {
+    auto invalidType = val.getType().cast<FIRRTLType>();
+    auto invalidVal =
+        builder.create<InvalidValuePrimOp>(loc, invalidType.getPassiveType());
+    if (invalidType.isa<AnalogType>())
+      builder.create<AttachOp>(loc, ValueRange{val, invalidVal});
+    else if (!invalidType.isPassive())
+      builder.create<ConnectOp>(loc, val, invalidVal);
+  }
+
   // Exp Parsing
+  ParseResult parseExpImpl(Value &result, SubOpVector &subOps,
+                           const Twine &message, bool isLeadingStmt);
   ParseResult parseExp(Value &result, SubOpVector &subOps,
-                       const Twine &message);
+                       const Twine &message) {
+    return parseExpImpl(result, subOps, message, /*isLeadingStmt:*/ false);
+  }
+  ParseResult parseExpLeadingStmt(Value &result, SubOpVector &subOps,
+                                  const Twine &message) {
+    return parseExpImpl(result, subOps, message, /*isLeadingStmt:*/ true);
+  }
 
   ParseResult parseOptionalExpPostscript(Value &result, SubOpVector &subOps);
   ParseResult parsePostFixFieldId(Value &result, SubOpVector &subOps);
@@ -991,8 +1013,14 @@ Value FIRStmtParser::convertToPassive(Value input, Location loc) {
 /// XX   ::= exp '.' DoubleLit // TODO Workaround for #470
 ///      ::= exp '[' exp ']'
 ///
-ParseResult FIRStmtParser::parseExp(Value &result, SubOpVector &subOps,
-                                    const Twine &message) {
+///
+/// If 'isLeadingStmt' is true, then this is being called to parse the first
+/// expression in a statement.  We can handle some weird cases due to this if
+/// we end up parsing the whole statement.  In that case we return success, but
+/// set the 'result' value to null.
+ParseResult FIRStmtParser::parseExpImpl(Value &result, SubOpVector &subOps,
+                                        const Twine &message,
+                                        bool isLeadingStmt) {
   switch (getToken().getKind()) {
 
     // Handle all the primitive ops: primop exp* intLit*  ')'
@@ -1022,8 +1050,31 @@ ParseResult FIRStmtParser::parseExp(Value &result, SubOpVector &subOps,
     if (!resolveSymbolEntry(result, symtabEntry, loc, false))
       break;
 
+    assert(symtabEntry.is<UnbundledID>() && "should be an instance");
+
     // Otherwise we referred to an implicitly bundled value.  We *must* be in
-    // the midst of processing a field ID reference.  If not, this is an error.
+    // the midst of processing a field ID reference or 'is invalid'.  If not,
+    // this is an error.
+    if (isLeadingStmt && consumeIf(FIRToken::kw_is)) {
+      LocWithInfo info(loc, this);
+      if (parseToken(FIRToken::kw_invalid, "expected 'invalid'") ||
+          parseOptionalInfo(info))
+        return failure();
+
+      // Invalidate all of the results of the bundled value.
+      unsigned unbundledId = symtabEntry.get<UnbundledID>() - 1;
+      assert(unbundledId < unbundledValues.size());
+      UnbundledValueEntry &ubEntry = unbundledValues[unbundledId];
+      for (auto elt : ubEntry) {
+        emitInvalidate(elt.second, info.getLoc());
+      }
+
+      // Signify that we parsed the whole statement.
+      result = Value();
+      return success();
+    }
+
+    // Handle the normal "instance.x" reference.
     StringRef fieldName;
     if (parseToken(FIRToken::period, "expected '.' in field reference") ||
         parseFieldId(fieldName, "expected field name") ||
@@ -1466,8 +1517,13 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
     // Statement productions that start with an expression.
     Value lhs;
     SmallVector<Operation *, 8> subOps;
-    if (parseExp(lhs, subOps, "unexpected token in module"))
+    if (parseExpLeadingStmt(lhs, subOps, "unexpected token in module"))
       return failure();
+    // We use parseExp in a special mode that can complete the entire stmt at
+    // once in unusual cases.  If this happened, then we are done.
+    if (!lhs)
+      return success();
+
     return parseLeadingExpStmt(lhs, subOps);
   }
 
@@ -1870,19 +1926,7 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs, SubOpVector &subOps) {
         parseOptionalInfo(info, subOps))
       return failure();
 
-    // The FIRRTL specification describes Invalidates as a statement with
-    // implicit connect semantics.  The FIRRTL dialect models it as a primitive
-    // that returns an "Invalid Value", followed by an explicit connect to make
-    // the representation simpler and more consistent.
-    auto invalidType = lhs.getType().cast<FIRRTLType>();
-    if (invalidType.isa<AnalogType>()) {
-      auto val = builder.create<InvalidValuePrimOp>(info.getLoc(), invalidType);
-      builder.create<AttachOp>(info.getLoc(), ValueRange{lhs, val});
-    } else {
-      auto val = builder.create<InvalidValuePrimOp>(
-          info.getLoc(), invalidType.getPassiveType());
-      builder.create<ConnectOp>(info.getLoc(), lhs, val);
-    }
+    emitInvalidate(lhs, info.getLoc());
     return success();
   }
 

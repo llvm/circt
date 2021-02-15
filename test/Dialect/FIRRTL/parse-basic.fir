@@ -104,7 +104,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     skip  @[SKipLoc.scala 42:24]
 
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue : !firrtl.uint<1>
-    ; CHECK-NEXT: firrtl.connect %reset, [[INV]] : !firrtl.uint<1>, !firrtl.uint<1>
+    ; CHECK-NEXT: firrtl.connect %auto, [[INV]] : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    auto is invalid
+
+    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue : !firrtl.uint<1>
+    ; CHECK-NOT: firrtl.connect %reset
     reset is invalid
 
     ; CHECK: [[A:%.+]] = firrtl.subfield %out_0("member") : (!firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>) -> !firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>
@@ -622,3 +626,21 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output output: UInt<1>
     ; CHECK: firrtl.connect %output, %input
     output <= input
+
+
+
+  ; https://github.com/llvm/circt/issues/563
+  module mod_0_563 :
+    input tmp1: UInt<5>
+    output tmp2: UInt<5>
+    tmp2 <= tmp1
+
+  ; CHECK-LABEL: firrtl.module @invalidate_entire_instance_563
+  module invalidate_entire_instance_563 :
+    ; CHECK:  %U0_tmp1, %U0_tmp2 = firrtl.instance @mod_0_563
+    inst U0 of mod_0_563
+
+    ; CHECK: %0 = firrtl.invalidvalue : !firrtl.uint<5>
+    ; CHECK: firrtl.connect %U0_tmp1, %0 : !firrtl.flip<uint<5>>, !firrtl.uint<5>
+    ; CHECK: %1 = firrtl.invalidvalue : !firrtl.uint<5>
+    U0 is invalid
