@@ -71,6 +71,9 @@ class Questa:
             svLib = os.path.splitext(lib)[0]
             cmd.append("-sv_lib")
             cmd.append(svLib)
+        if self.dpiLibs:
+            cmd.append("-cpppath")
+            cmd.append("@CMAKE_CXX_COMPILER@")
         return subprocess.run(cmd + simargs.split())
 
 

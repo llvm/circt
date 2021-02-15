@@ -162,10 +162,12 @@ class CosimTestRunner:
             # Run the simulation.
             simEnv = os.environ.copy()
             if "@CMAKE_BUILD_TYPE@" == "Debug":
-              simEnv["COSIM_DEBUG_FILE"] = "cosim_debug.log"
+                simEnv["COSIM_DEBUG_FILE"] = "cosim_debug.log"
+            cmd = [self.simRunScript, "--objdir", "o"] + \
+                self.sources + self.args
+            print("[INFO] Sim run command: " + " ".join(cmd))
             simProc = subprocess.Popen(
-                [self.simRunScript, "--objdir", "o"]
-                + self.sources + self.args,
+                cmd,
                 stdout=simStdout, stderr=simStderr, env=simEnv,
                 preexec_fn=os.setsid)
             simStderr.close()
@@ -204,9 +206,10 @@ class CosimTestRunner:
             # actual CWD.
             testEnv = os.environ.copy()
             testEnv["PWD"] = os.getcwd()
-
             # Run the test script.
-            testProc = subprocess.run([sys.executable, "-u", "script.py"],
+            cmd = [sys.executable, "-u", "script.py"]
+            print("[INFO] Test run command: " + " ".join(cmd))
+            testProc = subprocess.run(cmd,
                                       stdout=testStdout, stderr=testStderr,
                                       cwd=os.getcwd(), env=testEnv)
             testStdout.close()
