@@ -183,8 +183,13 @@ static StringRef getVerilogDeclWord(Operation *op) {
   if (auto interface = dyn_cast<InterfaceInstanceOp>(op))
     return interface.getInterfaceType().getInterface().getValue();
 
-  if (isa<RTLModuleOp>(op->getParentOp()))
-    return "wire";
+  Operation *parent = op;
+  do {
+    parent = parent->getParentOp();
+    if (isa<RTLModuleOp>(parent))
+      return "wire";
+  } while (parent != nullptr && !parent->hasTrait<ProceduralRegion>());
+
   return "logic";
 };
 
