@@ -183,6 +183,8 @@ static StringRef getVerilogDeclWord(Operation *op) {
   if (auto interface = dyn_cast<InterfaceInstanceOp>(op))
     return interface.getInterfaceType().getInterface().getValue();
 
+  // If 'op' is in a module, output 'wire'. If 'op' is in a procedural block,
+  // fall through to default.
   Operation *parent = op;
   do {
     parent = parent->getParentOp();

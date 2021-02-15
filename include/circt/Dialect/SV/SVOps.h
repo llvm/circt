@@ -25,7 +25,7 @@ namespace sv {
 /// Return true if the specified operation is an expression.
 bool isExpression(Operation *op);
 
-/// Signals that an ops regions are procedural.
+/// Signals that an operations regions are procedural.
 template <typename ConcreteType>
 class ProceduralRegion
     : public mlir::OpTrait::TraitBase<ConcreteType, ProceduralRegion> {
