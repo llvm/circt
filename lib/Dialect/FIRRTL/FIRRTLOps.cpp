@@ -20,8 +20,6 @@
 #include "mlir/IR/FunctionImplementation.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/SmallSet.h"
-#include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
@@ -643,7 +641,7 @@ static LogicalResult verifyMemOp(MemOp mem) {
 
   // Store the port names as we find them. This lets us check quickly
   // for uniqueneess.
-  StringSet<> portNamesSet;
+  llvm::SmallDenseSet<Attribute, 8> portNamesSet;
 
   // Store the previous data type. This lets us check that the data
   // type is consistent across all ports.
@@ -671,7 +669,7 @@ static LogicalResult verifyMemOp(MemOp mem) {
     }
 
     // Require that all port names are unique.
-    if (!std::get<1>(portNamesSet.insert(portName.getValue()))) {
+    if (!portNamesSet.insert(portName).second) {
       mem.emitOpError() << "has non-unique port name " << portName;
       return failure();
     }
@@ -753,7 +751,7 @@ static LogicalResult verifyMemOp(MemOp mem) {
 
     // Error if the type of the current port was not the same as the
     // last port, but skip checking the first port.
-    if (oldDataType && (oldDataType != dataType)) {
+    if (oldDataType && oldDataType != dataType) {
       mem.emitOpError() << "port " << mem.getPortName(i)
                         << " has a different type than port "
                         << mem.getPortName(i - 1) << " (expected "
