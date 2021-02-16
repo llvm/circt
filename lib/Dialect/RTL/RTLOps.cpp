@@ -21,13 +21,13 @@ using namespace rtl;
 
 /// Return true if the specified operation is a combinatorial logic op.
 bool rtl::isCombinatorial(Operation *op) {
-  struct IsCombClassifier
-      : public CombinatorialVisitor<IsCombClassifier, bool> {
-    bool visitInvalidComb(Operation *op) { return false; }
-    bool visitUnhandledComb(Operation *op) { return true; }
+  struct IsCombClassifier : public TypeOpVisitor<IsCombClassifier, bool> {
+    bool visitInvalidTypeOp(Operation *op) { return false; }
+    bool visitUnhandledTypeOp(Operation *op) { return true; }
   };
 
-  return IsCombClassifier().dispatchCombinatorialVisitor(op);
+  return op->getDialect()->getNamespace() == "comb" ||
+         IsCombClassifier().dispatchTypeOpVisitor(op);
 }
 
 //===----------------------------------------------------------------------===//

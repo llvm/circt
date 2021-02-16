@@ -13,50 +13,46 @@
 #ifndef CIRCT_DIALECT_RTL_RTLVISITORS_H
 #define CIRCT_DIALECT_RTL_RTLVISITORS_H
 
-// TODO: Delete me!
-#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/RTL/RTLOps.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
 namespace rtl {
 
-using namespace circt::comb;
-
-/// This helps visit Combinatorial nodes.
+/// This helps visit TypeOp nodes.
 template <typename ConcreteType, typename ResultType = void,
           typename... ExtraArgs>
-class CombinatorialVisitor {
+class TypeOpVisitor {
 public:
-  ResultType dispatchCombinatorialVisitor(Operation *op, ExtraArgs... args) {
+  ResultType dispatchTypeOpVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case< // Array operations
             ArraySliceOp, ArrayCreateOp, ArrayConcatOp, ArrayGetOp>(
             [&](auto expr) -> ResultType {
-              return thisCast->visitComb(expr, args...);
+              return thisCast->visitTypeOp(expr, args...);
             })
         .Default([&](auto expr) -> ResultType {
-          return thisCast->visitInvalidComb(op, args...);
+          return thisCast->visitInvalidTypeOp(op, args...);
         });
   }
 
   /// This callback is invoked on any non-expression operations.
-  ResultType visitInvalidComb(Operation *op, ExtraArgs... args) {
+  ResultType visitInvalidTypeOp(Operation *op, ExtraArgs... args) {
     op->emitOpError("unknown RTL combinatorial node");
     abort();
   }
 
   /// This callback is invoked on any combinatorial operations that are not
   /// handled by the concrete visitor.
-  ResultType visitUnhandledComb(Operation *op, ExtraArgs... args) {
+  ResultType visitUnhandledTypeOp(Operation *op, ExtraArgs... args) {
     return ResultType();
   }
 
 #define HANDLE(OPTYPE, OPKIND)                                                 \
-  ResultType visitComb(OPTYPE op, ExtraArgs... args) {                         \
-    return static_cast<ConcreteType *>(this)->visit##OPKIND##Comb(op,          \
-                                                                  args...);    \
+  ResultType visitTypeOp(OPTYPE op, ExtraArgs... args) {                       \
+    return static_cast<ConcreteType *>(this)->visit##OPKIND##TypeOp(op,        \
+                                                                    args...);  \
   }
 
   HANDLE(ArraySliceOp, Unhandled);
@@ -66,7 +62,7 @@ public:
 #undef HANDLE
 };
 
-/// This helps visit Combinatorial nodes.
+/// This helps visit TypeOp nodes.
 template <typename ConcreteType, typename ResultType = void,
           typename... ExtraArgs>
 class StmtVisitor {
@@ -90,18 +86,18 @@ public:
 
   /// This callback is invoked on any combinatorial operations that are not
   /// handled by the concrete visitor.
-  ResultType visitUnhandledComb(Operation *op, ExtraArgs... args) {
+  ResultType visitUnhandledTypeOp(Operation *op, ExtraArgs... args) {
     return ResultType();
   }
 
   /// This fallback is invoked on any binary node that isn't explicitly handled.
   /// The default implementation delegates to the 'unhandled' fallback.
-  ResultType visitBinaryComb(Operation *op, ExtraArgs... args) {
-    return static_cast<ConcreteType *>(this)->visitUnhandledComb(op, args...);
+  ResultType visitBinaryTypeOp(Operation *op, ExtraArgs... args) {
+    return static_cast<ConcreteType *>(this)->visitUnhandledTypeOp(op, args...);
   }
 
-  ResultType visitUnaryComb(Operation *op, ExtraArgs... args) {
-    return static_cast<ConcreteType *>(this)->visitUnhandledComb(op, args...);
+  ResultType visitUnaryTypeOp(Operation *op, ExtraArgs... args) {
+    return static_cast<ConcreteType *>(this)->visitUnhandledTypeOp(op, args...);
   }
 
 #define HANDLE(OPTYPE, OPKIND)                                                 \
