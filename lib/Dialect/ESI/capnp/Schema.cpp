@@ -894,11 +894,11 @@ static GasketComponent decodeList(rtl::ArrayType type,
   auto offset = ptr.slice(2, 30)
                     .cast(b.getIntegerType(30))
                     .name(field.getName(), "_offset");
-  auto elemSize = ptr.slice(31, 3);
-  auto length = ptr.slice(34, 29);
+  auto elemSize = ptr.slice(32, 3);
+  auto length = ptr.slice(35, 29);
 
   // Assert that ptr type == list type;
-  asserts.assertEqual(ptrType, 0);
+  asserts.assertEqual(ptrType, 1);
 
   // Assert that the element size in the message matches our expectation.
   auto expectedElemSizeBits = bits(capnpType.getList().getElementType());
@@ -929,8 +929,7 @@ static GasketComponent decodeList(rtl::ArrayType type,
 
   // Assert that the length of the list (array) is at most the length of the
   // array.
-  auto maxWords = (type.getSize() * expectedElemSizeBits) / (8 * 64);
-  asserts.assertPred(length, ICmpPredicate::sle, maxWords);
+  asserts.assertPred(length, ICmpPredicate::ule, type.getSize());
 
   // Get the entire message slice, compute the offset into the list, then get
   // the list data in an ArrayType.
