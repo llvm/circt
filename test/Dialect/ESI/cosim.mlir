@@ -96,9 +96,9 @@ rtl.module @top(%clk:i1, %rstn:i1) -> () {
   // SV:      assert(rootPointer_2[6'h0+:32] == 32'h0);
   // SV:      assert(rootPointer_2[6'h20+:16] == 16'h0);
   // SV:      assert(rootPointer_2[6'h30+:16] == 16'h1);
-  // SV:      assert(i_ptr[6'h0+:2] == 2'h0);
-  // SV:      assert(i_ptr[6'h1F+:3] == 3'h5);
-  // SV:      assert($signed(i_ptr[6'h22+:29]) <= 29'sh0);
+  // SV:      assert(i_ptr[6'h0+:2] == 2'h1);
+  // SV:      assert(i_ptr[6'h20+:3] == 3'h5);
+  // SV:      assert(i_ptr[6'h23+:29] <= 29'h4);
   // SV:    end
   // SV:  end // always @(posedge)
   // SV:  wire [63:0] rootPointer_2 = ArrTestEP_DataOut[9'h0+:64];
