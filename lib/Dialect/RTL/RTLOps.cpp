@@ -19,6 +19,17 @@
 using namespace circt;
 using namespace rtl;
 
+/// Return true if the specified operation is a combinatorial logic op.
+bool rtl::isCombinatorial(Operation *op) {
+  struct IsCombClassifier
+      : public CombinatorialVisitor<IsCombClassifier, bool> {
+    bool visitInvalidComb(Operation *op) { return false; }
+    bool visitUnhandledComb(Operation *op) { return true; }
+  };
+
+  return IsCombClassifier().dispatchCombinatorialVisitor(op);
+}
+
 //===----------------------------------------------------------------------===//
 // RTLModuleOp
 //===----------------------------------------------------------------------===/
