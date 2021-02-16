@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Translation/ExportVerilog.h"
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Dialect/RTL/RTLTypes.h"
 #include "circt/Dialect/RTL/RTLVisitors.h"
@@ -2215,6 +2216,6 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
 void circt::registerToVerilogTranslation() {
   TranslateFromMLIRRegistration toVerilog(
       "export-verilog", exportVerilog, [](DialectRegistry &registry) {
-        registry.insert<RTLDialect, SVDialect>();
+        registry.insert<CombDialect, RTLDialect, SVDialect>();
       });
 }

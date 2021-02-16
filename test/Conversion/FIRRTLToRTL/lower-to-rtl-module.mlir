@@ -181,7 +181,7 @@ firrtl.circuit "Simple" {
 
     firrtl.connect %outE, %inE : !firrtl.flip<uint<4>>, !firrtl.uint<3>
 
-    // CHECK: [[OUTBY:%.+]] = rtl.merge %inB, %inA : i4
+    // CHECK: [[OUTBY:%.+]] = comb.merge %inB, %inA : i4
 
     // CHECK: [[OUTCX:%.+]] = firrtl.asPassive [[OUTC]]
     // CHECK: [[OUTCY:%.+]] = firrtl.stdIntCast [[OUTCX]]
