@@ -30,16 +30,13 @@ def CombDialect : Dialect {
   let cppNamespace = "::circt::comb";
 }
 
+// TODO: eliminate the dependence on the RTL dialect here.
+
 // Type constraint that indicates that an operand/result may only be a valid,
 // known, non-directional type.
 def RTLIntegerType : Type<CPred<"rtl::isRTLIntegerType($_self)">,
                           "an integer bitvector of one or more bits",
                           "::mlir::IntegerType">;
-
-// Type constraint that indicates that an operand/result may only be a valid,
-// known, non-directional type.
-def RTLValueType : Type<CPred<"rtl::isRTLValueType($_self)">,
-                        "a known primitive element">;
 
 // Type constraint that indicates that an operand/result may only be a valid
 // non-directional type.
