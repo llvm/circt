@@ -4,12 +4,12 @@
 // - Cap'nProto schema generation
 //
 //===----------------------------------------------------------------------===//
+
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/ESI/ESIOps.h"
-
 #include "circt/Dialect/RTL/RTLDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
-
+#include "circt/Support/LLVM.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -22,6 +22,7 @@
 #include "circt/Dialect/ESI/CosimSchema.h"
 #endif
 
+using namespace circt;
 using namespace circt::esi;
 
 //===----------------------------------------------------------------------===//
@@ -40,7 +41,7 @@ struct ExportCosimSchema {
       : module(module), os(os), diag(module.getContext()->getDiagEngine()),
         unknown(UnknownLoc::get(module.getContext())) {
     diag.registerHandler([this](Diagnostic &diag) -> LogicalResult {
-      if (diag.getSeverity() == DiagnosticSeverity::Error)
+      if (diag.getSeverity() == mlir::DiagnosticSeverity::Error)
         ++errorCount;
       return failure();
     });
@@ -61,7 +62,7 @@ struct ExportCosimSchema {
 private:
   ModuleOp module;
   llvm::raw_ostream &os;
-  DiagnosticEngine &diag;
+  mlir::DiagnosticEngine &diag;
   const Location unknown;
   size_t errorCount = 0;
 
