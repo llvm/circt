@@ -20,6 +20,8 @@
 using namespace circt;
 using namespace firrtl;
 
+using mlir::TypeStorageAllocator;
+
 //===----------------------------------------------------------------------===//
 // Type Printing
 //===----------------------------------------------------------------------===//

@@ -19,6 +19,8 @@ using namespace mlir;
 using namespace circt;
 using namespace comb;
 
+using mlir::constFoldBinaryOp;
+
 static Attribute getIntAttr(const APInt &value, MLIRContext *context) {
   return IntegerAttr::get(IntegerType::get(context, value.getBitWidth()),
                           value);

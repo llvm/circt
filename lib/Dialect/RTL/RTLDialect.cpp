@@ -46,7 +46,7 @@ struct RTLOpAsmDialectInterface : public OpAsmDialectInterface {
 
     for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
       // Scan for a 'rtl.name' attribute.
-      if (auto str = getRTLNameAttr(impl::getArgAttrs(parentOp, i)))
+      if (auto str = getRTLNameAttr(mlir::impl::getArgAttrs(parentOp, i)))
         setNameFn(block->getArgument(i), str.getValue());
     }
   }

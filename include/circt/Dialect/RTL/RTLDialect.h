@@ -15,11 +15,11 @@
 
 // TODO: Delete me!
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Dialect.h"
 
 namespace circt {
 namespace rtl {
-using namespace mlir;
 
 // TODO: Delete me! For backwards compatibility only.
 using namespace circt::comb;

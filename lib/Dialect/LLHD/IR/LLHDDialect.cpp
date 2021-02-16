@@ -18,9 +18,10 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
 
-using namespace mlir;
 using namespace circt;
 using namespace circt::llhd;
+
+using mlir::TypeStorageAllocator;
 
 //===----------------------------------------------------------------------===//
 // LLHDDialect Interfaces
@@ -28,8 +29,8 @@ using namespace circt::llhd;
 
 namespace {
 /// This class defines the interface for handling inlining with LLHD operations.
-struct LLHDInlinerInterface : public DialectInlinerInterface {
-  using DialectInlinerInterface::DialectInlinerInterface;
+struct LLHDInlinerInterface : public mlir::DialectInlinerInterface {
+  using mlir::DialectInlinerInterface::DialectInlinerInterface;
 
   //===--------------------------------------------------------------------===//
   // Analysis Hooks
@@ -55,8 +56,7 @@ struct LLHDInlinerInterface : public DialectInlinerInterface {
 //===----------------------------------------------------------------------===//
 
 LLHDDialect::LLHDDialect(mlir::MLIRContext *context)
-    : Dialect(getDialectNamespace(), context,
-    ::mlir::TypeID::get<LLHDDialect>()) {
+    : Dialect(getDialectNamespace(), context, TypeID::get<LLHDDialect>()) {
   addTypes<SigType, TimeType, ArrayType, PtrType>();
   addAttributes<TimeAttr>();
   addOperations<

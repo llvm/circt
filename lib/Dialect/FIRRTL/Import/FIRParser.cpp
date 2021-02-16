@@ -14,6 +14,7 @@
 
 #include "FIRLexer.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
@@ -29,7 +30,7 @@
 
 using namespace circt;
 using namespace firrtl;
-using namespace mlir;
+
 using llvm::SMLoc;
 using llvm::SourceMgr;
 
@@ -2735,7 +2736,7 @@ OwningModuleRef circt::firrtl::importFIRRTL(SourceMgr &sourceMgr,
 }
 
 void circt::firrtl::registerFromFIRRTLTranslation() {
-  static TranslateToMLIRRegistration fromFIR(
+  static mlir::TranslateToMLIRRegistration fromFIR(
       "import-firrtl", [](llvm::SourceMgr &sourceMgr, MLIRContext *context) {
         return importFIRRTL(sourceMgr, context);
       });

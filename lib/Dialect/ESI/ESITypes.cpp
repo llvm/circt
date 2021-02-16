@@ -12,22 +12,23 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/ESI/ESITypes.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/TypeSwitch.h"
 
-using namespace mlir;
+using namespace circt;
 using namespace circt::esi;
 
-Type ChannelPort::parse(mlir::MLIRContext *ctxt, mlir::DialectAsmParser &p) {
+Type ChannelPort::parse(MLIRContext *ctxt, DialectAsmParser &p) {
   Type inner;
   if (p.parseLess() || p.parseType(inner) || p.parseGreater())
     return Type();
   return get(ctxt, inner);
 }
 
-void ChannelPort::print(mlir::DialectAsmPrinter &p) const {
+void ChannelPort::print(DialectAsmPrinter &p) const {
   p << "channel<";
   p.printType(getInner());
   p << ">";

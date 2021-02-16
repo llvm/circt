@@ -27,7 +27,6 @@
 #include <initializer_list>
 #include <string>
 
-using namespace mlir;
 using namespace circt::esi::capnp::detail;
 using namespace circt;
 

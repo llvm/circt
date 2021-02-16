@@ -19,19 +19,28 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
-#define GET_OP_CLASSES
-#include "circt/Dialect/SV/SVEnums.h.inc"
-// Clang format shouldn't reorder these headers.
-#include "circt/Dialect/SV/SV.h.inc"
-#include "circt/Dialect/SV/SVStructs.h.inc"
-
 namespace circt {
 namespace sv {
 
 /// Return true if the specified operation is an expression.
 bool isExpression(Operation *op);
 
+/// Signals that an operations regions are procedural.
+template <typename ConcreteType>
+class ProceduralRegion
+    : public mlir::OpTrait::TraitBase<ConcreteType, ProceduralRegion> {
+  static LogicalResult verifyTrait(Operation *op) {
+    return mlir::OpTrait::impl::verifyAtLeastNRegions(op, 1);
+  }
+};
+
 } // namespace sv
 } // namespace circt
+
+#define GET_OP_CLASSES
+#include "circt/Dialect/SV/SVEnums.h.inc"
+// Clang format shouldn't reorder these headers.
+#include "circt/Dialect/SV/SV.h.inc"
+#include "circt/Dialect/SV/SVStructs.h.inc"
 
 #endif // CIRCT_DIALECT_SV_OPS_H

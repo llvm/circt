@@ -27,7 +27,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
-using namespace mlir;
+
 using namespace rtl;
 using namespace sv;
 
@@ -173,6 +173,29 @@ static bool isNoopCast(Operation *op) {
 
   return false;
 }
+
+/// Return the word (e.g. "reg") in Verilog to declare the specified thing.
+static StringRef getVerilogDeclWord(Operation *op) {
+  if (isa<RegOp>(op))
+    return "reg";
+  if (isa<WireOp>(op) || isa<MergeOp>(op))
+    return "wire";
+
+  // Interfaces instances use the name of the declared interface.
+  if (auto interface = dyn_cast<InterfaceInstanceOp>(op))
+    return interface.getInterfaceType().getInterface().getValue();
+
+  // If 'op' is in a module, output 'wire'. If 'op' is in a procedural block,
+  // fall through to default.
+  Operation *parent = op;
+  do {
+    parent = parent->getParentOp();
+    if (isa<RTLModuleOp>(parent))
+      return "wire";
+  } while (parent != nullptr && !parent->hasTrait<ProceduralRegion>());
+
+  return "logic";
+};
 
 namespace {
 /// This enum keeps track of the precedence level of various binary operators,
@@ -1129,7 +1152,7 @@ void ModuleEmitter::emitStatementExpression(Operation *op) {
   } else if (isZeroBitType(op->getResult(0).getType())) {
     indent() << "// Zero width: ";
   } else if (emitInlineLogicDecls && !outOfLineExpresssionDecls.count(op)) {
-    indent() << "logic ";
+    indent() << getVerilogDeclWord(op) << " ";
     emitTypeDimWithSpaceIfNeeded(op->getResult(0).getType(), op->getLoc(), os);
     os << getName(op->getResult(0)) << " = ";
   } else {
@@ -1865,20 +1888,6 @@ public:
     return valuesToEmit;
   }
 
-  // Return the word (e.g. "reg") in Verilog to declare the specified thing.
-  static StringRef getVerilogDeclWord(Operation *op) {
-    if (isa<RegOp>(op))
-      return "reg";
-    if (isa<WireOp>(op) || isa<MergeOp>(op))
-      return "wire";
-
-    // Interfaces instances use the name of the declared interface.
-    if (auto interface = dyn_cast<InterfaceInstanceOp>(op))
-      return interface.getInterfaceType().getInterface().getValue();
-
-    return "logic";
-  };
-
 private:
   size_t maxDeclNameWidth = 0, maxTypeWidth = 0;
   SmallVector<ValuesToEmitRecord, 16> valuesToEmit;
@@ -2002,7 +2011,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
     // Emit the leading word, like 'wire' or 'reg'.
     auto type = record.value.getType();
-    auto word = NameCollector::getVerilogDeclWord(decl);
+    auto word = getVerilogDeclWord(decl);
     if (!isZeroBitType(type)) {
       indent() << word;
       os.indent(maxDeclNameWidth - word.size() + 1);
@@ -2226,7 +2235,7 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
 }
 
 void circt::registerToVerilogTranslation() {
-  TranslateFromMLIRRegistration toVerilog(
+  mlir::TranslateFromMLIRRegistration toVerilog(
       "export-verilog", exportVerilog, [](DialectRegistry &registry) {
         registry.insert<CombDialect, RTLDialect, SVDialect>();
       });

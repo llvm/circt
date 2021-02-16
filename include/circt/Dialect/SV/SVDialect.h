@@ -13,11 +13,11 @@
 #ifndef CIRCT_DIALECT_SV_DIALECT_H
 #define CIRCT_DIALECT_SV_DIALECT_H
 
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Dialect.h"
 
 namespace circt {
 namespace sv {
-using namespace mlir;
 
 class SVDialect : public Dialect {
 public:

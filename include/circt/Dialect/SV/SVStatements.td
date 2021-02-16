@@ -105,7 +105,7 @@ def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
 
 
 def AlwaysOp : SVOp<"always", [HasRegionTerminator, NoRegionArguments,
-                               RecursiveSideEffects]> {
+                               RecursiveSideEffects, ProceduralRegion]> {
   let summary = "'always @' block";
   let description = "See SV Spec 9.2, and 9.4.2.2.";
   
@@ -147,7 +147,7 @@ def ResetTypeAttr : I32EnumAttr<"ResetType", "reset type",
 
 
 def AlwaysFFOp : SVOp<"alwaysff", [HasRegionTerminator, NoRegionArguments,
-                               RecursiveSideEffects]> {
+                               RecursiveSideEffects, ProceduralRegion]> {
   let summary = "'alwaysff @' block with optional reset";
   let description = [{ 
     alwaysff blocks represent always_ff verilog nodes, which enforce inference 
@@ -190,7 +190,7 @@ def AlwaysFFOp : SVOp<"alwaysff", [HasRegionTerminator, NoRegionArguments,
 
 
 def InitialOp : SVOp<"initial", [HasRegionTerminator, NoRegionArguments,
-                                 RecursiveSideEffects]> {
+                                 RecursiveSideEffects, ProceduralRegion]> {
   let summary = "'initial' block";
   let description = "See SV Spec 9.2.1.";
 
