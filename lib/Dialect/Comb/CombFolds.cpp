@@ -10,13 +10,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "mlir/Dialect/CommonFolders.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 
+using namespace mlir;
 using namespace circt;
-using namespace rtl;
+using namespace comb;
 
 static Attribute getIntAttr(const APInt &value, MLIRContext *context) {
   return IntegerAttr::get(IntegerType::get(context, value.getBitWidth()),
@@ -453,14 +454,14 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
         auto one = rewriter.create<ConstantOp>(op.getLoc(), op.getType(), 1);
         auto shiftLeftOp =
-            rewriter.create<rtl::ShlOp>(op.getLoc(), inputs.back(), one);
+            rewriter.create<comb::ShlOp>(op.getLoc(), inputs.back(), one);
 
         newOperands.push_back(shiftLeftOp);
         rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(), newOperands);
         return success();
       }
 
-      auto shlOp = inputs[size - 1].getDefiningOp<rtl::ShlOp>();
+      auto shlOp = inputs[size - 1].getDefiningOp<comb::ShlOp>();
       // add(..., x, shl(x, c)) -> add(..., mul(x, (1 << c) + 1))
       if (shlOp && shlOp.lhs() == inputs[size - 2] &&
           matchPattern(shlOp.rhs(), m_RConstant(value))) {
@@ -470,7 +471,7 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
             rewriter.create<ConstantOp>(op.getLoc(), (one << value) + one);
 
         std::array<Value, 2> factors = {shlOp.lhs(), rhs};
-        auto mulOp = rewriter.create<rtl::MulOp>(op.getLoc(), factors);
+        auto mulOp = rewriter.create<comb::MulOp>(op.getLoc(), factors);
 
         SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
         newOperands.push_back(mulOp);
@@ -478,7 +479,7 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         return success();
       }
 
-      auto mulOp = inputs[size - 1].getDefiningOp<rtl::MulOp>();
+      auto mulOp = inputs[size - 1].getDefiningOp<comb::MulOp>();
       // add(..., x, mul(x, c)) -> add(..., mul(x, c + 1))
       if (mulOp && mulOp.inputs().size() == 2 &&
           mulOp.inputs()[0] == inputs[size - 2] &&
@@ -487,7 +488,7 @@ void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         APInt one(/*numBits=*/value.getBitWidth(), 1, /*isSigned=*/false);
         auto rhs = rewriter.create<ConstantOp>(op.getLoc(), value + one);
         std::array<Value, 2> factors = {mulOp.inputs()[0], rhs};
-        auto newMulOp = rewriter.create<rtl::MulOp>(op.getLoc(), factors);
+        auto newMulOp = rewriter.create<comb::MulOp>(op.getLoc(), factors);
 
         SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
         newOperands.push_back(newMulOp);
@@ -546,7 +547,8 @@ void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
           value.isPowerOf2()) {
         auto shift = rewriter.create<ConstantOp>(op.getLoc(), op.getType(),
                                                  value.exactLogBase2());
-        auto shlOp = rewriter.create<rtl::ShlOp>(op.getLoc(), inputs[0], shift);
+        auto shlOp =
+            rewriter.create<comb::ShlOp>(op.getLoc(), inputs[0], shift);
 
         rewriter.replaceOpWithNewOp<MulOp>(op, op.getType(),
                                            ArrayRef<Value>(shlOp));

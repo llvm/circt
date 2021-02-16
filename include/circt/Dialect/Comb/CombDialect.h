@@ -1,4 +1,4 @@
-//===- RTLDialect.h - RTL dialect declaration -------------------*- C++ -*-===//
+//===- CombDialect.h - Comb dialect declaration -----------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,30 +6,28 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines an RTL MLIR dialect.
+// This file defines an Comb MLIR dialect.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_RTL_RTLDIALECT_H
-#define CIRCT_DIALECT_RTL_RTLDIALECT_H
+#ifndef CIRCT_DIALECT_COMB_COMBDIALECT_H
+#define CIRCT_DIALECT_COMB_COMBDIALECT_H
 
-// TODO: Delete me!
-#include "circt/Dialect/Comb/CombDialect.h"
 #include "mlir/IR/Dialect.h"
 
 namespace circt {
-namespace rtl {
+namespace comb {
 using namespace mlir;
 
-// TODO: Delete me! For backwards compatibility only.
-using namespace circt::comb;
-
-class RTLDialect : public Dialect {
+class CombDialect : public Dialect {
 public:
-  explicit RTLDialect(MLIRContext *context);
-  ~RTLDialect();
+  explicit CombDialect(MLIRContext *context);
+  ~CombDialect();
 
-  static StringRef getDialectNamespace() { return "rtl"; }
+  static StringRef getDialectNamespace() { return "comb"; }
+
+  Operation *materializeConstant(OpBuilder &builder, Attribute value, Type type,
+                                 Location loc) override;
 
   /// Parses a type registered to this dialect
   Type parseType(DialectAsmParser &parser) const override;
@@ -38,10 +36,10 @@ public:
   void printType(Type type, DialectAsmPrinter &printer) const override;
 };
 
-} // namespace rtl
+} // namespace comb
 } // namespace circt
 
 // Pull in all enum type definitions and utility function declarations.
-#include "circt/Dialect/RTL/RTLEnums.h.inc"
+#include "circt/Dialect/Comb/CombEnums.h.inc"
 
-#endif // CIRCT_DIALECT_RTL_RTLDIALECT_H
+#endif // CIRCT_DIALECT_COMB_COMBDIALECT_H
