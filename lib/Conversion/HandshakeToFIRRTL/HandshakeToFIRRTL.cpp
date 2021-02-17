@@ -726,9 +726,12 @@ public:
   void buildAllReadyLogic(SmallVector<ValueVector *, 4> inputs,
                           ValueVector *output, Value condition);
 
-  void buildOneStageSeqBufferLogic(Value predValid, Value validReg,
-                                   Value predReady, Value succReady,
-                                   Value predData, Value dataReg);
+  void buildControlBufferLogic(Value predValid, Value predReady,
+                               Value succValid, Value succReady, Value clock,
+                               Value reset, Value predData = nullptr,
+                               Value succData = nullptr);
+  void buildDataBufferLogic(Value predValid, Value validReg, Value predReady,
+                            Value succReady, Value predData, Value dataReg);
   bool buildSeqBufferLogic(int64_t numStage, ValueVector *input,
                            ValueVector *output, Value clock, Value reset,
                            bool isControl);
@@ -1442,9 +1445,83 @@ bool HandshakeBuilder::visitHandshake(handshake::ConstantOp op) {
   return true;
 }
 
-void HandshakeBuilder::buildOneStageSeqBufferLogic(
-    Value predValid, Value validReg, Value predReady, Value succReady,
-    Value predData = nullptr, Value dataReg = nullptr) {
+void HandshakeBuilder::buildControlBufferLogic(Value predValid, Value predReady,
+                                               Value succValid, Value succReady,
+                                               Value clock, Value reset,
+                                               Value predData, Value succData) {
+  auto bitType = UIntType::get(rewriter.getContext(), 1);
+  auto falseConst = createConstantOp(bitType, APInt(1, 0), insertLoc, rewriter);
+
+  // Create a wire and connect it to the register for the ready buffer.
+  auto readyRegWireName = rewriter.getStringAttr("readyRegWire");
+  auto readyRegWire =
+      rewriter.create<WireOp>(insertLoc, bitType, readyRegWireName);
+
+  auto readyRegName = rewriter.getStringAttr("readyReg");
+  auto readyReg = rewriter.create<RegResetOp>(insertLoc, bitType, clock, reset,
+                                              falseConst, readyRegName);
+  rewriter.create<ConnectOp>(insertLoc, readyReg, readyRegWire);
+
+  // Create the logic to drive the successor valid and potentially data.
+  auto validResult = rewriter.create<MuxPrimOp>(insertLoc, bitType, readyReg,
+                                                readyReg, predValid);
+  rewriter.create<ConnectOp>(insertLoc, succValid, validResult);
+
+  // Create the logic to drive the predecessor ready.
+  auto notReady = rewriter.create<NotPrimOp>(insertLoc, bitType, readyReg);
+  rewriter.create<ConnectOp>(insertLoc, predReady, notReady);
+
+  // Create the logic for successor and register are both low.
+  auto succNotReady = rewriter.create<NotPrimOp>(insertLoc, bitType, succReady);
+  auto neitherReady =
+      rewriter.create<AndPrimOp>(insertLoc, bitType, succNotReady, notReady);
+
+  // Create a mux for taking the input when neither ready.
+  auto ctrlNotReadyMux = rewriter.create<MuxPrimOp>(
+      insertLoc, bitType, neitherReady, predValid, readyReg);
+
+  // Create the logic for successor and register are both high.
+  auto bothReady =
+      rewriter.create<AndPrimOp>(insertLoc, bitType, succReady, readyReg);
+
+  // Create a mux for emptying the register when both are ready.
+  auto resetSignal = rewriter.create<MuxPrimOp>(insertLoc, bitType, bothReady,
+                                                falseConst, ctrlNotReadyMux);
+  rewriter.create<ConnectOp>(insertLoc, readyRegWire, resetSignal);
+
+  // Add same logic for the data path if necessary.
+  if (predData) {
+    auto dataType = predData.getType().cast<FIRRTLType>();
+    auto ctrlDataRegWireName = rewriter.getStringAttr("ctrlDataRegWire");
+    auto ctrlDataRegWire =
+        rewriter.create<WireOp>(insertLoc, dataType, ctrlDataRegWireName);
+
+    auto ctrlDataRegName = rewriter.getStringAttr("ctrlDataReg");
+    auto ctrlZeroConst =
+        createConstantOp(dataType, APInt(dataType.getBitWidthOrSentinel(), 0),
+                         insertLoc, rewriter);
+    auto ctrlDataReg = rewriter.create<RegResetOp>(
+        insertLoc, dataType, clock, reset, ctrlZeroConst, ctrlDataRegName);
+
+    rewriter.create<ConnectOp>(insertLoc, ctrlDataReg, ctrlDataRegWire);
+
+    auto dataResult = rewriter.create<MuxPrimOp>(insertLoc, dataType, readyReg,
+                                                 ctrlDataReg, predData);
+    rewriter.create<ConnectOp>(insertLoc, succData, dataResult);
+
+    auto dataNotReadyMux = rewriter.create<MuxPrimOp>(
+        insertLoc, dataType, neitherReady, predData, ctrlDataReg);
+
+    auto dataResetSignal = rewriter.create<MuxPrimOp>(
+        insertLoc, dataType, bothReady, ctrlZeroConst, dataNotReadyMux);
+    rewriter.create<ConnectOp>(insertLoc, ctrlDataRegWire, dataResetSignal);
+  }
+}
+
+void HandshakeBuilder::buildDataBufferLogic(Value predValid, Value validReg,
+                                            Value predReady, Value succReady,
+                                            Value predData = nullptr,
+                                            Value dataReg = nullptr) {
   auto bitType = UIntType::get(rewriter.getContext(), 1);
 
   // Create a signal for when the valid register is empty or the successor is
@@ -1534,14 +1611,37 @@ bool HandshakeBuilder::buildSeqBufferLogic(int64_t numStage, ValueVector *input,
                                             zeroDataConst, dataRegName);
     }
 
+    // Create wires for valid, ready and data signal coming from the control
+    // buffer stage.
+    auto ctrlValidWireName =
+        rewriter.getStringAttr("ctrlValidWire" + std::to_string(i));
+    auto ctrlValidWire =
+        rewriter.create<WireOp>(insertLoc, bitType, ctrlValidWireName);
+
+    auto ctrlReadyWireName =
+        rewriter.getStringAttr("ctrlReadyWire" + std::to_string(i));
+    auto ctrlReadyWire =
+        rewriter.create<WireOp>(insertLoc, bitType, ctrlReadyWireName);
+
+    Value ctrlDataWire;
+    if (!isControl) {
+      auto ctrlDataWireName =
+          rewriter.getStringAttr("ctrlDataWire" + std::to_string(i));
+      ctrlDataWire =
+          rewriter.create<WireOp>(insertLoc, dataType, ctrlDataWireName);
+    }
+
     // Build the current stage of the buffer.
-    buildOneStageSeqBufferLogic(currentValid, validReg, currentReady, readyWire,
-                                currentData, dataReg);
+    buildDataBufferLogic(currentValid, validReg, currentReady, readyWire,
+                         currentData, dataReg);
+
+    buildControlBufferLogic(validReg, readyWire, ctrlValidWire, ctrlReadyWire,
+                            clock, reset, dataReg, ctrlDataWire);
 
     // Update the current valid, ready, and data.
-    currentValid = validReg;
-    currentReady = readyWire;
-    currentData = dataReg;
+    currentValid = ctrlValidWire;
+    currentReady = ctrlReadyWire;
+    currentData = ctrlDataWire;
   }
 
   // Connect to the output ports.
