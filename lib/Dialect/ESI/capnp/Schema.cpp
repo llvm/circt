@@ -117,7 +117,7 @@ private:
   /// construction, it's convenient to use the capnp model so assemble the
   /// virtual list of `Type`s here.
   using FieldInfo = rtl::StructType::FieldInfo;
-  SmallVector<rtl::StructType::FieldInfo> fieldTypes;
+  SmallVector<FieldInfo> fieldTypes;
 
   ::capnp::SchemaParser parser;
   mutable llvm::Optional<uint64_t> cachedID;
