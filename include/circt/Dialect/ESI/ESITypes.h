@@ -15,10 +15,17 @@
 #ifndef CIRCT_DIALECT_ESI_ESITYPES_H
 #define CIRCT_DIALECT_ESI_ESITYPES_H
 
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/Operation.h"
 
 #include "ESIDialect.h"
+
+namespace circt {
+namespace rtl {
+class StructType;
+} // namespace rtl
+} // namespace circt
 
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/ESI/ESITypes.h.inc"

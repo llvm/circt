@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/RTL/RTLOps.h"
@@ -38,6 +39,7 @@ namespace esi {
 } // namespace circt
 
 using namespace circt;
+using namespace circt::comb;
 using namespace circt::esi;
 using namespace circt::rtl;
 using namespace circt::sv;
@@ -901,6 +903,7 @@ void ESItoRTLPass::runOnOperation() {
 
   // Set up a conversion and give it a set of laws.
   ConversionTarget pass1Target(*ctxt);
+  pass1Target.addLegalDialect<CombDialect>();
   pass1Target.addLegalDialect<RTLDialect>();
   pass1Target.addLegalDialect<SVDialect>();
   pass1Target.addLegalOp<WrapValidReady, UnwrapValidReady>();
@@ -923,6 +926,7 @@ void ESItoRTLPass::runOnOperation() {
     signalPassFailure();
 
   ConversionTarget pass2Target(*ctxt);
+  pass2Target.addLegalDialect<CombDialect>();
   pass2Target.addLegalDialect<RTLDialect>();
   pass2Target.addLegalDialect<SVDialect>();
   pass2Target.addIllegalDialect<ESIDialect>();

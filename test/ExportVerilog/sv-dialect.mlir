@@ -13,7 +13,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
   sv.always posedge %clock {
     sv.ifdef "!SYNTHESIS" {
       %tmp = sv.textual_value "PRINTF_COND_" : i1
-      %tmp2 = rtl.and %tmp, %cond : i1
+      %tmp2 = comb.and %tmp, %cond : i1
       sv.if %tmp2 {
         sv.fwrite "Hi\n"
       }
@@ -70,7 +70,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     sv.fwrite "Async Reset Block\n"
   } 
 
-  %c42 = rtl.constant (42 : i42) : i42
+  %c42 = comb.constant (42 : i42) : i42
 
   // CHECK-NEXT:   if (cond)
   sv.if %cond {
@@ -84,7 +84,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     sv.fwrite "Hi\n"
 
     // CHECK-NEXT:     $fwrite(32'h80000002, "Bye %x\n", val + val);
-    %tmp = rtl.add %val, %val : i8
+    %tmp = comb.add %val, %val : i8
     sv.fwrite "Bye %x\n"(%tmp) : i8
 
     // CHECK-NEXT:     assert(cond);
@@ -139,7 +139,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     sv.verbatim "`define Thing2"   // CHECK-NEXT:   `define Thing2
   }                                // CHECK-NEXT: `endif
 
-  %add = rtl.add %val, %val : i8
+  %add = comb.add %val, %val : i8
 
   // CHECK-NEXT: `define STUFF "wire42 (val + val)"
   sv.verbatim "`define STUFF \"{{0}} ({{1}})\"" (%wire42, %add) : !rtl.inout<i42>, i8
@@ -200,7 +200,7 @@ rtl.module @reg(%in4: i4, %in8: i8) -> (%a: i8, %b: i8) {
 // https://github.com/llvm/circt/issues/508
 rtl.module @issue508(%in1: i1, %in2: i1) {
   // CHECK: wire _T = in1 | in2;
-  %clock = rtl.or %in1, %in2 : i1 
+  %clock = comb.or %in1, %in2 : i1 
 
   // CHECK-NEXT: always @(posedge _T)
   sv.always posedge %clock {
@@ -211,13 +211,13 @@ rtl.module @issue508(%in1: i1, %in2: i1) {
 // https://github.com/llvm/circt/issues/439
 rtl.module @exprInlineTestIssue439(%clk: i1) {
   // CHECK: wire [31:0] _T = 32'h0;
-  %c = rtl.constant (0:i32) : i32
+  %c = comb.constant (0:i32) : i32
 
   // CHECK: always @(posedge clk) begin
   sv.always posedge %clk {
     // CHECK: logic [15:0] _T_0 = _T[15:0];
-    %e = rtl.extract %c from 0 : (i32) -> i16
-    %f = rtl.add %e, %e : i16
+    %e = comb.extract %c from 0 : (i32) -> i16
+    %f = comb.add %e, %e : i16
     sv.fwrite "%d"(%f) : i16
     // CHECK: $fwrite(32'h80000002, "%d", _T_0 + _T_0);
     // CHECK: end // always @(posedge)
@@ -229,13 +229,13 @@ rtl.module @exprInlineTestIssue439(%clk: i1) {
 rtl.module @issue439(%in1: i1, %in2: i1) {
   // CHECK: wire _T_0;
   // CHECK: wire _T = in1 | in2;
-  %clock = rtl.or %in1, %in2 : i1
+  %clock = comb.or %in1, %in2 : i1
 
   // CHECK-NEXT: always @(posedge _T)
   sv.always posedge %clock {
     // CHECK-NEXT: assign _T_0 = in1;
     // CHECK-NEXT: assign _T_0 = in2;
-    %merged = rtl.merge %in1, %in2 : i1
+    %merged = comb.merge %in1, %in2 : i1
     // CHECK-NEXT: $fwrite(32'h80000002, "Bye %x\n", _T_0);
     sv.fwrite "Bye %x\n"(%merged) : i1
   }

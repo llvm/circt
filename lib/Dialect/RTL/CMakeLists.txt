@@ -8,11 +8,13 @@ add_circt_dialect_library(CIRCTRTL
   DEPENDS
   MLIRRTLIncGen
   MLIRRTLEnumsIncGen
+  CIRCTComb
   
   LINK_COMPONENTS
   Support
 
   LINK_LIBS PUBLIC
+  CIRCTComb
   MLIRIR
    )
 

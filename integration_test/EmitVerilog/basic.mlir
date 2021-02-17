@@ -14,12 +14,12 @@ module {
   }
 
   rtl.module @AAA() -> (i1 {rtl.name = "f"}) {
-    %z = rtl.constant ( 1 : i1 ) : i1
+    %z = comb.constant ( 1 : i1 ) : i1
     rtl.output %z : i1
   }
 
   rtl.module @shl(%a: i1) -> (i1 {rtl.name = "b"}) {
-    %0 = rtl.shl %a, %a : i1
+    %0 = comb.shl %a, %a : i1
     rtl.output %0 : i1
   }
 }

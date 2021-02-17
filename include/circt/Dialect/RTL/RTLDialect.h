@@ -26,9 +26,6 @@ public:
 
   static StringRef getDialectNamespace() { return "rtl"; }
 
-  Operation *materializeConstant(OpBuilder &builder, Attribute value, Type type,
-                                 Location loc) override;
-
   /// Parses a type registered to this dialect
   Type parseType(DialectAsmParser &parser) const override;
 

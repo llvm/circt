@@ -11,12 +11,24 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/RTL/RTLVisitors.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
 
 using namespace circt;
 using namespace rtl;
+
+/// Return true if the specified operation is a combinatorial logic op.
+bool rtl::isCombinatorial(Operation *op) {
+  struct IsCombClassifier : public TypeOpVisitor<IsCombClassifier, bool> {
+    bool visitInvalidTypeOp(Operation *op) { return false; }
+    bool visitUnhandledTypeOp(Operation *op) { return true; }
+  };
+
+  return op->getDialect()->getNamespace() == "comb" ||
+         IsCombClassifier().dispatchTypeOpVisitor(op);
+}
 
 //===----------------------------------------------------------------------===//
 // RTLModuleOp
@@ -526,127 +538,8 @@ static LogicalResult verifyOutputOp(OutputOp *op) {
 }
 
 //===----------------------------------------------------------------------===//
-// ICmpOp
-//===----------------------------------------------------------------------===//
-
-ICmpPredicate ICmpOp::getFlippedPredicate(ICmpPredicate predicate) {
-  switch (predicate) {
-  case ICmpPredicate::eq:
-    return ICmpPredicate::eq;
-  case ICmpPredicate::ne:
-    return ICmpPredicate::ne;
-  case ICmpPredicate::slt:
-    return ICmpPredicate::sgt;
-  case ICmpPredicate::sle:
-    return ICmpPredicate::sge;
-  case ICmpPredicate::sgt:
-    return ICmpPredicate::slt;
-  case ICmpPredicate::sge:
-    return ICmpPredicate::sle;
-  case ICmpPredicate::ult:
-    return ICmpPredicate::ugt;
-  case ICmpPredicate::ule:
-    return ICmpPredicate::uge;
-  case ICmpPredicate::ugt:
-    return ICmpPredicate::ult;
-  case ICmpPredicate::uge:
-    return ICmpPredicate::ule;
-  }
-  llvm_unreachable("unknown comparison predicate");
-}
-
-//===----------------------------------------------------------------------===//
-// RTL combinational ops
-//===----------------------------------------------------------------------===//
-
-/// Return true if the specified operation is a combinatorial logic op.
-bool rtl::isCombinatorial(Operation *op) {
-  struct IsCombClassifier
-      : public CombinatorialVisitor<IsCombClassifier, bool> {
-    bool visitInvalidComb(Operation *op) { return false; }
-    bool visitUnhandledComb(Operation *op) { return true; }
-  };
-
-  return IsCombClassifier().dispatchCombinatorialVisitor(op);
-}
-
-//===----------------------------------------------------------------------===//
-// ConstantOp
-//===----------------------------------------------------------------------===//
-
-static LogicalResult verifyConstantOp(ConstantOp constant) {
-  // If the result type has a bitwidth, then the attribute must match its width.
-  if (constant.value().getBitWidth() != constant.getType().getWidth())
-    return constant.emitError(
-        "firrtl.constant attribute bitwidth doesn't match return type");
-
-  return success();
-}
-
-/// Build a ConstantOp from an APInt, infering the result type from the
-/// width of the APInt.
-void ConstantOp::build(OpBuilder &builder, OperationState &result,
-                       const APInt &value) {
-
-  auto type = IntegerType::get(builder.getContext(), value.getBitWidth());
-  auto attr = builder.getIntegerAttr(type, value);
-  return build(builder, result, type, attr);
-}
-
-/// This builder allows construction of small signed integers like 0, 1, -1
-/// matching a specified MLIR IntegerType.  This shouldn't be used for general
-/// constant folding because it only works with values that can be expressed in
-/// an int64_t.  Use APInt's instead.
-void ConstantOp::build(OpBuilder &builder, OperationState &result, Type type,
-                       int64_t value) {
-  auto numBits = type.cast<IntegerType>().getWidth();
-  build(builder, result, APInt(numBits, (uint64_t)value, /*isSigned=*/true));
-}
-
-void ConstantOp::getAsmResultNames(
-    function_ref<void(Value, StringRef)> setNameFn) {
-  auto intTy = getType();
-  auto intCst = getValue();
-
-  // Sugar i1 constants with 'true' and 'false'.
-  if (intTy.getWidth() == 1)
-    return setNameFn(getResult(), intCst.isNullValue() ? "false" : "true");
-
-  // Otherwise, build a complex name with the value and type.
-  SmallVector<char, 32> specialNameBuffer;
-  llvm::raw_svector_ostream specialName(specialNameBuffer);
-  specialName << 'c' << intCst << '_' << intTy;
-  setNameFn(getResult(), specialName.str());
-}
-
-//===----------------------------------------------------------------------===//
-// Unary Operations
-//===----------------------------------------------------------------------===//
-
-static LogicalResult verifySExtOp(SExtOp op) {
-  // The source must be smaller than the dest type.  Both are already known to
-  // be signless integers.
-  auto srcType = op.getOperand().getType().cast<IntegerType>();
-  if (srcType.getWidth() >= op.getType().getWidth()) {
-    op.emitOpError("extension must increase bitwidth of operand");
-    return failure();
-  }
-
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
-
-static LogicalResult verifyExtractOp(ExtractOp op) {
-  unsigned srcWidth = op.input().getType().cast<IntegerType>().getWidth();
-  unsigned dstWidth = op.getType().getWidth();
-  if (op.lowBit() >= srcWidth || srcWidth - op.lowBit() < dstWidth)
-    return op.emitOpError("from bit too large for input"), failure();
-
-  return success();
-}
 
 static ParseResult parseSliceTypes(OpAsmParser &p, Type &srcType,
                                    Type &idxType) {
@@ -668,8 +561,8 @@ void ArraySliceOp::build(::mlir::OpBuilder &b, ::mlir::OperationState &state,
                          Value input, size_t lowBit, size_t size) {
   auto inputArrayTy = input.getType().cast<ArrayType>();
   unsigned idxWidth = llvm::Log2_64_Ceil(inputArrayTy.getSize());
-  auto lowBitValue =
-      b.create<ConstantOp>(state.location, b.getIntegerType(idxWidth), lowBit);
+  auto lowBitValue = b.create<circt::comb::ConstantOp>(
+      state.location, b.getIntegerType(idxWidth), lowBit);
   auto dstType = ArrayType::get(inputArrayTy.getElementType(), size);
   build(b, state, dstType, input, lowBitValue);
 }
@@ -758,30 +651,6 @@ void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
   for (Value val : values)
     resultSize += val.getType().cast<ArrayType>().getSize();
   build(b, state, ArrayType::get(elemTy, resultSize), values);
-}
-
-//===----------------------------------------------------------------------===//
-// Variadic operations
-//===----------------------------------------------------------------------===//
-
-static LogicalResult verifyUTVariadicRTLOp(Operation *op) {
-  if (op->getOperands().empty())
-    return op->emitOpError("requires 1 or more args");
-
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
-// ConcatOp
-//===----------------------------------------------------------------------===//
-
-void ConcatOp::build(OpBuilder &builder, OperationState &result,
-                     ValueRange inputs) {
-  unsigned resultWidth = 0;
-  for (auto input : inputs) {
-    resultWidth += input.getType().cast<IntegerType>().getWidth();
-  }
-  build(builder, result, builder.getIntegerType(resultWidth), inputs);
 }
 
 //===----------------------------------------------------------------------===//
