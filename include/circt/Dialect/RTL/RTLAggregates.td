@@ -101,7 +101,7 @@ def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
     behavior.
   }];
 
-  let arguments = (ins ArrayType:$input, RTLIntegerType:$lowIndex);
+  let arguments = (ins ArrayType:$input, AnyUnsignedInteger:$lowIndex);
   let results = (outs ArrayType:$dst);
   let verifier = [{
     unsigned inputSize = input().getType().cast<ArrayType>().getSize();
@@ -140,7 +140,7 @@ def ArrayGetOp : RTLOp<"array_get",
     [NoSideEffect, IndexBitWidthConstraint<"index", "input">,
      ArrayElementTypeConstraint<"result", "input">]> {
   let summary = "Get the value in an array at the specified index";
-  let arguments = (ins ArrayType:$input, RTLIntegerType:$index);
+  let arguments = (ins ArrayType:$input, AnyUnsignedInteger:$index);
   let results = (outs RTLNonInOutType:$result);
 
   let assemblyFormat = [{
