@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/RTL/RTLOps.h"
@@ -38,6 +39,7 @@ namespace esi {
 } // namespace circt
 
 using namespace circt;
+using namespace circt::comb;
 using namespace circt::esi;
 using namespace circt::rtl;
 using namespace circt::sv;

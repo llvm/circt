@@ -28,6 +28,7 @@
 
 using namespace circt;
 
+using namespace comb;
 using namespace rtl;
 using namespace sv;
 
