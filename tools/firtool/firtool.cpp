@@ -82,6 +82,11 @@ static cl::opt<OutputFormatKind> outputFormat(
                           "Do not output anything")),
     cl::init(OutputMLIR));
 
+static cl::opt<bool>
+    verifyPasses("verify-each",
+                 cl::desc("Run the verifier after each transformation pass"),
+                 cl::init(true));
+
 /// Process a single buffer of the input.
 static LogicalResult
 processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
@@ -100,7 +105,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
   // Apply any pass manager command line options.
   PassManager pm(&context);
-  pm.enableVerifier(true);
+  pm.enableVerifier(verifyPasses);
   applyPassManagerCLOptions(pm);
 
   OwningModuleRef module;
