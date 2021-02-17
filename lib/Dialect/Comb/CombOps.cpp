@@ -18,6 +18,16 @@ using namespace mlir;
 using namespace circt;
 using namespace comb;
 
+/// Return true if the specified type is a signless non-zero width integer type,
+/// the only type which the comb ops operate.
+static bool isCombIntegerType(mlir::Type type) {
+  auto intType = type.dyn_cast<IntegerType>();
+  if (!intType || !intType.isSignless())
+    return false;
+
+  return intType.getWidth() != 0;
+}
+
 //===----------------------------------------------------------------------===//
 // ICmpOp
 //===----------------------------------------------------------------------===//
