@@ -312,7 +312,7 @@ static Value createOneHotMuxTree(ArrayRef<Value> inputs, Value select,
 
 /// Construct a decoder by dynamically shifting 1 bit by the input amount.
 /// See http://www.imm.dtu.dk/~masca/chisel-book.pdf Section 5.2.
-static Value createDecoder(Value input, unsigned width, Location insertLoc,
+static Value createDecoder(Value input, Location insertLoc,
                            ConversionPatternRewriter &rewriter) {
   auto *context = rewriter.getContext();
 
@@ -881,8 +881,7 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
   // Since addresses coming from Handshake are IndexType and have a hardcoded
   // 64-bit width in this pass, we may need to truncate down to the actual
   // width used to index into the decoder.
-  uint64_t decodeWidth = argData.size();
-  size_t bitsNeeded = getNumIndexBits(decodeWidth);
+  size_t bitsNeeded = getNumIndexBits(argData.size());
   size_t selectBits =
       selectData.getType().cast<FIRRTLType>().getBitWidthOrSentinel();
 
@@ -894,8 +893,7 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
   }
 
   // Create a decoder for the select data.
-  auto decodedSelect =
-      createDecoder(selectData, decodeWidth, insertLoc, rewriter);
+  auto decodedSelect = createDecoder(selectData, insertLoc, rewriter);
 
   // Walk through each arg data.
   for (unsigned i = 0, e = argData.size(); i != e; ++i) {
