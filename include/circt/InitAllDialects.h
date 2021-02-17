@@ -14,6 +14,7 @@
 #ifndef CIRCT_INITALLDIALECTS_H_
 #define CIRCT_INITALLDIALECTS_H_
 
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
@@ -29,6 +30,7 @@ namespace circt {
 inline void registerAllDialects(mlir::DialectRegistry &registry) {
   // clang-format off
   registry.insert<
+    comb::CombDialect,
     esi::ESIDialect,
     firrtl::FIRRTLDialect,
     handshake::HandshakeOpsDialect,

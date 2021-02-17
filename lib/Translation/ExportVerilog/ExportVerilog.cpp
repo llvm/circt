@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Translation/ExportVerilog.h"
+#include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Comb/CombVisitors.h"
 #include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Dialect/RTL/RTLTypes.h"
 #include "circt/Dialect/RTL/RTLVisitors.h"
@@ -624,7 +626,8 @@ namespace {
 /// we emit the characters to a SmallVector which allows us to emit a bunch of
 /// stuff, then pre-insert parentheses and other things if we find out that it
 /// was needed later.
-class ExprEmitter : public CombinatorialVisitor<ExprEmitter, SubExprInfo>,
+class ExprEmitter : public TypeOpVisitor<ExprEmitter, SubExprInfo>,
+                    public CombinationalVisitor<ExprEmitter, SubExprInfo>,
                     public Visitor<ExprEmitter, SubExprInfo> {
 public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
@@ -648,7 +651,8 @@ public:
   ModuleEmitter &emitter;
 
 private:
-  friend class CombinatorialVisitor<ExprEmitter, SubExprInfo>;
+  friend class TypeOpVisitor<ExprEmitter, SubExprInfo>;
+  friend class CombinationalVisitor<ExprEmitter, SubExprInfo>;
   friend class Visitor<ExprEmitter, SubExprInfo>;
 
   /// Emit the specified value as a subexpression to the stream.
@@ -656,8 +660,16 @@ private:
                           SubExprSignRequirement signReq = NoRequirement);
 
   SubExprInfo visitUnhandledExpr(Operation *op);
-  SubExprInfo visitInvalidComb(Operation *op) { return dispatchSVVisitor(op); }
+  SubExprInfo visitInvalidComb(Operation *op) {
+    return dispatchTypeOpVisitor(op);
+  }
   SubExprInfo visitUnhandledComb(Operation *op) {
+    return visitUnhandledExpr(op);
+  }
+  SubExprInfo visitInvalidTypeOp(Operation *op) {
+    return dispatchSVVisitor(op);
+  }
+  SubExprInfo visitUnhandledTypeOp(Operation *op) {
     return visitUnhandledExpr(op);
   }
   SubExprInfo visitUnhandledSV(Operation *op) { return visitUnhandledExpr(op); }
@@ -684,17 +696,18 @@ private:
 
   // Noop cast operators.
   SubExprInfo visitSV(ReadInOutOp op) { return emitNoopCast(op); }
+  SubExprInfo visitSV(ArrayIndexInOutOp op);
 
   // Other
-  SubExprInfo visitComb(ArraySliceOp op);
-  SubExprInfo visitComb(ArrayGetOp op);
-  SubExprInfo visitComb(ArrayCreateOp op);
-  SubExprInfo visitComb(ArrayConcatOp op);
-  SubExprInfo visitSV(ArrayIndexInOutOp op);
-  SubExprInfo visitComb(MuxOp op);
+  using TypeOpVisitor::visitTypeOp;
+  SubExprInfo visitTypeOp(ArraySliceOp op);
+  SubExprInfo visitTypeOp(ArrayGetOp op);
+  SubExprInfo visitTypeOp(ArrayCreateOp op);
+  SubExprInfo visitTypeOp(ArrayConcatOp op);
 
-  // RTL Dialect Operations
-  using CombinatorialVisitor::visitComb;
+  // Comb Dialect Operations
+  using CombinationalVisitor::visitComb;
+  SubExprInfo visitComb(MuxOp op);
   SubExprInfo visitComb(ConstantOp op);
   SubExprInfo visitComb(AddOp op) { return emitVariadic(op, Addition, "+"); }
   SubExprInfo visitComb(SubOp op) { return emitBinary(op, Addition, "-"); }
@@ -863,7 +876,7 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
 
   // Okay, this is an expression we should emit inline.  Do this through our
   // visitor.
-  auto expInfo = dispatchCombinatorialVisitor(exp.getDefiningOp());
+  auto expInfo = dispatchCombinationalVisitor(exp.getDefiningOp());
 
   // Check cases where we have to insert things before the expression now that
   // we know things about it.
@@ -1039,7 +1052,7 @@ SubExprInfo ExprEmitter::visitComb(ConstantOp op) {
 
 // 11.5.1 "Vector bit-select and part-select addressing" allows a '+:' syntax
 // for slicing operations.
-SubExprInfo ExprEmitter::visitComb(ArraySliceOp op) {
+SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
   auto arrayPrec = emitSubExpr(op.input(), Selection);
 
   unsigned dstWidth = op.getType().getSize();
@@ -1049,7 +1062,7 @@ SubExprInfo ExprEmitter::visitComb(ArraySliceOp op) {
   return {Selection, arrayPrec.signedness};
 }
 
-SubExprInfo ExprEmitter::visitComb(ArrayGetOp op) {
+SubExprInfo ExprEmitter::visitTypeOp(ArrayGetOp op) {
   emitSubExpr(op.input(), Selection);
   os << '[';
   emitSubExpr(op.index(), LowestPrecedence);
@@ -1058,7 +1071,7 @@ SubExprInfo ExprEmitter::visitComb(ArrayGetOp op) {
 }
 
 // Syntax from: section 5.11 "Array literals".
-SubExprInfo ExprEmitter::visitComb(ArrayCreateOp op) {
+SubExprInfo ExprEmitter::visitTypeOp(ArrayCreateOp op) {
   os << '{';
   llvm::interleaveComma(op.inputs(), os, [&](Value operand) {
     os << "{";
@@ -1069,7 +1082,7 @@ SubExprInfo ExprEmitter::visitComb(ArrayCreateOp op) {
   return {Unary, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitComb(ArrayConcatOp op) {
+SubExprInfo ExprEmitter::visitTypeOp(ArrayConcatOp op) {
   os << '{';
   llvm::interleaveComma(op.getOperands(), os,
                         [&](Value v) { emitSubExpr(v, LowestPrecedence); });
@@ -2223,7 +2236,7 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
 
 void circt::registerToVerilogTranslation() {
   mlir::TranslateFromMLIRRegistration toVerilog(
-      "export-verilog", exportVerilog, [](mlir::DialectRegistry &registry) {
-        registry.insert<RTLDialect, SVDialect>();
+      "export-verilog", exportVerilog, [](DialectRegistry &registry) {
+        registry.insert<CombDialect, RTLDialect, SVDialect>();
       });
 }

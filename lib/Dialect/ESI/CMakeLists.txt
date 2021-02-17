@@ -7,6 +7,7 @@ set(ESI_Deps
 
 set(ESI_LinkLibs
   CIRCTSupport
+  CIRCTComb
   CIRCTSV
   CIRCTRTL
   MLIREDSC

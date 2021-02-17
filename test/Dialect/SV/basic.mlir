@@ -14,7 +14,7 @@ func @test1(%arg0: i1, %arg1: i1) {
   sv.always posedge  %arg0 {
     sv.ifdef "!SYNTHESIS" {
       %tmp = sv.textual_value "PRINTF_COND_" : i1
-      %tmp2 = rtl.and %tmp, %arg1 : i1
+      %tmp2 = comb.and %tmp, %arg1 : i1
       sv.if %tmp2 {
         sv.fwrite "Hi\n" 
       }
@@ -30,7 +30,7 @@ func @test1(%arg0: i1, %arg1: i1) {
   // CHECK-NEXT: sv.always posedge %arg0 {
   // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
   // CHECK-NEXT:     %0 = sv.textual_value "PRINTF_COND_" : i1
-  // CHECK-NEXT:     %1 = rtl.and %0, %arg1 : i1
+  // CHECK-NEXT:     %1 = comb.and %0, %arg1 : i1
   // CHECK-NEXT:     sv.if %1 {
   // CHECK-NEXT:       sv.fwrite "Hi\0A" 
   // CHECK-NEXT:     }

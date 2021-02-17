@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_RTL_OPS_H
 #define CIRCT_DIALECT_RTL_OPS_H
 
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/RTL/RTLDialect.h"
 #include "circt/Dialect/RTL/RTLTypes.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -25,6 +26,7 @@
 
 namespace circt {
 namespace rtl {
+using namespace circt::comb;
 
 /// A RTL module ports direction.
 enum PortDirection {
