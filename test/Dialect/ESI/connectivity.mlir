@@ -11,11 +11,18 @@ rtl.module @Reciever(%a: !esi.channel<i1>) {
   // Recieve bits.
   %data, %valid = esi.unwrap.vr %a, %rdy : i1
 }
+!FooStruct = type !esi.struct<FooStruct, a: si4, b: !rtl.array<3 x ui4>>
+rtl.module @StructRcvr(%a: !esi.channel<!FooStruct>) {
+  %rdy = constant 1 : i1
+  // Recieve bits.
+  %data, %valid = esi.unwrap.vr %a, %rdy : !FooStruct
+}
 
 // CHECK-LABEL: rtl.module @Sender() -> (%x: !esi.channel<i1>) {
 // CHECK:        %chanOutput, %ready = esi.wrap.vr %false, %false : i1
 // CHECK-LABEL: rtl.module @Reciever(%a: !esi.channel<i1>) {
 // CHECK:        %rawOutput, %valid = esi.unwrap.vr %a, %true : i1
+// CHECK-LABEL: rtl.module @StructRcvr(%a: !esi.channel<!esi.struct<FooStruct, a: si4, b: !rtl.array<3xui4>>>)
 
 rtl.module @test(%clk: i1, %rstn: i1) {
   %esiChan = rtl.instance "sender" @Sender () : () -> (!esi.channel<i1>)
