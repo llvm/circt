@@ -24,7 +24,7 @@
 namespace circt {
 namespace rtl {
 class StructType;
-}
+} // namespace rtl
 } // namespace circt
 
 #define GET_TYPEDEF_CLASSES
