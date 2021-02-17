@@ -13,16 +13,11 @@
 #ifndef CIRCT_DIALECT_RTL_RTLDIALECT_H
 #define CIRCT_DIALECT_RTL_RTLDIALECT_H
 
-// TODO: Delete me!
-#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Dialect.h"
 
 namespace circt {
 namespace rtl {
-
-// TODO: Delete me! For backwards compatibility only.
-using namespace circt::comb;
 
 class RTLDialect : public Dialect {
 public:

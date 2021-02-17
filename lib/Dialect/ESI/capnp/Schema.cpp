@@ -10,6 +10,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ESICapnp.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/RTL/RTLDialect.h"
 #include "circt/Dialect/RTL/RTLOps.h"
@@ -459,7 +460,7 @@ public:
 
   /// Construct a bitcast.
   GasketComponent cast(Type t) const {
-    auto dst = builder->create<rtl::BitcastOp>(loc(), t, s);
+    auto dst = builder->create<comb::BitcastOp>(loc(), t, s);
     return GasketComponent(*builder, dst);
   }
 
@@ -473,18 +474,18 @@ public:
     assert(s.getType().isa<IntegerType>());
     Value signlessVal = s;
     if (!signlessVal.getType().isSignlessInteger())
-      signlessVal = builder->create<rtl::BitcastOp>(
+      signlessVal = builder->create<comb::BitcastOp>(
           loc(), builder->getIntegerType(s.getType().getIntOrFloatBitWidth()),
           s);
 
     if (!t.isSigned()) {
       auto extracted =
-          builder->create<rtl::ExtractOp>(loc(), t, signlessVal, 0);
+          builder->create<comb::ExtractOp>(loc(), t, signlessVal, 0);
       return GasketComponent(*builder, extracted).cast(t);
     }
-    auto magnitude = builder->create<rtl::ExtractOp>(
+    auto magnitude = builder->create<comb::ExtractOp>(
         loc(), builder->getIntegerType(t.getWidth() - 1), signlessVal, 0);
-    auto sign = builder->create<rtl::ExtractOp>(
+    auto sign = builder->create<comb::ExtractOp>(
         loc(), builder->getIntegerType(1), signlessVal, t.getWidth() - 1);
     auto result = builder->create<comb::ConcatOp>(loc(), sign, magnitude);
 
@@ -558,7 +559,7 @@ public:
     unsigned expIdxWidth = llvm::Log2_64_Ceil(type.getSize());
     int64_t lsbWidth = lsb.getType().getIntOrFloatBitWidth();
     if (lsbWidth > expIdxWidth)
-      lsb = builder->create<rtl::ExtractOp>(
+      lsb = builder->create<comb::ExtractOp>(
           loc(), builder->getIntegerType(expIdxWidth), lsb, 0);
     else if (lsbWidth < expIdxWidth)
       assert(false && "LSB Value must not be smaller than expected.");
@@ -640,7 +641,7 @@ Slice GasketComponent::castBitArray() const {
       rtl::ArrayType::get(builder->getI1Type(), rtl::getBitWidth(s.getType()));
   if (s.getType() == dstTy)
     return Slice(*builder, s);
-  auto dst = builder->create<rtl::BitcastOp>(loc(), dstTy, s);
+  auto dst = builder->create<comb::BitcastOp>(loc(), dstTy, s);
   return Slice(*builder, dst);
 }
 
@@ -700,7 +701,7 @@ private:
   void assertPred(Value val, ICmpPredicate pred, int64_t expected) {
     auto expectedVal = create<comb::ConstantOp>(loc, val.getType(), expected);
     create<sv::AssertOp>(
-        loc, create<rtl::ICmpOp>(loc, getI1Type(), pred, val, expectedVal));
+        loc, create<comb::ICmpOp>(loc, getI1Type(), pred, val, expectedVal));
   }
   Location loc;
 };
@@ -935,7 +936,7 @@ static GasketComponent decodeList(rtl::ArrayType type,
   auto msg = ptr.getRootSlice();
   auto ptrOffset = ptr.getOffsetFromRoot();
   assert(ptrOffset);
-  auto listOffset = b.create<rtl::AddOp>(
+  auto listOffset = b.create<comb::AddOp>(
       loc, offset,
       b.create<comb::ConstantOp>(loc, b.getIntegerType(30), *ptrOffset + 64));
   auto listSlice =
