@@ -40,7 +40,8 @@ def LowerFIRRTLToRTLModule
     Lower firrtl.module's to rtl.module.
   }];
   let constructor = "circt::createLowerFIRRTLToRTLModulePass()";
-  let dependentDialects = ["rtl::RTLDialect", "sv::SVDialect"];
+  let dependentDialects = ["comb::CombDialect", "rtl::RTLDialect",
+                           "sv::SVDialect"];
 }
 
 def LowerFIRRTLToRTL : Pass<"lower-firrtl-to-rtl", "rtl::RTLModuleOp"> {
@@ -49,7 +50,8 @@ def LowerFIRRTLToRTL : Pass<"lower-firrtl-to-rtl", "rtl::RTLModuleOp"> {
     Lower the contents of an firrtl.module to the RTL dialect.
   }];
   let constructor = "circt::createLowerFIRRTLToRTLPass()";
-  let dependentDialects = ["rtl::RTLDialect", "sv::SVDialect"];
+  let dependentDialects = ["comb::CombDialect", "rtl::RTLDialect",
+                           "sv::SVDialect"];
 }
 
 //===----------------------------------------------------------------------===//

@@ -1,8 +1,8 @@
 // RUN: circt-opt %s -split-input-file -verify-diagnostics
 
 func private @test_constant() -> i32 {
-  // expected-error @+1 {{firrtl.constant attribute bitwidth doesn't match return type}}
-  %a = rtl.constant(42 : i12) : i32
+  // expected-error @+1 {{comb.constant attribute bitwidth doesn't match return type}}
+  %a = comb.constant(42 : i12) : i32
   return %a : i32
 }
 
@@ -10,29 +10,29 @@ func private @test_constant() -> i32 {
 
 func private @test_extend(%arg0: i4) -> i4 {
   // expected-error @+1 {{extension must increase bitwidth of operand}}
-  %a = rtl.sext %arg0 : (i4) -> i4
+  %a = comb.sext %arg0 : (i4) -> i4
   return %a : i4
 }
 
 // -----
 
 func private @test_extract(%arg0: i4) {
-  // expected-error @+1 {{'rtl.extract' op from bit too large for input}}
-  %a = rtl.extract %arg0 from 6 : (i4) -> i3
+  // expected-error @+1 {{'comb.extract' op from bit too large for input}}
+  %a = comb.extract %arg0 from 6 : (i4) -> i3
 }
 
 // -----
 
 func private @test_extract(%arg0: i4) {
-  // expected-error @+1 {{'rtl.extract' op from bit too large for input}}
-  %b = rtl.extract %arg0 from 2 : (i4) -> i3
+  // expected-error @+1 {{'comb.extract' op from bit too large for input}}
+  %b = comb.extract %arg0 from 2 : (i4) -> i3
 }
 
 // -----
 
 func private @test_and() {
-  // expected-error @+1 {{'rtl.and' op expected 1 or more operands}}
-  %b = rtl.and : i111
+  // expected-error @+1 {{'comb.and' op expected 1 or more operands}}
+  %b = comb.and : i111
 }
 
 // -----
@@ -136,6 +136,6 @@ rtl.module @struct(%a: !rtl.struct<foo: i42>, %b: i42) {
 // -----
 
 rtl.module @invalid_add(%a: i0) {  // i0 ports are ok.
-  // expected-error @+1 {{'rtl.add' op operand #0 must be an integer bitvector of one or more bits, but got 'i0'}}
-  %b = rtl.add %a, %a: i0
+  // expected-error @+1 {{'comb.add' op operand #0 must be an integer bitvector of one or more bits, but got 'i0'}}
+  %b = comb.add %a, %a: i0
 }

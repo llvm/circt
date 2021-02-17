@@ -5,6 +5,7 @@
 
 // DIALECT: Available Dialects:
 // DIALECT-NEXT: affine
+// DIALECT-NEXT: comb
 // DIALECT-NEXT: esi
 // DIALECT-NEXT: firrtl
 // DIALECT-NEXT: handshake
