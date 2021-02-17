@@ -1512,15 +1512,14 @@ struct HandshakeInsertBufferPass
       auto user = operand.getOwner();
 
       // If graph cycle detected, insert a BufferOp into the edge.
-      if (opOnStack[user] && !isa<handshake::BufferOp>(op) &&
-          !isa<handshake::BufferOp>(user)) {
+      if (!isa<handshake::BufferOp>(op) && !isa<handshake::BufferOp>(user)) {
         auto value = operand.get();
 
         builder.setInsertionPointAfter(op);
         auto bufferOp = builder.create<handshake::BufferOp>(
             op->getLoc(), value.getType(), value, /*sequential=*/true,
             /*control=*/value.getType().isa<NoneType>(),
-            /*slots=*/2);
+            /*slots=*/1);
         value.replaceUsesWithIf(
             bufferOp,
             function_ref<bool(OpOperand &)>([](OpOperand &operand) -> bool {
@@ -1528,7 +1527,7 @@ struct HandshakeInsertBufferPass
             }));
       }
       // For unvisited operations, recursively call insertBufferOp() method.
-      else if (!opVisited[user])
+      if (!opVisited[user])
         insertBufferOp(user, builder);
     }
     // Pop operation out of the stack.
