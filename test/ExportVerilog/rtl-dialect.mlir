@@ -20,7 +20,7 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1,
   %r25: i1, %r26: i1, %r27: i1, %r28: i1,
   %r29: i12, %r30: i2, %r31: i9, %r33: i4, %r34: i4,
   %r35: !rtl.array<3xi4>, %r36: i12, %r37: i4,
-  %r38: !rtl.array<6xi4>, %r39: i4, %r40: !rtl.struct<foo: i2, bar:i4>
+  %r38: !rtl.array<6xi4>, %r40: !rtl.struct<foo: i2, bar:i4>
   ) {
   
   %0 = comb.add %a, %b : i4
@@ -91,14 +91,14 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1,
 // CHECK-NEXT:   output [3:0]                                              r0, r2, r4, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15
 // CHECK-NEXT:   output                                                    r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27,
 // CHECK-NEXT:   output                                                    r28,
-// CHECK-NEXT:   output [11:0]           r29,
-// CHECK-NEXT:   output [1:0]            r30,
-// CHECK-NEXT:   output [8:0]            r31,
-// CHECK-NEXT:   output [3:0]            r33, r34,
-// CHECK-NEXT:   output [2:0][3:0]       r35,
-// CHECK-NEXT:   output [11:0]           r36,
-// CHECK-NEXT:   output [3:0]            r37,
-// CHECK-NEXT:   output [5:0][3:0]       r38);
+// CHECK-NEXT:   output [11:0]                                             r29,
+// CHECK-NEXT:   output [1:0]                                              r30,
+// CHECK-NEXT:   output [8:0]                                              r31,
+// CHECK-NEXT:   output [3:0]                                              r33, r34,
+// CHECK-NEXT:   output [2:0][3:0]                                         r35,
+// CHECK-NEXT:   output [11:0]                                             r36,
+// CHECK-NEXT:   output [3:0]                                              r37,
+// CHECK-NEXT:   output [5:0][3:0]                                         r38,
 // CHECK-NEXT:   output struct packed {logic [1:0] foo; logic [3:0] bar; } r40);
 // CHECK-EMPTY:
 // CHECK-NEXT:   wire [8:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
@@ -138,7 +138,6 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1,
 // CHECK-NEXT:   assign r36 = {3{a}};
 // CHECK-NEXT:   assign r37 = array2d[a][b];
 // CHECK-NEXT:   assign r38 = {[[WIRE1]], [[WIRE1]]};
-// CHECK-NEXT:   assign r39 = structA.bar;
 // CHECK-NEXT:   assign r40 = '{foo: structA.foo, bar: a};
 // CHECK-NEXT: endmodule
 

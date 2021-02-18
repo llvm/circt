@@ -785,6 +785,9 @@ private:
   SubExprInfo visitTypeOp(ArrayGetOp op);
   SubExprInfo visitTypeOp(ArrayCreateOp op);
   SubExprInfo visitTypeOp(ArrayConcatOp op);
+  SubExprInfo visitTypeOp(StructCreateOp op);
+  SubExprInfo visitTypeOp(StructExtractOp op);
+  SubExprInfo visitTypeOp(StructInjectOp op);
 
   // Comb Dialect Operations
   using CombinationalVisitor::visitComb;
@@ -839,10 +842,6 @@ private:
   SubExprInfo visitComb(ICmpOp op);
 
   SubExprInfo visitComb(BitcastOp op);
-
-  SubExprInfo visitComb(StructCreateOp op);
-  SubExprInfo visitComb(StructExtractOp op);
-  SubExprInfo visitComb(StructInjectOp op);
 
 private:
   /// This is set (before a visit method is called) if emitSubExpr would
@@ -1199,7 +1198,7 @@ SubExprInfo ExprEmitter::visitComb(MuxOp op) {
   return {Conditional, signedness};
 }
 
-SubExprInfo ExprEmitter::visitComb(StructCreateOp op) {
+SubExprInfo ExprEmitter::visitTypeOp(StructCreateOp op) {
   StructType stype = op.getType().cast<StructType>();
   os << "'{";
   size_t i = 0;
@@ -1212,13 +1211,13 @@ SubExprInfo ExprEmitter::visitComb(StructCreateOp op) {
   return {Unary, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitComb(StructExtractOp op) {
+SubExprInfo ExprEmitter::visitTypeOp(StructExtractOp op) {
   emitSubExpr(op.input(), Selection);
   os << '.' << op.field();
   return {Selection, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitComb(StructInjectOp op) {
+SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
   StructType stype = op.getType().cast<StructType>();
   os << "'{";
   llvm::interleaveComma(stype.getElements(), os,
