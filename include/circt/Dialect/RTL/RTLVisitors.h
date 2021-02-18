@@ -42,7 +42,9 @@ public:
                        // Cast operation
                        BitcastOp,
                        // Array operations
-                       ArraySliceOp, ArrayCreateOp, ArrayConcatOp, ArrayGetOp>(
+                       ArraySliceOp, ArrayCreateOp, ArrayConcatOp, ArrayGetOp,
+                       // Struct operations
+                       StructCreateOp, StructExtractOp, StructInjectOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitComb(expr, args...);
             })
@@ -113,6 +115,9 @@ public:
   HANDLE(ConcatOp, Unhandled);
   HANDLE(ExtractOp, Unhandled);
   HANDLE(MuxOp, Unhandled);
+  HANDLE(StructCreateOp, Unhandled);
+  HANDLE(StructExtractOp, Unhandled);
+  HANDLE(StructInjectOp, Unhandled);
   HANDLE(BitcastOp, Unary);
   HANDLE(ArraySliceOp, Unhandled);
   HANDLE(ArrayGetOp, Unhandled);
