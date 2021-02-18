@@ -20,4 +20,10 @@ def Struct : ESI_Type<"Struct"> {
   let parameters = (ins
     StringRefParameter<"struct name">:$name,
     "::circt::rtl::StructType":$inner);
+
+  let extraClassDeclaration = [{
+    ArrayRef<::circt::rtl::StructType::FieldInfo> getElements() const {
+      return getInner().getElements();
+    }
+  }];
 }
