@@ -24,7 +24,7 @@ def ConstantOp
     }];
 
   let arguments = (ins APIntAttr:$value);
-  let results = (outs RTLIntegerType:$result);
+  let results = (outs CombIntegerType:$result);
 
   // FIXME(QoI): Instead of requiring "rtl.constant (42: i8) : i8", we should
   // just use "rtl.constant 42: i8".  This can be done with a custom printer and
@@ -59,8 +59,8 @@ def ConstantOp
 // Base class for binary operators.
 class BinOp<string mnemonic, list<OpTrait> traits = []> :
       CombOp<mnemonic, traits # [NoSideEffect]> {
-  let arguments = (ins RTLIntegerType:$lhs, RTLIntegerType:$rhs);
-  let results = (outs RTLIntegerType:$result);
+  let arguments = (ins CombIntegerType:$lhs, CombIntegerType:$rhs);
+  let results = (outs CombIntegerType:$result);
 
   let assemblyFormat =
     "$lhs `,` $rhs  attr-dict `:` functional-type($args, $results)";
@@ -76,8 +76,8 @@ class UTBinOp<string mnemonic, list<OpTrait> traits = []> :
 // Base class for variadic operators.
 class VariadicOp<string mnemonic, list<OpTrait> traits = []> :
       CombOp<mnemonic, traits # [NoSideEffect]> {
-  let arguments = (ins Variadic<RTLIntegerType>:$inputs);
-  let results = (outs RTLIntegerType:$result);
+  let arguments = (ins Variadic<CombIntegerType>:$inputs);
+  let results = (outs CombIntegerType:$result);
 
   let assemblyFormat =
     "$inputs attr-dict `:` functional-type($inputs, results)";
@@ -168,7 +168,7 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
   }];
 
   let arguments = (ins ICmpPredicate:$predicate, 
-                   RTLIntegerType:$lhs, RTLIntegerType:$rhs);
+                   CombIntegerType:$lhs, CombIntegerType:$rhs);
   let results = (outs I1:$result);
 
   let assemblyFormat = "$predicate $lhs `,` $rhs  attr-dict `:` type($lhs)";
@@ -195,7 +195,7 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
 // Base class for unary reduction operations that produce an i1.
 class UnaryI1ReductionOp<string mnemonic, list<OpTrait> traits = []> :
       CombOp<mnemonic, traits # [NoSideEffect]> {
-  let arguments = (ins RTLIntegerType:$input);
+  let arguments = (ins CombIntegerType:$input);
   let results = (outs I1:$result);
   let hasFolder = 1;
 
@@ -215,8 +215,8 @@ def ExtractOp : CombOp<"extract", [NoSideEffect]> {
   let summary = "Extract a range of bits into a smaller value, lowBit "
                 "specifies the lowest bit included.";
 
-  let arguments = (ins RTLIntegerType:$input, I32Attr:$lowBit);
-  let results = (outs RTLIntegerType:$result);
+  let arguments = (ins CombIntegerType:$input, I32Attr:$lowBit);
+  let results = (outs CombIntegerType:$result);
 
   let assemblyFormat =
     "$input `from` $lowBit attr-dict `:` functional-type($input, $result)";
@@ -228,8 +228,8 @@ def ExtractOp : CombOp<"extract", [NoSideEffect]> {
 def SExtOp : CombOp<"sext", [NoSideEffect]> {
   let summary = "Sign extend an integer to a larger integer";
 
-  let arguments = (ins RTLIntegerType:$input);
-  let results = (outs RTLIntegerType:$result);
+  let arguments = (ins CombIntegerType:$input);
+  let results = (outs CombIntegerType:$result);
 
   let assemblyFormat =
     "$input attr-dict `:` functional-type($input, $result)";
@@ -269,9 +269,9 @@ def MuxOp : CombOp<"mux",
     ```
   }];
 
-  let arguments = (ins I1:$cond, RTLNonInOutType:$trueValue,
-                       RTLNonInOutType:$falseValue);
-  let results = (outs RTLNonInOutType:$result);
+  let arguments = (ins I1:$cond, AnyType:$trueValue,
+                       AnyType:$falseValue);
+  let results = (outs AnyType:$result);
 
   let assemblyFormat =
     "$cond `,` $trueValue `,` $falseValue attr-dict `:` type($result)";
