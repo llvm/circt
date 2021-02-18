@@ -446,12 +446,12 @@ static LogicalResult verifyRTLModuleGeneratedOp(RTLModuleGeneratedOp op) {
     return op.emitError("Cannot find generator definition '")
            << op.generatorKind() << "'";
 
-  if (!isa<RTLGeneratorTypeOp>(referencedKind))
+  if (!isa<RTLGeneratorSchemaOp>(referencedKind))
     return op.emitError("Symbol resolved to '")
            << referencedKind->getName()
-           << "' which is not a RTLGeneratorTypeOp";
+           << "' which is not a RTLGeneratorSchemaOp";
 
-  auto referencedKindOp = dyn_cast<RTLGeneratorTypeOp>(referencedKind);
+  auto referencedKindOp = dyn_cast<RTLGeneratorSchemaOp>(referencedKind);
   SmallVector<StringRef, 8> requiredParams;
   referencedKindOp.getRequiredParams(requiredParams);
   auto dict = op->getAttrDictionary();
@@ -462,15 +462,15 @@ static LogicalResult verifyRTLModuleGeneratedOp(RTLModuleGeneratedOp op) {
   return success();
 }
 
-void RTLGeneratorTypeOp::getRequiredParams(
+void RTLGeneratorSchemaOp::getRequiredParams(
     SmallVectorImpl<StringRef> &results) {
   for (auto param : requiredAttrs())
     results.push_back(param.dyn_cast<StringAttr>().getValue());
   if (auto p = getGeneratorParent())
-    dyn_cast<RTLGeneratorTypeOp>(p).getRequiredParams(results);
+    dyn_cast<RTLGeneratorSchemaOp>(p).getRequiredParams(results);
 }
 
-Operation *RTLGeneratorTypeOp::getGeneratorParent() {
+Operation *RTLGeneratorSchemaOp::getGeneratorParent() {
   if (!parent())
     return nullptr;
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();

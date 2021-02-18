@@ -138,26 +138,32 @@ def RTLModuleExternOp : RTLOp<"module.extern",
   let parser = "return ::parse$cppClass(parser, result);";
 }
 
-def RTLGeneratorTypeOp : RTLOp<"generator.type", 
+def RTLGeneratorSchemaOp : RTLOp<"generator.schema", 
       [Symbol, HasParent<"mlir::ModuleOp">]> {
-  let summary = "RTL Generator Type";
+  let summary = "RTL Generator Schema declaration";
   let description = [{
-    the "rtl.generator.type" operation declares a type of generated module.  The
-    type of a module is independent of the external method of producing it.  It
-    is assumed that for well known types, multiple external tools might exist
-    which can process it.  The type may be a specialization of another type 
-    (single-inheritance).  Generator types list attributes required by instances
-    and are inherited.
+    the "rtl.generator.schema" operation declares a kind of generated module by
+    declaring the schema of meta-data required.  
+    A generated module instance of a schema is independent of the external
+    method of producing it.  It is assumed that for well known schema instances,
+    multiple external tools might exist which can process it.  The schema may
+    inherite from another schema.  Generator nodes list attributes required by
+    rtl.module.generated instances and are inherited.
 
     For example:
-    generator.type @MEMORY, "Simple-Memory", 1, "write_latency", "read_latency"
-    generator.type @FIRMEM (parent: @MEMORY), "FIRRTL-Memory", 1, "ports"
-    module.generated @mymem, @FIRMEM(ports) -> (ports) {write_latency=1, read_latency=1, ports="read,write"}
+    generator.schema @MEMORY, "Simple-Memory", "1", ["write_latency", "read_latency"]
+    generator.schema @FIRMEM (parent: @MEMORY), "FIRRTL-Memory", "1", ["ports"]
+    module.generated @mymem, @FIRMEM(ports) -> (ports) {write_latency=1, read_latency=1, ports=["read","write"]}
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name, StrAttr:$descriptor, I32Attr:$version, StrArrayAttr:$requiredAttrs, OptionalAttr<FlatSymbolRefAttr>:$parent);
+  let arguments = (ins SymbolNameAttr:$sym_name, StrAttr:$descriptor, 
+                       I32Attr:$version, StrArrayAttr:$requiredAttrs, 
+                      OptionalAttr<FlatSymbolRefAttr>:$parent);
   let results = (outs);
-  let assemblyFormat = [{$sym_name ( `(` `parent` `:` $parent^ `)` )? `,` $descriptor `,` $version `,` $requiredAttrs attr-dict}];
+  let assemblyFormat = [{
+      $sym_name ( `(` `parent` `:` $parent^ `)` )? `,` $descriptor `,` $version
+      `,` $requiredAttrs attr-dict
+    }];
 
   let extraClassDeclaration = [{   
     // get a list of required attributes.  Recuses into parents
@@ -180,7 +186,8 @@ def RTLModuleGeneratedOp : RTLOp<"module.generated",
     have proper parameterization in the rtl.dialect.  We need a way to represent
     parameterized types instead of just concrete types.
   }];
-  let arguments = (ins FlatSymbolRefAttr:$generatorKind, OptionalAttr<StrAttr>:$verilogName);
+  let arguments = (ins FlatSymbolRefAttr:$generatorKind, 
+                       OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 

@@ -50,11 +50,11 @@ module {
   // CHECK:       %cst = constant dense<0> : vector<3xi8>
   // CHECK-NEXT:  rtl.instance "anyType1" @AnyType1(%cst) : (vector<3xi8>) -> ()
 
-  rtl.generator.type @MEMORY, "Simple-Memory", 1, ["write_latency", "read_latency"]
-  rtl.generator.type @MEMDTY (parent: @MEMORY), "FIRRTL-Memory", 1, ["ports"]
+  rtl.generator.schema @MEMORY, "Simple-Memory", 1, ["write_latency", "read_latency"]
+  rtl.generator.schema @MEMDTY (parent: @MEMORY), "FIRRTL-Memory", 1, ["ports"]
   rtl.module.generated @genmod1, @MEMDTY() -> (%x: i1 {rtl.name="FOOBAR"}) attributes {write_latency=1, read_latency=1, ports=["read","write"]}
-  // CHECK-LABEL: rtl.generator.type @MEMORY, "Simple-Memory", 1, ["write_latency", "read_latency"]
-  // CHECK-NEXT: rtl.generator.type @MEMDTY(parent : @MEMORY), "FIRRTL-Memory", 1, ["ports"]
+  // CHECK-LABEL: rtl.generator.schema @MEMORY, "Simple-Memory", 1, ["write_latency", "read_latency"]
+  // CHECK-NEXT: rtl.generator.schema @MEMDTY(parent : @MEMORY), "FIRRTL-Memory", 1, ["ports"]
   // CHECK-NEXT: rtl.module.generated @genmod1, @MEMDTY() -> (%FOOBAR: i1) attributes {ports = ["read", "write"], read_latency = 1 : i64, write_latency = 1 : i64}
 
 }
