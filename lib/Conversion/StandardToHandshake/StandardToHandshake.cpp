@@ -1519,7 +1519,7 @@ struct HandshakeInsertBufferPass
         auto bufferOp = builder.create<handshake::BufferOp>(
             op->getLoc(), value.getType(), value, /*sequential=*/true,
             /*control=*/value.getType().isa<NoneType>(),
-            /*slots=*/1);
+            /*slots=*/2);
         value.replaceUsesWithIf(
             bufferOp,
             function_ref<bool(OpOperand &)>([](OpOperand &operand) -> bool {
