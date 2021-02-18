@@ -56,8 +56,13 @@ public:
     os.indent(currentIndent);
     return *this;
   }
+  IndentingOStream &pad(size_t space) {
+    os.indent(space);
+    return *this;
+  }
   void addIndent() { currentIndent += 2; }
   void reduceIndent() { currentIndent -= 2; }
+  operator llvm::raw_ostream &() { return os; }
 
 private:
   llvm::raw_ostream &os;
@@ -111,7 +116,8 @@ private:
   /// wrap non-struct types in a capnp struct. During decoder/encoder
   /// construction, it's convenient to use the capnp model so assemble the
   /// virtual list of `Type`s here.
-  ArrayRef<Type> fieldTypes;
+  using FieldInfo = rtl::StructType::FieldInfo;
+  SmallVector<FieldInfo> fieldTypes;
 
   ::capnp::SchemaParser parser;
   mutable llvm::Optional<uint64_t> cachedID;
@@ -169,11 +175,17 @@ static size_t bits(::capnp::schema::Type::Reader type) {
 }
 
 TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
-  fieldTypes =
-      TypeSwitch<Type, ArrayRef<Type>>(type)
-          .Case([this](IntegerType) { return ArrayRef<Type>(&type, 1); })
-          .Case([this](rtl::ArrayType) { return ArrayRef<Type>(&type, 1); })
-          .Default([](Type) { return ArrayRef<Type>(); });
+  TypeSwitch<Type>(type)
+      .Case([this](IntegerType t) {
+        fieldTypes.push_back(FieldInfo{.name = "i", .type = t});
+      })
+      .Case([this](rtl::ArrayType t) {
+        fieldTypes.push_back(FieldInfo{.name = "l", .type = t});
+      })
+      .Case([this](esi::StructType t) {
+        fieldTypes.append(t.getElements().begin(), t.getElements().end());
+      })
+      .Default([](Type) {});
 }
 
 /// Write a valid capnp schema to memory, then parse it out of memory using the
@@ -246,16 +258,26 @@ uint64_t TypeSchemaImpl::capnpTypeID() const {
 }
 
 /// Returns true if the type is currently supported.
-static bool isSupported(Type type) {
+static bool isSupported(Type type, bool outer = false) {
   return llvm::TypeSwitch<::mlir::Type, bool>(type)
-      .Case<IntegerType>([](IntegerType t) { return t.getWidth() <= 64; })
-      .Case<rtl::ArrayType>(
-          [](rtl::ArrayType t) { return isSupported(t.getElementType()); })
+      .Case([](IntegerType t) { return t.getWidth() <= 64; })
+      .Case([](rtl::ArrayType t) { return isSupported(t.getElementType()); })
+      .Case([outer](esi::StructType t) {
+        // We don't yet support structs containing structs.
+        if (!outer)
+          return false;
+        // A struct is supported if all of its elements are.
+        for (auto field : t.getElements()) {
+          if (!isSupported(field.type))
+            return false;
+        }
+        return true;
+      })
       .Default([](Type) { return false; });
 }
 
 /// Returns true if the type is currently supported.
-bool TypeSchemaImpl::isSupported() const { return ::isSupported(type); }
+bool TypeSchemaImpl::isSupported() const { return ::isSupported(type, true); }
 
 /// Returns the expected size of an array (capnp list) in 64-bit words.
 static int64_t size(rtl::ArrayType mType, capnp::schema::Field::Reader cField) {
@@ -269,7 +291,7 @@ static int64_t size(rtl::ArrayType mType, capnp::schema::Field::Reader cField) {
 
 /// Compute the size of a capnp struct, in 64-bit words.
 static int64_t size(capnp::schema::Node::Struct::Reader cStruct,
-                    ArrayRef<Type> mFields) {
+                    ArrayRef<rtl::StructType::FieldInfo> mFields) {
   using namespace capnp::schema;
   int64_t size = (1 + // Header
                   cStruct.getDataWordCount() + cStruct.getPointerCount());
@@ -282,7 +304,7 @@ static int64_t size(capnp::schema::Node::Struct::Reader cStruct,
     // The size of the thing to which the pointer is pointing, not the size of
     // the pointer itself.
     int64_t pointedToSize =
-        TypeSwitch<mlir::Type, int64_t>(mFields[cField.getCodeOrder()])
+        TypeSwitch<mlir::Type, int64_t>(mFields[cField.getCodeOrder()].type)
             .Case([](IntegerType) { return 0; })
             .Case([cField](rtl::ArrayType mType) {
               return ::size(mType, cField);
@@ -313,6 +335,7 @@ static void emitName(Type type, llvm::raw_ostream &os) {
         os << "ArrayOf" << arrTy.getSize() << 'x';
         emitName(arrTy.getElementType(), os);
       })
+      .Case([&os](esi::StructType t) { os << t.getName(); })
       .Default([](Type) {
         assert(false && "Type not supported. Please check support first with "
                         "isSupported()");
@@ -336,9 +359,9 @@ static void emitCapnpType(Type type, IndentingOStream &os) {
       .Case([&os](IntegerType intTy) {
         auto w = intTy.getWidth();
         if (w == 0) {
-          os.indent() << "Void";
+          os << "Void";
         } else if (w == 1) {
-          os.indent() << "Bool";
+          os << "Bool";
         } else {
           if (intTy.isSigned())
             os << "Int";
@@ -364,6 +387,9 @@ static void emitCapnpType(Type type, IndentingOStream &os) {
         emitCapnpType(arrTy.getElementType(), os);
         os << ')';
       })
+      .Case([&os](rtl::StructType structTy) {
+        assert(false && "Struct containing structs not supported");
+      })
       .Default([](Type) {
         assert(false && "Type not supported. Please check support first with "
                         "isSupported()");
@@ -378,15 +404,23 @@ LogicalResult TypeSchemaImpl::write(llvm::raw_ostream &rawOS) const {
 
   // Since capnp requires messages to be structs, emit a wrapper struct.
   os.indent() << "struct ";
-  writeMetadata(rawOS);
+  if (failed(writeMetadata(rawOS)))
+    return failure();
   os << " {\n";
   os.addIndent();
 
-  // Specify the actual type, followed by the capnp field.
-  os.indent() << "# Actual type is " << type << ".\n";
-  os.indent() << "i @0 :";
-  emitCapnpType(type, os);
-  os << ";\n";
+  size_t counter = 0;
+  size_t maxNameLength = 0;
+  for (auto field : fieldTypes)
+    maxNameLength = std::max(maxNameLength, field.name.size());
+
+  for (auto field : fieldTypes) {
+    // Specify the actual type, followed by the capnp field.
+    os.indent() << field.name;
+    os.pad(maxNameLength - field.name.size()) << " @" << counter++ << " :";
+    emitCapnpType(field.type, os);
+    os << ";  # Actual type is " << field.type << ".\n";
+  }
 
   os.reduceIndent();
   os.indent() << "}\n\n";
@@ -643,18 +677,6 @@ Slice GasketComponent::castBitArray() const {
     return Slice(*builder, s);
   auto dst = builder->create<comb::BitcastOp>(loc(), dstTy, s);
   return Slice(*builder, dst);
-}
-
-GasketComponent GasketComponent::padTo(uint64_t finalBits) const {
-  auto casted = castBitArray();
-  int64_t padBits = finalBits - casted.size();
-  assert(padBits >= 0);
-  if (padBits == 0)
-    return *this;
-
-  return GasketComponent(*builder,
-                         builder->create<rtl::ArrayConcatOp>(
-                             loc(), ArrayRef<Value>{padding(padBits), casted}));
 }
 
 GasketComponent
@@ -1040,8 +1062,8 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
   for (auto field : st.getFields()) {
     uint16_t idx = field.getCodeOrder();
     assert(idx < fieldTypes.size() && "Capnp struct longer than fieldTypes.");
-    fieldValues.push_back(
-        decodeField(fieldTypes[idx], field, dataSection, ptrSection, asserts));
+    fieldValues.push_back(decodeField(fieldTypes[idx].type, field, dataSection,
+                                      ptrSection, asserts));
   }
 
   // What to return depends on the type. (e.g. structs have to be constructed
