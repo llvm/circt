@@ -28,10 +28,10 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<
-                       // Array operations
-                       ArraySliceOp, ArrayCreateOp, ArrayConcatOp, ArrayGetOp,
-                       // Struct operations
-                       StructCreateOp, StructExtractOp, StructInjectOp>(
+            // Array operations
+            ArraySliceOp, ArrayCreateOp, ArrayConcatOp, ArrayGetOp,
+            // Struct operations
+            StructCreateOp, StructExtractOp, StructInjectOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitTypeOp(expr, args...);
             })
