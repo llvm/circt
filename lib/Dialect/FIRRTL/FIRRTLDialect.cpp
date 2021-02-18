@@ -115,7 +115,7 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
 
     for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
       // Scan for a 'firrtl.name' attribute.
-      if (auto str = getFIRRTLNameAttr(impl::getArgAttrs(parentOp, i)))
+      if (auto str = getFIRRTLNameAttr(mlir::impl::getArgAttrs(parentOp, i)))
         setNameFn(block->getArgument(i), str.getValue());
     }
   }

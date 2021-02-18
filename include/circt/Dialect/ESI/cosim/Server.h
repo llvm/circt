@@ -17,10 +17,7 @@
 #define CIRCT_DIALECT_ESI_COSIM_SERVER_H
 
 #include "circt/Dialect/ESI/cosim/Endpoint.h"
-
-namespace std {
-class thread;
-} // namespace std
+#include <thread>
 
 namespace circt {
 namespace esi {

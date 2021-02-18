@@ -17,7 +17,6 @@
 #include "mlir/IR/DialectImplementation.h"
 
 using namespace circt::sv;
-using namespace mlir;
 
 //===----------------------------------------------------------------------===//
 // Dialect specification.

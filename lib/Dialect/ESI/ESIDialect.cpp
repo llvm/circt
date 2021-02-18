@@ -13,11 +13,9 @@
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/ESI/ESITypes.h"
-
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/Support/FormatVariadic.h"
-
-using namespace mlir;
 
 namespace circt {
 namespace esi {

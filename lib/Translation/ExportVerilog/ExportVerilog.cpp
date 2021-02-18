@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Translation/ExportVerilog.h"
+#include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Comb/CombVisitors.h"
 #include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Dialect/RTL/RTLTypes.h"
 #include "circt/Dialect/RTL/RTLVisitors.h"
@@ -25,12 +27,13 @@
 #include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
-using namespace mlir;
+
+using namespace comb;
 using namespace rtl;
 using namespace sv;
 
-/// Should we emit wire decls in a block at the top of a module, or inline?
-static constexpr bool emitInlineWireDecls = true;
+/// Should we emit 'logic' decls in a block at the top of a module, or inline?
+static constexpr bool emitInlineLogicDecls = true;
 
 /// This is the preferred source width for the generated Verilog.
 static constexpr size_t preferredSourceWidth = 120;
@@ -252,6 +255,29 @@ static bool isNoopCast(Operation *op) {
   return false;
 }
 
+/// Return the word (e.g. "reg") in Verilog to declare the specified thing.
+static StringRef getVerilogDeclWord(Operation *op) {
+  if (isa<RegOp>(op))
+    return "reg";
+  if (isa<WireOp>(op) || isa<MergeOp>(op))
+    return "wire";
+
+  // Interfaces instances use the name of the declared interface.
+  if (auto interface = dyn_cast<InterfaceInstanceOp>(op))
+    return interface.getInterfaceType().getInterface().getValue();
+
+  // If 'op' is in a module, output 'wire'. If 'op' is in a procedural block,
+  // fall through to default.
+  Operation *parent = op;
+  do {
+    parent = parent->getParentOp();
+    if (isa<RTLModuleOp>(parent))
+      return "wire";
+  } while (parent != nullptr && !parent->hasTrait<ProceduralRegion>());
+
+  return "logic";
+};
+
 namespace {
 /// This enum keeps track of the precedence level of various binary operators,
 /// where a lower number binds tighter.
@@ -450,6 +476,11 @@ public:
   /// emitted as standalone wire declarations.  This can happen because they are
   /// multiply-used or because the user requires a name to reference.
   SmallPtrSet<Operation *, 16> outOfLineExpressions;
+
+  /// This set keeps track of expressions that need an explicit logic decl at
+  /// the top of the module to avoid "use before def" issues in the generated
+  /// verilog.  This can happen for cyclic modules.
+  SmallPtrSet<Operation *, 16> outOfLineExpresssionDecls;
 };
 
 } // end anonymous namespace
@@ -676,7 +707,8 @@ namespace {
 /// we emit the characters to a SmallVector which allows us to emit a bunch of
 /// stuff, then pre-insert parentheses and other things if we find out that it
 /// was needed later.
-class ExprEmitter : public CombinatorialVisitor<ExprEmitter, SubExprInfo>,
+class ExprEmitter : public TypeOpVisitor<ExprEmitter, SubExprInfo>,
+                    public CombinationalVisitor<ExprEmitter, SubExprInfo>,
                     public Visitor<ExprEmitter, SubExprInfo> {
 public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
@@ -700,7 +732,8 @@ public:
   ModuleEmitter &emitter;
 
 private:
-  friend class CombinatorialVisitor<ExprEmitter, SubExprInfo>;
+  friend class TypeOpVisitor<ExprEmitter, SubExprInfo>;
+  friend class CombinationalVisitor<ExprEmitter, SubExprInfo>;
   friend class Visitor<ExprEmitter, SubExprInfo>;
 
   /// Emit the specified value as a subexpression to the stream.
@@ -708,8 +741,16 @@ private:
                           SubExprSignRequirement signReq = NoRequirement);
 
   SubExprInfo visitUnhandledExpr(Operation *op);
-  SubExprInfo visitInvalidComb(Operation *op) { return dispatchSVVisitor(op); }
+  SubExprInfo visitInvalidComb(Operation *op) {
+    return dispatchTypeOpVisitor(op);
+  }
   SubExprInfo visitUnhandledComb(Operation *op) {
+    return visitUnhandledExpr(op);
+  }
+  SubExprInfo visitInvalidTypeOp(Operation *op) {
+    return dispatchSVVisitor(op);
+  }
+  SubExprInfo visitUnhandledTypeOp(Operation *op) {
     return visitUnhandledExpr(op);
   }
   SubExprInfo visitUnhandledSV(Operation *op) { return visitUnhandledExpr(op); }
@@ -736,17 +777,18 @@ private:
 
   // Noop cast operators.
   SubExprInfo visitSV(ReadInOutOp op) { return emitNoopCast(op); }
+  SubExprInfo visitSV(ArrayIndexInOutOp op);
 
   // Other
-  SubExprInfo visitComb(ArraySliceOp op);
-  SubExprInfo visitComb(ArrayGetOp op);
-  SubExprInfo visitComb(ArrayCreateOp op);
-  SubExprInfo visitComb(ArrayConcatOp op);
-  SubExprInfo visitSV(ArrayIndexInOutOp op);
-  SubExprInfo visitComb(MuxOp op);
+  using TypeOpVisitor::visitTypeOp;
+  SubExprInfo visitTypeOp(ArraySliceOp op);
+  SubExprInfo visitTypeOp(ArrayGetOp op);
+  SubExprInfo visitTypeOp(ArrayCreateOp op);
+  SubExprInfo visitTypeOp(ArrayConcatOp op);
 
-  // RTL Dialect Operations
-  using CombinatorialVisitor::visitComb;
+  // Comb Dialect Operations
+  using CombinationalVisitor::visitComb;
+  SubExprInfo visitComb(MuxOp op);
   SubExprInfo visitComb(ConstantOp op);
   SubExprInfo visitComb(AddOp op) { return emitVariadic(op, Addition, "+"); }
   SubExprInfo visitComb(SubOp op) { return emitBinary(op, Addition, "-"); }
@@ -919,7 +961,7 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
 
   // Okay, this is an expression we should emit inline.  Do this through our
   // visitor.
-  auto expInfo = dispatchCombinatorialVisitor(exp.getDefiningOp());
+  auto expInfo = dispatchCombinationalVisitor(exp.getDefiningOp());
 
   // Check cases where we have to insert things before the expression now that
   // we know things about it.
@@ -1095,7 +1137,7 @@ SubExprInfo ExprEmitter::visitComb(ConstantOp op) {
 
 // 11.5.1 "Vector bit-select and part-select addressing" allows a '+:' syntax
 // for slicing operations.
-SubExprInfo ExprEmitter::visitComb(ArraySliceOp op) {
+SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
   auto arrayPrec = emitSubExpr(op.input(), Selection);
 
   unsigned dstWidth = op.getType().getSize();
@@ -1105,7 +1147,7 @@ SubExprInfo ExprEmitter::visitComb(ArraySliceOp op) {
   return {Selection, arrayPrec.signedness};
 }
 
-SubExprInfo ExprEmitter::visitComb(ArrayGetOp op) {
+SubExprInfo ExprEmitter::visitTypeOp(ArrayGetOp op) {
   emitSubExpr(op.input(), Selection);
   os << '[';
   emitSubExpr(op.index(), LowestPrecedence);
@@ -1114,7 +1156,7 @@ SubExprInfo ExprEmitter::visitComb(ArrayGetOp op) {
 }
 
 // Syntax from: section 5.11 "Array literals".
-SubExprInfo ExprEmitter::visitComb(ArrayCreateOp op) {
+SubExprInfo ExprEmitter::visitTypeOp(ArrayCreateOp op) {
   os << '{';
   llvm::interleaveComma(op.inputs(), os, [&](Value operand) {
     os << "{";
@@ -1125,7 +1167,7 @@ SubExprInfo ExprEmitter::visitComb(ArrayCreateOp op) {
   return {Unary, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitComb(ArrayConcatOp op) {
+SubExprInfo ExprEmitter::visitTypeOp(ArrayConcatOp op) {
   os << '{';
   llvm::interleaveComma(op.getOperands(), os,
                         [&](Value v) { emitSubExpr(v, LowestPrecedence); });
@@ -1230,8 +1272,8 @@ void ModuleEmitter::emitStatementExpression(Operation *op) {
     indent() << "// Unused: ";
   } else if (isZeroBitType(op->getResult(0).getType())) {
     indent() << "// Zero width: ";
-  } else if (emitInlineWireDecls) {
-    indent() << "wire ";
+  } else if (emitInlineLogicDecls && !outOfLineExpresssionDecls.count(op)) {
+    indent() << getVerilogDeclWord(op) << " ";
     emitTypeDimWithSpaceIfNeeded(op->getResult(0).getType(), op->getLoc(), os);
     os << getName(op->getResult(0)) << " = ";
   } else {
@@ -1945,32 +1987,39 @@ static void printArraySubscripts(Type type, raw_ostream &os) {
   }
 }
 
-void ModuleEmitter::collectNamesEmitDecls(Block &block) {
-  // In the first pass, we fill in the symbol table, calculate the max width
-  // of the declaration words and the max type width.
-  size_t maxDeclNameWidth = 0, maxTypeWidth = 0;
-
-  // Return the word (e.g. "wire") in Verilog to declare the specified thing.
-  auto getVerilogDeclWord = [](Operation *op) -> StringRef {
-    if (isa<RegOp>(op))
-      return "reg";
-
-    // Interfaces instances use the name of the declared interface.
-    if (auto interface = dyn_cast<InterfaceInstanceOp>(op))
-      return interface.getInterfaceType().getInterface().getValue();
-
-    return "wire";
-  };
-
+namespace {
+class NameCollector {
+public:
   // This is information we keep track of for each wire/reg/interface
   // declaration we're going to emit.
   struct ValuesToEmitRecord {
     Value value;
     SmallString<8> typeString;
   };
-  SmallVector<ValuesToEmitRecord, 16> valuesToEmit;
 
+  NameCollector(ModuleEmitter &moduleEmitter) : moduleEmitter(moduleEmitter) {}
+
+  // Scan operations in the specified block, collecting information about those
+  // that need to be emitted out of line.
+  void collectNames(Block &block);
+
+  size_t getMaxDeclNameWidth() const { return maxDeclNameWidth; }
+  size_t getMaxTypeWidth() const { return maxTypeWidth; }
+  const SmallVectorImpl<ValuesToEmitRecord> &getValuesToEmit() const {
+    return valuesToEmit;
+  }
+
+private:
+  size_t maxDeclNameWidth = 0, maxTypeWidth = 0;
+  SmallVector<ValuesToEmitRecord, 16> valuesToEmit;
+  ModuleEmitter &moduleEmitter;
+};
+} // namespace
+
+void NameCollector::collectNames(Block &block) {
   SmallString<32> nameTmp;
+
+  using ValueOrOp = ModuleEmitter::ValueOrOp;
 
   // Loop over all of the results of all of the ops.  Anything that defines a
   // value needs to be noticed.
@@ -1980,7 +2029,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     // If the op is an instance, add its name to the name table as an op.
     auto instance = dyn_cast<InstanceOp>(&op);
     if (instance)
-      addName(ValueOrOp(instance), instance.instanceName());
+      moduleEmitter.addName(ValueOrOp(instance), instance.instanceName());
 
     for (auto result : op.getResults()) {
       // If this is an expression emitted inline or unused, it doesn't need a
@@ -1991,29 +2040,53 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
           continue;
 
         // Remember that this expression should be emitted out of line.
-        outOfLineExpressions.insert(&op);
+        moduleEmitter.outOfLineExpressions.insert(&op);
       }
 
       // Otherwise, it must be an expression or a declaration like a
       // RegOp/WireOp.  Remember and unique the name for this result.
       if (instance) {
         // The name for an instance result is custom.
-        nameTmp = getName(ValueOrOp(instance)).str() + "_";
+        nameTmp = moduleEmitter.getName(ValueOrOp(instance)).str() + "_";
         unsigned resultNumber = result.getResultNumber();
         auto resultName = instance.getResultName(resultNumber);
         if (resultName)
           nameTmp += resultName.getValue().str();
         else
           nameTmp += std::to_string(resultNumber);
-        addName(result, nameTmp);
+        moduleEmitter.addName(result, nameTmp);
       } else {
-        addName(result, op.getAttrOfType<StringAttr>("name"));
+        moduleEmitter.addName(result, op.getAttrOfType<StringAttr>("name"));
       }
 
       // If we are emitting out-of-line expressions using inline wire decls,
       // don't measure or emit this wire, it will be emitted inline.
-      if (isExpr && emitInlineWireDecls)
-        continue;
+      if (isExpr && emitInlineLogicDecls) {
+        // We can only emit inline logic decls if the generated Verilog will
+        // see the declaration before all the uses.  However, rtl.module allows
+        // cyclic graphs in its body.  We check to make sure that no uses of
+        // this expression are lexically above this expression.  If they are,
+        // we have to emit the declaration at the top of the block.
+        bool haveAnyOutOfOrderUses = false;
+        for (auto *userOp : result.getUsers()) {
+          // If the user is in a suboperation like an always block, then zip up
+          // to the operation that uses it.
+          while (&block != &userOp->getParentRegion()->front())
+            userOp = userOp->getParentOp();
+
+          // Check to see if this is lexically before its users.
+          if (!op.isBeforeInBlock(userOp)) {
+            haveAnyOutOfOrderUses = true;
+            break;
+          }
+        }
+
+        // If we have no out of order uses, we can emit an inline declaration.
+        if (!haveAnyOutOfOrderUses)
+          continue;
+        // Otherwise keep track of this unusual case and declare it like normal.
+        moduleEmitter.outOfLineExpresssionDecls.insert(&op);
+      }
 
       // Emit this value.
       valuesToEmit.push_back(ValuesToEmitRecord{result, {}});
@@ -2029,7 +2102,24 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       }
       maxTypeWidth = std::max(typeString.size(), maxTypeWidth);
     }
+
+    // Recursively process any regions under the op.
+    for (auto &region : op.getRegions()) {
+      if (!region.empty())
+        collectNames(region.front());
+    }
   }
+}
+
+void ModuleEmitter::collectNamesEmitDecls(Block &block) {
+  // In the first pass, we fill in the symbol table, calculate the max width
+  // of the declaration words and the max type width.
+  NameCollector collector(*this);
+  collector.collectNames(block);
+
+  auto &valuesToEmit = collector.getValuesToEmit();
+  size_t maxDeclNameWidth = collector.getMaxDeclNameWidth();
+  size_t maxTypeWidth = collector.getMaxTypeWidth();
 
   if (maxTypeWidth > 0) // add a space if any type exists
     maxTypeWidth += 1;
@@ -2271,8 +2361,8 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
 }
 
 void circt::registerToVerilogTranslation() {
-  TranslateFromMLIRRegistration toVerilog(
+  mlir::TranslateFromMLIRRegistration toVerilog(
       "export-verilog", exportVerilog, [](DialectRegistry &registry) {
-        registry.insert<RTLDialect, SVDialect>();
+        registry.insert<CombDialect, RTLDialect, SVDialect>();
       });
 }

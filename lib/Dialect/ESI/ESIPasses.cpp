@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/RTL/RTLOps.h"
@@ -17,6 +18,7 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
@@ -36,7 +38,8 @@ namespace esi {
 } // namespace esi
 } // namespace circt
 
-using namespace mlir;
+using namespace circt;
+using namespace circt::comb;
 using namespace circt::esi;
 using namespace circt::rtl;
 using namespace circt::sv;
@@ -115,7 +118,7 @@ ESIRTLBuilder::ESIRTLBuilder(Operation *top)
 
 StringAttr ESIRTLBuilder::constructInterfaceName(ChannelPort port) {
   Operation *tableOp =
-      getInsertionPoint()->getParentWithTrait<OpTrait::SymbolTable>();
+      getInsertionPoint()->getParentWithTrait<mlir::OpTrait::SymbolTable>();
 
   // Get a name based on the type.
   std::string portTypeName;
@@ -900,6 +903,7 @@ void ESItoRTLPass::runOnOperation() {
 
   // Set up a conversion and give it a set of laws.
   ConversionTarget pass1Target(*ctxt);
+  pass1Target.addLegalDialect<CombDialect>();
   pass1Target.addLegalDialect<RTLDialect>();
   pass1Target.addLegalDialect<SVDialect>();
   pass1Target.addLegalOp<WrapValidReady, UnwrapValidReady>();
@@ -922,6 +926,7 @@ void ESItoRTLPass::runOnOperation() {
     signalPassFailure();
 
   ConversionTarget pass2Target(*ctxt);
+  pass2Target.addLegalDialect<CombDialect>();
   pass2Target.addLegalDialect<RTLDialect>();
   pass2Target.addLegalDialect<SVDialect>();
   pass2Target.addIllegalDialect<ESIDialect>();

@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_TYPES_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Types.h"
 
 namespace circt {
@@ -24,8 +25,6 @@ struct FlipTypeStorage;
 struct BundleTypeStorage;
 struct VectorTypeStorage;
 } // namespace detail.
-
-using namespace mlir;
 
 class ClockType;
 class ResetType;
@@ -68,7 +67,7 @@ public:
   /// Reset, etc) then return the bitwidth.  Return -1 if the is one of these
   /// types but without a specified bitwidth.  Return -2 if this isn't a simple
   /// type.
-  int32_t getBitWidthOrSentinel() const;
+  int32_t getBitWidthOrSentinel();
 
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {

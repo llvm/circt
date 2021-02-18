@@ -25,13 +25,12 @@ def ConnectOp : SVOp<"connect", [InOutTypeConstraint<"src", "dest">]> {
   let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
 }
 
+// Note that net declarations like 'wire' should not appear in an always block.
 def WireOp : SVOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let summary = "Define a new wire";
   let description = [{
-    Declare a new wire:
-    ```
-      %name = sv.wire : !rtl.inout<t1>
-    ```
+    Declare a SystemVerilog Net Declaration of 'wire' type.
+     See SV Spec 6.7, pp97.
     }];
 
   let arguments = (ins OptionalAttr<StrAttr>:$name);
@@ -55,10 +54,15 @@ def WireOp : SVOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
       return result().getType().cast<InOutType>().getElementType();
     }
   }];
+  let verifier = [{ return ::verifyWireOp(*this); }];
 }
 
 def RegOp : SVOp<"reg", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let summary = "Define a new `reg` in SystemVerilog";
+   let description = [{
+     Declare a SystemVerilog Variable Declaration of 'reg' type.
+     See SV Spec 6.8, pp100.
+   }];
   let arguments = (ins OptionalAttr<StrAttr>:$name);
   let results = (outs InOutType:$result);
 

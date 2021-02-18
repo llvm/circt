@@ -34,6 +34,10 @@ namespace llhd {
 class LLHDDialect;
 } // namespace llhd
 
+namespace comb {
+class CombDialect;
+} // namespace comb
+
 namespace rtl {
 class RTLDialect;
 class RTLModuleOp;

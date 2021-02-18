@@ -1,4 +1,4 @@
-//===- RTLCombinatorial.td - RTL combinatorial logic ops ---*- tablegen -*-===//
+//===- Combinational.td - combinational logic ops ----------*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,12 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This describes the MLIR ops for combinatorial logic.
+// This describes the MLIR ops for combinational logic.
 //
 //===----------------------------------------------------------------------===//
 
 def ConstantOp
- : RTLOp<"constant",
+ : CombOp<"constant",
           [NoSideEffect, ConstantLike, FirstAttrDerivedResultType,
            DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let summary = "Produce a constant value";
@@ -24,7 +24,7 @@ def ConstantOp
     }];
 
   let arguments = (ins APIntAttr:$value);
-  let results = (outs RTLIntegerType:$result);
+  let results = (outs CombIntegerType:$result);
 
   // FIXME(QoI): Instead of requiring "rtl.constant (42: i8) : i8", we should
   // just use "rtl.constant 42: i8".  This can be done with a custom printer and
@@ -57,39 +57,39 @@ def ConstantOp
 //===----------------------------------------------------------------------===//
 
 // Base class for binary operators.
-class BinRTLOp<string mnemonic, list<OpTrait> traits = []> :
-      RTLOp<mnemonic, traits # [NoSideEffect]> {
-  let arguments = (ins RTLIntegerType:$lhs, RTLIntegerType:$rhs);
-  let results = (outs RTLIntegerType:$result);
+class BinOp<string mnemonic, list<OpTrait> traits = []> :
+      CombOp<mnemonic, traits # [NoSideEffect]> {
+  let arguments = (ins CombIntegerType:$lhs, CombIntegerType:$rhs);
+  let results = (outs CombIntegerType:$result);
 
   let assemblyFormat =
     "$lhs `,` $rhs  attr-dict `:` functional-type($args, $results)";
 }
 
 // Binary operator with uniform input/result types.
-class UTBinRTLOp<string mnemonic, list<OpTrait> traits = []> :
-      BinRTLOp<mnemonic,
+class UTBinOp<string mnemonic, list<OpTrait> traits = []> :
+      BinOp<mnemonic,
                traits # [SameTypeOperands, SameOperandsAndResultType]> {
   let assemblyFormat = "$lhs `,` $rhs  attr-dict `:` type($result)";
 }
 
 // Base class for variadic operators.
-class VariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
-      RTLOp<mnemonic, traits # [NoSideEffect]> {
-  let arguments = (ins Variadic<RTLIntegerType>:$inputs);
-  let results = (outs RTLIntegerType:$result);
+class VariadicOp<string mnemonic, list<OpTrait> traits = []> :
+      CombOp<mnemonic, traits # [NoSideEffect]> {
+  let arguments = (ins Variadic<CombIntegerType>:$inputs);
+  let results = (outs CombIntegerType:$result);
 
   let assemblyFormat =
     "$inputs attr-dict `:` functional-type($inputs, results)";
 }
 
-class UTVariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
-      VariadicRTLOp<mnemonic,
+class UTVariadicOp<string mnemonic, list<OpTrait> traits = []> :
+      VariadicOp<mnemonic,
                     traits # [SameTypeOperands, SameOperandsAndResultType]> {
 
   let hasCanonicalizer = true;
   let hasFolder = true;
-  let verifier =  "return ::verifyUTVariadicRTLOp(*this);";
+  let verifier =  "return ::verifyUTVariadicOp(*this);";
 
   let assemblyFormat = "$inputs attr-dict `:` type($result)";
 
@@ -102,24 +102,24 @@ class UTVariadicRTLOp<string mnemonic, list<OpTrait> traits = []> :
 }
 
 // Arithmetic and Logical Operations.
-def AddOp : UTVariadicRTLOp<"add", [Commutative]>;
-def SubOp : UTBinRTLOp<"sub">;
-def MulOp : UTVariadicRTLOp<"mul", [Commutative]>;
-def DivUOp : UTBinRTLOp<"divu">;
-def DivSOp : UTBinRTLOp<"divs">;
-def ModUOp : UTBinRTLOp<"modu">;
-def ModSOp : UTBinRTLOp<"mods">;
+def AddOp : UTVariadicOp<"add", [Commutative]>;
+def SubOp : UTBinOp<"sub">;
+def MulOp : UTVariadicOp<"mul", [Commutative]>;
+def DivUOp : UTBinOp<"divu">;
+def DivSOp : UTBinOp<"divs">;
+def ModUOp : UTBinOp<"modu">;
+def ModSOp : UTBinOp<"mods">;
 let hasFolder = true in {
-  def ShlOp : UTBinRTLOp<"shl">;
-  def ShrUOp : UTBinRTLOp<"shru">;
-  def ShrSOp : UTBinRTLOp<"shrs">;
+  def ShlOp : UTBinOp<"shl">;
+  def ShrUOp : UTBinOp<"shru">;
+  def ShrSOp : UTBinOp<"shrs">;
 }
 
-def AndOp : UTVariadicRTLOp<"and", [Commutative]>;
-def OrOp  : UTVariadicRTLOp<"or", [Commutative]>;
-def XorOp : UTVariadicRTLOp<"xor", [Commutative]>;
+def AndOp : UTVariadicOp<"and", [Commutative]>;
+def OrOp  : UTVariadicOp<"or", [Commutative]>;
+def XorOp : UTVariadicOp<"xor", [Commutative]>;
 
-def MergeOp : UTVariadicRTLOp<"merge", [Commutative]> {
+def MergeOp : UTVariadicOp<"merge", [Commutative]> {
   let summary ="Electrically merge signals together as if connected by a wire.";
   let description = [{
     This operation merges multiple signals together as if they were connected to
@@ -155,7 +155,7 @@ def ICmpPredicate : I64EnumAttr<
      ICmpPredicateSGT, ICmpPredicateSGE, ICmpPredicateULT, ICmpPredicateULE,
      ICmpPredicateUGT, ICmpPredicateUGE]>;
 
-def ICmpOp : RTLOp<"icmp", [NoSideEffect, SameTypeOperands]> {
+def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
   let summary = "Compare two integer values";
   let description = [{
     This operation compares two integers using a predicate.  If the predicate is
@@ -168,7 +168,7 @@ def ICmpOp : RTLOp<"icmp", [NoSideEffect, SameTypeOperands]> {
   }];
 
   let arguments = (ins ICmpPredicate:$predicate, 
-                   RTLIntegerType:$lhs, RTLIntegerType:$rhs);
+                   CombIntegerType:$lhs, CombIntegerType:$rhs);
   let results = (outs I1:$result);
 
   let assemblyFormat = "$predicate $lhs `,` $rhs  attr-dict `:` type($lhs)";
@@ -193,30 +193,30 @@ def ICmpOp : RTLOp<"icmp", [NoSideEffect, SameTypeOperands]> {
 //===----------------------------------------------------------------------===//
 
 // Base class for unary reduction operations that produce an i1.
-class UnaryI1ReductionRTLOp<string mnemonic, list<OpTrait> traits = []> :
-      RTLOp<mnemonic, traits # [NoSideEffect]> {
-  let arguments = (ins RTLIntegerType:$input);
+class UnaryI1ReductionOp<string mnemonic, list<OpTrait> traits = []> :
+      CombOp<mnemonic, traits # [NoSideEffect]> {
+  let arguments = (ins CombIntegerType:$input);
   let results = (outs I1:$result);
   let hasFolder = 1;
 
   let assemblyFormat = "$input attr-dict `:` type($input)";
 }
 
-def AndROp : UnaryI1ReductionRTLOp<"andr">;
-def OrROp  : UnaryI1ReductionRTLOp<"orr">;
-def XorROp : UnaryI1ReductionRTLOp<"xorr">;
+def AndROp : UnaryI1ReductionOp<"andr">;
+def OrROp  : UnaryI1ReductionOp<"orr">;
+def XorROp : UnaryI1ReductionOp<"xorr">;
 
 //===----------------------------------------------------------------------===//
 // Integer width modifying operations.
 //===----------------------------------------------------------------------===//
 
 // Extract a range of bits from the specified input.
-def ExtractOp : RTLOp<"extract", [NoSideEffect]> {
+def ExtractOp : CombOp<"extract", [NoSideEffect]> {
   let summary = "Extract a range of bits into a smaller value, lowBit "
                 "specifies the lowest bit included.";
 
-  let arguments = (ins RTLIntegerType:$input, I32Attr:$lowBit);
-  let results = (outs RTLIntegerType:$result);
+  let arguments = (ins CombIntegerType:$input, I32Attr:$lowBit);
+  let results = (outs CombIntegerType:$result);
 
   let assemblyFormat =
     "$input `from` $lowBit attr-dict `:` functional-type($input, $result)";
@@ -225,11 +225,11 @@ def ExtractOp : RTLOp<"extract", [NoSideEffect]> {
   let verifier = "return ::verifyExtractOp(*this);";
 }
 
-def SExtOp : RTLOp<"sext", [NoSideEffect]> {
+def SExtOp : CombOp<"sext", [NoSideEffect]> {
   let summary = "Sign extend an integer to a larger integer";
 
-  let arguments = (ins RTLIntegerType:$input);
-  let results = (outs RTLIntegerType:$result);
+  let arguments = (ins CombIntegerType:$input);
+  let results = (outs CombIntegerType:$result);
 
   let assemblyFormat =
     "$input attr-dict `:` functional-type($input, $result)";
@@ -242,8 +242,12 @@ def SExtOp : RTLOp<"sext", [NoSideEffect]> {
 // Other Operations
 //===----------------------------------------------------------------------===//
 
-def ConcatOp : VariadicRTLOp<"concat"> {
+def ConcatOp : VariadicOp<"concat"> {
   let summary = "Concatenate a variadic list of operands together.";
+  let description = [{
+    See the RTL-SV rationale document for details on operand ordering.
+  }];
+
   let hasFolder = true;
   let hasCanonicalizer = true;
 
@@ -256,7 +260,7 @@ def ConcatOp : VariadicRTLOp<"concat"> {
 }
 
 // Select one of two values based on a condition.
-def MuxOp : RTLOp<"mux",
+def MuxOp : CombOp<"mux",
  [NoSideEffect, AllTypesMatch<["trueValue", "falseValue", "result"]>]> {
   let summary = "Return one or the other operand depending on a selector bit";
   let description = [{
@@ -265,9 +269,9 @@ def MuxOp : RTLOp<"mux",
     ```
   }];
 
-  let arguments = (ins I1:$cond, RTLNonInOutType:$trueValue,
-                       RTLNonInOutType:$falseValue);
-  let results = (outs RTLNonInOutType:$result);
+  let arguments = (ins I1:$cond, AnyType:$trueValue,
+                       AnyType:$falseValue);
+  let results = (outs AnyType:$result);
 
   let assemblyFormat =
     "$cond `,` $trueValue `,` $falseValue attr-dict `:` type($result)";
@@ -285,76 +289,25 @@ def MuxOp : RTLOp<"mux",
   ];
 }
 
-def KnownBitWidthType : Type<CPred<[{getBitWidth($_self) != -1}]>,
+def KnownBitWidthType : Type<CPred<[{rtl::getBitWidth($_self) != -1}]>,
   "Type wherein the bitwidth in hardware is known">;
 
-def BitcastOp: RTLOp<"bitcast", [NoSideEffect]> {
+def BitcastOp: CombOp<"bitcast", [NoSideEffect]> {
   let summary = [{
     Reinterpret one value to another value of the same size and
     potentially different type.
   }];
 
   let description = [{
-    The bitcast operation represents a bitwise reinerpretation (cast) of a
-    value. This always synthesizes away in hardware, though if may or may not
-    be syntactically represented in lowering or export language.
-
-    Since bitcasting requires information on the bitwise layout of the types
-    on which it operates, we discuss that here.
-
-    ### Integer bit vectors
-
-    MLIR's `IntegerType` with `Signless` semantics are used to represent bit
-    vectors. They are never padded or aligned.
-
-    ### Arrays
-
-    The RTL dialect defines a custom `ArrayType`.
-
-    - **Bit layout**: High index of array starts at the MSB. Array's 0th
-      element's LSB located at array LSB.
-    - **Padding between elements**: None
-    - **Alignment of elements**: None
-
-    ### Structs
-
-    The RTL dialect defines a custom `StructType`.
-
-    - **Bit layout**: The first listed member's MSB corresponds to the
-      struct's MSB. The last member in the list shares its LSB with the
-      struct.
-    - **Padding between elements**: None
-    - **Alignment of elements**: None
-
-    ### Example figure
-
-    ```
-    15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0 
-    -------------------------------------------------
-    | MSB                                       LSB | 16 bit integer vector
-    -------------------------------------------------
-                             | MSB              LSB | 8 bit integer vector
-    -------------------------------------------------
-    | MSB      [1]       LSB | MSB     [0]      LSB | 2 element array of 8 bit integer vectors
-    -------------------------------------------------
-
-          13 12 11 10  9  8  7  6  5  4  3  2  1  0 
-                                ---------------------
-                                | MSB           LSB | 7 bit integer vector
-          -------------------------------------------
-          | MSB     [1]     LSB | MSB    [0]    LSB | 2 element array of 7 bit integer vectors
-          -------------------------------------------
-          | MSB a LSB | MSB b[1] LSB | MSB b[0] LSB | struct
-          -------------------------------------------  a: 4 bit integral
-                                                       b: 2 element array of 5 bit integer vectors
-    ```
+    See the RTL-SV rationale document for a longer description, including an
+    example.
   }];
 
   let arguments = (ins KnownBitWidthType:$input);
   let results = (outs KnownBitWidthType:$result);
   let verifier = [{
-    if (getBitWidth(input().getType()) !=
-        getBitWidth(result().getType()))
+    if (rtl::getBitWidth(input().getType()) !=
+        rtl::getBitWidth(result().getType()))
       return this->emitOpError("Bitwidth of input must match result");
     return success();
   }];

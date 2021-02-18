@@ -13,11 +13,11 @@
 #ifndef CIRCT_DIALECT_RTL_RTLDIALECT_H
 #define CIRCT_DIALECT_RTL_RTLDIALECT_H
 
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Dialect.h"
 
 namespace circt {
 namespace rtl {
-using namespace mlir;
 
 class RTLDialect : public Dialect {
 public:
@@ -25,9 +25,6 @@ public:
   ~RTLDialect();
 
   static StringRef getDialectNamespace() { return "rtl"; }
-
-  Operation *materializeConstant(OpBuilder &builder, Attribute value, Type type,
-                                 Location loc) override;
 
   /// Parses a type registered to this dialect
   Type parseType(DialectAsmParser &parser) const override;

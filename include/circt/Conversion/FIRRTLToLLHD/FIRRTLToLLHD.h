@@ -23,7 +23,6 @@ class OperationPass;
 } // namespace mlir
 
 namespace circt {
-using namespace mlir;
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 createConvertFIRRTLToLLHDPass();
 } // namespace circt

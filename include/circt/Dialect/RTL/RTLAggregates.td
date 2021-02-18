@@ -25,6 +25,8 @@ def ArrayCreateOp : RTLOp<"array_create", [NoSideEffect, SameTypeOperands]> {
     // %a, %b, %c are all i4
     %array = rtl.array_create %a, %b, %c : (i4)
     ```
+
+    See the RTL-SV rationale document for details on operand ordering.
   }];
 
   let arguments = (ins Variadic<RTLNonInOutType>:$inputs);
@@ -56,6 +58,8 @@ def ArrayConcatOp : RTLOp<"array_concat", [NoSideEffect]> {
     %array = rtl.array_concat %a, %b, %c : (2, 5, 4 x i4)
     // %array is !rtl.array<11 x i4>
     ```
+
+    See the RTL-SV rationale document for details on operand ordering.
   }];
 
   let arguments = (ins Variadic<ArrayType>:$inputs);
