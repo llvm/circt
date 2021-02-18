@@ -170,20 +170,20 @@ static bool isZeroBitType(Type type) {
 
 static Type stripUnpackedTypes(Type type) {
   return TypeSwitch<Type, Type>(type)
-  .Case<InOutType>([](InOutType inoutType) { 
-    return stripUnpackedTypes(inoutType.getElementType());
-  })
-.Case<UnpackedArrayType>([](UnpackedArrayType arrayType) {
-  return stripUnpackedTypes(arrayType.getElementType());
-})
-.Default([](Type type){
-  return type;
-});
+      .Case<InOutType>([](InOutType inoutType) {
+        return stripUnpackedTypes(inoutType.getElementType());
+      })
+      .Case<UnpackedArrayType>([](UnpackedArrayType arrayType) {
+        return stripUnpackedTypes(arrayType.getElementType());
+      })
+      .Default([](Type type) { return type; });
 }
 
-/// Output the basic type that consists of packed and primitive types.  This is those to the left of the name in verilog.
-static void printPackedTypeImpl(Type type, raw_ostream& os, Location loc, 
-SmallVectorImpl<size_t>& dims, bool implicitIntType, char structFieldSep) {
+/// Output the basic type that consists of packed and primitive types.  This is
+/// those to the left of the name in verilog.
+static void printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
+                                SmallVectorImpl<size_t> &dims,
+                                bool implicitIntType, char structFieldSep) {
   return TypeSwitch<Type, void>(type)
       .Case<IntegerType>([&](IntegerType integerType) {
         if (!implicitIntType)
@@ -198,30 +198,33 @@ SmallVectorImpl<size_t>& dims, bool implicitIntType, char structFieldSep) {
             os << '[' << (dim - 1) << ":0]";
           else
             os << "/*Zero Width*/";
-          
-    })
+      })
       .Case<InOutType>([&](InOutType inoutType) {
-        printPackedTypeImpl(inoutType.getElementType(), os, loc, dims, implicitIntType, structFieldSep);
+        printPackedTypeImpl(inoutType.getElementType(), os, loc, dims,
+                            implicitIntType, structFieldSep);
       })
       .Case<StructType>([&](StructType structType) {
         os << "struct packed {";
-        for (auto& element : structType.getElements()) {
+        for (auto &element : structType.getElements()) {
           SmallVector<size_t, 8> structDims;
-          printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc, structDims, false, structFieldSep);
+          printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
+                              structDims, false, structFieldSep);
           os << ' ' << element.name << ';' << structFieldSep;
         }
         os << '}';
       })
       .Case<ArrayType>([&](ArrayType arrayType) {
         dims.push_back(arrayType.getSize());
-        printPackedTypeImpl(arrayType.getElementType(), os, loc, dims, implicitIntType, structFieldSep);
+        printPackedTypeImpl(arrayType.getElementType(), os, loc, dims,
+                            implicitIntType, structFieldSep);
       })
       .Case<InterfaceType>([](InterfaceType ifaceType) {
-        //Noop
+        // Noop
       })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
         os << "<<unexpected unpacked array>>";
-        emitError(loc, "Unexpected unpacked array in packed type ") << arrayType;
+        emitError(loc, "Unexpected unpacked array in packed type ")
+            << arrayType;
       })
       .Default([&](Type type) {
         os << "<<invalid type>>";
@@ -229,13 +232,18 @@ SmallVectorImpl<size_t>& dims, bool implicitIntType, char structFieldSep) {
       });
 }
 
-static void printPackedType(Type type, raw_ostream& os, Location loc, bool implicitIntType = true, char structFieldSep = ' ') {
+static void printPackedType(Type type, raw_ostream &os, Location loc,
+                            bool implicitIntType = true,
+                            char structFieldSep = ' ') {
   SmallVector<size_t, 8> packedDimensions;
-  printPackedTypeImpl(type, os, loc, packedDimensions, implicitIntType, structFieldSep);
+  printPackedTypeImpl(type, os, loc, packedDimensions, implicitIntType,
+                      structFieldSep);
 }
 
-/// Output the unpacked array dimensions.  This is the part of the type that is to the right of the name.
-static void unpackedTypePrefixToString(Type type, raw_ostream& os, Location loc) {
+/// Output the unpacked array dimensions.  This is the part of the type that is
+/// to the right of the name.
+static void unpackedTypePrefixToString(Type type, raw_ostream &os,
+                                       Location loc) {
   TypeSwitch<Type, void>(type)
       .Case<InOutType>([&](InOutType inoutType) {
         unpackedTypePrefixToString(inoutType.getElementType(), os, loc);
@@ -2097,7 +2105,8 @@ void NameCollector::collectNames(Block &block) {
       // Convert the port's type to a string and measure it.
       {
         llvm::raw_svector_ostream stringStream(typeString);
-        printPackedType(stripUnpackedTypes(result.getType()), stringStream, op.getLoc());
+        printPackedType(stripUnpackedTypes(result.getType()), stringStream,
+                        op.getLoc());
       }
       maxTypeWidth = std::max(typeString.size(), maxTypeWidth);
     }
@@ -2229,7 +2238,8 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
     portTypeStrings.push_back({});
     {
       llvm::raw_svector_ostream stringStream(portTypeStrings.back());
-      printPackedType(stripUnpackedTypes(port.type), stringStream, module.getLoc());
+      printPackedType(stripUnpackedTypes(port.type), stringStream,
+                      module.getLoc());
     }
 
     maxTypeWidth = std::max(portTypeStrings.back().size(), maxTypeWidth);
@@ -2285,7 +2295,8 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
     // If we have any more ports with the same types and the same direction,
     // emit them in a list on the same line.
     while (portIdx != e && portInfo[portIdx].direction == thisPortDirection &&
-           stripUnpackedTypes(portType) == stripUnpackedTypes(portInfo[portIdx].type)) {
+           stripUnpackedTypes(portType) ==
+               stripUnpackedTypes(portInfo[portIdx].type)) {
       // Don't exceed our preferred line length.
       StringRef name = getPortName(portIdx);
       if (os.tell() + 2 + name.size() - startOfLinePos >
