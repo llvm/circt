@@ -33,8 +33,8 @@ class BasicSystemTester(cosim.CosimBase):
                 random.randint(500, 1250)
             ]
             print(f"Sending {arr}")
-            ep.send(self.schema.ArrayOf4xSi13.new_message(i=arr))
+            ep.send(self.schema.ArrayOf4xSi13.new_message(l=arr))
             result = self.readMsg(ep, self.schema.ArrayOf2xUi24)
             print(f"Got {result}")
-            assert (result.i[0] == arr[0] + arr[1])
-            assert (result.i[1] == arr[2] + arr[3])
+            assert (result.l[0] == arr[0] + arr[1])
+            assert (result.l[1] == arr[2] + arr[3])
