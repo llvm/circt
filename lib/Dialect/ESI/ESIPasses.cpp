@@ -118,7 +118,7 @@ ESIRTLBuilder::ESIRTLBuilder(Operation *top)
 
 StringAttr ESIRTLBuilder::constructInterfaceName(ChannelPort port) {
   Operation *tableOp =
-      getInsertionPoint()->getParentWithTrait<OpTrait::SymbolTable>();
+      getInsertionPoint()->getParentWithTrait<mlir::OpTrait::SymbolTable>();
 
   // Get a name based on the type.
   std::string portTypeName;
