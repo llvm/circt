@@ -459,6 +459,35 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
       return failure();
   }
 
+  // Check that result types are consistent with the referenced module.
+  auto expectedTypes = getModuleType(referencedModule).getResults();
+  auto numResults = op->getNumResults();
+
+  if (expectedTypes.size() != numResults) {
+    auto diag = op.emitOpError()
+                << "has a wrong number of results; expected "
+                << expectedTypes.size() << " but got " << numResults;
+    diag.attachNote(referencedModule->getLoc())
+        << "original module declared here";
+
+    return failure();
+  }
+
+  for (size_t i = 0; i != numResults; i++) {
+    auto expectedType = expectedTypes[i];
+    auto resultType = op.getResultTypes()[i];
+    if (resultType != expectedType && !resultType.isa<NoneType>() &&
+        !expectedType.isa<NoneType>()) {
+      auto diag = op.emitOpError()
+                  << "#" << i << " result type must be " << expectedType
+                  << ", but got " << resultType;
+
+      diag.attachNote(referencedModule->getLoc())
+          << "original module declared here";
+      return failure();
+    }
+  }
+
   return success();
 }
 
