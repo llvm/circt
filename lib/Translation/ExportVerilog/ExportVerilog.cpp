@@ -250,14 +250,13 @@ static void printPackedType(Type type, raw_ostream &os, Location loc,
 
 /// Output the unpacked array dimensions.  This is the part of the type that is
 /// to the right of the name.
-static void unpackedTypePrefixToString(Type type, raw_ostream &os,
-                                       Location loc) {
+static void printUnpackedTypePostfix(Type type, raw_ostream &os) {
   TypeSwitch<Type, void>(type)
       .Case<InOutType>([&](InOutType inoutType) {
-        unpackedTypePrefixToString(inoutType.getElementType(), os, loc);
+        printUnpackedTypePostfix(inoutType.getElementType(), os);
       })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
-        unpackedTypePrefixToString(arrayType.getElementType(), os, loc);
+        printUnpackedTypePostfix(arrayType.getElementType(), os);
         os << '[' << (arrayType.getSize() - 1) << ":0]";
       });
 }
@@ -1991,17 +1990,6 @@ static bool isExpressionEmittedInline(Operation *op) {
   return op->getResult(0).hasOneUse();
 }
 
-// Print out the array subscripts after a wire/port declaration.
-static void printArraySubscripts(Type type, raw_ostream &os) {
-  if (auto inout = type.dyn_cast<InOutType>())
-    return printArraySubscripts(inout.getElementType(), os);
-
-  if (auto array = type.dyn_cast<UnpackedArrayType>()) {
-    printArraySubscripts(array.getElementType(), os);
-    os << '[' << (array.getSize() - 1) << ":0]";
-  }
-}
-
 namespace {
 class NameCollector {
 public:
@@ -2171,7 +2159,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       os << "()";
     } else {
       // Print out any array subscripts.
-      printArraySubscripts(type, os);
+      printUnpackedTypePostfix(type, os);
     }
 
     os << ';';
@@ -2297,7 +2285,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
 
     // Emit the name.
     os << getPortName(portIdx);
-    printArraySubscripts(portType, os);
+    printUnpackedTypePostfix(portType, os);
     ++portIdx;
 
     // If we have any more ports with the same types and the same direction,
@@ -2315,7 +2303,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
 
       // Append this to the running port decl.
       os << ", " << name;
-      printArraySubscripts(portInfo[portIdx].type, os);
+      printUnpackedTypePostfix(portInfo[portIdx].type, os);
       ++portIdx;
     }
 
