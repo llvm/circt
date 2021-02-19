@@ -12,7 +12,8 @@
 
 def RTLModuleOp : RTLOp<"module",
       [IsolatedFromAbove, FunctionLike, Symbol, RegionKindInterface,
-       SingleBlockImplicitTerminator<"OutputOp">, HasParent<"mlir::ModuleOp">]>{
+       SingleBlockImplicitTerminator<"OutputOp">, HasParent<"mlir::ModuleOp">,
+       CallableOpInterface]>{
   let summary = "RTL Module";
   let description = [{
     The "rtl.module" operation represents a Verilog module, including a given
@@ -48,6 +49,17 @@ def RTLModuleOp : RTLOp<"module",
     StringRef getName() {
       return (*this)->getAttrOfType<StringAttr>(
         ::mlir::SymbolTable::getSymbolAttrName()).getValue();
+    }
+
+    // Returns the callable region of the operation, which is just the module
+    // body.
+    Region *getCallableRegion() {
+      return &getBody();
+    }
+
+    // Returns the result types that the callable region produces when executes.
+    ArrayRef<Type> getCallableResults() {
+      return getType().getResults();
     }
 
   private:
@@ -139,7 +151,7 @@ def RTLModuleExternOp : RTLOp<"module.extern",
 }
 
 def InstanceOp : RTLOp<"instance",
-                       [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
+      [CallOpInterface, DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let summary = "Create an instance of a module";
   let description = [{
     This represents an instance of a module. The inputs and results are 
@@ -154,15 +166,28 @@ def InstanceOp : RTLOp<"instance",
   let results = (outs Variadic<AnyType>);
 
   let extraClassDeclaration = [{
-    // Return the name of the specified result or empty string if it cannot be
-    // determined.
+    /// Return the name of the specified result or empty string if it cannot be
+    /// determined.
     StringAttr getResultName(size_t i);
 
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
     Operation *getReferencedModule();
+
+    /// Get the argument operands to the called function.
+    operand_range getArgOperands() {
+      return {arg_operand_begin(), arg_operand_end()};
+    }
+
+    operand_iterator arg_operand_begin() { return operand_begin(); }
+    operand_iterator arg_operand_end() { return operand_end(); }
+
+    /// Return the callee of this operation.
+    CallInterfaceCallable getCallableForCallee() {
+      return (*this)->getAttrOfType<SymbolRefAttr>("moduleName");
+    }
   }];
-  
+
   let assemblyFormat = [{
     $instanceName $moduleName `(` $inputs `)` attr-dict
       `:` functional-type($inputs, results)

@@ -16,16 +16,69 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/Transforms/InliningUtils.h"
 
 using namespace circt;
 using namespace rtl;
 
 //===----------------------------------------------------------------------===//
-// Dialect specification.
+// Inliner Dialect Interface
 //===----------------------------------------------------------------------===//
 
 namespace {
+struct RTLInlinerInterface : public mlir::DialectInlinerInterface {
+  using mlir::DialectInlinerInterface::DialectInlinerInterface;
 
+  /// Returns true is the `callable` operation can be inlined into the location
+  /// of the `call` operation.
+  bool isLegalToInline(Operation *call, Operation *callable,
+                       bool wouldBeCloned) const override final {
+    // Only inline an  operation which is marked inline
+    return call->hasAttr("inline");
+  }
+
+  /// Returns true if the operation from RTL `op` can be inlined in to the
+  /// destination region `dest.
+  bool
+  isLegalToInline(Operation *op, Region *dest, bool,
+                  BlockAndValueMapping &valueMapping) const override final {
+    // No operations in RTL prevent inlining.
+    return true;
+  }
+
+  /// Returns true if the given region `src` can be inlined into the region
+  /// `dest`.
+  bool isLegalToInline(Region *dest, Region *src, bool,
+                       BlockAndValueMapping &) const override final {
+    // No operations in RTL prevent inlining.
+    return true;
+  }
+
+  /// When considering if `op` can be inlined, should this operation's regions
+  /// be recursively querried for legality and cost analysis.
+  bool shouldAnalyzeRecursively(Operation *op) const override final {
+    // We don't need recursive analysis.  The only requirement is that the
+    // instance is marked for inlining.
+    return false;
+  }
+
+  /// Handle the given inlined terminator by replacing it with a new operation
+  /// as necessary.
+  void handleTerminator(Operation *op,
+                        ArrayRef<Value> valuesToReplace) const override final {
+    // Only terminator is the OutputOp
+    auto outputOp = cast<rtl::OutputOp>(op);
+    for (auto retValue : llvm::zip(valuesToReplace, outputOp.getOperands()))
+      std::get<0>(retValue).replaceAllUsesWith(std::get<1>(retValue));
+  }
+};
+} // end anonymous namespace
+
+//===----------------------------------------------------------------------===//
+// OpAsm Dialect Interface
+//===----------------------------------------------------------------------===//
+
+namespace {
 // We implement the OpAsmDialectInterface so that RTL dialect operations
 // automatically interpret the name attribute on operations as their SSA name.
 struct RTLOpAsmDialectInterface : public OpAsmDialectInterface {
@@ -53,6 +106,10 @@ struct RTLOpAsmDialectInterface : public OpAsmDialectInterface {
 };
 } // end anonymous namespace
 
+//===----------------------------------------------------------------------===//
+// Dialect specification.
+//===----------------------------------------------------------------------===//
+
 RTLDialect::RTLDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context,
               ::mlir::TypeID::get<RTLDialect>()) {
@@ -70,7 +127,7 @@ RTLDialect::RTLDialect(MLIRContext *context)
       >();
 
   // Register interface implementations.
-  addInterfaces<RTLOpAsmDialectInterface>();
+  addInterfaces<RTLInlinerInterface, RTLOpAsmDialectInterface>();
 }
 
 RTLDialect::~RTLDialect() {}

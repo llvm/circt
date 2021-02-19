@@ -16,9 +16,37 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/Transforms/InliningUtils.h"
 
 using namespace circt;
 using namespace comb;
+
+//===----------------------------------------------------------------------===//
+// Inliner Dialect Interface
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct CombInlinerInterface : public mlir::DialectInlinerInterface {
+  using mlir::DialectInlinerInterface::DialectInlinerInterface;
+
+  /// Returns true if the operation from RTL `op` can be inlined in to the
+  /// destination region `dest`.
+  bool
+  isLegalToInline(Operation *op, Region *dest, bool,
+                  BlockAndValueMapping &valueMapping) const override final {
+    // No operations in Comb prevent inlining.
+    return true;
+  }
+
+  /// Returns true if the given region `src` can be inlined into the region
+  /// `dest`.
+  bool isLegalToInline(Region *dest, Region *src, bool,
+                       BlockAndValueMapping &) const override final {
+    // No operations in Comb prevent inlining.
+    return true;
+  }
+};
+} // end anonymous namespace
 
 //===----------------------------------------------------------------------===//
 // Dialect specification.
@@ -33,6 +61,9 @@ CombDialect::CombDialect(MLIRContext *context)
 #define GET_OP_LIST
 #include "circt/Dialect/Comb/Comb.cpp.inc"
       >();
+
+  // Register interface implementations.
+  addInterfaces<CombInlinerInterface>();
 }
 
 CombDialect::~CombDialect() {}
