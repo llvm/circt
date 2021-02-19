@@ -168,6 +168,9 @@ static bool isZeroBitType(Type type) {
   return false;
 }
 
+/// Given a set of known nested types (those supported by this pass), strip off
+/// leading unpacked types.  This strips off portions of the type that are
+/// printed to the right of the name in verilog.
 static Type stripUnpackedTypes(Type type) {
   return TypeSwitch<Type, Type>(type)
       .Case<InOutType>([](InOutType inoutType) {
@@ -180,7 +183,11 @@ static Type stripUnpackedTypes(Type type) {
 }
 
 /// Output the basic type that consists of packed and primitive types.  This is
-/// those to the left of the name in verilog.
+/// those to the left of the name in verilog. implicitIntType controls whether
+/// to print a base type for (logic) for inteters or whether the caller will
+/// have handled this (with logic, wire, reg, etc).  structFieldSep is a
+/// character to be printed between struct fields.  Pretty printed structs will
+/// likely use newline, while inline structs will use spaces
 static void printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                                 SmallVectorImpl<size_t> &dims,
                                 bool implicitIntType, char structFieldSep) {
@@ -208,7 +215,8 @@ static void printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         for (auto &element : structType.getElements()) {
           SmallVector<size_t, 8> structDims;
           printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
-                              structDims, false, structFieldSep);
+                              structDims, /*implicitIntType=*/false,
+                              structFieldSep);
           os << ' ' << element.name << ';' << structFieldSep;
         }
         os << '}';
