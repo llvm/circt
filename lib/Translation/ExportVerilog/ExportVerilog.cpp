@@ -86,6 +86,8 @@ static void getTypeDims(SmallVectorImpl<int64_t> &dims, Type type,
     return getTypeDims(dims, uarray.getElementType(), loc);
   if (type.isa<InterfaceType>())
     return;
+  if (type.isa<StructType>())
+    return;
 
   int width;
   if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
@@ -164,6 +166,99 @@ static bool isZeroBitType(Type type) {
 
   // We have an open type system, so assume it is ok.
   return false;
+}
+
+/// Given a set of known nested types (those supported by this pass), strip off
+/// leading unpacked types.  This strips off portions of the type that are
+/// printed to the right of the name in verilog.
+static Type stripUnpackedTypes(Type type) {
+  return TypeSwitch<Type, Type>(type)
+      .Case<InOutType>([](InOutType inoutType) {
+        return stripUnpackedTypes(inoutType.getElementType());
+      })
+      .Case<UnpackedArrayType>([](UnpackedArrayType arrayType) {
+        return stripUnpackedTypes(arrayType.getElementType());
+      })
+      .Default([](Type type) { return type; });
+}
+
+/// Output the basic type that consists of packed and primitive types.  This is
+/// those to the left of the name in verilog. implicitIntType controls whether
+/// to print a base type for (logic) for inteters or whether the caller will
+/// have handled this (with logic, wire, reg, etc).  structFieldSep is a
+/// character to be printed between struct fields.  Pretty printed structs will
+/// likely use newline, while inline structs will use spaces
+static void printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
+                                SmallVectorImpl<size_t> &dims,
+                                bool implicitIntType, char structFieldSep) {
+  return TypeSwitch<Type, void>(type)
+      .Case<IntegerType>([&](IntegerType integerType) {
+        if (!implicitIntType)
+          os << "logic";
+        if (integerType.getWidth() != 1)
+          dims.push_back(integerType.getWidth());
+        if (!dims.empty() && !implicitIntType)
+          os << ' ';
+
+        for (auto dim : dims)
+          if (dim)
+            os << '[' << (dim - 1) << ":0]";
+          else
+            os << "/*Zero Width*/";
+      })
+      .Case<InOutType>([&](InOutType inoutType) {
+        printPackedTypeImpl(inoutType.getElementType(), os, loc, dims,
+                            implicitIntType, structFieldSep);
+      })
+      .Case<StructType>([&](StructType structType) {
+        os << "struct packed {";
+        for (auto &element : structType.getElements()) {
+          SmallVector<size_t, 8> structDims;
+          printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
+                              structDims, /*implicitIntType=*/false,
+                              structFieldSep);
+          os << ' ' << element.name << ';' << structFieldSep;
+        }
+        os << '}';
+      })
+      .Case<ArrayType>([&](ArrayType arrayType) {
+        dims.push_back(arrayType.getSize());
+        printPackedTypeImpl(arrayType.getElementType(), os, loc, dims,
+                            implicitIntType, structFieldSep);
+      })
+      .Case<InterfaceType>([](InterfaceType ifaceType) {
+        // Noop
+      })
+      .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
+        os << "<<unexpected unpacked array>>";
+        emitError(loc, "Unexpected unpacked array in packed type ")
+            << arrayType;
+      })
+      .Default([&](Type type) {
+        os << "<<invalid type>>";
+        emitError(loc, "value has an unsupported verilog type ") << type;
+      });
+}
+
+static void printPackedType(Type type, raw_ostream &os, Location loc,
+                            bool implicitIntType = true,
+                            char structFieldSep = ' ') {
+  SmallVector<size_t, 8> packedDimensions;
+  printPackedTypeImpl(type, os, loc, packedDimensions, implicitIntType,
+                      structFieldSep);
+}
+
+/// Output the unpacked array dimensions.  This is the part of the type that is
+/// to the right of the name.
+static void printUnpackedTypePostfix(Type type, raw_ostream &os) {
+  TypeSwitch<Type, void>(type)
+      .Case<InOutType>([&](InOutType inoutType) {
+        printUnpackedTypePostfix(inoutType.getElementType(), os);
+      })
+      .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
+        printUnpackedTypePostfix(arrayType.getElementType(), os);
+        os << '[' << (arrayType.getSize() - 1) << ":0]";
+      });
 }
 
 /// Return true if this is a noop cast that will emit with no syntax.
@@ -706,6 +801,9 @@ private:
   SubExprInfo visitTypeOp(ArrayGetOp op);
   SubExprInfo visitTypeOp(ArrayCreateOp op);
   SubExprInfo visitTypeOp(ArrayConcatOp op);
+  SubExprInfo visitTypeOp(StructCreateOp op);
+  SubExprInfo visitTypeOp(StructExtractOp op);
+  SubExprInfo visitTypeOp(StructInjectOp op);
 
   // Comb Dialect Operations
   using CombinationalVisitor::visitComb;
@@ -1114,6 +1212,42 @@ SubExprInfo ExprEmitter::visitComb(MuxOp op) {
     signedness = IsSigned;
 
   return {Conditional, signedness};
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(StructCreateOp op) {
+  StructType stype = op.getType().cast<StructType>();
+  os << "'{";
+  size_t i = 0;
+  llvm::interleaveComma(stype.getElements(), os,
+                        [&](const StructType::FieldInfo &field) {
+                          os << field.name << ": ";
+                          emitSubExpr(op.getOperand(i++), Selection);
+                        });
+  os << '}';
+  return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(StructExtractOp op) {
+  emitSubExpr(op.input(), Selection);
+  os << '.' << op.field();
+  return {Selection, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
+  StructType stype = op.getType().cast<StructType>();
+  os << "'{";
+  llvm::interleaveComma(stype.getElements(), os,
+                        [&](const StructType::FieldInfo &field) {
+                          os << field.name << ": ";
+                          if (field.name == op.field()) {
+                            emitSubExpr(op.newValue(), Selection);
+                          } else {
+                            emitSubExpr(op.input(), Selection);
+                            os << '.' << field.name;
+                          }
+                        });
+  os << '}';
+  return {Selection, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
@@ -1859,17 +1993,6 @@ static bool isExpressionEmittedInline(Operation *op) {
   return op->getResult(0).hasOneUse();
 }
 
-// Print out the array subscripts after a wire/port declaration.
-static void printArraySubscripts(Type type, raw_ostream &os) {
-  if (auto inout = type.dyn_cast<InOutType>())
-    return printArraySubscripts(inout.getElementType(), os);
-
-  if (auto array = type.dyn_cast<UnpackedArrayType>()) {
-    printArraySubscripts(array.getElementType(), os);
-    os << '[' << (array.getSize() - 1) << ":0]";
-  }
-}
-
 namespace {
 class NameCollector {
 public:
@@ -1981,8 +2104,8 @@ void NameCollector::collectNames(Block &block) {
       // Convert the port's type to a string and measure it.
       {
         llvm::raw_svector_ostream stringStream(typeString);
-        emitTypeDimWithSpaceIfNeeded(result.getType(), op.getLoc(),
-                                     stringStream);
+        printPackedType(stripUnpackedTypes(result.getType()), stringStream,
+                        op.getLoc());
       }
       maxTypeWidth = std::max(typeString.size(), maxTypeWidth);
     }
@@ -2004,6 +2127,9 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
   auto &valuesToEmit = collector.getValuesToEmit();
   size_t maxDeclNameWidth = collector.getMaxDeclNameWidth();
   size_t maxTypeWidth = collector.getMaxTypeWidth();
+
+  if (maxTypeWidth > 0) // add a space if any type exists
+    maxTypeWidth += 1;
 
   SmallPtrSet<Operation *, 8> ops;
 
@@ -2036,7 +2162,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       os << "()";
     } else {
       // Print out any array subscripts.
-      printArraySubscripts(type, os);
+      printUnpackedTypePostfix(type, os);
     }
 
     os << ';';
@@ -2111,11 +2237,15 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
     portTypeStrings.push_back({});
     {
       llvm::raw_svector_ostream stringStream(portTypeStrings.back());
-      emitTypeDimWithSpaceIfNeeded(port.type, module.getLoc(), stringStream);
+      printPackedType(stripUnpackedTypes(port.type), stringStream,
+                      module.getLoc());
     }
 
     maxTypeWidth = std::max(portTypeStrings.back().size(), maxTypeWidth);
   }
+
+  if (maxTypeWidth > 0) // add a space if any type exists
+    maxTypeWidth += 1;
 
   addIndent();
 
@@ -2158,13 +2288,14 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
 
     // Emit the name.
     os << getPortName(portIdx);
-    printArraySubscripts(portType, os);
+    printUnpackedTypePostfix(portType, os);
     ++portIdx;
 
     // If we have any more ports with the same types and the same direction,
     // emit them in a list on the same line.
     while (portIdx != e && portInfo[portIdx].direction == thisPortDirection &&
-           portType == portInfo[portIdx].type) {
+           stripUnpackedTypes(portType) ==
+               stripUnpackedTypes(portInfo[portIdx].type)) {
       // Don't exceed our preferred line length.
       StringRef name = getPortName(portIdx);
       if (os.tell() + 2 + name.size() - startOfLinePos >
@@ -2175,7 +2306,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
 
       // Append this to the running port decl.
       os << ", " << name;
-      printArraySubscripts(portType, os);
+      printUnpackedTypePostfix(portInfo[portIdx].type, os);
       ++portIdx;
     }
 
