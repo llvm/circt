@@ -380,13 +380,17 @@ bool firrtl::areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType) {
   return destType.getWidthlessType() == srcType.getWidthlessType();
 }
 
-/// Return the element of an array type or null
-/// top level for ODS constraint usage
-Type firrtl::getArrayElementType(Type array) {
+/// Return the element of an array type or null.  This propagates flip types.
+Type firrtl::getVectorElementType(Type array) {
+  bool isFlipped = false;
+  if (auto flip = array.dyn_cast<FlipType>()) {
+    isFlipped = true;
+    array = flip.getElementType();
+  }
   auto vectorType = array.dyn_cast<FVectorType>();
-  if (vectorType)
-    return vectorType.getElementType();
-  return Type();
+  if (!vectorType) return Type();
+  auto elementType = vectorType.getElementType();
+  return isFlipped ? FlipType::get(elementType) : elementType;
 }
 
 /// Return the passiver version of a firrtl type
