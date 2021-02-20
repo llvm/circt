@@ -1,9 +1,15 @@
 // RUN: circt-translate %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
+
+// CHECK: typedef struct
+// CHECK: } StructFoo;
+sv.typedef !rtl.struct<bar: i1, arr: !rtl.array<4 x i8>> @StructFoo
+
 // CHECK-LABEL: module M1(
 rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
   %wire42 = sv.wire : !rtl.inout<i42>
 
+  // CHECK: typedef logic [126:0] Foo127;
   sv.typedef i127 @Foo127
 
   // CHECK:      always @(posedge clock) begin

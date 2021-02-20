@@ -1317,7 +1317,12 @@ void ModuleEmitter::visitMerge(MergeOp op) {
   }
 }
 
-LogicalResult ModuleEmitter::visitSV(TypeDefOp op) {}
+LogicalResult ModuleEmitter::visitSV(TypeDefOp op) {
+  indent() << "typedef ";
+  ::printPackedType(op.type(), os, op.getLoc(), false, '\n');
+  os << ' ' << op.sym_name() << ";\n";
+  return success();
+}
 
 LogicalResult ModuleEmitter::visitSV(ConnectOp op) {
   SmallPtrSet<Operation *, 8> ops;
@@ -2356,7 +2361,8 @@ void MLIRModuleEmitter::emit(ModuleOp module) {
       ModuleEmitter(state).emitRTLModule(module);
     else if (auto module = dyn_cast<RTLModuleExternOp>(op))
       ModuleEmitter(state).emitRTLExternModule(module);
-    else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) || isa<IfDefOp>(op))
+    else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) || isa<IfDefOp>(op) ||
+             isa<TypeDefOp>(op))
       ModuleEmitter(state).emitOperation(&op);
     else if (!isa<ModuleTerminatorOp>(op))
       op.emitError("unknown operation");

@@ -7,7 +7,10 @@
 // RUN: verilator --lint-only --top-module casts %t1.sv
 // RUN: verilator --lint-only --top-module exprInlineTestIssue439 %t1.sv
 
+sv.typedef !rtl.struct<bar: i1, arr: !rtl.array<4 x i8>> @StructFoo
+
 rtl.module @B(%a: i1 { rtl.inout }) -> (i1 {rtl.name = "b"}, i1 {rtl.name = "c"}) {
+  sv.typedef i1 @Bit1
   %0 = comb.or %a, %a : i1
   %1 = comb.and %a, %a : i1
   rtl.output %0, %1 : i1, i1
