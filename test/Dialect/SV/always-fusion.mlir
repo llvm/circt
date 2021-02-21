@@ -119,3 +119,24 @@ rtl.module @alwaysff_ifdef(%arg0: i1) {
   }
   rtl.output
 }
+
+// CHECK-LABEL: rtl.module @ifdef_merge(%arg0: i1) {
+// CHECK-NEXT:    sv.ifdef "FOO"  {
+// CHECK-NEXT:      sv.alwaysff(posedge %arg0)  {
+// CHECK-NEXT:        sv.fwrite "A1"
+// CHECK-NEXT:        sv.fwrite "B1"
+// CHECK-NEXT:      }
+// CHECK-NEXT:    }
+rtl.module @ifdef_merge(%arg0: i1) {
+  sv.ifdef "FOO" {
+    sv.alwaysff(posedge %arg0) {
+      sv.fwrite "A1"
+    }
+  }
+  sv.ifdef "FOO" {
+    sv.alwaysff(posedge %arg0) {
+      sv.fwrite "B1"
+    }
+  }
+  rtl.output
+}
