@@ -170,7 +170,6 @@ rtl.module @ifdef_proc_merge(%arg0: i1) {
   rtl.output
 }
 
-
 // CHECK-LABEL: rtl.module @if_merge(%arg0: i1, %arg1: i1) {
 // CHECK-NEXT:    sv.alwaysff(posedge %arg0)  {
 // CHECK-NEXT:      %true = comb.constant(true) : i1
@@ -196,6 +195,22 @@ rtl.module @if_merge(%arg0: i1, %arg1: i1) {
     sv.if %0 {
       sv.fwrite "B1"
     }
+  }
+  rtl.output
+}
+
+
+// CHECK-LABEL: rtl.module @initial_merge(%arg0: i1) {
+// CHECK-NEXT:    sv.initial {
+// CHECK-NEXT:      sv.fwrite "A1"
+// CHECK-NEXT:      sv.fwrite "B1"
+// CHECK-NEXT:    }
+rtl.module @initial_merge(%arg0: i1) {
+  sv.initial {
+    sv.fwrite "A1"
+  }
+  sv.initial {
+    sv.fwrite "B1"
   }
   rtl.output
 }
