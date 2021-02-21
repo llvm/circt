@@ -74,9 +74,7 @@ static void mergeRegions(Region *region1, Region *region2) {
 /// Inline all regions from the second operation into the first.
 static void mergeOperationsIntoFrom(Operation *op1, Operation *op2) {
   assert(op1 != op2 && "Cannot merge an op into itself");
-  assert(op1->getNumRegions() == 2 &&
-         "alwaysff should always have two regions");
-  for (unsigned i = 0; i != 2; ++i)
+  for (size_t i = 0, e = op1->getNumRegions(); i != e; ++i)
     mergeRegions(&op1->getRegion(i), &op2->getRegion(i));
 }
 
@@ -133,6 +131,7 @@ void RTLCleanupPass::runOnGraphRegion(Region &region, bool shallow) {
   // merge in to.
   DenseSet<Operation *, SimpleOperationInfo> alwaysFFOpsSeen;
   llvm::SmallDenseMap<Attribute, Operation *, 4> ifdefOps;
+  sv::InitialOp initialOpSeen;
 
   for (Operation &op : llvm::make_early_inc_range(body)) {
     // Recursively process any regions in the op before we visit it.
@@ -177,6 +176,24 @@ void RTLCleanupPass::runOnGraphRegion(Region &region, bool shallow) {
       // simplifications.
       runOnGraphRegion(ifdefOp->getRegion(0), /*shallow=*/true);
       runOnGraphRegion(ifdefOp->getRegion(1), /*shallow=*/true);
+      continue;
+    }
+
+    // Merge initial ops anywhere in the module.
+    if (auto initialOp = dyn_cast<sv::InitialOp>(op)) {
+      if (!initialOpSeen) {
+        initialOpSeen = initialOp;
+        continue;
+      }
+
+      mergeOperationsIntoFrom(initialOp, initialOpSeen);
+      initialOpSeen->erase();
+      initialOpSeen = initialOp;
+      anythingChanged = true;
+
+      // Reprocess the merged body because this may have uncovered other
+      // simplifications.
+      runOnGraphRegion(initialOp->getRegion(0), /*shallow=*/true);
       continue;
     }
   }
