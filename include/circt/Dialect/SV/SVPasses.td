@@ -15,33 +15,15 @@
 
 include "mlir/Pass/PassBase.td"
 
-def AlwaysFusion : Pass<"sv-always-fusion", "rtl::RTLModuleOp"> {
-  let summary = "Combine AlwaysFF blocks with the same predicate";
+def RTLCleanup : Pass<"rtl-cleanup", "rtl::RTLModuleOp"> {
+  let summary = "Cleanup transformations for operations in rtl.module bodies";
   let description = [{
-      This pass finds all AlwaysFF operations with the same condition, and
-      combines them in to a single operation. For example:
-      ```mlir
-      // Input
-      rtl.module() {
-        sv.alwaysff(posedge %clock)  {
-          sv.passign %counter, %1 : i8
-        }
-        sv.alwaysff(posedge %clock)  {
-          sv.passign %param, %2 : i16
-        }
-      }
-  
-      // Output
-      rtl.module() {
-        sv.alwaysff(posedge %clock)  {
-          sv.passign %counter, %1 : i8
-          sv.passign %param, %2 : i16
-        }
-      }
-      ```
+      This pass merges sv.alwaysff operations with the same condition, sv.ifdef
+      nodes with the same condition, and perform other cleanups for the IR.
+      This is a good thing to run before Verilog emission.
   }];
 
-  let constructor = "circt::sv::createAlwaysFusionPass()";
+  let constructor = "circt::sv::createRTLCleanupPass()";
 }
 
 #endif // CIRCT_DIALECT_SV_SVPASSES

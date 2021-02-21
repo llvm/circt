@@ -24,7 +24,7 @@ class OperationPass;
 namespace circt {
 namespace sv {
 
-std::unique_ptr<mlir::Pass> createAlwaysFusionPass();
+std::unique_ptr<mlir::Pass> createRTLCleanupPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

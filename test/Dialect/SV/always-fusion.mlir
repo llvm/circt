@@ -1,4 +1,4 @@
-// RUN: circt-opt -sv-always-fusion %s | FileCheck %s
+// RUN: circt-opt -rtl-cleanup %s | FileCheck %s
 
 //CHECK-LABEL: rtl.module @alwaysff_basic(%arg0: i1, %arg1: i1) {
 //CHECK-NEXT:   sv.alwaysff(posedge %arg0)  {
