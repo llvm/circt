@@ -459,32 +459,63 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
       return failure();
   }
 
-  // Check that result types are consistent with the referenced module.
-  auto expectedTypes = getModuleType(referencedModule).getResults();
-  auto numResults = op->getNumResults();
+  // If the referenced moudle is internal, check that input and result types are
+  // consistent with the referenced module.
+  if (isa<RTLModuleOp>(referencedModule)) {
+    // Check operand types first.
+    auto numOperands = op->getNumOperands();
+    auto expectedOperandTypes = getModuleType(referencedModule).getInputs();
 
-  if (expectedTypes.size() != numResults) {
-    auto diag = op.emitOpError()
-                << "has a wrong number of results; expected "
-                << expectedTypes.size() << " but got " << numResults;
-    diag.attachNote(referencedModule->getLoc())
-        << "original module declared here";
-
-    return failure();
-  }
-
-  for (size_t i = 0; i != numResults; i++) {
-    auto expectedType = expectedTypes[i];
-    auto resultType = op.getResultTypes()[i];
-    if (resultType != expectedType && !resultType.isa<NoneType>() &&
-        !expectedType.isa<NoneType>()) {
+    if (expectedOperandTypes.size() != numOperands) {
       auto diag = op.emitOpError()
-                  << "#" << i << " result type must be " << expectedType
-                  << ", but got " << resultType;
-
+                  << "has a wrong number of operands; expected "
+                  << expectedOperandTypes.size() << " but got " << numOperands;
       diag.attachNote(referencedModule->getLoc())
           << "original module declared here";
+
       return failure();
+    }
+
+    for (size_t i = 0; i != numOperands; ++i) {
+      auto expectedType = expectedOperandTypes[i];
+      auto operandType = op.getOperand(i).getType();
+      if (operandType != expectedType) {
+        auto diag = op.emitOpError()
+                    << "#" << i << " operand type must be " << expectedType
+                    << ", but got " << operandType;
+
+        diag.attachNote(referencedModule->getLoc())
+            << "original module declared here";
+        return failure();
+      }
+    }
+
+    // Checke result types.
+    auto numResults = op->getNumResults();
+    auto expectedResultTypes = getModuleType(referencedModule).getResults();
+
+    if (expectedResultTypes.size() != numResults) {
+      auto diag = op.emitOpError()
+                  << "has a wrong number of results; expected "
+                  << expectedResultTypes.size() << " but got " << numResults;
+      diag.attachNote(referencedModule->getLoc())
+          << "original module declared here";
+
+      return failure();
+    }
+
+    for (size_t i = 0; i != numResults; ++i) {
+      auto expectedType = expectedResultTypes[i];
+      auto resultType = op.getResult(i).getType();
+      if (resultType != expectedType) {
+        auto diag = op.emitOpError()
+                    << "#" << i << " result type must be " << expectedType
+                    << ", but got " << resultType;
+
+        diag.attachNote(referencedModule->getLoc())
+            << "original module declared here";
+        return failure();
+      }
     }
   }
 

@@ -166,3 +166,29 @@ rtl.module @test() -> () {
   %0 = rtl.instance "test" @f() : () -> (i1)
   rtl.output
 }
+
+// -----
+
+// expected-note @+1 {{original module declared here}}
+rtl.module @empty() -> () {
+  rtl.output
+}
+
+rtl.module @test(%a: i1) -> () {
+  // expected-error @+1 {{'rtl.instance' op has a wrong number of operands; expected 0 but got 1}}
+  rtl.instance "test" @empty(%a) : (i1) -> ()
+  rtl.output
+}
+
+// -----
+
+// expected-note @+1 {{original module declared here}}
+rtl.module @f(%a: i1) -> () {
+  rtl.output
+}
+
+rtl.module @test(%a: i2) -> () {
+  // expected-error @+1 {{'rtl.instance' op #0 operand type must be 'i1', but got 'i2'}}
+  rtl.instance "test" @f(%a) : (i2) -> ()
+  rtl.output
+}
