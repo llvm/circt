@@ -84,7 +84,7 @@ namespace {
 struct AlwaysFusionPass : public AlwaysFusionBase<AlwaysFusionPass> {
   void runOnOperation() override;
 
-  void runOnRegionBlock(Block &body);
+  void runOnRegion(Region &region);
 
 private:
   bool anythingChanged;
@@ -95,7 +95,7 @@ void AlwaysFusionPass::runOnOperation() {
   // Keeps track if anything changed during this pass, used to determine if
   // the analyses were preserved.
   anythingChanged = false;
-  runOnRegionBlock(*getOperation().getBodyBlock());
+  runOnRegion(getOperation().getBody());
 
   // If we did not change anything in the graph mark all analysis as
   // preserved.
@@ -103,29 +103,64 @@ void AlwaysFusionPass::runOnOperation() {
     markAllAnalysesPreserved();
 }
 
-void AlwaysFusionPass::runOnRegionBlock(Block &body) {
+void AlwaysFusionPass::runOnRegion(Region &region) {
+  if (region.getBlocks().size() != 1)
+    return;
+  Block &body = region.front();
+
   // A set of operations in the current block which are mergable. Any
   // operation in this set is a candidate for another similar operation to
   // merge in to.
   DenseSet<Operation *, SimpleOperationInfo> alwaysFFOpsSeen;
+  llvm::SmallDenseMap<Attribute, Operation *, 4> ifdefOps;
+
   for (Operation &op : llvm::make_early_inc_range(body)) {
     // Recursively process any regions in the op before we visit it.
-    for (size_t i = 0, e = op.getNumRegions(); i != e; ++i) {
-      if (op.getRegion(i).getBlocks().size() == 1)
-        runOnRegionBlock(op.getRegion(i).front());
+    for (size_t i = 0, e = op.getNumRegions(); i != e; ++i)
+      runOnRegion(op.getRegion(i));
+
+    // Merge alwaysff operations by hashing them to check to see if we've
+    // already encountered one.  If so, merge them and reprocess the body.
+    if (auto alwaysOp = dyn_cast<sv::AlwaysFFOp>(op)) {
+      // Merge identical alwaysff's together and delete the old operation.
+      auto itAndInserted = alwaysFFOpsSeen.insert(alwaysOp);
+      if (itAndInserted.second)
+        continue;
+      auto *existingAlways = *itAndInserted.first;
+
+      mergeOperations(existingAlways, alwaysOp);
+      alwaysOp.erase();
+      anythingChanged = true;
+
+      // Reprocess the merged body because this may have uncovered other
+      // simplifications.
+      runOnRegion(existingAlways->getRegion(0));
+      runOnRegion(existingAlways->getRegion(1));
+      continue;
     }
 
-    if (auto alwaysOp = dyn_cast<sv::AlwaysFFOp>(op)) {
-      // Check if we have encountered an equivalent operation already.  If we
-      // have, merge them together and delete the old operation.
-      auto itAndInserted = alwaysFFOpsSeen.insert(alwaysOp);
-      if (!itAndInserted.second) {
-        // Merge with a similar alwaysff if we already have one.
-        mergeOperations(*itAndInserted.first, alwaysOp);
-        alwaysOp.erase();
-        anythingChanged = true;
+    // Merge graph ifdefs anywhere in the module.
+    if (auto ifdefOp = dyn_cast<sv::IfDefOp>(op)) {
+      auto *&entry = ifdefOps[ifdefOp.condAttr()];
+      if (!entry) {
+        entry = ifdefOp;
+        continue;
       }
+
+      mergeOperations(entry, ifdefOp);
+      ifdefOp.erase();
+      anythingChanged = true;
+
+      // TODO: Reprocess the merged body because this may have uncovered other
+      // simplifications.
+      runOnRegion(entry->getRegion(0));
+      runOnRegion(entry->getRegion(1));
+      continue;
     }
+
+    // TODO: Merge procedural ifdef's with neighboring ones of the same
+    // condition.
+    // TODO: Merge procedural if's.
   }
 }
 
