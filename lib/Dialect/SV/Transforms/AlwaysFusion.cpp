@@ -12,10 +12,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "SVPassDetail.h"
-#include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
-#include "mlir/IR/Visitors.h"
 
 using namespace circt;
 using namespace sv;
@@ -83,49 +81,32 @@ static void mergeOperations(Operation *op1, Operation *op2) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-
 struct AlwaysFusionPass : public AlwaysFusionBase<AlwaysFusionPass> {
   void runOnOperation() override;
 };
-
 } // end anonymous namespace
 
 void AlwaysFusionPass::runOnOperation() {
-  auto *op = getOperation();
+  auto *moduleBody = getOperation().getBodyBlock();
 
   // Keeps track if anything changed during this pass, used to determine if
   // the analyses were preserved.
   bool graphChanged = false;
 
-  auto kindInterface = dyn_cast<mlir::RegionKindInterface>(op);
-  for (unsigned i = 0; i < op->getNumRegions(); ++i) {
-    // If the operation does not implement the region kind interface, all of
-    // its regions are implicitly regular SSACFG region. Since we are blindly
-    // combining alwaysff blocks, make sure they are in a graph region.
-    if (!kindInterface || kindInterface.getRegionKind(i) == RegionKind::SSACFG)
-      continue;
-
-    if (op->getRegion(i).empty())
-      continue;
-
-    // Graph regions only have 1 block.
-    auto &block = op->getRegion(i).front();
-
-    // A set of operations in the current block which are mergable. Any
-    // operation in this set is a candidate for another similar operation to
-    // merge in to.
-    DenseSet<Operation *, SimpleOperationInfo> foundOps;
-    for (sv::AlwaysFFOp alwaysOp :
-         llvm::make_early_inc_range(block.getOps<sv::AlwaysFFOp>())) {
-      // check if we have encountered an equivalent operation already.  If we
-      // have, merge them together and delete the old operation.
-      auto itAndInserted = foundOps.insert(alwaysOp);
-      if (!itAndInserted.second) {
-        // Merge with a similar alwaysff
-        mergeOperations(*itAndInserted.first, alwaysOp);
-        alwaysOp.erase();
-        graphChanged = true;
-      }
+  // A set of operations in the current block which are mergable. Any
+  // operation in this set is a candidate for another similar operation to
+  // merge in to.
+  DenseSet<Operation *, SimpleOperationInfo> foundOps;
+  for (sv::AlwaysFFOp alwaysOp :
+       llvm::make_early_inc_range(moduleBody->getOps<sv::AlwaysFFOp>())) {
+    // Check if we have encountered an equivalent operation already.  If we
+    // have, merge them together and delete the old operation.
+    auto itAndInserted = foundOps.insert(alwaysOp);
+    if (!itAndInserted.second) {
+      // Merge with a similar alwaysff
+      mergeOperations(*itAndInserted.first, alwaysOp);
+      alwaysOp.erase();
+      graphChanged = true;
     }
   }
 
