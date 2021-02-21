@@ -248,14 +248,3 @@ rtl.module @issue439(%in1: i1, %in2: i1) {
     sv.fwrite "Bye %x\n"(%merged) : i1
   }
 }
-
-rtl.module.extern @Foo() -> ()
-
-// CHECK-LABEL: module issue625(
-rtl.module @issue625() -> (%x: i1) {
-  %1 = comb.constant(1 : i1) : i1
-  %o = comb.add %1, %1 {name="Foo"} : i1
-  // CHECK:  wire Foo_0 = 1'h1 + 1'h1;
-  sv.fwrite "%d"(%o) : i1
-  rtl.output %o : i1
-}
