@@ -264,9 +264,8 @@ namespace {
 /// This is the base class for all of the Verilog Emitter components.
 class VerilogEmitterBase {
 public:
-  explicit VerilogEmitterBase(VerilogEmitterState &state,
-                              VerilogEmitterBase *parentScope)
-      : state(state), os(state.os), parentScope(parentScope) {}
+  explicit VerilogEmitterBase(VerilogEmitterState &state)
+      : state(state), os(state.os) {}
 
   InFlightDiagnostic emitError(Operation *op, const Twine &message) {
     state.encounteredError = true;
@@ -289,72 +288,12 @@ public:
   /// The stream to emit to.
   raw_ostream &os;
 
-  using ValueOrOp = PointerUnion<Value, Operation *>;
-  StringRef addName(ValueOrOp valueOrOp, StringRef name);
-  StringRef addName(ValueOrOp valueOrOp, StringAttr nameAttr) {
-    return addName(valueOrOp, nameAttr ? nameAttr.getValue() : "");
-  }
-
-  StringRef getName(Value value) { return getName(ValueOrOp(value)); }
-  StringRef getName(ValueOrOp valueOrOp) {
-    auto *entry = nameTable[valueOrOp];
-    assert(entry && "value expected a name but doesn't have one");
-    return entry->getKey();
-  }
-
-  /// Return the location information as a (potentially empty) string.
-  static std::string
-  getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops);
-
-  /// If we have location information for any of the specified operations,
-  /// aggregate it together and print a pretty comment specifying where the
-  /// operations came from.  In any case, print a newline.
-  void emitLocationInfoAndNewLine(const SmallPtrSet<Operation *, 8> &ops);
-
-  /// Find and add to `usedNames` all of the names we should avoid.
-  void registerIdentifiers(Block &b);
-
-protected:
-  /// nameTable keeps track of mappings from Value's and operations (for
-  /// instances) to their string table entry.
-  llvm::DenseMap<ValueOrOp, llvm::StringMapEntry<llvm::NoneType> *> nameTable;
-
-  llvm::StringSet<> usedNames;
-  size_t nextGeneratedNameID = 0;
-
-  bool isNameUsed(StringRef name) const {
-    if (usedNames.contains(name))
-      return true;
-    if (parentScope)
-      return parentScope->isNameUsed(name);
-    return false;
-  }
-
-  VerilogEmitterBase *parentScope;
-
 private:
   VerilogEmitterBase(const VerilogEmitterBase &) = delete;
   void operator=(const VerilogEmitterBase &) = delete;
 };
 
 } // end anonymous namespace
-
-/// Add every symbol `usedNames`. End recursion when we encounter an op which
-/// enters a new name scope.
-void VerilogEmitterBase::registerIdentifiers(Block &b) {
-  for (Operation &op : b) {
-    auto symbol =
-        op.getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
-    if (symbol)
-      usedNames.insert(symbol.getValue());
-
-    if (isa<RTLModuleOp>(op) || op.hasTrait<ProceduralRegion>())
-      continue;
-    for (Region &region : op.getRegions())
-      for (Block &block : region.getBlocks())
-        registerIdentifiers(block);
-  }
-}
 
 //===----------------------------------------------------------------------===//
 // ModuleEmitter
@@ -367,10 +306,10 @@ class ModuleEmitter : public VerilogEmitterBase,
                       public sv::Visitor<ModuleEmitter, LogicalResult> {
 
 public:
-  explicit ModuleEmitter(VerilogEmitterState &state,
-                         VerilogEmitterBase *parentScope)
-      : VerilogEmitterBase(state, parentScope) {}
+  explicit ModuleEmitter(VerilogEmitterState &state, ModuleEmitter *parentScope)
+      : VerilogEmitterBase(state), parentScope(parentScope) {}
 
+  void emitMLIRModule(ModuleOp module);
   void emitRTLModule(RTLModuleOp module);
   void emitRTLExternModule(RTLModuleExternOp module);
   void emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
@@ -420,11 +359,52 @@ public:
   LogicalResult visitSV(AssignInterfaceSignalOp op);
   void emitOperation(Operation *op);
 
+  using ValueOrOp = PointerUnion<Value, Operation *>;
+
   void collectNamesEmitDecls(Block &block);
+  StringRef addName(ValueOrOp valueOrOp, StringRef name);
+  StringRef addName(ValueOrOp valueOrOp, StringAttr nameAttr) {
+    return addName(valueOrOp, nameAttr ? nameAttr.getValue() : "");
+  }
+
+  StringRef getName(Value value) { return getName(ValueOrOp(value)); }
+  StringRef getName(ValueOrOp valueOrOp) {
+    auto *entry = nameTable[valueOrOp];
+    assert(entry && "value expected a name but doesn't have one");
+    return entry->getKey();
+  }
+
+  /// Return the location information as a (potentially empty) string.
+  std::string getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops);
+
+  /// If we have location information for any of the specified operations,
+  /// aggregate it together and print a pretty comment specifying where the
+  /// operations came from.  In any case, print a newline.
+  void emitLocationInfoAndNewLine(const SmallPtrSet<Operation *, 8> &ops);
+
+  /// nameTable keeps track of mappings from Value's and operations (for
+  /// instances) to their string table entry.
+  llvm::DenseMap<ValueOrOp, llvm::StringMapEntry<llvm::NoneType> *> nameTable;
 
   /// outputNames tracks the uniquified names for output ports, which don't have
   /// a Value or Op representation.
   SmallVector<StringRef> outputNames;
+
+  llvm::StringSet<> usedNames;
+  size_t nextGeneratedNameID = 0;
+
+  /// Check if a name is in use in the local scope or in any scope higher in the
+  /// scope hierarchy.
+  bool isNameUsed(StringRef name) const {
+    if (usedNames.contains(name))
+      return true;
+    if (parentScope)
+      return parentScope->isNameUsed(name);
+    return false;
+  }
+
+  /// Find and add to `usedNames` all of the names we should avoid.
+  void registerIdentifiers(Block &b);
 
   /// This set keeps track of all of the expression nodes that need to be
   /// emitted as standalone wire declarations.  This can happen because they are
@@ -435,9 +415,30 @@ public:
   /// the top of the module to avoid "use before def" issues in the generated
   /// verilog.  This can happen for cyclic modules.
   SmallPtrSet<Operation *, 16> outOfLineExpresssionDecls;
+
+private:
+  // Pointer to module emitter for parent scope.
+  ModuleEmitter *parentScope;
 };
 
 } // end anonymous namespace
+
+/// Add every symbol `usedNames`. End recursion when we encounter an op which
+/// enters a new name scope.
+void ModuleEmitter::registerIdentifiers(Block &b) {
+  for (Operation &op : b) {
+    auto symbol =
+        op.getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
+    if (symbol)
+      usedNames.insert(symbol.getValue());
+
+    if (isa<RTLModuleOp>(op) || op.hasTrait<ProceduralRegion>())
+      continue;
+    for (Region &region : op.getRegions())
+      for (Block &block : region.getBlocks())
+        registerIdentifiers(block);
+  }
+}
 
 /// Add the specified name to the name table, auto-uniquing the name if
 /// required.  If the name is empty, then this creates a unique temp name.
@@ -446,7 +447,7 @@ public:
 /// also be an op for an instance, since we want the instances op uniqued and
 /// tracked.  It can also be null for things like outputs which are not tracked
 /// in the nameTable.
-StringRef VerilogEmitterBase::addName(ValueOrOp valueOrOp, StringRef name) {
+StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
   if (name.empty())
     name = "_T";
 
@@ -491,6 +492,7 @@ StringRef VerilogEmitterBase::addName(ValueOrOp valueOrOp, StringRef name) {
   if (!reservedWords.count(name)) {
     if (!isNameUsed(name)) {
       auto insertResult = usedNames.insert(name);
+      assert(insertResult.second && "Name is already used despite check.");
       if (valueOrOp)
         nameTable[valueOrOp] = &*insertResult.first;
       return insertResult.first->getKey();
@@ -511,6 +513,7 @@ StringRef VerilogEmitterBase::addName(ValueOrOp valueOrOp, StringRef name) {
     if (!reservedWords.count(name)) {
       if (!isNameUsed(name)) {
         auto insertResult = usedNames.insert(name);
+        assert(insertResult.second && "Name is already used despite check.");
         if (valueOrOp)
           nameTable[valueOrOp] = &*insertResult.first;
         return insertResult.first->getKey();
@@ -523,8 +526,8 @@ StringRef VerilogEmitterBase::addName(ValueOrOp valueOrOp, StringRef name) {
 }
 
 /// Return the location information as a (potentially empty) string.
-std::string VerilogEmitterBase::getLocationInfoAsString(
-    const SmallPtrSet<Operation *, 8> &ops) {
+std::string
+ModuleEmitter::getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
   std::string resultStr;
   llvm::raw_string_ostream sstr(resultStr);
 
@@ -619,7 +622,7 @@ std::string VerilogEmitterBase::getLocationInfoAsString(
 /// If we have location information for any of the specified operations,
 /// aggregate it together and print a pretty comment specifying where the
 /// operations came from.  In any case, print a newline.
-void VerilogEmitterBase::emitLocationInfoAndNewLine(
+void ModuleEmitter::emitLocationInfoAndNewLine(
     const SmallPtrSet<Operation *, 8> &ops) {
   auto locInfo = getLocationInfoAsString(ops);
   if (!locInfo.empty())
@@ -2101,12 +2104,28 @@ void ModuleEmitter::emitOperation(Operation *op) {
   indent() << "unknown MLIR operation " << op->getName().getStringRef() << "\n";
 }
 
+void ModuleEmitter::emitMLIRModule(ModuleOp module) {
+  // Add symbols to list of used names.
+  registerIdentifiers(*module.getBody());
+
+  for (auto &op : *module.getBody()) {
+    if (auto module = dyn_cast<RTLModuleOp>(op))
+      ModuleEmitter(state, this).emitRTLModule(module);
+    else if (auto module = dyn_cast<RTLModuleExternOp>(op))
+      ModuleEmitter(state, this).emitRTLExternModule(module);
+    else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) || isa<IfDefOp>(op))
+      ModuleEmitter(state, this).emitOperation(&op);
+    else if (!isa<ModuleTerminatorOp>(op))
+      op.emitError("unknown operation");
+  }
+}
+
 void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
   os << "// external module " << module.getName() << "\n\n";
 }
 
 void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
-  // Add names to usedNames.
+  // Add symbols to list of used names.
   registerIdentifiers(*module.getBodyBlock());
 
   // Add all the ports to the name table.
@@ -2242,36 +2261,9 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
 // MLIRModuleEmitter
 //===----------------------------------------------------------------------===//
 
-namespace {
-class MLIRModuleEmitter : public VerilogEmitterBase {
-public:
-  explicit MLIRModuleEmitter(VerilogEmitterState &state)
-      : VerilogEmitterBase(state, nullptr) {}
-
-  void emit(ModuleOp module);
-};
-
-} // end anonymous namespace
-
-void MLIRModuleEmitter::emit(ModuleOp module) {
-  // Add identifers to usedNames.
-  registerIdentifiers(*module.getBody());
-
-  for (auto &op : *module.getBody()) {
-    if (auto module = dyn_cast<RTLModuleOp>(op))
-      ModuleEmitter(state, this).emitRTLModule(module);
-    else if (auto module = dyn_cast<RTLModuleExternOp>(op))
-      ModuleEmitter(state, this).emitRTLExternModule(module);
-    else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) || isa<IfDefOp>(op))
-      ModuleEmitter(state, this).emitOperation(&op);
-    else if (!isa<ModuleTerminatorOp>(op))
-      op.emitError("unknown operation");
-  }
-}
-
 LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   VerilogEmitterState state(os);
-  MLIRModuleEmitter(state).emit(module);
+  ModuleEmitter(state, nullptr).emitMLIRModule(module);
   return failure(state.encounteredError);
 }
 
