@@ -499,6 +499,12 @@ public:
     return false;
   }
 
+  /// Mapping of types to the typedef which provides an alias to that type.
+  llvm::DenseMap<Type, TypeDefOp> typesToTypeDef;
+
+  /// If a typedef exists in this or a parent namespace, return it.
+  Optional<TypeDefOp> getTypeDef(Type t);
+
   /// Find and add to `usedNames` all of the names we should avoid.
   void registerIdentifiers(Block &b);
 
@@ -519,6 +525,15 @@ private:
 
 } // end anonymous namespace
 
+Optional<TypeDefOp> ModuleEmitter::getTypeDef(Type t) {
+  auto tdefIt = typesToTypeDef.find(t);
+  if (tdefIt != typesToTypeDef.end())
+    return tdefIt->second;
+  if (parentScope == nullptr)
+    return Optional<TypeDefOp>();
+  return parentScope->getTypeDef(t);
+}
+
 /// Add every symbol `usedNames`. End recursion when we encounter an op which
 /// enters a new name scope.
 void ModuleEmitter::registerIdentifiers(Block &b) {
@@ -527,6 +542,8 @@ void ModuleEmitter::registerIdentifiers(Block &b) {
         op.getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
     if (symbol)
       usedNames.insert(symbol.getValue());
+    if (TypeDefOp defOp = dyn_cast<TypeDefOp>(op))
+      typesToTypeDef.insert(std::make_pair(defOp.type(), defOp));
 
     if (isa<RTLModuleOp>(op) || op.hasTrait<ProceduralRegion>())
       continue;
@@ -2144,7 +2161,10 @@ void NameCollector::collectNames(Block &block) {
           std::max(getVerilogDeclWord(&op).size(), maxDeclNameWidth);
 
       // Convert the port's type to a string and measure it.
-      {
+      Optional<TypeDefOp> tdef = moduleEmitter.getTypeDef(result.getType());
+      if (tdef) {
+        typeString = tdef->sym_name();
+      } else {
         llvm::raw_svector_ostream stringStream(typeString);
         printPackedType(stripUnpackedTypes(result.getType()), stringStream,
                         op.getLoc());
@@ -2297,7 +2317,10 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
 
     // Convert the port's type to a string and measure it.
     portTypeStrings.push_back({});
-    {
+    Optional<TypeDefOp> tdef = getTypeDef(port.type);
+    if (tdef) {
+      portTypeStrings.back() = tdef->sym_name();
+    } else {
       llvm::raw_svector_ostream stringStream(portTypeStrings.back());
       printPackedType(stripUnpackedTypes(port.type), stringStream,
                       module.getLoc());

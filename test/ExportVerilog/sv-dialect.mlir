@@ -5,9 +5,15 @@
 // CHECK: } StructFoo;
 sv.typedef !rtl.struct<bar: i1, arr: !rtl.array<4 x i8>> @StructFoo
 
+// CHECK: typedef logic [7:0] Byte;
+sv.typedef i8 @Byte
+
 // CHECK-LABEL: module M1(
-rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
+rtl.module @M1(%clock : i1, %cond : i1, %val : i8) -> (%out: !rtl.struct<b: i8>) {
   %wire42 = sv.wire : !rtl.inout<i42>
+
+  %byte = rtl.struct_create (%val) : !rtl.struct<b: i8>
+  sv.fwrite "%d\n"(%byte) : !rtl.struct<b: i8>
 
   // CHECK: typedef logic [126:0] Foo127;
   sv.typedef i127 @Foo127
@@ -162,6 +168,8 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     // CHECK-NEXT: fwrite(32'h80000002, "%d", {{.+}});
     // CHECK-NEXT: `endif
   }
+
+  rtl.output %byte : !rtl.struct<b: i8>
 }
 
 // CHECK-LABEL: module Aliasing(
@@ -178,8 +186,8 @@ rtl.module @Aliasing(%a : !rtl.inout<i42>, %b : !rtl.inout<i42>,
 rtl.module @reg(%in4: i4, %in8: i8) -> (%a: i8, %b: i8) {
   // CHECK-LABEL: module reg(
   // CHECK-NEXT:   input  [3:0] in4,
-  // CHECK-NEXT:   input  [7:0] in8,
-  // CHECK-NEXT:   output [7:0] a, b);
+  // CHECK-NEXT:   input  Byte  in8,
+  // CHECK-NEXT:   output Byte  a, b);
 
   // CHECK-EMPTY:
   // CHECK-NEXT: reg [7:0]       myReg;
