@@ -219,9 +219,10 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op) {
                                const char *defineFalse = nullptr) {
     std::string define = "`define ";
     if (!defineFalse) {
-      b.create<sv::IfDefOp>(guard, [&]() { emitString(define + defineTrue); });
+      b.create<sv::IfDefProceduralOp>(
+          guard, [&]() { emitString(define + defineTrue); });
     } else {
-      b.create<sv::IfDefOp>(
+      b.create<sv::IfDefProceduralOp>(
           guard, [&]() { emitString(define + defineTrue); },
           [&]() { emitString(define + defineFalse); });
     }
@@ -256,7 +257,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op) {
 
   emitString("\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
 
-  b.create<sv::IfDefOp>(
+  b.create<sv::IfDefProceduralOp>(
       "RANDOMIZE",
       [&]() {
         emitGuardedDefine(
@@ -1255,7 +1256,7 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
       emitRandomizePrologIfNeeded();
       auto type = reg.getType().dyn_cast<rtl::InOutType>().getElementType();
 
-      builder->create<sv::IfDefOp>("RANDOMIZE_REG_INIT", [&]() {
+      builder->create<sv::IfDefProceduralOp>("RANDOMIZE_REG_INIT", [&]() {
         if (resetSignal) {
           auto one = builder->create<comb::ConstantOp>(APInt(1, 1));
           auto notResetValue = builder->create<comb::XorOp>(resetSignal, one);
@@ -1398,7 +1399,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     builder->create<sv::InitialOp>([&]() {
       emitRandomizePrologIfNeeded();
 
-      builder->create<sv::IfDefOp>("RANDOMIZE_MEM_INIT", [&]() {
+      builder->create<sv::IfDefProceduralOp>("RANDOMIZE_MEM_INIT", [&]() {
         if (depth == 1) { // Don't emit a for loop for one element.
           for (Value reg : regs) {
             auto type = sv::getInOutElementType(reg.getType());
@@ -2109,8 +2110,8 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
   return success();
 }
 
-// Printf is a macro op that lowers to an sv.ifdef, an sv.if, and an sv.fwrite
-// all nested together.
+// Printf is a macro op that lowers to an sv.ifdef.procedural, an sv.if,
+// and an sv.fwrite all nested together.
 LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   auto clock = getLoweredValue(op.clock());
   auto cond = getLoweredValue(op.cond());
@@ -2132,7 +2133,7 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   // Emit this into an "sv.always posedge" body.
   builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, [&]() {
     // Emit an "#ifndef SYNTHESIS" guard into the always block.
-    builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
+    builder->create<sv::IfDefProceduralOp>("!SYNTHESIS", [&]() {
       // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
       Value ifCond =
           builder->create<sv::TextualValueOp>(cond.getType(), "`PRINTF_COND_");
@@ -2159,7 +2160,7 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
   // Emit this into an "sv.always posedge" body.
   builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, [&]() {
     // Emit an "#ifndef SYNTHESIS" guard into the always block.
-    builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
+    builder->create<sv::IfDefProceduralOp>("!SYNTHESIS", [&]() {
       // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
       Value ifCond =
           builder->create<sv::TextualValueOp>(cond.getType(), "`STOP_COND_");
@@ -2249,23 +2250,24 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
   if (inoutValues.size() < 2)
     return success();
 
-  // In the non-synthesis case, we emit a SystemVerilog alias statement.
   builder->create<sv::IfDefOp>(
-      "!SYNTHESIS", [&]() { builder->create<sv::AliasOp>(inoutValues); });
+      "!SYNTHESIS",
+      // In the non-synthesis case, we emit a SystemVerilog alias statement.
+      [&]() { builder->create<sv::AliasOp>(inoutValues); },
 
-  // If we're doing synthesis, we emit an all-pairs assign complex.
-  builder->create<sv::IfDefOp>("SYNTHESIS", [&]() {
-    // Lower the
-    SmallVector<Value, 4> values;
-    for (size_t i = 0, e = inoutValues.size(); i != e; ++i)
-      values.push_back(builder->createOrFold<sv::ReadInOutOp>(inoutValues[i]));
+      // If we're doing synthesis, we emit an all-pairs assign complex.
+      [&]() {
+        SmallVector<Value, 4> values;
+        for (size_t i = 0, e = inoutValues.size(); i != e; ++i)
+          values.push_back(
+              builder->createOrFold<sv::ReadInOutOp>(inoutValues[i]));
 
-    for (size_t i1 = 0, e = inoutValues.size(); i1 != e; ++i1) {
-      for (size_t i2 = 0; i2 != e; ++i2)
-        if (i1 != i2)
-          builder->create<sv::ConnectOp>(inoutValues[i1], values[i2]);
-    }
-  });
+        for (size_t i1 = 0, e = inoutValues.size(); i1 != e; ++i1) {
+          for (size_t i2 = 0; i2 != e; ++i2)
+            if (i1 != i2)
+              builder->create<sv::ConnectOp>(inoutValues[i1], values[i2]);
+        }
+      });
 
   return success();
 }

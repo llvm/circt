@@ -253,7 +253,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %b1 = firrtl.stdIntCast %b : (i4) -> !firrtl.uint<4>
 
     // CHECK-NEXT: sv.always posedge %clock {
-    // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
+    // CHECK-NEXT:   sv.ifdef.procedural "!SYNTHESIS" {
     // CHECK-NEXT:     [[TV:%.+]] = sv.textual_value "`PRINTF_COND_" : i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and [[TV]], %reset
     // CHECK-NEXT:     sv.if [[AND]] {
@@ -291,7 +291,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %resetc = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
 
     // CHECK-NEXT: sv.always posedge %clock1 {
-    // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
+    // CHECK-NEXT:   sv.ifdef.procedural "!SYNTHESIS" {
     // CHECK-NEXT:     %0 = sv.textual_value "`STOP_COND_" : i1
     // CHECK-NEXT:     %1 = comb.and %0, %reset : i1
     // CHECK-NEXT:     sv.if %1 {
@@ -302,7 +302,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     firrtl.stop %clock1c, %resetc, 42
 
     // CHECK-NEXT: sv.always posedge %clock2 {
-    // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
+    // CHECK-NEXT:   sv.ifdef.procedural "!SYNTHESIS" {
     // CHECK-NEXT:     %0 = sv.textual_value "`STOP_COND_" : i1
     // CHECK-NEXT:     %1 = comb.and %0, %reset : i1
     // CHECK-NEXT:     sv.if %1 {
@@ -412,8 +412,7 @@ module attributes {firrtl.mainModule = "Simple"} {
   // CHECK:                          %c1: !rtl.inout<i1>) -> (%outClock: i1) {
   // CHECK-NEXT:   sv.ifdef "!SYNTHESIS"  {
   // CHECK-NEXT:     sv.alias %a1, %b1, %c1 : !rtl.inout<i1>
-  // CHECK-NEXT:   }
-  // CHECK-NEXT:   sv.ifdef "SYNTHESIS"  {
+  // CHECK-NEXT:   } else {
   // CHECK-NEXT:     %1 = sv.read_inout %a1 : !rtl.inout<i1>
   // CHECK-NEXT:     %2 = sv.read_inout %b1 : !rtl.inout<i1>
   // CHECK-NEXT:     %3 = sv.read_inout %c1 : !rtl.inout<i1>
@@ -466,7 +465,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
     // CHECK-NEXT:    sv.initial {
     // CHECK-NEXT:    sv.verbatim "`INIT_RANDOM_PROLOG_"
-    // CHECK-NEXT:    sv.ifdef "RANDOMIZE_REG_INIT"  {
+    // CHECK-NEXT:    sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
     // CHECK-NEXT:       %3 = sv.textual_value "`RANDOM" : i2
     // CHECK-NEXT:        sv.bpassign %count, %3 : i2
     // CHECK-NEXT:     }
@@ -520,7 +519,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
     // CHECK-NEXT:   sv.initial {
     // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
-    // CHECK-NEXT:     sv.ifdef "RANDOMIZE_REG_INIT"  {
+    // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
     // CHECK-NEXT:       %true = comb.constant(true) : i1
     // CHECK-NEXT:       %8 = comb.xor %reset, %true : i1
     // CHECK-NEXT:       sv.if %8  {
@@ -537,7 +536,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: }
     // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
     // CHECK-NEXT:   sv.initial  {
-    // CHECK-NEXT:     sv.ifdef "RANDOMIZE_REG_INIT"  {
+    // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
     // CHECK-NEXT:       %true = comb.constant(true) : i1
     // CHECK-NEXT:       %8 = comb.xor %reset, %true : i1
     // CHECK-NEXT:       sv.if %8  {
@@ -618,7 +617,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
     // CHECK-NEXT:   sv.initial  {
     // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
-    // CHECK-NEXT:     sv.ifdef "RANDOMIZE_MEM_INIT"  {
+    // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_MEM_INIT"  {
     // CHECK-NEXT:       sv.verbatim "integer {{.*}}_initvar < 12{{.*}}`RANDOM;"(%_M) : !rtl.inout<uarray<12xi42>>
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
@@ -710,7 +709,7 @@ module attributes {firrtl.mainModule = "Simple"} {
   // CHECK-NEXT:  sv.ifdef "!SYNTHESIS"  {
   // CHECK-NEXT:    sv.initial  {
   // CHECK-NEXT:      sv.verbatim "`INIT_RANDOM_PROLOG_"
-  // CHECK-NEXT:      sv.ifdef "RANDOMIZE_MEM_INIT"  {
+  // CHECK-NEXT:      sv.ifdef.procedural "RANDOMIZE_MEM_INIT"  {
   // CHECK-NEXT:        sv.verbatim "integer {{.*}}_initvar < 20{{.*}}
   // CHECK-NEXT:      }
   // CHECK-NEXT:    }
@@ -740,7 +739,7 @@ module attributes {firrtl.mainModule = "Simple"} {
   // CHECK-NEXT:   sv.ifdef "!SYNTHESIS"  {
   // CHECK-NEXT:     sv.initial  {
   // CHECK-NEXT:       sv.verbatim "`INIT_RANDOM_PROLOG_"
-  // CHECK-NEXT:       sv.ifdef "RANDOMIZE_MEM_INIT"  {
+  // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_MEM_INIT"  {
   // CHECK-NEXT:         %0 = sv.textual_value "`RANDOM" : i4
   // CHECK-NEXT:         %false = comb.constant(false) : i1
   // CHECK-NEXT:         %1 = sv.array_index_inout %_M_id[%false] : !rtl.inout<uarray<1xi4>>, i1
@@ -820,8 +819,7 @@ module attributes {firrtl.mainModule = "Simple"} {
 
     // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
     // CHECK-NEXT:   sv.alias %a, %.invalid_analog : !rtl.inout<i1>, !rtl.inout<i1>
-    // CHECK-NEXT: }
-    // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
+    // CHECK-NEXT: } else {
     // CHECK-NEXT:   %0 = sv.read_inout %a : !rtl.inout<i1>
     // CHECK-NEXT:   %1 = sv.read_inout %.invalid_analog : !rtl.inout<i1>
     // CHECK-NEXT:   sv.connect %a, %1 : i1

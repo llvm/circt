@@ -159,6 +159,16 @@ void IfDefOp::build(OpBuilder &odsBuilder, OperationState &result,
 }
 
 //===----------------------------------------------------------------------===//
+// IfDefProceduralOp
+
+void IfDefProceduralOp::build(OpBuilder &odsBuilder, OperationState &result,
+                              StringRef cond, std::function<void()> thenCtor,
+                              std::function<void()> elseCtor) {
+  IfDefOp::build(odsBuilder, result, cond, std::move(thenCtor),
+                 std::move(elseCtor));
+}
+
+//===----------------------------------------------------------------------===//
 // IfOp
 
 void IfOp::build(OpBuilder &odsBuilder, OperationState &result, Value cond,

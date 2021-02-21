@@ -6,7 +6,7 @@
 // CHECK-NOT: firrtl.circuit
 
 // We should get a large header boilerplate.
-// CHECK:   sv.ifdef "RANDOMIZE_GARBAGE_ASSIGN"  {
+// CHECK:   sv.ifdef.procedural "RANDOMIZE_GARBAGE_ASSIGN"  {
 // CHECK-NEXT:   sv.verbatim "`define RANDOMIZE"
 // CHECK-NEXT:  }
 firrtl.circuit "Simple" {

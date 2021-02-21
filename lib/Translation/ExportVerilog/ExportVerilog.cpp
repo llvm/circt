@@ -342,6 +342,7 @@ public:
   LogicalResult visitStmt(OutputOp op);
   LogicalResult visitStmt(InstanceOp op);
   LogicalResult visitSV(IfDefOp op);
+  LogicalResult visitSV(IfDefProceduralOp op);
   LogicalResult visitSV(IfOp op);
   LogicalResult visitSV(AlwaysOp op);
   LogicalResult visitSV(AlwaysFFOp op);
@@ -1439,6 +1440,35 @@ LogicalResult ModuleEmitter::visitSV(IfDefOp op) {
   return success();
 }
 
+LogicalResult ModuleEmitter::visitSV(IfDefProceduralOp op) {
+  auto cond = op.cond();
+
+  if (cond.startswith("!"))
+    indent() << "`ifndef " << cond.drop_front(1);
+  else
+    indent() << "`ifdef " << cond;
+
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  emitLocationInfoAndNewLine(ops);
+
+  addIndent();
+  for (auto &o : op.getThenBlock()->without_terminator())
+    emitOperation(&o);
+  reduceIndent();
+
+  if (op.hasElse()) {
+    indent() << "`else\n";
+    addIndent();
+    for (auto &o : op.getElseBlock()->without_terminator())
+      emitOperation(&o);
+    reduceIndent();
+  }
+
+  indent() << "`endif\n";
+  return success();
+}
+
 /// Emit the body of a control flow statement that is surrounded by begin/end
 /// markers if non-singular.  If the control flow construct is multi-line and
 /// if multiLineComment is non-null, the string is included in a comment after
@@ -2074,7 +2104,8 @@ void ModuleEmitter::emitMLIRModule(ModuleOp module) {
       ModuleEmitter(state).emitRTLModule(module);
     else if (auto module = dyn_cast<RTLModuleExternOp>(op))
       ModuleEmitter(state).emitRTLExternModule(module);
-    else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) || isa<IfDefOp>(op))
+    else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) || isa<IfDefOp>(op) ||
+             isa<IfDefProceduralOp>(op))
       ModuleEmitter(state).emitOperation(&op);
     else if (!isa<ModuleTerminatorOp>(op))
       op.emitError("unknown operation");
