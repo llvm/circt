@@ -147,7 +147,7 @@ def ResetTypeAttr : I32EnumAttr<"ResetType", "reset type",
 
 
 def AlwaysFFOp : SVOp<"alwaysff", [HasRegionTerminator, NoRegionArguments,
-                               RecursiveSideEffects, ProceduralRegion]> {
+                                   RecursiveSideEffects, ProceduralRegion]> {
   let summary = "'alwaysff @' block with optional reset";
   let description = [{ 
     alwaysff blocks represent always_ff verilog nodes, which enforce inference 

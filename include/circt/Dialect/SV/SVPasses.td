@@ -15,7 +15,7 @@
 
 include "mlir/Pass/PassBase.td"
 
-def AlwaysFusion : Pass<"sv-always-fusion"> {
+def AlwaysFusion : Pass<"sv-always-fusion", "rtl::RTLModuleOp"> {
   let summary = "Combine AlwaysFF blocks with the same predicate";
   let description = [{
       This pass finds all AlwaysFF operations with the same condition, and
