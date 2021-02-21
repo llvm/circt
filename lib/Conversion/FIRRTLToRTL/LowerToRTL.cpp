@@ -1892,16 +1892,21 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValuePrimOp op) {
   if (!resultTy)
     return failure();
 
-  // We lower invalid to 0.  TODO: the FIRRTL spec mentions something about
-  // lowering it to a random value, we should see if this is what we need to
-  // do.
-  if (!op.getType().isa<AnalogType>())
-    return setLoweringTo<comb::ConstantOp>(op, resultTy, 0);
-
   // Values of analog type always need to be lowered to something with inout
   // type.  We do that by lowering to a wire and return that.  As with the SFC,
   // we do not connect anything to this, because it is bidirectional.
-  return setLoweringTo<sv::WireOp>(op, resultTy, ".invalid_analog");
+  if (op.getType().isa<AnalogType>())
+    return setLoweringTo<sv::WireOp>(op, resultTy, ".invalid_analog");
+
+  // We lower invalid to 0.  TODO: the FIRRTL spec mentions something about
+  // lowering it to a random value, we should see if this is what we need to
+  // do.
+  if (resultTy.isa<IntegerType>())
+    return setLoweringTo<comb::ConstantOp>(op, resultTy, 0);
+
+  // Invalid for bundles isn't supported.
+  op.emitOpError("unsupported type");
+  return failure();
 }
 
 LogicalResult FIRRTLLowering::visitExpr(HeadPrimOp op) {
