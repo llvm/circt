@@ -388,7 +388,8 @@ Type firrtl::getVectorElementType(Type array) {
     array = flip.getElementType();
   }
   auto vectorType = array.dyn_cast<FVectorType>();
-  if (!vectorType) return Type();
+  if (!vectorType)
+    return Type();
   auto elementType = vectorType.getElementType();
   return isFlipped ? FlipType::get(elementType) : elementType;
 }
