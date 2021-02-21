@@ -141,7 +141,6 @@ rtl.module @ifdef_merge(%arg0: i1) {
   rtl.output
 }
 
-
 // CHECK-LABEL: rtl.module @ifdef_proc_merge(%arg0: i1) {
 // CHECK-NEXT:    sv.alwaysff(posedge %arg0)  {
 // CHECK-NEXT:      %true = comb.constant(true) : i1
@@ -149,6 +148,9 @@ rtl.module @ifdef_merge(%arg0: i1) {
 // CHECK-NEXT:      sv.ifdef.procedural "FOO"  {
 // CHECK-NEXT:        sv.fwrite "A1"
 // CHECK-NEXT:        sv.fwrite "%x"(%0) : i1
+// CHECK-NEXT:      }
+// CHECK-NEXT:      sv.ifdef.procedural "BAR"  {
+// CHECK-NEXT:        sv.fwrite "B1"
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
 rtl.module @ifdef_proc_merge(%arg0: i1) {
@@ -160,6 +162,39 @@ rtl.module @ifdef_proc_merge(%arg0: i1) {
     %0 = comb.xor %arg0, %true : i1
     sv.ifdef.procedural "FOO" {
        sv.fwrite "%x"(%0) : i1
+    }
+     sv.ifdef.procedural "BAR" {
+       sv.fwrite "B1"
+    }
+  }
+  rtl.output
+}
+
+
+// CHECK-LABEL: rtl.module @if_merge(%arg0: i1, %arg1: i1) {
+// CHECK-NEXT:    sv.alwaysff(posedge %arg0)  {
+// CHECK-NEXT:      %true = comb.constant(true) : i1
+// CHECK-NEXT:      %0 = comb.xor %arg1, %true : i1
+// CHECK-NEXT:      sv.if %arg1  {
+// CHECK-NEXT:        sv.fwrite "A1"
+// CHECK-NEXT:        sv.fwrite "%x"(%0) : i1
+// CHECK-NEXT:      }
+// CHECK-NEXT:      sv.if %0 {
+// CHECK-NEXT:        sv.fwrite "B1"
+// CHECK-NEXT:      }
+// CHECK-NEXT:    }
+rtl.module @if_merge(%arg0: i1, %arg1: i1) {
+  sv.alwaysff(posedge %arg0) {
+    sv.if %arg1 {
+      sv.fwrite "A1"
+    }
+    %true = comb.constant(true) : i1
+    %0 = comb.xor %arg1, %true : i1
+    sv.if %arg1 {
+      sv.fwrite "%x"(%0) : i1
+    }
+    sv.if %0 {
+      sv.fwrite "B1"
     }
   }
   rtl.output
