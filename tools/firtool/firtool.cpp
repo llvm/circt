@@ -139,7 +139,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
     // If enabled, run the optimizer.
     if (!disableOptimization) {
-      pm.addNestedPass<rtl::RTLModuleOp>(sv::createAlwaysFusionPass());
+      pm.addNestedPass<rtl::RTLModuleOp>(sv::createRTLCleanupPass());
       pm.addPass(createCSEPass());
       pm.addPass(createCanonicalizerPass());
     }

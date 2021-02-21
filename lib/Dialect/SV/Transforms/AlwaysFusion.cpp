@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This transformation pass performs simple fusion of always_ff in the same
-// region.
+// This transformation pass performs various cleanups and canonicalization
+// transformations for rtl.module bodies.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,7 +16,10 @@
 #include "circt/Dialect/SV/SVPasses.h"
 
 using namespace circt;
-using namespace sv;
+
+//===----------------------------------------------------------------------===//
+// Helper utilities
+//===----------------------------------------------------------------------===//
 
 namespace {
 
@@ -60,7 +63,7 @@ static void mergeRegions(Region *region1, Region *region2) {
     auto &block1 = region1->front();
     auto &block2 = region2->front();
     // Remove the terminator from the first block before merging.
-    assert(isa<YieldOp>(block1.back()) &&
+    assert(isa<sv::YieldOp>(block1.back()) &&
            "Block should be terminated by an sv.yield operation");
     block1.back().erase();
     block1.getOperations().splice(block1.end(), block2.getOperations());
@@ -81,9 +84,8 @@ static void mergeOperations(Operation *op1, Operation *op2) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct AlwaysFusionPass : public AlwaysFusionBase<AlwaysFusionPass> {
+struct RTLCleanupPass : public sv::RTLCleanupBase<RTLCleanupPass> {
   void runOnOperation() override;
-
   void runOnRegion(Region &region);
 
 private:
@@ -91,7 +93,7 @@ private:
 };
 } // end anonymous namespace
 
-void AlwaysFusionPass::runOnOperation() {
+void RTLCleanupPass::runOnOperation() {
   // Keeps track if anything changed during this pass, used to determine if
   // the analyses were preserved.
   anythingChanged = false;
@@ -103,7 +105,7 @@ void AlwaysFusionPass::runOnOperation() {
     markAllAnalysesPreserved();
 }
 
-void AlwaysFusionPass::runOnRegion(Region &region) {
+void RTLCleanupPass::runOnRegion(Region &region) {
   if (region.getBlocks().size() != 1)
     return;
   Block &body = region.front();
@@ -164,6 +166,6 @@ void AlwaysFusionPass::runOnRegion(Region &region) {
   }
 }
 
-std::unique_ptr<Pass> circt::sv::createAlwaysFusionPass() {
-  return std::make_unique<AlwaysFusionPass>();
+std::unique_ptr<Pass> circt::sv::createRTLCleanupPass() {
+  return std::make_unique<RTLCleanupPass>();
 }
