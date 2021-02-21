@@ -14,7 +14,6 @@
 #include "SVPassDetail.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
-#include "mlir/Interfaces/SideEffectInterfaces.h"
 
 using namespace circt;
 
@@ -200,24 +199,42 @@ void RTLCleanupPass::runOnProceduralRegion(Region &region, bool shallow) {
     if (auto ifdef = dyn_cast<sv::IfDefProceduralOp>(op)) {
       if (auto prevIfDef =
               dyn_cast_or_null<sv::IfDefProceduralOp>(lastSideEffectingOp)) {
-        // We know that there are no side effective operations between the two,
-        // so merge the first one into this one.
-        mergeOperationsIntoFrom(ifdef, prevIfDef);
-        anythingChanged = true;
-        prevIfDef->erase();
+        if (ifdef.cond() == prevIfDef.cond()) {
+          // We know that there are no side effective operations between the
+          // two, so merge the first one into this one.
+          mergeOperationsIntoFrom(ifdef, prevIfDef);
+          anythingChanged = true;
+          prevIfDef->erase();
 
-        // Reprocess the merged body because this may have uncovered other
-        // simplifications.
-        runOnProceduralRegion(ifdef->getRegion(0), /*shallow=*/true);
-        runOnProceduralRegion(ifdef->getRegion(1), /*shallow=*/true);
+          // Reprocess the merged body because this may have uncovered other
+          // simplifications.
+          runOnProceduralRegion(ifdef->getRegion(0), /*shallow=*/true);
+          runOnProceduralRegion(ifdef->getRegion(1), /*shallow=*/true);
+        }
+      }
+    }
+
+    // Merge 'if' operations with the same condition.
+    if (auto ifop = dyn_cast<sv::IfOp>(op)) {
+      if (auto prevIf = dyn_cast_or_null<sv::IfOp>(lastSideEffectingOp)) {
+        if (ifop.cond() == prevIf.cond()) {
+          // We know that there are no side effective operations between the
+          // two, so merge the first one into this one.
+          mergeOperationsIntoFrom(ifop, prevIf);
+          anythingChanged = true;
+          prevIf->erase();
+
+          // Reprocess the merged body because this may have uncovered other
+          // simplifications.
+          runOnProceduralRegion(ifop->getRegion(0), /*shallow=*/true);
+          runOnProceduralRegion(ifop->getRegion(1), /*shallow=*/true);
+        }
       }
     }
 
     // Keep track of the last side effecting operation we've seen.
     if (!mlir::MemoryEffectOpInterface::hasNoEffect(&op))
       lastSideEffectingOp = &op;
-
-    // TODO: Merge procedural if's.
   }
 }
 
