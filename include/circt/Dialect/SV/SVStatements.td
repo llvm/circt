@@ -21,8 +21,7 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments,
   let summary = "'ifdef MACRO' block";
 
   let description = [{
-    This operation is an #ifdef block, or an #ifndef block if `string` starts
-    with a `!` character.
+    This operation is an #ifdef block, which has a "then" and "else" region.
   }];
 
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
@@ -62,8 +61,7 @@ def IfDefProceduralOp
   let summary = "'ifdef MACRO' block for procedural regions";
 
   let description = [{
-    This operation is an #ifdef block, or an #ifndef block if `string` starts
-    with a `!` character.
+    This operation is an #ifdef block, which has a "then" and "else" region.
   }];
 
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
