@@ -309,6 +309,7 @@ public:
   explicit ModuleEmitter(VerilogEmitterState &state)
       : VerilogEmitterBase(state) {}
 
+  void emitMLIRModule(ModuleOp module);
   void emitRTLModule(RTLModuleOp module);
   void emitRTLExternModule(RTLModuleExternOp module);
   void emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
@@ -2067,6 +2068,19 @@ void ModuleEmitter::emitOperation(Operation *op) {
   indent() << "unknown MLIR operation " << op->getName().getStringRef() << "\n";
 }
 
+void ModuleEmitter::emitMLIRModule(ModuleOp module) {
+  for (auto &op : *module.getBody()) {
+    if (auto module = dyn_cast<RTLModuleOp>(op))
+      ModuleEmitter(state).emitRTLModule(module);
+    else if (auto module = dyn_cast<RTLModuleExternOp>(op))
+      ModuleEmitter(state).emitRTLExternModule(module);
+    else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) || isa<IfDefOp>(op))
+      ModuleEmitter(state).emitOperation(&op);
+    else if (!isa<ModuleTerminatorOp>(op))
+      op.emitError("unknown operation");
+  }
+}
+
 void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
   os << "// external module " << module.getName() << "\n\n";
 }
@@ -2205,33 +2219,9 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
 // MLIRModuleEmitter
 //===----------------------------------------------------------------------===//
 
-namespace {
-class MLIRModuleEmitter : public VerilogEmitterBase {
-public:
-  explicit MLIRModuleEmitter(VerilogEmitterState &state)
-      : VerilogEmitterBase(state) {}
-
-  void emit(ModuleOp module);
-};
-
-} // end anonymous namespace
-
-void MLIRModuleEmitter::emit(ModuleOp module) {
-  for (auto &op : *module.getBody()) {
-    if (auto module = dyn_cast<RTLModuleOp>(op))
-      ModuleEmitter(state).emitRTLModule(module);
-    else if (auto module = dyn_cast<RTLModuleExternOp>(op))
-      ModuleEmitter(state).emitRTLExternModule(module);
-    else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) || isa<IfDefOp>(op))
-      ModuleEmitter(state).emitOperation(&op);
-    else if (!isa<ModuleTerminatorOp>(op))
-      op.emitError("unknown operation");
-  }
-}
-
 LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   VerilogEmitterState state(os);
-  MLIRModuleEmitter(state).emit(module);
+  ModuleEmitter(state).emitMLIRModule(module);
   return failure(state.encounteredError);
 }
 
