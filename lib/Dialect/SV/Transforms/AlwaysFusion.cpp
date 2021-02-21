@@ -83,37 +83,50 @@ static void mergeOperations(Operation *op1, Operation *op2) {
 namespace {
 struct AlwaysFusionPass : public AlwaysFusionBase<AlwaysFusionPass> {
   void runOnOperation() override;
+
+  void runOnRegionBlock(Block &body);
+
+private:
+  bool anythingChanged;
 };
 } // end anonymous namespace
 
 void AlwaysFusionPass::runOnOperation() {
-  auto *moduleBody = getOperation().getBodyBlock();
-
   // Keeps track if anything changed during this pass, used to determine if
   // the analyses were preserved.
-  bool graphChanged = false;
-
-  // A set of operations in the current block which are mergable. Any
-  // operation in this set is a candidate for another similar operation to
-  // merge in to.
-  DenseSet<Operation *, SimpleOperationInfo> foundOps;
-  for (sv::AlwaysFFOp alwaysOp :
-       llvm::make_early_inc_range(moduleBody->getOps<sv::AlwaysFFOp>())) {
-    // Check if we have encountered an equivalent operation already.  If we
-    // have, merge them together and delete the old operation.
-    auto itAndInserted = foundOps.insert(alwaysOp);
-    if (!itAndInserted.second) {
-      // Merge with a similar alwaysff
-      mergeOperations(*itAndInserted.first, alwaysOp);
-      alwaysOp.erase();
-      graphChanged = true;
-    }
-  }
+  anythingChanged = false;
+  runOnRegionBlock(*getOperation().getBodyBlock());
 
   // If we did not change anything in the graph mark all analysis as
   // preserved.
-  if (!graphChanged)
+  if (!anythingChanged)
     markAllAnalysesPreserved();
+}
+
+void AlwaysFusionPass::runOnRegionBlock(Block &body) {
+  // A set of operations in the current block which are mergable. Any
+  // operation in this set is a candidate for another similar operation to
+  // merge in to.
+  DenseSet<Operation *, SimpleOperationInfo> alwaysFFOpsSeen;
+  for (Operation &op : llvm::make_early_inc_range(body)) {
+    // Recursively process any regions in the op before we visit it.
+    for (size_t i = 0, e = op.getNumRegions(); i != e; ++i) {
+      if (op.getRegion(i).getBlocks().size() == 1)
+        runOnRegionBlock(op.getRegion(i).front());
+    }
+
+    if (auto alwaysOp = dyn_cast<sv::AlwaysFFOp>(op)) {
+      // Check if we have encountered an equivalent operation already.  If we
+      // have, merge them together and delete the old operation.
+      auto itAndInserted = alwaysFFOpsSeen.insert(alwaysOp);
+      if (!itAndInserted.second) {
+        // Merge with a similar alwaysff if we already have one.
+        mergeOperations(*itAndInserted.first, alwaysOp);
+        alwaysOp.erase();
+        anythingChanged = true;
+      }
+    }
+  }
 }
 
 std::unique_ptr<Pass> circt::sv::createAlwaysFusionPass() {
