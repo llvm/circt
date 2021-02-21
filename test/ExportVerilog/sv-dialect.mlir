@@ -11,7 +11,8 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT:   `endif
   // CHECK-NEXT: end // always @(posedge)
   sv.always posedge %clock {
-    sv.ifdef "!SYNTHESIS" {
+    sv.ifdef "SYNTHESIS" {
+    } else {
       %tmp = sv.textual_value "PRINTF_COND_" : i1
       %tmp2 = comb.and %tmp, %cond : i1
       sv.if %tmp2 {
@@ -133,10 +134,10 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     sv.passign %wire42, %thing : i42
   }// CHECK-NEXT:   {{end // initial$}}
 
-  sv.ifdef "!VERILATOR"  {         // CHECK-NEXT: `ifndef VERILATOR
-    sv.verbatim "`define Thing1"   // CHECK-NEXT:   `define Thing1
-  } else  {                        // CHECK-NEXT: `else
+  sv.ifdef "VERILATOR"  {          // CHECK-NEXT: `ifdef VERILATOR
     sv.verbatim "`define Thing2"   // CHECK-NEXT:   `define Thing2
+  } else  {                        // CHECK-NEXT: `else
+    sv.verbatim "`define Thing1"   // CHECK-NEXT:   `define Thing1
   }                                // CHECK-NEXT: `endif
 
   %add = comb.add %val, %val : i8

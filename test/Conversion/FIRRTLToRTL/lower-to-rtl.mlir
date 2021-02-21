@@ -253,7 +253,8 @@ module attributes {firrtl.mainModule = "Simple"} {
     %b1 = firrtl.stdIntCast %b : (i4) -> !firrtl.uint<4>
 
     // CHECK-NEXT: sv.always posedge %clock {
-    // CHECK-NEXT:   sv.ifdef.procedural "!SYNTHESIS" {
+    // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
+    // CHECK-NEXT:   } else {
     // CHECK-NEXT:     [[TV:%.+]] = sv.textual_value "`PRINTF_COND_" : i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and [[TV]], %reset
     // CHECK-NEXT:     sv.if [[AND]] {
@@ -291,7 +292,8 @@ module attributes {firrtl.mainModule = "Simple"} {
     %resetc = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
 
     // CHECK-NEXT: sv.always posedge %clock1 {
-    // CHECK-NEXT:   sv.ifdef.procedural "!SYNTHESIS" {
+    // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
+    // CHECK-NEXT:   } else {
     // CHECK-NEXT:     %0 = sv.textual_value "`STOP_COND_" : i1
     // CHECK-NEXT:     %1 = comb.and %0, %reset : i1
     // CHECK-NEXT:     sv.if %1 {
@@ -302,7 +304,8 @@ module attributes {firrtl.mainModule = "Simple"} {
     firrtl.stop %clock1c, %resetc, 42
 
     // CHECK-NEXT: sv.always posedge %clock2 {
-    // CHECK-NEXT:   sv.ifdef.procedural "!SYNTHESIS" {
+    // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
+    // CHECK-NEXT:   } else {
     // CHECK-NEXT:     %0 = sv.textual_value "`STOP_COND_" : i1
     // CHECK-NEXT:     %1 = comb.and %0, %reset : i1
     // CHECK-NEXT:     sv.if %1 {
@@ -410,9 +413,7 @@ module attributes {firrtl.mainModule = "Simple"} {
 
   // CHECK-LABEL: rtl.module @Analog(%a1: !rtl.inout<i1>, %b1: !rtl.inout<i1>,
   // CHECK:                          %c1: !rtl.inout<i1>) -> (%outClock: i1) {
-  // CHECK-NEXT:   sv.ifdef "!SYNTHESIS"  {
-  // CHECK-NEXT:     sv.alias %a1, %b1, %c1 : !rtl.inout<i1>
-  // CHECK-NEXT:   } else {
+  // CHECK-NEXT:   sv.ifdef "SYNTHESIS"  {
   // CHECK-NEXT:     %1 = sv.read_inout %a1 : !rtl.inout<i1>
   // CHECK-NEXT:     %2 = sv.read_inout %b1 : !rtl.inout<i1>
   // CHECK-NEXT:     %3 = sv.read_inout %c1 : !rtl.inout<i1>
@@ -422,6 +423,8 @@ module attributes {firrtl.mainModule = "Simple"} {
   // CHECK-NEXT:     sv.connect %b1, %3 : i1
   // CHECK-NEXT:     sv.connect %c1, %1 : i1
   // CHECK-NEXT:     sv.connect %c1, %2 : i1
+  // CHECK-NEXT:   } else {
+  // CHECK-NEXT:     sv.alias %a1, %b1, %c1 : !rtl.inout<i1>
   // CHECK-NEXT:   }
   // CHECK-NEXT:    %0 = sv.read_inout %a1 : !rtl.inout<i1>
   // CHECK-NEXT:    rtl.output %0 : i1
@@ -462,7 +465,8 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: %count = sv.reg : !rtl.inout<i2>
     %count = firrtl.reg %0 {name = "count"} : (!firrtl.clock) -> !firrtl.uint<2>
 
-    // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
+    // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
+    // CHECK-NEXT:   } else {
     // CHECK-NEXT:    sv.initial {
     // CHECK-NEXT:    sv.verbatim "`INIT_RANDOM_PROLOG_"
     // CHECK-NEXT:    sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
@@ -516,7 +520,8 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: }(asyncreset : posedge %reset) {
     // CHECK-NEXT:   sv.passign %reg, %c0_i32 : i32
     // CHECK-NEXT: }
-    // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
+    // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
+    // CHECK-NEXT: } else {
     // CHECK-NEXT:   sv.initial {
     // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
     // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
@@ -534,7 +539,8 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: }(syncreset : posedge %reset) {
     // CHECK-NEXT:    sv.passign %reg2, %c0_i32 : i32
     // CHECK-NEXT: }
-    // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
+    // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
+    // CHECK-NEXT: } else {
     // CHECK-NEXT:   sv.initial  {
     // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
     // CHECK-NEXT:       %true = comb.constant(true) : i1
@@ -614,7 +620,8 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK:  %_M = sv.reg : !rtl.inout<uarray<12xi42>>
     %_M_read, %_M_write = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>
 
-    // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
+    // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
+    // CHECK-NEXT:   } else {
     // CHECK-NEXT:   sv.initial  {
     // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
     // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_MEM_INIT"  {
@@ -628,12 +635,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: %_M_read_en = sv.wire : !rtl.inout<i1>
     // CHECK-NEXT: %_M_read_clk = sv.wire : !rtl.inout<i1>
     // CHECK-NEXT: %_M_read_data = sv.wire : !rtl.inout<i42>
-    // CHECK-NEXT: sv.ifdef "!RANDOMIZE_GARBAGE_ASSIGN"  {
-    // CHECK-NEXT:   %2 = sv.read_inout %_M_read_addr : !rtl.inout<i4>
-    // CHECK-NEXT:   %3 = sv.array_index_inout %_M[%2] : !rtl.inout<uarray<12xi42>>, i4
-    // CHECK-NEXT:   %4 = sv.read_inout %3
-    // CHECK-NEXT:   sv.connect %_M_read_data, %4 : i42
-    // CHECK-NEXT: } else  {
+    // CHECK-NEXT: sv.ifdef "RANDOMIZE_GARBAGE_ASSIGN"  {
     // CHECK-NEXT:   %2 = sv.read_inout %_M_read_addr : !rtl.inout<i4>
     // CHECK-NEXT:   %3 = sv.array_index_inout %_M[%2]
     // CHECK-NEXT:   %4 = sv.read_inout %3 : !rtl.inout<i42>
@@ -642,6 +644,11 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:   %6 = sv.textual_value "`RANDOM" : i42
     // CHECK-NEXT:   %7 = comb.mux %5, %4, %6 : i42
     // CHECK-NEXT:   sv.connect %_M_read_data, %7 : i42
+    // CHECK-NEXT: } else  {
+    // CHECK-NEXT:   %2 = sv.read_inout %_M_read_addr : !rtl.inout<i4>
+    // CHECK-NEXT:   %3 = sv.array_index_inout %_M[%2] : !rtl.inout<uarray<12xi42>>, i4
+    // CHECK-NEXT:   %4 = sv.read_inout %3
+    // CHECK-NEXT:   sv.connect %_M_read_data, %4 : i42
     // CHECK-NEXT: }
 
     // Write port.
@@ -706,7 +713,8 @@ module attributes {firrtl.mainModule = "Simple"} {
   // CHECK-LABEL: rtl.module @MemAggregate(%clock1: i1, %clock2: i1) {
   // CHECK-NEXT:  %_M_id = sv.reg : !rtl.inout<uarray<20xi4>>
   // CHECK-NEXT:  %_M_other = sv.reg : !rtl.inout<uarray<20xi8>>
-  // CHECK-NEXT:  sv.ifdef "!SYNTHESIS"  {
+  // CHECK-NEXT:  sv.ifdef "SYNTHESIS"  {
+  // CHECK-NEXT:  } else {
   // CHECK-NEXT:    sv.initial  {
   // CHECK-NEXT:      sv.verbatim "`INIT_RANDOM_PROLOG_"
   // CHECK-NEXT:      sv.ifdef.procedural "RANDOMIZE_MEM_INIT"  {
@@ -736,7 +744,8 @@ module attributes {firrtl.mainModule = "Simple"} {
   // CHECK-LABEL: rtl.module @MemOne() {
   // CHECK-NEXT:   %_M_id = sv.reg : !rtl.inout<uarray<1xi4>>
   // CHECK-NEXT:   %_M_other = sv.reg : !rtl.inout<uarray<1xi8>>
-  // CHECK-NEXT:   sv.ifdef "!SYNTHESIS"  {
+  // CHECK-NEXT:   sv.ifdef "SYNTHESIS"  {
+  // CHECK-NEXT:   } else {
   // CHECK-NEXT:     sv.initial  {
   // CHECK-NEXT:       sv.verbatim "`INIT_RANDOM_PROLOG_"
   // CHECK-NEXT:       sv.ifdef.procedural "RANDOMIZE_MEM_INIT"  {
@@ -772,7 +781,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: %_M_read_en = sv.wire : !rtl.inout<i1>
     // CHECK-NEXT: %_M_read_clk = sv.wire : !rtl.inout<i1>
     // CHECK-NEXT: %_M_read_data = sv.wire : !rtl.inout<i42>
-    // CHECK-NEXT: sv.ifdef "!RANDOMIZE_GARBAGE_ASSIGN"  {
+    // CHECK-NEXT: sv.ifdef "RANDOMIZE_GARBAGE_ASSIGN"  {
     %6 = firrtl.subfield %_M_read("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<4>>
     firrtl.connect %6, %c0_ui1 : !firrtl.flip<uint<4>>, !firrtl.uint<1>
     %7 = firrtl.subfield %_M_read("en") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<1>>
@@ -817,13 +826,13 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: %.invalid_analog = sv.wire : !rtl.inout<i1>
     %0 = firrtl.invalidvalue : !firrtl.analog<1>
 
-    // CHECK-NEXT: sv.ifdef "!SYNTHESIS"  {
-    // CHECK-NEXT:   sv.alias %a, %.invalid_analog : !rtl.inout<i1>, !rtl.inout<i1>
-    // CHECK-NEXT: } else {
+    // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
     // CHECK-NEXT:   %0 = sv.read_inout %a : !rtl.inout<i1>
     // CHECK-NEXT:   %1 = sv.read_inout %.invalid_analog : !rtl.inout<i1>
     // CHECK-NEXT:   sv.connect %a, %1 : i1
     // CHECK-NEXT:   sv.connect %.invalid_analog, %0 : i1
+    // CHECK-NEXT: } else {
+    // CHECK-NEXT:   sv.alias %a, %.invalid_analog : !rtl.inout<i1>, !rtl.inout<i1>
     // CHECK-NEXT: }
     firrtl.attach %a1, %0 : !firrtl.analog<1>, !firrtl.analog<1>
   }

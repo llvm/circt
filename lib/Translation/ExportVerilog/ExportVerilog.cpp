@@ -341,8 +341,12 @@ public:
   LogicalResult visitSV(AliasOp op);
   LogicalResult visitStmt(OutputOp op);
   LogicalResult visitStmt(InstanceOp op);
-  LogicalResult visitSV(IfDefOp op);
-  LogicalResult visitSV(IfDefProceduralOp op);
+
+  LogicalResult emitIfDef(Operation *op, StringRef cond);
+  LogicalResult visitSV(IfDefOp op) { return emitIfDef(op, op.cond()); }
+  LogicalResult visitSV(IfDefProceduralOp op) {
+    return emitIfDef(op, op.cond());
+  }
   LogicalResult visitSV(IfOp op);
   LogicalResult visitSV(AlwaysOp op);
   LogicalResult visitSV(AlwaysFFOp op);
@@ -1411,11 +1415,10 @@ LogicalResult ModuleEmitter::visitSV(CoverOp op) {
   return success();
 }
 
-LogicalResult ModuleEmitter::visitSV(IfDefOp op) {
-  auto cond = op.cond();
-
-  if (cond.startswith("!"))
-    indent() << "`ifndef " << cond.drop_front(1);
+LogicalResult ModuleEmitter::emitIfDef(Operation *op, StringRef cond) {
+  bool hasEmptyThen = isa<sv::YieldOp>(op->getRegion(0).front().front());
+  if (hasEmptyThen)
+    indent() << "`ifndef " << cond;
   else
     indent() << "`ifdef " << cond;
 
@@ -1423,44 +1426,18 @@ LogicalResult ModuleEmitter::visitSV(IfDefOp op) {
   ops.insert(op);
   emitLocationInfoAndNewLine(ops);
 
-  addIndent();
-  for (auto &o : op.getThenBlock()->without_terminator())
-    emitOperation(&o);
-  reduceIndent();
-
-  if (op.hasElse()) {
-    indent() << "`else\n";
+  if (!hasEmptyThen) {
     addIndent();
-    for (auto &o : op.getElseBlock()->without_terminator())
+    for (auto &o : op->getRegion(0).front().without_terminator())
       emitOperation(&o);
     reduceIndent();
   }
 
-  indent() << "`endif\n";
-  return success();
-}
-
-LogicalResult ModuleEmitter::visitSV(IfDefProceduralOp op) {
-  auto cond = op.cond();
-
-  if (cond.startswith("!"))
-    indent() << "`ifndef " << cond.drop_front(1);
-  else
-    indent() << "`ifdef " << cond;
-
-  SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
-  emitLocationInfoAndNewLine(ops);
-
-  addIndent();
-  for (auto &o : op.getThenBlock()->without_terminator())
-    emitOperation(&o);
-  reduceIndent();
-
-  if (op.hasElse()) {
-    indent() << "`else\n";
+  if (!op->getRegion(1).empty()) {
+    if (!hasEmptyThen)
+      indent() << "`else\n";
     addIndent();
-    for (auto &o : op.getElseBlock()->without_terminator())
+    for (auto &o : op->getRegion(1).front().without_terminator())
       emitOperation(&o);
     reduceIndent();
   }

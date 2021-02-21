@@ -12,7 +12,8 @@ func @test1(%arg0: i1, %arg1: i1) {
   //    end // always @(posedge)
 
   sv.always posedge  %arg0 {
-    sv.ifdef "!SYNTHESIS" {
+    sv.ifdef "SYNTHESIS" {
+    } else {
       %tmp = sv.textual_value "PRINTF_COND_" : i1
       %tmp2 = comb.and %tmp, %arg1 : i1
       sv.if %tmp2 {
@@ -28,7 +29,8 @@ func @test1(%arg0: i1, %arg1: i1) {
   }
 
   // CHECK-NEXT: sv.always posedge %arg0 {
-  // CHECK-NEXT:   sv.ifdef "!SYNTHESIS" {
+  // CHECK-NEXT:   sv.ifdef "SYNTHESIS" {
+  // CHECK-NEXT:   } else {
   // CHECK-NEXT:     %0 = sv.textual_value "PRINTF_COND_" : i1
   // CHECK-NEXT:     %1 = comb.and %0, %arg1 : i1
   // CHECK-NEXT:     sv.if %1 {
