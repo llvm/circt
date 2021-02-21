@@ -16,8 +16,7 @@ def HasRegionTerminator : SingleBlockImplicitTerminator<"YieldOp">;
 // Control flow like-operations
 //===----------------------------------------------------------------------===//
 
-def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments,
-                             RecursiveSideEffects]> {
+def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments]> {
   let summary = "'ifdef MACRO' block";
 
   let description = [{
@@ -57,7 +56,7 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments,
 
 def IfDefProceduralOp
   : SVOp<"ifdef.procedural", [HasRegionTerminator, NoRegionArguments,
-                              RecursiveSideEffects, ProceduralRegion]> {
+                              ProceduralRegion]> {
   let summary = "'ifdef MACRO' block for procedural regions";
 
   let description = [{
@@ -96,7 +95,7 @@ def IfDefProceduralOp
 }
 
 def IfOp : SVOp<"if", [HasRegionTerminator, NoRegionArguments,
-                       RecursiveSideEffects, ProceduralRegion]> {
+                       ProceduralRegion]> {
   let summary = "'if (cond)' block";
   
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);

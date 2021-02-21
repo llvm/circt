@@ -14,6 +14,7 @@
 #include "SVPassDetail.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 
 using namespace circt;
 
@@ -57,21 +58,22 @@ static void mergeRegions(Region *region1, Region *region2) {
     region1->getBlocks().splice(region1->end(), region2->getBlocks());
     return;
   }
-  // If the second region is not empty, splice its block into the end of the
+
+  // If the second region is not empty, splice its block into the start of the
   // first region.
   if (!region2->empty()) {
     auto &block1 = region1->front();
     auto &block2 = region2->front();
     // Remove the terminator from the first block before merging.
-    assert(isa<sv::YieldOp>(block1.back()) &&
+    assert(isa<sv::YieldOp>(block2.back()) &&
            "Block should be terminated by an sv.yield operation");
-    block1.back().erase();
-    block1.getOperations().splice(block1.end(), block2.getOperations());
+    block2.back().erase();
+    block1.getOperations().splice(block1.begin(), block2.getOperations());
   }
 }
 
 /// Inline all regions from the second operation into the first.
-static void mergeOperations(Operation *op1, Operation *op2) {
+static void mergeOperationsIntoFrom(Operation *op1, Operation *op2) {
   assert(op1 != op2 && "Cannot merge an op into itself");
   assert(op1->getNumRegions() == 2 &&
          "alwaysff should always have two regions");
@@ -86,7 +88,10 @@ static void mergeOperations(Operation *op1, Operation *op2) {
 namespace {
 struct RTLCleanupPass : public sv::RTLCleanupBase<RTLCleanupPass> {
   void runOnOperation() override;
-  void runOnRegion(Region &region);
+
+  void runOnRegionsInOp(Operation &op);
+  void runOnGraphRegion(Region &region, bool shallow);
+  void runOnProceduralRegion(Region &region, bool shallow);
 
 private:
   bool anythingChanged;
@@ -97,7 +102,7 @@ void RTLCleanupPass::runOnOperation() {
   // Keeps track if anything changed during this pass, used to determine if
   // the analyses were preserved.
   anythingChanged = false;
-  runOnRegion(getOperation().getBody());
+  runOnGraphRegion(getOperation().getBody(), /*shallow=*/false);
 
   // If we did not change anything in the graph mark all analysis as
   // preserved.
@@ -105,7 +110,21 @@ void RTLCleanupPass::runOnOperation() {
     markAllAnalysesPreserved();
 }
 
-void RTLCleanupPass::runOnRegion(Region &region) {
+/// Recursively process all of the regions in the specified op, dispatching to
+/// graph or procedural processing as appropriate.
+void RTLCleanupPass::runOnRegionsInOp(Operation &op) {
+  if (op.hasTrait<sv::ProceduralRegion>()) {
+    for (auto &region : op.getRegions())
+      runOnProceduralRegion(region, /*shallow=*/false);
+  } else {
+    for (auto &region : op.getRegions())
+      runOnGraphRegion(region, /*shallow=*/false);
+  }
+}
+
+/// Run simplifications on the specified graph region.  If shallow is true, then
+/// we only look at the specified region, we don't recurse into subregions.
+void RTLCleanupPass::runOnGraphRegion(Region &region, bool shallow) {
   if (region.getBlocks().size() != 1)
     return;
   Block &body = region.front();
@@ -118,8 +137,8 @@ void RTLCleanupPass::runOnRegion(Region &region) {
 
   for (Operation &op : llvm::make_early_inc_range(body)) {
     // Recursively process any regions in the op before we visit it.
-    for (size_t i = 0, e = op.getNumRegions(); i != e; ++i)
-      runOnRegion(op.getRegion(i));
+    if (!shallow && op.getNumRegions() != 0)
+      runOnRegionsInOp(op);
 
     // Merge alwaysff operations by hashing them to check to see if we've
     // already encountered one.  If so, merge them and reprocess the body.
@@ -130,14 +149,15 @@ void RTLCleanupPass::runOnRegion(Region &region) {
         continue;
       auto *existingAlways = *itAndInserted.first;
 
-      mergeOperations(existingAlways, alwaysOp);
-      alwaysOp.erase();
+      mergeOperationsIntoFrom(alwaysOp, existingAlways);
+      existingAlways->erase();
+      *itAndInserted.first = alwaysOp;
       anythingChanged = true;
 
       // Reprocess the merged body because this may have uncovered other
       // simplifications.
-      runOnRegion(existingAlways->getRegion(0));
-      runOnRegion(existingAlways->getRegion(1));
+      runOnGraphRegion(alwaysOp->getRegion(0), /*shallow=*/true);
+      runOnGraphRegion(alwaysOp->getRegion(1), /*shallow=*/true);
       continue;
     }
 
@@ -149,19 +169,54 @@ void RTLCleanupPass::runOnRegion(Region &region) {
         continue;
       }
 
-      mergeOperations(entry, ifdefOp);
-      ifdefOp.erase();
+      mergeOperationsIntoFrom(ifdefOp, entry);
+      entry->erase();
+      entry = ifdefOp;
       anythingChanged = true;
 
-      // TODO: Reprocess the merged body because this may have uncovered other
+      // Reprocess the merged body because this may have uncovered other
       // simplifications.
-      runOnRegion(entry->getRegion(0));
-      runOnRegion(entry->getRegion(1));
+      runOnGraphRegion(ifdefOp->getRegion(0), /*shallow=*/true);
+      runOnGraphRegion(ifdefOp->getRegion(1), /*shallow=*/true);
       continue;
     }
+  }
+}
 
-    // TODO: Merge procedural ifdef's with neighboring ones of the same
-    // condition.
+/// Run simplifications on the specified procedural region.  If shallow is true,
+/// then we only look at the specified region, we don't recurse into subregions.
+void RTLCleanupPass::runOnProceduralRegion(Region &region, bool shallow) {
+  if (region.getBlocks().size() != 1)
+    return;
+  Block &body = region.front();
+
+  Operation *lastSideEffectingOp = nullptr;
+  for (Operation &op : llvm::make_early_inc_range(body)) {
+    // Recursively process any regions in the op before we visit it.
+    if (!shallow && op.getNumRegions() != 0)
+      runOnRegionsInOp(op);
+
+    // Merge procedural ifdefs with neighbors in the procedural region.
+    if (auto ifdef = dyn_cast<sv::IfDefProceduralOp>(op)) {
+      if (auto prevIfDef =
+              dyn_cast_or_null<sv::IfDefProceduralOp>(lastSideEffectingOp)) {
+        // We know that there are no side effective operations between the two,
+        // so merge the first one into this one.
+        mergeOperationsIntoFrom(ifdef, prevIfDef);
+        anythingChanged = true;
+        prevIfDef->erase();
+
+        // Reprocess the merged body because this may have uncovered other
+        // simplifications.
+        runOnProceduralRegion(ifdef->getRegion(0), /*shallow=*/true);
+        runOnProceduralRegion(ifdef->getRegion(1), /*shallow=*/true);
+      }
+    }
+
+    // Keep track of the last side effecting operation we've seen.
+    if (!mlir::MemoryEffectOpInterface::hasNoEffect(&op))
+      lastSideEffectingOp = &op;
+
     // TODO: Merge procedural if's.
   }
 }

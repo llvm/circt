@@ -1,6 +1,7 @@
 // RUN: circt-opt -rtl-cleanup %s | FileCheck %s
 
 //CHECK-LABEL: rtl.module @alwaysff_basic(%arg0: i1, %arg1: i1) {
+//CHECK-NEXT:   sv.fwrite "Middle\0A"
 //CHECK-NEXT:   sv.alwaysff(posedge %arg0)  {
 //CHECK-NEXT:     sv.fwrite "A1"
 //CHECK-NEXT:     sv.fwrite "A2"
@@ -9,7 +10,6 @@
 //CHECK-NEXT:     sv.fwrite "B1"
 //CHECK-NEXT:     sv.fwrite "B2"
 //CHECK-NEXT:   }
-//CHECK-NEXT:   sv.fwrite "Middle\0A"
 //CHECK-NEXT:   rtl.output
 //CHECK-NEXT: }
 
@@ -136,6 +136,30 @@ rtl.module @ifdef_merge(%arg0: i1) {
   sv.ifdef "FOO" {
     sv.alwaysff(posedge %arg0) {
       sv.fwrite "B1"
+    }
+  }
+  rtl.output
+}
+
+
+// CHECK-LABEL: rtl.module @ifdef_proc_merge(%arg0: i1) {
+// CHECK-NEXT:    sv.alwaysff(posedge %arg0)  {
+// CHECK-NEXT:      %true = comb.constant(true) : i1
+// CHECK-NEXT:      %0 = comb.xor %arg0, %true : i1
+// CHECK-NEXT:      sv.ifdef.procedural "FOO"  {
+// CHECK-NEXT:        sv.fwrite "A1"
+// CHECK-NEXT:        sv.fwrite "%x"(%0) : i1
+// CHECK-NEXT:      }
+// CHECK-NEXT:    }
+rtl.module @ifdef_proc_merge(%arg0: i1) {
+  sv.alwaysff(posedge %arg0) {
+    sv.ifdef.procedural "FOO" {
+      sv.fwrite "A1"
+    }
+    %true = comb.constant(true) : i1
+    %0 = comb.xor %arg0, %true : i1
+    sv.ifdef.procedural "FOO" {
+       sv.fwrite "%x"(%0) : i1
     }
   }
   rtl.output
