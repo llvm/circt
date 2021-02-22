@@ -1,13 +1,5 @@
 // RUN: circt-opt %s -split-input-file -verify-diagnostics
 
-func private @test_constant() -> i32 {
-  // expected-error @+1 {{comb.constant attribute bitwidth doesn't match return type}}
-  %a = comb.constant(42 : i12) : i32
-  return %a : i32
-}
-
-// -----
-
 func private @test_extend(%arg0: i4) -> i4 {
   // expected-error @+1 {{extension must increase bitwidth of operand}}
   %a = comb.sext %arg0 : (i4) -> i4
@@ -157,7 +149,7 @@ rtl.module @test() -> () {
 
 // expected-note @+1 {{original module declared here}}
 rtl.module @f() -> (i2) {
-  %a = comb.constant(1 : i2) : i2
+  %a = comb.constant 1 : i2
   rtl.output %a : i2
 }
 
