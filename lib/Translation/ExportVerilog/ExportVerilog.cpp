@@ -208,7 +208,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
       })
       .Case<InOutType>([&](InOutType inoutType) {
         return printPackedTypeImpl(inoutType.getElementType(), os, loc, dims,
-                            implicitIntType);
+                                   implicitIntType);
       })
       .Case<StructType>([&](StructType structType) {
         os << "struct packed {";
@@ -224,11 +224,9 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
       .Case<ArrayType>([&](ArrayType arrayType) {
         dims.push_back(arrayType.getSize());
         return printPackedTypeImpl(arrayType.getElementType(), os, loc, dims,
-                            implicitIntType);
+                                   implicitIntType);
       })
-      .Case<InterfaceType>([](InterfaceType ifaceType) {
-        return false;
-      })
+      .Case<InterfaceType>([](InterfaceType ifaceType) { return false; })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
         os << "<<unexpected unpacked array>>";
         emitError(loc, "Unexpected unpacked array in packed type ")
@@ -1288,7 +1286,8 @@ void ModuleEmitter::emitStatementExpression(Operation *op) {
     indent() << "// Zero width: ";
   } else if (emitInlineLogicDecls && !outOfLineExpresssionDecls.count(op)) {
     indent() << getVerilogDeclWord(op) << " ";
-    if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os, op->getLoc()))
+    if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os,
+                        op->getLoc()))
       os << ' ';
     os << getName(op->getResult(0)) << " = ";
   } else {
@@ -1926,9 +1925,9 @@ static bool isExpressionUnableToInline(Operation *op) {
                           op->getLoc()))
       // Bitcasts rely on the type being assigned to, so we cannot inline.
       return true;
-  
+
   // StructCreateOp needs to be assigning to a named temporary so that types
-  // are inferred properly by verilog 
+  // are inferred properly by verilog
   if (isa<StructCreateOp>(op))
     return true;
 
