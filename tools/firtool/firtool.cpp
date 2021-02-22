@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/Passes.h"
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -94,7 +95,8 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   MLIRContext context;
 
   // Register our dialects.
-  context.loadDialect<firrtl::FIRRTLDialect, rtl::RTLDialect, sv::SVDialect>();
+  context.loadDialect<firrtl::FIRRTLDialect, rtl::RTLDialect, comb::CombDialect,
+                      sv::SVDialect>();
 
   llvm::SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(ownedBuffer), llvm::SMLoc());
