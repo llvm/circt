@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/Passes.h"
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -94,7 +95,8 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   MLIRContext context;
 
   // Register our dialects.
-  context.loadDialect<firrtl::FIRRTLDialect, rtl::RTLDialect, sv::SVDialect>();
+  context.loadDialect<firrtl::FIRRTLDialect, rtl::RTLDialect, comb::CombDialect,
+                      sv::SVDialect>();
 
   llvm::SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(ownedBuffer), llvm::SMLoc());
@@ -132,14 +134,14 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // Run the lower-to-rtl pass if requested.
   if (lowerToRTL) {
     if (enableLowerTypes)
-      pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+      pm.nest<firrtl::CircuitOp>().addNestedPass<firrtl::FModuleOp>(
           firrtl::createLowerFIRRTLTypesPass());
     pm.addPass(createLowerFIRRTLToRTLModulePass());
-    pm.nest<rtl::RTLModuleOp>().addPass(createLowerFIRRTLToRTLPass());
+    pm.addNestedPass<rtl::RTLModuleOp>(createLowerFIRRTLToRTLPass());
 
     // If enabled, run the optimizer.
     if (!disableOptimization) {
-      pm.addNestedPass<rtl::RTLModuleOp>(sv::createAlwaysFusionPass());
+      pm.addNestedPass<rtl::RTLModuleOp>(sv::createRTLCleanupPass());
       pm.addPass(createCSEPass());
       pm.addPass(createCanonicalizerPass());
     }

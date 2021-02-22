@@ -644,3 +644,12 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.connect %U0_tmp1, %0 : !firrtl.flip<uint<5>>, !firrtl.uint<5>
     ; CHECK: %1 = firrtl.invalidvalue : !firrtl.uint<5>
     U0 is invalid
+
+  ; https://github.com/llvm/circt/issues/606
+  ; CHECK-LABEL: firrtl.module @mutableSubIndex606
+  module mutableSubIndex606 : 
+    output io : UInt<1>[8]
+    ; CHECK:  %0 = firrtl.subindex %io[0] : !firrtl.flip<vector<uint<1>, 8>>
+    ; CHECK: firrtl.connect %0, %c0_ui1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    io[0] <= UInt<1>("h00") 
+

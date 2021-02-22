@@ -136,6 +136,8 @@ void RegOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 void IfDefOp::build(OpBuilder &odsBuilder, OperationState &result,
                     StringRef cond, std::function<void()> thenCtor,
                     std::function<void()> elseCtor) {
+  assert(!cond.empty() && cond.front() != '!' &&
+         "Should only use simple Verilog identifiers in ifdef conditions");
   result.addAttribute("cond", odsBuilder.getStringAttr(cond));
   Region *thenRegion = result.addRegion();
   IfDefOp::ensureTerminator(*thenRegion, odsBuilder, result.location);
@@ -156,6 +158,16 @@ void IfDefOp::build(OpBuilder &odsBuilder, OperationState &result,
     elseCtor();
     odsBuilder.setInsertionPoint(oldIP);
   }
+}
+
+//===----------------------------------------------------------------------===//
+// IfDefProceduralOp
+
+void IfDefProceduralOp::build(OpBuilder &odsBuilder, OperationState &result,
+                              StringRef cond, std::function<void()> thenCtor,
+                              std::function<void()> elseCtor) {
+  IfDefOp::build(odsBuilder, result, cond, std::move(thenCtor),
+                 std::move(elseCtor));
 }
 
 //===----------------------------------------------------------------------===//

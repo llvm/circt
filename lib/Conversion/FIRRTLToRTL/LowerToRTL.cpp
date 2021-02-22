@@ -219,10 +219,16 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op) {
                                const char *defineFalse = nullptr) {
     std::string define = "`define ";
     if (!defineFalse) {
-      b.create<sv::IfDefOp>(guard, [&]() { emitString(define + defineTrue); });
+      assert(defineTrue && "didn't define anything");
+      b.create<sv::IfDefProceduralOp>(
+          guard, [&]() { emitString(define + defineTrue); });
     } else {
-      b.create<sv::IfDefOp>(
-          guard, [&]() { emitString(define + defineTrue); },
+      b.create<sv::IfDefProceduralOp>(
+          guard,
+          [&]() {
+            if (defineTrue)
+              emitString(define + defineTrue);
+          },
           [&]() { emitString(define + defineFalse); });
     }
   };
@@ -232,7 +238,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op) {
   emitGuardedDefine("RANDOMIZE_INVALID_ASSIGN", "RANDOMIZE");
   emitGuardedDefine("RANDOMIZE_REG_INIT", "RANDOMIZE");
   emitGuardedDefine("RANDOMIZE_MEM_INIT", "RANDOMIZE");
-  emitGuardedDefine("!RANDOM", "RANDOM $random");
+  emitGuardedDefine("RANDOM", nullptr, "RANDOM $random");
 
   emitString(
       "\n// Users can define 'PRINTF_COND' to add an extra gate to prints.");
@@ -247,22 +253,21 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op) {
   emitString(
       "\n// Users can define INIT_RANDOM as general code that gets injected "
       "into the\n// initializer block for modules with registers.");
-  emitGuardedDefine("!INIT_RANDOM", "INIT_RANDOM");
+  emitGuardedDefine("INIT_RANDOM", nullptr, "INIT_RANDOM");
 
   emitString("\n// If using random initialization, you can also define "
              "RANDOMIZE_DELAY to\n// customize the delay used, otherwise 0.002 "
              "is used.");
-  emitGuardedDefine("!RANDOMIZE_DELAY", "RANDOMIZE_DELAY 0.002");
+  emitGuardedDefine("RANDOMIZE_DELAY", nullptr, "RANDOMIZE_DELAY 0.002");
 
   emitString("\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
 
-  b.create<sv::IfDefOp>(
+  b.create<sv::IfDefProceduralOp>(
       "RANDOMIZE",
       [&]() {
         emitGuardedDefine(
-            "!VERILATOR",
-            "INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end",
-            "INIT_RANDOM_PROLOG_ `INIT_RANDOM");
+            "VERILATOR", "INIT_RANDOM_PROLOG_ `INIT_RANDOM",
+            "INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end");
       },
       [&]() { emitString("`define INIT_RANDOM_PROLOG_"); });
 
@@ -1250,12 +1255,12 @@ void FIRRTLLowering::emitRandomizePrologIfNeeded() {
 void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
   // Emit the initializer expression for simulation that fills it with random
   // value.
-  builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
+  builder->create<sv::IfDefOp>("SYNTHESIS", std::function<void()>(), [&]() {
     builder->create<sv::InitialOp>([&]() {
       emitRandomizePrologIfNeeded();
       auto type = reg.getType().dyn_cast<rtl::InOutType>().getElementType();
 
-      builder->create<sv::IfDefOp>("RANDOMIZE_REG_INIT", [&]() {
+      builder->create<sv::IfDefProceduralOp>("RANDOMIZE_REG_INIT", [&]() {
         if (resetSignal) {
           auto one = builder->create<comb::ConstantOp>(APInt(1, 1));
           auto notResetValue = builder->create<comb::XorOp>(resetSignal, one);
@@ -1394,11 +1399,11 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
   // Emit the initializer expression for simulation that fills it with random
   // value.
-  builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
+  builder->create<sv::IfDefOp>("SYNTHESIS", std::function<void()>(), [&]() {
     builder->create<sv::InitialOp>([&]() {
       emitRandomizePrologIfNeeded();
 
-      builder->create<sv::IfDefOp>("RANDOMIZE_MEM_INIT", [&]() {
+      builder->create<sv::IfDefProceduralOp>("RANDOMIZE_MEM_INIT", [&]() {
         if (depth == 1) { // Don't emit a for loop for one element.
           for (Value reg : regs) {
             auto type = sv::getInOutElementType(reg.getType());
@@ -1531,8 +1536,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         emitReads(false);
       } else {
         builder->create<sv::IfDefOp>(
-            "!RANDOMIZE_GARBAGE_ASSIGN", [&]() { emitReads(false); },
-            [&]() { emitReads(true); });
+            "RANDOMIZE_GARBAGE_ASSIGN", [&]() { emitReads(true); },
+            [&]() { emitReads(false); });
       }
       break;
     }
@@ -1887,16 +1892,21 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValuePrimOp op) {
   if (!resultTy)
     return failure();
 
-  // We lower invalid to 0.  TODO: the FIRRTL spec mentions something about
-  // lowering it to a random value, we should see if this is what we need to
-  // do.
-  if (!op.getType().isa<AnalogType>())
-    return setLoweringTo<comb::ConstantOp>(op, resultTy, 0);
-
   // Values of analog type always need to be lowered to something with inout
   // type.  We do that by lowering to a wire and return that.  As with the SFC,
   // we do not connect anything to this, because it is bidirectional.
-  return setLoweringTo<sv::WireOp>(op, resultTy, ".invalid_analog");
+  if (op.getType().isa<AnalogType>())
+    return setLoweringTo<sv::WireOp>(op, resultTy, ".invalid_analog");
+
+  // We lower invalid to 0.  TODO: the FIRRTL spec mentions something about
+  // lowering it to a random value, we should see if this is what we need to
+  // do.
+  if (resultTy.isa<IntegerType>())
+    return setLoweringTo<comb::ConstantOp>(op, resultTy, 0);
+
+  // Invalid for bundles isn't supported.
+  op.emitOpError("unsupported type");
+  return failure();
 }
 
 LogicalResult FIRRTLLowering::visitExpr(HeadPrimOp op) {
@@ -2109,8 +2119,8 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
   return success();
 }
 
-// Printf is a macro op that lowers to an sv.ifdef, an sv.if, and an sv.fwrite
-// all nested together.
+// Printf is a macro op that lowers to an sv.ifdef.procedural, an sv.if,
+// and an sv.fwrite all nested together.
 LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   auto clock = getLoweredValue(op.clock());
   auto cond = getLoweredValue(op.cond());
@@ -2132,17 +2142,18 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   // Emit this into an "sv.always posedge" body.
   builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, [&]() {
     // Emit an "#ifndef SYNTHESIS" guard into the always block.
-    builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
-      // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
-      Value ifCond =
-          builder->create<sv::TextualValueOp>(cond.getType(), "`PRINTF_COND_");
-      ifCond = builder->createOrFold<comb::AndOp>(ifCond, cond);
+    builder->create<sv::IfDefProceduralOp>(
+        "SYNTHESIS", std::function<void()>(), [&]() {
+          // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
+          Value ifCond = builder->create<sv::TextualValueOp>(cond.getType(),
+                                                             "`PRINTF_COND_");
+          ifCond = builder->createOrFold<comb::AndOp>(ifCond, cond);
 
-      builder->create<sv::IfOp>(ifCond, [&]() {
-        // Emit the sv.fwrite.
-        builder->create<sv::FWriteOp>(op.formatString(), operands);
-      });
-    });
+          builder->create<sv::IfOp>(ifCond, [&]() {
+            // Emit the sv.fwrite.
+            builder->create<sv::FWriteOp>(op.formatString(), operands);
+          });
+        });
   });
 
   return success();
@@ -2159,19 +2170,20 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
   // Emit this into an "sv.always posedge" body.
   builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, [&]() {
     // Emit an "#ifndef SYNTHESIS" guard into the always block.
-    builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
-      // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
-      Value ifCond =
-          builder->create<sv::TextualValueOp>(cond.getType(), "`STOP_COND_");
-      ifCond = builder->createOrFold<comb::AndOp>(ifCond, cond);
-      builder->create<sv::IfOp>(ifCond, [&]() {
-        // Emit the sv.fatal or sv.finish.
-        if (op.exitCode())
-          builder->create<sv::FatalOp>();
-        else
-          builder->create<sv::FinishOp>();
-      });
-    });
+    builder->create<sv::IfDefProceduralOp>(
+        "SYNTHESIS", std::function<void()>(), [&]() {
+          // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
+          Value ifCond = builder->create<sv::TextualValueOp>(cond.getType(),
+                                                             "`STOP_COND_");
+          ifCond = builder->createOrFold<comb::AndOp>(ifCond, cond);
+          builder->create<sv::IfOp>(ifCond, [&]() {
+            // Emit the sv.fatal or sv.finish.
+            if (op.exitCode())
+              builder->create<sv::FatalOp>();
+            else
+              builder->create<sv::FinishOp>();
+          });
+        });
   });
 
   return success();
@@ -2249,23 +2261,24 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
   if (inoutValues.size() < 2)
     return success();
 
-  // In the non-synthesis case, we emit a SystemVerilog alias statement.
   builder->create<sv::IfDefOp>(
-      "!SYNTHESIS", [&]() { builder->create<sv::AliasOp>(inoutValues); });
+      "SYNTHESIS",
+      // If we're doing synthesis, we emit an all-pairs assign complex.
+      [&]() {
+        SmallVector<Value, 4> values;
+        for (size_t i = 0, e = inoutValues.size(); i != e; ++i)
+          values.push_back(
+              builder->createOrFold<sv::ReadInOutOp>(inoutValues[i]));
 
-  // If we're doing synthesis, we emit an all-pairs assign complex.
-  builder->create<sv::IfDefOp>("SYNTHESIS", [&]() {
-    // Lower the
-    SmallVector<Value, 4> values;
-    for (size_t i = 0, e = inoutValues.size(); i != e; ++i)
-      values.push_back(builder->createOrFold<sv::ReadInOutOp>(inoutValues[i]));
+        for (size_t i1 = 0, e = inoutValues.size(); i1 != e; ++i1) {
+          for (size_t i2 = 0; i2 != e; ++i2)
+            if (i1 != i2)
+              builder->create<sv::ConnectOp>(inoutValues[i1], values[i2]);
+        }
+      },
 
-    for (size_t i1 = 0, e = inoutValues.size(); i1 != e; ++i1) {
-      for (size_t i2 = 0; i2 != e; ++i2)
-        if (i1 != i2)
-          builder->create<sv::ConnectOp>(inoutValues[i1], values[i2]);
-    }
-  });
+      // In the non-synthesis case, we emit a SystemVerilog alias statement.
+      [&]() { builder->create<sv::AliasOp>(inoutValues); });
 
   return success();
 }

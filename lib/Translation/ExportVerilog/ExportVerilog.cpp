@@ -309,6 +309,7 @@ public:
   explicit ModuleEmitter(VerilogEmitterState &state)
       : VerilogEmitterBase(state) {}
 
+  void emitMLIRModule(ModuleOp module);
   void emitRTLModule(RTLModuleOp module);
   void emitRTLExternModule(RTLModuleExternOp module);
   void emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
@@ -340,7 +341,12 @@ public:
   LogicalResult visitSV(AliasOp op);
   LogicalResult visitStmt(OutputOp op);
   LogicalResult visitStmt(InstanceOp op);
-  LogicalResult visitSV(IfDefOp op);
+
+  LogicalResult emitIfDef(Operation *op, StringRef cond);
+  LogicalResult visitSV(IfDefOp op) { return emitIfDef(op, op.cond()); }
+  LogicalResult visitSV(IfDefProceduralOp op) {
+    return emitIfDef(op, op.cond());
+  }
   LogicalResult visitSV(IfOp op);
   LogicalResult visitSV(AlwaysOp op);
   LogicalResult visitSV(AlwaysFFOp op);
@@ -954,9 +960,9 @@ SubExprInfo ExprEmitter::visitComb(ConcatOp op) {
 }
 
 SubExprInfo ExprEmitter::visitComb(BitcastOp op) {
-  // NOTE: Bitcasts are always emitted out-of-line with their own wire
-  // declaration. SystemVerilog uses the wire declaration to know what type this
-  // value is being casted to.
+  // NOTE: Bitcasts are emitted out-of-line with their own wire declaration when
+  // their dimensions don't match. SystemVerilog uses the wire declaration to
+  // know what type this value is being casted to.
   Type toType = op.getType();
   if (!haveMatchingDims(toType, op.input().getType(), op.getLoc())) {
     os << "/*cast(bit";
@@ -1409,11 +1415,10 @@ LogicalResult ModuleEmitter::visitSV(CoverOp op) {
   return success();
 }
 
-LogicalResult ModuleEmitter::visitSV(IfDefOp op) {
-  auto cond = op.cond();
-
-  if (cond.startswith("!"))
-    indent() << "`ifndef " << cond.drop_front(1);
+LogicalResult ModuleEmitter::emitIfDef(Operation *op, StringRef cond) {
+  bool hasEmptyThen = isa<sv::YieldOp>(op->getRegion(0).front().front());
+  if (hasEmptyThen)
+    indent() << "`ifndef " << cond;
   else
     indent() << "`ifdef " << cond;
 
@@ -1421,15 +1426,18 @@ LogicalResult ModuleEmitter::visitSV(IfDefOp op) {
   ops.insert(op);
   emitLocationInfoAndNewLine(ops);
 
-  addIndent();
-  for (auto &o : op.getThenBlock()->without_terminator())
-    emitOperation(&o);
-  reduceIndent();
-
-  if (op.hasElse()) {
-    indent() << "`else\n";
+  if (!hasEmptyThen) {
     addIndent();
-    for (auto &o : op.getElseBlock()->without_terminator())
+    for (auto &o : op->getRegion(0).front().without_terminator())
+      emitOperation(&o);
+    reduceIndent();
+  }
+
+  if (!op->getRegion(1).empty()) {
+    if (!hasEmptyThen)
+      indent() << "`else\n";
+    addIndent();
+    for (auto &o : op->getRegion(1).front().without_terminator())
       emitOperation(&o);
     reduceIndent();
   }
@@ -1897,8 +1905,56 @@ private:
 } // namespace
 
 void NameCollector::collectNames(Block &block) {
-  SmallString<32> nameTmp;
+  // Do a prepass over the operations in the block keeping track of whether any
+  // inlinable expression nodes are used out of order by other statements
+  // they'll get inlined into.  For example in:
+  //   sv.assert %y
+  //   ...
+  //   %x = comb.and ...
+  //   %y = comb.xor %x, true
+  // We want to know that both %y and %x will be used out of order since they'll
+  // both get inlined into the sv.assert earlier in the block.
+  typedef enum {
+    UnseenSoFar = 0,
+    SeenBelow = 1,
+    SeenAndUsedOutOfOrder = 2
+  } OperationScanKind;
 
+  DenseMap<Operation *, OperationScanKind> exprsUsesInformation;
+
+  // Scan the block from the bottom up.
+  for (auto &op : llvm::reverse(block)) {
+    if (!isVerilogExpression(&op)) {
+      // Just remember that we saw this operation.
+      exprsUsesInformation[&op] = SeenBelow;
+      continue;
+    }
+
+    // Check the users of any inlined expression to see if they are lexically
+    // below the operation itself.  If not, it is being used out of order.
+    bool haveAnyOutOfOrderUses = false;
+    for (auto *userOp : op.getUsers()) {
+      // If the user is in a suboperation like an always block, then zip up
+      // to the operation that uses it.
+      while (&block != &userOp->getParentRegion()->front())
+        userOp = userOp->getParentOp();
+
+      // See if we have seen this operation below.  If not, it is an out of
+      // order use, and if the user is itself an inlined expression used out of
+      // order, then this is too.
+      auto userInfo = exprsUsesInformation[userOp];
+      if (userInfo == SeenBelow)
+        continue;
+      haveAnyOutOfOrderUses = true;
+      break;
+    }
+
+    // Remember if this operation has any out of order uses.
+    exprsUsesInformation[&op] =
+        haveAnyOutOfOrderUses ? SeenAndUsedOutOfOrder : SeenBelow;
+  }
+
+  SmallString<32> nameTmp;
   using ValueOrOp = ModuleEmitter::ValueOrOp;
 
   // Loop over all of the results of all of the ops.  Anything that defines a
@@ -1947,22 +2003,9 @@ void NameCollector::collectNames(Block &block) {
         // cyclic graphs in its body.  We check to make sure that no uses of
         // this expression are lexically above this expression.  If they are,
         // we have to emit the declaration at the top of the block.
-        bool haveAnyOutOfOrderUses = false;
-        for (auto *userOp : result.getUsers()) {
-          // If the user is in a suboperation like an always block, then zip up
-          // to the operation that uses it.
-          while (&block != &userOp->getParentRegion()->front())
-            userOp = userOp->getParentOp();
-
-          // Check to see if this is lexically before its users.
-          if (!op.isBeforeInBlock(userOp)) {
-            haveAnyOutOfOrderUses = true;
-            break;
-          }
-        }
 
         // If we have no out of order uses, we can emit an inline declaration.
-        if (!haveAnyOutOfOrderUses)
+        if (exprsUsesInformation[&op] != SeenAndUsedOutOfOrder)
           continue;
         // Otherwise keep track of this unusual case and declare it like normal.
         moduleEmitter.outOfLineExpresssionDecls.insert(&op);
@@ -2065,6 +2108,20 @@ void ModuleEmitter::emitOperation(Operation *op) {
 
   emitOpError(op, "cannot emit this operation to Verilog");
   indent() << "unknown MLIR operation " << op->getName().getStringRef() << "\n";
+}
+
+void ModuleEmitter::emitMLIRModule(ModuleOp module) {
+  for (auto &op : *module.getBody()) {
+    if (auto module = dyn_cast<RTLModuleOp>(op))
+      ModuleEmitter(state).emitRTLModule(module);
+    else if (auto module = dyn_cast<RTLModuleExternOp>(op))
+      ModuleEmitter(state).emitRTLExternModule(module);
+    else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) || isa<IfDefOp>(op) ||
+             isa<IfDefProceduralOp>(op))
+      ModuleEmitter(state).emitOperation(&op);
+    else if (!isa<ModuleTerminatorOp>(op))
+      op.emitError("unknown operation");
+  }
 }
 
 void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
@@ -2205,33 +2262,9 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
 // MLIRModuleEmitter
 //===----------------------------------------------------------------------===//
 
-namespace {
-class MLIRModuleEmitter : public VerilogEmitterBase {
-public:
-  explicit MLIRModuleEmitter(VerilogEmitterState &state)
-      : VerilogEmitterBase(state) {}
-
-  void emit(ModuleOp module);
-};
-
-} // end anonymous namespace
-
-void MLIRModuleEmitter::emit(ModuleOp module) {
-  for (auto &op : *module.getBody()) {
-    if (auto module = dyn_cast<RTLModuleOp>(op))
-      ModuleEmitter(state).emitRTLModule(module);
-    else if (auto module = dyn_cast<RTLModuleExternOp>(op))
-      ModuleEmitter(state).emitRTLExternModule(module);
-    else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) || isa<IfDefOp>(op))
-      ModuleEmitter(state).emitOperation(&op);
-    else if (!isa<ModuleTerminatorOp>(op))
-      op.emitError("unknown operation");
-  }
-}
-
 LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   VerilogEmitterState state(os);
-  MLIRModuleEmitter(state).emit(module);
+  ModuleEmitter(state).emitMLIRModule(module);
   return failure(state.encounteredError);
 }
 

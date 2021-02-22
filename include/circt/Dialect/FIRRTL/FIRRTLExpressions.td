@@ -64,9 +64,9 @@ def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
 }
 
 class IndexConstraint<string value, string resultValue>
-  : TypesMatchWith<"type should be element of array type",
+  : TypesMatchWith<"type should be element of vector type",
                    value, resultValue,
-                   "firrtl::getArrayElementType($_self)">;
+                   "firrtl::getVectorElementType($_self)">;
 
 def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect, 
                                        IndexConstraint<"input", "result">]> {
@@ -81,7 +81,7 @@ def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect,
     ```
     }];
 
-  let arguments = (ins FVectorType:$input, I32Attr:$index);
+  let arguments = (ins FIRRTLType:$input, I32Attr:$index);
   let results = (outs FIRRTLType:$result);
 
   // TODO: Could drop the result type, inferring it from the source.

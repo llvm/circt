@@ -19,14 +19,14 @@ def ConstantOp
     The constant operation produces a constant value of standard integer type
     without a sign.
     ```
-      %result = rtl.constant 42 : t1
+      %result = comb.constant 42 : t1
     ```
     }];
 
   let arguments = (ins APIntAttr:$value);
   let results = (outs CombIntegerType:$result);
 
-  // FIXME(QoI): Instead of requiring "rtl.constant (42: i8) : i8", we should
+  // FIXME(QoI): Instead of requiring "comb.constant (42: i8) : i8", we should
   // just use "rtl.constant 42: i8".  This can be done with a custom printer and
   // parser, but would be better to be autoderived from the
   // FirstAttrDerivedResultType trait.  This should be an MLIR core improvement.
