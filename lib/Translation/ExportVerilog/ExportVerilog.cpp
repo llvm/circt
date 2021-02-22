@@ -186,10 +186,11 @@ static Type stripUnpackedTypes(Type type) {
 /// those to the left of the name in verilog. implicitIntType controls whether
 /// to print a base type for (logic) for inteters or whether the caller will
 /// have handled this (with logic, wire, reg, etc).
-static void printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
+/// Returns whether anything was printed out
+static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                                 SmallVectorImpl<size_t> &dims,
                                 bool implicitIntType) {
-  return TypeSwitch<Type, void>(type)
+  return TypeSwitch<Type, bool>(type)
       .Case<IntegerType>([&](IntegerType integerType) {
         if (!implicitIntType)
           os << "logic";
@@ -203,9 +204,10 @@ static void printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
             os << '[' << (dim - 1) << ":0]";
           else
             os << "/*Zero Width*/";
+        return !dims.empty() || !implicitIntType;
       })
       .Case<InOutType>([&](InOutType inoutType) {
-        printPackedTypeImpl(inoutType.getElementType(), os, loc, dims,
+        return printPackedTypeImpl(inoutType.getElementType(), os, loc, dims,
                             implicitIntType);
       })
       .Case<StructType>([&](StructType structType) {
@@ -217,30 +219,33 @@ static void printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           os << ' ' << element.name << "; ";
         }
         os << '}';
+        return true;
       })
       .Case<ArrayType>([&](ArrayType arrayType) {
         dims.push_back(arrayType.getSize());
-        printPackedTypeImpl(arrayType.getElementType(), os, loc, dims,
+        return printPackedTypeImpl(arrayType.getElementType(), os, loc, dims,
                             implicitIntType);
       })
       .Case<InterfaceType>([](InterfaceType ifaceType) {
-        // Noop
+        return false;
       })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
         os << "<<unexpected unpacked array>>";
         emitError(loc, "Unexpected unpacked array in packed type ")
             << arrayType;
+        return true;
       })
       .Default([&](Type type) {
         os << "<<invalid type>>";
         emitError(loc, "value has an unsupported verilog type ") << type;
+        return true;
       });
 }
 
-static void printPackedType(Type type, raw_ostream &os, Location loc,
+static bool printPackedType(Type type, raw_ostream &os, Location loc,
                             bool implicitIntType = true) {
   SmallVector<size_t, 8> packedDimensions;
-  printPackedTypeImpl(type, os, loc, packedDimensions, implicitIntType);
+  return printPackedTypeImpl(type, os, loc, packedDimensions, implicitIntType);
 }
 
 /// Output the unpacked array dimensions.  This is the part of the type that is
@@ -1209,7 +1214,7 @@ SubExprInfo ExprEmitter::visitComb(MuxOp op) {
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(StructCreateOp op) {
-  StructType stype = op.getType().cast<StructType>();
+  StructType stype = op.getType();
   os << "'{";
   size_t i = 0;
   llvm::interleaveComma(stype.getElements(), os,
@@ -1283,7 +1288,8 @@ void ModuleEmitter::emitStatementExpression(Operation *op) {
     indent() << "// Zero width: ";
   } else if (emitInlineLogicDecls && !outOfLineExpresssionDecls.count(op)) {
     indent() << getVerilogDeclWord(op) << " ";
-    emitTypeDimWithSpaceIfNeeded(op->getResult(0).getType(), op->getLoc(), os);
+    if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os, op->getLoc()))
+      os << ' ';
     os << getName(op->getResult(0)) << " = ";
   } else {
     indent() << "assign " << getName(op->getResult(0)) << " = ";
@@ -1920,6 +1926,11 @@ static bool isExpressionUnableToInline(Operation *op) {
                           op->getLoc()))
       // Bitcasts rely on the type being assigned to, so we cannot inline.
       return true;
+  
+  // StructCreateOp needs to be assigning to a named temporary so that types
+  // are inferred properly by verilog 
+  if (isa<StructCreateOp>(op))
+    return true;
 
   // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
