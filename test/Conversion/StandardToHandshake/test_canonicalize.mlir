@@ -6,7 +6,7 @@ module {
   // CHECK-SAME:                         %[[VAL_0:.*]]: none, ...) -> none {
   handshake.func @simple(%arg0: none, ...) -> none {
 
-    // CHECK: %[[VAL_1:.*]] = "handshake.constant"(%[[VAL_0:.*]]) {value = 1 : index} : (none) -> index
+    // CHECK-NOT: "handshake.constant"(%arg0)
     %0 = "handshake.constant"(%arg0) {value = 1 : index} : (none) -> index
     
     // CHECK-NOT: %[[TMP_0:.*]] = "handshake.branch"(%[[VAL_0:.*]]) {control = true} : (none) -> none

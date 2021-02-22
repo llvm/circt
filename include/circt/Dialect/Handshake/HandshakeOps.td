@@ -437,8 +437,9 @@ def ConditionalBranchOp : Handshake_Op<"conditional_branch", [
   }];
 }
 
-def SinkOp
-    : Handshake_Op<"sink", [DeclareOpInterfaceMethods<ExecutableOpInterface>]> {
+def SinkOp : Handshake_Op<"sink", [
+  NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>
+]> {
   let summary = "sink operation";
   let description = [{
     The "handshake.sink" operation discards any data that arrives at its
