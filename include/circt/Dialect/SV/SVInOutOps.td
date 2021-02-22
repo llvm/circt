@@ -48,12 +48,6 @@ def WireOp : SVOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
 
   let assemblyFormat = "custom<ImplicitSSAName>(attr-dict) `:` type($result)";
   let hasCanonicalizer = true;
-
-  let extraClassDeclaration = [{
-    Type getElementType() {
-      return result().getType().cast<InOutType>().getElementType();
-    }
-  }];
   let verifier = [{ return ::verifyWireOp(*this); }];
 }
 
@@ -75,12 +69,6 @@ def RegOp : SVOp<"reg", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   // We handle the name in a custom way, so we use a customer parser/printer.
   let assemblyFormat = "custom<ImplicitSSAName>(attr-dict) `:` type($result)";
   let hasCanonicalizer = true;
-
-  let extraClassDeclaration = [{
-    Type getElementType() {
-      return result().getType().cast<InOutType>().getElementType();
-    }
-  }];
 }
 
 def ReadInOutOp
