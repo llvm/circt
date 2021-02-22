@@ -19,7 +19,7 @@ rtl.module @A(%d: i1, %e: i1) -> (i1 {rtl.name = "f"}) {
 }
 
 rtl.module @AAA(%d: i1, %e: i1) -> (i1 {rtl.name = "f"}) {
-  %z = comb.constant ( 0 : i1 ) : i1
+  %z = comb.constant 0 : i1
   rtl.output %z : i1
 }
 
@@ -78,10 +78,10 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !rtl.array<10xi4>,
   %31 = comb.sext %a : (i4) -> i9
   %33 = comb.mux %cond, %a, %b : i4
 
-  %allone = comb.constant (15 : i4) : i4
+  %allone = comb.constant 15 : i4
   %34 = comb.xor %a, %allone : i4
 
-  %one = comb.constant (1 : i4) : i4
+  %one = comb.constant 1 : i4
   %aPlusOne = comb.add %a, %one : i4
   %35 = rtl.array_slice %array at %aPlusOne: (!rtl.array<10xi4>) -> !rtl.array<3xi4>
 
@@ -93,7 +93,7 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !rtl.array<10xi4>,
 }
 
 rtl.module @exprInlineTestIssue439(%clk: i1) {
-  %c = comb.constant (0:i32) : i32
+  %c = comb.constant 0 : i32
 
   sv.always posedge %clk {
     %e = comb.extract %c from 0 : (i32) -> i16
@@ -104,7 +104,7 @@ rtl.module @exprInlineTestIssue439(%clk: i1) {
 
 rtl.module @casts(%in1: i64) -> (%r1: !rtl.array<5xi8>) {
   %bits = comb.bitcast %in1 : (i64) -> !rtl.array<64xi1>
-  %idx = comb.constant (10 : i6) : i6
+  %idx = comb.constant 10 : i6
   %midBits = rtl.array_slice %bits at %idx : (!rtl.array<64xi1>) -> !rtl.array<40xi1>
   %r1 = comb.bitcast %midBits : (!rtl.array<40xi1>) -> !rtl.array<5xi8>
   rtl.output %r1 : !rtl.array<5xi8>
