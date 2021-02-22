@@ -185,12 +185,10 @@ static Type stripUnpackedTypes(Type type) {
 /// Output the basic type that consists of packed and primitive types.  This is
 /// those to the left of the name in verilog. implicitIntType controls whether
 /// to print a base type for (logic) for inteters or whether the caller will
-/// have handled this (with logic, wire, reg, etc).  structFieldSep is a
-/// character to be printed between struct fields.  Pretty printed structs will
-/// likely use newline, while inline structs will use spaces
+/// have handled this (with logic, wire, reg, etc).
 static void printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                                 SmallVectorImpl<size_t> &dims,
-                                bool implicitIntType, char structFieldSep) {
+                                bool implicitIntType) {
   return TypeSwitch<Type, void>(type)
       .Case<IntegerType>([&](IntegerType integerType) {
         if (!implicitIntType)
@@ -208,23 +206,22 @@ static void printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
       })
       .Case<InOutType>([&](InOutType inoutType) {
         printPackedTypeImpl(inoutType.getElementType(), os, loc, dims,
-                            implicitIntType, structFieldSep);
+                            implicitIntType);
       })
       .Case<StructType>([&](StructType structType) {
         os << "struct packed {";
         for (auto &element : structType.getElements()) {
           SmallVector<size_t, 8> structDims;
           printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
-                              structDims, /*implicitIntType=*/false,
-                              structFieldSep);
-          os << ' ' << element.name << ';' << structFieldSep;
+                              structDims, /*implicitIntType=*/false);
+          os << ' ' << element.name << "; ";
         }
         os << '}';
       })
       .Case<ArrayType>([&](ArrayType arrayType) {
         dims.push_back(arrayType.getSize());
         printPackedTypeImpl(arrayType.getElementType(), os, loc, dims,
-                            implicitIntType, structFieldSep);
+                            implicitIntType);
       })
       .Case<InterfaceType>([](InterfaceType ifaceType) {
         // Noop
@@ -241,11 +238,9 @@ static void printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
 }
 
 static void printPackedType(Type type, raw_ostream &os, Location loc,
-                            bool implicitIntType = true,
-                            char structFieldSep = ' ') {
+                            bool implicitIntType = true) {
   SmallVector<size_t, 8> packedDimensions;
-  printPackedTypeImpl(type, os, loc, packedDimensions, implicitIntType,
-                      structFieldSep);
+  printPackedTypeImpl(type, os, loc, packedDimensions, implicitIntType);
 }
 
 /// Output the unpacked array dimensions.  This is the part of the type that is
