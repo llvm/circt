@@ -1,35 +1,25 @@
-# ⚡️ "CIRCT" / Circuit IR Compilers and Tools
+# Getting Started with the CIRCT Project
 
-"CIRCT" stands for "Circuit IR Compilers and Tools".  One might also interpret
-it as the recursively as "CIRCT IR Compiler and Tools".  The T can be
-selectively expanded as Tool, Translator, Team, Technology, Target, Tree, Type,
-... we're ok with the ambiguity.
+## Overview
 
-The CIRCT community is an open and welcoming community.  If you'd like to
-participate, you can do so in a number of different ways:
+Welcome to the CIRCT project!
 
-1) Join our [Discourse Forum](https://llvm.discourse.group/c/Projects-that-want-to-become-official-LLVM-Projects/circt/) on the LLVM Discourse server.  To get a "mailing list" like experience click the bell icon in the upper right and switch to "Watching".  It is also helpful to go to your Discourse profile, then the "emails" tab, and check "Enable mailing list mode".  You can also do chat with us on [CIRCT channel](https://discord.com/channels/636084430946959380/742572728787402763) of LLVM discord server.
+"CIRCT" stands for "Circuit IR Compilers and Tools".  The CIRCT project is an 
+(experimental!) effort looking to apply MLIR and the LLVM development 
+methodology to the domain of hardware design tools.
 
-2) Join our weekly video chat.  Please see the
-[meeting notes document](https://docs.google.com/document/d/1fOSRdyZR2w75D87yU2Ma9h2-_lEPL4NxvhJGJd-s5pk/edit#)
-for more information.
-
-3) Contribute code.  CIRCT follows all of the LLVM Policies: you can create pull
-   requests for the CIRCT repository, and gain commit access using the [standard
-   LLVM policies](https://llvm.discourse.group/c/Projects-that-want-to-become-official-LLVM-Projects/circt/).
-
-Also take a look at the following diagram, which gives a brief overview of the current [dialects and how they interact](includes/img/dialects.svg):
+Take a look at the following diagram, which gives a brief overview of the 
+current [dialects and how they interact](includes/img/dialects.svg):
 
 <p align="center"><img src="includes/img/dialects.svg"/></p>
-
-For more information, please see our longer [charter document](Charter.md).
 
 ## Setting this up
 
 These commands can be used to setup CIRCT project:
 
 1) **Install Dependencies** of LLVM/MLIR according to [the
-  instructions](https://mlir.llvm.org/getting_started/), including cmake and ninja.
+  instructions](https://mlir.llvm.org/getting_started/), including cmake and 
+ninja.
 
 2) **Check out LLVM and CIRCT repos.**  CIRCT contains LLVM as a git
 submodule.  The LLVM repo here includes staged changes to MLIR which
@@ -45,7 +35,10 @@ $ git submodule init
 $ git submodule update
 ```
 
-*Note:* The repository is set up so that `git submodule update` performs a shallow clone, meaning it downloads just enough of the LLVM repository to check out the currently specified commit. If you wish to work with the full history of the LLVM repository, you can manually "unshallow" the the submodule:
+*Note:* The repository is set up so that `git submodule update` performs a 
+shallow clone, meaning it downloads just enough of the LLVM repository to check 
+out the currently specified commit. If you wish to work with the full history of
+the LLVM repository, you can manually "unshallow" the the submodule:
 
 ```
 $ cd llvm
@@ -95,11 +88,11 @@ in performance.
 
 5) **Optionally configure your environment**:
 
-It is useful to add the `.../circt/build/bin` and `.../circt/llvm/build/bin` directories to the end
-of your PATH, allowing you to use the tools like `circt-opt` in a natural way on
-the command line.  Similarly, you need to be in the build directory to invoke
-ninja, which is super annoying.  You might find a bash/zsh alias like this to
-be useful:
+It is useful to add the `.../circt/build/bin` and `.../circt/llvm/build/bin` 
+directories to the end of your PATH, allowing you to use the tools like `circt-opt` 
+in a natural way on the command line.  Similarly, you need to be in the build 
+directory to invoke ninja, which is super annoying.  You might find a bash/zsh 
+alias like this to be useful:
 
 ```bash
 build() {
@@ -153,9 +146,10 @@ GitHub issues.  Here are some high-level guidelines:
  * Beyond mechanical formatting issues, please follow the [LLVM Coding
    Standards](https://llvm.org/docs/CodingStandards.html).
 
- * Please practice "[incremental development](https://llvm.org/docs/DeveloperPolicy.html#incremental-development)", preferring to send a small
-   series of incremental patches rather than large patches.  There are other
-   policies in the LLVM Developer Policy document that are worth skimming.
+ * Please practice "[incremental development](https://llvm.org/docs/DeveloperPolicy.html#incremental-development)", 
+   preferring to send a small series of incremental patches rather than large 
+   patches.  There are other policies in the LLVM Developer Policy document that
+   are worth skimming.
 
  * Please use "Squash and Merge" in PRs when they are approved - we don't
    need the intra-change history in the repository history.
@@ -166,12 +160,15 @@ GitHub issues.  Here are some high-level guidelines:
 
 ## Submitting changes to LLVM / MLIR
 
-This project depends on MLIR and LLVM, and it is occasionally useful to improve them.
+This project depends on MLIR and LLVM, and it is occasionally useful to improve 
+them.
 To get set up for this:
 
-1) Follow the "[How to Contribute](https://mlir.llvm.org/getting_started/Contributing/)" instructions, and install the right tools, e.g. 'arcanist' and `clang-format`.
- 2) Get an LLVM Phabricator account
- 3) [Ask for LLVM commit access](https://llvm.org/docs/DeveloperPolicy.html#obtaining-commit-access), the barrier is low.
+1) Follow the "[How to Contribute](https://mlir.llvm.org/getting_started/Contributing/)" 
+instructions, and install the right tools, e.g. 'arcanist' and `clang-format`.
+2) Get an LLVM Phabricator account
+3) [Ask for LLVM commit access](https://llvm.org/docs/DeveloperPolicy.html#obtaining-commit-access), 
+the barrier is low.
 
 ### Submitting a patch
 
@@ -193,7 +190,12 @@ When your review converges and your patch is approved, do the following:
 
 ### Updating the staging version of LLVM / MLIR
 
-The 'staging' tree at git@github.com:circt/llvm.git is only intended to be a temporary location for patches which have not yet been accepted upstream.  The patches here should not be long lived and the branches in that tree may be rebased without warning.  The 'correct' version of LLVM is referenced by its git hash as a submodule of the main circt repository.  It may be necessary to pull changes from LLVM, in which case it is appropriate to rebase this tree.
+The 'staging' tree at git@github.com:circt/llvm.git is only intended to be a 
+temporary location for patches which have not yet been accepted upstream.  The 
+patches here should not be long lived and the branches in that tree may be 
+rebased without warning.  The 'correct' version of LLVM is referenced by its git
+hash as a submodule of the main circt repository.  It may be necessary to pull 
+changes from LLVM, in which case it is appropriate to rebase this tree.
 
 ```
 $ cd llvm
@@ -204,13 +206,18 @@ $ ninja
 $ ninja check-mlir
 ```
 
-At this point we have built and tested our changes with any upstream changes and resolved any conflicts.  Note that we rebase instead of merging in order to ensure that our patches remain current, since they should get pushed to LLVM at some point.  Now we can update `circt/llvm` and push a new reference to LLVM for everyone else to use.
+At this point we have built and tested our changes with any upstream changes and
+resolved any conflicts.  Note that we rebase instead of merging in order to 
+ensure that our patches remain current, since they should get pushed to LLVM at 
+some point.  Now we can update `circt/llvm` and push a new reference to LLVM for
+everyone else to use.
 
 ```
 $ git push -f origin HEAD:staging
 ```
 
-However, we're still not done at this point.  `circt/circt` still points at the old git hash for the llvm submodule.
+However, we're still not done at this point.  `circt/circt` still points at the 
+old git hash for the llvm submodule.
 
 ```
 $ cd circt/build
@@ -218,7 +225,8 @@ $ ninja
 $ ninja check-circt
 ```
 
-Now we have fixed any changes to circuit, so those changes can be committed and pushed.
+Now we have fixed any changes to circuit, so those changes can be committed and 
+pushed.
 
 ```
 $ cd ..
