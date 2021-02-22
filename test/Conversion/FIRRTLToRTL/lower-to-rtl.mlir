@@ -797,8 +797,8 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK:       }
     // CHECK:     }
     // CHECK:     sv.alwaysff(posedge %[[clk]]) {
-    // CHECK:       %[[en:.+]] = sv.read_inout %[[en_0]]
-    // CHECK:       %[[mask:.+]] = sv.read_inout %[[mask_0]]
+    // CHECK-DAG:   %[[en:.+]] = sv.read_inout %[[en_0]]
+    // CHECK-DAG:   %[[mask:.+]] = sv.read_inout %[[mask_0]]
     // CHECK:       %[[cond:.+]] = comb.and %[[en]], %[[mask]]
     // CHECK:       sv.if %[[cond]] {
     // CHECK:         %[[addr:.+]] = sv.read_inout %[[addr_0]]
