@@ -101,9 +101,12 @@ rtl.module @top(%clk:i1, %rstn:i1) -> () {
   // SV:      assert(l_ptr[6'h23+:29] <= 29'h4);
   // SV:    end
   // SV:  end // always @(posedge)
-  // SV:  wire [63:0] rootPointer_2 = ArrTestEP_DataOut[9'h0+:64];
-  // SV:  wire [63:0] ptrSection = ArrTestEP_DataOut[9'h40+:64];
-  // SV:  wire [63:0] l_ptr = ptrSection[6'h0+:64];
+  // SV:  assign rootPointer_2 = ArrTestEP_DataOut[9'h0+:64];
+  // SV:  assign ptrSection = ArrTestEP_DataOut[9'h40+:64];
+  // SV:  assign l_ptr = ptrSection[6'h0+:64];
+  // SV:  wire [29:0] _T_3 = l_ptr[6'h2+:30] + 30'h80;
+  // SV:  wire [8:0] _T_4 = _T_3[8:0];
+  // SV:  wire [3:0][63:0] _T_5 = /*cast(bit[3:0][63:0])*/ArrTestEP_DataOut[_T_4+:256];
 
   // The decode part is missing, but ExportVerilog is currently not using the
   // names I'm assigning since it's inlining them. More work on ExportVerilog is
