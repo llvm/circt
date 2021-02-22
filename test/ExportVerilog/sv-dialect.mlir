@@ -11,7 +11,8 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT:   `endif
   // CHECK-NEXT: end // always @(posedge)
   sv.always posedge %clock {
-    sv.ifdef "!SYNTHESIS" {
+    sv.ifdef "SYNTHESIS" {
+    } else {
       %tmp = sv.textual_value "PRINTF_COND_" : i1
       %tmp2 = comb.and %tmp, %cond : i1
       sv.if %tmp2 {
@@ -133,10 +134,10 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     sv.passign %wire42, %thing : i42
   }// CHECK-NEXT:   {{end // initial$}}
 
-  sv.ifdef "!VERILATOR"  {         // CHECK-NEXT: `ifndef VERILATOR
-    sv.verbatim "`define Thing1"   // CHECK-NEXT:   `define Thing1
-  } else  {                        // CHECK-NEXT: `else
+  sv.ifdef "VERILATOR"  {          // CHECK-NEXT: `ifdef VERILATOR
     sv.verbatim "`define Thing2"   // CHECK-NEXT:   `define Thing2
+  } else  {                        // CHECK-NEXT: `else
+    sv.verbatim "`define Thing1"   // CHECK-NEXT:   `define Thing1
   }                                // CHECK-NEXT: `endif
 
   %add = comb.add %val, %val : i8
@@ -240,3 +241,22 @@ rtl.module @issue439(%in1: i1, %in2: i1) {
     sv.fwrite "Bye %x\n"(%merged) : i1
   }
 }
+
+// https://github.com/llvm/circt/issues/595
+// CHECK-LABEL: module issue595
+rtl.module @issue595(%arr: !rtl.array<128xi1>) {
+  // CHECK: wire [63:0] _T;
+  %c0_i32 = comb.constant(0 : i32) : i32
+  %c0_i7 = comb.constant(0 : i7) : i7
+  %c0_i6 = comb.constant(0 : i6) : i6
+  %0 = comb.icmp eq %3, %c0_i32 : i32
+  // CHECK: assert(_T[6'h0+:32] == 32'h0);
+  sv.assert %0 : i1
+
+  // CHECK: assign _T = arr[7'h0+:64];
+  %1 = rtl.array_slice %arr at %c0_i7 : (!rtl.array<128xi1>) -> !rtl.array<64xi1>
+  %2 = rtl.array_slice %1 at %c0_i6 : (!rtl.array<64xi1>) -> !rtl.array<32xi1>
+  %3 = comb.bitcast %2 : (!rtl.array<32xi1>) -> i32
+  rtl.output
+}
+
