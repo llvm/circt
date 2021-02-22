@@ -370,6 +370,7 @@ def ControlMergeOp : Handshake_Op<"control_merge", [
   let arguments = (ins Variadic<AnyType>:$dataOperands, BoolAttr : $control);
   let results = (outs Variadic<AnyType>);
 
+  let hasCanonicalizer = 1;
   let builders = [OpBuilderDAG<(ins "Value":$operand, "int":$inputs)>];
 
   let extraClassDeclaration = [{
@@ -646,9 +647,11 @@ def JoinOp : Handshake_Op<"join", [
 def I4 : I<4>;
 def I4Attr : SignlessIntegerAttrBase<I4, "4-bit integer attribute">;
 
+def HasOneOperand : Constraint<CPred<"$_self.size() == 1">, "has one operand">;
 def HasOneResult : Constraint<CPred<"$_self.size() == 1">, "has one result">;
 
-def EliminateSimpleMergesPattern : Pat<(MergeOp $a), (replaceWithValue $a)>;
+def EliminateSimpleMergesPattern : Pat<(MergeOp $a), (replaceWithValue $a),
+                                       [(HasOneOperand:$a)]>;
 
 def EliminateSimpleBranchesPattern
     : Pat<(BranchOp $a, $attr), (replaceWithValue $a)>;
@@ -657,11 +660,5 @@ def EliminateSimpleForksPattern : Pat<(ForkOp
                                        : $op $a, $attr),
                                       (replaceWithValue $a), [(HasOneResult
                                                                : $op)]>;
-
-// def EliminateSimpleControlMergesPattern :
-//     Pattern<(ControlMergeOp $a),
-//             [(replaceWithValue $a),
-//              (ConstantOp $a__0, ConstantAttr<I4Attr,
-// "0">)]>;
 
 #endif // HANDSHAKE_OPS
