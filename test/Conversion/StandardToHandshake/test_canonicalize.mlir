@@ -36,4 +36,12 @@ module {
     "handshake.sink"(%index) : (index) -> ()
     handshake.return %result, %arg2 : none, none
   }
+
+  // CHECK-LABEL: cmerge_with_control_ignored
+  handshake.func @cmerge_with_control_ignored(%arg0: none, %arg1: none, %arg2: none) -> (none, none) {
+    // CHECK: "handshake.merge"(%{{.+}}, %{{.+}})
+    // CHECK-NOT: "handshake.control_merge"
+    %result, %index = "handshake.control_merge"(%arg0, %arg1) {control = true} : (none, none) -> (none, index)
+    handshake.return %result, %arg2 : none, none
+  }
 }

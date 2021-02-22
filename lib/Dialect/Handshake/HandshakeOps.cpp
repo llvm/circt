@@ -334,11 +334,8 @@ LogicalResult EliminateSimpleControlMergesPattern::matchAndRewrite(
     ControlMergeOp op, PatternRewriter &rewriter) const {
   auto dataResult = op.getResult(0);
   auto choiceResult = op.getResult(1);
-  if (!choiceResult.hasOneUse())
-    return failure();
-
-  auto *choiceUser = choiceResult.getUses().begin().getUser();
-  if (!isa<SinkOp>(choiceUser))
+  auto choiceUnused = choiceResult.use_empty();
+  if (!choiceUnused && !choiceResult.hasOneUse())
     return failure();
 
   auto merge = rewriter.create<MergeOp>(op.getLoc(), dataResult.getType(),
@@ -350,8 +347,16 @@ LogicalResult EliminateSimpleControlMergesPattern::matchAndRewrite(
         user, [&]() { user->setOperand(use.getOperandNumber(), merge); });
   }
 
-  rewriter.eraseOp(choiceUser);
   rewriter.eraseOp(op);
+
+  if (choiceUnused)
+    return success();
+
+  auto *choiceUser = choiceResult.getUses().begin().getUser();
+  if (!isa<SinkOp>(choiceUser))
+    return failure();
+
+  rewriter.eraseOp(choiceUser);
 
   return success();
 }
