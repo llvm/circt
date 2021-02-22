@@ -852,7 +852,6 @@ private:
   // SystemVerilog spec 11.8.1: "Reduction operator results are unsigned,
   // regardless of the operands."
   SubExprInfo visitComb(AndROp op) { return emitUnary(op, "&", true); }
-  SubExprInfo visitComb(OrROp op) { return emitUnary(op, "|", true); }
   SubExprInfo visitComb(XorROp op) { return emitUnary(op, "^", true); }
 
   SubExprInfo visitComb(SExtOp op);
@@ -1081,6 +1080,14 @@ SubExprInfo ExprEmitter::visitComb(ICmpOp op) {
 
   auto pred = static_cast<uint64_t>(op.predicate());
   assert(pred < sizeof(symop) / sizeof(symop[0]));
+  if (pred == 1) {
+    // Lower "!= 0" to Reduction Or
+    if (auto op1 =
+            dyn_cast_or_null<ConstantOp>(op.getOperand(1).getDefiningOp())) {
+      if (op1.getValue().isNullValue())
+        return emitUnary(op, "|", true);
+    }
+  }
   auto result = emitBinary(op, Comparison, symop[pred], signop[pred]);
 
   // SystemVerilog 11.8.1: "Comparison... operator results are unsigned,

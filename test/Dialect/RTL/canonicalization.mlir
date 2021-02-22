@@ -488,7 +488,7 @@ rtl.module @andr_constant_folding2() -> (i1) {
 
 rtl.module @orr_constant_folding1() -> (i1) {
   %c0_i4 = comb.constant(0 : i4) : i4
-  %0 = comb.orr %c0_i4 : i4
+  %0 = comb.icmp ne %c0_i4, %c0_i4 : i4
   rtl.output %0 : i1
 }
 
@@ -498,7 +498,8 @@ rtl.module @orr_constant_folding1() -> (i1) {
 
 rtl.module @orr_constant_folding2() -> (i1) {
   %c8_i4 = comb.constant(8 : i4) : i4
-  %0 = comb.orr %c8_i4 : i4
+  %zero4 = comb.constant (0 : i4) : i4
+  %0 = comb.icmp ne %c8_i4, %zero4 : i4
   rtl.output %0 : i1
 }
 
