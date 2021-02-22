@@ -580,7 +580,12 @@ public:
   /// Create an op to slice the array from lsb to lsb + size. Return a new slice
   /// with that op.
   Slice slice(int64_t lsb, int64_t size) const {
-    Value newSlice = builder->create<rtl::ArraySliceOp>(loc(), s, lsb, size);
+    rtl::ArrayType dstTy = rtl::ArrayType::get(type.getElementType(), size);
+    IntegerType idxTy =
+        builder->getIntegerType(llvm::Log2_64_Ceil(type.getSize()));
+    Value lsbConst = builder->create<comb::ConstantOp>(loc(), idxTy, lsb);
+    Value newSlice =
+        builder->create<rtl::ArraySliceOp>(loc(), dstTy, s, lsbConst);
     return Slice(this, lsb, newSlice);
   }
 
