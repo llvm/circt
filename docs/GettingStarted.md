@@ -8,7 +8,7 @@ selectively expanded as Tool, Translator, Team, Technology, Target, Tree, Type,
 The CIRCT community is an open and welcoming community.  If you'd like to
 participate, you can do so in a number of different ways:
 
-1) Join our [Discourse Forum](https://llvm.discourse.group/c/Projects-that-want-to-become-official-LLVM-Projects/circt/) on the LLVM Discourse server.  To get a "mailing list" like experience click the bell icon in the upper right and switch to "Watching".  It is also helpful to go to your Discourse profile, then the "emails" tab, and check "Enable mailing list mode".
+1) Join our [Discourse Forum](https://llvm.discourse.group/c/Projects-that-want-to-become-official-LLVM-Projects/circt/) on the LLVM Discourse server.  To get a "mailing list" like experience click the bell icon in the upper right and switch to "Watching".  It is also helpful to go to your Discourse profile, then the "emails" tab, and check "Enable mailing list mode".  You can also do chat with us on [CIRCT channel](https://discord.com/channels/636084430946959380/742572728787402763) of LLVM discord server.
 
 2) Join our weekly video chat.  Please see the
 [meeting notes document](https://docs.google.com/document/d/1fOSRdyZR2w75D87yU2Ma9h2-_lEPL4NxvhJGJd-s5pk/edit#)
@@ -22,34 +22,11 @@ Also take a look at the following diagram, which gives a brief overview of the c
 
 <p align="center"><img src="includes/img/dialects.svg"/></p>
 
-## Motivation
-
-The EDA industry has well-known and widely used proprietary and open source
-tools.  However, these tools are inconsistent, have usability concerns, and were
-not designed together into a common platform.  Furthermore
-these tools are generally built with
-[Verilog](https://en.wikipedia.org/wiki/Verilog) (also
-[VHDL](https://en.wikipedia.org/wiki/VHDL)) as the IRs that they
-interchange.  Verilog has well known design issues, and limitations, e.g.
-suffering from poor location tracking support.
-
-The CIRCT project is an (experimental!) effort looking to apply MLIR and
-the LLVM development methodology to the domain of hardware design tools.  Many
-of us dream of having reusable infrastructure that is modular, uses
-library-based design techniques, is more consistent, and builds on the best
-practices in compiler infrastructure and compiler design techniques.
-
-By working together, we hope that we can build a new center of gravity to draw
-contributions from the small (but enthusiastic!) community of people who work
-on open hardware tooling.  In turn we hope this will propel open tools forward,
-enables new higher-level abstractions for hardware design, and
-perhaps some pieces may even be adopted by proprietary tools in time.
-
 For more information, please see our longer [charter document](Charter.md).
 
 ## Setting this up
 
-These commands can be used to set this up on a Mac:
+These commands can be used to setup CIRCT project:
 
 1) **Install Dependencies** of LLVM/MLIR according to [the
   instructions](https://mlir.llvm.org/getting_started/), including cmake and ninja.
