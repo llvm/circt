@@ -1352,7 +1352,7 @@ LogicalResult ModuleEmitter::visitSV(TypeDefOp op) {
   typesToTypeDef.insert(std::make_pair(op.type(), op));
 
   indent() << "typedef ";
-  ::printPackedType(op.type(), os, op.getLoc(), false);
+  printPackedType(op.type(), os, op.getLoc(), false);
   os << ' ' << op.sym_name() << ";\n";
   return success();
 }
