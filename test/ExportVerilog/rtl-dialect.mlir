@@ -6,9 +6,11 @@ rtl.module.extern @E(%a: i1 {rtl.direction = "in"},
 
 // CHECK-LABEL: // external module E
 
-rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1,
+rtl.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
                         %array2d: !rtl.array<12 x array<10xi4>>,
-                        %uarray: !rtl.uarray<16xi8>) -> (
+                        %uarray: !rtl.uarray<16xi8>,
+                        %postUArray: i8,
+                        %structA: !rtl.struct<foo: i2, bar:i4>) -> (
   %r0: i4, %r2: i4, %r4: i4, %r6: i4,
   %r7: i4, %r8: i4, %r9: i4, %r10: i4,
   %r11: i4, %r12: i4, %r13: i4, %r14: i4,
@@ -18,7 +20,8 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1,
   %r25: i1, %r26: i1, %r27: i1, %r28: i1,
   %r29: i12, %r30: i2, %r31: i9, %r33: i4, %r34: i4,
   %r35: !rtl.array<3xi4>, %r36: i12, %r37: i4,
-  %r38: !rtl.array<6xi4>
+  %r38: !rtl.array<6xi4>, 
+  %r40: !rtl.struct<foo: i2, bar:i4>, %r41: !rtl.struct<foo: i2, bar: i4>
   ) {
   
   %0 = comb.add %a, %b : i4
@@ -69,31 +72,42 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1,
 
   %36 = comb.concat %a, %a, %a : (i4, i4, i4) -> i12
 
+  %39 = rtl.struct_extract %structA["bar"] : !rtl.struct<foo: i2, bar: i4>
+  %40 = rtl.struct_inject %structA["bar"], %a : !rtl.struct<foo: i2, bar: i4>
+  %41 = rtl.struct_create (%c, %a) : !rtl.struct<foo: i2, bar: i4>
+  %42 = rtl.struct_inject %41["bar"], %b : !rtl.struct<foo: i2, bar: i4>
+
   rtl.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14,
               %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27,
-              %28, %29, %30, %31, %33, %34, %35, %36, %37, %38 :
+              %28, %29, %30, %31, %33, %34, %35, %36, %37, %38, %40, %42 :
     i4,i4, i4,i4,i4,i4,i4, i4,i4,i4,i4,i4,
     i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,i1,i1,
-    i12, i2,i9,i4, i4, !rtl.array<3xi4>, i12, i4, !rtl.array<6xi4>
+   i12, i2, i9, i4, i4, !rtl.array<3xi4>, i12, i4, !rtl.array<6xi4>, 
+   !rtl.struct<foo: i2, bar: i4>, !rtl.struct<foo: i2, bar: i4>
 }
 // CHECK-LABEL: module TESTSIMPLE(
-// CHECK-NEXT:   input  [3:0]            a, b
-// CHECK-NEXT:   input                   cond,
-// CHECK-NEXT:   input  [11:0][9:0][3:0] array2d,
-// CHECK-NEXT:   input  [7:0]            uarray[15:0],
-// CHECK-NEXT:   output [3:0]            r0, r2, r4, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15
-// CHECK-NEXT:   output                  r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27, r28
-// CHECK-NEXT:   output [11:0]           r29,
-// CHECK-NEXT:   output [1:0]            r30,
-// CHECK-NEXT:   output [8:0]            r31,
-// CHECK-NEXT:   output [3:0]            r33, r34,
-// CHECK-NEXT:   output [2:0][3:0]       r35,
-// CHECK-NEXT:   output [11:0]           r36,
-// CHECK-NEXT:   output [3:0]            r37,
-// CHECK-NEXT:   output [5:0][3:0]       r38);
+// CHECK-NEXT:   input  [3:0]                                              a, b,
+// CHECK-NEXT:   input  [1:0]                                              c,
+// CHECK-NEXT:   input                                                     cond,
+// CHECK-NEXT:   input  [11:0][9:0][3:0]                                   array2d,
+// CHECK-NEXT:   input  [7:0]                                              uarray[15:0], postUArray,
+// CHECK-NEXT:   input  struct packed {logic [1:0] foo; logic [3:0] bar; } structA,
+// CHECK-NEXT:   output [3:0]                                              r0, r2, r4, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15
+// CHECK-NEXT:   output                                                    r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27,
+// CHECK-NEXT:   output                                                    r28,
+// CHECK-NEXT:   output [11:0]                                             r29,
+// CHECK-NEXT:   output [1:0]                                              r30,
+// CHECK-NEXT:   output [8:0]                                              r31,
+// CHECK-NEXT:   output [3:0]                                              r33, r34,
+// CHECK-NEXT:   output [2:0][3:0]                                         r35,
+// CHECK-NEXT:   output [11:0]                                             r36,
+// CHECK-NEXT:   output [3:0]                                              r37,
+// CHECK-NEXT:   output [5:0][3:0]                                         r38,
+// CHECK-NEXT:   output struct packed {logic [1:0] foo; logic [3:0] bar; } r40, r41);
 // CHECK-EMPTY:
 // CHECK-NEXT:   wire [8:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
 // CHECK-NEXT:   wire [2:0][3:0] [[WIRE1:.+]] = {{[{}][{}]}}4'hF}, {a + b}, {4'hF}};
+// CHECK-NEXT:   wire struct packed {logic [1:0] foo; logic [3:0] bar; } [[WIRE2:.+]] = '{foo: c, bar: a};
 // CHECK-NEXT:   assign r0 = a + b;
 // CHECK-NEXT:   assign r2 = a - b;
 // CHECK-NEXT:   assign r4 = a * b;
@@ -129,7 +143,10 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1,
 // CHECK-NEXT:   assign r36 = {3{a}};
 // CHECK-NEXT:   assign r37 = array2d[a][b];
 // CHECK-NEXT:   assign r38 = {[[WIRE1]], [[WIRE1]]};
+// CHECK-NEXT:   assign r40 = '{foo: structA.foo, bar: a};
+// CHECK-NEXT:   assign r41 = '{foo: _T_1.foo, bar: b};
 // CHECK-NEXT: endmodule
+
 
 rtl.module @B(%a: i1) -> (%b: i1, %c: i1) {
   %0 = comb.or %a, %a : i1

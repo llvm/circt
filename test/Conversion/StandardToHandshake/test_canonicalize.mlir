@@ -6,7 +6,7 @@ module {
   // CHECK-SAME:                         %[[VAL_0:.*]]: none, ...) -> none {
   handshake.func @simple(%arg0: none, ...) -> none {
 
-    // CHECK: %[[VAL_1:.*]] = "handshake.constant"(%[[VAL_0:.*]]) {value = 1 : index} : (none) -> index
+    // CHECK-NOT: "handshake.constant"(%arg0)
     %0 = "handshake.constant"(%arg0) {value = 1 : index} : (none) -> index
     
     // CHECK-NOT: %[[TMP_0:.*]] = "handshake.branch"(%[[VAL_0:.*]]) {control = true} : (none) -> none
@@ -25,5 +25,23 @@ module {
     %7 = addi %4, %6 : index
     "handshake.sink"(%7) : (index) -> ()
     handshake.return %5#1 : none
+  }
+
+  // CHECK-LABEL: cmerge_with_control_sunk
+  handshake.func @cmerge_with_control_sunk(%arg0: none, %arg1: none, %arg2: none) -> (none, none) {
+    // CHECK: "handshake.merge"(%{{.+}}, %{{.+}})
+    // CHECK-NOT: "handshake.control_merge"
+    // CHECK-NOT: "handshake.sink"
+    %result, %index = "handshake.control_merge"(%arg0, %arg1) {control = true} : (none, none) -> (none, index)
+    "handshake.sink"(%index) : (index) -> ()
+    handshake.return %result, %arg2 : none, none
+  }
+
+  // CHECK-LABEL: cmerge_with_control_ignored
+  handshake.func @cmerge_with_control_ignored(%arg0: none, %arg1: none, %arg2: none) -> (none, none) {
+    // CHECK: "handshake.merge"(%{{.+}}, %{{.+}})
+    // CHECK-NOT: "handshake.control_merge"
+    %result, %index = "handshake.control_merge"(%arg0, %arg1) {control = true} : (none, none) -> (none, index)
+    handshake.return %result, %arg2 : none, none
   }
 }

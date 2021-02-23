@@ -208,7 +208,7 @@ The patch flow goes like this:
 1) Check out the LLVM mono repo (as described above).
 2) Make changes to your codebase.
 3) Stage your changes with `git add`.
-4) Run clang-format to tidy up the details of the patch with `git clang-format origin/master`
+4) Run clang-format to tidy up the details of the patch with `git clang-format origin/main`
 5) Create a [patch in Phabricator](https://llvm.org/docs/Phabricator.html) with `arc diff`.
 6) Iterate on review, changing your code and sending another patch with `arc diff`.
 
@@ -226,7 +226,7 @@ The 'staging' tree at git@github.com:circt/llvm.git is only intended to be a tem
 ```
 $ cd llvm
 $ git remote add llvm git@github.com:llvm/llvm-project.git
-$ git pull --rebase llvm master
+$ git pull --rebase llvm main
 $ cd build
 $ ninja
 $ ninja check-mlir
@@ -251,7 +251,7 @@ Now we have fixed any changes to circuit, so those changes can be committed and 
 ```
 $ cd ..
 $ git commit .
-$ git push origin HEAD:master
+$ git push origin HEAD:main
 ```
 
 You should see that the changes include an update to the submodule hash.
