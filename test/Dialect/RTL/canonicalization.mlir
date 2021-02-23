@@ -482,26 +482,6 @@ rtl.module @andr_constant_folding2() -> (i1) {
   rtl.output %0 : i1
 }
 
-// CHECK-LABEL: rtl.module @orr_constant_folding1() -> (i1) {
-// CHECK-NEXT:  %false = comb.constant false
-// CHECK-NEXT:  rtl.output %false : i1
-
-rtl.module @orr_constant_folding1() -> (i1) {
-  %c0_i4 = comb.constant 0 : i4
-  %0 = comb.orr %c0_i4 : i4
-  rtl.output %0 : i1
-}
-
-// CHECK-LABEL: rtl.module @orr_constant_folding2() -> (i1) {
-// CHECK-NEXT:  %true = comb.constant true
-// CHECK-NEXT:  rtl.output %true : i1
-
-rtl.module @orr_constant_folding2() -> (i1) {
-  %c8_i4 = comb.constant 8 : i4
-  %0 = comb.orr %c8_i4 : i4
-  rtl.output %0 : i1
-}
-
 // CHECK-LABEL: rtl.module @xorr_constant_folding1() -> (i1) {
 // CHECK-NEXT:  %true = comb.constant true
 // CHECK-NEXT:  rtl.output %true : i1

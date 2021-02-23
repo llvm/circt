@@ -109,13 +109,14 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: = comb.andr [[CONCAT1]] : i8
     %16 = firrtl.andr %6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: = comb.orr [[CONCAT1]] : i8
+    // CHECK-NEXT: = comb.constant
+    // CHECK-NEXT: = comb.icmp ne {{.*}}, {{.*}} : i8
     %17 = firrtl.orr %6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: %c0_i6 = comb.constant
     // CHECK-NEXT: [[ZEXTC1:%.+]] = comb.concat %c0_i6, [[CONCAT1]] : (i6, i8) -> i14
-    // CHECK-NEXT: %c0_i8 = comb.constant
-    // CHECK-NEXT: [[ZEXT2:%.+]] = comb.concat %c0_i8, [[SUB]] : (i8, i6) -> i14
+    // CHECK-NEXT: [[CONST:%.+]] = comb.constant
+    // CHECK-NEXT: [[ZEXT2:%.+]] = comb.concat [[CONST]], [[SUB]] : (i8, i6) -> i14
     // CHECK-NEXT: [[VAL18:%.+]] = comb.mul  [[ZEXTC1]], [[ZEXT2]] : i14
     %18 = firrtl.mul %6, %2 : (!firrtl.uint<8>, !firrtl.uint<6>) -> !firrtl.uint<14>
 
@@ -225,8 +226,8 @@ module attributes {firrtl.mainModule = "Simple"} {
 
     // Issue #364: https://github.com/llvm/circt/issues/364
     // CHECK:      %c-873_i12 = comb.constant -873 : i12
-    // CHECK-NEXT: %c0_i12_9 = comb.constant 0 : i12
-    // CHECK-NEXT: = comb.sub %c0_i12_9, %c-873_i12 : i12
+    // CHECK-NEXT: [[CONST:%.+]] = comb.constant 0 : i12
+    // CHECK-NEXT: = comb.sub [[CONST]], %c-873_i12 : i12
     %c1175_ui11 = firrtl.constant(1175 : ui11) : !firrtl.uint<11>
     %51 = firrtl.neg %c1175_ui11 : (!firrtl.uint<11>) -> !firrtl.sint<12>
 

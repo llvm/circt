@@ -200,7 +200,6 @@ class UnaryI1ReductionOp<string mnemonic, list<OpTrait> traits = []> :
 }
 
 def AndROp : UnaryI1ReductionOp<"andr">;
-def OrROp  : UnaryI1ReductionOp<"orr">;
 def XorROp : UnaryI1ReductionOp<"xorr">;
 
 //===----------------------------------------------------------------------===//

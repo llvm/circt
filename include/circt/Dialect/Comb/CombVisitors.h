@@ -36,7 +36,7 @@ public:
                        // Comparison operations
                        ICmpOp,
                        // Reduction Operators
-                       AndROp, OrROp, XorROp,
+                       AndROp, XorROp,
                        // Other operations.
                        SExtOp, ConcatOp, ExtractOp, MuxOp,
                        // Cast operation
@@ -100,7 +100,6 @@ public:
   HANDLE(XorOp, Variadic);
 
   HANDLE(AndROp, Unary);
-  HANDLE(OrROp, Unary);
   HANDLE(XorROp, Unary);
 
   HANDLE(ICmpOp, Binary);
