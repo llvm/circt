@@ -499,9 +499,6 @@ public:
   /// If a typedef exists in this or a parent namespace, return it.
   Optional<TypeDefOp> getTypeDef(Type t);
 
-  /// Add all the typedefs visible in this scope to the mapping.
-  void registerTypeDefs(Block &b);
-
   /// This set keeps track of all of the expression nodes that need to be
   /// emitted as standalone wire declarations.  This can happen because they are
   /// multiply-used or because the user requires a name to reference.
@@ -518,19 +515,6 @@ private:
 };
 
 } // end anonymous namespace
-
-void ModuleEmitter::registerTypeDefs(Block &b) {
-  for (Operation &op : b) {
-    if (TypeDefOp defOp = dyn_cast<TypeDefOp>(op))
-      typesToTypeDef.insert(std::make_pair(defOp.type(), defOp));
-
-    if (isa<RTLModuleOp>(op) || op.hasTrait<ProceduralRegion>())
-      continue;
-    for (Region &region : op.getRegions())
-      for (Block &block : region.getBlocks())
-        registerTypeDefs(block);
-  }
-}
 
 Optional<TypeDefOp> ModuleEmitter::getTypeDef(Type t) {
   auto tdefIt = typesToTypeDef.find(t);
@@ -1364,6 +1348,9 @@ void ModuleEmitter::visitMerge(MergeOp op) {
 }
 
 LogicalResult ModuleEmitter::visitSV(TypeDefOp op) {
+  // Insert into mapping when we print it.
+  typesToTypeDef.insert(std::make_pair(op.type(), op));
+
   indent() << "typedef ";
   ::printPackedType(op.type(), os, op.getLoc(), false);
   os << ' ' << op.sym_name() << ";\n";
@@ -2292,9 +2279,6 @@ void ModuleEmitter::emitOperation(Operation *op) {
 }
 
 void ModuleEmitter::emitMLIRModule(ModuleOp module) {
-  // Scan the module for typedefs.
-  registerTypeDefs(*module.getBody());
-
   for (auto &op : *module.getBody()) {
     if (auto module = dyn_cast<RTLModuleOp>(op))
       ModuleEmitter(state, this).emitRTLModule(module);
@@ -2302,7 +2286,7 @@ void ModuleEmitter::emitMLIRModule(ModuleOp module) {
       ModuleEmitter(state, this).emitRTLExternModule(module);
     else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) || isa<IfDefOp>(op) ||
              isa<TypeDefOp>(op) || isa<IfDefProceduralOp>(op))
-      ModuleEmitter(state, this).emitOperation(&op);
+      emitOperation(&op);
     else if (!isa<ModuleTerminatorOp>(op))
       op.emitError("unknown operation");
   }
@@ -2313,9 +2297,6 @@ void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
 }
 
 void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
-  // Scan the module for typedefs.
-  registerTypeDefs(*module.getBodyBlock());
-
   // Add all the ports to the name table.
   SmallVector<ModulePortInfo, 8> portInfo;
   module.getPortInfo(portInfo);
