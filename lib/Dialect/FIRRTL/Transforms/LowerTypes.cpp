@@ -98,6 +98,7 @@ struct FIRRTLTypesLowering : public LowerFIRRTLTypesBase<FIRRTLTypesLowering>,
   void visitDecl(MemOp op);
   void visitExpr(SubfieldOp op);
   void visitStmt(ConnectOp op);
+  void visitExpr(InvalidValuePrimOp op);
 
 private:
   // Lowering module block arguments.
@@ -313,8 +314,8 @@ void FIRRTLTypesLowering::visitDecl(MemOp op) {
         // to all clocks. This is handled by creating a dummy wire,
         // setting the dummy wire as the lowering target, and then
         // connecting every new port subfield to that.
-        if (elt.name == "clk" | elt.name == "en" | elt.name == "addr" |
-            elt.name == "wmode") {
+        if ((elt.name == "clk") | (elt.name == "en") | (elt.name == "addr") |
+            (elt.name == "wmode")) {
           Type theType = FlipType::get(elt.type);
 
           // Construct a new wire if needed.
@@ -439,6 +440,31 @@ void FIRRTLTypesLowering::visitStmt(ConnectOp op) {
       builder->create<ConnectOp>(newDest, newSrc);
     else
       builder->create<ConnectOp>(newSrc, newDest);
+  }
+
+  // Remember to remove the original op.
+  opsToRemove.push_back(op);
+}
+
+// Lowering invalid may need to create a new invalid for each field
+void FIRRTLTypesLowering::visitExpr(InvalidValuePrimOp op) {
+  Value result = op.result();
+
+  // Attempt to get the bundle types, potentially unwrapping an outer flip type
+  // that wraps the whole bundle.
+  BundleType resultType = getCanonicalBundleType(result.getType());
+
+  // If we aren't connecting two bundles, there is nothing to do.
+  if (!resultType)
+    return;
+
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+  flattenBundleTypes(resultType, "", false, fieldTypes);
+
+  // Loop over the leaf aggregates.
+  for (auto field : fieldTypes) {
+    setBundleLowering(result, StringRef(field.suffix).drop_front(1),
+                      builder->create<InvalidValuePrimOp>(field.getPortType()));
   }
 
   // Remember to remove the original op.
