@@ -127,6 +127,7 @@ private:
 
   // State to track the new attributes for the module.
   SmallVector<NamedAttribute> newAttrs;
+  DenseSet<NamedAttribute> savedAttrs;
   size_t originalNumArgs;
   SmallString<8> argNameBuffer;
 };
@@ -145,13 +146,9 @@ void FIRRTLTypesLowering::runOnOperation() {
   ImplicitLocOpBuilder theBuilder(module.getLoc(), &getContext());
   builder = &theBuilder;
 
-  // Save the name attribute for the module.
-  module->getAttrDictionary()
-      .getNamed(SymbolTable::getSymbolAttrName())
-      .map([&](NamedAttribute nameAttr) {
-        newAttrs.push_back(nameAttr);
-        return nameAttr;
-      });
+  // Save the original attributes for the module.
+  auto oldAttrs = module.getAttrs();
+  savedAttrs.insert(oldAttrs.begin(), oldAttrs.end());
 
   // Lower the module block arguments.
   SmallVector<BlockArgument, 8> args(body->args_begin(), body->args_end());
@@ -176,8 +173,10 @@ void FIRRTLTypesLowering::runOnOperation() {
   argsToRemove.clear();
 
   // Set the module's new attributes.
+  newAttrs.append(savedAttrs.begin(), savedAttrs.end());
   module->setAttrs(newAttrs);
   newAttrs.clear();
+  savedAttrs.clear();
 
   // Keep the module's type up-to-date.
   auto moduleType = builder->getFunctionType(body->getArgumentTypes(), {});
@@ -529,6 +528,14 @@ Value FIRRTLTypesLowering::addArg(Type type, unsigned oldArgNumber,
     auto newAttr = builder->getNamedAttr(newArgAttrName, newArgAttrs);
     newAttrs.push_back(newAttr);
   }
+
+  // Remove the saved attributes for the old argument.
+  module->getAttrDictionary()
+      .getNamed(getArgAttrName(oldArgNumber))
+      .map([&](NamedAttribute attr) {
+        savedAttrs.erase(attr);
+        return attr;
+      });
 
   return newValue;
 }
