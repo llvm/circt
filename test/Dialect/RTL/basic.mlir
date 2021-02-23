@@ -2,10 +2,10 @@
 
 // CHECK-LABEL: rtl.module @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> (i50) {
 rtl.module @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> (i50) {
-  // CHECK-NEXT:    %c42_i12 = comb.constant(42 : i12) : i12
+  // CHECK-NEXT:    %c42_i12 = comb.constant 42 : i12
   // CHECK-NEXT:    [[RES0:%[0-9]+]] = comb.add %c42_i12, %c42_i12 : i12
   // CHECK-NEXT:    [[RES1:%[0-9]+]] = comb.mul %c42_i12, [[RES0]] : i12
-  %a = comb.constant(42 : i12) : i12
+  %a = comb.constant 42 : i12
   %b = comb.add %a, %a : i12
   %c = comb.mul %a, %b : i12
 

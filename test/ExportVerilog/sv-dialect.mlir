@@ -71,7 +71,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     sv.fwrite "Async Reset Block\n"
   } 
 
-  %c42 = comb.constant (42 : i42) : i42
+  %c42 = comb.constant 42 : i42
 
   // CHECK-NEXT:   if (cond)
   sv.if %cond {
@@ -212,7 +212,7 @@ rtl.module @issue508(%in1: i1, %in2: i1) {
 // https://github.com/llvm/circt/issues/439
 rtl.module @exprInlineTestIssue439(%clk: i1) {
   // CHECK: wire [31:0] _T = 32'h0;
-  %c = comb.constant (0:i32) : i32
+  %c = comb.constant 0 : i32
 
   // CHECK: always @(posedge clk) begin
   sv.always posedge %clk {
@@ -246,9 +246,9 @@ rtl.module @issue439(%in1: i1, %in2: i1) {
 // CHECK-LABEL: module issue595
 rtl.module @issue595(%arr: !rtl.array<128xi1>) {
   // CHECK: wire [63:0] _T;
-  %c0_i32 = comb.constant(0 : i32) : i32
-  %c0_i7 = comb.constant(0 : i7) : i7
-  %c0_i6 = comb.constant(0 : i6) : i6
+  %c0_i32 = comb.constant 0 : i32
+  %c0_i7 = comb.constant 0 : i7
+  %c0_i6 = comb.constant 0 : i6
   %0 = comb.icmp eq %3, %c0_i32 : i32
   // CHECK: assert(_T[6'h0+:32] == 32'h0);
   sv.assert %0 : i1

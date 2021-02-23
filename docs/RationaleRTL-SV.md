@@ -114,9 +114,9 @@ is relevant: in the MLIR assembly and in the MLIR C++ model.
 In MLIR assembly, operands are always listed MSB to LSB (big endian style):
 
 ```mlir
-%msb = rtl.constant (0xEF : i8) : i8
-%mid = rtl.constant (0x7 : i4) : i4
-%lsb = rtl.constant (0xA018 : i16) : i16
+%msb = comb.constant 0xEF : i8
+%mid = comb.constant 0x7 : i4
+%lsb = comb.constant 0xA018 : i16
 %result = rtl.concat %msb, %mid, %lsb : (i8, i4, i16) -> i28
 // %result is 0xEF7A018
 ```
@@ -126,9 +126,9 @@ ordering for `rtl.concat` was chosen to be consistent with simply abutting
 them in lexical order.
 
 ```mlir
-%1 = rtl.constant (0x1 : i4) : i4
-%2 = rtl.constant (0x2 : i4) : i4
-%3 = rtl.constant (0x3 : i4) : i4
+%1 = comb.constant 0x1 : i4
+%2 = comb.constant 0x2 : i4
+%3 = comb.constant 0x3 : i4
 %arr123 = rtl.array_create %1, %2, %3 : i4
 // %arr123[0] = 0x3
 // %arr123[1] = 0x2

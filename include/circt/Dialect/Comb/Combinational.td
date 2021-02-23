@@ -26,11 +26,8 @@ def ConstantOp
   let arguments = (ins APIntAttr:$value);
   let results = (outs CombIntegerType:$result);
 
-  // FIXME(QoI): Instead of requiring "comb.constant (42: i8) : i8", we should
-  // just use "rtl.constant 42: i8".  This can be done with a custom printer and
-  // parser, but would be better to be autoderived from the
-  // FirstAttrDerivedResultType trait.  This should be an MLIR core improvement.
-  let assemblyFormat = "`(` $value `)` attr-dict `:` type($result)";
+  let parser = "return parse$cppClass(parser, result);";
+  let printer = "print$cppClass(p, *this);";
 
   let builders = [
     /// Build a ConstantOp from an APInt, infering the result type from the
