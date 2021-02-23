@@ -106,7 +106,8 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: = comb.xorr [[CONCAT1]] : i8
     %15 = firrtl.xorr %6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: = comb.andr [[CONCAT1]] : i8
+    // CHECK-NEXT: = comb.constant -1 : i8
+    // CHECK-NEXT: = comb.icmp eq  {{.*}}, {{.*}} : i8
     %16 = firrtl.andr %6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: = comb.constant
@@ -166,7 +167,8 @@ module attributes {firrtl.mainModule = "Simple"} {
 
     // Noop
     %27 = firrtl.validif %12, %18 : (!firrtl.uint<1>, !firrtl.uint<14>) -> !firrtl.uint<14>
-    // CHECK-NEXT: comb.andr
+    // CHECK-NEXT: = comb.constant -1 : i14
+    // CHECK-NEXT: = comb.icmp eq  {{.*}}, {{.*}} : i14
     %28 = firrtl.andr %27 : (!firrtl.uint<14>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: %c0_i11 = comb.constant 0 : i11

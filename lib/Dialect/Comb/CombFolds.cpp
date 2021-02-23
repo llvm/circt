@@ -99,15 +99,6 @@ OpFoldResult SExtOp::fold(ArrayRef<Attribute> constants) {
   return {};
 }
 
-OpFoldResult AndROp::fold(ArrayRef<Attribute> constants) {
-  // Constant fold.
-  if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>())
-    return getIntAttr(APInt(1, input.getValue().isAllOnesValue()),
-                      getContext());
-
-  return {};
-}
-
 OpFoldResult XorROp::fold(ArrayRef<Attribute> constants) {
   // Constant fold.
   if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>())
