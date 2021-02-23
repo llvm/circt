@@ -45,7 +45,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: llvm
-          key: ${{ runner.os }}-llvm-install-${{ steps.get-llvm-hash.outputs.hash }}
+          key: ${{ runner.os }}-llvm-sharedlibs-${{ steps.get-llvm-hash.outputs.hash }}
 
       # Build LLVM if we didn't hit in the cache.
       - name: Rebuild and Install LLVM
@@ -62,6 +62,7 @@ jobs:
           mkdir build_assert
           cd build_assert
           cmake .. \
+            -DBUILD_SHARED_LIBS=ON \
             -DCMAKE_BUILD_TYPE=Debug \
             -DLLVM_ENABLE_ASSERTIONS=ON \
             -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ \
@@ -83,6 +84,7 @@ jobs:
           mkdir build_release
           cd build_release
           cmake .. \
+            -DBUILD_SHARED_LIBS=ON \
             -DCMAKE_BUILD_TYPE=Release \
             -DLLVM_ENABLE_ASSERTIONS=OFF \
             -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ \
