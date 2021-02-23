@@ -294,3 +294,15 @@ module  {
     }
   }
 }
+
+// -----
+// COM: Test vector lowering
+firrtl.circuit "LowerVectors" {
+  firrtl.module @LowerVectors(%a: !firrtl.vector<uint<1>, 2>, %b: !firrtl.flip<vector<uint<1>, 2>>) {
+    firrtl.connect %b, %a: !firrtl.flip<vector<uint<1>, 2>>, !firrtl.vector<uint<1>, 2>
+  }
+
+  // CHECK: firrtl.module @LowerVectors(%a_0: !firrtl.uint<1>, %a_1: !firrtl.uint<1>, %b_0: !firrtl.flip<uint<1>>, %b_1: !firrtl.flip<uint<1>>)
+  // CHECK: firrtl.connect %b_0, %a_0
+  // CHECK: firrtl.connect %b_1, %a_1
+}
