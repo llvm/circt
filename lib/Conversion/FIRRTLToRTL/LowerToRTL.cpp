@@ -1582,9 +1582,9 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       // Attach the write port
       auto last = writePipe.back();
       builder->create<sv::AlwaysFFOp>(EventControl::AtPosEdge, clk, [&]() {
+        auto enable = builder->create<sv::ReadInOutOp>(last.en);
         auto cond = builder->create<comb::AndOp>(
-            builder->create<sv::ReadInOutOp>(last.en),
-            builder->create<sv::ReadInOutOp>(last.mask));
+            enable, builder->create<sv::ReadInOutOp>(last.mask));
         builder->create<sv::IfOp>(cond, [&]() {
           auto slot = builder->create<sv::ArrayIndexInOutOp>(
               reg, builder->create<sv::ReadInOutOp>(last.addr));
