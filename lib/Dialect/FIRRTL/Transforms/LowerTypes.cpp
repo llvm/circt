@@ -156,6 +156,9 @@ void FIRRTLTypesLowering::runOnOperation() {
   getOperation().eraseArguments(argsToRemove);
   argsToRemove.clear();
 
+  // Keep the module's type up-to-date.
+  module.setType(builder->getFunctionType(body->getArgumentTypes(), {}));
+
   // Reset lowered state.
   loweredBundleValues.clear();
 }
@@ -467,9 +470,6 @@ Value FIRRTLTypesLowering::addArg(Type type, unsigned oldArgNumber,
 
   // Append the new argument.
   auto newValue = body->addArgument(type);
-
-  // Keep the module's type up-to-date.
-  module.setType(builder->getFunctionType(body->getArgumentTypes(), {}));
 
   // Copy over the name attribute for the new argument.
   StringAttr nameAttr = getFIRRTLNameAttr(module.getArgAttrs(oldArgNumber));
