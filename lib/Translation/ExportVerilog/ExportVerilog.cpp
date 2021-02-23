@@ -851,7 +851,7 @@ private:
 
   // SystemVerilog spec 11.8.1: "Reduction operator results are unsigned,
   // regardless of the operands."
-  SubExprInfo visitComb(XorROp op) { return emitUnary(op, "^", true); }
+  SubExprInfo visitComb(ParityOp op) { return emitUnary(op, "^", true); }
 
   SubExprInfo visitComb(SExtOp op);
   SubExprInfo visitComb(ConcatOp op);
