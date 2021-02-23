@@ -2102,9 +2102,6 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
     if (!clockVal || !resetSignal)
       return failure();
 
-    //    auto one = builder->create<comb::ConstantOp>(APInt(1, 1));
-    //    auto invResetSignal = builder->create<comb::XorOp>(resetSignal, one);
-
     builder->create<sv::AlwaysFFOp>(
         EventControl::AtPosEdge, clockVal,
         regResetOp.resetSignal().getType().isa<AsyncResetType>()
@@ -2142,13 +2139,13 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
     if (!clockVal)
       return failure();
 
-    builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clockVal, [&]() {
+    builder->create<sv::AlwaysFFOp>(EventControl::AtPosEdge, clockVal, [&]() {
       builder->create<sv::PAssignOp>(destVal, srcVal);
     });
     return success();
   }
 
-  // If this is an assignment to a RegInit, then the connect implicitly
+  // If this is an assignment to a RegReset, then the connect implicitly
   // happens under the clock and reset that gate the register.
   if (auto regResetOp = dyn_cast_or_null<RegResetOp>(dest.getDefiningOp())) {
     Value clockVal = getLoweredValue(regResetOp.clockVal());
@@ -2156,24 +2153,13 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
     if (!clockVal || !resetSignal)
       return failure();
 
-    auto one = builder->create<comb::ConstantOp>(APInt(1, 1));
-    auto invResetSignal = builder->create<comb::XorOp>(resetSignal, one);
-
-    auto resetFn = [&]() {
-      builder->create<sv::IfOp>(invResetSignal, [&]() {
-        builder->create<sv::PAssignOp>(destVal, srcVal);
-      });
-    };
-
-    if (regResetOp.resetSignal().getType().isa<AsyncResetType>()) {
-      builder->create<sv::AlwaysOp>(
-          ArrayRef<EventControl>{EventControl::AtPosEdge,
-                                 EventControl::AtPosEdge},
-          ArrayRef<Value>{clockVal, resetSignal}, resetFn);
-      return success();
-    } else { // sync reset
-      builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clockVal, resetFn);
-    }
+    builder->create<sv::AlwaysFFOp>(
+        EventControl::AtPosEdge, clockVal,
+        regResetOp.resetSignal().getType().isa<AsyncResetType>()
+            ? ::ResetType::AsyncReset
+            : ::ResetType::SyncReset,
+        EventControl::AtPosEdge, resetSignal,
+        [&]() { builder->create<sv::PAssignOp>(destVal, srcVal); });
     return success();
   }
 
