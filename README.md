@@ -124,5 +124,5 @@ To get something that runs fast, use `-DCMAKE_BUILD_TYPE=Release` or
 you want debug info to go with it.  `Release` mode makes a very large difference
 in performance.
 
-Consult the [Getting Started](docs/GettingStarted.md) page for detailed 
-information on configuring and compiling CIRCT.
+Consult the [Getting Started](https://circt.llvm.org/getting_started/) page for 
+detailed information on configuring and compiling CIRCT.
