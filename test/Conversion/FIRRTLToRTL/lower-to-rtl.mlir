@@ -12,15 +12,15 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:  [[OUT5:%.+]] = sv.wire : !rtl.inout<i4>
     %out5 = firrtl.wire : !firrtl.flip<uint<4>>
 
-    // CHECK: [[ZERO4:%.+]] = comb.constant(0 : i4) : i4
+    // CHECK: [[ZERO4:%.+]] = comb.constant 0 : i4
     // CHECK: sv.connect [[OUT5]], [[ZERO4]] : i4
     %tmp1 = firrtl.invalidvalue : !firrtl.uint<4>
     firrtl.connect %out5, %tmp1 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
-    // CHECK: comb.constant(-4 : i4) : i4
+    // CHECK: comb.constant -4 : i4
     %c12_ui4 = firrtl.constant(12 : ui4) : !firrtl.uint<4>
 
-    // CHECK: comb.constant(2 : i3) : i3
+    // CHECK: comb.constant 2 : i3
     %c2_si3 = firrtl.constant(2 : si3) : !firrtl.sint<3>
 
     // CHECK: [[ZEXT:%.+]] = comb.concat %false_0, %in1 : (i1, i4) -> i5
@@ -93,13 +93,13 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: = comb.extract [[CONCAT1]] from 3 : (i8) -> i5
     %11 = firrtl.shr %6, 3 : (!firrtl.uint<8>) -> !firrtl.uint<5>
 
-    // CHECK-NEXT: = comb.constant(false) : i1
+    // CHECK-NEXT: = comb.constant false
     %12 = firrtl.shr %6, 8 : (!firrtl.uint<8>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: = comb.extract %in3 from 7 : (i8) -> i1
     %13 = firrtl.shr %in3c, 8 : (!firrtl.sint<8>) -> !firrtl.sint<1>
 
-    // CHECK-NEXT: [[ZERO:%.+]] = comb.constant(0 : i3) : i3
+    // CHECK-NEXT: [[ZERO:%.+]] = comb.constant 0 : i3
     // CHECK-NEXT: = comb.concat [[CONCAT1]], [[ZERO]] : (i8, i3) -> i11
     %14 = firrtl.shl %6, 3 : (!firrtl.uint<8>) -> !firrtl.uint<11>
 
@@ -141,21 +141,21 @@ module attributes {firrtl.mainModule = "Simple"} {
     // Nodes with no names are just dropped.
     %22 = firrtl.node %n1 : !firrtl.uint<2>
 
-    // CHECK-NEXT: %false_{{.*}} = comb.constant(false) : i1
+    // CHECK-NEXT: %false_{{.*}} = comb.constant false
     // CHECK-NEXT: [[CVT:%.+]] = comb.concat %false_{{.*}}, %in2 : (i1, i2) -> i3
     %23 = firrtl.cvt %22 : (!firrtl.uint<2>) -> !firrtl.sint<3>
 
     // Will be dropped, here because this triggered a crash
     %s23 = firrtl.cvt %in3c : (!firrtl.sint<8>) -> !firrtl.sint<8>
 
-    // CHECK-NEXT: %c-1_i3 = comb.constant(-1 : i3) : i3
+    // CHECK-NEXT: %c-1_i3 = comb.constant -1 : i3
     // CHECK-NEXT: [[XOR:%.+]] = comb.xor [[CVT]], %c-1_i3 : i3
     %24 = firrtl.not %23 : (!firrtl.sint<3>) -> !firrtl.uint<3>
 
     %s24 = firrtl.asSInt %24 : (!firrtl.uint<3>) -> !firrtl.sint<3>
 
     // CHECK-NEXT: [[SEXT:%.+]] = comb.sext [[XOR]] : (i3) -> i4
-    // CHECK-NEXT: [[ZERO4b:%.+]] = comb.constant(0 : i4) : i4
+    // CHECK-NEXT: [[ZERO4b:%.+]] = comb.constant 0 : i4
     // CHECK-NEXT: [[SUB:%.+]] = comb.sub [[ZERO4b]], [[SEXT]] : i4
     %25 = firrtl.neg %s24 : (!firrtl.sint<3>) -> !firrtl.sint<4>
 
@@ -168,19 +168,19 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: comb.andr
     %28 = firrtl.andr %27 : (!firrtl.uint<14>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: %c0_i11 = comb.constant(0 : i11)
+    // CHECK-NEXT: %c0_i11 = comb.constant 0 : i11
     // CHECK-NEXT: [[XOREXT:%.+]] = comb.concat %c0_i11, [[XOR]]
     // CHECK-NEXT: [[SHIFT:%.+]] = comb.shru [[XOREXT]], [[VAL18]] : i14
     // CHECK-NEXT: [[DSHR:%.+]] = comb.extract [[SHIFT]] from 0 : (i14) -> i3
     %29 = firrtl.dshr %24, %18 : (!firrtl.uint<3>, !firrtl.uint<14>) -> !firrtl.uint<3>
 
-    // CHECK-NEXT: %c0_i5 = comb.constant(0 : i5)
+    // CHECK-NEXT: %c0_i5 = comb.constant 0 : i5
     // CHECK-NEXT: = comb.concat %c0_i5, {{.*}} : (i5, i3) -> i8
     // CHECK-NEXT: [[SHIFT:%.+]] = comb.shrs %in3, {{.*}} : i8
     %a29 = firrtl.dshr %in3c, %9 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<8>
 
     // CHECK-NEXT: = comb.sext %in3 : (i8) -> i15
-    // CHECK-NEXT: %c0_i12 = comb.constant(0 : i12)
+    // CHECK-NEXT: %c0_i12 = comb.constant 0 : i12
     // CHECK-NEXT: = comb.concat %c0_i12, [[DSHR]]
     // CHECK-NEXT: [[SHIFT:%.+]] = comb.shl {{.*}}, {{.*}} : i15
     %30 = firrtl.dshl %in3c, %29 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<15>
@@ -224,8 +224,8 @@ module attributes {firrtl.mainModule = "Simple"} {
     %50 = firrtl.div %c104_ui8, %c306_ui10 : (!firrtl.uint<8>, !firrtl.uint<10>) -> !firrtl.uint<8>
 
     // Issue #364: https://github.com/llvm/circt/issues/364
-    // CHECK:      %c-873_i12 = comb.constant(-873 : i12) : i12
-    // CHECK-NEXT: %c0_i12_9 = comb.constant(0 : i12) : i12
+    // CHECK:      %c-873_i12 = comb.constant -873 : i12
+    // CHECK-NEXT: %c0_i12_9 = comb.constant 0 : i12
     // CHECK-NEXT: = comb.sub %c0_i12_9, %c-873_i12 : i12
     %c1175_ui11 = firrtl.constant(1175 : ui11) : !firrtl.uint<11>
     %51 = firrtl.neg %c1175_ui11 : (!firrtl.uint<11>) -> !firrtl.sint<12>
@@ -390,7 +390,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: %tmp48 = sv.wire : !rtl.inout<i27>
     %tmp48 = firrtl.wire : !firrtl.uint<27>
 
-    // CHECK-NEXT: %c0_i38 = comb.constant(0 : i38)
+    // CHECK-NEXT: %c0_i38 = comb.constant 0 : i38
     // CHECK-NEXT: %0 = comb.concat %c0_i38, %inp2 : (i38, i27) -> i65
     // CHECK-NEXT: %1 = comb.divu %0, %inpi : i65
     %0 = firrtl.div %inp_2, %inp_i : (!firrtl.uint<27>, !firrtl.uint<65>) -> !firrtl.uint<27>
@@ -455,7 +455,7 @@ module attributes {firrtl.mainModule = "Simple"} {
 
   // CHECK-LABEL: rtl.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   rtl.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
-    // CHECK-NEXT: %c0_i2 = comb.constant(0 : i2) : i2
+    // CHECK-NEXT: %c0_i2 = comb.constant 0 : i2
     %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
 
     %0 = firrtl.stdIntCast %clock : (i1) -> !firrtl.clock
@@ -506,7 +506,7 @@ module attributes {firrtl.mainModule = "Simple"} {
 
   // CHECK-LABEL: rtl.module @InitReg1(
   rtl.module @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (%io_q: i32) {
-    // CHECK-NEXT: %c0_i32 = comb.constant(0 : i32) : i32
+    // CHECK-NEXT: %c0_i32 = comb.constant 0 : i32
     %c0_ui32 = firrtl.constant(0 : ui32) : !firrtl.uint<32>
 
     %0 = firrtl.stdIntCast %clock : (i1) -> !firrtl.clock
@@ -525,7 +525,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:   sv.initial {
     // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
     // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:       %true = comb.constant(true) : i1
+    // CHECK-NEXT:       %true = comb.constant true
     // CHECK-NEXT:       %8 = comb.xor %reset, %true : i1
     // CHECK-NEXT:       sv.if %8  {
     // CHECK-NEXT:         %9 = sv.textual_value "`RANDOM" : i32
@@ -543,7 +543,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: } else {
     // CHECK-NEXT:   sv.initial  {
     // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:       %true = comb.constant(true) : i1
+    // CHECK-NEXT:       %true = comb.constant true
     // CHECK-NEXT:       %8 = comb.xor %reset, %true : i1
     // CHECK-NEXT:       sv.if %8  {
     // CHECK-NEXT:         %9 = sv.textual_value "`RANDOM" : i32
@@ -556,10 +556,10 @@ module attributes {firrtl.mainModule = "Simple"} {
     %reg2 = firrtl.regreset %0, %1, %c0_ui32 {name = "reg2"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<32>) -> !firrtl.uint<32>
 
     // CHECK-NEXT: %0 = sv.read_inout %reg : !rtl.inout<i32>
-    // CHECK-NEXT: %false = comb.constant(false) : i1
+    // CHECK-NEXT: %false = comb.constant false
     // CHECK-NEXT: %1 = comb.concat %false, %0 : (i1, i32) -> i33
     // CHECK-NEXT: %2 = sv.read_inout %reg2 : !rtl.inout<i32>
-    // CHECK-NEXT: %false_0 = comb.constant(false) : i1
+    // CHECK-NEXT: %false_0 = comb.constant false
     // CHECK-NEXT: %3 = comb.concat %false_0, %2 : (i1, i32) -> i33
     // CHECK-NEXT: %4 = comb.add %1, %3 : i33
     // CHECK-NEXT: %5 = comb.extract %4 from 1 : (i33) -> i32
@@ -630,7 +630,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: %[[data_inout:.+]] = sv.array_index_inout %_M[%[[addr]]]
     // CHECK-NEXT: %[[data:.+]] = sv.read_inout %[[data_inout]]
     // CHECK-NEXT: sv.ifdef "RANDOMIZE_GARBAGE_ASSIGN"  {
-    // CHECK-NEXT:   %c-4_i4 = comb.constant(-4 : i4) : i4
+    // CHECK-NEXT:   %c-4_i4 = comb.constant -4 : i4
     // CHECK-NEXT:   %[[cond:.+]] = comb.icmp ult %[[addr]], %c-4_i4 : i4
     // CHECK-NEXT:   %[[random:.+]] = sv.textual_value "`RANDOM" : i42
     // CHECK-NEXT:   %[[dataOrRandom:.+]] = comb.mux %[[cond]], %[[data]], %[[random]] : i42
@@ -741,10 +741,10 @@ module attributes {firrtl.mainModule = "Simple"} {
     // COM: --------------------------------------------------------------------
     // CHECK-DAG: %memory_r_en_pipe   = sv.reg : !rtl.inout<uarray<2xi1>>
     // CHECK-DAG: %memory_r_addr_pipe = sv.reg : !rtl.inout<uarray<2xi4>>
-    // CHECK:     %[[zero:.+]] = comb.constant(false)
+    // CHECK:     %[[zero:.+]] = comb.constant false
     // CHECK-DAG: %[[en_0:.+]] = sv.array_index_inout %memory_r_en_pipe[%[[zero]]]
     // CHECK-DAG: %[[addr_0:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[zero]]]
-    // CHECK:     %[[one:.+]] = comb.constant(true)
+    // CHECK:     %[[one:.+]] = comb.constant true
     // CHECK-DAG: %[[en_1:.+]] = sv.array_index_inout %memory_r_en_pipe[%[[one]]]
     // CHECK-DAG: %[[addr_1:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[one]]]
     // CHECK:     sv.alwaysff(posedge %[[clk]]) {
@@ -779,7 +779,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-DAG: %memory_w_en_pipe   = sv.reg : !rtl.inout<uarray<1xi1>>
     // CHECK-DAG: %memory_w_data_pipe = sv.reg : !rtl.inout<uarray<1xi8>>
     // CHECK-DAG: %memory_w_mask_pipe = sv.reg : !rtl.inout<uarray<1xi1>>
-    // CHECK:     %[[zero:.+]] = comb.constant(false)
+    // CHECK:     %[[zero:.+]] = comb.constant false
     // CHECK-DAG: %[[addr_0:.+]] = sv.array_index_inout %memory_w_addr_pipe[%[[zero]]]
     // CHECK-DAG: %[[en_0:.+]]   = sv.array_index_inout %memory_w_en_pipe[%[[zero]]]
     // CHECK-DAG: %[[data_0:.+]] = sv.array_index_inout %memory_w_data_pipe[%[[zero]]]
@@ -812,46 +812,46 @@ module attributes {firrtl.mainModule = "Simple"} {
     // COM: --------------------------------------------------------------------
     // CHECK:     sv.ifdef "SYNTHESIS" {
     // CHECK:     } else {
-    // CHECK:       %[[zero:.+]] = comb.constant(false)
+    // CHECK:       %[[zero:.+]] = comb.constant false
     // CHECK:       %[[r_en_0:.+]] = sv.array_index_inout %memory_r_en_pipe[%[[zero]]]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[r_en_0]], %[[random]]
     // CHECK:     }
     // CHECK:     sv.ifdef "SYNTHESIS" {
     // CHECK:     } else {
-    // CHECK:       %[[zero:.+]] = comb.constant(false)
+    // CHECK:       %[[zero:.+]] = comb.constant false
     // CHECK:       %[[r_addr_0:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[zero]]]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[r_addr_0]], %[[random]]
-    // CHECK:       %[[one:.+]] = comb.constant(true)
+    // CHECK:       %[[one:.+]] = comb.constant true
     // CHECK:       %[[r_addr_1:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[one]]]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[r_addr_1]], %[[random]]
     // CHECK:     }
     // CHECK:     sv.ifdef "SYNTHESIS" {
     // CHECK:     } else {
-    // CHECK:       %[[zero:.+]] = comb.constant(false)
+    // CHECK:       %[[zero:.+]] = comb.constant false
     // CHECK:       %[[w_en_0:.+]] = sv.array_index_inout %memory_w_en_pipe[%[[zero]]]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[w_en_0]], %[[random]]
     // CHECK:     }
     // CHECK:     sv.ifdef "SYNTHESIS" {
     // CHECK:     } else {
-    // CHECK:       %[[zero:.+]] = comb.constant(false)
+    // CHECK:       %[[zero:.+]] = comb.constant false
     // CHECK:       %[[w_addr_0:.+]] = sv.array_index_inout %memory_w_addr_pipe[%[[zero]]]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[w_addr_0]], %[[random]]
     // CHECK:     }
     // CHECK:     sv.ifdef "SYNTHESIS" {
     // CHECK:     } else {
-    // CHECK:       %[[zero:.+]] = comb.constant(false)
+    // CHECK:       %[[zero:.+]] = comb.constant false
     // CHECK:       %[[w_mask_0:.+]] = sv.array_index_inout %memory_w_mask_pipe[%[[zero]]]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[w_mask_0]], %[[random]]
     // CHECK:     }
     // CHECK:     sv.ifdef "SYNTHESIS" {
     // CHECK:     } else {
-    // CHECK:       %[[zero:.+]] = comb.constant(false)
+    // CHECK:       %[[zero:.+]] = comb.constant false
     // CHECK:       %[[w_data_0:.+]] = sv.array_index_inout %memory_w_data_pipe[%[[zero]]]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[w_data_0]], %[[random]]
@@ -883,8 +883,8 @@ module attributes {firrtl.mainModule = "Simple"} {
   }
 
   // CHECK-LABEL: rtl.module @top_mod() -> (%tmp27: i23) {
-  // CHECK-NEXT:    %c42_i23 = comb.constant(42 : i23) : i23
-  // CHECK-NEXT:    %c0_i23 = comb.constant(0 : i23) : i23
+  // CHECK-NEXT:    %c42_i23 = comb.constant 42 : i23
+  // CHECK-NEXT:    %c0_i23 = comb.constant 0 : i23
   // CHECK-NEXT:    rtl.output %c0_i23 : i23
   // CHECK-NEXT:  }
   rtl.module @top_mod() -> (%tmp27: i23) {
