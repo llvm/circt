@@ -1607,9 +1607,9 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         if (depth == 1) { // Don't emit a for loop for one element.
           auto type = sv::getInOutElementType(reg.getType());
           type = sv::getAnyRTLArrayElementType(type);
+          auto randomVal = builder->create<sv::TextualValueOp>(type, "`RANDOM");
           auto zero = builder->create<comb::ConstantOp>(APInt(1, 0));
           auto subscript = builder->create<sv::ArrayIndexInOutOp>(reg, zero);
-          auto randomVal = builder->create<sv::TextualValueOp>(type, "`RANDOM");
           builder->create<sv::BPAssignOp>(subscript, randomVal);
         } else {
           assert(depth < (1ULL << 31) && "FIXME: Our initialization logic uses "
