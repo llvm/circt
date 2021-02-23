@@ -263,9 +263,9 @@ rtl.module @issue595(%arr: !rtl.array<128xi1>) {
 
 rtl.module @issue595_variant1(%arr: !rtl.array<128xi1>) {
   // CHECK: wire [63:0] _T;
-  %c0_i32 = comb.constant(0 : i32) : i32
-  %c0_i7 = comb.constant(0 : i7) : i7
-  %c0_i6 = comb.constant(0 : i6) : i6
+  %c0_i32 = comb.constant 0 : i32
+  %c0_i7 = comb.constant 0 : i7
+  %c0_i6 = comb.constant 0 : i6
   %0 = comb.icmp ne %3, %c0_i32 : i32
   // CHECK: assert(|_T[6'h0+:32]);
   sv.assert %0 : i1
