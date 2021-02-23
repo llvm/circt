@@ -42,9 +42,9 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !rtl.array<10xi4>,
   %r12: i4, %r13: i1,
   %r14: i1, %r15: i1, %r16: i1, %r17: i1,
   %r18: i1, %r19: i1, %r20: i1, %r21: i1,
-  %r22: i1, %r23: i1, %r24: i1, 
-  %r25: i12, %r26: i2, %r27: i9, %r28: i4, %r29: i4,
-  %r30: !rtl.array<3xi4>
+  %r22: i1, %r23: i1, 
+  %r24: i12, %r25: i2, %r26: i9, %r27: i4, %r28: i4,
+  %r29: !rtl.array<3xi4>
   ) {
 
   %0 = comb.add %a, %b : i4
@@ -70,24 +70,23 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !rtl.array<10xi4>,
   %20 = comb.icmp ule %a, %b : i4
   %21 = comb.icmp ugt %a, %b : i4
   %22 = comb.icmp uge %a, %b : i4
-  %23 = comb.andr %a : i4
-  %24 = comb.xorr %a : i4
-  %25 = comb.concat %a, %a, %b : (i4, i4, i4) -> i12
-  %26 = comb.extract %a from 1 : (i4) -> i2
-  %27 = comb.sext %a : (i4) -> i9
-  %28 = comb.mux %cond, %a, %b : i4
+  %23 = comb.xorr %a : i4
+  %24 = comb.concat %a, %a, %b : (i4, i4, i4) -> i12
+  %25 = comb.extract %a from 1 : (i4) -> i2
+  %26 = comb.sext %a : (i4) -> i9
+  %27 = comb.mux %cond, %a, %b : i4
 
   %allone = comb.constant 15 : i4
-  %29 = comb.xor %a, %allone : i4
+  %28 = comb.xor %a, %allone : i4
 
   %one = comb.constant 1 : i4
   %aPlusOne = comb.add %a, %one : i4
-  %30 = rtl.array_slice %array at %aPlusOne: (!rtl.array<10xi4>) -> !rtl.array<3xi4>
+  %29 = rtl.array_slice %array at %aPlusOne: (!rtl.array<10xi4>) -> !rtl.array<3xi4>
 
 
-  rtl.output %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, %30:
+  rtl.output %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29:
     i4,i4, i4,i4,i4,i4,i4, i4,i4,i4,i4,i4,
-    i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,i1,
+    i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,
     i12, i2,i9,i4, i4, !rtl.array<3xi4>
 }
 

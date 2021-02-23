@@ -15,9 +15,7 @@ rtl.module @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> (i50) {
   // CHECK-NEXT:    [[RES4:%[0-9]+]] = comb.concat %c42_i12 : (i12) -> i12
   %conc1 = comb.concat %a : (i12) -> i12
 
-  // CHECK-NEXT:    [[RES5:%[0-9]+]] = comb.andr [[RES4]] : i12
   // CHECK-NEXT:    [[RES7:%[0-9]+]] = comb.xorr [[RES4]] : i12
-  %andr1 = comb.andr %conc1 : i12
   %xorr1 = comb.xorr %conc1 : i12
 
   // CHECK-NEXT:    [[RES8:%[0-9]+]] = comb.concat [[RES4]], [[RES0]], [[RES1]], [[RES2]], [[RES2]] : (i12, i12, i12, i7, i7) -> i50

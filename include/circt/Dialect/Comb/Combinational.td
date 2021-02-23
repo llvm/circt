@@ -199,7 +199,6 @@ class UnaryI1ReductionOp<string mnemonic, list<OpTrait> traits = []> :
   let assemblyFormat = "$input attr-dict `:` type($input)";
 }
 
-def AndROp : UnaryI1ReductionOp<"andr">;
 def XorROp : UnaryI1ReductionOp<"xorr">;
 
 //===----------------------------------------------------------------------===//

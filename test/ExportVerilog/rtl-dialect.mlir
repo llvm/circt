@@ -47,7 +47,8 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %23 = comb.icmp ule %a, %b : i4
   %24 = comb.icmp ugt %a, %b : i4
   %25 = comb.icmp uge %a, %b : i4
-  %26 = comb.andr %a : i4
+  %one4 = comb.constant -1 : i4
+  %26 = comb.icmp eq %a, %one4 : i4
   %zero4 = comb.constant 0 : i4
   %27 = comb.icmp ne %a, %zero4 : i4
   %28 = comb.xorr %a : i4
