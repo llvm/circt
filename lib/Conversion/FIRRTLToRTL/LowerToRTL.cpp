@@ -1270,9 +1270,9 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
           for (size_t i = 0, e = a.getSize(); i != e; ++i) {
             auto iIdx =
                 builder->create<comb::ConstantOp>(APInt(log2(e + 1), i));
-            builder->create<sv::BPAssignOp>(
-                builder->create<sv::ArrayIndexInOutOp>(reg, iIdx),
-                randomVal(a.getElementType()));
+            auto arrayIndex = builder->create<sv::ArrayIndexInOutOp>(reg, iIdx);
+            builder->create<sv::BPAssignOp>(arrayIndex,
+                                            randomVal(a.getElementType()));
           }
         })
         .Default([&](auto a) {
@@ -1582,9 +1582,9 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       // Attach the write port
       auto last = writePipe.back();
       builder->create<sv::AlwaysFFOp>(EventControl::AtPosEdge, clk, [&]() {
+        auto enable = builder->create<sv::ReadInOutOp>(last.en);
         auto cond = builder->create<comb::AndOp>(
-            builder->create<sv::ReadInOutOp>(last.en),
-            builder->create<sv::ReadInOutOp>(last.mask));
+            enable, builder->create<sv::ReadInOutOp>(last.mask));
         builder->create<sv::IfOp>(cond, [&]() {
           auto slot = builder->create<sv::ArrayIndexInOutOp>(
               reg, builder->create<sv::ReadInOutOp>(last.addr));
