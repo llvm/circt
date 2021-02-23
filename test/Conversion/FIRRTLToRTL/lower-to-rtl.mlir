@@ -899,6 +899,15 @@ module attributes {firrtl.mainModule = "Simple"} {
     rtl.output %4 : i23
   }
 
+  //CHECK-LABEL: rtl.module @test_partialconnect(%clock: i1) {
+  //CHECK: sv.alwaysff(posedge %clock)
+  rtl.module @test_partialconnect(%clock : i1) -> () {
+    %firclock = firrtl.stdIntCast %clock : (i1) -> !firrtl.clock
+    %b = firrtl.reg %firclock {name = "pcon"} : (!firrtl.clock) -> !firrtl.uint<1>
+    %a = firrtl.constant(0 : ui2) : !firrtl.uint<2>
+    firrtl.partialconnect %b, %a : !firrtl.uint<1>, !firrtl.uint<2>
+  }
+
   // CHECK-LABEL: rtl.module @SimpleStruct(%source: !rtl.struct<valid: i1, ready: i1, data: i64>) -> (%fldout: i64) {
   // CHECK-NEXT:    %0 = rtl.struct_extract %source["data"] : !rtl.struct<valid: i1, ready: i1, data: i64>
   // CHECK-NEXT:    rtl.output %0 : i64
