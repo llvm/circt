@@ -2,7 +2,7 @@
 #define HIR_HIR_H
 
 #include "mlir/IR/Dialect.h"
-#include "mlir/IR/Function.h"
+#include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Interfaces/LoopLikeInterface.h"

@@ -1,6 +1,6 @@
-add_mlir_library(MLIRHIRScheduleVerifier
+add_mlir_library(CIRCTHIRScheduleVerifier
   ScheduleVerifier.cpp
 
   LINK_LIBS PUBLIC
-  MLIRHIR
+  CIRCTHIR
   )

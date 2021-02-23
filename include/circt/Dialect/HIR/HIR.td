@@ -9,7 +9,7 @@ include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/IR/SymbolInterfaces.td"
 
 // Dialect
-def HIRR_Dialect : Dialect {
+def HIRDialect : Dialect {
   let name = "hir";
   let summary = "An MLIR dialect for Hardware acclerator description";
   let description = [{
@@ -44,7 +44,7 @@ def WireType
 
 // Ops
 class HIR_Op<string mnemonic, list<OpTrait> traits = []>
-: Op<HIRR_Dialect, mnemonic, traits>;
+: Op<HIRDialect, mnemonic, traits>;
 
 def DefTimeVarOp : HIR_Op<"def_time_var", [NoSideEffect]> {
   let summary = "Op defines a new time var.";

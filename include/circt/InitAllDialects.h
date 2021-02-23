@@ -38,6 +38,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     esi::ESIDialect,
     firrtl::FIRRTLDialect,
     handshake::HandshakeOpsDialect,
+    hir::HIRDialect
     llhd::LLHDDialect,
     msft::MSFTDialect,
     hw::HWDialect,

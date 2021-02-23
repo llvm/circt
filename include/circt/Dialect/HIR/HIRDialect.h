@@ -2,7 +2,7 @@
 #define HIR_HIRDIALECT_H
 
 #include "mlir/IR/Dialect.h"
-#include "mlir/IR/Function.h"
+#include "mlir/IR/FunctionSupport.h"
 
 namespace mlir {
   namespace hir {

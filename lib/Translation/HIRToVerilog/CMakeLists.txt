@@ -1,4 +1,4 @@
-add_mlir_library(MLIRHIRToVerilog
+add_mlir_library(CIRCTHIRToVerilog
   HIRToVerilog.cpp
 
   ADDITIONAL_HEADER_DIRS
@@ -6,5 +6,5 @@ add_mlir_library(MLIRHIRToVerilog
   ${PROJECT_SOURCE_DIR}/lib/Target/HIRToVerilog/
 
   LINK_LIBS PUBLIC
-  MLIRHIR
+  CIRCTHIR
   )

@@ -7,7 +7,7 @@
 #include "circt/Dialect/HIR/HIR.h"
 #include "circt/Dialect/HIR/HIRDialect.h"
 #include "mlir/Dialect/CommonFolders.h"
-#include "mlir/IR/Function.h"
+#include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"

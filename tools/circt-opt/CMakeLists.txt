@@ -15,6 +15,8 @@ target_link_libraries(circt-opt
   CIRCTFIRRTLToHW
   CIRCTHandshakeOps
   CIRCTHandshakeToFIRRTL
+  CIRCTHIR
+  CIRCTHIRScheduleVerifier
   CIRCTLLHD
   CIRCTLLHDToLLVM
   CIRCTLLHDTransforms
