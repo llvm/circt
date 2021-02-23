@@ -813,47 +813,47 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK:     sv.ifdef "SYNTHESIS" {
     // CHECK:     } else {
     // CHECK:       %[[zero:.+]] = comb.constant(false)
-    // CHECK-DAG:   %[[r_en_0:.+]] = sv.array_index_inout %memory_r_en_pipe[%[[zero]]]
-    // CHECK-DAG:   %[[random:.+]] = sv.textual_value "`RANDOM"
+    // CHECK:       %[[r_en_0:.+]] = sv.array_index_inout %memory_r_en_pipe[%[[zero]]]
+    // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[r_en_0]], %[[random]]
     // CHECK:     }
     // CHECK:     sv.ifdef "SYNTHESIS" {
     // CHECK:     } else {
     // CHECK:       %[[zero:.+]] = comb.constant(false)
-    // CHECK-DAG:   %[[r_addr_0:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[zero]]]
-    // CHECK-DAG:   %[[random:.+]] = sv.textual_value "`RANDOM"
+    // CHECK:       %[[r_addr_0:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[zero]]]
+    // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[r_addr_0]], %[[random]]
     // CHECK:       %[[one:.+]] = comb.constant(true)
-    // CHECK-DAG:   %[[r_addr_1:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[one]]]
-    // CHECK-DAG:   %[[random:.+]] = sv.textual_value "`RANDOM"
+    // CHECK:       %[[r_addr_1:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[one]]]
+    // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[r_addr_1]], %[[random]]
     // CHECK:     }
     // CHECK:     sv.ifdef "SYNTHESIS" {
     // CHECK:     } else {
     // CHECK:       %[[zero:.+]] = comb.constant(false)
-    // CHECK-DAG:   %[[w_en_0:.+]] = sv.array_index_inout %memory_w_en_pipe[%[[zero]]]
-    // CHECK-DAG:   %[[random:.+]] = sv.textual_value "`RANDOM"
+    // CHECK:       %[[w_en_0:.+]] = sv.array_index_inout %memory_w_en_pipe[%[[zero]]]
+    // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[w_en_0]], %[[random]]
     // CHECK:     }
     // CHECK:     sv.ifdef "SYNTHESIS" {
     // CHECK:     } else {
     // CHECK:       %[[zero:.+]] = comb.constant(false)
-    // CHECK-DAG:   %[[w_addr_0:.+]] = sv.array_index_inout %memory_w_addr_pipe[%[[zero]]]
-    // CHECK-DAG:   %[[random:.+]] = sv.textual_value "`RANDOM"
+    // CHECK:       %[[w_addr_0:.+]] = sv.array_index_inout %memory_w_addr_pipe[%[[zero]]]
+    // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[w_addr_0]], %[[random]]
     // CHECK:     }
     // CHECK:     sv.ifdef "SYNTHESIS" {
     // CHECK:     } else {
     // CHECK:       %[[zero:.+]] = comb.constant(false)
-    // CHECK-DAG:   %[[w_mask_0:.+]] = sv.array_index_inout %memory_w_mask_pipe[%[[zero]]]
-    // CHECK-DAG:   %[[random:.+]] = sv.textual_value "`RANDOM"
+    // CHECK:       %[[w_mask_0:.+]] = sv.array_index_inout %memory_w_mask_pipe[%[[zero]]]
+    // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[w_mask_0]], %[[random]]
     // CHECK:     }
     // CHECK:     sv.ifdef "SYNTHESIS" {
     // CHECK:     } else {
     // CHECK:       %[[zero:.+]] = comb.constant(false)
-    // CHECK-DAG:   %[[w_data_0:.+]] = sv.array_index_inout %memory_w_data_pipe[%[[zero]]]
-    // CHECK-DAG:   %[[random:.+]] = sv.textual_value "`RANDOM"
+    // CHECK:       %[[w_data_0:.+]] = sv.array_index_inout %memory_w_data_pipe[%[[zero]]]
+    // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[w_data_0]], %[[random]]
     // CHECK:     }
   }
