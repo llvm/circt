@@ -1270,9 +1270,9 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
           for (size_t i = 0, e = a.getSize(); i != e; ++i) {
             auto iIdx =
                 builder->create<comb::ConstantOp>(APInt(log2(e + 1), i));
-            builder->create<sv::BPAssignOp>(
-                builder->create<sv::ArrayIndexInOutOp>(reg, iIdx),
-                randomVal(a.getElementType()));
+            auto arrayIndex = builder->create<sv::ArrayIndexInOutOp>(reg, iIdx);
+            builder->create<sv::BPAssignOp>(arrayIndex,
+                                            randomVal(a.getElementType()));
           }
         })
         .Default([&](auto a) {
