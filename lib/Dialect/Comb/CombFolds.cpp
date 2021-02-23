@@ -743,6 +743,41 @@ OpFoldResult MuxOp::fold(ArrayRef<Attribute> constants) {
   return {};
 }
 
+void MuxOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                        MLIRContext *context) {
+  struct Folder final : public OpRewritePattern<MuxOp> {
+    using OpRewritePattern::OpRewritePattern;
+    LogicalResult matchAndRewrite(MuxOp op,
+                                  PatternRewriter &rewriter) const override {
+      auto width = op.getType().cast<IntegerType>().getWidth();
+
+      if (width == 1) {
+        APInt value;
+
+        // mux(a, true, b) -> or(a, b)
+        if (matchPattern(op.trueValue(), m_RConstant(value))) {
+          if (value == 1) {
+            SmallVector<Value, 4> newOperands{op.cond(), op.falseValue()};
+            rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
+            return success();
+          }
+        }
+
+        // mux(a, b, false) -> and(a, b)
+        if (matchPattern(op.falseValue(), m_RConstant(value))) {
+          if (value == 0) {
+            SmallVector<Value, 4> newOperands{op.cond(), op.trueValue()};
+            rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
+            return success();
+          }
+        }
+      }
+      return failure();
+    }
+  };
+  results.insert<Folder>(context);
+}
+
 //===----------------------------------------------------------------------===//
 // ICmpOp
 //===----------------------------------------------------------------------===//
