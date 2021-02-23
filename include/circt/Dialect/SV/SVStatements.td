@@ -16,19 +16,57 @@ def HasRegionTerminator : SingleBlockImplicitTerminator<"YieldOp">;
 // Control flow like-operations
 //===----------------------------------------------------------------------===//
 
-def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments,
-                             RecursiveSideEffects]> {
+def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments]> {
   let summary = "'ifdef MACRO' block";
-   
-   let description = [{
-    This operation is an #ifdef block, or an #ifndef block if `string` starts
-    with a `!` character.
-    }];
+
+  let description = [{
+    This operation is an #ifdef block, which has a "then" and "else" region.
+  }];
 
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
   let arguments = (ins StrAttr:$cond);
   let results = (outs);
-  
+
+  let assemblyFormat = "$cond $thenRegion (`else` $elseRegion^)? attr-dict";
+
+  // TODO: ODS forces using a custom builder just to get the region terminator
+  // implicitly installed.
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilderDAG<(ins "StringRef":$cond,
+                      CArg<"std::function<void()>", "{}">:$thenCtor,
+                      CArg<"std::function<void()>", "{}">:$elseCtor)>
+  ];
+
+  let extraClassDeclaration = [{
+    /// Returns true if an else block exists.
+    bool hasElse() { return !elseRegion().empty(); }
+
+    Block *getThenBlock() {
+      assert(!thenRegion().empty() && "Unexpected empty 'then' region.");
+      return &thenRegion().front();
+    }
+
+    Block *getElseBlock() {
+      assert(hasElse() && "Empty 'else' region.");
+      return &elseRegion().front();
+    }
+  }];
+}
+
+def IfDefProceduralOp
+  : SVOp<"ifdef.procedural", [HasRegionTerminator, NoRegionArguments,
+                              ProceduralRegion]> {
+  let summary = "'ifdef MACRO' block for procedural regions";
+
+  let description = [{
+    This operation is an #ifdef block, which has a "then" and "else" region.
+  }];
+
+  let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
+  let arguments = (ins StrAttr:$cond);
+  let results = (outs);
+
   let assemblyFormat = "$cond $thenRegion (`else` $elseRegion^)? attr-dict";
 
   // TODO: ODS forces using a custom builder just to get the region terminator
@@ -57,7 +95,7 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments,
 }
 
 def IfOp : SVOp<"if", [HasRegionTerminator, NoRegionArguments,
-                       RecursiveSideEffects]> {
+                       ProceduralRegion]> {
   let summary = "'if (cond)' block";
   
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
@@ -147,7 +185,7 @@ def ResetTypeAttr : I32EnumAttr<"ResetType", "reset type",
 
 
 def AlwaysFFOp : SVOp<"alwaysff", [HasRegionTerminator, NoRegionArguments,
-                               RecursiveSideEffects, ProceduralRegion]> {
+                                   RecursiveSideEffects, ProceduralRegion]> {
   let summary = "'alwaysff @' block with optional reset";
   let description = [{ 
     alwaysff blocks represent always_ff verilog nodes, which enforce inference 
@@ -218,8 +256,8 @@ def InitialOp : SVOp<"initial", [HasRegionTerminator, NoRegionArguments,
 
 def YieldOp
   : SVOp<"yield", [NoSideEffect, Terminator,
-                   ParentOneOf<["IfDefOp, IfOp", "AlwaysOp", "InitialOp", 
-                                "AlwaysFFOp"]>]> {
+                   ParentOneOf<["IfDefOp", "IfDefProceduralOp", "IfOp",
+                                "AlwaysOp", "InitialOp", "AlwaysFFOp"]>]> {
   let summary = "terminator for control-flow operation regions";
   let arguments = (ins);
 

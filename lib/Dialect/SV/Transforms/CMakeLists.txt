@@ -1,5 +1,5 @@
 add_circt_dialect_library(CIRCTSVTransforms
-  AlwaysFusion.cpp
+  RTLCleanup.cpp
 
   DEPENDS
   CIRCTSVTransformsIncGen

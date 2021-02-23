@@ -88,7 +88,7 @@ def FModuleOp : FIRRTLOp<"module",
     friend class OpTrait::FunctionLike<FModuleOp>;
 
     /// Returns the number of arguments, implementing OpTrait::FunctionLike.
-    unsigned getNumFuncArguments() { return getType().getInputs().size(); }
+    unsigned getNumFuncArguments() { return getBodyBlock()->getNumArguments(); }
     /// Returns the number of results, implementing OpTrait::FunctionLike.
     unsigned getNumFuncResults() { return getType().getResults().size(); }
 

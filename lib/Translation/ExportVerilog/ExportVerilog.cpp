@@ -86,6 +86,8 @@ static void getTypeDims(SmallVectorImpl<int64_t> &dims, Type type,
     return getTypeDims(dims, uarray.getElementType(), loc);
   if (type.isa<InterfaceType>())
     return;
+  if (type.isa<StructType>())
+    return;
 
   int width;
   if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
@@ -164,6 +166,97 @@ static bool isZeroBitType(Type type) {
 
   // We have an open type system, so assume it is ok.
   return false;
+}
+
+/// Given a set of known nested types (those supported by this pass), strip off
+/// leading unpacked types.  This strips off portions of the type that are
+/// printed to the right of the name in verilog.
+static Type stripUnpackedTypes(Type type) {
+  return TypeSwitch<Type, Type>(type)
+      .Case<InOutType>([](InOutType inoutType) {
+        return stripUnpackedTypes(inoutType.getElementType());
+      })
+      .Case<UnpackedArrayType>([](UnpackedArrayType arrayType) {
+        return stripUnpackedTypes(arrayType.getElementType());
+      })
+      .Default([](Type type) { return type; });
+}
+
+/// Output the basic type that consists of packed and primitive types.  This is
+/// those to the left of the name in verilog. implicitIntType controls whether
+/// to print a base type for (logic) for inteters or whether the caller will
+/// have handled this (with logic, wire, reg, etc).
+/// Returns whether anything was printed out
+static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
+                                SmallVectorImpl<size_t> &dims,
+                                bool implicitIntType) {
+  return TypeSwitch<Type, bool>(type)
+      .Case<IntegerType>([&](IntegerType integerType) {
+        if (!implicitIntType)
+          os << "logic";
+        if (integerType.getWidth() != 1)
+          dims.push_back(integerType.getWidth());
+        if (!dims.empty() && !implicitIntType)
+          os << ' ';
+
+        for (auto dim : dims)
+          if (dim)
+            os << '[' << (dim - 1) << ":0]";
+          else
+            os << "/*Zero Width*/";
+        return !dims.empty() || !implicitIntType;
+      })
+      .Case<InOutType>([&](InOutType inoutType) {
+        return printPackedTypeImpl(inoutType.getElementType(), os, loc, dims,
+                                   implicitIntType);
+      })
+      .Case<StructType>([&](StructType structType) {
+        os << "struct packed {";
+        for (auto &element : structType.getElements()) {
+          SmallVector<size_t, 8> structDims;
+          printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
+                              structDims, /*implicitIntType=*/false);
+          os << ' ' << element.name << "; ";
+        }
+        os << '}';
+        return true;
+      })
+      .Case<ArrayType>([&](ArrayType arrayType) {
+        dims.push_back(arrayType.getSize());
+        return printPackedTypeImpl(arrayType.getElementType(), os, loc, dims,
+                                   implicitIntType);
+      })
+      .Case<InterfaceType>([](InterfaceType ifaceType) { return false; })
+      .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
+        os << "<<unexpected unpacked array>>";
+        emitError(loc, "Unexpected unpacked array in packed type ")
+            << arrayType;
+        return true;
+      })
+      .Default([&](Type type) {
+        os << "<<invalid type>>";
+        emitError(loc, "value has an unsupported verilog type ") << type;
+        return true;
+      });
+}
+
+static bool printPackedType(Type type, raw_ostream &os, Location loc,
+                            bool implicitIntType = true) {
+  SmallVector<size_t, 8> packedDimensions;
+  return printPackedTypeImpl(type, os, loc, packedDimensions, implicitIntType);
+}
+
+/// Output the unpacked array dimensions.  This is the part of the type that is
+/// to the right of the name.
+static void printUnpackedTypePostfix(Type type, raw_ostream &os) {
+  TypeSwitch<Type, void>(type)
+      .Case<InOutType>([&](InOutType inoutType) {
+        printUnpackedTypePostfix(inoutType.getElementType(), os);
+      })
+      .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
+        printUnpackedTypePostfix(arrayType.getElementType(), os);
+        os << '[' << (arrayType.getSize() - 1) << ":0]";
+      });
 }
 
 /// Return true if this is a noop cast that will emit with no syntax.
@@ -342,7 +435,12 @@ public:
   LogicalResult visitSV(AliasOp op);
   LogicalResult visitStmt(OutputOp op);
   LogicalResult visitStmt(InstanceOp op);
-  LogicalResult visitSV(IfDefOp op);
+
+  LogicalResult emitIfDef(Operation *op, StringRef cond);
+  LogicalResult visitSV(IfDefOp op) { return emitIfDef(op, op.cond()); }
+  LogicalResult visitSV(IfDefProceduralOp op) {
+    return emitIfDef(op, op.cond());
+  }
   LogicalResult visitSV(IfOp op);
   LogicalResult visitSV(AlwaysOp op);
   LogicalResult visitSV(AlwaysFFOp op);
@@ -726,6 +824,9 @@ private:
   SubExprInfo visitTypeOp(ArrayGetOp op);
   SubExprInfo visitTypeOp(ArrayCreateOp op);
   SubExprInfo visitTypeOp(ArrayConcatOp op);
+  SubExprInfo visitTypeOp(StructCreateOp op);
+  SubExprInfo visitTypeOp(StructExtractOp op);
+  SubExprInfo visitTypeOp(StructInjectOp op);
 
   // Comb Dialect Operations
   using CombinationalVisitor::visitComb;
@@ -975,9 +1076,9 @@ SubExprInfo ExprEmitter::visitComb(ConcatOp op) {
 }
 
 SubExprInfo ExprEmitter::visitComb(BitcastOp op) {
-  // NOTE: Bitcasts are always emitted out-of-line with their own wire
-  // declaration. SystemVerilog uses the wire declaration to know what type this
-  // value is being casted to.
+  // NOTE: Bitcasts are emitted out-of-line with their own wire declaration when
+  // their dimensions don't match. SystemVerilog uses the wire declaration to
+  // know what type this value is being casted to.
   Type toType = op.getType();
   if (!haveMatchingDims(toType, op.input().getType(), op.getLoc())) {
     os << "/*cast(bit";
@@ -1136,6 +1237,42 @@ SubExprInfo ExprEmitter::visitComb(MuxOp op) {
   return {Conditional, signedness};
 }
 
+SubExprInfo ExprEmitter::visitTypeOp(StructCreateOp op) {
+  StructType stype = op.getType();
+  os << "'{";
+  size_t i = 0;
+  llvm::interleaveComma(stype.getElements(), os,
+                        [&](const StructType::FieldInfo &field) {
+                          os << field.name << ": ";
+                          emitSubExpr(op.getOperand(i++), Selection);
+                        });
+  os << '}';
+  return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(StructExtractOp op) {
+  emitSubExpr(op.input(), Selection);
+  os << '.' << op.field();
+  return {Selection, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
+  StructType stype = op.getType().cast<StructType>();
+  os << "'{";
+  llvm::interleaveComma(stype.getElements(), os,
+                        [&](const StructType::FieldInfo &field) {
+                          os << field.name << ": ";
+                          if (field.name == op.field()) {
+                            emitSubExpr(op.newValue(), Selection);
+                          } else {
+                            emitSubExpr(op.input(), Selection);
+                            os << '.' << field.name;
+                          }
+                        });
+  os << '}';
+  return {Selection, IsUnsigned};
+}
+
 SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
   emitter.emitOpError(op, "cannot emit this expression to Verilog");
   os << "<<unsupported expr: " << op->getName().getStringRef() << ">>";
@@ -1175,7 +1312,9 @@ void ModuleEmitter::emitStatementExpression(Operation *op) {
     indent() << "// Zero width: ";
   } else if (emitInlineLogicDecls && !outOfLineExpresssionDecls.count(op)) {
     indent() << getVerilogDeclWord(op) << " ";
-    emitTypeDimWithSpaceIfNeeded(op->getResult(0).getType(), op->getLoc(), os);
+    if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os,
+                        op->getLoc()))
+      os << ' ';
     os << getName(op->getResult(0)) << " = ";
   } else {
     indent() << "assign " << getName(op->getResult(0)) << " = ";
@@ -1205,7 +1344,7 @@ void ModuleEmitter::visitMerge(MergeOp op) {
 
 LogicalResult ModuleEmitter::visitSV(TypeDefOp op) {
   indent() << "typedef ";
-  ::printPackedType(op.type(), os, op.getLoc(), false, '\n');
+  ::printPackedType(op.type(), os, op.getLoc(), false);
   os << ' ' << op.sym_name() << ";\n";
   return success();
 }
@@ -1437,11 +1576,10 @@ LogicalResult ModuleEmitter::visitSV(CoverOp op) {
   return success();
 }
 
-LogicalResult ModuleEmitter::visitSV(IfDefOp op) {
-  auto cond = op.cond();
-
-  if (cond.startswith("!"))
-    indent() << "`ifndef " << cond.drop_front(1);
+LogicalResult ModuleEmitter::emitIfDef(Operation *op, StringRef cond) {
+  bool hasEmptyThen = isa<sv::YieldOp>(op->getRegion(0).front().front());
+  if (hasEmptyThen)
+    indent() << "`ifndef " << cond;
   else
     indent() << "`ifdef " << cond;
 
@@ -1449,15 +1587,18 @@ LogicalResult ModuleEmitter::visitSV(IfDefOp op) {
   ops.insert(op);
   emitLocationInfoAndNewLine(ops);
 
-  addIndent();
-  for (auto &o : op.getThenBlock()->without_terminator())
-    emitOperation(&o);
-  reduceIndent();
-
-  if (op.hasElse()) {
-    indent() << "`else\n";
+  if (!hasEmptyThen) {
     addIndent();
-    for (auto &o : op.getElseBlock()->without_terminator())
+    for (auto &o : op->getRegion(0).front().without_terminator())
+      emitOperation(&o);
+    reduceIndent();
+  }
+
+  if (!op->getRegion(1).empty()) {
+    if (!hasEmptyThen)
+      indent() << "`else\n";
+    addIndent();
+    for (auto &o : op->getRegion(1).front().without_terminator())
       emitOperation(&o);
     reduceIndent();
   }
@@ -1820,6 +1961,11 @@ static bool isExpressionUnableToInline(Operation *op) {
       // Bitcasts rely on the type being assigned to, so we cannot inline.
       return true;
 
+  // StructCreateOp needs to be assigning to a named temporary so that types
+  // are inferred properly by verilog
+  if (isa<StructCreateOp>(op))
+    return true;
+
   // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
   for (auto user : op->getUsers()) {
@@ -1884,17 +2030,6 @@ static bool isExpressionEmittedInline(Operation *op) {
   return op->getResult(0).hasOneUse();
 }
 
-// Print out the array subscripts after a wire/port declaration.
-static void printArraySubscripts(Type type, raw_ostream &os) {
-  if (auto inout = type.dyn_cast<InOutType>())
-    return printArraySubscripts(inout.getElementType(), os);
-
-  if (auto array = type.dyn_cast<UnpackedArrayType>()) {
-    printArraySubscripts(array.getElementType(), os);
-    os << '[' << (array.getSize() - 1) << ":0]";
-  }
-}
-
 namespace {
 class NameCollector {
 public:
@@ -1925,8 +2060,56 @@ private:
 } // namespace
 
 void NameCollector::collectNames(Block &block) {
-  SmallString<32> nameTmp;
+  // Do a prepass over the operations in the block keeping track of whether any
+  // inlinable expression nodes are used out of order by other statements
+  // they'll get inlined into.  For example in:
+  //   sv.assert %y
+  //   ...
+  //   %x = comb.and ...
+  //   %y = comb.xor %x, true
+  // We want to know that both %y and %x will be used out of order since they'll
+  // both get inlined into the sv.assert earlier in the block.
+  typedef enum {
+    UnseenSoFar = 0,
+    SeenBelow = 1,
+    SeenAndUsedOutOfOrder = 2
+  } OperationScanKind;
 
+  DenseMap<Operation *, OperationScanKind> exprsUsesInformation;
+
+  // Scan the block from the bottom up.
+  for (auto &op : llvm::reverse(block)) {
+    if (!isVerilogExpression(&op)) {
+      // Just remember that we saw this operation.
+      exprsUsesInformation[&op] = SeenBelow;
+      continue;
+    }
+
+    // Check the users of any inlined expression to see if they are lexically
+    // below the operation itself.  If not, it is being used out of order.
+    bool haveAnyOutOfOrderUses = false;
+    for (auto *userOp : op.getUsers()) {
+      // If the user is in a suboperation like an always block, then zip up
+      // to the operation that uses it.
+      while (&block != &userOp->getParentRegion()->front())
+        userOp = userOp->getParentOp();
+
+      // See if we have seen this operation below.  If not, it is an out of
+      // order use, and if the user is itself an inlined expression used out of
+      // order, then this is too.
+      auto userInfo = exprsUsesInformation[userOp];
+      if (userInfo == SeenBelow)
+        continue;
+      haveAnyOutOfOrderUses = true;
+      break;
+    }
+
+    // Remember if this operation has any out of order uses.
+    exprsUsesInformation[&op] =
+        haveAnyOutOfOrderUses ? SeenAndUsedOutOfOrder : SeenBelow;
+  }
+
+  SmallString<32> nameTmp;
   using ValueOrOp = ModuleEmitter::ValueOrOp;
 
   // Loop over all of the results of all of the ops.  Anything that defines a
@@ -1975,22 +2158,9 @@ void NameCollector::collectNames(Block &block) {
         // cyclic graphs in its body.  We check to make sure that no uses of
         // this expression are lexically above this expression.  If they are,
         // we have to emit the declaration at the top of the block.
-        bool haveAnyOutOfOrderUses = false;
-        for (auto *userOp : result.getUsers()) {
-          // If the user is in a suboperation like an always block, then zip up
-          // to the operation that uses it.
-          while (&block != &userOp->getParentRegion()->front())
-            userOp = userOp->getParentOp();
-
-          // Check to see if this is lexically before its users.
-          if (!op.isBeforeInBlock(userOp)) {
-            haveAnyOutOfOrderUses = true;
-            break;
-          }
-        }
 
         // If we have no out of order uses, we can emit an inline declaration.
-        if (!haveAnyOutOfOrderUses)
+        if (exprsUsesInformation[&op] != SeenAndUsedOutOfOrder)
           continue;
         // Otherwise keep track of this unusual case and declare it like normal.
         moduleEmitter.outOfLineExpresssionDecls.insert(&op);
@@ -2009,8 +2179,8 @@ void NameCollector::collectNames(Block &block) {
         typeString = tdef->sym_name();
       } else {
         llvm::raw_svector_ostream stringStream(typeString);
-        emitTypeDimWithSpaceIfNeeded(result.getType(), op.getLoc(),
-                                     stringStream);
+        printPackedType(stripUnpackedTypes(result.getType()), stringStream,
+                        op.getLoc());
       }
       maxTypeWidth = std::max(typeString.size(), maxTypeWidth);
     }
@@ -2032,6 +2202,9 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
   auto &valuesToEmit = collector.getValuesToEmit();
   size_t maxDeclNameWidth = collector.getMaxDeclNameWidth();
   size_t maxTypeWidth = collector.getMaxTypeWidth();
+
+  if (maxTypeWidth > 0) // add a space if any type exists
+    maxTypeWidth += 1;
 
   SmallPtrSet<Operation *, 8> ops;
 
@@ -2064,7 +2237,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
       os << "()";
     } else {
       // Print out any array subscripts.
-      printArraySubscripts(type, os);
+      printUnpackedTypePostfix(type, os);
     }
 
     os << ';';
@@ -2099,16 +2272,13 @@ void ModuleEmitter::emitOperation(Operation *op) {
 }
 
 void ModuleEmitter::emitMLIRModule(ModuleOp module) {
-  // Add symbols to list of used names.
-  registerIdentifiers(*module.getBody());
-
   for (auto &op : *module.getBody()) {
     if (auto module = dyn_cast<RTLModuleOp>(op))
       ModuleEmitter(state, this).emitRTLModule(module);
     else if (auto module = dyn_cast<RTLModuleExternOp>(op))
       ModuleEmitter(state, this).emitRTLExternModule(module);
     else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) || isa<IfDefOp>(op) ||
-             isa<TypeDefOp>(op))
+             isa<TypeDefOp>(op) || isa<IfDefProceduralOp>(op))
       ModuleEmitter(state, this).emitOperation(&op);
     else if (!isa<ModuleTerminatorOp>(op))
       op.emitError("unknown operation");
@@ -2120,9 +2290,6 @@ void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
 }
 
 void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
-  // Add symbols to list of used names.
-  registerIdentifiers(*module.getBodyBlock());
-
   // Add all the ports to the name table.
   SmallVector<ModulePortInfo, 8> portInfo;
   module.getPortInfo(portInfo);
@@ -2162,11 +2329,15 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
       portTypeStrings.back() = tdef->sym_name();
     } else {
       llvm::raw_svector_ostream stringStream(portTypeStrings.back());
-      emitTypeDimWithSpaceIfNeeded(port.type, module.getLoc(), stringStream);
+      printPackedType(stripUnpackedTypes(port.type), stringStream,
+                      module.getLoc());
     }
 
     maxTypeWidth = std::max(portTypeStrings.back().size(), maxTypeWidth);
   }
+
+  if (maxTypeWidth > 0) // add a space if any type exists
+    maxTypeWidth += 1;
 
   addIndent();
 
@@ -2209,13 +2380,14 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
 
     // Emit the name.
     os << getPortName(portIdx);
-    printArraySubscripts(portType, os);
+    printUnpackedTypePostfix(portType, os);
     ++portIdx;
 
     // If we have any more ports with the same types and the same direction,
     // emit them in a list on the same line.
     while (portIdx != e && portInfo[portIdx].direction == thisPortDirection &&
-           portType == portInfo[portIdx].type) {
+           stripUnpackedTypes(portType) ==
+               stripUnpackedTypes(portInfo[portIdx].type)) {
       // Don't exceed our preferred line length.
       StringRef name = getPortName(portIdx);
       if (os.tell() + 2 + name.size() - startOfLinePos >
@@ -2226,7 +2398,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
 
       // Append this to the running port decl.
       os << ", " << name;
-      printArraySubscripts(portType, os);
+      printUnpackedTypePostfix(portInfo[portIdx].type, os);
       ++portIdx;
     }
 
