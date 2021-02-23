@@ -1786,8 +1786,6 @@ LogicalResult FIRRTLLowering::visitExpr(AndRPrimOp op) {
       op, ICmpPredicate::eq, operand,
       builder->create<comb::ConstantOp>(
           APInt(operand.getType().getIntOrFloatBitWidth(), -1)));
-  // return setLoweringTo<comb::AndROp>(op, builder->getIntegerType(1),
-  // operand);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(OrRPrimOp op) {

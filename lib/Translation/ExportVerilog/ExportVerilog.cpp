@@ -1079,14 +1079,14 @@ SubExprInfo ExprEmitter::visitComb(ICmpOp op) {
 
   auto pred = static_cast<uint64_t>(op.predicate());
   assert(pred < sizeof(symop) / sizeof(symop[0]));
-  if (pred == 0) {
+  if (op.predicate() == ICmpPredicate::eq) {
     // Lower "== -1" to Reduction And
     if (auto op1 =
             dyn_cast_or_null<ConstantOp>(op.getOperand(1).getDefiningOp())) {
       if (op1.getValue().isAllOnesValue())
         return emitUnary(op, "&", true);
     }
-  } else if (pred == 1) {
+  } else if (op.predicate() == ICmpPredicate::ne) {
     // Lower "!= 0" to Reduction Or
     if (auto op1 =
             dyn_cast_or_null<ConstantOp>(op.getOperand(1).getDefiningOp())) {
