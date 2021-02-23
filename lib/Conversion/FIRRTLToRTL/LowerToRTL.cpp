@@ -1793,7 +1793,11 @@ LogicalResult FIRRTLLowering::visitExpr(OrRPrimOp op) {
     return failure();
   }
 
-  return setLoweringTo<comb::OrROp>(op, builder->getIntegerType(1), operand);
+  // Lower OrR to != 0
+  return setLoweringTo<comb::ICmpOp>(
+      op, ICmpPredicate::ne, operand,
+      builder->create<comb::ConstantOp>(
+          APInt(operand.getType().getIntOrFloatBitWidth(), 0)));
 }
 
 //===----------------------------------------------------------------------===//

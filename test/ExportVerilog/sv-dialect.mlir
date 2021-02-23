@@ -260,3 +260,19 @@ rtl.module @issue595(%arr: !rtl.array<128xi1>) {
   rtl.output
 }
 
+
+rtl.module @issue595_variant1(%arr: !rtl.array<128xi1>) {
+  // CHECK: wire [63:0] _T;
+  %c0_i32 = comb.constant 0 : i32
+  %c0_i7 = comb.constant 0 : i7
+  %c0_i6 = comb.constant 0 : i6
+  %0 = comb.icmp ne %3, %c0_i32 : i32
+  // CHECK: assert(|_T[6'h0+:32]);
+  sv.assert %0 : i1
+
+  // CHECK: assign _T = arr[7'h0+:64];
+  %1 = rtl.array_slice %arr at %c0_i7 : (!rtl.array<128xi1>) -> !rtl.array<64xi1>
+  %2 = rtl.array_slice %1 at %c0_i6 : (!rtl.array<64xi1>) -> !rtl.array<32xi1>
+  %3 = comb.bitcast %2 : (!rtl.array<32xi1>) -> i32
+  rtl.output
+}
