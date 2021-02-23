@@ -394,24 +394,11 @@ public:
   llvm::StringSet<> usedNames;
   size_t nextGeneratedNameID = 0;
 
-  /// Check if a name is in use in the local scope or in any scope higher in the
-  /// scope hierarchy.
-  bool isNameUsed(StringRef name) const {
-    if (usedNames.contains(name))
-      return true;
-    if (parentScope)
-      return parentScope->isNameUsed(name);
-    return false;
-  }
-
   /// Mapping of types to the typedef which provides an alias to that type.
   llvm::DenseMap<Type, TypeDefOp> typesToTypeDef;
 
   /// If a typedef exists in this or a parent namespace, return it.
   Optional<TypeDefOp> getTypeDef(Type t);
-
-  /// Find and add to `usedNames` all of the names we should avoid.
-  void registerIdentifiers(Block &b);
 
   /// This set keeps track of all of the expression nodes that need to be
   /// emitted as standalone wire declarations.  This can happen because they are
@@ -437,25 +424,6 @@ Optional<TypeDefOp> ModuleEmitter::getTypeDef(Type t) {
   if (parentScope == nullptr)
     return Optional<TypeDefOp>();
   return parentScope->getTypeDef(t);
-}
-
-/// Add every symbol `usedNames`. End recursion when we encounter an op which
-/// enters a new name scope.
-void ModuleEmitter::registerIdentifiers(Block &b) {
-  for (Operation &op : b) {
-    auto symbol =
-        op.getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
-    if (symbol)
-      usedNames.insert(symbol.getValue());
-    if (TypeDefOp defOp = dyn_cast<TypeDefOp>(op))
-      typesToTypeDef.insert(std::make_pair(defOp.type(), defOp));
-
-    if (isa<RTLModuleOp>(op) || op.hasTrait<ProceduralRegion>())
-      continue;
-    for (Region &region : op.getRegions())
-      for (Block &block : region.getBlocks())
-        registerIdentifiers(block);
-  }
 }
 
 /// Add the specified name to the name table, auto-uniquing the name if
@@ -508,9 +476,8 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
 
   // Check to see if this name is available - if so, use it.
   if (!reservedWords.count(name)) {
-    if (!isNameUsed(name)) {
-      auto insertResult = usedNames.insert(name);
-      assert(insertResult.second && "Name is already used despite check.");
+    auto insertResult = usedNames.insert(name);
+    if (insertResult.second) {
       if (valueOrOp)
         nameTable[valueOrOp] = &*insertResult.first;
       return insertResult.first->getKey();
@@ -529,9 +496,8 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
     name = StringRef(nameBuffer.data(), nameBuffer.size());
 
     if (!reservedWords.count(name)) {
-      if (!isNameUsed(name)) {
-        auto insertResult = usedNames.insert(name);
-        assert(insertResult.second && "Name is already used despite check.");
+      auto insertResult = usedNames.insert(name);
+      if (insertResult.second) {
         if (valueOrOp)
           nameTable[valueOrOp] = &*insertResult.first;
         return insertResult.first->getKey();
