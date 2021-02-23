@@ -269,7 +269,7 @@ static bool isNoopCast(Operation *op) {
 }
 
 /// Return the word (e.g. "reg") in Verilog to declare the specified thing.
-static StringRef getVerilogDeclWord(Operation *op) {
+static StringRef getVerilogDeclWord(Operation *op, bool typedefExists) {
   if (isa<RegOp>(op))
     return "reg";
   if (isa<WireOp>(op) || isa<MergeOp>(op))
@@ -288,7 +288,8 @@ static StringRef getVerilogDeclWord(Operation *op) {
       return "wire";
   } while (parent != nullptr && !parent->hasTrait<ProceduralRegion>());
 
-  return "logic";
+  // If a name exists, don't print logic.
+  return typedefExists ? "" : "logic";
 };
 
 namespace {
@@ -498,6 +499,9 @@ public:
   /// If a typedef exists in this or a parent namespace, return it.
   Optional<TypeDefOp> getTypeDef(Type t);
 
+  /// Add all the typedefs visible in this scope to the mapping.
+  void registerTypeDefs(Block &b);
+
   /// This set keeps track of all of the expression nodes that need to be
   /// emitted as standalone wire declarations.  This can happen because they are
   /// multiply-used or because the user requires a name to reference.
@@ -514,6 +518,19 @@ private:
 };
 
 } // end anonymous namespace
+
+void ModuleEmitter::registerTypeDefs(Block &b) {
+  for (Operation &op : b) {
+    if (TypeDefOp defOp = dyn_cast<TypeDefOp>(op))
+      typesToTypeDef.insert(std::make_pair(defOp.type(), defOp));
+
+    if (isa<RTLModuleOp>(op) || op.hasTrait<ProceduralRegion>())
+      continue;
+    for (Region &region : op.getRegions())
+      for (Block &block : region.getBlocks())
+        registerTypeDefs(block);
+  }
+}
 
 Optional<TypeDefOp> ModuleEmitter::getTypeDef(Type t) {
   auto tdefIt = typesToTypeDef.find(t);
@@ -1311,9 +1328,13 @@ void ModuleEmitter::emitStatementExpression(Operation *op) {
   } else if (isZeroBitType(op->getResult(0).getType())) {
     indent() << "// Zero width: ";
   } else if (emitInlineLogicDecls && !outOfLineExpresssionDecls.count(op)) {
-    indent() << getVerilogDeclWord(op) << " ";
-    if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os,
-                        op->getLoc()))
+    Type exprType = op->getResult(0).getType();
+    Optional<TypeDefOp> typedefOp = getTypeDef(exprType);
+
+    indent() << getVerilogDeclWord(op, typedefOp.hasValue()) << " ";
+    if (typedefOp)
+      os << typedefOp->sym_name() << ' ';
+    else if (printPackedType(stripUnpackedTypes(exprType), os, op->getLoc()))
       os << ' ';
     os << getName(op->getResult(0)) << " = ";
   } else {
@@ -2170,9 +2191,6 @@ void NameCollector::collectNames(Block &block) {
       valuesToEmit.push_back(ValuesToEmitRecord{result, {}});
       auto &typeString = valuesToEmit.back().typeString;
 
-      maxDeclNameWidth =
-          std::max(getVerilogDeclWord(&op).size(), maxDeclNameWidth);
-
       // Convert the port's type to a string and measure it.
       Optional<TypeDefOp> tdef = moduleEmitter.getTypeDef(result.getType());
       if (tdef) {
@@ -2183,6 +2201,8 @@ void NameCollector::collectNames(Block &block) {
                         op.getLoc());
       }
       maxTypeWidth = std::max(typeString.size(), maxTypeWidth);
+      maxDeclNameWidth = std::max(
+          getVerilogDeclWord(&op, tdef.hasValue()).size(), maxDeclNameWidth);
     }
 
     // Recursively process any regions under the op.
@@ -2216,7 +2236,7 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
 
     // Emit the leading word, like 'wire' or 'reg'.
     auto type = record.value.getType();
-    auto word = getVerilogDeclWord(decl);
+    auto word = getVerilogDeclWord(decl, getTypeDef(type).hasValue());
     if (!isZeroBitType(type)) {
       indent() << word;
       os.indent(maxDeclNameWidth - word.size() + 1);
@@ -2272,6 +2292,9 @@ void ModuleEmitter::emitOperation(Operation *op) {
 }
 
 void ModuleEmitter::emitMLIRModule(ModuleOp module) {
+  // Scan the module for typedefs.
+  registerTypeDefs(*module.getBody());
+
   for (auto &op : *module.getBody()) {
     if (auto module = dyn_cast<RTLModuleOp>(op))
       ModuleEmitter(state, this).emitRTLModule(module);
@@ -2290,6 +2313,9 @@ void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
 }
 
 void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
+  // Scan the module for typedefs.
+  registerTypeDefs(*module.getBodyBlock());
+
   // Add all the ports to the name table.
   SmallVector<ModulePortInfo, 8> portInfo;
   module.getPortInfo(portInfo);

@@ -1,19 +1,23 @@
 // RUN: circt-translate %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 
-// CHECK: typedef struct
-// CHECK: } StructFoo;
+// CHECK: typedef struct packed {logic bar; logic [3:0][7:0] arr; } StructFoo;
 sv.typedef !rtl.struct<bar: i1, arr: !rtl.array<4 x i8>> @StructFoo
 
 // CHECK: typedef logic [7:0] Byte;
 sv.typedef i8 @Byte
 
 // CHECK-LABEL: module M1(
-rtl.module @M1(%clock : i1, %cond : i1, %val : i8) -> (%out: !rtl.struct<b: i8>) {
+// CHECK-NEXT:   input            clock, cond,
+// CHECK-NEXT:   input  Byte      val,
+// CHECK-NEXT:   output StructFoo out);
+rtl.module @M1(%clock : i1, %cond : i1, %val : i8) -> (%out:!rtl.struct<bar: i1, arr: !rtl.array<4 x i8>>) {
   %wire42 = sv.wire : !rtl.inout<i42>
 
-  %byte = rtl.struct_create (%val) : !rtl.struct<b: i8>
-  sv.fwrite "%d\n"(%byte) : !rtl.struct<b: i8>
+  %arr = rtl.array_create %val, %val, %val, %val : (i8)
+  %byte = rtl.struct_create (%cond, %arr) :!rtl.struct<bar: i1, arr: !rtl.array<4 x i8>>
+  // CHECK: wire StructFoo _T = '{bar: cond, arr: ({{{}}{val}, {val}, {val}, {val}})};
+  sv.fwrite "%d\n"(%byte) :!rtl.struct<bar: i1, arr: !rtl.array<4 x i8>>
 
   // CHECK: typedef logic [126:0] Foo127;
   sv.typedef i127 @Foo127
@@ -128,9 +132,9 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) -> (%out: !rtl.struct<b: i8>)
  
   // CHECK-NEXT: initial begin
   sv.initial {
-    // CHECK-NEXT: logic [41:0] _T = THING;
+    // CHECK-NEXT: logic [41:0] [[THING:.+]] = THING;
     %thing = sv.textual_value "THING" : i42
-    // CHECK-NEXT: wire42 = _T;
+    // CHECK-NEXT: wire42 = [[THING]];
     sv.bpassign %wire42, %thing : i42
 
     sv.ifdef "FOO" {
@@ -144,7 +148,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) -> (%out: !rtl.struct<b: i8>)
       // CHECK-NEXT: `endif
     }
 
-    // CHECK-NEXT: wire42 <= _T;
+    // CHECK-NEXT: wire42 <= [[THING]];
     sv.passign %wire42, %thing : i42
   }// CHECK-NEXT:   {{end // initial$}}
 
@@ -170,7 +174,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) -> (%out: !rtl.struct<b: i8>)
     // CHECK-NEXT: `endif
   }
 
-  rtl.output %byte : !rtl.struct<b: i8>
+  rtl.output %byte : !rtl.struct<bar: i1, arr: !rtl.array<4 x i8>>
 }
 
 // CHECK-LABEL: module Aliasing(
