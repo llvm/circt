@@ -849,7 +849,8 @@ Optional<MemOp::PortKind> MemOp::getPortKind(StringRef portName) {
 
 /// Return the kind of the specified port number.
 Optional<MemOp::PortKind> MemOp::getPortKind(size_t resultNo) {
-  return getMemPortKindFromType(getResult(resultNo).getType().cast<FIRRTLType>());
+  return getMemPortKindFromType(
+      getResult(resultNo).getType().cast<FIRRTLType>());
 }
 
 /// Return the data-type field of the memory, the type of each element.
