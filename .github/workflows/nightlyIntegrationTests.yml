@@ -15,6 +15,10 @@ jobs:
   build-circt:
     name: Build and Test
     runs-on: ubuntu-latest
+
+    # We only run this job on a schedule if it is the main CIRCT repository.
+    if: (github.event_name == 'schedule' && github.repository == 'llvm/circt') || (github.event_name != 'schedule')
+
     container:
       image: ghcr.io/circt/images/circt-integration-test:v3
     steps:
