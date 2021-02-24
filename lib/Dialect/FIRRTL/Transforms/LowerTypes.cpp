@@ -272,7 +272,7 @@ void FIRRTLTypesLowering::visitDecl(MemOp op) {
 
   // Store any new wires created during lowering. This ensures that
   // wires are re-used if they already exist.
-  DenseMap<StringRef, Value> newWires;
+  llvm::StringMap<Value> newWires;
 
   // Loop over the leaf aggregates.
   for (auto field : fieldTypes) {
