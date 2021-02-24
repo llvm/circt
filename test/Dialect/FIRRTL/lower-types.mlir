@@ -279,3 +279,18 @@ module  {
 //CHECK-NEXT:    }
 //CHECK-NEXT:  }
 //CHECK-NEXT:}
+
+// -----
+// https://github.com/llvm/circt/issues/661
+
+// COM: This test is just checking that the following doesn't error.
+module  {
+  firrtl.circuit "foo" {
+    firrtl.module @foo(%clock: !firrtl.clock) {
+      %head_MPORT_2, %head_MPORT_6 = firrtl.mem Undefined {depth = 20 : i64, name = "head", portNames = ["MPORT_2", "MPORT_6"], readLatency = 0 : i32, writeLatency = 1 : i32}
+      : !firrtl.flip<bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<5>, mask: uint<1>>>,
+        !firrtl.flip<bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<5>, mask: uint<1>>>
+      %127 = firrtl.subfield %head_MPORT_6("clk") : (!firrtl.flip<bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<5>, mask: uint<1>>>) -> !firrtl.flip<clock>
+    }
+  }
+}
