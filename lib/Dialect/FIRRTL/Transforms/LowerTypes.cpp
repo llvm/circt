@@ -126,8 +126,7 @@ private:
   DenseMap<ValueIdentifier, Value> loweredBundleValues;
 
   // State to track the new attributes for the module.
-  SmallVector<NamedAttribute> newAttrs;
-  DenseSet<NamedAttribute> savedAttrs;
+  DenseSet<NamedAttribute> newAttrs;
   size_t originalNumArgs;
   SmallString<8> argNameBuffer;
 };
@@ -148,7 +147,7 @@ void FIRRTLTypesLowering::runOnOperation() {
 
   // Save the original attributes for the module.
   auto oldAttrs = module.getAttrs();
-  savedAttrs.insert(oldAttrs.begin(), oldAttrs.end());
+  newAttrs.insert(oldAttrs.begin(), oldAttrs.end());
 
   // Lower the module block arguments.
   SmallVector<BlockArgument, 8> args(body->args_begin(), body->args_end());
@@ -173,10 +172,9 @@ void FIRRTLTypesLowering::runOnOperation() {
   argsToRemove.clear();
 
   // Set the module's new attributes.
-  newAttrs.append(savedAttrs.begin(), savedAttrs.end());
-  module->setAttrs(newAttrs);
+  SmallVector<NamedAttribute> newAttrArray(newAttrs.begin(), newAttrs.end());
+  module->setAttrs(newAttrArray);
   newAttrs.clear();
-  savedAttrs.clear();
 
   // Keep the module's type up-to-date.
   auto moduleType = builder->getFunctionType(body->getArgumentTypes(), {});
@@ -519,6 +517,14 @@ Value FIRRTLTypesLowering::addArg(Type type, unsigned oldArgNumber,
   // Append the new argument.
   auto newValue = body->addArgument(type);
 
+  // Remove the saved attributes for the old argument.
+  module->getAttrDictionary()
+      .getNamed(getArgAttrName(oldArgNumber))
+      .map([&](NamedAttribute attr) {
+        newAttrs.erase(attr);
+        return attr;
+      });
+
   // Save the name attribute for the new argument.
   StringAttr nameAttr = getFIRRTLNameAttr(module.getArgAttrs(oldArgNumber));
   if (nameAttr) {
@@ -526,16 +532,8 @@ Value FIRRTLTypesLowering::addArg(Type type, unsigned oldArgNumber,
     auto newArgNumber = newValue.getArgNumber() - originalNumArgs;
     auto newArgAttrName = getArgAttrName(newArgNumber);
     auto newAttr = builder->getNamedAttr(newArgAttrName, newArgAttrs);
-    newAttrs.push_back(newAttr);
+    newAttrs.insert(newAttr);
   }
-
-  // Remove the saved attributes for the old argument.
-  module->getAttrDictionary()
-      .getNamed(getArgAttrName(oldArgNumber))
-      .map([&](NamedAttribute attr) {
-        savedAttrs.erase(attr);
-        return attr;
-      });
 
   return newValue;
 }
