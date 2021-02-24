@@ -281,7 +281,7 @@ void FIRRTLTypesLowering::visitDecl(MemOp op) {
     // constructed by checking the kind of the memory.
     resultPortTypes.clear();
     for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
-      auto kind = op.getPortKind(op.getPortName(i).getValue()).getValue();
+      auto kind = op.getPortKind(i).getValue();
       auto flattenedPortType =
           FlipType::get(op.getTypeForPort(op.depth(), field.type, kind));
 
