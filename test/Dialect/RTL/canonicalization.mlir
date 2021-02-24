@@ -462,22 +462,22 @@ rtl.module @sext_constant_folding() -> (i5) {
   rtl.output %0 : i5
 }
 
-// CHECK-LABEL: rtl.module @xorr_constant_folding1() -> (i1) {
+// CHECK-LABEL: rtl.module @parity_constant_folding1() -> (i1) {
 // CHECK-NEXT:  %true = comb.constant true
 // CHECK-NEXT:  rtl.output %true : i1
 
-rtl.module @xorr_constant_folding1() -> (i1) {
+rtl.module @parity_constant_folding1() -> (i1) {
   %c4_i4 = comb.constant 4 : i4
-  %0 = comb.xorr %c4_i4 : i4
+  %0 = comb.parity %c4_i4 : i4
   rtl.output %0 : i1
 }
 
-// CHECK-LABEL: rtl.module @xorr_constant_folding2() -> (i1) {
+// CHECK-LABEL: rtl.module @parity_constant_folding2() -> (i1) {
 // CHECK-NEXT:  %false = comb.constant false
 // CHECK-NEXT:  rtl.output %false : i1
-rtl.module @xorr_constant_folding2() -> (i1) {
+rtl.module @parity_constant_folding2() -> (i1) {
   %c15_i4 = comb.constant 15 : i4
-  %0 = comb.xorr %c15_i4 : i4
+  %0 = comb.parity %c15_i4 : i4
   rtl.output %0 : i1
 }
 

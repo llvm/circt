@@ -103,7 +103,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: = comb.concat [[CONCAT1]], [[ZERO]] : (i8, i3) -> i11
     %14 = firrtl.shl %6, 3 : (!firrtl.uint<8>) -> !firrtl.uint<11>
 
-    // CHECK-NEXT: = comb.xorr [[CONCAT1]] : i8
+    // CHECK-NEXT: = comb.parity [[CONCAT1]] : i8
     %15 = firrtl.xorr %6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: = comb.constant -1 : i8
