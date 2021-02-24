@@ -21,6 +21,7 @@ set(ESI_LinkLibs
   MLIREDSC
   MLIRIR
   MLIRTransforms
+  MLIRTranslation
 )
 
 set(ESI_Deps
