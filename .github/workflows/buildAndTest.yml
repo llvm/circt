@@ -9,46 +9,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  # Build the LLVM submodule then cache it. Do not rebuild if hit in the
-  # cache.
-  build-llvm:
-    name: Build LLVM
-    runs-on: ubuntu-latest
-    steps:
-      # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
-      # time.
-      - name: Get CIRCT
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 2
-          submodules: "true"
-
-      # Extract the LLVM submodule hash for use in the cache key.
-      - name: Get LLVM Hash
-        id: get-llvm-hash
-        run: echo "::set-output name=hash::$(git rev-parse @:./llvm)"
-        shell: bash
-
-      # Try to fetch LLVM from the cache.
-      - name: Cache LLVM
-        id: cache-llvm
-        uses: actions/cache@v2
-        with:
-          path: llvm
-          key: ${{ runner.os }}-llvm-sharedlibs-${{ steps.get-llvm-hash.outputs.hash }}
-
-      # Build LLVM if we didn't hit in the cache.
-      - name: Rebuild and Install LLVM
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: utils/build-llvm.sh
-
-
-    # Installing the results into the cache is an action which is automatically
-    # added by the cache action above.
-
-  # --- end of build-llvm job.
-
-  # Configure CIRCT using LLVM's build system ("Unified" build). We do not actually build this configuration since it isn't as easy to cache LLVM artifacts in this mode.
+  # Configure CIRCT using LLVM's build system ("Unified" build). We do not
+  # actually build this configuration since it isn't as easy to cache LLVM
+  # artifacts in this mode.
   configure-circt-unified:
     name: Configure Unified Build
     runs-on: ubuntu-latest
@@ -78,7 +41,6 @@ jobs:
   # Build CIRCT and run its tests.
   build-circt:
     name: Build and Test
-    needs: build-llvm
     runs-on: ubuntu-latest
     steps:
       - name: Configure Environment
@@ -117,9 +79,8 @@ jobs:
           path: llvm
           key: ${{ runner.os }}-llvm-sharedlibs-${{ steps.get-llvm-hash.outputs.hash }}
 
-      # Build LLVM if we didn't hit in the cache. Even though we build it in
-      # the previous job, there is a low chance that it'll have been evicted by
-      # the time we get here.
+
+      # Build LLVM if we didn't hit in the cache.
       - name: Rebuild and Install LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: utils/build-llvm.sh
