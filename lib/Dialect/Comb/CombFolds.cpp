@@ -751,25 +751,29 @@ void MuxOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                   PatternRewriter &rewriter) const override {
       auto width = op.getType().cast<IntegerType>().getWidth();
 
-      if (width == 1) {
-        APInt value;
+      APInt value;
 
-        // mux(a, true, b) -> or(a, b)
-        if (matchPattern(op.trueValue(), m_RConstant(value))) {
-          if (value == 1) {
-            SmallVector<Value, 4> newOperands{op.cond(), op.falseValue()};
-            rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
-            return success();
-          }
+      // mux(a, 11...1, b) -> or(a, b)
+      if (matchPattern(op.trueValue(), m_RConstant(value))) {
+        if (value.isAllOnesValue()) {
+          auto cond = width == 1 ? op.cond()
+                                 : rewriter.createOrFold<SExtOp>(
+                                       op.getLoc(), op.getType(), op.cond());
+          Value newOperands[] = {cond, op.falseValue()};
+          rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
+          return success();
         }
+      }
 
-        // mux(a, b, false) -> and(a, b)
-        if (matchPattern(op.falseValue(), m_RConstant(value))) {
-          if (value == 0) {
-            SmallVector<Value, 4> newOperands{op.cond(), op.trueValue()};
-            rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
-            return success();
-          }
+      // mux(a, b, 0) -> and(a, b)
+      if (matchPattern(op.falseValue(), m_RConstant(value))) {
+        if (value.isNullValue()) {
+          auto cond = width == 1 ? op.cond()
+                                 : rewriter.createOrFold<SExtOp>(
+                                       op.getLoc(), op.getType(), op.cond());
+          Value newOperands[] = {cond, op.trueValue()};
+          rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
+          return success();
         }
       }
       return failure();
