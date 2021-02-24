@@ -51,7 +51,7 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %26 = comb.icmp eq %a, %one4 : i4
   %zero4 = comb.constant 0 : i4
   %27 = comb.icmp ne %a, %zero4 : i4
-  %28 = comb.xorr %a : i4
+  %28 = comb.parity %a : i4
   %29 = comb.concat %a, %a, %b : (i4, i4, i4) -> i12
   %30 = comb.extract %a from 1 : (i4) -> i2
   %31 = comb.sext %a : (i4) -> i9

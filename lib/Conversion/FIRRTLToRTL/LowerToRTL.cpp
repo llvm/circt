@@ -1770,7 +1770,7 @@ LogicalResult FIRRTLLowering::visitExpr(XorRPrimOp op) {
     return failure();
   }
 
-  return setLoweringTo<comb::XorROp>(op, builder->getIntegerType(1), operand);
+  return setLoweringTo<comb::ParityOp>(op, builder->getIntegerType(1), operand);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(AndRPrimOp op) {

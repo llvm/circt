@@ -199,7 +199,7 @@ class UnaryI1ReductionOp<string mnemonic, list<OpTrait> traits = []> :
   let assemblyFormat = "$input attr-dict `:` type($input)";
 }
 
-def XorROp : UnaryI1ReductionOp<"xorr">;
+def ParityOp : UnaryI1ReductionOp<"parity">;
 
 //===----------------------------------------------------------------------===//
 // Integer width modifying operations.
