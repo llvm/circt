@@ -272,7 +272,7 @@ void FIRRTLTypesLowering::visitDecl(MemOp op) {
 
   // Store any new wires created during lowering. This ensures that
   // wires are re-used if they already exist.
-  DenseMap<StringRef, Value> newWires;
+  llvm::StringMap<Value> newWires;
 
   // Loop over the leaf aggregates.
   for (auto field : fieldTypes) {
@@ -319,15 +319,13 @@ void FIRRTLTypesLowering::visitDecl(MemOp op) {
           Type theType = FlipType::get(elt.type);
 
           // Construct a new wire if needed.
-          auto wire =
-              newWires[op.getPortName(i).getValue().str() + elt.name.str()];
+          auto wireName =
+              op.getPortName(i).getValue().str() + "_" + elt.name.str();
+          auto wire = newWires[wireName];
           if (!wire) {
-            wire = builder->create<WireOp>(
-                theType, op.name().getValue().str() + "_" +
-                             op.getPortName(i).getValue().str() + "_" +
-                             elt.name.str());
-            newWires[op.getPortName(i).getValue().str() + elt.name.str()] =
-                wire;
+            wire = builder->create<WireOp>(theType, op.name().getValue().str() +
+                                                        "_" + wireName);
+            newWires[wireName] = wire;
             setBundleLowering(op.getResult(i), elt.name.str(), wire);
           }
 
