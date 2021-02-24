@@ -1967,8 +1967,11 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValuePrimOp op) {
   // We lower invalid to 0.  TODO: the FIRRTL spec mentions something about
   // lowering it to a random value, we should see if this is what we need to
   // do.
-  if (resultTy.isa<IntegerType>())
+  if (auto intType = resultTy.dyn_cast<IntegerType>()) {
+    if (intType.getWidth() == 0) // Let the caller handle zero width values.
+      return failure();
     return setLoweringTo<comb::ConstantOp>(op, resultTy, 0);
+  }
 
   // Invalid for bundles isn't supported.
   op.emitOpError("unsupported type");
