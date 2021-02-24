@@ -939,4 +939,12 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: }
     firrtl.attach %a1, %0 : !firrtl.analog<1>, !firrtl.analog<1>
   }
+
+  // CHECK-LABEL: IsInvalidIssue654
+  // https://github.com/llvm/circt/issues/654
+  rtl.module @IsInvalidIssue654() {
+    %w = firrtl.wire : !firrtl.flip<uint<0>>
+    %0 = firrtl.invalidvalue : !firrtl.uint<0>
+    firrtl.connect %w, %0 : !firrtl.flip<uint<0>>, !firrtl.uint<0>
+  }
 }
