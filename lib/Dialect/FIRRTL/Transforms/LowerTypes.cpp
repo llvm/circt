@@ -319,15 +319,13 @@ void FIRRTLTypesLowering::visitDecl(MemOp op) {
           Type theType = FlipType::get(elt.type);
 
           // Construct a new wire if needed.
-          auto wire =
-              newWires[op.getPortName(i).getValue().str() + elt.name.str()];
+          auto wireName =
+              op.getPortName(i).getValue().str() + "_" + elt.name.str();
+          auto wire = newWires[wireName];
           if (!wire) {
-            wire = builder->create<WireOp>(
-                theType, op.name().getValue().str() + "_" +
-                             op.getPortName(i).getValue().str() + "_" +
-                             elt.name.str());
-            newWires[op.getPortName(i).getValue().str() + elt.name.str()] =
-                wire;
+            wire = builder->create<WireOp>(theType, op.name().getValue().str() +
+                                                        "_" + wireName);
+            newWires[wireName] = wire;
             setBundleLowering(op.getResult(i), elt.name.str(), wire);
           }
 
