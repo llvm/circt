@@ -18,5 +18,8 @@ if(CapnProto_FOUND)
     ${COSIM_CAPNP_HDRS}
     ${COSIM_CAPNP_SRCS}
     CosimSchema.h)
-  target_link_libraries(EsiCosimCapnp PRIVATE CapnProto::capnp)
+  target_link_libraries(EsiCosimCapnp
+    PRIVATE
+    CapnProto::capnp
+    CapnProto::capnp-rpc)
 endif()
