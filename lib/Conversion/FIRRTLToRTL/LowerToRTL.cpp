@@ -1289,8 +1289,7 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
     TypeSwitch<Type>(type)
         .Case<rtl::UnpackedArrayType>([&](auto a) {
           for (size_t i = 0, e = a.getSize(); i != e; ++i) {
-            auto iIdx =
-                builder->create<rtl::ConstantOp>(APInt(log2(e + 1), i));
+            auto iIdx = builder->create<rtl::ConstantOp>(APInt(log2(e + 1), i));
             auto arrayIndex = builder->create<sv::ArrayIndexInOutOp>(reg, iIdx);
             builder->create<sv::BPAssignOp>(arrayIndex,
                                             randomVal(a.getElementType()));
