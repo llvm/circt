@@ -9,12 +9,12 @@
 #include "circt/Dialect/HIR/Verification/SheduleVerifier.h"
 
 #include "mlir/Dialect/CommonFolders.h"
-#include "mlir/IR/Function.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/FunctionImplementation.h"
+#include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Region.h"
-#include "mlir/IR/StandardTypes.h"
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Support/LogicalResult.h"
@@ -227,7 +227,7 @@ bool ScheduleVerifier::inspectOp(DefOp op) {
   this->output_delays = op.output_delays();
   // Indentity map for root level time vars.
   schedule.insert(tstart, tstart, 0);
-  for (int i = 0; i < input_delays.size(); i++) {
+  for (unsigned i = 0; i < input_delays.size(); i++) {
     mapValueToDefiningLoc.insert(std::make_pair(args[i], op.getLoc()));
     if (!args[i].getType().isa<IntegerType>())
       continue;
@@ -238,7 +238,7 @@ bool ScheduleVerifier::inspectOp(DefOp op) {
 }
 
 bool ScheduleVerifier::inspectOp(hir::ConstantOp op) {
-  setIntegerConst(op.res(), op.value().getLimitedValue());
+  setIntegerConst(op.res(), op.value());
   return true;
 }
 
@@ -273,8 +273,7 @@ bool ScheduleVerifier::inspectOp(UnrollForOp op) {
   schedule.insert(tloop, tstart, 0);
   yieldPoints.push(TimeInstant());
   bool ok = true;
-  for (int i = op.lb().getLimitedValue(); i < op.ub().getLimitedValue();
-       i += op.step().getLimitedValue()) {
+  for (unsigned i = op.lb(); i < op.ub(); i += op.step()) {
     setIntegerConst(idx, i);
     ok &= inspectBody(op.getLoopBody().front());
     TimeInstant yieldPoint = yieldPoints.top();
@@ -418,18 +417,18 @@ bool ScheduleVerifier::inspectOp(hir::CallOp op) {
   auto operands = op.operands();
   Value tstart = op.tstart();
   unsigned tstart_delay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
-  ArrayAttr input_delays = op.getAttrOfType<ArrayAttr>("input_delays");
-  ArrayAttr output_delays = op.getAttrOfType<ArrayAttr>("output_delays");
+  ArrayAttr input_delays = op->getAttrOfType<ArrayAttr>("input_delays");
+  ArrayAttr output_delays = op->getAttrOfType<ArrayAttr>("output_delays");
   assert(input_delays.size() == operands.size());
   assert(output_delays.size() == results.size());
   bool ok = true;
-  for (int i = 0; i < operands.size(); i++) {
+  for (unsigned i = 0; i < operands.size(); i++) {
     auto arg_delay = input_delays[i].cast<IntegerAttr>().getInt();
     ok &= schedule.check(op.getLoc(), getDefiningLoc(operands[i]), operands[i],
                          op.tstart(), tstart_delay + arg_delay,
                          "operand " + std::to_string(i + 1));
   }
-  for (int i = 0; i < results.size(); i++) {
+  for (unsigned i = 0; i < results.size(); i++) {
     auto res_delay = output_delays[i].cast<IntegerAttr>().getInt();
     schedule.insert(results[i], op.tstart(), tstart_delay + res_delay);
   }
@@ -475,7 +474,9 @@ bool ScheduleVerifier::inspectOp(Operation *inst) {
     emitError(inst->getLoc(), "Unsupported Operation for verification!");
     return false;
   }
+  return false;
 }
+
 bool ScheduleVerifier::inspectBody(Block &block) {
 
   // Print the operations within the entity.
@@ -485,7 +486,7 @@ bool ScheduleVerifier::inspectBody(Block &block) {
       // return false;
     }
   }
-  for (auto operation : opsToErase) {
+  for (auto *operation : opsToErase) {
     operation->erase();
   }
   return true;

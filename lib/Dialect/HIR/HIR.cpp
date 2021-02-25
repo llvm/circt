@@ -7,12 +7,13 @@
 #include "circt/Dialect/HIR/HIR.h"
 #include "circt/Dialect/HIR/HIRDialect.h"
 #include "mlir/Dialect/CommonFolders.h"
-#include "mlir/IR/FunctionSupport.h"
+#include "mlir/IR/Attributes.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/FunctionImplementation.h"
+#include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Region.h"
-#include "mlir/IR/StandardTypes.h"
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Support/LogicalResult.h"
@@ -26,11 +27,11 @@ using namespace llvm;
 
 static IntegerAttr getIntegerAttr(OpAsmParser &parser, int width, int value) {
   return IntegerAttr::get(
-      IntegerType::get(width, parser.getBuilder().getContext()),
+      IntegerType::get(parser.getBuilder().getContext(), width),
       APInt(width, value));
 }
 static Type getIntegerType(OpAsmParser &parser, int bitwidth) {
-  return IntegerType::get(bitwidth, parser.getBuilder().getContext());
+  return IntegerType::get(parser.getBuilder().getContext(), bitwidth);
 }
 static ConstType getConstIntType(OpAsmParser &parser) {
   return ConstType::get(parser.getBuilder().getContext());
@@ -49,75 +50,77 @@ static ParseResult parseIntegerAttr(IntegerAttr &value, int bitwidth,
 }
 
 /// parse a comma separated list of operands.
-static ParseResult
-parseOperands(OpAsmParser &parser,
-              SmallVectorImpl<OpAsmParser::OperandType> &operands) {
-  // operands-list ::= firstOperand (, nextOperand)* .
-  OpAsmParser::OperandType firstOperand;
-  if (parser.parseOperand(firstOperand))
-    return failure();
-  operands.push_back(firstOperand);
-  while (!parser.parseComma()) {
-    OpAsmParser::OperandType nextOperand;
-    if (parser.parseOperand(nextOperand))
-      return failure();
-    operands.push_back(nextOperand);
-  }
-  return success();
-}
+// static ParseResult
+// parseOperands(OpAsmParser &parser,
+//              SmallVectorImpl<OpAsmParser::OperandType> &operands) {
+//  // operands-list ::= firstOperand (, nextOperand)* .
+//  OpAsmParser::OperandType firstOperand;
+//  if (parser.parseOperand(firstOperand))
+//    return failure();
+//  operands.push_back(firstOperand);
+//  while (!parser.parseComma()) {
+//    OpAsmParser::OperandType nextOperand;
+//    if (parser.parseOperand(nextOperand))
+//      return failure();
+//    operands.push_back(nextOperand);
+//  }
+//  return success();
+//}
 
-/// parse an optional comma separated list of operands with paren as delimiter.
-static ParseResult
-parseOptionalOperands(OpAsmParser &parser,
-                      SmallVectorImpl<OpAsmParser::OperandType> &operands) {
-  // ::= `(` `)` or `(` operands-list `)`.
-  if (parser.parseLParen())
-    return failure();
-  if (parser.parseOptionalRParen())
-    if (parseOperands(parser, operands))
-      return failure();
-  return success();
-}
+// parse an optional comma separated list of operands with paren as delimiter.
+// static ParseResult
+// parseOptionalOperands(OpAsmParser &parser,
+//                      SmallVectorImpl<OpAsmParser::OperandType> &operands) {
+//  // ::= `(` `)` or `(` operands-list `)`.
+//  if (parser.parseLParen())
+//    return failure();
+//  if (parser.parseOptionalRParen())
+//    if (parseOperands(parser, operands))
+//      return failure();
+//  return success();
+//}
 
-static ParseResult parseTypes(OpAsmParser &parser,
-                              SmallVectorImpl<Type> &types) {
-  Type firstType;
-  if (parser.parseType(firstType))
-    return failure();
-  types.push_back(firstType);
-  while (!parser.parseComma()) {
-    Type nextType;
-    if (parser.parseType(nextType))
-      return failure();
-    types.push_back(nextType);
-  }
-  return success();
-}
+// static ParseResult parseTypes(OpAsmParser &parser,
+//                              SmallVectorImpl<Type> &types) {
+//  Type firstType;
+//  if (parser.parseType(firstType))
+//    return failure();
+//  types.push_back(firstType);
+//  while (!parser.parseComma()) {
+//    Type nextType;
+//    if (parser.parseType(nextType))
+//      return failure();
+//    types.push_back(nextType);
+//  }
+//  return success();
+//}
 
-static ParseResult parseOptionalTypes(OpAsmParser &parser,
-                                      SmallVectorImpl<Type> &types) {
-  if (parser.parseLParen())
-    return failure();
-  if (parser.parseOptionalRParen())
-    if (parseTypes(parser, types))
-      return failure();
-  return success();
-}
+// static ParseResult parseOptionalTypes(OpAsmParser &parser,
+//                                      SmallVectorImpl<Type> &types) {
+//  if (parser.parseLParen())
+//    return failure();
+//  if (parser.parseOptionalRParen())
+//    if (parseTypes(parser, types))
+//      return failure();
+//  return success();
+//}
 
-static ParseResult parseFunctionType(OpAsmParser &parser, int num_operands,
-                                     SmallVectorImpl<Type> &operandTypes,
-                                     SmallVectorImpl<Type> &resultTypes) {
-  SMLoc typeLoc = parser.getCurrentLocation();
-  if (parseOptionalTypes(parser, operandTypes))
-    return failure();
-  if (operandTypes.size() != num_operands)
-    return parser.emitError(typeLoc, "Wrong number of type parameters.");
-  if (parser.parseArrow())
-    return failure();
-  if (parseOptionalTypes(parser, resultTypes))
-    return failure();
-  return success();
-}
+// static ParseResult parseFunctionType(OpAsmParser &parser, unsigned
+// num_operands,
+//                                     SmallVectorImpl<Type> &operandTypes,
+//                                     SmallVectorImpl<Type> &resultTypes) {
+//  SMLoc typeLoc = parser.getCurrentLocation();
+//  if (parseOptionalTypes(parser, operandTypes))
+//    return failure();
+//  if (operandTypes.size() != num_operands)
+//    return parser.emitError(typeLoc, "Wrong number of type parameters.");
+//  if (parser.parseArrow())
+//    return failure();
+//  if (parseOptionalTypes(parser, resultTypes))
+//    return failure();
+//  return success();
+//}
+
 /// CallOp
 /// Syntax:
 /// $callee `(` $operands `)` `at` $tstart (`offset` $offset^ )?
@@ -266,7 +269,7 @@ static void printCallOp(OpAsmPrinter &printer, CallOp op) {
   if (op.offset())
     printer << " offset " << op.offset();
   printer << " : (";
-  for (int i = 0; i < operands.size(); i++) {
+  for (unsigned i = 0; i < operands.size(); i++) {
     if (i > 0)
       printer << ", ";
     Type type = operands[i].getType();
@@ -280,7 +283,7 @@ static void printCallOp(OpAsmPrinter &printer, CallOp op) {
   if (resultTypes.size() == 0)
     return;
   printer << " -> (";
-  for (int i = 0; i < resultTypes.size(); i++) {
+  for (unsigned i = 0; i < resultTypes.size(); i++) {
     if (i > 0)
       printer << ", ";
     Type type = resultTypes[i];
@@ -608,7 +611,6 @@ static ParseResult parseDefOp(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   // Parse the function signature.
-  bool isVariadic = false;
   if (parseDefSignature(parser, entryArgs, argTypes, argAttrs, resultTypes,
                         resultAttrs, result))
     return failure();
@@ -629,7 +631,11 @@ static ParseResult parseDefOp(OpAsmParser &parser, OperationState &result) {
   auto *body = result.addRegion();
   entryArgs.push_back(tstart);
   argTypes.push_back(getTimeType(parser));
-  return parser.parseOptionalRegion(*body, entryArgs, argTypes);
+  auto r = parser.parseOptionalRegion(*body, entryArgs, argTypes);
+  if (r.hasValue())
+    return r.getValue();
+  else
+    return success();
 }
 
 static void printDefSignature(OpAsmPrinter &printer, DefOp op) {
@@ -641,7 +647,7 @@ static void printDefSignature(OpAsmPrinter &printer, DefOp op) {
   ArrayAttr output_delays = op.output_delays();
   printer << "(";
   bool firstArg = true;
-  for (int i = 0; i < argTypes.size(); i++) {
+  for (unsigned i = 0; i < argTypes.size(); i++) {
     if (!firstArg)
       printer << ", ";
     firstArg = false;
@@ -659,7 +665,7 @@ static void printDefSignature(OpAsmPrinter &printer, DefOp op) {
 
   printer << " -> (";
   bool firstRes = true;
-  for (int i = 0; i < resTypes.size(); i++) {
+  for (unsigned i = 0; i < resTypes.size(); i++) {
     if (!firstRes)
       printer << ",";
     firstRes = false;
@@ -706,5 +712,7 @@ LogicalResult DefOp::verifyType() {
 
 /// required for functionlike trait
 LogicalResult DefOp::verifyBody() { return success(); }
+namespace mlir {
 #define GET_OP_CLASSES
 #include "circt/Dialect/HIR/HIR.cpp.inc"
+} // namespace mlir

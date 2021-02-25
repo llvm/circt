@@ -21,7 +21,7 @@ using namespace mlir;
 using namespace hir;
 
 HIRDialect::HIRDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context) {
+    : Dialect(getDialectNamespace(), context, TypeID::get<HIRDialect>()) {
   addTypes<TimeType, StreamType, ConstType, MemrefType, WireType>();
   addOperations<
 #define GET_OP_LIST
@@ -95,6 +95,7 @@ static ParseResult parseShapedType(DialectAsmParser &parser,
   }
   if (parser.parseType(elementType))
     return failure();
+  return success();
 }
 }; // namespace Helpers.
 
@@ -114,7 +115,7 @@ static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
   SmallVector<unsigned, 4> default_packing;
   // default packing is [0,1,2,3] for shape = [d3,d2,d1,d0] i.e. d0 is fastest
   // changing dim in linear index and no distributed dimensions.
-  for (int i = 0; i < shape.size(); i++)
+  for (size_t i = 0; i < shape.size(); i++)
     default_packing.push_back(i);
 
   if (!parser.parseOptionalGreater())
@@ -159,7 +160,7 @@ static void printMemrefType(MemrefType memrefTy, DialectAsmPrinter &printer) {
 
   printer << elementType << ", packing = [";
 
-  for (int i = 0; i < packing.size(); i++)
+  for (size_t i = 0; i < packing.size(); i++)
     printer << packing[i] << ((i == (packing.size() - 1)) ? "" : ", ");
   printer << "]";
 
@@ -178,7 +179,6 @@ static void printMemrefType(MemrefType memrefTy, DialectAsmPrinter &printer) {
 // Stream Type.
 static Type parseStreamType(DialectAsmParser &parser, MLIRContext *context) {
   Type elementType;
-  hir::Details::PortKind default_port = hir::Details::rw;
   hir::Details::PortKind port;
   if (parser.parseLess())
     return Type();
@@ -197,24 +197,25 @@ static Type parseStreamType(DialectAsmParser &parser, MLIRContext *context) {
   return StreamType::get(context, elementType, port);
 }
 
-static void printStreamType(StreamType streamType, DialectAsmPrinter &printer) {
-  auto elementType = streamType.getElementType();
-  auto port = streamType.getPort();
-  printer << streamType.getKeyword();
-  printer << "<";
-  printer << elementType << ", ";
-
-  if (port == Details::r) {
-    printer << ", r";
-  } else if (port == Details::w) {
-    printer << ", w";
-  } else if (port == Details::rw) {
-    printer << "";
-  } else {
-    printer << ", unknown";
-  }
-  printer << ">";
-}
+// static void printStreamType(StreamType streamType, DialectAsmPrinter
+// &printer) {
+//  auto elementType = streamType.getElementType();
+//  auto port = streamType.getPort();
+//  printer << streamType.getKeyword();
+//  printer << "<";
+//  printer << elementType << ", ";
+//
+//  if (port == Details::r) {
+//    printer << ", r";
+//  } else if (port == Details::w) {
+//    printer << ", w";
+//  } else if (port == Details::rw) {
+//    printer << "";
+//  } else {
+//    printer << ", unknown";
+//  }
+//  printer << ">";
+//}
 
 // WireType.
 static Type parseWireType(DialectAsmParser &parser, MLIRContext *context) {
@@ -230,7 +231,7 @@ static Type parseWireType(DialectAsmParser &parser, MLIRContext *context) {
   SmallVector<unsigned, 4> default_packing;
   // default packing is [0,1,2,3] for shape = [d3,d2,d1,d0] i.e. d0 is fastest
   // changing dim in linear index and no distributed dimensions.
-  for (int i = 0; i < shape.size(); i++)
+  for (size_t i = 0; i < shape.size(); i++)
     default_packing.push_back(i);
 
   if (!parser.parseOptionalGreater())

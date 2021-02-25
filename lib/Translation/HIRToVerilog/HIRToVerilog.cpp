@@ -4,7 +4,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Target/HIRToVerilog/HIRToVerilog.h"
+#include "circt/Translation/HIRToVerilog.h"
 #include "Generators.h"
 #include "Helpers.h"
 #include "VerilogValue.h"
@@ -12,7 +12,7 @@
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/MLIRContext.h"
-#include "mlir/IR/Module.h"
+//#include "mlir/IR/Module.h"
 #include "mlir/IR/Visitors.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Translation.h"
@@ -846,7 +846,7 @@ LogicalResult VerilogPrinter::printConstantOp(hir::ConstantOp op,
   auto result = op.res();
   unsigned id_result = newValueNumber();
   VerilogValue v_result(result, "v" + to_string(id_result));
-  int value = op.value().getLimitedValue();
+  int value = op.value();
   v_result.setIntegerConst(value);
   verilogMapper.insert(result, v_result);
 
@@ -993,9 +993,9 @@ LogicalResult VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
 LogicalResult VerilogPrinter::printUnrollForOp(UnrollForOp op,
                                                unsigned indentAmount) {
   Value tlast = op.tlast(); // output
-  int lb = op.lb().getLimitedValue();
-  int ub = op.ub().getLimitedValue();
-  int step = op.step().getLimitedValue();
+  int lb = op.lb();
+  int ub = op.ub();
+  int step = op.step();
   Value tstart = op.tstart();
   VerilogValue *v_tstart = verilogMapper.get_mut(tstart);
   Value tloop = op.getIterTimeVar();
@@ -1036,7 +1036,7 @@ LogicalResult VerilogPrinter::printUnrollForOp(UnrollForOp op,
 
     module_out << "//DEBUG: " << verilogMapper.get_mut(idx)->strConstOrWire()
                << ", expected " << i << "\n";
-    assert(status.value != LogicalResult::Failure);
+    assert(status.succeeded());
     region_end();
     v_tloop = next_v_tloop;
   }

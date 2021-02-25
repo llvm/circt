@@ -10,8 +10,8 @@
 #include "circt/Dialect/HIR/Verification/SheduleVerifier.h"
 
 #include "mlir/Dialect/CommonFolders.h"
-#include "mlir/IR/Function.h"
 #include "mlir/IR/FunctionImplementation.h"
+#include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Region.h"

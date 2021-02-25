@@ -3,7 +3,7 @@
 
 #include "Helpers.h"
 #include "circt/Dialect/HIR/HIR.h"
-#include "circt/Target/HIRToVerilog/HIRToVerilog.h"
+#include "circt/Translation/HIRToVerilog.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include <string>
 

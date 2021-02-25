@@ -1,4 +1,4 @@
-add_mlir_library(CIRCTHIRToVerilog
+add_circt_translation_library(CIRCTHIRToVerilog
   HIRToVerilog.cpp
 
   ADDITIONAL_HEADER_DIRS

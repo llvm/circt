@@ -1,6 +1,8 @@
 #ifndef HIR_HIR_H
 #define HIR_HIR_H
 
+#include "circt/Support/LLVM.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/OpDefinition.h"
@@ -8,19 +10,17 @@
 #include "mlir/Interfaces/LoopLikeInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
-using namespace llvm;
-
 namespace mlir {
 namespace hir {
 /// Defines the kind corresponding to the type. So MemrefType has Kind
 /// MemrefKind
-enum Kinds {
-  TimeKind = Type::FIRST_PRIVATE_EXPERIMENTAL_0_TYPE,
-  ConstKind,
-  MemrefKind,
-  StreamKind,
-  WireKind
-};
+// enum Kinds {
+//  TimeKind = Type::FIRST_PRIVATE_EXPERIMENTAL_0_TYPE,
+//  ConstKind,
+//  MemrefKind,
+//  StreamKind,
+//  WireKind
+//};
 
 namespace Details {
 /// PortKind tells what type of port this is. r => read port, w => write port
@@ -43,9 +43,9 @@ struct MemrefTypeStorage : public TypeStorage {
   }
 
   /// Define a hash function for the key type.
-  static hash_code hashKey(const KeyTy &key) {
-    return hash_combine(std::get<0>(key), std::get<1>(key), std::get<2>(key),
-                        std::get<3>(key));
+  static llvm::hash_code hashKey(const KeyTy &key) {
+    return llvm::hash_combine(std::get<0>(key), std::get<1>(key),
+                              std::get<2>(key), std::get<3>(key));
   }
 
   /// Define a construction function for the key type.
@@ -66,8 +66,8 @@ struct MemrefTypeStorage : public TypeStorage {
   }
 
   ArrayRef<unsigned> shape;
-  ArrayRef<unsigned> packing;
   Type elementType;
+  ArrayRef<unsigned> packing;
   PortKind port;
 };
 
@@ -85,8 +85,8 @@ struct StreamTypeStorage : public TypeStorage {
   }
 
   /// Define a hash function for the key type.
-  static hash_code hashKey(const KeyTy &key) {
-    return hash_combine(std::get<0>(key), std::get<1>(key));
+  static llvm::hash_code hashKey(const KeyTy &key) {
+    return llvm::hash_combine(std::get<0>(key), std::get<1>(key));
   }
 
   /// Define a construction function for the key type.
@@ -123,8 +123,9 @@ struct WireTypeStorage : public TypeStorage {
   }
 
   /// Define a hash function for the key type.
-  static hash_code hashKey(const KeyTy &key) {
-    return hash_combine(std::get<0>(key), std::get<1>(key), std::get<2>(key));
+  static llvm::hash_code hashKey(const KeyTy &key) {
+    return llvm::hash_combine(std::get<0>(key), std::get<1>(key),
+                              std::get<2>(key));
   }
 
   /// Define a construction function for the key type.
@@ -150,26 +151,23 @@ struct WireTypeStorage : public TypeStorage {
 } // namespace Details.
 
 /// This class defines hir.time type in the dialect.
-class TimeType : public Type::TypeBase<TimeType, Type, DefaultTypeStorage> {
+class TimeType : public Type::TypeBase<TimeType, Type, TypeStorage> {
 public:
   using Base::Base;
 
-  static bool kindof(unsigned kind) { return kind == TimeKind; }
+  // static bool kindof(unsigned kind) { return kind == TimeKind; }
   static StringRef getKeyword() { return "time"; }
-  static TimeType get(MLIRContext *context) {
-    return Base::get(context, TimeKind);
-  }
 };
 
 /// This class defines hir.const type in the dialect.
-class ConstType : public Type::TypeBase<ConstType, Type, DefaultTypeStorage> {
+class ConstType : public Type::TypeBase<ConstType, Type, TypeStorage> {
 public:
   using Base::Base;
-  static bool kindof(unsigned kind) { return kind == ConstKind; }
+  // static bool kindof(unsigned kind) { return kind == ConstKind; }
   static StringRef getKeyword() { return "const"; }
-  static ConstType get(MLIRContext *context) {
-    return Base::get(context, ConstKind);
-  }
+  // static ConstType get(MLIRContext *context) {
+  //  return Base::get(context, ConstKind);
+  //}
 };
 
 /// This class defines hir.memref type in the dialect.
@@ -178,12 +176,12 @@ class MemrefType
 public:
   using Base::Base;
 
-  static bool kindof(unsigned kind) { return kind == MemrefKind; }
+  // static bool kindof(unsigned kind) { return kind == MemrefKind; }
   static StringRef getKeyword() { return "memref"; }
   static MemrefType get(MLIRContext *context, ArrayRef<unsigned> shape,
                         Type elementType, ArrayRef<unsigned> packing,
                         Details::PortKind port) {
-    return Base::get(context, MemrefKind, shape, elementType, packing, port);
+    return Base::get(context, shape, elementType, packing, port);
   }
   ArrayRef<unsigned> getShape() { return getImpl()->shape; }
   Type getElementType() { return getImpl()->elementType; }
@@ -197,11 +195,11 @@ class StreamType
 public:
   using Base::Base;
 
-  static bool kindof(unsigned kind) { return kind == StreamKind; }
+  // static bool kindof(unsigned kind) { return kind == StreamKind; }
   static StringRef getKeyword() { return "stream"; }
   static StreamType get(MLIRContext *context, Type elementType,
                         Details::PortKind port) {
-    return Base::get(context, StreamKind, elementType, port);
+    return Base::get(context, elementType, port);
   }
   Type getElementType() { return getImpl()->elementType; }
   Details::PortKind getPort() { return getImpl()->port; }
@@ -213,21 +211,20 @@ class WireType
 public:
   using Base::Base;
 
-  static bool kindof(unsigned kind) { return kind == WireKind; }
+  // static bool kindof(unsigned kind) { return kind == WireKind; }
   static StringRef getKeyword() { return "wire"; }
   static WireType get(MLIRContext *context, ArrayRef<unsigned> shape,
                       Type elementType, Details::PortKind port) {
-    return Base::get(context, WireKind, shape, elementType, port);
+    return Base::get(context, shape, elementType, port);
   }
   ArrayRef<unsigned> getShape() { return getImpl()->shape; }
   Type getElementType() { return getImpl()->elementType; }
   Details::PortKind getPort() { return getImpl()->port; }
 };
 
+} // namespace hir.
 #define GET_OP_CLASSES
 #include "circt/Dialect/HIR/HIR.h.inc"
-
-} // namespace hir.
 } // namespace mlir.
 
 #endif // HIR_HIR_H.
