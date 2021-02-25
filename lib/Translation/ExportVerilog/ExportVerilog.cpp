@@ -286,7 +286,9 @@ static StringRef getVerilogDeclWord(Operation *op) {
     parent = parent->getParentOp();
     if (isa<RTLModuleOp>(parent))
       return "wire";
-  } while (parent != nullptr && !parent->hasTrait<ProceduralRegion>());
+    if (parent->hasTrait<ProceduralRegion>())
+      return "automatic logic";
+  } while (parent != nullptr);
 
   return "logic";
 };
