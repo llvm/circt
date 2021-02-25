@@ -1,5 +1,5 @@
 // REQUIRES: verilator
-// REQUIRES: quartus
+// REQUIRES: questa
 
 // RUN: firtool --lower-to-rtl --verilog %s > %t1.1995.v
 // RUN: firtool --lower-to-rtl --verilog %s > %t1.2001.v
