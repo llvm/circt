@@ -800,6 +800,7 @@ private:
 
   // Other
   using TypeOpVisitor::visitTypeOp;
+  SubExprInfo visitTypeOp(ConstantOp op);
   SubExprInfo visitTypeOp(ArraySliceOp op);
   SubExprInfo visitTypeOp(ArrayGetOp op);
   SubExprInfo visitTypeOp(ArrayCreateOp op);
@@ -811,7 +812,6 @@ private:
   // Comb Dialect Operations
   using CombinationalVisitor::visitComb;
   SubExprInfo visitComb(MuxOp op);
-  SubExprInfo visitComb(ConstantOp op);
   SubExprInfo visitComb(AddOp op) { return emitVariadic(op, Addition, "+"); }
   SubExprInfo visitComb(SubOp op) { return emitBinary(op, Addition, "-"); }
   SubExprInfo visitComb(MulOp op) { return emitVariadic(op, Multiply, "*"); }
@@ -1137,7 +1137,7 @@ SubExprInfo ExprEmitter::visitSV(TextualValueOp op) {
   return {Unary, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitComb(ConstantOp op) {
+SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
   bool isNegated = false;
   const APInt &value = op.getValue();
   // If this is a negative signed number and not MININT (e.g. -128), then print
