@@ -14,7 +14,6 @@
 #define CIRCT_DIALECT_COMB_COMBVISITORS_H
 
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/RTL/RTLOps.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
