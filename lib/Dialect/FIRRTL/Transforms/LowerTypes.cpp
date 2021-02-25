@@ -18,6 +18,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/FunctionSupport.h"
 #include "llvm/ADT/StringSwitch.h"
+#include <algorithm>
 
 using namespace circt;
 using namespace firrtl;
@@ -126,7 +127,7 @@ private:
   DenseMap<ValueIdentifier, Value> loweredBundleValues;
 
   // State to track the new attributes for the module.
-  DenseSet<NamedAttribute> newAttrs;
+  SmallVector<NamedAttribute, 8> newAttrs;
   size_t originalNumArgs;
   SmallString<8> argNameBuffer;
 };
@@ -145,9 +146,12 @@ void FIRRTLTypesLowering::runOnOperation() {
   ImplicitLocOpBuilder theBuilder(module.getLoc(), &getContext());
   builder = &theBuilder;
 
-  // Save the original attributes for the module.
-  auto oldAttrs = module.getAttrs();
-  newAttrs.insert(oldAttrs.begin(), oldAttrs.end());
+  // Remember the original argument attributess.
+  SmallVector<NamedAttribute, 8> originalArgAttrs;
+  DictionaryAttr originalAttrs = module->getAttrDictionary();
+  for (size_t i = 0, e = module.getNumArguments(); i < e; ++i)
+    originalArgAttrs.push_back(
+        originalAttrs.getNamed(getArgAttrName(i)).getValue());
 
   // Lower the module block arguments.
   SmallVector<BlockArgument, 8> args(body->args_begin(), body->args_end());
@@ -167,13 +171,23 @@ void FIRRTLTypesLowering::runOnOperation() {
   while (!opsToRemove.empty())
     opsToRemove.pop_back_val()->erase();
 
+  if (argsToRemove.empty())
+    return;
+
   // Remove block args that have been lowered.
   body->eraseArguments(argsToRemove);
   argsToRemove.clear();
 
-  // Set the module's new attributes.
-  SmallVector<NamedAttribute> newAttrArray(newAttrs.begin(), newAttrs.end());
-  module->setAttrs(newAttrArray);
+  // Copy over any attributes that weren't original argument attributes.
+  auto *argAttrBegin = originalArgAttrs.begin();
+  auto *argAttrEnd = originalArgAttrs.end();
+  std::sort(argAttrBegin, argAttrEnd);
+  for (auto attr : originalAttrs)
+    if (std::lower_bound(argAttrBegin, argAttrEnd, attr) == argAttrEnd)
+      newAttrs.push_back(attr);
+
+  // Update the module's attributes.
+  module->setAttrs(newAttrs);
   newAttrs.clear();
 
   // Keep the module's type up-to-date.
@@ -517,14 +531,6 @@ Value FIRRTLTypesLowering::addArg(Type type, unsigned oldArgNumber,
   // Append the new argument.
   auto newValue = body->addArgument(type);
 
-  // Remove the saved attributes for the old argument.
-  module->getAttrDictionary()
-      .getNamed(getArgAttrName(oldArgNumber))
-      .map([&](NamedAttribute attr) {
-        newAttrs.erase(attr);
-        return attr;
-      });
-
   // Save the name attribute for the new argument.
   StringAttr nameAttr = getFIRRTLNameAttr(module.getArgAttrs(oldArgNumber));
   if (nameAttr) {
@@ -532,7 +538,7 @@ Value FIRRTLTypesLowering::addArg(Type type, unsigned oldArgNumber,
     auto newArgNumber = newValue.getArgNumber() - originalNumArgs;
     auto newArgAttrName = getArgAttrName(newArgNumber);
     auto newAttr = builder->getNamedAttr(newArgAttrName, newArgAttrs);
-    newAttrs.insert(newAttr);
+    newAttrs.push_back(newAttr);
   }
 
   return newValue;
