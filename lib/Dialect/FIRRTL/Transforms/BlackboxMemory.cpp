@@ -116,7 +116,7 @@ struct MemOpInfo : public llvm::DenseMapInfo<MemOp> {
 
 /// Create an instance of a Module using the module name and the port list.
 static InstanceOp createInstance(OpBuilder builder, Location loc,
-                                 StringRef moduleName,
+                                 StringRef moduleName, StringAttr instanceName,
                                  const ModulePortList &modulePorts) {
   // Make a bundle of the inputs and outputs of the specified module.
   SmallVector<Type, 4> resultTypes;
@@ -130,7 +130,7 @@ static InstanceOp createInstance(OpBuilder builder, Location loc,
 
   return builder.create<InstanceOp>(loc, resultTypes, moduleName,
                                     builder.getArrayAttr(resultNames),
-                                    StringAttr());
+                                    instanceName);
 }
 
 /// Get the portlist for an external module representing a blackbox memory. This
@@ -160,11 +160,19 @@ getBlackboxPortsForMemOp(MemOp op, const MemoryPortList &memPorts,
     // Flatten the bundle representing a memory port, name-mangling and adding
     // every field in the bundle to the exter module's port list.
     auto type = op.getResult(i).getType().cast<FIRRTLType>();
-    if (type.isa<FlipType>())
+    bool shouldFlip = true;
+    if (type.isa<FlipType>()) {
       type = type.cast<FlipType>().getElementType();
+      // We need to flip each element in the bundle.  If the bundle as a whole
+      // was flipped, we can reuse the element type directly without applying a
+      // flip.
+      shouldFlip = false;
+    }
     for (auto bundleElement : type.cast<BundleType>().getElements()) {
       auto name = builder.getStringAttr(prefix + bundleElement.name.str());
-      auto type = FlipType::get(bundleElement.type);
+      auto type = bundleElement.type;
+      if (shouldFlip)
+        type = FlipType::get(type);
       extPorts.push_back({name, type});
     }
   }
@@ -254,8 +262,8 @@ createWrapperModule(MemOp op, const MemoryPortList &memPorts,
 
   // Create the module
   builder.setInsertionPointToStart(moduleOp.getBodyBlock());
-  auto instanceOp =
-      createInstance(builder, op.getLoc(), extModuleOp.getName(), extPorts);
+  auto instanceOp = createInstance(builder, op.getLoc(), extModuleOp.getName(),
+                                   op.nameAttr(), extPorts);
 
   // Connect the ports between the memory module and the instance of the black
   // box memory module. The outer module has a single bundle representing each
@@ -358,8 +366,9 @@ replaceMemWithWrapperModule(DenseMap<MemOp, FModuleOp, MemOpInfo> &knownMems,
   }
 
   // Create an instance of the wrapping module
-  auto instanceOp = createInstance(OpBuilder(memOp), memOp.getLoc(),
-                                   moduleOp.getName(), modPorts);
+  auto instanceOp =
+      createInstance(OpBuilder(memOp), memOp.getLoc(), moduleOp.getName(),
+                     memOp.nameAttr(), modPorts);
 
   // Replace the memory operation with the module instance
   memOp.replaceAllUsesWith(instanceOp.getResults());
@@ -419,8 +428,9 @@ replaceMemWithExtModule(DenseMap<MemOp, FExtModuleOp, MemOpInfo> &knownMems,
   OpBuilder builder(memOp);
 
   // Create an instance of the black box module
-  auto instanceOp = createInstance(builder, memOp.getLoc(),
-                                   extModuleOp.getName(), extPortList);
+  auto instanceOp =
+      createInstance(builder, memOp.getLoc(), extModuleOp.getName(),
+                     memOp.nameAttr(), extPortList);
 
   // Create a wire for every memory port
   SmallVector<Value, 2> results;
