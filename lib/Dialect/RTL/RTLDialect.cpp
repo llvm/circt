@@ -82,9 +82,8 @@ RTLDialect::~RTLDialect() {}
 /// like, i.e. single result, zero operands, non side-effecting, etc. On
 /// success, this hook should return the value generated to represent the
 /// constant value. Otherwise, it should return null on failure.
-Operation *RTLDialect::materializeConstant(OpBuilder &builder,
-                                              Attribute value, Type type,
-                                              Location loc) {
+Operation *RTLDialect::materializeConstant(OpBuilder &builder, Attribute value,
+                                           Type type, Location loc) {
   // Integer constants.
   if (auto intType = type.dyn_cast<IntegerType>())
     if (auto attrValue = value.dyn_cast<IntegerAttr>())
