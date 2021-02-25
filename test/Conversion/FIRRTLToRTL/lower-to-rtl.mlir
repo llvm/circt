@@ -264,13 +264,20 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:       sv.fwrite "No operands!\0A"
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
-    // CHECK-NEXT: }
+    // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS"  {
+    // CHECK-NEXT:     } else  {
+    // CHECK-NEXT:       %3 = sv.textual_value "`PRINTF_COND_" : i1
+    // CHECK-NEXT:       %4 = comb.and %3, %reset : i1
+    // CHECK-NEXT:       sv.if %4  {
+    // CHECK-NEXT:         sv.fwrite "Hi %x %x\0A"(%2, %b) : i5, i4
+    // CHECK-NEXT:       }
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:   }
    firrtl.printf %clock1, %reset1, "No operands!\0A"
 
     // CHECK: [[ADD:%.+]] = comb.add
     %0 = firrtl.add %a1, %a1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
-    // CHECK: sv.fwrite "Hi %x %x\0A"({{.*}}) : i5, i4
     firrtl.printf %clock1, %reset1, "Hi %x %x\0A"(%0, %b1) : !firrtl.uint<5>, !firrtl.uint<4>
 
     firrtl.skip
@@ -346,19 +353,15 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:   sv.if %aEn {
     // CHECK-NEXT:     sv.assert %aCond : i1
     // CHECK-NEXT:   }
-    // CHECK-NEXT: }
-    firrtl.assert %clockC, %aCondC, %aEnC, "assert0"
-    // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.if %bEn {
     // CHECK-NEXT:     sv.assume %bCond  : i1
     // CHECK-NEXT:   }
-    // CHECK-NEXT: }
-    firrtl.assume %clockC, %bCondC, %bEnC, "assume0"
-    // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.if %cEn {
     // CHECK-NEXT:     sv.cover %cCond : i1
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
+    firrtl.assert %clockC, %aCondC, %aEnC, "assert0"
+    firrtl.assume %clockC, %bCondC, %bEnC, "assume0"
     firrtl.cover %clockC, %cCondC, %cEnC, "cover0"
     // CHECK-NEXT: rtl.output
     rtl.output
