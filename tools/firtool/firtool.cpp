@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/Passes.h"
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -68,6 +69,11 @@ static cl::opt<bool>
                      cl::init(false));
 
 static cl::opt<bool>
+    blackboxMemory("blackbox-memory",
+                   cl::desc("Create a blackbox for all memory operations"),
+                   cl::init(false));
+
+static cl::opt<bool>
     ignoreFIRLocations("ignore-fir-locators",
                        cl::desc("ignore the @info locations in the .fir file"),
                        cl::init(false));
@@ -94,7 +100,8 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   MLIRContext context;
 
   // Register our dialects.
-  context.loadDialect<firrtl::FIRRTLDialect, rtl::RTLDialect, sv::SVDialect>();
+  context.loadDialect<firrtl::FIRRTLDialect, rtl::RTLDialect, comb::CombDialect,
+                      sv::SVDialect>();
 
   llvm::SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(ownedBuffer), llvm::SMLoc());
@@ -129,17 +136,20 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // Allow optimizations to run multithreaded.
   context.disableMultithreading(false);
 
+  if (blackboxMemory)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
+
   // Run the lower-to-rtl pass if requested.
   if (lowerToRTL) {
     if (enableLowerTypes)
-      pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+      pm.nest<firrtl::CircuitOp>().addNestedPass<firrtl::FModuleOp>(
           firrtl::createLowerFIRRTLTypesPass());
     pm.addPass(createLowerFIRRTLToRTLModulePass());
-    pm.nest<rtl::RTLModuleOp>().addPass(createLowerFIRRTLToRTLPass());
+    pm.addNestedPass<rtl::RTLModuleOp>(createLowerFIRRTLToRTLPass());
 
     // If enabled, run the optimizer.
     if (!disableOptimization) {
-      pm.addNestedPass<rtl::RTLModuleOp>(sv::createAlwaysFusionPass());
+      pm.addNestedPass<rtl::RTLModuleOp>(sv::createRTLCleanupPass());
       pm.addPass(createCSEPass());
       pm.addPass(createCanonicalizerPass());
     }

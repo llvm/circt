@@ -118,7 +118,7 @@ ESIRTLBuilder::ESIRTLBuilder(Operation *top)
 
 StringAttr ESIRTLBuilder::constructInterfaceName(ChannelPort port) {
   Operation *tableOp =
-      getInsertionPoint()->getParentWithTrait<OpTrait::SymbolTable>();
+      getInsertionPoint()->getParentWithTrait<mlir::OpTrait::SymbolTable>();
 
   // Get a name based on the type.
   std::string portTypeName;
@@ -629,10 +629,11 @@ public:
     } else if (unwrap) {
       wrap = dyn_cast<WrapValidReady>(operands[0].getDefiningOp());
       if (!wrap)
-        return rewriter.notifyMatchFailure(wrap, [](Diagnostic &d) {
-          d << "This conversion only supports wrap-unwrap back-to-back. "
-               "Could not find 'wrap'.";
-        });
+        return rewriter.notifyMatchFailure(
+            operands[0].getDefiningOp(), [](Diagnostic &d) {
+              d << "This conversion only supports wrap-unwrap back-to-back. "
+                   "Could not find 'wrap'.";
+            });
       valid = wrap.valid();
       data = wrap.rawInput();
       ready = operands[1];

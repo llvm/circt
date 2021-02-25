@@ -99,24 +99,7 @@ OpFoldResult SExtOp::fold(ArrayRef<Attribute> constants) {
   return {};
 }
 
-OpFoldResult AndROp::fold(ArrayRef<Attribute> constants) {
-  // Constant fold.
-  if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>())
-    return getIntAttr(APInt(1, input.getValue().isAllOnesValue()),
-                      getContext());
-
-  return {};
-}
-
-OpFoldResult OrROp::fold(ArrayRef<Attribute> constants) {
-  // Constant fold.
-  if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>())
-    return getIntAttr(APInt(1, input.getValue() != 0), getContext());
-
-  return {};
-}
-
-OpFoldResult XorROp::fold(ArrayRef<Attribute> constants) {
+OpFoldResult ParityOp::fold(ArrayRef<Attribute> constants) {
   // Constant fold.
   if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>())
     return getIntAttr(APInt(1, input.getValue().countPopulation() & 1),
@@ -751,6 +734,47 @@ OpFoldResult MuxOp::fold(ArrayRef<Attribute> constants) {
   return {};
 }
 
+void MuxOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                        MLIRContext *context) {
+  struct Folder final : public OpRewritePattern<MuxOp> {
+    using OpRewritePattern::OpRewritePattern;
+    LogicalResult matchAndRewrite(MuxOp op,
+                                  PatternRewriter &rewriter) const override {
+      auto width = op.getType().cast<IntegerType>().getWidth();
+
+      APInt value;
+
+      // mux(a, 11...1, b) -> or(a, b)
+      if (matchPattern(op.trueValue(), m_RConstant(value))) {
+        if (value.isAllOnesValue()) {
+          auto cond = op.cond();
+          if (width > 1)
+            cond = rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(),
+                                                 op.cond());
+          Value newOperands[] = {cond, op.falseValue()};
+          rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
+          return success();
+        }
+      }
+
+      // mux(a, b, 0) -> and(a, b)
+      if (matchPattern(op.falseValue(), m_RConstant(value))) {
+        if (value.isNullValue()) {
+          auto cond = op.cond();
+          if (width > 1)
+            cond = rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(),
+                                                 op.cond());
+          Value newOperands[] = {cond, op.trueValue()};
+          rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
+          return success();
+        }
+      }
+      return failure();
+    }
+  };
+  results.insert<Folder>(context);
+}
+
 //===----------------------------------------------------------------------===//
 // ICmpOp
 //===----------------------------------------------------------------------===//
@@ -928,6 +952,36 @@ struct ICmpCanonicalizeConstant final : public OpRewritePattern<ICmpOp> {
           return replaceWithConstantI1(1);
         // x >= c -> x > (c-1)
         return replaceWith(ICmpPredicate::ugt, op.lhs(), getConstant(rhs - 1));
+      case ICmpPredicate::eq:
+        if (rhs.getBitWidth() != 1)
+          break;
+        if (rhs.isNullValue()) {
+          // x == 0 -> x ^ 1
+          rewriter.replaceOpWithNewOp<XorOp>(op, op.lhs(),
+                                             getConstant(APInt(1, 1)));
+          return success();
+        }
+        if (rhs.isAllOnesValue()) {
+          // x == 1 -> x
+          rewriter.replaceOp(op, op.lhs());
+          return success();
+        }
+        break;
+      case ICmpPredicate::ne:
+        if (rhs.getBitWidth() != 1)
+          break;
+        if (rhs.isNullValue()) {
+          // x != 0 -> x
+          rewriter.replaceOp(op, op.lhs());
+          return success();
+        }
+        if (rhs.isAllOnesValue()) {
+          // x != 1 -> x ^ 1
+          rewriter.replaceOpWithNewOp<XorOp>(op, op.lhs(),
+                                             getConstant(APInt(1, 1)));
+          return success();
+        }
+        break;
       default:
         break;
       }

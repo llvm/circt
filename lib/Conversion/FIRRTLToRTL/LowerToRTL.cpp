@@ -21,6 +21,7 @@
 #include "circt/Support/ImplicitLocOpBuilder.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TinyPtrVector.h"
 
 using namespace circt;
@@ -219,10 +220,16 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op) {
                                const char *defineFalse = nullptr) {
     std::string define = "`define ";
     if (!defineFalse) {
-      b.create<sv::IfDefOp>(guard, [&]() { emitString(define + defineTrue); });
+      assert(defineTrue && "didn't define anything");
+      b.create<sv::IfDefProceduralOp>(
+          guard, [&]() { emitString(define + defineTrue); });
     } else {
-      b.create<sv::IfDefOp>(
-          guard, [&]() { emitString(define + defineTrue); },
+      b.create<sv::IfDefProceduralOp>(
+          guard,
+          [&]() {
+            if (defineTrue)
+              emitString(define + defineTrue);
+          },
           [&]() { emitString(define + defineFalse); });
     }
   };
@@ -232,7 +239,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op) {
   emitGuardedDefine("RANDOMIZE_INVALID_ASSIGN", "RANDOMIZE");
   emitGuardedDefine("RANDOMIZE_REG_INIT", "RANDOMIZE");
   emitGuardedDefine("RANDOMIZE_MEM_INIT", "RANDOMIZE");
-  emitGuardedDefine("!RANDOM", "RANDOM $random");
+  emitGuardedDefine("RANDOM", nullptr, "RANDOM $random");
 
   emitString(
       "\n// Users can define 'PRINTF_COND' to add an extra gate to prints.");
@@ -247,22 +254,21 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op) {
   emitString(
       "\n// Users can define INIT_RANDOM as general code that gets injected "
       "into the\n// initializer block for modules with registers.");
-  emitGuardedDefine("!INIT_RANDOM", "INIT_RANDOM");
+  emitGuardedDefine("INIT_RANDOM", nullptr, "INIT_RANDOM");
 
   emitString("\n// If using random initialization, you can also define "
              "RANDOMIZE_DELAY to\n// customize the delay used, otherwise 0.002 "
              "is used.");
-  emitGuardedDefine("!RANDOMIZE_DELAY", "RANDOMIZE_DELAY 0.002");
+  emitGuardedDefine("RANDOMIZE_DELAY", nullptr, "RANDOMIZE_DELAY 0.002");
 
   emitString("\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
 
-  b.create<sv::IfDefOp>(
+  b.create<sv::IfDefProceduralOp>(
       "RANDOMIZE",
       [&]() {
         emitGuardedDefine(
-            "!VERILATOR",
-            "INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end",
-            "INIT_RANDOM_PROLOG_ `INIT_RANDOM");
+            "VERILATOR", "INIT_RANDOM_PROLOG_ `INIT_RANDOM",
+            "INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end");
       },
       [&]() { emitString("`define INIT_RANDOM_PROLOG_"); });
 
@@ -764,6 +770,8 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   void emitRandomizePrologIfNeeded();
   void initializeRegister(Value reg, Value resetSignal);
 
+  void addToProceduralBlock(Value clock, std::function<void(void)> fn);
+
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitExpr;
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitDecl;
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitStmt;
@@ -895,6 +903,12 @@ private:
   /// Each value lowered (e.g. operation result) is kept track in this map.  The
   /// key should have a FIRRTL type, the result will have an RTL dialect type.
   DenseMap<Value, Value> valueMapping;
+
+  /// Each value used as a clock to procedural statements has an always block
+  /// associated with it.  FIRRTL has sequential semantics and we must lower
+  /// sequential procedural statements to the same always block to maintain that
+  /// ordering.
+  llvm::SmallDenseMap<Value, sv::AlwaysOp> proceduralBlocks;
 
   /// This is true if we've emitted `INIT_RANDOM_PROLOG_ into an initial block
   /// in this module already.
@@ -1142,6 +1156,19 @@ LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
   return setLowering(orig->getResult(0), result);
 }
 
+void FIRRTLLowering::addToProceduralBlock(Value clock,
+                                          std::function<void(void)> fn) {
+  auto &blk = proceduralBlocks[clock];
+  if (!blk)
+    blk = builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, fn);
+  else {
+    auto oldIP = builder->saveInsertionPoint();
+    builder->setInsertionPoint(blk.getBodyBlock()->getTerminator());
+    fn();
+    builder->restoreInsertionPoint(oldIP);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // Special Operations
 //===----------------------------------------------------------------------===//
@@ -1248,25 +1275,44 @@ void FIRRTLLowering::emitRandomizePrologIfNeeded() {
 }
 
 void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
+  // Construct and return a new reference to `RANDOM.
+  auto randomVal = [&](Type type) {
+    return builder->create<sv::TextualValueOp>(type, "`RANDOM");
+  };
+
+  // Randomly initialize everything in the register. If the register
+  // is an aggregate type, then assign random values to all its
+  // constituent ground types.
+  // TODO: Extend this so it recursively initializes everything.
+  auto randomInit = [&]() {
+    auto type = reg.getType().dyn_cast<rtl::InOutType>().getElementType();
+    TypeSwitch<Type>(type)
+        .Case<rtl::UnpackedArrayType>([&](auto a) {
+          for (size_t i = 0, e = a.getSize(); i != e; ++i) {
+            auto iIdx =
+                builder->create<comb::ConstantOp>(APInt(log2(e + 1), i));
+            auto arrayIndex = builder->create<sv::ArrayIndexInOutOp>(reg, iIdx);
+            builder->create<sv::BPAssignOp>(arrayIndex,
+                                            randomVal(a.getElementType()));
+          }
+        })
+        .Default([&](auto a) {
+          builder->create<sv::BPAssignOp>(reg, randomVal(a));
+        });
+  };
+
   // Emit the initializer expression for simulation that fills it with random
   // value.
-  builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
+  builder->create<sv::IfDefOp>("SYNTHESIS", std::function<void()>(), [&]() {
     builder->create<sv::InitialOp>([&]() {
       emitRandomizePrologIfNeeded();
-      auto type = reg.getType().dyn_cast<rtl::InOutType>().getElementType();
-
-      builder->create<sv::IfDefOp>("RANDOMIZE_REG_INIT", [&]() {
+      builder->create<sv::IfDefProceduralOp>("RANDOMIZE_REG_INIT", [&]() {
         if (resetSignal) {
           auto one = builder->create<comb::ConstantOp>(APInt(1, 1));
           auto notResetValue = builder->create<comb::XorOp>(resetSignal, one);
-          builder->create<sv::IfOp>(notResetValue, [&]() {
-            auto randomVal =
-                builder->create<sv::TextualValueOp>(type, "`RANDOM");
-            builder->create<sv::BPAssignOp>(reg, randomVal);
-          });
+          builder->create<sv::IfOp>(notResetValue, [&]() { randomInit(); });
         } else {
-          auto randomVal = builder->create<sv::TextualValueOp>(type, "`RANDOM");
-          builder->create<sv::BPAssignOp>(reg, randomVal);
+          randomInit();
         }
       });
     });
@@ -1333,114 +1379,60 @@ struct FlatBundleFieldEntry {
 };
 } // end anonymous namespace.
 
-/// Convert a nested bundle of fields into a flat list of fields.  This is used
-/// when working with mems to flatten them.  Return true if we fail to lower
-/// any of the element types, or false if successul.
-static bool flattenBundleTypes(Type type, StringRef nameSoFar,
-                               SmallVectorImpl<FlatBundleFieldEntry> &results) {
-  // Ignore flips.
-  if (auto flip = type.dyn_cast<FlipType>())
-    return flattenBundleTypes(flip.getElementType(), nameSoFar, results);
-
-  // In the base case we record this field.
-  auto bundle = type.dyn_cast<BundleType>();
-  if (!bundle) {
-    auto rtlType = lowerType(type);
-    if (rtlType && !rtlType.isInteger(0))
-      results.push_back({rtlType, nameSoFar.str()});
-    return rtlType == Type();
-  }
-
-  SmallString<16> tmpName(nameSoFar);
-
-  // Otherwise, we have a bundle type.  Break it down.
-  for (auto &elt : bundle.getElements()) {
-    // Construct the suffix to pass down.
-    tmpName.resize(nameSoFar.size());
-    tmpName.push_back('_');
-    tmpName.append(elt.name.strref());
-    // Recursively process subelements.
-    if (flattenBundleTypes(elt.type, tmpName, results))
-      return true;
-  }
-  return false;
-}
-
 LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
-  if (op.readLatency() != 0 || op.writeLatency() != 1) {
-    // FIXME: This should be an error.
-    op.emitWarning("FIXME: need to support mem read/write latency correctly");
-  }
-
   StringRef memName = "mem";
   if (op.name().hasValue())
     memName = op.name().getValue();
 
-  // Aggregate mems may declare multiple reg's.  We need to declare and random
-  // initialize them all.
-  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  if (flattenBundleTypes(op.getDataType(), memName, fieldTypes))
-    return op.emitError("could not lower mem element type");
+  // TODO: Remove this restriction and preserve aggregates in
+  // memories.
+  if (op.getDataType().cast<FIRRTLType>().getPassiveType().isa<BundleType>())
+    return op.emitOpError(
+        "should have already been lowered from a ground type to an aggregate "
+        "type using the LowerTypes pass. Use "
+        "'firtool --enable-lower-types' or 'circt-opt "
+        "--pass-pipeline='firrtl.circuit(firrtl.module(firrtl-lower-types))' "
+        "to run this.");
 
   uint64_t depth = op.depth();
+  uint64_t readLatency = op.readLatency();
+  uint64_t writeLatency = op.writeLatency();
 
-  // Add one reg declaration for each field of the mem.
-  SmallVector<Value> regs;
-  for (const auto &field : fieldTypes) {
-    auto resultType = rtl::UnpackedArrayType::get(field.type, depth);
-    auto name = builder->getStringAttr(field.name);
-    regs.push_back(builder->create<sv::RegOp>(resultType, name));
-  }
+  FIRRTLType addrType = op.getResult(0)
+                            .getType()
+                            .cast<FIRRTLType>()
+                            .getPassiveType()
+                            .cast<BundleType>()
+                            .getElement("addr")
+                            ->type;
 
-  // Emit the initializer expression for simulation that fills it with random
-  // value.
-  builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
-    builder->create<sv::InitialOp>([&]() {
-      emitRandomizePrologIfNeeded();
+  // A store of values associated with a delayed read.
+  struct ReadPipeElement {
+    Value en;
+    Value addr;
+  };
 
-      builder->create<sv::IfDefOp>("RANDOMIZE_MEM_INIT", [&]() {
-        if (depth == 1) { // Don't emit a for loop for one element.
-          for (Value reg : regs) {
-            auto type = sv::getInOutElementType(reg.getType());
-            type = sv::getAnyRTLArrayElementType(type);
-            auto randomVal =
-                builder->create<sv::TextualValueOp>(type, "`RANDOM");
-            auto zero = builder->create<comb::ConstantOp>(APInt(1, 0));
-            auto subscript = builder->create<sv::ArrayIndexInOutOp>(reg, zero);
-            builder->create<sv::BPAssignOp>(subscript, randomVal);
-          }
-        } else if (!regs.empty()) {
-          assert(depth < (1ULL << 31) && "FIXME: Our initialization logic uses "
-                                         "'integer' which doesn't support "
-                                         "mems greater than 2^32");
+  // A store of values associated with a delayed write.
+  struct WritePipeElement {
+    Value en;
+    Value addr;
+    Value mask;
+    Value data;
+  };
 
-          std::string action = "integer {{0}}_initvar;\n";
-          action += "for ({{0}}_initvar = 0; {{0}}_initvar < " +
-                    llvm::utostr(depth) + "; {{0}}_initvar = {{0}}_initvar+1)";
-          if (regs.size() != 1)
-            action += " begin";
+  // Create a register for the memory.
+  Value reg = builder->create<sv::RegOp>(
+      rtl::UnpackedArrayType::get(lowerType(op.getDataType()), depth),
+      builder->getStringAttr(memName.str()));
 
-          for (size_t i = 0, e = regs.size(); i != e; ++i)
-            action +=
-                "\n  {{" + llvm::utostr(i) + "}}[{{0}}_initvar] = `RANDOM;";
+  // Track pipeline registers that were added. These need to be
+  // randomly initialized later.
+  SmallVector<Value> pipeRegs;
 
-          if (regs.size() != 1)
-            action += "\nend";
-          builder->create<sv::VerbatimOp>(action, regs);
-        }
-      });
-    });
-  });
-
-  // Keep track of whether this mem is an even power of two or not.
-  bool isPowerOfTwo = llvm::isPowerOf2_64(depth);
-
-  // Lower all of the read/write ports.  Each port is a separate
-  // return value of the memory.
+  // Loop over each port
   auto namesArray = op.portNames();
   for (size_t i = 0, e = namesArray.size(); i != e; ++i) {
-
-    auto portName = namesArray[i].cast<StringAttr>().getValue();
+    auto portName = namesArray[i].cast<StringAttr>().getValue().str();
     auto port = op.getPortNamed(portName);
 
     // Do not lower ports if they aren't used.
@@ -1450,124 +1442,216 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     auto portBundleType =
         port.getType().cast<FIRRTLType>().getPassiveType().cast<BundleType>();
 
-    SmallVector<std::pair<Identifier, Value>> portWires;
+    // Create wires for all the memory ports
+    llvm::StringMap<Value> portWires;
     for (BundleType::BundleElement elt : portBundleType.getElements()) {
       auto fieldType = lowerType(elt.type);
-      if (!fieldType)
-        return op.emitOpError("port " + elt.name.str() +
-                              " has unexpected field");
-
       if (fieldType.isInteger(0)) {
-        portWires.push_back({elt.name, Value()});
+        portWires.insert({elt.name.strref(), Value()});
         continue;
       }
       auto name =
           (Twine(memName) + "_" + portName + "_" + elt.name.str()).str();
       auto fieldWire = builder->create<sv::WireOp>(fieldType, name);
-      portWires.push_back({elt.name, fieldWire});
+      portWires.insert({elt.name.strref(), fieldWire});
     }
 
-    // Return the inout wire corresponding to a port field.
-    auto getPortFieldWire = [&](StringRef portName) -> Value {
-      for (auto entry : portWires) {
-        if (entry.first.strref() == portName)
-          return entry.second;
-      }
-      llvm_unreachable("unknown port wire!");
-    };
-
-    // Now that we have the wires for each element, rewrite any subfields to use
-    // them instead of the subfields.
+    // Now that we have the wires for each element, rewrite any subfields to
+    // use them instead of the subfields.
     while (!port.use_empty()) {
       auto portField = cast<SubfieldOp>(*port.user_begin());
       portField->dropAllReferences();
-      (void)setLowering(portField, getPortFieldWire(portField.fieldname()));
+      (void)setLowering(portField, portWires[portField.fieldname()]);
     }
 
     // Return the value corresponding to a port field.
     auto getPortFieldValue = [&](StringRef portName) -> Value {
-      return builder->create<sv::ReadInOutOp>(getPortFieldWire(portName));
+      return builder->create<sv::ReadInOutOp>(portWires[portName]);
     };
 
+    // Create an array register
+    auto arrayReg = [&](StringRef elementName, Type type, int depth) -> Value {
+      auto a = builder->create<sv::RegOp>(
+          rtl::UnpackedArrayType::get(type, depth),
+          builder->getStringAttr(memName.str() + "_" + portName +
+                                 elementName.str()));
+      pipeRegs.push_back(a);
+      return a;
+    };
+
+    // Read an inout type
+    auto readInOut = [&](Value a) -> Value {
+      return builder->create<sv::ReadInOutOp>(a);
+    };
+
+    auto i1Type = IntegerType::get(builder->getContext(), 1);
+    auto clk = getPortFieldValue("clk");
+
+    // Loop over each element of the port
     switch (op.getPortKind(portName).getValue()) {
-    case MemOp::PortKind::ReadWrite:
+    case MemOp::PortKind::ReadWrite: {
+      // TODO: Handle readwriters properly
       op.emitOpError("readwrite ports should be lowered into separate read and "
                      "write ports by previous passes");
+    }
       continue;
     case MemOp::PortKind::Read: {
-      auto emitReads = [&](bool masked) {
-        // TODO: not handling bundle elements correctly yet.
-        if (regs.size() > 1)
-          op.emitOpError("don't support bundle elements yet");
-
-        // Emit an assign to the read port, using the address.
-        // TODO(firrtl-spec): It appears that the clock signal on the read port
-        // is ignored, why does it exist?
-        for (auto reg : regs) {
-          auto addr = getPortFieldValue("addr");
-          Value value = builder->create<sv::ArrayIndexInOutOp>(reg, addr);
-          value = builder->create<sv::ReadInOutOp>(value);
-
-          // If we're masking, emit "addr < Depth ? mem[addr] : `RANDOM".
-          if (masked) {
-            auto addrWidth = addr.getType().getIntOrFloatBitWidth();
-            auto depthCst =
-                builder->create<comb::ConstantOp>(APInt(addrWidth, depth));
-            auto cmp = builder->create<comb::ICmpOp>(ICmpPredicate::ult, addr,
-                                                     depthCst);
-            auto randomVal =
-                builder->create<sv::TextualValueOp>(value.getType(), "`RANDOM");
-            value = builder->create<comb::MuxOp>(cmp, value, randomVal);
-          }
-
-          // FIXME: This isn't right for multi-slot data's.
-          builder->create<sv::ConnectOp>(getPortFieldWire("data"), value);
+      // Add delays for non-zero read latency
+      SmallVector<ReadPipeElement> readPipe;
+      readPipe.push_back({portWires["en"], portWires["addr"]});
+      Value enReg, addrReg;
+      for (size_t j = 0; j < readLatency; ++j) {
+        if (j == 0) {
+          enReg = arrayReg("_en_pipe", i1Type, readLatency);
+          addrReg = arrayReg("_addr_pipe", lowerType(addrType), readLatency);
         }
-      };
-
-      // If the memory size is a power of two, then we can just unconditionally
-      // read from it, otherwise we emit #ifdef'd masking logic.
-      if (isPowerOfTwo) {
-        emitReads(false);
-      } else {
-        builder->create<sv::IfDefOp>(
-            "!RANDOMIZE_GARBAGE_ASSIGN", [&]() { emitReads(false); },
-            [&]() { emitReads(true); });
+        auto jIdx =
+            builder->create<comb::ConstantOp>(APInt(log2(readLatency + 1), j));
+        auto enJ = builder->create<sv::ArrayIndexInOutOp>(enReg, jIdx);
+        auto addrJ = builder->create<sv::ArrayIndexInOutOp>(addrReg, jIdx);
+        readPipe.push_back({enJ, addrJ});
       }
-      break;
-    }
+      if (readLatency != 0) {
+        builder->create<sv::AlwaysFFOp>(EventControl::AtPosEdge, clk, [&]() {
+          auto lastEn = readPipe[0].en;
+          auto lastAddr = readPipe[0].addr;
+          for (size_t j = 1; j < readLatency + 1; ++j) {
+            auto thisEn = readPipe[j].en;
+            auto thisAddr = readPipe[j].addr;
 
-    case MemOp::PortKind::Write: {
-      // TODO: not handling bundle elements correctly yet.
-      if (regs.size() > 1)
-        op.emitOpError("don't support bundle elements yet");
-
-      // Emit something like:
-      // always @(posedge _M_write_clk) begin
-      //   if (_M_write_en & _M_write_mask)
-      //     _M[_M_write_addr] <= _M_write_data;
-      // end
-      auto clock = getPortFieldValue("clk");
-      builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, [&]() {
-        auto enable = getPortFieldValue("en");
-        auto mask = getPortFieldValue("mask");
-        auto cond = builder->create<comb::AndOp>(enable, mask);
-        builder->create<sv::IfOp>(cond, [&]() {
-          // FIXME: This isn't right for multi-slot data mems.
-          auto data = getPortFieldValue("data");
-          auto addr = getPortFieldValue("addr");
-
-          for (auto reg : regs) {
-            auto slot = builder->create<sv::ArrayIndexInOutOp>(reg, addr);
-            builder->create<sv::PAssignOp>(slot, data);
+            auto readLastEn = builder->create<sv::ReadInOutOp>(lastEn);
+            builder->create<sv::PAssignOp>(thisEn, readLastEn);
+            builder->create<sv::IfOp>(readLastEn, [&]() {
+              builder->create<sv::PAssignOp>(
+                  thisAddr, builder->create<sv::ReadInOutOp>(lastAddr));
+            });
+            lastEn = thisEn;
+            lastAddr = thisAddr;
           }
         });
-      });
+      }
+      Value addr = builder->create<sv::ReadInOutOp>(readPipe.back().addr);
+      Value value = builder->create<sv::ArrayIndexInOutOp>(reg, addr);
+      value = builder->create<sv::ReadInOutOp>(value);
 
-      break;
+      // If we're masking, emit "addr < Depth ? mem[addr] : `RANDOM".
+      if (!llvm::isPowerOf2_64(depth)) {
+        builder->create<sv::IfDefOp>(
+            "RANDOMIZE_GARBAGE_ASSIGN",
+            [&]() {
+              auto addrWidth = addr.getType().getIntOrFloatBitWidth();
+              auto depthCst =
+                  builder->create<comb::ConstantOp>(APInt(addrWidth, depth));
+              auto cmp = builder->create<comb::ICmpOp>(ICmpPredicate::ult, addr,
+                                                       depthCst);
+              auto randomVal = builder->create<sv::TextualValueOp>(
+                  value.getType(), "`RANDOM");
+              auto randomOrVal =
+                  builder->create<comb::MuxOp>(cmp, value, randomVal);
+              builder->create<sv::ConnectOp>(portWires["data"], randomOrVal);
+            },
+            [&]() {
+              builder->create<sv::ConnectOp>(portWires["data"], value);
+            });
+      } else {
+        builder->create<sv::ConnectOp>(portWires["data"], value);
+      }
     }
+      continue;
+    case MemOp::PortKind::Write: {
+      SmallVector<WritePipeElement> writePipe;
+      writePipe.push_back({portWires["en"], portWires["addr"],
+                           portWires["mask"], portWires["data"]});
+
+      // Construct wripe pipe registers for non-unary write latency
+      WritePipeElement wReg;
+      for (size_t j = 0; j < writeLatency - 1; ++j) {
+        if (j == 0) {
+          wReg = {arrayReg("_en_pipe", i1Type, writeLatency - 1),
+                  arrayReg("_addr_pipe", lowerType(addrType), writeLatency - 1),
+                  arrayReg("_mask_pipe", i1Type, writeLatency - 1),
+                  arrayReg("_data_pipe", lowerType(op.getDataType()),
+                           writeLatency - 1)};
+        }
+        auto jIdx =
+            builder->create<comb::ConstantOp>(APInt(log2(writeLatency), j));
+        writePipe.push_back(
+            {builder->create<sv::ArrayIndexInOutOp>(wReg.en, jIdx),
+             builder->create<sv::ArrayIndexInOutOp>(wReg.addr, jIdx),
+             builder->create<sv::ArrayIndexInOutOp>(wReg.mask, jIdx),
+             builder->create<sv::ArrayIndexInOutOp>(wReg.data, jIdx)});
+      }
+
+      // Build the write pipe for non-unary write latency
+      if (writeLatency != 1) {
+        builder->create<sv::AlwaysFFOp>(EventControl::AtPosEdge, clk, [&]() {
+          auto right = writePipe[0];
+          for (size_t j = 1; j < writeLatency; ++j) {
+            auto left = writePipe[j];
+            auto readEn = readInOut(right.en);
+            builder->create<sv::PAssignOp>(left.en, readEn);
+            builder->create<sv::IfOp>(readEn, [&]() {
+              builder->create<sv::PAssignOp>(left.addr, readInOut(right.addr));
+              builder->create<sv::PAssignOp>(left.mask, readInOut(right.mask));
+              builder->create<sv::PAssignOp>(left.data, readInOut(right.data));
+            });
+            right = left;
+          }
+        });
+      }
+
+      // Attach the write port
+      auto last = writePipe.back();
+      builder->create<sv::AlwaysFFOp>(EventControl::AtPosEdge, clk, [&]() {
+        auto enable = builder->create<sv::ReadInOutOp>(last.en);
+        auto cond = builder->create<comb::AndOp>(
+            enable, builder->create<sv::ReadInOutOp>(last.mask));
+        builder->create<sv::IfOp>(cond, [&]() {
+          auto slot = builder->create<sv::ArrayIndexInOutOp>(
+              reg, builder->create<sv::ReadInOutOp>(last.addr));
+          builder->create<sv::PAssignOp>(
+              slot, builder->create<sv::ReadInOutOp>(last.data));
+        });
+      });
+    }
+      continue;
     }
   }
+
+  // Emit the initializer expression for simulation that fills it with random
+  // value.
+  builder->create<sv::IfDefOp>("SYNTHESIS", std::function<void()>(), [&]() {
+    builder->create<sv::InitialOp>([&]() {
+      emitRandomizePrologIfNeeded();
+
+      builder->create<sv::IfDefProceduralOp>("RANDOMIZE_MEM_INIT", [&]() {
+        if (depth == 1) { // Don't emit a for loop for one element.
+          auto type = sv::getInOutElementType(reg.getType());
+          type = sv::getAnyRTLArrayElementType(type);
+          auto randomVal = builder->create<sv::TextualValueOp>(type, "`RANDOM");
+          auto zero = builder->create<comb::ConstantOp>(APInt(1, 0));
+          auto subscript = builder->create<sv::ArrayIndexInOutOp>(reg, zero);
+          builder->create<sv::BPAssignOp>(subscript, randomVal);
+        } else {
+          assert(depth < (1ULL << 31) && "FIXME: Our initialization logic uses "
+                                         "'integer' which doesn't support "
+                                         "mems greater than 2^32");
+
+          std::string action = "integer {{0}}_initvar;\n";
+          action += "for ({{0}}_initvar = 0; {{0}}_initvar < " +
+                    llvm::utostr(depth) + "; {{0}}_initvar = {{0}}_initvar+1)";
+          action += "\n  {{0}}[{{0}}_initvar] = `RANDOM;";
+
+          builder->create<sv::VerbatimOp>(action, reg);
+        }
+      });
+    });
+  });
+
+  // Randomly initialize any pipeline registers that were created.
+  for (auto pipeReg : pipeRegs)
+    initializeRegister(pipeReg, Value());
+
   return success();
 }
 
@@ -1707,7 +1791,7 @@ LogicalResult FIRRTLLowering::visitExpr(XorRPrimOp op) {
     return failure();
   }
 
-  return setLoweringTo<comb::XorROp>(op, builder->getIntegerType(1), operand);
+  return setLoweringTo<comb::ParityOp>(op, builder->getIntegerType(1), operand);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(AndRPrimOp op) {
@@ -1718,7 +1802,11 @@ LogicalResult FIRRTLLowering::visitExpr(AndRPrimOp op) {
     });
   }
 
-  return setLoweringTo<comb::AndROp>(op, builder->getIntegerType(1), operand);
+  // Lower AndR to == -1
+  return setLoweringTo<comb::ICmpOp>(
+      op, ICmpPredicate::eq, operand,
+      builder->create<comb::ConstantOp>(
+          APInt(operand.getType().getIntOrFloatBitWidth(), -1)));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(OrRPrimOp op) {
@@ -1730,7 +1818,11 @@ LogicalResult FIRRTLLowering::visitExpr(OrRPrimOp op) {
     return failure();
   }
 
-  return setLoweringTo<comb::OrROp>(op, builder->getIntegerType(1), operand);
+  // Lower OrR to != 0
+  return setLoweringTo<comb::ICmpOp>(
+      op, ICmpPredicate::ne, operand,
+      builder->create<comb::ConstantOp>(
+          APInt(operand.getType().getIntOrFloatBitWidth(), 0)));
 }
 
 //===----------------------------------------------------------------------===//
@@ -1887,16 +1979,24 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValuePrimOp op) {
   if (!resultTy)
     return failure();
 
-  // We lower invalid to 0.  TODO: the FIRRTL spec mentions something about
-  // lowering it to a random value, we should see if this is what we need to
-  // do.
-  if (!op.getType().isa<AnalogType>())
-    return setLoweringTo<comb::ConstantOp>(op, resultTy, 0);
-
   // Values of analog type always need to be lowered to something with inout
   // type.  We do that by lowering to a wire and return that.  As with the SFC,
   // we do not connect anything to this, because it is bidirectional.
-  return setLoweringTo<sv::WireOp>(op, resultTy, ".invalid_analog");
+  if (op.getType().isa<AnalogType>())
+    return setLoweringTo<sv::WireOp>(op, resultTy, ".invalid_analog");
+
+  // We lower invalid to 0.  TODO: the FIRRTL spec mentions something about
+  // lowering it to a random value, we should see if this is what we need to
+  // do.
+  if (auto intType = resultTy.dyn_cast<IntegerType>()) {
+    if (intType.getWidth() == 0) // Let the caller handle zero width values.
+      return failure();
+    return setLoweringTo<comb::ConstantOp>(op, resultTy, 0);
+  }
+
+  // Invalid for bundles isn't supported.
+  op.emitOpError("unsupported type");
+  return failure();
 }
 
 LogicalResult FIRRTLLowering::visitExpr(HeadPrimOp op) {
@@ -2030,9 +2130,6 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
     if (!clockVal || !resetSignal)
       return failure();
 
-    //    auto one = builder->create<comb::ConstantOp>(APInt(1, 1));
-    //    auto invResetSignal = builder->create<comb::XorOp>(resetSignal, one);
-
     builder->create<sv::AlwaysFFOp>(
         EventControl::AtPosEdge, clockVal,
         regResetOp.resetSignal().getType().isa<AsyncResetType>()
@@ -2070,13 +2167,13 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
     if (!clockVal)
       return failure();
 
-    builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clockVal, [&]() {
+    builder->create<sv::AlwaysFFOp>(EventControl::AtPosEdge, clockVal, [&]() {
       builder->create<sv::PAssignOp>(destVal, srcVal);
     });
     return success();
   }
 
-  // If this is an assignment to a RegInit, then the connect implicitly
+  // If this is an assignment to a RegReset, then the connect implicitly
   // happens under the clock and reset that gate the register.
   if (auto regResetOp = dyn_cast_or_null<RegResetOp>(dest.getDefiningOp())) {
     Value clockVal = getLoweredValue(regResetOp.clockVal());
@@ -2084,24 +2181,13 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
     if (!clockVal || !resetSignal)
       return failure();
 
-    auto one = builder->create<comb::ConstantOp>(APInt(1, 1));
-    auto invResetSignal = builder->create<comb::XorOp>(resetSignal, one);
-
-    auto resetFn = [&]() {
-      builder->create<sv::IfOp>(invResetSignal, [&]() {
-        builder->create<sv::PAssignOp>(destVal, srcVal);
-      });
-    };
-
-    if (regResetOp.resetSignal().getType().isa<AsyncResetType>()) {
-      builder->create<sv::AlwaysOp>(
-          ArrayRef<EventControl>{EventControl::AtPosEdge,
-                                 EventControl::AtPosEdge},
-          ArrayRef<Value>{clockVal, resetSignal}, resetFn);
-      return success();
-    } else { // sync reset
-      builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clockVal, resetFn);
-    }
+    builder->create<sv::AlwaysFFOp>(
+        EventControl::AtPosEdge, clockVal,
+        regResetOp.resetSignal().getType().isa<AsyncResetType>()
+            ? ::ResetType::AsyncReset
+            : ::ResetType::SyncReset,
+        EventControl::AtPosEdge, resetSignal,
+        [&]() { builder->create<sv::PAssignOp>(destVal, srcVal); });
     return success();
   }
 
@@ -2109,8 +2195,8 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
   return success();
 }
 
-// Printf is a macro op that lowers to an sv.ifdef, an sv.if, and an sv.fwrite
-// all nested together.
+// Printf is a macro op that lowers to an sv.ifdef.procedural, an sv.if,
+// and an sv.fwrite all nested together.
 LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   auto clock = getLoweredValue(op.clock());
   auto cond = getLoweredValue(op.cond());
@@ -2129,20 +2215,20 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
     }
   }
 
-  // Emit this into an "sv.always posedge" body.
-  builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, [&]() {
+  addToProceduralBlock(clock, [&]() {
     // Emit an "#ifndef SYNTHESIS" guard into the always block.
-    builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
-      // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
-      Value ifCond =
-          builder->create<sv::TextualValueOp>(cond.getType(), "`PRINTF_COND_");
-      ifCond = builder->createOrFold<comb::AndOp>(ifCond, cond);
+    builder->create<sv::IfDefProceduralOp>(
+        "SYNTHESIS", std::function<void()>(), [&]() {
+          // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
+          Value ifCond = builder->create<sv::TextualValueOp>(cond.getType(),
+                                                             "`PRINTF_COND_");
+          ifCond = builder->createOrFold<comb::AndOp>(ifCond, cond);
 
-      builder->create<sv::IfOp>(ifCond, [&]() {
-        // Emit the sv.fwrite.
-        builder->create<sv::FWriteOp>(op.formatString(), operands);
-      });
-    });
+          builder->create<sv::IfOp>(ifCond, [&]() {
+            // Emit the sv.fwrite.
+            builder->create<sv::FWriteOp>(op.formatString(), operands);
+          });
+        });
   });
 
   return success();
@@ -2157,21 +2243,22 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
     return failure();
 
   // Emit this into an "sv.always posedge" body.
-  builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, [&]() {
+  addToProceduralBlock(clock, [&]() {
     // Emit an "#ifndef SYNTHESIS" guard into the always block.
-    builder->create<sv::IfDefOp>("!SYNTHESIS", [&]() {
-      // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
-      Value ifCond =
-          builder->create<sv::TextualValueOp>(cond.getType(), "`STOP_COND_");
-      ifCond = builder->createOrFold<comb::AndOp>(ifCond, cond);
-      builder->create<sv::IfOp>(ifCond, [&]() {
-        // Emit the sv.fatal or sv.finish.
-        if (op.exitCode())
-          builder->create<sv::FatalOp>();
-        else
-          builder->create<sv::FinishOp>();
-      });
-    });
+    builder->create<sv::IfDefProceduralOp>(
+        "SYNTHESIS", std::function<void()>(), [&]() {
+          // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
+          Value ifCond = builder->create<sv::TextualValueOp>(cond.getType(),
+                                                             "`STOP_COND_");
+          ifCond = builder->createOrFold<comb::AndOp>(ifCond, cond);
+          builder->create<sv::IfOp>(ifCond, [&]() {
+            // Emit the sv.fatal or sv.finish.
+            if (op.exitCode())
+              builder->create<sv::FatalOp>();
+            else
+              builder->create<sv::FinishOp>();
+          });
+        });
   });
 
   return success();
@@ -2201,7 +2288,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
   if (!clock || !enable || !predicate)
     return failure();
 
-  builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, [&]() {
+  addToProceduralBlock(clock, [&]() {
     builder->create<sv::IfOp>(enable, [&]() {
       // Create BOpTy inside the always/if.
       builder->create<BOpTy>(predicate);
@@ -2249,23 +2336,24 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
   if (inoutValues.size() < 2)
     return success();
 
-  // In the non-synthesis case, we emit a SystemVerilog alias statement.
   builder->create<sv::IfDefOp>(
-      "!SYNTHESIS", [&]() { builder->create<sv::AliasOp>(inoutValues); });
+      "SYNTHESIS",
+      // If we're doing synthesis, we emit an all-pairs assign complex.
+      [&]() {
+        SmallVector<Value, 4> values;
+        for (size_t i = 0, e = inoutValues.size(); i != e; ++i)
+          values.push_back(
+              builder->createOrFold<sv::ReadInOutOp>(inoutValues[i]));
 
-  // If we're doing synthesis, we emit an all-pairs assign complex.
-  builder->create<sv::IfDefOp>("SYNTHESIS", [&]() {
-    // Lower the
-    SmallVector<Value, 4> values;
-    for (size_t i = 0, e = inoutValues.size(); i != e; ++i)
-      values.push_back(builder->createOrFold<sv::ReadInOutOp>(inoutValues[i]));
+        for (size_t i1 = 0, e = inoutValues.size(); i1 != e; ++i1) {
+          for (size_t i2 = 0; i2 != e; ++i2)
+            if (i1 != i2)
+              builder->create<sv::ConnectOp>(inoutValues[i1], values[i2]);
+        }
+      },
 
-    for (size_t i1 = 0, e = inoutValues.size(); i1 != e; ++i1) {
-      for (size_t i2 = 0; i2 != e; ++i2)
-        if (i1 != i2)
-          builder->create<sv::ConnectOp>(inoutValues[i1], values[i2]);
-    }
-  });
+      // In the non-synthesis case, we emit a SystemVerilog alias statement.
+      [&]() { builder->create<sv::AliasOp>(inoutValues); });
 
   return success();
 }

@@ -98,6 +98,7 @@ struct FIRRTLTypesLowering : public LowerFIRRTLTypesBase<FIRRTLTypesLowering>,
   void visitDecl(MemOp op);
   void visitExpr(SubfieldOp op);
   void visitStmt(ConnectOp op);
+  void visitExpr(InvalidValuePrimOp op);
 
 private:
   // Lowering module block arguments.
@@ -155,6 +156,9 @@ void FIRRTLTypesLowering::runOnOperation() {
   // Remove args that have been lowered.
   getOperation().eraseArguments(argsToRemove);
   argsToRemove.clear();
+
+  // Keep the module's type up-to-date.
+  module.setType(builder->getFunctionType(body->getArgumentTypes(), {}));
 
   // Reset lowered state.
   loweredBundleValues.clear();
@@ -268,7 +272,7 @@ void FIRRTLTypesLowering::visitDecl(MemOp op) {
 
   // Store any new wires created during lowering. This ensures that
   // wires are re-used if they already exist.
-  DenseMap<StringRef, Value> newWires;
+  llvm::StringMap<Value> newWires;
 
   // Loop over the leaf aggregates.
   for (auto field : fieldTypes) {
@@ -277,7 +281,7 @@ void FIRRTLTypesLowering::visitDecl(MemOp op) {
     // constructed by checking the kind of the memory.
     resultPortTypes.clear();
     for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
-      auto kind = op.getPortKind(op.getPortName(i).getValue()).getValue();
+      auto kind = op.getPortKind(i).getValue();
       auto flattenedPortType =
           FlipType::get(op.getTypeForPort(op.depth(), field.type, kind));
 
@@ -310,20 +314,18 @@ void FIRRTLTypesLowering::visitDecl(MemOp op) {
         // to all clocks. This is handled by creating a dummy wire,
         // setting the dummy wire as the lowering target, and then
         // connecting every new port subfield to that.
-        if (elt.name == "clk" | elt.name == "en" | elt.name == "addr" |
-            elt.name == "wmode") {
+        if ((elt.name == "clk") | (elt.name == "en") | (elt.name == "addr") |
+            (elt.name == "wmode")) {
           Type theType = FlipType::get(elt.type);
 
           // Construct a new wire if needed.
-          auto wire =
-              newWires[op.getPortName(i).getValue().str() + elt.name.str()];
+          auto wireName =
+              op.getPortName(i).getValue().str() + "_" + elt.name.str();
+          auto wire = newWires[wireName];
           if (!wire) {
-            wire = builder->create<WireOp>(
-                theType, op.name().getValue().str() + "_" +
-                             op.getPortName(i).getValue().str() + "_" +
-                             elt.name.str());
-            newWires[op.getPortName(i).getValue().str() + elt.name.str()] =
-                wire;
+            wire = builder->create<WireOp>(theType, op.name().getValue().str() +
+                                                        "_" + wireName);
+            newWires[wireName] = wire;
             setBundleLowering(op.getResult(i), elt.name.str(), wire);
           }
 
@@ -442,6 +444,31 @@ void FIRRTLTypesLowering::visitStmt(ConnectOp op) {
   opsToRemove.push_back(op);
 }
 
+// Lowering invalid may need to create a new invalid for each field
+void FIRRTLTypesLowering::visitExpr(InvalidValuePrimOp op) {
+  Value result = op.result();
+
+  // Attempt to get the bundle types, potentially unwrapping an outer flip type
+  // that wraps the whole bundle.
+  BundleType resultType = getCanonicalBundleType(result.getType());
+
+  // If we aren't connecting two bundles, there is nothing to do.
+  if (!resultType)
+    return;
+
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+  flattenBundleTypes(resultType, "", false, fieldTypes);
+
+  // Loop over the leaf aggregates.
+  for (auto field : fieldTypes) {
+    setBundleLowering(result, StringRef(field.suffix).drop_front(1),
+                      builder->create<InvalidValuePrimOp>(field.getPortType()));
+  }
+
+  // Remember to remove the original op.
+  opsToRemove.push_back(op);
+}
+
 //===----------------------------------------------------------------------===//
 // Helpers to manage state.
 //===----------------------------------------------------------------------===//
@@ -467,9 +494,6 @@ Value FIRRTLTypesLowering::addArg(Type type, unsigned oldArgNumber,
 
   // Append the new argument.
   auto newValue = body->addArgument(type);
-
-  // Keep the module's type up-to-date.
-  module.setType(builder->getFunctionType(body->getArgumentTypes(), {}));
 
   // Copy over the name attribute for the new argument.
   StringAttr nameAttr = getFIRRTLNameAttr(module.getArgAttrs(oldArgNumber));

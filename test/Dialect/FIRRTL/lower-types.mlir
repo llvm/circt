@@ -247,3 +247,50 @@ firrtl.circuit "Foo" {
 
   }
 }
+
+
+// -----
+// https://github.com/llvm/circt/issues/593
+
+module  {
+  firrtl.circuit "top_mod" {
+    firrtl.module @mod_2(%clock: !firrtl.clock, %inp_a: !firrtl.bundle<inp_d: uint<14>>) {
+    }
+    firrtl.module @top_mod(%clock: !firrtl.clock) {
+      %U0_clock, %U0_inp_a = firrtl.instance @mod_2 {name = "U0", portNames = ["clock", "inp_a"]} : !firrtl.flip<clock>, !firrtl.flip<bundle<inp_d: uint<14>>>
+      %0 = firrtl.invalidvalue : !firrtl.clock
+      firrtl.connect %U0_clock, %0 : !firrtl.flip<clock>, !firrtl.clock
+      %1 = firrtl.invalidvalue : !firrtl.bundle<inp_d: uint<14>>
+      firrtl.connect %U0_inp_a, %1 : !firrtl.flip<bundle<inp_d: uint<14>>>, !firrtl.bundle<inp_d: uint<14>>
+    }
+  }
+}
+
+//CHECK-LABEL: module  {
+//CHECK-NEXT:   firrtl.circuit "top_mod" {
+//CHECK-NEXT:     firrtl.module @mod_2(%clock: !firrtl.clock, %inp_a_inp_d: !firrtl.uint<14>) {
+//CHECK-NEXT:     }
+//CHECK-NEXT:    firrtl.module @top_mod(%clock: !firrtl.clock) {
+//CHECK-NEXT:      %U0_clock, %U0_inp_a_inp_d = firrtl.instance @mod_2 {name = "U0", portNames = ["clock", "inp_a_inp_d"]} : !firrtl.flip<clock>, !firrtl.flip<uint<14>>
+//CHECK-NEXT:      %0 = firrtl.invalidvalue : !firrtl.clock
+//CHECK-NEXT:      firrtl.connect %U0_clock, %0 : !firrtl.flip<clock>, !firrtl.clock
+//CHECK-NEXT:      %1 = firrtl.invalidvalue : !firrtl.uint<14>
+//CHECK-NEXT:      firrtl.connect %U0_inp_a_inp_d, %1 : !firrtl.flip<uint<14>>, !firrtl.uint<14>
+//CHECK-NEXT:    }
+//CHECK-NEXT:  }
+//CHECK-NEXT:}
+
+// -----
+// https://github.com/llvm/circt/issues/661
+
+// COM: This test is just checking that the following doesn't error.
+module  {
+  firrtl.circuit "foo" {
+    firrtl.module @foo(%clock: !firrtl.clock) {
+      %head_MPORT_2, %head_MPORT_6 = firrtl.mem Undefined {depth = 20 : i64, name = "head", portNames = ["MPORT_2", "MPORT_6"], readLatency = 0 : i32, writeLatency = 1 : i32}
+      : !firrtl.flip<bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<5>, mask: uint<1>>>,
+        !firrtl.flip<bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<5>, mask: uint<1>>>
+      %127 = firrtl.subfield %head_MPORT_6("clk") : (!firrtl.flip<bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<5>, mask: uint<1>>>) -> !firrtl.flip<clock>
+    }
+  }
+}

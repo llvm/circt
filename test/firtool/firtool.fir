@@ -56,7 +56,7 @@ circuit test_mod :
 ; VERILOG-NEXT : endmodule
 
 ; MLIRLOWER-LABEL:   rtl.module @implicitTrunc(%inp_1: i1, %inp_2: i5) -> (%out1: i3, %out2: i3) {
-; MLIRLOWER-NEXT :     %c0_i5 = comb.constant(0 : i5) : i5
+; MLIRLOWER-NEXT :     %c0_i5 = comb.constant 0 : i5
 ; MLIRLOWER-NEXT :     %.out1.output = sv.wire  : !rtl.inout<i3>
 ; MLIRLOWER-NEXT :     %.out2.output = sv.wire  : !rtl.inout<i3>
 ; MLIRLOWER-NEXT :     %0 = comb.sext %inp_2 : (i5) -> i6
