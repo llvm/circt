@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_COMB_COMBVISITORS_H
 
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/RTL/RTLOps.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
@@ -27,7 +28,7 @@ public:
   ResultType dispatchCombinationalVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<ConstantOp,
+        .template Case<rtl::ConstantOp,
                        // Arithmetic and Logical Binary Operations.
                        AddOp, SubOp, MulOp, DivUOp, DivSOp, ModUOp, ModSOp,
                        ShlOp, ShrUOp, ShrSOp,
@@ -81,7 +82,7 @@ public:
   }
 
   // Basic nodes.
-  HANDLE(ConstantOp, Unhandled);
+  HANDLE(rtl::ConstantOp, Unhandled);
 
   // Arithmetic and Logical Binary Operations.
   HANDLE(AddOp, Binary);
