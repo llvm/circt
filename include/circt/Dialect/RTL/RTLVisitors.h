@@ -28,6 +28,7 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<
+            ConstantOp,
             // Array operations
             ArraySliceOp, ArrayCreateOp, ArrayConcatOp, ArrayGetOp,
             // Struct operations
@@ -58,6 +59,7 @@ public:
                                                                     args...);  \
   }
 
+  HANDLE(ConstantOp, Unhandled);
   HANDLE(StructCreateOp, Unhandled);
   HANDLE(StructExtractOp, Unhandled);
   HANDLE(StructInjectOp, Unhandled);

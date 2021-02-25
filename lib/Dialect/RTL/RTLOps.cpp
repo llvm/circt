@@ -35,7 +35,7 @@ bool rtl::isCombinatorial(Operation *op) {
 //===----------------------------------------------------------------------===//
 
 static void printConstantOp(OpAsmPrinter &p, ConstantOp &op) {
-  p << "rtl.constant";
+  p << "rtl.constant ";
   p.printAttribute(op.valueAttr());
   p.printOptionalAttrDict(op.getAttrs(), /*elidedAttrs=*/{"value"});
 }
@@ -56,7 +56,7 @@ static LogicalResult verifyConstantOp(ConstantOp constant) {
   // If the result type has a bitwidth, then the attribute must match its width.
   if (constant.value().getBitWidth() != constant.getType().getWidth())
     return constant.emitError(
-        "rtl.constantattribute bitwidth doesn't match return type");
+        "rtl.constant attribute bitwidth doesn't match return type");
 
   return success();
 }

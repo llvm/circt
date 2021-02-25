@@ -28,8 +28,7 @@ public:
   ResultType dispatchCombinationalVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<rtl::ConstantOp,
-                       // Arithmetic and Logical Binary Operations.
+        .template Case<// Arithmetic and Logical Binary Operations.
                        AddOp, SubOp, MulOp, DivUOp, DivSOp, ModUOp, ModSOp,
                        ShlOp, ShrUOp, ShrSOp,
                        // Bitwise operations
@@ -81,8 +80,6 @@ public:
                                                                   args...);    \
   }
 
-  // Basic nodes.
-  HANDLE(rtl::ConstantOp, Unhandled);
 
   // Arithmetic and Logical Binary Operations.
   HANDLE(AddOp, Binary);
