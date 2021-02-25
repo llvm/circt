@@ -756,9 +756,10 @@ void MuxOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       // mux(a, 11...1, b) -> or(a, b)
       if (matchPattern(op.trueValue(), m_RConstant(value))) {
         if (value.isAllOnesValue()) {
-          auto cond = width == 1 ? op.cond()
-                                 : rewriter.createOrFold<SExtOp>(
-                                       op.getLoc(), op.getType(), op.cond());
+          auto cond = op.cond();
+          if (width > 1)
+            cond = rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(),
+                                                 op.cond());
           Value newOperands[] = {cond, op.falseValue()};
           rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
           return success();
@@ -768,9 +769,10 @@ void MuxOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       // mux(a, b, 0) -> and(a, b)
       if (matchPattern(op.falseValue(), m_RConstant(value))) {
         if (value.isNullValue()) {
-          auto cond = width == 1 ? op.cond()
-                                 : rewriter.createOrFold<SExtOp>(
-                                       op.getLoc(), op.getType(), op.cond());
+          auto cond = op.cond();
+          if (width > 1)
+            cond = rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(),
+                                                 op.cond());
           Value newOperands[] = {cond, op.trueValue()};
           rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
           return success();
