@@ -765,3 +765,39 @@ rtl.module @shrs_fold2() -> (i12) {
   %0 = comb.shrs %c-5_i12, %c10_i12 : i12
   rtl.output %0 : i12
 }
+// CHECK-LABEL:  rtl.module @icmp_fold_1bit_eq1(%arg: i1) -> (i1) {
+// CHECK-NEXT:    %true = comb.constant true
+// CHECK-NEXT:    %0 = comb.xor %arg, %true : i1
+// CHECK-NEXT:    rtl.output %0 : i1
+      
+rtl.module @icmp_fold_1bit_eq1(%arg: i1) -> (i1) {
+  %c1 = comb.constant 0 : i1
+  %0 = comb.icmp eq  %c1, %arg : i1
+  rtl.output %0 : i1
+}
+ // CHECK-LABEL: rtl.module @icmp_fold_1bit_eq2(%arg: i1) -> (i1) {
+ // CHECK-NEXT:    rtl.output %arg : i1
+
+rtl.module @icmp_fold_1bit_eq2(%arg: i1) -> (i1) {
+  %c1 = comb.constant 1 : i1
+  %0 = comb.icmp eq   %c1, %arg : i1
+  rtl.output %0 : i1
+}
+// CHECK-LABEL:  rtl.module @icmp_fold_1bit_neq1(%arg: i1) -> (i1) {
+ // CHECK-NEXT:    rtl.output %arg : i1
+      
+rtl.module @icmp_fold_1bit_neq1(%arg: i1) -> (i1) {
+  %c1 = comb.constant 0 : i1
+  %0 = comb.icmp ne  %c1, %arg : i1
+  rtl.output %0 : i1
+}
+ // CHECK-LABEL: rtl.module @icmp_fold_1bit_neq2(%arg: i1) -> (i1) {
+// CHECK-NEXT:    %true = comb.constant true
+// CHECK-NEXT:    %0 = comb.xor %arg, %true : i1
+// CHECK-NEXT:    rtl.output %0 : i1
+
+rtl.module @icmp_fold_1bit_neq2(%arg: i1) -> (i1) {
+  %c1 = comb.constant 1 : i1
+  %0 = comb.icmp ne  %c1, %arg  : i1
+  rtl.output %0 : i1
+}
