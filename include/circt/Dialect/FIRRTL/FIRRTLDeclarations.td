@@ -134,7 +134,6 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
   let arguments = (ins ClockType:$clockVal, OptionalAttr<StrAttr>:$name);
   let results = (outs PassiveType:$result);
 
-  let hasCanonicalizer = 1;
   let assemblyFormat =
     "operands attr-dict `:` functional-type(operands, $result)";
 }
