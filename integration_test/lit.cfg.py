@@ -85,6 +85,12 @@ if config.verilator_path != "":
       'VERILATOR_PATH', config.verilator_path)
 
 # Enable Questa if it has been detected.
+if config.quartus_path != "":
+  tool_dirs.append(os.path.dirname(config.quartus_path))
+  tools.append('quartus')
+  config.available_features.add('quartus')
+
+# Enable Questa if it has been detected.
 if config.questa_path != "":
   config.available_features.add('questa')
   config.available_features.add('ieee-sim')
