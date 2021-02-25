@@ -766,43 +766,6 @@ rtl.module @shrs_fold2() -> (i12) {
   rtl.output %0 : i12
 }
 
-// CHECK-LABEL:  rtl.module @icmp_fold_1bit_eq1(%arg: i1) -> (i1) {
-// CHECK-NEXT:    %true = comb.constant true
-// CHECK-NEXT:    %0 = comb.xor %arg, %true : i1
-// CHECK-NEXT:    rtl.output %0 : i1
-      
-rtl.module @icmp_fold_1bit_eq1(%arg: i1) -> (i1) {
-  %c1 = comb.constant 0 : i1
-  %0 = comb.icmp eq  %c1, %arg : i1
-  rtl.output %0 : i1
-}
- // CHECK-LABEL: rtl.module @icmp_fold_1bit_eq2(%arg: i1) -> (i1) {
- // CHECK-NEXT:    rtl.output %arg : i1
-
-rtl.module @icmp_fold_1bit_eq2(%arg: i1) -> (i1) {
-  %c1 = comb.constant 1 : i1
-  %0 = comb.icmp eq   %c1, %arg : i1
-  rtl.output %0 : i1
-}
-// CHECK-LABEL:  rtl.module @icmp_fold_1bit_neq1(%arg: i1) -> (i1) {
- // CHECK-NEXT:    rtl.output %arg : i1
-      
-rtl.module @icmp_fold_1bit_neq1(%arg: i1) -> (i1) {
-  %c1 = comb.constant 0 : i1
-  %0 = comb.icmp ne  %c1, %arg : i1
-  rtl.output %0 : i1
-}
- // CHECK-LABEL: rtl.module @icmp_fold_1bit_neq2(%arg: i1) -> (i1) {
-// CHECK-NEXT:    %true = comb.constant true
-// CHECK-NEXT:    %0 = comb.xor %arg, %true : i1
-// CHECK-NEXT:    rtl.output %0 : i1
-
-rtl.module @icmp_fold_1bit_neq2(%arg: i1) -> (i1) {
-  %c1 = comb.constant 1 : i1
-  %0 = comb.icmp ne  %c1, %arg  : i1
-  rtl.output %0 : i1
-}
-
 // CHECK-LABEL: rtl.module @mux_canonicalize0(%a: i1, %b: i1) -> (i1) {
 // CHECK-NEXT:   %0 = comb.or %a, %b : i1
 // CHECK-NEXT: rtl.output %0 : i1
@@ -839,4 +802,20 @@ rtl.module @mux_canonicalize3(%a: i1, %b: i4) -> (i4) {
   %c0_i4 = comb.constant 0 : i4
   %0 = comb.mux %a, %b, %c0_i4 : i4
   rtl.output %0 : i4
+}
+
+// CHECK-LABEL: rtl.module @icmp_fold_1bit_eq1(%arg: i1) -> (i1, i1, i1, i1) {
+// CHECK-NEXT:   %true = comb.constant true
+// CHECK-NEXT:   %0 = comb.xor %arg, %true : i1
+// CHECK-NEXT:   %1 = comb.xor %arg, %true : i1
+// CHECK-NEXT:   rtl.output %0, %arg, %arg, %1 : i1, i1, i1, i1
+// CHECK-NEXT:   }  
+rtl.module @icmp_fold_1bit_eq1(%arg: i1) -> (i1, i1, i1, i1) {
+  %zero = comb.constant 0 : i1
+  %one = comb.constant 1 : i1
+  %0 = comb.icmp eq  %zero, %arg : i1
+  %1 = comb.icmp eq   %one, %arg : i1
+  %2 = comb.icmp ne  %zero, %arg : i1
+  %3 = comb.icmp ne   %one, %arg : i1
+  rtl.output %0, %1, %2, %3 : i1, i1, i1, i1
 }

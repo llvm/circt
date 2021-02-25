@@ -960,7 +960,8 @@ struct ICmpCanonicalizeConstant final : public OpRewritePattern<ICmpOp> {
           rewriter.replaceOpWithNewOp<XorOp>(op, op.lhs(),
                                              getConstant(APInt(1, 1)));
           return success();
-        } else if (rhs.isAllOnesValue()) {
+        }
+        if (rhs.isAllOnesValue()) {
           // x == 1 -> x
           rewriter.replaceOp(op, op.lhs());
           return success();
@@ -973,7 +974,8 @@ struct ICmpCanonicalizeConstant final : public OpRewritePattern<ICmpOp> {
           // x != 0 -> x
           rewriter.replaceOp(op, op.lhs());
           return success();
-        } else if (rhs.isAllOnesValue()) {
+        }
+        if (rhs.isAllOnesValue()) {
           // x != 1 -> x ^ 1
           rewriter.replaceOpWithNewOp<XorOp>(op, op.lhs(),
                                              getConstant(APInt(1, 1)));
