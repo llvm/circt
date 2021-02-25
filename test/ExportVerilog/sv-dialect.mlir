@@ -216,7 +216,7 @@ rtl.module @exprInlineTestIssue439(%clk: i1) {
 
   // CHECK: always @(posedge clk) begin
   sv.always posedge %clk {
-    // CHECK: logic [15:0] _T_0 = _T[15:0];
+    // CHECK: automatic logic [15:0] _T_0 = _T[15:0];
     %e = comb.extract %c from 0 : (i32) -> i16
     %f = comb.add %e, %e : i16
     sv.fwrite "%d"(%f) : i16
