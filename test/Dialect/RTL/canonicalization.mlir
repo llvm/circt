@@ -804,14 +804,14 @@ rtl.module @mux_canonicalize3(%a: i1, %b: i4) -> (i4) {
   rtl.output %0 : i4
 }
 // CHECK-LABEL: rtl.module @icmp_fold_1bit_eq1(%arg: i1) -> (i1, i1, i1, i1) {
-// CHECK-NEXT:   %true = comb.constant true
+// CHECK-NEXT:   %true = comb.rtl true
 // CHECK-NEXT:   %0 = comb.xor %arg, %true : i1
 // CHECK-NEXT:   %1 = comb.xor %arg, %true : i1
 // CHECK-NEXT:   rtl.output %0, %arg, %arg, %1 : i1, i1, i1, i1
 // CHECK-NEXT:   }  
 rtl.module @icmp_fold_1bit_eq1(%arg: i1) -> (i1, i1, i1, i1) {
-  %zero = comb.constant 0 : i1
-  %one = comb.constant 1 : i1
+  %zero = rtl.constant 0 : i1
+  %one = rtl.constant 1 : i1
   %0 = comb.icmp eq  %zero, %arg : i1
   %1 = comb.icmp eq   %one, %arg : i1
   %2 = comb.icmp ne  %zero, %arg : i1
