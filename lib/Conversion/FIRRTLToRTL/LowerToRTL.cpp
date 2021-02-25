@@ -908,7 +908,7 @@ private:
   /// associated with it.  FIRRTL has sequential semantics and we must lower
   /// sequential procedural statements to the same always block to maintain that
   /// ordering.
-  DenseMap<Value, sv::AlwaysOp> proceduralBlocks;
+  llvm::SmallDenseMap<Value, sv::AlwaysOp> proceduralBlocks;
 
   /// This is true if we've emitted `INIT_RANDOM_PROLOG_ into an initial block
   /// in this module already.
