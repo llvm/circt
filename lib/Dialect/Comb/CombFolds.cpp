@@ -952,6 +952,36 @@ struct ICmpCanonicalizeConstant final : public OpRewritePattern<ICmpOp> {
           return replaceWithConstantI1(1);
         // x >= c -> x > (c-1)
         return replaceWith(ICmpPredicate::ugt, op.lhs(), getConstant(rhs - 1));
+      case ICmpPredicate::eq:
+        if (rhs.getBitWidth() != 1)
+          break;
+        if (rhs.isNullValue()) {
+          // x == 0 -> x ^ 1
+          rewriter.replaceOpWithNewOp<XorOp>(op, op.lhs(),
+                                             getConstant(APInt(1, 1)));
+          return success();
+        }
+        if (rhs.isAllOnesValue()) {
+          // x == 1 -> x
+          rewriter.replaceOp(op, op.lhs());
+          return success();
+        }
+        break;
+      case ICmpPredicate::ne:
+        if (rhs.getBitWidth() != 1)
+          break;
+        if (rhs.isNullValue()) {
+          // x != 0 -> x
+          rewriter.replaceOp(op, op.lhs());
+          return success();
+        }
+        if (rhs.isAllOnesValue()) {
+          // x != 1 -> x ^ 1
+          rewriter.replaceOpWithNewOp<XorOp>(op, op.lhs(),
+                                             getConstant(APInt(1, 1)));
+          return success();
+        }
+        break;
       default:
         break;
       }
