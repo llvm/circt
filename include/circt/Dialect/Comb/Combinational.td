@@ -272,6 +272,7 @@ def MuxOp : CombOp<"mux",
     "$cond `,` $trueValue `,` $falseValue attr-dict `:` type($result)";
   
   let hasFolder = true;
+  let hasCanonicalizer = true;
 
   let builders = [
     OpBuilderDAG<(ins "Value":$cond, "Value":$trueValue, "Value":$falseValue),

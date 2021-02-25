@@ -734,6 +734,47 @@ OpFoldResult MuxOp::fold(ArrayRef<Attribute> constants) {
   return {};
 }
 
+void MuxOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                        MLIRContext *context) {
+  struct Folder final : public OpRewritePattern<MuxOp> {
+    using OpRewritePattern::OpRewritePattern;
+    LogicalResult matchAndRewrite(MuxOp op,
+                                  PatternRewriter &rewriter) const override {
+      auto width = op.getType().cast<IntegerType>().getWidth();
+
+      APInt value;
+
+      // mux(a, 11...1, b) -> or(a, b)
+      if (matchPattern(op.trueValue(), m_RConstant(value))) {
+        if (value.isAllOnesValue()) {
+          auto cond = op.cond();
+          if (width > 1)
+            cond = rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(),
+                                                 op.cond());
+          Value newOperands[] = {cond, op.falseValue()};
+          rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
+          return success();
+        }
+      }
+
+      // mux(a, b, 0) -> and(a, b)
+      if (matchPattern(op.falseValue(), m_RConstant(value))) {
+        if (value.isNullValue()) {
+          auto cond = op.cond();
+          if (width > 1)
+            cond = rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(),
+                                                 op.cond());
+          Value newOperands[] = {cond, op.trueValue()};
+          rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
+          return success();
+        }
+      }
+      return failure();
+    }
+  };
+  results.insert<Folder>(context);
+}
+
 //===----------------------------------------------------------------------===//
 // ICmpOp
 //===----------------------------------------------------------------------===//

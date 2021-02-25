@@ -765,3 +765,41 @@ rtl.module @shrs_fold2() -> (i12) {
   %0 = comb.shrs %c-5_i12, %c10_i12 : i12
   rtl.output %0 : i12
 }
+
+// CHECK-LABEL: rtl.module @mux_canonicalize0(%a: i1, %b: i1) -> (i1) {
+// CHECK-NEXT:   %0 = comb.or %a, %b : i1
+// CHECK-NEXT: rtl.output %0 : i1
+rtl.module @mux_canonicalize0(%a: i1, %b: i1) -> (i1) {
+  %true = comb.constant true
+  %0 = comb.mux %a, %true, %b : i1
+  rtl.output %0 : i1
+}
+
+// CHECK-LABEL: rtl.module @mux_canonicalize1(%a: i1, %b: i1) -> (i1) {
+// CHECK-NEXT:   %0 = comb.and %a, %b : i1
+// CHECK-NEXT: rtl.output %0 : i1
+rtl.module @mux_canonicalize1(%a: i1, %b: i1) -> (i1) {
+  %false = comb.constant false
+  %0 = comb.mux %a, %b, %false : i1
+  rtl.output %0 : i1
+}
+
+// CHECK-LABEL: rtl.module @mux_canonicalize2(%a: i1, %b: i4) -> (i4) {
+// CHECK-NEXT:   %0 = comb.sext %a : (i1) -> i4
+// CHECK-NEXT:   %1 = comb.or %0, %b : i4
+// CHECK-NEXT: rtl.output %1 : i4
+rtl.module @mux_canonicalize2(%a: i1, %b: i4) -> (i4) {
+  %c-1_i4 = comb.constant -1 : i4
+  %0 = comb.mux %a, %c-1_i4, %b : i4
+  rtl.output %0 : i4
+}
+
+// CHECK-LABEL: rtl.module @mux_canonicalize3(%a: i1, %b: i4) -> (i4) {
+// CHECK-NEXT:   %0 = comb.sext %a : (i1) -> i4
+// CHECK-NEXT:   %1 = comb.and %0, %b : i4
+// CHECK-NEXT: rtl.output %1 : i4
+rtl.module @mux_canonicalize3(%a: i1, %b: i4) -> (i4) {
+  %c0_i4 = comb.constant 0 : i4
+  %0 = comb.mux %a, %b, %c0_i4 : i4
+  rtl.output %0 : i4
+}
