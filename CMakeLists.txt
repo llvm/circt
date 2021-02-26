@@ -153,6 +153,31 @@ else()
 endif()
 
 #-------------------------------------------------------------------------------
+# Quartus Configuration
+#-------------------------------------------------------------------------------
+
+# If Quartus hasn't been explicitly disabled, find it.
+option(QUARTUS_DISABLE "Disable the Quartus synthesis tests.")
+if (QUARTUS_DISABLE)
+  message(STATUS "Disabling Quartus tests.")
+else()
+  if (EXISTS ${QUARTUS_PATH})
+    message(STATUS "Setting Quartus path to ${QUARTUS_PATH}.")
+  else()
+    # Search for Quartus's `quartus` command.
+    find_program(QUARTUS_PATH "quartus")
+    if(EXISTS ${QUARTUS_PATH})
+      # Then strip the filename.
+      get_filename_component(QUARTUS_PATH ${QUARTUS_PATH} DIRECTORY)
+      message(STATUS "Found Quartus at ${QUARTUS_PATH}.")
+    else()
+      set(QUARTUS_PATH "")
+      message(STATUS "Did not find Quartus.")
+    endif()
+  endif()
+endif()
+
+#-------------------------------------------------------------------------------
 # Questa Configuration
 #-------------------------------------------------------------------------------
 
