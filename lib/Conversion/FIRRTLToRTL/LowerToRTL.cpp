@@ -1369,16 +1369,6 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   return success();
 }
 
-namespace {
-/// This represents a flattened bundle field element.
-struct FlatBundleFieldEntry {
-  /// This is the underlying ground type of the field.
-  Type type;
-  /// This is a field name with any suffixes to make it unique.
-  std::string name;
-};
-} // end anonymous namespace.
-
 LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   StringRef memName = "mem";
   if (op.name().hasValue())
