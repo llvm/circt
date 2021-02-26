@@ -370,20 +370,23 @@ void FIRRTLTypesLowering::visitDecl(RegOp op) {
 
   // Attempt to get the bundle types, potentially unwrapping an outer flip type
   // that wraps the whole bundle.
-  BundleType resultType = getCanonicalBundleType(result.getType());
+  FIRRTLType resultType = getCanonicalAggregateType(result.getType());
 
   // If the reg is not a bundle, there is nothing to do.
   if (!resultType)
     return;
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenBundleTypes(resultType, "", false, fieldTypes);
+  flattenType(resultType, "", false, fieldTypes);
 
   // Loop over the leaf aggregates.
   for (auto field : fieldTypes) {
+    SmallString<16> loweredName(op.nameAttr().getValue());
+    loweredName += field.suffix;
     setBundleLowering(
         result, StringRef(field.suffix).drop_front(1),
-        builder->create<RegOp>(field.getPortType(), op.clockVal()));
+        builder->create<RegOp>(field.getPortType(), op.clockVal(),
+                               builder->getStringAttr(loweredName)));
   }
 
   // Remember to remove the original op.
