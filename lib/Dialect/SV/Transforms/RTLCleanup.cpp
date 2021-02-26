@@ -137,25 +137,25 @@ void RTLCleanupPass::runOnGraphRegion(Region &region, bool shallow) {
     // Recursively process any regions in the op before we visit it.
     if (!shallow && op.getNumRegions() != 0)
       runOnRegionsInOp(op);
-
-    // Merge alwaysff operations by hashing them to check to see if we've
-    // already encountered one.  If so, merge them and reprocess the body.
-    if (auto alwaysOp = dyn_cast<sv::AlwaysFFOp>(op)) {
+    // Merge alwaysff and always operations by hashing them to check to see if
+    // we've already encountered one.  If so, merge them and reprocess the body.
+    if (isa<sv::AlwaysOp, sv::AlwaysFFOp>(op)) {
       // Merge identical alwaysff's together and delete the old operation.
-      auto itAndInserted = alwaysFFOpsSeen.insert(alwaysOp);
+      auto itAndInserted = alwaysFFOpsSeen.insert(&op);
       if (itAndInserted.second)
         continue;
       auto *existingAlways = *itAndInserted.first;
 
-      mergeOperationsIntoFrom(alwaysOp, existingAlways);
+      mergeOperationsIntoFrom(&op, existingAlways);
       existingAlways->erase();
-      *itAndInserted.first = alwaysOp;
+      *itAndInserted.first = &op;
       anythingChanged = true;
 
       // Reprocess the merged body because this may have uncovered other
       // simplifications.
-      runOnGraphRegion(alwaysOp->getRegion(0), /*shallow=*/true);
-      runOnGraphRegion(alwaysOp->getRegion(1), /*shallow=*/true);
+      for (auto &reg : op.getRegions()) {
+        runOnGraphRegion(reg, /*shallow=*/true);
+      }
       continue;
     }
 

@@ -214,3 +214,32 @@ rtl.module @initial_merge(%arg0: i1) {
   }
   rtl.output
 }
+
+//CHECK-LABEL: rtl.module @always_basic(%arg0: i1, %arg1: i1) {
+//CHECK-NEXT:   sv.fwrite "Middle\0A"
+//CHECK-NEXT:   sv.always   posedge %arg0   {
+//CHECK-NEXT:     sv.fwrite "A1"
+//CHECK-NEXT:     sv.fwrite "A2"
+//CHECK-NEXT:   }
+//CHECK-NEXT:   sv.always   posedge %arg1   {
+//CHECK-NEXT:     sv.fwrite "B1"
+//CHECK-NEXT:     sv.fwrite "B2"
+//CHECK-NEXT:   }
+//CHECK-NEXT:   rtl.output
+//CHECK-NEXT: }
+rtl.module @always_basic(%arg0: i1, %arg1: i1) {
+  sv.always posedge %arg0 {
+    sv.fwrite "A1"
+  }
+  sv.always posedge %arg1 {
+    sv.fwrite "B1"
+  }
+  sv.fwrite "Middle\n"
+  sv.always posedge %arg0 {
+    sv.fwrite "A2"
+  }
+  sv.always posedge %arg1 {
+    sv.fwrite "B2"
+  }
+  rtl.output
+}
