@@ -21,6 +21,7 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Target/LLVMIR.h"
+#include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/Passes.h"
 
 #include "llvm/Support/InitLLVM.h"
@@ -163,6 +164,7 @@ int main(int argc, char **argv) {
   // Load the dialects
   context
       .loadDialect<llhd::LLHDDialect, LLVM::LLVMDialect, StandardOpsDialect>();
+  mlir::registerLLVMDialectTranslation(context);
 
   OwningModuleRef module(parseSourceFile(mgr, &context));
 
