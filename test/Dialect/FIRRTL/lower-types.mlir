@@ -294,3 +294,20 @@ module  {
     }
   }
 }
+
+  firrtl.circuit "RegBundle" {
+//CHECK-LABEL: firrtl.module @RegBundle(%a_a: !firrtl.uint<1>, %clk: !firrtl.clock, %b_a: !firrtl.flip<uint<1>>) {
+//CHECK-NEXT: %0 = firrtl.reg %clk : (!firrtl.clock) -> !firrtl.uint<1>
+//CHECK-NEXT: firrtl.connect %0, %a_a : !firrtl.uint<1>, !firrtl.uint<1>
+//CHECK-NEXT: firrtl.connect %b_a, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    firrtl.module @RegBundle(%a: !firrtl.bundle<a: uint<1>>, %clk: !firrtl.clock, %b: !firrtl.flip<bundle<a: uint<1>>>) {
+      %x = firrtl.reg %clk {name = "x"} : (!firrtl.clock) -> !firrtl.bundle<a: uint<1>>
+      %0 = firrtl.subfield %x("a") : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
+      %1 = firrtl.subfield %a("a") : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
+      firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+      %2 = firrtl.subfield %b("a") : (!firrtl.flip<bundle<a: uint<1>>>) -> !firrtl.flip<uint<1>>
+      %3 = firrtl.subfield %x("a") : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
+      firrtl.connect %2, %3 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    }
+  
+}
