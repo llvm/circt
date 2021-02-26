@@ -982,8 +982,6 @@ struct ICmpCanonicalizeConstant final : public OpRewritePattern<ICmpOp> {
           return success();
         }
         break;
-      default:
-        break;
       }
     }
 
