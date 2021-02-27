@@ -27,7 +27,7 @@ module {
 
     rtl.instance "rcvr2" @Rcvr(%ifaceInPort) : (!sv.modport<@data_vr::@data_in>) -> ()
 
-    %c1 = comb.constant 1 : i1
+    %c1 = rtl.constant 1 : i1
     sv.interface.signal.assign %iface(@data_vr::@valid) = %c1 : i1
 
     sv.always posedge %clk {

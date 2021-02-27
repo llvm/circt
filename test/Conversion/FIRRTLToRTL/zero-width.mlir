@@ -7,8 +7,8 @@ module attributes {firrtl.mainModule = "Simple"} {
     %uin0c = firrtl.wire : !firrtl.uint<0>
     %uin3c = firrtl.stdIntCast %uin3 : (i3) -> !firrtl.uint<3>
   
-    // CHECK-NEXT: comb.constant 0 : i3
-    // CHECK-NEXT: [[MULZERO:%.+]] = comb.constant 0 : i3
+    // CHECK-NEXT: rtl.constant 0 : i3
+    // CHECK-NEXT: [[MULZERO:%.+]] = rtl.constant 0 : i3
     %0 = firrtl.mul %uin0c, %uin3c : (!firrtl.uint<0>, !firrtl.uint<3>) -> !firrtl.uint<3>
     %c0 = firrtl.stdIntCast %0 : (!firrtl.uint<3>) -> i3
 
@@ -21,19 +21,19 @@ module attributes {firrtl.mainModule = "Simple"} {
     // Lowers to nothing.  Issue #429.
     %div = firrtl.div %node, %uin3c : (!firrtl.uint<0>, !firrtl.uint<3>) -> !firrtl.uint<0>
 
-    // CHECK-NEXT: %c0_i4 = comb.constant 0 : i4
-    // CHECK-NEXT: %false = comb.constant false
+    // CHECK-NEXT: %c0_i4 = rtl.constant 0 : i4
+    // CHECK-NEXT: %false = rtl.constant false
     // CHECK-NEXT: [[UIN3EXT:%.+]] = comb.concat %false, %uin3 : (i1, i3) -> i4
     // CHECK-NEXT: [[ADDRES:%.+]] = comb.add %c0_i4, [[UIN3EXT]] : i4
     %1 = firrtl.add %uin0c, %uin3c : (!firrtl.uint<0>, !firrtl.uint<3>) -> !firrtl.uint<4>
     %c1 = firrtl.stdIntCast %1 : (!firrtl.uint<4>) -> i4
 
-    // CHECK-NEXT: [[SHL:%.+]] = comb.constant 0 : i4
+    // CHECK-NEXT: [[SHL:%.+]] = rtl.constant 0 : i4
     %2 = firrtl.shl %node, 4 : (!firrtl.uint<0>) -> !firrtl.uint<4>
     %c2 = firrtl.stdIntCast %2 : (!firrtl.uint<4>) -> i4
 
     // Issue #436
-    // CHECK: [[CMP:%true.*]] = comb.constant true
+    // CHECK: [[CMP:%true.*]] = rtl.constant true
     %3 = firrtl.eq %uin0c, %uin0c : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<1>
     %c3 = firrtl.stdIntCast %3 : (!firrtl.uint<1>) -> i1
 
@@ -46,13 +46,13 @@ module attributes {firrtl.mainModule = "Simple"} {
     %uin0c = firrtl.wire : !firrtl.uint<0>
     %uin3c = firrtl.stdIntCast %uin3 : (i3) -> !firrtl.uint<3>
   
-    // CHECK-NEXT: = comb.constant true
+    // CHECK-NEXT: = rtl.constant true
     %0 = firrtl.andr %uin0c : (!firrtl.uint<0>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: = comb.constant false
+    // CHECK-NEXT: = rtl.constant false
     %1 = firrtl.xorr %uin0c : (!firrtl.uint<0>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: = comb.constant false
+    // CHECK-NEXT: = rtl.constant false
     %2 = firrtl.orr %uin0c : (!firrtl.uint<0>) -> !firrtl.uint<1>
 
     // Lowers to the uin3 value.

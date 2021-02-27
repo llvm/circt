@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Dialect/RTL/RTLTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -49,7 +50,7 @@ Operation *CombDialect::materializeConstant(OpBuilder &builder, Attribute value,
   // Integer constants.
   if (auto intType = type.dyn_cast<IntegerType>())
     if (auto attrValue = value.dyn_cast<IntegerAttr>())
-      return builder.create<ConstantOp>(loc, type, attrValue);
+      return builder.create<rtl::ConstantOp>(loc, type, attrValue);
 
   return nullptr;
 }

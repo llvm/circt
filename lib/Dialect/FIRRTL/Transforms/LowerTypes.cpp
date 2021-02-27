@@ -35,47 +35,54 @@ struct FlatBundleFieldEntry {
 };
 } // end anonymous namespace
 
-// Convert a nested bundle of fields into a flat list of fields.  This is used
+// Convert an aggregate type into a flat list of fields.  This is used
 // when working with instances and mems to flatten them.
-static void flattenBundleTypes(FIRRTLType type, StringRef suffixSoFar,
-                               bool isFlipped,
-                               SmallVectorImpl<FlatBundleFieldEntry> &results) {
+static void flattenType(FIRRTLType type, StringRef suffixSoFar, bool isFlipped,
+                        SmallVectorImpl<FlatBundleFieldEntry> &results) {
   if (auto flip = type.dyn_cast<FlipType>())
-    return flattenBundleTypes(flip.getElementType(), suffixSoFar, !isFlipped,
-                              results);
+    return flattenType(flip.getElementType(), suffixSoFar, !isFlipped, results);
 
-  // In the base case we record this field.
-  auto bundle = type.dyn_cast<BundleType>();
-  if (!bundle) {
-    results.push_back({type, suffixSoFar.str(), isFlipped});
-    return;
-  }
+  TypeSwitch<FIRRTLType>(type)
+      .Case<BundleType>([&](auto bundle) {
+        SmallString<16> tmpSuffix(suffixSoFar);
 
-  SmallString<16> tmpSuffix(suffixSoFar);
+        // Otherwise, we have a bundle type.  Break it down.
+        for (auto &elt : bundle.getElements()) {
+          // Construct the suffix to pass down.
+          tmpSuffix.resize(suffixSoFar.size());
+          tmpSuffix.push_back('_');
+          tmpSuffix.append(elt.name.strref());
+          // Recursively process subelements.
+          flattenType(elt.type, tmpSuffix, isFlipped, results);
+        }
+        return;
+      })
+      .Case<FVectorType>([&](auto vector) {
+        for (size_t i = 0, e = vector.getNumElements(); i != e; ++i)
+          flattenType(vector.getElementType(),
+                      (suffixSoFar + "_" + std::to_string(i)).str(), isFlipped,
+                      results);
+        return;
+      })
+      .Default([&](auto) {
+        results.push_back({type, suffixSoFar.str(), isFlipped});
+        return;
+      });
 
-  // Otherwise, we have a bundle type.  Break it down.
-  for (auto &elt : bundle.getElements()) {
-    // Construct the suffix to pass down.
-    tmpSuffix.resize(suffixSoFar.size());
-    tmpSuffix.push_back('_');
-    tmpSuffix.append(elt.name.strref());
-    // Recursively process subelements.
-    flattenBundleTypes(elt.type, tmpSuffix, isFlipped, results);
-  }
+  return;
 }
 
-// Helper to peel off the outer most flip type from a bundle that has all flips
-// canonicalized to the outer level, or just return the bundle directly. For any
-// other type, returns null.
-static BundleType getCanonicalBundleType(Type originalType) {
-  BundleType originalBundleType;
-
+// Helper to peel off the outer most flip type from an aggregate type that has
+// all flips canonicalized to the outer level, or just return the bundle
+// directly. For any ground type, returns null.
+static FIRRTLType getCanonicalAggregateType(Type originalType) {
+  FIRRTLType unflipped = originalType.dyn_cast<FIRRTLType>();
   if (auto flipType = originalType.dyn_cast<FlipType>())
-    originalBundleType = flipType.getElementType().dyn_cast<BundleType>();
-  else
-    originalBundleType = originalType.dyn_cast<BundleType>();
+    unflipped = flipType.getElementType();
 
-  return originalBundleType;
+  return TypeSwitch<FIRRTLType, FIRRTLType>(unflipped)
+      .Case<BundleType, FVectorType>([](auto a) { return a; })
+      .Default([](auto) { return nullptr; });
 }
 
 //===----------------------------------------------------------------------===//
@@ -97,6 +104,7 @@ struct FIRRTLTypesLowering : public LowerFIRRTLTypesBase<FIRRTLTypesLowering>,
   void visitDecl(InstanceOp op);
   void visitDecl(MemOp op);
   void visitExpr(SubfieldOp op);
+  void visitExpr(SubindexOp op);
   void visitStmt(ConnectOp op);
   void visitExpr(InvalidValuePrimOp op);
 
@@ -174,9 +182,10 @@ void FIRRTLTypesLowering::lowerArg(BlockArgument arg, FIRRTLType type) {
 
   // Flatten any bundle types.
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenBundleTypes(type, "", false, fieldTypes);
+  flattenType(type, "", false, fieldTypes);
 
   for (auto field : fieldTypes) {
+
     // Create new block arguments.
     auto type = field.getPortType();
     auto newValue = addArg(type, argNumber, field.suffix);
@@ -214,8 +223,8 @@ void FIRRTLTypesLowering::visitDecl(InstanceOp op) {
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-    flattenBundleTypes(op.getType(i).cast<FIRRTLType>(), op.getPortNameStr(i),
-                       /*isFlip*/ false, fieldTypes);
+    flattenType(op.getType(i).cast<FIRRTLType>(), op.getPortNameStr(i),
+                /*isFlip*/ false, fieldTypes);
 
     for (auto field : fieldTypes) {
       // Store the flat type for the new bundle type.
@@ -264,7 +273,7 @@ void FIRRTLTypesLowering::visitDecl(MemOp op) {
   auto type = op.getDataType();
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenBundleTypes(type, "", false, fieldTypes);
+  flattenType(type, "", false, fieldTypes);
 
   // Mutable store of the types of the ports of a new memory. This is
   // cleared and re-used.
@@ -371,7 +380,45 @@ void FIRRTLTypesLowering::visitExpr(SubfieldOp op) {
 
   // Flatten any nested bundle types the usual way.
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenBundleTypes(resultType, fieldname, false, fieldTypes);
+  flattenType(resultType, fieldname, false, fieldTypes);
+
+  for (auto field : fieldTypes) {
+    // Look up the mapping for this suffix.
+    auto newValue = getBundleLowering(input, field.suffix);
+
+    // The prefix is the field name and possibly field separator.
+    auto prefixSize = fieldname.size();
+    if (field.suffix.size() > fieldname.size())
+      prefixSize += 1;
+
+    // Get the remaining field suffix by removing the prefix.
+    auto partialSuffix = StringRef(field.suffix).drop_front(prefixSize);
+
+    // If we are at the leaf of a bundle.
+    if (partialSuffix.empty())
+      // Replace the result with the flattened value.
+      op.replaceAllUsesWith(newValue);
+    else
+      // Map the partial suffix for the result value to the flattened value.
+      setBundleLowering(op, partialSuffix, newValue);
+  }
+
+  // Remember to remove the original op.
+  opsToRemove.push_back(op);
+}
+
+// This is currently the same lowering as SubfieldOp, but using a fieldname
+// derived from the fixed index.
+//
+// TODO: Unify this and SubfieldOp handling.
+void FIRRTLTypesLowering::visitExpr(SubindexOp op) {
+  Value input = op.input();
+  std::string fieldname = std::to_string(op.index());
+  FIRRTLType resultType = op.getType();
+
+  // Flatten any nested bundle types the usual way.
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+  flattenType(resultType, fieldname, false, fieldTypes);
 
   for (auto field : fieldTypes) {
     // Look up the mapping for this suffix.
@@ -413,8 +460,8 @@ void FIRRTLTypesLowering::visitStmt(ConnectOp op) {
 
   // Attempt to get the bundle types, potentially unwrapping an outer flip type
   // that wraps the whole bundle.
-  BundleType destType = getCanonicalBundleType(dest.getType());
-  BundleType srcType = getCanonicalBundleType(src.getType());
+  FIRRTLType destType = getCanonicalAggregateType(dest.getType());
+  FIRRTLType srcType = getCanonicalAggregateType(src.getType());
 
   // If we aren't connecting two bundles, there is nothing to do.
   if (!destType || !srcType)
@@ -450,14 +497,14 @@ void FIRRTLTypesLowering::visitExpr(InvalidValuePrimOp op) {
 
   // Attempt to get the bundle types, potentially unwrapping an outer flip type
   // that wraps the whole bundle.
-  BundleType resultType = getCanonicalBundleType(result.getType());
+  FIRRTLType resultType = getCanonicalAggregateType(result.getType());
 
   // If we aren't connecting two bundles, there is nothing to do.
   if (!resultType)
     return;
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenBundleTypes(resultType, "", false, fieldTypes);
+  flattenType(resultType, "", false, fieldTypes);
 
   // Loop over the leaf aggregates.
   for (auto field : fieldTypes) {
@@ -525,23 +572,24 @@ Value FIRRTLTypesLowering::getBundleLowering(Value oldValue,
   return entry;
 }
 
-// For a mapped bundle typed value, retrieve and return the flat values for each
-// field.
+// For a mapped aggregate typed value, retrieve and return the flat values for
+// each field.
 void FIRRTLTypesLowering::getAllBundleLowerings(
     Value value, SmallVectorImpl<Value> &results) {
-  // Get the original value's bundle type.
-  BundleType bundleType = getCanonicalBundleType(value.getType());
-  assert(bundleType && "attempted to get bundle lowerings for non-bundle type");
 
-  // Flatten the original value's bundle type.
-  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenBundleTypes(bundleType, "", false, fieldTypes);
+  TypeSwitch<FIRRTLType>(getCanonicalAggregateType(value.getType()))
+      .Case<BundleType, FVectorType>([&](auto aggregateType) {
+        // Flatten the original value's bundle type.
+        SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+        flattenType(aggregateType, "", false, fieldTypes);
 
-  for (auto element : fieldTypes) {
-    // Remove the field separator prefix.
-    auto name = StringRef(element.suffix).drop_front(1);
+        for (auto element : fieldTypes) {
+          // Remove the field separator prefix.
+          auto name = StringRef(element.suffix).drop_front(1);
 
-    // Store the resulting lowering for this flat value.
-    results.push_back(getBundleLowering(value, name));
-  }
+          // Store the resulting lowering for this flat value.
+          results.push_back(getBundleLowering(value, name));
+        }
+      })
+      .Default([&](auto) {});
 }

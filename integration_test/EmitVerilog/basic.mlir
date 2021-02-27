@@ -14,7 +14,7 @@ module {
   }
 
   rtl.module @AAA() -> (i1 {rtl.name = "f"}) {
-    %z = comb.constant 1 : i1
+    %z = rtl.constant 1 : i1
     rtl.output %z : i1
   }
 

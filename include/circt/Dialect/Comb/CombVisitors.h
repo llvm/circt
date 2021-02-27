@@ -27,20 +27,20 @@ public:
   ResultType dispatchCombinationalVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<ConstantOp,
-                       // Arithmetic and Logical Binary Operations.
-                       AddOp, SubOp, MulOp, DivUOp, DivSOp, ModUOp, ModSOp,
-                       ShlOp, ShrUOp, ShrSOp,
-                       // Bitwise operations
-                       AndOp, OrOp, XorOp,
-                       // Comparison operations
-                       ICmpOp,
-                       // Reduction Operators
-                       ParityOp,
-                       // Other operations.
-                       SExtOp, ConcatOp, ExtractOp, MuxOp,
-                       // Cast operation
-                       BitcastOp>([&](auto expr) -> ResultType {
+        .template Case<
+            // Arithmetic and Logical Binary Operations.
+            AddOp, SubOp, MulOp, DivUOp, DivSOp, ModUOp, ModSOp, ShlOp, ShrUOp,
+            ShrSOp,
+            // Bitwise operations
+            AndOp, OrOp, XorOp,
+            // Comparison operations
+            ICmpOp,
+            // Reduction Operators
+            ParityOp,
+            // Other operations.
+            SExtOp, ConcatOp, ExtractOp, MuxOp,
+            // Cast operation
+            BitcastOp>([&](auto expr) -> ResultType {
           return thisCast->visitComb(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -79,9 +79,6 @@ public:
     return static_cast<ConcreteType *>(this)->visit##OPKIND##Comb(op,          \
                                                                   args...);    \
   }
-
-  // Basic nodes.
-  HANDLE(ConstantOp, Unhandled);
 
   // Arithmetic and Logical Binary Operations.
   HANDLE(AddOp, Binary);
