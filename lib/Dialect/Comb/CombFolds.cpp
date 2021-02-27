@@ -744,7 +744,7 @@ static mlir::Value sextToDestTypeAndFlip(mlir::Value op, Type destType,
                                          PatternRewriter &rewriter) {
   op = sextToDestType(op, destType, rewriter);
   Value newOperands[] = {
-      op, rewriter.create<ConstantOp>(op.getLoc(), destType, -1)};
+      op, rewriter.create<rtl::ConstantOp>(op.getLoc(), destType, -1)};
   return rewriter.create<XorOp>(op.getLoc(), destType, newOperands);
 }
 
