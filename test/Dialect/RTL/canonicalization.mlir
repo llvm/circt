@@ -822,13 +822,13 @@ rtl.module @mux_canonicalize4(%a: i1, %b: i1, %c: i4) -> (i1, i1, i4, i4) {
   %false = rtl.constant false
   %0 = comb.mux %a, %false, %b : i1
 
-  %true = comb.constant true
+  %true = rtl.constant true
   %1 = comb.mux %a, %b, %true : i1
 
-  %c-1_i4 = comb.constant -1 : i4
+  %c-1_i4 = rtl.constant -1 : i4
   %2 = comb.mux %a, %c, %c-1_i4 : i4
 
-  %c0_i4 = comb.constant 0 : i4
+  %c0_i4 = rtl.constant 0 : i4
   %3 = comb.mux %a, %c0_i4, %c : i4
   rtl.output %0, %1, %2, %3 : i1, i1, i4, i4
 }
