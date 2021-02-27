@@ -149,7 +149,7 @@ rtl.module @test() -> () {
 
 // expected-note @+1 {{original module declared here}}
 rtl.module @f() -> (i2) {
-  %a = comb.constant 1 : i2
+  %a = rtl.constant 1 : i2
   rtl.output %a : i2
 }
 

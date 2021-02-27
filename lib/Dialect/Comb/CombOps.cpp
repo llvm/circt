@@ -58,72 +58,7 @@ ICmpPredicate ICmpOp::getFlippedPredicate(ICmpPredicate predicate) {
   llvm_unreachable("unknown comparison predicate");
 }
 
-//===----------------------------------------------------------------------===//
-// ConstantOp
-//===----------------------------------------------------------------------===//
 
-static void printConstantOp(OpAsmPrinter &p, ConstantOp &op) {
-  p << "comb.constant ";
-  p.printAttribute(op.valueAttr());
-  p.printOptionalAttrDict(op.getAttrs(), /*elidedAttrs=*/{"value"});
-}
-
-static ParseResult parseConstantOp(OpAsmParser &parser,
-                                   OperationState &result) {
-  IntegerAttr valueAttr;
-
-  if (parser.parseAttribute(valueAttr, "value", result.attributes) ||
-      parser.parseOptionalAttrDict(result.attributes))
-    return failure();
-
-  result.addTypes(valueAttr.getType());
-  return success();
-}
-
-static LogicalResult verifyConstantOp(ConstantOp constant) {
-  // If the result type has a bitwidth, then the attribute must match its width.
-  if (constant.value().getBitWidth() != constant.getType().getWidth())
-    return constant.emitError(
-        "comb.constant attribute bitwidth doesn't match return type");
-
-  return success();
-}
-
-/// Build a ConstantOp from an APInt, infering the result type from the
-/// width of the APInt.
-void ConstantOp::build(OpBuilder &builder, OperationState &result,
-                       const APInt &value) {
-
-  auto type = IntegerType::get(builder.getContext(), value.getBitWidth());
-  auto attr = builder.getIntegerAttr(type, value);
-  return build(builder, result, type, attr);
-}
-
-/// This builder allows construction of small signed integers like 0, 1, -1
-/// matching a specified MLIR IntegerType.  This shouldn't be used for general
-/// constant folding because it only works with values that can be expressed in
-/// an int64_t.  Use APInt's instead.
-void ConstantOp::build(OpBuilder &builder, OperationState &result, Type type,
-                       int64_t value) {
-  auto numBits = type.cast<IntegerType>().getWidth();
-  build(builder, result, APInt(numBits, (uint64_t)value, /*isSigned=*/true));
-}
-
-void ConstantOp::getAsmResultNames(
-    function_ref<void(Value, StringRef)> setNameFn) {
-  auto intTy = getType();
-  auto intCst = getValue();
-
-  // Sugar i1 constants with 'true' and 'false'.
-  if (intTy.getWidth() == 1)
-    return setNameFn(getResult(), intCst.isNullValue() ? "false" : "true");
-
-  // Otherwise, build a complex name with the value and type.
-  SmallVector<char, 32> specialNameBuffer;
-  llvm::raw_svector_ostream specialName(specialNameBuffer);
-  specialName << 'c' << intCst << '_' << intTy;
-  setNameFn(getResult(), specialName.str());
-}
 
 //===----------------------------------------------------------------------===//
 // Unary Operations

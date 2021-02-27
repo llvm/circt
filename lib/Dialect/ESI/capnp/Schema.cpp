@@ -583,7 +583,7 @@ public:
     rtl::ArrayType dstTy = rtl::ArrayType::get(type.getElementType(), size);
     IntegerType idxTy =
         builder->getIntegerType(llvm::Log2_64_Ceil(type.getSize()));
-    Value lsbConst = builder->create<comb::ConstantOp>(loc(), idxTy, lsb);
+    Value lsbConst = builder->create<rtl::ConstantOp>(loc(), idxTy, lsb);
     Value newSlice =
         builder->create<rtl::ArraySliceOp>(loc(), dstTy, s, lsbConst);
     return Slice(this, lsb, newSlice);
@@ -626,7 +626,7 @@ public:
   GasketComponent operator[](size_t idx) const {
     IntegerType idxTy =
         builder->getIntegerType(llvm::Log2_32_Ceil(type.getSize()));
-    auto idxVal = builder->create<comb::ConstantOp>(loc(), idxTy, idx);
+    auto idxVal = builder->create<rtl::ConstantOp>(loc(), idxTy, idx);
     return GasketComponent(*builder,
                            builder->create<rtl::ArrayGetOp>(loc(), s, idxVal));
   }
@@ -661,12 +661,12 @@ private:
 
 GasketComponent GasketBuilder::zero(uint64_t width) const {
   return GasketComponent(*builder,
-                         builder->create<comb::ConstantOp>(
+                         builder->create<rtl::ConstantOp>(
                              loc(), builder->getIntegerType(width), 0));
 }
 GasketComponent GasketBuilder::constant(uint64_t width, uint64_t value) const {
   return GasketComponent(*builder,
-                         builder->create<comb::ConstantOp>(
+                         builder->create<rtl::ConstantOp>(
                              loc(), builder->getIntegerType(width), value));
 }
 
@@ -726,7 +726,7 @@ public:
 
 private:
   void assertPred(Value val, ICmpPredicate pred, int64_t expected) {
-    auto expectedVal = create<comb::ConstantOp>(loc, val.getType(), expected);
+    auto expectedVal = create<rtl::ConstantOp>(loc, val.getType(), expected);
     create<sv::AssertOp>(
         loc, create<comb::ICmpOp>(loc, getI1Type(), pred, val, expectedVal));
   }
@@ -965,7 +965,7 @@ static GasketComponent decodeList(rtl::ArrayType type,
   assert(ptrOffset);
   auto listOffset = b.create<comb::AddOp>(
       loc, offset,
-      b.create<comb::ConstantOp>(loc, b.getIntegerType(30), *ptrOffset + 64));
+      b.create<rtl::ConstantOp>(loc, b.getIntegerType(30), *ptrOffset + 64));
   auto listSlice =
       msg.slice(listOffset.getResult(), type.getSize() * expectedElemSizeBits);
 

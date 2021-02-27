@@ -10,45 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-def ConstantOp
- : CombOp<"constant",
-          [NoSideEffect, ConstantLike, FirstAttrDerivedResultType,
-           DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
-  let summary = "Produce a constant value";
-  let description = [{
-    The constant operation produces a constant value of standard integer type
-    without a sign.
-    ```
-      %result = comb.constant 42 : t1
-    ```
-    }];
-
-  let arguments = (ins APIntAttr:$value);
-  let results = (outs CombIntegerType:$result);
-
-  let parser = "return parse$cppClass(parser, result);";
-  let printer = "print$cppClass(p, *this);";
-
-  let builders = [
-    /// Build a ConstantOp from an APInt, infering the result type from the
-    /// width of the APInt.
-    OpBuilderDAG<(ins "const APInt &":$value)>,
-
-    /// This builder allows construction of small signed integers like 0, 1, -1
-    /// matching a specified MLIR IntegerType.  This shouldn't be used for
-    /// general constant folding because it only works with values that can be
-    /// expressed in an int64_t.  Use APInt's instead.
-    OpBuilderDAG<(ins "Type":$type, "int64_t":$value)>
-  ];
-  let extraClassDeclaration = [{
-    APInt getValue() {
-      return (*this)->getAttrOfType<IntegerAttr>("value").getValue();
-    }
-  }];
-  let hasFolder = true;
-  let verifier = "return ::verifyConstantOp(*this);";
-}
-
 //===----------------------------------------------------------------------===//
 // Arithmetic and Logical Operations
 //===----------------------------------------------------------------------===//
