@@ -1,5 +1,6 @@
 // RUN: circt-opt -canonicalize %s | FileCheck %s
 
+// CHECK-LABEL: func @if_dead_condition(%arg0: i1) {
 // CHECK-NEXT:    sv.always posedge %arg0  {
 // CHECK-NEXT:      sv.fwrite "Reachable1"
 // CHECK-NEXT:      sv.fwrite "Reachable2"
