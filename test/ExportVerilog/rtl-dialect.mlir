@@ -47,9 +47,9 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %23 = comb.icmp ule %a, %b : i4
   %24 = comb.icmp ugt %a, %b : i4
   %25 = comb.icmp uge %a, %b : i4
-  %one4 = comb.constant -1 : i4
+  %one4 = rtl.constant -1 : i4
   %26 = comb.icmp eq %a, %one4 : i4
-  %zero4 = comb.constant 0 : i4
+  %zero4 = rtl.constant 0 : i4
   %27 = comb.icmp ne %a, %zero4 : i4
   %28 = comb.parity %a : i4
   %29 = comb.concat %a, %a, %b : (i4, i4, i4) -> i12
@@ -57,7 +57,7 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %31 = comb.sext %a : (i4) -> i9
   %33 = comb.mux %cond, %a, %b : i4
 
-  %allone = comb.constant 15 : i4
+  %allone = rtl.constant 15 : i4
   %34 = comb.xor %a, %allone : i4
 
   %arrCreated = rtl.array_create %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone : (i4)
@@ -175,7 +175,7 @@ rtl.module @A(%d: i1, %e: i1) -> (%f: i1) {
 // CHECK-NEXT: endmodule
 
 rtl.module @AAA(%d: i1, %e: i1) -> (%f: i1) {
-  %z = comb.constant 0 : i1
+  %z = rtl.constant 0 : i1
   rtl.output %z : i1
 }
 // CHECK-LABEL: module AAA(
@@ -289,7 +289,7 @@ rtl.module @extract_all(%tmp85: i1) -> (%tmp106: i1) {
 
 // https://github.com/llvm/circt/issues/320
 rtl.module @literal_extract(%inp_1: i349) -> (%tmp6: i349) {
-  %c-58836_i17 = comb.constant -58836 : i17
+  %c-58836_i17 = rtl.constant -58836 : i17
   %0 = comb.sext %c-58836_i17 : (i17) -> i349
   rtl.output %0 : i349
 }
@@ -393,8 +393,8 @@ rtl.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
 
   // https://github.com/llvm/circt/issues/369
   // CHECK: assign awire = 4'sh5 / -4'sh3;
-  %c5_i4 = comb.constant 5 : i4
-  %c-3_i4 = comb.constant -3 : i4
+  %c5_i4 = rtl.constant 5 : i4
+  %c-3_i4 = rtl.constant -3 : i4
   %divs = comb.divs %c5_i4, %c-3_i4 : i4
   sv.connect %awire, %divs: i4
 
