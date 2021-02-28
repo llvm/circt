@@ -539,8 +539,6 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:         sv.bpassign %reg, %9 : i32
     // CHECK-NEXT:       }
     // CHECK-NEXT:     }
-    // CHECK-NEXT:   }
-    // CHECK-NEXT:   sv.initial  {
     // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
     // CHECK-NEXT:       %true = rtl.constant true
     // CHECK-NEXT:       %8 = comb.xor %reset, %true : i1
@@ -814,7 +812,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK:       %[[r_en_0:.+]] = sv.array_index_inout %memory_r_en_pipe[%[[zero]]]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[r_en_0]], %[[random]]
-   // CHECK:       %[[zero:.+]] = rtl.constant false
+    // CHECK:       %[[zero:.+]] = rtl.constant false
     // CHECK:       %[[r_addr_0:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[zero]]]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[r_addr_0]], %[[random]]
