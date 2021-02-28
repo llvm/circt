@@ -101,7 +101,8 @@ def IfOp : SVOp<"if", [HasRegionTerminator, NoRegionArguments,
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
   let arguments = (ins I1:$cond);
   let results = (outs);
-  
+
+  let hasCanonicalizer = true;
   let assemblyFormat = "$cond $thenRegion (`else` $elseRegion^)? attr-dict";
 
   // TODO: ODS forces using a custom builder just to get the region terminator

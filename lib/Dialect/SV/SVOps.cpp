@@ -198,6 +198,40 @@ void IfOp::build(OpBuilder &odsBuilder, OperationState &result, Value cond,
   }
 }
 
+/// Replaces the given op with the contents of the given single-block region.
+static void replaceOpWithRegion(PatternRewriter &rewriter, Operation *op,
+                                Region &region) {
+  assert(llvm::hasSingleElement(region) && "expected single-region block");
+  Block *block = &region.front();
+  Operation *terminator = block->getTerminator();
+  rewriter.mergeBlockBefore(block, op);
+  rewriter.eraseOp(op);
+  rewriter.eraseOp(terminator);
+}
+
+void IfOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                       MLIRContext *context) {
+  struct RemoveStaticCondition : public OpRewritePattern<IfOp> {
+    using OpRewritePattern<IfOp>::OpRewritePattern;
+
+    LogicalResult matchAndRewrite(IfOp op,
+                                  PatternRewriter &rewriter) const override {
+      auto constant = op.cond().getDefiningOp<rtl::ConstantOp>();
+      if (!constant)
+        return failure();
+
+      if (constant.getValue().isAllOnesValue())
+        replaceOpWithRegion(rewriter, op, op.thenRegion());
+      else if (!op.elseRegion().empty())
+        replaceOpWithRegion(rewriter, op, op.elseRegion());
+      else
+        rewriter.eraseOp(op);
+
+      return success();
+    }
+  };
+  results.insert<RemoveStaticCondition>(context);
+}
 //===----------------------------------------------------------------------===//
 // AlwaysOp
 
