@@ -777,6 +777,15 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   void initializeRegister(Value reg, Value resetSignal);
 
   void addToAlwaysBlock(Value clock, std::function<void(void)> fn);
+  void addToAlwaysFFBlock(EventControl clockEdge, Value clock,
+                          ::ResetType resetStyle, EventControl resetEdge,
+                          Value reset, std::function<void(void)> body = {},
+                          std::function<void(void)> resetBody = {});
+  void addToAlwaysFFBlock(EventControl clockEdge, Value clock,
+                          std::function<void(void)> body = {}) {
+    addToAlwaysFFBlock(clockEdge, clock, ::ResetType(), EventControl(), Value(),
+                       body, std::function<void(void)>());
+  }
 
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitExpr;
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitDecl;
@@ -916,6 +925,11 @@ private:
   /// ordering.
   llvm::SmallDenseMap<Value, sv::AlwaysOp> alwaysBlocks;
 
+  llvm::SmallDenseMap<std::tuple<Block *, EventControl, Value, ::ResetType,
+                                 EventControl, Value>,
+                      sv::AlwaysFFOp>
+      alwaysFFBlocks;
+
   /// This is true if we've emitted `INIT_RANDOM_PROLOG_ into an initial block
   /// in this module already.
   bool randomizePrologEmitted;
@@ -976,6 +990,7 @@ void FIRRTLLowering::runOnOperation() {
   // Clear out the value mapping for next time, so we don't have dangling keys.
   valueMapping.clear();
   alwaysBlocks.clear();
+  alwaysFFBlocks.clear();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1165,13 +1180,50 @@ LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
 
 void FIRRTLLowering::addToAlwaysBlock(Value clock,
                                       std::function<void(void)> fn) {
-  auto &blk = alwaysBlocks[clock];
-  if (!blk)
-    blk = builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, fn);
-  else {
+  // This isn't uniquing the parent region in.  This can be added as a key to
+  // the alwaysBlocks set if needed.
+  assert(isa<rtl::RTLModuleOp>(builder->getBlock()->getParentOp()) &&
+         "only support inserting into the top level of a module so far");
+
+  auto &op = alwaysBlocks[clock];
+  if (!op) {
+    op = builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, fn);
+    return;
+  }
+
+  auto oldIP = builder->saveInsertionPoint();
+  builder->setInsertionPoint(op.getBodyBlock()->getTerminator());
+  fn();
+  builder->restoreInsertionPoint(oldIP);
+}
+
+void FIRRTLLowering::addToAlwaysFFBlock(EventControl clockEdge, Value clock,
+                                        ::ResetType resetStyle,
+                                        EventControl resetEdge, Value reset,
+                                        std::function<void(void)> body,
+                                        std::function<void(void)> resetBody) {
+  auto &op = alwaysFFBlocks[{builder->getBlock(), clockEdge, clock, resetStyle,
+                             resetEdge, reset}];
+  if (!op) {
+    if (reset) {
+      op = builder->create<sv::AlwaysFFOp>(clockEdge, clock, resetStyle,
+                                           resetEdge, reset, body, resetBody);
+    } else {
+      assert(!resetBody);
+      op = builder->create<sv::AlwaysFFOp>(clockEdge, clock, body);
+    }
+    return;
+  }
+  if (body) {
     auto oldIP = builder->saveInsertionPoint();
-    builder->setInsertionPoint(blk.getBodyBlock()->getTerminator());
-    fn();
+    builder->setInsertionPoint(op.getBodyBlock()->getTerminator());
+    body();
+    builder->restoreInsertionPoint(oldIP);
+  }
+  if (resetBody) {
+    auto oldIP = builder->saveInsertionPoint();
+    builder->setInsertionPoint(op.getResetBlock()->getTerminator());
+    resetBody();
     builder->restoreInsertionPoint(oldIP);
   }
 }
@@ -1362,13 +1414,13 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   };
 
   if (op.resetSignal().getType().isa<AsyncResetType>()) {
-    builder->create<sv::AlwaysFFOp>(
-        EventControl::AtPosEdge, clockVal, ::ResetType::AsyncReset,
-        EventControl::AtPosEdge, resetSignal, std::function<void()>(), resetFn);
+    addToAlwaysFFBlock(EventControl::AtPosEdge, clockVal,
+                       ::ResetType::AsyncReset, EventControl::AtPosEdge,
+                       resetSignal, std::function<void()>(), resetFn);
   } else { // sync reset
-    builder->create<sv::AlwaysFFOp>(
-        EventControl::AtPosEdge, clockVal, ::ResetType::SyncReset,
-        EventControl::AtPosEdge, resetSignal, std::function<void()>(), resetFn);
+    addToAlwaysFFBlock(EventControl::AtPosEdge, clockVal,
+                       ::ResetType::SyncReset, EventControl::AtPosEdge,
+                       resetSignal, std::function<void()>(), resetFn);
   }
 
   initializeRegister(regResult, resetSignal);
@@ -1508,7 +1560,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         readPipe.push_back({enJ, addrJ});
       }
       if (readLatency != 0) {
-        builder->create<sv::AlwaysFFOp>(EventControl::AtPosEdge, clk, [&]() {
+        addToAlwaysFFBlock(EventControl::AtPosEdge, clk, [&]() {
           auto lastEn = readPipe[0].en;
           auto lastAddr = readPipe[0].addr;
           for (size_t j = 1; j < readLatency + 1; ++j) {
@@ -1580,7 +1632,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
       // Build the write pipe for non-unary write latency
       if (writeLatency != 1) {
-        builder->create<sv::AlwaysFFOp>(EventControl::AtPosEdge, clk, [&]() {
+        addToAlwaysFFBlock(EventControl::AtPosEdge, clk, [&]() {
           auto right = writePipe[0];
           for (size_t j = 1; j < writeLatency; ++j) {
             auto left = writePipe[j];
@@ -1598,7 +1650,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
       // Attach the write port
       auto last = writePipe.back();
-      builder->create<sv::AlwaysFFOp>(EventControl::AtPosEdge, clk, [&]() {
+      addToAlwaysFFBlock(EventControl::AtPosEdge, clk, [&]() {
         auto enable = builder->create<sv::ReadInOutOp>(last.en);
         auto cond = builder->create<comb::AndOp>(
             enable, builder->create<sv::ReadInOutOp>(last.mask));
@@ -2116,7 +2168,7 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
     if (!clockVal)
       return failure();
 
-    builder->create<sv::AlwaysFFOp>(EventControl::AtPosEdge, clockVal, [&]() {
+    addToAlwaysFFBlock(EventControl::AtPosEdge, clockVal, [&]() {
       builder->create<sv::PAssignOp>(destVal, srcVal);
     });
     return success();
@@ -2130,13 +2182,13 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
     if (!clockVal || !resetSignal)
       return failure();
 
-    builder->create<sv::AlwaysFFOp>(
-        EventControl::AtPosEdge, clockVal,
-        regResetOp.resetSignal().getType().isa<AsyncResetType>()
-            ? ::ResetType::AsyncReset
-            : ::ResetType::SyncReset,
-        EventControl::AtPosEdge, resetSignal,
-        [&]() { builder->create<sv::PAssignOp>(destVal, srcVal); });
+    addToAlwaysFFBlock(EventControl::AtPosEdge, clockVal,
+                       regResetOp.resetSignal().getType().isa<AsyncResetType>()
+                           ? ::ResetType::AsyncReset
+                           : ::ResetType::SyncReset,
+                       EventControl::AtPosEdge, resetSignal, [&]() {
+                         builder->create<sv::PAssignOp>(destVal, srcVal);
+                       });
     return success();
   }
 
@@ -2167,7 +2219,7 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
     if (!clockVal)
       return failure();
 
-    builder->create<sv::AlwaysFFOp>(EventControl::AtPosEdge, clockVal, [&]() {
+    addToAlwaysFFBlock(EventControl::AtPosEdge, clockVal, [&]() {
       builder->create<sv::PAssignOp>(destVal, srcVal);
     });
     return success();
@@ -2181,13 +2233,13 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
     if (!clockVal || !resetSignal)
       return failure();
 
-    builder->create<sv::AlwaysFFOp>(
-        EventControl::AtPosEdge, clockVal,
-        regResetOp.resetSignal().getType().isa<AsyncResetType>()
-            ? ::ResetType::AsyncReset
-            : ::ResetType::SyncReset,
-        EventControl::AtPosEdge, resetSignal,
-        [&]() { builder->create<sv::PAssignOp>(destVal, srcVal); });
+    auto resetStyle = regResetOp.resetSignal().getType().isa<AsyncResetType>()
+                          ? ::ResetType::AsyncReset
+                          : ::ResetType::SyncReset;
+    addToAlwaysFFBlock(EventControl::AtPosEdge, clockVal, resetStyle,
+                       EventControl::AtPosEdge, resetSignal, [&]() {
+                         builder->create<sv::PAssignOp>(destVal, srcVal);
+                       });
     return success();
   }
 
