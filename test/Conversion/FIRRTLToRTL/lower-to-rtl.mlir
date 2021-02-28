@@ -540,14 +540,6 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:       }
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
-    // CHECK-NEXT: }
-    // CHECK-NEXT: %reg2 = sv.reg : !rtl.inout<i32>
-    // CHECK-NEXT: sv.alwaysff(posedge %clock) {
-    // CHECK-NEXT: }(syncreset : posedge %reset) {
-    // CHECK-NEXT:    sv.passign %reg2, %c0_i32 : i32
-    // CHECK-NEXT: }
-    // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
-    // CHECK-NEXT: } else {
     // CHECK-NEXT:   sv.initial  {
     // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
     // CHECK-NEXT:       %true = rtl.constant true
@@ -558,6 +550,11 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:       }
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    // CHECK-NEXT: %reg2 = sv.reg : !rtl.inout<i32>
+    // CHECK-NEXT: sv.alwaysff(posedge %clock) {
+    // CHECK-NEXT: }(syncreset : posedge %reset) {
+    // CHECK-NEXT:    sv.passign %reg2, %c0_i32 : i32
     // CHECK-NEXT: }
     %reg = firrtl.regreset %0, %4, %c0_ui32 {name = "reg"} : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<32>) -> !firrtl.uint<32>
     %reg2 = firrtl.regreset %0, %1, %c0_ui32 {name = "reg2"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<32>) -> !firrtl.uint<32>
@@ -817,10 +814,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK:       %[[r_en_0:.+]] = sv.array_index_inout %memory_r_en_pipe[%[[zero]]]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[r_en_0]], %[[random]]
-    // CHECK:     }
-    // CHECK:     sv.ifdef "SYNTHESIS" {
-    // CHECK:     } else {
-    // CHECK:       %[[zero:.+]] = rtl.constant false
+   // CHECK:       %[[zero:.+]] = rtl.constant false
     // CHECK:       %[[r_addr_0:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[zero]]]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[r_addr_0]], %[[random]]
@@ -828,30 +822,18 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK:       %[[r_addr_1:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[one]]]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[r_addr_1]], %[[random]]
-    // CHECK:     }
-    // CHECK:     sv.ifdef "SYNTHESIS" {
-    // CHECK:     } else {
     // CHECK:       %[[zero:.+]] = rtl.constant false
     // CHECK:       %[[w_en_0:.+]] = sv.array_index_inout %memory_w_en_pipe[%[[zero]]]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[w_en_0]], %[[random]]
-    // CHECK:     }
-    // CHECK:     sv.ifdef "SYNTHESIS" {
-    // CHECK:     } else {
     // CHECK:       %[[zero:.+]] = rtl.constant false
     // CHECK:       %[[w_addr_0:.+]] = sv.array_index_inout %memory_w_addr_pipe[%[[zero]]]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[w_addr_0]], %[[random]]
-    // CHECK:     }
-    // CHECK:     sv.ifdef "SYNTHESIS" {
-    // CHECK:     } else {
     // CHECK:       %[[zero:.+]] = rtl.constant false
     // CHECK:       %[[w_mask_0:.+]] = sv.array_index_inout %memory_w_mask_pipe[%[[zero]]]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[w_mask_0]], %[[random]]
-    // CHECK:     }
-    // CHECK:     sv.ifdef "SYNTHESIS" {
-    // CHECK:     } else {
     // CHECK:       %[[zero:.+]] = rtl.constant false
     // CHECK:       %[[w_data_0:.+]] = sv.array_index_inout %memory_w_data_pipe[%[[zero]]]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
