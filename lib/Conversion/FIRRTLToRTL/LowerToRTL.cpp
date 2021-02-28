@@ -776,7 +776,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   void emitRandomizePrologIfNeeded();
   void initializeRegister(Value reg, Value resetSignal);
 
-  void addToProceduralBlock(Value clock, std::function<void(void)> fn);
+  void addToAlwaysBlock(Value clock, std::function<void(void)> fn);
 
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitExpr;
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitDecl;
@@ -914,7 +914,7 @@ private:
   /// associated with it.  FIRRTL has sequential semantics and we must lower
   /// sequential procedural statements to the same always block to maintain that
   /// ordering.
-  llvm::SmallDenseMap<Value, sv::AlwaysOp> proceduralBlocks;
+  llvm::SmallDenseMap<Value, sv::AlwaysOp> alwaysBlocks;
 
   /// This is true if we've emitted `INIT_RANDOM_PROLOG_ into an initial block
   /// in this module already.
@@ -975,6 +975,7 @@ void FIRRTLLowering::runOnOperation() {
 
   // Clear out the value mapping for next time, so we don't have dangling keys.
   valueMapping.clear();
+  alwaysBlocks.clear();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1162,9 +1163,9 @@ LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
   return setLowering(orig->getResult(0), result);
 }
 
-void FIRRTLLowering::addToProceduralBlock(Value clock,
-                                          std::function<void(void)> fn) {
-  auto &blk = proceduralBlocks[clock];
+void FIRRTLLowering::addToAlwaysBlock(Value clock,
+                                      std::function<void(void)> fn) {
+  auto &blk = alwaysBlocks[clock];
   if (!blk)
     blk = builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, fn);
   else {
@@ -2214,7 +2215,7 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
     }
   }
 
-  addToProceduralBlock(clock, [&]() {
+  addToAlwaysBlock(clock, [&]() {
     // Emit an "#ifndef SYNTHESIS" guard into the always block.
     builder->create<sv::IfDefProceduralOp>(
         "SYNTHESIS", std::function<void()>(), [&]() {
@@ -2242,7 +2243,7 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
     return failure();
 
   // Emit this into an "sv.always posedge" body.
-  addToProceduralBlock(clock, [&]() {
+  addToAlwaysBlock(clock, [&]() {
     // Emit an "#ifndef SYNTHESIS" guard into the always block.
     builder->create<sv::IfDefProceduralOp>(
         "SYNTHESIS", std::function<void()>(), [&]() {
@@ -2287,7 +2288,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
   if (!clock || !enable || !predicate)
     return failure();
 
-  addToProceduralBlock(clock, [&]() {
+  addToAlwaysBlock(clock, [&]() {
     builder->create<sv::IfOp>(enable, [&]() {
       // Create BOpTy inside the always/if.
       builder->create<BOpTy>(predicate);
