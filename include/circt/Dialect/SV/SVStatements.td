@@ -35,6 +35,9 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments]> {
   let builders = [
     OpBuilderDAG<(ins "StringRef":$cond,
                       CArg<"std::function<void()>", "{}">:$thenCtor,
+                      CArg<"std::function<void()>", "{}">:$elseCtor)>,
+    OpBuilderDAG<(ins "StringAttr":$cond,
+                      CArg<"std::function<void()>", "{}">:$thenCtor,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>
   ];
 

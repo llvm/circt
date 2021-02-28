@@ -786,6 +786,8 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
     addToAlwaysFFBlock(clockEdge, clock, ::ResetType(), EventControl(), Value(),
                        body, std::function<void(void)>());
   }
+  void addToIfDefBlock(StringRef cond, std::function<void(void)> thenCtor,
+                       std::function<void(void)> elseCtor = {});
 
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitExpr;
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitDecl;
@@ -919,16 +921,14 @@ private:
   /// key should have a FIRRTL type, the result will have an RTL dialect type.
   DenseMap<Value, Value> valueMapping;
 
-  /// Each value used as a clock to procedural statements has an always block
-  /// associated with it.  FIRRTL has sequential semantics and we must lower
-  /// sequential procedural statements to the same always block to maintain that
-  /// ordering.
+  // We auto-unique graph-level blocks to reduce the amount of generated code
+  // and ensure that side effects are properly ordered in FIRRTL.
   llvm::SmallDenseMap<Value, sv::AlwaysOp> alwaysBlocks;
-
   llvm::SmallDenseMap<std::tuple<Block *, EventControl, Value, ::ResetType,
                                  EventControl, Value>,
                       sv::AlwaysFFOp>
       alwaysFFBlocks;
+  llvm::SmallDenseMap<std::pair<Block *, Attribute>, sv::IfDefOp> ifdefBlocks;
 
   /// This is true if we've emitted `INIT_RANDOM_PROLOG_ into an initial block
   /// in this module already.
@@ -991,6 +991,7 @@ void FIRRTLLowering::runOnOperation() {
   valueMapping.clear();
   alwaysBlocks.clear();
   alwaysFFBlocks.clear();
+  ifdefBlocks.clear();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1228,6 +1229,30 @@ void FIRRTLLowering::addToAlwaysFFBlock(EventControl clockEdge, Value clock,
   }
 }
 
+void FIRRTLLowering::addToIfDefBlock(StringRef cond,
+                                     std::function<void(void)> thenCtor,
+                                     std::function<void(void)> elseCtor) {
+  auto condAttr = builder->getStringAttr(cond);
+  auto &op = ifdefBlocks[{builder->getBlock(), condAttr}];
+  if (!op) {
+    op = builder->create<sv::IfDefOp>(condAttr, thenCtor, elseCtor);
+    return;
+  }
+
+  if (thenCtor) {
+    auto oldIP = builder->saveInsertionPoint();
+    builder->setInsertionPoint(op.getThenBlock()->getTerminator());
+    thenCtor();
+    builder->restoreInsertionPoint(oldIP);
+  }
+  if (elseCtor) {
+    auto oldIP = builder->saveInsertionPoint();
+    builder->setInsertionPoint(op.getElseBlock()->getTerminator());
+    elseCtor();
+    builder->restoreInsertionPoint(oldIP);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // Special Operations
 //===----------------------------------------------------------------------===//
@@ -1361,7 +1386,7 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
 
   // Emit the initializer expression for simulation that fills it with random
   // value.
-  builder->create<sv::IfDefOp>("SYNTHESIS", std::function<void()>(), [&]() {
+  addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     builder->create<sv::InitialOp>([&]() {
       emitRandomizePrologIfNeeded();
       builder->create<sv::IfDefProceduralOp>("RANDOMIZE_REG_INIT", [&]() {
@@ -1584,7 +1609,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
       // If we're masking, emit "addr < Depth ? mem[addr] : `RANDOM".
       if (!llvm::isPowerOf2_64(depth)) {
-        builder->create<sv::IfDefOp>(
+        addToIfDefBlock(
             "RANDOMIZE_GARBAGE_ASSIGN",
             [&]() {
               auto addrWidth = addr.getType().getIntOrFloatBitWidth();
@@ -1668,7 +1693,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
   // Emit the initializer expression for simulation that fills it with random
   // value.
-  builder->create<sv::IfDefOp>("SYNTHESIS", std::function<void()>(), [&]() {
+  addToIfDefBlock("SYNTHESIS", {}, [&]() {
     builder->create<sv::InitialOp>([&]() {
       emitRandomizePrologIfNeeded();
 
@@ -2388,7 +2413,7 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
   if (inoutValues.size() < 2)
     return success();
 
-  builder->create<sv::IfDefOp>(
+  addToIfDefBlock(
       "SYNTHESIS",
       // If we're doing synthesis, we emit an all-pairs assign complex.
       [&]() {
