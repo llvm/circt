@@ -788,6 +788,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   }
   void addToIfDefBlock(StringRef cond, std::function<void(void)> thenCtor,
                        std::function<void(void)> elseCtor = {});
+  void addToInitialBlock(std::function<void(void)> body);
 
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitExpr;
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitDecl;
@@ -929,6 +930,7 @@ private:
                       sv::AlwaysFFOp>
       alwaysFFBlocks;
   llvm::SmallDenseMap<std::pair<Block *, Attribute>, sv::IfDefOp> ifdefBlocks;
+  llvm::SmallDenseMap<Block *, sv::InitialOp> initialBlocks;
 
   /// This is true if we've emitted `INIT_RANDOM_PROLOG_ into an initial block
   /// in this module already.
@@ -992,6 +994,7 @@ void FIRRTLLowering::runOnOperation() {
   alwaysBlocks.clear();
   alwaysFFBlocks.clear();
   ifdefBlocks.clear();
+  initialBlocks.clear();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1253,6 +1256,21 @@ void FIRRTLLowering::addToIfDefBlock(StringRef cond,
   }
 }
 
+void FIRRTLLowering::addToInitialBlock(std::function<void(void)> body) {
+  auto &op = initialBlocks[builder->getBlock()];
+  if (!op) {
+    op = builder->create<sv::InitialOp>(body);
+    return;
+  }
+
+  if (body) {
+    auto oldIP = builder->saveInsertionPoint();
+    builder->setInsertionPoint(op.getBodyBlock()->getTerminator());
+    body();
+    builder->restoreInsertionPoint(oldIP);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // Special Operations
 //===----------------------------------------------------------------------===//
@@ -1387,7 +1405,7 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
   // Emit the initializer expression for simulation that fills it with random
   // value.
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
-    builder->create<sv::InitialOp>([&]() {
+    addToInitialBlock([&]() {
       emitRandomizePrologIfNeeded();
       builder->create<sv::IfDefProceduralOp>("RANDOMIZE_REG_INIT", [&]() {
         if (resetSignal) {
@@ -1694,7 +1712,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   // Emit the initializer expression for simulation that fills it with random
   // value.
   addToIfDefBlock("SYNTHESIS", {}, [&]() {
-    builder->create<sv::InitialOp>([&]() {
+    addToInitialBlock([&]() {
       emitRandomizePrologIfNeeded();
 
       builder->create<sv::IfDefProceduralOp>("RANDOMIZE_MEM_INIT", [&]() {
