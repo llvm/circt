@@ -85,6 +85,9 @@ static Value castToFIRRTLType(Value val, Type type,
 /// Cast from a FIRRTL type (potentially with a flip) to a standard type.
 static Value castFromFIRRTLType(Value val, Type type,
                                 ImplicitLocOpBuilder &builder) {
+  if (type.isa<rtl::InOutType>() && val.getType().isa<AnalogType>())
+    return builder.createOrFold<AnalogInOutCastOp>(type, val);
+
   // Strip off Flip type if needed.
   val = builder.createOrFold<AsPassivePrimOp>(val);
   if (rtl::StructType structTy = type.dyn_cast<rtl::StructType>())
@@ -702,8 +705,11 @@ void FIRRTLModuleLowering::lowerInstance(
     auto wire = builder.create<WireOp>(port.type, name);
 
     // Drop zero bit input/inout ports.
-    if (!portType.isInteger(0))
+    if (!portType.isInteger(0)) {
+      if (port.isInOut())
+        portType = rtl::InOutType::get(portType);
       operands.push_back(castFromFIRRTLType(wire, portType, builder));
+    }
 
     portResult.replaceAllUsesWith(wire);
   }
@@ -1712,7 +1718,11 @@ LogicalResult FIRRTLLowering::visitExpr(AnalogInOutCastOp op) {
   if (!result)
     return failure();
 
-  return setLowering(op, result);
+  if (!result.getType().isa<rtl::InOutType>())
+    return op.emitOpError("operand didn't lower to inout type correctly");
+
+  op.replaceAllUsesWith(result);
+  return success();
 }
 
 LogicalResult FIRRTLLowering::visitExpr(CvtPrimOp op) {
