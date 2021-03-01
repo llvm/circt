@@ -446,6 +446,7 @@ public:
   LogicalResult visitSV(AlwaysOp op);
   LogicalResult visitSV(AlwaysFFOp op);
   LogicalResult visitSV(InitialOp op);
+  LogicalResult visitSV(CaseZOp op);
   LogicalResult visitSV(FWriteOp op);
   LogicalResult visitSV(FatalOp op);
   LogicalResult visitSV(FinishOp op);
@@ -1751,6 +1752,36 @@ LogicalResult ModuleEmitter::visitSV(InitialOp op) {
 
   indent() << "initial";
   emitBeginEndRegion(op.getBodyBlock(), ops, *this, "initial");
+  return success();
+}
+
+LogicalResult ModuleEmitter::visitSV(CaseZOp op) {
+  SmallPtrSet<Operation *, 8> ops, emptyOps;
+  ops.insert(op);
+
+  indent() << "casez (" << emitExpressionToString(op.cond(), ops) << ')';
+  emitLocationInfoAndNewLine(ops);
+
+  addIndent();
+  for (auto caseInfo : op.getCases()) {
+    auto pattern = caseInfo.pattern;
+
+    if (pattern.isDefault())
+      indent() << "default";
+    else {
+      // TODO: We could emit in hex if/when the size is a multiple of 4 and
+      // there are no x's crossing nibble boundaries.
+      indent() << pattern.getWidth() << "'b";
+      for (size_t bit = 0, e = pattern.getWidth(); bit != e; ++bit)
+        os << CaseZOp::getVerilogLetter(pattern.getBit(e - bit - 1));
+    }
+    os << ": ";
+    emitBeginEndRegion(caseInfo.block, emptyOps, *this);
+  }
+
+  reduceIndent();
+  indent() << "endcase";
+  emitLocationInfoAndNewLine(ops);
   return success();
 }
 

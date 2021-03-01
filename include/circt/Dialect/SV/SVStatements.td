@@ -257,6 +257,7 @@ def InitialOp : SVOp<"initial", [HasRegionTerminator, NoRegionArguments,
 def CaseZOp : SVOp<"casez", [HasRegionTerminator, NoRegionArguments,
                              ProceduralRegion]> {
   let summary = "'casez (cond)' block";
+  let description = "See SV Spec 9.2.1.";
 
   let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
   let arguments = (ins RTLIntegerType:$cond, ArrayAttr:$casePatterns);
@@ -269,6 +270,15 @@ def CaseZOp : SVOp<"casez", [HasRegionTerminator, NoRegionArguments,
   let extraClassDeclaration = [{
     /// This describes the bit in a pattern, 0/1/x.
     enum PatternBit { PatternZero = 0, PatternOne = 1, PatternAny = 2 };
+
+    static char getVerilogLetter(PatternBit bit) {
+      switch (bit) {
+      case PatternZero: return '0';
+      case PatternOne: return '1';
+      case PatternAny: return 'x';
+      }
+    }
+
     // This is provides convenient access to encode and decode a pattern.
     struct CasePattern {
       IntegerAttr attr;

@@ -33,6 +33,7 @@ public:
             RegOp, WireOp,
             // Control flow.
             IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp, AlwaysFFOp, InitialOp,
+            CaseZOp,
             // Other Statements.
             ConnectOp, YieldOp, BPAssignOp, PAssignOp, AliasOp, FWriteOp,
             FatalOp, FinishOp, VerbatimOp,
@@ -82,6 +83,7 @@ public:
   HANDLE(AlwaysOp, Unhandled);
   HANDLE(AlwaysFFOp, Unhandled);
   HANDLE(InitialOp, Unhandled);
+  HANDLE(CaseZOp, Unhandled);
 
   // Other Statements.
   HANDLE(ConnectOp, Unhandled);
