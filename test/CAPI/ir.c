@@ -69,7 +69,7 @@ int main() {
   // CHECK-LABEL: @registration
   // CHECK: 0
   // clang-format on
-
+  
   return 0;
 }
 #endif
