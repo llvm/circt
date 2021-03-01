@@ -161,7 +161,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
 
     // CHECK-NEXT: casez (val)
     sv.casez %val : i8
-    // CHECK-NEXT: 8'b0000001x: begin
+    // CHECK-NEXT: 8'b0000001?: begin
     case b0000001x: {
       // CHECK-NEXT: $fwrite(32'h80000002, "a");
       sv.fwrite "a"
@@ -170,7 +170,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
       sv.yield
     } // CHECK-NEXT: end
 
-    // CHECK-NEXT: 8'b000000x1:
+    // CHECK-NEXT: 8'b000000?1:
     // CHECK-NOT: begin
     case b000000x1: {
       // CHECK-NEXT:  $fwrite(32'h80000002, "y");
