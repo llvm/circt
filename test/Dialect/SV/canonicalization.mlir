@@ -43,5 +43,11 @@ func @if_dead_condition(%arg0: i1) {
       sv.fwrite "Reachable4"
     } 
   }
+
+  sv.ifdef "SYNTHESIS" {}
+  sv.ifdef "SYNTHESIS" {} else {}
+  sv.always posedge %arg0 {}
+  sv.initial {}
+
   return
 }

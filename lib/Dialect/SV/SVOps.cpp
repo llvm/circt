@@ -166,6 +166,12 @@ void IfDefOp::build(OpBuilder &odsBuilder, OperationState &result,
   }
 }
 
+static bool isEmptyBlockExceptForTerminator(Block *region) {
+  if (!region)
+    return true;
+  llvm::any_of(region->without_terminator(), [](auto &op) { return true; });
+}
+
 void IfDefOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                           MLIRContext *context) {
   // If both thenRegion and elseRegion are empty, erase op.
@@ -173,9 +179,10 @@ void IfDefOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
     using OpRewritePattern::OpRewritePattern;
     LogicalResult matchAndRewrite(IfDefOp op,
                                   PatternRewriter &rewriter) const override {
-      if (!op.thenRegion().empty())
+      if (!isEmptyBlockExceptForTerminator(op.getThenBlock()))
         return failure();
-      else if (op.hasElse() && !op.elseRegion().empty())
+      else if (op.hasElse() &&
+               !isEmptyBlockExceptForTerminator(op.getElseBlock()))
         return failure();
 
       rewriter.eraseOp(op);
