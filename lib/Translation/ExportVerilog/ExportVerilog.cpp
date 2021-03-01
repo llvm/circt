@@ -331,6 +331,100 @@ static const StringSet<> &getReservedWords() {
   return set;
 }
 
+/// Return the location information as a (potentially empty) string.
+static std::string
+getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
+  std::string resultStr;
+  llvm::raw_string_ostream sstr(resultStr);
+
+  // Multiple operations may come from the same location or may not have useful
+  // location info.  Unique it now.
+  SmallPtrSet<Attribute, 8> locations;
+  for (auto *op : ops) {
+    if (auto loc = op->getLoc().dyn_cast<FileLineColLoc>())
+      locations.insert(loc);
+  }
+
+  auto printLoc = [&](FileLineColLoc loc) {
+    sstr << loc.getFilename();
+    if (auto line = loc.getLine()) {
+      sstr << ':' << line;
+      if (auto col = loc.getColumn())
+        sstr << ':' << col;
+    }
+  };
+
+  switch (locations.size()) {
+  case 1:
+    printLoc((*locations.begin()).cast<FileLineColLoc>());
+    LLVM_FALLTHROUGH;
+  case 0:
+    return sstr.str();
+  default:
+    break;
+  }
+
+  // Sort the entries.
+  SmallVector<FileLineColLoc, 8> locVector;
+  locVector.reserve(locations.size());
+  for (auto loc : locations)
+    locVector.push_back(loc.cast<FileLineColLoc>());
+
+  llvm::array_pod_sort(
+      locVector.begin(), locVector.end(),
+      [](const FileLineColLoc *lhs, const FileLineColLoc *rhs) -> int {
+        if (auto fn = lhs->getFilename().compare(rhs->getFilename()))
+          return fn;
+        if (lhs->getLine() != rhs->getLine())
+          return lhs->getLine() < rhs->getLine() ? -1 : 1;
+        return lhs->getColumn() < rhs->getColumn() ? -1 : 1;
+      });
+
+  // The entries are sorted by filename, line, col.  Try to merge together
+  // entries to reduce verbosity on the column info.
+  StringRef lastFileName;
+  for (size_t i = 0, e = locVector.size(); i != e;) {
+    if (i != 0)
+      sstr << ", ";
+
+    // Print the filename if it changed.
+    auto first = locVector[i];
+    if (first.getFilename() != lastFileName) {
+      lastFileName = first.getFilename();
+      sstr << lastFileName;
+    }
+
+    // Scan for entires with the same file/line.
+    size_t end = i + 1;
+    while (end != e && first.getFilename() == locVector[end].getFilename() &&
+           first.getLine() == locVector[end].getLine())
+      ++end;
+
+    // If we have one entry, print it normally.
+    if (end == i + 1) {
+      if (auto line = first.getLine()) {
+        sstr << ':' << line;
+        if (auto col = first.getColumn())
+          sstr << ':' << col;
+      }
+      ++i;
+      continue;
+    }
+
+    // Otherwise print a brace enclosed list.
+    sstr << ':' << first.getLine() << ":{";
+    while (i != end) {
+      sstr << locVector[i++].getColumn();
+
+      if (i != end)
+        sstr << ',';
+    }
+    sstr << '}';
+  }
+
+  return sstr.str();
+}
+
 //===----------------------------------------------------------------------===//
 // VerilogEmitter
 //===----------------------------------------------------------------------===//
@@ -355,17 +449,22 @@ private:
 } // namespace
 
 //===----------------------------------------------------------------------===//
-// ModuleEmitter
+// EmitterBase
 //===----------------------------------------------------------------------===//
-
 namespace {
 
-class ModuleEmitter : public rtl::StmtVisitor<ModuleEmitter, LogicalResult>,
-                      public sv::Visitor<ModuleEmitter, LogicalResult> {
-
+class EmitterBase {
 public:
-  explicit ModuleEmitter(VerilogEmitterState &state)
-      : state(state), os(state.os) {}
+  // All of the mutable state we are maintaining.
+  VerilogEmitterState &state;
+
+  /// The stream to emit to.
+  raw_ostream &os;
+
+  EmitterBase(VerilogEmitterState &state, raw_ostream &os)
+      : state(state), os(os) {}
+  explicit EmitterBase(VerilogEmitterState &state)
+      : EmitterBase(state, state.os) {}
 
   InFlightDiagnostic emitError(Operation *op, const Twine &message) {
     state.encounteredError = true;
@@ -382,71 +481,38 @@ public:
   void addIndent() { state.currentIndent += 2; }
   void reduceIndent() { state.currentIndent -= 2; }
 
-  // All of the mutable state we are maintaining.
-  VerilogEmitterState &state;
+  /// If we have location information for any of the specified operations,
+  /// aggregate it together and print a pretty comment specifying where the
+  /// operations came from.  In any case, print a newline.
+  void emitLocationInfoAndNewLine(const SmallPtrSet<Operation *, 8> &ops) {
+    auto locInfo = getLocationInfoAsString(ops);
+    if (!locInfo.empty())
+      os << "\t// " << locInfo;
+    os << '\n';
+  }
 
-  /// The stream to emit to.
-  raw_ostream &os;
+private:
+  void operator=(const EmitterBase &) = delete;
+  EmitterBase(const EmitterBase &) = delete;
+};
+} // end anonymous namespace
+
+//===----------------------------------------------------------------------===//
+// ModuleEmitter
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+class ModuleEmitter : public EmitterBase {
+public:
+  explicit ModuleEmitter(VerilogEmitterState &state) : EmitterBase(state) {}
 
   void emitMLIRModule(ModuleOp module);
   void emitRTLModule(RTLModuleOp module);
   void emitRTLExternModule(RTLModuleExternOp module);
-  void emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
-                      bool forceRootExpr = false);
-
-  /// Emit the specified expression and return it as a string.
-  std::string
-  emitExpressionToString(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
-                         VerilogPrecedence precedence = LowestPrecedence);
 
   // Statements.
-  void emitStatementExpression(Operation *op);
-
-  // Visitor methods.
-  LogicalResult visitUnhandledStmt(Operation *op) { return failure(); }
-  LogicalResult visitInvalidStmt(Operation *op) { return failure(); }
-  LogicalResult visitUnhandledSV(Operation *op) { return failure(); }
-  LogicalResult visitInvalidSV(Operation *op) { return failure(); }
-  using StmtVisitor::visitStmt;
-  using Visitor::visitSV;
-
-  void visitMerge(MergeOp op);
-  LogicalResult visitSV(WireOp op) { return success(); }
-  LogicalResult visitSV(RegOp op) { return success(); }
-  LogicalResult visitSV(InterfaceInstanceOp op) { return success(); }
-  LogicalResult visitSV(ConnectOp op);
-  LogicalResult visitSV(BPAssignOp op);
-  LogicalResult visitSV(PAssignOp op);
-  LogicalResult visitSV(AliasOp op);
-  LogicalResult visitStmt(OutputOp op);
-  LogicalResult visitStmt(InstanceOp op);
-
-  LogicalResult emitIfDef(Operation *op, StringRef cond);
-  LogicalResult visitSV(IfDefOp op) { return emitIfDef(op, op.cond()); }
-  LogicalResult visitSV(IfDefProceduralOp op) {
-    return emitIfDef(op, op.cond());
-  }
-  LogicalResult visitSV(IfOp op);
-  LogicalResult visitSV(AlwaysOp op);
-  LogicalResult visitSV(AlwaysFFOp op);
-  LogicalResult visitSV(InitialOp op);
-  LogicalResult visitSV(CaseZOp op);
-  LogicalResult visitSV(FWriteOp op);
-  LogicalResult visitSV(FatalOp op);
-  LogicalResult visitSV(FinishOp op);
-  LogicalResult visitSV(VerbatimOp op);
-  LogicalResult visitSV(AssertOp op);
-  LogicalResult visitSV(AssumeOp op);
-  LogicalResult visitSV(CoverOp op);
-  LogicalResult visitSV(InterfaceOp op);
-  LogicalResult visitSV(InterfaceSignalOp op);
-  LogicalResult visitSV(InterfaceModportOp op);
-  LogicalResult visitSV(AssignInterfaceSignalOp op);
-  void emitOperation(Operation *op);
-
-  void emitBlockAsStatement(Block *block,
-                            SmallPtrSet<Operation *, 8> &locationOps,
-                            StringRef multiLineComment = StringRef());
+  void emitStatement(Operation *op);
 
   using ValueOrOp = PointerUnion<Value, Operation *>;
 
@@ -463,14 +529,7 @@ public:
     return entry->getKey();
   }
 
-  /// Return the location information as a (potentially empty) string.
-  std::string getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops);
-
-  /// If we have location information for any of the specified operations,
-  /// aggregate it together and print a pretty comment specifying where the
-  /// operations came from.  In any case, print a newline.
-  void emitLocationInfoAndNewLine(const SmallPtrSet<Operation *, 8> &ops);
-
+public:
   /// nameTable keeps track of mappings from Value's and operations (for
   /// instances) to their string table entry.
   llvm::DenseMap<ValueOrOp, llvm::StringMapEntry<llvm::NoneType> *> nameTable;
@@ -582,111 +641,6 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
   }
 }
 
-/// Return the location information as a (potentially empty) string.
-std::string
-ModuleEmitter::getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
-  std::string resultStr;
-  llvm::raw_string_ostream sstr(resultStr);
-
-  // Multiple operations may come from the same location or may not have useful
-  // location info.  Unique it now.
-  SmallPtrSet<Attribute, 8> locations;
-  for (auto *op : ops) {
-    if (auto loc = op->getLoc().dyn_cast<FileLineColLoc>())
-      locations.insert(loc);
-  }
-
-  auto printLoc = [&](FileLineColLoc loc) {
-    sstr << loc.getFilename();
-    if (auto line = loc.getLine()) {
-      sstr << ':' << line;
-      if (auto col = loc.getColumn())
-        sstr << ':' << col;
-    }
-  };
-
-  switch (locations.size()) {
-  case 1:
-    printLoc((*locations.begin()).cast<FileLineColLoc>());
-    LLVM_FALLTHROUGH;
-  case 0:
-    return sstr.str();
-  default:
-    break;
-  }
-
-  // Sort the entries.
-  SmallVector<FileLineColLoc, 8> locVector;
-  locVector.reserve(locations.size());
-  for (auto loc : locations)
-    locVector.push_back(loc.cast<FileLineColLoc>());
-
-  llvm::array_pod_sort(
-      locVector.begin(), locVector.end(),
-      [](const FileLineColLoc *lhs, const FileLineColLoc *rhs) -> int {
-        if (auto fn = lhs->getFilename().compare(rhs->getFilename()))
-          return fn;
-        if (lhs->getLine() != rhs->getLine())
-          return lhs->getLine() < rhs->getLine() ? -1 : 1;
-        return lhs->getColumn() < rhs->getColumn() ? -1 : 1;
-      });
-
-  // The entries are sorted by filename, line, col.  Try to merge together
-  // entries to reduce verbosity on the column info.
-  StringRef lastFileName;
-  for (size_t i = 0, e = locVector.size(); i != e;) {
-    if (i != 0)
-      sstr << ", ";
-
-    // Print the filename if it changed.
-    auto first = locVector[i];
-    if (first.getFilename() != lastFileName) {
-      lastFileName = first.getFilename();
-      sstr << lastFileName;
-    }
-
-    // Scan for entires with the same file/line.
-    size_t end = i + 1;
-    while (end != e && first.getFilename() == locVector[end].getFilename() &&
-           first.getLine() == locVector[end].getLine())
-      ++end;
-
-    // If we have one entry, print it normally.
-    if (end == i + 1) {
-      if (auto line = first.getLine()) {
-        sstr << ':' << line;
-        if (auto col = first.getColumn())
-          sstr << ':' << col;
-      }
-      ++i;
-      continue;
-    }
-
-    // Otherwise print a brace enclosed list.
-    sstr << ':' << first.getLine() << ":{";
-    while (i != end) {
-      sstr << locVector[i++].getColumn();
-
-      if (i != end)
-        sstr << ',';
-    }
-    sstr << '}';
-  }
-
-  return sstr.str();
-}
-
-/// If we have location information for any of the specified operations,
-/// aggregate it together and print a pretty comment specifying where the
-/// operations came from.  In any case, print a newline.
-void ModuleEmitter::emitLocationInfoAndNewLine(
-    const SmallPtrSet<Operation *, 8> &ops) {
-  auto locInfo = getLocationInfoAsString(ops);
-  if (!locInfo.empty())
-    os << "\t// " << locInfo;
-  os << '\n';
-}
-
 //===----------------------------------------------------------------------===//
 // Expression Emission
 //===----------------------------------------------------------------------===//
@@ -721,14 +675,16 @@ namespace {
 /// we emit the characters to a SmallVector which allows us to emit a bunch of
 /// stuff, then pre-insert parentheses and other things if we find out that it
 /// was needed later.
-class ExprEmitter : public TypeOpVisitor<ExprEmitter, SubExprInfo>,
+class ExprEmitter : public EmitterBase,
+                    public TypeOpVisitor<ExprEmitter, SubExprInfo>,
                     public CombinationalVisitor<ExprEmitter, SubExprInfo>,
                     public Visitor<ExprEmitter, SubExprInfo> {
 public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
   /// of any emitted expressions in the specified set.
   ExprEmitter(ModuleEmitter &emitter, SmallPtrSet<Operation *, 8> &emittedExprs)
-      : emitter(emitter), emittedExprs(emittedExprs), os(resultBuffer) {}
+      : EmitterBase(emitter.state, os), emitter(emitter),
+        emittedExprs(emittedExprs), os(resultBuffer) {}
 
   void emitExpression(Value exp, bool forceRootExpr, raw_ostream &os);
 
@@ -742,8 +698,6 @@ public:
         return lookThroughNoopCasts(op->getOperand(0));
     return value;
   }
-
-  ModuleEmitter &emitter;
 
 private:
   friend class TypeOpVisitor<ExprEmitter, SubExprInfo>;
@@ -856,6 +810,8 @@ private:
   SubExprInfo visitComb(BitcastOp op);
 
 private:
+  ModuleEmitter &emitter;
+
   /// This is set (before a visit method is called) if emitSubExpr would
   /// prefer to get an output of a specific sign.  This is a hint to cause the
   /// visitor to change its emission strategy, but the visit method can ignore
@@ -1268,52 +1224,130 @@ SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
 }
 
 //===----------------------------------------------------------------------===//
-// Statements
+// StmtEmitter
 //===----------------------------------------------------------------------===//
+
+namespace {
+/// This emits statement-related operations.
+class StmtEmitter : public EmitterBase,
+                    public rtl::StmtVisitor<StmtEmitter, LogicalResult>,
+                    public sv::Visitor<StmtEmitter, LogicalResult> {
+public:
+  /// Create an ExprEmitter for the specified module emitter, and keeping track
+  /// of any emitted expressions in the specified set.
+  StmtEmitter(ModuleEmitter &emitter)
+      : EmitterBase(emitter.state), emitter(emitter) {}
+
+  void emitStatement(Operation *op);
+
+  void emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
+                      bool forceRootExpr = false);
+
+  /// Emit the specified expression and return it as a string.
+  std::string
+  emitExpressionToString(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
+                         VerilogPrecedence precedence = LowestPrecedence);
+
+private:
+  using StmtVisitor::visitStmt;
+  using Visitor::visitSV;
+  friend class rtl::StmtVisitor<StmtEmitter, LogicalResult>;
+  friend class sv::Visitor<StmtEmitter, LogicalResult>;
+
+  // Visitor methods.
+  LogicalResult visitUnhandledStmt(Operation *op) { return failure(); }
+  LogicalResult visitInvalidStmt(Operation *op) { return failure(); }
+  LogicalResult visitUnhandledSV(Operation *op) { return failure(); }
+  LogicalResult visitInvalidSV(Operation *op) { return failure(); }
+
+  void emitMergeOp(MergeOp op);
+  LogicalResult visitSV(WireOp op) { return success(); }
+  LogicalResult visitSV(RegOp op) { return success(); }
+  LogicalResult visitSV(InterfaceInstanceOp op) { return success(); }
+  LogicalResult visitSV(ConnectOp op);
+  LogicalResult visitSV(BPAssignOp op);
+  LogicalResult visitSV(PAssignOp op);
+  LogicalResult visitSV(AliasOp op);
+  LogicalResult visitStmt(OutputOp op);
+  LogicalResult visitStmt(InstanceOp op);
+
+  LogicalResult emitIfDef(Operation *op, StringRef cond);
+  LogicalResult visitSV(IfDefOp op) { return emitIfDef(op, op.cond()); }
+  LogicalResult visitSV(IfDefProceduralOp op) {
+    return emitIfDef(op, op.cond());
+  }
+  LogicalResult visitSV(IfOp op);
+  LogicalResult visitSV(AlwaysOp op);
+  LogicalResult visitSV(AlwaysFFOp op);
+  LogicalResult visitSV(InitialOp op);
+  LogicalResult visitSV(CaseZOp op);
+  LogicalResult visitSV(FWriteOp op);
+  LogicalResult visitSV(FatalOp op);
+  LogicalResult visitSV(FinishOp op);
+  LogicalResult visitSV(VerbatimOp op);
+  LogicalResult visitSV(AssertOp op);
+  LogicalResult visitSV(AssumeOp op);
+  LogicalResult visitSV(CoverOp op);
+  LogicalResult visitSV(InterfaceOp op);
+  LogicalResult visitSV(InterfaceSignalOp op);
+  LogicalResult visitSV(InterfaceModportOp op);
+  LogicalResult visitSV(AssignInterfaceSignalOp op);
+  void emitStatementExpression(Operation *op);
+
+  void emitBlockAsStatement(Block *block,
+                            SmallPtrSet<Operation *, 8> &locationOps,
+                            StringRef multiLineComment = StringRef());
+
+  ModuleEmitter &emitter;
+};
+
+} // end anonymous namespace
 
 /// Emit the specified value as an expression.  If this is an inline-emitted
 /// expression, we emit that expression, otherwise we emit a reference to the
 /// already computed name.  If 'forceRootExpr' is true, then this emits an
 /// expression even if we typically don't do it inline.
 ///
-void ModuleEmitter::emitExpression(Value exp,
-                                   SmallPtrSet<Operation *, 8> &emittedExprs,
-                                   bool forceRootExpr) {
-  ExprEmitter(*this, emittedExprs).emitExpression(exp, forceRootExpr, os);
+void StmtEmitter::emitExpression(Value exp,
+                                 SmallPtrSet<Operation *, 8> &emittedExprs,
+                                 bool forceRootExpr) {
+  ExprEmitter(emitter, emittedExprs).emitExpression(exp, forceRootExpr, os);
 }
 
 /// Emit the specified expression and return it as a string.
 std::string
-ModuleEmitter::emitExpressionToString(Value exp,
-                                      SmallPtrSet<Operation *, 8> &emittedExprs,
-                                      VerilogPrecedence precedence) {
-  return ExprEmitter(*this, emittedExprs)
+StmtEmitter::emitExpressionToString(Value exp,
+                                    SmallPtrSet<Operation *, 8> &emittedExprs,
+                                    VerilogPrecedence precedence) {
+  return ExprEmitter(emitter, emittedExprs)
       .emitExpressionToString(exp, precedence);
 }
 
-void ModuleEmitter::emitStatementExpression(Operation *op) {
+void StmtEmitter::emitStatementExpression(Operation *op) {
   // This is invoked for expressions that have a non-single use.  This could
   // either be because they are dead or because they have multiple uses.
   if (op->getResult(0).use_empty()) {
     indent() << "// Unused: ";
   } else if (isZeroBitType(op->getResult(0).getType())) {
     indent() << "// Zero width: ";
-  } else if (emitInlineLogicDecls && !outOfLineExpresssionDecls.count(op)) {
+  } else if (emitInlineLogicDecls &&
+             !emitter.outOfLineExpresssionDecls.count(op)) {
     indent() << getVerilogDeclWord(op) << " ";
     if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os,
                         op->getLoc()))
       os << ' ';
-    os << getName(op->getResult(0)) << " = ";
+    os << emitter.getName(op->getResult(0)) << " = ";
   } else {
-    indent() << "assign " << getName(op->getResult(0)) << " = ";
+    indent() << "assign " << emitter.getName(op->getResult(0)) << " = ";
   }
   SmallPtrSet<Operation *, 8> emittedExprs;
-  emitExpression(op->getResult(0), emittedExprs, /*forceRootExpr=*/true);
+  emitExpression(op->getResult(0), emittedExprs,
+                 /*forceRootExpr=*/true);
   os << ';';
   emitLocationInfoAndNewLine(emittedExprs);
 }
 
-void ModuleEmitter::visitMerge(MergeOp op) {
+void StmtEmitter::emitMergeOp(MergeOp op) {
   SmallPtrSet<Operation *, 8> ops;
 
   // Emit "a = rtl.merge x, y, z" as:
@@ -1322,7 +1356,7 @@ void ModuleEmitter::visitMerge(MergeOp op) {
   //   assign a = z;
   for (auto operand : op.getOperands()) {
     ops.insert(op);
-    indent() << "assign " << getName(op) << " = ";
+    indent() << "assign " << emitter.getName(op) << " = ";
     emitExpression(operand, ops);
     os << ';';
     emitLocationInfoAndNewLine(ops);
@@ -1330,7 +1364,7 @@ void ModuleEmitter::visitMerge(MergeOp op) {
   }
 }
 
-LogicalResult ModuleEmitter::visitSV(ConnectOp op) {
+LogicalResult StmtEmitter::visitSV(ConnectOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1343,7 +1377,7 @@ LogicalResult ModuleEmitter::visitSV(ConnectOp op) {
   return success();
 }
 
-LogicalResult ModuleEmitter::visitSV(BPAssignOp op) {
+LogicalResult StmtEmitter::visitSV(BPAssignOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1356,7 +1390,7 @@ LogicalResult ModuleEmitter::visitSV(BPAssignOp op) {
   return success();
 }
 
-LogicalResult ModuleEmitter::visitSV(PAssignOp op) {
+LogicalResult StmtEmitter::visitSV(PAssignOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1369,7 +1403,7 @@ LogicalResult ModuleEmitter::visitSV(PAssignOp op) {
   return success();
 }
 
-LogicalResult ModuleEmitter::visitSV(AliasOp op) {
+LogicalResult StmtEmitter::visitSV(AliasOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1383,7 +1417,7 @@ LogicalResult ModuleEmitter::visitSV(AliasOp op) {
 
 /// For OutputOp we put "assign" statements at the end of the Verilog module to
 /// assign the module outputs to intermediate wires.
-LogicalResult ModuleEmitter::visitStmt(OutputOp op) {
+LogicalResult StmtEmitter::visitStmt(OutputOp op) {
   SmallPtrSet<Operation *, 8> ops;
 
   SmallVector<ModulePortInfo, 8> ports;
@@ -1398,7 +1432,7 @@ LogicalResult ModuleEmitter::visitStmt(OutputOp op) {
     indent();
     if (isZeroBitType(port.type))
       os << "// Zero width: ";
-    os << "assign " << outputNames[port.argNum] << " = ";
+    os << "assign " << emitter.outputNames[port.argNum] << " = ";
     emitExpression(op.getOperand(operandIndex), ops);
     os << ';';
     emitLocationInfoAndNewLine(ops);
@@ -1407,7 +1441,7 @@ LogicalResult ModuleEmitter::visitStmt(OutputOp op) {
   return success();
 }
 
-LogicalResult ModuleEmitter::visitSV(FWriteOp op) {
+LogicalResult StmtEmitter::visitSV(FWriteOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1423,7 +1457,7 @@ LogicalResult ModuleEmitter::visitSV(FWriteOp op) {
   return success();
 }
 
-LogicalResult ModuleEmitter::visitSV(FatalOp op) {
+LogicalResult StmtEmitter::visitSV(FatalOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent() << "$fatal;";
@@ -1431,7 +1465,7 @@ LogicalResult ModuleEmitter::visitSV(FatalOp op) {
   return success();
 }
 
-LogicalResult ModuleEmitter::visitSV(VerbatimOp op) {
+LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1525,7 +1559,7 @@ LogicalResult ModuleEmitter::visitSV(VerbatimOp op) {
   return success();
 }
 
-LogicalResult ModuleEmitter::visitSV(FinishOp op) {
+LogicalResult StmtEmitter::visitSV(FinishOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent() << "$finish;";
@@ -1533,7 +1567,7 @@ LogicalResult ModuleEmitter::visitSV(FinishOp op) {
   return success();
 }
 
-LogicalResult ModuleEmitter::visitSV(AssertOp op) {
+LogicalResult StmtEmitter::visitSV(AssertOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent() << "assert(" << emitExpressionToString(op.predicate(), ops) << ");";
@@ -1541,7 +1575,7 @@ LogicalResult ModuleEmitter::visitSV(AssertOp op) {
   return success();
 }
 
-LogicalResult ModuleEmitter::visitSV(AssumeOp op) {
+LogicalResult StmtEmitter::visitSV(AssumeOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent() << "assume(" << emitExpressionToString(op.property(), ops) << ");";
@@ -1549,7 +1583,7 @@ LogicalResult ModuleEmitter::visitSV(AssumeOp op) {
   return success();
 }
 
-LogicalResult ModuleEmitter::visitSV(CoverOp op) {
+LogicalResult StmtEmitter::visitSV(CoverOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent() << "cover(" << emitExpressionToString(op.property(), ops) << ");";
@@ -1557,7 +1591,7 @@ LogicalResult ModuleEmitter::visitSV(CoverOp op) {
   return success();
 }
 
-LogicalResult ModuleEmitter::emitIfDef(Operation *op, StringRef cond) {
+LogicalResult StmtEmitter::emitIfDef(Operation *op, StringRef cond) {
   bool hasEmptyThen = isa<sv::YieldOp>(op->getRegion(0).front().front());
   if (hasEmptyThen)
     indent() << "`ifndef " << cond;
@@ -1569,19 +1603,19 @@ LogicalResult ModuleEmitter::emitIfDef(Operation *op, StringRef cond) {
   emitLocationInfoAndNewLine(ops);
 
   if (!hasEmptyThen) {
-    addIndent();
+    emitter.addIndent();
     for (auto &o : op->getRegion(0).front().without_terminator())
-      emitOperation(&o);
-    reduceIndent();
+      emitStatement(&o);
+    emitter.reduceIndent();
   }
 
   if (!op->getRegion(1).empty()) {
     if (!hasEmptyThen)
       indent() << "`else\n";
-    addIndent();
+    emitter.addIndent();
     for (auto &o : op->getRegion(1).front().without_terminator())
-      emitOperation(&o);
-    reduceIndent();
+      emitStatement(&o);
+    emitter.reduceIndent();
   }
 
   indent() << "`endif\n";
@@ -1592,9 +1626,9 @@ LogicalResult ModuleEmitter::emitIfDef(Operation *op, StringRef cond) {
 /// markers if non-singular.  If the control flow construct is multi-line and
 /// if multiLineComment is non-null, the string is included in a comment after
 /// the 'end' to make it easier to associate.
-void ModuleEmitter::emitBlockAsStatement(
-    Block *block, SmallPtrSet<Operation *, 8> &locationOps,
-    StringRef multiLineComment) {
+void StmtEmitter::emitBlockAsStatement(Block *block,
+                                       SmallPtrSet<Operation *, 8> &locationOps,
+                                       StringRef multiLineComment) {
   auto isSingleVerilogStatement = [&](Operation &op) {
     // Not all expressions and statements are guaranteed to emit a single
     // Verilog statement (for the purposes of if statements).  Just do a simple
@@ -1611,10 +1645,10 @@ void ModuleEmitter::emitBlockAsStatement(
     os << " begin";
   emitLocationInfoAndNewLine(locationOps);
 
-  addIndent();
+  emitter.addIndent();
   for (auto &op : block->without_terminator())
-    emitOperation(&op);
-  reduceIndent();
+    emitStatement(&op);
+  emitter.reduceIndent();
 
   if (!hasOneStmt) {
     indent() << "end";
@@ -1624,7 +1658,7 @@ void ModuleEmitter::emitBlockAsStatement(
   }
 }
 
-LogicalResult ModuleEmitter::visitSV(IfOp op) {
+LogicalResult StmtEmitter::visitSV(IfOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1637,7 +1671,7 @@ LogicalResult ModuleEmitter::visitSV(IfOp op) {
   return success();
 }
 
-LogicalResult ModuleEmitter::visitSV(AlwaysOp op) {
+LogicalResult StmtEmitter::visitSV(AlwaysOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1687,7 +1721,7 @@ LogicalResult ModuleEmitter::visitSV(AlwaysOp op) {
   return success();
 }
 
-LogicalResult ModuleEmitter::visitSV(AlwaysFFOp op) {
+LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1715,7 +1749,7 @@ LogicalResult ModuleEmitter::visitSV(AlwaysFFOp op) {
   else {
     os << " begin";
     emitLocationInfoAndNewLine(ops);
-    addIndent();
+    emitter.addIndent();
 
     indent() << "if (";
     // Negative edge async resets need to invert the reset condition.  This is
@@ -1728,7 +1762,7 @@ LogicalResult ModuleEmitter::visitSV(AlwaysFFOp op) {
     indent() << "else";
     emitBlockAsStatement(op.getBodyBlock(), ops);
 
-    reduceIndent();
+    emitter.reduceIndent();
 
     indent() << "end";
     os << " // " << comment;
@@ -1737,7 +1771,7 @@ LogicalResult ModuleEmitter::visitSV(AlwaysFFOp op) {
   return success();
 }
 
-LogicalResult ModuleEmitter::visitSV(InitialOp op) {
+LogicalResult StmtEmitter::visitSV(InitialOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1746,14 +1780,14 @@ LogicalResult ModuleEmitter::visitSV(InitialOp op) {
   return success();
 }
 
-LogicalResult ModuleEmitter::visitSV(CaseZOp op) {
+LogicalResult StmtEmitter::visitSV(CaseZOp op) {
   SmallPtrSet<Operation *, 8> ops, emptyOps;
   ops.insert(op);
 
   indent() << "casez (" << emitExpressionToString(op.cond(), ops) << ')';
   emitLocationInfoAndNewLine(ops);
 
-  addIndent();
+  emitter.addIndent();
   for (auto caseInfo : op.getCases()) {
     auto pattern = caseInfo.pattern;
 
@@ -1770,13 +1804,13 @@ LogicalResult ModuleEmitter::visitSV(CaseZOp op) {
     emitBlockAsStatement(caseInfo.block, emptyOps);
   }
 
-  reduceIndent();
+  emitter.reduceIndent();
   indent() << "endcase";
   emitLocationInfoAndNewLine(ops);
   return success();
 }
 
-LogicalResult ModuleEmitter::visitStmt(InstanceOp op) {
+LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -1830,7 +1864,7 @@ LogicalResult ModuleEmitter::visitStmt(InstanceOp op) {
     }
   }
 
-  os << ' ' << getName(ValueOrOp(op)) << " (";
+  os << ' ' << emitter.getName(ModuleEmitter::ValueOrOp(op)) << " (";
 
   SmallVector<ModulePortInfo, 8> portInfo;
   getModulePortInfo(moduleOp, portInfo);
@@ -1900,19 +1934,19 @@ LogicalResult ModuleEmitter::visitStmt(InstanceOp op) {
   return success();
 }
 
-LogicalResult ModuleEmitter::visitSV(InterfaceOp op) {
+LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
   os << "interface " << op.sym_name() << ";\n";
 
   addIndent();
   for (auto &o : op.getBodyBlock()->without_terminator())
-    emitOperation(&o);
+    emitStatement(&o);
   reduceIndent();
 
   os << "endinterface\n\n";
   return success();
 }
 
-LogicalResult ModuleEmitter::visitSV(InterfaceSignalOp op) {
+LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
   if (!isZeroBitType(op.type()))
     indent() << "logic ";
   else
@@ -1923,7 +1957,7 @@ LogicalResult ModuleEmitter::visitSV(InterfaceSignalOp op) {
   return success();
 }
 
-LogicalResult ModuleEmitter::visitSV(InterfaceModportOp op) {
+LogicalResult StmtEmitter::visitSV(InterfaceModportOp op) {
   indent() << "modport " << op.sym_name() << '(';
 
   llvm::interleaveComma(op.ports(), os, [&](const Attribute &portAttr) {
@@ -1935,7 +1969,7 @@ LogicalResult ModuleEmitter::visitSV(InterfaceModportOp op) {
   return success();
 }
 
-LogicalResult ModuleEmitter::visitSV(AssignInterfaceSignalOp op) {
+LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
   SmallPtrSet<Operation *, 8> emitted;
   indent() << "assign ";
   emitExpression(op.iface(), emitted, /*forceRootExpr=*/true);
@@ -1944,6 +1978,34 @@ LogicalResult ModuleEmitter::visitSV(AssignInterfaceSignalOp op) {
   os << ";\n";
   return success();
 }
+
+void StmtEmitter::emitStatement(Operation *op) {
+  // Expressions may either be ignored or emitted as an expression statements.
+  if (isVerilogExpression(op)) {
+    if (emitter.outOfLineExpressions.count(op))
+      emitStatementExpression(op);
+    return;
+  }
+
+  // Handle RTL statements.
+  if (succeeded(dispatchStmtVisitor(op)))
+    return;
+
+  // Handle SV Statements.
+  if (succeeded(dispatchSVVisitor(op)))
+    return;
+
+  if (auto merge = dyn_cast<MergeOp>(op))
+    return emitMergeOp(merge);
+
+  emitOpError(op, "cannot emit this operation to Verilog");
+  indent() << "unknown MLIR operation " << op->getName().getStringRef() << "\n";
+}
+
+void ModuleEmitter::emitStatement(Operation *op) {
+  StmtEmitter(*this).emitStatement(op);
+}
+
 //===----------------------------------------------------------------------===//
 // Module Driver
 //===----------------------------------------------------------------------===//
@@ -2255,29 +2317,6 @@ void ModuleEmitter::collectNamesEmitDecls(Block &block) {
     os << '\n';
 }
 
-void ModuleEmitter::emitOperation(Operation *op) {
-  // Expressions may either be ignored or emitted as an expression statements.
-  if (isVerilogExpression(op)) {
-    if (outOfLineExpressions.count(op))
-      emitStatementExpression(op);
-    return;
-  }
-
-  // Handle RTL statements.
-  if (succeeded(dispatchStmtVisitor(op)))
-    return;
-
-  // Handle SV Statements.
-  if (succeeded(dispatchSVVisitor(op)))
-    return;
-
-  if (auto merge = dyn_cast<MergeOp>(op))
-    return visitMerge(merge);
-
-  emitOpError(op, "cannot emit this operation to Verilog");
-  indent() << "unknown MLIR operation " << op->getName().getStringRef() << "\n";
-}
-
 void ModuleEmitter::emitMLIRModule(ModuleOp module) {
   for (auto &op : *module.getBody()) {
     if (auto module = dyn_cast<RTLModuleOp>(op))
@@ -2286,7 +2325,7 @@ void ModuleEmitter::emitMLIRModule(ModuleOp module) {
       ModuleEmitter(state).emitRTLExternModule(module);
     else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) || isa<IfDefOp>(op) ||
              isa<IfDefProceduralOp>(op))
-      ModuleEmitter(state).emitOperation(&op);
+      ModuleEmitter(state).emitStatement(&op);
     else if (!isa<ModuleTerminatorOp>(op))
       op.emitError("unknown operation");
   }
@@ -2424,7 +2463,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
 
   // Emit the body.
   for (auto &op : *module.getBodyBlock()) {
-    emitOperation(&op);
+    emitStatement(&op);
   }
 
   reduceIndent();
