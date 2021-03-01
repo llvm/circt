@@ -386,21 +386,6 @@ void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
 //===----------------------------------------------------------------------===//
 // InitialOp
 //===----------------------------------------------------------------------===//
-
-void InitialOp::build(OpBuilder &odsBuilder, OperationState &result,
-                      std::function<void()> bodyCtor) {
-  Region *body = result.addRegion();
-  InitialOp::ensureTerminator(*body, odsBuilder, result.location);
-
-  // Fill in the body of the #ifdef.
-  if (bodyCtor) {
-    auto oldIP = &*odsBuilder.getInsertionPoint();
-    odsBuilder.setInsertionPointToStart(&*body->begin());
-    bodyCtor();
-    odsBuilder.setInsertionPoint(oldIP);
-  }
-}
-
 void InitialOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                             MLIRContext *context) {
   // If the body is empty, erase op.
@@ -417,6 +402,22 @@ void InitialOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
   };
   results.insert<EraseEmptyOp>(context);
 }
+
+void InitialOp::build(OpBuilder &odsBuilder, OperationState &result,
+                      std::function<void()> bodyCtor) {
+  Region *body = result.addRegion();
+  InitialOp::ensureTerminator(*body, odsBuilder, result.location);
+
+  // Fill in the body of the #ifdef.
+  if (bodyCtor) {
+    auto oldIP = &*odsBuilder.getInsertionPoint();
+    odsBuilder.setInsertionPointToStart(&*body->begin());
+    bodyCtor();
+    odsBuilder.setInsertionPoint(oldIP);
+  }
+}
+
+
 
 //===----------------------------------------------------------------------===//
 // TypeDecl operations
