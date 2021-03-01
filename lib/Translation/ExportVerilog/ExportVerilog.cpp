@@ -1236,6 +1236,9 @@ public:
 
   void emitStatement(Operation *op);
 
+  size_t getNumStatementsEmitted() const { return numStatementsEmitted; }
+
+private:
   void emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
                       bool forceRootExpr = false);
 
@@ -1244,7 +1247,6 @@ public:
   emitExpressionToString(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
                          VerilogPrecedence precedence = LowestPrecedence);
 
-private:
   using StmtVisitor::visitStmt;
   using Visitor::visitSV;
   friend class rtl::StmtVisitor<StmtEmitter, LogicalResult>;
@@ -1295,6 +1297,7 @@ private:
                             StringRef multiLineComment = StringRef());
 
   ModuleEmitter &emitter;
+  size_t numStatementsEmitted = 0;
 };
 
 } // end anonymous namespace
@@ -1324,10 +1327,13 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
   // either be because they are dead or because they have multiple uses.
   if (op->getResult(0).use_empty()) {
     indent() << "// Unused: ";
+    --numStatementsEmitted;
   } else if (isZeroBitType(op->getResult(0).getType())) {
     indent() << "// Zero width: ";
+    --numStatementsEmitted;
   } else if (emitInlineLogicDecls &&
              !emitter.outOfLineExpresssionDecls.count(op)) {
+
     indent() << getVerilogDeclWord(op) << " ";
     if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os,
                         op->getLoc()))
@@ -1345,6 +1351,7 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
 
 void StmtEmitter::emitMergeOp(MergeOp op) {
   SmallPtrSet<Operation *, 8> ops;
+  --numStatementsEmitted; // We manually count our statements.
 
   // Emit "a = rtl.merge x, y, z" as:
   //   assign a = x;
@@ -1357,6 +1364,7 @@ void StmtEmitter::emitMergeOp(MergeOp op) {
     os << ';';
     emitLocationInfoAndNewLine(ops);
     ops.clear();
+    ++numStatementsEmitted;
   }
 }
 
@@ -1414,8 +1422,9 @@ LogicalResult StmtEmitter::visitSV(AliasOp op) {
 /// For OutputOp we put "assign" statements at the end of the Verilog module to
 /// assign the module outputs to intermediate wires.
 LogicalResult StmtEmitter::visitStmt(OutputOp op) {
-  SmallPtrSet<Operation *, 8> ops;
+  --numStatementsEmitted; // Count emitted statements manually.
 
+  SmallPtrSet<Operation *, 8> ops;
   SmallVector<ModulePortInfo, 8> ports;
   RTLModuleOp parent = op->getParentOfType<RTLModuleOp>();
   parent.getPortInfo(ports);
@@ -1433,6 +1442,7 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
     os << ';';
     emitLocationInfoAndNewLine(ops);
     ++operandIndex;
+    ++numStatementsEmitted;
   }
   return success();
 }
@@ -1552,6 +1562,11 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
   }
 
   emitLocationInfoAndNewLine(ops);
+
+  // We don't know how many statements we emitted, so assume conservatively
+  // that a lot got put out. This will make sure we get a begin/end block around
+  // this.
+  numStatementsEmitted += 2;
   return success();
 }
 
@@ -1625,33 +1640,45 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, StringRef cond) {
 void StmtEmitter::emitBlockAsStatement(Block *block,
                                        SmallPtrSet<Operation *, 8> &locationOps,
                                        StringRef multiLineComment) {
-  auto isSingleVerilogStatement = [&](Operation &op) {
-    // Not all expressions and statements are guaranteed to emit a single
-    // Verilog statement (for the purposes of if statements).  Just do a simple
-    // check here for now.  This can be improved over time.
-    return isa<FWriteOp>(op) || isa<FinishOp>(op) || isa<FatalOp>(op) ||
-           isa<AssertOp>(op) || isa<AssumeOp>(op) || isa<CoverOp>(op) ||
-           isa<BPAssignOp>(op) || isa<PAssignOp>(op) || isa<ConnectOp>(op);
-  };
 
-  // Determine if we can omit the begin/end keywords.
-  bool hasOneStmt = llvm::hasSingleElement(block->without_terminator()) &&
-                    isSingleVerilogStatement(block->front());
-  if (!hasOneStmt)
-    os << " begin";
-  emitLocationInfoAndNewLine(locationOps);
+  // We don't know if we need to emit the begin until after we emit the body of
+  // the block.  We can have multiple ops that fold together into one statement
+  // (common in nested expressions feeding into a connect) or one apparently
+  // simple set of operations that gets broken across multiple lines because
+  // they are too long.
+  //
+  // Solve this by emitting into a temporary buffer, determining if we need to
+  // emit the begin, and if so, emit the begin and then the buffer contents.
+  SmallString<128> blockBuffer;
+  size_t numSubstatementsEmitted;
+  {
+    llvm::raw_svector_ostream blockOutStream(blockBuffer);
+    addIndent();
+    StmtEmitter subEmitter(emitter, blockOutStream);
+    for (auto &op : block->without_terminator())
+      subEmitter.emitStatement(&op);
+    reduceIndent();
 
-  addIndent();
-  for (auto &op : block->without_terminator())
-    emitStatement(&op);
-  reduceIndent();
-
-  if (!hasOneStmt) {
-    indent() << "end";
-    if (!multiLineComment.empty())
-      os << " // " << multiLineComment;
-    os << '\n';
+    numSubstatementsEmitted = subEmitter.getNumStatementsEmitted();
   }
+
+  // If we emitted exactly one statement, then we can just emit it and be
+  // done.
+  if (numSubstatementsEmitted == 1) {
+    emitLocationInfoAndNewLine(locationOps);
+    os << blockBuffer;
+    return;
+  }
+
+  // Otherwise we emit the begin and end logic.
+  os << " begin";
+  emitLocationInfoAndNewLine(locationOps);
+  os << blockBuffer;
+
+  indent() << "end";
+  if (!multiLineComment.empty())
+    os << " // " << multiLineComment;
+  os << '\n';
 }
 
 LogicalResult StmtEmitter::visitSV(IfOp op) {
@@ -1664,6 +1691,15 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
     indent() << "else";
     emitBlockAsStatement(op.getElseBlock(), ops);
   }
+
+  // We count if as multiple statements to make sure it is always surrounded by
+  // a begin/end so we don't get if/else confusion in cases like this:
+  // if (cond)
+  //   if (otherCond)    // This should force a begin!
+  //     stmt
+  // else                // Goes with the outer if!
+  //   thing;
+  ++numStatementsEmitted;
   return success();
 }
 
@@ -1944,8 +1980,10 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
 LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
   if (!isZeroBitType(op.type()))
     indent() << "logic ";
-  else
+  else {
+    ++numStatementsEmitted; // Conservatively require a begin/end.
     indent() << "// Zero width: logic ";
+  }
 
   emitTypeDimWithSpaceIfNeeded(op.type(), op.getLoc(), os);
   os << op.sym_name() << ";\n";
@@ -1977,10 +2015,14 @@ LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
 void StmtEmitter::emitStatement(Operation *op) {
   // Expressions may either be ignored or emitted as an expression statements.
   if (isVerilogExpression(op)) {
-    if (emitter.outOfLineExpressions.count(op))
+    if (emitter.outOfLineExpressions.count(op)) {
+      ++numStatementsEmitted;
       emitStatementExpression(op);
+    }
     return;
   }
+
+  ++numStatementsEmitted;
 
   // Handle RTL statements.
   if (succeeded(dispatchStmtVisitor(op)))

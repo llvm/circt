@@ -71,12 +71,38 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     sv.fwrite "Async Reset Block\n"
   } 
 
-  %c42 = rtl.constant 42 : i42
-
   // CHECK-NEXT:   if (cond)
   sv.if %cond {
+    %c42 = rtl.constant 42 : i42
+
     // CHECK-NEXT: wire42 = 42'h2A;
     sv.bpassign %wire42, %c42 : i42
+  }
+
+  // CHECK-NEXT:   if (cond)
+  // CHECK-NOT: begin
+  sv.if %cond {
+    %c42 = rtl.constant 42 : i8
+    %add = comb.add %val, %c42 : i8
+
+    // CHECK-NEXT: $fwrite(32'h80000002, "Inlined! %x\n", val + 8'h2A);
+    sv.fwrite "Inlined! %x\n"(%add) : i8
+  }
+
+  // begin/end required here to avoid else-confusion.  
+
+  // CHECK-NEXT:   if (cond) begin
+  sv.if %cond {
+    // CHECK-NEXT: if (clock)
+    sv.if %clock {
+      // CHECK-NEXT: $fwrite(32'h80000002, "Inside Block\n");
+      sv.fwrite "Inside Block\n"
+    }
+    // CHECK-NEXT: end
+  } else { // CHECK-NEXT: else
+    // CHECK-NOT: begin
+    // CHECK-NEXT: $fwrite(32'h80000002, "Else Block\n");
+    sv.fwrite "Else Block\n"
   }
 
   // CHECK-NEXT:   if (cond) begin
