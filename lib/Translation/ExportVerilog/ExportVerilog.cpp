@@ -550,10 +550,6 @@ public:
   /// the top of the module to avoid "use before def" issues in the generated
   /// verilog.  This can happen for cyclic modules.
   SmallPtrSet<Operation *, 16> outOfLineExpresssionDecls;
-
-private:
-  ModuleEmitter(const ModuleEmitter &) = delete;
-  void operator=(const ModuleEmitter &) = delete;
 };
 
 } // end anonymous namespace
@@ -1218,7 +1214,7 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
 }
 
 SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
-  emitter.emitOpError(op, "cannot emit this expression to Verilog");
+  emitOpError(op, "cannot emit this expression to Verilog");
   os << "<<unsupported expr: " << op->getName().getStringRef() << ">>";
   return {Symbol, IsUnsigned};
 }
@@ -1235,8 +1231,8 @@ class StmtEmitter : public EmitterBase,
 public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
   /// of any emitted expressions in the specified set.
-  StmtEmitter(ModuleEmitter &emitter)
-      : EmitterBase(emitter.state), emitter(emitter) {}
+  StmtEmitter(ModuleEmitter &emitter, raw_ostream &os)
+      : EmitterBase(emitter.state, os), emitter(emitter) {}
 
   void emitStatement(Operation *op);
 
@@ -1524,13 +1520,13 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
         if (line.drop_front(start)
                 .take_front(next - start)
                 .getAsInteger(10, operandNo)) {
-          op.emitError("operand substitution too large");
+          emitError(op, "operand substitution too large");
           continue;
         }
         next += 2;
 
         if (operandNo >= op.operands().size()) {
-          op.emitError("operand " + llvm::utostr(operandNo) + " isn't valid");
+          emitError(op, "operand " + llvm::utostr(operandNo) + " isn't valid");
           continue;
         }
 
@@ -1603,19 +1599,19 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, StringRef cond) {
   emitLocationInfoAndNewLine(ops);
 
   if (!hasEmptyThen) {
-    emitter.addIndent();
+    addIndent();
     for (auto &o : op->getRegion(0).front().without_terminator())
       emitStatement(&o);
-    emitter.reduceIndent();
+    reduceIndent();
   }
 
   if (!op->getRegion(1).empty()) {
     if (!hasEmptyThen)
       indent() << "`else\n";
-    emitter.addIndent();
+    addIndent();
     for (auto &o : op->getRegion(1).front().without_terminator())
       emitStatement(&o);
-    emitter.reduceIndent();
+    reduceIndent();
   }
 
   indent() << "`endif\n";
@@ -1645,10 +1641,10 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
     os << " begin";
   emitLocationInfoAndNewLine(locationOps);
 
-  emitter.addIndent();
+  addIndent();
   for (auto &op : block->without_terminator())
     emitStatement(&op);
-  emitter.reduceIndent();
+  reduceIndent();
 
   if (!hasOneStmt) {
     indent() << "end";
@@ -1749,7 +1745,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
   else {
     os << " begin";
     emitLocationInfoAndNewLine(ops);
-    emitter.addIndent();
+    addIndent();
 
     indent() << "if (";
     // Negative edge async resets need to invert the reset condition.  This is
@@ -1761,8 +1757,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
     emitBlockAsStatement(op.getResetBlock(), ops);
     indent() << "else";
     emitBlockAsStatement(op.getBodyBlock(), ops);
-
-    emitter.reduceIndent();
+    reduceIndent();
 
     indent() << "end";
     os << " // " << comment;
@@ -1787,7 +1782,7 @@ LogicalResult StmtEmitter::visitSV(CaseZOp op) {
   indent() << "casez (" << emitExpressionToString(op.cond(), ops) << ')';
   emitLocationInfoAndNewLine(ops);
 
-  emitter.addIndent();
+  addIndent();
   for (auto caseInfo : op.getCases()) {
     auto pattern = caseInfo.pattern;
 
@@ -1804,7 +1799,7 @@ LogicalResult StmtEmitter::visitSV(CaseZOp op) {
     emitBlockAsStatement(caseInfo.block, emptyOps);
   }
 
-  emitter.reduceIndent();
+  reduceIndent();
   indent() << "endcase";
   emitLocationInfoAndNewLine(ops);
   return success();
@@ -2003,7 +1998,7 @@ void StmtEmitter::emitStatement(Operation *op) {
 }
 
 void ModuleEmitter::emitStatement(Operation *op) {
-  StmtEmitter(*this).emitStatement(op);
+  StmtEmitter(*this, os).emitStatement(op);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2327,7 +2322,7 @@ void ModuleEmitter::emitMLIRModule(ModuleOp module) {
              isa<IfDefProceduralOp>(op))
       ModuleEmitter(state).emitStatement(&op);
     else if (!isa<ModuleTerminatorOp>(op))
-      op.emitError("unknown operation");
+      emitError(&op, "unknown operation");
   }
 }
 
@@ -2343,9 +2338,9 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
   for (auto &port : portInfo) {
     StringRef name = port.getName();
     if (name.empty()) {
-      module.emitOpError(
-          "Found port without a name. Port names are required for "
-          "Verilog synthesis.\n");
+      emitOpError(module,
+                  "Found port without a name. Port names are required for "
+                  "Verilog synthesis.\n");
       name = "<<NO-NAME-FOUND>>";
     }
     if (port.isOutput())
