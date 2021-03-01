@@ -254,6 +254,54 @@ def InitialOp : SVOp<"initial", [HasRegionTerminator, NoRegionArguments,
   }];
 }
 
+def CaseZOp : SVOp<"casez", [HasRegionTerminator, NoRegionArguments,
+                             ProceduralRegion]> {
+  let summary = "'casez (cond)' block";
+
+  let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
+  let arguments = (ins RTLIntegerType:$cond, ArrayAttr:$casePatterns);
+  let results = (outs);
+
+  let parser = "return parseCaseZOp(parser, result);";
+  let printer = "printCaseZOp(p, *this);";
+  let verifier = "return ::verifyCaseZOp(*this);";
+
+  let extraClassDeclaration = [{
+    /// This describes the bit in a pattern, 0/1/x.
+    enum PatternBit { PatternZero = 0, PatternOne = 1, PatternAny = 2 };
+    // This is provides convenient access to encode and decode a pattern.
+    struct CasePattern {
+      IntegerAttr attr;
+
+      // Return the number of bits in the pattern.
+      size_t getWidth() const {
+        return attr.getValue().getBitWidth()/2;
+      }
+
+      /// Return the specified bit, bit 0 is the least significant bit.
+      PatternBit getBit(size_t bitNumber) const;
+
+      /// Return true if this pattern always matches.
+      bool isDefault() const;
+
+      // Get a CasePattern from a specified list of PatternBits.  Bits are
+      // specified in most least significant order - element zero is the least
+      // significant bit.
+      CasePattern(ArrayRef<PatternBit> bits, MLIRContext *context);
+      CasePattern(IntegerAttr attr) : attr(attr) {}
+    };
+    // This provides information about one case.
+    struct CaseInfo {
+      CasePattern pattern;
+      Block *block;
+    };
+
+    SmallVector<CaseInfo, 4> getCases();
+
+    // void addCase(...)
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Other Statements
 //===----------------------------------------------------------------------===//
@@ -261,7 +309,8 @@ def InitialOp : SVOp<"initial", [HasRegionTerminator, NoRegionArguments,
 def YieldOp
   : SVOp<"yield", [NoSideEffect, Terminator,
                    ParentOneOf<["IfDefOp", "IfDefProceduralOp", "IfOp",
-                                "AlwaysOp", "InitialOp", "AlwaysFFOp"]>]> {
+                                "AlwaysOp", "InitialOp", "AlwaysFFOp",
+                                "CaseZOp"]>]> {
   let summary = "terminator for control-flow operation regions";
   let arguments = (ins);
 
