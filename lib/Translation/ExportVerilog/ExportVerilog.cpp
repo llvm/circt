@@ -354,12 +354,17 @@ private:
 };
 } // namespace
 
+//===----------------------------------------------------------------------===//
+// ModuleEmitter
+//===----------------------------------------------------------------------===//
+
 namespace {
 
-/// This is the base class for all of the Verilog Emitter components.
-class VerilogEmitterBase {
+class ModuleEmitter : public rtl::StmtVisitor<ModuleEmitter, LogicalResult>,
+                      public sv::Visitor<ModuleEmitter, LogicalResult> {
+
 public:
-  explicit VerilogEmitterBase(VerilogEmitterState &state)
+  explicit ModuleEmitter(VerilogEmitterState &state)
       : state(state), os(state.os) {}
 
   InFlightDiagnostic emitError(Operation *op, const Twine &message) {
@@ -382,27 +387,6 @@ public:
 
   /// The stream to emit to.
   raw_ostream &os;
-
-private:
-  VerilogEmitterBase(const VerilogEmitterBase &) = delete;
-  void operator=(const VerilogEmitterBase &) = delete;
-};
-
-} // end anonymous namespace
-
-//===----------------------------------------------------------------------===//
-// ModuleEmitter
-//===----------------------------------------------------------------------===//
-
-namespace {
-
-class ModuleEmitter : public VerilogEmitterBase,
-                      public rtl::StmtVisitor<ModuleEmitter, LogicalResult>,
-                      public sv::Visitor<ModuleEmitter, LogicalResult> {
-
-public:
-  explicit ModuleEmitter(VerilogEmitterState &state)
-      : VerilogEmitterBase(state) {}
 
   void emitMLIRModule(ModuleOp module);
   void emitRTLModule(RTLModuleOp module);
@@ -507,6 +491,10 @@ public:
   /// the top of the module to avoid "use before def" issues in the generated
   /// verilog.  This can happen for cyclic modules.
   SmallPtrSet<Operation *, 16> outOfLineExpresssionDecls;
+
+private:
+  ModuleEmitter(const ModuleEmitter &) = delete;
+  void operator=(const ModuleEmitter &) = delete;
 };
 
 } // end anonymous namespace
