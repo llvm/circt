@@ -544,7 +544,8 @@ static void printCaseZOp(OpAsmPrinter &p, CaseZOp op) {
     } else {
       p << "case b";
       for (size_t i = 0, e = pattern.getWidth(); i != e; ++i)
-        p << CaseZOp::getVerilogLetter(pattern.getBit(e - i - 1));
+        p << CaseZOp::getLetter(pattern.getBit(e - i - 1),
+                                /*isVerilog=*/false);
     }
 
     p << ':';
