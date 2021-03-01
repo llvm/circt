@@ -1202,8 +1202,9 @@ class StmtEmitter : public EmitterBase,
 public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
   /// of any emitted expressions in the specified set.
-  StmtEmitter(ModuleEmitter &emitter, raw_ostream &os)
-      : EmitterBase(emitter.state, os), emitter(emitter) {}
+  StmtEmitter(ModuleEmitter &emitter, SmallVectorImpl<char> &outBuffer)
+      : EmitterBase(emitter.state, stringStream), emitter(emitter),
+        stringStream(outBuffer), outBuffer(outBuffer) {}
 
   void emitStatement(Operation *op);
 
@@ -1263,6 +1264,10 @@ private:
                             StringRef multiLineComment = StringRef());
 
   ModuleEmitter &emitter;
+  llvm::raw_svector_ostream stringStream;
+  // All statements are emitted into a temporary buffer, this is it.
+  SmallVectorImpl<char> &outBuffer;
+
   size_t numStatementsEmitted = 0;
 };
 
@@ -1611,33 +1616,26 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
   // simple set of operations that gets broken across multiple lines because
   // they are too long.
   //
-  // Solve this by emitting into a temporary buffer, determining if we need to
-  // emit the begin, and if so, emit the begin and then the buffer contents.
-  SmallString<128> blockBuffer;
-  size_t numSubstatementsEmitted;
-  {
-    llvm::raw_svector_ostream blockOutStream(blockBuffer);
-    addIndent();
-    StmtEmitter subEmitter(emitter, blockOutStream);
-    for (auto &op : block->without_terminator())
-      subEmitter.emitStatement(&op);
-    reduceIndent();
+  // Solve this by emitting the statements, determining if we need to
+  // emit the begin, and if so, emit the begin retroactively.
+  size_t beginInsertPoint = outBuffer.size();
+  emitLocationInfoAndNewLine(locationOps);
 
-    numSubstatementsEmitted = subEmitter.getNumStatementsEmitted();
-  }
+  auto numEmittedBefore = getNumStatementsEmitted();
 
-  // If we emitted exactly one statement, then we can just emit it and be
-  // done.
-  if (numSubstatementsEmitted == 1) {
-    emitLocationInfoAndNewLine(locationOps);
-    os << blockBuffer;
+  addIndent();
+  for (auto &op : block->without_terminator())
+    emitStatement(&op);
+  reduceIndent();
+
+  // If we emitted exactly one statement, then we are done.
+  if (getNumStatementsEmitted() - numEmittedBefore == 1)
     return;
-  }
 
   // Otherwise we emit the begin and end logic.
-  os << " begin";
-  emitLocationInfoAndNewLine(locationOps);
-  os << blockBuffer;
+  StringRef beginStr = " begin";
+  outBuffer.insert(outBuffer.begin() + beginInsertPoint, beginStr.begin(),
+                   beginStr.end());
 
   indent() << "end";
   if (!multiLineComment.empty())
@@ -1800,7 +1798,7 @@ LogicalResult StmtEmitter::visitSV(CaseZOp op) {
       for (size_t bit = 0, e = pattern.getWidth(); bit != e; ++bit)
         os << CaseZOp::getVerilogLetter(pattern.getBit(e - bit - 1));
     }
-    os << ": ";
+    os << ":";
     emitBlockAsStatement(caseInfo.block, emptyOps);
   }
 
@@ -2009,7 +2007,9 @@ void StmtEmitter::emitStatement(Operation *op) {
 }
 
 void ModuleEmitter::emitStatement(Operation *op) {
-  StmtEmitter(*this, os).emitStatement(op);
+  SmallString<128> outputBuffer;
+  StmtEmitter(*this, outputBuffer).emitStatement(op);
+  os << outputBuffer;
 }
 
 //===----------------------------------------------------------------------===//
