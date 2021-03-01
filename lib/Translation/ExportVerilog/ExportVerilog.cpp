@@ -530,6 +530,10 @@ public:
   SmallVector<StringRef> outputNames;
 
   llvm::StringSet<> usedNames;
+
+  /// Set of used MLIR module names, to ensure unique names when renaming
+  /// keywords in module names.
+  llvm::StringSet<> usedModuleNames;
   size_t nextGeneratedNameID = 0;
 
   /// This set keeps track of all of the expression nodes that need to be
@@ -2354,6 +2358,39 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
       addName(module.getArgument(port.argNum), name);
   }
 
+  // Get the list of reserved words we need to avoid.  We could prepopulate this
+  // into the used words cache, but it is large and immutable, so we just query
+  // it when needed.
+  auto &reservedWords = getReservedWords();
+  auto moduleName = module.getName();
+  if (reservedWords.count(moduleName)) {
+    // If not available, we need to auto-unique it.
+    SmallVector<char, 16> nameBuffer(moduleName.begin(), moduleName.end());
+    nameBuffer.push_back('_');
+    auto baseSize = nameBuffer.size();
+
+    // Try until we find something that works.
+    while (1) {
+      auto suffix = llvm::utostr(nextGeneratedNameID++);
+      nameBuffer.append(suffix.begin(), suffix.end());
+      moduleName = StringRef(nameBuffer.data(), nameBuffer.size());
+
+      if (!reservedWords.count(moduleName)) {
+        auto insertResult = usedModuleNames.insert(moduleName);
+        if (insertResult.second) {
+          // If the module name is unique, then the insertion is successfull,
+          // then the return bool is true, then exit from the infinite while
+          // loop.
+          break;
+        }
+      }
+      // Chop off the suffix and try again.
+      nameBuffer.resize(baseSize);
+    }
+    // Rename the module to a unique non-keyword name.
+    module.setName(moduleName);
+  } else
+    usedModuleNames.insert(moduleName);
   os << "module " << module.getName() << '(';
   if (!portInfo.empty())
     os << '\n';
