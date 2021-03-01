@@ -344,6 +344,7 @@ BlockOps insertMergeOps(handshake::FuncOp f, BlockValues blockLiveIns,
     for (auto &val : blockLiveIns[&block]) {
       Operation *newOp = insertMerge(&block, val, rewriter);
       blockMerges[&block].push_back(newOp);
+      mergePairs[val] = newOp;
     }
 
     // Block arguments are not in livein list as they are defined inside the
@@ -351,6 +352,7 @@ BlockOps insertMergeOps(handshake::FuncOp f, BlockValues blockLiveIns,
     for (auto &arg : block.getArguments()) {
       Operation *newOp = insertMerge(&block, arg, rewriter);
       blockMerges[&block].push_back(newOp);
+      mergePairs[arg] = newOp;
     }
   }
 
