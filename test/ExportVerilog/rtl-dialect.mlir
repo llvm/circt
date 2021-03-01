@@ -260,7 +260,7 @@ rtl.module @shl(%a: i1) -> (%b: i1) {
 // CHECK-NEXT: endmodule
 
 
-rtl.module @inout(%a: !rtl.inout<i42>) -> (%out: i42) {
+rtl.module @inout_0(%a: !rtl.inout<i42>) -> (%out: i42) {
   %aget = sv.read_inout %a: !rtl.inout<i42>
   rtl.output %aget : i42
 }
@@ -555,3 +555,25 @@ rtl.module @longvariadic(%a: i8) -> (%b: i8) {
                 %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
   rtl.output %1 : i8
 }
+
+// https://github.com/llvm/circt/issues/681
+// Rename keywords used in variable/module names
+rtl.module @inout(%inout: i1) -> (%b: i1) {
+  rtl.output %inout : i1
+}   
+// CHECK-LABEL: module inout_1(
+// CHECK-NEXT:  input  inout_0,
+// CHECK-NEXT:  output b);
+// CHECK-EMPTY:
+// CHECK-NEXT: assign b = inout_0;
+
+// https://github.com/llvm/circt/issues/681
+// Rename keywords used in variable/module names
+rtl.module @reg(%inout: i1) -> (%b: i1) {
+  rtl.output %inout : i1
+}   
+// CHECK-LABEL: module reg_1(
+// CHECK-NEXT:  input  inout_0,
+// CHECK-NEXT:  output b);
+// CHECK-EMPTY:
+// CHECK-NEXT: assign b = inout_0;

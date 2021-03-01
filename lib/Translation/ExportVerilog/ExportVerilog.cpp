@@ -2459,15 +2459,13 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
       nameBuffer.append(suffix.begin(), suffix.end());
       moduleName = StringRef(nameBuffer.data(), nameBuffer.size());
 
-      if (!reservedWords.count(moduleName)) {
-        auto insertResult = usedModuleNames.insert(moduleName);
-        if (insertResult.second) {
+      if (!reservedWords.count(moduleName))
+        if (usedModuleNames.insert(moduleName).second)
           // If the module name is unique, then the insertion is successfull,
           // then the return bool is true, then exit from the infinite while
           // loop.
           break;
-        }
-      }
+
       // Chop off the suffix and try again.
       nameBuffer.resize(baseSize);
     }
