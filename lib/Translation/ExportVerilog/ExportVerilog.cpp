@@ -684,9 +684,6 @@ public:
 
   void emitExpression(Value exp, bool forceRootExpr, raw_ostream &os);
 
-  /// Emit the specified expression and return it as a string.
-  std::string emitExpressionToString(Value exp, VerilogPrecedence precedence);
-
   /// Do a best-effort job of looking through noop cast operations.
   Value lookThroughNoopCasts(Value value) {
     if (auto *op = value.getDefiningOp())
@@ -832,13 +829,6 @@ void ExprEmitter::emitExpression(Value exp, bool forceRootExpr,
 
   // Once the expression is done, we can emit the result to the stream.
   os << resultBuffer;
-}
-
-/// Emit the specified expression and return it as a string.
-std::string ExprEmitter::emitExpressionToString(Value exp,
-                                                VerilogPrecedence precedence) {
-  emitSubExpr(exp, precedence);
-  return std::string(resultBuffer.begin(), resultBuffer.end());
 }
 
 SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
@@ -1242,11 +1232,6 @@ private:
   void emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
                       bool forceRootExpr = false);
 
-  /// Emit the specified expression and return it as a string.
-  std::string
-  emitExpressionToString(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
-                         VerilogPrecedence precedence = LowestPrecedence);
-
   using StmtVisitor::visitStmt;
   using Visitor::visitSV;
   friend class rtl::StmtVisitor<StmtEmitter, LogicalResult>;
@@ -1311,15 +1296,6 @@ void StmtEmitter::emitExpression(Value exp,
                                  SmallPtrSet<Operation *, 8> &emittedExprs,
                                  bool forceRootExpr) {
   ExprEmitter(emitter, emittedExprs).emitExpression(exp, forceRootExpr, os);
-}
-
-/// Emit the specified expression and return it as a string.
-std::string
-StmtEmitter::emitExpressionToString(Value exp,
-                                    SmallPtrSet<Operation *, 8> &emittedExprs,
-                                    VerilogPrecedence precedence) {
-  return ExprEmitter(emitter, emittedExprs)
-      .emitExpressionToString(exp, precedence);
 }
 
 void StmtEmitter::emitStatementExpression(Operation *op) {
@@ -1456,7 +1432,8 @@ LogicalResult StmtEmitter::visitSV(FWriteOp op) {
   os << '"';
 
   for (auto operand : op.operands()) {
-    os << ", " << emitExpressionToString(operand, ops);
+    os << ", ";
+    emitExpression(operand, ops);
   }
   os << ");";
   emitLocationInfoAndNewLine(ops);
@@ -1544,7 +1521,7 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
         os << line.take_front(start - 2);
 
         // Emit the operand.
-        os << emitExpressionToString(op.operands()[operandNo], ops);
+        emitExpression(op.operands()[operandNo], ops);
 
         // Forget about the part we emitted.
         line = line.drop_front(next);
@@ -1581,7 +1558,9 @@ LogicalResult StmtEmitter::visitSV(FinishOp op) {
 LogicalResult StmtEmitter::visitSV(AssertOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  indent() << "assert(" << emitExpressionToString(op.predicate(), ops) << ");";
+  indent() << "assert(";
+  emitExpression(op.predicate(), ops);
+  os << ");";
   emitLocationInfoAndNewLine(ops);
   return success();
 }
@@ -1589,7 +1568,9 @@ LogicalResult StmtEmitter::visitSV(AssertOp op) {
 LogicalResult StmtEmitter::visitSV(AssumeOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  indent() << "assume(" << emitExpressionToString(op.property(), ops) << ");";
+  indent() << "assume(";
+  emitExpression(op.property(), ops);
+  os << ");";
   emitLocationInfoAndNewLine(ops);
   return success();
 }
@@ -1597,7 +1578,9 @@ LogicalResult StmtEmitter::visitSV(AssumeOp op) {
 LogicalResult StmtEmitter::visitSV(CoverOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  indent() << "cover(" << emitExpressionToString(op.property(), ops) << ");";
+  indent() << "cover(";
+  emitExpression(op.property(), ops);
+  os << ");";
   emitLocationInfoAndNewLine(ops);
   return success();
 }
@@ -1685,7 +1668,9 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  indent() << "if (" << emitExpressionToString(op.cond(), ops) << ')';
+  indent() << "if (";
+  emitExpression(op.cond(), ops);
+  os << ')';
   emitBlockAsStatement(op.getThenBlock(), ops);
   if (op.hasElse()) {
     indent() << "else";
@@ -1708,8 +1693,8 @@ LogicalResult StmtEmitter::visitSV(AlwaysOp op) {
   ops.insert(op);
 
   auto printEvent = [&](AlwaysOp::Condition cond) {
-    os << stringifyEventControl(cond.event) << ' '
-       << emitExpressionToString(cond.value, ops);
+    os << stringifyEventControl(cond.event) << ' ';
+    emitExpression(cond.value, ops);
   };
 
   switch (op.getNumConditions()) {
@@ -1757,11 +1742,11 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  indent() << "always_ff @(" << stringifyEventControl(op.clockEdge()) << " "
-           << emitExpressionToString(op.clock(), ops);
+  indent() << "always_ff @(" << stringifyEventControl(op.clockEdge()) << " ";
+  emitExpression(op.clock(), ops);
   if (op.resetStyle() == ResetType::AsyncReset) {
-    os << " or " << stringifyEventControl(*op.resetEdge()) << " "
-       << emitExpressionToString(op.reset(), ops);
+    os << " or " << stringifyEventControl(*op.resetEdge()) << " ";
+    emitExpression(op.reset(), ops);
   }
   os << ')';
 
@@ -1789,7 +1774,8 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
     if (op.resetStyle() == ResetType::AsyncReset &&
         *op.resetEdge() == EventControl::AtNegEdge)
       os << "!";
-    os << emitExpressionToString(op.reset(), ops) << ')';
+    emitExpression(op.reset(), ops);
+    os << ')';
     emitBlockAsStatement(op.getResetBlock(), ops);
     indent() << "else";
     emitBlockAsStatement(op.getBodyBlock(), ops);
@@ -1815,7 +1801,9 @@ LogicalResult StmtEmitter::visitSV(CaseZOp op) {
   SmallPtrSet<Operation *, 8> ops, emptyOps;
   ops.insert(op);
 
-  indent() << "casez (" << emitExpressionToString(op.cond(), ops) << ')';
+  indent() << "casez (";
+  emitExpression(op.cond(), ops);
+  os << ')';
   emitLocationInfoAndNewLine(ops);
 
   addIndent();
