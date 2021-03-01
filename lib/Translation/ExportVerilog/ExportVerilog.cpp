@@ -651,8 +651,6 @@ struct SubExprInfo {
       : precedence(precedence), signedness(signedness) {}
 };
 
-enum SubExprSignRequirement { NoRequirement, RequireSigned, RequireUnsigned };
-
 } // namespace
 
 namespace {
@@ -668,10 +666,14 @@ class ExprEmitter : public EmitterBase,
                     public Visitor<ExprEmitter, SubExprInfo> {
 public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
-  /// of any emitted expressions in the specified set.
-  ExprEmitter(ModuleEmitter &emitter, SmallPtrSet<Operation *, 8> &emittedExprs)
+  /// of any emitted expressions in the specified set.  If any subexpressions
+  /// are too large to emit, then they are added into tooLargeSubExpressions to
+  /// be emitted independently by the caller.
+  ExprEmitter(ModuleEmitter &emitter, SmallPtrSet<Operation *, 8> &emittedExprs,
+              SmallVectorImpl<Operation *> &tooLargeSubExpressions)
       : EmitterBase(emitter.state, os), emitter(emitter),
-        emittedExprs(emittedExprs), os(resultBuffer) {}
+        emittedExprs(emittedExprs),
+        tooLargeSubExpressions(tooLargeSubExpressions), os(resultBuffer) {}
 
   void emitExpression(Value exp, bool forceRootExpr, raw_ostream &os);
 
@@ -680,8 +682,16 @@ private:
   friend class CombinationalVisitor<ExprEmitter, SubExprInfo>;
   friend class Visitor<ExprEmitter, SubExprInfo>;
 
+  enum SubExprSignRequirement { NoRequirement, RequireSigned, RequireUnsigned };
+  enum SubExprOutOfLineBehavior {
+    OOLTopLevel, //< Top level expressions shouldn't be emitted out of line.
+    OOLUnary,    //< Unary expressions are more generous on line lengths.
+    OOLBinary    //< Binary expressions split easily.
+  };
+
   /// Emit the specified value as a subexpression to the stream.
   SubExprInfo emitSubExpr(Value exp, VerilogPrecedence parenthesizeIfLooserThan,
+                          SubExprOutOfLineBehavior outOfLineBehavior,
                           SubExprSignRequirement signReq = NoRequirement);
 
   SubExprInfo visitUnhandledExpr(Operation *op);
@@ -717,7 +727,7 @@ private:
 
   // Noop cast operators.
   SubExprInfo visitSV(ReadInOutOp op) {
-    return emitSubExpr(op->getOperand(0), LowestPrecedence);
+    return emitSubExpr(op->getOperand(0), LowestPrecedence, OOLUnary);
   }
   SubExprInfo visitSV(ArrayIndexInOutOp op);
 
@@ -792,7 +802,13 @@ private:
   /// it without a correctness problem.
   SubExprSignRequirement signPreference = NoRequirement;
 
+  /// Keep track of all operations emitted within this subexpression for
+  /// location information tracking.
   SmallPtrSet<Operation *, 8> &emittedExprs;
+
+  /// If any subexpressions would result in too large of a line, report it back
+  /// to the caller in this vector.
+  SmallVectorImpl<Operation *> &tooLargeSubExpressions;
   SmallString<128> resultBuffer;
   llvm::raw_svector_ostream os;
 };
@@ -806,7 +822,9 @@ private:
 void ExprEmitter::emitExpression(Value exp, bool forceRootExpr,
                                  raw_ostream &os) {
   // Emit the expression.
-  emitSubExpr(exp, forceRootExpr ? ForceEmitMultiUse : LowestPrecedence);
+  emitSubExpr(exp, forceRootExpr ? ForceEmitMultiUse : LowestPrecedence,
+              OOLTopLevel,
+              /*signRequirement*/ NoRequirement);
 
   // Once the expression is done, we can emit the result to the stream.
   os << resultBuffer;
@@ -815,7 +833,8 @@ void ExprEmitter::emitExpression(Value exp, bool forceRootExpr,
 SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
                                     const char *syntax,
                                     SubExprSignRequirement operandSignReq) {
-  auto lhsInfo = emitSubExpr(op->getOperand(0), prec, operandSignReq);
+  auto lhsInfo =
+      emitSubExpr(op->getOperand(0), prec, OOLBinary, operandSignReq);
   os << ' ' << syntax << ' ';
 
   // The precedence of the RHS operand must be tighter than this operator if
@@ -828,7 +847,8 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
     if (op->getName() == rhsOperandOp->getName())
       rhsPrec = prec;
 
-  auto rhsInfo = emitSubExpr(op->getOperand(1), rhsPrec, operandSignReq);
+  auto rhsInfo =
+      emitSubExpr(op->getOperand(1), rhsPrec, OOLBinary, operandSignReq);
 
   // SystemVerilog 11.8.1 says that the result of a binary expression is signed
   // only if both operands are signed.
@@ -846,7 +866,7 @@ SubExprInfo ExprEmitter::emitVariadic(Operation *op, VerilogPrecedence prec,
   interleave(
       op->getOperands().begin(), op->getOperands().end(),
       [&](Value v1) {
-        if (emitSubExpr(v1, prec).signedness != IsSigned)
+        if (emitSubExpr(v1, prec, OOLBinary).signedness != IsSigned)
           sign = IsUnsigned;
       },
       [&] { os << ' ' << syntax << ' '; });
@@ -857,13 +877,14 @@ SubExprInfo ExprEmitter::emitVariadic(Operation *op, VerilogPrecedence prec,
 SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
                                    bool resultAlwaysUnsigned) {
   os << syntax;
-  auto signedness = emitSubExpr(op->getOperand(0), Unary).signedness;
+  auto signedness = emitSubExpr(op->getOperand(0), Unary, OOLUnary).signedness;
   return {Unary, resultAlwaysUnsigned ? IsUnsigned : signedness};
 }
 
 /// Emit the specified value as a subexpression to the stream.
 SubExprInfo ExprEmitter::emitSubExpr(Value exp,
                                      VerilogPrecedence parenthesizeIfLooserThan,
+                                     SubExprOutOfLineBehavior outOfLineBehavior,
                                      SubExprSignRequirement signRequirement) {
   auto *op = exp.getDefiningOp();
   bool shouldEmitInlineExpr = op && isVerilogExpression(op);
@@ -922,6 +943,37 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     expInfo.precedence = Selection;
   }
 
+  // If we emitted this subexpression and it resulted in something very large,
+  // then we may be in the process of making super huge lines.  Back off to
+  // emitting this as its own temporary on its own line.
+  unsigned threshold;
+  switch (outOfLineBehavior) {
+  case OOLTopLevel:
+    threshold = ~0U;
+    break;
+  case OOLUnary:
+    threshold = 70;
+    break;
+  case OOLBinary:
+    threshold = 45;
+    break;
+  }
+
+  if (resultBuffer.size() - subExprStartIndex > threshold &&
+      parenthesizeIfLooserThan != ForceEmitMultiUse) {
+    // Remember that this subexpr needs to be emitted independently.
+    tooLargeSubExpressions.push_back(op);
+    emitter.outOfLineExpressions.insert(op);
+    emitter.addName(ModuleEmitter::ValueOrOp(exp), "_tmp");
+
+    // Lop this off the buffer we emitted.
+    resultBuffer.resize(subExprStartIndex);
+
+    // Try again, now it will get emitted as a out-of-line leaf.
+    return emitSubExpr(exp, parenthesizeIfLooserThan, outOfLineBehavior,
+                       signRequirement);
+  }
+
   // Remember that we emitted this.
   emittedExprs.insert(exp.getDefiningOp());
   return expInfo;
@@ -934,16 +986,16 @@ SubExprInfo ExprEmitter::visitComb(SExtOp op) {
   // Handle sign extend from a single bit in a pretty way.
   if (inWidth == 1) {
     os << '{' << destWidth << '{';
-    emitSubExpr(op.getOperand(), LowestPrecedence);
+    emitSubExpr(op.getOperand(), LowestPrecedence, OOLUnary);
     os << "}}";
     return {Unary, IsUnsigned};
   }
 
   // Otherwise, this is a sign extension of a general expression.
   os << "{{" << (destWidth - inWidth) << '{';
-  emitSubExpr(op.getOperand(), Unary);
+  emitSubExpr(op.getOperand(), Unary, OOLUnary);
   os << '[' << (inWidth - 1) << "]}}, ";
-  emitSubExpr(op.getOperand(), LowestPrecedence);
+  emitSubExpr(op.getOperand(), LowestPrecedence, OOLUnary);
   os << '}';
   return {Unary, IsUnsigned};
 }
@@ -958,14 +1010,15 @@ SubExprInfo ExprEmitter::visitComb(ConcatOp op) {
 
   if (allSame) {
     os << '{' << op.getNumOperands() << '{';
-    emitSubExpr(firstOperand, LowestPrecedence);
+    emitSubExpr(firstOperand, LowestPrecedence, OOLUnary);
     os << "}}";
     return {Unary, IsUnsigned};
   }
 
   os << '{';
-  llvm::interleaveComma(op.getOperands(), os,
-                        [&](Value v) { emitSubExpr(v, LowestPrecedence); });
+  llvm::interleaveComma(op.getOperands(), os, [&](Value v) {
+    emitSubExpr(v, LowestPrecedence, OOLBinary);
+  });
 
   os << '}';
   return {Unary, IsUnsigned};
@@ -981,7 +1034,7 @@ SubExprInfo ExprEmitter::visitComb(BitcastOp op) {
     emitTypeDims(toType, op.getLoc(), os);
     os << ")*/";
   }
-  return emitSubExpr(op.input(), LowestPrecedence);
+  return emitSubExpr(op.input(), LowestPrecedence, OOLUnary);
 }
 
 SubExprInfo ExprEmitter::visitComb(ICmpOp op) {
@@ -1024,7 +1077,7 @@ SubExprInfo ExprEmitter::visitComb(ExtractOp op) {
   unsigned loBit = op.lowBit();
   unsigned hiBit = loBit + op.getType().getWidth() - 1;
 
-  auto x = emitSubExpr(op.input(), LowestPrecedence);
+  auto x = emitSubExpr(op.input(), LowestPrecedence, OOLUnary);
   assert(x.precedence == Symbol &&
          "should be handled by isExpressionUnableToInline");
 
@@ -1087,19 +1140,19 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
 // 11.5.1 "Vector bit-select and part-select addressing" allows a '+:' syntax
 // for slicing operations.
 SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
-  auto arrayPrec = emitSubExpr(op.input(), Selection);
+  auto arrayPrec = emitSubExpr(op.input(), Selection, OOLUnary);
 
   unsigned dstWidth = op.getType().getSize();
   os << '[';
-  emitSubExpr(op.lowIndex(), LowestPrecedence);
+  emitSubExpr(op.lowIndex(), LowestPrecedence, OOLBinary);
   os << "+:" << dstWidth << ']';
   return {Selection, arrayPrec.signedness};
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(ArrayGetOp op) {
-  emitSubExpr(op.input(), Selection);
+  emitSubExpr(op.input(), Selection, OOLUnary);
   os << '[';
-  emitSubExpr(op.index(), LowestPrecedence);
+  emitSubExpr(op.index(), LowestPrecedence, OOLBinary);
   os << ']';
   return {Selection, IsUnsigned};
 }
@@ -1109,7 +1162,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ArrayCreateOp op) {
   os << '{';
   llvm::interleaveComma(op.inputs(), os, [&](Value operand) {
     os << "{";
-    emitSubExpr(operand, LowestPrecedence);
+    emitSubExpr(operand, LowestPrecedence, OOLBinary);
     os << "}";
   });
   os << '}';
@@ -1118,28 +1171,29 @@ SubExprInfo ExprEmitter::visitTypeOp(ArrayCreateOp op) {
 
 SubExprInfo ExprEmitter::visitTypeOp(ArrayConcatOp op) {
   os << '{';
-  llvm::interleaveComma(op.getOperands(), os,
-                        [&](Value v) { emitSubExpr(v, LowestPrecedence); });
+  llvm::interleaveComma(op.getOperands(), os, [&](Value v) {
+    emitSubExpr(v, LowestPrecedence, OOLBinary);
+  });
   os << '}';
   return {Unary, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitSV(ArrayIndexInOutOp op) {
-  auto arrayPrec = emitSubExpr(op.input(), Selection);
+  auto arrayPrec = emitSubExpr(op.input(), Selection, OOLUnary);
   os << '[';
-  emitSubExpr(op.index(), LowestPrecedence);
+  emitSubExpr(op.index(), LowestPrecedence, OOLBinary);
   os << ']';
   return {Selection, arrayPrec.signedness};
 }
 
 SubExprInfo ExprEmitter::visitComb(MuxOp op) {
   // The ?: operator is right associative.
-  emitSubExpr(op.cond(), VerilogPrecedence(Conditional - 1));
+  emitSubExpr(op.cond(), VerilogPrecedence(Conditional - 1), OOLBinary);
   os << " ? ";
-  auto lhsInfo =
-      emitSubExpr(op.trueValue(), VerilogPrecedence(Conditional - 1));
+  auto lhsInfo = emitSubExpr(op.trueValue(), VerilogPrecedence(Conditional - 1),
+                             OOLBinary);
   os << " : ";
-  auto rhsInfo = emitSubExpr(op.falseValue(), Conditional);
+  auto rhsInfo = emitSubExpr(op.falseValue(), Conditional, OOLBinary);
 
   SubExprSignResult signedness = IsUnsigned;
   if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
@@ -1155,14 +1209,14 @@ SubExprInfo ExprEmitter::visitTypeOp(StructCreateOp op) {
   llvm::interleaveComma(stype.getElements(), os,
                         [&](const StructType::FieldInfo &field) {
                           os << field.name << ": ";
-                          emitSubExpr(op.getOperand(i++), Selection);
+                          emitSubExpr(op.getOperand(i++), Selection, OOLBinary);
                         });
   os << '}';
   return {Unary, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(StructExtractOp op) {
-  emitSubExpr(op.input(), Selection);
+  emitSubExpr(op.input(), Selection, OOLUnary);
   os << '.' << op.field();
   return {Selection, IsUnsigned};
 }
@@ -1174,9 +1228,9 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
                         [&](const StructType::FieldInfo &field) {
                           os << field.name << ": ";
                           if (field.name == op.field()) {
-                            emitSubExpr(op.newValue(), Selection);
+                            emitSubExpr(op.newValue(), Selection, OOLBinary);
                           } else {
-                            emitSubExpr(op.input(), Selection);
+                            emitSubExpr(op.input(), Selection, OOLBinary);
                             os << '.' << field.name;
                           }
                         });
@@ -1268,6 +1322,8 @@ private:
   // All statements are emitted into a temporary buffer, this is it.
   SmallVectorImpl<char> &outBuffer;
 
+  // This is the index of the start of the current statement being emitted.
+  size_t statementBeginningIndex = 0;
   size_t numStatementsEmitted = 0;
 };
 
@@ -1281,7 +1337,30 @@ private:
 void StmtEmitter::emitExpression(Value exp,
                                  SmallPtrSet<Operation *, 8> &emittedExprs,
                                  bool forceRootExpr) {
-  ExprEmitter(emitter, emittedExprs).emitExpression(exp, forceRootExpr, os);
+  SmallVector<Operation *> tooLargeSubExpressions;
+  ExprEmitter(emitter, emittedExprs, tooLargeSubExpressions)
+      .emitExpression(exp, forceRootExpr, os);
+
+  // It is possible that the emitted expression was too large to fit on a line
+  // and needs to be split.  If so, the new subexpressions that need emitting
+  // are put out into the the 'tooLargeSubExpressions' list.  Re-emit these at
+  // the start of the current statement as their own stmt expressions.
+  if (tooLargeSubExpressions.empty())
+    return;
+
+  // Pop this statement off and save it to the side.
+  std::string thisStmt(outBuffer.begin() + statementBeginningIndex,
+                       outBuffer.end());
+  outBuffer.resize(statementBeginningIndex);
+
+  // Emit each stmt expression in turn.
+  for (auto *expr : tooLargeSubExpressions) {
+    statementBeginningIndex = outBuffer.size();
+    emitStatementExpression(expr);
+  }
+
+  // Re-add this statement now that all the preceeding ones are out.
+  outBuffer.append(thisStmt.begin(), thisStmt.end());
 }
 
 void StmtEmitter::emitStatementExpression(Operation *op) {
@@ -1980,6 +2059,10 @@ LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
 }
 
 void StmtEmitter::emitStatement(Operation *op) {
+  // Know where the start of this statement is in case any out of band precuror
+  // statements need to be emitted.
+  statementBeginningIndex = outBuffer.size();
+
   // Expressions may either be ignored or emitted as an expression statements.
   if (isVerilogExpression(op)) {
     if (emitter.outOfLineExpressions.count(op)) {

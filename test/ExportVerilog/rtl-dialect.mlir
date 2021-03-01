@@ -381,7 +381,9 @@ rtl.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
   %a3 = comb.divu %a1, %a2: i4
   sv.connect %awire, %a3: i4
 
-  // CHECK: assign awire = $unsigned(
+  // CHECK: wire [3:0] _tmp = $signed(in1) / $signed(in2) + $signed(in1) / $signed(in2);
+  // CHECK: wire [3:0] _tmp_0 = $signed(in1) / $signed(in2) * $signed(in1) / $signed(in2);
+  // CHECK: assign awire = _tmp / _tmp_0;
   %b1a = comb.divs %in1, %in2: i4
   %b1b = comb.divs %in1, %in2: i4
   %b1c = comb.divs %in1, %in2: i4
@@ -500,7 +502,7 @@ rtl.module @issue525(%struct: i2, %else: i2) -> (%casex: i2) {
 
 // https://github.com/llvm/circt/issues/438
 // CHECK-LABEL: module cyclic
-rtl.module @cyclic(%a: i1) -> (i1 {rtl.name = "b"}) {
+rtl.module @cyclic(%a: i1) -> (%b: i1) {
   // CHECK: wire _T_0;
 
   // CHECK: wire _T = _T_0 + _T_0;
@@ -512,9 +514,29 @@ rtl.module @cyclic(%a: i1) -> (i1 {rtl.name = "b"}) {
   rtl.output %2 : i1
 }
 
+
+// https://github.com/llvm/circt/issues/668
+// CHECK-LABEL: module longExpressions
+rtl.module @longExpressions(%a: i8, %a2: i8) -> (%b: i8) {
+  // CHECK: wire [7:0] _tmp = a + a + a + a + a
+  %1 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
+  // CHECK-NEXT: wire [7:0] _tmp_0 = a + a + a 
+  %2 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
+  // CHECK-NEXT: wire [7:0] _tmp_1 = a + a + a + a + a + a + a + a 
+  %3 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
+  // CHECK-NEXT: wire [7:0] _tmp_2 = a + a + a + a + a + a + a + a 
+  %4 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
+  // CHECK-NEXT: assign b = _tmp * _tmp_0 | _tmp_1 * _tmp_2;
+  %5 = comb.mul %1, %2 : i8
+  %6 = comb.mul %3, %4 : i8
+  %7 = comb.or %5, %6 : i8
+  rtl.output %7 : i8
+}
+
 // https://github.com/llvm/circt/issues/668
 // CHECK-LABEL: module longvariadic
-rtl.module @longvariadic(%a: i8, %a2: i8) -> (i8 {rtl.name = "b"}, i8 {rtl.name = "c"}) {
+rtl.module @longvariadic(%a: i8) -> (%b: i8) {
+  // CHECK: assign b = a + a + a + a
   %1 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
                 %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
                 %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
@@ -531,6 +553,5 @@ rtl.module @longvariadic(%a: i8, %a2: i8) -> (i8 {rtl.name = "b"}, i8 {rtl.name 
                 %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
                 %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
                 %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
-  %2 = comb.mul %a2, %a2 : i8
-  rtl.output %1, %2 : i8, i8
+  rtl.output %1 : i8
 }
