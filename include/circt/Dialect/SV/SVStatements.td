@@ -271,11 +271,11 @@ def CaseZOp : SVOp<"casez", [HasRegionTerminator, NoRegionArguments,
     /// This describes the bit in a pattern, 0/1/x.
     enum PatternBit { PatternZero = 0, PatternOne = 1, PatternAny = 2 };
 
-    static char getVerilogLetter(PatternBit bit) {
+    static char getLetter(PatternBit bit, bool isVerilog) {
       switch (bit) {
       case PatternZero: return '0';
       case PatternOne: return '1';
-      case PatternAny: return 'x';
+      case PatternAny: return isVerilog ? '?' : 'x';
       }
     }
 

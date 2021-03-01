@@ -1875,7 +1875,8 @@ LogicalResult StmtEmitter::visitSV(CaseZOp op) {
       // there are no x's crossing nibble boundaries.
       indent() << pattern.getWidth() << "'b";
       for (size_t bit = 0, e = pattern.getWidth(); bit != e; ++bit)
-        os << CaseZOp::getVerilogLetter(pattern.getBit(e - bit - 1));
+        os << CaseZOp::getLetter(pattern.getBit(e - bit - 1),
+                                 /*isVerilog*/ true);
     }
     os << ":";
     emitBlockAsStatement(caseInfo.block, emptyOps);
