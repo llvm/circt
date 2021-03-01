@@ -259,15 +259,6 @@ static void printUnpackedTypePostfix(Type type, raw_ostream &os) {
       });
 }
 
-/// Return true if this is a noop cast that will emit with no syntax.
-static bool isNoopCast(Operation *op) {
-  // These are always noop casts.
-  if (isa<ReadInOutOp>(op))
-    return true;
-
-  return false;
-}
-
 /// Return the word (e.g. "reg") in Verilog to declare the specified thing.
 static StringRef getVerilogDeclWord(Operation *op) {
   if (isa<RegOp>(op))
@@ -684,14 +675,6 @@ public:
 
   void emitExpression(Value exp, bool forceRootExpr, raw_ostream &os);
 
-  /// Do a best-effort job of looking through noop cast operations.
-  Value lookThroughNoopCasts(Value value) {
-    if (auto *op = value.getDefiningOp())
-      if (isNoopCast(op) && !emitter.outOfLineExpressions.count(op))
-        return lookThroughNoopCasts(op->getOperand(0));
-    return value;
-  }
-
 private:
   friend class TypeOpVisitor<ExprEmitter, SubExprInfo>;
   friend class CombinationalVisitor<ExprEmitter, SubExprInfo>;
@@ -728,16 +711,14 @@ private:
   SubExprInfo emitUnary(Operation *op, const char *syntax,
                         bool resultAlwaysUnsigned = false);
 
-  SubExprInfo emitNoopCast(Operation *op) {
-    return emitSubExpr(op->getOperand(0), LowestPrecedence);
-  }
-
   SubExprInfo visitSV(GetModportOp op);
   SubExprInfo visitSV(ReadInterfaceSignalOp op);
   SubExprInfo visitSV(TextualValueOp op);
 
   // Noop cast operators.
-  SubExprInfo visitSV(ReadInOutOp op) { return emitNoopCast(op); }
+  SubExprInfo visitSV(ReadInOutOp op) {
+    return emitSubExpr(op->getOperand(0), LowestPrecedence);
+  }
   SubExprInfo visitSV(ArrayIndexInOutOp op);
 
   // Other
@@ -842,10 +823,10 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   // This isn't needed on the LHS, because the relevant Verilog operators are
   // left-associative.
   //
-  auto *rhsOperandOp = lookThroughNoopCasts(op->getOperand(1)).getDefiningOp();
   auto rhsPrec = VerilogPrecedence(prec - 1);
-  if (rhsOperandOp && op->getName() == rhsOperandOp->getName())
-    rhsPrec = prec;
+  if (auto *rhsOperandOp = op->getOperand(1).getDefiningOp())
+    if (op->getName() == rhsOperandOp->getName())
+      rhsPrec = prec;
 
   auto rhsInfo = emitSubExpr(op->getOperand(1), rhsPrec, operandSignReq);
 
@@ -2101,12 +2082,6 @@ static bool isExpressionAlwaysInline(Operation *op) {
   // An SV interface modport is a symbolic name that is always inlined.
   if (isa<GetModportOp>(op) || isa<ReadInterfaceSignalOp>(op))
     return true;
-
-  // If this is a noop cast and the operand is always inlined, then the noop
-  // cast is always inlined.
-  if (isNoopCast(op))
-    if (auto *operandOp = op->getOperand(0).getDefiningOp())
-      return isExpressionAlwaysInline(operandOp);
 
   return false;
 }
