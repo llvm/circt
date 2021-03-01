@@ -460,6 +460,10 @@ public:
   LogicalResult visitSV(AssignInterfaceSignalOp op);
   void emitOperation(Operation *op);
 
+  void emitBlockAsStatement(Block *block,
+                            SmallPtrSet<Operation *, 8> &locationOps,
+                            StringRef multiLineComment = StringRef());
+
   using ValueOrOp = PointerUnion<Value, Operation *>;
 
   void collectNamesEmitDecls(Block &block);
@@ -1600,10 +1604,9 @@ LogicalResult ModuleEmitter::emitIfDef(Operation *op, StringRef cond) {
 /// markers if non-singular.  If the control flow construct is multi-line and
 /// if multiLineComment is non-null, the string is included in a comment after
 /// the 'end' to make it easier to associate.
-static void emitBeginEndRegion(Block *block,
-                               SmallPtrSet<Operation *, 8> &locationOps,
-                               ModuleEmitter &emitter,
-                               StringRef multiLineComment = StringRef()) {
+void ModuleEmitter::emitBlockAsStatement(
+    Block *block, SmallPtrSet<Operation *, 8> &locationOps,
+    StringRef multiLineComment) {
   auto isSingleVerilogStatement = [&](Operation &op) {
     // Not all expressions and statements are guaranteed to emit a single
     // Verilog statement (for the purposes of if statements).  Just do a simple
@@ -1617,19 +1620,19 @@ static void emitBeginEndRegion(Block *block,
   bool hasOneStmt = llvm::hasSingleElement(block->without_terminator()) &&
                     isSingleVerilogStatement(block->front());
   if (!hasOneStmt)
-    emitter.os << " begin";
-  emitter.emitLocationInfoAndNewLine(locationOps);
+    os << " begin";
+  emitLocationInfoAndNewLine(locationOps);
 
-  emitter.addIndent();
+  addIndent();
   for (auto &op : block->without_terminator())
-    emitter.emitOperation(&op);
-  emitter.reduceIndent();
+    emitOperation(&op);
+  reduceIndent();
 
   if (!hasOneStmt) {
-    emitter.indent() << "end";
+    indent() << "end";
     if (!multiLineComment.empty())
-      emitter.os << " // " << multiLineComment;
-    emitter.os << '\n';
+      os << " // " << multiLineComment;
+    os << '\n';
   }
 }
 
@@ -1638,10 +1641,10 @@ LogicalResult ModuleEmitter::visitSV(IfOp op) {
   ops.insert(op);
 
   indent() << "if (" << emitExpressionToString(op.cond(), ops) << ')';
-  emitBeginEndRegion(op.getThenBlock(), ops, *this);
+  emitBlockAsStatement(op.getThenBlock(), ops);
   if (op.hasElse()) {
     indent() << "else";
-    emitBeginEndRegion(op.getElseBlock(), ops, *this);
+    emitBlockAsStatement(op.getElseBlock(), ops);
   }
   return success();
 }
@@ -1692,7 +1695,7 @@ LogicalResult ModuleEmitter::visitSV(AlwaysOp op) {
     comment += ')';
   }
 
-  emitBeginEndRegion(op.getBodyBlock(), ops, *this, comment);
+  emitBlockAsStatement(op.getBodyBlock(), ops, comment);
   return success();
 }
 
@@ -1720,7 +1723,7 @@ LogicalResult ModuleEmitter::visitSV(AlwaysFFOp op) {
   comment += ')';
 
   if (op.resetStyle() == ResetType::NoReset)
-    emitBeginEndRegion(op.getBodyBlock(), ops, *this, comment);
+    emitBlockAsStatement(op.getBodyBlock(), ops, comment);
   else {
     os << " begin";
     emitLocationInfoAndNewLine(ops);
@@ -1733,9 +1736,9 @@ LogicalResult ModuleEmitter::visitSV(AlwaysFFOp op) {
         *op.resetEdge() == EventControl::AtNegEdge)
       os << "!";
     os << emitExpressionToString(op.reset(), ops) << ')';
-    emitBeginEndRegion(op.getResetBlock(), ops, *this);
+    emitBlockAsStatement(op.getResetBlock(), ops);
     indent() << "else";
-    emitBeginEndRegion(op.getBodyBlock(), ops, *this);
+    emitBlockAsStatement(op.getBodyBlock(), ops);
 
     reduceIndent();
 
@@ -1751,7 +1754,7 @@ LogicalResult ModuleEmitter::visitSV(InitialOp op) {
   ops.insert(op);
 
   indent() << "initial";
-  emitBeginEndRegion(op.getBodyBlock(), ops, *this, "initial");
+  emitBlockAsStatement(op.getBodyBlock(), ops, "initial");
   return success();
 }
 
@@ -1776,7 +1779,7 @@ LogicalResult ModuleEmitter::visitSV(CaseZOp op) {
         os << CaseZOp::getVerilogLetter(pattern.getBit(e - bit - 1));
     }
     os << ": ";
-    emitBeginEndRegion(caseInfo.block, emptyOps, *this);
+    emitBlockAsStatement(caseInfo.block, emptyOps);
   }
 
   reduceIndent();
