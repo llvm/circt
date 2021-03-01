@@ -160,6 +160,25 @@ void IfDefOp::build(OpBuilder &odsBuilder, OperationState &result,
   }
 }
 
+void IfDefOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                          MLIRContext *context) {
+  // If both thenRegion and elseRegion are empty, erase op.
+  struct EraseEmptyOp final : public OpRewritePattern<IfDefOp> {
+    using OpRewritePattern::OpRewritePattern;
+    LogicalResult matchAndRewrite(IfDefOp op,
+                                  PatternRewriter &rewriter) const override {
+      if (!op.thenRegion().empty())
+        return failure();
+      else if (op.hasElse() && !op.elseRegion().empty())
+        return failure();
+
+      rewriter.eraseOp(op);
+      return success();
+    }
+  };
+  results.insert<EraseEmptyOp>(context);
+}
+
 //===----------------------------------------------------------------------===//
 // IfDefProceduralOp
 
@@ -282,6 +301,23 @@ static void printEventList(OpAsmPrinter &p, AlwaysOp op, ArrayAttr portsAttr,
   }
 }
 
+void AlwaysOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                           MLIRContext *context) {
+  // If the body is empty, erase op.
+  struct EraseEmptyOp final : public OpRewritePattern<AlwaysOp> {
+    using OpRewritePattern::OpRewritePattern;
+    LogicalResult matchAndRewrite(AlwaysOp op,
+                                  PatternRewriter &rewriter) const override {
+      if (!op.body().empty())
+        return failure();
+
+      rewriter.eraseOp(op);
+      return success();
+    }
+  };
+  results.insert<EraseEmptyOp>(context);
+}
+
 //===----------------------------------------------------------------------===//
 // AlwaysFFOp
 
@@ -364,6 +400,24 @@ void InitialOp::build(OpBuilder &odsBuilder, OperationState &result,
     odsBuilder.setInsertionPoint(oldIP);
   }
 }
+
+void InitialOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                            MLIRContext *context) {
+  // If the body is empty, erase op.
+  struct EraseEmptyOp final : public OpRewritePattern<InitialOp> {
+    using OpRewritePattern::OpRewritePattern;
+    LogicalResult matchAndRewrite(InitialOp op,
+                                  PatternRewriter &rewriter) const override {
+      if (!op.body().empty())
+        return failure();
+
+      rewriter.eraseOp(op);
+      return success();
+    }
+  };
+  results.insert<EraseEmptyOp>(context);
+}
+
 //===----------------------------------------------------------------------===//
 // TypeDecl operations
 //===----------------------------------------------------------------------===//

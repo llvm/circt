@@ -27,6 +27,7 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments]> {
   let arguments = (ins StrAttr:$cond);
   let results = (outs);
 
+  let hasCanonicalizer = true;
   let assemblyFormat = "$cond $thenRegion (`else` $elseRegion^)? attr-dict";
 
   // TODO: ODS forces using a custom builder just to get the region terminator
@@ -153,6 +154,7 @@ def AlwaysOp : SVOp<"always", [HasRegionTerminator, NoRegionArguments,
   let results = (outs);
   
   let assemblyFormat = "custom<EventList>($events, $clocks) $body attr-dict";
+  let hasCanonicalizer = true;
 
   let skipDefaultBuilders = 1;
   let builders = [
@@ -236,6 +238,7 @@ def InitialOp : SVOp<"initial", [HasRegionTerminator, NoRegionArguments,
   let arguments = (ins);
   let results = (outs);
 
+  let hasCanonicalizer = true;
   let assemblyFormat = "$body attr-dict";
 
   // TODO: ODS forces using a custom builder just to get the region terminator
