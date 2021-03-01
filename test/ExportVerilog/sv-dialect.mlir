@@ -161,7 +161,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
 
     // CHECK-NEXT: casez (val)
     sv.casez %val : i8
-    // CHECK-NEXT: 8'b0000001x:  begin
+    // CHECK-NEXT: 8'b0000001x: begin
     case b0000001x: {
       // CHECK-NEXT: $fwrite(32'h80000002, "a");
       sv.fwrite "a"
@@ -267,7 +267,8 @@ rtl.module @issue508(%in1: i1, %in2: i1) {
   // CHECK: wire _T = in1 | in2;
   %clock = comb.or %in1, %in2 : i1 
 
-  // CHECK-NEXT: always @(posedge _T)
+  // CHECK-NEXT: always @(posedge _T) begin
+  // CHECK-NEXT: end
   sv.always posedge %clock {
   }
 }
