@@ -925,4 +925,14 @@ module attributes {firrtl.mainModule = "Simple"} {
     %0 = firrtl.invalidvalue : !firrtl.uint<0>
     firrtl.connect %w, %0 : !firrtl.flip<uint<0>>, !firrtl.uint<0>
   }
+
+  // CHECK-LABEL: ASQ
+  // https://github.com/llvm/circt/issues/699
+  rtl.module @ASQ(%clock: i1, %reset: i1) {
+    %0 = firrtl.stdIntCast %clock : (i1) -> !firrtl.clock
+    %1 = firrtl.stdIntCast %reset : (i1) -> !firrtl.asyncreset
+    %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+    %widx_widx_bin = firrtl.regreset %0, %1, %c0_ui1 {name = "widx_widx_bin"} : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>) -> !firrtl.uint<4>
+    rtl.output
+  }
 }

@@ -1444,7 +1444,9 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
 
   Value clockVal = getLoweredValue(op.clockVal());
   Value resetSignal = getLoweredValue(op.resetSignal());
-  Value resetValue = getLoweredValue(op.resetValue());
+  // Reset values may be narrower than the register.  Extend appropriately.
+  Value resetValue = getLoweredAndExtOrTruncValue(
+      op.resetValue(), op.getType().cast<FIRRTLType>());
 
   if (!clockVal || !resetSignal || !resetValue)
     return failure();
