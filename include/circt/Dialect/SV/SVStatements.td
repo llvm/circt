@@ -36,6 +36,9 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments]> {
   let builders = [
     OpBuilderDAG<(ins "StringRef":$cond,
                       CArg<"std::function<void()>", "{}">:$thenCtor,
+                      CArg<"std::function<void()>", "{}">:$elseCtor)>,
+    OpBuilderDAG<(ins "StringAttr":$cond,
+                      CArg<"std::function<void()>", "{}">:$thenCtor,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>
   ];
 
@@ -102,7 +105,8 @@ def IfOp : SVOp<"if", [HasRegionTerminator, NoRegionArguments,
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
   let arguments = (ins I1:$cond);
   let results = (outs);
-  
+
+  let hasCanonicalizer = true;
   let assemblyFormat = "$cond $thenRegion (`else` $elseRegion^)? attr-dict";
 
   // TODO: ODS forces using a custom builder just to get the region terminator
@@ -253,6 +257,64 @@ def InitialOp : SVOp<"initial", [HasRegionTerminator, NoRegionArguments,
   }];
 }
 
+def CaseZOp : SVOp<"casez", [HasRegionTerminator, NoRegionArguments,
+                             ProceduralRegion]> {
+  let summary = "'casez (cond)' block";
+  let description = "See SV Spec 9.2.1.";
+
+  let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
+  let arguments = (ins RTLIntegerType:$cond, ArrayAttr:$casePatterns);
+  let results = (outs);
+
+  let parser = "return parseCaseZOp(parser, result);";
+  let printer = "printCaseZOp(p, *this);";
+  let verifier = "return ::verifyCaseZOp(*this);";
+
+  let extraClassDeclaration = [{
+    /// This describes the bit in a pattern, 0/1/x.
+    enum PatternBit { PatternZero = 0, PatternOne = 1, PatternAny = 2 };
+
+    static char getVerilogLetter(PatternBit bit) {
+      switch (bit) {
+      case PatternZero: return '0';
+      case PatternOne: return '1';
+      case PatternAny: return 'x';
+      }
+    }
+
+    // This is provides convenient access to encode and decode a pattern.
+    struct CasePattern {
+      IntegerAttr attr;
+
+      // Return the number of bits in the pattern.
+      size_t getWidth() const {
+        return attr.getValue().getBitWidth()/2;
+      }
+
+      /// Return the specified bit, bit 0 is the least significant bit.
+      PatternBit getBit(size_t bitNumber) const;
+
+      /// Return true if this pattern always matches.
+      bool isDefault() const;
+
+      // Get a CasePattern from a specified list of PatternBits.  Bits are
+      // specified in most least significant order - element zero is the least
+      // significant bit.
+      CasePattern(ArrayRef<PatternBit> bits, MLIRContext *context);
+      CasePattern(IntegerAttr attr) : attr(attr) {}
+    };
+    // This provides information about one case.
+    struct CaseInfo {
+      CasePattern pattern;
+      Block *block;
+    };
+
+    SmallVector<CaseInfo, 4> getCases();
+
+    // void addCase(...)
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Other Statements
 //===----------------------------------------------------------------------===//
@@ -260,7 +322,8 @@ def InitialOp : SVOp<"initial", [HasRegionTerminator, NoRegionArguments,
 def YieldOp
   : SVOp<"yield", [NoSideEffect, Terminator,
                    ParentOneOf<["IfDefOp", "IfDefProceduralOp", "IfOp",
-                                "AlwaysOp", "InitialOp", "AlwaysFFOp"]>]> {
+                                "AlwaysOp", "InitialOp", "AlwaysFFOp",
+                                "CaseZOp"]>]> {
   let summary = "terminator for control-flow operation regions";
   let arguments = (ins);
 
