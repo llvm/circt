@@ -103,11 +103,12 @@ struct FIRRTLTypesLowering : public LowerFIRRTLTypesBase<FIRRTLTypesLowering>,
   // Lowering operations.
   void visitDecl(InstanceOp op);
   void visitDecl(MemOp op);
-  void visitExpr(SubfieldOp op);
   void visitDecl(RegOp op);
+  void visitDecl(WireOp op);
+  void visitExpr(InvalidValuePrimOp op);
+  void visitExpr(SubfieldOp op);
   void visitExpr(SubindexOp op);
   void visitStmt(ConnectOp op);
-  void visitExpr(InvalidValuePrimOp op);
 
 private:
   // Lowering module block arguments.
@@ -361,6 +362,40 @@ void FIRRTLTypesLowering::visitDecl(MemOp op) {
     }
   }
 
+  opsToRemove.push_back(op);
+}
+
+/// Lower a wire op with a bundle to mutliple non-bundled wires.
+void FIRRTLTypesLowering::visitDecl(WireOp op) {
+  Value result = op.result();
+
+  // Attempt to get the bundle types, potentially unwrapping an outer flip type
+  // that wraps the whole bundle.
+  FIRRTLType resultType = getCanonicalAggregateType(result.getType());
+
+  // If the wire is not a bundle, there is nothing to do.
+  if (!resultType)
+    return;
+
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+  flattenType(resultType, "", false, fieldTypes);
+
+  // Create the prefix of the lowered name
+  StringRef wireName = "";
+  if (op.name().hasValue())
+    wireName = op.name().getValue();
+
+  // Loop over the leaf aggregates.
+  SmallString<16> loweredName(wireName);
+  for (auto field : fieldTypes) {
+    loweredName.resize(wireName.size());
+    loweredName += field.suffix;
+    auto wire = builder->create<WireOp>(field.getPortType(),
+                                        builder->getStringAttr(loweredName));
+    setBundleLowering(result, StringRef(field.suffix).drop_front(1), wire);
+  }
+
+  // Remember to remove the original op.
   opsToRemove.push_back(op);
 }
 
