@@ -404,6 +404,180 @@ void InitialOp::build(OpBuilder &odsBuilder, OperationState &result,
     odsBuilder.setInsertionPoint(oldIP);
   }
 }
+
+//===----------------------------------------------------------------------===//
+// CaseZOp
+//===----------------------------------------------------------------------===//
+
+/// Return the specified bit, bit 0 is the least significant bit.
+auto CaseZOp::CasePattern::getBit(size_t bitNumber) const -> PatternBit {
+  return PatternBit(unsigned(attr.getValue()[bitNumber * 2]) +
+                    2 * unsigned(attr.getValue()[bitNumber * 2 + 1]));
+}
+
+bool CaseZOp::CasePattern::isDefault() const {
+  for (size_t i = 0, e = getWidth(); i != e; ++i)
+    if (getBit(i) != PatternAny)
+      return false;
+  return true;
+}
+
+// Get a CasePattern from a specified list of PatternBits.  Bits are
+// specified in most least significant order - element zero is the least
+// significant bit.
+CaseZOp::CasePattern::CasePattern(ArrayRef<PatternBit> bits,
+                                  MLIRContext *context) {
+  APInt pattern(bits.size() * 2, 0);
+  for (auto elt : llvm::reverse(bits)) {
+    pattern <<= 2;
+    pattern |= unsigned(elt);
+  }
+  auto patternType = IntegerType::get(context, bits.size() * 2);
+  attr = IntegerAttr::get(patternType, pattern);
+}
+
+auto CaseZOp::getCases() -> SmallVector<CaseInfo, 4> {
+  SmallVector<CaseInfo, 4> result;
+  assert(casePatterns().size() == getNumRegions() &&
+         "case pattern / region count mismatch");
+  size_t nextRegion = 0;
+  for (auto elt : casePatterns()) {
+    result.push_back({CasePattern(elt.cast<IntegerAttr>()),
+                      &getRegion(nextRegion++).front()});
+  }
+
+  return result;
+}
+
+static ParseResult parseCaseZOp(OpAsmParser &parser, OperationState &result) {
+  auto &builder = parser.getBuilder();
+
+  OpAsmParser::OperandType condOperand;
+  Type condType;
+
+  auto loc = parser.getCurrentLocation();
+  if (parser.parseOperand(condOperand) || parser.parseColonType(condType) ||
+      parser.parseOptionalAttrDict(result.attributes) ||
+      parser.resolveOperand(condOperand, condType, result.operands))
+    return failure();
+
+  // Check the integer type.
+  if (!result.operands[0].getType().isSignlessInteger())
+    return parser.emitError(loc, "condition must have signless integer type");
+  auto condWidth = condType.getIntOrFloatBitWidth();
+
+  // Parse all the cases.
+  SmallVector<Attribute> casePatterns;
+  SmallVector<CaseZOp::PatternBit, 16> caseBits;
+  while (1) {
+    if (succeeded(parser.parseOptionalKeyword("default"))) {
+      // Fill the pattern with Any.
+      caseBits.assign(condWidth, CaseZOp::PatternAny);
+    } else if (failed(parser.parseOptionalKeyword("case"))) {
+      // Not default or case, must be the end of the cases.
+      break;
+    } else {
+      // Parse the pattern.  It always starts with b, so it is an MLIR keyword.
+      StringRef caseVal;
+      loc = parser.getCurrentLocation();
+      if (parser.parseKeyword(&caseVal))
+        return failure();
+
+      if (caseVal.front() != 'b')
+        return parser.emitError(loc, "expected case value starting with 'b'");
+      caseVal = caseVal.drop_front();
+
+      // Parse and decode each bit, we reverse the list later for MSB->LSB.
+      for (; !caseVal.empty(); caseVal = caseVal.drop_front()) {
+        CaseZOp::PatternBit bit;
+        switch (caseVal.front()) {
+        case '0':
+          bit = CaseZOp::PatternZero;
+          break;
+        case '1':
+          bit = CaseZOp::PatternOne;
+          break;
+        case 'x':
+          bit = CaseZOp::PatternAny;
+          break;
+        default:
+          return parser.emitError(loc, "unexpected case bit '")
+                 << caseVal.front() << "'";
+        }
+        caseBits.push_back(bit);
+      }
+
+      if (caseVal.size() > condWidth)
+        return parser.emitError(loc, "too many bits specified in pattern");
+      std::reverse(caseBits.begin(), caseBits.end());
+
+      // High zeros may be missing.
+      if (caseBits.size() < condWidth)
+        caseBits.append(condWidth - caseBits.size(), CaseZOp::PatternZero);
+    }
+
+    auto resultPattern = CaseZOp::CasePattern(caseBits, builder.getContext());
+    casePatterns.push_back(resultPattern.attr);
+    caseBits.clear();
+
+    // Parse the case body.
+    auto caseRegion = std::make_unique<Region>();
+    if (parser.parseColon() || parser.parseRegion(*caseRegion))
+      return failure();
+    CaseZOp::ensureTerminator(*caseRegion, builder, result.location);
+    result.addRegion(std::move(caseRegion));
+  }
+
+  result.addAttribute("casePatterns", builder.getArrayAttr(casePatterns));
+  return success();
+}
+
+static void printCaseZOp(OpAsmPrinter &p, CaseZOp op) {
+  p << "sv.casez" << ' ' << op.cond() << " : " << op.cond().getType();
+  p.printOptionalAttrDict(op.getAttrs(), /*elidedAttrs=*/{"casePatterns"});
+
+  for (auto caseInfo : op.getCases()) {
+    p.printNewline();
+    auto pattern = caseInfo.pattern;
+    if (pattern.isDefault()) {
+      p << "default";
+    } else {
+      p << "case b";
+      for (size_t i = 0, e = pattern.getWidth(); i != e; ++i) {
+        char code;
+        switch (pattern.getBit(e - i - 1)) {
+        case CaseZOp::PatternZero:
+          code = '0';
+          break;
+        case CaseZOp::PatternOne:
+          code = '1';
+          break;
+        case CaseZOp::PatternAny:
+          code = 'x';
+          break;
+        }
+        p << code;
+      }
+    }
+
+    p << ':';
+    bool printTerminator = true;
+    if (auto *term = caseInfo.block->getTerminator()) {
+      printTerminator =
+          !term->getAttrDictionary().empty() || term->getNumOperands() != 0;
+    }
+    p.printRegion(*caseInfo.block->getParent(), /*printEntryBlockArgs=*/false,
+                  /*printBlockTerminators=*/printTerminator);
+  }
+}
+
+static LogicalResult verifyCaseZOp(CaseZOp op) {
+  // Ensure that the number of regions and number of case values match.
+  if (op.casePatterns().size() != op.getNumRegions())
+    return op.emitOpError("case pattern / region count mismatch");
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // TypeDecl operations
 //===----------------------------------------------------------------------===//
