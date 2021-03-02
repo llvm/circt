@@ -170,7 +170,7 @@ static bool isEmptyBlockExceptForTerminator(Block *block) {
   if (!block)
     return true;
   return llvm::all_of(block->without_terminator(),
-                       [](auto &op) { return false; });
+                      [](auto &op) { return false; });
 }
 
 void IfDefOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
