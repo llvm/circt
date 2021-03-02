@@ -257,7 +257,7 @@ def InitialOp : SVOp<"initial", [HasRegionTerminator, NoRegionArguments,
 def CaseZOp : SVOp<"casez", [HasRegionTerminator, NoRegionArguments,
                              ProceduralRegion]> {
   let summary = "'casez (cond)' block";
-  let description = "See SV Spec 9.2.1.";
+  let description = "See SystemVerilog 2017 12.5.1.";
 
   let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
   let arguments = (ins RTLIntegerType:$cond, ArrayAttr:$casePatterns);
