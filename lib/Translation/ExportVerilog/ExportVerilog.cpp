@@ -500,6 +500,7 @@ public:
 
   void emitMLIRModule(ModuleOp module);
   void emitRTLModule(RTLModuleOp module);
+  void prepareRTLModule(Block &block);
   void emitRTLExternModule(RTLModuleExternOp module);
 
   // Statements.
@@ -2419,7 +2420,65 @@ void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
   os << "// external module " << module.getName() << "\n\n";
 }
 
+static Value lowerVariadicCommutativeOp(Operation &op, OperandRange operands) {
+  Value lhs, rhs;
+  switch (operands.size()) {
+  case 0:
+    assert(0 && "cannot be called with empty operand range");
+  case 1:
+    return operands[0];
+  case 2:
+    lhs = operands[0];
+    rhs = operands[1];
+    break;
+  default:
+    auto firstHalf = operands.size() / 2;
+    lhs = lowerVariadicCommutativeOp(op, operands.take_front(firstHalf));
+    rhs = lowerVariadicCommutativeOp(op, operands.drop_front(firstHalf));
+    break;
+  }
+
+  OperationState state(op.getLoc(), op.getName());
+  // state.addOperands(ValueRange{lhs, rhs});
+  state.addOperands(lhs);
+  state.addOperands(rhs);
+  state.addTypes(op.getResult(0).getType());
+  auto *newOp = Operation::create(state);
+  op.getBlock()->getOperations().insert(Block::iterator(&op), newOp);
+  return newOp->getResult(0);
+}
+
+/// For each module we emit, do a prepass over the structure, pre-lowering and
+/// otherwise rewriting operations we don't want to emit.
+void ModuleEmitter::prepareRTLModule(Block &block) {
+  for (auto &op : llvm::make_early_inc_range(block)) {
+    // If the operations has regions, lower each of the regions.
+    for (auto &region : op.getRegions()) {
+      if (!region.empty())
+        prepareRTLModule(region.front());
+    }
+
+    // Lower commutative variadic operations with more than two operands into
+    // balanced operand trees so we can split long lines across multiple
+    // statements.
+    if (op.getNumOperands() > 2 && op.getNumResults() == 1 &&
+        op.hasTrait<OpTrait::IsCommutative>() &&
+        mlir::MemoryEffectOpInterface::hasNoEffect(&op) &&
+        op.getNumRegions() == 0 && op.getNumSuccessors() == 0 &&
+        op.getAttrs().empty() && !isa<comb::MergeOp>(op)) {
+      // Lower this operation to a balanced binary tree of the same operation.
+      auto result = lowerVariadicCommutativeOp(op, op.getOperands());
+      op.getResult(0).replaceAllUsesWith(result);
+      op.erase();
+      continue;
+    }
+  }
+}
+
 void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
+  // Perform lowerings to make it easier to emit the module.
+  prepareRTLModule(*module.getBodyBlock());
+
   // Add all the ports to the name table.
   SmallVector<ModulePortInfo, 8> portInfo;
   module.getPortInfo(portInfo);
