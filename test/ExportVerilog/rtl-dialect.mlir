@@ -576,22 +576,22 @@ rtl.module @longvariadic(%a: i8) -> (%b: i8) {
 
 // https://github.com/llvm/circt/issues/681
 // Rename keywords used in variable/module names
-rtl.module @inout(%inout: i1) -> (%b: i1) {
-  rtl.output %inout : i1
-}   
 // CHECK-LABEL: module inout_1(
 // CHECK-NEXT:  input  inout_0,
 // CHECK-NEXT:  output b);
 // CHECK-EMPTY:
 // CHECK-NEXT: assign b = inout_0;
+rtl.module @inout(%inout: i1) -> (%b: i1) {
+  rtl.output %inout : i1
+}   
 
 // https://github.com/llvm/circt/issues/681
 // Rename keywords used in variable/module names
-rtl.module @reg(%inout: i1) -> (%b: i1) {
-  rtl.output %inout : i1
-}   
 // CHECK-LABEL: module reg_1(
 // CHECK-NEXT:  input  inout_0,
 // CHECK-NEXT:  output b);
 // CHECK-EMPTY:
 // CHECK-NEXT: assign b = inout_0;
+rtl.module @reg(%inout: i1) -> (%b: i1) {
+  rtl.output %inout : i1
+}   
