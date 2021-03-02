@@ -117,7 +117,7 @@ bool BitwidthReductionPass::inspectOp(DefOp op) {
 }
 
 bool BitwidthReductionPass::inspectOp(hir::ConstantOp op) {
-  setIntegerConst(op.res(), op.value().getLimitedValue());
+  setIntegerConst(op.res(), op.value());
   return true;
 }
 
@@ -131,7 +131,7 @@ bool BitwidthReductionPass::inspectOp(ForOp op) {
 
   Block *body = op.getBody();
   BlockArgument new_idx =
-      body->addArgument(IntegerType::get(min_bitwidth, op.getContext()));
+      body->addArgument(IntegerType::get(op.getContext(), min_bitwidth));
   BlockArgument new_tloop =
       body->addArgument(hir::TimeType::get(op.getContext()));
   body->getArgument(0).replaceAllUsesWith(new_idx);
@@ -152,21 +152,9 @@ bool BitwidthReductionPass::inspectOp(MemReadOp op) { return true; }
 
 bool BitwidthReductionPass::inspectOp(MemWriteOp op) { return true; }
 
-bool BitwidthReductionPass::inspectOp(hir::AddOp op) {
-  Value result = op.res();
-  Value left = op.left();
-  Value right = op.right();
+bool BitwidthReductionPass::inspectOp(hir::AddOp op) { return true; }
 
-  return true;
-}
-
-bool BitwidthReductionPass::inspectOp(hir::SubtractOp op) {
-  Value result = op.res();
-  Value left = op.left();
-  Value right = op.right();
-
-  return true;
-}
+bool BitwidthReductionPass::inspectOp(hir::SubtractOp op) { return true; }
 
 bool BitwidthReductionPass::inspectOp(hir::ReturnOp op) { return true; }
 
