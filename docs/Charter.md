@@ -157,9 +157,15 @@ through logic synthesis into fixed logic.
 Several projects have described the internal representation of HLS
 compilers. LegUp leverages the Clang/LLVM framework for
 representing designs, while Bambu builds an independent
-internal representation. A recent effort in this area is Futil,
-which implements an intermediate representation leveraged by the Dahlia
-system.
+internal representation. 
+
+[Calyx](https://capra.cs.cornell.edu/calyx) is a new intermediate language
+that combines a software-like control language with a hardware-like structural
+langauge. This intermediate level of representation allows Calyx to optimize
+structural programs using control flow information.
+Calyx currently serves as the compilation target for [Dahlia](https://capra.cs.cornell.edu/dahlia)
+and several other domain-specific architectures (systolic array, number 
+theoretic transform unit).
 
 ### [Dataflow/handshake](Dialects/Handshake.md)
 
