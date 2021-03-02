@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/StringSwitch.h"
 
 using namespace circt;
@@ -273,6 +274,7 @@ void FIRRTLTypesLowering::visitDecl(InstanceOp op) {
 /// element in a memory's data type.
 void FIRRTLTypesLowering::visitDecl(MemOp op) {
   auto type = op.getDataType();
+  auto depth = op.depth();
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
   flattenType(type, "", false, fieldTypes);
@@ -280,6 +282,16 @@ void FIRRTLTypesLowering::visitDecl(MemOp op) {
   // Mutable store of the types of the ports of a new memory. This is
   // cleared and re-used.
   SmallVector<Type, 4> resultPortTypes;
+  llvm::SmallSetVector<Attribute, 4> resultPortNames;
+
+  // Insert a unique port into resultPortNames with base name nameStr.
+  auto uniquePortName = [&](StringRef baseName) {
+    size_t i = 0;
+    std::string suffix = "";
+    while (!resultPortNames.insert(
+        builder->getStringAttr(baseName.str() + suffix)))
+      suffix = std::to_string(i++);
+  };
 
   // Store any new wires created during lowering. This ensures that
   // wires are re-used if they already exist.
@@ -291,22 +303,42 @@ void FIRRTLTypesLowering::visitDecl(MemOp op) {
     // Determine the new port type for this memory. New ports are
     // constructed by checking the kind of the memory.
     resultPortTypes.clear();
+    resultPortNames.clear();
     for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
       auto kind = op.getPortKind(i).getValue();
-      auto flattenedPortType =
-          FlipType::get(op.getTypeForPort(op.depth(), field.type, kind));
+      auto name = op.getPortName(i);
 
-      resultPortTypes.push_back(flattenedPortType);
+      // Any read or write ports are just added.
+      if (kind != MemOp::PortKind::ReadWrite) {
+        resultPortTypes.push_back(
+            FlipType::get(op.getTypeForPort(depth, field.type, kind)));
+        uniquePortName(name.getValue());
+        continue;
+      }
+
+      // Any readwrite ports are lowered to 1x read and 1x write.
+      resultPortTypes.push_back(FlipType::get(
+          op.getTypeForPort(depth, field.type, MemOp::PortKind::Read)));
+      resultPortTypes.push_back(FlipType::get(
+          op.getTypeForPort(depth, field.type, MemOp::PortKind::Write)));
+
+      auto nameStr = name.getValue().str();
+      uniquePortName(nameStr + "_r");
+      uniquePortName(nameStr + "_w");
     }
 
     // Construct the new memory for this flattened field.
     auto newName = op.name().getValue().str() + field.suffix;
     auto newMem = builder->create<MemOp>(
-        resultPortTypes, op.readLatency(), op.writeLatency(), op.depth(),
-        op.ruw(), op.portNames(), builder->getStringAttr(newName));
+        resultPortTypes, op.readLatency(), op.writeLatency(), depth, op.ruw(),
+        builder->getArrayAttr(resultPortNames.getArrayRef()),
+        builder->getStringAttr(newName));
 
-    // Setup the lowering to the new memory.
-    for (size_t i = 0, e = newMem.getNumResults(); i != e; ++i) {
+    // Setup the lowering to the new memory. We need to track both the
+    // new memory index ("i") and the old memory index ("j") to deal
+    // with the situation where readwrite ports have been split into
+    // separate ports.
+    for (size_t i = 0, j = 0, e = newMem.getNumResults(); i != e; ++i, ++j) {
 
       BundleType underlying = newMem.getResult(i)
                                   .getType()
@@ -316,28 +348,68 @@ void FIRRTLTypesLowering::visitDecl(MemOp op) {
 
       auto kind =
           newMem.getPortKind(newMem.getPortName(i).getValue()).getValue();
+      auto oldKind = op.getPortKind(op.getPortName(j).getValue()).getValue();
 
+      auto skip = kind == MemOp::PortKind::Write &&
+                  oldKind == MemOp::PortKind::ReadWrite;
+
+      // Loop over all elements in the port. Because readwrite ports
+      // have been split, this only needs to deal with the fields of
+      // read or write ports. If the port is replacing a readwrite
+      // port, then this is linked against the old field.
       for (auto elt : underlying.getElements()) {
 
-        // These ports require special handling. When these are
-        // lowered, they result in multiple new connections. E.g., an
-        // assignment to a clock needs to be split into an assignment
-        // to all clocks. This is handled by creating a dummy wire,
-        // setting the dummy wire as the lowering target, and then
-        // connecting every new port subfield to that.
-        if ((elt.name == "clk") | (elt.name == "en") | (elt.name == "addr") |
-            (elt.name == "wmode")) {
-          Type theType = FlipType::get(elt.type);
+        auto oldName = elt.name.str();
+        if (oldKind == MemOp::PortKind::ReadWrite) {
+          if (oldName == "mask")
+            oldName = "wmask";
+          if (oldName == "data" && kind == MemOp::PortKind::Read)
+            oldName = "rdata";
+          if (oldName == "data" && kind == MemOp::PortKind::Write)
+            oldName = "wdata";
+        }
 
-          // Construct a new wire if needed.
-          auto wireName =
-              op.getPortName(i).getValue().str() + "_" + elt.name.str();
+        auto getWire = [&](FIRRTLType type, StringRef wireName) -> Value {
           auto wire = newWires[wireName];
           if (!wire) {
-            wire = builder->create<WireOp>(theType, op.name().getValue().str() +
-                                                        "_" + wireName);
+            wire = builder->create<WireOp>(type.getPassiveType(),
+                                           newMem.name().getValue().str() +
+                                               "_" + wireName.str());
             newWires[wireName] = wire;
-            setBundleLowering(op.getResult(i), elt.name.str(), wire);
+          }
+          return wire;
+        };
+
+        // These ports ("addr", "clk", "en") require special
+        // handling. When these are lowered, they result in multiple
+        // new connections. E.g., an assignment to a clock needs to be
+        // split into an assignment to all clocks. This is handled by
+        // creating a dummy wire, setting the dummy wire as the
+        // lowering target, and then connecting every new port
+        // subfield to that.
+        if ((elt.name == "clk") || (elt.name == "en") || (elt.name == "addr")) {
+          FIRRTLType theType = FlipType::get(elt.type);
+
+          // Construct a new wire if needed.
+          auto wireName = op.getPortName(j).getValue().str() + "_" + oldName;
+          auto wire = getWire(theType, wireName);
+
+          if (!(oldKind == MemOp::PortKind::ReadWrite &&
+                kind == MemOp::PortKind::Write))
+            setBundleLowering(op.getResult(j), oldName, wire);
+
+          // Handle "en" specially if this used to be a readwrite port.
+          if (oldKind == MemOp::PortKind::ReadWrite && elt.name == "en") {
+            auto wmode =
+                getWire(theType, op.getPortName(j).getValue().str() + "_wmode");
+            if (!skip)
+              setBundleLowering(op.getResult(j), "wmode", wmode);
+            Value gate;
+            if (kind == MemOp::PortKind::Read)
+              gate = builder->create<NotPrimOp>(wmode.getType(), wmode);
+            else
+              gate = wmode;
+            wire = builder->create<AndPrimOp>(wire.getType(), wire, gate);
           }
 
           builder->create<ConnectOp>(
@@ -347,18 +419,23 @@ void FIRRTLTypesLowering::visitDecl(MemOp op) {
           continue;
         }
 
-        // Data ports ("data", "rdata", "wdata", "mask", "wmask") are
-        // trivially lowered because each data leaf winds up in a new,
-        // separate memory. No wire creation is needed.
+        // Data ports ("data", "mask") are trivially lowered because
+        // each data leaf winds up in a new, separate memory. No wire
+        // creation is needed.
         FIRRTLType theType = elt.type;
-        if (kind == MemOp::PortKind::Write || elt.name == "wdata" ||
-            elt.name == "wmask")
+        if (kind == MemOp::PortKind::Write)
           theType = FlipType::get(theType);
 
-        setBundleLowering(op.getResult(i), elt.name.str() + field.suffix,
+        setBundleLowering(op.getResult(j), oldName + field.suffix,
                           builder->create<SubfieldOp>(
                               theType, newMem.getResult(i), elt.name));
       }
+
+      // Don't increment the index of the old memory if this is the
+      // first, new port (the read port).
+      if (kind == MemOp::PortKind::Read &&
+          oldKind == MemOp::PortKind::ReadWrite)
+        --j;
     }
   }
 
@@ -624,6 +701,8 @@ void FIRRTLTypesLowering::setBundleLowering(Value oldValue, StringRef flatField,
                                             Value newValue) {
   auto flatFieldId = builder->getIdentifier(flatField);
   auto &entry = loweredBundleValues[ValueIdentifier(oldValue, flatFieldId)];
+  if (entry == newValue)
+    return;
   assert(!entry && "bundle lowering has already been set");
   entry = newValue;
 }

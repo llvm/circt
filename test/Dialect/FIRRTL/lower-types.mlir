@@ -248,6 +248,122 @@ firrtl.circuit "Foo" {
   }
 }
 
+// -----
+
+// COM: Test that a memory with a readwrite port is split into 1r1w
+//
+// circuit Foo:
+//  module Foo:
+//    input clock: Clock
+//    input rwEn: UInt<1>
+//    input rwMode: UInt<1>
+//    input rwAddr: UInt<4>
+//    input rwMask: UInt<1>
+//    input rwDataIn: UInt<8>
+//    output rwDataOut: UInt<8>
+//
+//    mem memory:
+//      data-type => UInt<8>
+//      depth => 16
+//      readwriter => rw
+//      read-latency => 0
+//      write-latency => 1
+//      read-under-write => undefined
+//
+//    memory.rw.clk <= clock
+//    memory.rw.en <= rwEn
+//    memory.rw.addr <= rwAddr
+//    memory.rw.wmode <= rwMode
+//    memory.rw.wmask <= rwMask
+//    memory.rw.wdata <= rwDataIn
+//    rwDataOut <= memory.rw.rdata
+
+firrtl.circuit "MemoryRWSplit" {
+  firrtl.module @MemoryRWSplit(%clock: !firrtl.clock, %rwEn: !firrtl.uint<1>, %rwMode: !firrtl.uint<1>, %rwAddr: !firrtl.uint<4>, %rwMask: !firrtl.uint<1>, %rwDataIn: !firrtl.uint<8>, %rwDataOut: !firrtl.flip<uint<8>>) {
+    %memory_rw = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, wmode: flip<uint<1>>, rdata: uint<8>, wdata: flip<uint<8>>, wmask: flip<uint<1>>>
+    %0 = firrtl.subfield %memory_rw("clk") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, wmode: flip<uint<1>>, rdata: uint<8>, wdata: flip<uint<8>>, wmask: flip<uint<1>>>) -> !firrtl.flip<clock>
+    firrtl.connect %0, %clock : !firrtl.flip<clock>, !firrtl.clock
+    %1 = firrtl.subfield %memory_rw("en") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, wmode: flip<uint<1>>, rdata: uint<8>, wdata: flip<uint<8>>, wmask: flip<uint<1>>>) -> !firrtl.flip<uint<1>>
+    firrtl.connect %1, %rwEn : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    %2 = firrtl.subfield %memory_rw("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, wmode: flip<uint<1>>, rdata: uint<8>, wdata: flip<uint<8>>, wmask: flip<uint<1>>>) -> !firrtl.flip<uint<4>>
+    firrtl.connect %2, %rwAddr : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+    %3 = firrtl.subfield %memory_rw("wmode") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, wmode: flip<uint<1>>, rdata: uint<8>, wdata: flip<uint<8>>, wmask: flip<uint<1>>>) -> !firrtl.flip<uint<1>>
+    firrtl.connect %3, %rwMode : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    %4 = firrtl.subfield %memory_rw("wmask") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, wmode: flip<uint<1>>, rdata: uint<8>, wdata: flip<uint<8>>, wmask: flip<uint<1>>>) -> !firrtl.flip<uint<1>>
+    firrtl.connect %4, %rwMask : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    %5 = firrtl.subfield %memory_rw("wdata") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, wmode: flip<uint<1>>, rdata: uint<8>, wdata: flip<uint<8>>, wmask: flip<uint<1>>>) -> !firrtl.flip<uint<8>>
+    firrtl.connect %5, %rwDataIn : !firrtl.flip<uint<8>>, !firrtl.uint<8>
+    %6 = firrtl.subfield %memory_rw("rdata") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, wmode: flip<uint<1>>, rdata: uint<8>, wdata: flip<uint<8>>, wmask: flip<uint<1>>>) -> !firrtl.uint<8>
+    firrtl.connect %rwDataOut, %6 : !firrtl.flip<uint<8>>, !firrtl.uint<8>
+  }
+
+  // CHECK-LABEL: firrtl.module @MemoryRWSplit
+  // COM: ---------------------------------------------------------------------------------
+  // COM: The read write port, "rw", was split into "rw_r" and "rw_w"
+  // CHECK: %memory_rw_r, %memory_rw_w = firrtl.mem
+  // COM:   - port names are updated correctly
+  // CHECK-SAME: portNames = ["rw_r", "rw_w"]
+  // COM:   - the types are correct for read and write ports
+  // CHECK-SAME: !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>
+  // COM: ---------------------------------------------------------------------------------
+  // COM: Read port is hooked up correctly
+  // COM:   - address is "rw_addr"
+  // CHECK: %memory_rw_addr = firrtl.wire
+  // CHECK: %[[R_ADDR:.+]] = firrtl.subfield %memory_rw_r("addr")
+  // CHECK: firrtl.connect %[[R_ADDR]], %memory_rw_addr
+  // COM:   - enable is "rw_en && !rw_wmode"
+  // CHECK: %memory_rw_en = firrtl.wire
+  // CHECK: %memory_rw_wmode = firrtl.wire
+  // CHECK: %[[NOT_WRITE:.+]] = firrtl.not %memory_rw_wmode
+  // CHECK: %[[EN_AND_NOT_WRITE:.+]] = firrtl.and %memory_rw_en, %[[NOT_WRITE]]
+  // CHECK: %[[R_EN:.+]] = firrtl.subfield %memory_rw_r("en")
+  // CHECK: firrtl.connect %[[R_EN]], %[[EN_AND_NOT_WRITE]]
+  // COM:   - clk is "rw_clk"
+  // CHECK: %memory_rw_clk = firrtl.wire
+  // CHECK: %[[R_CLK:.+]] = firrtl.subfield %memory_rw_r("clk")
+  // CHECK: firrtl.connect %[[R_CLK]], %memory_rw_clk
+  // COM:   - data has a reference
+  // CHECK: %[[R_DATA:.+]] = firrtl.subfield %memory_rw_r("data")
+  // COM: ---------------------------------------------------------------------------------
+  // COM: Write port is hooked up correctly.
+  // COM:   - address is "rw_addr"
+  // CHECK: %[[W_ADDR:.+]] = firrtl.subfield %memory_rw_w("addr")
+  // CHECK: firrtl.connect %[[W_ADDR]], %memory_rw_addr
+  // COM:   - enable is "rw_en && rw_wmode"
+  // CHECK: %[[EN_AND_WRITE:.+]] = firrtl.and %memory_rw_en, %memory_rw_wmode
+  // CHECK: %[[W_EN:.+]] = firrtl.subfield %memory_rw_w("en")
+  // CHECK: firrtl.connect %[[W_EN]], %[[EN_AND_WRITE]]
+  // COM:   - clk is "rw_clk"
+  // CHECK: %[[W_CLK:.+]] = firrtl.subfield %memory_rw_w("clk")
+  // CHECK: firrtl.connect %[[W_CLK]], %memory_rw_clk
+  // COM:   - data has a reference
+  // CHECK: %[[W_DATA:.+]] = firrtl.subfield %memory_rw_w("data")
+  // COM:   - mask has a reference
+  // CHECK: %[[W_MASK:.+]] = firrtl.subfield %memory_rw_w("mask")
+  // COM: ---------------------------------------------------------------------------------
+  // COM: Check that the lowering is worked.
+  // CHECK: firrtl.connect %memory_rw_clk, %clock
+  // CHECK: firrtl.connect %memory_rw_en, %rwEn
+  // CHECK: firrtl.connect %memory_rw_addr, %rwAddr
+  // CHECK: firrtl.connect %memory_rw_wmode, %rwMode
+  // CHECK: firrtl.connect %[[W_MASK]], %rwMask
+  // CHECK: firrtl.connect %[[W_DATA]], %rwDataIn
+  // CHECK: firrtl.connect %rwDataOut, %[[R_DATA]]
+}
+
+// -----
+
+firrtl.circuit "MemoryRWSplitUnique" {
+  firrtl.module @MemoryRWSplitUnique() {
+    %memory_rw, %memory_rw_r, %memory_rw_w = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["rw", "rw_r", "rw_w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, wmode: flip<uint<1>>, rdata: uint<8>, wdata: flip<uint<8>>, wmask: flip<uint<1>>>, !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>
+  }
+
+  // CHECK-LABEL: firrtl.module @MemoryRWSplitUnique
+  // CHECK: %memory_rw_r, %memory_rw_w, %memory_rw_r0, %memory_rw_w0 = firrtl.mem
+  // COM:   - port names are updated correctly
+  // CHECK-SAME: portNames = ["rw_r", "rw_w", "rw_r0", "rw_w0"]
+
+}
 
 // -----
 // https://github.com/llvm/circt/issues/593
@@ -326,7 +442,7 @@ firrtl.circuit "WireBundle" {
       firrtl.connect %2, %3 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     }
 }
-  
+
 // -----
 // COM: Test vector lowering
 firrtl.circuit "LowerVectors" {
