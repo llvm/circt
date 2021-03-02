@@ -2462,7 +2462,7 @@ void ModuleEmitter::prepareRTLModule(Block &block) {
     // balanced operand trees so we can split long lines across multiple
     // statements.
     if (op.getNumOperands() > 2 && op.getNumResults() == 1 &&
-        op.hasTrait<OpTrait::IsCommutative>() &&
+        op.hasTrait<mlir::OpTrait::IsCommutative>() &&
         mlir::MemoryEffectOpInterface::hasNoEffect(&op) &&
         op.getNumRegions() == 0 && op.getNumSuccessors() == 0 &&
         op.getAttrs().empty() && !isa<comb::MergeOp>(op)) {
