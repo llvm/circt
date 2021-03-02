@@ -182,7 +182,7 @@ def ExtractOp : CombOp<"extract", [NoSideEffect]> {
 }
 
 def SExtOp : CombOp<"sext", [NoSideEffect]> {
-  let summary = "Sign extend an integer to a larger integer";
+  let summary = "Sign extend an integer to an equal or larger integer";
 
   let arguments = (ins CombIntegerType:$input);
   let results = (outs CombIntegerType:$result);
