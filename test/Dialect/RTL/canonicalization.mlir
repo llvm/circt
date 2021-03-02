@@ -818,3 +818,10 @@ rtl.module @icmp_fold_1bit_eq1(%arg: i1) -> (i1, i1, i1, i1) {
   %3 = comb.icmp ne   %one, %arg : i1
   rtl.output %0, %1, %2, %3 : i1, i1, i1, i1
 }
+
+// CHECK-LABEL: rtl.module @sext_identical(%a: i1) -> (i1) {
+// CHECK-NEXT:   rtl.output %a : i1
+rtl.module @sext_identical(%a: i1) -> (i1) {
+  %0 = comb.sext %a : (i1) -> (i1)
+  rtl.output %0 : i1
+}

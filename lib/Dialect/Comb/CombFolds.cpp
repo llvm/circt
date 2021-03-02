@@ -88,6 +88,9 @@ OpFoldResult SExtOp::fold(ArrayRef<Attribute> constants) {
     return getIntAttr(input.getValue().sext(destWidth), getContext());
   }
 
+  if (getType().getWidth() == input().getType().cast<IntegerType>().getWidth())
+    return input();
+
   return {};
 }
 

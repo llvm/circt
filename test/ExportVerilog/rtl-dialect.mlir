@@ -536,7 +536,25 @@ rtl.module @longExpressions(%a: i8, %a2: i8) -> (%b: i8) {
 // https://github.com/llvm/circt/issues/668
 // CHECK-LABEL: module longvariadic
 rtl.module @longvariadic(%a: i8) -> (%b: i8) {
-  // CHECK: assign b = a + a + a + a
+  // CHECK: wire [7:0] _tmp = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_0 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_1 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_2 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_3 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_4 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_5 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_6 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_7 = _tmp + _tmp_0 + _tmp_1 + _tmp_2 + _tmp_3 + _tmp_4 + _tmp_5 + _tmp_6;
+  // CHECK: wire [7:0] _tmp_8 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_9 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_10 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_11 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_12 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_13 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_14 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_15 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_16 = _tmp_8 + _tmp_9 + _tmp_10 + _tmp_11 + _tmp_12 + _tmp_13 + _tmp_14 + _tmp_15;
+  // CHECK: assign b = _tmp_7 + _tmp_16;
   %1 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
                 %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
                 %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
