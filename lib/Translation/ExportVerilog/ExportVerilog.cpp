@@ -519,6 +519,7 @@ public:
     assert(entry && "value expected a name but doesn't have one");
     return entry->getKey();
   }
+  //StringRef resolveKeywordConflict(ValueOrOp valueOrOp, StringRef name, llvm::StringSet<> &recordNames);
 
 public:
   /// nameTable keeps track of mappings from Value's and operations (for
@@ -534,6 +535,7 @@ public:
   /// Set of used MLIR module names, to ensure unique names when renaming
   /// keywords in module names.
   llvm::StringSet<> usedModuleNames;
+
   size_t nextGeneratedNameID = 0;
 
   /// This set keeps track of all of the expression nodes that need to be
@@ -548,6 +550,38 @@ public:
 };
 
 } // end anonymous namespace
+std::string resolveKeywordConflict(StringRef name, const llvm::StringSet<> &recordNames, size_t &nextGeneratedNameID){
+  // Get the list of reserved words we need to avoid.  We could prepopulate this
+  // into the used words cache, but it is large and immutable, so we just query
+  // it when needed.
+  auto &reservedWords = getReservedWords();
+
+  // Check to see if this name is available - if so, use it.
+  if (!reservedWords.count(name)) 
+    if (recordNames.find(name) == recordNames.end()) 
+      return name.data();
+
+  // If not, we need to auto-unique it.
+  SmallVector<char, 16> nameBuffer(name.begin(), name.end());
+  nameBuffer.push_back('_');
+  auto baseSize = nameBuffer.size();
+
+  // Try until we find something that works.
+  while (1) {
+    auto suffix = llvm::utostr(nextGeneratedNameID++);
+    nameBuffer.append(suffix.begin(), suffix.end());
+    name = StringRef(nameBuffer.data(), nameBuffer.size());
+
+    if (!reservedWords.count(name)) 
+    if (recordNames.find(name) == recordNames.end()) 
+      return name.data();
+
+    // Chop off the suffix and try again.
+    nameBuffer.resize(baseSize);
+  }
+  // Control never reaches this return.
+  return name.data();
+}
 
 /// Add the specified name to the name table, auto-uniquing the name if
 /// required.  If the name is empty, then this creates a unique temp name.
@@ -591,45 +625,13 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
     }
     return addName(valueOrOp, tmpName);
   }
-
-  // Get the list of reserved words we need to avoid.  We could prepopulate this
-  // into the used words cache, but it is large and immutable, so we just query
-  // it when needed.
-  auto &reservedWords = getReservedWords();
-
-  // Check to see if this name is available - if so, use it.
-  if (!reservedWords.count(name)) {
-    auto insertResult = usedNames.insert(name);
-    if (insertResult.second) {
+  name = StringRef(resolveKeywordConflict(name, usedNames, nextGeneratedNameID));
+    auto iter = usedNames.insert(name);
       if (valueOrOp)
-        nameTable[valueOrOp] = &*insertResult.first;
-      return insertResult.first->getKey();
-    }
-  }
-
-  // If not, we need to auto-unique it.
-  SmallVector<char, 16> nameBuffer(name.begin(), name.end());
-  nameBuffer.push_back('_');
-  auto baseSize = nameBuffer.size();
-
-  // Try until we find something that works.
-  while (1) {
-    auto suffix = llvm::utostr(nextGeneratedNameID++);
-    nameBuffer.append(suffix.begin(), suffix.end());
-    name = StringRef(nameBuffer.data(), nameBuffer.size());
-
-    if (!reservedWords.count(name)) {
-      auto insertResult = usedNames.insert(name);
-      if (insertResult.second) {
-        if (valueOrOp)
-          nameTable[valueOrOp] = &*insertResult.first;
-        return insertResult.first->getKey();
-      }
-    }
-
-    // Chop off the suffix and try again.
-    nameBuffer.resize(baseSize);
-  }
+        nameTable[valueOrOp] = &*iter.first;
+      return iter.first->getKey();
+  
+  return name;
 }
 
 //===----------------------------------------------------------------------===//
@@ -2445,38 +2447,39 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
   // Get the list of reserved words we need to avoid.  We could prepopulate this
   // into the used words cache, but it is large and immutable, so we just query
   // it when needed.
-  auto &reservedWords = getReservedWords();
+  //auto &reservedWords = getReservedWords();
   auto moduleName = module.getName();
-  if (reservedWords.count(moduleName)) {
-    // If not available, we need to auto-unique it.
-    SmallVector<char, 16> nameBuffer(moduleName.begin(), moduleName.end());
-    nameBuffer.push_back('_');
-    auto baseSize = nameBuffer.size();
+  resolveKeywordConflict(moduleName, usedModuleNames, nextGeneratedNameID);
+  //if (reservedWords.count(moduleName)) {
+  //  // If not available, we need to auto-unique it.
+  //  SmallVector<char, 16> nameBuffer(moduleName.begin(), moduleName.end());
+  //  nameBuffer.push_back('_');
+  //  auto baseSize = nameBuffer.size();
 
-    // Try until we find something that works.
-    while (1) {
-      auto suffix = llvm::utostr(nextGeneratedNameID++);
-      nameBuffer.append(suffix.begin(), suffix.end());
-      moduleName = StringRef(nameBuffer.data(), nameBuffer.size());
+  //  // Try until we find something that works.
+  //  while (1) {
+  //    auto suffix = llvm::utostr(nextGeneratedNameID++);
+  //    nameBuffer.append(suffix.begin(), suffix.end());
+  //    moduleName = StringRef(nameBuffer.data(), nameBuffer.size());
 
-      // We donot check for conflict in reserved keywords after adding the
-      // suffix. We are making an assumption that incrementing the suffix won't
-      // cause a new conflict with reservedWords. There's no Verilog reserved
-      // word like reg_16.
-      if (usedModuleNames.insert(moduleName).second)
-        // If the module name is unique, then the insertion is successfull,
-        // then the return bool is true, then exit from the infinite while
-        // loop.
-        break;
+  //    // We donot check for conflict in reserved keywords after adding the
+  //    // suffix. We are making an assumption that incrementing the suffix won't
+  //    // cause a new conflict with reservedWords. There's no Verilog reserved
+  //    // word like reg_16.
+  //    if (usedModuleNames.insert(moduleName).second)
+  //      // If the module name is unique, then the insertion is successfull,
+  //      // then the return bool is true, then exit from the infinite while
+  //      // loop.
+  //      break;
 
-      // Chop off the suffix and try again.
-      nameBuffer.resize(baseSize);
-    }
-    // Rename the module to a unique non-keyword name.
-    module.setName(moduleName);
-  } else
-    usedModuleNames.insert(moduleName);
-  os << "module " << module.getName() << '(';
+  //    // Chop off the suffix and try again.
+  //    nameBuffer.resize(baseSize);
+  //  }
+  //  // Rename the module to a unique non-keyword name.
+  //  module.setName(moduleName);
+  //} else
+  //  usedModuleNames.insert(moduleName);
+  os << "module " << moduleName << '(';
   if (!portInfo.empty())
     os << '\n';
 
