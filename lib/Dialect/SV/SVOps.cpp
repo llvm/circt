@@ -166,10 +166,11 @@ void IfDefOp::build(OpBuilder &odsBuilder, OperationState &result,
   }
 }
 
-static bool isEmptyBlockExceptForTerminator(Block *region) {
-  if (!region)
+static bool isEmptyBlockExceptForTerminator(Block *block) {
+  if (!block)
     return true;
-  llvm::any_of(region->without_terminator(), [](auto &op) { return true; });
+  return llvm::all_of(block->without_terminator(),
+                       [](auto &op) { return false; });
 }
 
 void IfDefOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
@@ -262,7 +263,24 @@ void IfOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       return success();
     }
   };
+
+  struct EraseEmptyOp final : public OpRewritePattern<IfOp> {
+    using OpRewritePattern::OpRewritePattern;
+    LogicalResult matchAndRewrite(IfOp op,
+                                  PatternRewriter &rewriter) const override {
+      if (!isEmptyBlockExceptForTerminator(op.getThenBlock()))
+        return failure();
+      else if (op.hasElse() &&
+               !isEmptyBlockExceptForTerminator(op.getElseBlock()))
+        return failure();
+
+      rewriter.eraseOp(op);
+      return success();
+    }
+  };
+
   results.insert<RemoveStaticCondition>(context);
+  results.insert<EraseEmptyOp>(context);
 }
 //===----------------------------------------------------------------------===//
 // AlwaysOp
