@@ -47,16 +47,17 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %23 = comb.icmp ule %a, %b : i4
   %24 = comb.icmp ugt %a, %b : i4
   %25 = comb.icmp uge %a, %b : i4
-  %26 = comb.andr %a : i4
-  %zero4 = comb.constant 0 : i4
+  %one4 = rtl.constant -1 : i4
+  %26 = comb.icmp eq %a, %one4 : i4
+  %zero4 = rtl.constant 0 : i4
   %27 = comb.icmp ne %a, %zero4 : i4
-  %28 = comb.xorr %a : i4
+  %28 = comb.parity %a : i4
   %29 = comb.concat %a, %a, %b : (i4, i4, i4) -> i12
   %30 = comb.extract %a from 1 : (i4) -> i2
   %31 = comb.sext %a : (i4) -> i9
   %33 = comb.mux %cond, %a, %b : i4
 
-  %allone = comb.constant 15 : i4
+  %allone = rtl.constant 15 : i4
   %34 = comb.xor %a, %allone : i4
 
   %arrCreated = rtl.array_create %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone : (i4)
@@ -174,7 +175,7 @@ rtl.module @A(%d: i1, %e: i1) -> (%f: i1) {
 // CHECK-NEXT: endmodule
 
 rtl.module @AAA(%d: i1, %e: i1) -> (%f: i1) {
-  %z = comb.constant 0 : i1
+  %z = rtl.constant 0 : i1
   rtl.output %z : i1
 }
 // CHECK-LABEL: module AAA(
@@ -288,7 +289,7 @@ rtl.module @extract_all(%tmp85: i1) -> (%tmp106: i1) {
 
 // https://github.com/llvm/circt/issues/320
 rtl.module @literal_extract(%inp_1: i349) -> (%tmp6: i349) {
-  %c-58836_i17 = comb.constant -58836 : i17
+  %c-58836_i17 = rtl.constant -58836 : i17
   %0 = comb.sext %c-58836_i17 : (i17) -> i349
   rtl.output %0 : i349
 }
@@ -380,7 +381,9 @@ rtl.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
   %a3 = comb.divu %a1, %a2: i4
   sv.connect %awire, %a3: i4
 
-  // CHECK: assign awire = $unsigned(
+  // CHECK: wire [3:0] _tmp = $signed(in1) / $signed(in2) + $signed(in1) / $signed(in2);
+  // CHECK: wire [3:0] _tmp_0 = $signed(in1) / $signed(in2) * $signed(in1) / $signed(in2);
+  // CHECK: assign awire = _tmp / _tmp_0;
   %b1a = comb.divs %in1, %in2: i4
   %b1b = comb.divs %in1, %in2: i4
   %b1c = comb.divs %in1, %in2: i4
@@ -392,8 +395,8 @@ rtl.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
 
   // https://github.com/llvm/circt/issues/369
   // CHECK: assign awire = 4'sh5 / -4'sh3;
-  %c5_i4 = comb.constant 5 : i4
-  %c-3_i4 = comb.constant -3 : i4
+  %c5_i4 = rtl.constant 5 : i4
+  %c-3_i4 = rtl.constant -3 : i4
   %divs = comb.divs %c5_i4, %c-3_i4 : i4
   sv.connect %awire, %divs: i4
 
@@ -499,7 +502,7 @@ rtl.module @issue525(%struct: i2, %else: i2) -> (%casex: i2) {
 
 // https://github.com/llvm/circt/issues/438
 // CHECK-LABEL: module cyclic
-rtl.module @cyclic(%a: i1) -> (i1 {rtl.name = "b"}) {
+rtl.module @cyclic(%a: i1) -> (%b: i1) {
   // CHECK: wire _T_0;
 
   // CHECK: wire _T = _T_0 + _T_0;
@@ -509,4 +512,64 @@ rtl.module @cyclic(%a: i1) -> (i1 {rtl.name = "b"}) {
   // CHECK: assign b = _T - _T;
   %2 = comb.sub %1, %1 : i1
   rtl.output %2 : i1
+}
+
+
+// https://github.com/llvm/circt/issues/668
+// CHECK-LABEL: module longExpressions
+rtl.module @longExpressions(%a: i8, %a2: i8) -> (%b: i8) {
+  // CHECK: wire [7:0] _tmp = a + a + a + a + a
+  %1 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
+  // CHECK-NEXT: wire [7:0] _tmp_0 = a + a + a 
+  %2 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
+  // CHECK-NEXT: wire [7:0] _tmp_1 = a + a + a + a + a + a + a + a 
+  %3 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
+  // CHECK-NEXT: wire [7:0] _tmp_2 = a + a + a + a + a + a + a + a 
+  %4 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
+  // CHECK-NEXT: assign b = _tmp * _tmp_0 | _tmp_1 * _tmp_2;
+  %5 = comb.mul %1, %2 : i8
+  %6 = comb.mul %3, %4 : i8
+  %7 = comb.or %5, %6 : i8
+  rtl.output %7 : i8
+}
+
+// https://github.com/llvm/circt/issues/668
+// CHECK-LABEL: module longvariadic
+rtl.module @longvariadic(%a: i8) -> (%b: i8) {
+  // CHECK: wire [7:0] _tmp = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_0 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_1 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_2 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_3 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_4 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_5 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_6 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_7 = _tmp + _tmp_0 + _tmp_1 + _tmp_2 + _tmp_3 + _tmp_4 + _tmp_5 + _tmp_6;
+  // CHECK: wire [7:0] _tmp_8 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_9 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_10 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_11 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_12 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_13 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_14 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_15 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+  // CHECK: wire [7:0] _tmp_16 = _tmp_8 + _tmp_9 + _tmp_10 + _tmp_11 + _tmp_12 + _tmp_13 + _tmp_14 + _tmp_15;
+  // CHECK: assign b = _tmp_7 + _tmp_16;
+  %1 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
+                %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
+                %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
+                %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
+                %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
+                %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
+                %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
+                %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
+                %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
+                %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
+                %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
+                %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
+                %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
+                %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
+                %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
+                %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
+  rtl.output %1 : i8
 }

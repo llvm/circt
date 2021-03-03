@@ -40,6 +40,7 @@ config.verilator_path = "@VERILATOR_PATH@"
 config.esi_cosim_path = "@ESI_COSIM_PATH@"
 config.timeout = "@CIRCT_INTEGRATION_TIMEOUT@"
 config.yosys_path = "@YOSYS_PATH@"
+config.quartus_path = "@QUARTUS_PATH@"
 config.questa_path = "@QUESTA_PATH@"
 config.esi_capnp = "@ESI_CAPNP@"
 

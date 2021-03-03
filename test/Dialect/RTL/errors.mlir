@@ -1,9 +1,9 @@
 // RUN: circt-opt %s -split-input-file -verify-diagnostics
 
-func private @test_extend(%arg0: i4) -> i4 {
+func private @test_extend(%arg0: i4) -> i3 {
   // expected-error @+1 {{extension must increase bitwidth of operand}}
-  %a = comb.sext %arg0 : (i4) -> i4
-  return %a : i4
+  %a = comb.sext %arg0 : (i4) -> i3
+  return %a : i3
 }
 
 // -----
@@ -149,7 +149,7 @@ rtl.module @test() -> () {
 
 // expected-note @+1 {{original module declared here}}
 rtl.module @f() -> (i2) {
-  %a = comb.constant 1 : i2
+  %a = rtl.constant 1 : i2
   rtl.output %a : i2
 }
 

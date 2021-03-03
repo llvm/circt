@@ -1,8 +1,8 @@
 // RUN: circt-opt %s | FileCheck %s
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
-// CHECK-LABEL: func @test1(%arg0: i1, %arg1: i1) {
-func @test1(%arg0: i1, %arg1: i1) {
+// CHECK-LABEL: rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
+rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
 
   // This corresponds to this block of system verilog code:
   //    always @(posedge arg0) begin
@@ -87,6 +87,45 @@ func @test1(%arg0: i1, %arg1: i1) {
   // CHECK-NEXT:     } else {
   // CHECK-NEXT:     }
 
-  // CHECK-NEXT: return
-  return
+  // CHECK-NEXT: sv.casez %arg8 : i8
+  // CHECK-NEXT: case b0000001x: {
+  // CHECK-NEXT:   sv.fwrite "x"
+  // CHECK-NEXT: }
+  // CHECK-NEXT: case b000000x1: {
+  // CHECK-NEXT:   sv.fwrite "y"
+  // CHECK-NEXT: }
+  // CHECK-NEXT: default: {
+  // CHECK-NEXT:   sv.fwrite "z"
+  // CHECK-NEXT: }
+
+  sv.casez %arg8 : i8
+  case b0000001x: {
+    sv.fwrite "x"
+    sv.yield
+  }
+  case b000000x1: {
+    sv.fwrite "y"
+  }  // implicit yield is ok.
+  default: {
+    sv.fwrite "z"
+    sv.yield
+  }
+
+  // CHECK-NEXT: sv.casez %arg1 : i1
+  // CHECK-NEXT: case b0: {
+  // CHECK-NEXT:   sv.fwrite "zero"
+  // CHECK-NEXT: }
+  // CHECK-NEXT: case b1: {
+  // CHECK-NEXT:   sv.fwrite "one"
+  // CHECK-NEXT: }
+  sv.casez %arg1 : i1
+  case b0: {
+    sv.fwrite "zero"
+  }
+  case b1: {
+    sv.fwrite "one"
+  }
+
+  // CHECK-NEXT: rtl.output
+  rtl.output
 }

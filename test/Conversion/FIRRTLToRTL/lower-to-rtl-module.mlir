@@ -310,4 +310,20 @@ firrtl.circuit "Simple" {
     firrtl.connect %sink, %source : !firrtl.flip<bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>>, !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
   }
 
+  // https://github.com/llvm/circt/issues/690
+  // CHECK-LABEL: rtl.module @bar690(%led_0: !rtl.inout<i1>) {
+  firrtl.module @bar690(%led_0: !firrtl.analog<1>) {
+  }
+  // CHECK-LABEL: rtl.module @foo690()
+  firrtl.module @foo690() {
+    // CHECK: %.led_0.wire = firrtl.wire  : !firrtl.analog<1>
+    // CHECK: %0 = firrtl.analogInOutCast %.led_0.wire
+    // CHECK: rtl.instance "fpga" @bar690(%0) : (!rtl.inout<i1>) -> ()
+    %result = firrtl.instance @bar690 {name = "fpga", portNames = ["led_0"]} : !firrtl.analog<1>
+  }
+  // CHECK-LABEL: rtl.module @foo690a(%a: !rtl.inout<i1>) {
+  firrtl.module @foo690a(%a: !firrtl.analog<1>) {
+    %result = firrtl.instance @bar690 {name = "fpga", portNames = ["led_0"]} : !firrtl.analog<1>
+    firrtl.attach %result, %a: !firrtl.analog<1>, !firrtl.analog<1>
+  }
 }

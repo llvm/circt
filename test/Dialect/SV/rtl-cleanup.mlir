@@ -143,7 +143,7 @@ rtl.module @ifdef_merge(%arg0: i1) {
 
 // CHECK-LABEL: rtl.module @ifdef_proc_merge(%arg0: i1) {
 // CHECK-NEXT:    sv.alwaysff(posedge %arg0)  {
-// CHECK-NEXT:      %true = comb.constant true
+// CHECK-NEXT:      %true = rtl.constant true
 // CHECK-NEXT:      %0 = comb.xor %arg0, %true : i1
 // CHECK-NEXT:      sv.ifdef.procedural "FOO"  {
 // CHECK-NEXT:        sv.fwrite "A1"
@@ -158,7 +158,7 @@ rtl.module @ifdef_proc_merge(%arg0: i1) {
     sv.ifdef.procedural "FOO" {
       sv.fwrite "A1"
     }
-    %true = comb.constant true
+    %true = rtl.constant true
     %0 = comb.xor %arg0, %true : i1
     sv.ifdef.procedural "FOO" {
        sv.fwrite "%x"(%0) : i1
@@ -172,7 +172,7 @@ rtl.module @ifdef_proc_merge(%arg0: i1) {
 
 // CHECK-LABEL: rtl.module @if_merge(%arg0: i1, %arg1: i1) {
 // CHECK-NEXT:    sv.alwaysff(posedge %arg0)  {
-// CHECK-NEXT:      %true = comb.constant true
+// CHECK-NEXT:      %true = rtl.constant true
 // CHECK-NEXT:      %0 = comb.xor %arg1, %true : i1
 // CHECK-NEXT:      sv.if %arg1  {
 // CHECK-NEXT:        sv.fwrite "A1"
@@ -187,7 +187,7 @@ rtl.module @if_merge(%arg0: i1, %arg1: i1) {
     sv.if %arg1 {
       sv.fwrite "A1"
     }
-    %true = comb.constant true
+    %true = rtl.constant true
     %0 = comb.xor %arg1, %true : i1
     sv.if %arg1 {
       sv.fwrite "%x"(%0) : i1
@@ -211,6 +211,35 @@ rtl.module @initial_merge(%arg0: i1) {
   }
   sv.initial {
     sv.fwrite "B1"
+  }
+  rtl.output
+}
+
+//CHECK-LABEL: rtl.module @always_basic(%arg0: i1, %arg1: i1) {
+//CHECK-NEXT:   sv.fwrite "Middle\0A"
+//CHECK-NEXT:   sv.always   posedge %arg0   {
+//CHECK-NEXT:     sv.fwrite "A1"
+//CHECK-NEXT:     sv.fwrite "A2"
+//CHECK-NEXT:   }
+//CHECK-NEXT:   sv.always   posedge %arg1   {
+//CHECK-NEXT:     sv.fwrite "B1"
+//CHECK-NEXT:     sv.fwrite "B2"
+//CHECK-NEXT:   }
+//CHECK-NEXT:   rtl.output
+//CHECK-NEXT: }
+rtl.module @always_basic(%arg0: i1, %arg1: i1) {
+  sv.always posedge %arg0 {
+    sv.fwrite "A1"
+  }
+  sv.always posedge %arg1 {
+    sv.fwrite "B1"
+  }
+  sv.fwrite "Middle\n"
+  sv.always posedge %arg0 {
+    sv.fwrite "A2"
+  }
+  sv.always posedge %arg1 {
+    sv.fwrite "B2"
   }
   rtl.output
 }
