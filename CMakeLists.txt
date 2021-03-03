@@ -153,6 +153,31 @@ else()
 endif()
 
 #-------------------------------------------------------------------------------
+# Vivado Configuration
+#-------------------------------------------------------------------------------
+
+# If vivado hasn't been explicitly disabled, find it.
+option(VIVADO_DISABLE "Disable the vivado synthesis tests.")
+if (VIVADO_DISABLE)
+  message(STATUS "Disabling vivado tests.")
+else()
+  if (EXISTS ${VIVADO_PATH})
+    message(STATUS "Setting vivado path to ${VIVADO_PATH}.")
+  else()
+    # Search for vivado's `vivado` command.
+    find_program(VIVADO_PATH "vivado")
+    if(EXISTS ${VIVADO_PATH})
+      # Then strip the filename.
+      get_filename_component(VIVADO_PATH ${VIVADO_PATH} DIRECTORY)
+      message(STATUS "Found vivado at ${VIVADO_PATH}.")
+    else()
+      set(VIVADO_PATH "")
+      message(STATUS "Did not find vivado.")
+    endif()
+  endif()
+endif()
+
+#-------------------------------------------------------------------------------
 # Quartus Configuration
 #-------------------------------------------------------------------------------
 
