@@ -125,7 +125,7 @@ private:
   Value getBundleLowering(Value oldValue, StringRef flatField);
   void getAllBundleLowerings(Value oldValue, SmallVectorImpl<Value> &results);
 
-  StringRef getArgAttrName(unsigned newArgNumber);
+  Identifier getArgAttrName(unsigned newArgNumber);
 
   // The builder is set and maintained in the main loop.
   ImplicitLocOpBuilder *builder;
@@ -140,7 +140,6 @@ private:
   // State to track the new attributes for the module.
   SmallVector<NamedAttribute, 8> newAttrs;
   size_t originalNumArgs;
-  SmallString<8> argNameBuffer;
 };
 } // end anonymous namespace
 
@@ -776,7 +775,8 @@ void FIRRTLTypesLowering::getAllBundleLowerings(
       .Default([&](auto) {});
 }
 
-StringRef FIRRTLTypesLowering::getArgAttrName(unsigned newArgNumber) {
+Identifier FIRRTLTypesLowering::getArgAttrName(unsigned newArgNumber) {
+  SmallString<16> argNameBuffer;
   mlir::impl::getArgAttrName(newArgNumber, argNameBuffer);
-  return argNameBuffer;
+  return Identifier::get(argNameBuffer, &getContext());
 }
