@@ -732,17 +732,9 @@ OpFoldResult MuxOp::fold(ArrayRef<Attribute> constants) {
   return {};
 }
 
-static mlir::Value sextToDestType(mlir::Value op, Type destType,
-                                  PatternRewriter &rewriter) {
-  auto width = destType.cast<IntegerType>().getWidth();
-  if (width > 1)
-    op = rewriter.create<SExtOp>(op.getLoc(), destType, op);
-  return op;
-}
-
 static mlir::Value sextToDestTypeAndFlip(mlir::Value op, Type destType,
                                          PatternRewriter &rewriter) {
-  op = sextToDestType(op, destType, rewriter);
+  op = rewriter.createOrFold<SExtOp>(op.getLoc(), destType, op);
   Value newOperands[] = {
       op, rewriter.create<rtl::ConstantOp>(op.getLoc(), destType, -1)};
   return rewriter.create<XorOp>(op.getLoc(), destType, newOperands);
@@ -760,7 +752,9 @@ void MuxOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       if (matchPattern(op.trueValue(), m_RConstant(value))) {
         // mux(a, 11...1, b) -> or(a, b)
         if (value.isAllOnesValue()) {
-          auto cond = sextToDestType(op.cond(), op.getType(), rewriter);
+          auto cond = rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(),
+                                                    op.cond());
+
           Value newOperands[] = {cond, op.falseValue()};
           rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
           return success();
@@ -778,7 +772,9 @@ void MuxOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       if (matchPattern(op.falseValue(), m_RConstant(value))) {
         // mux(a, b, 0) -> and(a, b)
         if (value.isNullValue()) {
-          auto cond = sextToDestType(op.cond(), op.getType(), rewriter);
+          auto cond = rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(),
+                                                    op.cond());
+
           Value newOperands[] = {cond, op.trueValue()};
           rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
           return success();
