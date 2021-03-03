@@ -191,7 +191,6 @@ void FIRRTLTypesLowering::runOnOperation() {
   // Copy over any attributes that weren't original argument attributes.
   auto *argAttrBegin = originalArgAttrs.begin();
   auto *argAttrEnd = originalArgAttrs.end();
-  std::sort(argAttrBegin, argAttrEnd);
   for (auto attr : originalAttrs)
     if (std::lower_bound(argAttrBegin, argAttrEnd, attr) == argAttrEnd)
       newAttrs.push_back(attr);
