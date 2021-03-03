@@ -419,9 +419,9 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
 /// Given string \p name, generate and return a new name if it conflicts with
 /// any keyword or any other name in the set \p recordNames. Use the int \p
 /// nextGeneratedNameID as a counter for suffix.
-static std::string resolveKeywordConflict(const StringRef &origName,
-                                          const llvm::StringSet<> &recordNames,
-                                          size_t &nextGeneratedNameID) {
+std::string resolveKeywordConflict(const StringRef &origName,
+                                   const llvm::StringSet<> &recordNames,
+                                   size_t &nextGeneratedNameID) {
   auto name = origName;
   // Get the list of reserved words we need to avoid.  We could prepopulate this
   // into the used words cache, but it is large and immutable, so we just query
@@ -560,11 +560,26 @@ public:
     assert(entry && "value expected a name but doesn't have one");
     return entry->getKey();
   }
+  StringRef getModuleName(StringRef moduleName) {
+    auto entryIter = moduleNameTable.find(moduleName);
+    if (entryIter != moduleNameTable.end())
+      return entryIter->getSecond()->getKey();
+    auto updatedName = resolveKeywordConflict(moduleName, usedModuleNames,
+                                              nextGeneratedNameID);
+    auto iter = usedModuleNames.insert(updatedName);
+    moduleNameTable[moduleName] = &*iter.first;
+    return iter.first->getKey();
+  }
 
 public:
   /// nameTable keeps track of mappings from Value's and operations (for
   /// instances) to their string table entry.
   llvm::DenseMap<ValueOrOp, llvm::StringMapEntry<llvm::NoneType> *> nameTable;
+
+  /// moduleNameTable keeps track of mappings from Module names to updated names
+  /// to resolve keyword conflicts.
+  llvm::DenseMap<StringRef, llvm::StringMapEntry<llvm::NoneType> *>
+      moduleNameTable;
 
   /// outputNames tracks the uniquified names for output ports, which don't have
   /// a Value or Op representation.
@@ -1912,9 +1927,9 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   // name, then use it here.  This is a hack because we lack proper support for
   // parameterized modules in the RTL dialect.
   if (auto extMod = dyn_cast<RTLModuleExternOp>(moduleOp)) {
-    indent() << extMod.getVerilogModuleName();
+    indent() << emitter.getModuleName(extMod.getVerilogModuleName());
   } else {
-    indent() << op.moduleName();
+    indent() << emitter.getModuleName(op.moduleName());
   }
 
   // Helper that prints a parameter constant value in a Verilog compatible way.
@@ -2429,7 +2444,7 @@ void ModuleEmitter::emitMLIRModule(ModuleOp module) {
 }
 
 void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
-  os << "// external module " << module.getName() << "\n\n";
+  os << "// external module " << getModuleName(module.getName()) << "\n\n";
 }
 
 static Value lowerVariadicCommutativeOp(Operation &op, OperandRange operands) {
@@ -2509,9 +2524,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
       addName(module.getArgument(port.argNum), name);
   }
 
-  auto moduleName = resolveKeywordConflict(module.getName(), usedModuleNames,
-                                           nextGeneratedNameID);
-  usedModuleNames.insert(moduleName);
+  auto moduleName = getModuleName(module.getName());
   os << "module " << moduleName << '(';
   if (!portInfo.empty())
     os << '\n';
