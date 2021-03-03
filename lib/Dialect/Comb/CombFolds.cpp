@@ -735,38 +735,59 @@ OpFoldResult MuxOp::fold(ArrayRef<Attribute> constants) {
   return {};
 }
 
+static mlir::Value sextToDestTypeAndFlip(mlir::Value op, Type destType,
+                                         PatternRewriter &rewriter) {
+  op = rewriter.createOrFold<SExtOp>(op.getLoc(), destType, op);
+  Value newOperands[] = {
+      op, rewriter.create<rtl::ConstantOp>(op.getLoc(), destType, -1)};
+  return rewriter.create<XorOp>(op.getLoc(), destType, newOperands);
+}
+
 void MuxOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                         MLIRContext *context) {
   struct Folder final : public OpRewritePattern<MuxOp> {
     using OpRewritePattern::OpRewritePattern;
     LogicalResult matchAndRewrite(MuxOp op,
                                   PatternRewriter &rewriter) const override {
-      auto width = op.getType().cast<IntegerType>().getWidth();
 
       APInt value;
 
-      // mux(a, 11...1, b) -> or(a, b)
       if (matchPattern(op.trueValue(), m_RConstant(value))) {
+        // mux(a, 11...1, b) -> or(a, b)
         if (value.isAllOnesValue()) {
-          auto cond = op.cond();
-          if (width > 1)
-            cond = rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(),
-                                                 op.cond());
+          auto cond = rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(),
+                                                    op.cond());
+
           Value newOperands[] = {cond, op.falseValue()};
           rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
           return success();
         }
+
+        // mux(a, 0, b) -> and(not(a), b)
+        if (value.isNullValue()) {
+          auto cond = sextToDestTypeAndFlip(op.cond(), op.getType(), rewriter);
+          Value newOperands[] = {cond, op.falseValue()};
+          rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
+          return success();
+        }
       }
 
-      // mux(a, b, 0) -> and(a, b)
       if (matchPattern(op.falseValue(), m_RConstant(value))) {
+        // mux(a, b, 0) -> and(a, b)
         if (value.isNullValue()) {
-          auto cond = op.cond();
-          if (width > 1)
-            cond = rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(),
-                                                 op.cond());
+          auto cond = rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(),
+                                                    op.cond());
+
           Value newOperands[] = {cond, op.trueValue()};
           rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
+          return success();
+        }
+
+        // mux(a, b, 11...1) -> or(not(a), b)
+        if (value.isAllOnesValue()) {
+          auto cond = sextToDestTypeAndFlip(op.cond(), op.getType(), rewriter);
+          Value newOperands[] = {cond, op.trueValue()};
+          rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
           return success();
         }
       }
