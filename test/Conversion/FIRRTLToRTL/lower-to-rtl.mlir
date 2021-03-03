@@ -935,4 +935,13 @@ module attributes {firrtl.mainModule = "Simple"} {
     %widx_widx_bin = firrtl.regreset %0, %1, %c0_ui1 {name = "widx_widx_bin"} : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>) -> !firrtl.uint<4>
     rtl.output
   }
+
+  // CHECK-LABEL: rtl.module @Struct0bits(%source: !rtl.struct<valid: i1, ready: i1, data: i0>) {
+  // CHECK-NEXT:    rtl.output 
+  // CHECK-NEXT:  }
+  rtl.module @Struct0bits(%source: !rtl.struct<valid: i1, ready: i1, data: i0>) {
+    %1 = firrtl.rtlStructCast %source : (!rtl.struct<valid: i1, ready: i1, data: i0>) -> !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<0>>
+    %2 = firrtl.subfield %1 ("data") : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<0>>) -> !firrtl.uint<0>
+    rtl.output
+  }
 }
