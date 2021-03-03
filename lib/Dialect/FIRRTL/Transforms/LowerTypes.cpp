@@ -138,8 +138,8 @@ private:
   DenseMap<ValueIdentifier, Value> loweredBundleValues;
 
   // State to track the new attributes for the module.
-  SmallVector<NamedAttribute, 8> newAttrs;
-  size_t originalNumArgs;
+  SmallVector<NamedAttribute, 8> newModuleAttrs;
+  size_t originalNumModuleArgs;
 };
 } // end anonymous namespace
 
@@ -158,7 +158,7 @@ void FIRRTLTypesLowering::runOnOperation() {
 
   // Lower the module block arguments.
   SmallVector<BlockArgument, 8> args(body->args_begin(), body->args_end());
-  originalNumArgs = args.size();
+  originalNumModuleArgs = args.size();
   for (auto arg : args)
     if (auto type = arg.getType().dyn_cast<FIRRTLType>())
       lowerArg(arg, type);
@@ -184,7 +184,7 @@ void FIRRTLTypesLowering::runOnOperation() {
   // Remember the original argument attributess.
   SmallVector<NamedAttribute, 8> originalArgAttrs;
   DictionaryAttr originalAttrs = module->getAttrDictionary();
-  for (size_t i = 0, e = originalNumArgs; i < e; ++i)
+  for (size_t i = 0, e = originalNumModuleArgs; i < e; ++i)
     originalArgAttrs.push_back(
         originalAttrs.getNamed(getArgAttrName(i)).getValue());
   DictionaryAttr::sortInPlace(originalArgAttrs);
@@ -194,11 +194,11 @@ void FIRRTLTypesLowering::runOnOperation() {
   auto *argAttrEnd = originalArgAttrs.end();
   for (auto attr : originalAttrs)
     if (std::lower_bound(argAttrBegin, argAttrEnd, attr) == argAttrEnd)
-      newAttrs.push_back(attr);
+      newModuleAttrs.push_back(attr);
 
   // Update the module's attributes.
-  module->setAttrs(newAttrs);
-  newAttrs.clear();
+  module->setAttrs(newModuleAttrs);
+  newModuleAttrs.clear();
 
   // Keep the module's type up-to-date.
   auto moduleType = builder->getFunctionType(body->getArgumentTypes(), {});
@@ -722,9 +722,9 @@ Value FIRRTLTypesLowering::addArg(Type type, unsigned oldArgNumber,
   StringAttr nameAttr = getFIRRTLNameAttr(module.getArgAttrs(oldArgNumber));
   if (nameAttr) {
     auto newArgAttrs = getArgAttrs(nameAttr, nameSuffix, builder);
-    auto newArgNumber = newValue.getArgNumber() - originalNumArgs;
+    auto newArgNumber = newValue.getArgNumber() - originalNumModuleArgs;
     auto newArgAttrName = getArgAttrName(newArgNumber);
-    newAttrs.push_back(NamedAttribute(newArgAttrName, newArgAttrs));
+    newModuleAttrs.push_back(NamedAttribute(newArgAttrName, newArgAttrs));
   }
 
   return newValue;
