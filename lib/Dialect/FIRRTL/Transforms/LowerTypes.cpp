@@ -724,8 +724,7 @@ Value FIRRTLTypesLowering::addArg(Type type, unsigned oldArgNumber,
     auto newArgAttrs = getArgAttrs(nameAttr, nameSuffix, builder);
     auto newArgNumber = newValue.getArgNumber() - originalNumArgs;
     auto newArgAttrName = getArgAttrName(newArgNumber);
-    auto newAttr = builder->getNamedAttr(newArgAttrName, newArgAttrs);
-    newAttrs.push_back(newAttr);
+    newAttrs.push_back(NamedAttribute(newArgAttrName, newArgAttrs));
   }
 
   return newValue;
