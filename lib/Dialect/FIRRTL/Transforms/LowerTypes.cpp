@@ -156,13 +156,6 @@ void FIRRTLTypesLowering::runOnOperation() {
   ImplicitLocOpBuilder theBuilder(module.getLoc(), &getContext());
   builder = &theBuilder;
 
-  // Remember the original argument attributess.
-  SmallVector<NamedAttribute, 8> originalArgAttrs;
-  DictionaryAttr originalAttrs = module->getAttrDictionary();
-  for (size_t i = 0, e = module.getNumArguments(); i < e; ++i)
-    originalArgAttrs.push_back(
-        originalAttrs.getNamed(getArgAttrName(i)).getValue());
-
   // Lower the module block arguments.
   SmallVector<BlockArgument, 8> args(body->args_begin(), body->args_end());
   originalNumArgs = args.size();
@@ -187,6 +180,14 @@ void FIRRTLTypesLowering::runOnOperation() {
   // Remove block args that have been lowered.
   body->eraseArguments(argsToRemove);
   argsToRemove.clear();
+
+  // Remember the original argument attributess.
+  SmallVector<NamedAttribute, 8> originalArgAttrs;
+  DictionaryAttr originalAttrs = module->getAttrDictionary();
+  for (size_t i = 0, e = originalNumArgs; i < e; ++i)
+    originalArgAttrs.push_back(
+        originalAttrs.getNamed(getArgAttrName(i)).getValue());
+  DictionaryAttr::sortInPlace(originalArgAttrs);
 
   // Copy over any attributes that weren't original argument attributes.
   auto *argAttrBegin = originalArgAttrs.begin();
