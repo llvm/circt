@@ -15,8 +15,11 @@
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
+#include "circt/Support/LLVM.h"
+#include "mlir/IR/FunctionSupport.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/StringSwitch.h"
+#include <algorithm>
 
 using namespace circt;
 using namespace firrtl;
@@ -122,6 +125,8 @@ private:
   Value getBundleLowering(Value oldValue, StringRef flatField);
   void getAllBundleLowerings(Value oldValue, SmallVectorImpl<Value> &results);
 
+  Identifier getArgAttrName(unsigned newArgNumber);
+
   // The builder is set and maintained in the main loop.
   ImplicitLocOpBuilder *builder;
 
@@ -131,6 +136,10 @@ private:
 
   // State to keep a mapping from (Value, Identifier) pairs to flattened values.
   DenseMap<ValueIdentifier, Value> loweredBundleValues;
+
+  // State to track the new attributes for the module.
+  SmallVector<NamedAttribute, 8> newModuleAttrs;
+  size_t originalNumModuleArgs;
 };
 } // end anonymous namespace
 
@@ -149,6 +158,7 @@ void FIRRTLTypesLowering::runOnOperation() {
 
   // Lower the module block arguments.
   SmallVector<BlockArgument, 8> args(body->args_begin(), body->args_end());
+  originalNumModuleArgs = args.size();
   for (auto arg : args)
     if (auto type = arg.getType().dyn_cast<FIRRTLType>())
       lowerArg(arg, type);
@@ -164,12 +174,35 @@ void FIRRTLTypesLowering::runOnOperation() {
   while (!opsToRemove.empty())
     opsToRemove.pop_back_val()->erase();
 
-  // Remove args that have been lowered.
-  getOperation().eraseArguments(argsToRemove);
+  if (argsToRemove.empty())
+    return;
+
+  // Remove block args that have been lowered.
+  body->eraseArguments(argsToRemove);
   argsToRemove.clear();
 
+  // Remember the original argument attributess.
+  SmallVector<NamedAttribute, 8> originalArgAttrs;
+  DictionaryAttr originalAttrs = module->getAttrDictionary();
+  for (size_t i = 0, e = originalNumModuleArgs; i < e; ++i)
+    originalArgAttrs.push_back(
+        originalAttrs.getNamed(getArgAttrName(i)).getValue());
+  DictionaryAttr::sortInPlace(originalArgAttrs);
+
+  // Copy over any attributes that weren't original argument attributes.
+  auto *argAttrBegin = originalArgAttrs.begin();
+  auto *argAttrEnd = originalArgAttrs.end();
+  for (auto attr : originalAttrs)
+    if (std::lower_bound(argAttrBegin, argAttrEnd, attr) == argAttrEnd)
+      newModuleAttrs.push_back(attr);
+
+  // Update the module's attributes.
+  module->setAttrs(newModuleAttrs);
+  newModuleAttrs.clear();
+
   // Keep the module's type up-to-date.
-  module.setType(builder->getFunctionType(body->getArgumentTypes(), {}));
+  auto moduleType = builder->getFunctionType(body->getArgumentTypes(), {});
+  module->setAttr(module.getTypeAttrName(), TypeAttr::get(moduleType));
 
   // Reset lowered state.
   loweredBundleValues.clear();
@@ -685,11 +718,13 @@ Value FIRRTLTypesLowering::addArg(Type type, unsigned oldArgNumber,
   // Append the new argument.
   auto newValue = body->addArgument(type);
 
-  // Copy over the name attribute for the new argument.
+  // Save the name attribute for the new argument.
   StringAttr nameAttr = getFIRRTLNameAttr(module.getArgAttrs(oldArgNumber));
   if (nameAttr) {
     auto newArgAttrs = getArgAttrs(nameAttr, nameSuffix, builder);
-    module.setArgAttrs(newValue.getArgNumber(), newArgAttrs);
+    auto newArgNumber = newValue.getArgNumber() - originalNumModuleArgs;
+    auto newArgAttrName = getArgAttrName(newArgNumber);
+    newModuleAttrs.push_back(NamedAttribute(newArgAttrName, newArgAttrs));
   }
 
   return newValue;
@@ -737,4 +772,10 @@ void FIRRTLTypesLowering::getAllBundleLowerings(
         }
       })
       .Default([&](auto) {});
+}
+
+Identifier FIRRTLTypesLowering::getArgAttrName(unsigned newArgNumber) {
+  SmallString<16> argNameBuffer;
+  mlir::impl::getArgAttrName(newArgNumber, argNameBuffer);
+  return Identifier::get(argNameBuffer, &getContext());
 }
