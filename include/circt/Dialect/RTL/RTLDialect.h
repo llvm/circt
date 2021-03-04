@@ -31,9 +31,6 @@ public:
 
   /// Print a type registered to this dialect
   void printType(Type type, DialectAsmPrinter &printer) const override;
-
-  Operation *materializeConstant(OpBuilder &builder, Attribute value, Type type,
-                                 Location loc) override;
 };
 
 } // namespace rtl

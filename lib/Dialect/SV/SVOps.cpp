@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Dialect/RTL/RTLTypes.h"
 #include "mlir/IR/Builders.h"
@@ -222,7 +223,7 @@ void IfOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 
     LogicalResult matchAndRewrite(IfOp op,
                                   PatternRewriter &rewriter) const override {
-      auto constant = op.cond().getDefiningOp<rtl::ConstantOp>();
+      auto constant = op.cond().getDefiningOp<comb::ConstantOp>();
       if (!constant)
         return failure();
 

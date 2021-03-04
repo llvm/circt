@@ -73,7 +73,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
 
   // CHECK-NEXT:   if (cond)
   sv.if %cond {
-    %c42 = rtl.constant 42 : i42
+    %c42 = comb.constant 42 : i42
 
     // CHECK-NEXT: wire42 = 42'h2A;
     sv.bpassign %wire42, %c42 : i42
@@ -82,7 +82,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT:   if (cond)
   // CHECK-NOT: begin
   sv.if %cond {
-    %c42 = rtl.constant 42 : i8
+    %c42 = comb.constant 42 : i8
     %add = comb.add %val, %c42 : i8
 
     // CHECK-NEXT: $fwrite(32'h80000002, "Inlined! %x\n", val + 8'h2A);
@@ -277,7 +277,7 @@ rtl.module @issue508(%in1: i1, %in2: i1) {
 // https://github.com/llvm/circt/issues/439
 rtl.module @exprInlineTestIssue439(%clk: i1) {
   // CHECK: wire [31:0] _T = 32'h0;
-  %c = rtl.constant 0 : i32
+  %c = comb.constant 0 : i32
 
   // CHECK: always @(posedge clk) begin
   sv.always posedge %clk {
@@ -311,9 +311,9 @@ rtl.module @issue439(%in1: i1, %in2: i1) {
 // CHECK-LABEL: module issue595
 rtl.module @issue595(%arr: !rtl.array<128xi1>) {
   // CHECK: wire [63:0] _T;
-  %c0_i32 = rtl.constant 0 : i32
-  %c0_i7 = rtl.constant 0 : i7
-  %c0_i6 = rtl.constant 0 : i6
+  %c0_i32 = comb.constant 0 : i32
+  %c0_i7 = comb.constant 0 : i7
+  %c0_i6 = comb.constant 0 : i6
   %0 = comb.icmp eq %3, %c0_i32 : i32
   // CHECK: assert(_T[6'h0+:32] == 32'h0);
   sv.assert %0 : i1
@@ -328,9 +328,9 @@ rtl.module @issue595(%arr: !rtl.array<128xi1>) {
 
 rtl.module @issue595_variant1(%arr: !rtl.array<128xi1>) {
   // CHECK: wire [63:0] _T;
-  %c0_i32 = rtl.constant 0 : i32
-  %c0_i7 = rtl.constant 0 : i7
-  %c0_i6 = rtl.constant 0 : i6
+  %c0_i32 = comb.constant 0 : i32
+  %c0_i7 = comb.constant 0 : i7
+  %c0_i6 = comb.constant 0 : i6
   %0 = comb.icmp ne %3, %c0_i32 : i32
   // CHECK: assert(|_T[6'h0+:32]);
   sv.assert %0 : i1
@@ -344,9 +344,9 @@ rtl.module @issue595_variant1(%arr: !rtl.array<128xi1>) {
 
 rtl.module @issue595_variant2_checkRedunctionAnd(%arr: !rtl.array<128xi1>) {
   // CHECK: wire [63:0] _T;
-  %c0_i32 = rtl.constant -1 : i32
-  %c0_i7 = rtl.constant 0 : i7
-  %c0_i6 = rtl.constant 0 : i6
+  %c0_i32 = comb.constant -1 : i32
+  %c0_i7 = comb.constant 0 : i7
+  %c0_i6 = comb.constant 0 : i6
   %0 = comb.icmp eq %3, %c0_i32 : i32
   // CHECK: assert(&_T[6'h0+:32]);
   sv.assert %0 : i1

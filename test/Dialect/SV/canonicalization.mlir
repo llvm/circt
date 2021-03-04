@@ -12,8 +12,8 @@
 
 func @if_dead_condition(%arg0: i1) {
   sv.always posedge %arg0 {
-    %true = rtl.constant true
-    %false = rtl.constant false
+    %true = comb.constant true
+    %false = comb.constant false
 
     sv.if %true {}
 
