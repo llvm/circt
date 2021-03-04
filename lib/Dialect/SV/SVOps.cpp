@@ -167,10 +167,8 @@ void IfDefOp::build(OpBuilder &odsBuilder, OperationState &result,
 }
 
 static bool isEmptyBlockExceptForTerminator(Block *block) {
-  if (!block)
-    return true;
-  return llvm::all_of(block->without_terminator(),
-                      [](auto &op) { return false; });
+  assert(block && "Blcok must be non-null");
+  return block->empty() || block->front().hasTrait<OpTrait::IsTerminator>();
 }
 
 void IfDefOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
@@ -182,8 +180,8 @@ void IfDefOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                   PatternRewriter &rewriter) const override {
       if (!isEmptyBlockExceptForTerminator(op.getThenBlock()))
         return failure();
-      else if (op.hasElse() &&
-               !isEmptyBlockExceptForTerminator(op.getElseBlock()))
+
+      if (op.hasElse() && !isEmptyBlockExceptForTerminator(op.getElseBlock()))
         return failure();
 
       rewriter.eraseOp(op);
@@ -270,8 +268,8 @@ void IfOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                   PatternRewriter &rewriter) const override {
       if (!isEmptyBlockExceptForTerminator(op.getThenBlock()))
         return failure();
-      else if (op.hasElse() &&
-               !isEmptyBlockExceptForTerminator(op.getElseBlock()))
+
+      if (op.hasElse() && !isEmptyBlockExceptForTerminator(op.getElseBlock()))
         return failure();
 
       rewriter.eraseOp(op);
@@ -366,23 +364,6 @@ static void printEventList(OpAsmPrinter &p, AlwaysOp op, ArrayAttr portsAttr,
   }
 }
 
-void AlwaysOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
-                                           MLIRContext *context) {
-  // If the body is empty, erase op.
-  struct EraseEmptyOp final : public OpRewritePattern<AlwaysOp> {
-    using OpRewritePattern::OpRewritePattern;
-    LogicalResult matchAndRewrite(AlwaysOp op,
-                                  PatternRewriter &rewriter) const override {
-      if (!op.body().empty())
-        return failure();
-
-      rewriter.eraseOp(op);
-      return success();
-    }
-  };
-  results.insert<EraseEmptyOp>(context);
-}
-
 //===----------------------------------------------------------------------===//
 // AlwaysFFOp
 
@@ -451,22 +432,6 @@ void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
 //===----------------------------------------------------------------------===//
 // InitialOp
 //===----------------------------------------------------------------------===//
-void InitialOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
-                                            MLIRContext *context) {
-  // If the body is empty, erase op.
-  struct EraseEmptyOp final : public OpRewritePattern<InitialOp> {
-    using OpRewritePattern::OpRewritePattern;
-    LogicalResult matchAndRewrite(InitialOp op,
-                                  PatternRewriter &rewriter) const override {
-      if (!op.body().empty())
-        return failure();
-
-      rewriter.eraseOp(op);
-      return success();
-    }
-  };
-  results.insert<EraseEmptyOp>(context);
-}
 
 void InitialOp::build(OpBuilder &odsBuilder, OperationState &result,
                       std::function<void()> bodyCtor) {

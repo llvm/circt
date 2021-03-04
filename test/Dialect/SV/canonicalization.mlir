@@ -44,12 +44,18 @@ func @if_dead_condition(%arg0: i1) {
     } 
   }
 
+  return
+}
+
+// CHECK-LABEL: func @empy_op(%arg0: i1) {
+// CHECK-NEXT:    return
+// CHECK-NEXT:  }
+func @empy_op(%arg0: i1) {
   sv.if %arg0 {}
   sv.if %arg0 {} else {}
   sv.ifdef "SYNTHESIS" {}
   sv.ifdef "SYNTHESIS" {} else {}
   sv.always posedge %arg0 {}
   sv.initial {}
-
   return
 }
