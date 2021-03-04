@@ -529,17 +529,12 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:   sv.initial {
     // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
     // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:       %true = rtl.constant true
-    // CHECK-NEXT:       %8 = comb.xor %reset, %true : i1
-    // CHECK-NEXT:       sv.if %8  {
-    // CHECK-NEXT:         %10 = sv.textual_value "`RANDOM" : i32
-    // CHECK-NEXT:         sv.bpassign %reg, %10 : i32
-    // CHECK-NEXT:       }
-    // CHECK-NEXT:       %true_1 = rtl.constant true
-    // CHECK-NEXT:       %9 = comb.xor %reset, %true_1 : i1
-    // CHECK-NEXT:       sv.if %9  {
-    // CHECK-NEXT:         %10 = sv.textual_value "`RANDOM" : i32
-    // CHECK-NEXT:         sv.bpassign %reg2, %10 : i32
+    // CHECK-NEXT:       sv.if %reset  {
+    // CHECK-NEXT:       } else {
+    // CHECK-NEXT:         %8 = sv.textual_value "`RANDOM" : i32
+    // CHECK-NEXT:         sv.bpassign %reg, %8 : i32
+    // CHECK-NEXT:         %9 = sv.textual_value "`RANDOM" : i32
+    // CHECK-NEXT:         sv.bpassign %reg2, %9 : i32
     // CHECK-NEXT:       }
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
