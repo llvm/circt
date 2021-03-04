@@ -6,18 +6,26 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
 
   // CHECK:      always @(posedge clock) begin
   // CHECK-NEXT:   `ifndef SYNTHESIS
-  // CHECK-NEXT:     if (PRINTF_COND_ & cond)
-  // CHECK-NEXT:       $fwrite(32'h80000002, "Hi\n");
-  // CHECK-NEXT:   `endif
-  // CHECK-NEXT: end // always @(posedge)
   sv.always posedge %clock {
     sv.ifdef "SYNTHESIS" {
     } else {
+  // CHECK-NEXT:     if (PRINTF_COND_ & cond)
       %tmp = sv.textual_value "PRINTF_COND_" : i1
       %tmp2 = comb.and %tmp, %cond : i1
       sv.if %tmp2 {
+  // CHECK-NEXT:       $fwrite(32'h80000002, "Hi\n");
         sv.fwrite "Hi\n"
       }
+
+      // CHECK-NEXT: if (!(clock | cond))
+      // CHECK-NEXT:   $fwrite(32'h80000002, "Bye\n");
+      %tmp3 = comb.or %clock, %cond : i1
+      sv.if %tmp3 {
+      } else {
+        sv.fwrite "Bye\n"
+      }
+  // CHECK-NEXT:   `endif
+  // CHECK-NEXT: end // always @(posedge)
     }
   }
 

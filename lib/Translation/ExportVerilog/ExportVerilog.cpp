@@ -673,7 +673,8 @@ public:
         emittedExprs(emittedExprs),
         tooLargeSubExpressions(tooLargeSubExpressions), os(resultBuffer) {}
 
-  void emitExpression(Value exp, bool forceRootExpr, raw_ostream &os);
+  void emitExpression(Value exp, VerilogPrecedence parenthesizeIfLooserThan,
+                      raw_ostream &os);
 
 private:
   friend class TypeOpVisitor<ExprEmitter, SubExprInfo>;
@@ -813,14 +814,13 @@ private:
 
 /// Emit the specified value as an expression.  If this is an inline-emitted
 /// expression, we emit that expression, otherwise we emit a reference to the
-/// already computed name.  If 'forceRootExpr' is true, then this emits an
-/// expression even if we typically don't do it inline.
+/// already computed name.
 ///
-void ExprEmitter::emitExpression(Value exp, bool forceRootExpr,
+void ExprEmitter::emitExpression(Value exp,
+                                 VerilogPrecedence parenthesizeIfLooserThan,
                                  raw_ostream &os) {
   // Emit the expression.
-  emitSubExpr(exp, forceRootExpr ? ForceEmitMultiUse : LowestPrecedence,
-              OOLTopLevel,
+  emitSubExpr(exp, parenthesizeIfLooserThan, OOLTopLevel,
               /*signRequirement*/ NoRequirement);
 
   // Once the expression is done, we can emit the result to the stream.
@@ -1262,8 +1262,9 @@ public:
   size_t getNumStatementsEmitted() const { return numStatementsEmitted; }
 
 private:
-  void emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
-                      bool forceRootExpr = false);
+  void
+  emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
+                 VerilogPrecedence parenthesizeIfLooserThan = LowestPrecedence);
 
   using StmtVisitor::visitStmt;
   using Visitor::visitSV;
@@ -1328,15 +1329,14 @@ private:
 
 /// Emit the specified value as an expression.  If this is an inline-emitted
 /// expression, we emit that expression, otherwise we emit a reference to the
-/// already computed name.  If 'forceRootExpr' is true, then this emits an
-/// expression even if we typically don't do it inline.
+/// already computed name.
 ///
 void StmtEmitter::emitExpression(Value exp,
                                  SmallPtrSet<Operation *, 8> &emittedExprs,
-                                 bool forceRootExpr) {
+                                 VerilogPrecedence parenthesizeIfLooserThan) {
   SmallVector<Operation *> tooLargeSubExpressions;
   ExprEmitter(emitter, emittedExprs, tooLargeSubExpressions)
-      .emitExpression(exp, forceRootExpr, os);
+      .emitExpression(exp, parenthesizeIfLooserThan, os);
 
   // It is possible that the emitted expression was too large to fit on a line
   // and needs to be split.  If so, the new subexpressions that need emitting
@@ -1380,9 +1380,12 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
   } else {
     indent() << "assign " << emitter.getName(op->getResult(0)) << " = ";
   }
+
+  // Emit the expression with a special precedence level so it knows to do a
+  // "deep" emission even though there are multiple uses, not just emitting the
+  // name.
   SmallPtrSet<Operation *, 8> emittedExprs;
-  emitExpression(op->getResult(0), emittedExprs,
-                 /*forceRootExpr=*/true);
+  emitExpression(op->getResult(0), emittedExprs, ForceEmitMultiUse);
   os << ';';
   emitLocationInfoAndNewLine(emittedExprs);
 }
@@ -1724,11 +1727,22 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
   ops.insert(op);
 
   indent() << "if (";
-  emitExpression(op.cond(), ops);
-  os << ')';
-  emitBlockAsStatement(op.getThenBlock(), ops);
-  if (op.hasElse()) {
-    indent() << "else";
+
+  // If we have an else and and empty then block, emit an inverted condition.
+  if (!op.hasElse() || !isa<sv::YieldOp>(op.getThenBlock()->front())) {
+    // Normal emission.
+    emitExpression(op.cond(), ops);
+    os << ')';
+    emitBlockAsStatement(op.getThenBlock(), ops);
+    if (op.hasElse()) {
+      indent() << "else";
+      emitBlockAsStatement(op.getElseBlock(), ops);
+    }
+  } else {
+    // inverted condition.
+    os << '!';
+    emitExpression(op.cond(), ops, Unary);
+    os << ')';
     emitBlockAsStatement(op.getElseBlock(), ops);
   }
 
@@ -2049,9 +2063,9 @@ LogicalResult StmtEmitter::visitSV(InterfaceModportOp op) {
 LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
   SmallPtrSet<Operation *, 8> emitted;
   indent() << "assign ";
-  emitExpression(op.iface(), emitted, /*forceRootExpr=*/true);
-  os << "." << op.signalName() << " = ";
-  emitExpression(op.rhs(), emitted, /*forceRootExpr=*/true);
+  emitExpression(op.iface(), emitted, ForceEmitMultiUse);
+  os << '.' << op.signalName() << " = ";
+  emitExpression(op.rhs(), emitted, ForceEmitMultiUse);
   os << ";\n";
   return success();
 }
