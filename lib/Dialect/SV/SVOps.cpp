@@ -196,7 +196,7 @@ void IfOp::build(OpBuilder &odsBuilder, OperationState &result, Value cond,
 
   Region *elseRegion = result.addRegion();
   if (elseCtor) {
-    IfDefOp::ensureTerminator(*elseRegion, odsBuilder, result.location);
+    IfOp::ensureTerminator(*elseRegion, odsBuilder, result.location);
     auto oldIP = &*odsBuilder.getInsertionPoint();
     odsBuilder.setInsertionPointToStart(&*elseRegion->begin());
     elseCtor();

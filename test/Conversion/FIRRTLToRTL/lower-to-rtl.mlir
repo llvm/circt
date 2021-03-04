@@ -263,16 +263,13 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       sv.fwrite "No operands!\0A"
     // CHECK-NEXT:     }
-    // CHECK-NEXT:   }
-    // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS"  {
-    // CHECK-NEXT:     } else  {
-    // CHECK-NEXT:       %3 = sv.textual_value "`PRINTF_COND_" : i1
-    // CHECK-NEXT:       %4 = comb.and %3, %reset : i1
-    // CHECK-NEXT:       sv.if %4  {
-    // CHECK-NEXT:         sv.fwrite "Hi %x %x\0A"(%2, %b) : i5, i4
-    // CHECK-NEXT:       }
+    // CHECK-NEXT:     %5 = sv.textual_value "`PRINTF_COND_" : i1
+    // CHECK-NEXT:     %6 = comb.and %5, %reset : i1
+    // CHECK-NEXT:     sv.if %6  {
+    // CHECK-NEXT:       sv.fwrite "Hi %x %x\0A"(%2, %b) : i5, i4
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
+    // CHECK-NEXT: }
    firrtl.printf %clock1, %reset1, "No operands!\0A"
 
     // CHECK: [[ADD:%.+]] = comb.add
@@ -532,17 +529,10 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:   sv.initial {
     // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
     // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:       %true = rtl.constant true
-    // CHECK-NEXT:       %8 = comb.xor %reset, %true : i1
-    // CHECK-NEXT:       sv.if %8  {
-    // CHECK-NEXT:         %9 = sv.textual_value "`RANDOM" : i32
-    // CHECK-NEXT:         sv.bpassign %reg, %9 : i32
-    // CHECK-NEXT:       }
-    // CHECK-NEXT:     }
-    // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:       %true = rtl.constant true
-    // CHECK-NEXT:       %8 = comb.xor %reset, %true : i1
-    // CHECK-NEXT:       sv.if %8  {
+    // CHECK-NEXT:       sv.if %reset  {
+    // CHECK-NEXT:       } else {
+    // CHECK-NEXT:         %8 = sv.textual_value "`RANDOM" : i32
+    // CHECK-NEXT:         sv.bpassign %reg, %8 : i32
     // CHECK-NEXT:         %9 = sv.textual_value "`RANDOM" : i32
     // CHECK-NEXT:         sv.bpassign %reg2, %9 : i32
     // CHECK-NEXT:       }

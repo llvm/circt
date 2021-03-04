@@ -27,14 +27,8 @@ namespace circt {
 /// Export a module containing RTL, and SV dialect code.
 mlir::LogicalResult exportVerilog(mlir::ModuleOp module, llvm::raw_ostream &os);
 
-/// Register a translation for exporting FIRRTL, RTL, and SV
+/// Register a translation for exporting RTL, Comb and SV to SystemVerilog.
 void registerToVerilogTranslation();
-
-/// Export a module containing RTL, and SV dialect code.
-mlir::LogicalResult exportFIRRTLToVerilog(mlir::ModuleOp module,
-                                          llvm::raw_ostream &os);
-/// Register a translation for exporting FIRRTL, RTL, and SV
-void registerFIRRTLToVerilogTranslation();
 
 } // namespace circt
 
