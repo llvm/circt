@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/RTL/RTLTypes.h"
 #include "mlir/IR/Builders.h"
 
 using namespace mlir;

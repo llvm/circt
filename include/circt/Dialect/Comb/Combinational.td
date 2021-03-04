@@ -245,31 +245,3 @@ def MuxOp : CombOp<"mux",
     }]>
   ];
 }
-
-def KnownBitWidthType : Type<CPred<[{rtl::getBitWidth($_self) != -1}]>,
-  "Type wherein the bitwidth in hardware is known">;
-
-def BitcastOp: CombOp<"bitcast", [NoSideEffect]> {
-  let summary = [{
-    Reinterpret one value to another value of the same size and
-    potentially different type.
-  }];
-
-  let description = [{
-    See the RTL-SV rationale document for a longer description, including an
-    example.
-  }];
-
-  let arguments = (ins KnownBitWidthType:$input);
-  let results = (outs KnownBitWidthType:$result);
-  let verifier = [{
-    if (rtl::getBitWidth(input().getType()) !=
-        rtl::getBitWidth(result().getType()))
-      return this->emitOpError("Bitwidth of input must match result");
-    return success();
-  }];
-
-  let assemblyFormat = [{
-    $input attr-dict `:` functional-type($input, $result)
-  }];
-}
