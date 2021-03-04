@@ -1618,7 +1618,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
           readInOut(builder->create<sv::ArrayIndexInOutOp>(reg, addr));
       // FIRRTL 5.11.1 says undefined behavior on low enable.
       auto undefinedVal =
-          builder->create<sv::TextualValueOp>(value.getType(), "`RANDOM");
+          builder->create<sv::TextualValueOp>(value.getType(), "'x");
       value = builder->create<comb::MuxOp>(en, value, undefinedVal);
 
       // If we're masking, emit "addr < Depth ? mem[addr] : `RANDOM".
