@@ -2125,9 +2125,16 @@ static bool isExpressionUnableToInline(Operation *op) {
   if (isa<StructCreateOp>(op))
     return true;
 
+  auto *opBlock = op->getBlock();
+
   // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
   for (auto user : op->getUsers()) {
+    // If the user is in a different block, then we emit this as an out-of-line
+    // declaration into its block and the user can refer to it.
+    if (user->getBlock() != opBlock)
+      return true;
+
     // Verilog bit selection is required by the standard to be:
     // "a vector, packed array, packed structure, parameter or concatenation".
     // It cannot be an arbitrary expression.
