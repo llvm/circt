@@ -27,6 +27,13 @@ bool sv::isExpression(Operation *op) {
          isa<sv::ReadInterfaceSignalOp>(op);
 }
 
+LogicalResult sv::verifyInProceduralRegion(Operation *op) {
+  if (op->getParentWithTrait<sv::ProceduralRegion>())
+    return success();
+  op->emitError() << op->getName() << " should be in a procedural region";
+  return failure();
+}
+
 //===----------------------------------------------------------------------===//
 // ImplicitSSAName Custom Directive
 //===----------------------------------------------------------------------===//

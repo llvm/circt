@@ -209,15 +209,22 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT: `define STUFF "wire42 (val + val)"
   sv.verbatim "`define STUFF \"{{0}} ({{1}})\"" (%wire42, %add) : !rtl.inout<i42>, i8
 
+  // CHECK-NEXT: `ifdef FOO
   sv.ifdef "FOO" {
-    // CHECK-NEXT: `ifdef FOO
-    %c1 = sv.textual_value "\"THING\"" : i1
     // CHECK-NEXT: wire {{.+}} = "THING";
-    sv.fwrite "%d" (%c1) : i1
-    // CHECK-NEXT: fwrite(32'h80000002, "%d", {{.+}});
-    sv.fwrite "%d" (%c1) : i1
-    // CHECK-NEXT: fwrite(32'h80000002, "%d", {{.+}});
-    // CHECK-NEXT: `endif
+    %c1 = sv.textual_value "\"THING\"" : i1
+
+    // CHECK-NEXT: initial begin
+    sv.initial {
+      // CHECK-NEXT: fwrite(32'h80000002, "%d", {{.+}});
+      sv.fwrite "%d" (%c1) : i1
+      // CHECK-NEXT: fwrite(32'h80000002, "%d", {{.+}});
+      sv.fwrite "%d" (%c1) : i1
+
+    // CHECK-NEXT: end // initial
+    }
+
+  // CHECK-NEXT: `endif
   }
 }
 
