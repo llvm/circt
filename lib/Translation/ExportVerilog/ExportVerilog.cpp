@@ -735,6 +735,7 @@ private:
   // Other
   using TypeOpVisitor::visitTypeOp;
   SubExprInfo visitTypeOp(ConstantOp op);
+  SubExprInfo visitTypeOp(BitcastOp op);
   SubExprInfo visitTypeOp(ArraySliceOp op);
   SubExprInfo visitTypeOp(ArrayGetOp op);
   SubExprInfo visitTypeOp(ArrayCreateOp op);
@@ -791,8 +792,6 @@ private:
   SubExprInfo visitComb(ConcatOp op);
   SubExprInfo visitComb(ExtractOp op);
   SubExprInfo visitComb(ICmpOp op);
-
-  SubExprInfo visitComb(BitcastOp op);
 
 private:
   ModuleEmitter &emitter;
@@ -1025,7 +1024,7 @@ SubExprInfo ExprEmitter::visitComb(ConcatOp op) {
   return {Unary, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitComb(BitcastOp op) {
+SubExprInfo ExprEmitter::visitTypeOp(BitcastOp op) {
   // NOTE: Bitcasts are emitted out-of-line with their own wire declaration when
   // their dimensions don't match. SystemVerilog uses the wire declaration to
   // know what type this value is being casted to.

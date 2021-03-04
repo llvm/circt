@@ -38,9 +38,7 @@ public:
             // Reduction Operators
             ParityOp,
             // Other operations.
-            SExtOp, ConcatOp, ExtractOp, MuxOp,
-            // Cast operation
-            BitcastOp>([&](auto expr) -> ResultType {
+            SExtOp, ConcatOp, ExtractOp, MuxOp>([&](auto expr) -> ResultType {
           return thisCast->visitComb(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -105,7 +103,6 @@ public:
   HANDLE(ConcatOp, Unhandled);
   HANDLE(ExtractOp, Unhandled);
   HANDLE(MuxOp, Unhandled);
-  HANDLE(BitcastOp, Unary);
 #undef HANDLE
 };
 
