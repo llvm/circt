@@ -32,9 +32,6 @@ using namespace comb;
 using namespace rtl;
 using namespace sv;
 
-/// Should we emit 'logic' decls in a block at the top of a module, or inline?
-static constexpr bool emitInlineLogicDecls = true;
-
 /// This is the preferred source width for the generated Verilog.
 static constexpr size_t preferredSourceWidth = 120;
 
@@ -1373,8 +1370,7 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
   } else if (isZeroBitType(op->getResult(0).getType())) {
     indent() << "// Zero width: ";
     --numStatementsEmitted;
-  } else if (emitInlineLogicDecls &&
-             !emitter.outOfLineExpresssionDecls.count(op)) {
+  } else if (!emitter.outOfLineExpresssionDecls.count(op)) {
 
     indent() << getVerilogDeclWord(op) << " ";
     if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os,
@@ -2307,9 +2303,8 @@ void NameCollector::collectNames(Block &block) {
         moduleEmitter.addName(result, op.getAttrOfType<StringAttr>("name"));
       }
 
-      // If we are emitting out-of-line expressions using inline wire decls,
-      // don't measure or emit this wire, it will be emitted inline.
-      if (isExpr && emitInlineLogicDecls) {
+      // Don't measure or emit wires that are emitted inline.
+      if (isExpr) {
         // We can only emit inline logic decls if the generated Verilog will
         // see the declaration before all the uses.  However, rtl.module allows
         // cyclic graphs in its body.  We check to make sure that no uses of
