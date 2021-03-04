@@ -494,7 +494,7 @@ public:
 
   /// Construct a bitcast.
   GasketComponent cast(Type t) const {
-    auto dst = builder->create<comb::BitcastOp>(loc(), t, s);
+    auto dst = builder->create<rtl::BitcastOp>(loc(), t, s);
     return GasketComponent(*builder, dst);
   }
 
@@ -508,7 +508,7 @@ public:
     assert(s.getType().isa<IntegerType>());
     Value signlessVal = s;
     if (!signlessVal.getType().isSignlessInteger())
-      signlessVal = builder->create<comb::BitcastOp>(
+      signlessVal = builder->create<rtl::BitcastOp>(
           loc(), builder->getIntegerType(s.getType().getIntOrFloatBitWidth()),
           s);
 
@@ -680,7 +680,7 @@ Slice GasketComponent::castBitArray() const {
       rtl::ArrayType::get(builder->getI1Type(), rtl::getBitWidth(s.getType()));
   if (s.getType() == dstTy)
     return Slice(*builder, s);
-  auto dst = builder->create<comb::BitcastOp>(loc(), dstTy, s);
+  auto dst = builder->create<rtl::BitcastOp>(loc(), dstTy, s);
   return Slice(*builder, dst);
 }
 

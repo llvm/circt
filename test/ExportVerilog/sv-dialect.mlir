@@ -321,7 +321,7 @@ rtl.module @issue595(%arr: !rtl.array<128xi1>) {
   // CHECK: assign _T = arr[7'h0+:64];
   %1 = rtl.array_slice %arr at %c0_i7 : (!rtl.array<128xi1>) -> !rtl.array<64xi1>
   %2 = rtl.array_slice %1 at %c0_i6 : (!rtl.array<64xi1>) -> !rtl.array<32xi1>
-  %3 = comb.bitcast %2 : (!rtl.array<32xi1>) -> i32
+  %3 = rtl.bitcast %2 : (!rtl.array<32xi1>) -> i32
   rtl.output
 }
 
@@ -338,7 +338,7 @@ rtl.module @issue595_variant1(%arr: !rtl.array<128xi1>) {
   // CHECK: assign _T = arr[7'h0+:64];
   %1 = rtl.array_slice %arr at %c0_i7 : (!rtl.array<128xi1>) -> !rtl.array<64xi1>
   %2 = rtl.array_slice %1 at %c0_i6 : (!rtl.array<64xi1>) -> !rtl.array<32xi1>
-  %3 = comb.bitcast %2 : (!rtl.array<32xi1>) -> i32
+  %3 = rtl.bitcast %2 : (!rtl.array<32xi1>) -> i32
   rtl.output
 }
 
@@ -354,6 +354,6 @@ rtl.module @issue595_variant2_checkRedunctionAnd(%arr: !rtl.array<128xi1>) {
   // CHECK: assign _T = arr[7'h0+:64];
   %1 = rtl.array_slice %arr at %c0_i7 : (!rtl.array<128xi1>) -> !rtl.array<64xi1>
   %2 = rtl.array_slice %1 at %c0_i6 : (!rtl.array<64xi1>) -> !rtl.array<32xi1>
-  %3 = comb.bitcast %2 : (!rtl.array<32xi1>) -> i32
+  %3 = rtl.bitcast %2 : (!rtl.array<32xi1>) -> i32
   rtl.output
 }
