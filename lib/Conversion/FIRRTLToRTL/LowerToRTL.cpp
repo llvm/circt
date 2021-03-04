@@ -777,7 +777,7 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   void initializeRegister(Value reg, Value resetSignal);
 
   void runWithInsertionPointAtEndOfBlock(std::function<void(void)> fn,
-                                         Block *block);
+                                         Region &region);
   void addToAlwaysBlock(Value clock, std::function<void(void)> fn);
   void addToAlwaysFFBlock(EventControl clockEdge, Value clock,
                           ::ResetType resetStyle, EventControl resetEdge,
@@ -794,6 +794,8 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   void addToIfDefProceduralBlock(StringRef cond,
                                  std::function<void(void)> thenCtor,
                                  std::function<void(void)> elseCtor = {});
+  void addIfProceduralBlock(Value cond, std::function<void(void)> thenCtor,
+                            std::function<void(void)> elseCtor = {});
 
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitExpr;
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitDecl;
@@ -1191,11 +1193,21 @@ LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
 /// specified block and run the closure.  This correctly handles the case where
 /// the closure is null, but the caller needs to make sure the block exists.
 void FIRRTLLowering::runWithInsertionPointAtEndOfBlock(
-    std::function<void(void)> fn, Block *block) {
+    std::function<void(void)> fn, Region &region) {
   if (!fn)
     return;
+
   auto oldIP = builder->saveInsertionPoint();
-  builder->setInsertionPoint(block->getTerminator());
+
+  // If this is the first logic injected into the specified block (e.g. an else
+  // region), create the block and put an sv.yield.
+  if (region.empty()) {
+    // All SV dialect control flow operations use sv.yield.
+    sv::IfOp::ensureTerminator(region, *builder,
+                               region.getParentOp()->getLoc());
+  }
+
+  builder->setInsertionPoint(region.front().getTerminator());
   fn();
   builder->restoreInsertionPoint(oldIP);
 }
@@ -1209,7 +1221,7 @@ void FIRRTLLowering::addToAlwaysBlock(Value clock,
 
   auto &op = alwaysBlocks[clock];
   if (op) {
-    runWithInsertionPointAtEndOfBlock(fn, op.getBodyBlock());
+    runWithInsertionPointAtEndOfBlock(fn, op.body());
   } else {
     op = builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, fn);
   }
@@ -1223,9 +1235,8 @@ void FIRRTLLowering::addToAlwaysFFBlock(EventControl clockEdge, Value clock,
   auto &op = alwaysFFBlocks[{builder->getBlock(), clockEdge, clock, resetStyle,
                              resetEdge, reset}];
   if (op) {
-    runWithInsertionPointAtEndOfBlock(body, op.getBodyBlock());
-    if (resetBody)
-      runWithInsertionPointAtEndOfBlock(resetBody, op.getResetBlock());
+    runWithInsertionPointAtEndOfBlock(body, op.bodyBlk());
+    runWithInsertionPointAtEndOfBlock(resetBody, op.resetBlk());
   } else {
     if (reset) {
       op = builder->create<sv::AlwaysFFOp>(clockEdge, clock, resetStyle,
@@ -1243,9 +1254,8 @@ void FIRRTLLowering::addToIfDefBlock(StringRef cond,
   auto condAttr = builder->getStringAttr(cond);
   auto &op = ifdefBlocks[{builder->getBlock(), condAttr}];
   if (op) {
-    runWithInsertionPointAtEndOfBlock(thenCtor, op.getThenBlock());
-    if (elseCtor)
-      runWithInsertionPointAtEndOfBlock(elseCtor, op.getElseBlock());
+    runWithInsertionPointAtEndOfBlock(thenCtor, op.thenRegion());
+    runWithInsertionPointAtEndOfBlock(elseCtor, op.elseRegion());
   } else {
     op = builder->create<sv::IfDefOp>(condAttr, thenCtor, elseCtor);
   }
@@ -1254,7 +1264,7 @@ void FIRRTLLowering::addToIfDefBlock(StringRef cond,
 void FIRRTLLowering::addToInitialBlock(std::function<void(void)> body) {
   auto &op = initialBlocks[builder->getBlock()];
   if (op) {
-    runWithInsertionPointAtEndOfBlock(body, op.getBodyBlock());
+    runWithInsertionPointAtEndOfBlock(body, op.body());
   } else {
     op = builder->create<sv::InitialOp>(body);
   }
@@ -1266,21 +1276,35 @@ void FIRRTLLowering::addToIfDefProceduralBlock(
 
   // Check to see if we already have an ifdef on this condition immediately
   // before the insertion point.  If so, extend it.
-  auto *insertBlock = builder->getBlock();
   auto insertIt = builder->getInsertionPoint();
-  if (insertIt != insertBlock->begin())
+  if (insertIt != builder->getBlock()->begin())
     if (auto ifdef = dyn_cast<sv::IfDefProceduralOp>(*--insertIt)) {
       if (ifdef.cond() == cond) {
-        if (thenCtor)
-          ;
-        runWithInsertionPointAtEndOfBlock(thenCtor, ifdef.getThenBlock());
-        if (elseCtor)
-          runWithInsertionPointAtEndOfBlock(elseCtor, ifdef.getElseBlock());
+        runWithInsertionPointAtEndOfBlock(thenCtor, ifdef.thenRegion());
+        runWithInsertionPointAtEndOfBlock(elseCtor, ifdef.elseRegion());
         return;
       }
     }
 
   builder->create<sv::IfDefProceduralOp>(cond, thenCtor, elseCtor);
+}
+
+void FIRRTLLowering::addIfProceduralBlock(Value cond,
+                                          std::function<void(void)> thenCtor,
+                                          std::function<void(void)> elseCtor) {
+  // Check to see if we already have an if on this condition immediately
+  // before the insertion point.  If so, extend it.
+  auto insertIt = builder->getInsertionPoint();
+  if (insertIt != builder->getBlock()->begin())
+    if (auto ifOp = dyn_cast<sv::IfOp>(*--insertIt)) {
+      if (ifOp.cond() == cond) {
+        runWithInsertionPointAtEndOfBlock(thenCtor, ifOp.thenRegion());
+        runWithInsertionPointAtEndOfBlock(elseCtor, ifOp.elseRegion());
+        return;
+      }
+    }
+
+  builder->create<sv::IfOp>(cond, thenCtor, elseCtor);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1430,9 +1454,7 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
       emitRandomizePrologIfNeeded();
       addToIfDefProceduralBlock("RANDOMIZE_REG_INIT", [&]() {
         if (resetSignal) {
-          auto one = builder->create<rtl::ConstantOp>(APInt(1, 1));
-          auto notResetValue = builder->create<comb::XorOp>(resetSignal, one);
-          builder->create<sv::IfOp>(notResetValue, [&]() { randomInit(); });
+          addIfProceduralBlock(resetSignal, {}, [&]() { randomInit(); });
         } else {
           randomInit();
         }
@@ -1635,7 +1657,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
             auto readLastEn = builder->create<sv::ReadInOutOp>(lastEn);
             builder->create<sv::PAssignOp>(thisEn, readLastEn);
-            builder->create<sv::IfOp>(readLastEn, [&]() {
+            addIfProceduralBlock(readLastEn, [&]() {
               builder->create<sv::PAssignOp>(
                   thisAddr, builder->create<sv::ReadInOutOp>(lastAddr));
             });
@@ -1704,7 +1726,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
             auto left = writePipe[j];
             auto readEn = readInOut(right.en);
             builder->create<sv::PAssignOp>(left.en, readEn);
-            builder->create<sv::IfOp>(readEn, [&]() {
+            addIfProceduralBlock(readEn, [&]() {
               builder->create<sv::PAssignOp>(left.addr, readInOut(right.addr));
               builder->create<sv::PAssignOp>(left.mask, readInOut(right.mask));
               builder->create<sv::PAssignOp>(left.data, readInOut(right.data));
@@ -1720,7 +1742,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         auto enable = builder->create<sv::ReadInOutOp>(last.en);
         auto cond = builder->create<comb::AndOp>(
             enable, builder->create<sv::ReadInOutOp>(last.mask));
-        builder->create<sv::IfOp>(cond, [&]() {
+        addIfProceduralBlock(cond, [&]() {
           auto slot = builder->create<sv::ArrayIndexInOutOp>(
               reg, builder->create<sv::ReadInOutOp>(last.addr));
           builder->create<sv::PAssignOp>(
@@ -2341,7 +2363,7 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
           builder->create<sv::TextualValueOp>(cond.getType(), "`PRINTF_COND_");
       ifCond = builder->createOrFold<comb::AndOp>(ifCond, cond);
 
-      builder->create<sv::IfOp>(ifCond, [&]() {
+      addIfProceduralBlock(ifCond, [&]() {
         // Emit the sv.fwrite.
         builder->create<sv::FWriteOp>(op.formatString(), operands);
       });
@@ -2367,7 +2389,7 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
       Value ifCond =
           builder->create<sv::TextualValueOp>(cond.getType(), "`STOP_COND_");
       ifCond = builder->createOrFold<comb::AndOp>(ifCond, cond);
-      builder->create<sv::IfOp>(ifCond, [&]() {
+      addIfProceduralBlock(ifCond, [&]() {
         // Emit the sv.fatal or sv.finish.
         if (op.exitCode())
           builder->create<sv::FatalOp>();
@@ -2405,7 +2427,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
     return failure();
 
   addToAlwaysBlock(clock, [&]() {
-    builder->create<sv::IfOp>(enable, [&]() {
+    addIfProceduralBlock(enable, [&]() {
       // Create BOpTy inside the always/if.
       builder->create<BOpTy>(predicate);
     });
