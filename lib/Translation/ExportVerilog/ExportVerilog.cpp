@@ -32,9 +32,6 @@ using namespace comb;
 using namespace rtl;
 using namespace sv;
 
-/// Should we emit 'logic' decls in a block at the top of a module, or inline?
-static constexpr bool emitInlineLogicDecls = true;
-
 /// This is the preferred source width for the generated Verilog.
 static constexpr size_t preferredSourceWidth = 120;
 
@@ -1356,6 +1353,7 @@ void StmtEmitter::emitExpression(Value exp,
   // Emit each stmt expression in turn.
   for (auto *expr : tooLargeSubExpressions) {
     statementBeginningIndex = outBuffer.size();
+    ++numStatementsEmitted;
     emitStatementExpression(expr);
   }
 
@@ -1372,8 +1370,7 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
   } else if (isZeroBitType(op->getResult(0).getType())) {
     indent() << "// Zero width: ";
     --numStatementsEmitted;
-  } else if (emitInlineLogicDecls &&
-             !emitter.outOfLineExpresssionDecls.count(op)) {
+  } else if (!emitter.outOfLineExpresssionDecls.count(op)) {
 
     indent() << getVerilogDeclWord(op) << " ";
     if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os,
@@ -2128,9 +2125,16 @@ static bool isExpressionUnableToInline(Operation *op) {
   if (isa<StructCreateOp>(op))
     return true;
 
+  auto *opBlock = op->getBlock();
+
   // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
   for (auto user : op->getUsers()) {
+    // If the user is in a different block, then we emit this as an out-of-line
+    // declaration into its block and the user can refer to it.
+    if (user->getBlock() != opBlock)
+      return true;
+
     // Verilog bit selection is required by the standard to be:
     // "a vector, packed array, packed structure, parameter or concatenation".
     // It cannot be an arbitrary expression.
@@ -2306,9 +2310,8 @@ void NameCollector::collectNames(Block &block) {
         moduleEmitter.addName(result, op.getAttrOfType<StringAttr>("name"));
       }
 
-      // If we are emitting out-of-line expressions using inline wire decls,
-      // don't measure or emit this wire, it will be emitted inline.
-      if (isExpr && emitInlineLogicDecls) {
+      // Don't measure or emit wires that are emitted inline.
+      if (isExpr) {
         // We can only emit inline logic decls if the generated Verilog will
         // see the declaration before all the uses.  However, rtl.module allows
         // cyclic graphs in its body.  We check to make sure that no uses of
