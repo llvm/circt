@@ -852,14 +852,18 @@ GasketComponent CapnpSegmentBuilder::encodeStructAt(
     uint64_t ptrLoc, ::capnp::schema::Node::Struct::Reader cStruct,
     ArrayRef<GasketComponent> mFieldValues) {
 
+  assert(ptrLoc % 64 == 0);
   size_t structSize =
       (cStruct.getDataWordCount() + cStruct.getPointerCount()) * 64;
   uint64_t structDataSectionOffset = alloc(structSize);
   uint64_t structPointerSectionOffset =
       structDataSectionOffset + (cStruct.getDataWordCount() * 64);
-  int64_t relativeStructDataOffset = structDataSectionOffset - ptrLoc;
+  assert(structDataSectionOffset % 64 == 0);
+  int64_t relativeStructDataOffsetWords =
+      ((structDataSectionOffset - ptrLoc) / 64) -
+      /*offset from end of pointer.*/ 1;
   GasketComponent structPtr = {constant(2, 0),
-                               constant(30, relativeStructDataOffset),
+                               constant(30, relativeStructDataOffsetWords),
                                constant(16, cStruct.getDataWordCount()),
                                constant(16, cStruct.getPointerCount())};
 
