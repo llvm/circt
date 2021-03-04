@@ -89,3 +89,16 @@ module IntArrSum (
   assign totalOut.data[0] = 24'($signed(arr.data[0])) + 24'($signed(arr.data[1]));
   assign totalOut.data[1] = 24'($signed(arr.data[2])) + 24'($signed(arr.data[3]));
 endmodule
+
+module Compressor (
+  input clk,
+  input rstn,
+  IValidReady_i1.source in,
+  IValidReady___rtl_struct_encrypted__i1__compressionLevel__ui4__blob___rtl_array_32xi8.sink x
+);
+
+  assign x.valid = in.valid;
+  assign in.ready = x.ready;
+  // assign totalOut.data[0] = 24'($signed(arr.data[0])) + 24'($signed(arr.data[1]));
+  // assign totalOut.data[1] = 24'($signed(arr.data[2])) + 24'($signed(arr.data[3]));
+endmodule
