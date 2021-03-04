@@ -3,6 +3,7 @@
 #include "circt/Dialect/HIR/HIR.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Transforms/HIR/Passes.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/Pass/Pass.h"
 namespace mlir {

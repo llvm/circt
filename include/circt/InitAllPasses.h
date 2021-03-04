@@ -20,6 +20,7 @@
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Transforms/HIR/Passes.h"
 #include "circt/Transforms/Passes.h"
 
 namespace circt {
@@ -35,6 +36,7 @@ inline void registerAllPasses() {
   seq::registerSeqPasses();
   sv::registerPasses();
   circt::registerPasses();
+  mlir::hir::initHIRTransformationPasses();
 }
 
 } // namespace circt
