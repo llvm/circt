@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/RTL/RTLOps.h"
-#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/RTL/RTLVisitors.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"

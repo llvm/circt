@@ -6,7 +6,6 @@ add_circt_dialect_library(CIRCTComb
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/Comb
 
   DEPENDS
-  CIRCTRTL
   MLIRCombIncGen
   MLIRCombEnumsIncGen
   
@@ -14,7 +13,6 @@ add_circt_dialect_library(CIRCTComb
   Support
 
   LINK_LIBS PUBLIC
-  CIRCTRTL
   MLIRIR
    )
 
