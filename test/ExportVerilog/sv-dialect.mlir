@@ -321,11 +321,12 @@ rtl.module @issue595(%arr: !rtl.array<128xi1>) {
   // CHECK: assign _T = arr[7'h0+:64];
   %1 = rtl.array_slice %arr at %c0_i7 : (!rtl.array<128xi1>) -> !rtl.array<64xi1>
   %2 = rtl.array_slice %1 at %c0_i6 : (!rtl.array<64xi1>) -> !rtl.array<32xi1>
-  %3 = comb.bitcast %2 : (!rtl.array<32xi1>) -> i32
+  %3 = rtl.bitcast %2 : (!rtl.array<32xi1>) -> i32
   rtl.output
 }
 
 
+// CHECK-LABEL: module issue595_variant1
 rtl.module @issue595_variant1(%arr: !rtl.array<128xi1>) {
   // CHECK: wire [63:0] _T;
   %c0_i32 = rtl.constant 0 : i32
@@ -338,10 +339,11 @@ rtl.module @issue595_variant1(%arr: !rtl.array<128xi1>) {
   // CHECK: assign _T = arr[7'h0+:64];
   %1 = rtl.array_slice %arr at %c0_i7 : (!rtl.array<128xi1>) -> !rtl.array<64xi1>
   %2 = rtl.array_slice %1 at %c0_i6 : (!rtl.array<64xi1>) -> !rtl.array<32xi1>
-  %3 = comb.bitcast %2 : (!rtl.array<32xi1>) -> i32
+  %3 = rtl.bitcast %2 : (!rtl.array<32xi1>) -> i32
   rtl.output
 }
 
+// CHECK-LABEL: module issue595_variant2_checkRedunctionAnd
 rtl.module @issue595_variant2_checkRedunctionAnd(%arr: !rtl.array<128xi1>) {
   // CHECK: wire [63:0] _T;
   %c0_i32 = rtl.constant -1 : i32
@@ -354,6 +356,52 @@ rtl.module @issue595_variant2_checkRedunctionAnd(%arr: !rtl.array<128xi1>) {
   // CHECK: assign _T = arr[7'h0+:64];
   %1 = rtl.array_slice %arr at %c0_i7 : (!rtl.array<128xi1>) -> !rtl.array<64xi1>
   %2 = rtl.array_slice %1 at %c0_i6 : (!rtl.array<64xi1>) -> !rtl.array<32xi1>
-  %3 = comb.bitcast %2 : (!rtl.array<32xi1>) -> i32
+  %3 = rtl.bitcast %2 : (!rtl.array<32xi1>) -> i32
   rtl.output
 }
+
+// CHECK-LABEL: if_multi_line_expr1
+rtl.module @if_multi_line_expr1(%clock: i1, %reset: i1, %really_long_port: i11) {
+  %tmp6 = sv.reg  : !rtl.inout<i25>
+
+  // CHECK:      if (reset)
+  // CHECK-NEXT:   tmp6 <= 25'h0;
+  // CHECK-NEXT: else begin
+  // CHECK-NEXT:   automatic logic [24:0] _tmp = {{..}}14{really_long_port[10]}}, really_long_port};
+  // CHECK-NEXT:   tmp6 <= _tmp & 25'h3039;
+  // CHECK-NEXT: end
+  sv.alwaysff(posedge %clock)  {
+    %0 = comb.sext %really_long_port : (i11) -> i25
+  %c12345_i25 = rtl.constant 12345 : i25
+    %1 = comb.and %0, %c12345_i25 : i25
+    sv.passign %tmp6, %1 : i25
+  }(syncreset : posedge %reset)  {
+    %c0_i25 = rtl.constant 0 : i25
+    sv.passign %tmp6, %c0_i25 : i25
+  }
+  rtl.output
+}
+
+// CHECK-LABEL: if_multi_line_expr2
+rtl.module @if_multi_line_expr2(%clock: i1, %reset: i1, %really_long_port: i11) {
+  %tmp6 = sv.reg  : !rtl.inout<i25>
+
+  %c12345_i25 = rtl.constant 12345 : i25
+  %0 = comb.sext %really_long_port : (i11) -> i25
+  %1 = comb.and %0, %c12345_i25 : i25
+  // CHECK:        wire [24:0] _tmp = {{..}}14{really_long_port[10]}}, really_long_port};
+  // CHECK-NEXT:   wire [24:0] _T = _tmp & 25'h3039;
+
+  // CHECK:      if (reset)
+  // CHECK-NEXT:   tmp6 <= 25'h0;
+  // CHECK-NEXT: else
+  // CHECK-NEXT:   tmp6 <= _T;
+  sv.alwaysff(posedge %clock)  {
+    sv.passign %tmp6, %1 : i25
+  }(syncreset : posedge %reset)  {
+    %c0_i25 = rtl.constant 0 : i25
+    sv.passign %tmp6, %c0_i25 : i25
+  }
+  rtl.output
+}
+

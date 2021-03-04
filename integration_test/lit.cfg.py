@@ -90,6 +90,13 @@ if config.quartus_path != "":
   tools.append('quartus')
   config.available_features.add('quartus')
 
+# Enable Vivado if it has been detected.
+if config.quartus_path != "":
+  tool_dirs.append(os.path.dirname(config.vivado_path))
+  tools.append('vivado')
+  config.available_features.add('vivado')
+
+
 # Enable Questa if it has been detected.
 if config.questa_path != "":
   config.available_features.add('questa')

@@ -101,9 +101,9 @@ rtl.module @exprInlineTestIssue439(%clk: i1) {
 }
 
 rtl.module @casts(%in1: i64) -> (%r1: !rtl.array<5xi8>) {
-  %bits = comb.bitcast %in1 : (i64) -> !rtl.array<64xi1>
+  %bits = rtl.bitcast %in1 : (i64) -> !rtl.array<64xi1>
   %idx = rtl.constant 10 : i6
   %midBits = rtl.array_slice %bits at %idx : (!rtl.array<64xi1>) -> !rtl.array<40xi1>
-  %r1 = comb.bitcast %midBits : (!rtl.array<40xi1>) -> !rtl.array<5xi8>
+  %r1 = rtl.bitcast %midBits : (!rtl.array<40xi1>) -> !rtl.array<5xi8>
   rtl.output %r1 : !rtl.array<5xi8>
 }

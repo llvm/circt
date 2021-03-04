@@ -31,10 +31,11 @@ public:
                        // Array operations
                        ArraySliceOp, ArrayCreateOp, ArrayConcatOp, ArrayGetOp,
                        // Struct operations
-                       StructCreateOp, StructExtractOp, StructInjectOp>(
-            [&](auto expr) -> ResultType {
-              return thisCast->visitTypeOp(expr, args...);
-            })
+                       StructCreateOp, StructExtractOp, StructInjectOp,
+                       // Cast operation
+                       BitcastOp>([&](auto expr) -> ResultType {
+          return thisCast->visitTypeOp(expr, args...);
+        })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidTypeOp(op, args...);
         });
@@ -59,6 +60,7 @@ public:
   }
 
   HANDLE(ConstantOp, Unhandled);
+  HANDLE(BitcastOp, Unhandled);
   HANDLE(StructCreateOp, Unhandled);
   HANDLE(StructExtractOp, Unhandled);
   HANDLE(StructInjectOp, Unhandled);

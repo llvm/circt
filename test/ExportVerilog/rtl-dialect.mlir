@@ -411,8 +411,8 @@ rtl.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
 // CHECK-NEXT: output [31:0]     r2);
 rtl.module @casts(%in1: i7, %in2: !rtl.array<8xi4>) -> (%r1: !rtl.array<7xi1>, %r2: i32) {
   // CHECK-EMPTY:
-  %r1 = comb.bitcast %in1 : (i7) -> !rtl.array<7xi1>
-  %r2 = comb.bitcast %in2 : (!rtl.array<8xi4>) -> i32
+  %r1 = rtl.bitcast %in1 : (i7) -> !rtl.array<7xi1>
+  %r2 = rtl.bitcast %in2 : (!rtl.array<8xi4>) -> i32
 
   // CHECK-NEXT: wire [31:0] {{.+}} = /*cast(bit[31:0])*/in2;
   // CHECK-NEXT: assign r1 = in1;

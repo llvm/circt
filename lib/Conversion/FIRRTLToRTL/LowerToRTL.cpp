@@ -1322,9 +1322,18 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
   // firrtl.mem lowering leaves invalid SubfieldOps.  Ignore these invalid ops.
   if (!op.input())
     return success();
+
+  // Extracting a zero bit value from a struct is defined but doesn't do
+  // anything.
+  if (isZeroBitFIRRTLType(op->getResult(0).getType()))
+    return setLowering(op, Value());
+
+  auto resultType = lowerType(op->getResult(0).getType());
   Value value = getLoweredValue(op.input());
-  return setLoweringTo<rtl::StructExtractOp>(
-      op, lowerType(op->getResult(0).getType()), value, op.fieldname());
+  assert(resultType && value && "subfield type lowering failed");
+
+  return setLoweringTo<rtl::StructExtractOp>(op, resultType, value,
+                                             op.fieldname());
 }
 
 //===----------------------------------------------------------------------===//
