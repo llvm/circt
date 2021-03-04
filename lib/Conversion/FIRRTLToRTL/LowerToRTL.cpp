@@ -1592,40 +1592,34 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       // Add delays for non-zero read latency
       SmallVector<ReadPipeElement> readPipe;
       readPipe.push_back({portWires["en"], portWires["addr"]});
-      Value enReg, addrReg;
-      for (size_t j = 0; j < readLatency; ++j) {
-        if (j == 0) {
-          enReg = arrayReg("_en_pipe", i1Type, readLatency);
-          addrReg = arrayReg("_addr_pipe", lowerType(addrType), readLatency);
+      if (readLatency > 0) {
+        Value enReg = arrayReg("_en_pipe", i1Type, readLatency);
+        Value addrReg =
+            arrayReg("_addr_pipe", lowerType(addrType), readLatency);
+        for (size_t j = 0; j < readLatency; ++j) {
+          auto jIdx =
+              builder->create<rtl::ConstantOp>(APInt(log2(readLatency + 1), j));
+          auto enJ = builder->create<sv::ArrayIndexInOutOp>(enReg, jIdx);
+          auto addrJ = builder->create<sv::ArrayIndexInOutOp>(addrReg, jIdx);
+          readPipe.push_back({enJ, addrJ});
         }
-        auto jIdx =
-            builder->create<rtl::ConstantOp>(APInt(log2(readLatency + 1), j));
-        auto enJ = builder->create<sv::ArrayIndexInOutOp>(enReg, jIdx);
-        auto addrJ = builder->create<sv::ArrayIndexInOutOp>(addrReg, jIdx);
-        readPipe.push_back({enJ, addrJ});
+        for (size_t j = 1; j <= readLatency; ++j) {
+          auto lastEn = readInOut(readPipe[j - 1].en);
+          auto lastAddr = readInOut(readPipe[j - 1].addr);
+          addToAlwaysFFBlock(EventControl::AtPosEdge, clk, [&]() {
+            builder->create<sv::PAssignOp>(readPipe[j].en, lastEn);
+            builder->create<sv::PAssignOp>(readPipe[j].addr, lastAddr);
+          });
+        }
       }
-      if (readLatency != 0) {
-        addToAlwaysFFBlock(EventControl::AtPosEdge, clk, [&]() {
-          auto lastEn = readPipe[0].en;
-          auto lastAddr = readPipe[0].addr;
-          for (size_t j = 1; j < readLatency + 1; ++j) {
-            auto thisEn = readPipe[j].en;
-            auto thisAddr = readPipe[j].addr;
-
-            auto readLastEn = builder->create<sv::ReadInOutOp>(lastEn);
-            builder->create<sv::PAssignOp>(thisEn, readLastEn);
-            builder->create<sv::IfOp>(readLastEn, [&]() {
-              builder->create<sv::PAssignOp>(
-                  thisAddr, builder->create<sv::ReadInOutOp>(lastAddr));
-            });
-            lastEn = thisEn;
-            lastAddr = thisAddr;
-          }
-        });
-      }
-      Value addr = builder->create<sv::ReadInOutOp>(readPipe.back().addr);
-      Value value = builder->create<sv::ArrayIndexInOutOp>(reg, addr);
-      value = builder->create<sv::ReadInOutOp>(value);
+      Value addr = readInOut(readPipe.back().addr);
+      Value en = readInOut(readPipe.back().en);
+      Value value =
+          readInOut(builder->create<sv::ArrayIndexInOutOp>(reg, addr));
+      // FIRRTL 5.11.1 says undefined behavior on low enable.
+      auto undefinedVal =
+          builder->create<sv::TextualValueOp>(value.getType(), "`RANDOM");
+      value = builder->create<comb::MuxOp>(en, value, undefinedVal);
 
       // If we're masking, emit "addr < Depth ? mem[addr] : `RANDOM".
       if (!llvm::isPowerOf2_64(depth)) {
@@ -1656,7 +1650,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       writePipe.push_back({portWires["en"], portWires["addr"],
                            portWires["mask"], portWires["data"]});
 
-      // Construct wripe pipe registers for non-unary write latency
+      // Construct write pipe registers for non-unary write latency
       WritePipeElement wReg;
       for (size_t j = 0; j < writeLatency - 1; ++j) {
         if (j == 0) {
@@ -1695,16 +1689,15 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
       // Attach the write port
       auto last = writePipe.back();
+      auto enable = builder->create<sv::ReadInOutOp>(last.en);
+      auto cond = builder->create<comb::AndOp>(
+          enable, builder->create<sv::ReadInOutOp>(last.mask));
+      auto slot = builder->create<sv::ArrayIndexInOutOp>(
+          reg, builder->create<sv::ReadInOutOp>(last.addr));
+      auto lastdata = builder->create<sv::ReadInOutOp>(last.data);
       addToAlwaysFFBlock(EventControl::AtPosEdge, clk, [&]() {
-        auto enable = builder->create<sv::ReadInOutOp>(last.en);
-        auto cond = builder->create<comb::AndOp>(
-            enable, builder->create<sv::ReadInOutOp>(last.mask));
-        builder->create<sv::IfOp>(cond, [&]() {
-          auto slot = builder->create<sv::ArrayIndexInOutOp>(
-              reg, builder->create<sv::ReadInOutOp>(last.addr));
-          builder->create<sv::PAssignOp>(
-              slot, builder->create<sv::ReadInOutOp>(last.data));
-        });
+        builder->create<sv::IfOp>(
+            cond, [&]() { builder->create<sv::PAssignOp>(slot, lastdata); });
       });
     }
       continue;

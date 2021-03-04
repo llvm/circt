@@ -625,16 +625,19 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-DAG: %_M_read_clk = sv.wire : !rtl.inout<i1>
     // CHECK-DAG: %_M_read_data = sv.wire : !rtl.inout<i42>
     // CHECK:      %[[addr:.+]] = sv.read_inout %_M_read_addr
+    // CHECK-NEXT: %[[en:.+]] = sv.read_inout %_M_read_en
     // CHECK-NEXT: %[[data_inout:.+]] = sv.array_index_inout %_M[%[[addr]]]
     // CHECK-NEXT: %[[data:.+]] = sv.read_inout %[[data_inout]]
+    // CHECK-NEXT: %[[rnd:.+]] = sv.textual_value "`RANDOM"
+    // CHECK-NEXT: %[[realdata:.+]] = comb.mux %[[en]], %[[data]], %[[rnd]]
     // CHECK-NEXT: sv.ifdef "RANDOMIZE_GARBAGE_ASSIGN"  {
     // CHECK-NEXT:   %c-4_i4 = rtl.constant -4 : i4
     // CHECK-NEXT:   %[[cond:.+]] = comb.icmp ult %[[addr]], %c-4_i4 : i4
     // CHECK-NEXT:   %[[random:.+]] = sv.textual_value "`RANDOM" : i42
-    // CHECK-NEXT:   %[[dataOrRandom:.+]] = comb.mux %[[cond]], %[[data]], %[[random]] : i42
+    // CHECK-NEXT:   %[[dataOrRandom:.+]] = comb.mux %[[cond]], %[[realdata]], %[[random]] : i42
     // CHECK-NEXT:   sv.connect %_M_read_data, %[[dataOrRandom]] : i42
     // CHECK-NEXT: } else  {
-    // CHECK-NEXT:   sv.connect %_M_read_data, %[[data]] : i42
+    // CHECK-NEXT:   sv.connect %_M_read_data, %[[realdata]] : i42
     // CHECK-NEXT: }
 
     // COM: Write port.
@@ -646,14 +649,14 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-DAG: %_M_write_mask = sv.wire : !rtl.inout<i1>
 
     // CHECK:      %[[clk:.+]] = sv.read_inout %_M_write_clk
+    // CHECK-DAG:  %[[en:.+]] = sv.read_inout %_M_write_en : !rtl.inout<i1>
+    // CHECK-DAG:  %[[mask:.+]] = sv.read_inout %_M_write_mask : !rtl.inout<i1>
+    // CHECK:      %[[cond:.+]] = comb.and %[[en]], %[[mask]] : i1
+    // CHECK:      %[[addr:.+]] = sv.read_inout %_M_write_addr : !rtl.inout<i4>
+    // CHECK-DAG:  %[[mem:.+]] = sv.array_index_inout %_M[%[[addr]]] : !rtl.inout<uarray<12xi42>>, i4
+    // CHECK-DAG:  %[[data:.+]] = sv.read_inout %_M_write_data
     // CHECK:      sv.alwaysff(posedge %[[clk]]) {
-    // CHECK-DAG:    %[[en:.+]] = sv.read_inout %_M_write_en : !rtl.inout<i1>
-    // CHECK-DAG:    %[[mask:.+]] = sv.read_inout %_M_write_mask : !rtl.inout<i1>
-    // CHECK:        %[[cond:.+]] = comb.and %[[en]], %[[mask]] : i1
     // CHECK-NEXT:   sv.if %[[cond]]  {
-    // CHECK:          %[[addr:.+]] = sv.read_inout %_M_write_addr : !rtl.inout<i4>
-    // CHECK-DAG:      %[[mem:.+]] = sv.array_index_inout %_M[%[[addr]]] : !rtl.inout<uarray<12xi42>>, i4
-    // CHECK-DAG:      %[[data:.+]] = sv.read_inout %_M_write_data
     // CHECK:          sv.passign %[[mem]], %[[data]] : i42
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
@@ -740,28 +743,28 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-DAG: %memory_r_en_pipe   = sv.reg : !rtl.inout<uarray<2xi1>>
     // CHECK-DAG: %memory_r_addr_pipe = sv.reg : !rtl.inout<uarray<2xi4>>
     // CHECK:     %[[zero:.+]] = rtl.constant false
-    // CHECK-DAG: %[[en_0:.+]] = sv.array_index_inout %memory_r_en_pipe[%[[zero]]]
-    // CHECK-DAG: %[[addr_0:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[zero]]]
-    // CHECK:     %[[one:.+]] = rtl.constant true
-    // CHECK-DAG: %[[en_1:.+]] = sv.array_index_inout %memory_r_en_pipe[%[[one]]]
-    // CHECK-DAG: %[[addr_1:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[one]]]
-    // CHECK:     sv.alwaysff(posedge %[[clk]]) {
-    // CHECK:       %[[en:.+]] = sv.read_inout %memory_r_en
-    // CHECK:       sv.passign %[[en_0]], %[[en]]
-    // CHECK:       sv.if %[[en]] {
-    // CHECK:         %[[addr:.+]] = sv.read_inout %memory_r_addr
-    // CHECK:         sv.passign %[[addr_0]], %[[addr]]
-    // CHECK:       }
-    // CHECK:       %[[en:.+]] = sv.read_inout %[[en_0]]
-    // CHECK:       sv.if %[[en]] {
-    // CHECK:         %[[addr:.+]] = sv.read_inout %[[addr_0]]
-    // CHECK:         sv.passign %[[addr_1]], %[[addr]]
-    // CHECK:       }
-    // CHECK:     }
-    // CHECK:     %[[addr:.+]] = sv.read_inout %[[addr_1]]
-    // CHECK:     %[[data_index:.+]] = sv.array_index_inout %memory[%[[addr]]]
-    // CHECK:     %[[data:.+]] = sv.read_inout %[[data_index]]
-    // CHECK:     sv.connect %memory_r_data, %[[data]]
+    // CHECK-NEXT: %[[en_0:.+]] = sv.array_index_inout %memory_r_en_pipe[%[[zero]]]
+    // CHECK-NEXT: %[[addr_0:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[zero]]]
+    // CHECK-NEXT: %[[one:.+]] = rtl.constant true
+    // CHECK-NEXT: %[[en_1:.+]] = sv.array_index_inout %memory_r_en_pipe[%[[one]]]
+    // CHECK-NEXT: %[[addr_1:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[one]]]
+    // CHECK-NEXT: %[[en_ld:.+]] = sv.read_inout %memory_r_en
+    // CHECK-NEXT: %[[addr_ld:.+]] = sv.read_inout %memory_r_addr
+    // CHECK-NEXT:     sv.alwaysff(posedge %[[clk]]) {
+    // CHECK-NEXT:       sv.passign %[[en_0]], %[[en_ld]]
+    // CHECK-NEXT:       sv.passign %[[addr_0]], %[[addr_ld]]
+    // CHECK-NEXT:       sv.passign %[[en_1]], %[[en_0ld:.+]] :
+    // CHECK-NEXT:       sv.passign %[[addr_1]], %[[addr_0ld:.+]] :
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     %[[en_0ld]] = sv.read_inout %[[en_0]]
+    // CHECK-NEXT:     %[[addr_0ld]] = sv.read_inout %[[addr_0]]
+    // CHECK-NEXT:     %[[addr_1ld:.+]] = sv.read_inout %[[addr_1]]
+    // CHECK-NEXT:     %[[en_1ld:.+]] = sv.read_inout %[[en_1]]
+    // CHECK-NEXT:     %[[data_index:.+]] = sv.array_index_inout %memory[%[[addr_1ld]]]
+    // CHECK-NEXT:     %[[datareal:.+]] = sv.read_inout %[[data_index]]
+    // CHECK-NEXT:     %[[datarnd:.+]] = sv.textual_value "`RANDOM"
+    // CHECK-NEXT:     %[[rddata:.+]] = comb.mux %[[en_1ld]], %[[datareal]], %[[datarnd]]
+    // CHECK-NEXT:     sv.connect %memory_r_data, %[[rddata]]
     // COM: --------------------------------------------------------------------
     // CHECK-DAG: %memory_w_addr = sv.wire  : !rtl.inout<i4>
     // CHECK-DAG: %memory_w_en   = sv.wire  : !rtl.inout<i1>
@@ -793,16 +796,15 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK:         %[[data:.+]] = sv.read_inout %memory_w_data
     // CHECK:         sv.passign %[[data_0]], %[[data]]
     // CHECK:       }
-    // CHECK:       %[[en:.+]] = sv.read_inout %[[en_0]]
-    // CHECK:       %[[mask:.+]] = sv.read_inout %[[mask_0]]
-    // CHECK:       %[[cond:.+]] = comb.and %[[en]], %[[mask]]
-    // CHECK:       sv.if %[[cond]] {
-    // CHECK:         %[[addr:.+]] = sv.read_inout %[[addr_0]]
-    // CHECK:         %[[memory_index:.+]] = sv.array_index_inout %memory[%[[addr]]]
-    // CHECK:         %[[data:.+]] = sv.read_inout %[[data_0]]
-    // CHECK:         sv.passign %[[memory_index]], %[[data]]
+    // CHECK:       sv.if %[[cond:.+]] {
+    // CHECK:         sv.passign %[[memory_index:.+]], %[[datarw:.+]] :
     // CHECK:       }
-    // CHECK:     }
+    // CHECK:     %[[en:.+]] = sv.read_inout %[[en_0]]
+    // CHECK:     %[[mask:.+]] = sv.read_inout %[[mask_0]]
+    // CHECK:     %[[cond]] = comb.and %[[en]], %[[mask]]
+    // CHECK:     %[[addr:.+]] = sv.read_inout %[[addr_0]]
+    // CHECK:     %[[memory_index]] = sv.array_index_inout %memory[%[[addr]]]
+    // CHECK:     %[[datarw]] = sv.read_inout %[[data_0]]
     // COM: --------------------------------------------------------------------
     // COM: Check that the pipeline registers are randomly initialized.
     // COM: --------------------------------------------------------------------
