@@ -109,6 +109,7 @@ struct FIRRTLTypesLowering : public LowerFIRRTLTypesBase<FIRRTLTypesLowering>,
   void visitExpr(InvalidValuePrimOp op);
   void visitExpr(SubfieldOp op);
   void visitExpr(SubindexOp op);
+  void visitExpr(SubaccessOp op);
   void visitStmt(ConnectOp op);
 
 private:
@@ -555,6 +556,44 @@ void FIRRTLTypesLowering::visitExpr(SubfieldOp op) {
 //
 // TODO: Unify this and SubfieldOp handling.
 void FIRRTLTypesLowering::visitExpr(SubindexOp op) {
+  Value input = op.input();
+  std::string fieldname = std::to_string(op.index());
+  FIRRTLType resultType = op.getType();
+
+  // Flatten any nested bundle types the usual way.
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+  flattenType(resultType, fieldname, false, fieldTypes);
+
+  for (auto field : fieldTypes) {
+    // Look up the mapping for this suffix.
+    auto newValue = getBundleLowering(input, field.suffix);
+
+    // The prefix is the field name and possibly field separator.
+    auto prefixSize = fieldname.size();
+    if (field.suffix.size() > fieldname.size())
+      prefixSize += 1;
+
+    // Get the remaining field suffix by removing the prefix.
+    auto partialSuffix = StringRef(field.suffix).drop_front(prefixSize);
+
+    // If we are at the leaf of a bundle.
+    if (partialSuffix.empty())
+      // Replace the result with the flattened value.
+      op.replaceAllUsesWith(newValue);
+    else
+      // Map the partial suffix for the result value to the flattened value.
+      setBundleLowering(op, partialSuffix, newValue);
+  }
+
+  // Remember to remove the original op.
+  opsToRemove.push_back(op);
+}
+
+// This is currently the same lowering as SubfieldOp, but using a fieldname
+// derived from the fixed index.
+//
+// TODO: Unify this and SubfieldOp handling.
+void FIRRTLTypesLowering::visitExpr(SubaccessOp op) {
   Value input = op.input();
   std::string fieldname = std::to_string(op.index());
   FIRRTLType resultType = op.getType();
