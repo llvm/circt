@@ -628,7 +628,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: %[[en:.+]] = sv.read_inout %_M_read_en
     // CHECK-NEXT: %[[data_inout:.+]] = sv.array_index_inout %_M[%[[addr]]]
     // CHECK-NEXT: %[[data:.+]] = sv.read_inout %[[data_inout]]
-    // CHECK-NEXT: %[[rnd:.+]] = sv.textual_value "`RANDOM"
+    // CHECK-NEXT: %[[rnd:.+]] = sv.textual_value "'x"
     // CHECK-NEXT: %[[realdata:.+]] = comb.mux %[[en]], %[[data]], %[[rnd]]
     // CHECK-NEXT: sv.ifdef "RANDOMIZE_GARBAGE_ASSIGN"  {
     // CHECK-NEXT:   %c-4_i4 = rtl.constant -4 : i4
@@ -762,7 +762,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:     %[[en_1ld:.+]] = sv.read_inout %[[en_1]]
     // CHECK-NEXT:     %[[data_index:.+]] = sv.array_index_inout %memory[%[[addr_1ld]]]
     // CHECK-NEXT:     %[[datareal:.+]] = sv.read_inout %[[data_index]]
-    // CHECK-NEXT:     %[[datarnd:.+]] = sv.textual_value "`RANDOM"
+    // CHECK-NEXT:     %[[datarnd:.+]] = sv.textual_value "'x"
     // CHECK-NEXT:     %[[rddata:.+]] = comb.mux %[[en_1ld]], %[[datareal]], %[[datarnd]]
     // CHECK-NEXT:     sv.connect %memory_r_data, %[[rddata]]
     // COM: --------------------------------------------------------------------
