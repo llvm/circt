@@ -1356,6 +1356,7 @@ void StmtEmitter::emitExpression(Value exp,
   // Emit each stmt expression in turn.
   for (auto *expr : tooLargeSubExpressions) {
     statementBeginningIndex = outBuffer.size();
+    ++numStatementsEmitted;
     emitStatementExpression(expr);
   }
 
