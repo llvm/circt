@@ -6,6 +6,7 @@
 // PY: rpc = basic.BasicSystemTester(rpcschemapath, simhostport)
 // PY: rpc.testIntAcc(25)
 // PY: rpc.testVectorSum(25)
+// PY: rpc.testStruct(25)
 
 rtl.module.extern @IntAccNoBP(%clk: i1, %rstn: i1, %ints: !esi.channel<i32>) -> (%totalOut: !esi.channel<i32>)
 rtl.module.extern @IntArrSum(%clk: i1, %rstn: i1, %arr: !esi.channel<!rtl.array<4 x si13>>) -> (%totalOut: !esi.channel<!rtl.array<2 x ui24>>)

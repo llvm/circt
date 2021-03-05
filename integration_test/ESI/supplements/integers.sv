@@ -94,7 +94,7 @@ module Compressor (
   input clk,
   input rstn,
   IValidReady_i1.source in,
-  IValidReady___rtl_struct_encrypted__i1__compressionLevel__ui4__blob___rtl_array_32xi8.sink x
+  IValidReady_Struct.sink x
 );
 
   assign x.valid = in.valid;

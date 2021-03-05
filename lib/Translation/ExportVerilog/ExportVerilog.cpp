@@ -2127,6 +2127,9 @@ static bool isExpressionUnableToInline(Operation *op) {
   if (isa<StructCreateOp>(op))
     return true;
 
+  if (isa<ReadInterfaceSignalOp>(op))
+    return true;
+
   auto *opBlock = op->getBlock();
 
   // Scan the users of the operation to see if any of them need this to be
