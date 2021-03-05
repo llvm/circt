@@ -124,9 +124,10 @@ StringAttr ESIRTLBuilder::constructInterfaceName(ChannelPort port) {
   std::string portTypeName;
   llvm::raw_string_ostream nameOS(portTypeName);
   TypeSwitch<Type>(port.getInner())
-      .Case([&](ArrayType arr) {
+      .Case([&](rtl::ArrayType arr) {
         nameOS << "ArrayOf" << arr.getSize() << 'x' << arr.getElementType();
       })
+      .Case([&](rtl::StructType t) { nameOS << "Struct"; })
       .Default([&](Type t) { nameOS << port.getInner(); });
 
   // Normalize the type name.

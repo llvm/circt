@@ -174,6 +174,22 @@ static size_t bits(::capnp::schema::Type::Reader type) {
   return 1 << (enc + 1);
 }
 
+/// Return true if 'type' is capnp pointer.
+static bool isPointerType(::capnp::schema::Type::Reader type) {
+  using ty = ::capnp::schema::Type;
+  switch (type.which()) {
+  case ty::ANY_POINTER:
+  case ty::DATA:
+  case ty::INTERFACE:
+  case ty::LIST:
+  case ty::STRUCT:
+  case ty::TEXT:
+    return true;
+  default:
+    return false;
+  }
+}
+
 TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
   TypeSwitch<Type>(type)
       .Case([this](IntegerType t) {
@@ -182,7 +198,7 @@ TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
       .Case([this](rtl::ArrayType t) {
         fieldTypes.push_back(FieldInfo{.name = "l", .type = t});
       })
-      .Case([this](esi::StructType t) {
+      .Case([this](rtl::StructType t) {
         fieldTypes.append(t.getElements().begin(), t.getElements().end());
       })
       .Default([](Type) {});
@@ -262,7 +278,7 @@ static bool isSupported(Type type, bool outer = false) {
   return llvm::TypeSwitch<::mlir::Type, bool>(type)
       .Case([](IntegerType t) { return t.getWidth() <= 64; })
       .Case([](rtl::ArrayType t) { return isSupported(t.getElementType()); })
-      .Case([outer](esi::StructType t) {
+      .Case([outer](rtl::StructType t) {
         // We don't yet support structs containing structs.
         if (!outer)
           return false;
@@ -322,7 +338,7 @@ size_t TypeSchemaImpl::size() const {
 }
 
 /// Write a valid Capnp name for 'type'.
-static void emitName(Type type, llvm::raw_ostream &os) {
+static void emitName(Type type, uint64_t id, llvm::raw_ostream &os) {
   llvm::TypeSwitch<Type>(type)
       .Case([&os](IntegerType intTy) {
         std::string intName;
@@ -333,9 +349,9 @@ static void emitName(Type type, llvm::raw_ostream &os) {
       })
       .Case([&os](rtl::ArrayType arrTy) {
         os << "ArrayOf" << arrTy.getSize() << 'x';
-        emitName(arrTy.getElementType(), os);
+        emitName(arrTy.getElementType(), 0, os);
       })
-      .Case([&os](esi::StructType t) { os << t.getName(); })
+      .Case([&os, id](rtl::StructType t) { os << "Struct" << id; })
       .Default([](Type) {
         assert(false && "Type not supported. Please check support first with "
                         "isSupported()");
@@ -347,7 +363,7 @@ static void emitName(Type type, llvm::raw_ostream &os) {
 StringRef TypeSchemaImpl::name() const {
   if (cachedName == "") {
     llvm::raw_string_ostream os(cachedName);
-    emitName(type, os);
+    emitName(type, capnpTypeID(), os);
     cachedName = os.str();
   }
   return cachedName;
@@ -387,7 +403,7 @@ static void emitCapnpType(Type type, IndentingOStream &os) {
         emitCapnpType(arrTy.getElementType(), os);
         os << ')';
       })
-      .Case([&os](rtl::StructType structTy) {
+      .Case([](rtl::StructType structTy) {
         assert(false && "Struct containing structs not supported");
       })
       .Default([](Type) {
@@ -749,19 +765,24 @@ namespace {
 class CapnpSegmentBuilder : public GasketBuilder {
 public:
   CapnpSegmentBuilder(OpBuilder &b, Location loc, uint64_t expectedSize)
-      : GasketBuilder(b, loc), segmentValues(allocator),
+      : GasketBuilder(b, loc), segmentValues(allocator), messageSize(0),
         expectedSize(expectedSize) {}
   CapnpSegmentBuilder(const CapnpSegmentBuilder &) = delete;
+  ~CapnpSegmentBuilder() {}
 
+  GasketComponent build(::capnp::schema::Node::Struct::Reader cStruct,
+                        ArrayRef<GasketComponent> mFieldValues);
+
+private:
   /// Allocate and build a struct. Return the address of the data section as an
   /// offset into the 'memory' map.
-  uint64_t createStruct(::capnp::schema::Node::Struct::Reader cStruct,
-                        ArrayRef<GasketComponent> mFieldValues);
+  GasketComponent encodeStructAt(uint64_t ptrLoc,
+                                 ::capnp::schema::Node::Struct::Reader cStruct,
+                                 ArrayRef<GasketComponent> mFieldValues);
   /// Build a value from the 'memory' map. Concatenates all the values in the
   /// 'memory' map, filling in the blank addresses with padding.
   GasketComponent compile() const;
 
-private:
   /// Encode 'val' and place the value at the specified 'memory' offset.
   void encodeFieldAt(uint64_t offset, GasketComponent val,
                      ::capnp::schema::Type::Reader type);
@@ -772,7 +793,7 @@ private:
   void insert(uint64_t offset, GasketComponent val) {
     uint64_t valSize = val.size();
     assert(!segmentValues.overlaps(offset, offset + valSize - 1));
-    assert(offset + valSize < expectedSize &&
+    assert(offset + valSize - 1 < expectedSize &&
            "Tried to insert above the max expected size of the message.");
     segmentValues.insert(offset, offset + valSize - 1, val);
   }
@@ -782,8 +803,16 @@ private:
   /// manage 'memory allocations' (figuring out where to place pointed to
   /// objects) separately from the data contained in those values, some of which
   /// are pointers themselves.
-  llvm::IntervalMap<uint64_t, GasketComponent, 16> segmentValues;
   llvm::IntervalMap<uint64_t, GasketComponent, 16>::Allocator allocator;
+  llvm::IntervalMap<uint64_t, GasketComponent, 16> segmentValues;
+
+  /// Track the allocated message size. Increase to 'alloc' more.
+  uint64_t messageSize;
+  uint64_t alloc(size_t bits) {
+    uint64_t ptr = messageSize;
+    messageSize += bits;
+    return ptr;
+  }
 
   /// The expected maximum size of the message.
   uint64_t expectedSize;
@@ -807,12 +836,11 @@ void CapnpSegmentBuilder::encodeFieldAt(uint64_t offset, GasketComponent val,
 
 uint64_t CapnpSegmentBuilder::buildList(Slice val,
                                         ::capnp::schema::Type::Reader type) {
-  // TODO: we need proper allocation for this once we support more than one
-  // type.
-  uint64_t listOffset = 128;
   rtl::ArrayType arrTy = val.getValue().getType().cast<rtl::ArrayType>();
   auto elemType = type.getList().getElementType();
   size_t elemWidth = bits(elemType);
+  uint64_t listOffset = alloc(elemWidth * arrTy.getSize());
+
   for (size_t i = 0, e = arrTy.getSize(); i < e; ++i) {
     size_t elemNum = e - i - 1;
     encodeFieldAt(listOffset + (elemNum * elemWidth), val[i], elemType);
@@ -820,33 +848,39 @@ uint64_t CapnpSegmentBuilder::buildList(Slice val,
   return listOffset;
 }
 
-uint64_t
-CapnpSegmentBuilder::createStruct(::capnp::schema::Node::Struct::Reader cStruct,
-                                  ArrayRef<GasketComponent> mFieldValues) {
+GasketComponent CapnpSegmentBuilder::encodeStructAt(
+    uint64_t ptrLoc, ::capnp::schema::Node::Struct::Reader cStruct,
+    ArrayRef<GasketComponent> mFieldValues) {
 
-  // TODO: change this to the actual offset when we do struct support. We don't
-  // need allocation before then.
-  uint64_t structPointerOffset = 0;
-
+  assert(ptrLoc % 64 == 0);
+  size_t structSize =
+      (cStruct.getDataWordCount() + cStruct.getPointerCount()) * 64;
+  uint64_t structDataSectionOffset = alloc(structSize);
+  uint64_t structPointerSectionOffset =
+      structDataSectionOffset + (cStruct.getDataWordCount() * 64);
+  assert(structDataSectionOffset % 64 == 0);
+  int64_t relativeStructDataOffsetWords =
+      ((structDataSectionOffset - ptrLoc) / 64) -
+      /*offset from end of pointer.*/ 1;
   GasketComponent structPtr = {constant(2, 0),
-                               constant(30, structPointerOffset),
+                               constant(30, relativeStructDataOffsetWords),
                                constant(16, cStruct.getDataWordCount()),
                                constant(16, cStruct.getPointerCount())};
-  insert(structPointerOffset, structPtr);
 
-  uint64_t dataSectionOffset = 64;
   // Loop through data fields.
   for (auto field : cStruct.getFields()) {
     uint16_t idx = field.getCodeOrder();
     assert(idx < mFieldValues.size() &&
            "Capnp struct longer than fieldValues.");
+    auto cFieldType = field.getSlot().getType();
     uint64_t fieldOffset =
-        dataSectionOffset +
-        field.getSlot().getOffset() * bits(field.getSlot().getType());
-    encodeFieldAt(fieldOffset, mFieldValues[idx], field.getSlot().getType());
+        (isPointerType(cFieldType) ? structPointerSectionOffset
+                                   : structDataSectionOffset) +
+        field.getSlot().getOffset() * bits(cFieldType);
+    encodeFieldAt(fieldOffset, mFieldValues[idx], cFieldType);
   }
 
-  return structPointerOffset;
+  return structPtr;
 }
 
 GasketComponent CapnpSegmentBuilder::compile() const {
@@ -872,6 +906,16 @@ GasketComponent CapnpSegmentBuilder::compile() const {
   return GasketComponent::concat(segmentValuesPlusPadding);
 }
 
+GasketComponent
+CapnpSegmentBuilder::build(::capnp::schema::Node::Struct::Reader cStruct,
+                           ArrayRef<GasketComponent> mFieldValues) {
+  uint64_t rootPtrLoc = alloc(64);
+  assert(rootPtrLoc == 0);
+  auto rootPtr = encodeStructAt(rootPtrLoc, cStruct, mFieldValues);
+  insert(rootPtrLoc, rootPtr);
+  return compile();
+}
+
 /// Build an RTL/SV dialect capnp encoder for this type. Inputs need to be
 /// packed on unpadded.
 Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
@@ -885,13 +929,14 @@ Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
   SmallVector<GasketComponent, 16> fieldValues;
   assert(operand.getValue().getType() == type);
   if (auto structTy = type.dyn_cast<rtl::StructType>()) {
-    assert(false && "Struct support is coming soon");
+    for (auto field : structTy.getElements()) {
+      fieldValues.push_back(GasketComponent(
+          b, b.create<rtl::StructExtractOp>(loc, operand, field)));
+    }
   } else {
     fieldValues.push_back(GasketComponent(b, operand));
   }
-
-  seg.createStruct(st, fieldValues);
-  return seg.compile();
+  return seg.build(st, fieldValues);
 }
 
 //===----------------------------------------------------------------------===//

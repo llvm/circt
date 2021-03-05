@@ -170,6 +170,10 @@ def StructExtractOp : RTLOp<"struct_extract", [NoSideEffect]> {
 
   let parser = "return ::parse$cppClass(parser, result);";
   let printer = "return ::print(p, *this);";
+
+  let builders = [
+    OpBuilderDAG<(ins "Value":$input, "StructType::FieldInfo":$field)>
+  ];
 }
 
 // Extract a range of bits from the specified input.

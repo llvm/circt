@@ -883,6 +883,12 @@ static void print(OpAsmPrinter &printer, rtl::StructExtractOp op) {
   printer << " : " << op.input().getType();
 }
 
+void StructExtractOp::build(::mlir::OpBuilder &odsBuilder,
+                            ::mlir::OperationState &odsState, Value input,
+                            StructType::FieldInfo field) {
+  build(odsBuilder, odsState, field.type, input, field.name);
+}
+
 //===----------------------------------------------------------------------===//
 // StructInjectOp
 //===----------------------------------------------------------------------===//
