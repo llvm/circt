@@ -722,6 +722,8 @@ private:
   SubExprInfo visitSV(GetModportOp op);
   SubExprInfo visitSV(ReadInterfaceSignalOp op);
   SubExprInfo visitSV(TextualValueOp op);
+  SubExprInfo visitSV(ConstantXOp op);
+  SubExprInfo visitSV(ConstantZOp op);
 
   // Noop cast operators.
   SubExprInfo visitSV(ReadInOutOp op) {
@@ -1101,6 +1103,16 @@ SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
 
 SubExprInfo ExprEmitter::visitSV(TextualValueOp op) {
   os << op.string();
+  return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitSV(ConstantXOp op) {
+  os << op.getType().getWidth() << "'bx";
+  return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitSV(ConstantZOp op) {
+  os << op.getType().getWidth() << "'bz";
   return {Unary, IsUnsigned};
 }
 
