@@ -99,7 +99,7 @@ module Compressor (
 
   assign x.valid = in.valid;
   assign in.ready = x.ready;
-  assign x.data.encrypted = ~x.data.encrypted;
+  assign x.data.encrypted = ~in.data.encrypted;
   assign x.data.compressionLevel = 0;
 
   logic [255:0] otp;
