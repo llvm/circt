@@ -413,44 +413,32 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
   return sstr.str();
 }
 
-/// Given string \p name, generate and return a new name if it conflicts with
-/// any keyword or any other name in the set \p recordNames. Use the int \p
-/// nextGeneratedNameID as a counter for suffix.
-std::string resolveKeywordConflict(const StringRef &origName,
-                                   const llvm::StringSet<> &recordNames,
+/// Given string \p origName, generate a new name if it conflicts with any keyword or any other name in the set \p recordNames. Use the int \p nextGeneratedNameID as a counter for suffix. Update the \p recordNames with the generated name and return an iterator corresponding to the new entry.
+llvm::StringMapIterator<llvm::NoneType>  resolveKeywordConflict(StringRef origName,
+                                   llvm::StringSet<> &recordNames,
                                    size_t &nextGeneratedNameID) {
   auto name = origName;
   // Get the list of reserved words we need to avoid.  We could prepopulate this
   // into the used words cache, but it is large and immutable, so we just query
   // it when needed.
   auto &reservedWords = getReservedWords();
-
-  // Check to see if this name is available - if so, use it.
-  if (!reservedWords.count(name))
-    if (recordNames.find(name) == recordNames.end()) {
-      return name.str();
-    }
-
-  // If not, we need to auto-unique it.
   SmallVector<char, 16> nameBuffer(name.begin(), name.end());
   nameBuffer.push_back('_');
   auto baseSize = nameBuffer.size();
 
-  // Try until we find something that works.
-  while (1) {
+  // Loop until we get a name that is not a keyword and is unique.
+  while (reservedWords.count(name) || recordNames.count(name) ) {
+
+    // If not, we need to auto-unique it.
     auto suffix = llvm::utostr(nextGeneratedNameID++);
     nameBuffer.append(suffix.begin(), suffix.end());
     name = StringRef(nameBuffer.data(), nameBuffer.size());
 
-    if (!reservedWords.count(name))
-      if (recordNames.find(name) == recordNames.end())
-        return name.str();
-
-    // Chop off the suffix and try again.
+    // Chop off the suffix and try again until we get a unique name..
     nameBuffer.resize(baseSize);
   }
-  // Control never reaches this return.
-  return name.str();
+  auto insertIt = recordNames.insert(name);
+  return insertIt.first;
 }
 
 //===----------------------------------------------------------------------===//
@@ -557,15 +545,14 @@ public:
     assert(entry && "value expected a name but doesn't have one");
     return entry->getKey();
   }
+
+  /// Given a module name \p moduleName, return the updated name if it has been previously renamed in the table moduleNameTable, else call resolveKeywordConflict, to get a new name in case of conflict with keywords.
   StringRef getModuleName(StringRef moduleName) {
-    auto entryIter = moduleNameTable.find(moduleName);
-    if (entryIter != moduleNameTable.end())
-      return entryIter->getSecond()->getKey();
-    auto updatedName = resolveKeywordConflict(moduleName, usedModuleNames,
-                                              nextGeneratedNameID);
-    auto iter = usedModuleNames.insert(updatedName);
-    moduleNameTable[moduleName] = &*iter.first;
-    return iter.first->getKey();
+    if (!moduleNameTable.count(moduleName)) {
+      moduleNameTable[moduleName] = &*resolveKeywordConflict(moduleName, usedModuleNames,
+          nextGeneratedNameID);
+    } 
+    return moduleNameTable[moduleName]->getKey();
   }
 
 public:
@@ -645,12 +632,10 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
     }
     return addName(valueOrOp, tmpName);
   }
-  name =
-      StringRef(resolveKeywordConflict(name, usedNames, nextGeneratedNameID));
-  auto iter = usedNames.insert(name);
+  auto iter = resolveKeywordConflict(name, usedNames, nextGeneratedNameID);
   if (valueOrOp)
-    nameTable[valueOrOp] = &*iter.first;
-  return iter.first->getKey();
+    nameTable[valueOrOp] = &*iter;
+  return iter->getKey();
 }
 
 //===----------------------------------------------------------------------===//
