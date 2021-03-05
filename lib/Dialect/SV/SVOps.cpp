@@ -166,6 +166,31 @@ void IfDefOp::build(OpBuilder &odsBuilder, OperationState &result,
   }
 }
 
+static bool isEmptyBlockExceptForTerminator(Block *block) {
+  assert(block && "Blcok must be non-null");
+  return block->empty() || block->front().hasTrait<OpTrait::IsTerminator>();
+}
+
+void IfDefOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                          MLIRContext *context) {
+  // If both thenRegion and elseRegion are empty, erase op.
+  struct EraseEmptyOp final : public OpRewritePattern<IfDefOp> {
+    using OpRewritePattern::OpRewritePattern;
+    LogicalResult matchAndRewrite(IfDefOp op,
+                                  PatternRewriter &rewriter) const override {
+      if (!isEmptyBlockExceptForTerminator(op.getThenBlock()))
+        return failure();
+
+      if (op.hasElse() && !isEmptyBlockExceptForTerminator(op.getElseBlock()))
+        return failure();
+
+      rewriter.eraseOp(op);
+      return success();
+    }
+  };
+  results.insert<EraseEmptyOp>(context);
+}
+
 //===----------------------------------------------------------------------===//
 // IfDefProceduralOp
 
@@ -236,7 +261,24 @@ void IfOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       return success();
     }
   };
+
+  struct EraseEmptyOp final : public OpRewritePattern<IfOp> {
+    using OpRewritePattern::OpRewritePattern;
+    LogicalResult matchAndRewrite(IfOp op,
+                                  PatternRewriter &rewriter) const override {
+      if (!isEmptyBlockExceptForTerminator(op.getThenBlock()))
+        return failure();
+
+      if (op.hasElse() && !isEmptyBlockExceptForTerminator(op.getElseBlock()))
+        return failure();
+
+      rewriter.eraseOp(op);
+      return success();
+    }
+  };
+
   results.insert<RemoveStaticCondition>(context);
+  results.insert<EraseEmptyOp>(context);
 }
 //===----------------------------------------------------------------------===//
 // AlwaysOp
