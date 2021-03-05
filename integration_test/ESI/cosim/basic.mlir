@@ -6,6 +6,7 @@
 // PY: rpc = basic.BasicSystemTester(rpcschemapath, simhostport)
 // PY: rpc.testIntAcc(25)
 // PY: rpc.testVectorSum(25)
+// PY: rpc.testStruct(25)
 
 rtl.module.extern @IntAccNoBP(%clk: i1, %rstn: i1, %ints: !esi.channel<i32>) -> (%totalOut: !esi.channel<i32>)
 rtl.module.extern @IntArrSum(%clk: i1, %rstn: i1, %arr: !esi.channel<!rtl.array<4 x si13>>) -> (%totalOut: !esi.channel<!rtl.array<2 x ui24>>)
@@ -24,7 +25,18 @@ rtl.module @array(%clk: i1, %rstn: i1) {
   %arrTotalBuffered = esi.buffer %clk, %rstn, %arrTotal {stages=2, name="totalChan"} : !rtl.array<2 x ui24>
 }
 
+!DataPkt = type !rtl.struct<encrypted: i1, compressionLevel: ui4, blob: !rtl.array<32 x i8>>
+!pktChan = type !esi.channel<!DataPkt>
+
+rtl.module.extern @Compressor(%clk: i1, %rstn: i1, %in: !esi.channel<i1>) -> (!pktChan { rtl.name = "x"})
+
+rtl.module @structs(%clk:i1, %rstn:i1) -> () {
+  %compressedData = rtl.instance "compressor" @Compressor(%clk, %rstn, %inputData) : (i1, i1, !esi.channel<i1>) -> !pktChan
+  %inputData = esi.cosim %clk, %rstn, %compressedData, 3 {name="Compressor"} : !pktChan -> !esi.channel<i1>
+}
+
 rtl.module @top(%clk: i1, %rstn: i1) {
   rtl.instance "ints" @ints (%clk, %rstn) : (i1, i1) -> ()
   rtl.instance "array" @array(%clk, %rstn) : (i1, i1) -> ()
+  rtl.instance "structs" @structs(%clk, %rstn) : (i1, i1) -> ()
 }
