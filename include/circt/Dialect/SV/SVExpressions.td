@@ -25,3 +25,27 @@ def TextualValueOp : SVOp<"textual_value", [NoSideEffect]> {
   let results = (outs AnySignlessInteger:$result);
   let assemblyFormat = "$string attr-dict `:` type($result)";
 }
+
+def ConstantXOp : SVOp<"constantX", [NoSideEffect]> {
+  let summary = "A constant of value 'x'";
+  let description = [{
+    This operation produces a constant value of 'x'.  This 'x' follows the
+    System Verilog rules for 'x' propagation.
+    }];
+
+  let arguments = (ins);
+  let results = (outs RTLIntegerType:$result);
+  let assemblyFormat = " attr-dict `:` type($result)";
+}
+
+def ConstantZOp : SVOp<"constantZ", [NoSideEffect]> {
+  let summary = "A constant of value 'z'";
+  let description = [{
+    This operation produces a constant value of 'z'.  This 'z' follows the
+    System Verilog rules for 'z' propagation.
+    }];
+
+  let arguments = (ins);
+  let results = (outs RTLIntegerType:$result);
+  let assemblyFormat = " attr-dict `:` type($result)";
+}
