@@ -39,6 +39,7 @@ using namespace std;
 
 typedef DenseMap<Block *, vector<Value>> BlockValues;
 typedef DenseMap<Block *, vector<Operation *>> BlockOps;
+typedef DenseMap<Value, Operation *> blockArgPairs;
 
 /// Remove basic blocks inside the given FuncOp. This allows the result to be
 /// a valid graph region, since multi-basic block regions are not allowed to
@@ -332,6 +333,7 @@ Operation *insertMerge(Block *block, Value val,
 // Adds Merge for every live-in and block argument
 // Returns DenseMap of all inserted operations
 BlockOps insertMergeOps(handshake::FuncOp f, BlockValues blockLiveIns,
+                        blockArgPairs &mergePairs,
                         ConversionPatternRewriter &rewriter) {
   BlockOps blockMerges;
 
@@ -342,6 +344,7 @@ BlockOps insertMergeOps(handshake::FuncOp f, BlockValues blockLiveIns,
     for (auto &val : blockLiveIns[&block]) {
       Operation *newOp = insertMerge(&block, val, rewriter);
       blockMerges[&block].push_back(newOp);
+      mergePairs[val] = newOp;
     }
 
     // Block arguments are not in livein list as they are defined inside the
@@ -349,6 +352,7 @@ BlockOps insertMergeOps(handshake::FuncOp f, BlockValues blockLiveIns,
     for (auto &arg : block.getArguments()) {
       Operation *newOp = insertMerge(&block, arg, rewriter);
       blockMerges[&block].push_back(newOp);
+      mergePairs[arg] = newOp;
     }
   }
 
@@ -438,7 +442,8 @@ Operation *getStartOp(Block *block) {
   return nullptr;
 }
 
-void reconnectMergeOps(handshake::FuncOp f, BlockOps blockMerges) {
+void reconnectMergeOps(handshake::FuncOp f, BlockOps blockMerges,
+                       blockArgPairs &mergePairs) {
   // All merge operands are initially set to original (defining) value
   // We here replace defining value with appropriate value from predecessor
   // block The predecessor can either be a merge, the original defining value,
@@ -454,6 +459,10 @@ void reconnectMergeOps(handshake::FuncOp f, BlockOps blockMerges) {
       for (auto *predBlock : block.getPredecessors()) {
         Value mgOperand = getMergeOperand(op, predBlock, blockMerges);
         assert(mgOperand != nullptr);
+        if (!mgOperand.getDefiningOp()) {
+          assert(mergePairs.count(mgOperand));
+          mgOperand = mergePairs[mgOperand]->getResult(0);
+        }
         op->setOperand(count, mgOperand);
         count++;
       }
@@ -490,14 +499,16 @@ void reconnectMergeOps(handshake::FuncOp f, BlockOps blockMerges) {
 }
 void addMergeOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
 
+  blockArgPairs mergePairs;
+
   // blockLiveIns: live in variables of block
   BlockValues liveIns = livenessAnalysis(f);
 
   // Insert merge operations
-  BlockOps mergeOps = insertMergeOps(f, liveIns, rewriter);
+  BlockOps mergeOps = insertMergeOps(f, liveIns, mergePairs, rewriter);
 
   // Set merge operands and uses
-  reconnectMergeOps(f, mergeOps);
+  reconnectMergeOps(f, mergeOps, mergePairs);
 }
 
 bool isLiveOut(Value val) {
