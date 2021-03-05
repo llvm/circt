@@ -18,6 +18,22 @@ module {
     sv.interface.modport @data_out ("output" @data, "output" @valid, "input" @ready)
   }
 
+  // CHECK-LABEL: interface struct_vr;
+  // CHECK:         struct packed {logic [6:0] foo; logic [4:0][15:0] bar; } data;
+  // CHECK:         logic valid;
+  // CHECK:         logic ready;
+  // CHECK:         modport data_in(input data, input valid, output ready);
+  // CHECK:         modport data_out(output data, output valid, input ready);
+  // CHECK:       endinterface
+  // CHECK-EMPTY:
+  sv.interface @struct_vr {
+    sv.interface.signal @data : !rtl.struct<foo: i7, bar: !rtl.array<5 x i16>>
+    sv.interface.signal @valid : i1
+    sv.interface.signal @ready : i1
+    sv.interface.modport @data_in ("input" @data, "input" @valid, "output" @ready)
+    sv.interface.modport @data_out ("output" @data, "output" @valid, "input" @ready)
+  }
+
   rtl.module.extern @Rcvr (%m: !sv.modport<@data_vr::@data_in>)
 
   // CHECK-LABEL: module Top
