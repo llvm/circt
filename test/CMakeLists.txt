@@ -22,6 +22,10 @@ if(NOT WIN32)
   list(APPEND CIRCT_TEST_DEPENDS llhd-sim)
 endif()
 
+if(CIRCT_BINDINGS_PYTHON_ENABLED)
+  list(APPEND CIRCT_TEST_DEPENDS CIRCTBindingsPython)
+endif()
+
 add_lit_testsuite(check-circt "Running the CIRCT regression tests"
   ${CMAKE_CURRENT_BINARY_DIR}
   DEPENDS ${CIRCT_TEST_DEPENDS}
