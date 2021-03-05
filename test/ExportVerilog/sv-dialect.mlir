@@ -149,6 +149,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT: initial begin
   sv.initial {
     // CHECK-NEXT: automatic logic [41:0] _T;
+    // CHECK-NEXT: automatic logic        _T_0;
     // CHECK-EMPTY:
     // CHECK-NEXT: assign _T = THING;
     %thing = sv.textual_value "THING" : i42
@@ -158,7 +159,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     sv.ifdef.procedural "FOO" {
       // CHECK-NEXT: `ifdef FOO
       %c1 = sv.textual_value "\"THING\"" : i1
-      // CHECK-NEXT: logic {{.+}} = "THING";
+      // CHECK-NEXT: assign {{.+}} = "THING";
       sv.fwrite "%d" (%c1) : i1
       // CHECK-NEXT: fwrite(32'h80000002, "%d", {{.+}});
       sv.fwrite "%d" (%c1) : i1
