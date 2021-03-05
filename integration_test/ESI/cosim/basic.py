@@ -41,12 +41,13 @@ class BasicSystemTester(cosim.CosimBase):
 
     def testStruct(self, num_msgs):
         ep = self.openEP(3, sendType=self.schema.Struct13922113893393513056,
-                         recvType=self.schema.I1)
+                         recvType=self.schema.Struct13922113893393513056)
         for _ in range(num_msgs):
             # Since the result is unsigned, we need to make sure the sum is
             # never negative.
-            arg = True
-            print(f"Sending {arg}")
-            ep.send(self.schema.I1.new_message(i=arg))
+            blob = [random.randint(0, 255) for x in range(32)]
+            print(f"Sending data {blob}")
+            ep.send(self.schema.Struct13922113893393513056.new_message(
+                encrypted=True, compressionLevel=5, blob=blob))
             result = self.readMsg(ep, self.schema.Struct13922113893393513056)
             print(f"Got {result}")
