@@ -415,10 +415,10 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
 /// Given string \p origName, generate a new name if it conflicts with any
 /// keyword or any other name in the set \p recordNames. Use the int \p
 /// nextGeneratedNameID as a counter for suffix. Update the \p recordNames with
-/// the generated name and return an iterator corresponding to the new entry.
-llvm::StringMapIterator<llvm::NoneType>
-resolveKeywordConflict(StringRef origName, llvm::StringSet<> &recordNames,
-                       size_t &nextGeneratedNameID) {
+/// the generated name and return the StringRef.
+StringRef resolveKeywordConflict(StringRef origName,
+                                 llvm::StringSet<> &recordNames,
+                                 size_t &nextGeneratedNameID) {
   auto name = origName;
   // Get the list of reserved words we need to avoid.  We could prepopulate this
   // into the used words cache, but it is large and immutable, so we just query
@@ -440,7 +440,7 @@ resolveKeywordConflict(StringRef origName, llvm::StringSet<> &recordNames,
     nameBuffer.resize(baseSize);
   }
   auto insertIt = recordNames.insert(name);
-  return insertIt.first;
+  return insertIt.first->getKey();
 }
 
 //===----------------------------------------------------------------------===//
@@ -543,9 +543,10 @@ public:
 
   StringRef getName(Value value) { return getName(ValueOrOp(value)); }
   StringRef getName(ValueOrOp valueOrOp) {
-    auto *entry = nameTable[valueOrOp];
-    assert(entry && "value expected a name but doesn't have one");
-    return entry->getKey();
+    auto entry = nameTable.find(valueOrOp);
+    assert(entry != nameTable.end() &&
+           "value expected a name but doesn't have one");
+    return entry->getSecond();
   }
 
   /// Given a module name \p moduleName, return the updated name if it has been
@@ -553,22 +554,25 @@ public:
   /// resolveKeywordConflict, to get a new name in case of conflict with
   /// keywords.
   StringRef getModuleName(StringRef moduleName) {
-    if (!moduleNameTable.count(moduleName)) {
-      moduleNameTable[moduleName] = &*resolveKeywordConflict(
-          moduleName, usedModuleNames, nextGeneratedNameID);
-    }
-    return moduleNameTable[moduleName]->getKey();
+    auto entryIter = moduleNameTable.find(moduleName);
+    StringRef updatedName;
+    if (entryIter == moduleNameTable.end()) {
+      updatedName = resolveKeywordConflict(moduleName, usedModuleNames,
+                                           nextGeneratedNameID);
+      moduleNameTable[moduleName] = updatedName;
+    } else
+      updatedName = entryIter->getSecond();
+    return updatedName;
   }
 
 public:
   /// nameTable keeps track of mappings from Value's and operations (for
   /// instances) to their string table entry.
-  llvm::DenseMap<ValueOrOp, llvm::StringMapEntry<llvm::NoneType> *> nameTable;
+  llvm::DenseMap<ValueOrOp, StringRef> nameTable;
 
   /// moduleNameTable keeps track of mappings from Module names to updated names
   /// to resolve keyword conflicts.
-  llvm::DenseMap<StringRef, llvm::StringMapEntry<llvm::NoneType> *>
-      moduleNameTable;
+  llvm::DenseMap<StringRef, StringRef> moduleNameTable;
 
   /// outputNames tracks the uniquified names for output ports, which don't have
   /// a Value or Op representation.
@@ -637,10 +641,11 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
     }
     return addName(valueOrOp, tmpName);
   }
-  auto iter = resolveKeywordConflict(name, usedNames, nextGeneratedNameID);
+  auto updatedName =
+      resolveKeywordConflict(name, usedNames, nextGeneratedNameID);
   if (valueOrOp)
-    nameTable[valueOrOp] = &*iter;
-  return iter->getKey();
+    nameTable[valueOrOp] = updatedName;
+  return updatedName;
 }
 
 //===----------------------------------------------------------------------===//
