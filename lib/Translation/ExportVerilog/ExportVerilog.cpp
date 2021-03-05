@@ -141,14 +141,6 @@ static bool haveMatchingDims(Type a, Type b, Location loc) {
   return aDims == bDims;
 }
 
-/// Emit the specified type dimensions and print out a trailing space if
-/// anything is printed.
-static void emitTypeDimWithSpaceIfNeeded(Type type, Location loc,
-                                         raw_ostream &os) {
-  if (emitTypeDims(type, loc, os))
-    os << ' ';
-}
-
 /// Return true if this is a zero bit type, e.g. a zero bit integer or array
 /// thereof.
 static bool isZeroBitType(Type type) {
@@ -2036,15 +2028,11 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
-  if (!isZeroBitType(op.type()))
-    indent() << "logic ";
-  else {
-    ++numStatementsEmitted; // Conservatively require a begin/end.
-    indent() << "// Zero width: logic ";
-  }
-
-  emitTypeDimWithSpaceIfNeeded(op.type(), op.getLoc(), os);
-  os << op.sym_name() << ";\n";
+  indent();
+  printPackedType(op.type(), os, op.getLoc(), false);
+  os << ' ' << op.sym_name();
+  printUnpackedTypePostfix(op.type(), os);
+  os << ";\n";
   return success();
 }
 
