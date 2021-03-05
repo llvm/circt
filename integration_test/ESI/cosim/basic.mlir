@@ -28,11 +28,11 @@ rtl.module @array(%clk: i1, %rstn: i1) {
 !DataPkt = type !rtl.struct<encrypted: i1, compressionLevel: ui4, blob: !rtl.array<32 x i8>>
 !pktChan = type !esi.channel<!DataPkt>
 
-rtl.module.extern @Compressor(%clk: i1, %rstn: i1, %in: !esi.channel<i1>) -> (!pktChan { rtl.name = "x"})
+rtl.module.extern @Compressor(%clk: i1, %rstn: i1, %in: !pktChan) -> (!pktChan { rtl.name = "x"})
 
 rtl.module @structs(%clk:i1, %rstn:i1) -> () {
-  %compressedData = rtl.instance "compressor" @Compressor(%clk, %rstn, %inputData) : (i1, i1, !esi.channel<i1>) -> !pktChan
-  %inputData = esi.cosim %clk, %rstn, %compressedData, 3 {name="Compressor"} : !pktChan -> !esi.channel<i1>
+  %compressedData = rtl.instance "compressor" @Compressor(%clk, %rstn, %inputData) : (i1, i1, !pktChan) -> !pktChan
+  %inputData = esi.cosim %clk, %rstn, %compressedData, 3 {name="Compressor"} : !pktChan -> !pktChan
 }
 
 rtl.module @top(%clk: i1, %rstn: i1) {
