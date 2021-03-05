@@ -27,6 +27,7 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments]> {
   let arguments = (ins StrAttr:$cond);
   let results = (outs);
 
+  let hasCanonicalizer = true;
   let assemblyFormat = "$cond $thenRegion (`else` $elseRegion^)? attr-dict";
 
   // TODO: ODS forces using a custom builder just to get the region terminator

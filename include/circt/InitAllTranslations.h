@@ -27,7 +27,6 @@ namespace circt {
 inline void registerAllTranslations() {
   static bool initOnce = []() {
     registerToVerilogTranslation();
-    registerFIRRTLToVerilogTranslation();
     esi::registerESITranslations();
     firrtl::registerFromFIRRTLTranslation();
     llhd::registerToVerilogTranslation();

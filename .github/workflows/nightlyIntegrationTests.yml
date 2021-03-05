@@ -7,16 +7,66 @@ on:
     - cron: 0 12 * * *
 
 jobs:
-  # We skip the LLVM pre-build-and-cache step since (presumably) it'll be in
-  # the cache already from the PR build.
+  # Build the LLVM submodule then cache it. Do not rebuild if hit in the
+  # cache.
+  build-llvm:
+    name: Build LLVM
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/circt/images/circt-integration-test:v3
+    steps:
+      # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
+      # time.
+      - name: Get CIRCT
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
+          submodules: "true"
+
+      # Extract the LLVM submodule hash for use in the cache key.
+      - name: Get LLVM Hash
+        id: get-llvm-hash
+        run: echo "::set-output name=hash::$(git rev-parse @:./llvm)"
+        shell: bash
+
+      # Try to fetch LLVM from the cache.
+      - name: Cache LLVM
+        id: cache-llvm
+        uses: actions/cache@v2
+        with:
+          path: llvm
+          key: ${{ runner.os }}-llvm-sharedlibs-${{ steps.get-llvm-hash.outputs.hash }}
+
+      # Build LLVM if we didn't hit in the cache.
+      - name: Rebuild and Install LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: utils/build-llvm.sh
 
   # Build CIRCT and run its tests using a Docker container with all the
   # integration testing prerequisite installed.
   build-circt:
     name: Build and Test
+    needs: build-llvm
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/circt/images/circt-integration-test:v3
+    strategy:
+      matrix:
+        build-assert: [ON, OFF]
+        build-shared: [ON, OFF]
+        build-type: [Debug, Release]
+        compiler:
+          - cc: clang
+            cxx: clang++
+          - cc: gcc
+            cxx: g++
+        exclude:
+          # We can't build with GCC+sharedlibs and succesfully run the tests.
+          # See issue https://github.com/llvm/circt/issues/708
+          - build-shared: ON
+            compiler:
+              cc: gcc
+
     steps:
       - name: Configure Environment
         run: echo "$GITHUB_WORKSPACE/llvm/install/bin" >> $GITHUB_PATH
@@ -53,48 +103,38 @@ jobs:
         run: utils/build-llvm.sh
 
       # --------
-      # Build and test CIRCT in both debug and release mode.
+      # Build and test CIRCT
       # --------
 
-      # Build the CIRCT test target in debug mode to build and test.
-      - name: Build and Test CIRCT (Assert)
+      - name: Configure CIRCT
+        env:
+          CC: ${{ matrix.compiler.cc }}
+          CXX: ${{ matrix.compiler.cxx }}
+          BUILD_ASSERT: ${{ matrix.build-assert }}
+          BUILD_SHARED: ${{ matrix.build-shared }}
+          BUILD_TYPE: ${{ matrix.build-type }}
         run: |
-          mkdir build_assert
-          cd build_assert
+          mkdir build && cd build
           cmake .. \
-            -DBUILD_SHARED_LIBS=ON \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DLLVM_ENABLE_ASSERTIONS=ON \
+            -DBUILD_SHARED_LIBS=$BUILD_SHARED \
+            -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
+            -DLLVM_ENABLE_ASSERTIONS=$BUILD_ASSERT \
             -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ \
             -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ \
             -DCMAKE_LINKER=lld \
-            -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_C_COMPILER=$CC \
+            -DCMAKE_CXX_COMPILER=$CXX \
             -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+      - name: Build CIRCT
+        run: |
+          cd build
+          make -j$(nproc)
+      - name: Test CIRCT
+        run: |
+          cd build
           make check-circt -j$(nproc)
-      - name: CIRCT integration tests (assert)
+      - name: Integration Test CIRCT
         run: |
-          cd build_assert
-          make check-circt-integration
-
-      # Build the CIRCT test target in release mode to build and test.
-      - name: Build and Test CIRCT (Release)
-        run: |
-          mkdir build_release
-          cd build_release
-          cmake .. \
-            -DBUILD_SHARED_LIBS=ON \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DLLVM_ENABLE_ASSERTIONS=OFF \
-            -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ \
-            -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ \
-            -DCMAKE_LINKER=lld \
-            -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_CXX_COMPILER=clang++ \
-            -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit
-          make check-circt -j$(nproc)
-      - name: CIRCT integration tests (release)
-        run: |
-          cd build_release
+          cd build
           make check-circt-integration
