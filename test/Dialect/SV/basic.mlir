@@ -15,7 +15,9 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
     sv.ifdef "SYNTHESIS" {
     } else {
       %tmp = sv.textual_value "PRINTF_COND_" : i1
-      %tmp2 = comb.and %tmp, %arg1 : i1
+      %tmpx = sv.constantX : i1
+      %tmpz = sv.constantZ : i1
+      %tmp2 = comb.and %tmp, %tmpx, %tmpz, %arg1 : i1
       sv.if %tmp2 {
         sv.fwrite "Hi\n" 
       }
@@ -32,12 +34,14 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   // CHECK-NEXT:   sv.ifdef "SYNTHESIS" {
   // CHECK-NEXT:   } else {
   // CHECK-NEXT:     %0 = sv.textual_value "PRINTF_COND_" : i1
-  // CHECK-NEXT:     %1 = comb.and %0, %arg1 : i1
-  // CHECK-NEXT:     sv.if %1 {
+  // CHECK-NEXT:     %1 = sv.constantX : i1
+  // CHECK-NEXT:     %2 = sv.constantZ : i1
+  // CHECK-NEXT:     %3 = comb.and %0, %1, %2, %arg1 : i1
+  // CHECK-NEXT:     sv.if %3 {
   // CHECK-NEXT:       sv.fwrite "Hi\0A" 
   // CHECK-NEXT:     }
-  // CHECK-NEXT:     sv.if %1 {
-  // CHECK-NEXT:       sv.fwrite "%x"(%1) : i1
+  // CHECK-NEXT:     sv.if %3 {
+  // CHECK-NEXT:       sv.fwrite "%x"(%3) : i1
   // CHECK-NEXT:     } else {
   // CHECK-NEXT:       sv.fwrite "There\0A" 
   // CHECK-NEXT:     }

@@ -48,6 +48,6 @@ class BasicSystemTester(cosim.CosimBase):
             blob = [random.randint(0, 255) for x in range(32)]
             print(f"Sending data {blob}")
             ep.send(self.schema.Struct13922113893393513056.new_message(
-              encrypted=True, compressionLevel=5, blob=blob))
+                encrypted=True, compressionLevel=5, blob=blob))
             result = self.readMsg(ep, self.schema.Struct13922113893393513056)
             print(f"Got {result}")

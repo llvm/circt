@@ -28,7 +28,8 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<
             // Expressions
-            ReadInOutOp, ArrayIndexInOutOp, TextualValueOp,
+            ReadInOutOp, ArrayIndexInOutOp, TextualValueOp, ConstantXOp,
+            ConstantZOp,
             // Declarations.
             RegOp, WireOp,
             // Control flow.
@@ -74,9 +75,11 @@ public:
   HANDLE(WireOp, Unhandled);
 
   // Expressions
-  HANDLE(TextualValueOp, Unhandled)
   HANDLE(ReadInOutOp, Unhandled);
   HANDLE(ArrayIndexInOutOp, Unhandled);
+  HANDLE(TextualValueOp, Unhandled);
+  HANDLE(ConstantXOp, Unhandled);
+  HANDLE(ConstantZOp, Unhandled);
 
   // Control flow.
   HANDLE(IfDefOp, Unhandled);
