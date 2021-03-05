@@ -28,7 +28,7 @@ bool sv::isExpression(Operation *op) {
 }
 
 LogicalResult sv::verifyInProceduralRegion(Operation *op) {
-  if (op->getParentWithTrait<sv::ProceduralRegion>())
+  if (op->getParentOp()->hasTrait<sv::ProceduralRegion>())
     return success();
   op->emitError() << op->getName() << " should be in a procedural region";
   return failure();
