@@ -89,3 +89,25 @@ module IntArrSum (
   assign totalOut.data[0] = 24'($signed(arr.data[0])) + 24'($signed(arr.data[1]));
   assign totalOut.data[1] = 24'($signed(arr.data[2])) + 24'($signed(arr.data[3]));
 endmodule
+
+module Compressor (
+  input clk,
+  input rstn,
+  IValidReady_i1.source in,
+  IValidReady_Struct.sink x
+);
+
+  assign x.valid = in.valid;
+  assign in.ready = x.ready;
+  assign x.data.encrypted = 1'b1;
+  assign x.data.compressionLevel = 4'd6;
+
+  logic [255:0] blob;
+  assign x.data.blob = blob;
+  always@(posedge clk) begin
+    if (in.valid)
+      blob <<= 5;
+    if (~rstn)
+      blob = 256'h0000002006000F;
+  end
+endmodule
