@@ -412,10 +412,13 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
   return sstr.str();
 }
 
-/// Given string \p origName, generate a new name if it conflicts with any keyword or any other name in the set \p recordNames. Use the int \p nextGeneratedNameID as a counter for suffix. Update the \p recordNames with the generated name and return an iterator corresponding to the new entry.
-llvm::StringMapIterator<llvm::NoneType>  resolveKeywordConflict(StringRef origName,
-                                   llvm::StringSet<> &recordNames,
-                                   size_t &nextGeneratedNameID) {
+/// Given string \p origName, generate a new name if it conflicts with any
+/// keyword or any other name in the set \p recordNames. Use the int \p
+/// nextGeneratedNameID as a counter for suffix. Update the \p recordNames with
+/// the generated name and return an iterator corresponding to the new entry.
+llvm::StringMapIterator<llvm::NoneType>
+resolveKeywordConflict(StringRef origName, llvm::StringSet<> &recordNames,
+                       size_t &nextGeneratedNameID) {
   auto name = origName;
   // Get the list of reserved words we need to avoid.  We could prepopulate this
   // into the used words cache, but it is large and immutable, so we just query
@@ -426,9 +429,9 @@ llvm::StringMapIterator<llvm::NoneType>  resolveKeywordConflict(StringRef origNa
   auto baseSize = nameBuffer.size();
 
   // Loop until we get a name that is not a keyword and is unique.
-  while (reservedWords.count(name) || recordNames.count(name) ) {
+  while (reservedWords.count(name) || recordNames.count(name)) {
 
-    // If not, we need to auto-unique it.
+    // We need to auto-unique it.
     auto suffix = llvm::utostr(nextGeneratedNameID++);
     nameBuffer.append(suffix.begin(), suffix.end());
     name = StringRef(nameBuffer.data(), nameBuffer.size());
@@ -545,12 +548,15 @@ public:
     return entry->getKey();
   }
 
-  /// Given a module name \p moduleName, return the updated name if it has been previously renamed in the table moduleNameTable, else call resolveKeywordConflict, to get a new name in case of conflict with keywords.
+  /// Given a module name \p moduleName, return the updated name if it has been
+  /// previously renamed in the table moduleNameTable, else call
+  /// resolveKeywordConflict, to get a new name in case of conflict with
+  /// keywords.
   StringRef getModuleName(StringRef moduleName) {
     if (!moduleNameTable.count(moduleName)) {
-      moduleNameTable[moduleName] = &*resolveKeywordConflict(moduleName, usedModuleNames,
-          nextGeneratedNameID);
-    } 
+      moduleNameTable[moduleName] = &*resolveKeywordConflict(
+          moduleName, usedModuleNames, nextGeneratedNameID);
+    }
     return moduleNameTable[moduleName]->getKey();
   }
 
@@ -2555,8 +2561,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
       addName(module.getArgument(port.argNum), name);
   }
 
-  auto moduleName = getModuleName(module.getName());
-  os << "module " << moduleName << '(';
+  os << "module " << getModuleName(module.getName()) << '(';
   if (!portInfo.empty())
     os << '\n';
 
