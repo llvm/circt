@@ -145,7 +145,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     // CHECK-NEXT: wire42 = _T;
     sv.bpassign %wire42, %thing : i42
 
-    sv.ifdef "FOO" {
+    sv.ifdef.procedural "FOO" {
       // CHECK-NEXT: `ifdef FOO
       %c1 = sv.textual_value "\"THING\"" : i1
       // CHECK-NEXT: logic {{.+}} = "THING";
