@@ -139,8 +139,8 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   if (blackboxMemory)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
 
-  // Run the lower-to-rtl pass if requested.
-  if (lowerToRTL) {
+  // Lower if we are going to verilog or if lowering was specifically requested.
+  if (lowerToRTL || outputFormat == OutputVerilog) {
     if (enableLowerTypes)
       pm.nest<firrtl::CircuitOp>().addNestedPass<firrtl::FModuleOp>(
           firrtl::createLowerFIRRTLTypesPass());
@@ -166,9 +166,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   case OutputDisabled:
     return success();
   case OutputVerilog:
-    if (lowerToRTL)
-      return exportVerilog(module.get(), os);
-    return exportFIRRTLToVerilog(module.get(), os);
+    return exportVerilog(module.get(), os);
   }
 };
 

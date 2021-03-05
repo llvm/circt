@@ -263,16 +263,13 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       sv.fwrite "No operands!\0A"
     // CHECK-NEXT:     }
-    // CHECK-NEXT:   }
-    // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS"  {
-    // CHECK-NEXT:     } else  {
-    // CHECK-NEXT:       %3 = sv.textual_value "`PRINTF_COND_" : i1
-    // CHECK-NEXT:       %4 = comb.and %3, %reset : i1
-    // CHECK-NEXT:       sv.if %4  {
-    // CHECK-NEXT:         sv.fwrite "Hi %x %x\0A"(%2, %b) : i5, i4
-    // CHECK-NEXT:       }
+    // CHECK-NEXT:     %5 = sv.textual_value "`PRINTF_COND_" : i1
+    // CHECK-NEXT:     %6 = comb.and %5, %reset : i1
+    // CHECK-NEXT:     sv.if %6  {
+    // CHECK-NEXT:       sv.fwrite "Hi %x %x\0A"(%2, %b) : i5, i4
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
+    // CHECK-NEXT: }
    firrtl.printf %clock1, %reset1, "No operands!\0A"
 
     // CHECK: [[ADD:%.+]] = comb.add
@@ -532,17 +529,10 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:   sv.initial {
     // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
     // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:       %true = rtl.constant true
-    // CHECK-NEXT:       %8 = comb.xor %reset, %true : i1
-    // CHECK-NEXT:       sv.if %8  {
-    // CHECK-NEXT:         %9 = sv.textual_value "`RANDOM" : i32
-    // CHECK-NEXT:         sv.bpassign %reg, %9 : i32
-    // CHECK-NEXT:       }
-    // CHECK-NEXT:     }
-    // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:       %true = rtl.constant true
-    // CHECK-NEXT:       %8 = comb.xor %reset, %true : i1
-    // CHECK-NEXT:       sv.if %8  {
+    // CHECK-NEXT:       sv.if %reset  {
+    // CHECK-NEXT:       } else {
+    // CHECK-NEXT:         %8 = sv.textual_value "`RANDOM" : i32
+    // CHECK-NEXT:         sv.bpassign %reg, %8 : i32
     // CHECK-NEXT:         %9 = sv.textual_value "`RANDOM" : i32
     // CHECK-NEXT:         sv.bpassign %reg2, %9 : i32
     // CHECK-NEXT:       }
@@ -933,6 +923,15 @@ module attributes {firrtl.mainModule = "Simple"} {
     %1 = firrtl.stdIntCast %reset : (i1) -> !firrtl.asyncreset
     %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
     %widx_widx_bin = firrtl.regreset %0, %1, %c0_ui1 {name = "widx_widx_bin"} : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>) -> !firrtl.uint<4>
+    rtl.output
+  }
+
+  // CHECK-LABEL: rtl.module @Struct0bits(%source: !rtl.struct<valid: i1, ready: i1, data: i0>) {
+  // CHECK-NEXT:    rtl.output 
+  // CHECK-NEXT:  }
+  rtl.module @Struct0bits(%source: !rtl.struct<valid: i1, ready: i1, data: i0>) {
+    %1 = firrtl.rtlStructCast %source : (!rtl.struct<valid: i1, ready: i1, data: i0>) -> !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<0>>
+    %2 = firrtl.subfield %1 ("data") : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<0>>) -> !firrtl.uint<0>
     rtl.output
   }
 }

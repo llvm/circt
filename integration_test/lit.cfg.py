@@ -106,6 +106,10 @@ if config.questa_path != "":
     llvm_config.with_environment(
         'LM_LICENSE_FILE', os.environ['LM_LICENSE_FILE'])
 
+  tool_dirs.append(config.questa_path)
+  tools.append('vlog')
+  tools.append('vsim')
+
   # When we add support for other simulators, we'll have to figure out which
   # one should be the default and modify this appropriately.
   config.substitutions.append(

@@ -776,6 +776,8 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   void emitRandomizePrologIfNeeded();
   void initializeRegister(Value reg, Value resetSignal);
 
+  void runWithInsertionPointAtEndOfBlock(std::function<void(void)> fn,
+                                         Region &region);
   void addToAlwaysBlock(Value clock, std::function<void(void)> fn);
   void addToAlwaysFFBlock(EventControl clockEdge, Value clock,
                           ::ResetType resetStyle, EventControl resetEdge,
@@ -789,6 +791,11 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
   void addToIfDefBlock(StringRef cond, std::function<void(void)> thenCtor,
                        std::function<void(void)> elseCtor = {});
   void addToInitialBlock(std::function<void(void)> body);
+  void addToIfDefProceduralBlock(StringRef cond,
+                                 std::function<void(void)> thenCtor,
+                                 std::function<void(void)> elseCtor = {});
+  void addIfProceduralBlock(Value cond, std::function<void(void)> thenCtor,
+                            std::function<void(void)> elseCtor = {});
 
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitExpr;
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitDecl;
@@ -1182,6 +1189,29 @@ LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
   return setLowering(orig->getResult(0), result);
 }
 
+/// Switch the insertion point of the current builder to the end of the
+/// specified block and run the closure.  This correctly handles the case where
+/// the closure is null, but the caller needs to make sure the block exists.
+void FIRRTLLowering::runWithInsertionPointAtEndOfBlock(
+    std::function<void(void)> fn, Region &region) {
+  if (!fn)
+    return;
+
+  auto oldIP = builder->saveInsertionPoint();
+
+  // If this is the first logic injected into the specified block (e.g. an else
+  // region), create the block and put an sv.yield.
+  if (region.empty()) {
+    // All SV dialect control flow operations use sv.yield.
+    sv::IfOp::ensureTerminator(region, *builder,
+                               region.getParentOp()->getLoc());
+  }
+
+  builder->setInsertionPoint(region.front().getTerminator());
+  fn();
+  builder->restoreInsertionPoint(oldIP);
+}
+
 void FIRRTLLowering::addToAlwaysBlock(Value clock,
                                       std::function<void(void)> fn) {
   // This isn't uniquing the parent region in.  This can be added as a key to
@@ -1190,15 +1220,11 @@ void FIRRTLLowering::addToAlwaysBlock(Value clock,
          "only support inserting into the top level of a module so far");
 
   auto &op = alwaysBlocks[clock];
-  if (!op) {
+  if (op) {
+    runWithInsertionPointAtEndOfBlock(fn, op.body());
+  } else {
     op = builder->create<sv::AlwaysOp>(EventControl::AtPosEdge, clock, fn);
-    return;
   }
-
-  auto oldIP = builder->saveInsertionPoint();
-  builder->setInsertionPoint(op.getBodyBlock()->getTerminator());
-  fn();
-  builder->restoreInsertionPoint(oldIP);
 }
 
 void FIRRTLLowering::addToAlwaysFFBlock(EventControl clockEdge, Value clock,
@@ -1208,7 +1234,10 @@ void FIRRTLLowering::addToAlwaysFFBlock(EventControl clockEdge, Value clock,
                                         std::function<void(void)> resetBody) {
   auto &op = alwaysFFBlocks[{builder->getBlock(), clockEdge, clock, resetStyle,
                              resetEdge, reset}];
-  if (!op) {
+  if (op) {
+    runWithInsertionPointAtEndOfBlock(body, op.bodyBlk());
+    runWithInsertionPointAtEndOfBlock(resetBody, op.resetBlk());
+  } else {
     if (reset) {
       op = builder->create<sv::AlwaysFFOp>(clockEdge, clock, resetStyle,
                                            resetEdge, reset, body, resetBody);
@@ -1216,19 +1245,6 @@ void FIRRTLLowering::addToAlwaysFFBlock(EventControl clockEdge, Value clock,
       assert(!resetBody);
       op = builder->create<sv::AlwaysFFOp>(clockEdge, clock, body);
     }
-    return;
-  }
-  if (body) {
-    auto oldIP = builder->saveInsertionPoint();
-    builder->setInsertionPoint(op.getBodyBlock()->getTerminator());
-    body();
-    builder->restoreInsertionPoint(oldIP);
-  }
-  if (resetBody) {
-    auto oldIP = builder->saveInsertionPoint();
-    builder->setInsertionPoint(op.getResetBlock()->getTerminator());
-    resetBody();
-    builder->restoreInsertionPoint(oldIP);
   }
 }
 
@@ -1237,38 +1253,58 @@ void FIRRTLLowering::addToIfDefBlock(StringRef cond,
                                      std::function<void(void)> elseCtor) {
   auto condAttr = builder->getStringAttr(cond);
   auto &op = ifdefBlocks[{builder->getBlock(), condAttr}];
-  if (!op) {
+  if (op) {
+    runWithInsertionPointAtEndOfBlock(thenCtor, op.thenRegion());
+    runWithInsertionPointAtEndOfBlock(elseCtor, op.elseRegion());
+  } else {
     op = builder->create<sv::IfDefOp>(condAttr, thenCtor, elseCtor);
-    return;
-  }
-
-  if (thenCtor) {
-    auto oldIP = builder->saveInsertionPoint();
-    builder->setInsertionPoint(op.getThenBlock()->getTerminator());
-    thenCtor();
-    builder->restoreInsertionPoint(oldIP);
-  }
-  if (elseCtor) {
-    auto oldIP = builder->saveInsertionPoint();
-    builder->setInsertionPoint(op.getElseBlock()->getTerminator());
-    elseCtor();
-    builder->restoreInsertionPoint(oldIP);
   }
 }
 
 void FIRRTLLowering::addToInitialBlock(std::function<void(void)> body) {
   auto &op = initialBlocks[builder->getBlock()];
-  if (!op) {
+  if (op) {
+    runWithInsertionPointAtEndOfBlock(body, op.body());
+  } else {
     op = builder->create<sv::InitialOp>(body);
-    return;
   }
+}
 
-  if (body) {
-    auto oldIP = builder->saveInsertionPoint();
-    builder->setInsertionPoint(op.getBodyBlock()->getTerminator());
-    body();
-    builder->restoreInsertionPoint(oldIP);
-  }
+void FIRRTLLowering::addToIfDefProceduralBlock(
+    StringRef cond, std::function<void(void)> thenCtor,
+    std::function<void(void)> elseCtor) {
+
+  // Check to see if we already have an ifdef on this condition immediately
+  // before the insertion point.  If so, extend it.
+  auto insertIt = builder->getInsertionPoint();
+  if (insertIt != builder->getBlock()->begin())
+    if (auto ifdef = dyn_cast<sv::IfDefProceduralOp>(*--insertIt)) {
+      if (ifdef.cond() == cond) {
+        runWithInsertionPointAtEndOfBlock(thenCtor, ifdef.thenRegion());
+        runWithInsertionPointAtEndOfBlock(elseCtor, ifdef.elseRegion());
+        return;
+      }
+    }
+
+  builder->create<sv::IfDefProceduralOp>(cond, thenCtor, elseCtor);
+}
+
+void FIRRTLLowering::addIfProceduralBlock(Value cond,
+                                          std::function<void(void)> thenCtor,
+                                          std::function<void(void)> elseCtor) {
+  // Check to see if we already have an if on this condition immediately
+  // before the insertion point.  If so, extend it.
+  auto insertIt = builder->getInsertionPoint();
+  if (insertIt != builder->getBlock()->begin())
+    if (auto ifOp = dyn_cast<sv::IfOp>(*--insertIt)) {
+      if (ifOp.cond() == cond) {
+        runWithInsertionPointAtEndOfBlock(thenCtor, ifOp.thenRegion());
+        runWithInsertionPointAtEndOfBlock(elseCtor, ifOp.elseRegion());
+        return;
+      }
+    }
+
+  builder->create<sv::IfOp>(cond, thenCtor, elseCtor);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1322,9 +1358,18 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
   // firrtl.mem lowering leaves invalid SubfieldOps.  Ignore these invalid ops.
   if (!op.input())
     return success();
+
+  // Extracting a zero bit value from a struct is defined but doesn't do
+  // anything.
+  if (isZeroBitFIRRTLType(op->getResult(0).getType()))
+    return setLowering(op, Value());
+
+  auto resultType = lowerType(op->getResult(0).getType());
   Value value = getLoweredValue(op.input());
-  return setLoweringTo<rtl::StructExtractOp>(
-      op, lowerType(op->getResult(0).getType()), value, op.fieldname());
+  assert(resultType && value && "subfield type lowering failed");
+
+  return setLoweringTo<rtl::StructExtractOp>(op, resultType, value,
+                                             op.fieldname());
 }
 
 //===----------------------------------------------------------------------===//
@@ -1407,11 +1452,9 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToInitialBlock([&]() {
       emitRandomizePrologIfNeeded();
-      builder->create<sv::IfDefProceduralOp>("RANDOMIZE_REG_INIT", [&]() {
+      addToIfDefProceduralBlock("RANDOMIZE_REG_INIT", [&]() {
         if (resetSignal) {
-          auto one = builder->create<rtl::ConstantOp>(APInt(1, 1));
-          auto notResetValue = builder->create<comb::XorOp>(resetSignal, one);
-          builder->create<sv::IfOp>(notResetValue, [&]() { randomInit(); });
+          addIfProceduralBlock(resetSignal, {}, [&]() { randomInit(); });
         } else {
           randomInit();
         }
@@ -1614,7 +1657,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
             auto readLastEn = builder->create<sv::ReadInOutOp>(lastEn);
             builder->create<sv::PAssignOp>(thisEn, readLastEn);
-            builder->create<sv::IfOp>(readLastEn, [&]() {
+            addIfProceduralBlock(readLastEn, [&]() {
               builder->create<sv::PAssignOp>(
                   thisAddr, builder->create<sv::ReadInOutOp>(lastAddr));
             });
@@ -1683,7 +1726,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
             auto left = writePipe[j];
             auto readEn = readInOut(right.en);
             builder->create<sv::PAssignOp>(left.en, readEn);
-            builder->create<sv::IfOp>(readEn, [&]() {
+            addIfProceduralBlock(readEn, [&]() {
               builder->create<sv::PAssignOp>(left.addr, readInOut(right.addr));
               builder->create<sv::PAssignOp>(left.mask, readInOut(right.mask));
               builder->create<sv::PAssignOp>(left.data, readInOut(right.data));
@@ -1699,7 +1742,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         auto enable = builder->create<sv::ReadInOutOp>(last.en);
         auto cond = builder->create<comb::AndOp>(
             enable, builder->create<sv::ReadInOutOp>(last.mask));
-        builder->create<sv::IfOp>(cond, [&]() {
+        addIfProceduralBlock(cond, [&]() {
           auto slot = builder->create<sv::ArrayIndexInOutOp>(
               reg, builder->create<sv::ReadInOutOp>(last.addr));
           builder->create<sv::PAssignOp>(
@@ -1717,7 +1760,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     addToInitialBlock([&]() {
       emitRandomizePrologIfNeeded();
 
-      builder->create<sv::IfDefProceduralOp>("RANDOMIZE_MEM_INIT", [&]() {
+      addToIfDefProceduralBlock("RANDOMIZE_MEM_INIT", [&]() {
         if (depth == 1) { // Don't emit a for loop for one element.
           auto type = sv::getInOutElementType(reg.getType());
           type = sv::getAnyRTLArrayElementType(type);
@@ -2314,18 +2357,17 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
 
   addToAlwaysBlock(clock, [&]() {
     // Emit an "#ifndef SYNTHESIS" guard into the always block.
-    builder->create<sv::IfDefProceduralOp>(
-        "SYNTHESIS", std::function<void()>(), [&]() {
-          // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
-          Value ifCond = builder->create<sv::TextualValueOp>(cond.getType(),
-                                                             "`PRINTF_COND_");
-          ifCond = builder->createOrFold<comb::AndOp>(ifCond, cond);
+    addToIfDefProceduralBlock("SYNTHESIS", std::function<void()>(), [&]() {
+      // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
+      Value ifCond =
+          builder->create<sv::TextualValueOp>(cond.getType(), "`PRINTF_COND_");
+      ifCond = builder->createOrFold<comb::AndOp>(ifCond, cond);
 
-          builder->create<sv::IfOp>(ifCond, [&]() {
-            // Emit the sv.fwrite.
-            builder->create<sv::FWriteOp>(op.formatString(), operands);
-          });
-        });
+      addIfProceduralBlock(ifCond, [&]() {
+        // Emit the sv.fwrite.
+        builder->create<sv::FWriteOp>(op.formatString(), operands);
+      });
+    });
   });
 
   return success();
@@ -2342,20 +2384,19 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
   // Emit this into an "sv.always posedge" body.
   addToAlwaysBlock(clock, [&]() {
     // Emit an "#ifndef SYNTHESIS" guard into the always block.
-    builder->create<sv::IfDefProceduralOp>(
-        "SYNTHESIS", std::function<void()>(), [&]() {
-          // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
-          Value ifCond = builder->create<sv::TextualValueOp>(cond.getType(),
-                                                             "`STOP_COND_");
-          ifCond = builder->createOrFold<comb::AndOp>(ifCond, cond);
-          builder->create<sv::IfOp>(ifCond, [&]() {
-            // Emit the sv.fatal or sv.finish.
-            if (op.exitCode())
-              builder->create<sv::FatalOp>();
-            else
-              builder->create<sv::FinishOp>();
-          });
-        });
+    addToIfDefProceduralBlock("SYNTHESIS", std::function<void()>(), [&]() {
+      // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
+      Value ifCond =
+          builder->create<sv::TextualValueOp>(cond.getType(), "`STOP_COND_");
+      ifCond = builder->createOrFold<comb::AndOp>(ifCond, cond);
+      addIfProceduralBlock(ifCond, [&]() {
+        // Emit the sv.fatal or sv.finish.
+        if (op.exitCode())
+          builder->create<sv::FatalOp>();
+        else
+          builder->create<sv::FinishOp>();
+      });
+    });
   });
 
   return success();
@@ -2386,7 +2427,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
     return failure();
 
   addToAlwaysBlock(clock, [&]() {
-    builder->create<sv::IfOp>(enable, [&]() {
+    addIfProceduralBlock(enable, [&]() {
       // Create BOpTy inside the always/if.
       builder->create<BOpTy>(predicate);
     });
