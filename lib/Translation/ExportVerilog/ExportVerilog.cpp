@@ -1084,12 +1084,12 @@ SubExprInfo ExprEmitter::visitComb(ExtractOp op) {
 
 SubExprInfo ExprEmitter::visitSV(GetModportOp op) {
   os << emitter.getName(op.iface()) + "." + op.field();
-  return {Unary, IsUnsigned};
+  return {Selection, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
   os << emitter.getName(op.iface()) + "." + op.signalName();
-  return {Unary, IsUnsigned};
+  return {Selection, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitSV(TextualValueOp op) {
