@@ -99,6 +99,15 @@ module Compressor (
 
   assign x.valid = in.valid;
   assign in.ready = x.ready;
-  // assign totalOut.data[0] = 24'($signed(arr.data[0])) + 24'($signed(arr.data[1]));
-  // assign totalOut.data[1] = 24'($signed(arr.data[2])) + 24'($signed(arr.data[3]));
+  assign x.data.encrypted = 1'b1;
+  assign x.data.compressionLevel = 4'd6;
+
+  logic [255:0] blob;
+  assign x.data.blob = blob;
+  always@(posedge clk) begin
+    if (in.valid)
+      blob <<= 5;
+    if (~rstn)
+      blob = 256'h0000002006000F;
+  end
 endmodule

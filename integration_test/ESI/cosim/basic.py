@@ -40,12 +40,12 @@ class BasicSystemTester(cosim.CosimBase):
             assert (result.l[1] == arr[2] + arr[3])
 
     def testStruct(self, num_msgs):
-        ep = self.openEP(3, sendType=self.schema.I1,
-                         recvType=self.schema.Struct13922113893393513056)
+        ep = self.openEP(3, sendType=self.schema.Struct13922113893393513056,
+                         recvType=self.schema.I1)
         for _ in range(num_msgs):
             # Since the result is unsigned, we need to make sure the sum is
             # never negative.
-            arg = 1
+            arg = True
             print(f"Sending {arg}")
             ep.send(self.schema.I1.new_message(i=arg))
             result = self.readMsg(ep, self.schema.Struct13922113893393513056)
