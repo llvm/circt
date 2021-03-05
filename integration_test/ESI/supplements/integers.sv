@@ -93,21 +93,22 @@ endmodule
 module Compressor (
   input clk,
   input rstn,
-  IValidReady_i1.source in,
+  IValidReady_Struct.source in,
   IValidReady_Struct.sink x
 );
 
   assign x.valid = in.valid;
   assign in.ready = x.ready;
-  assign x.data.encrypted = 1'b1;
-  assign x.data.compressionLevel = 4'd6;
+  assign x.data.encrypted = ~in.data.encrypted;
+  assign x.data.compressionLevel = 0;
 
-  logic [255:0] blob;
-  assign x.data.blob = blob;
+  logic [255:0] otp;
+  assign x.data.blob = in.data.blob ^ otp;
   always@(posedge clk) begin
-    if (in.valid)
-      blob <<= 5;
+    // if (in.valid)
+      // otp = (otp >> 8) | (otp << 248);
     if (~rstn)
-      blob = 256'h0000002006000F;
+      // otp = 256'h930fd6366c1b97a6d27e9ef1752a444f;
+      otp = 256'h0;
   end
 endmodule

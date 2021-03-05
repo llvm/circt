@@ -1121,7 +1121,13 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
   GasketComponent ret =
       TypeSwitch<Type, GasketComponent>(type)
           .Case([&fieldValues](IntegerType) { return fieldValues[0]; })
-          .Case([&fieldValues](rtl::ArrayType) { return fieldValues[0]; });
+          .Case([&fieldValues](rtl::ArrayType) { return fieldValues[0]; })
+          .Case([&](rtl::StructType) {
+            SmallVector<Value, 8> rawValues(llvm::map_range(
+                fieldValues, [](GasketComponent c) { return c.getValue(); }));
+            return GasketComponent(
+                b, b.create<rtl::StructCreateOp>(loc, type, rawValues));
+          });
   return ret;
 }
 
