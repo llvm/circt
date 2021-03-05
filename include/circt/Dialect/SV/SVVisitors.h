@@ -28,8 +28,8 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<
             // Expressions
-            ReadInOutOp, ArrayIndexInOutOp, TextualValueOp, 
-            ConstantXOp, ConstantZOp,
+            ReadInOutOp, ArrayIndexInOutOp, TextualValueOp, ConstantXOp,
+            ConstantZOp,
             // Declarations.
             RegOp, WireOp,
             // Control flow.
