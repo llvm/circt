@@ -148,7 +148,9 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
  
   // CHECK-NEXT: initial begin
   sv.initial {
-    // CHECK-NEXT: logic [41:0] _T = THING;
+    // CHECK-NEXT: automatic logic [41:0] _T;
+    // CHECK-EMPTY:
+    // CHECK-NEXT: assign _T = THING;
     %thing = sv.textual_value "THING" : i42
     // CHECK-NEXT: wire42 = _T;
     sv.bpassign %wire42, %thing : i42
@@ -289,7 +291,8 @@ rtl.module @exprInlineTestIssue439(%clk: i1) {
 
   // CHECK: always @(posedge clk) begin
   sv.always posedge %clk {
-    // CHECK: automatic logic [15:0] _T_0 = _T[15:0];
+    // CHECK: automatic logic [15:0] _T_0;
+    // CHECK: assign _T_0 = _T[15:0];
     %e = comb.extract %c from 0 : (i32) -> i16
     %f = comb.add %e, %e : i16
     sv.fwrite "%d"(%f) : i16
@@ -301,13 +304,14 @@ rtl.module @exprInlineTestIssue439(%clk: i1) {
 // CHECK-LABEL: module issue439(
 // https://github.com/llvm/circt/issues/439
 rtl.module @issue439(%in1: i1, %in2: i1) {
-  // CHECK: wire _T_0;
   // CHECK: wire _T = in1 | in2;
   %clock = comb.or %in1, %in2 : i1
 
   // CHECK-NEXT: always @(posedge _T)
   sv.always posedge %clock {
-    // CHECK-NEXT: assign _T_0 = in1;
+    // FIXME: https://github.com/llvm/circt/issues/726
+    // CHECK: wire _T_0;
+    // CHECK: assign _T_0 = in1;
     // CHECK-NEXT: assign _T_0 = in2;
     %merged = comb.merge %in1, %in2 : i1
     // CHECK-NEXT: $fwrite(32'h80000002, "Bye %x\n", _T_0);
@@ -413,3 +417,74 @@ rtl.module @if_multi_line_expr2(%clock: i1, %reset: i1, %really_long_port: i11) 
   rtl.output
 }
 
+// https://github.com/llvm/circt/issues/720
+// CHECK-LABEL: module issue720(
+rtl.module @issue720(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
+
+  // CHECK: always @(posedge clock) begin
+  sv.always posedge %clock  {
+    // CHECK:   automatic logic _T;
+
+    // CHECK:   if (arg1)
+    // CHECK:     $fatal;
+    sv.if %arg1  {
+      sv.fatal
+    }
+
+  // CHECK:   assign _T = arg1 & arg2;
+  // CHECK:   if (_T)
+  // CHECK:     $fatal;
+
+    //this forces a common subexpression to be output out-of-line
+    %610 = comb.and %arg1, %arg2 : i1
+    %611 = comb.and %arg3, %610 : i1
+    sv.if %610  {
+      sv.fatal
+    }
+
+    // CHECK:   if (arg3 & _T)
+    // CHECK:     $fatal;
+    sv.if %611  {
+      sv.fatal
+    }
+  } // CHECK: end // always @(posedge)
+
+  rtl.output
+}
+
+// CHECK-LABEL: module issue720ifdef(
+rtl.module @issue720ifdef(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
+  // CHECK: always @(posedge clock) begin
+  sv.always posedge %clock  {
+    // The variable for the ifdef block needs to be emitted at the top of the
+    // always block since the ifdef is transparent to verilog.
+
+    // CHECK:    automatic logic _T;
+    // CHECK:    if (arg1)
+    // CHECK:      $fatal;
+    sv.if %arg1  {
+      sv.fatal
+    }
+
+    // CHECK:    `ifdef FUN_AND_GAMES
+     sv.ifdef.procedural "FUN_AND_GAMES" {
+      // This forces a common subexpression to be output out-of-line
+      // CHECK:      assign _T = arg1 & arg2;
+      // CHECK:      if (_T)
+      // CHECK:        $fatal;
+      %610 = comb.and %arg1, %arg2 : i1
+      sv.if %610  {
+        sv.fatal
+      }
+      // CHECK:      if (arg3 & _T)
+      // CHECK:        $fatal;
+      %611 = comb.and %arg3, %610 : i1
+     sv.if %611  {
+        sv.fatal
+      }
+      // CHECK:    `endif
+      // CHECK:  end // always @(posedge)
+    }
+  }
+  rtl.output
+}
