@@ -1,8 +1,6 @@
 #!/usr/bin/python3
 
-import binascii
 import capnp
-import random
 import time
 
 
