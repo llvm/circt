@@ -558,12 +558,12 @@ public:
   /// previously renamed in the table moduleNameTable, else call
   /// resolveKeywordConflict, to get a new name in case of conflict with
   /// keywords.
-  StringRef getModuleName(StringRef moduleName) {
+  StringRef getModuleName(StringAttr moduleName) {
     auto entryIter = moduleNameTable.find(moduleName);
     StringRef updatedName;
     if (entryIter == moduleNameTable.end()) {
-      updatedName = resolveKeywordConflict(moduleName, usedModuleNames,
-                                           nextGeneratedNameID);
+      updatedName = resolveKeywordConflict(
+          moduleName.getValue(), usedModuleNames, nextGeneratedNameID);
       moduleNameTable[moduleName] = updatedName;
     } else
       updatedName = entryIter->getSecond();
@@ -577,7 +577,7 @@ public:
 
   /// moduleNameTable keeps track of mappings from Module names to updated names
   /// to resolve keyword conflicts.
-  llvm::DenseMap<StringRef, StringRef> moduleNameTable;
+  llvm::DenseMap<Attribute, StringRef> moduleNameTable;
 
   /// outputNames tracks the uniquified names for output ports, which don't have
   /// a Value or Op representation.
@@ -2206,9 +2206,13 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   // name, then use it here.  This is a hack because we lack proper support for
   // parameterized modules in the RTL dialect.
   if (auto extMod = dyn_cast<RTLModuleExternOp>(moduleOp)) {
-    indent() << emitter.getModuleName(extMod.getVerilogModuleName());
-  } else {
-    indent() << emitter.getModuleName(op.moduleName());
+    auto verilogName = extMod.verilogNameAttr();
+    if (!verilogName)
+      verilogName = extMod->getAttrOfType<StringAttr>(
+          ::mlir::SymbolTable::getSymbolAttrName());
+    indent() << emitter.getModuleName(verilogName);
+  } else if (auto mod = dyn_cast<RTLModuleOp>(moduleOp)) {
+    indent() << emitter.getModuleName(mod.getNameAttr()); //.moduleName());
   }
 
   // Helper that prints a parameter constant value in a Verilog compatible way.
@@ -2491,7 +2495,11 @@ void ModuleEmitter::emitMLIRModule(ModuleOp module) {
 }
 
 void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
-  os << "// external module " << getModuleName(module.getName()) << "\n\n";
+  auto verilogName = module.verilogNameAttr();
+  if (!verilogName)
+    verilogName = module->getAttrOfType<StringAttr>(
+        ::mlir::SymbolTable::getSymbolAttrName());
+  os << "// external module " << getModuleName(verilogName) << "\n\n";
 }
 
 static Value lowerVariadicCommutativeOp(Operation &op, OperandRange operands) {
@@ -2571,7 +2579,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
       addName(module.getArgument(port.argNum), name);
   }
 
-  os << "module " << getModuleName(module.getName()) << '(';
+  os << "module " << getModuleName(module.getNameAttr()) << '(';
   if (!portInfo.empty())
     os << '\n';
 
