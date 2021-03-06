@@ -28,6 +28,13 @@ bool sv::isExpression(Operation *op) {
          isa<sv::ConstantZOp>(op);
 }
 
+LogicalResult sv::verifyInProceduralRegion(Operation *op) {
+  if (op->getParentOp()->hasTrait<sv::ProceduralRegion>())
+    return success();
+  op->emitError() << op->getName() << " should be in a procedural region";
+  return failure();
+}
+
 //===----------------------------------------------------------------------===//
 // ImplicitSSAName Custom Directive
 //===----------------------------------------------------------------------===//

@@ -69,9 +69,11 @@ module {
       sv.assert %validValue : i1
     }
 
-    %structDataSignal = sv.interface.signal.read %structIface(@struct_vr::@data) : !rtl.struct<foo: i7, bar: !rtl.array<5 x i16>>
-    %structData = rtl.struct_extract %structDataSignal["foo"] : !rtl.struct<foo: i7, bar: !rtl.array<5 x i16>>
-    // CHECK: $fwrite(32'h80000002, "%d", [[IFACEST]].data.foo);
-    sv.fwrite "%d"(%structData) : i7
+    sv.if %clk {
+      %structDataSignal = sv.interface.signal.read %structIface(@struct_vr::@data) : !rtl.struct<foo: i7, bar: !rtl.array<5 x i16>>
+      %structData = rtl.struct_extract %structDataSignal["foo"] : !rtl.struct<foo: i7, bar: !rtl.array<5 x i16>>
+      // CHECK: $fwrite(32'h80000002, "%d", [[IFACEST]].data.foo);
+      sv.fwrite "%d"(%structData) : i7
+    }
   }
 }
