@@ -428,9 +428,13 @@ StringRef resolveKeywordConflict(StringRef origName,
   nameBuffer.push_back('_');
   auto baseSize = nameBuffer.size();
 
-  // Loop until we get a name that is not a keyword and is unique.
-  while (reservedWords.count(name) || recordNames.count(name)) {
-
+  while (1) {
+    // Loop until we get a name that is not a keyword and is unique.
+    if (!reservedWords.count(name)) {
+      auto itAndInserted = recordNames.insert(name);
+      if (itAndInserted.second)
+        return itAndInserted.first->getKey();
+    }
     // We need to auto-unique it.
     auto suffix = llvm::utostr(nextGeneratedNameID++);
     nameBuffer.append(suffix.begin(), suffix.end());
@@ -439,8 +443,9 @@ StringRef resolveKeywordConflict(StringRef origName,
     // Chop off the suffix and try again until we get a unique name..
     nameBuffer.resize(baseSize);
   }
-  auto insertIt = recordNames.insert(name);
-  return insertIt.first->getKey();
+
+  // Control never reaches this return.
+  return origName;
 }
 
 //===----------------------------------------------------------------------===//
