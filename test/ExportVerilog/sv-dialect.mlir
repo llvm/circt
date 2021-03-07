@@ -394,7 +394,8 @@ rtl.module @if_multi_line_expr1(%clock: i1, %reset: i1, %really_long_port: i11) 
   // CHECK:      if (reset)
   // CHECK-NEXT:   tmp6 <= 25'h0;
   // CHECK-NEXT: else begin
-  // CHECK-NEXT:   automatic logic [24:0] _tmp = {{..}}14{really_long_port[10]}}, really_long_port};
+  // CHECK-NEXT:   automatic logic [24:0] _tmp;
+  // CHECK-NEXT:   assign _tmp = {{..}}14{really_long_port[10]}}, really_long_port};
   // CHECK-NEXT:   tmp6 <= _tmp & 25'h3039;
   // CHECK-NEXT: end
   sv.alwaysff(posedge %clock)  {
@@ -502,4 +503,52 @@ rtl.module @issue720ifdef(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
     }
   }
   rtl.output
+}
+
+// https://github.com/llvm/circt/issues/728
+
+// CHECK-LABEL: module issue728(
+rtl.module @issue728(%clock: i1, %a: i1 {rtl.name = "asdfasdfasdfasdfafa"}, %b: i1 {rtl.name = "gasfdasafwjhijjafija"})  {
+  // CHECK:  always @(posedge clock) begin
+  // CHECK:    automatic logic _tmp;
+  // CHECK:    automatic logic _tmp_0;
+  // CHECK:    $fwrite(32'h80000002, "force output");
+  // CHECK:    assign _tmp = asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa;
+  // CHECK:    assign _tmp_0 = gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija;
+  // CHECK:    if (_tmp & _tmp_0)
+  // CHECK:      $fwrite(32'h80000002, "this cond is split");
+  // CHECK:  end // always @(posedge)
+  sv.always posedge %clock  {
+     sv.fwrite "force output"
+     %cond = comb.and %a, %b, %a, %b, %a, %b : i1
+     sv.if %cond  {
+       sv.fwrite "this cond is split"
+     }
+  }
+  rtl.output 
+}
+
+// CHECK-LABEL: module issue728ifdef(
+rtl.module @issue728ifdef(%clock: i1, %a: i1 {rtl.name = "asdfasdfasdfasdfafa"}, %b: i1 {rtl.name = "gasfdasafwjhijjafija"})  {
+  // CHECK: always @(posedge clock) begin
+  // CHECK:      automatic logic _tmp;
+  // CHECK:      automatic logic _tmp_0;
+  // CHECK:    $fwrite(32'h80000002, "force output");
+  // CHECK:    `ifdef FUN_AND_GAMES
+  // CHECK:      assign _tmp = asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa;
+  // CHECK:      assign _tmp_0 = gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija;
+  // CHECK:      if (_tmp & _tmp_0)
+  // CHECK:        $fwrite(32'h80000002, "this cond is split");
+  // CHECK:    `endif
+  // CHECK: end // always @(posedge)
+  sv.always posedge %clock  {
+     sv.fwrite "force output"
+     sv.ifdef.procedural "FUN_AND_GAMES" {
+       %cond = comb.and %a, %b, %a, %b, %a, %b : i1
+       sv.if %cond  {
+         sv.fwrite "this cond is split"
+       }
+     }
+  }
+  rtl.output 
 }
