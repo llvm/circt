@@ -257,8 +257,8 @@ rtl.module @Aliasing(%a : !rtl.inout<i42>, %b : !rtl.inout<i42>,
   sv.alias %a, %b, %c : !rtl.inout<i42>, !rtl.inout<i42>, !rtl.inout<i42>
 }
 
-rtl.module @reg(%in4: i4, %in8: i8) -> (%a: i8, %b: i8) {
-  // CHECK-LABEL: module reg(
+rtl.module @reg_0(%in4: i4, %in8: i8) -> (%a: i8, %b: i8) {
+  // CHECK-LABEL: module reg_0(
   // CHECK-NEXT:   input  [3:0] in4,
   // CHECK-NEXT:   input  [7:0] in8,
   // CHECK-NEXT:   output [7:0] a, b);

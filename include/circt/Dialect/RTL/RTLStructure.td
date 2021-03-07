@@ -44,10 +44,15 @@ def RTLModuleOp : RTLOp<"module",
     // squatting on the name.
     Block *getBodyBlock() { return &body().front(); }
 
+    // Get the module's symbolic name as StringAttr.
+    StringAttr getNameAttr() {
+      return (*this)->getAttrOfType<StringAttr>(
+        ::mlir::SymbolTable::getSymbolAttrName());
+    }
+
     // Get the module's symbolic name.
     StringRef getName() {
-      return (*this)->getAttrOfType<StringAttr>(
-        ::mlir::SymbolTable::getSymbolAttrName()).getValue();
+      return getNameAttr().getValue();
     }
 
   private:
@@ -110,6 +115,17 @@ def RTLModuleExternOp : RTLOp<"module.extern",
     /// here.  This is typically the symbol, but can be overridden with the
     /// verilogName attribute.
     StringRef getVerilogModuleName();
+
+    /// Return the name to use for the Verilog module that we're referencing
+    /// here.  This is typically the symbol, but can be overridden with the
+    /// verilogName attribute.
+    StringAttr getVerilogModuleNameAttr() {
+      if (auto vName = verilogNameAttr()){
+        return vName;
+      }
+      return (*this)->getAttrOfType<StringAttr>(
+          ::mlir::SymbolTable::getSymbolAttrName());
+    }
 
   private:
     // This trait needs access to the hooks defined below.
