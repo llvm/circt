@@ -666,14 +666,23 @@ public:
   /// of any emitted expressions in the specified set.  If any subexpressions
   /// are too large to emit, then they are added into tooLargeSubExpressions to
   /// be emitted independently by the caller.
-  ExprEmitter(ModuleEmitter &emitter, SmallPtrSet<Operation *, 8> &emittedExprs,
+  ExprEmitter(ModuleEmitter &emitter, SmallVectorImpl<char> &resultBuffer,
+              SmallPtrSet<Operation *, 8> &emittedExprs,
               SmallVectorImpl<Operation *> &tooLargeSubExpressions)
       : EmitterBase(emitter.state, os), emitter(emitter),
         emittedExprs(emittedExprs),
-        tooLargeSubExpressions(tooLargeSubExpressions), os(resultBuffer) {}
+        tooLargeSubExpressions(tooLargeSubExpressions),
+        resultBuffer(resultBuffer), os(resultBuffer) {}
 
-  void emitExpression(Value exp, VerilogPrecedence parenthesizeIfLooserThan,
-                      raw_ostream &os);
+  /// Emit the specified value as an expression.  If this is an inline-emitted
+  /// expression, we emit that expression, otherwise we emit a reference to the
+  /// already computed name.
+  ///
+  void emitExpression(Value exp, VerilogPrecedence parenthesizeIfLooserThan) {
+    // Emit the expression.
+    emitSubExpr(exp, parenthesizeIfLooserThan, OOLTopLevel,
+                /*signRequirement*/ NoRequirement);
+  }
 
 private:
   friend class TypeOpVisitor<ExprEmitter, SubExprInfo>;
@@ -808,25 +817,10 @@ private:
   /// If any subexpressions would result in too large of a line, report it back
   /// to the caller in this vector.
   SmallVectorImpl<Operation *> &tooLargeSubExpressions;
-  SmallString<128> resultBuffer;
+  SmallVectorImpl<char> &resultBuffer;
   llvm::raw_svector_ostream os;
 };
 } // end anonymous namespace
-
-/// Emit the specified value as an expression.  If this is an inline-emitted
-/// expression, we emit that expression, otherwise we emit a reference to the
-/// already computed name.
-///
-void ExprEmitter::emitExpression(Value exp,
-                                 VerilogPrecedence parenthesizeIfLooserThan,
-                                 raw_ostream &os) {
-  // Emit the expression.
-  emitSubExpr(exp, parenthesizeIfLooserThan, OOLTopLevel,
-              /*signRequirement*/ NoRequirement);
-
-  // Once the expression is done, we can emit the result to the stream.
-  os << resultBuffer;
-}
 
 SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
                                     const char *syntax,
@@ -1627,8 +1621,8 @@ void StmtEmitter::emitExpression(Value exp,
                                  SmallPtrSet<Operation *, 8> &emittedExprs,
                                  VerilogPrecedence parenthesizeIfLooserThan) {
   SmallVector<Operation *> tooLargeSubExpressions;
-  ExprEmitter(emitter, emittedExprs, tooLargeSubExpressions)
-      .emitExpression(exp, parenthesizeIfLooserThan, os);
+  ExprEmitter(emitter, outBuffer, emittedExprs, tooLargeSubExpressions)
+      .emitExpression(exp, parenthesizeIfLooserThan);
 
   // It is possible that the emitted expression was too large to fit on a line
   // and needs to be split.  If so, the new subexpressions that need emitting
