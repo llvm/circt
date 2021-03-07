@@ -51,3 +51,37 @@ rtl.module @Passign(%arg0: i1) {
   // expected-error @+1 {{sv.passign should be in a procedural region}}
   sv.passign %reg, %arg0 : i1
 }
+
+// -----
+rtl.module @IfOp(%arg0: i1) {
+  // expected-error @+1 {{sv.if should be in a procedural region}}
+  sv.if %arg0 {
+    sv.fwrite "Foo"
+  }
+}
+
+// -----
+rtl.module @Fatal() {
+  // expected-error @+1 {{sv.fatal should be in a procedural region}}
+  sv.fatal
+}
+
+// -----
+rtl.module @Fatal() {
+  // expected-error @+1 {{sv.finish should be in a procedural region}}
+  sv.finish
+}
+
+// -----
+rtl.module @CaseZ(%arg8: i8) {
+  // expected-error @+1 {{sv.casez should be in a procedural region}}
+  sv.casez %arg8 : i8
+    case b0000001x: {
+      sv.fwrite "x"
+      sv.yield
+    }
+    default: {
+      sv.fwrite "z"
+      sv.yield
+    }
+}
