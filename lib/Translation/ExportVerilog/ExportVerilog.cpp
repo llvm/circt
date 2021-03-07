@@ -537,7 +537,7 @@ public:
   /// This set keeps track of expressions that need an explicit logic decl at
   /// the top of the module to avoid "use before def" issues in the generated
   /// verilog.  This can happen for cyclic modules.
-  SmallPtrSet<Operation *, 16> outOfLineExpresssionDecls;
+  SmallPtrSet<Operation *, 16> outOfLineExpressionDecls;
 };
 
 } // end anonymous namespace
@@ -1492,7 +1492,7 @@ void NameCollector::collectNames(Block &block) {
 
         // Otherwise keep track of this unusual case and declare it like
         // normal.
-        moduleEmitter.outOfLineExpresssionDecls.insert(&op);
+        moduleEmitter.outOfLineExpressionDecls.insert(&op);
       }
 
       // Emit this value.
@@ -1662,7 +1662,7 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
   } else if (isZeroBitType(op->getResult(0).getType())) {
     indent() << "// Zero width: ";
     --numStatementsEmitted;
-  } else if (!emitter.outOfLineExpresssionDecls.count(op)) {
+  } else if (!emitter.outOfLineExpressionDecls.count(op)) {
     indent() << getVerilogDeclWord(op) << " ";
     if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os,
                         op->getLoc()))
