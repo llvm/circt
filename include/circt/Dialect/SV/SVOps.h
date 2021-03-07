@@ -49,7 +49,8 @@ public:
   }
 };
 
-/// This class verifies that the specified op is not located in a procedural region.
+/// This class verifies that the specified op is not located in a procedural
+/// region.
 template <typename ConcreteType>
 class NonProceduralOp
     : public mlir::OpTrait::TraitBase<ConcreteType, NonProceduralOp> {
