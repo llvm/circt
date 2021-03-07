@@ -7,7 +7,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
   // CHECK:      always @(posedge clock) begin
   // CHECK-NEXT:   `ifndef SYNTHESIS
   sv.always posedge %clock {
-    sv.ifdef "SYNTHESIS" {
+    sv.ifdef.procedural "SYNTHESIS" {
     } else {
   // CHECK-NEXT:     if (PRINTF_COND_ & 1'bx & 1'bz & cond)
       %tmp = sv.textual_value "PRINTF_COND_" : i1
@@ -81,65 +81,70 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     sv.fwrite "Async Reset Block\n"
   } 
 
-  // CHECK-NEXT:   if (cond)
-  sv.if %cond {
-    %c42 = rtl.constant 42 : i42
+  // CHECK-NEXT:  initial begin
+  sv.initial {
+    // CHECK-NEXT:   if (cond)
+    sv.if %cond {
+      %c42 = rtl.constant 42 : i42
 
-    // CHECK-NEXT: wire42 = 42'h2A;
-    sv.bpassign %wire42, %c42 : i42
-  }
-
-  // CHECK-NEXT:   if (cond)
-  // CHECK-NOT: begin
-  sv.if %cond {
-    %c42 = rtl.constant 42 : i8
-    %add = comb.add %val, %c42 : i8
-
-    // CHECK-NEXT: $fwrite(32'h80000002, "Inlined! %x\n", val + 8'h2A);
-    sv.fwrite "Inlined! %x\n"(%add) : i8
-  }
-
-  // begin/end required here to avoid else-confusion.  
-
-  // CHECK-NEXT:   if (cond) begin
-  sv.if %cond {
-    // CHECK-NEXT: if (clock)
-    sv.if %clock {
-      // CHECK-NEXT: $fwrite(32'h80000002, "Inside Block\n");
-      sv.fwrite "Inside Block\n"
+      // CHECK-NEXT: wire42 = 42'h2A;
+      sv.bpassign %wire42, %c42 : i42
     }
-    // CHECK-NEXT: end
-  } else { // CHECK-NEXT: else
+
+    // CHECK-NEXT:   if (cond)
     // CHECK-NOT: begin
-    // CHECK-NEXT: $fwrite(32'h80000002, "Else Block\n");
-    sv.fwrite "Else Block\n"
+    sv.if %cond {
+      %c42 = rtl.constant 42 : i8
+      %add = comb.add %val, %c42 : i8
+
+      // CHECK-NEXT: $fwrite(32'h80000002, "Inlined! %x\n", val + 8'h2A);
+      sv.fwrite "Inlined! %x\n"(%add) : i8
+    }
+
+    // begin/end required here to avoid else-confusion.  
+
+    // CHECK-NEXT:   if (cond) begin
+    sv.if %cond {
+      // CHECK-NEXT: if (clock)
+      sv.if %clock {
+        // CHECK-NEXT: $fwrite(32'h80000002, "Inside Block\n");
+        sv.fwrite "Inside Block\n"
+      }
+      // CHECK-NEXT: end
+    } else { // CHECK-NEXT: else
+      // CHECK-NOT: begin
+      // CHECK-NEXT: $fwrite(32'h80000002, "Else Block\n");
+      sv.fwrite "Else Block\n"
+    }
+
+    // CHECK-NEXT:   if (cond) begin
+    sv.if %cond {
+      // CHECK-NEXT:     $fwrite(32'h80000002, "Hi\n");
+      sv.fwrite "Hi\n"
+
+      // CHECK-NEXT:     $fwrite(32'h80000002, "Bye %x\n", val + val);
+      %tmp = comb.add %val, %val : i8
+      sv.fwrite "Bye %x\n"(%tmp) : i8
+
+      // CHECK-NEXT:     assert(cond);
+      sv.assert %cond : i1
+      // CHECK-NEXT:     assume(cond);
+      sv.assume %cond : i1
+      // CHECK-NEXT:     cover(cond);
+      sv.cover %cond : i1
+
+      // CHECK-NEXT:   $fatal
+      sv.fatal
+      // CHECK-NEXT:   $finish
+      sv.finish
+
+      // CHECK-NEXT: Emit some stuff in verilog
+      // CHECK-NEXT: Great power and responsibility!
+      sv.verbatim "Emit some stuff in verilog\nGreat power and responsibility!"
+    }// CHECK-NEXT:   {{end$}}
   }
+  // CHECK-NEXT:  end // initial
 
-  // CHECK-NEXT:   if (cond) begin
-  sv.if %cond {
-    // CHECK-NEXT:     $fwrite(32'h80000002, "Hi\n");
-    sv.fwrite "Hi\n"
-
-    // CHECK-NEXT:     $fwrite(32'h80000002, "Bye %x\n", val + val);
-    %tmp = comb.add %val, %val : i8
-    sv.fwrite "Bye %x\n"(%tmp) : i8
-
-    // CHECK-NEXT:     assert(cond);
-    sv.assert %cond : i1
-    // CHECK-NEXT:     assume(cond);
-    sv.assume %cond : i1
-    // CHECK-NEXT:     cover(cond);
-    sv.cover %cond : i1
-
-    // CHECK-NEXT:   $fatal
-    sv.fatal
-    // CHECK-NEXT:   $finish
-    sv.finish
-
-    // CHECK-NEXT: Emit some stuff in verilog
-    // CHECK-NEXT: Great power and responsibility!
-    sv.verbatim "Emit some stuff in verilog\nGreat power and responsibility!"
-  }// CHECK-NEXT:   {{end$}}
 
   // CHECK-NEXT: initial
   // CHECK-NOT: begin
