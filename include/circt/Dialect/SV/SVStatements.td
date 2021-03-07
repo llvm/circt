@@ -16,7 +16,8 @@ def HasRegionTerminator : SingleBlockImplicitTerminator<"YieldOp">;
 // Control flow like-operations
 //===----------------------------------------------------------------------===//
 
-def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments]> {
+def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments,
+                             NonProceduralOp]> {
   let summary = "'ifdef MACRO' block";
 
   let description = [{
@@ -148,7 +149,8 @@ def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
 
 
 def AlwaysOp : SVOp<"always", [HasRegionTerminator, NoRegionArguments,
-                               RecursiveSideEffects, ProceduralRegion]> {
+                               RecursiveSideEffects, ProceduralRegion,
+                               NonProceduralOp]> {
   let summary = "'always @' block";
   let description = "See SV Spec 9.2, and 9.4.2.2.";
   
@@ -190,7 +192,8 @@ def ResetTypeAttr : I32EnumAttr<"ResetType", "reset type",
 
 
 def AlwaysFFOp : SVOp<"alwaysff", [HasRegionTerminator, NoRegionArguments,
-                                   RecursiveSideEffects, ProceduralRegion]> {
+                                   RecursiveSideEffects, ProceduralRegion,
+                                   NonProceduralOp]> {
   let summary = "'alwaysff @' block with optional reset";
   let description = [{ 
     alwaysff blocks represent always_ff verilog nodes, which enforce inference 
@@ -233,7 +236,8 @@ def AlwaysFFOp : SVOp<"alwaysff", [HasRegionTerminator, NoRegionArguments,
 
 
 def InitialOp : SVOp<"initial", [HasRegionTerminator, NoRegionArguments,
-                                 RecursiveSideEffects, ProceduralRegion]> {
+                                 RecursiveSideEffects, ProceduralRegion,
+                                 NonProceduralOp]> {
   let summary = "'initial' block";
   let description = "See SV Spec 9.2.1.";
 

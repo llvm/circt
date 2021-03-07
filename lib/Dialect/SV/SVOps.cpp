@@ -35,6 +35,13 @@ LogicalResult sv::verifyInProceduralRegion(Operation *op) {
   return failure();
 }
 
+LogicalResult sv::verifyInNonProceduralRegion(Operation *op) {
+  if (!op->getParentOp()->hasTrait<sv::ProceduralRegion>())
+    return success();
+  op->emitError() << op->getName() << " should be in a non-procedural region";
+  return failure();
+}
+
 //===----------------------------------------------------------------------===//
 // ImplicitSSAName Custom Directive
 //===----------------------------------------------------------------------===//
