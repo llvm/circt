@@ -49,7 +49,7 @@ jobs:
     needs: build-llvm
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-integration-test:v3
+      image: ghcr.io/circt/images/circt-integration-test:v4
     strategy:
       matrix:
         build-assert: [ON, OFF]
