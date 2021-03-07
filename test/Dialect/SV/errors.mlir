@@ -117,3 +117,11 @@ rtl.module @AlwaysFF(%arg0: i1) {
     sv.alwaysff (posedge %arg0) {}
   }
 }
+
+// -----
+rtl.module @Wire() {
+  sv.initial {
+    // expected-error @+1 {{sv.wire should be in a non-procedural region}}
+    %wire = sv.wire : !rtl.inout<i1>
+  }
+}
