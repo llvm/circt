@@ -99,7 +99,7 @@ def IfDefProceduralOp
 }
 
 def IfOp : SVOp<"if", [HasRegionTerminator, NoRegionArguments,
-                       ProceduralRegion]> {
+                       ProceduralRegion, ProceduralOp]> {
   let summary = "'if (cond)' block";
   
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
@@ -256,7 +256,7 @@ def InitialOp : SVOp<"initial", [HasRegionTerminator, NoRegionArguments,
 }
 
 def CaseZOp : SVOp<"casez", [HasRegionTerminator, NoRegionArguments,
-                             ProceduralRegion]> {
+                             ProceduralRegion, ProceduralOp]> {
   let summary = "'casez (cond)' block";
   let description = "See SystemVerilog 2017 12.5.1.";
 
@@ -328,7 +328,8 @@ def YieldOp
    let assemblyFormat = "attr-dict";
 }
 
-def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">]> {
+def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">,
+                                   ProceduralOp]> {
   let summary = "Blocking procedural assignment";
   let description = [{
     A SystemVerilog blocking procedural assignment statement 'x = y;'.  These
@@ -340,7 +341,8 @@ def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">]> {
   let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
 }
 
-def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">]> {
+def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
+                                 ProceduralOp]> {
   let summary = "Nonblocking procedural assignment";
   let description = [{
     A SystemVerilog nonblocking procedural assignment statement 'x <= y;'. 
@@ -370,7 +372,7 @@ def AliasOp : SVOp<"alias"> {
 
 // TODO: This needs to model the file descriptor to write on.  This is currently
 // hard coded to 32'h80000002.
-def FWriteOp : SVOp<"fwrite"> {
+def FWriteOp : SVOp<"fwrite", [ProceduralOp]> {
   let summary = "'$fwrite' statement";
    
   let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands);
@@ -380,7 +382,7 @@ def FWriteOp : SVOp<"fwrite"> {
     "$string attr-dict (`(` $operands^ `)` `:` type($operands))?";
 }
 
-def FinishOp : SVOp<"finish"> {
+def FinishOp : SVOp<"finish", [ProceduralOp]> {
   let summary = "'$finish' statement";
   let description = [{
     Finishes a simulation and exits the simulation process.
@@ -392,7 +394,7 @@ def FinishOp : SVOp<"finish"> {
   let assemblyFormat = "attr-dict";
 }
 
-def FatalOp : SVOp<"fatal"> {
+def FatalOp : SVOp<"fatal", [ProceduralOp]> {
   let summary = "'$fatal' statement";
   let description = [{
     Run-time fatal assertion error.

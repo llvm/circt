@@ -24,6 +24,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/SaveAndRestore.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
@@ -599,7 +600,7 @@ public:
   /// This set keeps track of expressions that need an explicit logic decl at
   /// the top of the module to avoid "use before def" issues in the generated
   /// verilog.  This can happen for cyclic modules.
-  SmallPtrSet<Operation *, 16> outOfLineExpresssionDecls;
+  SmallPtrSet<Operation *, 16> outOfLineExpressionDecls;
 };
 
 } // end anonymous namespace
@@ -694,14 +695,23 @@ public:
   /// of any emitted expressions in the specified set.  If any subexpressions
   /// are too large to emit, then they are added into tooLargeSubExpressions to
   /// be emitted independently by the caller.
-  ExprEmitter(ModuleEmitter &emitter, SmallPtrSet<Operation *, 8> &emittedExprs,
+  ExprEmitter(ModuleEmitter &emitter, SmallVectorImpl<char> &outBuffer,
+              SmallPtrSet<Operation *, 8> &emittedExprs,
               SmallVectorImpl<Operation *> &tooLargeSubExpressions)
       : EmitterBase(emitter.state, os), emitter(emitter),
         emittedExprs(emittedExprs),
-        tooLargeSubExpressions(tooLargeSubExpressions), os(resultBuffer) {}
+        tooLargeSubExpressions(tooLargeSubExpressions), outBuffer(outBuffer),
+        os(outBuffer) {}
 
-  void emitExpression(Value exp, VerilogPrecedence parenthesizeIfLooserThan,
-                      raw_ostream &os);
+  /// Emit the specified value as an expression.  If this is an inline-emitted
+  /// expression, we emit that expression, otherwise we emit a reference to the
+  /// already computed name.
+  ///
+  void emitExpression(Value exp, VerilogPrecedence parenthesizeIfLooserThan) {
+    // Emit the expression.
+    emitSubExpr(exp, parenthesizeIfLooserThan, OOLTopLevel,
+                /*signRequirement*/ NoRequirement);
+  }
 
 private:
   friend class TypeOpVisitor<ExprEmitter, SubExprInfo>;
@@ -719,6 +729,8 @@ private:
   SubExprInfo emitSubExpr(Value exp, VerilogPrecedence parenthesizeIfLooserThan,
                           SubExprOutOfLineBehavior outOfLineBehavior,
                           SubExprSignRequirement signReq = NoRequirement);
+
+  void retroactivelyEmitExpressionIntoTemporarily(Operation *op);
 
   SubExprInfo visitUnhandledExpr(Operation *op);
   SubExprInfo visitInvalidComb(Operation *op) {
@@ -750,6 +762,8 @@ private:
   SubExprInfo visitSV(GetModportOp op);
   SubExprInfo visitSV(ReadInterfaceSignalOp op);
   SubExprInfo visitSV(TextualValueOp op);
+  SubExprInfo visitSV(ConstantXOp op);
+  SubExprInfo visitSV(ConstantZOp op);
 
   // Noop cast operators.
   SubExprInfo visitSV(ReadInOutOp op) {
@@ -818,9 +832,10 @@ private:
   SubExprInfo visitComb(ExtractOp op);
   SubExprInfo visitComb(ICmpOp op);
 
-private:
+public:
   ModuleEmitter &emitter;
 
+private:
   /// This is set (before a visit method is called) if emitSubExpr would
   /// prefer to get an output of a specific sign.  This is a hint to cause the
   /// visitor to change its emission strategy, but the visit method can ignore
@@ -834,25 +849,10 @@ private:
   /// If any subexpressions would result in too large of a line, report it back
   /// to the caller in this vector.
   SmallVectorImpl<Operation *> &tooLargeSubExpressions;
-  SmallString<128> resultBuffer;
+  SmallVectorImpl<char> &outBuffer;
   llvm::raw_svector_ostream os;
 };
 } // end anonymous namespace
-
-/// Emit the specified value as an expression.  If this is an inline-emitted
-/// expression, we emit that expression, otherwise we emit a reference to the
-/// already computed name.
-///
-void ExprEmitter::emitExpression(Value exp,
-                                 VerilogPrecedence parenthesizeIfLooserThan,
-                                 raw_ostream &os) {
-  // Emit the expression.
-  emitSubExpr(exp, parenthesizeIfLooserThan, OOLTopLevel,
-              /*signRequirement*/ NoRequirement);
-
-  // Once the expression is done, we can emit the result to the stream.
-  os << resultBuffer;
-}
 
 SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
                                     const char *syntax,
@@ -905,6 +905,27 @@ SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
   return {Unary, resultAlwaysUnsigned ? IsUnsigned : signedness};
 }
 
+/// We eagerly emit single-use expressions inline into big expression trees...
+/// up to the point where they turn into massively long source lines of Verilog.
+/// At that point, we retroactively break the huge expression by inserting
+/// temporaries.  This handles the bookkeeping.
+void ExprEmitter::retroactivelyEmitExpressionIntoTemporarily(Operation *op) {
+  assert(isVerilogExpression(op) && !emitter.outOfLineExpressions.count(op) &&
+         "Should only be called on expressions though to be inlined");
+
+  emitter.outOfLineExpressions.insert(op);
+  emitter.addName(ModuleEmitter::ValueOrOp(op->getResult(0)), "_tmp");
+
+  // If we're emitting this temporary in a procedural region, we need to emit
+  // the variable declaration at the end of the block's declaration range, then
+  // emit an assign.
+  if (isTemporaryInProceduralRegion(op))
+    emitter.outOfLineExpressionDecls.insert(op);
+
+  // Remember that this subexpr needs to be emitted independently.
+  tooLargeSubExpressions.push_back(op);
+}
+
 /// Emit the specified value as a subexpression to the stream.
 SubExprInfo ExprEmitter::emitSubExpr(Value exp,
                                      VerilogPrecedence parenthesizeIfLooserThan,
@@ -931,7 +952,7 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     return {Symbol, IsUnsigned};
   }
 
-  unsigned subExprStartIndex = resultBuffer.size();
+  unsigned subExprStartIndex = outBuffer.size();
 
   // Inform the visit method about the preferred sign we want from the result.
   // It may choose to ignore this, but some emitters can change behavior based
@@ -945,8 +966,8 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
   // Check cases where we have to insert things before the expression now that
   // we know things about it.
   auto addPrefix = [&](StringRef prefix) {
-    resultBuffer.insert(resultBuffer.begin() + subExprStartIndex,
-                        prefix.begin(), prefix.end());
+    outBuffer.insert(outBuffer.begin() + subExprStartIndex, prefix.begin(),
+                     prefix.end());
   };
   if (signRequirement == RequireSigned && expInfo.signedness == IsUnsigned) {
     addPrefix("$signed(");
@@ -983,15 +1004,15 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     break;
   }
 
-  if (resultBuffer.size() - subExprStartIndex > threshold &&
+  if (outBuffer.size() - subExprStartIndex > threshold &&
       parenthesizeIfLooserThan != ForceEmitMultiUse) {
-    // Remember that this subexpr needs to be emitted independently.
-    tooLargeSubExpressions.push_back(op);
-    emitter.outOfLineExpressions.insert(op);
-    emitter.addName(ModuleEmitter::ValueOrOp(exp), "_tmp");
+    // Inform the module emitter that this expression needs a temporary
+    // wire/logic declaration and set it up so it will be referenced instead of
+    // emitted inline.
+    retroactivelyEmitExpressionIntoTemporarily(op);
 
     // Lop this off the buffer we emitted.
-    resultBuffer.resize(subExprStartIndex);
+    outBuffer.resize(subExprStartIndex);
 
     // Try again, now it will get emitted as a out-of-line leaf.
     return emitSubExpr(exp, parenthesizeIfLooserThan, outOfLineBehavior,
@@ -1129,6 +1150,16 @@ SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
 
 SubExprInfo ExprEmitter::visitSV(TextualValueOp op) {
   os << op.string();
+  return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitSV(ConstantXOp op) {
+  os << op.getType().getWidth() << "'bx";
+  return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitSV(ConstantZOp op) {
+  os << op.getType().getWidth() << "'bz";
   return {Unary, IsUnsigned};
 }
 
@@ -1508,7 +1539,7 @@ void NameCollector::collectNames(Block &block) {
 
         // Otherwise keep track of this unusual case and declare it like
         // normal.
-        moduleEmitter.outOfLineExpresssionDecls.insert(&op);
+        moduleEmitter.outOfLineExpressionDecls.insert(&op);
       }
 
       // Emit this value.
@@ -1558,6 +1589,16 @@ public:
   void emitStatement(Operation *op);
   void emitStatementBlock(Block &body);
   size_t getNumStatementsEmitted() const { return numStatementsEmitted; }
+
+  /// Emit the declaration for the temporary operation with no initializer and
+  /// no semicolon, e.g. "wire foo".
+  void emitDeclarationForTemporary(Operation *op) {
+    indent() << getVerilogDeclWord(op) << " ";
+    if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os,
+                        op->getLoc()))
+      os << ' ';
+    os << emitter.getName(op->getResult(0));
+  }
 
 private:
   void collectNamesEmitDecls(Block &block);
@@ -1623,13 +1664,20 @@ private:
                             SmallPtrSet<Operation *, 8> &locationOps,
                             StringRef multiLineComment = StringRef());
 
+public:
   ModuleEmitter &emitter;
+
+private:
   llvm::raw_svector_ostream stringStream;
   // All statements are emitted into a temporary buffer, this is it.
   SmallVectorImpl<char> &outBuffer;
 
   // This is the index of the start of the current statement being emitted.
   size_t statementBeginningIndex = 0;
+
+  /// This is the index of the end of the declaration region of the current
+  /// 'begin' block, used to emit variable declarations.
+  size_t blockDeclarationInsertPointIndex = 0;
   size_t numStatementsEmitted = 0;
 };
 
@@ -1643,8 +1691,8 @@ void StmtEmitter::emitExpression(Value exp,
                                  SmallPtrSet<Operation *, 8> &emittedExprs,
                                  VerilogPrecedence parenthesizeIfLooserThan) {
   SmallVector<Operation *> tooLargeSubExpressions;
-  ExprEmitter(emitter, emittedExprs, tooLargeSubExpressions)
-      .emitExpression(exp, parenthesizeIfLooserThan, os);
+  ExprEmitter(emitter, outBuffer, emittedExprs, tooLargeSubExpressions)
+      .emitExpression(exp, parenthesizeIfLooserThan);
 
   // It is possible that the emitted expression was too large to fit on a line
   // and needs to be split.  If so, the new subexpressions that need emitting
@@ -1658,15 +1706,34 @@ void StmtEmitter::emitExpression(Value exp,
                        outBuffer.end());
   outBuffer.resize(statementBeginningIndex);
 
+  SmallVector<Operation *> declarationsNeeded;
   // Emit each stmt expression in turn.
   for (auto *expr : tooLargeSubExpressions) {
     statementBeginningIndex = outBuffer.size();
     ++numStatementsEmitted;
     emitStatementExpression(expr);
+
+    if (emitter.outOfLineExpressionDecls.count(expr))
+      declarationsNeeded.push_back(expr);
   }
 
   // Re-add this statement now that all the preceeding ones are out.
   outBuffer.append(thisStmt.begin(), thisStmt.end());
+
+  // If any of the expressions needed a separate declaration, emit that.  We
+  // do this after inserting the assign statements because we don't want to
+  // invalidate the index.
+  if (!declarationsNeeded.empty()) {
+    thisStmt.assign(outBuffer.begin() + blockDeclarationInsertPointIndex,
+                    outBuffer.end());
+    outBuffer.resize(blockDeclarationInsertPointIndex);
+    for (auto *expr : declarationsNeeded) {
+      emitDeclarationForTemporary(expr);
+      os << ";\n";
+    }
+    blockDeclarationInsertPointIndex = outBuffer.size();
+    outBuffer.append(thisStmt.begin(), thisStmt.end());
+  }
 }
 
 void StmtEmitter::emitStatementExpression(Operation *op) {
@@ -1678,12 +1745,9 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
   } else if (isZeroBitType(op->getResult(0).getType())) {
     indent() << "// Zero width: ";
     --numStatementsEmitted;
-  } else if (!emitter.outOfLineExpresssionDecls.count(op)) {
-    indent() << getVerilogDeclWord(op) << " ";
-    if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os,
-                        op->getLoc()))
-      os << ' ';
-    os << emitter.getName(op->getResult(0)) << " = ";
+  } else if (!emitter.outOfLineExpressionDecls.count(op)) {
+    emitDeclarationForTemporary(op);
+    os << " = ";
   } else {
     indent() << "assign " << emitter.getName(op->getResult(0)) << " = ";
   }
@@ -2000,6 +2064,10 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
   size_t beginInsertPoint = outBuffer.size();
   emitLocationInfoAndNewLine(locationOps);
 
+  // Change the blockDeclarationInsertPointIndex for the statements in this
+  // block.
+  llvm::SaveAndRestore<size_t> X(blockDeclarationInsertPointIndex,
+                                 outBuffer.size());
   auto numEmittedBefore = getNumStatementsEmitted();
   emitStatementBlock(*block);
 
