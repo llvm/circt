@@ -444,9 +444,6 @@ StringRef resolveKeywordConflict(StringRef origName,
     // Chop off the suffix and try again until we get a unique name..
     nameBuffer.resize(baseSize);
   }
-
-  // Control never reaches this return.
-  return origName;
 }
 
 //===----------------------------------------------------------------------===//
@@ -561,13 +558,11 @@ public:
   /// keywords.
   StringRef getModuleName(StringAttr moduleName) {
     auto entryIter = moduleNameTable.find(moduleName);
-    StringRef updatedName;
-    if (entryIter == moduleNameTable.end()) {
-      updatedName = resolveKeywordConflict(
-          moduleName.getValue(), usedModuleNames, nextGeneratedNameID);
-      moduleNameTable[moduleName] = updatedName;
-    } else
-      updatedName = entryIter->getSecond();
+    if (entryIter != moduleNameTable.end())
+      return entryIter->getSecond();
+    auto updatedName = resolveKeywordConflict(
+        moduleName.getValue(), usedModuleNames, nextGeneratedNameID);
+    moduleNameTable[moduleName] = updatedName;
     return updatedName;
   }
 
@@ -2274,10 +2269,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   // name, then use it here.  This is a hack because we lack proper support for
   // parameterized modules in the RTL dialect.
   if (auto extMod = dyn_cast<RTLModuleExternOp>(moduleOp)) {
-    auto verilogName = extMod.verilogNameAttr();
-    if (!verilogName)
-      verilogName = extMod->getAttrOfType<StringAttr>(
-          ::mlir::SymbolTable::getSymbolAttrName());
+    auto verilogName = extMod.getVerilogModuleNameAttr();
     indent() << emitter.getModuleName(verilogName);
   } else if (auto mod = dyn_cast<RTLModuleOp>(moduleOp)) {
     indent() << emitter.getModuleName(mod.getNameAttr()); //.moduleName());
@@ -2563,10 +2555,7 @@ void ModuleEmitter::emitMLIRModule(ModuleOp module) {
 }
 
 void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
-  auto verilogName = module.verilogNameAttr();
-  if (!verilogName)
-    verilogName = module->getAttrOfType<StringAttr>(
-        ::mlir::SymbolTable::getSymbolAttrName());
+  auto verilogName = module.getVerilogModuleNameAttr();
   os << "// external module " << getModuleName(verilogName) << "\n\n";
 }
 
