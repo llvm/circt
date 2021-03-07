@@ -413,6 +413,39 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
   return sstr.str();
 }
 
+/// Given string \p origName, generate a new name if it conflicts with any
+/// keyword or any other name in the set \p recordNames. Use the int \p
+/// nextGeneratedNameID as a counter for suffix. Update the \p recordNames with
+/// the generated name and return the StringRef.
+StringRef resolveKeywordConflict(StringRef origName,
+                                 llvm::StringSet<> &recordNames,
+                                 size_t &nextGeneratedNameID) {
+  auto name = origName;
+  // Get the list of reserved words we need to avoid.  We could prepopulate this
+  // into the used words cache, but it is large and immutable, so we just query
+  // it when needed.
+  auto &reservedWords = getReservedWords();
+  SmallVector<char, 16> nameBuffer(name.begin(), name.end());
+  nameBuffer.push_back('_');
+  auto baseSize = nameBuffer.size();
+
+  while (1) {
+    // Loop until we get a name that is not a keyword and is unique.
+    if (!reservedWords.count(name)) {
+      auto itAndInserted = recordNames.insert(name);
+      if (itAndInserted.second)
+        return itAndInserted.first->getKey();
+    }
+    // We need to auto-unique it.
+    auto suffix = llvm::utostr(nextGeneratedNameID++);
+    nameBuffer.append(suffix.begin(), suffix.end());
+    name = StringRef(nameBuffer.data(), nameBuffer.size());
+
+    // Chop off the suffix and try again until we get a unique name..
+    nameBuffer.resize(baseSize);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // VerilogEmitter
 //===----------------------------------------------------------------------===//
@@ -513,21 +546,45 @@ public:
 
   StringRef getName(Value value) { return getName(ValueOrOp(value)); }
   StringRef getName(ValueOrOp valueOrOp) {
-    auto *entry = nameTable[valueOrOp];
-    assert(entry && "value expected a name but doesn't have one");
-    return entry->getKey();
+    auto entry = nameTable.find(valueOrOp);
+    assert(entry != nameTable.end() &&
+           "value expected a name but doesn't have one");
+    return entry->getSecond();
+  }
+
+  /// Given a module name \p moduleName, return the updated name if it has been
+  /// previously renamed in the table moduleNameTable, else call
+  /// resolveKeywordConflict, to get a new name in case of conflict with
+  /// keywords.
+  StringRef getModuleName(StringAttr moduleName) {
+    auto entryIter = moduleNameTable.find(moduleName);
+    if (entryIter != moduleNameTable.end())
+      return entryIter->getSecond();
+    auto updatedName = resolveKeywordConflict(
+        moduleName.getValue(), usedModuleNames, nextGeneratedNameID);
+    moduleNameTable[moduleName] = updatedName;
+    return updatedName;
   }
 
 public:
   /// nameTable keeps track of mappings from Value's and operations (for
   /// instances) to their string table entry.
-  llvm::DenseMap<ValueOrOp, llvm::StringMapEntry<llvm::NoneType> *> nameTable;
+  llvm::DenseMap<ValueOrOp, StringRef> nameTable;
+
+  /// moduleNameTable keeps track of mappings from Module names to updated names
+  /// to resolve keyword conflicts.
+  llvm::DenseMap<Attribute, StringRef> moduleNameTable;
 
   /// outputNames tracks the uniquified names for output ports, which don't have
   /// a Value or Op representation.
   SmallVector<StringRef> outputNames;
 
   llvm::StringSet<> usedNames;
+
+  /// Set of used MLIR module names, to ensure unique names when renaming
+  /// keywords in module names.
+  llvm::StringSet<> usedModuleNames;
+
   size_t nextGeneratedNameID = 0;
 
   /// This set keeps track of all of the expression nodes that need to be
@@ -585,45 +642,11 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
     }
     return addName(valueOrOp, tmpName);
   }
-
-  // Get the list of reserved words we need to avoid.  We could prepopulate this
-  // into the used words cache, but it is large and immutable, so we just query
-  // it when needed.
-  auto &reservedWords = getReservedWords();
-
-  // Check to see if this name is available - if so, use it.
-  if (!reservedWords.count(name)) {
-    auto insertResult = usedNames.insert(name);
-    if (insertResult.second) {
-      if (valueOrOp)
-        nameTable[valueOrOp] = &*insertResult.first;
-      return insertResult.first->getKey();
-    }
-  }
-
-  // If not, we need to auto-unique it.
-  SmallVector<char, 16> nameBuffer(name.begin(), name.end());
-  nameBuffer.push_back('_');
-  auto baseSize = nameBuffer.size();
-
-  // Try until we find something that works.
-  while (1) {
-    auto suffix = llvm::utostr(nextGeneratedNameID++);
-    nameBuffer.append(suffix.begin(), suffix.end());
-    name = StringRef(nameBuffer.data(), nameBuffer.size());
-
-    if (!reservedWords.count(name)) {
-      auto insertResult = usedNames.insert(name);
-      if (insertResult.second) {
-        if (valueOrOp)
-          nameTable[valueOrOp] = &*insertResult.first;
-        return insertResult.first->getKey();
-      }
-    }
-
-    // Chop off the suffix and try again.
-    nameBuffer.resize(baseSize);
-  }
+  auto updatedName =
+      resolveKeywordConflict(name, usedNames, nextGeneratedNameID);
+  if (valueOrOp)
+    nameTable[valueOrOp] = updatedName;
+  return updatedName;
 }
 
 //===----------------------------------------------------------------------===//
@@ -2246,9 +2269,10 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   // name, then use it here.  This is a hack because we lack proper support for
   // parameterized modules in the RTL dialect.
   if (auto extMod = dyn_cast<RTLModuleExternOp>(moduleOp)) {
-    indent() << extMod.getVerilogModuleName();
-  } else {
-    indent() << op.moduleName();
+    auto verilogName = extMod.getVerilogModuleNameAttr();
+    indent() << emitter.getModuleName(verilogName);
+  } else if (auto mod = dyn_cast<RTLModuleOp>(moduleOp)) {
+    indent() << emitter.getModuleName(mod.getNameAttr()); //.moduleName());
   }
 
   // Helper that prints a parameter constant value in a Verilog compatible way.
@@ -2531,7 +2555,8 @@ void ModuleEmitter::emitMLIRModule(ModuleOp module) {
 }
 
 void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
-  os << "// external module " << module.getName() << "\n\n";
+  auto verilogName = module.getVerilogModuleNameAttr();
+  os << "// external module " << getModuleName(verilogName) << "\n\n";
 }
 
 static Value lowerVariadicCommutativeOp(Operation &op, OperandRange operands) {
@@ -2611,7 +2636,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
       addName(module.getArgument(port.argNum), name);
   }
 
-  os << "module " << module.getName() << '(';
+  os << "module " << getModuleName(module.getNameAttr()) << '(';
   if (!portInfo.empty())
     os << '\n';
 
