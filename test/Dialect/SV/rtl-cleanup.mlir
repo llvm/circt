@@ -1,7 +1,9 @@
 // RUN: circt-opt -rtl-cleanup %s | FileCheck %s
 
 //CHECK-LABEL: rtl.module @alwaysff_basic(%arg0: i1, %arg1: i1) {
-//CHECK-NEXT:   sv.fwrite "Middle\0A"
+//CHECK-NEXT:   sv.initial {
+//CHECK-NEXT:     sv.fwrite "Middle\0A"
+//CHECK-NEXT:   }
 //CHECK-NEXT:   sv.alwaysff(posedge %arg0)  {
 //CHECK-NEXT:     sv.fwrite "A1"
 //CHECK-NEXT:     sv.fwrite "A2"
@@ -20,7 +22,9 @@ rtl.module @alwaysff_basic(%arg0: i1, %arg1: i1) {
   sv.alwaysff(posedge %arg1) {
     sv.fwrite "B1"
   }
-  sv.fwrite "Middle\n"
+  sv.initial {
+    sv.fwrite "Middle\n"
+  }
   sv.alwaysff(posedge %arg0) {
     sv.fwrite "A2"
   }
@@ -216,7 +220,9 @@ rtl.module @initial_merge(%arg0: i1) {
 }
 
 //CHECK-LABEL: rtl.module @always_basic(%arg0: i1, %arg1: i1) {
-//CHECK-NEXT:   sv.fwrite "Middle\0A"
+//CHECK-NEXT:   sv.initial {
+//CHECK-NEXT:     sv.fwrite "Middle\0A"
+//CHECK-NEXT:   }
 //CHECK-NEXT:   sv.always   posedge %arg0   {
 //CHECK-NEXT:     sv.fwrite "A1"
 //CHECK-NEXT:     sv.fwrite "A2"
@@ -234,7 +240,9 @@ rtl.module @always_basic(%arg0: i1, %arg1: i1) {
   sv.always posedge %arg1 {
     sv.fwrite "B1"
   }
-  sv.fwrite "Middle\n"
+  sv.initial {
+    sv.fwrite "Middle\n"
+  }
   sv.always posedge %arg0 {
     sv.fwrite "A2"
   }

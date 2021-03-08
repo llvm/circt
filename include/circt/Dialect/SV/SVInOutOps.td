@@ -26,7 +26,8 @@ def ConnectOp : SVOp<"connect", [InOutTypeConstraint<"src", "dest">]> {
 }
 
 // Note that net declarations like 'wire' should not appear in an always block.
-def WireOp : SVOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
+def WireOp : SVOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>,
+                           NonProceduralOp]> {
   let summary = "Define a new wire";
   let description = [{
     Declare a SystemVerilog Net Declaration of 'wire' type.

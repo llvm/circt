@@ -67,11 +67,36 @@ module {
       sv.fwrite "valid: %d\n" (%validValue) : i1
       // CHECK: assert(_T.valid);
       sv.assert %validValue : i1
-    }
 
-    %structDataSignal = sv.interface.signal.read %structIface(@struct_vr::@data) : !rtl.struct<foo: i7, bar: !rtl.array<5 x i16>>
-    %structData = rtl.struct_extract %structDataSignal["foo"] : !rtl.struct<foo: i7, bar: !rtl.array<5 x i16>>
-    // CHECK: $fwrite(32'h80000002, "%d", [[IFACEST]].data.foo);
-    sv.fwrite "%d"(%structData) : i7
+      sv.if %clk {
+        %structDataSignal = sv.interface.signal.read %structIface(@struct_vr::@data) : !rtl.struct<foo: i7, bar: !rtl.array<5 x i16>>
+        %structData = rtl.struct_extract %structDataSignal["foo"] : !rtl.struct<foo: i7, bar: !rtl.array<5 x i16>>
+        // CHECK: $fwrite(32'h80000002, "%d", [[IFACEST]].data.foo);
+        sv.fwrite "%d"(%structData) : i7
+      }
+    }
+  }
+
+// Next test case is related to:https://github.com/llvm/circt/issues/681
+// Rename keywords used in variable/module names
+  rtl.module.extern @reg (%m: !sv.modport<@data_vr::@data_in>)
+  // CHECK-LABEL: module Top2
+  rtl.module @Top2 (%clk: i1) {
+    // CHECK: data_vr [[IFACE:.+]]();{{.*}}//{{.+}}
+    %iface = sv.interface.instance : !sv.interface<@data_vr>
+
+    // CHECK-EMPTY:
+    %ifaceInPort = sv.modport.get %iface @data_in :
+      !sv.interface<@data_vr> -> !sv.modport<@data_vr::@data_in>
+
+    // CHECK: reg_0 rcvr1 ({{.*}}//{{.+}}
+    // CHECK:   .m ([[IFACE]].data_in){{.*}}//{{.+}}
+    // CHECK: );
+    rtl.instance "rcvr1" @reg(%ifaceInPort) : (!sv.modport<@data_vr::@data_in>) -> ()
+
+    // CHECK: reg_0 rcvr2 ({{.*}}//{{.+}}
+    // CHECK:   .m ([[IFACE]].data_in){{.*}}//{{.+}}
+    // CHECK: );
+    rtl.instance "rcvr2" @reg(%ifaceInPort) : (!sv.modport<@data_vr::@data_in>) -> ()
   }
 }

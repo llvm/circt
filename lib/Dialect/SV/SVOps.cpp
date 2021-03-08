@@ -24,7 +24,22 @@ using namespace sv;
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {
   return isa<sv::TextualValueOp>(op) || isa<sv::GetModportOp>(op) ||
-         isa<sv::ReadInterfaceSignalOp>(op);
+         isa<sv::ReadInterfaceSignalOp>(op) || isa<sv::ConstantXOp>(op) ||
+         isa<sv::ConstantZOp>(op);
+}
+
+LogicalResult sv::verifyInProceduralRegion(Operation *op) {
+  if (op->getParentOp()->hasTrait<sv::ProceduralRegion>())
+    return success();
+  op->emitError() << op->getName() << " should be in a procedural region";
+  return failure();
+}
+
+LogicalResult sv::verifyInNonProceduralRegion(Operation *op) {
+  if (!op->getParentOp()->hasTrait<sv::ProceduralRegion>())
+    return success();
+  op->emitError() << op->getName() << " should be in a non-procedural region";
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
@@ -613,8 +628,8 @@ static LogicalResult verifyCaseZOp(CaseZOp op) {
 //===----------------------------------------------------------------------===//
 
 ModportType InterfaceOp::getModportType(StringRef modportName) {
-  InterfaceModportOp modportOp = lookupSymbol<InterfaceModportOp>(modportName);
-  assert(modportOp && "Modport symbol not found.");
+  assert(lookupSymbol<InterfaceModportOp>(modportName) &&
+         "Modport symbol not found.");
   auto *ctxt = getContext();
   return ModportType::get(
       getContext(),
