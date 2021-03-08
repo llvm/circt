@@ -26,6 +26,8 @@ namespace sv {
 bool isExpression(Operation *op);
 /// Return true if the specified operation is in a procedural region.
 LogicalResult verifyInProceduralRegion(Operation *op);
+/// Return true if the specified operation is not in a procedural region.
+LogicalResult verifyInNonProceduralRegion(Operation *op);
 
 /// Signals that an operations regions are procedural.
 template <typename ConcreteType>
@@ -43,6 +45,17 @@ class ProceduralOp
 public:
   static LogicalResult verifyTrait(Operation *op) {
     return verifyInProceduralRegion(op);
+  }
+};
+
+/// This class verifies that the specified op is not located in a procedural
+/// region.
+template <typename ConcreteType>
+class NonProceduralOp
+    : public mlir::OpTrait::TraitBase<ConcreteType, NonProceduralOp> {
+public:
+  static LogicalResult verifyTrait(Operation *op) {
+    return verifyInNonProceduralRegion(op);
   }
 };
 

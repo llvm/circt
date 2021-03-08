@@ -85,3 +85,43 @@ rtl.module @CaseZ(%arg8: i8) {
       sv.yield
     }
 }
+
+// -----
+rtl.module @Initial() {
+  sv.initial {
+    // expected-error @+1 {{sv.initial should be in a non-procedural region}}
+    sv.initial {}
+  }
+}
+
+// -----
+rtl.module @IfDef() {
+  sv.initial {
+    // expected-error @+1 {{sv.ifdef should be in a non-procedural region}}
+    sv.ifdef "SYNTHESIS" {}
+  }
+}
+
+// -----
+rtl.module @Always(%arg0: i1) {
+  sv.initial {
+    // expected-error @+1 {{sv.always should be in a non-procedural region}}
+    sv.always posedge %arg0 {}
+  }
+}
+
+// -----
+rtl.module @AlwaysFF(%arg0: i1) {
+  sv.initial {
+    // expected-error @+1 {{sv.alwaysff should be in a non-procedural region}}
+    sv.alwaysff (posedge %arg0) {}
+  }
+}
+
+// -----
+rtl.module @Wire() {
+  sv.initial {
+    // expected-error @+1 {{sv.wire should be in a non-procedural region}}
+    %wire = sv.wire : !rtl.inout<i1>
+  }
+}
