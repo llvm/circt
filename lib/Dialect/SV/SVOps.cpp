@@ -628,8 +628,8 @@ static LogicalResult verifyCaseZOp(CaseZOp op) {
 //===----------------------------------------------------------------------===//
 
 ModportType InterfaceOp::getModportType(StringRef modportName) {
-  InterfaceModportOp modportOp = lookupSymbol<InterfaceModportOp>(modportName);
-  assert(modportOp && "Modport symbol not found.");
+  assert(lookupSymbol<InterfaceModportOp>(modportName) &&
+         "Modport symbol not found.");
   auto *ctxt = getContext();
   return ModportType::get(
       getContext(),

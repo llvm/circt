@@ -2564,6 +2564,7 @@ static Value lowerVariadicCommutativeOp(Operation &op, OperandRange operands) {
   switch (operands.size()) {
   case 0:
     assert(0 && "cannot be called with empty operand range");
+    break;
   case 1:
     return operands[0];
   case 2:
