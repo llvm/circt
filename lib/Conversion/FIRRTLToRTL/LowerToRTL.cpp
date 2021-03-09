@@ -1232,8 +1232,8 @@ void FIRRTLLowering::addToAlwaysFFBlock(EventControl clockEdge, Value clock,
                                         EventControl resetEdge, Value reset,
                                         std::function<void(void)> body,
                                         std::function<void(void)> resetBody) {
-  auto &op = alwaysFFBlocks[{builder->getBlock(), clockEdge, clock, resetStyle,
-                             resetEdge, reset}];
+  auto &op = alwaysFFBlocks[std::make_tuple(
+      builder->getBlock(), clockEdge, clock, resetStyle, resetEdge, reset)];
   if (op) {
     runWithInsertionPointAtEndOfBlock(body, op.bodyBlk());
     runWithInsertionPointAtEndOfBlock(resetBody, op.resetBlk());
